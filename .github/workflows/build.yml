@@ -185,6 +185,20 @@ jobs:
           done
           cp ikemen/src/resources/defaultMotif.ini $D/data/system.base.def
           cp -rn ikemen/font/* $D/font/ 2>/dev/null || true
+          # Runtime assets that Ikemen releases take from the Screenpack repo (gofx, glyphs, fonts...)
+          git clone --depth 1 https://github.com/ikemen-engine/Ikemen-GO-Screenpack.git screenpack
+          for f in screenpack/data/*; do
+            case "$(basename "$f")" in
+              common.snd|fight.def|fight.sff|fight.snd|fightfx.air|fightfx.sff) ;;
+              *) cp -rn "$f" $D/data/ ;;
+            esac
+          done
+          cp -rn screenpack/font/* $D/font/ 2>/dev/null || true
+          curl -fsSL https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/refs/heads/master/gamecontrollerdb.txt -o $D/external/gamecontrollerdb.txt || true
+          # Fail the build if anything the engine needs at startup is missing
+          for need in data/gofx/gofx.def data/glyphs.sff data/system.base.def data/common.air data/common.cmd data/common.const data/action.zss; do
+            test -e "$D/$need" || { echo "MISSING $need"; exit 1; }
+          done
           cp cvf-files/data/characters.def cvf-files/data/options11.def cvf-files/data/cvf_online.ini $D/data/
           mkdir -p $D/chars && cp -r cvf-files/chars/* $D/chars/
           cp cvf-files/save/config.ini $D/save/
