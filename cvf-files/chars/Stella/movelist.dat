@@ -1,0 +1,48 @@
+<#f0f000>:Stella Ricard / Loretta Ricard - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Stella quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Dagger</>
+Chain Attack				^A <#bebebe>up to 3 times while hitting enemy.</>
+  <#9a9a9a>Stella can chain up to 3 normal attacks whi...</>
+Rushing Slash				_F_F_+^A / ^C
+  <#9a9a9a>Stella dashes forward while slashing the ai...</>
+Hurricane				_D_DF_F_+^A / ^C
+  <#9a9a9a>Stella sends out a fast moving shockwave us...</>
+Furious Wave				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Stella sends a ground shockwave that eventu...</>
+Crescent Moon				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Stella creates a moon-shaped air projectile...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Stella summons Loretta, who uses her ice sp...</>
+Hover				<#bebebe>hold</> ^B
+  <#9a9a9a>Stella slowly descends down while the butto...</>
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Loretta quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Icicle Spike Ice Fang</>
+Angled Attack				_D_+^A <#bebebe>or</> _U_+^A
+  <#9a9a9a>Loretta creates a portal angled up or down,...</>
+Icy Flake				_F_F_+^A / ^C
+  <#9a9a9a>Loretta shoots a fast traveling snow flake...</>
+Icicle Drop				_D_DF_F_+^A / ^C
+  <#9a9a9a>Loretta opens a portal and sends it flying...</>
+Freeze Bite				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Loretta opens a portal and summons wolf-sha...</>
+Blizzard Storm				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Loretta opens a portal and blasts her enemy...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Loretta summons Stella and creates a large...</>
+Hover				<#bebebe>hold</> ^B
+  <#9a9a9a>Loretta slowly descends down while the butt...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

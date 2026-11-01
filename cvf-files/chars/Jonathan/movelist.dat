@@ -1,0 +1,34 @@
+<#f0f000>:Jonathan Morris - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Jonathan jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Joke: Dart Bowl of Cu...</>
+Slide				_D_+^B
+  <#9a9a9a>Jonathan slides forward.</>
+Dive Kick				_D_+^B <#bebebe>or</> _DF_+^B
+  <#9a9a9a>Jonathan dives either down or diagonally do...</>
+Teddy Ablaze command:				_D_DF_F_+^A / ^C
+  <#9a9a9a>Jonathan jumps with his knee extended to de...</>
+Wrecking Ball				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Jonathan starts swinging an oversized iron...</>
+Rocket Slash				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Jonathan rushes forward at incredible speed...</>
+Aura Blast				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Jonathan summons all his power to create a...</>
+Showtime				_U_U_D_D_B_F_B_F^B^A
+  <#9a9a9a>Jonathan stops goofing around and starts ac...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Jonathan summons all of his power to use th...</>
+Stonewall				<#bebebe>hold</> ^Y
+  <#9a9a9a>Jonathan assumes a blocking pose.</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

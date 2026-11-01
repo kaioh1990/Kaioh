@@ -1,0 +1,30 @@
+<#f0f000>:Simon Belmont - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Simon jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C <#bebebe>as chronicles/cv1 simon or</> ^C <#bebebe>as cv4 simon</>
+  <#9a9a9a>Available subweapons: Dagger Holy Water Hol...</>
+Slide				_D_+^B
+  <#9a9a9a>Simon slides forward.</>
+Diagonal Attack				_+^A / ^C <#bebebe>or</> _._+^A / ^C
+  <#9a9a9a>While standing Simon attacks either upward,...</>
+Crawl				_DB <#bebebe>or</> _DF
+  <#9a9a9a>Simon crawls forward or backward.</>
+Flame Whip Activation				_U_+^Y
+  <#9a9a9a>Simon powers his whip up.</>
+Flame Whip				_F_F_+^A / ^C
+  <#9a9a9a>Simon envelops his whip in flames for this...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Simon will use a a unique damage-type rosar...</>
+Laurels				^Y
+  <#9a9a9a>Simon will start eating some laurels, heali...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

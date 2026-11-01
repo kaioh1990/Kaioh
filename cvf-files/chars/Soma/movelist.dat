@@ -1,0 +1,34 @@
+<#f0f000>:Soma - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Soma jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available souls: Amalaric Sniper Puppetmast...</>
+Slide				_D_+^B
+  <#9a9a9a>Soma slides forward.</>
+Dive Kick				_D_+^B <#bebebe>or</> _DF_+^B
+  <#9a9a9a>Soma dives either down or diagonally down w...</>
+Bat Form				^Y
+  <#9a9a9a>Soma turns into a giant bat.</>
+RPG Launcher				_F_F_+^A / ^C
+  <#9a9a9a>Soma fires a quick missile from his rocked...</>
+Valmanway				_D_DF_F_+^A
+  <#9a9a9a>Soma unleashes several very quick slashes.</>
+Claimh Solais				_D_DF_F_+^C
+  <#9a9a9a>Soma uses his Claimh Solais sword's power f...</>
+Cagnazzo				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Soma summons Cagnazzo who punches everythin...</>
+Barbariccia				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Soma transforms into Barbarricia and rushes...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Soma momentarily loses control over his pow...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

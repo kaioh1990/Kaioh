@@ -1,0 +1,79 @@
+;Player information
+[Info]
+name         = "Eric"   ; Name of character
+displayname  = "Hair Color?"  ; Name of character to display
+versiondate=0924
+mugenversion=2002.14.04
+author       = "CvF"   ; Character author name
+pal.defaults = 1,2,3,4,5,6   ; Default palettes in order of preference (up to 4, starts from 1)
+localcoord   = 320,240       ; Local coordinate space (width, height)
+
+; Files for the player
+[Files]
+movelist = movelist.dat ; Ikemen command list (online port)
+cns=command.st
+cmd=command.st
+stcommon=common1.st
+sprite=sprites.sff
+anim=anim.air
+st=states.st
+st1=extras.st
+st2=../../data/player.st
+st3=../../data/intros.st
+st4=../../data/aimode.st
+sound=sound.snd
+pal1=01.act
+pal2=02.act
+pal3=03.act
+pal4=04.act
+pal5=01.act
+pal6=01.act
+pal7=01.act
+pal8=01.act
+pal9=01.act
+pal10=01.act
+pal11=01.act
+pal12=01.act
+[dub.Files]
+cns=command.st
+cmd=command.st
+stcommon=common1.st
+sprite=sprites.sff
+anim=anim.air
+st=states.st
+st1=extras.st
+st2=../../data/player.st
+st3=../../data/intros.st
+st6=../../data/aimode.st
+sound=sounddub.snd
+pal1=01.act
+pal2=02.act
+pal3=03.act
+pal4=04.act
+pal5=01.act
+pal6=01.act
+pal7=01.act
+pal8=01.act
+pal9=01.act
+pal10=01.act
+pal11=01.act
+pal12=01.act
+; Maps character selection buttons to palette numbers.
+[Palette Keymap]
+a=1
+b=2
+c=3
+x=4
+y=5
+z=6
+a2=7
+b2=8
+c2=9
+x2=10
+y2=11
+z2=12
+
+; Arcade mode
+[Arcade]
+;intro.storyboard=start.def
+ending.storyboard=../../data/victory.def

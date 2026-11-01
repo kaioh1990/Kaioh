@@ -1,0 +1,28 @@
+<#f0f000>:Axe Armor - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Axe Armor jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Double Axes Puppetmas...</>
+Axe Rush				_D_DF_F_+^A
+  <#9a9a9a>Axe Armor runs forward while swinging its axe.</>
+Axe Rush				_D_DF_F_+^C
+  <#9a9a9a>Axe Armor runs forward while swinging its axe.</>
+Axe Jump				_F_F_+^A / ^C
+  <#9a9a9a>Axe Armor slightly jumps forward while swin...</>
+Shockwave				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Axe Armor releases a shockwave by striking...</>
+Axe Slam				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Axe Armor summons a giant axe and slam it i...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Axe Armor creates three hovering axes in fr...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

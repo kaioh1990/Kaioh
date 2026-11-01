@@ -1,0 +1,32 @@
+<#f0f000>:Reimu Hakurei - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Reimu jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C <#bebebe>or</> ^C
+  <#9a9a9a>Available subweapons: Talismans Yinyang orb</>
+Slide				_D_+^B
+  <#9a9a9a>Reimu slides forward.</>
+Backflip				_D_+^X
+  <#9a9a9a>Reimu does a backflip.</>
+Icicles				_F_F_+^A / ^C
+  <#9a9a9a>Reimu summons Cirno, who fires 3 icicles th...</>
+Expanding Ice Flake				_D_DF_F_+^A / ^C
+  <#9a9a9a>Reimu summons Cirno who fires a small snowf...</>
+Star Projectiles				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Reimu summons Marisa who fires two star-sha...</>
+Master Spark				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Reimu summons Marisa to fire a devastating...</>
+Fantasy Seal				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Reimu starts firing homing energy balls at...</>
+Flying Dash				^X <#bebebe>or</> _F_+^X
+  <#9a9a9a>Reimu does an do an airdash either back or...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

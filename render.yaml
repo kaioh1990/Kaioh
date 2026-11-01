@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: cvf-lobby
+    runtime: go
+    plan: free
+    rootDir: lobby
+    buildCommand: go build -o cvf-lobby .
+    startCommand: ./cvf-lobby
+    healthCheckPath: /healthz

@@ -1,0 +1,28 @@
+<#f0f000>:Shanoa - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Shanoa quickly jumps up.</>
+Glyph Use				_U_+^A / ^C
+  <#9a9a9a>Available glyphs: Igniz Grando Fulgur Lumin...</>
+Slide				_D_+^B
+  <#9a9a9a>Shanoa slides forward.</>
+Hasta Union				_F_F_+^A / ^C
+  <#9a9a9a>Shanoa unifies two Hasta type glyphs to cre...</>
+Custos Glyph				_D_DF_F_+^A / ^C
+  <#9a9a9a>Shanoa uses both the black and white Custos...</>
+Glyph Sword				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Shanoa unifies a Secare glyph with the curr...</>
+Secare Union				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Shanoa unifies two Secare type glyphs to cr...</>
+Glyph Union				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Shanoa unifies two glyphs of the same eleme...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

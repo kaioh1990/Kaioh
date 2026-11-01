@@ -1,0 +1,36 @@
+<#f0f000>:Juste Belmont - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Juste quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C <#bebebe>Available subweapons: Dagger Holy Water Holy Cross Axe Bible Sacred Fist Christopher's Soul command:</> _F_F_+^A
+  <#9a9a9a>Drawing on his ancestor's, Christopher Belm...</>
+Fire Book				_F_F_+^C
+  <#9a9a9a>Juste throws a floating, burning cross that...</>
+Fire Book + Holy Water				_D_DF_F_+^A
+  <#9a9a9a>Juste creates a fireball, which bounces aro...</>
+Holy Book + Dagger				_D_DF_F_+^C
+  <#9a9a9a>Juste fires a bunch of holy-infused daggers...</>
+Fire Book + Axe				_B_DB_D_DF_F_+^A
+  <#9a9a9a>Juste summons two flame dragons which pursu...</>
+Ice Book + Cross				_B_DB_D_DF_F_+^C
+  <#9a9a9a>Juste summons a floating icy cross, which s...</>
+Ice Book + Fist				_U_D_DF_F_+^A <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A
+  <#9a9a9a>Juste envelops his fist with a thick icy sp...</>
+Bolt Book + Holy Water				_U_D_DF_F_+^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^C
+  <#9a9a9a>Juste creates two lightning bolts, which ci...</>
+Slide				_D_+^B
+  <#9a9a9a>Juste slides forward.</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Juste summons all of his power to use the s...</>
+Dash Forward				_F_+^X
+  <#9a9a9a>Juste has an ability to dash forward if you...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

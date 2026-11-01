@@ -1,0 +1,28 @@
+<#f0f000>:Yoko Fernandez - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Yoko jumps up very fast.</>
+Spell Use				_U_+^A / ^C
+  <#9a9a9a>Available spells: Blaze Holy lightning Icicle</>
+Slide				_D_+^B
+  <#9a9a9a>Yoko slides forward.</>
+Healing Staff				^A
+  <#9a9a9a>Each attack of Yoko's staff weapon gives ba...</>
+Flame Thrower				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Yoko releases a stream of fire from her hands.</>
+Thor's Bellow				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Yoko summons a large, almost stationary bal...</>
+Icy Explosion				_F_F_+^A / ^C
+  <#9a9a9a>Yoko throws out an ice shard that explodes...</>
+Philosopher's Stone				^Y
+  <#9a9a9a>Yoko will use her remaining magical power t...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

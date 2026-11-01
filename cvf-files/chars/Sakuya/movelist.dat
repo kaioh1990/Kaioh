@@ -1,0 +1,34 @@
+<#f0f000>:Sakuya Izayoi - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Sakuya quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C <#bebebe>or</> ^C
+  <#9a9a9a>Available subweapons: Dagger Stopwatch</>
+Backflip				_D_+^X
+  <#9a9a9a>Sakuya does a backflip.</>
+Backflip Dagger Throw				^A <#bebebe>or</> ^C <#bebebe>during a backdash or forward dash.</>
+  <#9a9a9a>Sakuya throws 2 quick daggers while backdas...</>
+Rapid Slash				_F_F_+^A / ^C
+  <#9a9a9a>Sakuya starts rapidly slashing the air and...</>
+Elemental Daggers				_D_DF_F_+^A / ^C
+  <#9a9a9a>Sakuya throws out 4 elemental daggers, eith...</>
+Seeking Sword				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Sakuya summons a spinning sword which will...</>
+Dagger Setup				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Sakuya quickly sets up several daggers in t...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Sakuya unleashes her time-controlling power...</>
+Flying Dash				^X <#bebebe>or</> _F_+^X
+  <#9a9a9a>Sakuya does an do an airdash either back or...</>
+Dash Forward				_F_+^X
+  <#9a9a9a>Sakuya has an ability to dash forward if yo...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

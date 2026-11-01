@@ -1,0 +1,34 @@
+<#f0f000>:Maxim Kischine - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Maxim quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Maxim's Shuriken Vert...</>
+Slide				_D_+^B
+  <#9a9a9a>Maxim slides forward.</>
+Sommersault				_U_+^B
+  <#9a9a9a>While jumping, Maxim starts spinning with s...</>
+Ninja Healing				_D_DF_F_+^A / ^C
+  <#9a9a9a>Maxim purifies his spirit and body, healing...</>
+Maxim Clone Dance				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Maxim starts creating dozens of ghostly clo...</>
+Maxim Clone				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Maxim summons a clone who appears exactly o...</>
+Rapid Stabbing				_F_F_+^A / ^C
+  <#9a9a9a>Maxim starts to rapidly stab the space in f...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Maxim splits into 2 and starts attacking th...</>
+Dash Forward				_F_+^X
+  <#9a9a9a>Maxim has an ability to dash forward if you...</>
+Battle Stance				^Y
+  <#9a9a9a>Maxim will assume a battle stance.</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

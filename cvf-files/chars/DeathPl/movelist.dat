@@ -1,0 +1,27 @@
+<#f0f000>:Death - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Death jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Sickle Homing Energy...</>
+Skull Summon				_F_F_+^A / ^C
+  <#9a9a9a>Death creates a large skull from his scythe.</>
+Scythe Throw command:				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Death summons several skull shaped spirits,...</>
+Corpse Hunt				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Death jumps up, then spins very fast with h...</>
+Sickle Storm				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Death starts creating sickles all over the...</>
+Chain Attack				^A <#bebebe>up to 3 times while hitting enemy.</>
+  <#9a9a9a>Death can chain up to 3 normal attacks whil...</>
+Summon Familiar command:				<#bebebe>(see description)</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

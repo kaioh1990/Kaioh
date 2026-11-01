@@ -1,0 +1,24 @@
+<#f0f000>:Hammer - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Hammer jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Smart Bomb Grenade Mine</>
+Positron Cannon				_D_DF_F_+^A / ^C
+  <#9a9a9a>Hammer fires a beam of searing light from h...</>
+Aerial Shots command:				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Hammer takes out a chaingun and starts unlo...</>
+RPG Launcher				_F_F_+^A / ^C
+  <#9a9a9a>Hammer fires from his rocket propelled gren...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Hammer calls for backup, and few seconds la...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

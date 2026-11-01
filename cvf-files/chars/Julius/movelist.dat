@@ -1,0 +1,28 @@
+<#f0f000>:Julius Belmont - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Julius jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Holy Water Holy Cross...</>
+Slide				_D_+^B
+  <#9a9a9a>Julius slides forward.</>
+Dive Kick				_D_+^B <#bebebe>or</> _DF_+^B
+  <#9a9a9a>Julius dives either down or diagonally down...</>
+Flame Whip				_F_F_+^A / ^C
+  <#9a9a9a>Julius envelops his whip in flames for one...</>
+Dodge				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Julius quickly dashes around his enemy.</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Julius summons all of his power to use the...</>
+Teleport				^Y_+_.
+  <#9a9a9a>Julius teleports toward the direction you p...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

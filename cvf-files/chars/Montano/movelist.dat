@@ -1,0 +1,32 @@
+<#f0f000>:Montano Cyprus - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Montano quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Ice Cross Lightning L...</>
+Slide				_D_+^B
+  <#9a9a9a>Montano slides forward.</>
+Chain Attack				^A <#bebebe>up to 2 times while hitting enemy.</>
+  <#9a9a9a>Montano can chain up to 2 normal attacks wh...</>
+Sword Swipe				_F_F_+^A / ^C
+  <#9a9a9a>Montano rushes forward while slashing with...</>
+Sword Overhead Slash				_D_DF_F_+^A / ^C
+  <#9a9a9a>Montano raises his sword overhead, then swi...</>
+Teleport Slash				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Montano teleports right in front of an enem...</>
+Triple Laser				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Montano releases 3 beams of light from his...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Montano utilizes his sword's innate magical...</>
+Dark Aura				^Y
+  <#9a9a9a>Montano will unleash a dark aura.</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

@@ -1,0 +1,40 @@
+<#f0f000>:Maria - Special Moves:</>
+
+Super Jump				<#bebebe>Sotn Maria</> _U_+^X <#bebebe>Rondo Maria</> _U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Maria jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Vermillion Bird White...</>
+Slide				_D_+^B
+  <#9a9a9a>Maria slides forward.</>
+Dive Kick				_D_+^B <#bebebe>or</> _DF_+^B
+  <#9a9a9a>Maria dives either down or diagonally down...</>
+Owl Glide				<#bebebe>hold</> ^X / _U_+_B / _F
+  <#9a9a9a>Maria slowly glides down while the A button...</>
+Air Dash				^X <#bebebe>or</> _F_+^X
+  <#9a9a9a>Maria does an airdash either back or forwar...</>
+Flying Kick				_F_F_+^A / ^C
+  <#9a9a9a>The ability which allowed her to outrun Alu...</>
+Song Book				_F_F_+^A / ^C
+  <#9a9a9a>Like most kids Maria likes to sing.</>
+Flame Thrower command:				_D_DF_F_+^A / ^C
+  <#9a9a9a>Maria throws an egg, which after a second o...</>
+Guardian Knuckle				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Maria summons a shadow version of herself t...</>
+Invincibility Mode				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Maria requests the power of all four of her...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Maria requests her currently active spiritu...</>
+Dash Forward				_F_+^X
+  <#9a9a9a>Maria has an ability to dash forward if you...</>
+Owl Familiar				^Y
+  <#9a9a9a>Maria summons an owl familiar.</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

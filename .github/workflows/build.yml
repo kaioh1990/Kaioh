@@ -42,7 +42,7 @@ jobs:
           git clone "$IKEMEN_REPO" ikemen
           cd ikemen
           git checkout "$IKEMEN_COMMIT"
-          git apply ../patches/ikemen-cvf-rollback-fixes.patch
+          git apply ../patches/ikemen-cvf-online.patch
           git --no-pager diff --stat
 
       - uses: actions/setup-go@v5
@@ -120,7 +120,7 @@ jobs:
           git clone "$IKEMEN_REPO" ikemen
           cd ikemen
           git checkout "$IKEMEN_COMMIT"
-          git apply ../patches/ikemen-cvf-rollback-fixes.patch
+          git apply ../patches/ikemen-cvf-online.patch
           git --no-pager diff --stat
 
       - uses: actions/setup-go@v5
@@ -185,7 +185,8 @@ jobs:
           done
           cp ikemen/src/resources/defaultMotif.ini $D/data/system.base.def
           cp -rn ikemen/font/* $D/font/ 2>/dev/null || true
-          cp cvf-files/data/characters.def cvf-files/data/options11.def $D/data/
+          cp cvf-files/data/characters.def cvf-files/data/options11.def cvf-files/data/cvf_online.ini $D/data/
+          mkdir -p $D/chars && cp -r cvf-files/chars/* $D/chars/
           cp cvf-files/save/config.ini $D/save/
           cp cvf-files/README-ONLINE.txt cvf-files/INSTALL-WINDOWS.txt $D/
           mkdir -p $D/patches && cp patches/*.patch $D/patches/

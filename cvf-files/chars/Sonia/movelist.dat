@@ -1,0 +1,32 @@
+<#f0f000>:Sonia Belmont - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Sonia quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Dagger Holy Water Hol...</>
+Slide				_D_+^B
+  <#9a9a9a>Sonia slides forward.</>
+Burning Mode				^Y
+  <#9a9a9a>Sonia activates burning mode.</>
+Fireball				^A
+  <#9a9a9a>While in burning mode, Sonia's whip gains a...</>
+Saint Soul				_F_F_+^A / ^C
+  <#9a9a9a>Sonia fires a quick holy based projectile f...</>
+Wind Soul				_D_DF_F_+^A / ^C
+  <#9a9a9a>Sonia releases a shockwave that destroys, d...</>
+Ice Soul				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Sonia purifies and heals herself using the...</>
+Fire Soul				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Sonia releases hot flames to both sides, bu...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Sonia summons all of her power to use the s...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

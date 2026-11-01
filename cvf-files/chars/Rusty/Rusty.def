@@ -1,0 +1,49 @@
+[Info]
+name         = "Rusty"   ; Name of character
+displayname  = "Femdom"  ; Name of character to display
+versiondate=0924
+mugenversion=2002.14.04
+author       = "CvF"   ; Character author name
+pal.defaults = 1,2,3,4,5,6   ; Default palettes in order of preference (up to 4, starts from 1)
+localcoord   = 320,240       ; Local coordinate space (width, height)
+[Files]
+movelist = movelist.dat ; Ikemen command list (online port)
+cmd      = command.st          ; Command set
+cns      = command.st          ; Constants
+st       = states.st          ; States
+stcommon=common1.st
+st1=extras.st
+st2=../../data/player.st
+st3=../../data/intros.st
+st6=../../data/debug.st     
+sprite   = CharSprite.sff      
+anim     = anim.air          
+sound    = sound.snd          
+pal1=01.act
+pal2=02.act
+pal3=03.act
+pal4=04.act
+pal5=05.act
+pal6=06.act
+pal7=07.act
+pal8=08.act
+pal9=09.act
+pal10=10.act
+pal11=11.act
+pal12=12.act
+[Palette Keymap]
+a  = 1 ;Press button X to select palette 1, etc.
+b  = 2
+c  = 3
+x  = 4
+y  = 5
+z  = 6
+a2 = 7 ;Hold Start and press button X for palette 7, etc.
+b2 = 8
+c2 = 9
+x2 = 10
+y2 = 11
+z2 = 12
+[Arcade]
+;intro.storyboard = intro.def
+;ending.storyboard = ending.def

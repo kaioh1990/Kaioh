@@ -1,0 +1,32 @@
+<#f0f000>:Hugh Baldwin - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Hugh jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Dagger Holy Water Hol...</>
+Slide				_D_+^B
+  <#9a9a9a>Hugh slides forward.</>
+Flame Strike				_D_DF_F_+^A / ^C
+  <#9a9a9a>Hugh puts his sword ablaze then strike the...</>
+Holy Sword				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Hugh rises his sword in the air and envelop...</>
+Dash Attack				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Hugh dashes across the screen with his swor...</>
+DSS Mode				^Y
+  <#9a9a9a>Hugh goes into the DSS mode.</>
+Sword Throw				_F_F_+^A / ^C
+  <#9a9a9a>Hugh throws out his sword, which goes forwa...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Hugh creates several shadow clones of his s...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Hugh summons all of his power to use the su...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

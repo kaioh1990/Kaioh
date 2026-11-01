@@ -1,0 +1,34 @@
+<#f0f000>:Charlotte - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Charlotte jumps up very fast.</>
+Spell Use				_U_+^A / ^C
+  <#9a9a9a>Available spells: Raging Fire Ice Needle He...</>
+Slide				_D_+^B
+  <#9a9a9a>Charlotte slides forward.</>
+Hover				<#bebebe>hold</> ^B
+  <#9a9a9a>Charlotte slowly descends down while the bu...</>
+Lightning				_F_F_+^A / ^C
+  <#9a9a9a>Charlotte summons electricity which slowly...</>
+Tempest				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Charlotte creates a whirlwind of freezing a...</>
+Speed Up				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Charlotte hastes herself with a high speed...</>
+Spell Absorbtion				^Y
+  <#9a9a9a>Charlotte attempts to absorb enemy's spells...</>
+Summon Gunman				_D_DF_F_+^A
+  <#9a9a9a>Charlotte summons a couple skeleton gunmen...</>
+Summon Skeleton				_D_DF_F_+^C
+  <#9a9a9a>Charlotte summons a couple skeletons who to...</>
+Dual Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Charlotte summons Jonathan to do the holy l...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

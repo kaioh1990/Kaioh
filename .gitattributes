@@ -1,3 +1,4 @@
 *.patch -text eol=lf
 *.def -text
 *.ini -text
+*.dat -text

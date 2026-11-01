@@ -1,0 +1,28 @@
+<#f0f000>:Skeleton - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>The Skeleton jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Bone/Alt.</>
+Halberd Rush				_F_F_+^A
+  <#9a9a9a>The Skeleton dashes forward while using a h...</>
+Whip Rush				_F_F_+^C
+  <#9a9a9a>The Skeleton dashes forward while whipping.</>
+Nova Beam				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>The Skeleton releases a devastating laser b...</>
+Sword Dash				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>The Skeleton dashes across the screen with...</>
+Giant Bone				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>The Skeleton throws a giant bone which hits...</>
+Cling				^Y <#bebebe>held down.</>
+  <#9a9a9a>The Skeleton can cling to ceilings if there...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

@@ -1,0 +1,30 @@
+<#f0f000>:Albus - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Albus jumps up very fast.</>
+Glyph Use				_U_+^A / ^C
+  <#9a9a9a>Available glyphs: Acerbatus Igniz Grando Fu...</>
+Slide				_D_+^B
+  <#9a9a9a>Albus slides forward.</>
+Teleport				^Y_+_.
+  <#9a9a9a>Albus teleports toward the direction you pr...</>
+Igniz Kick				_D_DF_F_+^A / ^C
+  <#9a9a9a>Albus does a spinning flame kick while jump...</>
+Torpor				_F_F_+^A / ^C
+  <#9a9a9a>Albus fires a bullet that puts everything i...</>
+Optical Shot				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Albus fires two projectiles that travel on...</>
+Multiple Torpor				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Albus jumps forward while dropping several...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Albus fires two projectiles that seek out e...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

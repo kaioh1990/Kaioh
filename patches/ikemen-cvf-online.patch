@@ -1,0 +1,973 @@
+diff --git a/external/script/main.lua b/external/script/main.lua
+index b7d76c8..bdbcc20 100644
+--- a/external/script/main.lua
++++ b/external/script/main.lua
+@@ -2356,12 +2356,22 @@ main.t_itemname = {
+ 		end
+ 		return nil
+ 	end,
++	--CvF ONLINE LOBBY
++	['lobby'] = function(t, item)
++		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++		hook.run("main.t_itemname", t, item)
++		main.f_lobby()
++		return nil
++	end,
+ 	--SERVER HOST
+ 	['serverhost'] = function(t, item)
+ 		main.f_waitForPreloads(true)
+ 		local doneSnd = motif[main.group].cursor.done.snd.serverhost or motif[main.group].cursor.done.snd.default
+ 		sndPlay(motif.Snd, doneSnd[1], doneSnd[2])
+ 		hook.run("main.t_itemname", t, item)
++		if cvfLobbyEnabled() then
++			main.f_cvfEnsureName()
++		end
+ 		if main.f_connect("", gameOption('Netplay.ListenPort')) then
+ 			if synchronize() then
+ 				enterSyncedNetplayMenu()
+@@ -3252,11 +3262,40 @@ function main.f_replay()
+ 	end
+ end
+ 
++-- CvF Online: ask for a lobby display name once
++function main.f_cvfEnsureName()
++	if cvfGetPlayerName() ~= '' then
++		return true
++	end
++	local name = main.f_drawInput(
++		motif[main.group].textinput.TextSpriteData,
++		'Enter your player name for the online lobby:',
++		motif[main.group],
++		motif[main.background],
++		motif[main.group].textinput.overlay.RectData
++	)
++	if name == '' then
++		return false
++	end
++	cvfSetPlayerName(name)
++	return true
++end
++
+ function main.f_connect(server, str)
++	local cvfHosting = (server == '')
++	if cvfHosting then
++		cvfOnlineHostBegin(gameOption('Netplay.ListenPort'))
++	else
++		cvfOnlineJoinBegin()
++	end
+ 	enterNetPlay(server)
+ 	while not connected() do
+ 		if esc() or getInput(-1, motif.title_info.menu.cancel.key) then
+ 			sndPlay(motif.Snd, motif.title_info.cancel.snd[1], motif.title_info.cancel.snd[2])
++			if cvfHosting then
++				cvfOnlineHostEnd()
++				cvfOnlineClosePorts()
++			end
+ 			exitNetPlay()
+ 			return false
+ 		end
+@@ -3272,16 +3311,107 @@ function main.f_connect(server, str)
+ 			txt = string.format(motif.title_info.connecting.text.join, server, str)
+ 		end
+ 		textImgReset(motif.title_info.connecting.TextSpriteData)
++		if cvfHosting then
++			txt = cvfOnlineHostStatus()
++			textImgSetPos(motif.title_info.connecting.TextSpriteData, nil, 40)
++		end
+ 		textImgSetText(motif.title_info.connecting.TextSpriteData, txt)
+ 		textImgDraw(motif.title_info.connecting.TextSpriteData)
+ 		--draw layerno = 1 backgrounds
+ 		bgDraw(motif[main.background].BGDef, 1)
+ 		refresh()
+ 	end
++	if cvfHosting then
++		cvfOnlineHostEnd()
++	end
+ 	replayRecord('save/replays/' .. os.date("%Y-%m-%d_%Hh%Mm%Ss") .. '.replay')
+ 	return true
+ end
+ 
++-- CvF Online: lobby screen listing players who are hosting
++function main.f_lobby()
++	if not cvfLobbyEnabled() then
++		return
++	end
++	if not main.f_cvfEnsureName() then
++		return
++	end
++	local sel = 1
++	local frame = 0
++	local lastRefresh = -10000
++	local ts = motif.title_info.connecting.TextSpriteData
++	resetKey()
++	while true do
++		frame = frame + 1
++		if frame - lastRefresh >= 180 then
++			cvfLobbyRefresh()
++			lastRefresh = frame
++		end
++		local rooms, status = cvfLobbyRooms()
++		if sel > #rooms then sel = math.max(1, #rooms) end
++		if esc() or getInput(-1, motif[main.group].menu.cancel.key) then
++			sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
++			return
++		elseif #rooms > 0 and getInput(-1, motif[main.group].menu.next.key) then
++			sel = sel % #rooms + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #rooms > 0 and getInput(-1, motif[main.group].menu.previous.key) then
++			sel = (sel - 2) % #rooms + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #rooms > 0 and getInput(-1, motif[main.group].menu.done.key) then
++			local r = rooms[sel]
++			sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++			main.f_waitForPreloads(true)
++			local oldPort = cvfGetNetplayPort()
++			cvfSetNetplayPort(r.port)
++			if main.f_connect(r.ip, r.name) then
++				if synchronize() then
++					enterSyncedNetplayMenu()
++				end
++				replayStop()
++				exitNetPlay()
++				exitReplay()
++				showSessionWarning()
++			end
++			cvfSetNetplayPort(oldPort)
++			lastRefresh = -10000
++			resetKey()
++		end
++		-- draw
++		clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++		bgDraw(motif[main.background].BGDef, 0)
++		rectDraw(motif.title_info.connecting.overlay.RectData)
++		local lines = {'ONLINE LOBBY  -  you are "' .. cvfGetPlayerName() .. '"', ''}
++		if #rooms == 0 then
++			table.insert(lines, status ~= '' and status or 'Nobody is hosting right now.')
++			table.insert(lines, '')
++			table.insert(lines, 'Pick Host Game to wait here for an opponent.')
++		else
++			table.insert(lines, 'Players waiting for a match:')
++			table.insert(lines, '')
++			local first = math.max(1, math.min(sel - 4, #rooms - 8))
++			for i = first, math.min(#rooms, first + 8) do
++				local r = rooms[i]
++				local wait = r.age < 60 and (r.age .. 's') or (math.floor(r.age / 60) .. 'm')
++				local tag = r.compatible and '' or '  (different version)'
++				table.insert(lines, (i == sel and '> ' or '   ') .. r.name .. '   waiting ' .. wait .. tag)
++			end
++			if status ~= '' then
++				table.insert(lines, '')
++				table.insert(lines, status)
++			end
++		end
++		table.insert(lines, '')
++		table.insert(lines, 'Up/Down: choose   Attack: join   Esc: back')
++		textImgReset(ts)
++		textImgSetPos(ts, nil, 40)
++		textImgSetText(ts, table.concat(lines, '\n'))
++		textImgDraw(ts)
++		bgDraw(motif[main.background].BGDef, 1)
++		refresh()
++	end
++end
++
+ --asserts content unlock conditions
+ function main.f_unlock(permanent)
+ 	local refreshRandom = false
+diff --git a/src/char.go b/src/char.go
+index 19bf05a..8bb6ca9 100644
+--- a/src/char.go
++++ b/src/char.go
+@@ -3228,6 +3228,25 @@ func (p *Projectile) tick() {
+ 	}
+ }
+ 
++// Advance the projectile animation.
++// Animation progress decides when removed projectiles are cleaned up and which Clsn boxes are active,
++// so it is gameplay state and must run once per simulated frame. It used to run from cueDraw(),
++// which rollback only calls once per rendered frame, so re-simulated frames desynced.
++func (p *Projectile) animStep() {
++	if p.anim == nil || p.root().scf(SCF_disabled) {
++		return
++	}
++	isPaused := p.hitpause > 0 || p.pauseBool
++	// TODO: Gating UpdateSprite() during pauses makes it go out of sync with the animation data
++	// In the case of projectiles this can be seen with Clsn display
++	if !isPaused && sys.tickFrame() {
++		p.anim.UpdateSprite()
++	}
++	if sys.tickNextFrame() && !isPaused {
++		p.anim.Action()
++	}
++}
++
+ func (p *Projectile) cueDraw() {
+ 	// Nothing to draw here. Not even debug
+ 	if p.anim == nil {
+@@ -3239,12 +3258,6 @@ func (p *Projectile) cueDraw() {
+ 
+ 	isPaused := p.hitpause > 0 || p.pauseBool
+ 
+-	// TODO: Gating UpdateSprite() during pauses makes it go out of sync with the animation data
+-	// In the case of projectiles this can be seen with Clsn display
+-	if !isPaused && sys.tickFrame() {
+-		p.anim.UpdateSprite()
+-	}
+-
+ 	// Projectile Clsn display
+ 	if sys.clsnDisplay {
+ 		if frm := p.anim.drawFrame(); frm != nil {
+@@ -3261,10 +3274,6 @@ func (p *Projectile) cueDraw() {
+ 		}
+ 	}
+ 
+-	if sys.tickNextFrame() && !isPaused {
+-		p.anim.Action() // TODO: Placing this in cueDraw is a bit unusual. Confirm if it's right
+-	}
+-
+ 	// Set position
+ 	pos := [2]float32{p.interPos[0] * p.localscl, p.interPos[1] * p.localscl}
+ 
+diff --git a/src/cvf_online.go b/src/cvf_online.go
+new file mode 100644
+index 0000000..4ffc97b
+--- /dev/null
++++ b/src/cvf_online.go
+@@ -0,0 +1,663 @@
++package main
++
++// Castlevania Fighter online helpers:
++//   - shows the host's public/LAN address and port while waiting for an opponent
++//   - opens the netplay ports on the router automatically (UPnP IGD, no dependencies)
++//   - talks to a small lobby server so players can find each other without typing IPs
++//
++// Everything network-related runs in goroutines; Lua only polls cached state, so the
++// menus never block on the network.
++
++import (
++	"bufio"
++	"bytes"
++	"encoding/json"
++	"encoding/xml"
++	"fmt"
++	"io"
++	"net"
++	"net/http"
++	"net/url"
++	"os"
++	"path/filepath"
++	"regexp"
++	"sort"
++	"strings"
++	"sync"
++	"time"
++
++	lua "github.com/yuin/gopher-lua"
++)
++
++const cvfOnlineConfigFile = "data/cvf_online.ini"
++const cvfOnlineProfileFile = "save/cvf_online_profile.json"
++
++type cvfOnlineState struct {
++	mu sync.Mutex
++
++	lobbyURL    string
++	buildTag    string
++	playerName  string
++	configRead  bool
++	httpClient  *http.Client
++	publicIP    string
++	publicIPErr string
++	publicBusy  bool
++
++	upnpStatus string
++	upnpMapped []upnpMapping
++
++	hosting       bool
++	hostPort      int
++	roomID        string
++	roomToken     string
++	roomOpen      string // "", "yes", "no"
++	lobbyHostErr  string
++	hostStop      chan struct{}
++	rooms         []cvfRoom
++	roomsErr      string
++	roomsBusy     bool
++	roomsFetched  time.Time
++	roomsRequests int
++}
++
++type cvfRoom struct {
++	ID      string `json:"id"`
++	Name    string `json:"name"`
++	IP      string `json:"ip"`
++	Port    int    `json:"port"`
++	UDPPort int    `json:"udp_port"`
++	Version string `json:"version"`
++	Open    string `json:"open"`
++	AgeSec  int    `json:"age_sec"`
++}
++
++var cvfOnline = &cvfOnlineState{
++	httpClient: &http.Client{Timeout: 70 * time.Second}, // free hosts can take ~1 min to wake up
++	buildTag:   "cvf-online-1",
++}
++
++func (s *cvfOnlineState) readConfig() {
++	if s.configRead {
++		return
++	}
++	s.configRead = true
++	if f, err := os.Open(cvfOnlineConfigFile); err == nil {
++		sc := bufio.NewScanner(f)
++		for sc.Scan() {
++			line := strings.TrimSpace(sc.Text())
++			if i := strings.Index(line, ";"); i >= 0 {
++				line = strings.TrimSpace(line[:i])
++			}
++			k, v, ok := strings.Cut(line, "=")
++			if !ok {
++				continue
++			}
++			k, v = strings.ToLower(strings.TrimSpace(k)), strings.TrimSpace(v)
++			switch k {
++			case "lobbyurl":
++				s.lobbyURL = strings.TrimRight(v, "/")
++			case "buildtag":
++				if v != "" {
++					s.buildTag = v
++				}
++			}
++		}
++		f.Close()
++	}
++	if b, err := os.ReadFile(cvfOnlineProfileFile); err == nil {
++		var p struct {
++			Name string `json:"name"`
++		}
++		if json.Unmarshal(b, &p) == nil {
++			s.playerName = p.Name
++		}
++	}
++}
++
++func (s *cvfOnlineState) saveProfile() {
++	b, _ := json.Marshal(map[string]string{"name": s.playerName})
++	os.MkdirAll(filepath.Dir(cvfOnlineProfileFile), 0755)
++	os.WriteFile(cvfOnlineProfileFile, b, 0644)
++}
++
++// ---------------------------------------------------------------------------
++// Addresses
++
++func cvfLocalIPs() []string {
++	var out []string
++	ifaces, _ := net.Interfaces()
++	for _, ifc := range ifaces {
++		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
++			continue
++		}
++		addrs, _ := ifc.Addrs()
++		for _, a := range addrs {
++			if ipn, ok := a.(*net.IPNet); ok {
++				if ip4 := ipn.IP.To4(); ip4 != nil && !ip4.IsLinkLocalUnicast() {
++					out = append(out, ip4.String())
++				}
++			}
++		}
++	}
++	return out
++}
++
++func (s *cvfOnlineState) fetchPublicIP() {
++	s.mu.Lock()
++	if s.publicBusy || s.publicIP != "" {
++		s.mu.Unlock()
++		return
++	}
++	s.publicBusy = true
++	lobby := s.lobbyURL
++	s.mu.Unlock()
++
++	go func() {
++		ip, err := "", fmt.Errorf("no lobby configured")
++		sources := []string{}
++		if lobby != "" {
++			sources = append(sources, lobby+"/api/ip")
++		}
++		sources = append(sources, "https://api.ipify.org?format=json")
++		for _, u := range sources {
++			ip, err = s.getIP(u)
++			if err == nil && ip != "" {
++				break
++			}
++		}
++		s.mu.Lock()
++		s.publicBusy = false
++		if err == nil && ip != "" {
++			s.publicIP, s.publicIPErr = ip, ""
++		} else {
++			s.publicIPErr = "unknown"
++		}
++		s.mu.Unlock()
++	}()
++}
++
++func (s *cvfOnlineState) getIP(u string) (string, error) {
++	c := &http.Client{Timeout: 15 * time.Second}
++	resp, err := c.Get(u)
++	if err != nil {
++		return "", err
++	}
++	defer resp.Body.Close()
++	var v struct {
++		IP string `json:"ip"`
++	}
++	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&v); err != nil {
++		return "", err
++	}
++	if net.ParseIP(v.IP) == nil {
++		return "", fmt.Errorf("bad ip")
++	}
++	return v.IP, nil
++}
++
++// ---------------------------------------------------------------------------
++// Minimal UPnP IGD client (SSDP discovery + SOAP AddPortMapping/DeletePortMapping)
++
++type upnpMapping struct {
++	controlURL, service string
++	port                int
++	proto               string
++}
++
++type upnpDevice struct {
++	controlURL, service, localIP string
++}
++
++func upnpDiscover() (*upnpDevice, error) {
++	conn, err := net.ListenPacket("udp4", ":0")
++	if err != nil {
++		return nil, err
++	}
++	defer conn.Close()
++	dst := &net.UDPAddr{IP: net.IPv4(239, 255, 255, 250), Port: 1900}
++	for _, st := range []string{
++		"urn:schemas-upnp-org:device:InternetGatewayDevice:1",
++		"urn:schemas-upnp-org:device:InternetGatewayDevice:2",
++		"urn:schemas-upnp-org:service:WANIPConnection:1",
++	} {
++		msg := "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nST: " + st +
++			"\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\n\r\n"
++		conn.WriteTo([]byte(msg), dst)
++	}
++	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
++	buf := make([]byte, 4096)
++	seen := map[string]bool{}
++	for {
++		n, _, err := conn.ReadFrom(buf)
++		if err != nil {
++			return nil, fmt.Errorf("no UPnP router found")
++		}
++		loc := ""
++		for _, line := range strings.Split(string(buf[:n]), "\r\n") {
++			if k, v, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(k), "location") {
++				loc = strings.TrimSpace(v)
++			}
++		}
++		if loc == "" || seen[loc] {
++			continue
++		}
++		seen[loc] = true
++		if d, err := upnpDescribe(loc); err == nil {
++			return d, nil
++		}
++	}
++}
++
++func upnpDescribe(loc string) (*upnpDevice, error) {
++	c := &http.Client{Timeout: 4 * time.Second}
++	resp, err := c.Get(loc)
++	if err != nil {
++		return nil, err
++	}
++	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
++	resp.Body.Close()
++	type svc struct {
++		ServiceType string `xml:"serviceType"`
++		ControlURL  string `xml:"controlURL"`
++	}
++	dec := xml.NewDecoder(bytes.NewReader(body))
++	var found *svc
++	for {
++		tok, err := dec.Token()
++		if err != nil {
++			break
++		}
++		if se, ok := tok.(xml.StartElement); ok && se.Name.Local == "service" {
++			var s svc
++			if dec.DecodeElement(&s, &se) == nil &&
++				(strings.Contains(s.ServiceType, "WANIPConnection") || strings.Contains(s.ServiceType, "WANPPPConnection")) {
++				found = &s
++				break
++			}
++		}
++	}
++	if found == nil {
++		return nil, fmt.Errorf("no WAN service")
++	}
++	base, _ := url.Parse(loc)
++	ctl, err := base.Parse(found.ControlURL)
++	if err != nil {
++		return nil, err
++	}
++	// Which local address reaches the router?
++	host := base.Hostname()
++	localIP := ""
++	if c, err := net.Dial("udp4", net.JoinHostPort(host, "1900")); err == nil {
++		localIP = c.LocalAddr().(*net.UDPAddr).IP.String()
++		c.Close()
++	}
++	return &upnpDevice{controlURL: ctl.String(), service: found.ServiceType, localIP: localIP}, nil
++}
++
++func upnpSOAP(controlURL, service, action, args string) error {
++	body := `<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" ` +
++		`s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:` + action +
++		` xmlns:u="` + service + `">` + args + `</u:` + action + `></s:Body></s:Envelope>`
++	req, err := http.NewRequest("POST", controlURL, strings.NewReader(body))
++	if err != nil {
++		return err
++	}
++	req.Header.Set("Content-Type", `text/xml; charset="utf-8"`)
++	req.Header.Set("SOAPAction", `"`+service+`#`+action+`"`)
++	c := &http.Client{Timeout: 5 * time.Second}
++	resp, err := c.Do(req)
++	if err != nil {
++		return err
++	}
++	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
++	resp.Body.Close()
++	if resp.StatusCode != 200 {
++		return fmt.Errorf("router refused (%d)", resp.StatusCode)
++	}
++	return nil
++}
++
++func upnpAdd(d *upnpDevice, port int, proto string) error {
++	args := fmt.Sprintf("<NewRemoteHost></NewRemoteHost><NewExternalPort>%d</NewExternalPort>"+
++		"<NewProtocol>%s</NewProtocol><NewInternalPort>%d</NewInternalPort>"+
++		"<NewInternalClient>%s</NewInternalClient><NewEnabled>1</NewEnabled>"+
++		"<NewPortMappingDescription>Castlevania Fighter Online</NewPortMappingDescription>"+
++		"<NewLeaseDuration>7200</NewLeaseDuration>", port, proto, port, d.localIP)
++	return upnpSOAP(d.controlURL, d.service, "AddPortMapping", args)
++}
++
++func upnpDelete(m upnpMapping) {
++	args := fmt.Sprintf("<NewRemoteHost></NewRemoteHost><NewExternalPort>%d</NewExternalPort>"+
++		"<NewProtocol>%s</NewProtocol>", m.port, m.proto)
++	upnpSOAP(m.controlURL, m.service, "DeletePortMapping", args)
++}
++
++func (s *cvfOnlineState) openPorts(tcpPort, udpPort int) {
++	s.mu.Lock()
++	s.upnpStatus = "Opening router port automatically..."
++	s.mu.Unlock()
++	go func() {
++		d, err := upnpDiscover()
++		if err != nil {
++			s.mu.Lock()
++			s.upnpStatus = "Router auto-setup unavailable"
++			s.mu.Unlock()
++			return
++		}
++		var maps []upnpMapping
++		var errs []string
++		try := func(p int, proto string) {
++			if p <= 0 {
++				return
++			}
++			if err := upnpAdd(d, p, proto); err != nil {
++				errs = append(errs, proto)
++			} else {
++				maps = append(maps, upnpMapping{d.controlURL, d.service, p, proto})
++			}
++		}
++		if tcpPort > 0 {
++			try(tcpPort, "TCP")
++		}
++		try(udpPort, "UDP")
++		s.mu.Lock()
++		s.upnpMapped = append(s.upnpMapped, maps...)
++		if len(errs) == 0 {
++			s.upnpStatus = "Router port opened automatically"
++		} else {
++			s.upnpStatus = "Router refused auto-setup (" + strings.Join(errs, "/") + ")"
++		}
++		s.mu.Unlock()
++	}()
++}
++
++func (s *cvfOnlineState) closePorts() {
++	s.mu.Lock()
++	maps := s.upnpMapped
++	s.upnpMapped = nil
++	s.upnpStatus = ""
++	s.mu.Unlock()
++	if len(maps) > 0 {
++		go func() {
++			for _, m := range maps {
++				upnpDelete(m)
++			}
++		}()
++	}
++}
++
++// ---------------------------------------------------------------------------
++// Lobby client
++
++func (s *cvfOnlineState) post(path string, v any, out any) error {
++	b, _ := json.Marshal(v)
++	resp, err := s.httpClient.Post(s.lobbyURL+path, "application/json", bytes.NewReader(b))
++	if err != nil {
++		return err
++	}
++	defer resp.Body.Close()
++	if resp.StatusCode/100 != 2 {
++		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
++		return fmt.Errorf("lobby: %s", strings.TrimSpace(string(msg)))
++	}
++	if out != nil {
++		return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
++	}
++	return nil
++}
++
++func (s *cvfOnlineState) hostBegin(port, udpPort int) {
++	s.readConfig()
++	s.hostEnd()
++	s.mu.Lock()
++	s.hosting, s.hostPort = true, port
++	s.roomID, s.roomToken, s.roomOpen, s.lobbyHostErr = "", "", "", ""
++	stop := make(chan struct{})
++	s.hostStop = stop
++	name, lobby, tag := s.playerName, s.lobbyURL, s.buildTag
++	s.mu.Unlock()
++
++	s.fetchPublicIP()
++	s.openPorts(port, udpPort)
++
++	if lobby == "" {
++		return
++	}
++	if name == "" {
++		name = "Player"
++	}
++	go func() {
++		// Give UPnP a moment so the lobby's reachability check sees the open port.
++		select {
++		case <-stop:
++			return
++		case <-time.After(3 * time.Second):
++		}
++		var r struct {
++			ID    string `json:"id"`
++			Token string `json:"token"`
++			IP    string `json:"ip"`
++		}
++		err := s.post("/api/rooms", map[string]any{"name": name, "port": port, "udp_port": udpPort, "version": tag}, &r)
++		s.mu.Lock()
++		if err != nil {
++			s.lobbyHostErr = "Lobby unreachable"
++			s.mu.Unlock()
++			return
++		}
++		if s.hostStop != stop {
++			s.mu.Unlock()
++			s.post("/api/rooms/"+r.ID+"/leave", map[string]string{"token": r.Token}, nil)
++			return
++		}
++		s.roomID, s.roomToken = r.ID, r.Token
++		if r.IP != "" && s.publicIP == "" {
++			s.publicIP = r.IP
++		}
++		s.mu.Unlock()
++		t := time.NewTicker(10 * time.Second)
++		defer t.Stop()
++		for {
++			var hb struct {
++				Open string `json:"open"`
++			}
++			err := s.post("/api/rooms/"+r.ID+"/heartbeat", map[string]string{"token": r.Token}, &hb)
++			s.mu.Lock()
++			if err == nil {
++				s.roomOpen = hb.Open
++				s.lobbyHostErr = ""
++			}
++			s.mu.Unlock()
++			select {
++			case <-stop:
++				s.post("/api/rooms/"+r.ID+"/leave", map[string]string{"token": r.Token}, nil)
++				return
++			case <-t.C:
++			}
++		}
++	}()
++}
++
++func (s *cvfOnlineState) hostEnd() {
++	s.mu.Lock()
++	if s.hostStop != nil {
++		close(s.hostStop)
++		s.hostStop = nil
++	}
++	s.hosting = false
++	s.roomID, s.roomToken, s.roomOpen = "", "", ""
++	s.mu.Unlock()
++}
++
++func (s *cvfOnlineState) hostStatus() string {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	var b strings.Builder
++	b.WriteString("Waiting for an opponent...\n\n")
++	pub := s.publicIP
++	if pub == "" {
++		if s.publicIPErr != "" {
++			pub = "(could not detect)"
++		} else {
++			pub = "(detecting...)"
++		}
++	}
++	fmt.Fprintf(&b, "Internet address: %s   Port: %d\n", pub, s.hostPort)
++	if ips := cvfLocalIPs(); len(ips) > 0 {
++		fmt.Fprintf(&b, "Same network (LAN): %s\n", strings.Join(ips, ", "))
++	}
++	if s.upnpStatus != "" {
++		b.WriteString(s.upnpStatus + "\n")
++		if strings.HasPrefix(s.upnpStatus, "Router auto-setup unavailable") || strings.HasPrefix(s.upnpStatus, "Router refused") {
++			fmt.Fprintf(&b, "If nobody can join: forward TCP+UDP %d on your router\nor use a VPN like Tailscale.\n", s.hostPort)
++		}
++	}
++	switch {
++	case s.lobbyURL == "":
++		b.WriteString("\nShare your Internet address with your opponent.\n")
++	case s.lobbyHostErr != "":
++		b.WriteString("\n" + s.lobbyHostErr + " - share your address instead.\n")
++	case s.roomID == "":
++		b.WriteString("\nListing you in the lobby...\n")
++	default:
++		fmt.Fprintf(&b, "\nListed in the lobby as \"%s\"\n", s.playerName)
++		b.WriteString("Other players can now pick you in Online > Lobby.\n")
++	}
++	b.WriteString("\nPress Esc to stop hosting.")
++	return b.String()
++}
++
++func (s *cvfOnlineState) refreshRooms() {
++	s.readConfig()
++	s.mu.Lock()
++	if s.roomsBusy || s.lobbyURL == "" {
++		if s.lobbyURL == "" {
++			s.roomsErr = "No lobby server configured (data/cvf_online.ini)"
++		}
++		s.mu.Unlock()
++		return
++	}
++	s.roomsBusy = true
++	if s.roomsFetched.IsZero() {
++		s.roomsErr = "Connecting to the lobby (can take up to a minute)..."
++	}
++	s.mu.Unlock()
++	go func() {
++		resp, err := s.httpClient.Get(s.lobbyURL + "/api/rooms")
++		var rooms []cvfRoom
++		if err == nil {
++			if resp.StatusCode == 200 {
++				err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rooms)
++			} else {
++				err = fmt.Errorf("status %d", resp.StatusCode)
++			}
++			resp.Body.Close()
++		}
++		s.mu.Lock()
++		s.roomsBusy = false
++		if err != nil {
++			s.roomsErr = "Lobby unreachable, retrying..."
++		} else {
++			sort.SliceStable(rooms, func(i, j int) bool { return rooms[i].AgeSec < rooms[j].AgeSec })
++			s.rooms, s.roomsErr, s.roomsFetched = rooms, "", time.Now()
++		}
++		s.mu.Unlock()
++	}()
++}
++
++var cvfNameRe = regexp.MustCompile(`[^\p{L}\p{N} _.\-!?']`)
++
++func cvfCleanName(n string) string {
++	n = strings.TrimSpace(cvfNameRe.ReplaceAllString(n, ""))
++	if r := []rune(n); len(r) > 20 {
++		n = string(r[:20])
++	}
++	return n
++}
++
++// ---------------------------------------------------------------------------
++// Lua bindings
++
++func cvfOnlineScriptInit(l *lua.LState) {
++	luaRegister(l, "cvfOnlineHostBegin", func(l *lua.LState) int {
++		cvfOnline.hostBegin(int(numArg(l, 1)), int(sys.cfg.Netplay.Rollback.Port))
++		return 0
++	})
++	luaRegister(l, "cvfOnlineHostEnd", func(l *lua.LState) int {
++		cvfOnline.hostEnd()
++		return 0
++	})
++	luaRegister(l, "cvfOnlineHostStatus", func(l *lua.LState) int {
++		l.Push(lua.LString(cvfOnline.hostStatus()))
++		return 1
++	})
++	// Called when joining: open our UDP rollback port too, so the host can reach us.
++	luaRegister(l, "cvfOnlineJoinBegin", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		cvfOnline.openPorts(0, int(sys.cfg.Netplay.Rollback.Port))
++		return 0
++	})
++	luaRegister(l, "cvfOnlineClosePorts", func(l *lua.LState) int {
++		cvfOnline.closePorts()
++		return 0
++	})
++	luaRegister(l, "cvfLobbyEnabled", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		l.Push(lua.LBool(cvfOnline.lobbyURL != ""))
++		return 1
++	})
++	luaRegister(l, "cvfLobbyRefresh", func(l *lua.LState) int {
++		cvfOnline.refreshRooms()
++		return 0
++	})
++	// Returns rooms table, status string
++	luaRegister(l, "cvfLobbyRooms", func(l *lua.LState) int {
++		cvfOnline.mu.Lock()
++		rooms := append([]cvfRoom(nil), cvfOnline.rooms...)
++		status := cvfOnline.roomsErr
++		tag := cvfOnline.buildTag
++		cvfOnline.mu.Unlock()
++		t := l.NewTable()
++		for _, r := range rooms {
++			rt := l.NewTable()
++			rt.RawSetString("id", lua.LString(r.ID))
++			rt.RawSetString("name", lua.LString(r.Name))
++			rt.RawSetString("ip", lua.LString(r.IP))
++			rt.RawSetString("port", lua.LNumber(r.Port))
++			rt.RawSetString("open", lua.LString(r.Open))
++			rt.RawSetString("age", lua.LNumber(r.AgeSec))
++			rt.RawSetString("compatible", lua.LBool(r.Version == tag))
++			t.Append(rt)
++		}
++		l.Push(t)
++		l.Push(lua.LString(status))
++		return 2
++	})
++	luaRegister(l, "cvfGetPlayerName", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		l.Push(lua.LString(cvfOnline.playerName))
++		return 1
++	})
++	luaRegister(l, "cvfSetPlayerName", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		n := cvfCleanName(strArg(l, 1))
++		cvfOnline.mu.Lock()
++		cvfOnline.playerName = n
++		cvfOnline.mu.Unlock()
++		cvfOnline.saveProfile()
++		l.Push(lua.LString(n))
++		return 1
++	})
++	// Temporarily point the netplay connection at a lobby room's port.
++	luaRegister(l, "cvfSetNetplayPort", func(l *lua.LState) int {
++		if p := int(numArg(l, 1)); p > 0 && p < 65536 {
++			sys.cfg.Netplay.ListenPort = p
++		}
++		return 0
++	})
++	luaRegister(l, "cvfGetNetplayPort", func(l *lua.LState) int {
++		l.Push(lua.LNumber(sys.cfg.Netplay.ListenPort))
++		return 1
++	})
++}
+diff --git a/src/script.go b/src/script.go
+index 5443f25..fdd510d 100644
+--- a/src/script.go
++++ b/src/script.go
+@@ -891,6 +891,7 @@ func luaKeyToString(k lua.LValue) string {
+ func systemScriptInit(l *lua.LState) {
+ 	triggerRedirection(l)
+ 	triggerFunctions(l)
++	cvfOnlineScriptInit(l)
+ 	luaRegister(l, "addChar", func(l *lua.LState) int {
+ 		/*Add a character definition to the select screen.
+ 		@function addChar
+diff --git a/src/system.go b/src/system.go
+index 2698d35..4591359 100644
+--- a/src/system.go
++++ b/src/system.go
+@@ -990,7 +990,14 @@ func (s *System) renderFrame() {
+ 	}
+ 
+ 	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
+-	dx, dy, dscl := s.zoom.computeCamera(x, y, scl)
++	// The zoomed camera is normally computed by action() as part of the simulated frame,
++	// so that ScreenPos stays deterministic under rollback. Only compute it here as a fallback.
++	var dx, dy, dscl float32
++	if s.zoom.resultValid {
++		dx, dy, dscl = s.zoom.resultPos[0], s.zoom.resultPos[1], s.zoom.resultScale
++	} else {
++		dx, dy, dscl = s.zoom.computeCamera(x, y, scl)
++	}
+ 	s.draw(dx, dy, dscl)
+ 
+ 	// Lua
+@@ -2945,6 +2952,11 @@ func (s *System) action() {
+ 		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
+ 	}
+ 	s.cam.Update(scl, x, y)
++	// Rollback determinism: compute the zoom-adjusted camera inside the simulated frame.
++	// ScreenPos triggers read zoom.resultPos, which used to be refreshed only by renderFrame(),
++	// so frames re-simulated during a rollback saw a stale camera and desynced.
++	s.zoom.computeCamera(s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale())
++	s.zoom.resultValid = true
+ 	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
+ 	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
+ 	if s.xmin > s.xmax {
+@@ -3018,6 +3030,13 @@ func (s *System) action() {
+ 		}
+ 	}
+ 
++	// Projectile animations are gameplay state; step them here instead of in cueDraw()
++	for i := range s.projs {
++		for _, p := range s.projs[i] {
++			p.animStep()
++		}
++	}
++
+ 	return
+ }
+ 
+@@ -6862,6 +6881,7 @@ type ZoomEffect struct {
+ 	stageBound  bool
+ 	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
+ 	resultScale float32
++	resultValid bool // True once the current simulated frame has computed resultPos/resultScale
+ }
+ 
+ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6897,7 @@ func (z *ZoomEffect) reset() {
+ 	z.stageBound = true
+ 	z.resultPos = [2]float32{0, 0}
+ 	z.resultScale = 1
++	z.resultValid = false
+ }
+ 
+ // Step the zoom variables

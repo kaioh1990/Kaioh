@@ -1,0 +1,22 @@
+<#f0f000>:Carrie Fernandez - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Carrie quickly jumps up.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Dagger Holy Water Hol...</>
+Slide				_D_+^B
+  <#9a9a9a>Carrie slides forward.</>
+Large Fireball				_F_F_+^A / ^C <#bebebe>or</> _D_DF_F_+^A / ^C
+  <#9a9a9a>Carrie shoots a very quick fireball, which...</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Carrie concentrates and rips several rocks...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

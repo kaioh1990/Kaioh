@@ -1,0 +1,40 @@
+<#f0f000>:Alucard - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Alucard jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Holy Water Axe Holy B...</>
+Dive Kick				_D_+^B <#bebebe>or</> _DF_+^B
+  <#9a9a9a>Alucard dives either down or diagonally dow...</>
+Bat Form				^Y
+  <#9a9a9a>Alucard turns into a giant bat.</>
+Double Backstab				_F_F_+^A
+  <#9a9a9a>Alucard warps forward and slashes twice.</>
+Mist Form				_F_F_+^C
+  <#9a9a9a>Alucard turns into mist for a second and qu...</>
+Hellfire				_U_D_DF_F_+^A <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A
+  <#9a9a9a>Alucard fires 3 fireballs which travel hori...</>
+Dark Inferno				_U_D_DF_F_+^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^C
+  <#9a9a9a>Alucard fires 3 dark orbs which travel hori...</>
+Wing Smash				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>While in bat form, Alucard dashes forward a...</>
+Dark Meta- morphosis				_U_+^Y
+  <#9a9a9a>Alucard's vampire half takes over.</>
+Item Crash				_D_DF_F_UF_U_+^A
+  <#9a9a9a>Alucard uses a cross item crash.</>
+Tetra Spirit				_D_DF_F_UF_U_+^C
+  <#9a9a9a>Alucard summons three spirits that home on...</>
+Muramasa Slash				_D_DF_F_+^A / ^C
+  <#9a9a9a>Alucard will use the cursed Muramasa sword...</>
+Wolf Charge				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Alucard transforms into a wolf and rushes f...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>

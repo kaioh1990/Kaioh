@@ -1,0 +1,30 @@
+<#f0f000>:Nathan Graves - Special Moves:</>
+
+Super Jump				_U_+^X <#bebebe>on the ground or</> ^X <#bebebe>in air</>
+  <#9a9a9a>Nathan jumps up very fast.</>
+Subweapon Use				_U_+^A / ^C
+  <#9a9a9a>Available subweapons: Dagger Holy Water Hol...</>
+Slide				_D_+^B
+  <#9a9a9a>Nathan slides forward.</>
+Shoulder Rush				_F_F_+^A / ^C
+  <#9a9a9a>Nathan quickly dashes across the screen, ra...</>
+Roundhouse Kick				_D_DF_F_+^A / ^C
+  <#9a9a9a>Nathan spins around with his leg extended,...</>
+Clone				_U_D_DF_F_+^A / ^C <#bebebe>or</> _U_UB_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Nathan creates a clone of himself which doe...</>
+Sword Slash				_B_DB_D_DF_F_+^A / ^C
+  <#9a9a9a>Nathan slashes very quickly with a sword cr...</>
+DSS Mode				^Y
+  <#9a9a9a>Nathan goes into the DSS mode.</>
+Item Crash				_D_DF_F_UF_U_+^A / ^C
+  <#9a9a9a>Nathan summons all of his power to use the...</>
+
+<#f0f000>:Buttons:</>
+^A  Primary attack				^B  Jump
+^C  Secondary attack				^X  Backdash
+^Y  Special ability				^Z  Change subweapon
+
+<#f0f000>:Common Moves:</>
+
+Turn Around				_B_+^B
+  <#9a9a9a>Character turns around while flying.</>
