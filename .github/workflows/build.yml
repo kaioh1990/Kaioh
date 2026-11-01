@@ -116,6 +116,7 @@ jobs:
       - name: Fetch Ikemen GO and apply CvF rollback fixes
         shell: bash
         run: |
+          git config --global core.autocrlf false
           git clone "$IKEMEN_REPO" ikemen
           cd ikemen
           git checkout "$IKEMEN_COMMIT"
