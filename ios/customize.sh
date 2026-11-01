@@ -15,6 +15,7 @@ printf 'external/script\nexternal/gamecontrollerdb.txt\n' > "$W/DefaultAssets/ma
 sed -i '' \
   -e 's/PRODUCT_BUNDLE_IDENTIFIER = "ikemen-engine.I-K-E-M-E-N-Go";/PRODUCT_BUNDLE_IDENTIFIER = "com.kaioh1990.cvfonline";/' \
   -e 's/DEVELOPMENT_TEAM = 6W73QW64V7;/DEVELOPMENT_TEAM = "";/' \
+  -e 's/IPHONEOS_DEPLOYMENT_TARGET = 26\.[0-9]*;/IPHONEOS_DEPLOYMENT_TARGET = 17.0;/' \
   -e 's/GENERATE_INFOPLIST_FILE = YES;/GENERATE_INFOPLIST_FILE = YES;\
 				INFOPLIST_KEY_CFBundleDisplayName = "CvF Online";/' \
   "$PBX"

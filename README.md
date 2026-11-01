@@ -9,7 +9,9 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
 | `cvf-files/` | Edited CvF files: menu (`options11.def`), roster, command lists, online settings |
 | `lobby/` | Lobby server (Go, no dependencies) |
 | `render.yaml` | One-click deploy of the lobby to Render's free tier |
-| `.github/workflows/` | Builds Windows + macOS (Intel and Apple Silicon) and publishes them as releases |
+| `ios/customize.sh` | Turns the [ikemen-ios](https://github.com/Jesuszilla/ikemen-ios) wrapper into the CvF Online iPhone/iPad app |
+| `tools/detmath-check/` | CI check that Intel/AMD and Apple chips compute identical math |
+| `.github/workflows/` | Builds Windows, macOS (Intel and Apple Silicon) and iOS/iPadOS, and publishes them as releases |
 
 ## Engine changes
 
@@ -18,6 +20,10 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
 3. **Online helpers:** the Host screen shows your Internet/LAN address and port, opens the router port
    automatically via UPnP, and lists you in the lobby. New **Online > Lobby** screen lists players
    who are hosting; pick one to join without typing an IP.
+4. **Cross-CPU determinism:** gameplay code uses pure-Go copies of `Exp`/`Log`/`Pow`/`Hypot`/`Log2`
+   (Go's assembly versions differ between amd64 and arm64), and Apple builds disable FMA fusion,
+   so PCs, Macs and iPads can play each other without desyncs.
+5. **CvF rules** (`data/cvf_online.ini`): attack invincibility cap and slower MP gain.
 
 ## Deploying the lobby (free)
 
