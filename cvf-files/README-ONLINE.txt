@@ -18,27 +18,33 @@ Your original "Castlevania Fighter (v0.8.5b)" folder is untouched.
   ARCADE / VERSUS / ONLINE.
 - Keyboard defaults (change in Options > Key Config):
   arrows = move, Z X C / A S D = buttons, Enter = start.
-- IMPORTANT: in menus, press Z (or the A / bottom face button on a
-  controller) to choose an item. Enter does NOT select menu items.
+- In menus press Enter or Z (or the A / bottom face button) to choose.
+- Command list: pause a match (Esc) > Command List.
 - Controllers work (Options > Joystick Config).
 - Alt+Enter toggles fullscreen.
 
 
 2. PLAYING ONLINE
 -----------------
-One player HOSTS, the other JOINS.
+Online menu: LOBBY / HOST GAME / JOIN GAME
 
-  Host:  ONLINE > Host Game.  The host needs TCP *and* UDP port 7500
-         forwarded on their router to their machine (or use a VPN
-         like Tailscale / ZeroTier / Radmin and skip port forwarding).
-  Join:  ONLINE > Join Game > New Address > type the host's IP.
-  Then:  pick Versus, choose characters, fight.
+  Host Game  You wait for an opponent. The screen shows your Internet
+             address and port, tries to open the port on your router
+             automatically, and lists you in the lobby.
+  Lobby      Shows everyone who is hosting right now. Pick a name to join.
+             No IP typing needed. (The first time, you choose a player name.)
+  Join Game  Join by typing the host's address yourself.
 
-Both players must use this same folder (same engine build, same
-characters). Mismatched files will desync.
+If nobody can join you: the host screen will say the router could not be
+set up automatically. Then either forward TCP *and* UDP port 7500 on your
+router to your machine, or have both players use a VPN like Tailscale /
+ZeroTier / Radmin and join by the VPN address.
+
+Both players must use the same build of this folder.
 
 Rollback settings are in save/config.ini under [Netplay]:
   Rollback.FrameDelay = 2   (raise to 3-4 on bad connections)
+Lobby server address: data/cvf_online.ini (LobbyURL).
 
 
 3. STEAM DECK / ROG Z13 (SteamOS)

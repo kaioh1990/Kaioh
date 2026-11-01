@@ -23,7 +23,7 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
 
 1. Sign in to [render.com](https://render.com) with GitHub.
 2. **New > Blueprint**, pick this repository, then **Apply**. Render reads `render.yaml`.
-3. Copy the service URL (e.g. `https://cvf-lobby.onrender.com`) into `cvf-files/data/cvf_online.ini`
+3. The service URL (currently `https://cvf-lobby.onrender.com`) goes into `cvf-files/data/cvf_online.ini`
    as `LobbyURL = ...` (and into `data/cvf_online.ini` in your game folder).
 
 Free Render services sleep after 15 minutes without traffic; the first visit after that takes
