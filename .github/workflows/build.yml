@@ -1,11 +1,12 @@
-name: Build CvF Online (macOS)
+name: Build CvF Online
 
 on:
   workflow_dispatch:
   push:
     paths:
       - 'patches/**'
-      - '.github/workflows/build-macos.yml'
+      - '.github/workflows/build.yml'
+      - 'cvf-files/**'
 
 env:
   IKEMEN_REPO: https://github.com/ikemen-engine/Ikemen-GO.git
@@ -105,4 +106,93 @@ jobs:
         with:
           name: cvf-online-macos-${{ matrix.name }}
           path: cvf-online-macos-${{ matrix.name }}.zip
+          retention-days: 30
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Ikemen GO and apply CvF rollback fixes
+        shell: bash
+        run: |
+          git clone "$IKEMEN_REPO" ikemen
+          cd ikemen
+          git checkout "$IKEMEN_COMMIT"
+          git apply ../patches/ikemen-cvf-rollback-fixes.patch
+          git --no-pager diff --stat
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: ikemen/go.sum
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          path-type: inherit
+          install: >-
+            git
+            make
+            diffutils
+            zip
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-bzip2
+            mingw-w64-ucrt-x86_64-nasm
+            mingw-w64-ucrt-x86_64-tools
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-libxmp
+
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: 1.4.304.1
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Build
+        shell: 'msys2 {0}'
+        working-directory: ikemen
+        env:
+          BUILD_FFMPEG: "yes"
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "1"
+        run: |
+          go env -w GO111MODULE=on
+          go mod download
+          ./build/build.sh Win64
+          ls -la Ikemen_GO.exe lib/
+
+      - name: Package (engine + CvF port files, no game content)
+        shell: 'msys2 {0}'
+        run: |
+          D=CvF-Online-Windows
+          mkdir -p $D/lib $D/data $D/font $D/save
+          cp ikemen/Ikemen_GO.exe $D/
+          cp -r ikemen/lib/* $D/lib/
+          cp -r ikemen/external $D/
+          # Ikemen data files, minus the ones Castlevania Fighter ships its own versions of
+          for f in ikemen/data/*; do
+            case "$(basename "$f")" in
+              common.snd|fight.def|fight.sff|fight.snd|fightfx.air|fightfx.sff) ;;
+              *) cp -r "$f" $D/data/ ;;
+            esac
+          done
+          cp ikemen/src/resources/defaultMotif.ini $D/data/system.base.def
+          cp -rn ikemen/font/* $D/font/ 2>/dev/null || true
+          cp cvf-files/data/characters.def cvf-files/data/options11.def $D/data/
+          cp cvf-files/save/config.ini $D/save/
+          cp cvf-files/README-ONLINE.txt cvf-files/INSTALL-WINDOWS.txt $D/
+          mkdir -p $D/patches && cp patches/*.patch $D/patches/
+          zip -q -r cvf-online-windows-x64.zip $D
+          ls -la cvf-online-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cvf-online-windows-x64
+          path: cvf-online-windows-x64.zip
           retention-days: 30

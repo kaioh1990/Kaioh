@@ -1,0 +1,979 @@
+;1.1
+;look for xxx for version
+[Info]
+name="Castlevania Fighter"
+author="CvF"
+versiondate=0
+mugenversion=1.1
+localcoord=320,240
+[Files]
+spr=main.sff
+snd=main.snd
+logo.storyboard=logo.def
+intro.storyboard=introgame.def
+select=characters.def
+fight=bars.def;barsdemo.def
+font1=font/cvfont.fnt
+font2=font/name.fnt
+font3=font/jg.fnt
+font4=font/st10.fnt;def
+font5=font/cvfont.fnt
+[Music]
+title.bgm=sound/Title.ogg
+title.bgm.volume=100
+title.bgm.loop=1
+title.bgm.loopstart=
+title.bgm.loopend=
+select.bgm=sound/Select.ogg
+select.bgm.volume=100
+select.bgm.loop=1
+select.bgm.loopstart=
+select.bgm.loopend=
+vs.bgm= 
+vs.bgm.volume=0
+vs.bgm.loop=1
+vs.bgm.loopstart=
+vs.bgm.loopend=
+victory.bgm=
+victory.bgm.volume=0
+victory.bgm.loop=0
+victory.bgm.loopstart=
+victory.bgm.loopend=
+[Title Info]
+fadein.time=24
+fadeout.time=16
+menu.pos=160,180
+menu.item.font=1,1,0
+menu.item.active.font=1,0,0
+menu.item.spacing=0,20
+menu.itemname.arcade="Arcade"
+menu.itemname.versus="Versus"
+menu.itemname.menunetwork="Online"
+menu.itemname.menunetwork.serverhost="Host Game"
+menu.itemname.menunetwork.serverjoin="Join Game"
+menu.itemname.menunetwork.back="Back"
+menu.itemname.menunetwork.serverjoin.joinadd="New Address"
+menu.itemname.menunetwork.serverjoin.back="Back"
+menu.itemname.server.netplayversus="Versus"
+menu.itemname.server.back="Exit"
+menu.itemname.teamarcade="Team Arcd"
+menu.itemname.teamversus="Team VS"
+menu.itemname.teamcoop="Co-op"
+menu.itemname.survival="Survival"
+menu.itemname.survivalcoop="Coop Surv"
+menu.itemname.training="Training"
+menu.itemname.watch="Watch"
+menu.itemname.options="Options"
+menu.itemname.exit="Exit"
+menu.window.margins.y=18,2
+menu.window.visibleitems=3
+menu.boxcursor.visible=1	
+menu.boxcursor.coords=-69,-16,69,2
+cursor.move.snd=0,0
+cursor.done.snd=0,1
+cancel.snd=0,2
+menu.window.anim=0
+menu.window.spr=0,0
+menu.boxcursor.anim=0
+menu.boxcursor.spr=0,0
+menu.boxcursor.anim=0
+menu.boxcursor.spr=0,0
+[TitleBGdef]
+bgclearcolor=0,0,0
+[TitleBG *];moon
+type=normal
+spriteno=0,3
+start=-2,118
+layerno=0
+mask=1
+[TitleBG *];scrolling castle bg
+type=normal
+spriteno=0,7
+start=0,110
+layerno=0
+mask=1
+trans=add
+[TitleBG *];scrolling castle
+type=normal
+spriteno=0,6
+start=0,110
+layerno=0
+mask=1
+[TitleBG *];Shadow
+type=normal
+spriteno=0,2
+start=-160,0
+mask=1
+trans=sub
+[TitleBG *];castlevania bg
+type=normal
+spriteno=0,1
+start=0,74
+mask=1
+trans=add;sub;
+[TitleBG *];castlevania
+type=normal
+spriteno=0,0
+start=0,74
+mask=1
+trans=none
+[TitleBG *];black lines
+type=normal
+spriteno=1,0
+start=-160,0
+layerno=0
+mask=1
+trans=none
+[TitleBG *];version text
+type=normal
+spriteno=1,10
+start=-140,3
+mask=1
+[TitleBG *];patch version digit - actual version
+type=normal
+spriteno=1,20
+start=-127,3
+mask=1
+[TitleBG *];patch version .
+type=normal
+spriteno=1,13
+start=-123,3
+mask=1
+[TitleBG *];patch version digit - beta revision
+type=normal
+spriteno=1,28
+start=-119,3
+mask=1
+[TitleBG *];patch version .
+type=normal
+spriteno=1,13
+start=-115,3
+mask=1
+[TitleBG *];patch version digit - subversion 1
+type=normal
+spriteno=1,25
+start=-111,3
+mask=1
+[TitleBG *];patch version digit - subversion 2
+type=normal
+spriteno=1,16
+start=-107,3
+mask=1
+;xxx
+[TitleBG *];patch version a (15=a, 16=b etc, up to e, need more)
+type=dummy;normal
+spriteno=1,15
+start=-103,3
+mask=1
+[TitleBG *];beta text
+type=normal
+spriteno=1,11
+start=159,3
+mask=1
+[Infobox]
+text.font=3,0,1
+[Infobox Text]
+==== CREDITS ====
+
+Castlevania and all related characters, graphics, music, sound effects, story, and other concepts (c) KONAMI
+
+M.U.G.E.N (c) Elecbyte
+
+= PRODUCER & CREATIVE DIRECTOR =
+Serio
+
+= LEAD M.U.G.E.N PROGRAMMING =
+Serio
+
+= M.U.G.E.N PROGRAMMING ASSISTANCE =
+Bia
+Winane
+
+= GRAPHIC & SOUND RIPPING =
+Ace Spark
+Anapan
+CyberDragon10K
+Fou-Lu
+Gemini
+Rasgar
+Rugal
+Serio
+Sonic Reaper
+Wonko
+
+= PIXEL ART =
+Bryce
+CyberDragon10K
+Daeron
+Donoffrio
+Ed
+FinnishFlame
+Irrlinchen
+Jorge D. Fuentes
+nukesheart
+Serio
+Thaddeus
+Vedora Kingdom
+
+= CHARACTER PORTRAITS =
+Jorge D. Fuentes
+
+= ADDITIONAL MUSIC TRACKS =
+"Alucard Battle"
+Castlevania: Legends
+(arr. by monjakure/Yuta Romeo)
+
+"An Inscription on a Tombstone"
+"Spirit Awakening to Eternity"
+Valkyrie Profile -LENNETH-
+Motoi Sakuraba
+
+"Awake"
+"Dracula's Tears"
+"Successor of Fate"
+various Castlevania titles
+(arr. by dlol)
+
+"Battle with Junior Shrooboid (Boss Battle Theme)"
+Mario & Luigi: Partners in Time
+Yoko Shimomura
+
+"Big Battle"
+Castlevania III: Dracula's Curse
+(arr. by NICH2)
+
+"Curse of Sorrow/Sorrow's Distortion"
+Castlevania: Order of Ecclesia
+(arr. by Lacope0)
+
+"Duke Nukem Jam"
+www.vertexguy.com
+Chris Kline
+
+"Chamber of Ruin"
+"Dungeon of Silence"
+"Scarlet Battle Soul"
+various cv titles
+(arr. by Dracula9)
+
+"Heart of Fire/Don't Wait Until Night"
+Castlevania: Aria of Sorrow
+(arr. by Jorge D. Fuentes)
+
+"Invitation of a Crazed Moon"
+Castlevania: Portrait of Ruin
+(arr. by Eru/WOODSOFT)
+
+"LEGENDARY BATTLE (Demon Emperor Mundus Battle 1: Sky)"
+Devil May Cry
+Masato Kouda
+
+"Proof of Blood"
+Castlevania: Circle of the Moon
+(arr. by Yamada)
+
+"Repose of Souls"
+Castlevania: Circle of the Moon
+(arr. by Carl Larsson - nightbeat)
+
+"Ruined Castle Corridor"
+Castlevania: Aria of Sorrow
+(arr. by DjBjra)
+
+"S (Sparda Battle 2)"
+Devil May Cry
+Masami Ueda
+
+"Shrine Maiden of Heaven and Earth -Orchestral Style-"
+Koumajou Densetsu II: A Stranger's Requiem
+Eiichiro Yanagi
+
+Simon Belmont's theme (nes arrangement)
+Sebastian Exe
+
+"The Legend of Cyprus (Montano's theme)"
+Demon Hunter Legend 4
+(arr. by Rasgar & Six-Stringed Flamberge)
+
+"Tragic Destiny/Like Father, Like Son"
+Castlevania: The Bloodstained Symphony (cancelled fangame)
+Geoffrey Gunn
+
+"Waltz of the Scarlet Devil"
+Koumajou Densetsu: Scarlet Symphony
+Eiichiro Yanagi
+
+= ADDITIONAL CHARACTERS =
+Duke Nukem
+(c) Gearbox Software, Apogee Software, 3D Realms
+
+Reimu, Sakuya, Remilia
+(c) Team Shanghai Alice
+
+Ronald McDonald
+(c) McDonald's
+
+= SPECIAL THANKS =
+UZO and Lukmendes for extensive testing
+
+All the testers on the forums and the discord server
+[Select Info]
+fadein.time=32
+fadeout.time=32
+rows=16
+columns=22
+wrapping=1
+pos=32,168
+showemptyboxes=0
+moveoveremptyboxes=0
+cell.layerno=0
+cell.size=16,16
+cell.spacing=0
+cell.bt.layerno=0
+cell.bg.spr=-1,0
+p1.cursor.startcell=1,4
+p1.cursor.active.spr=0,15
+p1.cursor.done.spr=0,15;6
+p1.cursor.move.snd=0,0
+p1.cursor.done.snd=0,1
+p1.random.move.snd=0,0
+p2.cursor.startcell=1,11
+p2.cursor.active.spr=0,17
+p2.cursor.done.spr=0,17;8
+p2.cursor.blink=1
+p2.cursor.move.snd=0,0
+p2.cursor.done.snd=0,1
+p2.random.move.snd=0,0
+random.move.snd.cancel=0
+stage.move.snd=0,0
+stage.done.snd=0,1
+cancel.snd=0,2
+portrait.spr=9000,0
+portrait.offset=0,0
+portrait.scale=1,1
+title.offset=160,-100
+title.font=-1
+p1.layerno=0
+p1.face.offset=0,16
+p1.face.scale=1,1
+p1.face.facing=1
+p1.face.layerno=1
+p1.name.offset=0,999
+p1.name.font=1,0,0
+p1.name.layerno=0
+p2.layerno=0
+p2.face.offset=320,16
+p2.face.scale=1,1
+p2.face.facing=1
+p2.face.layerno=1
+p2.name.offset=320,999
+p2.name.font=1,0,0
+p2.name.layerno=0
+stage.layerno=0
+stage.pos.layerno=0
+stage.pos=96,128
+stage.active.layerno=0
+stage.active.font=4,0,1
+stage.active2.layerno=0
+stage.active2.font=4,0,1
+stage.done.layerno=0
+stage.done.font=4,0,1
+teammenu.move.wrapping=0
+p1.teammenu.pos=20,36
+p1.teammenu.selftitle.font=1,0,1
+p1.teammenu.selftitle.text=
+p1.teammenu.enemytitle.font=1,0,1
+p1.teammenu.enemytitle.text=
+p1.teammenu.move.snd=-1
+p1.teammenu.value.snd=-1
+p1.teammenu.done.snd=-1
+p1.teammenu.item.offset=0,20
+p1.teammenu.item.spacing=0,15
+p1.teammenu.item.font=1,0,1
+p1.teammenu.item.active.font=1,1,1
+p1.teammenu.item.active2.font=1,0,1
+p1.teammenu.item.cursor.offset=-10,0
+p1.teammenu.item.cursor.anim=180
+p1.teammenu.value.icon.offset=60,1
+p1.teammenu.value.icon.spr=181,0
+p1.teammenu.value.empty.icon.offset=60,1
+p1.teammenu.value.empty.icon.spr=182,0
+p1.teammenu.value.spacing=6,0
+p2.teammenu.pos=299,36
+p2.teammenu.selftitle.font=1,0,-1
+p2.teammenu.selftitle.text=
+p2.teammenu.enemytitle.font=1,0,-1
+p2.teammenu.enemytitle.text=
+p2.teammenu.move.snd=-1
+p2.teammenu.value.snd=-1
+p2.teammenu.done.snd=-1
+p2.teammenu.item.offset=0,20
+p2.teammenu.item.spacing=0,15
+p2.teammenu.item.font=1,0,-1
+p2.teammenu.item.active.font=1,1,-1
+p2.teammenu.item.active2.font=1,0,-1
+p2.teammenu.item.cursor.offset=10,0
+p2.teammenu.item.cursor.anim=190
+p2.teammenu.value.icon.offset=-60,1
+p2.teammenu.value.icon.spr=191,0
+p2.teammenu.value.empty.icon.offset=-60,1
+p2.teammenu.value.empty.icon.spr=192,0
+p2.teammenu.value.spacing=-6,0
+cell.random.layerno=0
+cell.random.spr=-1,0
+cell.random.switchtime=1
+[SelectBGdef]
+[SelectBG *];background
+type=normal
+spriteno=0,10
+layerno=0
+start=-160,0
+mask=0
+tile=1,1
+[SelectBG *];mist top
+type=anim
+actionno=0
+layerno=1
+mask=1
+start=160,16
+tile=0,0
+velocity=0.28,0
+[begin action 0]
+0000,030,00,00,08,,AS128D256
+0000,030,00,00,08,,AS124D256
+0000,030,00,00,08,,AS120D256
+0000,030,00,00,08,,AS116D256
+0000,030,00,00,08,,AS112D256
+0000,030,00,00,08,,AS108D256
+0000,030,00,00,08,,AS104D256
+0000,030,00,00,08,,AS100D256
+0000,030,00,00,08,,AS096D256
+0000,030,00,00,08,,AS092D256
+0000,030,00,00,08,,AS088D256
+0000,030,00,00,08,,AS084D256
+0000,030,00,00,08,,AS080D256
+0000,030,00,00,08,,AS076D256
+0000,030,00,00,08,,AS072D256
+0000,030,00,00,08,,AS068D256
+0000,030,00,00,08,,AS064D256
+0000,030,00,00,08,,AS060D256
+0000,030,00,00,08,,AS056D256
+0000,030,00,00,08,,AS052D256
+0000,030,00,00,08,,AS048D256
+0000,030,00,00,08,,AS044D256
+0000,030,00,00,08,,AS040D256
+0000,030,00,00,08,,AS036D256
+0000,030,00,00,08,,AS032D256
+0000,030,00,00,08,,AS028D256
+0000,030,00,00,08,,AS024D256
+0000,030,00,00,08,,AS020D256
+0000,030,00,00,08,,AS016D256
+0000,030,00,00,08,,AS012D256
+0000,030,00,00,08,,AS008D256
+0000,030,00,00,08,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];mist top
+type=anim
+actionno=1
+layerno=1
+mask=1
+start=160,64
+tile=0,0
+velocity=0.32,0
+[begin action 1]
+0000,031,00,00,07,,AS128D256
+0000,031,00,00,07,,AS124D256
+0000,031,00,00,07,,AS120D256
+0000,031,00,00,07,,AS116D256
+0000,031,00,00,07,,AS112D256
+0000,031,00,00,07,,AS108D256
+0000,031,00,00,07,,AS104D256
+0000,031,00,00,07,,AS100D256
+0000,031,00,00,07,,AS096D256
+0000,031,00,00,07,,AS092D256
+0000,031,00,00,07,,AS088D256
+0000,031,00,00,07,,AS084D256
+0000,031,00,00,07,,AS080D256
+0000,031,00,00,07,,AS076D256
+0000,031,00,00,07,,AS072D256
+0000,031,00,00,07,,AS068D256
+0000,031,00,00,07,,AS064D256
+0000,031,00,00,07,,AS060D256
+0000,031,00,00,07,,AS056D256
+0000,031,00,00,07,,AS052D256
+0000,031,00,00,07,,AS048D256
+0000,031,00,00,07,,AS044D256
+0000,031,00,00,07,,AS040D256
+0000,031,00,00,07,,AS036D256
+0000,031,00,00,07,,AS032D256
+0000,031,00,00,07,,AS028D256
+0000,031,00,00,07,,AS024D256
+0000,031,00,00,07,,AS020D256
+0000,031,00,00,07,,AS016D256
+0000,031,00,00,07,,AS012D256
+0000,031,00,00,07,,AS008D256
+0000,031,00,00,07,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];mist top
+type=anim
+actionno=2
+layerno=1
+mask=1
+start=160,96
+tile=0,0
+velocity=0.36,0
+[begin action 2]
+0000,032,00,00,06,,AS128D256
+0000,032,00,00,06,,AS124D256
+0000,032,00,00,06,,AS120D256
+0000,032,00,00,06,,AS116D256
+0000,032,00,00,06,,AS112D256
+0000,032,00,00,06,,AS108D256
+0000,032,00,00,06,,AS104D256
+0000,032,00,00,06,,AS100D256
+0000,032,00,00,06,,AS096D256
+0000,032,00,00,06,,AS092D256
+0000,032,00,00,06,,AS088D256
+0000,032,00,00,06,,AS084D256
+0000,032,00,00,06,,AS080D256
+0000,032,00,00,06,,AS076D256
+0000,032,00,00,06,,AS072D256
+0000,032,00,00,06,,AS068D256
+0000,032,00,00,06,,AS064D256
+0000,032,00,00,06,,AS060D256
+0000,032,00,00,06,,AS056D256
+0000,032,00,00,06,,AS052D256
+0000,032,00,00,06,,AS048D256
+0000,032,00,00,06,,AS044D256
+0000,032,00,00,06,,AS040D256
+0000,032,00,00,06,,AS036D256
+0000,032,00,00,06,,AS032D256
+0000,032,00,00,06,,AS028D256
+0000,032,00,00,06,,AS024D256
+0000,032,00,00,06,,AS020D256
+0000,032,00,00,06,,AS016D256
+0000,032,00,00,06,,AS012D256
+0000,032,00,00,06,,AS008D256
+0000,032,00,00,06,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];mist top
+type=anim
+actionno=3
+layerno=1
+mask=1
+start=-160,112
+tile=0,0
+velocity=-0.4,0
+[begin action 3]
+0000,033,00,00,05,,AS128D256
+0000,033,00,00,05,,AS124D256
+0000,033,00,00,05,,AS120D256
+0000,033,00,00,05,,AS116D256
+0000,033,00,00,05,,AS112D256
+0000,033,00,00,05,,AS108D256
+0000,033,00,00,05,,AS104D256
+0000,033,00,00,05,,AS100D256
+0000,033,00,00,05,,AS096D256
+0000,033,00,00,05,,AS092D256
+0000,033,00,00,05,,AS088D256
+0000,033,00,00,05,,AS084D256
+0000,033,00,00,05,,AS080D256
+0000,033,00,00,05,,AS076D256
+0000,033,00,00,05,,AS072D256
+0000,033,00,00,05,,AS068D256
+0000,033,00,00,05,,AS064D256
+0000,033,00,00,05,,AS060D256
+0000,033,00,00,05,,AS056D256
+0000,033,00,00,05,,AS052D256
+0000,033,00,00,05,,AS048D256
+0000,033,00,00,05,,AS044D256
+0000,033,00,00,05,,AS040D256
+0000,033,00,00,05,,AS036D256
+0000,033,00,00,05,,AS032D256
+0000,033,00,00,05,,AS028D256
+0000,033,00,00,05,,AS024D256
+0000,033,00,00,05,,AS020D256
+0000,033,00,00,05,,AS016D256
+0000,033,00,00,05,,AS012D256
+0000,033,00,00,05,,AS008D256
+0000,033,00,00,05,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];mist bottom
+type=anim
+actionno=4
+layerno=1
+mask=1
+start=160,142
+tile=0,0
+velocity=0.4,0
+[begin action 4]
+0000,034,00,00,05,,AS128D256
+0000,034,00,00,05,,AS124D256
+0000,034,00,00,05,,AS120D256
+0000,034,00,00,05,,AS116D256
+0000,034,00,00,05,,AS112D256
+0000,034,00,00,05,,AS108D256
+0000,034,00,00,05,,AS104D256
+0000,034,00,00,05,,AS100D256
+0000,034,00,00,05,,AS096D256
+0000,034,00,00,05,,AS092D256
+0000,034,00,00,05,,AS088D256
+0000,034,00,00,05,,AS084D256
+0000,034,00,00,05,,AS080D256
+0000,034,00,00,05,,AS076D256
+0000,034,00,00,05,,AS072D256
+0000,034,00,00,05,,AS068D256
+0000,034,00,00,05,,AS064D256
+0000,034,00,00,05,,AS060D256
+0000,034,00,00,05,,AS056D256
+0000,034,00,00,05,,AS052D256
+0000,034,00,00,05,,AS048D256
+0000,034,00,00,05,,AS044D256
+0000,034,00,00,05,,AS040D256
+0000,034,00,00,05,,AS036D256
+0000,034,00,00,05,,AS032D256
+0000,034,00,00,05,,AS028D256
+0000,034,00,00,05,,AS024D256
+0000,034,00,00,05,,AS020D256
+0000,034,00,00,05,,AS016D256
+0000,034,00,00,05,,AS012D256
+0000,034,00,00,05,,AS008D256
+0000,034,00,00,05,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];mist bottom
+type=anim
+actionno=5
+layerno=1
+mask=1
+start=160,170
+tile=0,0
+velocity=0.36,0
+[begin action 5]
+0000,035,00,00,06,,AS128D256
+0000,035,00,00,06,,AS124D256
+0000,035,00,00,06,,AS120D256
+0000,035,00,00,06,,AS116D256
+0000,035,00,00,06,,AS112D256
+0000,035,00,00,06,,AS108D256
+0000,035,00,00,06,,AS104D256
+0000,035,00,00,06,,AS100D256
+0000,035,00,00,06,,AS096D256
+0000,035,00,00,06,,AS092D256
+0000,035,00,00,06,,AS088D256
+0000,035,00,00,06,,AS084D256
+0000,035,00,00,06,,AS080D256
+0000,035,00,00,06,,AS076D256
+0000,035,00,00,06,,AS072D256
+0000,035,00,00,06,,AS068D256
+0000,035,00,00,06,,AS064D256
+0000,035,00,00,06,,AS060D256
+0000,035,00,00,06,,AS056D256
+0000,035,00,00,06,,AS052D256
+0000,035,00,00,06,,AS048D256
+0000,035,00,00,06,,AS044D256
+0000,035,00,00,06,,AS040D256
+0000,035,00,00,06,,AS036D256
+0000,035,00,00,06,,AS032D256
+0000,035,00,00,06,,AS028D256
+0000,035,00,00,06,,AS024D256
+0000,035,00,00,06,,AS020D256
+0000,035,00,00,06,,AS016D256
+0000,035,00,00,06,,AS012D256
+0000,035,00,00,06,,AS008D256
+0000,035,00,00,06,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];mist bottom
+type=anim
+actionno=6
+layerno=1
+mask=1
+start=-160,180
+tile=0,0
+velocity=-0.32,0
+[begin action 6]
+0000,036,00,00,07,,AS128D256
+0000,036,00,00,07,,AS124D256
+0000,036,00,00,07,,AS120D256
+0000,036,00,00,07,,AS116D256
+0000,036,00,00,07,,AS112D256
+0000,036,00,00,07,,AS108D256
+0000,036,00,00,07,,AS104D256
+0000,036,00,00,07,,AS100D256
+0000,036,00,00,07,,AS096D256
+0000,036,00,00,07,,AS092D256
+0000,036,00,00,07,,AS088D256
+0000,036,00,00,07,,AS084D256
+0000,036,00,00,07,,AS080D256
+0000,036,00,00,07,,AS076D256
+0000,036,00,00,07,,AS072D256
+0000,036,00,00,07,,AS068D256
+0000,036,00,00,07,,AS064D256
+0000,036,00,00,07,,AS060D256
+0000,036,00,00,07,,AS056D256
+0000,036,00,00,07,,AS052D256
+0000,036,00,00,07,,AS048D256
+0000,036,00,00,07,,AS044D256
+0000,036,00,00,07,,AS040D256
+0000,036,00,00,07,,AS036D256
+0000,036,00,00,07,,AS032D256
+0000,036,00,00,07,,AS028D256
+0000,036,00,00,07,,AS024D256
+0000,036,00,00,07,,AS020D256
+0000,036,00,00,07,,AS016D256
+0000,036,00,00,07,,AS012D256
+0000,036,00,00,07,,AS008D256
+0000,036,00,00,07,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];mist bottom
+type=anim
+actionno=7
+layerno=1
+mask=1
+start=0,224
+tile=1,0
+tilespacing=384,0
+velocity=0.28,0
+[begin action 7]
+0000,037,00,00,08,,AS128D256
+0000,037,00,00,08,,AS124D256
+0000,037,00,00,08,,AS120D256
+0000,037,00,00,08,,AS116D256
+0000,037,00,00,08,,AS112D256
+0000,037,00,00,08,,AS108D256
+0000,037,00,00,08,,AS104D256
+0000,037,00,00,08,,AS100D256
+0000,037,00,00,08,,AS096D256
+0000,037,00,00,08,,AS092D256
+0000,037,00,00,08,,AS088D256
+0000,037,00,00,08,,AS084D256
+0000,037,00,00,08,,AS080D256
+0000,037,00,00,08,,AS076D256
+0000,037,00,00,08,,AS072D256
+0000,037,00,00,08,,AS068D256
+0000,037,00,00,08,,AS064D256
+0000,037,00,00,08,,AS060D256
+0000,037,00,00,08,,AS056D256
+0000,037,00,00,08,,AS052D256
+0000,037,00,00,08,,AS048D256
+0000,037,00,00,08,,AS044D256
+0000,037,00,00,08,,AS040D256
+0000,037,00,00,08,,AS036D256
+0000,037,00,00,08,,AS032D256
+0000,037,00,00,08,,AS028D256
+0000,037,00,00,08,,AS024D256
+0000,037,00,00,08,,AS020D256
+0000,037,00,00,08,,AS016D256
+0000,037,00,00,08,,AS012D256
+0000,037,00,00,08,,AS008D256
+0000,037,00,00,08,,AS004D256
+-001,000,00,00,-1
+[SelectBG *];gradient cells
+type=normal
+spriteno=0,13
+layerno=0
+mask=1
+start=-160,160
+tile=0,0
+[SelectBG *];cells
+type=normal
+spriteno=0,11
+layerno=0
+mask=1
+start=-160,168
+tile=0,0
+[SelectBG *];frame
+type=normal
+spriteno=0,12
+layerno=0
+mask=1
+start=-160,160
+tile=0,0
+[SelectBG *];choose frame
+type=normal
+spriteno=0,14
+layerno=1;0
+mask=1
+start=-160,16
+tile=0,0
+[SelectBG *];black lines
+type=normal
+spriteno=1,0
+start=-160,0
+mask=1
+layerno=1
+trans=none
+[VS Screen]
+time=0
+fadein.time=2
+fadeout.time=2
+match.text=""
+match.offset=9999,9999
+match.font=-1
+p1.pos=9999,9999
+p1.offset=9999,9999
+p1.facing=1
+p1.scale=1,1
+p2.pos=99999,9999
+p1.offset=9999,9999
+p2.facing=-1
+p2.scale=1,1
+p1.name.pos=9999,9999
+p1.name.offset=9999,9999
+p1.name.font=-1
+p2.name.pos=9999,9999
+p2.name.offset=9999,9999
+p2.name.font=-1
+[VersusBGdef]
+[VersusBG *]
+type=dummy
+spriteno=0,0
+start=0,0
+[Demo Mode]
+enabled=0 ; online port: Ikemen starts the demo instantly when title.waittime=-1, causing a title loop
+select.enabled=0
+vsscreen.enabled=0
+title.waittime=-1
+fight.endtime=1
+fight.playbgm=0
+fight.stopbgm=1
+fight.bars.display=1
+intro.waitcycles=99999
+debuginfo=1
+[Continue Screen]
+enabled=0
+pos=160,0
+continue.text="CONTINUE?"
+continue.font=2,0,0
+continue.offset=0,32
+yes.text="YES"
+yes.font=2,0,0,128,128,128
+yes.offset=-80,160
+yes.active.text="YES"
+yes.active.font=2,3,0
+yes.active.offset=-80,160
+no.text="NO"
+no.font=2,0,0,128,128,128
+no.offset=80,160
+no.active.text="NO"
+no.active.font=2,3,0
+no.active.offset=80,160
+cursor.move.snd=0,0
+cursor.done.snd=0,1
+cancel.snd=0,2
+[Game Over Screen]
+enabled=1
+storyboard=gameover.def
+[Victory Screen]
+enabled=0
+time=0
+fadein.time=8
+fadeout.time=15
+p1.offset=10000,20
+p1.spr=0,0
+p1.facing=1
+p1.scale=1,1
+p1.window=0,0,319,160
+p1.name.offset=20,180
+p1.name.font=-1
+winquote.text="Winner!"
+winquote.offset=20,192
+winquote.font=-1
+winquote.window=18,171,301,228
+winquote.textwrap=w
+[VictoryBGdef] 
+[VictoryBG 1] 
+type=normal
+spriteno=1,1
+start=0,0
+tile=1,1
+velocity=0,0
+[Win Screen]
+enabled=1
+wintext.text=
+wintext.font=2,0,0
+wintext.offset=159,70
+wintext.displaytime=-1
+wintext.layerno=2
+fadein.time=32
+pose.time=1200
+fadeout.time=64
+[Default Ending]
+enabled=0
+storyboard=
+[End Credits]
+enabled=1
+storyboard=credits.def
+[Survival Results Screen]
+enabled=0
+darken=0
+winstext.text=""
+winstext.font=-1
+winstext.offset=9999,9999
+winstext.displaytime=-1
+winstext.layerno=0
+fadein.time=32
+show.time=-1
+fadeout.time=64
+roundstowin=0
+[Option Info]
+title.offset=160,223
+title.font=1,0,0
+fadein.time=32
+fadeout.time=32
+cursor.move.snd=0,0
+cursor.done.snd=0,1
+cancel.snd=0,2
+[OptionBGdef]
+bgclearcolor=0,0,0
+[OptionBG *];moon
+type=normal
+spriteno=0,4
+start=60,50
+mask=1
+[OptionBG *];castle
+type=normal
+spriteno=0,5
+start=70,240
+mask=1
+[OptionBG *];fade in
+type=anim
+actionno=998
+start=-160,0
+layerno=1
+mask=0
+[begin action 998]
+0001,001,00,00,01,,AS256D000
+0001,001,00,00,01,,AS245D010
+0001,001,00,00,01,,AS235D020
+0001,001,00,00,01,,AS225D030
+0001,001,00,00,01,,AS215D040
+0001,001,00,00,01,,AS205D050
+0001,001,00,00,01,,AS195D060
+0001,001,00,00,01,,AS185D070
+0001,001,00,00,01,,AS175D080
+0001,001,00,00,01,,AS165D090
+0001,001,00,00,01,,AS155D100
+0001,001,00,00,01,,AS145D110
+0001,001,00,00,01,,AS135D120
+0001,001,00,00,01,,AS125D130
+0001,001,00,00,01,,AS115D140
+0001,001,00,00,01,,AS105D150
+0001,001,00,00,01,,AS095D160
+0001,001,00,00,01,,AS085D170
+0001,001,00,00,01,,AS075D180
+0001,001,00,00,01,,AS065D190
+0001,001,00,00,01,,AS055D200
+0001,001,00,00,01,,AS045D210
+0001,001,00,00,01,,AS035D220
+0001,001,00,00,01,,AS025D230
+0001,001,00,00,01,,AS015D240
+0001,001,00,00,01,,AS005D250
+0001,001,00,00,01,,AS000D256
+-1,-1,0,0,-1
+[OptionBG *];black lines
+type=normal
+spriteno=1,0
+start=-160,0
+layerno=1
+mask=1
+trans=none

@@ -1,0 +1,14 @@
+CvF Online - Windows x64 engine package
+=======================================
+This zip contains only the patched Ikemen GO engine (with the rollback fixes)
+and the two edited Castlevania Fighter files. It does NOT contain the game's
+characters, stages or music.
+
+To install:
+1. Copy these folders from your Castlevania Fighter v0.8.5b folder into this
+   folder: chars, stages, data, font, sound
+   (when asked, do NOT overwrite data\characters.def and data\options11.def
+   from this zip; skip/keep the ones already here).
+2. Double-click Ikemen_GO.exe.
+
+In menus press Z (or controller A) to choose. See README-ONLINE.txt.

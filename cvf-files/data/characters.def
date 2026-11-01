@@ -1,0 +1,449 @@
+;"locked" entries are there to keep the character icons properly aligned to the graphics. they can't be selected. replace vacant with character's folder/.def name.
+[Characters]
+Grant,,order=0
+Sonia,,order=0
+Simon,,order=0
+Jonathan,,order=0
+Charlotte,,order=0
+OldAxeArmor,,order=0
+Nathan,,order=0
+Hugh,,order=0
+Skeleton,,order=0
+DeathPl,,order=0
+Wwolf,,order=0
+Shanoa,,order=0
+Albus,,order=0
+Sypha,,order=0
+Eric,,order=0
+John,,order=0
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+;----------------------------
+Angela,,order=0
+HAlucard,,order=0
+Juste,,order=0
+Maxim,,order=0
+Alucard,,order=0
+Richter,,order=0
+Maria,,order=0
+Soma,,order=0
+Julius,,order=0
+Hammer,,order=0
+Yoko,,order=0
+Maid,,order=0
+Stella,,order=0
+Carrie,,order=0
+Leon,,order=0
+Hector,,order=0
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+;----------------------------
+SpearGuard,,order=0
+DarioPl,,order=0
+Soleiyu,,order=0
+Shovel,,order=0
+Slogra,,order=0
+Montano,,order=0
+Kale,,order=0
+Rebecca,,order=0
+Royce,,order=0
+Reimu,,order=0
+Sakuya,,order=0
+Rusty,,order=0
+Lizardman,,order=0
+FoxArcher,,order=0
+Desmond,,order=0
+Victor,,order=0
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+;----------------------------
+;this place is always empty,to divide select screen from off screen invisible bosses
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+;----------------------------
+;invisible bosses only past this point. locked layout makes it inaccessible for player to select.
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+zx-bonus/zx-bonus.def,stages/Town1.def,includestage=0,order=0
+zx-bonus/zx-bonus2.def,stages/Entrance1.def,includestage=0,order=0
+zx-bonus/zx-bonus3.def,stages/Entrance2.def,includestage=0,order=0
+zx-bonus/zx-bonus4.def,stages/Marble1.def,includestage=0,order=0
+zx-bonus/zx-bonus5.def,stages/AguniBG.def,includestage=0,order=0
+zx-bonus/zx-bonus6.def,stages/RichterBG.def,includestage=0,order=0
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+Intro,stages/intro.def,includestage=0,order=1
+Abaddon,stages/AbaddonBG.def,includestage=0,order=2
+Cerberus,stages/CerberusBG.def,includestage=0,order=2
+Lesserd,stages/LesserdBG.def,includestage=0,order=2
+Dogether,stages/NecroBG.def,includestage=0,order=2
+GBat,stages/GBatBG.def,includestage=0,order=2
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+Wyvern,stages/WyvernBG.def,includestage=0,order=2
+Dario,stages/DarioBG.def,includestage=0,order=3
+Dmitri/Dmitri2.def,stages/DmitriBG.def,includestage=0,order=0;3
+Aguni,stages/AguniBG.def,includestage=0,order=3
+Draculina,stages/DraculBG.def,includestage=0,order=4
+Sknight,stages/Marble1.def,includestage=0,order=4;rename to sknightbg later
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+Frank,stages/FrankBG.def,includestage=0,order=4
+Werewolf,stages/WerewolfBG.def,includestage=0,order=4
+Balore,stages/BaloreBG.def,includestage=0,order=4
+FArmor,stages/FArmorBG.def,includestage=0,order=4
+Dullahan,stages/DullahanBG.def,includestage=0,order=4
+GArmor,stages/City2.def,includestage=0,order=4
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+Legion,stages/LegionBG.def,includestage=0,order=0;4
+Minotaur,stages/MinotaurBG.def,includestage=0,order=4
+Akmodan,stages/AkmodanBG.def,includestage=0,order=4
+Succubus,stages/SuccubusBG.def,includestage=0,order=5
+Stella/Stella2.def,stages/SistersBG.def,includestage=0,order=5,hidden=2 ; online port: boss intro hangs when picked as P1, kept as arcade-only boss
+Astarte,stages/AstarteBG.def,includestage=0,order=5
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+Carmilla,stages/CarmillaBG.def,includestage=0,order=5
+Shaft,stages/ShaftBG.def,includestage=0,order=5
+Olrox,stages/OlroxBG.def,includestage=0,order=5
+Zephyr,stages/ZephyrBG.def,includestage=0,order=6
+Cyclops,stages/CyclopsBG.def,includestage=0,order=6
+Paranoia,stages/ParanoiaBG.def,includestage=0,order=6
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+Medusa,stages/MedusaBG.def,includestage=0,order=6
+Rusalka,stages/RusalkaBG.def,includestage=0,order=6
+Blackmore,stages/BlackmoreBG.def,includestage=0,order=6
+Gergoth,stages/GergothBG.def,includestage=0,order=6
+Brauner,stages/BraunerBG.def,includestage=0,order=7
+Richter/Richter2.def,stages/RichterBG.def,includestage=0,order=7
+Walter,stages/DracBG3.def,includestage=0,order=7
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+Albus/Albus2.def,stages/AlbusBG.def,includestage=0,order=7
+Barlowe,stages/BarloweBG.def,includestage=0,order=7
+Death,stages/DeathBG.def,includestage=0,order=8
+Dracula,stages/DracBG.def,includestage=0,order=9
+EvilSoma,stages/DracBG2.def,includestage=0,order=10
+Remilia,stages/RemiliaBG.def,includestage=0,order=0
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+NSuccubus,stages/SuccubusBG.def,includestage=0,order=0
+DChick,stages/DimitriBG.def,includestage=0,order=0
+Necro,stages/NecroBG.def,includestage=0,order=5
+Galamoth,stages/GalamothBG.def,includestage=0,order=0;6
+Karasuman,stages/KarasumanBG.def,includestage=0,order=0;4
+Adramelech,stages/AdramelechBG.def,includestage=0,order=0;6
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+PMaster,stages/PMasterBG.def,includestage=0,order=0;4;puppet master
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<br> ; LOCKED
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+<vacant>
+
+;add more identical copies of these to increase amount of boss slots. keep the locked and vacant slots aligned.
+
+[ExtraStages]
+stages/AbaddonBG.def
+stages/AlbusBG.def
+stages/AkmodanBG.def
+stages/AstarteBG.def
+stages/BaloreBG.def
+stages/BlackmoreBG.def
+stages/BraunerBG.def
+stages/CarmillaBG.def
+stages/CerberusBG.def
+stages/Chapel.def
+stages/City1.def
+stages/WyvernBG.def
+stages/City2.def
+stages/CyclopsBG.def
+stages/DarioBG.def
+stages/DeathBG.def
+stages/DmitriBG.def
+stages/DracBG1.def
+stages/DraculBG.def
+stages/DullahanBG.def
+stages/BarloweBG.def
+stages/Entrance1.def
+stages/FArmorBG.def
+stages/FrankBG.def
+stages/GBatBG.def
+stages/GergothBG.def
+stages/JuliusBG.def
+stages/kfm01.def
+stages/LegionBG.def
+stages/LesserdBG.def
+stages/Marble1.def
+stages/MedusaBG.def
+stages/MenaceBG.def
+stages/Mine.def
+stages/MinotaurBG.def
+stages/NecroBG.def
+stages/OlroxBG.def
+stages/AguniBG.def
+stages/RichterBG.def
+stages/OWall1.def
+stages/ParanoiaBG.def
+stages/RemiliaBG.def
+stages/RemiliaBG2.def
+stages/RusalkaBG.def
+stages/SistersBG.def
+stages/StellaBG.def
+stages/SuccubusBG.def
+stages/Tower1.def
+stages/Town1.def
+stages/WerewolfBG.def
+stages/WMemoryBG.def
+stages/ShaftBG.def
+stages/KarasumanBG.def
+stages/ZephyrBG.def
+
+[Options]
+arcade.maxmatches=1,99,99,99,99,99,99,99,1,1;all bosses mode
+;uncomment above, comment below to activate every single boss in arcade mode. otherwise they're selected randomly.
+;arcade.maxmatches=1,4,99,4,99,4,99,1,1,1
+team.maxmatches=1,99,99,99,99,99,99,1,1,1
+
+;1-intro
+;2-
+;3-dario/demitri/aguni/zephyr/abaddon/
+;4-
+;5-olrox/shaft/carmilla/astarte/necromancer/succubus/necromancer/
+;6-
+;7-richter/barlowe/albus/brauner/
+;8-death
+;9-drac
+;10-soma
