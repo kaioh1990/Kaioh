@@ -25,7 +25,7 @@ John,,order=0
 <br> ; LOCKED
 ;----------------------------
 Angela,,order=0
-HAlucard,,order=0
+<br> ; HAlucard removed in the online port (breaks the game) - restore: HAlucard,,order=0
 Juste,,order=0
 Maxim,,order=0
 Alucard,,order=0

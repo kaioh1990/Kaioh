@@ -1,8 +1,25 @@
 diff --git a/external/script/main.lua b/external/script/main.lua
-index b7d76c8..bdbcc20 100644
+index b7d76c8..8ddbc04 100644
 --- a/external/script/main.lua
 +++ b/external/script/main.lua
-@@ -2356,12 +2356,22 @@ main.t_itemname = {
+@@ -2308,14 +2308,10 @@ main.t_itemname = {
+ 		main.pauseMenu = false
+ 		main.selectMenu[2] = true
+ 		main.stageMenu = true
+-		main.teamMenu[1].simul = true
++		-- CvF Online: 1-on-1 only. CvF's select screen has no team-mode layout, so the
++		-- Single/Simul/Turns/Tag menu drew overlapping, unreadable text.
+ 		main.teamMenu[1].single = true
+-		main.teamMenu[1].tag = true
+-		main.teamMenu[1].turns = true
+-		main.teamMenu[2].simul = true
+ 		main.teamMenu[2].single = true
+-		main.teamMenu[2].tag = true
+-		main.teamMenu[2].turns = true
+ 		textImgSetText(motif.select_info.title.TextSpriteData, motif.select_info.title.text.netplayversus)
+ 		setGameMode('netplayversus')
+ 		setHomeTeam(1)
+@@ -2356,12 +2352,22 @@ main.t_itemname = {
  		end
  		return nil
  	end,
@@ -25,10 +42,83 @@ index b7d76c8..bdbcc20 100644
  		if main.f_connect("", gameOption('Netplay.ListenPort')) then
  			if synchronize() then
  				enterSyncedNetplayMenu()
-@@ -3252,11 +3262,40 @@ function main.f_replay()
+@@ -2872,7 +2878,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+ 							motif.infobox.text.TextSpriteData
+ 						)
+ 					end
+-					if not bool_main or esc() then
++					if not bool_main or (esc() and main.f_cvfConfirm('Quit the game?')) then
+ 						break
+ 					end
+ 				elseif bool_f1 and (getKey(motif.infobox.keycode) or gameOption('Config.FirstRun')) then
+@@ -2907,7 +2913,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+ 						sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
+ 						break
+ 					elseif f == 'exit' then
+-						break
++						if not bool_main or main.f_cvfConfirm('Quit the game?') then
++							break
++						end
+ 					elseif main.t_itemname[f] == nil then
+ 						if t_storyModeList[f] then
+ 							f = 'storyarc'
+@@ -3252,11 +3260,93 @@ function main.f_replay()
  	end
  end
  
++-- CvF Online: Yes/No confirmation (defaults to No)
++function main.f_cvfConfirm(question)
++	local yes = false
++	local frame = 0
++	local ts = motif.title_info.connecting.TextSpriteData
++	resetKey()
++	while true do
++		frame = frame + 1
++		if frame > 10 then
++			if esc() or getInput(-1, motif[main.group].menu.cancel.key) then
++				sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
++				yes = false
++				break
++			elseif getInput(-1, motif[main.group].menu.next.key) or getInput(-1, motif[main.group].menu.previous.key) then
++				yes = not yes
++				sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++			elseif getInput(-1, motif[main.group].menu.done.key) then
++				sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++				break
++			end
++		end
++		clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++		bgDraw(motif[main.background].BGDef, 0)
++		rectDraw(motif.title_info.connecting.overlay.RectData)
++		textImgReset(ts)
++		textImgSetPos(ts, nil, 100)
++		textImgSetText(ts, question .. '\n\n' .. (yes and '> YES <      NO  ' or '  YES      > NO <'))
++		textImgDraw(ts)
++		bgDraw(motif[main.background].BGDef, 1)
++		refresh()
++	end
++	resetKey()
++	return yes
++end
++
++-- CvF Online: during netplay, "any player" menu input only listens to the host (player 1),
++-- so only the host drives the shared menus and stage select.
++do
++	local rawGetInput, rawGetInputTime = getInput, getInputTime
++	getInput = function(p, ...)
++		if p == -1 and netPlay() then
++			p = 1
++		end
++		return rawGetInput(p, ...)
++	end
++	getInputTime = function(p, ...)
++		if p == -1 and netPlay() then
++			p = 1
++		end
++		return rawGetInputTime(p, ...)
++	end
++end
++
 +-- CvF Online: ask for a lobby display name once
 +function main.f_cvfEnsureName()
 +	if cvfGetPlayerName() ~= '' then
@@ -66,7 +156,7 @@ index b7d76c8..bdbcc20 100644
  			exitNetPlay()
  			return false
  		end
-@@ -3272,16 +3311,107 @@ function main.f_connect(server, str)
+@@ -3272,16 +3362,107 @@ function main.f_connect(server, str)
  			txt = string.format(motif.title_info.connecting.text.join, server, str)
  		end
  		textImgReset(motif.title_info.connecting.TextSpriteData)
@@ -174,8 +264,22 @@ index b7d76c8..bdbcc20 100644
  --asserts content unlock conditions
  function main.f_unlock(permanent)
  	local refreshRandom = false
+diff --git a/src/bytecode.go b/src/bytecode.go
+index 276abbf..cd01956 100644
+--- a/src/bytecode.go
++++ b/src/bytecode.go
+@@ -5530,6 +5530,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+ 		} else if slot >= len(crun.hitby) {
+ 			slot = 0
+ 		}
++		if !cvfClampInvincibility(crun, &time) {
++			return
++		}
+ 		crun.hitby[slot].not = not
+ 		crun.hitby[slot].time = time
+ 		crun.hitby[slot].flag = attr
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..8bb6ca9 100644
+index 19bf05a..841936c 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -3228,6 +3228,25 @@ func (p *Projectile) tick() {
@@ -228,12 +332,28 @@ index 19bf05a..8bb6ca9 100644
  	// Set position
  	pos := [2]float32{p.interPos[0] * p.localscl, p.interPos[1] * p.localscl}
  
+@@ -3699,6 +3708,7 @@ type Char struct {
+ 	ghv                 GetHitVar
+ 	mhv                 MoveHitVar
+ 	hitby               [8]HitBy
++	cvfMPRem            int32 // CvF online port: fractional MP gain carry-over
+ 	hover               [8]HitOverride
+ 	hoverIdx            int
+ 	hoverKeepState      bool
+@@ -8370,6 +8380,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+ 		return BytecodeUndefined()
+ 	}
+ 
++	v = cvfScaleMPGain(c, i, v)
+ 	if _, ok := c.cnsvar[i]; ok {
+ 		c.cnsvar[i] += v
+ 	} else {
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 0000000..4ffc97b
+index 0000000..585f32e
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,663 @@
+@@ -0,0 +1,788 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -675,13 +795,22 @@ index 0000000..4ffc97b
 +			Token string `json:"token"`
 +			IP    string `json:"ip"`
 +		}
-+		err := s.post("/api/rooms", map[string]any{"name": name, "port": port, "udp_port": udpPort, "version": tag}, &r)
-+		s.mu.Lock()
-+		if err != nil {
-+			s.lobbyHostErr = "Lobby unreachable"
++		for {
++			err := s.post("/api/rooms", map[string]any{"name": name, "port": port, "udp_port": udpPort, "version": tag}, &r)
++			if err == nil {
++				break
++			}
++			s.mu.Lock()
++			s.lobbyHostErr = "Lobby unreachable, retrying"
 +			s.mu.Unlock()
-+			return
++			select {
++			case <-stop:
++				return
++			case <-time.After(10 * time.Second):
++			}
 +		}
++		s.mu.Lock()
++		s.lobbyHostErr = ""
 +		if s.hostStop != stop {
 +			s.mu.Unlock()
 +			s.post("/api/rooms/"+r.ID+"/leave", map[string]string{"token": r.Token}, nil)
@@ -896,6 +1025,122 @@ index 0000000..4ffc97b
 +		l.Push(lua.LNumber(sys.cfg.Netplay.ListenPort))
 +		return 1
 +	})
++}
++
++// ---------------------------------------------------------------------------
++// Gameplay rules for the online port (data/cvf_online.ini). They must be identical
++// for both players, so they are read once at startup from the shared game folder.
++//
++//   MaxAttackInvincibility = N  cap NotHitBy/HitBy granted during attack states to the
++//                               first N frames of the state (0 = off)
++//   InvincibilityExemptStates = 1000-1099   states that keep their invincibility
++//   MPVar = 34                  variable holding MP
++//   MPGainScale = 0.5           multiply every MP gain (fractions carry over)
++//   RulesAuthor = CvF           only characters with this author are affected
++
++type cvfRulesT struct {
++	loaded       bool
++	iframeCap    int32
++	exemptLo     int32
++	exemptHi     int32
++	mpVar        int32
++	mpScaleMilli int32
++	author       string
++}
++
++var cvfRules = cvfRulesT{exemptLo: 1000, exemptHi: 1099, mpVar: -1, mpScaleMilli: 1000}
++
++func cvfRulesLoad() *cvfRulesT {
++	r := &cvfRules
++	if r.loaded {
++		return r
++	}
++	r.loaded = true
++	f, err := os.Open(cvfOnlineConfigFile)
++	if err != nil {
++		return r
++	}
++	defer f.Close()
++	sc := bufio.NewScanner(f)
++	for sc.Scan() {
++		line := sc.Text()
++		if i := strings.Index(line, ";"); i >= 0 {
++			line = line[:i]
++		}
++		k, v, ok := strings.Cut(line, "=")
++		if !ok {
++			continue
++		}
++		k, v = strings.ToLower(strings.TrimSpace(k)), strings.TrimSpace(v)
++		switch k {
++		case "maxattackinvincibility":
++			fmt.Sscan(v, &r.iframeCap)
++		case "invincibilityexemptstates":
++			var lo, hi int32
++			if n, _ := fmt.Sscanf(strings.ReplaceAll(v, " ", ""), "%d-%d", &lo, &hi); n == 2 {
++				r.exemptLo, r.exemptHi = lo, hi
++			}
++		case "mpvar":
++			fmt.Sscan(v, &r.mpVar)
++		case "mpgainscale":
++			var s float64
++			if _, err := fmt.Sscan(v, &s); err == nil && s >= 0 && s <= 10 {
++				r.mpScaleMilli = int32(s*1000 + 0.5)
++			}
++		case "rulesauthor":
++			r.author = strings.ToLower(v)
++		}
++	}
++	return r
++}
++
++func (r *cvfRulesT) appliesTo(c *Char) bool {
++	if c == nil || c.helperIndex != 0 {
++		return false
++	}
++	return r.author == "" || c.gi().authorLow == r.author
++}
++
++// Clamp the duration of a NotHitBy/HitBy set while attacking. Returns false to skip it.
++func cvfClampInvincibility(c *Char, time *int32) bool {
++	r := cvfRulesLoad()
++	if r.iframeCap <= 0 || c.ss.moveType != MT_A || !r.appliesTo(c) {
++		return true
++	}
++	if c.ss.no >= r.exemptLo && c.ss.no <= r.exemptHi {
++		return true
++	}
++	remaining := r.iframeCap - c.ss.time
++	cvfDebugf("iframes %s state %d time %d remaining %d", c.name, c.ss.no, c.ss.time, remaining)
++	if remaining <= 0 {
++		return false
++	}
++	if *time < 0 || *time > remaining {
++		*time = remaining
++	}
++	return true
++}
++
++// Scale positive MP gains; the fractional part is kept in c.cvfMPRem (part of rollback state).
++func cvfScaleMPGain(c *Char, i, v int32) int32 {
++	r := cvfRulesLoad()
++	if v <= 0 || i != r.mpVar || r.mpScaleMilli == 1000 || !r.appliesTo(c) {
++		return v
++	}
++	cvfDebugf("mp gain %s +%d", c.name, v)
++	total := v*r.mpScaleMilli + c.cvfMPRem
++	c.cvfMPRem = total % 1000
++	return total / 1000
++}
++
++var cvfDebugOn = os.Getenv("CVF_RULES_DEBUG") != ""
++var cvfDebugCount int
++
++func cvfDebugf(format string, args ...any) {
++	if cvfDebugOn && cvfDebugCount < 200 {
++		cvfDebugCount++
++		fmt.Fprintf(os.Stderr, "[cvf] "+format+"\n", args...)
++	}
 +}
 diff --git a/src/script.go b/src/script.go
 index 5443f25..fdd510d 100644
