@@ -14,18 +14,37 @@ permissions:
   contents: write
   actions: read
 
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 jobs:
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Skip builds that are older than main
+        id: fresh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "ok=true" >> $GITHUB_OUTPUT; exit 0; fi
+          latest=$(gh api repos/${{ github.repository }}/commits/main -q .sha)
+          if [ "$latest" = "${{ github.event.workflow_run.head_sha }}" ]; then
+            echo "ok=true" >> $GITHUB_OUTPUT
+          else
+            echo "Build is for ${{ github.event.workflow_run.head_sha }}, main is $latest - not publishing"
+            echo "ok=false" >> $GITHUB_OUTPUT
+          fi
       - uses: actions/download-artifact@v4
+        if: steps.fresh.outputs.ok == 'true'
         with:
           run-id: ${{ github.event.workflow_run.id || inputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: dist
           merge-multiple: true
       - name: Publish release
+        if: steps.fresh.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
