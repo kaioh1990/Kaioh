@@ -1,0 +1,108 @@
+name: Build CvF Online (macOS)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'patches/**'
+      - '.github/workflows/build-macos.yml'
+
+env:
+  IKEMEN_REPO: https://github.com/ikemen-engine/Ikemen-GO.git
+  IKEMEN_COMMIT: 6a09392
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Intel build: on an Apple Silicon Mac it runs through Rosetta 2 and does
+          # exactly the same floating-point math as Windows / Linux x86-64 players.
+          - name: intel
+            os: macos-15-intel
+            target: MacOS
+            bin: Ikemen_GO_MacOS
+            app: "CvF Online (Intel - for online vs PC).app"
+            goflags: ""
+          # Native Apple Silicon build, FMA fusion disabled. Fine for Mac-vs-Mac/offline.
+          - name: arm64
+            os: macos-15
+            target: MacOSARM
+            bin: Ikemen_GO_MacOSARM
+            app: "CvF Online (Apple Silicon).app"
+            goflags: "-gcflags=all=-d=fmahash=n"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Ikemen GO and apply CvF rollback fixes
+        run: |
+          git clone "$IKEMEN_REPO" ikemen
+          cd ikemen
+          git checkout "$IKEMEN_COMMIT"
+          git apply ../patches/ikemen-cvf-rollback-fixes.patch
+          git --no-pager diff --stat
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: ikemen/go.sum
+
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: 1.4.304.1
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Install dependencies
+        run: |
+          export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_AUTO_UPDATE=1
+          brew install --quiet pkg-config git nasm libxmp sdl2 molten-vk
+
+      - name: Build
+        working-directory: ikemen
+        env:
+          BUILD_FFMPEG: "yes"
+          BUILD_SDL2: "no"
+          CGO_ENABLED: "1"
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+          GOFLAGS: ${{ matrix.goflags }}
+        run: |
+          go env -w GO111MODULE=on
+          go mod download
+          ./build/build.sh ${{ matrix.target }}
+          make appbundle BINNAME=bin/${{ matrix.bin }}
+          mv I.K.E.M.E.N-Go.app "../${{ matrix.app }}"
+          file "../${{ matrix.app }}/Contents/MacOS/${{ matrix.bin }}"
+          otool -L "../${{ matrix.app }}/Contents/MacOS/${{ matrix.bin }}" | head -30
+
+      - name: Bundle Homebrew dylibs into the app
+        run: |
+          APP="${{ matrix.app }}"
+          BIN="$APP/Contents/MacOS/${{ matrix.bin }}"
+          FW="$APP/Contents/Frameworks"
+          mkdir -p "$FW"
+          # Copy any Homebrew-provided dylibs the binary links to, and point the binary at the bundled copies
+          for lib in $(otool -L "$BIN" | awk '/\/(opt\/homebrew|usr\/local)\//{print $1}'); do
+            base=$(basename "$lib")
+            cp -Lf "$lib" "$FW/$base"
+            chmod u+w "$FW/$base"
+            install_name_tool -change "$lib" "@executable_path/../Frameworks/$base" "$BIN"
+            install_name_tool -id "@executable_path/../Frameworks/$base" "$FW/$base" || true
+          done
+          install_name_tool -add_rpath "@executable_path/../Frameworks" "$BIN" 2>/dev/null || true
+          codesign --force --deep --sign - "$APP"
+          otool -L "$BIN" | head -30
+
+      - name: Package
+        run: |
+          ditto -c -k --keepParent "${{ matrix.app }}" "cvf-online-macos-${{ matrix.name }}.zip"
+          ls -la *.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cvf-online-macos-${{ matrix.name }}
+          path: cvf-online-macos-${{ matrix.name }}.zip
+          retention-days: 30
