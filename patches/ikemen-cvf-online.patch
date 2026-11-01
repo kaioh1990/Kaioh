@@ -265,9 +265,45 @@ index b7d76c8..8ddbc04 100644
  function main.f_unlock(permanent)
  	local refreshRandom = false
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..cd01956 100644
+index 276abbf..4640447 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
+@@ -2032,7 +2032,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+ 	//if v1.IsUndefined() {
+ 	//	return
+ 	//}
+-	v1.SetF(float32(math.Exp(v1.value)))
++	v1.SetF(float32(cvfExp(v1.value)))
+ }
+ 
+ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2043,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+ 		*v1 = BytecodeUndefined()
+ 		sys.printBytecodeError("Invalid logarithm")
+ 	} else {
+-		v1.SetF(float32(math.Log(v1.value)))
++		v1.SetF(float32(cvfLog(v1.value)))
+ 	}
+ }
+ 
+@@ -2056,7 +2056,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+ 		*v1 = BytecodeUndefined()
+ 		sys.printBytecodeError("Invalid logarithm")
+ 	} else {
+-		v1.SetF(float32(math.Log(v2.value) / math.Log(v1.value)))
++		v1.SetF(float32(cvfLog(v2.value) / cvfLog(v1.value)))
+ 	}
+ }
+ 
+@@ -2167,7 +2167,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+ 		*v1 = BytecodeUndefined()
+ 		return
+ 	}
+-	shift := math.Pow(10, v2.value)
++	shift := cvfPow(10, v2.value)
+ 	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
+ }
+ 
 @@ -5530,6 +5530,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
@@ -279,7 +315,7 @@ index 276abbf..cd01956 100644
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..841936c 100644
+index 19bf05a..c4d46a6 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -3228,6 +3228,25 @@ func (p *Projectile) tick() {
@@ -340,6 +376,15 @@ index 19bf05a..841936c 100644
  	hover               [8]HitOverride
  	hoverIdx            int
  	hoverKeepState      bool
+@@ -4001,7 +4011,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
+ 				distZ *= 4.0
+ 			}
+ 			// Use hypotenuse between x and z
+-			sortDist = float32(math.Hypot(float64(effectiveX), float64(distZ)))
++			sortDist = float32(cvfHypot(float64(effectiveX), float64(distZ)))
+ 		}
+ 
+ 		// Save result in sorting slice
 @@ -8370,6 +8380,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
@@ -348,6 +393,302 @@ index 19bf05a..841936c 100644
  	if _, ok := c.cnsvar[i]; ok {
  		c.cnsvar[i] += v
  	} else {
+diff --git a/src/common.go b/src/common.go
+index a741eab..08b3c28 100644
+--- a/src/common.go
++++ b/src/common.go
+@@ -143,7 +143,7 @@ func Pow(x, y float32) float32 {
+ 		return float32(p * p)
+ 	}
+ 	// General-purpose fallback
+-	return float32(math.Pow(float64(x), float64(y)))
++	return float32(cvfPow(float64(x), float64(y)))
+ }
+ 
+ func Lerp(x, y, a float32) float32 {
+@@ -488,7 +488,7 @@ func I32ToU16(i32 int32) uint16 {
+ }
+ 
+ func RoundFloat(val float64, precision int) float64 {
+-	factor := math.Pow(10, float64(precision))
++	factor := cvfPow(10, float64(precision))
+ 	return math.Round(val*factor) / factor
+ }
+ 
+diff --git a/src/cvf_detmath.go b/src/cvf_detmath.go
+new file mode 100644
+index 0000000..0e4430f
+--- /dev/null
++++ b/src/cvf_detmath.go
+@@ -0,0 +1,268 @@
++// CvF Online: deterministic copies of math.Exp/Log/Pow/Hypot/Log2.
++//
++// Go's math package uses hand-written assembly for Exp (amd64, arm64), Log and
++// Hypot (amd64). Those give slightly different results on Intel/AMD vs Apple
++// chips, which desyncs rollback netplay between a PC and a Mac/iPad. These are
++// the portable pure-Go versions from the Go standard library, so every CPU
++// computes bit-identical results (all builds also disable FMA fusion).
++//
++// Derived from Go's src/math (exp.go, log.go, pow.go, hypot.go, log10.go):
++// Copyright 2009 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license (Go LICENSE).
++
++package main
++
++import "math"
++
++func cvfExp(x float64) float64 {
++	const (
++		Ln2Hi = 6.93147180369123816490e-01
++		Ln2Lo = 1.90821492927058770002e-10
++		Log2e = 1.44269504088896338700e+00
++
++		Overflow  = 7.09782712893383973096e+02
++		Underflow = -7.45133219101941108420e+02
++		NearZero  = 1.0 / (1 << 28) // 2**-28
++	)
++
++	// special cases
++	switch {
++	case math.IsNaN(x):
++		return x
++	case x > Overflow: // handles case where x is +∞
++		return math.Inf(1)
++	case x < Underflow: // handles case where x is -∞
++		return 0
++	case -NearZero < x && x < NearZero:
++		return 1 + x
++	}
++
++	// reduce; computed as r = hi - lo for extra precision.
++	var k int
++	switch {
++	case x < 0:
++		k = int(Log2e*x - 0.5)
++	case x > 0:
++		k = int(Log2e*x + 0.5)
++	}
++	hi := x - float64(k)*Ln2Hi
++	lo := float64(k) * Ln2Lo
++
++	// compute
++	return cvfExpmulti(hi, lo, k)
++}
++func cvfExpmulti(hi, lo float64, k int) float64 {
++	const (
++		P1 = 1.66666666666666657415e-01  /* 0x3FC55555; 0x55555555 */
++		P2 = -2.77777777770155933842e-03 /* 0xBF66C16C; 0x16BEBD93 */
++		P3 = 6.61375632143793436117e-05  /* 0x3F11566A; 0xAF25DE2C */
++		P4 = -1.65339022054652515390e-06 /* 0xBEBBBD41; 0xC5D26BF1 */
++		P5 = 4.13813679705723846039e-08  /* 0x3E663769; 0x72BEA4D0 */
++	)
++
++	r := hi - lo
++	t := r * r
++	c := r - t*(P1+t*(P2+t*(P3+t*(P4+t*P5))))
++	y := 1 - ((lo - (r*c)/(2-c)) - hi)
++	// TODO(rsc): make sure math.Ldexp can handle boundary k
++	return math.Ldexp(y, k)
++}
++
++func cvfLog(x float64) float64 {
++	const (
++		Ln2Hi = 6.93147180369123816490e-01 /* 3fe62e42 fee00000 */
++		Ln2Lo = 1.90821492927058770002e-10 /* 3dea39ef 35793c76 */
++		L1    = 6.666666666666735130e-01   /* 3FE55555 55555593 */
++		L2    = 3.999999999940941908e-01   /* 3FD99999 9997FA04 */
++		L3    = 2.857142874366239149e-01   /* 3FD24924 94229359 */
++		L4    = 2.222219843214978396e-01   /* 3FCC71C5 1D8E78AF */
++		L5    = 1.818357216161805012e-01   /* 3FC74664 96CB03DE */
++		L6    = 1.531383769920937332e-01   /* 3FC39A09 D078C69F */
++		L7    = 1.479819860511658591e-01   /* 3FC2F112 DF3E5244 */
++	)
++
++	// special cases
++	switch {
++	case math.IsNaN(x) || math.IsInf(x, 1):
++		return x
++	case x < 0:
++		return math.NaN()
++	case x == 0:
++		return math.Inf(-1)
++	}
++
++	// reduce
++	f1, ki := math.Frexp(x)
++	if f1 < math.Sqrt2/2 {
++		f1 *= 2
++		ki--
++	}
++	f := f1 - 1
++	k := float64(ki)
++
++	// compute
++	s := f / (2 + f)
++	s2 := s * s
++	s4 := s2 * s2
++	t1 := s2 * (L1 + s4*(L3+s4*(L5+s4*L7)))
++	t2 := s4 * (L2 + s4*(L4+s4*L6))
++	R := t1 + t2
++	hfsq := 0.5 * f * f
++	return k*Ln2Hi - ((hfsq - (s*(hfsq+R) + k*Ln2Lo)) - f)
++}
++
++func cvfIsOddInt(x float64) bool {
++	if math.Abs(x) >= (1 << 53) {
++		// 1 << 53 is the largest exact integer in the float64 format.
++		// Any number outside this range will be truncated before the decimal point and therefore will always be
++		// an even integer.
++		// Without this check and if x overflows int64 the int64(xi) conversion below may produce incorrect results
++		// on some architectures (and does so on arm64). See issue #57465.
++		return false
++	}
++
++	xi, xf := math.Modf(x)
++	return xf == 0 && int64(xi)&1 == 1
++}
++
++func cvfPow(x, y float64) float64 {
++	switch {
++	case y == 0 || x == 1:
++		return 1
++	case y == 1:
++		return x
++	case math.IsNaN(x) || math.IsNaN(y):
++		return math.NaN()
++	case x == 0:
++		switch {
++		case y < 0:
++			if math.Signbit(x) && cvfIsOddInt(y) {
++				return math.Inf(-1)
++			}
++			return math.Inf(1)
++		case y > 0:
++			if math.Signbit(x) && cvfIsOddInt(y) {
++				return x
++			}
++			return 0
++		}
++	case math.IsInf(y, 0):
++		switch {
++		case x == -1:
++			return 1
++		case (math.Abs(x) < 1) == math.IsInf(y, 1):
++			return 0
++		default:
++			return math.Inf(1)
++		}
++	case math.IsInf(x, 0):
++		if math.IsInf(x, -1) {
++			return cvfPow(1/x, -y) // Pow(-0, -y)
++		}
++		switch {
++		case y < 0:
++			return 0
++		case y > 0:
++			return math.Inf(1)
++		}
++	case y == 0.5:
++		return math.Sqrt(x)
++	case y == -0.5:
++		return 1 / math.Sqrt(x)
++	}
++
++	yi, yf := math.Modf(math.Abs(y))
++	if yf != 0 && x < 0 {
++		return math.NaN()
++	}
++	if yi >= 1<<63 {
++		// yi is a large even int that will lead to overflow (or underflow to 0)
++		// for all x except -1 (x == 1 was handled earlier)
++		switch {
++		case x == -1:
++			return 1
++		case (math.Abs(x) < 1) == (y > 0):
++			return 0
++		default:
++			return math.Inf(1)
++		}
++	}
++
++	// ans = a1 * 2**ae (= 1 for now).
++	a1 := 1.0
++	ae := 0
++
++	// ans *= x**yf
++	if yf != 0 {
++		if yf > 0.5 {
++			yf--
++			yi++
++		}
++		a1 = cvfExp(yf * cvfLog(x))
++	}
++
++	// ans *= x**yi
++	// by multiplying in successive squarings
++	// of x according to bits of yi.
++	// accumulate powers of two into exp.
++	x1, xe := math.Frexp(x)
++	for i := int64(yi); i != 0; i >>= 1 {
++		if xe < -1<<12 || 1<<12 < xe {
++			// catch xe before it overflows the left shift below
++			// Since i !=0 it has at least one bit still set, so ae will accumulate xe
++			// on at least one more iteration, ae += xe is a lower bound on ae
++			// the lower bound on ae exceeds the size of a float64 exp
++			// so the final call to math.Ldexp will produce under/overflow (0/math.Inf)
++			ae += xe
++			break
++		}
++		if i&1 == 1 {
++			a1 *= x1
++			ae += xe
++		}
++		x1 *= x1
++		xe <<= 1
++		if x1 < .5 {
++			x1 += x1
++			xe--
++		}
++	}
++
++	// ans = a1*2**ae
++	// if y < 0 { ans = 1 / ans }
++	// but in the opposite order
++	if y < 0 {
++		a1 = 1 / a1
++		ae = -ae
++	}
++	return math.Ldexp(a1, ae)
++}
++
++func cvfHypot(p, q float64) float64 {
++	p, q = math.Abs(p), math.Abs(q)
++	// special cases
++	switch {
++	case math.IsInf(p, 1) || math.IsInf(q, 1):
++		return math.Inf(1)
++	case math.IsNaN(p) || math.IsNaN(q):
++		return math.NaN()
++	}
++	if p < q {
++		p, q = q, p
++	}
++	if p == 0 {
++		return 0
++	}
++	q = q / p
++	return p * math.Sqrt(1+q*q)
++}
++
++func cvfLog2(x float64) float64 {
++	frac, exp := math.Frexp(x)
++	// Make sure exact powers of two give an exact answer.
++	// Don't depend on Log(0.5)*(1/math.Ln2)+exp being exactly exp-1.
++	if frac == 0.5 {
++		return float64(exp - 1)
++	}
++	return cvfLog(frac)*(1/math.Ln2) + float64(exp)
++}
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
 index 0000000..585f32e
@@ -1142,6 +1483,30 @@ index 0000000..585f32e
 +		fmt.Fprintf(os.Stderr, "[cvf] "+format+"\n", args...)
 +	}
 +}
+diff --git a/src/fightscreen.go b/src/fightscreen.go
+index 51867f3..88bff7c 100644
+--- a/src/fightscreen.go
++++ b/src/fightscreen.go
+@@ -2894,7 +2894,7 @@ func (cs *ComboShake) update() {
+ 	var decay float32 = 1
+ 	if cs.decay != 0 && cs.time > 0 {
+ 		t := float32(cs.curTime) / float32(cs.time)
+-		decay = float32(math.Pow(float64(t), float64(cs.decay)))
++		decay = float32(cvfPow(float64(t), float64(cs.decay)))
+ 	}
+ 
+ 	elapsed := float32(cs.time - cs.curTime)
+@@ -2923,8 +2923,8 @@ func (cs *ComboShake) update() {
+ 	} else {
+ 		phaseRad := Rad(cs.phase) + Rad(cs.freq)*elapsed
+ 		sinVal := float32(math.Sin(float64(phaseRad)))
+-		exponent := float32(math.Log(float64(cs.scale))) * decay * sinVal
+-		cs.curScale = float32(math.Exp(float64(exponent)))
++		exponent := float32(cvfLog(float64(cs.scale))) * decay * sinVal
++		cs.curScale = float32(cvfExp(float64(exponent)))
+ 	}
+ 
+ 	// Step timer only after computing offset and scale
 diff --git a/src/script.go b/src/script.go
 index 5443f25..fdd510d 100644
 --- a/src/script.go
@@ -1155,7 +1520,7 @@ index 5443f25..fdd510d 100644
  		/*Add a character definition to the select screen.
  		@function addChar
 diff --git a/src/system.go b/src/system.go
-index 2698d35..4591359 100644
+index 2698d35..5c93749 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -990,7 +990,14 @@ func (s *System) renderFrame() {
@@ -1186,6 +1551,19 @@ index 2698d35..4591359 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
+@@ -2998,9 +3010,9 @@ func (s *System) action() {
+ 				start := s.ffbparams[i].start
+ 				t := s.ffbparams[i].timer
+ 				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
+-				d1 = float32(math.Pow(float64(d1), float64(t)))
+-				d2 = float32(math.Pow(float64(d2), float64(t*t)))
+-				d3 = float32(math.Pow(float64(d2), float64(t*t*t)))
++				d1 = float32(cvfPow(float64(d1), float64(t)))
++				d2 = float32(cvfPow(float64(d2), float64(t*t)))
++				d3 = float32(cvfPow(float64(d2), float64(t*t*t)))
+ 				ampl := (start + d1 + d2 + d3) / 255.0
+ 				intensity := uint16(ampl * 0xFFFF)
+ 				switch s.ffbparams[i].waveform {
 @@ -3018,6 +3030,13 @@ func (s *System) action() {
  		}
  	}
@@ -1200,6 +1578,22 @@ index 2698d35..4591359 100644
  	return
  }
  
+@@ -6820,13 +6839,13 @@ func (es *EnvShake) update() {
+ 	// Mul is applied once per cycle
+ 	if es.mul != 0 && es.mul != 1 {
+ 		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
+-		factor *= math.Pow(float64(es.mul), cycles)
++		factor *= cvfPow(float64(es.mul), cycles)
+ 	}
+ 
+ 	// Apply decay
+ 	t := float64(es.curTime) / float64(es.time)
+ 	if es.decay != 0 && t > 0 {
+-		factor *= math.Pow(t, float64(es.decay))
++		factor *= cvfPow(t, float64(es.decay))
+ 	}
+ 
+ 	ampl := float64(es.ampl) * factor
 @@ -6862,6 +6881,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it

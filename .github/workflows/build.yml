@@ -7,6 +7,8 @@ on:
       - 'patches/**'
       - '.github/workflows/build.yml'
       - 'cvf-files/**'
+      - 'ios/**'
+      - 'tools/**'
 
 env:
   IKEMEN_REPO: https://github.com/ikemen-engine/Ikemen-GO.git
@@ -212,3 +214,103 @@ jobs:
           name: cvf-online-windows-x64
           path: cvf-online-windows-x64.zip
           retention-days: 30
+
+  # Every CPU must compute identical math for rollback netplay between
+  # PC (Intel/AMD) and Mac/iPad (Apple chips).
+  detmath-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Ikemen GO and apply CvF patch
+        run: |
+          git config --global core.autocrlf false
+          git clone -q "$IKEMEN_REPO" ikemen
+          cd ikemen && git checkout -q "$IKEMEN_COMMIT" && git apply ../patches/ikemen-cvf-online.patch
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Hash deterministic math results
+        env:
+          GOFLAGS: "-gcflags=all=-d=fmahash=n"
+        run: |
+          cp ikemen/src/cvf_detmath.go tools/detmath-check/detmath.go
+          cd tools/detmath-check
+          go build -o detmath-check . 2>/dev/null
+          ./detmath-check | tee out.txt
+          echo "$(go env GOARCH)"
+          grep -q 'hash=bc7d7b675f985a466cebb335e931c6551b5193a37488d78031b71a7a73dc482c' out.txt
+
+  ios:
+    # The ikemen-ios Xcode project needs Xcode 26 (default on macos-26).
+    runs-on: macos-26
+    env:
+      IOS_APP_COMMIT: 60606d6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Ikemen GO and apply CvF patch
+        run: |
+          git clone "$IKEMEN_REPO" ikemen
+          cd ikemen
+          git checkout "$IKEMEN_COMMIT"
+          git apply ../patches/ikemen-cvf-online.patch
+          git --no-pager diff --stat
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: ikemen/go.sum
+
+      - name: Install host tools
+        run: |
+          export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_AUTO_UPDATE=1
+          brew install --quiet pkg-config git nasm
+          xcodebuild -version
+
+      - name: Prepare the CvF Online iOS app project
+        run: |
+          git clone https://github.com/Jesuszilla/ikemen-ios.git CvF-Online-iOS
+          git -C CvF-Online-iOS checkout "$IOS_APP_COMMIT"
+          ./ios/customize.sh CvF-Online-iOS
+
+      - name: Build engine + IPA
+        working-directory: ikemen
+        env:
+          BUILD_FFMPEG: "yes"
+          CGO_ENABLED: "1"
+          GOFLAGS: "-gcflags=all=-d=fmahash=n"
+          IOS_WRAPPER_DIR: ${{ github.workspace }}/CvF-Online-iOS
+          IOS_APP_VERSION: "0.8.5"
+          IOS_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          go env -w GO111MODULE=on
+          go mod download
+          ./build/build.sh iOS 2> >(grep -v 'fmahash\|bisect-match' >&2)
+          test -f bin/ikemen-go.ipa
+          cp bin/ikemen-go.ipa "../cvf-online-ios.ipa"
+          unzip -p bin/ikemen-go.ipa 'Payload/*.app/Info.plist' > /tmp/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' -c 'Print :CFBundleDisplayName' -c 'Print :MinimumOSVersion' -c 'Print :UIFileSharingEnabled' /tmp/Info.plist
+          unzip -l bin/ikemen-go.ipa | tail -3
+
+      - name: Package Xcode project (build + sign on your own device)
+        run: |
+          rm -rf CvF-Online-iOS/.git CvF-Online-iOS/DefaultAssets/external
+          ditto -c -k --keepParent CvF-Online-iOS cvf-online-ios-xcode.zip
+          ls -la cvf-online-ios.ipa cvf-online-ios-xcode.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cvf-online-ios
+          path: |
+            cvf-online-ios.ipa
+            cvf-online-ios-xcode.zip
+          retention-days: 30
+

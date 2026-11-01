@@ -50,13 +50,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           ls -la dist
-          for tag in cvf-online-macos cvf-online-windows; do
+          for tag in cvf-online-macos cvf-online-windows cvf-online-ios; do
             n=$(ls dist | grep -c "$tag" || true)
             [ "$n" -gt 0 ] || continue
             case $tag in
               cvf-online-macos) title="CvF Online - macOS builds"; notes="Patched Ikemen GO (rollback fixes) for Castlevania Fighter. Intel build = run through Rosetta for online play against Windows/Linux. Apple Silicon build = Mac-vs-Mac/offline. Put the .app next to chars/, data/, stages/.";;
               cvf-online-windows) title="CvF Online - Windows x64 build"; notes="Patched Ikemen GO (rollback fixes) for Castlevania Fighter v0.8.5b, Windows 10/11 x64. Engine package only: copy chars, stages, data, font, sound from your Castlevania Fighter v0.8.5b folder into the extracted folder (skip files that already exist), then run Ikemen_GO.exe. In menus press Z / controller A to choose.";;
+              cvf-online-ios) title="CvF Online - iPhone / iPad"; notes="Patched Ikemen GO for Castlevania Fighter on iOS/iPadOS 17+. cvf-online-ios.ipa = unsigned app to sideload (Sideloadly / AltStore / SideStore). cvf-online-ios-xcode.zip = ready-to-build Xcode project: open I.K.E.M.E.N-Go.xcodeproj, pick your Team under Signing, press Run with your device selected. Then copy the CvF Online game folder onto the device (Finder > your device > Files > CvF Online) and pick it when the app asks.";;
             esac
             gh release delete $tag --yes --cleanup-tag 2>/dev/null || true
-            gh release create $tag dist/$tag*.zip --title "$title" --notes "$notes" --target main
+            gh release create $tag $(ls dist/$tag* ) --title "$title" --notes "$notes" --target main
           done
