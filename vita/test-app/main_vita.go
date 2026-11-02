@@ -49,7 +49,7 @@ func main() {
 	vlog("1 Go main started")
 	C.psvDebugScreenInit()
 	vlog("2 screen ready")
-	say("\x1b[1;33mCastlevania Fighter Online - Vita test 9\x1b[0m\n\n")
+	say("\x1b[1;33mCastlevania Fighter Online - Vita test 10\x1b[0m\n\n")
 
 	say("1. Goroutines:\n")
 	say("   a) start one... ")
