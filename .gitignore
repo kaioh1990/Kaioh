@@ -1,1 +1,8 @@
 /tools/detmath-check/detmath.go
+/vita/test-app/detmath.go
+/vita/tinygo/vita.json
+*.elf
+*.velf
+eboot.bin
+param.sfo
+*.vpk

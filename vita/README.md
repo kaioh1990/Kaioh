@@ -19,9 +19,26 @@ Changes needed for TinyGo (patches in this folder):
   (`-std=c2x`). Unused SDL pieces (syswm, hidapi, shape, AudioCVT, event filters'
   header) removed or given explicit prototypes. `declstrip.go` is the helper used.
 
+## Phase 2 — Vita toolchain (in progress, Nov 1 2026)
+
+- vitasdk (2026.08 core) + SDL2, vitaGL, libxmp packages installed.
+- **TinyGo Vita target** (`tinygo/vita.json.in`, `tinygo/vita_shim.c`):
+  linux/arm target linked with ld.lld against vitasdk's newlib; the shim
+  supplies mmap (Go heap), futexes (sleep), getrandom (hardware RNG).
+  Layout flags give exactly 2 LOAD segments at 0x81000000, which the Vita's
+  loader requires (the first test build with lld's default layout rebooted
+  the console).
+- **Determinism finding:** TinyGo replaces Go's trig functions with C library
+  ones, so Sin/Cos/Tan/Atan/Atan2/Asin/Acos were added to `cvf_detmath.go`
+  (bit-identical to Go's own, so PC/Mac/iPad results don't change). The CI
+  `detmath-check` now also runs under TinyGo.
+- **Memory fix done:** sounds load on first play (`cvf_sound_lazy.go`), LRU cap
+  96 MB (`CVF_SOUND_CACHE_MB`). One match: ~700 MB live heap -> 56 MB.
+- Engine now compiles for the Vita target; only link libraries remain.
+- `test-app/`: on-screen runtime/math/CPU/memory test (`build-test-app.sh`).
+
 ## Next phases
 
-1. **On-demand sound loading** (SND index + read WAV when first played, LRU cache).
 2. **TinyGo `vita` target**: target JSON (cortex-a9, hard-float, thumb2), small
    runtime file (heap from `sceKernelAllocMemBlock`, ticks, sleep), link with
    vitasdk (`arm-vita-eabi-gcc -Wl,-q`), `vita-elf-create` → `.vpk`.

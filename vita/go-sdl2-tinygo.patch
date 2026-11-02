@@ -2163,6 +2163,15 @@ diff -ruN sdlorig/sdl/system.c iktg/third/sdl2/sdl/system.c
  #include "system.h"
  
  #if defined(_WIN32)
+diff -ruN sdlorig/sdl/system_linux.go iktg/third/sdl2/sdl/system_linux.go
+--- sdlorig/sdl/system_linux.go	2026-10-31 20:31:05.847437350 -0400
++++ iktg/third/sdl2/sdl/system_linux.go	2026-11-01 22:32:25.238184577 -0500
+@@ -1,4 +1,4 @@
+-// +build !android
++//go:build linux && !vita
+ 
+ package sdl
+ 
 diff -ruN sdlorig/sdl/syswm.go iktg/third/sdl2/sdl/syswm.go
 --- sdlorig/sdl/syswm.go	2026-10-31 20:31:05.847571327 -0400
 +++ iktg/third/sdl2/sdl/syswm.go	1969-12-31 19:00:00.000000000 -0500

@@ -33,6 +33,7 @@ func main() {
 		p := cvfPow(ax/100, y); put(p); if u := ulp(p, math.Pow(ax/100, y)); u > maxU[2] { maxU[2] = u }
 		hy := cvfHypot(x, y); put(hy); if u := ulp(hy, math.Hypot(x, y)); u > maxU[3] { maxU[3] = u }
 		l2 := cvfLog2(ax); put(l2); if u := ulp(l2, math.Log2(ax)); u > maxU[4] { maxU[4] = u }
+		put(cvfSin(x)); put(cvfCos(y)); put(cvfTan(y)); put(cvfAtan2(x, y)); put(cvfAsin(y / 10)); put(cvfAcos(y / 10)); put(cvfAtan(x))
 	}
 	fmt.Printf("maxULP exp=%d log=%d pow=%d hypot=%d log2=%d\nhash=%x\n", maxU[0], maxU[1], maxU[2], maxU[3], maxU[4], h.Sum(nil))
 }

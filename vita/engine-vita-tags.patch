@@ -1,12 +1,3 @@
---- ikp/src/cgo_spike_vita.go	1969-12-31 19:00:00.000000000 -0500
-+++ iktg/src/cgo_spike_vita.go	2026-11-01 22:06:35.857693374 -0500
-@@ -0,0 +1,6 @@
-+//go:build vita
-+
-+package main
-+
-+// #cgo LDFLAGS: -L$SCRATCH/game/lib -L$SCRATCH/gllib -lSDL2 -lGL
-+import "C"
 --- ikp/src/font_gl33.go	2026-10-31 19:57:25.610537481 -0400
 +++ iktg/src/font_gl33.go	2026-11-01 21:53:27.105239412 -0500
 @@ -1,4 +1,4 @@
