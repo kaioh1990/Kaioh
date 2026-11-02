@@ -3,8 +3,13 @@
 # Usage: ios/customize.sh <ikemen-ios checkout>
 set -euo pipefail
 W="$1"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 PBX="$W/I.K.E.M.E.N-Go.xcodeproj/project.pbxproj"
 PLIST="$W/I.K.E.M.E.N-Go/Info.plist"
+
+# 0. All-in-one support: run the game from Payload/*.app/Game when it is there
+#    (see ios/make-full-ipa.py). Without it the app still asks for a game folder.
+(cd "$W" && patch -p1 < "$HERE/bundled-game.patch")
 
 # 1. Only ship the (patched) engine scripts + controller DB as "default assets".
 #    The stock manifest would unzip Ikemen's own fight.def/common.snd/... over

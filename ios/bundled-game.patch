@@ -1,0 +1,109 @@
+diff --git a/I.K.E.M.E.N-Go/ViewController.m b/I.K.E.M.E.N-Go/ViewController.m
+index e850d21..22c26b8 100644
+--- a/I.K.E.M.E.N-Go/ViewController.m
++++ b/I.K.E.M.E.N-Go/ViewController.m
+@@ -25,6 +25,7 @@
+ @property (nonatomic, assign) BOOL securityScopeActive;
+ @property (nonatomic, assign) BOOL ikemenStarted;
+ @property (nonatomic, strong) UIDocumentPickerViewController *activePicker;
++@property (nonatomic) BOOL usingBundledGame;
+ @property (nonatomic, strong) UIWindow *alertWindow;
+ @property (nonatomic, strong) TouchOverlayView *overlayView;
+ @property (nonatomic, strong) MetalContainerView *metalContainerView;
+@@ -155,6 +156,13 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+         return;
+     }
+     
++    // All-in-one build: the game ships inside the app, so there is nothing to pick.
++    if ([self prepareBundledGame]) {
++        self.usingBundledGame = YES;
++        [self setupControllerListening];
++        return;
++    }
++
+     // Get whether or not we should display the folder picker now.
+     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+     BOOL shouldPickFolder = [defaults boolForKey:RestartFolderPickKey];
+@@ -174,6 +182,72 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+     }
+ }
+ 
++// Builds a writable game root from the read-only Game folder in the app bundle:
++// Application Support/CvF holds symlinks to chars, data, stages... and save points
++// at Documents/save, so saves survive updates and logs are reachable from Files.
++// The links are rebuilt on every launch because the bundle path changes on install.
++- (BOOL)prepareBundledGame {
++    NSFileManager *fm = [NSFileManager defaultManager];
++    NSURL *gameURL = [[NSBundle mainBundle].bundleURL URLByAppendingPathComponent:@"Game" isDirectory:YES];
++    BOOL isDir = NO;
++    if (![fm fileExistsAtPath:gameURL.path isDirectory:&isDir] || !isDir) {
++        return NO;
++    }
++
++    NSError *error = nil;
++    NSURL *docs = [fm URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
++    NSURL *support = [fm URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
++    if (!docs || !support) {
++        NSLog(@"Could not locate app folders: %@", error);
++        return NO;
++    }
++
++    NSURL *rootURL = [support URLByAppendingPathComponent:@"CvF" isDirectory:YES];
++    NSURL *saveURL = [docs URLByAppendingPathComponent:@"save" isDirectory:YES];
++    if (![fm createDirectoryAtURL:rootURL withIntermediateDirectories:YES attributes:nil error:&error] ||
++        ![fm createDirectoryAtURL:saveURL withIntermediateDirectories:YES attributes:nil error:&error]) {
++        NSLog(@"Could not create game folders: %@", error);
++        return NO;
++    }
++
++    NSArray<NSString *> *names = [fm contentsOfDirectoryAtPath:gameURL.path error:&error];
++    if (!names) {
++        NSLog(@"Could not list bundled game: %@", error);
++        return NO;
++    }
++
++    for (NSString *name in names) {
++        NSString *source = [gameURL URLByAppendingPathComponent:name].path;
++        if ([name isEqualToString:@"save"]) {
++            // Seed defaults such as config.ini, never replacing the player's files.
++            for (NSString *file in [fm contentsOfDirectoryAtPath:source error:nil]) {
++                NSString *destination = [saveURL URLByAppendingPathComponent:file].path;
++                if (![fm fileExistsAtPath:destination]) {
++                    [fm copyItemAtPath:[source stringByAppendingPathComponent:file] toPath:destination error:nil];
++                }
++            }
++            continue;
++        }
++        NSString *link = [rootURL URLByAppendingPathComponent:name].path;
++        [fm removeItemAtPath:link error:nil];
++        if (![fm createSymbolicLinkAtPath:link withDestinationPath:source error:&error]) {
++            NSLog(@"Could not link %@: %@", name, error);
++            return NO;
++        }
++    }
++
++    NSString *saveLink = [rootURL URLByAppendingPathComponent:@"save"].path;
++    [fm removeItemAtPath:saveLink error:nil];
++    if (![fm createSymbolicLinkAtPath:saveLink withDestinationPath:saveURL.path error:&error]) {
++        NSLog(@"Could not link save folder: %@", error);
++        return NO;
++    }
++
++    self.assetsFolderURL = rootURL;
++    self.securityScopeActive = NO;
++    return YES;
++}
++
+ - (BOOL)beginAccessingAssetsFolder {
+     if (_securityScopeActive) {
+         return YES;
+@@ -772,6 +846,9 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+ }
+ 
+ - (void)touchOverlayDidTapGameFolder:(TouchOverlayView*)view {
++    if (self.usingBundledGame) {
++        return;
++    }
+     [self presentAssetsFolderPicker];
+ }
+ 
