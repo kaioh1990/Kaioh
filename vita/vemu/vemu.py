@@ -440,6 +440,8 @@ cur_fiber = [None]; thread_ctx = [None]
 @H('_sceFiberInitializeImpl')
 def _(fib, name, entry, arg0, ctx, size, opt):
     fibers[fib] = {'entry': entry, 'arg0': arg0, 'ctx': ctx, 'size': size, 'saved': None, 'done': False}
+    # hardware SceFiber marks the lowest context word (seen in a real core dump)
+    mu.mem_write(ctx, b'\xee\xee\xee\xee')
     return 0
 @H('sceFiberRun')
 def _(fib, argrun, pout, *_):

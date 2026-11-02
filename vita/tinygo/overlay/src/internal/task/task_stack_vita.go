@@ -99,13 +99,18 @@ func (s *state) resume() {
 }
 
 func (s *state) pause() {
-	if *s.canaryPtr != stackCanary || *(*uintptr)(unsafe.Add(unsafe.Pointer(s.canaryPtr), vitaFiberHeader)) != stackCanary {
+	if *s.canaryPtr != stackCanary || *(*uintptr)(unsafe.Add(unsafe.Pointer(s.canaryPtr), vitaFiberHeader+vitaGuardCheck)) != stackCanary {
 		vitaStackOverflow()
 	}
 	vitaFiberPause(&s.sp)
 }
 
 const vitaGuardWords = 64
+
+// SceFiber writes its own 0xEEEEEEEE marker into the lowest word of the
+// context on hardware, so the overflow check looks at a word in the middle
+// of the guard band instead.
+const vitaGuardCheck = 32 * 4
 
 //export tinygo_vita_stack_overflow
 func vitaStackOverflow()
