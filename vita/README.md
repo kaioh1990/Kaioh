@@ -37,6 +37,20 @@ Changes needed for TinyGo (patches in this folder):
 - Engine now compiles for the Vita target; only link libraries remain.
 - `test-app/`: on-screen runtime/math/CPU/memory test (`build-test-app.sh`).
 
+### Hardware results (user's Vita, 3.60 Enso)
+
+- Loader needs: 2 segments, page-aligned data, room after code, position-
+  independent linker thunks (`--pic-veneer`).
+- Goroutines must run as SceFiber fibers (kernel rejects syscalls from
+  unregistered stacks). Confirmed working: spawn, channels, sleep.
+- **The Vita starts threads in flush-to-zero FP mode (FPSCR=0x03000000).**
+  That was the only math difference vs PC (denormals). With FZ/DN cleared,
+  all 21 math categories and the full rollback-math hash match the PC
+  bit-for-bit. The runtime now sets IEEE mode at startup and per fiber.
+- newlib's `time_t` is 32-bit; Go's runtime expects time64 structs, so the
+  shim converts (this broke time.Since and time.Sleep).
+- ~232 MB free in one block with the default setup.
+
 ## Next phases
 
 2. **TinyGo `vita` target**: target JSON (cortex-a9, hard-float, thumb2), small

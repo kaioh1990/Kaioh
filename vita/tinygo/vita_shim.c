@@ -28,7 +28,27 @@ void tinygo_register_fatal_signals(void) { vlog("  runtime main entered"); }
 void tinygo_signal_enable(unsigned s) {}
 void tinygo_signal_ignore(unsigned s) {}
 void tinygo_signal_disable(unsigned s) {}
-int __clock_gettime64(int clk, void *ts) { return clock_gettime(clk, (struct timespec *)ts); }
+// Go's runtime passes a time64 struct {int64 sec; int64 nsec}; the Vita's
+// newlib uses 32-bit time_t, so fill Go's layout explicitly.
+struct go_timespec { long long sec; long long nsec; };
+int __clock_gettime64(int clk, void *out) {
+	struct timespec ts;
+	int r = clock_gettime(clk, &ts);
+	struct go_timespec *g = out;
+	g->sec = (long long)ts.tv_sec;
+	g->nsec = (long long)ts.tv_nsec;
+	return r;
+}
+
+// IEEE floating point (no flush-to-zero, no default-NaN), like a PC. The Vita
+// starts threads in flush-to-zero mode, which made rollback math differ.
+void tinygo_vita_ieee_fp(void) {
+	unsigned v;
+	__asm__ volatile("vmrs %0, fpscr" : "=r"(v));
+	v &= ~((1u << 24) | (1u << 25) | (3u << 22));
+	__asm__ volatile("vmsr fpscr, %0" : : "r"(v));
+}
+__attribute__((constructor(102))) static void vita_fp_init(void) { tinygo_vita_ieee_fp(); }
 
 // Futexes: TinyGo's cooperative scheduler runs every goroutine on one Vita
 // thread, so "waiting" just means sleeping until the value changes or the

@@ -4,11 +4,13 @@
 #include <stdint.h>
 
 void tinygo_task_exit(void);
+void tinygo_vita_ieee_fp(void);
 
 // Fiber entry: args points at {fn, argsBundle}. fn is TinyGo's goroutine start
 // wrapper, which takes the argument bundle as its only parameter.
 static void vita_fiber_entry(SceUInt32 argOnInitialize, SceUInt32 argOnRun) {
 	uintptr_t *p = (uintptr_t *)argOnInitialize;
+	tinygo_vita_ieee_fp(); // each fiber may start with the default FPSCR
 	void (*fn)(void *) = (void (*)(void *))p[0];
 	fn((void *)p[1]);
 	tinygo_task_exit(); // pauses forever; never returns here

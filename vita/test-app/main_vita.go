@@ -49,7 +49,7 @@ func main() {
 	vlog("1 Go main started")
 	C.psvDebugScreenInit()
 	vlog("2 screen ready")
-	say("\x1b[1;33mCastlevania Fighter Online - Vita test 10\x1b[0m\n\n")
+	say("\x1b[1;33mCastlevania Fighter Online - Vita test 11\x1b[0m\n\n")
 
 	say("1. Goroutines:\n")
 	say("   a) start one... ")
@@ -72,7 +72,10 @@ func main() {
 	close(ping)
 	say("%d (want 100)\n   c) sleep... ", n)
 	time.Sleep(100 * time.Millisecond)
-	say("ok\n   d) full test: ")
+	say("ok\n   clock: 500 ms sleep measured as ")
+	t0 := time.Now()
+	time.Sleep(500 * time.Millisecond)
+	say("%d ms\n   d) full test: ", time.Since(t0).Milliseconds())
 	say("%s\n", goroutineTest())
 
 	say("2. Rollback math check (must match PC/Mac/iPad)\n")
@@ -92,9 +95,14 @@ func main() {
 			say("\x1b[1;31mdiffer: %v\x1b[0m\n", bad)
 		}
 	}
-	check("default")
-	C.vfp_set_ieee()
-	check("IEEE   ")
+	check("main goroutine")
+	fdone := make(chan bool)
+	go func() {
+		time.Sleep(10 * time.Millisecond) // pause + resume before checking
+		check("new goroutine ")
+		fdone <- true
+	}()
+	<-fdone
 	h := mathHash()
 	say("   full hash %s (PC %s)\n", h, expectedHash)
 
