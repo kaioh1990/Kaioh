@@ -3259,7 +3259,7 @@ index 2888520..59208e5 100644
  
  import (
 diff --git a/src/script.go b/src/script.go
-index 5443f25..fdb3797 100644
+index 5443f25..533f911 100644
 --- a/src/script.go
 +++ b/src/script.go
 @@ -1,6 +1,7 @@
@@ -3306,6 +3306,31 @@ index 5443f25..fdb3797 100644
  		goVal, err := luaToJsonValue(lv, nil)
  		if err != nil {
  			l.RaiseError(err.Error())
+@@ -4216,6 +4221,11 @@ func systemScriptInit(l *lua.LState) {
+ 		/*Check whether resources are currently being loaded.
+ 		@function loading
+ 		@treturn boolean loading `true` if the loader is in `LS_Loading` state.*/
++		if isVita && sys.loader.state == LS_Loading {
++			// Goroutines are cooperative on the Vita: let the loader run while
++			// scripts poll this in a loop (e.g. "while loading() do end").
++			runtime.Gosched()
++		}
+ 		l.Push(lua.LBool(sys.loader.state == LS_Loading))
+ 		return 1
+ 	})
+@@ -5393,7 +5403,11 @@ func systemScriptInit(l *lua.LState) {
+ 		/*Check whether resources are currently being preloaded.
+ 		@function preloading
+ 		@treturn boolean `true` if assets are still being preloaded.*/
+-		l.Push(lua.LBool(!sys.sel.AllPreloadsReady()))
++		ready := sys.sel.AllPreloadsReady()
++		if isVita && !ready {
++			runtime.Gosched()
++		}
++		l.Push(lua.LBool(!ready))
+ 		return 1
+ 	})
+ 	luaRegister(l, "preloadListChar", func(*lua.LState) int {
 diff --git a/src/sdl_other.go b/src/sdl_other.go
 index 399921b..4403e16 100644
 --- a/src/sdl_other.go

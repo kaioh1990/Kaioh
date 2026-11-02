@@ -602,6 +602,11 @@ def _(path, flags, mode, *_):
         return errno_code(e)
     uid = new_uid(); fds[uid] = {'fd': fd, 'path': p}
     if args.trace_stubs or os.environ.get('VEMU_OPEN'): say('[io] open %s -> %x' % (p, uid))
+    if os.environ.get('VEMU_STOP_MARK') and not STOPT and os.environ['VEMU_STOP_MARK'] in p:
+        import threading
+        def _fire():
+            STOP_REASON[0] = 'sample (stopped %ss after %s)' % (os.environ.get('VEMU_STOP_SEC', '120'), p); mu.emu_stop()
+        t = threading.Timer(float(os.environ.get('VEMU_STOP_SEC', '120')), _fire); t.daemon = True; t.start(); STOPT.append(t)
     if args.press_after and PRESS_BASE[0] is None and args.press_after in p:
         PRESS_BASE[0] = FRAME[0]; say('[vemu] press base at frame %d' % FRAME[0])
     return uid
@@ -622,6 +627,8 @@ def _(uid, buf, n, *_):
     f = fds.get(uid)
     data = bytes(mu.mem_read(buf, n))
     if not f: return 0x80010009
+    if os.environ.get('VEMU_STOP_MARK') and not STOPT and os.environ['VEMU_STOP_MARK'] in f['path']:
+        pass
     if f['path'].endswith('cvftest.log'):
         LOGBUF[0] += data.decode('utf-8', 'replace')
         while '\n' in LOGBUF[0]:
@@ -720,6 +727,7 @@ def _(a, b, *_):
 
 # ---------------------------------------------------------------- misc devices
 FRAME = [0]
+STOPT = []
 PRESS = {}
 PRESS_BASE = [None if args.press_after else 0]
 for item in filter(None, args.press.split(',')):
@@ -951,7 +959,18 @@ def trace_sym_hook(uc, ad, sz, ud):
         ln = r32(mu.reg_read(UC_ARM_REG_SP))
         say('[fbi] len=%d lr=%s idx=%s' % (ln, symbolize(mu.reg_read(UC_ARM_REG_LR)), [r32(mu.reg_read(UC_ARM_REG_R3) + 4 * i) for i in range(min(ln, 4))]))
         return
+    if os.environ.get('VEMU_LASTR0'):
+        LASTR0[n] = mu.reg_read(UC_ARM_REG_R0); return
     say('[trace] %s #%d lr=%s fiber=%s' % (n, TS_COUNT[n], symbolize(mu.reg_read(UC_ARM_REG_LR)), cur_fiber[0]))
+LASTR0 = {}
+WATCHN = [0]
+def watch_hook(uc, access, addr, size, value, ud):
+    WATCHN[0] += 1
+    if WATCHN[0] <= 200:
+        say('[watch] write %x size %d value %x pc=%s lr=%s' % (addr, size, value & 0xffffffff, symbolize(uc.reg_read(UC_ARM_REG_PC)), symbolize(uc.reg_read(UC_ARM_REG_LR))))
+if os.environ.get('VEMU_WATCH'):
+    _wa, _wl = [int(x, 0) for x in os.environ['VEMU_WATCH'].split(',')]
+    mu.hook_add(UC_HOOK_MEM_WRITE, watch_hook, begin=_wa, end=_wa + _wl - 1)
 for n in filter(None, args.trace_sym.split(',')):
     a = L2R(byname[n])
     mu.hook_add(UC_HOOK_CODE, trace_sym_hook, begin=a & ~1, end=a & ~1)
@@ -979,6 +998,9 @@ def backtrace():
     return out
 
 def dump(reason):
+    if LASTR0:
+        for k, v in LASTR0.items():
+            say('[lastr0] %s r0=%x words=%s' % (k, v, [hex(r32(v + 4 * i)) for i in range(20)]))
     say('==== %s ====' % reason)
     pc = mu.reg_read(UC_ARM_REG_PC); lr = mu.reg_read(UC_ARM_REG_LR)
     say('pc=%08x %s' % (pc, symbolize(pc))); say('lr=%08x %s' % (lr, symbolize(lr)))
@@ -1001,7 +1023,7 @@ t_end = time.time() + args.max_sec
 pc = start
 while True:
     try:
-        mu.emu_start(pc, 0xffffffff, timeout=int(min(5, max(1, t_end - time.time())) * 1e6))
+        mu.emu_start(pc, 0xffffffff, timeout=int(max(1, t_end - time.time()) * 1e6))
     except UcError as e:
         dump('UcError %s (%s)' % (e, STOP_REASON[0])); break
     if STOP_REASON[0]:
