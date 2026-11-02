@@ -1,0 +1,11 @@
+--- /tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/tg/tinygo/src/net/netdev_native.go.orig	2026-11-02 01:04:48.721724873 -0500
++++ /tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/tg/tinygo/src/net/netdev_native.go	2026-11-02 01:04:48.724887431 -0500
+@@ -4,7 +4,7 @@
+ //
+ // On the native linux target TinyGo does NOT override the "syscall" package, so
+ // the standard library's syscall.Socket/Connect/Bind/... are available and the
+-// TinyGo compiler lowers syscall.Syscall/RawSyscall into real inline-asm system
++// TinyGo compiler lowers syscall.VSyscall/RawSyscall into real inline-asm system
+ // calls (see compiler/syscall.go). That means we can implement the netdever
+ // interface directly on top of raw Linux sockets, without needing a network
+ // driver or musl's (omitted) src/network module.

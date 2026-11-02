@@ -67,6 +67,7 @@
     "src/runtime/asm_arm.S",
     "targets/vita_shim.c",
     "targets/vita_fiber.c",
-    "targets/vita_fiber.S"
+    "targets/vita_fiber.S",
+    "targets/vita_syscall.c"
   ]
 }

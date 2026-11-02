@@ -397,8 +397,8 @@
 +func (bgv *bgVideo) MixerCleared()        {}
 +func (bgv *bgVideo) Close()               {}
 --- ikp/src/vita_platform.go	1969-12-31 19:00:00.000000000 -0500
-+++ iktg/src/vita_platform.go	2026-11-02 00:49:33.802967447 -0500
-@@ -0,0 +1,111 @@
++++ iktg/src/vita_platform.go	2026-11-02 01:03:59.238383353 -0500
+@@ -0,0 +1,115 @@
 +//go:build vita
 +
 +package main
@@ -430,6 +430,7 @@
 +void vglSwapBuffers(unsigned char has_commondialog);
 +void *vglGetProcAddress(const char *name);
 +
++static void vita_libc_chdir(const char *p) { chdir(p); }
 +static void vita_clock(void) {
 +	scePowerSetArmClockFrequency(444);
 +	scePowerSetBusClockFrequency(222);
@@ -455,6 +456,9 @@
 +// vitaPlatformInit runs at the very start of realMain.
 +func vitaPlatformInit() {
 +	C.vita_clock()
++	cd := C.CString(vitaDataDir)
++	C.vita_libc_chdir(cd) // for C libraries (libxmp, SDL) that open files themselves
++	C.free(unsafe.Pointer(cd))
 +	if err := os.Chdir(vitaDataDir); err != nil {
 +		Logcat("vita: chdir " + vitaDataDir + " failed: " + err.Error())
 +	}

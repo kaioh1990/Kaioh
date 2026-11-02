@@ -1,0 +1,11 @@
+--- /tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/tg/tinygo/src/os/osexec.go.orig	2026-11-02 01:04:48.729868876 -0500
++++ /tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/tg/tinygo/src/os/osexec.go	2026-11-02 01:04:48.732228996 -0500
+@@ -34,7 +34,7 @@
+ 	}
+ 	env1[len(envv)] = nil
+ 
+-	ret, _, err := syscall.Syscall(syscall.SYS_EXECVE, uintptr(unsafe.Pointer(unsafe.SliceData(argv0))), uintptr(unsafe.Pointer(unsafe.SliceData(argv1))), uintptr(unsafe.Pointer(unsafe.SliceData(env1))))
++	ret, _, err := syscall.VSyscall(syscall.SYS_EXECVE, uintptr(unsafe.Pointer(unsafe.SliceData(argv0))), uintptr(unsafe.Pointer(unsafe.SliceData(argv1))), uintptr(unsafe.Pointer(unsafe.SliceData(env1))))
+ 	if int(ret) != 0 {
+ 		return err
+ 	}
