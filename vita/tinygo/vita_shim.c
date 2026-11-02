@@ -63,3 +63,17 @@ long getrandom(void *buf, size_t len, unsigned flags) {
 
 // glibc/musl name for errno; newlib calls it __errno.
 int *__errno_location(void) { return &errno; }
+
+// stdout/stderr (Go's println, panic messages) go to ux0:data/cvftest.log,
+// since the Vita has no console. Other descriptors use newlib.
+#include <psp2/io/fcntl.h>
+#include <reent.h>
+ssize_t __real_write(int fd, const void *buf, size_t n);
+ssize_t __wrap_write(int fd, const void *buf, size_t n) {
+	if (fd == 1 || fd == 2) {
+		SceUID f = sceIoOpen("ux0:data/cvftest.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
+		if (f >= 0) { sceIoWrite(f, buf, n); sceIoClose(f); }
+		return (ssize_t)n;
+	}
+	return __real_write(fd, buf, n);
+}

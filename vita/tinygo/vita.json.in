@@ -29,6 +29,7 @@
   "ldflags": [
     "-q",
     "--no-gc-sections",
+    "--wrap=write",
     "--pic-veneer",
     "-zseparate-loadable-segments",
     "--no-rosegment",
