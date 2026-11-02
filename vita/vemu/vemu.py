@@ -936,13 +936,15 @@ TS_COUNT = {}
 ALLOC_BY = collections.Counter() if False else None
 def alloc_hook(uc, ad, sz, ud):
     n = mu.reg_read(UC_ARM_REG_R0)
-    if n >= 65536:
+    if FRAME[0] < int(os.environ.get('VEMU_ALLOCS_FROM', '0')): return
+    ALLOCN[symbolize(mu.reg_read(UC_ARM_REG_LR)).split('+')[0]] += 1
+    if n >= int(os.environ.get('VEMU_ALLOCS_MIN', '65536')):
         lr = mu.reg_read(UC_ARM_REG_LR)
         # walk one level up using the caller's lr is unreliable; record direct caller
         ALLOCS[symbolize(lr).split('+')[0]] += n
 if os.environ.get('VEMU_ALLOCS'):
     import collections as _c
-    ALLOCS = _c.Counter()
+    ALLOCS = _c.Counter(); ALLOCN = _c.Counter()
     _a = L2R(byname['runtime.alloc'])
     mu.hook_add(UC_HOOK_CODE, alloc_hook, begin=_a, end=_a)
 SIZEKINDS = {}
@@ -1044,4 +1046,5 @@ say('[vgl] in-use texture copies: %d (%d MB total, peak %d KB in one frame, %d >
 say('[vemu] ctrl calls: ' + ', '.join('%s=%d' % kv for kv in calls.items() if 'Ctrl' in kv[0] or 'Hid' in kv[0]))
 if os.environ.get('VEMU_ALLOCS'):
     for k, v in ALLOCS.most_common(30): say('[alloc] %8d KB %s' % (v >> 10, k))
+    for k, v in ALLOCN.most_common(40): say('[allocn] %8d %s' % (v, k))
 say('[vemu] frames=%d mem=%dMB' % (FRAME[0], MEM_BUDGET[0] >> 20))

@@ -3346,10 +3346,37 @@ index 399921b..4403e16 100644
  	return winWidth, winHeight
  }
 diff --git a/src/sound.go b/src/sound.go
-index 6cdd693..f9b599b 100644
+index 6cdd693..b98d672 100644
 --- a/src/sound.go
 +++ b/src/sound.go
-@@ -711,6 +711,10 @@ type Sound struct {
+@@ -441,14 +441,15 @@ func (bgm *Bgm) Open(filename string, loop, bgmVolume, bgmLoopStart, bgmLoopEnd,
+ 	bgm.volctrl = &effects.Volume{Streamer: streamer, Base: 2, Volume: 0, Silent: true}
+ 	bgm.sampleRate = format.SampleRate
+ 	dstFreq := beep.SampleRate(float32(sys.cfg.Sound.SampleRate) / bgm.freqmul)
+-	resampler := beep.Resample(Clamp(sys.cfg.Sound.AudioResampleQuality, 1, 16), bgm.sampleRate, dstFreq, bgm.volctrl)
++	resampler := beep.Resample(audioResampleQuality(), bgm.sampleRate, dstFreq, bgm.volctrl)
+ 	bgm.ctrl = &beep.Ctrl{Streamer: resampler}
+ 	bgm.UpdateVolume()
+ 	bgm.streamer.Seek(startPosition)
+ 	speaker.Play(bgm.ctrl)
+ 
+ 	// Handle the RAM swap in the background (only for looped BGM and only if the user enabled it)
+-	if lc != 0 && sys.cfg.Sound.BGMRAMBuffer && bgm.format != "xmp" {
++	// Vita: decoding a whole track into RAM costs tens of MB and seconds of CPU.
++	if lc != 0 && sys.cfg.Sound.BGMRAMBuffer && bgm.format != "xmp" && !isVita {
+ 		// go func(ctx context.Context) {
+ 		// Changing this to SafeGo should be safe because ctx has already been captured above
+ 		SafeGo(func() {
+@@ -661,7 +662,7 @@ func (bgm *Bgm) OpenFromStreamer(stream beep.Streamer, srcSampleRate beep.Sample
+ 	bgm.sampleRate = srcSampleRate
+ 	bgm.volctrl = &effects.Volume{Streamer: stream, Base: 2, Volume: 0, Silent: true}
+ 	dstFreq := beep.SampleRate(float32(sys.cfg.Sound.SampleRate) / bgm.freqmul)
+-	resampler := beep.Resample(Clamp(sys.cfg.Sound.AudioResampleQuality, 1, 16), bgm.sampleRate, dstFreq, bgm.volctrl)
++	resampler := beep.Resample(audioResampleQuality(), bgm.sampleRate, dstFreq, bgm.volctrl)
+ 	bgm.ctrl = &beep.Ctrl{Streamer: resampler}
+ 	bgm.UpdateVolume()
+ 	speaker.Play(bgm.ctrl)
+@@ -711,6 +712,10 @@ type Sound struct {
  	wavData []byte
  	format  beep.Format
  	length  int
@@ -3360,7 +3387,7 @@ index 6cdd693..f9b599b 100644
  }
  
  func readSound(f io.ReadSeekCloser, size uint32) (*Sound, error) {
-@@ -759,10 +763,14 @@ func readSound(f io.ReadSeekCloser, size uint32) (*Sound, error) {
+@@ -759,10 +764,14 @@ func readSound(f io.ReadSeekCloser, size uint32) (*Sound, error) {
  	if recovered != nil {
  		return nil, nil // If sound wasn't able to be fully played, we disable it to avoid engine freezing
  	}
@@ -3376,7 +3403,7 @@ index 6cdd693..f9b599b 100644
  	streamer, _, _ := wav.Decode(bytes.NewReader(s.wavData))
  	return streamer
  }
-@@ -818,6 +826,9 @@ func LoadSnd(filename string) (*Snd, error) {
+@@ -818,6 +827,9 @@ func LoadSnd(filename string) (*Snd, error) {
  // The "keepItem" function allows to filter out unwanted waves.
  // If max > 0, the function returns immediately when a matching entry is found. It also gives up after "max" non-matching entries.
  func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32) (*Snd, error) {
@@ -3386,7 +3413,7 @@ index 6cdd693..f9b599b 100644
  	s := newSnd()
  	f, err := OpenFile(filename)
  	if err != nil {
-@@ -872,7 +883,14 @@ func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32)
+@@ -872,7 +884,14 @@ func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32)
  			if exists {
  				LogMessage("WARNING: Duplicate sound key in %v: %v,%v (index %v ignored)", filename, num[0], num[1], i)
  			} else {
@@ -3402,7 +3429,7 @@ index 6cdd693..f9b599b 100644
  				if err != nil {
  					LogMessage("Sound %v,%v in %v can't be read: %v", num[0], num[1], filename, err)
  					if max > 0 {
-@@ -896,7 +914,11 @@ func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32)
+@@ -896,7 +915,11 @@ func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32)
  }
  
  func (s *Snd) Get(gn [2]int32) *Sound {
@@ -3415,6 +3442,28 @@ index 6cdd693..f9b599b 100644
  }
  
  func (s *Snd) play(gn [2]int32, volumescale int32, pan float32, loopstart, loopend, startposition int, keepOnMatchEnd ...bool) bool {
+@@ -1094,7 +1117,7 @@ func (s *SoundChannel) Play(sound *Sound, group, number, loop int32, freqmul flo
+ 	s.sfx.publishGains()
+ 	srcRate := s.sound.format.SampleRate
+ 	dstRate := beep.SampleRate(float32(sys.cfg.Sound.SampleRate) / s.sfx.freqmul)
+-	resampler := beep.Resample(Clamp(sys.cfg.Sound.AudioResampleQuality, 1, 16), srcRate, dstRate, s.sfx)
++	resampler := beep.Resample(audioResampleQuality(), srcRate, dstRate, s.sfx)
+ 	// Start paused so callers can configure volume and pan before playback begins.
+ 	s.ctrl = &beep.Ctrl{Streamer: resampler, Paused: true}
+ 	s.streamer.Seek(startPosition)
+@@ -1471,3 +1494,12 @@ func newPlaySndParams() *PlaySndParams {
+ 		sourceID:   -1,
+ 	}
+ }
++
++// audioResampleQuality is the resampler quality; the Vita uses the cheapest
++// setting because every playing sound is resampled on the CPU.
++func audioResampleQuality() int {
++	if isVita {
++		return 1
++	}
++	return Clamp(sys.cfg.Sound.AudioResampleQuality, 1, 16)
++}
 diff --git a/src/sound_xm.go b/src/sound_xm.go
 index 123d9e3..6082e7a 100644
 --- a/src/sound_xm.go
@@ -3452,7 +3501,7 @@ index 9b29416..4bd85c5 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/system.go b/src/system.go
-index 2698d35..2647b8a 100644
+index 2698d35..9e559ba 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -3480,11 +3529,12 @@ index 2698d35..2647b8a 100644
  	s.whitePalTex = NewPaletteTexture()
  	s.whitePalTex.SetSubData(pal32ToBytes(whitepal))
  	s.SpriteTextureAtlas.textureSize = 2048
-@@ -955,6 +962,12 @@ func (s *System) await(fps int) bool {
+@@ -955,6 +962,13 @@ func (s *System) await(fps int) bool {
  
  	s.eventUpdate()
  
 +	if isVita {
++		vitaPerfTick(s.frameSkip)
 +		// TinyGo goroutines are cooperative: when the frame loop runs behind
 +		// schedule it never sleeps, so background loaders would never run.
 +		runtime.Gosched()
@@ -3493,7 +3543,7 @@ index 2698d35..2647b8a 100644
  	return !s.gameEnd
  }
  
-@@ -990,7 +1003,14 @@ func (s *System) renderFrame() {
+@@ -990,7 +1004,14 @@ func (s *System) renderFrame() {
  	}
  
  	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
@@ -3509,7 +3559,7 @@ index 2698d35..2647b8a 100644
  	s.draw(dx, dy, dscl)
  
  	// Lua
-@@ -2945,6 +2965,11 @@ func (s *System) action() {
+@@ -2945,6 +2966,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -3521,7 +3571,7 @@ index 2698d35..2647b8a 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2998,9 +3023,9 @@ func (s *System) action() {
+@@ -2998,9 +3024,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -3534,7 +3584,7 @@ index 2698d35..2647b8a 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3043,13 @@ func (s *System) action() {
+@@ -3018,6 +3044,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -3548,7 +3598,7 @@ index 2698d35..2647b8a 100644
  	return
  }
  
-@@ -5050,6 +5082,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -5050,6 +5083,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -3558,7 +3608,7 @@ index 2698d35..2647b8a 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -6820,13 +6855,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6856,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -3574,7 +3624,7 @@ index 2698d35..2647b8a 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6870,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6871,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -3587,7 +3637,7 @@ index 2698d35..2647b8a 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6897,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6898,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -3595,7 +3645,7 @@ index 2698d35..2647b8a 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6913,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6914,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -3800,10 +3850,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..821d332
+index 0000000..67e0d2c
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,289 @@
+@@ -0,0 +1,323 @@
 +//go:build vita
 +
 +package main
@@ -3979,6 +4029,7 @@ index 0000000..821d332
 +import (
 +	"os"
 +	"runtime"
++	"time"
 +	"unsafe"
 +)
 +
@@ -4093,12 +4144,45 @@ index 0000000..821d332
 +// vitaTraceOn enables the detailed startup trace until the main config is normalized.
 +var vitaTraceOn = true
 +var vitaTraceDeep = false
++
++// Frame-time report written to the log every 300 frames (about 5 s at 60 fps).
++var vitaPerf struct {
++	last    time.Time
++	n, skip int
++	sum     time.Duration
++	max     time.Duration
++}
++
++func vitaPerfTick(skipped bool) {
++	now := time.Now()
++	if !vitaPerf.last.IsZero() {
++		d := now.Sub(vitaPerf.last)
++		vitaPerf.sum += d
++		if d > vitaPerf.max {
++			vitaPerf.max = d
++		}
++		vitaPerf.n++
++		if skipped {
++			vitaPerf.skip++
++		}
++	}
++	vitaPerf.last = now
++	if vitaPerf.n >= 300 {
++		var m runtime.MemStats
++		runtime.ReadMemStats(&m)
++		avg := vitaPerf.sum / time.Duration(vitaPerf.n)
++		vitaTrace("perf: " + itoa(vitaPerf.n) + " frames, avg " + itoa(int(avg/time.Microsecond)) + " us (" +
++			itoa(int(time.Second/avg)) + " fps), max " + itoa(int(vitaPerf.max/time.Millisecond)) + " ms, draws skipped " +
++			itoa(vitaPerf.skip) + ", heap inuse " + itoa(int(m.HeapInuse>>20)) + " MB sys " + itoa(int(m.HeapSys>>20)) + " MB")
++		vitaPerf.n, vitaPerf.skip, vitaPerf.sum, vitaPerf.max = 0, 0, 0, 0
++	}
++}
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..b591967
+index 0000000..63a7827
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,27 @@
 +//go:build !vita
 +
 +package main
@@ -4118,10 +4202,11 @@ index 0000000..b591967
 +func vitaGetProcAddress(name string) unsafe.Pointer { return nil }
 +
 +func vitaShaderSources(name string) (string, string, bool) { return "", "", false }
-+func fmtHex(v uint32) string                                { return "" }
-+func vitaTrace(string) {}
-+func vitaCRC(string) {}
-+func vitaMem(string) {}
++func fmtHex(v uint32) string                               { return "" }
++func vitaTrace(string)                                     {}
++func vitaCRC(string)                                       {}
++func vitaMem(string)                                       {}
++func vitaPerfTick(bool)                                    {}
 +
 +var vitaTraceOn = false
 +var vitaTraceDeep = false
