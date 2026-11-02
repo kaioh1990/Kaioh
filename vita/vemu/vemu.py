@@ -490,7 +490,10 @@ def census_diff(a, b):
     big = sorted(objs, key=lambda o: -o[1])[:4]
     import array
     regions = []
-    for b0, n in objs: regions.append((hs + b0 * 16, n * 16))
+    for b0, n in objs:
+        lay = r32(hs + b0 * 16 + n * 16 - 4)
+        if lay == 0: continue  # pointer-free: the GC does not scan it
+        regions.append((hs + b0 * 16, n * 16))
     for (lo, sz) in segs[1:]: regions.append((lo, sz))
     regions.append((stack, STACK_SIZE))
     for b0, n in big:
@@ -506,8 +509,8 @@ def census_diff(a, b):
                     refs.append((ra, rs, i * 4))
                     if len(refs) > 6: break
             if len(refs) > 6: break
-        say('[census] obj %x size %d refs: %s' % (ta, n * 16, ', '.join('%x(size %d)+%d' % r for r in refs)))
-        for ra, rs, off in refs[:2]:
+        say('[census] obj %x size %d refs: %s' % (ta, n * 16, ', '.join('%x(size %d)+%d lay=%x' % (r[0], r[1], r[2], r32(r[0] + r[1] - 4)) for r in refs)))
+        for ra, rs, off in refs[:3]:
             say('[census]    ref obj %x first words %s' % (ra, bytes(mu.mem_read(ra, min(rs, 48))).hex()))
     for k, v in d.most_common(25):
         say('[census] diff size %d layout %s %s: %+d KB (%d objs)' % (k[0], hex(k[1]), symbolize(k[1]) if k[1] > 0x81000000 and k[1] < 0x82000000 else '', v >> 10, v // k[0]))
@@ -775,8 +778,9 @@ def gl_handler(name):
         if name == 'vglInitExtended' or name == 'vglInit': return 1
         if name == 'vglGetProcAddress':
             n = cstr(a[0]); r = byname.get(n, 0)
-            if not r: MISSING.add(n)
-            return L2R(r)
+            if not r: MISSING.add(n); return 0
+            ra = L2R(r)
+            return ra | (1 if ra in THUMBSYM else 0)
         if name == 'vglSwapBuffers':
             FRAME[0] += 1; VTIME[0] += 16667
             if FRAME[0] % 60 == 0: say('[gl] frame %d' % FRAME[0])
@@ -868,6 +872,18 @@ def hook_wrap(uc, ad, sz, ud):
         STOP_REASON[0] = 'pyerr'; uc.emu_stop()
 
 TS_COUNT = {}
+ALLOC_BY = collections.Counter() if False else None
+def alloc_hook(uc, ad, sz, ud):
+    n = mu.reg_read(UC_ARM_REG_R0)
+    if n >= 65536:
+        lr = mu.reg_read(UC_ARM_REG_LR)
+        # walk one level up using the caller's lr is unreliable; record direct caller
+        ALLOCS[symbolize(lr).split('+')[0]] += n
+if os.environ.get('VEMU_ALLOCS'):
+    import collections as _c
+    ALLOCS = _c.Counter()
+    _a = L2R(byname['runtime.alloc'])
+    mu.hook_add(UC_HOOK_CODE, alloc_hook, begin=_a, end=_a)
 SIZEKINDS = {}
 def trace_sym_hook(uc, ad, sz, ud):
     n = symbolize(ad); TS_COUNT[n] = TS_COUNT.get(n, 0) + 1
@@ -950,4 +966,6 @@ for fib, f in fibers.items():
     say('[vemu] fiber %x ctx %x size %d: deepest use %d bytes' % (fib, f['ctx'], f['size'], f['size'] - lo))
 say('[vemu] GL procs missing: %d' % len(MISSING))
 say('[vemu] ctrl calls: ' + ', '.join('%s=%d' % kv for kv in calls.items() if 'Ctrl' in kv[0] or 'Hid' in kv[0]))
+if os.environ.get('VEMU_ALLOCS'):
+    for k, v in ALLOCS.most_common(30): say('[alloc] %8d KB %s' % (v >> 10, k))
 say('[vemu] frames=%d mem=%dMB' % (FRAME[0], MEM_BUDGET[0] >> 20))

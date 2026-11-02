@@ -692,7 +692,7 @@ index a741eab..540ab31 100644
  	basename := filepath.Base(filename)
  	ext := filepath.Ext(basename)
 diff --git a/src/config.go b/src/config.go
-index d39783d..283c0c1 100644
+index d39783d..97b9d1b 100644
 --- a/src/config.go
 +++ b/src/config.go
 @@ -291,7 +291,9 @@ func loadConfig(def string) (*Config, error) {
@@ -705,7 +705,7 @@ index d39783d..283c0c1 100644
  
  	assignFrom := func(src *ini.File) {
  		if src == nil {
-@@ -319,12 +321,18 @@ func loadConfig(def string) (*Config, error) {
+@@ -319,12 +321,20 @@ func loadConfig(def string) (*Config, error) {
  
  	// Apply precedence: struct zero/default tags < defaultConfig.ini < user config
  	assignFrom(defaultOnlyIni)
@@ -716,19 +716,21 @@ index d39783d..283c0c1 100644
  	c.DefaultOnlyIni = defaultOnlyIni
 +	vitaTrace("cfg: user assigned")
 +	vitaCRC("pre-normalize")
++	vitaTraceDeep = vitaTraceOn
  	c.normalize()
 +	vitaTrace("cfg: normalized")
 +	vitaTraceOn = false
++	vitaTraceDeep = false
  	c.sysSet()
 +	vitaTrace("cfg: sysSet done")
  	c.Save(def)
  	return &c, nil
  }
-@@ -474,6 +482,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
+@@ -474,6 +484,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
  
  // SetValueUpdate sets the value based on the query string and updates the IniFile.
  func (c *Config) SetValueUpdate(query string, value interface{}) error {
-+	if isVita && vitaTraceOn {
++	if isVita && vitaTraceDeep {
 +		vitaTrace("SVU " + query)
 +	}
  	return SetValueUpdate(c, c.IniFile, query, value)
@@ -2767,66 +2769,86 @@ index ee44670..f66c4b7 100644
 +	sys.mainThreadTask <- f
 +}
 diff --git a/src/iniutils.go b/src/iniutils.go
-index e791f5d..eb21b18 100644
+index e791f5d..7a27f20 100644
 --- a/src/iniutils.go
 +++ b/src/iniutils.go
-@@ -383,6 +383,9 @@ func initMaps(v reflect.Value) {
+@@ -265,6 +265,9 @@ func parseQueryPath(query string) []queryPart {
+ // findFieldByINITag locates a field by its `ini` tag, supporting anonymous
+ // embedded structs. If no `ini` tag is present, it falls back to matching by field name.
+ func findFieldByINITag(v reflect.Value, tag string) (reflect.Value, reflect.StructField, bool) {
++	if isVita && vitaTraceDeep {
++		vitaTrace("    findTag " + tag + " in " + v.Type().Name())
++	}
+ 	val := v
+ 	if !val.IsValid() {
+ 		return reflect.Value{}, reflect.StructField{}, false
+@@ -383,6 +386,9 @@ func initMaps(v reflect.Value) {
  			if fieldType.PkgPath != "" {
  				continue
  			}
-+			if isVita && vitaTraceOn {
++			if isVita && vitaTraceDeep {
 +				vitaTrace("initMaps " + t.Name() + "." + fieldType.Name + " kind " + strconv.Itoa(int(fieldVal.Kind())))
 +			}
  			initMaps(fieldVal)
  		}
  	case reflect.Slice, reflect.Array:
-@@ -392,7 +395,13 @@ func initMaps(v reflect.Value) {
+@@ -392,7 +398,13 @@ func initMaps(v reflect.Value) {
  	case reflect.Map:
  		// If map is nil, we "make" it
  		if v.IsNil() && v.CanSet() {
-+			if isVita && vitaTraceOn {
++			if isVita && vitaTraceDeep {
 +				vitaTrace("  MakeMap")
 +			}
  			v.Set(reflect.MakeMap(v.Type()))
-+			if isVita && vitaTraceOn {
++			if isVita && vitaTraceDeep {
 +				vitaTrace("  MakeMap ok")
 +			}
  		}
  
  		// Then we also want to recurse into each key/value pair
-@@ -1820,7 +1829,13 @@ func SetValue(structPtr interface{}, query string, val interface{}) error {
+@@ -561,6 +573,9 @@ func resolveWithLookup(in string, lookupTag string, baseDef string) string {
+ 
+ // setFieldValue assigns a value to a field based on its type, honoring default and lookup tags.
+ func setFieldValue(fieldVal reflect.Value, value interface{}, defTag string, keyPath string, lookupTag string, baseDef string) error {
++	if isVita && vitaTraceDeep {
++		vitaTrace("    setField kind " + strconv.Itoa(int(fieldVal.Kind())))
++	}
+ 	// Helper to zero-out the field
+ 	setNil := func(fieldVal reflect.Value) {
+ 		switch fieldVal.Kind() {
+@@ -1820,7 +1835,13 @@ func SetValue(structPtr interface{}, query string, val interface{}) error {
  		}
  		return ""
  	}
-+	if isVita && vitaTraceOn {
++	if isVita && vitaTraceDeep {
 +		vitaTrace("  SV parsed")
 +	}
  	baseDef := extractDef(structPtr)
-+	if isVita && vitaTraceOn {
++	if isVita && vitaTraceDeep {
 +		vitaTrace("  SV def " + baseDef)
 +	}
  
  	return assignField(structPtr, parts, val, baseDef)
  }
-@@ -1828,6 +1843,9 @@ func SetValue(structPtr interface{}, query string, val interface{}) error {
+@@ -1828,6 +1849,9 @@ func SetValue(structPtr interface{}, query string, val interface{}) error {
  // SetValueUpdate sets a value and updates the INI file accordingly
  func SetValueUpdate(obj interface{}, iniFile *ini.File, query string, value interface{}) error {
  	err := SetValue(obj, query, value)
-+	if isVita && vitaTraceOn {
++	if isVita && vitaTraceDeep {
 +		vitaTrace("  SetValue done")
 +	}
  	if err != nil {
  		return err
  	}
-@@ -1849,7 +1867,13 @@ func SetValueUpdate(obj interface{}, iniFile *ini.File, query string, value inte
+@@ -1849,7 +1873,13 @@ func SetValueUpdate(obj interface{}, iniFile *ini.File, query string, value inte
  		valStr = fmt.Sprintf("%v", v)
  	}
  
-+	if isVita && vitaTraceOn {
++	if isVita && vitaTraceDeep {
 +		vitaTrace("  valStr " + valStr)
 +	}
  	err = updateINIFile(obj, iniFile, query, valStr)
-+	if isVita && vitaTraceOn {
++	if isVita && vitaTraceDeep {
 +		vitaTrace("  updateINI done")
 +	}
  	if err != nil {
@@ -3261,7 +3283,7 @@ index 9b29416..4bd85c5 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/system.go b/src/system.go
-index 2698d35..b28d5b8 100644
+index 2698d35..9bf89ff 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -3273,7 +3295,20 @@ index 2698d35..b28d5b8 100644
  		if ctx, err := s.window.GLCreateContext(); err != nil {
  			panic(fmt.Sprintf("Could not initialize context :( Reason? %s", err))
  		} else {
-@@ -990,7 +990,14 @@ func (s *System) renderFrame() {
+@@ -955,6 +955,12 @@ func (s *System) await(fps int) bool {
+ 
+ 	s.eventUpdate()
+ 
++	if isVita {
++		// TinyGo goroutines are cooperative: when the frame loop runs behind
++		// schedule it never sleeps, so background loaders would never run.
++		runtime.Gosched()
++	}
++
+ 	return !s.gameEnd
+ }
+ 
+@@ -990,7 +996,14 @@ func (s *System) renderFrame() {
  	}
  
  	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
@@ -3289,7 +3324,7 @@ index 2698d35..b28d5b8 100644
  	s.draw(dx, dy, dscl)
  
  	// Lua
-@@ -2945,6 +2952,11 @@ func (s *System) action() {
+@@ -2945,6 +2958,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -3301,7 +3336,7 @@ index 2698d35..b28d5b8 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2998,9 +3010,9 @@ func (s *System) action() {
+@@ -2998,9 +3016,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -3314,7 +3349,7 @@ index 2698d35..b28d5b8 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3030,13 @@ func (s *System) action() {
+@@ -3018,6 +3036,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -3328,7 +3363,7 @@ index 2698d35..b28d5b8 100644
  	return
  }
  
-@@ -5050,6 +5069,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -5050,6 +5075,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -3338,7 +3373,7 @@ index 2698d35..b28d5b8 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -6820,13 +6842,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6848,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -3354,7 +3389,7 @@ index 2698d35..b28d5b8 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6857,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6863,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -3367,7 +3402,7 @@ index 2698d35..b28d5b8 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6884,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6890,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -3375,7 +3410,7 @@ index 2698d35..b28d5b8 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6900,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6906,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -3580,10 +3615,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..abc7b89
+index 0000000..d26e0d9
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,228 @@
+@@ -0,0 +1,229 @@
 +//go:build vita
 +
 +package main
@@ -3812,12 +3847,13 @@ index 0000000..abc7b89
 +
 +// vitaTraceOn enables the detailed startup trace until the main config is normalized.
 +var vitaTraceOn = true
++var vitaTraceDeep = false
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..8a26ba4
+index 0000000..b591967
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,26 @@
 +//go:build !vita
 +
 +package main
@@ -3843,6 +3879,7 @@ index 0000000..8a26ba4
 +func vitaMem(string) {}
 +
 +var vitaTraceOn = false
++var vitaTraceDeep = false
 diff --git a/src/vita_shaders.go b/src/vita_shaders.go
 new file mode 100644
 index 0000000..6cb3fa7
