@@ -1,0 +1,59 @@
+name: Vita feasibility spike
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/vita-spike.yml'
+      - 'vita/**'
+
+env:
+  IKEMEN_REPO: https://github.com/ikemen-engine/Ikemen-GO.git
+  IKEMEN_COMMIT: 6a09392
+  TINYGO_VERSION: 0.44.0
+
+jobs:
+  # Does the patched engine compile with TinyGo at all? (host Linux first)
+  tinygo-ikemen:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Install TinyGo + engine deps
+        run: |
+          wget -q https://github.com/tinygo-org/tinygo/releases/download/v${TINYGO_VERSION}/tinygo_${TINYGO_VERSION}_amd64.deb
+          sudo dpkg -i tinygo_${TINYGO_VERSION}_amd64.deb
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsdl2-dev libxmp-dev libgl1-mesa-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libgtk-3-dev pkg-config
+          tinygo version
+      - name: Fetch Ikemen GO + CvF patch
+        run: |
+          git clone -q "$IKEMEN_REPO" ikemen
+          cd ikemen && git checkout -q "$IKEMEN_COMMIT" && git apply ../patches/ikemen-cvf-online.patch
+          go mod download
+      - name: TinyGo build (host)
+        working-directory: ikemen
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          tinygo build -o ikemen-tinygo -gc=conservative -scheduler=tasks ./src 2>&1 | tee ../tinygo-host.log
+      - name: TinyGo build (linux/arm 32-bit, Vita-like CPU)
+        working-directory: ikemen
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          GOARCH=arm tinygo build -o /dev/null -gc=conservative ./src 2>&1 | tee ../tinygo-arm.log
+      - name: Summarise errors
+        if: always()
+        run: |
+          for f in tinygo-host.log tinygo-arm.log; do
+            echo "== $f: $(grep -c . $f 2>/dev/null) lines"; head -c 20000 $f 2>/dev/null
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vita-spike-logs
+          path: '*.log'
