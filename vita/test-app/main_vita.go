@@ -12,6 +12,9 @@ package main
 #include <stdlib.h>
 
 void vlog(const char *s);
+unsigned vfp_get_fpscr(void);
+void vfp_set_ieee(void);
+int mem_probe_mb(void);
 static void say(const char *s) { psvDebugScreenPuts(s); vlog(s); }
 static int startPressed(void) {
 	SceCtrlData pad;
@@ -46,7 +49,7 @@ func main() {
 	vlog("1 Go main started")
 	C.psvDebugScreenInit()
 	vlog("2 screen ready")
-	say("\x1b[1;33mCastlevania Fighter Online - Vita test 8\x1b[0m\n\n")
+	say("\x1b[1;33mCastlevania Fighter Online - Vita test 9\x1b[0m\n\n")
 
 	say("1. Goroutines:\n")
 	say("   a) start one... ")
@@ -72,14 +75,28 @@ func main() {
 	say("ok\n   d) full test: ")
 	say("%s\n", goroutineTest())
 
-	say("2. Rollback math check (must match PC/Mac/iPad)...\n")
-	t := time.Now()
-	h := mathHash()
-	ok := "\x1b[1;32mMATCH - Vita can play online vs PC\x1b[0m"
-	if h != expectedHash {
-		ok = "\x1b[1;31mMISMATCH - would desync vs PC\x1b[0m"
+	say("2. Rollback math check (must match PC/Mac/iPad)\n")
+	want := []string{"b42e237c", "3a2e4fbc", "b00ff867", "3219fa5d", "553bdcab", "c4e876c5", "00d81096", "a0dac36e", "13204710", "926a095a", "4e435bb3", "ecdf26ee", "9e0e55e2", "dcba6ce0", "9bf1c1b7", "3404666c", "5a500614", "741dd2fb", "2336ec2b", "27d7d8cd", "8cee5ea0"}
+	check := func(label string) {
+		say("   %s FPSCR=0x%08x: ", label, uint32(C.vfp_get_fpscr()))
+		got := catHashes()
+		bad := []string{}
+		for i := range got {
+			if got[i] != want[i] {
+				bad = append(bad, catNames[i])
+			}
+		}
+		if len(bad) == 0 {
+			say("\x1b[1;32mALL MATCH\x1b[0m\n")
+		} else {
+			say("\x1b[1;31mdiffer: %v\x1b[0m\n", bad)
+		}
 	}
-	say("   hash %s (PC: %s) %s  [%.1fs]\n", h, expectedHash, ok, time.Since(t).Seconds())
+	check("default")
+	C.vfp_set_ieee()
+	check("IEEE   ")
+	h := mathHash()
+	say("   full hash %s (PC %s)\n", h, expectedHash)
 
 	say("3. CPU speed: ")
 	b := cpuBench()
@@ -88,26 +105,7 @@ func main() {
 	say("4. Memory: ")
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	say("Go heap reserved %d MB\n", ms.Sys>>20)
-	// How much can Go actually use?
-	var keep [][]byte
-	total := 0
-	for total < 512 {
-		func() {
-			defer func() { recover() }()
-			keep = append(keep, make([]byte, 8<<20))
-			total += 8
-		}()
-		if len(keep)*8 != total {
-			break
-		}
-		if total%64 == 0 {
-			say("%d.. ", total)
-		}
-	}
-	say("\n   allocated %d MB before running out\n", total)
-	keep = nil
-
+	say("Go heap %d MB; largest free block now %d MB\n", ms.Sys>>20, int(C.mem_probe_mb()))
 	say("\n\x1b[1;36mAll done. Press START to exit.\x1b[0m\n")
 	for C.startPressed() == 0 {
 		time.Sleep(50 * time.Millisecond)
