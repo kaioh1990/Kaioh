@@ -126,3 +126,8 @@ int __wrap_clock_gettime(clockid_t clk, struct timespec *ts) {
 	}
 	return __real_clock_gettime(clk, ts);
 }
+
+void tinygo_vita_stack_overflow(void) {
+	vlog("FATAL: goroutine stack overflow");
+	abort();
+}

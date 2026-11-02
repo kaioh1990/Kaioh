@@ -27,6 +27,10 @@ const stackCanary = uintptr(uint64(0x670c1333b83bf575) & uint64(^uintptr(0)))
 
 const vitaFiberHeader = 256
 
+const vitaMainStackSize = 2 * 1024 * 1024
+
+var vitaMainStarted bool
+
 type state struct {
 	// sp is the stack pointer saved when the goroutine paused (callee-saved
 	// registers are pushed just below it).
@@ -59,8 +63,14 @@ func vitaFiberRun(fiber unsafe.Pointer, systemStack *uintptr)
 func vitaFiberPause(sp *uintptr)
 
 func (s *state) initialize(fn uintptr, args unsafe.Pointer, stackSize uintptr) {
-	if stackSize < 32*1024 {
-		stackSize = 32 * 1024
+	// TinyGo cannot grow stacks, and Ikemen's init/Lua code recurses deeply,
+	// so the first goroutine (package init + main) gets a large stack and the
+	// rest get at least 256 KB.
+	if !vitaMainStarted {
+		vitaMainStarted = true
+		stackSize = vitaMainStackSize
+	} else if stackSize < 256*1024 {
+		stackSize = 256 * 1024
 	}
 	stackSize = (stackSize + 7) &^ 7
 	stack := runtime_alloc(stackSize, gclayout.Conservative.AsPtr())
@@ -74,6 +84,11 @@ func (s *state) initialize(fn uintptr, args unsafe.Pointer, stackSize uintptr) {
 	*(*unsafe.Pointer)(unsafe.Add(entryArgs, unsafe.Sizeof(uintptr(0)))) = args
 
 	ctx := unsafe.Add(stack, vitaFiberHeader)
+	// Guard band just above the header: if these words change, the stack
+	// overflowed (checked whenever the goroutine pauses).
+	for i := uintptr(0); i < vitaGuardWords; i++ {
+		*(*uintptr)(unsafe.Add(ctx, i*4)) = stackCanary
+	}
 	if vitaFiberInit(s.fiber, ctx, stackSize-vitaFiberHeader, entryArgs) != 0 {
 		panic("could not create goroutine fiber")
 	}
@@ -84,8 +99,16 @@ func (s *state) resume() {
 }
 
 func (s *state) pause() {
+	if *s.canaryPtr != stackCanary || *(*uintptr)(unsafe.Add(unsafe.Pointer(s.canaryPtr), vitaFiberHeader)) != stackCanary {
+		vitaStackOverflow()
+	}
 	vitaFiberPause(&s.sp)
 }
+
+const vitaGuardWords = 64
+
+//export tinygo_vita_stack_overflow
+func vitaStackOverflow()
 
 // SystemStack returns the system stack pointer when called from a task stack.
 // When called from the system stack, it returns 0.
