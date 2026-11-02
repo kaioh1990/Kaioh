@@ -14,7 +14,7 @@
   "linker": "ld.lld",
   "rtlib": "",
   "libc": "",
-  "default-stack-size": 65536,
+  "default-stack-size": 131072,
   "cflags": [
     "--target=armv7-unknown-none-eabihf",
     "-mcpu=cortex-a9",
@@ -42,6 +42,7 @@
     "@V@/lib/gcc/arm-vita-eabi/15.2.0/crtbegin.o",
     "@V@/arm-vita-eabi/lib/crt0.o",
     "--start-group",
+    "-lSceFiber_stub",
     "-lgcc",
     "-lc",
     "-lm",
@@ -61,8 +62,9 @@
     "@V@/lib/gcc/arm-vita-eabi/15.2.0/crtn.o"
   ],
   "extra-files": [
-    "src/internal/task/task_stack_arm.S",
     "src/runtime/asm_arm.S",
-    "targets/vita_shim.c"
+    "targets/vita_shim.c",
+    "targets/vita_fiber.c",
+    "targets/vita_fiber.S"
   ]
 }
