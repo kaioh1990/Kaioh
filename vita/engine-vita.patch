@@ -1,0 +1,706 @@
+--- ikp/src/cgo_vita.go	1969-12-31 19:00:00.000000000 -0500
++++ iktg/src/cgo_vita.go	2026-11-02 00:49:22.375722311 -0500
+@@ -0,0 +1,13 @@
++//go:build vita
++
++package main
++
++// Libraries for the PS Vita build (vitasdk) - see the cgo lines below.
++
++// #cgo LDFLAGS: -lSDL2 -lvitaGL -lvitashark -lSceShaccCgExt -lmathneon -ltaihen_stub -lxmp
++// #cgo LDFLAGS: -lSceGxm_stub -lSceDisplay_stub -lSceCtrl_stub -lSceAppMgr_stub -lSceAppUtil_stub
++// #cgo LDFLAGS: -lSceAudio_stub -lSceAudioIn_stub -lSceSysmodule_stub -lSceIofilemgr_stub
++// #cgo LDFLAGS: -lSceCommonDialog_stub -lSceTouch_stub -lSceHid_stub -lSceMotion_stub
++// #cgo LDFLAGS: -lScePower_stub -lSceProcessmgr_stub -lSceKernelDmacMgr_stub -lSceShaccCg_stub
++// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lstdc++ -lsupc++ -lm
++import "C"
+--- ikp/src/font_gl33.go	2026-10-31 19:57:25.610537481 -0400
++++ iktg/src/font_gl33.go	2026-11-01 21:53:27.105239412 -0500
+@@ -1,4 +1,4 @@
+-//go:build !android && !ios
++//go:build !android && !ios && !vita
+ 
+ package main
+ 
+--- ikp/src/font_gles32.go	2026-10-31 19:57:25.610537481 -0400
++++ iktg/src/font_gles32.go	2026-11-01 21:53:27.117100646 -0500
+@@ -1,4 +1,4 @@
+-//go:build android
++//go:build android || vita
+ 
+ package main
+ 
+--- ikp/src/font_vk.go	2026-10-31 19:57:25.610537481 -0400
++++ iktg/src/font_vk.go	2026-11-01 21:53:27.112981479 -0500
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+--- ikp/src/main.go	2026-10-31 19:57:25.614537481 -0400
++++ iktg/src/main.go	2026-11-02 00:48:02.527870714 -0500
+@@ -67,6 +67,8 @@
+ 		}
+ 	}()
+ 
++	vitaPlatformInit()
++
+ 	if runtime.GOOS == "android" {
+ 		Logcat("Inside realMain...")
+ 		runtime.LockOSThread()
+--- ikp/src/render_gl33.go	2026-10-31 19:57:25.622537481 -0400
++++ iktg/src/render_gl33.go	2026-11-01 21:53:27.104388532 -0500
+@@ -1,4 +1,4 @@
+-//go:build !android && !ios
++//go:build !android && !ios && !vita
+ 
+ package main
+ 
+--- ikp/src/render_gles32.go	2026-10-31 19:57:25.626537482 -0400
++++ iktg/src/render_gles32.go	2026-11-02 00:48:40.725802222 -0500
+@@ -2,7 +2,7 @@
+ // for GLES 3.2 which is the main version that runs on modern
+ // Android (ARM). Work adapted from Leon Kasovan
+ 
+-//go:build android
++//go:build android || vita
+ 
+ package main
+ 
+@@ -46,6 +46,13 @@
+ 
+ 	Logcat("GLES: [LOCKED] Starting: " + name)
+ 	var vertObj, fragObj, prog uint32
++	if isVita {
++		// vitaGL's GLSL translator wants GLSL 1.x style sources.
++		if v, f, ok := vitaShaderSources(name); ok {
++			vert, frag = v, f
++		}
++		geo = ""
++	}
+ 
+ 	vertObj, err = r.compileShader(gl.VERTEX_SHADER, vert)
+ 	if err != nil {
+@@ -126,7 +133,7 @@
+ 	// GLES 3.0+ drivers REQUIRE the version to be the very first line.
+ 	// If your file doesn't have it, we add it here.
+ 	fullSrc := src
+-	if !strings.HasPrefix(strings.TrimSpace(src), "#version") {
++	if !isVita && !strings.HasPrefix(strings.TrimSpace(src), "#version") {
+ 		// Anchor to 320 es for best feature compatibility
+ 		header := "#version 320 es\n"
+ 		fullSrc = header + src
+@@ -556,6 +563,9 @@
+ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
+ 	switch i {
+ 	case 8:
++		if isVita {
++			return gl.LUMINANCE
++		}
+ 		return gl.RED
+ 	case 24:
+ 		return gl.RGB
+@@ -573,10 +583,19 @@
+ func (t *Texture_GLES32) MapSizedInternalFormat(i int32) uint32 {
+ 	switch i {
+ 	case 8:
++		if isVita {
++			return gl.LUMINANCE
++		}
+ 		return gl.R8
+ 	case 24:
++		if isVita {
++			return gl.RGB
++		}
+ 		return gl.RGB8
+ 	case 32:
++		if isVita {
++			return gl.RGBA
++		}
+ 		return gl.RGBA8
+ 	case 96:
+ 		return gl.RGB32F
+@@ -790,8 +809,8 @@
+ 	// Data buffers for rendering
+ 	postVertData := f32.Bytes(binary.LittleEndian, -1, -1, 1, -1, -1, 1, 1, 1)
+ 
+-	r.enableModel = sys.cfg.Video.EnableModel
+-	r.enableShadow = sys.cfg.Video.EnableModelShadow
++	r.enableModel = sys.cfg.Video.EnableModel && !isVita
++	r.enableShadow = sys.cfg.Video.EnableModelShadow && !isVita
+ 
+ 	// Generate VAO's
+ 	gl.GenVertexArrays(1, &r.spriteVAO)
+@@ -950,10 +969,14 @@
+ 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+ 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+ 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
++		ppFormat := int32(gl.RGBA8_SNORM)
++		if isVita {
++			ppFormat = gl.RGBA
++		}
+ 		gl.TexImage2D(
+ 			gl.TEXTURE_2D,
+ 			0,
+-			gl.RGBA8_SNORM,
++			ppFormat,
+ 			sys.scrrect[2],
+ 			sys.scrrect[3],
+ 			0,
+@@ -1003,7 +1026,12 @@
+ 		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
+ 	} else {
+ 		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
+-		gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, r.rbo_depth)
++		if !isVita { // 2D only on the Vita: no depth buffer needed
++			gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, r.rbo_depth)
++		}
++	}
++	if isVita {
++		Logcat("vita: framebuffer status 0x" + fmtHex(uint32(gl.CheckFramebufferStatus(gl.FRAMEBUFFER))))
+ 	}
+ 
+ 	// create our two FBOs for our post-processing needs
+@@ -2223,6 +2251,11 @@
+ 
+ // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
+ func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
++	if isVita {
++		// No gl_VertexID in vitaGL's shaders: send the quad as vertex data.
++		r.SetVertexData(v[:]...)
++		return
++	}
+ 	if loc, ok := r.currentProgram.uniforms["quad"]; ok && loc >= 0 {
+ 		gl.Uniform4fv(loc, 4, &v[0])
+ 	}
+--- ikp/src/render_vk.go	2026-10-31 19:57:25.638537482 -0400
++++ iktg/src/render_vk.go	2026-11-01 21:53:27.107256887 -0500
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+--- ikp/src/render_vk_swap.go	2026-10-31 19:57:25.638537482 -0400
++++ iktg/src/render_vk_swap.go	2026-11-01 21:53:27.110861332 -0500
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+--- ikp/src/sdl_other.go	2026-10-31 19:57:25.646537483 -0400
++++ iktg/src/sdl_other.go	2026-11-02 00:48:02.524419251 -0500
+@@ -6,6 +6,9 @@
+ 
+ // Gets the actual device pixel size
+ func (w *Window) GetDrawablePixelSize() (int32, int32) {
++	if isVita {
++		return vitaScreenW, vitaScreenH
++	}
+ 	winWidth, winHeight := w.Window.GetSize()
+ 	return winWidth, winHeight
+ }
+--- ikp/src/system.go	2026-11-01 22:23:13.796909109 -0500
++++ iktg/src/system.go	2026-11-02 00:48:02.527013561 -0500
+@@ -426,7 +426,7 @@
+ 	_, forceWindowed := s.cmdFlags["-windowed"]
+ 	s.window.fullscreen = s.cfg.Video.Fullscreen && !forceWindowed
+ 
+-	if strings.HasPrefix(renderName, "OpenGL") {
++	if strings.HasPrefix(renderName, "OpenGL") && !isVita {
+ 		if ctx, err := s.window.GLCreateContext(); err != nil {
+ 			panic(fmt.Sprintf("Could not initialize context :( Reason? %s", err))
+ 		} else {
+--- ikp/src/system_sdl.go	2026-10-31 19:57:25.658537483 -0400
++++ iktg/src/system_sdl.go	2026-11-02 00:48:02.524166770 -0500
+@@ -27,6 +27,18 @@
+ 	var w2, h2 int32 = int32(w), int32(h)
+ 	var fullscreen bool
+ 
++	if isVita {
++		// PS Vita: no SDL window. vitaGL owns the 960x544 display; SDL only
++		// provides audio, events and controllers.
++		chk(sdl.Init(sdl.INIT_AUDIO | sdl.INIT_JOYSTICK | sdl.INIT_EVENTS | sdl.INIT_GAMECONTROLLER | sdl.INIT_TIMER))
++		vitaGLInit()
++		for i := range input.controllers {
++			input.controllerstate[i] = &ControllerState{Buttons: make(map[sdl.GameControllerButton]byte)}
++		}
++		return &Window{title: s.cfg.Config.WindowTitle, w: vitaScreenW, h: vitaScreenH,
++			fullscreen: true, focused: true}, nil
++	}
++
+ 	if runtime.GOOS == "android" {
+ 		// Get the proper flag for the window type we need to create
+ 		renderName := gfx.GetName()
+@@ -168,6 +180,10 @@
+ }
+ 
+ func (w *Window) SwapBuffers() {
++	if isVita {
++		vitaGLSwap()
++		return
++	}
+ 	w.Window.GLSwap()
+ }
+ 
+@@ -204,6 +220,9 @@
+ }
+ 
+ func (w *Window) SetIcon(icon []image.Image) {
++	if isVita {
++		return
++	}
+ 	if surface, err := w.imageToSurface(icon[0]); err == nil {
+ 		w.Window.SetIcon(surface)
+ 	}
+@@ -214,6 +233,9 @@
+ }
+ 
+ func (w *Window) GetSize() (int, int) {
++	if isVita {
++		return vitaScreenW, vitaScreenH
++	}
+ 	w2, h2 := w.Window.GetSize()
+ 	return int(w2), int(h2)
+ }
+@@ -261,6 +283,9 @@
+ }
+ 
+ func (w *Window) toggleFullscreen() {
++	if isVita {
++		return
++	}
+ 	if w.fullscreen {
+ 		w.Window.SetFullscreen(0)
+ 		w.Window.SetBordered(!sys.cfg.Video.Borderless)
+--- ikp/src/util_desktop.go	2026-10-31 19:57:25.658537483 -0400
++++ iktg/src/util_desktop.go	2026-11-01 21:53:27.115062100 -0500
+@@ -1,4 +1,4 @@
+-//go:build !raw && !android && !ios
++//go:build !raw && !android && !ios && !vita
+ 
+ package main
+ 
+--- ikp/src/util_vita.go	1969-12-31 19:00:00.000000000 -0500
++++ iktg/src/util_vita.go	2026-11-02 00:47:43.337721575 -0500
+@@ -0,0 +1,76 @@
++//go:build vita
++
++package main
++
++import (
++	"fmt"
++	"io"
++	"os"
++	"unsafe"
++
++	findfont "github.com/flopp/go-findfont"
++	"github.com/sqweek/dialog"
++)
++
++// Log writer implementation
++func NewLogWriter() io.Writer {
++	return os.Stderr
++}
++
++// Message box implementation
++func ShowInfoDialog(message, title string) {
++	dialog.Message(message).Title(title).Info()
++}
++
++func ShowErrorDialog(message string) {
++	dialog.Message(message).Title("I.K.E.M.E.N Error").Error()
++}
++
++// Returns true if the user chose to retry
++func ShowRetryDialog(message string) bool {
++	return dialog.Message("%s", message).Title("I.K.E.M.E.N RetryLoadOnError").YesNo()
++}
++
++// TTF font loading
++func LoadFntTtf(f *Fnt, fontfile string, filename string, height int32) {
++	// Search in local directory
++	fileDir := SearchFile(filename, []string{fontfile, sys.motif.Def, "", "data/"}, "font/")
++	// Search in system directory
++	fp := fileDir
++	if fp = FileExist(fp); len(fp) == 0 {
++		var err error
++		fileDir, err = findfont.Find(fileDir)
++		if err != nil {
++			panic(fmt.Errorf("failed to find ttf font %v: %w", fileDir, err))
++		}
++	}
++	// Load ttf
++	if height == -1 {
++		height = int32(f.Size[1])
++	} else {
++		f.Size[1] = uint16(height)
++	}
++	ttf, err := gfxFont.LoadFont(fileDir, height, int(sys.gameWidth), int(sys.gameHeight))
++	if err != nil {
++		panic(fmt.Errorf("failed to load ttf font %v: %w", fileDir, err))
++	}
++	f.ttf = ttf.(Font)
++
++	// Create Ttf dummy palettes
++	f.palettes = make([][256]uint32, 1)
++	for i := 0; i < 256; i++ {
++		f.palettes[0][i] = 0
++	}
++}
++
++func selectRenderer(cfgVal string) (Renderer, FontRenderer) {
++	return &Renderer_GLES32{}, &FontRenderer_GLES32{}
++}
++
++func Logcat(s string) {
++	fmt.Println(s)
++}
++
++func eglGetProcAddress(name string) unsafe.Pointer {
++	return vitaGetProcAddress(name)
++}
+--- ikp/src/video_ffmpeg.go	2026-10-31 19:57:25.658537483 -0400
++++ iktg/src/video_ffmpeg.go	2026-11-01 21:55:33.696380347 -0500
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+--- ikp/src/video_stub_vita.go	1969-12-31 19:00:00.000000000 -0500
++++ iktg/src/video_stub_vita.go	2026-11-01 21:55:44.236826688 -0500
+@@ -0,0 +1,23 @@
++//go:build vita
++
++package main
++
++import "errors"
++
++// Vita build: no FFmpeg. Background videos are skipped.
++type bgVideo struct {
++	texture Texture
++	visible bool
++	muted   bool
++}
++
++func (bgv *bgVideo) Open(filename string, volume int, sm BgVideoScaleMode, sf BgVideoScaleFilter, loop bool) error {
++	return errors.New("video not supported on this build")
++}
++func (bgv *bgVideo) Tick() error          { return nil }
++func (bgv *bgVideo) SetPlaying(on bool)   {}
++func (bgv *bgVideo) SetVisible(on bool)   {}
++func (bgv *bgVideo) Reset()               {}
++func (bgv *bgVideo) updateAudioVolume()   {}
++func (bgv *bgVideo) MixerCleared()        {}
++func (bgv *bgVideo) Close()               {}
+--- ikp/src/vita_platform.go	1969-12-31 19:00:00.000000000 -0500
++++ iktg/src/vita_platform.go	2026-11-02 00:49:33.802967447 -0500
+@@ -0,0 +1,111 @@
++//go:build vita
++
++package main
++
++// PS Vita platform glue: vitaGL display instead of an SDL window, game data
++// in ux0:data/CvF, CPU at 444 MHz.
++
++/*
++#include <stdlib.h>
++#include <psp2/power.h>
++#include <unistd.h>
++#include <string.h>
++#include <psp2/io/fcntl.h>
++
++// Engine log: ux0:data/cvftest.log (stdout/stderr also land here, see the
++// TinyGo Vita shim). Cleared at every start.
++void vlog(const char *s) {
++	SceUID fd = sceIoOpen("ux0:data/cvftest.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
++	if (fd < 0) return;
++	sceIoWrite(fd, s, strlen(s));
++	sceIoWrite(fd, "\n", 1);
++	sceIoClose(fd);
++}
++__attribute__((constructor)) static void vlog_start(void) {
++	sceIoRemove("ux0:data/cvftest.log");
++	vlog("CvF Online for PS Vita - engine log");
++}
++int vglInitExtended(int legacy_pool_size, int width, int height, int ram_threshold, int msaa);
++void vglSwapBuffers(unsigned char has_commondialog);
++void *vglGetProcAddress(const char *name);
++
++static void vita_clock(void) {
++	scePowerSetArmClockFrequency(444);
++	scePowerSetBusClockFrequency(222);
++	scePowerSetGpuClockFrequency(222);
++	scePowerSetGpuXbarClockFrequency(166);
++}
++*/
++import "C"
++
++import (
++	"os"
++	"unsafe"
++)
++
++const isVita = true
++
++const (
++	vitaScreenW = 960
++	vitaScreenH = 544
++	vitaDataDir = "ux0:data/CvF"
++)
++
++// vitaPlatformInit runs at the very start of realMain.
++func vitaPlatformInit() {
++	C.vita_clock()
++	if err := os.Chdir(vitaDataDir); err != nil {
++		Logcat("vita: chdir " + vitaDataDir + " failed: " + err.Error())
++	}
++}
++
++var vitaGLStarted bool
++
++func vitaGLInit() {
++	if vitaGLStarted {
++		return
++	}
++	// 16 MB threshold keeps some main RAM free for the rest of the engine.
++	r := C.vglInitExtended(0, vitaScreenW, vitaScreenH, 16*1024*1024, 0)
++	Logcat("vita: vglInitExtended -> " + itoa(int(r)))
++	vitaGLStarted = true
++}
++
++func vitaGLSwap() {
++	C.vglSwapBuffers(0)
++}
++
++func vitaGetProcAddress(name string) unsafe.Pointer {
++	n := C.CString(name)
++	defer C.free(unsafe.Pointer(n))
++	return C.vglGetProcAddress(n)
++}
++
++func itoa(i int) string {
++	neg := i < 0
++	if neg {
++		i = -i
++	}
++	b := []byte{}
++	for {
++		b = append([]byte{byte('0' + i%10)}, b...)
++		i /= 10
++		if i == 0 {
++			break
++		}
++	}
++	if neg {
++		b = append([]byte{'-'}, b...)
++	}
++	return string(b)
++}
++
++func fmtHex(v uint32) string {
++	const d = "0123456789abcdef"
++	b := make([]byte, 8)
++	for i := 7; i >= 0; i-- {
++		b[i] = d[v&15]
++		v >>= 4
++	}
++	return string(b)
++}
+--- ikp/src/vita_platform_other.go	1969-12-31 19:00:00.000000000 -0500
++++ iktg/src/vita_platform_other.go	2026-11-02 00:49:04.591531960 -0500
+@@ -0,0 +1,20 @@
++//go:build !vita
++
++package main
++
++import "unsafe"
++
++const isVita = false
++
++const (
++	vitaScreenW = 960
++	vitaScreenH = 544
++)
++
++func vitaPlatformInit()                             {}
++func vitaGLInit()                                   {}
++func vitaGLSwap()                                   {}
++func vitaGetProcAddress(name string) unsafe.Pointer { return nil }
++
++func vitaShaderSources(name string) (string, string, bool) { return "", "", false }
++func fmtHex(v uint32) string                                { return "" }
+--- ikp/src/vita_shaders.go	1969-12-31 19:00:00.000000000 -0500
++++ iktg/src/vita_shaders.go	2026-11-02 00:49:04.587531960 -0500
+@@ -0,0 +1,154 @@
++//go:build vita
++
++package main
++
++// GLSL 1.x versions of the engine's shaders for vitaGL's GLSL->CG translator
++// (no #version 320 es, no gl_VertexID, attribute/varying, texture2D).
++
++func vitaShaderSources(name string) (vert, frag string, ok bool) {
++	switch name {
++	case "Main Shader":
++		return vitaSpriteVert, vitaSpriteFrag, true
++	case "Identity Postprocess":
++		return vitaIdentVert, vitaIdentFrag, true
++	case "font shader":
++		return vitaFontVert, vitaFontFrag, true
++	}
++	return "", "", false
++}
++
++const vitaSpriteVert = `
++uniform mat4 modelview;
++uniform mat4 projection;
++attribute vec2 position;
++attribute vec2 uv;
++varying vec2 texcoord;
++void main(void) {
++	texcoord = uv;
++	gl_Position = projection * (modelview * vec4(position, 0.0, 1.0));
++}
++`
++
++const vitaHSV = `
++vec3 ikemenRgbToHsv(vec3 c) {
++	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
++	vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
++	vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
++	float d = q.x - min(q.w, q.y);
++	float e = 1.0e-10;
++	return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
++}
++vec3 ikemenHsvToRgb(vec3 c) {
++	vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
++	vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
++	return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
++}
++vec3 ikemenHueShift(vec3 color, float dhue) {
++	vec3 hsv = ikemenRgbToHsv(color);
++	hsv.x = mod(hsv.x + dhue, 1.0);
++	return ikemenHsvToRgb(hsv);
++}
++`
++
++const vitaSpriteFrag = `
++uniform sampler2D tex;
++uniform sampler2D pal;
++uniform vec4 tint;
++uniform vec3 add;
++uniform vec3 mult;
++uniform float alpha;
++uniform float gray;
++uniform float hue;
++uniform int mask;
++uniform int isFlat;
++uniform int isRgba;
++uniform int isTrapez;
++uniform int neg;
++uniform vec4 spriteUV;
++uniform vec4 palUV;
++varying vec2 texcoord;
++` + vitaHSV + `
++void main(void) {
++	vec4 c;
++	vec3 neg_base = vec3(1.0);
++	vec3 final_add = add;
++	vec4 final_mul = vec4(mult, alpha);
++	if (isFlat != 0) {
++		c = tint;
++		neg_base *= c.a;
++		final_add *= c.a;
++		final_mul.rgb *= alpha;
++	} else {
++		vec2 atlasUV = clamp(texcoord, spriteUV.xy, spriteUV.zw - 0.0001);
++		c = texture2D(tex, atlasUV);
++		if (isRgba != 0) {
++			if (mask == -1) c.a = 1.0;
++			neg_base *= c.a;
++			final_add *= c.a;
++			final_mul.rgb *= alpha;
++		} else {
++			c = texture2D(pal, vec2(palUV.x + palUV.z * c.r * 0.9966, palUV.y));
++			if (mask == -1) c.a = 1.0;
++		}
++	}
++	if (hue != 0.0) c.rgb = ikemenHueShift(c.rgb, hue);
++	if (neg != 0) c.rgb = neg_base - c.rgb;
++	c.rgb = mix(vec3((c.r + c.g + c.b) / 3.0), c.rgb, 1.0 - gray);
++	c.rgb += final_add;
++	c *= final_mul;
++	if (isFlat == 0) c.rgb = mix(c.rgb, tint.rgb * c.a, tint.a);
++	gl_FragColor = c;
++}
++`
++
++const vitaIdentVert = `
++attribute vec2 VertCoord;
++varying vec2 texcoord;
++void main(void) {
++	gl_Position = vec4(VertCoord, 0.0, 1.0);
++	texcoord = (VertCoord + 1.0) / 2.0;
++}
++`
++
++const vitaIdentFrag = `
++uniform sampler2D Texture;
++varying vec2 texcoord;
++void main(void) {
++	gl_FragColor = texture2D(Texture, texcoord);
++}
++`
++
++const vitaFontVert = `
++uniform vec2 resolution;
++attribute vec2 vert;
++attribute vec2 vertTexCoord;
++varying vec2 fragTexCoord;
++void main(void) {
++	fragTexCoord = vertTexCoord;
++	vec2 res = max(resolution, vec2(1.0, 1.0));
++	vec2 clipSpace = (vert / res) * 2.0 - 1.0;
++	gl_Position = vec4(clipSpace * vec2(1.0, -1.0), 0.0, 1.0);
++}
++`
++
++const vitaFontFrag = `
++uniform vec4 textColor;
++uniform vec3 palAdd;
++uniform vec3 palMul;
++uniform float palGray;
++uniform float palHue;
++uniform int palNeg;
++uniform sampler2D tex;
++varying vec2 fragTexCoord;
++` + vitaHSV + `
++void main(void) {
++	vec4 texColor = texture2D(tex, fragTexCoord);
++	vec4 c = min(textColor, vec4(1.0)) * vec4(1.0, 1.0, 1.0, texColor.r);
++	if (palHue != 0.0) c.rgb = ikemenHueShift(c.rgb, palHue);
++	if (palNeg != 0) c.rgb = c.aaa - c.rgb;
++	c.rgb = mix(vec3((c.r + c.g + c.b) / 3.0), c.rgb, 1.0 - palGray);
++	c.rgb += palAdd * c.a;
++	c.rgb *= palMul;
++	gl_FragColor = c;
++}
++`
+--- ikp/src/vk_stub_vita.go	1969-12-31 19:00:00.000000000 -0500
++++ iktg/src/vk_stub_vita.go	2026-11-01 21:53:27.140391098 -0500
+@@ -0,0 +1,11 @@
++//go:build vita
++
++package main
++
++type Renderer_VK struct {
++	*Renderer_GLES32
++	surfaceLost bool
++}
++
++func (r *Renderer_VK) Await()                       {}
++func (r *Renderer_VK) RecreateSurfaceAndSwapchain() {}

@@ -11,17 +11,23 @@
 __attribute__((weak)) void vlog(const char *s) {}
 #include <stdio.h>
 
-// TinyGo grabs its heap with one big anonymous mmap.
+// TinyGo grabs its heap with one big anonymous mmap (it halves the size until
+// one succeeds). Take it straight from the kernel so newlib's malloc heap
+// stays free for the C libraries (SDL, vitaGL, ...).
+#include <psp2/kernel/sysmem.h>
 void *mmap(void *addr, size_t len, int prot, int flags, int fd, long long off) {
 	char msg[96];
-	void *p = memalign(4096, len);
-	snprintf(msg, sizeof msg, "  runtime heap: mmap %u MB -> %s", (unsigned)(len >> 20), p ? "ok" : "no");
+	void *p = NULL;
+	size_t sz = (len + 0xFFFFF) & ~(size_t)0xFFFFF; // 1 MB granularity
+	SceUID b = sceKernelAllocMemBlock("go-heap", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, sz, NULL);
+	if (b >= 0 && sceKernelGetMemBlockBase(b, &p) < 0) p = NULL;
+	snprintf(msg, sizeof msg, "  runtime heap: %u MB -> %s", (unsigned)(sz >> 20), p ? "ok" : "no");
 	vlog(msg);
 	if (!p) { errno = ENOMEM; return (void *)-1; }
 	memset(p, 0, len);
 	return p;
 }
-int munmap(void *addr, size_t len) { free(addr); return 0; }
+int munmap(void *addr, size_t len) { return 0; } // heap is never returned
 int pause(void) { for (;;) sceKernelDelayThread(1000000); return 0; }
 // Fatal-signal reporting isn't available on the Vita.
 void tinygo_register_fatal_signals(void) { vlog("  runtime main entered"); }
