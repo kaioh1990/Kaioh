@@ -29,11 +29,12 @@
   "ldflags": [
     "-q",
     "--no-gc-sections",
+    "--pic-veneer",
     "-zseparate-loadable-segments",
     "--no-rosegment",
     "-znorelro",
     "--image-base=0x81000000",
-    "-zmax-page-size=0x1000",
+    "-zmax-page-size=0x10000",
     "-znognustack",
     "-L@V@/lib/gcc/arm-vita-eabi/15.2.0",
     "-L@V@/arm-vita-eabi/lib",
