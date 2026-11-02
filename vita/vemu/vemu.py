@@ -752,8 +752,36 @@ def glid(): GLIDS[0] += 1; return GLIDS[0]
 GLSTR = {}
 def gl_default(name):
     return 0
+# vitaGL texture model: glTexSubImage2D on a texture drawn in the last
+# FRAME_PURGE_FREQ (4) frames copies the WHOLE texture to a new allocation
+# (no NULL check on hardware -> crash if the pool is exhausted).
+GLTEX = {'unit': 0, 'bound': {}, 'size': {}, 'last': {}, 'copy_frame': 0, 'copy_peak': 0, 'copy_total': 0, 'copies': 0, 'big': 0, 'err': 0}
+GLFMT_BPP = {0x1909: 1, 0x1907: 3, 0x1908: 4, 0x190A: 2, 0x1903: 1}
+def gl_tex_model(name, a):
+    T = GLTEX
+    if name == 'glActiveTexture': T['unit'] = a[0] - 0x84C0
+    elif name == 'glBindTexture' and a[0] == 0x0DE1: T['bound'][T['unit']] = a[1]
+    elif name == 'glTexImage2D' and a[0] == 0x0DE1:
+        t = T['bound'].get(T['unit']); T['size'][t] = a[3] * a[4] * GLFMT_BPP.get(a[6], 4); T['last'].pop(t, None)
+    elif name in ('glDrawArrays', 'glDrawElements'):
+        for t in T['bound'].values(): T['last'][t] = FRAME[0]
+    elif name == 'glTexSubImage2D' and a[0] == 0x0DE1:
+        t = T['bound'].get(T['unit']); lf = T['last'].get(t)
+        if lf is not None and FRAME[0] - lf <= 4:
+            sz = T['size'].get(t, 0)
+            T['copies'] += 1; T['copy_total'] += sz; T['copy_frame'] += sz
+            T['last'].pop(t, None)
+            if sz >= 2 << 20:
+                T['big'] += 1
+                if T['big'] <= 20: say('[vgl] WARNING: TexSubImage2D on in-use texture %d copies %d KB' % (t, sz >> 10))
+    elif name == 'glPixelStorei' and a[0] != 0x0CF2:
+        T['err'] += 1
+        if T['err'] <= 3: say('[vgl] WARNING: glPixelStorei(0x%x) is GL_INVALID_ENUM on vitaGL' % a[0])
+    elif name == 'vglSwapBuffers':
+        T['copy_peak'] = max(T['copy_peak'], T['copy_frame']); T['copy_frame'] = 0
 def gl_handler(name):
     def f(*a):
+        gl_tex_model(name, a)
         if name in ('glGenTextures', 'glGenBuffers', 'glGenFramebuffers', 'glGenRenderbuffers', 'glGenVertexArrays'):
             n, p = a[0], a[1]
             for i in range(n): w32(p + 4 * i, glid())
@@ -805,6 +833,23 @@ for a, n in syms:
         if n in byname and byname[n] == a:
             gl_hooks[L2R(a)] = n
 
+import signal as _signal
+def _sample(signum, frame):
+    try:
+        pc = mu.reg_read(UC_ARM_REG_PC); lr = mu.reg_read(UC_ARM_REG_LR); sp = mu.reg_read(UC_ARM_REG_SP)
+        say('[sample] pc=%s lr=%s last=%s fiber=%s' % (symbolize(pc), symbolize(lr), handlers_cur[0], cur_fiber[0]))
+        # walk stack words for return addresses
+        out = []
+        for i in range(0, 4096, 4):
+            try: w = struct.unpack('<I', bytes(mu.mem_read(sp + i, 4)))[0]
+            except Exception: break
+            sy = symbolize(w)
+            if sy and '+' in sy and not sy.startswith('0x'): out.append(sy)
+            if len(out) >= 25: break
+        say('[sample] stack: ' + ' | '.join(out))
+    except Exception as e:
+        say('[sample] err %s' % e)
+_signal.signal(_signal.SIGUSR1, _sample)
 # ---------------------------------------------------------------- hooks
 seen_default = set()
 import collections
@@ -956,7 +1001,7 @@ t_end = time.time() + args.max_sec
 pc = start
 while True:
     try:
-        mu.emu_start(pc, 0xffffffff, timeout=int(max(1, t_end - time.time()) * 1e6))
+        mu.emu_start(pc, 0xffffffff, timeout=int(min(5, max(1, t_end - time.time())) * 1e6))
     except UcError as e:
         dump('UcError %s (%s)' % (e, STOP_REASON[0])); break
     if STOP_REASON[0]:
@@ -973,6 +1018,7 @@ for fib, f in fibers.items():
     lo = next((i for i in range(64 * 4, len(data), 4) if data[i:i+4] != b'\0\0\0\0'), len(data))
     say('[vemu] fiber %x ctx %x size %d: deepest use %d bytes' % (fib, f['ctx'], f['size'], f['size'] - lo))
 say('[vemu] GL procs missing: %d' % len(MISSING))
+say('[vgl] in-use texture copies: %d (%d MB total, peak %d KB in one frame, %d >= 2 MB)' % (GLTEX['copies'], GLTEX['copy_total'] >> 20, GLTEX['copy_peak'] >> 10, GLTEX['big']))
 say('[vemu] ctrl calls: ' + ', '.join('%s=%d' % kv for kv in calls.items() if 'Ctrl' in kv[0] or 'Hid' in kv[0]))
 if os.environ.get('VEMU_ALLOCS'):
     for k, v in ALLOCS.most_common(30): say('[alloc] %8d KB %s' % (v >> 10, k))
