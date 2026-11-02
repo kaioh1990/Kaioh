@@ -19,10 +19,14 @@ void *mmap(void *addr, size_t len, int prot, int flags, int fd, long long off) {
 	char msg[96];
 	void *p = NULL;
 	size_t sz = (len + 0xFFFFF) & ~(size_t)0xFFFFF; // 1 MB granularity
+	// Leave room for vitaGL, SDL and the system (48 MB).
+	SceKernelFreeMemorySizeInfo fm; fm.size = sizeof(fm);
+	if (sceKernelGetFreeMemorySize(&fm) >= 0 && sz + (48u << 20) > (size_t)fm.size_user) {
+		errno = ENOMEM; return (void *)-1;
+	}
 	SceUID b = sceKernelAllocMemBlock("go-heap", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, sz, NULL);
 	if (b >= 0 && sceKernelGetMemBlockBase(b, &p) < 0) p = NULL;
-	snprintf(msg, sizeof msg, "  runtime heap: %u MB -> %s", (unsigned)(sz >> 20), p ? "ok" : "no");
-	vlog(msg);
+	if (p) { snprintf(msg, sizeof msg, "  runtime heap: %u MB (free user %u MB)", (unsigned)(sz >> 20), (unsigned)(fm.size_user >> 20)); vlog(msg); }
 	if (!p) { errno = ENOMEM; return (void *)-1; }
 	memset(p, 0, len);
 	return p;
@@ -131,3 +135,7 @@ void tinygo_vita_stack_overflow(void) {
 	vlog("FATAL: goroutine stack overflow");
 	abort();
 }
+__attribute__((weak)) void tinygo_scanstack(unsigned sp) {}
+
+// newlib's malloc heap (C libraries only; Go has its own heap).
+int _newlib_heap_size_user = 40 * 1024 * 1024;

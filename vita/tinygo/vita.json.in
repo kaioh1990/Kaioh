@@ -9,7 +9,7 @@
   ],
   "goos": "linux",
   "goarch": "arm",
-  "gc": "conservative",
+  "gc": "precise",
   "scheduler": "tasks",
   "linker": "ld.lld",
   "rtlib": "",

@@ -1,0 +1,32 @@
+diff -ru /root/go/pkg/mod/github.com/jfreymuth/vorbis@v1.0.2/codebook.go third/vorbis/codebook.go
+--- /root/go/pkg/mod/github.com/jfreymuth/vorbis@v1.0.2/codebook.go	2026-10-31 20:31:05.309792040 -0400
++++ third/vorbis/codebook.go	2026-11-02 06:46:46.647789320 -0500
+@@ -108,7 +108,27 @@
+ }
+ 
+ func lookup1Values(entries int, dim uint32) int {
+-	return int(math.Floor(math.Pow(float64(entries), 1/float64(dim))))
++	// The spec wants the largest r with r^dim <= entries. Floating point pow
++	// can land just below an exact integer (e.g. 81^(1/4) = 2.9999999 with
++	// TinyGo's libm pow), so correct the estimate with integer math.
++	r := int(math.Floor(math.Pow(float64(entries), 1/float64(dim))))
++	pow := func(b int) int {
++		v := 1
++		for i := uint32(0); i < dim; i++ {
++			v *= b
++			if v > entries {
++				return entries + 1
++			}
++		}
++		return v
++	}
++	for r > 0 && pow(r) > entries {
++		r--
++	}
++	for pow(r+1) <= entries {
++		r++
++	}
++	return r
+ }
+ 
+ func float32Unpack(x uint32) float32 {

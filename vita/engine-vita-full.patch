@@ -1,0 +1,4022 @@
+diff --git a/build/build.sh b/build/build.sh
+index 0fa3c54..7715c2f 100755
+--- a/build/build.sh
++++ b/build/build.sh
+@@ -236,7 +236,7 @@ check_deps() {
+ 			need g++
+ 			need make
+ 			need nasm
+-			need yasm
++			true # need yasm
+ 			need go
+ 			if ((${#missing[@]})); then
+ 				echo "ERROR: Missing tools: ${missing[*]}" >&2
+diff --git a/external/script/main.lua b/external/script/main.lua
+index b7d76c8..8ddbc04 100644
+--- a/external/script/main.lua
++++ b/external/script/main.lua
+@@ -2308,14 +2308,10 @@ main.t_itemname = {
+ 		main.pauseMenu = false
+ 		main.selectMenu[2] = true
+ 		main.stageMenu = true
+-		main.teamMenu[1].simul = true
++		-- CvF Online: 1-on-1 only. CvF's select screen has no team-mode layout, so the
++		-- Single/Simul/Turns/Tag menu drew overlapping, unreadable text.
+ 		main.teamMenu[1].single = true
+-		main.teamMenu[1].tag = true
+-		main.teamMenu[1].turns = true
+-		main.teamMenu[2].simul = true
+ 		main.teamMenu[2].single = true
+-		main.teamMenu[2].tag = true
+-		main.teamMenu[2].turns = true
+ 		textImgSetText(motif.select_info.title.TextSpriteData, motif.select_info.title.text.netplayversus)
+ 		setGameMode('netplayversus')
+ 		setHomeTeam(1)
+@@ -2356,12 +2352,22 @@ main.t_itemname = {
+ 		end
+ 		return nil
+ 	end,
++	--CvF ONLINE LOBBY
++	['lobby'] = function(t, item)
++		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++		hook.run("main.t_itemname", t, item)
++		main.f_lobby()
++		return nil
++	end,
+ 	--SERVER HOST
+ 	['serverhost'] = function(t, item)
+ 		main.f_waitForPreloads(true)
+ 		local doneSnd = motif[main.group].cursor.done.snd.serverhost or motif[main.group].cursor.done.snd.default
+ 		sndPlay(motif.Snd, doneSnd[1], doneSnd[2])
+ 		hook.run("main.t_itemname", t, item)
++		if cvfLobbyEnabled() then
++			main.f_cvfEnsureName()
++		end
+ 		if main.f_connect("", gameOption('Netplay.ListenPort')) then
+ 			if synchronize() then
+ 				enterSyncedNetplayMenu()
+@@ -2872,7 +2878,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+ 							motif.infobox.text.TextSpriteData
+ 						)
+ 					end
+-					if not bool_main or esc() then
++					if not bool_main or (esc() and main.f_cvfConfirm('Quit the game?')) then
+ 						break
+ 					end
+ 				elseif bool_f1 and (getKey(motif.infobox.keycode) or gameOption('Config.FirstRun')) then
+@@ -2907,7 +2913,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+ 						sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
+ 						break
+ 					elseif f == 'exit' then
+-						break
++						if not bool_main or main.f_cvfConfirm('Quit the game?') then
++							break
++						end
+ 					elseif main.t_itemname[f] == nil then
+ 						if t_storyModeList[f] then
+ 							f = 'storyarc'
+@@ -3252,11 +3260,93 @@ function main.f_replay()
+ 	end
+ end
+ 
++-- CvF Online: Yes/No confirmation (defaults to No)
++function main.f_cvfConfirm(question)
++	local yes = false
++	local frame = 0
++	local ts = motif.title_info.connecting.TextSpriteData
++	resetKey()
++	while true do
++		frame = frame + 1
++		if frame > 10 then
++			if esc() or getInput(-1, motif[main.group].menu.cancel.key) then
++				sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
++				yes = false
++				break
++			elseif getInput(-1, motif[main.group].menu.next.key) or getInput(-1, motif[main.group].menu.previous.key) then
++				yes = not yes
++				sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++			elseif getInput(-1, motif[main.group].menu.done.key) then
++				sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++				break
++			end
++		end
++		clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++		bgDraw(motif[main.background].BGDef, 0)
++		rectDraw(motif.title_info.connecting.overlay.RectData)
++		textImgReset(ts)
++		textImgSetPos(ts, nil, 100)
++		textImgSetText(ts, question .. '\n\n' .. (yes and '> YES <      NO  ' or '  YES      > NO <'))
++		textImgDraw(ts)
++		bgDraw(motif[main.background].BGDef, 1)
++		refresh()
++	end
++	resetKey()
++	return yes
++end
++
++-- CvF Online: during netplay, "any player" menu input only listens to the host (player 1),
++-- so only the host drives the shared menus and stage select.
++do
++	local rawGetInput, rawGetInputTime = getInput, getInputTime
++	getInput = function(p, ...)
++		if p == -1 and netPlay() then
++			p = 1
++		end
++		return rawGetInput(p, ...)
++	end
++	getInputTime = function(p, ...)
++		if p == -1 and netPlay() then
++			p = 1
++		end
++		return rawGetInputTime(p, ...)
++	end
++end
++
++-- CvF Online: ask for a lobby display name once
++function main.f_cvfEnsureName()
++	if cvfGetPlayerName() ~= '' then
++		return true
++	end
++	local name = main.f_drawInput(
++		motif[main.group].textinput.TextSpriteData,
++		'Enter your player name for the online lobby:',
++		motif[main.group],
++		motif[main.background],
++		motif[main.group].textinput.overlay.RectData
++	)
++	if name == '' then
++		return false
++	end
++	cvfSetPlayerName(name)
++	return true
++end
++
+ function main.f_connect(server, str)
++	local cvfHosting = (server == '')
++	if cvfHosting then
++		cvfOnlineHostBegin(gameOption('Netplay.ListenPort'))
++	else
++		cvfOnlineJoinBegin()
++	end
+ 	enterNetPlay(server)
+ 	while not connected() do
+ 		if esc() or getInput(-1, motif.title_info.menu.cancel.key) then
+ 			sndPlay(motif.Snd, motif.title_info.cancel.snd[1], motif.title_info.cancel.snd[2])
++			if cvfHosting then
++				cvfOnlineHostEnd()
++				cvfOnlineClosePorts()
++			end
+ 			exitNetPlay()
+ 			return false
+ 		end
+@@ -3272,16 +3362,107 @@ function main.f_connect(server, str)
+ 			txt = string.format(motif.title_info.connecting.text.join, server, str)
+ 		end
+ 		textImgReset(motif.title_info.connecting.TextSpriteData)
++		if cvfHosting then
++			txt = cvfOnlineHostStatus()
++			textImgSetPos(motif.title_info.connecting.TextSpriteData, nil, 40)
++		end
+ 		textImgSetText(motif.title_info.connecting.TextSpriteData, txt)
+ 		textImgDraw(motif.title_info.connecting.TextSpriteData)
+ 		--draw layerno = 1 backgrounds
+ 		bgDraw(motif[main.background].BGDef, 1)
+ 		refresh()
+ 	end
++	if cvfHosting then
++		cvfOnlineHostEnd()
++	end
+ 	replayRecord('save/replays/' .. os.date("%Y-%m-%d_%Hh%Mm%Ss") .. '.replay')
+ 	return true
+ end
+ 
++-- CvF Online: lobby screen listing players who are hosting
++function main.f_lobby()
++	if not cvfLobbyEnabled() then
++		return
++	end
++	if not main.f_cvfEnsureName() then
++		return
++	end
++	local sel = 1
++	local frame = 0
++	local lastRefresh = -10000
++	local ts = motif.title_info.connecting.TextSpriteData
++	resetKey()
++	while true do
++		frame = frame + 1
++		if frame - lastRefresh >= 180 then
++			cvfLobbyRefresh()
++			lastRefresh = frame
++		end
++		local rooms, status = cvfLobbyRooms()
++		if sel > #rooms then sel = math.max(1, #rooms) end
++		if esc() or getInput(-1, motif[main.group].menu.cancel.key) then
++			sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
++			return
++		elseif #rooms > 0 and getInput(-1, motif[main.group].menu.next.key) then
++			sel = sel % #rooms + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #rooms > 0 and getInput(-1, motif[main.group].menu.previous.key) then
++			sel = (sel - 2) % #rooms + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #rooms > 0 and getInput(-1, motif[main.group].menu.done.key) then
++			local r = rooms[sel]
++			sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++			main.f_waitForPreloads(true)
++			local oldPort = cvfGetNetplayPort()
++			cvfSetNetplayPort(r.port)
++			if main.f_connect(r.ip, r.name) then
++				if synchronize() then
++					enterSyncedNetplayMenu()
++				end
++				replayStop()
++				exitNetPlay()
++				exitReplay()
++				showSessionWarning()
++			end
++			cvfSetNetplayPort(oldPort)
++			lastRefresh = -10000
++			resetKey()
++		end
++		-- draw
++		clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++		bgDraw(motif[main.background].BGDef, 0)
++		rectDraw(motif.title_info.connecting.overlay.RectData)
++		local lines = {'ONLINE LOBBY  -  you are "' .. cvfGetPlayerName() .. '"', ''}
++		if #rooms == 0 then
++			table.insert(lines, status ~= '' and status or 'Nobody is hosting right now.')
++			table.insert(lines, '')
++			table.insert(lines, 'Pick Host Game to wait here for an opponent.')
++		else
++			table.insert(lines, 'Players waiting for a match:')
++			table.insert(lines, '')
++			local first = math.max(1, math.min(sel - 4, #rooms - 8))
++			for i = first, math.min(#rooms, first + 8) do
++				local r = rooms[i]
++				local wait = r.age < 60 and (r.age .. 's') or (math.floor(r.age / 60) .. 'm')
++				local tag = r.compatible and '' or '  (different version)'
++				table.insert(lines, (i == sel and '> ' or '   ') .. r.name .. '   waiting ' .. wait .. tag)
++			end
++			if status ~= '' then
++				table.insert(lines, '')
++				table.insert(lines, status)
++			end
++		end
++		table.insert(lines, '')
++		table.insert(lines, 'Up/Down: choose   Attack: join   Esc: back')
++		textImgReset(ts)
++		textImgSetPos(ts, nil, 40)
++		textImgSetText(ts, table.concat(lines, '\n'))
++		textImgDraw(ts)
++		bgDraw(motif[main.background].BGDef, 1)
++		refresh()
++	end
++end
++
+ --asserts content unlock conditions
+ function main.f_unlock(permanent)
+ 	local refreshRandom = false
+diff --git a/go.mod b/go.mod
+index d7ac2bc..25d50b6 100644
+--- a/go.mod
++++ b/go.mod
+@@ -42,3 +42,32 @@ require (
+ 	github.com/tidwall/match v1.1.1 // indirect
+ 	github.com/tidwall/pretty v1.2.0 // indirect
+ )
++
++replace (
++	golang.org/x/arch => github.com/golang/arch v0.26.0
++	golang.org/x/crypto => github.com/golang/crypto v0.51.0
++	golang.org/x/exp => github.com/golang/exp v0.0.0-20220609121020-a51bd0440498
++	golang.org/x/image => github.com/golang/image v0.47.0
++	golang.org/x/mobile => github.com/golang/mobile v0.0.0-20221110043201-43a038452099
++	golang.org/x/mod => github.com/golang/mod v0.35.0
++	golang.org/x/net => github.com/golang/net v0.55.0
++	golang.org/x/oauth2 => github.com/golang/oauth2 v0.36.0
++	golang.org/x/sync => github.com/golang/sync v0.20.0
++	golang.org/x/sys => github.com/golang/sys v0.49.0
++	golang.org/x/telemetry => github.com/golang/telemetry v0.0.0-20260508192327-42602be52be6
++	golang.org/x/term => github.com/golang/term v0.43.0
++	golang.org/x/text => github.com/golang/text v0.43.0
++	golang.org/x/time => github.com/golang/time v0.15.0
++	golang.org/x/tools => github.com/golang/tools v0.51.0
++	golang.org/x/xerrors => github.com/golang/xerrors v0.0.0-20240903120638-7835f813f4da
++	gopkg.in/ini.v1 => github.com/go-ini/ini v1.67.0
++)
++
++replace github.com/sqweek/dialog => /tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/dialogstub
++
++replace github.com/leonkasovan/gl => ./third/gl
++
++replace github.com/veandco/go-sdl2 => ./third/sdl2
++
++replace github.com/mewkiz/pkg => ./third/mewkiz-pkg
++replace github.com/jfreymuth/vorbis => ./third/vorbis
+diff --git a/go.sum b/go.sum
+index 609a38f..cbf954b 100644
+--- a/go.sum
++++ b/go.sum
+@@ -16,10 +16,29 @@ github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71 h1:5BVwOaUSBTlVZowGO6VZGw
+ github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71/go.mod h1:9YTyiznxEY1fVinfM7RvRcjRHbw2xLBJ3AAGIT0I4Nw=
+ github.com/go-gl/mathgl v1.0.0 h1:t9DznWJlXxxjeeKLIdovCOVJQk/GzDEL7h/h+Ro2B68=
+ github.com/go-gl/mathgl v1.0.0/go.mod h1:yhpkQzEiH9yPyxDUGzkmgScbaBVlhC06qodikEM0ZwQ=
++github.com/go-ini/ini v1.67.0 h1:z6ZrTEZqSWOTyH2FlglNbNgARyHG8oLW9gMELqKr06A=
++github.com/go-ini/ini v1.67.0/go.mod h1:ByCAeIL28uOIIG0E3PJtZPDL8WnHpFKFOtgjp+3Ies8=
+ github.com/go-test/deep v1.0.1 h1:UQhStjbkDClarlmv0am7OXXO4/GaPdCGiUiMTvi28sg=
+ github.com/go-test/deep v1.0.1/go.mod h1:wGDj63lr65AM2AQyKZd/NYHGb0R+1RLqB8NKt3aSFNA=
++github.com/golang/crypto v0.51.0/go.mod h1:8AdwkbraGNABw2kOX6YFPs3WM22XqI4EXEd8g+x7Oc8=
++github.com/golang/exp v0.0.0-20220609121020-a51bd0440498 h1:S/p0wFTPwd3v4/7SZsL6bTTtl+gZFE0/Lz1LsXddkVI=
++github.com/golang/exp v0.0.0-20220609121020-a51bd0440498/go.mod h1:yh0Ynu2b5ZUe3MQfp2nM0ecK7wsgouWTDN0FNeJuIys=
+ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 h1:DACJavvAHhabrF08vX0COfcOBJRhZ8lUbR+ZWIs0Y5g=
+ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0/go.mod h1:E/TSTwGwJL78qG/PmXZO1EjYhfJinVAhrmmHX6Z8B9k=
++github.com/golang/image v0.47.0 h1:QoHq8z68UMGGPepX5NnXbuPRLGQ5pyAbt0kbKKdoe70=
++github.com/golang/image v0.47.0/go.mod h1:IkN5o4A7vq55vXN8FWjjnhg9Rs2GOtffqsSi9mWAKYE=
++github.com/golang/mobile v0.0.0-20221110043201-43a038452099 h1:oSfrYIX533MrTcas/eyXFalZ/bK7MlH+TanP0mxrSV4=
++github.com/golang/mobile v0.0.0-20221110043201-43a038452099/go.mod h1:aAjjkJNdrh3PMckS4B10TGS2nag27cbKR1y2BpUxsiY=
++github.com/golang/mod v0.35.0/go.mod h1:+GwiRhIInF8wPm+4AoT6L0FA1QWAad3OMdTRx4tFYlU=
++github.com/golang/net v0.55.0/go.mod h1:L5U2KuzuOe1lY7Z+aWVIKK6qEeJXnXV9yzGA+WCHJww=
++github.com/golang/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
++github.com/golang/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
++github.com/golang/telemetry v0.0.0-20260508192327-42602be52be6/go.mod h1:Eqhaxk/wZsWEH8CRxLwj6xzEJbz7k1EFGqx7nyCoabE=
++github.com/golang/term v0.43.0/go.mod h1:lrhlHNdQJHO+1qVYiHfFKVuVioJIheAc3fBSMFYEIsk=
++github.com/golang/text v0.43.0 h1:JmNb4n42y+wb6caAVMkiagBfVpH6ByUdu7L/3AYdso0=
++github.com/golang/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=
++github.com/golang/tools v0.51.0/go.mod h1:9eEncMayCV6zRMGhR5eZEC2iBx98qWcF1HZ9Z7wJOoA=
++github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+ github.com/hajimehoshi/go-mp3 v0.3.4 h1:NUP7pBYH8OguP4diaTZ9wJbUbk3tC0KlfzsEpWmYj68=
+ github.com/hajimehoshi/go-mp3 v0.3.4/go.mod h1:fRtZraRFcWb0pu7ok0LqyFhCUrPeMsGRSVop0eemFmo=
+ github.com/hajimehoshi/oto/v2 v2.3.1/go.mod h1:seWLbgHH7AyUMYKfKYT9pg7PhUu9/SisyJvNTT+ASQo=
+diff --git a/src/bgdef.go b/src/bgdef.go
+index 840b4f8..fbda389 100644
+--- a/src/bgdef.go
++++ b/src/bgdef.go
+@@ -385,7 +385,7 @@ func (s *BGDef) draw(layer int32, x, y, scl float32, transform *bgDrawTransform)
+ 
+ 	if s.model != nil && s.sceneNumber >= 0 {
+ 		drawFOV := s.fov * math.Pi / 180
+-		outlineConst := float32(0.003 * math.Tan(float64(drawFOV)))
++		outlineConst := float32(0.003 * cvfTan(float64(drawFOV)))
+ 		proj := gfx.PerspectiveProjectionMatrix(drawFOV, float32(sys.scrrect[2])/float32(sys.scrrect[3]), s.near, s.far)
+ 		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
+ 		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
+diff --git a/src/bytecode.go b/src/bytecode.go
+index 276abbf..17f4220 100644
+--- a/src/bytecode.go
++++ b/src/bytecode.go
+@@ -2032,7 +2032,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+ 	//if v1.IsUndefined() {
+ 	//	return
+ 	//}
+-	v1.SetF(float32(math.Exp(v1.value)))
++	v1.SetF(float32(cvfExp(v1.value)))
+ }
+ 
+ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2043,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+ 		*v1 = BytecodeUndefined()
+ 		sys.printBytecodeError("Invalid logarithm")
+ 	} else {
+-		v1.SetF(float32(math.Log(v1.value)))
++		v1.SetF(float32(cvfLog(v1.value)))
+ 	}
+ }
+ 
+@@ -2056,7 +2056,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+ 		*v1 = BytecodeUndefined()
+ 		sys.printBytecodeError("Invalid logarithm")
+ 	} else {
+-		v1.SetF(float32(math.Log(v2.value) / math.Log(v1.value)))
++		v1.SetF(float32(cvfLog(v2.value) / cvfLog(v1.value)))
+ 	}
+ }
+ 
+@@ -2064,42 +2064,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
+ 	if v1.IsUndefined() {
+ 		return
+ 	}
+-	v1.SetF(float32(math.Cos(v1.value)))
++	v1.SetF(float32(cvfCos(v1.value)))
+ }
+ 
+ func (BytecodeExp) sin(v1 *BytecodeValue) {
+ 	if v1.IsUndefined() {
+ 		return
+ 	}
+-	v1.SetF(float32(math.Sin(v1.value)))
++	v1.SetF(float32(cvfSin(v1.value)))
+ }
+ 
+ func (BytecodeExp) tan(v1 *BytecodeValue) {
+ 	if v1.IsUndefined() {
+ 		return
+ 	}
+-	v1.SetF(float32(math.Tan(v1.value)))
++	v1.SetF(float32(cvfTan(v1.value)))
+ }
+ 
+ func (BytecodeExp) acos(v1 *BytecodeValue) {
+ 	if v1.IsUndefined() {
+ 		return
+ 	}
+-	v1.SetF(float32(math.Acos(v1.value)))
++	v1.SetF(float32(cvfAcos(v1.value)))
+ }
+ 
+ func (BytecodeExp) asin(v1 *BytecodeValue) {
+ 	if v1.IsUndefined() {
+ 		return
+ 	}
+-	v1.SetF(float32(math.Asin(v1.value)))
++	v1.SetF(float32(cvfAsin(v1.value)))
+ }
+ 
+ func (BytecodeExp) atan(v1 *BytecodeValue) {
+ 	if v1.IsUndefined() {
+ 		return
+ 	}
+-	v1.SetF(float32(math.Atan(v1.value)))
++	v1.SetF(float32(cvfAtan(v1.value)))
+ }
+ 
+ func (BytecodeExp) floor(v1 *BytecodeValue) {
+@@ -2167,7 +2167,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+ 		*v1 = BytecodeUndefined()
+ 		return
+ 	}
+-	shift := math.Pow(10, v2.value)
++	shift := cvfPow(10, v2.value)
+ 	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
+ }
+ 
+@@ -2190,7 +2190,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
+ 		*v1 = BytecodeUndefined()
+ 		return
+ 	}
+-	v1.SetF(float32(math.Atan2(v1.value, v2.value)))
++	v1.SetF(float32(cvfAtan2(v1.value, v2.value)))
+ }
+ 
+ func (BytecodeExp) sign(v1 *BytecodeValue) {
+@@ -5530,6 +5530,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+ 		} else if slot >= len(crun.hitby) {
+ 			slot = 0
+ 		}
++		if !cvfClampInvincibility(crun, &time) {
++			return
++		}
+ 		crun.hitby[slot].not = not
+ 		crun.hitby[slot].time = time
+ 		crun.hitby[slot].flag = attr
+diff --git a/src/cgo_vita.go b/src/cgo_vita.go
+new file mode 100644
+index 0000000..0cee43a
+--- /dev/null
++++ b/src/cgo_vita.go
+@@ -0,0 +1,13 @@
++//go:build vita
++
++package main
++
++// Libraries for the PS Vita build (vitasdk) - see the cgo lines below.
++
++// #cgo LDFLAGS: -lSDL2 -lvitaGL -lvitashark -lSceShaccCgExt -lmathneon -ltaihen_stub -lxmp
++// #cgo LDFLAGS: -lSceGxm_stub -lSceDisplay_stub -lSceCtrl_stub -lSceAppMgr_stub -lSceAppUtil_stub
++// #cgo LDFLAGS: -lSceAudio_stub -lSceAudioIn_stub -lSceSysmodule_stub -lSceIofilemgr_stub
++// #cgo LDFLAGS: -lSceCommonDialog_stub -lSceTouch_stub -lSceHid_stub -lSceMotion_stub
++// #cgo LDFLAGS: -lScePower_stub -lSceProcessmgr_stub -lSceKernelDmacMgr_stub -lSceShaccCg_stub
++// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lkubridge_stub_weak -lstdc++ -lsupc++ -lm
++import "C"
+diff --git a/src/char.go b/src/char.go
+index 19bf05a..03005cf 100644
+--- a/src/char.go
++++ b/src/char.go
+@@ -3228,6 +3228,25 @@ func (p *Projectile) tick() {
+ 	}
+ }
+ 
++// Advance the projectile animation.
++// Animation progress decides when removed projectiles are cleaned up and which Clsn boxes are active,
++// so it is gameplay state and must run once per simulated frame. It used to run from cueDraw(),
++// which rollback only calls once per rendered frame, so re-simulated frames desynced.
++func (p *Projectile) animStep() {
++	if p.anim == nil || p.root().scf(SCF_disabled) {
++		return
++	}
++	isPaused := p.hitpause > 0 || p.pauseBool
++	// TODO: Gating UpdateSprite() during pauses makes it go out of sync with the animation data
++	// In the case of projectiles this can be seen with Clsn display
++	if !isPaused && sys.tickFrame() {
++		p.anim.UpdateSprite()
++	}
++	if sys.tickNextFrame() && !isPaused {
++		p.anim.Action()
++	}
++}
++
+ func (p *Projectile) cueDraw() {
+ 	// Nothing to draw here. Not even debug
+ 	if p.anim == nil {
+@@ -3239,12 +3258,6 @@ func (p *Projectile) cueDraw() {
+ 
+ 	isPaused := p.hitpause > 0 || p.pauseBool
+ 
+-	// TODO: Gating UpdateSprite() during pauses makes it go out of sync with the animation data
+-	// In the case of projectiles this can be seen with Clsn display
+-	if !isPaused && sys.tickFrame() {
+-		p.anim.UpdateSprite()
+-	}
+-
+ 	// Projectile Clsn display
+ 	if sys.clsnDisplay {
+ 		if frm := p.anim.drawFrame(); frm != nil {
+@@ -3261,10 +3274,6 @@ func (p *Projectile) cueDraw() {
+ 		}
+ 	}
+ 
+-	if sys.tickNextFrame() && !isPaused {
+-		p.anim.Action() // TODO: Placing this in cueDraw is a bit unusual. Confirm if it's right
+-	}
+-
+ 	// Set position
+ 	pos := [2]float32{p.interPos[0] * p.localscl, p.interPos[1] * p.localscl}
+ 
+@@ -3699,6 +3708,7 @@ type Char struct {
+ 	ghv                 GetHitVar
+ 	mhv                 MoveHitVar
+ 	hitby               [8]HitBy
++	cvfMPRem            int32 // CvF online port: fractional MP gain carry-over
+ 	hover               [8]HitOverride
+ 	hoverIdx            int
+ 	hoverKeepState      bool
+@@ -4001,7 +4011,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
+ 				distZ *= 4.0
+ 			}
+ 			// Use hypotenuse between x and z
+-			sortDist = float32(math.Hypot(float64(effectiveX), float64(distZ)))
++			sortDist = float32(cvfHypot(float64(effectiveX), float64(distZ)))
+ 		}
+ 
+ 		// Save result in sorting slice
+@@ -8370,6 +8380,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+ 		return BytecodeUndefined()
+ 	}
+ 
++	v = cvfScaleMPGain(c, i, v)
+ 	if _, ok := c.cnsvar[i]; ok {
+ 		c.cnsvar[i] += v
+ 	} else {
+@@ -14420,8 +14431,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+ 				// Check if the character is above the platform's surface
+ 				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
+ 					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
+-					angleSinValue := float32(math.Sin(float64(p.platformAngle) / 180 * math.Pi))
+-					angleCosValue := float32(math.Cos(float64(p.platformAngle) / 180 * math.Pi))
++					angleSinValue := float32(cvfSin(float64(p.platformAngle) / 180 * math.Pi))
++					angleCosValue := float32(cvfCos(float64(p.platformAngle) / 180 * math.Pi))
+ 					oldDistX := (getter.oldPos[0]*getter.localscl - (p.pos[0])*p.localscl) * p.facing
+ 					onPlatform := func(protrude bool) {
+ 						getter.platformPosY = ((p.pos[1]+p.platformHeight[0]+p.velocity[1])*p.localscl - angleSinValue*(oldDistX/angleCosValue)) / getter.localscl
+diff --git a/src/common.go b/src/common.go
+index a741eab..540ab31 100644
+--- a/src/common.go
++++ b/src/common.go
+@@ -102,11 +102,11 @@ func Deg(f float32) float32 {
+ }
+ 
+ func Cos(f float32) float32 {
+-	return float32(math.Cos(float64(f)))
++	return float32(cvfCos(float64(f)))
+ }
+ 
+ func Sin(f float32) float32 {
+-	return float32(math.Sin(float64(f)))
++	return float32(cvfSin(float64(f)))
+ }
+ 
+ func Sign[T int | int32 | int64 | float32 | float64](val T) (sig T) {
+@@ -143,7 +143,7 @@ func Pow(x, y float32) float32 {
+ 		return float32(p * p)
+ 	}
+ 	// General-purpose fallback
+-	return float32(math.Pow(float64(x), float64(y)))
++	return float32(cvfPow(float64(x), float64(y)))
+ }
+ 
+ func Lerp(x, y, a float32) float32 {
+@@ -488,7 +488,7 @@ func I32ToU16(i32 int32) uint16 {
+ }
+ 
+ func RoundFloat(val float64, precision int) float64 {
+-	factor := math.Pow(10, float64(precision))
++	factor := cvfPow(10, float64(precision))
+ 	return math.Round(val*factor) / factor
+ }
+ 
+@@ -1903,9 +1903,76 @@ func OpenFile(filename string) (io.ReadSeekCloser, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	if isVita {
++		// Every read is a system call on the Vita; SFF/SND loaders do many
++		// tiny reads, so buffer them.
++		return &vitaBufFile{f: f, buf: make([]byte, 0, 32*1024)}, nil
++	}
+ 	return f, nil // *os.File implements io.ReadSeekCloser
+ }
+ 
++// vitaBufFile is a read-buffered io.ReadSeekCloser over an *os.File.
++type vitaBufFile struct {
++	f        *os.File
++	buf      []byte // buffered bytes starting at file offset bufStart
++	bufStart int64
++	pos      int64 // logical position
++}
++
++func (b *vitaBufFile) Read(p []byte) (int, error) {
++	if len(p) == 0 {
++		return 0, nil
++	}
++	if b.pos < b.bufStart || b.pos >= b.bufStart+int64(len(b.buf)) {
++		// Large reads bypass the buffer.
++		if len(p) >= cap(b.buf) {
++			if _, err := b.f.Seek(b.pos, io.SeekStart); err != nil {
++				return 0, err
++			}
++			n, err := b.f.Read(p)
++			b.pos += int64(n)
++			b.buf = b.buf[:0]
++			return n, err
++		}
++		if _, err := b.f.Seek(b.pos, io.SeekStart); err != nil {
++			return 0, err
++		}
++		n, err := b.f.Read(b.buf[:cap(b.buf)])
++		b.buf = b.buf[:n]
++		b.bufStart = b.pos
++		if n == 0 {
++			if err == nil {
++				err = io.EOF
++			}
++			return 0, err
++		}
++	}
++	n := copy(p, b.buf[b.pos-b.bufStart:])
++	b.pos += int64(n)
++	return n, nil
++}
++
++func (b *vitaBufFile) Seek(offset int64, whence int) (int64, error) {
++	switch whence {
++	case io.SeekStart:
++		b.pos = offset
++	case io.SeekCurrent:
++		b.pos += offset
++	case io.SeekEnd:
++		end, err := b.f.Seek(offset, io.SeekEnd)
++		if err != nil {
++			return b.pos, err
++		}
++		b.pos = end
++	}
++	if b.pos < 0 {
++		b.pos = 0
++	}
++	return b.pos, nil
++}
++
++func (b *vitaBufFile) Close() error { return b.f.Close() }
++
+ func LowercaseNoExtension(filename string) string {
+ 	basename := filepath.Base(filename)
+ 	ext := filepath.Ext(basename)
+diff --git a/src/config.go b/src/config.go
+index d39783d..283c0c1 100644
+--- a/src/config.go
++++ b/src/config.go
+@@ -291,7 +291,9 @@ func loadConfig(def string) (*Config, error) {
+ 	}
+ 	var c Config
+ 	c.Def = def
++	vitaTrace("cfg: ini parsed")
+ 	c.initStruct()
++	vitaTrace("cfg: initStruct done")
+ 
+ 	assignFrom := func(src *ini.File) {
+ 		if src == nil {
+@@ -319,12 +321,18 @@ func loadConfig(def string) (*Config, error) {
+ 
+ 	// Apply precedence: struct zero/default tags < defaultConfig.ini < user config
+ 	assignFrom(defaultOnlyIni)
++	vitaTrace("cfg: defaults assigned")
+ 	assignFrom(userIniFile)
+ 
+ 	c.IniFile = iniFile
+ 	c.DefaultOnlyIni = defaultOnlyIni
++	vitaTrace("cfg: user assigned")
++	vitaCRC("pre-normalize")
+ 	c.normalize()
++	vitaTrace("cfg: normalized")
++	vitaTraceOn = false
+ 	c.sysSet()
++	vitaTrace("cfg: sysSet done")
+ 	c.Save(def)
+ 	return &c, nil
+ }
+@@ -474,6 +482,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
+ 
+ // SetValueUpdate sets the value based on the query string and updates the IniFile.
+ func (c *Config) SetValueUpdate(query string, value interface{}) error {
++	if isVita && vitaTraceOn {
++		vitaTrace("SVU " + query)
++	}
+ 	return SetValueUpdate(c, c.IniFile, query, value)
+ }
+ 
+diff --git a/src/cvf_detmath.go b/src/cvf_detmath.go
+new file mode 100644
+index 0000000..1955427
+--- /dev/null
++++ b/src/cvf_detmath.go
+@@ -0,0 +1,880 @@
++// CvF Online: deterministic copies of math.Exp/Log/Pow/Hypot/Log2 and the
++// trig functions (Sin/Cos/Tan/Atan/Atan2/Asin/Acos).
++//
++// Go's math package uses hand-written assembly for Exp (amd64, arm64), Log and
++// Hypot (amd64). Those give slightly different results on Intel/AMD vs Apple
++// chips, which desyncs rollback netplay between a PC and a Mac/iPad. These are
++// the portable pure-Go versions from the Go standard library, so every CPU
++// computes bit-identical results (all builds also disable FMA fusion).
++// The trig functions are included because other Go compilers (TinyGo, used
++// for the PS Vita build) replace them with C library versions.
++//
++// Derived from Go's src/math (exp.go, log.go, pow.go, hypot.go, log10.go):
++// Copyright 2009 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license (Go LICENSE).
++
++package main
++
++import (
++	"math"
++	mbits "math/bits"
++)
++
++func cvfExp(x float64) float64 {
++	const (
++		Ln2Hi = 6.93147180369123816490e-01
++		Ln2Lo = 1.90821492927058770002e-10
++		Log2e = 1.44269504088896338700e+00
++
++		Overflow  = 7.09782712893383973096e+02
++		Underflow = -7.45133219101941108420e+02
++		NearZero  = 1.0 / (1 << 28) // 2**-28
++	)
++
++	// special cases
++	switch {
++	case math.IsNaN(x):
++		return x
++	case x > Overflow: // handles case where x is +∞
++		return math.Inf(1)
++	case x < Underflow: // handles case where x is -∞
++		return 0
++	case -NearZero < x && x < NearZero:
++		return 1 + x
++	}
++
++	// reduce; computed as r = hi - lo for extra precision.
++	var k int
++	switch {
++	case x < 0:
++		k = int(Log2e*x - 0.5)
++	case x > 0:
++		k = int(Log2e*x + 0.5)
++	}
++	hi := x - float64(k)*Ln2Hi
++	lo := float64(k) * Ln2Lo
++
++	// compute
++	return cvfExpmulti(hi, lo, k)
++}
++func cvfExpmulti(hi, lo float64, k int) float64 {
++	const (
++		P1 = 1.66666666666666657415e-01  /* 0x3FC55555; 0x55555555 */
++		P2 = -2.77777777770155933842e-03 /* 0xBF66C16C; 0x16BEBD93 */
++		P3 = 6.61375632143793436117e-05  /* 0x3F11566A; 0xAF25DE2C */
++		P4 = -1.65339022054652515390e-06 /* 0xBEBBBD41; 0xC5D26BF1 */
++		P5 = 4.13813679705723846039e-08  /* 0x3E663769; 0x72BEA4D0 */
++	)
++
++	r := hi - lo
++	t := r * r
++	c := r - t*(P1+t*(P2+t*(P3+t*(P4+t*P5))))
++	y := 1 - ((lo - (r*c)/(2-c)) - hi)
++	// TODO(rsc): make sure math.Ldexp can handle boundary k
++	return math.Ldexp(y, k)
++}
++
++func cvfLog(x float64) float64 {
++	const (
++		Ln2Hi = 6.93147180369123816490e-01 /* 3fe62e42 fee00000 */
++		Ln2Lo = 1.90821492927058770002e-10 /* 3dea39ef 35793c76 */
++		L1    = 6.666666666666735130e-01   /* 3FE55555 55555593 */
++		L2    = 3.999999999940941908e-01   /* 3FD99999 9997FA04 */
++		L3    = 2.857142874366239149e-01   /* 3FD24924 94229359 */
++		L4    = 2.222219843214978396e-01   /* 3FCC71C5 1D8E78AF */
++		L5    = 1.818357216161805012e-01   /* 3FC74664 96CB03DE */
++		L6    = 1.531383769920937332e-01   /* 3FC39A09 D078C69F */
++		L7    = 1.479819860511658591e-01   /* 3FC2F112 DF3E5244 */
++	)
++
++	// special cases
++	switch {
++	case math.IsNaN(x) || math.IsInf(x, 1):
++		return x
++	case x < 0:
++		return math.NaN()
++	case x == 0:
++		return math.Inf(-1)
++	}
++
++	// reduce
++	f1, ki := math.Frexp(x)
++	if f1 < math.Sqrt2/2 {
++		f1 *= 2
++		ki--
++	}
++	f := f1 - 1
++	k := float64(ki)
++
++	// compute
++	s := f / (2 + f)
++	s2 := s * s
++	s4 := s2 * s2
++	t1 := s2 * (L1 + s4*(L3+s4*(L5+s4*L7)))
++	t2 := s4 * (L2 + s4*(L4+s4*L6))
++	R := t1 + t2
++	hfsq := 0.5 * f * f
++	return k*Ln2Hi - ((hfsq - (s*(hfsq+R) + k*Ln2Lo)) - f)
++}
++
++func cvfIsOddInt(x float64) bool {
++	if math.Abs(x) >= (1 << 53) {
++		// 1 << 53 is the largest exact integer in the float64 format.
++		// Any number outside this range will be truncated before the decimal point and therefore will always be
++		// an even integer.
++		// Without this check and if x overflows int64 the int64(xi) conversion below may produce incorrect results
++		// on some architectures (and does so on arm64). See issue #57465.
++		return false
++	}
++
++	xi, xf := math.Modf(x)
++	return xf == 0 && int64(xi)&1 == 1
++}
++
++func cvfPow(x, y float64) float64 {
++	switch {
++	case y == 0 || x == 1:
++		return 1
++	case y == 1:
++		return x
++	case math.IsNaN(x) || math.IsNaN(y):
++		return math.NaN()
++	case x == 0:
++		switch {
++		case y < 0:
++			if math.Signbit(x) && cvfIsOddInt(y) {
++				return math.Inf(-1)
++			}
++			return math.Inf(1)
++		case y > 0:
++			if math.Signbit(x) && cvfIsOddInt(y) {
++				return x
++			}
++			return 0
++		}
++	case math.IsInf(y, 0):
++		switch {
++		case x == -1:
++			return 1
++		case (math.Abs(x) < 1) == math.IsInf(y, 1):
++			return 0
++		default:
++			return math.Inf(1)
++		}
++	case math.IsInf(x, 0):
++		if math.IsInf(x, -1) {
++			return cvfPow(1/x, -y) // Pow(-0, -y)
++		}
++		switch {
++		case y < 0:
++			return 0
++		case y > 0:
++			return math.Inf(1)
++		}
++	case y == 0.5:
++		return math.Sqrt(x)
++	case y == -0.5:
++		return 1 / math.Sqrt(x)
++	}
++
++	yi, yf := math.Modf(math.Abs(y))
++	if yf != 0 && x < 0 {
++		return math.NaN()
++	}
++	if yi >= 1<<63 {
++		// yi is a large even int that will lead to overflow (or underflow to 0)
++		// for all x except -1 (x == 1 was handled earlier)
++		switch {
++		case x == -1:
++			return 1
++		case (math.Abs(x) < 1) == (y > 0):
++			return 0
++		default:
++			return math.Inf(1)
++		}
++	}
++
++	// ans = a1 * 2**ae (= 1 for now).
++	a1 := 1.0
++	ae := 0
++
++	// ans *= x**yf
++	if yf != 0 {
++		if yf > 0.5 {
++			yf--
++			yi++
++		}
++		a1 = cvfExp(yf * cvfLog(x))
++	}
++
++	// ans *= x**yi
++	// by multiplying in successive squarings
++	// of x according to bits of yi.
++	// accumulate powers of two into exp.
++	x1, xe := math.Frexp(x)
++	for i := int64(yi); i != 0; i >>= 1 {
++		if xe < -1<<12 || 1<<12 < xe {
++			// catch xe before it overflows the left shift below
++			// Since i !=0 it has at least one bit still set, so ae will accumulate xe
++			// on at least one more iteration, ae += xe is a lower bound on ae
++			// the lower bound on ae exceeds the size of a float64 exp
++			// so the final call to math.Ldexp will produce under/overflow (0/math.Inf)
++			ae += xe
++			break
++		}
++		if i&1 == 1 {
++			a1 *= x1
++			ae += xe
++		}
++		x1 *= x1
++		xe <<= 1
++		if x1 < .5 {
++			x1 += x1
++			xe--
++		}
++	}
++
++	// ans = a1*2**ae
++	// if y < 0 { ans = 1 / ans }
++	// but in the opposite order
++	if y < 0 {
++		a1 = 1 / a1
++		ae = -ae
++	}
++	return math.Ldexp(a1, ae)
++}
++
++func cvfHypot(p, q float64) float64 {
++	p, q = math.Abs(p), math.Abs(q)
++	// special cases
++	switch {
++	case math.IsInf(p, 1) || math.IsInf(q, 1):
++		return math.Inf(1)
++	case math.IsNaN(p) || math.IsNaN(q):
++		return math.NaN()
++	}
++	if p < q {
++		p, q = q, p
++	}
++	if p == 0 {
++		return 0
++	}
++	q = q / p
++	return p * math.Sqrt(1+q*q)
++}
++
++func cvfLog2(x float64) float64 {
++	frac, exp := math.Frexp(x)
++	// Make sure exact powers of two give an exact answer.
++	// Don't depend on Log(0.5)*(1/math.Ln2)+exp being exactly exp-1.
++	if frac == 0.5 {
++		return float64(exp - 1)
++	}
++	return cvfLog(frac)*(1/math.Ln2) + float64(exp)
++}
++
++// ---- trig (from sin.go, tan.go, trig_reduce.go, atan.go, asin.go, atan2.go)
++
++/*
++	Floating-point sine and cosine.
++*/
++
++// The original C code, the long comment, and the constants
++// below were from http://netlib.sandia.gov/cephes/cmath/cvfSin.c,
++// available from http://www.netlib.org/cephes/cmath.tgz.
++// The go code is a simplified version of the original C.
++//
++//      cvfSin.c
++//
++//      Circular sine
++//
++// SYNOPSIS:
++//
++// double x, y, cvfSin();
++// y = cvfSin( x );
++//
++// DESCRIPTION:
++//
++// Range reduction is into intervals of pi/4.  The reduction error is nearly
++// eliminated by contriving an extended precision modular arithmetic.
++//
++// Two polynomial approximating functions are employed.
++// Between 0 and pi/4 the sine is approximated by
++//      x  +  x**3 P(x**2).
++// Between pi/4 and pi/2 the cosine is represented as
++//      1  -  x**2 Q(x**2).
++//
++// ACCURACY:
++//
++//                      Relative error:
++// arithmetic   domain      # trials      peak         rms
++//    DEC       0, 10       150000       3.0e-17     7.8e-18
++//    IEEE -1.07e9,+1.07e9  130000       2.1e-16     5.4e-17
++//
++// Partial loss of accuracy begins to occur at x = 2**30 = 1.074e9.  The loss
++// is not gradual, but jumps suddenly to about 1 part in 10e7.  Results may
++// be meaningless for x > 2**49 = 5.6e14.
++//
++//      cvfCos.c
++//
++//      Circular cosine
++//
++// SYNOPSIS:
++//
++// double x, y, cvfCos();
++// y = cvfCos( x );
++//
++// DESCRIPTION:
++//
++// Range reduction is into intervals of pi/4.  The reduction error is nearly
++// eliminated by contriving an extended precision modular arithmetic.
++//
++// Two polynomial approximating functions are employed.
++// Between 0 and pi/4 the cosine is approximated by
++//      1  -  x**2 Q(x**2).
++// Between pi/4 and pi/2 the sine is represented as
++//      x  +  x**3 P(x**2).
++//
++// ACCURACY:
++//
++//                      Relative error:
++// arithmetic   domain      # trials      peak         rms
++//    IEEE -1.07e9,+1.07e9  130000       2.1e-16     5.4e-17
++//    DEC        0,+1.07e9   17000       3.0e-17     7.2e-18
++//
++// Cephes Math Library Release 2.8:  June, 2000
++// Copyright 1984, 1987, 1989, 1992, 2000 by Stephen L. Moshier
++//
++// The readme file at http://netlib.sandia.gov/cephes/ says:
++//    Some software in this archive may be from the book _Methods and
++// Programs for Mathematical Functions_ (Prentice-Hall or Simon & Schuster
++// International, 1989) or from the Cephes Mathematical Library, a
++// commercial product. In either event, it is copyrighted by the author.
++// What you see here may be used freely but it comes with no support or
++// guarantee.
++//
++//   The two known misprints in the book are repaired here in the
++// source listings for the gamma function and the incomplete beta
++// integral.
++//
++//   Stephen L. Moshier
++//   moshier@na-net.ornl.gov
++
++// cvfSin coefficients
++var cvf_sin = [...]float64{
++	1.58962301576546568060e-10, // 0x3de5d8fd1fd19ccd
++	-2.50507477628578072866e-8, // 0xbe5ae5e5a9291f5d
++	2.75573136213857245213e-6,  // 0x3ec71de3567d48a1
++	-1.98412698295895385996e-4, // 0xbf2a01a019bfdf03
++	8.33333333332211858878e-3,  // 0x3f8111111110f7d0
++	-1.66666666666666307295e-1, // 0xbfc5555555555548
++}
++
++// cvfCos coefficients
++var cvf_cos = [...]float64{
++	-1.13585365213876817300e-11, // 0xbda8fa49a0861a9b
++	2.08757008419747316778e-9,   // 0x3e21ee9d7b4e3f05
++	-2.75573141792967388112e-7,  // 0xbe927e4f7eac4bc6
++	2.48015872888517045348e-5,   // 0x3efa01a019c844f5
++	-1.38888888888730564116e-3,  // 0xbf56c16c16c14f91
++	4.16666666666665929218e-2,   // 0x3fa555555555554b
++}
++
++func cvfCos(x float64) float64 {
++	const (
++		PI4A = 7.85398125648498535156e-1  // 0x3fe921fb40000000, math.Pi/4 split into three parts
++		PI4B = 3.77489470793079817668e-8  // 0x3e64442d00000000,
++		PI4C = 2.69515142907905952645e-15 // 0x3ce8469898cc5170,
++	)
++	// special cases
++	switch {
++	case math.IsNaN(x) || math.IsInf(x, 0):
++		return math.NaN()
++	}
++
++	// make argument positive
++	sign := false
++	x = math.Abs(x)
++
++	var j uint64
++	var y, z float64
++	if x >= cvfReduceThreshold {
++		j, z = cvfTrigReduce(x)
++	} else {
++		j = uint64(x * (4 / math.Pi)) // integer part of x/(math.Pi/4), as integer for tests on the phase angle
++		y = float64(j)                // integer part of x/(math.Pi/4), as float
++
++		// map zeros to origin
++		if j&1 == 1 {
++			j++
++			y++
++		}
++		j &= 7                               // octant modulo 2Pi radians (360 degrees)
++		z = ((x - y*PI4A) - y*PI4B) - y*PI4C // Extended precision modular arithmetic
++	}
++
++	if j > 3 {
++		j -= 4
++		sign = !sign
++	}
++	if j > 1 {
++		sign = !sign
++	}
++
++	zz := z * z
++	if j == 1 || j == 2 {
++		y = z + z*zz*((((((cvf_sin[0]*zz)+cvf_sin[1])*zz+cvf_sin[2])*zz+cvf_sin[3])*zz+cvf_sin[4])*zz+cvf_sin[5])
++	} else {
++		y = 1.0 - 0.5*zz + zz*zz*((((((cvf_cos[0]*zz)+cvf_cos[1])*zz+cvf_cos[2])*zz+cvf_cos[3])*zz+cvf_cos[4])*zz+cvf_cos[5])
++	}
++	if sign {
++		y = -y
++	}
++	return y
++}
++
++func cvfSin(x float64) float64 {
++	const (
++		PI4A = 7.85398125648498535156e-1  // 0x3fe921fb40000000, math.Pi/4 split into three parts
++		PI4B = 3.77489470793079817668e-8  // 0x3e64442d00000000,
++		PI4C = 2.69515142907905952645e-15 // 0x3ce8469898cc5170,
++	)
++	// special cases
++	switch {
++	case x == 0 || math.IsNaN(x):
++		return x // return ±0 || math.NaN()
++	case math.IsInf(x, 0):
++		return math.NaN()
++	}
++
++	// make argument positive but save the sign
++	sign := false
++	if x < 0 {
++		x = -x
++		sign = true
++	}
++
++	var j uint64
++	var y, z float64
++	if x >= cvfReduceThreshold {
++		j, z = cvfTrigReduce(x)
++	} else {
++		j = uint64(x * (4 / math.Pi)) // integer part of x/(math.Pi/4), as integer for tests on the phase angle
++		y = float64(j)                // integer part of x/(math.Pi/4), as float
++
++		// map zeros to origin
++		if j&1 == 1 {
++			j++
++			y++
++		}
++		j &= 7                               // octant modulo 2Pi radians (360 degrees)
++		z = ((x - y*PI4A) - y*PI4B) - y*PI4C // Extended precision modular arithmetic
++	}
++	// reflect in x axis
++	if j > 3 {
++		sign = !sign
++		j -= 4
++	}
++	zz := z * z
++	if j == 1 || j == 2 {
++		y = 1.0 - 0.5*zz + zz*zz*((((((cvf_cos[0]*zz)+cvf_cos[1])*zz+cvf_cos[2])*zz+cvf_cos[3])*zz+cvf_cos[4])*zz+cvf_cos[5])
++	} else {
++		y = z + z*zz*((((((cvf_sin[0]*zz)+cvf_sin[1])*zz+cvf_sin[2])*zz+cvf_sin[3])*zz+cvf_sin[4])*zz+cvf_sin[5])
++	}
++	if sign {
++		y = -y
++	}
++	return y
++}
++
++/*
++	Floating-point tangent.
++*/
++
++// The original C code, the long comment, and the constants
++// below were from http://netlib.sandia.gov/cephes/cmath/cvfSin.c,
++// available from http://www.netlib.org/cephes/cmath.tgz.
++// The go code is a simplified version of the original C.
++//
++//      cvfTan.c
++//
++//      Circular tangent
++//
++// SYNOPSIS:
++//
++// double x, y, cvfTan();
++// y = cvfTan( x );
++//
++// DESCRIPTION:
++//
++// Returns the circular tangent of the radian argument x.
++//
++// Range reduction is modulo pi/4.  A rational function
++//       x + x**3 P(x**2)/Q(x**2)
++// is employed in the basic interval [0, pi/4].
++//
++// ACCURACY:
++//                      Relative error:
++// arithmetic   domain     # trials      peak         rms
++//    DEC      +-1.07e9      44000      4.1e-17     1.0e-17
++//    IEEE     +-1.07e9      30000      2.9e-16     8.1e-17
++//
++// Partial loss of accuracy begins to occur at x = 2**30 = 1.074e9.  The loss
++// is not gradual, but jumps suddenly to about 1 part in 10e7.  Results may
++// be meaningless for x > 2**49 = 5.6e14.
++// [Accuracy loss statement from cvfSin.go comments.]
++//
++// Cephes Math Library Release 2.8:  June, 2000
++// Copyright 1984, 1987, 1989, 1992, 2000 by Stephen L. Moshier
++//
++// The readme file at http://netlib.sandia.gov/cephes/ says:
++//    Some software in this archive may be from the book _Methods and
++// Programs for Mathematical Functions_ (Prentice-Hall or Simon & Schuster
++// International, 1989) or from the Cephes Mathematical Library, a
++// commercial product. In either event, it is copyrighted by the author.
++// What you see here may be used freely but it comes with no support or
++// guarantee.
++//
++//   The two known misprints in the book are repaired here in the
++// source listings for the gamma function and the incomplete beta
++// integral.
++//
++//   Stephen L. Moshier
++//   moshier@na-net.ornl.gov
++
++// cvfTan coefficients
++var cvf_tanP = [...]float64{
++	-1.30936939181383777646e4, // 0xc0c992d8d24f3f38
++	1.15351664838587416140e6,  // 0x413199eca5fc9ddd
++	-1.79565251976484877988e7, // 0xc1711fead3299176
++}
++var cvf_tanQ = [...]float64{
++	1.00000000000000000000e0,
++	1.36812963470692954678e4,  // 0x40cab8a5eeb36572
++	-1.32089234440210967447e6, // 0xc13427bc582abc96
++	2.50083801823357915839e7,  // 0x4177d98fc2ead8ef
++	-5.38695755929454629881e7, // 0xc189afe03cbe5a31
++}
++
++func cvfTan(x float64) float64 {
++	const (
++		PI4A = 7.85398125648498535156e-1  // 0x3fe921fb40000000, math.Pi/4 split into three parts
++		PI4B = 3.77489470793079817668e-8  // 0x3e64442d00000000,
++		PI4C = 2.69515142907905952645e-15 // 0x3ce8469898cc5170,
++	)
++	// special cases
++	switch {
++	case x == 0 || math.IsNaN(x):
++		return x // return ±0 || math.NaN()
++	case math.IsInf(x, 0):
++		return math.NaN()
++	}
++
++	// make argument positive but save the sign
++	sign := false
++	if x < 0 {
++		x = -x
++		sign = true
++	}
++	var j uint64
++	var y, z float64
++	if x >= cvfReduceThreshold {
++		j, z = cvfTrigReduce(x)
++	} else {
++		j = uint64(x * (4 / math.Pi)) // integer part of x/(math.Pi/4), as integer for tests on the phase angle
++		y = float64(j)                // integer part of x/(math.Pi/4), as float
++
++		/* map zeros and singularities to origin */
++		if j&1 == 1 {
++			j++
++			y++
++		}
++
++		z = ((x - y*PI4A) - y*PI4B) - y*PI4C
++	}
++	zz := z * z
++
++	if zz > 1e-14 {
++		y = z + z*(zz*(((cvf_tanP[0]*zz)+cvf_tanP[1])*zz+cvf_tanP[2])/((((zz+cvf_tanQ[1])*zz+cvf_tanQ[2])*zz+cvf_tanQ[3])*zz+cvf_tanQ[4]))
++	} else {
++		y = z
++	}
++	if j&2 == 2 {
++		y = -1 / y
++	}
++	if sign {
++		y = -y
++	}
++	return y
++}
++
++// cvfReduceThreshold is the maximum value of x where the reduction using math.Pi/4
++// in 3 float64 parts still gives accurate results. This threshold
++// is set by y*C being representable as a float64 without error
++// where y is given by y = floor(x * (4 / math.Pi)) and C is the leading partial
++// terms of 4/math.Pi. Since the leading terms (PI4A and PI4B in cvfSin.go) have 30
++// and 32 trailing zero bits, y should have less than 30 significant mbits.
++//
++//	y < 1<<30  -> floor(x*4/math.Pi) < 1<<30 -> x < (1<<30 - 1) * math.Pi/4
++//
++// So, conservatively we can take x < 1<<29.
++// Above this threshold Payne-Hanek range reduction must be used.
++const cvfReduceThreshold = 1 << 29
++
++// cvfTrigReduce implements Payne-Hanek range reduction by math.Pi/4
++// for x > 0. It returns the integer part mod 8 (j) and
++// the fractional part (z) of x / (math.Pi/4).
++// The implementation is based on:
++// "ARGUMENT REDUCTION FOR HUGE ARGUMENTS: Good to the Last Bit"
++// K. C. Ng et al, March 24, 1992
++// The simulated multi-precision calculation of x*B uses 64-bit integer arithmetic.
++func cvfTrigReduce(x float64) (j uint64, z float64) {
++	const PI4 = math.Pi / 4
++	if x < PI4 {
++		return 0, x
++	}
++	// Extract out the integer and exponent such that,
++	// x = ix * 2 ** exp.
++	ix := math.Float64bits(x)
++	exp := int(ix>>cvfFloatShift&cvfFloatMask) - cvfFloatBias - cvfFloatShift
++	ix &^= cvfFloatMask << cvfFloatShift
++	ix |= 1 << cvfFloatShift
++	// Use the exponent to extract the 3 appropriate uint64 digits from cvfMPi4,
++	// B ~ (z0, z1, z2), such that the product leading digit has the exponent -61.
++	// Note, exp >= -53 since x >= PI4 and exp < 971 for maximum float64.
++	digit, bitshift := uint(exp+61)/64, uint(exp+61)%64
++	z0 := (cvfMPi4[digit] << bitshift) | (cvfMPi4[digit+1] >> (64 - bitshift))
++	z1 := (cvfMPi4[digit+1] << bitshift) | (cvfMPi4[digit+2] >> (64 - bitshift))
++	z2 := (cvfMPi4[digit+2] << bitshift) | (cvfMPi4[digit+3] >> (64 - bitshift))
++	// Multiply mantissa by the digits and extract the upper two digits (hi, lo).
++	z2hi, _ := mbits.Mul64(z2, ix)
++	z1hi, z1lo := mbits.Mul64(z1, ix)
++	z0lo := z0 * ix
++	lo, c := mbits.Add64(z1lo, z2hi, 0)
++	hi, _ := mbits.Add64(z0lo, z1hi, c)
++	// The top 3 bits are j.
++	j = hi >> 61
++	// Extract the fraction and find its magnitude.
++	hi = hi<<3 | lo>>61
++	lz := uint(mbits.LeadingZeros64(hi))
++	e := uint64(cvfFloatBias - (lz + 1))
++	// Clear implicit mantissa bit and shift into place.
++	hi = (hi << (lz + 1)) | (lo >> (64 - (lz + 1)))
++	hi >>= 64 - cvfFloatShift
++	// Include the exponent and convert to a float.
++	hi |= e << cvfFloatShift
++	z = math.Float64frombits(hi)
++	// Map zeros to origin.
++	if j&1 == 1 {
++		j++
++		j &= 7
++		z--
++	}
++	// Multiply the fractional part by pi/4.
++	return j, z * PI4
++}
++
++// cvfMPi4 is the binary digits of 4/pi as a uint64 array,
++// that is, 4/pi = Sum cvfMPi4[i]*2^(-64*i)
++// 19 64-bit digits and the leading one bit give 1217 bits
++// of precision to handle the largest possible float64 exponent.
++var cvfMPi4 = [...]uint64{
++	0x0000000000000001,
++	0x45f306dc9c882a53,
++	0xf84eafa3ea69bb81,
++	0xb6c52b3278872083,
++	0xfca2c757bd778ac3,
++	0x6e48dc74849ba5c0,
++	0x0c925dd413a32439,
++	0xfc3bd63962534e7d,
++	0xd1046bea5d768909,
++	0xd338e04d68befc82,
++	0x7323ac7306a673e9,
++	0x3908bf177bf25076,
++	0x3ff12fffbc0b301f,
++	0xde5e2316b414da3e,
++	0xda6cfd9e4f96136e,
++	0x9e8c7ecd3cbfd45a,
++	0xea4f758fd7cbe2f6,
++	0x7a0e73ef14a525d4,
++	0xd7f6bf623f1aba10,
++	0xac06608df8f6d757,
++}
++
++/*
++	Floating-point arctangent.
++*/
++
++// The original C code, the long comment, and the constants below were
++// from http://netlib.sandia.gov/cephes/cmath/cvfAtan.c, available from
++// http://www.netlib.org/cephes/cmath.tgz.
++// The go code is a version of the original C.
++//
++// cvfAtan.c
++// Inverse circular tangent (arctangent)
++//
++// SYNOPSIS:
++// double x, y, cvfAtan();
++// y = cvfAtan( x );
++//
++// DESCRIPTION:
++// Returns radian angle between -pi/2 and +pi/2 whose tangent is x.
++//
++// Range reduction is from three intervals into the interval from zero to 0.66.
++// The approximant uses a rational function of degree 4/5 of the form
++// x + x**3 P(x)/Q(x).
++//
++// ACCURACY:
++//                      Relative error:
++// arithmetic   domain    # trials  peak     rms
++//    DEC       -10, 10   50000     2.4e-17  8.3e-18
++//    IEEE      -10, 10   10^6      1.8e-16  5.0e-17
++//
++// Cephes Math Library Release 2.8:  June, 2000
++// Copyright 1984, 1987, 1989, 1992, 2000 by Stephen L. Moshier
++//
++// The readme file at http://netlib.sandia.gov/cephes/ says:
++//    Some software in this archive may be from the book _Methods and
++// Programs for Mathematical Functions_ (Prentice-Hall or Simon & Schuster
++// International, 1989) or from the Cephes Mathematical Library, a
++// commercial product. In either event, it is copyrighted by the author.
++// What you see here may be used freely but it comes with no support or
++// guarantee.
++//
++//   The two known misprints in the book are repaired here in the
++// source listings for the gamma function and the incomplete beta
++// integral.
++//
++//   Stephen L. Moshier
++//   moshier@na-net.ornl.gov
++
++// cvfXatan evaluates a series valid in the range [0, 0.66].
++func cvfXatan(x float64) float64 {
++	const (
++		P0 = -8.750608600031904122785e-01
++		P1 = -1.615753718733365076637e+01
++		P2 = -7.500855792314704667340e+01
++		P3 = -1.228866684490136173410e+02
++		P4 = -6.485021904942025371773e+01
++		Q0 = +2.485846490142306297962e+01
++		Q1 = +1.650270098316988542046e+02
++		Q2 = +4.328810604912902668951e+02
++		Q3 = +4.853903996359136964868e+02
++		Q4 = +1.945506571482613964425e+02
++	)
++	z := x * x
++	z = z * ((((P0*z+P1)*z+P2)*z+P3)*z + P4) / (((((z+Q0)*z+Q1)*z+Q2)*z+Q3)*z + Q4)
++	z = x*z + x
++	return z
++}
++
++// cvfSatan reduces its argument (known to be positive)
++// to the range [0, 0.66] and calls cvfXatan.
++func cvfSatan(x float64) float64 {
++	const (
++		cvfMorebits = 6.123233995736765886130e-17 // pi/2 = PIO2 + cvfMorebits
++		cvfTan3pio8 = 2.41421356237309504880      // cvfTan(3*pi/8)
++	)
++	if x <= 0.66 {
++		return cvfXatan(x)
++	}
++	if x > cvfTan3pio8 {
++		return math.Pi/2 - cvfXatan(1/x) + cvfMorebits
++	}
++	return math.Pi/4 + cvfXatan((x-1)/(x+1)) + 0.5*cvfMorebits
++}
++
++func cvfAtan(x float64) float64 {
++	if x == 0 {
++		return x
++	}
++	if x > 0 {
++		return cvfSatan(x)
++	}
++	return -cvfSatan(-x)
++}
++
++/*
++	Floating-point arcsine and arccosine.
++
++	They are implemented by computing the arctangent
++	after appropriate range reduction.
++*/
++
++func cvfAsin(x float64) float64 {
++	if x == 0 {
++		return x // special case
++	}
++	sign := false
++	if x < 0 {
++		x = -x
++		sign = true
++	}
++	if x > 1 {
++		return math.NaN() // special case
++	}
++
++	temp := math.Sqrt(1 - x*x)
++	if x > 0.7 {
++		temp = math.Pi/2 - cvfSatan(temp/x)
++	} else {
++		temp = cvfSatan(x / temp)
++	}
++
++	if sign {
++		temp = -temp
++	}
++	return temp
++}
++
++func cvfAcos(x float64) float64 {
++	return math.Pi/2 - cvfAsin(x)
++}
++
++func cvfAtan2(y, x float64) float64 {
++	// special cases
++	switch {
++	case math.IsNaN(y) || math.IsNaN(x):
++		return math.NaN()
++	case y == 0:
++		if x >= 0 && !math.Signbit(x) {
++			return math.Copysign(0, y)
++		}
++		return math.Copysign(math.Pi, y)
++	case x == 0:
++		return math.Copysign(math.Pi/2, y)
++	case math.IsInf(x, 0):
++		if math.IsInf(x, 1) {
++			switch {
++			case math.IsInf(y, 0):
++				return math.Copysign(math.Pi/4, y)
++			default:
++				return math.Copysign(0, y)
++			}
++		}
++		switch {
++		case math.IsInf(y, 0):
++			return math.Copysign(3*math.Pi/4, y)
++		default:
++			return math.Copysign(math.Pi, y)
++		}
++	case math.IsInf(y, 0):
++		return math.Copysign(math.Pi/2, y)
++	}
++
++	// Call cvfAtan and determine the quadrant.
++	q := cvfAtan(y / x)
++	if x < 0 {
++		if q <= 0 {
++			return q + math.Pi
++		}
++		return q - math.Pi
++	}
++	return q
++}
++
++const (
++	cvfFloatMask  = 0x7FF
++	cvfFloatShift = 64 - 11 - 1
++	cvfFloatBias  = 1023
++)
+diff --git a/src/cvf_online.go b/src/cvf_online.go
+new file mode 100644
+index 0000000..585f32e
+--- /dev/null
++++ b/src/cvf_online.go
+@@ -0,0 +1,788 @@
++package main
++
++// Castlevania Fighter online helpers:
++//   - shows the host's public/LAN address and port while waiting for an opponent
++//   - opens the netplay ports on the router automatically (UPnP IGD, no dependencies)
++//   - talks to a small lobby server so players can find each other without typing IPs
++//
++// Everything network-related runs in goroutines; Lua only polls cached state, so the
++// menus never block on the network.
++
++import (
++	"bufio"
++	"bytes"
++	"encoding/json"
++	"encoding/xml"
++	"fmt"
++	"io"
++	"net"
++	"net/http"
++	"net/url"
++	"os"
++	"path/filepath"
++	"regexp"
++	"sort"
++	"strings"
++	"sync"
++	"time"
++
++	lua "github.com/yuin/gopher-lua"
++)
++
++const cvfOnlineConfigFile = "data/cvf_online.ini"
++const cvfOnlineProfileFile = "save/cvf_online_profile.json"
++
++type cvfOnlineState struct {
++	mu sync.Mutex
++
++	lobbyURL    string
++	buildTag    string
++	playerName  string
++	configRead  bool
++	httpClient  *http.Client
++	publicIP    string
++	publicIPErr string
++	publicBusy  bool
++
++	upnpStatus string
++	upnpMapped []upnpMapping
++
++	hosting       bool
++	hostPort      int
++	roomID        string
++	roomToken     string
++	roomOpen      string // "", "yes", "no"
++	lobbyHostErr  string
++	hostStop      chan struct{}
++	rooms         []cvfRoom
++	roomsErr      string
++	roomsBusy     bool
++	roomsFetched  time.Time
++	roomsRequests int
++}
++
++type cvfRoom struct {
++	ID      string `json:"id"`
++	Name    string `json:"name"`
++	IP      string `json:"ip"`
++	Port    int    `json:"port"`
++	UDPPort int    `json:"udp_port"`
++	Version string `json:"version"`
++	Open    string `json:"open"`
++	AgeSec  int    `json:"age_sec"`
++}
++
++var cvfOnline = &cvfOnlineState{
++	httpClient: &http.Client{Timeout: 70 * time.Second}, // free hosts can take ~1 min to wake up
++	buildTag:   "cvf-online-1",
++}
++
++func (s *cvfOnlineState) readConfig() {
++	if s.configRead {
++		return
++	}
++	s.configRead = true
++	if f, err := os.Open(cvfOnlineConfigFile); err == nil {
++		sc := bufio.NewScanner(f)
++		for sc.Scan() {
++			line := strings.TrimSpace(sc.Text())
++			if i := strings.Index(line, ";"); i >= 0 {
++				line = strings.TrimSpace(line[:i])
++			}
++			k, v, ok := strings.Cut(line, "=")
++			if !ok {
++				continue
++			}
++			k, v = strings.ToLower(strings.TrimSpace(k)), strings.TrimSpace(v)
++			switch k {
++			case "lobbyurl":
++				s.lobbyURL = strings.TrimRight(v, "/")
++			case "buildtag":
++				if v != "" {
++					s.buildTag = v
++				}
++			}
++		}
++		f.Close()
++	}
++	if b, err := os.ReadFile(cvfOnlineProfileFile); err == nil {
++		var p struct {
++			Name string `json:"name"`
++		}
++		if json.Unmarshal(b, &p) == nil {
++			s.playerName = p.Name
++		}
++	}
++}
++
++func (s *cvfOnlineState) saveProfile() {
++	b, _ := json.Marshal(map[string]string{"name": s.playerName})
++	os.MkdirAll(filepath.Dir(cvfOnlineProfileFile), 0755)
++	os.WriteFile(cvfOnlineProfileFile, b, 0644)
++}
++
++// ---------------------------------------------------------------------------
++// Addresses
++
++func cvfLocalIPs() []string {
++	var out []string
++	ifaces, _ := net.Interfaces()
++	for _, ifc := range ifaces {
++		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
++			continue
++		}
++		addrs, _ := ifc.Addrs()
++		for _, a := range addrs {
++			if ipn, ok := a.(*net.IPNet); ok {
++				if ip4 := ipn.IP.To4(); ip4 != nil && !ip4.IsLinkLocalUnicast() {
++					out = append(out, ip4.String())
++				}
++			}
++		}
++	}
++	return out
++}
++
++func (s *cvfOnlineState) fetchPublicIP() {
++	s.mu.Lock()
++	if s.publicBusy || s.publicIP != "" {
++		s.mu.Unlock()
++		return
++	}
++	s.publicBusy = true
++	lobby := s.lobbyURL
++	s.mu.Unlock()
++
++	go func() {
++		ip, err := "", fmt.Errorf("no lobby configured")
++		sources := []string{}
++		if lobby != "" {
++			sources = append(sources, lobby+"/api/ip")
++		}
++		sources = append(sources, "https://api.ipify.org?format=json")
++		for _, u := range sources {
++			ip, err = s.getIP(u)
++			if err == nil && ip != "" {
++				break
++			}
++		}
++		s.mu.Lock()
++		s.publicBusy = false
++		if err == nil && ip != "" {
++			s.publicIP, s.publicIPErr = ip, ""
++		} else {
++			s.publicIPErr = "unknown"
++		}
++		s.mu.Unlock()
++	}()
++}
++
++func (s *cvfOnlineState) getIP(u string) (string, error) {
++	c := &http.Client{Timeout: 15 * time.Second}
++	resp, err := c.Get(u)
++	if err != nil {
++		return "", err
++	}
++	defer resp.Body.Close()
++	var v struct {
++		IP string `json:"ip"`
++	}
++	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&v); err != nil {
++		return "", err
++	}
++	if net.ParseIP(v.IP) == nil {
++		return "", fmt.Errorf("bad ip")
++	}
++	return v.IP, nil
++}
++
++// ---------------------------------------------------------------------------
++// Minimal UPnP IGD client (SSDP discovery + SOAP AddPortMapping/DeletePortMapping)
++
++type upnpMapping struct {
++	controlURL, service string
++	port                int
++	proto               string
++}
++
++type upnpDevice struct {
++	controlURL, service, localIP string
++}
++
++func upnpDiscover() (*upnpDevice, error) {
++	conn, err := net.ListenPacket("udp4", ":0")
++	if err != nil {
++		return nil, err
++	}
++	defer conn.Close()
++	dst := &net.UDPAddr{IP: net.IPv4(239, 255, 255, 250), Port: 1900}
++	for _, st := range []string{
++		"urn:schemas-upnp-org:device:InternetGatewayDevice:1",
++		"urn:schemas-upnp-org:device:InternetGatewayDevice:2",
++		"urn:schemas-upnp-org:service:WANIPConnection:1",
++	} {
++		msg := "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nST: " + st +
++			"\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\n\r\n"
++		conn.WriteTo([]byte(msg), dst)
++	}
++	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
++	buf := make([]byte, 4096)
++	seen := map[string]bool{}
++	for {
++		n, _, err := conn.ReadFrom(buf)
++		if err != nil {
++			return nil, fmt.Errorf("no UPnP router found")
++		}
++		loc := ""
++		for _, line := range strings.Split(string(buf[:n]), "\r\n") {
++			if k, v, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(k), "location") {
++				loc = strings.TrimSpace(v)
++			}
++		}
++		if loc == "" || seen[loc] {
++			continue
++		}
++		seen[loc] = true
++		if d, err := upnpDescribe(loc); err == nil {
++			return d, nil
++		}
++	}
++}
++
++func upnpDescribe(loc string) (*upnpDevice, error) {
++	c := &http.Client{Timeout: 4 * time.Second}
++	resp, err := c.Get(loc)
++	if err != nil {
++		return nil, err
++	}
++	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
++	resp.Body.Close()
++	type svc struct {
++		ServiceType string `xml:"serviceType"`
++		ControlURL  string `xml:"controlURL"`
++	}
++	dec := xml.NewDecoder(bytes.NewReader(body))
++	var found *svc
++	for {
++		tok, err := dec.Token()
++		if err != nil {
++			break
++		}
++		if se, ok := tok.(xml.StartElement); ok && se.Name.Local == "service" {
++			var s svc
++			if dec.DecodeElement(&s, &se) == nil &&
++				(strings.Contains(s.ServiceType, "WANIPConnection") || strings.Contains(s.ServiceType, "WANPPPConnection")) {
++				found = &s
++				break
++			}
++		}
++	}
++	if found == nil {
++		return nil, fmt.Errorf("no WAN service")
++	}
++	base, _ := url.Parse(loc)
++	ctl, err := base.Parse(found.ControlURL)
++	if err != nil {
++		return nil, err
++	}
++	// Which local address reaches the router?
++	host := base.Hostname()
++	localIP := ""
++	if c, err := net.Dial("udp4", net.JoinHostPort(host, "1900")); err == nil {
++		localIP = c.LocalAddr().(*net.UDPAddr).IP.String()
++		c.Close()
++	}
++	return &upnpDevice{controlURL: ctl.String(), service: found.ServiceType, localIP: localIP}, nil
++}
++
++func upnpSOAP(controlURL, service, action, args string) error {
++	body := `<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" ` +
++		`s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:` + action +
++		` xmlns:u="` + service + `">` + args + `</u:` + action + `></s:Body></s:Envelope>`
++	req, err := http.NewRequest("POST", controlURL, strings.NewReader(body))
++	if err != nil {
++		return err
++	}
++	req.Header.Set("Content-Type", `text/xml; charset="utf-8"`)
++	req.Header.Set("SOAPAction", `"`+service+`#`+action+`"`)
++	c := &http.Client{Timeout: 5 * time.Second}
++	resp, err := c.Do(req)
++	if err != nil {
++		return err
++	}
++	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
++	resp.Body.Close()
++	if resp.StatusCode != 200 {
++		return fmt.Errorf("router refused (%d)", resp.StatusCode)
++	}
++	return nil
++}
++
++func upnpAdd(d *upnpDevice, port int, proto string) error {
++	args := fmt.Sprintf("<NewRemoteHost></NewRemoteHost><NewExternalPort>%d</NewExternalPort>"+
++		"<NewProtocol>%s</NewProtocol><NewInternalPort>%d</NewInternalPort>"+
++		"<NewInternalClient>%s</NewInternalClient><NewEnabled>1</NewEnabled>"+
++		"<NewPortMappingDescription>Castlevania Fighter Online</NewPortMappingDescription>"+
++		"<NewLeaseDuration>7200</NewLeaseDuration>", port, proto, port, d.localIP)
++	return upnpSOAP(d.controlURL, d.service, "AddPortMapping", args)
++}
++
++func upnpDelete(m upnpMapping) {
++	args := fmt.Sprintf("<NewRemoteHost></NewRemoteHost><NewExternalPort>%d</NewExternalPort>"+
++		"<NewProtocol>%s</NewProtocol>", m.port, m.proto)
++	upnpSOAP(m.controlURL, m.service, "DeletePortMapping", args)
++}
++
++func (s *cvfOnlineState) openPorts(tcpPort, udpPort int) {
++	s.mu.Lock()
++	s.upnpStatus = "Opening router port automatically..."
++	s.mu.Unlock()
++	go func() {
++		d, err := upnpDiscover()
++		if err != nil {
++			s.mu.Lock()
++			s.upnpStatus = "Router auto-setup unavailable"
++			s.mu.Unlock()
++			return
++		}
++		var maps []upnpMapping
++		var errs []string
++		try := func(p int, proto string) {
++			if p <= 0 {
++				return
++			}
++			if err := upnpAdd(d, p, proto); err != nil {
++				errs = append(errs, proto)
++			} else {
++				maps = append(maps, upnpMapping{d.controlURL, d.service, p, proto})
++			}
++		}
++		if tcpPort > 0 {
++			try(tcpPort, "TCP")
++		}
++		try(udpPort, "UDP")
++		s.mu.Lock()
++		s.upnpMapped = append(s.upnpMapped, maps...)
++		if len(errs) == 0 {
++			s.upnpStatus = "Router port opened automatically"
++		} else {
++			s.upnpStatus = "Router refused auto-setup (" + strings.Join(errs, "/") + ")"
++		}
++		s.mu.Unlock()
++	}()
++}
++
++func (s *cvfOnlineState) closePorts() {
++	s.mu.Lock()
++	maps := s.upnpMapped
++	s.upnpMapped = nil
++	s.upnpStatus = ""
++	s.mu.Unlock()
++	if len(maps) > 0 {
++		go func() {
++			for _, m := range maps {
++				upnpDelete(m)
++			}
++		}()
++	}
++}
++
++// ---------------------------------------------------------------------------
++// Lobby client
++
++func (s *cvfOnlineState) post(path string, v any, out any) error {
++	b, _ := json.Marshal(v)
++	resp, err := s.httpClient.Post(s.lobbyURL+path, "application/json", bytes.NewReader(b))
++	if err != nil {
++		return err
++	}
++	defer resp.Body.Close()
++	if resp.StatusCode/100 != 2 {
++		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
++		return fmt.Errorf("lobby: %s", strings.TrimSpace(string(msg)))
++	}
++	if out != nil {
++		return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
++	}
++	return nil
++}
++
++func (s *cvfOnlineState) hostBegin(port, udpPort int) {
++	s.readConfig()
++	s.hostEnd()
++	s.mu.Lock()
++	s.hosting, s.hostPort = true, port
++	s.roomID, s.roomToken, s.roomOpen, s.lobbyHostErr = "", "", "", ""
++	stop := make(chan struct{})
++	s.hostStop = stop
++	name, lobby, tag := s.playerName, s.lobbyURL, s.buildTag
++	s.mu.Unlock()
++
++	s.fetchPublicIP()
++	s.openPorts(port, udpPort)
++
++	if lobby == "" {
++		return
++	}
++	if name == "" {
++		name = "Player"
++	}
++	go func() {
++		// Give UPnP a moment so the lobby's reachability check sees the open port.
++		select {
++		case <-stop:
++			return
++		case <-time.After(3 * time.Second):
++		}
++		var r struct {
++			ID    string `json:"id"`
++			Token string `json:"token"`
++			IP    string `json:"ip"`
++		}
++		for {
++			err := s.post("/api/rooms", map[string]any{"name": name, "port": port, "udp_port": udpPort, "version": tag}, &r)
++			if err == nil {
++				break
++			}
++			s.mu.Lock()
++			s.lobbyHostErr = "Lobby unreachable, retrying"
++			s.mu.Unlock()
++			select {
++			case <-stop:
++				return
++			case <-time.After(10 * time.Second):
++			}
++		}
++		s.mu.Lock()
++		s.lobbyHostErr = ""
++		if s.hostStop != stop {
++			s.mu.Unlock()
++			s.post("/api/rooms/"+r.ID+"/leave", map[string]string{"token": r.Token}, nil)
++			return
++		}
++		s.roomID, s.roomToken = r.ID, r.Token
++		if r.IP != "" && s.publicIP == "" {
++			s.publicIP = r.IP
++		}
++		s.mu.Unlock()
++		t := time.NewTicker(10 * time.Second)
++		defer t.Stop()
++		for {
++			var hb struct {
++				Open string `json:"open"`
++			}
++			err := s.post("/api/rooms/"+r.ID+"/heartbeat", map[string]string{"token": r.Token}, &hb)
++			s.mu.Lock()
++			if err == nil {
++				s.roomOpen = hb.Open
++				s.lobbyHostErr = ""
++			}
++			s.mu.Unlock()
++			select {
++			case <-stop:
++				s.post("/api/rooms/"+r.ID+"/leave", map[string]string{"token": r.Token}, nil)
++				return
++			case <-t.C:
++			}
++		}
++	}()
++}
++
++func (s *cvfOnlineState) hostEnd() {
++	s.mu.Lock()
++	if s.hostStop != nil {
++		close(s.hostStop)
++		s.hostStop = nil
++	}
++	s.hosting = false
++	s.roomID, s.roomToken, s.roomOpen = "", "", ""
++	s.mu.Unlock()
++}
++
++func (s *cvfOnlineState) hostStatus() string {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	var b strings.Builder
++	b.WriteString("Waiting for an opponent...\n\n")
++	pub := s.publicIP
++	if pub == "" {
++		if s.publicIPErr != "" {
++			pub = "(could not detect)"
++		} else {
++			pub = "(detecting...)"
++		}
++	}
++	fmt.Fprintf(&b, "Internet address: %s   Port: %d\n", pub, s.hostPort)
++	if ips := cvfLocalIPs(); len(ips) > 0 {
++		fmt.Fprintf(&b, "Same network (LAN): %s\n", strings.Join(ips, ", "))
++	}
++	if s.upnpStatus != "" {
++		b.WriteString(s.upnpStatus + "\n")
++		if strings.HasPrefix(s.upnpStatus, "Router auto-setup unavailable") || strings.HasPrefix(s.upnpStatus, "Router refused") {
++			fmt.Fprintf(&b, "If nobody can join: forward TCP+UDP %d on your router\nor use a VPN like Tailscale.\n", s.hostPort)
++		}
++	}
++	switch {
++	case s.lobbyURL == "":
++		b.WriteString("\nShare your Internet address with your opponent.\n")
++	case s.lobbyHostErr != "":
++		b.WriteString("\n" + s.lobbyHostErr + " - share your address instead.\n")
++	case s.roomID == "":
++		b.WriteString("\nListing you in the lobby...\n")
++	default:
++		fmt.Fprintf(&b, "\nListed in the lobby as \"%s\"\n", s.playerName)
++		b.WriteString("Other players can now pick you in Online > Lobby.\n")
++	}
++	b.WriteString("\nPress Esc to stop hosting.")
++	return b.String()
++}
++
++func (s *cvfOnlineState) refreshRooms() {
++	s.readConfig()
++	s.mu.Lock()
++	if s.roomsBusy || s.lobbyURL == "" {
++		if s.lobbyURL == "" {
++			s.roomsErr = "No lobby server configured (data/cvf_online.ini)"
++		}
++		s.mu.Unlock()
++		return
++	}
++	s.roomsBusy = true
++	if s.roomsFetched.IsZero() {
++		s.roomsErr = "Connecting to the lobby (can take up to a minute)..."
++	}
++	s.mu.Unlock()
++	go func() {
++		resp, err := s.httpClient.Get(s.lobbyURL + "/api/rooms")
++		var rooms []cvfRoom
++		if err == nil {
++			if resp.StatusCode == 200 {
++				err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rooms)
++			} else {
++				err = fmt.Errorf("status %d", resp.StatusCode)
++			}
++			resp.Body.Close()
++		}
++		s.mu.Lock()
++		s.roomsBusy = false
++		if err != nil {
++			s.roomsErr = "Lobby unreachable, retrying..."
++		} else {
++			sort.SliceStable(rooms, func(i, j int) bool { return rooms[i].AgeSec < rooms[j].AgeSec })
++			s.rooms, s.roomsErr, s.roomsFetched = rooms, "", time.Now()
++		}
++		s.mu.Unlock()
++	}()
++}
++
++var cvfNameRe = regexp.MustCompile(`[^\p{L}\p{N} _.\-!?']`)
++
++func cvfCleanName(n string) string {
++	n = strings.TrimSpace(cvfNameRe.ReplaceAllString(n, ""))
++	if r := []rune(n); len(r) > 20 {
++		n = string(r[:20])
++	}
++	return n
++}
++
++// ---------------------------------------------------------------------------
++// Lua bindings
++
++func cvfOnlineScriptInit(l *lua.LState) {
++	luaRegister(l, "cvfOnlineHostBegin", func(l *lua.LState) int {
++		cvfOnline.hostBegin(int(numArg(l, 1)), int(sys.cfg.Netplay.Rollback.Port))
++		return 0
++	})
++	luaRegister(l, "cvfOnlineHostEnd", func(l *lua.LState) int {
++		cvfOnline.hostEnd()
++		return 0
++	})
++	luaRegister(l, "cvfOnlineHostStatus", func(l *lua.LState) int {
++		l.Push(lua.LString(cvfOnline.hostStatus()))
++		return 1
++	})
++	// Called when joining: open our UDP rollback port too, so the host can reach us.
++	luaRegister(l, "cvfOnlineJoinBegin", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		cvfOnline.openPorts(0, int(sys.cfg.Netplay.Rollback.Port))
++		return 0
++	})
++	luaRegister(l, "cvfOnlineClosePorts", func(l *lua.LState) int {
++		cvfOnline.closePorts()
++		return 0
++	})
++	luaRegister(l, "cvfLobbyEnabled", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		l.Push(lua.LBool(cvfOnline.lobbyURL != ""))
++		return 1
++	})
++	luaRegister(l, "cvfLobbyRefresh", func(l *lua.LState) int {
++		cvfOnline.refreshRooms()
++		return 0
++	})
++	// Returns rooms table, status string
++	luaRegister(l, "cvfLobbyRooms", func(l *lua.LState) int {
++		cvfOnline.mu.Lock()
++		rooms := append([]cvfRoom(nil), cvfOnline.rooms...)
++		status := cvfOnline.roomsErr
++		tag := cvfOnline.buildTag
++		cvfOnline.mu.Unlock()
++		t := l.NewTable()
++		for _, r := range rooms {
++			rt := l.NewTable()
++			rt.RawSetString("id", lua.LString(r.ID))
++			rt.RawSetString("name", lua.LString(r.Name))
++			rt.RawSetString("ip", lua.LString(r.IP))
++			rt.RawSetString("port", lua.LNumber(r.Port))
++			rt.RawSetString("open", lua.LString(r.Open))
++			rt.RawSetString("age", lua.LNumber(r.AgeSec))
++			rt.RawSetString("compatible", lua.LBool(r.Version == tag))
++			t.Append(rt)
++		}
++		l.Push(t)
++		l.Push(lua.LString(status))
++		return 2
++	})
++	luaRegister(l, "cvfGetPlayerName", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		l.Push(lua.LString(cvfOnline.playerName))
++		return 1
++	})
++	luaRegister(l, "cvfSetPlayerName", func(l *lua.LState) int {
++		cvfOnline.readConfig()
++		n := cvfCleanName(strArg(l, 1))
++		cvfOnline.mu.Lock()
++		cvfOnline.playerName = n
++		cvfOnline.mu.Unlock()
++		cvfOnline.saveProfile()
++		l.Push(lua.LString(n))
++		return 1
++	})
++	// Temporarily point the netplay connection at a lobby room's port.
++	luaRegister(l, "cvfSetNetplayPort", func(l *lua.LState) int {
++		if p := int(numArg(l, 1)); p > 0 && p < 65536 {
++			sys.cfg.Netplay.ListenPort = p
++		}
++		return 0
++	})
++	luaRegister(l, "cvfGetNetplayPort", func(l *lua.LState) int {
++		l.Push(lua.LNumber(sys.cfg.Netplay.ListenPort))
++		return 1
++	})
++}
++
++// ---------------------------------------------------------------------------
++// Gameplay rules for the online port (data/cvf_online.ini). They must be identical
++// for both players, so they are read once at startup from the shared game folder.
++//
++//   MaxAttackInvincibility = N  cap NotHitBy/HitBy granted during attack states to the
++//                               first N frames of the state (0 = off)
++//   InvincibilityExemptStates = 1000-1099   states that keep their invincibility
++//   MPVar = 34                  variable holding MP
++//   MPGainScale = 0.5           multiply every MP gain (fractions carry over)
++//   RulesAuthor = CvF           only characters with this author are affected
++
++type cvfRulesT struct {
++	loaded       bool
++	iframeCap    int32
++	exemptLo     int32
++	exemptHi     int32
++	mpVar        int32
++	mpScaleMilli int32
++	author       string
++}
++
++var cvfRules = cvfRulesT{exemptLo: 1000, exemptHi: 1099, mpVar: -1, mpScaleMilli: 1000}
++
++func cvfRulesLoad() *cvfRulesT {
++	r := &cvfRules
++	if r.loaded {
++		return r
++	}
++	r.loaded = true
++	f, err := os.Open(cvfOnlineConfigFile)
++	if err != nil {
++		return r
++	}
++	defer f.Close()
++	sc := bufio.NewScanner(f)
++	for sc.Scan() {
++		line := sc.Text()
++		if i := strings.Index(line, ";"); i >= 0 {
++			line = line[:i]
++		}
++		k, v, ok := strings.Cut(line, "=")
++		if !ok {
++			continue
++		}
++		k, v = strings.ToLower(strings.TrimSpace(k)), strings.TrimSpace(v)
++		switch k {
++		case "maxattackinvincibility":
++			fmt.Sscan(v, &r.iframeCap)
++		case "invincibilityexemptstates":
++			var lo, hi int32
++			if n, _ := fmt.Sscanf(strings.ReplaceAll(v, " ", ""), "%d-%d", &lo, &hi); n == 2 {
++				r.exemptLo, r.exemptHi = lo, hi
++			}
++		case "mpvar":
++			fmt.Sscan(v, &r.mpVar)
++		case "mpgainscale":
++			var s float64
++			if _, err := fmt.Sscan(v, &s); err == nil && s >= 0 && s <= 10 {
++				r.mpScaleMilli = int32(s*1000 + 0.5)
++			}
++		case "rulesauthor":
++			r.author = strings.ToLower(v)
++		}
++	}
++	return r
++}
++
++func (r *cvfRulesT) appliesTo(c *Char) bool {
++	if c == nil || c.helperIndex != 0 {
++		return false
++	}
++	return r.author == "" || c.gi().authorLow == r.author
++}
++
++// Clamp the duration of a NotHitBy/HitBy set while attacking. Returns false to skip it.
++func cvfClampInvincibility(c *Char, time *int32) bool {
++	r := cvfRulesLoad()
++	if r.iframeCap <= 0 || c.ss.moveType != MT_A || !r.appliesTo(c) {
++		return true
++	}
++	if c.ss.no >= r.exemptLo && c.ss.no <= r.exemptHi {
++		return true
++	}
++	remaining := r.iframeCap - c.ss.time
++	cvfDebugf("iframes %s state %d time %d remaining %d", c.name, c.ss.no, c.ss.time, remaining)
++	if remaining <= 0 {
++		return false
++	}
++	if *time < 0 || *time > remaining {
++		*time = remaining
++	}
++	return true
++}
++
++// Scale positive MP gains; the fractional part is kept in c.cvfMPRem (part of rollback state).
++func cvfScaleMPGain(c *Char, i, v int32) int32 {
++	r := cvfRulesLoad()
++	if v <= 0 || i != r.mpVar || r.mpScaleMilli == 1000 || !r.appliesTo(c) {
++		return v
++	}
++	cvfDebugf("mp gain %s +%d", c.name, v)
++	total := v*r.mpScaleMilli + c.cvfMPRem
++	c.cvfMPRem = total % 1000
++	return total / 1000
++}
++
++var cvfDebugOn = os.Getenv("CVF_RULES_DEBUG") != ""
++var cvfDebugCount int
++
++func cvfDebugf(format string, args ...any) {
++	if cvfDebugOn && cvfDebugCount < 200 {
++		cvfDebugCount++
++		fmt.Fprintf(os.Stderr, "[cvf] "+format+"\n", args...)
++	}
++}
+diff --git a/src/cvf_sound_lazy.go b/src/cvf_sound_lazy.go
+new file mode 100644
+index 0000000..897ab9c
+--- /dev/null
++++ b/src/cvf_sound_lazy.go
+@@ -0,0 +1,147 @@
++package main
++
++// CvF Online: on-demand loading of .snd sounds.
++//
++// Ikemen normally reads every sound of every .snd file into memory when a
++// character or the fight screen loads. Castlevania Fighter's shared sound
++// bank (data/Xsound.snd) is 687 MB of uncompressed WAVs, which made one match
++// use ~700 MB of RAM - too much for the PS Vita and wasteful everywhere else.
++// Now only each sound's header is read at load time; the samples are read the
++// first time the sound plays and kept in a size-capped LRU cache.
++
++import (
++	"bytes"
++	"io"
++	"os"
++	"strconv"
++	"sync"
++
++	"github.com/ikemen-engine/beep/v2/wav"
++)
++
++type lazySound struct {
++	filename string
++	offset   int64
++	size     uint32
++	state    int8 // 0 = not loaded, 1 = loaded, -1 = corrupted
++	lastUse  uint64
++}
++
++var cvfLazy struct {
++	sync.Mutex
++	loaded  []*Sound
++	bytes   int64
++	tick    uint64
++	limit   int64
++	enabled int8 // 0 unknown, 1 on, -1 off
++}
++
++// CVF_LAZY_SOUNDS=0 restores the original behaviour; CVF_SOUND_CACHE_MB sets the cache size.
++func cvfLazySoundsEnabled() bool {
++	if cvfLazy.enabled == 0 {
++		cvfLazy.enabled = 1
++		if os.Getenv("CVF_LAZY_SOUNDS") == "0" {
++			cvfLazy.enabled = -1
++		}
++		cvfLazy.limit = 96 << 20
++		if isVita {
++			cvfLazy.limit = 24 << 20
++		}
++		if mb, err := strconv.Atoi(os.Getenv("CVF_SOUND_CACHE_MB")); err == nil && mb > 0 {
++			cvfLazy.limit = int64(mb) << 20
++		}
++	}
++	return cvfLazy.enabled == 1
++}
++
++// newLazySound reads only the WAV header at f's current position.
++func newLazySound(f io.ReadSeeker, filename string, offset int64, size uint32) (*Sound, error) {
++	hdrLen := uint32(4096)
++	if size < hdrLen {
++		hdrLen = size
++	}
++	hdr := make([]byte, hdrLen)
++	if _, err := io.ReadFull(f, hdr); err != nil {
++		return nil, err
++	}
++	snd := &Sound{lazy: &lazySound{filename: filename, offset: offset, size: size}}
++	if st, wavfmt, err := wav.Decode(bytes.NewReader(hdr)); err == nil {
++		snd.format = wavfmt
++		snd.length = st.Len()
++	} else {
++		// Unusual header layout: load it fully now, like before.
++		if !snd.ensureLoaded() {
++			return nil, nil
++		}
++	}
++	return snd, nil
++}
++
++// ensureLoaded makes sure the samples are in memory. Returns false if the
++// sound can't be played.
++func (s *Sound) ensureLoaded() bool {
++	l := s.lazy
++	if l == nil {
++		return s.wavData != nil
++	}
++	cvfLazy.Lock()
++	defer cvfLazy.Unlock()
++	switch l.state {
++	case 1:
++		return true
++	case -1:
++		return false
++	}
++	f, err := OpenFile(l.filename)
++	if err != nil {
++		l.state = -1
++		return false
++	}
++	defer f.Close()
++	if _, err := f.Seek(l.offset, io.SeekStart); err != nil {
++		l.state = -1
++		return false
++	}
++	full, err := readSound(f, l.size)
++	if err != nil || full == nil {
++		l.state = -1
++		return false
++	}
++	s.wavData, s.format, s.length = full.wavData, full.format, full.length
++	l.state = 1
++	cvfLazy.tick++
++	l.lastUse = cvfLazy.tick
++	cvfLazy.loaded = append(cvfLazy.loaded, s)
++	cvfLazy.bytes += int64(len(s.wavData))
++	cvfEvictSounds()
++	return true
++}
++
++func (s *Sound) lazyTouch() {
++	if s.lazy == nil {
++		return
++	}
++	cvfLazy.Lock()
++	cvfLazy.tick++
++	s.lazy.lastUse = cvfLazy.tick
++	cvfLazy.Unlock()
++}
++
++// cvfEvictSounds drops the samples of the least recently used sounds until the
++// cache fits. A channel that is still playing an evicted sound keeps its own
++// reference to the data, so nothing is cut off. Caller holds the lock.
++func cvfEvictSounds() {
++	for cvfLazy.bytes > cvfLazy.limit && len(cvfLazy.loaded) > 1 {
++		oldest := 0
++		for i, s := range cvfLazy.loaded {
++			if s.lazy.lastUse < cvfLazy.loaded[oldest].lazy.lastUse {
++				oldest = i
++			}
++		}
++		s := cvfLazy.loaded[oldest]
++		cvfLazy.bytes -= int64(len(s.wavData))
++		s.wavData = nil
++		s.lazy.state = 0
++		cvfLazy.loaded = append(cvfLazy.loaded[:oldest], cvfLazy.loaded[oldest+1:]...)
++	}
++}
+diff --git a/src/fightscreen.go b/src/fightscreen.go
+index 51867f3..2c25f8d 100644
+--- a/src/fightscreen.go
++++ b/src/fightscreen.go
+@@ -2894,7 +2894,7 @@ func (cs *ComboShake) update() {
+ 	var decay float32 = 1
+ 	if cs.decay != 0 && cs.time > 0 {
+ 		t := float32(cs.curTime) / float32(cs.time)
+-		decay = float32(math.Pow(float64(t), float64(cs.decay)))
++		decay = float32(cvfPow(float64(t), float64(cs.decay)))
+ 	}
+ 
+ 	elapsed := float32(cs.time - cs.curTime)
+@@ -2906,13 +2906,13 @@ func (cs *ComboShake) update() {
+ 	} else {
+ 		curAmp := cs.ampl * decay
+ 		phaseRad := Rad(cs.phase) + Rad(cs.freq)*elapsed
+-		val := curAmp * float32(math.Sin(float64(phaseRad)))
++		val := curAmp * float32(cvfSin(float64(phaseRad)))
+ 
+ 		currentAngleDeg := cs.dir + cs.diradd*elapsed
+ 		radAng := Rad(currentAngleDeg)
+ 
+-		x := val * float32(math.Cos(float64(radAng)))
+-		y := -val * float32(math.Sin(float64(radAng))) // Negated for counter‑clockwise
++		x := val * float32(cvfCos(float64(radAng)))
++		y := -val * float32(cvfSin(float64(radAng))) // Negated for counter‑clockwise
+ 
+ 		cs.curOffset = [2]float32{x, y}
+ 	}
+@@ -2922,9 +2922,9 @@ func (cs *ComboShake) update() {
+ 		cs.curScale = 1
+ 	} else {
+ 		phaseRad := Rad(cs.phase) + Rad(cs.freq)*elapsed
+-		sinVal := float32(math.Sin(float64(phaseRad)))
+-		exponent := float32(math.Log(float64(cs.scale))) * decay * sinVal
+-		cs.curScale = float32(math.Exp(float64(exponent)))
++		sinVal := float32(cvfSin(float64(phaseRad)))
++		exponent := float32(cvfLog(float64(cs.scale))) * decay * sinVal
++		cs.curScale = float32(cvfExp(float64(exponent)))
+ 	}
+ 
+ 	// Step timer only after computing offset and scale
+@@ -4937,6 +4937,12 @@ func loadFightScreen(def string) (*FightScreen, error) {
+ 				}
+ 				if is.LoadFile("fightfx.sff", []string{def, sys.motif.Def, "", "data/"}, "",
+ 					func(filename string) error {
++						if isVita && fs.sff != nil && fs.sff.filename == filename {
++							// Same file as the lifebar SFF (CvF uses fightfx.sff for both):
++							// share it instead of decoding a second 65 MB copy.
++							*ffx.sff = *fs.sff
++							return nil
++						}
+ 						s, err := loadSff(filename, SffTypeOther, true, false)
+ 						if err != nil {
+ 							return err
+diff --git a/src/font_gl33.go b/src/font_gl33.go
+index fdec276..0b7f3ba 100644
+--- a/src/font_gl33.go
++++ b/src/font_gl33.go
+@@ -1,4 +1,4 @@
+-//go:build !android && !ios
++//go:build !android && !ios && !vita
+ 
+ package main
+ 
+diff --git a/src/font_gles32.go b/src/font_gles32.go
+index fa6d8f3..a1126ca 100644
+--- a/src/font_gles32.go
++++ b/src/font_gles32.go
+@@ -1,4 +1,4 @@
+-//go:build android
++//go:build android || vita
+ 
+ package main
+ 
+diff --git a/src/font_vk.go b/src/font_vk.go
+index cb4c517..0d14b77 100644
+--- a/src/font_vk.go
++++ b/src/font_vk.go
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+diff --git a/src/image.go b/src/image.go
+index ee44670..f66c4b7 100644
+--- a/src/image.go
++++ b/src/image.go
+@@ -215,7 +215,7 @@ func (pf *PalFX) sinAdd(color *[3]int32) {
+ 		if pf.cycletime[0] == 2 {
+ 			st += math.Pi / 2
+ 		}
+-		sin := math.Sin(st / float64(pf.cycletime[0]))
++		sin := cvfSin(st / float64(pf.cycletime[0]))
+ 		for i := range *color {
+ 			(*color)[i] += int32(sin * float64(pf.sinadd[i]))
+ 		}
+@@ -228,7 +228,7 @@ func (pf *PalFX) sinMul(color *[3]int32) {
+ 		if pf.cycletime[1] == 2 {
+ 			st += math.Pi / 2
+ 		}
+-		sin := math.Sin(st / float64(pf.cycletime[1]))
++		sin := cvfSin(st / float64(pf.cycletime[1]))
+ 		for i := range *color {
+ 			(*color)[i] += int32(sin * float64(pf.sinmul[i]))
+ 		}
+@@ -241,7 +241,7 @@ func (pf *PalFX) sinColor(color *float32) {
+ 		if pf.cycletime[2] == 2 {
+ 			st += math.Pi / 2.0
+ 		}
+-		sin := math.Sin(st / float64(pf.cycletime[2]))
++		sin := cvfSin(st / float64(pf.cycletime[2]))
+ 
+ 		(*color) += float32(sin * (float64(pf.sincolor) / 256.0))
+ 
+@@ -254,7 +254,7 @@ func (pf *PalFX) sinHueshift(color *float32) {
+ 		if pf.cycletime[3] == 2 {
+ 			st += math.Pi / 2.0
+ 		}
+-		sin := math.Sin(st / float64(pf.cycletime[3]))
++		sin := cvfSin(st / float64(pf.cycletime[3]))
+ 
+ 		(*color) += float32(sin * (float64(pf.sinhue) / 512.0))
+ 
+@@ -856,9 +856,9 @@ func (s *Sprite) shareCopy(src *Sprite) {
+ 
+ 	// We must defer copying the texture during the main thread
+ 	// Otherwise we can end up copying a nil texture over the good one or other race condition bugs
+-	sys.mainThreadTask <- func() {
++	runGfxTask(func() {
+ 		s.Tex = src.Tex
+-	}
++	})
+ 
+ 	//s.paltemp = src.paltemp
+ 	//s.PalTex = src.PalTex
+@@ -912,7 +912,7 @@ func (s *Sprite) SetPxl(px []byte) {
+ 	if int64(len(px)) != int64(s.Size[0])*int64(s.Size[1]) {
+ 		return
+ 	}
+-	sys.mainThreadTask <- func() {
++	runGfxTask(func() {
+ 
+ 		if s.textureAtlas != nil && int32(s.Size[0]) < s.textureAtlas.textureSize/2 && int32(s.Size[1]) < s.textureAtlas.textureSize/2 {
+ 			// Pack into texture atlas
+@@ -935,7 +935,7 @@ func (s *Sprite) SetPxl(px []byte) {
+ 			}
+ 			s.Tex.SetData(px)
+ 		}
+-	}
++	})
+ }
+ 
+ func (s *Sprite) SetRaw(data []byte, sprWidth int32, sprHeight int32, sprDepth int32) {
+@@ -958,7 +958,7 @@ func (s *Sprite) SetRaw(data []byte, sprWidth int32, sprHeight int32, sprDepth i
+ 			data[i+2] = uint8((uint32(data[i+2]) * 0x101 * uint32(a) / 0xff) >> 8)
+ 		}
+ 	}
+-	sys.mainThreadTask <- func() {
++	runGfxTask(func() {
+ 		if s.textureAtlas != nil && int32(sprWidth) < s.textureAtlas.textureSize/2 && int32(sprHeight) < s.textureAtlas.textureSize/2 {
+ 			// Pack into texture atlas
+ 			var data32 []byte
+@@ -992,7 +992,7 @@ func (s *Sprite) SetRaw(data []byte, sprWidth int32, sprHeight int32, sprDepth i
+ 			s.Tex = tex
+ 			s.Tex.SetData(data)
+ 		}
+-	}
++	})
+ 
+ }
+ 
+@@ -1739,6 +1739,9 @@ func loadingCanceled() bool {
+ 
+ // Loads the full SFF file
+ func loadSff(filename string, sffType SffType, isMainThread bool, isActPal bool) (*Sff, error) {
++	if isVita {
++		defer vitaMem("after sff " + filename)
++	}
+ 	if loadingCanceled() {
+ 		return nil, ErrLoadingCanceled
+ 	}
+@@ -2453,3 +2456,14 @@ func saveScreenshot(data []uint8, width, height int, filename string) {
+ 	}
+ 	file.Close()
+ }
++
++// runGfxTask queues f for the main thread. On the Vita every goroutine shares
++// one OS thread, so it runs right away instead: queueing would keep each
++// decoded sprite's pixels alive until the next frame (70+ MB for fightfx.sff).
++func runGfxTask(f func()) {
++	if isVita {
++		f()
++		return
++	}
++	sys.mainThreadTask <- f
++}
+diff --git a/src/iniutils.go b/src/iniutils.go
+index e791f5d..eb21b18 100644
+--- a/src/iniutils.go
++++ b/src/iniutils.go
+@@ -383,6 +383,9 @@ func initMaps(v reflect.Value) {
+ 			if fieldType.PkgPath != "" {
+ 				continue
+ 			}
++			if isVita && vitaTraceOn {
++				vitaTrace("initMaps " + t.Name() + "." + fieldType.Name + " kind " + strconv.Itoa(int(fieldVal.Kind())))
++			}
+ 			initMaps(fieldVal)
+ 		}
+ 	case reflect.Slice, reflect.Array:
+@@ -392,7 +395,13 @@ func initMaps(v reflect.Value) {
+ 	case reflect.Map:
+ 		// If map is nil, we "make" it
+ 		if v.IsNil() && v.CanSet() {
++			if isVita && vitaTraceOn {
++				vitaTrace("  MakeMap")
++			}
+ 			v.Set(reflect.MakeMap(v.Type()))
++			if isVita && vitaTraceOn {
++				vitaTrace("  MakeMap ok")
++			}
+ 		}
+ 
+ 		// Then we also want to recurse into each key/value pair
+@@ -1820,7 +1829,13 @@ func SetValue(structPtr interface{}, query string, val interface{}) error {
+ 		}
+ 		return ""
+ 	}
++	if isVita && vitaTraceOn {
++		vitaTrace("  SV parsed")
++	}
+ 	baseDef := extractDef(structPtr)
++	if isVita && vitaTraceOn {
++		vitaTrace("  SV def " + baseDef)
++	}
+ 
+ 	return assignField(structPtr, parts, val, baseDef)
+ }
+@@ -1828,6 +1843,9 @@ func SetValue(structPtr interface{}, query string, val interface{}) error {
+ // SetValueUpdate sets a value and updates the INI file accordingly
+ func SetValueUpdate(obj interface{}, iniFile *ini.File, query string, value interface{}) error {
+ 	err := SetValue(obj, query, value)
++	if isVita && vitaTraceOn {
++		vitaTrace("  SetValue done")
++	}
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -1849,7 +1867,13 @@ func SetValueUpdate(obj interface{}, iniFile *ini.File, query string, value inte
+ 		valStr = fmt.Sprintf("%v", v)
+ 	}
+ 
++	if isVita && vitaTraceOn {
++		vitaTrace("  valStr " + valStr)
++	}
+ 	err = updateINIFile(obj, iniFile, query, valStr)
++	if isVita && vitaTraceOn {
++		vitaTrace("  updateINI done")
++	}
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/src/main.go b/src/main.go
+index 2609c76..e045414 100644
+--- a/src/main.go
++++ b/src/main.go
+@@ -60,6 +60,7 @@ func main() {
+ }
+ 
+ func realMain() {
++	vitaTrace("main: realMain")
+ 	// Crash path
+ 	defer func() {
+ 		if r := recover(); r != nil {
+@@ -67,6 +68,8 @@ func realMain() {
+ 		}
+ 	}()
+ 
++	vitaPlatformInit()
++
+ 	if runtime.GOOS == "android" {
+ 		Logcat("Inside realMain...")
+ 		runtime.LockOSThread()
+@@ -154,7 +157,9 @@ func realMain() {
+ 	os.MkdirAll(filepath.Join(sys.baseDir, "save/replays"), permission)
+ 	os.MkdirAll(filepath.Join(sys.baseDir, "save/logs"), permission)
+ 
++	vitaTrace("main: dirs made")
+ 	processCommandLine()
++	vitaTrace("main: cmdline done")
+ 
+ 	// Ensure cmdFlags exists even when there are no CLI args,
+ 	// since we assign defaults below.
+@@ -182,8 +187,9 @@ func realMain() {
+ 		Logcat("LOG: Subsystems initialized!")
+ 	}
+ 
+-	// Init the SDL LUT's
++	vitaTrace("main: stats done")
+ 	initLUTs()
++	vitaTrace("main: LUTs done")
+ 
+ 	// Config file path
+ 	configPath := "save/config.ini"
+@@ -202,6 +208,7 @@ func realMain() {
+ 	if runtime.GOOS == "ios" {
+ 		cfg.Video.RenderMode = "Vulkan 1.3"
+ 	}
++	vitaTrace("main: config loaded")
+ 	sys.cfg = *cfg
+ 	// Logcat("LOG: Config Loaded. System Script: " + sys.cfg.Config.System)
+ 
+@@ -219,10 +226,11 @@ func realMain() {
+ 
+ 	// Initialize game and create window
+ 	// This is where the window is born!
++	vitaTrace("main: sys.init")
+ 	sys.luaLState = sys.init(int32(sys.gameWidth), int32(sys.gameHeight))
+ 	//defer sys.shutdown()
+ 
+-	// Begin processing game using its lua scripts
++	vitaTrace("main: running " + sys.cfg.Config.System)
+ 	if err := sys.luaLState.DoFile(sys.cfg.Config.System); err != nil {
+ 		if strings.Contains(err.Error(), "<game end>") {
+ 			handleExit()
+diff --git a/src/rect.go b/src/rect.go
+index d63aa49..25c8b51 100644
+--- a/src/rect.go
++++ b/src/rect.go
+@@ -280,7 +280,7 @@ func (r *Rect) updateAlpha() {
+ 		return
+ 	}
+ 	r.pulsePhase += r.pulsePhaseStep
+-	v := r.pulseMid + r.pulseAmp*float32(math.Sin(float64(r.pulsePhase)))
++	v := r.pulseMid + r.pulseAmp*float32(cvfSin(float64(r.pulsePhase)))
+ 	src := Clamp(int32(math.Round(float64(v))), 0, 255)
+ 	r.alpha = packAlpha(src, 255-src)
+ }
+diff --git a/src/render.go b/src/render.go
+index 6ccd7bc..757cc66 100644
+--- a/src/render.go
++++ b/src/render.go
+@@ -1242,6 +1242,23 @@ func (ta *TextureAtlas) bytesPerPixel() int32 {
+ 
+ func (ta *TextureAtlas) clearTexture(tex Texture, width, height int32) {
+ 	bpp := ta.bytesPerPixel()
++	if isVita {
++		// Clear in bands with one small buffer instead of a full-size slice
++		// (a 2048x2048 RGBA atlas would need 16 MB of Go heap at once).
++		band := int32(32)
++		if band > height {
++			band = height
++		}
++		clearData := make([]byte, int(width*band*bpp))
++		for y := int32(0); y < height; y += band {
++			h := band
++			if y+h > height {
++				h = height - y
++			}
++			tex.SetSubData2(clearData[:int(width*h*bpp)], 0, y, width, h, width*bpp)
++		}
++		return
++	}
+ 	clearData := make([]byte, int(width*height*bpp))
+ 	tex.SetSubData2(clearData, 0, 0, width, height, width*bpp)
+ }
+@@ -1295,7 +1312,10 @@ func CreateTextureAtlas(width, height int32, depth int32, filter bool) *TextureA
+ }
+ 
+ func (ta *TextureAtlas) AddImage(width, height, stride int32, data []byte) ([4]float32, bool) {
+-	const maxWidth = 4096
++	maxWidth := int32(4096)
++	if isVita {
++		maxWidth = 2048
++	}
+ 
+ 	// Initial check for images larger than the atlas's current size
+ 	if ta.resize {
+diff --git a/src/render_gl33.go b/src/render_gl33.go
+index 1a2540b..3b8944d 100644
+--- a/src/render_gl33.go
++++ b/src/render_gl33.go
+@@ -1,4 +1,4 @@
+-//go:build !android && !ios
++//go:build !android && !ios && !vita
+ 
+ package main
+ 
+diff --git a/src/render_gles32.go b/src/render_gles32.go
+index 891acab..7821134 100644
+--- a/src/render_gles32.go
++++ b/src/render_gles32.go
+@@ -2,7 +2,7 @@
+ // for GLES 3.2 which is the main version that runs on modern
+ // Android (ARM). Work adapted from Leon Kasovan
+ 
+-//go:build android
++//go:build android || vita
+ 
+ package main
+ 
+@@ -46,6 +46,13 @@ func (r *Renderer_GLES32) newShaderProgram(vert, frag, geo, name string, crashWh
+ 
+ 	Logcat("GLES: [LOCKED] Starting: " + name)
+ 	var vertObj, fragObj, prog uint32
++	if isVita {
++		// vitaGL's GLSL translator wants GLSL 1.x style sources.
++		if v, f, ok := vitaShaderSources(name); ok {
++			vert, frag = v, f
++		}
++		geo = ""
++	}
+ 
+ 	vertObj, err = r.compileShader(gl.VERTEX_SHADER, vert)
+ 	if err != nil {
+@@ -126,7 +133,7 @@ func (r *Renderer_GLES32) compileShader(shaderType uint32, src string) (uint32,
+ 	// GLES 3.0+ drivers REQUIRE the version to be the very first line.
+ 	// If your file doesn't have it, we add it here.
+ 	fullSrc := src
+-	if !strings.HasPrefix(strings.TrimSpace(src), "#version") {
++	if !isVita && !strings.HasPrefix(strings.TrimSpace(src), "#version") {
+ 		// Anchor to 320 es for best feature compatibility
+ 		header := "#version 320 es\n"
+ 		fullSrc = header + src
+@@ -436,8 +443,20 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+ 	if stride != width*bytesPerPixel {
+ 		rowLength = stride / bytesPerPixel
+ 	}
++	if isVita && rowLength != 0 && data != nil {
++		// GLES2 (vitaGL) has no UNPACK_ROW_LENGTH: repack rows tightly.
++		rb := int(width * bytesPerPixel)
++		packed := make([]byte, rb*int(height))
++		for row := 0; row < int(height); row++ {
++			copy(packed[row*rb:(row+1)*rb], data[row*int(stride):row*int(stride)+rb])
++		}
++		data = packed
++		rowLength = 0
++	}
+ 
+-	gl.PixelStorei(gl.UNPACK_ROW_LENGTH, rowLength)
++	if !isVita {
++		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, rowLength)
++	}
+ 
+ 	ptr := unsafe.Pointer(nil)
+ 	if data != nil {
+@@ -454,7 +473,7 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+ 		Logcat(fmt.Sprintf("GL ERROR in SetSubData: %v | w:%d h:%d s:%d", err, width, height, stride))
+ 	}
+ 
+-	if rowLength != 0 {
++	if rowLength != 0 && !isVita {
+ 		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
+ 	}
+ 
+@@ -556,6 +575,9 @@ func (t *Texture_GLES32) MapUploadType(i int32) uint32 {
+ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
+ 	switch i {
+ 	case 8:
++		if isVita {
++			return gl.LUMINANCE
++		}
+ 		return gl.RED
+ 	case 24:
+ 		return gl.RGB
+@@ -573,10 +595,19 @@ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
+ func (t *Texture_GLES32) MapSizedInternalFormat(i int32) uint32 {
+ 	switch i {
+ 	case 8:
++		if isVita {
++			return gl.LUMINANCE
++		}
+ 		return gl.R8
+ 	case 24:
++		if isVita {
++			return gl.RGB
++		}
+ 		return gl.RGB8
+ 	case 32:
++		if isVita {
++			return gl.RGBA
++		}
+ 		return gl.RGBA8
+ 	case 96:
+ 		return gl.RGB32F
+@@ -790,8 +821,8 @@ func (r *Renderer_GLES32) Init() {
+ 	// Data buffers for rendering
+ 	postVertData := f32.Bytes(binary.LittleEndian, -1, -1, 1, -1, -1, 1, 1, 1)
+ 
+-	r.enableModel = sys.cfg.Video.EnableModel
+-	r.enableShadow = sys.cfg.Video.EnableModelShadow
++	r.enableModel = sys.cfg.Video.EnableModel && !isVita
++	r.enableShadow = sys.cfg.Video.EnableModelShadow && !isVita
+ 
+ 	// Generate VAO's
+ 	gl.GenVertexArrays(1, &r.spriteVAO)
+@@ -950,10 +981,14 @@ func (r *Renderer_GLES32) Init() {
+ 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+ 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+ 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
++		ppFormat := int32(gl.RGBA8_SNORM)
++		if isVita {
++			ppFormat = gl.RGBA
++		}
+ 		gl.TexImage2D(
+ 			gl.TEXTURE_2D,
+ 			0,
+-			gl.RGBA8_SNORM,
++			ppFormat,
+ 			sys.scrrect[2],
+ 			sys.scrrect[3],
+ 			0,
+@@ -1003,7 +1038,12 @@ func (r *Renderer_GLES32) Init() {
+ 		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
+ 	} else {
+ 		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
+-		gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, r.rbo_depth)
++		if !isVita { // 2D only on the Vita: no depth buffer needed
++			gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, r.rbo_depth)
++		}
++	}
++	if isVita {
++		Logcat("vita: framebuffer status 0x" + fmtHex(uint32(gl.CheckFramebufferStatus(gl.FRAMEBUFFER))))
+ 	}
+ 
+ 	// create our two FBOs for our post-processing needs
+@@ -2223,6 +2263,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+ 
+ // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
+ func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
++	if isVita {
++		// No gl_VertexID in vitaGL's shaders: send the quad as vertex data.
++		r.SetVertexData(v[:]...)
++		return
++	}
+ 	if loc, ok := r.currentProgram.uniforms["quad"]; ok && loc >= 0 {
+ 		gl.Uniform4fv(loc, 4, &v[0])
+ 	}
+diff --git a/src/render_vk.go b/src/render_vk.go
+index 34cef7d..5c8063d 100644
+--- a/src/render_vk.go
++++ b/src/render_vk.go
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+diff --git a/src/render_vk_swap.go b/src/render_vk_swap.go
+index 2888520..59208e5 100644
+--- a/src/render_vk_swap.go
++++ b/src/render_vk_swap.go
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+diff --git a/src/script.go b/src/script.go
+index 5443f25..fdd510d 100644
+--- a/src/script.go
++++ b/src/script.go
+@@ -891,6 +891,7 @@ func luaKeyToString(k lua.LValue) string {
+ func systemScriptInit(l *lua.LState) {
+ 	triggerRedirection(l)
+ 	triggerFunctions(l)
++	cvfOnlineScriptInit(l)
+ 	luaRegister(l, "addChar", func(l *lua.LState) int {
+ 		/*Add a character definition to the select screen.
+ 		@function addChar
+diff --git a/src/sdl_other.go b/src/sdl_other.go
+index 399921b..4403e16 100644
+--- a/src/sdl_other.go
++++ b/src/sdl_other.go
+@@ -6,6 +6,9 @@ import "C"
+ 
+ // Gets the actual device pixel size
+ func (w *Window) GetDrawablePixelSize() (int32, int32) {
++	if isVita {
++		return vitaScreenW, vitaScreenH
++	}
+ 	winWidth, winHeight := w.Window.GetSize()
+ 	return winWidth, winHeight
+ }
+diff --git a/src/sound.go b/src/sound.go
+index 6cdd693..f9b599b 100644
+--- a/src/sound.go
++++ b/src/sound.go
+@@ -711,6 +711,10 @@ type Sound struct {
+ 	wavData []byte
+ 	format  beep.Format
+ 	length  int
++	// CvF Online: sounds from character/common .snd files are read from disk
++	// the first time they are played instead of all at load time (CvF's
++	// shared sound bank alone is 687 MB). lazy == nil for eagerly loaded sounds.
++	lazy *lazySound
+ }
+ 
+ func readSound(f io.ReadSeekCloser, size uint32) (*Sound, error) {
+@@ -759,10 +763,14 @@ func readSound(f io.ReadSeekCloser, size uint32) (*Sound, error) {
+ 	if recovered != nil {
+ 		return nil, nil // If sound wasn't able to be fully played, we disable it to avoid engine freezing
+ 	}
+-	return &Sound{wavData, wavfmt, s.Len()}, nil
++	return &Sound{wavData: wavData, format: wavfmt, length: s.Len()}, nil
+ }
+ 
+ func (s *Sound) GetStreamer() beep.StreamSeeker {
++	if !s.ensureLoaded() {
++		return nil
++	}
++	s.lazyTouch()
+ 	streamer, _, _ := wav.Decode(bytes.NewReader(s.wavData))
+ 	return streamer
+ }
+@@ -818,6 +826,9 @@ func LoadSnd(filename string) (*Snd, error) {
+ // The "keepItem" function allows to filter out unwanted waves.
+ // If max > 0, the function returns immediately when a matching entry is found. It also gives up after "max" non-matching entries.
+ func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32) (*Snd, error) {
++	if isVita {
++		defer vitaMem("after snd " + filename)
++	}
+ 	s := newSnd()
+ 	f, err := OpenFile(filename)
+ 	if err != nil {
+@@ -872,7 +883,14 @@ func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32)
+ 			if exists {
+ 				LogMessage("WARNING: Duplicate sound key in %v: %v,%v (index %v ignored)", filename, num[0], num[1], i)
+ 			} else {
+-				tmp, err := readSound(f, subFileLength)
++				var tmp *Sound
++				var err error
++				if max == 0 && cvfLazySoundsEnabled() && subFileLength >= 128 {
++					// Read the format header now; the samples on first play.
++					tmp, err = newLazySound(f, filename, int64(subHeaderOffset)+16, subFileLength)
++				} else {
++					tmp, err = readSound(f, subFileLength)
++				}
+ 				if err != nil {
+ 					LogMessage("Sound %v,%v in %v can't be read: %v", num[0], num[1], filename, err)
+ 					if max > 0 {
+@@ -896,7 +914,11 @@ func LoadSndFiltered(filename string, keepItem func([2]int32) bool, max uint32)
+ }
+ 
+ func (s *Snd) Get(gn [2]int32) *Sound {
+-	return s.table[gn]
++	snd := s.table[gn]
++	if snd != nil && snd.lazy != nil && !snd.ensureLoaded() {
++		return nil // corrupted: behave as before (sound disabled)
++	}
++	return snd
+ }
+ 
+ func (s *Snd) play(gn [2]int32, volumescale int32, pan float32, loopstart, loopend, startposition int, keepOnMatchEnd ...bool) bool {
+diff --git a/src/sound_xm.go b/src/sound_xm.go
+index 123d9e3..6082e7a 100644
+--- a/src/sound_xm.go
++++ b/src/sound_xm.go
+@@ -141,6 +141,9 @@ func newXMStreamer(f *os.File) (*xmStreamer, error) {
+ 
+ func xmpDecode(f io.ReadSeekCloser) (beep.StreamSeekCloser, beep.Format, error) {
+ 	file, ok := f.(*os.File)
++	if vb, isBuf := f.(*vitaBufFile); isBuf {
++		file, ok = vb.f, true
++	}
+ 	if !ok {
+ 		return nil, beep.Format{}, fmt.Errorf("xmpDecode: expected *os.File, got %T", f)
+ 	}
+diff --git a/src/stage.go b/src/stage.go
+index 9b29416..4bd85c5 100644
+--- a/src/stage.go
++++ b/src/stage.go
+@@ -57,7 +57,7 @@ func (bga *bgAction) action(updateTime bool) {
+ 	for i := 0; i < 2; i++ {
+ 		bga.pos[i] += bga.vel[i]
+ 		if bga.sinlooptime[i] > 0 {
+-			bga.sinoffset[i] = bga.radius[i] * float32(math.Sin(
++			bga.sinoffset[i] = bga.radius[i] * float32(cvfSin(
+ 				2*math.Pi*float64(bga.sintime[i])/float64(bga.sinlooptime[i])))
+ 			if updateTime {
+ 				bga.sintime[i]++
+@@ -1523,7 +1523,7 @@ func loadStage(def string, maindef bool) (*Stage, error) {
+ 				}
+ 			}
+ 		}
+-		posMul := float32(math.Tan(float64(s.stageCamera.fov*math.Pi/180)/2)) * -s.model.offset[2] / (float32(s.stageCamera.localcoord[1]) / 2)
++		posMul := float32(cvfTan(float64(s.stageCamera.fov*math.Pi/180)/2)) * -s.model.offset[2] / (float32(s.stageCamera.localcoord[1]) / 2)
+ 		s.stageCamera.zoffset = int32(float32(s.stageCamera.localcoord[1])/2 - s.model.offset[1]/posMul - s.stageCamera.yshift*float32(sys.scrrect[3]/2)/float32(sys.gameHeight)*float32(s.stageCamera.localcoord[1])/sys.heightScale)
+ 		if str, ok := sec["scale"]; ok {
+ 			for k, v := range SplitAndTrim(str, ",") {
+diff --git a/src/system.go b/src/system.go
+index 2698d35..b28d5b8 100644
+--- a/src/system.go
++++ b/src/system.go
+@@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
+ 	_, forceWindowed := s.cmdFlags["-windowed"]
+ 	s.window.fullscreen = s.cfg.Video.Fullscreen && !forceWindowed
+ 
+-	if strings.HasPrefix(renderName, "OpenGL") {
++	if strings.HasPrefix(renderName, "OpenGL") && !isVita {
+ 		if ctx, err := s.window.GLCreateContext(); err != nil {
+ 			panic(fmt.Sprintf("Could not initialize context :( Reason? %s", err))
+ 		} else {
+@@ -990,7 +990,14 @@ func (s *System) renderFrame() {
+ 	}
+ 
+ 	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
+-	dx, dy, dscl := s.zoom.computeCamera(x, y, scl)
++	// The zoomed camera is normally computed by action() as part of the simulated frame,
++	// so that ScreenPos stays deterministic under rollback. Only compute it here as a fallback.
++	var dx, dy, dscl float32
++	if s.zoom.resultValid {
++		dx, dy, dscl = s.zoom.resultPos[0], s.zoom.resultPos[1], s.zoom.resultScale
++	} else {
++		dx, dy, dscl = s.zoom.computeCamera(x, y, scl)
++	}
+ 	s.draw(dx, dy, dscl)
+ 
+ 	// Lua
+@@ -2945,6 +2952,11 @@ func (s *System) action() {
+ 		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
+ 	}
+ 	s.cam.Update(scl, x, y)
++	// Rollback determinism: compute the zoom-adjusted camera inside the simulated frame.
++	// ScreenPos triggers read zoom.resultPos, which used to be refreshed only by renderFrame(),
++	// so frames re-simulated during a rollback saw a stale camera and desynced.
++	s.zoom.computeCamera(s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale())
++	s.zoom.resultValid = true
+ 	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
+ 	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
+ 	if s.xmin > s.xmax {
+@@ -2998,9 +3010,9 @@ func (s *System) action() {
+ 				start := s.ffbparams[i].start
+ 				t := s.ffbparams[i].timer
+ 				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
+-				d1 = float32(math.Pow(float64(d1), float64(t)))
+-				d2 = float32(math.Pow(float64(d2), float64(t*t)))
+-				d3 = float32(math.Pow(float64(d2), float64(t*t*t)))
++				d1 = float32(cvfPow(float64(d1), float64(t)))
++				d2 = float32(cvfPow(float64(d2), float64(t*t)))
++				d3 = float32(cvfPow(float64(d2), float64(t*t*t)))
+ 				ampl := (start + d1 + d2 + d3) / 255.0
+ 				intensity := uint16(ampl * 0xFFFF)
+ 				switch s.ffbparams[i].waveform {
+@@ -3018,6 +3030,13 @@ func (s *System) action() {
+ 		}
+ 	}
+ 
++	// Projectile animations are gameplay state; step them here instead of in cueDraw()
++	for i := range s.projs {
++		for _, p := range s.projs[i] {
++			p.animStep()
++		}
++	}
++
+ 	return
+ }
+ 
+@@ -5050,6 +5069,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+ 		return nil
+ 	}
+ 	sc := s.charlist[ref]
++	if isVita && ref%8 == 0 {
++		vitaMem("preload " + sc.def)
++	}
+ 	localAnims := NewPreloadedAnims()
+ 	listSpr := make(map[[2]uint16]bool)
+ 	for k := range s.charSpritePreload {
+@@ -6820,13 +6842,13 @@ func (es *EnvShake) update() {
+ 	// Mul is applied once per cycle
+ 	if es.mul != 0 && es.mul != 1 {
+ 		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
+-		factor *= math.Pow(float64(es.mul), cycles)
++		factor *= cvfPow(float64(es.mul), cycles)
+ 	}
+ 
+ 	// Apply decay
+ 	t := float64(es.curTime) / float64(es.time)
+ 	if es.decay != 0 && t > 0 {
+-		factor *= math.Pow(t, float64(es.decay))
++		factor *= cvfPow(t, float64(es.decay))
+ 	}
+ 
+ 	ampl := float64(es.ampl) * factor
+@@ -6835,9 +6857,9 @@ func (es *EnvShake) update() {
+ 	} else {
+ 		phaseRad := float64(currentPhase) * math.Pi / 180.0
+ 		dirRad := float64(currentDir) * math.Pi / 180.0
+-		offset := ampl * math.Sin(phaseRad)
+-		x := float32(offset * math.Sin(-dirRad))
+-		y := float32(offset * math.Cos(-dirRad))
++		offset := ampl * cvfSin(phaseRad)
++		x := float32(offset * cvfSin(-dirRad))
++		y := float32(offset * cvfCos(-dirRad))
+ 		es.curOffset = [2]float32{x, y}
+ 	}
+ 
+@@ -6862,6 +6884,7 @@ type ZoomEffect struct {
+ 	stageBound  bool
+ 	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
+ 	resultScale float32
++	resultValid bool // True once the current simulated frame has computed resultPos/resultScale
+ }
+ 
+ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6900,7 @@ func (z *ZoomEffect) reset() {
+ 	z.stageBound = true
+ 	z.resultPos = [2]float32{0, 0}
+ 	z.resultScale = 1
++	z.resultValid = false
+ }
+ 
+ // Step the zoom variables
+diff --git a/src/system_sdl.go b/src/system_sdl.go
+index 8eea3d3..0057ed5 100644
+--- a/src/system_sdl.go
++++ b/src/system_sdl.go
+@@ -27,6 +27,18 @@ func (s *System) newWindow(w, h int) (*Window, error) {
+ 	var w2, h2 int32 = int32(w), int32(h)
+ 	var fullscreen bool
+ 
++	if isVita {
++		// PS Vita: no SDL window. vitaGL owns the 960x544 display; SDL only
++		// provides audio, events and controllers.
++		chk(sdl.Init(sdl.INIT_AUDIO | sdl.INIT_JOYSTICK | sdl.INIT_EVENTS | sdl.INIT_GAMECONTROLLER | sdl.INIT_TIMER))
++		vitaGLInit()
++		for i := range input.controllers {
++			input.controllerstate[i] = &ControllerState{Buttons: make(map[sdl.GameControllerButton]byte)}
++		}
++		return &Window{title: s.cfg.Config.WindowTitle, w: vitaScreenW, h: vitaScreenH,
++			fullscreen: true, focused: true}, nil
++	}
++
+ 	if runtime.GOOS == "android" {
+ 		// Get the proper flag for the window type we need to create
+ 		renderName := gfx.GetName()
+@@ -168,6 +180,10 @@ func (s *System) newWindow(w, h int) (*Window, error) {
+ }
+ 
+ func (w *Window) SwapBuffers() {
++	if isVita {
++		vitaGLSwap()
++		return
++	}
+ 	w.Window.GLSwap()
+ }
+ 
+@@ -204,6 +220,9 @@ func (w *Window) imageToSurface(img image.Image) (*sdl.Surface, error) {
+ }
+ 
+ func (w *Window) SetIcon(icon []image.Image) {
++	if isVita {
++		return
++	}
+ 	if surface, err := w.imageToSurface(icon[0]); err == nil {
+ 		w.Window.SetIcon(surface)
+ 	}
+@@ -214,6 +233,9 @@ func (w *Window) SetSwapInterval(interval int) {
+ }
+ 
+ func (w *Window) GetSize() (int, int) {
++	if isVita {
++		return vitaScreenW, vitaScreenH
++	}
+ 	w2, h2 := w.Window.GetSize()
+ 	return int(w2), int(h2)
+ }
+@@ -261,6 +283,9 @@ func (w *Window) GetClipboardString() string {
+ }
+ 
+ func (w *Window) toggleFullscreen() {
++	if isVita {
++		return
++	}
+ 	if w.fullscreen {
+ 		w.Window.SetFullscreen(0)
+ 		w.Window.SetBordered(!sys.cfg.Video.Borderless)
+diff --git a/src/util_desktop.go b/src/util_desktop.go
+index 1f1547c..f6938d1 100644
+--- a/src/util_desktop.go
++++ b/src/util_desktop.go
+@@ -1,4 +1,4 @@
+-//go:build !raw && !android && !ios
++//go:build !raw && !android && !ios && !vita
+ 
+ package main
+ 
+diff --git a/src/util_vita.go b/src/util_vita.go
+new file mode 100644
+index 0000000..f23269a
+--- /dev/null
++++ b/src/util_vita.go
+@@ -0,0 +1,76 @@
++//go:build vita
++
++package main
++
++import (
++	"fmt"
++	"io"
++	"os"
++	"unsafe"
++
++	findfont "github.com/flopp/go-findfont"
++	"github.com/sqweek/dialog"
++)
++
++// Log writer implementation
++func NewLogWriter() io.Writer {
++	return os.Stderr
++}
++
++// Message box implementation
++func ShowInfoDialog(message, title string) {
++	dialog.Message(message).Title(title).Info()
++}
++
++func ShowErrorDialog(message string) {
++	dialog.Message(message).Title("I.K.E.M.E.N Error").Error()
++}
++
++// Returns true if the user chose to retry
++func ShowRetryDialog(message string) bool {
++	return dialog.Message("%s", message).Title("I.K.E.M.E.N RetryLoadOnError").YesNo()
++}
++
++// TTF font loading
++func LoadFntTtf(f *Fnt, fontfile string, filename string, height int32) {
++	// Search in local directory
++	fileDir := SearchFile(filename, []string{fontfile, sys.motif.Def, "", "data/"}, "font/")
++	// Search in system directory
++	fp := fileDir
++	if fp = FileExist(fp); len(fp) == 0 {
++		var err error
++		fileDir, err = findfont.Find(fileDir)
++		if err != nil {
++			panic(fmt.Errorf("failed to find ttf font %v: %w", fileDir, err))
++		}
++	}
++	// Load ttf
++	if height == -1 {
++		height = int32(f.Size[1])
++	} else {
++		f.Size[1] = uint16(height)
++	}
++	ttf, err := gfxFont.LoadFont(fileDir, height, int(sys.gameWidth), int(sys.gameHeight))
++	if err != nil {
++		panic(fmt.Errorf("failed to load ttf font %v: %w", fileDir, err))
++	}
++	f.ttf = ttf.(Font)
++
++	// Create Ttf dummy palettes
++	f.palettes = make([][256]uint32, 1)
++	for i := 0; i < 256; i++ {
++		f.palettes[0][i] = 0
++	}
++}
++
++func selectRenderer(cfgVal string) (Renderer, FontRenderer) {
++	return &Renderer_GLES32{}, &FontRenderer_GLES32{}
++}
++
++func Logcat(s string) {
++	fmt.Println(s)
++}
++
++func eglGetProcAddress(name string) unsafe.Pointer {
++	return vitaGetProcAddress(name)
++}
+diff --git a/src/video_ffmpeg.go b/src/video_ffmpeg.go
+index 374a0a4..06bcb7f 100644
+--- a/src/video_ffmpeg.go
++++ b/src/video_ffmpeg.go
+@@ -1,3 +1,5 @@
++//go:build !vita
++
+ package main
+ 
+ import (
+diff --git a/src/video_stub_vita.go b/src/video_stub_vita.go
+new file mode 100644
+index 0000000..51e0ffb
+--- /dev/null
++++ b/src/video_stub_vita.go
+@@ -0,0 +1,23 @@
++//go:build vita
++
++package main
++
++import "errors"
++
++// Vita build: no FFmpeg. Background videos are skipped.
++type bgVideo struct {
++	texture Texture
++	visible bool
++	muted   bool
++}
++
++func (bgv *bgVideo) Open(filename string, volume int, sm BgVideoScaleMode, sf BgVideoScaleFilter, loop bool) error {
++	return errors.New("video not supported on this build")
++}
++func (bgv *bgVideo) Tick() error          { return nil }
++func (bgv *bgVideo) SetPlaying(on bool)   {}
++func (bgv *bgVideo) SetVisible(on bool)   {}
++func (bgv *bgVideo) Reset()               {}
++func (bgv *bgVideo) updateAudioVolume()   {}
++func (bgv *bgVideo) MixerCleared()        {}
++func (bgv *bgVideo) Close()               {}
+diff --git a/src/vita_platform.go b/src/vita_platform.go
+new file mode 100644
+index 0000000..abc7b89
+--- /dev/null
++++ b/src/vita_platform.go
+@@ -0,0 +1,228 @@
++//go:build vita
++
++package main
++
++// PS Vita platform glue: vitaGL display instead of an SDL window, game data
++// in ux0:data/CvF, CPU at 444 MHz.
++
++/*
++#include <stdlib.h>
++#include <psp2/power.h>
++#include <unistd.h>
++#include <string.h>
++#include <psp2/io/fcntl.h>
++
++// Engine log: ux0:data/cvftest.log (stdout/stderr also land here, see the
++// TinyGo Vita shim). Cleared at every start.
++void vlog(const char *s) {
++	SceUID fd = sceIoOpen("ux0:data/cvftest.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
++	if (fd < 0) return;
++	sceIoWrite(fd, s, strlen(s));
++	sceIoWrite(fd, "\n", 1);
++	sceIoClose(fd);
++}
++static void vita_crash_install(void);
++__attribute__((constructor)) static void vlog_start(void) {
++	sceIoRemove("ux0:data/cvftest.log");
++	vlog("CvF Online for PS Vita - engine log");
++	vita_crash_install();
++}
++
++// Crash reporter: if kubridge is installed, write registers and a backtrace
++// (link-time addresses) to the log on a data/prefetch abort. Weak import, so
++// the game still starts without kubridge.
++#include <stdio.h>
++#include <kubridge.h>
++#include <psp2/kernel/processmgr.h>
++extern char __exidx_start[];
++#define CVF_LINK_EXIDX 0x810000b4u
++static void crash_line(const char *fmt, unsigned a, unsigned b, unsigned c, unsigned d) {
++	char buf[96]; snprintf(buf, sizeof buf, fmt, a, b, c, d); vlog(buf);
++}
++static void crash_dump(unsigned type, unsigned *r, unsigned sp, unsigned lr, unsigned pc, unsigned far, unsigned fsr) {
++	unsigned base = (unsigned)__exidx_start - (CVF_LINK_EXIDX - 0x81000000u);
++	unsigned lim = base + 0x6a0000u;
++#define L(x) (((x) >= base && (x) < lim) ? (x) - base + 0x81000000u : (x))
++	vlog("=== CRASH ===");
++	crash_line("type %u pc %08x lr %08x far %08x", type, L(pc), L(lr), far);
++	crash_line("fsr %08x sp %08x base %08x", fsr, sp, base, 0);
++	for (int i = 0; i < 12; i += 4) crash_line("r%u-: %08x %08x %08x", i, L(r[i]), L(r[i+1]), L(r[i+2]));
++	crash_line("r3 %08x r7 %08x r11 %08x r12 %08x", L(r[3]), L(r[7]), L(r[11]), L(r[12]));
++	unsigned *s = (unsigned *)(sp & ~3u); unsigned found[32]; int n = 0;
++	for (int i = 0; i < 4096 && n < 32; i++) {
++		unsigned v = s[i];
++		if (v >= base + 0x14b000u && v < lim) found[n++] = v - base + 0x81000000u;
++	}
++	for (int i = 0; i < n; i += 4) crash_line("bt %08x %08x %08x %08x", found[i], i+1<n?found[i+1]:0, i+2<n?found[i+2]:0, i+3<n?found[i+3]:0);
++	vlog("=== END ===");
++	sceKernelExitProcess(0);
++}
++static void crash_new(KuKernelExceptionContext *c) { crash_dump(c->exceptionType, &c->r0, c->sp, c->lr, c->pc, c->FAR, c->FSR); }
++static void crash_old(KuKernelAbortContext *c) { crash_dump(c->abortType, &c->r0, c->sp, c->lr, c->pc, c->FAR, c->FSR); }
++// An unresolved weak import stub is "movw r12,#0; movt r12,#0; bx r12";
++// calling it jumps to address 0, so check before calling.
++static int stub_resolved(void *fn) {
++	unsigned *w = (unsigned *)((unsigned)fn & ~1u);
++	if ((w[0] & 0xFFF0F000u) != 0xE300C000u || (w[1] & 0xFFF0F000u) != 0xE340C000u) return 0;
++	unsigned lo = ((w[0] >> 4) & 0xF000u) | (w[0] & 0xFFFu);
++	unsigned hi = ((w[1] >> 4) & 0xF000u) | (w[1] & 0xFFFu);
++	return ((hi << 16) | lo) != 0;
++}
++static void vita_crash_install(void) {
++	KuKernelExceptionHandler old1; KuKernelAbortHandler old2;
++	if (!stub_resolved((void *)kuKernelRegisterExceptionHandler)) {
++		vlog("crash handler: kubridge not installed");
++		return;
++	}
++	int a = kuKernelRegisterExceptionHandler(KU_KERNEL_EXCEPTION_TYPE_DATA_ABORT, crash_new, &old1, NULL);
++	int b = kuKernelRegisterExceptionHandler(KU_KERNEL_EXCEPTION_TYPE_PREFETCH_ABORT, crash_new, &old1, NULL);
++	int u = kuKernelRegisterExceptionHandler(KU_KERNEL_EXCEPTION_TYPE_UNDEFINED_INSTRUCTION, crash_new, &old1, NULL);
++	if (a < 0) a = kuKernelRegisterAbortHandler(crash_old, &old2, NULL);
++	char buf[96]; snprintf(buf, sizeof buf, "crash handler: %08x %08x %08x", a, b, u); vlog(buf);
++}
++extern void _init(void);
++static unsigned crc_tab[256];
++static void vita_crc_log(const char *tag) {
++	if (!crc_tab[1]) for (unsigned i = 0; i < 256; i++) { unsigned c = i; for (int k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1; crc_tab[i] = c; }
++	unsigned base = (unsigned)__exidx_start - (CVF_LINK_EXIDX - 0x81000000u);
++	unsigned len = ((unsigned)_init & ~1u) - base;
++	const unsigned char *p = (const unsigned char *)base; unsigned c = 0xFFFFFFFFu;
++	for (unsigned i = 0; i < len; i++) c = crc_tab[(c ^ p[i]) & 0xFF] ^ (c >> 8);
++	char buf[96]; snprintf(buf, sizeof buf, "crc %s base %08x len %08x crc %08x", tag, base, len, ~c); vlog(buf);
++}
++int vglInitExtended(int legacy_pool_size, int width, int height, int ram_threshold, int msaa);
++void vglSwapBuffers(unsigned char has_commondialog);
++void *vglGetProcAddress(const char *name);
++// vitaGL lacks many GLES3 entry points; a NULL function pointer would crash
++// when called, so those become no-ops returning 0.
++static unsigned long long vita_gl_missing(void) { return 0; }
++static void *vita_gl_proc(const char *name) {
++	void *p = vglGetProcAddress(name);
++	return p ? p : (void *)vita_gl_missing;
++}
++
++static void vita_libc_chdir(const char *p) { chdir(p); }
++static void vita_clock(void) {
++	scePowerSetArmClockFrequency(444);
++	scePowerSetBusClockFrequency(222);
++	scePowerSetGpuClockFrequency(222);
++	scePowerSetGpuXbarClockFrequency(166);
++}
++*/
++import "C"
++
++import (
++	"os"
++	"runtime"
++	"unsafe"
++)
++
++const isVita = true
++
++const (
++	vitaScreenW = 960
++	vitaScreenH = 544
++	vitaDataDir = "ux0:data/CvF"
++)
++
++// vitaPlatformInit runs at the very start of realMain.
++func vitaPlatformInit() {
++	// C.vita_clock() // 444 MHz disabled while chasing the startup crash
++	vitaCRC("start")
++	cd := C.CString(vitaDataDir)
++	C.vita_libc_chdir(cd) // for C libraries (libxmp, SDL) that open files themselves
++	C.free(unsafe.Pointer(cd))
++	if err := os.Chdir(vitaDataDir); err != nil {
++		Logcat("vita: chdir " + vitaDataDir + " failed: " + err.Error())
++	}
++}
++
++var vitaGLStarted bool
++
++func vitaGLInit() {
++	if vitaGLStarted {
++		return
++	}
++	// 16 MB threshold keeps some main RAM free for the rest of the engine.
++	r := C.vglInitExtended(0, vitaScreenW, vitaScreenH, 16*1024*1024, 0)
++	Logcat("vita: vglInitExtended -> " + itoa(int(r)))
++	vitaGLStarted = true
++}
++
++func vitaGLSwap() {
++	C.vglSwapBuffers(0)
++}
++
++func vitaGetProcAddress(name string) unsafe.Pointer {
++	n := C.CString(name)
++	defer C.free(unsafe.Pointer(n))
++	return C.vita_gl_proc(n)
++}
++
++func itoa(i int) string {
++	neg := i < 0
++	if neg {
++		i = -i
++	}
++	b := []byte{}
++	for {
++		b = append([]byte{byte('0' + i%10)}, b...)
++		i /= 10
++		if i == 0 {
++			break
++		}
++	}
++	if neg {
++		b = append([]byte{'-'}, b...)
++	}
++	return string(b)
++}
++
++func fmtHex(v uint32) string {
++	const d = "0123456789abcdef"
++	b := make([]byte, 8)
++	for i := 7; i >= 0; i-- {
++		b[i] = d[v&15]
++		v >>= 4
++	}
++	return string(b)
++}
++
++func init() { vitaTrace("main: package init reached") }
++
++func vitaTrace(s string) {
++	cs := C.CString(s)
++	C.vlog(cs)
++	C.free(unsafe.Pointer(cs))
++}
++
++func vitaCRC(tag string) {
++	cs := C.CString(tag)
++	C.vita_crc_log(cs)
++	C.free(unsafe.Pointer(cs))
++}
++
++func vitaMem(tag string) {
++	// Collect at load checkpoints: TinyGo's heap otherwise fragments until a
++	// large allocation fails even though most of the heap is garbage.
++	runtime.GC()
++	var m runtime.MemStats
++	runtime.ReadMemStats(&m)
++	vitaTrace("mem " + tag + ": inuse " + itoa(int(m.HeapInuse>>20)) + " MB, sys " + itoa(int(m.HeapSys>>20)) + " MB, gc " + itoa(int(m.NumGC)))
++}
++
++var vitaMemGCFlag = -1
++
++// vitaMemGC: diagnostics only; create save/vita_memgc to force a GC before each memory report.
++func vitaMemGC() bool {
++	if vitaMemGCFlag < 0 {
++		vitaMemGCFlag = 0
++		if _, err := os.Stat("save/vita_memgc"); err == nil {
++			vitaMemGCFlag = 1
++		}
++	}
++	return vitaMemGCFlag == 1
++}
++
++// vitaTraceOn enables the detailed startup trace until the main config is normalized.
++var vitaTraceOn = true
+diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
+new file mode 100644
+index 0000000..8a26ba4
+--- /dev/null
++++ b/src/vita_platform_other.go
+@@ -0,0 +1,25 @@
++//go:build !vita
++
++package main
++
++import "unsafe"
++
++const isVita = false
++
++const (
++	vitaScreenW = 960
++	vitaScreenH = 544
++)
++
++func vitaPlatformInit()                             {}
++func vitaGLInit()                                   {}
++func vitaGLSwap()                                   {}
++func vitaGetProcAddress(name string) unsafe.Pointer { return nil }
++
++func vitaShaderSources(name string) (string, string, bool) { return "", "", false }
++func fmtHex(v uint32) string                                { return "" }
++func vitaTrace(string) {}
++func vitaCRC(string) {}
++func vitaMem(string) {}
++
++var vitaTraceOn = false
+diff --git a/src/vita_shaders.go b/src/vita_shaders.go
+new file mode 100644
+index 0000000..6cb3fa7
+--- /dev/null
++++ b/src/vita_shaders.go
+@@ -0,0 +1,154 @@
++//go:build vita
++
++package main
++
++// GLSL 1.x versions of the engine's shaders for vitaGL's GLSL->CG translator
++// (no #version 320 es, no gl_VertexID, attribute/varying, texture2D).
++
++func vitaShaderSources(name string) (vert, frag string, ok bool) {
++	switch name {
++	case "Main Shader":
++		return vitaSpriteVert, vitaSpriteFrag, true
++	case "Identity Postprocess":
++		return vitaIdentVert, vitaIdentFrag, true
++	case "font shader":
++		return vitaFontVert, vitaFontFrag, true
++	}
++	return "", "", false
++}
++
++const vitaSpriteVert = `
++uniform mat4 modelview;
++uniform mat4 projection;
++attribute vec2 position;
++attribute vec2 uv;
++varying vec2 texcoord;
++void main(void) {
++	texcoord = uv;
++	gl_Position = projection * (modelview * vec4(position, 0.0, 1.0));
++}
++`
++
++const vitaHSV = `
++vec3 ikemenRgbToHsv(vec3 c) {
++	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
++	vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
++	vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
++	float d = q.x - min(q.w, q.y);
++	float e = 1.0e-10;
++	return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
++}
++vec3 ikemenHsvToRgb(vec3 c) {
++	vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
++	vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
++	return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
++}
++vec3 ikemenHueShift(vec3 color, float dhue) {
++	vec3 hsv = ikemenRgbToHsv(color);
++	hsv.x = mod(hsv.x + dhue, 1.0);
++	return ikemenHsvToRgb(hsv);
++}
++`
++
++const vitaSpriteFrag = `
++uniform sampler2D tex;
++uniform sampler2D pal;
++uniform vec4 tint;
++uniform vec3 add;
++uniform vec3 mult;
++uniform float alpha;
++uniform float gray;
++uniform float hue;
++uniform int mask;
++uniform int isFlat;
++uniform int isRgba;
++uniform int isTrapez;
++uniform int neg;
++uniform vec4 spriteUV;
++uniform vec4 palUV;
++varying vec2 texcoord;
++` + vitaHSV + `
++void main(void) {
++	vec4 c;
++	vec3 neg_base = vec3(1.0);
++	vec3 final_add = add;
++	vec4 final_mul = vec4(mult, alpha);
++	if (isFlat != 0) {
++		c = tint;
++		neg_base *= c.a;
++		final_add *= c.a;
++		final_mul.rgb *= alpha;
++	} else {
++		vec2 atlasUV = clamp(texcoord, spriteUV.xy, spriteUV.zw - 0.0001);
++		c = texture2D(tex, atlasUV);
++		if (isRgba != 0) {
++			if (mask == -1) c.a = 1.0;
++			neg_base *= c.a;
++			final_add *= c.a;
++			final_mul.rgb *= alpha;
++		} else {
++			c = texture2D(pal, vec2(palUV.x + palUV.z * c.r * 0.9966, palUV.y));
++			if (mask == -1) c.a = 1.0;
++		}
++	}
++	if (hue != 0.0) c.rgb = ikemenHueShift(c.rgb, hue);
++	if (neg != 0) c.rgb = neg_base - c.rgb;
++	c.rgb = mix(vec3((c.r + c.g + c.b) / 3.0), c.rgb, 1.0 - gray);
++	c.rgb += final_add;
++	c *= final_mul;
++	if (isFlat == 0) c.rgb = mix(c.rgb, tint.rgb * c.a, tint.a);
++	gl_FragColor = c;
++}
++`
++
++const vitaIdentVert = `
++attribute vec2 VertCoord;
++varying vec2 texcoord;
++void main(void) {
++	gl_Position = vec4(VertCoord, 0.0, 1.0);
++	texcoord = (VertCoord + 1.0) / 2.0;
++}
++`
++
++const vitaIdentFrag = `
++uniform sampler2D Texture;
++varying vec2 texcoord;
++void main(void) {
++	gl_FragColor = texture2D(Texture, texcoord);
++}
++`
++
++const vitaFontVert = `
++uniform vec2 resolution;
++attribute vec2 vert;
++attribute vec2 vertTexCoord;
++varying vec2 fragTexCoord;
++void main(void) {
++	fragTexCoord = vertTexCoord;
++	vec2 res = max(resolution, vec2(1.0, 1.0));
++	vec2 clipSpace = (vert / res) * 2.0 - 1.0;
++	gl_Position = vec4(clipSpace * vec2(1.0, -1.0), 0.0, 1.0);
++}
++`
++
++const vitaFontFrag = `
++uniform vec4 textColor;
++uniform vec3 palAdd;
++uniform vec3 palMul;
++uniform float palGray;
++uniform float palHue;
++uniform int palNeg;
++uniform sampler2D tex;
++varying vec2 fragTexCoord;
++` + vitaHSV + `
++void main(void) {
++	vec4 texColor = texture2D(tex, fragTexCoord);
++	vec4 c = min(textColor, vec4(1.0)) * vec4(1.0, 1.0, 1.0, texColor.r);
++	if (palHue != 0.0) c.rgb = ikemenHueShift(c.rgb, palHue);
++	if (palNeg != 0) c.rgb = c.aaa - c.rgb;
++	c.rgb = mix(vec3((c.r + c.g + c.b) / 3.0), c.rgb, 1.0 - palGray);
++	c.rgb += palAdd * c.a;
++	c.rgb *= palMul;
++	gl_FragColor = c;
++}
++`
+diff --git a/src/vk_stub_vita.go b/src/vk_stub_vita.go
+new file mode 100644
+index 0000000..678c514
+--- /dev/null
++++ b/src/vk_stub_vita.go
+@@ -0,0 +1,11 @@
++//go:build vita
++
++package main
++
++type Renderer_VK struct {
++	*Renderer_GLES32
++	surfaceLost bool
++}
++
++func (r *Renderer_VK) Await()                       {}
++func (r *Renderer_VK) RecreateSurfaceAndSwapchain() {}
