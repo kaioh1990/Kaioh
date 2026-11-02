@@ -24,7 +24,7 @@ void *mmap(void *addr, size_t len, int prot, int flags, int fd, long long off) {
 int munmap(void *addr, size_t len) { free(addr); return 0; }
 int pause(void) { for (;;) sceKernelDelayThread(1000000); return 0; }
 // Fatal-signal reporting isn't available on the Vita.
-void tinygo_register_fatal_signals(void) {}
+void tinygo_register_fatal_signals(void) { vlog("  runtime main entered"); }
 void tinygo_signal_enable(unsigned s) {}
 void tinygo_signal_ignore(unsigned s) {}
 void tinygo_signal_disable(unsigned s) {}
@@ -60,3 +60,6 @@ long getrandom(void *buf, size_t len, unsigned flags) {
 	}
 	return (long)len;
 }
+
+// glibc/musl name for errno; newlib calls it __errno.
+int *__errno_location(void) { return &errno; }
