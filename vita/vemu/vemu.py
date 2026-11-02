@@ -764,6 +764,7 @@ def gl_default(name):
 # FRAME_PURGE_FREQ (4) frames copies the WHOLE texture to a new allocation
 # (no NULL check on hardware -> crash if the pool is exhausted).
 GLTEX = {'unit': 0, 'bound': {}, 'size': {}, 'last': {}, 'copy_frame': 0, 'copy_peak': 0, 'copy_total': 0, 'copies': 0, 'big': 0, 'err': 0}
+DS = {'d': 0, 'v': 0, 'vmax': 0, 'el': 0, 'fb': 0, 'vp': set()}
 GLFMT_BPP = {0x1909: 1, 0x1907: 3, 0x1908: 4, 0x190A: 2, 0x1903: 1}
 def gl_tex_model(name, a):
     T = GLTEX
@@ -773,6 +774,13 @@ def gl_tex_model(name, a):
         t = T['bound'].get(T['unit']); T['size'][t] = a[3] * a[4] * GLFMT_BPP.get(a[6], 4); T['last'].pop(t, None)
     elif name in ('glDrawArrays', 'glDrawElements'):
         for t in T['bound'].values(): T['last'][t] = FRAME[0]
+        cnt = a[2] if name == 'glDrawArrays' else a[1]
+        DS['d'] += 1; DS['v'] += cnt; DS['vmax'] = max(DS['vmax'], cnt)
+        if name == 'glDrawElements': DS['el'] += 1
+    elif name == 'glViewport':
+        DS['vp'].add((a[2], a[3]))
+    elif name == 'glBindFramebuffer':
+        DS['fb'] += 1
     elif name == 'glTexSubImage2D' and a[0] == 0x0DE1:
         t = T['bound'].get(T['unit']); lf = T['last'].get(t)
         if lf is not None and FRAME[0] - lf <= 4:
@@ -787,6 +795,9 @@ def gl_tex_model(name, a):
         if T['err'] <= 3: say('[vgl] WARNING: glPixelStorei(0x%x) is GL_INVALID_ENUM on vitaGL' % a[0])
     elif name == 'vglSwapBuffers':
         T['copy_peak'] = max(T['copy_peak'], T['copy_frame']); T['copy_frame'] = 0
+        if FRAME[0] % 60 == 0 and os.environ.get('VEMU_DRAWSTATS'):
+            say('[draw] frame %d: %d draws (%d elements), %d verts, max %d verts/draw, %d fb binds, viewports %s' % (FRAME[0], DS['d'], DS['el'], DS['v'], DS['vmax'], DS['fb'], sorted(DS['vp'])))
+        DS.update(d=0, v=0, vmax=0, el=0, fb=0, vp=set())
 def gl_handler(name):
     def f(*a):
         gl_tex_model(name, a)
@@ -827,6 +838,11 @@ def gl_handler(name):
             return ra | (1 if ra in THUMBSYM else 0)
         if name == 'vglSwapBuffers':
             FRAME[0] += 1; VTIME[0] += 16667
+            if PROF['range']:
+                if FRAME[0] == PROF['range'][0] and PROF['h'] is None:
+                    PROF['h'] = mu.hook_add(UC_HOOK_BLOCK, prof_hook); say('[prof] start at frame %d' % FRAME[0])
+                elif FRAME[0] == PROF['range'][1] and PROF['h'] is not None:
+                    mu.hook_del(PROF['h']); PROF['h'] = None; prof_report()
             if FRAME[0] % 60 == 0: say('[gl] frame %d' % FRAME[0])
             if args.frames and FRAME[0] >= args.frames: raise Stop()
             if args.frames_after and PRESS_BASE[0] is not None and FRAME[0] - PRESS_BASE[0] >= args.frames_after: raise Stop()
@@ -858,6 +874,21 @@ def _sample(signum, frame):
     except Exception as e:
         say('[sample] err %s' % e)
 _signal.signal(_signal.SIGUSR1, _sample)
+
+PROF = {'range': [int(x) for x in os.environ['VEMU_PROF'].split(':')] if os.environ.get('VEMU_PROF') else None, 'h': None, 'blk': {}}
+def prof_hook(uc, addr, size, ud):
+    b = PROF['blk']; b[addr] = b.get(addr, 0) + size // 2
+def prof_report():
+    import collections
+    fn = collections.Counter(); cache = {}
+    for a, n in PROF['blk'].items():
+        sy = symbolize(a).split('+')[0]
+        fn[sy] += n
+    tot = sum(fn.values()) or 1
+    frames = PROF['range'][1] - PROF['range'][0]
+    say('[prof] ~%d instr/frame over %d frames' % (tot // max(1, frames), frames))
+    for k, v in fn.most_common(60):
+        say('[prof] %5.1f%% %s' % (100.0 * v / tot, k[:150]))
 # ---------------------------------------------------------------- hooks
 seen_default = set()
 import collections
