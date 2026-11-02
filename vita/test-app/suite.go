@@ -7,6 +7,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -64,14 +65,18 @@ func goroutineTest() string {
 		}
 		done <- true
 	}()
+	var wg sync.WaitGroup
 	for w := 0; w < 4; w++ {
+		wg.Add(1)
 		go func(w int) {
+			defer wg.Done()
 			for i := 0; i < 1000; i++ {
 				ch <- 1
 			}
 		}(w)
 	}
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	wg.Wait()
 	close(ch)
 	<-done
 	m := map[string]int{}
