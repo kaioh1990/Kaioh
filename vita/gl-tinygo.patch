@@ -1,0 +1,596 @@
+diff -ruN glorig/all-core/gl/package.go iktg/third/gl/all-core/gl/package.go
+--- glorig/all-core/gl/package.go	2026-10-31 20:31:00.544324525 -0400
++++ iktg/third/gl/all-core/gl/package.go	2026-11-01 21:57:07.365862781 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/all-core/gl/procaddr.go iktg/third/gl/all-core/gl/procaddr.go
+--- glorig/all-core/gl/procaddr.go	2026-10-31 20:31:00.544947290 -0400
++++ iktg/third/gl/all-core/gl/procaddr.go	2026-11-01 21:57:07.364882140 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/go.mod iktg/third/gl/go.mod
+--- glorig/go.mod	1969-12-31 19:00:00.000000000 -0500
++++ iktg/third/gl/go.mod	2026-11-01 21:56:59.246521953 -0500
+@@ -0,0 +1,3 @@
++module github.com/leonkasovan/gl
++
++go 1.20
+diff -ruN glorig/v2.0/gles2/package.go iktg/third/gl/v2.0/gles2/package.go
+--- glorig/v2.0/gles2/package.go	2026-10-31 20:31:00.550657255 -0400
++++ iktg/third/gl/v2.0/gles2/package.go	2026-11-01 21:57:07.284717617 -0500
+@@ -17,8 +17,8 @@
+ package gles2
+ 
+ // #cgo LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: glesv2
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v2.1/gl/package.go iktg/third/gl/v2.1/gl/package.go
+--- glorig/v2.1/gl/package.go	2026-10-31 20:31:00.562657255 -0400
++++ iktg/third/gl/v2.1/gl/package.go	2026-11-01 21:57:07.356404188 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v2.1/gl/procaddr.go iktg/third/gl/v2.1/gl/procaddr.go
+--- glorig/v2.1/gl/procaddr.go	2026-10-31 20:31:00.562657255 -0400
++++ iktg/third/gl/v2.1/gl/procaddr.go	2026-11-01 21:57:07.355204042 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v3.0/gles2/package.go iktg/third/gl/v3.0/gles2/package.go
+--- glorig/v3.0/gles2/package.go	2026-10-31 20:31:00.564208635 -0400
++++ iktg/third/gl/v3.0/gles2/package.go	2026-11-01 21:57:07.289006895 -0500
+@@ -17,8 +17,8 @@
+ package gles2
+ 
+ // #cgo LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: glesv2
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v3.1/gles2/package.go iktg/third/gl/v3.1/gles2/package.go
+--- glorig/v3.1/gles2/package.go	2026-10-31 20:31:00.570657256 -0400
++++ iktg/third/gl/v3.1/gles2/package.go	2026-11-01 21:57:07.301547169 -0500
+@@ -17,8 +17,8 @@
+ package gles2
+ 
+ // #cgo LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: glesv2
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v3.2/gles2/package.go iktg/third/gl/v3.2/gles2/package.go
+--- glorig/v3.2/gles2/package.go	2026-10-31 20:31:00.586657257 -0400
++++ iktg/third/gl/v3.2/gles2/package.go	2026-11-01 21:57:07.395429605 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v3.2/gles2/procaddr.go iktg/third/gl/v3.2/gles2/procaddr.go
+--- glorig/v3.2/gles2/procaddr.go	2026-10-31 20:31:00.586657257 -0400
++++ iktg/third/gl/v3.2/gles2/procaddr.go	2026-11-01 21:57:26.305062950 -0500
+@@ -29,6 +29,7 @@
+                 libHandle = dlopen("/lib/aarch64-linux-gnu/libGLESv2.so", RTLD_LAZY);
+  	if (libHandle)
+ 		return dlsym(libHandle, name);
++	return NULL;
+ }
+ */
+ import "C"
+diff -ruN glorig/v3.2-compatibility/gl/package.go iktg/third/gl/v3.2-compatibility/gl/package.go
+--- glorig/v3.2-compatibility/gl/package.go	2026-10-31 20:31:00.580249335 -0400
++++ iktg/third/gl/v3.2-compatibility/gl/package.go	2026-11-01 21:57:07.432636190 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v3.2-compatibility/gl/procaddr.go iktg/third/gl/v3.2-compatibility/gl/procaddr.go
+--- glorig/v3.2-compatibility/gl/procaddr.go	2026-10-31 20:31:00.580249335 -0400
++++ iktg/third/gl/v3.2-compatibility/gl/procaddr.go	2026-11-01 21:57:07.431066021 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v3.2-core/gl/package.go iktg/third/gl/v3.2-core/gl/package.go
+--- glorig/v3.2-core/gl/package.go	2026-10-31 20:31:00.582657257 -0400
++++ iktg/third/gl/v3.2-core/gl/package.go	2026-11-01 21:57:07.420936060 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v3.2-core/gl/procaddr.go iktg/third/gl/v3.2-core/gl/procaddr.go
+--- glorig/v3.2-core/gl/procaddr.go	2026-10-31 20:31:00.582657257 -0400
++++ iktg/third/gl/v3.2-core/gl/procaddr.go	2026-11-01 21:57:07.419322357 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v3.3-compatibility/gl/package.go iktg/third/gl/v3.3-compatibility/gl/package.go
+--- glorig/v3.3-compatibility/gl/package.go	2026-10-31 20:31:00.590657257 -0400
++++ iktg/third/gl/v3.3-compatibility/gl/package.go	2026-11-01 21:57:07.410425585 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v3.3-compatibility/gl/procaddr.go iktg/third/gl/v3.3-compatibility/gl/procaddr.go
+--- glorig/v3.3-compatibility/gl/procaddr.go	2026-10-31 20:31:00.594657257 -0400
++++ iktg/third/gl/v3.3-compatibility/gl/procaddr.go	2026-11-01 21:57:07.409508791 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v3.3-core/gl/package.go iktg/third/gl/v3.3-core/gl/package.go
+--- glorig/v3.3-core/gl/package.go	2026-10-31 20:31:00.595418060 -0400
++++ iktg/third/gl/v3.3-core/gl/package.go	2026-11-01 21:57:07.388610097 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v3.3-core/gl/procaddr.go iktg/third/gl/v3.3-core/gl/procaddr.go
+--- glorig/v3.3-core/gl/procaddr.go	2026-10-31 20:31:00.598667291 -0400
++++ iktg/third/gl/v3.3-core/gl/procaddr.go	2026-11-01 21:57:07.386982065 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.1-compatibility/gl/package.go iktg/third/gl/v4.1-compatibility/gl/package.go
+--- glorig/v4.1-compatibility/gl/package.go	2026-10-31 20:31:00.602657258 -0400
++++ iktg/third/gl/v4.1-compatibility/gl/package.go	2026-11-01 21:57:07.336404187 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.1-compatibility/gl/procaddr.go iktg/third/gl/v4.1-compatibility/gl/procaddr.go
+--- glorig/v4.1-compatibility/gl/procaddr.go	2026-10-31 20:31:00.602657258 -0400
++++ iktg/third/gl/v4.1-compatibility/gl/procaddr.go	2026-11-01 21:57:07.333500000 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.1-core/gl/package.go iktg/third/gl/v4.1-core/gl/package.go
+--- glorig/v4.1-core/gl/package.go	2026-10-31 20:31:00.610657258 -0400
++++ iktg/third/gl/v4.1-core/gl/package.go	2026-11-01 21:57:07.294498523 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.1-core/gl/procaddr.go iktg/third/gl/v4.1-core/gl/procaddr.go
+--- glorig/v4.1-core/gl/procaddr.go	2026-10-31 20:31:00.610657258 -0400
++++ iktg/third/gl/v4.1-core/gl/procaddr.go	2026-11-01 21:57:07.292515994 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.2-compatibility/gl/package.go iktg/third/gl/v4.2-compatibility/gl/package.go
+--- glorig/v4.2-compatibility/gl/package.go	2026-10-31 20:31:00.614657258 -0400
++++ iktg/third/gl/v4.2-compatibility/gl/package.go	2026-11-01 21:57:07.324404186 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.2-compatibility/gl/procaddr.go iktg/third/gl/v4.2-compatibility/gl/procaddr.go
+--- glorig/v4.2-compatibility/gl/procaddr.go	2026-10-31 20:31:00.614657258 -0400
++++ iktg/third/gl/v4.2-compatibility/gl/procaddr.go	2026-11-01 21:57:07.320810298 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.2-core/gl/package.go iktg/third/gl/v4.2-core/gl/package.go
+--- glorig/v4.2-core/gl/package.go	2026-10-31 20:31:00.619156281 -0400
++++ iktg/third/gl/v4.2-core/gl/package.go	2026-11-01 21:57:07.277455600 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.2-core/gl/procaddr.go iktg/third/gl/v4.2-core/gl/procaddr.go
+--- glorig/v4.2-core/gl/procaddr.go	2026-10-31 20:31:00.622517825 -0400
++++ iktg/third/gl/v4.2-core/gl/procaddr.go	2026-11-01 21:57:07.276467014 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.3-compatibility/gl/package.go iktg/third/gl/v4.3-compatibility/gl/package.go
+--- glorig/v4.3-compatibility/gl/package.go	2026-10-31 20:31:00.626657259 -0400
++++ iktg/third/gl/v4.3-compatibility/gl/package.go	2026-11-01 21:57:07.378165985 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.3-compatibility/gl/procaddr.go iktg/third/gl/v4.3-compatibility/gl/procaddr.go
+--- glorig/v4.3-compatibility/gl/procaddr.go	2026-10-31 20:31:00.626657259 -0400
++++ iktg/third/gl/v4.3-compatibility/gl/procaddr.go	2026-11-01 21:57:07.376405556 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.3-core/gl/package.go iktg/third/gl/v4.3-core/gl/package.go
+--- glorig/v4.3-core/gl/package.go	2026-10-31 20:31:00.630657259 -0400
++++ iktg/third/gl/v4.3-core/gl/package.go	2026-11-01 21:57:07.426772910 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.3-core/gl/procaddr.go iktg/third/gl/v4.3-core/gl/procaddr.go
+--- glorig/v4.3-core/gl/procaddr.go	2026-10-31 20:31:00.630657259 -0400
++++ iktg/third/gl/v4.3-core/gl/procaddr.go	2026-11-01 21:57:07.425537681 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.4-compatibility/gl/package.go iktg/third/gl/v4.4-compatibility/gl/package.go
+--- glorig/v4.4-compatibility/gl/package.go	2026-10-31 20:31:00.638657260 -0400
++++ iktg/third/gl/v4.4-compatibility/gl/package.go	2026-11-01 21:57:07.444404193 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.4-compatibility/gl/procaddr.go iktg/third/gl/v4.4-compatibility/gl/procaddr.go
+--- glorig/v4.4-compatibility/gl/procaddr.go	2026-10-31 20:31:00.638657260 -0400
++++ iktg/third/gl/v4.4-compatibility/gl/procaddr.go	2026-11-01 21:57:07.441505328 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.4-core/gl/package.go iktg/third/gl/v4.4-core/gl/package.go
+--- glorig/v4.4-core/gl/package.go	2026-10-31 20:31:00.642955887 -0400
++++ iktg/third/gl/v4.4-core/gl/package.go	2026-11-01 21:57:07.315355251 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.4-core/gl/procaddr.go iktg/third/gl/v4.4-core/gl/procaddr.go
+--- glorig/v4.4-core/gl/procaddr.go	2026-10-31 20:31:00.646307878 -0400
++++ iktg/third/gl/v4.4-core/gl/procaddr.go	2026-11-01 21:57:07.313952053 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.5-compatibility/gl/package.go iktg/third/gl/v4.5-compatibility/gl/package.go
+--- glorig/v4.5-compatibility/gl/package.go	2026-10-31 20:31:00.650657261 -0400
++++ iktg/third/gl/v4.5-compatibility/gl/package.go	2026-11-01 21:57:07.400404191 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.5-compatibility/gl/procaddr.go iktg/third/gl/v4.5-compatibility/gl/procaddr.go
+--- glorig/v4.5-compatibility/gl/procaddr.go	2026-10-31 20:31:00.650657261 -0400
++++ iktg/third/gl/v4.5-compatibility/gl/procaddr.go	2026-11-01 21:57:07.398908007 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.5-core/gl/package.go iktg/third/gl/v4.5-core/gl/package.go
+--- glorig/v4.5-core/gl/package.go	2026-10-31 20:31:00.654657261 -0400
++++ iktg/third/gl/v4.5-core/gl/package.go	2026-11-01 21:57:07.307582281 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.5-core/gl/procaddr.go iktg/third/gl/v4.5-core/gl/procaddr.go
+--- glorig/v4.5-core/gl/procaddr.go	2026-10-31 20:31:00.654657261 -0400
++++ iktg/third/gl/v4.5-core/gl/procaddr.go	2026-11-01 21:57:07.305508934 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.6-compatibility/gl/package.go iktg/third/gl/v4.6-compatibility/gl/package.go
+--- glorig/v4.6-compatibility/gl/package.go	2026-10-31 20:31:00.662657261 -0400
++++ iktg/third/gl/v4.6-compatibility/gl/package.go	2026-11-01 21:57:07.346023689 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.6-compatibility/gl/procaddr.go iktg/third/gl/v4.6-compatibility/gl/procaddr.go
+--- glorig/v4.6-compatibility/gl/procaddr.go	2026-10-31 20:31:00.662657261 -0400
++++ iktg/third/gl/v4.6-compatibility/gl/procaddr.go	2026-11-01 21:57:07.344855055 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default
+diff -ruN glorig/v4.6-core/gl/package.go iktg/third/gl/v4.6-core/gl/package.go
+--- glorig/v4.6-core/gl/package.go	2026-10-31 20:31:00.666657262 -0400
++++ iktg/third/gl/v4.6-core/gl/package.go	2026-11-01 21:57:07.371851022 -0500
+@@ -20,8 +20,8 @@
+ // #cgo gles2,darwin         LDFLAGS: -framework OpenGLES
+ // #cgo !gles2,windows       LDFLAGS: -lopengl32
+ // #cgo gles2,windows        LDFLAGS: -lGLESv2
+-// #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
+-// #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
++//
++//
+ // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
+ // #ifndef WIN32_LEAN_AND_MEAN
+ // #define WIN32_LEAN_AND_MEAN 1
+diff -ruN glorig/v4.6-core/gl/procaddr.go iktg/third/gl/v4.6-core/gl/procaddr.go
+--- glorig/v4.6-core/gl/procaddr.go	2026-10-31 20:31:00.666657262 -0400
++++ iktg/third/gl/v4.6-core/gl/procaddr.go	2026-11-01 21:57:07.370865019 -0500
+@@ -23,9 +23,9 @@
+ #cgo !gles2,darwin LDFLAGS: -framework OpenGL
+ #cgo gles2,darwin  LDFLAGS: -framework OpenGLES
+ #cgo linux freebsd netbsd openbsd CFLAGS: -DTAG_POSIX
+-#cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
++//
+ #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd egl,windows CFLAGS: -DTAG_EGL
+-#cgo egl,linux egl,freebsd egl,netbsd egl,openbsd pkg-config: egl
++//
+ #cgo egl,windows LDFLAGS: -lEGL
+ #cgo egl,darwin  LDFLAGS: -lEGL
+ // Check the EGL tag first as it takes priority over the platform's default

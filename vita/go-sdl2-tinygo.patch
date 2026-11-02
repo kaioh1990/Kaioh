@@ -1,0 +1,2559 @@
+diff -ruN sdlorig/gfx/sdl_gfx_cgo.go iktg/third/sdl2/gfx/sdl_gfx_cgo.go
+--- sdlorig/gfx/sdl_gfx_cgo.go	2026-10-31 20:31:05.841763041 -0400
++++ iktg/third/sdl2/gfx/sdl_gfx_cgo.go	2026-11-01 21:57:07.260821109 -0500
+@@ -3,6 +3,6 @@
+ package gfx
+ 
+ //#cgo windows LDFLAGS: -lSDL2 -lSDL2_gfx
+-//#cgo linux freebsd darwin pkg-config: sdl2
++//
+ //#cgo linux freebsd darwin LDFLAGS: -lSDL2_gfx
+ import "C"
+diff -ruN sdlorig/img/sdl_image_cgo.go iktg/third/sdl2/img/sdl_image_cgo.go
+--- sdlorig/img/sdl_image_cgo.go	2026-10-31 20:31:05.841996414 -0400
++++ iktg/third/sdl2/img/sdl_image_cgo.go	2026-11-01 21:57:07.259077328 -0500
+@@ -2,7 +2,7 @@
+ 
+ package img
+ 
+-//#cgo linux freebsd darwin pkg-config: sdl2
++//
+ //#cgo linux freebsd darwin LDFLAGS: -lSDL2_image
+ //#cgo windows LDFLAGS: -lSDL2 -lSDL2_image
+ import "C"
+diff -ruN sdlorig/mix/sdl_mixer_cgo.go iktg/third/sdl2/mix/sdl_mixer_cgo.go
+--- sdlorig/mix/sdl_mixer_cgo.go	2026-10-31 20:31:05.842957997 -0400
++++ iktg/third/sdl2/mix/sdl_mixer_cgo.go	2026-11-01 21:57:07.257422121 -0500
+@@ -3,6 +3,6 @@
+ package mix
+ 
+ //#cgo windows LDFLAGS: -lSDL2 -lSDL2_mixer
+-//#cgo linux freebsd darwin pkg-config: sdl2
++//
+ //#cgo linux freebsd darwin LDFLAGS: -lSDL2_mixer
+ import "C"
+diff -ruN sdlorig/sdl/audio.go iktg/third/sdl2/sdl/audio.go
+--- sdlorig/sdl/audio.go	2026-10-31 20:31:05.843339378 -0400
++++ iktg/third/sdl2/sdl/audio.go	2026-11-01 21:58:48.684410211 -0500
+@@ -198,7 +198,7 @@
+ 
+ // MIX_MAXVOLUME is the full audio volume value used in MixAudioFormat() and AudioFormat().
+ // (https://wiki.libsdl.org/SDL2/SDL_MixAudioFormat)
+-const MIX_MAXVOLUME = C.SDL_MIX_MAXVOLUME // full audio volume
++const MIX_MAXVOLUME = C.SDL_MIX_MAXVOLUME
+ 
+ // AudioFormat is an enumeration of audio formats.
+ // (https://wiki.libsdl.org/SDL2/SDL_AudioFormat)
+@@ -208,10 +208,6 @@
+ // (https://wiki.libsdl.org/SDL2/SDL_AudioSpec)
+ type AudioCallback C.SDL_AudioCallback
+ 
+-// AudioFilter is the filter list used in AudioCVT() (internal use)
+-// (https://wiki.libsdl.org/SDL2/SDL_AudioCVT)
+-type AudioFilter C.SDL_AudioFilter
+-
+ // AudioDeviceID is ID of an audio device previously opened with OpenAudioDevice().
+ // (https://wiki.libsdl.org/SDL2/SDL_OpenAudioDevice)
+ type AudioDeviceID uint32
+@@ -236,23 +232,6 @@
+ }
+ type cAudioSpec C.SDL_AudioSpec
+ 
+-// AudioCVT contains audio data conversion information.
+-// (https://wiki.libsdl.org/SDL2/SDL_AudioCVT)
+-type AudioCVT struct {
+-	Needed      int32           // set to 1 if conversion possible
+-	SrcFormat   AudioFormat     // source audio format
+-	DstFormat   AudioFormat     // target audio format
+-	RateIncr    float64         // rate conversion increment
+-	Buf         unsafe.Pointer  // the buffer to hold entire audio data. Use AudioCVT.BufAsSlice() for access via a Go slice
+-	Len         int32           // length of original audio buffer
+-	LenCVT      int32           // length of converted audio buffer
+-	LenMult     int32           // buf must be len*len_mult big
+-	LenRatio    float64         // given len, final size is len*len_ratio
+-	filters     [10]AudioFilter // filter list (internal use)
+-	filterIndex int32           // current audio conversion function (internal use)
+-}
+-type cAudioCVT C.SDL_AudioCVT
+-
+ // AudioStream is a new audio conversion interface.
+ // (https://wiki.libsdl.org/SDL2/SDL_AudioStream)
+ type AudioStream C.SDL_AudioStream
+@@ -269,10 +248,6 @@
+ 	return (*C.SDL_AudioSpec)(unsafe.Pointer(as))
+ }
+ 
+-func (cvt *AudioCVT) cptr() *C.SDL_AudioCVT {
+-	return (*C.SDL_AudioCVT)(unsafe.Pointer(cvt))
+-}
+-
+ func (stream *AudioStream) cptr() *C.SDL_AudioStream {
+ 	return (*C.SDL_AudioStream)(unsafe.Pointer(stream))
+ }
+@@ -319,27 +294,6 @@
+ 	return !fmt.IsSigned()
+ }
+ 
+-// AllocBuf allocates the requested memory for AudioCVT buffer.
+-func (cvt *AudioCVT) AllocBuf(size uintptr) {
+-	cvt.Buf = C.malloc(C.size_t(size))
+-}
+-
+-// FreeBuf deallocates the memory previously allocated from AudioCVT buffer.
+-func (cvt *AudioCVT) FreeBuf() {
+-	C.free(cvt.Buf)
+-}
+-
+-// BufAsSlice returns AudioCVT.buf as byte slice.
+-// NOTE: Must be used after ConvertAudio() because it uses LenCVT as slice length.
+-func (cvt AudioCVT) BufAsSlice() []byte {
+-	var b []byte
+-	sliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+-	sliceHeader.Len = int(cvt.LenCVT)
+-	sliceHeader.Cap = int(cvt.Len * cvt.LenMult)
+-	sliceHeader.Data = uintptr(unsafe.Pointer(cvt.Buf))
+-	return b
+-}
+-
+ // GetNumAudioDrivers returns the number of built-in audio drivers.
+ // (https://wiki.libsdl.org/SDL2/SDL_GetNumAudioDrivers)
+ func GetNumAudioDrivers() int {
+@@ -477,28 +431,6 @@
+ 	C.SDL_FreeWAV(_audioBuf)
+ }
+ 
+-// BuildAudioCVT initializes an AudioCVT structure for conversion.
+-// (https://wiki.libsdl.org/SDL2/SDL_BuildAudioCVT)
+-func BuildAudioCVT(cvt *AudioCVT, srcFormat AudioFormat, srcChannels uint8, srcRate int, dstFormat AudioFormat, dstChannels uint8, dstRate int) (converted bool, err error) {
+-	switch int(C.SDL_BuildAudioCVT(cvt.cptr(), srcFormat.c(), C.Uint8(srcChannels), C.int(srcRate), dstFormat.c(), C.Uint8(dstChannels), C.int(dstRate))) {
+-	case 1:
+-		return true, nil
+-	case 0:
+-		return false, nil
+-	}
+-	return false, GetError()
+-}
+-
+-// ConvertAudio converts audio data to a desired audio format.
+-// (https://wiki.libsdl.org/SDL2/SDL_ConvertAudio)
+-func ConvertAudio(cvt *AudioCVT) error {
+-	_cvt := (*C.SDL_AudioCVT)(unsafe.Pointer(cvt))
+-	if C.SDL_ConvertAudio(_cvt) != 0 {
+-		return GetError()
+-	}
+-	return nil
+-}
+-
+ // QueueAudio queues more audio on non-callback devices.
+ // (https://wiki.libsdl.org/SDL2/SDL_QueueAudio)
+ func QueueAudio(dev AudioDeviceID, data []byte) error {
+diff -ruN sdlorig/sdl/audio_test.go iktg/third/sdl2/sdl/audio_test.go
+--- sdlorig/sdl/audio_test.go	2026-10-31 20:31:05.843475500 -0400
++++ iktg/third/sdl2/sdl/audio_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,90 +0,0 @@
+-package sdl
+-
+-import (
+-	"bytes"
+-	"testing"
+-)
+-
+-var squareWave = []byte("RIFF,\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00" +
+-	"\x01\x00\xab \x00\x00\xab \x00\x00\x01\x00\b\x00data\b\x00\x00\x00\x00" +
+-	"\x00\x00\x00\xff\xff\xff\xff")
+-
+-func TestAudioDevices(t *testing.T) {
+-	for _, isCapture := range []bool{false, true} {
+-		n := GetNumAudioDevices(isCapture)
+-		for i := 0; i < n; i++ {
+-			if GetAudioDeviceName(i, isCapture) == "" {
+-				t.Errorf("GetAudioDeviceName(%v, %v) returned empty string",
+-					i, isCapture)
+-			}
+-		}
+-
+-		// cover GetAudioDeviceName() even if n < 1
+-		if name := GetAudioDeviceName(-1, isCapture); name != "" {
+-			t.Errorf("GetAudioDeviceName(-1, %v) == %#v; want empty string",
+-				isCapture, name)
+-		}
+-	}
+-}
+-
+-func TestAudioInitQuit(t *testing.T) {
+-	Do(func() {
+-		// figure out what driver will work
+-		if err := InitSubSystem(INIT_AUDIO); err != nil {
+-			t.Fatalf("InitSubSystem(INIT_AUDIO): %v", err)
+-		}
+-		driver := GetCurrentAudioDriver()
+-
+-		// reset audio subsystem
+-		QuitSubSystem(INIT_AUDIO)
+-		if GetCurrentAudioDriver() != "" {
+-			t.Fatalf(`GetCurrentAudioDriver() != "" after QuitSubSystem()`)
+-		}
+-
+-		// test valid init
+-		if err := AudioInit(driver); err != nil {
+-			t.Errorf("AudioInit(%s) returned error: %v", driver, err)
+-		} else {
+-			if got := GetCurrentAudioDriver(); got != driver {
+-				t.Errorf("GetCurrentAudioDriver() == %#v; want %#v", got, driver)
+-			}
+-
+-			// test quit
+-			AudioQuit()
+-			if GetCurrentAudioDriver() != "" {
+-				t.Fatalf(`GetCurrentAudioDriver() != "" after AudioQuit()`)
+-			}
+-		}
+-
+-		// test invalid init
+-		driver = "bogus"
+-		if err := AudioInit(driver); err == nil {
+-			t.Errorf("AudioInit(%s) did not return error", driver)
+-		}
+-	})
+-}
+-
+-func TestLoadWAVRW(t *testing.T) {
+-	// load WAV from *RWOps pointing to WAV data
+-	src, _ := RWFromMem(squareWave)
+-	buf, spec := LoadWAVRW(src, false)
+-
+-	// test returned []byte
+-	want := []byte{0, 0, 0, 0, 255, 255, 255, 255}
+-	if buf == nil {
+-		t.Errorf("LoadWAVRW() returned nil []byte")
+-	} else {
+-		if bytes.Compare(buf, want) != 0 {
+-			t.Errorf("LoadWAVRW() returned %v; want %v", buf, want)
+-		}
+-		FreeWAV(buf) // make sure we can free without error
+-	}
+-
+-	// test returned *AudioSpec
+-	if spec == nil {
+-		t.Errorf("LoadWAVRW() returned nil *AudioSpec")
+-	} else if spec.Freq != 8363 { // no need to test all the spec fields
+-		t.Errorf("LoadWAVRW() returned *AudioSpec with Freq %d; want %d",
+-			spec.Freq, 8363)
+-	}
+-}
+diff -ruN sdlorig/sdl/clipboard_test.go iktg/third/sdl2/sdl/clipboard_test.go
+--- sdlorig/sdl/clipboard_test.go	2026-10-31 20:31:05.843632607 -0400
++++ iktg/third/sdl2/sdl/clipboard_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,31 +0,0 @@
+-package sdl
+-
+-import "testing"
+-
+-func TestClipboard(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_VIDEO)
+-		defer Quit()
+-
+-		// need a window to own the clipboard
+-		if win, err := CreateWindow("", 0, 0, 0, 0, 0); err == nil {
+-			defer win.Destroy()
+-		} else {
+-			t.Skipf("Could not CreateWindow(): %v", err)
+-		}
+-
+-		wantString, wantBool := []string{"", "naïveté"}, []bool{false, true}
+-		for i := 0; i < 2; i++ {
+-			if err := SetClipboardText(wantString[i]); err != nil {
+-				t.Skipf("Could not SetClipboardText(): %v", err)
+-			}
+-			if got := HasClipboardText(); got != wantBool[i] {
+-				t.Errorf("HasClipboardText() == %v; want %v", got, wantBool[i])
+-			}
+-			if got, err := GetClipboardText(); err == nil && got != wantString[i] {
+-				t.Errorf("GetClipboardText() == (nil, %#v); want (nil, %#v)",
+-					got, wantString[i])
+-			}
+-		}
+-	})
+-}
+diff -ruN sdlorig/sdl/cpuinfo_test.go iktg/third/sdl2/sdl/cpuinfo_test.go
+--- sdlorig/sdl/cpuinfo_test.go	2026-10-31 20:31:05.843702571 -0400
++++ iktg/third/sdl2/sdl/cpuinfo_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,24 +0,0 @@
+-package sdl
+-
+-import (
+-	"runtime"
+-	"testing"
+-)
+-
+-func TestCPUCount(t *testing.T) {
+-	if runtime.NumCPU() != GetCPUCount() {
+-		t.Error("GetCPUCount(): CPU count mismatch")
+-	}
+-}
+-
+-func TestGetCPUCacheLineSize(t *testing.T) {
+-	if GetCPUCacheLineSize() == 0 {
+-		t.Error("GetCPUCacheLineSize(): cache line size wrong")
+-	}
+-}
+-
+-func TestGetSystemRAM(t *testing.T) {
+-	if VERSION_ATLEAST(2, 0, 1) && GetSystemRAM() <= 0 {
+-		t.Error("GetSystemRAM(): wrong return value")
+-	}
+-}
+diff -ruN sdlorig/sdl/events.c iktg/third/sdl2/sdl/events.c
+--- sdlorig/sdl/events.c	2026-10-31 20:31:05.843784327 -0400
++++ iktg/third/sdl2/sdl/events.c	2026-11-01 22:01:29.069131752 -0500
+@@ -1,4 +1,6 @@
+-#include "_cgo_export.h"
++#include "sdl_wrapper.h"
++extern int goSetEventFilterCallback(void *data, SDL_Event *e);
++extern int goEventFilterCallback(void *userdata, SDL_Event *e);
+ #include "events.h"
+ 
+ SDL_Event event;
+diff -ruN sdlorig/sdl/events.go iktg/third/sdl2/sdl/events.go
+--- sdlorig/sdl/events.go	2026-10-31 20:31:05.843808283 -0400
++++ iktg/third/sdl2/sdl/events.go	2026-11-01 21:58:48.676410211 -0500
+@@ -1020,25 +1020,6 @@
+ 	return e.Timestamp
+ }
+ 
+-// SysWMEvent contains a video driver dependent system event.
+-// (https://wiki.libsdl.org/SDL2/SDL_SysWMEvent)
+-type SysWMEvent struct {
+-	Type      EventType // SYSWMEVENT
+-	Timestamp uint32    // timestamp of the event
+-	Msg       *SysWMmsg // driver dependent data, defined in SDL_syswm.h
+-}
+-type cSysWMEvent C.SDL_SysWMEvent
+-
+-// GetType returns the event type.
+-func (e SysWMEvent) GetType() EventType {
+-	return e.Type
+-}
+-
+-// GetTimestamp returns the timestamp of the event.
+-func (e SysWMEvent) GetTimestamp() uint32 {
+-	return e.Timestamp
+-}
+-
+ // EventFilter is the function to call when an event happens.
+ // (https://wiki.libsdl.org/SDL2/SDL_SetEventFilter)
+ type EventFilter interface {
+@@ -1152,13 +1133,6 @@
+ 			Data1:     int32(e.data1),
+ 			Data2:     int32(e.data2),
+ 		}
+-	case SYSWMEVENT:
+-		e := (*cSysWMEvent)(unsafe.Pointer(cevent))
+-		return SysWMEvent{
+-			Type:      EventType(e._type),
+-			Timestamp: uint32(e.timestamp),
+-			Msg:       (*SysWMmsg)(unsafe.Pointer(e.msg)),
+-		}
+ 	case KEYDOWN, KEYUP:
+ 		e := (*cKeyboardEvent)(unsafe.Pointer(cevent))
+ 		return KeyboardEvent{
+diff -ruN sdlorig/sdl/events_test.go iktg/third/sdl2/sdl/events_test.go
+--- sdlorig/sdl/events_test.go	2026-10-31 20:31:05.844078669 -0400
++++ iktg/third/sdl2/sdl/events_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,265 +0,0 @@
+-package sdl
+-
+-import "testing"
+-
+-func TestEventsPushEvent(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		in := UserEvent{
+-			Type: USEREVENT,
+-			Code: 42,
+-		}
+-
+-		// Remove existing events in the queue
+-		if _, err := PeepEvents(make([]Event, 100), GETEVENT, FIRSTEVENT, LASTEVENT); err != nil {
+-			t.Error("PeepEvents:", err)
+-		}
+-
+-		PushEvent(&in)
+-
+-		out, ok := PollEvent().(*UserEvent)
+-		if !ok {
+-			t.Errorf("Failed to cast event to *UserEvent")
+-		}
+-		if out.Code != in.Code {
+-			t.Errorf("Expected event code %d but got %d", in.Code, out.Code)
+-		}
+-	})
+-}
+-
+-type simpleTestFilter struct{}
+-
+-func (s *simpleTestFilter) FilterEvent(e Event, userdata interface{}) bool {
+-	return true
+-}
+-
+-func TestEventsSetGetEventFilter(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		filter := &simpleTestFilter{}
+-		SetEventFilter(filter, nil)
+-
+-		if filter != GetEventFilter() {
+-			t.Errorf("Could not round-trip the event filter.")
+-		}
+-
+-		if !isCEventFilterSet() {
+-			t.Errorf("Event filter was not actually set in C.")
+-		}
+-
+-		SetEventFilter(nil, nil)
+-
+-		if nil != GetEventFilter() {
+-			t.Errorf("Event filter was not cleared.")
+-		}
+-
+-		if isCEventFilterSet() {
+-			t.Errorf("Event filter was not actually cleared in C.")
+-		}
+-	})
+-}
+-
+-func countEventsInQ(wait bool) int {
+-	var e Event
+-	if wait {
+-		e = WaitEvent()
+-	} else {
+-		e = PollEvent()
+-	}
+-
+-	count := 0
+-	for ; e != nil; e = PollEvent() {
+-		count++
+-	}
+-	return count
+-}
+-
+-func TestEventsSetEventFilter(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		filterFunc := func(e Event, log bool) bool {
+-			if log {
+-				t.Log("TestSetEventFilter received", e)
+-			}
+-
+-			ue, ok := e.(*UserEvent)
+-			if !ok {
+-				return false
+-			}
+-
+-			return ue.Code == 42
+-		}
+-		SetEventFilterFunc(func(e Event, userdata interface{}) bool {
+-			return filterFunc(e, true)
+-		}, nil)
+-
+-		ins := []*UserEvent{
+-			{Type: USEREVENT, Code: 42},
+-			{Type: USEREVENT, Code: 41},
+-		}
+-
+-		expectedOutCount := 0
+-		for _, in := range ins {
+-			PushEvent(in)
+-			if filterFunc(in, false) {
+-				expectedOutCount++
+-			}
+-		}
+-
+-		outCount := countEventsInQ(false)
+-
+-		if outCount != expectedOutCount {
+-			t.Errorf("Expected %d events to pass but got %d.", expectedOutCount, outCount)
+-		}
+-	})
+-}
+-
+-func TestEventsGetEventFilterNilOnStartup(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		if GetEventFilter() != nil {
+-			t.Errorf("Event filter should be nil on startup.")
+-		}
+-		SetEventFilterFunc(func(_ Event, userdata interface{}) bool {
+-			return true
+-		}, nil)
+-
+-		Quit()
+-		Init(INIT_EVERYTHING)
+-
+-		if GetEventFilter() != nil {
+-			t.Errorf("Event filter should be nil on startup.")
+-		}
+-	})
+-}
+-
+-func TestEventsFilterEventsFuncQ(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		ins := []*UserEvent{
+-			{Type: USEREVENT, Code: 42},
+-			{Type: USEREVENT, Code: 41},
+-		}
+-
+-		filterFunc := func(e Event, log bool) bool {
+-			if log {
+-				t.Log("TestEventsFilterEventsFuncQ received", e)
+-			}
+-
+-			ue, ok := e.(*UserEvent)
+-			if !ok {
+-				return false
+-			}
+-
+-			return ue.Code == 42
+-		}
+-
+-		expectedOutCount := 0
+-		for _, in := range ins {
+-			PushEvent(in)
+-			if filterFunc(in, false) {
+-				expectedOutCount++
+-			}
+-		}
+-
+-		FilterEventsFunc(func(e Event, userdata interface{}) bool {
+-			return filterFunc(e, true)
+-		}, nil)
+-
+-		outCount := countEventsInQ(false)
+-
+-		if outCount != expectedOutCount {
+-			t.Errorf("Expected %d events to pass but got %d.", expectedOutCount, outCount)
+-		}
+-	})
+-}
+-
+-func TestEventsAddEventWatch(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		in := UserEvent{
+-			Type: USEREVENT,
+-			Code: 42,
+-		}
+-
+-		out := Event(nil)
+-		watch := func(e Event, userdata interface{}) bool {
+-			t.Log("TestAddEventWatch received", e)
+-			out = e
+-			if val, ok := userdata.(int); !ok || val != 0xDEADBEEF {
+-				t.Errorf("Failed to get userdata")
+-			}
+-			return true
+-		}
+-
+-		AddEventWatchFunc(watch, 0xDEADBEEF)
+-		PushEvent(&in)
+-
+-		if out == nil {
+-			t.Errorf("Event from event watch was nil but expected it to be non-nil.")
+-		}
+-
+-		outue, ok := out.(*UserEvent)
+-		if !ok {
+-			t.Errorf("Failed to cast event to *UserEvent")
+-		}
+-		if outue.Code != in.Code {
+-			t.Errorf("Expected event code %d but got %d", in.Code, outue.Code)
+-		}
+-	})
+-}
+-
+-func TestEventsEventWatchClearOnStartup(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-
+-		AddEventWatchFunc(func(_ Event, userdata interface{}) bool {
+-			return true
+-		}, nil)
+-
+-		Quit()
+-
+-		if len(eventWatches) != 0 {
+-			t.Errorf("Expected go event watches to be cleared but it contains %d contexts", len(eventWatches))
+-		}
+-	})
+-}
+-
+-func TestEventsAddDelEventWatch(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		in := UserEvent{
+-			Type: USEREVENT,
+-			Code: 42,
+-		}
+-
+-		out := Event(nil)
+-		watch := func(e Event, userdata interface{}) bool {
+-			t.Log("TestAddDelEventWatch received", e)
+-			out = e
+-			return true
+-		}
+-
+-		handle := AddEventWatchFunc(watch, nil)
+-		DelEventWatch(handle)
+-		PushEvent(&in)
+-
+-		if out != nil {
+-			t.Errorf("Event was received from event watch after it had been removed.")
+-		}
+-	})
+-}
+diff -ruN sdlorig/sdl/filesystem_test.go iktg/third/sdl2/sdl/filesystem_test.go
+--- sdlorig/sdl/filesystem_test.go	2026-10-31 20:31:05.844151696 -0400
++++ iktg/third/sdl2/sdl/filesystem_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,30 +0,0 @@
+-package sdl
+-
+-import (
+-	"testing"
+-)
+-
+-func TestGetBasePath(t *testing.T) {
+-	if !VERSION_ATLEAST(2, 0, 1) {
+-		return
+-	}
+-
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		path := GetBasePath()
+-		// pathetic, but a comparison to runtime.Caller() does not help here,
+-		// since this would return go's testing package
+-		if path == "" {
+-			t.Error("GetBasePath() did not return anything")
+-		}
+-		Quit()
+-	})
+-}
+-
+-// Do not test GetPrefPath(), since SDL_GetPrefPath() also
+-// *creates* the necessary directories, polluting the user's
+-// system with unnecessary stuff.
+-// func TestGetPrefPath(t *testing.T) {
+-// 	path := GetPrefPath("go-sdl2", "test")
+-// 	t.Error(path)
+-// }
+diff -ruN sdlorig/sdl/gamecontroller.go iktg/third/sdl2/sdl/gamecontroller.go
+--- sdlorig/sdl/gamecontroller.go	2026-10-31 20:31:05.844274572 -0400
++++ iktg/third/sdl2/sdl/gamecontroller.go	2026-11-01 22:00:26.101367720 -0500
+@@ -321,7 +321,6 @@
+ */
+ import "C"
+ import (
+-	"encoding/binary"
+ 	"unsafe"
+ )
+ 
+@@ -732,30 +731,6 @@
+ 	return int(bind.bindType)
+ }
+ 
+-// Button returns button mapped for this SDL joystick layer binding.
+-func (bind *GameControllerButtonBind) Button() int {
+-	val, _ := binary.Varint(bind.value[:4])
+-	return int(val)
+-}
+-
+-// Axis returns axis mapped for this SDL joystick layer binding.
+-func (bind *GameControllerButtonBind) Axis() int {
+-	val, _ := binary.Varint(bind.value[:4])
+-	return int(val)
+-}
+-
+-// Hat returns hat mapped for this SDL joystick layer binding.
+-func (bind *GameControllerButtonBind) Hat() int {
+-	val, _ := binary.Varint(bind.value[:4])
+-	return int(val)
+-}
+-
+-// HatMask returns hat mask for this SDL joystick layer binding.
+-func (bind *GameControllerButtonBind) HatMask() int {
+-	val, _ := binary.Varint(bind.value[4:8])
+-	return int(val)
+-}
+-
+ // SendEffect sends a controller specific effect packet.
+ // (https://wiki.libsdl.org/SDL2/SDL_GameControllerSendEffect)
+ func (ctrl *GameController) SendEffect(data []byte) (err error) {
+diff -ruN sdlorig/sdl/hidapi.go iktg/third/sdl2/sdl/hidapi.go
+--- sdlorig/sdl/hidapi.go	2026-10-31 20:31:05.844570994 -0400
++++ iktg/third/sdl2/sdl/hidapi.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,358 +0,0 @@
+-package sdl
+-
+-/*
+-#include "sdl_wrapper.h"
+-
+-#if !(SDL_VERSION_ATLEAST(2,0,18))
+-
+-#if defined(WARN_OUTDATED)
+-#pragma message("SDL_hid_init is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_exit is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_device_change_count is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_enumerate is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_free_enumeration is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_open is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_open_path is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_write is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_read_timeout is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_read is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_set_nonblocking is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_send_feature_report is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_get_feature_report is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_close is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_get_manufacturer_string is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_get_product_string is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_get_serial_number_string is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_get_indexed_string is not supported before SDL 2.0.18")
+-#pragma message("SDL_hid_ble_scan is not supported before SDL 2.0.18")
+-#endif
+-
+-struct SDL_hid_device_;
+-typedef struct SDL_hid_device_ SDL_hid_device; // opaque hidapi structure
+-
+-// hidapi info structure
+-// Information about a connected HID device
+-typedef struct SDL_hid_device_info
+-{
+-    // Platform-specific device path
+-    char *path;
+-
+-    // Device Vendor ID
+-    unsigned short vendor_id;
+-
+-    // Device Product ID
+-    unsigned short product_id;
+-
+-    // Serial Number
+-    wchar_t *serial_number;
+-
+-    // Device Release Number in binary-coded decimal, also known as Device Version Number
+-    unsigned short release_number;
+-
+-    // Manufacturer String
+-    wchar_t *manufacturer_string;
+-
+-    // Product string
+-    wchar_t *product_string;
+-
+-    // Usage Page for this Device/Interface (Windows/Mac only).
+-    unsigned short usage_page;
+-
+-    // Usage for this Device/Interface (Windows/Mac only).
+-    unsigned short usage;
+-
+-    // The USB interface which this logical device represents.
+-    // Valid on both Linux implementations in all cases.
+-    // Valid on the Windows implementation only if the device
+-    // contains more than one interface.
+-    int interface_number;
+-
+-    // Additional information about the USB interface.
+-    // Valid on libusb and Android implementations.
+-    int interface_class;
+-    int interface_subclass;
+-    int interface_protocol;
+-
+-    // Pointer to the next device
+-    struct SDL_hid_device_info *next;
+-} SDL_hid_device_info;
+-
+-static int SDL_hid_init(void)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_exit(void)
+-{
+-	return -1;
+-}
+-
+-static Uint32 SDL_hid_device_change_count(void)
+-{
+-	return 0;
+-}
+-
+-static SDL_hid_device_info * SDL_hid_enumerate(unsigned short vendor_id, unsigned short product_id)
+-{
+-	return NULL;
+-}
+-
+-static void SDL_hid_free_enumeration(SDL_hid_device_info *devs)
+-{
+-}
+-
+-static SDL_hid_device * SDL_hid_open(unsigned short vendor_id, unsigned short product_id, const wchar_t *serial_number)
+-{
+-	return NULL;
+-}
+-
+-static SDL_hid_device * SDL_hid_open_path(const char *path, int bExclusive)
+-{
+-	return NULL;
+-}
+-
+-static int SDL_hid_write(SDL_hid_device *dev, const unsigned char *data, size_t length)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_read_timeout(SDL_hid_device *dev, unsigned char *data, size_t length, int milliseconds)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_read(SDL_hid_device *dev, unsigned char *data, size_t length)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_set_nonblocking(SDL_hid_device *dev, int nonblock)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_send_feature_report(SDL_hid_device *dev, const unsigned char *data, size_t length)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_get_feature_report(SDL_hid_device *dev, unsigned char *data, size_t length)
+-{
+-	return -1;
+-}
+-
+-static void SDL_hid_close(SDL_hid_device *dev)
+-{
+-}
+-
+-static int SDL_hid_get_manufacturer_string(SDL_hid_device *dev, wchar_t *string, size_t maxlen)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_get_product_string(SDL_hid_device *dev, wchar_t *string, size_t maxlen)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_get_serial_number_string(SDL_hid_device *dev, wchar_t *string, size_t maxlen)
+-{
+-	return -1;
+-}
+-
+-static int SDL_hid_get_indexed_string(SDL_hid_device *dev, int string_index, wchar_t *string, size_t maxlen)
+-{
+-	return -1;
+-}
+-
+-static void SDL_hid_ble_scan(SDL_bool active)
+-{
+-}
+-
+-#endif
+-*/
+-import "C"
+-import "unsafe"
+-
+-type HIDDevice C.SDL_hid_device
+-
+-type HIDDeviceInfo struct {
+-	path               *C.char
+-	VendorID           uint16
+-	ProductID          uint16
+-	SerialNumber       *C.wchar_t
+-	ReleaseNumber      uint16
+-	ManufacturerString *C.wchar_t
+-	ProductString      *C.wchar_t
+-	UsagePage          uint16
+-	Usage              uint16
+-	InterfaceNumber    int32
+-	InterfaceClass     int32
+-	InterfaceSubclass  int32
+-	InterfaceProtocol  int32
+-	next               *HIDDeviceInfo
+-}
+-
+-func (info *HIDDeviceInfo) Path() string {
+-	return C.GoString(info.path)
+-}
+-
+-// HIDInit initializes the HIDAPI library.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_init)
+-func HIDInit() (err error) {
+-	ret := C.SDL_hid_init()
+-	return errorFromInt(int(ret))
+-}
+-
+-// HIDExit finalizes the HIDAPI library.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_exit)
+-func HIDExit() (err error) {
+-	ret := C.SDL_hid_exit()
+-	return errorFromInt(int(ret))
+-}
+-
+-// HIDDeviceChangeCount checks to see if devices may have been added or removed.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_device_change_count)
+-func HIDDeviceChangeCount() (n uint32) {
+-	return uint32(C.SDL_hid_device_change_count())
+-}
+-
+-// HIDEnumerate enumerates the HID devices.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_enumerate)
+-func HIDEnumerate(vendorID, productID uint16) (info *HIDDeviceInfo) {
+-	_vendorID := C.Uint16(vendorID)
+-	_productID := C.Uint16(productID)
+-	info = (*HIDDeviceInfo)(unsafe.Pointer(C.SDL_hid_enumerate(_vendorID, _productID)))
+-	return
+-}
+-
+-// HIDFreeEnumeration frees an enumeration Linked List.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_free_enumeration)
+-func HIDFreeEnumeration(info *HIDDeviceInfo) {
+-	_info := (*C.SDL_hid_device_info)(unsafe.Pointer(info))
+-	C.SDL_hid_free_enumeration(_info)
+-}
+-
+-// HIDOpen opens a HID device using a Vendor ID (VID), Product ID (PID) and optionally a serial number.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_open)
+-func HIDOpen(vendorID, productID uint16, _serialNumber *C.wchar_t) (device *HIDDevice) {
+-	_vendorID := C.Uint16(vendorID)
+-	_productID := C.Uint16(productID)
+-	_device := C.SDL_hid_open(_vendorID, _productID, _serialNumber)
+-	return (*HIDDevice)(_device)
+-}
+-
+-// HIDOpenPath opens a HID device by its path name.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_open_path)
+-func HIDOpenPath(path string, exclusive bool) (device *HIDDevice) {
+-	_path := C.CString(path)
+-	defer C.free(unsafe.Pointer(_path))
+-	_exclusive := C.int(0)
+-	if exclusive {
+-		_exclusive = C.int(1)
+-	}
+-	_device := C.SDL_hid_open_path(_path, _exclusive)
+-	return (*HIDDevice)(_device)
+-}
+-
+-// Write writes an Output report to a HID device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_write)
+-func (device *HIDDevice) Write(data []byte) (n int, err error) {
+-	_length := C.size_t(len(data))
+-	_data := (*C.uchar)(unsafe.Pointer(&data[0]))
+-	_device := (*C.SDL_hid_device)(device)
+-	n = int(C.SDL_hid_write(_device, _data, _length))
+-	return n, errorFromInt(n)
+-}
+-
+-// ReadTimeout reads an Input report from a HID device with timeout.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_read_timeout)
+-func (device *HIDDevice) ReadTimeout(data []byte, milliseconds int) (n int, err error) {
+-	_length := C.size_t(len(data))
+-	_data := (*C.uchar)(unsafe.Pointer(&data[0]))
+-	_device := (*C.SDL_hid_device)(device)
+-	_milliseconds := C.int(milliseconds)
+-	n = int(C.SDL_hid_read_timeout(_device, _data, _length, _milliseconds))
+-	return n, errorFromInt(n)
+-}
+-
+-// Read an Input report from a HID device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_read)
+-func (device *HIDDevice) Read(data []byte) (n int, err error) {
+-	_length := C.size_t(len(data))
+-	_data := (*C.uchar)(unsafe.Pointer(&data[0]))
+-	_device := (*C.SDL_hid_device)(device)
+-	n = int(C.SDL_hid_read(_device, _data, _length))
+-	return n, errorFromInt(n)
+-}
+-
+-// SetNonBlocking sets the device handle to be non-blocking.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_set_nonblocking)
+-func (device *HIDDevice) SetNonBlocking(nonblock bool) (err error) {
+-	_device := (*C.SDL_hid_device)(device)
+-	_nonblock := C.int(Btoi(nonblock))
+-	return errorFromInt(int(C.SDL_hid_set_nonblocking(_device, _nonblock)))
+-}
+-
+-// SendFeatureReport sends a Feature report to the device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_send_feature_report)
+-func (device *HIDDevice) SendFeatureReport(data []byte) (n int, err error) {
+-	_length := C.size_t(len(data))
+-	_data := (*C.uchar)(unsafe.Pointer(&data[0]))
+-	_device := (*C.SDL_hid_device)(device)
+-	n = int(C.SDL_hid_send_feature_report(_device, _data, _length))
+-	return n, errorFromInt(n)
+-}
+-
+-// GetFeatureReport gets a feature report from a HID device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_get_feature_report)
+-func (device *HIDDevice) GetFeatureReport(data []byte) (n int, err error) {
+-	_length := C.size_t(len(data))
+-	_data := (*C.uchar)(unsafe.Pointer(&data[0]))
+-	_device := (*C.SDL_hid_device)(device)
+-	n = int(C.SDL_hid_get_feature_report(_device, _data, _length))
+-	return n, errorFromInt(n)
+-}
+-
+-// Close closes a HID device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_close)
+-func (device *HIDDevice) Close() {
+-	_device := (*C.SDL_hid_device)(device)
+-	C.SDL_hid_close(_device)
+-}
+-
+-// GetManufacturerString gets The Manufacturer String from a HID device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_get_manufacturer_string)
+-func (device *HIDDevice) GetManufacturerString(_str *C.wchar_t, _maxlen C.size_t) (err error) {
+-	_device := (*C.SDL_hid_device)(device)
+-	return errorFromInt(int(C.SDL_hid_get_manufacturer_string(_device, _str, _maxlen)))
+-}
+-
+-// GetProductString gets The Product String from a HID device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_get_product_string)
+-func (device *HIDDevice) GetProductString(_str *C.wchar_t, _maxlen C.size_t) (err error) {
+-	_device := (*C.SDL_hid_device)(device)
+-	return errorFromInt(int(C.SDL_hid_get_product_string(_device, _str, _maxlen)))
+-}
+-
+-// GetSerialNumberString gets The SerialNumber String from a HID device.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_get_serial_number_string)
+-func (device *HIDDevice) GetSerialNumberString(_str *C.wchar_t, _maxlen C.size_t) (err error) {
+-	_device := (*C.SDL_hid_device)(device)
+-	return errorFromInt(int(C.SDL_hid_get_serial_number_string(_device, _str, _maxlen)))
+-}
+-
+-// GetIndexedString gets a string from a HID device, based on its string index.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_get_indexed_string)
+-func (device *HIDDevice) GetIndexedString(index int, _str *C.wchar_t, _maxlen C.size_t) (err error) {
+-	_device := (*C.SDL_hid_device)(device)
+-	_index := C.int(index)
+-	return errorFromInt(int(C.SDL_hid_get_indexed_string(_device, _index, _str, _maxlen)))
+-}
+-
+-// HIDBLEScan starts or stops a BLE scan on iOS and tvOS to pair Steam Controllers.
+-// (https://wiki.libsdl.org/SDL2/SDL_hid_ble_scan)
+-func (device *HIDDevice) HIDBLEScan(active bool) {
+-	_active := C.SDL_bool(Btoi(active))
+-	C.SDL_hid_ble_scan(_active)
+-}
+diff -ruN sdlorig/sdl/hints.c iktg/third/sdl2/sdl/hints.c
+--- sdlorig/sdl/hints.c	2026-10-31 20:31:05.844640086 -0400
++++ iktg/third/sdl2/sdl/hints.c	2026-11-01 22:01:29.072232251 -0500
+@@ -1,4 +1,5 @@
+-#include "_cgo_export.h"
++#include "sdl_wrapper.h"
++extern void goHintCallback(char *name, char *oldValue, char *newValue);
+ 
+ #include "sdl_wrapper.h"
+ #include "hints.h"
+diff -ruN sdlorig/sdl/hints_test.go iktg/third/sdl2/sdl/hints_test.go
+--- sdlorig/sdl/hints_test.go	2026-10-31 20:31:05.844858824 -0400
++++ iktg/third/sdl2/sdl/hints_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,131 +0,0 @@
+-package sdl
+-
+-import (
+-	"sync"
+-	"testing"
+-)
+-
+-const (
+-	TIMER_RESOLUTION = "32"
+-	DRIVER           = "software"
+-)
+-
+-func TestSetHintWithPriority(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		if !SetHintWithPriority(HINT_TIMER_RESOLUTION, TIMER_RESOLUTION, HINT_DEFAULT) {
+-			t.Errorf("return value for SetHintWithPriority(HINT_TIMER_RESOLUTION, TIMER_RESOLUTION, HINT_DEFAULT) is wrong")
+-		}
+-		if GetHint(HINT_TIMER_RESOLUTION) != TIMER_RESOLUTION {
+-			t.Errorf("SetHintWithPriority() did not set value properly")
+-		}
+-		if !SetHintWithPriority(HINT_RENDER_DRIVER, DRIVER, HINT_NORMAL) {
+-			t.Errorf("return value for SetHintWithPriority(HINT_RENDER_DRIVER, 'software', HINT_NORMAL) is wrong")
+-		}
+-		if GetHint(HINT_RENDER_DRIVER) != DRIVER {
+-			t.Errorf("SetHintWithPriority() [HINT_NORMAL] did not set value properly")
+-		}
+-		if SetHintWithPriority(HINT_RENDER_DRIVER, DRIVER, HINT_DEFAULT) {
+-			t.Errorf("return value for SetHintWithPriority(HINT_RENDER_DRIVER, DRIVER, HINT_DEFAULT) is wrong")
+-		}
+-		if GetHint(HINT_RENDER_DRIVER) != DRIVER {
+-			t.Errorf("SetHintWithPriority() [HINT_DEFAULT] did not set value properly")
+-		}
+-	})
+-}
+-
+-func TestGetSetHint(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		if !SetHint(HINT_TIMER_RESOLUTION, TIMER_RESOLUTION) {
+-			t.Errorf("return value for SetHint(HINT_TIMER_RESOLUTION, RESOLUTION) is wrong")
+-		}
+-		if GetHint(HINT_TIMER_RESOLUTION) != TIMER_RESOLUTION {
+-			t.Errorf("return value for GetHint(HINT_TIMER_RESOLUTION) is wrong")
+-		}
+-
+-		if !SetHint(HINT_RENDER_DRIVER, DRIVER) {
+-			t.Errorf("return value for SetHint(HINT_RENDER_DRIVER, DRIVER) is wrong")
+-		}
+-		if GetHint(HINT_RENDER_DRIVER) != DRIVER {
+-			t.Errorf("return value for GetHint(HINT_RENDER_DRIVER) is wrong")
+-		}
+-	})
+-}
+-
+-func TestClearHints(t *testing.T) {
+-	Do(func() {
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		if !SetHint(HINT_TIMER_RESOLUTION, TIMER_RESOLUTION) {
+-			t.Errorf("return value for SetHint(HINT_TIMER_RESOLUTION, TIMER_RESOLUTION) is wrong")
+-		}
+-		if GetHint(HINT_TIMER_RESOLUTION) != TIMER_RESOLUTION {
+-			t.Errorf("return value for GetHint(HINT_TIMER_RESOLUTION) is wrong")
+-		}
+-		ClearHints()
+-		if GetHint(HINT_TIMER_RESOLUTION) != "" {
+-			t.Errorf("return value for GetHint(HINT_TIMER_RESOLUTION) after ClearHints() is wrong")
+-		}
+-	})
+-}
+-
+-func TestAddHintCallback(t *testing.T) {
+-	Do(func() {
+-		var wg sync.WaitGroup
+-
+-		AddHintCallback(HINT_ALLOW_TOPMOST, func(data interface{}, name, oldValue, newValue string) {
+-			t.Log("HINT_ALLOW_TOPMOST:", data, name, oldValue, newValue)
+-			if newValue != "" {
+-				if newValue != "1" && data.(int) != 12 {
+-					t.Fail()
+-				}
+-				wg.Done()
+-			}
+-		}, 12)
+-		wg.Add(1)
+-
+-		AddHintCallback(HINT_RENDER_VSYNC, func(data interface{}, name, oldValue, newValue string) {
+-			t.Log("HINT_RENDER_VSYNC:", data, name, oldValue, newValue)
+-			if newValue != "" {
+-				if newValue != "1" && data.(int) != 34 {
+-					t.Fail()
+-				}
+-				wg.Done()
+-			}
+-		}, 34)
+-		wg.Add(1)
+-
+-		SetHint(HINT_ALLOW_TOPMOST, "1")
+-		SetHint(HINT_RENDER_VSYNC, "1")
+-
+-		wg.Wait()
+-	})
+-}
+-
+-func TestDelHintCallback(t *testing.T) {
+-	Do(func() {
+-		AddHintCallback(HINT_ALLOW_TOPMOST, func(data interface{}, name, oldValue, newValue string) {
+-			if newValue == "2" {
+-				t.Fail()
+-			}
+-		}, nil)
+-
+-		AddHintCallback(HINT_RENDER_VSYNC, func(data interface{}, name, oldValue, newValue string) {
+-			if newValue == "2" {
+-				t.Fail()
+-			}
+-		}, nil)
+-
+-		DelHintCallback(HINT_ALLOW_TOPMOST)
+-		DelHintCallback(HINT_RENDER_VSYNC)
+-
+-		SetHint(HINT_ALLOW_TOPMOST, "2")
+-		SetHint(HINT_RENDER_VSYNC, "2")
+-	})
+-}
+diff -ruN sdlorig/sdl/log.c iktg/third/sdl2/sdl/log.c
+--- sdlorig/sdl/log.c	2026-10-31 20:31:05.845213012 -0400
++++ iktg/third/sdl2/sdl/log.c	2026-11-01 22:01:29.074685189 -0500
+@@ -1,4 +1,5 @@
+-#include "_cgo_export.h"
++#include "sdl_wrapper.h"
++extern void logOutputFunction(void *data, int category, SDL_LogPriority pri, char *message);
+ 
+ void LogSetOutputFunction(void *data)
+ {
+diff -ruN sdlorig/sdl/log_test.go iktg/third/sdl2/sdl/log_test.go
+--- sdlorig/sdl/log_test.go	2026-10-31 20:31:05.845295813 -0400
++++ iktg/third/sdl2/sdl/log_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,16 +0,0 @@
+-package sdl
+-
+-import (
+-	"testing"
+-)
+-
+-func TestLog(t *testing.T) {
+-	Log("log_test: TestLog: %s", "this is a message")
+-}
+-
+-func TestLogSetOutputFunction(t *testing.T) {
+-	LogSetOutputFunction(func(d interface{}, c LogCategory, pri LogPriority, message string) {
+-		println("CUSTOM:", message)
+-	}, nil)
+-	Log("log_test: TestLogSetOutputFunction: %s", "this is a message")
+-}
+diff -ruN sdlorig/sdl/mouse.go iktg/third/sdl2/sdl/mouse.go
+--- sdlorig/sdl/mouse.go	2026-10-31 20:31:05.845369535 -0400
++++ iktg/third/sdl2/sdl/mouse.go	2026-11-01 21:59:10.804639671 -0500
+@@ -3,11 +3,6 @@
+ /*
+ #include "sdl_wrapper.h"
+ 
+-#if defined(__WIN32)
+-#include <SDL2/SDL_syswm.h>
+-#else
+-#include <SDL_syswm.h>
+-#endif
+ 
+ #if !(SDL_VERSION_ATLEAST(2,0,4))
+ 
+diff -ruN sdlorig/sdl/pixels_test.go iktg/third/sdl2/sdl/pixels_test.go
+--- sdlorig/sdl/pixels_test.go	2026-10-31 20:31:05.845882761 -0400
++++ iktg/third/sdl2/sdl/pixels_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,57 +0,0 @@
+-package sdl
+-
+-import "testing"
+-
+-func TestBytesAndBitsPerPixel(t *testing.T) {
+-	tests := []struct {
+-		name      string
+-		format    PixelFormatConstant
+-		wantBytes int
+-		wantBits  int
+-	}{
+-		{"UNKNOWN", PIXELFORMAT_UNKNOWN, 0, 0},
+-		{"INDEX1LSB", PIXELFORMAT_INDEX1LSB, 0, 1},
+-		{"INDEX1MSB", PIXELFORMAT_INDEX1MSB, 0, 1},
+-		{"INDEX4LSB", PIXELFORMAT_INDEX4LSB, 0, 4},
+-		{"INDEX4MSB", PIXELFORMAT_INDEX4MSB, 0, 4},
+-		{"INDEX8", PIXELFORMAT_INDEX8, 1, 8},
+-		{"RGB332", PIXELFORMAT_RGB332, 1, 8},
+-		{"RGB444", PIXELFORMAT_RGB444, 2, 12},
+-		{"RGB555", PIXELFORMAT_RGB555, 2, 15},
+-		{"BGR555", PIXELFORMAT_BGR555, 2, 15},
+-		{"ARGB4444", PIXELFORMAT_ARGB4444, 2, 16},
+-		{"RGBA4444", PIXELFORMAT_RGBA4444, 2, 16},
+-		{"ABGR4444", PIXELFORMAT_ABGR4444, 2, 16},
+-		{"BGRA4444", PIXELFORMAT_BGRA4444, 2, 16},
+-		{"ARGB1555", PIXELFORMAT_ARGB1555, 2, 16},
+-		{"RGBA5551", PIXELFORMAT_RGBA5551, 2, 16},
+-		{"ABGR1555", PIXELFORMAT_ABGR1555, 2, 16},
+-		{"BGRA5551", PIXELFORMAT_BGRA5551, 2, 16},
+-		{"RGB565", PIXELFORMAT_RGB565, 2, 16},
+-		{"BGR565", PIXELFORMAT_BGR565, 2, 16},
+-		{"RGB24", PIXELFORMAT_RGB24, 3, 24},
+-		{"BGR24", PIXELFORMAT_BGR24, 3, 24},
+-		{"RGB888", PIXELFORMAT_RGB888, 4, 24},
+-		{"RGBX8888", PIXELFORMAT_RGBX8888, 4, 24},
+-		{"BGR888", PIXELFORMAT_BGR888, 4, 24},
+-		{"BGRX8888", PIXELFORMAT_BGRX8888, 4, 24},
+-		{"ARGB8888", PIXELFORMAT_ARGB8888, 4, 32},
+-		{"RGBA8888", PIXELFORMAT_RGBA8888, 4, 32},
+-		{"ABGR8888", PIXELFORMAT_ABGR8888, 4, 32},
+-		{"BGRA8888", PIXELFORMAT_BGRA8888, 4, 32},
+-		{"ARGB2101010", PIXELFORMAT_ARGB2101010, 4, 32},
+-		{"YV12", PIXELFORMAT_YV12, 1, 86},
+-		{"IYUV", PIXELFORMAT_IYUV, 1, 89},
+-		{"YUY2", PIXELFORMAT_YUY2, 2, 85},
+-		{"UYVY", PIXELFORMAT_UYVY, 2, 89},
+-		{"YVYU", PIXELFORMAT_YVYU, 2, 86},
+-	}
+-	for _, tt := range tests {
+-		if got := BytesPerPixel(uint32(tt.format)); got != tt.wantBytes {
+-			t.Errorf("BytesPerPixel(%s) want %d, got %d", tt.name, tt.wantBytes, got)
+-		}
+-		if got := BitsPerPixel(uint32(tt.format)); got != tt.wantBits {
+-			t.Errorf("BitsPerPixel(%s) want %d, got %d", tt.name, tt.wantBits, got)
+-		}
+-	}
+-}
+diff -ruN sdlorig/sdl/power_test.go iktg/third/sdl2/sdl/power_test.go
+--- sdlorig/sdl/power_test.go	2026-10-31 20:31:05.845947735 -0400
++++ iktg/third/sdl2/sdl/power_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,25 +0,0 @@
+-package sdl
+-
+-import "testing"
+-
+-func TestGetPowerInfo(t *testing.T) {
+-	state, seconds, percent := GetPowerInfo()
+-	strstate := "Unknown"
+-	minutes := -1
+-	if state == POWERSTATE_CHARGED {
+-		strstate = "Battery charged"
+-	} else if state == POWERSTATE_CHARGING {
+-		strstate = "Battery charging"
+-	} else if state == POWERSTATE_NO_BATTERY {
+-		strstate = "No battery"
+-	} else if state == POWERSTATE_ON_BATTERY {
+-		strstate = "On battery"
+-	}
+-	if seconds != -1 {
+-		minutes = seconds / 60
+-	}
+-	t.Log("Power status report, please check manually")
+-	t.Logf("Status: %s", strstate)
+-	t.Logf("Minutes left (-1 = undetermined): %d", minutes)
+-	t.Logf("Percent left (-1 = undetermined): %d", percent)
+-}
+diff -ruN sdlorig/sdl/rect_test.go iktg/third/sdl2/sdl/rect_test.go
+--- sdlorig/sdl/rect_test.go	2026-10-31 20:31:05.846043381 -0400
++++ iktg/third/sdl2/sdl/rect_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,144 +0,0 @@
+-package sdl
+-
+-import (
+-	"testing"
+-)
+-
+-func TestRectHasIntersection(t *testing.T) {
+-	var tests = []struct {
+-		want bool
+-		rA   *Rect
+-		rB   *Rect
+-	}{
+-		{want: true, rA: &Rect{0, 0, 10, 10}, rB: &Rect{6, 7, 6, 7}},
+-		{want: false, rA: &Rect{0, 0, 10, 10}, rB: &Rect{20, 20, 5, 5}},
+-		{want: false, rA: &Rect{0, 0, 10, 10}, rB: &Rect{10, 0, 5, 5}},
+-	}
+-
+-	for _, test := range tests {
+-		if result := test.rA.HasIntersection(test.rB); result != test.want {
+-			t.Errorf("%v.HasIntersection(%v) = %v - want %v", test.rA, test.rB, result, test.want)
+-		}
+-		if result := test.rB.HasIntersection(test.rA); result != test.want {
+-			t.Errorf("%v.HasIntersection(%v) = %v - want %v", test.rB, test.rA, result, test.want)
+-		}
+-	}
+-}
+-
+-func TestRectIntersect(t *testing.T) {
+-	var tests = []struct {
+-		want   bool
+-		rA     *Rect
+-		rB     *Rect
+-		result Rect
+-	}{
+-		{want: true, rA: &Rect{0, 0, 10, 10}, rB: &Rect{6, 7, 6, 7}, result: Rect{6, 7, 4, 3}},
+-		{want: false, rA: &Rect{0, 0, 10, 10}, rB: &Rect{20, 20, 5, 5}, result: Rect{20, 20, -10, -10}},
+-		{want: false, rA: &Rect{0, 0, 10, 10}, rB: &Rect{10, 0, 5, 5}, result: Rect{10, 0, 0, 5}},
+-	}
+-
+-	for _, test := range tests {
+-		result, intersects := test.rA.Intersect(test.rB)
+-		if intersects != test.want || result != test.result {
+-			t.Errorf("%v.Intersects(%v) = %v, %v - want %v, %v", test.rA, test.rB, intersects, result, test.want, test.result)
+-		}
+-		result, intersects = test.rB.Intersect(test.rA)
+-		if intersects != test.want || result != test.result {
+-			t.Errorf("%v.Intersects(%v) = %v, %v - want %v, %v", test.rB, test.rA, intersects, result, test.want, test.result)
+-		}
+-	}
+-}
+-
+-func TestRectUnion(t *testing.T) {
+-	var tests = []struct {
+-		rA     *Rect
+-		rB     *Rect
+-		result Rect
+-	}{
+-		{rA: &Rect{0, 0, 10, 10}, rB: &Rect{6, 7, 6, 7}, result: Rect{0, 0, 12, 14}},
+-		{rA: &Rect{0, 0, 10, 10}, rB: &Rect{20, 20, 5, 5}, result: Rect{0, 0, 25, 25}},
+-		{rA: &Rect{0, 0, 10, 10}, rB: &Rect{10, 0, 5, 5}, result: Rect{0, 0, 15, 10}},
+-	}
+-
+-	for _, test := range tests {
+-		result := test.rA.Union(test.rB)
+-		if result != test.result {
+-			t.Errorf("%v.Union(%v) = %v - want %v", test.rA, test.rB, result, test.result)
+-		}
+-		result = test.rB.Union(test.rA)
+-		if result != test.result {
+-			t.Errorf("%v.Union(%v) = %v - want %v", test.rB, test.rA, result, test.result)
+-		}
+-	}
+-}
+-
+-func TestRectEmpty(t *testing.T) {
+-	var tests = []struct {
+-		want bool
+-		r    *Rect
+-	}{
+-		{want: true, r: &Rect{}},
+-		{want: true, r: &Rect{W: 1}},
+-		{want: true, r: &Rect{H: 1}},
+-		{want: true, r: nil},
+-		{want: false, r: &Rect{W: 1, H: 1}},
+-	}
+-
+-	for _, test := range tests {
+-		if got := test.r.Empty(); got != test.want {
+-			t.Errorf("%#v.Empty() = %v - want %v", test.r, got, test.want)
+-		}
+-	}
+-}
+-
+-func TestEnclosurePoints(t *testing.T) {
+-	var tests = []struct {
+-		want      bool
+-		points    []Point
+-		clip      *Rect
+-		enclosure Rect
+-	}{
+-		{want: false, points: make([]Point, 0), clip: nil, enclosure: Rect{}},
+-		{want: true, points: []Point{{5, 5}, {3, 7}, {4, 2}}, clip: nil, enclosure: Rect{3, 2, 3, 6}},
+-		{want: true, points: []Point{{5, 5}, {3, 7}, {4, 2}}, clip: &Rect{0, 0, 6, 6}, enclosure: Rect{4, 2, 2, 4}},
+-	}
+-
+-	for _, test := range tests {
+-		enclosure, result := EnclosePoints(test.points, test.clip)
+-		if enclosure != test.enclosure || result != test.want {
+-			t.Errorf("EnclosurePoints(%v, %v) = %v, %v - want %v, %v",
+-				test.points, test.clip, enclosure, result, test.enclosure, test.want)
+-		}
+-	}
+-}
+-
+-func TestIntersectLines(t *testing.T) {
+-
+-	var tests = []struct {
+-		want bool
+-		in   struct{ x1, y1, x2, y2 int32 }
+-		out  struct{ x1, y1, x2, y2 int32 }
+-		r    *Rect
+-	}{
+-		{want: false,
+-			in:  struct{ x1, y1, x2, y2 int32 }{15, 15, 25, 25},
+-			out: struct{ x1, y1, x2, y2 int32 }{15, 15, 25, 25},
+-			r:   &Rect{X: 0, Y: 0, W: 10, H: 10}},
+-		{want: true,
+-			in:  struct{ x1, y1, x2, y2 int32 }{-1, -1, 11, 11},
+-			out: struct{ x1, y1, x2, y2 int32 }{0, 0, 9, 9},
+-			r:   &Rect{X: 0, Y: 0, W: 10, H: 10}}}
+-
+-	for _, test := range tests {
+-		original := test.in
+-		if result := test.r.IntersectLine(&test.in.x1, &test.in.y1, &test.in.x2, &test.in.y2); result != test.want {
+-			t.Errorf("%v.IntersectLines(%v, %v, %v, %v) = %v - want %v",
+-				test.r, original.x1, original.y1, original.x2, original.y2, result, test.want)
+-		}
+-
+-		if test.in != test.out {
+-			t.Errorf("%v.IntersectLines(%v, %v, %v, %v) gives %v - want %v",
+-				test.r, original.x1, original.y1, original.x2, original.y2, test.in, test.out)
+-		}
+-	}
+-}
+diff -ruN sdlorig/sdl/render_test.go iktg/third/sdl2/sdl/render_test.go
+--- sdlorig/sdl/render_test.go	2026-10-31 20:31:05.846328386 -0400
++++ iktg/third/sdl2/sdl/render_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,89 +0,0 @@
+-package sdl
+-
+-import (
+-	"errors"
+-	"testing"
+-)
+-
+-func TestRenderIntegerScale(t *testing.T) {
+-	_, r, err := CreateWindowAndRenderer(50, 50, 0)
+-	if err != nil {
+-		t.Fatalf("unable to create renderer: %s", err)
+-		return
+-	}
+-
+-	errUnsupported := errors.New("That operation is not supported")
+-
+-	if !VERSION_ATLEAST(2, 0, 5) {
+-		t.Run("GetIntegerScale on versions < 2.0.5 should return unsupported", func(t *testing.T) {
+-			_, got := r.GetIntegerScale()
+-			if got.Error() != errUnsupported.Error() {
+-				t.Fatalf("expected call to GetIntegerScale to fail with %s, got %s", errUnsupported, got)
+-			}
+-		})
+-		t.Run("SetIntegerScale on versions < 2.0.5 should return unsupported", func(t *testing.T) {
+-			got := r.SetIntegerScale(false)
+-			if got.Error() != errUnsupported.Error() {
+-				t.Fatalf("expected call to SetIntegerScale to fail with %s, got %s", errUnsupported, got)
+-			}
+-		})
+-
+-		return
+-	}
+-
+-	set := func(v bool, t *testing.T) {
+-		if err := r.SetIntegerScale(v); err != nil {
+-			t.Fatalf("unable to set scale %v: %s", v, err)
+-		}
+-	}
+-	check := func(want bool, t *testing.T) {
+-		got, err := r.GetIntegerScale()
+-		if err != nil {
+-			t.Fatalf("unable to get scale: %s", err)
+-		}
+-
+-		if got != want {
+-			t.Fatalf("wanted renderer scale to be %v", want)
+-		}
+-	}
+-
+-	t.Run("should start out as false", func(t *testing.T) {
+-		check(false, t)
+-	})
+-
+-	t.Run("if set to true should return true", func(t *testing.T) {
+-		set(true, t)
+-		check(true, t)
+-	})
+-
+-	t.Run("if set to false should return false", func(t *testing.T) {
+-		set(true, t)
+-		check(true, t)
+-
+-		set(false, t)
+-		check(false, t)
+-	})
+-
+-	t.Run("should handle SDL_FALSE return on GetIntegerScale", func(t *testing.T) {
+-		_, dummy, err := CreateWindowAndRenderer(50, 50, 0)
+-		if err != nil {
+-			t.Fatalf("unable to create renderer: %s", err)
+-			return
+-		}
+-
+-		if err := dummy.SetIntegerScale(true); err != nil {
+-			t.Fatalf("expected call to SetIntegerScale to succeed, got %s", err)
+-		}
+-		if err := dummy.Destroy(); err != nil {
+-			t.Fatalf("expected call to Destroy to succeed, got %s", err)
+-		}
+-
+-		v, err := dummy.GetIntegerScale()
+-		if err == nil {
+-			t.Fatalf("expected call to GetIntegerScale on ivalid renderer to fail")
+-		}
+-		if v != false {
+-			t.Fatalf("wanted renderer scale to be %v", false)
+-		}
+-	})
+-}
+diff -ruN sdlorig/sdl/sdl_cgo.go iktg/third/sdl2/sdl/sdl_cgo.go
+--- sdlorig/sdl/sdl_cgo.go	2026-10-31 20:31:05.846650416 -0400
++++ iktg/third/sdl2/sdl/sdl_cgo.go	2026-11-01 21:57:07.275976697 -0500
+@@ -3,5 +3,5 @@
+ package sdl
+ 
+ //#cgo windows LDFLAGS: -lSDL2
+-//#cgo linux freebsd darwin openbsd pkg-config: sdl2
++//
+ import "C"
+diff -ruN sdlorig/sdl/sdl_test.go iktg/third/sdl2/sdl/sdl_test.go
+--- sdlorig/sdl/sdl_test.go	2026-10-31 20:31:05.846705901 -0400
++++ iktg/third/sdl2/sdl/sdl_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,76 +0,0 @@
+-package sdl
+-
+-import (
+-	"fmt"
+-	"os"
+-	"runtime"
+-	"testing"
+-)
+-
+-func init() {
+-	if !VERSION_ATLEAST(2, 0, 4) {
+-		fmt.Printf("Warning: Your SDL version (%d.%d.%d) is outdated and may fail to pass tests written for 2.0.4\n", MAJOR_VERSION, MINOR_VERSION, PATCHLEVEL)
+-	}
+-}
+-
+-/* Set up main thread during testing to run any thread-stubborn test code.
+- * This is necessary as Go runs test functions on different threads.
+- * Examples of functions that are best run in main:
+- *     Init, Quit, PollEvent, WaitEvent
+- * Failure to run such functions in main during testing may produce insidious,
+- * hard-to-reproduce bugs.
+- */
+-func TestMain(m *testing.M) {
+-	var exitcode int
+-	Main(func() {
+-		exitcode = m.Run()
+-	})
+-	os.Exit(exitcode)
+-}
+-
+-func TestInitQuit(t *testing.T) {
+-	Do(func() {
+-		Init(0)
+-		subs := []uint32{INIT_TIMER, INIT_AUDIO, INIT_VIDEO, INIT_JOYSTICK,
+-			INIT_HAPTIC, INIT_GAMECONTROLLER}
+-
+-		for i := 0; i < len(subs); i++ {
+-			if (runtime.GOOS == "freebsd") && (subs[i] == INIT_HAPTIC) {
+-				// FreeBSD does not support the haptic subsystem
+-				continue
+-			}
+-			if err := Init(subs[i]); err != nil {
+-				t.Errorf("Error on Init(%d): %s", subs[i], err)
+-			}
+-			if WasInit(subs[i]) != subs[i] {
+-				t.Errorf("Init(%d): subsystem not initialized", subs[i])
+-			}
+-			QuitSubSystem(subs[i])
+-			if WasInit(subs[i]) == subs[i] {
+-				t.Errorf("QuitSubSystem(%d): subsystem still initialized", subs[i])
+-			}
+-			if err := InitSubSystem(subs[i]); err != nil {
+-				t.Errorf("Error on Init(%d): %s", subs[i], err)
+-			}
+-			if WasInit(subs[i]) != subs[i] {
+-				t.Errorf("InitSubSystem(%d): subsystem not initialized", subs[i])
+-			}
+-			QuitSubSystem(subs[i])
+-			if WasInit(subs[i]) == subs[i] {
+-				t.Errorf("QuitSubSystem(%d): subsystem still initialized", subs[i])
+-			}
+-		}
+-		Quit()
+-	})
+-}
+-
+-func TestGetPlatform(t *testing.T) {
+-	goos := runtime.GOOS
+-	value := GetPlatform()
+-	if (goos == "linux" && value != "Linux") ||
+-		(goos == "freebsd" && value != "FreeBSD") ||
+-		(goos == "windows" && value != "Windows") ||
+-		(goos == "darwin" && value != "Mac OS X") {
+-		t.Errorf("platform mismatch: '%s' != '%s'", goos, value)
+-	}
+-}
+diff -ruN sdlorig/sdl/shape.go iktg/third/sdl2/sdl/shape.go
+--- sdlorig/sdl/shape.go	2026-10-31 20:31:05.846825248 -0400
++++ iktg/third/sdl2/sdl/shape.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,184 +0,0 @@
+-package sdl
+-
+-/*
+-#include "sdl_wrapper.h"
+-
+-// until SDL 2.0.6 SDL_shape.h was not included in SDL.h
+-#if !(SDL_VERSION_ATLEAST(2,0,6))
+-#if defined(_WIN32)
+-	#include <SDL2/SDL_shape.h>
+-#else
+-	#include <SDL_shape.h>
+-#endif
+-#endif
+-*/
+-import "C"
+-import "unsafe"
+-
+-const (
+-	NONSHAPEABLE_WINDOW    = C.SDL_NONSHAPEABLE_WINDOW
+-	INVALID_SHAPE_ARGUMENT = C.SDL_INVALID_SHAPE_ARGUMENT
+-	WINDOW_LACKS_SHAPE     = C.SDL_WINDOW_LACKS_SHAPE
+-)
+-
+-type WindowShapeModeKind C.WindowShapeMode
+-
+-const (
+-	ShapeModeDefaultKind              WindowShapeModeKind = C.ShapeModeDefault              // the default mode, a binarized alpha cutoff of 1
+-	ShapeModeBinarizeAlphaKind        WindowShapeModeKind = C.ShapeModeBinarizeAlpha        // a binarized alpha cutoff with a given integer value
+-	ShapeModeReverseBinarizeAlphaKind WindowShapeModeKind = C.ShapeModeReverseBinarizeAlpha // a binarized alpha cutoff with a given integer value, but with the opposite comparison
+-	ShapeModeColorKeyKind             WindowShapeModeKind = C.ShapeModeColorKey             // a color key is applied
+-)
+-
+-func SHAPEMODEALPHA(mode WindowShapeModeKind) bool {
+-	return (mode == ShapeModeDefaultKind ||
+-		mode == ShapeModeBinarizeAlphaKind ||
+-		mode == ShapeModeReverseBinarizeAlphaKind)
+-}
+-
+-// A union containing parameters for shaped windows
+-// uint8 or Color
+-type cWindowShapeParams C.SDL_WindowShapeParams
+-
+-type cWindowShapeMode struct {
+-	mode       WindowShapeModeKind
+-	parameters cWindowShapeParams
+-}
+-
+-type WindowShapeMode interface {
+-	Mode() WindowShapeModeKind
+-	cWSM() cWindowShapeMode
+-}
+-
+-type ShapeModeDefault struct{}
+-
+-func (smd ShapeModeDefault) Mode() WindowShapeModeKind {
+-	return ShapeModeDefaultKind
+-}
+-
+-func (smd ShapeModeDefault) cWSM() cWindowShapeMode {
+-	return cWindowShapeMode{
+-		mode:       ShapeModeDefaultKind,
+-		parameters: [4]uint8{1, 0, 0, 0},
+-	}
+-}
+-
+-type ShapeModeBinarizeAlpha struct {
+-	Cutoff uint8
+-}
+-
+-func (smba ShapeModeBinarizeAlpha) Mode() WindowShapeModeKind {
+-	return ShapeModeBinarizeAlphaKind
+-}
+-
+-func (smba ShapeModeBinarizeAlpha) cWSM() cWindowShapeMode {
+-	return cWindowShapeMode{
+-		mode:       ShapeModeBinarizeAlphaKind,
+-		parameters: [4]uint8{smba.Cutoff, 0, 0, 0},
+-	}
+-}
+-
+-type ShapeModeReverseBinarizeAlpha struct {
+-	Cutoff uint8
+-}
+-
+-func (smba ShapeModeReverseBinarizeAlpha) Mode() WindowShapeModeKind {
+-	return ShapeModeReverseBinarizeAlphaKind
+-}
+-
+-func (smba ShapeModeReverseBinarizeAlpha) cWSM() cWindowShapeMode {
+-	return cWindowShapeMode{
+-		mode:       ShapeModeReverseBinarizeAlphaKind,
+-		parameters: [4]uint8{smba.Cutoff, 0, 0, 0},
+-	}
+-}
+-
+-type ShapeModeColorKey struct {
+-	Color Color
+-}
+-
+-func (smck ShapeModeColorKey) Mode() WindowShapeModeKind {
+-	return ShapeModeColorKeyKind
+-}
+-
+-func (smck ShapeModeColorKey) cWSM() cWindowShapeMode {
+-	return cWindowShapeMode{
+-		mode:       ShapeModeReverseBinarizeAlphaKind,
+-		parameters: [4]uint8{smck.Color.R, smck.Color.G, smck.Color.B, smck.Color.A},
+-	}
+-}
+-
+-func (cwsm cWindowShapeMode) goWSM() WindowShapeMode {
+-	switch cwsm.mode {
+-	case ShapeModeDefaultKind:
+-		return ShapeModeDefault{}
+-
+-	case ShapeModeBinarizeAlphaKind:
+-		return ShapeModeBinarizeAlpha{
+-			Cutoff: ([4]uint8)(cwsm.parameters)[0],
+-		}
+-
+-	case ShapeModeReverseBinarizeAlphaKind:
+-		return ShapeModeReverseBinarizeAlpha{
+-			Cutoff: ([4]uint8)(cwsm.parameters)[0],
+-		}
+-
+-	case ShapeModeColorKeyKind:
+-		return ShapeModeColorKey{
+-			Color: Color{
+-				R: ([4]uint8)(cwsm.parameters)[0],
+-				G: ([4]uint8)(cwsm.parameters)[1],
+-				B: ([4]uint8)(cwsm.parameters)[2],
+-				A: ([4]uint8)(cwsm.parameters)[3],
+-			},
+-		}
+-
+-	default:
+-		panic("Unknown WindowShapeModeKind")
+-
+-	}
+-}
+-
+-func (wsm *cWindowShapeMode) cptr() *C.SDL_WindowShapeMode {
+-	return (*C.SDL_WindowShapeMode)(unsafe.Pointer(wsm))
+-}
+-
+-// CreateShapedWindow creates a window that can be shaped with the specified position, dimensions, and flags
+-// (https://wiki.libsdl.org/SDL2/SDL_CreateShapedWindow)
+-func CreateShapedWindow(title string, x, y, w, h uint32, flags uint32) (*Window, error) {
+-	_title := C.CString(title)
+-	defer C.free(unsafe.Pointer(_title))
+-	_window := C.SDL_CreateShapedWindow(_title, C.uint(x), C.uint(y), C.uint(w), C.uint(h), C.Uint32(flags))
+-	if _window == nil {
+-		return nil, GetError()
+-	}
+-	return (*Window)(unsafe.Pointer(_window)), nil
+-}
+-
+-// IsShapedWindow returns whether the given window is a shaped window.
+-// (https://wiki.libsdl.org/SDL2/SDL_IsShapedWindow)
+-func (window *Window) IsShaped() bool {
+-	return (C.SDL_IsShapedWindow(window.cptr()) & 1) == 1
+-}
+-
+-// SetShape sets the shape and parameters of a shaped window
+-// (https://wiki.libsdl.org/SDL2/SDL_SetWindowShape)
+-func (window *Window) SetShape(shape *Surface, shape_mode WindowShapeMode) int32 {
+-	if shape_mode == nil {
+-		panic("shape_mode can not be nil")
+-	}
+-	var _cWSM cWindowShapeMode = shape_mode.cWSM()
+-
+-	return (int32)(C.SDL_SetWindowShape(window.cptr(), shape.cptr(), _cWSM.cptr()))
+-}
+-
+-// GetShapeMode gets the shape parameters of a shaped window
+-// (https://wiki.libsdl.org/SDL2/SDL_GetShapedWindowMode)
+-func (window *Window) GetShapeMode() (WindowShapeMode, int32) {
+-	var _cWSM cWindowShapeMode
+-	var _resInt32 = (int32)(C.SDL_GetShapedWindowMode(window.cptr(), _cWSM.cptr()))
+-	if _resInt32 != 0 {
+-		return nil, _resInt32
+-	}
+-	return _cWSM.goWSM(), _resInt32
+-}
+diff -ruN sdlorig/sdl/struct_test.go iktg/third/sdl2/sdl/struct_test.go
+--- sdlorig/sdl/struct_test.go	2026-10-31 20:31:05.846936531 -0400
++++ iktg/third/sdl2/sdl/struct_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,177 +0,0 @@
+-package sdl
+-
+-import (
+-	"fmt"
+-	"reflect"
+-	"strings"
+-	"testing"
+-)
+-
+-type EdgeCaseFunc func(t *testing.T, a, b interface{})
+-
+-func structMatch(t *testing.T, ta, tb reflect.Type) {
+-	structMatchGeneric(t, ta, tb, ta.Size(), tb.Size())
+-}
+-
+-func structMatchFixed(t *testing.T, ta, tb reflect.Type, szb uintptr) {
+-	structMatchGeneric(t, ta, tb, ta.Size(), szb)
+-}
+-
+-func structMatchGeneric(t *testing.T, ta, tb reflect.Type, sza, szb uintptr) {
+-	if sza != szb {
+-		t.Errorf("type size mismatch: %s(%d) != %s(%d)",
+-			ta.Name(), ta.Size(), tb.Name(), tb.Size())
+-		t.Fail()
+-	}
+-
+-	if ta.Kind() != tb.Kind() {
+-		t.Errorf("type kind mismatch: %s=%s != %s=%s",
+-			ta.Name(), ta.Kind(), tb.Name(), tb.Kind())
+-		t.Fail()
+-	}
+-}
+-
+-func mouseWheelEventEdgeCase(t *testing.T, a, b interface{}) {
+-	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+-
+-	if VERSION_ATLEAST(2, 0, 4) {
+-		structMatchFixed(t, ta, tb, 28)
+-	} else {
+-		tf := reflect.TypeOf(MouseWheelEvent{}.Direction)
+-		structMatchFixed(t, ta, tb, tb.Size()+tf.Size())
+-	}
+-}
+-
+-func dropEventEdgeCase(t *testing.T, a, b interface{}) {
+-	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+-
+-	if VERSION_ATLEAST(2, 0, 5) {
+-		structMatch(t, ta, tb)
+-	} else {
+-		structMatchFixed(t, ta, tb, 24)
+-	}
+-}
+-
+-// TODO: SysWMInfo
+-// TODO: RendererInfo
+-// TODO: AudioCVT
+-func TestStructABI(t *testing.T) {
+-	var tests = []struct {
+-		gStruct    interface{}
+-		cStruct    interface{}
+-		isEdgeCase EdgeCaseFunc
+-	}{
+-		{AudioSpec{}, cAudioSpec{}, nil},
+-		{DisplayMode{}, cDisplayMode{}, nil},
+-		{Palette{}, cPalette{}, nil},
+-		{PixelFormat{}, cPixelFormat{}, nil},
+-		{Surface{}, cSurface{}, nil},
+-		{Version{}, cVersion{}, nil},
+-		{WindowEvent{}, cWindowEvent{}, nil},
+-
+-		// EVENTS
+-		{KeyboardEvent{}, cKeyboardEvent{}, nil},
+-		{MouseButtonEvent{}, cMouseButtonEvent{}, nil},
+-		{MouseMotionEvent{}, cMouseMotionEvent{}, nil},
+-		{MouseWheelEvent{}, cMouseWheelEvent{}, mouseWheelEventEdgeCase},
+-		{TextEditingEvent{}, cTextEditingEvent{}, nil},
+-		{TextInputEvent{}, cTextInputEvent{}, nil},
+-		{JoyAxisEvent{}, cJoyAxisEvent{}, nil},
+-		{JoyBallEvent{}, cJoyBallEvent{}, nil},
+-		{JoyHatEvent{}, cJoyHatEvent{}, nil},
+-		{JoyButtonEvent{}, cJoyButtonEvent{}, nil},
+-		{ControllerAxisEvent{}, cControllerAxisEvent{}, nil},
+-		{ControllerButtonEvent{}, cControllerButtonEvent{}, nil},
+-		{ControllerDeviceEvent{}, cControllerDeviceEvent{}, nil},
+-		{AudioDeviceEvent{}, cAudioDeviceEvent{}, nil},
+-		{TouchFingerEvent{}, cTouchFingerEvent{}, nil},
+-		{MultiGestureEvent{}, cMultiGestureEvent{}, nil},
+-		{DollarGestureEvent{}, cDollarGestureEvent{}, nil},
+-		{DropEvent{}, cDropEvent{}, dropEventEdgeCase},
+-		{UserEvent{}, cUserEvent{}, nil},
+-		{SysWMEvent{}, cSysWMEvent{}, nil},
+-	}
+-
+-	for _, test := range tests {
+-		testABI(t, test.gStruct, test.cStruct, test.isEdgeCase)
+-	}
+-}
+-
+-// TODO: mixer.MusicType
+-// TODO: mixer.Fading
+-func TestTypeABI(t *testing.T) {
+-	var tests = []struct {
+-		gType interface{}
+-		cType interface{}
+-	}{
+-		{AudioStatus(0), cAudioStatus(0)},
+-		{ErrorCode(0), cErrorCode(0)},
+-	}
+-
+-	for _, test := range tests {
+-		testABI(t, test.gType, test.cType, nil)
+-	}
+-}
+-
+-func testABI(t *testing.T, a, b interface{}, f EdgeCaseFunc) {
+-	ta, tb := reflect.TypeOf(a), reflect.TypeOf(b)
+-
+-	if f != nil {
+-		f(t, a, b)
+-	} else {
+-		structMatch(t, ta, tb)
+-
+-		if ta.Kind() == reflect.Struct {
+-			for i := 0; i < ta.NumField(); i++ {
+-				f := ta.Field(i)
+-				if f.Name == "_" {
+-					// ignore padding fields
+-					continue
+-				}
+-				if err := verifyField(t, f, tb); err != nil {
+-					dumpStructFormat(t, ta)
+-					dumpStructFormat(t, tb)
+-					t.Error(err)
+-				}
+-			}
+-		}
+-	}
+-}
+-
+-func dumpStructFormat(t *testing.T, s reflect.Type) {
+-	const dFormat = "%5d %30s %8d %8d"
+-	var sFormat = strings.Replace(dFormat, "d", "s", -1)
+-
+-	t.Logf(sFormat, "index", "name", "offset", "size")
+-	for i := 0; i < s.NumField(); i++ {
+-		f := s.Field(i)
+-		t.Logf(dFormat, i, s.Name()+"."+f.Name, f.Offset, f.Type.Size())
+-	}
+-}
+-
+-func verifyField(t *testing.T, gField reflect.StructField, cType reflect.Type) error {
+-	var cField = searchField(cType, gField.Name)
+-	if cField == nil {
+-		return fmt.Errorf("field not found: %q", gField.Name)
+-	}
+-	gOffset, gSize := gField.Offset, gField.Type.Size()
+-	cOffset, cSize := cField.Offset, cField.Type.Size()
+-	if cOffset != gOffset || cSize != gSize {
+-		return fmt.Errorf("field offset/size mismatch %s(%d, %d) != %s(%d, %d)",
+-			gField.Name, gOffset, gSize,
+-			cField.Name, cOffset, cSize)
+-	}
+-	return nil
+-}
+-
+-func searchField(t reflect.Type, gName string) *reflect.StructField {
+-	for i := 0; i < t.NumField(); i++ {
+-		var f = t.Field(i)
+-		// convert c field_name to fieldname
+-		var cName = strings.Replace(f.Name, "_", "", -1)
+-		if strings.EqualFold(gName, cName) {
+-			return &f
+-		}
+-	}
+-	return nil
+-}
+diff -ruN sdlorig/sdl/surface.go iktg/third/sdl2/sdl/surface.go
+--- sdlorig/sdl/surface.go	2026-10-31 20:31:05.846987312 -0400
++++ iktg/third/sdl2/sdl/surface.go	2026-11-01 22:00:00.680414491 -0500
+@@ -490,33 +490,6 @@
+ 	return nil
+ }
+ 
+-// Blit performs a fast surface copy to a destination surface.
+-// (https://wiki.libsdl.org/SDL2/SDL_BlitSurface)
+-func (surface *Surface) Blit(srcRect *Rect, dst *Surface, dstRect *Rect) error {
+-	if C.SDL_BlitSurface(surface.cptr(), srcRect.cptr(), dst.cptr(), dstRect.cptr()) != 0 {
+-		return GetError()
+-	}
+-	return nil
+-}
+-
+-// BlitScaled performs a scaled surface copy to a destination surface.
+-// (https://wiki.libsdl.org/SDL2/SDL_BlitScaled)
+-func (surface *Surface) BlitScaled(srcRect *Rect, dst *Surface, dstRect *Rect) error {
+-	if C.SDL_BlitScaled(surface.cptr(), srcRect.cptr(), dst.cptr(), dstRect.cptr()) != 0 {
+-		return GetError()
+-	}
+-	return nil
+-}
+-
+-// UpperBlit has been replaced by Blit().
+-// (https://wiki.libsdl.org/SDL2/SDL_UpperBlit)
+-func (surface *Surface) UpperBlit(srcRect *Rect, dst *Surface, dstRect *Rect) error {
+-	if C.SDL_UpperBlit(surface.cptr(), srcRect.cptr(), dst.cptr(), dstRect.cptr()) != 0 {
+-		return GetError()
+-	}
+-	return nil
+-}
+-
+ // LowerBlit performs low-level surface blitting only.
+ // (https://wiki.libsdl.org/SDL2/SDL_LowerBlit)
+ func (surface *Surface) LowerBlit(srcRect *Rect, dst *Surface, dstRect *Rect) error {
+@@ -533,15 +506,6 @@
+ 		return GetError()
+ 	}
+ 	return nil
+-}
+-
+-// UpperBlitScaled has been replaced by BlitScaled().
+-// (https://wiki.libsdl.org/SDL2/SDL_UpperBlitScaled)
+-func (surface *Surface) UpperBlitScaled(srcRect *Rect, dst *Surface, dstRect *Rect) error {
+-	if C.SDL_UpperBlitScaled(surface.cptr(), srcRect.cptr(), dst.cptr(), dstRect.cptr()) != 0 {
+-		return GetError()
+-	}
+-	return nil
+ }
+ 
+ // LowerBlitScaled performs low-level surface scaled blitting only.
+diff -ruN sdlorig/sdl/surface_test.go iktg/third/sdl2/sdl/surface_test.go
+--- sdlorig/sdl/surface_test.go	2026-10-31 20:31:05.847151118 -0400
++++ iktg/third/sdl2/sdl/surface_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,52 +0,0 @@
+-package sdl
+-
+-import (
+-	"testing"
+-)
+-
+-func TestSurface(t *testing.T) {
+-	Do(func() {
+-		var window *Window
+-		var surface *Surface
+-		var image *Surface
+-		var err error
+-
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		if window, err = CreateWindow("Hello!", 100, 100, 800, 600, WINDOW_SHOWN); err != nil {
+-			t.Error(err)
+-		}
+-		defer window.Destroy()
+-
+-		if surface, err = window.GetSurface(); err != nil {
+-			t.Error(err)
+-		}
+-
+-		pixels := surface.Pixels()
+-		for i := range pixels {
+-			pixels[i] = 0xFF
+-		}
+-
+-		if err = window.UpdateSurface(); err != nil {
+-			t.Error(err)
+-		}
+-
+-		Delay(50)
+-
+-		if image, err = LoadBMP("../.go-sdl2-examples/assets/test.bmp"); err != nil {
+-			t.Error(err)
+-		}
+-		defer image.Free()
+-
+-		if err = image.Blit(&Rect{0, 0, 512, 512}, surface, &Rect{0, 0, 512, 512}); err != nil {
+-			t.Error(err)
+-		}
+-
+-		if err = window.UpdateSurface(); err != nil {
+-			t.Error(err)
+-		}
+-
+-		Delay(50)
+-	})
+-}
+diff -ruN sdlorig/sdl/system.c iktg/third/sdl2/sdl/system.c
+--- sdlorig/sdl/system.c	2026-10-31 20:31:05.847206692 -0400
++++ iktg/third/sdl2/sdl/system.c	2026-11-01 22:01:29.076878465 -0500
+@@ -1,4 +1,4 @@
+-#include "_cgo_export.h"
++#include "sdl_wrapper.h"
+ #include "system.h"
+ 
+ #if defined(_WIN32)
+diff -ruN sdlorig/sdl/syswm.go iktg/third/sdl2/sdl/syswm.go
+--- sdlorig/sdl/syswm.go	2026-10-31 20:31:05.847571327 -0400
++++ iktg/third/sdl2/sdl/syswm.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,149 +0,0 @@
+-package sdl
+-
+-/*
+-#include "sdl_wrapper.h"
+-
+-#if defined(__WIN32)
+-#include <SDL2/SDL_syswm.h>
+-#else
+-#include <SDL_syswm.h>
+-#endif
+-
+-#if !(SDL_VERSION_ATLEAST(2,0,2))
+-#define SDL_SYSWM_WAYLAND SDL_SYSWM_UNKNOWN
+-#define SDL_SYSWM_MIR SDL_SYSWM_UNKNOWN
+-#endif
+-
+-#if !(SDL_VERSION_ATLEAST(2,0,3))
+-
+-#if defined(WARN_OUTDATED)
+-#pragma message("SDL_SYSWM_WINRT is not supported before SDL 2.0.3")
+-#endif
+-
+-#define SDL_SYSWM_WINRT (0)
+-#endif
+-
+-#if !(SDL_VERSION_ATLEAST(2,0,4))
+-
+-#if defined(WARN_OUTDATED)
+-#pragma message("SDL_SYSWM_ANDROID is not supported before SDL 2.0.4")
+-#endif
+-
+-#define SDL_SYSWM_ANDROID (0)
+-#endif
+-
+-#if !(SDL_VERSION_ATLEAST(2,0,5))
+-
+-#if defined(WARN_OUTDATED)
+-#pragma message("SDL_SYSWM_VIVANTE is not supported before SDL 2.0.5")
+-#endif
+-
+-#define SDL_SYSWM_VIVANTE (0)
+-#endif
+-*/
+-import "C"
+-import "unsafe"
+-
+-// Various supported windowing subsystems.
+-// (https://wiki.libsdl.org/SDL2/SDL_SYSWM_TYPE)
+-type SysWmType C.SDL_SYSWM_TYPE
+-
+-const (
+-	SYSWM_UNKNOWN  SysWmType = C.SDL_SYSWM_UNKNOWN
+-	SYSWM_WINDOWS  SysWmType = C.SDL_SYSWM_WINDOWS  // Microsoft Windows
+-	SYSWM_X11      SysWmType = C.SDL_SYSWM_X11      // X Window System
+-	SYSWM_DIRECTFB SysWmType = C.SDL_SYSWM_DIRECTFB // DirectFB
+-	SYSWM_COCOA    SysWmType = C.SDL_SYSWM_COCOA    // Apple Mac OS X
+-	SYSWM_UIKIT    SysWmType = C.SDL_SYSWM_UIKIT    // Apple iOS
+-	SYSWM_WAYLAND  SysWmType = C.SDL_SYSWM_WAYLAND  // Wayland (>= SDL 2.0.2)
+-	SYSWM_MIR      SysWmType = C.SDL_SYSWM_MIR      // Mir (>= SDL 2.0.2)
+-	SYSWM_WINRT    SysWmType = C.SDL_SYSWM_WINRT    // WinRT (>= SDL 2.0.3)
+-	SYSWM_ANDROID  SysWmType = C.SDL_SYSWM_ANDROID  // Android (>= SDL 2.0.4)
+-	SYSWM_VIVANTE  SysWmType = C.SDL_SYSWM_VIVANTE  // Vivante (>= SDL 2.0.5)
+-)
+-
+-// SysWMInfo contains system-dependent information about a window.
+-// (https://wiki.libsdl.org/SDL2/SDL_SysWMinfo)
+-type SysWMInfo struct {
+-	Version   Version   // a Version structure that contains the current SDL version
+-	Subsystem SysWmType // the windowing system type
+-	dummy     [24]byte  // unused (to help compilers when no specific system is available)
+-}
+-
+-// WindowsInfo contains Microsoft Windows window information.
+-type WindowsInfo struct {
+-	Window        unsafe.Pointer // the window handle
+-	DeviceContext unsafe.Pointer // the device context handle
+-	Instance      unsafe.Pointer // the instance handle
+-}
+-
+-// X11Info contains X Window System window information.
+-type X11Info struct {
+-	Display unsafe.Pointer // the X11 display
+-	Window  uint           // the X11 window
+-}
+-
+-// DFBInfo contains DirectFB window information.
+-type DFBInfo struct {
+-	Dfb     unsafe.Pointer // the DirectFB main interface
+-	Window  unsafe.Pointer // the DirectFB window handle
+-	Surface unsafe.Pointer // the DirectFB client surface
+-}
+-
+-// CocoaInfo contains Apple Mac OS X window information.
+-type CocoaInfo struct {
+-	Window unsafe.Pointer // the Cocoa window
+-}
+-
+-// UIKitInfo contains Apple iOS window information.
+-type UIKitInfo struct {
+-	Window unsafe.Pointer // the UIKit window
+-}
+-
+-// SysWMmsg contains system-dependent window manager messages.
+-// (https://wiki.libsdl.org/SDL2/SDL_SysWMmsg)
+-type SysWMmsg struct {
+-	Version   Version   // a Version structure that contains the current SDL version
+-	Subsystem SysWmType // the windowing system type
+-	data      [24]byte  // internal data
+-}
+-
+-func (info *SysWMInfo) cptr() *C.SDL_SysWMinfo {
+-	return (*C.SDL_SysWMinfo)(unsafe.Pointer(info))
+-}
+-
+-// GetWMInfo returns driver specific information about a window.
+-// (https://wiki.libsdl.org/SDL2/SDL_GetWindowWMInfo)
+-func (window *Window) GetWMInfo() (*SysWMInfo, error) {
+-	var info SysWMInfo
+-	VERSION(&info.Version)
+-	if C.SDL_GetWindowWMInfo(window.cptr(), info.cptr()) == 0 {
+-		return nil, GetError()
+-	}
+-	return &info, nil
+-}
+-
+-// GetWindowsInfo returns Microsoft Windows window information.
+-func (info *SysWMInfo) GetWindowsInfo() *WindowsInfo {
+-	return (*WindowsInfo)(unsafe.Pointer(&info.dummy[0]))
+-}
+-
+-// GetX11Info returns X Window System window information.
+-func (info *SysWMInfo) GetX11Info() *X11Info {
+-	return (*X11Info)(unsafe.Pointer(&info.dummy[0]))
+-}
+-
+-// GetDFBInfo returns DirectFB window information.
+-func (info *SysWMInfo) GetDFBInfo() *DFBInfo {
+-	return (*DFBInfo)(unsafe.Pointer(&info.dummy[0]))
+-}
+-
+-// GetCocoaInfo returns Apple Mac OS X window information.
+-func (info *SysWMInfo) GetCocoaInfo() *CocoaInfo {
+-	return (*CocoaInfo)(unsafe.Pointer(&info.dummy[0]))
+-}
+-
+-// GetUIKitInfo returns Apple iOS window information.
+-func (info *SysWMInfo) GetUIKitInfo() *UIKitInfo {
+-	return (*UIKitInfo)(unsafe.Pointer(&info.dummy[0]))
+-}
+diff -ruN sdlorig/sdl/syswm_cocoa.go iktg/third/sdl2/sdl/syswm_cocoa.go
+--- sdlorig/sdl/syswm_cocoa.go	2026-10-31 20:31:05.847643919 -0400
++++ iktg/third/sdl2/sdl/syswm_cocoa.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,16 +0,0 @@
+-// +build cocoa OR darwin
+-
+-package sdl
+-
+-import "C"
+-import "unsafe"
+-
+-// CocoaMsg contains Apple Mac OS X window information.
+-type CocoaMsg struct {
+-	dummy C.int
+-}
+-
+-// Cocoa() returns Apple Mac OS X message.
+-func (msg *SysWMmsg) Cocoa() *CocoaMsg {
+-	return (*CocoaMsg)(unsafe.Pointer(&msg.data[0]))
+-}
+diff -ruN sdlorig/sdl/syswm_dfb.go iktg/third/sdl2/sdl/syswm_dfb.go
+--- sdlorig/sdl/syswm_dfb.go	2026-10-31 20:31:05.847672589 -0400
++++ iktg/third/sdl2/sdl/syswm_dfb.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,16 +0,0 @@
+-// +build dfb
+-
+-package sdl
+-
+-import "C"
+-import "unsafe"
+-
+-// DFBMsg contains DirectFB window information.
+-type DFBMsg struct {
+-	Event C.DFBEvent
+-}
+-
+-// DFB() returns DirectFB message.
+-func (msg *SysWMmsg) DFB() *DFBMsg {
+-	return (*DFBMsg)(unsafe.Pointer(&msg.data[0]))
+-}
+diff -ruN sdlorig/sdl/syswm_uikit.go iktg/third/sdl2/sdl/syswm_uikit.go
+--- sdlorig/sdl/syswm_uikit.go	2026-10-31 20:31:05.847706664 -0400
++++ iktg/third/sdl2/sdl/syswm_uikit.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,16 +0,0 @@
+-// +build uikit
+-
+-package sdl
+-
+-import "C"
+-import "unsafe"
+-
+-// UIKitMsg contains Apple iOS window information.
+-type UIKitMsg struct {
+-	dummy C.int
+-}
+-
+-// UIKit() returns Apple iOS message.
+-func (msg *SysWMmsg) UIKit() *UIKitMsg {
+-	return (*UIKitMsg)(unsafe.Pointer(&msg.data[0]))
+-}
+diff -ruN sdlorig/sdl/syswm_vivante.go iktg/third/sdl2/sdl/syswm_vivante.go
+--- sdlorig/sdl/syswm_vivante.go	2026-10-31 20:31:05.847733307 -0400
++++ iktg/third/sdl2/sdl/syswm_vivante.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,16 +0,0 @@
+-// +build vivante
+-
+-package sdl
+-
+-import "C"
+-import "unsafe"
+-
+-// VivanteKitMsg contains Vivante window information.
+-type VivanteKitMsg struct {
+-	dummy C.int
+-}
+-
+-// Vivante() returns Vivante message.
+-func (msg *SysWMmsg) Vivante() *VivanteMsg {
+-	return (*VivanteMsg)(unsafe.Pointer(&msg.data[0]))
+-}
+diff -ruN sdlorig/sdl/syswm_windows.go iktg/third/sdl2/sdl/syswm_windows.go
+--- sdlorig/sdl/syswm_windows.go	2026-10-31 20:31:05.847763542 -0400
++++ iktg/third/sdl2/sdl/syswm_windows.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,22 +0,0 @@
+-// +build windows
+-
+-package sdl
+-
+-/*
+-#include <windef.h>
+-*/
+-import "C"
+-import "unsafe"
+-
+-// WindowsMsg contains Microsoft Windows window information.
+-type WindowsMsg struct {
+-	Hwnd   C.HWND
+-	Msg    C.UINT
+-	WParam C.WPARAM
+-	LParam C.LPARAM
+-}
+-
+-// Windows() returns Microsoft Windows message.
+-func (msg *SysWMmsg) Windows() *WindowsMsg {
+-	return (*WindowsMsg)(unsafe.Pointer(&msg.data[0]))
+-}
+diff -ruN sdlorig/sdl/syswm_x11.go iktg/third/sdl2/sdl/syswm_x11.go
+--- sdlorig/sdl/syswm_x11.go	2026-10-31 20:31:05.847792161 -0400
++++ iktg/third/sdl2/sdl/syswm_x11.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,19 +0,0 @@
+-// +build x11
+-
+-package sdl
+-
+-/*
+-#include <X11/Xlib.h>
+-*/
+-import "C"
+-import "unsafe"
+-
+-// X11Msg contains X Window System window information.
+-type X11Msg struct {
+-	Event C.XEvent
+-}
+-
+-// X11() returns X Window System message.
+-func (msg *SysWMmsg) X11() *X11Msg {
+-	return (*X11Msg)(unsafe.Pointer(&msg.data[0]))
+-}
+diff -ruN sdlorig/sdl/timer_test.go iktg/third/sdl2/sdl/timer_test.go
+--- sdlorig/sdl/timer_test.go	2026-10-31 20:31:05.848315181 -0400
++++ iktg/third/sdl2/sdl/timer_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,47 +0,0 @@
+-package sdl
+-
+-import (
+-	"testing"
+-	"time"
+-)
+-
+-// Both time.Sleep() and Delay() are only guaranteed to wait *at least* the
+-// given duration, so all tests only check that time differentials are at least
+-// a certain value.
+-
+-func TestGetTicks(t *testing.T) {
+-	before := GetTicks()
+-	ms := 1
+-	time.Sleep(time.Duration(ms) * time.Millisecond)
+-	after := GetTicks()
+-	if after-before < uint32(ms) {
+-		t.Errorf("GetTicks(): returned %d, then %d after %d ms",
+-			before, after, ms)
+-	}
+-}
+-
+-func TestGetPerformance(t *testing.T) {
+-	freq := GetPerformanceFrequency()
+-	if freq <= 0 {
+-		t.Errorf("GetPerformanceFrequency(): returned %d", freq)
+-	}
+-	before := GetPerformanceCounter()
+-	ms := 10
+-	time.Sleep(time.Duration(ms) * time.Millisecond)
+-	after := GetPerformanceCounter()
+-	if after-before < freq*uint64(ms)/1000 {
+-		t.Errorf("GetPerformanceCounter(): returned %d, then %d after %d ms",
+-			before, after, ms)
+-	}
+-}
+-
+-func TestDelay(t *testing.T) {
+-	for msDelay := 0; msDelay <= 20; msDelay += 10 {
+-		before := time.Now()
+-		Delay(uint32(msDelay))
+-		msSince := time.Since(before) / time.Millisecond
+-		if int64(msSince) < int64(msDelay) {
+-			t.Errorf("Delay(%d): delayed for only %d ms", msDelay, msSince)
+-		}
+-	}
+-}
+diff -ruN sdlorig/sdl/touch.go iktg/third/sdl2/sdl/touch.go
+--- sdlorig/sdl/touch.go	2026-10-31 20:31:05.848350045 -0400
++++ iktg/third/sdl2/sdl/touch.go	2026-11-01 22:00:06.669686587 -0500
+@@ -29,7 +29,7 @@
+ import "unsafe"
+ 
+ // TOUCH_MOUSEID is the device ID for mouse events simulated with touch input
+-const TOUCH_MOUSEID = C.SDL_TOUCH_MOUSEID
++const TOUCH_MOUSEID = 0xFFFFFFFF
+ 
+ // TouchID is the ID of a touch device.
+ type TouchID C.SDL_TouchID
+diff -ruN sdlorig/sdl/video_test.go iktg/third/sdl2/sdl/video_test.go
+--- sdlorig/sdl/video_test.go	2026-10-31 20:31:05.848720502 -0400
++++ iktg/third/sdl2/sdl/video_test.go	1969-12-31 19:00:00.000000000 -0500
+@@ -1,34 +0,0 @@
+-package sdl
+-
+-import (
+-	"testing"
+-)
+-
+-func TestWindow(t *testing.T) {
+-	Do(func() {
+-		var window *Window
+-		var err error
+-
+-		Init(INIT_EVERYTHING)
+-		defer Quit()
+-
+-		if window, err = CreateWindow("Hello!", 100, 100, 800, 600, WINDOW_SHOWN); err != nil {
+-			t.Error(err)
+-		}
+-		defer window.Destroy()
+-
+-		if title := window.GetTitle(); title != "Hello!" {
+-			t.Error("Window title is incorrect!")
+-		}
+-
+-		if x, y := window.GetPosition(); x != 100 || y != 100 {
+-			t.Error("Window position is incorrect!")
+-		}
+-
+-		if w, h := window.GetSize(); w != 800 || h != 600 {
+-			t.Error("Window size is incorrect!")
+-		}
+-
+-		Delay(100)
+-	})
+-}
+diff -ruN sdlorig/ttf/sdl_ttf_cgo.go iktg/third/sdl2/ttf/sdl_ttf_cgo.go
+--- sdlorig/ttf/sdl_ttf_cgo.go	2026-10-31 20:31:05.848973569 -0400
++++ iktg/third/sdl2/ttf/sdl_ttf_cgo.go	2026-11-01 21:57:07.256316633 -0500
+@@ -3,6 +3,6 @@
+ package ttf
+ 
+ //#cgo windows LDFLAGS: -lSDL2 -lSDL2_ttf
+-//#cgo linux freebsd darwin pkg-config: SDL2_ttf
++//
+ //#cgo linux freebsd darwin LDFLAGS: -lSDL2_ttf
+ import "C"
