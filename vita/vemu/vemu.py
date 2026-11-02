@@ -79,6 +79,12 @@ else:
         elif code in (43, 44):
             ins = struct.unpack('<I', mu.mem_read(P, 4))[0]; v = T & 0xffff if code == 43 else T >> 16
             ins = (ins & 0xFFF0F000) | ((v & 0xF000) << 4) | (v & 0xFFF); mu.mem_write(P, struct.pack('<I', ins))
+        elif code == 29:
+            # Real Vita loader behaviour: JUMP24 is re-encoded as B, so a
+            # conditional BL loses its link bit.
+            ins = struct.unpack('<I', mu.mem_read(P, 4))[0]
+            if (ins >> 28) != 0xE and ((ins >> 24) & 0xF) == 0xB:
+                mu.mem_write(P, struct.pack('<I', ins & ~(1 << 24)))
         elif code in (47, 48):
             h1, h2 = struct.unpack('<HH', mu.mem_read(P, 4)); v = T & 0xffff if code == 47 else T >> 16
             h1 = (h1 & 0xFBF0) | ((v >> 12) & 0xF) | (((v >> 11) & 1) << 10)

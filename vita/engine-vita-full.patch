@@ -3615,10 +3615,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..d26e0d9
+index 0000000..821d332
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,289 @@
 +//go:build vita
 +
 +package main
@@ -3711,6 +3711,65 @@ index 0000000..d26e0d9
 +	for (unsigned i = 0; i < len; i++) c = crc_tab[(c ^ p[i]) & 0xFF] ^ (c >> 8);
 +	char buf[96]; snprintf(buf, sizeof buf, "crc %s base %08x len %08x crc %08x", tag, base, len, ~c); vlog(buf);
 +}
++// Image verifier: re-applies the module's relocations from app0:ikvita.velf
++// to a copy of the code segment and compares it with what the loader put in
++// memory. Logs the first differences (offsets are relative to the segment).
++static void vita_verify_image(void) {
++	unsigned base0 = (unsigned)__exidx_start - (CVF_LINK_EXIDX - 0x81000000u);
++	unsigned len = ((unsigned)_init & ~1u) - base0;
++	SceUID fd = sceIoOpen("app0:ikvita.velf", SCE_O_RDONLY, 0);
++	if (fd < 0) { vlog("verify: no app0:ikvita.velf"); return; }
++	unsigned char eh[52];
++	sceIoRead(fd, eh, 52);
++	unsigned phoff = *(unsigned *)(eh + 28); unsigned short phnum = *(unsigned short *)(eh + 44);
++	unsigned ph[8][8]; if (phnum > 8) phnum = 8;
++	sceIoLseek(fd, phoff, SCE_SEEK_SET); sceIoRead(fd, ph, 32 * phnum);
++	int i0 = -1, ir = -1, n = 0;
++	for (int i = 0; i < phnum; i++) { if (ph[i][0] == 1) { if (n++ == 0) i0 = i; } if (ph[i][0] == 0x60000000) ir = i; }
++	if (i0 < 0 || ir < 0) { vlog("verify: bad velf"); sceIoClose(fd); return; }
++	unsigned char *img = malloc(ph[i0][4]); unsigned char *rel = malloc(ph[ir][4]);
++	if (!img || !rel) { vlog("verify: no memory"); sceIoClose(fd); free(img); free(rel); return; }
++	sceIoLseek(fd, ph[i0][1], SCE_SEEK_SET); sceIoRead(fd, img, ph[i0][4]);
++	sceIoLseek(fd, ph[ir][1], SCE_SEEK_SET); sceIoRead(fd, rel, ph[ir][4]);
++	sceIoClose(fd);
++	// seg1 base: find a reloc into seg 0 data that targets seg 1 and read it back.
++	unsigned base1 = 0; int nrel = 0, napplied = 0;
++	for (int pass = 0; pass < 2; pass++) {
++		unsigned char *r = rel, *end = rel + ph[ir][4];
++		while (r < end) {
++			unsigned w0 = *(unsigned *)r, a, o;
++			unsigned symseg = (w0 >> 4) & 15, code = (w0 >> 8) & 255, datseg = (w0 >> 16) & 15;
++			if (w0 & 15) { unsigned w1 = *(unsigned *)(r + 4); o = (w0 >> 20) | ((w1 & 0x3FF) << 12); a = w1 >> 10; r += 8; }
++			else { a = *(unsigned *)(r + 4); o = *(unsigned *)(r + 8); r += 12; }
++			if (pass == 0) { nrel++;
++				if (!base1 && datseg == 0 && symseg == 1 && code == 2 && o < len) base1 = *(unsigned *)(base0 + o) - a;
++				continue; }
++			if (datseg != 0 || o + 4 > ph[i0][4]) continue;
++			unsigned S = symseg == 0 ? base0 : base1, T = S + a;
++			unsigned char *P = img + o;
++			if (code == 2 || code == 38) { *(unsigned *)P = T; napplied++; }
++			else if (code == 43 || code == 44) { unsigned ins = *(unsigned *)P, v = code == 43 ? (T & 0xFFFF) : (T >> 16);
++				*(unsigned *)P = (ins & 0xFFF0F000u) | ((v & 0xF000) << 4) | (v & 0xFFF); napplied++; }
++			else if (code == 47 || code == 48) { unsigned short h1 = *(unsigned short *)P, h2 = *(unsigned short *)(P + 2);
++				unsigned v = code == 47 ? (T & 0xFFFF) : (T >> 16);
++				h1 = (h1 & 0xFBF0) | ((v >> 12) & 0xF) | (((v >> 11) & 1) << 10);
++				h2 = (h2 & 0x8F00) | (((v >> 8) & 7) << 12) | (v & 0xFF);
++				*(unsigned short *)P = h1; *(unsigned short *)(P + 2) = h2; napplied++; }
++		}
++	}
++	char buf[120];
++	snprintf(buf, sizeof buf, "verify: base0 %08x base1 %08x relocs %d applied %d", base0, base1, nrel, napplied); vlog(buf);
++	int diffs = 0;
++	for (unsigned o = 0; o + 4 <= len; o += 4) {
++		unsigned m = *(unsigned *)(base0 + o), e = *(unsigned *)(img + o);
++		if (m != e) {
++			if (diffs < 24) { snprintf(buf, sizeof buf, "verify: off %06x mem %08x exp %08x", o, m, e); vlog(buf); }
++			diffs++;
++		}
++	}
++	snprintf(buf, sizeof buf, "verify: %d differing words", diffs); vlog(buf);
++	free(img); free(rel);
++}
 +int vglInitExtended(int legacy_pool_size, int width, int height, int ram_threshold, int msaa);
 +void vglSwapBuffers(unsigned char has_commondialog);
 +void *vglGetProcAddress(const char *name);
@@ -3748,8 +3807,9 @@ index 0000000..d26e0d9
 +
 +// vitaPlatformInit runs at the very start of realMain.
 +func vitaPlatformInit() {
-+	// C.vita_clock() // 444 MHz disabled while chasing the startup crash
++	C.vita_clock()
 +	vitaCRC("start")
++	C.vita_verify_image()
 +	cd := C.CString(vitaDataDir)
 +	C.vita_libc_chdir(cd) // for C libraries (libxmp, SDL) that open files themselves
 +	C.free(unsafe.Pointer(cd))
