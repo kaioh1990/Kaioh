@@ -46,9 +46,30 @@ func main() {
 	vlog("1 Go main started")
 	C.psvDebugScreenInit()
 	vlog("2 screen ready")
-	say("\x1b[1;33mCastlevania Fighter Online - Vita test 6\x1b[0m\n\n")
+	say("\x1b[1;33mCastlevania Fighter Online - Vita test 7\x1b[0m\n\n")
 
-	say("1. Go runtime: ")
+	say("1. Goroutines:\n")
+	say("   a) start one... ")
+	done := make(chan bool, 1)
+	go func() { done <- true }()
+	say("created... ")
+	<-done
+	say("ok\n   b) ping-pong... ")
+	ping, pong := make(chan int), make(chan int)
+	go func() {
+		for v := range ping {
+			pong <- v + 1
+		}
+	}()
+	n := 0
+	for i := 0; i < 100; i++ {
+		ping <- n
+		n = <-pong
+	}
+	close(ping)
+	say("%d (want 100)\n   c) sleep... ", n)
+	time.Sleep(100 * time.Millisecond)
+	say("ok\n   d) full test: ")
 	say("%s\n", goroutineTest())
 
 	say("2. Rollback math check (must match PC/Mac/iPad)...\n")

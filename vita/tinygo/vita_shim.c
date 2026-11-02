@@ -68,9 +68,17 @@ int *__errno_location(void) { return &errno; }
 // since the Vita has no console. Other descriptors use newlib.
 #include <psp2/io/fcntl.h>
 #include <reent.h>
+// If the app shows a debug screen, echo stdout/stderr there too.
+__attribute__((weak)) int psvDebugScreenPuts(const char *text);
 ssize_t __real_write(int fd, const void *buf, size_t n);
 ssize_t __wrap_write(int fd, const void *buf, size_t n) {
 	if (fd == 1 || fd == 2) {
+		if (psvDebugScreenPuts) {
+			char tmp[257];
+			size_t k = n < 256 ? n : 256;
+			memcpy(tmp, buf, k); tmp[k] = 0;
+			psvDebugScreenPuts(tmp);
+		}
 		SceUID f = sceIoOpen("ux0:data/cvftest.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
 		if (f >= 0) { sceIoWrite(f, buf, n); sceIoClose(f); }
 		return (ssize_t)n;

@@ -13,9 +13,7 @@ tinygo_vita_fiber_run:
     push {r3-r11, lr}
     str  sp, [r1]
     mov  r4, r1
-    mov  r1, #0
-    mov  r2, #0
-    bl   sceFiberRun
+    bl   tinygo_vita_fiber_run_c
     mov  r1, #0
     str  r1, [r4]
     pop  {r3-r11, pc}
@@ -28,8 +26,6 @@ tinygo_vita_fiber_run:
 tinygo_vita_fiber_pause:
     push {r3-r11, lr}
     str  sp, [r0]
-    mov  r0, #0
-    mov  r1, #0
-    bl   sceFiberReturnToThread
+    bl   tinygo_vita_fiber_pause_c
     pop  {r3-r11, pc}
 .size tinygo_vita_fiber_pause, .-tinygo_vita_fiber_pause
