@@ -14,7 +14,7 @@ PLIST="$W/I.K.E.M.E.N-Go/Info.plist"
 # 1. Only ship the (patched) engine scripts + controller DB as "default assets".
 #    The stock manifest would unzip Ikemen's own fight.def/common.snd/... over
 #    Castlevania Fighter's files in the game folder you pick.
-printf 'external/script\nexternal/gamecontrollerdb.txt\n' > "$W/DefaultAssets/manifest.txt"
+printf 'external/script\nexternal/gamecontrollerdb.txt\nsave/config.ini\n' > "$W/DefaultAssets/manifest.txt"
 
 # 2. Own bundle id + name, no hard-coded signing team (pick yours in Xcode).
 sed -i '' \

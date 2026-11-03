@@ -46,7 +46,7 @@ def main(ipa, game, config, output):
         assets = zipfile.ZipFile(os.path.join(output + ".assets", app + "DefaultAssets.zip"))
         replaced = set()
         for info in assets.infolist():
-            if info.is_dir() or info.filename == "manifest.txt":
+            if info.is_dir() or info.filename == "manifest.txt" or info.filename.startswith("save/"):
                 continue
             replaced.add(info.filename)
             target = zipfile.ZipInfo(f"{app}Game/{info.filename}", info.date_time)

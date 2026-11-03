@@ -288,6 +288,8 @@ jobs:
           git clone https://github.com/Jesuszilla/ikemen-ios.git CvF-Online-iOS
           git -C CvF-Online-iOS checkout "$IOS_APP_COMMIT"
           ./ios/customize.sh CvF-Online-iOS
+          # Default settings for the app (listed in its asset manifest)
+          mkdir -p ikemen/save && cp cvf-files/save/config.ini ikemen/save/
 
       - name: Build engine + IPA
         working-directory: ikemen
@@ -310,7 +312,7 @@ jobs:
 
       - name: Package Xcode project (build + sign on your own device)
         run: |
-          rm -rf CvF-Online-iOS/.git CvF-Online-iOS/DefaultAssets/external
+          rm -rf CvF-Online-iOS/.git CvF-Online-iOS/DefaultAssets/external CvF-Online-iOS/DefaultAssets/save
           ditto -c -k --keepParent CvF-Online-iOS cvf-online-ios-xcode.zip
           ls -la cvf-online-ios.ipa cvf-online-ios-xcode.zip
 

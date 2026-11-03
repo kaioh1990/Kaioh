@@ -1,5 +1,5 @@
 diff --git a/I.K.E.M.E.N-Go/ViewController.m b/I.K.E.M.E.N-Go/ViewController.m
-index e850d21..22c26b8 100644
+index e850d21..5163117 100644
 --- a/I.K.E.M.E.N-Go/ViewController.m
 +++ b/I.K.E.M.E.N-Go/ViewController.m
 @@ -25,6 +25,7 @@
@@ -24,28 +24,33 @@ index e850d21..22c26b8 100644
      // Get whether or not we should display the folder picker now.
      NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
      BOOL shouldPickFolder = [defaults boolForKey:RestartFolderPickKey];
-@@ -174,6 +182,72 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -174,6 +182,123 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
      }
  }
  
-+// Builds a writable game root from the read-only Game folder in the app bundle:
++// Builds a game root from a Game folder, either Documents/Game (copied in through
++// Finder, so the app stays small) or Game inside the app bundle (all-in-one IPA).
 +// Application Support/CvF holds symlinks to chars, data, stages... and save points
 +// at Documents/save, so saves survive updates and logs are reachable from Files.
 +// The links are rebuilt on every launch because the bundle path changes on install.
 +- (BOOL)prepareBundledGame {
 +    NSFileManager *fm = [NSFileManager defaultManager];
-+    NSURL *gameURL = [[NSBundle mainBundle].bundleURL URLByAppendingPathComponent:@"Game" isDirectory:YES];
-+    BOOL isDir = NO;
-+    if (![fm fileExistsAtPath:gameURL.path isDirectory:&isDir] || !isDir) {
-+        return NO;
-+    }
-+
 +    NSError *error = nil;
 +    NSURL *docs = [fm URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
 +    NSURL *support = [fm URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
 +    if (!docs || !support) {
 +        NSLog(@"Could not locate app folders: %@", error);
 +        return NO;
++    }
++
++    NSURL *gameURL = [docs URLByAppendingPathComponent:@"Game" isDirectory:YES];
++    BOOL gameInDocuments = [fm fileExistsAtPath:[gameURL URLByAppendingPathComponent:@"chars"].path];
++    if (!gameInDocuments) {
++        gameURL = [[NSBundle mainBundle].bundleURL URLByAppendingPathComponent:@"Game" isDirectory:YES];
++        BOOL isDir = NO;
++        if (![fm fileExistsAtPath:gameURL.path isDirectory:&isDir] || !isDir) {
++            return NO;
++        }
 +    }
 +
 +    NSURL *rootURL = [support URLByAppendingPathComponent:@"CvF" isDirectory:YES];
@@ -64,6 +69,9 @@ index e850d21..22c26b8 100644
 +
 +    for (NSString *name in names) {
 +        NSString *source = [gameURL URLByAppendingPathComponent:name].path;
++        if (gameInDocuments && [name isEqualToString:@"external"]) {
++            continue; // Built by installEngineFilesAtRoot below
++        }
 +        if ([name isEqualToString:@"save"]) {
 +            // Seed defaults such as config.ini, never replacing the player's files.
 +            for (NSString *file in [fm contentsOfDirectoryAtPath:source error:nil]) {
@@ -89,15 +97,58 @@ index e850d21..22c26b8 100644
 +        return NO;
 +    }
 +
++    if (gameInDocuments && ![self installEngineFilesAtRoot:rootURL game:gameURL save:saveURL]) {
++        return NO;
++    }
++
 +    self.assetsFolderURL = rootURL;
 +    self.securityScopeActive = NO;
++    return YES;
++}
++
++// The scripts must match this app's engine, so they come from DefaultAssets.zip
++// rather than the Game folder. Anything else in Game/external is linked in.
++- (BOOL)installEngineFilesAtRoot:(NSURL *)rootURL game:(NSURL *)gameURL save:(NSURL *)saveURL {
++    NSFileManager *fm = [NSFileManager defaultManager];
++    NSURL *zipURL = [[NSBundle mainBundle] URLForResource:@"DefaultAssets" withExtension:@"zip"];
++    NSString *tmp = [NSTemporaryDirectory() stringByAppendingPathComponent:@"cvf-assets"];
++    [fm removeItemAtPath:tmp error:nil];
++    if (!zipURL || ![SSZipArchive unzipFileAtPath:zipURL.path toDestination:tmp]) {
++        NSLog(@"Could not unpack the engine files");
++        return NO;
++    }
++
++    NSError *error = nil;
++    NSString *external = [rootURL URLByAppendingPathComponent:@"external"].path;
++    NSString *tmpExternal = [tmp stringByAppendingPathComponent:@"external"];
++    [fm removeItemAtPath:external error:nil];
++    if (![fm moveItemAtPath:tmpExternal toPath:external error:&error]) {
++        NSLog(@"Could not install the engine files: %@", error);
++        return NO;
++    }
++
++    NSString *gameExternal = [gameURL URLByAppendingPathComponent:@"external"].path;
++    for (NSString *name in [fm contentsOfDirectoryAtPath:gameExternal error:nil]) {
++        NSString *link = [external stringByAppendingPathComponent:name];
++        if (![fm fileExistsAtPath:link]) {
++            [fm createSymbolicLinkAtPath:link withDestinationPath:[gameExternal stringByAppendingPathComponent:name] error:nil];
++        }
++    }
++
++    // Default settings for a fresh install, never replacing the player's own.
++    NSString *config = [saveURL URLByAppendingPathComponent:@"config.ini"].path;
++    if (![fm fileExistsAtPath:config]) {
++        [fm copyItemAtPath:[tmp stringByAppendingPathComponent:@"save/config.ini"] toPath:config error:nil];
++    }
++
++    [fm removeItemAtPath:tmp error:nil];
 +    return YES;
 +}
 +
  - (BOOL)beginAccessingAssetsFolder {
      if (_securityScopeActive) {
          return YES;
-@@ -772,6 +846,9 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -772,6 +897,9 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
  }
  
  - (void)touchOverlayDidTapGameFolder:(TouchOverlayView*)view {
