@@ -343,6 +343,13 @@ func allocateHeap() {
 			continue
 		}
 		heapStart = uintptr(addr)
+		if GOOS == "linux" && GOARCH == "arm" {
+			// PS Vita: the block is committed physical memory anyway, so use
+			// all of it from the start. Growing by 33% per collection meant
+			// ~60 full collections while loading and a collection every few
+			// MB of allocation during fights.
+			heapSize = heapMaxSize
+		}
 		heapEnd = heapStart + heapSize
 		break
 	}

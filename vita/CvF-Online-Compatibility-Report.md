@@ -224,3 +224,48 @@ Tested on the user's Vita (firmware 3.60, HENkaku/Ensō). 11 test builds.
 - GC pauses in long fights.
 - Controls.
 - Networking.
+
+## Update (Nov 3, 2026, afternoon): PS Vita build 19
+
+**Not yet tested on hardware.** Every change below was checked in the emulator: boot, title menu, a 1,500-frame Richter vs Maid fight, and select-screen rendering through a Mesa-backed GL path.
+
+**Crash entering training (build 18):**
+- **Cause:** an unaligned VFP load (`vldr`) of a float operand inside the bytecode interpreter. ARMv7 faults on unaligned VLDR/LDRD/LDM, and the emulator doesn't enforce alignment.
+- **Fix:** operands are now read byte by byte, and the compiler targets `+strict-align`, so LLVM never merges unaligned loads.
+
+**Mirrored, duplicated portrait on the select screen:**
+- **Cause:** CvF's portrait sprites hold the P1 face and the mirrored P2 face side by side, and the screenpack sets no clip window.
+- **Fix:** on the Vita, the engine clips each face to its half of the screen (`p1.face.window` / `p2.face.window`). The data files are not changed.
+
+**Overlapping white text on stage select:**
+- **Cause:** `st10.fnt` is a picture font. Each glyph is a whole stage banner and the glyph advance is zero. The default `Stage %i: %s` text therefore drew the banners for S, t, a, g, e and the stage letter on top of each other.
+- **Fix:** the stage text is now just `%s` (the stage's banner), and Random uses `*`, the font's "Random" banner.
+
+**Scissor without vitaGL's stencil passes:**
+- Sprite clip windows are now applied in the sprite shader: fragments outside an NDC rectangle are discarded.
+- vitaGL's scissor redraws the full-screen stencil on every enable, disable or move. The select screen and scrolling menus used it constantly.
+- If the shader fails to compile on the device, the engine falls back to the old scissor path.
+
+**GC (the ~1 s spikes):**
+- **Heap growth:** the TinyGo heap used to grow 33% per collection, which meant ~60 full collections during boot and fight loading. It now uses the whole 256 MB block from the start.
+- **When collections run:**
+  - Outside fights, every 32 MB of allocation.
+  - During fights, every 192 MB.
+  - At round transitions.
+  - In the emulator, a fight now collects about once a minute, instead of every few seconds.
+- **Collection cost:** sweep skips 16 free blocks per metadata word, so a sweep of the full heap takes ~0.1 s instead of 1.2 s in the emulator.
+- **Forced collections:** the forced collections at load checkpoints are gone.
+
+**Loading:**
+- **Character compile:** about 2x faster from the CNS compiler work. The bytecode hash was checked to be identical for Richter and Maid.
+- **Collections while loading:** far fewer.
+- **Emulator result:** Richter and Maid compile in ~7 s and ~4.5 s, down from ~13 s each.
+
+**CPU per frame:**
+- **Uniform lookups:** uniform locations and values use array caches instead of string or int maps.
+- **String pool:** has a pointer-identity cache in front of its map, for trigger strings like StateType/MoveType.
+- **NumExplod and ExplodVar:** count without building slices.
+
+**Profiling findings:** CvF's `data/player.st` is a single `[Statedef -3]` with 877 controllers that run for each player on every tick. It accounts for ~69% of all bytecode operations in a fight, spread evenly across controllers. About 1.7M instructions per tick in the emulator, which should be ~5–7 ms per tick on hardware. A diagnostic per-controller profiler is in `bcprof.go` (off by default).
+
+**New in the log:** each `perf:` line now adds allocation per 300 frames and splits CPU time into `logic … us/tick` and `draw … us/drawn frame`. The first hardware log from build 19 will show whether the remaining bottleneck is game logic, draw submission, or the GPU (`GPU wait`).

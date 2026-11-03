@@ -314,6 +314,40 @@ index d7ac2bc..25d50b6 100644
 +
 +replace github.com/mewkiz/pkg => ./third/mewkiz-pkg
 +replace github.com/jfreymuth/vorbis => ./third/vorbis
+diff --git a/go.sum b/go.sum
+index 609a38f..cbf954b 100644
+--- a/go.sum
++++ b/go.sum
+@@ -16,10 +16,29 @@ github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71 h1:5BVwOaUSBTlVZowGO6VZGw
+ github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71/go.mod h1:9YTyiznxEY1fVinfM7RvRcjRHbw2xLBJ3AAGIT0I4Nw=
+ github.com/go-gl/mathgl v1.0.0 h1:t9DznWJlXxxjeeKLIdovCOVJQk/GzDEL7h/h+Ro2B68=
+ github.com/go-gl/mathgl v1.0.0/go.mod h1:yhpkQzEiH9yPyxDUGzkmgScbaBVlhC06qodikEM0ZwQ=
++github.com/go-ini/ini v1.67.0 h1:z6ZrTEZqSWOTyH2FlglNbNgARyHG8oLW9gMELqKr06A=
++github.com/go-ini/ini v1.67.0/go.mod h1:ByCAeIL28uOIIG0E3PJtZPDL8WnHpFKFOtgjp+3Ies8=
+ github.com/go-test/deep v1.0.1 h1:UQhStjbkDClarlmv0am7OXXO4/GaPdCGiUiMTvi28sg=
+ github.com/go-test/deep v1.0.1/go.mod h1:wGDj63lr65AM2AQyKZd/NYHGb0R+1RLqB8NKt3aSFNA=
++github.com/golang/crypto v0.51.0/go.mod h1:8AdwkbraGNABw2kOX6YFPs3WM22XqI4EXEd8g+x7Oc8=
++github.com/golang/exp v0.0.0-20220609121020-a51bd0440498 h1:S/p0wFTPwd3v4/7SZsL6bTTtl+gZFE0/Lz1LsXddkVI=
++github.com/golang/exp v0.0.0-20220609121020-a51bd0440498/go.mod h1:yh0Ynu2b5ZUe3MQfp2nM0ecK7wsgouWTDN0FNeJuIys=
+ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 h1:DACJavvAHhabrF08vX0COfcOBJRhZ8lUbR+ZWIs0Y5g=
+ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0/go.mod h1:E/TSTwGwJL78qG/PmXZO1EjYhfJinVAhrmmHX6Z8B9k=
++github.com/golang/image v0.47.0 h1:QoHq8z68UMGGPepX5NnXbuPRLGQ5pyAbt0kbKKdoe70=
++github.com/golang/image v0.47.0/go.mod h1:IkN5o4A7vq55vXN8FWjjnhg9Rs2GOtffqsSi9mWAKYE=
++github.com/golang/mobile v0.0.0-20221110043201-43a038452099 h1:oSfrYIX533MrTcas/eyXFalZ/bK7MlH+TanP0mxrSV4=
++github.com/golang/mobile v0.0.0-20221110043201-43a038452099/go.mod h1:aAjjkJNdrh3PMckS4B10TGS2nag27cbKR1y2BpUxsiY=
++github.com/golang/mod v0.35.0/go.mod h1:+GwiRhIInF8wPm+4AoT6L0FA1QWAad3OMdTRx4tFYlU=
++github.com/golang/net v0.55.0/go.mod h1:L5U2KuzuOe1lY7Z+aWVIKK6qEeJXnXV9yzGA+WCHJww=
++github.com/golang/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
++github.com/golang/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
++github.com/golang/telemetry v0.0.0-20260508192327-42602be52be6/go.mod h1:Eqhaxk/wZsWEH8CRxLwj6xzEJbz7k1EFGqx7nyCoabE=
++github.com/golang/term v0.43.0/go.mod h1:lrhlHNdQJHO+1qVYiHfFKVuVioJIheAc3fBSMFYEIsk=
++github.com/golang/text v0.43.0 h1:JmNb4n42y+wb6caAVMkiagBfVpH6ByUdu7L/3AYdso0=
++github.com/golang/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=
++github.com/golang/tools v0.51.0/go.mod h1:9eEncMayCV6zRMGhR5eZEC2iBx98qWcF1HZ9Z7wJOoA=
++github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+ github.com/hajimehoshi/go-mp3 v0.3.4 h1:NUP7pBYH8OguP4diaTZ9wJbUbk3tC0KlfzsEpWmYj68=
+ github.com/hajimehoshi/go-mp3 v0.3.4/go.mod h1:fRtZraRFcWb0pu7ok0LqyFhCUrPeMsGRSVop0eemFmo=
+ github.com/hajimehoshi/oto/v2 v2.3.1/go.mod h1:seWLbgHH7AyUMYKfKYT9pg7PhUu9/SisyJvNTT+ASQo=
 diff --git a/src/anim.go b/src/anim.go
 index f4c200f..a3ba028 100644
 --- a/src/anim.go
@@ -441,6 +475,133 @@ index ac9143a..5b51042 100644
  }
  
  func (s *SDLSpeaker) Play(st beep.Streamer) {
+diff --git a/src/bcprof.go b/src/bcprof.go
+new file mode 100644
+index 0000000..8ff6d69
+--- /dev/null
++++ b/src/bcprof.go
+@@ -0,0 +1,121 @@
++package main
++
++import (
++	"fmt"
++	"sort"
++)
++
++// Diagnostic: count bytecode operations per (player, helper, state) to find
++// which states dominate fight CPU time. Build with bcOpProf = true.
++const bcOpProf = false
++
++var bcOps uint64
++
++type bcProfKey struct {
++	pn  int
++	hid int32
++	st  int32
++}
++
++var bcProfMap = map[bcProfKey]uint64{}
++var bcProfFrames int
++
++func bcProfRun(c *Char, sb *StateBytecode, st int32) bool {
++	if !bcOpProf {
++		return sb.run(c)
++	}
++	if st == -3 && c.playerNo == 0 && c.helperIndex == 0 {
++		bcProfTop = &sb.block
++	}
++	o := bcOps
++	r := sb.run(c)
++	k := bcProfKey{c.playerNo, c.helperId, st}
++	if c.helperIndex == 0 {
++		k.hid = -1
++	}
++	bcProfMap[k] += bcOps - o
++	return r
++}
++
++// bcProfFrame is called once per game tick.
++func bcProfFrame() {
++	if !bcOpProf || sys.roundState() < 2 {
++		return
++	}
++	bcProfFrames++
++	if bcProfFrames != 420 {
++		if bcProfFrames < 120 {
++			// warm-up: discard
++			bcProfMap = map[bcProfKey]uint64{}
++			bcOps = 0
++			for i := range bcProfCtlOps {
++				bcProfCtlOps[i] = 0
++			}
++		}
++		return
++	}
++	type kv struct {
++		k bcProfKey
++		v uint64
++	}
++	var all []kv
++	for k, v := range bcProfMap {
++		all = append(all, kv{k, v})
++	}
++	sort.Slice(all, func(i, j int) bool { return all[i].v > all[j].v })
++	n := uint64(300)
++	vitaTrace("bcprof: ops/frame " + itoa(int(bcOps/n)))
++	bcProfCtlDump(n)
++	for i, e := range all {
++		if i >= 40 {
++			break
++		}
++		vitaTrace("bcprof: " + itoa(int(e.v/n)) + " p" + itoa(e.k.pn) + " h" + itoa(int(e.k.hid)) + " st " + itoa(int(e.k.st)))
++	}
++}
++
++var bcProfTop *StateBlock
++var bcProfCtlOps []uint64
++var bcProfCtlSc []StateController
++
++func bcProfCtl(i int, sc StateController, ops uint64) {
++	for len(bcProfCtlOps) <= i {
++		bcProfCtlOps = append(bcProfCtlOps, 0)
++		bcProfCtlSc = append(bcProfCtlSc, nil)
++	}
++	bcProfCtlOps[i] += ops
++	bcProfCtlSc[i] = sc
++}
++
++func bcProfCtlDump(n uint64) {
++	idx := make([]int, len(bcProfCtlOps))
++	for i := range idx {
++		idx[i] = i
++	}
++	sort.Slice(idx, func(a, b int) bool { return bcProfCtlOps[idx[a]] > bcProfCtlOps[idx[b]] })
++	vitaTrace("bcprof: -3 has " + itoa(len(idx)) + " ctrls")
++	for k, i := range idx {
++		if k >= 60 {
++			break
++		}
++		name := fmt.Sprintf("%T", bcProfCtlSc[i])
++		if sb, ok := bcProfCtlSc[i].(*StateBlock); ok && len(sb.ctrls) > 0 {
++			name = fmt.Sprintf("%T", sb.ctrls[0])
++		}
++		vitaTrace("bcprof: ctl " + itoa(i) + " " + itoa(int(bcProfCtlOps[i]/n)) + " " + name)
++	}
++	// Type sequence, for mapping indices to source.
++	var seq []byte
++	for i, sc := range bcProfCtlSc {
++		name := fmt.Sprintf("%T", sc)
++		if sb, ok := sc.(*StateBlock); ok && len(sb.ctrls) > 0 {
++			name = fmt.Sprintf("%T", sb.ctrls[0])
++		}
++		seq = append(seq, []byte(itoa(i)+":"+name+" ")...)
++		if len(seq) > 3000 {
++			vitaTrace("bcprof: seq " + string(seq))
++			seq = seq[:0]
++		}
++	}
++	vitaTrace("bcprof: seq " + string(seq))
++}
 diff --git a/src/bgdef.go b/src/bgdef.go
 index 840b4f8..fbda389 100644
 --- a/src/bgdef.go
@@ -455,10 +616,52 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..df2a4a5 100644
+index 276abbf..8ad3f12 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
-@@ -1488,7 +1488,16 @@ func (bs *BytecodeStack) Clear() {
+@@ -1282,6 +1282,13 @@ type StringPool struct {
+ 	List    []string
+ 	ListLow []string // Lowercase list to avoid doing that work during runtime
+ 	Map     map[string]int
++	// Pointer-identity cache in front of Map: trigger results such as
++	// StateType/MoveType are string literals pushed ~1000 times per frame.
++	pcache [16]struct {
++		p   *byte
++		n   int
++		idx int
++	}
+ }
+ 
+ func NewStringPool() *StringPool {
+@@ -1290,9 +1297,27 @@ func NewStringPool() *StringPool {
+ 
+ func (sp *StringPool) Clear() {
+ 	sp.List, sp.ListLow, sp.Map = nil, nil, make(map[string]int)
++	sp.pcache = [16]struct {
++		p   *byte
++		n   int
++		idx int
++	}{}
+ }
+ 
+ func (sp *StringPool) Add(s string) int {
++	p, n := unsafe.StringData(s), len(s)
++	slot := &sp.pcache[(uintptr(unsafe.Pointer(p))>>2)&15]
++	if p != nil && slot.p == p && slot.n == n && slot.idx < len(sp.List) {
++		return slot.idx
++	}
++	i := sp.add(s)
++	if p != nil {
++		slot.p, slot.n, slot.idx = p, n, i
++	}
++	return i
++}
++
++func (sp *StringPool) add(s string) int {
+ 	i, ok := sp.Map[s]
+ 	if !ok {
+ 		i = len(sp.List)
+@@ -1488,7 +1513,16 @@ func (bs *BytecodeStack) Clear() {
  }
  
  func (bs *BytecodeStack) Push(bv BytecodeValue) {
@@ -476,7 +679,7 @@ index 276abbf..df2a4a5 100644
  }
  
  func (bs *BytecodeStack) PushI(i int32) {
-@@ -1574,7 +1583,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
+@@ -1574,7 +1608,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
  		be.append((*(*[4]OpCode)(unsafe.Pointer(&f)))[:]...)
  	case VT_Int:
  		if bv.value >= -128 && bv.value <= 127 {
@@ -486,15 +689,45 @@ index 276abbf..df2a4a5 100644
  		} else if bv.value >= math.MinInt32 && bv.value <= math.MaxInt32 {
  			be.append(OC_int)
  			i := int32(bv.value)
-@@ -1664,6 +1674,17 @@ func (be BytecodeExp) PeekLength(i int) int {
+@@ -1627,9 +1662,9 @@ func (be *BytecodeExp) appendI64Op(op OpCode, addr int64) {
+ 	be.append((*(*[8]OpCode)(unsafe.Pointer(&addr)))[:]...)
+ }
+ 
+-// Replaces *(*int32)(unsafe.Pointer(&be[*i]))
++// Bytecode operands are unaligned: bcI32 reads them byte by byte.
+ func (be BytecodeExp) ReadIntAt(i *int) int32 {
+-	v := *(*int32)(unsafe.Pointer(&be[*i]))
++	v := bcI32(be, *i)
+ 	*i += 4 // Advance the cursor past the 4 bytes we just read
+ 	return v
+ }
+@@ -1659,11 +1694,34 @@ func (be BytecodeExp) readMapKey(i *int) string {
+ 
+ // Reads the expression length header at the current pointer
+ func (be BytecodeExp) PeekLength(i int) int {
+-	return int(*(*int32)(unsafe.Pointer(&be[i])))
++	return int(bcI32(be, i))
+ }
  
  // Calculates how far to skip and moves the pointer past that entire section
  // Used for example when a redirection is invalid
 +var bcIdxStack [256]int
++
++// bcI32/bcI64 read little-endian operands byte by byte (operands are not
++// aligned; see ReadIntAt).
++func bcI32(b []OpCode, i int) int32 {
++	_ = b[i+3]
++	return int32(uint32(b[i]) | uint32(b[i+1])<<8 | uint32(b[i+2])<<16 | uint32(b[i+3])<<24)
++}
++
++func bcI64(b []OpCode, i int) int64 {
++	return int64(uint64(uint32(bcI32(b, i))) | uint64(uint32(bcI32(b, i+4)))<<32)
++}
++
 +var bcIdxDepth int
 +
 +func (be BytecodeExp) readInt32At(i int) int32 {
-+	return *(*int32)(unsafe.Pointer(&be[i]))
++	return bcI32(be, i)
 +}
 +
 +func (be BytecodeExp) poolStringAtValue(i int) string {
@@ -504,7 +737,7 @@ index 276abbf..df2a4a5 100644
  func (be BytecodeExp) JumpToNext(i *int) {
  	*i += be.PeekLength(*i) + 4
  }
-@@ -2032,7 +2053,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+@@ -2032,7 +2090,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
  	//if v1.IsUndefined() {
  	//	return
  	//}
@@ -513,7 +746,7 @@ index 276abbf..df2a4a5 100644
  }
  
  func (BytecodeExp) ln(v1 *BytecodeValue) {
-@@ -2043,7 +2064,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2101,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -522,7 +755,7 @@ index 276abbf..df2a4a5 100644
  	}
  }
  
-@@ -2056,7 +2077,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2056,7 +2114,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -531,7 +764,7 @@ index 276abbf..df2a4a5 100644
  	}
  }
  
-@@ -2064,42 +2085,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
+@@ -2064,42 +2122,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
  	if v1.IsUndefined() {
  		return
  	}
@@ -580,7 +813,7 @@ index 276abbf..df2a4a5 100644
  }
  
  func (BytecodeExp) floor(v1 *BytecodeValue) {
-@@ -2167,7 +2188,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2167,7 +2225,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -589,7 +822,7 @@ index 276abbf..df2a4a5 100644
  	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
  }
  
-@@ -2190,7 +2211,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2190,7 +2248,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -598,7 +831,7 @@ index 276abbf..df2a4a5 100644
  }
  
  func (BytecodeExp) sign(v1 *BytecodeValue) {
-@@ -2236,6 +2257,16 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+@@ -2236,8 +2294,21 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
  
  func (be BytecodeExp) run(c *Char) BytecodeValue {
  	oc := c
@@ -614,8 +847,13 @@ index 276abbf..df2a4a5 100644
 +	bcIdxDepth++
  	for i := 1; i <= len(be); i++ {
  		opc := be[i-1]
++		if bcOpProf {
++			bcOps++
++		}
  		switch opc {
-@@ -2268,7 +2299,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+ 		case OC_jud8:
+ 			if sys.bcStack.Top().IsUndefined() {
+@@ -2268,7 +2339,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			fallthrough
  		case OC_jmp:
@@ -624,7 +862,7 @@ index 276abbf..df2a4a5 100644
  		case OC_player:
  			pn := int(sys.bcStack.Pop().ToI())
  			if c = c.playerTrigger(pn, true); c != nil {
-@@ -2278,21 +2309,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2278,21 +2349,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			// Invalid: Push undefined and use the length header to jump over the block
  			sys.bcStack.Push(BytecodeUndefined())
@@ -649,7 +887,7 @@ index 276abbf..df2a4a5 100644
  		case OC_helper:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2301,7 +2332,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2301,7 +2372,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -658,7 +896,7 @@ index 276abbf..df2a4a5 100644
  		case OC_target:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2310,63 +2341,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2310,63 +2381,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -731,7 +969,7 @@ index 276abbf..df2a4a5 100644
  		case OC_rdreset:
  			// Reset the current redirection
  			// A redirect only lasts one opcode, so this empty case ends it
-@@ -2375,13 +2406,13 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2375,22 +2446,22 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			// Evaluate block as the redirect target. No continue, so the redirect ends after it
  			// Ex: "parent, cond(alive, life, 0)" reads both alive and life from parent
  			sys.bcStack.Push(be[i+4 : i+4+l].run(c))
@@ -747,7 +985,18 @@ index 276abbf..df2a4a5 100644
  			continue
  		case OC_int8:
  			sys.bcStack.PushI(int32(int8(be[i])))
-@@ -2402,7 +2433,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+ 			i++
+ 		case OC_int:
+-			sys.bcStack.PushI(*(*int32)(unsafe.Pointer(&be[i])))
++			sys.bcStack.PushI(bcI32(be, i))
+ 			i += 4
+ 		case OC_int64:
+-			sys.bcStack.PushI64(*(*int64)(unsafe.Pointer(&be[i])))
++			sys.bcStack.PushI64(bcI64(be, i))
+ 			i += 8
+ 		case OC_float:
+ 			arr := make([]byte, 4)
+@@ -2402,7 +2473,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			sys.bcStack.PushF(flo)
  			i += 4
  		case OC_string:
@@ -759,7 +1008,7 @@ index 276abbf..df2a4a5 100644
  		case OC_neg:
  			be.neg(sys.bcStack.Top())
  		case OC_bwnot:
-@@ -2599,7 +2633,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2599,7 +2673,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_hitcount:
  			sys.bcStack.PushI(c.hitCount)
  		case OC_hitdefattr:
@@ -769,7 +1018,7 @@ index 276abbf..df2a4a5 100644
  			if attr == -2 { // String value on the stack
  				attr = evalTriggerAttr(c, sys.bcStack.Pop())
  			}
-@@ -2747,15 +2782,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2747,15 +2822,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_vel_z:
  			sys.bcStack.PushF(c.vel[2] * (c.localscl / oc.localscl))
  		case OC_assign_:
@@ -800,7 +1049,7 @@ index 276abbf..df2a4a5 100644
  		case OC_var:
  			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
  		case OC_sysvar:
-@@ -2770,6 +2815,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2770,6 +2855,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		}
  		c = oc
  	}
@@ -808,7 +1057,16 @@ index 276abbf..df2a4a5 100644
  	return sys.bcStack.Pop()
  }
  
-@@ -5017,7 +5063,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
+@@ -3812,7 +3898,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
+ 			sys.bcStack.Push(BytecodeUndefined())
+ 		}
+ 	case OC_ex_isassertedchar:
+-		sys.bcStack.PushB(c.asf(AssertSpecialFlag((*(*int64)(unsafe.Pointer(&be[*i]))))))
++		sys.bcStack.PushB(c.asf(AssertSpecialFlag((bcI64(be, *i)))))
+ 		*i += 8
+ 	case OC_ex_isassertedglobal:
+ 		flag := be.ReadIntAt(i)
+@@ -5017,7 +5103,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
  		//		continue
  		//	}
  		//}
@@ -825,7 +1083,7 @@ index 276abbf..df2a4a5 100644
  			changeState = true
  			break
  		}
-@@ -5089,6 +5143,7 @@ type StateBlock struct {
+@@ -5089,6 +5183,7 @@ type StateBlock struct {
  	trigger             BytecodeExp
  	elseBlock           *StateBlock
  	ctrls               []StateController
@@ -833,7 +1091,7 @@ index 276abbf..df2a4a5 100644
  	// Loop fields
  	loopBlock        bool
  	nestedInLoop     bool
-@@ -5104,6 +5159,16 @@ func newStateBlock() *StateBlock {
+@@ -5104,6 +5199,16 @@ func newStateBlock() *StateBlock {
  	return &StateBlock{persistent: 1, persistentIndex: -1, ignorehitpause: false}
  }
  
@@ -850,7 +1108,7 @@ index 276abbf..df2a4a5 100644
  func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  	c.currentSctrlIndex = b.persistentIndex
  	// For Mugen compatibility, if in hitpause and this SCTRL has the same index
-@@ -5189,7 +5254,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5189,7 +5294,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			// Run state controllers
  			if !interrupt {
@@ -860,7 +1118,7 @@ index 276abbf..df2a4a5 100644
  					switch sc.(type) {
  					case *StateBlock:
  					default:
-@@ -5197,7 +5263,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5197,7 +5303,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  							continue
  						}
  					}
@@ -869,7 +1127,7 @@ index 276abbf..df2a4a5 100644
  						if sys.loopBreak {
  							sys.loopBreak = false
  							interrupt = true
-@@ -5244,7 +5310,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5244,7 +5350,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			return false
  		}
@@ -879,16 +1137,43 @@ index 276abbf..df2a4a5 100644
  			switch sc.(type) {
  			case *StateBlock:
  			default:
-@@ -5252,7 +5319,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5252,7 +5359,16 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  					continue
  				}
  			}
 -			if sc.Run(c, ps) {
++			if bcOpProf && b == bcProfTop {
++				o := bcOps
++				r := runs[i](c, ps)
++				bcProfCtl(i, sc, bcOps-o)
++				if r {
++					return true
++				}
++				continue
++			}
 +			if runs[i](c, ps) {
  				return true
  			}
  		}
-@@ -5414,21 +5481,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5375,7 +5491,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
+ 				sys.workBe = sys.workBe[:n]
+ 			}
+ 			for m := 0; m < int(n); m++ {
+-				l := *(*int32)(unsafe.Pointer(&scb[i]))
++				l := bcI32([]OpCode(scb), i)
+ 				i += 4
+ 				sys.workBe[m] = (*(*BytecodeExp)(unsafe.Pointer(&scb)))[i : i+int(l)]
+ 				i += int(l)
+@@ -5402,7 +5518,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+ 			n := scb[i]
+ 			i++
+ 			for m := 0; m < int(n); m++ {
+-				l := *(*int32)(unsafe.Pointer(&scb[i]))
++				l := bcI32([]OpCode(scb), i)
+ 				i += 4 + int(l)
+ 			}
+ 			if id == paramID {
+@@ -5414,21 +5530,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -920,7 +1205,7 @@ index 276abbf..df2a4a5 100644
  }
  
  type stateDef StateControllerBase
-@@ -5530,6 +5595,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +5644,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -930,7 +1215,7 @@ index 276abbf..df2a4a5 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -6653,7 +6721,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,7 +6770,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -959,7 +1244,7 @@ index 0000000..0cee43a
 +// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lkubridge_stub_weak -lstdc++ -lsupc++ -lm
 +import "C"
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..8d1e8b8 100644
+index 19bf05a..1d0aa0d 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -1881,9 +1881,9 @@ func (e *Explod) initFromChar(c *Char) *Explod {
@@ -1062,7 +1347,48 @@ index 19bf05a..8d1e8b8 100644
  		if len(e) > 0 && e[0] != nil && c.isEnemyOf(e[0]) {
  			n += 1
  		}
-@@ -7832,7 +7844,8 @@ func (c *Char) hitAdd(h int32) {
+@@ -6012,9 +6024,14 @@ func (c *Char) numExplod(eid BytecodeValue) BytecodeValue {
+ 		return BytecodeUndefined()
+ 	}
+ 
++	// Count without building a slice (NumExplod runs hundreds of times per frame).
+ 	id := eid.ToI()
+-	expls := c.getMultipleExplods(id, -1, false)
+-	total := int32(len(expls))
++	var total int32
++	for _, e := range sys.explods[c.playerNo] {
++		if e.matchId(id, c.id) {
++			total++
++		}
++	}
+ 
+ 	return BytecodeInt(total)
+ }
+@@ -7363,11 +7380,19 @@ func (c *Char) getSingleExplod(id int32, idx int, log bool) *Explod {
+ 		return nil
+ 	}
+ 
+-	explods := c.getMultipleExplods(id, idx, log)
+-	if len(explods) > 0 {
+-		return explods[0]
++	// Find the idx-th match directly (getMultipleExplods allocates a slice).
++	matchCount := 0
++	for _, e := range sys.explods[c.playerNo] {
++		if e.matchId(id, c.id) {
++			if matchCount == idx {
++				return e
++			}
++			matchCount++
++		}
++	}
++	if log {
++		sys.appendToConsole(c.warn() + fmt.Sprintf("found no explod with ID %v and index %v", id, idx))
+ 	}
+-
+ 	return nil
+ }
+ 
+@@ -7832,7 +7857,8 @@ func (c *Char) hitAdd(h int32) {
  		}
  	} else if c.teamside != -1 {
  		// In Mugen, HitAdd can increase combo count even without targets
@@ -1072,7 +1398,7 @@ index 19bf05a..8d1e8b8 100644
  			if len(p) > 0 && c.teamside == ^i&1 {
  				// This is a bit of a workaround for backward compatibility only
  				if p[0].receivedHits != 0 || p[0].ss.moveType == MT_H {
-@@ -8370,6 +8383,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+@@ -8370,6 +8396,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -1080,7 +1406,7 @@ index 19bf05a..8d1e8b8 100644
  	if _, ok := c.cnsvar[i]; ok {
  		c.cnsvar[i] += v
  	} else {
-@@ -9008,7 +9022,8 @@ func (c *Char) lifeSet(life int32) {
+@@ -9008,7 +9035,8 @@ func (c *Char) lifeSet(life int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -1090,7 +1416,7 @@ index 19bf05a..8d1e8b8 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].life = c.life
  			}
-@@ -9100,7 +9115,8 @@ func (c *Char) redLifeSet(set int32) {
+@@ -9100,7 +9128,8 @@ func (c *Char) redLifeSet(set int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -1100,7 +1426,7 @@ index 19bf05a..8d1e8b8 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].redLife = c.redLife
  			}
-@@ -9811,65 +9827,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
+@@ -9811,65 +9840,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
  	}
  	key := strings.ToLower(s)
  
@@ -1184,13 +1510,13 @@ index 19bf05a..8d1e8b8 100644
 +	if !isAdd {
 +		m[key] = mv
 +		return
-+	}
+ 	}
 +	// String operations don't exist yet, so any add touching one is a no-op
 +	old := m[key]
 +	if mv.Type == VT_String || old.Type == VT_String {
 +		sys.appendToConsole(c.warn() + "MapAdd: cannot add string values")
 +		return
- 	}
++	}
 +	// Defer to the engine's own add so int/float promotion matches expressions
 +	sum := old.ToBV()
 +	BytecodeExp{}.add(&sum, mv.ToBV())
@@ -1198,7 +1524,65 @@ index 19bf05a..8d1e8b8 100644
  }
  
  // Used to init, fully reset or partially reset the map array
-@@ -13710,7 +13714,8 @@ func (cl *CharList) clear() {
+@@ -12436,35 +12453,35 @@ func (c *Char) actionRun() {
+ 	// Run state -4
+ 	c.minus = -4
+ 	if sb, ok := c.gi().states[-4]; ok {
+-		sb.run(c)
++		bcProfRun(c, sb, int32(c.minus))
+ 	}
+ 	if !c.pauseBool {
+ 		// Run state -3
+ 		c.minus = -3
+ 		if c.ss.sb.playerNo == c.playerNo && (c.isPlayerType() || c.keyctrl[2]) {
+ 			if sb, ok := c.gi().states[-3]; ok {
+-				sb.run(c)
++				bcProfRun(c, sb, int32(c.minus))
+ 			}
+ 		}
+ 		// Run state -2
+ 		c.minus = -2
+ 		if c.isPlayerType() || c.keyctrl[1] {
+ 			if sb, ok := c.gi().states[-2]; ok {
+-				sb.run(c)
++				bcProfRun(c, sb, int32(c.minus))
+ 			}
+ 		}
+ 		// Run state -1
+ 		c.minus = -1
+ 		if c.ss.sb.playerNo == c.playerNo && c.keyctrl[0] {
+ 			if sb, ok := c.gi().states[-1]; ok {
+-				sb.run(c)
++				bcProfRun(c, sb, int32(c.minus))
+ 			}
+ 		}
+ 		// Change into buffered state
+ 		c.stateChange2()
+ 		// Run current state
+ 		c.minus = 0
+-		c.ss.sb.run(c)
++		bcProfRun(c, c.ss.sb, c.ss.no)
+ 	}
+ 
+ 	// Guarding instructions
+@@ -12495,14 +12512,14 @@ func (c *Char) actionRun() {
+ 	// Uses minus -4 because its properties are similar
+ 	c.minus = -4
+ 	if sb, ok := c.gi().states[-10]; ok {
+-		sb.run(c)
++		bcProfRun(c, sb, -10)
+ 	}
+ 	// Set minus back to normal
+ 	c.minus = 0
+ 	// If State +1 changed the current state, run the next one as well
+ 	if !c.pauseBool && c.stchtmp {
+ 		c.stateChange2()
+-		c.ss.sb.run(c)
++		bcProfRun(c, c.ss.sb, c.ss.no)
+ 	}
+ 	if !c.pauseBool {
+ 		if !c.hitPause() {
+@@ -13710,7 +13727,8 @@ func (cl *CharList) clear() {
  
  	// Clear all player ID's to avoid false conflicts with stale players
  	// TODO: Maybe stale players should be cleared better
@@ -1208,7 +1592,7 @@ index 19bf05a..8d1e8b8 100644
  		for _, c := range p {
  			if c != nil {
  				c.id = -1
-@@ -13858,7 +13863,8 @@ func (cl *CharList) audit() {
+@@ -13858,7 +13876,8 @@ func (cl *CharList) audit() {
  
  func (cl *CharList) commandUpdate() {
  	// Iterate players
@@ -1218,7 +1602,7 @@ index 19bf05a..8d1e8b8 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -14420,8 +14426,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+@@ -14420,8 +14439,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
  				// Check if the character is above the platform's surface
  				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
  					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
@@ -1373,6 +1757,3343 @@ index a741eab..e7080c4 100644
  func LowercaseNoExtension(filename string) string {
  	basename := filepath.Base(filename)
  	ext := filepath.Ext(basename)
+diff --git a/src/compiler.go b/src/compiler.go
+index 768df8d..4bb828a 100644
+--- a/src/compiler.go
++++ b/src/compiler.go
+@@ -10,8 +10,6 @@ import (
+ 
+ const specialSymbols = " !=<>()|&+-*/%,[]^:;{}#\"\t\r\n"
+ 
+-type expFunc func(out *BytecodeExp, in *string) (BytecodeValue, error)
+-
+ type scFunc func(is IniSection, sc *StateControllerBase) (StateController, error)
+ 
+ type CharCompiler struct {
+@@ -31,6 +29,12 @@ type CharCompiler struct {
+ 	stateNo          int32
+ 	zssMode          bool
+ 	currentFile      string
++	// Reusable temporaries, see getScratch
++	lowerCache   *[lowerCacheSize]lowerCacheEntry
++	scratch      []*BytecodeExp
++	scratchDepth int
++	frames       []*expValueFrame
++	frameDepth   int
+ }
+ 
+ func newCharCompiler() *CharCompiler {
+@@ -492,7 +496,64 @@ var triggerMap = map[string]int{
+ }
+ 
+ func (c *CharCompiler) tokenizer(in *string) string {
+-	return strings.ToLower(c.tokenizerCS(in))
++	return c.toLower(c.tokenizerCS(in))
++}
++
++// Lookup table for specialSymbols (all ASCII), replacing strings.IndexAny,
++// which rebuilds its character set on every call
++var specialSymbolTable = func() (t [256]bool) {
++	for i := 0; i < len(specialSymbols); i++ {
++		t[specialSymbols[i]] = true
++	}
++	return
++}()
++
++// Same result as strings.IndexAny(s, specialSymbols)
++func indexSpecialSymbol(s string) int {
++	for i := 0; i < len(s); i++ {
++		if specialSymbolTable[s[i]] {
++			return i
++		}
++	}
++	return -1
++}
++
++type lowerCacheEntry struct {
++	src, low string
++}
++
++const lowerCacheSize = 1024
++
++// Same result as strings.ToLower(s). Tokens with uppercase letters are
++// lowercased once and then served from a small direct-mapped cache, since
++// CNS code repeats the same mixed-case words (Var, Time, StateNo...) all over
++// and every strings.ToLower of one allocates a new string
++func (c *CharCompiler) toLower(s string) string {
++	h := uint32(2166136261)
++	upper := false
++	for i := 0; i < len(s); i++ {
++		ch := s[i]
++		if ch >= 0x80 {
++			return strings.ToLower(s)
++		}
++		if 'A' <= ch && ch <= 'Z' {
++			upper = true
++		}
++		h = (h ^ uint32(ch)) * 16777619
++	}
++	if !upper {
++		return s
++	}
++	if c.lowerCache == nil {
++		c.lowerCache = new([lowerCacheSize]lowerCacheEntry)
++	}
++	e := &c.lowerCache[h&(lowerCacheSize-1)]
++	if e.src == s {
++		return e.low
++	}
++	low := strings.ToLower(s)
++	e.src, e.low = s, low
++	return low
+ }
+ 
+ // Same but case-sensitive
+@@ -625,7 +686,7 @@ func (*CharCompiler) tokenizerCS(in *string) string {
+ 		}
+ 	}
+ 	if i == 0 {
+-		i = strings.IndexAny(*in, specialSymbols)
++		i = indexSpecialSymbol(*in)
+ 		if i < 0 {
+ 			i = len(*in)
+ 		}
+@@ -703,6 +764,19 @@ func (c *CharCompiler) integer2(in *string) (int32, error) {
+ }
+ 
+ func (c *CharCompiler) number(token string) BytecodeValue {
++	// Most tokens are names or operators. ParseFloat can only succeed if the
++	// token starts with a digit, '.', a sign, or "inf"/"nan", and its error
++	// path allocates (a NumError plus a copy of the string), so reject the
++	// rest up front. Same result as letting ParseFloat fail
++	if len(token) == 0 {
++		return bvNone()
++	}
++	switch ch := token[0]; {
++	case ch >= '0' && ch <= '9', ch == '.', ch == '+', ch == '-',
++		ch == 'i', ch == 'I', ch == 'n', ch == 'N':
++	default:
++		return bvNone()
++	}
+ 	f, err := strconv.ParseFloat(token, 64)
+ 	if err != nil && f == 0 {
+ 		return bvNone()
+@@ -1140,11 +1214,12 @@ func (c *CharCompiler) evaluateComparison(out *BytecodeExp, in *string,
+ 
+ func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
+ 	rd, appendVal bool, defval ...BytecodeValue) (BytecodeValue, error) {
+-	var be BytecodeExp
+ 	var bv BytecodeValue
+ 	mae := c.token
++	be := c.getScratch()
+ 	if c.token = c.tokenizer(in); c.token != "(" {
+ 		if len(defval) == 0 || defval[0].IsNone() {
++			c.putScratch(1)
+ 			return bvNone(), Error("Missing '(' after " + mae)
+ 		}
+ 		*in = c.token + " " + *in
+@@ -1152,10 +1227,12 @@ func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
+ 	} else {
+ 		c.token = c.tokenizer(in)
+ 		var err error
+-		if bv, err = c.expBoolOr(&be, in); err != nil {
++		if bv, err = c.expBoolOr(be, in); err != nil {
++			c.putScratch(1)
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
++			c.putScratch(1)
+ 			return bvNone(), err
+ 		}
+ 	}
+@@ -1163,10 +1240,11 @@ func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
+ 		be.appendValue(bv)
+ 		bv = bvNone()
+ 	}
+-	if rd && len(be) > 0 {
+-		out.appendI32Op(OC_run_caller, int32(len(be)))
++	if rd && len(*be) > 0 {
++		out.appendI32Op(OC_run_caller, int32(len(*be)))
+ 	}
+-	out.append(be...)
++	out.append(*be...)
++	c.putScratch(1)
+ 	return bv, nil
+ }
+ 
+@@ -1232,19 +1310,21 @@ func (c *CharCompiler) twoOptArg(out *BytecodeExp, in *string,
+ 
+ func (c *CharCompiler) mathFunc(out *BytecodeExp, in *string, rd bool,
+ 	oc OpCode, f func(*BytecodeValue)) (bv BytecodeValue, err error) {
+-	var be BytecodeExp
+-	if bv, err = c.oneArg(&be, in, false, false); err != nil {
++	be := c.getScratch()
++	if bv, err = c.oneArg(be, in, false, false); err != nil {
++		c.putScratch(1)
+ 		return
+ 	}
+ 	if bv.IsNone() {
+ 		if rd {
+ 			out.append(OC_rdreset)
+ 		}
+-		out.append(be...)
++		out.append(*be...)
+ 		out.append(oc)
+ 	} else {
+ 		f(&bv)
+ 	}
++	c.putScratch(1)
+ 	return
+ }
+ 
+@@ -1319,266 +1399,300 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		c.token = c.tokenizer(in)
+ 		return bv, nil
+ 	}
++	f := c.getFrame()
++	bv, err := c.expValueSub(f, out, in, rd)
++	c.frameDepth--
++	return bv, err
++}
++
++// Address-taken temporaries of expValueSub. TinyGo heap-allocates locals
++// whose address escapes into the recursive parser, which here meant several
++// allocations on every call of a very hot function. Frames are reused from a
++// stack instead (see getFrame); the buffers keep their capacity, and their
++// contents are only ever copied into out
++type expValueFrame struct {
++	be1, be2, be3, be BytecodeExp
++	bv, bv1           BytecodeValue
++}
++
++func (c *CharCompiler) getFrame() *expValueFrame {
++	if c.frameDepth == len(c.frames) {
++		c.frames = append(c.frames, new(expValueFrame))
++	}
++	f := c.frames[c.frameDepth]
++	c.frameDepth++
++	f.be1, f.be2, f.be3, f.be = f.be1[:0], f.be2[:0], f.be3[:0], f.be[:0]
++	f.bv, f.bv1 = bvNone(), bvNone()
++	return f
++}
++
++// The helpers below used to be closures at the top of expValue. Each one was
++// allocated on every expValue call, and everything they captured (including
++// the parameters) escaped to the heap. They're methods with explicit
++// parameters now
+ 
+-	// Helper to determine whether vars are used as triggers or assignments
+-	_var := func(sys, f bool) error {
+-		_, err := c.oneArg(out, in, rd, true)
++// Helper to determine whether vars are used as triggers or assignments
++func (c *CharCompiler) expVar(out *BytecodeExp, in *string, rd bool, isSys, isF bool) error {
++	_, err := c.oneArg(out, in, rd, true)
++	if err != nil {
++		return err
++	}
++	var oc OpCode
++	c.token = c.tokenizer(in)
++	set := c.token == ":="
++	if set {
++		c.token = c.tokenizer(in)
++		be2 := c.getScratch()
++		bv2, err := c.expEqne(be2, in)
+ 		if err != nil {
++			c.putScratch(1)
+ 			return err
+ 		}
+-		var oc OpCode
+-		c.token = c.tokenizer(in)
+-		set := c.token == ":="
++		if bv2.IsNone() && len(*be2) == 0 {
++			c.putScratch(1)
++			return Error("Missing value after ':=' operator")
++		}
++		be2.appendValue(bv2)
++		if rd {
++			out.appendI32Op(OC_run_caller, int32(len(*be2)))
++		}
++		out.append(*be2...)
++		out.append(OC_assign_)
++		c.putScratch(1)
++	}
++	switch [...]bool{isSys, isF} {
++	case [...]bool{false, false}:
++		oc = OC_var
+ 		if set {
+-			c.token = c.tokenizer(in)
+-			var be2 BytecodeExp
+-			bv2, err := c.expEqne(&be2, in)
+-			if err != nil {
+-				return err
+-			}
+-			if bv2.IsNone() && len(be2) == 0 {
+-				return Error("Missing value after ':=' operator")
+-			}
+-			be2.appendValue(bv2)
+-			if rd {
+-				out.appendI32Op(OC_run_caller, int32(len(be2)))
+-			}
+-			out.append(be2...)
+-			out.append(OC_assign_)
++			oc = OC_assign_var
+ 		}
+-		switch [...]bool{sys, f} {
+-		case [...]bool{false, false}:
+-			oc = OC_var
+-			if set {
+-				oc = OC_assign_var
+-			}
+-		case [...]bool{false, true}:
+-			oc = OC_fvar
+-			if set {
+-				oc = OC_assign_fvar
+-			}
+-		case [...]bool{true, false}:
+-			oc = OC_sysvar
+-			if set {
+-				oc = OC_assign_sysvar
+-			}
+-		case [...]bool{true, true}:
+-			oc = OC_sysfvar
+-			if set {
+-				oc = OC_assign_sysfvar
+-			}
++	case [...]bool{false, true}:
++		oc = OC_fvar
++		if set {
++			oc = OC_assign_fvar
++		}
++	case [...]bool{true, false}:
++		oc = OC_sysvar
++		if set {
++			oc = OC_assign_sysvar
++		}
++	case [...]bool{true, true}:
++		oc = OC_sysfvar
++		if set {
++			oc = OC_assign_sysfvar
+ 		}
+-		out.append(oc)
+-		return nil
+ 	}
++	out.append(oc)
++	return nil
++}
+ 
+-	text := func() error {
+-		i := strings.Index(*in, "\"")
+-		if c.token != "\"" || i < 0 {
+-			return Error("Not enclosed in \"")
+-		}
+-		c.token = (*in)[:i]
+-		*in = (*in)[i+1:]
+-		return nil
++// Reads a quoted string into c.token
++func (c *CharCompiler) expText(in *string) error {
++	i := strings.Index(*in, "\"")
++	if c.token != "\"" || i < 0 {
++		return Error("Not enclosed in \"")
+ 	}
++	c.token = (*in)[:i]
++	*in = (*in)[i+1:]
++	return nil
++}
+ 
+-	// Helper for equal/not equal. Caller handles the negation itself
+-	eqne := func(f func(not bool) error) error {
+-		not, err := c.checkEquality(in)
++// Helper for equal/not equal. Caller handles the negation itself
++func (c *CharCompiler) eqne(in *string, f func(not bool) error) error {
++	not, err := c.checkEquality(in)
++	if err != nil {
++		return err
++	}
++	if err := f(not); err != nil {
++		return err
++	}
++	return nil
++}
++
++// For moveType, stateType and such triggers
++// Each can either be compared against specific flags or keywords, or used bare to return a string
++// This helper looks ahead to determine how to handle them
++// Always leaves c.token at the next token, so callers must return right after
++func (c *CharCompiler) flagTrigger(out *BytecodeExp, in *string, pushSelf func(), tryKeyword func(not bool) (matched bool, err error)) error {
++	savedIn := *in
++	peekTok := c.tokenizer(in)
++	*in = savedIn
++	if peekTok != "=" && peekTok != "!=" {
++		pushSelf()
++		c.token = c.tokenizer(in)
++		return nil
++	}
++	return c.eqne(in, func(not bool) error {
++		matched, err := tryKeyword(not)
+ 		if err != nil {
+ 			return err
+ 		}
+-		if err := f(not); err != nil {
++		if matched {
++			c.token = c.tokenizer(in)
++			return nil
++		}
++		pushSelf()
++		var be2 BytecodeExp
++		bv2, err := c.expGrls(&be2, in)
++		if err != nil {
+ 			return err
+ 		}
++		out.append(be2...)
++		out.appendValue(bv2)
++		if not {
++			out.append(OC_ne)
++		} else {
++			out.append(OC_eq)
++		}
+ 		return nil
+-	}
++	})
++}
+ 
+-	// For moveType, stateType and such triggers
+-	// Each can either be compared against specific flags or keywords, or used bare to return a string
+-	// This helper looks ahead to determine how to handle them
+-	// Always leaves c.token at the next token, so callers must return right after
+-	flagTrigger := func(pushSelf func(), tryKeyword func(not bool) (matched bool, err error)) error {
+-		savedIn := *in
+-		peekTok := c.tokenizer(in)
+-		*in = savedIn
+-		if peekTok != "=" && peekTok != "!=" {
+-			pushSelf()
+-			c.token = c.tokenizer(in)
+-			return nil
++// Parses a flag. Returns flag and error.
++func (c *CharCompiler) flagSub(in *string) (int32, error) {
++	flg := int32(0)
++	base := c.token
++	for _, ch := range base {
++		switch ch {
++		case 'H', 'h':
++			flg |= int32(HF_H)
++		case 'L', 'l':
++			flg |= int32(HF_L)
++		case 'M', 'm':
++			flg |= int32(HF_H | HF_L)
++		case 'A', 'a':
++			flg |= int32(HF_A)
++		case 'F', 'f':
++			flg |= int32(HF_F)
++		case 'D', 'd':
++			flg |= int32(HF_D)
++		case 'P', 'p':
++			flg |= int32(HF_P)
++		default:
++			return flg, Error("Invalid flags: " + base)
+ 		}
+-		return eqne(func(not bool) error {
+-			matched, err := tryKeyword(not)
+-			if err != nil {
+-				return err
+-			}
+-			if matched {
+-				c.token = c.tokenizer(in)
+-				return nil
+-			}
+-			pushSelf()
+-			var be2 BytecodeExp
+-			bv2, err := c.expGrls(&be2, in)
+-			if err != nil {
+-				return err
+-			}
+-			out.append(be2...)
+-			out.appendValue(bv2)
+-			if not {
+-				out.append(OC_ne)
+-			} else {
+-				out.append(OC_eq)
+-			}
+-			return nil
+-		})
+ 	}
+-
+-	// Parses a flag. Returns flag and error.
+-	flagSub := func() (int32, error) {
+-		flg := int32(0)
+-		base := c.token
+-		for _, ch := range base {
+-			switch ch {
+-			case 'H', 'h':
+-				flg |= int32(HF_H)
+-			case 'L', 'l':
+-				flg |= int32(HF_L)
+-			case 'M', 'm':
+-				flg |= int32(HF_H | HF_L)
+-			case 'A', 'a':
+-				flg |= int32(HF_A)
+-			case 'F', 'f':
+-				flg |= int32(HF_F)
+-			case 'D', 'd':
+-				flg |= int32(HF_D)
+-			case 'P', 'p':
+-				flg |= int32(HF_P)
+-			default:
+-				return flg, Error("Invalid flags: " + base)
+-			}
+-		}
+-		// peek ahead to see if we have signs in the flag
+-		if len(*in) > 0 {
+-			switch (*in)[0] {
+-			case '+':
+-				// move forward
+-				flg |= int32(HF_PLS)
+-				*in = (*in)[1:]
+-			case '-':
+-				// move forward
+-				flg |= int32(HF_MNS)
+-				*in = (*in)[1:]
+-			}
++	// peek ahead to see if we have signs in the flag
++	if len(*in) > 0 {
++		switch (*in)[0] {
++		case '+':
++			// move forward
++			flg |= int32(HF_PLS)
++			*in = (*in)[1:]
++		case '-':
++			// move forward
++			flg |= int32(HF_MNS)
++			*in = (*in)[1:]
+ 		}
+-		return flg, nil
+ 	}
++	return flg, nil
++}
+ 
+-	// The right side of a flag comparison can be a bare literal or the same thing quoted
+-	// Unwrap quotes so both parse identically
+-	flagRHS := func() error {
+-		if c.token == "\"" {
+-			return text()
+-		}
+-		return nil
++// The right side of a flag comparison can be a bare literal or the same thing quoted
++// Unwrap quotes so both parse identically
++func (c *CharCompiler) flagRHS(in *string) error {
++	if c.token == "\"" {
++		return c.expText(in)
+ 	}
++	return nil
++}
+ 
+-	// Checks for "=" or "!=" after a trigger without consuming it
+-	nextIsEqne := func() bool {
+-		savedIn := *in
+-		tok := c.tokenizer(in)
+-		*in = savedIn
+-		return tok == "=" || tok == "!="
+-	}
++// Checks for "=" or "!=" after a trigger without consuming it
++func (c *CharCompiler) nextIsEqne(in *string) bool {
++	savedIn := *in
++	tok := c.tokenizer(in)
++	*in = savedIn
++	return tok == "=" || tok == "!="
++}
+ 
+-	// Parses the right side of a comparison as a string expression
+-	parseStringExp := func() (BytecodeExp, error) {
+-		var be BytecodeExp
+-		bv, err := c.expGrls(&be, in)
+-		if err != nil {
+-			return nil, err
+-		}
+-		if !bv.IsNone() && bv.vtype != VT_String {
+-			return nil, Error("Expected a string expression")
+-		}
+-		be.appendValue(bv)
+-		return be, nil
++// Parses the right side of a comparison as a string expression
++func (c *CharCompiler) parseStringExp(in *string) (BytecodeExp, error) {
++	var be BytecodeExp
++	bv, err := c.expGrls(&be, in)
++	if err != nil {
++		return nil, err
++	}
++	if !bv.IsNone() && bv.vtype != VT_String {
++		return nil, Error("Expected a string expression")
+ 	}
++	be.appendValue(bv)
++	return be, nil
++}
+ 
+-	// Compiles "= attr" for attr triggers. Literals are converted now
+-	// Anything else is a string expression converted at runtime, so both forms run the same test
+-	// Returns a non-nil stringExp for the string form. Leaves c.token at the next token
+-	parseAttrComparison := func(allowExpr, tolerateMalformed bool) (attr int32, stringExp BytecodeExp, not bool, err error) {
+-		if not, err = c.checkEquality(in); err != nil {
+-			return
+-		}
+-		if allowExpr && !isAttrLiteral(c.token) {
+-			// Only HitDefAttr in CNS tolerates bad syntax. Other triggers report the expression error
+-			if !tolerateMalformed {
+-				stringExp, err = parseStringExp()
+-				return
+-			}
+-			// Restore the whole compiler on failure, since parsing can change more than the token
+-			saved, savedIn := *c, *in
+-			if stringExp, err = parseStringExp(); err == nil {
+-				return
+-			}
+-			*c, *in = saved, savedIn
+-		}
+-		if err = flagRHS(); err != nil {
++// Compiles "= attr" for attr triggers. Literals are converted now
++// Anything else is a string expression converted at runtime, so both forms run the same test
++// Returns a non-nil stringExp for the string form. Leaves c.token at the next token
++func (c *CharCompiler) parseAttrComparison(in *string, allowExpr, tolerateMalformed bool) (attr int32, stringExp BytecodeExp, not bool, err error) {
++	if not, err = c.checkEquality(in); err != nil {
++		return
++	}
++	if allowExpr && !isAttrLiteral(c.token) {
++		// Only HitDefAttr in CNS tolerates bad syntax. Other triggers report the expression error
++		if !tolerateMalformed {
++			stringExp, err = c.parseStringExp(in)
+ 			return
+ 		}
+-		if attr, err = c.trgAttr(in); err != nil {
++		// Restore the whole compiler on failure, since parsing can change more than the token
++		saved, savedIn := *c, *in
++		if stringExp, err = c.parseStringExp(in); err == nil {
+ 			return
+ 		}
+-		c.token = c.tokenizer(in)
++		*c, *in = saved, savedIn
++	}
++	if err = c.flagRHS(in); err != nil {
++		return
++	}
++	if attr, err = c.trgAttr(in); err != nil {
+ 		return
+ 	}
++	c.token = c.tokenizer(in)
++	return
++}
+ 
+-	// Same as parseAttrComparison, but for hitflag triggers
+-	parseHitFlagComparison := func() (flag int32, stringExp BytecodeExp, not bool, err error) {
+-		if not, err = c.checkEquality(in); err != nil {
+-			return
+-		}
+-		if !isHitFlagLiteral(c.token) {
+-			stringExp, err = parseStringExp()
+-			return
+-		}
+-		if err = flagRHS(); err != nil {
+-			return
+-		}
+-		if flag, err = flagSub(); err != nil {
+-			return
+-		}
+-		c.token = c.tokenizer(in)
++// Same as parseAttrComparison, but for hitflag triggers
++func (c *CharCompiler) parseHitFlagComparison(in *string) (flag int32, stringExp BytecodeExp, not bool, err error) {
++	if not, err = c.checkEquality(in); err != nil {
++		return
++	}
++	if !isHitFlagLiteral(c.token) {
++		stringExp, err = c.parseStringExp(in)
+ 		return
+ 	}
++	if err = c.flagRHS(in); err != nil {
++		return
++	}
++	if flag, err = c.flagSub(in); err != nil {
++		return
++	}
++	c.token = c.tokenizer(in)
++	return
++}
+ 
+-	// Emits an attr or hitflag test. The operand is the literal value, or -2 for the string form
+-	emitAttrOrHitFlagTest := func(value int32, stringExp BytecodeExp, not bool, ops ...OpCode) {
+-		if stringExp != nil {
+-			// The right side belongs to the caller, not the redirect target
+-			if rd {
+-				out.appendI32Op(OC_run_caller, int32(len(stringExp)))
+-			}
+-			out.append(stringExp...)
+-			value = -2
+-		}
+-		out.append(ops[:len(ops)-1]...)
+-		out.appendI32Op(ops[len(ops)-1], value)
+-		if not {
+-			out.append(OC_blnot)
++// Emits an attr or hitflag test. The operand is the literal value, or -2 for the string form
++func (c *CharCompiler) emitAttrOrHitFlagTest(out *BytecodeExp, rd bool, value int32, stringExp BytecodeExp, not bool, ops ...OpCode) {
++	if stringExp != nil {
++		// The right side belongs to the caller, not the redirect target
++		if rd {
++			out.appendI32Op(OC_run_caller, int32(len(stringExp)))
+ 		}
++		out.append(stringExp...)
++		value = -2
+ 	}
++	out.append(ops[:len(ops)-1]...)
++	out.appendI32Op(ops[len(ops)-1], value)
++	if not {
++		out.append(OC_blnot)
++	}
++}
+ 
+-	var be1, be2, be3 BytecodeExp
+-	var bv1, bv2, bv3 BytecodeValue
+-	var be BytecodeExp
++func (c *CharCompiler) expValueSub(f *expValueFrame, out *BytecodeExp, in *string, rd bool) (BytecodeValue, error) {
++	var bv2, bv3 BytecodeValue
+ 	var opc OpCode
+ 	var err error
+ 	// A quoted string like "Ikemen"
+ 	// Kept as typed, since it might need to print and eq/ne already compares case-insensitively
+ 	if c.token == "\"" {
+-		if err := text(); err != nil {
++		if err := c.expText(in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		out.appendI32Op(OC_string, int32(sys.stringPool[c.playerNo].Add(c.token)))
+@@ -1609,7 +1723,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if c.token != "," {
+ 			switch opc {
+ 			case OC_partner, OC_enemy, OC_enemynear:
+-				be1.appendValue(BytecodeInt(0))
++				f.be1.appendValue(BytecodeInt(0))
+ 			case OC_root:
+ 				return bvNone(), Error("Missing ',' after Root")
+ 			case OC_parent:
+@@ -1623,12 +1737,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			}
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expValue(&be2, in, true); err != nil {
++		if bv2, err = c.expValue(&f.be2, in, true); err != nil {
+ 			return bvNone(), err
+ 		}
+-		be2.appendValue(bv2)
+-		out.appendI32Op(opc, int32(len(be2)))
+-		out.append(be2...)
++		f.be2.appendValue(bv2)
++		out.appendI32Op(opc, int32(len(f.be2)))
++		out.append(f.be2...)
+ 		return bvNone(), nil
+ 	// Redirections with 1 argument
+ 	case "partner", "enemy", "enemynear", "playerid", "player", "playerindex", "helperindex":
+@@ -1651,18 +1765,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		c.token = c.tokenizer(in)
+ 		if c.token == "(" {
+ 			c.token = c.tokenizer(in)
+-			if bv1, err = c.expBoolOr(&be1, in); err != nil {
++			if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 				return bvNone(), err
+ 			}
+ 			if err := c.checkClosingParenthesis(); err != nil {
+ 				return bvNone(), err
+ 			}
+ 			c.token = c.tokenizer(in)
+-			be1.appendValue(bv1)
++			f.be1.appendValue(f.bv1)
+ 		} else {
+ 			switch opc {
+ 			case OC_partner, OC_enemy, OC_enemynear:
+-				be1.appendValue(BytecodeInt(0)) // Argument is optional for these
++				f.be1.appendValue(BytecodeInt(0)) // Argument is optional for these
+ 			case OC_player:
+ 				return bvNone(), Error("Missing '(' after Player")
+ 			case OC_playerid:
+@@ -1676,9 +1790,9 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			}
+ 		}
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+-		out.append(be1...)
++		out.append(f.be1...)
+ 		if c.token != "," {
+ 			switch opc {
+ 			case OC_partner:
+@@ -1700,12 +1814,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			}
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expValue(&be2, in, true); err != nil {
++		if bv2, err = c.expValue(&f.be2, in, true); err != nil {
+ 			return bvNone(), err
+ 		}
+-		be2.appendValue(bv2)
+-		out.appendI32Op(opc, int32(len(be2)))
+-		out.append(be2...)
++		f.be2.appendValue(bv2)
++		out.appendI32Op(opc, int32(len(f.be2)))
++		out.append(f.be2...)
+ 		return bvNone(), nil
+ 	// Redirections with 2 arguments
+ 	case "helper", "target":
+@@ -1719,20 +1833,20 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if c.token == "(" {
+ 			c.token = c.tokenizer(in)
+ 			// Read the first argument (ID)
+-			if bv1, err = c.expBoolOr(&be1, in); err != nil {
++			if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 				return bvNone(), err
+ 			}
+-			be1.appendValue(bv1)
++			f.be1.appendValue(f.bv1)
+ 			// Check if there's a second argument
+ 			if c.token == "," {
+ 				c.token = c.tokenizer(in)
+-				if bv2, err = c.expBoolOr(&be1, in); err != nil {
++				if bv2, err = c.expBoolOr(&f.be1, in); err != nil {
+ 					return bvNone(), err
+ 				}
+-				be1.appendValue(bv2)
++				f.be1.appendValue(bv2)
+ 			} else {
+ 				// If not, default index to 0
+-				be1.appendValue(BytecodeInt(0))
++				f.be1.appendValue(BytecodeInt(0))
+ 			}
+ 			if err := c.checkClosingParenthesis(); err != nil {
+ 				return bvNone(), err
+@@ -1740,13 +1854,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			c.token = c.tokenizer(in)
+ 		} else {
+ 			// Default to ID -1 and index 0 if no arguments are provided
+-			be1.appendValue(BytecodeInt(-1))
+-			be1.appendValue(BytecodeInt(0))
++			f.be1.appendValue(BytecodeInt(-1))
++			f.be1.appendValue(BytecodeInt(0))
+ 		}
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+-		out.append(be1...)
++		out.append(f.be1...)
+ 		if c.token != "," {
+ 			switch opc {
+ 			case OC_helper:
+@@ -1758,194 +1872,194 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			}
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expValue(&be2, in, true); err != nil {
++		if bv2, err = c.expValue(&f.be2, in, true); err != nil {
+ 			return bvNone(), err
+ 		}
+-		be2.appendValue(bv2)
+-		out.appendI32Op(opc, int32(len(be2)))
+-		out.append(be2...)
++		f.be2.appendValue(bv2)
++		out.appendI32Op(opc, int32(len(f.be2)))
++		out.append(f.be2...)
+ 		return bvNone(), nil
+ 	case "-":
+ 		if len(*in) > 0 && (((*in)[0] >= '0' && (*in)[0] <= '9') || (*in)[0] == '.') {
+ 			c.token += c.tokenizer(in)
+-			bv = c.number(c.token)
+-			if bv.IsNone() {
++			f.bv = c.number(c.token)
++			if f.bv.IsNone() {
+ 				return bvNone(), Error("Invalid data: " + c.token)
+ 			}
+ 		} else {
+ 			c.token = c.tokenizer(in)
+-			if bv, err = c.expValue(&be1, in, false); err != nil {
++			if f.bv, err = c.expValue(&f.be1, in, false); err != nil {
+ 				return bvNone(), err
+ 			}
+-			if bv.IsNone() && len(be1) == 0 {
++			if f.bv.IsNone() && len(f.be1) == 0 {
+ 				return bvNone(), Error("Missing expression after '-'")
+ 			}
+-			if bv.IsNone() {
++			if f.bv.IsNone() {
+ 				if rd {
+ 					//out.append(OC_rdreset)
+-					return bvNone(), Error("'-' operator cannot be used within a trigger redirection")
++					return bvNone(), Error("'-' operator cannot f.be used within a trigger redirection")
+ 				}
+-				out.append(be1...)
++				out.append(f.be1...)
+ 				out.append(OC_neg)
+ 			} else {
+-				out.neg(&bv)
++				out.neg(&f.bv)
+ 			}
+-			return bv, nil
++			return f.bv, nil
+ 		}
+ 	case "~":
+ 		c.token = c.tokenizer(in)
+-		if bv, err = c.expValue(&be1, in, false); err != nil {
++		if f.bv, err = c.expValue(&f.be1, in, false); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv.IsNone() {
++		if f.bv.IsNone() {
+ 			if rd {
+ 				//out.append(OC_rdreset)
+-				return bvNone(), Error("'~' operator cannot be used within a trigger redirection")
++				return bvNone(), Error("'~' operator cannot f.be used within a trigger redirection")
+ 			}
+-			out.append(be1...)
++			out.append(f.be1...)
+ 			out.append(OC_bwnot)
+ 		} else {
+-			out.bwnot(&bv)
++			out.bwnot(&f.bv)
+ 		}
+-		return bv, nil
++		return f.bv, nil
+ 	case "!":
+ 		c.token = c.tokenizer(in)
+-		if bv, err = c.expValue(&be1, in, false); err != nil {
++		if f.bv, err = c.expValue(&f.be1, in, false); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv.IsNone() {
++		if f.bv.IsNone() {
+ 			if rd {
+ 				//out.append(OC_rdreset)
+ 				// Ikemen used to allow operators in the middle of a redirection and make them just cancel the redirection
+ 				// Mugen's compiler crashes instead. This seems safer because of user error
+-				return bvNone(), Error("'!' operator cannot be used within a trigger redirection")
++				return bvNone(), Error("'!' operator cannot f.be used within a trigger redirection")
+ 			}
+-			out.append(be1...)
++			out.append(f.be1...)
+ 			out.append(OC_blnot)
+ 		} else {
+-			out.blnot(&bv)
++			out.blnot(&f.bv)
+ 		}
+-		return bv, nil
++		return f.bv, nil
+ 	case "(":
+ 		c.token = c.tokenizer(in)
+-		if bv, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv.IsNone() {
++		if f.bv.IsNone() {
+ 			if rd {
+ 				//out.append(OC_rdreset)
+-				return bvNone(), Error("Parentheses cannot be used within a trigger redirection")
++				return bvNone(), Error("Parentheses cannot f.be used within a trigger redirection")
+ 			}
+-			out.append(be1...)
++			out.append(f.be1...)
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "var":
+-		return bvNone(), _var(false, false)
++		return bvNone(), c.expVar(out, in, rd, false, false)
+ 	case "fvar":
+-		return bvNone(), _var(false, true)
++		return bvNone(), c.expVar(out, in, rd, false, true)
+ 	case "sysvar":
+-		return bvNone(), _var(true, false)
++		return bvNone(), c.expVar(out, in, rd, true, false)
+ 	case "sysfvar":
+-		return bvNone(), _var(true, true)
++		return bvNone(), c.expVar(out, in, rd, true, true)
+ 	case "ifelse":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in IfElse")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in IfElse")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv3, err = c.expBoolOr(&be3, in); err != nil {
++		if bv3, err = c.expBoolOr(&f.be3, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+-			out.append(be3...)
++			out.append(f.be3...)
+ 			out.appendValue(bv3)
+ 			out.append(OC_ifelse)
+ 		} else {
+-			if bv1.ToB() {
+-				bv = bv2
++			if f.bv1.ToB() {
++				f.bv = bv2
+ 			} else {
+-				bv = bv3
++				f.bv = bv3
+ 			}
+ 		}
+ 	case "cond":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Cond")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Cond")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv3, err = c.expBoolOr(&be3, in); err != nil {
++		if bv3, err = c.expBoolOr(&f.be3, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
+ 			// TODO: Cond is supposed to return undefined if the condition is undefined
+ 			// At the moment we have it returning the second option like IfElse does
+-			be3.appendValue(bv3)
+-			be2.appendValue(bv2)
+-			if len(be3) > int(math.MaxUint8-1) {
+-				be2.appendI32Op(OC_jmp, int32(len(be3)+1))
++			f.be3.appendValue(bv3)
++			f.be2.appendValue(bv2)
++			if len(f.be3) > int(math.MaxUint8-1) {
++				f.be2.appendI32Op(OC_jmp, int32(len(f.be3)+1))
+ 			} else {
+-				be2.append(OC_jmp8, OpCode(len(be3)+1))
++				f.be2.append(OC_jmp8, OpCode(len(f.be3)+1))
+ 			}
+-			be1.appendValue(bv1)
+-			if len(be2) > int(math.MaxUint8-1) {
+-				be1.appendI32Op(OC_jz, int32(len(be2)+1))
++			f.be1.appendValue(f.bv1)
++			if len(f.be2) > int(math.MaxUint8-1) {
++				f.be1.appendI32Op(OC_jz, int32(len(f.be2)+1))
+ 			} else {
+-				be1.append(OC_jz8, OpCode(len(be2)+1))
++				f.be1.append(OC_jz8, OpCode(len(f.be2)+1))
+ 			}
+-			be1.append(OC_pop)
+-			be1.append(be2...)
+-			be1.append(OC_pop)
+-			be1.append(be3...)
++			f.be1.append(OC_pop)
++			f.be1.append(f.be2...)
++			f.be1.append(OC_pop)
++			f.be1.append(f.be3...)
+ 			if rd {
+-				out.appendI32Op(OC_run_redir, int32(len(be1)))
++				out.appendI32Op(OC_run_redir, int32(len(f.be1)))
+ 			}
+-			out.append(be1...)
++			out.append(f.be1...)
+ 		} else {
+-			if bv1.IsUndefined() {
+-				bv = bv1
+-			} else if bv1.ToB() {
+-				bv = bv2
++			if f.bv1.IsUndefined() {
++				f.bv = f.bv1
++			} else if f.bv1.ToB() {
++				f.bv = bv2
+ 			} else {
+-				bv = bv3
++				f.bv = bv3
+ 			}
+ 		}
+ 	case "ailevel":
+@@ -2087,13 +2201,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		c1type := c.token
+ 		switch c1type {
+ 		case "clsn1":
+-			bv1 = BytecodeInt(1)
++			f.bv1 = BytecodeInt(1)
+ 		case "clsn2":
+-			bv1 = BytecodeInt(2)
++			f.bv1 = BytecodeInt(2)
+ 		case "size":
+-			bv1 = BytecodeInt(3)
++			f.bv1 = BytecodeInt(3)
+ 		case "dummy":
+-			bv1 = BytecodeInt(4)
++			f.bv1 = BytecodeInt(4)
+ 		default:
+ 			return bvNone(), Error("Invalid collision box type: " + c1type)
+ 		}
+@@ -2102,7 +2216,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			return bvNone(), Error("Missing ',' in ClsnOverlap")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+@@ -2124,14 +2238,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		be1.appendValue(bv1)
+-		be1.append(be2...)
+-		be1.appendValue(bv2)
+-		be1.appendValue(bv3)
++		f.be1.appendValue(f.bv1)
++		f.be1.append(f.be2...)
++		f.be1.appendValue(bv2)
++		f.be1.appendValue(bv3)
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+-		out.append(be1...)
++		out.append(f.be1...)
+ 		out.append(OC_ex_, OC_ex_clsnoverlap)
+ 	case "clsnvar":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+@@ -2140,13 +2254,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		ctype := c.token
+ 		switch ctype {
+ 		case "clsn1":
+-			bv1 = BytecodeInt(1)
++			f.bv1 = BytecodeInt(1)
+ 		case "clsn2":
+-			bv1 = BytecodeInt(2)
++			f.bv1 = BytecodeInt(2)
+ 		case "size":
+-			bv1 = BytecodeInt(3)
++			f.bv1 = BytecodeInt(3)
+ 		case "dummy":
+-			bv1 = BytecodeInt(4)
++			f.bv1 = BytecodeInt(4)
+ 		default:
+ 			return bvNone(), Error(fmt.Sprintf("Invalid Clsn type: %s", ctype))
+ 		}
+@@ -2157,7 +2271,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		}
+ 		c.token = c.tokenizer(in)
+ 
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		c.token = c.tokenizer(in)
+@@ -2181,62 +2295,21 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			return bvNone(), err
+ 		}
+ 
+-		be1.appendValue(bv1)
+-		be1.append(be2...)
+-		be1.appendValue(bv2)
++		f.be1.appendValue(f.bv1)
++		f.be1.append(f.be2...)
++		f.be1.appendValue(bv2)
+ 
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+ 
+ 		// Just in case anybody else bangs their head against a wall with redirects:
+-		// it is imperative that the be1.append(opcodetype, opcode) comes after the
+-		// rd out.appendI32Op(OC_run_caller, int32(len(be1)))
+-		be1.append(OC_ex2_, opc)
+-		out.append(be1...)
++		// it is imperative that the f.be1.append(opcodetype, opcode) comes after the
++		// rd out.appendI32Op(OC_run_caller, int32(len(f.be1)))
++		f.be1.append(OC_ex2_, opc)
++		out.append(f.be1...)
+ 	case "command", "selfcommand":
+-		// These still work the same as in Mugen. They don't actually push strings
+-		opc := OC_command
+-		if c.token == "selfcommand" {
+-			opc = OC_selfcommand
+-		}
+-		if err := eqne(func(not bool) error {
+-			var nameExp BytecodeExp
+-			if c.token == "\"" {
+-				if err := text(); err != nil {
+-					return err
+-				}
+-				if _, ok := c.cmdl.Names[c.token]; !ok {
+-					return Error("Command doesn't exist: " + c.token)
+-				}
+-				nameExp.appendI32Op(OC_string, int32(sys.stringPool[c.playerNo].Add(c.token)))
+-				c.token = c.tokenizer(in)
+-			} else {
+-				// Evaluate dynamic names at runtime, where map and local var values are available
+-				bv, err := c.expGrls(&nameExp, in)
+-				if err != nil {
+-					return err
+-				}
+-				if !bv.IsNone() && bv.vtype != VT_String {
+-					return Error(`Not enclosed in "`)
+-				}
+-				nameExp.appendValue(bv)
+-			}
+-			// The name belongs to the caller. OC_run_caller also keeps the redirect alive for the command opcode
+-			if rd {
+-				out.appendI32Op(OC_run_caller, int32(len(nameExp)))
+-			}
+-			out.append(nameExp...)
+-			out.append(opc)
+-			if not {
+-				out.append(OC_blnot)
+-			}
+-			return nil
+-		}); err != nil {
+-			return bvNone(), err
+-		}
+-		// The command comparison already read the next token, so don't skip an outer operator
+-		return bvNone(), nil
++		return c.expValueCommand(out, in, rd)
+ 	case "const":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+@@ -2571,14 +2644,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in ExplodVar")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+@@ -2720,18 +2793,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			}
+ 		}
+ 
+-		be1.appendValue(bv1)
+-		be1.append(be2...)
+-		be1.appendValue(bv2)
++		f.be1.appendValue(f.bv1)
++		f.be1.append(f.be2...)
++		f.be1.appendValue(bv2)
+ 
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+ 		// Just in case anybody else bangs their head against a wall with redirects:
+-		// it is imperative that the be1.append(opcodetype, opcode) comes after the
+-		// rd out.appendI32Op(OC_run_caller, int32(len(be1)))
+-		be1.append(OC_ex2_, opc)
+-		out.append(be1...)
++		// it is imperative that the f.be1.append(opcodetype, opcode) comes after the
++		// rd out.appendI32Op(OC_run_caller, int32(len(f.be1)))
++		f.be1.append(OC_ex2_, opc)
++		out.append(f.be1...)
+ 	case "facing":
+ 		out.append(OC_facing)
+ 	case "frontedge":
+@@ -2948,20 +3021,20 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		switch isFlag {
+ 		case 1, 2:
+ 			// 1 is attr, 2 is hitflag
+-			if nextIsEqne() {
++			if c.nextIsEqne(in) {
+ 				var value int32
+ 				var stringExp BytecodeExp
+ 				var not bool
+ 				var err error
+ 				if isFlag == 1 {
+-					value, stringExp, not, err = parseAttrComparison(true, false)
++					value, stringExp, not, err = c.parseAttrComparison(in, true, false)
+ 				} else {
+-					value, stringExp, not, err = parseHitFlagComparison()
++					value, stringExp, not, err = c.parseHitFlagComparison(in)
+ 				}
+ 				if err != nil {
+ 					return bvNone(), err
+ 				}
+-				emitAttrOrHitFlagTest(value, stringExp, not, OC_ex_, opc)
++				c.emitAttrOrHitFlagTest(out, rd, value, stringExp, not, OC_ex_, opc)
+ 				return bvNone(), nil
+ 			}
+ 			// No comparison. Push the current value as a string
+@@ -3037,9 +3110,9 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 
+ 		if isEqne || allowWrongHDA {
+ 			// Case 1: valid comparison. Expressions are only tried when the operator is really there
+-			attr, stringExp, not, err := parseAttrComparison(isEqne, !c.zssMode && sys.ignoreMostErrors)
++			attr, stringExp, not, err := c.parseAttrComparison(in, isEqne, !c.zssMode && sys.ignoreMostErrors)
+ 			if err == nil {
+-				emitAttrOrHitFlagTest(attr, stringExp, not, OC_hitdefattr)
++				c.emitAttrOrHitFlagTest(out, rd, attr, stringExp, not, OC_hitdefattr)
+ 				return bvNone(), nil
+ 			}
+ 			// Case 2: malformed attr string
+@@ -3174,12 +3247,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			return bvNone(), Error("Invalid HitDefVar argument: " + c.token)
+ 		}
+ 		if isFlag {
+-			if nextIsEqne() {
+-				flag, stringExp, not, err := parseHitFlagComparison()
++			if c.nextIsEqne(in) {
++				flag, stringExp, not, err := c.parseHitFlagComparison(in)
+ 				if err != nil {
+ 					return bvNone(), err
+ 				}
+-				emitAttrOrHitFlagTest(flag, stringExp, not, OC_ex3_, opc)
++				c.emitAttrOrHitFlagTest(out, rd, flag, stringExp, not, OC_ex3_, opc)
+ 				return bvNone(), nil
+ 			}
+ 			// No comparison. Push the current flag as a string
+@@ -3252,70 +3325,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 	case "movereversed":
+ 		out.append(OC_movereversed)
+ 	case "movetype", "p2movetype", "prevmovetype":
+-		// The flag here is from a fixed set (A/H/I), not a string
+-		// It compiles straight to a MoveType number without involving the string pool
+-		trname := c.token
+-		pushSelf := func() {
+-			if trname == "prevmovetype" {
+-				out.append(OC_ex_, OC_ex_prevmovetype, 0)
+-			} else if trname == "p2movetype" {
+-				// OC_p2's length header must match what actually follows it -
+-				// when P2 doesn't exist, JumpToNext uses this length to skip
+-				// past the whole block. A hardcoded 0 here would make it land
+-				// on OC_movetype instead of past it, running it against the
+-				// wrong character and corrupting the stack.
+-				var sub BytecodeExp
+-				sub.append(OC_movetype, 0)
+-				out.appendI32Op(OC_p2, int32(len(sub)))
+-				out.append(sub...)
+-			} else {
+-				out.append(OC_movetype, 0)
+-			}
+-		}
+-		if err := flagTrigger(pushSelf, func(not bool) (bool, error) {
+-			if len(c.token) == 0 {
+-				return false, Error(trname + " trigger requires a comparison")
+-			}
+-			var mt MoveType
+-			switch c.token[0] {
+-			case 'i':
+-				mt = MT_I
+-			case 'a':
+-				mt = MT_A
+-			case 'h':
+-				mt = MT_H
+-			default:
+-				// TODO: Figure out how to keep these explicit errors
+-				//return Error("Invalid MoveType: " + c.token)
+-				return false, nil
+-			}
+-			if trname == "prevmovetype" {
+-				out.append(OC_ex_, OC_ex_prevmovetype, OpCode(mt>>15))
+-				if not {
+-					out.append(OC_blnot)
+-				}
+-			} else if trname == "p2movetype" {
+-				// OC_blnot has to go inside sub, not after it
+-				// It needs to run (or not) before the redirect's protected block ends
+-				// So the declared length has to account for it too
+-				var sub BytecodeExp
+-				sub.append(OC_movetype, OpCode(mt>>15))
+-				if not {
+-					sub.append(OC_blnot)
+-				}
+-				out.appendI32Op(OC_p2, int32(len(sub)))
+-				out.append(sub...)
+-			} else {
+-				out.append(OC_movetype, OpCode(mt>>15))
+-				if not {
+-					out.append(OC_blnot)
+-				}
+-			}
+-			return true, nil
+-		}); err != nil {
+-			return bvNone(), err
+-		}
+-		return bvNone(), nil
++		return c.expValueMoveType(out, in, rd)
+ 	case "palfxvar":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+@@ -3489,14 +3499,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' after index in ProjClsnOverlap")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+@@ -3519,15 +3529,15 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		be2.appendValue(bv2)
+-		be1.appendValue(bv1)
++		f.be2.appendValue(bv2)
++		f.be1.appendValue(f.bv1)
+ 
+-		be1.append(be2...)
+-		be1.appendValue(bv3)
++		f.be1.append(f.be2...)
++		f.be1.appendValue(bv3)
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+-		out.append(be1...)
++		out.append(f.be1...)
+ 		out.append(OC_ex2_, OC_ex2_projclsnoverlap)
+ 
+ 	case "projguardedtime":
+@@ -3544,14 +3554,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in ProjVar")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+@@ -3743,50 +3753,50 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 
+ 		negate, tokenRead := false, false
+ 		if isFlag {
+-			if nextIsEqne() {
++			if c.nextIsEqne(in) {
+ 				// Attr parses "SCA, AP". Flags parse "HLA"
+ 				var value int32
+ 				var stringExp BytecodeExp
+ 				var not bool
+ 				var err error
+ 				if opc == OC_ex2_projvar_attr {
+-					value, stringExp, not, err = parseAttrComparison(true, false)
++					value, stringExp, not, err = c.parseAttrComparison(in, true, false)
+ 				} else {
+-					value, stringExp, not, err = parseHitFlagComparison()
++					value, stringExp, not, err = c.parseHitFlagComparison(in)
+ 				}
+ 				if err != nil {
+ 					return bvNone(), err
+ 				}
+ 				if stringExp != nil {
+ 					// -2 tells the opcode to convert the string value below it
+-					be3 = stringExp
+-					be3.appendValue(BytecodeInt(-2))
++					f.be3 = stringExp
++					f.be3.appendValue(BytecodeInt(-2))
+ 				} else {
+-					be3.appendValue(BytecodeInt(value))
++					f.be3.appendValue(BytecodeInt(value))
+ 				}
+ 				// Negation is applied after the opcode, so the value can't collide with the -1 sentinel
+ 				negate, tokenRead = not, true
+ 			} else {
+ 				// No comparison. Push the current flag as a string
+-				be3.appendValue(BytecodeInt(-1))
++				f.be3.appendValue(BytecodeInt(-1))
+ 			}
+ 		} else {
+-			be3.appendValue(BytecodeInt(0))
++			f.be3.appendValue(BytecodeInt(0))
+ 		}
+ 
+-		be1.appendValue(bv1)
+-		be1.append(be2...)
+-		be1.appendValue(bv2)
+-		be1.append(be3...)
++		f.be1.appendValue(f.bv1)
++		f.be1.append(f.be2...)
++		f.be1.appendValue(bv2)
++		f.be1.append(f.be3...)
+ 
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+ 		// Just in case anybody else bangs their head against a wall with redirects:
+-		// it is imperative that the be1.append(opcodetype, opcode) comes after the
+-		// rd out.appendI32Op(OC_run_caller, int32(len(be1)))
+-		be1.append(OC_ex2_, opc)
+-		out.append(be1...)
++		// it is imperative that the f.be1.append(opcodetype, opcode) comes after the
++		// rd out.appendI32Op(OC_run_caller, int32(len(f.be1)))
++		f.be1.append(OC_ex2_, opc)
++		out.append(f.be1...)
+ 		if negate {
+ 			out.append(OC_blnot)
+ 		}
+@@ -3797,12 +3807,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 	case "random":
+ 		out.append(OC_random)
+ 	case "reversaldefattr":
+-		if nextIsEqne() {
+-			attr, stringExp, not, err := parseAttrComparison(true, false)
++		if c.nextIsEqne(in) {
++			attr, stringExp, not, err := c.parseAttrComparison(in, true, false)
+ 			if err != nil {
+ 				return bvNone(), err
+ 			}
+-			emitAttrOrHitFlagTest(attr, stringExp, not, OC_ex_, OC_ex_reversaldefattr)
++			c.emitAttrOrHitFlagTest(out, rd, attr, stringExp, not, OC_ex_, OC_ex_reversaldefattr)
+ 			return bvNone(), nil
+ 		}
+ 		// No comparison. Push the current reversal_attr as a string
+@@ -3848,7 +3858,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+@@ -3895,82 +3905,29 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			return bvNone(), err
+ 		}
+ 
+-		be1.appendValue(bv1)
++		f.be1.appendValue(f.bv1)
+ 
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+ 		// Just in case anybody else bangs their head against a wall with redirects:
+-		// it is imperative that the be1.append(opcodetype, opcode) comes after the
+-		// rd out.appendI32Op(OC_run_caller, int32(len(be1)))
+-		be1.append(OC_ex2_, opc)
+-		out.append(be1...)
++		// it is imperative that the f.be1.append(opcodetype, opcode) comes after the
++		// rd out.appendI32Op(OC_run_caller, int32(len(f.be1)))
++		f.be1.append(OC_ex2_, opc)
++		out.append(f.be1...)
+ 	case "stateno", "p2stateno":
+ 		if c.token == "p2stateno" {
+ 			out.appendI32Op(OC_p2, 1)
+ 		}
+ 		out.append(OC_stateno)
+ 	case "statetype", "p2statetype", "prevstatetype":
+-		trname := c.token
+-		pushSelf := func() {
+-			if trname == "prevstatetype" {
+-				out.append(OC_ex_, OC_ex_prevstatetype, 0)
+-			} else if trname == "p2statetype" {
+-				var sub BytecodeExp
+-				sub.append(OC_statetype, 0)
+-				out.appendI32Op(OC_p2, int32(len(sub)))
+-				out.append(sub...)
+-			} else {
+-				out.append(OC_statetype, 0)
+-			}
+-		}
+-		if err := flagTrigger(pushSelf, func(not bool) (bool, error) {
+-			if len(c.token) == 0 {
+-				return false, Error(trname + " trigger requires a comparison")
+-			}
+-			var st StateType
+-			switch c.token[0] {
+-			case 's':
+-				st = ST_S
+-			case 'c':
+-				st = ST_C
+-			case 'a':
+-				st = ST_A
+-			case 'l':
+-				st = ST_L
+-			default:
+-				return false, nil
+-			}
+-			if trname == "prevstatetype" {
+-				out.append(OC_ex_, OC_ex_prevstatetype, OpCode(st))
+-				if not {
+-					out.append(OC_blnot)
+-				}
+-			} else if trname == "p2statetype" {
+-				var sub BytecodeExp
+-				sub.append(OC_statetype, OpCode(st))
+-				if not {
+-					sub.append(OC_blnot)
+-				}
+-				out.appendI32Op(OC_p2, int32(len(sub)))
+-				out.append(sub...)
+-			} else {
+-				out.append(OC_statetype, OpCode(st))
+-				if not {
+-					out.append(OC_blnot)
+-				}
+-			}
+-			return true, nil
+-		}); err != nil {
+-			return bvNone(), err
+-		}
+-		return bvNone(), nil
++		return c.expValueStateType(out, in, rd)
+ 	case "stagebgvar":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		// First argument
+-		bv1, err := c.expBoolOr(&be1, in)
++		f.bv1, err = c.expBoolOr(&f.be1, in)
+ 		if err != nil {
+ 			return bvNone(), err
+ 		}
+@@ -3979,7 +3936,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		}
+ 		// Second argument
+ 		c.token = c.tokenizer(in)
+-		bv2, err := c.expBoolOr(&be2, in)
++		bv2, err := c.expBoolOr(&f.be2, in)
+ 		if err != nil {
+ 			return bvNone(), err
+ 		}
+@@ -4033,14 +3990,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			return bvNone(), err
+ 		}
+ 		// Output
+-		be1.appendValue(bv1)
+-		be1.append(be2...)
+-		be1.appendValue(bv2)
++		f.be1.appendValue(f.bv1)
++		f.be1.append(f.be2...)
++		f.be1.appendValue(bv2)
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+-		be1.append(OC_ex2_, opc)
+-		out.append(be1...)
++		f.be1.append(OC_ex2_, opc)
++		out.append(f.be1...)
+ 	case "stagevar":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+@@ -4227,33 +4184,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		out.append(OC_const_)
+ 		out.append(opc)
+ 	case "teammode":
+-		pushSelf := func() { out.append(OC_teammode, 255) }
+-		if err := flagTrigger(pushSelf, func(not bool) (bool, error) {
+-			if len(c.token) == 0 {
+-				return false, Error("TeamMode trigger requires a comparison")
+-			}
+-			var tm TeamMode
+-			switch c.token {
+-			case "single":
+-				tm = TM_Single
+-			case "simul":
+-				tm = TM_Simul
+-			case "turns":
+-				tm = TM_Turns
+-			case "tag":
+-				tm = TM_Tag
+-			default:
+-				return false, nil
+-			}
+-			out.append(OC_teammode, OpCode(tm))
+-			if not {
+-				out.append(OC_blnot)
+-			}
+-			return true, nil
+-		}); err != nil {
+-			return bvNone(), err
+-		}
+-		return bvNone(), nil
++		return c.expValueTeamMode(out, in, rd)
+ 	case "teamside":
+ 		out.append(OC_teamside)
+ 	case "tickspersecond":
+@@ -4300,28 +4231,28 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			return bvNone(), err
+ 		}
+ 		if n <= 0 {
+-			return bvNone(), Error("AnimElem must be greater than 0")
++			return bvNone(), Error("AnimElem must f.be greater than 0")
+ 		}
+-		be1.appendValue(BytecodeInt(n))
++		f.be1.appendValue(BytecodeInt(n))
+ 		// TODO: This probably has the same redirection issue old projectile triggers had
+ 		if rd {
+-			out.appendI32Op(OC_run_caller, int32(len(be1)))
++			out.appendI32Op(OC_run_caller, int32(len(f.be1)))
+ 		}
+-		out.append(be1...)
++		out.append(f.be1...)
+ 		out.append(OC_animelemtime)
+-		if err = c.evaluateComparison(&be, in, false); err != nil {
++		if err = c.evaluateComparison(&f.be, in, false); err != nil {
+ 			return bvNone(), err
+ 		}
+-		out.append(OC_jud8, OpCode(len(be)))
+-		out.append(be...)
+-		return bv, nil
++		out.append(OC_jud8, OpCode(len(f.be)))
++		out.append(f.be...)
++		return f.bv, nil
+ 	case "timemod":
+ 		n, err := c.parseOldAnimElemStyle(in, "TimeMod")
+ 		if err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if n <= 0 {
+-			return bvNone(), Error("TimeMod must be greater than 0")
++			return bvNone(), Error("TimeMod must f.be greater than 0")
+ 		}
+ 		out.append(OC_time)
+ 		out.appendValue(BytecodeInt(n))
+@@ -4329,7 +4260,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err = c.evaluateComparison(out, in, true); err != nil {
+ 			return bvNone(), err
+ 		}
+-		return bv, nil
++		return f.bv, nil
+ 	case "p2dist":
+ 		c.token = c.tokenizer(in)
+ 		switch c.token {
+@@ -4381,81 +4312,81 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 	case "parentexist":
+ 		out.append(OC_ex2_, OC_ex2_parentexist)
+ 	case "pi":
+-		bv = BytecodeFloat(float32(math.Pi))
++		f.bv = BytecodeFloat(float32(math.Pi))
+ 	case "e":
+-		bv = BytecodeFloat(float32(math.E))
++		f.bv = BytecodeFloat(float32(math.E))
+ 	case "abs":
+-		if bv, err = c.mathFunc(out, in, rd, OC_abs, out.abs); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_abs, out.abs); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "exp":
+-		if bv, err = c.mathFunc(out, in, rd, OC_exp, out.exp); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_exp, out.exp); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "ln":
+-		if bv, err = c.mathFunc(out, in, rd, OC_ln, out.ln); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_ln, out.ln); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "log":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Log")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+ 			out.append(OC_log)
+ 		} else {
+-			out.log(&bv1, bv2)
+-			bv = bv1
++			out.log(&f.bv1, bv2)
++			f.bv = f.bv1
+ 		}
+ 	case "cos":
+-		if bv, err = c.mathFunc(out, in, rd, OC_cos, out.cos); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_cos, out.cos); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "sin":
+-		if bv, err = c.mathFunc(out, in, rd, OC_sin, out.sin); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_sin, out.sin); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "tan":
+-		if bv, err = c.mathFunc(out, in, rd, OC_tan, out.tan); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_tan, out.tan); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "acos":
+-		if bv, err = c.mathFunc(out, in, rd, OC_acos, out.acos); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_acos, out.acos); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "asin":
+-		if bv, err = c.mathFunc(out, in, rd, OC_asin, out.asin); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_asin, out.asin); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "atan":
+-		if bv, err = c.mathFunc(out, in, rd, OC_atan, out.atan); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_atan, out.atan); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "floor":
+-		if bv, err = c.mathFunc(out, in, rd, OC_floor, out.floor); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_floor, out.floor); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "ceil":
+-		if bv, err = c.mathFunc(out, in, rd, OC_ceil, out.ceil); err != nil {
++		if f.bv, err = c.mathFunc(out, in, rd, OC_ceil, out.ceil); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	case "float":
+@@ -4467,74 +4398,74 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Max")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+ 			out.append(OC_ex_, OC_ex_max)
+ 		} else {
+-			out.max(&bv1, bv2)
+-			bv = bv1
++			out.max(&f.bv1, bv2)
++			f.bv = f.bv1
+ 		}
+ 	case "min":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Min")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+ 			out.append(OC_ex_, OC_ex_min)
+ 		} else {
+-			out.min(&bv1, bv2)
+-			bv = bv1
++			out.min(&f.bv1, bv2)
++			f.bv = f.bv1
+ 		}
+ 	case "randomrange":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in RandomRange")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+@@ -4543,109 +4474,109 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if rd {
+ 			out.append(OC_rdreset)
+ 		}
+-		out.append(be1...)
+-		out.appendValue(bv1)
+-		out.append(be2...)
++		out.append(f.be1...)
++		out.appendValue(f.bv1)
++		out.append(f.be2...)
+ 		out.appendValue(bv2)
+ 		out.append(OC_ex_, OC_ex_randomrange)
+ 	case "round":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Round")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+ 			out.append(OC_ex_, OC_ex_round)
+ 		} else {
+-			out.round(&bv1, bv2)
+-			bv = bv1
++			out.round(&f.bv1, bv2)
++			f.bv = f.bv1
+ 		}
+ 	case "clamp":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Clamp")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Clamp")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv3, err = c.expBoolOr(&be3, in); err != nil {
++		if bv3, err = c.expBoolOr(&f.be3, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+-			out.append(be3...)
++			out.append(f.be3...)
+ 			out.appendValue(bv3)
+ 			out.append(OC_ex_, OC_ex_clamp)
+ 		} else {
+-			out.clamp(&bv1, bv2, bv3)
+-			bv = bv1
++			out.clamp(&f.bv1, bv2, bv3)
++			f.bv = f.bv1
+ 		}
+ 	case "atan2":
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in ATan2")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+ 			out.append(OC_ex_, OC_ex_atan2)
+ 		} else {
+-			out.atan2(&bv1, bv2)
+-			bv = bv1
++			out.atan2(&f.bv1, bv2)
++			f.bv = f.bv1
+ 		}
+ 	case "sign":
+ 		if _, err := c.oneArg(out, in, rd, true); err != nil {
+@@ -4666,40 +4597,40 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		if err := c.checkOpeningParenthesis(in); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1, err = c.expBoolOr(&be1, in); err != nil {
++		if f.bv1, err = c.expBoolOr(&f.be1, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Lerp")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv2, err = c.expBoolOr(&be2, in); err != nil {
++		if bv2, err = c.expBoolOr(&f.be2, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if c.token != "," {
+ 			return bvNone(), Error("Missing ',' in Lerp")
+ 		}
+ 		c.token = c.tokenizer(in)
+-		if bv3, err = c.expBoolOr(&be3, in); err != nil {
++		if bv3, err = c.expBoolOr(&f.be3, in); err != nil {
+ 			return bvNone(), err
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+ 			return bvNone(), err
+ 		}
+-		if bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
++		if f.bv1.IsNone() || bv2.IsNone() || bv3.IsNone() {
+ 			if rd {
+ 				out.append(OC_rdreset)
+ 			}
+-			out.append(be1...)
+-			out.appendValue(bv1)
+-			out.append(be2...)
++			out.append(f.be1...)
++			out.appendValue(f.bv1)
++			out.append(f.be2...)
+ 			out.appendValue(bv2)
+-			out.append(be3...)
++			out.append(f.be3...)
+ 			out.appendValue(bv3)
+ 			out.append(OC_ex_, OC_ex_lerp)
+ 		} else {
+-			out.lerp(&bv1, bv2, bv3)
+-			bv = bv1
++			out.lerp(&f.bv1, bv2, bv3)
++			f.bv = f.bv1
+ 		}
+ 	case "ailevelf":
+ 		out.append(OC_ex_, OC_ex_ailevelf)
+@@ -5203,7 +5134,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		// So map(ifelse) is the same as map("ifelse") but not map(ifelse(...))
+ 		key := c.token
+ 		var keyExp BytecodeExp
+-		// Read the token after the key, and go back if the key turns out to be an expression
++		// Read the token after the key, and go back if the key turns out to f.be an expression
+ 		savedIn := *in
+ 		c.token = c.tokenizer(in)
+ 		// A quote starts a string and "$" starts a local variable, so neither is a name
+@@ -5214,7 +5145,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			if err != nil {
+ 				return bvNone(), err
+ 			}
+-			// Constant numbers can't be keys. Runtime values are still unchecked
++			// Constant numbers can't f.be keys. Runtime values are still unchecked
+ 			if !kv.IsNone() && kv.vtype != VT_String {
+ 				return bvNone(), Error("Expected a string expression")
+ 			}
+@@ -5266,18 +5197,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		// Map assignment with := operator
+ 		if c.token == ":=" {
+ 			c.token = c.tokenizer(in)
+-			bv2, err := c.expEqne(&be2, in)
++			bv2, err := c.expEqne(&f.be2, in)
+ 			if err != nil {
+ 				return bvNone(), err
+ 			}
+-			if bv2.IsNone() && len(be2) == 0 {
++			if bv2.IsNone() && len(f.be2) == 0 {
+ 				return bvNone(), Error("Missing value after ':=' operator")
+ 			}
+-			be2.appendValue(bv2)
++			f.be2.appendValue(bv2)
+ 			if rd {
+-				out.appendI32Op(OC_run_caller, int32(len(be2)))
++				out.appendI32Op(OC_run_caller, int32(len(f.be2)))
+ 			}
+-			out.append(be2...)
++			out.append(f.be2...)
+ 			out.append(OC_assign_)
+ 			out.appendI32Op(assignOp, keyIdx)
+ 		} else {
+@@ -5388,34 +5319,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 	case "pausetime":
+ 		out.append(OC_ex_, OC_ex_pausetime)
+ 	case "physics":
+-		pushSelf := func() { out.append(OC_ex_, OC_ex_physics, 0) }
+-		if err := flagTrigger(pushSelf, func(not bool) (bool, error) {
+-			if len(c.token) == 0 {
+-				return false, Error("Physics trigger requires a comparison")
+-			}
+-			var st StateType
+-			switch c.token[0] {
+-			case 's':
+-				st = ST_S
+-			case 'c':
+-				st = ST_C
+-			case 'a':
+-				st = ST_A
+-			case 'n':
+-				st = ST_N
+-			default:
+-				//return Error("Invalid Physics type: " + c.token)
+-				return false, nil
+-			}
+-			out.append(OC_ex_, OC_ex_physics, OpCode(st))
+-			if not {
+-				out.append(OC_blnot)
+-			}
+-			return true, nil
+-		}); err != nil {
+-			return bvNone(), err
+-		}
+-		return bvNone(), nil
++		return c.expValuePhysics(out, in, rd)
+ 	case "playerindexexist":
+ 		if _, err := c.oneArg(out, in, rd, true); err != nil {
+ 			return bvNone(), err
+@@ -5578,7 +5482,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		}
+ 		if rd {
+ 			//out.append(OC_rdreset)
+-			return bvNone(), Error("'" + c.token + "' operator cannot be used within a trigger redirection")
++			return bvNone(), Error("'" + c.token + "' operator cannot f.be used within a trigger redirection")
+ 		}
+ 		c.previousOperator = c.token
+ 		c.token = c.tokenizer(in)
+@@ -5586,7 +5490,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 	default:
+ 		// Exceptions for the projectile triggers with (very) old syntax
+ 		// projHit123, projGuarded456, projContact789
+-		// These will be converted internally to the newer Proj*Time trigger OpCodes
++		// These will f.be converted internally to the newer Proj*Time trigger OpCodes
+ 		l := len(c.token)
+ 		if (l >= 7 && c.token[:7] == "projhit") ||
+ 			(l >= 11 && (c.token[:11] == "projguarded" || c.token[:11] == "projcontact")) {
+@@ -5617,7 +5521,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 			}
+ 			// Mugen only allows 0 or 1 in the first comparison
+ 			if n != 0 && n != 1 && !sys.ignoreMostErrors {
+-				return bvNone(), Error(trname + " must be compared against 0 or 1")
++				return bvNone(), Error(trname + " must f.be compared against 0 or 1")
+ 			}
+ 			// Check if the second comparison exists (ProjContact[ID] = value, [oper] value2)
+ 			hasSecondComparison := c.token == ","
+@@ -5667,7 +5571,237 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+ 		}
+ 	}
+ 	c.token = c.tokenizer(in)
+-	return bv, nil
++	return f.bv, nil
++}
++
++func (c *CharCompiler) expValueCommand(out *BytecodeExp, in *string, rd bool) (BytecodeValue, error) {
++	// These still work the same as in Mugen. They don't actually push strings
++	opc := OC_command
++	if c.token == "selfcommand" {
++		opc = OC_selfcommand
++	}
++	if err := c.eqne(in, func(not bool) error {
++		var nameExp BytecodeExp
++		if c.token == "\"" {
++			if err := c.expText(in); err != nil {
++				return err
++			}
++			if _, ok := c.cmdl.Names[c.token]; !ok {
++				return Error("Command doesn't exist: " + c.token)
++			}
++			nameExp.appendI32Op(OC_string, int32(sys.stringPool[c.playerNo].Add(c.token)))
++			c.token = c.tokenizer(in)
++		} else {
++			// Evaluate dynamic names at runtime, where map and local var values are available
++			bv, err := c.expGrls(&nameExp, in)
++			if err != nil {
++				return err
++			}
++			if !bv.IsNone() && bv.vtype != VT_String {
++				return Error(`Not enclosed in "`)
++			}
++			nameExp.appendValue(bv)
++		}
++		// The name belongs to the caller. OC_run_caller also keeps the redirect alive for the command opcode
++		if rd {
++			out.appendI32Op(OC_run_caller, int32(len(nameExp)))
++		}
++		out.append(nameExp...)
++		out.append(opc)
++		if not {
++			out.append(OC_blnot)
++		}
++		return nil
++	}); err != nil {
++		return bvNone(), err
++	}
++	// The command comparison already read the next token, so don't skip an outer operator
++	return bvNone(), nil
++}
++
++func (c *CharCompiler) expValueMoveType(out *BytecodeExp, in *string, rd bool) (BytecodeValue, error) {
++	// The flag here is from a fixed set (A/H/I), not a string
++	// It compiles straight to a MoveType number without involving the string pool
++	trname := c.token
++	pushSelf := func() {
++		if trname == "prevmovetype" {
++			out.append(OC_ex_, OC_ex_prevmovetype, 0)
++		} else if trname == "p2movetype" {
++			// OC_p2's length header must match what actually follows it -
++			// when P2 doesn't exist, JumpToNext uses this length to skip
++			// past the whole block. A hardcoded 0 here would make it land
++			// on OC_movetype instead of past it, running it against the
++			// wrong character and corrupting the stack.
++			var sub BytecodeExp
++			sub.append(OC_movetype, 0)
++			out.appendI32Op(OC_p2, int32(len(sub)))
++			out.append(sub...)
++		} else {
++			out.append(OC_movetype, 0)
++		}
++	}
++	if err := c.flagTrigger(out, in, pushSelf, func(not bool) (bool, error) {
++		if len(c.token) == 0 {
++			return false, Error(trname + " trigger requires a comparison")
++		}
++		var mt MoveType
++		switch c.token[0] {
++		case 'i':
++			mt = MT_I
++		case 'a':
++			mt = MT_A
++		case 'h':
++			mt = MT_H
++		default:
++			// TODO: Figure out how to keep these explicit errors
++			//return Error("Invalid MoveType: " + c.token)
++			return false, nil
++		}
++		if trname == "prevmovetype" {
++			out.append(OC_ex_, OC_ex_prevmovetype, OpCode(mt>>15))
++			if not {
++				out.append(OC_blnot)
++			}
++		} else if trname == "p2movetype" {
++			// OC_blnot has to go inside sub, not after it
++			// It needs to run (or not) before the redirect's protected block ends
++			// So the declared length has to account for it too
++			var sub BytecodeExp
++			sub.append(OC_movetype, OpCode(mt>>15))
++			if not {
++				sub.append(OC_blnot)
++			}
++			out.appendI32Op(OC_p2, int32(len(sub)))
++			out.append(sub...)
++		} else {
++			out.append(OC_movetype, OpCode(mt>>15))
++			if not {
++				out.append(OC_blnot)
++			}
++		}
++		return true, nil
++	}); err != nil {
++		return bvNone(), err
++	}
++	return bvNone(), nil
++}
++
++func (c *CharCompiler) expValueStateType(out *BytecodeExp, in *string, rd bool) (BytecodeValue, error) {
++	trname := c.token
++	pushSelf := func() {
++		if trname == "prevstatetype" {
++			out.append(OC_ex_, OC_ex_prevstatetype, 0)
++		} else if trname == "p2statetype" {
++			var sub BytecodeExp
++			sub.append(OC_statetype, 0)
++			out.appendI32Op(OC_p2, int32(len(sub)))
++			out.append(sub...)
++		} else {
++			out.append(OC_statetype, 0)
++		}
++	}
++	if err := c.flagTrigger(out, in, pushSelf, func(not bool) (bool, error) {
++		if len(c.token) == 0 {
++			return false, Error(trname + " trigger requires a comparison")
++		}
++		var st StateType
++		switch c.token[0] {
++		case 's':
++			st = ST_S
++		case 'c':
++			st = ST_C
++		case 'a':
++			st = ST_A
++		case 'l':
++			st = ST_L
++		default:
++			return false, nil
++		}
++		if trname == "prevstatetype" {
++			out.append(OC_ex_, OC_ex_prevstatetype, OpCode(st))
++			if not {
++				out.append(OC_blnot)
++			}
++		} else if trname == "p2statetype" {
++			var sub BytecodeExp
++			sub.append(OC_statetype, OpCode(st))
++			if not {
++				sub.append(OC_blnot)
++			}
++			out.appendI32Op(OC_p2, int32(len(sub)))
++			out.append(sub...)
++		} else {
++			out.append(OC_statetype, OpCode(st))
++			if not {
++				out.append(OC_blnot)
++			}
++		}
++		return true, nil
++	}); err != nil {
++		return bvNone(), err
++	}
++	return bvNone(), nil
++}
++
++func (c *CharCompiler) expValueTeamMode(out *BytecodeExp, in *string, rd bool) (BytecodeValue, error) {
++	pushSelf := func() { out.append(OC_teammode, 255) }
++	if err := c.flagTrigger(out, in, pushSelf, func(not bool) (bool, error) {
++		if len(c.token) == 0 {
++			return false, Error("TeamMode trigger requires a comparison")
++		}
++		var tm TeamMode
++		switch c.token {
++		case "single":
++			tm = TM_Single
++		case "simul":
++			tm = TM_Simul
++		case "turns":
++			tm = TM_Turns
++		case "tag":
++			tm = TM_Tag
++		default:
++			return false, nil
++		}
++		out.append(OC_teammode, OpCode(tm))
++		if not {
++			out.append(OC_blnot)
++		}
++		return true, nil
++	}); err != nil {
++		return bvNone(), err
++	}
++	return bvNone(), nil
++}
++
++func (c *CharCompiler) expValuePhysics(out *BytecodeExp, in *string, rd bool) (BytecodeValue, error) {
++	pushSelf := func() { out.append(OC_ex_, OC_ex_physics, 0) }
++	if err := c.flagTrigger(out, in, pushSelf, func(not bool) (bool, error) {
++		if len(c.token) == 0 {
++			return false, Error("Physics trigger requires a comparison")
++		}
++		var st StateType
++		switch c.token[0] {
++		case 's':
++			st = ST_S
++		case 'c':
++			st = ST_C
++		case 'a':
++			st = ST_A
++		case 'n':
++			st = ST_N
++		default:
++			//return Error("Invalid Physics type: " + c.token)
++			return false, nil
++		}
++		out.append(OC_ex_, OC_ex_physics, OpCode(st))
++		if not {
++			out.append(OC_blnot)
++		}
++		return true, nil
++	}); err != nil {
++		return bvNone(), err
++	}
++	return bvNone(), nil
+ }
+ 
+ func (c *CharCompiler) contiguousOperator(in *string) error {
+@@ -5747,20 +5881,22 @@ func (c *CharCompiler) expPow(out *BytecodeExp, in *string) (BytecodeValue, erro
+ 		}
+ 		if c.token == "**" {
+ 			c.token = c.tokenizer(in)
+-			var be BytecodeExp
+-			bv2, err := c.expPostNot(&be, in)
++			be := c.getScratch()
++			bv2, err := c.expPostNot(be, in)
+ 			if err != nil {
++				c.putScratch(1)
+ 				return bvNone(), err
+ 			}
+ 			if bv.IsNone() || bv2.IsNone() {
+ 				out.appendValue(bv)
+-				out.append(be...)
++				out.append(*be...)
+ 				out.appendValue(bv2)
+ 				out.append(OC_pow)
+ 				bv = bvNone()
+ 			} else {
+ 				out.pow(&bv, bv2, c.playerNo)
+ 			}
++			c.putScratch(1)
+ 		} else {
+ 			break
+ 		}
+@@ -5777,20 +5913,19 @@ func (c *CharCompiler) expMldv(out *BytecodeExp, in *string) (BytecodeValue, err
+ 		if err := c.operator(in); err != nil {
+ 			return bvNone(), err
+ 		}
++		var opc OpCode
+ 		switch c.token {
+ 		case "*":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expPow, out.mul, OC_mul)
++			opc = OC_mul
+ 		case "/":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expPow, out.div, OC_div)
++			opc = OC_div
+ 		case "%":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expPow, out.mod, OC_mod)
++			opc = OC_mod
+ 		default:
+ 			return bv, nil
+ 		}
+-		if err != nil {
++		c.token = c.tokenizer(in)
++		if bv, err = c.expOneOpSub(out, in, bv, expLvPow, opc); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	}
+@@ -5805,17 +5940,17 @@ func (c *CharCompiler) expAdsb(out *BytecodeExp, in *string) (BytecodeValue, err
+ 		if err := c.operator(in); err != nil {
+ 			return bvNone(), err
+ 		}
++		var opc OpCode
+ 		switch c.token {
+ 		case "+":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expMldv, out.add, OC_add)
++			opc = OC_add
+ 		case "-":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expMldv, out.sub, OC_sub)
++			opc = OC_sub
+ 		default:
+ 			return bv, nil
+ 		}
+-		if err != nil {
++		c.token = c.tokenizer(in)
++		if bv, err = c.expOneOpSub(out, in, bv, expLvMldv, opc); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	}
+@@ -5830,64 +5965,69 @@ func (c *CharCompiler) expGrls(out *BytecodeExp, in *string) (BytecodeValue, err
+ 		if err := c.operator(in); err != nil {
+ 			return bvNone(), err
+ 		}
++		var opc OpCode
+ 		switch c.token {
+ 		case ">":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expAdsb, out.gt, OC_gt)
++			opc = OC_gt
+ 		case ">=":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expAdsb, out.ge, OC_ge)
++			opc = OC_ge
+ 		case "<":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expAdsb, out.lt, OC_lt)
++			opc = OC_lt
+ 		case "<=":
+-			c.token = c.tokenizer(in)
+-			err = c.expOneOpSub(out, in, &bv, c.expAdsb, out.le, OC_le)
++			opc = OC_le
+ 		default:
+ 			return bv, nil
+ 		}
+-		if err != nil {
++		c.token = c.tokenizer(in)
++		if bv, err = c.expOneOpSub(out, in, bv, expLvAdsb, opc); err != nil {
+ 			return bvNone(), err
+ 		}
+ 	}
+ }
+ 
++// Parses "= [min, max]" style ranges. Returns the updated left value and
++// whether a range was actually read
+ func (c *CharCompiler) expRange(out *BytecodeExp, in *string,
+-	bv *BytecodeValue, opc OpCode) (bool, error) {
++	bv BytecodeValue, opc OpCode) (BytecodeValue, bool, error) {
+ 	open := c.token
+ 	oldin := *in
+ 	c.token = c.tokenizer(in)
+-	var be2, be3 BytecodeExp
+-	bv2, err := c.expBoolOr(&be2, in)
++	mark := c.scratchDepth
++	be2, be3 := c.getScratch(), c.getScratch()
++	bv2, err := c.expBoolOr(be2, in)
+ 	if err != nil {
+-		return false, err
++		c.scratchDepth = mark
++		return bv, false, err
+ 	}
+ 	if c.token != "," {
++		c.scratchDepth = mark
+ 		if open != "(" {
+-			return false, Error("Missing ','")
++			return bv, false, Error("Missing ','")
+ 		}
+ 		if err := c.checkClosingParenthesis(); err != nil {
+-			return false, err
++			return bv, false, err
+ 		}
+ 		c.token = open
+ 		*in = oldin
+-		return false, nil
++		return bv, false, nil
+ 	}
+ 	c.token = c.tokenizer(in)
+-	bv3, err := c.expBoolOr(&be3, in)
++	bv3, err := c.expBoolOr(be3, in)
+ 	if err != nil {
+-		return false, err
++		c.scratchDepth = mark
++		return bv, false, err
+ 	}
+ 	close := c.token
+ 	if close != "]" && close != ")" {
+-		return false, Error("Missing ']' or ')'")
++		c.scratchDepth = mark
++		return bv, false, Error("Missing ']' or ')'")
+ 	}
+ 	c.token = c.tokenizer(in)
+ 	if bv.IsNone() || bv2.IsNone() || bv3.IsNone() {
+-		out.appendValue(*bv)
+-		out.append(be2...)
++		out.appendValue(bv)
++		out.append(*be2...)
+ 		out.appendValue(bv2)
+-		out.append(be3...)
++		out.append(*be3...)
+ 		out.appendValue(bv3)
+ 
+ 		var rop OpCode
+@@ -5905,9 +6045,9 @@ func (c *CharCompiler) expRange(out *BytecodeExp, in *string,
+ 		if opc == OC_ne {
+ 			out.append(OC_blnot)
+ 		}
+-		*bv = bvNone()
++		bv = bvNone()
+ 	} else {
+-		tmp := *bv
++		tmp := bv
+ 		var minPass, maxPass bool
+ 
+ 		if tmp.vtype == VT_Float || bv2.vtype == VT_Float || bv3.vtype == VT_Float {
+@@ -5939,7 +6079,8 @@ func (c *CharCompiler) expRange(out *BytecodeExp, in *string,
+ 			bv.SetB(!bv.ToB())
+ 		}
+ 	}
+-	return true, nil
++	c.scratchDepth = mark
++	return bv, true, nil
+ }
+ 
+ func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, error) {
+@@ -5964,7 +6105,8 @@ func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, err
+ 		switch c.token {
+ 		case "[", "(":
+ 			if !c.norange {
+-				if ok, err := c.expRange(out, in, &bv, opc); err != nil {
++				var ok bool
++				if bv, ok, err = c.expRange(out, in, bv, opc); err != nil {
+ 					return bvNone(), err
+ 				} else if ok {
+ 					break
+@@ -5972,43 +6114,126 @@ func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, err
+ 			}
+ 			fallthrough
+ 		default:
+-			switch opc {
+-			case OC_eq:
+-				err = c.expOneOpSub(out, in, &bv, c.expGrls, out.eq, opc)
+-			case OC_ne:
+-				err = c.expOneOpSub(out, in, &bv, c.expGrls, out.ne, opc)
+-			}
+-			if err != nil {
++			if bv, err = c.expOneOpSub(out, in, bv, expLvGrls, opc); err != nil {
+ 				return bvNone(), err
+ 			}
+ 		}
+ 	}
+ }
+ 
+-func (*CharCompiler) expOneOpSub(out *BytecodeExp, in *string, bv *BytecodeValue,
+-	ef expFunc, opf func(v1 *BytecodeValue, v2 BytecodeValue),
+-	opc OpCode) error {
++// Precedence levels of the binary operator parsers. The generic helpers below
++// dispatch on these instead of taking method values like c.expAnd or
++// out.bwand: under TinyGo every method value is a heap-allocated closure, and
++// passing pointers through func values makes everything they touch escape.
++type expLevel uint8
++
++const (
++	expLvPow expLevel = iota
++	expLvMldv
++	expLvAdsb
++	expLvGrls
++	expLvEqne
++	expLvAnd
++	expLvXor
++	expLvOr
++	expLvBoolAnd
++	expLvBoolXor
++)
++
++// Parses one operand at the given precedence level
++func (c *CharCompiler) expLevel(lv expLevel, out *BytecodeExp, in *string) (BytecodeValue, error) {
++	switch lv {
++	case expLvPow:
++		return c.expPow(out, in)
++	case expLvMldv:
++		return c.expMldv(out, in)
++	case expLvAdsb:
++		return c.expAdsb(out, in)
++	case expLvGrls:
++		return c.expGrls(out, in)
++	case expLvEqne:
++		return c.expEqne(out, in)
++	case expLvAnd:
++		return c.expAnd(out, in)
++	case expLvXor:
++		return c.expXor(out, in)
++	case expLvOr:
++		return c.expOr(out, in)
++	case expLvBoolAnd:
++		return c.expBoolAnd(out, in)
++	default:
++		return c.expBoolXor(out, in)
++	}
++}
++
++// Folds a binary operation on two constants (what out.mul etc. did when
++// passed as func values)
++func constBinaryOp(v1 *BytecodeValue, v2 BytecodeValue, opc OpCode) {
+ 	var be BytecodeExp
+-	bv2, err := ef(&be, in)
++	switch opc {
++	case OC_mul:
++		be.mul(v1, v2)
++	case OC_div:
++		be.div(v1, v2)
++	case OC_mod:
++		be.mod(v1, v2)
++	case OC_add:
++		be.add(v1, v2)
++	case OC_sub:
++		be.sub(v1, v2)
++	case OC_gt:
++		be.gt(v1, v2)
++	case OC_ge:
++		be.ge(v1, v2)
++	case OC_lt:
++		be.lt(v1, v2)
++	case OC_le:
++		be.le(v1, v2)
++	case OC_eq:
++		be.eq(v1, v2)
++	case OC_ne:
++		be.ne(v1, v2)
++	case OC_bwand:
++		be.bwand(v1, v2)
++	case OC_bwxor:
++		be.bwxor(v1, v2)
++	case OC_bwor:
++		be.bwor(v1, v2)
++	case OC_bland:
++		be.bland(v1, v2)
++	case OC_blxor:
++		be.blxor(v1, v2)
++	case OC_blor:
++		be.blor(v1, v2)
++	}
++}
++
++// Parses the right operand of a binary operator at level lv and combines it
++// with bv, either by folding constants or by emitting the operation
++func (c *CharCompiler) expOneOpSub(out *BytecodeExp, in *string, bv BytecodeValue,
++	lv expLevel, opc OpCode) (BytecodeValue, error) {
++	be := c.getScratch()
++	bv2, err := c.expLevel(lv, be, in)
+ 	if err != nil {
+-		return err
++		c.putScratch(1)
++		return bv, err
+ 	}
+ 	if bv.IsNone() || bv2.IsNone() {
+-		out.appendValue(*bv)
+-		out.append(be...)
++		out.appendValue(bv)
++		out.append(*be...)
+ 		out.appendValue(bv2)
+ 		out.append(opc)
+-		*bv = bvNone()
++		bv = bvNone()
+ 	} else {
+-		opf(bv, bv2)
++		constBinaryOp(&bv, bv2, opc)
+ 	}
+-	return nil
++	c.putScratch(1)
++	return bv, nil
+ }
+ 
+-func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, ef expFunc,
+-	opt string, opf func(v1 *BytecodeValue, v2 BytecodeValue),
+-	opc OpCode) (BytecodeValue, error) {
+-	bv, err := ef(out, in)
++func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, lv expLevel,
++	opt string, opc OpCode) (BytecodeValue, error) {
++	bv, err := c.expLevel(lv, out, in)
+ 	if err != nil {
+ 		return bvNone(), err
+ 	}
+@@ -6018,7 +6243,7 @@ func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, ef expFunc,
+ 		}
+ 		if c.token == opt {
+ 			c.token = c.tokenizer(in)
+-			if err := c.expOneOpSub(out, in, &bv, ef, opf, opc); err != nil {
++			if bv, err = c.expOneOpSub(out, in, bv, lv, opc); err != nil {
+ 				return bvNone(), err
+ 			}
+ 		} else {
+@@ -6028,20 +6253,20 @@ func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, ef expFunc,
+ }
+ 
+ func (c *CharCompiler) expAnd(out *BytecodeExp, in *string) (BytecodeValue, error) {
+-	return c.expOneOp(out, in, c.expEqne, "&", out.bwand, OC_bwand)
++	return c.expOneOp(out, in, expLvEqne, "&", OC_bwand)
+ }
+ 
+ func (c *CharCompiler) expXor(out *BytecodeExp, in *string) (BytecodeValue, error) {
+-	return c.expOneOp(out, in, c.expAnd, "^", out.bwxor, OC_bwxor)
++	return c.expOneOp(out, in, expLvAnd, "^", OC_bwxor)
+ }
+ 
+ func (c *CharCompiler) expOr(out *BytecodeExp, in *string) (BytecodeValue, error) {
+-	return c.expOneOp(out, in, c.expXor, "|", out.bwor, OC_bwor)
++	return c.expOneOp(out, in, expLvXor, "|", OC_bwor)
+ }
+ 
+ func (c *CharCompiler) expBoolAnd(out *BytecodeExp, in *string) (BytecodeValue, error) {
+ 	if c.block != nil {
+-		return c.expOneOp(out, in, c.expOr, "&&", out.bland, OC_bland)
++		return c.expOneOp(out, in, expLvOr, "&&", OC_bland)
+ 	}
+ 	bv, err := c.expOr(out, in)
+ 	if err != nil {
+@@ -6053,25 +6278,27 @@ func (c *CharCompiler) expBoolAnd(out *BytecodeExp, in *string) (BytecodeValue,
+ 		}
+ 		if c.token == "&&" {
+ 			c.token = c.tokenizer(in)
+-			var be BytecodeExp
+-			bv2, err := c.expBoolAnd(&be, in)
++			be := c.getScratch()
++			bv2, err := c.expBoolAnd(be, in)
+ 			if err != nil {
++				c.putScratch(1)
+ 				return bvNone(), err
+ 			}
+ 			if bv.IsNone() || bv2.IsNone() {
+ 				out.appendValue(bv)
+ 				be.appendValue(bv2)
+-				if len(be) > int(math.MaxUint8-1) {
+-					out.appendI32Op(OC_jz, int32(len(be)+1))
++				if len(*be) > int(math.MaxUint8-1) {
++					out.appendI32Op(OC_jz, int32(len(*be)+1))
+ 				} else {
+-					out.append(OC_jz8, OpCode(len(be)+1))
++					out.append(OC_jz8, OpCode(len(*be)+1))
+ 				}
+ 				out.append(OC_pop)
+-				out.append(be...)
++				out.append(*be...)
+ 				bv = bvNone()
+ 			} else {
+ 				out.bland(&bv, bv2)
+ 			}
++			c.putScratch(1)
+ 		} else {
+ 			break
+ 		}
+@@ -6080,13 +6307,21 @@ func (c *CharCompiler) expBoolAnd(out *BytecodeExp, in *string) (BytecodeValue,
+ }
+ 
+ func (c *CharCompiler) expBoolXor(out *BytecodeExp, in *string) (BytecodeValue, error) {
+-	return c.expOneOp(out, in, c.expBoolAnd, "^^", out.blxor, OC_blxor)
++	return c.expOneOp(out, in, expLvBoolAnd, "^^", OC_blxor)
+ }
+ 
+ func (c *CharCompiler) expBoolOr(out *BytecodeExp, in *string) (BytecodeValue, error) {
+-	defer func(omp string) { c.previousOperator = omp }(c.previousOperator)
++	// Restores previousOperator on return (was a deferred closure, which
++	// heap-allocates under TinyGo)
++	omp := c.previousOperator
++	bv, err := c.expBoolOrSub(out, in)
++	c.previousOperator = omp
++	return bv, err
++}
++
++func (c *CharCompiler) expBoolOrSub(out *BytecodeExp, in *string) (BytecodeValue, error) {
+ 	if c.block != nil {
+-		return c.expOneOp(out, in, c.expBoolXor, "||", out.blor, OC_blor)
++		return c.expOneOp(out, in, expLvBoolXor, "||", OC_blor)
+ 	}
+ 	bv, err := c.expBoolXor(out, in)
+ 	if err != nil {
+@@ -6098,25 +6333,27 @@ func (c *CharCompiler) expBoolOr(out *BytecodeExp, in *string) (BytecodeValue, e
+ 		}
+ 		if c.token == "||" {
+ 			c.token = c.tokenizer(in)
+-			var be BytecodeExp
+-			bv2, err := c.expBoolOr(&be, in)
++			be := c.getScratch()
++			bv2, err := c.expBoolOr(be, in)
+ 			if err != nil {
++				c.putScratch(1)
+ 				return bvNone(), err
+ 			}
+ 			if bv.IsNone() || bv2.IsNone() {
+ 				out.appendValue(bv)
+ 				be.appendValue(bv2)
+-				if len(be) > int(math.MaxUint8-1) {
+-					out.appendI32Op(OC_jnz, int32(len(be)+1))
++				if len(*be) > int(math.MaxUint8-1) {
++					out.appendI32Op(OC_jnz, int32(len(*be)+1))
+ 				} else {
+-					out.append(OC_jnz8, OpCode(len(be)+1))
++					out.append(OC_jnz8, OpCode(len(*be)+1))
+ 				}
+ 				out.append(OC_pop)
+-				out.append(be...)
++				out.append(*be...)
+ 				bv = bvNone()
+ 			} else {
+ 				out.blor(&bv, bv2)
+ 			}
++			c.putScratch(1)
+ 		} else {
+ 			break
+ 		}
+@@ -6124,17 +6361,21 @@ func (c *CharCompiler) expBoolOr(out *BytecodeExp, in *string) (BytecodeValue, e
+ 	return bv, nil
+ }
+ 
+-func (c *CharCompiler) typedExp(ef expFunc, in *string,
+-	vt ValueType) (BytecodeExp, error) {
++// Compiles a full expression (expBoolOr) and converts a constant result to vt.
++// The expression is built in a scratch buffer and returned as an exact-size
++// copy, so a stored expression costs one allocation and no slack
++func (c *CharCompiler) typedExp(in *string, vt ValueType) (BytecodeExp, error) {
+ 	c.token = c.tokenizer(in)
+-	var be BytecodeExp
+-	bv, err := ef(&be, in)
++	be := c.getScratch()
++	bv, err := c.expBoolOr(be, in)
+ 	if err != nil {
++		c.putScratch(1)
+ 		return nil, err
+ 	}
+ 	if !bv.IsNone() {
+ 		// Constant numbers can't stand in for strings. Runtime values are still unchecked
+ 		if vt == VT_String && bv.vtype != VT_String {
++			c.putScratch(1)
+ 			return nil, Error("Expected a string expression")
+ 		}
+ 		switch vt {
+@@ -6147,11 +6388,45 @@ func (c *CharCompiler) typedExp(ef expFunc, in *string,
+ 		}
+ 		be.appendValue(bv)
+ 	}
+-	return be, nil
++	res := cloneExp(*be)
++	c.putScratch(1)
++	return res, nil
++}
++
++// Returns an exact-size copy of a scratch expression. Empty gives nil, like a
++// BytecodeExp that was never appended to
++func cloneExp(be BytecodeExp) BytecodeExp {
++	if len(be) == 0 {
++		return nil
++	}
++	res := make(BytecodeExp, len(be))
++	copy(res, be)
++	return res
++}
++
++// Scratch buffers for temporary bytecode. TinyGo heap-allocates every local
++// BytecodeExp whose address is passed into the (recursive) expression parser,
++// and the appends then grow it from nothing every time. Temporaries come from
++// this stack of reusable buffers instead. Strictly LIFO: putScratch(n) releases
++// the last n buffers. Their contents must only be copied out, never kept.
++// A missed release only wastes buffers; restoring a saved copy of the compiler
++// (*c = saved) also restores the depth consistently
++func (c *CharCompiler) getScratch() *BytecodeExp {
++	if c.scratchDepth == len(c.scratch) {
++		c.scratch = append(c.scratch, new(BytecodeExp))
++	}
++	be := c.scratch[c.scratchDepth]
++	c.scratchDepth++
++	*be = (*be)[:0]
++	return be
++}
++
++func (c *CharCompiler) putScratch(n int) {
++	c.scratchDepth -= n
+ }
+ 
+ func (c *CharCompiler) argExpression(in *string, vt ValueType) (BytecodeExp, error) {
+-	be, err := c.typedExp(c.expBoolOr, in, vt)
++	be, err := c.typedExp(in, vt)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -6170,7 +6445,7 @@ func (c *CharCompiler) argExpression(in *string, vt ValueType) (BytecodeExp, err
+ }
+ 
+ func (c *CharCompiler) fullExpression(in *string, vt ValueType) (BytecodeExp, error) {
+-	be, err := c.typedExp(c.expBoolOr, in, vt)
++	be, err := c.typedExp(in, vt)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -6271,7 +6546,7 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
+ 	}
+ 
+ 	for ; c.i < len(c.lines); c.i++ {
+-		line := strings.TrimSpace(strings.SplitN(c.lines[c.i], ";", 2)[0])
++		line := strings.TrimSpace(cutComment(c.lines[c.i]))
+ 
+ 		// Check for open [State] headers
+ 		// They end up as an invalid parameter for the previous state controller and cause both blocks to be merged
+@@ -6326,12 +6601,12 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
+ 						}
+ 						return nil, Error("Invalid parameter syntax: " + line)
+ 					}
+-					name = strings.ToLower(lhs)
++					name = c.toLower(lhs)
+ 				} else {
+ 					if j := strings.IndexAny(lhs, " \t"); j >= 0 {
+ 						lhs = lhs[:j]
+ 					}
+-					name = strings.ToLower(lhs)
++					name = c.toLower(lhs)
+ 				}
+ 			}
+ 		}
+@@ -6379,6 +6654,14 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
+ 	return is, nil
+ }
+ 
++// Same as strings.SplitN(line, ";", 2)[0] without allocating the slice
++func cutComment(line string) string {
++	if i := strings.IndexByte(line, ';'); i >= 0 {
++		return line[:i]
++	}
++	return line
++}
++
+ func (c *CharCompiler) stateSec(is IniSection, f func() error) error {
+ 	if err := f(); err != nil {
+ 		return err
+@@ -6559,17 +6842,23 @@ func (c *CharCompiler) scAdd(sc *StateControllerBase, id byte,
+ // ParamValue adds the parameter immediately, unlike StateParam which only reads it
+ func (c *CharCompiler) paramValue(is IniSection, sc *StateControllerBase,
+ 	paramname string, id byte, vt ValueType, numArg int, mandatory bool) error {
++	// Same as stateParam with a closure, written out because this runs for
++	// every parameter every sctrl type knows (mostly absent ones), and the
++	// closure and everything it captured were heap-allocated on each call
+ 	found := false
+-	if err := c.stateParam(is, paramname, false, func(data string) error {
++	if data, ok := is[paramname]; ok {
+ 		found = true
++		var err error
+ 		// Mugen ignores empty parameters
+ 		if sys.ignoreMostErrors && !c.zssMode && len(strings.TrimSpace(data)) == 0 {
+ 			found = false
+-			return nil
++		} else {
++			err = c.scAdd(sc, id, data, vt, numArg)
+ 		}
+-		return c.scAdd(sc, id, data, vt, numArg)
+-	}); err != nil {
+-		return err
++		if err != nil {
++			return Error(data + "\n" + paramname + ": " + err.Error())
++		}
++		delete(is, paramname)
+ 	}
+ 	if mandatory && !found {
+ 		return Error(paramname + " not specified")
+@@ -7229,8 +7518,13 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
+ 	for ; c.i < len(c.lines); c.i++ {
+ 		// Find a statedef, skipping over other lines until finding one
+ 		// Get the current line, without comments
+-		line := strings.ToLower(strings.TrimSpace(
+-			strings.SplitN(c.lines[c.i], ";", 2)[0]))
++		line := strings.TrimSpace(cutComment(c.lines[c.i]))
++		// Lowercasing can't change whether the line starts with '[' and ends
++		// with ']', so skip it for all the lines that don't
++		if line == "" || line[0] != '[' || line[len(line)-1] != ']' {
++			continue
++		}
++		line = c.toLower(line)
+ 		// If this is not a line starting a statedef, continue to the next line
+ 		if len(line) < 11 || line[0] != '[' || line[len(line)-1] != ']' ||
+ 			line[1:10] != "statedef " {
+@@ -7277,12 +7571,13 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
+ 		// Continue looping through state file lines to define the current state
+ 		for c.i++; c.i < len(c.lines); c.i++ {
+ 			// Get the current line, without comments
+-			line := strings.ToLower(strings.TrimSpace(
+-				strings.SplitN(c.lines[c.i], ";", 2)[0]))
++			line := strings.TrimSpace(cutComment(c.lines[c.i]))
+ 			// If this is not a line starting an sctrl, continue to the next line
++			// (checked before lowercasing, which can't change the outcome)
+ 			if line == "" || line[0] != '[' || line[len(line)-1] != ']' {
+ 				continue
+ 			}
++			line = c.toLower(line)
+ 			if len(line) < 7 || line[1:7] != "state " {
+ 				c.i--
+ 				break
+@@ -8134,7 +8429,7 @@ func (c *CharCompiler) callFunc(line *string, root bool, ctrls *[]StateControlle
+ 	} else {
+ 		for {
+ 			// Parse arguments
+-			be, err := c.typedExp(c.expBoolOr, &expr, VT_Undefined)
++			be, err := c.typedExp(&expr, VT_Undefined)
+ 			if err != nil {
+ 				return err
+ 			}
+diff --git a/src/compiler_bchash.go b/src/compiler_bchash.go
+new file mode 100644
+index 0000000..c83520b
+--- /dev/null
++++ b/src/compiler_bchash.go
+@@ -0,0 +1,178 @@
++package main
++
++import (
++	"fmt"
++	"os"
++	"reflect"
++	"sort"
++	"unsafe"
++)
++
++// Debug aid for compiler work: hashes everything CharCompiler.Compile
++// produced for one character (state bytecode, blocks, controller parameters,
++// functions, string pool, console warnings) so a change to the compiler can
++// be checked for identical output. Vita-only, enabled by the file
++// ux0:data/CvF/vita_bchash.txt; one log line per character.
++
++// vitaBCHashEnabled reports whether the compiled-output hash should be logged.
++func vitaBCHashEnabled() bool {
++	if !isVita {
++		return false
++	}
++	_, err := os.Stat("vita_bchash.txt")
++	return err == nil
++}
++
++// vitaBCHashLog logs the hash of a character's compiled states.
++// consoleFrom is len(sys.consoleText) before compiling.
++func vitaBCHashLog(def string, pn int, gi *CharGlobalInfo, states map[int32]*StateBytecode, consoleFrom int) {
++	h := newBCHasher()
++	keys := make([]int, 0, len(states))
++	for k := range states {
++		keys = append(keys, int(k))
++	}
++	sort.Ints(keys)
++	for _, k := range keys {
++		h.u64(uint64(int64(k)))
++		h.value(reflect.ValueOf(states[int32(k)]))
++	}
++	hStates := h.sum
++	h.value(reflect.ValueOf(gi.callFuncs))
++	hFuncs := h.sum
++	h.value(reflect.ValueOf(sys.stringPool[pn].List))
++	h.value(reflect.ValueOf(sys.stringPool[pn].ListLow))
++	if consoleFrom > len(sys.consoleText) {
++		consoleFrom = 0
++	}
++	h.value(reflect.ValueOf(sys.consoleText[consoleFrom:]))
++	vitaTrace(fmt.Sprintf("bchash: %s states=%d bytes=%d pool=%d warn=%d states=%016x funcs=%016x all=%016x",
++		def, len(states), h.bytes, len(sys.stringPool[pn].List), len(sys.consoleText)-consoleFrom,
++		hStates, hFuncs, h.sum))
++}
++
++type bcHasher struct {
++	sum   uint64
++	bytes int
++	seen  map[uintptr]int
++}
++
++func newBCHasher() *bcHasher {
++	return &bcHasher{sum: 14695981039346656037, seen: make(map[uintptr]int)}
++}
++
++func (h *bcHasher) byte1(b byte) {
++	h.sum ^= uint64(b)
++	h.sum *= 1099511628211
++}
++
++func (h *bcHasher) u64(v uint64) {
++	for i := 0; i < 8; i++ {
++		h.byte1(byte(v >> (8 * i)))
++	}
++}
++
++func (h *bcHasher) str(s string) {
++	h.u64(uint64(len(s)))
++	for i := 0; i < len(s); i++ {
++		h.byte1(s[i])
++	}
++}
++
++func (h *bcHasher) value(v reflect.Value) {
++	if !v.IsValid() {
++		h.byte1(0xff)
++		return
++	}
++	switch v.Kind() {
++	case reflect.Bool:
++		if v.Bool() {
++			h.byte1(1)
++		} else {
++			h.byte1(0)
++		}
++	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
++		h.u64(uint64(v.Int()))
++	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
++		h.u64(v.Uint())
++	case reflect.Float32, reflect.Float64:
++		h.u64(uint64(int64(v.Float() * 65536)))
++	case reflect.String:
++		h.str(v.String())
++	case reflect.Slice:
++		if v.IsNil() {
++			h.byte1(0xfe)
++			return
++		}
++		n := v.Len()
++		h.u64(uint64(n))
++		if v.Type().Elem().Kind() == reflect.Uint8 {
++			// Bytecode: hash the raw bytes directly
++			if n > 0 {
++				b := unsafe.Slice((*byte)(v.UnsafePointer()), n)
++				for _, x := range b {
++					h.byte1(x)
++				}
++				h.bytes += n
++			}
++			return
++		}
++		for i := 0; i < n; i++ {
++			h.value(v.Index(i))
++		}
++	case reflect.Array:
++		n := v.Len()
++		for i := 0; i < n; i++ {
++			h.value(v.Index(i))
++		}
++	case reflect.Struct:
++		n := v.NumField()
++		for i := 0; i < n; i++ {
++			h.value(v.Field(i))
++		}
++	case reflect.Ptr:
++		if v.IsNil() {
++			h.byte1(0xfd)
++			return
++		}
++		p := v.Pointer()
++		if id, ok := h.seen[p]; ok {
++			// Shared pointer: hash its first-visit order instead of the address
++			h.byte1(0xfc)
++			h.u64(uint64(id))
++			return
++		}
++		h.seen[p] = len(h.seen)
++		h.value(v.Elem())
++	case reflect.Interface:
++		if v.IsNil() {
++			h.byte1(0xfb)
++			return
++		}
++		e := v.Elem()
++		h.str(e.Type().String())
++		h.value(e)
++	case reflect.Map:
++		if v.IsNil() {
++			h.byte1(0xfa)
++			return
++		}
++		keys := v.MapKeys()
++		h.u64(uint64(len(keys)))
++		sort.Slice(keys, func(i, j int) bool {
++			return fmt.Sprint(keys[i].Interface()) < fmt.Sprint(keys[j].Interface())
++		})
++		for _, k := range keys {
++			h.value(k)
++			h.value(v.MapIndex(k))
++		}
++	case reflect.Func:
++		if v.IsNil() {
++			h.byte1(0xf9)
++		} else {
++			h.byte1(0xf8)
++		}
++	default:
++		// Channels and unsafe pointers are not compiler output
++		h.byte1(0xf7)
++	}
++}
 diff --git a/src/config.go b/src/config.go
 index d39783d..6bb3e64 100644
 --- a/src/config.go
@@ -3754,10 +7475,20 @@ index 2609c76..d0df867 100644
  		if strings.Contains(err.Error(), "<game end>") {
  			handleExit()
 diff --git a/src/motif.go b/src/motif.go
-index ce7ed68..57bddaf 100644
+index ce7ed68..92bbe39 100644
 --- a/src/motif.go
 +++ b/src/motif.go
-@@ -2951,7 +2951,8 @@ func (mo *Motif) processStateChange(c *Char, states []int32) bool {
+@@ -1574,6 +1574,9 @@ func loadMotif(def string) (*Motif, error) {
+ 			return fmt.Errorf("Failed to load text from %s: %w", filename, err)
+ 		}
+ 		motifText = NormalizeNewlines(inputText)
++		if isVita {
++			motifText = vitaMotifFixes(motifText)
++		}
+ 
+ 		var modsConcat strings.Builder
+ 		for _, p := range modSystemDefs {
+@@ -2951,7 +2954,8 @@ func (mo *Motif) processStateChange(c *Char, states []int32) bool {
  
  func (mo *Motif) processStateTransitions(winnerStates, loserStates [4][]int32) {
  	wIdx, lIdx := 0, 0
@@ -3767,7 +7498,7 @@ index ce7ed68..57bddaf 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -3000,7 +3001,8 @@ func (mo *Motif) processStateTransitionsBySide(p1States, p2States [4][]int32) {
+@@ -3000,7 +3004,8 @@ func (mo *Motif) processStateTransitionsBySide(p1States, p2States [4][]int32) {
  		assigned[side] = 1
  	}
  	// 2) Apply remaining members in stable playerNo order.
@@ -3777,7 +7508,7 @@ index ce7ed68..57bddaf 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -3191,7 +3193,8 @@ func (m *Motif) isDialogueSet() bool {
+@@ -3191,7 +3196,8 @@ func (m *Motif) isDialogueSet() bool {
  			len(sys.chars[pn-1]) > 0 &&
  			len(sys.chars[pn-1][0].dialogue) > 0
  	}
@@ -3787,7 +7518,7 @@ index ce7ed68..57bddaf 100644
  		if len(p) > 0 && len(p[0].dialogue) > 0 {
  			return true
  		}
-@@ -3569,7 +3572,7 @@ func (ch *MotifChallenger) init(m *Motif) {
+@@ -3569,7 +3575,7 @@ func (ch *MotifChallenger) init(m *Motif) {
  	}
  	ch.controllerNo = controllerNo
  
@@ -3796,7 +7527,7 @@ index ce7ed68..57bddaf 100644
  		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.challenger_init", err.Error())
  	}
  
-@@ -3592,7 +3595,7 @@ func (ch *MotifChallenger) init(m *Motif) {
+@@ -3592,7 +3598,7 @@ func (ch *MotifChallenger) init(m *Motif) {
  func (ch *MotifChallenger) step(m *Motif) {
  	m.ChallengerBgDef.BGDef.step()
  	if ch.counter > 0 {
@@ -3805,7 +7536,7 @@ index ce7ed68..57bddaf 100644
  			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.challenger", err.Error())
  		}
  	}
-@@ -3720,7 +3723,7 @@ func (co *MotifContinue) init(m *Motif) {
+@@ -3720,7 +3726,7 @@ func (co *MotifContinue) init(m *Motif) {
  		co.initialized = true
  		return
  	}
@@ -3814,7 +7545,7 @@ index ce7ed68..57bddaf 100644
  		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.continue_init", err.Error())
  	}
  
-@@ -3825,7 +3828,7 @@ func (co *MotifContinue) playCounterSounds(m *Motif) {
+@@ -3825,7 +3831,7 @@ func (co *MotifContinue) playCounterSounds(m *Motif) {
  func (co *MotifContinue) step(m *Motif) {
  	m.ContinueBgDef.BGDef.step()
  	if co.counter > 0 {
@@ -3823,7 +7554,7 @@ index ce7ed68..57bddaf 100644
  			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.continue", err.Error())
  		}
  	}
-@@ -3855,7 +3858,8 @@ func (co *MotifContinue) step(m *Motif) {
+@@ -3855,7 +3861,8 @@ func (co *MotifContinue) step(m *Motif) {
  	if co.selected && !co.showEndAnim && co.endTimer == -1 {
  		if co.waitTimer < 0 {
  			var wait int32
@@ -3833,7 +7564,7 @@ index ce7ed68..57bddaf 100644
  				if len(p) == 0 || p[0].anim == nil {
  					continue
  				}
-@@ -4274,7 +4278,8 @@ func (di *MotifDialogue) getDialogueLines() ([]string, int, error) {
+@@ -4274,7 +4281,8 @@ func (di *MotifDialogue) getDialogueLines() ([]string, int, error) {
  	}
  	if pn == 0 {
  		var validPlayers []int
@@ -3843,7 +7574,7 @@ index ce7ed68..57bddaf 100644
  			if len(p) > 0 && len(p[0].dialogue) > 0 {
  				validPlayers = append(validPlayers, i+1)
  			}
-@@ -4336,7 +4341,8 @@ func (di *MotifDialogue) reset(m *Motif) {
+@@ -4336,7 +4344,8 @@ func (di *MotifDialogue) reset(m *Motif) {
  }
  
  func (di *MotifDialogue) clear(m *Motif) {
@@ -3853,7 +7584,7 @@ index ce7ed68..57bddaf 100644
  		if len(p) > 0 {
  			p[0].dialogue = nil
  		}
-@@ -5217,7 +5223,7 @@ func (hi *MotifHiscore) init(m *Motif, mode string, place, endTime int32, noFade
+@@ -5217,7 +5226,7 @@ func (hi *MotifHiscore) init(m *Motif, mode string, place, endTime int32, noFade
  		return
  	}
  
@@ -3862,7 +7593,7 @@ index ce7ed68..57bddaf 100644
  		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.hiscore_init", err.Error())
  	}
  
-@@ -5497,7 +5503,7 @@ func (hi *MotifHiscore) step(m *Motif) {
+@@ -5497,7 +5506,7 @@ func (hi *MotifHiscore) step(m *Motif) {
  		m.HiscoreBgDef.BGDef.step()
  	}
  	if hi.counter > 0 {
@@ -3871,7 +7602,7 @@ index ce7ed68..57bddaf 100644
  			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.hiscore", err.Error())
  		}
  	}
-@@ -5843,7 +5849,7 @@ func parseRankingRows(path, mode string) []rankingRow {
+@@ -5843,7 +5852,7 @@ func parseRankingRows(path, mode string) []rankingRow {
  	if path == "" || mode == "" {
  		return nil
  	}
@@ -3880,7 +7611,7 @@ index ce7ed68..57bddaf 100644
  	if err != nil {
  		fmt.Println("hiscore: read stats.json failed:", err)
  		return nil
-@@ -6228,7 +6234,7 @@ func (vi *MotifVictory) init(m *Motif) {
+@@ -6228,7 +6237,7 @@ func (vi *MotifVictory) init(m *Motif) {
  		vi.initialized = true
  		return
  	}
@@ -3889,7 +7620,7 @@ index ce7ed68..57bddaf 100644
  		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.victory_init", err.Error())
  	}
  
-@@ -6339,7 +6345,7 @@ func (vi *MotifVictory) init(m *Motif) {
+@@ -6339,7 +6348,7 @@ func (vi *MotifVictory) init(m *Motif) {
  func (vi *MotifVictory) step(m *Motif) {
  	m.VictoryBgDef.BGDef.step()
  	if vi.counter > 0 {
@@ -3898,7 +7629,7 @@ index ce7ed68..57bddaf 100644
  			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.victory", err.Error())
  		}
  	}
-@@ -6727,7 +6733,7 @@ func (wi *MotifWin) init(m *Motif) {
+@@ -6727,7 +6736,7 @@ func (wi *MotifWin) init(m *Motif) {
  	hasModeResults := wi.isEnabled() && resultsScreenForMode(sys.gameMode) != nil
  
  	if (wi.isEnabled() && won) || ((wi.loseEnabled || hasModeResults) && lostOrDraw) {
@@ -3907,7 +7638,7 @@ index ce7ed68..57bddaf 100644
  			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.result_init", err.Error())
  		}
  		// Variant selection: [Win Screen] results.<gamemode> = <section name>
-@@ -6917,7 +6923,7 @@ func (wi *MotifWin) step(m *Motif) {
+@@ -6917,7 +6926,7 @@ func (wi *MotifWin) step(m *Motif) {
  		m.WinBgDef.BGDef.step()
  	}
  	if wi.counter > 0 {
@@ -3916,6 +7647,34 @@ index ce7ed68..57bddaf 100644
  			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.result", err.Error())
  		}
  	}
+@@ -6999,3 +7008,27 @@ func (wi *MotifWin) draw(m *Motif, layerno int16) {
+ 		}
+ 	}
+ }
++
++// vitaMotifFixes patches the CvF screenpack: its select-screen portraits are
++// sheets holding both the P1 and the mirrored P2 face side by side, which
++// showed a duplicated, mirrored head-shot at 960x540. Clip each side's face
++// to its half of the screen, as the screenpack intends.
++//
++// Its stage font (st10.fnt) is a picture font: every glyph is a whole stage
++// banner and the advance is zero, so the default "Stage %i: %s" text drew
++// the banners for S, t, a, g, e and the stage letter on top of each other.
++// Print only the stage's letter, and '*' (the "Random" banner) for random.
++func vitaMotifFixes(t string) string {
++	if strings.Contains(t, "font/st10.fnt") && !strings.Contains(t, "stage.active.text") {
++		for _, k := range []string{"stage.active", "stage.active2", "stage.done"} {
++			t = strings.Replace(t, "\n"+k+".font=4,0,1\n", "\n"+k+".font=4,0,1\n"+k+".text=%s\n", 1)
++		}
++		t = strings.Replace(t, "\nstage.done.text=%s\n", "\nstage.done.text=%s\nstage.random.text=*\n", 1)
++	}
++	if strings.Contains(t, "p1.face.window") || !strings.Contains(t, "\np2.face.offset=320,16\n") {
++		return t
++	}
++	t = strings.Replace(t, "\np1.face.offset=0,16\n", "\np1.face.offset=0,16\np1.face.window=0,0,160,240\n", 1)
++	t = strings.Replace(t, "\np2.face.offset=320,16\n", "\np2.face.offset=320,16\np2.face.window=160,0,320,240\n", 1)
++	return t
++}
 diff --git a/src/rect.go b/src/rect.go
 index d63aa49..25c8b51 100644
 --- a/src/rect.go
@@ -4267,7 +8026,7 @@ index 1a2540b..3b8944d 100644
  package main
  
 diff --git a/src/render_gles32.go b/src/render_gles32.go
-index 891acab..7353edf 100644
+index 891acab..5679eac 100644
 --- a/src/render_gles32.go
 +++ b/src/render_gles32.go
 @@ -2,7 +2,7 @@
@@ -4287,7 +8046,22 @@ index 891acab..7353edf 100644
  	"strings"
  	"sync"
  	"unsafe"
-@@ -46,6 +47,13 @@ func (r *Renderer_GLES32) newShaderProgram(vert, frag, geo, name string, crashWh
+@@ -32,6 +33,14 @@ type ShaderProgram_GLES32 struct {
+ 	textures      map[string]int   // Sampler name to texture unit
+ 	name          string           // For debugging
+ 	needsGrabPass bool
++	uniCache      [24]uniCacheEnt
++	uniCacheN     int
++}
++
++type uniCacheEnt struct {
++	p   *byte
++	n   int
++	loc int32
+ }
+ 
+ var shaderCompileMutex sync.Mutex
+@@ -46,6 +55,13 @@ func (r *Renderer_GLES32) newShaderProgram(vert, frag, geo, name string, crashWh
  
  	Logcat("GLES: [LOCKED] Starting: " + name)
  	var vertObj, fragObj, prog uint32
@@ -4301,7 +8075,7 @@ index 891acab..7353edf 100644
  
  	vertObj, err = r.compileShader(gl.VERTEX_SHADER, vert)
  	if err != nil {
-@@ -126,7 +134,7 @@ func (r *Renderer_GLES32) compileShader(shaderType uint32, src string) (uint32,
+@@ -126,7 +142,7 @@ func (r *Renderer_GLES32) compileShader(shaderType uint32, src string) (uint32,
  	// GLES 3.0+ drivers REQUIRE the version to be the very first line.
  	// If your file doesn't have it, we add it here.
  	fullSrc := src
@@ -4310,7 +8084,7 @@ index 891acab..7353edf 100644
  		// Anchor to 320 es for best feature compatibility
  		header := "#version 320 es\n"
  		fullSrc = header + src
-@@ -395,8 +403,10 @@ func (t *Texture_GLES32) SetData(data []byte) {
+@@ -395,8 +411,10 @@ func (t *Texture_GLES32) SetData(data []byte) {
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -4323,7 +8097,7 @@ index 891acab..7353edf 100644
  
  	if data != nil {
  		gl.TexImage2D(gl.TEXTURE_2D, 0, int32(internalFormat), t.width, t.height, 0, uploadFormat, uploadType, unsafe.Pointer(&data[0]))
-@@ -422,7 +432,9 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -422,7 +440,9 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -4334,7 +8108,7 @@ index 891acab..7353edf 100644
  
  	bits := Max(t.depth, 8)
  	uploadFormat := t.MapUploadFormat(bits)
-@@ -436,8 +448,20 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -436,8 +456,20 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  	if stride != width*bytesPerPixel {
  		rowLength = stride / bytesPerPixel
  	}
@@ -4356,7 +8130,7 @@ index 891acab..7353edf 100644
  
  	ptr := unsafe.Pointer(nil)
  	if data != nil {
-@@ -454,7 +478,7 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -454,7 +486,7 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  		Logcat(fmt.Sprintf("GL ERROR in SetSubData: %v | w:%d h:%d s:%d", err, width, height, stride))
  	}
  
@@ -4365,7 +8139,7 @@ index 891acab..7353edf 100644
  		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
  	}
  
-@@ -472,8 +496,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
+@@ -472,8 +504,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -4378,7 +8152,7 @@ index 891acab..7353edf 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, int32(internalFormat), t.width, t.height, 0, uploadFormat, uploadType, unsafe.Pointer(&data[0]))
  	gl.GenerateMipmap(gl.TEXTURE_2D)
  	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, int32(mag))
-@@ -485,8 +511,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
+@@ -485,8 +519,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
  func (t *Texture_GLES32) SetPixelData(data []float32) {
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -4391,7 +8165,7 @@ index 891acab..7353edf 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, t.width, t.height, 0, gl.RGBA, gl.FLOAT, unsafe.Pointer(&data[0]))
  }
  
-@@ -517,8 +545,10 @@ func (t *Texture_GLES32) SetRGBPixelData(data []float32) {
+@@ -517,8 +553,10 @@ func (t *Texture_GLES32) SetRGBPixelData(data []float32) {
  	r.SetActiveTexture0() //gl.ActiveTexture(gl.TEXTURE0)
  
  	gl.BindTexture(gl.TEXTURE_2D, t.handle)
@@ -4404,7 +8178,7 @@ index 891acab..7353edf 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, t.width, t.height, 0, gl.RGB, gl.FLOAT, unsafe.Pointer(&data[0]))
  }
  */
-@@ -556,6 +586,9 @@ func (t *Texture_GLES32) MapUploadType(i int32) uint32 {
+@@ -556,6 +594,9 @@ func (t *Texture_GLES32) MapUploadType(i int32) uint32 {
  func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
  	switch i {
  	case 8:
@@ -4414,7 +8188,7 @@ index 891acab..7353edf 100644
  		return gl.RED
  	case 24:
  		return gl.RGB
-@@ -573,10 +606,19 @@ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
+@@ -573,10 +614,19 @@ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
  func (t *Texture_GLES32) MapSizedInternalFormat(i int32) uint32 {
  	switch i {
  	case 8:
@@ -4434,7 +8208,7 @@ index 891acab..7353edf 100644
  		return gl.RGBA8
  	case 96:
  		return gl.RGB32F
-@@ -625,6 +667,8 @@ type Renderer_GLES32 struct {
+@@ -625,6 +675,8 @@ type Renderer_GLES32 struct {
  	modelVertexBuffer       [2]uint32
  	modelIndexBuffer        [2]uint32
  	spriteVAO               uint32
@@ -4443,7 +8217,52 @@ index 891acab..7353edf 100644
  	modelVAO                uint32
  	modelEnvVAO             uint32
  	postVAO                 uint32
-@@ -790,8 +834,8 @@ func (r *Renderer_GLES32) Init() {
+@@ -638,21 +690,29 @@ type Renderer_GLES32 struct {
+ 	GLES32State
+ }
+ type GLES32State struct {
+-	program             uint32
+-	depthTest           bool
+-	depthMask           bool
+-	invertFrontFace     bool
+-	doubleSided         bool
+-	blendEnabled        bool
+-	blendEquation       BlendEquation
+-	blendSrc            BlendFunc
+-	blendDst            BlendFunc
+-	scissorRect         [4]int32
+-	scissorEnabled      bool
+-	boundTex            []boundTexture // Caches texture units to what's actually bound there. Sized per GPU
+-	texCacheLastUsed    []uint64       // Sprite-only recency, for LRU eviction. Sized per GPU
+-	texCacheTimer       uint64         // Increments on every sprite texture access
+-	uniformICache       map[uint32]int32
++	program          uint32
++	depthTest        bool
++	depthMask        bool
++	invertFrontFace  bool
++	doubleSided      bool
++	blendEnabled     bool
++	blendEquation    BlendEquation
++	blendSrc         BlendFunc
++	blendDst         BlendFunc
++	scissorRect      [4]int32
++	scissorEnabled   bool
++	boundTex         []boundTexture // Caches texture units to what's actually bound there. Sized per GPU
++	texCacheLastUsed []uint64       // Sprite-only recency, for LRU eviction. Sized per GPU
++	texCacheTimer    uint64         // Increments on every sprite texture access
++	uniformICache    map[uint32]int32
++	uniArrI          [64]struct {
++		v  int32
++		ok bool
++	}
++	uniArrF [64]struct {
++		v [4]float32
++		n uint8
++	}
+ 	uniformF1Cache      map[uint32]float32
+ 	uniformF2Cache      map[uint32][2]float32
+ 	uniformF3Cache      map[uint32][3]float32
+@@ -790,8 +850,8 @@ func (r *Renderer_GLES32) Init() {
  	// Data buffers for rendering
  	postVertData := f32.Bytes(binary.LittleEndian, -1, -1, 1, -1, -1, 1, 1, 1)
  
@@ -4454,7 +8273,28 @@ index 891acab..7353edf 100644
  
  	// Generate VAO's
  	gl.GenVertexArrays(1, &r.spriteVAO)
-@@ -855,6 +899,7 @@ func (r *Renderer_GLES32) Init() {
+@@ -837,11 +897,19 @@ func (r *Renderer_GLES32) Init() {
+ 	r.bindBuffer(gl.ARRAY_BUFFER, 0)
+ 
+ 	// Sprite shader
+-	r.spriteShader, _ = r.newShaderProgram(vertShader, fragShader, "", "Main Shader", true)
++	var spriteErr error
++	r.spriteShader, spriteErr = r.newShaderProgram(vertShader, fragShader, "", "Main Shader", true)
++	if isVita && (spriteErr != nil || r.spriteShader == nil) {
++		Logcat("vita: sprite shader with clipping failed, using scissor fallback")
++		r.spriteShader, _ = r.newShaderProgram(vertShader, fragShader, "", "Main Shader (no clip)", true)
++	}
+ 	r.spriteShader.RegisterAttributes("position", "uv")
+ 	r.spriteShader.RegisterUniforms("modelview", "projection", "x1x2x4x3",
+ 		"alpha", "tint", "mask", "neg", "gray", "add", "mult", "isFlat", "isRgba", "isTrapez", "hue",
+ 		"spriteUV", "palUV", "quad", "useQuad")
++	if isVita {
++		r.spriteShader.RegisterUniforms("clipOn", "clipRect")
++	}
+ 	r.spriteShader.RegisterTextures("pal", "tex")
+ 
+ 	// Configure spriteVAO
+@@ -855,6 +923,7 @@ func (r *Renderer_GLES32) Init() {
  	locUV := r.spriteShader.attributes["uv"]
  	gl.EnableVertexAttribArray(uint32(locUV))
  	gl.VertexAttribPointerWithOffset(uint32(locUV), 2, gl.FLOAT, false, 16, 8)
@@ -4462,7 +8302,7 @@ index 891acab..7353edf 100644
  
  	// Unbind for safety
  	r.bindVertexArray(0)
-@@ -950,10 +995,14 @@ func (r *Renderer_GLES32) Init() {
+@@ -950,10 +1019,14 @@ func (r *Renderer_GLES32) Init() {
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
@@ -4478,7 +8318,7 @@ index 891acab..7353edf 100644
  			sys.scrrect[2],
  			sys.scrrect[3],
  			0,
-@@ -1003,7 +1052,12 @@ func (r *Renderer_GLES32) Init() {
+@@ -1003,7 +1076,12 @@ func (r *Renderer_GLES32) Init() {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
  	} else {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
@@ -4492,7 +8332,7 @@ index 891acab..7353edf 100644
  	}
  
  	// create our two FBOs for our post-processing needs
-@@ -1140,10 +1194,33 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
+@@ -1140,10 +1218,33 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
  	}
  }
  
@@ -4526,7 +8366,7 @@ index 891acab..7353edf 100644
  
  	x, y, width, height := int32(0), int32(0), int32(sys.scrrect[2]), int32(sys.scrrect[3])
  	time := sdl.GetPerformanceCounter() // consistent time across all shaders
-@@ -1165,9 +1242,13 @@ func (r *Renderer_GLES32) EndFrame() {
+@@ -1165,9 +1266,13 @@ func (r *Renderer_GLES32) EndFrame() {
  	gl.Viewport(x, y, width, height)
  	// clear both of our post-processing FBOs to make sure
  	// nothing's there. the output is set later
@@ -4543,7 +8383,7 @@ index 891acab..7353edf 100644
  	}
  	fbo_texture := r.fbo_texture
  	if sys.msaa > 0 {
-@@ -1243,36 +1324,51 @@ func (r *Renderer_GLES32) Await() {
+@@ -1243,36 +1348,51 @@ func (r *Renderer_GLES32) Await() {
  	gl.Finish()
  }
  
@@ -4617,10 +8457,44 @@ index 891acab..7353edf 100644
  }
  
  func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
-@@ -1835,6 +1931,13 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
+@@ -1834,7 +1954,47 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
+ 	return true
  }
  
++// vitaClipLocs returns the shader-clip uniforms of the current program, if it
++// has them (the Vita sprite shader).
++func (r *Renderer_GLES32) vitaClipLocs() (on, rect int32, ok bool) {
++	p := r.currentProgram
++	if p == nil || r.program != p.program {
++		return -1, -1, false
++	}
++	on, ok1 := p.uniforms["clipOn"]
++	rect, ok2 := p.uniforms["clipRect"]
++	return on, rect, ok1 && ok2 && on >= 0 && rect >= 0
++}
++
  func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
++	if isVita {
++		// vitaGL implements glScissor with stencil passes over the whole
++		// screen each time the test is switched or moved. Clip in the sprite
++		// shader instead (discard outside an NDC rectangle).
++		if on, rect, ok := r.vitaClipLocs(); ok {
++			if r.scissorEnabled {
++				gl.Disable(gl.SCISSOR_TEST)
++				r.scissorEnabled = false
++			}
++			if x <= 0 && y <= 0 && x+width >= sys.scrrect[2] && y+height >= sys.scrrect[3] {
++				r.SetUniformISub(on, 0)
++				return
++			}
++			W, H := float32(sys.scrrect[2]), float32(sys.scrrect[3])
++			realY := float32(sys.scrrect[3] - (y + height))
++			r.SetUniformFSub(rect, float32(x)/W*2-1, realY/H*2-1,
++				float32(x+width)/W*2-1, (realY+float32(height))/H*2-1)
++			r.SetUniformISub(on, 1)
++			return
++		}
++	}
 +	if isVita && x <= 0 && y <= 0 && x+width >= sys.scrrect[2] && y+height >= sys.scrrect[3] {
 +		// vitaGL implements the scissor test with stencil passes over the
 +		// whole screen every time it is switched on, off or moved. A scissor
@@ -4631,7 +8505,81 @@ index 891acab..7353edf 100644
  	// Flip Y to OpenGL convention
  	realY := sys.scrrect[3] - (y + height)
  
-@@ -2196,6 +2299,23 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -1852,6 +2012,11 @@ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
+ }
+ 
+ func (r *Renderer_GLES32) DisableScissor() {
++	if isVita {
++		if on, _, ok := r.vitaClipLocs(); ok {
++			r.SetUniformISub(on, 0)
++		}
++	}
+ 	if r.scissorEnabled {
+ 		gl.Disable(gl.SCISSOR_TEST)
+ 		r.scissorEnabled = false
+@@ -1865,7 +2030,14 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
+ 	}
+ 
+ 	// Cached path for the sprite shader
+-	if r.program == r.spriteShader.program {
++	if r.program == r.spriteShader.program && loc < int32(len(r.uniArrI)) {
++		// Array cache: the map lookups cost ~1000 hash probes per fight frame.
++		e := &r.uniArrI[loc]
++		if e.ok && e.v == val {
++			return
++		}
++		e.ok, e.v = true, val
++	} else if r.program == r.spriteShader.program {
+ 		key := (r.program << 16) | uint32(loc)
+ 		if old, exists := r.uniformICache[key]; exists && old == val {
+ 			return
+@@ -1882,7 +2054,24 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
+ 	}
+ 
+ 	// Cached path for the sprite shader
+-	if r.program == r.spriteShader.program {
++	if r.program == r.spriteShader.program && loc < int32(len(r.uniArrF)) && len(values) <= 4 {
++		e := &r.uniArrF[loc]
++		n := uint8(len(values))
++		if e.n == n {
++			same := true
++			for i, v := range values {
++				if e.v[i] != v {
++					same = false
++					break
++				}
++			}
++			if same {
++				return
++			}
++		}
++		e.n = n
++		copy(e.v[:], values)
++	} else if r.program == r.spriteShader.program {
+ 		key := (r.program << 16) | uint32(loc)
+ 
+ 		switch len(values) {
+@@ -1941,7 +2130,19 @@ func (r *Renderer_GLES32) SetUniformFvSub(loc int32, values []float32) {
+ }
+ 
+ func (r *Renderer_GLES32) uniformLoc(s *ShaderProgram_GLES32, name string) int32 {
++	// Names are almost always string literals: match on the data pointer
++	// before falling back to the map (a string hash per uniform per draw).
++	p, n := unsafe.StringData(name), len(name)
++	for i := 0; i < s.uniCacheN; i++ {
++		if e := &s.uniCache[i]; e.p == p && e.n == n {
++			return e.loc
++		}
++	}
+ 	loc, ok := s.uniforms[name]
++	if ok && s.uniCacheN < len(s.uniCache) {
++		s.uniCache[s.uniCacheN] = uniCacheEnt{p, n, loc}
++		s.uniCacheN++
++	}
+ 	if !ok {
+ 		// Would otherwise write to location 0. Only engine code picks these names
+ 		panic(fmt.Sprintf("Uniform '%s' not registered in %s", name, s.name))
+@@ -2196,6 +2397,23 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  		}
  	}
  
@@ -4655,7 +8603,7 @@ index 891acab..7353edf 100644
  	need := len(values) * 4
  
  	// Adjust scratch buffer size if necessary
-@@ -2223,6 +2343,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -2223,6 +2441,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  
  // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
  func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
@@ -5023,7 +8971,7 @@ index 0000000..5af4ec0
 +	return sc.Run
 +}
 diff --git a/src/script.go b/src/script.go
-index 5443f25..efd6f70 100644
+index 5443f25..6964b35 100644
 --- a/src/script.go
 +++ b/src/script.go
 @@ -1,6 +1,7 @@
@@ -5052,7 +9000,18 @@ index 5443f25..efd6f70 100644
  			for _, c := range p {
  				//for i := range c.clipboardText {
  				//	c.clipboardText[i] = nil
-@@ -2965,7 +2968,9 @@ func systemScriptInit(l *lua.LState) {
+@@ -2897,6 +2900,10 @@ func systemScriptInit(l *lua.LState) {
+ 				sys.await(sys.gameRenderSpeed())
+ 			}
+ 			runtime.GC()
++			if isVita {
++				vitaGCTrigger(192 << 20)
++				vitaRoundGC()
++			}
+ 			return nil
+ 		}
+ 
+@@ -2965,7 +2972,9 @@ func systemScriptInit(l *lua.LState) {
  				// Assign round start player ID's
  				sys.initPlayerID()
  
@@ -5063,7 +9022,7 @@ index 5443f25..efd6f70 100644
  					if len(c) > 0 {
  						// Add or replace in charList
  						if sys.roundNo == 1 {
-@@ -2986,7 +2991,8 @@ func systemScriptInit(l *lua.LState) {
+@@ -2986,7 +2995,8 @@ func systemScriptInit(l *lua.LState) {
  						}
  
  						// Copy each other's command lists
@@ -5073,7 +9032,7 @@ index 5443f25..efd6f70 100644
  							if i != j && len(cj) > 0 {
  								if len(cj[0].cmd) == 0 {
  									cj[0].cmd = make([]CommandList, len(sys.chars))
-@@ -4030,14 +4036,16 @@ func systemScriptInit(l *lua.LState) {
+@@ -4030,14 +4040,16 @@ func systemScriptInit(l *lua.LState) {
  		@treturn any value Decoded JSON root value (Lua `string`, `number`, `boolean`, `table` or `nil`).*/
  		path := strArg(l, 1)
  
@@ -5093,7 +9052,7 @@ index 5443f25..efd6f70 100644
  		if err != nil {
  			l.RaiseError("jsonDecode: parse %s: %v", path, err)
  			return 0
-@@ -4053,6 +4061,7 @@ func systemScriptInit(l *lua.LState) {
+@@ -4053,6 +4065,7 @@ func systemScriptInit(l *lua.LState) {
  		@tparam string path Output JSON file path (parent directories are created as needed).*/
  		lv := l.Get(1)
  		path := strArg(l, 2)
@@ -5101,7 +9060,7 @@ index 5443f25..efd6f70 100644
  		goVal, err := luaToJsonValue(lv, nil)
  		if err != nil {
  			l.RaiseError(err.Error())
-@@ -4216,6 +4225,11 @@ func systemScriptInit(l *lua.LState) {
+@@ -4216,6 +4229,11 @@ func systemScriptInit(l *lua.LState) {
  		/*Check whether resources are currently being loaded.
  		@function loading
  		@treturn boolean loading `true` if the loader is in `LS_Loading` state.*/
@@ -5113,7 +9072,7 @@ index 5443f25..efd6f70 100644
  		l.Push(lua.LBool(sys.loader.state == LS_Loading))
  		return 1
  	})
-@@ -5284,7 +5298,8 @@ func systemScriptInit(l *lua.LState) {
+@@ -5284,7 +5302,8 @@ func systemScriptInit(l *lua.LState) {
  				sys.chars[pn-1][0].setASF(ASF_nohardcodedkeys, true)
  			}
  		} else {
@@ -5123,7 +9082,7 @@ index 5443f25..efd6f70 100644
  				if len(p) > 0 {
  					for j := range p[0].cmd {
  						p[0].cmd[j].BufReset()
-@@ -5393,7 +5408,11 @@ func systemScriptInit(l *lua.LState) {
+@@ -5393,7 +5412,11 @@ func systemScriptInit(l *lua.LState) {
  		/*Check whether resources are currently being preloaded.
  		@function preloading
  		@treturn boolean `true` if assets are still being preloaded.*/
@@ -5136,7 +9095,7 @@ index 5443f25..efd6f70 100644
  		return 1
  	})
  	luaRegister(l, "preloadListChar", func(*lua.LState) int {
-@@ -7359,7 +7378,8 @@ func systemScriptInit(l *lua.LState) {
+@@ -7359,7 +7382,8 @@ func systemScriptInit(l *lua.LState) {
  			sys.maxPowerMode = !sys.maxPowerMode
  		}
  		if sys.maxPowerMode {
@@ -5330,7 +9289,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..631df6a 100644
+index 2698d35..1121989 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -5429,7 +9388,17 @@ index 2698d35..631df6a 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2533,7 +2559,8 @@ func (s *System) resetRound() {
+@@ -2478,6 +2504,9 @@ func (s *System) updateMusicMaps() {
+ 
+ // TODO: This function is still a bit overloaded because it's handling some selections instead of doing a pure reset
+ func (s *System) resetRound() {
++	if isVita {
++		vitaRoundGC()
++	}
+ 	if s.sel.gameParams.PersistRounds && !s.roundResetFlg && !s.reloadFlg {
+ 		s.persistRoundCount++
+ 	}
+@@ -2533,7 +2562,8 @@ func (s *System) resetRound() {
  	}
  
  	// Reset characters
@@ -5439,7 +9408,7 @@ index 2698d35..631df6a 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2562,7 +2589,8 @@ func (s *System) resetRound() {
+@@ -2562,7 +2592,8 @@ func (s *System) resetRound() {
  	}
  
  	// Place characters in state 5900
@@ -5449,7 +9418,7 @@ index 2698d35..631df6a 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2691,7 +2719,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
+@@ -2691,7 +2722,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
  	sys.allPalFX = newPalFX()
  	sys.bgPalFX = newPalFX()
  	sys.resetGblEffect()
@@ -5459,7 +9428,7 @@ index 2698d35..631df6a 100644
  		if len(p) > 0 {
  			sys.clearPlayerAssets(i, forceDestroy)
  		}
-@@ -2727,7 +2756,8 @@ func (s *System) globalCollision() {
+@@ -2727,7 +2759,8 @@ func (s *System) globalCollision() {
  /*
  // This is never called
  func (s *System) posReset() {
@@ -5469,7 +9438,7 @@ index 2698d35..631df6a 100644
  		if len(p) > 0 {
  			p[0].posReset()
  		}
-@@ -2763,7 +2793,8 @@ func (s *System) runIntroSkip() {
+@@ -2763,7 +2796,8 @@ func (s *System) runIntroSkip() {
  		s.specialFlag = kept
  
  		// Reset all characters
@@ -5479,7 +9448,7 @@ index 2698d35..631df6a 100644
  			if len(p) > 0 {
  				s.clearPlayerAssets(i, false)
  				p[0].posReset()
-@@ -2775,6 +2806,7 @@ func (s *System) runIntroSkip() {
+@@ -2775,6 +2809,7 @@ func (s *System) runIntroSkip() {
  
  // TODO: Maybe these could get a more thorough clear between matches, to prevent holding onto previous character sprites
  func (s *System) clearSpriteData() {
@@ -5487,17 +9456,18 @@ index 2698d35..631df6a 100644
  	// Main sprites
  	s.spriteList = s.spriteList[:0]
  
-@@ -2834,6 +2866,9 @@ func (s *System) screenright() float32 {
+@@ -2834,6 +2869,10 @@ func (s *System) screenright() float32 {
  // Core game logic. Chars, stage, projectiles, etc
  // The part that can rewind and fast forward during rollbacks
  func (s *System) action() {
 +	// No bytecode is running between frames; recover from any panic that
 +	// unwound through BytecodeExp.run without releasing its cursor slot.
 +	bcIdxDepth = 0
++	bcProfFrame()
  	if s.matchPaused() {
  		return
  	}
-@@ -2945,6 +2980,11 @@ func (s *System) action() {
+@@ -2945,6 +2984,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -5509,7 +9479,7 @@ index 2698d35..631df6a 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2998,9 +3038,9 @@ func (s *System) action() {
+@@ -2998,9 +3042,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -5522,7 +9492,7 @@ index 2698d35..631df6a 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3058,13 @@ func (s *System) action() {
+@@ -3018,6 +3062,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -5536,7 +9506,7 @@ index 2698d35..631df6a 100644
  	return
  }
  
-@@ -3046,7 +3093,7 @@ func (s *System) uiAction() {
+@@ -3046,7 +3097,7 @@ func (s *System) uiAction() {
  	// Needs to happen after motif update or motif inputs will lag 1 frame
  	for _, key := range SortedKeys(sys.cfg.Common.Lua) {
  		for _, v := range sys.cfg.Common.Lua[key] {
@@ -5545,7 +9515,7 @@ index 2698d35..631df6a 100644
  				sys.luaLState.RaiseError("Error executing Lua code: %s\n%v", v, err.Error())
  			}
  		}
-@@ -3330,7 +3377,8 @@ func (s *System) stepRoundState() {
+@@ -3330,7 +3381,8 @@ func (s *System) stepRoundState() {
  		}
  	} else if s.intro > 0 {
  		if s.intro == s.fightScreen.round.ctrl_time {
@@ -5555,7 +9525,7 @@ index 2698d35..631df6a 100644
  				if len(p) > 0 {
  					if p[0].activelyFighting() && !p[0].asf(ASF_nointroreset) {
  						p[0].posReset() // Technically we don't really need this step
-@@ -3340,7 +3388,8 @@ func (s *System) stepRoundState() {
+@@ -3340,7 +3392,8 @@ func (s *System) stepRoundState() {
  		}
  		s.intro--
  		if s.intro == 0 {
@@ -5565,7 +9535,7 @@ index 2698d35..631df6a 100644
  				if len(p) > 0 {
  					if p[0].alive() {
  						p[0].setSCF(SCF_over_alive, false)
-@@ -3429,7 +3478,8 @@ func (s *System) stepRoundState() {
+@@ -3429,7 +3482,8 @@ func (s *System) stepRoundState() {
  			// Check if game can proceed into roundstate 4
  			if s.winwaittime > 0 {
  				if s.intro == rs4t-1 {
@@ -5575,7 +9545,7 @@ index 2698d35..631df6a 100644
  						if len(p) == 0 {
  							continue
  						}
-@@ -3455,7 +3505,8 @@ func (s *System) stepRoundState() {
+@@ -3455,7 +3509,8 @@ func (s *System) stepRoundState() {
  
  			// Disable ctrl (once) at the first frame of roundstate 4
  			if s.intro == rs4t-1 {
@@ -5585,7 +9555,7 @@ index 2698d35..631df6a 100644
  					if len(p) > 0 {
  						p[0].setSCF(SCF_ctrl, false)
  					}
-@@ -3502,7 +3553,8 @@ func (s *System) stepRoundState() {
+@@ -3502,7 +3557,8 @@ func (s *System) stepRoundState() {
  		// Send characters to win/lose poses
  		// In Mugen this loop can run at any point after the win poses have started, hence "<="
  		if s.winposetime <= 0 {
@@ -5595,7 +9565,7 @@ index 2698d35..631df6a 100644
  				if len(p) == 0 {
  					continue
  				}
-@@ -3657,7 +3709,8 @@ func (s *System) roundEndDecision() bool {
+@@ -3657,7 +3713,8 @@ func (s *System) roundEndDecision() bool {
  
  	// Update win triggers if finish type was changed
  	if ft != s.finishType {
@@ -5605,7 +9575,7 @@ index 2698d35..631df6a 100644
  			if len(p) > 0 && p[0].teamside != -1 && ko[^i&1] {
  				for _, h := range p {
  					for _, tid := range h.targets {
-@@ -3678,6 +3731,7 @@ func (s *System) roundEndDecision() bool {
+@@ -3678,6 +3735,7 @@ func (s *System) roundEndDecision() bool {
  }
  
  func (s *System) draw(x, y, scl float32) {
@@ -5613,7 +9583,7 @@ index 2698d35..631df6a 100644
  	s.brightnessOld = s.brightness
  	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
  	s.brightness = 1.0
-@@ -3714,30 +3768,42 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3714,30 +3772,42 @@ func (s *System) draw(x, y, scl float32) {
  		// Draw stage elements with layerNo == -1
  		if !s.gsf(GSF_nobg) {
  			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
@@ -5662,7 +9632,7 @@ index 2698d35..631df6a 100644
  
  		// Draw char texts layer -1
  		s.drawCharTexts(-1)
-@@ -3750,9 +3816,13 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3750,9 +3820,13 @@ func (s *System) draw(x, y, scl float32) {
  		// TODO: Make shadows render in same layers as their sources?
  		if !s.gsf(GSF_globalnoshadow) {
  			if s.stage.reflection.layerno >= 0 {
@@ -5678,7 +9648,7 @@ index 2698d35..631df6a 100644
  		}
  
  		//off := s.envShake.getOffset()
-@@ -3790,7 +3860,9 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3790,7 +3864,9 @@ func (s *System) draw(x, y, scl float32) {
  		//}
  
  		// Draw fight screen layer 0
@@ -5689,7 +9659,7 @@ index 2698d35..631df6a 100644
  
  		// Draw char texts layer 0
  		s.drawCharTexts(0)
-@@ -3807,14 +3879,20 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3807,14 +3883,20 @@ func (s *System) draw(x, y, scl float32) {
  
  	// Draw character sprites in layer 0
  	if s.envcol_time == 0 || s.envcol_under {
@@ -5713,7 +9683,7 @@ index 2698d35..631df6a 100644
  
  	// Draw char texts layer 1
  	s.drawCharTexts(1)
-@@ -3823,10 +3901,14 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3823,10 +3905,14 @@ func (s *System) draw(x, y, scl float32) {
  	s.motif.draw(1)
  
  	// Draw character sprites in layer 1 (old "ontop")
@@ -5730,7 +9700,7 @@ index 2698d35..631df6a 100644
  
  	// Draw char texts layer 2
  	s.drawCharTexts(2)
-@@ -3939,7 +4021,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
+@@ -3939,7 +4025,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
  		y := 240 - panelState.gameHeight
  		if s.statusLFunc != nil {
  			s.debugFont.SetColor(255, 255, 255, 255)
@@ -5740,7 +9710,14 @@ index 2698d35..631df6a 100644
  				if len(p) > 0 {
  					top := s.luaLState.GetTop()
  					if s.luaLState.CallByParam(lua.P{Fn: s.statusLFunc, NRet: 1,
-@@ -4054,7 +4137,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4050,11 +4137,15 @@ func (s *System) runMatch() (reload bool) {
+ 
+ 	// Defer resetting variables on return
+ 	defer func() {
++		if isVita {
++			vitaGCTrigger(32 << 20)
++		}
+ 		s.oldNextAddTime = 1
  		s.nomusic = false
  		s.allPalFX.clear()
  		s.allPalFX.enable = false
@@ -5750,7 +9727,7 @@ index 2698d35..631df6a 100644
  			if len(p) > 0 {
  				forceDestroy := s.matchOver() ||
  					(s.tmode[i&1] == TM_Turns && p[0].teamside != -1 && s.effectiveLoss[i&1])
-@@ -4128,7 +4212,7 @@ func (s *System) runMatch() (reload bool) {
+@@ -4128,7 +4219,7 @@ func (s *System) runMatch() (reload bool) {
  
  		for _, v := range s.shortcutScripts {
  			if v.Activate {
@@ -5759,7 +9736,31 @@ index 2698d35..631df6a 100644
  					s.luaLState.RaiseError("Error executing Lua code: %s\n%v", v.Script, err.Error())
  				}
  			}
-@@ -4266,7 +4350,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4150,10 +4241,12 @@ func (s *System) runMatch() (reload bool) {
+ 		}
+ 
+ 		// Update game state
++		vitaPerfBegin()
+ 		s.action()
+ 
+ 		// Update motif
+ 		s.uiAction()
++		vitaPerfEnd(0)
+ 
+ 		// Patch: Pause stage videos while game is paused
+ 		// This is necessary for the time being because videos are paused in the stage's action() and pauses now just skip that entirely
+@@ -4242,8 +4335,10 @@ func (s *System) runMatch() (reload bool) {
+ 		}
+ 
+ 		// Cue sprites, then render
++		vitaPerfBegin()
+ 		s.cueDraw()
+ 		s.renderFrame()
++		vitaPerfEnd(1)
+ 
+ 		// Update system. Break if update returns false (engine shutdown).
+ 		if !s.update() {
+@@ -4266,7 +4361,8 @@ func (s *System) runMatch() (reload bool) {
  
  func (s *System) SetupCharRoundStart() {
  	// Prepare next round for all players
@@ -5769,7 +9770,7 @@ index 2698d35..631df6a 100644
  		if len(p) > 0 {
  			p[0].prepareNextRound()
  		}
-@@ -4274,7 +4359,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4274,7 +4370,8 @@ func (s *System) SetupCharRoundStart() {
  
  	// For power sharing, set maximum power to the highest one in the team
  	if s.cfg.Options.Team.PowerShare {
@@ -5779,7 +9780,7 @@ index 2698d35..631df6a 100644
  			if len(p) > 0 && p[0].teamside != -1 {
  				pmax := Max(s.cgi[i&1].data.power, s.cgi[i].data.power)
  				for j := i & 1; j < MaxSimul*2; j += 2 {
-@@ -4287,7 +4373,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4287,7 +4384,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Calculate maximum life for all characters
@@ -5789,7 +9790,7 @@ index 2698d35..631df6a 100644
  		if len(p) > 0 {
  			// Get max life, and adjust based on team mode
  			var lmax float32
-@@ -4344,7 +4431,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4344,7 +4442,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's dizzy and guard points
@@ -5799,7 +9800,7 @@ index 2698d35..631df6a 100644
  		if len(p) > 0 {
  			if p[0].ocd().dizzyPoints > 0 {
  				p[0].dizzyPoints = p[0].ocd().dizzyPoints
-@@ -4360,7 +4448,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4360,7 +4459,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's state
@@ -5809,7 +9810,7 @@ index 2698d35..631df6a 100644
  		if len(p) > 0 {
  			if p[0].roundsExisted() == 0 && (s.roundNo == 1 || s.tmode[i&1] == TM_Turns) {
  				// If round 1 or a new character in Turns mode, initialize values
-@@ -4413,7 +4502,8 @@ func (s *System) runNextRound() bool {
+@@ -4413,7 +4513,8 @@ func (s *System) runNextRound() bool {
  			for i := range s.roundsExisted {
  				s.roundsExisted[i]++
  			}
@@ -5819,7 +9820,7 @@ index 2698d35..631df6a 100644
  				if len(p) > 0 {
  					if s.tmode[i&1] != TM_Turns || !s.effectiveLoss[i&1] {
  						p[0].life = p[0].lifeMax
-@@ -4518,7 +4608,8 @@ type RoundStartBackup struct {
+@@ -4518,7 +4619,8 @@ type RoundStartBackup struct {
  func (bk *RoundStartBackup) Save() {
  	// Save characters
  	// We save helpers as well because of "preserve" parameter
@@ -5829,7 +9830,7 @@ index 2698d35..631df6a 100644
  		if len(chars) == 0 {
  			// Backups are reused, so discard characters saved for this slot in a previous round
  			bk.charBackup[i] = nil
-@@ -4584,7 +4675,8 @@ func (bk *RoundStartBackup) Save() {
+@@ -4584,7 +4686,8 @@ func (bk *RoundStartBackup) Save() {
  
  func (bk *RoundStartBackup) Restore() {
  	// Restore characters
@@ -5839,7 +9840,7 @@ index 2698d35..631df6a 100644
  		if len(chars) == 0 {
  			continue
  		}
-@@ -5050,6 +5142,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -5050,6 +5153,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -5849,7 +9850,7 @@ index 2698d35..631df6a 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -5318,6 +5413,13 @@ func (s *Select) AddChar(def string) *SelectChar {
+@@ -5318,6 +5424,13 @@ func (s *Select) AddChar(def string) *SelectChar {
  		LogMessage("Failed to add char: %v (%s)", defPathFromSelect, reason)
  		return nil
  	}
@@ -5863,7 +9864,7 @@ index 2698d35..631df6a 100644
  
  	// Print a message for every loaded character. Just muted at the moment
  	defer func() {
-@@ -6304,6 +6406,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6304,6 +6417,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		if l.cancelRequested() || l.state == LS_Cancel || sys.gameEnd {
  			return 0
  		}
@@ -5871,19 +9872,23 @@ index 2698d35..631df6a 100644
  		if l.err = p.load(cdef, gi); l.err != nil {
  			if errors.Is(l.err, ErrLoadingCanceled) {
  				l.state = LS_Cancel
-@@ -6322,7 +6425,10 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6322,7 +6436,14 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		}
  
  		// Compile character states
 -		if gi.states, l.err = newCharCompiler().Compile(p, cdef, gi); l.err != nil {
 +		vitaTrace("load: compile states " + cdef)
++		consoleFrom := len(sys.consoleText)
 +		gi.states, l.err = newCharCompiler().Compile(p, cdef, gi)
 +		vitaTrace("load: compiled " + cdef)
++		if isVita && l.err == nil && vitaBCHashEnabled() {
++			vitaBCHashLog(cdef, p.playerNo, gi, gi.states, consoleFrom)
++		}
 +		if l.err != nil {
  			if attached {
  				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
  			} else {
-@@ -6820,13 +6926,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6941,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -5899,7 +9904,7 @@ index 2698d35..631df6a 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6941,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6956,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -5912,7 +9917,7 @@ index 2698d35..631df6a 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6968,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6983,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -5920,7 +9925,7 @@ index 2698d35..631df6a 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6984,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6999,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -6125,10 +10130,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..e1036a6
+index 0000000..d51287d
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,528 @@
+@@ -0,0 +1,565 @@
 +//go:build vita
 +
 +package main
@@ -6418,7 +10423,9 @@ index 0000000..e1036a6
 +	// large allocation fails even though most of the heap is garbage.
 +	// Rate-limited: a full collection plus ReadMemStats (which walks the whole
 +	// heap) at every file load added seconds to boot and fight loading.
-+	if time.Since(vitaMemLast) < 3*time.Second {
++	// The runtime now uses the whole committed heap from the start, so
++	// fragmentation is no longer a risk; collecting here only cost time.
++	if !vitaTraceOn || time.Since(vitaMemLast) < 3*time.Second {
 +		return
 +	}
 +	runtime.GC()
@@ -6456,7 +10463,21 @@ index 0000000..e1036a6
 +
 +	totalSwap  time.Duration
 +	totalSwaps int
++
++	// CPU time in game logic (action+uiAction) and in cueDraw+renderFrame
++	// (the latter is near zero on frames whose drawing is skipped).
++	t0    time.Time
++	part  [2]time.Duration
++	partN [2]int
 +}
++
++func vitaPerfBegin() { vitaPerf.t0 = time.Now() }
++func vitaPerfEnd(i int) {
++	vitaPerf.part[i] += time.Since(vitaPerf.t0)
++	vitaPerf.partN[i]++
++}
++
++var vitaPerfAlloc uint64
 +
 +func vitaPerfTick(skipped bool) {
 +	now := time.Now()
@@ -6476,7 +10497,12 @@ index 0000000..e1036a6
 +		avg := vitaPerf.sum / time.Duration(vitaPerf.n)
 +		vitaTrace("perf: " + itoa(vitaPerf.n) + " frames, avg " + itoa(int(avg/time.Microsecond)) + " us (" +
 +			itoa(int(time.Second/avg)) + " fps), max " + itoa(int(vitaPerf.max/time.Millisecond)) + " ms, draws skipped " +
-+			itoa(vitaPerf.skip) + ", GPU wait " + itoa(int(vitaPerf.swap/time.Millisecond)) + " ms in " + itoa(vitaPerf.swaps) + " swaps")
++			itoa(vitaPerf.skip) + ", GPU wait " + itoa(int(vitaPerf.swap/time.Millisecond)) + " ms in " + itoa(vitaPerf.swaps) + " swaps, alloc " +
++			itoa(int((runtime.VitaTotalAlloc()-vitaPerfAlloc)>>10)) + " KB, logic " +
++			itoa(int(vitaPerf.part[0]/time.Microsecond)/max(1, vitaPerf.partN[0])) + " us/tick, draw " +
++			itoa(int(vitaPerf.part[1]/time.Microsecond)/max(1, vitaPerf.n-vitaPerf.skip)) + " us/drawn frame")
++		vitaPerf.part, vitaPerf.partN = [2]time.Duration{}, [2]int{}
++		vitaPerfAlloc = runtime.VitaTotalAlloc()
 +		vitaPerf.n, vitaPerf.skip, vitaPerf.sum, vitaPerf.max, vitaPerf.swap, vitaPerf.swaps = 0, 0, 0, 0, 0, 0
 +	}
 +}
@@ -6657,12 +10683,28 @@ index 0000000..e1036a6
 +	}
 +	return vitaClientArraysFlag == 1
 +}
++
++// vitaGCTrigger sets how many bytes may be allocated between collections.
++// Fights use a large budget so collections fall between rounds instead of
++// stalling the game every few seconds.
++func vitaGCTrigger(n uintptr) { runtime.VitaSetGCTrigger(n) }
++
++var vitaRoundGCAt uint64
++
++// vitaRoundGC collects at a round transition (screen is fading) when enough
++// has been allocated since the last one.
++func vitaRoundGC() {
++	if t := runtime.VitaTotalAlloc(); t-vitaRoundGCAt > 24<<20 {
++		runtime.GC()
++		vitaRoundGCAt = runtime.VitaTotalAlloc()
++	}
++}
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..63a7827
+index 0000000..a19b9c3
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,31 @@
 +//go:build !vita
 +
 +package main
@@ -6687,18 +10729,24 @@ index 0000000..63a7827
 +func vitaCRC(string)                                       {}
 +func vitaMem(string)                                       {}
 +func vitaPerfTick(bool)                                    {}
++func vitaGCTrigger(uintptr)                                {}
++func vitaRoundGC()                                         {}
++func vitaPerfBegin()                                       {}
++func vitaPerfEnd(int)                                      {}
 +
 +var vitaTraceOn = false
 +var vitaTraceDeep = false
 diff --git a/src/vita_shaders.go b/src/vita_shaders.go
 new file mode 100644
-index 0000000..6cb3fa7
+index 0000000..40dc76a
 --- /dev/null
 +++ b/src/vita_shaders.go
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,171 @@
 +//go:build vita
 +
 +package main
++
++import "strings"
 +
 +// GLSL 1.x versions of the engine's shaders for vitaGL's GLSL->CG translator
 +// (no #version 320 es, no gl_VertexID, attribute/varying, texture2D).
@@ -6707,6 +10755,10 @@ index 0000000..6cb3fa7
 +	switch name {
 +	case "Main Shader":
 +		return vitaSpriteVert, vitaSpriteFrag, true
++	case "Main Shader (no clip)":
++		// Fallback if the translator rejects the clipping code.
++		return strings.Replace(vitaSpriteVert, "clippos = gl_Position;", "", 1),
++			strings.Replace(vitaSpriteFrag, vitaClipFrag, "", 1), true
 +	case "Identity Postprocess":
 +		return vitaIdentVert, vitaIdentFrag, true
 +	case "font shader":
@@ -6721,9 +10773,11 @@ index 0000000..6cb3fa7
 +attribute vec2 position;
 +attribute vec2 uv;
 +varying vec2 texcoord;
++varying vec4 clippos;
 +void main(void) {
 +	texcoord = uv;
 +	gl_Position = projection * (modelview * vec4(position, 0.0, 1.0));
++	clippos = gl_Position;
 +}
 +`
 +
@@ -6764,10 +10818,13 @@ index 0000000..6cb3fa7
 +uniform int neg;
 +uniform vec4 spriteUV;
 +uniform vec4 palUV;
++uniform int clipOn;
++uniform vec4 clipRect;
 +varying vec2 texcoord;
++varying vec4 clippos;
 +` + vitaHSV + `
 +void main(void) {
-+	vec4 c;
++` + vitaClipFrag + `	vec4 c;
 +	vec3 neg_base = vec3(1.0);
 +	vec3 final_add = add;
 +	vec4 final_mul = vec4(mult, alpha);
@@ -6849,6 +10906,12 @@ index 0000000..6cb3fa7
 +	c.rgb *= palMul;
 +	gl_FragColor = c;
 +}
++`
++
++const vitaClipFrag = `	if (clipOn != 0) {
++		vec2 cp = clippos.xy / clippos.w;
++		if (cp.x < clipRect.x || cp.y < clipRect.y || cp.x > clipRect.z || cp.y > clipRect.w) discard;
++	}
 +`
 diff --git a/src/vk_stub_vita.go b/src/vk_stub_vita.go
 new file mode 100644

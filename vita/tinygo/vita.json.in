@@ -1,7 +1,7 @@
 {
   "llvm-target": "armv7-unknown-none-eabihf",
   "cpu": "cortex-a9",
-  "features": "+armv7-a,+dsp,+fp64,+d32,+neon,+vfp2,+vfp2sp,+vfp3,+vfp3d16,+vfp3d16sp,+vfp3sp,-aes,-fp-armv8,-fp16,-sha2,-thumb-mode,-vfp4",
+  "features": "+armv7-a,+dsp,+fp64,+d32,+neon,+vfp2,+vfp2sp,+vfp3,+vfp3d16,+vfp3d16sp,+vfp3sp,-aes,-fp-armv8,-fp16,-sha2,-thumb-mode,-vfp4,+strict-align",
   "build-tags": [
     "vita",
     "linux",

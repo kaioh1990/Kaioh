@@ -396,7 +396,9 @@ func calculateHeapAddresses() {
 
 	// Allocate some memory to keep 2 bits of information about every block.
 	metadataSize := (totalSize + blocksPerStateByte*bytesPerBlock) / (1 + blocksPerStateByte*bytesPerBlock)
-	metadataStart = unsafe.Pointer(heapEnd - metadataSize)
+	// Vita port: keep the metadata word-aligned so sweep/findHead can test
+	// 16 block states with one aligned load.
+	metadataStart = unsafe.Pointer((heapEnd - metadataSize) &^ 7)
 
 	// Use the rest of the available memory as heap.
 	numBlocks := (uintptr(metadataStart) - heapStart) / bytesPerBlock
@@ -452,6 +454,16 @@ func alloc(size uintptr, layout unsafe.Pointer) unsafe.Pointer {
 	var ranGC bool
 	var grewHeap bool
 	var pointer unsafe.Pointer
+
+	// Vita port: the whole heap is available from the start, so collect
+	// after a fixed amount of allocation instead of only when the heap is
+	// exhausted. Waiting for exhaustion scattered the survivors over the
+	// whole heap, and a 1.7 MB request then failed with 230 MB free.
+	gcSinceGC += size
+	if gcTriggerBytes != 0 && gcSinceGC >= gcTriggerBytes {
+		runGC()
+		ranGC = true
+	}
 	for {
 		pointer = popFreeRange(neededBlocks)
 		if pointer != nil {
@@ -608,11 +620,42 @@ func GC() {
 // of the runtime.GC() function. The difference is that it returns the number of
 // free bytes in the heap after the GC is finished.
 //
+// gcTriggerBytes (Vita): collect after this many bytes were allocated since
+// the previous collection; 0 means only when the heap is exhausted.
+var gcTriggerBytes uintptr = vitaGCTriggerDefault()
+var gcSinceGC uintptr
+
+func vitaGCTriggerDefault() uintptr {
+	if GOOS == "linux" && GOARCH == "arm" {
+		return 32 << 20
+	}
+	return 0
+}
+
+// VitaSetGCTrigger sets the allocation volume between collections (0: only
+// when the heap is exhausted) and returns the previous value.
+func VitaSetGCTrigger(n uintptr) uintptr {
+	gcLock.Lock()
+	old := gcTriggerBytes
+	gcTriggerBytes = n
+	gcLock.Unlock()
+	return old
+}
+
+// VitaTotalAlloc returns the total number of bytes allocated so far.
+func VitaTotalAlloc() uint64 { return gcTotalAlloc }
+
+// gcLogTimes prints a line per collection (stderr -> the Vita log).
+var gcLogTimes = GOOS == "linux" && GOARCH == "arm"
+
 //go:noheap
 func runGC() (freeBytes uintptr) {
 	if gcDebug {
 		println("running collection cycle...")
 	}
+
+	// Vita port: log collection timings (mark / sweep, microseconds).
+	gcT0 := nanotime()
 
 	// Mark phase: mark all reachable objects, recursively.
 	gcMarkReachable()
@@ -658,9 +701,15 @@ func runGC() (freeBytes uintptr) {
 	// sweep.
 	gcResumeWorld()
 
+	gcSinceGC = 0
+
 	// Sweep phase: free all non-marked objects and unmark marked objects for
 	// the next collection cycle. This also rebuilds the free ranges list.
+	gcT1 := nanotime()
 	freeBytes = sweep()
+	if gcLogTimes {
+		println("gc:", gcNumGC+1, "mark", (gcT1-gcT0)/1000, "us sweep", (nanotime()-gcT1)/1000, "us free", uint(freeBytes>>10), "KB total", uint(gcTotalAlloc>>10), "KB")
+	}
 
 	// Show how much has been sweeped, for debugging.
 	if gcDebug {
@@ -795,7 +844,22 @@ func sweep() uintptr {
 		// Scan backwards until we find a marked head.
 		// Free the blocks as we go.
 		freeEnd := block
-		for block > 0 && (block-1).state() != blockStateMark {
+		for block > 0 {
+			// Vita port: free 16 blocks at once when a metadata word holds no
+			// marked head (the 256 MB heap is mostly free; per-block sweeping
+			// took over a second).
+			if block%(blocksPerStateByte*4) == 0 {
+				wp := (*uint32)(unsafe.Add(metadataStart, (block-blocksPerStateByte*4)/blocksPerStateByte))
+				w := *wp
+				if w&(w>>blocksPerStateByte)&(uint32(blockStateEach)*0x01010101) == 0 {
+					*wp = 0
+					block -= blocksPerStateByte * 4
+					continue
+				}
+			}
+			if (block - 1).state() == blockStateMark {
+				break
+			}
 			block--
 			block.free()
 		}
@@ -819,7 +883,17 @@ func sweep() uintptr {
 		}
 
 		// Skip the tail.
-		for block > 0 && (block-1).state() == blockStateTail {
+		for block > 0 {
+			if block%(blocksPerStateByte*4) == 0 {
+				w := *(*uint32)(unsafe.Add(metadataStart, (block-blocksPerStateByte*4)/blocksPerStateByte))
+				if w == uint32(blockStateByteAllTails)*0x01010101 {
+					block -= blocksPerStateByte * 4
+					continue
+				}
+			}
+			if (block - 1).state() != blockStateTail {
+				break
+			}
 			block--
 		}
 	}
