@@ -633,7 +633,18 @@ def _(uid, buf, n, *_):
         LOGBUF[0] += data.decode('utf-8', 'replace')
         while '\n' in LOGBUF[0]:
             line, LOGBUF[0] = LOGBUF[0].split('\n', 1)
-            if line: say('[log] ' + line)
+            if line: say('[log] ' + (('[h%.0f] ' % (time.time() - T0)) if os.environ.get('VEMU_HOSTTIME') else '') + line)
+            if os.environ.get('VEMU_PROF_MARKS'):
+                _m = os.environ['VEMU_PROF_MARKS'].split('|')
+                if PROF['h'] is None and not PROF.get('marked') and _m[0] in line:
+                    PROF['marked'] = 1; PROF['range'] = PROF['range'] or [0, 0]; PROF['pending'] = 'add'; mu.emu_stop()
+                    if os.environ.get('VEMU_PROF_SECS'):
+                        import threading
+                        def _pstop():
+                            PROF['pending'] = 'del'; mu.emu_stop()
+                        _t = threading.Timer(float(os.environ['VEMU_PROF_SECS']), _pstop); _t.daemon = True; _t.start()
+                elif PROF['h'] is not None and _m[1] in line:
+                    PROF['pending'] = 'del'; mu.emu_stop()
             if args.press_after and PRESS_BASE[0] is None and args.press_after in line:
                 PRESS_BASE[0] = FRAME[0]; say('[vemu] press base at frame %d' % FRAME[0])
             for ci, cen in enumerate(filter(None, os.environ.get('VEMU_CENSUS', '').split('|'))):
@@ -890,8 +901,22 @@ def _sample(signum, frame):
 _signal.signal(_signal.SIGUSR1, _sample)
 
 PROF = {'range': [int(x) for x in os.environ['VEMU_PROF'].split(':')] if os.environ.get('VEMU_PROF') else None, 'h': None, 'blk': {}}
+def prof_flush():
+    # Drop translated blocks so the new block hook instruments all code.
+    lo = L2R(symaddr[0]) & ~0xfff; hi = (L2R(symaddr[-1]) + 0x10000) & ~0xfff
+    for a in range(lo, hi, 0x10000):
+        try: mu.ctl_remove_cache(a, min(a + 0x10000, hi))
+        except Exception: pass
+PROF_CALLEE = {}
+if os.environ.get('VEMU_PROF_CALLERS'):
+    for _n in os.environ['VEMU_PROF_CALLERS'].split(','):
+        if _n in byname: PROF_CALLEE[L2R(byname[_n]) & ~1] = _n
+PROF_CALLERS = {}
 def prof_hook(uc, addr, size, ud):
-    b = PROF['blk']; b[addr] = b.get(addr, 0) + size // 2
+    b = PROF['blk']; b[addr] = b.get(addr, 0) + size // 4
+    if addr in PROF_CALLEE:
+        k = (PROF_CALLEE[addr], symbolize(uc.reg_read(UC_ARM_REG_LR)).split('+')[0])
+        PROF_CALLERS[k] = PROF_CALLERS.get(k, 0) + 1
 def prof_report():
     import collections
     fn = collections.Counter(); cache = {}
@@ -903,6 +928,8 @@ def prof_report():
     say('[prof] ~%d instr/frame over %d frames' % (tot // max(1, frames), frames))
     for k, v in fn.most_common(60):
         say('[prof] %5.1f%% %s' % (100.0 * v / tot, k[:150]))
+    for (cal, src), v in sorted(PROF_CALLERS.items(), key=lambda x: -x[1])[:40]:
+        say('[profcall] %8d %s <- %s' % (v, cal, src[:120]))
 
 TEXTS = _cc.Counter() if False else None
 def text_hook(uc, addr, size, ud):
@@ -1096,9 +1123,10 @@ while True:
     # emu_stop from unicorn internals (e.g. pc change); continue
     pc = mu.reg_read(UC_ARM_REG_PC) | ((mu.reg_read(UC_ARM_REG_CPSR) >> 5) & 1)
     if PROF.get('pending') == 'add':
-        PROF['h'] = mu.hook_add(UC_HOOK_BLOCK, prof_hook); mu.ctl_remove_cache(0x80000000, 0xf0000000); PROF['pending'] = None; say('[prof] start at frame %d' % FRAME[0])
+        PROF['h'] = mu.hook_add(UC_HOOK_BLOCK, prof_hook); prof_flush(); PROF['pending'] = None; say('[prof] start at frame %d' % FRAME[0])
     elif PROF.get('pending') == 'del':
-        mu.hook_del(PROF['h']); mu.ctl_remove_cache(0x80000000, 0xf0000000); PROF['h'] = None; PROF['pending'] = None; prof_report()
+        mu.hook_del(PROF['h']); prof_flush(); PROF['h'] = None; PROF['pending'] = None; prof_report()
+        if os.environ.get('VEMU_PROF_EXIT'): break
     if os.environ.get('VEMU_DBGRET'): say('[dbg] restart %x' % pc)
 say('[vemu] top calls: ' + ', '.join('%s=%d' % kv for kv in sorted(calls.items(), key=lambda x: -x[1])[:25]))
 for fib, f in fibers.items():

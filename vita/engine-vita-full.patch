@@ -329,6 +329,64 @@ index f4c200f..7388caf 100644
  	// Draw only the filtered items
  	for _, idx := range sortList {
  		s := dl[idx]
+diff --git a/src/audio_sdl.go b/src/audio_sdl.go
+index ac9143a..5b51042 100644
+--- a/src/audio_sdl.go
++++ b/src/audio_sdl.go
+@@ -28,6 +28,7 @@ type SDLSpeaker struct {
+ 	sampleRate beep.SampleRate
+ 	bufferSize int
+ 	buf        [][2]float64
++	out        []byte
+ }
+ 
+ func floatToS16(v float64) int16 {
+@@ -81,16 +82,33 @@ func (s *SDLSpeaker) FillAudio() {
+ 	if sdl.GetQueuedAudioSize(s.dev) > uint32(s.bufferSize*4) {
+ 		return
+ 	}
++	if isVita {
++		// Goroutines are cooperative on the Vita: this pump only runs between
++		// frames, which can be 100+ ms apart while the game is busy. Keep a
++		// deeper queue (about 4 buffers, ~185 ms) so playback does not run dry.
++		for i := 0; i < 4 && sdl.GetQueuedAudioSize(s.dev) < uint32(s.bufferSize*4*4); i++ {
++			if !s.fillOnce() {
++				break
++			}
++		}
++		return
++	}
++	s.fillOnce()
++}
+ 
++func (s *SDLSpeaker) fillOnce() bool {
+ 	frames := s.bufferSize
+-	buf := make([]byte, frames*4)
++	if cap(s.out) < frames*4 {
++		s.out = make([]byte, frames*4)
++	}
++	buf := s.out[:frames*4]
+ 
+ 	s.mu.Lock()
+ 	n, _ := s.mixer.Stream(s.buf[:frames])
+ 	s.mu.Unlock()
+ 
+ 	if n == 0 {
+-		return
++		return false
+ 	}
+ 
+ 	for i := 0; i < n; i++ {
+@@ -103,7 +121,8 @@ func (s *SDLSpeaker) FillAudio() {
+ 		buf[i*4+3] = byte(r >> 8)
+ 	}
+ 
+-	sdl.QueueAudio(s.dev, buf)
++	sdl.QueueAudio(s.dev, buf[:n*4])
++	return true
+ }
+ 
+ func (s *SDLSpeaker) Play(st beep.Streamer) {
 diff --git a/src/bgdef.go b/src/bgdef.go
 index 840b4f8..fbda389 100644
 --- a/src/bgdef.go
@@ -343,10 +401,28 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..c3b457b 100644
+index 276abbf..e9d0277 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
-@@ -1574,7 +1574,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
+@@ -1488,7 +1488,16 @@ func (bs *BytecodeStack) Clear() {
+ }
+ 
+ func (bs *BytecodeStack) Push(bv BytecodeValue) {
+-	*bs = append(*bs, bv)
++	// Fast path without the runtime append call (TinyGo's append goes through
++	// sliceAppend + memmove for every push, ~17% of fight frame time on Vita).
++	s := *bs
++	if n := len(s); n < cap(s) {
++		s = s[:n+1]
++		s[n] = bv
++		*bs = s
++		return
++	}
++	*bs = append(s, bv)
+ }
+ 
+ func (bs *BytecodeStack) PushI(i int32) {
+@@ -1574,7 +1583,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
  		be.append((*(*[4]OpCode)(unsafe.Pointer(&f)))[:]...)
  	case VT_Int:
  		if bv.value >= -128 && bv.value <= 127 {
@@ -356,7 +432,7 @@ index 276abbf..c3b457b 100644
  		} else if bv.value >= math.MinInt32 && bv.value <= math.MaxInt32 {
  			be.append(OC_int)
  			i := int32(bv.value)
-@@ -1664,6 +1665,17 @@ func (be BytecodeExp) PeekLength(i int) int {
+@@ -1664,6 +1674,17 @@ func (be BytecodeExp) PeekLength(i int) int {
  
  // Calculates how far to skip and moves the pointer past that entire section
  // Used for example when a redirection is invalid
@@ -374,7 +450,7 @@ index 276abbf..c3b457b 100644
  func (be BytecodeExp) JumpToNext(i *int) {
  	*i += be.PeekLength(*i) + 4
  }
-@@ -2032,7 +2044,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+@@ -2032,7 +2053,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
  	//if v1.IsUndefined() {
  	//	return
  	//}
@@ -383,7 +459,7 @@ index 276abbf..c3b457b 100644
  }
  
  func (BytecodeExp) ln(v1 *BytecodeValue) {
-@@ -2043,7 +2055,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2064,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -392,7 +468,7 @@ index 276abbf..c3b457b 100644
  	}
  }
  
-@@ -2056,7 +2068,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2056,7 +2077,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -401,7 +477,7 @@ index 276abbf..c3b457b 100644
  	}
  }
  
-@@ -2064,42 +2076,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
+@@ -2064,42 +2085,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
  	if v1.IsUndefined() {
  		return
  	}
@@ -450,7 +526,7 @@ index 276abbf..c3b457b 100644
  }
  
  func (BytecodeExp) floor(v1 *BytecodeValue) {
-@@ -2167,7 +2179,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2167,7 +2188,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -459,7 +535,7 @@ index 276abbf..c3b457b 100644
  	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
  }
  
-@@ -2190,7 +2202,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2190,7 +2211,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -468,7 +544,7 @@ index 276abbf..c3b457b 100644
  }
  
  func (BytecodeExp) sign(v1 *BytecodeValue) {
-@@ -2236,6 +2248,16 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+@@ -2236,6 +2257,16 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
  
  func (be BytecodeExp) run(c *Char) BytecodeValue {
  	oc := c
@@ -485,7 +561,7 @@ index 276abbf..c3b457b 100644
  	for i := 1; i <= len(be); i++ {
  		opc := be[i-1]
  		switch opc {
-@@ -2268,7 +2290,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2268,7 +2299,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			fallthrough
  		case OC_jmp:
@@ -494,7 +570,7 @@ index 276abbf..c3b457b 100644
  		case OC_player:
  			pn := int(sys.bcStack.Pop().ToI())
  			if c = c.playerTrigger(pn, true); c != nil {
-@@ -2278,21 +2300,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2278,21 +2309,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			// Invalid: Push undefined and use the length header to jump over the block
  			sys.bcStack.Push(BytecodeUndefined())
@@ -519,7 +595,7 @@ index 276abbf..c3b457b 100644
  		case OC_helper:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2301,7 +2323,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2301,7 +2332,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -528,7 +604,7 @@ index 276abbf..c3b457b 100644
  		case OC_target:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2310,63 +2332,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2310,63 +2341,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -601,7 +677,7 @@ index 276abbf..c3b457b 100644
  		case OC_rdreset:
  			// Reset the current redirection
  			// A redirect only lasts one opcode, so this empty case ends it
-@@ -2375,13 +2397,13 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2375,13 +2406,13 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			// Evaluate block as the redirect target. No continue, so the redirect ends after it
  			// Ex: "parent, cond(alive, life, 0)" reads both alive and life from parent
  			sys.bcStack.Push(be[i+4 : i+4+l].run(c))
@@ -617,7 +693,7 @@ index 276abbf..c3b457b 100644
  			continue
  		case OC_int8:
  			sys.bcStack.PushI(int32(int8(be[i])))
-@@ -2402,7 +2424,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2402,7 +2433,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			sys.bcStack.PushF(flo)
  			i += 4
  		case OC_string:
@@ -627,7 +703,7 @@ index 276abbf..c3b457b 100644
  		case OC_neg:
  			be.neg(sys.bcStack.Top())
  		case OC_bwnot:
-@@ -2599,7 +2622,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2599,7 +2631,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_hitcount:
  			sys.bcStack.PushI(c.hitCount)
  		case OC_hitdefattr:
@@ -637,7 +713,7 @@ index 276abbf..c3b457b 100644
  			if attr == -2 { // String value on the stack
  				attr = evalTriggerAttr(c, sys.bcStack.Pop())
  			}
-@@ -2747,15 +2771,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2747,15 +2780,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_vel_z:
  			sys.bcStack.PushF(c.vel[2] * (c.localscl / oc.localscl))
  		case OC_assign_:
@@ -668,7 +744,7 @@ index 276abbf..c3b457b 100644
  		case OC_var:
  			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
  		case OC_sysvar:
-@@ -2770,6 +2804,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2770,6 +2813,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		}
  		c = oc
  	}
@@ -676,7 +752,70 @@ index 276abbf..c3b457b 100644
  	return sys.bcStack.Pop()
  }
  
-@@ -5414,21 +5449,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5089,6 +5133,7 @@ type StateBlock struct {
+ 	trigger             BytecodeExp
+ 	elseBlock           *StateBlock
+ 	ctrls               []StateController
++	runs                []scRunFn // ctrls[i].Run resolved once (see sc_runfn.go)
+ 	// Loop fields
+ 	loopBlock        bool
+ 	nestedInLoop     bool
+@@ -5104,6 +5149,16 @@ func newStateBlock() *StateBlock {
+ 	return &StateBlock{persistent: 1, persistentIndex: -1, ignorehitpause: false}
+ }
+ 
++func (b *StateBlock) runFns() []scRunFn {
++	if len(b.runs) != len(b.ctrls) {
++		b.runs = make([]scRunFn, len(b.ctrls))
++		for i, sc := range b.ctrls {
++			b.runs[i] = scRunFunc(sc)
++		}
++	}
++	return b.runs
++}
++
+ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+ 	c.currentSctrlIndex = b.persistentIndex
+ 	// For Mugen compatibility, if in hitpause and this SCTRL has the same index
+@@ -5189,7 +5244,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+ 			}
+ 			// Run state controllers
+ 			if !interrupt {
+-				for _, sc := range b.ctrls {
++				runs := b.runFns()
++				for i, sc := range b.ctrls {
+ 					switch sc.(type) {
+ 					case *StateBlock:
+ 					default:
+@@ -5197,7 +5253,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+ 							continue
+ 						}
+ 					}
+-					if sc.Run(c, ps) {
++					if runs[i](c, ps) {
+ 						if sys.loopBreak {
+ 							sys.loopBreak = false
+ 							interrupt = true
+@@ -5244,7 +5300,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+ 			}
+ 			return false
+ 		}
+-		for _, sc := range b.ctrls {
++		runs := b.runFns()
++		for i, sc := range b.ctrls {
+ 			switch sc.(type) {
+ 			case *StateBlock:
+ 			default:
+@@ -5252,7 +5309,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+ 					continue
+ 				}
+ 			}
+-			if sc.Run(c, ps) {
++			if runs[i](c, ps) {
+ 				return true
+ 			}
+ 		}
+@@ -5414,21 +5471,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -708,7 +847,7 @@ index 276abbf..c3b457b 100644
  }
  
  type stateDef StateControllerBase
-@@ -5530,6 +5563,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +5585,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -718,7 +857,7 @@ index 276abbf..c3b457b 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -6653,7 +6689,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,7 +6711,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -747,7 +886,7 @@ index 0000000..0cee43a
 +// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lkubridge_stub_weak -lstdc++ -lsupc++ -lm
 +import "C"
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..f68c4a0 100644
+index 19bf05a..8d1e8b8 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -1881,9 +1881,9 @@ func (e *Explod) initFromChar(c *Char) *Explod {
@@ -830,7 +969,37 @@ index 19bf05a..f68c4a0 100644
  		}
  
  		// Save result in sorting slice
-@@ -8370,6 +8380,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+@@ -5428,7 +5438,8 @@ func (c *Char) enemy(n int32) *Char {
+ 
+ 	// Iterate until nth enemy
+ 	var count int32
+-	for _, e := range sys.chars {
++	for _ci := range sys.chars {
++		e := sys.chars[_ci]
+ 		if len(e) > 0 && e[0] != nil && c.isEnemyOf(e[0]) {
+ 			if count == n {
+ 				return e[0]
+@@ -5998,7 +6009,8 @@ func (c *Char) numEnemy() int32 {
+ 	var n int32
+ 
+ 	// Same as enemy() loop
+-	for _, e := range sys.chars {
++	for _ci := range sys.chars {
++		e := sys.chars[_ci]
+ 		if len(e) > 0 && e[0] != nil && c.isEnemyOf(e[0]) {
+ 			n += 1
+ 		}
+@@ -7832,7 +7844,8 @@ func (c *Char) hitAdd(h int32) {
+ 		}
+ 	} else if c.teamside != -1 {
+ 		// In Mugen, HitAdd can increase combo count even without targets
+-		for i, p := range sys.chars {
++		for i := range sys.chars {
++			p := sys.chars[i]
+ 			if len(p) > 0 && c.teamside == ^i&1 {
+ 				// This is a bit of a workaround for backward compatibility only
+ 				if p[0].receivedHits != 0 || p[0].ss.moveType == MT_H {
+@@ -8370,6 +8383,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -838,7 +1007,27 @@ index 19bf05a..f68c4a0 100644
  	if _, ok := c.cnsvar[i]; ok {
  		c.cnsvar[i] += v
  	} else {
-@@ -9811,65 +9822,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
+@@ -9008,7 +9022,8 @@ func (c *Char) lifeSet(life int32) {
+ 
+ 	// Update life sharing
+ 	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
+-		for _, p := range sys.chars {
++		for _ci := range sys.chars {
++			p := sys.chars[_ci]
+ 			if len(p) > 0 && p[0].teamside == c.teamside {
+ 				p[0].life = c.life
+ 			}
+@@ -9100,7 +9115,8 @@ func (c *Char) redLifeSet(set int32) {
+ 
+ 	// Update life sharing
+ 	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
+-		for _, p := range sys.chars {
++		for _ci := range sys.chars {
++			p := sys.chars[_ci]
+ 			if len(p) > 0 && p[0].teamside == c.teamside {
+ 				p[0].redLife = c.redLife
+ 			}
+@@ -9811,65 +9827,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
  	}
  	key := strings.ToLower(s)
  
@@ -936,7 +1125,27 @@ index 19bf05a..f68c4a0 100644
  }
  
  // Used to init, fully reset or partially reset the map array
-@@ -14420,8 +14419,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+@@ -13710,7 +13714,8 @@ func (cl *CharList) clear() {
+ 
+ 	// Clear all player ID's to avoid false conflicts with stale players
+ 	// TODO: Maybe stale players should be cleared better
+-	for _, p := range sys.chars {
++	for _ci := range sys.chars {
++		p := sys.chars[_ci]
+ 		for _, c := range p {
+ 			if c != nil {
+ 				c.id = -1
+@@ -13858,7 +13863,8 @@ func (cl *CharList) audit() {
+ 
+ func (cl *CharList) commandUpdate() {
+ 	// Iterate players
+-	for i, p := range sys.chars {
++	for i := range sys.chars {
++		p := sys.chars[i]
+ 		if len(p) == 0 {
+ 			continue
+ 		}
+@@ -14420,8 +14426,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
  				// Check if the character is above the platform's surface
  				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
  					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
@@ -948,7 +1157,7 @@ index 19bf05a..f68c4a0 100644
  					onPlatform := func(protrude bool) {
  						getter.platformPosY = ((p.pos[1]+p.platformHeight[0]+p.velocity[1])*p.localscl - angleSinValue*(oldDistX/angleCosValue)) / getter.localscl
 diff --git a/src/common.go b/src/common.go
-index a741eab..540ab31 100644
+index a741eab..006ec14 100644
 --- a/src/common.go
 +++ b/src/common.go
 @@ -102,11 +102,11 @@ func Deg(f float32) float32 {
@@ -983,7 +1192,25 @@ index a741eab..540ab31 100644
  	return math.Round(val*factor) / factor
  }
  
-@@ -1903,9 +1903,76 @@ func OpenFile(filename string) (io.ReadSeekCloser, error) {
+@@ -801,6 +801,17 @@ func SplitAndTrim(str, sep string) (ss []string) {
+ 	for i, s := range ss {
+ 		ss[i] = strings.TrimSpace(s)
+ 	}
++	if isVita && len(str) > 64*1024 {
++		// TinyGo's GC finds an object's head by walking back from an interior
++		// pointer, so thousands of line substrings pointing into one multi-MB
++		// file string made every collection quadratic (62% of character
++		// compile time on the Vita). Give each line its own allocation.
++		for i, s := range ss {
++			if s != "" {
++				ss[i] = strings.Clone(s)
++			}
++		}
++	}
+ 	return
+ }
+ 
+@@ -1903,9 +1914,76 @@ func OpenFile(filename string) (io.ReadSeekCloser, error) {
  	if err != nil {
  		return nil, err
  	}
@@ -2951,7 +3178,7 @@ index 0000000..897ab9c
 +	}
 +}
 diff --git a/src/fightscreen.go b/src/fightscreen.go
-index 51867f3..2c25f8d 100644
+index 51867f3..07356b9 100644
 --- a/src/fightscreen.go
 +++ b/src/fightscreen.go
 @@ -2894,7 +2894,7 @@ func (cs *ComboShake) update() {
@@ -3006,6 +3233,16 @@ index 51867f3..2c25f8d 100644
  						s, err := loadSff(filename, SffTypeOther, true, false)
  						if err != nil {
  							return err
+@@ -5575,7 +5581,8 @@ func (fs *FightScreen) step() {
+ 	cb, cd, cp := [2]int32{}, [2]int32{}, [2]float32{}
+ 	targets := [2]int32{}
+ 	// Combo
+-	for _, ch := range sys.chars {
++	for _ci := range sys.chars {
++		ch := sys.chars[_ci]
+ 		// Iterate through all players to see the combo status of each team
+ 		for _, c := range ch {
+ 			if c.receivedHits > 0 && (c.teamside == 0 || c.teamside == 1) && (c.alive() || !c.scf(SCF_over_ko)) { // If alive or not alive but not in state 5150 yet
 diff --git a/src/font_gl33.go b/src/font_gl33.go
 index fdec276..0b7f3ba 100644
 --- a/src/font_gl33.go
@@ -3398,10 +3635,70 @@ index 2609c76..d0df867 100644
  		if strings.Contains(err.Error(), "<game end>") {
  			handleExit()
 diff --git a/src/motif.go b/src/motif.go
-index ce7ed68..2e9f79b 100644
+index ce7ed68..a7a4c98 100644
 --- a/src/motif.go
 +++ b/src/motif.go
-@@ -5843,7 +5843,7 @@ func parseRankingRows(path, mode string) []rankingRow {
+@@ -2951,7 +2951,8 @@ func (mo *Motif) processStateChange(c *Char, states []int32) bool {
+ 
+ func (mo *Motif) processStateTransitions(winnerStates, loserStates [4][]int32) {
+ 	wIdx, lIdx := 0, 0
+-	for _, p := range sys.chars {
++	for _ci := range sys.chars {
++		p := sys.chars[_ci]
+ 		if len(p) == 0 {
+ 			continue
+ 		}
+@@ -3000,7 +3001,8 @@ func (mo *Motif) processStateTransitionsBySide(p1States, p2States [4][]int32) {
+ 		assigned[side] = 1
+ 	}
+ 	// 2) Apply remaining members in stable playerNo order.
+-	for pn, p := range sys.chars {
++	for pn := range sys.chars {
++		p := sys.chars[pn]
+ 		if len(p) == 0 {
+ 			continue
+ 		}
+@@ -3191,7 +3193,8 @@ func (m *Motif) isDialogueSet() bool {
+ 			len(sys.chars[pn-1]) > 0 &&
+ 			len(sys.chars[pn-1][0].dialogue) > 0
+ 	}
+-	for _, p := range sys.chars {
++	for _ci := range sys.chars {
++		p := sys.chars[_ci]
+ 		if len(p) > 0 && len(p[0].dialogue) > 0 {
+ 			return true
+ 		}
+@@ -3855,7 +3858,8 @@ func (co *MotifContinue) step(m *Motif) {
+ 	if co.selected && !co.showEndAnim && co.endTimer == -1 {
+ 		if co.waitTimer < 0 {
+ 			var wait int32
+-			for _, p := range sys.chars {
++			for _ci := range sys.chars {
++				p := sys.chars[_ci]
+ 				if len(p) == 0 || p[0].anim == nil {
+ 					continue
+ 				}
+@@ -4274,7 +4278,8 @@ func (di *MotifDialogue) getDialogueLines() ([]string, int, error) {
+ 	}
+ 	if pn == 0 {
+ 		var validPlayers []int
+-		for i, p := range sys.chars {
++		for i := range sys.chars {
++			p := sys.chars[i]
+ 			if len(p) > 0 && len(p[0].dialogue) > 0 {
+ 				validPlayers = append(validPlayers, i+1)
+ 			}
+@@ -4336,7 +4341,8 @@ func (di *MotifDialogue) reset(m *Motif) {
+ }
+ 
+ func (di *MotifDialogue) clear(m *Motif) {
+-	for _, p := range sys.chars {
++	for _ci := range sys.chars {
++		p := sys.chars[_ci]
+ 		if len(p) > 0 {
+ 			p[0].dialogue = nil
+ 		}
+@@ -5843,7 +5849,7 @@ func parseRankingRows(path, mode string) []rankingRow {
  	if path == "" || mode == "" {
  		return nil
  	}
@@ -3424,10 +3721,34 @@ index d63aa49..25c8b51 100644
  	r.alpha = packAlpha(src, 255-src)
  }
 diff --git a/src/render.go b/src/render.go
-index 6ccd7bc..f3aee28 100644
+index 6ccd7bc..cee3453 100644
 --- a/src/render.go
 +++ b/src/render.go
-@@ -905,28 +905,57 @@ func initRenderSpriteQuad(rp *RenderParams) {
+@@ -377,13 +377,20 @@ func (rp *RenderParams) IsValid() bool {
+ 		IsFinite(rp.x+rp.y+rp.xts+rp.xbs+rp.ys+rp.vs+rp.rxadd+rp.rot.angle+rp.rcx+rp.rcy)
+ }
+ 
++var quadMVScratch mgl.Mat4
++var quadTrapezScratch [4]float32
++
+ func drawQuads(modelview mgl.Mat4, x1, y1, x2, y2, x3, y3, x4, y4 float32, uvst [4]float32, isTrapez bool) {
+-	gfx.SetUniformMatrix("modelview", modelview[:])
++	// Package-level scratch: slicing the parameter or using the variadic
++	// SetUniformF made TinyGo heap-allocate on every quad.
++	quadMVScratch = modelview
++	gfx.SetUniformMatrix("modelview", quadMVScratch[:])
+ 	if isTrapez {
+-		gfx.SetUniformF("x1x2x4x3", x1, x2, x4, x3) // this uniform is optional
++		quadTrapezScratch = [4]float32{x1, x2, x4, x3} // this uniform is optional
+ 	} else {
+-		gfx.SetUniformF("x1x2x4x3", 0, 0, 0, 0)
++		quadTrapezScratch = [4]float32{}
+ 	}
++	gfx.SetUniformFv("x1x2x4x3", quadTrapezScratch[:])
+ 
+ 	// This effectively side-steps a low-level rectangle rasterization edge case,
+ 	// that caused visible and frequent artifacts on the diagonal.
+@@ -905,28 +912,57 @@ func initRenderSpriteQuad(rp *RenderParams) {
  	rp.y += rp.rcy
  }
  
@@ -3454,7 +3775,7 @@ index 6ccd7bc..f3aee28 100644
 +	gfx.SetUniformI("neg", int(Btoi(rsCur.spfx.neg)))
 +	gfx.SetUniformFv("add", rsCur.spfx.add[:])
 +	gfx.SetUniformFv("mult", rsCur.spfx.mult[:])
-+	gfx.SetUniformF("alpha", a)
++	setUniform1("alpha", a)
 +
 +	renderSpriteQuad(rsCur.modelview, rsCur.rp)
 +}
@@ -3493,7 +3814,7 @@ index 6ccd7bc..f3aee28 100644
  
  	// Heavy state change
  	// Because renderWithBlending() sometimes needs 2 passes, we'll do most of the setup outside of render()
-@@ -935,14 +964,14 @@ func RenderSprite(rp RenderParams) {
+@@ -935,14 +971,14 @@ func RenderSprite(rp RenderParams) {
  	gfx.EnableScissor(rp.window[0], rp.window[1], rp.window[2], rp.window[3])
  
  	// Static uniforms
@@ -3503,14 +3824,16 @@ index 6ccd7bc..f3aee28 100644
  	gfx.SetUniformI("mask", int(rp.mask))
  	gfx.SetUniformI("isTrapez", int(Btoi(Abs(Abs(rp.xts)-Abs(rp.xbs)) > 0.001)))
  
- 	gfx.SetUniformF("gray", spfx.gray)
- 	gfx.SetUniformF("hue", spfx.hue)
+-	gfx.SetUniformF("gray", spfx.gray)
+-	gfx.SetUniformF("hue", spfx.hue)
 -	gfx.SetUniformFv("tint", tint[:])
++	setUniform1("gray", spfx.gray)
++	setUniform1("hue", spfx.hue)
 +	gfx.SetUniformFv("tint", rsCur.tint[:])
  
  	if rp.paltex == nil {
  		gfx.SetUniformI("isRgba", 1)
-@@ -971,22 +1000,7 @@ func RenderSprite(rp RenderParams) {
+@@ -971,22 +1007,7 @@ func RenderSprite(rp RenderParams) {
  		gfx.SetTexture("pal", rp.paltex)
  	}
  
@@ -3534,7 +3857,139 @@ index 6ccd7bc..f3aee28 100644
  
  	gfx.DisableScissor()
  }
-@@ -1242,6 +1256,23 @@ func (ta *TextureAtlas) bytesPerPixel() int32 {
+@@ -1023,16 +1044,10 @@ func renderWithBlending(
+ 		dst = 0
+ 	}
+ 
+-	// Helpers for invertblend
+-	// Invert PalFX add
+-	invertAColor := func() {
+-		spfx.add[0], spfx.add[1], spfx.add[2] = -spfx.add[0], -spfx.add[1], -spfx.add[2]
+-	}
+-	// Disable the "neg" uniform, which the shader uses to invert colors
+-	// We sometimes use this because subtractive transparency already inverts colors on its own, so it'd be a double negation
+-	disableNeg := func() {
+-		spfx.neg = false
+-	}
++	// Helpers for invertblend (plain functions: closures here heap-allocated on every sprite under TinyGo)
++	// rwbInvertAColor inverts PalFX add. Setting spfx.neg = false disables the
++	// "neg" uniform, which the shader uses to invert colors; subtractive
++	// transparency already inverts colors on its own, so it'd be a double negation
+ 
+ 	// Proceed with the render calls
+ 	switch {
+@@ -1044,10 +1059,10 @@ func renderWithBlending(
+ 		case src == 1 && dst == 1:
+ 			// Fast path for full subtraction
+ 			if spfx.invblend >= 1 {
+-				invertAColor()
++				rwbInvertAColor(spfx)
+ 			}
+ 			if spfx.invblend == 3 {
+-				disableNeg()
++				spfx.neg = false
+ 			}
+ 			render(BlendInv, blendSourceFactor, BlendOne, 1)
+ 		default:
+@@ -1057,10 +1072,10 @@ func renderWithBlending(
+ 			}
+ 			if src > 0 {
+ 				if spfx.invblend >= 1 {
+-					invertAColor()
++					rwbInvertAColor(spfx)
+ 				}
+ 				if spfx.invblend == 3 {
+-					disableNeg()
++					spfx.neg = false
+ 				}
+ 				render(BlendInv, blendSourceFactor, BlendOne, src)
+ 			}
+@@ -1082,21 +1097,21 @@ func renderWithBlending(
+ 			// This is kind of like "invblend = 3"
+ 			// But adding "invertblend" support here would force people to have to use it to get the expected results
+ 			// We avoid "neg" entirely because it turns black edges into white auras. But maybe allowing that would be more consistent?
+-			disableNeg() // spfx.neg = false
+-			//invertAColor()
++			spfx.neg = false // spfx.neg = false
++			//rwbInvertAColor(spfx)
+ 
+ 			// Pass 1: additive with gray PalFX
+ 			if dst > 0 {
+ 				makeFxGrayscale()
+ 				// Set gray uniform manually because render() doesn't set it (and doesn't need to most of the time)
+-				gfx.SetUniformF("gray", 1.0)
++				setUniform1("gray", 1.0)
+ 				render(BlendAdd, blendSourceFactor, BlendOne, dst)
+ 			}
+ 			// Pass 2: subtractive with original PalFX
+ 			if src > 0 {
+ 				*spfx = origState
+-				disableNeg() // Disable neg again because of the restore
+-				gfx.SetUniformF("gray", spfx.gray)
++				spfx.neg = false // Disable neg again because of the restore
++				setUniform1("gray", spfx.gray)
+ 				render(BlendReverseSubtract, blendSourceFactor, BlendOne, src)
+ 			}
+ 		} else {
+@@ -1104,13 +1119,13 @@ func renderWithBlending(
+ 			// Pass 1: subtractive with gray PalFX
+ 			if dst > 0 {
+ 				makeFxGrayscale()
+-				gfx.SetUniformF("gray", 1.0)
++				setUniform1("gray", 1.0)
+ 				render(BlendReverseSubtract, blendSourceFactor, BlendOne, dst)
+ 			}
+ 			// Pass 2: additive with original PalFX
+ 			if src > 0 {
+ 				*spfx = origState
+-				gfx.SetUniformF("gray", spfx.gray)
++				setUniform1("gray", spfx.gray)
+ 				render(BlendAdd, blendSourceFactor, BlendOne, src)
+ 			}
+ 		}
+@@ -1127,10 +1142,10 @@ func renderWithBlending(
+ 		case src == 1 && dst == 1:
+ 			// Fast path for full Add
+ 			if spfx.invblend >= 1 {
+-				invertAColor()
++				rwbInvertAColor(spfx)
+ 			}
+ 			if spfx.invblend == 3 {
+-				disableNeg()
++				spfx.neg = false
+ 			}
+ 			render(Blend, blendSourceFactor, BlendOne, 1)
+ 		default:
+@@ -1142,10 +1157,10 @@ func renderWithBlending(
+ 				if spfx.invblend >= 1 && dst == 1 {
+ 					Blend = BlendReverseSubtract
+ 					if spfx.invblend >= 2 { // Not 1 here. TODO: Explain why in comment
+-						invertAColor()
++						rwbInvertAColor(spfx)
+ 					}
+ 					if spfx.invblend == 3 {
+-						disableNeg()
++						spfx.neg = false
+ 					}
+ 				} else {
+ 					Blend = BlendAdd
+@@ -1200,12 +1215,12 @@ func FillRect(rect [4]int32, color uint32, alpha [2]int32, fx *PalFX) {
+ 	gfx.SetUniformI("isTrapez", 0)
+ 	gfx.SetUniformI("mask", 0)
+ 	gfx.SetUniformI("isRgba", 1)
+-	gfx.SetUniformF("gray", spfx.gray)
+-	gfx.SetUniformF("hue", spfx.hue)
++	setUniform1("gray", spfx.gray)
++	setUniform1("hue", spfx.hue)
+ 
+ 	// Alpha is determined by tint, so we reset it here
+ 	// TODO: Maybe the shader shouldn't have a duplicate alpha component inside "tint"
+-	gfx.SetUniformF("alpha", 1.0)
++	setUniform1("alpha", 1.0)
+ 
+ 	// Local function called for each blending pass
+ 	renderPass := func(eq BlendEquation, src, dst BlendFunc, a float32) {
+@@ -1242,6 +1257,23 @@ func (ta *TextureAtlas) bytesPerPixel() int32 {
  
  func (ta *TextureAtlas) clearTexture(tex Texture, width, height int32) {
  	bpp := ta.bytesPerPixel()
@@ -3558,7 +4013,7 @@ index 6ccd7bc..f3aee28 100644
  	clearData := make([]byte, int(width*height*bpp))
  	tex.SetSubData2(clearData, 0, 0, width, height, width*bpp)
  }
-@@ -1295,7 +1326,11 @@ func CreateTextureAtlas(width, height int32, depth int32, filter bool) *TextureA
+@@ -1295,7 +1327,11 @@ func CreateTextureAtlas(width, height int32, depth int32, filter bool) *TextureA
  }
  
  func (ta *TextureAtlas) AddImage(width, height, stride int32, data []byte) ([4]float32, bool) {
@@ -3571,6 +4026,27 @@ index 6ccd7bc..f3aee28 100644
  
  	// Initial check for images larger than the atlas's current size
  	if ta.resize {
+@@ -1499,3 +1535,20 @@ type SpriteTextureAtlas struct {
+ 	textures8   []*TextureAtlas
+ 	textures32  []*TextureAtlas
+ }
++
++func rwbInvertAColor(spfx *ShaderPalFX) {
++	spfx.add[0], spfx.add[1], spfx.add[2] = -spfx.add[0], -spfx.add[1], -spfx.add[2]
++}
++
++var uniF1Scratch [1]float32
++
++// setUniform1 sets a single-float uniform. On the Vita it avoids the variadic
++// SetUniformF, whose argument slice TinyGo heap-allocates on every call.
++func setUniform1(name string, v float32) {
++	if isVita {
++		uniF1Scratch[0] = v
++		gfx.SetUniformFv(name, uniF1Scratch[:])
++		return
++	}
++	gfx.SetUniformF(name, v)
++}
 diff --git a/src/render_gl33.go b/src/render_gl33.go
 index 1a2540b..3b8944d 100644
 --- a/src/render_gl33.go
@@ -3930,8 +4406,343 @@ index 2888520..59208e5 100644
  package main
  
  import (
+diff --git a/src/sc_runfn.go b/src/sc_runfn.go
+new file mode 100644
+index 0000000..5af4ec0
+--- /dev/null
++++ b/src/sc_runfn.go
+@@ -0,0 +1,329 @@
++package main
++
++// Code generated for the Vita port. DO NOT EDIT BY HAND.
++
++// scRunFn is a state controller Run method resolved to a direct function.
++// TinyGo dispatches interface method calls by comparing the dynamic type
++// against every implementing type in turn; with ~160 controller types that
++// chain cost ~13% of frame time. Resolving the method once avoids it.
++type scRunFn func(c *Char, ps []int32) bool
++
++func scRunFunc(sc StateController) scRunFn {
++	switch x := sc.(type) {
++	case *StateBlock:
++		return x.Run
++	case CallFunction:
++		return x.Run
++	case LoopBreak:
++		return x.Run
++	case LoopContinue:
++		return x.Run
++	case StateExpr:
++		return x.Run
++	case afterImage:
++		return x.Run
++	case afterImageTime:
++		return x.Run
++	case allPalFX:
++		return x.Run
++	case angleAdd:
++		return x.Run
++	case angleDraw:
++		return x.Run
++	case angleMul:
++		return x.Run
++	case angleSet:
++		return x.Run
++	case appendToClipboard:
++		return x.Run
++	case assertAnalogVector:
++		return x.Run
++	case assertCommand:
++		return x.Run
++	case assertInput:
++		return x.Run
++	case assertSpecial:
++		return x.Run
++	case attackDist:
++		return x.Run
++	case attackMulSet:
++		return x.Run
++	case bgPalFX:
++		return x.Run
++	case bindToParent:
++		return x.Run
++	case bindToRoot:
++		return x.Run
++	case bindToTarget:
++		return x.Run
++	case cameraCtrl:
++		return x.Run
++	case changeAnim:
++		return x.Run
++	case changeAnim2:
++		return x.Run
++	case changeMovelist:
++		return x.Run
++	case changeState:
++		return x.Run
++	case clearClipboard:
++		return x.Run
++	case createPlatform:
++		return x.Run
++	case ctrlSet:
++		return x.Run
++	case defenceMulSet:
++		return x.Run
++	case depth:
++		return x.Run
++	case depthBound:
++		return x.Run
++	case destroySelf:
++		return x.Run
++	case dialogue:
++		return x.Run
++	case displayToClipboard:
++		return x.Run
++	case dizzyPointsAdd:
++		return x.Run
++	case dizzyPointsSet:
++		return x.Run
++	case dizzySet:
++		return x.Run
++	case envColor:
++		return x.Run
++	case envShake:
++		return x.Run
++	case explod:
++		return x.Run
++	case explodBindTime:
++		return x.Run
++	case fallEnvShake:
++		return x.Run
++	case forceFeedback:
++		return x.Run
++	case gameMakeAnim:
++		return x.Run
++	case getHitVarSet:
++		return x.Run
++	case gravity:
++		return x.Run
++	case groundLevelOffset:
++		return x.Run
++	case guardBreakSet:
++		return x.Run
++	case guardPointsAdd:
++		return x.Run
++	case guardPointsSet:
++		return x.Run
++	case height:
++		return x.Run
++	case helper:
++		return x.Run
++	case hitAdd:
++		return x.Run
++	case hitBy:
++		return x.Run
++	case hitDef:
++		return x.Run
++	case hitFallDamage:
++		return x.Run
++	case hitFallSet:
++		return x.Run
++	case hitFallVel:
++		return x.Run
++	case hitOverride:
++		return x.Run
++	case hitVelSet:
++		return x.Run
++	case lifeAdd:
++		return x.Run
++	case lifeSet:
++		return x.Run
++	case lifebarAction:
++		return x.Run
++	case loadFile:
++		return x.Run
++	case loadState:
++		return x.Run
++	case makeDust:
++		return x.Run
++	case mapReset:
++		return x.Run
++	case mapSet:
++		return x.Run
++	case matchRestart:
++		return x.Run
++	case modifyBGCtrl:
++		return x.Run
++	case modifyBGCtrl3d:
++		return x.Run
++	case modifyBgm:
++		return x.Run
++	case modifyExplod:
++		return x.Run
++	case modifyHitDef:
++		return x.Run
++	case modifyPlayer:
++		return x.Run
++	case modifyProjectile:
++		return x.Run
++	case modifyReflection:
++		return x.Run
++	case modifyReversalDef:
++		return x.Run
++	case modifyShadow:
++		return x.Run
++	case modifySnd:
++		return x.Run
++	case modifyStageBG:
++		return x.Run
++	case modifyStageVar:
++		return x.Run
++	case modifyStoryboard:
++		return x.Run
++	case modifyText:
++		return x.Run
++	case moveHitReset:
++		return x.Run
++	case notHitBy:
++		return x.Run
++	case offset:
++		return x.Run
++	case overrideClsn:
++		return x.Run
++	case palFX:
++		return x.Run
++	case pause:
++		return x.Run
++	case playBgm:
++		return x.Run
++	case playSnd:
++		return x.Run
++	case playerPush:
++		return x.Run
++	case posAdd:
++		return x.Run
++	case posFreeze:
++		return x.Run
++	case posSet:
++		return x.Run
++	case powerAdd:
++		return x.Run
++	case powerSet:
++		return x.Run
++	case printToConsole:
++		return x.Run
++	case projectile:
++		return x.Run
++	case redLifeAdd:
++		return x.Run
++	case redLifeSet:
++		return x.Run
++	case remapPal:
++		return x.Run
++	case remapSprite:
++		return x.Run
++	case removeExplod:
++		return x.Run
++	case removeStoryboard:
++		return x.Run
++	case removeText:
++		return x.Run
++	case reversalDef:
++		return x.Run
++	case roundTimeAdd:
++		return x.Run
++	case roundTimeSet:
++		return x.Run
++	case runState:
++		return x.Run
++	case saveFile:
++		return x.Run
++	case saveState:
++		return x.Run
++	case scoreAdd:
++		return x.Run
++	case screenBound:
++		return x.Run
++	case selfState:
++		return x.Run
++	case shaderSet:
++		return x.Run
++	case shiftInput:
++		return x.Run
++	case sndPan:
++		return x.Run
++	case sprPriority:
++		return x.Run
++	case stateTypeSet:
++		return x.Run
++	case stopSnd:
++		return x.Run
++	case storyboard:
++		return x.Run
++	case superPause:
++		return x.Run
++	case tagIn:
++		return x.Run
++	case tagOut:
++		return x.Run
++	case targetAdd:
++		return x.Run
++	case targetBind:
++		return x.Run
++	case targetDizzyPointsAdd:
++		return x.Run
++	case targetDrop:
++		return x.Run
++	case targetFacing:
++		return x.Run
++	case targetGuardPointsAdd:
++		return x.Run
++	case targetLifeAdd:
++		return x.Run
++	case targetPowerAdd:
++		return x.Run
++	case targetRedLifeAdd:
++		return x.Run
++	case targetScoreAdd:
++		return x.Run
++	case targetState:
++		return x.Run
++	case targetVelAdd:
++		return x.Run
++	case targetVelSet:
++		return x.Run
++	case text:
++		return x.Run
++	case trans:
++		return x.Run
++	case transformClsn:
++		return x.Run
++	case transformSprite:
++		return x.Run
++	case turn:
++		return x.Run
++	case varAssign:
++		return x.Run
++	case varRandom:
++		return x.Run
++	case varRangeSet:
++		return x.Run
++	case varSet:
++		return x.Run
++	case velAdd:
++		return x.Run
++	case velMul:
++		return x.Run
++	case velSet:
++		return x.Run
++	case victoryQuote:
++		return x.Run
++	case width:
++		return x.Run
++	case zoom:
++		return x.Run
++	}
++	return sc.Run
++}
 diff --git a/src/script.go b/src/script.go
-index 5443f25..533f911 100644
+index 5443f25..efd6f70 100644
 --- a/src/script.go
 +++ b/src/script.go
 @@ -1,6 +1,7 @@
@@ -3950,7 +4761,38 @@ index 5443f25..533f911 100644
  	luaRegister(l, "addChar", func(l *lua.LState) int {
  		/*Add a character definition to the select screen.
  		@function addChar
-@@ -4030,14 +4032,16 @@ func systemScriptInit(l *lua.LState) {
+@@ -2173,7 +2175,8 @@ func systemScriptInit(l *lua.LState) {
+ 	luaRegister(l, "clear", func(*lua.LState) int {
+ 		/*Clear all characters' clipboard text buffers.
+ 		@function clear*/
+-		for _, p := range sys.chars {
++		for _ci := range sys.chars {
++			p := sys.chars[_ci]
+ 			for _, c := range p {
+ 				//for i := range c.clipboardText {
+ 				//	c.clipboardText[i] = nil
+@@ -2965,7 +2968,9 @@ func systemScriptInit(l *lua.LState) {
+ 				// Assign round start player ID's
+ 				sys.initPlayerID()
+ 
+-				for i, c := range sys.chars {
++				for i := range sys.chars {
++
++					c := sys.chars[i]
+ 					if len(c) > 0 {
+ 						// Add or replace in charList
+ 						if sys.roundNo == 1 {
+@@ -2986,7 +2991,8 @@ func systemScriptInit(l *lua.LState) {
+ 						}
+ 
+ 						// Copy each other's command lists
+-						for j, cj := range sys.chars {
++						for j := range sys.chars {
++							cj := sys.chars[j]
+ 							if i != j && len(cj) > 0 {
+ 								if len(cj[0].cmd) == 0 {
+ 									cj[0].cmd = make([]CommandList, len(sys.chars))
+@@ -4030,14 +4036,16 @@ func systemScriptInit(l *lua.LState) {
  		@treturn any value Decoded JSON root value (Lua `string`, `number`, `boolean`, `table` or `nil`).*/
  		path := strArg(l, 1)
  
@@ -3970,7 +4812,7 @@ index 5443f25..533f911 100644
  		if err != nil {
  			l.RaiseError("jsonDecode: parse %s: %v", path, err)
  			return 0
-@@ -4053,6 +4057,7 @@ func systemScriptInit(l *lua.LState) {
+@@ -4053,6 +4061,7 @@ func systemScriptInit(l *lua.LState) {
  		@tparam string path Output JSON file path (parent directories are created as needed).*/
  		lv := l.Get(1)
  		path := strArg(l, 2)
@@ -3978,7 +4820,7 @@ index 5443f25..533f911 100644
  		goVal, err := luaToJsonValue(lv, nil)
  		if err != nil {
  			l.RaiseError(err.Error())
-@@ -4216,6 +4221,11 @@ func systemScriptInit(l *lua.LState) {
+@@ -4216,6 +4225,11 @@ func systemScriptInit(l *lua.LState) {
  		/*Check whether resources are currently being loaded.
  		@function loading
  		@treturn boolean loading `true` if the loader is in `LS_Loading` state.*/
@@ -3990,7 +4832,17 @@ index 5443f25..533f911 100644
  		l.Push(lua.LBool(sys.loader.state == LS_Loading))
  		return 1
  	})
-@@ -5393,7 +5403,11 @@ func systemScriptInit(l *lua.LState) {
+@@ -5284,7 +5298,8 @@ func systemScriptInit(l *lua.LState) {
+ 				sys.chars[pn-1][0].setASF(ASF_nohardcodedkeys, true)
+ 			}
+ 		} else {
+-			for _, p := range sys.chars {
++			for _ci := range sys.chars {
++				p := sys.chars[_ci]
+ 				if len(p) > 0 {
+ 					for j := range p[0].cmd {
+ 						p[0].cmd[j].BufReset()
+@@ -5393,7 +5408,11 @@ func systemScriptInit(l *lua.LState) {
  		/*Check whether resources are currently being preloaded.
  		@function preloading
  		@treturn boolean `true` if assets are still being preloaded.*/
@@ -4003,6 +4855,16 @@ index 5443f25..533f911 100644
  		return 1
  	})
  	luaRegister(l, "preloadListChar", func(*lua.LState) int {
+@@ -7359,7 +7378,8 @@ func systemScriptInit(l *lua.LState) {
+ 			sys.maxPowerMode = !sys.maxPowerMode
+ 		}
+ 		if sys.maxPowerMode {
+-			for _, c := range sys.chars {
++			for _ci := range sys.chars {
++				c := sys.chars[_ci]
+ 				if len(c) > 0 {
+ 					c[0].power = c[0].powerMax
+ 				}
 diff --git a/src/sdl_other.go b/src/sdl_other.go
 index 399921b..4403e16 100644
 --- a/src/sdl_other.go
@@ -4172,8 +5034,22 @@ index 9b29416..4bd85c5 100644
  		s.stageCamera.zoffset = int32(float32(s.stageCamera.localcoord[1])/2 - s.model.offset[1]/posMul - s.stageCamera.yshift*float32(sys.scrrect[3]/2)/float32(sys.gameHeight)*float32(s.stageCamera.localcoord[1])/sys.heightScale)
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
+diff --git a/src/stats.go b/src/stats.go
+index fa2364d..f106cf9 100644
+--- a/src/stats.go
++++ b/src/stats.go
+@@ -201,7 +201,8 @@ func (s *StatsLog) discardCurrentMatch() {
+ func (s *StatsLog) nextRound() {
+ 	// Build per-side fighter snapshots for the stats system
+ 	var fighters [2][]StatsFighterState
+-	for _, p := range sys.chars {
++	for _ci := range sys.chars {
++		p := sys.chars[_ci]
+ 		if len(p) > 0 && p[0].teamside != -1 {
+ 			side := int(p[0].teamside) // 0 or 1
+ 			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..385323d 100644
+index 2698d35..8bd8145 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -4201,7 +5077,17 @@ index 2698d35..385323d 100644
  	s.whitePalTex = NewPaletteTexture()
  	s.whitePalTex.SetSubData(pal32ToBytes(whitepal))
  	s.SpriteTextureAtlas.textureSize = 2048
-@@ -955,6 +962,13 @@ func (s *System) await(fps int) bool {
+@@ -818,7 +825,8 @@ func (s *System) setGameAspect() {
+ 	}
+ 	// The active stage may not be registered in stageList.
+ 	sys.stage.updateLocalScale(sys.gameWidth)
+-	for _, p := range sys.chars {
++	for _ci := range sys.chars {
++		p := sys.chars[_ci]
+ 		if len(p) > 0 {
+ 			// Raw scale adjusted to the new game width
+ 			p[0].baselocalscl = p[0].gi().rawlocalscl * (sys.gameWidth / 320)
+@@ -955,6 +963,13 @@ func (s *System) await(fps int) bool {
  
  	s.eventUpdate()
  
@@ -4215,7 +5101,7 @@ index 2698d35..385323d 100644
  	return !s.gameEnd
  }
  
-@@ -990,7 +1004,14 @@ func (s *System) renderFrame() {
+@@ -990,7 +1005,14 @@ func (s *System) renderFrame() {
  	}
  
  	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
@@ -4231,7 +5117,88 @@ index 2698d35..385323d 100644
  	s.draw(dx, dy, dscl)
  
  	// Lua
-@@ -2834,6 +2855,9 @@ func (s *System) screenright() float32 {
+@@ -2264,7 +2286,8 @@ func (s *System) pruneCharId() {
+ 
+ 	// At this point we're still checking the previous round's player ID's
+ 	// However that works out well for Turns mode because it means a joining player won't reuse the ID of a defeated player
+-	for _, p := range s.chars {
++	for _ci := range s.chars {
++		p := s.chars[_ci]
+ 		if len(p) > 0 && p[0] != nil && p[0].id > s.lastCharId {
+ 			s.lastCharId = p[0].id
+ 		}
+@@ -2289,7 +2312,8 @@ func (s *System) newCharId() int32 {
+ 		// This method scanned sys.chars instead but that's worse
+ 		for {
+ 			conflict := false
+-			for _, p := range s.chars {
++			for _ci := range s.chars {
++				p := s.chars[_ci]
+ 				for _, c := range p {
+ 					if c != nil && c.id == newid && !c.csf(CSF_destroy) {
+ 						// Note: We only recycle destroyed helper ID's because the ID's refresh each round, unlike Mugen
+@@ -2445,7 +2469,9 @@ func (s *System) updateMusicMaps() {
+ 		s.matchMusicSel = s.matchMusicSel[:0]
+ 	}
+ 
+-	for i, p := range s.chars {
++	for i := range s.chars {
++
++		p := s.chars[i]
+ 		if len(p) == 0 {
+ 			continue
+ 		}
+@@ -2533,7 +2559,8 @@ func (s *System) resetRound() {
+ 	}
+ 
+ 	// Reset characters
+-	for i, p := range s.chars {
++	for i := range s.chars {
++		p := s.chars[i]
+ 		if len(p) == 0 {
+ 			continue
+ 		}
+@@ -2562,7 +2589,8 @@ func (s *System) resetRound() {
+ 	}
+ 
+ 	// Place characters in state 5900
+-	for _, p := range s.chars {
++	for _ci := range s.chars {
++		p := s.chars[_ci]
+ 		if len(p) == 0 {
+ 			continue
+ 		}
+@@ -2691,7 +2719,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
+ 	sys.allPalFX = newPalFX()
+ 	sys.bgPalFX = newPalFX()
+ 	sys.resetGblEffect()
+-	for i, p := range sys.chars {
++	for i := range sys.chars {
++		p := sys.chars[i]
+ 		if len(p) > 0 {
+ 			sys.clearPlayerAssets(i, forceDestroy)
+ 		}
+@@ -2727,7 +2756,8 @@ func (s *System) globalCollision() {
+ /*
+ // This is never called
+ func (s *System) posReset() {
+-	for _, p := range s.chars {
++	for _ci := range s.chars {
++		p := s.chars[_ci]
+ 		if len(p) > 0 {
+ 			p[0].posReset()
+ 		}
+@@ -2763,7 +2793,8 @@ func (s *System) runIntroSkip() {
+ 		s.specialFlag = kept
+ 
+ 		// Reset all characters
+-		for i, p := range s.chars {
++		for i := range s.chars {
++			p := s.chars[i]
+ 			if len(p) > 0 {
+ 				s.clearPlayerAssets(i, false)
+ 				p[0].posReset()
+@@ -2834,6 +2865,9 @@ func (s *System) screenright() float32 {
  // Core game logic. Chars, stage, projectiles, etc
  // The part that can rewind and fast forward during rollbacks
  func (s *System) action() {
@@ -4241,7 +5208,7 @@ index 2698d35..385323d 100644
  	if s.matchPaused() {
  		return
  	}
-@@ -2945,6 +2969,11 @@ func (s *System) action() {
+@@ -2945,6 +2979,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -4253,7 +5220,7 @@ index 2698d35..385323d 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2998,9 +3027,9 @@ func (s *System) action() {
+@@ -2998,9 +3037,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -4266,7 +5233,7 @@ index 2698d35..385323d 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3047,13 @@ func (s *System) action() {
+@@ -3018,6 +3057,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -4280,7 +5247,67 @@ index 2698d35..385323d 100644
  	return
  }
  
-@@ -3678,6 +3714,7 @@ func (s *System) roundEndDecision() bool {
+@@ -3330,7 +3376,8 @@ func (s *System) stepRoundState() {
+ 		}
+ 	} else if s.intro > 0 {
+ 		if s.intro == s.fightScreen.round.ctrl_time {
+-			for _, p := range s.chars {
++			for _ci := range s.chars {
++				p := s.chars[_ci]
+ 				if len(p) > 0 {
+ 					if p[0].activelyFighting() && !p[0].asf(ASF_nointroreset) {
+ 						p[0].posReset() // Technically we don't really need this step
+@@ -3340,7 +3387,8 @@ func (s *System) stepRoundState() {
+ 		}
+ 		s.intro--
+ 		if s.intro == 0 {
+-			for _, p := range s.chars {
++			for _ci := range s.chars {
++				p := s.chars[_ci]
+ 				if len(p) > 0 {
+ 					if p[0].alive() {
+ 						p[0].setSCF(SCF_over_alive, false)
+@@ -3429,7 +3477,8 @@ func (s *System) stepRoundState() {
+ 			// Check if game can proceed into roundstate 4
+ 			if s.winwaittime > 0 {
+ 				if s.intro == rs4t-1 {
+-					for _, p := range s.chars {
++					for _ci := range s.chars {
++						p := s.chars[_ci]
+ 						if len(p) == 0 {
+ 							continue
+ 						}
+@@ -3455,7 +3504,8 @@ func (s *System) stepRoundState() {
+ 
+ 			// Disable ctrl (once) at the first frame of roundstate 4
+ 			if s.intro == rs4t-1 {
+-				for _, p := range s.chars {
++				for _ci := range s.chars {
++					p := s.chars[_ci]
+ 					if len(p) > 0 {
+ 						p[0].setSCF(SCF_ctrl, false)
+ 					}
+@@ -3502,7 +3552,8 @@ func (s *System) stepRoundState() {
+ 		// Send characters to win/lose poses
+ 		// In Mugen this loop can run at any point after the win poses have started, hence "<="
+ 		if s.winposetime <= 0 {
+-			for _, p := range s.chars {
++			for _ci := range s.chars {
++				p := s.chars[_ci]
+ 				if len(p) == 0 {
+ 					continue
+ 				}
+@@ -3657,7 +3708,8 @@ func (s *System) roundEndDecision() bool {
+ 
+ 	// Update win triggers if finish type was changed
+ 	if ft != s.finishType {
+-		for i, p := range s.chars {
++		for i := range s.chars {
++			p := s.chars[i]
+ 			if len(p) > 0 && p[0].teamside != -1 && ko[^i&1] {
+ 				for _, h := range p {
+ 					for _, tid := range h.targets {
+@@ -3678,6 +3730,7 @@ func (s *System) roundEndDecision() bool {
  }
  
  func (s *System) draw(x, y, scl float32) {
@@ -4288,7 +5315,7 @@ index 2698d35..385323d 100644
  	s.brightnessOld = s.brightness
  	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
  	s.brightness = 1.0
-@@ -3714,30 +3751,42 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3714,30 +3767,42 @@ func (s *System) draw(x, y, scl float32) {
  		// Draw stage elements with layerNo == -1
  		if !s.gsf(GSF_nobg) {
  			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
@@ -4337,7 +5364,7 @@ index 2698d35..385323d 100644
  
  		// Draw char texts layer -1
  		s.drawCharTexts(-1)
-@@ -3750,9 +3799,13 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3750,9 +3815,13 @@ func (s *System) draw(x, y, scl float32) {
  		// TODO: Make shadows render in same layers as their sources?
  		if !s.gsf(GSF_globalnoshadow) {
  			if s.stage.reflection.layerno >= 0 {
@@ -4353,7 +5380,7 @@ index 2698d35..385323d 100644
  		}
  
  		//off := s.envShake.getOffset()
-@@ -3790,7 +3843,9 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3790,7 +3859,9 @@ func (s *System) draw(x, y, scl float32) {
  		//}
  
  		// Draw fight screen layer 0
@@ -4364,7 +5391,7 @@ index 2698d35..385323d 100644
  
  		// Draw char texts layer 0
  		s.drawCharTexts(0)
-@@ -3807,14 +3862,20 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3807,14 +3878,20 @@ func (s *System) draw(x, y, scl float32) {
  
  	// Draw character sprites in layer 0
  	if s.envcol_time == 0 || s.envcol_under {
@@ -4388,7 +5415,7 @@ index 2698d35..385323d 100644
  
  	// Draw char texts layer 1
  	s.drawCharTexts(1)
-@@ -3823,10 +3884,14 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3823,10 +3900,14 @@ func (s *System) draw(x, y, scl float32) {
  	s.motif.draw(1)
  
  	// Draw character sprites in layer 1 (old "ontop")
@@ -4405,7 +5432,107 @@ index 2698d35..385323d 100644
  
  	// Draw char texts layer 2
  	s.drawCharTexts(2)
-@@ -5050,6 +5115,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -3939,7 +4020,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
+ 		y := 240 - panelState.gameHeight
+ 		if s.statusLFunc != nil {
+ 			s.debugFont.SetColor(255, 255, 255, 255)
+-			for i, p := range s.chars {
++			for i := range s.chars {
++				p := s.chars[i]
+ 				if len(p) > 0 {
+ 					top := s.luaLState.GetTop()
+ 					if s.luaLState.CallByParam(lua.P{Fn: s.statusLFunc, NRet: 1,
+@@ -4054,7 +4136,8 @@ func (s *System) runMatch() (reload bool) {
+ 		s.nomusic = false
+ 		s.allPalFX.clear()
+ 		s.allPalFX.enable = false
+-		for i, p := range s.chars {
++		for i := range s.chars {
++			p := s.chars[i]
+ 			if len(p) > 0 {
+ 				forceDestroy := s.matchOver() ||
+ 					(s.tmode[i&1] == TM_Turns && p[0].teamside != -1 && s.effectiveLoss[i&1])
+@@ -4266,7 +4349,8 @@ func (s *System) runMatch() (reload bool) {
+ 
+ func (s *System) SetupCharRoundStart() {
+ 	// Prepare next round for all players
+-	for _, p := range s.chars {
++	for _ci := range s.chars {
++		p := s.chars[_ci]
+ 		if len(p) > 0 {
+ 			p[0].prepareNextRound()
+ 		}
+@@ -4274,7 +4358,8 @@ func (s *System) SetupCharRoundStart() {
+ 
+ 	// For power sharing, set maximum power to the highest one in the team
+ 	if s.cfg.Options.Team.PowerShare {
+-		for i, p := range s.chars {
++		for i := range s.chars {
++			p := s.chars[i]
+ 			if len(p) > 0 && p[0].teamside != -1 {
+ 				pmax := Max(s.cgi[i&1].data.power, s.cgi[i].data.power)
+ 				for j := i & 1; j < MaxSimul*2; j += 2 {
+@@ -4287,7 +4372,8 @@ func (s *System) SetupCharRoundStart() {
+ 	}
+ 
+ 	// Calculate maximum life for all characters
+-	for i, p := range s.chars {
++	for i := range s.chars {
++		p := s.chars[i]
+ 		if len(p) > 0 {
+ 			// Get max life, and adjust based on team mode
+ 			var lmax float32
+@@ -4344,7 +4430,8 @@ func (s *System) SetupCharRoundStart() {
+ 	}
+ 
+ 	// Initialize each character's dizzy and guard points
+-	for _, p := range s.chars {
++	for _ci := range s.chars {
++		p := s.chars[_ci]
+ 		if len(p) > 0 {
+ 			if p[0].ocd().dizzyPoints > 0 {
+ 				p[0].dizzyPoints = p[0].ocd().dizzyPoints
+@@ -4360,7 +4447,8 @@ func (s *System) SetupCharRoundStart() {
+ 	}
+ 
+ 	// Initialize each character's state
+-	for i, p := range s.chars {
++	for i := range s.chars {
++		p := s.chars[i]
+ 		if len(p) > 0 {
+ 			if p[0].roundsExisted() == 0 && (s.roundNo == 1 || s.tmode[i&1] == TM_Turns) {
+ 				// If round 1 or a new character in Turns mode, initialize values
+@@ -4413,7 +4501,8 @@ func (s *System) runNextRound() bool {
+ 			for i := range s.roundsExisted {
+ 				s.roundsExisted[i]++
+ 			}
+-			for i, p := range s.chars {
++			for i := range s.chars {
++				p := s.chars[i]
+ 				if len(p) > 0 {
+ 					if s.tmode[i&1] != TM_Turns || !s.effectiveLoss[i&1] {
+ 						p[0].life = p[0].lifeMax
+@@ -4518,7 +4607,8 @@ type RoundStartBackup struct {
+ func (bk *RoundStartBackup) Save() {
+ 	// Save characters
+ 	// We save helpers as well because of "preserve" parameter
+-	for i, chars := range sys.chars {
++	for i := range sys.chars {
++		chars := sys.chars[i]
+ 		if len(chars) == 0 {
+ 			// Backups are reused, so discard characters saved for this slot in a previous round
+ 			bk.charBackup[i] = nil
+@@ -4584,7 +4674,8 @@ func (bk *RoundStartBackup) Save() {
+ 
+ func (bk *RoundStartBackup) Restore() {
+ 	// Restore characters
+-	for i, chars := range sys.chars {
++	for i := range sys.chars {
++		chars := sys.chars[i]
+ 		if len(chars) == 0 {
+ 			continue
+ 		}
+@@ -5050,6 +5141,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -4415,7 +5542,27 @@ index 2698d35..385323d 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -6820,13 +6888,13 @@ func (es *EnvShake) update() {
+@@ -6304,6 +6398,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+ 		if l.cancelRequested() || l.state == LS_Cancel || sys.gameEnd {
+ 			return 0
+ 		}
++		vitaTrace("load: char data " + cdef)
+ 		if l.err = p.load(cdef, gi); l.err != nil {
+ 			if errors.Is(l.err, ErrLoadingCanceled) {
+ 				l.state = LS_Cancel
+@@ -6322,7 +6417,10 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+ 		}
+ 
+ 		// Compile character states
+-		if gi.states, l.err = newCharCompiler().Compile(p, cdef, gi); l.err != nil {
++		vitaTrace("load: compile states " + cdef)
++		gi.states, l.err = newCharCompiler().Compile(p, cdef, gi)
++		vitaTrace("load: compiled " + cdef)
++		if l.err != nil {
+ 			if attached {
+ 				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
+ 			} else {
+@@ -6820,13 +6918,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -4431,7 +5578,7 @@ index 2698d35..385323d 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6903,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6933,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -4444,7 +5591,7 @@ index 2698d35..385323d 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6930,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6960,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -4452,7 +5599,7 @@ index 2698d35..385323d 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6946,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6976,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
