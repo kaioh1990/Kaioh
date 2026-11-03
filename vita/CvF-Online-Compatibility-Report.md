@@ -190,3 +190,37 @@ Tested on the user's Vita (firmware 3.60, HENkaku/Ensō). 11 test builds.
 - Controls mapping.
 - Networking.
 - Vita-vs-PC online needs matching GameWidth/GameHeight, because Ikemen syncs those settings.
+
+## Update (Nov 3, 2026, overnight): PS Vita builds 17–18, toward 60 fps
+
+**Not yet tested on hardware.** Build 18 is the current build. The gains below come from emulator measurements.
+
+**Rendering (vitaGL CPU/GPU overhead):**
+- **Scissor:** vitaGL implements the scissor test with full-screen stencil passes every time it's enabled, disabled or moved. The engine toggled it for every sprite. A scissor that covers the whole target now leaves the test off.
+- **Sprite vertices:** these now go through client-side arrays, which vitaGL copies into its per-frame ring buffer. Before, each sprite called `glBufferData`, which allocated fresh GPU-mapped memory. Creating `ux0:data/CvF/vita_vbo.txt` reverts to the old path.
+- **Post-processing:** the ping-pong FBOs are no longer cleared when only the identity shader runs. In vitaGL each clear is a full-screen draw.
+
+**CPU:**
+- **Compiler:** built with TinyGo `-opt=2` instead of the default `-opt=z`, about 17% fewer instructions per frame.
+- **Dispatch and lookups:**
+  - `CallFunction` calls `StateBlock` directly.
+  - String-pool operands are pushed by index.
+  - Per-frame Lua (`loop()`, motif hooks) runs from pre-compiled chunks.
+  - `int32`-keyed maps (var/fvar) have a fast lookup path in the TinyGo runtime.
+- **Allocations:** `SpriteData` comes from a per-frame pool. In the emulator, GC pauses during a fight are about half as frequent.
+- **Result:** emulator fight frames dropped from ~16.5M to ~8.7M instructions over the night's work.
+
+**Loading:**
+- **File lookups:** `FileExist` no longer falls back to a case-insensitive glob on the Vita, because its file systems are already case-insensitive. The fallback had caused ~110k directory reads and ~11k stats per boot.
+- **Select screen:** CvF's `<br>` and `<vacant>` placeholders skip the file search.
+- **Logging:** the log now uses one file descriptor instead of opening the file on the memory card once per line.
+- **Image verifier:** the boot-time verifier is off, so the 50 MB `.velf` is no longer read at startup.
+- **Forced GCs:** forced collections at load checkpoints are rate-limited.
+
+**Still open:**
+- Hardware fps after these changes.
+- Black fight screen: build 16+ includes pixel probes for it.
+- Character compile time: ~13 s per character in the emulator, mostly allocation and GC in the CNS compiler.
+- GC pauses in long fights.
+- Controls.
+- Networking.
