@@ -764,6 +764,8 @@ def gl_default(name):
 # FRAME_PURGE_FREQ (4) frames copies the WHOLE texture to a new allocation
 # (no NULL check on hardware -> crash if the pool is exhausted).
 GLTEX = {'unit': 0, 'bound': {}, 'size': {}, 'last': {}, 'copy_frame': 0, 'copy_peak': 0, 'copy_total': 0, 'copies': 0, 'big': 0, 'err': 0}
+import collections as _cc
+DSC = _cc.Counter(); DSN = [0]; TEXTC = _cc.Counter()
 DS = {'d': 0, 'v': 0, 'vmax': 0, 'el': 0, 'fb': 0, 'vp': set()}
 GLFMT_BPP = {0x1909: 1, 0x1907: 3, 0x1908: 4, 0x190A: 2, 0x1903: 1}
 def gl_tex_model(name, a):
@@ -776,6 +778,18 @@ def gl_tex_model(name, a):
         for t in T['bound'].values(): T['last'][t] = FRAME[0]
         cnt = a[2] if name == 'glDrawArrays' else a[1]
         DS['d'] += 1; DS['v'] += cnt; DS['vmax'] = max(DS['vmax'], cnt)
+        if os.environ.get('VEMU_DRAWCALLERS') and FRAME[0] >= int(os.environ['VEMU_DRAWCALLERS']):
+            DSN[0] += 1
+            if DSN[0] % 7 == 0:
+                sp = mu.reg_read(UC_ARM_REG_SP); chain = []
+                for i in range(0, 1536, 4):
+                    w = r32(sp + i)
+                    if 0x81000000 <= w < 0x82000000:
+                        sy = symbolize(w).split('+')[0]
+                        if sy.startswith('main.') or sy.startswith('(main.') or sy.startswith('(*main.'):
+                            if sy not in chain: chain.append(sy)
+                        if len(chain) >= 4: break
+                DSC[' < '.join(chain)] += 1
         if name == 'glDrawElements': DS['el'] += 1
     elif name == 'glViewport':
         DS['vp'].add((a[2], a[3]))
@@ -840,9 +854,9 @@ def gl_handler(name):
             FRAME[0] += 1; VTIME[0] += 16667
             if PROF['range']:
                 if FRAME[0] == PROF['range'][0] and PROF['h'] is None:
-                    PROF['h'] = mu.hook_add(UC_HOOK_BLOCK, prof_hook); say('[prof] start at frame %d' % FRAME[0])
+                    PROF['pending'] = 'add'; mu.emu_stop()
                 elif FRAME[0] == PROF['range'][1] and PROF['h'] is not None:
-                    mu.hook_del(PROF['h']); PROF['h'] = None; prof_report()
+                    PROF['pending'] = 'del'; mu.emu_stop()
             if FRAME[0] % 60 == 0: say('[gl] frame %d' % FRAME[0])
             if args.frames and FRAME[0] >= args.frames: raise Stop()
             if args.frames_after and PRESS_BASE[0] is not None and FRAME[0] - PRESS_BASE[0] >= args.frames_after: raise Stop()
@@ -889,6 +903,14 @@ def prof_report():
     say('[prof] ~%d instr/frame over %d frames' % (tot // max(1, frames), frames))
     for k, v in fn.most_common(60):
         say('[prof] %5.1f%% %s' % (100.0 * v / tot, k[:150]))
+
+TEXTS = _cc.Counter() if False else None
+def text_hook(uc, addr, size, ud):
+    if FRAME[0] < int(os.environ.get('VEMU_TEXTS', '0')): return
+    p = uc.reg_read(UC_ARM_REG_R1); n = uc.reg_read(UC_ARM_REG_R2)
+    try: t = bytes(uc.mem_read(p, min(n, 60))).decode('utf-8', 'replace') if n and n < 100000 else ''
+    except Exception: t = '?'
+    TEXTC[t] += 1
 # ---------------------------------------------------------------- hooks
 seen_default = set()
 import collections
@@ -980,7 +1002,11 @@ if os.environ.get('VEMU_ALLOCS'):
     mu.hook_add(UC_HOOK_CODE, alloc_hook, begin=_a, end=_a)
 SIZEKINDS = {}
 def trace_sym_hook(uc, ad, sz, ud):
-    n = symbolize(ad); TS_COUNT[n] = TS_COUNT.get(n, 0) + 1
+    if FRAME[0] < int(os.environ.get('VEMU_COUNT_FROM', '0')): return
+    n = symbolize(ad)
+    if os.environ.get('VEMU_COUNT_LR'): n += ' <- ' + symbolize(mu.reg_read(UC_ARM_REG_LR)).split('+')[0]
+    TS_COUNT[n] = TS_COUNT.get(n, 0) + 1
+    if os.environ.get('VEMU_COUNT_ONLY'): return
     if os.environ.get('VEMU_SIZEKIND') and 'RawType).Size' in n:
         r0 = mu.reg_read(UC_ARM_REG_R0)
         k = -1 if r0 == 0 or r0 & 3 else mu.mem_read(r0, 1)[0] & 31
@@ -1004,6 +1030,9 @@ def watch_hook(uc, access, addr, size, value, ud):
 if os.environ.get('VEMU_WATCH'):
     _wa, _wl = [int(x, 0) for x in os.environ['VEMU_WATCH'].split(',')]
     mu.hook_add(UC_HOOK_MEM_WRITE, watch_hook, begin=_wa, end=_wa + _wl - 1)
+if os.environ.get('VEMU_TEXTS'):
+    _ta = L2R(byname['(*main.Fnt).DrawText'])
+    mu.hook_add(UC_HOOK_CODE, text_hook, begin=_ta & ~1, end=_ta & ~1)
 for n in filter(None, args.trace_sym.split(',')):
     a = L2R(byname[n])
     mu.hook_add(UC_HOOK_CODE, trace_sym_hook, begin=a & ~1, end=a & ~1)
@@ -1066,6 +1095,10 @@ while True:
         dump('timeout'); break
     # emu_stop from unicorn internals (e.g. pc change); continue
     pc = mu.reg_read(UC_ARM_REG_PC) | ((mu.reg_read(UC_ARM_REG_CPSR) >> 5) & 1)
+    if PROF.get('pending') == 'add':
+        PROF['h'] = mu.hook_add(UC_HOOK_BLOCK, prof_hook); mu.ctl_remove_cache(0x80000000, 0xf0000000); PROF['pending'] = None; say('[prof] start at frame %d' % FRAME[0])
+    elif PROF.get('pending') == 'del':
+        mu.hook_del(PROF['h']); mu.ctl_remove_cache(0x80000000, 0xf0000000); PROF['h'] = None; PROF['pending'] = None; prof_report()
     if os.environ.get('VEMU_DBGRET'): say('[dbg] restart %x' % pc)
 say('[vemu] top calls: ' + ', '.join('%s=%d' % kv for kv in sorted(calls.items(), key=lambda x: -x[1])[:25]))
 for fib, f in fibers.items():
@@ -1073,6 +1106,9 @@ for fib, f in fibers.items():
     lo = next((i for i in range(64 * 4, len(data), 4) if data[i:i+4] != b'\0\0\0\0'), len(data))
     say('[vemu] fiber %x ctx %x size %d: deepest use %d bytes' % (fib, f['ctx'], f['size'], f['size'] - lo))
 say('[vemu] GL procs missing: %d' % len(MISSING))
+for k, v in DSC.most_common(25): say('[drawcaller] %6d %s' % (v, k[:220]))
+for k, v in TEXTC.most_common(40): say('[text] %6d %r' % (v, k))
+for k, v in sorted(TS_COUNT.items(), key=lambda x: -x[1]): say('[count] %8d %s' % (v, k))
 say('[vgl] in-use texture copies: %d (%d MB total, peak %d KB in one frame, %d >= 2 MB)' % (GLTEX['copies'], GLTEX['copy_total'] >> 20, GLTEX['copy_peak'] >> 10, GLTEX['big']))
 say('[vemu] ctrl calls: ' + ', '.join('%s=%d' % kv for kv in calls.items() if 'Ctrl' in kv[0] or 'Hid' in kv[0]))
 if os.environ.get('VEMU_ALLOCS'):

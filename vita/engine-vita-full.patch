@@ -314,6 +314,21 @@ index d7ac2bc..25d50b6 100644
 +
 +replace github.com/mewkiz/pkg => ./third/mewkiz-pkg
 +replace github.com/jfreymuth/vorbis => ./third/vorbis
+diff --git a/src/anim.go b/src/anim.go
+index f4c200f..7388caf 100644
+--- a/src/anim.go
++++ b/src/anim.go
+@@ -1536,6 +1536,10 @@ func (dl DrawList) draw(layerno int32, under bool, cameraX, cameraY, cameraScl f
+ 	shake := sys.envShake.getOffset()
+ 	fightClip, clipFight := sys.fightDrawClip()
+ 
++	if isVita && vitaDrawCensusDue() {
++		vitaDrawCensus(dl, sortList, layerno)
++	}
++
+ 	// Draw only the filtered items
+ 	for _, idx := range sortList {
+ 		s := dl[idx]
 diff --git a/src/bgdef.go b/src/bgdef.go
 index 840b4f8..fbda389 100644
 --- a/src/bgdef.go
@@ -328,10 +343,20 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..5def177 100644
+index 276abbf..c3b457b 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
-@@ -1664,6 +1664,17 @@ func (be BytecodeExp) PeekLength(i int) int {
+@@ -1574,7 +1574,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
+ 		be.append((*(*[4]OpCode)(unsafe.Pointer(&f)))[:]...)
+ 	case VT_Int:
+ 		if bv.value >= -128 && bv.value <= 127 {
+-			be.append(OC_int8, OpCode(bv.value))
++			// via int8: converting a negative float64 straight to uint8 yields 0 on ARM
++			be.append(OC_int8, OpCode(int8(bv.value)))
+ 		} else if bv.value >= math.MinInt32 && bv.value <= math.MaxInt32 {
+ 			be.append(OC_int)
+ 			i := int32(bv.value)
+@@ -1664,6 +1665,17 @@ func (be BytecodeExp) PeekLength(i int) int {
  
  // Calculates how far to skip and moves the pointer past that entire section
  // Used for example when a redirection is invalid
@@ -349,7 +374,7 @@ index 276abbf..5def177 100644
  func (be BytecodeExp) JumpToNext(i *int) {
  	*i += be.PeekLength(*i) + 4
  }
-@@ -2032,7 +2043,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+@@ -2032,7 +2044,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
  	//if v1.IsUndefined() {
  	//	return
  	//}
@@ -358,7 +383,7 @@ index 276abbf..5def177 100644
  }
  
  func (BytecodeExp) ln(v1 *BytecodeValue) {
-@@ -2043,7 +2054,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2055,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -367,7 +392,7 @@ index 276abbf..5def177 100644
  	}
  }
  
-@@ -2056,7 +2067,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2056,7 +2068,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -376,7 +401,7 @@ index 276abbf..5def177 100644
  	}
  }
  
-@@ -2064,42 +2075,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
+@@ -2064,42 +2076,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
  	if v1.IsUndefined() {
  		return
  	}
@@ -425,7 +450,7 @@ index 276abbf..5def177 100644
  }
  
  func (BytecodeExp) floor(v1 *BytecodeValue) {
-@@ -2167,7 +2178,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2167,7 +2179,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -434,7 +459,7 @@ index 276abbf..5def177 100644
  	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
  }
  
-@@ -2190,7 +2201,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2190,7 +2202,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -443,7 +468,7 @@ index 276abbf..5def177 100644
  }
  
  func (BytecodeExp) sign(v1 *BytecodeValue) {
-@@ -2236,6 +2247,16 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+@@ -2236,6 +2248,16 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
  
  func (be BytecodeExp) run(c *Char) BytecodeValue {
  	oc := c
@@ -460,7 +485,7 @@ index 276abbf..5def177 100644
  	for i := 1; i <= len(be); i++ {
  		opc := be[i-1]
  		switch opc {
-@@ -2268,7 +2289,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2268,7 +2290,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			fallthrough
  		case OC_jmp:
@@ -469,7 +494,7 @@ index 276abbf..5def177 100644
  		case OC_player:
  			pn := int(sys.bcStack.Pop().ToI())
  			if c = c.playerTrigger(pn, true); c != nil {
-@@ -2278,21 +2299,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2278,21 +2300,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			// Invalid: Push undefined and use the length header to jump over the block
  			sys.bcStack.Push(BytecodeUndefined())
@@ -494,7 +519,7 @@ index 276abbf..5def177 100644
  		case OC_helper:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2301,7 +2322,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2301,7 +2323,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -503,7 +528,7 @@ index 276abbf..5def177 100644
  		case OC_target:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2310,63 +2331,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2310,63 +2332,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -576,7 +601,7 @@ index 276abbf..5def177 100644
  		case OC_rdreset:
  			// Reset the current redirection
  			// A redirect only lasts one opcode, so this empty case ends it
-@@ -2375,13 +2396,13 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2375,13 +2397,13 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			// Evaluate block as the redirect target. No continue, so the redirect ends after it
  			// Ex: "parent, cond(alive, life, 0)" reads both alive and life from parent
  			sys.bcStack.Push(be[i+4 : i+4+l].run(c))
@@ -592,7 +617,7 @@ index 276abbf..5def177 100644
  			continue
  		case OC_int8:
  			sys.bcStack.PushI(int32(int8(be[i])))
-@@ -2402,7 +2423,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2402,7 +2424,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			sys.bcStack.PushF(flo)
  			i += 4
  		case OC_string:
@@ -602,7 +627,7 @@ index 276abbf..5def177 100644
  		case OC_neg:
  			be.neg(sys.bcStack.Top())
  		case OC_bwnot:
-@@ -2599,7 +2621,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2599,7 +2622,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_hitcount:
  			sys.bcStack.PushI(c.hitCount)
  		case OC_hitdefattr:
@@ -612,7 +637,7 @@ index 276abbf..5def177 100644
  			if attr == -2 { // String value on the stack
  				attr = evalTriggerAttr(c, sys.bcStack.Pop())
  			}
-@@ -2747,15 +2770,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2747,15 +2771,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_vel_z:
  			sys.bcStack.PushF(c.vel[2] * (c.localscl / oc.localscl))
  		case OC_assign_:
@@ -643,7 +668,7 @@ index 276abbf..5def177 100644
  		case OC_var:
  			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
  		case OC_sysvar:
-@@ -2770,6 +2803,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2770,6 +2804,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		}
  		c = oc
  	}
@@ -651,7 +676,7 @@ index 276abbf..5def177 100644
  	return sys.bcStack.Pop()
  }
  
-@@ -5414,21 +5448,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5414,21 +5449,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -683,7 +708,7 @@ index 276abbf..5def177 100644
  }
  
  type stateDef StateControllerBase
-@@ -5530,6 +5562,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +5563,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -693,7 +718,7 @@ index 276abbf..5def177 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -6653,7 +6688,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,7 +6689,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -3557,7 +3582,7 @@ index 1a2540b..3b8944d 100644
  package main
  
 diff --git a/src/render_gles32.go b/src/render_gles32.go
-index 891acab..ed3c255 100644
+index 891acab..ed2af3b 100644
 --- a/src/render_gles32.go
 +++ b/src/render_gles32.go
 @@ -2,7 +2,7 @@
@@ -3569,7 +3594,15 @@ index 891acab..ed3c255 100644
  
  package main
  
-@@ -46,6 +46,13 @@ func (r *Renderer_GLES32) newShaderProgram(vert, frag, geo, name string, crashWh
+@@ -12,6 +12,7 @@ import (
+ 	"fmt"
+ 	"math"
+ 	"runtime"
++	"strconv"
+ 	"strings"
+ 	"sync"
+ 	"unsafe"
+@@ -46,6 +47,13 @@ func (r *Renderer_GLES32) newShaderProgram(vert, frag, geo, name string, crashWh
  
  	Logcat("GLES: [LOCKED] Starting: " + name)
  	var vertObj, fragObj, prog uint32
@@ -3583,7 +3616,7 @@ index 891acab..ed3c255 100644
  
  	vertObj, err = r.compileShader(gl.VERTEX_SHADER, vert)
  	if err != nil {
-@@ -126,7 +133,7 @@ func (r *Renderer_GLES32) compileShader(shaderType uint32, src string) (uint32,
+@@ -126,7 +134,7 @@ func (r *Renderer_GLES32) compileShader(shaderType uint32, src string) (uint32,
  	// GLES 3.0+ drivers REQUIRE the version to be the very first line.
  	// If your file doesn't have it, we add it here.
  	fullSrc := src
@@ -3592,7 +3625,7 @@ index 891acab..ed3c255 100644
  		// Anchor to 320 es for best feature compatibility
  		header := "#version 320 es\n"
  		fullSrc = header + src
-@@ -395,8 +402,10 @@ func (t *Texture_GLES32) SetData(data []byte) {
+@@ -395,8 +403,10 @@ func (t *Texture_GLES32) SetData(data []byte) {
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -3605,7 +3638,7 @@ index 891acab..ed3c255 100644
  
  	if data != nil {
  		gl.TexImage2D(gl.TEXTURE_2D, 0, int32(internalFormat), t.width, t.height, 0, uploadFormat, uploadType, unsafe.Pointer(&data[0]))
-@@ -422,7 +431,9 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -422,7 +432,9 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -3616,7 +3649,7 @@ index 891acab..ed3c255 100644
  
  	bits := Max(t.depth, 8)
  	uploadFormat := t.MapUploadFormat(bits)
-@@ -436,8 +447,20 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -436,8 +448,20 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  	if stride != width*bytesPerPixel {
  		rowLength = stride / bytesPerPixel
  	}
@@ -3638,7 +3671,7 @@ index 891acab..ed3c255 100644
  
  	ptr := unsafe.Pointer(nil)
  	if data != nil {
-@@ -454,7 +477,7 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -454,7 +478,7 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  		Logcat(fmt.Sprintf("GL ERROR in SetSubData: %v | w:%d h:%d s:%d", err, width, height, stride))
  	}
  
@@ -3647,7 +3680,7 @@ index 891acab..ed3c255 100644
  		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
  	}
  
-@@ -472,8 +495,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
+@@ -472,8 +496,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -3660,7 +3693,7 @@ index 891acab..ed3c255 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, int32(internalFormat), t.width, t.height, 0, uploadFormat, uploadType, unsafe.Pointer(&data[0]))
  	gl.GenerateMipmap(gl.TEXTURE_2D)
  	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, int32(mag))
-@@ -485,8 +510,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
+@@ -485,8 +511,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
  func (t *Texture_GLES32) SetPixelData(data []float32) {
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -3673,7 +3706,7 @@ index 891acab..ed3c255 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, t.width, t.height, 0, gl.RGBA, gl.FLOAT, unsafe.Pointer(&data[0]))
  }
  
-@@ -517,8 +544,10 @@ func (t *Texture_GLES32) SetRGBPixelData(data []float32) {
+@@ -517,8 +545,10 @@ func (t *Texture_GLES32) SetRGBPixelData(data []float32) {
  	r.SetActiveTexture0() //gl.ActiveTexture(gl.TEXTURE0)
  
  	gl.BindTexture(gl.TEXTURE_2D, t.handle)
@@ -3686,7 +3719,7 @@ index 891acab..ed3c255 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, t.width, t.height, 0, gl.RGB, gl.FLOAT, unsafe.Pointer(&data[0]))
  }
  */
-@@ -556,6 +585,9 @@ func (t *Texture_GLES32) MapUploadType(i int32) uint32 {
+@@ -556,6 +586,9 @@ func (t *Texture_GLES32) MapUploadType(i int32) uint32 {
  func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
  	switch i {
  	case 8:
@@ -3696,7 +3729,7 @@ index 891acab..ed3c255 100644
  		return gl.RED
  	case 24:
  		return gl.RGB
-@@ -573,10 +605,19 @@ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
+@@ -573,10 +606,19 @@ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
  func (t *Texture_GLES32) MapSizedInternalFormat(i int32) uint32 {
  	switch i {
  	case 8:
@@ -3716,7 +3749,7 @@ index 891acab..ed3c255 100644
  		return gl.RGBA8
  	case 96:
  		return gl.RGB32F
-@@ -790,8 +831,8 @@ func (r *Renderer_GLES32) Init() {
+@@ -790,8 +832,8 @@ func (r *Renderer_GLES32) Init() {
  	// Data buffers for rendering
  	postVertData := f32.Bytes(binary.LittleEndian, -1, -1, 1, -1, -1, 1, 1, 1)
  
@@ -3727,7 +3760,7 @@ index 891acab..ed3c255 100644
  
  	// Generate VAO's
  	gl.GenVertexArrays(1, &r.spriteVAO)
-@@ -950,10 +991,14 @@ func (r *Renderer_GLES32) Init() {
+@@ -950,10 +992,14 @@ func (r *Renderer_GLES32) Init() {
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
@@ -3743,7 +3776,7 @@ index 891acab..ed3c255 100644
  			sys.scrrect[2],
  			sys.scrrect[3],
  			0,
-@@ -1003,7 +1048,12 @@ func (r *Renderer_GLES32) Init() {
+@@ -1003,7 +1049,12 @@ func (r *Renderer_GLES32) Init() {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
  	} else {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
@@ -3757,7 +3790,115 @@ index 891acab..ed3c255 100644
  	}
  
  	// create our two FBOs for our post-processing needs
-@@ -2223,6 +2273,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -1140,10 +1191,33 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
+ 	}
+ }
+ 
++// vitaPixelProbe logs a few pixels of the bound framebuffer (fight black-screen diagnosis).
++func vitaPixelProbe(tag string, w, h int32) {
++	var px [4]byte
++	out := "pixels " + tag + ":"
++	for _, p := range [][2]int32{{w / 2, h / 2}, {w / 4, h / 4}, {w * 3 / 4, h / 3}} {
++		gl.ReadPixels(p[0], p[1], 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, unsafe.Pointer(&px[0]))
++		out += " (" + strconv.Itoa(int(px[0])) + "," + strconv.Itoa(int(px[1])) + "," + strconv.Itoa(int(px[2])) + "," + strconv.Itoa(int(px[3])) + ")"
++	}
++	if e := gl.GetError(); e != 0 {
++		out += " glerr " + strconv.Itoa(int(e))
++	}
++	vitaTrace(out)
++}
++
+ func (r *Renderer_GLES32) EndFrame() {
+ 	if len(r.fbo_pp) == 0 {
+ 		return
+ 	}
++	probe := isVita && vitaDiagProbeDue()
++	if probe {
++		vitaPixelProbe("scene fbo", sys.scrrect[2], sys.scrrect[3])
++	}
++	defer func() {
++		if probe {
++			vitaPixelProbe("screen", vitaScreenW, vitaScreenH)
++		}
++	}()
+ 
+ 	x, y, width, height := int32(0), int32(0), int32(sys.scrrect[2]), int32(sys.scrrect[3])
+ 	time := sdl.GetPerformanceCounter() // consistent time across all shaders
+@@ -1243,36 +1317,51 @@ func (r *Renderer_GLES32) Await() {
+ 	gl.Finish()
+ }
+ 
++// These used map literals, which built three hash maps on every blended draw.
+ func (r *Renderer_GLES32) MapBlendEquation(i BlendEquation) uint32 {
+-	var BlendEquationLUT = map[BlendEquation]uint32{
+-		BlendAdd:             gl.FUNC_ADD,
+-		BlendReverseSubtract: gl.FUNC_REVERSE_SUBTRACT,
++	switch i {
++	case BlendAdd:
++		return gl.FUNC_ADD
++	case BlendReverseSubtract:
++		return gl.FUNC_REVERSE_SUBTRACT
+ 	}
+-	return BlendEquationLUT[i]
++	return 0
+ }
+ 
+ func (r *Renderer_GLES32) MapBlendFunction(i BlendFunc) uint32 {
+-	var BlendFunctionLUT = map[BlendFunc]uint32{
+-		BlendOne:              gl.ONE,
+-		BlendZero:             gl.ZERO,
+-		BlendSrcAlpha:         gl.SRC_ALPHA,
+-		BlendOneMinusSrcAlpha: gl.ONE_MINUS_SRC_ALPHA,
+-		BlendDstColor:         gl.DST_COLOR,
+-		BlendOneMinusDstColor: gl.ONE_MINUS_DST_COLOR,
+-	}
+-	return BlendFunctionLUT[i]
++	switch i {
++	case BlendOne:
++		return gl.ONE
++	case BlendZero:
++		return gl.ZERO
++	case BlendSrcAlpha:
++		return gl.SRC_ALPHA
++	case BlendOneMinusSrcAlpha:
++		return gl.ONE_MINUS_SRC_ALPHA
++	case BlendDstColor:
++		return gl.DST_COLOR
++	case BlendOneMinusDstColor:
++		return gl.ONE_MINUS_DST_COLOR
++	}
++	return 0
+ }
+ 
+ func (r *Renderer_GLES32) MapPrimitiveMode(i PrimitiveMode) uint32 {
+-	var PrimitiveModeLUT = map[PrimitiveMode]uint32{
+-		LINES:          gl.LINES,
+-		LINE_LOOP:      gl.LINE_LOOP,
+-		LINE_STRIP:     gl.LINE_STRIP,
+-		TRIANGLES:      gl.TRIANGLES,
+-		TRIANGLE_STRIP: gl.TRIANGLE_STRIP,
+-		TRIANGLE_FAN:   gl.TRIANGLE_FAN,
+-	}
+-	return PrimitiveModeLUT[i]
++	switch i {
++	case LINES:
++		return gl.LINES
++	case LINE_LOOP:
++		return gl.LINE_LOOP
++	case LINE_STRIP:
++		return gl.LINE_STRIP
++	case TRIANGLES:
++		return gl.TRIANGLES
++	case TRIANGLE_STRIP:
++		return gl.TRIANGLE_STRIP
++	case TRIANGLE_FAN:
++		return gl.TRIANGLE_FAN
++	}
++	return 0
+ }
+ 
+ func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
+@@ -2223,6 +2312,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  
  // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
  func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
@@ -4032,7 +4173,7 @@ index 9b29416..4bd85c5 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/system.go b/src/system.go
-index 2698d35..f497dd5 100644
+index 2698d35..385323d 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -4139,7 +4280,132 @@ index 2698d35..f497dd5 100644
  	return
  }
  
-@@ -5050,6 +5086,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -3678,6 +3714,7 @@ func (s *System) roundEndDecision() bool {
+ }
+ 
+ func (s *System) draw(x, y, scl float32) {
++	vitaDiagFrame()
+ 	s.brightnessOld = s.brightness
+ 	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
+ 	s.brightness = 1.0
+@@ -3714,30 +3751,42 @@ func (s *System) draw(x, y, scl float32) {
+ 		// Draw stage elements with layerNo == -1
+ 		if !s.gsf(GSF_nobg) {
+ 			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
+-				s.stage.draw(-1, bgx, bgy, scl)
++				if !(vitaDiagSkip(1)) {
++					s.stage.draw(-1, bgx, bgy, scl)
++				}
+ 			}
+ 		}
+ 
+ 		// Draw reflections on layer -1
+ 		if !s.gsf(GSF_globalnoshadow) {
+ 			if s.stage.reflection.layerno < 0 {
+-				s.reflectionList.draw(x, y, scl*s.cam.BaseScale())
++				if !(vitaDiagSkip(2)) {
++					s.reflectionList.draw(x, y, scl*s.cam.BaseScale())
++				}
+ 			}
+ 		}
+ 
+ 		// Draw character sprites with layerNo == -1
+-		s.spriteList.draw(-1, false, x, y, scl*s.cam.BaseScale())
++		if !(vitaDiagSkip(2)) {
++			s.spriteList.draw(-1, false, x, y, scl*s.cam.BaseScale())
++		}
+ 
+ 		// Draw stage elements with layerNo == 0
+ 		if !s.gsf(GSF_nobg) {
+-			s.stage.draw(0, bgx, bgy, scl)
++			if !(vitaDiagSkip(1)) {
++				s.stage.draw(0, bgx, bgy, scl)
++			}
+ 		}
+ 
+ 		// Draw character sprites with special under flag
+-		s.spriteList.draw(0, true, x, y, scl*s.cam.BaseScale())
++		if !(vitaDiagSkip(2)) {
++			s.spriteList.draw(0, true, x, y, scl*s.cam.BaseScale())
++		}
+ 
+ 		// Draw fight screen layer -1
+-		s.fightScreen.draw(-1)
++		if !(vitaDiagSkip(3)) {
++			s.fightScreen.draw(-1)
++		}
+ 
+ 		// Draw char texts layer -1
+ 		s.drawCharTexts(-1)
+@@ -3750,9 +3799,13 @@ func (s *System) draw(x, y, scl float32) {
+ 		// TODO: Make shadows render in same layers as their sources?
+ 		if !s.gsf(GSF_globalnoshadow) {
+ 			if s.stage.reflection.layerno >= 0 {
+-				s.reflectionList.draw(x, y, scl*s.cam.BaseScale())
++				if !(vitaDiagSkip(2)) {
++					s.reflectionList.draw(x, y, scl*s.cam.BaseScale())
++				}
++			}
++			if !(vitaDiagSkip(2)) {
++				s.shadowList.draw(x, y, scl*s.cam.BaseScale())
+ 			}
+-			s.shadowList.draw(x, y, scl*s.cam.BaseScale())
+ 		}
+ 
+ 		//off := s.envShake.getOffset()
+@@ -3790,7 +3843,9 @@ func (s *System) draw(x, y, scl float32) {
+ 		//}
+ 
+ 		// Draw fight screen layer 0
+-		s.fightScreen.draw(0)
++		if !(vitaDiagSkip(3)) {
++			s.fightScreen.draw(0)
++		}
+ 
+ 		// Draw char texts layer 0
+ 		s.drawCharTexts(0)
+@@ -3807,14 +3862,20 @@ func (s *System) draw(x, y, scl float32) {
+ 
+ 	// Draw character sprites in layer 0
+ 	if s.envcol_time == 0 || s.envcol_under {
+-		s.spriteList.draw(0, false, x, y, scl*s.cam.BaseScale())
++		if !(vitaDiagSkip(2)) {
++			s.spriteList.draw(0, false, x, y, scl*s.cam.BaseScale())
++		}
+ 		if s.envcol_time == 0 && !s.gsf(GSF_nofg) {
+-			s.stage.draw(1, bgx, bgy, scl)
++			if !(vitaDiagSkip(1)) {
++				s.stage.draw(1, bgx, bgy, scl)
++			}
+ 		}
+ 	}
+ 
+ 	// Draw fight screen layer 1
+-	s.fightScreen.draw(1)
++	if !(vitaDiagSkip(3)) {
++		s.fightScreen.draw(1)
++	}
+ 
+ 	// Draw char texts layer 1
+ 	s.drawCharTexts(1)
+@@ -3823,10 +3884,14 @@ func (s *System) draw(x, y, scl float32) {
+ 	s.motif.draw(1)
+ 
+ 	// Draw character sprites in layer 1 (old "ontop")
+-	s.spriteList.draw(1, false, x, y, scl*s.cam.BaseScale())
++	if !(vitaDiagSkip(2)) {
++		s.spriteList.draw(1, false, x, y, scl*s.cam.BaseScale())
++	}
+ 
+ 	// Draw fight screen layer 2
+-	s.fightScreen.draw(2)
++	if !(vitaDiagSkip(3)) {
++		s.fightScreen.draw(2)
++	}
+ 
+ 	// Draw char texts layer 2
+ 	s.drawCharTexts(2)
+@@ -5050,6 +5115,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -4149,7 +4415,7 @@ index 2698d35..f497dd5 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -6820,13 +6859,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6888,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -4165,7 +4431,7 @@ index 2698d35..f497dd5 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6874,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6903,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -4178,7 +4444,7 @@ index 2698d35..f497dd5 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6901,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6930,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -4186,7 +4452,7 @@ index 2698d35..f497dd5 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6917,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6946,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -4391,10 +4657,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..a5a46df
+index 0000000..bfa9042
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,501 @@
 +//go:build vita
 +
 +package main
@@ -4610,8 +4876,11 @@ index 0000000..a5a46df
 +func vitaGLSwap() {
 +	t := time.Now()
 +	C.vglSwapBuffers(0)
-+	vitaPerf.swap += time.Since(t)
++	d := time.Since(t)
++	vitaPerf.swap += d
 +	vitaPerf.swaps++
++	vitaPerf.totalSwap += d
++	vitaPerf.totalSwaps++
 +}
 +
 +func vitaGetProcAddress(name string) unsafe.Pointer {
@@ -4651,7 +4920,12 @@ index 0000000..a5a46df
 +
 +func init() { vitaTrace("main: package init reached") }
 +
++var vitaStartTime = time.Now()
++
 +func vitaTrace(s string) {
++	// Timestamp (seconds since launch) so the log shows how long loading takes.
++	ms := int(time.Since(vitaStartTime) / time.Millisecond)
++	s = "[" + itoa(ms/1000) + "." + itoa(ms%1000/100) + "s] " + s
 +	cs := C.CString(s)
 +	C.vlog(cs)
 +	C.free(unsafe.Pointer(cs))
@@ -4697,6 +4971,9 @@ index 0000000..a5a46df
 +	max     time.Duration
 +	swap    time.Duration // time blocked in vglSwapBuffers (waiting on the GPU / vsync)
 +	swaps   int
++
++	totalSwap  time.Duration
++	totalSwaps int
 +}
 +
 +func vitaPerfTick(skipped bool) {
@@ -4722,6 +4999,168 @@ index 0000000..a5a46df
 +			itoa(vitaPerf.skip) + ", GPU wait " + itoa(int(vitaPerf.swap/time.Millisecond)) + " ms in " + itoa(vitaPerf.swaps) + " swaps, heap inuse " + itoa(int(m.HeapInuse>>20)) + " MB sys " + itoa(int(m.HeapSys>>20)) + " MB")
 +		vitaPerf.n, vitaPerf.skip, vitaPerf.sum, vitaPerf.max, vitaPerf.swap, vitaPerf.swaps = 0, 0, 0, 0, 0, 0
 +	}
++}
++
++// Render diagnostics: during the first match, cycle through modes that skip
++// parts of the fight's drawing, 8 seconds each, and log how fast each runs.
++// 0 = everything, 1 = no stage, 2 = no characters/effects, 3 = no lifebars,
++// 4 = none of the above. After one cycle it stays on mode 0.
++var vitaDiag struct {
++	mode, frames int
++	start        time.Time
++	swapAt       time.Duration
++	swapsAt      int
++	done         bool
++	inFight      bool
++	probes       int
++	cycle        bool
++}
++
++var vitaDiagNames = [...]string{"everything", "no stage", "no characters/effects", "no lifebars", "nothing (clear only)"}
++
++func vitaDiagFrame() {
++	vitaDiag.inFight = true
++	vitaExplodLog()
++	if vitaDiag.done {
++		return
++	}
++	now := time.Now()
++	if vitaDiag.start.IsZero() {
++		// Mode cycling is opt-in: create ux0:data/CvF/vita_diag.txt to enable it.
++		if _, err := os.Stat("vita_diag.txt"); err != nil {
++			vitaDiag.cycle = false
++		} else {
++			vitaDiag.cycle = true
++		}
++		vitaDiag.start, vitaDiag.swapAt, vitaDiag.swapsAt = now, vitaPerf.totalSwap, vitaPerf.totalSwaps
++		vitaTrace("diag: fight drawing started, mode 0 (" + vitaDiagNames[0] + ")")
++	}
++	vitaDiag.frames++
++	if el := now.Sub(vitaDiag.start); el >= 8*time.Second {
++		ms := int(el / time.Millisecond)
++		gw := int((vitaPerf.totalSwap - vitaDiag.swapAt) / time.Millisecond)
++		sw := vitaPerf.totalSwaps - vitaDiag.swapsAt
++		fps10 := 0
++		if ms > 0 {
++			fps10 = vitaDiag.frames * 10000 / ms
++		}
++		vitaTrace("diag: mode " + itoa(vitaDiag.mode) + " (" + vitaDiagNames[vitaDiag.mode] + "): " + itoa(vitaDiag.frames) +
++			" fight draws in " + itoa(ms) + " ms (" + itoa(fps10/10) + "." + itoa(fps10%10) + " per s), " + itoa(sw) + " swaps, GPU wait " + itoa(gw) + " ms")
++		vitaDiag.mode++
++		if !vitaDiag.cycle || vitaDiag.mode >= len(vitaDiagNames) {
++			vitaDiag.mode, vitaDiag.done = 0, true
++			vitaTrace("diag: done, drawing everything")
++			return
++		}
++		vitaDiag.start, vitaDiag.frames, vitaDiag.swapAt, vitaDiag.swapsAt = now, 0, vitaPerf.totalSwap, vitaPerf.totalSwaps
++		vitaTrace("diag: mode " + itoa(vitaDiag.mode) + " (" + vitaDiagNames[vitaDiag.mode] + ")")
++	}
++}
++
++func vitaDiagSkip(part int) bool {
++	m := vitaDiag.mode
++	return m == part || m == 4
++}
++
++var vitaProbeLast time.Time
++
++// vitaDiagProbeDue reports whether to sample pixels this frame: once per
++// second while fight drawing is active (vitaDiagFrame ran this frame).
++func vitaDiagProbeDue() bool {
++	if !vitaDiag.inFight {
++		return false
++	}
++	vitaDiag.inFight = false
++	if time.Since(vitaProbeLast) < time.Second || vitaDiag.probes >= 40 {
++		return false
++	}
++	vitaProbeLast = time.Now()
++	vitaDiag.probes++
++	return true
++}
++
++var vitaCensusDone int
++
++// vitaDrawCensusDue is true for the sprite-list passes of one frame, two
++// seconds into the first fight.
++func vitaDrawCensusDue() bool {
++	if vitaCensusDone >= 6 || vitaDiag.mode != 0 || vitaDiag.done || vitaDiag.start.IsZero() || time.Since(vitaDiag.start) < 2*time.Second {
++		return false
++	}
++	vitaCensusDone++
++	return true
++}
++
++// vitaDrawCensus logs what the sprite list contains (diagnostics: fights draw
++// ~400 sprites per frame).
++func vitaDrawCensus(dl DrawList, sortList []int, layerno int32) {
++	type key struct {
++		g, n   uint16
++		trans  TransType
++		sa, da int16
++		blank  bool
++		w, h   uint16
++	}
++	cnt := map[key]int{}
++	for _, idx := range sortList {
++		s := dl[idx]
++		k := key{blank: s.isBlank()}
++		if s.anim != nil && s.anim.spr != nil {
++			k.g, k.n = s.anim.spr.Group, s.anim.spr.Number
++			k.w, k.h = s.anim.spr.Size[0], s.anim.spr.Size[1]
++			k.trans, k.sa, k.da = s.anim.curtrans, int16(s.anim.interpolate_blend_srcalpha), int16(s.anim.interpolate_blend_dstalpha)
++		}
++		cnt[k]++
++	}
++	vitaTrace("census layer " + itoa(int(layerno)) + ": " + itoa(len(sortList)) + " sprites, " + itoa(len(cnt)) + " kinds")
++	for i := 0; i < 15 && len(cnt) > 0; i++ {
++		var best key
++		bn := -1
++		for k, v := range cnt {
++			if v > bn {
++				best, bn = k, v
++			}
++		}
++		delete(cnt, best)
++		vitaTrace("  " + itoa(bn) + "x spr " + itoa(int(best.g)) + "," + itoa(int(best.n)) + " size " + itoa(int(best.w)) + "x" + itoa(int(best.h)) +
++			" trans " + itoa(int(best.trans)) + " alpha " + itoa(int(best.sa)) + "/" + itoa(int(best.da)) + " blank " + itoa(int(Btoi(best.blank))))
++	}
++}
++
++var vitaExplodLogLast time.Time
++
++// vitaExplodLog: diagnostics for explods piling up during fights.
++func vitaExplodLog() {
++	if time.Since(vitaExplodLogLast) < time.Second || vitaDiag.probes >= 40 {
++		return
++	}
++	vitaExplodLogLast = time.Now()
++	out := "explods:"
++	for i := range sys.explods {
++		if len(sys.explods[i]) == 0 {
++			continue
++		}
++		out += " p" + itoa(i) + "=" + itoa(len(sys.explods[i]))
++	}
++	out += " tick " + itoa(sys.tickCount) + " old " + itoa(sys.oldTickCount) + " tf " + itoa(int(Btoi(sys.tickFrame()))) + " tnf " + itoa(int(Btoi(sys.tickNextFrame()))) + " paused " + itoa(int(Btoi(sys.paused))) + " super " + itoa(int(sys.supertime)) + " pause " + itoa(int(sys.pausetime))
++	n := 0
++	for i := range sys.explods {
++		for _, e := range sys.explods[i] {
++			if n >= 3 {
++				break
++			}
++			n++
++			out += " [id " + itoa(int(e.id)) + " t " + itoa(int(e.time)) + " rt " + itoa(int(e.removetime)) + " pause " + itoa(int(Btoi(e.pauseBool))) +
++				" smt " + itoa(int(e.supermovetime)) + " pmt " + itoa(int(e.pausemovetime)) + " ihp " + itoa(int(Btoi(e.ignorehitpause)))
++			if p := e.parent(); p != nil {
++				out += " pact " + itoa(int(p.acttmp))
++			} else {
++				out += " noparent"
++			}
++			out += "]"
++		}
++	}
++	vitaTrace(out)
 +}
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
