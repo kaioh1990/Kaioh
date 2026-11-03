@@ -315,10 +315,64 @@ index d7ac2bc..25d50b6 100644
 +replace github.com/mewkiz/pkg => ./third/mewkiz-pkg
 +replace github.com/jfreymuth/vorbis => ./third/vorbis
 diff --git a/src/anim.go b/src/anim.go
-index f4c200f..7388caf 100644
+index f4c200f..a3ba028 100644
 --- a/src/anim.go
 +++ b/src/anim.go
-@@ -1536,6 +1536,10 @@ func (dl DrawList) draw(layerno int32, under bool, cameraX, cameraY, cameraScl f
+@@ -1445,6 +1445,18 @@ type SpriteData struct {
+ }
+ 
+ func newSpriteData() *SpriteData {
++	if isVita {
++		// Per-frame pool: SpriteData is only used while the frame is built
++		// and drawn (afterimages copy it), and allocating ~100 of these per
++		// frame kept the Vita's garbage collector busy.
++		sd := spriteDataPoolNext()
++		*sd = SpriteData{
++			trans:        TT_default,
++			alpha:        [2]int32{255, 0},
++			airOffsetFix: [2]float32{1, 1},
++		}
++		return sd
++	}
+ 	return &SpriteData{
+ 		trans:        TT_default,
+ 		alpha:        [2]int32{255, 0},
+@@ -1452,6 +1464,34 @@ func newSpriteData() *SpriteData {
+ 	}
+ }
+ 
++var spriteDataPool struct {
++	chunks [][]SpriteData
++	chunk  int
++	idx    int
++}
++
++func spriteDataPoolNext() *SpriteData {
++	p := &spriteDataPool
++	for {
++		if p.chunk >= len(p.chunks) {
++			p.chunks = append(p.chunks, make([]SpriteData, 64))
++		}
++		if p.idx < len(p.chunks[p.chunk]) {
++			sd := &p.chunks[p.chunk][p.idx]
++			p.idx++
++			return sd
++		}
++		p.chunk++
++		p.idx = 0
++	}
++}
++
++// spriteDataPoolReset makes the pool reusable; called when the frame's
++// sprite lists are cleared.
++func spriteDataPoolReset() {
++	spriteDataPool.chunk, spriteDataPool.idx = 0, 0
++}
++
+ func (sd *SpriteData) isBlank() bool {
+ 	return sd.scl[0] == 0 || sd.scl[1] == 0 || sd.anim == nil || sd.anim.isBlank()
+ }
+@@ -1536,6 +1576,10 @@ func (dl DrawList) draw(layerno int32, under bool, cameraX, cameraY, cameraScl f
  	shake := sys.envShake.getOffset()
  	fightClip, clipFight := sys.fightDrawClip()
  
@@ -401,7 +455,7 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..e9d0277 100644
+index 276abbf..df2a4a5 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
 @@ -1488,7 +1488,16 @@ func (bs *BytecodeStack) Clear() {
@@ -693,17 +747,19 @@ index 276abbf..e9d0277 100644
  			continue
  		case OC_int8:
  			sys.bcStack.PushI(int32(int8(be[i])))
-@@ -2402,7 +2433,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2402,7 +2433,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			sys.bcStack.PushF(flo)
  			i += 4
  		case OC_string:
 -			sys.bcStack.PushS(be.ReadPoolStringAt(&i))
-+			sys.bcStack.PushS(be.poolStringAtValue(i))
++			// The operand is already this player's string pool index: push it
++			// directly instead of looking the string up in the pool's map again.
++			sys.bcStack.Push(BytecodeValue{VT_String, float64(be.readInt32At(i))})
 +			i += 4
  		case OC_neg:
  			be.neg(sys.bcStack.Top())
  		case OC_bwnot:
-@@ -2599,7 +2631,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2599,7 +2633,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_hitcount:
  			sys.bcStack.PushI(c.hitCount)
  		case OC_hitdefattr:
@@ -713,7 +769,7 @@ index 276abbf..e9d0277 100644
  			if attr == -2 { // String value on the stack
  				attr = evalTriggerAttr(c, sys.bcStack.Pop())
  			}
-@@ -2747,15 +2780,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2747,15 +2782,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_vel_z:
  			sys.bcStack.PushF(c.vel[2] * (c.localscl / oc.localscl))
  		case OC_assign_:
@@ -744,7 +800,7 @@ index 276abbf..e9d0277 100644
  		case OC_var:
  			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
  		case OC_sysvar:
-@@ -2770,6 +2813,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2770,6 +2815,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		}
  		c = oc
  	}
@@ -752,7 +808,24 @@ index 276abbf..e9d0277 100644
  	return sys.bcStack.Pop()
  }
  
-@@ -5089,6 +5133,7 @@ type StateBlock struct {
+@@ -5017,7 +5063,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
+ 		//		continue
+ 		//	}
+ 		//}
+-		if sc.Run(c, nil) {
++		// Direct call for blocks: TinyGo's interface dispatch compares the
++		// dynamic type against every controller type in turn.
++		var cs bool
++		if sb, ok := sc.(*StateBlock); ok {
++			cs = sb.Run(c, nil)
++		} else {
++			cs = sc.Run(c, nil)
++		}
++		if cs {
+ 			changeState = true
+ 			break
+ 		}
+@@ -5089,6 +5143,7 @@ type StateBlock struct {
  	trigger             BytecodeExp
  	elseBlock           *StateBlock
  	ctrls               []StateController
@@ -760,7 +833,7 @@ index 276abbf..e9d0277 100644
  	// Loop fields
  	loopBlock        bool
  	nestedInLoop     bool
-@@ -5104,6 +5149,16 @@ func newStateBlock() *StateBlock {
+@@ -5104,6 +5159,16 @@ func newStateBlock() *StateBlock {
  	return &StateBlock{persistent: 1, persistentIndex: -1, ignorehitpause: false}
  }
  
@@ -777,7 +850,7 @@ index 276abbf..e9d0277 100644
  func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  	c.currentSctrlIndex = b.persistentIndex
  	// For Mugen compatibility, if in hitpause and this SCTRL has the same index
-@@ -5189,7 +5244,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5189,7 +5254,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			// Run state controllers
  			if !interrupt {
@@ -787,7 +860,7 @@ index 276abbf..e9d0277 100644
  					switch sc.(type) {
  					case *StateBlock:
  					default:
-@@ -5197,7 +5253,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5197,7 +5263,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  							continue
  						}
  					}
@@ -796,7 +869,7 @@ index 276abbf..e9d0277 100644
  						if sys.loopBreak {
  							sys.loopBreak = false
  							interrupt = true
-@@ -5244,7 +5300,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5244,7 +5310,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			return false
  		}
@@ -806,7 +879,7 @@ index 276abbf..e9d0277 100644
  			switch sc.(type) {
  			case *StateBlock:
  			default:
-@@ -5252,7 +5309,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5252,7 +5319,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  					continue
  				}
  			}
@@ -815,7 +888,7 @@ index 276abbf..e9d0277 100644
  				return true
  			}
  		}
-@@ -5414,21 +5471,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5414,21 +5481,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -847,7 +920,7 @@ index 276abbf..e9d0277 100644
  }
  
  type stateDef StateControllerBase
-@@ -5530,6 +5585,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +5595,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -857,7 +930,7 @@ index 276abbf..e9d0277 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -6653,7 +6711,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,7 +6721,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -1288,7 +1361,7 @@ index a741eab..006ec14 100644
  	basename := filepath.Base(filename)
  	ext := filepath.Ext(basename)
 diff --git a/src/config.go b/src/config.go
-index d39783d..37b2f95 100644
+index d39783d..6bb3e64 100644
 --- a/src/config.go
 +++ b/src/config.go
 @@ -291,7 +291,9 @@ func loadConfig(def string) (*Config, error) {
@@ -1301,7 +1374,7 @@ index d39783d..37b2f95 100644
  
  	assignFrom := func(src *ini.File) {
  		if src == nil {
-@@ -319,12 +321,32 @@ func loadConfig(def string) (*Config, error) {
+@@ -319,12 +321,31 @@ func loadConfig(def string) (*Config, error) {
  
  	// Apply precedence: struct zero/default tags < defaultConfig.ini < user config
  	assignFrom(defaultOnlyIni)
@@ -1311,7 +1384,6 @@ index d39783d..37b2f95 100644
  	c.IniFile = iniFile
  	c.DefaultOnlyIni = defaultOnlyIni
 +	vitaTrace("cfg: user assigned")
-+	vitaCRC("pre-normalize")
 +	vitaTraceDeep = vitaTraceOn
  	c.normalize()
 +	if isVita {
@@ -1334,7 +1406,7 @@ index d39783d..37b2f95 100644
  	c.Save(def)
  	return &c, nil
  }
-@@ -474,6 +496,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
+@@ -474,6 +495,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
  
  // SetValueUpdate sets the value based on the query string and updates the IniFile.
  func (c *Config) SetValueUpdate(query string, value interface{}) error {
@@ -3560,6 +3632,40 @@ index 0000000..24adbf5
 +	jsonFileCache.m = map[string][]byte{}
 +	jsonFileCache.Unlock()
 +}
+diff --git a/src/luacache.go b/src/luacache.go
+new file mode 100644
+index 0000000..59a4946
+--- /dev/null
++++ b/src/luacache.go
+@@ -0,0 +1,28 @@
++package main
++
++import (
++	lua "github.com/yuin/gopher-lua"
++)
++
++// luaChunkCache holds compiled versions of Lua snippets the engine runs every
++// frame (Common.Lua "loop()", motif hooks). DoString re-parses and recompiles
++// the source each call, which on the Vita cost ~10 parses per frame.
++var luaChunkCache = map[*lua.LState]map[string]*lua.LFunction{}
++
++func luaDoStringCached(l *lua.LState, src string) error {
++	m := luaChunkCache[l]
++	if m == nil {
++		m = map[string]*lua.LFunction{}
++		luaChunkCache[l] = m
++	}
++	fn, ok := m[src]
++	if !ok {
++		var err error
++		if fn, err = l.LoadString(src); err != nil {
++			return err
++		}
++		m[src] = fn
++	}
++	l.Push(fn)
++	return l.PCall(0, lua.MultRet, nil)
++}
 diff --git a/src/main.go b/src/main.go
 index 2609c76..d0df867 100644
 --- a/src/main.go
@@ -3635,7 +3741,7 @@ index 2609c76..d0df867 100644
  		if strings.Contains(err.Error(), "<game end>") {
  			handleExit()
 diff --git a/src/motif.go b/src/motif.go
-index ce7ed68..a7a4c98 100644
+index ce7ed68..57bddaf 100644
 --- a/src/motif.go
 +++ b/src/motif.go
 @@ -2951,7 +2951,8 @@ func (mo *Motif) processStateChange(c *Char, states []int32) bool {
@@ -3668,6 +3774,42 @@ index ce7ed68..a7a4c98 100644
  		if len(p) > 0 && len(p[0].dialogue) > 0 {
  			return true
  		}
+@@ -3569,7 +3572,7 @@ func (ch *MotifChallenger) init(m *Motif) {
+ 	}
+ 	ch.controllerNo = controllerNo
+ 
+-	if err := sys.luaLState.DoString("hook.run('game.challenger_init')"); err != nil {
++	if err := luaDoStringCached(sys.luaLState, "hook.run('game.challenger_init')"); err != nil {
+ 		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.challenger_init", err.Error())
+ 	}
+ 
+@@ -3592,7 +3595,7 @@ func (ch *MotifChallenger) init(m *Motif) {
+ func (ch *MotifChallenger) step(m *Motif) {
+ 	m.ChallengerBgDef.BGDef.step()
+ 	if ch.counter > 0 {
+-		if err := sys.luaLState.DoString("hook.run('game.challenger')"); err != nil {
++		if err := luaDoStringCached(sys.luaLState, "hook.run('game.challenger')"); err != nil {
+ 			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.challenger", err.Error())
+ 		}
+ 	}
+@@ -3720,7 +3723,7 @@ func (co *MotifContinue) init(m *Motif) {
+ 		co.initialized = true
+ 		return
+ 	}
+-	if err := sys.luaLState.DoString("hook.run('game.continue_init')"); err != nil {
++	if err := luaDoStringCached(sys.luaLState, "hook.run('game.continue_init')"); err != nil {
+ 		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.continue_init", err.Error())
+ 	}
+ 
+@@ -3825,7 +3828,7 @@ func (co *MotifContinue) playCounterSounds(m *Motif) {
+ func (co *MotifContinue) step(m *Motif) {
+ 	m.ContinueBgDef.BGDef.step()
+ 	if co.counter > 0 {
+-		if err := sys.luaLState.DoString("hook.run('game.continue')"); err != nil {
++		if err := luaDoStringCached(sys.luaLState, "hook.run('game.continue')"); err != nil {
+ 			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.continue", err.Error())
+ 		}
+ 	}
 @@ -3855,7 +3858,8 @@ func (co *MotifContinue) step(m *Motif) {
  	if co.selected && !co.showEndAnim && co.endTimer == -1 {
  		if co.waitTimer < 0 {
@@ -3698,6 +3840,24 @@ index ce7ed68..a7a4c98 100644
  		if len(p) > 0 {
  			p[0].dialogue = nil
  		}
+@@ -5217,7 +5223,7 @@ func (hi *MotifHiscore) init(m *Motif, mode string, place, endTime int32, noFade
+ 		return
+ 	}
+ 
+-	if err := sys.luaLState.DoString("hook.run('game.hiscore_init')"); err != nil {
++	if err := luaDoStringCached(sys.luaLState, "hook.run('game.hiscore_init')"); err != nil {
+ 		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.hiscore_init", err.Error())
+ 	}
+ 
+@@ -5497,7 +5503,7 @@ func (hi *MotifHiscore) step(m *Motif) {
+ 		m.HiscoreBgDef.BGDef.step()
+ 	}
+ 	if hi.counter > 0 {
+-		if err := sys.luaLState.DoString("hook.run('game.hiscore')"); err != nil {
++		if err := luaDoStringCached(sys.luaLState, "hook.run('game.hiscore')"); err != nil {
+ 			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.hiscore", err.Error())
+ 		}
+ 	}
 @@ -5843,7 +5849,7 @@ func parseRankingRows(path, mode string) []rankingRow {
  	if path == "" || mode == "" {
  		return nil
@@ -3707,6 +3867,42 @@ index ce7ed68..a7a4c98 100644
  	if err != nil {
  		fmt.Println("hiscore: read stats.json failed:", err)
  		return nil
+@@ -6228,7 +6234,7 @@ func (vi *MotifVictory) init(m *Motif) {
+ 		vi.initialized = true
+ 		return
+ 	}
+-	if err := sys.luaLState.DoString("hook.run('game.victory_init')"); err != nil {
++	if err := luaDoStringCached(sys.luaLState, "hook.run('game.victory_init')"); err != nil {
+ 		sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.victory_init", err.Error())
+ 	}
+ 
+@@ -6339,7 +6345,7 @@ func (vi *MotifVictory) init(m *Motif) {
+ func (vi *MotifVictory) step(m *Motif) {
+ 	m.VictoryBgDef.BGDef.step()
+ 	if vi.counter > 0 {
+-		if err := sys.luaLState.DoString("hook.run('game.victory')"); err != nil {
++		if err := luaDoStringCached(sys.luaLState, "hook.run('game.victory')"); err != nil {
+ 			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.victory", err.Error())
+ 		}
+ 	}
+@@ -6727,7 +6733,7 @@ func (wi *MotifWin) init(m *Motif) {
+ 	hasModeResults := wi.isEnabled() && resultsScreenForMode(sys.gameMode) != nil
+ 
+ 	if (wi.isEnabled() && won) || ((wi.loseEnabled || hasModeResults) && lostOrDraw) {
+-		if err := sys.luaLState.DoString("hook.run('game.result_init')"); err != nil {
++		if err := luaDoStringCached(sys.luaLState, "hook.run('game.result_init')"); err != nil {
+ 			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.result_init", err.Error())
+ 		}
+ 		// Variant selection: [Win Screen] results.<gamemode> = <section name>
+@@ -6917,7 +6923,7 @@ func (wi *MotifWin) step(m *Motif) {
+ 		m.WinBgDef.BGDef.step()
+ 	}
+ 	if wi.counter > 0 {
+-		if err := sys.luaLState.DoString("hook.run('game.result')"); err != nil {
++		if err := luaDoStringCached(sys.luaLState, "hook.run('game.result')"); err != nil {
+ 			sys.luaLState.RaiseError("Error executing Lua hook: %s\n%v", "game.result", err.Error())
+ 		}
+ 	}
 diff --git a/src/rect.go b/src/rect.go
 index d63aa49..25c8b51 100644
 --- a/src/rect.go
@@ -4058,7 +4254,7 @@ index 1a2540b..3b8944d 100644
  package main
  
 diff --git a/src/render_gles32.go b/src/render_gles32.go
-index 891acab..ed2af3b 100644
+index 891acab..7353edf 100644
 --- a/src/render_gles32.go
 +++ b/src/render_gles32.go
 @@ -2,7 +2,7 @@
@@ -4225,7 +4421,16 @@ index 891acab..ed2af3b 100644
  		return gl.RGBA8
  	case 96:
  		return gl.RGB32F
-@@ -790,8 +832,8 @@ func (r *Renderer_GLES32) Init() {
+@@ -625,6 +667,8 @@ type Renderer_GLES32 struct {
+ 	modelVertexBuffer       [2]uint32
+ 	modelIndexBuffer        [2]uint32
+ 	spriteVAO               uint32
++	vitaVerts               []float32 // Vita: client-side sprite vertices
++	vitaLocPos, vitaLocUV   uint32
+ 	modelVAO                uint32
+ 	modelEnvVAO             uint32
+ 	postVAO                 uint32
+@@ -790,8 +834,8 @@ func (r *Renderer_GLES32) Init() {
  	// Data buffers for rendering
  	postVertData := f32.Bytes(binary.LittleEndian, -1, -1, 1, -1, -1, 1, 1, 1)
  
@@ -4236,7 +4441,15 @@ index 891acab..ed2af3b 100644
  
  	// Generate VAO's
  	gl.GenVertexArrays(1, &r.spriteVAO)
-@@ -950,10 +992,14 @@ func (r *Renderer_GLES32) Init() {
+@@ -855,6 +899,7 @@ func (r *Renderer_GLES32) Init() {
+ 	locUV := r.spriteShader.attributes["uv"]
+ 	gl.EnableVertexAttribArray(uint32(locUV))
+ 	gl.VertexAttribPointerWithOffset(uint32(locUV), 2, gl.FLOAT, false, 16, 8)
++	r.vitaLocPos, r.vitaLocUV = uint32(locPos), uint32(locUV)
+ 
+ 	// Unbind for safety
+ 	r.bindVertexArray(0)
+@@ -950,10 +995,14 @@ func (r *Renderer_GLES32) Init() {
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
@@ -4252,7 +4465,7 @@ index 891acab..ed2af3b 100644
  			sys.scrrect[2],
  			sys.scrrect[3],
  			0,
-@@ -1003,7 +1049,12 @@ func (r *Renderer_GLES32) Init() {
+@@ -1003,7 +1052,12 @@ func (r *Renderer_GLES32) Init() {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
  	} else {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
@@ -4266,7 +4479,7 @@ index 891acab..ed2af3b 100644
  	}
  
  	// create our two FBOs for our post-processing needs
-@@ -1140,10 +1191,33 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
+@@ -1140,10 +1194,33 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
  	}
  }
  
@@ -4300,7 +4513,24 @@ index 891acab..ed2af3b 100644
  
  	x, y, width, height := int32(0), int32(0), int32(sys.scrrect[2]), int32(sys.scrrect[3])
  	time := sdl.GetPerformanceCounter() // consistent time across all shaders
-@@ -1243,36 +1317,51 @@ func (r *Renderer_GLES32) Await() {
+@@ -1165,9 +1242,13 @@ func (r *Renderer_GLES32) EndFrame() {
+ 	gl.Viewport(x, y, width, height)
+ 	// clear both of our post-processing FBOs to make sure
+ 	// nothing's there. the output is set later
+-	for i := 0; i < 2; i++ {
+-		gl.BindFramebuffer(gl.FRAMEBUFFER, r.fbo_pp[i])
+-		gl.Clear(gl.COLOR_BUFFER_BIT)
++	// With a single post shader the result goes straight to the screen, so
++	// the ping-pong FBOs are never read; vitaGL clears with full-screen draws.
++	if !(isVita && len(r.postShaderSelect) <= 1) {
++		for i := 0; i < 2; i++ {
++			gl.BindFramebuffer(gl.FRAMEBUFFER, r.fbo_pp[i])
++			gl.Clear(gl.COLOR_BUFFER_BIT)
++		}
+ 	}
+ 	fbo_texture := r.fbo_texture
+ 	if sys.msaa > 0 {
+@@ -1243,36 +1324,51 @@ func (r *Renderer_GLES32) Await() {
  	gl.Finish()
  }
  
@@ -4374,7 +4604,45 @@ index 891acab..ed2af3b 100644
  }
  
  func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
-@@ -2223,6 +2312,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -1835,6 +1931,13 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
+ }
+ 
+ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
++	if isVita && x <= 0 && y <= 0 && x+width >= sys.scrrect[2] && y+height >= sys.scrrect[3] {
++		// vitaGL implements the scissor test with stencil passes over the
++		// whole screen every time it is switched on, off or moved. A scissor
++		// covering the whole target clips nothing, so leave the test off.
++		r.DisableScissor()
++		return
++	}
+ 	// Flip Y to OpenGL convention
+ 	realY := sys.scrrect[3] - (y + height)
+ 
+@@ -2196,6 +2299,23 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+ 		}
+ 	}
+ 
++	if isVita && len(values) > 0 && vitaClientArrays() {
++		// vitaGL: glBufferData allocates fresh GPU-mapped memory (and queues
++		// the old block for deletion) on every sprite. Client-side arrays are
++		// copied into vitaGL's per-frame ring buffer at draw time instead,
++		// which is much cheaper.
++		if cap(r.vitaVerts) < len(values) {
++			r.vitaVerts = make([]float32, len(values)*2)
++		}
++		v := r.vitaVerts[:len(values)]
++		copy(v, values)
++		r.bindVertexArray(r.spriteVAO)
++		r.bindBuffer(gl.ARRAY_BUFFER, 0)
++		gl.VertexAttribPointer(r.vitaLocPos, 2, gl.FLOAT, false, 16, unsafe.Pointer(&v[0]))
++		gl.VertexAttribPointer(r.vitaLocUV, 2, gl.FLOAT, false, 16, unsafe.Pointer(&v[2]))
++		return
++	}
++
+ 	need := len(values) * 4
+ 
+ 	// Adjust scratch buffer size if necessary
+@@ -2223,6 +2343,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  
  // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
  func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
@@ -5049,7 +5317,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..8bd8145 100644
+index 2698d35..2ebe047 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -5198,7 +5466,15 @@ index 2698d35..8bd8145 100644
  			if len(p) > 0 {
  				s.clearPlayerAssets(i, false)
  				p[0].posReset()
-@@ -2834,6 +2865,9 @@ func (s *System) screenright() float32 {
+@@ -2775,6 +2806,7 @@ func (s *System) runIntroSkip() {
+ 
+ // TODO: Maybe these could get a more thorough clear between matches, to prevent holding onto previous character sprites
+ func (s *System) clearSpriteData() {
++	spriteDataPoolReset()
+ 	// Main sprites
+ 	s.spriteList = s.spriteList[:0]
+ 
+@@ -2834,6 +2866,9 @@ func (s *System) screenright() float32 {
  // Core game logic. Chars, stage, projectiles, etc
  // The part that can rewind and fast forward during rollbacks
  func (s *System) action() {
@@ -5208,7 +5484,7 @@ index 2698d35..8bd8145 100644
  	if s.matchPaused() {
  		return
  	}
-@@ -2945,6 +2979,11 @@ func (s *System) action() {
+@@ -2945,6 +2980,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -5220,7 +5496,7 @@ index 2698d35..8bd8145 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2998,9 +3037,9 @@ func (s *System) action() {
+@@ -2998,9 +3038,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -5233,7 +5509,7 @@ index 2698d35..8bd8145 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3057,13 @@ func (s *System) action() {
+@@ -3018,6 +3058,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -5247,7 +5523,16 @@ index 2698d35..8bd8145 100644
  	return
  }
  
-@@ -3330,7 +3376,8 @@ func (s *System) stepRoundState() {
+@@ -3046,7 +3093,7 @@ func (s *System) uiAction() {
+ 	// Needs to happen after motif update or motif inputs will lag 1 frame
+ 	for _, key := range SortedKeys(sys.cfg.Common.Lua) {
+ 		for _, v := range sys.cfg.Common.Lua[key] {
+-			if err := sys.luaLState.DoString(v); err != nil {
++			if err := luaDoStringCached(sys.luaLState, v); err != nil {
+ 				sys.luaLState.RaiseError("Error executing Lua code: %s\n%v", v, err.Error())
+ 			}
+ 		}
+@@ -3330,7 +3377,8 @@ func (s *System) stepRoundState() {
  		}
  	} else if s.intro > 0 {
  		if s.intro == s.fightScreen.round.ctrl_time {
@@ -5257,7 +5542,7 @@ index 2698d35..8bd8145 100644
  				if len(p) > 0 {
  					if p[0].activelyFighting() && !p[0].asf(ASF_nointroreset) {
  						p[0].posReset() // Technically we don't really need this step
-@@ -3340,7 +3387,8 @@ func (s *System) stepRoundState() {
+@@ -3340,7 +3388,8 @@ func (s *System) stepRoundState() {
  		}
  		s.intro--
  		if s.intro == 0 {
@@ -5267,7 +5552,7 @@ index 2698d35..8bd8145 100644
  				if len(p) > 0 {
  					if p[0].alive() {
  						p[0].setSCF(SCF_over_alive, false)
-@@ -3429,7 +3477,8 @@ func (s *System) stepRoundState() {
+@@ -3429,7 +3478,8 @@ func (s *System) stepRoundState() {
  			// Check if game can proceed into roundstate 4
  			if s.winwaittime > 0 {
  				if s.intro == rs4t-1 {
@@ -5277,7 +5562,7 @@ index 2698d35..8bd8145 100644
  						if len(p) == 0 {
  							continue
  						}
-@@ -3455,7 +3504,8 @@ func (s *System) stepRoundState() {
+@@ -3455,7 +3505,8 @@ func (s *System) stepRoundState() {
  
  			// Disable ctrl (once) at the first frame of roundstate 4
  			if s.intro == rs4t-1 {
@@ -5287,7 +5572,7 @@ index 2698d35..8bd8145 100644
  					if len(p) > 0 {
  						p[0].setSCF(SCF_ctrl, false)
  					}
-@@ -3502,7 +3552,8 @@ func (s *System) stepRoundState() {
+@@ -3502,7 +3553,8 @@ func (s *System) stepRoundState() {
  		// Send characters to win/lose poses
  		// In Mugen this loop can run at any point after the win poses have started, hence "<="
  		if s.winposetime <= 0 {
@@ -5297,7 +5582,7 @@ index 2698d35..8bd8145 100644
  				if len(p) == 0 {
  					continue
  				}
-@@ -3657,7 +3708,8 @@ func (s *System) roundEndDecision() bool {
+@@ -3657,7 +3709,8 @@ func (s *System) roundEndDecision() bool {
  
  	// Update win triggers if finish type was changed
  	if ft != s.finishType {
@@ -5307,7 +5592,7 @@ index 2698d35..8bd8145 100644
  			if len(p) > 0 && p[0].teamside != -1 && ko[^i&1] {
  				for _, h := range p {
  					for _, tid := range h.targets {
-@@ -3678,6 +3730,7 @@ func (s *System) roundEndDecision() bool {
+@@ -3678,6 +3731,7 @@ func (s *System) roundEndDecision() bool {
  }
  
  func (s *System) draw(x, y, scl float32) {
@@ -5315,7 +5600,7 @@ index 2698d35..8bd8145 100644
  	s.brightnessOld = s.brightness
  	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
  	s.brightness = 1.0
-@@ -3714,30 +3767,42 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3714,30 +3768,42 @@ func (s *System) draw(x, y, scl float32) {
  		// Draw stage elements with layerNo == -1
  		if !s.gsf(GSF_nobg) {
  			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
@@ -5364,7 +5649,7 @@ index 2698d35..8bd8145 100644
  
  		// Draw char texts layer -1
  		s.drawCharTexts(-1)
-@@ -3750,9 +3815,13 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3750,9 +3816,13 @@ func (s *System) draw(x, y, scl float32) {
  		// TODO: Make shadows render in same layers as their sources?
  		if !s.gsf(GSF_globalnoshadow) {
  			if s.stage.reflection.layerno >= 0 {
@@ -5380,7 +5665,7 @@ index 2698d35..8bd8145 100644
  		}
  
  		//off := s.envShake.getOffset()
-@@ -3790,7 +3859,9 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3790,7 +3860,9 @@ func (s *System) draw(x, y, scl float32) {
  		//}
  
  		// Draw fight screen layer 0
@@ -5391,7 +5676,7 @@ index 2698d35..8bd8145 100644
  
  		// Draw char texts layer 0
  		s.drawCharTexts(0)
-@@ -3807,14 +3878,20 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3807,14 +3879,20 @@ func (s *System) draw(x, y, scl float32) {
  
  	// Draw character sprites in layer 0
  	if s.envcol_time == 0 || s.envcol_under {
@@ -5415,7 +5700,7 @@ index 2698d35..8bd8145 100644
  
  	// Draw char texts layer 1
  	s.drawCharTexts(1)
-@@ -3823,10 +3900,14 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3823,10 +3901,14 @@ func (s *System) draw(x, y, scl float32) {
  	s.motif.draw(1)
  
  	// Draw character sprites in layer 1 (old "ontop")
@@ -5432,7 +5717,7 @@ index 2698d35..8bd8145 100644
  
  	// Draw char texts layer 2
  	s.drawCharTexts(2)
-@@ -3939,7 +4020,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
+@@ -3939,7 +4021,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
  		y := 240 - panelState.gameHeight
  		if s.statusLFunc != nil {
  			s.debugFont.SetColor(255, 255, 255, 255)
@@ -5442,7 +5727,7 @@ index 2698d35..8bd8145 100644
  				if len(p) > 0 {
  					top := s.luaLState.GetTop()
  					if s.luaLState.CallByParam(lua.P{Fn: s.statusLFunc, NRet: 1,
-@@ -4054,7 +4136,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4054,7 +4137,8 @@ func (s *System) runMatch() (reload bool) {
  		s.nomusic = false
  		s.allPalFX.clear()
  		s.allPalFX.enable = false
@@ -5452,7 +5737,16 @@ index 2698d35..8bd8145 100644
  			if len(p) > 0 {
  				forceDestroy := s.matchOver() ||
  					(s.tmode[i&1] == TM_Turns && p[0].teamside != -1 && s.effectiveLoss[i&1])
-@@ -4266,7 +4349,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4128,7 +4212,7 @@ func (s *System) runMatch() (reload bool) {
+ 
+ 		for _, v := range s.shortcutScripts {
+ 			if v.Activate {
+-				if err := s.luaLState.DoString(v.Script); err != nil {
++				if err := luaDoStringCached(s.luaLState, v.Script); err != nil {
+ 					s.luaLState.RaiseError("Error executing Lua code: %s\n%v", v.Script, err.Error())
+ 				}
+ 			}
+@@ -4266,7 +4350,8 @@ func (s *System) runMatch() (reload bool) {
  
  func (s *System) SetupCharRoundStart() {
  	// Prepare next round for all players
@@ -5462,7 +5756,7 @@ index 2698d35..8bd8145 100644
  		if len(p) > 0 {
  			p[0].prepareNextRound()
  		}
-@@ -4274,7 +4358,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4274,7 +4359,8 @@ func (s *System) SetupCharRoundStart() {
  
  	// For power sharing, set maximum power to the highest one in the team
  	if s.cfg.Options.Team.PowerShare {
@@ -5472,7 +5766,7 @@ index 2698d35..8bd8145 100644
  			if len(p) > 0 && p[0].teamside != -1 {
  				pmax := Max(s.cgi[i&1].data.power, s.cgi[i].data.power)
  				for j := i & 1; j < MaxSimul*2; j += 2 {
-@@ -4287,7 +4372,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4287,7 +4373,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Calculate maximum life for all characters
@@ -5482,7 +5776,7 @@ index 2698d35..8bd8145 100644
  		if len(p) > 0 {
  			// Get max life, and adjust based on team mode
  			var lmax float32
-@@ -4344,7 +4430,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4344,7 +4431,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's dizzy and guard points
@@ -5492,7 +5786,7 @@ index 2698d35..8bd8145 100644
  		if len(p) > 0 {
  			if p[0].ocd().dizzyPoints > 0 {
  				p[0].dizzyPoints = p[0].ocd().dizzyPoints
-@@ -4360,7 +4447,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4360,7 +4448,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's state
@@ -5502,7 +5796,7 @@ index 2698d35..8bd8145 100644
  		if len(p) > 0 {
  			if p[0].roundsExisted() == 0 && (s.roundNo == 1 || s.tmode[i&1] == TM_Turns) {
  				// If round 1 or a new character in Turns mode, initialize values
-@@ -4413,7 +4501,8 @@ func (s *System) runNextRound() bool {
+@@ -4413,7 +4502,8 @@ func (s *System) runNextRound() bool {
  			for i := range s.roundsExisted {
  				s.roundsExisted[i]++
  			}
@@ -5512,7 +5806,7 @@ index 2698d35..8bd8145 100644
  				if len(p) > 0 {
  					if s.tmode[i&1] != TM_Turns || !s.effectiveLoss[i&1] {
  						p[0].life = p[0].lifeMax
-@@ -4518,7 +4607,8 @@ type RoundStartBackup struct {
+@@ -4518,7 +4608,8 @@ type RoundStartBackup struct {
  func (bk *RoundStartBackup) Save() {
  	// Save characters
  	// We save helpers as well because of "preserve" parameter
@@ -5522,7 +5816,7 @@ index 2698d35..8bd8145 100644
  		if len(chars) == 0 {
  			// Backups are reused, so discard characters saved for this slot in a previous round
  			bk.charBackup[i] = nil
-@@ -4584,7 +4674,8 @@ func (bk *RoundStartBackup) Save() {
+@@ -4584,7 +4675,8 @@ func (bk *RoundStartBackup) Save() {
  
  func (bk *RoundStartBackup) Restore() {
  	// Restore characters
@@ -5532,7 +5826,7 @@ index 2698d35..8bd8145 100644
  		if len(chars) == 0 {
  			continue
  		}
-@@ -5050,6 +5141,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -5050,6 +5142,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -5542,7 +5836,7 @@ index 2698d35..8bd8145 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -6304,6 +6398,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6304,6 +6399,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		if l.cancelRequested() || l.state == LS_Cancel || sys.gameEnd {
  			return 0
  		}
@@ -5550,7 +5844,7 @@ index 2698d35..8bd8145 100644
  		if l.err = p.load(cdef, gi); l.err != nil {
  			if errors.Is(l.err, ErrLoadingCanceled) {
  				l.state = LS_Cancel
-@@ -6322,7 +6417,10 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6322,7 +6418,10 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		}
  
  		// Compile character states
@@ -5562,7 +5856,7 @@ index 2698d35..8bd8145 100644
  			if attached {
  				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
  			} else {
-@@ -6820,13 +6918,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6919,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -5578,7 +5872,7 @@ index 2698d35..8bd8145 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6933,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6934,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -5591,7 +5885,7 @@ index 2698d35..8bd8145 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6960,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6961,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -5599,7 +5893,7 @@ index 2698d35..8bd8145 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6976,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6977,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -5804,10 +6098,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..bfa9042
+index 0000000..8b571a1
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,520 @@
 +//go:build vita
 +
 +package main
@@ -5824,12 +6118,14 @@ index 0000000..bfa9042
 +
 +// Engine log: ux0:data/cvftest.log (stdout/stderr also land here, see the
 +// TinyGo Vita shim). Cleared at every start.
++// One descriptor for the whole run (shared with the shim's stdout/stderr):
++// reopening the file for every line cost a memory-card open per log line.
++int vita_log_fd(void);
 +void vlog(const char *s) {
-+	SceUID fd = sceIoOpen("ux0:data/cvftest.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
++	SceUID fd = vita_log_fd();
 +	if (fd < 0) return;
 +	sceIoWrite(fd, s, strlen(s));
 +	sceIoWrite(fd, "\n", 1);
-+	sceIoClose(fd);
 +}
 +static void vita_crash_install(void);
 +__attribute__((constructor)) static void vlog_start(void) {
@@ -5998,8 +6294,12 @@ index 0000000..bfa9042
 +// vitaPlatformInit runs at the very start of realMain.
 +func vitaPlatformInit() {
 +	C.vita_clock()
-+	vitaCRC("start")
-+	C.vita_verify_image()
++	// Image verifier (found the loader's JUMP24 rewrite) is off for release:
++	// it read and relocated the 50 MB velf on every boot.
++	if _, err := os.Stat("app0:ikvita.velf"); err == nil {
++		vitaCRC("start")
++		C.vita_verify_image()
++	}
 +	cd := C.CString(vitaDataDir)
 +	C.vita_libc_chdir(cd) // for C libraries (libxmp, SDL) that open files themselves
 +	C.free(unsafe.Pointer(cd))
@@ -6107,7 +6407,7 @@ index 0000000..bfa9042
 +}
 +
 +// vitaTraceOn enables the detailed startup trace until the main config is normalized.
-+var vitaTraceOn = true
++var vitaTraceOn = false
 +var vitaTraceDeep = false
 +
 +// Frame-time report written to the log every 300 frames (about 5 s at 60 fps).
@@ -6138,12 +6438,10 @@ index 0000000..bfa9042
 +	}
 +	vitaPerf.last = now
 +	if vitaPerf.n >= 300 {
-+		var m runtime.MemStats
-+		runtime.ReadMemStats(&m)
 +		avg := vitaPerf.sum / time.Duration(vitaPerf.n)
 +		vitaTrace("perf: " + itoa(vitaPerf.n) + " frames, avg " + itoa(int(avg/time.Microsecond)) + " us (" +
 +			itoa(int(time.Second/avg)) + " fps), max " + itoa(int(vitaPerf.max/time.Millisecond)) + " ms, draws skipped " +
-+			itoa(vitaPerf.skip) + ", GPU wait " + itoa(int(vitaPerf.swap/time.Millisecond)) + " ms in " + itoa(vitaPerf.swaps) + " swaps, heap inuse " + itoa(int(m.HeapInuse>>20)) + " MB sys " + itoa(int(m.HeapSys>>20)) + " MB")
++			itoa(vitaPerf.skip) + ", GPU wait " + itoa(int(vitaPerf.swap/time.Millisecond)) + " ms in " + itoa(vitaPerf.swaps) + " swaps")
 +		vitaPerf.n, vitaPerf.skip, vitaPerf.sum, vitaPerf.max, vitaPerf.swap, vitaPerf.swaps = 0, 0, 0, 0, 0, 0
 +	}
 +}
@@ -6308,6 +6606,21 @@ index 0000000..bfa9042
 +		}
 +	}
 +	vitaTrace(out)
++}
++
++var vitaClientArraysFlag = -1
++
++// vitaClientArrays: sprite vertices go through client-side arrays unless
++// ux0:data/CvF/vita_vbo.txt exists (fallback to the old glBufferData path).
++func vitaClientArrays() bool {
++	if vitaClientArraysFlag < 0 {
++		vitaClientArraysFlag = 1
++		if _, err := os.Stat("vita_vbo.txt"); err == nil {
++			vitaClientArraysFlag = 0
++		}
++		vitaTrace("render: client vertex arrays " + itoa(vitaClientArraysFlag))
++	}
++	return vitaClientArraysFlag == 1
 +}
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644

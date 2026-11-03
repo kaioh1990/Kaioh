@@ -101,6 +101,15 @@ int *__errno_location(void) { return &errno; }
 // If the app shows a debug screen, echo stdout/stderr there too.
 __attribute__((weak)) int psvDebugScreenPuts(const char *text);
 ssize_t __real_write(int fd, const void *buf, size_t n);
+// Engine log descriptor, opened once. sceIoWrite goes straight to the file
+// system, so the log survives a crash without explicit flushing.
+static SceUID vita_log_uid = -1;
+int vita_log_fd(void) {
+	if (vita_log_uid < 0)
+		vita_log_uid = sceIoOpen("ux0:data/cvftest.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
+	return vita_log_uid;
+}
+
 ssize_t __wrap_write(int fd, const void *buf, size_t n) {
 	if (fd == 1 || fd == 2) {
 		if (psvDebugScreenPuts) {
@@ -109,8 +118,8 @@ ssize_t __wrap_write(int fd, const void *buf, size_t n) {
 			memcpy(tmp, buf, k); tmp[k] = 0;
 			psvDebugScreenPuts(tmp);
 		}
-		SceUID f = sceIoOpen("ux0:data/cvftest.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
-		if (f >= 0) { sceIoWrite(f, buf, n); sceIoClose(f); }
+		SceUID f = vita_log_fd();
+		if (f >= 0) sceIoWrite(f, buf, n);
 		return (ssize_t)n;
 	}
 	return __real_write(fd, buf, n);

@@ -928,6 +928,19 @@ def prof_report():
     say('[prof] ~%d instr/frame over %d frames' % (tot // max(1, frames), frames))
     for k, v in fn.most_common(60):
         say('[prof] %5.1f%% %s' % (100.0 * v / tot, k[:150]))
+    if os.environ.get('VEMU_PROF_LINES'):
+        want = os.environ['VEMU_PROF_LINES']
+        rows = [(R2L(a), n) for a, n in PROF['blk'].items() if symbolize(a).split('+')[0] == want]
+        import subprocess
+        addrs = [hex(a) for a, n in rows]
+        if addrs:
+            out = subprocess.run(['arm-vita-eabi-addr2line', '-e', args.elf] + addrs, capture_output=True, text=True).stdout.split('\n')
+            byline = collections.Counter()
+            for (a, n), ln in zip(rows, out):
+                byline[ln.split('/')[-1]] += n
+            ftot = sum(byline.values()) or 1
+            for ln, n in byline.most_common(40):
+                say('[profline] %5.1f%% %s' % (100.0 * n / ftot, ln))
     for (cal, src), v in sorted(PROF_CALLERS.items(), key=lambda x: -x[1])[:40]:
         say('[profcall] %8d %s <- %s' % (v, cal, src[:120]))
 
