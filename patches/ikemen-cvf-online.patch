@@ -1418,10 +1418,10 @@ index 00000000..19554275
 +)
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 00000000..0d7162f2
+index 00000000..ab3ba906
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,832 @@
+@@ -0,0 +1,858 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -2106,6 +2106,7 @@ index 00000000..0d7162f2
 +//   MPGainScale = 0.5           multiply every MP gain (fractions carry over)
 +//   SpecialCooldown = N         frames after a special attack before another can start (0 = off)
 +//   SpecialStates = 1100-2999   the states that count as special attacks
++//   FightAspect = 16:9          aspect ratio of fights, or "stage" for the stage's own
 +//   RulesAuthor = CvF           only characters with this author are affected
 +
 +type cvfRulesT struct {
@@ -2118,6 +2119,7 @@ index 00000000..0d7162f2
 +	specialCD    int32
 +	specialLo    int32
 +	specialHi    int32
++	fightAspect  [2]int32
 +	author       string
 +}
 +
@@ -2167,6 +2169,12 @@ index 00000000..0d7162f2
 +			if n, _ := fmt.Sscanf(strings.ReplaceAll(v, " ", ""), "%d-%d", &lo, &hi); n == 2 {
 +				r.specialLo, r.specialHi = lo, hi
 +			}
++		case "fightaspect":
++			if strings.EqualFold(v, "stage") {
++				r.fightAspect = [2]int32{-1, -1}
++			} else {
++				fmt.Sscanf(strings.ReplaceAll(v, " ", ""), "%d:%d", &r.fightAspect[0], &r.fightAspect[1])
++			}
 +		case "rulesauthor":
 +			r.author = strings.ToLower(v)
 +		}
@@ -2199,6 +2207,24 @@ index 00000000..0d7162f2
 +		*time = remaining
 +	}
 +	return true
++}
++
++// Physical screen size, passed in by the iOS app.
++var cvfScreen [2]int32
++
++func cvfParseScreen(s string) {
++	fmt.Sscanf(s, "%dx%d", &cvfScreen[0], &cvfScreen[1])
++}
++
++// Applies the shared fight aspect, which affects gameplay and must match between players,
++// and fits the menus to screens wider than 16:9. Game size outside fights is display only.
++func cvfApplyDisplay(cfg *Config) {
++	if a := cvfRulesLoad().fightAspect; a[0] != 0 && a[1] != 0 {
++		cfg.Video.FightAspectWidth, cfg.Video.FightAspectHeight = a[0], a[1]
++	}
++	if w, h := cvfScreen[0], cvfScreen[1]; h > 0 && w*9 > h*16 {
++		cfg.Video.GameWidth = (cfg.Video.GameHeight * w / h) &^ 1
++	}
 +}
 +
 +// Count down the wait between special attacks. It restarts on every frame spent in a
@@ -2487,6 +2513,18 @@ index ee44670f..b2b690bc 100644
  
  		(*color) += float32(sin * (float64(pf.sinhue) / 512.0))
  
+diff --git a/src/main.go b/src/main.go
+index 2609c76b..4efec7d0 100644
+--- a/src/main.go
++++ b/src/main.go
+@@ -198,6 +198,7 @@ func realMain() {
+ 		// For Android, let's see exactly what failed
+ 		panic(err)
+ 	}
++	cvfApplyDisplay(cfg)
+ 	// Force to Vulkan 1.3 for iOS
+ 	if runtime.GOOS == "ios" {
+ 		cfg.Video.RenderMode = "Vulkan 1.3"
 diff --git a/src/rect.go b/src/rect.go
 index d63aa49d..25c8b512 100644
 --- a/src/rect.go
@@ -2698,3 +2736,18 @@ index 2698d355..5d67d0c8 100644
  }
  
  // Step the zoom variables
+diff --git a/src/util_ios.go b/src/util_ios.go
+index aabd7589..410808ee 100755
+--- a/src/util_ios.go
++++ b/src/util_ios.go
+@@ -123,7 +123,9 @@ func SDL_main(argc C.int, argv **C.char) C.int {
+ 	for i := 0; i+1 < len(args); i++ {
+ 		if args[i] == "--assets" {
+ 			sys.baseDir = args[i+1]
+-			break
++		}
++		if args[i] == "--screen" {
++			cvfParseScreen(args[i+1])
+ 		}
+ 	}
+ 
