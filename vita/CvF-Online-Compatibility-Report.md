@@ -301,3 +301,7 @@ Tested on the user's Vita (firmware 3.60, HENkaku/Ensō). 11 test builds.
 - **Fewer allocations:** the per-character command step no longer allocates a map every tick (~900 allocations per second).
 
 **Next:** read the phase timers from the build 21 log and cut the largest engine-side phase; the renderer agent is reducing GL calls per frame (batching consecutive sprites), since the draw cost is per call inside vitaGL.
+
+**Build 21 on hardware: black fight screen.** The first 30 fps pacing forced a draw on ticks where the engine had already chosen to skip, which broke the frame begin/end pairing; every swapped frame was black (the pixel probe confirmed it and the emulator's GL harness reproduced it). Build 22 only ever *adds* skips on top of the engine's own decision, and only during matches. Verified with fight screenshots in the emulator.
+
+**Build 21's timers, the real numbers:** with the profiler no longer running, a fight tick is ~9 ms of logic (character scripts 8.2 ms, everything else under 1 ms combined) and ~8 ms of CPU per drawn frame. So build 20's "16 ms outside the scripts" was mostly the one-time profiler itself. Logic 9 + draw 8 fits a 33 ms two-tick budget with room to spare, which is why 30 fps is the right target and should hold.
