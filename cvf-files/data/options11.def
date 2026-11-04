@@ -377,6 +377,7 @@ p2.name.layerno=0
 stage.layerno=0
 stage.pos.layerno=0
 stage.pos=96,128
+stage.text=%s
 stage.active.layerno=0
 stage.active.font=4,0,1
 stage.active.text=%s
