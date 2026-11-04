@@ -1,5 +1,5 @@
 diff --git a/external/script/main.lua b/external/script/main.lua
-index b7d76c8..8ddbc04 100644
+index b7d76c83..8ddbc04e 100644
 --- a/external/script/main.lua
 +++ b/external/script/main.lua
 @@ -2308,14 +2308,10 @@ main.t_itemname = {
@@ -265,7 +265,7 @@ index b7d76c8..8ddbc04 100644
  function main.f_unlock(permanent)
  	local refreshRandom = false
 diff --git a/src/bgdef.go b/src/bgdef.go
-index 840b4f8..fbda389 100644
+index 840b4f88..fbda3898 100644
 --- a/src/bgdef.go
 +++ b/src/bgdef.go
 @@ -385,7 +385,7 @@ func (s *BGDef) draw(layer int32, x, y, scl float32, transform *bgDrawTransform)
@@ -278,7 +278,7 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..17f4220 100644
+index 276abbf3..2c2dce11 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
 @@ -2032,7 +2032,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
@@ -385,8 +385,18 @@ index 276abbf..17f4220 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
+@@ -5770,6 +5773,9 @@ func (sc changeState) Run(c *Char, _ []int32) bool {
+ 		}
+ 		return true
+ 	})
++	if cvfBlockSpecial(crun, v) {
++		return false
++	}
+ 	crun.changeState(v, a, ctrl, ffx)
+ 	return stop
+ }
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..03005cf 100644
+index 19bf05a4..2e4f7870 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -3228,6 +3228,25 @@ func (p *Projectile) tick() {
@@ -439,15 +449,16 @@ index 19bf05a..03005cf 100644
  	// Set position
  	pos := [2]float32{p.interPos[0] * p.localscl, p.interPos[1] * p.localscl}
  
-@@ -3699,6 +3708,7 @@ type Char struct {
+@@ -3699,6 +3708,8 @@ type Char struct {
  	ghv                 GetHitVar
  	mhv                 MoveHitVar
  	hitby               [8]HitBy
 +	cvfMPRem            int32 // CvF online port: fractional MP gain carry-over
++	cvfSpecialCD        int32 // CvF online port: frames until another special attack can start
  	hover               [8]HitOverride
  	hoverIdx            int
  	hoverKeepState      bool
-@@ -4001,7 +4011,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
+@@ -4001,7 +4012,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
  				distZ *= 4.0
  			}
  			// Use hypotenuse between x and z
@@ -456,7 +467,7 @@ index 19bf05a..03005cf 100644
  		}
  
  		// Save result in sorting slice
-@@ -8370,6 +8380,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+@@ -8370,6 +8381,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -464,7 +475,15 @@ index 19bf05a..03005cf 100644
  	if _, ok := c.cnsvar[i]; ok {
  		c.cnsvar[i] += v
  	} else {
-@@ -14420,8 +14431,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+@@ -12217,6 +12229,7 @@ func (c *Char) actionPrepare() {
+ 	}
+ 
+ 	c.pauseBool = false
++	cvfSpecialTick(c)
+ 	// Removing this c.cmd check makes a basic helper init incorrectly during a pause
+ 	// TODO: Confirm why it uses c.cmd specifically
+ 	if c.cmd != nil {
+@@ -14420,8 +14433,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
  				// Check if the character is above the platform's surface
  				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
  					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
@@ -476,7 +495,7 @@ index 19bf05a..03005cf 100644
  					onPlatform := func(protrude bool) {
  						getter.platformPosY = ((p.pos[1]+p.platformHeight[0]+p.velocity[1])*p.localscl - angleSinValue*(oldDistX/angleCosValue)) / getter.localscl
 diff --git a/src/common.go b/src/common.go
-index a741eab..2b1922e 100644
+index a741eab7..2b1922e7 100644
 --- a/src/common.go
 +++ b/src/common.go
 @@ -102,11 +102,11 @@ func Deg(f float32) float32 {
@@ -513,7 +532,7 @@ index a741eab..2b1922e 100644
  
 diff --git a/src/cvf_detmath.go b/src/cvf_detmath.go
 new file mode 100644
-index 0000000..1955427
+index 00000000..19554275
 --- /dev/null
 +++ b/src/cvf_detmath.go
 @@ -0,0 +1,880 @@
@@ -1399,10 +1418,10 @@ index 0000000..1955427
 +)
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 0000000..585f32e
+index 00000000..0d7162f2
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,788 @@
+@@ -0,0 +1,832 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -2085,6 +2104,8 @@ index 0000000..585f32e
 +//   InvincibilityExemptStates = 1000-1099   states that keep their invincibility
 +//   MPVar = 34                  variable holding MP
 +//   MPGainScale = 0.5           multiply every MP gain (fractions carry over)
++//   SpecialCooldown = N         frames after a special attack before another can start (0 = off)
++//   SpecialStates = 1100-2999   the states that count as special attacks
 +//   RulesAuthor = CvF           only characters with this author are affected
 +
 +type cvfRulesT struct {
@@ -2094,10 +2115,13 @@ index 0000000..585f32e
 +	exemptHi     int32
 +	mpVar        int32
 +	mpScaleMilli int32
++	specialCD    int32
++	specialLo    int32
++	specialHi    int32
 +	author       string
 +}
 +
-+var cvfRules = cvfRulesT{exemptLo: 1000, exemptHi: 1099, mpVar: -1, mpScaleMilli: 1000}
++var cvfRules = cvfRulesT{exemptLo: 1000, exemptHi: 1099, mpVar: -1, mpScaleMilli: 1000, specialLo: 1100, specialHi: 2999}
 +
 +func cvfRulesLoad() *cvfRulesT {
 +	r := &cvfRules
@@ -2136,6 +2160,13 @@ index 0000000..585f32e
 +			if _, err := fmt.Sscan(v, &s); err == nil && s >= 0 && s <= 10 {
 +				r.mpScaleMilli = int32(s*1000 + 0.5)
 +			}
++		case "specialcooldown":
++			fmt.Sscan(v, &r.specialCD)
++		case "specialstates":
++			var lo, hi int32
++			if n, _ := fmt.Sscanf(strings.ReplaceAll(v, " ", ""), "%d-%d", &lo, &hi); n == 2 {
++				r.specialLo, r.specialHi = lo, hi
++			}
 +		case "rulesauthor":
 +			r.author = strings.ToLower(v)
 +		}
@@ -2170,6 +2201,38 @@ index 0000000..585f32e
 +	return true
 +}
 +
++// Count down the wait between special attacks. It restarts on every frame spent in a
++// special attack, so it runs from the end of the move. Stored on Char, so it rolls back.
++func cvfSpecialTick(c *Char) {
++	r := cvfRulesLoad()
++	if r.specialCD <= 0 || !r.appliesTo(c) {
++		return
++	}
++	if c.ss.moveType == MT_A && c.ss.no >= r.specialLo && c.ss.no <= r.specialHi {
++		c.cvfSpecialCD = r.specialCD
++	} else if c.cvfSpecialCD > 0 && !c.hitPause() {
++		c.cvfSpecialCD--
++	}
++}
++
++// True when a ChangeState would start a new special attack during the wait.
++// Moving between states of the same move is allowed, and so is anything but an attack.
++func cvfBlockSpecial(c *Char, no int32) bool {
++	r := cvfRulesLoad()
++	if c.cvfSpecialCD <= 0 || no < r.specialLo || no > r.specialHi || !r.appliesTo(c) {
++		return false
++	}
++	if c.ss.no >= r.specialLo && c.ss.no <= r.specialHi {
++		return false
++	}
++	st, ok := sys.cgi[c.ss.sb.playerNo].states[no]
++	if !ok || st.moveType != MT_A {
++		return false
++	}
++	cvfDebugf("special blocked %s state %d, %d frames left", c.name, no, c.cvfSpecialCD)
++	return true
++}
++
 +// Scale positive MP gains; the fractional part is kept in c.cvfMPRem (part of rollback state).
 +func cvfScaleMPGain(c *Char, i, v int32) int32 {
 +	r := cvfRulesLoad()
@@ -2193,7 +2256,7 @@ index 0000000..585f32e
 +}
 diff --git a/src/cvf_sound_lazy.go b/src/cvf_sound_lazy.go
 new file mode 100644
-index 0000000..c3ac2b6
+index 00000000..c3ac2b6d
 --- /dev/null
 +++ b/src/cvf_sound_lazy.go
 @@ -0,0 +1,144 @@
@@ -2342,7 +2405,7 @@ index 0000000..c3ac2b6
 +	}
 +}
 diff --git a/src/fightscreen.go b/src/fightscreen.go
-index 51867f3..5b91761 100644
+index 51867f32..5b917612 100644
 --- a/src/fightscreen.go
 +++ b/src/fightscreen.go
 @@ -2894,7 +2894,7 @@ func (cs *ComboShake) update() {
@@ -2385,7 +2448,7 @@ index 51867f3..5b91761 100644
  
  	// Step timer only after computing offset and scale
 diff --git a/src/image.go b/src/image.go
-index ee44670..b2b690b 100644
+index ee44670f..b2b690bc 100644
 --- a/src/image.go
 +++ b/src/image.go
 @@ -215,7 +215,7 @@ func (pf *PalFX) sinAdd(color *[3]int32) {
@@ -2425,7 +2488,7 @@ index ee44670..b2b690b 100644
  		(*color) += float32(sin * (float64(pf.sinhue) / 512.0))
  
 diff --git a/src/rect.go b/src/rect.go
-index d63aa49..25c8b51 100644
+index d63aa49d..25c8b512 100644
 --- a/src/rect.go
 +++ b/src/rect.go
 @@ -280,7 +280,7 @@ func (r *Rect) updateAlpha() {
@@ -2438,7 +2501,7 @@ index d63aa49..25c8b51 100644
  	r.alpha = packAlpha(src, 255-src)
  }
 diff --git a/src/script.go b/src/script.go
-index 5443f25..fdd510d 100644
+index 5443f257..fdd510d8 100644
 --- a/src/script.go
 +++ b/src/script.go
 @@ -891,6 +891,7 @@ func luaKeyToString(k lua.LValue) string {
@@ -2450,7 +2513,7 @@ index 5443f25..fdd510d 100644
  		/*Add a character definition to the select screen.
  		@function addChar
 diff --git a/src/sound.go b/src/sound.go
-index 6cdd693..7eaa167 100644
+index 6cdd6939..7eaa167e 100644
 --- a/src/sound.go
 +++ b/src/sound.go
 @@ -711,6 +711,10 @@ type Sound struct {
@@ -2510,7 +2573,7 @@ index 6cdd693..7eaa167 100644
  
  func (s *Snd) play(gn [2]int32, volumescale int32, pan float32, loopstart, loopend, startposition int, keepOnMatchEnd ...bool) bool {
 diff --git a/src/stage.go b/src/stage.go
-index 9b29416..4bd85c5 100644
+index 9b294164..4bd85c57 100644
 --- a/src/stage.go
 +++ b/src/stage.go
 @@ -57,7 +57,7 @@ func (bga *bgAction) action(updateTime bool) {
@@ -2532,7 +2595,7 @@ index 9b29416..4bd85c5 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/system.go b/src/system.go
-index 2698d35..5d67d0c 100644
+index 2698d355..5d67d0c8 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -990,7 +990,14 @@ func (s *System) renderFrame() {
