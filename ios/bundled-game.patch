@@ -1,3 +1,247 @@
+diff --git a/I.K.E.M.E.N-Go/DPadView.m b/I.K.E.M.E.N-Go/DPadView.m
+index a005f03..1ee201e 100644
+--- a/I.K.E.M.E.N-Go/DPadView.m
++++ b/I.K.E.M.E.N-Go/DPadView.m
+@@ -11,6 +11,7 @@
+ 
+ @property (nonatomic, assign) DPadDirection currentDirection;
+ @property (nonatomic, assign) CGPoint discOffset;
++@property (nonatomic, assign) int currentSector;
+ 
+ @end
+ 
+@@ -33,8 +34,9 @@ IB_DESIGNABLE
+     return self;
+ }
+ 
++// Easier to land on without looking.
+ - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+-    return [super pointInside:point withEvent:event];
++    return CGRectContainsPoint(CGRectInset(self.bounds, -24.0, -24.0), point);
+ }
+ 
+ 
+@@ -61,6 +63,7 @@ IB_DESIGNABLE
+     }
+     _discOffset = CGPointZero;
+     _currentDirection = DPadDirectionNeutral;
++    _currentSector = -1;
+ }
+ 
+ - (void)drawRect:(CGRect)rect {
+@@ -182,26 +185,29 @@ IB_DESIGNABLE
+         deg += 360.0;
+     }
+     
+-    // Sector Mapping (wider diagonals version)
+-    DPadDirection newDir = DPadDirectionNeutral;
+-    if (deg >= 345 || deg < 15)       newDir = DPadDirectionRight;                     // Right (Narrower)
+-    else if (deg >= 15 && deg < 75)   newDir = DPadDirectionDown | DPadDirectionRight; // Down-Right (Wider)
+-    else if (deg >= 75 && deg < 105)  newDir = DPadDirectionDown;                      // Down (Narrower)
+-    else if (deg >= 105 && deg < 165) newDir = DPadDirectionDown | DPadDirectionLeft;  // Down-Left (Wider)
+-    else if (deg >= 165 && deg < 195) newDir = DPadDirectionLeft;                      // Left (Narrower)
+-    else if (deg >= 195 && deg < 255) newDir = DPadDirectionUp | DPadDirectionLeft;    // Up-Left (Wider)
+-    else if (deg >= 255 && deg < 285) newDir = DPadDirectionUp;                        // Up (Narrower)
+-    else if (deg >= 285 && deg < 345) newDir = DPadDirectionUp | DPadDirectionRight;   // Up-Right (Wider)
+-    
+-    // Sector Mapping (old, equal sectors version)
+-//    if (deg >= 337.5 || deg < 22.5)       newDir = DPadDirectionRight;
+-//    else if (deg >= 22.5 && deg < 67.5)   newDir = DPadDirectionDown | DPadDirectionRight;
+-//    else if (deg >= 67.5 && deg < 112.5)  newDir = DPadDirectionDown;
+-//    else if (deg >= 112.5 && deg < 157.5) newDir = DPadDirectionDown | DPadDirectionLeft;
+-//    else if (deg >= 157.5 && deg < 202.5) newDir = DPadDirectionLeft;
+-//    else if (deg >= 202.5 && deg < 247.5) newDir = DPadDirectionUp | DPadDirectionLeft;
+-//    else if (deg >= 247.5 && deg < 292.5) newDir = DPadDirectionUp;
+-//    else if (deg >= 292.5 && deg < 337.5) newDir = DPadDirectionUp | DPadDirectionRight;
++    // Eight equal sectors. A direction is held until the thumb is clearly past its
++    // sector, so resting on a boundary doesn't flicker between two inputs.
++    static const CGFloat kSectorHold = 30.5; // 22.5 half sector + 8 degrees
++    if (_currentSector >= 0) {
++        CGFloat delta = fabs(fmod(deg - _currentSector * 45.0 + 540.0, 360.0) - 180.0);
++        if (delta > kSectorHold) {
++            _currentSector = -1;
++        }
++    }
++    if (_currentSector < 0) {
++        _currentSector = ((int)floor((deg + 22.5) / 45.0)) % 8;
++    }
++    static const DPadDirection kSectors[8] = {
++        DPadDirectionRight,
++        DPadDirectionDown | DPadDirectionRight,
++        DPadDirectionDown,
++        DPadDirectionDown | DPadDirectionLeft,
++        DPadDirectionLeft,
++        DPadDirectionUp | DPadDirectionLeft,
++        DPadDirectionUp,
++        DPadDirectionUp | DPadDirectionRight,
++    };
++    DPadDirection newDir = kSectors[_currentSector];
+     
+     // Dynamic Vector Displacement Offset
+     CGFloat normDist = MIN(dist, 1.0);
+@@ -225,6 +231,7 @@ IB_DESIGNABLE
+ }
+ 
+ - (void)resetDPad {
++    _currentSector = -1;
+     [self updateDirection:DPadDirectionNeutral offset:CGPointZero];
+ }
+ 
+diff --git a/I.K.E.M.E.N-Go/TouchOverlayView.m b/I.K.E.M.E.N-Go/TouchOverlayView.m
+index 84a9608..26107b0 100644
+--- a/I.K.E.M.E.N-Go/TouchOverlayView.m
++++ b/I.K.E.M.E.N-Go/TouchOverlayView.m
+@@ -11,8 +11,18 @@
+ #import "SDLWindowFix.h"
+ #import <Foundation/Foundation.h>
+ #import <SDL2/SDL.h>
++#import "libikemen.h"
++
++static const CGFloat kTapDistance = 16.0;
++static const CGFloat kSwipeDistance = 28.0;
++static const NSTimeInterval kTapTime = 0.35;
++static const NSTimeInterval kGesturePress = 0.09;
+ 
+ @interface TouchOverlayView ()
++@property (nonatomic, weak) UITouch *gestureTouch;
++@property (nonatomic, assign) CGPoint gestureStart;
++@property (nonatomic, assign) NSTimeInterval gestureTime;
++@property (nonatomic, assign) BOOL gestureTwoFingers;
+ @property (nonatomic, assign) GamepadButton activeButtons;
+ @property (nonatomic, strong) NSMutableSet<UIButton *> *currentlyPressedButtons;
+ @property (nonatomic, assign) CGSize lastKnownSize;
+@@ -35,6 +45,7 @@ static SDL_Joystick *virtualJoystick;
+     _leftJoystickView.delegate = self;
+     _rightJoystickView.delegate = self;
+     _dPadView.delegate = self;
++    _dPadView.deadZone = 0.12;
+     
+     self.vewlixButtonView.multipleTouchEnabled = YES;
+     self.vewlixButtonView.userInteractionEnabled = YES;
+@@ -94,6 +105,7 @@ static SDL_Joystick *virtualJoystick;
+     _currentlyPressedButtons = [NSMutableSet set];
+     _hitSlop = 12.0;
+     _lastKnownSize = CGSizeZero;
++    self.dPadView.deadZone = 0.12;
+ }
+ 
+ - (void)setupViews {
+@@ -163,6 +175,7 @@ static SDL_Joystick *virtualJoystick;
+ 
+ - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(nullable UIEvent *)event {
+     [super touchesBegan:touches withEvent:event];
++    [self trackGestureBegan:touches event:event];
+     [self processTouches:event.allTouches];
+     [self resetHideTimer];
+ }
+@@ -175,16 +188,107 @@ static SDL_Joystick *virtualJoystick;
+ 
+ - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(nullable UIEvent *)event {
+     [super touchesEnded:touches withEvent:event];
++    [self trackGestureEnded:touches];
+     [self processTouches:event.allTouches];
+     [self resetHideTimer];
+ }
+ 
+ - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(nullable UIEvent *)event {
+     [super touchesCancelled:touches withEvent:event];
++    self.gestureTouch = nil;
+     [self processTouches:event.allTouches];
+     [self resetHideTimer];
+ }
+ 
++#pragma mark - Menu gestures
++- (BOOL)touchIsOnButton:(UITouch *)touch {
++    CGPoint loc = [touch locationInView:self];
++    for (UIButton *button in self.buttons) {
++        CGRect frame = [self convertRect:button.bounds fromView:button];
++        if (CGRectContainsPoint(CGRectInset(frame, -self.hitSlop, -self.hitSlop), loc)) {
++            return YES;
++        }
++    }
++    return NO;
++}
++
++- (void)trackGestureBegan:(NSSet<UITouch *> *)touches event:(UIEvent *)event {
++    if (CvfInMatch()) {
++        self.gestureTouch = nil;
++        return;
++    }
++    if (self.gestureTouch != nil) {
++        self.gestureTwoFingers = YES;
++        return;
++    }
++    UITouch *touch = touches.anyObject;
++    if ([self touchIsOnButton:touch]) {
++        return;
++    }
++    self.gestureTouch = touch;
++    self.gestureStart = [touch locationInView:self];
++    self.gestureTime = touch.timestamp;
++    self.gestureTwoFingers = touches.count > 1;
++}
++
++- (void)trackGestureEnded:(NSSet<UITouch *> *)touches {
++    UITouch *touch = self.gestureTouch;
++    if (touch == nil || ![touches containsObject:touch]) {
++        return;
++    }
++    self.gestureTouch = nil;
++    
++    CGPoint end = [touch locationInView:self];
++    CGFloat dx = end.x - self.gestureStart.x;
++    CGFloat dy = end.y - self.gestureStart.y;
++    CGFloat distance = hypot(dx, dy);
++    NSTimeInterval held = touch.timestamp - self.gestureTime;
++    
++    if (distance >= kSwipeDistance) {
++        DPadDirection direction;
++        if (fabs(dx) > fabs(dy)) {
++            direction = dx > 0 ? DPadDirectionRight : DPadDirectionLeft;
++        } else {
++            direction = dy > 0 ? DPadDirectionDown : DPadDirectionUp;
++        }
++        [self pressDirection:direction];
++    } else if (distance <= kTapDistance && held <= kTapTime) {
++        if (self.gestureTwoFingers) {
++            [self pressGestureButton:SDL_CONTROLLER_BUTTON_BACK];
++        } else if (!CvfTouchTap(end.x / self.bounds.size.width, end.y / self.bounds.size.height)) {
++            [self pressGestureButton:SDL_CONTROLLER_BUTTON_A];
++        }
++    }
++}
++
++// performSelector rather than dispatch_after: the engine runs inside a main queue
++// block, so blocks queued behind it would not run. Run loop timers still fire.
++- (void)pressDirection:(DPadDirection)direction {
++    [self dPad:self.dPadView didChangeDirection:direction];
++    [self performSelector:@selector(releaseDirection) withObject:nil afterDelay:kGesturePress];
++}
++
++- (void)releaseDirection {
++    [self dPad:self.dPadView didChangeDirection:DPadDirectionNeutral];
++}
++
++- (void)pressGestureButton:(SDL_GameControllerButton)button {
++    [self initVirtualJoystick];
++    if (virtualJoystick == NULL) {
++        return;
++    }
++    SDL_JoystickSetVirtualButton(virtualJoystick, (int)button, SDL_PRESSED);
++    SDL_JoystickUpdate();
++    [self performSelector:@selector(releaseGestureButton:) withObject:@(button) afterDelay:kGesturePress];
++}
++
++- (void)releaseGestureButton:(NSNumber *)button {
++    if (virtualJoystick != NULL) {
++        SDL_JoystickSetVirtualButton(virtualJoystick, button.intValue, SDL_RELEASED);
++        SDL_JoystickUpdate();
++    }
++}
++
+ // This method processes touch events so that multiple button presses (A+B, X+Y, X+A, etc.) work
+ - (void)processTouches:(NSSet<UITouch *> *)touches {
+     NSMutableSet<UIButton *> *newPressedButtons = [NSMutableSet set];
 diff --git a/I.K.E.M.E.N-Go/ViewController.m b/I.K.E.M.E.N-Go/ViewController.m
 index e850d21..6f1cf8a 100644
 --- a/I.K.E.M.E.N-Go/ViewController.m

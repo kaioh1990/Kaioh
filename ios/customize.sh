@@ -31,6 +31,7 @@ grep -q 'INFOPLIST_KEY_CFBundleDisplayName = "CvF Online"' "$PBX"
 #    straight onto the device, and explain the local-network prompt (UPnP).
 plutil -replace UIFileSharingEnabled -bool YES "$PLIST"
 plutil -replace LSSupportsOpeningDocumentsInPlace -bool YES "$PLIST"
+plutil -replace CADisableMinimumFrameDurationOnPhone -bool YES "$PLIST" # 120 Hz on ProMotion iPhones
 plutil -replace NSLocalNetworkUsageDescription -string "CvF Online uses your local network to open a port on your router for online matches." "$PLIST"
 plutil -lint "$PLIST"
 echo "ikemen-ios customized for CvF Online"

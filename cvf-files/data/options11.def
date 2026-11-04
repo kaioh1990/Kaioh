@@ -933,6 +933,18 @@ fadeout.time=32
 cursor.move.snd=0,0
 cursor.done.snd=0,1
 cancel.snd=0,2
+; online port: say what each button does in the button config screens
+keymenu.item.value.offset = 135, 0
+keymenu.itemname.a = A Primary Atk
+keymenu.itemname.b = B Jump
+keymenu.itemname.c = C Second Atk
+keymenu.itemname.x = X Backdash
+keymenu.itemname.y = Y Special
+keymenu.itemname.z = Z Subweapon
+keymenu.itemname.start = Start
+keymenu.itemname.d = D Extra
+keymenu.itemname.w = W Whip Rush
+keymenu.itemname.menu = Menu / Back
 [OptionBGdef]
 bgclearcolor=0,0,0
 [OptionBG *];moon

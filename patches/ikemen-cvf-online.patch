@@ -1,8 +1,16 @@
 diff --git a/external/script/main.lua b/external/script/main.lua
-index b7d76c83..8ddbc04e 100644
+index b7d76c83..f7f714b5 100644
 --- a/external/script/main.lua
 +++ b/external/script/main.lua
-@@ -2308,14 +2308,10 @@ main.t_itemname = {
+@@ -70,6 +70,7 @@ end
+ 
+ --returns value depending on button pressed (a = 1; a + start = 7 etc.)
+ function main.f_btnPalNo(p)
++	if main.touchConfirm then return 1 end
+ 	local s = 0
+ 	if commandGetState(p, '/s') then s = 6 end
+ 	for i, k in ipairs({'a', 'b', 'c', 'x', 'y', 'z'}) do
+@@ -2308,14 +2309,10 @@ main.t_itemname = {
  		main.pauseMenu = false
  		main.selectMenu[2] = true
  		main.stageMenu = true
@@ -19,7 +27,7 @@ index b7d76c83..8ddbc04e 100644
  		textImgSetText(motif.select_info.title.TextSpriteData, motif.select_info.title.text.netplayversus)
  		setGameMode('netplayversus')
  		setHomeTeam(1)
-@@ -2356,12 +2352,22 @@ main.t_itemname = {
+@@ -2356,12 +2353,22 @@ main.t_itemname = {
  		end
  		return nil
  	end,
@@ -42,7 +50,7 @@ index b7d76c83..8ddbc04e 100644
  		if main.f_connect("", gameOption('Netplay.ListenPort')) then
  			if synchronize() then
  				enterSyncedNetplayMenu()
-@@ -2872,7 +2878,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+@@ -2872,7 +2879,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
  							motif.infobox.text.TextSpriteData
  						)
  					end
@@ -51,7 +59,7 @@ index b7d76c83..8ddbc04e 100644
  						break
  					end
  				elseif bool_f1 and (getKey(motif.infobox.keycode) or gameOption('Config.FirstRun')) then
-@@ -2907,7 +2913,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+@@ -2907,7 +2914,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
  						sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
  						break
  					elseif f == 'exit' then
@@ -62,7 +70,7 @@ index b7d76c83..8ddbc04e 100644
  					elseif main.t_itemname[f] == nil then
  						if t_storyModeList[f] then
  							f = 'storyarc'
-@@ -3252,11 +3260,93 @@ function main.f_replay()
+@@ -3252,11 +3261,93 @@ function main.f_replay()
  	end
  end
  
@@ -156,7 +164,7 @@ index b7d76c83..8ddbc04e 100644
  			exitNetPlay()
  			return false
  		end
-@@ -3272,16 +3362,107 @@ function main.f_connect(server, str)
+@@ -3272,16 +3363,107 @@ function main.f_connect(server, str)
  			txt = string.format(motif.title_info.connecting.text.join, server, str)
  		end
  		textImgReset(motif.title_info.connecting.TextSpriteData)
@@ -264,11 +272,97 @@ index b7d76c83..8ddbc04e 100644
  --asserts content unlock conditions
  function main.f_unlock(permanent)
  	local refreshRandom = false
+diff --git a/external/script/options.lua b/external/script/options.lua
+index eda5450c..7a4305d6 100644
+--- a/external/script/options.lua
++++ b/external/script/options.lua
+@@ -863,6 +863,20 @@ options.t_itemname = {
+ 		end
+ 		return true
+ 	end,
++	--Frame Rate (fights outside online play; game speed stays the same)
++	['framerate'] = function(t, item, cursorPosY, moveTxt)
++		if getInput(-1, motif.option_info.menu.add.key, motif.option_info.menu.subtract.key) then
++			sndPlay(motif.Snd, motif.option_info.cursor.move.snd[1], motif.option_info.cursor.move.snd[2])
++			if gameOption('Video.Framerate') == 120 then
++				modifyGameOption('Video.Framerate', 60)
++			else
++				modifyGameOption('Video.Framerate', 120)
++			end
++			t.items[item].vardisplay = options.t_vardisplay['framerate']()
++			options.modified = true
++		end
++		return true
++	end,
+ 	--MSAA
+ 	['msaa'] = function(t, item, cursorPosY, moveTxt)
+ 		if getInput(-1, motif.option_info.menu.add.key) and gameOption('Video.MSAA') < 32 then
+@@ -1623,6 +1637,9 @@ options.t_vardisplay = {
+ 	['vsync'] = function()
+ 		return options.f_definedDisplay(gameOption('Video.VSync'), {[1] = motif.option_info.menu.valuename.enabled}, motif.option_info.menu.valuename.disabled)
+ 	end,
++	['framerate'] = function()
++		return gameOption('Video.Framerate') .. ' FPS'
++	end,
+ 	['windowscalemode'] = function()
+ 		return options.f_boolDisplay(gameOption('Video.WindowScaleMode'), motif.option_info.menu.valuename.bilinear, motif.option_info.menu.valuename.nearest)
+ 	end,
+@@ -1880,6 +1897,16 @@ end
+ --;===========================================================
+ --; KEY SETTINGS
+ --;===========================================================
++-- Readable names for controller inputs; the saved values are unchanged
++local t_keyLabels = {
++	A = 'Pad A', B = 'Pad B', X = 'Pad X', Y = 'Pad Y',
++	LB = 'L Bumper', RB = 'R Bumper', LT = 'L Trigger', RT = 'R Trigger',
++	LS = 'L Stick In', RS = 'R Stick In', START = 'Start', BACK = 'Select',
++	DP_U = 'D-Pad Up', DP_D = 'D-Pad Dn', DP_L = 'D-Pad Lt', DP_R = 'D-Pad Rt',
++	['LS_X-'] = 'LStick Lt', ['LS_X+'] = 'LStick Rt', ['LS_Y-'] = 'LStick Up', ['LS_Y+'] = 'LStick Dn',
++	['RS_X-'] = 'RStick Lt', ['RS_X+'] = 'RStick Rt', ['RS_Y-'] = 'RStick Up', ['RS_Y+'] = 'RStick Dn',
++}
++
+ local t_keyCfg = {}
+ table.insert(t_keyCfg, {itemname = 'spacer', displayname = '-', paramname = 'spacer'})
+ for _, v in ipairs(motif.option_info.keymenu.itemname_order or {}) do
+@@ -2308,7 +2335,7 @@ function options.f_keyCfg(cfgType, controller, bg, skipClear)
+ 				displayname = base.displayname,
+ 				paramname   = base.paramname,
+ 				selected    = base.selected,
+-				vardisplay  = base['vardisplay' .. pn],
++				vardisplay  = t_keyLabels[base['vardisplay' .. pn]] or base['vardisplay' .. pn],
+ 				infodisplay = base.infodisplay,
+ 			}
+ 			-- contextual labels
 diff --git a/external/script/start.lua b/external/script/start.lua
-index e35377a3..2f08f847 100644
+index e35377a3..4ddf0c21 100644
 --- a/external/script/start.lua
 +++ b/external/script/start.lua
-@@ -3118,9 +3118,11 @@ function start.f_selectScreen()
+@@ -1502,6 +1502,24 @@ function start.f_randomChar(pn)
+ 	return result
+ end
+ 
++--returns the selectable cell under a touch, in screenpack coordinates
++function start.f_touchCell(x, y)
++	local size = motif.select_info.cell.size
++	for row, cols in ipairs(start.t_grid) do
++		for col, c in ipairs(cols) do
++			local cx = motif.select_info.pos[1] + c.x
++			local cy = motif.select_info.pos[2] + c.y
++			if x >= cx and x < cx + size[1] and y >= cy and y < cy + size[2] then
++				if c.char ~= nil and c.skip ~= 1 and c.hidden ~= 2 then
++					return col - 1, row - 1
++				end
++				return nil
++			end
++		end
++	end
++	return nil
++end
++
+ --return true if slot is selected, update start.t_grid
+ function start.f_slotSelected(cell, side, cmd, player, x, y)
+ 	if cmd == nil then
+@@ -3118,9 +3136,11 @@ function start.f_selectScreen()
  					main.f_animPosDraw(motif.select_info.stage.portrait.slot.AnimData)
  				end
  				--draw stage name
@@ -282,6 +376,30 @@ index e35377a3..2f08f847 100644
  				end
  				textImgReset(stageTextData)
  				textImgSetText(stageTextData, stage_text)
+@@ -3692,6 +3712,23 @@ function start.f_selectMenu(side, cmd, player, member, selectState)
+ 			end
+ 			--calculate current position
+ 			start.c[player].selX, start.c[player].selY = start.f_cellMovement(start.c[player].selX, start.c[player].selY, cmd, side, start.f_getCursorData(player).cursor.move.snd)
++			--touch: the first tap on a character moves the cursor, a second tap selects
++			main.touchConfirm = false
++			if cmd ~= nil then
++				local tapX, tapY = cvfTouchTap()
++				if tapX ~= nil then
++					local cellX, cellY = start.f_touchCell(tapX, tapY)
++					if cellX ~= nil then
++						if cellX == start.c[player].selX and cellY == start.c[player].selY then
++							main.touchConfirm = true
++						else
++							start.c[player].selX, start.c[player].selY = cellX, cellY
++							local moveSnd = start.f_getCursorData(player).cursor.move.snd
++							sndPlay(motif.Snd, moveSnd[1], moveSnd[2])
++						end
++					end
++				end
++			end
+ 			start.c[player].cell = start.c[player].selX + motif.select_info.columns * start.c[player].selY
+ 			start.c[player].selRef = start.f_selGrid(start.c[player].cell + 1).char_ref
+ 			main.f_preloadSetCharHighlight(player, start.c[player].selRef)
 diff --git a/src/bgdef.go b/src/bgdef.go
 index 840b4f88..fbda3898 100644
 --- a/src/bgdef.go
@@ -1436,10 +1554,10 @@ index 00000000..19554275
 +)
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 00000000..ab3ba906
+index 00000000..38ce9b70
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,858 @@
+@@ -0,0 +1,888 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -2031,6 +2149,16 @@ index 00000000..ab3ba906
 +// Lua bindings
 +
 +func cvfOnlineScriptInit(l *lua.LState) {
++	luaRegister(l, "cvfTouchTap", func(l *lua.LState) int {
++		cvfTap.used, cvfTap.polled = true, sys.frameCounter
++		if !cvfTap.pending {
++			return 0
++		}
++		cvfTap.pending = false
++		l.Push(lua.LNumber(cvfTap.x))
++		l.Push(lua.LNumber(cvfTap.y))
++		return 2
++	})
 +	luaRegister(l, "cvfOnlineHostBegin", func(l *lua.LState) int {
 +		cvfOnline.hostBegin(int(numArg(l, 1)), int(sys.cfg.Netplay.Rollback.Port))
 +		return 0
@@ -2224,6 +2352,26 @@ index 00000000..ab3ba906
 +	if *time < 0 || *time > remaining {
 +		*time = remaining
 +	}
++	return true
++}
++
++// Touch taps for screens that read them directly (character select). The screen polls
++// every frame, so an old poll means nothing is listening and the app sends a confirm instead.
++var cvfTap struct {
++	x, y    float32
++	pending bool
++	polled  int32
++	used    bool
++}
++
++// x and y are 0-1 across the game view. Returns false if no screen is listening.
++func cvfStoreTap(x, y float32) bool {
++	if !cvfTap.used || sys.frameCounter-cvfTap.polled > 5 {
++		return false
++	}
++	gameWidth := 240 * sys.getMotifAspect()
++	cvfTap.x, cvfTap.y = x*gameWidth-(gameWidth-320)/2, y*240
++	cvfTap.pending = true
 +	return true
 +}
 +
@@ -2556,6 +2704,18 @@ index d63aa49d..25c8b512 100644
  	src := Clamp(int32(math.Round(float64(v))), 0, 255)
  	r.alpha = packAlpha(src, 255-src)
  }
+diff --git a/src/resources/defaultMotif.ini b/src/resources/defaultMotif.ini
+index bfa04966..4e23b980 100644
+--- a/src/resources/defaultMotif.ini
++++ b/src/resources/defaultMotif.ini
+@@ -3907,6 +3907,7 @@ Welcome to I.K.E.M.E.N GO engine! (%s - %s)
+ 	menu.itemname.menuvideo.resolution.back = Back
+ 	menu.itemname.menuvideo.fullscreen = Fullscreen
+ 	menu.itemname.menuvideo.vsync = VSync
++	menu.itemname.menuvideo.framerate = Frame Rate
+ 	menu.itemname.menuvideo.aspectratio = Aspect Ratio
+ 	; Aspect ratio is assigned based on values used in itemname suffix (e.g. 4:3)
+ 	menu.itemname.menuvideo.aspectratio.defaultaspect = Default
 diff --git a/src/script.go b/src/script.go
 index 5443f257..fdd510d8 100644
 --- a/src/script.go
@@ -2755,10 +2915,37 @@ index 2698d355..5d67d0c8 100644
  
  // Step the zoom variables
 diff --git a/src/util_ios.go b/src/util_ios.go
-index aabd7589..410808ee 100755
+index aabd7589..6f8d9827 100755
 --- a/src/util_ios.go
 +++ b/src/util_ios.go
-@@ -123,7 +123,9 @@ func SDL_main(argc C.int, argv **C.char) C.int {
+@@ -101,6 +101,26 @@ func ShowRetryDialog(message string) bool {
+ 	return false
+ }
+ 
++// True while a fight is on screen, so touches stay as game controls.
++//
++//export CvfInMatch
++func CvfInMatch() C.int {
++	if sys.middleOfMatch() && !sys.motif.me.active {
++		return 1
++	}
++	return 0
++}
++
++// Hands a tap to the current screen. Returns 0 if that screen doesn't read taps.
++//
++//export CvfTouchTap
++func CvfTouchTap(x, y C.float) C.int {
++	if cvfStoreTap(float32(x), float32(y)) {
++		return 1
++	}
++	return 0
++}
++
+ //export SDL_main
+ func SDL_main(argc C.int, argv **C.char) C.int {
+ 	runtime.LockOSThread()
+@@ -123,7 +143,9 @@ func SDL_main(argc C.int, argv **C.char) C.int {
  	for i := 0; i+1 < len(args); i++ {
  		if args[i] == "--assets" {
  			sys.baseDir = args[i+1]
