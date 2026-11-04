@@ -264,6 +264,24 @@ index b7d76c83..8ddbc04e 100644
  --asserts content unlock conditions
  function main.f_unlock(permanent)
  	local refreshRandom = false
+diff --git a/external/script/start.lua b/external/script/start.lua
+index e35377a3..2f08f847 100644
+--- a/external/script/start.lua
++++ b/external/script/start.lua
+@@ -3118,9 +3118,11 @@ function start.f_selectScreen()
+ 					main.f_animPosDraw(motif.select_info.stage.portrait.slot.AnimData)
+ 				end
+ 				--draw stage name
+-				local stage_text = motif.select_info.stage.random.text
++				-- CvF: the stage font is a picture font. Each character is a whole stage banner and they
++				-- all draw in the same spot, so print only the stage's own character ('*' is Random).
++				local stage_text = '*'
+ 				if stageListNo ~= 0 then
+-					stage_text = main.f_formatBySpec(motif.select_info.stage.text, {i = stageListNo, s = main.t_selStages[start.f_stageMenuRef()].name})
++					stage_text = main.t_selStages[start.f_stageMenuRef()].name
+ 				end
+ 				textImgReset(stageTextData)
+ 				textImgSetText(stageTextData, stage_text)
 diff --git a/src/bgdef.go b/src/bgdef.go
 index 840b4f88..fbda3898 100644
 --- a/src/bgdef.go
