@@ -475,12 +475,373 @@ index ac9143a..5b51042 100644
  }
  
  func (s *SDLSpeaker) Play(st beep.Streamer) {
+diff --git a/src/bc_fuse.go b/src/bc_fuse.go
+new file mode 100644
+index 0000000..f3ed928
+--- /dev/null
++++ b/src/bc_fuse.go
+@@ -0,0 +1,355 @@
++package main
++
++// Peephole fusion for the Vita bytecode interpreter.
++//
++// Fight logic on the Vita is dominated by the interpreter loop, about 60k
++// operations per tick per player with CvF's shared -3 state, and each
++// dispatch costs more than the work it does. fuseBytecode rewrites the most
++// common two-op sequences into single fused opcodes:
++//
++//	int8 n; var         -> var8 n nop        (also fvar, sysvar)
++//	int8 n; eq/ne/..    -> eq8 n nop ...
++//	jz8 k; pop          -> jz8p k nop        (the "triggerall" separator)
++//
++// Every rewrite keeps the byte length, so no jump target moves; the padding
++// byte is a real no-op opcode in case anything lands on it. The walker only
++// steps across opcodes whose operand size it knows and stops at the first it
++// doesn't, so an unknown opcode can never be mis-decoded.
++
++var fuseFlag = -1
++
++// fuseEnabled: on the Vita unless ux0:data/CvF/vita_nofuse.txt exists
++// (also disables trigger hoisting), for A/B checks with the state hash.
++func fuseEnabled() bool {
++	if fuseFlag < 0 {
++		fuseFlag = 0
++		if isVita && FileExist("vita_nofuse.txt") == "" {
++			fuseFlag = 1
++		}
++	}
++	return fuseFlag == 1
++}
++
++var fuseStats struct{ exprs, fused int }
++
++func fuseBytecode(sb *StateBytecode) {
++	if !fuseEnabled() || sb == nil {
++		return
++	}
++	fuseExp(sb.stateTypeExp)
++	fuseExp(sb.moveTypeExp)
++	fuseExp(sb.physicsExp)
++	fuseBlock(&sb.block)
++}
++
++func fuseBlock(b *StateBlock) {
++	if b == nil {
++		return
++	}
++	fuseExp(b.trigger)
++	fuseExp(b.forCtrlVar.be)
++	for i := range b.forExpression {
++		fuseExp(b.forExpression[i])
++	}
++	if b.elseBlock != nil {
++		fuseBlock(b.elseBlock)
++	}
++	for _, sc := range b.ctrls {
++		switch c := sc.(type) {
++		case *StateBlock:
++			fuseBlock(c)
++		case StateExpr:
++			fuseExp(BytecodeExp(c))
++		case varAssign:
++			fuseExp(c.be)
++		default:
++			fuseController(sc)
++		}
++	}
++}
++
++// fuseController fuses the parameter expressions of a state controller. The
++// controllers are all StateControllerBase ([]byte of "paramID; count;
++// expr-length; expr..." entries) wrapped in distinct named types; sc_runfn.go
++// knows them all, so it provides the conversion.
++func fuseController(sc StateController) {
++	scb, ok := scBase(sc)
++	if !ok {
++		return
++	}
++	for _, p := range scb {
++		for _, e := range p.exp {
++			fuseExp(e)
++		}
++	}
++}
++
++// opLen returns the operand length of a base opcode, or -1 when the walker
++// must stop (unknown opcode, or a nested block it handles separately).
++func opLen(op OpCode) int {
++	switch op {
++	case OC_jud8, OC_jz8, OC_jnz8, OC_jmp8, OC_int8, OC_localvar,
++		OC_statetype, OC_movetype, OC_teammode:
++		return 1
++	case OC_jz, OC_jnz, OC_jmp, OC_int, OC_float, OC_string, OC_hitdefattr:
++		return 4
++	case OC_int64:
++		return 8
++	case OC_var8, OC_fvar8, OC_sysvar8, OC_eq8, OC_ne8, OC_lt8, OC_gt8, OC_le8, OC_ge8, OC_jz8p, OC_jnz8p:
++		return 2
++	case OC_eq32, OC_ne32, OC_lt32, OC_gt32, OC_le32, OC_ge32:
++		return 5
++	case OC_range_ii8, OC_range_ie8, OC_range_ei8, OC_range_ee8:
++		return 4
++	case OC_range_ii32, OC_range_ie32, OC_range_ei32, OC_range_ee32:
++		return 10
++	case OC_tcmp8:
++		return 6
++	case OC_tcmp32:
++		return 9
++	case OC_trange8:
++		return 8
++	case OC_trange32:
++		return 14
++	case OC_tvcmp8:
++		return 8
++	case OC_player, OC_parent, OC_root, OC_helper, OC_target, OC_partner, OC_enemy,
++		OC_enemynear, OC_playerid, OC_playerindex, OC_p2, OC_stateowner, OC_helperindex,
++		OC_run_redir, OC_run_caller:
++		return -2 // 4-byte length + nested block
++	case OC_ex_, OC_ex2_, OC_ex3_, OC_const_, OC_assign_:
++		return -1 // sub-opcodes with their own operands: stop here
++	}
++	if op < OC_ex3_ {
++		return 0 // plain trigger / operator
++	}
++	return -1
++}
++
++func fuseExp(be BytecodeExp) {
++	if len(be) == 0 {
++		return
++	}
++	fuseStats.exprs++
++	fuseExp1(be)
++	fuseLines(be)
++}
++
++func fuseExp1(be BytecodeExp) {
++	i := 0
++	for i < len(be) {
++		op := be[i]
++		// Fusions: check the two-op patterns at i.
++		if op == OC_int8 && i+2 < len(be) {
++			var f OpCode
++			switch be[i+2] {
++			case OC_var:
++				f = OC_var8
++			case OC_fvar:
++				f = OC_fvar8
++			case OC_sysvar:
++				f = OC_sysvar8
++			case OC_eq:
++				f = OC_eq8
++			case OC_ne:
++				f = OC_ne8
++			case OC_lt:
++				f = OC_lt8
++			case OC_gt:
++				f = OC_gt8
++			case OC_le:
++				f = OC_le8
++			case OC_ge:
++				f = OC_ge8
++			}
++			if f != 0 {
++				be[i], be[i+2] = f, OC_nop
++				fuseStats.fused++
++				i += 3
++				continue
++			}
++		}
++		if op == OC_int8 && i+5 < len(be) && be[i+2] == OC_int8 && be[i+4] >= OC_range_ii && be[i+4] <= OC_range_ee {
++			// int8 a; int8 b; range -> range8 a b nop nop
++			be[i] = be[i+4] - OC_range_ii + OC_range_ii8
++			be[i+2] = be[i+3] // b
++			be[i+3], be[i+4] = OC_nop, OC_nop
++			fuseStats.fused++
++			i += 5
++			continue
++		}
++		if op == OC_int && i+5 < len(be) {
++			var f OpCode
++			switch be[i+5] {
++			case OC_eq:
++				f = OC_eq32
++			case OC_ne:
++				f = OC_ne32
++			case OC_lt:
++				f = OC_lt32
++			case OC_gt:
++				f = OC_gt32
++			case OC_le:
++				f = OC_le32
++			case OC_ge:
++				f = OC_ge32
++			}
++			if f != 0 {
++				be[i], be[i+5] = f, OC_nop
++				fuseStats.fused++
++				i += 6
++				continue
++			}
++			if i+10 < len(be) && be[i+5] == OC_int && be[i+10] >= OC_range_ii && be[i+10] <= OC_range_ee {
++				// int a; int b; range -> range32 a b nop nop
++				be[i] = be[i+10] - OC_range_ii + OC_range_ii32
++				copy(be[i+5:i+9], be[i+6:i+10])
++				be[i+9], be[i+10] = OC_nop, OC_nop
++				fuseStats.fused++
++				i += 11
++				continue
++			}
++		}
++		if (op == OC_jz8 || op == OC_jnz8) && i+2 < len(be) && be[i+2] == OC_pop {
++			// Only when the jump can't land on the pop we're removing: a
++			// forward jump of k lands at i+2+k, which equals the pop only
++			// for k == 0 (meaning "end of expression"), so this is always safe.
++			if op == OC_jz8 {
++				be[i] = OC_jz8p
++			} else {
++				be[i] = OC_jnz8p
++			}
++			be[i+2] = OC_nop
++			fuseStats.fused++
++			i += 3
++			continue
++		}
++		n := opLen(op)
++		switch {
++		case n >= 0:
++			i += 1 + n
++		case n == -2:
++			if i+5 > len(be) {
++				return
++			}
++			l := int(bcI32([]OpCode(be), i+1))
++			if l < 0 || i+5+l > len(be) {
++				return
++			}
++			fuseExp(be[i+5 : i+5+l])
++			i += 5 + l
++		default:
++			return
++		}
++	}
++}
++
++// isSimpleTrigger reports whether t is a one-byte trigger pushTrigger handles.
++func isSimpleTrigger(t OpCode) bool {
++	switch t {
++	case OC_stateno, OC_prevstateno, OC_life, OC_lifemax, OC_roundstate, OC_time, OC_alive, OC_ctrl,
++		OC_anim, OC_numpartner, OC_numenemy, OC_gametime, OC_power, OC_facing, OC_hitpausetime,
++		OC_movecontact, OC_movehit, OC_teamside, OC_id:
++		return true
++	}
++	return false
++}
++
++func isCmp8(op OpCode) bool  { return op >= OC_eq8 && op <= OC_ge8 }
++func isCmp32(op OpCode) bool { return op >= OC_eq32 && op <= OC_ge32 }
++func cmpOf8(op OpCode) OpCode {
++	switch op {
++	case OC_eq8:
++		return OC_eq
++	case OC_ne8:
++		return OC_ne
++	case OC_lt8:
++		return OC_lt
++	case OC_gt8:
++		return OC_gt
++	case OC_le8:
++		return OC_le
++	}
++	return OC_ge
++}
++func cmpOf32(op OpCode) OpCode { return cmpOf8(op - OC_eq32 + OC_eq8) }
++
++// fuseLines runs after fuseExp1 and folds "T; cmp k; jz8p 0" lines.
++func fuseLines(be BytecodeExp) {
++	i := 0
++	for i < len(be) {
++		op := be[i]
++		if isSimpleTrigger(op) {
++			// T; cmp8 n nop; jz8p 0 nop  (7 bytes)
++			if i+6 < len(be) && isCmp8(be[i+1]) && be[i+4] == OC_jz8p && be[i+5] == 0 {
++				t, cmp, n := op, cmpOf8(be[i+1]), be[i+2]
++				be[i], be[i+1], be[i+2], be[i+3] = OC_tcmp8, t, cmp, n
++				be[i+4], be[i+5], be[i+6] = OC_nop, OC_nop, OC_nop
++				fuseStats.fused++
++				i += 7
++				continue
++			}
++			// T; cmp32 n(4) nop; jz8p 0 nop  (10 bytes)
++			if i+9 < len(be) && isCmp32(be[i+1]) && be[i+7] == OC_jz8p && be[i+8] == 0 {
++				t, cmp := op, cmpOf32(be[i+1])
++				var k [4]OpCode
++				copy(k[:], be[i+2:i+6])
++				be[i], be[i+1], be[i+2] = OC_tcmp32, t, cmp
++				copy(be[i+3:i+7], k[:])
++				be[i+7], be[i+8], be[i+9] = OC_nop, OC_nop, OC_nop
++				fuseStats.fused++
++				i += 10
++				continue
++			}
++			// T; rangeR8 a b nop nop; jz8p 0 nop  (9 bytes)
++			if i+8 < len(be) && be[i+1] >= OC_range_ii8 && be[i+1] <= OC_range_ee8 && be[i+6] == OC_jz8p && be[i+7] == 0 {
++				t, r, a, b := op, be[i+1]-OC_range_ii8+OC_range_ii, be[i+2], be[i+3]
++				be[i], be[i+1], be[i+2], be[i+3], be[i+4] = OC_trange8, t, r, a, b
++				be[i+5], be[i+6], be[i+7], be[i+8] = OC_nop, OC_nop, OC_nop, OC_nop
++				fuseStats.fused++
++				i += 9
++				continue
++			}
++			// T; rangeR32 a(4) b(4) nop nop; jz8p 0 nop  (15 bytes)
++			if i+14 < len(be) && be[i+1] >= OC_range_ii32 && be[i+1] <= OC_range_ee32 && be[i+12] == OC_jz8p && be[i+13] == 0 {
++				t, r := op, be[i+1]-OC_range_ii32+OC_range_ii
++				var ab [8]OpCode
++				copy(ab[:], be[i+2:i+10])
++				be[i], be[i+1], be[i+2] = OC_trange32, t, r
++				copy(be[i+3:i+11], ab[:])
++				be[i+11], be[i+12], be[i+13], be[i+14] = OC_nop, OC_nop, OC_nop, OC_nop
++				fuseStats.fused++
++				i += 15
++				continue
++			}
++		}
++		if op == OC_var8 || op == OC_fvar8 || op == OC_sysvar8 {
++			// var8 v nop; cmp8 n nop; jz8p 0 nop  (9 bytes)
++			if i+8 < len(be) && isCmp8(be[i+3]) && be[i+6] == OC_jz8p && be[i+7] == 0 {
++				v, cmp, n := be[i+1], cmpOf8(be[i+3]), be[i+4]
++				be[i], be[i+1], be[i+2], be[i+3], be[i+4] = OC_tvcmp8, op, v, cmp, n
++				be[i+5], be[i+6], be[i+7], be[i+8] = OC_nop, OC_nop, OC_nop, OC_nop
++				fuseStats.fused++
++				i += 9
++				continue
++			}
++		}
++		n := opLen(op)
++		switch {
++		case n >= 0:
++			i += 1 + n
++		case n == -2:
++			if i+5 > len(be) {
++				return
++			}
++			l := int(bcI32([]OpCode(be), i+1))
++			if l < 0 || i+5+l > len(be) {
++				return
++			}
++			fuseLines(be[i+5 : i+5+l])
++			i += 5 + l
++		default:
++			return
++		}
++	}
++}
 diff --git a/src/bcprof.go b/src/bcprof.go
 new file mode 100644
-index 0000000..8ff6d69
+index 0000000..4cacca4
 --- /dev/null
 +++ b/src/bcprof.go
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,250 @@
 +package main
 +
 +import (
@@ -488,11 +849,24 @@ index 0000000..8ff6d69
 +	"sort"
 +)
 +
-+// Diagnostic: count bytecode operations per (player, helper, state) to find
-+// which states dominate fight CPU time. Build with bcOpProf = true.
++// Diagnostics for where fight CPU time goes.
++//
++// bcOpProf (compile-time, emulator): count bytecode operations per
++// (player, helper, state) and per controller of the first player's -3.
++//
++// hwProf (run-time, PS Vita): the same breakdown in microseconds, measured
++// once during the first match (ticks 120..720 of round state 2+) and written
++// to the log.
 +const bcOpProf = false
 +
 +var bcOps uint64
++var bcOpHist [256]uint64
++var bcPairHist map[uint16]uint64 = map[uint16]uint64{}
++var bcPrevOp OpCode
++var bcExHist = map[uint16]uint64{}
++
++var hwProf bool
++var hwProfDone bool
 +
 +type bcProfKey struct {
 +	pn  int
@@ -503,60 +877,130 @@ index 0000000..8ff6d69
 +var bcProfMap = map[bcProfKey]uint64{}
 +var bcProfFrames int
 +
++func bcProfNow() uint64 {
++	if bcOpProf {
++		return bcOps
++	}
++	return uint64(vitaNowUs())
++}
++
 +func bcProfRun(c *Char, sb *StateBytecode, st int32) bool {
-+	if !bcOpProf {
++	if !bcOpProf && !hwProf {
 +		return sb.run(c)
 +	}
 +	if st == -3 && c.playerNo == 0 && c.helperIndex == 0 {
 +		bcProfTop = &sb.block
 +	}
-+	o := bcOps
++	o := bcProfNow()
 +	r := sb.run(c)
 +	k := bcProfKey{c.playerNo, c.helperId, st}
 +	if c.helperIndex == 0 {
 +		k.hid = -1
++	} else if st >= 0 {
++		k.st = -100 // all helper states together
 +	}
-+	bcProfMap[k] += bcOps - o
++	bcProfMap[k] += uint64(uint32(bcProfNow() - o))
 +	return r
 +}
 +
 +// bcProfFrame is called once per game tick.
 +func bcProfFrame() {
-+	if !bcOpProf || sys.roundState() < 2 {
++	if (!bcOpProf && !isVita) || hwProfDone {
++		return
++	}
++	if sys.roundState() < 2 {
 +		return
 +	}
 +	bcProfFrames++
-+	if bcProfFrames != 420 {
-+		if bcProfFrames < 120 {
-+			// warm-up: discard
-+			bcProfMap = map[bcProfKey]uint64{}
-+			bcOps = 0
-+			for i := range bcProfCtlOps {
-+				bcProfCtlOps[i] = 0
-+			}
-+		}
++	switch {
++	case bcProfFrames < 120:
 +		return
++	case bcProfFrames == 120:
++		// Start measuring.
++		hwProf = isVita && !bcOpProf
++		bcProfMap = map[bcProfKey]uint64{}
++		bcOps = 0
++		for i := range bcProfCtlOps {
++			bcProfCtlOps[i] = 0
++		}
++		bcProfStart = bcProfNow()
++		return
++	case bcProfFrames < 720:
++		return
++	}
++	hwProf, hwProfDone = false, true
++	n := uint64(600)
++	unit := "us"
++	if bcOpProf {
++		unit = "ops"
 +	}
 +	type kv struct {
 +		k bcProfKey
 +		v uint64
 +	}
 +	var all []kv
++	var sum uint64
 +	for k, v := range bcProfMap {
 +		all = append(all, kv{k, v})
++		sum += v
 +	}
 +	sort.Slice(all, func(i, j int) bool { return all[i].v > all[j].v })
-+	n := uint64(300)
-+	vitaTrace("bcprof: ops/frame " + itoa(int(bcOps/n)))
-+	bcProfCtlDump(n)
++	if bcOpProf {
++		type ov struct {
++			o OpCode
++			v uint64
++		}
++		var hs []ov
++		for o, v := range bcOpHist {
++			if v > 0 {
++				hs = append(hs, ov{OpCode(o), v})
++			}
++		}
++		sort.Slice(hs, func(i, j int) bool { return hs[i].v > hs[j].v })
++		for i, e := range hs {
++			if i >= 40 {
++				break
++			}
++			vitaTrace("bcprof: op " + itoa(int(e.o)) + " " + itoa(int(e.v/n)))
++		}
++		type pv struct {
++			p uint16
++			v uint64
++		}
++		var ps []pv
++		for p, v := range bcExHist {
++			ps = append(ps, pv{p, v})
++		}
++		sort.Slice(ps, func(i, j int) bool { return ps[i].v > ps[j].v })
++		for i, e := range ps {
++			if i >= 30 {
++				break
++			}
++			vitaTrace("bcprof: ex " + itoa(int(e.p>>8)) + "," + itoa(int(e.p&255)) + " " + itoa(int(e.v/n)))
++		}
++		ps = nil
++		for p, v := range bcPairHist {
++			ps = append(ps, pv{p, v})
++		}
++		sort.Slice(ps, func(i, j int) bool { return ps[i].v > ps[j].v })
++		for i, e := range ps {
++			if i >= 40 {
++				break
++			}
++			vitaTrace("bcprof: pair " + itoa(int(e.p>>8)) + "," + itoa(int(e.p&255)) + " " + itoa(int(e.v/n)))
++		}
++	}
++	vitaTrace("bcprof: " + unit + " per tick in char states " + itoa(int(sum/n)) + " (whole window " + itoa(int(uint64(uint32(bcProfNow()-bcProfStart))/n)) + ")")
 +	for i, e := range all {
-+		if i >= 40 {
++		if i >= 30 {
 +			break
 +		}
 +		vitaTrace("bcprof: " + itoa(int(e.v/n)) + " p" + itoa(e.k.pn) + " h" + itoa(int(e.k.hid)) + " st " + itoa(int(e.k.st)))
 +	}
++	bcProfCtlDump(n)
 +}
 +
++var bcProfStart uint64
 +var bcProfTop *StateBlock
 +var bcProfCtlOps []uint64
 +var bcProfCtlSc []StateController
@@ -566,41 +1010,87 @@ index 0000000..8ff6d69
 +		bcProfCtlOps = append(bcProfCtlOps, 0)
 +		bcProfCtlSc = append(bcProfCtlSc, nil)
 +	}
-+	bcProfCtlOps[i] += ops
++	bcProfCtlOps[i] += uint64(uint32(ops))
 +	bcProfCtlSc[i] = sc
 +}
 +
 +func bcProfCtlDump(n uint64) {
++	// Totals per block of 32 controllers, in file order.
++	var line []byte
++	for i := 0; i < len(bcProfCtlOps); i += 32 {
++		var t uint64
++		for j := i; j < i+32 && j < len(bcProfCtlOps); j++ {
++			t += bcProfCtlOps[j]
++		}
++		line = append(line, []byte(itoa(i)+":"+itoa(int(t/n))+" ")...)
++	}
++	vitaTrace("bcprof: -3 has " + itoa(len(bcProfCtlOps)) + " ctrls; per 32: " + string(line))
 +	idx := make([]int, len(bcProfCtlOps))
 +	for i := range idx {
 +		idx[i] = i
 +	}
 +	sort.Slice(idx, func(a, b int) bool { return bcProfCtlOps[idx[a]] > bcProfCtlOps[idx[b]] })
-+	vitaTrace("bcprof: -3 has " + itoa(len(idx)) + " ctrls")
 +	for k, i := range idx {
-+		if k >= 60 {
++		if k >= 25 {
 +			break
 +		}
 +		name := fmt.Sprintf("%T", bcProfCtlSc[i])
 +		if sb, ok := bcProfCtlSc[i].(*StateBlock); ok && len(sb.ctrls) > 0 {
 +			name = fmt.Sprintf("%T", sb.ctrls[0])
 +		}
-+		vitaTrace("bcprof: ctl " + itoa(i) + " " + itoa(int(bcProfCtlOps[i]/n)) + " " + name)
++		vitaTrace("bcprof: ctl " + itoa(i) + " " + itoa(int(bcProfCtlOps[i]*100/n)) + "/100 " + name)
 +	}
-+	// Type sequence, for mapping indices to source.
-+	var seq []byte
-+	for i, sc := range bcProfCtlSc {
-+		name := fmt.Sprintf("%T", sc)
-+		if sb, ok := sc.(*StateBlock); ok && len(sb.ctrls) > 0 {
-+			name = fmt.Sprintf("%T", sb.ctrls[0])
-+		}
-+		seq = append(seq, []byte(itoa(i)+":"+name+" ")...)
-+		if len(seq) > 3000 {
-+			vitaTrace("bcprof: seq " + string(seq))
-+			seq = seq[:0]
++}
++
++// State hash (ux0:data/CvF/vita_statehash.txt): fixed random seed and, during
++// a match, a log line every 30 ticks with a hash of the players' state. Used
++// to check that bytecode fusion/hoisting changes nothing: two emulator runs
++// with and without them must produce identical lines.
++var vitaStateHashOn = -1
++
++func vitaStateHashEnabled() bool {
++	if vitaStateHashOn < 0 {
++		vitaStateHashOn = 0
++		if FileExist("vita_statehash.txt") != "" {
++			vitaStateHashOn = 1
++			Srand(12345)
 +		}
 +	}
-+	vitaTrace("bcprof: seq " + string(seq))
++	return vitaStateHashOn == 1
++}
++
++var stateHashTick int
++
++func vitaStateHashTick() {
++	if !isVita || !vitaStateHashEnabled() || sys.roundState() < 1 {
++		return
++	}
++	stateHashTick++
++	if stateHashTick%30 != 0 {
++		return
++	}
++	var h uint32 = 2166136261
++	mix := func(v uint32) { h = (h ^ v) * 16777619 }
++	for pn := 0; pn < 2 && pn < len(sys.chars); pn++ {
++		for _, c := range sys.chars[pn] {
++			mix(uint32(c.ss.no))
++			mix(uint32(c.ss.time))
++			mix(uint32(c.life))
++			mix(uint32(c.animNo))
++			mix(uint32(int32(c.pos[0] * 64)))
++			mix(uint32(int32(c.pos[1] * 64)))
++			mix(uint32(c.helperId))
++			var vs int64
++			for k, v := range c.cnsvar {
++				vs += int64(k)*7919 + int64(v)
++			}
++			mix(uint32(vs))
++			mix(uint32(vs >> 32))
++		}
++		mix(uint32(len(sys.explods[pn])))
++	}
++	mix(uint32(sys.randseed))
++	vitaTrace("statehash: " + itoa(stateHashTick) + " " + fmtHex(h))
 +}
 diff --git a/src/bgdef.go b/src/bgdef.go
 index 840b4f8..fbda389 100644
@@ -616,10 +1106,53 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..8ad3f12 100644
+index 276abbf..44bc852 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
-@@ -1282,6 +1282,13 @@ type StringPool struct {
+@@ -445,6 +445,42 @@ const (
+ 	OC_ex_
+ 	OC_ex2_
+ 	OC_ex3_
++	// Fused opcodes added by the Vita peephole pass (see bc_fuse.go). Each
++	// replaces a two-op sequence of the same byte length, so no jump targets
++	// move; the padding byte is OC_nop.
++	OC_nop
++	OC_var8    // var8 n nop        == int8 n; var
++	OC_fvar8   // fvar8 n nop       == int8 n; fvar
++	OC_sysvar8 // sysvar8 n nop     == int8 n; sysvar
++	OC_eq8     // eq8 n nop         == int8 n; eq
++	OC_ne8
++	OC_lt8
++	OC_gt8
++	OC_le8
++	OC_ge8
++	OC_jz8p  // jz8p k nop        == jz8 k; pop
++	OC_jnz8p // jnz8p k nop       == jnz8 k; pop
++	OC_eq32  // eq32 n(4) nop     == int n; eq
++	OC_ne32
++	OC_lt32
++	OC_gt32
++	OC_le32
++	OC_ge32
++	OC_range_ii8 // range_ii8 a b nop nop == int8 a; int8 b; range_ii (any of the 4 range kinds via the nop slot? no: 4 opcodes)
++	OC_range_ie8
++	OC_range_ei8
++	OC_range_ee8
++	OC_range_ii32 // range_ii32 a(4) b(4) nop nop == int a; int b; range_ii
++	OC_range_ie32
++	OC_range_ei32
++	OC_range_ee32
++	// Whole "triggerall" line in one op: trigger T compared with a constant,
++	// then "jz8 0; pop" (false: push false and end the expression).
++	OC_tcmp8    // tcmp8 T C n + 4 nop      == T; cmp8 n nop; jz8p 0 nop
++	OC_tcmp32   // tcmp32 T C n(4) + 3 nop  == T; cmp32 n(4) nop; jz8p 0 nop
++	OC_trange8  // trange8 T R a b + 4 nop  == T; rangeR8 a b nop nop; jz8p 0 nop
++	OC_trange32 // trange32 T R a(4) b(4) + 3 nop
++	OC_tvcmp8   // tvcmp8 V v C n + 5 nop   == var8 v nop; cmp8 n nop; jz8p 0 nop   (V: var8/fvar8/sysvar8)
+ )
+ const (
+ 	OC_const_data_life OpCode = iota
+@@ -1282,6 +1318,13 @@ type StringPool struct {
  	List    []string
  	ListLow []string // Lowercase list to avoid doing that work during runtime
  	Map     map[string]int
@@ -633,7 +1166,7 @@ index 276abbf..8ad3f12 100644
  }
  
  func NewStringPool() *StringPool {
-@@ -1290,9 +1297,27 @@ func NewStringPool() *StringPool {
+@@ -1290,9 +1333,27 @@ func NewStringPool() *StringPool {
  
  func (sp *StringPool) Clear() {
  	sp.List, sp.ListLow, sp.Map = nil, nil, make(map[string]int)
@@ -661,7 +1194,7 @@ index 276abbf..8ad3f12 100644
  	i, ok := sp.Map[s]
  	if !ok {
  		i = len(sp.List)
-@@ -1488,7 +1513,16 @@ func (bs *BytecodeStack) Clear() {
+@@ -1488,7 +1549,16 @@ func (bs *BytecodeStack) Clear() {
  }
  
  func (bs *BytecodeStack) Push(bv BytecodeValue) {
@@ -679,7 +1212,7 @@ index 276abbf..8ad3f12 100644
  }
  
  func (bs *BytecodeStack) PushI(i int32) {
-@@ -1574,7 +1608,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
+@@ -1574,7 +1644,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
  		be.append((*(*[4]OpCode)(unsafe.Pointer(&f)))[:]...)
  	case VT_Int:
  		if bv.value >= -128 && bv.value <= 127 {
@@ -689,7 +1222,7 @@ index 276abbf..8ad3f12 100644
  		} else if bv.value >= math.MinInt32 && bv.value <= math.MaxInt32 {
  			be.append(OC_int)
  			i := int32(bv.value)
-@@ -1627,9 +1662,9 @@ func (be *BytecodeExp) appendI64Op(op OpCode, addr int64) {
+@@ -1627,9 +1698,9 @@ func (be *BytecodeExp) appendI64Op(op OpCode, addr int64) {
  	be.append((*(*[8]OpCode)(unsafe.Pointer(&addr)))[:]...)
  }
  
@@ -701,7 +1234,7 @@ index 276abbf..8ad3f12 100644
  	*i += 4 // Advance the cursor past the 4 bytes we just read
  	return v
  }
-@@ -1659,11 +1694,34 @@ func (be BytecodeExp) readMapKey(i *int) string {
+@@ -1659,11 +1730,34 @@ func (be BytecodeExp) readMapKey(i *int) string {
  
  // Reads the expression length header at the current pointer
  func (be BytecodeExp) PeekLength(i int) int {
@@ -737,7 +1270,7 @@ index 276abbf..8ad3f12 100644
  func (be BytecodeExp) JumpToNext(i *int) {
  	*i += be.PeekLength(*i) + 4
  }
-@@ -2032,7 +2090,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+@@ -2032,7 +2126,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
  	//if v1.IsUndefined() {
  	//	return
  	//}
@@ -746,7 +1279,7 @@ index 276abbf..8ad3f12 100644
  }
  
  func (BytecodeExp) ln(v1 *BytecodeValue) {
-@@ -2043,7 +2101,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2137,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -755,7 +1288,7 @@ index 276abbf..8ad3f12 100644
  	}
  }
  
-@@ -2056,7 +2114,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2056,7 +2150,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -764,7 +1297,7 @@ index 276abbf..8ad3f12 100644
  	}
  }
  
-@@ -2064,42 +2122,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
+@@ -2064,42 +2158,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
  	if v1.IsUndefined() {
  		return
  	}
@@ -813,7 +1346,7 @@ index 276abbf..8ad3f12 100644
  }
  
  func (BytecodeExp) floor(v1 *BytecodeValue) {
-@@ -2167,7 +2225,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2167,7 +2261,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -822,7 +1355,7 @@ index 276abbf..8ad3f12 100644
  	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
  }
  
-@@ -2190,7 +2248,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2190,7 +2284,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -831,7 +1364,7 @@ index 276abbf..8ad3f12 100644
  }
  
  func (BytecodeExp) sign(v1 *BytecodeValue) {
-@@ -2236,8 +2294,21 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+@@ -2236,8 +2330,30 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
  
  func (be BytecodeExp) run(c *Char) BytecodeValue {
  	oc := c
@@ -849,11 +1382,20 @@ index 276abbf..8ad3f12 100644
  		opc := be[i-1]
 +		if bcOpProf {
 +			bcOps++
++			bcOpHist[opc]++
++			bcPairHist[uint16(bcPrevOp)<<8|uint16(opc)]++
++			bcPrevOp = opc
++			switch opc {
++			case OC_ex_, OC_ex2_, OC_ex3_, OC_const_:
++				if i < len(be) {
++					bcExHist[uint16(opc)<<8|uint16(be[i])]++
++				}
++			}
 +		}
  		switch opc {
  		case OC_jud8:
  			if sys.bcStack.Top().IsUndefined() {
-@@ -2268,7 +2339,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2268,7 +2384,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			fallthrough
  		case OC_jmp:
@@ -862,7 +1404,7 @@ index 276abbf..8ad3f12 100644
  		case OC_player:
  			pn := int(sys.bcStack.Pop().ToI())
  			if c = c.playerTrigger(pn, true); c != nil {
-@@ -2278,21 +2349,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2278,21 +2394,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			// Invalid: Push undefined and use the length header to jump over the block
  			sys.bcStack.Push(BytecodeUndefined())
@@ -887,7 +1429,7 @@ index 276abbf..8ad3f12 100644
  		case OC_helper:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2301,7 +2372,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2301,7 +2417,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -896,7 +1438,7 @@ index 276abbf..8ad3f12 100644
  		case OC_target:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2310,63 +2381,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2310,63 +2426,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -969,7 +1511,7 @@ index 276abbf..8ad3f12 100644
  		case OC_rdreset:
  			// Reset the current redirection
  			// A redirect only lasts one opcode, so this empty case ends it
-@@ -2375,22 +2446,22 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2375,22 +2491,129 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			// Evaluate block as the redirect target. No continue, so the redirect ends after it
  			// Ex: "parent, cond(alive, life, 0)" reads both alive and life from parent
  			sys.bcStack.Push(be[i+4 : i+4+l].run(c))
@@ -986,6 +1528,113 @@ index 276abbf..8ad3f12 100644
  		case OC_int8:
  			sys.bcStack.PushI(int32(int8(be[i])))
  			i++
++		case OC_nop:
++		case OC_var8:
++			sys.bcStack.PushI(int32(int8(be[i])))
++			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
++			i += 2
++		case OC_fvar8:
++			sys.bcStack.PushI(int32(int8(be[i])))
++			*sys.bcStack.Top() = c.fvarGet(sys.bcStack.Top().ToI())
++			i += 2
++		case OC_sysvar8:
++			sys.bcStack.PushI(int32(int8(be[i])))
++			*sys.bcStack.Top() = c.sysVarGet(sys.bcStack.Top().ToI())
++			i += 2
++		case OC_eq8:
++			be.eq(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i]))))
++			i += 2
++		case OC_ne8:
++			be.ne(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i]))))
++			i += 2
++		case OC_lt8:
++			be.lt(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i]))))
++			i += 2
++		case OC_gt8:
++			be.gt(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i]))))
++			i += 2
++		case OC_le8:
++			be.le(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i]))))
++			i += 2
++		case OC_ge8:
++			be.ge(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i]))))
++			i += 2
++		case OC_eq32:
++			be.eq(sys.bcStack.Top(), BytecodeInt(bcI32(be, i)))
++			i += 5
++		case OC_ne32:
++			be.ne(sys.bcStack.Top(), BytecodeInt(bcI32(be, i)))
++			i += 5
++		case OC_lt32:
++			be.lt(sys.bcStack.Top(), BytecodeInt(bcI32(be, i)))
++			i += 5
++		case OC_gt32:
++			be.gt(sys.bcStack.Top(), BytecodeInt(bcI32(be, i)))
++			i += 5
++		case OC_le32:
++			be.le(sys.bcStack.Top(), BytecodeInt(bcI32(be, i)))
++			i += 5
++		case OC_ge32:
++			be.ge(sys.bcStack.Top(), BytecodeInt(bcI32(be, i)))
++			i += 5
++		case OC_range_ii8, OC_range_ie8, OC_range_ei8, OC_range_ee8:
++			be.rangeCheck(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i]))), BytecodeInt(int32(int8(be[i+1]))), opc-OC_range_ii8+OC_range_ii)
++			i += 4
++		case OC_range_ii32, OC_range_ie32, OC_range_ei32, OC_range_ee32:
++			be.rangeCheck(sys.bcStack.Top(), BytecodeInt(bcI32(be, i)), BytecodeInt(bcI32(be, i+4)), opc-OC_range_ii32+OC_range_ii)
++			i += 10
++		case OC_tcmp8, OC_tcmp32, OC_trange8, OC_trange32, OC_tvcmp8:
++			// One whole triggerall line. Push the trigger value exactly as the
++			// plain opcode would, apply the compare, then do what jz8p 0 does.
++			var n int
++			switch opc {
++			case OC_tcmp8:
++				be.pushTrigger(c, be[i])
++				be.cmpConst(be[i+1], BytecodeInt(int32(int8(be[i+2]))))
++				n = 6
++			case OC_tcmp32:
++				be.pushTrigger(c, be[i])
++				be.cmpConst(be[i+1], BytecodeInt(bcI32(be, i+2)))
++				n = 9
++			case OC_trange8:
++				be.pushTrigger(c, be[i])
++				be.rangeCheck(sys.bcStack.Top(), BytecodeInt(int32(int8(be[i+2]))), BytecodeInt(int32(int8(be[i+3]))), be[i+1])
++				n = 8
++			case OC_trange32:
++				be.pushTrigger(c, be[i])
++				be.rangeCheck(sys.bcStack.Top(), BytecodeInt(bcI32(be, i+2)), BytecodeInt(bcI32(be, i+6)), be[i+1])
++				n = 14
++			case OC_tvcmp8:
++				sys.bcStack.PushI(int32(int8(be[i+1])))
++				switch be[i] {
++				case OC_var8:
++					*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
++				case OC_fvar8:
++					*sys.bcStack.Top() = c.fvarGet(sys.bcStack.Top().ToI())
++				default:
++					*sys.bcStack.Top() = c.sysVarGet(sys.bcStack.Top().ToI())
++				}
++				be.cmpConst(be[i+2], BytecodeInt(int32(int8(be[i+3]))))
++				n = 8
++			}
++			if sys.bcStack.Top().ToB() {
++				sys.bcStack.Pop()
++				i += n
++				break
++			}
++			i = len(be)
++		case OC_jz8p, OC_jnz8p:
++			// jz8 k; pop: jump (value stays) or fall through and pop it
++			if sys.bcStack.Top().ToB() == (opc == OC_jz8p) {
++				sys.bcStack.Pop()
++				i += 2
++				break
++			}
++			if be[i] == 0 {
++				i = len(be)
++			} else {
++				i += int(uint8(be[i])) + 1
++			}
  		case OC_int:
 -			sys.bcStack.PushI(*(*int32)(unsafe.Pointer(&be[i])))
 +			sys.bcStack.PushI(bcI32(be, i))
@@ -996,7 +1645,7 @@ index 276abbf..8ad3f12 100644
  			i += 8
  		case OC_float:
  			arr := make([]byte, 4)
-@@ -2402,7 +2473,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2402,7 +2625,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			sys.bcStack.PushF(flo)
  			i += 4
  		case OC_string:
@@ -1008,7 +1657,25 @@ index 276abbf..8ad3f12 100644
  		case OC_neg:
  			be.neg(sys.bcStack.Top())
  		case OC_bwnot:
-@@ -2599,7 +2673,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2556,7 +2782,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+ 					redir = oc.ss.sb.playerNo
+ 					pno = c.ss.sb.playerNo
+ 				}
+-				cmdPos, found := c.cmd[redir].Names[cmdName.ToS()]
++				cmdPos, found := c.cmd[redir].lookupName(cmdName.ToS())
+ 				ok = found && c.command(pno, cmdPos)
+ 			}
+ 			sys.bcStack.PushB(ok)
+@@ -2564,7 +2790,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+ 			cmdName := sys.bcStack.Pop()
+ 			ok := false
+ 			if c.cmd != nil && cmdName.vtype == VT_String {
+-				cmdPos, found := c.cmd[sys.workingState.playerNo].Names[cmdName.ToS()]
++				cmdPos, found := c.cmd[sys.workingState.playerNo].lookupName(cmdName.ToS())
+ 				ok = found && c.command(sys.workingState.playerNo, cmdPos)
+ 			}
+ 			sys.bcStack.PushB(ok)
+@@ -2599,7 +2825,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_hitcount:
  			sys.bcStack.PushI(c.hitCount)
  		case OC_hitdefattr:
@@ -1018,7 +1685,7 @@ index 276abbf..8ad3f12 100644
  			if attr == -2 { // String value on the stack
  				attr = evalTriggerAttr(c, sys.bcStack.Pop())
  			}
-@@ -2747,15 +2822,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2747,15 +2974,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_vel_z:
  			sys.bcStack.PushF(c.vel[2] * (c.localscl / oc.localscl))
  		case OC_assign_:
@@ -1049,7 +1716,7 @@ index 276abbf..8ad3f12 100644
  		case OC_var:
  			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
  		case OC_sysvar:
-@@ -2770,6 +2855,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2770,6 +3007,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		}
  		c = oc
  	}
@@ -1057,7 +1724,7 @@ index 276abbf..8ad3f12 100644
  	return sys.bcStack.Pop()
  }
  
-@@ -3812,7 +3898,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
+@@ -3812,7 +4050,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
  			sys.bcStack.Push(BytecodeUndefined())
  		}
  	case OC_ex_isassertedchar:
@@ -1066,7 +1733,7 @@ index 276abbf..8ad3f12 100644
  		*i += 8
  	case OC_ex_isassertedglobal:
  		flag := be.ReadIntAt(i)
-@@ -5017,7 +5103,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
+@@ -5017,7 +5255,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
  		//		continue
  		//	}
  		//}
@@ -1083,23 +1750,26 @@ index 276abbf..8ad3f12 100644
  			changeState = true
  			break
  		}
-@@ -5089,6 +5183,7 @@ type StateBlock struct {
+@@ -5089,6 +5335,8 @@ type StateBlock struct {
  	trigger             BytecodeExp
  	elseBlock           *StateBlock
  	ctrls               []StateController
 +	runs                []scRunFn // ctrls[i].Run resolved once (see sc_runfn.go)
++	isBlock             []bool    // ctrls[i] is a *StateBlock (resolved with runs)
  	// Loop fields
  	loopBlock        bool
  	nestedInLoop     bool
-@@ -5104,6 +5199,16 @@ func newStateBlock() *StateBlock {
+@@ -5104,6 +5352,18 @@ func newStateBlock() *StateBlock {
  	return &StateBlock{persistent: 1, persistentIndex: -1, ignorehitpause: false}
  }
  
 +func (b *StateBlock) runFns() []scRunFn {
 +	if len(b.runs) != len(b.ctrls) {
 +		b.runs = make([]scRunFn, len(b.ctrls))
++		b.isBlock = make([]bool, len(b.ctrls))
 +		for i, sc := range b.ctrls {
 +			b.runs[i] = scRunFunc(sc)
++			_, b.isBlock[i] = sc.(*StateBlock)
 +		}
 +	}
 +	return b.runs
@@ -1108,54 +1778,59 @@ index 276abbf..8ad3f12 100644
  func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  	c.currentSctrlIndex = b.persistentIndex
  	// For Mugen compatibility, if in hitpause and this SCTRL has the same index
-@@ -5189,7 +5294,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5189,15 +5449,13 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			// Run state controllers
  			if !interrupt {
 -				for _, sc := range b.ctrls {
+-					switch sc.(type) {
+-					case *StateBlock:
+-					default:
+-						if !b.ctrlsIgnorehitpause && c.hitPause() {
+-							continue
+-						}
 +				runs := b.runFns()
-+				for i, sc := range b.ctrls {
- 					switch sc.(type) {
- 					case *StateBlock:
- 					default:
-@@ -5197,7 +5303,7 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
- 							continue
- 						}
++				hp := !b.ctrlsIgnorehitpause && c.hitPause()
++				for i := range b.ctrls {
++					if hp && !b.isBlock[i] {
++						continue
  					}
 -					if sc.Run(c, ps) {
 +					if runs[i](c, ps) {
  						if sys.loopBreak {
  							sys.loopBreak = false
  							interrupt = true
-@@ -5244,7 +5350,8 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5244,15 +5502,22 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			return false
  		}
 -		for _, sc := range b.ctrls {
+-			switch sc.(type) {
+-			case *StateBlock:
+-			default:
+-				if !b.ctrlsIgnorehitpause && c.hitPause() {
+-					continue
 +		runs := b.runFns()
++		hp := !b.ctrlsIgnorehitpause && c.hitPause()
 +		for i, sc := range b.ctrls {
- 			switch sc.(type) {
- 			case *StateBlock:
- 			default:
-@@ -5252,7 +5359,16 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
- 					continue
- 				}
- 			}
--			if sc.Run(c, ps) {
-+			if bcOpProf && b == bcProfTop {
-+				o := bcOps
-+				r := runs[i](c, ps)
-+				bcProfCtl(i, sc, bcOps-o)
-+				if r {
-+					return true
-+				}
++			if hp && !b.isBlock[i] {
 +				continue
 +			}
++			if (bcOpProf || hwProf) && b == bcProfTop {
++				o := bcProfNow()
++				r := runs[i](c, ps)
++				bcProfCtl(i, sc, bcProfNow()-o)
++				if r {
++					return true
+ 				}
++				continue
+ 			}
+-			if sc.Run(c, ps) {
 +			if runs[i](c, ps) {
  				return true
  			}
  		}
-@@ -5375,7 +5491,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
+@@ -5375,7 +5640,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
  				sys.workBe = sys.workBe[:n]
  			}
  			for m := 0; m < int(n); m++ {
@@ -1164,7 +1839,7 @@ index 276abbf..8ad3f12 100644
  				i += 4
  				sys.workBe[m] = (*(*BytecodeExp)(unsafe.Pointer(&scb)))[i : i+int(l)]
  				i += int(l)
-@@ -5402,7 +5518,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5402,7 +5667,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  			n := scb[i]
  			i++
  			for m := 0; m < int(n); m++ {
@@ -1173,7 +1848,7 @@ index 276abbf..8ad3f12 100644
  				i += 4 + int(l)
  			}
  			if id == paramID {
-@@ -5414,21 +5530,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5414,21 +5679,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -1205,7 +1880,7 @@ index 276abbf..8ad3f12 100644
  }
  
  type stateDef StateControllerBase
-@@ -5530,6 +5644,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +5793,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -1215,7 +1890,7 @@ index 276abbf..8ad3f12 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -6653,7 +6770,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,7 +6919,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -1224,6 +1899,91 @@ index 276abbf..8ad3f12 100644
  	pfx.invertblend = -2 // Forcing 1.1 behavior
  
  	StateControllerBase(sc).run(c, func(paramID byte, exp []BytecodeExp) bool {
+@@ -13610,6 +13876,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+ 			sys.appendToConsole(crun.warn() + "LoadFile: cannot read var data")
+ 			return false
+ 		}
++		crun.varGen++
+ 		crun.cnsvar = loaded
+ 	case 2: // Fvar
+ 		var loaded map[int32]float32
+@@ -13617,6 +13884,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+ 			sys.appendToConsole(crun.warn() + "LoadFile: cannot read fvar data")
+ 			return false
+ 		}
++		crun.varGen++
+ 		crun.cnsfvar = loaded
+ 	}
+ 	return false
+@@ -17147,3 +17415,68 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
+ 	sys.bcVarStack.Clear()
+ 	return
+ }
++
++// pushTrigger evaluates a simple one-byte trigger opcode exactly as run
++// does (used by the fused triggerall-line opcodes).
++func (be BytecodeExp) pushTrigger(c *Char, t OpCode) {
++	switch t {
++	case OC_stateno:
++		sys.bcStack.PushI(c.ss.no)
++	case OC_prevstateno:
++		sys.bcStack.PushI(c.ss.prevno)
++	case OC_life:
++		sys.bcStack.PushI(c.life)
++	case OC_lifemax:
++		sys.bcStack.PushI(c.lifeMax)
++	case OC_roundstate:
++		sys.bcStack.PushI(sys.roundState())
++	case OC_time:
++		sys.bcStack.PushI(c.ss.time)
++	case OC_alive:
++		sys.bcStack.PushB(c.alive())
++	case OC_ctrl:
++		sys.bcStack.PushB(c.ctrl())
++	case OC_anim:
++		sys.bcStack.PushI(c.animNo)
++	case OC_numpartner:
++		sys.bcStack.PushI(c.numPartner())
++	case OC_numenemy:
++		sys.bcStack.PushI(c.numEnemy())
++	case OC_gametime:
++		sys.bcStack.PushI(sys.gameTime())
++	case OC_power:
++		sys.bcStack.PushI(c.getPower())
++	case OC_facing:
++		sys.bcStack.PushI(int32(c.facing))
++	case OC_hitpausetime:
++		sys.bcStack.PushI(c.hitPauseTime)
++	case OC_movecontact:
++		sys.bcStack.PushI(c.moveContact())
++	case OC_movehit:
++		sys.bcStack.PushI(c.moveHit())
++	case OC_teamside:
++		sys.bcStack.PushI(int32(c.teamside) + 1)
++	case OC_id:
++		sys.bcStack.PushI(c.id)
++	default:
++		c.panic("fused trigger: unsupported opcode")
++	}
++}
++
++// cmpConst applies a comparison opcode between the stack top and a constant.
++func (be BytecodeExp) cmpConst(cmp OpCode, k BytecodeValue) {
++	switch cmp {
++	case OC_eq:
++		be.eq(sys.bcStack.Top(), k)
++	case OC_ne:
++		be.ne(sys.bcStack.Top(), k)
++	case OC_lt:
++		be.lt(sys.bcStack.Top(), k)
++	case OC_gt:
++		be.gt(sys.bcStack.Top(), k)
++	case OC_le:
++		be.le(sys.bcStack.Top(), k)
++	default:
++		be.ge(sys.bcStack.Top(), k)
++	}
++}
 diff --git a/src/cgo_vita.go b/src/cgo_vita.go
 new file mode 100644
 index 0000000..0cee43a
@@ -1244,10 +2004,18 @@ index 0000000..0cee43a
 +// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lkubridge_stub_weak -lstdc++ -lsupc++ -lm
 +import "C"
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..1d0aa0d 100644
+index 19bf05a..9f4e3f6 100644
 --- a/src/char.go
 +++ b/src/char.go
-@@ -1881,9 +1881,9 @@ func (e *Explod) initFromChar(c *Char) *Explod {
+@@ -6,6 +6,7 @@ import (
+ 	"sort"
+ 	"strconv"
+ 	"strings"
++	"unsafe"
+ )
+ 
+ const (
+@@ -1881,9 +1882,9 @@ func (e *Explod) initFromChar(c *Char) *Explod {
  		animPN:            c.playerNo,
  		spritePN:          c.playerNo,
  		layerno:           c.layerNo,
@@ -1260,7 +2028,7 @@ index 19bf05a..1d0aa0d 100644
  		scale:             [2]float32{1, 1},
  		removetime:        -2,
  		postype:           PT_P1,
-@@ -3228,6 +3228,25 @@ func (p *Projectile) tick() {
+@@ -3228,6 +3229,25 @@ func (p *Projectile) tick() {
  	}
  }
  
@@ -1286,7 +2054,7 @@ index 19bf05a..1d0aa0d 100644
  func (p *Projectile) cueDraw() {
  	// Nothing to draw here. Not even debug
  	if p.anim == nil {
-@@ -3239,12 +3258,6 @@ func (p *Projectile) cueDraw() {
+@@ -3239,12 +3259,6 @@ func (p *Projectile) cueDraw() {
  
  	isPaused := p.hitpause > 0 || p.pauseBool
  
@@ -1299,7 +2067,7 @@ index 19bf05a..1d0aa0d 100644
  	// Projectile Clsn display
  	if sys.clsnDisplay {
  		if frm := p.anim.drawFrame(); frm != nil {
-@@ -3261,10 +3274,6 @@ func (p *Projectile) cueDraw() {
+@@ -3261,10 +3275,6 @@ func (p *Projectile) cueDraw() {
  		}
  	}
  
@@ -1310,7 +2078,7 @@ index 19bf05a..1d0aa0d 100644
  	// Set position
  	pos := [2]float32{p.interPos[0] * p.localscl, p.interPos[1] * p.localscl}
  
-@@ -3699,6 +3708,7 @@ type Char struct {
+@@ -3699,6 +3709,7 @@ type Char struct {
  	ghv                 GetHitVar
  	mhv                 MoveHitVar
  	hitby               [8]HitBy
@@ -1318,7 +2086,16 @@ index 19bf05a..1d0aa0d 100644
  	hover               [8]HitOverride
  	hoverIdx            int
  	hoverKeepState      bool
-@@ -4001,7 +4011,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
+@@ -3718,6 +3729,8 @@ type Char struct {
+ 	facing              float32
+ 	fbFlip              bool
+ 	cnsvar              map[int32]int32
++	varGen              uint32 // bumped on every write to cnsvar/cnsfvar (see varGet)
++	varCache            [32]varCacheEnt
+ 	cnsfvar             map[int32]float32
+ 	cnssysvar           map[int32]int32
+ 	cnssysfvar          map[int32]float32
+@@ -4001,7 +4014,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
  				distZ *= 4.0
  			}
  			// Use hypotenuse between x and z
@@ -1327,7 +2104,7 @@ index 19bf05a..1d0aa0d 100644
  		}
  
  		// Save result in sorting slice
-@@ -5428,7 +5438,8 @@ func (c *Char) enemy(n int32) *Char {
+@@ -5428,7 +5441,8 @@ func (c *Char) enemy(n int32) *Char {
  
  	// Iterate until nth enemy
  	var count int32
@@ -1337,7 +2114,24 @@ index 19bf05a..1d0aa0d 100644
  		if len(e) > 0 && e[0] != nil && c.isEnemyOf(e[0]) {
  			if count == n {
  				return e[0]
-@@ -5998,7 +6009,8 @@ func (c *Char) numEnemy() int32 {
+@@ -5586,14 +5600,14 @@ func (c *Char) animExist(anim BytecodeValue) BytecodeValue {
+ 	if pn < 0 || pn >= len(sys.chars) || len(sys.chars[pn]) == 0 {
+ 		pn = c.playerNo
+ 	}
+-	return BytecodeBool(sys.cgi[pn].animTable.get(anim.ToI()) != nil)
++	return BytecodeBool(sys.cgi[pn].animTable.anims[anim.ToI()] != nil)
+ }
+ 
+ func (c *Char) selfAnimExist(anim BytecodeValue) BytecodeValue {
+ 	if anim.IsUndefined() {
+ 		return BytecodeUndefined()
+ 	}
+-	return BytecodeBool(c.gi().animTable.get(anim.ToI()) != nil)
++	return BytecodeBool(c.gi().animTable.anims[anim.ToI()] != nil)
+ }
+ 
+ func (c *Char) animTime() int32 {
+@@ -5998,7 +6012,8 @@ func (c *Char) numEnemy() int32 {
  	var n int32
  
  	// Same as enemy() loop
@@ -1347,7 +2141,7 @@ index 19bf05a..1d0aa0d 100644
  		if len(e) > 0 && e[0] != nil && c.isEnemyOf(e[0]) {
  			n += 1
  		}
-@@ -6012,9 +6024,14 @@ func (c *Char) numExplod(eid BytecodeValue) BytecodeValue {
+@@ -6012,9 +6027,14 @@ func (c *Char) numExplod(eid BytecodeValue) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -1364,7 +2158,7 @@ index 19bf05a..1d0aa0d 100644
  
  	return BytecodeInt(total)
  }
-@@ -7363,11 +7380,19 @@ func (c *Char) getSingleExplod(id int32, idx int, log bool) *Explod {
+@@ -7363,11 +7383,19 @@ func (c *Char) getSingleExplod(id int32, idx int, log bool) *Explod {
  		return nil
  	}
  
@@ -1388,7 +2182,7 @@ index 19bf05a..1d0aa0d 100644
  	return nil
  }
  
-@@ -7832,7 +7857,8 @@ func (c *Char) hitAdd(h int32) {
+@@ -7832,7 +7860,8 @@ func (c *Char) hitAdd(h int32) {
  		}
  	} else if c.teamside != -1 {
  		// In Mugen, HitAdd can increase combo count even without targets
@@ -1398,7 +2192,74 @@ index 19bf05a..1d0aa0d 100644
  			if len(p) > 0 && c.teamside == ^i&1 {
  				// This is a bit of a workaround for backward compatibility only
  				if p[0].receivedHits != 0 || p[0].ss.moveType == MT_H {
-@@ -8370,6 +8396,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+@@ -8224,6 +8253,7 @@ func (c *Char) initConstants(gi *CharGlobalInfo) {
+ }
+ 
+ func (c *Char) initCnsVar() {
++	c.varGen++
+ 	c.cnsvar = make(map[int32]int32)
+ 	c.cnsfvar = make(map[int32]float32)
+ 	c.cnssysvar = make(map[int32]int32)
+@@ -8235,6 +8265,19 @@ func (c *Char) varGet(i int32) BytecodeValue {
+ 		sys.appendToConsole(c.warn() + fmt.Sprintf("var index %v must be positive", i))
+ 		return BytecodeUndefined()
+ 	}
++	if isVita {
++		// Direct-mapped read cache in front of the map (var(n) is read ~40k
++		// times per tick on the Vita). Entries are keyed on the map identity
++		// and a write generation, so any write or map replacement misses.
++		e := &c.varCache[uint32(i)&31]
++		mp := *(*uintptr)(unsafe.Pointer(&c.cnsvar))
++		if e.key == i && e.gen == c.varGen && e.mp == mp && !e.isF {
++			return BytecodeInt(e.ival)
++		}
++		val := c.cnsvar[i]
++		*e = varCacheEnt{key: i, gen: c.varGen, mp: mp, ival: val}
++		return BytecodeInt(val)
++	}
+ 	// Check var (map)
+ 	val, ok := c.cnsvar[i]
+ 	// If key found
+@@ -8251,6 +8294,16 @@ func (c *Char) fvarGet(i int32) BytecodeValue {
+ 		return BytecodeUndefined()
+ 	}
+ 
++	if isVita {
++		e := &c.varCache[uint32(i)&31]
++		mp := *(*uintptr)(unsafe.Pointer(&c.cnsfvar))
++		if e.key == i && e.gen == c.varGen && e.mp == mp && e.isF {
++			return BytecodeFloat(e.fval)
++		}
++		val := c.cnsfvar[i]
++		*e = varCacheEnt{key: i, gen: c.varGen, mp: mp, fval: val, isF: true}
++		return BytecodeFloat(val)
++	}
+ 	val, ok := c.cnsfvar[i]
+ 	if ok {
+ 		return BytecodeFloat(val)
+@@ -8325,6 +8378,7 @@ func (c *Char) cnsVarSet(i int32, value BytecodeValue, scType int32, varType int
+ }
+ 
+ func (c *Char) varSet(i, v int32) BytecodeValue {
++	c.varGen++
+ 	if i < 0 {
+ 		sys.appendToConsole(c.warn() + fmt.Sprintf("var index %v must be positive", i))
+ 		return BytecodeUndefined()
+@@ -8335,6 +8389,7 @@ func (c *Char) varSet(i, v int32) BytecodeValue {
+ }
+ 
+ func (c *Char) fvarSet(i int32, v float32) BytecodeValue {
++	c.varGen++
+ 	if i < 0 {
+ 		sys.appendToConsole(c.warn() + fmt.Sprintf("fvar index %v must be positive", i))
+ 		return BytecodeUndefined()
+@@ -8365,11 +8420,13 @@ func (c *Char) sysFvarSet(i int32, v float32) BytecodeValue {
+ }
+ 
+ func (c *Char) varAdd(i, v int32) BytecodeValue {
++	c.varGen++
+ 	if i < 0 {
+ 		sys.appendToConsole(c.warn() + fmt.Sprintf("var index %v must be positive", i))
  		return BytecodeUndefined()
  	}
  
@@ -1406,7 +2267,28 @@ index 19bf05a..1d0aa0d 100644
  	if _, ok := c.cnsvar[i]; ok {
  		c.cnsvar[i] += v
  	} else {
-@@ -9008,7 +9035,8 @@ func (c *Char) lifeSet(life int32) {
+@@ -8379,6 +8436,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+ }
+ 
+ func (c *Char) fvarAdd(i int32, v float32) BytecodeValue {
++	c.varGen++
+ 	if i < 0 {
+ 		sys.appendToConsole(c.warn() + fmt.Sprintf("fvar index %v must be positive", i))
+ 		return BytecodeUndefined()
+@@ -8468,10 +8526,12 @@ func varRangeSetSub[T int32 | float32](c *Char, m *map[int32]T, first, last int3
+ }
+ 
+ func (c *Char) varRangeSet(first, last, val int32) {
++	c.varGen++
+ 	varRangeSetSub(c, &c.cnsvar, first, last, val)
+ }
+ 
+ func (c *Char) fvarRangeSet(first, last int32, val float32) {
++	c.varGen++
+ 	varRangeSetSub(c, &c.cnsfvar, first, last, val)
+ }
+ 
+@@ -9008,7 +9068,8 @@ func (c *Char) lifeSet(life int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -1416,7 +2298,7 @@ index 19bf05a..1d0aa0d 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].life = c.life
  			}
-@@ -9100,7 +9128,8 @@ func (c *Char) redLifeSet(set int32) {
+@@ -9100,7 +9161,8 @@ func (c *Char) redLifeSet(set int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -1426,7 +2308,7 @@ index 19bf05a..1d0aa0d 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].redLife = c.redLife
  			}
-@@ -9811,65 +9840,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
+@@ -9811,65 +9873,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
  	}
  	key := strings.ToLower(s)
  
@@ -1510,13 +2392,13 @@ index 19bf05a..1d0aa0d 100644
 +	if !isAdd {
 +		m[key] = mv
 +		return
- 	}
++	}
 +	// String operations don't exist yet, so any add touching one is a no-op
 +	old := m[key]
 +	if mv.Type == VT_String || old.Type == VT_String {
 +		sys.appendToConsole(c.warn() + "MapAdd: cannot add string values")
 +		return
-+	}
+ 	}
 +	// Defer to the engine's own add so int/float promotion matches expressions
 +	sum := old.ToBV()
 +	BytecodeExp{}.add(&sum, mv.ToBV())
@@ -1524,7 +2406,7 @@ index 19bf05a..1d0aa0d 100644
  }
  
  // Used to init, fully reset or partially reset the map array
-@@ -12436,35 +12453,35 @@ func (c *Char) actionRun() {
+@@ -12436,35 +12486,35 @@ func (c *Char) actionRun() {
  	// Run state -4
  	c.minus = -4
  	if sb, ok := c.gi().states[-4]; ok {
@@ -1565,7 +2447,7 @@ index 19bf05a..1d0aa0d 100644
  	}
  
  	// Guarding instructions
-@@ -12495,14 +12512,14 @@ func (c *Char) actionRun() {
+@@ -12495,14 +12545,14 @@ func (c *Char) actionRun() {
  	// Uses minus -4 because its properties are similar
  	c.minus = -4
  	if sb, ok := c.gi().states[-10]; ok {
@@ -1582,7 +2464,7 @@ index 19bf05a..1d0aa0d 100644
  	}
  	if !c.pauseBool {
  		if !c.hitPause() {
-@@ -13710,7 +13727,8 @@ func (cl *CharList) clear() {
+@@ -13710,7 +13760,8 @@ func (cl *CharList) clear() {
  
  	// Clear all player ID's to avoid false conflicts with stale players
  	// TODO: Maybe stale players should be cleared better
@@ -1592,7 +2474,7 @@ index 19bf05a..1d0aa0d 100644
  		for _, c := range p {
  			if c != nil {
  				c.id = -1
-@@ -13858,7 +13876,8 @@ func (cl *CharList) audit() {
+@@ -13858,7 +13909,8 @@ func (cl *CharList) audit() {
  
  func (cl *CharList) commandUpdate() {
  	// Iterate players
@@ -1602,7 +2484,7 @@ index 19bf05a..1d0aa0d 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -14420,8 +14439,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+@@ -14420,8 +14472,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
  				// Check if the character is above the platform's surface
  				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
  					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
@@ -1613,6 +2495,20 @@ index 19bf05a..1d0aa0d 100644
  					oldDistX := (getter.oldPos[0]*getter.localscl - (p.pos[0])*p.localscl) * p.facing
  					onPlatform := func(protrude bool) {
  						getter.platformPosY = ((p.pos[1]+p.platformHeight[0]+p.velocity[1])*p.localscl - angleSinValue*(oldDistX/angleCosValue)) / getter.localscl
+@@ -15065,3 +15117,13 @@ type Platform struct {
+ 	localScale float32
+ 	ownerID    int32
+ }
++
++// varCacheEnt: see Char.varGet.
++type varCacheEnt struct {
++	key  int32
++	gen  uint32
++	mp   uintptr
++	ival int32
++	fval float32
++	isF  bool
++}
 diff --git a/src/common.go b/src/common.go
 index a741eab..e7080c4 100644
 --- a/src/common.go
@@ -1758,7 +2654,7 @@ index a741eab..e7080c4 100644
  	basename := filepath.Base(filename)
  	ext := filepath.Ext(basename)
 diff --git a/src/compiler.go b/src/compiler.go
-index 768df8d..4bb828a 100644
+index 768df8d..3521410 100644
 --- a/src/compiler.go
 +++ b/src/compiler.go
 @@ -10,8 +10,6 @@ import (
@@ -1783,7 +2679,7 @@ index 768df8d..4bb828a 100644
  }
  
  func newCharCompiler() *CharCompiler {
-@@ -492,7 +496,64 @@ var triggerMap = map[string]int{
+@@ -492,7 +496,66 @@ var triggerMap = map[string]int{
  }
  
  func (c *CharCompiler) tokenizer(in *string) string {
@@ -1821,7 +2717,6 @@ index 768df8d..4bb828a 100644
 +// CNS code repeats the same mixed-case words (Var, Time, StateNo...) all over
 +// and every strings.ToLower of one allocates a new string
 +func (c *CharCompiler) toLower(s string) string {
-+	h := uint32(2166136261)
 +	upper := false
 +	for i := 0; i < len(s); i++ {
 +		ch := s[i]
@@ -1831,10 +2726,13 @@ index 768df8d..4bb828a 100644
 +		if 'A' <= ch && ch <= 'Z' {
 +			upper = true
 +		}
-+		h = (h ^ uint32(ch)) * 16777619
 +	}
 +	if !upper {
 +		return s
++	}
++	h := uint32(2166136261)
++	for i := 0; i < len(s); i++ {
++		h = (h ^ uint32(s[i])) * 16777619
 +	}
 +	if c.lowerCache == nil {
 +		c.lowerCache = new([lowerCacheSize]lowerCacheEntry)
@@ -1849,7 +2747,7 @@ index 768df8d..4bb828a 100644
  }
  
  // Same but case-sensitive
-@@ -625,7 +686,7 @@ func (*CharCompiler) tokenizerCS(in *string) string {
+@@ -625,7 +688,7 @@ func (*CharCompiler) tokenizerCS(in *string) string {
  		}
  	}
  	if i == 0 {
@@ -1858,7 +2756,7 @@ index 768df8d..4bb828a 100644
  		if i < 0 {
  			i = len(*in)
  		}
-@@ -703,6 +764,19 @@ func (c *CharCompiler) integer2(in *string) (int32, error) {
+@@ -703,6 +766,13 @@ func (c *CharCompiler) integer2(in *string) (int32, error) {
  }
  
  func (c *CharCompiler) number(token string) BytecodeValue {
@@ -1866,19 +2764,77 @@ index 768df8d..4bb828a 100644
 +	// token starts with a digit, '.', a sign, or "inf"/"nan", and its error
 +	// path allocates (a NumError plus a copy of the string), so reject the
 +	// rest up front. Same result as letting ParseFloat fail
-+	if len(token) == 0 {
-+		return bvNone()
-+	}
-+	switch ch := token[0]; {
-+	case ch >= '0' && ch <= '9', ch == '.', ch == '+', ch == '-',
-+		ch == 'i', ch == 'I', ch == 'n', ch == 'N':
-+	default:
++	if !numberCandidate(token) {
 +		return bvNone()
 +	}
  	f, err := strconv.ParseFloat(token, 64)
  	if err != nil && f == 0 {
  		return bvNone()
-@@ -1140,11 +1214,12 @@ func (c *CharCompiler) evaluateComparison(out *BytecodeExp, in *string,
+@@ -711,7 +781,7 @@ func (c *CharCompiler) number(token string) BytecodeValue {
+ 		c.reverseOrder = false
+ 		return BytecodeValue{VT_Float, f}
+ 	}
+-	if strings.ContainsAny(token, "Ee") {
++	if strings.IndexByte(token, 'E') >= 0 || strings.IndexByte(token, 'e') >= 0 {
+ 		return bvNone()
+ 	}
+ 	c.reverseOrder = false
+@@ -724,6 +794,27 @@ func (c *CharCompiler) number(token string) BytecodeValue {
+ 	return BytecodeValue{VT_Int, f}
+ }
+ 
++// Reports whether strconv.ParseFloat could possibly accept token. After an
++// optional sign it needs a digit or '.' (decimal, hex, exponent forms), or
++// the whole rest must be "inf", "infinity" or "nan" (any case). Everything
++// else is a syntax error, which returns 0 and allocates the error value
++func numberCandidate(token string) bool {
++	s := token
++	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
++		s = s[1:]
++	}
++	if len(s) == 0 {
++		return false
++	}
++	switch ch := s[0]; {
++	case ch >= '0' && ch <= '9', ch == '.':
++		return true
++	case ch == 'i', ch == 'I', ch == 'n', ch == 'N':
++		return len(s) == 3 || len(s) == 8
++	}
++	return false
++}
++
+ func (c *CharCompiler) attr(text string, hitdef bool) (int32, error) {
+ 	// Compile-time literals follow the parser's CNS/ZSS error-tolerance settings
+ 	strict := c.zssMode || !sys.ignoreMostErrors
+@@ -830,7 +921,7 @@ func attrMask(text string, hitdef, strict bool, warn func(string)) (int32, error
+ func (c *CharCompiler) trgAttr(in *string) (int32, error) {
+ 	flg := int32(0)
+ 	*in = c.token + *in
+-	i := strings.IndexAny(*in, specialSymbols)
++	i := indexSpecialSymbol(*in)
+ 	var att string
+ 	if i >= 0 {
+ 		att = (*in)[:i]
+@@ -854,7 +945,7 @@ func (c *CharCompiler) trgAttr(in *string) (int32, error) {
+ 	for len(*in) > 0 && (*in)[0] == ',' {
+ 		oldin := *in
+ 		*in = strings.TrimSpace((*in)[1:])
+-		i := strings.IndexAny(*in, specialSymbols)
++		i := indexSpecialSymbol(*in)
+ 		var att string
+ 		if i >= 0 {
+ 			att = (*in)[:i]
+@@ -908,7 +999,7 @@ func isAttrLiteral(tok string) bool {
+ 	if tok == "\"" {
+ 		return true
+ 	}
+-	if i := strings.IndexAny(tok, specialSymbols); i >= 0 {
++	if i := indexSpecialSymbol(tok); i >= 0 {
+ 		tok = tok[:i]
+ 	}
+ 	return tok != "" && strings.Trim(tok, "SCAsca") == ""
+@@ -1140,11 +1231,12 @@ func (c *CharCompiler) evaluateComparison(out *BytecodeExp, in *string,
  
  func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
  	rd, appendVal bool, defval ...BytecodeValue) (BytecodeValue, error) {
@@ -1892,7 +2848,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), Error("Missing '(' after " + mae)
  		}
  		*in = c.token + " " + *in
-@@ -1152,10 +1227,12 @@ func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
+@@ -1152,10 +1244,12 @@ func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
  	} else {
  		c.token = c.tokenizer(in)
  		var err error
@@ -1906,7 +2862,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  	}
-@@ -1163,10 +1240,11 @@ func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
+@@ -1163,10 +1257,11 @@ func (c *CharCompiler) oneArg(out *BytecodeExp, in *string,
  		be.appendValue(bv)
  		bv = bvNone()
  	}
@@ -1921,7 +2877,7 @@ index 768df8d..4bb828a 100644
  	return bv, nil
  }
  
-@@ -1232,19 +1310,21 @@ func (c *CharCompiler) twoOptArg(out *BytecodeExp, in *string,
+@@ -1232,19 +1327,21 @@ func (c *CharCompiler) twoOptArg(out *BytecodeExp, in *string,
  
  func (c *CharCompiler) mathFunc(out *BytecodeExp, in *string, rd bool,
  	oc OpCode, f func(*BytecodeValue)) (bv BytecodeValue, err error) {
@@ -1946,7 +2902,7 @@ index 768df8d..4bb828a 100644
  	return
  }
  
-@@ -1319,266 +1399,300 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1319,266 +1416,300 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		c.token = c.tokenizer(in)
  		return bv, nil
  	}
@@ -1976,15 +2932,15 @@ index 768df8d..4bb828a 100644
 +	f.bv, f.bv1 = bvNone(), bvNone()
 +	return f
 +}
-+
-+// The helpers below used to be closures at the top of expValue. Each one was
-+// allocated on every expValue call, and everything they captured (including
-+// the parameters) escaped to the heap. They're methods with explicit
-+// parameters now
  
 -	// Helper to determine whether vars are used as triggers or assignments
 -	_var := func(sys, f bool) error {
 -		_, err := c.oneArg(out, in, rd, true)
++// The helpers below used to be closures at the top of expValue. Each one was
++// allocated on every expValue call, and everything they captured (including
++// the parameters) escaped to the heap. They're methods with explicit
++// parameters now
++
 +// Helper to determine whether vars are used as triggers or assignments
 +func (c *CharCompiler) expVar(out *BytecodeExp, in *string, rd bool, isSys, isF bool) error {
 +	_, err := c.oneArg(out, in, rd, true)
@@ -2371,11 +3327,11 @@ index 768df8d..4bb828a 100644
 +		*c, *in = saved, savedIn
 +	}
 +	if err = c.flagRHS(in); err != nil {
-+		return
-+	}
-+	if attr, err = c.trgAttr(in); err != nil {
  		return
  	}
++	if attr, err = c.trgAttr(in); err != nil {
++		return
++	}
 +	c.token = c.tokenizer(in)
 +	return
 +}
@@ -2461,7 +3417,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		out.appendI32Op(OC_string, int32(sys.stringPool[c.playerNo].Add(c.token)))
-@@ -1609,7 +1723,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1609,7 +1740,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if c.token != "," {
  			switch opc {
  			case OC_partner, OC_enemy, OC_enemynear:
@@ -2470,7 +3426,7 @@ index 768df8d..4bb828a 100644
  			case OC_root:
  				return bvNone(), Error("Missing ',' after Root")
  			case OC_parent:
-@@ -1623,12 +1737,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1623,12 +1754,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			}
  		}
  		c.token = c.tokenizer(in)
@@ -2487,7 +3443,7 @@ index 768df8d..4bb828a 100644
  		return bvNone(), nil
  	// Redirections with 1 argument
  	case "partner", "enemy", "enemynear", "playerid", "player", "playerindex", "helperindex":
-@@ -1651,18 +1765,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1651,18 +1782,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		c.token = c.tokenizer(in)
  		if c.token == "(" {
  			c.token = c.tokenizer(in)
@@ -2509,7 +3465,7 @@ index 768df8d..4bb828a 100644
  			case OC_player:
  				return bvNone(), Error("Missing '(' after Player")
  			case OC_playerid:
-@@ -1676,9 +1790,9 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1676,9 +1807,9 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			}
  		}
  		if rd {
@@ -2521,7 +3477,7 @@ index 768df8d..4bb828a 100644
  		if c.token != "," {
  			switch opc {
  			case OC_partner:
-@@ -1700,12 +1814,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1700,12 +1831,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			}
  		}
  		c.token = c.tokenizer(in)
@@ -2538,7 +3494,7 @@ index 768df8d..4bb828a 100644
  		return bvNone(), nil
  	// Redirections with 2 arguments
  	case "helper", "target":
-@@ -1719,20 +1833,20 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1719,20 +1850,20 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if c.token == "(" {
  			c.token = c.tokenizer(in)
  			// Read the first argument (ID)
@@ -2564,7 +3520,7 @@ index 768df8d..4bb828a 100644
  			}
  			if err := c.checkClosingParenthesis(); err != nil {
  				return bvNone(), err
-@@ -1740,13 +1854,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1740,13 +1871,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			c.token = c.tokenizer(in)
  		} else {
  			// Default to ID -1 and index 0 if no arguments are provided
@@ -2582,7 +3538,7 @@ index 768df8d..4bb828a 100644
  		if c.token != "," {
  			switch opc {
  			case OC_helper:
-@@ -1758,194 +1872,194 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -1758,194 +1889,194 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			}
  		}
  		c.token = c.tokenizer(in)
@@ -2845,7 +3801,7 @@ index 768df8d..4bb828a 100644
  			}
  		}
  	case "ailevel":
-@@ -2087,13 +2201,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2087,13 +2218,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		c1type := c.token
  		switch c1type {
  		case "clsn1":
@@ -2863,7 +3819,7 @@ index 768df8d..4bb828a 100644
  		default:
  			return bvNone(), Error("Invalid collision box type: " + c1type)
  		}
-@@ -2102,7 +2216,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2102,7 +2233,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			return bvNone(), Error("Missing ',' in ClsnOverlap")
  		}
  		c.token = c.tokenizer(in)
@@ -2872,7 +3828,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		if c.token != "," {
-@@ -2124,14 +2238,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2124,14 +2255,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkClosingParenthesis(); err != nil {
  			return bvNone(), err
  		}
@@ -2893,7 +3849,7 @@ index 768df8d..4bb828a 100644
  		out.append(OC_ex_, OC_ex_clsnoverlap)
  	case "clsnvar":
  		if err := c.checkOpeningParenthesis(in); err != nil {
-@@ -2140,13 +2254,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2140,13 +2271,13 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		ctype := c.token
  		switch ctype {
  		case "clsn1":
@@ -2911,7 +3867,7 @@ index 768df8d..4bb828a 100644
  		default:
  			return bvNone(), Error(fmt.Sprintf("Invalid Clsn type: %s", ctype))
  		}
-@@ -2157,7 +2271,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2157,7 +2288,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		}
  		c.token = c.tokenizer(in)
  
@@ -2920,7 +3876,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		c.token = c.tokenizer(in)
-@@ -2181,62 +2295,21 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2181,62 +2312,21 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			return bvNone(), err
  		}
  
@@ -2992,7 +3948,7 @@ index 768df8d..4bb828a 100644
  	case "const":
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
-@@ -2571,14 +2644,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2571,14 +2661,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
  		}
@@ -3009,7 +3965,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		if c.token != "," {
-@@ -2720,18 +2793,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2720,18 +2810,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			}
  		}
  
@@ -3036,7 +3992,7 @@ index 768df8d..4bb828a 100644
  	case "facing":
  		out.append(OC_facing)
  	case "frontedge":
-@@ -2948,20 +3021,20 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -2948,20 +3038,20 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		switch isFlag {
  		case 1, 2:
  			// 1 is attr, 2 is hitflag
@@ -3061,7 +4017,7 @@ index 768df8d..4bb828a 100644
  				return bvNone(), nil
  			}
  			// No comparison. Push the current value as a string
-@@ -3037,9 +3110,9 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3037,9 +3127,9 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  
  		if isEqne || allowWrongHDA {
  			// Case 1: valid comparison. Expressions are only tried when the operator is really there
@@ -3073,7 +4029,7 @@ index 768df8d..4bb828a 100644
  				return bvNone(), nil
  			}
  			// Case 2: malformed attr string
-@@ -3174,12 +3247,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3174,12 +3264,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			return bvNone(), Error("Invalid HitDefVar argument: " + c.token)
  		}
  		if isFlag {
@@ -3089,7 +4045,7 @@ index 768df8d..4bb828a 100644
  				return bvNone(), nil
  			}
  			// No comparison. Push the current flag as a string
-@@ -3252,70 +3325,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3252,70 +3342,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  	case "movereversed":
  		out.append(OC_movereversed)
  	case "movetype", "p2movetype", "prevmovetype":
@@ -3161,7 +4117,7 @@ index 768df8d..4bb828a 100644
  	case "palfxvar":
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
-@@ -3489,14 +3499,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3489,14 +3516,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
  		}
@@ -3178,7 +4134,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		if c.token != "," {
-@@ -3519,15 +3529,15 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3519,15 +3546,15 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkClosingParenthesis(); err != nil {
  			return bvNone(), err
  		}
@@ -3200,7 +4156,7 @@ index 768df8d..4bb828a 100644
  		out.append(OC_ex2_, OC_ex2_projclsnoverlap)
  
  	case "projguardedtime":
-@@ -3544,14 +3554,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3544,14 +3571,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
  		}
@@ -3217,7 +4173,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		if c.token != "," {
-@@ -3743,50 +3753,50 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3743,50 +3770,50 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  
  		negate, tokenRead := false, false
  		if isFlag {
@@ -3285,7 +4241,7 @@ index 768df8d..4bb828a 100644
  		if negate {
  			out.append(OC_blnot)
  		}
-@@ -3797,12 +3807,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3797,12 +3824,12 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  	case "random":
  		out.append(OC_random)
  	case "reversaldefattr":
@@ -3301,7 +4257,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), nil
  		}
  		// No comparison. Push the current reversal_attr as a string
-@@ -3848,7 +3858,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3848,7 +3875,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
  		}
@@ -3310,7 +4266,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		if c.token != "," {
-@@ -3895,82 +3905,29 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3895,82 +3922,29 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			return bvNone(), err
  		}
  
@@ -3401,7 +4357,7 @@ index 768df8d..4bb828a 100644
  		if err != nil {
  			return bvNone(), err
  		}
-@@ -3979,7 +3936,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -3979,7 +3953,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		}
  		// Second argument
  		c.token = c.tokenizer(in)
@@ -3410,7 +4366,7 @@ index 768df8d..4bb828a 100644
  		if err != nil {
  			return bvNone(), err
  		}
-@@ -4033,14 +3990,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4033,14 +4007,14 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			return bvNone(), err
  		}
  		// Output
@@ -3431,7 +4387,7 @@ index 768df8d..4bb828a 100644
  	case "stagevar":
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
-@@ -4227,33 +4184,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4227,33 +4201,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		out.append(OC_const_)
  		out.append(opc)
  	case "teammode":
@@ -3466,7 +4422,7 @@ index 768df8d..4bb828a 100644
  	case "teamside":
  		out.append(OC_teamside)
  	case "tickspersecond":
-@@ -4300,28 +4231,28 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4300,28 +4248,28 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			return bvNone(), err
  		}
  		if n <= 0 {
@@ -3504,7 +4460,7 @@ index 768df8d..4bb828a 100644
  		}
  		out.append(OC_time)
  		out.appendValue(BytecodeInt(n))
-@@ -4329,7 +4260,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4329,7 +4277,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err = c.evaluateComparison(out, in, true); err != nil {
  			return bvNone(), err
  		}
@@ -3513,7 +4469,7 @@ index 768df8d..4bb828a 100644
  	case "p2dist":
  		c.token = c.tokenizer(in)
  		switch c.token {
-@@ -4381,81 +4312,81 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4381,81 +4329,81 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  	case "parentexist":
  		out.append(OC_ex2_, OC_ex2_parentexist)
  	case "pi":
@@ -3616,7 +4572,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  	case "float":
-@@ -4467,74 +4398,74 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4467,74 +4415,74 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
  		}
@@ -3709,7 +4665,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  		if err := c.checkClosingParenthesis(); err != nil {
-@@ -4543,109 +4474,109 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4543,109 +4491,109 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if rd {
  			out.append(OC_rdreset)
  		}
@@ -3848,7 +4804,7 @@ index 768df8d..4bb828a 100644
  		}
  	case "sign":
  		if _, err := c.oneArg(out, in, rd, true); err != nil {
-@@ -4666,40 +4597,40 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -4666,40 +4614,40 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		if err := c.checkOpeningParenthesis(in); err != nil {
  			return bvNone(), err
  		}
@@ -3899,7 +4855,7 @@ index 768df8d..4bb828a 100644
  		}
  	case "ailevelf":
  		out.append(OC_ex_, OC_ex_ailevelf)
-@@ -5203,7 +5134,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5203,7 +5151,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		// So map(ifelse) is the same as map("ifelse") but not map(ifelse(...))
  		key := c.token
  		var keyExp BytecodeExp
@@ -3908,7 +4864,7 @@ index 768df8d..4bb828a 100644
  		savedIn := *in
  		c.token = c.tokenizer(in)
  		// A quote starts a string and "$" starts a local variable, so neither is a name
-@@ -5214,7 +5145,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5214,7 +5162,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			if err != nil {
  				return bvNone(), err
  			}
@@ -3917,7 +4873,7 @@ index 768df8d..4bb828a 100644
  			if !kv.IsNone() && kv.vtype != VT_String {
  				return bvNone(), Error("Expected a string expression")
  			}
-@@ -5266,18 +5197,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5266,18 +5214,18 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		// Map assignment with := operator
  		if c.token == ":=" {
  			c.token = c.tokenizer(in)
@@ -3941,7 +4897,7 @@ index 768df8d..4bb828a 100644
  			out.append(OC_assign_)
  			out.appendI32Op(assignOp, keyIdx)
  		} else {
-@@ -5388,34 +5319,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5388,34 +5336,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  	case "pausetime":
  		out.append(OC_ex_, OC_ex_pausetime)
  	case "physics":
@@ -3977,7 +4933,7 @@ index 768df8d..4bb828a 100644
  	case "playerindexexist":
  		if _, err := c.oneArg(out, in, rd, true); err != nil {
  			return bvNone(), err
-@@ -5578,7 +5482,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5578,7 +5499,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		}
  		if rd {
  			//out.append(OC_rdreset)
@@ -3986,7 +4942,7 @@ index 768df8d..4bb828a 100644
  		}
  		c.previousOperator = c.token
  		c.token = c.tokenizer(in)
-@@ -5586,7 +5490,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5586,7 +5507,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  	default:
  		// Exceptions for the projectile triggers with (very) old syntax
  		// projHit123, projGuarded456, projContact789
@@ -3995,7 +4951,7 @@ index 768df8d..4bb828a 100644
  		l := len(c.token)
  		if (l >= 7 && c.token[:7] == "projhit") ||
  			(l >= 11 && (c.token[:11] == "projguarded" || c.token[:11] == "projcontact")) {
-@@ -5617,7 +5521,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5617,7 +5538,7 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  			}
  			// Mugen only allows 0 or 1 in the first comparison
  			if n != 0 && n != 1 && !sys.ignoreMostErrors {
@@ -4004,7 +4960,7 @@ index 768df8d..4bb828a 100644
  			}
  			// Check if the second comparison exists (ProjContact[ID] = value, [oper] value2)
  			hasSecondComparison := c.token == ","
-@@ -5667,7 +5571,237 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
+@@ -5667,7 +5588,237 @@ func (c *CharCompiler) expValue(out *BytecodeExp, in *string,
  		}
  	}
  	c.token = c.tokenizer(in)
@@ -4243,7 +5199,7 @@ index 768df8d..4bb828a 100644
  }
  
  func (c *CharCompiler) contiguousOperator(in *string) error {
-@@ -5747,20 +5881,22 @@ func (c *CharCompiler) expPow(out *BytecodeExp, in *string) (BytecodeValue, erro
+@@ -5747,20 +5898,22 @@ func (c *CharCompiler) expPow(out *BytecodeExp, in *string) (BytecodeValue, erro
  		}
  		if c.token == "**" {
  			c.token = c.tokenizer(in)
@@ -4269,7 +5225,7 @@ index 768df8d..4bb828a 100644
  		} else {
  			break
  		}
-@@ -5777,20 +5913,19 @@ func (c *CharCompiler) expMldv(out *BytecodeExp, in *string) (BytecodeValue, err
+@@ -5777,20 +5930,19 @@ func (c *CharCompiler) expMldv(out *BytecodeExp, in *string) (BytecodeValue, err
  		if err := c.operator(in); err != nil {
  			return bvNone(), err
  		}
@@ -4296,7 +5252,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  	}
-@@ -5805,17 +5940,17 @@ func (c *CharCompiler) expAdsb(out *BytecodeExp, in *string) (BytecodeValue, err
+@@ -5805,17 +5957,17 @@ func (c *CharCompiler) expAdsb(out *BytecodeExp, in *string) (BytecodeValue, err
  		if err := c.operator(in); err != nil {
  			return bvNone(), err
  		}
@@ -4319,7 +5275,7 @@ index 768df8d..4bb828a 100644
  			return bvNone(), err
  		}
  	}
-@@ -5830,64 +5965,69 @@ func (c *CharCompiler) expGrls(out *BytecodeExp, in *string) (BytecodeValue, err
+@@ -5830,64 +5982,69 @@ func (c *CharCompiler) expGrls(out *BytecodeExp, in *string) (BytecodeValue, err
  		if err := c.operator(in); err != nil {
  			return bvNone(), err
  		}
@@ -4411,7 +5367,7 @@ index 768df8d..4bb828a 100644
  		out.appendValue(bv3)
  
  		var rop OpCode
-@@ -5905,9 +6045,9 @@ func (c *CharCompiler) expRange(out *BytecodeExp, in *string,
+@@ -5905,9 +6062,9 @@ func (c *CharCompiler) expRange(out *BytecodeExp, in *string,
  		if opc == OC_ne {
  			out.append(OC_blnot)
  		}
@@ -4423,7 +5379,7 @@ index 768df8d..4bb828a 100644
  		var minPass, maxPass bool
  
  		if tmp.vtype == VT_Float || bv2.vtype == VT_Float || bv3.vtype == VT_Float {
-@@ -5939,7 +6079,8 @@ func (c *CharCompiler) expRange(out *BytecodeExp, in *string,
+@@ -5939,7 +6096,8 @@ func (c *CharCompiler) expRange(out *BytecodeExp, in *string,
  			bv.SetB(!bv.ToB())
  		}
  	}
@@ -4433,7 +5389,7 @@ index 768df8d..4bb828a 100644
  }
  
  func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, error) {
-@@ -5964,7 +6105,8 @@ func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, err
+@@ -5964,7 +6122,8 @@ func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, err
  		switch c.token {
  		case "[", "(":
  			if !c.norange {
@@ -4443,7 +5399,7 @@ index 768df8d..4bb828a 100644
  					return bvNone(), err
  				} else if ok {
  					break
-@@ -5972,43 +6114,126 @@ func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, err
+@@ -5972,43 +6131,126 @@ func (c *CharCompiler) expEqne(out *BytecodeExp, in *string) (BytecodeValue, err
  			}
  			fallthrough
  		default:
@@ -4591,7 +5547,7 @@ index 768df8d..4bb828a 100644
  	if err != nil {
  		return bvNone(), err
  	}
-@@ -6018,7 +6243,7 @@ func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, ef expFunc,
+@@ -6018,7 +6260,7 @@ func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, ef expFunc,
  		}
  		if c.token == opt {
  			c.token = c.tokenizer(in)
@@ -4600,7 +5556,7 @@ index 768df8d..4bb828a 100644
  				return bvNone(), err
  			}
  		} else {
-@@ -6028,20 +6253,20 @@ func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, ef expFunc,
+@@ -6028,20 +6270,20 @@ func (c *CharCompiler) expOneOp(out *BytecodeExp, in *string, ef expFunc,
  }
  
  func (c *CharCompiler) expAnd(out *BytecodeExp, in *string) (BytecodeValue, error) {
@@ -4625,7 +5581,7 @@ index 768df8d..4bb828a 100644
  	}
  	bv, err := c.expOr(out, in)
  	if err != nil {
-@@ -6053,25 +6278,27 @@ func (c *CharCompiler) expBoolAnd(out *BytecodeExp, in *string) (BytecodeValue,
+@@ -6053,25 +6295,27 @@ func (c *CharCompiler) expBoolAnd(out *BytecodeExp, in *string) (BytecodeValue,
  		}
  		if c.token == "&&" {
  			c.token = c.tokenizer(in)
@@ -4659,7 +5615,7 @@ index 768df8d..4bb828a 100644
  		} else {
  			break
  		}
-@@ -6080,13 +6307,21 @@ func (c *CharCompiler) expBoolAnd(out *BytecodeExp, in *string) (BytecodeValue,
+@@ -6080,13 +6324,21 @@ func (c *CharCompiler) expBoolAnd(out *BytecodeExp, in *string) (BytecodeValue,
  }
  
  func (c *CharCompiler) expBoolXor(out *BytecodeExp, in *string) (BytecodeValue, error) {
@@ -4684,7 +5640,7 @@ index 768df8d..4bb828a 100644
  	}
  	bv, err := c.expBoolXor(out, in)
  	if err != nil {
-@@ -6098,25 +6333,27 @@ func (c *CharCompiler) expBoolOr(out *BytecodeExp, in *string) (BytecodeValue, e
+@@ -6098,25 +6350,27 @@ func (c *CharCompiler) expBoolOr(out *BytecodeExp, in *string) (BytecodeValue, e
  		}
  		if c.token == "||" {
  			c.token = c.tokenizer(in)
@@ -4718,7 +5674,7 @@ index 768df8d..4bb828a 100644
  		} else {
  			break
  		}
-@@ -6124,17 +6361,21 @@ func (c *CharCompiler) expBoolOr(out *BytecodeExp, in *string) (BytecodeValue, e
+@@ -6124,17 +6378,21 @@ func (c *CharCompiler) expBoolOr(out *BytecodeExp, in *string) (BytecodeValue, e
  	return bv, nil
  }
  
@@ -4744,7 +5700,7 @@ index 768df8d..4bb828a 100644
  			return nil, Error("Expected a string expression")
  		}
  		switch vt {
-@@ -6147,11 +6388,45 @@ func (c *CharCompiler) typedExp(ef expFunc, in *string,
+@@ -6147,11 +6405,45 @@ func (c *CharCompiler) typedExp(ef expFunc, in *string,
  		}
  		be.appendValue(bv)
  	}
@@ -4792,7 +5748,7 @@ index 768df8d..4bb828a 100644
  	if err != nil {
  		return nil, err
  	}
-@@ -6170,7 +6445,7 @@ func (c *CharCompiler) argExpression(in *string, vt ValueType) (BytecodeExp, err
+@@ -6170,7 +6462,7 @@ func (c *CharCompiler) argExpression(in *string, vt ValueType) (BytecodeExp, err
  }
  
  func (c *CharCompiler) fullExpression(in *string, vt ValueType) (BytecodeExp, error) {
@@ -4801,7 +5757,7 @@ index 768df8d..4bb828a 100644
  	if err != nil {
  		return nil, err
  	}
-@@ -6271,7 +6546,7 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
+@@ -6271,7 +6563,7 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
  	}
  
  	for ; c.i < len(c.lines); c.i++ {
@@ -4810,14 +5766,22 @@ index 768df8d..4bb828a 100644
  
  		// Check for open [State] headers
  		// They end up as an invalid parameter for the previous state controller and cause both blocks to be merged
-@@ -6326,12 +6601,12 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
+@@ -6320,18 +6612,18 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
+ 			if name == "" {
+ 				if !sys.ignoreMostErrors {
+ 					// If strict, only a single token is valid on the LHS
+-					if strings.IndexAny(lhs, " \t") >= 0 {
++					if indexSpaceTab(lhs) >= 0 {
+ 						if sys.ignoreMostErrors {
+ 							continue
  						}
  						return nil, Error("Invalid parameter syntax: " + line)
  					}
 -					name = strings.ToLower(lhs)
 +					name = c.toLower(lhs)
  				} else {
- 					if j := strings.IndexAny(lhs, " \t"); j >= 0 {
+-					if j := strings.IndexAny(lhs, " \t"); j >= 0 {
++					if j := indexSpaceTab(lhs); j >= 0 {
  						lhs = lhs[:j]
  					}
 -					name = strings.ToLower(lhs)
@@ -4825,10 +5789,32 @@ index 768df8d..4bb828a 100644
  				}
  			}
  		}
-@@ -6379,6 +6654,14 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
+@@ -6379,6 +6671,36 @@ func (c *CharCompiler) parseSection(sctrl func(name, data string) error) (IniSec
  	return is, nil
  }
  
++// Same as strings.IndexAny(s, " \t")
++func indexSpaceTab(s string) int {
++	for i := 0; i < len(s); i++ {
++		if s[i] == ' ' || s[i] == '\t' {
++			return i
++		}
++	}
++	return -1
++}
++
++// Reports whether any parameter name in is starts with prefix once
++// lowercased. Lets the prefixed parameter groups (palfx., afterimage.,
++// shader.) skip dozens of lookups and string concatenations when absent
++func (c *CharCompiler) hasKeyPrefix(is IniSection, prefix string) bool {
++	for k := range is {
++		if strings.HasPrefix(c.toLower(k), prefix) {
++			return true
++		}
++	}
++	return false
++}
++
 +// Same as strings.SplitN(line, ";", 2)[0] without allocating the slice
 +func cutComment(line string) string {
 +	if i := strings.IndexByte(line, ';'); i >= 0 {
@@ -4840,7 +5826,73 @@ index 768df8d..4bb828a 100644
  func (c *CharCompiler) stateSec(is IniSection, f func() error) error {
  	if err := f(); err != nil {
  		return err
-@@ -6559,17 +6842,23 @@ func (c *CharCompiler) scAdd(sc *StateControllerBase, id byte,
+@@ -6450,13 +6772,14 @@ func (c *CharCompiler) getDataPrefix(data *string, ffxDefault bool) (prefix stri
+ 			// Get the substring after the matched prefix
+ 			rest := str[len(longestMatch):]
+ 
+-			// Split by any sequence of non-letter characters to isolate tokens
+-			re := regexp.MustCompile("[^a-z]+")
+-			tokens := re.Split(rest, -1)
+-
+-			nextToken := ""
+-			if len(tokens) > 0 {
+-				nextToken = tokens[0]
++			// The first run of letters, i.e. what regexp "[^a-z]+" Split(rest, -1)[0]
++			// gave (the regexp was compiled on every call)
++			nextToken := rest
++			for i := 0; i < len(rest); i++ {
++				if rest[i] < 'a' || rest[i] > 'z' {
++					nextToken = rest[:i]
++					break
++				}
+ 			}
+ 
+ 			// Remove prefix only if next token is empty or a known trigger
+@@ -6483,6 +6806,15 @@ func (c *CharCompiler) stringToExp(s string) []BytecodeExp {
+ 
+ // Handles parameters with FX prefixes
+ func (c *CharCompiler) paramPrefixValue(is IniSection, sc *StateControllerBase,
++	name string, id byte, numArg int, mandatory, ffxDefault bool) error {
++	// Absent is the common case: skip the closure (see paramPrefixValueSub)
++	if _, ok := is[name]; !ok && !mandatory {
++		return nil
++	}
++	return c.paramPrefixValueSub(is, sc, name, id, numArg, mandatory, ffxDefault)
++}
++
++func (c *CharCompiler) paramPrefixValueSub(is IniSection, sc *StateControllerBase,
+ 	name string, id byte, numArg int, mandatory, ffxDefault bool) error {
+ 	return c.stateParam(is, name, mandatory, func(data string) error {
+ 		// Legacy syntax: a lexically stripped prefix means the rest is purely numeric
+@@ -6526,7 +6858,14 @@ func (c *CharCompiler) paramPrefixValue(is IniSection, sc *StateControllerBase,
+ 
+ func (c *CharCompiler) exprs(data string, vt ValueType,
+ 	numArg int) ([]BytecodeExp, error) {
+-	bes := []BytecodeExp{}
++	// Sized for the usual argument count (never nil, like the old literal)
++	n := numArg
++	if n > 4 {
++		n = 4
++	} else if n < 0 {
++		n = 0
++	}
++	bes := make([]BytecodeExp, 0, n)
+ 	for n := 1; n <= numArg; n++ {
+ 		var be BytecodeExp
+ 		var err error
+@@ -6552,6 +6891,11 @@ func (c *CharCompiler) scAdd(sc *StateControllerBase, id byte,
+ 	if err != nil {
+ 		return err
+ 	}
++	if len(topbe) == 0 {
++		// Nothing to prepend: store bes as is instead of copying it
++		sc.add(id, bes)
++		return nil
++	}
+ 	sc.add(id, append(topbe, bes...))
+ 	return nil
+ }
+@@ -6559,17 +6903,23 @@ func (c *CharCompiler) scAdd(sc *StateControllerBase, id byte,
  // ParamValue adds the parameter immediately, unlike StateParam which only reads it
  func (c *CharCompiler) paramValue(is IniSection, sc *StateControllerBase,
  	paramname string, id byte, vt ValueType, numArg int, mandatory bool) error {
@@ -4869,7 +5921,138 @@ index 768df8d..4bb828a 100644
  	}
  	if mandatory && !found {
  		return Error(paramname + " not specified")
-@@ -7229,8 +7518,13 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
+@@ -6619,6 +6969,14 @@ func (c *CharCompiler) paramValueLoose(is IniSection, sc *StateControllerBase,
+ }
+ 
+ func (c *CharCompiler) paramAnimtype(is IniSection, sc *StateControllerBase, paramName string, id byte) error {
++	// Absent is the common case: skip the closure (see paramAnimtypeSub)
++	if _, ok := is[paramName]; !ok {
++		return nil
++	}
++	return c.paramAnimtypeSub(is, sc, paramName, id)
++}
++
++func (c *CharCompiler) paramAnimtypeSub(is IniSection, sc *StateControllerBase, paramName string, id byte) error {
+ 	return c.stateParam(is, paramName, false, func(data string) error {
+ 		if len(data) == 0 {
+ 			return Error(paramName + " not specified")
+@@ -6671,6 +7029,14 @@ func (c *CharCompiler) paramAnimtype(is IniSection, sc *StateControllerBase, par
+ }
+ 
+ func (c *CharCompiler) paramHittype(is IniSection, sc *StateControllerBase, paramName string, id byte) error {
++	// Absent is the common case: skip the closure (see paramHittypeSub)
++	if _, ok := is[paramName]; !ok {
++		return nil
++	}
++	return c.paramHittypeSub(is, sc, paramName, id)
++}
++
++func (c *CharCompiler) paramHittypeSub(is IniSection, sc *StateControllerBase, paramName string, id byte) error {
+ 	return c.stateParam(is, paramName, false, func(data string) error {
+ 		if len(data) == 0 {
+ 			return Error(paramName + " not specified")
+@@ -6713,6 +7079,14 @@ func (c *CharCompiler) paramHittype(is IniSection, sc *StateControllerBase, para
+ }
+ 
+ func (c *CharCompiler) paramPostype(is IniSection, sc *StateControllerBase, id byte) error {
++	// Absent is the common case: skip the closure (see paramPostypeSub)
++	if _, ok := is["postype"]; !ok {
++		return nil
++	}
++	return c.paramPostypeSub(is, sc, id)
++}
++
++func (c *CharCompiler) paramPostypeSub(is IniSection, sc *StateControllerBase, id byte) error {
+ 	return c.stateParam(is, "postype", false, func(data string) error {
+ 		if len(data) == 0 {
+ 			return Error("postype not specified")
+@@ -6769,6 +7143,14 @@ func (c *CharCompiler) paramPostype(is IniSection, sc *StateControllerBase, id b
+ }
+ 
+ func (c *CharCompiler) paramSpace(is IniSection, sc *StateControllerBase, id byte, allowNone bool) error {
++	// Absent is the common case: skip the closure (see paramSpaceSub)
++	if _, ok := is["space"]; !ok {
++		return nil
++	}
++	return c.paramSpaceSub(is, sc, id, allowNone)
++}
++
++func (c *CharCompiler) paramSpaceSub(is IniSection, sc *StateControllerBase, id byte, allowNone bool) error {
+ 	return c.stateParam(is, "space", false, func(data string) error {
+ 		if len(data) == 0 {
+ 			return Error("space not specified")
+@@ -6800,6 +7182,14 @@ func (c *CharCompiler) paramSpace(is IniSection, sc *StateControllerBase, id byt
+ }
+ 
+ func (c *CharCompiler) paramProjection(is IniSection, sc *StateControllerBase, key string, id byte) error {
++	// Absent is the common case: skip the closure (see paramProjectionSub)
++	if _, ok := is[key]; !ok {
++		return nil
++	}
++	return c.paramProjectionSub(is, sc, key, id)
++}
++
++func (c *CharCompiler) paramProjectionSub(is IniSection, sc *StateControllerBase, key string, id byte) error {
+ 	return c.stateParam(is, key, false, func(data string) error {
+ 		var proj Projection
+ 
+@@ -6820,6 +7210,14 @@ func (c *CharCompiler) paramProjection(is IniSection, sc *StateControllerBase, k
+ }
+ 
+ func (c *CharCompiler) paramSaveData(is IniSection, sc *StateControllerBase, id byte) error {
++	// Absent is the common case: skip the closure (see paramSaveDataSub)
++	if _, ok := is["savedata"]; !ok {
++		return nil
++	}
++	return c.paramSaveDataSub(is, sc, id)
++}
++
++func (c *CharCompiler) paramSaveDataSub(is IniSection, sc *StateControllerBase, id byte) error {
+ 	return c.stateParam(is, "savedata", false, func(data string) error {
+ 		if len(data) <= 1 {
+ 			return Error("savedata not specified")
+@@ -6845,6 +7243,10 @@ func (c *CharCompiler) paramTrans(is IniSection, sc *StateControllerBase, prefix
+ 	// Check if we have both trans and alpha parameters
+ 	_, alphaExists := is[prefix+"alpha"]
+ 	_, transExists := is[prefix+"trans"]
++	if !alphaExists && !transExists {
++		// Nothing to do. Returning here skips the closure below
++		return nil
++	}
+ 
+ 	// Require trans parameter before accepting alpha
+ 	// In Mugen this fails silently
+@@ -6965,6 +7367,14 @@ func (c *CharCompiler) paramTrans(is IniSection, sc *StateControllerBase, prefix
+ }
+ 
+ func (c *CharCompiler) paramClsnType(is IniSection, sc *StateControllerBase, paramName string, id byte) error {
++	// Absent is the common case: skip the closure (see paramClsnTypeSub)
++	if _, ok := is[paramName]; !ok {
++		return nil
++	}
++	return c.paramClsnTypeSub(is, sc, paramName, id)
++}
++
++func (c *CharCompiler) paramClsnTypeSub(is IniSection, sc *StateControllerBase, paramName string, id byte) error {
+ 	return c.stateParam(is, paramName, false, func(data string) error {
+ 		if len(data) == 0 {
+ 			return Error("Clsn type not specified for " + paramName)
+@@ -6992,6 +7402,14 @@ func (c *CharCompiler) paramClsnType(is IniSection, sc *StateControllerBase, par
+ }
+ 
+ func (c *CharCompiler) paramStringList(is IniSection, sc *StateControllerBase, paramName string, opcode byte) error {
++	// Absent is the common case: skip the closure (see paramStringListSub)
++	if _, ok := is[paramName]; !ok {
++		return nil
++	}
++	return c.paramStringListSub(is, sc, paramName, opcode)
++}
++
++func (c *CharCompiler) paramStringListSub(is IniSection, sc *StateControllerBase, paramName string, opcode byte) error {
+ 	return c.stateParam(is, paramName, false, func(data string) error {
+ 		parts := strings.Split(data, ",")
+ 		var allBe []BytecodeExp
+@@ -7229,8 +7647,13 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
  	for ; c.i < len(c.lines); c.i++ {
  		// Find a statedef, skipping over other lines until finding one
  		// Get the current line, without comments
@@ -4885,7 +6068,7 @@ index 768df8d..4bb828a 100644
  		// If this is not a line starting a statedef, continue to the next line
  		if len(line) < 11 || line[0] != '[' || line[len(line)-1] != ']' ||
  			line[1:10] != "statedef " {
-@@ -7277,12 +7571,13 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
+@@ -7277,12 +7700,13 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
  		// Continue looping through state file lines to define the current state
  		for c.i++; c.i < len(c.lines); c.i++ {
  			// Get the current line, without comments
@@ -4901,7 +6084,28 @@ index 768df8d..4bb828a 100644
  			if len(line) < 7 || line[1:7] != "state " {
  				c.i--
  				break
-@@ -8134,7 +8429,7 @@ func (c *CharCompiler) callFunc(line *string, root bool, ctrls *[]StateControlle
+@@ -7312,7 +7736,7 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
+ 				switch name {
+ 				case "type":
+ 					var ok bool
+-					scf, ok = c.scmap[strings.ToLower(data)]
++					scf, ok = c.scmap[c.toLower(data)]
+ 					if !ok {
+ 						return Error("Invalid state controller: " + data)
+ 					}
+@@ -7375,7 +7799,10 @@ func (c *CharCompiler) stateCompileCNS(states map[int32]*StateBytecode, filename
+ 						}
+ 
+ 						// Parse trigger conditions into a bytecode expression
+-						be, err := c.fullExpression(&data, VT_Bool)
++						// (through a copy: taking data's address made it escape
++						// to the heap for every line of the section)
++						expr := data
++						be, err := c.fullExpression(&expr, VT_Bool)
+ 						if err != nil {
+ 							// Ignore the error if it happened in a trigger that is being skipped anyway
+ 							if missingIdx >= 0 && sys.ignoreMostErrors {
+@@ -8134,7 +8561,7 @@ func (c *CharCompiler) callFunc(line *string, root bool, ctrls *[]StateControlle
  	} else {
  		for {
  			// Parse arguments
@@ -5094,6 +6298,77 @@ index 0000000..c83520b
 +		h.byte1(0xf7)
 +	}
 +}
+diff --git a/src/compiler_functions.go b/src/compiler_functions.go
+index 762ee1f..72f4fae 100644
+--- a/src/compiler_functions.go
++++ b/src/compiler_functions.go
+@@ -892,12 +892,15 @@ func (c *CharCompiler) explodSub(is IniSection, sc *StateControllerBase) error {
+ 		return err
+ 	}
+ 	// vel or velocity
++	// Same as stateParam with a closure. The closure made velFound, sc and
++	// the parameters escape to the heap on every call
+ 	velFound := false
+-	if err := c.stateParam(is, "vel", false, func(data string) error {
++	if data, ok := is["vel"]; ok {
+ 		velFound = true
+-		return c.scAdd(sc, explod_velocity, data, VT_Float, 3)
+-	}); err != nil {
+-		return err
++		if err := c.scAdd(sc, explod_velocity, data, VT_Float, 3); err != nil {
++			return Error(data + "\n" + "vel" + ": " + err.Error())
++		}
++		delete(is, "vel")
+ 	}
+ 	if !velFound {
+ 		if err := c.paramValue(is, sc, "velocity",
+@@ -1459,6 +1462,10 @@ func (c *CharCompiler) modifyReflection(is IniSection, sc *StateControllerBase)
+ 
+ func (c *CharCompiler) palFXSub(is IniSection,
+ 	sc *StateControllerBase, prefix string) error {
++	// All parameters below start with prefix
++	if prefix != "" && !c.hasKeyPrefix(is, prefix) {
++		return nil
++	}
+ 	if err := c.paramValue(is, sc, prefix+"time",
+ 		palFX_time, VT_Int, 1, false); err != nil {
+ 		return err
+@@ -1601,6 +1608,10 @@ func (c *CharCompiler) afterImageSub(is IniSection, sc *StateControllerBase, pre
+ 		afterImage_redirectid, VT_Int, 1, false); err != nil {
+ 		return err
+ 	}
++	// All other parameters start with prefix
++	if prefix != "" && !c.hasKeyPrefix(is, prefix) {
++		return nil
++	}
+ 	if err := c.paramTrans(is, sc, prefix, afterImage_trans); err != nil {
+ 		return err
+ 	}
+@@ -7018,6 +7029,11 @@ func (c *CharCompiler) shaderSub(is IniSection, sc *StateControllerBase, baseOp
+ 	opTex2Anim := baseOp + 4
+ 	opTex2Spr := baseOp + 5
+ 
++	// Nothing below can match without a key starting with prefix
++	if prefix != "" && !c.hasKeyPrefix(is, prefix) {
++		return nil
++	}
++
+ 	if err := c.paramValue(is, sc, prefix+"name",
+ 		opShader, VT_String, 1, false); err != nil {
+ 		return err
+@@ -7025,9 +7041,10 @@ func (c *CharCompiler) shaderSub(is IniSection, sc *StateControllerBase, baseOp
+ 
+ 	var shaderParams []BytecodeExp
+ 	var paramIndices []int
++	paramPrefix := prefix + "param"
+ 	for k, v := range is {
+-		if strings.HasPrefix(strings.ToLower(k), prefix+"param") {
+-			numStr := k[len(prefix+"param"):]
++		if strings.HasPrefix(strings.ToLower(k), paramPrefix) {
++			numStr := k[len(paramPrefix):]
+ 			// Keys like "params" are left to the regular unknown parameter handling
+ 			if numStr == "" || strings.Trim(numStr, "0123456789") != "" {
+ 				continue
 diff --git a/src/config.go b/src/config.go
 index d39783d..6bb3e64 100644
 --- a/src/config.go
@@ -7324,6 +8599,65 @@ index e791f5d..7a27f20 100644
  	if err != nil {
  		return err
  	}
+diff --git a/src/input.go b/src/input.go
+index 68f7f0b..4e12f3b 100644
+--- a/src/input.go
++++ b/src/input.go
+@@ -4,6 +4,7 @@ import (
+ 	"fmt"
+ 	"math"
+ 	"strings"
++	"unsafe"
+ 
+ 	"github.com/veandco/go-sdl2/sdl"
+ )
+@@ -2713,7 +2714,8 @@ func (c *Command) Step(ibuf *InputBuffer, ai, isHelper, hpbuf, pausebuf bool, ex
+ type CommandList struct {
+ 	Buffer                *InputBuffer
+ 	Names                 map[string]int
+-	Commands              [][]Command // [name][commands]
++	nameCache             [32]cmdNameCacheEnt // see lookupName
++	Commands              [][]Command         // [name][commands]
+ 	DefaultTime           int32
+ 	DefaultStepTime       int32
+ 	DefaultAutoGreater    bool
+@@ -3078,6 +3080,7 @@ func (cl *CommandList) GetState(name string) bool {
+ // For cases where one player's inputs are compared to another's commands
+ func (cl *CommandList) CopyList(src CommandList) {
+ 	cl.Names = src.Names
++	cl.nameCache = [32]cmdNameCacheEnt{}
+ 	cl.Commands = make([][]Command, len(src.Commands))
+ 	for i, ca := range src.Commands {
+ 		cl.Commands[i] = make([]Command, len(ca))
+@@ -3241,3 +3244,28 @@ func autoGenerateExtendedCommand(originalCmd *Command) *Command {
+ 	return &generatedCmd
+ }
+ */
++
++type cmdNameCacheEnt struct {
++	p   *byte
++	n   int
++	pos int
++	ok  bool
++}
++
++// lookupName is Names[name] with a pointer-identity cache in front: command
++// names in bytecode are string-pool entries whose data never moves, and
++// trigger code checks commands thousands of times per tick.
++func (cl *CommandList) lookupName(name string) (int, bool) {
++	p, n := unsafe.StringData(name), len(name)
++	if p == nil {
++		pos, ok := cl.Names[name]
++		return pos, ok
++	}
++	e := &cl.nameCache[(uintptr(unsafe.Pointer(p))>>3)&31]
++	if e.p == p && e.n == n {
++		return e.pos, e.ok
++	}
++	pos, ok := cl.Names[name]
++	*e = cmdNameCacheEnt{p, n, pos, ok}
++	return pos, ok
++}
 diff --git a/src/jsoncache.go b/src/jsoncache.go
 new file mode 100644
 index 0000000..24adbf5
@@ -7689,7 +9023,7 @@ index d63aa49..25c8b51 100644
  	r.alpha = packAlpha(src, 255-src)
  }
 diff --git a/src/render.go b/src/render.go
-index 6ccd7bc..cee3453 100644
+index 6ccd7bc..ad422ab 100644
 --- a/src/render.go
 +++ b/src/render.go
 @@ -377,13 +377,20 @@ func (rp *RenderParams) IsValid() bool {
@@ -7716,7 +9050,7 @@ index 6ccd7bc..cee3453 100644
  
  	// This effectively side-steps a low-level rectangle rasterization edge case,
  	// that caused visible and frequent artifacts on the diagonal.
-@@ -905,28 +912,57 @@ func initRenderSpriteQuad(rp *RenderParams) {
+@@ -905,28 +912,65 @@ func initRenderSpriteQuad(rp *RenderParams) {
  	rp.y += rp.rcy
  }
  
@@ -7744,6 +9078,14 @@ index 6ccd7bc..cee3453 100644
 +	gfx.SetUniformFv("add", rsCur.spfx.add[:])
 +	gfx.SetUniformFv("mult", rsCur.spfx.mult[:])
 +	setUniform1("alpha", a)
++	if isVita && rsCur.rp.customShader.name == "" {
++		// Tell the Vita sprite shader whether any colour effect is active;
++		// without one it takes a two-texture-read fast path.
++		spfx, rp := &rsCur.spfx, &rsCur.rp
++		fx := rp.paltex == nil || rp.mask == -1 || spfx.neg || spfx.hue != 0 || spfx.gray != 0 ||
++			spfx.add != [3]float32{} || spfx.mult != [3]float32{1, 1, 1} || rsCur.tint[3] != 0
++		gfx.SetUniformI("fxOn", int(Btoi(fx)))
++	}
 +
 +	renderSpriteQuad(rsCur.modelview, rsCur.rp)
 +}
@@ -7782,7 +9124,7 @@ index 6ccd7bc..cee3453 100644
  
  	// Heavy state change
  	// Because renderWithBlending() sometimes needs 2 passes, we'll do most of the setup outside of render()
-@@ -935,14 +971,14 @@ func RenderSprite(rp RenderParams) {
+@@ -935,14 +979,14 @@ func RenderSprite(rp RenderParams) {
  	gfx.EnableScissor(rp.window[0], rp.window[1], rp.window[2], rp.window[3])
  
  	// Static uniforms
@@ -7801,7 +9143,7 @@ index 6ccd7bc..cee3453 100644
  
  	if rp.paltex == nil {
  		gfx.SetUniformI("isRgba", 1)
-@@ -971,22 +1007,7 @@ func RenderSprite(rp RenderParams) {
+@@ -971,22 +1015,7 @@ func RenderSprite(rp RenderParams) {
  		gfx.SetTexture("pal", rp.paltex)
  	}
  
@@ -7825,7 +9167,7 @@ index 6ccd7bc..cee3453 100644
  
  	gfx.DisableScissor()
  }
-@@ -1023,16 +1044,10 @@ func renderWithBlending(
+@@ -1023,16 +1052,10 @@ func renderWithBlending(
  		dst = 0
  	}
  
@@ -7846,7 +9188,7 @@ index 6ccd7bc..cee3453 100644
  
  	// Proceed with the render calls
  	switch {
-@@ -1044,10 +1059,10 @@ func renderWithBlending(
+@@ -1044,10 +1067,10 @@ func renderWithBlending(
  		case src == 1 && dst == 1:
  			// Fast path for full subtraction
  			if spfx.invblend >= 1 {
@@ -7859,7 +9201,7 @@ index 6ccd7bc..cee3453 100644
  			}
  			render(BlendInv, blendSourceFactor, BlendOne, 1)
  		default:
-@@ -1057,10 +1072,10 @@ func renderWithBlending(
+@@ -1057,10 +1080,10 @@ func renderWithBlending(
  			}
  			if src > 0 {
  				if spfx.invblend >= 1 {
@@ -7872,7 +9214,7 @@ index 6ccd7bc..cee3453 100644
  				}
  				render(BlendInv, blendSourceFactor, BlendOne, src)
  			}
-@@ -1082,21 +1097,21 @@ func renderWithBlending(
+@@ -1082,21 +1105,21 @@ func renderWithBlending(
  			// This is kind of like "invblend = 3"
  			// But adding "invertblend" support here would force people to have to use it to get the expected results
  			// We avoid "neg" entirely because it turns black edges into white auras. But maybe allowing that would be more consistent?
@@ -7899,7 +9241,7 @@ index 6ccd7bc..cee3453 100644
  				render(BlendReverseSubtract, blendSourceFactor, BlendOne, src)
  			}
  		} else {
-@@ -1104,13 +1119,13 @@ func renderWithBlending(
+@@ -1104,13 +1127,13 @@ func renderWithBlending(
  			// Pass 1: subtractive with gray PalFX
  			if dst > 0 {
  				makeFxGrayscale()
@@ -7915,7 +9257,7 @@ index 6ccd7bc..cee3453 100644
  				render(BlendAdd, blendSourceFactor, BlendOne, src)
  			}
  		}
-@@ -1127,10 +1142,10 @@ func renderWithBlending(
+@@ -1127,10 +1150,10 @@ func renderWithBlending(
  		case src == 1 && dst == 1:
  			// Fast path for full Add
  			if spfx.invblend >= 1 {
@@ -7928,7 +9270,7 @@ index 6ccd7bc..cee3453 100644
  			}
  			render(Blend, blendSourceFactor, BlendOne, 1)
  		default:
-@@ -1142,10 +1157,10 @@ func renderWithBlending(
+@@ -1142,10 +1165,10 @@ func renderWithBlending(
  				if spfx.invblend >= 1 && dst == 1 {
  					Blend = BlendReverseSubtract
  					if spfx.invblend >= 2 { // Not 1 here. TODO: Explain why in comment
@@ -7941,12 +9283,15 @@ index 6ccd7bc..cee3453 100644
  					}
  				} else {
  					Blend = BlendAdd
-@@ -1200,12 +1215,12 @@ func FillRect(rect [4]int32, color uint32, alpha [2]int32, fx *PalFX) {
+@@ -1200,12 +1223,15 @@ func FillRect(rect [4]int32, color uint32, alpha [2]int32, fx *PalFX) {
  	gfx.SetUniformI("isTrapez", 0)
  	gfx.SetUniformI("mask", 0)
  	gfx.SetUniformI("isRgba", 1)
 -	gfx.SetUniformF("gray", spfx.gray)
 -	gfx.SetUniformF("hue", spfx.hue)
++	if isVita {
++		gfx.SetUniformI("fxOn", 1)
++	}
 +	setUniform1("gray", spfx.gray)
 +	setUniform1("hue", spfx.hue)
  
@@ -7957,7 +9302,7 @@ index 6ccd7bc..cee3453 100644
  
  	// Local function called for each blending pass
  	renderPass := func(eq BlendEquation, src, dst BlendFunc, a float32) {
-@@ -1242,6 +1257,23 @@ func (ta *TextureAtlas) bytesPerPixel() int32 {
+@@ -1242,6 +1268,23 @@ func (ta *TextureAtlas) bytesPerPixel() int32 {
  
  func (ta *TextureAtlas) clearTexture(tex Texture, width, height int32) {
  	bpp := ta.bytesPerPixel()
@@ -7981,7 +9326,7 @@ index 6ccd7bc..cee3453 100644
  	clearData := make([]byte, int(width*height*bpp))
  	tex.SetSubData2(clearData, 0, 0, width, height, width*bpp)
  }
-@@ -1295,7 +1327,11 @@ func CreateTextureAtlas(width, height int32, depth int32, filter bool) *TextureA
+@@ -1295,7 +1338,11 @@ func CreateTextureAtlas(width, height int32, depth int32, filter bool) *TextureA
  }
  
  func (ta *TextureAtlas) AddImage(width, height, stride int32, data []byte) ([4]float32, bool) {
@@ -7994,7 +9339,7 @@ index 6ccd7bc..cee3453 100644
  
  	// Initial check for images larger than the atlas's current size
  	if ta.resize {
-@@ -1499,3 +1535,20 @@ type SpriteTextureAtlas struct {
+@@ -1499,3 +1546,20 @@ type SpriteTextureAtlas struct {
  	textures8   []*TextureAtlas
  	textures32  []*TextureAtlas
  }
@@ -8026,7 +9371,7 @@ index 1a2540b..3b8944d 100644
  package main
  
 diff --git a/src/render_gles32.go b/src/render_gles32.go
-index 891acab..5679eac 100644
+index 891acab..f360158 100644
 --- a/src/render_gles32.go
 +++ b/src/render_gles32.go
 @@ -2,7 +2,7 @@
@@ -8217,7 +9562,7 @@ index 891acab..5679eac 100644
  	modelVAO                uint32
  	modelEnvVAO             uint32
  	postVAO                 uint32
-@@ -638,21 +690,29 @@ type Renderer_GLES32 struct {
+@@ -638,21 +690,33 @@ type Renderer_GLES32 struct {
  	GLES32State
  }
  type GLES32State struct {
@@ -8259,10 +9604,14 @@ index 891acab..5679eac 100644
 +		v [4]float32
 +		n uint8
 +	}
++	uniArrM [64]struct {
++		v  [16]float32
++		ok bool
++	}
  	uniformF1Cache      map[uint32]float32
  	uniformF2Cache      map[uint32][2]float32
  	uniformF3Cache      map[uint32][3]float32
-@@ -790,8 +850,8 @@ func (r *Renderer_GLES32) Init() {
+@@ -790,8 +854,8 @@ func (r *Renderer_GLES32) Init() {
  	// Data buffers for rendering
  	postVertData := f32.Bytes(binary.LittleEndian, -1, -1, 1, -1, -1, 1, 1, 1)
  
@@ -8273,7 +9622,7 @@ index 891acab..5679eac 100644
  
  	// Generate VAO's
  	gl.GenVertexArrays(1, &r.spriteVAO)
-@@ -837,11 +897,19 @@ func (r *Renderer_GLES32) Init() {
+@@ -837,11 +901,19 @@ func (r *Renderer_GLES32) Init() {
  	r.bindBuffer(gl.ARRAY_BUFFER, 0)
  
  	// Sprite shader
@@ -8289,12 +9638,12 @@ index 891acab..5679eac 100644
  		"alpha", "tint", "mask", "neg", "gray", "add", "mult", "isFlat", "isRgba", "isTrapez", "hue",
  		"spriteUV", "palUV", "quad", "useQuad")
 +	if isVita {
-+		r.spriteShader.RegisterUniforms("clipOn", "clipRect")
++		r.spriteShader.RegisterUniforms("clipOn", "clipRect", "fxOn")
 +	}
  	r.spriteShader.RegisterTextures("pal", "tex")
  
  	// Configure spriteVAO
-@@ -855,6 +923,7 @@ func (r *Renderer_GLES32) Init() {
+@@ -855,6 +927,7 @@ func (r *Renderer_GLES32) Init() {
  	locUV := r.spriteShader.attributes["uv"]
  	gl.EnableVertexAttribArray(uint32(locUV))
  	gl.VertexAttribPointerWithOffset(uint32(locUV), 2, gl.FLOAT, false, 16, 8)
@@ -8302,7 +9651,7 @@ index 891acab..5679eac 100644
  
  	// Unbind for safety
  	r.bindVertexArray(0)
-@@ -950,10 +1019,14 @@ func (r *Renderer_GLES32) Init() {
+@@ -950,10 +1023,14 @@ func (r *Renderer_GLES32) Init() {
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
@@ -8318,7 +9667,7 @@ index 891acab..5679eac 100644
  			sys.scrrect[2],
  			sys.scrrect[3],
  			0,
-@@ -1003,7 +1076,12 @@ func (r *Renderer_GLES32) Init() {
+@@ -1003,7 +1080,12 @@ func (r *Renderer_GLES32) Init() {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
  	} else {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
@@ -8332,7 +9681,36 @@ index 891acab..5679eac 100644
  	}
  
  	// create our two FBOs for our post-processing needs
-@@ -1140,10 +1218,33 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
+@@ -1130,8 +1212,27 @@ func (r *Renderer_GLES32) IsShadowEnabled() bool {
+ 	return r.enableShadow
+ }
+ 
++// vitaDirect: on the Vita, with no post-processing shader selected, the scene
++// is drawn straight to the display buffer. The offscreen pass (an extra
++// 960x540 target, a scene switch and a full-screen copy every frame) is what
++// the post-processing chain needs, and nothing else does.
++func (r *Renderer_GLES32) vitaDirect() bool {
++	if isVita {
++		vitaFBOCheck()
++	}
++	return isVita && !vitaFBOForced && len(r.postShaderSelect) <= 1 && sys.msaa == 0
++}
++
++// sceneFBO is the framebuffer the scene is rendered into.
++func (r *Renderer_GLES32) sceneFBO() uint32 {
++	if r.vitaDirect() {
++		return 0
++	}
++	return r.fbo
++}
++
+ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
+-	gl.BindFramebuffer(gl.FRAMEBUFFER, r.fbo)
++	gl.BindFramebuffer(gl.FRAMEBUFFER, r.sceneFBO())
+ 	gl.Viewport(0, 0, sys.scrrect[2], sys.scrrect[3])
+ 	if clearColor {
+ 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+@@ -1140,10 +1241,44 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
  	}
  }
  
@@ -8354,6 +9732,17 @@ index 891acab..5679eac 100644
  	if len(r.fbo_pp) == 0 {
  		return
  	}
++	if r.vitaDirect() {
++		// Already on the display buffer; just reset the state the post pass resets.
++		r.DisableScissor()
++		r.DisableBlending()
++		r.SetDepthTest(false)
++		r.SetDepthMask(false)
++		if isVita && vitaDiagProbeDue() {
++			vitaPixelProbe("screen", vitaScreenW, vitaScreenH)
++		}
++		return
++	}
 +	probe := isVita && vitaDiagProbeDue()
 +	if probe {
 +		vitaPixelProbe("scene fbo", sys.scrrect[2], sys.scrrect[3])
@@ -8366,7 +9755,7 @@ index 891acab..5679eac 100644
  
  	x, y, width, height := int32(0), int32(0), int32(sys.scrrect[2]), int32(sys.scrrect[3])
  	time := sdl.GetPerformanceCounter() // consistent time across all shaders
-@@ -1165,9 +1266,13 @@ func (r *Renderer_GLES32) EndFrame() {
+@@ -1165,9 +1300,13 @@ func (r *Renderer_GLES32) EndFrame() {
  	gl.Viewport(x, y, width, height)
  	// clear both of our post-processing FBOs to make sure
  	// nothing's there. the output is set later
@@ -8383,7 +9772,7 @@ index 891acab..5679eac 100644
  	}
  	fbo_texture := r.fbo_texture
  	if sys.msaa > 0 {
-@@ -1243,36 +1348,51 @@ func (r *Renderer_GLES32) Await() {
+@@ -1243,36 +1382,51 @@ func (r *Renderer_GLES32) Await() {
  	gl.Finish()
  }
  
@@ -8457,7 +9846,7 @@ index 891acab..5679eac 100644
  }
  
  func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
-@@ -1834,7 +1954,47 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
+@@ -1834,7 +1988,47 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
  	return true
  }
  
@@ -8505,7 +9894,7 @@ index 891acab..5679eac 100644
  	// Flip Y to OpenGL convention
  	realY := sys.scrrect[3] - (y + height)
  
-@@ -1852,6 +2012,11 @@ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
+@@ -1852,6 +2046,11 @@ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
  }
  
  func (r *Renderer_GLES32) DisableScissor() {
@@ -8517,7 +9906,7 @@ index 891acab..5679eac 100644
  	if r.scissorEnabled {
  		gl.Disable(gl.SCISSOR_TEST)
  		r.scissorEnabled = false
-@@ -1865,7 +2030,14 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
+@@ -1865,7 +2064,14 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
  	}
  
  	// Cached path for the sprite shader
@@ -8533,7 +9922,7 @@ index 891acab..5679eac 100644
  		key := (r.program << 16) | uint32(loc)
  		if old, exists := r.uniformICache[key]; exists && old == val {
  			return
-@@ -1882,7 +2054,24 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
+@@ -1882,7 +2088,24 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
  	}
  
  	// Cached path for the sprite shader
@@ -8559,7 +9948,7 @@ index 891acab..5679eac 100644
  		key := (r.program << 16) | uint32(loc)
  
  		switch len(values) {
-@@ -1941,7 +2130,19 @@ func (r *Renderer_GLES32) SetUniformFvSub(loc int32, values []float32) {
+@@ -1941,7 +2164,19 @@ func (r *Renderer_GLES32) SetUniformFvSub(loc int32, values []float32) {
  }
  
  func (r *Renderer_GLES32) uniformLoc(s *ShaderProgram_GLES32, name string) int32 {
@@ -8579,7 +9968,30 @@ index 891acab..5679eac 100644
  	if !ok {
  		// Would otherwise write to location 0. Only engine code picks these names
  		panic(fmt.Sprintf("Uniform '%s' not registered in %s", name, s.name))
-@@ -2196,6 +2397,23 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -1967,9 +2202,20 @@ func (r *Renderer_GLES32) SetUniformFv(name string, values []float32) {
+ // Caching matrices is as expensive as direct function calls
+ func (r *Renderer_GLES32) SetUniformMatrix(name string, value []float32) {
+ 	loc := r.uniformLoc(r.currentProgram, name)
+-	if loc >= 0 {
+-		gl.UniformMatrix4fv(loc, 1, false, &value[0])
++	if loc < 0 {
++		return
+ 	}
++	// Vita: most sprites share the same modelview/projection, so skip the
++	// upload when the sprite shader already has this matrix.
++	if isVita && r.program == r.spriteShader.program && loc < int32(len(r.uniArrM)) && len(value) == 16 {
++		e := &r.uniArrM[loc]
++		if e.ok && *(*[16]float32)(value) == e.v {
++			return
++		}
++		e.ok = true
++		copy(e.v[:], value)
++	}
++	gl.UniformMatrix4fv(loc, 1, false, &value[0])
+ }
+ 
+ func (r *Renderer_GLES32) SetModelUniformI(name string, val int) {
+@@ -2196,6 +2442,23 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  		}
  	}
  
@@ -8603,7 +10015,7 @@ index 891acab..5679eac 100644
  	need := len(values) * 4
  
  	// Adjust scratch buffer size if necessary
-@@ -2223,6 +2441,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -2223,6 +2486,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  
  // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
  func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
@@ -8615,6 +10027,24 @@ index 891acab..5679eac 100644
  	if loc, ok := r.currentProgram.uniforms["quad"]; ok && loc >= 0 {
  		gl.Uniform4fv(loc, 4, &v[0])
  	}
+@@ -2490,12 +2758,14 @@ func (r *Renderer_GLES32) NeedsGrabPass() bool {
+ func (r *Renderer_GLES32) ResolveBackBuffer() Texture {
+ 	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, r.grabTexture, 0)
+ 
+-	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, r.fbo)
+-	gl.ReadBuffer(gl.COLOR_ATTACHMENT0)
++	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, r.sceneFBO())
++	if !r.vitaDirect() {
++		gl.ReadBuffer(gl.COLOR_ATTACHMENT0)
++	}
+ 
+ 	gl.CopyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, r.grabTexture.width, r.grabTexture.height)
+ 
+-	gl.BindFramebuffer(gl.FRAMEBUFFER, r.fbo)
++	gl.BindFramebuffer(gl.FRAMEBUFFER, r.sceneFBO())
+ 	return r.grabTexture
+ }
+ 
 diff --git a/src/render_vk.go b/src/render_vk.go
 index 34cef7d..5c8063d 100644
 --- a/src/render_vk.go
@@ -8635,12 +10065,115 @@ index 2888520..59208e5 100644
  package main
  
  import (
+diff --git a/src/sb_hoist.go b/src/sb_hoist.go
+new file mode 100644
+index 0000000..10025b6
+--- /dev/null
++++ b/src/sb_hoist.go
+@@ -0,0 +1,97 @@
++package main
++
++// Trigger hoisting for the Vita.
++//
++// CvF's shared player.st is one [Statedef -3] with 877 controllers, most of
++// them guarded by "triggerall = numenemy" or "triggerall = numpartner". Each
++// guard compiles to "<op> jz8 0 pop" at the start of the controller's
++// trigger, and is re-evaluated for every controller on every tick.
++//
++// hoistTriggers wraps each run of consecutive controllers that share such a
++// guard in one parent block whose trigger is the guard alone, and strips the
++// guard from the children. The guard is pure, so evaluating it once per run
++// gives the same result as once per controller; everything else (order,
++// persistence, ignorehitpause) is untouched because the children keep their
++// own blocks.
++
++func hoistTriggers(sb *StateBytecode) {
++	if !fuseEnabled() || sb == nil {
++		return
++	}
++	hoistBlock(&sb.block)
++}
++
++// hoistGuard returns the guard opcode if the trigger starts with a hoistable
++// "triggerall" guard, and the length of that prefix.
++func hoistGuard(t BytecodeExp) (OpCode, int) {
++	if len(t) >= 4 && t[1] == OC_jz8 && t[2] == 0 && t[3] == OC_pop {
++		switch t[0] {
++		case OC_numenemy, OC_numpartner:
++			return t[0], 4
++		}
++	}
++	return 0, 0
++}
++
++func hoistBlock(b *StateBlock) {
++	if b == nil || b.loopBlock || len(b.ctrls) < 2 {
++		return
++	}
++	var out []StateController
++	i := 0
++	for i < len(b.ctrls) {
++		sbi, ok := b.ctrls[i].(*StateBlock)
++		var g OpCode
++		var gl int
++		if ok && !sbi.loopBlock && sbi.elseBlock == nil {
++			g, gl = hoistGuard(sbi.trigger)
++		}
++		if gl == 0 {
++			out = append(out, b.ctrls[i])
++			i++
++			continue
++		}
++		// Extend the run.
++		j := i + 1
++		for j < len(b.ctrls) {
++			sbj, ok := b.ctrls[j].(*StateBlock)
++			if !ok || sbj.loopBlock || sbj.elseBlock != nil {
++				break
++			}
++			if gj, glj := hoistGuard(sbj.trigger); gj != g || glj != gl {
++				break
++			}
++			j++
++		}
++		if j-i < 2 {
++			out = append(out, b.ctrls[i])
++			i++
++			continue
++		}
++		parent := newStateBlock()
++		parent.trigger = BytecodeExp{g}
++		parent.ignorehitpause = true      // children do their own hit-pause checks
++		parent.ctrlsIgnorehitpause = true // likewise
++		for k := i; k < j; k++ {
++			ch := b.ctrls[k].(*StateBlock)
++			ch.trigger = stripPrefix(ch.trigger, gl)
++			parent.ctrls = append(parent.ctrls, ch)
++		}
++		out = append(out, parent)
++		i = j
++	}
++	b.ctrls = out
++	b.runs = nil
++}
++
++// stripPrefix removes the guard; a trigger that was only the guard becomes
++// empty (always true), and a trigger that was "guard; <rest>" where rest was
++// pushed as a plain value keeps the rest.
++func stripPrefix(t BytecodeExp, n int) BytecodeExp {
++	rest := t[n:]
++	if len(rest) == 0 {
++		return nil
++	}
++	// A trailing "value; jmp8 0" from the trigger builder is harmless.
++	return append(BytecodeExp(nil), rest...)
++}
 diff --git a/src/sc_runfn.go b/src/sc_runfn.go
 new file mode 100644
-index 0000000..5af4ec0
+index 0000000..79f68c8
 --- /dev/null
 +++ b/src/sc_runfn.go
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,596 @@
 +package main
 +
 +// Code generated for the Vita port. DO NOT EDIT BY HAND.
@@ -8970,6 +10503,273 @@ index 0000000..5af4ec0
 +	}
 +	return sc.Run
 +}
++
++// scBase returns the parameter list of a StateControllerBase-typed controller.
++func scBase(sc StateController) (StateControllerBase, bool) {
++	switch x := sc.(type) {
++	case afterImageTime:
++		return StateControllerBase(x), true
++	case angleAdd:
++		return StateControllerBase(x), true
++	case angleDraw:
++		return StateControllerBase(x), true
++	case angleMul:
++		return StateControllerBase(x), true
++	case angleSet:
++		return StateControllerBase(x), true
++	case assertAnalogVector:
++		return StateControllerBase(x), true
++	case assertCommand:
++		return StateControllerBase(x), true
++	case assertInput:
++		return StateControllerBase(x), true
++	case assertSpecial:
++		return StateControllerBase(x), true
++	case attackDist:
++		return StateControllerBase(x), true
++	case attackMulSet:
++		return StateControllerBase(x), true
++	case bindToParent:
++		return StateControllerBase(x), true
++	case bindToTarget:
++		return StateControllerBase(x), true
++	case cameraCtrl:
++		return StateControllerBase(x), true
++	case changeAnim:
++		return StateControllerBase(x), true
++	case changeMovelist:
++		return StateControllerBase(x), true
++	case changeState:
++		return StateControllerBase(x), true
++	case clearClipboard:
++		return StateControllerBase(x), true
++	case createPlatform:
++		return StateControllerBase(x), true
++	case ctrlSet:
++		return StateControllerBase(x), true
++	case defenceMulSet:
++		return StateControllerBase(x), true
++	case depth:
++		return StateControllerBase(x), true
++	case depthBound:
++		return StateControllerBase(x), true
++	case destroySelf:
++		return StateControllerBase(x), true
++	case dialogue:
++		return StateControllerBase(x), true
++	case displayToClipboard:
++		return StateControllerBase(x), true
++	case dizzyPointsAdd:
++		return StateControllerBase(x), true
++	case dizzyPointsSet:
++		return StateControllerBase(x), true
++	case dizzySet:
++		return StateControllerBase(x), true
++	case envColor:
++		return StateControllerBase(x), true
++	case envShake:
++		return StateControllerBase(x), true
++	case explod:
++		return StateControllerBase(x), true
++	case explodBindTime:
++		return StateControllerBase(x), true
++	case fallEnvShake:
++		return StateControllerBase(x), true
++	case forceFeedback:
++		return StateControllerBase(x), true
++	case gameMakeAnim:
++		return StateControllerBase(x), true
++	case getHitVarSet:
++		return StateControllerBase(x), true
++	case gravity:
++		return StateControllerBase(x), true
++	case groundLevelOffset:
++		return StateControllerBase(x), true
++	case guardBreakSet:
++		return StateControllerBase(x), true
++	case guardPointsAdd:
++		return StateControllerBase(x), true
++	case guardPointsSet:
++		return StateControllerBase(x), true
++	case height:
++		return StateControllerBase(x), true
++	case helper:
++		return StateControllerBase(x), true
++	case hitAdd:
++		return StateControllerBase(x), true
++	case hitBy:
++		return StateControllerBase(x), true
++	case hitFallDamage:
++		return StateControllerBase(x), true
++	case hitFallSet:
++		return StateControllerBase(x), true
++	case hitFallVel:
++		return StateControllerBase(x), true
++	case hitOverride:
++		return StateControllerBase(x), true
++	case hitVelSet:
++		return StateControllerBase(x), true
++	case lifeAdd:
++		return StateControllerBase(x), true
++	case lifeSet:
++		return StateControllerBase(x), true
++	case lifebarAction:
++		return StateControllerBase(x), true
++	case loadFile:
++		return StateControllerBase(x), true
++	case loadState:
++		return StateControllerBase(x), true
++	case makeDust:
++		return StateControllerBase(x), true
++	case mapReset:
++		return StateControllerBase(x), true
++	case mapSet:
++		return StateControllerBase(x), true
++	case matchRestart:
++		return StateControllerBase(x), true
++	case modifyBGCtrl:
++		return StateControllerBase(x), true
++	case modifyBGCtrl3d:
++		return StateControllerBase(x), true
++	case modifyBgm:
++		return StateControllerBase(x), true
++	case modifyPlayer:
++		return StateControllerBase(x), true
++	case modifyReflection:
++		return StateControllerBase(x), true
++	case modifyShadow:
++		return StateControllerBase(x), true
++	case modifySnd:
++		return StateControllerBase(x), true
++	case modifyStageBG:
++		return StateControllerBase(x), true
++	case modifyStageVar:
++		return StateControllerBase(x), true
++	case moveHitReset:
++		return StateControllerBase(x), true
++	case offset:
++		return StateControllerBase(x), true
++	case overrideClsn:
++		return StateControllerBase(x), true
++	case palFX:
++		return StateControllerBase(x), true
++	case pause:
++		return StateControllerBase(x), true
++	case playBgm:
++		return StateControllerBase(x), true
++	case playSnd:
++		return StateControllerBase(x), true
++	case playerPush:
++		return StateControllerBase(x), true
++	case posFreeze:
++		return StateControllerBase(x), true
++	case posSet:
++		return StateControllerBase(x), true
++	case powerAdd:
++		return StateControllerBase(x), true
++	case powerSet:
++		return StateControllerBase(x), true
++	case printToConsole:
++		return StateControllerBase(x), true
++	case redLifeAdd:
++		return StateControllerBase(x), true
++	case redLifeSet:
++		return StateControllerBase(x), true
++	case remapPal:
++		return StateControllerBase(x), true
++	case remapSprite:
++		return StateControllerBase(x), true
++	case removeExplod:
++		return StateControllerBase(x), true
++	case removeStoryboard:
++		return StateControllerBase(x), true
++	case removeText:
++		return StateControllerBase(x), true
++	case roundTimeAdd:
++		return StateControllerBase(x), true
++	case roundTimeSet:
++		return StateControllerBase(x), true
++	case runState:
++		return StateControllerBase(x), true
++	case saveFile:
++		return StateControllerBase(x), true
++	case saveState:
++		return StateControllerBase(x), true
++	case scoreAdd:
++		return StateControllerBase(x), true
++	case screenBound:
++		return StateControllerBase(x), true
++	case shaderSet:
++		return StateControllerBase(x), true
++	case shiftInput:
++		return StateControllerBase(x), true
++	case sndPan:
++		return StateControllerBase(x), true
++	case sprPriority:
++		return StateControllerBase(x), true
++	case stateTypeSet:
++		return StateControllerBase(x), true
++	case stopSnd:
++		return StateControllerBase(x), true
++	case storyboard:
++		return StateControllerBase(x), true
++	case superPause:
++		return StateControllerBase(x), true
++	case tagIn:
++		return StateControllerBase(x), true
++	case tagOut:
++		return StateControllerBase(x), true
++	case targetAdd:
++		return StateControllerBase(x), true
++	case targetBind:
++		return StateControllerBase(x), true
++	case targetDizzyPointsAdd:
++		return StateControllerBase(x), true
++	case targetDrop:
++		return StateControllerBase(x), true
++	case targetFacing:
++		return StateControllerBase(x), true
++	case targetGuardPointsAdd:
++		return StateControllerBase(x), true
++	case targetLifeAdd:
++		return StateControllerBase(x), true
++	case targetPowerAdd:
++		return StateControllerBase(x), true
++	case targetRedLifeAdd:
++		return StateControllerBase(x), true
++	case targetScoreAdd:
++		return StateControllerBase(x), true
++	case targetState:
++		return StateControllerBase(x), true
++	case targetVelAdd:
++		return StateControllerBase(x), true
++	case targetVelSet:
++		return StateControllerBase(x), true
++	case text:
++		return StateControllerBase(x), true
++	case trans:
++		return StateControllerBase(x), true
++	case transformClsn:
++		return StateControllerBase(x), true
++	case transformSprite:
++		return StateControllerBase(x), true
++	case turn:
++		return StateControllerBase(x), true
++	case varRandom:
++		return StateControllerBase(x), true
++	case varRangeSet:
++		return StateControllerBase(x), true
++	case varSet:
++		return StateControllerBase(x), true
++	case victoryQuote:
++		return StateControllerBase(x), true
++	case width:
++		return StateControllerBase(x), true
++	case zoom:
++		return StateControllerBase(x), true
++	}
++	return nil, false
++}
 diff --git a/src/script.go b/src/script.go
 index 5443f25..6964b35 100644
 --- a/src/script.go
@@ -9274,6 +11074,18 @@ index 9b29416..4bd85c5 100644
  		s.stageCamera.zoffset = int32(float32(s.stageCamera.localcoord[1])/2 - s.model.offset[1]/posMul - s.stageCamera.yshift*float32(sys.scrrect[3]/2)/float32(sys.gameHeight)*float32(s.stageCamera.localcoord[1])/sys.heightScale)
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
+diff --git a/src/state_clone.go b/src/state_clone.go
+index e6a9d4d..9919604 100644
+--- a/src/state_clone.go
++++ b/src/state_clone.go
+@@ -459,6 +459,7 @@ func (c *Char) Clone(gsp *GameStatePool) (result Char) {
+ 
+ 	result.ss = c.ss.Clone()
+ 
++	result.varGen++
+ 	result.cnsvar = *gsp.Get(c.cnsvar).(*map[int32]int32)
+ 	maps.Clear(result.cnsvar)
+ 	for k, v := range c.cnsvar {
 diff --git a/src/stats.go b/src/stats.go
 index fa2364d..f106cf9 100644
 --- a/src/stats.go
@@ -9289,7 +11101,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..1121989 100644
+index 2698d35..c4bb7f2 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -9456,7 +11268,7 @@ index 2698d35..1121989 100644
  	// Main sprites
  	s.spriteList = s.spriteList[:0]
  
-@@ -2834,6 +2869,10 @@ func (s *System) screenright() float32 {
+@@ -2834,6 +2869,11 @@ func (s *System) screenright() float32 {
  // Core game logic. Chars, stage, projectiles, etc
  // The part that can rewind and fast forward during rollbacks
  func (s *System) action() {
@@ -9464,10 +11276,11 @@ index 2698d35..1121989 100644
 +	// unwound through BytecodeExp.run without releasing its cursor slot.
 +	bcIdxDepth = 0
 +	bcProfFrame()
++	vitaStateHashTick()
  	if s.matchPaused() {
  		return
  	}
-@@ -2945,6 +2984,11 @@ func (s *System) action() {
+@@ -2945,6 +2985,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -9479,7 +11292,7 @@ index 2698d35..1121989 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2998,9 +3042,9 @@ func (s *System) action() {
+@@ -2998,9 +3043,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -9492,7 +11305,7 @@ index 2698d35..1121989 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3062,13 @@ func (s *System) action() {
+@@ -3018,6 +3063,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -9506,7 +11319,7 @@ index 2698d35..1121989 100644
  	return
  }
  
-@@ -3046,7 +3097,7 @@ func (s *System) uiAction() {
+@@ -3046,7 +3098,7 @@ func (s *System) uiAction() {
  	// Needs to happen after motif update or motif inputs will lag 1 frame
  	for _, key := range SortedKeys(sys.cfg.Common.Lua) {
  		for _, v := range sys.cfg.Common.Lua[key] {
@@ -9515,7 +11328,7 @@ index 2698d35..1121989 100644
  				sys.luaLState.RaiseError("Error executing Lua code: %s\n%v", v, err.Error())
  			}
  		}
-@@ -3330,7 +3381,8 @@ func (s *System) stepRoundState() {
+@@ -3330,7 +3382,8 @@ func (s *System) stepRoundState() {
  		}
  	} else if s.intro > 0 {
  		if s.intro == s.fightScreen.round.ctrl_time {
@@ -9525,7 +11338,7 @@ index 2698d35..1121989 100644
  				if len(p) > 0 {
  					if p[0].activelyFighting() && !p[0].asf(ASF_nointroreset) {
  						p[0].posReset() // Technically we don't really need this step
-@@ -3340,7 +3392,8 @@ func (s *System) stepRoundState() {
+@@ -3340,7 +3393,8 @@ func (s *System) stepRoundState() {
  		}
  		s.intro--
  		if s.intro == 0 {
@@ -9535,7 +11348,7 @@ index 2698d35..1121989 100644
  				if len(p) > 0 {
  					if p[0].alive() {
  						p[0].setSCF(SCF_over_alive, false)
-@@ -3429,7 +3482,8 @@ func (s *System) stepRoundState() {
+@@ -3429,7 +3483,8 @@ func (s *System) stepRoundState() {
  			// Check if game can proceed into roundstate 4
  			if s.winwaittime > 0 {
  				if s.intro == rs4t-1 {
@@ -9545,7 +11358,7 @@ index 2698d35..1121989 100644
  						if len(p) == 0 {
  							continue
  						}
-@@ -3455,7 +3509,8 @@ func (s *System) stepRoundState() {
+@@ -3455,7 +3510,8 @@ func (s *System) stepRoundState() {
  
  			// Disable ctrl (once) at the first frame of roundstate 4
  			if s.intro == rs4t-1 {
@@ -9555,7 +11368,7 @@ index 2698d35..1121989 100644
  					if len(p) > 0 {
  						p[0].setSCF(SCF_ctrl, false)
  					}
-@@ -3502,7 +3557,8 @@ func (s *System) stepRoundState() {
+@@ -3502,7 +3558,8 @@ func (s *System) stepRoundState() {
  		// Send characters to win/lose poses
  		// In Mugen this loop can run at any point after the win poses have started, hence "<="
  		if s.winposetime <= 0 {
@@ -9565,7 +11378,7 @@ index 2698d35..1121989 100644
  				if len(p) == 0 {
  					continue
  				}
-@@ -3657,7 +3713,8 @@ func (s *System) roundEndDecision() bool {
+@@ -3657,7 +3714,8 @@ func (s *System) roundEndDecision() bool {
  
  	// Update win triggers if finish type was changed
  	if ft != s.finishType {
@@ -9575,7 +11388,7 @@ index 2698d35..1121989 100644
  			if len(p) > 0 && p[0].teamside != -1 && ko[^i&1] {
  				for _, h := range p {
  					for _, tid := range h.targets {
-@@ -3678,6 +3735,7 @@ func (s *System) roundEndDecision() bool {
+@@ -3678,6 +3736,7 @@ func (s *System) roundEndDecision() bool {
  }
  
  func (s *System) draw(x, y, scl float32) {
@@ -9583,7 +11396,7 @@ index 2698d35..1121989 100644
  	s.brightnessOld = s.brightness
  	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
  	s.brightness = 1.0
-@@ -3714,30 +3772,42 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3714,30 +3773,42 @@ func (s *System) draw(x, y, scl float32) {
  		// Draw stage elements with layerNo == -1
  		if !s.gsf(GSF_nobg) {
  			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
@@ -9632,7 +11445,7 @@ index 2698d35..1121989 100644
  
  		// Draw char texts layer -1
  		s.drawCharTexts(-1)
-@@ -3750,9 +3820,13 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3750,9 +3821,13 @@ func (s *System) draw(x, y, scl float32) {
  		// TODO: Make shadows render in same layers as their sources?
  		if !s.gsf(GSF_globalnoshadow) {
  			if s.stage.reflection.layerno >= 0 {
@@ -9648,7 +11461,7 @@ index 2698d35..1121989 100644
  		}
  
  		//off := s.envShake.getOffset()
-@@ -3790,7 +3864,9 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3790,7 +3865,9 @@ func (s *System) draw(x, y, scl float32) {
  		//}
  
  		// Draw fight screen layer 0
@@ -9659,7 +11472,7 @@ index 2698d35..1121989 100644
  
  		// Draw char texts layer 0
  		s.drawCharTexts(0)
-@@ -3807,14 +3883,20 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3807,14 +3884,20 @@ func (s *System) draw(x, y, scl float32) {
  
  	// Draw character sprites in layer 0
  	if s.envcol_time == 0 || s.envcol_under {
@@ -9683,7 +11496,7 @@ index 2698d35..1121989 100644
  
  	// Draw char texts layer 1
  	s.drawCharTexts(1)
-@@ -3823,10 +3905,14 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3823,10 +3906,14 @@ func (s *System) draw(x, y, scl float32) {
  	s.motif.draw(1)
  
  	// Draw character sprites in layer 1 (old "ontop")
@@ -9700,7 +11513,7 @@ index 2698d35..1121989 100644
  
  	// Draw char texts layer 2
  	s.drawCharTexts(2)
-@@ -3939,7 +4025,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
+@@ -3939,7 +4026,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
  		y := 240 - panelState.gameHeight
  		if s.statusLFunc != nil {
  			s.debugFont.SetColor(255, 255, 255, 255)
@@ -9710,8 +11523,15 @@ index 2698d35..1121989 100644
  				if len(p) > 0 {
  					top := s.luaLState.GetTop()
  					if s.luaLState.CallByParam(lua.P{Fn: s.statusLFunc, NRet: 1,
-@@ -4050,11 +4137,15 @@ func (s *System) runMatch() (reload bool) {
+@@ -4048,13 +4136,22 @@ func (s *System) runMatch() (reload bool) {
+ 		s.debugAccel = 1
+ 	}
  
++	// Vita: big allocation budget for the whole match (all modes, including
++	// training), so collections fall on round transitions.
++	if isVita {
++		vitaGCTrigger(192 << 20)
++	}
  	// Defer resetting variables on return
  	defer func() {
 +		if isVita {
@@ -9727,7 +11547,7 @@ index 2698d35..1121989 100644
  			if len(p) > 0 {
  				forceDestroy := s.matchOver() ||
  					(s.tmode[i&1] == TM_Turns && p[0].teamside != -1 && s.effectiveLoss[i&1])
-@@ -4128,7 +4219,7 @@ func (s *System) runMatch() (reload bool) {
+@@ -4128,7 +4225,7 @@ func (s *System) runMatch() (reload bool) {
  
  		for _, v := range s.shortcutScripts {
  			if v.Activate {
@@ -9736,7 +11556,7 @@ index 2698d35..1121989 100644
  					s.luaLState.RaiseError("Error executing Lua code: %s\n%v", v.Script, err.Error())
  				}
  			}
-@@ -4150,10 +4241,12 @@ func (s *System) runMatch() (reload bool) {
+@@ -4150,10 +4247,12 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Update game state
@@ -9749,7 +11569,7 @@ index 2698d35..1121989 100644
  
  		// Patch: Pause stage videos while game is paused
  		// This is necessary for the time being because videos are paused in the stage's action() and pauses now just skip that entirely
-@@ -4242,8 +4335,10 @@ func (s *System) runMatch() (reload bool) {
+@@ -4242,8 +4341,10 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Cue sprites, then render
@@ -9760,7 +11580,7 @@ index 2698d35..1121989 100644
  
  		// Update system. Break if update returns false (engine shutdown).
  		if !s.update() {
-@@ -4266,7 +4361,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4266,7 +4367,8 @@ func (s *System) runMatch() (reload bool) {
  
  func (s *System) SetupCharRoundStart() {
  	// Prepare next round for all players
@@ -9770,7 +11590,7 @@ index 2698d35..1121989 100644
  		if len(p) > 0 {
  			p[0].prepareNextRound()
  		}
-@@ -4274,7 +4370,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4274,7 +4376,8 @@ func (s *System) SetupCharRoundStart() {
  
  	// For power sharing, set maximum power to the highest one in the team
  	if s.cfg.Options.Team.PowerShare {
@@ -9780,7 +11600,7 @@ index 2698d35..1121989 100644
  			if len(p) > 0 && p[0].teamside != -1 {
  				pmax := Max(s.cgi[i&1].data.power, s.cgi[i].data.power)
  				for j := i & 1; j < MaxSimul*2; j += 2 {
-@@ -4287,7 +4384,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4287,7 +4390,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Calculate maximum life for all characters
@@ -9790,7 +11610,7 @@ index 2698d35..1121989 100644
  		if len(p) > 0 {
  			// Get max life, and adjust based on team mode
  			var lmax float32
-@@ -4344,7 +4442,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4344,7 +4448,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's dizzy and guard points
@@ -9800,7 +11620,7 @@ index 2698d35..1121989 100644
  		if len(p) > 0 {
  			if p[0].ocd().dizzyPoints > 0 {
  				p[0].dizzyPoints = p[0].ocd().dizzyPoints
-@@ -4360,7 +4459,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4360,7 +4465,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's state
@@ -9810,7 +11630,7 @@ index 2698d35..1121989 100644
  		if len(p) > 0 {
  			if p[0].roundsExisted() == 0 && (s.roundNo == 1 || s.tmode[i&1] == TM_Turns) {
  				// If round 1 or a new character in Turns mode, initialize values
-@@ -4413,7 +4513,8 @@ func (s *System) runNextRound() bool {
+@@ -4413,7 +4519,8 @@ func (s *System) runNextRound() bool {
  			for i := range s.roundsExisted {
  				s.roundsExisted[i]++
  			}
@@ -9820,7 +11640,7 @@ index 2698d35..1121989 100644
  				if len(p) > 0 {
  					if s.tmode[i&1] != TM_Turns || !s.effectiveLoss[i&1] {
  						p[0].life = p[0].lifeMax
-@@ -4518,7 +4619,8 @@ type RoundStartBackup struct {
+@@ -4518,7 +4625,8 @@ type RoundStartBackup struct {
  func (bk *RoundStartBackup) Save() {
  	// Save characters
  	// We save helpers as well because of "preserve" parameter
@@ -9830,7 +11650,7 @@ index 2698d35..1121989 100644
  		if len(chars) == 0 {
  			// Backups are reused, so discard characters saved for this slot in a previous round
  			bk.charBackup[i] = nil
-@@ -4584,7 +4686,8 @@ func (bk *RoundStartBackup) Save() {
+@@ -4584,7 +4692,8 @@ func (bk *RoundStartBackup) Save() {
  
  func (bk *RoundStartBackup) Restore() {
  	// Restore characters
@@ -9840,7 +11660,15 @@ index 2698d35..1121989 100644
  		if len(chars) == 0 {
  			continue
  		}
-@@ -5050,6 +5153,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -4628,6 +4737,7 @@ func (bk *RoundStartBackup) Restore() {
+ 			// Remake the CNS variable maps
+ 			// Then restore only var and fvar (losing sysvar and sysfvar)
+ 			c.initCnsVar()
++			c.varGen++
+ 			for k, v := range bkup.cnsvar {
+ 				c.cnsvar[k] = v
+ 			}
+@@ -5050,6 +5160,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -9850,7 +11678,7 @@ index 2698d35..1121989 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -5318,6 +5424,13 @@ func (s *Select) AddChar(def string) *SelectChar {
+@@ -5318,6 +5431,13 @@ func (s *Select) AddChar(def string) *SelectChar {
  		LogMessage("Failed to add char: %v (%s)", defPathFromSelect, reason)
  		return nil
  	}
@@ -9864,7 +11692,7 @@ index 2698d35..1121989 100644
  
  	// Print a message for every loaded character. Just muted at the moment
  	defer func() {
-@@ -6304,6 +6417,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6304,6 +6424,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		if l.cancelRequested() || l.state == LS_Cancel || sys.gameEnd {
  			return 0
  		}
@@ -9872,7 +11700,7 @@ index 2698d35..1121989 100644
  		if l.err = p.load(cdef, gi); l.err != nil {
  			if errors.Is(l.err, ErrLoadingCanceled) {
  				l.state = LS_Cancel
-@@ -6322,7 +6436,14 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6322,7 +6443,23 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		}
  
  		// Compile character states
@@ -9884,11 +11712,20 @@ index 2698d35..1121989 100644
 +		if isVita && l.err == nil && vitaBCHashEnabled() {
 +			vitaBCHashLog(cdef, p.playerNo, gi, gi.states, consoleFrom)
 +		}
++		if l.err == nil {
++			for _, sb := range gi.states {
++				hoistTriggers(sb)
++				fuseBytecode(sb)
++			}
++			if isVita {
++				vitaTrace("load: fused " + itoa(fuseStats.fused) + " ops in " + itoa(fuseStats.exprs) + " expressions")
++			}
++		}
 +		if l.err != nil {
  			if attached {
  				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
  			} else {
-@@ -6820,13 +6941,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6957,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -9904,7 +11741,7 @@ index 2698d35..1121989 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6956,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6972,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -9917,7 +11754,7 @@ index 2698d35..1121989 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6983,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6999,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -9925,7 +11762,7 @@ index 2698d35..1121989 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6999,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +7015,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -9933,6 +11770,14 @@ index 2698d35..1121989 100644
  }
  
  // Step the zoom variables
+@@ -7042,6 +7181,7 @@ func (s *System) restoreCharVars(c *Char) {
+ 		return
+ 	}
+ 
++	c.varGen++
+ 	for k, v := range bk.cnsvar {
+ 		c.cnsvar[k] = v
+ 	}
 diff --git a/src/system_sdl.go b/src/system_sdl.go
 index 8eea3d3..0057ed5 100644
 --- a/src/system_sdl.go
@@ -10130,10 +11975,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..d51287d
+index 0000000..bc5fe86
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,565 @@
+@@ -0,0 +1,590 @@
 +//go:build vita
 +
 +package main
@@ -10299,12 +12144,19 @@ index 0000000..d51287d
 +}
 +
 +static void vita_libc_chdir(const char *p) { chdir(p); }
++static int vita_arm_clock;
 +static void vita_clock(void) {
-+	scePowerSetArmClockFrequency(444);
++	// 500 MHz is accepted when an overclock plugin (PSVshell, ...) unlocks
++	// it; the stock kernel rejects it and keeps the previous setting.
++	if (scePowerSetArmClockFrequency(500) < 0) scePowerSetArmClockFrequency(444);
 +	scePowerSetBusClockFrequency(222);
 +	scePowerSetGpuClockFrequency(222);
 +	scePowerSetGpuXbarClockFrequency(166);
++	vita_arm_clock = scePowerGetArmClockFrequency();
 +}
++static int vita_get_arm_clock(void) { return vita_arm_clock; }
++// vitaNowUs: process time in microseconds (cheap, for the timing profiler).
++static unsigned int vita_now_us(void) { return (unsigned int)sceKernelGetProcessTimeLow(); }
 +*/
 +import "C"
 +
@@ -10326,6 +12178,7 @@ index 0000000..d51287d
 +// vitaPlatformInit runs at the very start of realMain.
 +func vitaPlatformInit() {
 +	C.vita_clock()
++	vitaTrace("cpu: arm clock " + itoa(int(C.vita_get_arm_clock())) + " MHz")
 +	// Image verifier (found the loader's JUMP24 rewrite) is off for release:
 +	// it read and relocated the 50 MB velf on every boot.
 +	if _, err := os.Stat("app0:ikvita.velf"); err == nil {
@@ -10699,12 +12552,29 @@ index 0000000..d51287d
 +		vitaRoundGCAt = runtime.VitaTotalAlloc()
 +	}
 +}
++
++func vitaNowUs() uint32 { return uint32(C.vita_now_us()) }
++
++// vitaFBOForced keeps the offscreen scene pass (ux0:data/CvF/vita_fbo.txt), for
++// comparison if direct rendering misbehaves.
++var vitaFBOForced bool
++var vitaFBOFlagChecked bool
++
++func vitaFBOCheck() {
++	if !vitaFBOFlagChecked {
++		vitaFBOFlagChecked = true
++		if _, err := os.Stat("vita_fbo.txt"); err == nil {
++			vitaFBOForced = true
++		}
++		vitaTrace("render: direct to display " + itoa(int(Btoi(!vitaFBOForced))))
++	}
++}
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..a19b9c3
+index 0000000..34467f4
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,36 @@
 +//go:build !vita
 +
 +package main
@@ -10732,16 +12602,21 @@ index 0000000..a19b9c3
 +func vitaGCTrigger(uintptr)                                {}
 +func vitaRoundGC()                                         {}
 +func vitaPerfBegin()                                       {}
++func vitaNowUs() uint32                                    { return 0 }
 +func vitaPerfEnd(int)                                      {}
 +
 +var vitaTraceOn = false
 +var vitaTraceDeep = false
++
++var vitaFBOForced = false
++
++func vitaFBOCheck() {}
 diff --git a/src/vita_shaders.go b/src/vita_shaders.go
 new file mode 100644
-index 0000000..40dc76a
+index 0000000..8f57fa1
 --- /dev/null
 +++ b/src/vita_shaders.go
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,183 @@
 +//go:build vita
 +
 +package main
@@ -10820,11 +12695,23 @@ index 0000000..40dc76a
 +uniform vec4 palUV;
 +uniform int clipOn;
 +uniform vec4 clipRect;
++uniform int fxOn;
 +varying vec2 texcoord;
 +varying vec4 clippos;
 +` + vitaHSV + `
 +void main(void) {
 +` + vitaClipFrag + `	vec4 c;
++	// Fast path: paletted sprite with no colour effects (the common case,
++	// and the GPU is fill-rate bound at 960x540). fxOn is set by the engine
++	// when any of hue/neg/gray/add/mult/tint/mask/isFlat/isRgba is active.
++	if (fxOn == 0) {
++		vec2 atlasUV = clamp(texcoord, spriteUV.xy, spriteUV.zw - 0.0001);
++		c = texture2D(tex, atlasUV);
++		c = texture2D(pal, vec2(palUV.x + palUV.z * c.r * 0.9966, palUV.y));
++		c.a *= alpha;
++		gl_FragColor = c;
++		return;
++	}
 +	vec3 neg_base = vec3(1.0);
 +	vec3 final_add = add;
 +	vec4 final_mul = vec4(mult, alpha);

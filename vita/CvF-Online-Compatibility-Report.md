@@ -269,3 +269,22 @@ Tested on the user's Vita (firmware 3.60, HENkaku/Ensō). 11 test builds.
 **Profiling findings:** CvF's `data/player.st` is a single `[Statedef -3]` with 877 controllers that run for each player on every tick. It accounts for ~69% of all bytecode operations in a fight, spread evenly across controllers. About 1.7M instructions per tick in the emulator, which should be ~5–7 ms per tick on hardware. A diagnostic per-controller profiler is in `bcprof.go` (off by default).
 
 **New in the log:** each `perf:` line now adds allocation per 300 frames and splits CPU time into `logic … us/tick` and `draw … us/drawn frame`. The first hardware log from build 19 will show whether the remaining bottleneck is game logic, draw submission, or the GPU (`GPU wait`).
+
+## Update (Nov 3, 2026, night): PS Vita build 20, the 60 fps push
+
+**Hardware baseline (build 19, user's log):** fight logic ~16 ms per tick, drawing 6–13 ms per drawn frame, GPU mostly idle. Menus 59–60 fps. The engine skipped ~80% of frames in fights and still ran at ~60% speed (~8 fps perceived). Memory cleanup 0.7–1.1 s each.
+
+**Where the fight time goes.** CvF's shared `data/player.st` is one `[Statedef -3]` with 877 controllers that run for each player on every tick; ~69% of all bytecode operations (61k per tick). The cost is flat: no single controller dominates, and only 73 of 877 have a guard that is constant for a match. So the interpreter has to run those checks faster, not skip them.
+
+**Build 20 changes (all verified in the emulator, see below):**
+- **Bytecode fusion (bc_fuse.go).** A load-time peephole pass rewrites the commonest two- and three-op sequences into single opcodes without changing byte lengths (so no jump target moves): `var(n)`, compare-with-constant, ranges, the `triggerall` separator, and whole `trigger-op <cmp> constant` lines. Ops per tick: 63k → ~45k. Instructions per fight frame in the emulator: 9.9M → 7.4–7.6M (−25%).
+- **Trigger hoisting (sb_hoist.go).** Runs of controllers sharing the same `triggerall=numenemy`/`numpartner` guard are wrapped so the guard is checked once per run.
+- **Correctness check.** A new state-hash mode (`vita_statehash.txt`: fixed random seed, a hash of both players' state every 30 ticks) was compared between a fused and an unfused run (`vita_nofuse.txt`) of the same fight: all 198 hashes identical over ~6000 ticks.
+- **Caches:** `var`/`fvar` reads (40k per tick) have a generation-stamped cache in front of the map; `command="..."` name lookups and string-pool pushes use pointer-identity caches; `selfanimexist` no longer copies an Animation per call.
+- **Compiler (loading):** the CNS compiler is 2.5–2.9x faster per character with byte-identical output (hash-verified), on top of build 19's GC work. Emulator: Richter 2.4 s, Maid 4.6 s.
+- **Drawing:** the scene renders straight to the display buffer (no offscreen target, scene switch or full-screen copy per frame); the sprite shader takes a two-texture-read fast path when no colour effect is active (the GPU is fill-rate bound at 960×540); matrix uniforms are cached like the others.
+- **GC:** the 192 MB in-fight budget now applies to every mode including training; collections otherwise fall at round transitions.
+- **CPU clock:** requests 500 MHz and falls back to 444 (the stock kernel rejects 500; an overclock plugin unlocks it). The log reports the clock.
+- **Hardware profiler:** build 20 logs, once during the first match, microseconds per state and per `-3` controller block (`bcprof:` lines), so the next hardware log shows exactly where the remaining time goes.
+
+**Expected on hardware:** logic ~16 → ~11–12 ms per tick from the interpreter work; drawing should fall materially from the direct render and shader fast path. Whether that clears the 16.6 ms budget on busy frames is the open question the next hardware log answers.

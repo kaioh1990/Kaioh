@@ -4,6 +4,8 @@
 Runs the ARM code in Unicorn and implements the Sce* imports it needs in
 Python. vitaGL's gl*/vgl* entry points are replaced by stubs (no GPU).
 Usage: vemu.py <elf> <stubs.txt from vita-elf-create -v> [--max-sec N]
+VEMU_GL=1 renders the GL calls on the host's Mesa instead (vemu_gl.py);
+VEMU_SHOTS=<dir> [VEMU_SHOT_EVERY=n | VEMU_SHOT_FRAMES=a,b] saves PNG screenshots.
 """
 import os, sys, struct, time, bisect, subprocess, argparse, stat as pystat
 sys.path.insert(0, os.environ.get('UCPY', ''))
@@ -633,7 +635,7 @@ def _(uid, buf, n, *_):
         LOGBUF[0] += data.decode('utf-8', 'replace')
         while '\n' in LOGBUF[0]:
             line, LOGBUF[0] = LOGBUF[0].split('\n', 1)
-            if line: say('[log] ' + (('[h%.0f] ' % (time.time() - T0)) if os.environ.get('VEMU_HOSTTIME') else '') + line)
+            if line: say('[log] ' + (('[h%.0f] ' % (time.time() - T0)) if os.environ.get('VEMU_HOSTTIME') else '') + (('[cpu %.1f] ' % time.process_time()) if os.environ.get('VEMU_CPUTIME') else '') + line)
             if os.environ.get('VEMU_PROF_MARKS'):
                 _m = os.environ['VEMU_PROF_MARKS'].split('|')
                 if PROF['h'] is None and not PROF.get('marked') and _m[0] in line:
@@ -822,10 +824,21 @@ def gl_tex_model(name, a):
         T['copy_peak'] = max(T['copy_peak'], T['copy_frame']); T['copy_frame'] = 0
         if FRAME[0] % 60 == 0 and os.environ.get('VEMU_DRAWSTATS'):
             say('[draw] frame %d: %d draws (%d elements), %d verts, max %d verts/draw, %d fb binds, viewports %s' % (FRAME[0], DS['d'], DS['el'], DS['v'], DS['vmax'], DS['fb'], sorted(DS['vp'])))
+            say('[glcalls] ' + ' '.join('%s=%d' % (k, v) for k, v in sorted(GLCOUNT.items(), key=lambda x: -x[1])[:25])); GLCOUNT.clear()
         DS.update(d=0, v=0, vmax=0, el=0, fb=0, vp=set())
+# VEMU_GL=1: replay GL on the host (Mesa) and save screenshots (see vemu_gl.py)
+VGL = None
+if os.environ.get('VEMU_GL') == '1':
+    import vemu_gl
+    VGL = vemu_gl.HostGL(mu, arg, cstr, say, FRAME)
+GLCOUNT = {}
 def gl_handler(name):
     def f(*a):
+        if os.environ.get('VEMU_DRAWSTATS'): GLCOUNT[name] = GLCOUNT.get(name, 0) + 1
         gl_tex_model(name, a)
+        if VGL is not None and not name.startswith('vgl'):
+            r = VGL.call(name, a)
+            if r is not vemu_gl.PASS: return r
         if name in ('glGenTextures', 'glGenBuffers', 'glGenFramebuffers', 'glGenRenderbuffers', 'glGenVertexArrays'):
             n, p = a[0], a[1]
             for i in range(n): w32(p + 4 * i, glid())
@@ -863,6 +876,7 @@ def gl_handler(name):
             return ra | (1 if ra in THUMBSYM else 0)
         if name == 'vglSwapBuffers':
             FRAME[0] += 1; VTIME[0] += 16667
+            if VGL is not None: VGL.swap(FRAME[0])
             if PROF['range']:
                 if FRAME[0] == PROF['range'][0] and PROF['h'] is None:
                     PROF['pending'] = 'add'; mu.emu_stop()
@@ -928,6 +942,11 @@ def prof_report():
     say('[prof] ~%d instr/frame over %d frames' % (tot // max(1, frames), frames))
     for k, v in fn.most_common(60):
         say('[prof] %5.1f%% %s' % (100.0 * v / tot, k[:150]))
+    if os.environ.get('VEMU_PROF_BLOCKS'):
+        want = os.environ['VEMU_PROF_BLOCKS']
+        rows = sorted([(n, a) for a, n in PROF['blk'].items() if symbolize(a).split('+')[0] == want], reverse=True)[:40]
+        ftot = sum(n for n, a in rows) or 1
+        for n, a in rows: say('[profblk] %6.1f%% %s' % (100.0 * n / ftot, symbolize(a)))
     if os.environ.get('VEMU_PROF_LINES'):
         want = os.environ['VEMU_PROF_LINES']
         rows = [(R2L(a), n) for a, n in PROF['blk'].items() if symbolize(a).split('+')[0] == want]
@@ -951,6 +970,37 @@ def text_hook(uc, addr, size, ud):
     try: t = bytes(uc.mem_read(p, min(n, 60))).decode('utf-8', 'replace') if n and n < 100000 else ''
     except Exception: t = '?'
     TEXTC[t] += 1
+
+# ---- alignment checker (VEMU_ALIGNCHECK=1): the real Vita CPU faults on
+# unaligned VLDR/VSTR/VLDM, LDRD/STRD and LDM/STM; Unicorn silently allows them.
+ALIGN_SEEN = {}
+def _align_kind(uc, pc):
+    thumb = (uc.reg_read(UC_ARM_REG_CPSR) >> 5) & 1
+    b = bytes(uc.mem_read(pc, 4))
+    if not thumb:
+        insn = struct.unpack('<I', b)[0]
+        if (insn & 0x0E000E00) == 0x0C000A00: return 'VLDR/VSTR/VLDM'
+        if (insn & 0x0E1000F0) in (0x000000D0, 0x000000F0): return 'LDRD/STRD'
+        if (insn & 0x0E000000) == 0x08000000: return 'LDM/STM'
+        return None
+    hw1, hw2 = struct.unpack('<HH', b)
+    if (hw1 & 0xF800) in (0xE800, 0xF000, 0xF800):
+        if (hw1 & 0xEE00) == 0xEC00 and (hw2 & 0x0E00) == 0x0A00: return 'VLDR/VSTR/VLDM(T)'
+        if (hw1 & 0xFE40) == 0xE840: return 'LDRD/STRD(T)'
+        if (hw1 & 0xFE40) == 0xE800: return 'LDM/STM(T)'
+        return None
+    if (hw1 & 0xF000) == 0xC000: return 'LDM/STM(T16)'
+    return None
+def _align_hook(uc, access, addr, size, value, ud):
+    if size >= 4 and (addr & 3):
+        pc = uc.reg_read(UC_ARM_REG_PC)
+        if pc in ALIGN_SEEN: return
+        k = _align_kind(uc, pc)
+        ALIGN_SEEN[pc] = k
+        if k:
+            say('[align] UNALIGNED %s addr=%x size=%d at %s lr=%s' % (k, addr, size, symbolize(pc), symbolize(uc.reg_read(UC_ARM_REG_LR))))
+if os.environ.get('VEMU_ALIGNCHECK'):
+    mu.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, _align_hook)
 # ---------------------------------------------------------------- hooks
 seen_default = set()
 import collections
@@ -1155,4 +1205,5 @@ say('[vemu] ctrl calls: ' + ', '.join('%s=%d' % kv for kv in calls.items() if 'C
 if os.environ.get('VEMU_ALLOCS'):
     for k, v in ALLOCS.most_common(30): say('[alloc] %8d KB %s' % (v >> 10, k))
     for k, v in ALLOCN.most_common(40): say('[allocn] %8d %s' % (v, k))
+if VGL is not None: VGL.report()
 say('[vemu] frames=%d mem=%dMB' % (FRAME[0], MEM_BUDGET[0] >> 20))
