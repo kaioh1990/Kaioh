@@ -288,3 +288,16 @@ Tested on the user's Vita (firmware 3.60, HENkaku/Ensō). 11 test builds.
 - **Hardware profiler:** build 20 logs, once during the first match, microseconds per state and per `-3` controller block (`bcprof:` lines), so the next hardware log shows exactly where the remaining time goes.
 
 **Expected on hardware:** logic ~16 → ~11–12 ms per tick from the interpreter work; drawing should fall materially from the direct render and shader fast path. Whether that clears the 16.6 ms budget on busy frames is the open question the next hardware log answers.
+
+## Update (Nov 4, 2026): build 20 on hardware, and build 21 (30 fps target)
+
+**Build 20 hardware log.** The CPU ran at 500 MHz (an overclock plugin is installed). Title and menus hold 60 fps. In the fight: the character scripts, after fusion, cost 12.4 ms per tick (P1 `-3` 4.7 ms, P2 0.8 ms, the rest spread over helpers and other states), but a whole tick was 28.8 ms, so ~16 ms is engine code outside the scripts, and drawing was 13–18 ms of CPU per drawn frame. Neither shows in the emulator, which counts instructions and stubs the GPU driver: the missing time is memory latency on the real CPU and work inside vitaGL. The user saw no improvement.
+
+**Decision:** target a locked 30 fps (game logic at full 60 Hz speed, every other frame drawn) rather than 60, which would need a rewrite of the engine's core data layout for the Vita's memory system.
+
+**Build 21:**
+- **30 fps pacing.** In matches the Vita draws every second tick deterministically; the catch-up skipping (which drew whenever it could and made frame times vary between 16 and 80 ms) is gone. `vita_60.txt` restores the old behaviour. Verified in the emulator: exactly 150 drawn frames per 300.
+- **Engine phase timers.** Every `perf:` line now breaks the tick into stage, character prepare/run/finish, char update, fight screen, collision, explods, UI, cue and render (`us/tick:` fields), measured with the Vita's own clock. This is the first hardware breakdown of the engine-side 16 ms.
+- **Fewer allocations:** the per-character command step no longer allocates a map every tick (~900 allocations per second).
+
+**Next:** read the phase timers from the build 21 log and cut the largest engine-side phase; the renderer agent is reducing GL calls per frame (batching consecutive sprites), since the draw cost is per call inside vitaGL.
