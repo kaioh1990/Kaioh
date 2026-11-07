@@ -334,7 +334,7 @@ index eda5450c..7a4305d6 100644
  			}
  			-- contextual labels
 diff --git a/external/script/start.lua b/external/script/start.lua
-index e35377a3..4ddf0c21 100644
+index e35377a3..9ec1e541 100644
 --- a/external/script/start.lua
 +++ b/external/script/start.lua
 @@ -1502,6 +1502,24 @@ function start.f_randomChar(pn)
@@ -376,7 +376,7 @@ index e35377a3..4ddf0c21 100644
  				end
  				textImgReset(stageTextData)
  				textImgSetText(stageTextData, stage_text)
-@@ -3692,6 +3712,23 @@ function start.f_selectMenu(side, cmd, player, member, selectState)
+@@ -3692,6 +3712,26 @@ function start.f_selectMenu(side, cmd, player, member, selectState)
  			end
  			--calculate current position
  			start.c[player].selX, start.c[player].selY = start.f_cellMovement(start.c[player].selX, start.c[player].selY, cmd, side, start.f_getCursorData(player).cursor.move.snd)
@@ -386,8 +386,11 @@ index e35377a3..4ddf0c21 100644
 +				local tapX, tapY = cvfTouchTap()
 +				if tapX ~= nil then
 +					local cellX, cellY = start.f_touchCell(tapX, tapY)
-+					if cellX ~= nil then
-+						if cellX == start.c[player].selX and cellY == start.c[player].selY then
++					do
++						if cellX == nil then
++							--tap away from the grid: the right half selects, like other menus
++							main.touchConfirm = tapX >= 160
++						elseif cellX == start.c[player].selX and cellY == start.c[player].selY then
 +							main.touchConfirm = true
 +						else
 +							start.c[player].selX, start.c[player].selY = cellX, cellY

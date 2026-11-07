@@ -88,10 +88,10 @@ index a005f03..1ee201e 100644
  }
  
 diff --git a/I.K.E.M.E.N-Go/TouchOverlayView.m b/I.K.E.M.E.N-Go/TouchOverlayView.m
-index 84a9608..4567ffb 100644
+index 84a9608..0972c5a 100644
 --- a/I.K.E.M.E.N-Go/TouchOverlayView.m
 +++ b/I.K.E.M.E.N-Go/TouchOverlayView.m
-@@ -11,8 +11,18 @@
+@@ -11,8 +11,22 @@
  #import "SDLWindowFix.h"
  #import <Foundation/Foundation.h>
  #import <SDL2/SDL.h>
@@ -101,16 +101,20 @@ index 84a9608..4567ffb 100644
 +static const CGFloat kSwipeDistance = 28.0;
 +static const NSTimeInterval kTapTime = 0.35;
 +static const NSTimeInterval kGesturePress = 0.09;
++static const NSTimeInterval kDoubleTapTime = 0.28;
++static const CGFloat kDoubleTapDistance = 60.0;
  
  @interface TouchOverlayView ()
 +@property (nonatomic, weak) UITouch *gestureTouch;
 +@property (nonatomic, assign) CGPoint gestureStart;
 +@property (nonatomic, assign) NSTimeInterval gestureTime;
-+@property (nonatomic, assign) BOOL gestureTwoFingers;
++@property (nonatomic, assign) NSUInteger gestureMaxTouches;
++@property (nonatomic, assign) BOOL tapPending;
++@property (nonatomic, assign) CGPoint pendingTapPoint;
  @property (nonatomic, assign) GamepadButton activeButtons;
  @property (nonatomic, strong) NSMutableSet<UIButton *> *currentlyPressedButtons;
  @property (nonatomic, assign) CGSize lastKnownSize;
-@@ -35,10 +45,16 @@ static SDL_Joystick *virtualJoystick;
+@@ -35,14 +49,22 @@ static SDL_Joystick *virtualJoystick;
      _leftJoystickView.delegate = self;
      _rightJoystickView.delegate = self;
      _dPadView.delegate = self;
@@ -119,15 +123,22 @@ index 84a9608..4567ffb 100644
      self.vewlixButtonView.multipleTouchEnabled = YES;
      self.vewlixButtonView.userInteractionEnabled = YES;
      
-+    // Menus use swipes, and fights the D-pad, so the analog sticks are not needed.
++    // No on-screen gamepad: the whole screen takes gestures instead (see Menu gestures).
 +    _leftJoystickView.hidden = YES;
 +    _rightJoystickView.hidden = YES;
++    _dPadView.hidden = YES;
++    self.vewlixButtonView.hidden = YES;
 +    [_gameFolderButton.superview bringSubviewToFront:_gameFolderButton];
 +    
      for (UIButton *btn in self.buttons) {
          btn.exclusiveTouch = NO;
          btn.userInteractionEnabled = NO;
-@@ -94,6 +110,7 @@ static SDL_Joystick *virtualJoystick;
+-        btn.alpha = 0.75f;
++        btn.hidden = YES;
+     }
+     
+     // Reset timer and wake the overlay up when the device rotates
+@@ -94,6 +116,7 @@ static SDL_Joystick *virtualJoystick;
      _currentlyPressedButtons = [NSMutableSet set];
      _hitSlop = 12.0;
      _lastKnownSize = CGSizeZero;
@@ -135,7 +146,7 @@ index 84a9608..4567ffb 100644
  }
  
  - (void)setupViews {
-@@ -141,6 +158,15 @@ static SDL_Joystick *virtualJoystick;
+@@ -141,6 +164,15 @@ static SDL_Joystick *virtualJoystick;
              [self resetHideTimer];
          }
  
@@ -151,7 +162,7 @@ index 84a9608..4567ffb 100644
          UIView *hitView = [super hitTest:point withEvent:event];
  
          if (hitView && hitView != self && hitView != self.superview && hitView != self.vewlixButtonView && hitView != self.contentView) {
-@@ -163,6 +189,7 @@ static SDL_Joystick *virtualJoystick;
+@@ -163,6 +195,7 @@ static SDL_Joystick *virtualJoystick;
  
  - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(nullable UIEvent *)event {
      [super touchesBegan:touches withEvent:event];
@@ -159,11 +170,11 @@ index 84a9608..4567ffb 100644
      [self processTouches:event.allTouches];
      [self resetHideTimer];
  }
-@@ -175,16 +202,107 @@ static SDL_Joystick *virtualJoystick;
+@@ -175,18 +208,145 @@ static SDL_Joystick *virtualJoystick;
  
  - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(nullable UIEvent *)event {
      [super touchesEnded:touches withEvent:event];
-+    [self trackGestureEnded:touches];
++    [self trackGestureEnded:touches event:event];
      [self processTouches:event.allTouches];
      [self resetHideTimer];
  }
@@ -176,40 +187,35 @@ index 84a9608..4567ffb 100644
  }
  
 +#pragma mark - Menu gestures
-+- (BOOL)touchIsOnButton:(UITouch *)touch {
-+    CGPoint loc = [touch locationInView:self];
-+    for (UIButton *button in self.buttons) {
-+        CGRect frame = [self convertRect:button.bounds fromView:button];
-+        if (CGRectContainsPoint(CGRectInset(frame, -self.hitSlop, -self.hitSlop), loc)) {
-+            return YES;
++// Swipe: move (outside fights). Tap on the right half: select. Double-tap on the right
++// half: back. Three-finger tap: Start/menu, also during fights.
++- (void)trackGestureBegan:(NSSet<UITouch *> *)touches event:(UIEvent *)event {
++    NSUInteger active = 0;
++    for (UITouch *t in event.allTouches) {
++        if (t.phase != UITouchPhaseEnded && t.phase != UITouchPhaseCancelled) {
++            active++;
 +        }
 +    }
-+    return NO;
++    if (self.gestureTouch == nil) {
++        UITouch *touch = touches.anyObject;
++        self.gestureTouch = touch;
++        self.gestureStart = [touch locationInView:self];
++        self.gestureTime = touch.timestamp;
++        self.gestureMaxTouches = 0;
++    }
++    self.gestureMaxTouches = MAX(self.gestureMaxTouches, active);
 +}
 +
-+- (void)trackGestureBegan:(NSSet<UITouch *> *)touches event:(UIEvent *)event {
-+    if (CvfInMatch()) {
-+        self.gestureTouch = nil;
-+        return;
-+    }
-+    if (self.gestureTouch != nil) {
-+        self.gestureTwoFingers = YES;
-+        return;
-+    }
-+    UITouch *touch = touches.anyObject;
-+    if ([self touchIsOnButton:touch]) {
-+        return;
-+    }
-+    self.gestureTouch = touch;
-+    self.gestureStart = [touch locationInView:self];
-+    self.gestureTime = touch.timestamp;
-+    self.gestureTwoFingers = touches.count > 1;
-+}
-+
-+- (void)trackGestureEnded:(NSSet<UITouch *> *)touches {
++- (void)trackGestureEnded:(NSSet<UITouch *> *)touches event:(UIEvent *)event {
 +    UITouch *touch = self.gestureTouch;
-+    if (touch == nil || ![touches containsObject:touch]) {
++    if (touch == nil) {
 +        return;
++    }
++    // Wait for every finger to lift before deciding what the gesture was.
++    for (UITouch *t in event.allTouches) {
++        if (![touches containsObject:t] && t.phase != UITouchPhaseEnded && t.phase != UITouchPhaseCancelled) {
++            return;
++        }
 +    }
 +    self.gestureTouch = nil;
 +    
@@ -217,8 +223,17 @@ index 84a9608..4567ffb 100644
 +    CGFloat dx = end.x - self.gestureStart.x;
 +    CGFloat dy = end.y - self.gestureStart.y;
 +    CGFloat distance = hypot(dx, dy);
-+    NSTimeInterval held = touch.timestamp - self.gestureTime;
++    BOOL quick = touch.timestamp - self.gestureTime <= kTapTime;
 +    
++    if (self.gestureMaxTouches >= 3) {
++        if (quick) {
++            [self pressGestureButton:SDL_CONTROLLER_BUTTON_START];
++        }
++        return;
++    }
++    if (self.gestureMaxTouches != 1 || CvfInMatch()) {
++        return;
++    }
 +    if (distance >= kSwipeDistance) {
 +        DPadDirection direction;
 +        if (fabs(dx) > fabs(dy)) {
@@ -227,12 +242,41 @@ index 84a9608..4567ffb 100644
 +            direction = dy > 0 ? DPadDirectionDown : DPadDirectionUp;
 +        }
 +        [self pressDirection:direction];
-+    } else if (distance <= kTapDistance && held <= kTapTime) {
-+        if (self.gestureTwoFingers) {
-+            [self pressGestureButton:SDL_CONTROLLER_BUTTON_BACK];
-+        } else if (!CvfTouchTap(end.x / self.bounds.size.width, end.y / self.bounds.size.height)) {
-+            [self pressGestureButton:SDL_CONTROLLER_BUTTON_A];
-+        }
++    } else if (distance <= kTapDistance && quick) {
++        [self handleTapAt:end];
++    }
++}
++
++- (void)handleTapAt:(CGPoint)point {
++    if (self.tapPending && hypot(point.x - self.pendingTapPoint.x, point.y - self.pendingTapPoint.y) <= kDoubleTapDistance) {
++        [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(commitSingleTap) object:nil];
++        self.tapPending = NO;
++        [self pressGestureButton:SDL_CONTROLLER_BUTTON_BACK];
++        return;
++    }
++    if (self.tapPending) {
++        [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(commitSingleTap) object:nil];
++        [self commitSingleTap];
++    }
++    // Hold the tap briefly in case a second one makes it a double-tap.
++    self.tapPending = YES;
++    self.pendingTapPoint = point;
++    [self performSelector:@selector(commitSingleTap) withObject:nil afterDelay:kDoubleTapTime];
++}
++
++- (void)commitSingleTap {
++    if (!self.tapPending) {
++        return;
++    }
++    self.tapPending = NO;
++    CGPoint p = self.pendingTapPoint;
++    CGSize size = self.bounds.size;
++    // Character select reads taps itself (tap a character to move there).
++    if (CvfTouchTap(p.x / size.width, p.y / size.height)) {
++        return;
++    }
++    if (p.x >= size.width / 2.0) {
++        [self pressGestureButton:SDL_CONTROLLER_BUTTON_A];
 +    }
 +}
 +
@@ -266,7 +310,12 @@ index 84a9608..4567ffb 100644
 +
  // This method processes touch events so that multiple button presses (A+B, X+Y, X+A, etc.) work
  - (void)processTouches:(NSSet<UITouch *> *)touches {
++    if (self.vewlixButtonView.hidden) {
++        return; // no on-screen buttons
++    }
      NSMutableSet<UIButton *> *newPressedButtons = [NSMutableSet set];
+     
+     // Evaluate active touch locations across the view
 diff --git a/I.K.E.M.E.N-Go/ViewController.m b/I.K.E.M.E.N-Go/ViewController.m
 index e850d21..4bb742b 100644
 --- a/I.K.E.M.E.N-Go/ViewController.m
