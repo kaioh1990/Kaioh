@@ -1554,10 +1554,10 @@ index 00000000..19554275
 +)
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 00000000..38ce9b70
+index 00000000..f9f7c8f9
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,888 @@
+@@ -0,0 +1,894 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -2388,8 +2388,14 @@ index 00000000..38ce9b70
 +	if a := cvfRulesLoad().fightAspect; a[0] != 0 && a[1] != 0 {
 +		cfg.Video.FightAspectWidth, cfg.Video.FightAspectHeight = a[0], a[1]
 +	}
-+	if w, h := cvfScreen[0], cvfScreen[1]; h > 0 && w*9 > h*16 {
-+		cfg.Video.GameWidth = (cfg.Video.GameHeight * w / h) &^ 1
++	// Menus match the screen's shape: wider on long phones, narrower (down to 4:3) on
++	// squarer screens, so neither gets black bars.
++	if w, h := cvfScreen[0], cvfScreen[1]; h > 0 && w*9 != h*16 {
++		gw := cfg.Video.GameHeight * w / h
++		if minW := cfg.Video.GameHeight * 4 / 3; gw < minW {
++			gw = minW
++		}
++		cfg.Video.GameWidth = gw &^ 1
 +	}
 +}
 +
