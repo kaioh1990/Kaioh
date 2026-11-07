@@ -334,7 +334,7 @@ index eda5450c..7a4305d6 100644
  			}
  			-- contextual labels
 diff --git a/external/script/start.lua b/external/script/start.lua
-index e35377a3..9ec1e541 100644
+index e35377a3..8cd1e043 100644
 --- a/external/script/start.lua
 +++ b/external/script/start.lua
 @@ -1502,6 +1502,24 @@ function start.f_randomChar(pn)
@@ -389,7 +389,7 @@ index e35377a3..9ec1e541 100644
 +					do
 +						if cellX == nil then
 +							--tap away from the grid: the right half selects, like other menus
-+							main.touchConfirm = tapX >= 160
++							main.touchConfirm = tapX >= 160 and cvfTouchMenus()
 +						elseif cellX == start.c[player].selX and cellY == start.c[player].selY then
 +							main.touchConfirm = true
 +						else
@@ -1557,10 +1557,10 @@ index 00000000..19554275
 +)
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 00000000..f9f7c8f9
+index 00000000..451b7d09
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,894 @@
+@@ -0,0 +1,901 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -2152,6 +2152,10 @@ index 00000000..f9f7c8f9
 +// Lua bindings
 +
 +func cvfOnlineScriptInit(l *lua.LState) {
++	luaRegister(l, "cvfTouchMenus", func(l *lua.LState) int {
++		l.Push(lua.LBool(cvfTouchMenus))
++		return 1
++	})
 +	luaRegister(l, "cvfTouchTap", func(l *lua.LState) int {
 +		cvfTap.used, cvfTap.polled = true, sys.frameCounter
 +		if !cvfTap.pending {
@@ -2366,6 +2370,9 @@ index 00000000..f9f7c8f9
 +	polled  int32
 +	used    bool
 +}
++
++// False while a physical controller is connected: only direct taps on elements count.
++var cvfTouchMenus = true
 +
 +// x and y are 0-1 across the game view. Returns false if no screen is listening.
 +func cvfStoreTap(x, y float32) bool {
@@ -2924,10 +2931,10 @@ index 2698d355..5d67d0c8 100644
  
  // Step the zoom variables
 diff --git a/src/util_ios.go b/src/util_ios.go
-index aabd7589..6f8d9827 100755
+index aabd7589..0233eaad 100755
 --- a/src/util_ios.go
 +++ b/src/util_ios.go
-@@ -101,6 +101,26 @@ func ShowRetryDialog(message string) bool {
+@@ -101,6 +101,31 @@ func ShowRetryDialog(message string) bool {
  	return false
  }
  
@@ -2951,10 +2958,15 @@ index aabd7589..6f8d9827 100755
 +	return 0
 +}
 +
++//export CvfSetTouchMenus
++func CvfSetTouchMenus(on C.int) {
++	cvfTouchMenus = on != 0
++}
++
  //export SDL_main
  func SDL_main(argc C.int, argv **C.char) C.int {
  	runtime.LockOSThread()
-@@ -123,7 +143,9 @@ func SDL_main(argc C.int, argv **C.char) C.int {
+@@ -123,7 +148,9 @@ func SDL_main(argc C.int, argv **C.char) C.int {
  	for i := 0; i+1 < len(args); i++ {
  		if args[i] == "--assets" {
  			sys.baseDir = args[i+1]

@@ -88,14 +88,15 @@ index a005f03..1ee201e 100644
  }
  
 diff --git a/I.K.E.M.E.N-Go/TouchOverlayView.m b/I.K.E.M.E.N-Go/TouchOverlayView.m
-index 84a9608..0972c5a 100644
+index 84a9608..006233f 100644
 --- a/I.K.E.M.E.N-Go/TouchOverlayView.m
 +++ b/I.K.E.M.E.N-Go/TouchOverlayView.m
-@@ -11,8 +11,22 @@
+@@ -11,8 +11,23 @@
  #import "SDLWindowFix.h"
  #import <Foundation/Foundation.h>
  #import <SDL2/SDL.h>
 +#import "libikemen.h"
++#import <GameController/GameController.h>
 +
 +static const CGFloat kTapDistance = 16.0;
 +static const CGFloat kSwipeDistance = 28.0;
@@ -114,7 +115,7 @@ index 84a9608..0972c5a 100644
  @property (nonatomic, assign) GamepadButton activeButtons;
  @property (nonatomic, strong) NSMutableSet<UIButton *> *currentlyPressedButtons;
  @property (nonatomic, assign) CGSize lastKnownSize;
-@@ -35,14 +49,22 @@ static SDL_Joystick *virtualJoystick;
+@@ -35,14 +50,22 @@ static SDL_Joystick *virtualJoystick;
      _leftJoystickView.delegate = self;
      _rightJoystickView.delegate = self;
      _dPadView.delegate = self;
@@ -138,7 +139,7 @@ index 84a9608..0972c5a 100644
      }
      
      // Reset timer and wake the overlay up when the device rotates
-@@ -94,6 +116,7 @@ static SDL_Joystick *virtualJoystick;
+@@ -94,6 +117,7 @@ static SDL_Joystick *virtualJoystick;
      _currentlyPressedButtons = [NSMutableSet set];
      _hitSlop = 12.0;
      _lastKnownSize = CGSizeZero;
@@ -146,7 +147,7 @@ index 84a9608..0972c5a 100644
  }
  
  - (void)setupViews {
-@@ -141,6 +164,15 @@ static SDL_Joystick *virtualJoystick;
+@@ -141,6 +165,15 @@ static SDL_Joystick *virtualJoystick;
              [self resetHideTimer];
          }
  
@@ -162,7 +163,7 @@ index 84a9608..0972c5a 100644
          UIView *hitView = [super hitTest:point withEvent:event];
  
          if (hitView && hitView != self && hitView != self.superview && hitView != self.vewlixButtonView && hitView != self.contentView) {
-@@ -163,6 +195,7 @@ static SDL_Joystick *virtualJoystick;
+@@ -163,6 +196,7 @@ static SDL_Joystick *virtualJoystick;
  
  - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(nullable UIEvent *)event {
      [super touchesBegan:touches withEvent:event];
@@ -170,7 +171,7 @@ index 84a9608..0972c5a 100644
      [self processTouches:event.allTouches];
      [self resetHideTimer];
  }
-@@ -175,18 +208,145 @@ static SDL_Joystick *virtualJoystick;
+@@ -175,18 +209,160 @@ static SDL_Joystick *virtualJoystick;
  
  - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(nullable UIEvent *)event {
      [super touchesEnded:touches withEvent:event];
@@ -187,6 +188,14 @@ index 84a9608..0972c5a 100644
  }
  
 +#pragma mark - Menu gestures
++// With a physical controller connected, only direct taps on screen elements (like a
++// character) are used; swipes, select/back taps and the menu tap are off.
++- (BOOL)controllerConnected {
++    BOOL connected = GCController.controllers.count > 0;
++    CvfSetTouchMenus(connected ? 0 : 1);
++    return connected;
++}
++
 +// Swipe: move (outside fights). Tap on the right half: select. Double-tap on the right
 +// half: back. Three-finger tap: Start/menu, also during fights.
 +- (void)trackGestureBegan:(NSSet<UITouch *> *)touches event:(UIEvent *)event {
@@ -225,13 +234,20 @@ index 84a9608..0972c5a 100644
 +    CGFloat distance = hypot(dx, dy);
 +    BOOL quick = touch.timestamp - self.gestureTime <= kTapTime;
 +    
++    BOOL controller = [self controllerConnected];
 +    if (self.gestureMaxTouches >= 3) {
-+        if (quick) {
++        if (quick && !controller) {
 +            [self pressGestureButton:SDL_CONTROLLER_BUTTON_START];
 +        }
 +        return;
 +    }
 +    if (self.gestureMaxTouches != 1 || CvfInMatch()) {
++        return;
++    }
++    if (controller) {
++        if (distance <= kTapDistance && quick) {
++            CvfTouchTap(end.x / self.bounds.size.width, end.y / self.bounds.size.height);
++        }
 +        return;
 +    }
 +    if (distance >= kSwipeDistance) {
