@@ -2827,9 +2827,27 @@ index 9b294164..4bd85c57 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/system.go b/src/system.go
-index 2698d355..5d67d0c8 100644
+index 2698d355..383c4a6a 100644
 --- a/src/system.go
 +++ b/src/system.go
+@@ -766,7 +766,7 @@ func (s *System) motifOverlayActive() bool {
+ 
+ func (s *System) shouldComposeFullResolution() bool {
+ 	return s.canUseFullResolutionAspect() &&
+-		(!s.middleOfMatch() || s.motifOverlayActive() || s.debugDisplay)
++		(!s.middleOfMatch() || s.motifOverlayActive() || s.debugDisplay || s.cvfWideView())
+ }
+ 
+ func (s *System) fightViewport() [4]int32 {
+@@ -803,7 +803,7 @@ func intersectRect(a, b [4]int32) [4]int32 {
+ }
+ 
+ func (s *System) fightDrawClip() ([4]int32, bool) {
+-	if !s.shouldComposeFullResolution() {
++	if !s.shouldComposeFullResolution() || s.cvfWideView() {
+ 		return s.scrrect, false
+ 	}
+ 	viewport := s.fightViewport()
 @@ -990,7 +990,14 @@ func (s *System) renderFrame() {
  	}
  
