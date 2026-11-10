@@ -27,6 +27,23 @@ sed -i '' \
 grep -q 'com.kaioh1990.cvfonline' "$PBX"
 grep -q 'INFOPLIST_KEY_CFBundleDisplayName = "CvF Online"' "$PBX"
 
+# 2b. vInputKit (controller remapping), when the CI build could fetch it. VIK_XCFRAMEWORK
+#     points at a built vInputKit.xcframework; without it the app builds as before.
+if [ -n "${VIK_XCFRAMEWORK:-}" ] && [ -d "$VIK_XCFRAMEWORK" ]; then
+  mkdir -p "$W/Frameworks"
+  rm -rf "$W/Frameworks/vInputKit.xcframework"
+  cp -R "$VIK_XCFRAMEWORK" "$W/Frameworks/vInputKit.xcframework"
+  VIK='$(PROJECT_DIR)/Frameworks/vInputKit.xcframework/ios-arm64/vInputKit.framework'
+  sed -i '' -e "s#INFOPLIST_FILE = \"I.K.E.M.E.N-Go/Info.plist\";#INFOPLIST_FILE = \"I.K.E.M.E.N-Go/Info.plist\";\\
+				GCC_PREPROCESSOR_DEFINITIONS = (\"\$(inherited)\", \"CVF_VINPUTKIT=1\", );\\
+				HEADER_SEARCH_PATHS = (\"\$(inherited)\", \"$VIK/Headers\", );\\
+				OTHER_LDFLAGS = (\"\$(inherited)\", \"$VIK/vInputKit\", \"-lc++\", \"-framework\", GameController, \"-framework\", CoreBluetooth, \"-framework\", CoreHaptics, \"-framework\", QuartzCore, \"-framework\", UniformTypeIdentifiers, );#" "$PBX"
+  test "$(grep -c 'CVF_VINPUTKIT=1' "$PBX")" -eq 2
+  echo "vInputKit linked from $VIK_XCFRAMEWORK"
+else
+  echo "vInputKit not available: building without controller remapping"
+fi
+
 # 3. Show the app's folder in Files / Finder so the game folder can be copied
 #    straight onto the device, and explain the local-network prompt (UPnP).
 plutil -replace UIFileSharingEnabled -bool YES "$PLIST"
