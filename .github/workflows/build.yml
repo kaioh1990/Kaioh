@@ -298,6 +298,8 @@ jobs:
           echo "GitHub API, repos/kaioh1990/vInputKit: HTTP $code"
           if [ "$code" != 200 ]; then
             grep -o '"message": *"[^"]*"' /tmp/vik-repo.json || true
+            echo "Repositories this token can see:"
+            curl -s -H "Authorization: Bearer $VINPUTKIT_TOKEN" "https://api.github.com/user/repos?per_page=100" | grep -o '"full_name": *"[^"]*"' || echo "  (none listed)"
             echo "::error::The VINPUTKIT_TOKEN secret cannot read kaioh1990/vInputKit (HTTP $code)"
             exit 1
           fi
