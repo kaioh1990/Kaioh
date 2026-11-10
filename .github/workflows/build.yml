@@ -291,6 +291,16 @@ jobs:
             echo "::notice::VINPUTKIT_TOKEN is not set, so the app is built without vInputKit"
             exit 0
           fi
+          # Diagnostics without printing the token: its kind, and what GitHub says about access.
+          case "$VINPUTKIT_TOKEN" in github_pat_*) kind="fine-grained";; ghp_*) kind="classic";; *) kind="unknown format";; esac
+          echo "Token: $kind, ${#VINPUTKIT_TOKEN} characters"
+          code=$(curl -s -o /tmp/vik-repo.json -w '%{http_code}' -H "Authorization: Bearer $VINPUTKIT_TOKEN" https://api.github.com/repos/kaioh1990/vInputKit)
+          echo "GitHub API, repos/kaioh1990/vInputKit: HTTP $code"
+          if [ "$code" != 200 ]; then
+            grep -o '"message": *"[^"]*"' /tmp/vik-repo.json || true
+            echo "::error::The VINPUTKIT_TOKEN secret cannot read kaioh1990/vInputKit (HTTP $code)"
+            exit 1
+          fi
           git clone -q --depth 1 "https://x-access-token:${VINPUTKIT_TOKEN}@github.com/kaioh1990/vInputKit.git" vinputkit
           git -C vinputkit log --oneline -1
           ./vinputkit/ios/build.sh
