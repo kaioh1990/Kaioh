@@ -1,0 +1,44 @@
+name: Publish dev Xcode project
+
+# Publishes only the Xcode project of a branch build as the "cvf-online-ios-dev" pre-release,
+# so it can be fetched without signing in. The IPA is not published (it contains vInputKit,
+# which is private; the Xcode project leaves vInputKit's library out).
+# Trigger: write a build run id to .github/dev-run-id and push.
+on:
+  push:
+    paths:
+      - '.github/dev-run-id'
+      - '.github/workflows/dev-xcode.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read run id
+        id: run
+        run: echo "id=$(tr -d '[:space:]' < .github/dev-run-id)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: cvf-online-ios
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist
+      - name: Publish the Xcode project only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -la dist
+          if unzip -l dist/cvf-online-ios-xcode.zip | grep -q 'vInputKit.xcframework'; then
+            echo "::error::The Xcode project contains vInputKit's library; not publishing"; exit 1
+          fi
+          gh release delete cvf-online-ios-dev --yes --cleanup-tag 2>/dev/null || true
+          gh release create cvf-online-ios-dev dist/cvf-online-ios-xcode.zip --prerelease \
+            --title "CvF Online iOS - dev Xcode project" \
+            --notes "Test build from ${GITHUB_REF_NAME} (run ${{ steps.run.outputs.id }}). Xcode project only; vInputKit is not included." \
+            --target "$GITHUB_SHA"
