@@ -250,7 +250,7 @@ jobs:
           echo "$(go env GOARCH)"
           grep -q 'hash=11406f6a4a9e04e52db4ac2407cdcfed2dfce4a876dcb546a6bb00d1dc55a486' out.txt
       - name: Same check with TinyGo (compiler used for the PS Vita build)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && runner.arch == 'X64'
         run: |
           wget -q https://github.com/tinygo-org/tinygo/releases/download/v0.44.0/tinygo_0.44.0_amd64.deb
           sudo dpkg -i tinygo_0.44.0_amd64.deb
