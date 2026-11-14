@@ -1557,10 +1557,10 @@ index 00000000..19554275
 +)
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 00000000..51d1319d
+index 00000000..d44d8905
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,930 @@
+@@ -0,0 +1,938 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -2157,13 +2157,16 @@ index 00000000..51d1319d
 +		return 1
 +	})
 +	luaRegister(l, "cvfTouchTap", func(l *lua.LState) int {
++		cvfTapMu.Lock()
 +		cvfTap.used, cvfTap.polled = true, sys.frameCounter
-+		if !cvfTap.pending {
++		pending, x, y := cvfTap.pending, cvfTap.x, cvfTap.y
++		cvfTap.pending = false
++		cvfTapMu.Unlock()
++		if !pending {
 +			return 0
 +		}
-+		cvfTap.pending = false
-+		l.Push(lua.LNumber(cvfTap.x))
-+		l.Push(lua.LNumber(cvfTap.y))
++		l.Push(lua.LNumber(x))
++		l.Push(lua.LNumber(y))
 +		return 2
 +	})
 +	luaRegister(l, "cvfOnlineHostBegin", func(l *lua.LState) int {
@@ -2375,11 +2378,16 @@ index 00000000..51d1319d
 +	used    bool
 +}
 +
++// Android delivers taps on its UI thread while the engine runs on another one.
++var cvfTapMu sync.Mutex
++
 +// False while a physical controller is connected: only direct taps on elements count.
 +var cvfTouchMenus = true
 +
 +// x and y are 0-1 across the game view. Returns false if no screen is listening.
 +func cvfStoreTap(x, y float32) bool {
++	cvfTapMu.Lock()
++	defer cvfTapMu.Unlock()
 +	if !cvfTap.used || sys.frameCounter-cvfTap.polled > 5 {
 +		return false
 +	}
@@ -2981,6 +2989,53 @@ index 2698d355..ae181668 100644
  }
  
  // Step the zoom variables
+diff --git a/src/util_android.go b/src/util_android.go
+index 7f6b5be1..7bdffe60 100644
+--- a/src/util_android.go
++++ b/src/util_android.go
+@@ -190,6 +190,42 @@ func Java_org_libsdl_app_SDLActivity_nativeOnSDLReady(env *C.JNIEnv, clazz C.jcl
+ 	}
+ }
+ 
++// CvF Online: the same touch-menu hooks as util_ios.go, called from SDLActivity.
++
++// True while a fight is on screen, so touches are left alone.
++//
++//export Java_org_libsdl_app_SDLActivity_nativeCvfInMatch
++func Java_org_libsdl_app_SDLActivity_nativeCvfInMatch(env *C.JNIEnv, clazz C.jclass) C.jboolean {
++	if sys.middleOfMatch() && !sys.motif.me.active {
++		return C.JNI_TRUE
++	}
++	return C.JNI_FALSE
++}
++
++// Hands a tap (0-1 across the game view) to the current screen.
++// Returns false if that screen doesn't read taps.
++//
++//export Java_org_libsdl_app_SDLActivity_nativeCvfTouchTap
++func Java_org_libsdl_app_SDLActivity_nativeCvfTouchTap(env *C.JNIEnv, clazz C.jclass, x, y C.jfloat) C.jboolean {
++	if cvfStoreTap(float32(x), float32(y)) {
++		return C.JNI_TRUE
++	}
++	return C.JNI_FALSE
++}
++
++//export Java_org_libsdl_app_SDLActivity_nativeCvfSetTouchMenus
++func Java_org_libsdl_app_SDLActivity_nativeCvfSetTouchMenus(env *C.JNIEnv, clazz C.jclass, on C.jboolean) {
++	cvfTouchMenus = on != C.JNI_FALSE
++}
++
++// Physical screen size in pixels (long side first), so menus fit the screen's shape.
++// Called before nativeOnSDLReady, i.e. before the config is loaded.
++//
++//export Java_org_libsdl_app_SDLActivity_nativeCvfSetScreen
++func Java_org_libsdl_app_SDLActivity_nativeCvfSetScreen(env *C.JNIEnv, clazz C.jclass, w, h C.jint) {
++	cvfScreen[0], cvfScreen[1] = int32(w), int32(h)
++}
++
+ func Logcat(s string) {
+ 	cs := C.CString(s)
+ 	C.__android_log_write(C.ANDROID_LOG_INFO, C.CString("ikemen"), cs)
 diff --git a/src/util_ios.go b/src/util_ios.go
 index aabd7589..0233eaad 100755
 --- a/src/util_ios.go

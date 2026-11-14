@@ -8,6 +8,7 @@ on:
       - '.github/workflows/build.yml'
       - 'cvf-files/**'
       - 'ios/**'
+      - 'android/**'
       - 'tools/**'
 
 env:
@@ -221,7 +222,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
+        # ubuntu-24.04-arm: same arm64 code generation as the Android build.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2022]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -255,6 +257,95 @@ jobs:
           cd tools/detmath-check
           tinygo run . | tee out-tinygo.txt
           grep -q 'hash=11406f6a4a9e04e52db4ac2407cdcfed2dfce4a876dcb546a6bb00d1dc55a486' out-tinygo.txt
+
+  android:
+    runs-on: ubuntu-24.04
+    env:
+      # Jesuszilla/ikemen-droid, the app wrapper Ikemen GO's build script packages with.
+      ANDROID_APP_COMMIT: dbc5cfb
+      # NDK r27d, as in Ikemen GO's own Android build image.
+      ANDROID_NDK_VERSION: 27.3.13750724
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Ikemen GO and apply CvF patch
+        run: |
+          git clone "$IKEMEN_REPO" ikemen
+          cd ikemen
+          git checkout "$IKEMEN_COMMIT"
+          git apply ../patches/ikemen-cvf-online.patch
+          git --no-pager diff --stat
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: ikemen/go.sum
+
+      # The wrapper's Gradle plugin (AGP 8.1) needs JDK 17.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install host tools and the Android NDK
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q nasm yasm ninja-build pkg-config cmake
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          if "$sdkmanager" --install "ndk;$ANDROID_NDK_VERSION" > /dev/null; then
+            ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          else
+            echo "::warning::NDK $ANDROID_NDK_VERSION not available; using the runner's $ANDROID_NDK_LATEST_HOME"
+            ndk="$ANDROID_NDK_LATEST_HOME"
+          fi
+          test -x "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - name: Prepare the CvF Online Android app project
+        env:
+          ANDROID_VERSION_NAME: "0.8.5"
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          git clone https://github.com/Jesuszilla/ikemen-droid.git CvF-Online-Android
+          git -C CvF-Online-Android checkout "$ANDROID_APP_COMMIT"
+          ./android/customize.sh CvF-Online-Android
+          # Default settings for the app (listed in its asset manifest). Same as the other
+          # builds except the renderer: phones run OpenGL ES, not desktop OpenGL.
+          mkdir -p ikemen/save
+          sed -e 's/^RenderMode\( *\)= OpenGL 3.3/RenderMode\1= OpenGL ES 3.2/' cvf-files/save/config.ini > ikemen/save/config.ini
+          grep -q '^RenderMode *= OpenGL ES 3.2' ikemen/save/config.ini
+
+      - name: Build engine + APK
+        working-directory: ikemen
+        env:
+          BUILD_FFMPEG: "yes"
+          CGO_ENABLED: "1"
+          # arm64, like Apple Silicon: no FMA fusion, so the math matches PCs for online play.
+          GOFLAGS: "-gcflags=all=-d=fmahash=n"
+          ANDROID_APK_REPO: ${{ github.workspace }}/CvF-Online-Android
+        run: |
+          go env -w GO111MODULE=on
+          go mod download
+          ./build/build.sh Android 2> >(grep -v 'fmahash\|bisect-match' >&2)
+          test -f bin/ikemen-go.apk
+          cp bin/ikemen-go.apk ../cvf-online-android.apk
+
+      - name: Check the APK
+        run: |
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$bt/aapt2" dump badging cvf-online-android.apk | grep -E "^package:|^application-label:|^native-code:"
+          "$bt/aapt2" dump badging cvf-online-android.apk | grep -q "name='com.kaioh1990.cvfonline'"
+          "$bt/apksigner" verify --print-certs cvf-online-android.apk | grep -i "SHA-256"
+          unzip -l cvf-online-android.apk | grep -E "lib/arm64-v8a/libmain.so|assets/save/config.ini|assets/external/script/main.lua"
+          ls -la cvf-online-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cvf-online-android
+          path: cvf-online-android.apk
+          retention-days: 30
 
   ios:
     # The ikemen-ios Xcode project needs Xcode 26 (default on macos-26).

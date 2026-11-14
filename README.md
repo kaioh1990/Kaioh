@@ -10,8 +10,9 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
 | `lobby/` | Lobby server (Go, no dependencies) |
 | `render.yaml` | One-click deploy of the lobby to Render's free tier |
 | `ios/customize.sh` | Turns the [ikemen-ios](https://github.com/Jesuszilla/ikemen-ios) wrapper into the CvF Online iPhone/iPad app |
+| `android/customize.sh` | Turns the [ikemen-droid](https://github.com/Jesuszilla/ikemen-droid) wrapper into the CvF Online Android app (`cvf-online.patch`: game folder auto-detect, menu gestures, settings never overwritten; `cvf-online.keystore`: fixed signing key so updates install over the top) |
 | `tools/detmath-check/` | CI check that Intel/AMD and Apple chips compute identical math |
-| `.github/workflows/` | Builds Windows, macOS (Intel and Apple Silicon) and iOS/iPadOS, and publishes them as releases |
+| `.github/workflows/` | Builds Windows, macOS (Intel and Apple Silicon), iOS/iPadOS and Android, and publishes them as releases |
 
 ## Engine changes
 
@@ -22,7 +23,7 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
    who are hosting; pick one to join without typing an IP.
 4. **Cross-CPU determinism:** gameplay code uses pure-Go copies of `Exp`/`Log`/`Pow`/`Hypot`/`Log2`
    (Go's assembly versions differ between amd64 and arm64), and Apple builds disable FMA fusion,
-   so PCs, Macs and iPads can play each other without desyncs.
+   so PCs, Macs, iPads and Android phones can play each other without desyncs.
 5. **CvF rules** (`data/cvf_online.ini`): attack invincibility cap and slower MP gain.
 
 ## Deploying the lobby (free)
