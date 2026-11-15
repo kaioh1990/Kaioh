@@ -1,5 +1,5 @@
 diff --git a/external/script/main.lua b/external/script/main.lua
-index b7d76c83..0b013be4 100644
+index b7d76c83..6d86e496 100644
 --- a/external/script/main.lua
 +++ b/external/script/main.lua
 @@ -70,6 +70,7 @@ end
@@ -96,7 +96,7 @@ index b7d76c83..0b013be4 100644
  					elseif main.t_itemname[f] == nil then
  						if t_storyModeList[f] then
  							f = 'storyarc'
-@@ -3252,11 +3287,98 @@ function main.f_replay()
+@@ -3252,11 +3287,136 @@ function main.f_replay()
  	end
  end
  
@@ -153,9 +153,47 @@ index b7d76c83..0b013be4 100644
 +	end
 +end
 +
++-- CvF Online: controls line for the lobby and nearby lists
++function main.f_cvfListHelp()
++	if cvfTouchUI() then
++		return 'Swipe: choose   Tap: join   Double-tap: back'
++	end
++	return 'Up/Down: choose   Attack: join   Esc: back'
++end
++
 +-- CvF Online: ask for a lobby display name once
 +function main.f_cvfEnsureName()
 +	if cvfGetPlayerName() ~= '' then
++		return true
++	end
++	-- Phones/tablets have no keyboard here: use the device's own name box (iPhone/iPad),
++	-- and never block on it; an untyped name becomes "Player 1234".
++	if cvfIsMobile() then
++		local typed = ''
++		if cvfAskNameBegin() then
++			local ts = motif.title_info.connecting.TextSpriteData
++			while true do
++				local r = cvfAskNamePoll()
++				if r ~= nil then
++					typed = r
++					break
++				end
++				clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++				bgDraw(motif[main.background].BGDef, 0)
++				rectDraw(motif.title_info.connecting.overlay.RectData)
++				textImgReset(ts)
++				textImgSetPos(ts, nil, 60)
++				textImgSetText(ts, 'Choose the name other players will see.')
++				textImgDraw(ts)
++				bgDraw(motif[main.background].BGDef, 1)
++				refresh()
++			end
++			resetKey()
++		end
++		if typed == '' then
++			typed = cvfDefaultName()
++		end
++		cvfSetPlayerName(typed)
 +		return true
 +	end
 +	local name = main.f_drawInput(
@@ -195,7 +233,7 @@ index b7d76c83..0b013be4 100644
  			exitNetPlay()
  			return false
  		end
-@@ -3272,16 +3394,200 @@ function main.f_connect(server, str)
+@@ -3272,16 +3432,200 @@ function main.f_connect(server, str)
  			txt = string.format(motif.title_info.connecting.text.join, server, str)
  		end
  		textImgReset(motif.title_info.connecting.TextSpriteData)
@@ -299,7 +337,7 @@ index b7d76c83..0b013be4 100644
 +			end
 +		end
 +		table.insert(lines, '')
-+		table.insert(lines, 'Up/Down: choose   Attack: join   Esc: back')
++		table.insert(lines, main.f_cvfListHelp())
 +		textImgReset(ts)
 +		textImgSetPos(ts, nil, 40)
 +		textImgSetText(ts, table.concat(lines, '\n'))
@@ -383,7 +421,7 @@ index b7d76c83..0b013be4 100644
 +			end
 +		end
 +		table.insert(lines, '')
-+		table.insert(lines, 'Up/Down: choose   Attack: join   Esc: back')
++		table.insert(lines, main.f_cvfListHelp())
 +		textImgReset(ts)
 +		textImgSetPos(ts, nil, 40)
 +		textImgSetText(ts, table.concat(lines, '\n'))
@@ -1681,10 +1719,10 @@ index 00000000..19554275
 +)
 diff --git a/src/cvf_nearby.go b/src/cvf_nearby.go
 new file mode 100644
-index 00000000..4adb26c7
+index 00000000..6323a306
 --- /dev/null
 +++ b/src/cvf_nearby.go
-@@ -0,0 +1,525 @@
+@@ -0,0 +1,605 @@
 +package main
 +
 +// Castlevania Fighter "Nearby" play: two devices on the same local network play without
@@ -1711,7 +1749,9 @@ index 00000000..4adb26c7
 +	"encoding/hex"
 +	"encoding/json"
 +	"fmt"
++	"math/big"
 +	"net"
++	"runtime"
 +	"sort"
 +	"strings"
 +	"sync"
@@ -1940,7 +1980,7 @@ index 00000000..4adb26c7
 +		b.WriteString("The other player picks Online > Join Nearby.\n\n")
 +	}
 +	b.WriteString(cvfNearbyNoWifiHint())
-+	b.WriteString("\nPress Esc to stop hosting.")
++	b.WriteString("\n" + cvfStopHostingHint())
 +	return b.String()
 +}
 +
@@ -2136,6 +2176,56 @@ index 00000000..4adb26c7
 +}
 +
 +// ---------------------------------------------------------------------------
++// Touch devices: gesture hints and the player name
++
++// True on phones/tablets while menus are driven by touch (no controller connected).
++func cvfTouchUI() bool {
++	return (runtime.GOOS == "ios" || runtime.GOOS == "android") && cvfTouchMenus
++}
++
++func cvfStopHostingHint() string {
++	if cvfTouchUI() {
++		return "Double-tap to stop hosting."
++	}
++	return "Press Esc to stop hosting."
++}
++
++// A name for players who never typed one ("Player 4821").
++func cvfDefaultName() string {
++	n, _ := rand.Int(rand.Reader, big.NewInt(9000))
++	return fmt.Sprintf("Player %d", 1000+n.Int64())
++}
++
++var cvfNameAsk struct {
++	sync.Mutex
++	waiting bool
++	done    bool
++	result  string
++}
++
++func cvfNameAskBegin() bool {
++	cvfNameAsk.Lock()
++	cvfNameAsk.waiting, cvfNameAsk.done, cvfNameAsk.result = true, false, ""
++	cvfNameAsk.Unlock()
++	if !cvfNativeAskName(cvfDefaultName()) {
++		cvfNameAsk.Lock()
++		cvfNameAsk.waiting = false
++		cvfNameAsk.Unlock()
++		return false
++	}
++	return true
++}
++
++// Called (from the app) with what the player typed; "" if they cancelled.
++func cvfNameAskDone(name string) {
++	cvfNameAsk.Lock()
++	if cvfNameAsk.waiting {
++		cvfNameAsk.waiting, cvfNameAsk.done, cvfNameAsk.result = false, true, name
++	}
++	cvfNameAsk.Unlock()
++}
++
++// ---------------------------------------------------------------------------
 +// Lua
 +
 +func cvfNearbyScriptInit(l *lua.LState) {
@@ -2195,6 +2285,34 @@ index 00000000..4adb26c7
 +		cvfP2PClose()
 +		return 0
 +	})
++	luaRegister(l, "cvfIsMobile", func(l *lua.LState) int {
++		l.Push(lua.LBool(runtime.GOOS == "ios" || runtime.GOOS == "android"))
++		return 1
++	})
++	luaRegister(l, "cvfTouchUI", func(l *lua.LState) int {
++		l.Push(lua.LBool(cvfTouchUI()))
++		return 1
++	})
++	luaRegister(l, "cvfDefaultName", func(l *lua.LState) int {
++		l.Push(lua.LString(cvfDefaultName()))
++		return 1
++	})
++	// Shows the device's own name box (iPhone/iPad). False if there is none.
++	luaRegister(l, "cvfAskNameBegin", func(l *lua.LState) int {
++		l.Push(lua.LBool(cvfNameAskBegin()))
++		return 1
++	})
++	// Nothing while the box is open, then the typed name ("" if cancelled).
++	luaRegister(l, "cvfAskNamePoll", func(l *lua.LState) int {
++		cvfNameAsk.Lock()
++		done, r := cvfNameAsk.done, cvfNameAsk.result
++		cvfNameAsk.Unlock()
++		if !done {
++			return 0
++		}
++		l.Push(lua.LString(r))
++		return 1
++	})
 +	luaRegister(l, "cvfNearbyHint", func(l *lua.LState) int {
 +		l.Push(lua.LString(strings.TrimRight(cvfNearbyNoWifiHint(), "\n")))
 +		return 1
@@ -2212,7 +2330,7 @@ index 00000000..4adb26c7
 +}
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 00000000..40fbc4ba
+index 00000000..10b9d645
 --- /dev/null
 +++ b/src/cvf_online.go
 @@ -0,0 +1,939 @@
@@ -2751,7 +2869,7 @@ index 00000000..40fbc4ba
 +		fmt.Fprintf(&b, "\nListed in the lobby as \"%s\"\n", s.playerName)
 +		b.WriteString("Other players can now pick you in Online > Lobby.\n")
 +	}
-+	b.WriteString("\nPress Esc to stop hosting.")
++	b.WriteString("\n" + cvfStopHostingHint())
 +	return b.String()
 +}
 +
@@ -3157,10 +3275,10 @@ index 00000000..40fbc4ba
 +}
 diff --git a/src/cvf_p2p_export_ios.go b/src/cvf_p2p_export_ios.go
 new file mode 100644
-index 00000000..d78af4db
+index 00000000..a6904e3a
 --- /dev/null
 +++ b/src/cvf_p2p_export_ios.go
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,34 @@
 +//go:build ios
 +
 +package main
@@ -3188,12 +3306,19 @@ index 00000000..d78af4db
 +func CvfP2PPeers(json *C.char) {
 +	cvfNearby.setP2P(C.GoString(json))
 +}
++
++// The player's answer from the app's name box ("" if cancelled).
++//
++//export CvfNameEntered
++func CvfNameEntered(name *C.char) {
++	cvfNameAskDone(C.GoString(name))
++}
 diff --git a/src/cvf_p2p_ios.go b/src/cvf_p2p_ios.go
 new file mode 100644
-index 00000000..1bc5e875
+index 00000000..574af3b5
 --- /dev/null
 +++ b/src/cvf_p2p_ios.go
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,69 @@
 +//go:build ios
 +
 +package main
@@ -3212,6 +3337,7 @@ index 00000000..1bc5e875
 +	void (*browse)(int on);
 +	int (*join)(const char *instance, int localTcp, int localUdp);
 +	void (*close)(void);
++	void (*askName)(const char *suggestion);
 +} CvfP2PFuncs;
 +static CvfP2PFuncs cvfP2PFn;
 +static void cvfP2PSet(CvfP2PFuncs *f) { cvfP2PFn = *f; }
@@ -3221,6 +3347,7 @@ index 00000000..1bc5e875
 +static void cvfP2PBrowseC(int on) { if (cvfP2PFn.browse) cvfP2PFn.browse(on); }
 +static int cvfP2PJoinC(const char *i, int t, int u) { return cvfP2PFn.join ? cvfP2PFn.join(i, t, u) : 0; }
 +static void cvfP2PCloseC(void) { if (cvfP2PFn.close) cvfP2PFn.close(); }
++static int cvfAskNameC(const char *s) { if (!cvfP2PFn.askName) return 0; cvfP2PFn.askName(s); return 1; }
 +*/
 +import "C"
 +import "unsafe"
@@ -3254,12 +3381,19 @@ index 00000000..1bc5e875
 +}
 +
 +func cvfP2PClose() { C.cvfP2PCloseC() }
++
++// Opens the app's name box. False if the app has none.
++func cvfNativeAskName(suggestion string) bool {
++	cs := C.CString(suggestion)
++	defer C.free(unsafe.Pointer(cs))
++	return C.cvfAskNameC(cs) != 0
++}
 diff --git a/src/cvf_p2p_other.go b/src/cvf_p2p_other.go
 new file mode 100644
-index 00000000..e224975e
+index 00000000..530eeb05
 --- /dev/null
 +++ b/src/cvf_p2p_other.go
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,15 @@
 +//go:build !ios
 +
 +package main
@@ -3273,6 +3407,8 @@ index 00000000..e224975e
 +func cvfP2PBrowse(on bool)                                       {}
 +func cvfP2PJoin(id string, localTcp, localUdp int) bool          { return false }
 +func cvfP2PClose()                                               {}
++
++func cvfNativeAskName(suggestion string) bool { return false }
 diff --git a/src/cvf_sound_lazy.go b/src/cvf_sound_lazy.go
 new file mode 100644
 index 00000000..c3ac2b6d

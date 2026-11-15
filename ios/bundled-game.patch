@@ -1,9 +1,9 @@
 diff --git a/I.K.E.M.E.N-Go/CvfP2P.m b/I.K.E.M.E.N-Go/CvfP2P.m
 new file mode 100644
-index 0000000..4b34f7e
+index 0000000..39cd1cf
 --- /dev/null
 +++ b/I.K.E.M.E.N-Go/CvfP2P.m
-@@ -0,0 +1,503 @@
+@@ -0,0 +1,567 @@
 +// CvF Online: direct iPhone/iPad link for Nearby play.
 +//
 +// Uses Apple's peer-to-peer Wi-Fi (the link AirDrop uses) through Network.framework, so
@@ -24,6 +24,7 @@ index 0000000..4b34f7e
 +
 +#import <Foundation/Foundation.h>
 +#import <Network/Network.h>
++#import <UIKit/UIKit.h>
 +#include <sys/socket.h>
 +#include <netinet/in.h>
 +#include <netinet/tcp.h>
@@ -35,6 +36,7 @@ index 0000000..4b34f7e
 +
 +extern void CvfP2PPeers(char *json);      // exported from Go
 +extern void CvfP2PRegister(void *funcs);  // exported from Go
++extern void CvfNameEntered(char *name);   // exported from Go
 +
 +#define kTCPType "_cvfnearby._tcp"
 +#define kUDPType "_cvfnearby._udp"
@@ -493,6 +495,67 @@ index 0000000..4b34f7e
 +    dispatch_async(Q(), ^{ Teardown(); });
 +}
 +
++// ---------------------------------------------------------------------------
++// Player name box for online play (the engine's own text box needs a keyboard)
++
++@interface CvfNameAsker : NSObject
+++ (void)ask:(NSString *)suggestion;
++@end
++
++@implementation CvfNameAsker
+++ (UIViewController *)topController {
++    UIWindow *win = nil;
++    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
++        if (![scene isKindOfClass:UIWindowScene.class]) continue;
++        for (UIWindow *w in ((UIWindowScene *)scene).windows) {
++            if (w.isKeyWindow) { win = w; break; }
++        }
++        if (!win) win = ((UIWindowScene *)scene).windows.firstObject;
++        if (win) break;
++    }
++    UIViewController *vc = win.rootViewController;
++    while (vc.presentedViewController) vc = vc.presentedViewController;
++    return vc;
++}
++
+++ (void)ask:(NSString *)suggestion {
++    UIViewController *vc = [self topController];
++    if (!vc) { CvfNameEntered(""); return; }
++    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Your player name"
++                                                               message:@"Other players see this name when you host or join."
++                                                        preferredStyle:UIAlertControllerStyleAlert];
++    [a addTextFieldWithConfigurationHandler:^(UITextField *f) {
++        f.placeholder = suggestion;
++        f.autocapitalizationType = UITextAutocapitalizationTypeWords;
++        f.autocorrectionType = UITextAutocorrectionTypeNo;
++        f.returnKeyType = UIReturnKeyDone;
++    }];
++    __weak UIAlertController *weakAlert = a;
++    [a addAction:[UIAlertAction actionWithTitle:@"Skip" style:UIAlertActionStyleCancel handler:^(UIAlertAction *x) {
++        CvfNameEntered("");
++    }]];
++    UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) {
++        NSString *t = [weakAlert.textFields.firstObject.text
++                       stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
++        if (t.length == 0) t = suggestion;
++        CvfNameEntered((char *)t.UTF8String);
++    }];
++    [a addAction:ok];
++    a.preferredAction = ok;
++    [vc presentViewController:a animated:YES completion:nil];
++}
++@end
++
++static void CvfAskName(const char *suggestion) {
++    NSString *s = @(suggestion ?: "");
++    if (NSThread.isMainThread) {
++        [CvfNameAsker ask:s];
++    } else {
++        // The engine pumps the main run loop every frame, so this still runs.
++        [CvfNameAsker performSelectorOnMainThread:@selector(ask:) withObject:s waitUntilDone:NO];
++    }
++}
++
 +// Hands these functions to the engine (layout matches CvfP2PFuncs in cvf_p2p_ios.go).
 +typedef struct {
 +    void (*advertise)(const char *, const char *, const char *, int, int);
@@ -500,10 +563,11 @@ index 0000000..4b34f7e
 +    void (*browse)(int);
 +    int (*join)(const char *, int, int);
 +    void (*close)(void);
++    void (*askName)(const char *);
 +} CvfP2PFuncs;
 +
 +void CvfP2PInstall(void) {
-+    static CvfP2PFuncs funcs = {CvfP2PAdvertise, CvfP2PAdvertiseStop, CvfP2PBrowse, CvfP2PJoin, CvfP2PClose};
++    static CvfP2PFuncs funcs = {CvfP2PAdvertise, CvfP2PAdvertiseStop, CvfP2PBrowse, CvfP2PJoin, CvfP2PClose, CvfAskName};
 +    static dispatch_once_t once;
 +    dispatch_once(&once, ^{ CvfP2PRegister(&funcs); });
 +}
