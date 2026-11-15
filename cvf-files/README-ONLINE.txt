@@ -27,7 +27,7 @@ Your original "Castlevania Fighter (v0.8.5b)" folder is untouched.
 
 2. PLAYING ONLINE
 -----------------
-Online menu: LOBBY / HOST GAME / JOIN GAME
+Online menu: LOBBY / HOST NEARBY / JOIN NEARBY / HOST GAME / JOIN GAME
 
   Host Game  You wait for an opponent. The screen shows your Internet
              address and port, tries to open the port on your router
@@ -35,6 +35,16 @@ Online menu: LOBBY / HOST GAME / JOIN GAME
   Lobby      Shows everyone who is hosting right now. Pick a name to join.
              No IP typing needed. (The first time, you choose a player name.)
   Join Game  Join by typing the host's address yourself.
+
+  Host Nearby / Join Nearby
+             Play someone right next to you, no Internet needed. Both
+             devices must be on the same Wi-Fi, OR one device turns on its
+             hotspot (iPhone: Settings > Personal Hotspot; Android: Hotspot;
+             Steam Deck: Wi-Fi > Hotspot; Windows: Mobile hotspot) and the
+             other device joins that hotspot. One player picks Host Nearby,
+             the other picks Join Nearby and chooses them from the list.
+             A hotspot used this way sends no mobile data. iPhone/iPad ask
+             once to allow "Local Network": tap Allow.
 
 If nobody can join you: the host screen will say the router could not be
 set up automatically. Then either forward TCP *and* UDP port 7500 on your

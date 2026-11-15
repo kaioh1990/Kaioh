@@ -24,7 +24,10 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
 4. **Cross-CPU determinism:** gameplay code uses pure-Go copies of `Exp`/`Log`/`Pow`/`Hypot`/`Log2`
    (Go's assembly versions differ between amd64 and arm64), and Apple builds disable FMA fusion,
    so PCs, Macs, iPads and Android phones can play each other without desyncs.
-5. **CvF rules** (`data/cvf_online.ini`): attack invincibility cap and slower MP gain.
+5. **Nearby play:** Online > Host Nearby / Join Nearby finds a player on the same Wi-Fi or phone
+   hotspot with a small UDP probe on port 7520 (unicast sweep of the local subnet, so it works on
+   iOS without the multicast entitlement). No Internet, lobby or IP typing needed.
+6. **CvF rules** (`data/cvf_online.ini`): attack invincibility cap and slower MP gain.
 
 ## Deploying the lobby (free)
 

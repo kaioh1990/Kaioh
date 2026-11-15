@@ -1,5 +1,5 @@
 diff --git a/external/script/main.lua b/external/script/main.lua
-index b7d76c83..f7f714b5 100644
+index b7d76c83..7cf58041 100644
 --- a/external/script/main.lua
 +++ b/external/script/main.lua
 @@ -70,6 +70,7 @@ end
@@ -27,7 +27,7 @@ index b7d76c83..f7f714b5 100644
  		textImgSetText(motif.select_info.title.TextSpriteData, motif.select_info.title.text.netplayversus)
  		setGameMode('netplayversus')
  		setHomeTeam(1)
-@@ -2356,12 +2353,22 @@ main.t_itemname = {
+@@ -2356,12 +2353,48 @@ main.t_itemname = {
  		end
  		return nil
  	end,
@@ -36,6 +36,32 @@ index b7d76c83..f7f714b5 100644
 +		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
 +		hook.run("main.t_itemname", t, item)
 +		main.f_lobby()
++		return nil
++	end,
++	--CvF NEARBY (same Wi-Fi or a phone hotspot, no Internet needed)
++	['nearbyhost'] = function(t, item)
++		main.f_waitForPreloads(true)
++		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++		hook.run("main.t_itemname", t, item)
++		main.f_cvfEnsureName()
++		main.cvfNearby = true
++		local ok = main.f_connect("", gameOption('Netplay.ListenPort'))
++		main.cvfNearby = false
++		if ok then
++			if synchronize() then
++				enterSyncedNetplayMenu()
++			end
++			replayStop()
++			exitNetPlay()
++			exitReplay()
++			showSessionWarning()
++		end
++		return nil
++	end,
++	['nearbyjoin'] = function(t, item)
++		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++		hook.run("main.t_itemname", t, item)
++		main.f_nearbyJoin()
 +		return nil
 +	end,
  	--SERVER HOST
@@ -50,7 +76,7 @@ index b7d76c83..f7f714b5 100644
  		if main.f_connect("", gameOption('Netplay.ListenPort')) then
  			if synchronize() then
  				enterSyncedNetplayMenu()
-@@ -2872,7 +2879,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+@@ -2872,7 +2905,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
  							motif.infobox.text.TextSpriteData
  						)
  					end
@@ -59,7 +85,7 @@ index b7d76c83..f7f714b5 100644
  						break
  					end
  				elseif bool_f1 and (getKey(motif.infobox.keycode) or gameOption('Config.FirstRun')) then
-@@ -2907,7 +2914,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+@@ -2907,7 +2940,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
  						sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
  						break
  					elseif f == 'exit' then
@@ -70,7 +96,7 @@ index b7d76c83..f7f714b5 100644
  					elseif main.t_itemname[f] == nil then
  						if t_storyModeList[f] then
  							f = 'storyarc'
-@@ -3252,11 +3261,93 @@ function main.f_replay()
+@@ -3252,11 +3287,98 @@ function main.f_replay()
  	end
  end
  
@@ -148,28 +174,33 @@ index b7d76c83..f7f714b5 100644
 +
  function main.f_connect(server, str)
 +	local cvfHosting = (server == '')
-+	if cvfHosting then
++	local cvfNear = main.cvfNearby
++	if cvfHosting and cvfNear then
++		cvfNearbyHostBegin(gameOption('Netplay.ListenPort'))
++	elseif cvfHosting then
 +		cvfOnlineHostBegin(gameOption('Netplay.ListenPort'))
-+	else
++	elseif not cvfNear then
 +		cvfOnlineJoinBegin()
 +	end
  	enterNetPlay(server)
  	while not connected() do
  		if esc() or getInput(-1, motif.title_info.menu.cancel.key) then
  			sndPlay(motif.Snd, motif.title_info.cancel.snd[1], motif.title_info.cancel.snd[2])
-+			if cvfHosting then
++			if cvfHosting and cvfNear then
++				cvfNearbyHostEnd()
++			elseif cvfHosting then
 +				cvfOnlineHostEnd()
 +				cvfOnlineClosePorts()
 +			end
  			exitNetPlay()
  			return false
  		end
-@@ -3272,16 +3363,107 @@ function main.f_connect(server, str)
+@@ -3272,16 +3394,183 @@ function main.f_connect(server, str)
  			txt = string.format(motif.title_info.connecting.text.join, server, str)
  		end
  		textImgReset(motif.title_info.connecting.TextSpriteData)
 +		if cvfHosting then
-+			txt = cvfOnlineHostStatus()
++			txt = cvfNear and cvfNearbyHostStatus() or cvfOnlineHostStatus()
 +			textImgSetPos(motif.title_info.connecting.TextSpriteData, nil, 40)
 +		end
  		textImgSetText(motif.title_info.connecting.TextSpriteData, txt)
@@ -178,13 +209,89 @@ index b7d76c83..f7f714b5 100644
  		bgDraw(motif[main.background].BGDef, 1)
  		refresh()
  	end
-+	if cvfHosting then
++	if cvfHosting and cvfNear then
++		cvfNearbyHostEnd()
++	elseif cvfHosting then
 +		cvfOnlineHostEnd()
 +	end
  	replayRecord('save/replays/' .. os.date("%Y-%m-%d_%Hh%Mm%Ss") .. '.replay')
  	return true
  end
  
++-- CvF Nearby: list players hosting on the same Wi-Fi or hotspot and join one
++function main.f_nearbyJoin()
++	local sel = 1
++	local ts = motif.title_info.connecting.TextSpriteData
++	cvfNearbyScanBegin()
++	resetKey()
++	while true do
++		local hosts, status = cvfNearbyHosts()
++		if sel > #hosts then sel = math.max(1, #hosts) end
++		if esc() or getInput(-1, motif[main.group].menu.cancel.key) then
++			sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
++			cvfNearbyScanEnd()
++			return
++		elseif #hosts > 0 and getInput(-1, motif[main.group].menu.next.key) then
++			sel = sel % #hosts + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #hosts > 0 and getInput(-1, motif[main.group].menu.previous.key) then
++			sel = (sel - 2) % #hosts + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #hosts > 0 and getInput(-1, motif[main.group].menu.done.key) then
++			local h = hosts[sel]
++			sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++			cvfNearbyScanEnd()
++			main.f_waitForPreloads(true)
++			local oldPort = cvfGetNetplayPort()
++			cvfSetNetplayPort(h.port)
++			main.cvfNearby = true
++			local ok = main.f_connect(h.ip, h.name)
++			main.cvfNearby = false
++			if ok then
++				if synchronize() then
++					enterSyncedNetplayMenu()
++				end
++				replayStop()
++				exitNetPlay()
++				exitReplay()
++				showSessionWarning()
++			end
++			cvfSetNetplayPort(oldPort)
++			cvfNearbyScanBegin()
++			resetKey()
++		end
++		-- draw
++		clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++		bgDraw(motif[main.background].BGDef, 0)
++		rectDraw(motif.title_info.connecting.overlay.RectData)
++		local lines = {'NEARBY  -  players on this Wi-Fi or hotspot', ''}
++		if #hosts == 0 then
++			table.insert(lines, status ~= '' and status or 'Searching...')
++			table.insert(lines, '')
++			table.insert(lines, 'The other player picks Online > Host Nearby.')
++			table.insert(lines, '')
++			table.insert(lines, 'No Wi-Fi around? Turn on the hotspot on one device')
++			table.insert(lines, '(iPhone: Personal Hotspot, Android/Steam Deck: Hotspot)')
++			table.insert(lines, 'and connect the other device to it. No Internet is used.')
++		else
++			local first = math.max(1, math.min(sel - 4, #hosts - 8))
++			for i = first, math.min(#hosts, first + 8) do
++				local h = hosts[i]
++				local tag = h.compatible and '' or '  (different version)'
++				table.insert(lines, (i == sel and '> ' or '   ') .. h.name .. '   ' .. h.ip .. tag)
++			end
++		end
++		table.insert(lines, '')
++		table.insert(lines, 'Up/Down: choose   Attack: join   Esc: back')
++		textImgReset(ts)
++		textImgSetPos(ts, nil, 40)
++		textImgSetText(ts, table.concat(lines, '\n'))
++		textImgDraw(ts)
++		bgDraw(motif[main.background].BGDef, 1)
++		refresh()
++	end
++end
++
 +-- CvF Online: lobby screen listing players who are hosting
 +function main.f_lobby()
 +	if not cvfLobbyEnabled() then
@@ -1555,12 +1662,429 @@ index 00000000..19554275
 +	cvfFloatShift = 64 - 11 - 1
 +	cvfFloatBias  = 1023
 +)
+diff --git a/src/cvf_nearby.go b/src/cvf_nearby.go
+new file mode 100644
+index 00000000..5fb0eac9
+--- /dev/null
++++ b/src/cvf_nearby.go
+@@ -0,0 +1,411 @@
++package main
++
++// Castlevania Fighter "Nearby" play: two devices on the same local network play without
++// the Internet, the lobby or typing addresses. The usual case is one device's hotspot
++// (iPhone Personal Hotspot, Android hotspot, Steam Deck / Windows hotspot) with the other
++// device joined to it, but any shared Wi-Fi works too.
++//
++// Discovery is a tiny UDP probe/reply on cvfNearbyPort:
++//   - the host answers probes with its name, netplay port and build tag;
++//   - the joiner sends a probe to every address of each local Wi-Fi/Ethernet subnet
++//     (plus the broadcast address) and lists whoever answers.
++// Probing each address directly avoids broadcast/multicast, which iOS only allows for
++// apps with a special Apple entitlement. A hotspot subnet is small (an iPhone's is 14
++// addresses), so a sweep is cheap.
++//
++// The match itself is ordinary Ikemen netplay (TCP handshake + rollback over UDP).
++
++import (
++	"encoding/json"
++	"fmt"
++	"net"
++	"sort"
++	"strings"
++	"sync"
++	"time"
++
++	lua "github.com/yuin/gopher-lua"
++)
++
++const (
++	cvfNearbyPort    = 7520
++	cvfNearbyProbe   = "CVFNEARBY?1"
++	cvfNearbyMaxScan = 1022 // addresses per interface; bigger networks scan the /24 around us
++	cvfNearbyExpire  = 7 * time.Second
++)
++
++type cvfNearbyHost struct {
++	Name    string
++	IP      string
++	Port    int
++	Version string
++	seen    time.Time
++}
++
++type cvfNearbyReply struct {
++	T       string `json:"t"`
++	Name    string `json:"name"`
++	Port    int    `json:"port"`
++	Version string `json:"ver"`
++}
++
++type cvfNearbyState struct {
++	mu sync.Mutex
++
++	// hosting
++	hostConn   net.PacketConn
++	hostErr    string
++	hostPort   int
++	hostProbes int
++
++	// joining
++	scanStop  chan struct{}
++	hosts     map[string]*cvfNearbyHost
++	scanErr   string
++	lastSweep time.Time
++	extra     []string // extra probe targets (tests)
++}
++
++var cvfNearby = &cvfNearbyState{}
++
++// Interfaces worth scanning: up, not loopback, not cellular/VPN/peer-to-peer links.
++func cvfNearbyIfaceOK(ifc net.Interface) bool {
++	if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
++		return false
++	}
++	n := strings.ToLower(ifc.Name)
++	for _, p := range []string{"pdp_ip", "rmnet", "ccmni", "wwan", "utun", "ipsec", "tun", "tap",
++		"ppp", "awdl", "llw", "anpi", "gif", "stf", "tailscale", "zt", "wg", "docker", "veth", "virbr"} {
++		if strings.HasPrefix(n, p) {
++			return false
++		}
++	}
++	return true
++}
++
++type cvfNearbyNet struct {
++	self  net.IP
++	ipnet *net.IPNet
++}
++
++func cvfNearbyNets() []cvfNearbyNet {
++	var out []cvfNearbyNet
++	ifaces, _ := net.Interfaces()
++	for _, ifc := range ifaces {
++		if !cvfNearbyIfaceOK(ifc) {
++			continue
++		}
++		addrs, _ := ifc.Addrs()
++		for _, a := range addrs {
++			ipn, ok := a.(*net.IPNet)
++			if !ok {
++				continue
++			}
++			ip4 := ipn.IP.To4()
++			if ip4 == nil || ip4.IsLinkLocalUnicast() || ip4.IsLoopback() {
++				continue
++			}
++			out = append(out, cvfNearbyNet{ip4, &net.IPNet{IP: ip4.Mask(ipn.Mask), Mask: ipn.Mask}})
++		}
++	}
++	return out
++}
++
++func cvfNearbyIsSelf(ip net.IP) bool {
++	for _, n := range cvfNearbyNets() {
++		if n.self.Equal(ip) {
++			return true
++		}
++	}
++	return false
++}
++
++// Every address to probe on one subnet: all hosts (or the /24 around us on big
++// networks), then the broadcast address. Our own address is skipped.
++func cvfNearbyTargets(n cvfNearbyNet) []net.IP {
++	ones, bits := n.ipnet.Mask.Size()
++	if bits != 32 || ones >= 31 {
++		return nil
++	}
++	base := n.ipnet.IP.To4()
++	size := uint32(1) << uint(32-ones)
++	if size-2 > cvfNearbyMaxScan {
++		base = n.self.Mask(net.CIDRMask(24, 32)).To4()
++		size = 256
++	}
++	start := uint32(base[0])<<24 | uint32(base[1])<<16 | uint32(base[2])<<8 | uint32(base[3])
++	out := make([]net.IP, 0, size)
++	for i := uint32(1); i < size; i++ { // i == size-1 is the broadcast address
++		v := start + i
++		ip := net.IPv4(byte(v>>24), byte(v>>16), byte(v>>8), byte(v)).To4()
++		if !ip.Equal(n.self) {
++			out = append(out, ip)
++		}
++	}
++	return out
++}
++
++// ---------------------------------------------------------------------------
++// Host side
++
++func (s *cvfNearbyState) hostBegin(port int) {
++	s.hostEnd()
++	conn, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", cvfNearbyPort))
++	s.mu.Lock()
++	s.hostPort, s.hostProbes = port, 0
++	if err != nil {
++		s.hostErr = "Nearby discovery unavailable (" + err.Error() + ")"
++		s.mu.Unlock()
++		return
++	}
++	s.hostErr = ""
++	s.hostConn = conn
++	s.mu.Unlock()
++
++	go func() {
++		buf := make([]byte, 256)
++		for {
++			n, from, err := conn.ReadFrom(buf)
++			if err != nil {
++				return // closed by hostEnd
++			}
++			if string(buf[:n]) != cvfNearbyProbe {
++				continue
++			}
++			cvfOnline.readConfig()
++			cvfOnline.mu.Lock()
++			name, tag := cvfOnline.playerName, cvfOnline.buildTag
++			cvfOnline.mu.Unlock()
++			if name == "" {
++				name = "Player"
++			}
++			s.mu.Lock()
++			p := s.hostPort
++			s.hostProbes++
++			s.mu.Unlock()
++			b, _ := json.Marshal(cvfNearbyReply{T: "cvfnearby", Name: name, Port: p, Version: tag})
++			conn.WriteTo(b, from)
++		}
++	}()
++}
++
++func (s *cvfNearbyState) hostEnd() {
++	s.mu.Lock()
++	c := s.hostConn
++	s.hostConn = nil
++	s.mu.Unlock()
++	if c != nil {
++		c.Close()
++	}
++}
++
++func (s *cvfNearbyState) hostStatus() string {
++	s.mu.Lock()
++	port, herr := s.hostPort, s.hostErr
++	s.mu.Unlock()
++	var b strings.Builder
++	b.WriteString("NEARBY  -  waiting for an opponent...\n\n")
++	var ips []string
++	for _, n := range cvfNearbyNets() {
++		ips = append(ips, n.self.String())
++	}
++	if len(ips) == 0 {
++		b.WriteString("Not connected to any network yet.\n\n")
++	} else {
++		fmt.Fprintf(&b, "Your address here: %s   Port: %d\n\n", strings.Join(ips, ", "), port)
++	}
++	if herr != "" {
++		b.WriteString(herr + "\nThe other player can still use Join Game with the address above.\n\n")
++	} else {
++		b.WriteString("The other player picks Online > Join Nearby.\n\n")
++	}
++	b.WriteString("No Wi-Fi around? Turn on the hotspot on one device\n")
++	b.WriteString("(iPhone: Personal Hotspot, Android/Steam Deck: Hotspot)\n")
++	b.WriteString("and connect the other device to it. No Internet is used.\n")
++	b.WriteString("\nPress Esc to stop hosting.")
++	return b.String()
++}
++
++// ---------------------------------------------------------------------------
++// Join side
++
++func (s *cvfNearbyState) scanBegin() {
++	s.mu.Lock()
++	if s.scanStop != nil {
++		s.mu.Unlock()
++		return
++	}
++	stop := make(chan struct{})
++	s.scanStop = stop
++	if s.hosts == nil {
++		s.hosts = map[string]*cvfNearbyHost{}
++	}
++	s.scanErr = ""
++	s.mu.Unlock()
++
++	conn, err := net.ListenPacket("udp4", ":0")
++	if err != nil {
++		s.mu.Lock()
++		s.scanErr = "Cannot search (" + err.Error() + ")"
++		s.scanStop = nil
++		s.mu.Unlock()
++		return
++	}
++
++	// Replies
++	go func() {
++		buf := make([]byte, 512)
++		for {
++			n, from, err := conn.ReadFrom(buf)
++			if err != nil {
++				return
++			}
++			var r cvfNearbyReply
++			if json.Unmarshal(buf[:n], &r) != nil || r.T != "cvfnearby" || r.Port <= 0 || r.Port > 65535 {
++				continue
++			}
++			ua, ok := from.(*net.UDPAddr)
++			if !ok || ua.IP.To4() == nil {
++				continue
++			}
++			if cvfNearbyIsSelf(ua.IP) {
++				continue // our own broadcast echo
++			}
++			ip := ua.IP.To4().String()
++			s.mu.Lock()
++			if s.hosts == nil { // search screen already closed
++				s.mu.Unlock()
++				continue
++			}
++			s.hosts[ip+fmt.Sprint(":", r.Port)] = &cvfNearbyHost{
++				Name: cvfCleanName(r.Name), IP: ip, Port: r.Port, Version: r.Version, seen: time.Now(),
++			}
++			s.mu.Unlock()
++		}
++	}()
++
++	// Probes: a full sweep straight away, then every 2.5 seconds.
++	go func() {
++		defer conn.Close()
++		probe := []byte(cvfNearbyProbe)
++		t := time.NewTicker(2500 * time.Millisecond)
++		defer t.Stop()
++		for {
++			nets := cvfNearbyNets()
++			sent := 0
++			for _, n := range nets {
++				for i, ip := range cvfNearbyTargets(n) {
++					select {
++					case <-stop:
++						return
++					default:
++					}
++					if _, err := conn.WriteTo(probe, &net.UDPAddr{IP: ip, Port: cvfNearbyPort}); err == nil {
++						sent++
++					}
++					if i%64 == 63 {
++						time.Sleep(2 * time.Millisecond) // don't overrun small send buffers
++					}
++				}
++			}
++			s.mu.Lock()
++			for _, h := range s.extra {
++				if a, err := net.ResolveUDPAddr("udp4", h); err == nil {
++					conn.WriteTo(probe, a)
++				}
++			}
++			s.lastSweep = time.Now()
++			switch {
++			case len(nets) == 0:
++				s.scanErr = "Not connected to any network."
++			case sent == 0:
++				s.scanErr = "Cannot reach the local network. On iPhone/iPad allow\nLocal Network for CvF Online in Settings > Privacy & Security."
++			default:
++				s.scanErr = ""
++			}
++			s.mu.Unlock()
++			select {
++			case <-stop:
++				return
++			case <-t.C:
++			}
++		}
++	}()
++}
++
++func (s *cvfNearbyState) scanEnd() {
++	s.mu.Lock()
++	if s.scanStop != nil {
++		close(s.scanStop)
++		s.scanStop = nil
++	}
++	s.hosts = nil
++	s.mu.Unlock()
++}
++
++// Hosts heard from recently, sorted by name, and a status line.
++func (s *cvfNearbyState) list() ([]cvfNearbyHost, string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	var out []cvfNearbyHost
++	for k, h := range s.hosts {
++		if time.Since(h.seen) > cvfNearbyExpire {
++			delete(s.hosts, k)
++			continue
++		}
++		out = append(out, *h)
++	}
++	sort.Slice(out, func(i, j int) bool {
++		if out[i].Name != out[j].Name {
++			return out[i].Name < out[j].Name
++		}
++		return out[i].IP < out[j].IP
++	})
++	return out, s.scanErr
++}
++
++// ---------------------------------------------------------------------------
++// Lua
++
++func cvfNearbyScriptInit(l *lua.LState) {
++	luaRegister(l, "cvfNearbyHostBegin", func(l *lua.LState) int {
++		cvfNearby.hostBegin(int(numArg(l, 1)))
++		return 0
++	})
++	luaRegister(l, "cvfNearbyHostEnd", func(l *lua.LState) int {
++		cvfNearby.hostEnd()
++		return 0
++	})
++	luaRegister(l, "cvfNearbyHostStatus", func(l *lua.LState) int {
++		l.Push(lua.LString(cvfNearby.hostStatus()))
++		return 1
++	})
++	luaRegister(l, "cvfNearbyScanBegin", func(l *lua.LState) int {
++		cvfNearby.scanBegin()
++		return 0
++	})
++	luaRegister(l, "cvfNearbyScanEnd", func(l *lua.LState) int {
++		cvfNearby.scanEnd()
++		return 0
++	})
++	// Returns a table of {name, ip, port, compatible} and a status string.
++	luaRegister(l, "cvfNearbyHosts", func(l *lua.LState) int {
++		hosts, status := cvfNearby.list()
++		cvfOnline.readConfig()
++		cvfOnline.mu.Lock()
++		tag := cvfOnline.buildTag
++		cvfOnline.mu.Unlock()
++		t := l.NewTable()
++		for _, h := range hosts {
++			rt := l.NewTable()
++			rt.RawSetString("name", lua.LString(h.Name))
++			rt.RawSetString("ip", lua.LString(h.IP))
++			rt.RawSetString("port", lua.LNumber(h.Port))
++			rt.RawSetString("compatible", lua.LBool(h.Version == tag))
++			t.Append(rt)
++		}
++		l.Push(t)
++		l.Push(lua.LString(status))
++		return 2
++	})
++}
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 00000000..d44d8905
+index 00000000..40fbc4ba
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,938 @@
+@@ -0,0 +1,939 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -2152,6 +2676,7 @@ index 00000000..d44d8905
 +// Lua bindings
 +
 +func cvfOnlineScriptInit(l *lua.LState) {
++	cvfNearbyScriptInit(l)
 +	luaRegister(l, "cvfTouchMenus", func(l *lua.LState) int {
 +		l.Push(lua.LBool(cvfTouchMenus))
 +		return 1
