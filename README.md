@@ -27,6 +27,9 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
 5. **Nearby play:** Online > Host Nearby / Join Nearby finds a player on the same Wi-Fi or phone
    hotspot with a small UDP probe on port 7520 (unicast sweep of the local subnet, so it works on
    iOS without the multicast entitlement). No Internet, lobby or IP typing needed.
+   iPhones/iPads also find and join each other directly over Apple's peer-to-peer Wi-Fi
+   (Bonjour `_cvfnearby._tcp/_udp`, `ios/bundled-game.patch` CvfP2P.m), with no network at all;
+   the app relays the normal netplay traffic through 127.0.0.1 so the netcode is unchanged.
 6. **CvF rules** (`data/cvf_online.ini`): attack invincibility cap and slower MP gain.
 
 ## Deploying the lobby (free)

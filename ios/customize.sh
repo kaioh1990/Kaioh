@@ -49,6 +49,8 @@ fi
 plutil -replace UIFileSharingEnabled -bool YES "$PLIST"
 plutil -replace LSSupportsOpeningDocumentsInPlace -bool YES "$PLIST"
 plutil -replace CADisableMinimumFrameDurationOnPhone -bool YES "$PLIST" # 120 Hz on ProMotion iPhones
-plutil -replace NSLocalNetworkUsageDescription -string "CvF Online uses your local network to open a port on your router for online matches." "$PLIST"
+plutil -replace NSLocalNetworkUsageDescription -string "CvF Online uses your local network to find and play people near you, and to open a port on your router for online matches." "$PLIST"
+# Nearby play: iPhone/iPad find each other over Bonjour (direct peer-to-peer Wi-Fi).
+plutil -replace NSBonjourServices -json '["_cvfnearby._tcp","_cvfnearby._udp"]' "$PLIST"
 plutil -lint "$PLIST"
 echo "ikemen-ios customized for CvF Online"

@@ -1,3 +1,512 @@
+diff --git a/I.K.E.M.E.N-Go/CvfP2P.m b/I.K.E.M.E.N-Go/CvfP2P.m
+new file mode 100644
+index 0000000..4b34f7e
+--- /dev/null
++++ b/I.K.E.M.E.N-Go/CvfP2P.m
+@@ -0,0 +1,503 @@
++// CvF Online: direct iPhone/iPad link for Nearby play.
++//
++// Uses Apple's peer-to-peer Wi-Fi (the link AirDrop uses) through Network.framework, so
++// two Apple devices find each other and play with no Wi-Fi network, router or Internet.
++// The engine's netcode is untouched: this file relays its normal netplay connection
++// through the loopback interface.
++//
++//   Host:   engine listens on TCP <tcpPort> and rollback UDP <udpPort> as usual.
++//           We advertise "_cvfnearby._tcp" and "_cvfnearby._udp" (instance = host id).
++//           A peer's TCP stream is piped to 127.0.0.1:<tcpPort>; its UDP packets are
++//           sent to 127.0.0.1:<udpPort> from 127.0.0.1:<joiner's rollback port>.
++//   Joiner: engine connects to 127.0.0.1:<localTcp> and uses rollback port <localUdp>.
++//           We pipe that to the host, and bind 127.0.0.1:<host rollback port> so the
++//           engine's rollback packets (sent to "the host" = 127.0.0.1) reach the host.
++//
++// Everything runs on one serial queue. Go calls in via the CvfP2P* functions below and
++// gets the list of hosts through CvfP2PPeers (exported from Go).
++
++#import <Foundation/Foundation.h>
++#import <Network/Network.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <netinet/tcp.h>
++#include <arpa/inet.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <errno.h>
++#include <string.h>
++
++extern void CvfP2PPeers(char *json);      // exported from Go
++extern void CvfP2PRegister(void *funcs);  // exported from Go
++
++#define kTCPType "_cvfnearby._tcp"
++#define kUDPType "_cvfnearby._udp"
++static const char kHello[] = "CVFP2PHELLO ";
++
++static dispatch_queue_t Q(void) {
++    static dispatch_queue_t q;
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{ q = dispatch_queue_create("cvf.nearby.p2p", DISPATCH_QUEUE_SERIAL); });
++    return q;
++}
++
++static nw_parameters_t ParamsTCP(void) {
++    nw_parameters_t p = nw_parameters_create_secure_tcp(NW_PARAMETERS_DISABLE_PROTOCOL, ^(nw_protocol_options_t o) {
++        nw_tcp_options_set_no_delay(o, true);
++    });
++    nw_parameters_set_include_peer_to_peer(p, true);
++    return p;
++}
++
++static nw_parameters_t ParamsUDP(void) {
++    nw_parameters_t p = nw_parameters_create_secure_udp(NW_PARAMETERS_DISABLE_PROTOCOL, NW_PARAMETERS_DEFAULT_CONFIGURATION);
++    nw_parameters_set_include_peer_to_peer(p, true);
++    return p;
++}
++
++// ---------------------------------------------------------------------------
++// Loopback sockets
++
++static struct sockaddr_in Loopback(int port) {
++    struct sockaddr_in a;
++    memset(&a, 0, sizeof a);
++    a.sin_len = sizeof a;
++    a.sin_family = AF_INET;
++    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
++    a.sin_port = htons((uint16_t)port);
++    return a;
++}
++
++static int LoopUDP(int bindPort, int peerPort) {
++    int fd = socket(AF_INET, SOCK_DGRAM, 0);
++    if (fd < 0) return -1;
++    int one = 1;
++    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
++    struct sockaddr_in a = Loopback(bindPort);
++    if (bind(fd, (struct sockaddr *)&a, sizeof a) < 0) { close(fd); return -1; }
++    a = Loopback(peerPort);
++    if (connect(fd, (struct sockaddr *)&a, sizeof a) < 0) { close(fd); return -1; }
++    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
++    return fd;
++}
++
++static void NoDelay(int fd) {
++    int one = 1;
++    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
++    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
++}
++
++static int LoopTCPConnect(int port) {
++    int fd = socket(AF_INET, SOCK_STREAM, 0);
++    if (fd < 0) return -1;
++    struct sockaddr_in a = Loopback(port);
++    if (connect(fd, (struct sockaddr *)&a, sizeof a) < 0) { close(fd); return -1; }
++    NoDelay(fd);
++    return fd;
++}
++
++static int LoopTCPListen(int port) {
++    int fd = socket(AF_INET, SOCK_STREAM, 0);
++    if (fd < 0) return -1;
++    int one = 1;
++    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
++    struct sockaddr_in a = Loopback(port);
++    if (bind(fd, (struct sockaddr *)&a, sizeof a) < 0 || listen(fd, 1) < 0) { close(fd); return -1; }
++    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
++    return fd;
++}
++
++static dispatch_source_t ReadSource(int fd, dispatch_block_t onReadable) {
++    dispatch_source_t src = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, (uintptr_t)fd, 0, Q());
++    dispatch_source_set_event_handler(src, onReadable);
++    dispatch_source_set_cancel_handler(src, ^{ close(fd); });
++    dispatch_resume(src);
++    return src;
++}
++
++// ---------------------------------------------------------------------------
++// Relay session (one at a time)
++
++static nw_connection_t sTCP, sUDP;
++static int sLocalTCP = -1, sLocalUDP = -1, sListenFD = -1;
++static dispatch_source_t sTCPSrc, sUDPSrc, sListenSrc, sHelloTimer;
++static BOOL sTCPReady, sTCPPumping;
++static int sGen;
++
++static void Teardown(void) {
++    sGen++;
++    if (sHelloTimer) { dispatch_source_cancel(sHelloTimer); sHelloTimer = nil; }
++    if (sTCPSrc) { dispatch_source_cancel(sTCPSrc); sTCPSrc = nil; } else if (sLocalTCP >= 0) close(sLocalTCP);
++    if (sUDPSrc) { dispatch_source_cancel(sUDPSrc); sUDPSrc = nil; } else if (sLocalUDP >= 0) close(sLocalUDP);
++    if (sListenSrc) { dispatch_source_cancel(sListenSrc); sListenSrc = nil; } else if (sListenFD >= 0) close(sListenFD);
++    sLocalTCP = sLocalUDP = sListenFD = -1;
++    if (sTCP) { nw_connection_cancel(sTCP); sTCP = nil; }
++    if (sUDP) { nw_connection_cancel(sUDP); sUDP = nil; }
++    sTCPReady = sTCPPumping = NO;
++}
++
++static BOOL WriteAll(int fd, dispatch_data_t d) {
++    __block BOOL ok = YES;
++    dispatch_data_apply(d, ^bool(dispatch_data_t region, size_t offset, const void *buf, size_t size) {
++        const char *p = buf;
++        while (size > 0) {
++            ssize_t n = write(fd, p, size);
++            if (n < 0 && errno == EINTR) continue;
++            if (n <= 0) { ok = NO; return false; }
++            p += n;
++            size -= (size_t)n;
++        }
++        return true;
++    });
++    return ok;
++}
++
++// Peer TCP stream -> engine
++static void PumpTCPIn(nw_connection_t c, int gen) {
++    nw_connection_receive(c, 1, 65536, ^(dispatch_data_t d, nw_content_context_t ctx, bool done, nw_error_t err) {
++        if (gen != sGen) return;
++        if (d && (sLocalTCP < 0 || !WriteAll(sLocalTCP, d))) { Teardown(); return; }
++        if (err || done) { Teardown(); return; }
++        PumpTCPIn(c, gen);
++    });
++}
++
++static void StartTCPPumpIfReady(void) {
++    if (sTCPReady && sLocalTCP >= 0 && !sTCPPumping) {
++        sTCPPumping = YES;
++        PumpTCPIn(sTCP, sGen);
++    }
++}
++
++// Engine TCP stream -> peer
++static void StartLocalTCP(int fd) {
++    sLocalTCP = fd;
++    int gen = sGen;
++    sTCPSrc = ReadSource(fd, ^{
++        if (gen != sGen) return;
++        char buf[16384];
++        ssize_t n = read(fd, buf, sizeof buf);
++        if (n < 0 && (errno == EAGAIN || errno == EINTR)) return;
++        if (n <= 0 || !sTCP) { Teardown(); return; }
++        dispatch_data_t d = dispatch_data_create(buf, (size_t)n, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
++        nw_connection_send(sTCP, d, NW_CONNECTION_DEFAULT_STREAM_CONTEXT, false, ^(nw_error_t e) {});
++    });
++    StartTCPPumpIfReady();
++}
++
++static void ForwardUDPToEngine(dispatch_data_t d) {
++    if (!d || sLocalUDP < 0) return;
++    size_t len = dispatch_data_get_size(d);
++    if (len == 0 || len > 2048) return;
++    char buf[2048];
++    char *bp = buf;
++    __block size_t at = 0;
++    dispatch_data_apply(d, ^bool(dispatch_data_t r, size_t off, const void *p, size_t n) {
++        memcpy(bp + at, p, n);
++        at += n;
++        return true;
++    });
++    if (len >= sizeof kHello - 1 && memcmp(buf, kHello, sizeof kHello - 1) == 0) return;
++    send(sLocalUDP, buf, len, 0);
++}
++
++// Engine rollback packets -> peer
++static void StartLocalUDP(int fd) {
++    sLocalUDP = fd;
++    int gen = sGen;
++    sUDPSrc = ReadSource(fd, ^{
++        if (gen != sGen) return;
++        char buf[2048];
++        for (;;) {
++            ssize_t n = recv(fd, buf, sizeof buf, 0);
++            if (n < 0) return; // EAGAIN, or ECONNREFUSED before the engine opens its socket
++            if (n == 0 || !sUDP) continue;
++            dispatch_data_t d = dispatch_data_create(buf, (size_t)n, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
++            nw_connection_send(sUDP, d, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true, ^(nw_error_t e) {});
++        }
++    });
++}
++
++// ---------------------------------------------------------------------------
++// Host side
++
++static nw_listener_t hTCPL, hUDPL;
++static int hTCPPort, hUDPPort;
++static NSString *hInstance;
++
++static void HostUDPIn(nw_connection_t c, int gen) {
++    nw_connection_receive_message(c, ^(dispatch_data_t d, nw_content_context_t ctx, bool done, nw_error_t err) {
++        if (gen != sGen || c != sUDP) return;
++        if (d && sLocalUDP < 0) {
++            // The joiner's hello names its engine's rollback port.
++            size_t len = dispatch_data_get_size(d);
++            if (len > sizeof kHello - 1 && len < 64) {
++                char buf[64] = {0};
++                char *bp = buf;
++                __block size_t at = 0;
++                dispatch_data_apply(d, ^bool(dispatch_data_t r, size_t off, const void *p, size_t n) {
++                    memcpy(bp + at, p, n);
++                    at += n;
++                    return true;
++                });
++                if (memcmp(buf, kHello, sizeof kHello - 1) == 0) {
++                    int port = atoi(buf + sizeof kHello - 1);
++                    if (port > 0 && port < 65536 && port != hUDPPort) {
++                        int fd = LoopUDP(port, hUDPPort);
++                        if (fd >= 0) StartLocalUDP(fd);
++                    }
++                }
++            }
++        }
++        ForwardUDPToEngine(d);
++        if (err) return;
++        HostUDPIn(c, gen);
++    });
++}
++
++static void HostAcceptTCP(nw_connection_t c) {
++    if (sTCP) { nw_connection_cancel(c); return; } // already playing someone
++    sTCP = c;
++    int gen = sGen;
++    nw_connection_set_queue(c, Q());
++    nw_connection_set_state_changed_handler(c, ^(nw_connection_state_t state, nw_error_t err) {
++        if (gen != sGen || c != sTCP) return;
++        if (state == nw_connection_state_ready) {
++            int fd = LoopTCPConnect(hTCPPort);
++            if (fd < 0) { Teardown(); return; }
++            sTCPReady = YES;
++            StartLocalTCP(fd);
++        } else if (state == nw_connection_state_failed || state == nw_connection_state_cancelled) {
++            Teardown();
++        }
++    });
++    nw_connection_start(c);
++}
++
++static void HostAcceptUDP(nw_connection_t c) {
++    if (sUDP) nw_connection_cancel(sUDP);
++    sUDP = c;
++    int gen = sGen;
++    nw_connection_set_queue(c, Q());
++    nw_connection_set_state_changed_handler(c, ^(nw_connection_state_t state, nw_error_t err) {
++        if (gen != sGen || c != sUDP) return;
++        if (state == nw_connection_state_ready) HostUDPIn(c, gen);
++    });
++    nw_connection_start(c);
++}
++
++static void StopAdvertising(void) {
++    if (hTCPL) { nw_listener_cancel(hTCPL); hTCPL = nil; }
++    if (hUDPL) { nw_listener_cancel(hUDPL); hUDPL = nil; }
++    hInstance = nil;
++}
++
++static nw_listener_t Advertise(nw_parameters_t params, const char *type, NSString *inst, nw_txt_record_t txt,
++                               void (^onConn)(nw_connection_t)) {
++    nw_listener_t l = nw_listener_create(params);
++    if (!l) return nil;
++    nw_advertise_descriptor_t ad = nw_advertise_descriptor_create_bonjour_service(inst.UTF8String, type, NULL);
++    if (txt) nw_advertise_descriptor_set_txt_record_object(ad, txt);
++    nw_listener_set_advertise_descriptor(l, ad);
++    nw_listener_set_queue(l, Q());
++    nw_listener_set_new_connection_handler(l, onConn);
++    nw_listener_set_state_changed_handler(l, ^(nw_listener_state_t s, nw_error_t e) {
++        if (s == nw_listener_state_failed) NSLog(@"CvF nearby: %s listener failed", type);
++    });
++    nw_listener_start(l);
++    return l;
++}
++
++static void TxtSet(nw_txt_record_t t, const char *key, NSString *v) {
++    const char *s = v.UTF8String ?: "";
++    size_t n = strlen(s);
++    if (n > 200) n = 200;
++    nw_txt_record_set_key(t, key, (const uint8_t *)s, n);
++}
++
++void CvfP2PAdvertise(const char *instance, const char *name, const char *ver, int tcpPort, int udpPort) {
++    NSString *inst = @(instance ?: ""), *n = @(name ?: ""), *v = @(ver ?: "");
++    dispatch_async(Q(), ^{
++        StopAdvertising();
++        if (inst.length == 0) return;
++        hTCPPort = tcpPort;
++        hUDPPort = udpPort;
++        hInstance = inst;
++        nw_txt_record_t txt = nw_txt_record_create_dictionary();
++        TxtSet(txt, "name", n);
++        TxtSet(txt, "ver", v);
++        TxtSet(txt, "rp", [NSString stringWithFormat:@"%d", udpPort]);
++        hTCPL = Advertise(ParamsTCP(), kTCPType, inst, txt, ^(nw_connection_t c) { HostAcceptTCP(c); });
++        hUDPL = Advertise(ParamsUDP(), kUDPType, inst, nil, ^(nw_connection_t c) { HostAcceptUDP(c); });
++    });
++}
++
++// Stops being findable. A relay that is already connected keeps running.
++void CvfP2PAdvertiseStop(void) {
++    dispatch_async(Q(), ^{ StopAdvertising(); });
++}
++
++// ---------------------------------------------------------------------------
++// Join side
++
++static nw_browser_t jBrowser;
++static NSMutableDictionary<NSString *, NSDictionary *> *jPeers; // instance -> info + endpoint
++
++static NSString *TxtGet(nw_txt_record_t t, const char *key) {
++    __block NSString *out = @"";
++    if (!t) return out;
++    nw_txt_record_access_key(t, key, ^bool(const char *k, nw_txt_record_find_key_t found, const uint8_t *value, size_t len) {
++        if (found == nw_txt_record_find_key_non_empty_value && value)
++            out = [[NSString alloc] initWithBytes:value length:len encoding:NSUTF8StringEncoding] ?: @"";
++        return true;
++    });
++    return out;
++}
++
++static void PublishPeers(void) {
++    NSMutableArray *list = [NSMutableArray array];
++    for (NSString *inst in jPeers) {
++        NSDictionary *p = jPeers[inst];
++        if (hInstance && [inst isEqualToString:hInstance]) continue; // ourselves
++        [list addObject:@{@"id": inst, @"name": p[@"name"], @"ver": p[@"ver"], @"rp": p[@"rp"]}];
++    }
++    NSData *js = [NSJSONSerialization dataWithJSONObject:list options:0 error:nil];
++    NSString *s = js ? [[NSString alloc] initWithData:js encoding:NSUTF8StringEncoding] : @"[]";
++    CvfP2PPeers((char *)s.UTF8String);
++}
++
++void CvfP2PBrowse(int on) {
++    dispatch_async(Q(), ^{
++        if (jBrowser) { nw_browser_cancel(jBrowser); jBrowser = nil; }
++        if (!on) return; // keep the last results: a join may still need them
++        if (!jPeers) jPeers = [NSMutableDictionary dictionary];
++        [jPeers removeAllObjects];
++        nw_browse_descriptor_t d = nw_browse_descriptor_create_bonjour_service(kTCPType, NULL);
++        nw_browse_descriptor_set_include_txt_record(d, true);
++        nw_browser_t b = nw_browser_create(d, ParamsTCP());
++        jBrowser = b;
++        nw_browser_set_queue(b, Q());
++        nw_browser_set_browse_results_changed_handler(b, ^(nw_browse_result_t old, nw_browse_result_t now, bool batchComplete) {
++            if (b != jBrowser) return;
++            nw_browse_result_change_t ch = nw_browse_result_get_changes(old, now);
++            if ((ch & nw_browse_result_change_result_removed) && old) {
++                nw_endpoint_t ep = nw_browse_result_copy_endpoint(old);
++                const char *inst = nw_endpoint_get_bonjour_service_name(ep);
++                if (inst) [jPeers removeObjectForKey:@(inst)];
++            }
++            if ((ch & (nw_browse_result_change_result_added | nw_browse_result_change_txt_record_changed)) && now) {
++                nw_endpoint_t ep = nw_browse_result_copy_endpoint(now);
++                const char *inst = nw_endpoint_get_bonjour_service_name(ep);
++                if (inst) {
++                    nw_txt_record_t t = nw_browse_result_copy_txt_record_object(now);
++                    int rp = TxtGet(t, "rp").intValue;
++                    jPeers[@(inst)] = @{@"name": TxtGet(t, "name"), @"ver": TxtGet(t, "ver"),
++                                        @"rp": @(rp > 0 ? rp : 7500), @"ep": ep};
++                }
++            }
++            if (batchComplete) PublishPeers();
++        });
++        nw_browser_set_state_changed_handler(b, ^(nw_browser_state_t s, nw_error_t e) {
++            if (s == nw_browser_state_failed) NSLog(@"CvF nearby: browser failed");
++        });
++        nw_browser_start(b);
++    });
++}
++
++static void JoinUDPIn(nw_connection_t c, int gen) {
++    nw_connection_receive_message(c, ^(dispatch_data_t d, nw_content_context_t ctx, bool done, nw_error_t err) {
++        if (gen != sGen || c != sUDP) return;
++        ForwardUDPToEngine(d);
++        if (!err) JoinUDPIn(c, gen);
++    });
++}
++
++int CvfP2PJoin(const char *instance, int localTcp, int localUdp) {
++    NSString *inst = @(instance ?: "");
++    __block int ok = 0;
++    dispatch_sync(Q(), ^{
++        NSDictionary *p = jPeers[inst];
++        if (!p) return;
++        Teardown();
++        int gen = sGen;
++
++        // The engine connects here; its stream goes to the host once both ends are up.
++        sListenFD = LoopTCPListen(localTcp);
++        if (sListenFD < 0) return;
++        int lfd = sListenFD;
++        sListenSrc = ReadSource(lfd, ^{
++            if (gen != sGen) return;
++            int fd = accept(lfd, NULL, NULL);
++            if (fd < 0) return;
++            if (sLocalTCP >= 0) { close(fd); return; }
++            fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
++            NoDelay(fd);
++            StartLocalTCP(fd);
++            dispatch_source_cancel(sListenSrc); // closes the listening socket
++            sListenSrc = nil;
++            sListenFD = -1;
++        });
++
++        nw_connection_t c = nw_connection_create(p[@"ep"], ParamsTCP());
++        sTCP = c;
++        nw_connection_set_queue(c, Q());
++        nw_connection_set_state_changed_handler(c, ^(nw_connection_state_t state, nw_error_t err) {
++            if (gen != sGen || c != sTCP) return;
++            if (state == nw_connection_state_ready) {
++                sTCPReady = YES;
++                StartTCPPumpIfReady();
++            } else if (state == nw_connection_state_failed) {
++                Teardown();
++            }
++        });
++        nw_connection_start(c);
++
++        // Rollback packets: the engine sends them to 127.0.0.1:<host rollback port>.
++        int rp = [p[@"rp"] intValue];
++        int ufd = LoopUDP(rp, localUdp);
++        if (ufd >= 0) StartLocalUDP(ufd);
++        nw_endpoint_t uep = nw_endpoint_create_bonjour_service(inst.UTF8String, kUDPType, "local.");
++        nw_connection_t u = nw_connection_create(uep, ParamsUDP());
++        sUDP = u;
++        nw_connection_set_queue(u, Q());
++        nw_connection_set_state_changed_handler(u, ^(nw_connection_state_t state, nw_error_t err) {
++            if (gen != sGen || u != sUDP || state != nw_connection_state_ready) return;
++            // Hello packets open the flow on the host and tell it our rollback port.
++            __block int left = 20;
++            NSString *hello = [NSString stringWithFormat:@"%s%d", kHello, localUdp];
++            NSData *hd = [hello dataUsingEncoding:NSUTF8StringEncoding];
++            sHelloTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, Q());
++            dispatch_source_set_timer(sHelloTimer, DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC, 50 * NSEC_PER_MSEC);
++            dispatch_source_t timer = sHelloTimer;
++            dispatch_source_set_event_handler(timer, ^{
++                if (gen != sGen || --left < 0) { dispatch_source_cancel(timer); return; }
++                dispatch_data_t d = dispatch_data_create(hd.bytes, hd.length, NULL, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
++                nw_connection_send(u, d, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true, ^(nw_error_t e) {});
++            });
++            dispatch_resume(timer);
++            JoinUDPIn(u, gen); // host -> engine
++        });
++        nw_connection_start(u);
++        ok = 1;
++    });
++    return ok;
++}
++
++void CvfP2PClose(void) {
++    dispatch_async(Q(), ^{ Teardown(); });
++}
++
++// Hands these functions to the engine (layout matches CvfP2PFuncs in cvf_p2p_ios.go).
++typedef struct {
++    void (*advertise)(const char *, const char *, const char *, int, int);
++    void (*advertiseStop)(void);
++    void (*browse)(int);
++    int (*join)(const char *, int, int);
++    void (*close)(void);
++} CvfP2PFuncs;
++
++void CvfP2PInstall(void) {
++    static CvfP2PFuncs funcs = {CvfP2PAdvertise, CvfP2PAdvertiseStop, CvfP2PBrowse, CvfP2PJoin, CvfP2PClose};
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{ CvfP2PRegister(&funcs); });
++}
 diff --git a/I.K.E.M.E.N-Go/CvfVInput.h b/I.K.E.M.E.N-Go/CvfVInput.h
 new file mode 100644
 index 0000000..b3abb30
@@ -503,7 +1012,7 @@ index 84a9608..991d913 100644
      
      // Evaluate active touch locations across the view
 diff --git a/I.K.E.M.E.N-Go/ViewController.m b/I.K.E.M.E.N-Go/ViewController.m
-index e850d21..85109b6 100644
+index e850d21..4b10b3f 100644
 --- a/I.K.E.M.E.N-Go/ViewController.m
 +++ b/I.K.E.M.E.N-Go/ViewController.m
 @@ -5,6 +5,10 @@
@@ -517,7 +1026,16 @@ index e850d21..85109b6 100644
  #import "GamepadInputs.h"
  #import "ViewController.h"
  #import "TouchOverlayView.h"
-@@ -25,6 +29,7 @@
+@@ -14,6 +18,8 @@
+ #import <GameController/GameController.h>
+ #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+ #import "zlib.h"
++
++extern void CvfP2PInstall(void);
+ #import "ZipArchive.h"
+ #import "libikemen.h"
+ #import <SDL2/SDL.h>
+@@ -25,6 +31,7 @@
  @property (nonatomic, assign) BOOL securityScopeActive;
  @property (nonatomic, assign) BOOL ikemenStarted;
  @property (nonatomic, strong) UIDocumentPickerViewController *activePicker;
@@ -525,7 +1043,7 @@ index e850d21..85109b6 100644
  @property (nonatomic, strong) UIWindow *alertWindow;
  @property (nonatomic, strong) TouchOverlayView *overlayView;
  @property (nonatomic, strong) MetalContainerView *metalContainerView;
-@@ -104,6 +109,11 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -104,6 +111,12 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
              }
          }
      }
@@ -534,10 +1052,11 @@ index e850d21..85109b6 100644
 +#if CVF_VINPUTKIT
 +    CvfVInputStart(self.overlayView);
 +#endif
++    CvfP2PInstall(); // Nearby play: direct iPhone/iPad link
  }
  
  - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
-@@ -155,6 +165,13 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -155,6 +168,13 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
          return;
      }
      
@@ -551,7 +1070,7 @@ index e850d21..85109b6 100644
      // Get whether or not we should display the folder picker now.
      NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
      BOOL shouldPickFolder = [defaults boolForKey:RestartFolderPickKey];
-@@ -174,6 +191,123 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -174,6 +194,123 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
      }
  }
  
@@ -675,7 +1194,7 @@ index e850d21..85109b6 100644
  - (BOOL)beginAccessingAssetsFolder {
      if (_securityScopeActive) {
          return YES;
-@@ -391,8 +525,8 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -391,8 +528,8 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
          return;
      }
  
@@ -686,7 +1205,7 @@ index e850d21..85109b6 100644
      if (!argv) {
          NSLog(@"Failed to allocate argv");
          return;
-@@ -401,10 +535,16 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -401,10 +538,16 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
      argv[0] = strdup("ikemen-go");
      argv[1] = strdup("--assets");
      argv[2] = strdup(path);
@@ -707,7 +1226,7 @@ index e850d21..85109b6 100644
              free(argv[i]);
          }
          free(argv);
-@@ -423,8 +563,14 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -423,8 +566,14 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
              SDL_SetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE, [dbPath UTF8String]);
          }
  
@@ -722,7 +1241,7 @@ index e850d21..85109b6 100644
          
          // Keep background events allowed
          SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
-@@ -434,13 +580,13 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -434,13 +583,13 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
  
          // Start SDL_main
          self.overlayView.sdlWasInit = YES;
@@ -738,7 +1257,7 @@ index e850d21..85109b6 100644
              free(argv[i]);
          }
          free(argv);
-@@ -772,6 +918,9 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -772,6 +921,9 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
  }
  
  - (void)touchOverlayDidTapGameFolder:(TouchOverlayView*)view {

@@ -43,6 +43,8 @@ Online menu: LOBBY / HOST NEARBY / JOIN NEARBY / HOST GAME / JOIN GAME
              Steam Deck: Wi-Fi > Hotspot; Windows: Mobile hotspot) and the
              other device joins that hotspot. One player picks Host Nearby,
              the other picks Join Nearby and chooses them from the list.
+             Two iPhones/iPads don't need any of that: they find each
+             other directly as long as Wi-Fi is switched on.
              A hotspot used this way sends no mobile data. iPhone/iPad ask
              once to allow "Local Network": tap Allow.
 
