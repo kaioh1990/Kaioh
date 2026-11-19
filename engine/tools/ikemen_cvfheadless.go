@@ -20,8 +20,14 @@ import (
 // cvfHeadless: running without window/renderer (platform calls are skipped).
 var cvfHeadless bool
 
+// CVF_FRAMES=n stops after n frames (benchmarks).
+var cvfFrames, cvfMaxFrames int
+
 func cvfHeadlessMain(args []string) int32 {
 	cvfHeadless = true
+	if n, err := strconv.Atoi(os.Getenv("CVF_FRAMES")); err == nil {
+		cvfMaxFrames = n
+	}
 	// ---- main.go
 	sys.baseDir = "./"
 	os.Args = append([]string{"ikemen-go"}, args...)

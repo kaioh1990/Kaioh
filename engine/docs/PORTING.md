@@ -91,8 +91,15 @@ stay as verified references and for the optimised paths later.
   `cvf_headless <gamedir> -p1 Alucard -p2 Richter -p1.ai 8 -p2.ai 8 -s
   stages/ParanoiaBG.def -rounds 1`.
 - 1897 reachable functions, 0 compile errors, links, runs the whole match.
-- Reference comparison (statedump, Alucard vs Richter AI 8): tick 1 is
-  identical; working through divergences from tick 2.
+- Reference comparison (statedump, Alucard vs Richter AI 8, seed 12345):
+  **all 287,545 lines (5,022 ticks) of the recorded reference are
+  identical** - characters, helpers, explods, vars, positions as IEEE bits.
+  (The reference recording stops at 185 s of emulation; a longer one is
+  being recorded to check the round end and round 2.)
+- Speed of the plain translation (x86-64, -O2, no optimisation work yet):
+  1.38 ms per tick, 1.4 s load. Allocation-heavy (heap-boxed locals,
+  maps for vars, malloc everywhere) - the optimisation phase starts from
+  here.
 
 ## Conventions
 
