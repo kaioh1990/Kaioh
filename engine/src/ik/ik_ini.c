@@ -2,8 +2,8 @@
 // loader, ported from its parser so values come out identically:
 // sections/keys in file order, case folding (Insensitive*), shadows
 // (AllowShadows), inline comments, surrounding quotes, continuation lines,
-// back-quoted and triple-quoted values. Writing files back (SaveTo) is a
-// no-op: the headless engine never rewrites the user's configuration.
+// back-quoted and triple-quoted values; comments are kept so SaveTo writes
+// files as go-ini does (PrettyFormat alignment, PrettySection spacing).
 #include <stdio.h>
 #include "ik/ik_sim.h"
 
@@ -15,6 +15,7 @@ struct GiniKey {
     GiniSection *s;
     GoString name, value;
     bool isShadow, isAuto, isBool;
+    GoString comment;
     GiniKey **shadows;
     int nshadows;
 };
@@ -25,6 +26,7 @@ struct GiniSection {
     GiniKey **keys;  // in keyList order
     int nkeys, cap;
     bool raw;
+    GoString comment, rawBody;
 };
 
 struct GiniFile {
@@ -222,6 +224,8 @@ static GoString read_continuation(Rd *r, GoString val) {
     return val;
 }
 
+static GoString *pending_comment;  // parse(): comment text for the next section/key
+
 static GoString read_value(GiniFile *f, Rd *r, GoString in, bool *err) {
     GoString line = trim_left(in);
     if (line.len == 0) return (GoString){"", 0};
@@ -248,7 +252,10 @@ static GoString read_value(GiniFile *f, Rd *r, GoString in, bool *err) {
         } else {
             i = index_any(line, "#;", 2);
         }
-        if (i > -1) line = trim((GoString){line.p, i});
+        if (i > -1) {
+            if (pending_comment) *pending_comment = cat(*pending_comment, (GoString){line.p + i, line.len - i});
+            line = trim((GoString){line.p, i});
+        }
     }
     if ((has_surrounded_quote(line, '\'') || has_surrounded_quote(line, '"')) && !f->o.PreserveSurroundedQuote) {
         line = (GoString){line.p + 1, line.len - 2};
@@ -269,11 +276,16 @@ static GoIface parse(GiniFile *f, GoString data) {
     GiniSection *sec = new_section(f, defname);
     bool unparseable = false;
     int count = 1;
+    GoString comment = {"", 0};
+    pending_comment = &comment;
     while (!r.eof) {
         GoString line = read_line(&r);
         line = trim_left(line);
         if (line.len == 0) continue;
-        if (line.p[0] == '#' || line.p[0] == ';') continue;
+        if (line.p[0] == '#' || line.p[0] == ';') {
+            comment = cat(comment, line);
+            continue;
+        }
         if (line.p[0] == '[') {
             int close = -1;
             for (int i = line.len - 1; i >= 0; i--)
@@ -286,6 +298,12 @@ static GoIface parse(GiniFile *f, GoString data) {
             name = go_cstr(gc_strdup(go_strz(name)));
             sec = new_section(f, name);
             if (!sec) return go_error(GOSTR("empty section name"));
+            {  // comment after "]"
+                GoString after = trim_left((GoString){line.p + close + 1, line.len - close - 1});
+                if (after.len && (after.p[0] == '#' || after.p[0] == ';')) comment = cat(comment, after);
+            }
+            sec->comment = trim(comment);
+            comment = (GoString){"", 0};
             count = 1;
             unparseable = false;
             for (int i = 0; i < f->o.UnparseableSections.len; i++) {
@@ -296,6 +314,7 @@ static GoIface parse(GiniFile *f, GoString data) {
         }
         if (unparseable) {
             sec->raw = true;
+            sec->rawBody = cat(sec->rawBody, line);
             continue;
         }
         GoString kname;
@@ -306,7 +325,8 @@ static GoIface parse(GiniFile *f, GoString data) {
                 bool err = false;
                 GoString kn = read_value(f, &r, line, &err);
                 GiniKey *k = new_key(sec, go_cstr(gc_strdup(go_strz(kn))), GOSTR("true"));
-                if (k) k->isBool = true;
+                if (k) k->isBool = true, k->comment = trim(comment);
+                comment = (GoString){"", 0};
                 continue;
             }
             if ((e == 1 || e == 2) && f->o.SkipUnrecognizableLines) continue;
@@ -326,8 +346,10 @@ static GoIface parse(GiniFile *f, GoString data) {
         kname = go_cstr(gc_strdup(go_strz(kname)));
         value = (GoString){(const char *)memcpy(gc_alloc_atomic((size_t)value.len + 1), value.p, (size_t)value.len), value.len};
         GiniKey *k = new_key(sec, kname, value);
-        if (k) k->isAuto = autoincr;
+        if (k) k->isAuto = autoincr, k->comment = trim(comment);
+        comment = (GoString){"", 0};
     }
+    pending_comment = NULL;
     return (GoIface){0};
 }
 
@@ -406,8 +428,120 @@ Ret_GoOpaque_ini_SectionPtrPtr__GoIface ini_File_NewSection(GoOpaque *recv, GoSt
     return r;
 }
 
+// go-ini's writeToBuffer with its defaults (PrettyFormat, PrettySection,
+// no DefaultHeader); comments, shadows and raw sections included
+#if defined(_WIN32)
+#define INI_LB "\r\n"
+#else
+#define INI_LB "\n"
+#endif
+typedef struct { char *p; int len, cap; } IniBuf;
+static void ib_put(IniBuf *b, const char *s, int n) {
+    if (b->len + n > b->cap) {
+        int c = b->cap ? b->cap * 2 : 4096;
+        while (c < b->len + n) c *= 2;
+        b->p = (char *)gc_realloc(b->p, (size_t)c);
+        b->cap = c;
+    }
+    memcpy(b->p + b->len, s, (size_t)n);
+    b->len += n;
+}
+static void ib_str(IniBuf *b, GoString s) { ib_put(b, s.p, s.len); }
+static void ib_cs(IniBuf *b, const char *s) { ib_put(b, s, (int)strlen(s)); }
+static void write_comment(IniBuf *b, GoString c, bool trimFirst) {
+    // lines prefixed with "; " unless they start with # or ;
+    int st = 0;
+    for (int i = 0; i <= c.len; i++) {
+        if (i < c.len && c.p[i] != '\n') continue;
+        GoString l = {c.p + st, i - st};
+        if (l.len && l.p[l.len - 1] == '\r') l.len--;
+        st = i + 1;
+        if (!l.len) continue;
+        if (l.p[0] != '#' && l.p[0] != ';') {
+            ib_cs(b, "; ");
+            ib_str(b, trimFirst ? trim(l) : l);
+        } else {
+            ib_put(b, l.p, 1);
+            ib_cs(b, " ");
+            ib_str(b, trim((GoString){l.p + 1, l.len - 1}));
+        }
+        ib_cs(b, INI_LB);
+    }
+}
+static bool contains_any(GoString s, const char *chars) {
+    for (int i = 0; i < s.len; i++)
+        if (strchr(chars, s.p[i])) return true;
+    return false;
+}
 GoIface ini_File_SaveTo(GoOpaque *recv, GoString path) {
-    (void)recv, (void)path;
+    GiniFile *f = (GiniFile *)recv;
+    IniBuf b = {0};
+    GoString kvd = f->o.KeyValueDelimiters.len ? f->o.KeyValueDelimiters : GOSTR("=:");
+    char eq[16];
+    snprintf(eq, sizeof eq, " %.*s ", f->o.KeyValueDelimiterOnWrite.len ? f->o.KeyValueDelimiterOnWrite.len : 1,
+             f->o.KeyValueDelimiterOnWrite.len ? f->o.KeyValueDelimiterOnWrite.p : "=");
+    char kvdz[16];
+    snprintf(kvdz, sizeof kvdz, "%.*s", kvd.len < 15 ? kvd.len : 15, kvd.p);
+    for (int si = 0; si < f->nsecs; si++) {
+        GiniSection *s = f->secs[si];
+        if (s->comment.len) write_comment(&b, s->comment, false);
+        if (si > 0 || !go_streq(strings_ToUpper(s->name), DEFAULT_SECTION)) {
+            ib_cs(&b, "[");
+            ib_str(&b, s->name);
+            ib_cs(&b, "]" INI_LB);
+        } else if (s->nkeys == 0) {
+            continue;
+        }
+        bool last = si == f->nsecs - 1;
+        if (s->raw) {
+            ib_str(&b, s->rawBody);
+            if (!last) ib_cs(&b, INI_LB);
+            continue;
+        }
+        int align = 0;
+        for (int i = 0; i < s->nkeys; i++) {
+            GoString kn = s->keys[i]->name;
+            int l = kn.len;
+            if (contains_any(kn, "\"") || contains_any(kn, kvdz)) l += 2;
+            else if (contains_any(kn, "`")) l += 6;
+            if (l > align) align = l;
+        }
+        for (int i = 0; i < s->nkeys; i++) {
+            GiniKey *k = s->keys[i];
+            if (k->comment.len) write_comment(&b, k->comment, true);
+            GoString kn = k->name;
+            if (k->isAuto) kn = GOSTR("-");
+            else if (contains_any(kn, "\"") || contains_any(kn, kvdz)) kn = go_strcat(go_strcat(GOSTR("`"), kn), GOSTR("`"));
+            else if (contains_any(kn, "`")) kn = go_strcat(go_strcat(GOSTR("\"\"\""), kn), GOSTR("\"\"\""));
+            int nvals = 1 + k->nshadows;
+            for (int v = 0; v < nvals; v++) {
+                GoString val = v == 0 ? k->value : k->shadows[v - 1]->value;
+                ib_str(&b, kn);
+                if (k->isBool) {
+                    ib_cs(&b, INI_LB);
+                    break;
+                }
+                for (int p = kn.len; p < align; p++) ib_cs(&b, " ");
+                if (contains_any(val, "\n`")) val = go_strcat(go_strcat(GOSTR("\"\"\""), val), GOSTR("\"\"\""));
+                else if (!f->o.IgnoreInlineComment && contains_any(val, "#;")) val = go_strcat(go_strcat(GOSTR("`"), val), GOSTR("`"));
+                else if (trim(val).len != val.len) val = go_strcat(go_strcat(GOSTR("\""), val), GOSTR("\""));
+                ib_cs(&b, eq);
+                ib_str(&b, val);
+                ib_cs(&b, INI_LB);
+            }
+        }
+        if (!last) ib_cs(&b, INI_LB);
+    }
+    // write next to the target, then replace it (no half-written config)
+    GoString tmp = go_strcat(path, GOSTR(".tmp"));
+    FILE *fp = fopen(go_strz(tmp), "wb");
+    if (!fp) return go_errorf("open %.*s: cannot create file", path.len, path.p);
+    size_t w = b.len ? fwrite(b.p, 1, (size_t)b.len, fp) : 0;
+    if (fclose(fp) != 0 || w != (size_t)b.len) return go_errorf("write %.*s: failed", path.len, path.p);
+#if defined(_WIN32)
+    remove(go_strz(path));
+#endif
+    if (rename(go_strz(tmp), go_strz(path)) != 0) return go_errorf("rename %.*s: failed", path.len, path.p);
     return (GoIface){0};
 }
 
