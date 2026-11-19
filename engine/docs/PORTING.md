@@ -194,3 +194,19 @@ stay as verified references and for the optimised paths later.
   only in the Vita file); fixed.
 - Embedded structs: fields Go does not promote (shadowed or ambiguous)
   keep their layout slot under a private name (`_sh<i>_<name>`).
+
+## Status 2026-11-19 07:30 — the native game runs (Linux, macOS arm64)
+
+- The whole game is translated (4,352+ functions): `cvf` opens the window,
+  runs the Lua menus (intro storyboard, title, main menu) and plays matches;
+  `cvf_headless` still reproduces the reference match (md5 54f8ae06…) on
+  Linux x86_64 and macOS arm64.
+- macOS: built with Apple clang for arm64 against the SDL2 bundled in
+  "CvF Online (Apple Silicon).app"; OpenGL 4.1 (Metal) renders the game.
+- Runtime pieces added for the full game: panic/recover (setjmp frames per
+  goroutine), go:embed, interface-keyed maps, image/png + stb_image,
+  image/draw, encoding/json over reflect, fmt Error()/String(),
+  sort.Sort on concrete types, time.Sleep/runtime.Gosched yielding.
+- Known gaps: placeholders for net/http/exec/xml/tabwriter (117 functions,
+  src/ik/ik_unsupported.c) - online play still to port; Vita/iOS/Android
+  front ends; .app bundling; input not yet exercised by hand.
