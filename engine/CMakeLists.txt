@@ -55,8 +55,11 @@ endif()
 # Translated Ikemen simulation (tools/gen/gotoc) and the headless match runner
 # used to verify it tick-for-tick against the reference state dumps.
 # SDL2: a CMake package (SDL2::SDL2) or explicit CVF_SDL2_INCLUDE_DIR /
-# CVF_SDL2_LIBRARY (headers directory containing SDL.h).
-find_package(SDL2 CONFIG QUIET)
+# CVF_SDL2_LIBRARY (headers directory containing SDL.h); the explicit paths
+# win (e.g. an arm64 SDL next to an x86_64 Homebrew one).
+if(NOT (CVF_SDL2_INCLUDE_DIR AND CVF_SDL2_LIBRARY))
+  find_package(SDL2 CONFIG QUIET)
+endif()
 if(NOT TARGET SDL2::SDL2)
   if(NOT CVF_SDL2_INCLUDE_DIR OR NOT CVF_SDL2_LIBRARY)
     message(FATAL_ERROR "SDL2 not found: set CVF_SDL2_INCLUDE_DIR and CVF_SDL2_LIBRARY")

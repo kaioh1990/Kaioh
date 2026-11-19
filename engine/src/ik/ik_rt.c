@@ -1079,7 +1079,7 @@ GoString time_Time_Format(GoOpaque t, GoString f) {
     (void)t, (void)f;
     return GOSTR("0000-00-00");
 }
-void time_Sleep(i64 d) { (void)d; }
+void time_Sleep(i64 d) { go_sleep_ns(d); }  // other goroutines run meanwhile
 GoOpaque *log_New(GoIface w, GoString prefix, int flags) {
     (void)w, (void)prefix, (void)flags;
     return (GoOpaque *)gc_calloc(1, sizeof(GoOpaque));
