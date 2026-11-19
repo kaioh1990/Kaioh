@@ -1254,7 +1254,7 @@ typedef struct sjson_errorType sjson_errorType;
 typedef struct sjson_pathResult sjson_pathResult;
 typedef struct sjson_sliceHeader sjson_sliceHeader;
 typedef struct sjson_stringHeader sjson_stringHeader;
-typedef struct sjson_val_L98a5cb sjson_val_L98a5cb;
+typedef struct sjson_val_Lfd4cad sjson_val_Lfd4cad;
 typedef struct slotRef_L64fd25 slotRef_L64fd25;
 typedef struct spec_Lda920c spec_Lda920c;
 typedef struct svc_Lc6dc42 svc_Lc6dc42;
@@ -1400,7 +1400,7 @@ typedef GoIface polling_PollSink;
 typedef GoIface polling_Poller;
 typedef int pretty_byKind;
 typedef int pretty_jtype;
-typedef GoFunc protocol_UdpProtocolDispatchFunc_Lcc8c17;
+typedef GoFunc protocol_UdpProtocolDispatchFunc_Lfb2994;
 typedef int protocol_UdpProtocolEventType;
 typedef int protocol_UdpProtocolState;
 typedef GoIface raster_Painter;
@@ -2416,9 +2416,9 @@ typedef struct { protocol_QueueEntry *p; int len, cap; } Slice_protocol_QueueEnt
 #define CVF_DEF_Slice_protocol_UdpProtocol
 typedef struct { protocol_UdpProtocol *p; int len, cap; } Slice_protocol_UdpProtocol;
 #endif
-#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
-#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
-typedef struct { protocol_UdpProtocolDispatchFunc_Lcc8c17 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17;
+#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lfb2994
+#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lfb2994
+typedef struct { protocol_UdpProtocolDispatchFunc_Lfb2994 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_Lfb2994;
 #endif
 #ifndef CVF_DEF_Slice_protocol_UdpProtocolEvent
 #define CVF_DEF_Slice_protocol_UdpProtocolEvent
@@ -2476,9 +2476,9 @@ typedef struct { secPair_Ld26ba1 *p; int len, cap; } Slice_secPair_Ld26ba1;
 #define CVF_DEF_Slice_sjson_pathResult
 typedef struct { sjson_pathResult *p; int len, cap; } Slice_sjson_pathResult;
 #endif
-#ifndef CVF_DEF_Slice_sjson_val_L98a5cb
-#define CVF_DEF_Slice_sjson_val_L98a5cb
-typedef struct { sjson_val_L98a5cb *p; int len, cap; } Slice_sjson_val_L98a5cb;
+#ifndef CVF_DEF_Slice_sjson_val_Lfd4cad
+#define CVF_DEF_Slice_sjson_val_Lfd4cad
+typedef struct { sjson_val_Lfd4cad *p; int len, cap; } Slice_sjson_val_Lfd4cad;
 #endif
 #ifndef CVF_DEF_Slice_slotRef_L64fd25
 #define CVF_DEF_Slice_slotRef_L64fd25
@@ -4402,7 +4402,7 @@ struct sjson_errorType { GoString msg; };
 struct sjson_pathResult { GoString part; GoString gpart; GoString path; bool force; bool more; };
 struct sjson_sliceHeader { void* data; int len; int cap; };
 struct sjson_stringHeader { void* data; int len; };
-struct sjson_val_L98a5cb { int index; gjson_Result res; };
+struct sjson_val_Lfd4cad { int index; gjson_Result res; };
 struct slotRef_L64fd25 { int idx; PlayerVictoryProperties* p; i32 order; };
 struct spec_Lda920c { GoString prefix; i32 varType; };
 struct svc_Lc6dc42 { GoString ServiceType; GoString ControlURL; };
@@ -5422,9 +5422,9 @@ GO_SLICE_FUNCS(Slice_protocol_QueueEntry, protocol_QueueEntry)
 #define CVF_FN_Slice_protocol_UdpProtocol
 GO_SLICE_FUNCS(Slice_protocol_UdpProtocol, protocol_UdpProtocol)
 #endif
-#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
-#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
-GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17, protocol_UdpProtocolDispatchFunc_Lcc8c17)
+#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lfb2994
+#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lfb2994
+GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_Lfb2994, protocol_UdpProtocolDispatchFunc_Lfb2994)
 #endif
 #ifndef CVF_FN_Slice_protocol_UdpProtocolEvent
 #define CVF_FN_Slice_protocol_UdpProtocolEvent
@@ -5482,9 +5482,9 @@ GO_SLICE_FUNCS(Slice_secPair_Ld26ba1, secPair_Ld26ba1)
 #define CVF_FN_Slice_sjson_pathResult
 GO_SLICE_FUNCS(Slice_sjson_pathResult, sjson_pathResult)
 #endif
-#ifndef CVF_FN_Slice_sjson_val_L98a5cb
-#define CVF_FN_Slice_sjson_val_L98a5cb
-GO_SLICE_FUNCS(Slice_sjson_val_L98a5cb, sjson_val_L98a5cb)
+#ifndef CVF_FN_Slice_sjson_val_Lfd4cad
+#define CVF_FN_Slice_sjson_val_Lfd4cad
+GO_SLICE_FUNCS(Slice_sjson_val_Lfd4cad, sjson_val_Lfd4cad)
 #endif
 #ifndef CVF_FN_Slice_slotRef_L64fd25
 #define CVF_FN_Slice_slotRef_L64fd25

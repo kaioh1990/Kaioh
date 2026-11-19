@@ -18,6 +18,24 @@ int main(int argc, char **argv) {
         }
         first = 2;
     }
+    if (first == 1) {
+        // macOS app bundle: the game data sits next to the .app (as with
+        // Ikemen's bundles); start there
+        Ret_GoString__GoIface exe = os_Executable();
+        const char *app = exe.r1.type ? NULL : strstr(go_strz(exe.r0), ".app/Contents/MacOS/");
+        if (app) {
+            char dir[4096];
+            const char *z = go_strz(exe.r0);
+            app = strstr(z, ".app/Contents/MacOS/");
+            size_t n = (size_t)(app - z);
+            while (n > 0 && z[n - 1] != '/') n--;  // folder containing X.app
+            if (n > 0 && n < sizeof dir) {
+                memcpy(dir, z, n);
+                dir[n] = 0;
+                if (chdir(dir) != 0) perror(dir);
+            }
+        }
+    }
     ik_init_globals();
     Slice_GoString args = {(GoString *)gc_alloc(sizeof(GoString) * (size_t)(argc + 1)), 0, argc + 1};
     args.p[args.len++] = GOSTR("cvf");

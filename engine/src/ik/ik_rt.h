@@ -108,6 +108,8 @@ extern GoImageUniform *image_White, *image_Black, *image_Transparent, *image_Opa
 extern GoIface io_Discard, io_ErrClosedPipe, ioutil_Discard;
 extern GoIface color_AlphaModel, color_YCbCrModel, color_RGBAModel, color_RGBA64Model, color_GrayModel, color_Gray16Model;
 extern GoImagePoint image_ZP;
+GoString ik_goos(void);    // runtime.GOOS of the target (ik_os.c)
+GoString ik_goarch(void);  // runtime.GOARCH
 void go_sort_iface(void *v, int (*len)(void *), bool (*less)(void *, int, int), void (*swap)(void *, int, int), bool stable);
 
 // Formatting (fmt verbs used by Ikemen: v d s f g e q x X c t, widths,

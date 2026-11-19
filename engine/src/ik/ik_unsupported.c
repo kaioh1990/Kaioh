@@ -23,9 +23,6 @@ GoIface net_conn_Close(GoOpaque /* net.conn */* recv) { return go_errorf("net_co
 GoIface net_conn_SetReadDeadline(GoOpaque /* net.conn */* recv, GoOpaque /* time.Time */ a0) { return go_errorf("net_conn_SetReadDeadline: not supported by the native engine yet"); } // func (*net.conn).SetReadDeadline(t time.Time) error
 GoIface net_netFD_Close(GoOpaque /* net.netFD */* recv) { return go_errorf("net_netFD_Close: not supported by the native engine yet"); } // func (*net.netFD).Close() error
 GoIface net_netFD_SetReadDeadline(GoOpaque /* net.netFD */* recv, GoOpaque /* time.Time */ a0) { return go_errorf("net_netFD_SetReadDeadline: not supported by the native engine yet"); } // func (*net.netFD).SetReadDeadline(t time.Time) error
-GoIface os_Chdir(GoString a0) { return go_errorf("os_Chdir: not supported by the native engine yet"); } // func os.Chdir(dir string) error
-GoIface os_Rename(GoString a0, GoString a1) { return go_errorf("os_Rename: not supported by the native engine yet"); } // func os.Rename(oldpath string, newpath string) error
-GoIface os_Setenv(GoString a0, GoString a1) { return go_errorf("os_Setenv: not supported by the native engine yet"); } // func os.Setenv(key string, value string) error
 GoIface sdl_InitSubSystem(u32 a0) { return go_errorf("sdl_InitSubSystem: not supported by the native engine yet"); } // func sdl.InitSubSystem(flags uint32) error
 GoIface tabwriter_Writer_Flush(GoOpaque /* tabwriter.Writer */* recv) { return go_errorf("tabwriter_Writer_Flush: not supported by the native engine yet"); } // func (*tabwriter.Writer).Flush() error
 GoIface xml_Decoder_DecodeElement(GoOpaque /* xml.Decoder */* recv, GoIface a0, GoOpaque /* xml.StartElement */* a1) { return go_errorf("xml_Decoder_DecodeElement: not supported by the native engine yet"); } // func (*xml.Decoder).DecodeElement(v any, start *xml.StartElement) error
@@ -45,7 +42,6 @@ GoString net_IPMask_String(Slice_u8 recv) { GoString r; memset(&r, 0, sizeof r);
 GoString net_IPNet_String(GoOpaque /* net.IPNet */* recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (*net.IPNet).String() string
 GoString net_UDPAddr_String(GoOpaque /* net.UDPAddr */* recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (*net.UDPAddr).String() string
 GoString os_ProcessState_String(GoOpaque /* os.ProcessState */* recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (*os.ProcessState).String() string
-GoString path_Dir(GoString a0) { GoString r; memset(&r, 0, sizeof r); return r; } // func path.Dir(path string) string
 GoString syscall_Signal_String(int recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (syscall.Signal).String() string
 GoString url_URL_Hostname(GoOpaque /* url.URL */* recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (*url.URL).Hostname() string
 GoString url_URL_String(GoOpaque /* url.URL */* recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (*url.URL).String() string
@@ -69,7 +65,6 @@ Ret_GoOpaque_os_ProcessStatePtrPtr__GoIface os_Process_Wait(GoOpaque /* os.Proce
 Ret_GoOpaque_url_URLPtrPtr__GoIface url_Parse(GoString a0) { Ret_GoOpaque_url_URLPtrPtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("url_Parse: not supported by the native engine yet"); return r; } // func url.Parse(rawURL string) (*url.URL, error)
 Ret_GoOpaque_url_URLPtrPtr__GoIface url_URL_Parse(GoOpaque /* url.URL */* recv, GoString a0) { Ret_GoOpaque_url_URLPtrPtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("url_URL_Parse: not supported by the native engine yet"); return r; } // func (*url.URL).Parse(ref string) (*url.URL, error)
 Ret_GoOpaque_user_UserPtrPtr__GoIface user_Current(void) { Ret_GoOpaque_user_UserPtrPtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("user_Current: not supported by the native engine yet"); return r; } // func user.Current() (*user.User, error)
-Ret_GoString__GoIface filepath_Abs(GoString a0) { Ret_GoString__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("filepath_Abs: not supported by the native engine yet"); return r; } // func filepath.Abs(path string) (string, error)
 Ret_GoString__GoIface url_PathUnescape(GoString a0) { Ret_GoString__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("url_PathUnescape: not supported by the native engine yet"); return r; } // func url.PathUnescape(s string) (string, error)
 Ret_Slice_GoIface__GoIface net_Interface_Addrs(GoOpaque /* net.Interface */* recv) { Ret_Slice_GoIface__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("net_Interface_Addrs: not supported by the native engine yet"); return r; } // func (*net.Interface).Addrs() ([]net.Addr, error)
 Ret_Slice_GoOpaque_net_InterfacePtr__GoIface net_Interfaces(void) { Ret_Slice_GoOpaque_net_InterfacePtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("net_Interfaces: not supported by the native engine yet"); return r; } // func net.Interfaces() ([]net.Interface, error)
@@ -86,25 +81,14 @@ Ret_int__GoIface tabwriter_Writer_Write(GoOpaque /* tabwriter.Writer */* recv, S
 Ret_u8__GoIface bytes_Reader_ReadByte(GoOpaque /* bytes.Reader */* recv) { Ret_u8__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("bytes_Reader_ReadByte: not supported by the native engine yet"); return r; } // func (*bytes.Reader).ReadByte() (byte, error)
 Slice_u8 bytes_TrimSpace(Slice_u8 a0) { Slice_u8 r; memset(&r, 0, sizeof r); return r; } // func bytes.TrimSpace(s []byte) []byte
 Slice_u8 net_ParseIP(GoString a0) { Slice_u8 r; memset(&r, 0, sizeof r); return r; } // func net.ParseIP(s string) net.IP
-bool bytes_Equal(Slice_u8 a0, Slice_u8 a1) { bool r; memset(&r, 0, sizeof r); return r; } // func bytes.Equal(a []byte, b []byte) bool
 bool dialog_MsgBuilder_YesNo(GoOpaque /* dialog.MsgBuilder */* recv) { bool r; memset(&r, 0, sizeof r); return r; } // func (*dialog.MsgBuilder).YesNo() bool
 bool ini_Section_HasKey(GoOpaque /* ini.Section */* recv, GoString a0) { bool r; memset(&r, 0, sizeof r); return r; } // func (*ini.Section).HasKey(name string) bool
 bool net_IP_IsLinkLocalUnicast(Slice_u8 recv) { bool r; memset(&r, 0, sizeof r); return r; } // func (net.IP).IsLinkLocalUnicast() bool
 bool os_ProcessState_Success(GoOpaque /* os.ProcessState */* recv) { bool r; memset(&r, 0, sizeof r); return r; } // func (*os.ProcessState).Success() bool
-f64 math_Acos(f64 a0) { f64 r; memset(&r, 0, sizeof r); return r; } // func math.Acos(x float64) float64
-f64 math_Asin(f64 a0) { f64 r; memset(&r, 0, sizeof r); return r; } // func math.Asin(x float64) float64
-f64 math_Atan2(f64 a0, f64 a1) { f64 r; memset(&r, 0, sizeof r); return r; } // func math.Atan2(y float64, x float64) float64
-f64 math_Cosh(f64 a0) { f64 r; memset(&r, 0, sizeof r); return r; } // func math.Cosh(x float64) float64
-f64 math_Log(f64 a0) { f64 r; memset(&r, 0, sizeof r); return r; } // func math.Log(x float64) float64
-f64 math_Sinh(f64 a0) { f64 r; memset(&r, 0, sizeof r); return r; } // func math.Sinh(x float64) float64
-f64 math_Tanh(f64 a0) { f64 r; memset(&r, 0, sizeof r); return r; } // func math.Tanh(x float64) float64
-f64 rand_Float64(void) { f64 r; memset(&r, 0, sizeof r); return r; } // func rand.Float64() float64
 i64 time_Time_Unix(GoOpaque /* time.Time */ recv) { i64 r; memset(&r, 0, sizeof r); return r; } // func (time.Time).Unix() int64
 int abi_Type_Len(GoOpaque /* abi.Type */* recv) { int r; memset(&r, 0, sizeof r); return r; } // func (*abi.Type).Len() int
 int binary_Size(GoIface a0) { int r; memset(&r, 0, sizeof r); return r; } // func binary.Size(v any) int
 int bufio_Reader_Buffered(GoOpaque /* bufio.Reader */* recv) { int r; memset(&r, 0, sizeof r); return r; } // func (*bufio.Reader).Buffered() int
-int bytes_Index(Slice_u8 a0, Slice_u8 a1) { int r; memset(&r, 0, sizeof r); return r; } // func bytes.Index(s []byte, sep []byte) int
-int rand_Intn(int a0) { int r; memset(&r, 0, sizeof r); return r; } // func rand.Intn(n int) int
 int runtime_Stack(Slice_u8 a0, bool a1) { int r; memset(&r, 0, sizeof r); return r; } // func runtime.Stack(buf []byte, all bool) int
 int syscall_WaitStatus_ExitStatus(u32 recv) { int r; memset(&r, 0, sizeof r); return r; } // func (syscall.WaitStatus).ExitStatus() int
 int time_Time_Day(GoOpaque /* time.Time */ recv) { int r; memset(&r, 0, sizeof r); return r; } // func (time.Time).Day() int
@@ -118,5 +102,4 @@ void dialog_MsgBuilder_Error(GoOpaque /* dialog.MsgBuilder */* recv) { } // func
 void gob_Register(GoIface a0) { } // func gob.Register(value any)
 void http_Header_Set(Map_GoString_Slice_GoString recv, GoString a0, GoString a1) { } // func (http.Header).Set(key string, value string)
 void ini_File_DeleteSection(GoOpaque /* ini.File */* recv, GoString a0) { } // func (*ini.File).DeleteSection(name string)
-void rand_Seed(i64 a0) { } // func rand.Seed(seed int64)
 void runtime_LockOSThread(void) { } // func runtime.LockOSThread()

@@ -365,6 +365,13 @@ static void fmt_value(Buf *b, const Spec *sp, char verb, GoIface x) {
         }
         return;
     }
+#ifdef GO_TID_S_uint8
+    if (x.type == GO_TID_S_uint8 && (verb == 's' || verb == 'q')) {  // []byte as text
+        Slice_u8 bs = *(Slice_u8 *)x.data;
+        fmt_value(b, sp, verb, (GoIface){GO_TID_string, go_box(GoString, ((GoString){(const char *)bs.p, bs.len}))});
+        return;
+    }
+#endif
     int k = kind_of(x.type);
     i64 si = 0;
     u64 ui = 0;

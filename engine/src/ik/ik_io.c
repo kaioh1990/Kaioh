@@ -826,7 +826,6 @@ GoIface os_MkdirAll(GoString path, u32 perm) {
     }
     return (GoIface){0};
 }
-Ret_GoString__GoIface os_Executable(void) { return (Ret_GoString__GoIface){{"", 0}, go_errorf("os.Executable: not supported")}; }
 
 // filepath.Walk / WalkDir: lexical order, directories before their contents.
 static GoIface walk(GoString root, GoFunc fn, bool dirEntry) {

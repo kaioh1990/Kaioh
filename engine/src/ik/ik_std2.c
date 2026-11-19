@@ -75,6 +75,51 @@ f64 math_Atan(f64 x) { return cvf_atan(x); }
 f64 math_Exp(f64 x) { return cvf_exp(x); }
 f64 math_Exp2(f64 x) { return cvf_pow(2, x); }
 f64 math_Hypot(f64 p, f64 q) { return cvf_hypot(p, q); }
+f64 math_Log(f64 x) { return cvf_ln(x); }
+f64 math_Asin(f64 x) { return cvf_asin(x); }
+f64 math_Acos(f64 x) { return cvf_acos(x); }
+f64 math_Atan2(f64 y, f64 x) { return cvf_atan2(y, x); }
+f64 math_Sinh(f64 x) {  // Go's math.sinh
+    const f64 P0 = -0.6307673640497716991184787251e+6, P1 = -0.8991272022039509355398013511e+5,
+              P2 = -0.2894211355989563807284660366e+4, P3 = -0.2630563213397497062819489e+2,
+              Q0 = -0.6307673640497716991212077277e+6, Q1 = 0.1521517378790019070696485176e+5,
+              Q2 = -0.173678953558233699533450911e+3;
+    bool sign = false;
+    if (x < 0) x = -x, sign = true;
+    f64 t;
+    if (x > 21) {
+        t = cvf_exp(x) * 0.5;
+    } else if (x > 0.5) {
+        f64 ex = cvf_exp(x);
+        t = (ex - 1 / ex) * 0.5;
+    } else {
+        f64 sq = x * x;
+        t = (((P3 * sq + P2) * sq + P1) * sq + P0) * x;
+        t = t / (((sq + Q2) * sq + Q1) * sq + Q0);
+    }
+    return sign ? -t : t;
+}
+f64 math_Cosh(f64 x) {  // Go's math.cosh
+    if (x < 0) x = -x;
+    if (x > 21) return cvf_exp(x) * 0.5;
+    f64 ex = cvf_exp(x);
+    return (ex + 1 / ex) * 0.5;
+}
+f64 math_Tanh(f64 x) {  // Go's math.tanh
+    static const f64 P[3] = {-9.64399179425052238628e-1, -9.92877231001918586564e1, -1.61468768441708447952e3};
+    static const f64 Q[3] = {1.12811678491632931402e2, 2.23548839060100448583e3, 4.84406305325125486048e3};
+    const f64 MAXLOG = 8.8029691931113054295988e+01;
+    f64 z = x < 0 ? -x : x;
+    if (z > 0.5 * MAXLOG) return x < 0 ? -1 : 1;
+    if (z >= 0.625) {
+        f64 s = cvf_exp(2 * z);
+        z = 1 - 2 / (s + 1);
+        return x < 0 ? -z : z;
+    }
+    if (x == 0) return x;
+    f64 s = x * x;
+    return x + x * s * ((P[0] * s + P[1]) * s + P[2]) / (((s + Q[0]) * s + Q[1]) * s + Q[2]);
+}
 f64 math_Log10(f64 x) { return cvf_log2(x) * (0.693147180559945309417232121458176568 / 2.30258509299404568401799145468436421); }
 
 // ---------------------------------------------------------------- strconv, hex, base64

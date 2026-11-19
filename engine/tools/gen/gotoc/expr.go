@@ -20,7 +20,7 @@ func (t *Tx) exprConv(e ast.Expr, target types.Type) string {
 		return "((GoOpaque){{0}}) /* unresolved type */"
 	}
 	tv := t.p.info.Types[e]
-	if known(tv.Value) && target != nil {
+	if known(tv.Value) && target != nil && !goosDependent(t.p, e) {
 		if isIface(target) {
 			ct := defaultType(tv.Type)
 			return t.box(constLit(tv.Value, ct), ct)
@@ -118,8 +118,11 @@ func goStrLit(s string) string {
 
 func (t *Tx) expr(e ast.Expr) string {
 	tv := t.p.info.Types[e]
-	if known(tv.Value) {
+	if known(tv.Value) && !goosDependent(t.p, e) {
 		return constLit(tv.Value, tv.Type)
+	}
+	if g := goosRef(t.p, e); g != "" {
+		return g
 	}
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -608,4 +611,41 @@ func bindConstRef(t *Tx, c *types.Const, cn string) string {
 		return "(" + cn + ")"
 	}
 	return "((" + t.ctype(c.Type()) + ")" + cn + ")"
+}
+
+
+// runtime.GOOS / runtime.GOARCH are constants to go/types (the translating
+// machine's values); the C engine decides them at C compile time instead,
+// so expressions using them are never folded (ik_goos/ik_goarch, ik_os.c).
+func goosRef(p *Prog, e ast.Expr) string {
+	se, ok := e.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	id, ok := se.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	pn, ok := p.info.Uses[id].(*types.PkgName)
+	if !ok || pn.Imported().Path() != "runtime" {
+		return ""
+	}
+	switch se.Sel.Name {
+	case "GOOS":
+		return "ik_goos()"
+	case "GOARCH":
+		return "ik_goarch()"
+	}
+	return ""
+}
+
+func goosDependent(p *Prog, e ast.Expr) bool {
+	found := false
+	ast.Inspect(e, func(n ast.Node) bool {
+		if x, ok := n.(ast.Expr); ok && goosRef(p, x) != "" {
+			found = true
+		}
+		return !found
+	})
+	return found
 }

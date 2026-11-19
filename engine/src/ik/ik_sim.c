@@ -1378,18 +1378,18 @@ static Slice_u8 lambda_27(Env_lambda_27 *_env, Slice_u8 dst, u8 c) {
     return GO_APPEND(Slice_u8, dst, c);
 }
 
-typedef struct Env_lambda_28 { Slice_sjson_val_L98a5cb *vals; } Env_lambda_28;
+typedef struct Env_lambda_28 { Slice_sjson_val_Lfd4cad *vals; } Env_lambda_28;
 static bool lambda_28(Env_lambda_28 *_env, gjson_Result _p0, gjson_Result vres) {
-    (*_env->vals) = GO_APPEND(Slice_sjson_val_L98a5cb, (*_env->vals), (sjson_val_L98a5cb){.res = vres});
+    (*_env->vals) = GO_APPEND(Slice_sjson_val_Lfd4cad, (*_env->vals), (sjson_val_Lfd4cad){.res = vres});
     return true;
 }
 
-typedef struct Env_lambda_29 { Slice_sjson_val_L98a5cb *vals; } Env_lambda_29;
+typedef struct Env_lambda_29 { Slice_sjson_val_Lfd4cad *vals; } Env_lambda_29;
 static bool lambda_29(Env_lambda_29 *_env, int i, int j) {
     return ((*_env->vals).p[i].index > (*_env->vals).p[j].index);
 }
 
-typedef struct Env_lambda_30 { Slice_sjson_val_L98a5cb *vals; } Env_lambda_30;
+typedef struct Env_lambda_30 { Slice_sjson_val_Lfd4cad *vals; } Env_lambda_30;
 static bool lambda_30(Env_lambda_30 *_env, int i, int j) {
     return ((*_env->vals).p[i].index > (*_env->vals).p[j].index);
 }
@@ -44001,7 +44001,7 @@ Ret_bool__GoIface protocol_UdpProtocol_OnSyncRequest(protocol_UdpProtocol* u, me
 void protocol_UdpProtocol_OnMsg(protocol_UdpProtocol* u, messages_UDPMessage msg, int length) {
     bool handled = false;
     GoIface err = {0};
-    Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17 table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17, protocol_UdpProtocolDispatchFunc_Lcc8c17, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
+    Slice_protocol_UdpProtocolDispatchFunc_Lfb2994 table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_Lfb2994, protocol_UdpProtocolDispatchFunc_Lfb2994, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
     u16 seq = iface_Header_e9556084(msg).SequenceNumber;
     if ((iface_Header_e9556084(msg).HeaderType != 1U) && (iface_Header_e9556084(msg).HeaderType != 2U)) {
         if (iface_Header_e9556084(msg).Magic != u->remoteMagicNumber) {
@@ -58574,7 +58574,7 @@ Ret_Slice_u8__GoIface sjson_setComplexPath(GoString jstr, GoString path, GoStrin
         jstr = go_bytes2str(njson);
     }
     if (res.Indexes.len > 0) {
-        Slice_sjson_val_L98a5cb *vals__h = go_box(Slice_sjson_val_L98a5cb, GO_MAKE(Slice_sjson_val_L98a5cb, sjson_val_L98a5cb, 0, res.Indexes.len));
+        Slice_sjson_val_Lfd4cad *vals__h = go_box(Slice_sjson_val_Lfd4cad, GO_MAKE(Slice_sjson_val_Lfd4cad, sjson_val_Lfd4cad, 0, res.Indexes.len));
         gjson_Result_ForEach(res, ((GoFunc){(void *)lambda_28, go_box(Env_lambda_28, ((Env_lambda_28){vals__h}))}));
         if (res.Indexes.len != (*vals__h).len) {
             return (Ret_Slice_u8__GoIface){go_str2bytes(jstr), ((GoIface){200, (void *)(g_sjson_errNoChange)})};
@@ -58586,11 +58586,11 @@ Ret_Slice_u8__GoIface sjson_setComplexPath(GoString jstr, GoString path, GoStrin
                 _cont1:;
             }
         }
-        go_sort_slice_stable((void *)GO_TMPADDR(Slice_sjson_val_L98a5cb, (*vals__h)), sizeof(sjson_val_L98a5cb), ((GoFunc){(void *)lambda_30, go_box(Env_lambda_30, ((Env_lambda_30){vals__h}))}));
+        go_sort_slice_stable((void *)GO_TMPADDR(Slice_sjson_val_Lfd4cad, (*vals__h)), sizeof(sjson_val_Lfd4cad), ((GoFunc){(void *)lambda_30, go_box(Env_lambda_30, ((Env_lambda_30){vals__h}))}));
         {
-            Slice_sjson_val_L98a5cb _t3 = (*vals__h);
+            Slice_sjson_val_Lfd4cad _t3 = (*vals__h);
             for (int _t2 = 0; _t2 < _t3.len; _t2++) {
-                sjson_val_L98a5cb val = _t3.p[_t2];
+                sjson_val_Lfd4cad val = _t3.p[_t2];
                 gjson_Result vres = val.res;
                 int _t5 = val.index;
                 int index = _t5;
@@ -71055,7 +71055,7 @@ GoString errutil_ErrInfo_Error(errutil_ErrInfo* e) {
 
 // github.com/mewkiz/pkg/term.Color (color.go:44), 0 TODO
 GoString term_Color(GoString text, Slice_GoString colors) {
-    if (false) {
+    if (go_streq(ik_goos(), GOSTR("windows"))) {
         return text;
     }
     return go_strcat(go_strcat(term_esc(strings_Join(colors, GOSTR(";"))), text), term_esc(GOSTR("0")));
@@ -140328,7 +140328,7 @@ GoString fn_KeyToString(sdl_Keycode k) {
 sdl_Keymod fn_NewModifierKey(bool ctrl, bool alt, bool shift) {
     sdl_Keymod mod = {0};
     if (ctrl) {
-        if (false && g_sys.cfg.Debug.MacOSUseCommandKey) {
+        if (go_streq(ik_goos(), GOSTR("darwin")) && g_sys.cfg.Debug.MacOSUseCommandKey) {
             mod |= ((sdl_Keymod)KMOD_GUI);
         } else {
             mod |= ((sdl_Keymod)KMOD_CTRL);
@@ -140443,7 +140443,7 @@ void Input_RumbleController(Input* input, int joy, u16 lo, u16 hi, u32 ticks) {
             u32 framerate_ms = go_f2u32(math_Ceil((((0x1p+00 / ((f64)gls)) * ((f64)g_sys.SystemStateVars_.turbo)) * 0x1.f4p+09)));
             u32 buffertime_ms = (u32)((framerate_ms) >> 1);
             f32 multiplier = 0x1p+00f;
-            if (false) {
+            if (go_streq(ik_goos(), GOSTR("darwin"))) {
                 multiplier = 0x1.ap+00f;
             }
             if (ticks > 0U) {
@@ -140674,7 +140674,7 @@ void fn_realMain(void) {
     _df1_f = ((GoFunc){(void *)lambda_1004, go_box(Env_lambda_1004, ((Env_lambda_1004){0}))});
     _df1 = true;
     fn_vitaPlatformInit();
-    if (false) {
+    if (go_streq(ik_goos(), GOSTR("android"))) {
         fn_Logcat(GOSTR("Inside realMain..."));
         runtime_LockOSThread();
         sdl_GLSetAttribute(((sdl_GLattr)SDL_GL_CONTEXT_PROFILE_MASK), (SDL_GL_CONTEXT_PROFILE_ES));
@@ -140721,7 +140721,7 @@ void fn_realMain(void) {
         }
         fn_Logcat(GOSTR("LOG: SDL Init SUCCESS"));
     } else {
-        if (false) {
+        if (go_streq(ik_goos(), GOSTR("ios"))) {
             fn_Logcat(GOSTR("Inside realMain..."));
             runtime_LockOSThread();
             if (go_streq(g_sys.baseDir, GOSTR(""))) {
@@ -140754,7 +140754,7 @@ void fn_realMain(void) {
         }
     }
     u32 permission = 493U;
-    if (true) {
+    if ((!go_streq(ik_goos(), GOSTR("android"))) && (!go_streq(ik_goos(), GOSTR("ios")))) {
         permission |= 1048576U;
     }
     os_MkdirAll(filepath_Join(GO_SLICE_LIT(Slice_GoString, GoString, 2, g_sys.baseDir, GOSTR("save/replays"))), permission);
@@ -140798,7 +140798,7 @@ void fn_realMain(void) {
             fn_chk(os_File_Close(f));
         }
     }
-    if (false) {
+    if (go_streq(ik_goos(), GOSTR("android"))) {
         sdl_InitSubSystem((SDL_INIT_JOYSTICK));
         sdl_InitSubSystem((SDL_INIT_GAMECONTROLLER));
         fn_Logcat(GOSTR("LOG: Subsystems initialized!"));
@@ -140822,7 +140822,7 @@ void fn_realMain(void) {
         fn_Logcat(go_strcat(GOSTR("LOG: loadConfig failed: "), iface_Error_319077b5(err)));
         go_panic_iface(0, err);
     }
-    if (false) {
+    if (go_streq(ik_goos(), GOSTR("ios"))) {
         cfg->Video.RenderMode = GOSTR("Vulkan 1.3");
     }
     fn_vitaTrace(GOSTR("main: config loaded"));
@@ -140948,7 +140948,7 @@ void fn_handlePanic(GoIface r) {
     runtime_ReadMemStats((&(*mem__h)));
     GoString version = fmt_Sprintf(GOSTR("Version: %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, g_Version)})));
     GoString buildTime = fmt_Sprintf(GOSTR("Build Time: %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, g_BuildTime)})));
-    GoString platform = fmt_Sprintf(GOSTR("Platform: %s (%s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, GOSTR("linux"))}), ((GoIface){17, go_box(GoString, GOSTR("amd64"))})));
+    GoString platform = fmt_Sprintf(GOSTR("Platform: %s (%s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, ik_goos())}), ((GoIface){17, go_box(GoString, ik_goarch())})));
     GoString render = iface_GetName_319077b5(g_gfx);
     GoString memory = fmt_Sprintf(GOSTR("RAM in Use: %v MB / OS Reserved: %v MB"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){11, go_box_a(u64, go_divu64(go_divu64((*(u64 *)go_scratch(sizeof(u64))), 1024U), 1024U))}), ((GoIface){11, go_box_a(u64, go_divu64(go_divu64((*(u64 *)go_scratch(sizeof(u64))), 1024U), 1024U))})));
     GoString threads = fmt_Sprintf(GOSTR("Active Goroutines: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, runtime_NumGoroutine())})));
@@ -162844,7 +162844,7 @@ GoString TeamMode_TriggerValue(TeamMode tm) {
 
 // isRunningInsideAppBundle (system.go:399), 0 TODO
 bool fn_isRunningInsideAppBundle(GoString exePath) {
-    return (false && strings_Contains(exePath, GOSTR(".app")));
+    return (go_streq(ik_goos(), GOSTR("darwin")) && strings_Contains(exePath, GOSTR(".app")));
 }
 
 // System.init (system.go:405), 0 TODO
@@ -162883,7 +162883,7 @@ lua_LState* System_init(System* s, i32 w, i32 h) {
             }
         }
     }
-    if (true) {
+    if ((!go_streq(ik_goos(), GOSTR("android"))) && (!go_streq(ik_goos(), GOSTR("ios")))) {
         Ret_GoString__GoIface _t8 = os_Executable();
         GoString exePath = _t8.r0;
         GoIface err = _t8.r1;
@@ -162987,7 +162987,7 @@ lua_LState* System_init(System* s, i32 w, i32 h) {
     fn_systemScriptInit(l);
     (*s__h)->shortcutScripts = Map_ShortcutKey_ShortcutScriptPtr_make(0);
     (*s__h)->loadedCustomShaders = Map_GoString_bool_make(0);
-    if (true) {
+    if (!go_streq(ik_goos(), GOSTR("android"))) {
         if ((*s__h)->cfg.Config.WindowIcon.len > 0) {
             Slice_GoIface f = GO_MAKE(Slice_GoIface, GoIface, (*s__h)->cfg.Config.WindowIcon.len, 0);
             (*s__h)->windowMainIcon = GO_MAKE(Slice_GoIface, GoIface, (*s__h)->cfg.Config.WindowIcon.len, 0);
@@ -163026,14 +163026,18 @@ void System_shutdown(System* s) {
     if ((g_sys.rollback.session != NULL) && (g_sys.rollback.session->recording != NULL)) {
         RollbackSession_SaveReplay(g_sys.rollback.session);
     }
-    iface_Close_818fc0bc(g_gfx);
-    Window_Close(s->window);
+    if (g_gfx.type != 0) {
+        iface_Close_818fc0bc(g_gfx);
+    }
+    if (s->window != NULL) {
+        Window_Close(s->window);
+    }
     if (g_speaker.type != 0) {
         iface_Close_818fc0bc(g_speaker);
     }
 }
 
-// getViewport (system.go:592), 0 TODO
+// getViewport (system.go:597), 0 TODO
 Arr4_f64 fn_getViewport(f64 srcW, f64 srcH, f64 dstW, f64 dstH) {
     f64 fromRatio = (srcW * dstH);
     f64 toRatio = (srcH * dstW);
@@ -163053,12 +163057,12 @@ Arr4_f64 fn_getViewport(f64 srcW, f64 srcH, f64 dstW, f64 dstH) {
     return (Arr4_f64){{0x0p+00, 0x0p+00, srcW, srcH}};
 }
 
-// System.middleOfMatch (system.go:612), 0 TODO
+// System.middleOfMatch (system.go:617), 0 TODO
 bool System_middleOfMatch(System* s) {
     return ((s->gameRunning && (!s->SystemStateVars_.fightLoopEnd)) && (!s->SystemStateVars_.postMatchFlg));
 }
 
-// System.skipMotifScaling (system.go:619), 0 TODO
+// System.skipMotifScaling (system.go:624), 0 TODO
 bool System_skipMotifScaling(System* s) {
     if (((System_middleOfMatch(s) || s->SystemStateVars_.postMatchFlg)) && (s->stage != NULL)) {
         return (System_getFightAspect(s) > System_getMotifAspect(s));
@@ -163067,7 +163071,7 @@ bool System_skipMotifScaling(System* s) {
     return (fn_CalculateAspect_i32(lc.v[0], lc.v[1]) > System_getMotifAspect(s));
 }
 
-// System.getFightAspect (system.go:628), 0 TODO
+// System.getFightAspect (system.go:633), 0 TODO
 f32 System_getFightAspect(System* s) {
     if (((s->cfg.Video.FightAspectWidth < 0) && (s->cfg.Video.FightAspectHeight < 0)) && (s->stage != NULL)) {
         Arr2_i32 coord = s->stage->stageCamera.localcoord;
@@ -163081,12 +163085,12 @@ f32 System_getFightAspect(System* s) {
     return System_getMotifAspect(s);
 }
 
-// System.getMotifAspect (system.go:648), 0 TODO
+// System.getMotifAspect (system.go:653), 0 TODO
 f32 System_getMotifAspect(System* s) {
     return fn_CalculateAspect_i32(s->SystemStateVars_.scrrect.v[2], s->SystemStateVars_.scrrect.v[3]);
 }
 
-// System.getCurrentAspect (system.go:654), 0 TODO
+// System.getCurrentAspect (system.go:659), 0 TODO
 f32 System_getCurrentAspect(System* s) {
     if (((s->SystemStateVars_.postMatchFlg && System_skipMotifScaling(s))) || ((System_middleOfMatch(s) && (!System_shouldComposeFullResolution(s))))) {
         return System_getFightAspect(s);
@@ -163094,7 +163098,7 @@ f32 System_getCurrentAspect(System* s) {
     return System_getMotifAspect(s);
 }
 
-// aspectStateForSize (system.go:662), 0 TODO
+// aspectStateForSize (system.go:667), 0 TODO
 drawAspectState fn_aspectStateForSize(i32 w, i32 h) {
     i32 baseWidth = 320;
     i32 baseHeight = 240;
@@ -163113,7 +163117,7 @@ drawAspectState fn_aspectStateForSize(i32 w, i32 h) {
     return st;
 }
 
-// System.setGameSize (system.go:686), 0 TODO
+// System.setGameSize (system.go:691), 0 TODO
 void System_setGameSize(System* s, i32 w, i32 h) {
     i32 _t1 = w;
     i32 _t2 = h;
@@ -163122,7 +163126,7 @@ void System_setGameSize(System* s, i32 w, i32 h) {
     System_restoreAspectState(s, fn_aspectStateForSize(w, h));
 }
 
-// System.applyFightAspect (system.go:692), 0 TODO
+// System.applyFightAspect (system.go:697), 0 TODO
 void System_applyFightAspect(System* s) {
     f32 baseHeight = 0x1.ep+07f;
     f32 aspectGame = 0;
@@ -163157,12 +163161,12 @@ void System_applyFightAspect(System* s) {
     s->SystemStateVars_.heightScale = (((f32)s->SystemStateVars_.scrrect.v[3]) / ((f32)s->SystemStateVars_.gameHeight));
 }
 
-// System.captureAspectState (system.go:732), 0 TODO
+// System.captureAspectState (system.go:737), 0 TODO
 drawAspectState System_captureAspectState(System* s) {
     return (drawAspectState){.gameWidth = s->SystemStateVars_.gameWidth, .gameHeight = s->SystemStateVars_.gameHeight, .widthScale = s->SystemStateVars_.widthScale, .heightScale = s->SystemStateVars_.heightScale};
 }
 
-// System.restoreAspectState (system.go:741), 0 TODO
+// System.restoreAspectState (system.go:746), 0 TODO
 void System_restoreAspectState(System* s, drawAspectState st) {
     s->SystemStateVars_.gameWidth = st.gameWidth;
     s->SystemStateVars_.gameHeight = st.gameHeight;
@@ -163170,7 +163174,7 @@ void System_restoreAspectState(System* s, drawAspectState st) {
     s->SystemStateVars_.heightScale = st.heightScale;
 }
 
-// System.withAspectState (system.go:748), 0 TODO
+// System.withAspectState (system.go:753), 0 TODO
 void System_withAspectState(System* s, drawAspectState st, GoFunc fn) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163185,7 +163189,7 @@ void System_withAspectState(System* s, drawAspectState st, GoFunc fn) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.wrapDrawWithAspectState (system.go:755), 0 TODO
+// System.wrapDrawWithAspectState (system.go:760), 0 TODO
 GoFunc System_wrapDrawWithAspectState(System* s, GoFunc fn) {
     System* *s__h = go_box(System*, s);
     GoFunc *fn__h = go_box(GoFunc, fn);
@@ -163196,22 +163200,22 @@ GoFunc System_wrapDrawWithAspectState(System* s, GoFunc fn) {
     return ((GoFunc){(void *)lambda_1773, go_box(Env_lambda_1773, ((Env_lambda_1773){s__h, fn__h, st__h}))});
 }
 
-// System.canUseFullResolutionAspect (system.go:770), 0 TODO
+// System.canUseFullResolutionAspect (system.go:775), 0 TODO
 bool System_canUseFullResolutionAspect(System* s) {
     return (s->cfg.Video.KeepAspect && (!System_skipMotifScaling(s)));
 }
 
-// System.motifOverlayActive (system.go:774), 0 TODO
+// System.motifOverlayActive (system.go:779), 0 TODO
 bool System_motifOverlayActive(System* s) {
     return (s->motif.di.active || ((s->motif.me.active && (s->motif.me.state != 0)) && (s->motif.me.state != 4)));
 }
 
-// System.shouldComposeFullResolution (system.go:779), 0 TODO
+// System.shouldComposeFullResolution (system.go:784), 0 TODO
 bool System_shouldComposeFullResolution(System* s) {
     return (System_canUseFullResolutionAspect(s) && ((((!System_middleOfMatch(s)) || System_motifOverlayActive(s)) || s->debugDisplay)));
 }
 
-// System.fightViewport (system.go:784), 0 TODO
+// System.fightViewport (system.go:789), 0 TODO
 Arr4_i32 System_fightViewport(System* s) {
     Arr4_i32 viewport = s->SystemStateVars_.scrrect;
     f32 fightAspect = System_getFightAspect(s);
@@ -163233,7 +163237,7 @@ Arr4_i32 System_fightViewport(System* s) {
     return viewport;
 }
 
-// intersectRect (system.go:806), 0 TODO
+// intersectRect (system.go:811), 0 TODO
 Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b) {
     i32 x1 = go_max_i32(a.v[0], b.v[0]);
     i32 y1 = go_max_i32(a.v[1], b.v[1]);
@@ -163245,7 +163249,7 @@ Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b) {
     return (Arr4_i32){{x1, y1, (x2 - x1), (y2 - y1)}};
 }
 
-// System.fightDrawClip (system.go:817), 0 TODO
+// System.fightDrawClip (system.go:822), 0 TODO
 Ret_Arr4_i32__bool System_fightDrawClip(System* s) {
     if (!System_shouldComposeFullResolution(s)) {
         return (Ret_Arr4_i32__bool){s->SystemStateVars_.scrrect, false};
@@ -163254,7 +163258,7 @@ Ret_Arr4_i32__bool System_fightDrawClip(System* s) {
     return (Ret_Arr4_i32__bool){viewport, (!go_eq_Arr4_i32(viewport, s->SystemStateVars_.scrrect))};
 }
 
-// System.setGameAspect (system.go:825), 0 TODO
+// System.setGameAspect (system.go:830), 0 TODO
 void System_setGameAspect(System* s) {
     System_applyFightAspect(&g_sys);
     {
@@ -163280,7 +163284,7 @@ void System_setGameAspect(System* s) {
     FightScreen_setScale(&g_sys.fightScreen);
 }
 
-// System.eventUpdate (system.go:845), 0 TODO
+// System.eventUpdate (system.go:850), 0 TODO
 bool System_eventUpdate(System* s) {
     s->SystemStateVars_.esc = false;
     {
@@ -163296,7 +163300,7 @@ bool System_eventUpdate(System* s) {
     return (!s->SystemStateVars_.gameEnd);
 }
 
-// System.runMainThreadTask (system.go:855), 0 TODO
+// System.runMainThreadTask (system.go:860), 0 TODO
 void System_runMainThreadTask(System* s) {
     {
         for (; 1; ) {
@@ -163319,7 +163323,7 @@ void System_runMainThreadTask(System* s) {
     }
 }
 
-// System.keepAlive (system.go:866), 0 TODO
+// System.keepAlive (system.go:871), 0 TODO
 void System_keepAlive(System* s) {
     if (s->keepAliveProfile) {
         GoOpaque /* time.Time */ now = time_Now();
@@ -163345,7 +163349,7 @@ void System_keepAlive(System* s) {
     Window_pollEvents(s->window);
 }
 
-// System.await (system.go:894), 0 TODO
+// System.await (system.go:899), 0 TODO
 bool System_await(System* s, int fps) {
     volatile bool _df2 = false; volatile GoFunc _df2_f; volatile bool _df3 = false; volatile bool _df3_a0; volatile GoFunc _df3_f;
     System* *s__h = go_box(System*, s);
@@ -163443,7 +163447,7 @@ bool System_await(System* s, int fps) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// System.soundPanView (system.go:1009), 0 TODO
+// System.soundPanView (system.go:1014), 0 TODO
 soundPanView System_soundPanView(System* s) {
     soundPanView view = {0};
     view.width = s->SystemStateVars_.gameWidth;
@@ -163457,7 +163461,7 @@ soundPanView System_soundPanView(System* s) {
     return view;
 }
 
-// System.renderFrame (system.go:1021), 0 TODO
+// System.renderFrame (system.go:1026), 0 TODO
 void System_renderFrame(System* s) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163517,7 +163521,7 @@ void System_renderFrame(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.update (system.go:1070), 0 TODO
+// System.update (system.go:1075), 0 TODO
 bool System_update(System* s) {
     s->frameCounter++;
     bool rollbackMatchStarting = ((s->rollback.session != NULL) && (s->rollback.netConnection != NULL));
@@ -163527,7 +163531,7 @@ bool System_update(System* s) {
     {
         int i = 0;
         for (; i < g_sys.joystickConfig.len; i++) {
-            if (false && (!g_sys.joystickConfig.p[i].isInitialized)) {
+            if (go_streq(ik_goos(), GOSTR("darwin")) && (!g_sys.joystickConfig.p[i].isInitialized)) {
                 int joyS = i;
                 if (joyS < g_sys.joystickConfig.len) {
                     if (Input_IsJoystickPresent(&g_input, joyS)) {
@@ -163569,7 +163573,7 @@ bool System_update(System* s) {
     return System_await(s, System_gameRenderSpeed(s));
 }
 
-// System.tickSound (system.go:1132), 0 TODO
+// System.tickSound (system.go:1137), 0 TODO
 void System_tickSound(System* s) {
     soundPanView view = System_soundPanView(s);
     SoundChannels_Tick(&s->soundChannels, view);
@@ -163598,7 +163602,7 @@ void System_tickSound(System* s) {
     }
 }
 
-// System.applyPauseFocusVolume (system.go:1154), 0 TODO
+// System.applyPauseFocusVolume (system.go:1159), 0 TODO
 void System_applyPauseFocusVolume(System* s) {
     s->focusMuted = (((s->cfg.Sound.FocusLossVolume < 100) && (s->window != NULL)) && (!Window_Focused(s->window)));
     s->pauseSoundVolume = 100;
@@ -163635,7 +163639,7 @@ void System_applyPauseFocusVolume(System* s) {
     }
 }
 
-// System.resetRemapInput (system.go:1197), 0 TODO
+// System.resetRemapInput (system.go:1202), 0 TODO
 void System_resetRemapInput(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -163646,7 +163650,7 @@ void System_resetRemapInput(System* s) {
     }
 }
 
-// System.loaderReset (system.go:1203), 0 TODO
+// System.loaderReset (system.go:1208), 0 TODO
 void System_loaderReset(System* s) {
     i32 _t1 = 1;
     Arr2_i32 _t2 = (Arr2_i32){{}};
@@ -163660,13 +163664,13 @@ void System_loaderReset(System* s) {
     Loader_reset(&s->loader);
 }
 
-// System.loadStart (system.go:1209), 0 TODO
+// System.loadStart (system.go:1214), 0 TODO
 void System_loadStart(System* s) {
     System_loaderReset(s);
     Loader_runTread(&s->loader);
 }
 
-// System.releaseReloadingCharFx (system.go:1215), 0 TODO
+// System.releaseReloadingCharFx (system.go:1220), 0 TODO
 void System_releaseReloadingCharFx(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163752,7 +163756,7 @@ void System_releaseReloadingCharFx(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.dropCanceledLoadData (system.go:1268), 0 TODO
+// System.dropCanceledLoadData (system.go:1273), 0 TODO
 void System_dropCanceledLoadData(System* s) {
     volatile bool _df6 = false; volatile GoFunc _df6_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163813,7 +163817,7 @@ void System_dropCanceledLoadData(System* s) {
     if (_df6) { _df6 = false; ((void (*)(void *))_df6_f.fn)(_df6_f.env); }
 }
 
-// System.loadCancel (system.go:1305), 0 TODO
+// System.loadCancel (system.go:1310), 0 TODO
 void System_loadCancel(System* s) {
     Loader_reset(&s->loader);
     System_dropCanceledLoadData(s);
@@ -163822,7 +163826,7 @@ void System_loadCancel(System* s) {
     }
 }
 
-// System.synchronize (system.go:1313), 0 TODO
+// System.synchronize (system.go:1318), 0 TODO
 GoIface System_synchronize(System* s) {
     if (s->replayFile != NULL) {
         ReplayFile_Synchronize(s->replayFile);
@@ -163834,7 +163838,7 @@ GoIface System_synchronize(System* s) {
     return (GoIface){0};
 }
 
-// System.anyHardButton (system.go:1341), 0 TODO
+// System.anyHardButton (system.go:1346), 0 TODO
 bool System_anyHardButton(System* s) {
     Slice_int hardButtonIdx = GO_SLICE_LIT(Slice_int, int, 6, 4, 5, 6, 7, 8, 9);
     {
@@ -163876,7 +163880,7 @@ bool System_anyHardButton(System* s) {
     return false;
 }
 
-// System.anyButton (system.go:1366), 0 TODO
+// System.anyButton (system.go:1371), 0 TODO
 bool System_anyButton(System* s) {
     if (s->replayFile != NULL) {
         return ReplayFile_AnyButton(s->replayFile);
@@ -163890,7 +163894,7 @@ bool System_anyButton(System* s) {
     return System_anyHardButton(s);
 }
 
-// System.buttonController (system.go:1379), 0 TODO
+// System.buttonController (system.go:1384), 0 TODO
 int System_buttonController(System* s, Slice_GoString btns) {
     {
         Slice_GoString _t2 = btns;
@@ -163913,7 +163917,7 @@ int System_buttonController(System* s, Slice_GoString btns) {
     return -1;
 }
 
-// System.stepCommandLists (system.go:1390), 0 TODO
+// System.stepCommandLists (system.go:1395), 0 TODO
 void System_stepCommandLists(System* s) {
     {
         Slice_CommandListPtr _t2 = s->commandLists;
@@ -163931,14 +163935,14 @@ void System_stepCommandLists(System* s) {
     }
 }
 
-// System.uiResetTokenGuard (system.go:1403), 0 TODO
+// System.uiResetTokenGuard (system.go:1408), 0 TODO
 void System_uiResetTokenGuard(System* s) {
     s->SystemStateVars_.uiConsumeInputFrame = (s->frameCounter + 1);
     s->SystemStateVars_.uiLastInputToken = GOSTR("");
     s->SystemStateVars_.lastInputController = -1;
 }
 
-// System.uiRepeatShouldFire (system.go:1409), 0 TODO
+// System.uiRepeatShouldFire (system.go:1414), 0 TODO
 bool System_uiRepeatShouldFire(System* s, i32 held) {
     if (held <= 1) {
         return false;
@@ -163949,7 +163953,7 @@ bool System_uiRepeatShouldFire(System* s, i32 held) {
     return (go_rem32(((held - ((1 + s->cfg.Input.UiRepeatDelay)))), s->cfg.Input.UiRepeatRate) == 0);
 }
 
-// System.uiControllerKey (system.go:1421), 0 TODO
+// System.uiControllerKey (system.go:1426), 0 TODO
 int System_uiControllerKey(System* s, int controllerIdx) {
     if (controllerIdx < 0) {
         return controllerIdx;
@@ -163960,7 +163964,7 @@ int System_uiControllerKey(System* s, int controllerIdx) {
     return controllerIdx;
 }
 
-// System.uiConsumeTokenThisFrame (system.go:1431), 0 TODO
+// System.uiConsumeTokenThisFrame (system.go:1436), 0 TODO
 bool System_uiConsumeTokenThisFrame(System* s, int controller, GoString tok) {
     if (((s->SystemStateVars_.uiRepeatFrame == s->frameCounter) && (s->SystemStateVars_.uiRepeatController == controller)) && go_streq(s->SystemStateVars_.uiRepeatToken, tok)) {
         return true;
@@ -163971,7 +163975,7 @@ bool System_uiConsumeTokenThisFrame(System* s, int controller, GoString tok) {
     return false;
 }
 
-// System.uiRawInput (system.go:1445), 0 TODO
+// System.uiRawInput (system.go:1450), 0 TODO
 bool System_uiRawInput(System* s, Slice_GoString btns, int controllerIdx) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     Slice_GoString btns__hv = btns; __typeof__(btns__hv) *btns__h = &btns__hv;
@@ -163994,7 +163998,7 @@ bool System_uiRawInput(System* s, Slice_GoString btns, int controllerIdx) {
     return false;
 }
 
-// System.uiIsKeyAction (system.go:1561), 0 TODO
+// System.uiIsKeyAction (system.go:1566), 0 TODO
 bool System_uiIsKeyAction(System* s, GoString name) {
     {
         GoString _t1 = name;
@@ -164008,7 +164012,7 @@ bool System_uiIsKeyAction(System* s, GoString name) {
     }
 }
 
-// System.uiDefaultTokens (system.go:1572), 0 TODO
+// System.uiDefaultTokens (system.go:1577), 0 TODO
 Slice_GoString System_uiDefaultTokens(System* s, int pn, bool joystick) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     GoString defaultNoKey__hv = ini_Key_String(ini_Section_Key(ini_File_Section((*s__h)->cfg.DefaultOnlyIni, GOSTR("Keys_P3")), GOSTR("menu"))); __typeof__(defaultNoKey__hv) *defaultNoKey__h = &defaultNoKey__hv;
@@ -164023,7 +164027,7 @@ Slice_GoString System_uiDefaultTokens(System* s, int pn, bool joystick) {
     return GO_SLICE_LIT(Slice_GoString, GoString, 14, ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("up")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("down")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("left")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("right")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("a")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("b")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("c")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("x")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("y")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("z")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("start")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("d")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("w")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("menu")));
 }
 
-// System.uiSetConfigDefaults (system.go:1596), 0 TODO
+// System.uiSetConfigDefaults (system.go:1601), 0 TODO
 void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_bool enabled) {
     if (pn < 1) {
         return;
@@ -164077,7 +164081,7 @@ void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_b
     System_uiResetTokenGuard(s);
 }
 
-// System.uiRegisterCommand (system.go:1652), 0 TODO
+// System.uiRegisterCommand (system.go:1657), 0 TODO
 GoIface System_uiRegisterCommand(System* s, GoString name, CommandSpec spec) {
     name = strings_TrimSpace(name);
     spec.Cmd = strings_TrimSpace(spec.Cmd);
@@ -164121,7 +164125,7 @@ GoIface System_uiRegisterCommand(System* s, GoString name, CommandSpec spec) {
     return (GoIface){0};
 }
 
-// System.uiApplyCommandRegistry (system.go:1681), 0 TODO
+// System.uiApplyCommandRegistry (system.go:1686), 0 TODO
 GoIface System_uiApplyCommandRegistry(System* s, CommandList* cl) {
     if ((cl == NULL) || (Map_GoString_CommandSpec_len(&s->uiCommandRegistry) == 0)) {
         return (GoIface){0};
@@ -164150,7 +164154,7 @@ GoIface System_uiApplyCommandRegistry(System* s, CommandList* cl) {
     return (GoIface){0};
 }
 
-// System.uiEnsureCommandLists (system.go:1696), 0 TODO
+// System.uiEnsureCommandLists (system.go:1701), 0 TODO
 GoIface System_uiEnsureCommandLists(System* s, int total) {
     Slice_GoString def = GO_SLICE_LIT(Slice_GoString, GoString, 15, GOSTR("D"), GOSTR("U"), GOSTR("L"), GOSTR("R"), GOSTR("a"), GOSTR("b"), GOSTR("c"), GOSTR("x"), GOSTR("y"), GOSTR("z"), GOSTR("s"), GOSTR("d"), GOSTR("w"), GOSTR("m"), GOSTR("/s"));
     CommandList* dcl = fn_NewCommandList(NULL);
@@ -164205,12 +164209,12 @@ GoIface System_uiEnsureCommandLists(System* s, int total) {
     return (GoIface){0};
 }
 
-// System.netplay (system.go:1739), 0 TODO
+// System.netplay (system.go:1744), 0 TODO
 bool System_netplay(System* s) {
     return (((s->rollback.session != NULL) || (s->netConnection != NULL)) || (s->replayFile != NULL));
 }
 
-// System.usesRollbackMatch (system.go:1743), 0 TODO
+// System.usesRollbackMatch (system.go:1748), 0 TODO
 bool System_usesRollbackMatch(System* s) {
     if (s->replayFile != NULL) {
         return false;
@@ -164218,17 +164222,17 @@ bool System_usesRollbackMatch(System* s) {
     return ((s->rollback.session != NULL) || (((s->netConnection == NULL) && (s->cfg.Netplay.Rollback.DesyncTestFrames > 0))));
 }
 
-// System.escExit (system.go:1751), 0 TODO
+// System.escExit (system.go:1756), 0 TODO
 bool System_escExit(System* s) {
     return (s->SystemStateVars_.esc && ((((!s->sel.gameParams->PauseMenu) || (!s->cfg.Config.EscOpensMenu)) || ((s->motif.AttractMode.Enabled && (s->SystemStateVars_.credits == 0))))));
 }
 
-// System.matchOver (system.go:1756), 0 TODO
+// System.matchOver (system.go:1761), 0 TODO
 bool System_matchOver(System* s) {
     return (((s->SystemStateVars_.wins.v[0] > 0) && (s->SystemStateVars_.wins.v[0] >= s->SystemStateVars_.matchWins.v[0])) || ((s->SystemStateVars_.wins.v[1] > 0) && (s->SystemStateVars_.wins.v[1] >= s->SystemStateVars_.matchWins.v[1])));
 }
 
-// System.anyChar (system.go:1762), 0 TODO
+// System.anyChar (system.go:1767), 0 TODO
 Char* System_anyChar(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -164249,7 +164253,7 @@ Char* System_anyChar(System* s) {
     return NULL;
 }
 
-// System.playerID (system.go:1773), 0 TODO
+// System.playerID (system.go:1778), 0 TODO
 Char* System_playerID(System* s, i32 id) {
     if (id < 0) {
         return NULL;
@@ -164266,7 +164270,7 @@ Char* System_playerID(System* s, i32 id) {
     return c;
 }
 
-// System.playerIDExist (system.go:1793), 0 TODO
+// System.playerIDExist (system.go:1798), 0 TODO
 BytecodeValue System_playerIDExist(System* s, BytecodeValue id) {
     if (BytecodeValue_IsUndefined(id)) {
         return fn_BytecodeUndefined();
@@ -164275,7 +164279,7 @@ BytecodeValue System_playerIDExist(System* s, BytecodeValue id) {
     return fn_BytecodeBool((c != NULL));
 }
 
-// System.playerIndex (system.go:1801), 0 TODO
+// System.playerIndex (system.go:1806), 0 TODO
 Char* System_playerIndex(System* s, i32 idx) {
     if ((idx < 0) || (((int)idx) >= g_sys.charList.runOrder.len)) {
         return NULL;
@@ -164297,7 +164301,7 @@ Char* System_playerIndex(System* s, i32 idx) {
     return NULL;
 }
 
-// System.playerIndexExist (system.go:1826), 0 TODO
+// System.playerIndexExist (system.go:1831), 0 TODO
 BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx) {
     if (BytecodeValue_IsUndefined(idx)) {
         return fn_BytecodeUndefined();
@@ -164306,7 +164310,7 @@ BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx) {
     return fn_BytecodeBool((char_ != NULL));
 }
 
-// System.getCharRoot (system.go:1835), 0 TODO
+// System.getCharRoot (system.go:1840), 0 TODO
 Char* System_getCharRoot(System* s, int idx) {
     if ((idx < 0) || (idx >= 12)) {
         return NULL;
@@ -164318,7 +164322,7 @@ Char* System_getCharRoot(System* s, int idx) {
     return p.p[0];
 }
 
-// System.playerNoExist (system.go:1846), 0 TODO
+// System.playerNoExist (system.go:1851), 0 TODO
 BytecodeValue System_playerNoExist(System* s, BytecodeValue pn) {
     if (BytecodeValue_IsUndefined(pn)) {
         return fn_BytecodeUndefined();
@@ -164328,7 +164332,7 @@ BytecodeValue System_playerNoExist(System* s, BytecodeValue pn) {
     return fn_BytecodeBool((c != NULL));
 }
 
-// System.palfxvar (system.go:1855), 0 TODO
+// System.palfxvar (system.go:1860), 0 TODO
 i32 System_palfxvar(System* s, i32 x, i32 y) {
     i32 n = 0;
     if (x >= 4) {
@@ -164369,7 +164373,7 @@ i32 System_palfxvar(System* s, i32 x, i32 y) {
     return n;
 }
 
-// System.palfxvar2 (system.go:1891), 0 TODO
+// System.palfxvar2 (system.go:1896), 0 TODO
 f32 System_palfxvar2(System* s, i32 x, i32 y) {
     f32 n = 0x1p+00f;
     if (x > 1) {
@@ -164396,27 +164400,27 @@ f32 System_palfxvar2(System* s, i32 x, i32 y) {
     return (n * 0x1p+08f);
 }
 
-// System.screenHeight (system.go:1914), 0 TODO
+// System.screenHeight (system.go:1919), 0 TODO
 f32 System_screenHeight(System* s) {
     return ((f32)s->SystemStateVars_.gameHeight);
 }
 
-// System.screenWidth (system.go:1919), 0 TODO
+// System.screenWidth (system.go:1924), 0 TODO
 f32 System_screenWidth(System* s) {
     return ((f32)s->SystemStateVars_.gameWidth);
 }
 
-// System.roundEnded (system.go:1923), 0 TODO
+// System.roundEnded (system.go:1928), 0 TODO
 bool System_roundEnded(System* s) {
     return (s->SystemStateVars_.intro < (-s->fightScreen.round->over_hittime));
 }
 
-// System.roundNoDamage (system.go:1928), 0 TODO
+// System.roundNoDamage (system.go:1933), 0 TODO
 bool System_roundNoDamage(System* s) {
     return (((g_sys.SystemStateVars_.intro < 0) && (g_sys.SystemStateVars_.intro <= (-g_sys.fightScreen.round->over_hittime))) && (g_sys.SystemStateVars_.intro >= (-g_sys.fightScreen.round->over_waittime)));
 }
 
-// System.gameTime (system.go:1933), 0 TODO
+// System.gameTime (system.go:1938), 0 TODO
 i32 System_gameTime(System* s) {
     i32 pmTime = 0;
     if (g_sys.netConnection != NULL) {
@@ -164431,7 +164435,7 @@ i32 System_gameTime(System* s) {
     return (g_sys.SystemStateVars_.matchTime + pmTime);
 }
 
-// System.roundState (system.go:1949), 0 TODO
+// System.roundState (system.go:1954), 0 TODO
 i32 System_roundState(System* s) {
     {
         do {
@@ -164450,7 +164454,7 @@ i32 System_roundState(System* s) {
     }
 }
 
-// System.introState (system.go:1966), 0 TODO
+// System.introState (system.go:1971), 0 TODO
 i32 System_introState(System* s) {
     {
         do {
@@ -164472,7 +164476,7 @@ i32 System_introState(System* s) {
     }
 }
 
-// System.outroState (system.go:1992), 0 TODO
+// System.outroState (system.go:1997), 0 TODO
 i32 System_outroState(System* s) {
     {
         do {
@@ -164495,23 +164499,23 @@ i32 System_outroState(System* s) {
     }
 }
 
-// System.roundOver (system.go:2018), 0 TODO
+// System.roundOver (system.go:2023), 0 TODO
 bool System_roundOver(System* s) {
     return (s->SystemStateVars_.intro < (-((s->fightScreen.round->over_waittime + FightScreenRound_overTime(s->fightScreen.round)))));
 }
 
-// System.roundIsSingle (system.go:2027), 0 TODO
+// System.roundIsSingle (system.go:2032), 0 TODO
 bool System_roundIsSingle(System* s) {
     return ((((!s->sel.gameParams->PersistRounds) && (s->SystemStateVars_.roundNo == 1)) && s->SystemStateVars_.decisiveRound.v[0]) && s->SystemStateVars_.decisiveRound.v[1]);
 }
 
-// System.maxDrawsReached (system.go:2031), 0 TODO
+// System.maxDrawsReached (system.go:2036), 0 TODO
 bool System_maxDrawsReached(System* s, int team) {
     i32 limit = s->SystemStateVars_.maxDraws.v[team];
     return ((limit >= 0) && (s->SystemStateVars_.draws >= limit));
 }
 
-// System.roundIsFinal (system.go:2038), 0 TODO
+// System.roundIsFinal (system.go:2043), 0 TODO
 bool System_roundIsFinal(System* s) {
     if (s->sel.gameParams->PersistRounds) {
         return false;
@@ -164525,7 +164529,7 @@ bool System_roundIsFinal(System* s) {
     return (System_maxDrawsReached(s, 0) && System_maxDrawsReached(s, 1));
 }
 
-// System.winnerTeam (system.go:2054), 0 TODO
+// System.winnerTeam (system.go:2059), 0 TODO
 i32 System_winnerTeam(System* s) {
     i32 winp = -1;
     if (!s->SystemStateVars_.endMatch) {
@@ -164546,12 +164550,12 @@ i32 System_winnerTeam(System* s) {
     return winp;
 }
 
-// System.gsf (system.go:2072), 0 TODO
+// System.gsf (system.go:2077), 0 TODO
 bool System_gsf(System* s, GlobalSpecialFlag gsf) {
     return ((s->SystemStateVars_.specialFlag & gsf) != 0U);
 }
 
-// System.setGSF (system.go:2076), 0 TODO
+// System.setGSF (system.go:2081), 0 TODO
 void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on) {
     if (on) {
         s->SystemStateVars_.specialFlag |= gsf;
@@ -164560,7 +164564,7 @@ void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on) {
     }
 }
 
-// System.appendToConsole (system.go:2084), 0 TODO
+// System.appendToConsole (system.go:2089), 0 TODO
 void System_appendToConsole(System* s, GoString str) {
     s->consoleText = GO_APPEND(Slice_GoString, s->consoleText, str);
     if (s->consoleText.len > s->cfg.Debug.ConsoleRows) {
@@ -164568,7 +164572,7 @@ void System_appendToConsole(System* s, GoString str) {
     }
 }
 
-// System.printToConsole (system.go:2091), 0 TODO
+// System.printToConsole (system.go:2096), 0 TODO
 void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     Slice_GoString spl = s->stringPool.v[pn].List;
     if ((sn >= 0) && (sn < spl.len)) {
@@ -164584,7 +164588,7 @@ void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     }
 }
 
-// System.luaQueuePreDraw (system.go:2103), 0 TODO
+// System.luaQueuePreDraw (system.go:2108), 0 TODO
 void System_luaQueuePreDraw(System* s, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -164593,7 +164597,7 @@ void System_luaQueuePreDraw(System* s, GoFunc fn) {
     s->luaDrawPreOps = GO_APPEND(Slice_GoFunc, s->luaDrawPreOps, fn);
 }
 
-// System.luaQueueLayerDraw (system.go:2110), 0 TODO
+// System.luaQueueLayerDraw (system.go:2115), 0 TODO
 void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -164609,7 +164613,7 @@ void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     s->luaDrawLayerOps.v[layer] = GO_APPEND(Slice_GoFunc, s->luaDrawLayerOps.v[layer], fn);
 }
 
-// System.luaFlushDrawQueue (system.go:2127), 0 TODO
+// System.luaFlushDrawQueue (system.go:2132), 0 TODO
 void System_luaFlushDrawQueue(System* s) {
     {
         Slice_GoFunc _t2 = s->luaDrawPreOps;
@@ -164637,7 +164641,7 @@ void System_luaFlushDrawQueue(System* s) {
     }
 }
 
-// System.luaDiscardDrawQueue (system.go:2141), 0 TODO
+// System.luaDiscardDrawQueue (system.go:2146), 0 TODO
 void System_luaDiscardDrawQueue(System* s) {
     s->luaDrawPreOps = GO_SLICE(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
     {
@@ -164649,7 +164653,7 @@ void System_luaDiscardDrawQueue(System* s) {
     }
 }
 
-// System.printBytecodeError (system.go:2151), 0 TODO
+// System.printBytecodeError (system.go:2156), 0 TODO
 void System_printBytecodeError(System* s, GoString str) {
     if ((s->loader.state == 2) && (s->workingChar != NULL)) {
         System_appendToConsole(s, go_strcat(Char_warn(g_sys.workingChar), str));
@@ -164660,7 +164664,7 @@ void System_printBytecodeError(System* s, GoString str) {
     }
 }
 
-// System.loadTime (system.go:2161), 0 TODO
+// System.loadTime (system.go:2166), 0 TODO
 void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bool shell, bool console) {
     i64 elapsed = time_Since(start);
     str = fmt_Sprintf(GOSTR("%v; Load time: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, str)}), ((GoIface){578, go_box_a(i64, elapsed)})));
@@ -164672,7 +164676,7 @@ void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bo
     }
 }
 
-// System.updateZScale (system.go:2174), 0 TODO
+// System.updateZScale (system.go:2179), 0 TODO
 f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     f32 _t1 = (g_sys.stage->stageCamera.topz / localscale);
     f32 topz = _t1;
@@ -164693,12 +164697,12 @@ f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     return scale;
 }
 
-// System.zEnabled (system.go:2189), 0 TODO
+// System.zEnabled (system.go:2194), 0 TODO
 bool System_zEnabled(System* s) {
     return (s->SystemStateVars_.zmin != s->SystemStateVars_.zmax);
 }
 
-// System.drawposXYfromZ (system.go:2194), 0 TODO
+// System.drawposXYfromZ (system.go:2199), 0 TODO
 Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos, f32 zscale) {
     Arr2_f32 outpos = {0};
     outpos.v[0] = ((((inpos.v[0] - s->SystemStateVars_.cam.Pos.v[0])) * zscale) + s->SystemStateVars_.cam.Pos.v[0]);
@@ -164708,12 +164712,12 @@ Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos
     return outpos;
 }
 
-// System.posZtoYoffset (system.go:2203), 0 TODO
+// System.posZtoYoffset (system.go:2208), 0 TODO
 f32 System_posZtoYoffset(System* s, f32 zpos, f32 localscl) {
     return ((zpos * localscl) * s->stage->stageCamera.depthtoscreen);
 }
 
-// System.zAxisOverlap (system.go:2209), 0 TODO
+// System.zAxisOverlap (system.go:2214), 0 TODO
 bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1, f32 posz2, f32 top2, f32 bot2, f32 localscl2) {
     if (!System_zEnabled(s)) {
         return true;
@@ -164725,7 +164729,7 @@ bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1
     return ((max1 >= min2) && (min1 <= max2));
 }
 
-// System.clsnOverlap (system.go:2222), 0 TODO
+// System.clsnOverlap (system.go:2227), 0 TODO
 Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f32 pos1, f32 facing1, Slice_ClsnFinal boxes2, Arr2_f32 pos2, f32 facing2) {
     if ((boxes1.len == 0) || (boxes2.len == 0)) {
         return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
@@ -164784,7 +164788,7 @@ Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f3
     return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
 }
 
-// System.initPlayerID (system.go:2276), 0 TODO
+// System.initPlayerID (system.go:2281), 0 TODO
 void System_initPlayerID(System* s) {
     GoFunc assignID = ((GoFunc){(void *)lambda_1782, &(Env_lambda_1782){0}});
     if (g_sys.SystemStateVars_.roundNo > 1) {
@@ -164813,7 +164817,7 @@ void System_initPlayerID(System* s) {
     }
 }
 
-// System.pruneCharId (system.go:2317), 0 TODO
+// System.pruneCharId (system.go:2322), 0 TODO
 void System_pruneCharId(System* s) {
     s->SystemStateVars_.lastCharId = go_max_i32(0, (g_sys.cfg.Config.HelperMax - 1));
     {
@@ -164828,7 +164832,7 @@ void System_pruneCharId(System* s) {
     }
 }
 
-// System.newCharId (system.go:2331), 0 TODO
+// System.newCharId (system.go:2336), 0 TODO
 i32 System_newCharId(System* s) {
     i32 newid = (s->SystemStateVars_.lastCharId + 1);
     {
@@ -164848,7 +164852,7 @@ i32 System_newCharId(System* s) {
     return newid;
 }
 
-// System.resetGblEffect (system.go:2372), 0 TODO
+// System.resetGblEffect (system.go:2377), 0 TODO
 void System_resetGblEffect(System* s) {
     PalFX_clear(s->allPalFX);
     PalFX_clear(s->bgPalFX);
@@ -164866,7 +164870,7 @@ void System_resetGblEffect(System* s) {
     s->SystemStateVars_.specialFlag = 0U;
 }
 
-// System.clearAllCharSounds (system.go:2384), 0 TODO
+// System.clearAllCharSounds (system.go:2389), 0 TODO
 void System_clearAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -164877,7 +164881,7 @@ void System_clearAllCharSounds(System* s) {
     }
 }
 
-// System.stopAllCharSounds (system.go:2391), 0 TODO
+// System.stopAllCharSounds (system.go:2396), 0 TODO
 void System_stopAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -164888,7 +164892,7 @@ void System_stopAllCharSounds(System* s) {
     }
 }
 
-// System.clearMatchSound (system.go:2397), 0 TODO
+// System.clearMatchSound (system.go:2402), 0 TODO
 void System_clearMatchSound(System* s) {
     StoryboardManager_clearSound(&s->matchStoryboards);
     {
@@ -164920,7 +164924,7 @@ void System_clearMatchSound(System* s) {
     }
 }
 
-// System.clearAllSound (system.go:2421), 0 TODO
+// System.clearAllSound (system.go:2426), 0 TODO
 void System_clearAllSound(System* s) {
     System* *s__h = go_box(System*, s);
     SoundChannels_StopAll(&(*s__h)->soundChannels);
@@ -164928,7 +164932,7 @@ void System_clearAllSound(System* s) {
     System_clearMatchSound((*s__h));
 }
 
-// System.clearPlayerAssets (system.go:2431), 0 TODO
+// System.clearPlayerAssets (system.go:2436), 0 TODO
 void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     StoryboardManager_clear(&s->matchStoryboards, pn);
     if (s->chars.v[pn].len > 0) {
@@ -164958,7 +164962,7 @@ void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     s->explodDrawOrder = fn_PointerSliceReset_Explod(s->explodDrawOrder);
 }
 
-// System.handleStageSwap (system.go:2461), 0 TODO
+// System.handleStageSwap (system.go:2466), 0 TODO
 bool System_handleStageSwap(System* s) {
     System* *s__h = go_box(System*, s);
     i32 roundRef = 0;
@@ -165001,7 +165005,7 @@ bool System_handleStageSwap(System* s) {
     return swap;
 }
 
-// System.updateMusicMaps (system.go:2498), 0 TODO
+// System.updateMusicMaps (system.go:2503), 0 TODO
 void System_updateMusicMaps(System* s) {
     bool newMatchMusic = ((s->SystemStateVars_.roundNo == 1) && (!s->SystemStateVars_.roundResetFlg));
     if (newMatchMusic) {
@@ -165043,7 +165047,7 @@ void System_updateMusicMaps(System* s) {
     }
 }
 
-// System.resetRound (system.go:2539), 0 TODO
+// System.resetRound (system.go:2544), 0 TODO
 void System_resetRound(System* s) {
     fn_specRound();
     if (false) {
@@ -165164,12 +165168,12 @@ void System_resetRound(System* s) {
     iface_Await_818fc0bc(g_gfx);
 }
 
-// System.debugPaused (system.go:2661), 0 TODO
+// System.debugPaused (system.go:2666), 0 TODO
 bool System_debugPaused(System* s) {
     return ((s->SystemStateVars_.paused && (!s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.motifPauseGame (system.go:2665), 0 TODO
+// System.motifPauseGame (system.go:2670), 0 TODO
 bool System_motifPauseGame(System* s) {
     if (s->motif.me.active) {
         return true;
@@ -165180,12 +165184,12 @@ bool System_motifPauseGame(System* s) {
     return false;
 }
 
-// System.matchPaused (system.go:2678), 0 TODO
+// System.matchPaused (system.go:2683), 0 TODO
 bool System_matchPaused(System* s) {
     return (System_debugPaused(s) || System_motifPauseGame(s));
 }
 
-// System.motifPauseMusic (system.go:2682), 0 TODO
+// System.motifPauseMusic (system.go:2687), 0 TODO
 bool System_motifPauseMusic(System* s) {
     if (s->motif.ch.active && (s->motif.ch.counter >= s->motif.ChallengerInfo.Pause.Time)) {
         return true;
@@ -165193,17 +165197,17 @@ bool System_motifPauseMusic(System* s) {
     return false;
 }
 
-// System.tickFrame (system.go:2691), 0 TODO
+// System.tickFrame (system.go:2696), 0 TODO
 bool System_tickFrame(System* s) {
     return ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.tickNextFrame (system.go:2701), 0 TODO
+// System.tickNextFrame (system.go:2706), 0 TODO
 bool System_tickNextFrame(System* s) {
     return ((go_f2i32((s->SystemStateVars_.tickCountF + s->SystemStateVars_.nextAddTime)) > s->SystemStateVars_.tickCount) && ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag) || (s->SystemStateVars_.oldTickCount >= s->SystemStateVars_.tickCount))));
 }
 
-// System.tickInterpolation (system.go:2708), 0 TODO
+// System.tickInterpolation (system.go:2713), 0 TODO
 f32 System_tickInterpolation(System* s) {
     if (System_tickNextFrame(s)) {
         return 0x1p+00f;
@@ -165215,12 +165219,12 @@ f32 System_tickInterpolation(System* s) {
     return 0x1p+00f;
 }
 
-// System.uiTick (system.go:2722), 0 TODO
+// System.uiTick (system.go:2727), 0 TODO
 bool System_uiTick(System* s) {
     return ((System_tickFrame(s) || System_debugPaused(s)) || s->motif.me.active);
 }
 
-// System.addFrameTime (system.go:2726), 0 TODO
+// System.addFrameTime (system.go:2731), 0 TODO
 bool System_addFrameTime(System* s, f32 t) {
     if (System_debugPaused(s)) {
         s->SystemStateVars_.oldNextAddTime = 0x0p+00f;
@@ -165241,7 +165245,7 @@ bool System_addFrameTime(System* s, f32 t) {
     return true;
 }
 
-// System.resetFrameTime (system.go:2746), 0 TODO
+// System.resetFrameTime (system.go:2751), 0 TODO
 void System_resetFrameTime(System* s) {
     int _t1 = 0;
     int _t2 = -1;
@@ -165259,7 +165263,7 @@ void System_resetFrameTime(System* s) {
     s->redrawWait.lastDraw = time_Now();
 }
 
-// System.resetMatchData (system.go:2755), 0 TODO
+// System.resetMatchData (system.go:2760), 0 TODO
 void System_resetMatchData(System* s, bool forceDestroy) {
     g_sys.allPalFX = fn_newPalFX();
     g_sys.bgPalFX = fn_newPalFX();
@@ -165276,7 +165280,7 @@ void System_resetMatchData(System* s, bool forceDestroy) {
     }
 }
 
-// System.charUpdate (system.go:2767), 0 TODO
+// System.charUpdate (system.go:2772), 0 TODO
 void System_charUpdate(System* s) {
     CharList_update(&s->charList);
     System_projectileUpdate(s);
@@ -165285,7 +165289,7 @@ void System_charUpdate(System* s) {
     }
 }
 
-// System.globalCollision (system.go:2779), 0 TODO
+// System.globalCollision (system.go:2784), 0 TODO
 void System_globalCollision(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165307,7 +165311,7 @@ void System_globalCollision(System* s) {
     s->projectileTradeSort = fn_PointerSliceReset_Projectile(s->projectileTradeSort);
 }
 
-// System.runIntroSkip (system.go:2806), 0 TODO
+// System.runIntroSkip (system.go:2811), 0 TODO
 void System_runIntroSkip(System* s) {
     if ((!System_gsf(s, 4U)) || System_gsf(s, 16384U)) {
         return;
@@ -165339,7 +165343,7 @@ void System_runIntroSkip(System* s) {
     }
 }
 
-// System.clearSpriteData (system.go:2845), 0 TODO
+// System.clearSpriteData (system.go:2850), 0 TODO
 void System_clearSpriteData(System* s) {
     fn_spriteDataPoolReset();
     s->spriteList = GO_SLICE(DrawList, s->spriteList, 0, 0);
@@ -165367,7 +165371,7 @@ void System_clearSpriteData(System* s) {
     }
 }
 
-// System.cueDraw (system.go:2876), 0 TODO
+// System.cueDraw (system.go:2881), 0 TODO
 void System_cueDraw(System* s) {
     if (s->SystemStateVars_.frameSkip) {
         return;
@@ -165391,17 +165395,17 @@ void System_cueDraw(System* s) {
     System_explodCueDraw(s);
 }
 
-// System.screenleft (system.go:2895), 0 TODO
+// System.screenleft (system.go:2900), 0 TODO
 f32 System_screenleft(System* s) {
     return (((f32)s->stage->screenleft) * s->stage->localscl);
 }
 
-// System.screenright (system.go:2899), 0 TODO
+// System.screenright (system.go:2904), 0 TODO
 f32 System_screenright(System* s) {
     return (((f32)s->stage->screenright) * s->stage->localscl);
 }
 
-// System.action (system.go:2905), 0 TODO
+// System.action (system.go:2910), 0 TODO
 void System_action(System* s) {
     g_bcIdxDepth = 0;
     fn_bcProfFrame();
@@ -165589,7 +165593,7 @@ void System_action(System* s) {
     return;
 }
 
-// System.uiAction (system.go:3124), 0 TODO
+// System.uiAction (system.go:3129), 0 TODO
 void System_uiAction(System* s) {
     if (!System_uiTick(s)) {
         return;
@@ -165624,7 +165628,7 @@ void System_uiAction(System* s) {
     }
 }
 
-// System.projectileUpdate (system.go:3157), 0 TODO
+// System.projectileUpdate (system.go:3162), 0 TODO
 void System_projectileUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165649,7 +165653,7 @@ void System_projectileUpdate(System* s) {
     }
 }
 
-// System.projectilePrune (system.go:3175), 0 TODO
+// System.projectilePrune (system.go:3180), 0 TODO
 void System_projectilePrune(System* s, int pn) {
     Slice_ProjectilePtr playerProjs = s->projs.v[pn];
     int writeIdx = 0;
@@ -165669,7 +165673,7 @@ void System_projectilePrune(System* s, int pn) {
     s->projs.v[pn] = GO_SLICE(Slice_ProjectilePtr, playerProjs, 0, writeIdx);
 }
 
-// System.explodUpdate (system.go:3193), 0 TODO
+// System.explodUpdate (system.go:3198), 0 TODO
 void System_explodUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165694,7 +165698,7 @@ void System_explodUpdate(System* s) {
     }
 }
 
-// System.explodCueDraw (system.go:3215), 0 TODO
+// System.explodCueDraw (system.go:3220), 0 TODO
 void System_explodCueDraw(System* s) {
     System* *s__h = go_box(System*, s);
     (*s__h)->explodDrawOrder = GO_SLICE(Slice_ExplodPtr, (*s__h)->explodDrawOrder, 0, 0);
@@ -165727,7 +165731,7 @@ void System_explodCueDraw(System* s) {
     }
 }
 
-// System.explodPrune (system.go:3268), 0 TODO
+// System.explodPrune (system.go:3273), 0 TODO
 void System_explodPrune(System* s, int pn) {
     Slice_ExplodPtr playerExplods = s->explods.v[pn];
     int writeIdx = 0;
@@ -165747,7 +165751,7 @@ void System_explodPrune(System* s, int pn) {
     s->explods.v[pn] = GO_SLICE(Slice_ExplodPtr, playerExplods, 0, writeIdx);
 }
 
-// System.charTextsUpdate (system.go:3284), 0 TODO
+// System.charTextsUpdate (system.go:3289), 0 TODO
 void System_charTextsUpdate(System* s) {
     if (!System_tickFrame(&g_sys)) {
         return;
@@ -165778,7 +165782,7 @@ void System_charTextsUpdate(System* s) {
     }
 }
 
-// System.charTextsPrune (system.go:3310), 0 TODO
+// System.charTextsPrune (system.go:3315), 0 TODO
 void System_charTextsPrune(System* s, int pn) {
     Slice_TextSpritePtr playerTexts = s->chartexts.v[pn];
     int writeIdx = 0;
@@ -165798,7 +165802,7 @@ void System_charTextsPrune(System* s, int pn) {
     s->chartexts.v[pn] = GO_SLICE(Slice_TextSpritePtr, playerTexts, 0, writeIdx);
 }
 
-// System.globalTick (system.go:3325), 0 TODO
+// System.globalTick (system.go:3330), 0 TODO
 void System_globalTick(System* s) {
     Stage_tick(s->stage);
     CharList_tick(&s->charList);
@@ -165819,7 +165823,7 @@ void System_globalTick(System* s) {
     s->SystemStateVars_.matchTime++;
 }
 
-// System.getSlowtime (system.go:3338), 0 TODO
+// System.getSlowtime (system.go:3343), 0 TODO
 i32 System_getSlowtime(System* s) {
     if (((s->SystemStateVars_.slowtime > 0) && (s->SystemStateVars_.intro < 0)) && (s->SystemStateVars_.curRoundTime != 0)) {
         return s->SystemStateVars_.slowtime;
@@ -165827,7 +165831,7 @@ i32 System_getSlowtime(System* s) {
     return 0;
 }
 
-// System.timeElapsed (system.go:3345), 0 TODO
+// System.timeElapsed (system.go:3350), 0 TODO
 i32 System_timeElapsed(System* s) {
     if (s->SystemStateVars_.maxRoundTime > 0) {
         return (s->SystemStateVars_.maxRoundTime - s->SystemStateVars_.curRoundTime);
@@ -165835,7 +165839,7 @@ i32 System_timeElapsed(System* s) {
     return s->SystemStateVars_.curPlayTime;
 }
 
-// System.timeRemaining (system.go:3354), 0 TODO
+// System.timeRemaining (system.go:3359), 0 TODO
 i32 System_timeRemaining(System* s) {
     if (s->SystemStateVars_.curRoundTime >= 0) {
         return s->SystemStateVars_.curRoundTime;
@@ -165843,7 +165847,7 @@ i32 System_timeRemaining(System* s) {
     return -1;
 }
 
-// System.timeTotal (system.go:3361), 0 TODO
+// System.timeTotal (system.go:3366), 0 TODO
 i32 System_timeTotal(System* s) {
     i32 t = s->SystemStateVars_.timerStart;
     {
@@ -165860,7 +165864,7 @@ i32 System_timeTotal(System* s) {
     return t;
 }
 
-// System.matchEndDialoguePending (system.go:3372), 0 TODO
+// System.matchEndDialoguePending (system.go:3377), 0 TODO
 bool System_matchEndDialoguePending(System* s) {
     if ((s->SystemStateVars_.postMatchFlg || (s->SystemStateVars_.dialogueForce != 0)) || s->motif.di.matchEndDone) {
         return false;
@@ -165880,7 +165884,7 @@ bool System_matchEndDialoguePending(System* s) {
     return (System_maxDrawsReached(s, 0) || System_maxDrawsReached(s, 1));
 }
 
-// System.shouldStartMatchEndDialogue (system.go:3392), 0 TODO
+// System.shouldStartMatchEndDialogue (system.go:3397), 0 TODO
 bool System_shouldStartMatchEndDialogue(System* s) {
     if (((!System_matchEndDialoguePending(s)) || (!System_matchOver(s))) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -165891,7 +165895,7 @@ bool System_shouldStartMatchEndDialogue(System* s) {
     return (((s->SystemStateVars_.intro + s->fightScreen.round->over_waittime) + s->fightScreen.round->over_time) <= 0);
 }
 
-// System.holdPostMatchForDialogue (system.go:3402), 0 TODO
+// System.holdPostMatchForDialogue (system.go:3407), 0 TODO
 bool System_holdPostMatchForDialogue(System* s) {
     if ((s->SystemStateVars_.dialogueForce != 0) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -165908,7 +165912,7 @@ bool System_holdPostMatchForDialogue(System* s) {
     return false;
 }
 
-// System.stepRoundState (system.go:3419), 0 TODO
+// System.stepRoundState (system.go:3424), 0 TODO
 void System_stepRoundState(System* s) {
     if (!FightScreenRound_act(s->fightScreen.round)) {
         return;
@@ -166118,7 +166122,7 @@ void System_stepRoundState(System* s) {
     }
 }
 
-// System.roundEndDecision (system.go:3645), 0 TODO
+// System.roundEndDecision (system.go:3650), 0 TODO
 bool System_roundEndDecision(System* s) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     GoFunc checkPerfect = ((GoFunc){(void *)lambda_1787, &(Env_lambda_1787){s__h}});
@@ -166272,7 +166276,7 @@ bool System_roundEndDecision(System* s) {
     return ((ko.v[0] || ko.v[1]) || ((*s__h)->SystemStateVars_.curRoundTime == 0));
 }
 
-// System.draw (system.go:3786), 0 TODO
+// System.draw (system.go:3791), 0 TODO
 void System_draw(System* s, f32 x, f32 y, f32 scl) {
     fn_vitaDiagFrame();
     s->SystemStateVars_.brightnessOld = s->SystemStateVars_.brightness;
@@ -166372,7 +166376,7 @@ void System_draw(System* s, f32 x, f32 y, f32 scl) {
     Motif_draw(&s->motif, 3);
 }
 
-// System.drawCharTexts (system.go:3976), 0 TODO
+// System.drawCharTexts (system.go:3981), 0 TODO
 void System_drawCharTexts(System* s, i16 layerno) {
     Arr4_i32* clip = NULL;
     {
@@ -166399,7 +166403,7 @@ void System_drawCharTexts(System* s, i16 layerno) {
     }
 }
 
-// System.drawTop (system.go:3988), 0 TODO
+// System.drawTop (system.go:3993), 0 TODO
 void System_drawTop(System* s) {
     s->SystemStateVars_.brightness = s->SystemStateVars_.brightnessOld;
     if (s->clsnDisplay) {
@@ -166419,7 +166423,7 @@ void System_drawTop(System* s) {
     }
 }
 
-// System.debugTextScale (system.go:4022), 0 TODO
+// System.debugTextScale (system.go:4027), 0 TODO
 Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     f32 sx = {0};
     f32 sy = {0};
@@ -166441,7 +166445,7 @@ Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     return (Ret_f32__f32){sx, sy};
 }
 
-// System.drawDebugText (system.go:4037), 0 TODO
+// System.drawDebugText (system.go:4042), 0 TODO
 void System_drawDebugText(System* s, drawAspectState logicState) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     System* *s__h = go_box(System*, s);
@@ -166567,7 +166571,7 @@ void System_drawDebugText(System* s, drawAspectState logicState) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.keepMatchRunning (system.go:4157), 0 TODO
+// System.keepMatchRunning (system.go:4162), 0 TODO
 bool System_keepMatchRunning(System* s) {
     if (!s->SystemStateVars_.endMatch) {
         return true;
@@ -166578,7 +166582,7 @@ bool System_keepMatchRunning(System* s) {
     return false;
 }
 
-// System.runMatch (system.go:4172), 0 TODO
+// System.runMatch (system.go:4177), 0 TODO
 bool System_runMatch(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f; volatile bool _df3 = false; volatile GoFunc _df3_f;
     System* *s__h = go_box(System*, s);
@@ -166805,7 +166809,7 @@ bool System_runMatch(System* s) {
     return reload;
 }
 
-// System.SetupCharRoundStart (system.go:4422), 0 TODO
+// System.SetupCharRoundStart (system.go:4427), 0 TODO
 void System_SetupCharRoundStart(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -166955,7 +166959,7 @@ void System_SetupCharRoundStart(System* s) {
     }
 }
 
-// System.runNextRound (system.go:4551), 0 TODO
+// System.runNextRound (system.go:4556), 0 TODO
 bool System_runNextRound(System* s) {
     bool _t1 = System_roundOver(s);
     bool roundOver = _t1;
@@ -167045,14 +167049,14 @@ bool System_runNextRound(System* s) {
     return true;
 }
 
-// System.gameLogicSpeed (system.go:4627), 0 TODO
+// System.gameLogicSpeed (system.go:4632), 0 TODO
 i32 System_gameLogicSpeed(System* s) {
     i32 base = ((i32)(60 + (s->cfg.Options.GameSpeed * s->cfg.Options.GameSpeedStep)));
     i32 spd = go_f2i32((((f32)base) * s->debugAccel));
     return go_max_i32(1, spd);
 }
 
-// System.gameRenderSpeed (system.go:4633), 0 TODO
+// System.gameRenderSpeed (system.go:4638), 0 TODO
 int System_gameRenderSpeed(System* s) {
     i32 spd = 0;
     if ((((!s->gameRunning) || s->motif.me.active) || (s->rollback.session != NULL)) || (s->replayFile != NULL)) {
@@ -167063,7 +167067,7 @@ int System_gameRenderSpeed(System* s) {
     return ((int)go_max_i32(1, spd));
 }
 
-// System.debugModeAllowed (system.go:4646), 0 TODO
+// System.debugModeAllowed (system.go:4651), 0 TODO
 bool System_debugModeAllowed(System* s) {
     if ((s->netConnection != NULL) || (s->rollback.session != NULL)) {
         return false;
@@ -167071,7 +167075,7 @@ bool System_debugModeAllowed(System* s) {
     return s->cfg.Debug.AllowDebugMode;
 }
 
-// System.inRollback (system.go:4654), 0 TODO
+// System.inRollback (system.go:4659), 0 TODO
 bool System_inRollback(System* s) {
     if (s->rollback.session != NULL) {
         return s->rollback.session->inRollback;
@@ -167079,7 +167083,7 @@ bool System_inRollback(System* s) {
     return false;
 }
 
-// System.isSpeculativeFrame (system.go:4661), 0 TODO
+// System.isSpeculativeFrame (system.go:4666), 0 TODO
 bool System_isSpeculativeFrame(System* s) {
     if (s->rollback.session != NULL) {
         return (!s->rollback.session->inRollback);
@@ -167087,7 +167091,7 @@ bool System_isSpeculativeFrame(System* s) {
     return false;
 }
 
-// RoundStartBackup.Save (system.go:4679), 0 TODO
+// RoundStartBackup.Save (system.go:4684), 0 TODO
 void RoundStartBackup_Save(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -167179,7 +167183,7 @@ void RoundStartBackup_Save(RoundStartBackup* bk) {
     bk->lastCharId = g_sys.SystemStateVars_.lastCharId;
 }
 
-// RoundStartBackup.Restore (system.go:4747), 0 TODO
+// RoundStartBackup.Restore (system.go:4752), 0 TODO
 void RoundStartBackup_Restore(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -167296,17 +167300,17 @@ void RoundStartBackup_Restore(RoundStartBackup* bk) {
     g_sys.SystemStateVars_.lastCharId = bk->lastCharId;
 }
 
-// newSelectChar (system.go:4869), 0 TODO
+// newSelectChar (system.go:4874), 0 TODO
 SelectChar* fn_newSelectChar(void) {
     return go_box(SelectChar, (SelectChar){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .cns_scale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .scp = fn_newSelectCharParams()});
 }
 
-// newSelectStage (system.go:4893), 0 TODO
+// newSelectStage (system.go:4898), 0 TODO
 SelectStage* fn_newSelectStage(void) {
     return go_box(SelectStage, (SelectStage){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .ssp = fn_newSelectStageParams()});
 }
 
-// PreloadState.String (system.go:4935), 0 TODO
+// PreloadState.String (system.go:4940), 0 TODO
 GoString PreloadState_String(PreloadState ps) {
     {
         PreloadState _t1 = ps;
@@ -167325,12 +167329,12 @@ GoString PreloadState_String(PreloadState ps) {
     return GOSTR("idle");
 }
 
-// newSelect (system.go:4963), 0 TODO
+// newSelect (system.go:4968), 0 TODO
 Select* fn_newSelect(void) {
     return go_box(Select, (Select){.selectedStageNo = -1, .charAnimPreload = Map_i32_bool_make(0), .stageAnimPreload = Map_i32_bool_make(0), .charSpritePreload = ({ Map_Arr2_u16_bool _m = Map_Arr2_u16_bool_make(2); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 0U}}, true); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 1U}}, true); (Map_Arr2_u16_bool)_m; }), .stageSpritePreload = Map_Arr2_u16_bool_make(0), .palOverwrite = Map_int_int_make(0), .cdefOverwrite = Map_int_GoString_make(0), .music = Map_GoString_Slice_bgMusicPtr_make(0), .gameParams = fn_newGameParams()});
 }
 
-// Select.initPreloadSync (system.go:4978), 0 TODO
+// Select.initPreloadSync (system.go:4983), 0 TODO
 void Select_initPreloadSync(Select* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167345,7 +167349,7 @@ void Select_initPreloadSync(Select* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.ensurePreloadWorker (system.go:4986), 0 TODO
+// Select.ensurePreloadWorker (system.go:4991), 0 TODO
 void Select_ensurePreloadWorker(Select* s) {
     Select* *s__h = go_box(Select*, s);
     Select_initPreloadSync((*s__h));
@@ -167359,7 +167363,7 @@ void Select_ensurePreloadWorker(Select* s) {
     fn_SafeGo(((GoFunc){(void *)lambda_1794, go_box(Env_lambda_1794, ((Env_lambda_1794){s__h}))}));
 }
 
-// Select.ensureCharPreloadSlot (system.go:5000), 0 TODO
+// Select.ensureCharPreloadSlot (system.go:5005), 0 TODO
 void Select_ensureCharPreloadSlot(Select* s, int ref) {
     if (ref < 0) {
         return;
@@ -167372,7 +167376,7 @@ void Select_ensureCharPreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.ensureStagePreloadSlot (system.go:5009), 0 TODO
+// Select.ensureStagePreloadSlot (system.go:5014), 0 TODO
 void Select_ensureStagePreloadSlot(Select* s, int ref) {
     if (ref <= 0) {
         return;
@@ -167386,7 +167390,7 @@ void Select_ensureStagePreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.QueueCharPreload (system.go:5019), 0 TODO
+// Select.QueueCharPreload (system.go:5024), 0 TODO
 void Select_QueueCharPreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Select* *s__h = go_box(Select*, s);
@@ -167447,7 +167451,7 @@ void Select_QueueCharPreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.QueueStagePreload (system.go:5057), 0 TODO
+// Select.QueueStagePreload (system.go:5062), 0 TODO
 void Select_QueueStagePreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Select* *s__h = go_box(Select*, s);
@@ -167508,7 +167512,7 @@ void Select_QueueStagePreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.CharPreloadStatus (system.go:5095), 0 TODO
+// Select.CharPreloadStatus (system.go:5100), 0 TODO
 PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167542,7 +167546,7 @@ PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.StagePreloadStatus (system.go:5108), 0 TODO
+// Select.StagePreloadStatus (system.go:5113), 0 TODO
 PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167576,7 +167580,7 @@ PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.AllPreloadsReady (system.go:5121), 0 TODO
+// Select.AllPreloadsReady (system.go:5126), 0 TODO
 bool Select_AllPreloadsReady(Select* s) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167642,7 +167646,7 @@ bool Select_AllPreloadsReady(Select* s) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.preloadWorkerLoop (system.go:5143), 0 TODO
+// Select.preloadWorkerLoop (system.go:5148), 0 TODO
 void Select_preloadWorkerLoop(Select* s) {
     Select_initPreloadSync(s);
     {
@@ -167723,7 +167727,7 @@ void Select_preloadWorkerLoop(Select* s) {
     }
 }
 
-// Select.preloadCharAssets (system.go:5212), 0 TODO
+// Select.preloadCharAssets (system.go:5217), 0 TODO
 GoIface Select_preloadCharAssets(Select* s, int ref) {
     Select* *s__h = go_box(Select*, s);
     if ((ref < 0) || (ref >= (*s__h)->charlist.len)) {
@@ -167850,7 +167854,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.preloadStageAssets (system.go:5324), 0 TODO
+// Select.preloadStageAssets (system.go:5329), 0 TODO
 GoIface Select_preloadStageAssets(Select* s, int ref) {
     if ((ref <= 0) || (ref > s->stagelist.len)) {
         return (GoIface){0};
@@ -167931,7 +167935,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.GetCharNo (system.go:5391), 0 TODO
+// Select.GetCharNo (system.go:5396), 0 TODO
 int Select_GetCharNo(Select* s, int i) {
     int n = i;
     if (s->charlist.len > 0) {
@@ -167943,7 +167947,7 @@ int Select_GetCharNo(Select* s, int i) {
     return n;
 }
 
-// Select.GetChar (system.go:5402), 0 TODO
+// Select.GetChar (system.go:5407), 0 TODO
 SelectChar* Select_GetChar(Select* s, int i) {
     if (s->charlist.len == 0) {
         return NULL;
@@ -167952,7 +167956,7 @@ SelectChar* Select_GetChar(Select* s, int i) {
     return (&s->charlist.p[n]);
 }
 
-// Select.ValidatePalette (system.go:5411), 0 TODO
+// Select.ValidatePalette (system.go:5416), 0 TODO
 int Select_ValidatePalette(Select* s, int charRef, int requested) {
     if ((charRef < 0) || (charRef >= s->charlist.len)) {
         return 1;
@@ -167984,14 +167988,14 @@ int Select_ValidatePalette(Select* s, int charRef, int requested) {
     return ((int)sc->pal.p[0]);
 }
 
-// Select.SelectStage (system.go:5435), 0 TODO
+// Select.SelectStage (system.go:5440), 0 TODO
 void Select_SelectStage(Select* s, int n) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selectedStageNo = n;
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// Select.GetStage (system.go:5441), 0 TODO
+// Select.GetStage (system.go:5446), 0 TODO
 SelectStage* Select_GetStage(Select* s, int n) {
     if (s->stagelist.len == 0) {
         return NULL;
@@ -168003,7 +168007,7 @@ SelectStage* Select_GetStage(Select* s, int n) {
     return (&s->stagelist.p[(n - 1)]);
 }
 
-// getDefaultDefPathInZip (system.go:5452), 0 TODO
+// getDefaultDefPathInZip (system.go:5457), 0 TODO
 Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     GoString path1 = {0};
     GoString path2 = {0};
@@ -168014,7 +168018,7 @@ Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     return (Ret_GoString__GoString){path1, path2};
 }
 
-// Select.AddChar (system.go:5459), 0 TODO
+// Select.AddChar (system.go:5464), 0 TODO
 SelectChar* Select_AddChar(Select* s, GoString def) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168348,7 +168352,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// Select.AddStage (system.go:5720), 0 TODO
+// Select.AddStage (system.go:5725), 0 TODO
 Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoString *def__h = go_box(GoString, def);
@@ -168587,7 +168591,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.AddSelectedChar (system.go:5901), 0 TODO
+// Select.AddSelectedChar (system.go:5906), 0 TODO
 bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     int _t1 = 0;
     int _t2 = Select_GetCharNo(s, cn);
@@ -168618,7 +168622,7 @@ bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     return true;
 }
 
-// Select.ClearSelected (system.go:5926), 0 TODO
+// Select.ClearSelected (system.go:5931), 0 TODO
 void Select_ClearSelected(Select* s) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selected = (Arr2_Slice_Arr2_int){{}};
@@ -168628,12 +168632,12 @@ void Select_ClearSelected(Select* s) {
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// newLoader (system.go:5956), 0 TODO
+// newLoader (system.go:5961), 0 TODO
 Loader* fn_newLoader(void) {
     return go_box(Loader, (Loader){.state = 0, .loadExit = go_chan_make(sizeof(LoaderState), 1)});
 }
 
-// Loader.requestCancel (system.go:5960), 0 TODO
+// Loader.requestCancel (system.go:5965), 0 TODO
 void Loader_requestCancel(Loader* l) {
     Loader* *l__h = go_box(Loader*, l);
     if ((*l__h)->cancelCh == NULL) {
@@ -168642,7 +168646,7 @@ void Loader_requestCancel(Loader* l) {
     sync_Once_Do(&(*l__h)->cancelOnce, ((GoFunc){(void *)lambda_1808, go_box(Env_lambda_1808, ((Env_lambda_1808){l__h}))}));
 }
 
-// Loader.cancelRequested (system.go:5967), 0 TODO
+// Loader.cancelRequested (system.go:5972), 0 TODO
 bool Loader_cancelRequested(Loader* l) {
     if (l->cancelCh == NULL) {
         return false;
@@ -168662,12 +168666,12 @@ bool Loader_cancelRequested(Loader* l) {
     }
 }
 
-// System.turnsPreloadActive (system.go:5989), 0 TODO
+// System.turnsPreloadActive (system.go:5994), 0 TODO
 bool System_turnsPreloadActive(System* s) {
     return (s->cfg.Config.TurnsLoading && (((s->turnsPreloadMember.v[0] >= 0) || (s->turnsPreloadMember.v[1] >= 0))));
 }
 
-// System.startNextTurnsPreload (system.go:5993), 0 TODO
+// System.startNextTurnsPreload (system.go:5998), 0 TODO
 void System_startNextTurnsPreload(System* s) {
     if (((!s->cfg.Config.TurnsLoading) || (s->loader.state == 1)) || (s->loader.state == 3)) {
         return;
@@ -168723,7 +168727,7 @@ void System_startNextTurnsPreload(System* s) {
     }
 }
 
-// System.finishTurnsPreloadForRollback (system.go:6037), 0 TODO
+// System.finishTurnsPreloadForRollback (system.go:6042), 0 TODO
 bool System_finishTurnsPreloadForRollback(System* s) {
     if (!System_turnsPreloadActive(s)) {
         return true;
@@ -168756,7 +168760,7 @@ bool System_finishTurnsPreloadForRollback(System* s) {
     return true;
 }
 
-// System.remapCharSlotRefs (system.go:6063), 0 TODO
+// System.remapCharSlotRefs (system.go:6068), 0 TODO
 void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int newSlot) {
     int oldCPU = (oldSlot ^ -1);
     int newCPU = (newSlot ^ -1);
@@ -168797,7 +168801,7 @@ void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int n
     }
 }
 
-// System.rebindCgiStateOwners (system.go:6095), 0 TODO
+// System.rebindCgiStateOwners (system.go:6100), 0 TODO
 void System_rebindCgiStateOwners(System* s, int pn) {
     if (((pn < 0) || (pn >= 12)) || (s->cgi.v[pn].states.m == 0)) {
         return;
@@ -168826,7 +168830,7 @@ void System_rebindCgiStateOwners(System* s, int pn) {
     }
 }
 
-// System.removePlayerFromCharList (system.go:6114), 0 TODO
+// System.removePlayerFromCharList (system.go:6119), 0 TODO
 void System_removePlayerFromCharList(System* s, int pn) {
     {
         for (; 1; ) {
@@ -168851,7 +168855,7 @@ void System_removePlayerFromCharList(System* s, int pn) {
     }
 }
 
-// System.getPreloadedCharAndCgi (system.go:6131), 0 TODO
+// System.getPreloadedCharAndCgi (system.go:6136), 0 TODO
 Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168869,7 +168873,7 @@ Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.setPreloadedChar (system.go:6137), 0 TODO
+// System.setPreloadedChar (system.go:6142), 0 TODO
 void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168883,7 +168887,7 @@ void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.clearPreloadedChars (system.go:6144), 0 TODO
+// System.clearPreloadedChars (system.go:6149), 0 TODO
 void System_clearPreloadedChars(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168897,7 +168901,7 @@ void System_clearPreloadedChars(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.activateTurnsSlot (system.go:6151), 0 TODO
+// System.activateTurnsSlot (system.go:6156), 0 TODO
 void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     int team = (slot & 1);
     {
@@ -168925,7 +168929,7 @@ void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     }
 }
 
-// System.activateNextTurnsFighters (system.go:6176), 0 TODO
+// System.activateNextTurnsFighters (system.go:6181), 0 TODO
 void System_activateNextTurnsFighters(System* s) {
     {
         int team = 0;
@@ -168982,7 +168986,7 @@ void System_activateNextTurnsFighters(System* s) {
     }
 }
 
-// Loader.loadCharacter (system.go:6228), 0 TODO
+// Loader.loadCharacter (system.go:6233), 0 TODO
 int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     volatile bool _df19 = false; volatile GoFunc _df19_f; volatile bool _df26 = false; volatile GoFunc _df26_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -169375,7 +169379,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     if (_df19) { _df19 = false; ((void (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// Loader.prepareTurnsFaces (system.go:6569), 0 TODO
+// Loader.prepareTurnsFaces (system.go:6574), 0 TODO
 void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScreenName* nm, Slice_int teamChars, Slice_Arr2_int teamSel) {
     i32 off = 0;
     if (g_sys.sel.gameParams != NULL) {
@@ -169456,7 +169460,7 @@ void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScree
     }
 }
 
-// Loader.loadStage (system.go:6685), 0 TODO
+// Loader.loadStage (system.go:6690), 0 TODO
 bool Loader_loadStage(Loader* l) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -169527,7 +169531,7 @@ bool Loader_loadStage(Loader* l) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Loader.load (system.go:6751), 0 TODO
+// Loader.load (system.go:6756), 0 TODO
 void Loader_load(Loader* l) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Loader* *l__h = go_box(Loader*, l);
@@ -169729,7 +169733,7 @@ void Loader_load(Loader* l) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Loader.reset (system.go:6904), 0 TODO
+// Loader.reset (system.go:6909), 0 TODO
 void Loader_reset(Loader* l) {
     {
         LoaderState _t1 = l->state;
@@ -169772,13 +169776,13 @@ void Loader_reset(Loader* l) {
     }
 }
 
-// Loader.retryAfterError (system.go:6942), 0 TODO
+// Loader.retryAfterError (system.go:6947), 0 TODO
 void Loader_retryAfterError(Loader* l) {
     ({ LoaderState _t1; go_chan_recv(l->loadExit, &_t1); _t1; });
     Loader_reset(l);
 }
 
-// Loader.runTread (system.go:6947), 0 TODO
+// Loader.runTread (system.go:6952), 0 TODO
 bool Loader_runTread(Loader* l) {
     Loader* *l__h = go_box(Loader*, l);
     if ((*l__h)->state != 0) {
@@ -169791,12 +169795,12 @@ bool Loader_runTread(Loader* l) {
     return true;
 }
 
-// EnvShake.clear (system.go:6974), 0 TODO
+// EnvShake.clear (system.go:6979), 0 TODO
 void EnvShake_clear(EnvShake* es) {
     (*es) = (EnvShake){.freq = 0x1.ep+05f, .phase = ((f32)math_NaN()), .ampl = -0x1p+02f, .mul = 0x1p+00f};
 }
 
-// EnvShake.restart (system.go:6983), 0 TODO
+// EnvShake.restart (system.go:6988), 0 TODO
 void EnvShake_restart(EnvShake* es) {
     if (es->time <= 0) {
         EnvShake_clear(es);
@@ -169805,7 +169809,7 @@ void EnvShake_restart(EnvShake* es) {
     es->curTime = es->time;
 }
 
-// EnvShake.setDefaultPhase (system.go:6991), 0 TODO
+// EnvShake.setDefaultPhase (system.go:6996), 0 TODO
 void EnvShake_setDefaultPhase(EnvShake* es) {
     if (math_IsNaN(((f64)es->phase))) {
         if (es->freq >= 0x1.68p+06f) {
@@ -169816,7 +169820,7 @@ void EnvShake_setDefaultPhase(EnvShake* es) {
     }
 }
 
-// EnvShake.update (system.go:7001), 0 TODO
+// EnvShake.update (system.go:7006), 0 TODO
 void EnvShake_update(EnvShake* es) {
     if (es->curTime <= 0) {
         if (es->time > 0) {
@@ -169851,12 +169855,12 @@ void EnvShake_update(EnvShake* es) {
     es->curTime--;
 }
 
-// EnvShake.getOffset (system.go:7045), 0 TODO
+// EnvShake.getOffset (system.go:7050), 0 TODO
 Arr2_f32 EnvShake_getOffset(EnvShake* es) {
     return es->curOffset;
 }
 
-// ZoomEffect.reset (system.go:7065), 0 TODO
+// ZoomEffect.reset (system.go:7070), 0 TODO
 void ZoomEffect_reset(ZoomEffect* z) {
     z->active = false;
     z->time = 0;
@@ -169873,7 +169877,7 @@ void ZoomEffect_reset(ZoomEffect* z) {
     z->resultValid = false;
 }
 
-// ZoomEffect.update (system.go:7082), 0 TODO
+// ZoomEffect.update (system.go:7087), 0 TODO
 void ZoomEffect_update(ZoomEffect* z) {
     if (!z->active) {
         return;
@@ -169920,7 +169924,7 @@ void ZoomEffect_update(ZoomEffect* z) {
     }
 }
 
-// ZoomEffect.computeCamera (system.go:7142), 0 TODO
+// ZoomEffect.computeCamera (system.go:7147), 0 TODO
 Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl) {
     f32 dx = {0};
     f32 dy = {0};
@@ -169976,7 +169980,7 @@ Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl)
     return (Ret_f32__f32__f32){dx, dy, dscl};
 }
 
-// System.saveCharVars (system.go:7213), 0 TODO
+// System.saveCharVars (system.go:7218), 0 TODO
 void System_saveCharVars(System* s, int pn) {
     if (s->chars.v[pn].len == 0) {
         return;
@@ -170013,7 +170017,7 @@ void System_saveCharVars(System* s, int pn) {
     Map_int_CharVarBackup_set(&s->charVarsBackup, pn, bk);
 }
 
-// System.restoreCharVars (system.go:7238), 0 TODO
+// System.restoreCharVars (system.go:7243), 0 TODO
 void System_restoreCharVars(System* s, Char* c) {
     bool _t1; CharVarBackup _t2 = Map_int_CharVarBackup_get(&s->charVarsBackup, c->playerNo, &_t1);
     CharVarBackup bk = _t2;
@@ -170053,7 +170057,7 @@ void System_restoreCharVars(System* s, Char* c) {
     Map_int_CharVarBackup_delete(&s->charVarsBackup, c->playerNo);
 }
 
-// System.loadCustomShader (system.go:7261), 0 TODO
+// System.loadCustomShader (system.go:7266), 0 TODO
 void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString name, GoString filename, Slice_u8 data) {
     Slice_u8 *data__h = go_box(Slice_u8, data);
     GoString *key__h = go_box(GoString, filepath_ToSlash(filepath_Clean(filename)));
@@ -170066,7 +170070,7 @@ void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString 
     { GoFunc _t1 = ((GoFunc){(void *)lambda_1815, go_box(Env_lambda_1815, ((Env_lambda_1815){data__h, key__h}))}); go_chan_send(s->mainThreadTask, &_t1); }
 }
 
-// System.loadCustomShaderFile (system.go:7277), 0 TODO
+// System.loadCustomShaderFile (system.go:7282), 0 TODO
 void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoString name, GoString path, Slice_GoString dirs) {
     System* *s__h = go_box(System*, s);
     Map_GoString_GoString *shaders__h = go_box(Map_GoString_GoString, shaders);
@@ -170078,7 +170082,7 @@ void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoStr
     fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1816, go_box(Env_lambda_1816, ((Env_lambda_1816){s__h, shaders__h, name__h}))}));
 }
 
-// System.loadCommonShaders (system.go:7299), 0 TODO
+// System.loadCommonShaders (system.go:7304), 0 TODO
 GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice_GoString dirs) {
     System* *s__h = go_box(System*, s);
     Map_GoString_GoString *shaders__h = go_box(Map_GoString_GoString, shaders);
@@ -170106,7 +170110,7 @@ GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice
     return (GoIface){0};
 }
 
-// System.isCustomShaderActive (system.go:7329), 0 TODO
+// System.isCustomShaderActive (system.go:7334), 0 TODO
 bool System_isCustomShaderActive(System* s, GoString key) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -170190,7 +170194,7 @@ bool System_isCustomShaderActive(System* s, GoString key) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// System.resolveCharShader (system.go:7363), 0 TODO
+// System.resolveCharShader (system.go:7368), 0 TODO
 Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     if (go_streq(name, GOSTR(""))) {
         return (Ret_GoString__bool){GOSTR(""), true};
@@ -170204,7 +170208,7 @@ Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     return (Ret_GoString__bool){key, ok};
 }
 
-// System.cleanCustomShaders (system.go:7374), 0 TODO
+// System.cleanCustomShaders (system.go:7379), 0 TODO
 void System_cleanCustomShaders(System* s) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&s->loadedCustomShaders);
@@ -170219,12 +170223,12 @@ void System_cleanCustomShaders(System* s) {
     }
 }
 
-// System.shouldHideWithBars (system.go:7388), 0 TODO
+// System.shouldHideWithBars (system.go:7393), 0 TODO
 bool System_shouldHideWithBars(System* s) {
     return (((!FightScreen_visible(&s->fightScreen)) || System_gsf(s, 8U)) || (!s->fightScreen.bars));
 }
 
-// pal32ToBytes (system.go:7392), 0 TODO
+// pal32ToBytes (system.go:7397), 0 TODO
 Slice_u8 fn_pal32ToBytes(Slice_u32 pal) {
     return ((Slice_u8){(((u8*)((void*)(&pal.p[0])))), (int)((pal.len * 4)), (int)((pal.len * 4))});
 }
@@ -170250,7 +170254,7 @@ Ret_WindowPtr__GoIface System_newWindow(System* s, int w, int h) {
         }
         return (Ret_WindowPtr__GoIface){go_box(Window, (Window){.title = s->cfg.Config.WindowTitle, .w = 960, .h = 544, .fullscreen = true, .focused = true}), (GoIface){0}};
     }
-    if (false) {
+    if (go_streq(ik_goos(), GOSTR("android"))) {
         GoString renderName = iface_GetName_319077b5(g_gfx);
         sdl_WindowFlags windowFlags = 0;
         if (go_streq(renderName, GOSTR("OpenGL ES 3.2"))) {
@@ -170266,7 +170270,7 @@ Ret_WindowPtr__GoIface System_newWindow(System* s, int w, int h) {
         }
         fullscreen = true;
     } else {
-        if (false) {
+        if (go_streq(ik_goos(), GOSTR("ios"))) {
             Ret_sdl_DisplayMode__GoIface _t4 = sdl_GetDesktopDisplayMode(0);
             sdl_DisplayMode mode = _t4.r0;
             GoIface err = _t4.r1;
@@ -170483,7 +170487,7 @@ void Window_toggleFullscreen(Window* w) {
         sdl_Window_SetFullscreen(w->embed_Window, 0U);
         sdl_Window_SetBordered(w->embed_Window, (!g_sys.cfg.Video.Borderless));
         sdl_Window_SetSize(w->embed_Window, ((i32)w->w), ((i32)w->h));
-        if (true && g_sys.cfg.Video.WindowCentered) {
+        if ((!go_streq(ik_goos(), GOSTR("android"))) && g_sys.cfg.Video.WindowCentered) {
             Ret_int__GoIface _t1 = sdl_Window_GetDisplayIndex(w->embed_Window);
             int displayIndex = _t1.r0;
             GoIface err = _t1.r1;
@@ -183198,7 +183202,7 @@ static const RField ik_rf_487[] = {{"Extensions", "", "json:\"extensions,omitemp
 static const RField ik_rf_488[] = {{"Magic", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Magic), false}, {"Version", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Version), false}, {"Length", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Length), false}, {"JSONHeader", "", "", &ik_rt[489], offsetof(gltf_glbHeader, JSONHeader), false}, };
 static const RField ik_rf_489[] = {{"Length", "", "", &ik_rt[9], offsetof(gltf_chunkHeader, Length), false}, {"Type", "", "", &ik_rt[9], offsetof(gltf_chunkHeader, Type), false}, };
 static const RField ik_rf_497[] = {{"msg", "github.com/tidwall/sjson", "", &ik_rt[13], offsetof(sjson_errorType, msg), false}, };
-static const RField ik_rf_499[] = {{"index", "github.com/tidwall/sjson", "", &ik_rt[1], offsetof(sjson_val_L98a5cb, index), false}, {"res", "github.com/tidwall/sjson", "", &ik_rt[500], offsetof(sjson_val_L98a5cb, res), false}, };
+static const RField ik_rf_499[] = {{"index", "github.com/tidwall/sjson", "", &ik_rt[1], offsetof(sjson_val_Lfd4cad, index), false}, {"res", "github.com/tidwall/sjson", "", &ik_rt[500], offsetof(sjson_val_Lfd4cad, res), false}, };
 static const RField ik_rf_500[] = {{"Type", "", "", &ik_rt[501], offsetof(gjson_Result, Type), false}, {"Raw", "", "", &ik_rt[13], offsetof(gjson_Result, Raw), false}, {"Str", "", "", &ik_rt[13], offsetof(gjson_Result, Str), false}, {"Num", "", "", &ik_rt[12], offsetof(gjson_Result, Num), false}, {"Index", "", "", &ik_rt[1], offsetof(gjson_Result, Index), false}, {"Indexes", "", "", &ik_rt[25], offsetof(gjson_Result, Indexes), false}, };
 static const RField ik_rf_506[] = {{"Metatable", "", "", &ik_rt[507], offsetof(lua_LTable, Metatable), false}, {"array", "github.com/yuin/gopher-lua", "", &ik_rt[508], offsetof(lua_LTable, array), false}, {"dict", "github.com/yuin/gopher-lua", "", &ik_rt[509], offsetof(lua_LTable, dict), false}, {"strdict", "github.com/yuin/gopher-lua", "", &ik_rt[510], offsetof(lua_LTable, strdict), false}, {"keys", "github.com/yuin/gopher-lua", "", &ik_rt[508], offsetof(lua_LTable, keys), false}, {"k2i", "github.com/yuin/gopher-lua", "", &ik_rt[511], offsetof(lua_LTable, k2i), false}, };
 static const RField ik_rf_513[] = {{"IsG", "", "", &ik_rt[0], offsetof(lua_LFunction, IsG), false}, {"Env", "", "", &ik_rt[505], offsetof(lua_LFunction, Env), false}, {"Proto", "", "", &ik_rt[514], offsetof(lua_LFunction, Proto), false}, {"GFunction", "", "", &ik_rt[522], offsetof(lua_LFunction, GFunction), false}, {"Upvalues", "", "", &ik_rt[523], offsetof(lua_LFunction, Upvalues), false}, };
@@ -184257,8 +184261,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(GoString*), "", "", &ik_rt[13], NULL, 0, 0, NULL, 199, false, "*string"},
     {22, sizeof(sjson_errorType*), "", "", &ik_rt[497], NULL, 0, 0, NULL, 200, false, "*sjson.errorType"},
     {25, sizeof(sjson_errorType), "errorType", "github.com/tidwall/sjson", NULL, NULL, 0, 1, ik_rf_497, 960, false, "sjson.errorType"},
-    {23, sizeof(Slice_sjson_val_L98a5cb), "", "", &ik_rt[499], NULL, 0, 0, NULL, 201, false, "[]sjson.val"},
-    {25, sizeof(sjson_val_L98a5cb), "val", "github.com/tidwall/sjson", NULL, NULL, 0, 2, ik_rf_499, 961, false, "sjson.val"},
+    {23, sizeof(Slice_sjson_val_Lfd4cad), "", "", &ik_rt[499], NULL, 0, 0, NULL, 201, false, "[]sjson.val"},
+    {25, sizeof(sjson_val_Lfd4cad), "val", "github.com/tidwall/sjson", NULL, NULL, 0, 2, ik_rf_499, 961, false, "sjson.val"},
     {25, sizeof(gjson_Result), "Result", "github.com/tidwall/gjson", NULL, NULL, 0, 6, ik_rf_500, 962, false, "gjson.Result"},
     {2, sizeof(gjson_Type), "Type", "github.com/tidwall/gjson", NULL, NULL, 0, 0, NULL, 963, false, "gjson.Type"},
     {25, sizeof(sjson_dtype), "dtype", "github.com/tidwall/sjson", NULL, NULL, 0, 0, NULL, 202, false, "sjson.dtype"},
@@ -185739,7 +185743,7 @@ const RType *const ik_rt_by_tid[2035] = {NULL, &ik_rt[0], &ik_rt[1], &ik_rt[2], 
 const int ik_rt_by_tid_count = 2035;
 
 const unsigned char ik_tid_kind[2035] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0,0,17,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,101,0,0,101,100,0,101,17,0,17,0,0,100,0,0,0,0,101,101,2,10,101,101,101,101,101,101,0,101,101,101,101,0,101,101,2,101,101,101,101,101,101,101,0,101,101,0,0,101,101,0,101,101,101,101,101,0,101,101,17,101,101,101,101,17,0,0,101,101,0,101,0,101,0,0,101,101,101,101,101,101,0,101,101,101,101,101,101,101,101,0,101,101,101,100,0,100,101,101,100,0,0,14,17,101,101,101,101,101,101,0,1,0,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,10,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,0,100,101,101,17,100,100,100,101,100,0,100,100,100,0,8,101,0,0,0,101,101,101,0,100,101,100,101,101,0,0,0,0,0,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,101,101,101,0,101,101,0,101,101,101,101,101,100,101,101,101,101,100,101,101,101,100,100,101,101,7,101,0,101,101,101,101,101,0,101,101,101,101,100,100,101,101,101,101,100,0,101,0,0,0,0,101,101,101,100,17,101,101,101,101,101,100,100,101,101,0,2,0,101,0,101,101,0,101,101,0,0,101,0,0,101,0,101,5,0,101,101,101,101,101,101,101,101,0,5,0,100,100,0,100,101,101,101,101,101,101,0,0,100,0,0,100,101,101,101,6,100,101,0,101,0,0,0,0,0,0,0,0,101,0,3,0,0,0,100,100,0,0,0,5,0,101,0,100,0,0,0,2,100,0,0,9,0,0,100,0,0,0,0,0,0,100,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,2,0,0,101,0,0,0,100,101,0,0,8,0,100,0,101,0,0,8,100,101,0,0,8,8,101,0,100,0,101,0,0,101,0,101,0,101,0,0,100,101,0,100,101,0,100,101,0,101,0,100,101,0,0,100,0,100,101,0,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,101,0,100,101,0,100,101,0,101,0,101,0,100,0,100,101,0,0,101,0,0,101,0,0,0,0,100,0,0,0,0,100,0,100,100,100,0,100,0,100,0,100,0,100,0,0,0,0,100,100,0,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,2,0,0,101,0,0,0,0,101,100,0,0,0,0,0,101,0,0,0,101,0,0,0,0,100,0,0,0,0,0,0,100,0,101,2,0,0,100,0,100,101,0,100,0,0,0,0,0,100,0,0,100,0,100,0,0,0,101,0,0,0,100,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,100,0,100,0,0,0,100,0,0,101,100,0,0,0,0,0,100,101,0,9,8,101,0,0,0,100,101,0,100,101,0,0,8,100,101,0,8,0,100,101,0,100,101,0,9,100,101,0,101,0,101,0,101,100,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,8,100,101,0,100,101,0,0,8,100,100,101,0,0,100,101,0,9,9,9,100,101,0,100,101,0,100,101,0,0,0,0,0,2,0,100,0,0,0,0,101,0,100,100,101,0,100,0,0,100,101,0,101,0,101,0,100,101,0,101,0,0,0,101,0,0,100,0,0,101,0,0,0,2,0,0,101,0,101,0,101,0,101,0,0,101,0,100,0,0,0,0,0,100,0,0,0,0,0,0,0,0,0,0,100,0,0,0,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,0,0,101,0,101,0,101,0,2,100,0,100,101,0,0,0,0,101,0,0,101,0,101,0,0,0,100,100,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,0,0,100,0,0,0,100,0,0,0,100,9,0,0,100,101,0,0,0,0,0,100,0,100,101,0,101,0,0,0,0,0,101,0,0,101,0,100,101,0,101,0,0,101,0,100,0,100,0,0,101,0,5,100,0,0,0,0,0,0,101,0,0,100,100,100,0,101,0,100,100,0,0,101,0,101,0,101,100,0,101,0,0,0,0,0,100,100,0,100,0,100,0,8,0,5,5,0,100,0,0,0,0,0,0,0,0,0,100,0,0,100,0,0,5,5,5,0,0,100,0,0,0,0,0,5,0,0,0,11,5,10,10,101,0,100,100,0,0,0,2,4,100,0,5,0,100,0,0,0,0,0,0,0,0,101,0,5,0,101,0,0,100,101,0,0,0,101,0,100,0,100,0,101,101,0,0,100,0,0,0,0,101,0,8,8,0,5,5,12,101,0,0,0,100,0,100,101,0,0,101,0,100,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,100,0,0,100,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,2,2,100,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,101,0,0,100,0,0,0,0,0,101,0,100,100,0,0,0,0,0,0,101,0,0,0,100,101,0,100,101,0,0,0,8,100,101,0,100,101,0,8,100,101,0,101,0,0,0,100,100,101,0,8,0,0,100,101,0,100,101,0,101,8,100,101,0,8,100,101,0,100,0,8,101,0,0,100,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,5,0,101,0,0,0,0,5,5,0,0,0,0,0,100,0,5,0,0,0,0,0,0,101,0,0,0,0,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,100,0,0,100,0,0,0,0,0,100,0,100,0,5,2,0,101,0,101,0,0,0,0,8,0,0,0,0,0,0,0,0,0,0,0,8,0,0,0,0,2,0,10,0,5,0,0,0,0,5,0,0,100,0,100,0,101,0,5,5,0,0,100,0,100,100,0,0,0,0,0,100,101,0,0,101,0,0,0,0,101,0,0,100,101,0,0,0,100,101,0,0,100,101,0,0,100,101,0,100,0,100,101,0,0,101,0,0,100,101,0,0,101,0,0,0,101,0,100,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,101,0,0,101,0,0,101,0,0,101,0,0,0,0,0,101,0,0,0,101,0,0,0,101,0,0,0,100,0,100,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,8,0,0,100,0,0,100,0,100,0,0,0,100,0,0,0,0,0,0,100,0,0,101,0,0,12,100,0,5,100,0,0,100,0,2,0,100,2,0,0,0,0,0,0,0,0,100,0,100,0,100,0,0,100,0,100,0,100,0,0,100,0,0,0,100,0,100,0,100,0,101,0,0,101,0,0,0,0,0,10,0,100,0,101,0,10,0,0,0,0,100,100,101,0,0,101,0,0,0,2,100,0,0,0,0,101,0,0,0,101,0,101,0,101,0,2,0,100,0,101,0,0,100,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,5,8,0,10,5,10,0};
-const unsigned ik_tid_size[2035] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,0,sizeof(Slice_u8),0,0,sizeof(GoOpaque),sizeof(GoOpaque),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,0,0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_L98a5cb),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_L9db835),sizeof(Slice_ov_L2966a0),sizeof(Slice_pv_Lb05621),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_L9a2a44),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,0,0,0,0,0,sizeof(GoOpaque),0,0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L64fd25),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_L5cd011),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(GoOpaque),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoOpaque),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_L98a5cb),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoReflectSliceHeader),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(ast_FuncCallExpr),sizeof(ast_ExprBase),sizeof(ast_Node),sizeof(Slice_ast_Expr),sizeof(ast_Comma3Expr),sizeof(ast_NumberExpr),sizeof(ast_ConstExprBase),sizeof(lua_constLValueExpr),sizeof(ast_LabelStmt),sizeof(ast_StmtBase),sizeof(ast_AssignStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(Slice_ast_Stmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_FuncDefStmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),0,sizeof(ast_ParList),sizeof(ast_ReturnStmt),sizeof(ast_IfStmt),sizeof(ast_BreakStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_GotoStmt),sizeof(ast_IdentExpr),sizeof(ast_AttrGetExpr),sizeof(ast_StringExpr),sizeof(ast_NilExpr),sizeof(ast_LogicalOpExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_TableExpr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(ast_ArithmeticOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(ast_Position),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(ast_Token),sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(Arr16_parse_yySymType),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_Error),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_L9db835),sizeof(bcProfKey),sizeof(ov_L2966a0),sizeof(pv_Lb05621),sizeof(StreamLooper),sizeof(pair_L9a2a44),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(Anon_a3823e0d),sizeof(GoOpaque),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_Lc6dc42),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(GoOpaque),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Texture_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,0,sizeof(GL33State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),0,0,0,0,0,0,sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L64fd25),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_L5cd011),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK)};
+const unsigned ik_tid_size[2035] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,0,sizeof(Slice_u8),0,0,sizeof(GoOpaque),sizeof(GoOpaque),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,0,0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_Lfd4cad),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_L9db835),sizeof(Slice_ov_L2966a0),sizeof(Slice_pv_Lb05621),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_L9a2a44),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,0,0,0,0,0,sizeof(GoOpaque),0,0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L64fd25),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_L5cd011),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(GoOpaque),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoOpaque),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_Lfd4cad),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoReflectSliceHeader),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(ast_FuncCallExpr),sizeof(ast_ExprBase),sizeof(ast_Node),sizeof(Slice_ast_Expr),sizeof(ast_Comma3Expr),sizeof(ast_NumberExpr),sizeof(ast_ConstExprBase),sizeof(lua_constLValueExpr),sizeof(ast_LabelStmt),sizeof(ast_StmtBase),sizeof(ast_AssignStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(Slice_ast_Stmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_FuncDefStmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),0,sizeof(ast_ParList),sizeof(ast_ReturnStmt),sizeof(ast_IfStmt),sizeof(ast_BreakStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_GotoStmt),sizeof(ast_IdentExpr),sizeof(ast_AttrGetExpr),sizeof(ast_StringExpr),sizeof(ast_NilExpr),sizeof(ast_LogicalOpExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_TableExpr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(ast_ArithmeticOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(ast_Position),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(ast_Token),sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(Arr16_parse_yySymType),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_Error),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_L9db835),sizeof(bcProfKey),sizeof(ov_L2966a0),sizeof(pv_Lb05621),sizeof(StreamLooper),sizeof(pair_L9a2a44),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(Anon_a3823e0d),sizeof(GoOpaque),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_Lc6dc42),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(GoOpaque),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Texture_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,0,sizeof(GL33State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),0,0,0,0,0,0,sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L64fd25),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_L5cd011),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK)};
 const int ik_tid_count = 2035;
 GoIface ik_binread_any(GoIface r, GoIface x, int big) {
     switch (x.type) {
