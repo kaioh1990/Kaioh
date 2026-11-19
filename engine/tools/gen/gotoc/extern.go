@@ -47,6 +47,13 @@ func externProtos(p *Prog) []string {
 
 // special: calls whose C form differs from a plain call.
 func (t *Tx) special(c *ast.CallExpr, fn *types.Func, args []string) string {
+	if fn.Pkg().Name() == "maps" && fn.Name() == "Clear" { // maps or golang.org/x/exp/maps
+		return fmt.Sprintf("gomap_clear((GoMap *)%s)", t.mapAddr(c.Args[0]))
+	}
+	if fn.Pkg().Name() == "slices" && fn.Name() == "Clone" {
+		st := t.typeOf(c.Args[0])
+		return fmt.Sprintf("GO_APPEND_SLICE(%s, (%s){0}, %s)", cbase(st.Underlying()), cbase(st.Underlying()), t.expr(c.Args[0]))
+	}
 	if fn.Pkg().Path() == "sort" && (fn.Name() == "Slice" || fn.Name() == "SliceStable") {
 		st := t.typeOf(c.Args[0])
 		x := t.expr(c.Args[0])

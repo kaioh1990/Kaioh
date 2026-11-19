@@ -71,3 +71,28 @@ func thunkLines() []string {
 }
 
 var _ = strings.Join
+
+// funcValue: a package function used as a value -> GoFunc with a thunk
+// taking the (unused) environment first.
+func (t *Tx) funcValue(fn *types.Func) string {
+	sig := fn.Type().(*types.Signature)
+	if sig.TypeParams() != nil {
+		return cFuncName(t.p, fn)
+	}
+	var params, args []string
+	for i := 0; i < sig.Params().Len(); i++ {
+		params = append(params, fmt.Sprintf("%s _a%d", cbase(sig.Params().At(i).Type()), i))
+		args = append(args, fmt.Sprintf("_a%d", i))
+	}
+	ret := t.retTypeOf(sig.Results(), "")
+	retKw := "return "
+	if ret == "void" {
+		retKw = ""
+	}
+	cf := cFuncName(t.p, fn)
+	name := "fv_" + cf
+	if _, ok := methodThunks[name]; !ok {
+		methodThunks[name] = fmt.Sprintf("static %s %s(void *_env%s) { (void)_env; %s%s(%s); }", ret, name, prependComma(params), retKw, cf, strings.Join(args, ", "))
+	}
+	return fmt.Sprintf("((GoFunc){(void *)%s, NULL})", name)
+}

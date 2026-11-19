@@ -2,10 +2,6 @@
 Snd GoOpaqueVal
 Fnt GoOpaqueVal
 Texture GoIface
-bgMusic GoOpaqueVal
 lazySound GoOpaqueVal
-specGuard GoOpaqueVal
-specList GoOpaqueVal
-nameFact GoOpaqueVal
 Sound GoOpaqueVal
 FntCharImage GoOpaqueVal

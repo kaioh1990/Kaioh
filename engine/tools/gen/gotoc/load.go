@@ -7,7 +7,10 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Prog struct {
@@ -21,6 +24,7 @@ type Prog struct {
 func load(dir string) *Prog {
 	ctx := build.Default
 	ctx.BuildTags = []string{"vita"}
+	ctx.CgoEnabled = true // keep cgo files of the main package (FakeImportC)
 	bp, _ := ctx.ImportDir(dir, 0)
 	p := &Prog{fset: token.NewFileSet(), funcs: map[string]*ast.FuncDecl{}}
 	for _, f := range append(bp.GoFiles, bp.CgoFiles...) {
@@ -37,12 +41,20 @@ func load(dir string) *Prog {
 		Instances:  map[*ast.Ident]types.Instance{},
 		Implicits:  map[ast.Node]types.Object{},
 	}
-	conf := types.Config{FakeImportC: true, Importer: importer.ForCompiler(p.fset, "source", nil), Error: func(error) {}}
+	conf := types.Config{FakeImportC: true, Importer: importer.ForCompiler(p.fset, "source", nil), Error: func(err error) {
+		if f := os.Getenv("GOTOC_TYPE_ERRORS"); f != "" && strings.Contains(err.Error(), f) {
+			fmt.Fprintln(os.Stderr, "type error:", err)
+		}
+	}}
 	p.pkg, _ = conf.Check("main", p.fset, p.files, p.info)
 	for _, f := range p.files {
 		for _, d := range f.Decls {
 			fd, ok := d.(*ast.FuncDecl)
 			if !ok {
+				continue
+			}
+			if p.info.Defs[fd.Name] == nil {
+				fmt.Fprintln(os.Stderr, "skipping undeclared func", funcKey(fd), p.fset.Position(fd.Pos()))
 				continue
 			}
 			p.funcs[funcKey(fd)] = fd

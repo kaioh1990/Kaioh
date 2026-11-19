@@ -127,6 +127,17 @@ func typePreamble() string {
 		}
 		for i := 0; i < st.NumFields(); i++ {
 			f := st.Field(i)
+			if es, ok := f.Type().Underlying().(*types.Struct); ok && f.Embedded() {
+				fmt.Fprintf(&b, " union { %s %s; struct {", cbase(f.Type()), embName(f))
+				for k := 0; k < es.NumFields(); k++ {
+					fmt.Fprintf(&b, " %s %s;", cbase(es.Field(k).Type()), embName(es.Field(k)))
+				}
+				if es.NumFields() == 0 {
+					b.WriteString(" char _empty_" + f.Name() + ";")
+				}
+				b.WriteString(" }; };")
+				continue
+			}
 			fmt.Fprintf(&b, " %s %s;", cbase(f.Type()), embName(f))
 		}
 		b.WriteString(" };\n")
@@ -164,7 +175,7 @@ func typePreamble() string {
 	}
 	for _, n := range keys(sn) {
 		el := cbase(sliceTypes[n])
-		if strings.HasPrefix(el, "void") || strings.Contains(el, "/*") {
+		if el == "void" {
 			continue
 		}
 		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\nGO_SLICE_FUNCS(%s, %s)\n#endif\n", n, n, n, el)
@@ -172,7 +183,7 @@ func typePreamble() string {
 	for _, n := range keys(mn) {
 		mt := mapTypes[n]
 		k, v := cbase(mt.Key()), cbase(mt.Elem())
-		if strings.Contains(k+v, "/*") || k == "void" || v == "void" {
+		if k == "void" || v == "void" {
 			continue
 		}
 		sk := "false"

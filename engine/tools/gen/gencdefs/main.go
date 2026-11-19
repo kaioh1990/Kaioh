@@ -23,6 +23,7 @@ func main() {
 	dir := os.Args[1]
 	ctx := build.Default
 	ctx.BuildTags = []string{"vita"}
+	ctx.CgoEnabled = true
 	bp, _ := ctx.ImportDir(dir, 0)
 	fset := token.NewFileSet()
 	var files []*ast.File
@@ -179,27 +180,7 @@ func main() {
 				}
 			}
 			fmt.Fprintf(bb, "struct %s {\n", n)
-			for i := 0; i < u.NumFields(); i++ {
-				f := u.Field(i)
-				name := f.Name()
-				if f.Embedded() {
-					// Promoted fields: anonymous struct inside a union with the
-					// whole embedded value (both c.X and c.Embedded work).
-					if es, ok := f.Type().Underlying().(*types.Struct); ok {
-						fmt.Fprintf(bb, "    union {\n        %s %s_;\n        struct {\n", cbase(f.Type()), name)
-						for k := 0; k < es.NumFields(); k++ {
-							fmt.Fprintf(bb, "            %s;\n", cdecl(es.Field(k).Type(), cField(es.Field(k).Name())))
-						}
-						bb.WriteString("        };\n    };\n")
-						continue
-					}
-					name = "embed_" + name
-				}
-				fmt.Fprintf(bb, "    %s;\n", cdecl(f.Type(), cField(name)))
-			}
-			if u.NumFields() == 0 {
-				bb.WriteString("    char _empty;\n")
-			}
+			writeFields(bb, u)
 			bb.WriteString("};\n\n")
 		default:
 			if _, isSlice := u.(*types.Slice); isSlice {
@@ -439,13 +420,36 @@ func ensureAnon(bb *strings.Builder, t types.Type) {
 		ensureArrs(bb, st.Field(i).Type())
 	}
 	fmt.Fprintf(bb, "struct %s {\n", n)
-	for i := 0; i < st.NumFields(); i++ {
-		fmt.Fprintf(bb, "    %s;\n", cdecl(st.Field(i).Type(), cField(st.Field(i).Name())))
+	writeFields(bb, st)
+	bb.WriteString("};\n")
+}
+
+// writeFields: struct members. Embedded structs become a union of the whole
+// embedded value (E_) and an anonymous struct of its fields, so both
+// s.E_ and the promoted s.field work.
+func writeFields(bb *strings.Builder, u *types.Struct) {
+	for i := 0; i < u.NumFields(); i++ {
+		f := u.Field(i)
+		name := f.Name()
+		if f.Embedded() {
+			if es, ok := f.Type().Underlying().(*types.Struct); ok {
+				fmt.Fprintf(bb, "    union {\n        %s %s_;\n        struct {\n", cbase(f.Type()), name)
+				for k := 0; k < es.NumFields(); k++ {
+					fmt.Fprintf(bb, "            %s;\n", cdecl(es.Field(k).Type(), cField(es.Field(k).Name())))
+				}
+				if es.NumFields() == 0 {
+					bb.WriteString("            char _empty_" + name + ";\n")
+				}
+				bb.WriteString("        };\n    };\n")
+				continue
+			}
+			name = "embed_" + name
+		}
+		fmt.Fprintf(bb, "    %s;\n", cdecl(f.Type(), cField(name)))
 	}
-	if st.NumFields() == 0 {
+	if u.NumFields() == 0 {
 		bb.WriteString("    char _empty;\n")
 	}
-	bb.WriteString("};\n")
 }
 
 func ensureArrs(bb *strings.Builder, t types.Type) {
@@ -471,6 +475,9 @@ func ensureArrs(bb *strings.Builder, t types.Type) {
 }
 
 func cbase(t types.Type) string {
+	if t != nil {
+		t = types.Unalias(t)
+	}
 	if n, ok := isPkgNamed(t); ok {
 		if o, ok := overrides[n]; ok {
 			return o

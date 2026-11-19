@@ -1,0 +1,13 @@
+Ikemen GO changes for the native engine's headless entry point
+(src/cvfheadless.go = tools/ikemen_cvfheadless.go).
+
+--- a/src/system.go
++++ b/src/system.go
+@@ func (s *System) await(fps int) bool {
+ func (s *System) await(fps int) bool {
++	if cvfHeadless {
++		// native engine without window: no rendering, no frame pacing
++		s.frameSkip = true
++		return !s.gameEnd
++	}
+ 	if !s.frameSkip && !s.window.renderingPaused {

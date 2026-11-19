@@ -43,11 +43,21 @@ func (t *Tx) call(c *ast.CallExpr) string {
 			return t.builtin(b.Name(), c)
 		}
 	}
+	if se, ok := c.Fun.(*ast.SelectorExpr); ok {
+		if b, ok := t.p.info.Uses[se.Sel].(*types.Builtin); ok {
+			return t.unsafeBuiltin(b.Name(), c)
+		}
+	}
 	fn := t.calleeFunc(c)
 	if fn == nil {
 		return t.indirectCall(c)
 	}
 	sig := fn.Type().(*types.Signature)
+	if fn.Pkg() != t.p.pkg && (sig.TypeParams() != nil || isGenericInstance(t, c)) {
+		if r := t.special(c, fn, nil); r != "" {
+			return r
+		}
+	}
 	if (sig.TypeParams() != nil || isGenericInstance(t, c)) && !simpleGeneric[fn.Name()] && sig.Recv() == nil {
 		if name, isig := t.genericCall(c, fn); name != "" {
 			return name + "(" + strings.Join(t.callArgs(c, isig), ", ") + ")"
@@ -195,9 +205,15 @@ func (t *Tx) methodRecv(x ast.Expr, sel *types.Selection, sig *types.Signature) 
 
 func (t *Tx) conversion(to types.Type, arg ast.Expr) string {
 	to = substT(to)
+	if id, ok := arg.(*ast.Ident); ok && id.Name == "nil" {
+		return t.exprConv(arg, to)
+	}
 	from := t.typeOf(arg)
 	if tv := t.p.info.Types[arg]; tv.Value != nil {
 		return constLit(tv.Value, to)
+	}
+	if from != nil && isInvalid(from) {
+		return "((" + cbase(to) + ")0) /* from an unresolved type */"
 	}
 	x := t.expr(arg)
 	if from == nil {
@@ -333,3 +349,22 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 }
 
 var simpleGeneric = map[string]bool{"Min": true, "Max": true, "Abs": true, "Sign": true, "Clamp": true}
+
+func (t *Tx) unsafeBuiltin(name string, c *ast.CallExpr) string {
+	switch name {
+	case "StringData":
+		return "((u8 *)(" + t.expr(c.Args[0]) + ").p)"
+	case "SliceData":
+		return "((" + t.expr(c.Args[0]) + ").p)"
+	case "String":
+		return fmt.Sprintf("((GoString){(const char *)(%s), (int)(%s)})", t.expr(c.Args[0]), t.expr(c.Args[1]))
+	case "Slice":
+		st := t.typeOf(c)
+		return fmt.Sprintf("((%s){(%s), (int)(%s), (int)(%s)})", cbase(st), t.expr(c.Args[0]), t.expr(c.Args[1]), t.expr(c.Args[1]))
+	case "Sizeof":
+		return fmt.Sprintf("sizeof(%s)", cbase(t.typeOf(c.Args[0])))
+	case "Add":
+		return fmt.Sprintf("((void *)((char *)(%s) + (%s)))", t.expr(c.Args[0]), t.expr(c.Args[1]))
+	}
+	return t.TODO(c, "unsafe."+name)
+}

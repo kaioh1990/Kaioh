@@ -20,7 +20,11 @@ var genInsts = map[string]*genInst{}
 var genPending []*genInst
 
 func substT(ty types.Type) types.Type {
-	if curSubst == nil || ty == nil {
+	if ty == nil {
+		return ty
+	}
+	ty = types.Unalias(ty)
+	if curSubst == nil {
 		return ty
 	}
 	return deepSubst(ty)

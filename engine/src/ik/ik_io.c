@@ -11,6 +11,15 @@ static GoString eof_s = {"EOF", 3};
 static GoString uneof_s = {"unexpected EOF", 14};
 static GoString notexist_s = {"file does not exist", 19};
 GoIface io_EOF = {GO_TID_ERRSTR, &eof_s};
+static struct {
+    FILE *f;
+    GoString name;
+    bool notexist;
+} rt_stderr = {NULL, {"/dev/stderr", 11}, false}, rt_stdout = {NULL, {"/dev/stdout", 11}, false};
+Slice_GoString os_Args;
+GoString ini_DEFAULT_SECTION = {"DEFAULT", 7};
+GoOpaque *os_Stderr = (GoOpaque *)&rt_stderr;
+GoOpaque *os_Stdout = (GoOpaque *)&rt_stdout;
 GoIface io_ErrUnexpectedEOF = {GO_TID_ERRSTR, &uneof_s};
 GoIface os_ErrNotExist = {GO_TID_ERRSTR, &notexist_s};
 
@@ -404,16 +413,16 @@ Ret_Slice_GoString__GoIface filepath_Glob(GoString pattern) {
 }
 
 // ---------------------------------------------------------------- unsupported
-Ret_GoOpaque_zip_ReadCloserPtrPtr__GoIface zip_OpenReader(GoString a0) {
-    Ret_GoOpaque_zip_ReadCloserPtrPtr__GoIface r = {0};
+Ret_GoZipReadCloserPtr__GoIface zip_OpenReader(GoString a0) {
+    Ret_GoZipReadCloserPtr__GoIface r = {0};
     r.r1 = go_errorf("zip: archives are not supported (%.*s)", a0.len, a0.p);
     return r;
 }
-GoIface zip_ReadCloser_Close(GoOpaque *recv) {
+GoIface zip_ReadCloser_Close(GoZipReadCloser *recv) {
     (void)recv;
     return (GoIface){0};
 }
-Ret_GoIface__GoIface zip_File_Open(GoOpaque *recv) {
+Ret_GoIface__GoIface zip_File_Open(GoZipFile *recv) {
     (void)recv;
     return (Ret_GoIface__GoIface){{0}, go_error(GOSTR("zip: not supported"))};
 }
@@ -441,25 +450,22 @@ GoIface gob_Encoder_Encode(GoOpaque *recv, GoIface a0) {
     (void)recv, (void)a0;
     return go_error(GOSTR("gob: not supported"));
 }
-GoOpaque *image_NewNRGBA(GoOpaque a0) {
-    (void)a0;
-    return (GoOpaque *)calloc(1, sizeof(GoOpaque));
+GoImageNRGBA *image_NewNRGBA(GoImageRect r) {
+    GoImageNRGBA *m = (GoImageNRGBA *)calloc(1, sizeof *m);
+    int w = r.Max.X - r.Min.X, h = r.Max.Y - r.Min.Y;
+    m->Rect = r;
+    m->Stride = 4 * w;
+    m->Pix = (Slice_u8){(u8 *)calloc((size_t)(w * h * 4 > 0 ? w * h * 4 : 1), 1), w * h * 4, w * h * 4};
+    return m;
 }
-GoOpaque image_Rect(int a0, int a1, int a2, int a3) {
-    GoOpaque r = {{0}};
-    int v[4] = {a0, a1, a2, a3};
-    memcpy(r._opaque, v, sizeof v);
-    return r;
+GoImageRect image_Rect(int x0, int y0, int x1, int y1) {
+    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
+    return (GoImageRect){{x0, y0}, {x1, y1}};
 }
-GoOpaque image_NRGBA_Bounds(GoOpaque *recv) {
-    (void)recv;
-    return (GoOpaque){{0}};
-}
-GoOpaque image_Paletted_Bounds(GoOpaque *recv) {
-    (void)recv;
-    return (GoOpaque){{0}};
-}
-void draw_Draw(GoIface a0, GoOpaque a1, GoIface a2, GoOpaque a3, int a4) { (void)a0, (void)a1, (void)a2, (void)a3, (void)a4; }
+GoImageRect image_NRGBA_Bounds(GoImageNRGBA *recv) { return recv->Rect; }
+GoImageRect image_Paletted_Bounds(GoImagePaletted *recv) { return recv->Rect; }
+void draw_Draw(GoIface a0, GoImageRect a1, GoIface a2, GoImagePoint a3, int a4) { (void)a0, (void)a1, (void)a2, (void)a3, (void)a4; }
 
 // net: online play is implemented natively elsewhere (not by translation).
 GoIface net_conn_LocalAddr(GoOpaque *recv) {
@@ -482,3 +488,125 @@ GoString net_TCPAddr_String(GoOpaque *recv) {
 Slice_u8 net_IP_To4(Slice_u8 recv) { return recv; }
 bool net_IP_Equal(Slice_u8 a, Slice_u8 b) { return a.len == b.len && (a.len == 0 || memcmp(a.p, b.p, (size_t)a.len) == 0); }
 bool net_IP_IsLoopback(Slice_u8 recv) { return recv.len >= 1 && recv.p[recv.len == 16 ? 12 : 0] == 127; }
+
+// ---------------------------------------------------------------- bufio
+// bufio.Writer over an io.Writer that is an *os.File (the state dump).
+typedef struct RtBufWriter {
+    GoIface w;
+} RtBufWriter;
+
+GoOpaque *bufio_NewWriterSize(GoIface w, int size) {
+    (void)size;  // stdio buffers already
+    RtBufWriter *b = (RtBufWriter *)calloc(1, sizeof *b);
+    b->w = w;
+    return (GoOpaque *)b;
+}
+
+Ret_int__GoIface bufio_Writer_Write(GoOpaque *recv, Slice_u8 p) {
+    RtBufWriter *b = (RtBufWriter *)recv;
+    Ret_int__GoIface r = {p.len, {0}};
+#ifdef GO_TID_P_os_File
+    if (b->w.type == GO_TID_P_os_File) {
+        RtFile *f = (RtFile *)b->w.data;
+        if (f->f) fwrite(p.p, 1, (size_t)p.len, f->f);
+    }
+#endif
+    return r;
+}
+
+GoIface bufio_Writer_Flush(GoOpaque *recv) {
+    RtBufWriter *b = (RtBufWriter *)recv;
+#ifdef GO_TID_P_os_File
+    if (b->w.type == GO_TID_P_os_File) {
+        RtFile *f = (RtFile *)b->w.data;
+        if (f->f) fflush(f->f);
+    }
+#endif
+    return (GoIface){0};
+}
+
+void beep_Mixer_Clear(GoOpaque *recv) { (void)recv; }
+
+int bytes_Reader_Len(GoOpaque *recv) {
+    RtBytesReader *r = (RtBytesReader *)recv;
+    return r->pos >= r->b.len ? 0 : r->b.len - (int)r->pos;
+}
+
+GoString filepath_Base(GoString s) {
+    if (s.len == 0) return GOSTR(".");
+    while (s.len > 0 && s.p[s.len - 1] == '/') s.len--;
+    int k = s.len;
+    while (k > 0 && s.p[k - 1] != '/') k--;
+    s = (GoString){s.p + k, s.len - k};
+    if (s.len == 0) return GOSTR("/");
+    return s;
+}
+
+Ret_int__GoIface io_ReadFull(GoIface r, Slice_u8 buf) {
+    Ret_int__GoIface o = {0};
+    while (o.r0 < buf.len) {
+        Ret_int__GoIface rr = iread(r, buf.p + o.r0, buf.len - o.r0);
+        o.r0 += rr.r0;
+        if (rr.r1.type) {
+            if (o.r0 < buf.len) o.r1 = o.r0 == 0 ? io_EOF : io_ErrUnexpectedEOF;
+            break;
+        }
+        if (rr.r0 == 0) {
+            o.r1 = io_ErrUnexpectedEOF;
+            break;
+        }
+    }
+    return o;
+}
+
+Ret_int__GoIface fmt_Scanln(Slice_GoIface a0) {
+    (void)a0;  // no console input in the headless engine
+    return (Ret_int__GoIface){0, io_EOF};
+}
+
+_Noreturn void os_Exit(int code) { exit(code); }
+
+GoImageRect image_Rectangle_Bounds(GoImageRect recv) { return recv; }
+
+int list_List_Len(GoOpaque *recv) {
+    (void)recv;
+    return 0;
+}
+
+void lua_LState_RaiseError(GoOpaque *recv, GoString fmt, Slice_GoIface args) {
+    (void)recv;
+    GoString s = go_sprintf(fmt, args.p, args.len);
+    go_panic_str(go_strz(s));
+}
+
+// bufio.Scanner (lines) over an io.Reader: reads everything up front.
+typedef struct RtScanner {
+    Slice_u8 data;
+    int pos;
+    GoString tok;
+} RtScanner;
+
+GoOpaque *bufio_NewScanner(GoIface r) {
+    RtScanner *s = (RtScanner *)calloc(1, sizeof *s);
+    s->data = io_ReadAll(r).r0;
+    return (GoOpaque *)s;
+}
+
+bool bufio_Scanner_Scan(GoOpaque *recv) {
+    RtScanner *s = (RtScanner *)recv;
+    if (s->pos >= s->data.len) return false;
+    int st = s->pos;
+    while (s->pos < s->data.len && s->data.p[s->pos] != '\n') s->pos++;
+    int end = s->pos;
+    if (s->pos < s->data.len) s->pos++;  // skip '\n'
+    if (end > st && s->data.p[end - 1] == '\r') end--;  // ScanLines drops a trailing \r
+    s->tok = (GoString){(const char *)s->data.p + st, end - st};
+    return true;
+}
+
+GoString bufio_Scanner_Text(GoOpaque *recv) { return ((RtScanner *)recv)->tok; }
+
+GoString os_Getenv(GoString key) {
+    const char *v = getenv(go_strz(key));
+    return v ? go_cstr(strdup(v)) : (GoString){"", 0};
+}

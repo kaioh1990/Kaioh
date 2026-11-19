@@ -1,5 +1,16 @@
 #!/bin/sh
-# Regenerates the reachable-simulation translation. Usage: run_reach.sh IKEMEN_SRC OUT.c
-export GOTOC_EXCLUDE=bc_compile.go,bc_fuse.go,bcprof.go,cvf_online.go,cvfcook.go,font.go,input_sdl.go,luacache.go,model.go,motif.go,music.go,netplay.go,render.go,render_gles32.go,render_vk.go,sound.go,spec_match.go,statedump.go,storyboard.go,system_sdl.go,util_android.go,util_desktop.go,util_ios.go,util_raw.go,util_vita.go,video_ffmpeg.go,video_stub_vita.go,vita_platform.go,vita_platform_other.go,vk_stub_vita.go
+# Regenerates the reachable-simulation translation.
+# Usage: run_reach.sh IKEMEN_SRC_DIR OUT.c   (GOTOC_HDR: header path)
+export GOTOC_EXCLUDE=cvfcook.go,font.go,input_sdl.go,luacache.go,model.go,motif.go,music.go,netplay.go,render.go,render_gles32.go,render_vk.go,sound.go,spec_match.go,storyboard.go,system_sdl.go,util_android.go,util_desktop.go,util_ios.go,util_raw.go,util_vita.go,video_ffmpeg.go,video_stub_vita.go,vita_platform.go,vita_platform_other.go,vk_stub_vita.go,rollback.go,audio_sdl.go,sound_xm.go,compiler_bchash.go
+# simulation functions living in otherwise excluded (platform) files
+export GOTOC_INCLUDE_FUNCS=Rotation.IsZero,itoa,fmtHex
+# functions implemented by hand in src/ik (ik_native.c)
+export GOTOC_NATIVE_FUNCS=decodeShiftJIS
+# platform/render/diagnostic functions in otherwise translated files
+export GOTOC_EXCLUDE_FUNCS=runGfxTask,GetKeyboardState,saveScreenshot,parseMusicSection,Char.cueDebugDraw,AnimTextSnd.Draw,FightScreenCombo.draw,Loader.runTread,System.drawDebugText,modifyBgm.Run,modifySnd.Run,Layout.DrawText
 export GOTOC_GEN_TYPES=${GOTOC_GEN_TYPES:-/home/claude/kaioh/engine/src/core/gen_types.h}
-exec "$(dirname "$0")/gotoc" "$1" reach:Loader.load,System.runMatch,System.resetRound,System.loadStart > "$2"
+# type-check in module mode (resolves pure-Go dependencies such as go-ini)
+export PATH=/tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/goroot/bin:$PATH GOTOOLCHAIN=local GOFLAGS=-mod=mod GOPROXY=off CGO_ENABLED=0
+SRC=$(cd "$1" && pwd)
+cd "$SRC/.."
+exec /tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/gotoc/gotoc ./src reach:cvfHeadlessMain > "$2"

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/token"
 	"go/types"
 	"strings"
 )
@@ -12,6 +13,45 @@ import (
 // the same), so closures that outlive their function stay valid.
 func heapVarsOf(p *Prog, region ast.Node) map[types.Object]bool {
 	out := map[types.Object]bool{}
+	// locals whose address is taken (&x, &x.f, &x[i] on arrays) may outlive
+	// the frame (Go moves them to the heap): allocate them on the heap too
+	ast.Inspect(region, func(n ast.Node) bool {
+		if fl, ok := n.(*ast.FuncLit); ok && fl != region {
+			return false // a nested literal's own locals are handled with it
+		}
+		u, ok := n.(*ast.UnaryExpr)
+		if !ok || u.Op != token.AND {
+			return true
+		}
+		x := u.X
+		for {
+			switch e := x.(type) {
+			case *ast.ParenExpr:
+				x = e.X
+				continue
+			case *ast.SelectorExpr:
+				if sel := p.info.Selections[e]; sel != nil && sel.Kind() == types.FieldVal {
+					if _, isPtr := p.info.TypeOf(e.X).Underlying().(*types.Pointer); !isPtr {
+						x = e.X
+						continue
+					}
+				}
+			case *ast.IndexExpr:
+				if _, isArr := p.info.TypeOf(e.X).Underlying().(*types.Array); isArr {
+					x = e.X
+					continue
+				}
+			}
+			break
+		}
+		if id, ok := x.(*ast.Ident); ok {
+			if v, ok := p.info.Uses[id].(*types.Var); ok && !v.IsField() && v.Parent() != p.pkg.Scope() && v.Pkg() == p.pkg &&
+				v.Pos() >= region.Pos() && v.Pos() <= region.End() {
+				out[v] = true
+			}
+		}
+		return true
+	})
 	ast.Inspect(region, func(n ast.Node) bool {
 		fl, ok := n.(*ast.FuncLit)
 		if !ok || fl == region {

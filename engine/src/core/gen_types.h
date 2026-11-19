@@ -281,6 +281,7 @@ typedef struct bcHasher bcHasher;
 typedef struct bcProfKey bcProfKey;
 typedef struct bgCtrl bgCtrl;
 typedef struct bgDrawTransform bgDrawTransform;
+typedef struct bgMusic bgMusic;
 typedef struct bgVideo bgVideo;
 typedef struct boundTexture boundTexture;
 typedef struct character character;
@@ -294,6 +295,7 @@ typedef struct expValueFrame expValueFrame;
 typedef struct fightScreenAnimationStateCloner fightScreenAnimationStateCloner;
 typedef struct lowerCacheEntry lowerCacheEntry;
 typedef struct modifyBGCtrlShader modifyBGCtrlShader;
+typedef struct nameFact nameFact;
 typedef struct paletteCopyKey paletteCopyKey;
 typedef struct queryPart queryPart;
 typedef struct rankingEntry rankingEntry;
@@ -304,6 +306,8 @@ typedef struct sffv1PalState sffv1PalState;
 typedef struct soundPanView soundPanView;
 typedef struct soundPanner soundPanner;
 typedef struct specFacts specFacts;
+typedef struct specGuard specGuard;
+typedef struct specList specList;
 typedef struct stageRollbackBgState stageRollbackBgState;
 typedef struct upnpDevice upnpDevice;
 typedef struct upnpMapping upnpMapping;
@@ -330,7 +334,7 @@ typedef GoMap Map_Arr2_u16_int; /* map[[2]uint16]int */
 #endif
 #ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
 #define CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
-typedef GoMap Map_GoOpaque_invalidtypePtr_bool; /* map[invalid type]bool */
+typedef GoMap Map_GoOpaque_invalidtypePtr_bool; /* map[Key]bool */
 #endif
 #ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
 #define CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
@@ -416,13 +420,13 @@ typedef GoMap Map_GoString_ResultsScreenPropertiesPtr; /* map[string]*ResultsScr
 #define CVF_DEF_Map_GoString_ScenePropertiesPtr
 typedef GoMap Map_GoString_ScenePropertiesPtr; /* map[string]*SceneProperties */
 #endif
-#ifndef CVF_DEF_Map_GoString_Slice_GoOpaqueValPtr
-#define CVF_DEF_Map_GoString_Slice_GoOpaqueValPtr
-typedef GoMap Map_GoString_Slice_GoOpaqueValPtr; /* map[string][]*bgMusic */
-#endif
 #ifndef CVF_DEF_Map_GoString_Slice_GoString
 #define CVF_DEF_Map_GoString_Slice_GoString
 typedef GoMap Map_GoString_Slice_GoString; /* map[string][]string */
+#endif
+#ifndef CVF_DEF_Map_GoString_Slice_bgMusicPtr
+#define CVF_DEF_Map_GoString_Slice_bgMusicPtr
+typedef GoMap Map_GoString_Slice_bgMusicPtr; /* map[string][]*bgMusic */
 #endif
 #ifndef CVF_DEF_Map_GoString_SoundPropertiesPtr
 #define CVF_DEF_Map_GoString_SoundPropertiesPtr
@@ -634,7 +638,7 @@ typedef u32 SystemCharFlag;
 typedef u32 CharSpecialFlag;
 typedef i16 InputBits;
 typedef i32 ProjContact;
-typedef Map_GoString_Slice_GoOpaqueValPtr Music;
+typedef Map_GoString_Slice_bgMusicPtr Music;
 typedef u8 CommandKey;
 typedef u8 Direction;
 typedef GoString Error;
@@ -1394,13 +1398,13 @@ typedef struct { GoIface *p; int len, cap; } Slice_GoIface;
 #define CVF_DEF_Slice_GoIfacePtr
 typedef struct { GoIface* *p; int len, cap; } Slice_GoIfacePtr;
 #endif
-#ifndef CVF_DEF_Slice_GoOpaqueValPtr
-#define CVF_DEF_Slice_GoOpaqueValPtr
-typedef struct { GoOpaqueVal* *p; int len, cap; } Slice_GoOpaqueValPtr;
+#ifndef CVF_DEF_Slice_GoOpaque_ggpo_PlayerPtr
+#define CVF_DEF_Slice_GoOpaque_ggpo_PlayerPtr
+typedef struct { GoOpaque /* ggpo.Player */ *p; int len, cap; } Slice_GoOpaque_ggpo_PlayerPtr;
 #endif
-#ifndef CVF_DEF_Slice_GoOpaque_invalidtypePtr
-#define CVF_DEF_Slice_GoOpaque_invalidtypePtr
-typedef struct { GoOpaque /* invalid type */ *p; int len, cap; } Slice_GoOpaque_invalidtypePtr;
+#ifndef CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
+#define CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
+typedef struct { GoOpaque /* lua.LFunction */* *p; int len, cap; } Slice_GoOpaque_lua_LFunctionPtrPtr;
 #endif
 #ifndef CVF_DEF_Slice_GoString
 #define CVF_DEF_Slice_GoString
@@ -1566,6 +1570,10 @@ typedef struct { backGround* *p; int len, cap; } Slice_backGroundPtr;
 #define CVF_DEF_Slice_bgCtrl
 typedef struct { bgCtrl *p; int len, cap; } Slice_bgCtrl;
 #endif
+#ifndef CVF_DEF_Slice_bgMusicPtr
+#define CVF_DEF_Slice_bgMusicPtr
+typedef struct { bgMusic* *p; int len, cap; } Slice_bgMusicPtr;
+#endif
 #ifndef CVF_DEF_Slice_bool
 #define CVF_DEF_Slice_bool
 typedef struct { bool *p; int len, cap; } Slice_bool;
@@ -1597,6 +1605,10 @@ typedef struct { i32 *p; int len, cap; } Slice_i32;
 #ifndef CVF_DEF_Slice_int
 #define CVF_DEF_Slice_int
 typedef struct { int *p; int len, cap; } Slice_int;
+#endif
+#ifndef CVF_DEF_Slice_nameFact
+#define CVF_DEF_Slice_nameFact
+typedef struct { nameFact *p; int len, cap; } Slice_nameFact;
 #endif
 #ifndef CVF_DEF_Slice_rankingRow
 #define CVF_DEF_Slice_rankingRow
@@ -1630,167 +1642,167 @@ typedef struct { u8 *p; int len, cap; } Slice_u8;
 #define CVF_DEF_Slice_upnpMapping
 typedef struct { upnpMapping *p; int len, cap; } Slice_upnpMapping;
 #endif
-typedef Slice_scParam hitBy;
-typedef Slice_scParam mapReset;
-typedef Slice_scParam modifyPlayer;
-typedef Slice_scParam modifyShadow;
-typedef Slice_scParam trans;
-typedef Slice_scParam hitFallDamage;
-typedef Slice_scParam lifeSet;
-typedef Slice_scParam playBgm;
-typedef Slice_scParam posAdd;
-typedef Slice_scParam roundTimeAdd;
-typedef Slice_scParam targetScoreAdd;
-typedef Slice_scParam changeAnim;
-typedef Slice_scParam fallEnvShake;
-typedef Slice_scParam modifyStageVar;
-typedef Slice_scParam posFreeze;
-typedef Slice_scParam loadFile;
-typedef Slice_scParam redLifeSet;
-typedef Slice_scParam targetVelAdd;
-typedef Slice_scParam modifyStoryboard;
-typedef Slice_scParam posSet;
-typedef Slice_scParam remapPal;
-typedef Slice_scParam StateControllerBase;
-typedef Slice_scParam turn;
-typedef Slice_ReflectionSpritePtr ReflectionList;
-typedef Slice_scParam groundLevelOffset;
-typedef Slice_scParam tagOut;
-typedef Slice_scParam velAdd;
-typedef Slice_scParam guardPointsAdd;
-typedef Slice_scParam targetFacing;
-typedef Slice_scParam createPlatform;
-typedef Slice_scParam forceFeedback;
-typedef Slice_scParam lifebarAction;
-typedef Slice_scParam removeExplod;
-typedef Slice_scParam runState;
-typedef Slice_scParam scoreAdd;
-typedef Slice_scParam selfState;
-typedef Slice_scParam stateTypeSet;
-typedef Slice_scParam gameMakeAnim;
-typedef Slice_scParam modifyBGCtrl;
+typedef Slice_scParam hitDef;
+typedef Slice_scParam superPause;
+typedef Slice_scParam velSet;
 typedef Slice_scParam zoom;
-typedef Slice_SoundChannel SoundChannels;
-typedef Slice_scParam attackDist;
-typedef Slice_scParam dizzyPointsAdd;
+typedef Slice_scParam guardBreakSet;
+typedef Slice_scParam changeMovelist;
 typedef Slice_scParam dizzyPointsSet;
-typedef Slice_scParam modifyReflection;
-typedef Slice_scParam targetAdd;
-typedef Slice_scParam palFX;
-typedef Slice_scParam afterImage;
-typedef Slice_scParam hitVelSet;
+typedef Slice_scParam posFreeze;
+typedef Slice_scParam roundTimeSet;
+typedef Slice_scParam explod;
+typedef Slice_scParam loadState;
+typedef Slice_scParam modifyBGCtrl3d;
 typedef Slice_scParam modifySnd;
-typedef Slice_scParam projectile;
-typedef Slice_scParam remapSprite;
-typedef Slice_scParam sndPan;
-typedef Slice_scParam text;
-typedef Slice_scParam angleMul;
-typedef Slice_scParam appendToClipboard;
-typedef Slice_ShadowSpritePtr ShadowList;
-typedef Slice_scParam afterImageTime;
-typedef Slice_scParam angleAdd;
-typedef Slice_scParam modifyProjectile;
-typedef Slice_scParam printToConsole;
-typedef Slice_scParam targetLifeAdd;
-typedef Slice_scParam allPalFX;
-typedef Slice_scParam assertSpecial;
-typedef Slice_scParam depth;
-typedef Slice_scParam hitOverride;
-typedef Slice_scParam velMul;
-typedef Slice_scParam getHitVarSet;
-typedef Slice_scParam mapSet;
-typedef Slice_scParam modifyText;
-typedef Slice_scParam tagIn;
 typedef Slice_scParam targetDrop;
-typedef Slice_scParam varSet;
-typedef Slice_OpCode StateExpr;
+typedef Slice_scParam bgPalFX;
+typedef Slice_scParam modifyProjectile;
+typedef Slice_scParam tagOut;
+typedef Slice_scParam targetRedLifeAdd;
+typedef Slice_scParam createPlatform;
+typedef Slice_scParam gameMakeAnim;
+typedef Slice_SpriteDataPtr DrawList;
+typedef Slice_scParam hitFallSet;
+typedef Slice_scParam palFX;
+typedef Slice_scParam targetVelAdd;
+typedef Slice_scParam stateDef;
+typedef Slice_scParam depthBound;
+typedef Slice_scParam hitFallVel;
+typedef Slice_scParam lifeAdd;
+typedef Slice_scParam StateControllerBase;
+typedef Slice_scParam moveHitReset;
+typedef Slice_scParam playerPush;
+typedef Slice_scParam scoreAdd;
+typedef Slice_scParam transformClsn;
+typedef Slice_scParam getHitVarSet;
 typedef Slice_scParam assertInput;
 typedef Slice_scParam attackMulSet;
-typedef Slice_scParam changeAnim2;
-typedef Slice_scParam dialogue;
-typedef Slice_scParam dizzySet;
-typedef Slice_scParam stopSnd;
-typedef Slice_scParam targetDizzyPointsAdd;
-typedef Slice_scParam changeState;
-typedef Slice_scParam offset;
-typedef Slice_scParam storyboard;
-typedef Slice_scParam velSet;
-typedef Slice_scParam victoryQuote;
-typedef Slice_scParam width;
-typedef Slice_BytecodeValue BytecodeStack;
-typedef Slice_scParam explodBindTime;
-typedef Slice_scParam gravity;
-typedef Slice_scParam playerPush;
-typedef Slice_scParam saveFile;
-typedef Slice_scParam bindToTarget;
-typedef Slice_scParam ctrlSet;
-typedef Slice_scParam guardPointsSet;
-typedef Slice_scParam saveState;
-typedef Slice_scParam moveHitReset;
-typedef Slice_scParam targetVelSet;
-typedef Slice_scParam transformSprite;
-typedef Slice_scParam varRangeSet;
-typedef Slice_scParam modifyReversalDef;
-typedef Slice_scParam modifyStageBG;
-typedef Slice_scParam assertAnalogVector;
-typedef Slice_scParam explod;
-typedef Slice_scParam assertCommand;
-typedef Slice_scParam bindToParent;
-typedef Slice_scParam cameraCtrl;
-typedef Slice_scParam height;
-typedef Slice_scParam bgPalFX;
-typedef Slice_scParam envColor;
-typedef Slice_scParam hitAdd;
-typedef Slice_scParam powerSet;
-typedef Slice_scParam helper;
-typedef Slice_scParam removeStoryboard;
-typedef Slice_scParam targetBind;
-typedef Slice_scParam targetGuardPointsAdd;
-typedef Slice_SpriteDataPtr DrawList;
-typedef Slice_scParam bindToRoot;
-typedef Slice_scParam makeDust;
-typedef Slice_scParam powerAdd;
-typedef Slice_scParam removePlatform;
-typedef Slice_scParam superPause;
-typedef Slice_scParam angleSet;
-typedef Slice_scParam destroySelf;
-typedef Slice_scParam guardBreakSet;
-typedef Slice_scParam hitDef;
-typedef Slice_scParam hitFallVel;
-typedef Slice_scParam matchRestart;
-typedef Slice_scParam overrideClsn;
-typedef Slice_scParam sprPriority;
-typedef Slice_scParam changeMovelist;
 typedef Slice_scParam defenceMulSet;
-typedef Slice_scParam modifyBGCtrl3d;
-typedef Slice_scParam modifyHitDef;
-typedef Slice_scParam screenBound;
-typedef Slice_scParam targetPowerAdd;
-typedef Slice_scParam clearClipboard;
-typedef Slice_scParam envShake;
-typedef Slice_scParam removeText;
-typedef Slice_scParam roundTimeSet;
-typedef Slice_scParam targetState;
-typedef Slice_scParam transformClsn;
-typedef Slice_scParam loadState;
+typedef Slice_scParam hitOverride;
+typedef Slice_scParam lifebarAction;
+typedef Slice_scParam shaderSet;
+typedef Slice_scParam tagIn;
+typedef Slice_scParam printToConsole;
+typedef Slice_scParam projectile;
+typedef Slice_OpCode StateExpr;
+typedef Slice_scParam assertCommand;
+typedef Slice_scParam modifyStageBG;
 typedef Slice_scParam notHitBy;
-typedef Slice_scParam playSnd;
-typedef Slice_scParam shiftInput;
-typedef Slice_scParam targetRedLifeAdd;
+typedef Slice_scParam sprPriority;
+typedef Slice_scParam targetAdd;
 typedef Slice_scParam redLifeAdd;
 typedef Slice_OpCode BytecodeExp;
-typedef Slice_scParam lifeAdd;
-typedef Slice_scParam modifyBgm;
-typedef Slice_scParam pause;
-typedef Slice_scParam depthBound;
-typedef Slice_scParam hitFallSet;
-typedef Slice_scParam reversalDef;
-typedef Slice_scParam varRandom;
+typedef Slice_ReflectionSpritePtr ReflectionList;
+typedef Slice_scParam angleSet;
+typedef Slice_scParam changeAnim2;
+typedef Slice_scParam envShake;
+typedef Slice_scParam roundTimeAdd;
+typedef Slice_scParam targetScoreAdd;
+typedef Slice_scParam helper;
+typedef Slice_scParam targetLifeAdd;
+typedef Slice_scParam targetPowerAdd;
+typedef Slice_scParam trans;
+typedef Slice_scParam turn;
+typedef Slice_scParam velAdd;
+typedef Slice_scParam assertAnalogVector;
+typedef Slice_scParam modifyPlayer;
+typedef Slice_scParam varRangeSet;
 typedef Slice_scParam angleDraw;
+typedef Slice_scParam angleMul;
 typedef Slice_scParam displayToClipboard;
-typedef Slice_scParam stateDef;
+typedef Slice_scParam hitVelSet;
+typedef Slice_scParam mapReset;
+typedef Slice_scParam pause;
+typedef Slice_scParam selfState;
+typedef Slice_scParam hitFallDamage;
+typedef Slice_scParam mapSet;
+typedef Slice_scParam matchRestart;
+typedef Slice_scParam playSnd;
+typedef Slice_scParam remapPal;
+typedef Slice_scParam angleAdd;
+typedef Slice_scParam bindToRoot;
+typedef Slice_scParam modifyReflection;
+typedef Slice_scParam modifyStoryboard;
+typedef Slice_scParam saveFile;
+typedef Slice_BytecodeValue BytecodeStack;
+typedef Slice_scParam stopSnd;
+typedef Slice_scParam targetGuardPointsAdd;
+typedef Slice_scParam velMul;
+typedef Slice_scParam groundLevelOffset;
+typedef Slice_scParam lifeSet;
+typedef Slice_scParam allPalFX;
+typedef Slice_scParam changeAnim;
+typedef Slice_scParam reversalDef;
+typedef Slice_scParam powerAdd;
+typedef Slice_scParam afterImage;
+typedef Slice_scParam destroySelf;
+typedef Slice_scParam forceFeedback;
+typedef Slice_scParam loadFile;
+typedef Slice_scParam posSet;
+typedef Slice_scParam victoryQuote;
+typedef Slice_scParam afterImageTime;
+typedef Slice_scParam changeState;
+typedef Slice_scParam ctrlSet;
+typedef Slice_scParam makeDust;
+typedef Slice_scParam modifyReversalDef;
+typedef Slice_scParam targetFacing;
+typedef Slice_scParam envColor;
+typedef Slice_scParam gravity;
+typedef Slice_scParam modifyBgm;
+typedef Slice_scParam playBgm;
+typedef Slice_scParam removePlatform;
+typedef Slice_scParam runState;
+typedef Slice_scParam targetState;
+typedef Slice_scParam powerSet;
+typedef Slice_scParam remapSprite;
+typedef Slice_scParam bindToParent;
+typedef Slice_scParam overrideClsn;
+typedef Slice_scParam posAdd;
+typedef Slice_ShadowSpritePtr ShadowList;
+typedef Slice_SoundChannel SoundChannels;
+typedef Slice_scParam dizzyPointsAdd;
+typedef Slice_scParam modifyBGCtrl;
+typedef Slice_scParam modifyStageVar;
+typedef Slice_scParam varSet;
+typedef Slice_scParam dizzySet;
+typedef Slice_scParam modifyShadow;
+typedef Slice_scParam removeStoryboard;
+typedef Slice_scParam targetVelSet;
+typedef Slice_scParam cameraCtrl;
+typedef Slice_scParam guardPointsSet;
+typedef Slice_scParam modifyHitDef;
+typedef Slice_scParam modifyText;
+typedef Slice_scParam text;
+typedef Slice_scParam bindToTarget;
+typedef Slice_scParam dialogue;
+typedef Slice_scParam hitBy;
+typedef Slice_scParam removeText;
+typedef Slice_scParam screenBound;
+typedef Slice_scParam stateTypeSet;
+typedef Slice_scParam targetDizzyPointsAdd;
+typedef Slice_scParam attackDist;
+typedef Slice_scParam explodBindTime;
+typedef Slice_scParam fallEnvShake;
+typedef Slice_scParam hitAdd;
+typedef Slice_scParam redLifeSet;
+typedef Slice_scParam sndPan;
+typedef Slice_scParam appendToClipboard;
+typedef Slice_scParam depth;
+typedef Slice_scParam saveState;
+typedef Slice_scParam targetBind;
+typedef Slice_scParam transformSprite;
+typedef Slice_scParam varRandom;
+typedef Slice_scParam width;
+typedef Slice_scParam assertSpecial;
+typedef Slice_scParam guardPointsAdd;
+typedef Slice_scParam height;
 typedef Slice_scParam modifyExplod;
-typedef Slice_scParam shaderSet;
+typedef Slice_scParam offset;
+typedef Slice_scParam removeExplod;
+typedef Slice_scParam shiftInput;
+typedef Slice_scParam storyboard;
+typedef Slice_scParam clearClipboard;
 #ifndef CVF_DEF_Slice_BytecodeExp
 #define CVF_DEF_Slice_BytecodeExp
 typedef struct { BytecodeExp *p; int len, cap; } Slice_BytecodeExp;
@@ -1798,6 +1810,10 @@ typedef struct { BytecodeExp *p; int len, cap; } Slice_BytecodeExp;
 #ifndef CVF_DEF_Slice_BytecodeExpPtr
 #define CVF_DEF_Slice_BytecodeExpPtr
 typedef struct { BytecodeExp* *p; int len, cap; } Slice_BytecodeExpPtr;
+#endif
+#ifndef CVF_DEF_Slice_Slice_nameFact
+#define CVF_DEF_Slice_Slice_nameFact
+typedef struct { Slice_nameFact *p; int len, cap; } Slice_Slice_nameFact;
 #endif
 #ifndef CVF_DEF_Slice_Slice_u32
 #define CVF_DEF_Slice_Slice_u32
@@ -2920,6 +2936,10 @@ typedef struct bgCtrl bgCtrl;
 #define CVF_TD_bgDrawTransform
 typedef struct bgDrawTransform bgDrawTransform;
 #endif
+#ifndef CVF_TD_bgMusic
+#define CVF_TD_bgMusic
+typedef struct bgMusic bgMusic;
+#endif
 #ifndef CVF_TD_bgVideo
 #define CVF_TD_bgVideo
 typedef struct bgVideo bgVideo;
@@ -2972,6 +2992,10 @@ typedef struct lowerCacheEntry lowerCacheEntry;
 #define CVF_TD_modifyBGCtrlShader
 typedef struct modifyBGCtrlShader modifyBGCtrlShader;
 #endif
+#ifndef CVF_TD_nameFact
+#define CVF_TD_nameFact
+typedef struct nameFact nameFact;
+#endif
 #ifndef CVF_TD_paletteCopyKey
 #define CVF_TD_paletteCopyKey
 typedef struct paletteCopyKey paletteCopyKey;
@@ -3011,6 +3035,14 @@ typedef struct soundPanner soundPanner;
 #ifndef CVF_TD_specFacts
 #define CVF_TD_specFacts
 typedef struct specFacts specFacts;
+#endif
+#ifndef CVF_TD_specGuard
+#define CVF_TD_specGuard
+typedef struct specGuard specGuard;
+#endif
+#ifndef CVF_TD_specList
+#define CVF_TD_specList
+typedef struct specList specList;
 #endif
 #ifndef CVF_TD_stageRollbackBgState
 #define CVF_TD_stageRollbackBgState
@@ -3438,15 +3470,69 @@ struct BoxBgProperties {
 };
 
 struct Anon_4c4ed5ec {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Map_GoString_BgAnimationPropertiesPtr Bg;
 };
 struct Anon_a632ad85 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     TextProperties Active;
 };
 struct Anon_af4c965e {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     TextProperties Active;
     TextProperties Conflict;
 };
@@ -3454,7 +3540,25 @@ struct Anon_39b99353 {
     GoString KeyCode;
 };
 struct Anon_53468e2e {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     bool Uppercase;
     Arr2_f32 Spacing;
     TweenProperties Tween;
@@ -3541,7 +3645,25 @@ struct Anon_b4b8c731 {
     Map_GoString_Arr2_i32 Snd;
 };
 struct Anon_4ad773ee {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Arr2_i32 Snd;
     GoString KeyCode;
 };
@@ -3549,11 +3671,47 @@ struct Anon_bf560d5f {
     GoString Storyboard;
 };
 struct Anon_fc37ce89 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     i32 Blinktime;
 };
 struct Anon_dfb9041b {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     i32 Blinktime;
     Slice_GoString Key;
 };
@@ -3660,12 +3818,12 @@ struct Bgm {
     GoString filename;
     int bgmVolume;
     int loop;
-    GoOpaque /* invalid type */ streamer;
-    GoOpaque /* invalid type */ ctrl;
-    GoOpaque /* invalid type */ volctrl;
+    GoIface streamer;
+    GoOpaque /* beep.Ctrl */* ctrl;
+    GoOpaque /* effects.Volume */* volctrl;
     GoString format;
     f32 freqmul;
-    GoOpaque /* invalid type */ sampleRate;
+    int sampleRate;
     int startPos;
     GoOpaque /* sync.Mutex */ mu;
     GoFunc cancel;
@@ -3688,9 +3846,9 @@ struct BoundingBox {
 };
 
 struct BufferSeeker {
-    GoOpaque /* invalid type */ buf;
+    GoOpaque /* beep.Buffer */* buf;
     int pos;
-    GoOpaque /* invalid type */ str;
+    GoIface str;
 };
 
 struct BytecodeFunction {
@@ -3910,11 +4068,48 @@ struct Anon_7bb06b75 {
     i32 Time;
 };
 struct Anon_5591596d {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     i32 Displaytime;
 };
 struct Anon_5f13cb02 {
-    AnimationProperties AnimationProperties;
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
     i32 Displaytime;
 };
 struct ChallengerInfoProperties {
@@ -5122,8 +5317,8 @@ struct Anon_eceff868 {
 };
 struct Config {
     GoString Def;
-    GoOpaque /* invalid type */ IniFile;
-    GoOpaque /* invalid type */ DefaultOnlyIni;
+    GoOpaque /* ini.File */* IniFile;
+    GoOpaque /* ini.File */* DefaultOnlyIni;
     Anon_b0b30749 Common;
     Anon_4dfef77c Options;
     Anon_18609da4 Config;
@@ -5162,7 +5357,26 @@ struct Anon_828756c7 {
     Arr2_i32 Snd;
 };
 struct Anon_3b80bc6b {
-    AnimationProperties AnimationProperties;
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
     i32 StartTime;
     i32 EndTime;
     Anon_161374c1 Default;
@@ -5261,11 +5475,48 @@ struct DemoModeProperties {
 };
 
 struct Anon_a61ac1b3 {
-    AnimationProperties AnimationProperties;
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
     AnimationProperties Active;
 };
 struct Anon_4d998b97 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Arr2_f32 TextSpacing;
     i32 TextDelay;
     GoString TextWrap;
@@ -5459,7 +5710,28 @@ struct FaceParams {
 };
 
 struct Anon_52ad6e9d {
-    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    union {
+        AnimationCharPreloadProperties AnimationCharPreloadProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+            bool ApplyPal;
+            i32 DrawOrder;
+        };
+    };
     Slice_GoString Key;
 };
 struct FaceProperties {
@@ -5969,7 +6241,7 @@ struct ShaderPalFX {
 
 struct Font_GLES32 {
     Map_i32_characterPtr fontChar;
-    GoOpaque /* invalid type */ ttf;
+    GoOpaque /* truetype.Font */* ttf;
     i32 scale;
     int windowWidth;
     int windowHeight;
@@ -6364,7 +6636,25 @@ struct Anon_0f1da223 {
     Anon_73c55e1f Done;
 };
 struct Anon_c0ebc6d1 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     AnimationTextProperties Wait;
     GoString Storyboard;
 };
@@ -6375,7 +6665,25 @@ struct Anon_53386e74 {
     OverlayProperties Overlay;
 };
 struct Anon_35963cd2 {
-    TextMapProperties TextMapProperties;
+    union {
+        TextMapProperties TextMapProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            Map_GoString_GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     OverlayProperties Overlay;
 };
 struct TitleInfoProperties {
@@ -6412,7 +6720,25 @@ struct PlayerCursorProperties {
 };
 
 struct Anon_7b12115d {
-    TextMapProperties TextMapProperties;
+    union {
+        TextMapProperties TextMapProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            Map_GoString_GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     i32 Switchtime;
 };
 struct ItemProperties {
@@ -6450,7 +6776,25 @@ struct Anon_cf68abeb {
     GoString Text;
 };
 struct Anon_e3e96c5e {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     i32 Num;
     Arr2_f32 Spacing;
     Anon_cf68abeb Random;
@@ -6459,7 +6803,15 @@ struct Anon_d18cf56f {
     Map_GoString_BgAnimationPropertiesPtr Bg;
 };
 struct Anon_0c2b6cfe {
-    AnimationTextProperties AnimationTextProperties;
+    union {
+        AnimationTextProperties AnimationTextProperties_;
+        struct {
+            AnimationProperties AnimationProperties;
+            Arr8_i32 Font;
+            GoString Text;
+            TextSprite* TextSpriteData;
+        };
+    };
 };
 struct Anon_14dc7311 {
     AnimationProperties Icon;
@@ -6491,7 +6843,28 @@ struct Anon_29e67731 {
     GoString Text;
 };
 struct Anon_5b6e6123 {
-    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    union {
+        AnimationCharPreloadProperties AnimationCharPreloadProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+            bool ApplyPal;
+            i32 DrawOrder;
+        };
+    };
     Arr2_i32 Snd;
 };
 struct Anon_c49cb36c {
@@ -6520,7 +6893,26 @@ struct PlayerSelectProperties {
 };
 
 struct Anon_4a620174 {
-    AnimationProperties AnimationProperties;
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
     i32 SwitchTime;
 };
 struct Anon_ad883348 {
@@ -6552,15 +6944,70 @@ struct Anon_5d3c67a8 {
     Anon_5977501b Move;
 };
 struct Anon_ba1e3273 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     i32 Switchtime;
 };
 struct Anon_4b8a3264 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Arr2_i32 Snd;
 };
 struct Anon_8a2bb521 {
-    AnimationStagePreloadProperties AnimationStagePreloadProperties;
+    union {
+        AnimationStagePreloadProperties AnimationStagePreloadProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
     AnimationProperties Bg;
     AnimationProperties Random;
     AnimationProperties Loading;
@@ -6568,7 +7015,25 @@ struct Anon_8a2bb521 {
 };
 struct Anon_f634dd61 {
     Arr2_f32 Pos;
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Anon_cf68abeb Random;
     i32 Randomselect;
     Anon_ba1e3273 Active;
@@ -6579,7 +7044,28 @@ struct Anon_f634dd61 {
     Anon_8a2bb521 Portrait;
 };
 struct Anon_85848459 {
-    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    union {
+        AnimationCharPreloadProperties AnimationCharPreloadProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+            bool ApplyPal;
+            i32 DrawOrder;
+        };
+    };
     AnimationProperties Loading;
 };
 struct Anon_cdcd6158 {
@@ -6648,13 +7134,50 @@ struct ValueIconVsProperties {
 };
 
 struct Anon_de509dfb {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Arr2_f32 Pos;
     i32 Num;
     Arr2_f32 Spacing;
 };
 struct Anon_1f7505bf {
-    AnimationProperties AnimationProperties;
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
     AnimationProperties Done;
 };
 struct Anon_c466bc00 {
@@ -6696,18 +7219,63 @@ struct Anon_50c501fc {
     i32 Time;
 };
 struct Anon_b1cc637d {
-    AnimationStagePreloadProperties AnimationStagePreloadProperties;
+    union {
+        AnimationStagePreloadProperties AnimationStagePreloadProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
     AnimationProperties Bg;
     AnimationProperties Loading;
 };
 struct Anon_b4e107d9 {
     Arr2_f32 Pos;
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Anon_b1cc637d Portrait;
     Arr2_i32 Snd;
 };
 struct Anon_8517cd1e {
-    AnimationTextProperties AnimationTextProperties;
+    union {
+        AnimationTextProperties AnimationTextProperties_;
+        struct {
+            AnimationProperties AnimationProperties;
+            Arr8_i32 Font;
+            GoString Text;
+            TextSprite* TextSpriteData;
+        };
+    };
     AnimationTextProperties Done;
     AnimationTextProperties Wait;
     GoString Storyboard;
@@ -6762,7 +7330,24 @@ struct PlayerLoseProperties {
 };
 
 struct Anon_b4ab5e02 {
-    FaceProperties FaceProperties;
+    union {
+        FaceProperties FaceProperties_;
+        struct {
+            AnimationCharPreloadProperties AnimationCharPreloadProperties;
+            Anon_52ad6e9d Done;
+            AnimationProperties Random;
+            AnimationProperties Loading;
+            AnimationProperties Slot;
+            Arr2_f32 Velocity;
+            Arr2_f32 MaxDist;
+            Arr2_f32 Accel;
+            Arr2_f32 Friction;
+            Arr2_f32 Pos;
+            i32 Num;
+            Arr2_f32 Spacing;
+            bool Padding;
+        };
+    };
     PlayerLoseProperties Lose;
 };
 struct PlayerVictoryProperties {
@@ -6794,7 +7379,25 @@ struct Anon_ce6aad93 {
     Anon_c29ce860 TeamKo;
 };
 struct Anon_a9c08002 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Arr2_f32 TextSpacing;
     i32 TextDelay;
     GoString TextWrap;
@@ -6831,7 +7434,25 @@ struct PlayerResultsProperties {
 };
 
 struct Anon_194d600d {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     i32 DisplayTime;
 };
 struct WinScreenProperties {
@@ -6867,7 +7488,29 @@ struct Anon_e71eca9f {
     Anon_c6d21910 P1;
     Anon_c6d21910 P2;
     Anon_39b99353 Unbind;
-    MenuProperties MenuProperties;
+    union {
+        MenuProperties MenuProperties_;
+        struct {
+            Arr2_f32 Pos;
+            TweenProperties Tween;
+            Anon_53468e2e Item;
+            Anon_f665a959 Window;
+            BoxCursorProperties BoxCursor;
+            BoxBgProperties BoxBg;
+            Anon_a316b3f5 Arrow;
+            Anon_2dddc38c Title;
+            Anon_0a015777 Next;
+            Anon_0a015777 Previous;
+            Anon_0a015777 Add;
+            Anon_0a015777 Subtract;
+            Anon_0a015777 Cancel;
+            Anon_0a015777 Done;
+            Anon_0a015777 Hiscore;
+            Map_GoString_GoString Unlock;
+            Map_GoString_GoString Valuename;
+            Map_GoString_GoString Itemname;
+        };
+    };
 };
 struct OptionInfoProperties {
     FadeProperties FadeIn;
@@ -6891,7 +7534,25 @@ struct ReplayInfoProperties {
 };
 
 struct Anon_1412bee7 {
-    TextMapProperties TextMapProperties;
+    union {
+        TextMapProperties TextMapProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            Map_GoString_GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     bool Uppercase;
     TextProperties Rank;
     TextProperties Result;
@@ -6899,7 +7560,28 @@ struct Anon_1412bee7 {
     TextProperties Face;
 };
 struct Anon_90dcfa72 {
-    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    union {
+        AnimationCharPreloadProperties AnimationCharPreloadProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+            bool ApplyPal;
+            i32 DrawOrder;
+        };
+    };
     i32 Num;
     Arr2_f32 Spacing;
     AnimationProperties Bg;
@@ -6944,7 +7626,25 @@ struct HiscoreInfoProperties {
 };
 
 struct Anon_87407db8 {
-    TextMapProperties TextMapProperties;
+    union {
+        TextMapProperties TextMapProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            Map_GoString_GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     GoString TextWrap;
 };
 struct WarningInfoProperties {
@@ -7087,9 +7787,9 @@ struct MotifMenu {
 };
 
 struct Motif {
-    GoOpaque /* invalid type */ IniFile;
-    GoOpaque /* invalid type */ UserIniFile;
-    GoOpaque /* invalid type */ DefaultOnlyIni;
+    GoOpaque /* ini.File */* IniFile;
+    GoOpaque /* ini.File */* UserIniFile;
+    GoOpaque /* ini.File */* DefaultOnlyIni;
     AnimationTable AnimTable;
     Sff* Sff;
     GoOpaqueVal* Snd;
@@ -7176,7 +7876,7 @@ struct Anon_2b2cdbcc {
     bool WaitForLoading;
 };
 struct Storyboard {
-    GoOpaque /* invalid type */ IniFile;
+    GoOpaque /* ini.File */* IniFile;
     AnimationTable AnimTable;
     Sff* Sff;
     GoOpaqueVal* Snd;
@@ -7430,7 +8130,7 @@ struct GameState {
     bool dialogueFlg;
     Slice_i32 timerCount;
     Slice_CommandListPtr commandLists;
-    Slice_GoOpaqueValPtr matchMusicSel;
+    Slice_bgMusicPtr matchMusicSel;
     i32 netTime;
 };
 
@@ -7757,11 +8457,47 @@ struct MovelistGlyphsProperties {
 };
 
 struct Anon_e6c808e7 {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     bool Uppercase;
 };
 struct Anon_800e850a {
-    TextProperties TextProperties;
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
     Arr2_f32 Spacing;
 };
 struct Anon_0107677c {
@@ -7882,9 +8618,9 @@ struct Node {
     GLTFAnimatableProperty rotation;
     GLTFAnimatableProperty scale;
     bool transformChanged;
-    GoOpaque /* invalid type */ localTransform;
-    GoOpaque /* invalid type */ worldTransform;
-    GoOpaque /* invalid type */ normalMatrix;
+    GoOpaque /* mgl32.Mat4 */ localTransform;
+    GoOpaque /* mgl32.Mat4 */ worldTransform;
+    GoOpaque /* mgl32.Mat4 */ normalMatrix;
     Slice_u32 childrenIndex;
     Trans trans;
     bool castShadow;
@@ -7908,7 +8644,7 @@ struct Node {
 };
 
 struct Normalizer {
-    GoOpaque /* invalid type */ streamer;
+    GoIface streamer;
     f64 mul;
     NormalizerLR* l;
     NormalizerLR* r;
@@ -8457,12 +9193,12 @@ struct RollbackLogger {
 struct Arr12_InputBits { InputBits v[12]; };
 #endif
 struct RollbackSession {
-    GoOpaque /* invalid type */ backend;
+    GoIface backend;
     Map_int_GameStatePtr saveStates;
     i64 now;
     i64 next;
-    Slice_GoOpaque_invalidtypePtr players;
-    Slice_GoOpaque_invalidtypePtr handles;
+    Slice_GoOpaque_ggpo_PlayerPtr players;
+    Slice_int handles;
     GoOpaque /* os.File */* recording;
     bool connected;
     GoString host;
@@ -8473,8 +9209,8 @@ struct RollbackSession {
     int run;
     GoString remoteIp;
     int currentPlayer;
-    GoOpaque /* invalid type */ currentPlayerHandle;
-    GoOpaque /* invalid type */ remotePlayerHandle;
+    int currentPlayerHandle;
+    int remotePlayerHandle;
     LoopTimer loopTimer;
     Map_int_Arr12_InputBits inputs;
     Map_int_Arr12_Arr6_i8 analogInputs;
@@ -8609,9 +9345,9 @@ struct RoundStartBackup {
 
 struct SDLSpeaker {
     GoOpaque /* invalid type */ dev;
-    GoOpaque /* invalid type */ mixer;
+    GoOpaque /* beep.Mixer */* mixer;
     GoOpaque /* sync.Mutex */ mu;
-    GoOpaque /* invalid type */ sampleRate;
+    int sampleRate;
     int bufferSize;
     Slice_Arr2_f64 buf;
     Slice_u8 out;
@@ -8820,9 +9556,9 @@ struct Skin {
 };
 
 struct SoundChannel {
-    GoOpaque /* invalid type */ streamer;
+    GoIface streamer;
     SoundEffect* sfx;
-    GoOpaque /* invalid type */ ctrl;
+    GoOpaque /* beep.Ctrl */* ctrl;
     GoOpaqueVal* sound;
     i32 playerID;
     i32 channelNo;
@@ -8835,7 +9571,7 @@ struct SoundChannel {
 };
 
 struct SoundEffect {
-    GoOpaque /* invalid type */ streamer;
+    GoIface streamer;
     soundPanner* panner;
     f32 volume;
     f32 duckMul;
@@ -8925,10 +9661,10 @@ struct StateBlock {
     Slice_StateController ctrls;
     Slice_scRunFn runs;
     Slice_bool isBlock;
-    GoOpaqueVal* specGuard;
+    specGuard* specGuard;
     cnode ctrig;
     BytecodeExp trigRaw;
-    GoOpaqueVal* spec;
+    specList* spec;
     bool loopBlock;
     bool nestedInLoop;
     bool forLoop;
@@ -9005,7 +9741,7 @@ struct StoryboardManager {
 };
 
 struct StreamLooper {
-    GoOpaque /* invalid type */ s;
+    GoIface s;
     int loopcount;
     int loopstart;
     int loopend;
@@ -9051,7 +9787,7 @@ struct StunBar {
 
 struct SwapSeeker {
     GoOpaque /* sync.RWMutex */ mu;
-    GoOpaque /* invalid type */ ss;
+    GoIface ss;
 };
 
 struct SyncHandshake {
@@ -9224,10 +9960,10 @@ struct System {
     bool debugDisplay;
     Arr2_int debugRef;
     i32 debugLastID;
-    GoOpaque /* invalid type */ soundMixer;
-    GoOpaque /* invalid type */ videoMixer;
+    GoOpaque /* beep.Mixer */* soundMixer;
+    GoOpaque /* beep.Mixer */* videoMixer;
     Bgm bgm;
-    Slice_GoOpaqueValPtr matchMusicSel;
+    Slice_bgMusicPtr matchMusicSel;
     int pauseSoundVolume;
     int focusSoundVolume;
     bool focusMuted;
@@ -9328,9 +10064,9 @@ struct System {
     bool maxPowerMode;
     Slice_DebugClsnText debugClsnText;
     Slice_GoString consoleText;
-    GoOpaque /* invalid type */ luaLState;
-    GoOpaque /* invalid type */ statusLFunc;
-    Slice_GoOpaque_invalidtypePtr listLFunc;
+    GoOpaque /* lua.LState */* luaLState;
+    GoOpaque /* lua.LFunction */* statusLFunc;
+    Slice_GoOpaque_lua_LFunctionPtrPtr listLFunc;
     Arr12_bool reloadPreserveVars;
     Map_int_CharVarBackup charVarsBackup;
     Map_GoString_bool loadedCustomShaders;
@@ -9555,6 +10291,17 @@ struct bgDrawTransform {
     Arr2_f32 scale;
 };
 
+struct bgMusic {
+    GoString bgmusic;
+    i32 bgmloop;
+    i32 bgmvolume;
+    i32 bgmloopstart;
+    i32 bgmloopend;
+    i32 bgmstartposition;
+    f32 bgmfreqmul;
+    i32 bgmloopcount;
+};
+
 struct bgVideo {
     GoIface texture;
     bool visible;
@@ -9681,6 +10428,13 @@ struct modifyBGCtrlShader {
     Arr2_Anon_65fa1d9f tex;
 };
 
+struct nameFact {
+    i8 who;
+    bool author;
+    GoString val;
+    i8 kind;
+};
+
 struct paletteCopyKey {
     u32* first;
     int count;
@@ -9750,7 +10504,7 @@ struct soundPanView {
 };
 
 struct soundPanner {
-    GoOpaque /* invalid type */ streamer;
+    GoIface streamer;
     GoOpaque /* atomic.Uint64 */ request;
 };
 
@@ -9761,6 +10515,20 @@ struct specFacts {
     bool enemyKnown;
     GoString enemyName;
     GoString enemyAuth;
+};
+
+struct specGuard {
+    Slice_Slice_nameFact all;
+    Slice_Slice_nameFact trig;
+    Slice_bool trigUnknown;
+};
+
+struct specList {
+    Char* owner;
+    u32 gen;
+    Slice_StateController ctrls;
+    Slice_scRunFn runs;
+    Slice_bool isBlock;
 };
 
 struct stageRollbackBgState {
@@ -9988,10 +10756,6 @@ GO_SLICE_FUNCS(Slice_GoIface, GoIface)
 #define CVF_FN_Slice_GoIfacePtr
 GO_SLICE_FUNCS(Slice_GoIfacePtr, GoIface*)
 #endif
-#ifndef CVF_FN_Slice_GoOpaqueValPtr
-#define CVF_FN_Slice_GoOpaqueValPtr
-GO_SLICE_FUNCS(Slice_GoOpaqueValPtr, GoOpaqueVal*)
-#endif
 #ifndef CVF_FN_Slice_GoString
 #define CVF_FN_Slice_GoString
 GO_SLICE_FUNCS(Slice_GoString, GoString)
@@ -10096,6 +10860,10 @@ GO_SLICE_FUNCS(Slice_Slice_Command, Slice_Command)
 #define CVF_FN_Slice_Slice_Slice_u8
 GO_SLICE_FUNCS(Slice_Slice_Slice_u8, Slice_Slice_u8)
 #endif
+#ifndef CVF_FN_Slice_Slice_nameFact
+#define CVF_FN_Slice_Slice_nameFact
+GO_SLICE_FUNCS(Slice_Slice_nameFact, Slice_nameFact)
+#endif
 #ifndef CVF_FN_Slice_Slice_u32
 #define CVF_FN_Slice_Slice_u32
 GO_SLICE_FUNCS(Slice_Slice_u32, Slice_u32)
@@ -10168,6 +10936,10 @@ GO_SLICE_FUNCS(Slice_backGroundPtr, backGround*)
 #define CVF_FN_Slice_bgCtrl
 GO_SLICE_FUNCS(Slice_bgCtrl, bgCtrl)
 #endif
+#ifndef CVF_FN_Slice_bgMusicPtr
+#define CVF_FN_Slice_bgMusicPtr
+GO_SLICE_FUNCS(Slice_bgMusicPtr, bgMusic*)
+#endif
 #ifndef CVF_FN_Slice_bool
 #define CVF_FN_Slice_bool
 GO_SLICE_FUNCS(Slice_bool, bool)
@@ -10199,6 +10971,10 @@ GO_SLICE_FUNCS(Slice_i32, i32)
 #ifndef CVF_FN_Slice_int
 #define CVF_FN_Slice_int
 GO_SLICE_FUNCS(Slice_int, int)
+#endif
+#ifndef CVF_FN_Slice_nameFact
+#define CVF_FN_Slice_nameFact
+GO_SLICE_FUNCS(Slice_nameFact, nameFact)
 #endif
 #ifndef CVF_FN_Slice_rankingRow
 #define CVF_FN_Slice_rankingRow
@@ -10328,13 +11104,13 @@ GO_MAP_FUNCS(Map_GoString_ResultsScreenPropertiesPtr, GoString, ResultsScreenPro
 #define CVF_FN_Map_GoString_ScenePropertiesPtr
 GO_MAP_FUNCS(Map_GoString_ScenePropertiesPtr, GoString, SceneProperties*, true)
 #endif
-#ifndef CVF_FN_Map_GoString_Slice_GoOpaqueValPtr
-#define CVF_FN_Map_GoString_Slice_GoOpaqueValPtr
-GO_MAP_FUNCS(Map_GoString_Slice_GoOpaqueValPtr, GoString, Slice_GoOpaqueValPtr, true)
-#endif
 #ifndef CVF_FN_Map_GoString_Slice_GoString
 #define CVF_FN_Map_GoString_Slice_GoString
 GO_MAP_FUNCS(Map_GoString_Slice_GoString, GoString, Slice_GoString, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Slice_bgMusicPtr
+#define CVF_FN_Map_GoString_Slice_bgMusicPtr
+GO_MAP_FUNCS(Map_GoString_Slice_bgMusicPtr, GoString, Slice_bgMusicPtr, true)
 #endif
 #ifndef CVF_FN_Map_GoString_SoundPropertiesPtr
 #define CVF_FN_Map_GoString_SoundPropertiesPtr

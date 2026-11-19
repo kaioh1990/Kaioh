@@ -453,6 +453,15 @@ bool strings_ContainsRune(GoString s, i32 r) {
     return false;
 }
 
+bool unicode_IsSpace(i32 r) {
+    switch (r) {
+    case '\t': case '\n': case '\v': case '\f': case '\r': case ' ': case 0x85: case 0xA0:
+    case 0x1680: case 0x2028: case 0x2029: case 0x202F: case 0x205F: case 0x3000:
+        return true;
+    }
+    return r >= 0x2000 && r <= 0x200A;
+}
+
 static inline bool rune_pred(GoFunc f, i32 r) { return ((bool (*)(void *, i32))f.fn)(f.env, r); }
 int strings_IndexFunc(GoString s, GoFunc f) {
     for (int i = 0; i < s.len;) {
@@ -963,6 +972,8 @@ u32 crc32_ChecksumIEEE(Slice_u8 b) {
     return c ^ 0xFFFFFFFFu;
 }
 
+GoOpaque binary_LittleEndian, binary_BigEndian;  // empty structs in Go
+
 u32 binary_littleEndian_Uint32(GoOpaque recv, Slice_u8 b) {
     (void)recv;
     return (u32)b.p[0] | ((u32)b.p[1] << 8) | ((u32)b.p[2] << 16) | ((u32)b.p[3] << 24);
@@ -987,10 +998,20 @@ void sync_Once_Do(GoOpaque *o, GoFunc f) {
     o->_opaque[0] = 1;
     ((void (*)(void *))f.fn)(f.env);
 }
-GoIface sync_Pool_Get(GoOpaque *p) {
-    (void)p;
-    return (GoIface){0};
+// sync.Pool keeps only its New function (no reuse: allocation reuse is
+// not observable by the simulation).
+GoOpaque go_sync_pool(GoFunc new_fn) {
+    GoOpaque o = {{0}};
+    memcpy(o._opaque, &new_fn, sizeof new_fn);
+    return o;
 }
+GoIface sync_Pool_Get(GoOpaque *p) {
+    GoFunc f;
+    memcpy(&f, p->_opaque, sizeof f);
+    if (!f.fn) return (GoIface){0};
+    return ((GoIface(*)(void *))f.fn)(f.env);
+}
+void sync_Pool_Put(GoOpaque *p, GoIface x) { (void)p, (void)x; }
 void runtime_Gosched(void) {}
 GoOpaque time_Now(void) { return (GoOpaque){{0}}; }
 GoOpaque time_Time_Add(GoOpaque t, i64 d) {
@@ -1025,4 +1046,115 @@ void time_Sleep(i64 d) { (void)d; }
 GoOpaque *log_New(GoIface w, GoString prefix, int flags) {
     (void)w, (void)prefix, (void)flags;
     return (GoOpaque *)calloc(1, sizeof(GoOpaque));
+}
+
+// Fields of opaque platform-library structs read and write a zeroed
+// scratch slot (sound/video state the headless simulation does not model).
+void *go_scratch(size_t n) {
+    static _Alignas(16) u8 buf[4096];
+    if (n > sizeof buf) n = sizeof buf;
+    memset(buf, 0, n);
+    return buf;
+}
+
+bool strings_ContainsAny(GoString s, GoString chars) {
+    for (int i = 0; i < s.len;) {
+        i32 r;
+        i += utf8_decode(s.p + i, s.len - i, &r);
+        if (strings_ContainsRune(chars, r)) return true;
+    }
+    return false;
+}
+void sync_RWMutex_Lock(GoOpaque *m) { (void)m; }
+void sync_RWMutex_Unlock(GoOpaque *m) { (void)m; }
+
+Ret_GoString__GoString__bool strings_Cut(GoString s, GoString sep) {
+    int i = strings_Index(s, sep);
+    if (i >= 0) return (Ret_GoString__GoString__bool){{s.p, i}, {s.p + i + sep.len, s.len - i - sep.len}, true};
+    return (Ret_GoString__GoString__bool){s, {"", 0}, false};
+}
+
+// fmt.Sscan into pointers to numbers/strings (space separated operands).
+extern const RType *const ik_rt_by_tid[];
+extern const int ik_rt_by_tid_count;
+
+static bool scan_store(GoIface dst, GoString tok) {
+    if (dst.type <= 0 || dst.type >= ik_rt_by_tid_count || !ik_rt_by_tid[dst.type]) return false;
+    const RType *t = ik_rt_by_tid[dst.type];
+    if (t->kind != 22 || !t->elem) return false;  // pointer
+    void *p = dst.data;
+    switch (t->elem->kind) {
+    case 2: case 3: case 4: case 5: case 6: {
+        Ret_i64__GoIface r = strconv_ParseInt(tok, 10, 64);
+        if (r.r1.type) return false;
+        switch (t->elem->kind) {
+        case 2: *(int *)p = (int)r.r0; break;
+        case 3: *(i8 *)p = (i8)r.r0; break;
+        case 4: *(i16 *)p = (i16)r.r0; break;
+        case 5: *(i32 *)p = (i32)r.r0; break;
+        default: *(i64 *)p = r.r0; break;
+        }
+        return true;
+    }
+    case 13: case 14: {
+        Ret_f64__GoIface r = strconv_ParseFloat(tok, t->elem->kind == 13 ? 32 : 64);
+        if (r.r1.type) return false;
+        if (t->elem->kind == 13) *(f32 *)p = (f32)r.r0;
+        else *(f64 *)p = r.r0;
+        return true;
+    }
+    case 24: *(GoString *)p = tok; return true;
+    case 1: {
+        Ret_bool__GoIface r = strconv_ParseBool(tok);
+        if (r.r1.type) return false;
+        *(bool *)p = r.r0;
+        return true;
+    }
+    }
+    return false;
+}
+
+Ret_int__GoIface fmt_Sscan(GoString str, Slice_GoIface args) {
+    Ret_int__GoIface r = {0};
+    Slice_GoString f = strings_Fields(str);
+    for (int i = 0; i < args.len; i++) {
+        if (i >= f.len) {
+            r.r1 = go_error(GOSTR("unexpected EOF"));
+            return r;
+        }
+        if (!scan_store(args.p[i], f.p[i])) {
+            r.r1 = go_error(GOSTR("expected integer"));
+            return r;
+        }
+        r.r0++;
+    }
+    return r;
+}
+
+// fmt.Sscanf for verb-only formats with literal separators ("%d-%d").
+Ret_int__GoIface fmt_Sscanf(GoString str, GoString format, Slice_GoIface args) {
+    Ret_int__GoIface r = {0};
+    int si = 0, ai = 0;
+    for (int fi = 0; fi < format.len; fi++) {
+        if (format.p[fi] != '%' || fi + 1 >= format.len) {
+            if (si >= str.len || str.p[si] != format.p[fi]) {
+                r.r1 = go_error(GOSTR("input does not match format"));
+                return r;
+            }
+            si++;
+            continue;
+        }
+        fi++;
+        int st = si;
+        if (si < str.len && (str.p[si] == '-' || str.p[si] == '+')) si++;
+        while (si < str.len && ((str.p[si] >= '0' && str.p[si] <= '9') || str.p[si] == '.' || str.p[si] == 'e' || str.p[si] == 'E'))
+            si++;
+        if (ai >= args.len || !scan_store(args.p[ai], (GoString){str.p + st, si - st})) {
+            r.r1 = go_error(GOSTR("bad input"));
+            return r;
+        }
+        ai++;
+        r.r0++;
+    }
+    return r;
 }

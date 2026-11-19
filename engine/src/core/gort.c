@@ -211,6 +211,14 @@ void gomap_del(GoMap *gm, const void *key) {
     rehash(m, m->nslots);  // simple: tombstones are dropped from the index
 }
 
+void gomap_clear(GoMap *gm) {
+    GoMapImpl *m = gm->m;
+    if (!m) return;
+    m->n = 0;
+    m->live = 0;
+    if (m->slots) memset(m->slots, 0, sizeof(i32) * (size_t)m->nslots);
+}
+
 int gomap_len(const GoMap *gm) { return gm->m ? gm->m->live : 0; }
 
 GoMapIter gomap_iter(GoMap *gm) { return (GoMapIter){gm->m, -1, NULL, NULL}; }

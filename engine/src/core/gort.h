@@ -79,12 +79,14 @@ GoMap gomap_make(size_t ksize, size_t vsize, bool strkey);
 void *gomap_find(GoMap *m, const void *key);            // NULL if absent
 void *gomap_put(GoMap *m, const void *key, size_t ksize, size_t vsize, bool strkey);  // inserts zero value
 void gomap_del(GoMap *m, const void *key);
+void gomap_clear(GoMap *m);  // maps.Clear: keeps the storage
 int gomap_len(const GoMap *m);
 GoMapIter gomap_iter(GoMap *m);
 bool gomap_next(GoMapIter *it);
 
 #define GO_MAP_FUNCS(M, K, V, STRKEY)                                                  \
-    static inline M M##_make(int n) { (void)n; M m = {0}; return m; }                   \
+    /* make() allocates: copies of a map value share its storage */                   \
+    static inline M M##_make(int n) { (void)n; return (M)gomap_make(sizeof(K), sizeof(V), STRKEY); } \
     static inline V M##_get(M *m, K k, bool *ok) {                                      \
         V *v = (V *)gomap_find((GoMap *)m, &k);                                         \
         if (ok) *ok = v != NULL;                                                        \

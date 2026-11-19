@@ -59,8 +59,8 @@ func shortFile(f string) string {
 }
 
 func (t *Tx) typeOf(e ast.Expr) types.Type {
-	if tv, ok := t.p.info.Types[e]; ok {
-		return substT(tv.Type)
+	if tv, ok := t.p.info.Types[e]; ok && tv.Type != nil {
+		return substT(types.Unalias(tv.Type))
 	}
 	if id, ok := e.(*ast.Ident); ok {
 		if o := t.p.info.Uses[id]; o != nil {
@@ -104,7 +104,10 @@ func cVarName(name string) string {
 		"default", "case", "do", "while", "for", "if", "else", "switch", "break", "continue",
 		"return", "goto", "void", "inline", "restrict", "bool", "true", "false", "NULL", "main",
 		"new", "delete", "abs", "min", "max", "exp", "log", "floor", "ceil", "sin", "cos", "tan", "pow",
-		"round", "signbit", "isnan", "isinf", "errno", "stdin", "stdout", "stderr", "time", "random", "rand":
+		"round", "signbit", "isnan", "isinf", "errno", "stdin", "stdout", "stderr", "time", "random", "rand",
+		"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "uintptr_t", "size_t",
+		"GoString", "GoIface", "GoFunc", "GoMap", "GoOpaque", "memcpy", "memset", "strlen", "free", "malloc",
+		"assert", "exit", "abort", "fabs", "sqrt", "trunc", "fmod", "remove", "rename", "puts", "printf":
 		return name + "_"
 	}
 	return name
@@ -288,7 +291,7 @@ func (t *Tx) stmt(s ast.Stmt) {
 	case *ast.AssignStmt:
 		t.assign(s)
 	case *ast.IncDecStmt:
-		t.w("%s%s;", t.expr(s.X), s.Tok.String())
+		t.w("%s%s;", t.lvalue(s.X), s.Tok.String())
 	case *ast.ReturnStmt:
 		t.ret(s)
 	case *ast.BlockStmt:
@@ -331,6 +334,17 @@ func (t *Tx) stmt(s ast.Stmt) {
 		for _, spec := range gd.Specs {
 			switch sp := spec.(type) {
 			case *ast.ValueSpec:
+				if len(sp.Names) > 1 && len(sp.Values) == 1 {
+					// var a, b = f(): tuple-valued initializer
+					tm := t.newTmp()
+					t.w("%s %s = %s;", t.callRetType(sp.Values[0]), tm, t.expr(sp.Values[0]))
+					for i, n := range sp.Names {
+						if obj := t.p.info.Defs[n]; obj != nil && n.Name != "_" {
+							t.w("%s", t.declObj(obj, t.ctype(obj.Type()), fmt.Sprintf("%s.r%d", tm, i)))
+						}
+					}
+					continue
+				}
 				for i, n := range sp.Names {
 					obj := t.p.info.Defs[n]
 					if obj == nil {
@@ -355,6 +369,28 @@ func (t *Tx) stmt(s ast.Stmt) {
 		}
 	case *ast.DeferStmt:
 		t.deferStmt(s)
+	case *ast.SelectStmt:
+		// Single-threaded: no channel is ever ready, so a select runs its
+		// default clause (and one without default would block forever).
+		var deflt *ast.CommClause
+		for _, cc := range s.Body.List {
+			if c := cc.(*ast.CommClause); c.Comm == nil {
+				deflt = c
+			}
+		}
+		if deflt == nil {
+			t.w("go_panic_str(\"select: no channel can become ready (single-threaded)\");")
+			break
+		}
+		t.w("do {")
+		t.ind++
+		t.inSwitch++
+		for _, st := range deflt.Body {
+			t.stmt(st)
+		}
+		t.inSwitch--
+		t.ind--
+		t.w("} while (0);")
 	case *ast.GoStmt:
 		t.w("%s;", t.TODO(s, "go"))
 	case *ast.EmptyStmt:
@@ -373,8 +409,10 @@ func zeroValue(ty types.Type) string {
 			return "false"
 		}
 		return "0"
-	case *types.Pointer, *types.Signature:
+	case *types.Pointer:
 		return "NULL"
+	case *types.Signature:
+		return "(GoFunc){0}"
 	}
 	return "{0}"
 }
@@ -446,7 +484,11 @@ func (t *Tx) ret(s *ast.ReturnStmt) {
 	}
 	if len(s.Results) == 1 && t.results.Len() > 1 {
 		// return f() with multi-value f
-		t.w("return %s;", t.expr(s.Results[0]))
+		v := t.expr(s.Results[0])
+		if strings.HasPrefix(v, "TODO(") {
+			v = "(" + t.retType + "){0} /* untranslated call */"
+		}
+		t.w("return %s;", v)
 		return
 	}
 	var vs []string
@@ -549,7 +591,7 @@ func (t *Tx) forStmt(s *ast.ForStmt, label string) {
 func (t *Tx) simpleStmtInline(s ast.Stmt) string {
 	switch s := s.(type) {
 	case *ast.IncDecStmt:
-		return t.expr(s.X) + s.Tok.String()
+		return t.lvalue(s.X) + s.Tok.String()
 	case *ast.AssignStmt:
 		if len(s.Lhs) == 1 && len(s.Rhs) == 1 && s.Tok != token.DEFINE {
 			return t.assignExpr(s.Lhs[0], s.Tok, s.Rhs[0])
@@ -679,7 +721,7 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 	case *types.Map:
 		mt := cbase(xt)
 		it := t.newTmp()
-		t.w("GoMapIter %s = gomap_iter(&%s);", it, t.expr(s.X))
+		t.w("GoMapIter %s = gomap_iter((GoMap *)%s);", it, t.mapAddr(s.X))
 		t.w("while (gomap_next(&%s)) {", it)
 		t.ind++
 		if key != "" {
@@ -826,6 +868,12 @@ func (t *Tx) eqExpr(tag string, tagType types.Type, e ast.Expr) string {
 	if isString(tagType) {
 		return "go_streq(" + tag + ", " + t.expr(e) + ")"
 	}
+	switch tagType.Underlying().(type) {
+	case *types.Struct, *types.Array:
+		return eqFuncName(tagType) + "(" + tag + ", " + t.exprConv(e, tagType) + ")"
+	case *types.Interface:
+		return "go_iface_eq(" + tag + ", " + t.exprConv(e, tagType) + ")"
+	}
 	return "(" + tag + " == " + t.exprConv(e, tagType) + ")"
 }
 
@@ -892,7 +940,21 @@ func (t *Tx) assign(s *ast.AssignStmt) {
 			}
 		case *ast.TypeAssertExpr:
 			ta := s.Rhs[0].(*ast.TypeAssertExpr)
-			ty := t.p.info.Types[ta.Type].Type
+			ty := substT(t.p.info.TypeOf(ta.Type))
+			if ty == nil || ty.Underlying() == nil || types.TypeString(ty, qual) == "invalid type" {
+				t.w("/* type assertion to an unresolved type at %s */", shortFile(t.p.fset.Position(s.Pos()).Filename))
+				if id, ok := s.Lhs[0].(*ast.Ident); ok && id.Name != "_" && s.Tok == token.DEFINE {
+					t.w("GoOpaque %s = {{0}};", cVarName(id.Name))
+				}
+				if id, ok := s.Lhs[1].(*ast.Ident); ok && id.Name != "_" {
+					if s.Tok == token.DEFINE {
+						t.w("bool %s = false;", cVarName(id.Name))
+					} else {
+						t.w("%s = false;", t.expr(id))
+					}
+				}
+				return
+			}
 			xv := t.newTmp()
 			t.w("GoIface %s = %s;", xv, t.expr(ta.X))
 			var cond, val string
@@ -951,8 +1013,8 @@ func (t *Tx) defOrSet(l ast.Expr, tok token.Token, val string, ty types.Type) {
 
 func (t *Tx) lvalue(e ast.Expr) string {
 	if ix, ok := e.(*ast.IndexExpr); ok {
-		if _, isMap := t.typeOf(ix.X).Underlying().(*types.Map); isMap {
-			return t.TODO(e, "map lvalue")
+		if mt, isMap := t.typeOf(ix.X).Underlying().(*types.Map); isMap {
+			return fmt.Sprintf("(*%s_ptr(%s, %s))", cbase(mt), t.mapAddr(ix.X), t.exprConv(ix.Index, mt.Key()))
 		}
 	}
 	return t.expr(e)

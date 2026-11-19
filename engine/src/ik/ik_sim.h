@@ -3,7 +3,12 @@
 #define IK_SIM_H
 #include "core/gen_types.h"
 #include "core/gen_consts.h"
+#include "ik/ik_rt_types.h"
 
+#ifndef CVF_DEF_Arr0_GoOpaque_os_dirInfoPtrPtr
+#define CVF_DEF_Arr0_GoOpaque_os_dirInfoPtrPtr
+typedef struct Arr0_GoOpaque_os_dirInfoPtrPtr Arr0_GoOpaque_os_dirInfoPtrPtr;
+#endif
 #ifndef CVF_DEF_Arr100_GoString
 #define CVF_DEF_Arr100_GoString
 typedef struct Arr100_GoString Arr100_GoString;
@@ -11,6 +16,14 @@ typedef struct Arr100_GoString Arr100_GoString;
 #ifndef CVF_DEF_Arr1024_lowerCacheEntry
 #define CVF_DEF_Arr1024_lowerCacheEntry
 typedef struct Arr1024_lowerCacheEntry Arr1024_lowerCacheEntry;
+#endif
+#ifndef CVF_DEF_Arr10_AnimLayout
+#define CVF_DEF_Arr10_AnimLayout
+typedef struct Arr10_AnimLayout Arr10_AnimLayout;
+#endif
+#ifndef CVF_DEF_Arr10_Arr2_GoString
+#define CVF_DEF_Arr10_Arr2_GoString
+typedef struct Arr10_Arr2_GoString Arr10_Arr2_GoString;
 #endif
 #ifndef CVF_DEF_Arr10_CommandKey
 #define CVF_DEF_Arr10_CommandKey
@@ -20,17 +33,53 @@ typedef struct Arr10_CommandKey Arr10_CommandKey;
 #define CVF_DEF_Arr12_AiInput
 typedef struct Arr12_AiInput Arr12_AiInput;
 #endif
-#ifndef CVF_DEF_Arr12_Arr6_i8
-#define CVF_DEF_Arr12_Arr6_i8
-typedef struct Arr12_Arr6_i8 Arr12_Arr6_i8;
+#ifndef CVF_DEF_Arr12_CharGlobalInfo
+#define CVF_DEF_Arr12_CharGlobalInfo
+typedef struct Arr12_CharGlobalInfo Arr12_CharGlobalInfo;
+#endif
+#ifndef CVF_DEF_Arr12_ForceFeedbackParams
+#define CVF_DEF_Arr12_ForceFeedbackParams
+typedef struct Arr12_ForceFeedbackParams Arr12_ForceFeedbackParams;
 #endif
 #ifndef CVF_DEF_Arr12_GoString
 #define CVF_DEF_Arr12_GoString
 typedef struct Arr12_GoString Arr12_GoString;
 #endif
-#ifndef CVF_DEF_Arr12_InputBits
-#define CVF_DEF_Arr12_InputBits
-typedef struct Arr12_InputBits Arr12_InputBits;
+#ifndef CVF_DEF_Arr12_Slice_Char
+#define CVF_DEF_Arr12_Slice_Char
+typedef struct Arr12_Slice_Char Arr12_Slice_Char;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_CharPtr
+#define CVF_DEF_Arr12_Slice_CharPtr
+typedef struct Arr12_Slice_CharPtr Arr12_Slice_CharPtr;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_ExplodPtr
+#define CVF_DEF_Arr12_Slice_ExplodPtr
+typedef struct Arr12_Slice_ExplodPtr Arr12_Slice_ExplodPtr;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_ProjectilePtr
+#define CVF_DEF_Arr12_Slice_ProjectilePtr
+typedef struct Arr12_Slice_ProjectilePtr Arr12_Slice_ProjectilePtr;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_TextSpritePtr
+#define CVF_DEF_Arr12_Slice_TextSpritePtr
+typedef struct Arr12_Slice_TextSpritePtr Arr12_Slice_TextSpritePtr;
+#endif
+#ifndef CVF_DEF_Arr12_bool
+#define CVF_DEF_Arr12_bool
+typedef struct Arr12_bool Arr12_bool;
+#endif
+#ifndef CVF_DEF_Arr12_f32
+#define CVF_DEF_Arr12_f32
+typedef struct Arr12_f32 Arr12_f32;
+#endif
+#ifndef CVF_DEF_Arr12_int
+#define CVF_DEF_Arr12_int
+typedef struct Arr12_int Arr12_int;
+#endif
+#ifndef CVF_DEF_Arr12_stagePlayer
+#define CVF_DEF_Arr12_stagePlayer
+typedef struct Arr12_stagePlayer Arr12_stagePlayer;
 #endif
 #ifndef CVF_DEF_Arr14_bool
 #define CVF_DEF_Arr14_bool
@@ -40,9 +89,17 @@ typedef struct Arr14_bool Arr14_bool;
 #define CVF_DEF_Arr16_Anon_bfbab8ed
 typedef struct Arr16_Anon_bfbab8ed Arr16_Anon_bfbab8ed;
 #endif
+#ifndef CVF_DEF_Arr16_f32
+#define CVF_DEF_Arr16_f32
+typedef struct Arr16_f32 Arr16_f32;
+#endif
 #ifndef CVF_DEF_Arr1_u8
 #define CVF_DEF_Arr1_u8
 typedef struct Arr1_u8 Arr1_u8;
+#endif
+#ifndef CVF_DEF_Arr20_FSBgTextSnd
+#define CVF_DEF_Arr20_FSBgTextSnd
+typedef struct Arr20_FSBgTextSnd Arr20_FSBgTextSnd;
 #endif
 #ifndef CVF_DEF_Arr20_u64
 #define CVF_DEF_Arr20_u64
@@ -56,9 +113,29 @@ typedef struct Arr256_bool Arr256_bool;
 #define CVF_DEF_Arr256_int
 typedef struct Arr256_int Arr256_int;
 #endif
+#ifndef CVF_DEF_Arr256_u32
+#define CVF_DEF_Arr256_u32
+typedef struct Arr256_u32 Arr256_u32;
+#endif
 #ifndef CVF_DEF_Arr256_u64
 #define CVF_DEF_Arr256_u64
 typedef struct Arr256_u64 Arr256_u64;
+#endif
+#ifndef CVF_DEF_Arr2_AnimLayout
+#define CVF_DEF_Arr2_AnimLayout
+typedef struct Arr2_AnimLayout Arr2_AnimLayout;
+#endif
+#ifndef CVF_DEF_Arr2_AnimTextSnd
+#define CVF_DEF_Arr2_AnimTextSnd
+typedef struct Arr2_AnimTextSnd Arr2_AnimTextSnd;
+#endif
+#ifndef CVF_DEF_Arr2_Arr32_AnimLayout
+#define CVF_DEF_Arr2_Arr32_AnimLayout
+typedef struct Arr2_Arr32_AnimLayout Arr2_Arr32_AnimLayout;
+#endif
+#ifndef CVF_DEF_Arr2_Arr4_bool
+#define CVF_DEF_Arr2_Arr4_bool
+typedef struct Arr2_Arr4_bool Arr2_Arr4_bool;
 #endif
 #ifndef CVF_DEF_Arr2_CharGlobalInfo
 #define CVF_DEF_Arr2_CharGlobalInfo
@@ -72,17 +149,65 @@ typedef struct Arr2_CharPtr Arr2_CharPtr;
 #define CVF_DEF_Arr2_CommandKey
 typedef struct Arr2_CommandKey Arr2_CommandKey;
 #endif
-#ifndef CVF_DEF_Arr2_InputBits
-#define CVF_DEF_Arr2_InputBits
-typedef struct Arr2_InputBits Arr2_InputBits;
+#ifndef CVF_DEF_Arr2_FaceParams
+#define CVF_DEF_Arr2_FaceParams
+typedef struct Arr2_FaceParams Arr2_FaceParams;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenActionPtr
+#define CVF_DEF_Arr2_FightScreenActionPtr
+typedef struct Arr2_FightScreenActionPtr Arr2_FightScreenActionPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenAiLevelPtr
+#define CVF_DEF_Arr2_FightScreenAiLevelPtr
+typedef struct Arr2_FightScreenAiLevelPtr Arr2_FightScreenAiLevelPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenComboPtr
+#define CVF_DEF_Arr2_FightScreenComboPtr
+typedef struct Arr2_FightScreenComboPtr Arr2_FightScreenComboPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenScorePtr
+#define CVF_DEF_Arr2_FightScreenScorePtr
+typedef struct Arr2_FightScreenScorePtr Arr2_FightScreenScorePtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenWinCountPtr
+#define CVF_DEF_Arr2_FightScreenWinCountPtr
+typedef struct Arr2_FightScreenWinCountPtr Arr2_FightScreenWinCountPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenWinIconPtr
+#define CVF_DEF_Arr2_FightScreenWinIconPtr
+typedef struct Arr2_FightScreenWinIconPtr Arr2_FightScreenWinIconPtr;
+#endif
+#ifndef CVF_DEF_Arr2_GoString
+#define CVF_DEF_Arr2_GoString
+typedef struct Arr2_GoString Arr2_GoString;
+#endif
+#ifndef CVF_DEF_Arr2_Rotation
+#define CVF_DEF_Arr2_Rotation
+typedef struct Arr2_Rotation Arr2_Rotation;
+#endif
+#ifndef CVF_DEF_Arr2_Slice_Arr2_int
+#define CVF_DEF_Arr2_Slice_Arr2_int
+typedef struct Arr2_Slice_Arr2_int Arr2_Slice_Arr2_int;
 #endif
 #ifndef CVF_DEF_Arr2_Slice_StatsFighterState
 #define CVF_DEF_Arr2_Slice_StatsFighterState
 typedef struct Arr2_Slice_StatsFighterState Arr2_Slice_StatsFighterState;
 #endif
+#ifndef CVF_DEF_Arr2_Slice_int
+#define CVF_DEF_Arr2_Slice_int
+typedef struct Arr2_Slice_int Arr2_Slice_int;
+#endif
+#ifndef CVF_DEF_Arr2_TeamMode
+#define CVF_DEF_Arr2_TeamMode
+typedef struct Arr2_TeamMode Arr2_TeamMode;
+#endif
 #ifndef CVF_DEF_Arr2_WinType
 #define CVF_DEF_Arr2_WinType
 typedef struct Arr2_WinType Arr2_WinType;
+#endif
+#ifndef CVF_DEF_Arr2_bgShaderTex
+#define CVF_DEF_Arr2_bgShaderTex
+typedef struct Arr2_bgShaderTex Arr2_bgShaderTex;
 #endif
 #ifndef CVF_DEF_Arr2_bool
 #define CVF_DEF_Arr2_bool
@@ -92,9 +217,17 @@ typedef struct Arr2_bool Arr2_bool;
 #define CVF_DEF_Arr2_f32
 typedef struct Arr2_f32 Arr2_f32;
 #endif
+#ifndef CVF_DEF_Arr2_i16
+#define CVF_DEF_Arr2_i16
+typedef struct Arr2_i16 Arr2_i16;
+#endif
 #ifndef CVF_DEF_Arr2_i32
 #define CVF_DEF_Arr2_i32
 typedef struct Arr2_i32 Arr2_i32;
+#endif
+#ifndef CVF_DEF_Arr2_i8
+#define CVF_DEF_Arr2_i8
+typedef struct Arr2_i8 Arr2_i8;
 #endif
 #ifndef CVF_DEF_Arr2_int
 #define CVF_DEF_Arr2_int
@@ -112,6 +245,14 @@ typedef struct Arr32_AnimLayout Arr32_AnimLayout;
 #define CVF_DEF_Arr32_cmdNameCacheEnt
 typedef struct Arr32_cmdNameCacheEnt Arr32_cmdNameCacheEnt;
 #endif
+#ifndef CVF_DEF_Arr32_varCacheEnt
+#define CVF_DEF_Arr32_varCacheEnt
+typedef struct Arr32_varCacheEnt Arr32_varCacheEnt;
+#endif
+#ifndef CVF_DEF_Arr3_BytecodeExp
+#define CVF_DEF_Arr3_BytecodeExp
+typedef struct Arr3_BytecodeExp Arr3_BytecodeExp;
+#endif
 #ifndef CVF_DEF_Arr3_Slice_OverrideCharData
 #define CVF_DEF_Arr3_Slice_OverrideCharData
 typedef struct Arr3_Slice_OverrideCharData Arr3_Slice_OverrideCharData;
@@ -127,6 +268,10 @@ typedef struct Arr3_f32 Arr3_f32;
 #ifndef CVF_DEF_Arr3_f64
 #define CVF_DEF_Arr3_f64
 typedef struct Arr3_f64 Arr3_f64;
+#endif
+#ifndef CVF_DEF_Arr3_i16
+#define CVF_DEF_Arr3_i16
+typedef struct Arr3_i16 Arr3_i16;
 #endif
 #ifndef CVF_DEF_Arr3_i32
 #define CVF_DEF_Arr3_i32
@@ -148,6 +293,10 @@ typedef struct Arr3_u8 Arr3_u8;
 #define CVF_DEF_Arr4_Arr2_f32
 typedef struct Arr4_Arr2_f32 Arr4_Arr2_f32;
 #endif
+#ifndef CVF_DEF_Arr4_BytecodeValue
+#define CVF_DEF_Arr4_BytecodeValue
+typedef struct Arr4_BytecodeValue Arr4_BytecodeValue;
+#endif
 #ifndef CVF_DEF_Arr4_OpCode
 #define CVF_DEF_Arr4_OpCode
 typedef struct Arr4_OpCode Arr4_OpCode;
@@ -155,6 +304,22 @@ typedef struct Arr4_OpCode Arr4_OpCode;
 #ifndef CVF_DEF_Arr4_ResultAnnouncement
 #define CVF_DEF_Arr4_ResultAnnouncement
 typedef struct Arr4_ResultAnnouncement Arr4_ResultAnnouncement;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_ClsnFinal
+#define CVF_DEF_Arr4_Slice_ClsnFinal
+typedef struct Arr4_Slice_ClsnFinal Arr4_Slice_ClsnFinal;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_ClsnOverride
+#define CVF_DEF_Arr4_Slice_ClsnOverride
+typedef struct Arr4_Slice_ClsnOverride Arr4_Slice_ClsnOverride;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_ClsnTransform
+#define CVF_DEF_Arr4_Slice_ClsnTransform
+typedef struct Arr4_Slice_ClsnTransform Arr4_Slice_ClsnTransform;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_i32
+#define CVF_DEF_Arr4_Slice_i32
+typedef struct Arr4_Slice_i32 Arr4_Slice_i32;
 #endif
 #ifndef CVF_DEF_Arr4_ValueType
 #define CVF_DEF_Arr4_ValueType
@@ -167,6 +332,10 @@ typedef struct Arr4_bool Arr4_bool;
 #ifndef CVF_DEF_Arr4_f32
 #define CVF_DEF_Arr4_f32
 typedef struct Arr4_f32 Arr4_f32;
+#endif
+#ifndef CVF_DEF_Arr4_f64
+#define CVF_DEF_Arr4_f64
+typedef struct Arr4_f64 Arr4_f64;
 #endif
 #ifndef CVF_DEF_Arr4_i32
 #define CVF_DEF_Arr4_i32
@@ -208,39 +377,81 @@ typedef struct Arr6_i8 Arr6_i8;
 #define CVF_DEF_Arr7_f32
 typedef struct Arr7_f32 Arr7_f32;
 #endif
-#ifndef CVF_DEF_Arr8_Arr6_i8
-#define CVF_DEF_Arr8_Arr6_i8
-typedef struct Arr8_Arr6_i8 Arr8_Arr6_i8;
+#ifndef CVF_DEF_Arr8_HitBy
+#define CVF_DEF_Arr8_HitBy
+typedef struct Arr8_HitBy Arr8_HitBy;
 #endif
-#ifndef CVF_DEF_Arr8_InputBits
-#define CVF_DEF_Arr8_InputBits
-typedef struct Arr8_InputBits Arr8_InputBits;
+#ifndef CVF_DEF_Arr8_HitOverride
+#define CVF_DEF_Arr8_HitOverride
+typedef struct Arr8_HitOverride Arr8_HitOverride;
 #endif
 #ifndef CVF_DEF_Arr8_OpCode
 #define CVF_DEF_Arr8_OpCode
 typedef struct Arr8_OpCode Arr8_OpCode;
 #endif
+#ifndef CVF_DEF_Arr8_Slice_FightScreenFacePtr
+#define CVF_DEF_Arr8_Slice_FightScreenFacePtr
+typedef struct Arr8_Slice_FightScreenFacePtr Arr8_Slice_FightScreenFacePtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_FightScreenNamePtr
+#define CVF_DEF_Arr8_Slice_FightScreenNamePtr
+typedef struct Arr8_Slice_FightScreenNamePtr Arr8_Slice_FightScreenNamePtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_GuardBarPtr
+#define CVF_DEF_Arr8_Slice_GuardBarPtr
+typedef struct Arr8_Slice_GuardBarPtr Arr8_Slice_GuardBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_LifeBarPtr
+#define CVF_DEF_Arr8_Slice_LifeBarPtr
+typedef struct Arr8_Slice_LifeBarPtr Arr8_Slice_LifeBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_PowerBarPtr
+#define CVF_DEF_Arr8_Slice_PowerBarPtr
+typedef struct Arr8_Slice_PowerBarPtr Arr8_Slice_PowerBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_StunBarPtr
+#define CVF_DEF_Arr8_Slice_StunBarPtr
+typedef struct Arr8_Slice_StunBarPtr Arr8_Slice_StunBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_f32
+#define CVF_DEF_Arr8_f32
+typedef struct Arr8_f32 Arr8_f32;
+#endif
 #ifndef CVF_DEF_Arr8_i32
 #define CVF_DEF_Arr8_i32
 typedef struct Arr8_i32 Arr8_i32;
 #endif
-#ifndef CVF_DEF_Arr90_GoString
-#define CVF_DEF_Arr90_GoString
-typedef struct Arr90_GoString Arr90_GoString;
+#ifndef CVF_DEF_Arr9_AnimTextSnd
+#define CVF_DEF_Arr9_AnimTextSnd
+typedef struct Arr9_AnimTextSnd Arr9_AnimTextSnd;
 #endif
 #ifndef CVF_DEF_Arr9_Anon_f8c1b65b
 #define CVF_DEF_Arr9_Anon_f8c1b65b
 typedef struct Arr9_Anon_f8c1b65b Arr9_Anon_f8c1b65b;
 #endif
+#ifndef CVF_DEF_Arr9_Arr2_i32
+#define CVF_DEF_Arr9_Arr2_i32
+typedef struct Arr9_Arr2_i32 Arr9_Arr2_i32;
+#endif
 #ifndef CVF_DEF_Arr9_bool
 #define CVF_DEF_Arr9_bool
 typedef struct Arr9_bool Arr9_bool;
 #endif
+#ifndef CVF_DEF_Arr9_f32
+#define CVF_DEF_Arr9_f32
+typedef struct Arr9_f32 Arr9_f32;
+#endif
 typedef struct fontSpec_L25f097 fontSpec_L25f097;
-typedef struct musicHolder_Lf80c9c musicHolder_Lf80c9c;
+typedef struct fontSpec_L8e0736 fontSpec_L8e0736;
+typedef struct kv_L9db1e9 kv_L9db1e9;
+typedef struct ov_L267e05 ov_L267e05;
 typedef struct pair_L900525 pair_L900525;
 typedef struct pair_Lf31ea2 pair_Lf31ea2;
+typedef struct pv_Lad4e0a pv_Lad4e0a;
+typedef struct qvPlayer_Ld7a4bd qvPlayer_Ld7a4bd;
 typedef struct spec_La365df spec_La365df;
+typedef struct Anon_3c59f47a Anon_3c59f47a;
+typedef struct Anon_8aabe1e9 Anon_8aabe1e9;
 typedef struct Anon_dcdcacfc Anon_dcdcacfc;
 typedef struct Anon_ed5d50f3 Anon_ed5d50f3;
 typedef struct Anon_f8c1b65b Anon_f8c1b65b;
@@ -256,13 +467,21 @@ typedef struct { AnimLayout *p; int len, cap; } Slice_AnimLayout;
 #define CVF_DEF_Slice_AnimPtr
 typedef struct { Anim* *p; int len, cap; } Slice_AnimPtr;
 #endif
+#ifndef CVF_DEF_Slice_Anon_3c59f47a
+#define CVF_DEF_Slice_Anon_3c59f47a
+typedef struct { Anon_3c59f47a *p; int len, cap; } Slice_Anon_3c59f47a;
+#endif
+#ifndef CVF_DEF_Slice_Arr256_u32
+#define CVF_DEF_Slice_Arr256_u32
+typedef struct { Arr256_u32 *p; int len, cap; } Slice_Arr256_u32;
+#endif
 #ifndef CVF_DEF_Slice_Arr2_f32
 #define CVF_DEF_Slice_Arr2_f32
 typedef struct { Arr2_f32 *p; int len, cap; } Slice_Arr2_f32;
 #endif
 #ifndef CVF_DEF_Slice_Arr2_i32
 #define CVF_DEF_Slice_Arr2_i32
-typedef struct { GoOpaque /* type param */ *p; int len, cap; } Slice_Arr2_i32;
+typedef struct { Arr2_i32 *p; int len, cap; } Slice_Arr2_i32;
 #endif
 #ifndef CVF_DEF_Slice_Arr2_int
 #define CVF_DEF_Slice_Arr2_int
@@ -272,21 +491,9 @@ typedef struct { Arr2_int *p; int len, cap; } Slice_Arr2_int;
 #define CVF_DEF_Slice_Arr4_f32
 typedef struct { Arr4_f32 *p; int len, cap; } Slice_Arr4_f32;
 #endif
-#ifndef CVF_DEF_Slice_Arr6_i8
-#define CVF_DEF_Slice_Arr6_i8
-typedef struct { Arr6_i8 *p; int len, cap; } Slice_Arr6_i8;
-#endif
 #ifndef CVF_DEF_Slice_Arr7_f32
 #define CVF_DEF_Slice_Arr7_f32
 typedef struct { Arr7_f32 *p; int len, cap; } Slice_Arr7_f32;
-#endif
-#ifndef CVF_DEF_Slice_Arr8_Arr6_i8
-#define CVF_DEF_Slice_Arr8_Arr6_i8
-typedef struct { Arr8_Arr6_i8 *p; int len, cap; } Slice_Arr8_Arr6_i8;
-#endif
-#ifndef CVF_DEF_Slice_Arr8_InputBits
-#define CVF_DEF_Slice_Arr8_InputBits
-typedef struct { Arr8_InputBits *p; int len, cap; } Slice_Arr8_InputBits;
 #endif
 #ifndef CVF_DEF_Slice_BytecodeExp
 #define CVF_DEF_Slice_BytecodeExp
@@ -306,11 +513,11 @@ typedef struct { Char *p; int len, cap; } Slice_Char;
 #endif
 #ifndef CVF_DEF_Slice_CharPtr
 #define CVF_DEF_Slice_CharPtr
-typedef struct { GoOpaque /* type param */* *p; int len, cap; } Slice_CharPtr;
+typedef struct { Char* *p; int len, cap; } Slice_CharPtr;
 #endif
 #ifndef CVF_DEF_Slice_ClsnFinal
 #define CVF_DEF_Slice_ClsnFinal
-typedef struct { GoOpaque /* type param */ *p; int len, cap; } Slice_ClsnFinal;
+typedef struct { ClsnFinal *p; int len, cap; } Slice_ClsnFinal;
 #endif
 #ifndef CVF_DEF_Slice_ClsnOverride
 #define CVF_DEF_Slice_ClsnOverride
@@ -358,11 +565,11 @@ typedef struct { DialogueToken *p; int len, cap; } Slice_DialogueToken;
 #endif
 #ifndef CVF_DEF_Slice_ExplodPtr
 #define CVF_DEF_Slice_ExplodPtr
-typedef struct { GoOpaque /* type param */* *p; int len, cap; } Slice_ExplodPtr;
+typedef struct { Explod* *p; int len, cap; } Slice_ExplodPtr;
 #endif
 #ifndef CVF_DEF_Slice_FSMsgPtr
 #define CVF_DEF_Slice_FSMsgPtr
-typedef struct { GoOpaque /* type param */ *p; int len, cap; } Slice_FSMsgPtr;
+typedef struct { FSMsg* *p; int len, cap; } Slice_FSMsgPtr;
 #endif
 #ifndef CVF_DEF_Slice_FightScreenFacePtr
 #define CVF_DEF_Slice_FightScreenFacePtr
@@ -372,9 +579,25 @@ typedef struct { FightScreenFace* *p; int len, cap; } Slice_FightScreenFacePtr;
 #define CVF_DEF_Slice_FightScreenNamePtr
 typedef struct { FightScreenName* *p; int len, cap; } Slice_FightScreenNamePtr;
 #endif
+#ifndef CVF_DEF_Slice_GLTFAnimationChannelPtr
+#define CVF_DEF_Slice_GLTFAnimationChannelPtr
+typedef struct { GLTFAnimationChannel* *p; int len, cap; } Slice_GLTFAnimationChannelPtr;
+#endif
 #ifndef CVF_DEF_Slice_GLTFAnimationPtr
 #define CVF_DEF_Slice_GLTFAnimationPtr
 typedef struct { GLTFAnimation* *p; int len, cap; } Slice_GLTFAnimationPtr;
+#endif
+#ifndef CVF_DEF_Slice_GLTFAnimationSamplerPtr
+#define CVF_DEF_Slice_GLTFAnimationSamplerPtr
+typedef struct { GLTFAnimationSampler* *p; int len, cap; } Slice_GLTFAnimationSamplerPtr;
+#endif
+#ifndef CVF_DEF_Slice_GLTFLight
+#define CVF_DEF_Slice_GLTFLight
+typedef struct { GLTFLight *p; int len, cap; } Slice_GLTFLight;
+#endif
+#ifndef CVF_DEF_Slice_GLTFTexturePtr
+#define CVF_DEF_Slice_GLTFTexturePtr
+typedef struct { GLTFTexture* *p; int len, cap; } Slice_GLTFTexturePtr;
 #endif
 #ifndef CVF_DEF_Slice_GoFunc
 #define CVF_DEF_Slice_GoFunc
@@ -384,29 +607,45 @@ typedef struct { GoFunc *p; int len, cap; } Slice_GoFunc;
 #define CVF_DEF_Slice_GoIface
 typedef struct { GoIface *p; int len, cap; } Slice_GoIface;
 #endif
-#ifndef CVF_DEF_Slice_GoOpaqueValPtr
-#define CVF_DEF_Slice_GoOpaqueValPtr
-typedef struct { GoOpaqueVal* *p; int len, cap; } Slice_GoOpaqueValPtr;
+#ifndef CVF_DEF_Slice_GoOpaque_ini_KeyPtrPtr
+#define CVF_DEF_Slice_GoOpaque_ini_KeyPtrPtr
+typedef struct { GoOpaque /* ini.Key */* *p; int len, cap; } Slice_GoOpaque_ini_KeyPtrPtr;
 #endif
-#ifndef CVF_DEF_Slice_GoOpaque_invalidtypePtr
-#define CVF_DEF_Slice_GoOpaque_invalidtypePtr
-typedef struct { GoOpaque /* invalid type */ *p; int len, cap; } Slice_GoOpaque_invalidtypePtr;
+#ifndef CVF_DEF_Slice_GoOpaque_ini_SectionPtrPtr
+#define CVF_DEF_Slice_GoOpaque_ini_SectionPtrPtr
+typedef struct { GoOpaque /* ini.Section */* *p; int len, cap; } Slice_GoOpaque_ini_SectionPtrPtr;
 #endif
 #ifndef CVF_DEF_Slice_GoOpaque_reflect_ValuePtr
 #define CVF_DEF_Slice_GoOpaque_reflect_ValuePtr
 typedef struct { GoOpaque /* reflect.Value */ *p; int len, cap; } Slice_GoOpaque_reflect_ValuePtr;
 #endif
+#ifndef CVF_DEF_Slice_GoOpaque_syscall_IovecPtr
+#define CVF_DEF_Slice_GoOpaque_syscall_IovecPtr
+typedef struct { GoOpaque /* syscall.Iovec */ *p; int len, cap; } Slice_GoOpaque_syscall_IovecPtr;
+#endif
+#ifndef CVF_DEF_Slice_GoOpaque_time_zonePtr
+#define CVF_DEF_Slice_GoOpaque_time_zonePtr
+typedef struct { GoOpaque /* time.zone */ *p; int len, cap; } Slice_GoOpaque_time_zonePtr;
+#endif
+#ifndef CVF_DEF_Slice_GoOpaque_time_zoneTransPtr
+#define CVF_DEF_Slice_GoOpaque_time_zoneTransPtr
+typedef struct { GoOpaque /* time.zoneTrans */ *p; int len, cap; } Slice_GoOpaque_time_zoneTransPtr;
+#endif
 #ifndef CVF_DEF_Slice_GoOpaque_typeparamPtr
 #define CVF_DEF_Slice_GoOpaque_typeparamPtr
 typedef struct { GoOpaque /* type param */ *p; int len, cap; } Slice_GoOpaque_typeparamPtr;
 #endif
-#ifndef CVF_DEF_Slice_GoOpaque_zip_FilePtrPtr
-#define CVF_DEF_Slice_GoOpaque_zip_FilePtrPtr
-typedef struct { GoOpaque /* zip.File */* *p; int len, cap; } Slice_GoOpaque_zip_FilePtrPtr;
+#ifndef CVF_DEF_Slice_GoOpaque_zip_fileListEntryPtr
+#define CVF_DEF_Slice_GoOpaque_zip_fileListEntryPtr
+typedef struct { GoOpaque /* zip.fileListEntry */ *p; int len, cap; } Slice_GoOpaque_zip_fileListEntryPtr;
 #endif
 #ifndef CVF_DEF_Slice_GoString
 #define CVF_DEF_Slice_GoString
 typedef struct { GoString *p; int len, cap; } Slice_GoString;
+#endif
+#ifndef CVF_DEF_Slice_GoZipFilePtr
+#define CVF_DEF_Slice_GoZipFilePtr
+typedef struct { GoZipFile* *p; int len, cap; } Slice_GoZipFilePtr;
 #endif
 #ifndef CVF_DEF_Slice_GuardBarPtr
 #define CVF_DEF_Slice_GuardBarPtr
@@ -415,10 +654,6 @@ typedef struct { GuardBar* *p; int len, cap; } Slice_GuardBarPtr;
 #ifndef CVF_DEF_Slice_IniSection
 #define CVF_DEF_Slice_IniSection
 typedef struct { IniSection *p; int len, cap; } Slice_IniSection;
-#endif
-#ifndef CVF_DEF_Slice_InputBits
-#define CVF_DEF_Slice_InputBits
-typedef struct { InputBits *p; int len, cap; } Slice_InputBits;
 #endif
 #ifndef CVF_DEF_Slice_KeyConfig
 #define CVF_DEF_Slice_KeyConfig
@@ -435,6 +670,18 @@ typedef struct { LifeBar* *p; int len, cap; } Slice_LifeBarPtr;
 #ifndef CVF_DEF_Slice_Map_f32_AnimLayoutPtr
 #define CVF_DEF_Slice_Map_f32_AnimLayoutPtr
 typedef struct { Map_f32_AnimLayoutPtr *p; int len, cap; } Slice_Map_f32_AnimLayoutPtr;
+#endif
+#ifndef CVF_DEF_Slice_MaterialPtr
+#define CVF_DEF_Slice_MaterialPtr
+typedef struct { Material* *p; int len, cap; } Slice_MaterialPtr;
+#endif
+#ifndef CVF_DEF_Slice_MeshPtr
+#define CVF_DEF_Slice_MeshPtr
+typedef struct { Mesh* *p; int len, cap; } Slice_MeshPtr;
+#endif
+#ifndef CVF_DEF_Slice_MorphTargetPtr
+#define CVF_DEF_Slice_MorphTargetPtr
+typedef struct { MorphTarget* *p; int len, cap; } Slice_MorphTargetPtr;
 #endif
 #ifndef CVF_DEF_Slice_NodePtr
 #define CVF_DEF_Slice_NodePtr
@@ -456,17 +703,41 @@ typedef struct { PalFX* *p; int len, cap; } Slice_PalFXPtr;
 #define CVF_DEF_Slice_PowerBarPtr
 typedef struct { PowerBar* *p; int len, cap; } Slice_PowerBarPtr;
 #endif
+#ifndef CVF_DEF_Slice_PreloadEntry
+#define CVF_DEF_Slice_PreloadEntry
+typedef struct { PreloadEntry *p; int len, cap; } Slice_PreloadEntry;
+#endif
+#ifndef CVF_DEF_Slice_PrimitivePtr
+#define CVF_DEF_Slice_PrimitivePtr
+typedef struct { Primitive* *p; int len, cap; } Slice_PrimitivePtr;
+#endif
 #ifndef CVF_DEF_Slice_ProjectilePtr
 #define CVF_DEF_Slice_ProjectilePtr
-typedef struct { GoOpaque /* type param */* *p; int len, cap; } Slice_ProjectilePtr;
+typedef struct { Projectile* *p; int len, cap; } Slice_ProjectilePtr;
 #endif
 #ifndef CVF_DEF_Slice_ReflectionSpritePtr
 #define CVF_DEF_Slice_ReflectionSpritePtr
 typedef struct { ReflectionSprite* *p; int len, cap; } Slice_ReflectionSpritePtr;
 #endif
+#ifndef CVF_DEF_Slice_ScenePtr
+#define CVF_DEF_Slice_ScenePtr
+typedef struct { Scene* *p; int len, cap; } Slice_ScenePtr;
+#endif
+#ifndef CVF_DEF_Slice_SelectChar
+#define CVF_DEF_Slice_SelectChar
+typedef struct { SelectChar *p; int len, cap; } Slice_SelectChar;
+#endif
+#ifndef CVF_DEF_Slice_SelectStage
+#define CVF_DEF_Slice_SelectStage
+typedef struct { SelectStage *p; int len, cap; } Slice_SelectStage;
+#endif
 #ifndef CVF_DEF_Slice_ShadowSpritePtr
 #define CVF_DEF_Slice_ShadowSpritePtr
 typedef struct { ShadowSprite* *p; int len, cap; } Slice_ShadowSpritePtr;
+#endif
+#ifndef CVF_DEF_Slice_SkinPtr
+#define CVF_DEF_Slice_SkinPtr
+typedef struct { Skin* *p; int len, cap; } Slice_SkinPtr;
 #endif
 #ifndef CVF_DEF_Slice_Slice_BytecodeExp
 #define CVF_DEF_Slice_Slice_BytecodeExp
@@ -484,17 +755,21 @@ typedef struct { Slice_GoString *p; int len, cap; } Slice_Slice_GoString;
 #define CVF_DEF_Slice_Slice_SpriteData
 typedef struct { Slice_SpriteData *p; int len, cap; } Slice_Slice_SpriteData;
 #endif
+#ifndef CVF_DEF_Slice_Slice_nameFact
+#define CVF_DEF_Slice_Slice_nameFact
+typedef struct { Slice_nameFact *p; int len, cap; } Slice_Slice_nameFact;
+#endif
 #ifndef CVF_DEF_Slice_Slice_u32
 #define CVF_DEF_Slice_Slice_u32
 typedef struct { Slice_u32 *p; int len, cap; } Slice_Slice_u32;
 #endif
-#ifndef CVF_DEF_Slice_Slice_u8
-#define CVF_DEF_Slice_Slice_u8
-typedef struct { Slice_u8 *p; int len, cap; } Slice_Slice_u8;
-#endif
 #ifndef CVF_DEF_Slice_SoundChannelPtr
 #define CVF_DEF_Slice_SoundChannelPtr
 typedef struct { SoundChannel* *p; int len, cap; } Slice_SoundChannelPtr;
+#endif
+#ifndef CVF_DEF_Slice_Sprite
+#define CVF_DEF_Slice_Sprite
+typedef struct { Sprite *p; int len, cap; } Slice_Sprite;
 #endif
 #ifndef CVF_DEF_Slice_SpriteData
 #define CVF_DEF_Slice_SpriteData
@@ -534,7 +809,7 @@ typedef struct { StunBar* *p; int len, cap; } Slice_StunBarPtr;
 #endif
 #ifndef CVF_DEF_Slice_TextSpritePtr
 #define CVF_DEF_Slice_TextSpritePtr
-typedef struct { GoOpaque /* type param */* *p; int len, cap; } Slice_TextSpritePtr;
+typedef struct { TextSprite* *p; int len, cap; } Slice_TextSpritePtr;
 #endif
 #ifndef CVF_DEF_Slice_TextureAtlasPtr
 #define CVF_DEF_Slice_TextureAtlasPtr
@@ -552,6 +827,10 @@ typedef struct { backGround* *p; int len, cap; } Slice_backGroundPtr;
 #define CVF_DEF_Slice_bgCtrl
 typedef struct { bgCtrl *p; int len, cap; } Slice_bgCtrl;
 #endif
+#ifndef CVF_DEF_Slice_bgMusicPtr
+#define CVF_DEF_Slice_bgMusicPtr
+typedef struct { bgMusic* *p; int len, cap; } Slice_bgMusicPtr;
+#endif
 #ifndef CVF_DEF_Slice_bool
 #define CVF_DEF_Slice_bool
 typedef struct { bool *p; int len, cap; } Slice_bool;
@@ -559,6 +838,10 @@ typedef struct { bool *p; int len, cap; } Slice_bool;
 #ifndef CVF_DEF_Slice_boolPtr
 #define CVF_DEF_Slice_boolPtr
 typedef struct { bool* *p; int len, cap; } Slice_boolPtr;
+#endif
+#ifndef CVF_DEF_Slice_cnode
+#define CVF_DEF_Slice_cnode
+typedef struct { cnode *p; int len, cap; } Slice_cnode;
 #endif
 #ifndef CVF_DEF_Slice_expValueFramePtr
 #define CVF_DEF_Slice_expValueFramePtr
@@ -596,6 +879,18 @@ typedef struct { i8 *p; int len, cap; } Slice_i8;
 #define CVF_DEF_Slice_int
 typedef struct { int *p; int len, cap; } Slice_int;
 #endif
+#ifndef CVF_DEF_Slice_kv_L9db1e9
+#define CVF_DEF_Slice_kv_L9db1e9
+typedef struct { kv_L9db1e9 *p; int len, cap; } Slice_kv_L9db1e9;
+#endif
+#ifndef CVF_DEF_Slice_nameFact
+#define CVF_DEF_Slice_nameFact
+typedef struct { nameFact *p; int len, cap; } Slice_nameFact;
+#endif
+#ifndef CVF_DEF_Slice_ov_L267e05
+#define CVF_DEF_Slice_ov_L267e05
+typedef struct { ov_L267e05 *p; int len, cap; } Slice_ov_L267e05;
+#endif
 #ifndef CVF_DEF_Slice_pair_L900525
 #define CVF_DEF_Slice_pair_L900525
 typedef struct { pair_L900525 *p; int len, cap; } Slice_pair_L900525;
@@ -604,9 +899,17 @@ typedef struct { pair_L900525 *p; int len, cap; } Slice_pair_L900525;
 #define CVF_DEF_Slice_pair_Lf31ea2
 typedef struct { pair_Lf31ea2 *p; int len, cap; } Slice_pair_Lf31ea2;
 #endif
+#ifndef CVF_DEF_Slice_pv_Lad4e0a
+#define CVF_DEF_Slice_pv_Lad4e0a
+typedef struct { pv_Lad4e0a *p; int len, cap; } Slice_pv_Lad4e0a;
+#endif
 #ifndef CVF_DEF_Slice_queryPart
 #define CVF_DEF_Slice_queryPart
 typedef struct { queryPart *p; int len, cap; } Slice_queryPart;
+#endif
+#ifndef CVF_DEF_Slice_qvPlayer_Ld7a4bd
+#define CVF_DEF_Slice_qvPlayer_Ld7a4bd
+typedef struct { qvPlayer_Ld7a4bd *p; int len, cap; } Slice_qvPlayer_Ld7a4bd;
 #endif
 #ifndef CVF_DEF_Slice_rankingRow
 #define CVF_DEF_Slice_rankingRow
@@ -640,9 +943,21 @@ typedef struct { u16 *p; int len, cap; } Slice_u16;
 #define CVF_DEF_Slice_u32
 typedef struct { u32 *p; int len, cap; } Slice_u32;
 #endif
+#ifndef CVF_DEF_Slice_u64
+#define CVF_DEF_Slice_u64
+typedef struct { u64 *p; int len, cap; } Slice_u64;
+#endif
 #ifndef CVF_DEF_Slice_u8
 #define CVF_DEF_Slice_u8
 typedef struct { u8 *p; int len, cap; } Slice_u8;
+#endif
+#ifndef CVF_DEF_Map_Arr2_i32_AnimationPtr
+#define CVF_DEF_Map_Arr2_i32_AnimationPtr
+typedef GoMap Map_Arr2_i32_AnimationPtr;
+#endif
+#ifndef CVF_DEF_Map_Arr2_i32_GoOpaqueValPtr
+#define CVF_DEF_Map_Arr2_i32_GoOpaqueValPtr
+typedef GoMap Map_Arr2_i32_GoOpaqueValPtr;
 #endif
 #ifndef CVF_DEF_Map_Arr2_u16_SpritePtr
 #define CVF_DEF_Map_Arr2_u16_SpritePtr
@@ -656,17 +971,41 @@ typedef GoMap Map_Arr2_u16_bool;
 #define CVF_DEF_Map_Arr2_u16_int
 typedef GoMap Map_Arr2_u16_int;
 #endif
+#ifndef CVF_DEF_Map_CharPtr_bool
+#define CVF_DEF_Map_CharPtr_bool
+typedef GoMap Map_CharPtr_bool;
+#endif
 #ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
 #define CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
 typedef GoMap Map_GoOpaque_invalidtypePtr_bool;
+#endif
+#ifndef CVF_DEF_Map_GoString_AnimationPropertiesPtr
+#define CVF_DEF_Map_GoString_AnimationPropertiesPtr
+typedef GoMap Map_GoString_AnimationPropertiesPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_Arr2_i32
 #define CVF_DEF_Map_GoString_Arr2_i32
 typedef GoMap Map_GoString_Arr2_i32;
 #endif
+#ifndef CVF_DEF_Map_GoString_BgAnimationPropertiesPtr
+#define CVF_DEF_Map_GoString_BgAnimationPropertiesPtr
+typedef GoMap Map_GoString_BgAnimationPropertiesPtr;
+#endif
+#ifndef CVF_DEF_Map_GoString_BgDefPropertiesPtr
+#define CVF_DEF_Map_GoString_BgDefPropertiesPtr
+typedef GoMap Map_GoString_BgDefPropertiesPtr;
+#endif
 #ifndef CVF_DEF_Map_GoString_BytecodeFunction
 #define CVF_DEF_Map_GoString_BytecodeFunction
 typedef GoMap Map_GoString_BytecodeFunction;
+#endif
+#ifndef CVF_DEF_Map_GoString_CellOverridePropertiesPtr
+#define CVF_DEF_Map_GoString_CellOverridePropertiesPtr
+typedef GoMap Map_GoString_CellOverridePropertiesPtr;
+#endif
+#ifndef CVF_DEF_Map_GoString_ContinueCounterPropertiesPtr
+#define CVF_DEF_Map_GoString_ContinueCounterPropertiesPtr
+typedef GoMap Map_GoString_ContinueCounterPropertiesPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_FightFxPtr
 #define CVF_DEF_Map_GoString_FightFxPtr
@@ -676,29 +1015,61 @@ typedef GoMap Map_GoString_FightFxPtr;
 #define CVF_DEF_Map_GoString_FightScreenModePtr
 typedef GoMap Map_GoString_FightScreenModePtr;
 #endif
+#ifndef CVF_DEF_Map_GoString_FontPropertiesPtr
+#define CVF_DEF_Map_GoString_FontPropertiesPtr
+typedef GoMap Map_GoString_FontPropertiesPtr;
+#endif
+#ifndef CVF_DEF_Map_GoString_GlyphPropertiesPtr
+#define CVF_DEF_Map_GoString_GlyphPropertiesPtr
+typedef GoMap Map_GoString_GlyphPropertiesPtr;
+#endif
+#ifndef CVF_DEF_Map_GoString_GoOpaque_ini_KeyPtrPtr
+#define CVF_DEF_Map_GoString_GoOpaque_ini_KeyPtrPtr
+typedef GoMap Map_GoString_GoOpaque_ini_KeyPtrPtr;
+#endif
 #ifndef CVF_DEF_Map_GoString_GoString
 #define CVF_DEF_Map_GoString_GoString
 typedef GoMap Map_GoString_GoString;
+#endif
+#ifndef CVF_DEF_Map_GoString_KeysPropertiesPtr
+#define CVF_DEF_Map_GoString_KeysPropertiesPtr
+typedef GoMap Map_GoString_KeysPropertiesPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_LayerPropertiesPtr
 #define CVF_DEF_Map_GoString_LayerPropertiesPtr
 typedef GoMap Map_GoString_LayerPropertiesPtr;
 #endif
+#ifndef CVF_DEF_Map_GoString_Map_f32_AnimLayoutPtr
+#define CVF_DEF_Map_GoString_Map_f32_AnimLayoutPtr
+typedef GoMap Map_GoString_Map_f32_AnimLayoutPtr;
+#endif
+#ifndef CVF_DEF_Map_GoString_Map_int_bool
+#define CVF_DEF_Map_GoString_Map_int_bool
+typedef GoMap Map_GoString_Map_int_bool;
+#endif
 #ifndef CVF_DEF_Map_GoString_MenuInfoPropertiesPtr
 #define CVF_DEF_Map_GoString_MenuInfoPropertiesPtr
 typedef GoMap Map_GoString_MenuInfoPropertiesPtr;
+#endif
+#ifndef CVF_DEF_Map_GoString_PlayerCursorStatePropertiesPtr
+#define CVF_DEF_Map_GoString_PlayerCursorStatePropertiesPtr
+typedef GoMap Map_GoString_PlayerCursorStatePropertiesPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_RemapPreset
 #define CVF_DEF_Map_GoString_RemapPreset
 typedef GoMap Map_GoString_RemapPreset;
 #endif
+#ifndef CVF_DEF_Map_GoString_ResultsScreenPropertiesPtr
+#define CVF_DEF_Map_GoString_ResultsScreenPropertiesPtr
+typedef GoMap Map_GoString_ResultsScreenPropertiesPtr;
+#endif
 #ifndef CVF_DEF_Map_GoString_ScenePropertiesPtr
 #define CVF_DEF_Map_GoString_ScenePropertiesPtr
 typedef GoMap Map_GoString_ScenePropertiesPtr;
 #endif
-#ifndef CVF_DEF_Map_GoString_Slice_GoOpaqueValPtr
-#define CVF_DEF_Map_GoString_Slice_GoOpaqueValPtr
-typedef GoMap Map_GoString_Slice_GoOpaqueValPtr;
+#ifndef CVF_DEF_Map_GoString_Slice_GoOpaque_ini_SectionPtrPtr
+#define CVF_DEF_Map_GoString_Slice_GoOpaque_ini_SectionPtrPtr
+typedef GoMap Map_GoString_Slice_GoOpaque_ini_SectionPtrPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_Slice_GoString
 #define CVF_DEF_Map_GoString_Slice_GoString
@@ -708,9 +1079,17 @@ typedef GoMap Map_GoString_Slice_GoString;
 #define CVF_DEF_Map_GoString_Slice_IniSection
 typedef GoMap Map_GoString_Slice_IniSection;
 #endif
+#ifndef CVF_DEF_Map_GoString_Slice_bgMusicPtr
+#define CVF_DEF_Map_GoString_Slice_bgMusicPtr
+typedef GoMap Map_GoString_Slice_bgMusicPtr;
+#endif
 #ifndef CVF_DEF_Map_GoString_SoundPropertiesPtr
 #define CVF_DEF_Map_GoString_SoundPropertiesPtr
 typedef GoMap Map_GoString_SoundPropertiesPtr;
+#endif
+#ifndef CVF_DEF_Map_GoString_TeamModesPropertiesPtr
+#define CVF_DEF_Map_GoString_TeamModesPropertiesPtr
+typedef GoMap Map_GoString_TeamModesPropertiesPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_TypedValue
 #define CVF_DEF_Map_GoString_TypedValue
@@ -728,10 +1107,6 @@ typedef GoMap Map_GoString_f32;
 #define CVF_DEF_Map_GoString_int
 typedef GoMap Map_GoString_int;
 #endif
-#ifndef CVF_DEF_Map_GoString_musicHolder_Lf80c9cPtr
-#define CVF_DEF_Map_GoString_musicHolder_Lf80c9cPtr
-typedef GoMap Map_GoString_musicHolder_Lf80c9cPtr;
-#endif
 #ifndef CVF_DEF_Map_GoString_scFunc
 #define CVF_DEF_Map_GoString_scFunc
 typedef GoMap Map_GoString_scFunc;
@@ -739,6 +1114,10 @@ typedef GoMap Map_GoString_scFunc;
 #ifndef CVF_DEF_Map_GoString_u8
 #define CVF_DEF_Map_GoString_u8
 typedef GoMap Map_GoString_u8;
+#endif
+#ifndef CVF_DEF_Map_OpCode_Arr2_i8
+#define CVF_DEF_Map_OpCode_Arr2_i8
+typedef GoMap Map_OpCode_Arr2_i8;
 #endif
 #ifndef CVF_DEF_Map_ShortcutKey_ShortcutScriptPtr
 #define CVF_DEF_Map_ShortcutKey_ShortcutScriptPtr
@@ -748,9 +1127,17 @@ typedef GoMap Map_ShortcutKey_ShortcutScriptPtr;
 #define CVF_DEF_Map_StagePtr_StagePtr
 typedef GoMap Map_StagePtr_StagePtr;
 #endif
+#ifndef CVF_DEF_Map_StateBlockPtr_GoString
+#define CVF_DEF_Map_StateBlockPtr_GoString
+typedef GoMap Map_StateBlockPtr_GoString;
+#endif
 #ifndef CVF_DEF_Map_backGroundPtr_backGroundPtr
 #define CVF_DEF_Map_backGroundPtr_backGroundPtr
 typedef GoMap Map_backGroundPtr_backGroundPtr;
+#endif
+#ifndef CVF_DEF_Map_bcProfKey_u64
+#define CVF_DEF_Map_bcProfKey_u64
+typedef GoMap Map_bcProfKey_u64;
 #endif
 #ifndef CVF_DEF_Map_f32_AnimLayoutPtr
 #define CVF_DEF_Map_f32_AnimLayoutPtr
@@ -776,6 +1163,18 @@ typedef GoMap Map_i32_CharPtr;
 #define CVF_DEF_Map_i32_FSTextPtr
 typedef GoMap Map_i32_FSTextPtr;
 #endif
+#ifndef CVF_DEF_Map_i32_GoOpaqueValPtr
+#define CVF_DEF_Map_i32_GoOpaqueValPtr
+typedef GoMap Map_i32_GoOpaqueValPtr;
+#endif
+#ifndef CVF_DEF_Map_i32_GoString
+#define CVF_DEF_Map_i32_GoString
+typedef GoMap Map_i32_GoString;
+#endif
+#ifndef CVF_DEF_Map_i32_Map_i32_GoOpaqueValPtr
+#define CVF_DEF_Map_i32_Map_i32_GoOpaqueValPtr
+typedef GoMap Map_i32_Map_i32_GoOpaqueValPtr;
+#endif
 #ifndef CVF_DEF_Map_i32_RemapTable
 #define CVF_DEF_Map_i32_RemapTable
 typedef GoMap Map_i32_RemapTable;
@@ -800,21 +1199,9 @@ typedef GoMap Map_i32_f32;
 #define CVF_DEF_Map_i32_i32
 typedef GoMap Map_i32_i32;
 #endif
-#ifndef CVF_DEF_Map_int_Arr12_Arr6_i8
-#define CVF_DEF_Map_int_Arr12_Arr6_i8
-typedef GoMap Map_int_Arr12_Arr6_i8;
-#endif
-#ifndef CVF_DEF_Map_int_Arr12_InputBits
-#define CVF_DEF_Map_int_Arr12_InputBits
-typedef GoMap Map_int_Arr12_InputBits;
-#endif
 #ifndef CVF_DEF_Map_int_CharVarBackup
 #define CVF_DEF_Map_int_CharVarBackup
 typedef GoMap Map_int_CharVarBackup;
-#endif
-#ifndef CVF_DEF_Map_int_GameStatePtr
-#define CVF_DEF_Map_int_GameStatePtr
-typedef GoMap Map_int_GameStatePtr;
 #endif
 #ifndef CVF_DEF_Map_int_GoOpaqueValPtr
 #define CVF_DEF_Map_int_GoOpaqueValPtr
@@ -840,21 +1227,41 @@ typedef GoMap Map_int_Slice_GoIface;
 #define CVF_DEF_Map_int_Slice_int
 typedef GoMap Map_int_Slice_int;
 #endif
+#ifndef CVF_DEF_Map_int_bool
+#define CVF_DEF_Map_int_bool
+typedef GoMap Map_int_bool;
+#endif
 #ifndef CVF_DEF_Map_int_fontSpec_L25f097
 #define CVF_DEF_Map_int_fontSpec_L25f097
 typedef GoMap Map_int_fontSpec_L25f097;
+#endif
+#ifndef CVF_DEF_Map_int_fontSpec_L8e0736
+#define CVF_DEF_Map_int_fontSpec_L8e0736
+typedef GoMap Map_int_fontSpec_L8e0736;
 #endif
 #ifndef CVF_DEF_Map_int_int
 #define CVF_DEF_Map_int_int
 typedef GoMap Map_int_int;
 #endif
+#ifndef CVF_DEF_Map_u16_GoFunc
+#define CVF_DEF_Map_u16_GoFunc
+typedef GoMap Map_u16_GoFunc;
+#endif
 #ifndef CVF_DEF_Map_u16_u64
 #define CVF_DEF_Map_u16_u64
 typedef GoMap Map_u16_u64;
 #endif
-#ifndef CVF_DEF_Map_uintptr_t_int
-#define CVF_DEF_Map_uintptr_t_int
-typedef GoMap Map_uintptr_t_int;
+#ifndef CVF_DEF_Map_u32Ptr_GoIface
+#define CVF_DEF_Map_u32Ptr_GoIface
+typedef GoMap Map_u32Ptr_GoIface;
+#endif
+#ifndef CVF_DEF_Map_u32_Slice_f32
+#define CVF_DEF_Map_u32_Slice_f32
+typedef GoMap Map_u32_Slice_f32;
+#endif
+#ifndef CVF_BODY_Arr0_GoOpaque_os_dirInfoPtrPtr
+#define CVF_BODY_Arr0_GoOpaque_os_dirInfoPtrPtr
+struct Arr0_GoOpaque_os_dirInfoPtrPtr { GoOpaque /* os.dirInfo */* v[0]; };
 #endif
 #ifndef CVF_BODY_Arr100_GoString
 #define CVF_BODY_Arr100_GoString
@@ -864,6 +1271,18 @@ struct Arr100_GoString { GoString v[100]; };
 #define CVF_BODY_Arr1024_lowerCacheEntry
 struct Arr1024_lowerCacheEntry { lowerCacheEntry v[1024]; };
 #endif
+#ifndef CVF_BODY_Arr10_AnimLayout
+#define CVF_BODY_Arr10_AnimLayout
+struct Arr10_AnimLayout { AnimLayout v[10]; };
+#endif
+#ifndef CVF_BODY_Arr2_GoString
+#define CVF_BODY_Arr2_GoString
+struct Arr2_GoString { GoString v[2]; };
+#endif
+#ifndef CVF_BODY_Arr10_Arr2_GoString
+#define CVF_BODY_Arr10_Arr2_GoString
+struct Arr10_Arr2_GoString { Arr2_GoString v[10]; };
+#endif
 #ifndef CVF_BODY_Arr10_CommandKey
 #define CVF_BODY_Arr10_CommandKey
 struct Arr10_CommandKey { CommandKey v[10]; };
@@ -872,21 +1291,53 @@ struct Arr10_CommandKey { CommandKey v[10]; };
 #define CVF_BODY_Arr12_AiInput
 struct Arr12_AiInput { AiInput v[12]; };
 #endif
-#ifndef CVF_BODY_Arr6_i8
-#define CVF_BODY_Arr6_i8
-struct Arr6_i8 { i8 v[6]; };
+#ifndef CVF_BODY_Arr12_CharGlobalInfo
+#define CVF_BODY_Arr12_CharGlobalInfo
+struct Arr12_CharGlobalInfo { CharGlobalInfo v[12]; };
 #endif
-#ifndef CVF_BODY_Arr12_Arr6_i8
-#define CVF_BODY_Arr12_Arr6_i8
-struct Arr12_Arr6_i8 { Arr6_i8 v[12]; };
+#ifndef CVF_BODY_Arr12_ForceFeedbackParams
+#define CVF_BODY_Arr12_ForceFeedbackParams
+struct Arr12_ForceFeedbackParams { ForceFeedbackParams v[12]; };
 #endif
 #ifndef CVF_BODY_Arr12_GoString
 #define CVF_BODY_Arr12_GoString
 struct Arr12_GoString { GoString v[12]; };
 #endif
-#ifndef CVF_BODY_Arr12_InputBits
-#define CVF_BODY_Arr12_InputBits
-struct Arr12_InputBits { InputBits v[12]; };
+#ifndef CVF_BODY_Arr12_Slice_Char
+#define CVF_BODY_Arr12_Slice_Char
+struct Arr12_Slice_Char { Slice_Char v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_CharPtr
+#define CVF_BODY_Arr12_Slice_CharPtr
+struct Arr12_Slice_CharPtr { Slice_CharPtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_ExplodPtr
+#define CVF_BODY_Arr12_Slice_ExplodPtr
+struct Arr12_Slice_ExplodPtr { Slice_ExplodPtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_ProjectilePtr
+#define CVF_BODY_Arr12_Slice_ProjectilePtr
+struct Arr12_Slice_ProjectilePtr { Slice_ProjectilePtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_TextSpritePtr
+#define CVF_BODY_Arr12_Slice_TextSpritePtr
+struct Arr12_Slice_TextSpritePtr { Slice_TextSpritePtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_bool
+#define CVF_BODY_Arr12_bool
+struct Arr12_bool { bool v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_f32
+#define CVF_BODY_Arr12_f32
+struct Arr12_f32 { f32 v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_int
+#define CVF_BODY_Arr12_int
+struct Arr12_int { int v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_stagePlayer
+#define CVF_BODY_Arr12_stagePlayer
+struct Arr12_stagePlayer { stagePlayer v[12]; };
 #endif
 #ifndef CVF_BODY_Arr14_bool
 #define CVF_BODY_Arr14_bool
@@ -896,9 +1347,17 @@ struct Arr14_bool { bool v[14]; };
 #define CVF_BODY_Arr16_Anon_bfbab8ed
 struct Arr16_Anon_bfbab8ed { Anon_bfbab8ed v[16]; };
 #endif
+#ifndef CVF_BODY_Arr16_f32
+#define CVF_BODY_Arr16_f32
+struct Arr16_f32 { f32 v[16]; };
+#endif
 #ifndef CVF_BODY_Arr1_u8
 #define CVF_BODY_Arr1_u8
 struct Arr1_u8 { u8 v[1]; };
+#endif
+#ifndef CVF_BODY_Arr20_FSBgTextSnd
+#define CVF_BODY_Arr20_FSBgTextSnd
+struct Arr20_FSBgTextSnd { FSBgTextSnd v[20]; };
 #endif
 #ifndef CVF_BODY_Arr20_u64
 #define CVF_BODY_Arr20_u64
@@ -912,9 +1371,37 @@ struct Arr256_bool { bool v[256]; };
 #define CVF_BODY_Arr256_int
 struct Arr256_int { int v[256]; };
 #endif
+#ifndef CVF_BODY_Arr256_u32
+#define CVF_BODY_Arr256_u32
+struct Arr256_u32 { u32 v[256]; };
+#endif
 #ifndef CVF_BODY_Arr256_u64
 #define CVF_BODY_Arr256_u64
 struct Arr256_u64 { u64 v[256]; };
+#endif
+#ifndef CVF_BODY_Arr2_AnimLayout
+#define CVF_BODY_Arr2_AnimLayout
+struct Arr2_AnimLayout { AnimLayout v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_AnimTextSnd
+#define CVF_BODY_Arr2_AnimTextSnd
+struct Arr2_AnimTextSnd { AnimTextSnd v[2]; };
+#endif
+#ifndef CVF_BODY_Arr32_AnimLayout
+#define CVF_BODY_Arr32_AnimLayout
+struct Arr32_AnimLayout { AnimLayout v[32]; };
+#endif
+#ifndef CVF_BODY_Arr2_Arr32_AnimLayout
+#define CVF_BODY_Arr2_Arr32_AnimLayout
+struct Arr2_Arr32_AnimLayout { Arr32_AnimLayout v[2]; };
+#endif
+#ifndef CVF_BODY_Arr4_bool
+#define CVF_BODY_Arr4_bool
+struct Arr4_bool { bool v[4]; };
+#endif
+#ifndef CVF_BODY_Arr2_Arr4_bool
+#define CVF_BODY_Arr2_Arr4_bool
+struct Arr2_Arr4_bool { Arr4_bool v[2]; };
 #endif
 #ifndef CVF_BODY_Arr2_CharGlobalInfo
 #define CVF_BODY_Arr2_CharGlobalInfo
@@ -928,17 +1415,61 @@ struct Arr2_CharPtr { Char* v[2]; };
 #define CVF_BODY_Arr2_CommandKey
 struct Arr2_CommandKey { CommandKey v[2]; };
 #endif
-#ifndef CVF_BODY_Arr2_InputBits
-#define CVF_BODY_Arr2_InputBits
-struct Arr2_InputBits { InputBits v[2]; };
+#ifndef CVF_BODY_Arr2_FaceParams
+#define CVF_BODY_Arr2_FaceParams
+struct Arr2_FaceParams { FaceParams v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenActionPtr
+#define CVF_BODY_Arr2_FightScreenActionPtr
+struct Arr2_FightScreenActionPtr { FightScreenAction* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenAiLevelPtr
+#define CVF_BODY_Arr2_FightScreenAiLevelPtr
+struct Arr2_FightScreenAiLevelPtr { FightScreenAiLevel* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenComboPtr
+#define CVF_BODY_Arr2_FightScreenComboPtr
+struct Arr2_FightScreenComboPtr { FightScreenCombo* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenScorePtr
+#define CVF_BODY_Arr2_FightScreenScorePtr
+struct Arr2_FightScreenScorePtr { FightScreenScore* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenWinCountPtr
+#define CVF_BODY_Arr2_FightScreenWinCountPtr
+struct Arr2_FightScreenWinCountPtr { FightScreenWinCount* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenWinIconPtr
+#define CVF_BODY_Arr2_FightScreenWinIconPtr
+struct Arr2_FightScreenWinIconPtr { FightScreenWinIcon* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_Rotation
+#define CVF_BODY_Arr2_Rotation
+struct Arr2_Rotation { Rotation v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_Slice_Arr2_int
+#define CVF_BODY_Arr2_Slice_Arr2_int
+struct Arr2_Slice_Arr2_int { Slice_Arr2_int v[2]; };
 #endif
 #ifndef CVF_BODY_Arr2_Slice_StatsFighterState
 #define CVF_BODY_Arr2_Slice_StatsFighterState
 struct Arr2_Slice_StatsFighterState { Slice_StatsFighterState v[2]; };
 #endif
+#ifndef CVF_BODY_Arr2_Slice_int
+#define CVF_BODY_Arr2_Slice_int
+struct Arr2_Slice_int { Slice_int v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_TeamMode
+#define CVF_BODY_Arr2_TeamMode
+struct Arr2_TeamMode { TeamMode v[2]; };
+#endif
 #ifndef CVF_BODY_Arr2_WinType
 #define CVF_BODY_Arr2_WinType
 struct Arr2_WinType { WinType v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_bgShaderTex
+#define CVF_BODY_Arr2_bgShaderTex
+struct Arr2_bgShaderTex { bgShaderTex v[2]; };
 #endif
 #ifndef CVF_BODY_Arr2_bool
 #define CVF_BODY_Arr2_bool
@@ -948,9 +1479,17 @@ struct Arr2_bool { bool v[2]; };
 #define CVF_BODY_Arr2_f32
 struct Arr2_f32 { f32 v[2]; };
 #endif
+#ifndef CVF_BODY_Arr2_i16
+#define CVF_BODY_Arr2_i16
+struct Arr2_i16 { i16 v[2]; };
+#endif
 #ifndef CVF_BODY_Arr2_i32
 #define CVF_BODY_Arr2_i32
 struct Arr2_i32 { i32 v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_i8
+#define CVF_BODY_Arr2_i8
+struct Arr2_i8 { i8 v[2]; };
 #endif
 #ifndef CVF_BODY_Arr2_int
 #define CVF_BODY_Arr2_int
@@ -960,13 +1499,17 @@ struct Arr2_int { int v[2]; };
 #define CVF_BODY_Arr2_u16
 struct Arr2_u16 { u16 v[2]; };
 #endif
-#ifndef CVF_BODY_Arr32_AnimLayout
-#define CVF_BODY_Arr32_AnimLayout
-struct Arr32_AnimLayout { AnimLayout v[32]; };
-#endif
 #ifndef CVF_BODY_Arr32_cmdNameCacheEnt
 #define CVF_BODY_Arr32_cmdNameCacheEnt
 struct Arr32_cmdNameCacheEnt { cmdNameCacheEnt v[32]; };
+#endif
+#ifndef CVF_BODY_Arr32_varCacheEnt
+#define CVF_BODY_Arr32_varCacheEnt
+struct Arr32_varCacheEnt { varCacheEnt v[32]; };
+#endif
+#ifndef CVF_BODY_Arr3_BytecodeExp
+#define CVF_BODY_Arr3_BytecodeExp
+struct Arr3_BytecodeExp { BytecodeExp v[3]; };
 #endif
 #ifndef CVF_BODY_Arr3_Slice_OverrideCharData
 #define CVF_BODY_Arr3_Slice_OverrideCharData
@@ -983,6 +1526,10 @@ struct Arr3_f32 { f32 v[3]; };
 #ifndef CVF_BODY_Arr3_f64
 #define CVF_BODY_Arr3_f64
 struct Arr3_f64 { f64 v[3]; };
+#endif
+#ifndef CVF_BODY_Arr3_i16
+#define CVF_BODY_Arr3_i16
+struct Arr3_i16 { i16 v[3]; };
 #endif
 #ifndef CVF_BODY_Arr3_i32
 #define CVF_BODY_Arr3_i32
@@ -1004,6 +1551,10 @@ struct Arr3_u8 { u8 v[3]; };
 #define CVF_BODY_Arr4_Arr2_f32
 struct Arr4_Arr2_f32 { Arr2_f32 v[4]; };
 #endif
+#ifndef CVF_BODY_Arr4_BytecodeValue
+#define CVF_BODY_Arr4_BytecodeValue
+struct Arr4_BytecodeValue { BytecodeValue v[4]; };
+#endif
 #ifndef CVF_BODY_Arr4_OpCode
 #define CVF_BODY_Arr4_OpCode
 struct Arr4_OpCode { OpCode v[4]; };
@@ -1012,17 +1563,33 @@ struct Arr4_OpCode { OpCode v[4]; };
 #define CVF_BODY_Arr4_ResultAnnouncement
 struct Arr4_ResultAnnouncement { ResultAnnouncement v[4]; };
 #endif
+#ifndef CVF_BODY_Arr4_Slice_ClsnFinal
+#define CVF_BODY_Arr4_Slice_ClsnFinal
+struct Arr4_Slice_ClsnFinal { Slice_ClsnFinal v[4]; };
+#endif
+#ifndef CVF_BODY_Arr4_Slice_ClsnOverride
+#define CVF_BODY_Arr4_Slice_ClsnOverride
+struct Arr4_Slice_ClsnOverride { Slice_ClsnOverride v[4]; };
+#endif
+#ifndef CVF_BODY_Arr4_Slice_ClsnTransform
+#define CVF_BODY_Arr4_Slice_ClsnTransform
+struct Arr4_Slice_ClsnTransform { Slice_ClsnTransform v[4]; };
+#endif
+#ifndef CVF_BODY_Arr4_Slice_i32
+#define CVF_BODY_Arr4_Slice_i32
+struct Arr4_Slice_i32 { Slice_i32 v[4]; };
+#endif
 #ifndef CVF_BODY_Arr4_ValueType
 #define CVF_BODY_Arr4_ValueType
 struct Arr4_ValueType { ValueType v[4]; };
 #endif
-#ifndef CVF_BODY_Arr4_bool
-#define CVF_BODY_Arr4_bool
-struct Arr4_bool { bool v[4]; };
-#endif
 #ifndef CVF_BODY_Arr4_f32
 #define CVF_BODY_Arr4_f32
 struct Arr4_f32 { f32 v[4]; };
+#endif
+#ifndef CVF_BODY_Arr4_f64
+#define CVF_BODY_Arr4_f64
+struct Arr4_f64 { f64 v[4]; };
 #endif
 #ifndef CVF_BODY_Arr4_i32
 #define CVF_BODY_Arr4_i32
@@ -1056,44 +1623,90 @@ struct Arr6_f64 { f64 v[6]; };
 #define CVF_BODY_Arr6_i32
 struct Arr6_i32 { i32 v[6]; };
 #endif
+#ifndef CVF_BODY_Arr6_i8
+#define CVF_BODY_Arr6_i8
+struct Arr6_i8 { i8 v[6]; };
+#endif
 #ifndef CVF_BODY_Arr7_f32
 #define CVF_BODY_Arr7_f32
 struct Arr7_f32 { f32 v[7]; };
 #endif
-#ifndef CVF_BODY_Arr8_Arr6_i8
-#define CVF_BODY_Arr8_Arr6_i8
-struct Arr8_Arr6_i8 { Arr6_i8 v[8]; };
+#ifndef CVF_BODY_Arr8_HitBy
+#define CVF_BODY_Arr8_HitBy
+struct Arr8_HitBy { HitBy v[8]; };
 #endif
-#ifndef CVF_BODY_Arr8_InputBits
-#define CVF_BODY_Arr8_InputBits
-struct Arr8_InputBits { InputBits v[8]; };
+#ifndef CVF_BODY_Arr8_HitOverride
+#define CVF_BODY_Arr8_HitOverride
+struct Arr8_HitOverride { HitOverride v[8]; };
 #endif
 #ifndef CVF_BODY_Arr8_OpCode
 #define CVF_BODY_Arr8_OpCode
 struct Arr8_OpCode { OpCode v[8]; };
 #endif
+#ifndef CVF_BODY_Arr8_Slice_FightScreenFacePtr
+#define CVF_BODY_Arr8_Slice_FightScreenFacePtr
+struct Arr8_Slice_FightScreenFacePtr { Slice_FightScreenFacePtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_FightScreenNamePtr
+#define CVF_BODY_Arr8_Slice_FightScreenNamePtr
+struct Arr8_Slice_FightScreenNamePtr { Slice_FightScreenNamePtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_GuardBarPtr
+#define CVF_BODY_Arr8_Slice_GuardBarPtr
+struct Arr8_Slice_GuardBarPtr { Slice_GuardBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_LifeBarPtr
+#define CVF_BODY_Arr8_Slice_LifeBarPtr
+struct Arr8_Slice_LifeBarPtr { Slice_LifeBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_PowerBarPtr
+#define CVF_BODY_Arr8_Slice_PowerBarPtr
+struct Arr8_Slice_PowerBarPtr { Slice_PowerBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_StunBarPtr
+#define CVF_BODY_Arr8_Slice_StunBarPtr
+struct Arr8_Slice_StunBarPtr { Slice_StunBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_f32
+#define CVF_BODY_Arr8_f32
+struct Arr8_f32 { f32 v[8]; };
+#endif
 #ifndef CVF_BODY_Arr8_i32
 #define CVF_BODY_Arr8_i32
 struct Arr8_i32 { i32 v[8]; };
 #endif
-#ifndef CVF_BODY_Arr90_GoString
-#define CVF_BODY_Arr90_GoString
-struct Arr90_GoString { GoString v[90]; };
+#ifndef CVF_BODY_Arr9_AnimTextSnd
+#define CVF_BODY_Arr9_AnimTextSnd
+struct Arr9_AnimTextSnd { AnimTextSnd v[9]; };
 #endif
 struct Anon_f8c1b65b { AttackType bit; GoString label; };
 #ifndef CVF_BODY_Arr9_Anon_f8c1b65b
 #define CVF_BODY_Arr9_Anon_f8c1b65b
 struct Arr9_Anon_f8c1b65b { Anon_f8c1b65b v[9]; };
 #endif
+#ifndef CVF_BODY_Arr9_Arr2_i32
+#define CVF_BODY_Arr9_Arr2_i32
+struct Arr9_Arr2_i32 { Arr2_i32 v[9]; };
+#endif
 #ifndef CVF_BODY_Arr9_bool
 #define CVF_BODY_Arr9_bool
 struct Arr9_bool { bool v[9]; };
 #endif
+#ifndef CVF_BODY_Arr9_f32
+#define CVF_BODY_Arr9_f32
+struct Arr9_f32 { f32 v[9]; };
+#endif
 struct fontSpec_L25f097 { GoString path; i32 height; };
-struct musicHolder_Lf80c9c { Slice_GoString Bgm; Slice_i32Ptr Loop; Slice_i32Ptr Volume; Slice_i32Ptr LoopStart; Slice_i32Ptr LoopEnd; Slice_i32Ptr StartPosition; Slice_f32Ptr FreqMul; Slice_i32Ptr LoopCount; };
+struct fontSpec_L8e0736 { GoString path; i32 height; };
+struct kv_L9db1e9 { bcProfKey k; u64 v; };
+struct ov_L267e05 { OpCode o; u64 v; };
 struct pair_L900525 { Char* ch; f32 dist; };
 struct pair_Lf31ea2 { Projectile* pr; f32 dist; };
+struct pv_Lad4e0a { u16 p; u64 v; };
+struct qvPlayer_Ld7a4bd { GoString character; int player; int num; int pal; f32 ai; int input; };
 struct spec_La365df { GoString prefix; i32 varType; };
+struct Anon_3c59f47a { GoString name; Arr4_ResultAnnouncement* data; Arr4_bool* exists; };
+struct Anon_8aabe1e9 { int ok; int fail; int native; int generic; };
 struct Anon_dcdcacfc { int exprs; int fused; };
 struct Anon_ed5d50f3 { Slice_Slice_SpriteData chunks; int chunk; int idx; };
 #ifndef CVF_FN_Slice_AnimFrame
@@ -1108,9 +1721,21 @@ GO_SLICE_FUNCS(Slice_AnimLayout, AnimLayout)
 #define CVF_FN_Slice_AnimPtr
 GO_SLICE_FUNCS(Slice_AnimPtr, Anim*)
 #endif
+#ifndef CVF_FN_Slice_Anon_3c59f47a
+#define CVF_FN_Slice_Anon_3c59f47a
+GO_SLICE_FUNCS(Slice_Anon_3c59f47a, Anon_3c59f47a)
+#endif
+#ifndef CVF_FN_Slice_Arr256_u32
+#define CVF_FN_Slice_Arr256_u32
+GO_SLICE_FUNCS(Slice_Arr256_u32, Arr256_u32)
+#endif
 #ifndef CVF_FN_Slice_Arr2_f32
 #define CVF_FN_Slice_Arr2_f32
 GO_SLICE_FUNCS(Slice_Arr2_f32, Arr2_f32)
+#endif
+#ifndef CVF_FN_Slice_Arr2_i32
+#define CVF_FN_Slice_Arr2_i32
+GO_SLICE_FUNCS(Slice_Arr2_i32, Arr2_i32)
 #endif
 #ifndef CVF_FN_Slice_Arr2_int
 #define CVF_FN_Slice_Arr2_int
@@ -1120,21 +1745,9 @@ GO_SLICE_FUNCS(Slice_Arr2_int, Arr2_int)
 #define CVF_FN_Slice_Arr4_f32
 GO_SLICE_FUNCS(Slice_Arr4_f32, Arr4_f32)
 #endif
-#ifndef CVF_FN_Slice_Arr6_i8
-#define CVF_FN_Slice_Arr6_i8
-GO_SLICE_FUNCS(Slice_Arr6_i8, Arr6_i8)
-#endif
 #ifndef CVF_FN_Slice_Arr7_f32
 #define CVF_FN_Slice_Arr7_f32
 GO_SLICE_FUNCS(Slice_Arr7_f32, Arr7_f32)
-#endif
-#ifndef CVF_FN_Slice_Arr8_Arr6_i8
-#define CVF_FN_Slice_Arr8_Arr6_i8
-GO_SLICE_FUNCS(Slice_Arr8_Arr6_i8, Arr8_Arr6_i8)
-#endif
-#ifndef CVF_FN_Slice_Arr8_InputBits
-#define CVF_FN_Slice_Arr8_InputBits
-GO_SLICE_FUNCS(Slice_Arr8_InputBits, Arr8_InputBits)
 #endif
 #ifndef CVF_FN_Slice_BytecodeExp
 #define CVF_FN_Slice_BytecodeExp
@@ -1151,6 +1764,14 @@ GO_SLICE_FUNCS(Slice_BytecodeValue, BytecodeValue)
 #ifndef CVF_FN_Slice_Char
 #define CVF_FN_Slice_Char
 GO_SLICE_FUNCS(Slice_Char, Char)
+#endif
+#ifndef CVF_FN_Slice_CharPtr
+#define CVF_FN_Slice_CharPtr
+GO_SLICE_FUNCS(Slice_CharPtr, Char*)
+#endif
+#ifndef CVF_FN_Slice_ClsnFinal
+#define CVF_FN_Slice_ClsnFinal
+GO_SLICE_FUNCS(Slice_ClsnFinal, ClsnFinal)
 #endif
 #ifndef CVF_FN_Slice_ClsnOverride
 #define CVF_FN_Slice_ClsnOverride
@@ -1196,6 +1817,14 @@ GO_SLICE_FUNCS(Slice_DialogueParsedLine, DialogueParsedLine)
 #define CVF_FN_Slice_DialogueToken
 GO_SLICE_FUNCS(Slice_DialogueToken, DialogueToken)
 #endif
+#ifndef CVF_FN_Slice_ExplodPtr
+#define CVF_FN_Slice_ExplodPtr
+GO_SLICE_FUNCS(Slice_ExplodPtr, Explod*)
+#endif
+#ifndef CVF_FN_Slice_FSMsgPtr
+#define CVF_FN_Slice_FSMsgPtr
+GO_SLICE_FUNCS(Slice_FSMsgPtr, FSMsg*)
+#endif
 #ifndef CVF_FN_Slice_FightScreenFacePtr
 #define CVF_FN_Slice_FightScreenFacePtr
 GO_SLICE_FUNCS(Slice_FightScreenFacePtr, FightScreenFace*)
@@ -1204,9 +1833,25 @@ GO_SLICE_FUNCS(Slice_FightScreenFacePtr, FightScreenFace*)
 #define CVF_FN_Slice_FightScreenNamePtr
 GO_SLICE_FUNCS(Slice_FightScreenNamePtr, FightScreenName*)
 #endif
+#ifndef CVF_FN_Slice_GLTFAnimationChannelPtr
+#define CVF_FN_Slice_GLTFAnimationChannelPtr
+GO_SLICE_FUNCS(Slice_GLTFAnimationChannelPtr, GLTFAnimationChannel*)
+#endif
 #ifndef CVF_FN_Slice_GLTFAnimationPtr
 #define CVF_FN_Slice_GLTFAnimationPtr
 GO_SLICE_FUNCS(Slice_GLTFAnimationPtr, GLTFAnimation*)
+#endif
+#ifndef CVF_FN_Slice_GLTFAnimationSamplerPtr
+#define CVF_FN_Slice_GLTFAnimationSamplerPtr
+GO_SLICE_FUNCS(Slice_GLTFAnimationSamplerPtr, GLTFAnimationSampler*)
+#endif
+#ifndef CVF_FN_Slice_GLTFLight
+#define CVF_FN_Slice_GLTFLight
+GO_SLICE_FUNCS(Slice_GLTFLight, GLTFLight)
+#endif
+#ifndef CVF_FN_Slice_GLTFTexturePtr
+#define CVF_FN_Slice_GLTFTexturePtr
+GO_SLICE_FUNCS(Slice_GLTFTexturePtr, GLTFTexture*)
 #endif
 #ifndef CVF_FN_Slice_GoFunc
 #define CVF_FN_Slice_GoFunc
@@ -1216,13 +1861,45 @@ GO_SLICE_FUNCS(Slice_GoFunc, GoFunc)
 #define CVF_FN_Slice_GoIface
 GO_SLICE_FUNCS(Slice_GoIface, GoIface)
 #endif
-#ifndef CVF_FN_Slice_GoOpaqueValPtr
-#define CVF_FN_Slice_GoOpaqueValPtr
-GO_SLICE_FUNCS(Slice_GoOpaqueValPtr, GoOpaqueVal*)
+#ifndef CVF_FN_Slice_GoOpaque_ini_KeyPtrPtr
+#define CVF_FN_Slice_GoOpaque_ini_KeyPtrPtr
+GO_SLICE_FUNCS(Slice_GoOpaque_ini_KeyPtrPtr, GoOpaque /* ini.Key */*)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_ini_SectionPtrPtr
+#define CVF_FN_Slice_GoOpaque_ini_SectionPtrPtr
+GO_SLICE_FUNCS(Slice_GoOpaque_ini_SectionPtrPtr, GoOpaque /* ini.Section */*)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_reflect_ValuePtr
+#define CVF_FN_Slice_GoOpaque_reflect_ValuePtr
+GO_SLICE_FUNCS(Slice_GoOpaque_reflect_ValuePtr, GoOpaque /* reflect.Value */)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_syscall_IovecPtr
+#define CVF_FN_Slice_GoOpaque_syscall_IovecPtr
+GO_SLICE_FUNCS(Slice_GoOpaque_syscall_IovecPtr, GoOpaque /* syscall.Iovec */)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_time_zonePtr
+#define CVF_FN_Slice_GoOpaque_time_zonePtr
+GO_SLICE_FUNCS(Slice_GoOpaque_time_zonePtr, GoOpaque /* time.zone */)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_time_zoneTransPtr
+#define CVF_FN_Slice_GoOpaque_time_zoneTransPtr
+GO_SLICE_FUNCS(Slice_GoOpaque_time_zoneTransPtr, GoOpaque /* time.zoneTrans */)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_typeparamPtr
+#define CVF_FN_Slice_GoOpaque_typeparamPtr
+GO_SLICE_FUNCS(Slice_GoOpaque_typeparamPtr, GoOpaque /* type param */)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_zip_fileListEntryPtr
+#define CVF_FN_Slice_GoOpaque_zip_fileListEntryPtr
+GO_SLICE_FUNCS(Slice_GoOpaque_zip_fileListEntryPtr, GoOpaque /* zip.fileListEntry */)
 #endif
 #ifndef CVF_FN_Slice_GoString
 #define CVF_FN_Slice_GoString
 GO_SLICE_FUNCS(Slice_GoString, GoString)
+#endif
+#ifndef CVF_FN_Slice_GoZipFilePtr
+#define CVF_FN_Slice_GoZipFilePtr
+GO_SLICE_FUNCS(Slice_GoZipFilePtr, GoZipFile*)
 #endif
 #ifndef CVF_FN_Slice_GuardBarPtr
 #define CVF_FN_Slice_GuardBarPtr
@@ -1231,10 +1908,6 @@ GO_SLICE_FUNCS(Slice_GuardBarPtr, GuardBar*)
 #ifndef CVF_FN_Slice_IniSection
 #define CVF_FN_Slice_IniSection
 GO_SLICE_FUNCS(Slice_IniSection, IniSection)
-#endif
-#ifndef CVF_FN_Slice_InputBits
-#define CVF_FN_Slice_InputBits
-GO_SLICE_FUNCS(Slice_InputBits, InputBits)
 #endif
 #ifndef CVF_FN_Slice_KeyConfig
 #define CVF_FN_Slice_KeyConfig
@@ -1251,6 +1924,18 @@ GO_SLICE_FUNCS(Slice_LifeBarPtr, LifeBar*)
 #ifndef CVF_FN_Slice_Map_f32_AnimLayoutPtr
 #define CVF_FN_Slice_Map_f32_AnimLayoutPtr
 GO_SLICE_FUNCS(Slice_Map_f32_AnimLayoutPtr, Map_f32_AnimLayoutPtr)
+#endif
+#ifndef CVF_FN_Slice_MaterialPtr
+#define CVF_FN_Slice_MaterialPtr
+GO_SLICE_FUNCS(Slice_MaterialPtr, Material*)
+#endif
+#ifndef CVF_FN_Slice_MeshPtr
+#define CVF_FN_Slice_MeshPtr
+GO_SLICE_FUNCS(Slice_MeshPtr, Mesh*)
+#endif
+#ifndef CVF_FN_Slice_MorphTargetPtr
+#define CVF_FN_Slice_MorphTargetPtr
+GO_SLICE_FUNCS(Slice_MorphTargetPtr, MorphTarget*)
 #endif
 #ifndef CVF_FN_Slice_NodePtr
 #define CVF_FN_Slice_NodePtr
@@ -1272,13 +1957,41 @@ GO_SLICE_FUNCS(Slice_PalFXPtr, PalFX*)
 #define CVF_FN_Slice_PowerBarPtr
 GO_SLICE_FUNCS(Slice_PowerBarPtr, PowerBar*)
 #endif
+#ifndef CVF_FN_Slice_PreloadEntry
+#define CVF_FN_Slice_PreloadEntry
+GO_SLICE_FUNCS(Slice_PreloadEntry, PreloadEntry)
+#endif
+#ifndef CVF_FN_Slice_PrimitivePtr
+#define CVF_FN_Slice_PrimitivePtr
+GO_SLICE_FUNCS(Slice_PrimitivePtr, Primitive*)
+#endif
+#ifndef CVF_FN_Slice_ProjectilePtr
+#define CVF_FN_Slice_ProjectilePtr
+GO_SLICE_FUNCS(Slice_ProjectilePtr, Projectile*)
+#endif
 #ifndef CVF_FN_Slice_ReflectionSpritePtr
 #define CVF_FN_Slice_ReflectionSpritePtr
 GO_SLICE_FUNCS(Slice_ReflectionSpritePtr, ReflectionSprite*)
 #endif
+#ifndef CVF_FN_Slice_ScenePtr
+#define CVF_FN_Slice_ScenePtr
+GO_SLICE_FUNCS(Slice_ScenePtr, Scene*)
+#endif
+#ifndef CVF_FN_Slice_SelectChar
+#define CVF_FN_Slice_SelectChar
+GO_SLICE_FUNCS(Slice_SelectChar, SelectChar)
+#endif
+#ifndef CVF_FN_Slice_SelectStage
+#define CVF_FN_Slice_SelectStage
+GO_SLICE_FUNCS(Slice_SelectStage, SelectStage)
+#endif
 #ifndef CVF_FN_Slice_ShadowSpritePtr
 #define CVF_FN_Slice_ShadowSpritePtr
 GO_SLICE_FUNCS(Slice_ShadowSpritePtr, ShadowSprite*)
+#endif
+#ifndef CVF_FN_Slice_SkinPtr
+#define CVF_FN_Slice_SkinPtr
+GO_SLICE_FUNCS(Slice_SkinPtr, Skin*)
 #endif
 #ifndef CVF_FN_Slice_Slice_BytecodeExp
 #define CVF_FN_Slice_Slice_BytecodeExp
@@ -1296,17 +2009,21 @@ GO_SLICE_FUNCS(Slice_Slice_GoString, Slice_GoString)
 #define CVF_FN_Slice_Slice_SpriteData
 GO_SLICE_FUNCS(Slice_Slice_SpriteData, Slice_SpriteData)
 #endif
+#ifndef CVF_FN_Slice_Slice_nameFact
+#define CVF_FN_Slice_Slice_nameFact
+GO_SLICE_FUNCS(Slice_Slice_nameFact, Slice_nameFact)
+#endif
 #ifndef CVF_FN_Slice_Slice_u32
 #define CVF_FN_Slice_Slice_u32
 GO_SLICE_FUNCS(Slice_Slice_u32, Slice_u32)
 #endif
-#ifndef CVF_FN_Slice_Slice_u8
-#define CVF_FN_Slice_Slice_u8
-GO_SLICE_FUNCS(Slice_Slice_u8, Slice_u8)
-#endif
 #ifndef CVF_FN_Slice_SoundChannelPtr
 #define CVF_FN_Slice_SoundChannelPtr
 GO_SLICE_FUNCS(Slice_SoundChannelPtr, SoundChannel*)
+#endif
+#ifndef CVF_FN_Slice_Sprite
+#define CVF_FN_Slice_Sprite
+GO_SLICE_FUNCS(Slice_Sprite, Sprite)
 #endif
 #ifndef CVF_FN_Slice_SpriteData
 #define CVF_FN_Slice_SpriteData
@@ -1344,6 +2061,10 @@ GO_SLICE_FUNCS(Slice_StoryboardPtr, Storyboard*)
 #define CVF_FN_Slice_StunBarPtr
 GO_SLICE_FUNCS(Slice_StunBarPtr, StunBar*)
 #endif
+#ifndef CVF_FN_Slice_TextSpritePtr
+#define CVF_FN_Slice_TextSpritePtr
+GO_SLICE_FUNCS(Slice_TextSpritePtr, TextSprite*)
+#endif
 #ifndef CVF_FN_Slice_TextureAtlasPtr
 #define CVF_FN_Slice_TextureAtlasPtr
 GO_SLICE_FUNCS(Slice_TextureAtlasPtr, TextureAtlas*)
@@ -1360,6 +2081,10 @@ GO_SLICE_FUNCS(Slice_backGroundPtr, backGround*)
 #define CVF_FN_Slice_bgCtrl
 GO_SLICE_FUNCS(Slice_bgCtrl, bgCtrl)
 #endif
+#ifndef CVF_FN_Slice_bgMusicPtr
+#define CVF_FN_Slice_bgMusicPtr
+GO_SLICE_FUNCS(Slice_bgMusicPtr, bgMusic*)
+#endif
 #ifndef CVF_FN_Slice_bool
 #define CVF_FN_Slice_bool
 GO_SLICE_FUNCS(Slice_bool, bool)
@@ -1367,6 +2092,10 @@ GO_SLICE_FUNCS(Slice_bool, bool)
 #ifndef CVF_FN_Slice_boolPtr
 #define CVF_FN_Slice_boolPtr
 GO_SLICE_FUNCS(Slice_boolPtr, bool*)
+#endif
+#ifndef CVF_FN_Slice_cnode
+#define CVF_FN_Slice_cnode
+GO_SLICE_FUNCS(Slice_cnode, cnode)
 #endif
 #ifndef CVF_FN_Slice_expValueFramePtr
 #define CVF_FN_Slice_expValueFramePtr
@@ -1404,6 +2133,18 @@ GO_SLICE_FUNCS(Slice_i8, i8)
 #define CVF_FN_Slice_int
 GO_SLICE_FUNCS(Slice_int, int)
 #endif
+#ifndef CVF_FN_Slice_kv_L9db1e9
+#define CVF_FN_Slice_kv_L9db1e9
+GO_SLICE_FUNCS(Slice_kv_L9db1e9, kv_L9db1e9)
+#endif
+#ifndef CVF_FN_Slice_nameFact
+#define CVF_FN_Slice_nameFact
+GO_SLICE_FUNCS(Slice_nameFact, nameFact)
+#endif
+#ifndef CVF_FN_Slice_ov_L267e05
+#define CVF_FN_Slice_ov_L267e05
+GO_SLICE_FUNCS(Slice_ov_L267e05, ov_L267e05)
+#endif
 #ifndef CVF_FN_Slice_pair_L900525
 #define CVF_FN_Slice_pair_L900525
 GO_SLICE_FUNCS(Slice_pair_L900525, pair_L900525)
@@ -1412,9 +2153,17 @@ GO_SLICE_FUNCS(Slice_pair_L900525, pair_L900525)
 #define CVF_FN_Slice_pair_Lf31ea2
 GO_SLICE_FUNCS(Slice_pair_Lf31ea2, pair_Lf31ea2)
 #endif
+#ifndef CVF_FN_Slice_pv_Lad4e0a
+#define CVF_FN_Slice_pv_Lad4e0a
+GO_SLICE_FUNCS(Slice_pv_Lad4e0a, pv_Lad4e0a)
+#endif
 #ifndef CVF_FN_Slice_queryPart
 #define CVF_FN_Slice_queryPart
 GO_SLICE_FUNCS(Slice_queryPart, queryPart)
+#endif
+#ifndef CVF_FN_Slice_qvPlayer_Ld7a4bd
+#define CVF_FN_Slice_qvPlayer_Ld7a4bd
+GO_SLICE_FUNCS(Slice_qvPlayer_Ld7a4bd, qvPlayer_Ld7a4bd)
 #endif
 #ifndef CVF_FN_Slice_rankingRow
 #define CVF_FN_Slice_rankingRow
@@ -1448,9 +2197,21 @@ GO_SLICE_FUNCS(Slice_u16, u16)
 #define CVF_FN_Slice_u32
 GO_SLICE_FUNCS(Slice_u32, u32)
 #endif
+#ifndef CVF_FN_Slice_u64
+#define CVF_FN_Slice_u64
+GO_SLICE_FUNCS(Slice_u64, u64)
+#endif
 #ifndef CVF_FN_Slice_u8
 #define CVF_FN_Slice_u8
 GO_SLICE_FUNCS(Slice_u8, u8)
+#endif
+#ifndef CVF_FN_Map_Arr2_i32_AnimationPtr
+#define CVF_FN_Map_Arr2_i32_AnimationPtr
+GO_MAP_FUNCS(Map_Arr2_i32_AnimationPtr, Arr2_i32, Animation*, false)
+#endif
+#ifndef CVF_FN_Map_Arr2_i32_GoOpaqueValPtr
+#define CVF_FN_Map_Arr2_i32_GoOpaqueValPtr
+GO_MAP_FUNCS(Map_Arr2_i32_GoOpaqueValPtr, Arr2_i32, GoOpaqueVal*, false)
 #endif
 #ifndef CVF_FN_Map_Arr2_u16_SpritePtr
 #define CVF_FN_Map_Arr2_u16_SpritePtr
@@ -1464,13 +2225,41 @@ GO_MAP_FUNCS(Map_Arr2_u16_bool, Arr2_u16, bool, false)
 #define CVF_FN_Map_Arr2_u16_int
 GO_MAP_FUNCS(Map_Arr2_u16_int, Arr2_u16, int, false)
 #endif
+#ifndef CVF_FN_Map_CharPtr_bool
+#define CVF_FN_Map_CharPtr_bool
+GO_MAP_FUNCS(Map_CharPtr_bool, Char*, bool, false)
+#endif
+#ifndef CVF_FN_Map_GoOpaque_invalidtypePtr_bool
+#define CVF_FN_Map_GoOpaque_invalidtypePtr_bool
+GO_MAP_FUNCS(Map_GoOpaque_invalidtypePtr_bool, GoOpaque /* invalid type */, bool, false)
+#endif
+#ifndef CVF_FN_Map_GoString_AnimationPropertiesPtr
+#define CVF_FN_Map_GoString_AnimationPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_AnimationPropertiesPtr, GoString, AnimationProperties*, true)
+#endif
 #ifndef CVF_FN_Map_GoString_Arr2_i32
 #define CVF_FN_Map_GoString_Arr2_i32
 GO_MAP_FUNCS(Map_GoString_Arr2_i32, GoString, Arr2_i32, true)
 #endif
+#ifndef CVF_FN_Map_GoString_BgAnimationPropertiesPtr
+#define CVF_FN_Map_GoString_BgAnimationPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_BgAnimationPropertiesPtr, GoString, BgAnimationProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_BgDefPropertiesPtr
+#define CVF_FN_Map_GoString_BgDefPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_BgDefPropertiesPtr, GoString, BgDefProperties*, true)
+#endif
 #ifndef CVF_FN_Map_GoString_BytecodeFunction
 #define CVF_FN_Map_GoString_BytecodeFunction
 GO_MAP_FUNCS(Map_GoString_BytecodeFunction, GoString, BytecodeFunction, true)
+#endif
+#ifndef CVF_FN_Map_GoString_CellOverridePropertiesPtr
+#define CVF_FN_Map_GoString_CellOverridePropertiesPtr
+GO_MAP_FUNCS(Map_GoString_CellOverridePropertiesPtr, GoString, CellOverrideProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_ContinueCounterPropertiesPtr
+#define CVF_FN_Map_GoString_ContinueCounterPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_ContinueCounterPropertiesPtr, GoString, ContinueCounterProperties*, true)
 #endif
 #ifndef CVF_FN_Map_GoString_FightFxPtr
 #define CVF_FN_Map_GoString_FightFxPtr
@@ -1480,29 +2269,81 @@ GO_MAP_FUNCS(Map_GoString_FightFxPtr, GoString, FightFx*, true)
 #define CVF_FN_Map_GoString_FightScreenModePtr
 GO_MAP_FUNCS(Map_GoString_FightScreenModePtr, GoString, FightScreenMode*, true)
 #endif
+#ifndef CVF_FN_Map_GoString_FontPropertiesPtr
+#define CVF_FN_Map_GoString_FontPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_FontPropertiesPtr, GoString, FontProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_GlyphPropertiesPtr
+#define CVF_FN_Map_GoString_GlyphPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_GlyphPropertiesPtr, GoString, GlyphProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_GoOpaque_ini_KeyPtrPtr
+#define CVF_FN_Map_GoString_GoOpaque_ini_KeyPtrPtr
+GO_MAP_FUNCS(Map_GoString_GoOpaque_ini_KeyPtrPtr, GoString, GoOpaque /* ini.Key */*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_GoString
+#define CVF_FN_Map_GoString_GoString
+GO_MAP_FUNCS(Map_GoString_GoString, GoString, GoString, true)
+#endif
+#ifndef CVF_FN_Map_GoString_KeysPropertiesPtr
+#define CVF_FN_Map_GoString_KeysPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_KeysPropertiesPtr, GoString, KeysProperties*, true)
+#endif
 #ifndef CVF_FN_Map_GoString_LayerPropertiesPtr
 #define CVF_FN_Map_GoString_LayerPropertiesPtr
 GO_MAP_FUNCS(Map_GoString_LayerPropertiesPtr, GoString, LayerProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Map_f32_AnimLayoutPtr
+#define CVF_FN_Map_GoString_Map_f32_AnimLayoutPtr
+GO_MAP_FUNCS(Map_GoString_Map_f32_AnimLayoutPtr, GoString, Map_f32_AnimLayoutPtr, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Map_int_bool
+#define CVF_FN_Map_GoString_Map_int_bool
+GO_MAP_FUNCS(Map_GoString_Map_int_bool, GoString, Map_int_bool, true)
 #endif
 #ifndef CVF_FN_Map_GoString_MenuInfoPropertiesPtr
 #define CVF_FN_Map_GoString_MenuInfoPropertiesPtr
 GO_MAP_FUNCS(Map_GoString_MenuInfoPropertiesPtr, GoString, MenuInfoProperties*, true)
 #endif
+#ifndef CVF_FN_Map_GoString_PlayerCursorStatePropertiesPtr
+#define CVF_FN_Map_GoString_PlayerCursorStatePropertiesPtr
+GO_MAP_FUNCS(Map_GoString_PlayerCursorStatePropertiesPtr, GoString, PlayerCursorStateProperties*, true)
+#endif
 #ifndef CVF_FN_Map_GoString_RemapPreset
 #define CVF_FN_Map_GoString_RemapPreset
 GO_MAP_FUNCS(Map_GoString_RemapPreset, GoString, RemapPreset, true)
 #endif
-#ifndef CVF_FN_Map_GoString_Slice_GoOpaqueValPtr
-#define CVF_FN_Map_GoString_Slice_GoOpaqueValPtr
-GO_MAP_FUNCS(Map_GoString_Slice_GoOpaqueValPtr, GoString, Slice_GoOpaqueValPtr, true)
+#ifndef CVF_FN_Map_GoString_ResultsScreenPropertiesPtr
+#define CVF_FN_Map_GoString_ResultsScreenPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_ResultsScreenPropertiesPtr, GoString, ResultsScreenProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_ScenePropertiesPtr
+#define CVF_FN_Map_GoString_ScenePropertiesPtr
+GO_MAP_FUNCS(Map_GoString_ScenePropertiesPtr, GoString, SceneProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Slice_GoOpaque_ini_SectionPtrPtr
+#define CVF_FN_Map_GoString_Slice_GoOpaque_ini_SectionPtrPtr
+GO_MAP_FUNCS(Map_GoString_Slice_GoOpaque_ini_SectionPtrPtr, GoString, Slice_GoOpaque_ini_SectionPtrPtr, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Slice_GoString
+#define CVF_FN_Map_GoString_Slice_GoString
+GO_MAP_FUNCS(Map_GoString_Slice_GoString, GoString, Slice_GoString, true)
 #endif
 #ifndef CVF_FN_Map_GoString_Slice_IniSection
 #define CVF_FN_Map_GoString_Slice_IniSection
 GO_MAP_FUNCS(Map_GoString_Slice_IniSection, GoString, Slice_IniSection, true)
 #endif
+#ifndef CVF_FN_Map_GoString_Slice_bgMusicPtr
+#define CVF_FN_Map_GoString_Slice_bgMusicPtr
+GO_MAP_FUNCS(Map_GoString_Slice_bgMusicPtr, GoString, Slice_bgMusicPtr, true)
+#endif
 #ifndef CVF_FN_Map_GoString_SoundPropertiesPtr
 #define CVF_FN_Map_GoString_SoundPropertiesPtr
 GO_MAP_FUNCS(Map_GoString_SoundPropertiesPtr, GoString, SoundProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_TeamModesPropertiesPtr
+#define CVF_FN_Map_GoString_TeamModesPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_TeamModesPropertiesPtr, GoString, TeamModesProperties*, true)
 #endif
 #ifndef CVF_FN_Map_GoString_TypedValue
 #define CVF_FN_Map_GoString_TypedValue
@@ -1520,10 +2361,6 @@ GO_MAP_FUNCS(Map_GoString_f32, GoString, f32, true)
 #define CVF_FN_Map_GoString_int
 GO_MAP_FUNCS(Map_GoString_int, GoString, int, true)
 #endif
-#ifndef CVF_FN_Map_GoString_musicHolder_Lf80c9cPtr
-#define CVF_FN_Map_GoString_musicHolder_Lf80c9cPtr
-GO_MAP_FUNCS(Map_GoString_musicHolder_Lf80c9cPtr, GoString, musicHolder_Lf80c9c*, true)
-#endif
 #ifndef CVF_FN_Map_GoString_scFunc
 #define CVF_FN_Map_GoString_scFunc
 GO_MAP_FUNCS(Map_GoString_scFunc, GoString, scFunc, true)
@@ -1531,6 +2368,10 @@ GO_MAP_FUNCS(Map_GoString_scFunc, GoString, scFunc, true)
 #ifndef CVF_FN_Map_GoString_u8
 #define CVF_FN_Map_GoString_u8
 GO_MAP_FUNCS(Map_GoString_u8, GoString, u8, true)
+#endif
+#ifndef CVF_FN_Map_OpCode_Arr2_i8
+#define CVF_FN_Map_OpCode_Arr2_i8
+GO_MAP_FUNCS(Map_OpCode_Arr2_i8, OpCode, Arr2_i8, false)
 #endif
 #ifndef CVF_FN_Map_ShortcutKey_ShortcutScriptPtr
 #define CVF_FN_Map_ShortcutKey_ShortcutScriptPtr
@@ -1540,13 +2381,25 @@ GO_MAP_FUNCS(Map_ShortcutKey_ShortcutScriptPtr, ShortcutKey, ShortcutScript*, fa
 #define CVF_FN_Map_StagePtr_StagePtr
 GO_MAP_FUNCS(Map_StagePtr_StagePtr, Stage*, Stage*, false)
 #endif
+#ifndef CVF_FN_Map_StateBlockPtr_GoString
+#define CVF_FN_Map_StateBlockPtr_GoString
+GO_MAP_FUNCS(Map_StateBlockPtr_GoString, StateBlock*, GoString, false)
+#endif
 #ifndef CVF_FN_Map_backGroundPtr_backGroundPtr
 #define CVF_FN_Map_backGroundPtr_backGroundPtr
 GO_MAP_FUNCS(Map_backGroundPtr_backGroundPtr, backGround*, backGround*, false)
 #endif
+#ifndef CVF_FN_Map_bcProfKey_u64
+#define CVF_FN_Map_bcProfKey_u64
+GO_MAP_FUNCS(Map_bcProfKey_u64, bcProfKey, u64, false)
+#endif
 #ifndef CVF_FN_Map_f32_AnimLayoutPtr
 #define CVF_FN_Map_f32_AnimLayoutPtr
 GO_MAP_FUNCS(Map_f32_AnimLayoutPtr, f32, AnimLayout*, false)
+#endif
+#ifndef CVF_FN_Map_i32_AnimLayoutPtr
+#define CVF_FN_Map_i32_AnimLayoutPtr
+GO_MAP_FUNCS(Map_i32_AnimLayoutPtr, i32, AnimLayout*, false)
 #endif
 #ifndef CVF_FN_Map_i32_AnimationPtr
 #define CVF_FN_Map_i32_AnimationPtr
@@ -1559,6 +2412,22 @@ GO_MAP_FUNCS(Map_i32_Arr2_i32, i32, Arr2_i32, false)
 #ifndef CVF_FN_Map_i32_CharPtr
 #define CVF_FN_Map_i32_CharPtr
 GO_MAP_FUNCS(Map_i32_CharPtr, i32, Char*, false)
+#endif
+#ifndef CVF_FN_Map_i32_FSTextPtr
+#define CVF_FN_Map_i32_FSTextPtr
+GO_MAP_FUNCS(Map_i32_FSTextPtr, i32, FSText*, false)
+#endif
+#ifndef CVF_FN_Map_i32_GoOpaqueValPtr
+#define CVF_FN_Map_i32_GoOpaqueValPtr
+GO_MAP_FUNCS(Map_i32_GoOpaqueValPtr, i32, GoOpaqueVal*, false)
+#endif
+#ifndef CVF_FN_Map_i32_GoString
+#define CVF_FN_Map_i32_GoString
+GO_MAP_FUNCS(Map_i32_GoString, i32, GoString, false)
+#endif
+#ifndef CVF_FN_Map_i32_Map_i32_GoOpaqueValPtr
+#define CVF_FN_Map_i32_Map_i32_GoOpaqueValPtr
+GO_MAP_FUNCS(Map_i32_Map_i32_GoOpaqueValPtr, i32, Map_i32_GoOpaqueValPtr, false)
 #endif
 #ifndef CVF_FN_Map_i32_RemapTable
 #define CVF_FN_Map_i32_RemapTable
@@ -1576,21 +2445,17 @@ GO_MAP_FUNCS(Map_i32_StateBytecodePtr, i32, StateBytecode*, false)
 #define CVF_FN_Map_i32_bool
 GO_MAP_FUNCS(Map_i32_bool, i32, bool, false)
 #endif
-#ifndef CVF_FN_Map_int_Arr12_Arr6_i8
-#define CVF_FN_Map_int_Arr12_Arr6_i8
-GO_MAP_FUNCS(Map_int_Arr12_Arr6_i8, int, Arr12_Arr6_i8, false)
+#ifndef CVF_FN_Map_i32_f32
+#define CVF_FN_Map_i32_f32
+GO_MAP_FUNCS(Map_i32_f32, i32, f32, false)
 #endif
-#ifndef CVF_FN_Map_int_Arr12_InputBits
-#define CVF_FN_Map_int_Arr12_InputBits
-GO_MAP_FUNCS(Map_int_Arr12_InputBits, int, Arr12_InputBits, false)
+#ifndef CVF_FN_Map_i32_i32
+#define CVF_FN_Map_i32_i32
+GO_MAP_FUNCS(Map_i32_i32, i32, i32, false)
 #endif
 #ifndef CVF_FN_Map_int_CharVarBackup
 #define CVF_FN_Map_int_CharVarBackup
 GO_MAP_FUNCS(Map_int_CharVarBackup, int, CharVarBackup, false)
-#endif
-#ifndef CVF_FN_Map_int_GameStatePtr
-#define CVF_FN_Map_int_GameStatePtr
-GO_MAP_FUNCS(Map_int_GameStatePtr, int, GameState*, false)
 #endif
 #ifndef CVF_FN_Map_int_GoOpaqueValPtr
 #define CVF_FN_Map_int_GoOpaqueValPtr
@@ -1616,21 +2481,37 @@ GO_MAP_FUNCS(Map_int_Slice_GoIface, int, Slice_GoIface, false)
 #define CVF_FN_Map_int_Slice_int
 GO_MAP_FUNCS(Map_int_Slice_int, int, Slice_int, false)
 #endif
+#ifndef CVF_FN_Map_int_bool
+#define CVF_FN_Map_int_bool
+GO_MAP_FUNCS(Map_int_bool, int, bool, false)
+#endif
 #ifndef CVF_FN_Map_int_fontSpec_L25f097
 #define CVF_FN_Map_int_fontSpec_L25f097
 GO_MAP_FUNCS(Map_int_fontSpec_L25f097, int, fontSpec_L25f097, false)
+#endif
+#ifndef CVF_FN_Map_int_fontSpec_L8e0736
+#define CVF_FN_Map_int_fontSpec_L8e0736
+GO_MAP_FUNCS(Map_int_fontSpec_L8e0736, int, fontSpec_L8e0736, false)
 #endif
 #ifndef CVF_FN_Map_int_int
 #define CVF_FN_Map_int_int
 GO_MAP_FUNCS(Map_int_int, int, int, false)
 #endif
+#ifndef CVF_FN_Map_u16_GoFunc
+#define CVF_FN_Map_u16_GoFunc
+GO_MAP_FUNCS(Map_u16_GoFunc, u16, GoFunc, false)
+#endif
 #ifndef CVF_FN_Map_u16_u64
 #define CVF_FN_Map_u16_u64
 GO_MAP_FUNCS(Map_u16_u64, u16, u64, false)
 #endif
-#ifndef CVF_FN_Map_uintptr_t_int
-#define CVF_FN_Map_uintptr_t_int
-GO_MAP_FUNCS(Map_uintptr_t_int, uintptr_t, int, false)
+#ifndef CVF_FN_Map_u32Ptr_GoIface
+#define CVF_FN_Map_u32Ptr_GoIface
+GO_MAP_FUNCS(Map_u32Ptr_GoIface, u32*, GoIface, false)
+#endif
+#ifndef CVF_FN_Map_u32_Slice_f32
+#define CVF_FN_Map_u32_Slice_f32
+GO_MAP_FUNCS(Map_u32_Slice_f32, u32, Slice_f32, false)
 #endif
 
 #ifndef CVF_RET_Ret_AnimFramePtr__GoIface
@@ -1669,6 +2550,10 @@ typedef struct { BytecodeValue r0; bool r1; GoIface r2; } Ret_BytecodeValue__boo
 #define CVF_RET_Ret_CharPtr__CharGlobalInfo
 typedef struct { Char* r0; CharGlobalInfo r1; } Ret_CharPtr__CharGlobalInfo;
 #endif
+#ifndef CVF_RET_Ret_ConfigPtr__GoIface
+#define CVF_RET_Ret_ConfigPtr__GoIface
+typedef struct { Config* r0; GoIface r1; } Ret_ConfigPtr__GoIface;
+#endif
 #ifndef CVF_RET_Ret_EnvironmentPtr__GoIface
 #define CVF_RET_Ret_EnvironmentPtr__GoIface
 typedef struct { Environment* r0; GoIface r1; } Ret_EnvironmentPtr__GoIface;
@@ -1676,6 +2561,10 @@ typedef struct { Environment* r0; GoIface r1; } Ret_EnvironmentPtr__GoIface;
 #ifndef CVF_RET_Ret_ExplodPtr__int
 #define CVF_RET_Ret_ExplodPtr__int
 typedef struct { Explod* r0; int r1; } Ret_ExplodPtr__int;
+#endif
+#ifndef CVF_RET_Ret_FightScreenPtr__GoIface
+#define CVF_RET_Ret_FightScreenPtr__GoIface
+typedef struct { FightScreen* r0; GoIface r1; } Ret_FightScreenPtr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_GoIface__GoIface
 #define CVF_RET_Ret_GoIface__GoIface
@@ -1689,25 +2578,33 @@ typedef struct { GoIface r0; bool r1; GoIface r2; } Ret_GoIface__bool__GoIface;
 #define CVF_RET_Ret_GoOpaqueValPtr__GoIface
 typedef struct { GoOpaqueVal* r0; GoIface r1; } Ret_GoOpaqueValPtr__GoIface;
 #endif
-#ifndef CVF_RET_Ret_GoOpaque_invalidtypePtr__GoIface
-#define CVF_RET_Ret_GoOpaque_invalidtypePtr__GoIface
-typedef struct { GoOpaque /* invalid type */ r0; GoIface r1; } Ret_GoOpaque_invalidtypePtr__GoIface;
+#ifndef CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoIface
+#define CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoIface
+typedef struct { GoOpaque /* ini.File */* r0; GoIface r1; } Ret_GoOpaque_ini_FilePtrPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoString__GoIface
+#define CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoString__GoIface
+typedef struct { GoOpaque /* ini.File */* r0; GoString r1; GoIface r2; } Ret_GoOpaque_ini_FilePtrPtr__GoString__GoIface;
+#endif
+#ifndef CVF_RET_Ret_GoOpaque_ini_KeyPtrPtr__GoIface
+#define CVF_RET_Ret_GoOpaque_ini_KeyPtrPtr__GoIface
+typedef struct { GoOpaque /* ini.Key */* r0; GoIface r1; } Ret_GoOpaque_ini_KeyPtrPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_GoOpaque_ini_SectionPtrPtr__GoIface
+#define CVF_RET_Ret_GoOpaque_ini_SectionPtrPtr__GoIface
+typedef struct { GoOpaque /* ini.Section */* r0; GoIface r1; } Ret_GoOpaque_ini_SectionPtrPtr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_GoOpaque_os_FilePtrPtr__GoIface
 #define CVF_RET_Ret_GoOpaque_os_FilePtrPtr__GoIface
 typedef struct { GoOpaque /* os.File */* r0; GoIface r1; } Ret_GoOpaque_os_FilePtrPtr__GoIface;
 #endif
-#ifndef CVF_RET_Ret_GoOpaque_reflect_ValuePtr__GoOpaque_reflect_StructFieldPtr__bool
-#define CVF_RET_Ret_GoOpaque_reflect_ValuePtr__GoOpaque_reflect_StructFieldPtr__bool
-typedef struct { GoOpaque /* reflect.Value */ r0; GoOpaque /* reflect.StructField */ r1; bool r2; } Ret_GoOpaque_reflect_ValuePtr__GoOpaque_reflect_StructFieldPtr__bool;
+#ifndef CVF_RET_Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool
+#define CVF_RET_Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool
+typedef struct { GoOpaque /* reflect.Value */ r0; GoReflectStructField r1; bool r2; } Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool;
 #endif
 #ifndef CVF_RET_Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface
 #define CVF_RET_Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface
 typedef struct { GoOpaque /* regexp.Regexp */* r0; GoIface r1; } Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface;
-#endif
-#ifndef CVF_RET_Ret_GoOpaque_zip_ReadCloserPtrPtr__GoIface
-#define CVF_RET_Ret_GoOpaque_zip_ReadCloserPtrPtr__GoIface
-typedef struct { GoOpaque /* zip.ReadCloser */* r0; GoIface r1; } Ret_GoOpaque_zip_ReadCloserPtrPtr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_GoString__GoIface
 #define CVF_RET_Ret_GoString__GoIface
@@ -1717,6 +2614,14 @@ typedef struct { GoString r0; GoIface r1; } Ret_GoString__GoIface;
 #define CVF_RET_Ret_GoString__GoString
 typedef struct { GoString r0; GoString r1; } Ret_GoString__GoString;
 #endif
+#ifndef CVF_RET_Ret_GoString__GoString__bool
+#define CVF_RET_Ret_GoString__GoString__bool
+typedef struct { GoString r0; GoString r1; bool r2; } Ret_GoString__GoString__bool;
+#endif
+#ifndef CVF_RET_Ret_GoString__Slice_GoString
+#define CVF_RET_Ret_GoString__Slice_GoString
+typedef struct { GoString r0; Slice_GoString r1; } Ret_GoString__Slice_GoString;
+#endif
 #ifndef CVF_RET_Ret_GoString__bool
 #define CVF_RET_Ret_GoString__bool
 typedef struct { GoString r0; bool r1; } Ret_GoString__bool;
@@ -1725,9 +2630,17 @@ typedef struct { GoString r0; bool r1; } Ret_GoString__bool;
 #define CVF_RET_Ret_GoString__bool__GoIface
 typedef struct { GoString r0; bool r1; GoIface r2; } Ret_GoString__bool__GoIface;
 #endif
+#ifndef CVF_RET_Ret_GoString__int
+#define CVF_RET_Ret_GoString__int
+typedef struct { GoString r0; int r1; } Ret_GoString__int;
+#endif
 #ifndef CVF_RET_Ret_GoString__int__int__int__int__int__f32__int
 #define CVF_RET_Ret_GoString__int__int__int__int__int__f32__int
 typedef struct { GoString r0; int r1; int r2; int r3; int r4; int r5; f32 r6; int r7; } Ret_GoString__int__int__int__int__int__f32__int;
+#endif
+#ifndef CVF_RET_Ret_GoZipReadCloserPtr__GoIface
+#define CVF_RET_Ret_GoZipReadCloserPtr__GoIface
+typedef struct { GoZipReadCloser* r0; GoIface r1; } Ret_GoZipReadCloserPtr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_IniSection__GoIface
 #define CVF_RET_Ret_IniSection__GoIface
@@ -1761,9 +2674,17 @@ typedef struct { OpCode r0; OpCode r1; i32 r2; i32 r3; GoIface r4; } Ret_OpCode_
 #define CVF_RET_Ret_OpCode__int
 typedef struct { OpCode r0; int r1; } Ret_OpCode__int;
 #endif
+#ifndef CVF_RET_Ret_SelectStagePtr__GoIface
+#define CVF_RET_Ret_SelectStagePtr__GoIface
+typedef struct { SelectStage* r0; GoIface r1; } Ret_SelectStagePtr__GoIface;
+#endif
 #ifndef CVF_RET_Ret_SffPtr__GoIface
 #define CVF_RET_Ret_SffPtr__GoIface
 typedef struct { Sff* r0; GoIface r1; } Ret_SffPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_SffPtr__Slice_i32__GoIface
+#define CVF_RET_Ret_SffPtr__Slice_i32__GoIface
+typedef struct { Sff* r0; Slice_i32 r1; GoIface r2; } Ret_SffPtr__Slice_i32__GoIface;
 #endif
 #ifndef CVF_RET_Ret_Slice_Arr4_f32__GoIface
 #define CVF_RET_Ret_Slice_Arr4_f32__GoIface
@@ -1777,13 +2698,17 @@ typedef struct { Slice_BytecodeExp r0; GoIface r1; } Ret_Slice_BytecodeExp__GoIf
 #define CVF_RET_Ret_Slice_GoString__GoIface
 typedef struct { Slice_GoString r0; GoIface r1; } Ret_Slice_GoString__GoIface;
 #endif
-#ifndef CVF_RET_Ret_Slice_InputBits__Slice_Arr6_i8
-#define CVF_RET_Ret_Slice_InputBits__Slice_Arr6_i8
-typedef struct { Slice_InputBits r0; Slice_Arr6_i8 r1; } Ret_Slice_InputBits__Slice_Arr6_i8;
+#ifndef CVF_RET_Ret_Slice_cnode__int
+#define CVF_RET_Ret_Slice_cnode__int
+typedef struct { Slice_cnode r0; int r1; } Ret_Slice_cnode__int;
 #endif
 #ifndef CVF_RET_Ret_Slice_u32__GoIface
 #define CVF_RET_Ret_Slice_u32__GoIface
 typedef struct { Slice_u32 r0; GoIface r1; } Ret_Slice_u32__GoIface;
+#endif
+#ifndef CVF_RET_Ret_Slice_u32__bool
+#define CVF_RET_Ret_Slice_u32__bool
+typedef struct { Slice_u32 r0; bool r1; } Ret_Slice_u32__bool;
 #endif
 #ifndef CVF_RET_Ret_Slice_u8__GoIface
 #define CVF_RET_Ret_Slice_u8__GoIface
@@ -1796,6 +2721,10 @@ typedef struct { Stage* r0; GoIface r1; } Ret_StagePtr__GoIface;
 #ifndef CVF_RET_Ret_StateBlockPtr__GoIface
 #define CVF_RET_Ret_StateBlockPtr__GoIface
 typedef struct { StateBlock* r0; GoIface r1; } Ret_StateBlockPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_StateControllerBase__bool
+#define CVF_RET_Ret_StateControllerBase__bool
+typedef struct { StateControllerBase r0; bool r1; } Ret_StateControllerBase__bool;
 #endif
 #ifndef CVF_RET_Ret_StateController__GoIface
 #define CVF_RET_Ret_StateController__GoIface
@@ -1821,6 +2750,10 @@ typedef struct { bool r0; GoIface r1; } Ret_bool__GoIface;
 #define CVF_RET_Ret_bool__GoOpaque_reflect_ValuePtr
 typedef struct { bool r0; GoOpaque /* reflect.Value */ r1; } Ret_bool__GoOpaque_reflect_ValuePtr;
 #endif
+#ifndef CVF_RET_Ret_bool__GoOpaque_reflect_ValuePtr__GoIface
+#define CVF_RET_Ret_bool__GoOpaque_reflect_ValuePtr__GoIface
+typedef struct { bool r0; GoOpaque /* reflect.Value */ r1; GoIface r2; } Ret_bool__GoOpaque_reflect_ValuePtr__GoIface;
+#endif
 #ifndef CVF_RET_Ret_bool__GoString__GoString
 #define CVF_RET_Ret_bool__GoString__GoString
 typedef struct { bool r0; GoString r1; GoString r2; } Ret_bool__GoString__GoString;
@@ -1828,10 +2761,6 @@ typedef struct { bool r0; GoString r1; GoString r2; } Ret_bool__GoString__GoStri
 #ifndef CVF_RET_Ret_bool__bool
 #define CVF_RET_Ret_bool__bool
 typedef struct { bool r0; bool r1; } Ret_bool__bool;
-#endif
-#ifndef CVF_RET_Ret_bool__bool__GoString__i32
-#define CVF_RET_Ret_bool__bool__GoString__i32
-typedef struct { bool r0; bool r1; GoString r2; i32 r3; } Ret_bool__bool__GoString__i32;
 #endif
 #ifndef CVF_RET_Ret_bool__bool__bool__bool
 #define CVF_RET_Ret_bool__bool__bool__bool
@@ -1913,6 +2842,10 @@ typedef struct { int r0; bool r1; } Ret_int__bool;
 #define CVF_RET_Ret_int__int
 typedef struct { int r0; int r1; } Ret_int__int;
 #endif
+#ifndef CVF_RET_Ret_int__int__GoString__bool
+#define CVF_RET_Ret_int__int__GoString__bool
+typedef struct { int r0; int r1; GoString r2; bool r3; } Ret_int__int__GoString__bool;
+#endif
 #ifndef CVF_RET_Ret_int__int__int
 #define CVF_RET_Ret_int__int__int
 typedef struct { int r0; int r1; int r2; } Ret_int__int__int;
@@ -1937,27 +2870,28 @@ typedef struct { u8 r0; u8 r1; } Ret_u8__u8;
 #include "ik/ik_rt.h"
 
 // std-library entry points (ik_rt.c)
+GoIface bufio_Writer_Flush(GoOpaque /* bufio.Writer */* recv); // func (*bufio.Writer).Flush() error
 GoIface errors_New(GoString a0); // func errors.New(text string) error
-GoIface fmt_Errorf(GoString a0, Slice_GoIface a1); // func fmt.Errorf(format string, a ...any) error
+GoIface fmt_Errorf(GoString a0, Slice_GoIface a1); // func fmt.Errorf(format string, a ...any) (err error)
 GoIface gob_Decoder_Decode(GoOpaque /* gob.Decoder */* recv, GoIface a0); // func (*gob.Decoder).Decode(e any) error
 GoIface gob_Encoder_Encode(GoOpaque /* gob.Encoder */* recv, GoIface a0); // func (*gob.Encoder).Encode(e any) error
-GoIface net_conn_LocalAddr(GoOpaque /* net.conn */* recv); // func (*net.conn).LocalAddr() net.Addr
-GoIface net_conn_RemoteAddr(GoOpaque /* net.conn */* recv); // func (*net.conn).RemoteAddr() net.Addr
+GoIface ini_File_SaveTo(GoOpaque /* ini.File */* recv, GoString a0); // func (*ini.File).SaveTo(filename string) error
 GoIface os_File_Close(GoOpaque /* os.File */* recv); // func (*os.File).Close() error
-GoIface os_WriteFile(GoString a0, Slice_u8 a1, u32 a2); // func os.WriteFile(name string, data []byte, perm fs.FileMode) error
-GoIface png_Encode(GoIface a0, GoIface a1); // func png.Encode(w io.Writer, m image.Image) error
 GoIface reflect_Value_Interface(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Interface() (i any)
 GoIface reflect_Value_Type(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Type() reflect.Type
 GoIface sync_Pool_Get(GoOpaque /* sync.Pool */* recv); // func (*sync.Pool).Get() any
-GoIface zip_ReadCloser_Close(GoOpaque /* zip.ReadCloser */* recv); // func (*zip.ReadCloser).Close() error
+GoIface zip_ReadCloser_Close(GoZipReadCloser* recv); // func (*zip.ReadCloser).Close() error
+GoImageNRGBA* image_NewNRGBA(GoImageRect a0); // func image.NewNRGBA(r image.Rectangle) *image.NRGBA
+GoImageRect image_NRGBA_Bounds(GoImageNRGBA* recv); // func (*image.NRGBA).Bounds() image.Rectangle
+GoImageRect image_Paletted_Bounds(GoImagePaletted* recv); // func (*image.Paletted).Bounds() image.Rectangle
+GoImageRect image_Rectangle_Bounds(GoImageRect recv); // func (image.Rectangle).Bounds() image.Rectangle
+GoOpaque /* bufio.Scanner */* bufio_NewScanner(GoIface a0); // func bufio.NewScanner(r io.Reader) *bufio.Scanner
+GoOpaque /* bufio.Writer */* bufio_NewWriterSize(GoIface a0, int a1); // func bufio.NewWriterSize(w io.Writer, size int) *bufio.Writer
 GoOpaque /* bytes.Reader */* bytes_NewReader(Slice_u8 a0); // func bytes.NewReader(b []byte) *bytes.Reader
 GoOpaque /* gob.Decoder */* gob_NewDecoder(GoIface a0); // func gob.NewDecoder(r io.Reader) *gob.Decoder
 GoOpaque /* gob.Encoder */* gob_NewEncoder(GoIface a0); // func gob.NewEncoder(w io.Writer) *gob.Encoder
-GoOpaque /* image.NRGBA */* image_NewNRGBA(GoOpaque /* image.Rectangle */ a0); // func image.NewNRGBA(r image.Rectangle) *image.NRGBA
-GoOpaque /* image.Rectangle */ image_NRGBA_Bounds(GoOpaque /* image.NRGBA */* recv); // func (*image.NRGBA).Bounds() image.Rectangle
-GoOpaque /* image.Rectangle */ image_Paletted_Bounds(GoOpaque /* image.Paletted */* recv); // func (*image.Paletted).Bounds() image.Rectangle
-GoOpaque /* image.Rectangle */ image_Rect(int a0, int a1, int a2, int a3); // func image.Rect(x0 int, y0 int, x1 int, y1 int) image.Rectangle
-GoOpaque /* log.Logger */* log_New(GoIface a0, GoString a1, int a2); // func log.New(out io.Writer, prefix string, flag int) *log.Logger
+GoOpaque /* ini.Key */* ini_Section_Key(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).Key(name string) *ini.Key
+GoOpaque /* ini.Section */* ini_File_Section(GoOpaque /* ini.File */* recv, GoString a0); // func (*ini.File).Section(name string) *ini.Section
 GoOpaque /* reflect.Value */ reflect_Append(GoOpaque /* reflect.Value */ a0, Slice_GoOpaque_reflect_ValuePtr a1); // func reflect.Append(s reflect.Value, x ...reflect.Value) reflect.Value
 GoOpaque /* reflect.Value */ reflect_MakeMap(GoIface a0); // func reflect.MakeMap(typ reflect.Type) reflect.Value
 GoOpaque /* reflect.Value */ reflect_MakeSlice(GoIface a0, int a1, int a2); // func reflect.MakeSlice(typ reflect.Type, len int, cap int) reflect.Value
@@ -1965,14 +2899,15 @@ GoOpaque /* reflect.Value */ reflect_New(GoIface a0); // func reflect.New(typ re
 GoOpaque /* reflect.Value */ reflect_ValueOf(GoIface a0); // func reflect.ValueOf(i any) reflect.Value
 GoOpaque /* reflect.Value */ reflect_Value_Elem(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Elem() reflect.Value
 GoOpaque /* reflect.Value */ reflect_Value_Field(GoOpaque /* reflect.Value */ recv, int a0); // func (reflect.Value).Field(i int) reflect.Value
+GoOpaque /* reflect.Value */ reflect_Value_FieldByName(GoOpaque /* reflect.Value */ recv, GoString a0); // func (reflect.Value).FieldByName(name string) reflect.Value
 GoOpaque /* reflect.Value */ reflect_Value_Index(GoOpaque /* reflect.Value */ recv, int a0); // func (reflect.Value).Index(i int) reflect.Value
 GoOpaque /* reflect.Value */ reflect_Value_MapIndex(GoOpaque /* reflect.Value */ recv, GoOpaque /* reflect.Value */ a0); // func (reflect.Value).MapIndex(key reflect.Value) reflect.Value
 GoOpaque /* reflect.Value */ reflect_Zero(GoIface a0); // func reflect.Zero(typ reflect.Type) reflect.Value
 GoOpaque /* regexp.Regexp */* regexp_MustCompile(GoString a0); // func regexp.MustCompile(str string) *regexp.Regexp
 GoOpaque /* time.Time */ time_Now(void); // func time.Now() time.Time
 GoOpaque /* time.Time */ time_Time_Add(GoOpaque /* time.Time */ recv, i64 a0); // func (time.Time).Add(d time.Duration) time.Time
-GoOpaque /* unsafe.Pointer */ reflect_Value_UnsafePointer(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).UnsafePointer() unsafe.Pointer
-GoString binary_littleEndian_String(GoOpaque /* binary.littleEndian */ recv); // func (binary.littleEndian).String() string
+GoString bufio_Scanner_Text(GoOpaque /* bufio.Scanner */* recv); // func (*bufio.Scanner).Text() string
+GoString filepath_Base(GoString a0); // func filepath.Base(path string) string
 GoString filepath_Clean(GoString a0); // func filepath.Clean(path string) string
 GoString filepath_Dir(GoString a0); // func filepath.Dir(path string) string
 GoString filepath_Ext(GoString a0); // func filepath.Ext(path string) string
@@ -1980,12 +2915,12 @@ GoString filepath_Join(Slice_GoString a0); // func filepath.Join(elem ...string)
 GoString filepath_ToSlash(GoString a0); // func filepath.ToSlash(path string) string
 GoString fmt_Sprint(Slice_GoIface a0); // func fmt.Sprint(a ...any) string
 GoString fmt_Sprintf(GoString a0, Slice_GoIface a1); // func fmt.Sprintf(format string, a ...any) string
-GoString net_IP_String(Slice_u8 recv); // func (net.IP).String() string
-GoString net_JoinHostPort(GoString a0, GoString a1); // func net.JoinHostPort(host string, port string) string
-GoString net_TCPAddr_String(GoOpaque /* net.TCPAddr */* recv); // func (*net.TCPAddr).String() string
+GoString ini_Key_Name(GoOpaque /* ini.Key */* recv); // func (*ini.Key).Name() string
+GoString ini_Key_Value(GoOpaque /* ini.Key */* recv); // func (*ini.Key).Value() string
+GoString ini_Section_Name(GoOpaque /* ini.Section */* recv); // func (*ini.Section).Name() string
 GoString os_File_Name(GoOpaque /* os.File */* recv); // func (*os.File).Name() string
+GoString os_Getenv(GoString a0); // func os.Getenv(key string) string
 GoString path_Join(Slice_GoString a0); // func path.Join(elem ...string) string
-GoString reflect_Kind_String(uintptr_t recv); // func (reflect.Kind).String() string
 GoString reflect_StructTag_Get(GoString recv, GoString a0); // func (reflect.StructTag).Get(key string) string
 GoString reflect_Value_String(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).String() string
 GoString regexp_Regexp_ReplaceAllString(GoOpaque /* regexp.Regexp */* recv, GoString a0, GoString a1); // func (*regexp.Regexp).ReplaceAllString(src string, repl string) string
@@ -2003,49 +2938,59 @@ GoString strings_TrimLeftFunc(GoString a0, GoFunc a1); // func strings.TrimLeftF
 GoString strings_TrimPrefix(GoString a0, GoString a1); // func strings.TrimPrefix(s string, prefix string) string
 GoString strings_TrimSpace(GoString a0); // func strings.TrimSpace(s string) string
 GoString strings_TrimSuffix(GoString a0, GoString a1); // func strings.TrimSuffix(s string, suffix string) string
-GoString time_Duration_String(i64 recv); // func (time.Duration).String() string
-GoString time_Time_Format(GoOpaque /* time.Time */ recv, GoString a0); // func (time.Time).Format(layout string) string
-Ret_GoIface__GoIface os_Stat(GoString a0); // func os.Stat(name string) (fs.FileInfo, error)
+Ret_GoIface__GoIface os_Stat(GoString a0); // func os.Stat(name string) (os.FileInfo, error)
 Ret_GoIface__GoIface png_Decode(GoIface a0); // func png.Decode(r io.Reader) (image.Image, error)
-Ret_GoIface__GoIface zip_File_Open(GoOpaque /* zip.File */* recv); // func (*zip.File).Open() (io.ReadCloser, error)
+Ret_GoIface__GoIface zip_File_Open(GoZipFile* recv); // func (*zip.File).Open() (io.ReadCloser, error)
+Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_LoadSources(GoIniLoadOptions a0, GoIface a1, Slice_GoIface a2); // func ini.LoadSources(opts ini.LoadOptions, source interface{}, others ...interface{}) (_ *ini.File, err error)
+Ret_GoOpaque_ini_KeyPtrPtr__GoIface ini_Section_GetKey(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).GetKey(name string) (*ini.Key, error)
+Ret_GoOpaque_ini_KeyPtrPtr__GoIface ini_Section_NewKey(GoOpaque /* ini.Section */* recv, GoString a0, GoString a1); // func (*ini.Section).NewKey(name string, val string) (*ini.Key, error)
+Ret_GoOpaque_ini_SectionPtrPtr__GoIface ini_File_GetSection(GoOpaque /* ini.File */* recv, GoString a0); // func (*ini.File).GetSection(name string) (*ini.Section, error)
+Ret_GoOpaque_ini_SectionPtrPtr__GoIface ini_File_NewSection(GoOpaque /* ini.File */* recv, GoString a0); // func (*ini.File).NewSection(name string) (*ini.Section, error)
 Ret_GoOpaque_os_FilePtrPtr__GoIface os_Create(GoString a0); // func os.Create(name string) (*os.File, error)
 Ret_GoOpaque_os_FilePtrPtr__GoIface os_Open(GoString a0); // func os.Open(name string) (*os.File, error)
-Ret_GoOpaque_os_FilePtrPtr__GoIface os_OpenFile(GoString a0, int a1, u32 a2); // func os.OpenFile(name string, flag int, perm fs.FileMode) (*os.File, error)
 Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface regexp_Compile(GoString a0); // func regexp.Compile(expr string) (*regexp.Regexp, error)
-Ret_GoOpaque_zip_ReadCloserPtrPtr__GoIface zip_OpenReader(GoString a0); // func zip.OpenReader(name string) (*zip.ReadCloser, error)
 Ret_GoString__GoIface strconv_Unquote(GoString a0); // func strconv.Unquote(s string) (string, error)
+Ret_GoString__GoString__bool strings_Cut(GoString a0, GoString a1); // func strings.Cut(s string, sep string) (before string, after string, found bool)
+Ret_GoZipReadCloserPtr__GoIface zip_OpenReader(GoString a0); // func zip.OpenReader(name string) (*zip.ReadCloser, error)
 Ret_Slice_GoString__GoIface filepath_Glob(GoString a0); // func filepath.Glob(pattern string) (matches []string, err error)
 Ret_Slice_u8__GoIface io_ReadAll(GoIface a0); // func io.ReadAll(r io.Reader) ([]byte, error)
 Ret_bool__GoIface regexp_MatchString(GoString a0, GoString a1); // func regexp.MatchString(pattern string, s string) (matched bool, err error)
 Ret_bool__GoIface strconv_ParseBool(GoString a0); // func strconv.ParseBool(str string) (bool, error)
 Ret_f64__GoIface strconv_ParseFloat(GoString a0, int a1); // func strconv.ParseFloat(s string, bitSize int) (float64, error)
-Ret_f64__f64 math_Modf(f64 a0); // func math.Modf(f float64) (int float64, frac float64)
+Ret_f64__f64 math_Modf(f64 a0); // func math.Modf(f float64) (integer float64, fractional float64)
 Ret_f64__int math_Frexp(f64 a0); // func math.Frexp(f float64) (frac float64, exp int)
 Ret_i64__GoIface bytes_Reader_Seek(GoOpaque /* bytes.Reader */* recv, i64 a0, int a1); // func (*bytes.Reader).Seek(offset int64, whence int) (int64, error)
 Ret_i64__GoIface os_File_Seek(GoOpaque /* os.File */* recv, i64 a0, int a1); // func (*os.File).Seek(offset int64, whence int) (ret int64, err error)
 Ret_i64__GoIface strconv_ParseInt(GoString a0, int a1, int a2); // func strconv.ParseInt(s string, base int, bitSize int) (i int64, err error)
+Ret_int__GoIface bufio_Writer_Write(GoOpaque /* bufio.Writer */* recv, Slice_u8 a0); // func (*bufio.Writer).Write(p []byte) (nn int, err error)
 Ret_int__GoIface bytes_Reader_Read(GoOpaque /* bytes.Reader */* recv, Slice_u8 a0); // func (*bytes.Reader).Read(b []byte) (n int, err error)
 Ret_int__GoIface fmt_Fprintf(GoIface a0, GoString a1, Slice_GoIface a2); // func fmt.Fprintf(w io.Writer, format string, a ...any) (n int, err error)
 Ret_int__GoIface fmt_Printf(GoString a0, Slice_GoIface a1); // func fmt.Printf(format string, a ...any) (n int, err error)
 Ret_int__GoIface fmt_Println(Slice_GoIface a0); // func fmt.Println(a ...any) (n int, err error)
+Ret_int__GoIface fmt_Scanln(Slice_GoIface a0); // func fmt.Scanln(a ...any) (n int, err error)
+Ret_int__GoIface fmt_Sscan(GoString a0, Slice_GoIface a1); // func fmt.Sscan(str string, a ...any) (n int, err error)
+Ret_int__GoIface fmt_Sscanf(GoString a0, GoString a1, Slice_GoIface a2); // func fmt.Sscanf(str string, format string, a ...any) (n int, err error)
+Ret_int__GoIface io_ReadFull(GoIface a0, Slice_u8 a1); // func io.ReadFull(r io.Reader, buf []byte) (n int, err error)
 Ret_int__GoIface os_File_Read(GoOpaque /* os.File */* recv, Slice_u8 a0); // func (*os.File).Read(b []byte) (n int, err error)
 Ret_int__GoIface strconv_Atoi(GoString a0); // func strconv.Atoi(s string) (int, error)
 Ret_int__GoIface strings_Builder_WriteString(GoOpaque /* strings.Builder */* recv, GoString a0); // func (*strings.Builder).WriteString(s string) (int, error)
 Ret_u64__GoIface strconv_ParseUint(GoString a0, int a1, int a2); // func strconv.ParseUint(s string, base int, bitSize int) (uint64, error)
 Ret_u64__u64 bits_Add64(u64 a0, u64 a1, u64 a2); // func bits.Add64(x uint64, y uint64, carry uint64) (sum uint64, carryOut uint64)
 Ret_u64__u64 bits_Mul64(u64 a0, u64 a1); // func bits.Mul64(x uint64, y uint64) (hi uint64, lo uint64)
+Slice_GoOpaque_ini_KeyPtrPtr ini_Section_Keys(GoOpaque /* ini.Section */* recv); // func (*ini.Section).Keys() []*ini.Key
+Slice_GoOpaque_ini_SectionPtrPtr ini_File_Sections(GoOpaque /* ini.File */* recv); // func (*ini.File).Sections() []*ini.Section
 Slice_GoOpaque_reflect_ValuePtr reflect_Value_MapKeys(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).MapKeys() []reflect.Value
+Slice_GoString ini_Key_ValueWithShadows(GoOpaque /* ini.Key */* recv); // func (*ini.Key).ValueWithShadows() []string
 Slice_GoString regexp_Regexp_FindAllString(GoOpaque /* regexp.Regexp */* recv, GoString a0, int a1); // func (*regexp.Regexp).FindAllString(s string, n int) []string
 Slice_GoString regexp_Regexp_FindStringSubmatch(GoOpaque /* regexp.Regexp */* recv, GoString a0); // func (*regexp.Regexp).FindStringSubmatch(s string) []string
 Slice_GoString strings_Fields(GoString a0); // func strings.Fields(s string) []string
 Slice_GoString strings_Split(GoString a0, GoString a1); // func strings.Split(s string, sep string) []string
 Slice_GoString strings_SplitN(GoString a0, GoString a1, int a2); // func strings.SplitN(s string, sep string, n int) []string
-Slice_u8 binary_bigEndian_AppendUint32(GoOpaque /* binary.bigEndian */ recv, Slice_u8 a0, u32 a1); // func (binary.bigEndian).AppendUint32(b []byte, v uint32) []byte
-Slice_u8 net_IP_To4(Slice_u8 recv); // func (net.IP).To4() net.IP
+Slice_u8 strconv_AppendInt(Slice_u8 a0, i64 a1, int a2); // func strconv.AppendInt(dst []byte, i int64, base int) []byte
+Slice_u8 strconv_AppendUint(Slice_u8 a0, u64 a1, int a2); // func strconv.AppendUint(dst []byte, i uint64, base int) []byte
+bool bufio_Scanner_Scan(GoOpaque /* bufio.Scanner */* recv); // func (*bufio.Scanner).Scan() bool
 bool errors_Is(GoIface a0, GoIface a1); // func errors.Is(err error, target error) bool
 bool filepath_IsAbs(GoString a0); // func filepath.IsAbs(path string) bool
-bool net_IP_Equal(Slice_u8 recv, Slice_u8 a0); // func (net.IP).Equal(x net.IP) bool
-bool net_IP_IsLoopback(Slice_u8 recv); // func (net.IP).IsLoopback() bool
 bool os_IsNotExist(GoIface a0); // func os.IsNotExist(err error) bool
 bool reflect_DeepEqual(GoIface a0, GoIface a1); // func reflect.DeepEqual(x any, y any) bool
 bool reflect_Value_Bool(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Bool() bool
@@ -2054,12 +2999,12 @@ bool reflect_Value_IsNil(GoOpaque /* reflect.Value */ recv); // func (reflect.Va
 bool reflect_Value_IsValid(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).IsValid() bool
 bool regexp_Regexp_MatchString(GoOpaque /* regexp.Regexp */* recv, GoString a0); // func (*regexp.Regexp).MatchString(s string) bool
 bool strings_Contains(GoString a0, GoString a1); // func strings.Contains(s string, substr string) bool
+bool strings_ContainsAny(GoString a0, GoString a1); // func strings.ContainsAny(s string, chars string) bool
 bool strings_ContainsRune(GoString a0, i32 a1); // func strings.ContainsRune(s string, r rune) bool
 bool strings_EqualFold(GoString a0, GoString a1); // func strings.EqualFold(s string, t string) bool
 bool strings_HasPrefix(GoString a0, GoString a1); // func strings.HasPrefix(s string, prefix string) bool
 bool strings_HasSuffix(GoString a0, GoString a1); // func strings.HasSuffix(s string, suffix string) bool
-bool time_Time_After(GoOpaque /* time.Time */ recv, GoOpaque /* time.Time */ a0); // func (time.Time).After(u time.Time) bool
-bool utf8_Valid(Slice_u8 a0); // func utf8.Valid(p []byte) bool
+bool unicode_IsSpace(i32 a0); // func unicode.IsSpace(r rune) bool
 f64 math_Ldexp(f64 a0, int a1); // func math.Ldexp(frac float64, exp int) float64
 f64 math_Pow10(int a0); // func math.Pow10(n int) float64
 f64 reflect_Value_Float(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Float() float64
@@ -2071,21 +3016,23 @@ i64 time_Time_Sub(GoOpaque /* time.Time */ recv, GoOpaque /* time.Time */ a0); /
 i64 time_Time_UnixMilli(GoOpaque /* time.Time */ recv); // func (time.Time).UnixMilli() int64
 i64 time_Time_UnixNano(GoOpaque /* time.Time */ recv); // func (time.Time).UnixNano() int64
 int bits_LeadingZeros64(u64 a0); // func bits.LeadingZeros64(x uint64) int
+int bytes_Reader_Len(GoOpaque /* bytes.Reader */* recv); // func (*bytes.Reader).Len() int
+int list_List_Len(GoOpaque /* list.List */* recv); // func (*list.List).Len() int
 int reflect_Value_Len(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Len() int
 int reflect_Value_NumField(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).NumField() int
-int strings_Builder_Len(GoOpaque /* strings.Builder */* recv); // func (*strings.Builder).Len() int
 int strings_Index(GoString a0, GoString a1); // func strings.Index(s string, substr string) int
 int strings_IndexAny(GoString a0, GoString a1); // func strings.IndexAny(s string, chars string) int
 int strings_IndexByte(GoString a0, u8 a1); // func strings.IndexByte(s string, c byte) int
 int strings_IndexFunc(GoString a0, GoFunc a1); // func strings.IndexFunc(s string, f func(rune) bool) int
 int strings_LastIndex(GoString a0, GoString a1); // func strings.LastIndex(s string, substr string) int
 u32 binary_littleEndian_Uint32(GoOpaque /* binary.littleEndian */ recv, Slice_u8 a0); // func (binary.littleEndian).Uint32(b []byte) uint32
-u32 crc32_ChecksumIEEE(Slice_u8 a0); // func crc32.ChecksumIEEE(data []byte) uint32
-u64 reflect_Value_Uint(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Uint() uint64
 uintptr_t reflect_Value_Kind(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Kind() reflect.Kind
-uintptr_t reflect_Value_Pointer(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Pointer() uintptr
-void draw_Draw(GoIface a0, GoOpaque /* image.Rectangle */ a1, GoIface a2, GoOpaque /* image.Point */ a3, int a4); // func draw.Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point, op draw.Op)
-void log_Printf(GoString a0, Slice_GoIface a1); // func log.Printf(format string, v ...any)
+void beep_Mixer_Clear(GoOpaque /* beep.Mixer */* recv); // func (*beep.Mixer).Clear()
+void draw_Draw(GoIface a0, GoImageRect a1, GoIface a2, GoImagePoint a3, int a4); // func draw.Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point, op draw.Op)
+void ini_Key_SetValue(GoOpaque /* ini.Key */* recv, GoString a0); // func (*ini.Key).SetValue(v string)
+void ini_Section_DeleteKey(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).DeleteKey(name string)
+void lua_LState_RaiseError(GoOpaque /* lua.LState */* recv, GoString a0, Slice_GoIface a1); // func (*lua.LState).RaiseError(format string, args ...interface{})
+void os_Exit(int a0); // func os.Exit(code int)
 void reflect_Value_Set(GoOpaque /* reflect.Value */ recv, GoOpaque /* reflect.Value */ a0); // func (reflect.Value).Set(x reflect.Value)
 void reflect_Value_SetBool(GoOpaque /* reflect.Value */ recv, bool a0); // func (reflect.Value).SetBool(x bool)
 void reflect_Value_SetFloat(GoOpaque /* reflect.Value */ recv, f64 a0); // func (reflect.Value).SetFloat(x float64)
@@ -2096,234 +3043,356 @@ void reflect_Value_SetUint(GoOpaque /* reflect.Value */ recv, u64 a0); // func (
 void runtime_Gosched(void); // func runtime.Gosched()
 void sort_Ints(Slice_int a0); // func sort.Ints(x []int)
 void sort_Strings(Slice_GoString a0); // func sort.Strings(x []string)
-void strings_Builder_Reset(GoOpaque /* strings.Builder */* recv); // func (*strings.Builder).Reset()
 void sync_Mutex_Lock(GoOpaque /* sync.Mutex */* recv); // func (*sync.Mutex).Lock()
 void sync_Mutex_Unlock(GoOpaque /* sync.Mutex */* recv); // func (*sync.Mutex).Unlock()
 void sync_Once_Do(GoOpaque /* sync.Once */* recv, GoFunc a0); // func (*sync.Once).Do(f func())
+void sync_RWMutex_Lock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).Lock()
 void sync_RWMutex_RLock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).RLock()
 void sync_RWMutex_RUnlock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).RUnlock()
+void sync_RWMutex_Unlock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).Unlock()
 void time_Sleep(i64 a0); // func time.Sleep(d time.Duration)
 
 // package variables
 extern GoIface g_ErrLoadingCanceled;
+extern Map_GoString_int g_StringToButtonLUT;
 extern Animation* g_animReuse;
 extern Arr9_Anon_f8c1b65b g_attackTypeStrings;
+extern Anon_8aabe1e9 g_bcCompileStats;
 extern Map_u16_u64 g_bcExHist;
+extern Map_OpCode_Arr2_i8 g_bcGenMain;
+extern Map_OpCode_Arr2_i8 g_bcGenSubConst;
+extern Map_OpCode_Arr2_i8 g_bcGenSubEx;
+extern Map_OpCode_Arr2_i8 g_bcGenSubEx2;
+extern Map_OpCode_Arr2_i8 g_bcGenSubEx3;
 extern int g_bcIdxDepth;
 extern Arr256_int g_bcIdxStack;
 extern Arr256_u64 g_bcOpHist;
 extern u64 g_bcOps;
 extern Map_u16_u64 g_bcPairHist;
 extern OpCode g_bcPrevOp;
+extern Slice_u64 g_bcProfCtlOps;
+extern Slice_StateController g_bcProfCtlSc;
+extern int g_bcProfFrames;
+extern Map_bcProfKey_u64 g_bcProfMap;
+extern Map_StateBlockPtr_GoString g_bcProfNames;
+extern u64 g_bcProfStart;
 extern StateBlock* g_bcProfTop;
+extern bool g_cjitCheck;
+extern int g_cjitMismatch;
+extern int g_cjitOn;
 extern Slice_GoString g_cmdCompletedScratch;
+extern int g_cvfDebugCount;
+extern bool g_cvfDebugOn;
+extern bool g_cvfHeadless;
 extern Arr20_u64 g_cvfMPi4;
+extern cvfRulesT g_cvfRules;
 extern Arr6_f64 g_cvf_cos;
 extern Arr6_f64 g_cvf_sin;
 extern Arr3_f64 g_cvf_tanP;
 extern Arr5_f64 g_cvf_tanQ;
+extern Slice_u8 g_defaultConfig;
+extern int g_fuseFlag;
 extern Anon_dcdcacfc g_fuseStats;
 extern Renderer g_gfx;
 extern bool g_hwProf;
+extern bool g_hwProfDone;
 extern Input g_input;
 extern Tiling g_notiling;
 extern NullStateController g_nullStateController;
+extern Slice_i32 g_sdKeys;
 extern u32 g_specGen;
 extern Arr256_bool g_specialSymbolTable;
 extern Anon_ed5d50f3 g_spriteDataPool;
+extern Slice_u8 g_stateDumpBuf;
+extern GoOpaque /* os.File */* g_stateDumpF;
+extern int g_stateDumpOn;
+extern int g_stateDumpTick;
+extern GoOpaque /* bufio.Writer */* g_stateDumpW;
+extern int g_stateHashTick;
 extern System g_sys;
 extern Map_GoString_int g_triggerMap;
 extern int g_vitaHalfTick;
+extern int g_vitaStateHashOn;
 extern bool g_vitaTraceDeep;
+extern bool g_vitaTraceOn;
 void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
-#define GO_TID_P_image_NRGBA 321
-#define GO_TID_P_image_Paletted 320
-#define GO_TID_P_net_TCPAddr 279
-#define GO_TID_P_os_File 283
-#define GO_TID_P_strings_Builder 280
-#define GO_TID_binary_littleEndian 312
-#define GO_TID_reflect_Kind 324
-#define GO_TID_time_Duration 325
-GoString StateType_TriggerValue(StateType st);
-void fn_chk(GoIface err);
-void DebugClsn_Add(DebugClsn* dc, Slice_ClsnFinal boxes, f32 x, f32 y, f32 facing);
-f32 fn_RandF32(f32 min_, f32 max_);
-f64 fn_cvfExp(f64 x);
-void bgVideo_SetVisible(bgVideo* bgv, bool on);
-GoString fn_attrString(i32 attr);
-GoString fn_flagString(i32 flag);
-Ret_i32__AnimationPtr__GoIface AnimCompiler_readAction(AnimCompiler* ac);
-bool fn_vitaBCHashEnabled(void);
-i32 Fade_animLength(Fade* fa);
-void Renderer_VK_Await(Renderer_VK* r);
-bool CommandStepKey_IsDirectionRelease(CommandStepKey ck);
-StageProps fn_newStageProps(void);
-GoIface bgVideo_Open(bgVideo* bgv, GoString filename, int volume, BgVideoScaleMode sm, BgVideoScaleFilter sf, bool loop);
-void bgVideo_SetPlaying(bgVideo* bgv, bool on);
-Ret_AnimFramePtr__GoIface fn_ReadAnimFrame(GoString line);
-GoIface AnimCompiler_errorf(AnimCompiler* ac, int line, GoString format, Slice_GoIface args);
-void fn_bcProfFrame(void);
-PalFXDef fn_palFXDefDefault(void);
-void SDLSpeaker_Close(SDLSpeaker* s);
-void fn_bcProfCtl(int i, StateController sc, u64 ops);
-stageCamera* fn_newStageCamera(void);
-Animation* fn_newAnimation(Sff* sff, PaletteList* pal);
-Ret_AnimationPtr__GoIface AnimCompiler_readAnimation(AnimCompiler* ac);
-Ret_Slice_Arr4_f32__GoIface AnimCompiler_readClsn(AnimCompiler* ac, u8 clsnType, i32 size);
-i32 fn_Random(void);
-void fn_vitaBCHashLog(GoString def, int pn, CharGlobalInfo* gi, Map_i32_StateBytecodePtr states, int consoleFrom);
-GoIface CharCompiler_hitBySub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString sctrlName);
-GoIface fn_luaDoStringCached(GoOpaque /* invalid type */ l, GoString src);
-Fade* fn_newFade(void);
-void bgVideo_updateAudioVolume(bgVideo* bgv);
-void fn_ShowErrorDialog(GoString message);
-GoIface bgVideo_Tick(bgVideo* bgv);
-void Fade_reset(Fade* fa);
-scRunFn fn_scRunFunc(StateController sc);
+#define GO_TID_P_bytes_Reader 537
+#define GO_TID_P_image_NRGBA 293
+#define GO_TID_P_image_Paletted 292
+#define GO_TID_P_ini_File 494
+#define GO_TID_P_ini_Key 506
+#define GO_TID_P_ini_Section 503
+#define GO_TID_P_list_Element 392
+#define GO_TID_P_list_List 389
+#define GO_TID_P_os_File 103
+#define GO_TID_P_os_dirInfo 340
+#define GO_TID_P_os_file 328
+#define GO_TID_P_sync_Cond 1080
+#define GO_TID_P_time_Location 547
+#define GO_TID_P_time_zone 553
+#define GO_TID_P_zip_File 543
+#define GO_TID_P_zip_ReadCloser 539
+#define GO_TID_P_zip_Reader 554
+#define GO_TID_S_uint8 279
+#define GO_TID_atomic_Bool 558
+#define GO_TID_atomic_Int32 500
+#define GO_TID_atomic_Pointer[os_dirInfo] 338
+#define GO_TID_atomic_noCopy 345
+#define GO_TID_beep_Format 632
+#define GO_TID_beep_SampleRate 633
+#define GO_TID_binary_littleEndian 285
+#define GO_TID_bytes_Reader 538
+#define GO_TID_color_Palette 565
+#define GO_TID_image_NRGBA 566
+#define GO_TID_image_Paletted 562
+#define GO_TID_image_Point 564
+#define GO_TID_image_Rectangle 563
+#define GO_TID_ini_DebugFunc 497
+#define GO_TID_ini_File 495
+#define GO_TID_ini_Key 507
+#define GO_TID_ini_LoadOptions 496
+#define GO_TID_ini_NameMapper 510
+#define GO_TID_ini_Section 504
+#define GO_TID_ini_ValueMapper 511
+#define GO_TID_list_Element 391
+#define GO_TID_list_List 390
+#define GO_TID_mgl32_Mat4 736
+#define GO_TID_os_File 327
+#define GO_TID_os_dirInfo 341
+#define GO_TID_os_file 329
+#define GO_TID_poll_FD 330
+#define GO_TID_poll_SysFile 332
+#define GO_TID_poll_fdMutex 331
+#define GO_TID_poll_pollDesc 336
+#define GO_TID_reflect_Kind 297
+#define GO_TID_sync_Cond 1081
+#define GO_TID_sync_Mutex 342
+#define GO_TID_sync_Once 557
+#define GO_TID_sync_RWMutex 499
+#define GO_TID_sync_copyChecker 1083
+#define GO_TID_sync_noCopy 343
+#define GO_TID_sync_notifyList 1082
+#define GO_TID_syscall_Iovec 335
+#define GO_TID_time_Duration 320
+#define GO_TID_time_Location 548
+#define GO_TID_time_Time 546
+#define GO_TID_time_zone 550
+#define GO_TID_time_zoneTrans 552
+#define GO_TID_zip_Decompressor 556
+#define GO_TID_zip_File 544
+#define GO_TID_zip_FileHeader 545
+#define GO_TID_zip_ReadCloser 540
+#define GO_TID_zip_Reader 541
+#define GO_TID_zip_fileListEntry 560
 AnimFrame* fn_newAnimFrame(void);
-void bgVideo_Reset(bgVideo* bgv);
-void bgVideo_Close(bgVideo* bgv);
-AnimationTable AnimCompiler_finalize(AnimCompiler* ac);
-i32 fn_Rand(i32 min_, i32 max_);
-bool fn_fuseEnabled(void);
-i32 fn_hitFlagMask(GoString s);
-void WinType_SetPerfect(WinType* wt);
-void WinType_SetClutch(WinType* wt);
-void bgAction_clear(bgAction* bga);
-FightFx* fn_newFightFx(void);
-bool CommandStepKey_IsDirectionPress(CommandStepKey ck);
-void bgAction_action(bgAction* bga, bool updateTime);
-void bgVideo_MixerCleared(bgVideo* bgv);
 u64 fn_bcProfNow(void);
-i32 fn_RandI(i32 x, i32 y);
-void fn_fuseBytecode(StateBytecode* sb);
-AnimCompiler* fn_newAnimCompiler(Sff* sff, PaletteList* pal, bool log_);
-void AnimCompiler_warnf(AnimCompiler* ac, GoString format, Slice_GoIface args);
-void AnimCompiler_compileText(AnimCompiler* ac, GoString filename, GoString text);
-i32 Fade_colorFadeTime(Fade* fa, i32 animLen);
-void fn_hoistTriggers(StateBytecode* sb);
+void SDLSpeaker_Close(SDLSpeaker* s);
 bool fn_bcProfRun(Char* c, StateBytecode* sb, i32 st);
-f32 fn_RandF(f32 x, f32 y);
 CharCompiler* fn_newCharCompiler(void);
+void fn_bcProfFrame(void);
+i32 fn_Random(void);
+void bgVideo_SetPlaying(bgVideo* bgv, bool on);
+bool fn_vitaBCHashEnabled(void);
+GoString StateType_TriggerValue(StateType st);
+i32 fn_RandI(i32 x, i32 y);
+void Renderer_VK_Await(Renderer_VK* r);
+void fn_Srand(i32 s);
+void WinType_SetPerfect(WinType* wt);
+void fn_initLUTs(void);
+FightFx* fn_newFightFx(void);
 GoIface fn_loadCommonFightFx(GoString def, bool isMainThread);
-i32 fn_evalHitFlag(Slice_BytecodeExp exp_, Char* c);
-i32 fn_evalAttr(Slice_BytecodeExp exp_, Char* c, bool hitdef);
-Camera* fn_newCamera(void);
-void Camera_Reset(Camera* c);
+bool CommandStepKey_IsDirectionPress(CommandStepKey ck);
+bool fn_stateDumpEnabled(void);
+f32 fn_RandF32(f32 min_, f32 max_);
+void WinType_SetClutch(WinType* wt);
+i32 fn_cvfHeadlessMain(Slice_GoString args);
+bool CommandStepKey_IsDirectionRelease(CommandStepKey ck);
+Ret_AnimFramePtr__GoIface fn_ReadAnimFrame(GoString line);
+f32 fn_RandF(f32 x, f32 y);
+cnode fn_compileExp(BytecodeExp be);
+PalFXDef fn_palFXDefDefault(void);
+bool CommandStepKey_IsButtonRelease(CommandStepKey ck);
+bool fn_fuseEnabled(void);
+void fn_vitaBCHashLog(GoString def, int pn, CharGlobalInfo* gi, Map_i32_StateBytecodePtr states, int consoleFrom);
+f64 fn_cvfExp(f64 x);
+void fn_fuseBytecode(StateBytecode* sb);
+bool CommandStepKey_IsButtonPress(CommandStepKey ck);
+void fn_fuseBlock(StateBlock* b);
+GoIface bgVideo_Open(bgVideo* bgv, GoString filename, int volume, BgVideoScaleMode sm, BgVideoScaleFilter sf, bool loop);
+i32 fn_Rand(i32 min_, i32 max_);
+void Fade_init(Fade* fa, Fade* dest, bool isFadeIn);
+bool RollbackSystem_hijackRunMatch(RollbackSystem* rs);
+GoIface CharCompiler_hitBySub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString sctrlName);
+void fn_chk(GoIface err);
+Ret_int__int__GoString__bool fn_parseOverrideKey(GoString key);
+GoIface fn_luaDoStringCached(GoOpaque /* lua.LState */* l, GoString src);
+Fade* fn_newFade(void);
+void bgVideo_Reset(bgVideo* bgv);
+void bgVideo_updateAudioVolume(bgVideo* bgv);
+i32 Fade_animLength(Fade* fa);
+GoIface bgVideo_Tick(bgVideo* bgv);
+i32 Fade_colorFadeTime(Fade* fa, i32 animLen);
+scRunFn fn_scRunFunc(StateController sc);
+StageProps fn_newStageProps(void);
+void fn_ShowErrorDialog(GoString message);
+void Fade_reset(Fade* fa);
+void bgVideo_SetVisible(bgVideo* bgv, bool on);
+i32 Fade_duration(Fade* fa);
+void fn_hoistTriggers(StateBytecode* sb);
+Ret_OpCode__int fn_hoistGuard(BytecodeExp t);
+Ret_GoString__bool fn_parseMapKey(GoString key);
+void fn_hoistBlock(StateBlock* b);
+Ret_GoString__GoString__bool fn_parseKV(GoString s);
+Ret_bool__bool fn_parseBoolLoose(GoString s);
+GoIface xmStreamer_Close(xmStreamer* x);
+GoString fn_attrString(i32 attr);
 f32 fn_Rad(f32 f);
 PalFX* fn_newPalFX(void);
-f32 fn_Cos(f32 f);
+f64 fn_cvfExpmulti(f64 hi, f64 lo, int k);
 GoIface fn_loadFightFx(GoString def, bool isCharFX, bool isMainThread);
+bool fn_isMusicKey(GoString key);
 void PalFX_clearWithNeg(PalFX* pf, bool neg);
+int xmStreamer_Position(xmStreamer* x);
+f32 fn_Cos(f32 f);
 f32 fn_Sin(f32 f);
-i32 fn_Ceil(f32 x);
-bool fn_IsInt(GoString s);
+void PalFX_clear(PalFX* pf);
+PalFX fn_identityPalFX(void);
+GoIface xmStreamer_Seek(xmStreamer* x, int p);
+GoString fn_extractPrefixFromMusicKey(GoString key);
+int xmStreamer_Len(xmStreamer* x);
+void Fade_step(Fade* fa);
+PalFX PalFX_sample(PalFX* pf);
+cnode cparser_popFrom(cparser* p, Slice_cnode* st);
+Ret_Slice_cnode__int cparser_parse(cparser* p, int s, int e, Slice_cnode init, bool startRedir);
+cnode cparser_redirect(cparser* p, OpCode op, int* ip, int e, bool useT, Slice_cnode* st);
+void fn_fuseController(StateController sc);
+int fn_opLen(OpCode op);
+GoString fn_flagString(i32 flag);
+stageCamera* fn_newStageCamera(void);
+void fn_bcProfCtl(int i, StateController sc, u64 ops);
 f32 fn_Pow(f32 x, f32 y);
 f32 fn_Lerp(f32 x, f32 y, f32 a);
-i32 fn_Floor(f32 x);
-bool fn_IsNumeric(GoString s);
-i32 fn_Atoi(GoString str);
-bcHasher* fn_newBCHasher(void);
-void PalFX_clear(PalFX* pf);
-void bcHasher_byte1(bcHasher* h, u8 b);
-PalFX fn_identityPalFX(void);
-void bcHasher_u64(bcHasher* h, u64 v);
-void bcHasher_str(bcHasher* h, GoString s);
-f64 fn_cvfExpmulti(f64 hi, f64 lo, int k);
-void bcHasher_value(bcHasher* h, GoOpaque /* reflect.Value */ v);
-Ret_StateController__GoIface CharCompiler_hitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
+i32 fn_Ceil(f32 x);
 f64 fn_cvfLog(f64 x);
-Ret_StateController__GoIface CharCompiler_notHitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
-PalFX PalFX_sample(PalFX* pf);
-Ret_StateController__GoIface CharCompiler_assertSpecial(CharCompiler* c, IniSection is, StateControllerBase* sc);
-bool fn_cvfIsOddInt(f64 x);
-f64 fn_cvfPow(f64 x, f64 y);
-GoOpaqueVal* fn_newFnt(void);
-Ret_GoOpaqueValPtr__GoIface fn_loadFnt(GoString filename, i32 height);
+i32 fn_Floor(f32 x);
+void fn_fuseExp(BytecodeExp be);
+void fn_fuseExp1(BytecodeExp be);
+bool fn_isSimpleTrigger(OpCode t);
+bool fn_isCmp8(OpCode op);
 void fn_bcProfNameCtl(StateController sc, StateBlock* b, GoString header);
-f64 fn_Atof(GoString str);
+GoString fn_bcProfCtlName(StateController sc);
+void fn_bcProfCtlDump(u64 n);
+bool fn_vitaStateHashEnabled(void);
+void fn_vitaStateHashTick(void);
+void Fade_drawRect(Fade* fa, Arr4_i32 rect, u32 color, i32 alpha);
+BytecodeExp fn_stripPrefix(BytecodeExp t, int n);
+void Fade_draw(Fade* fa);
+Ret_GoString__Slice_GoString fn_splitMusicParamValue(GoString v);
+i32 fn_hitFlagMask(GoString s);
+bool fn_IsNumeric(GoString s);
+i32 fn_evalHitFlag(Slice_BytecodeExp exp_, Char* c);
+Camera* fn_newCamera(void);
+void Camera_Reset(Camera* c);
+GoOpaqueVal* fn_newFnt(void);
+void DebugClsn_Add(DebugClsn* dc, Slice_ClsnFinal boxes, f32 x, f32 y, f32 facing);
+Ret_StateController__GoIface CharCompiler_hitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
+i32 fn_evalAttr(Slice_BytecodeExp exp_, Char* c, bool hitdef);
 i32 fn_evalTriggerAttr(Char* c, BytecodeValue v);
 i32 fn_evalTriggerHitFlag(Char* c, BytecodeValue v);
 GoString MoveType_TriggerValue(MoveType mt);
-void fn_vitaStateHashTick(void);
-void Camera_Init(Camera* c);
-Arr4_i32 bgDrawTransform_window(bgDrawTransform* t, Arr4_i32 window, Arr2_f32 localScl);
-void Camera_ResetTracking(Camera* c);
 void DebugClsn_draw(DebugClsn* dc, u32 color, Arr2_i32 blendAlpha);
 void CharData_init(CharData* cd);
+void bgAction_clear(bgAction* bga);
+void bgVideo_MixerCleared(bgVideo* bgv);
+void bgAction_action(bgAction* bga, bool updateTime);
+GameState* fn_NewGameState(void);
+void bgVideo_Close(bgVideo* bgv);
+Slice_u8 fn_sdF(Slice_u8 b, f32 f);
+void GameState_LoadState(GameState* gs, int stateID);
+Animation* Animation_Clone(Animation* a, GameStatePool* gsp);
+Animation* Animation_CloneState(Animation* anim);
+bool fn_IsInt(GoString s);
+i32 fn_Atoi(GoString str);
+void fn_WithSpeakerLock(GoFunc f);
+Ret_StateController__GoIface CharCompiler_notHitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
+bool Fade_isActive(Fade* fa);
+Ret_StateController__GoIface CharCompiler_assertSpecial(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Slice_GoString fn_expandMusicKV(GoString key, GoString value);
+f64 fn_Atof(GoString str);
+bool fn_cvfIsOddInt(f64 x);
+Arr14_bool fn_GetKeyboardState(KeyConfig kc);
+Ret_GoOpaqueValPtr__GoIface fn_loadFnt(GoString filename, i32 height);
+f64 fn_cvfPow(f64 x, f64 y);
 void fn_cookChar(GoString cdef, int pn, CharGlobalInfo* gi);
+Arr14_bool fn_GetJoystickState(KeyConfig kc);
+Ret_GoString__int fn_iniFirstValue(GoOpaque /* ini.Key */* k);
+GoIface SwapSeeker_Seek(SwapSeeker* sw, int p);
+int SwapSeeker_Position(SwapSeeker* sw);
+int SwapSeeker_Len(SwapSeeker* sw);
+stageShaderDef fn_newStageShaderDef(void);
+backGround* fn_newBackGround(Sff* sff);
+AnimFrame AnimFrame_Clone(AnimFrame* af);
+void stageShaderDef_readShader(stageShaderDef* d, IniSection is);
+Ret_backGroundPtr__GoIface fn_readBackGround(IniSection is, backGround* link, Sff* sff, AnimationTable at, StageProps sProps, GoString def, i32 startlayer);
+GetHitVar* GetHitVar_Clone(GetHitVar* ghv);
 Arr4_Arr2_f32 fn_RectRotate(Arr4_f32 rect, Arr2_f32 pivot, f32 angle);
+SelectCharParams* fn_newSelectCharParams(void);
+void fn_specRegister(StateBlock* b, Slice_GoString all, Slice_Slice_GoString trig, Slice_i8 trexist);
+void fn_overlayUserFirstWins(GoOpaque /* ini.File */* dst, GoOpaque /* ini.File */* user);
 FSText* fn_newFSText(void);
-void CharSize_init(CharSize* cs);
 void PalFX_sinAdd(PalFX* pf, Arr3_i32* color);
 void PalFX_sinMul(PalFX* pf, Arr3_i32* color);
-void Camera_setScreenPos(Camera* c, f32 x, f32 y, f32 scl);
-void Camera_SaveRestoreTracking(Camera* c);
-void Camera_Update(Camera* c, f32 scl, f32 x, f32 y);
-void CharVelocity_init(CharVelocity* cv);
-f32 Camera_XBound(Camera* c, f32 scl, f32 x);
-f32 Camera_MinZoomScale(Camera* c);
-f32 Camera_YBound(Camera* c, f32 scl, f32 y);
-f32 Camera_BaseScale(Camera* c);
-f32 Camera_GroundLevel(Camera* c);
-void CharMovement_init(CharMovement* cm);
-Ret_f32__f32__f32 Camera_action(Camera* c, f32 x, f32 y, f32 scale, bool pause);
-bool CommandStepKey_IsButtonPress(CommandStepKey ck);
-bool CommandStepKey_IsButtonRelease(CommandStepKey ck);
-Arr14_bool fn_GetKeyboardState(KeyConfig kc);
-GoIface fn_writeReplayInput(GoIface w, InputBits ibit, Arr6_i8 axes);
-Arr14_bool fn_GetJoystickState(KeyConfig kc);
-i32 Fade_duration(Fade* fa);
-void Fade_init(Fade* fa, Fade* dest, bool isFadeIn);
-void Fade_step(Fade* fa);
-bool RollbackSystem_hijackRunMatch(RollbackSystem* rs);
-void Fade_drawRect(Fade* fa, Arr4_i32 rect, u32 color, i32 alpha);
-Ret_OpCode__int fn_hoistGuard(BytecodeExp t);
-void fn_stateDumpTickFn(void);
 Ret_bool__f32__f32 fn_RectIntersect(Arr4_f32 rect1, Arr4_f32 rect2, f32 angle1, f32 angle2, Arr2_f32 pivot1, Arr2_f32 pivot2);
 Ret_bool__f32__f32 fn_RectIntersectAABB(Arr4_f32 rect1, Arr4_f32 rect2);
 f64 fn_cvfHypot(f64 p, f64 q);
-Ret_bool__f32__f32 fn_RectIntersectSAT(Arr4_f32 rect1, Arr4_f32 rect2, Arr2_f32 pivot1, Arr2_f32 pivot2, f32 angle1, f32 angle2);
-i32 fn_F64toI32(f64 f);
-Ret_i32__bool fn_readDigit(GoString d);
-i32 fn_Btoi(bool b);
-i16 fn_I32ToI16(i32 i32);
-f64 fn_RoundFloat(f64 val, int precision);
-GoString fn_NormalizeNewlines(GoString input);
-Ret_GoString__GoIface fn_LoadText(GoString filename);
-f64 fn_cvfCos(f64 x);
-Ret_GoOpaque_invalidtypePtr__GoIface fn_LoadINIText(GoString text, GoOpaque /* invalid type */ opts);
-GoString fn_decodeShiftJIS(GoString input);
-GoString fn_FileExist(GoString filename);
-f64 fn_cvfSin(f64 x);
-GoString fn_SearchFile(GoString file, Slice_GoString dirs, Slice_GoString defaultDirs);
-Ret_StateController__GoIface CharCompiler_playSnd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoString CharCompiler_tokenizer(CharCompiler* c, GoString* in);
-int fn_indexSpecialSymbol(GoString s);
-GoIface CharCompiler_changeStateSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar);
+GoOpaqueVal* fn_getFont(Map_int_GoOpaqueValPtr f, i32 idx);
+FSText* fn_readFSText(GoString pre, IniSection is, GoString str, i16 ln, Map_int_GoOpaqueValPtr f, i32 align);
+void PalFX_sinColor(PalFX* pf, f32* color);
+void PalFX_sinHueshift(PalFX* pf, f32* color);
+bool fn_tagInsensitiveKeys(GoReflectStructField sf);
+bool fn_tagKeyFirstMap(GoReflectStructField sf);
+void Music_Append(Music m, Music other);
+void NetConnection_Close(NetConnection* nc);
+Ret_StateControllerBase__bool fn_scBase(StateController sc);
+Animation* fn_newAnimation(Sff* sff, PaletteList* pal);
+bool fn_isCmp32(OpCode op);
+OpCode fn_cmpOf8(OpCode op);
+GoOpaque /* invalid type */ fn_StringToKey(GoString s);
+AnimCompiler* fn_newAnimCompiler(Sff* sff, PaletteList* pal, bool log_);
+GoFunc fn_redirResolver(OpCode op);
+void AnimCompiler_warnf(AnimCompiler* ac, GoString format, Slice_GoIface args);
+void Music_Override(Music m, Music other);
+OpCode fn_cmpOf32(OpCode op);
+void KeyConfig_swap(KeyConfig* kc, KeyConfig* kc2);
+bool Rotation_IsZero(Rotation* r);
+GoIface AnimCompiler_errorf(AnimCompiler* ac, int line, GoString format, Slice_GoIface args);
+void AnimCompiler_compileText(AnimCompiler* ac, GoString filename, GoString text);
+AnimationTable AnimCompiler_finalize(AnimCompiler* ac);
+void Camera_Init(Camera* c);
+void FSText_SetColor(FSText* txt, i32 r, i32 g, i32 b, i32 a);
+void fn_processCommandLine(void);
+GoIface NetConnection_Stop(NetConnection* nc);
+Ret_AnimationPtr__GoIface AnimCompiler_readAnimation(AnimCompiler* ac);
+cnode cparser_simple(cparser* p, OpCode op, int* ip, int e, bool useT, Slice_cnode* st);
+cnode fn_nativeNode(OpCode op, BytecodeExp be, int start, Slice_cnode args, bool useT);
+Ret_Slice_Arr4_f32__GoIface AnimCompiler_readClsn(AnimCompiler* ac, u8 clsnType, i32 size);
+Ret_i32__AnimationPtr__GoIface AnimCompiler_readAction(AnimCompiler* ac);
 void Animation_Reset(Animation* a);
-f64 fn_cvfTan(f64 x);
 bool Animation_isBlank(Animation* a);
 bool Animation_isCommonFX(Animation* a);
 i32 Animation_AnimTime(Animation* a);
 i32 Animation_AnimElemTime(Animation* a, i32 elem);
 i32 Animation_AnimElemNo(Animation* a, i32 time_);
 i32 Animation_GetLength(Animation* a);
-void HitDef_reset(HitDef* hd, Char* c, Projectile* proj);
-GoIface fn_LoadFile(GoString* file, Slice_GoString dirs, GoString defaultDir, GoFunc load);
 AnimFrame* Animation_curFrame(Animation* a);
 AnimFrame* Animation_CurrentFrame(Animation* a);
 AnimFrame* Animation_drawFrame(Animation* a);
 void Animation_SetAnimElem(Animation* a, i32 elem, i32 elemtime);
-Ret_GoString__GoString fn_SplitPath(GoString p);
 void Animation_animSeek(Animation* a, i32 elem);
 void Animation_UpdateSprite(Animation* a);
-GoString fn_StripComment(GoString s);
-Slice_GoString fn_SplitAndTrim(GoString str, GoString sep);
-void fn_compileBlockTriggers(StateBlock* b);
-GoString fn_OldSprintf(GoString f, Slice_GoIface a);
 void Animation_UpdateInterpolation(Animation* a);
 void Animation_Action(Animation* a);
 Ret_TransType__Arr2_i32 Animation_alphaToBlend(Animation* a);
@@ -2334,15 +3403,99 @@ void Animation_ShadowDraw(Animation* a, Arr4_i32* window, f32 x, f32 y, f32 xscl
 AnimationTable fn_NewAnimationTable(void);
 Animation* AnimCompiler_compileAction(AnimCompiler* ac);
 AnimationTable fn_ReadAnimationTable(GoString filename, Sff* sff, PaletteList* pal, GoString text, bool log_);
+bool fn_cjitEnabled(void);
+void fn_compileBlockTriggers(StateBlock* b);
+bool StateBlock_evalTrigger(StateBlock* b, Char* c);
+void fn_fuseLines(BytecodeExp be);
+void Camera_ResetTracking(Camera* c);
+void Camera_setScreenPos(Camera* c, f32 x, f32 y, f32 scl);
+void Camera_SaveRestoreTracking(Camera* c);
+Ret_bool__f32__f32 fn_RectIntersectSAT(Arr4_f32 rect1, Arr4_f32 rect2, Arr2_f32 pivot1, Arr2_f32 pivot2, f32 angle1, f32 angle2);
+void CharSize_init(CharSize* cs);
+void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt);
+i32 fn_cvfGame(void);
+void FSText_step(FSText* txt);
+Slice_queryPart fn_parseQueryPath(GoString query);
+Arr4_i32 bgDrawTransform_window(bgDrawTransform* t, Arr4_i32 window, Arr2_f32 localScl);
+void Camera_Update(Camera* c, f32 scl, f32 x, f32 y);
+i32 fn_F64toI32(f64 f);
+f32 Camera_XBound(Camera* c, f32 scl, f32 x);
+f32 Camera_MinZoomScale(Camera* c);
+void fn_cvfRefresh(void);
+StringPool* fn_NewStringPool(void);
+void StringPool_Clear(StringPool* sp);
+void CharVelocity_init(CharVelocity* cv);
+Ret_i32__bool fn_readDigit(GoString d);
+i32 fn_Btoi(bool b);
+i16 fn_I32ToI16(i32 i32_);
+f64 fn_RoundFloat(f64 val, int precision);
+void FSText_resetTxtPfx(FSText* txt);
+void PalFX_refresh(PalFX* pf);
+GoString fn_normalizeMusicPrefix(GoString prefix);
+SelectStageParams* fn_newSelectStageParams(void);
+FSBgTextSnd fn_newFSBgTextSnd(void);
+FSBgTextSnd fn_readFSBgTextSnd(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
+void FSBgTextSnd_step(FSBgTextSnd* bts, GoOpaqueVal* snd);
+int Input_GetMaxJoystickCount(Input* input);
+void FSBgTextSnd_reset(FSBgTextSnd* bts);
+void FSBgTextSnd_bgDraw(FSBgTextSnd* bts, i16 layerno);
+void FSBgTextSnd_draw(FSBgTextSnd* bts, i16 layerno, Map_int_GoOpaqueValPtr f);
+Map_i32_AnimLayoutPtr fn_readMultipleValues(GoString pre, GoString name, IniSection is, Sff* sff, AnimationTable at);
+Map_f32_AnimLayoutPtr fn_readMultipleValuesF(GoString pre, GoString name, IniSection is, Sff* sff, AnimationTable at);
+bool Input_IsJoystickPresent(Input* input, int joy);
+int StringPool_Add(StringPool* sp, GoString s);
+int StringPool_add(StringPool* sp, GoString s);
+bool BytecodeValue_IsNone(BytecodeValue bv);
+bool BytecodeValue_IsUndefined(BytecodeValue bv);
+f32 BytecodeValue_ToF(BytecodeValue bv);
+i32 BytecodeValue_ToI(BytecodeValue bv);
+i64 BytecodeValue_ToI64(BytecodeValue bv);
+bool BytecodeValue_ToB(BytecodeValue bv);
+GoIface BytecodeValue_ToAny(BytecodeValue bv);
+GoString BytecodeValue_ToS(BytecodeValue bv);
+GoString BytecodeValue_toLowS(BytecodeValue bv);
+void BytecodeValue_SetF(BytecodeValue* bv, f32 f);
+void BytecodeValue_SetI(BytecodeValue* bv, i32 i);
+void PalFX_tickTimers(PalFX* pf);
+void PalFX_step(PalFX* pf);
+PalFX PalFX_stacked(PalFX base, PalFX extra, TransType blendMode, Arr2_i32 alpha);
 Animation* AnimationTable_get(AnimationTable at, i32 no);
+void BytecodeValue_SetB(BytecodeValue* bv, bool b);
+BytecodeValue fn_bvNone(void);
+BytecodeValue fn_BytecodeUndefined(void);
+BytecodeValue fn_BytecodeFloat(f32 f);
 void AnimationTable_resolveCopyAction(AnimationTable at);
 SpriteData* fn_newSpriteData(void);
 SpriteData* fn_spriteDataPoolNext(void);
-bool StateBlock_evalTrigger(StateBlock* b, Char* c);
-void StringPool_Clear(StringPool* sp);
-Ret_GoString__GoString fn_SectionName(GoString sec);
 void fn_spriteDataPoolReset(void);
 bool SpriteData_isBlank(SpriteData* sd);
+BytecodeValue fn_BytecodeInt(i32 i);
+BytecodeValue fn_BytecodeInt64(i64 i);
+BytecodeValue fn_BytecodeBool(bool b);
+BytecodeValue fn_BytecodeString(GoString s);
+TypedValue fn_TypedValueOf(BytecodeValue bv);
+BytecodeValue TypedValue_ToBV(TypedValue mv);
+f32 TypedValue_ToF(TypedValue mv);
+void BytecodeStack_Clear(BytecodeStack* bs);
+Slice_u8 fn_sdI(Slice_u8 b, i64 v);
+void fn_stateDumpTickFn(void);
+Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m);
+Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m);
+statsRollbackState StatsLog_saveRollbackState(StatsLog* s);
+void statsRollbackState_load(statsRollbackState state, StatsLog* s);
+void StatsLog_startMatch(StatsLog* s);
+void StatsLog_addRound(StatsLog* s, i32 index, i32 timer, Arr2_i32 score, Arr2_Slice_StatsFighterState fighters);
+void BytecodeStack_Push(BytecodeStack* bs, BytecodeValue bv);
+void fn_bcStackGrow(BytecodeStack* bs, BytecodeValue bv);
+void BytecodeStack_PushI(BytecodeStack* bs, i32 i);
+void BytecodeStack_PushI64(BytecodeStack* bs, i64 i);
+void BytecodeStack_PushF(BytecodeStack* bs, f32 f);
+void BytecodeStack_PushB(BytecodeStack* bs, bool b);
+void BytecodeStack_PushS(BytecodeStack* bs, GoString s);
+BytecodeValue* BytecodeStack_Top(BytecodeStack bs);
+GoString fn_NormalizeNewlines(GoString input);
+Ret_GoString__GoIface fn_LoadText(GoString filename);
+Map_i32_FSTextPtr fn_readMultipleFSText(GoString pre, GoString name, IniSection is, GoString fmtstr, i16 ln, Map_int_GoOpaqueValPtr f, i32 align);
 void DrawList_add(DrawList* dl, SpriteData* sd);
 void DrawList_draw(DrawList dl, i32 layerno, bool under, f32 cameraX, f32 cameraY, f32 cameraScl);
 ShadowSprite* fn_newShadowSprite(void);
@@ -2353,87 +3506,21 @@ void ReflectionList_add(ReflectionList* rl, ReflectionSprite* rs);
 void ReflectionList_draw(ReflectionList rl, f32 x, f32 y, f32 scl);
 Anim* fn_NewAnim(Sff* sff, GoString action);
 Anim* Anim_Copy(Anim* a);
+void Anim_SetLocalcoord(Anim* a, f32 lx, f32 ly);
 void Anim_SetPos(Anim* a, f32 x, f32 y);
 void Anim_SetScale(Anim* a, f32 xscl, f32 yscl);
 void Anim_SetWindow(Anim* a, Arr4_f32 window);
 Arr4_i32 Anim_drawWindow(Anim* a);
 void Anim_SetVelocity(Anim* a, f32 xvel, f32 yvel);
 void Anim_updateVel(Anim* a);
-Ret_f32__f32__f32 Camera_reduceZoomSpeed(Camera* c, f32 newLeft, f32 newRight, f32 newScale, f32 oldLeft, f32 oldRight, f32 oldScale);
-Ret_f32__f32 Camera_keepScreenEdge(Camera* c, f32 left, f32 right);
-Ret_f32__f32 Camera_keepStageEdge(Camera* c, f32 left, f32 right);
-void HitDef_finalizeParams(HitDef* hd, Char* c, Projectile* proj);
-Ret_f32__f32__f32 Camera_hardLimit(Camera* c, f32 left, f32 right);
-f32 Camera_reduceYScrollSpeed(Camera* c, f32 newY, f32 oldY);
-f32 Camera_boundY(Camera* c, f32 y, f32 scale);
-bool Camera_zoomEnabled(Camera* c);
-void HitDef_updateStateType(HitDef* hd, StateType stateType);
-bool HitDef_testAttr(HitDef* hd, i32 attr);
-bool HitDef_testReversalAttr(HitDef* hd, i32 attr);
-void GetHitVar_reset(GetHitVar* ghv, Char* c);
-GoString CharCompiler_toLower(CharCompiler* c, GoString s);
-Ret_StateController__GoIface CharCompiler_changeState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_selfState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoString CharCompiler_tokenizerCS(CharCompiler* _recv, GoString* in);
-int CharCompiler_isOperator(CharCompiler* _recv, GoString token);
-GoIface CharCompiler_operator(CharCompiler* c, GoString* in);
-Ret_StateController__GoIface CharCompiler_tagIn(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_tagOut(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_destroySelf(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_GoIface__GoIface Config_GetValue(Config* c, GoString query);
-Ret_u64__f64 fn_cvfTrigReduce(f64 x);
-Ret_i32__GoIface CharCompiler_integer2(CharCompiler* c, GoString* in);
-BytecodeValue CharCompiler_number(CharCompiler* c, GoString token);
-GoIface CharCompiler_changeAnimSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-bool fn_cvfClampInvincibility(Char* c, i32* time_);
-int StringPool_Add(StringPool* sp, GoString s);
-int StringPool_add(StringPool* sp, GoString s);
-bool BytecodeValue_IsNone(BytecodeValue bv);
-bool BytecodeValue_IsUndefined(BytecodeValue bv);
-f32 BytecodeValue_ToF(BytecodeValue bv);
-i32 BytecodeValue_ToI(BytecodeValue bv);
-void GetHitVar_selectiveReset(GetHitVar* ghv, Char* c);
-i64 BytecodeValue_ToI64(BytecodeValue bv);
-bool BytecodeValue_ToB(BytecodeValue bv);
-GoIface BytecodeValue_ToAny(BytecodeValue bv);
-GoString BytecodeValue_ToS(BytecodeValue bv);
-void GetHitVar_clearOff(GetHitVar* ghv);
-i32 GetHitVar_chainId(GetHitVar ghv);
-bool GetHitVar_idMatch(GetHitVar ghv, i32 id);
-GoString BytecodeValue_toLowS(BytecodeValue bv);
-void BytecodeValue_SetF(BytecodeValue* bv, f32 f);
-void BytecodeValue_SetI(BytecodeValue* bv, i32 i);
-void BytecodeValue_SetB(BytecodeValue* bv, bool b);
-BytecodeValue fn_bvNone(void);
-BytecodeValue fn_BytecodeUndefined(void);
-i32 GetHitVar_getJuggle(GetHitVar ghv, i32 id, i32 defaultJuggle);
-void GetHitVar_dropPlayerId(GetHitVar* ghv, i32 id);
-void GetHitVar_addId(GetHitVar* ghv, i32 id, i32 juggle);
-bool GetHitVar_testAttr(GetHitVar* ghv, i32 attr);
-void HitBy_clear(HitBy* hb);
-BytecodeValue fn_BytecodeFloat(f32 f);
-BytecodeValue fn_BytecodeInt(i32 i);
-void HitOverride_clear(HitOverride* ho);
-BytecodeValue fn_BytecodeInt64(i64 i);
-BytecodeValue fn_BytecodeBool(bool b);
-BytecodeValue fn_BytecodeString(GoString s);
-TypedValue fn_TypedValueOf(BytecodeValue bv);
-void MoveHitVar_clear(MoveHitVar* mhv);
-BytecodeValue TypedValue_ToBV(TypedValue mv);
-f32 TypedValue_ToF(TypedValue mv);
-AfterImage* fn_newAfterImage(void);
-void BytecodeStack_Clear(BytecodeStack* bs);
-void BytecodeStack_Push(BytecodeStack* bs, BytecodeValue bv);
-void fn_bcStackGrow(BytecodeStack* bs, BytecodeValue bv);
-void BytecodeStack_PushI(BytecodeStack* bs, i32 i);
-void BytecodeStack_PushI64(BytecodeStack* bs, i64 i);
-void AfterImage_setPalColor(AfterImage* ai, i32 color);
-void BytecodeStack_PushF(BytecodeStack* bs, f32 f);
-void BytecodeStack_PushB(BytecodeStack* bs, bool b);
-void AfterImage_setPalHueShift(AfterImage* ai, i32 huesh);
-void BytecodeStack_PushS(BytecodeStack* bs, GoString s);
-BytecodeValue* BytecodeStack_Top(BytecodeStack bs);
-void AfterImage_setPalInvertall(AfterImage* ai, bool invertall);
+void Anim_Update(Anim* a, bool force);
+void Anim_Draw(Anim* a, i16 ln);
+void Anim_Reset(Anim* a);
+i32 Anim_GetLength(Anim* a);
+PreloadedAnims fn_NewPreloadedAnims(void);
+void PreloadedAnims_addAnim(PreloadedAnims pa, Animation* anim, i32 no);
+void PreloadedAnims_addSprite(PreloadedAnims pa, Sff* sff, u16 grp, u16 idx);
+void PreloadedAnims_updateSff(PreloadedAnims pa, Sff* sff);
 BytecodeValue BytecodeStack_Pop(BytecodeStack* bs);
 void BytecodeStack_Dup(BytecodeStack* bs);
 void BytecodeStack_Swap(BytecodeStack* bs);
@@ -2496,108 +3583,9 @@ void BytecodeExp_deg(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_lerp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3);
 BytecodeValue BytecodeExp_run(BytecodeExp be, Char* c);
 BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc);
-void AfterImage_setPalInvertblend(AfterImage* ai, i32 invertblend);
-void AfterImage_setPalBrightR(AfterImage* ai, i32 addr);
-void AfterImage_setPalBrightG(AfterImage* ai, i32 addg);
-void AfterImage_setPalBrightB(AfterImage* ai, i32 addb);
-void AfterImage_setPalContrastR(AfterImage* ai, i32 mulr);
-void AfterImage_setPalContrastG(AfterImage* ai, i32 mulg);
-void AfterImage_setPalContrastB(AfterImage* ai, i32 mulb);
-void AfterImage_setup(AfterImage* ai, Char* c);
-void AfterImage_recAfterImg(AfterImage* ai, SpriteData* sd, bool hitpause);
-bool AfterImage_isActive(AfterImage* ai);
-void AfterImage_recAndCue(AfterImage* ai, SpriteData* sd, int playerNo, bool rec, bool hitpause);
-Explod* fn_newExplod(void);
-void Explod_clear(Explod* e);
-Explod* Explod_initFromChar(Explod* e, Char* c);
-Char* Explod_root(Explod* e);
-Char* Explod_parent(Explod* e);
-void Explod_setAllPosX(Explod* e, f32 x);
-void Explod_setAllPosY(Explod* e, f32 y);
-void Explod_setAllPosZ(Explod* e, f32 z);
-void Explod_setBind(Explod* e, i32 bId);
-void Explod_setPos(Explod* e, Char* c);
-bool Explod_matchId(Explod* e, i32 eid, i32 pid);
-void Explod_setAnim(Explod* e);
-void Explod_setAnimElem(Explod* e);
-bool Explod_pauseStatus(Explod* e);
-void Explod_flagForRemoval(Explod* e);
-void Explod_update(Explod* e);
-void Explod_cueDraw(Explod* e);
-void Explod_stepInterpolation(Explod* e);
-GoOpaqueVal* fn_getFont(Map_int_GoOpaqueValPtr f, i32 idx);
-bool NetConnection_isClosing(NetConnection* nc);
-FSText* fn_readFSText(GoString pre, IniSection is, GoString str, i16 ln, Map_int_GoOpaqueValPtr f, i32 align);
-void PalFX_sinColor(PalFX* pf, f32* color);
-void FSText_SetColor(FSText* txt, i32 r, i32 g, i32 b, i32 a);
-void FSText_step(FSText* txt);
-void FSText_resetTxtPfx(FSText* txt);
-void PalFX_sinHueshift(PalFX* pf, f32* color);
-void PalFX_refresh(PalFX* pf);
-void FSBgTextSnd_step(FSBgTextSnd* bts, GoOpaqueVal* snd);
-void FSBgTextSnd_reset(FSBgTextSnd* bts);
-void FSBgTextSnd_bgDraw(FSBgTextSnd* bts, i16 layerno);
-void PalFX_tickTimers(PalFX* pf);
-void FSBgTextSnd_draw(FSBgTextSnd* bts, i16 layerno, Map_int_GoOpaqueValPtr f);
-Ret_i32__i32 fn_calcBarFillRect(i32 pos, Arr2_i32 range_, f32 offset, f32 scale, f32 screenScale, f32 midPos, f32 fill);
-void LifeBar_step(LifeBar* lb, int charpn, LifeBar* lbr);
-void PalFX_step(PalFX* pf);
-i32 Fnt_CharWidth(GoOpaqueVal* f, i32 c, i32 bt);
-GoOpaqueVal* fn_newBgMusic(void);
-void NetConnection_Close(NetConnection* nc);
-void LifeBar_reset(LifeBar* lb);
-void LifeBar_bgDraw(LifeBar* lb, i16 layerno, int charpn);
-void LifeBar_draw(LifeBar* lb, i16 layerno, int charpn, LifeBar* lbr, Map_int_GoOpaqueValPtr f);
-PalFX PalFX_stacked(PalFX base, PalFX extra, TransType blendMode, Arr2_i32 alpha);
-PalFX* PalFX_withStacked(PalFX* pf, PalFX* extra, TransType blendMode, Arr2_i32 alpha);
-PalFX* PalFX_withStackedColor(PalFX* pf, f32 r, f32 g, f32 b);
-Palette* fn_newPaldata(void);
-bool fn_tagKeyFirstMap(GoOpaque /* reflect.StructField */ sf);
-Slice_queryPart fn_parseQueryPath(GoString query);
-Ret_GoOpaque_reflect_ValuePtr__GoOpaque_reflect_StructFieldPtr__bool fn_findFieldByINITag(GoOpaque /* reflect.Value */ v, GoString tag);
-void KeyConfig_swap(KeyConfig* kc, KeyConfig* kc2);
-int Input_GetMaxJoystickCount(Input* input);
-void InputBits_KeysToBits(InputBits* ibit, Arr14_bool buttons);
-Arr14_bool InputBits_BitsToKeys(InputBits ibit);
-CommandKeyRemap* fn_NewCommandKeyRemap(void);
-void Music_Append(Music m, Music other);
-void NetConnection_fail(NetConnection* nc, GoIface err);
-void Music_Override(Music m, Music other);
-GoString fn_normalizeMusicPrefix(GoString prefix);
-GoIface NetConnection_Stop(NetConnection* nc);
-InputReader* fn_NewInputReader(void);
-void InputReader_Reset(InputReader* ir);
-Arr14_bool InputReader_LocalInput(InputReader* ir, int in);
-Arr6_i8 InputReader_LocalAnalogInput(InputReader* ir, int in);
-Ret_bool__bool__bool__bool InputReader_SocdResolution(InputReader* ir, bool U, bool D, bool B, bool F);
-bool Input_IsJoystickPresent(Input* input, int joy);
-Arr6_f32 Input_GetJoystickAxes(Input* input, int joy);
-Slice_u8 Input_GetJoystickButtons(Input* input, int joy);
-GoString Input_GetJoystickGUID(Input* input, int joy);
-Ret_EnvironmentPtr__GoIface fn_loadEnvironment(GoString filepath);
-void Input_RumbleController(Input* input, int joy, u16 lo, u16 hi, u32 ticks);
-void Music_DebugDump(Music m, GoString label);
-bool NetConnection_IsConnected(NetConnection* nc);
-Ret_ModelPtr__GoIface fn_loadglTFModel(GoString filepath);
-i32 Fnt_TextWidth(GoOpaqueVal* f, GoString txt, i32 bank, i32 spacingXAdd);
-void Fnt_Print(GoOpaqueVal* f, GoString txt, f32 x, f32 y, f32 xscl, f32 yscl, f32 rxadd, Rotation rot, i32 projectionMode, f32 fLength, i32 bank, i32 align, Arr4_i32* window, PalFX* palfx, Arr4_f32 frgba);
-void fn_applyDefaultsToValue(GoOpaque /* reflect.Value */ v);
-Ret_GoString__int__int__int__int__int__f32__int Music_Read(Music m, GoString key, GoString def);
-void PaletteList_init(PaletteList* pl);
-PaletteList PaletteList_copyMap(PaletteList* pl);
-void fn_setDefaultFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoOpaque /* reflect.StructField */ fieldType, GoString defTag);
-Arr14_bool NetConnection_readNetInput(NetConnection* nc, int i);
-Arr6_i8 NetConnection_readNetInputAnalog(NetConnection* nc, int i);
-bool NetConnection_AnyButton(NetConnection* nc);
-void Anim_Update(Anim* a, bool force);
-void Anim_Draw(Anim* a, i16 ln);
-void Explod_resetInterpolation(Explod* e, PalFXDef* pfd);
-void Anim_Reset(Anim* a);
-i32 Anim_GetLength(Anim* a);
 void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i);
 void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc);
 void BytecodeExp_run_ex(BytecodeExp be, Char* c, int* i, Char* oc);
-f32 Explod_trueFacing(Explod* e);
 void BytecodeExp_run_ex2(BytecodeExp be, Char* c, int* i, Char* oc);
 void BytecodeExp_run_ex3(BytecodeExp be, Char* c, int* i, Char* oc);
 f32 BytecodeExp_evalF(BytecodeExp be, Char* c);
@@ -2622,173 +3610,6 @@ Slice_BytecodeExp StateControllerBase_iToExp(StateControllerBase _recv, Slice_i3
 Slice_BytecodeExp StateControllerBase_i64ToExp(StateControllerBase _recv, Slice_i64 i);
 void StateControllerBase_add(StateControllerBase* scb, u8 paramID, Slice_BytecodeExp exp_);
 void StateControllerBase_run(StateControllerBase scb, Char* c, GoFunc visit);
-Projectile* fn_newProjectile(void);
-void Projectile_clear(Projectile* p);
-Projectile* Projectile_initFromChar(Projectile* p, Char* c);
-void Projectile_setAllPos(Projectile* p, Arr3_f32 pos);
-void fn_hoistBlock(StateBlock* b);
-BytecodeExp fn_stripPrefix(BytecodeExp t, int n);
-GoIface xmStreamer_Close(xmStreamer* x);
-GameState* fn_NewGameState(void);
-GoIface xmStreamer_Seek(xmStreamer* x, int p);
-void GameState_LoadState(GameState* gs, int stateID);
-Animation* Animation_Clone(Animation* a, GameStatePool* gsp);
-void PaletteList_SetSource(PaletteList* pl, int i, Slice_u32 p);
-Ret_int__Slice_u32 PaletteList_NewPal(PaletteList* pl);
-Arr9_bool InputReader_ButtonAssistCheck(InputReader* ir, Arr9_bool current);
-GoIface NetConnection_Synchronize(NetConnection* nc);
-Slice_u32 PaletteList_Get(PaletteList* pl, int i);
-void PaletteList_Remap(PaletteList* pl, int source, int destination);
-void PaletteList_ResetRemap(PaletteList* pl);
-bool fn_isZeroValue(GoOpaque /* reflect.Value */ v);
-Slice_int PaletteList_GetPalMap(PaletteList* pl);
-bool PaletteList_SwapPalMap(PaletteList* pl, Slice_int* palMap);
-Slice_u8 fn_Pal32ToBytes(Slice_u32 pal);
-GoIface fn_NewTextureFromPalette(Slice_u32 pal);
-bool Sprite_isBlank(Sprite* s);
-void Music_act(Music m);
-Sprite* fn_newSprite(void);
-InputBuffer* fn_NewInputBuffer(void);
-void InputBuffer_Reset(InputBuffer* ib);
-void InputBuffer_updateInputTime(InputBuffer* ib, bool U, bool D, bool L, bool R, bool B, bool F, bool a, bool b, bool c, bool x, bool y, bool z, bool s, bool d, bool w, bool m);
-i32 InputBuffer_State(InputBuffer* __, CommandStepKey ck);
-void Fade_draw(Fade* fa);
-bool Fade_isActive(Fade* fa);
-bool Rotation_IsZero(Rotation* r);
-void ShaderTexture_clear(ShaderTexture* st);
-void ShaderTexture_step(ShaderTexture* st);
-void CustomShader_set(CustomShader* cs, GoString name, GoString key);
-GoIface RollbackSystem_preMatchSetup(RollbackSystem* rs);
-void RollbackSystem_postMatchSetup(RollbackSystem* rs);
-bool RollbackSystem_runFrame(RollbackSystem* rs);
-bool RollbackSystem_simulateFrame(RollbackSystem* rs);
-stageShaderDef fn_newStageShaderDef(void);
-Animation* Animation_CloneState(Animation* anim);
-void fn_WithSpeakerLock(GoFunc f);
-GoIface SwapSeeker_Seek(SwapSeeker* sw, int p);
-GoIface BufferSeeker_Seek(BufferSeeker* b, int p);
-backGround* fn_newBackGround(Sff* sff);
-GoIface StreamLooper_Seek(StreamLooper* b, int p);
-void fn_specRegister(StateBlock* b, Slice_GoString all, Slice_Slice_GoString trig, Slice_i8 trexist);
-AnimFrame AnimFrame_Clone(AnimFrame* af);
-statsRollbackState StatsLog_saveRollbackState(StatsLog* s);
-void statsRollbackState_load(statsRollbackState state, StatsLog* s);
-void CustomShader_clear(CustomShader* cs);
-bool RollbackSystem_updateEvents(RollbackSystem* rs);
-Ret_GoIface__GoIface Renderer_GLES32_newTexture(Renderer_GLES32* r, i32 width, i32 height, i32 depth, bool filter);
-Slice_u8 fn_getAIInputs(int player);
-CustomShaderRenderData CustomShader_renderData(CustomShader* cs, bool act);
-void InputBits_SetInputAI(InputBits* ib, int in);
-GoIface Renderer_GLES32_newSubTexture(Renderer_GLES32* r, GoIface tex, i32 width, i32 height, Arr4_f32 uvst);
-i16 fn_readI16(Slice_u8 b);
-void Texture_GLES32_SetData(Texture_GLES32* t, Slice_u8 data);
-void Texture_GLES32_SetSubData(Texture_GLES32* t, Slice_u8 data);
-i32 Texture_GLES32_GetWidth(Texture_GLES32* t);
-i32 Texture_GLES32_GetHeight(Texture_GLES32* t);
-Ret_Slice_InputBits__Slice_Arr6_i8 fn_decodeInputs(Slice_Slice_u8 buffer);
-Slice_u8 fn_writeI16(i16 i16);
-Slice_u8 fn_writeI32(i32 i32);
-Slice_u8 RollbackSystem_getInputs(RollbackSystem* rs, int player);
-Arr14_bool RollbackSystem_readRollbackInput(RollbackSystem* rs, int controller);
-Arr6_i8 RollbackSystem_readRollbackInputAnalog(RollbackSystem* rs, int controller);
-void StatsLog_startMatch(StatsLog* s);
-OverrideCharData* fn_newOverrideCharData(void);
-GameParams* fn_newGameParams(void);
-bool RollbackSystem_anyButton(RollbackSystem* rs);
-RollbackLogger fn_NewRollbackLogger(GoString timestamp);
-void RollbackLogger_logRoundSkipCheck(RollbackLogger* g, i32 fadeoutStart, bool anyButton, bool roundnotskip, bool skipEligible, bool matchEndDialogue);
-void RollbackLogger_logRoundAdvanceCheck(RollbackLogger* g, bool roundOver, bool tickFrame, bool motifEndActive, bool fightLoopEnd, bool holdPostMatch, bool canAdvance);
-void RollbackLogger_updateStateLogs(RollbackLogger* g);
-void RollbackLogger_saveStateLogs(RollbackLogger* g);
-void RollbackSession_ensureReplayFrame(RollbackSession* rs, int frame);
-void RollbackSession_RecordReplayFrame(RollbackSession* rs, i32 time_, Slice_InputBits inputs, Slice_Arr6_i8 axes);
-void RollbackSession_TruncateReplayFrom(RollbackSession* rs, i32 time_);
-void RollbackSession_SaveReplay(RollbackSession* rs);
-LoopTimer fn_NewLoopTimer(u32 fps, u32 framesToSpread);
-Bgm* fn_newBgm(void);
-void Bgm_Stop(Bgm* bgm);
-void stageShaderDef_readShader(stageShaderDef* d, IniSection is);
-void StatsLog_addRound(StatsLog* s, i32 index, i32 timer, Arr2_i32 score, Arr2_Slice_StatsFighterState fighters);
-Ret_backGroundPtr__GoIface fn_readBackGround(IniSection is, backGround* link, Sff* sff, AnimationTable at, StageProps sProps, GoString def, i32 startlayer);
-GetHitVar* GetHitVar_Clone(GetHitVar* ghv);
-AfterImage* AfterImage_Clone(AfterImage* ai, GameStatePool* gsp);
-void GameState_SaveState(GameState* gs, int stateID);
-GoString TeamMode_TriggerValue(TeamMode tm);
-StatsMatch* StatsLog_currentStatsMatch(StatsLog* s);
-Explod* Explod_Clone(Explod* e, GameStatePool* gsp);
-Projectile* Projectile_clone(Projectile* p, GameStatePool* gsp);
-StateState StateState_Clone(StateState* ss);
-void StatsLog_discardCurrentMatch(StatsLog* s);
-void StatsLog_nextRound(StatsLog* s);
-void StoryboardManager_add(StoryboardManager* m, Storyboard* s);
-void StoryboardManager_update(StoryboardManager* m);
-void StoryboardManager_step(StoryboardManager* m);
-void Window_SwapBuffers(Window* w);
-Ret_int__int Window_GetSize(Window* w);
-void Bgm_Open(Bgm* bgm, GoString filename, int loop, int bgmVolume, int bgmLoopStart, int bgmLoopEnd, int startPosition, f32 freqmul, int loopcount);
-RemapPreset fn_cloneRemapPreset(RemapPreset src, GameStatePool* gsp);
-void StoryboardManager_remove(StoryboardManager* m, i32 ownerID, i32 id);
-void fn_specChar(Char* c);
-void fn_specRound(void);
-Char Char_Clone(Char* c, GameStatePool* gsp);
-void CommandList_CopyTo(CommandList* src, CommandList* dst);
-void GameState_savePalFX(GameState* gs);
-void GameState_saveCharData(GameState* gs, GameStatePool* gsp);
-void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp);
-void GameState_saveExplodData(GameState* gs, GameStatePool* gsp);
-void GameState_saveCharTextData(GameState* gs);
-void GameState_loadPalFX(GameState* gs);
-void GameState_loadCharData(GameState* gs, GameStatePool* gsp);
-void StoryboardManager_clear(StoryboardManager* m, int playerNo);
-void StoryboardManager_clearSound(StoryboardManager* m);
-Ret_StoryboardPtr__GoIface fn_loadStoryboard(GoString def);
-GoString fn_itoa(int i);
-void Window_UpdateDebugFPS(Window* w);
-OverrideCharData* GameParams_ensureOverride(GameParams* p, int team, int member);
-void backGround_reset(backGround* bg);
-void fn_vitaTrace(GoString s);
-void Bgm_SetPaused(Bgm* bgm, bool pause);
-void Bgm_UpdateVolume(Bgm* bgm);
-void Bgm_SetFreqMul(Bgm* bgm, f32 freqmul);
-void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp);
-void GameState_loadExplodData(GameState* gs, GameStatePool* gsp);
-void fn_vitaMem(GoString tag);
-void GameState_loadCharTextData(GameState* gs);
-void Window_pollEvents(Window* w);
-bool GameState_stageCanMutate(GameState* gs);
-GoString GameState_String(GameState* gs);
-CharList CharList_Clone(CharList* cl, GameStatePool* gsp);
-void Bgm_SetLoopPoints(Bgm* bgm, int bgmLoopStart, int bgmLoopEnd);
-void backGround_changeAnim(backGround* bg, i32 animNo, AnimationTable table);
-PalFX* PalFX_Clone(PalFX* pf);
-bool Window_shouldClose(Window* w);
-void backGround_draw(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip);
-void backGround_drawTransformed(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip, bgDrawTransform* transform);
-Command Command_clone(Command* c);
-void Bgm_Seek(Bgm* bgm, int positionSample);
-void fn_vitaPerfBegin(void);
-void fn_vitaPerfEnd(int i);
-void fn_vitaPerfTick(bool skipped);
-GoString Char_String(Char cs);
-CommandList CommandList_Clone(CommandList* cl);
-Animation* fightScreenAnimationStateCloner_clone(fightScreenAnimationStateCloner* cl, Animation* anim);
-AnimTextSnd fightScreenAnimationStateCloner_cloneAnimTextSnd(fightScreenAnimationStateCloner* cl, AnimTextSnd src);
-FightScreenRound* FightScreenRound_Clone(FightScreenRound* ro);
-GameStatePool fn_NewGameStatePool(void);
-GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item);
-bool Window_Focused(Window* w);
-void Window_Close(Window* w);
-void fn_vitaDiagFrame(void);
-bool fn_vitaDiagSkip(int part);
-FightScreen FightScreen_Clone(FightScreen* fs);
-bool fn_vitaDrawCensusDue(void);
-bool System_middleOfMatch(System* s);
-bool System_skipMotifScaling(System* s);
-void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 layerno);
-f32 System_getFightAspect(System* s);
-f32 System_getMotifAspect(System* s);
-f32 System_getCurrentAspect(System* s);
-drawAspectState fn_aspectStateForSize(i32 w, i32 h);
 bool StateControllerBase_hasParam(StateControllerBase scb, u8 paramID);
 Char* fn_getRedirectedChar(Char* c, StateControllerBase sc, u8 redirectID, GoString scname);
 void stateDef_Run(stateDef sc, Char* c);
@@ -2893,6 +3714,561 @@ bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1);
 bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1);
 bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1);
 bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1);
+GoIface BufferSeeker_Seek(BufferSeeker* b, int p);
+int BufferSeeker_Position(BufferSeeker* b);
+int BufferSeeker_Len(BufferSeeker* b);
+int StreamLooper_Len(StreamLooper* b);
+AfterImage* AfterImage_Clone(AfterImage* ai, GameStatePool* gsp);
+void Window_SwapBuffers(Window* w);
+int StreamLooper_Position(StreamLooper* b);
+void GameState_SaveState(GameState* gs, int stateID);
+GoString TeamMode_TriggerValue(TeamMode tm);
+StatsMatch* StatsLog_currentStatsMatch(StatsLog* s);
+Explod* Explod_Clone(Explod* e, GameStatePool* gsp);
+Projectile* Projectile_clone(Projectile* p, GameStatePool* gsp);
+void StatsLog_discardCurrentMatch(StatsLog* s);
+void StatsLog_nextRound(StatsLog* s);
+void StoryboardManager_add(StoryboardManager* m, Storyboard* s);
+void StoryboardManager_update(StoryboardManager* m);
+void StoryboardManager_step(StoryboardManager* m);
+GoIface StreamLooper_Seek(StreamLooper* b, int p);
+StateState StateState_Clone(StateState* ss);
+Ret_int__int Window_GetSize(Window* w);
+f32 Camera_YBound(Camera* c, f32 scl, f32 y);
+f32 Camera_BaseScale(Camera* c);
+f64 fn_cvfCos(f64 x);
+f32 Camera_GroundLevel(Camera* c);
+void CharMovement_init(CharMovement* cm);
+Ret_GoOpaque_ini_FilePtrPtr__GoIface fn_LoadINIText(GoString text, GoIniLoadOptions opts);
+Ret_ConfigPtr__GoIface fn_loadConfig(GoString def);
+Ret_f32__f32__f32 Camera_action(Camera* c, f32 x, f32 y, f32 scale, bool pause);
+Ret_f32__f32__f32 Camera_reduceZoomSpeed(Camera* c, f32 newLeft, f32 newRight, f32 newScale, f32 oldLeft, f32 oldRight, f32 oldScale);
+Ret_GoOpaque_ini_FilePtrPtr__GoString__GoIface fn_LoadINIFile(GoString filename, GoIniLoadOptions opts);
+GoString fn_decodeShiftJIS(GoString input);
+Ret_f32__f32 Camera_keepScreenEdge(Camera* c, f32 left, f32 right);
+Ret_f32__f32 Camera_keepStageEdge(Camera* c, f32 left, f32 right);
+void HitDef_reset(HitDef* hd, Char* c, Projectile* proj);
+void HitDef_finalizeParams(HitDef* hd, Char* c, Projectile* proj);
+Ret_f32__f32__f32 Camera_hardLimit(Camera* c, f32 left, f32 right);
+f32 Camera_reduceYScrollSpeed(Camera* c, f32 newY, f32 oldY);
+f32 Camera_boundY(Camera* c, f32 y, f32 scale);
+bool Camera_zoomEnabled(Camera* c);
+void HitDef_updateStateType(HitDef* hd, StateType stateType);
+GoString fn_FileExist(GoString filename);
+Ret_StateController__GoIface CharCompiler_playSnd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+f64 fn_cvfSin(f64 x);
+void Config_initStruct(Config* c);
+void Config_normalize(Config* c);
+GoString fn_SearchFile(GoString file, Slice_GoString dirs, Slice_GoString defaultDirs);
+GoString CharCompiler_tokenizer(CharCompiler* c, GoString* in);
+int fn_indexSpecialSymbol(GoString s);
+GoIface CharCompiler_changeStateSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+f64 fn_cvfTan(f64 x);
+GoIface fn_LoadFile(GoString* file, Slice_GoString dirs, GoString defaultDir, GoFunc load);
+Ret_GoString__GoString fn_SplitPath(GoString p);
+GoString fn_StripComment(GoString s);
+Slice_GoString fn_SplitAndTrim(GoString str, GoString sep);
+GoString fn_OldSprintf(GoString f, Slice_GoIface a);
+Ret_GoString__GoString fn_SectionName(GoString sec);
+bool fn_HasExtension(GoString file, GoString ext);
+Arr3_u16 fn_ParseIkemenVersion(GoString versionStr);
+GoString CharCompiler_toLower(CharCompiler* c, GoString s);
+GoString CharCompiler_tokenizerCS(CharCompiler* _recv, GoString* in);
+int CharCompiler_isOperator(CharCompiler* _recv, GoString token);
+GoIface CharCompiler_operator(CharCompiler* c, GoString* in);
+Ret_i32__GoIface CharCompiler_integer2(CharCompiler* c, GoString* in);
+Ret_StateController__GoIface CharCompiler_changeState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_selfState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_tagIn(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_tagOut(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void Config_sysSet(Config* c);
+Ret_StateController__GoIface CharCompiler_destroySelf(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_changeAnimSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_GoIface__GoIface Config_GetValue(Config* c, GoString query);
+GoIface Config_SetValueUpdate(Config* c, GoString query, GoIface value);
+GoIface Config_Save(Config* c, GoString file);
+Ret_i32__i32 fn_calcBarFillRect(i32 pos, Arr2_i32 range_, f32 offset, f32 scale, f32 screenScale, f32 midPos, f32 fill);
+LifeBar* fn_newLifeBar(void);
+LifeBar* fn_readLifeBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void LifeBar_step(LifeBar* lb, int charpn, LifeBar* lbr);
+bool HitDef_testAttr(HitDef* hd, i32 attr);
+bool HitDef_testReversalAttr(HitDef* hd, i32 attr);
+void GetHitVar_reset(GetHitVar* ghv, Char* c);
+void GetHitVar_selectiveReset(GetHitVar* ghv, Char* c);
+void GetHitVar_clearOff(GetHitVar* ghv);
+Arr2_u16 fn_ParseMugenVersion(GoString versionStr);
+GoString Error_Error(Error e);
+void fn_LogMessage(GoString format, Slice_GoIface a);
+IniSection fn_NewIniSection(void);
+PalFX* PalFX_withStacked(PalFX* pf, PalFX* extra, TransType blendMode, Arr2_i32 alpha);
+PalFX* PalFX_withStackedColor(PalFX* pf, f32 r, f32 g, f32 b);
+Palette* fn_newPaldata(void);
+void PaletteList_init(PaletteList* pl);
+PaletteList PaletteList_copyMap(PaletteList* pl);
+void PaletteList_SetSource(PaletteList* pl, int i, Slice_u32 p);
+Ret_int__Slice_u32 PaletteList_NewPal(PaletteList* pl);
+Slice_u32 PaletteList_Get(PaletteList* pl, int i);
+void PaletteList_Remap(PaletteList* pl, int source, int destination);
+void PaletteList_ResetRemap(PaletteList* pl);
+IniSection fn_resolveLifebarPrefixOperators(IniSection is, GoString targetPrefix, GoString prefixBase);
+Ret_IniSection__GoString__GoString fn_ReadIniSection(Slice_GoString lines, int* i);
+void IniSection_Parse(IniSection is, Slice_GoString lines, int* i);
+GoIface IniSection_LoadFile(IniSection is, GoString name, Slice_GoString dirs, GoString defaultDir, GoFunc load);
+bool IniSection_ReadI32(IniSection is, GoString name, Slice_i32Ptr out);
+bool IniSection_ReadF32(IniSection is, GoString name, Slice_f32Ptr out);
+bool IniSection_ReadBool(IniSection is, GoString name, Slice_boolPtr out);
+bool IniSection_readI32ForStage(IniSection is, GoString name, Slice_i32Ptr out);
+bool IniSection_readI32ForStageMinLength(IniSection is, GoString name, Slice_i32Ptr out);
+bool IniSection_readF32ForStage(IniSection is, GoString name, Slice_f32Ptr out);
+Slice_i32 IniSection_readI32CsvForStage(IniSection is, GoString name);
+Ret_GoIface__bool__GoIface IniSection_ReadAutoType(IniSection is, GoString name);
+GoIface IniSection_ReadAutoTypeMap(IniSection is, Map_GoString_TypedValue dst, GoString kind);
+Ret_GoString__bool__GoIface IniSection_getText(IniSection is, GoString name);
+Layout* fn_newLayout(i16 ln);
+Layout* fn_ReadLayout(GoString pre, IniSection is, i16 ln);
+void Layout_Read(Layout* l, GoString pre, IniSection is);
+Arr4_i32 Layout_calcLBRect(Layout* l, Arr4_i32 window);
+void Layout_DrawFaceSprite(Layout* l, f32 x, f32 y, i16 ln, Sprite* s, PalFX* fx, f32 fscale, Arr4_i32* window);
+void Layout_DrawAnim(Layout* l, Arr4_i32* r, f32 x, f32 y, f32 scl, f32 xscl, f32 yscl, i16 ln, Animation* a, PalFX* palfx);
+i32 GetHitVar_chainId(GetHitVar ghv);
+bool GetHitVar_idMatch(GetHitVar ghv, i32 id);
+i32 GetHitVar_getJuggle(GetHitVar ghv, i32 id, i32 defaultJuggle);
+void GetHitVar_dropPlayerId(GetHitVar* ghv, i32 id);
+void GetHitVar_addId(GetHitVar* ghv, i32 id, i32 juggle);
+bool GetHitVar_testAttr(GetHitVar* ghv, i32 attr);
+void HitBy_clear(HitBy* hb);
+void HitOverride_clear(HitOverride* ho);
+void MoveHitVar_clear(MoveHitVar* mhv);
+void Layout_DrawText(Layout* l, f32 x, f32 y, f32 scl, i16 ln, GoString text, GoOpaqueVal* f, i32 b, i32 a, PalFX* palfx, Arr4_f32 frgba);
+AnimLayout fn_newAnimLayout(Sff* sff, i16 ln);
+AnimLayout fn_ReadAnimLayout(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln);
+void AnimLayout_Read(AnimLayout* al, GoString pre, IniSection is, AnimationTable at, i16 ln);
+void AnimLayout_Reset(AnimLayout* al);
+void AnimLayout_Action(AnimLayout* al);
+bool AnimLayout_HasAnim(AnimLayout* al);
+void AnimLayout_Draw(AnimLayout* al, f32 x, f32 y, i16 layerno, f32 scale);
+void fn_ReadPalFX(GoString pre, IniSection is, PalFX* pfx);
+AfterImage* fn_newAfterImage(void);
+void AfterImage_setPalColor(AfterImage* ai, i32 color);
+void AfterImage_setPalHueShift(AfterImage* ai, i32 huesh);
+void AfterImage_setPalInvertall(AfterImage* ai, bool invertall);
+void AfterImage_setPalInvertblend(AfterImage* ai, i32 invertblend);
+void AfterImage_setPalBrightR(AfterImage* ai, i32 addr);
+void AfterImage_setPalBrightG(AfterImage* ai, i32 addg);
+AnimTextSnd* fn_newAnimTextSnd(Sff* sff, i16 ln);
+Ret_u64__f64 fn_cvfTrigReduce(f64 x);
+cvfRulesT* fn_cvfRulesLoad(void);
+void LifeBar_reset(LifeBar* lb);
+void LifeBar_bgDraw(LifeBar* lb, i16 layerno, int charpn);
+bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
+void LifeBar_draw(LifeBar* lb, i16 layerno, int charpn, LifeBar* lbr, Map_int_GoOpaqueValPtr f);
+void AfterImage_setPalBrightB(AfterImage* ai, i32 addb);
+AnimTextSnd* fn_ReadAnimTextSnd(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
+void AfterImage_setPalContrastR(AfterImage* ai, i32 mulr);
+void AnimTextSnd_Read(AnimTextSnd* ats, GoString pre, IniSection is, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
+void AfterImage_setPalContrastG(AfterImage* ai, i32 mulg);
+void AfterImage_setPalContrastB(AfterImage* ai, i32 mulb);
+void AfterImage_setup(AfterImage* ai, Char* c);
+void AfterImage_recAfterImg(AfterImage* ai, SpriteData* sd, bool hitpause);
+bool AfterImage_isActive(AfterImage* ai);
+void AnimTextSnd_Reset(AnimTextSnd* ats);
+void AnimTextSnd_Action(AnimTextSnd* ats);
+void AnimTextSnd_Draw(AnimTextSnd* ats, f32 x, f32 y, i16 layerno, Map_int_GoOpaqueValPtr f, f32 scale);
+bool AnimTextSnd_HasDrawable(AnimTextSnd* ats);
+bool AnimTextSnd_End(AnimTextSnd* ats, i32 dt, bool inf);
+bool fn_compareNatural(GoString a, GoString b);
+Ret_bool__GoString__GoString fn_IsZipPath(GoString path);
+void AfterImage_recAndCue(AfterImage* ai, SpriteData* sd, int playerNo, bool rec, bool hitpause);
+Explod* fn_newExplod(void);
+void Explod_clear(Explod* e);
+Explod* Explod_initFromChar(Explod* e, Char* c);
+Char* Explod_root(Explod* e);
+Char* Explod_parent(Explod* e);
+void Explod_setAllPosX(Explod* e, f32 x);
+void Explod_setAllPosY(Explod* e, f32 y);
+void Explod_setAllPosZ(Explod* e, f32 z);
+void Explod_setBind(Explod* e, i32 bId);
+void Explod_setPos(Explod* e, Char* c);
+bool Explod_matchId(Explod* e, i32 eid, i32 pid);
+void Explod_setAnim(Explod* e);
+Ret_int__GoIface zipMemFileReader_Read(zipMemFileReader* zmfr, Slice_u8 p);
+Ret_i64__GoIface zipMemFileReader_Seek(zipMemFileReader* zmfr, i64 offset, int whence);
+GoIface zipMemFileReader_Close(zipMemFileReader* zmfr);
+GoString fn_joinSearchPath(GoString base, GoString name);
+Ret_GoIface__GoIface fn_OpenFile(GoString filename);
+Ret_int__GoIface vitaBufFile_Read(vitaBufFile* b, Slice_u8 p);
+Ret_i64__GoIface vitaBufFile_Seek(vitaBufFile* b, i64 offset, int whence);
+GoIface vitaBufFile_Close(vitaBufFile* b);
+GoString fn_LowercaseNoExtension(GoString filename);
+void fn_SafeGo(GoFunc f);
+void Explod_setAnimElem(Explod* e);
+bool Explod_pauseStatus(Explod* e);
+BytecodeValue CharCompiler_number(CharCompiler* c, GoString token);
+bool fn_cvfClampInvincibility(Char* c, i32* time_);
+TextSprite* fn_NewTextSprite(void);
+bool fn_numberCandidate(GoString token);
+Ret_i32__GoIface CharCompiler_attr(CharCompiler* c, GoString text, bool hitdef);
+Ret_i32__GoIface fn_attrMask(GoString text, bool hitdef, bool strict, GoFunc warn);
+Ret_StateController__GoIface CharCompiler_changeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_changeAnim2(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_helper(CharCompiler* c, IniSection is, StateControllerBase* sc);
+f64 fn_cvfXatan(f64 x);
+f64 fn_cvfSatan(f64 x);
+f64 fn_cvfAtan(f64 x);
+f64 fn_cvfAsin(f64 x);
+f64 fn_cvfAcos(f64 x);
+f64 fn_cvfAtan2(f64 y, f64 x);
+i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v);
+void TextSprite_Clear(TextSprite* ts);
+void fn_cvfDebugf(GoString format, Slice_GoIface args);
+void TextSprite_SetLocalcoordChar(TextSprite* ts, Arr2_i32 lc);
+void TextSprite_SetPos(TextSprite* ts, f32 x, f32 y);
+void TextSprite_SetScale(TextSprite* ts, f32 xscl, f32 yscl);
+void TextSprite_ApplyScaleRatio(TextSprite* ts);
+Ret_i32__GoIface CharCompiler_trgAttr(CharCompiler* c, GoString* in);
+bool fn_isAttrLiteral(GoString tok);
+bool fn_isHitFlagLiteral(GoString tok);
+GoIface CharCompiler_checkOpeningParenthesis(CharCompiler* c, GoString* in);
+GoIface CharCompiler_checkOpeningParenthesisCS(CharCompiler* c, GoString* in);
+GoIface CharCompiler_checkClosingParenthesis(CharCompiler* c);
+Ret_bool__GoIface CharCompiler_checkEquality(CharCompiler* c, GoString* in);
+Ret_OpCode__OpCode__i32__i32__GoIface CharCompiler_intRange(CharCompiler* c, GoString* in);
+Ret_StateController__GoIface CharCompiler_ctrlSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_runState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+PowerBar* fn_newPowerBar(void);
+void TextSprite_SetColor(TextSprite* ts, i32 r, i32 g, i32 b, i32 a);
+void TextSprite_SetVelocity(TextSprite* ts, f32 xvel, f32 yvel);
+void CharCompiler_compareValues(CharCompiler* c, bool _range, GoString* in);
+GoIface CharCompiler_explodSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_evaluateComparison(CharCompiler* c, BytecodeExp* out, GoString* in, bool required);
+Ret_BytecodeValue__GoIface CharCompiler_oneArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
+Ret_BytecodeValue__BytecodeValue__GoIface CharCompiler_twoOptArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
+Ret_BytecodeValue__GoIface CharCompiler_mathFunc(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, OpCode oc, GoFunc f);
+Ret_GoString__GoIface CharCompiler_readOldProjectileID(CharCompiler* c, GoString* in, GoString trname, int baseLen, BytecodeExp* out);
+Ret_i32__GoIface CharCompiler_parseOldAnimElemStyle(CharCompiler* c, GoString* in, GoString name);
+Ret_BytecodeValue__GoIface CharCompiler_expValue(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
+GoIface CharCompiler_explodInterpolate(CharCompiler* c, IniSection is, StateControllerBase* sc);
+expValueFrame* CharCompiler_getFrame(CharCompiler* c);
+GoIface CharCompiler_expVar(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool isSys, bool isF);
+PowerBar* fn_readPowerBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void PowerBar_step(PowerBar* pb, int charpn, PowerBar* pbr, GoOpaqueVal* snd);
+void PowerBar_reset(PowerBar* pb);
+void PowerBar_bgDraw(PowerBar* pb, i16 layerno, int charpn);
+void PowerBar_draw(PowerBar* pb, i16 layerno, int charpn, PowerBar* pbr, Map_int_GoOpaqueValPtr f);
+GuardBar* fn_newGuardBar(void);
+GuardBar* fn_readGuardBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void TextSprite_SetMaxDist(TextSprite* ts, f32 x, f32 y);
+void TextSprite_SetAccel(TextSprite* ts, f32 xacc, f32 yacc);
+void TextSprite_Update(TextSprite* ts);
+void TextSprite_draw(TextSprite* ts, i16 ln, Arr4_i32* clip);
+Slice_int PaletteList_GetPalMap(PaletteList* pl);
+bool PaletteList_SwapPalMap(PaletteList* pl, Slice_int* palMap);
+Slice_u8 fn_Pal32ToBytes(Slice_u32 pal);
+GoIface fn_NewTextureFromPalette(Slice_u32 pal);
+Ret_Slice_u32__GoIface fn_readActPalette(GoString filename);
+bool Sprite_isBlank(Sprite* s);
+Sprite* fn_newSprite(void);
+void Sprite_shareCopy(Sprite* s, Sprite* src);
+Slice_u32 Sprite_GetPal(Sprite* s, PaletteList* pl);
+GoIface Sprite_GetPalTex(Sprite* s, PaletteList* pl);
+void Sprite_SetPxl(Sprite* s, Slice_u8 px);
+void Sprite_SetRaw(Sprite* s, Slice_u8 data, i32 sprWidth, i32 sprHeight, i32 sprDepth);
+GoIface Sprite_readHeader(Sprite* s, GoIface r, u32* ofs, u32* size, u16* link);
+GoIface Sprite_readPcxHeader(Sprite* s, GoIface r, i64 offset);
+Slice_u8 Sprite_RlePcxDecode(Sprite* s, Slice_u8 rle);
+GoIface Sprite_read(Sprite* s, GoIface f, SffHeader* sh, i64 offset, u32 datasize, u32 nextSubheader, Sprite* prev, PaletteList* pl, bool isCharFirstSprite);
+GoIface Sprite_readHeaderV2(Sprite* s, GoIface r, u32* ofs, u32* size, u32 lofs, u32 tofs, u16* link);
+Slice_u8 Sprite_Rle8Decode(Sprite* s, Slice_u8 rle);
+Slice_u8 Sprite_Rle5Decode(Sprite* s, Slice_u8 rle);
+Slice_u8 Sprite_Lz5Decode(Sprite* s, Slice_u8 rle);
+GoIface Sprite_readV2(Sprite* s, GoIface f, i64 offset, u32 datasize);
+GoIface Sprite_CachePalTex(Sprite* s, Slice_u32 pal);
+void Sprite_Draw(Sprite* s, f32 x, f32 y, f32 xscale, f32 yscale, f32 rxadd, Rotation rot, i32 projectionMode, f32 fLength, PalFX* fx, Arr4_i32* window);
+GoIface CharCompiler_expText(CharCompiler* c, GoString* in);
+Ret_StateController__GoIface CharCompiler_explod(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface SffHeader_Read(SffHeader* sh, GoIface r, u32* lofs, u32* tofs);
+GoIface CharCompiler_eqne(CharCompiler* c, GoString* in, GoFunc f);
+void GuardBar_step(GuardBar* gb, int charpn, GuardBar* gbr, GoOpaqueVal* snd);
+Ret_StateController__GoIface CharCompiler_modifyExplod(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_flagTrigger(CharCompiler* c, BytecodeExp* out, GoString* in, GoFunc pushSelf, GoFunc tryKeyword);
+Ret_StateController__GoIface CharCompiler_gameMakeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_i32__GoIface CharCompiler_flagSub(CharCompiler* c, GoString* in);
+GoIface CharCompiler_posSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void GuardBar_reset(GuardBar* gb);
+void GuardBar_bgDraw(GuardBar* gb, i16 layerno, int charpn);
+Sff* fn_newSff(SffType sffType);
+GoIface CharCompiler_flagRHS(CharCompiler* c, GoString* in);
+bool CharCompiler_nextIsEqne(CharCompiler* c, GoString* in);
+Ret_StateController__GoIface CharCompiler_posSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_BytecodeExp__GoIface CharCompiler_parseStringExp(CharCompiler* c, GoString* in);
+Ret_i32__BytecodeExp__bool__GoIface CharCompiler_parseAttrComparison(CharCompiler* c, GoString* in, bool allowExpr, bool tolerateMalformed);
+void GuardBar_draw(GuardBar* gb, i16 layerno, int charpn, GuardBar* gbr, Map_int_GoOpaqueValPtr f);
+Ret_i32__BytecodeExp__bool__GoIface CharCompiler_parseHitFlagComparison(CharCompiler* c, GoString* in);
+void CharCompiler_emitAttrOrHitFlagTest(CharCompiler* c, BytecodeExp* out, bool rd, i32 value, BytecodeExp stringExp, bool not, Slice_OpCode ops);
+Ret_StateController__GoIface CharCompiler_posAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Sff* fn_findActiveSff(GoString filename);
+Ret_StateController__GoIface CharCompiler_velSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_velAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_velMul(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyShadow(CharCompiler* c, IniSection is, StateControllerBase* sc);
+bool fn_loadingCanceled(void);
+Ret_SffPtr__GoIface fn_loadSff(GoString filename, SffType sffType, bool isMainThread, bool isActPal);
+Ret_BytecodeValue__GoIface CharCompiler_expValueSub(CharCompiler* c, expValueFrame* f, BytecodeExp* out, GoString* in, bool rd);
+Ret_StateController__GoIface CharCompiler_modifyReflection(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_palFXSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
+Ret_StateController__GoIface CharCompiler_palFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_allPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_bgPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_afterImageSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
+StunBar* fn_newStunBar(void);
+StunBar* fn_readStunBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void StunBar_step(StunBar* sb, int charpn, StunBar* sbr, GoOpaqueVal* snd);
+void StunBar_reset(StunBar* sb);
+void StunBar_bgDraw(StunBar* sb, i16 layerno, int charpn);
+void sffv1PalState_update(sffv1PalState* p, Sprite* sprite, u8 ps, u32 xofs);
+Ret_Slice_u32__GoIface fn_readSffv1Palette(GoIface f, GoFunc read, i64 offset);
+Ret_SffPtr__Slice_i32__GoIface fn_preloadSff(GoString filename, SffType sffType, Map_Arr2_u16_bool preloadSpr);
+void StunBar_draw(StunBar* sb, i16 layerno, int charpn, StunBar* sbr, Map_int_GoOpaqueValPtr f);
+FightScreenFace* fn_newFightScreenFace(void);
+FightScreenFace* fn_readFightScreenFace(GoString pre, IniSection is, Sff* sff, AnimationTable at);
+Ret_StateController__GoIface CharCompiler_afterImage(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_afterImageTime(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface Sff_loadPalettes(Sff* s, GoIface f, u32 lofs);
+GoIface CharCompiler_parseAttrExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, bool hitdef);
+void FightScreenFace_step(FightScreenFace* fa, int charpn, FightScreenFace* refFace);
+GoIface CharCompiler_parseHitFlag(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
+GoIface CharCompiler_parseHitFlagExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
+GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreenFace_reset(FightScreenFace* fa);
+void FightScreenFace_bgDraw(FightScreenFace* fa, i16 layerno);
+void FightScreenFace_draw(FightScreenFace* fa, i16 layerno, int charpn, FightScreenFace* refFace);
+Ret_Slice_u32__GoIface Sff_ReadPalette(Sff* s, GoIface f, i64 offset, u32 size);
+Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findFieldByINITag(GoOpaque /* reflect.Value */ v, GoString tag);
+CommandKeyRemap* fn_NewCommandKeyRemap(void);
+Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findMapFieldWithTag(GoOpaque /* reflect.Value */ v, GoString tag);
+InputReader* fn_NewInputReader(void);
+void InputReader_Reset(InputReader* ir);
+Arr14_bool InputReader_LocalInput(InputReader* ir, int in);
+Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findDefaultField(GoOpaque /* reflect.Value */ v);
+void fn_initMaps(GoOpaque /* reflect.Value */ v);
+Ret_bool__bool__bool__bool InputReader_SocdResolution(InputReader* ir, bool U, bool D, bool B, bool F);
+void fn_applyDefaultsToValue(GoOpaque /* reflect.Value */ v);
+void fn_setDefaultFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoReflectStructField fieldType, GoString defTag);
+bool fn_isZeroValue(GoOpaque /* reflect.Value */ v);
+Slice_GoString fn_buildLookupDirs(GoString lookupTag, GoString baseDef);
+GoString fn_resolveWithLookup(GoString in, GoString lookupTag, GoString baseDef);
+Arr9_bool InputReader_ButtonAssistCheck(InputReader* ir, Arr9_bool current);
+InputBuffer* fn_NewInputBuffer(void);
+void InputBuffer_Reset(InputBuffer* ib);
+GoIface fn_setFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoIface value, GoString defTag, GoString keyPath, GoString lookupTag, GoString baseDef);
+void InputBuffer_updateInputTime(InputBuffer* ib, bool U, bool D, bool L, bool R, bool B, bool F, bool a, bool b, bool c, bool x, bool y, bool z, bool s, bool d, bool w, bool m);
+i32 InputBuffer_State(InputBuffer* __, CommandStepKey ck);
+Ret_bool__GoOpaque_reflect_ValuePtr__GoIface fn_assignToPatternMap(GoOpaque /* reflect.Value */ v, GoString lastPartName, GoIface value, bool final, GoString baseDef);
+Ret_bool__GoIface fn_assignToFlattenMapField(GoOpaque /* reflect.Value */ fieldVal, GoReflectStructField sf, Slice_queryPart parts, int currentIndex, GoIface value, GoString baseDef, GoFunc extractNames);
+bool fn_elemHasFieldWithINITag(GoIface elemType, GoString name);
+GoIface fn_assignField(GoIface structPtr, Slice_queryPart parts, GoIface value, GoString baseDef);
+i32 InputBuffer_StateCharge(InputBuffer* ib, CommandStepKey ck);
+bool Command_GreaterCheckFail(Command* c, int i, InputBuffer* ibuf);
+Arr14_bool AiInput_Buttons(AiInput* ai);
+void AiInput_Update(AiInput* ai, f32 level);
+GoString fn_resolveSectionForWrite(GoOpaque /* ini.File */* f, GoString sec);
+GoIface fn_updateINIFile(GoIface obj, GoOpaque /* ini.File */* iniFile, GoString query, GoString value);
+bool AiInput_U(AiInput* ai);
+Ret_bool__GoOpaque_reflect_ValuePtr fn_getValueFromPatternMap(GoOpaque /* reflect.Value */ v, GoString partName);
+bool AiInput_D(AiInput* ai);
+bool AiInput_L(AiInput* ai);
+bool AiInput_R(AiInput* ai);
+bool AiInput_a(AiInput* ai);
+bool AiInput_b(AiInput* ai);
+bool AiInput_c(AiInput* ai);
+bool AiInput_x(AiInput* ai);
+bool AiInput_y(AiInput* ai);
+bool AiInput_z(AiInput* ai);
+bool AiInput_s(AiInput* ai);
+bool AiInput_d(AiInput* ai);
+bool AiInput_w(AiInput* ai);
+bool AiInput_m(AiInput* ai);
+bool CommandStep_IsSingleDirection(CommandStep* cs);
+bool CommandStep_IsDirToButton(CommandStep* cs, CommandStep next);
+bool CommandStep_EqualSteps(CommandStep cs, CommandStep n);
+Command* fn_newCommand(void);
+GoIface Command_ReadCommandSymbols(Command* c, GoString cmdstr, CommandKeyRemap* kr);
+Arr6_f32 Input_GetJoystickAxes(Input* input, int joy);
+Slice_u8 Input_GetJoystickButtons(Input* input, int joy);
+void ShaderTexture_clear(ShaderTexture* st);
+void ShaderTexture_step(ShaderTexture* st);
+Bgm* fn_newBgm(void);
+void Bgm_Stop(Bgm* bgm);
+void Bgm_Open(Bgm* bgm, GoString filename, int loop, int bgmVolume, int bgmLoopStart, int bgmLoopEnd, int startPosition, f32 freqmul, int loopcount);
+void fn_specChar(Char* c);
+RemapPreset fn_cloneRemapPreset(RemapPreset src, GameStatePool* gsp);
+void StoryboardManager_remove(StoryboardManager* m, i32 ownerID, i32 id);
+GoString Input_GetJoystickGUID(Input* input, int joy);
+void Input_RumbleController(Input* input, int joy, u16 lo, u16 hi, u32 ticks);
+void Music_AppendParams(Music m, Slice_GoString entries);
+void CustomShader_set(CustomShader* cs, GoString name, GoString key);
+Ret_EnvironmentPtr__GoIface fn_loadEnvironment(GoString filepath);
+void Music_DebugDump(Music m, GoString label);
+Ret_ModelPtr__GoIface fn_loadglTFModel(GoString filepath);
+Ret_GoString__int__int__int__int__int__f32__int Music_Read(Music m, GoString key, GoString def);
+void Music_act(Music m);
+Arr14_bool NetConnection_readNetInput(NetConnection* nc, int i);
+Arr6_i8 NetConnection_readNetInputAnalog(NetConnection* nc, int i);
+bool NetConnection_AnyButton(NetConnection* nc);
+GoIface NetConnection_Synchronize(NetConnection* nc);
+bool NetConnection_Update(NetConnection* nc);
+void ReplayFile_Close(ReplayFile* rf);
+void CustomShader_clear(CustomShader* cs);
+Ret_GoIface__GoIface Renderer_GLES32_newTexture(Renderer_GLES32* r, i32 width, i32 height, i32 depth, bool filter);
+CustomShaderRenderData CustomShader_renderData(CustomShader* cs, bool act);
+GoIface Renderer_GLES32_newSubTexture(Renderer_GLES32* r, GoIface tex, i32 width, i32 height, Arr4_f32 uvst);
+void Texture_GLES32_SetData(Texture_GLES32* t, Slice_u8 data);
+void Texture_GLES32_SetSubData(Texture_GLES32* t, Slice_u8 data);
+i32 Texture_GLES32_GetWidth(Texture_GLES32* t);
+Arr14_bool RollbackSystem_readRollbackInput(RollbackSystem* rs, int controller);
+Arr6_i8 RollbackSystem_readRollbackInputAnalog(RollbackSystem* rs, int controller);
+OverrideCharData* fn_newOverrideCharData(void);
+Char Char_Clone(Char* c, GameStatePool* gsp);
+void StoryboardManager_clear(StoryboardManager* m, int playerNo);
+GameParams* fn_newGameParams(void);
+void CommandList_CopyTo(CommandList* src, CommandList* dst);
+GameParams* fn_newGameParamsFromMotif(Motif* m);
+void StoryboardManager_clearSound(StoryboardManager* m);
+void fn_specRound(void);
+i32 Texture_GLES32_GetHeight(Texture_GLES32* t);
+GoString Renderer_GLES32_GetName(Renderer_GLES32* r);
+bool RollbackSystem_anyButton(RollbackSystem* rs);
+void RollbackLogger_logRoundSkipCheck(RollbackLogger* g, i32 fadeoutStart, bool anyButton, bool roundnotskip, bool skipEligible, bool matchEndDialogue);
+void RollbackLogger_logRoundAdvanceCheck(RollbackLogger* g, bool roundOver, bool tickFrame, bool motifEndActive, bool fightLoopEnd, bool holdPostMatch, bool canAdvance);
+void RollbackSession_TruncateReplayFrom(RollbackSession* rs, i32 time_);
+i64 LoopTimer_usToWaitThisLoop(LoopTimer* lt);
+void RollbackSession_Close(RollbackSession* r);
+Slice_GoString GameParams_MusicEntries(GameParams* p);
+OverrideCharData* GameParams_ensureOverride(GameParams* p, int team, int member);
+void GameParams_AppendParams(GameParams* p, Slice_GoString entries);
+void Bgm_SetPaused(Bgm* bgm, bool pause);
+void Bgm_UpdateVolume(Bgm* bgm);
+void Bgm_Seek(Bgm* bgm, int positionSample);
+GoOpaqueVal* fn_newSnd(void);
+Ret_GoOpaqueValPtr__GoIface fn_LoadSnd(GoString filename);
+GoOpaqueVal* Snd_Get(GoOpaqueVal* s, Arr2_i32 gn);
+bool Snd_play(GoOpaqueVal* s, Arr2_i32 gn, i32 volumescale, f32 pan, int loopstart, int loopend, int startposition, Slice_bool keepOnMatchEnd);
+void SoundChannel_Reset(SoundChannel* s);
+void backGround_reset(backGround* bg);
+void backGround_changeAnim(backGround* bg, i32 animNo, AnimationTable table);
+void backGround_draw(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip);
+void backGround_drawTransformed(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip, bgDrawTransform* transform);
+bgCtrl* fn_newBgCtrl(void);
+GoIface bgCtrl_read(bgCtrl* bgc, IniSection is, int idx);
+void GameState_savePalFX(GameState* gs);
+void GameState_saveCharData(GameState* gs, GameStatePool* gsp);
+void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp);
+void GameState_saveExplodData(GameState* gs, GameStatePool* gsp);
+void GameState_saveCharTextData(GameState* gs);
+Ret_StoryboardPtr__GoIface fn_loadStoryboard(GoString def);
+void GameState_loadPalFX(GameState* gs);
+void GameState_loadCharData(GameState* gs, GameStatePool* gsp);
+void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp);
+void GameState_loadExplodData(GameState* gs, GameStatePool* gsp);
+GoString fn_itoa(int i);
+GoString fn_fmtHex(u32 v);
+void Window_UpdateDebugFPS(Window* w);
+void fn_vitaTrace(GoString s);
+void fn_vitaMem(GoString tag);
+void GameState_loadCharTextData(GameState* gs);
+void Window_pollEvents(Window* w);
+bool GameState_stageCanMutate(GameState* gs);
+CharList CharList_Clone(CharList* cl, GameStatePool* gsp);
+void fn_vitaPerfBegin(void);
+PalFX* PalFX_Clone(PalFX* pf);
+bool Window_shouldClose(Window* w);
+Command Command_clone(Command* c);
+CommandList CommandList_Clone(CommandList* cl);
+bool Window_Focused(Window* w);
+void Window_Close(Window* w);
+Animation* fightScreenAnimationStateCloner_clone(fightScreenAnimationStateCloner* cl, Animation* anim);
+AnimTextSnd fightScreenAnimationStateCloner_cloneAnimTextSnd(fightScreenAnimationStateCloner* cl, AnimTextSnd src);
+FightScreenRound* FightScreenRound_Clone(FightScreenRound* ro);
+GameStatePool fn_NewGameStatePool(void);
+Arr4_f64 fn_getViewport(f64 srcW, f64 srcH, f64 dstW, f64 dstH);
+GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item);
+FightScreen FightScreen_Clone(FightScreen* fs);
+stageRollbackState Stage_CloneRollbackState(Stage* s);
+void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps);
+bool System_middleOfMatch(System* s);
+void stageRollbackState_Load(stageRollbackState* ss, Stage* s);
+Ret_Map_i32_StagePtr__StagePtr fn_cloneStageList(GameStatePool* gsp, Map_i32_StagePtr src, Stage* active);
+Stage* Stage_Clone(Stage* s, GameStatePool* gsp);
+void Storyboard_syncDialoguePosToTime(Storyboard* s);
+TextSprite* fn_cloneTextSprite(TextSprite* ts);
+void Storyboard_init(Storyboard* s);
+void fn_vitaPerfEnd(int i);
+void fn_vitaPerfTick(bool skipped);
+void fn_vitaDiagFrame(void);
+bool fn_vitaDiagSkip(int part);
+bool fn_vitaDrawCensusDue(void);
+void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 layerno);
+Ret_GoIface__GoIface fn_GetValue(GoIface structPtr, GoString query);
+void Command_AutoGreaterExpand(Command* c);
+GoIface fn_SetValue(GoIface structPtr, GoString query, GoIface val);
+GoIface fn_SetValueUpdate(GoIface obj, GoOpaque /* ini.File */* iniFile, GoString query, GoIface value);
+GoIface fn_SaveINI(GoOpaque /* ini.File */* iniFile, GoString filePath);
+void Command_ApplyBackwardCompatibility(Command* c, GoString charName);
+void Command_Clear(Command* c, bool bufreset);
+void Command_Step(Command* c, InputBuffer* ibuf, bool ai, bool isHelper, bool hpbuf, bool pausebuf, i32 extratime);
+bool System_skipMotifScaling(System* s);
+f32 System_getFightAspect(System* s);
+f32 System_getMotifAspect(System* s);
+f32 System_getCurrentAspect(System* s);
+drawAspectState fn_aspectStateForSize(i32 w, i32 h);
+void System_setGameSize(System* s, i32 w, i32 h);
+void System_applyFightAspect(System* s);
+void fn_vitaGCTrigger(uintptr_t n);
+drawAspectState System_captureAspectState(System* s);
+void System_restoreAspectState(System* s, drawAspectState st);
+bool System_canUseFullResolutionAspect(System* s);
+bool System_motifOverlayActive(System* s);
+bool System_shouldComposeFullResolution(System* s);
+Arr4_i32 System_fightViewport(System* s);
+Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b);
+Ret_Arr4_i32__bool System_fightDrawClip(System* s);
+void System_setGameAspect(System* s);
+bool System_eventUpdate(System* s);
+void System_runMainThreadTask(System* s);
+void fn_vitaRoundGC(void);
+u32 fn_vitaNowUs(void);
+void fn_vitaPhase(int ph);
+bool fn_vitaHalfRate(void);
+void fn_vitaMatchEnd(void);
+Arr14_bool ReplayFile_readReplayInput(ReplayFile* rf, int i);
+Arr6_i8 ReplayFile_readReplayInputAnalog(ReplayFile* rf, int i);
+void SoundChannel_Play(SoundChannel* s, GoOpaqueVal* sound, i32 group, i32 number, i32 loop, f32 freqmul, int loopStart, int loopEnd, int startPosition);
+bool ReplayFile_AnyButton(ReplayFile* rf);
+void ReplayFile_Synchronize(ReplayFile* rf);
+bool ReplayFile_Update(ReplayFile* rf);
+bool SoundChannel_IsPlaying(SoundChannel* s);
+void SoundChannel_SetPaused(SoundChannel* s, bool pause);
+void SoundChannel_SetVolume(SoundChannel* s, f32 vol);
+void SoundChannel_SetPan(SoundChannel* s, f32 p, f32 ls, i32 sourceID);
+bool bgCtrl_xEnable(bgCtrl* bgc);
+void fn_RenderSprite(RenderParams rpIn);
+void SoundChannel_SetPriority(SoundChannel* s, i32 priority);
+void SoundChannels_SetSize(SoundChannels* s, i32 size);
+SoundChannel* SoundChannels_Request(SoundChannels* s, i32 pid, i32 chNo, bool lowpriority, i32 priority);
+SoundChannel* SoundChannels_Get(SoundChannels* s, i32 pid, i32 ch);
+void fn_FillRect(Arr4_i32 rect, u32 color, Arr2_i32 alpha, PalFX* fx);
+void Renderer_GLES32_Close(Renderer_GLES32* r);
+TextureAtlas* fn_CreateTextureAtlas(i32 width, i32 height, i32 depth, bool filter);
+void Renderer_GLES32_BeginFrame(Renderer_GLES32* r, bool clearColor);
+bool SoundChannels_Play(SoundChannels* s, GoOpaqueVal* sound, i32 group, i32 number, i32 volumescale, f32 pan, int loopStart, int loopEnd, int startPosition, Slice_bool keepOnMatchEnd);
+void SoundChannels_StopAll(SoundChannels* s);
+void SoundChannels_Tick(SoundChannels* s, soundPanView view);
+void SoundChannels_Duck(SoundChannels* s, f32 duckMul, bool freeze);
+PlaySndParams* fn_newPlaySndParams(void);
+Ret_Arr4_f32__bool TextureAtlas_AddImage(TextureAtlas* ta, i32 width, i32 height, i32 stride, Slice_u8 data);
+GoIface fn_NewPaletteTexture(void);
+void Renderer_GLES32_EndFrame(Renderer_GLES32* r);
+void Renderer_GLES32_Await(Renderer_GLES32* r);
 bool offset_Run(offset sc, Char* c, Slice_i32 _p1);
 bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1);
 bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1);
@@ -2961,378 +4337,54 @@ void StateBytecode_init(StateBytecode* sb, Char* c);
 bool StateBytecode_run(StateBytecode* sb, Char* c);
 void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t);
 void BytecodeExp_cmpConst(BytecodeExp be, OpCode cmp, BytecodeValue k);
-bool fn_HasExtension(GoString file, GoString ext);
-f64 fn_cvfAsin(f64 x);
-TextSprite* fn_NewTextSprite(void);
-i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v);
-Ret_StateController__GoIface CharCompiler_changeAnim2(CharCompiler* c, IniSection is, StateControllerBase* sc);
-f64 fn_cvfAtan(f64 x);
-IniSection fn_NewIniSection(void);
-void CharCompiler_compareValues(CharCompiler* c, bool _range, GoString* in);
-Ret_IniSection__GoString__GoString fn_ReadIniSection(Slice_GoString lines, int* i);
-bool IniSection_ReadF32(IniSection is, GoString name, Slice_f32Ptr out);
-bool IniSection_readI32ForStage(IniSection is, GoString name, Slice_i32Ptr out);
-GoIface CharCompiler_evaluateComparison(CharCompiler* c, BytecodeExp* out, GoString* in, bool required);
-Layout* fn_newLayout(i16 ln);
-Layout* fn_ReadLayout(GoString pre, IniSection is, i16 ln);
-Ret_StateController__GoIface CharCompiler_changeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void Sprite_SetPxl(Sprite* s, Slice_u8 px);
-f64 fn_cvfXatan(f64 x);
-Slice_u32 Sprite_GetPal(Sprite* s, PaletteList* pl);
-void fn_vitaGCTrigger(uintptr_t n);
-f64 fn_cvfSatan(f64 x);
-GoOpaqueVal* fn_newSnd(void);
-GoIface CharCompiler_checkOpeningParenthesisCS(CharCompiler* c, GoString* in);
-void TextSprite_Clear(TextSprite* ts);
-void TextSprite_ApplyScaleRatio(TextSprite* ts);
-void Sprite_shareCopy(Sprite* s, Sprite* src);
-i64 LoopTimer_usToWaitThisLoop(LoopTimer* lt);
-void RollbackSession_Close(RollbackSession* r);
-Ret_StateController__GoIface CharCompiler_helper(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_GoOpaqueValPtr__GoIface fn_LoadSnd(GoString filename);
-f64 fn_cvfAcos(f64 x);
-GoIface Sprite_GetPalTex(Sprite* s, PaletteList* pl);
-void fn_LogMessage(GoString format, Slice_GoIface a);
-GoIface CharCompiler_checkOpeningParenthesis(CharCompiler* c, GoString* in);
-bool IniSection_ReadBool(IniSection is, GoString name, Slice_boolPtr out);
-bool fn_numberCandidate(GoString token);
-Ret_BytecodeValue__GoIface CharCompiler_mathFunc(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, OpCode oc, GoFunc f);
-void TextSprite_SetPos(TextSprite* ts, f32 x, f32 y);
-bool NetConnection_Update(NetConnection* nc);
-Ret_i32__GoIface CharCompiler_trgAttr(CharCompiler* c, GoString* in);
-void fn_vitaRoundGC(void);
-Ret_i32__GoIface CharCompiler_attr(CharCompiler* c, GoString text, bool hitdef);
-Arr3_u16 fn_ParseIkemenVersion(GoString versionStr);
-f64 fn_cvfAtan2(f64 y, f64 x);
-void TextSprite_SetVelocity(TextSprite* ts, f32 xvel, f32 yvel);
-void Sprite_SetRaw(Sprite* s, Slice_u8 data, i32 sprWidth, i32 sprHeight, i32 sprDepth);
-void IniSection_Parse(IniSection is, Slice_GoString lines, int* i);
-bool fn_isAttrLiteral(GoString tok);
-GoIface IniSection_LoadFile(IniSection is, GoString name, Slice_GoString dirs, GoString defaultDir, GoFunc load);
-GoIface Sprite_readHeader(Sprite* s, GoIface r, u32* ofs, u32* size, u16* link);
-Ret_bool__GoIface CharCompiler_checkEquality(CharCompiler* c, GoString* in);
-bool IniSection_readI32ForStageMinLength(IniSection is, GoString name, Slice_i32Ptr out);
-Ret_GoIface__bool__GoIface IniSection_ReadAutoType(IniSection is, GoString name);
-void Layout_Read(Layout* l, GoString pre, IniSection is);
-Ret_i32__GoIface fn_attrMask(GoString text, bool hitdef, bool strict, GoFunc warn);
-GoIface Sprite_readPcxHeader(Sprite* s, GoIface r, i64 offset);
-Ret_BytecodeValue__GoIface CharCompiler_oneArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
-GoString Renderer_GLES32_GetName(Renderer_GLES32* r);
-Arr2_u16 fn_ParseMugenVersion(GoString versionStr);
-void TextSprite_SetScale(TextSprite* ts, f32 xscl, f32 yscl);
-void TextSprite_SetLocalcoordChar(TextSprite* ts, Arr2_i32 lc);
-GoString Error_Error(Error e);
-bool IniSection_ReadI32(IniSection is, GoString name, Slice_i32Ptr out);
-Ret_GoString__bool__GoIface IniSection_getText(IniSection is, GoString name);
-void TextSprite_SetMaxDist(TextSprite* ts, f32 x, f32 y);
-void TextSprite_SetAccel(TextSprite* ts, f32 xacc, f32 yacc);
-bool IniSection_readF32ForStage(IniSection is, GoString name, Slice_f32Ptr out);
-Slice_i32 IniSection_readI32CsvForStage(IniSection is, GoString name);
-void TextSprite_SetColor(TextSprite* ts, i32 r, i32 g, i32 b, i32 a);
-bool fn_isHitFlagLiteral(GoString tok);
-GoIface CharCompiler_checkClosingParenthesis(CharCompiler* c);
-Ret_OpCode__OpCode__i32__i32__GoIface CharCompiler_intRange(CharCompiler* c, GoString* in);
-Slice_u8 Sprite_RlePcxDecode(Sprite* s, Slice_u8 rle);
-GoIface IniSection_ReadAutoTypeMap(IniSection is, Map_GoString_TypedValue dst, GoString kind);
-Ret_BytecodeValue__BytecodeValue__GoIface CharCompiler_twoOptArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
-Ret_StateController__GoIface CharCompiler_ctrlSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-RollbackSession fn_NewRollbackSession(RollbackProperties config);
-Slice_u8 fn_encodeInputs(InputBits inputs);
-u32 RollbackSession_LiveChecksum(RollbackSession* rs);
-Arr4_i32 Layout_calcLBRect(Layout* l, Arr4_i32 window);
-void Layout_DrawFaceSprite(Layout* l, f32 x, f32 y, i16 ln, Sprite* s, PalFX* fx, f32 fscale, Arr4_i32* window);
-void Layout_DrawAnim(Layout* l, Arr4_i32* r, f32 x, f32 y, f32 scl, f32 xscl, f32 yscl, i16 ln, Animation* a, PalFX* palfx);
-void Layout_DrawText(Layout* l, f32 x, f32 y, f32 scl, i16 ln, GoString text, GoOpaqueVal* f, i32 b, i32 a, PalFX* palfx, Arr4_f32 frgba);
-AnimLayout fn_newAnimLayout(Sff* sff, i16 ln);
-AnimLayout fn_ReadAnimLayout(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln);
-void AnimLayout_Read(AnimLayout* al, GoString pre, IniSection is, AnimationTable at, i16 ln);
-Ret_GoString__GoIface CharCompiler_readOldProjectileID(CharCompiler* c, GoString* in, GoString trname, int baseLen, BytecodeExp* out);
-Ret_i32__GoIface CharCompiler_parseOldAnimElemStyle(CharCompiler* c, GoString* in, GoString name);
-Ret_BytecodeValue__GoIface CharCompiler_expValue(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
-expValueFrame* CharCompiler_getFrame(CharCompiler* c);
-GoIface CharCompiler_expVar(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool isSys, bool isF);
-Ret_StateController__GoIface CharCompiler_runState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface Sprite_read(Sprite* s, GoIface f, SffHeader* sh, i64 offset, u32 datasize, u32 nextSubheader, Sprite* prev, PaletteList* pl, bool isCharFirstSprite);
-void ReplayFile_Close(ReplayFile* rf);
-void AnimLayout_Reset(AnimLayout* al);
-void AnimLayout_Action(AnimLayout* al);
-bool AnimLayout_HasAnim(AnimLayout* al);
-GoIface CharCompiler_expText(CharCompiler* c, GoString* in);
-void AnimLayout_Draw(AnimLayout* al, f32 x, f32 y, i16 layerno, f32 scale);
-GoIface CharCompiler_eqne(CharCompiler* c, GoString* in, GoFunc f);
-void fn_ReadPalFX(GoString pre, IniSection is, PalFX* pfx);
-GoIface CharCompiler_flagTrigger(CharCompiler* c, BytecodeExp* out, GoString* in, GoFunc pushSelf, GoFunc tryKeyword);
-Ret_i32__GoIface CharCompiler_flagSub(CharCompiler* c, GoString* in);
-GoIface CharCompiler_explodSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void PowerBar_step(PowerBar* pb, int charpn, PowerBar* pbr, GoOpaqueVal* snd);
-void PowerBar_reset(PowerBar* pb);
-Slice_u8 Sprite_Lz5Decode(Sprite* s, Slice_u8 rle);
-i32 InputBuffer_StateCharge(InputBuffer* ib, CommandStepKey ck);
-Slice_u8 Sprite_Rle8Decode(Sprite* s, Slice_u8 rle);
-void PowerBar_bgDraw(PowerBar* pb, i16 layerno, int charpn);
-void PowerBar_draw(PowerBar* pb, i16 layerno, int charpn, PowerBar* pbr, Map_int_GoOpaqueValPtr f);
-void TextSprite_Update(TextSprite* ts);
-void TextSprite_draw(TextSprite* ts, i16 ln, Arr4_i32* clip);
-GoIface Sprite_readHeaderV2(Sprite* s, GoIface r, u32* ofs, u32* size, u32 lofs, u32 tofs, u16* link);
-void ReplayFile_Synchronize(ReplayFile* rf);
-Slice_u8 Sprite_Rle5Decode(Sprite* s, Slice_u8 rle);
-GoIface Sprite_readV2(Sprite* s, GoIface f, i64 offset, u32 datasize);
-Arr14_bool ReplayFile_readReplayInput(ReplayFile* rf, int i);
-Arr6_i8 ReplayFile_readReplayInputAnalog(ReplayFile* rf, int i);
-void fn_RenderSprite(RenderParams rpIn);
-GoIface Sprite_CachePalTex(Sprite* s, Slice_u32 pal);
-GoIface RollbackSession_InitP1(RollbackSession* rs, int numPlayers, int localPort, int remotePort, GoString remoteIp);
-bool ReplayFile_AnyButton(ReplayFile* rf);
-GoIface RollbackSession_InitP2(RollbackSession* rs, int numPlayers, int localPort, int remotePort, GoString remoteIp);
-bool ReplayFile_Update(ReplayFile* rf);
-void RollbackSession_InitSyncTest(RollbackSession* rs, int numPlayers);
-GoIface CharCompiler_explodInterpolate(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void Sprite_Draw(Sprite* s, f32 x, f32 y, f32 xscale, f32 yscale, f32 rxadd, Rotation rot, i32 projectionMode, f32 fLength, PalFX* fx, Arr4_i32* window);
-Ret_StateController__GoIface CharCompiler_explod(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void GuardBar_step(GuardBar* gb, int charpn, GuardBar* gbr, GoOpaqueVal* snd);
-GoIface SffHeader_Read(SffHeader* sh, GoIface r, u32* lofs, u32* tofs);
-Ret_StateController__GoIface CharCompiler_modifyExplod(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_gameMakeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_posSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void GuardBar_reset(GuardBar* gb);
-void GuardBar_bgDraw(GuardBar* gb, i16 layerno, int charpn);
-Sff* fn_newSff(SffType sffType);
-void fn_FillRect(Arr4_i32 rect, u32 color, Arr2_i32 alpha, PalFX* fx);
-void Renderer_GLES32_Close(Renderer_GLES32* r);
-void AnimTextSnd_Read(AnimTextSnd* ats, GoString pre, IniSection is, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
-bool Command_GreaterCheckFail(Command* c, int i, InputBuffer* ibuf);
-GoIface CharCompiler_flagRHS(CharCompiler* c, GoString* in);
-bool CharCompiler_nextIsEqne(CharCompiler* c, GoString* in);
-Ret_StateController__GoIface CharCompiler_posSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void AnimTextSnd_Reset(AnimTextSnd* ats);
-void AnimTextSnd_Action(AnimTextSnd* ats);
-Ret_BytecodeExp__GoIface CharCompiler_parseStringExp(CharCompiler* c, GoString* in);
-void AnimTextSnd_Draw(AnimTextSnd* ats, f32 x, f32 y, i16 layerno, Map_int_GoOpaqueValPtr f, f32 scale);
-Ret_i32__BytecodeExp__bool__GoIface CharCompiler_parseAttrComparison(CharCompiler* c, GoString* in, bool allowExpr, bool tolerateMalformed);
-void GuardBar_draw(GuardBar* gb, i16 layerno, int charpn, GuardBar* gbr, Map_int_GoOpaqueValPtr f);
-bool AnimTextSnd_HasDrawable(AnimTextSnd* ats);
-Ret_i32__BytecodeExp__bool__GoIface CharCompiler_parseHitFlagComparison(CharCompiler* c, GoString* in);
-bool AnimTextSnd_End(AnimTextSnd* ats, i32 dt, bool inf);
-void CharCompiler_emitAttrOrHitFlagTest(CharCompiler* c, BytecodeExp* out, bool rd, i32 value, BytecodeExp stringExp, bool not, Slice_OpCode ops);
-Ret_StateController__GoIface CharCompiler_posAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Sff* fn_findActiveSff(GoString filename);
-Ret_StateController__GoIface CharCompiler_velSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_velAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_velMul(CharCompiler* c, IniSection is, StateControllerBase* sc);
-bool fn_loadingCanceled(void);
-Arr14_bool AiInput_Buttons(AiInput* ai);
-Ret_SffPtr__GoIface fn_loadSff(GoString filename, SffType sffType, bool isMainThread, bool isActPal);
-void AiInput_Update(AiInput* ai, f32 level);
-Ret_StateController__GoIface CharCompiler_modifyShadow(CharCompiler* c, IniSection is, StateControllerBase* sc);
-bool fn_compareNatural(GoString a, GoString b);
-Ret_bool__GoString__GoString fn_IsZipPath(GoString path);
-bool AiInput_U(AiInput* ai);
-Ret_BytecodeValue__GoIface CharCompiler_expValueSub(CharCompiler* c, expValueFrame* f, BytecodeExp* out, GoString* in, bool rd);
-bool AiInput_D(AiInput* ai);
-Ret_int__GoIface zipMemFileReader_Read(zipMemFileReader* zmfr, Slice_u8 p);
-Ret_i64__GoIface zipMemFileReader_Seek(zipMemFileReader* zmfr, i64 offset, int whence);
-GoIface zipMemFileReader_Close(zipMemFileReader* zmfr);
-bool AiInput_L(AiInput* ai);
-TextureAtlas* fn_CreateTextureAtlas(i32 width, i32 height, i32 depth, bool filter);
-void Renderer_GLES32_BeginFrame(Renderer_GLES32* r, bool clearColor);
-Ret_Arr4_f32__bool TextureAtlas_AddImage(TextureAtlas* ta, i32 width, i32 height, i32 stride, Slice_u8 data);
-void Renderer_GLES32_EndFrame(Renderer_GLES32* r);
-bool AiInput_R(AiInput* ai);
-GoString fn_joinSearchPath(GoString base, GoString name);
-Ret_GoIface__GoIface fn_OpenFile(GoString filename);
-Ret_int__GoIface vitaBufFile_Read(vitaBufFile* b, Slice_u8 p);
-Ret_i64__GoIface vitaBufFile_Seek(vitaBufFile* b, i64 offset, int whence);
-GoIface vitaBufFile_Close(vitaBufFile* b);
-Ret_StateController__GoIface CharCompiler_modifyReflection(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_palFXSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
-void StunBar_step(StunBar* sb, int charpn, StunBar* sbr, GoOpaqueVal* snd);
-void StunBar_reset(StunBar* sb);
-void StunBar_bgDraw(StunBar* sb, i16 layerno, int charpn);
-void StunBar_draw(StunBar* sb, i16 layerno, int charpn, StunBar* sbr, Map_int_GoOpaqueValPtr f);
-bool AiInput_a(AiInput* ai);
-bool AiInput_b(AiInput* ai);
-bool AiInput_c(AiInput* ai);
-bool AiInput_x(AiInput* ai);
-bool AiInput_y(AiInput* ai);
-bool AiInput_z(AiInput* ai);
-bool AiInput_s(AiInput* ai);
-bool AiInput_d(AiInput* ai);
-bool AiInput_w(AiInput* ai);
-bool AiInput_m(AiInput* ai);
-bool CommandStep_IsSingleDirection(CommandStep* cs);
-bool CommandStep_IsDirToButton(CommandStep* cs, CommandStep next);
-bool CommandStep_EqualSteps(CommandStep cs, CommandStep n);
-Command* fn_newCommand(void);
-GoIface Command_ReadCommandSymbols(Command* c, GoString cmdstr, CommandKeyRemap* kr);
-void Renderer_GLES32_Await(Renderer_GLES32* r);
-GoIface fn_NewPaletteTexture(void);
-void fn_SafeGo(GoFunc f);
-Ret_StateController__GoIface CharCompiler_palFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_allPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_bgPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_afterImageSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
-Ret_StateController__GoIface CharCompiler_afterImage(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_afterImageTime(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface Sff_loadPalettes(Sff* s, GoIface f, u32 lofs);
-GoIface CharCompiler_parseAttrExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, bool hitdef);
-GoIface CharCompiler_parseHitFlag(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
-void FightScreenFace_step(FightScreenFace* fa, int charpn, FightScreenFace* refFace);
-GoIface CharCompiler_parseHitFlagExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
-GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_hitDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenFace_reset(FightScreenFace* fa);
-Ret_StateController__GoIface CharCompiler_modifyHitDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_reversalDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifyReversalDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenFace_bgDraw(FightScreenFace* fa, i16 layerno);
-void FightScreenFace_draw(FightScreenFace* fa, i16 layerno, int charpn, FightScreenFace* refFace);
-Ret_Slice_u32__GoIface Sff_ReadPalette(Sff* s, GoIface f, i64 offset, u32 size);
+void Explod_flagForRemoval(Explod* e);
+void Explod_update(Explod* e);
 void FightScreenFace_drawTeammates(FightScreenFace* fa, i16 layerno);
 Sprite* Sff_GetSprite(Sff* s, u16 g, u16 n);
-void FightScreenName_step(FightScreenName* nm);
-void FightScreenName_reset(FightScreenName* nm);
 Sprite* Sff_cloneSpriteWithPal(Sff* s, u16 g, u16 n, PaletteList* pl);
 void fn_requestScreenshot(void);
 void fn_saveScreenshot(Slice_u8 data, int width, int height, GoString filename);
+void Explod_cueDraw(Explod* e);
+void Explod_stepInterpolation(Explod* e);
+void Explod_resetInterpolation(Explod* e, PalFXDef* pfd);
+f32 Explod_trueFacing(Explod* e);
+FightScreenName* fn_newFightScreenName(void);
+FightScreenName* fn_readFightScreenName(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
 void fn_runGfxTask(GoFunc f);
+CommandList* fn_NewCommandList(InputBuffer* cb);
+bool CommandList_InputUpdate(CommandList* cl, Char* char_, int controller);
+void FightScreenName_step(FightScreenName* nm);
+void FightScreenName_reset(FightScreenName* nm);
 void FightScreenName_bgDraw(FightScreenName* nm, i16 layerno);
 void FightScreenName_draw(FightScreenName* nm, i16 layerno, int charpn, Map_int_GoOpaqueValPtr f, int side);
 void FightScreenName_drawTeammates(FightScreenName* nm, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenWinIcon* fn_newFightScreenWinIcon(void);
+FightScreenWinIcon* fn_readFightScreenWinIcon(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
 void FightScreenWinIcon_add(FightScreenWinIcon* wi, WinType wt);
+void Renderer_GLES32_BeginScreenshot(Renderer_GLES32* r, int width, int height);
 void FightScreenWinIcon_step(FightScreenWinIcon* wi, i32 numwin);
+bool Renderer_GLES32_FinishScreenshot(Renderer_GLES32* r, Slice_u8 data, int width, int height);
 void FightScreenWinIcon_reset(FightScreenWinIcon* wi);
+Arr6_f32 fn_NormalizeAxes(Arr6_i8* axes);
+void FightScreenWinIcon_clear(FightScreenWinIcon* wi);
 void FightScreenWinIcon_draw(FightScreenWinIcon* wi, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+bool CommandList_Assert(CommandList* cl, GoString name, i32 time_);
+void CommandList_ClearName(CommandList* cl, GoString name);
+void CommandList_Step(CommandList* cl, bool ai, bool isHelper, bool hpbuf, bool pausebuf, i32 extratime);
+void CommandList_BufReset(CommandList* cl);
+void CommandList_Add(CommandList* cl, Command c);
+Slice_Command CommandList_At(CommandList* cl, int i);
+FightScreenTime* fn_newFightScreenTime(void);
+FightScreenTime* fn_readFightScreenTime(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
 void FightScreenTime_step(FightScreenTime* ti);
 void FightScreenTime_reset(FightScreenTime* ti);
+void CommandList_CopyList(CommandList* cl, CommandList src);
 void FightScreenTime_bgDraw(FightScreenTime* ti, i16 layerno);
 void FightScreenTime_draw(FightScreenTime* ti, i16 layerno, Map_int_GoOpaqueValPtr f);
-Ret_bool__GoOpaque_reflect_ValuePtr fn_getValueFromPatternMap(GoOpaque /* reflect.Value */ v, GoString partName);
-Ret_GoIface__GoIface fn_GetValue(GoIface structPtr, GoString query);
-void Command_AutoGreaterExpand(Command* c);
-void Command_ApplyBackwardCompatibility(Command* c, GoString charName);
-void Command_Clear(Command* c, bool bufreset);
-void Command_Step(Command* c, InputBuffer* ibuf, bool ai, bool isHelper, bool hpbuf, bool pausebuf, i32 extratime);
-CommandList* fn_NewCommandList(InputBuffer* cb);
-GoOpaqueVal* Snd_Get(GoOpaqueVal* s, Arr2_i32 gn);
-bool Snd_play(GoOpaqueVal* s, Arr2_i32 gn, i32 volumescale, f32 pan, int loopstart, int loopend, int startposition, Slice_bool keepOnMatchEnd);
-void SoundChannel_Reset(SoundChannel* s);
-void SoundChannel_Play(SoundChannel* s, GoOpaqueVal* sound, i32 group, i32 number, i32 loop, f32 freqmul, int loopStart, int loopEnd, int startPosition);
-bool SoundChannel_IsPlaying(SoundChannel* s);
-void SoundChannel_SetPaused(SoundChannel* s, bool pause);
-void SoundChannel_SetVolume(SoundChannel* s, f32 vol);
-void SoundChannel_SetPan(SoundChannel* s, f32 p, f32 ls, i32 sourceID);
-void SoundChannel_SetPriority(SoundChannel* s, i32 priority);
-void SoundChannel_SetFreqMul(SoundChannel* s, f32 freqmul);
-void SoundChannel_SetLoopPoints(SoundChannel* s, int loopstart, int loopend);
-void SoundChannels_SetSize(SoundChannels* s, i32 size);
-SoundChannel* SoundChannels_Request(SoundChannels* s, i32 pid, i32 chNo, bool lowpriority, i32 priority);
-SoundChannel* SoundChannels_Get(SoundChannels* s, i32 pid, i32 ch);
-bool SoundChannels_Play(SoundChannels* s, GoOpaqueVal* sound, i32 group, i32 number, i32 volumescale, f32 pan, int loopStart, int loopEnd, int startPosition, Slice_bool keepOnMatchEnd);
-void SoundChannels_StopAll(SoundChannels* s);
-bgCtrl* fn_newBgCtrl(void);
-GoIface bgCtrl_read(bgCtrl* bgc, IniSection is, int idx);
-bool bgCtrl_xEnable(bgCtrl* bgc);
-bool bgCtrl_yEnable(bgCtrl* bgc);
-void Stage_applyShaderDef(Stage* s, stageShaderDef* def, CustomShader* cs);
-SelectStage* Stage_si(Stage* s);
-Stage* fn_newStage(GoString def);
-Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef);
-stageRollbackState Stage_CloneRollbackState(Stage* s);
-drawAspectState System_captureAspectState(System* s);
-void stageRollbackState_Load(stageRollbackState* ss, Stage* s);
-Ret_Map_i32_StagePtr__StagePtr fn_cloneStageList(GameStatePool* gsp, Map_i32_StagePtr src, Stage* active);
-Stage* Stage_Clone(Stage* s, GameStatePool* gsp);
-TextSprite* fn_cloneTextSprite(TextSprite* ts);
-Anim* Anim_CloneState(Anim* anim);
-Fade* Fade_Clone(Fade* fa);
-MotifContinue MotifContinue_Clone(MotifContinue* co);
-DialogueToken fn_cloneDialogueToken(DialogueToken t);
-DialogueParsedLine fn_cloneDialogueParsedLine(DialogueParsedLine src);
-MotifDialogue MotifDialogue_Clone(MotifDialogue* di);
-rankingRow rankingRow_Clone(rankingRow* rr);
-MotifHiscore MotifHiscore_Clone(MotifHiscore* hi);
-MotifWin MotifWin_Clone(MotifWin* wi);
-Motif Motif_Clone(Motif* m, bool postMatch);
-Music fn_cloneMusicMapShallow(Music src);
-void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps);
-void System_restoreAspectState(System* s, drawAspectState st);
-void System_withAspectState(System* s, drawAspectState st, GoFunc fn);
-void fn_vitaPhase(int ph);
-bool System_canUseFullResolutionAspect(System* s);
-bool System_motifOverlayActive(System* s);
-bool System_shouldComposeFullResolution(System* s);
-void Storyboard_syncDialoguePosToTime(Storyboard* s);
-void Storyboard_init(Storyboard* s);
-Arr4_i32 System_fightViewport(System* s);
-Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b);
-Ret_Arr4_i32__bool System_fightDrawClip(System* s);
-bool System_eventUpdate(System* s);
-void System_runMainThreadTask(System* s);
-bool System_await(System* s, int fps);
-soundPanView System_soundPanView(System* s);
-void System_renderFrame(System* s);
-bool System_update(System* s);
-bool fn_vitaHalfRate(void);
-void fn_vitaMatchEnd(void);
-void SoundChannels_Tick(SoundChannels* s, soundPanView view);
-void SoundChannels_Duck(SoundChannels* s, f32 duckMul, bool freeze);
-PlaySndParams* fn_newPlaySndParams(void);
-void Stage_updateLocalScale(Stage* s, f32 gameWidth);
-Slice_StoryboardPtr fn_cloneStoryboards(Slice_StoryboardPtr src);
-Storyboard Storyboard_Clone(Storyboard* s);
-void System_tickSound(System* s);
-void System_applyPauseFocusVolume(System* s);
-BGDef* BGDef_Clone(BGDef* s);
-void System_loaderReset(System* s);
-void System_loadStart(System* s);
-CustomShader CustomShader_Clone(CustomShader* cs, GameStatePool* gsp);
-GoIface System_synchronize(System* s);
-bool System_anyHardButton(System* s);
-bool System_anyButton(System* s);
-bool System_usesRollbackMatch(System* s);
-bool System_matchOver(System* s);
-Char* System_anyChar(System* s);
-Char* System_playerID(System* s, i32 id);
-BytecodeValue System_playerIDExist(System* s, BytecodeValue id);
-Char* System_playerIndex(System* s, i32 idx);
-BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx);
-Char* System_getCharRoot(System* s, int idx);
-BytecodeValue System_playerNoExist(System* s, BytecodeValue pn);
-i32 System_palfxvar(System* s, i32 x, i32 y);
-f32 System_palfxvar2(System* s, i32 x, i32 y);
-bool System_roundEnded(System* s);
-bool System_roundNoDamage(System* s);
-i32 System_gameTime(System* s);
-Slice_backGroundPtr Stage_getBg(Stage* s, i32 id);
-Slice_NodePtr Stage_get3DBg(Stage* s, u32 id);
-Slice_GLTFAnimationPtr Stage_get3DAnim(Stage* s, u32 id);
-void Stage_setShaderTex(Stage* s, ShaderTexture* st, bgShaderTex def);
-i32 System_roundState(System* s);
-void Stage_bgCtrlAction(Stage* s);
-void Stage_runBgCtrl(Stage* s, bgCtrl* bgc);
-bool Stage_paused(Stage* s);
-void Stage_action(Stage* s);
-void Stage_tick(Stage* s);
-i32 System_introState(System* s);
-i32 System_outroState(System* s);
-bool System_roundOver(System* s);
-bool System_roundIsSingle(System* s);
-bool System_maxDrawsReached(System* s, int team);
-bool System_roundIsFinal(System* s);
-bool System_gsf(System* s, GlobalSpecialFlag gsf);
-void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on);
-void System_appendToConsole(System* s, GoString str);
-void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a);
-void System_luaFlushDrawQueue(System* s);
-void System_luaDiscardDrawQueue(System* s);
-void System_printBytecodeError(System* s, GoString str);
-void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bool shell, bool console);
-f32 System_updateZScale(System* s, f32 pos, f32 localscale);
-bool System_zEnabled(System* s);
-Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos, f32 zscale);
-f32 System_posZtoYoffset(System* s, f32 zpos, f32 localscl);
-bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1, f32 posz2, f32 top2, f32 bot2, f32 localscl2);
-Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f32 pos1, f32 facing1, Slice_ClsnFinal boxes2, Arr2_f32 pos2, f32 facing2);
+Projectile* fn_newProjectile(void);
+void Projectile_clear(Projectile* p);
+Projectile* Projectile_initFromChar(Projectile* p, Char* c);
+void Projectile_setAllPos(Projectile* p, Arr3_f32 pos);
 bool Projectile_isActive(Projectile* p);
 bool Projectile_pauseStatus(Projectile* p);
 void Projectile_update(Projectile* p);
@@ -3358,69 +4410,9 @@ void Char_panic(Char* c, GoString msg);
 void Char_init(Char* c, int n, int idx);
 void Char_clearState(Char* c);
 bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2);
-GoIface CharCompiler_projectileSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_projectile(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifyProjectile(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_width(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_sprPriority(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_bool__GoIface CharCompiler_varSetOlderSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoFunc alreadyAssigned);
-Ret_i32__BytecodeExp__bool__GoIface CharCompiler_varSetNewerSub(CharCompiler* c, GoString name);
-void FightScreenCombo_step(FightScreenCombo* co, int side, i32 hits, i32 damage, f32 percentage);
-void FightScreenCombo_reset(FightScreenCombo* co);
-void FightScreenCombo_draw(FightScreenCombo* co, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-void ComboShake_reset(ComboShake* cs);
-void ComboShake_restart(ComboShake* cs);
-void ComboShake_update(ComboShake* cs);
-Ret_GoString__GoString fn_splitMusicKey(GoString rawKey);
-Music fn_parseMusicSection(GoOpaque /* invalid type */ section);
-Arr2_f32 ComboShake_getOffset(ComboShake* cs);
-f32 ComboShake_getScale(ComboShake* cs);
-FSMsg* fn_newFSMsg(int side);
-Slice_FSMsgPtr fn_insertFSMsg(Slice_FSMsgPtr array, FSMsg* value, int index);
-GoIface CharCompiler_varSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc, i32 scType);
-Ret_StateController__GoIface CharCompiler_varSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_varAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_parentVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Slice_FSMsgPtr fn_removeFSMsg(Slice_FSMsgPtr array, int index);
-bool FSMsg_isEqual(FSMsg* m, FSMsg* other);
-void FightScreenAction_step(FightScreenAction* ac, int leader);
-Ret_StateController__GoIface CharCompiler_parentVarAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_rootVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenAction_reset(FightScreenAction* ac, int leader);
-Ret_StateController__GoIface CharCompiler_rootVarAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenAction_draw(FightScreenAction* ac, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-Ret_StateController__GoIface CharCompiler_turn(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetFacing(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetBind(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_bindToTarget(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetLifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetVelSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetVelAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetPowerAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetDrop(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_lifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_lifeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_powerAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_powerSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_hitVelSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_screenBound(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_posFreeze(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_envShake(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_hitOverride(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_pause(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_superPause(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_trans(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_playerPush(CharCompiler* c, IniSection is, StateControllerBase* sc);
-i32 FightScreenRound_overTime(FightScreenRound* ro);
-bool FightScreenRound_act(FightScreenRound* ro);
-void FightScreenRound_handleRoundIntro(FightScreenRound* ro);
 void Char_enemyNearP2Clear(Char* c);
 Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2list);
-Ret_i32__BytecodeExp__GoIface CharCompiler_typeExpression(CharCompiler* c, GoString data, GoString name, GoString validLetters, GoFunc conv);
 void Char_prepareNextRound(Char* c);
-GoIface CharCompiler_parseTypeExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, GoString name, GoString validLetters, GoFunc conv);
-Ret_StateController__GoIface CharCompiler_stateTypeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 CharGlobalInfo* Char_gi(Char* c);
 CharGlobalInfo* Char_stOgi(Char* c);
 CharGlobalInfo* Char_stWgi(Char* c);
@@ -3429,98 +4421,102 @@ OverrideCharData* Char_ocd(Char* c);
 void Char_applyMapOverrides(Char* c);
 void Char_resetModifyPlayer(Char* c);
 GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi);
+void Char_loadPalettes(Char* c);
 GoIface Char_loadFx(Char* c, GoString def, CharGlobalInfo* gi);
 void Char_clearHitCount(Char* c);
-void Char_clearMoveHit(Char* c);
-void Char_changeAnimEx(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx);
-void Char_changeAnim(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx);
+Ret_StateController__GoIface CharCompiler_hitDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyHitDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_reversalDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
+FightScreenCombo* fn_newFightScreenCombo(void);
+FightScreenCombo* fn_readFightScreenCombo(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f, int side);
+Ret_StateController__GoIface CharCompiler_modifyReversalDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_projectileSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_projectile(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_int__bool CommandList_lookupName(CommandList* cl, GoString name);
+Ret_StateController__GoIface CharCompiler_modifyProjectile(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_width(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreenCombo_step(FightScreenCombo* co, int side, i32 hits, i32 damage, f32 percentage);
+void FightScreenCombo_reset(FightScreenCombo* co);
+void FightScreenCombo_draw(FightScreenCombo* co, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+Ret_StateController__GoIface CharCompiler_sprPriority(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_bool__GoIface CharCompiler_varSetOlderSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoFunc alreadyAssigned);
+Ret_i32__BytecodeExp__bool__GoIface CharCompiler_varSetNewerSub(CharCompiler* c, GoString name);
+void ComboShake_reset(ComboShake* cs);
+void ComboShake_restart(ComboShake* cs);
+GoIface CharCompiler_varSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc, i32 scType);
+Ret_StateController__GoIface CharCompiler_varSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_varAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void ComboShake_setDefaultPhase(ComboShake* cs);
+void ComboShake_update(ComboShake* cs);
+FSMsg* fn_newFSMsg(int side);
+Slice_FSMsgPtr fn_insertFSMsg(Slice_FSMsgPtr array, FSMsg* value, int index);
+Slice_FSMsgPtr fn_removeFSMsg(Slice_FSMsgPtr array, int index);
+bool FSMsg_isEqual(FSMsg* m, FSMsg* other);
+FightScreenAction* fn_newFightScreenAction(void);
+Music fn_parseMusicSection(GoOpaque /* ini.Section */* section);
+void Motif_resolvePath(Motif* m);
+FightScreenAction* fn_readFightScreenAction(GoString pre, IniSection is, Map_int_GoOpaqueValPtr f);
+void Stage_drawModel(Stage* s, Arr2_f32 pos, f32 yofs, f32 scl, i32 layerNumber);
+Ret_StateController__GoIface CharCompiler_parentVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreenAction_step(FightScreenAction* ac, int leader);
+Ret_StateController__GoIface CharCompiler_parentVarAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_rootVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreenAction_reset(FightScreenAction* ac, int leader);
+Ret_StateController__GoIface CharCompiler_rootVarAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_turn(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreenAction_draw(FightScreenAction* ac, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+Ret_StateController__GoIface CharCompiler_targetFacing(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetBind(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_bindToTarget(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetLifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_GoIface__GoIface Motif_GetValue(Motif* m, GoString query);
+FightScreenRound* fn_newFightScreenRound(GoOpaqueVal* snd);
+Fade* fn_readLbFade(GoString pre, IniSection is, Sff* sff, AnimationTable at, GoOpaqueVal* snd);
+Ret_StateController__GoIface CharCompiler_targetState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetVelSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetVelAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+FightScreenRound* fn_readFightScreenRound(IniSection is, Sff* sff, AnimationTable at, GoOpaqueVal* snd, Map_int_GoOpaqueValPtr f);
+Ret_StateController__GoIface CharCompiler_targetPowerAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetDrop(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_lifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_lifeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_powerAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_powerSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_hitVelSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_screenBound(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void GLTFAnimation_toggle(GLTFAnimation* anim, bool enabled);
+Ret_StateController__GoIface CharCompiler_posFreeze(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_envShake(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_hitOverride(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_pause(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_superPause(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_trans(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_playerPush(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void Model_step(Model* model);
+Ret_i32__BytecodeExp__GoIface CharCompiler_typeExpression(CharCompiler* c, GoString data, GoString name, GoString validLetters, GoFunc conv);
+GoIface CharCompiler_parseTypeExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, GoString name, GoString validLetters, GoFunc conv);
+Ret_StateController__GoIface CharCompiler_stateTypeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_angleDraw(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_angleSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_angleAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_angleMul(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_envColor(CharCompiler* c, IniSection is, StateControllerBase* sc);
 GoIface CharCompiler_displayToClipboardSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenRound_handleRoundOutro(FightScreenRound* ro);
-void FightScreenRound_reset(FightScreenRound* ro);
-void Char_changeAnim2(Char* c, i32 animNo, int animPlayerNo, GoString ffx);
-void Char_setAnimElem(Char* c, i32 elem, i32 elemtime);
-void Char_setAnimElemTo(Char* c, Animation* anim, i32* animelem);
-bool Char_scf(Char* c, SystemCharFlag scf);
-void Char_setSCF(Char* c, SystemCharFlag scf, bool on);
-bool Char_csf(Char* c, CharSpecialFlag csf);
-void Char_setCSF(Char* c, CharSpecialFlag csf, bool on);
-bool Char_asf(Char* c, AssertSpecialFlag asf);
-void Char_setASF(Char* c, AssertSpecialFlag asf, bool on);
-Char* Char_parent(Char* c, bool log_);
-bool Char_parentExist(Char* c);
-Char* Char_root(Char* c, bool log_);
-Char* Char_stateOwner(Char* c);
-Char* Char_helperTrigger(Char* c, i32 id, int idx);
-Char* Char_getHelperChainIndex(Char* c, i32 idx);
-Char* Char_helperIndexTrigger(Char* c, i32 idx);
-BytecodeValue Char_helperIndexExist(Char* c, BytecodeValue id);
-i32 Char_indexTrigger(Char* c);
-Char* Char_targetTrigger(Char* c, i32 id, int idx);
-Char* Char_partner(Char* c, i32 n, bool log_);
-Char* Char_partnerTag(Char* c, i32 n);
-Char* Char_enemy(Char* c, i32 n);
-Char* Char_enemyNearTrigger(Char* c, i32 n);
-Char* Char_p2(Char* c);
-Char* Char_playerIDTrigger(Char* c, i32 id, bool log_);
-Char* Char_playerIndexTrigger(Char* c, i32 idx);
-Char* Char_playerTrigger(Char* c, int pn, bool log_);
-bool Char_isEnemyOf(Char* c, Char* e);
 Ret_StateController__GoIface CharCompiler_displayToClipboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_appendToClipboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_clearClipboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_makeDust(CharCompiler* c, IniSection is, StateControllerBase* sc);
-f32 Char_getAILevel(Char* c);
-void Char_setAILevel(Char* c, f32 level);
-bool Char_alive(Char* c);
-bool Char_activelyFighting(Char* c);
-BytecodeValue Char_animElemNo(Char* c, i32 time_);
-BytecodeValue Char_animElemTime(Char* c, i32 elem);
-BytecodeValue Char_animExist(Char* c, BytecodeValue anim);
-BytecodeValue Char_selfAnimExist(Char* c, BytecodeValue anim);
-i32 Char_animTime(Char* c);
-void Char_updateCurFrame(Char* c);
-f32 Char_backEdge(Char* c);
-f32 Char_backEdgeBodyDist(Char* c);
-Ret_BytecodeValue__GoIface CharCompiler_expValueCommand(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
-f32 Char_backEdgeDist(Char* c);
-f32 Char_bottomEdge(Char* c);
-f32 Char_botBoundBodyDist(Char* c);
-f32 Char_botBoundDist(Char* c);
-bool Char_canRecover(Char* c);
-i32 Char_comboCount(Char* c);
-bool Char_command(Char* c, int pn, int i);
-void Char_assertCommand(Char* c, GoString name, i32 time_);
-Ret_BytecodeValue__GoIface CharCompiler_expValueMoveType(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
-BytecodeValue Char_constp(Char* c, f32 coordinate, f32 value);
-bool Char_ctrl(Char* c);
-bool Char_drawgame(Char* c);
-f32 Char_frontEdge(Char* c);
-f32 Char_frontEdgeBodyDist(Char* c);
-f32 Char_frontEdgeDist(Char* c);
-f32 Char_gameHeight(Char* c);
-f32 Char_gameWidth(Char* c);
-i32 Char_runOrderTrigger(Char* c);
-Ret_BytecodeValue__GoIface CharCompiler_expValueStateType(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
-Char* Char_powerOwner(Char* c);
-i32 Char_getPower(Char* c);
-Ret_BytecodeValue__GoIface CharCompiler_expValueTeamMode(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
-bool Char_hitDefAttr(Char* c, i32 attr);
-bool Char_hitOver(Char* c);
-bool Char_hitShakeOver(Char* c);
-bool Char_isHelper(Char* c, i32 id, int idx);
-bool Char_isPlayerType(Char* c);
-Ret_BytecodeValue__GoIface CharCompiler_expValuePhysics(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
-GoIface CharCompiler_contiguousOperator(CharCompiler* c, GoString* in);
-Ret_BytecodeValue__GoIface CharCompiler_expPostNot(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_StateController__GoIface CharCompiler_attackDist(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_attackMulSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_defenceMulSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_fallEnvShake(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void Motif_reset(Motif* m);
+void Motif_step(Motif* m);
+void Motif_drawAspectBars(Motif* m);
+void Motif_draw(Motif* m, i16 layerno);
+void Motif_drawFade(Motif* m);
+bool Motif_isDialogueSet(Motif* m);
+void Motif_act(Motif* m);
 Ret_StateController__GoIface CharCompiler_hitFallDamage(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_hitFallVel(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_hitFallSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
@@ -3552,46 +4548,162 @@ Ret_StateController__GoIface CharCompiler_guardBreakSet(CharCompiler* c, IniSect
 Ret_StateController__GoIface CharCompiler_guardPointsAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_guardPointsSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_lifebarAction(CharCompiler* c, IniSection is, StateControllerBase* sc);
+i32 FightScreenRound_overTime(FightScreenRound* ro);
+bool FightScreenRound_act(FightScreenRound* ro);
+void FightScreenRound_handleRoundIntro(FightScreenRound* ro);
+void Model_reset(Model* model);
+void MotifMenu_runLua(MotifMenu* me, Motif* m);
+void FightScreenRound_handleRoundOutro(FightScreenRound* ro);
+void FightScreenRound_reset(FightScreenRound* ro);
+void FightScreenRound_draw(FightScreenRound* ro, i16 layerno, Map_int_GoOpaqueValPtr f);
+void FightScreenRound_drawFade(FightScreenRound* ro);
+FightScreenTimer* fn_newFightScreenTimer(void);
+FightScreenTimer* fn_readFightScreenTimer(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenTimer_step(FightScreenTimer* tr);
+void FightScreenTimer_reset(FightScreenTimer* tr);
+void FightScreenTimer_bgDraw(FightScreenTimer* tr, i16 layerno);
+void FightScreenTimer_draw(FightScreenTimer* tr, i16 layerno, Map_int_GoOpaqueValPtr f);
+FightScreenScore* fn_newFightScreenScore(void);
+FightScreenScore* fn_readFightScreenScore(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenScore_step(FightScreenScore* sc);
+void FightScreenScore_reset(FightScreenScore* sc);
+void FightScreenScore_bgDraw(FightScreenScore* sc, i16 layerno);
+void FightScreenScore_draw(FightScreenScore* sc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenMatch* fn_newFightScreenMatch(void);
+FightScreenMatch* fn_readFightScreenMatch(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenMatch_step(FightScreenMatch* ma);
+void FightScreenMatch_reset(FightScreenMatch* ma);
+void FightScreenMatch_bgDraw(FightScreenMatch* ma, i16 layerno);
+void FightScreenMatch_draw(FightScreenMatch* ma, i16 layerno, Map_int_GoOpaqueValPtr f);
+FightScreenAiLevel* fn_newFightScreenAiLevel(void);
+void Char_clearMoveHit(Char* c);
+void Char_changeAnimEx(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx);
 Ret_StateController__GoIface CharCompiler_loadState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void Char_changeAnim(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx);
 GoIface CharCompiler_mapSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void Char_changeAnim2(Char* c, i32 animNo, int animPlayerNo, GoString ffx);
+void Char_setAnimElem(Char* c, i32 elem, i32 elemtime);
+void Char_setAnimElemTo(Char* c, Animation* anim, i32* animelem);
+bool Char_scf(Char* c, SystemCharFlag scf);
+void Char_setSCF(Char* c, SystemCharFlag scf, bool on);
+bool Char_csf(Char* c, CharSpecialFlag csf);
+void Char_setCSF(Char* c, CharSpecialFlag csf, bool on);
+bool Char_asf(Char* c, AssertSpecialFlag asf);
+void Char_setASF(Char* c, AssertSpecialFlag asf, bool on);
+Char* Char_parent(Char* c, bool log_);
+bool Char_parentExist(Char* c);
+Char* Char_root(Char* c, bool log_);
 Ret_StateController__GoIface CharCompiler_mapSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+FightScreenAiLevel* fn_readFightScreenAiLevel(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenAiLevel_step(FightScreenAiLevel* ai);
+void FightScreenAiLevel_reset(FightScreenAiLevel* ai);
+void FightScreenAiLevel_bgDraw(FightScreenAiLevel* ai, i16 layerno);
+void FightScreenAiLevel_draw(FightScreenAiLevel* ai, i16 layerno, Map_int_GoOpaqueValPtr f, f32 ailv);
+FightScreenWinCount* fn_newFightScreenWinCount(void);
+FightScreenWinCount* fn_readFightScreenWinCount(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenWinCount_step(FightScreenWinCount* wc);
+void FightScreenWinCount_reset(FightScreenWinCount* wc);
+void FightScreenWinCount_bgDraw(FightScreenWinCount* wc, i16 layerno);
+void FightScreenWinCount_draw(FightScreenWinCount* wc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenMode* fn_newFightScreenMode(void);
+Map_GoString_FightScreenModePtr fn_readFightScreenMode(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenMode_step(FightScreenMode* mo);
+void FightScreenMode_reset(FightScreenMode* mo);
+void FightScreenMode_bgDraw(FightScreenMode* mo, i16 layerno);
+void FightScreenMode_draw(FightScreenMode* mo, i16 layerno, Map_int_GoOpaqueValPtr f);
+Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def);
+void Renderer_GLES32_SetModelVertexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u8 values);
+void Renderer_GLES32_SetModelIndexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u32 values);
+u32 Renderer_GLES32_LoadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName, Slice_u8 shaderData);
+void Renderer_GLES32_UnloadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName);
+Char* Char_stateOwner(Char* c);
+Char* Char_helperTrigger(Char* c, i32 id, int idx);
 Ret_StateController__GoIface CharCompiler_mapAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_parentMapSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_parentMapAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Char* Char_getHelperChainIndex(Char* c, i32 idx);
 Ret_StateController__GoIface CharCompiler_rootMapSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_rootMapAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_teamMapSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Char* Char_helperIndexTrigger(Char* c, i32 idx);
 Ret_StateController__GoIface CharCompiler_teamMapAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_mapReset(CharCompiler* c, IniSection is, StateControllerBase* sc);
+BytecodeValue Char_helperIndexExist(Char* c, BytecodeValue id);
+i32 Char_indexTrigger(Char* c);
+Char* Char_targetTrigger(Char* c, i32 id, int idx);
+Char* Char_partner(Char* c, i32 n, bool log_);
+Char* Char_partnerTag(Char* c, i32 n);
+Char* Char_enemy(Char* c, i32 n);
+Char* Char_enemyNearTrigger(Char* c, i32 n);
+Char* Char_p2(Char* c);
+Char* Char_playerIDTrigger(Char* c, i32 id, bool log_);
+Char* Char_playerIndexTrigger(Char* c, i32 idx);
+Char* Char_playerTrigger(Char* c, int pn, bool log_);
+bool Char_isEnemyOf(Char* c, Char* e);
+f32 Char_getAILevel(Char* c);
+void Char_setAILevel(Char* c, f32 level);
+bool Char_alive(Char* c);
+bool Char_activelyFighting(Char* c);
+BytecodeValue Char_animElemNo(Char* c, i32 time_);
+BytecodeValue Char_animElemTime(Char* c, i32 elem);
+BytecodeValue Char_animExist(Char* c, BytecodeValue anim);
+BytecodeValue Char_selfAnimExist(Char* c, BytecodeValue anim);
+i32 Char_animTime(Char* c);
 Ret_StateController__GoIface CharCompiler_matchRestart(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_playBgm(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_modifyBGCtrl(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifyBGCtrl3d(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifySnd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifyBgm(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_printToConsole(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_redLifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_redLifeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_remapSprite(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_roundTimeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void Char_updateCurFrame(Char* c);
+f32 Char_backEdge(Char* c);
+f32 Char_backEdgeBodyDist(Char* c);
+f32 Char_backEdgeDist(Char* c);
+f32 Char_bottomEdge(Char* c);
+f32 Char_botBoundBodyDist(Char* c);
+f32 Char_botBoundDist(Char* c);
+bool Char_canRecover(Char* c);
+Ret_BytecodeValue__GoIface CharCompiler_expValueCommand(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
+i32 Char_comboCount(Char* c);
+bool Char_command(Char* c, int pn, int i);
+Ret_BytecodeValue__GoIface CharCompiler_expValueMoveType(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
+void Char_assertCommand(Char* c, GoString name, i32 time_);
+BytecodeValue Char_constp(Char* c, f32 coordinate, f32 value);
+bool Char_ctrl(Char* c);
+bool Char_drawgame(Char* c);
+f32 Char_frontEdge(Char* c);
+Ret_BytecodeValue__GoIface CharCompiler_expValueStateType(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
+f32 Char_frontEdgeBodyDist(Char* c);
+f32 Char_frontEdgeDist(Char* c);
+f32 Char_gameHeight(Char* c);
+f32 Char_gameWidth(Char* c);
+i32 Char_runOrderTrigger(Char* c);
+Char* Char_powerOwner(Char* c);
+Ret_BytecodeValue__GoIface CharCompiler_expValueTeamMode(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
+i32 Char_getPower(Char* c);
+bool Char_hitDefAttr(Char* c, i32 attr);
+bool Char_hitOver(Char* c);
+bool Char_hitShakeOver(Char* c);
+bool Char_isHelper(Char* c, i32 id, int idx);
+Ret_BytecodeValue__GoIface CharCompiler_expValuePhysics(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
+GoIface CharCompiler_contiguousOperator(CharCompiler* c, GoString* in);
+Ret_BytecodeValue__GoIface CharCompiler_expPostNot(CharCompiler* c, BytecodeExp* out, GoString* in);
+bool Char_isPlayerType(Char* c);
 bool Char_isHost(Char* c);
 i32 Char_jugglePoints(Char* c, i32 id);
-Ret_StateController__GoIface CharCompiler_roundTimeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_BytecodeValue__GoIface CharCompiler_expPow(CharCompiler* c, BytecodeExp* out, GoString* in);
 f32 Char_leftEdge(Char* c);
 bool Char_lose(Char* c);
 bool Char_loseKO(Char* c);
 bool Char_loseTime(Char* c);
-Ret_BytecodeValue__GoIface CharCompiler_expPow(CharCompiler* c, BytecodeExp* out, GoString* in);
 i32 Char_moveContact(Char* c);
-Ret_BytecodeValue__GoIface CharCompiler_expMldv(CharCompiler* c, BytecodeExp* out, GoString* in);
 i32 Char_moveCountered(Char* c);
+Ret_BytecodeValue__GoIface CharCompiler_expMldv(CharCompiler* c, BytecodeExp* out, GoString* in);
 i32 Char_moveGuarded(Char* c);
 i32 Char_moveHit(Char* c);
 i32 Char_moveReversed(Char* c);
 i32 Char_numEnemy(Char* c);
-Ret_BytecodeValue__GoIface CharCompiler_expAdsb(CharCompiler* c, BytecodeExp* out, GoString* in);
 BytecodeValue Char_numExplod(Char* c, BytecodeValue eid);
+Ret_BytecodeValue__GoIface CharCompiler_expAdsb(CharCompiler* c, BytecodeExp* out, GoString* in);
 i32 Char_numPlayer(Char* c);
+Ret_BytecodeValue__GoIface CharCompiler_expGrls(CharCompiler* c, BytecodeExp* out, GoString* in);
 BytecodeValue Char_numText(Char* c, BytecodeValue textid);
 BytecodeValue Char_soundVar(Char* c, BytecodeValue chid, OpCode vtype);
 BytecodeValue Char_numHelper(Char* c, BytecodeValue hid);
@@ -3600,112 +4712,86 @@ i32 Char_numProj(Char* c);
 BytecodeValue Char_numProjID(Char* c, BytecodeValue pid);
 BytecodeValue Char_numTarget(Char* c, BytecodeValue hid);
 i32 Char_palfxvar(Char* c, i32 x);
-f32 Char_palfxvar2(Char* c, i32 x);
-Ret_BytecodeValue__GoIface CharCompiler_expGrls(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__bool__GoIface CharCompiler_expRange(CharCompiler* c, BytecodeExp* out, GoString* in, BytecodeValue bv, OpCode opc);
 Ret_BytecodeValue__GoIface CharCompiler_expEqne(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expLevel(CharCompiler* c, expLevel lv, BytecodeExp* out, GoString* in);
 void fn_constBinaryOp(BytecodeValue* v1, BytecodeValue v2, OpCode opc);
-GoIface CharCompiler_saveLoadFileSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_saveFile(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_loadFile(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_saveState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_scoreAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_shaderSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_storyboardSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_storyboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifyStoryboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_removeStoryboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetDizzyPointsAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetGuardPointsAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetRedLifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_targetScoreAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+f32 Char_palfxvar2(Char* c, i32 x);
 i32 Char_pauseTimeTrigger(Char* c);
-bool Char_canOwnProjectiles(Char* c);
 Ret_BytecodeValue__GoIface CharCompiler_expOneOpSub(CharCompiler* c, BytecodeExp* out, GoString* in, BytecodeValue bv, expLevel lv, OpCode opc);
-GoIface CharCompiler_textSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+bool Char_canOwnProjectiles(Char* c);
 BytecodeValue Char_projTimeTrigger(Char* c, BytecodeValue pid, GoFunc match);
 BytecodeValue Char_projCancelTime(Char* c, BytecodeValue pid);
 BytecodeValue Char_projContactTime(Char* c, BytecodeValue pid);
 BytecodeValue Char_projGuardedTime(Char* c, BytecodeValue pid);
 BytecodeValue Char_projHitTime(Char* c, BytecodeValue pid);
 bool Char_reversalDefAttr(Char* c, i32 attr);
-Ret_BytecodeValue__GoIface CharCompiler_expOneOp(CharCompiler* c, BytecodeExp* out, GoString* in, expLevel lv, GoString opt, OpCode opc);
-Ret_BytecodeValue__GoIface CharCompiler_expAnd(CharCompiler* c, BytecodeExp* out, GoString* in);
 f32 Char_rightEdge(Char* c);
 i32 Char_roundsExisted(Char* c);
 i32 Char_roundsWon(Char* c);
 f32 Char_screenPosX(Char* c);
 f32 Char_screenPosY(Char* c);
 f32 Char_screenHeight(Char* c);
-f32 Char_screenWidth(Char* c);
-BytecodeValue Char_selfStatenoExist(Char* c, BytecodeValue stateno);
-f32 Char_stageFrontEdgeDist(Char* c);
-f32 Char_stageBackEdgeDist(Char* c);
-int Char_teamLeader(Char* c);
+Ret_BytecodeValue__GoIface CharCompiler_expOneOp(CharCompiler* c, BytecodeExp* out, GoString* in, expLevel lv, GoString opt, OpCode opc);
+Ret_BytecodeValue__GoIface CharCompiler_expAnd(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expXor(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expOr(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expBoolAnd(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expBoolXor(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expBoolOr(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expBoolOrSub(CharCompiler* c, BytecodeExp* out, GoString* in);
-Ret_StateController__GoIface CharCompiler_text(CharCompiler* c, IniSection is, StateControllerBase* sc);
+f32 Char_screenWidth(Char* c);
+BytecodeValue Char_selfStatenoExist(Char* c, BytecodeValue stateno);
+f32 Char_stageFrontEdgeDist(Char* c);
+f32 Char_stageBackEdgeDist(Char* c);
+int Char_teamLeader(Char* c);
 Ret_BytecodeExp__GoIface CharCompiler_typedExp(CharCompiler* c, GoString* in, ValueType vt);
-Ret_StateController__GoIface CharCompiler_modifyText(CharCompiler* c, IniSection is, StateControllerBase* sc);
 i32 Char_teamSize(Char* c);
-Ret_StateController__GoIface CharCompiler_removeText(CharCompiler* c, IniSection is, StateControllerBase* sc);
-BytecodeExp fn_cloneExp(BytecodeExp be);
 Slice_int Char_getTeamOrder(Char* c);
-BytecodeExp* CharCompiler_getScratch(CharCompiler* c);
 void Char_updateTeamOrder(Char* c, Slice_int team);
+BytecodeExp fn_cloneExp(BytecodeExp be);
+BytecodeExp* CharCompiler_getScratch(CharCompiler* c);
+void CharCompiler_putScratch(CharCompiler* c, int n);
+Ret_BytecodeExp__GoIface CharCompiler_argExpression(CharCompiler* c, GoString* in, ValueType vt);
 void Char_changeTagOrder(Char* c, int targetMN);
+Ret_BytecodeExp__GoIface CharCompiler_fullExpression(CharCompiler* c, GoString* in, ValueType vt);
+Ret_i32__bool__bool fn_parseTriggerNumber(GoString name);
 void Char_changeTagLeader(Char* c, int nextLeaderPN);
 f32 Char_topEdge(Char* c);
 f32 Char_topBoundBodyDist(Char* c);
 f32 Char_topBoundDist(Char* c);
+Ret_IniSection__GoIface CharCompiler_parseSection(CharCompiler* c, GoFunc sctrl);
 bool Char_win(Char* c);
 bool Char_winKO(Char* c);
 bool Char_winTime(Char* c);
 bool Char_winPerfect(Char* c);
 bool Char_winClutch(Char* c);
 bool Char_winType(Char* c, WinType wt);
-void CharCompiler_putScratch(CharCompiler* c, int n);
-Ret_BytecodeExp__GoIface CharCompiler_argExpression(CharCompiler* c, GoString* in, ValueType vt);
-Ret_BytecodeExp__GoIface CharCompiler_fullExpression(CharCompiler* c, GoString* in, ValueType vt);
-Ret_i32__bool__bool fn_parseTriggerNumber(GoString name);
-Ret_StateController__GoIface CharCompiler_modifyStageVar(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_IniSection__GoIface CharCompiler_parseSection(CharCompiler* c, GoFunc sctrl);
 Slice_SoundChannelPtr Char_getOwnChannels(Char* c, i32 chNo);
 void Char_playSound(Char* c, PlaySndParams* params);
 int fn_indexSpaceTab(GoString s);
-void Char_autoTurn(Char* c);
-void Char_updateFBFlip(Char* c);
-bool Char_shouldFaceP2(Char* c);
-bool Char_stateChange1(Char* c, i32 no, int pn);
-bool Char_stateChange2(Char* c);
-void Char_changeStateEx(Char* c, i32 no, int pn, i32 anim, i32 ctrl, GoString ffx);
 bool CharCompiler_hasKeyPrefix(CharCompiler* c, IniSection is, GoString prefix);
 GoString fn_cutComment(GoString line);
 GoIface CharCompiler_stateSec(CharCompiler* c, IniSection is, GoFunc f);
+void Char_autoTurn(Char* c);
+void Char_updateFBFlip(Char* c);
+bool Char_shouldFaceP2(Char* c);
 GoIface CharCompiler_stateParam(CharCompiler* c, IniSection is, GoString name, bool mandatory, GoFunc f);
 GoString CharCompiler_getDataPrefix(CharCompiler* c, GoString* data, bool ffxDefault);
+bool Char_stateChange1(Char* c, i32 no, int pn);
 Slice_BytecodeExp CharCompiler_stringToExp(CharCompiler* c, GoString s);
 GoIface CharCompiler_paramPrefixValue(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString name, u8 id, int numArg, bool mandatory, bool ffxDefault);
 GoIface CharCompiler_paramPrefixValueSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString name, u8 id, int numArg, bool mandatory, bool ffxDefault);
+bool Char_stateChange2(Char* c);
+void Char_changeStateEx(Char* c, i32 no, int pn, i32 anim, i32 ctrl, GoString ffx);
+void Char_changeState(Char* c, i32 no, i32 anim, i32 ctrl, GoString ffx);
 Ret_Slice_BytecodeExp__GoIface CharCompiler_exprs(CharCompiler* c, GoString data, ValueType vt, int numArg);
 GoIface CharCompiler_scAdd(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, ValueType vt, int numArg, Slice_BytecodeExp topbe);
 GoIface CharCompiler_paramValue(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramname, u8 id, ValueType vt, int numArg, bool mandatory);
-Ret_StateController__GoIface CharCompiler_cameraCtrl(CharCompiler* c, IniSection is, StateControllerBase* sc);
 GoIface CharCompiler_paramValueLoose(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramname, u8 id, ValueType vt, int numArg, bool mandatory);
-Ret_StateController__GoIface CharCompiler_height(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_depth(CharCompiler* c, IniSection is, StateControllerBase* sc);
 GoIface CharCompiler_paramAnimtype(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
 GoIface CharCompiler_paramAnimtypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
-Ret_StateController__GoIface CharCompiler_depthBound(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void Char_changeState(Char* c, i32 no, i32 anim, i32 ctrl, GoString ffx);
 void Char_runState(Char* c, i32 no, int pn);
-GoIface CharCompiler_paramHittype(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
-Ret_StateController__GoIface CharCompiler_modifyPlayer(CharCompiler* c, IniSection is, StateControllerBase* sc);
 void Char_selfState(Char* c, i32 no, i32 anim, i32 readplayerid, i32 ctrl, GoString ffx);
 void Char_destroy(Char* c);
 bool Char_destroySelf(Char* c, bool recursive, bool removeexplods, bool removetexts);
@@ -3715,10 +4801,7 @@ Arr3_f32 Char_helperPos(Char* c, PosType pt, Arr3_f32 pos, i32 facing, f32* dstF
 Ret_ExplodPtr__int Char_spawnExplod(Char* c);
 Slice_ExplodPtr Char_getMultipleExplods(Char* c, i32 id, int idx, bool log_);
 Explod* Char_getSingleExplod(Char* c, i32 id, int idx, bool log_);
-Arr2_i32 Char_explodDrawPal(Char* c, Explod* e);
-void Char_commitExplod(Char* c, int i);
-void Char_explodBindTime(Char* c, i32 id, i32 time_);
-void Char_removeExplod(Char* c, i32 id, i32 idx);
+GoIface CharCompiler_paramHittype(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
 GoIface CharCompiler_paramHittypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
 GoIface CharCompiler_paramPostype(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id);
 GoIface CharCompiler_paramPostypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id);
@@ -3726,15 +4809,56 @@ GoIface CharCompiler_paramSpace(CharCompiler* c, IniSection is, StateControllerB
 GoIface CharCompiler_paramSpaceSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id, bool allowNone);
 GoIface CharCompiler_paramProjection(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString key, u8 id);
 GoIface CharCompiler_paramProjectionSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString key, u8 id);
-Ret_StateController__GoIface CharCompiler_assertCommand(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_getHitVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_paramSaveData(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id);
+GoIface CharCompiler_paramSaveDataSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id);
+GoIface CharCompiler_paramTrans(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix, u8 id);
+GoIface CharCompiler_paramClsnType(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
+GoIface CharCompiler_paramClsnTypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
+GoIface CharCompiler_paramStringList(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 opcode);
+GoIface CharCompiler_paramStringListSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 opcode);
+Arr2_i32 Char_explodDrawPal(Char* c, Explod* e);
+Ret_StateController__GoIface CharCompiler_modifyBGCtrl3d(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifySnd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyBgm(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_printToConsole(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_redLifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_redLifeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_remapSprite(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_roundTimeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_roundTimeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_saveLoadFileSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_saveFile(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_loadFile(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_saveState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_scoreAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_shaderSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_storyboardSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_storyboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyStoryboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreen_step(FightScreen* fs);
+Ret_StateController__GoIface CharCompiler_removeStoryboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetDizzyPointsAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreen_reset(FightScreen* fs);
+Ret_StateController__GoIface CharCompiler_targetGuardPointsAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetRedLifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetScoreAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_textSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+bool FightScreen_visible(FightScreen* fs);
+Ret_StateController__GoIface CharCompiler_text(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreen_draw(FightScreen* fs, i16 layerno);
+void Char_commitExplod(Char* c, int i);
+GoIface CharCompiler_stateDef(CharCompiler* c, IniSection is, StateBytecode* sbc);
+void Char_explodBindTime(Char* c, i32 id, i32 time_);
+void Char_removeExplod(Char* c, i32 id, i32 idx);
 TextSprite* Char_spawnText(Char* c);
 Slice_TextSpritePtr Char_getMultipleTexts(Char* c, i32 id, int idx, bool log_);
 void Char_removeText(Char* c, i32 id, i32 index);
 Animation* Char_getAnimSprite(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx, bool ownpal);
 Animation* Char_getSelfAnimSprite(Char* c, i32 animNo, GoString ffx, bool ownpal);
+GoIface CharCompiler_stateCompile(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, Slice_GoString dirs, bool negoverride, Map_GoString_TypedValue constants);
 Animation* Char_getShadowReflectionSprite(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx, bool ownpal, GoString scname);
 Animation* Char_getAnim(Char* c, i32 n, GoString ffx);
+GoIface CharCompiler_stateCompileCNS(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, GoString filetext, bool negoverride, Map_GoString_TypedValue constants);
 void Char_animSpriteSetup(Char* c, Animation* a, int spritePN, GoString ffx, bool ownpal);
 void Char_posReset(Char* c);
 void Char_setPosX(Char* c, f32 x, bool all);
@@ -3749,31 +4873,51 @@ void Char_commitProjectile(Char* c, Projectile* p, PosType pt, f32 offx, f32 off
 Arr2_i32 Char_projDrawPal(Char* c, Projectile* p);
 Slice_ProjectilePtr Char_getMultipleProjs(Char* c, i32 id, int idx, bool log_);
 Projectile* Char_getSingleProj(Char* c, i32 id, int idx, bool log_);
+GoIface CharCompiler_wrongClosureToken(CharCompiler* c);
+Ret_GoString__bool CharCompiler_nextLine(CharCompiler* c);
+GoString CharCompiler_scan(CharCompiler* c, GoString* line);
 Arr2_f32 Char_clsnScaleLocal(Char* c);
 Arr2_f32 Char_sizeBoxScaleWorld(Char* c);
 Reaction Char_gethitAnimtype(Char* c);
 bool Char_isTargetBound(Char* c);
 void Char_initConstants(Char* c, CharGlobalInfo* gi);
 void Char_initCnsVar(Char* c);
+GoIface CharCompiler_needToken(CharCompiler* c, GoString t);
+Ret_GoString__GoIface CharCompiler_readString(CharCompiler* c, GoString* line);
+Ret_GoString__bool__GoIface CharCompiler_readSentenceLine(CharCompiler* c, GoString* line);
+Ret_GoString__bool__GoIface CharCompiler_readSentence(CharCompiler* c, GoString* line);
+GoIface CharCompiler_statementEnd(CharCompiler* c, GoString* line);
+GoIface CharCompiler_readKeyValue(CharCompiler* c, IniSection is, GoString end, GoString* line);
+GoIface CharCompiler_varNameCheck(CharCompiler* c, GoString nm);
+Ret_Slice_GoString__GoIface CharCompiler_varNames(CharCompiler* c, GoString end, GoString* line);
+GoIface CharCompiler_inclNumVars(CharCompiler* c, i32* numVars);
+Ret_i32__GoIface CharCompiler_scanI32(CharCompiler* c, GoString* line);
+Ret_i32__GoIface CharCompiler_scanStateDef(CharCompiler* c, GoString* line, Map_GoString_TypedValue constants);
+GoIface CharCompiler_blockAttribSet(CharCompiler* c, GoString* line, StateBlock* bl, StateBytecode* sbc, bool inheritIhp, bool nestedInLoop);
+Ret_StateBlockPtr__GoIface CharCompiler_subBlock(CharCompiler* c, GoString* line, bool root, StateBytecode* sbc, i32* numVars, bool inheritIhp, bool nestedInLoop);
 BytecodeValue Char_varGet(Char* c, i32 i);
 BytecodeValue Char_fvarGet(Char* c, i32 i);
 BytecodeValue Char_sysVarGet(Char* c, i32 i);
 BytecodeValue Char_sysFvarGet(Char* c, i32 i);
 BytecodeValue Char_cnsVarSet(Char* c, i32 i, BytecodeValue value, i32 scType, i32 varType);
+GoIface CharCompiler_switchBlock(CharCompiler* c, GoString* line, StateBlock* bl, StateBytecode* sbc, i32* numVars);
 BytecodeValue Char_varSet(Char* c, i32 i, i32 v);
 BytecodeValue Char_fvarSet(Char* c, i32 i, f32 v);
 BytecodeValue Char_sysVarSet(Char* c, i32 i, i32 v);
+GoIface CharCompiler_loopBlock(CharCompiler* c, GoString* line, bool root, StateBlock* bl, StateBytecode* sbc, i32* numVars);
 BytecodeValue Char_sysFvarSet(Char* c, i32 i, f32 v);
 BytecodeValue Char_varAdd(Char* c, i32 i, i32 v);
 BytecodeValue Char_fvarAdd(Char* c, i32 i, f32 v);
 BytecodeValue Char_sysVarAdd(Char* c, i32 i, i32 v);
 BytecodeValue Char_sysFvarAdd(Char* c, i32 i, f32 v);
+GoIface CharCompiler_callFunc(CharCompiler* c, GoString* line, bool root, Slice_StateController* ctrls, Slice_u8 ret);
 void Char_varRangeSet(Char* c, i32 first, i32 last, i32 val);
 void Char_fvarRangeSet(Char* c, i32 first, i32 last, f32 val);
 void Char_sysVarRangeSet(Char* c, i32 first, i32 last, i32 val);
 void Char_sysFvarRangeSet(Char* c, i32 first, i32 last, f32 val);
 void Char_setFacing(Char* c, f32 f);
 Slice_backGroundPtr Char_getMultipleStageBg(Char* c, i32 id, int idx, bool log_);
+GoIface CharCompiler_letAssign(CharCompiler* c, GoString* line, bool root, Slice_StateController* ctrls, i32* numVars, Slice_GoString names, bool endLine);
 backGround* Char_getSingleStageBg(Char* c, i32 id, int idx, bool log_);
 BytecodeValue Char_numStageBG(Char* c, BytecodeValue id);
 Slice_i32 Char_getTarget(Char* c, i32 id, int idx);
@@ -3787,6 +4931,8 @@ void Char_targetGuardPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute);
 void Char_targetRedLifeAdd(Char* c, Slice_i32 tar, i32 add, bool absolute);
 void Char_targetScoreAdd(Char* c, Slice_i32 tar, f32 s);
 void Char_targetState(Char* c, Slice_i32 tar, i32 state);
+GoIface CharCompiler_stateBlock(CharCompiler* c, GoString* line, StateBlock* bl, bool root, StateBytecode* sbc, Slice_StateController* ctrls, i32* numVars);
+GoIface CharCompiler_stateCompileZSS(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, GoString filetext, Map_GoString_TypedValue constants);
 void Char_targetVelSetX(Char* c, Slice_i32 tar, f32 x);
 void Char_targetVelSetY(Char* c, Slice_i32 tar, f32 y);
 void Char_targetVelSetZ(Char* c, Slice_i32 tar, f32 z);
@@ -3795,53 +4941,12 @@ void Char_targetVelAddY(Char* c, Slice_i32 tar, f32 y);
 void Char_targetVelAddZ(Char* c, Slice_i32 tar, f32 z);
 void Char_targetDrop(Char* c, i32 excludeid, i32 excludechar, bool keepone);
 f32 Char_attackTrigger(Char* c);
+Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char* p, GoString def, CharGlobalInfo* gi);
 f32 Char_defenceTrigger(Char* c);
 i32 Char_computeDamage(Char* c, f64 damage, bool kill, bool absolute, f32 atkmul, Char* attacker, bool bounds);
 void Char_lifeAdd(Char* c, f64 add, bool kill, bool absolute);
 void Char_lifeSet(Char* c, i32 life);
 void Char_setPower(Char* c, i32 pow_);
-GoIface CharCompiler_paramSaveData(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id);
-GoIface CharCompiler_paramSaveDataSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id);
-GoIface CharCompiler_paramTrans(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix, u8 id);
-GoIface CharCompiler_paramClsnType(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
-GoIface CharCompiler_paramClsnTypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id);
-Ret_StateController__GoIface CharCompiler_groundLevelOffset(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_paramStringList(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 opcode);
-Ret_StateController__GoIface CharCompiler_targetAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_paramStringListSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 opcode);
-GoIface CharCompiler_stateDef(CharCompiler* c, IniSection is, StateBytecode* sbc);
-GoIface CharCompiler_stateCompile(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, Slice_GoString dirs, bool negoverride, Map_GoString_TypedValue constants);
-GoIface CharCompiler_stateCompileCNS(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, GoString filetext, bool negoverride, Map_GoString_TypedValue constants);
-GoIface CharCompiler_wrongClosureToken(CharCompiler* c);
-Ret_GoString__bool CharCompiler_nextLine(CharCompiler* c);
-GoString CharCompiler_scan(CharCompiler* c, GoString* line);
-GoIface CharCompiler_needToken(CharCompiler* c, GoString t);
-Ret_GoString__GoIface CharCompiler_readString(CharCompiler* c, GoString* line);
-Ret_GoString__bool__GoIface CharCompiler_readSentenceLine(CharCompiler* c, GoString* line);
-Ret_GoString__bool__GoIface CharCompiler_readSentence(CharCompiler* c, GoString* line);
-GoIface CharCompiler_statementEnd(CharCompiler* c, GoString* line);
-GoIface CharCompiler_readKeyValue(CharCompiler* c, IniSection is, GoString end, GoString* line);
-GoIface CharCompiler_varNameCheck(CharCompiler* c, GoString nm);
-Ret_Slice_GoString__GoIface CharCompiler_varNames(CharCompiler* c, GoString end, GoString* line);
-Ret_StateController__GoIface CharCompiler_transformClsn(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_transformSprite(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifyStageBG(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_shaderSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 baseOp, GoString prefix);
-Ret_StateController__GoIface CharCompiler_shiftInput(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_overrideClsn(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_null(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_inclNumVars(CharCompiler* c, i32* numVars);
-Ret_i32__GoIface CharCompiler_scanI32(CharCompiler* c, GoString* line);
-Ret_i32__GoIface CharCompiler_scanStateDef(CharCompiler* c, GoString* line, Map_GoString_TypedValue constants);
-GoIface CharCompiler_blockAttribSet(CharCompiler* c, GoString* line, StateBlock* bl, StateBytecode* sbc, bool inheritIhp, bool nestedInLoop);
-Ret_StateBlockPtr__GoIface CharCompiler_subBlock(CharCompiler* c, GoString* line, bool root, StateBytecode* sbc, i32* numVars, bool inheritIhp, bool nestedInLoop);
-GoIface CharCompiler_switchBlock(CharCompiler* c, GoString* line, StateBlock* bl, StateBytecode* sbc, i32* numVars);
-GoIface CharCompiler_loopBlock(CharCompiler* c, GoString* line, bool root, StateBlock* bl, StateBytecode* sbc, i32* numVars);
-GoIface CharCompiler_callFunc(CharCompiler* c, GoString* line, bool root, Slice_StateController* ctrls, Slice_u8 ret);
-GoIface CharCompiler_letAssign(CharCompiler* c, GoString* line, bool root, Slice_StateController* ctrls, i32* numVars, Slice_GoString names, bool endLine);
-GoIface CharCompiler_stateBlock(CharCompiler* c, GoString* line, StateBlock* bl, bool root, StateBytecode* sbc, Slice_StateController* ctrls, i32* numVars);
-GoIface CharCompiler_stateCompileZSS(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, GoString filetext, Map_GoString_TypedValue constants);
-Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char* p, GoString def, CharGlobalInfo* gi);
 void Char_powerAdd(Char* c, i32 add);
 void Char_powerSet(Char* c, i32 pow_);
 void Char_dizzyPointsAdd(Char* c, f64 add, bool absolute);
@@ -3872,43 +4977,33 @@ BytecodeValue Char_p2BodyDistY(Char* c, Char* oc);
 BytecodeValue Char_p2BodyDistZ(Char* c, Char* oc);
 void Char_setPauseTime(Char* c, i32 pausetime, i32 movetime);
 void Char_setSuperPauseTime(Char* c, i32 pausetime, i32 movetime, bool unhittable, f32 p2defmul);
-void FightScreenRound_draw(FightScreenRound* ro, i16 layerno, Map_int_GoOpaqueValPtr f);
-void FightScreenRound_drawFade(FightScreenRound* ro);
-void FightScreenTimer_step(FightScreenTimer* tr);
-void FightScreenTimer_reset(FightScreenTimer* tr);
-void FightScreenTimer_bgDraw(FightScreenTimer* tr, i16 layerno);
-void FightScreenTimer_draw(FightScreenTimer* tr, i16 layerno, Map_int_GoOpaqueValPtr f);
-void FightScreenScore_step(FightScreenScore* sc);
-void FightScreenScore_reset(FightScreenScore* sc);
-void FightScreenScore_bgDraw(FightScreenScore* sc, i16 layerno);
-void FightScreenScore_draw(FightScreenScore* sc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-void FightScreenMatch_step(FightScreenMatch* ma);
-void FightScreenMatch_reset(FightScreenMatch* ma);
-void FightScreenMatch_bgDraw(FightScreenMatch* ma, i16 layerno);
-void FightScreenMatch_draw(FightScreenMatch* ma, i16 layerno, Map_int_GoOpaqueValPtr f);
-void FightScreenAiLevel_step(FightScreenAiLevel* ai);
-void FightScreenAiLevel_reset(FightScreenAiLevel* ai);
-void FightScreenAiLevel_bgDraw(FightScreenAiLevel* ai, i16 layerno);
-void FightScreenAiLevel_draw(FightScreenAiLevel* ai, i16 layerno, Map_int_GoOpaqueValPtr f, f32 ailv);
-void FightScreenWinCount_step(FightScreenWinCount* wc);
-void FightScreenWinCount_reset(FightScreenWinCount* wc);
-void FightScreenWinCount_bgDraw(FightScreenWinCount* wc, i16 layerno);
-void FightScreenWinCount_draw(FightScreenWinCount* wc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-void FightScreenMode_step(FightScreenMode* mo);
-void FightScreenMode_reset(FightScreenMode* mo);
-void FightScreenMode_bgDraw(FightScreenMode* mo, i16 layerno);
-void FightScreenMode_draw(FightScreenMode* mo, i16 layerno, Map_int_GoOpaqueValPtr f);
-void FightScreen_step(FightScreen* fs);
-void FightScreen_reset(FightScreen* fs);
-bool FightScreen_visible(FightScreen* fs);
-void FightScreen_draw(FightScreen* fs, i16 layerno);
-void FightScreen_drawFade(FightScreen* fs);
-void FightScreen_appendAction(FightScreen* fs, Char* c, FSMsg* msg, i32 refresh);
-void FightScreen_addComboHits(FightScreen* fs, int side, i32 n);
-void FightScreen_syncTeamOrder(FightScreen* fs, int side);
 void Char_propagateIgnoreDarkenTime(Char* c);
 PalFX* Char_getPalfx(Char* c);
 Slice_int Char_getPalMap(Char* c);
+Ret_StateController__GoIface CharCompiler_modifyText(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_removeText(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyStageVar(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_cameraCtrl(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_height(CharCompiler* c, IniSection is, StateControllerBase* sc);
+void FightScreen_drawFade(FightScreen* fs);
+void FightScreen_setScale(FightScreen* fs);
+GoString fn_readMotifFightFromDef(GoString def);
+void FightScreen_resolvePath(FightScreen* fs);
+void FightScreen_appendAction(FightScreen* fs, Char* c, FSMsg* msg, i32 refresh);
+void FightScreen_addComboHits(FightScreen* fs, int side, i32 n);
+void FightScreen_syncTeamOrder(FightScreen* fs, int side);
+Ret_StateController__GoIface CharCompiler_depth(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_depthBound(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyPlayer(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_assertCommand(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_getHitVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_groundLevelOffset(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_targetAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_transformClsn(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_transformSprite(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyStageBG(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_shaderSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 baseOp, GoString prefix);
+Ret_StateController__GoIface CharCompiler_shiftInput(CharCompiler* c, IniSection is, StateControllerBase* sc);
 bool Char_pause(Char* c);
 bool Char_hitPause(Char* c);
 void Char_angleSet(Char* c, f32 a);
@@ -3986,11 +5081,12 @@ void Char_actionFinish(Char* c);
 void Char_track(Char* c);
 void Char_update(Char* c);
 void Char_tick(Char* c);
-Ret_bool__bool__GoString__i32 Char_debugHitByState(Char* c, i32 boxgroup, i32 boxindex);
 void Char_cueDebugDraw(Char* c);
 void Char_cueDraw(Char* c);
+void CharList_clear(CharList* cl);
 void CharList_add(CharList* cl, Char* c);
 void CharList_delete(CharList* cl, Char* dc);
+void CharList_audit(CharList* cl);
 void CharList_commandUpdate(CharList* cl);
 void CharList_updateRunOrder(CharList* cl);
 void CharList_action(CharList* cl);
@@ -4006,38 +5102,104 @@ void CharList_cueDraw(CharList* cl);
 Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list);
 void Char_varCachePut(Char* c, i32 i);
 void Char_fvarCachePut(Char* c, i32 i);
-bool CommandList_InputUpdate(CommandList* cl, Char* char_, int controller);
-void Renderer_GLES32_BeginScreenshot(Renderer_GLES32* r, int width, int height);
-bool Renderer_GLES32_FinishScreenshot(Renderer_GLES32* r, Slice_u8 data, int width, int height);
+Ret_StateController__GoIface CharCompiler_overrideClsn(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_null(CharCompiler* c, IniSection is, StateControllerBase* sc);
+bool bgCtrl_yEnable(bgCtrl* bgc);
+void Stage_applyShaderDef(Stage* s, stageShaderDef* def, CustomShader* cs);
+SelectStage* Stage_si(Stage* s);
+Stage* fn_newStage(GoString def);
+Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef);
+void Stage_updateLocalScale(Stage* s, f32 gameWidth);
+Slice_backGroundPtr Stage_getBg(Stage* s, i32 id);
+Slice_NodePtr Stage_get3DBg(Stage* s, u32 id);
+Slice_GLTFAnimationPtr Stage_get3DAnim(Stage* s, u32 id);
+void Stage_setShaderTex(Stage* s, ShaderTexture* st, bgShaderTex def);
+void Stage_bgCtrlAction(Stage* s);
+void Stage_runBgCtrl(Stage* s, bgCtrl* bgc);
+bool Stage_paused(Stage* s);
+void Stage_action(Stage* s);
+void Stage_tick(Stage* s);
 void Stage_draw(Stage* s, i32 layer, f32 x, f32 y, f32 scl);
 void Stage_reset(Stage* s);
 void Stage_destroy(Stage* s);
 GoString Stage_warn(Stage* s);
 modifyBGCtrlShader Stage_newModifyBGCtrlShader(Stage* s);
 void Stage_modifyBGCtrl(Stage* s, i32 id, Arr3_i32 t, Arr3_i32 v, f32 x, f32 y, Arr2_i32 src, Arr2_i32 dst, Arr3_i32 add, Arr3_i32 mul, Arr4_i32 sinadd, Arr4_i32 sinmul, Arr2_i32 sincolor, Arr2_i32 sinhue, i32 invall, i32 invblend, f32 color, f32 hue, modifyBGCtrlShader shader);
+void Stage_modifyBGCtrl3d(Stage* s, u32 id, Arr3_i32 t, Arr3_i32 v);
+Anim* Anim_CloneState(Anim* anim);
+Fade* Fade_Clone(Fade* fa);
+MotifContinue MotifContinue_Clone(MotifContinue* co);
+DialogueToken fn_cloneDialogueToken(DialogueToken t);
+DialogueParsedLine fn_cloneDialogueParsedLine(DialogueParsedLine src);
+MotifDialogue MotifDialogue_Clone(MotifDialogue* di);
+rankingRow rankingRow_Clone(rankingRow* rr);
+MotifHiscore MotifHiscore_Clone(MotifHiscore* hi);
+MotifWin MotifWin_Clone(MotifWin* wi);
+Motif Motif_Clone(Motif* m, bool postMatch);
+Music fn_cloneMusicMapShallow(Music src);
+Slice_StoryboardPtr fn_cloneStoryboards(Slice_StoryboardPtr src);
+bool System_await(System* s, int fps);
+soundPanView System_soundPanView(System* s);
+void System_renderFrame(System* s);
+bool System_update(System* s);
+Storyboard Storyboard_Clone(Storyboard* s);
+BGDef* BGDef_Clone(BGDef* s);
+CustomShader CustomShader_Clone(CustomShader* cs, GameStatePool* gsp);
+void System_tickSound(System* s);
+void System_applyPauseFocusVolume(System* s);
+void System_resetRemapInput(System* s);
+void System_loaderReset(System* s);
+GoIface System_synchronize(System* s);
+bool System_anyHardButton(System* s);
+bool System_anyButton(System* s);
+void System_stepCommandLists(System* s);
+bool System_usesRollbackMatch(System* s);
+bool System_matchOver(System* s);
+Char* System_anyChar(System* s);
+Char* System_playerID(System* s, i32 id);
+BytecodeValue System_playerIDExist(System* s, BytecodeValue id);
+Char* System_playerIndex(System* s, i32 idx);
+BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx);
+Char* System_getCharRoot(System* s, int idx);
+BytecodeValue System_playerNoExist(System* s, BytecodeValue pn);
+i32 System_palfxvar(System* s, i32 x, i32 y);
+f32 System_palfxvar2(System* s, i32 x, i32 y);
+bool System_roundEnded(System* s);
+bool System_roundNoDamage(System* s);
+i32 System_gameTime(System* s);
+i32 System_roundState(System* s);
+i32 System_introState(System* s);
+i32 System_outroState(System* s);
+bool System_roundOver(System* s);
+bool System_roundIsSingle(System* s);
+bool System_maxDrawsReached(System* s, int team);
+bool System_roundIsFinal(System* s);
+bool System_gsf(System* s, GlobalSpecialFlag gsf);
+void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on);
+void System_appendToConsole(System* s, GoString str);
+void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a);
+void System_luaFlushDrawQueue(System* s);
+void System_luaDiscardDrawQueue(System* s);
+void System_printBytecodeError(System* s, GoString str);
+void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bool shell, bool console);
+f32 System_updateZScale(System* s, f32 pos, f32 localscale);
+bool System_zEnabled(System* s);
+Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos, f32 zscale);
+f32 System_posZtoYoffset(System* s, f32 zpos, f32 localscl);
+bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1, f32 posz2, f32 top2, f32 bot2, f32 localscl2);
+Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f32 pos1, f32 facing1, Slice_ClsnFinal boxes2, Arr2_f32 pos2, f32 facing2);
+void System_initPlayerID(System* s);
+void System_pruneCharId(System* s);
 i32 System_newCharId(System* s);
 void System_resetGblEffect(System* s);
 void System_clearAllCharSounds(System* s);
 void System_stopAllCharSounds(System* s);
-Arr6_f32 fn_NormalizeAxes(Arr6_i8* axes);
-bool CommandList_Assert(CommandList* cl, GoString name, i32 time_);
-void CommandList_ClearName(CommandList* cl, GoString name);
 void System_clearMatchSound(System* s);
 void System_clearAllSound(System* s);
 void System_clearPlayerAssets(System* s, int pn, bool forceDestroy);
 bool System_handleStageSwap(System* s);
 void System_updateMusicMaps(System* s);
-void CommandList_Step(CommandList* cl, bool ai, bool isHelper, bool hpbuf, bool pausebuf, i32 extratime);
-void CommandList_BufReset(CommandList* cl);
-void Stage_modifyBGCtrl3d(Stage* s, u32 id, Arr3_i32 t, Arr3_i32 v);
 void System_resetRound(System* s);
-void CommandList_Add(CommandList* cl, Command c);
-Slice_Command CommandList_At(CommandList* cl, int i);
-void CommandList_CopyList(CommandList* cl, CommandList src);
-Ret_int__bool CommandList_lookupName(CommandList* cl, GoString name);
-void Stage_drawModel(Stage* s, Arr2_f32 pos, f32 yofs, f32 scl, i32 layerNumber);
-void GLTFAnimation_toggle(GLTFAnimation* anim, bool enabled);
-void Model_step(Model* model);
 bool System_debugPaused(System* s);
 bool System_motifPauseGame(System* s);
 bool System_matchPaused(System* s);
@@ -4049,11 +5211,6 @@ bool System_uiTick(System* s);
 bool System_addFrameTime(System* s, f32 t);
 void System_resetFrameTime(System* s);
 void System_resetMatchData(System* s, bool forceDestroy);
-void Renderer_GLES32_SetModelVertexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u8 values);
-void Renderer_GLES32_SetModelIndexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u32 values);
-u32 Renderer_GLES32_LoadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName, Slice_u8 shaderData);
-void Renderer_GLES32_UnloadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName);
-void Model_reset(Model* model);
 void System_charUpdate(System* s);
 void System_globalCollision(System* s);
 void System_runIntroSkip(System* s);
@@ -4079,20 +5236,10 @@ bool System_matchEndDialoguePending(System* s);
 bool System_shouldStartMatchEndDialogue(System* s);
 bool System_holdPostMatchForDialogue(System* s);
 void System_stepRoundState(System* s);
-Ret_GoIface__GoIface Motif_GetValue(Motif* m, GoString query);
-void Motif_reset(Motif* m);
-void Motif_step(Motif* m);
-void Motif_drawAspectBars(Motif* m);
-void Motif_draw(Motif* m, i16 layerno);
-void Motif_drawFade(Motif* m);
-bool Motif_isDialogueSet(Motif* m);
-void Motif_act(Motif* m);
 bool System_roundEndDecision(System* s);
-void MotifMenu_runLua(MotifMenu* me, Motif* m);
 void System_draw(System* s, f32 x, f32 y, f32 scl);
 void System_drawCharTexts(System* s, i16 layerno);
 void System_drawTop(System* s);
-Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st);
 void System_drawDebugText(System* s, drawAspectState logicState);
 bool System_keepMatchRunning(System* s);
 bool System_runMatch(System* s);
@@ -4101,12 +5248,22 @@ bool System_runNextRound(System* s);
 i32 System_gameLogicSpeed(System* s);
 int System_gameRenderSpeed(System* s);
 bool System_debugModeAllowed(System* s);
-bool System_inRollback(System* s);
 bool System_isSpeculativeFrame(System* s);
 void RoundStartBackup_Save(RoundStartBackup* bk);
 void RoundStartBackup_Restore(RoundStartBackup* bk);
-GoString PreloadState_String(PreloadState ps);
+SelectChar* fn_newSelectChar(void);
+SelectStage* fn_newSelectStage(void);
 Select* fn_newSelect(void);
+void Select_ensureStagePreloadSlot(Select* s, int ref);
+GoIface Select_preloadCharAssets(Select* s, int ref);
+GoIface Select_preloadStageAssets(Select* s, int ref);
+int Select_GetCharNo(Select* s, int i);
+void Select_SelectStage(Select* s, int n);
+Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk);
+SelectChar* Select_AddChar(Select* s, GoString def);
+Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def);
+bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl);
+void Select_ClearSelected(Select* s);
 Loader* fn_newLoader(void);
 void Loader_requestCancel(Loader* l);
 bool Loader_cancelRequested(Loader* l);
@@ -4140,15 +5297,14 @@ bool System_isCustomShaderActive(System* s, GoString key);
 Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name);
 void System_cleanCustomShaders(System* s);
 bool System_shouldHideWithBars(System* s);
-Arr4_f32 fn_NormalizeRect_f32(Arr4_f32 rect);
 Slice_GoString fn_SortedKeys_Slice_GoString(Map_GoString_Slice_GoString m);
+Arr4_f32 fn_NormalizeRect_f32(Arr4_f32 rect);
 Slice_u8 fn_SliceDelete_u8(Slice_u8 slice, int i);
 Slice_Arr2_i32 fn_SliceDelete_Arr2_i32(Slice_Arr2_i32 slice, int i);
-Arr4_i32 fn_NormalizeRect_i32(Arr4_i32 rect);
-f32 fn_CalculateAspect_i32(i32 w, i32 h);
 i32 fn_resolvePBKey_AnimLayoutPtr(Map_i32_AnimLayoutPtr m, i32 pbval, i32 max_);
 i32 fn_resolvePBKey_FSTextPtr(Map_i32_FSTextPtr m, i32 pbval, i32 max_);
-Slice_GoString fn_SortedKeys_ScenePropertiesPtr(Map_GoString_ScenePropertiesPtr m);
+Arr4_i32 fn_NormalizeRect_i32(Arr4_i32 rect);
+f32 fn_CalculateAspect_i32(i32 w, i32 h);
 Slice_FSMsgPtr fn_SliceDelete_FSMsgPtr(Slice_FSMsgPtr slice, int i);
 Slice_int fn_sliceMove_int(Slice_int array, int srcIndex, int dstIndex);
 Slice_i32 fn_SliceGrow_i32(Slice_i32 slice, int n);
@@ -4160,6 +5316,7 @@ void fn_varRangeSetSub_f32(Char* c, Map_i32_f32* m, i32 first, i32 last, f32 val
 Slice_GoString fn_SortedKeys_GoString(Map_GoString_GoString m);
 Slice_ClsnFinal fn_SliceDelete_ClsnFinal(Slice_ClsnFinal slice, int i);
 Slice_CharPtr fn_SliceDelete_CharPtr(Slice_CharPtr slice, int i);
+Slice_GoString fn_SortedKeys_ScenePropertiesPtr(Map_GoString_ScenePropertiesPtr m);
 Slice_ProjectilePtr fn_PointerSliceReset_Projectile(Slice_ProjectilePtr slice);
 Slice_ExplodPtr fn_PointerSliceReset_Explod(Slice_ExplodPtr slice);
 Slice_TextSpritePtr fn_PointerSliceReset_TextSprite(Slice_TextSpritePtr slice);
@@ -4170,7 +5327,7 @@ void iface_BeginFrame_76a6ff7e(GoIface _x, bool _a0);
 #define ik_iface_BeginFrame iface_BeginFrame_76a6ff7e
 void iface_BeginScreenshot_7be8c69f(GoIface _x, int _a0, int _a1);
 #define ik_iface_BeginScreenshot iface_BeginScreenshot_7be8c69f
-GoOpaque /* image.Rectangle */ iface_Bounds_d954a296(GoIface _x);
+GoImageRect iface_Bounds_d954a296(GoIface _x);
 #define ik_iface_Bounds iface_Bounds_d954a296
 GoIface iface_Close_143b0862(GoIface _x);
 #define ik_iface_Close iface_Close_143b0862
@@ -4180,7 +5337,7 @@ void iface_EndFrame_818fc0bc(GoIface _x);
 #define ik_iface_EndFrame iface_EndFrame_818fc0bc
 GoString iface_Error_319077b5(GoIface _x);
 #define ik_iface_Error iface_Error_319077b5
-GoOpaque /* reflect.StructField */ iface_Field_15ec044c(GoIface _x, int _a0);
+GoReflectStructField iface_Field_15ec044c(GoIface _x, int _a0);
 #define ik_iface_Field iface_Field_15ec044c
 bool iface_FinishScreenshot_4c49171d(GoIface _x, Slice_u8 _a0, int _a1, int _a2);
 #define ik_iface_FinishScreenshot iface_FinishScreenshot_4c49171d
@@ -4196,10 +5353,14 @@ GoIface iface_Key_91ee7c7d(GoIface _x);
 #define ik_iface_Key iface_Key_91ee7c7d
 uintptr_t iface_Kind_1d8722d3(GoIface _x);
 #define ik_iface_Kind iface_Kind_1d8722d3
+int iface_Len_a218166d(GoIface _x);
+#define ik_iface_Len iface_Len_a218166d
 GoString iface_Name_319077b5(GoIface _x);
 #define ik_iface_Name iface_Name_319077b5
 int iface_NumField_a218166d(GoIface _x);
 #define ik_iface_NumField iface_NumField_a218166d
+int iface_Position_a218166d(GoIface _x);
+#define ik_iface_Position iface_Position_a218166d
 Ret_int__GoIface iface_Read_32c5b18d(GoIface _x, Slice_u8 _a0);
 #define ik_iface_Read iface_Read_32c5b18d
 bool iface_Run_c5596a8a(GoIface _x, Char* _a0, Slice_i32 _a1);
@@ -4210,8 +5371,6 @@ void iface_SetData_a8625030(GoIface _x, Slice_u8 _a0);
 #define ik_iface_SetData iface_SetData_a8625030
 void iface_SetSubData_a8625030(GoIface _x, Slice_u8 _a0);
 #define ik_iface_SetSubData iface_SetSubData_a8625030
-GoString iface_String_319077b5(GoIface _x);
-#define ik_iface_String iface_String_319077b5
 GoIface iface_newSubTexture_ec504342(GoIface _x, GoIface _a0, i32 _a1, i32 _a2, Arr4_f32 _a3);
 #define ik_iface_newSubTexture iface_newSubTexture_ec504342
 Ret_GoIface__GoIface iface_newTexture_96deffff(GoIface _x, i32 _a0, i32 _a1, i32 _a2, bool _a3);

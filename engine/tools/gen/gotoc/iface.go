@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"fmt"
 	"go/ast"
 	"go/types"
@@ -18,7 +19,11 @@ func typeID(ty types.Type) int {
 	if ty == nil {
 		return 0
 	}
-	k := types.TypeString(ty, qual)
+	ty = types.Unalias(ty)
+	if isIface(ty) {
+		return 0 // interfaces are never dynamic types
+	}
+	k := canonTypeKey(ty)
 	if id, ok := typeIDs[k]; ok {
 		return id
 	}
@@ -120,6 +125,15 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 		}
 		var b strings.Builder
 		b.WriteString(hdr + " {\n    switch (_x.type) {\n")
+		if isReflectTypeMethod(im.method) {
+			call := fmt.Sprintf("rt_type_%s((const RType *)_x.data%s)", im.name, prependComma(argNames))
+			if ret == "void" {
+				fmt.Fprintf(&b, "    case GO_TID_RTYPE: %s; return;\n", call)
+			} else {
+				fmt.Fprintf(&b, "    case GO_TID_RTYPE: return %s;\n", call)
+			}
+			rtTypeMethodsUsed[im.name] = hdr
+		}
 		if im.name == "Error" && ret == "GoString" {
 			b.WriteString("    case GO_TID_ERRSTR: return *(GoString *)_x.data;\n")
 		}
@@ -149,6 +163,10 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 				continue
 			}
 			msig := mfn.Type().(*types.Signature)
+			if !types.Identical(types.NewSignatureType(nil, nil, nil, msig.Params(), msig.Results(), msig.Variadic()),
+				types.NewSignatureType(nil, nil, nil, sig.Params(), sig.Results(), sig.Variadic())) {
+				continue
+			}
 			_, wantPtr := msig.Recv().Type().(*types.Pointer)
 			_, isPtr := ty.Underlying().(*types.Pointer)
 			var recv string
@@ -216,7 +234,7 @@ func (t *Tx) typeSwitch(s *ast.TypeSwitchStmt) {
 				conds = append(conds, xv+".type == 0")
 				continue
 			}
-			ty := t.p.info.Types[e].Type
+			ty := substT(t.p.info.TypeOf(e))
 			if isIface(ty) {
 				conds = append(conds, t.implementsCond(xv, ty))
 			} else {
@@ -296,7 +314,7 @@ func (t *Tx) implementsCond(xv string, ty types.Type) string {
 }
 
 func (t *Tx) typeAssert(e *ast.TypeAssertExpr) string {
-	ty := t.p.info.Types[e.Type].Type
+	ty := substT(t.p.info.TypeOf(e.Type))
 	x := t.expr(e.X)
 	if isIface(ty) {
 		return x
@@ -318,6 +336,9 @@ func tidDefines(p *Prog) string {
 		base := ty
 		if pt, ok := ty.(*types.Pointer); ok {
 			base = pt.Elem()
+		}
+		if s, ok := ty.(*types.Slice); ok && basicKind(s.Elem()) == types.Uint8 {
+			out = append(out, fmt.Sprintf("#define GO_TID_S_uint8 %d", id))
 		}
 		if n, ok := base.(*types.Named); ok && n.Obj().Pkg() != nil && n.Obj().Pkg() != p.pkg {
 			ts := types.TypeString(ty, func(p *types.Package) string { return p.Name() })
@@ -371,4 +392,16 @@ func dispNameCount(name string) int {
 		}
 	}
 	return c
+}
+
+var byteRuneRe = regexp.MustCompile(`\bbyte\b|\brune\b`)
+
+// canonTypeKey: identical types get identical keys (byte = uint8, rune = int32).
+func canonTypeKey(ty types.Type) string {
+	return byteRuneRe.ReplaceAllStringFunc(types.TypeString(types.Unalias(ty), qual), func(m string) string {
+		if m == "byte" {
+			return "uint8"
+		}
+		return "int32"
+	})
 }

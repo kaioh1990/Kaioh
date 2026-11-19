@@ -563,3 +563,30 @@ GoString strconv_Itoa(int a0) {
 }
 
 GoString strconv_FormatFloat(f64 f, u8 fmt, int prec, int bits) { return go_format_float(f, (char)fmt, prec, bits); }
+
+Slice_u8 strconv_AppendInt(Slice_u8 b, i64 v, int base) {
+    char t[72];
+    int n = 0;
+    bool neg = v < 0;
+    u64 m = neg ? (u64)0 - (u64)v : (u64)v;
+    do {
+        int d = (int)(m % (u64)base);
+        t[n++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
+        m /= (u64)base;
+    } while (m);
+    if (neg) b = go_append_Slice_u8(b, '-');
+    while (n) b = go_append_Slice_u8(b, (u8)t[--n]);
+    return b;
+}
+
+Slice_u8 strconv_AppendUint(Slice_u8 b, u64 m, int base) {
+    char t[72];
+    int n = 0;
+    do {
+        int d = (int)(m % (u64)base);
+        t[n++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
+        m /= (u64)base;
+    } while (m);
+    while (n) b = go_append_Slice_u8(b, (u8)t[--n]);
+    return b;
+}

@@ -11,13 +11,19 @@ import (
 // menus, platform, Vita-only performance code); calls into them become
 // stubs.
 var excludedFiles = map[string]bool{}
+var excludedFuncs = map[string]bool{} // GOTOC_EXCLUDE_FUNCS: Name or Type.Method
+var nativeFuncs = map[string]bool{}   // GOTOC_NATIVE_FUNCS: implemented by hand in C
+var includedFuncs = map[string]bool{} // GOTOC_INCLUDE_FUNCS: translated even in excluded files
 
 func isExcluded(p *Prog, k string) bool {
 	fd := p.funcs[k]
 	if fd == nil {
 		return true
 	}
-	return excludedFiles[shortFile(p.fset.Position(fd.Pos()).Filename)]
+	if includedFuncs[k] {
+		return false
+	}
+	return excludedFiles[shortFile(p.fset.Position(fd.Pos()).Filename)] || excludedFuncs[k]
 }
 
 func reach(p *Prog, roots []string) map[string]bool {

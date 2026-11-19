@@ -126,6 +126,9 @@ func ensureArrs(bb *strings.Builder, t types.Type) {
 }
 
 func cbase(t types.Type) string {
+	if t != nil {
+		t = types.Unalias(t)
+	}
 	if n, ok := isPkgNamed(t); ok {
 		if o, ok := overrides[n]; ok {
 			return o
@@ -163,6 +166,8 @@ func cbase(t types.Type) string {
 			return "f64"
 		case types.String:
 			return "GoString"
+		case types.UnsafePointer:
+			return "void*"
 		}
 	case *types.Pointer:
 		return cbase(u.Elem()) + "*"
@@ -188,6 +193,9 @@ func cbase(t types.Type) string {
 			return "GoIface"
 		case *types.Basic, *types.Pointer, *types.Slice, *types.Map, *types.Signature:
 			return cbase(u.Underlying())
+		}
+		if c, ok := extStructs[types.TypeString(u, qual)]; ok {
+			return c
 		}
 		return "GoOpaque /* " + types.TypeString(u, qual) + " */"
 	case *types.Chan:
@@ -259,4 +267,33 @@ func embName(f *types.Var) string {
 		return "embed_" + f.Name()
 	}
 	return cField(f.Name())
+}
+
+// standard-library struct types given C layouts (ik_rt.h)
+var extStructs = map[string]string{
+	"image.Point":     "GoImagePoint",
+	"image.Rectangle": "GoImageRect",
+	"image.NRGBA":     "GoImageNRGBA",
+	"image.Paletted":  "GoImagePaletted",
+	"zip.ReadCloser":  "GoZipReadCloser",
+	"zip.File":        "GoZipFile",
+	"reflect.StructField": "GoReflectStructField",
+	"ini.LoadOptions": "GoIniLoadOptions",
+}
+
+// isInvalid: types from packages that failed to type-check (platform deps)
+func isInvalid(ty types.Type) bool {
+	if ty == nil {
+		return true
+	}
+	if b, ok := ty.(*types.Basic); ok && b.Kind() == types.Invalid {
+		return true
+	}
+	if b, ok := ty.Underlying().(*types.Basic); ok && b.Kind() == types.Invalid {
+		return true
+	}
+	if p, ok := ty.(*types.Pointer); ok {
+		return isInvalid(p.Elem())
+	}
+	return false
 }

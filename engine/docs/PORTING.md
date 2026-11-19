@@ -75,6 +75,25 @@ stay as verified references and for the optimised paths later.
      filepath, encoding/binary, regexp (few);
   4. `reflect` uses (Value_*) in state_clone/compiler: stub or rewrite.
 
+### Status 2026-11-19 02:10 — first full translated match runs
+
+- gotoc now translates everything the headless match reaches: interfaces
+  (type ids, switch dispatchers, type switches/assertions), generics
+  (monomorphised), defer, method values, closures (captured and
+  address-taken locals live on the heap), select (single-threaded: default
+  clause), go-ini via a C port (ik_ini.c), reflect over generated type
+  descriptors (ik_reflect.c), fmt/strconv/strings/sort/regexp/os/io shims.
+- Type-checking runs in module mode with Go 1.27, so pure-Go dependencies
+  resolve; platform packages (SDL, GL, audio) stay opaque.
+- Entry point: `cvfHeadlessMain` (tools/ikemen_cvfheadless.go, copied into
+  the Ikemen tree) replays main.go + main.lua's command-line quick match +
+  the Lua `game` function. `src/app/headless_main.c` runs it:
+  `cvf_headless <gamedir> -p1 Alucard -p2 Richter -p1.ai 8 -p2.ai 8 -s
+  stages/ParanoiaBG.def -rounds 1`.
+- 1897 reachable functions, 0 compile errors, links, runs the whole match.
+- Reference comparison (statedump, Alucard vs Richter AI 8): tick 1 is
+  identical; working through divergences from tick 2.
+
 ## Conventions
 
 - Determinism flags in CMakeLists.txt: no FMA contraction, no fast-math,

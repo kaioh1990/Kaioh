@@ -13,6 +13,9 @@ import (
 
 func (t *Tx) exprConv(e ast.Expr, target types.Type) string {
 	target = substT(target)
+	if target != nil && isInvalid(target) {
+		return "((GoOpaque){{0}}) /* unresolved type */"
+	}
 	tv := t.p.info.Types[e]
 	if tv.Value != nil && target != nil {
 		if isIface(target) {
@@ -24,7 +27,9 @@ func (t *Tx) exprConv(e ast.Expr, target types.Type) string {
 	// nil to slice/map/interface
 	if id, ok := e.(*ast.Ident); ok && id.Name == "nil" && target != nil {
 		switch target.Underlying().(type) {
-		case *types.Pointer, *types.Signature:
+		case *types.Pointer:
+			return "NULL"
+		case *types.Basic: // unsafe.Pointer
 			return "NULL"
 		default:
 			return "(" + cbase(target) + "){0}"
@@ -173,7 +178,7 @@ func (t *Tx) ident(e *ast.Ident) string {
 		}
 		return cVarName(e.Name)
 	case *types.Func:
-		return cFuncName(t.p, o)
+		return t.funcValue(o)
 	case *types.Const:
 		return constLit(o.Val(), o.Type())
 	case *types.Nil:
@@ -186,6 +191,13 @@ func (t *Tx) ident(e *ast.Ident) string {
 func (t *Tx) selector(e *ast.SelectorExpr) string {
 	if id, ok := e.X.(*ast.Ident); ok {
 		if pn, ok := t.p.info.Uses[id].(*types.PkgName); ok {
+			if fn, ok := t.p.info.Uses[e.Sel].(*types.Func); ok {
+				externs[fn] = true
+				return t.funcValue(fn)
+			}
+			if c, ok := t.p.info.Uses[e.Sel].(*types.Const); ok {
+				return constLit(c.Val(), c.Type())
+			}
 			return pn.Imported().Name() + "_" + e.Sel.Name
 		}
 	}
@@ -215,6 +227,11 @@ func (t *Tx) fieldPath(x ast.Expr, sel *types.Selection) string {
 		}
 		s := st.Underlying().(*types.Struct)
 		f := s.Field(idx)
+		if c := cbase(st); strings.HasPrefix(c, "GoOpaque") {
+			// field of an opaque (platform library) struct: a zeroed scratch slot
+			ft := sel.Type()
+			return fmt.Sprintf("(*(%s *)go_scratch(sizeof(%s)))", cbase(ft), cbase(ft))
+		}
 		if ptr {
 			base = base + "->" + embName(f)
 		} else {
@@ -302,7 +319,7 @@ func (t *Tx) binary(e *ast.BinaryExpr) string {
 			if e.Op == token.NEQ {
 				op = "!"
 			}
-			return fmt.Sprintf("(%smemcmp(&(%s){%s}, &(%s){%s}, sizeof(%s)) == 0)", op, cbase(opType), t.expr(e.X), cbase(opType), t.expr(e.Y), cbase(opType))
+			return fmt.Sprintf("(%s%s(%s, %s))", op, eqFuncName(opType), t.exprConv(e.X, opType), t.exprConv(e.Y, opType))
 		}
 		op := "=="
 		if e.Op == token.NEQ {
@@ -331,6 +348,13 @@ func (t *Tx) binary(e *ast.BinaryExpr) string {
 			}
 			if field != "" {
 				return "(" + t.expr(other) + field + " " + op + " 0)"
+			}
+			_, isChan := ot.Underlying().(*types.Chan)
+			if ot == nil || isChan || types.TypeString(ot, qual) == "invalid type" || strings.Contains(cbase(ot), "invalid type") {
+				if op == "==" {
+					return "true /* unresolved type: nil */"
+				}
+				return "false /* unresolved type: nil */"
 			}
 		}
 		if isIface(lt) || isIface(rt) {
@@ -401,12 +425,26 @@ func identOf(e ast.Expr) *ast.Ident {
 
 func (t *Tx) mapGet(m, k ast.Expr, mt *types.Map, okPtr string) string {
 	name := cbase(mt)
-	return fmt.Sprintf("%s_get(&%s, %s, %s)", name, t.expr(m), t.exprConv(k, mt.Key()), okPtr)
+	return fmt.Sprintf("%s_get(%s, %s, %s)", name, t.mapAddr(m), t.exprConv(k, mt.Key()), okPtr)
 }
 
 func (t *Tx) mapSet(m, k ast.Expr, mt *types.Map, val string) string {
 	name := cbase(mt)
-	return fmt.Sprintf("%s_set(&%s, %s, %s)", name, t.expr(m), t.exprConv(k, mt.Key()), val)
+	return fmt.Sprintf("%s_set(%s, %s, %s)", name, t.mapAddr(m), t.exprConv(k, mt.Key()), val)
+}
+
+// mapAddr: pointer to a map handle. Map values are handles to shared
+// storage, so a temporary copy is as good as the original.
+func (t *Tx) mapAddr(m ast.Expr) string {
+	switch m.(type) {
+	case *ast.Ident, *ast.SelectorExpr, *ast.StarExpr:
+		return "&" + t.expr(m)
+	case *ast.IndexExpr:
+		if _, isMap := t.typeOf(m.(*ast.IndexExpr).X).Underlying().(*types.Map); !isMap {
+			return "&" + t.expr(m)
+		}
+	}
+	return fmt.Sprintf("GO_TMPADDR(%s, %s)", cbase(t.typeOf(m).Underlying()), t.expr(m))
 }
 
 func (t *Tx) sliceExpr(e *ast.SliceExpr) string {
@@ -440,6 +478,23 @@ func (t *Tx) sliceExpr(e *ast.SliceExpr) string {
 
 func (t *Tx) composite(e *ast.CompositeLit) string {
 	ty := t.typeOf(e)
+	if n, ok := ty.(*types.Named); ok && n.Obj().Pkg() != nil && n.Obj().Pkg() != t.p.pkg {
+		if _, isStruct := n.Underlying().(*types.Struct); isStruct {
+			// standard-library struct values are opaque in C
+			if _, mapped := extStructs[types.TypeString(n, qual)]; mapped {
+				goto normal
+			}
+			if n.Obj().Pkg().Path() == "sync" && n.Obj().Name() == "Pool" {
+				for _, el := range e.Elts {
+					if kv, ok := el.(*ast.KeyValueExpr); ok && kv.Key.(*ast.Ident).Name == "New" {
+						return "go_sync_pool(" + t.expr(kv.Value) + ")"
+					}
+				}
+			}
+			return "((GoOpaque){{0}})"
+		}
+	}
+normal:
 	switch u := ty.Underlying().(type) {
 	case *types.Struct:
 		var parts []string
@@ -498,6 +553,9 @@ func (t *Tx) composite(e *ast.CompositeLit) string {
 		}
 		fmt.Fprintf(&b, " (%s)_m; })", cbase(ty))
 		return b.String()
+	}
+	if strings.Contains(cbase(ty), "invalid type") {
+		return "((GoOpaque){{0}}) /* unresolved type */"
 	}
 	return t.TODO(e, "composite")
 }
