@@ -1,6 +1,8 @@
 #!/bin/sh
 # Regenerates gen_types.h/gen_consts.h and the simulation translation.
 set -e
+# build configuration of the translated Ikemen tree (see cvf_engine_common.go)
+export GOTOC_TAGS=${GOTOC_TAGS-cvf}
 S=/tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad
 E=/home/claude/kaioh/engine
 export GENCDEFS_OVERRIDES=$E/tools/gen/gencdefs/overrides.txt

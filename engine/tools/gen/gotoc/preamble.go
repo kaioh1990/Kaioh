@@ -131,6 +131,7 @@ func typePreamble() string {
 		for i := 0; i < st.NumFields(); i++ {
 			emitVal(st.Field(i).Type())
 		}
+		prom := promotedNames(st)
 		fmt.Fprintf(&b, "struct %s {", n)
 		if st.NumFields() == 0 {
 			b.WriteString(" char _empty;")
@@ -140,7 +141,11 @@ func typePreamble() string {
 			if es, ok := f.Type().Underlying().(*types.Struct); ok && f.Embedded() {
 				fmt.Fprintf(&b, " union { %s %s; struct {", cbase(f.Type()), embName(f))
 				for k := 0; k < es.NumFields(); k++ {
-					fmt.Fprintf(&b, " %s %s;", cbase(es.Field(k).Type()), embName(es.Field(k)))
+					fn := embName(es.Field(k))
+					if !prom[es.Field(k).Name()] {
+						fn = fmt.Sprintf("_sh%d_%s", i, es.Field(k).Name())
+					}
+					fmt.Fprintf(&b, " %s %s;", cbase(es.Field(k).Type()), fn)
 				}
 				if es.NumFields() == 0 {
 					b.WriteString(" char _empty_" + f.Name() + ";")
@@ -219,6 +224,30 @@ func genTypesDefined() map[string]bool {
 	for _, ln := range strings.Split(string(data), "\n") {
 		if strings.HasPrefix(ln, "struct ") && strings.HasSuffix(ln, " {") {
 			out[strings.TrimSuffix(strings.TrimPrefix(ln, "struct "), " {")] = true
+		}
+	}
+	return out
+}
+
+// promotedNames: names of embedded structs' fields that Go promotes into
+// st (not shadowed by a direct field, not present in two embeddings).
+// Others keep their slot in the flattened layout under a private name.
+func promotedNames(st *types.Struct) map[string]bool {
+	direct := map[string]bool{}
+	count := map[string]int{}
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		direct[f.Name()] = true
+		if es, ok := f.Type().Underlying().(*types.Struct); ok && f.Embedded() {
+			for k := 0; k < es.NumFields(); k++ {
+				count[es.Field(k).Name()]++
+			}
+		}
+	}
+	out := map[string]bool{}
+	for n, c := range count {
+		if c == 1 && !direct[n] {
+			out[n] = true
 		}
 	}
 	return out

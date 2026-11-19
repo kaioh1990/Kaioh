@@ -23,7 +23,7 @@ func fmtFloat_unused(f float64) string {
 }
 
 func isPkgNamed(t types.Type) (string, bool) {
-	if n, ok := t.(*types.Named); ok && isOwn(n.Obj().Pkg()) {
+	if n, ok := t.(*types.Named); ok && ownTypes(n.Obj().Pkg()) {
 		pk := n.Obj().Pkg()
 		pfx := ""
 		if pk != pkg {

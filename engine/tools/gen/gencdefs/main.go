@@ -23,6 +23,9 @@ func main() {
 	dir := os.Args[1]
 	ctx := build.Default
 	ctx.BuildTags = []string{"vita"}
+	if t, ok := os.LookupEnv("GOTOC_TAGS"); ok { // build configuration (default: vita)
+		ctx.BuildTags = strings.Fields(strings.ReplaceAll(t, ",", " "))
+	}
 	ctx.CgoEnabled = true
 	bp, _ := ctx.ImportDir(dir, 0)
 	fset := token.NewFileSet()
@@ -432,6 +435,7 @@ func ensureAnon(bb *strings.Builder, t types.Type) {
 // embedded value (E_) and an anonymous struct of its fields, so both
 // s.E_ and the promoted s.field work.
 func writeFields(bb *strings.Builder, u *types.Struct) {
+	prom := promotedNames(u)
 	for i := 0; i < u.NumFields(); i++ {
 		f := u.Field(i)
 		name := f.Name()
@@ -439,7 +443,11 @@ func writeFields(bb *strings.Builder, u *types.Struct) {
 			if es, ok := f.Type().Underlying().(*types.Struct); ok {
 				fmt.Fprintf(bb, "    union {\n        %s %s_;\n        struct {\n", cbase(f.Type()), name)
 				for k := 0; k < es.NumFields(); k++ {
-					fmt.Fprintf(bb, "            %s;\n", cdecl(es.Field(k).Type(), cField(es.Field(k).Name())))
+					fn := cField(es.Field(k).Name())
+					if !prom[es.Field(k).Name()] {
+						fn = fmt.Sprintf("_sh%d_%s", i, es.Field(k).Name())
+					}
+					fmt.Fprintf(bb, "            %s;\n", cdecl(es.Field(k).Type(), fn))
 				}
 				if es.NumFields() == 0 {
 					bb.WriteString("            char _empty_" + name + ";\n")
@@ -594,4 +602,28 @@ func cField(name string) string {
 		return name + "_"
 	}
 	return name
+}
+
+// promotedNames: names of embedded structs' fields that Go promotes into
+// st (not shadowed by a direct field, not present in two embeddings).
+// Others keep their slot in the flattened layout under a private name.
+func promotedNames(st *types.Struct) map[string]bool {
+	direct := map[string]bool{}
+	count := map[string]int{}
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		direct[f.Name()] = true
+		if es, ok := f.Type().Underlying().(*types.Struct); ok && f.Embedded() {
+			for k := 0; k < es.NumFields(); k++ {
+				count[es.Field(k).Name()]++
+			}
+		}
+	}
+	out := map[string]bool{}
+	for n, c := range count {
+		if c == 1 && !direct[n] {
+			out[n] = true
+		}
+	}
+	return out
 }

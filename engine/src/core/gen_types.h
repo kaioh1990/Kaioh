@@ -118,12 +118,14 @@ typedef struct FightScreenWinCount FightScreenWinCount;
 typedef struct FightScreenWinIcon FightScreenWinIcon;
 typedef struct FilesProperties FilesProperties;
 typedef struct FontProperties FontProperties;
-typedef struct FontRenderer_GLES32 FontRenderer_GLES32;
+typedef struct FontRenderer_GL33 FontRenderer_GL33;
+typedef struct FontRenderer_VK FontRenderer_VK;
 typedef struct color color;
 typedef struct ShaderPalFX ShaderPalFX;
-typedef struct Font_GLES32 Font_GLES32;
+typedef struct Font_GL33 Font_GL33;
+typedef struct Font_VK Font_VK;
 typedef struct ForceFeedbackParams ForceFeedbackParams;
-typedef struct GLES32State GLES32State;
+typedef struct GL33State GL33State;
 typedef struct GLTFAnimatableProperty GLTFAnimatableProperty;
 typedef struct GLTFAnimation GLTFAnimation;
 typedef struct GLTFAnimationChannel GLTFAnimationChannel;
@@ -218,8 +220,28 @@ typedef struct Projectile Projectile;
 typedef struct Rect Rect;
 typedef struct ReflectionSprite ReflectionSprite;
 typedef struct RenderParams RenderParams;
-typedef struct vitaBatch vitaBatch;
-typedef struct Renderer_GLES32 Renderer_GLES32;
+typedef struct Renderer_GL33 Renderer_GL33;
+typedef struct VulkanBuffer VulkanBuffer;
+typedef struct VulkanSpriteTexture VulkanSpriteTexture;
+typedef struct VulkanModelTexture VulkanModelTexture;
+typedef struct VulkanShadowMapTexture VulkanShadowMapTexture;
+typedef struct VulkanModelSpecializationConstants0 VulkanModelSpecializationConstants0;
+typedef struct VulkanModelSpecializationConstants1 VulkanModelSpecializationConstants1;
+typedef struct VulkanModelPipelineState VulkanModelPipelineState;
+typedef struct VulkanBlendState VulkanBlendState;
+typedef struct VulkanPipelineState VulkanPipelineState;
+typedef struct VulkanShadowMapPipelineState VulkanShadowMapPipelineState;
+typedef struct VulkanSpriteProgramVertUniformBufferObject VulkanSpriteProgramVertUniformBufferObject;
+typedef struct VulkanSpriteProgramFragUniformBufferObject VulkanSpriteProgramFragUniformBufferObject;
+typedef struct VulkanLightUniform VulkanLightUniform;
+typedef struct VulkanModelProgramUniformBufferObject0 VulkanModelProgramUniformBufferObject0;
+typedef struct VulkanModelProgramUniformBufferObject1 VulkanModelProgramUniformBufferObject1;
+typedef struct VulkanModelProgramUniformBufferObject2 VulkanModelProgramUniformBufferObject2;
+typedef struct VulkanShadowMapProgramUniformBufferObject0 VulkanShadowMapProgramUniformBufferObject0;
+typedef struct VulkanShadowMapProgramUniformBufferObject1 VulkanShadowMapProgramUniformBufferObject1;
+typedef struct VulkanShadowMapProgramUniformBufferObject2 VulkanShadowMapProgramUniformBufferObject2;
+typedef struct VulkanShadowMapProgramPushConstant VulkanShadowMapProgramPushConstant;
+typedef struct VKState VKState;
 typedef struct Renderer_VK Renderer_VK;
 typedef struct ReplayFile ReplayFile;
 typedef struct ReplayHeader ReplayHeader;
@@ -244,8 +266,7 @@ typedef struct SessionConfigOverride SessionConfigOverride;
 typedef struct SffHeader SffHeader;
 typedef struct SpriteTextureAtlas SpriteTextureAtlas;
 typedef struct Sff Sff;
-typedef struct uniCacheEnt uniCacheEnt;
-typedef struct ShaderProgram_GLES32 ShaderProgram_GLES32;
+typedef struct ShaderProgram_GL33 ShaderProgram_GL33;
 typedef struct ShadowSprite ShadowSprite;
 typedef struct ShortcutKey ShortcutKey;
 typedef struct ShortcutScript ShortcutScript;
@@ -272,9 +293,21 @@ typedef struct System System;
 typedef struct TeamModesProperties TeamModesProperties;
 typedef struct TextSprite TextSprite;
 typedef struct TextureAtlas TextureAtlas;
-typedef struct Texture_GLES32 Texture_GLES32;
+typedef struct Texture_GL33 Texture_GL33;
+typedef struct Texture_VK Texture_VK;
 typedef struct TypedValue TypedValue;
 typedef struct UndefinedFormatter UndefinedFormatter;
+typedef struct VulkanAllocation VulkanAllocation;
+typedef struct VulkanOOMRecord VulkanOOMRecord;
+typedef struct VulkanAllocator VulkanAllocator;
+typedef struct VulkanFreeRegion VulkanFreeRegion;
+typedef struct VulkanMemoryBlock VulkanMemoryBlock;
+typedef struct VulkanProgramInfo VulkanProgramInfo;
+typedef struct VulkanRenderInfo VulkanRenderInfo;
+typedef struct VulkanRenderTargetInfo VulkanRenderTargetInfo;
+typedef struct VulkanResource VulkanResource;
+typedef struct VulkanSamplerInfo VulkanSamplerInfo;
+typedef struct VulkanSwapchainInfo VulkanSwapchainInfo;
 typedef struct Window Window;
 typedef struct backGround backGround;
 typedef struct bcHasher bcHasher;
@@ -300,9 +333,11 @@ typedef struct paletteCopyKey paletteCopyKey;
 typedef struct queryPart queryPart;
 typedef struct rankingEntry rankingEntry;
 typedef struct rankingRow rankingRow;
+typedef struct reisenAudioStreamer reisenAudioStreamer;
 typedef struct runTally runTally;
 typedef struct scParam scParam;
 typedef struct sffv1PalState sffv1PalState;
+typedef struct sliceHeader sliceHeader;
 typedef struct soundPanView soundPanView;
 typedef struct soundPanner soundPanner;
 typedef struct specFacts specFacts;
@@ -332,9 +367,29 @@ typedef GoMap Map_Arr2_u16_bool; /* map[[2]uint16]bool */
 #define CVF_DEF_Map_Arr2_u16_int
 typedef GoMap Map_Arr2_u16_int; /* map[[2]uint16]int */
 #endif
+#ifndef CVF_DEF_Map_GoIface_int
+#define CVF_DEF_Map_GoIface_int
+typedef GoMap Map_GoIface_int; /* map[interface{}]int */
+#endif
+#ifndef CVF_DEF_Map_GoIface_u32
+#define CVF_DEF_Map_GoIface_u32
+typedef GoMap Map_GoIface_u32; /* map[interface{}]uint32 */
+#endif
+#ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_Slice_GoOpaque_invalidtypePtr
+#define CVF_DEF_Map_GoOpaque_invalidtypePtr_Slice_GoOpaque_invalidtypePtr
+typedef GoMap Map_GoOpaque_invalidtypePtr_Slice_GoOpaque_invalidtypePtr; /* map[invalid type][]invalid type */
+#endif
+#ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_VulkanAllocationPtr
+#define CVF_DEF_Map_GoOpaque_invalidtypePtr_VulkanAllocationPtr
+typedef GoMap Map_GoOpaque_invalidtypePtr_VulkanAllocationPtr; /* map[invalid type]*VulkanAllocation */
+#endif
 #ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
 #define CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
 typedef GoMap Map_GoOpaque_invalidtypePtr_bool; /* map[Key]bool */
+#endif
+#ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_u32
+#define CVF_DEF_Map_GoOpaque_invalidtypePtr_u32
+typedef GoMap Map_GoOpaque_invalidtypePtr_u32; /* map[invalid type]uint32 */
 #endif
 #ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
 #define CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
@@ -472,6 +527,18 @@ typedef GoMap Map_GoString_u8; /* map[string]uint8 */
 #define CVF_DEF_Map_ShortcutKey_ShortcutScriptPtr
 typedef GoMap Map_ShortcutKey_ShortcutScriptPtr; /* map[ShortcutKey]*ShortcutScript */
 #endif
+#ifndef CVF_DEF_Map_Texture_VKPtr_bool
+#define CVF_DEF_Map_Texture_VKPtr_bool
+typedef GoMap Map_Texture_VKPtr_bool; /* map[*Texture_VK]bool */
+#endif
+#ifndef CVF_DEF_Map_VulkanProgramInfoPtr_Map_u32_GoOpaque_invalidtypePtr
+#define CVF_DEF_Map_VulkanProgramInfoPtr_Map_u32_GoOpaque_invalidtypePtr
+typedef GoMap Map_VulkanProgramInfoPtr_Map_u32_GoOpaque_invalidtypePtr; /* map[*VulkanProgramInfo]map[uint32]invalid type */
+#endif
+#ifndef CVF_DEF_Map_VulkanSamplerInfo_GoOpaque_invalidtypePtr
+#define CVF_DEF_Map_VulkanSamplerInfo_GoOpaque_invalidtypePtr
+typedef GoMap Map_VulkanSamplerInfo_GoOpaque_invalidtypePtr; /* map[VulkanSamplerInfo]invalid type */
+#endif
 #ifndef CVF_DEF_Map_bgVideoPtr_Anon_fa4d6974
 #define CVF_DEF_Map_bgVideoPtr_Anon_fa4d6974
 typedef GoMap Map_bgVideoPtr_Anon_fa4d6974; /* map[*bgVideo]struct{} */
@@ -588,13 +655,21 @@ typedef GoMap Map_u32_Arr3_f32; /* map[uint32][3]float32 */
 #define CVF_DEF_Map_u32_Arr4_f32
 typedef GoMap Map_u32_Arr4_f32; /* map[uint32][4]float32 */
 #endif
-#ifndef CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
-#define CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
-typedef GoMap Map_u32_ShaderProgram_GLES32Ptr; /* map[uint32]*ShaderProgram_GLES32 */
+#ifndef CVF_DEF_Map_u32_GoOpaque_invalidtypePtr
+#define CVF_DEF_Map_u32_GoOpaque_invalidtypePtr
+typedef GoMap Map_u32_GoOpaque_invalidtypePtr; /* map[uint32]invalid type */
+#endif
+#ifndef CVF_DEF_Map_u32_ShaderProgram_GL33Ptr
+#define CVF_DEF_Map_u32_ShaderProgram_GL33Ptr
+typedef GoMap Map_u32_ShaderProgram_GL33Ptr; /* map[uint32]*ShaderProgram_GL33 */
 #endif
 #ifndef CVF_DEF_Map_u32_Slice_f32
 #define CVF_DEF_Map_u32_Slice_f32
 typedef GoMap Map_u32_Slice_f32; /* map[uint32][]float32 */
+#endif
+#ifndef CVF_DEF_Map_u32_VulkanProgramInfoPtr
+#define CVF_DEF_Map_u32_VulkanProgramInfoPtr
+typedef GoMap Map_u32_VulkanProgramInfoPtr; /* map[uint32]*VulkanProgramInfo */
 #endif
 #ifndef CVF_DEF_Map_u32_f32
 #define CVF_DEF_Map_u32_f32
@@ -607,6 +682,10 @@ typedef GoMap Map_u32_i32; /* map[uint32]int32 */
 #ifndef CVF_DEF_Map_u32_u32
 #define CVF_DEF_Map_u32_u32
 typedef GoMap Map_u32_u32; /* map[uint32]uint32 */
+#endif
+#ifndef CVF_DEF_Map_u64_u32
+#define CVF_DEF_Map_u64_u32
+typedef GoMap Map_u64_u32; /* map[uint64]uint32 */
 #endif
 #ifndef CVF_DEF_Map_uintptr_t_int
 #define CVF_DEF_Map_uintptr_t_int
@@ -675,8 +754,10 @@ typedef int SffType;
 typedef GoFunc cnode;
 typedef GoIface StateController;
 typedef GoString SyncScope;
+typedef int TextureResidency;
 typedef int TextureSamplingParam;
 typedef GoIface TtfFont;
+typedef int VulkanResourceType;
 typedef u8 expLevel;
 typedef Map_paletteCopyKey_Slice_u32 paletteCopier;
 typedef GoFunc scFunc;
@@ -765,9 +846,6 @@ typedef struct Anon_ad3827b6 Anon_ad3827b6;
 typedef struct Anon_a61ac1b3 Anon_a61ac1b3;
 typedef struct Anon_4d998b97 Anon_4d998b97;
 typedef struct Anon_52ad6e9d Anon_52ad6e9d;
-typedef struct Anon_5596a083 Anon_5596a083;
-typedef struct Anon_a810cdd4 Anon_a810cdd4;
-typedef struct Anon_7b4debcb Anon_7b4debcb;
 typedef struct Anon_0f1da223 Anon_0f1da223;
 typedef struct Anon_c0ebc6d1 Anon_c0ebc6d1;
 typedef struct Anon_53386e74 Anon_53386e74;
@@ -926,17 +1004,17 @@ typedef struct Arr16_Anon_bfbab8ed Arr16_Anon_bfbab8ed;
 #define CVF_DEF_Arr16_f32
 typedef struct Arr16_f32 Arr16_f32;
 #endif
-#ifndef CVF_DEF_Arr192_bool
-#define CVF_DEF_Arr192_bool
-typedef struct Arr192_bool Arr192_bool;
-#endif
 #ifndef CVF_DEF_Arr20_FSBgTextSnd
 #define CVF_DEF_Arr20_FSBgTextSnd
 typedef struct Arr20_FSBgTextSnd Arr20_FSBgTextSnd;
 #endif
-#ifndef CVF_DEF_Arr24_uniCacheEnt
-#define CVF_DEF_Arr24_uniCacheEnt
-typedef struct Arr24_uniCacheEnt Arr24_uniCacheEnt;
+#ifndef CVF_DEF_Arr24_Arr16_f32
+#define CVF_DEF_Arr24_Arr16_f32
+typedef struct Arr24_Arr16_f32 Arr24_Arr16_f32;
+#endif
+#ifndef CVF_DEF_Arr24_f32
+#define CVF_DEF_Arr24_f32
+typedef struct Arr24_f32 Arr24_f32;
 #endif
 #ifndef CVF_DEF_Arr2_AnimLayout
 #define CVF_DEF_Arr2_AnimLayout
@@ -957,6 +1035,10 @@ typedef struct Arr2_Arr32_AnimLayout Arr2_Arr32_AnimLayout;
 #ifndef CVF_DEF_Arr2_Arr4_bool
 #define CVF_DEF_Arr2_Arr4_bool
 typedef struct Arr2_Arr4_bool Arr2_Arr4_bool;
+#endif
+#ifndef CVF_DEF_Arr2_Arr4_f32
+#define CVF_DEF_Arr2_Arr4_f32
+typedef struct Arr2_Arr4_f32 Arr2_Arr4_f32;
 #endif
 #ifndef CVF_DEF_Arr2_CharGlobalInfo
 #define CVF_DEF_Arr2_CharGlobalInfo
@@ -994,6 +1076,10 @@ typedef struct Arr2_FightScreenWinCountPtr Arr2_FightScreenWinCountPtr;
 #define CVF_DEF_Arr2_FightScreenWinIconPtr
 typedef struct Arr2_FightScreenWinIconPtr Arr2_FightScreenWinIconPtr;
 #endif
+#ifndef CVF_DEF_Arr2_GoOpaque_chanPtr
+#define CVF_DEF_Arr2_GoOpaque_chanPtr
+typedef struct Arr2_GoOpaque_chanPtr Arr2_GoOpaque_chanPtr;
+#endif
 #ifndef CVF_DEF_Arr2_GoString
 #define CVF_DEF_Arr2_GoString
 typedef struct Arr2_GoString Arr2_GoString;
@@ -1006,6 +1092,10 @@ typedef struct Arr2_Rotation Arr2_Rotation;
 #define CVF_DEF_Arr2_Slice_Arr2_int
 typedef struct Arr2_Slice_Arr2_int Arr2_Slice_Arr2_int;
 #endif
+#ifndef CVF_DEF_Arr2_Slice_GoOpaque_invalidtypePtr
+#define CVF_DEF_Arr2_Slice_GoOpaque_invalidtypePtr
+typedef struct Arr2_Slice_GoOpaque_invalidtypePtr Arr2_Slice_GoOpaque_invalidtypePtr;
+#endif
 #ifndef CVF_DEF_Arr2_Slice_StatsFighterState
 #define CVF_DEF_Arr2_Slice_StatsFighterState
 typedef struct Arr2_Slice_StatsFighterState Arr2_Slice_StatsFighterState;
@@ -1017,6 +1107,18 @@ typedef struct Arr2_Slice_int Arr2_Slice_int;
 #ifndef CVF_DEF_Arr2_TeamMode
 #define CVF_DEF_Arr2_TeamMode
 typedef struct Arr2_TeamMode Arr2_TeamMode;
+#endif
+#ifndef CVF_DEF_Arr2_VulkanBuffer
+#define CVF_DEF_Arr2_VulkanBuffer
+typedef struct Arr2_VulkanBuffer Arr2_VulkanBuffer;
+#endif
+#ifndef CVF_DEF_Arr2_VulkanRenderInfoPtr
+#define CVF_DEF_Arr2_VulkanRenderInfoPtr
+typedef struct Arr2_VulkanRenderInfoPtr Arr2_VulkanRenderInfoPtr;
+#endif
+#ifndef CVF_DEF_Arr2_VulkanRenderTargetInfoPtr
+#define CVF_DEF_Arr2_VulkanRenderTargetInfoPtr
+typedef struct Arr2_VulkanRenderTargetInfoPtr Arr2_VulkanRenderTargetInfoPtr;
 #endif
 #ifndef CVF_DEF_Arr2_WinType
 #define CVF_DEF_Arr2_WinType
@@ -1058,10 +1160,6 @@ typedef struct Arr2_u16 Arr2_u16;
 #define CVF_DEF_Arr2_u32
 typedef struct Arr2_u32 Arr2_u32;
 #endif
-#ifndef CVF_DEF_Arr2_u64
-#define CVF_DEF_Arr2_u64
-typedef struct Arr2_u64 Arr2_u64;
-#endif
 #ifndef CVF_DEF_Arr32_AnimLayout
 #define CVF_DEF_Arr32_AnimLayout
 typedef struct Arr32_AnimLayout Arr32_AnimLayout;
@@ -1094,6 +1192,10 @@ typedef struct Arr3_Slice_GoFunc Arr3_Slice_GoFunc;
 #define CVF_DEF_Arr3_Slice_OverrideCharData
 typedef struct Arr3_Slice_OverrideCharData Arr3_Slice_OverrideCharData;
 #endif
+#ifndef CVF_DEF_Arr3_bool
+#define CVF_DEF_Arr3_bool
+typedef struct Arr3_bool Arr3_bool;
+#endif
 #ifndef CVF_DEF_Arr3_f32
 #define CVF_DEF_Arr3_f32
 typedef struct Arr3_f32 Arr3_f32;
@@ -1109,6 +1211,10 @@ typedef struct Arr3_int Arr3_int;
 #ifndef CVF_DEF_Arr3_u16
 #define CVF_DEF_Arr3_u16
 typedef struct Arr3_u16 Arr3_u16;
+#endif
+#ifndef CVF_DEF_Arr4_Arr16_f32
+#define CVF_DEF_Arr4_Arr16_f32
+typedef struct Arr4_Arr16_f32 Arr4_Arr16_f32;
 #endif
 #ifndef CVF_DEF_Arr4_ResultAnnouncement
 #define CVF_DEF_Arr4_ResultAnnouncement
@@ -1130,6 +1236,10 @@ typedef struct Arr4_Slice_ClsnTransform Arr4_Slice_ClsnTransform;
 #define CVF_DEF_Arr4_Slice_i32
 typedef struct Arr4_Slice_i32 Arr4_Slice_i32;
 #endif
+#ifndef CVF_DEF_Arr4_VulkanLightUniform
+#define CVF_DEF_Arr4_VulkanLightUniform
+typedef struct Arr4_VulkanLightUniform Arr4_VulkanLightUniform;
+#endif
 #ifndef CVF_DEF_Arr4_bool
 #define CVF_DEF_Arr4_bool
 typedef struct Arr4_bool Arr4_bool;
@@ -1149,18 +1259,6 @@ typedef struct Arr4_u8 Arr4_u8;
 #ifndef CVF_DEF_Arr64_AnimationPtr
 #define CVF_DEF_Arr64_AnimationPtr
 typedef struct Arr64_AnimationPtr Arr64_AnimationPtr;
-#endif
-#ifndef CVF_DEF_Arr64_Anon_5596a083
-#define CVF_DEF_Arr64_Anon_5596a083
-typedef struct Arr64_Anon_5596a083 Arr64_Anon_5596a083;
-#endif
-#ifndef CVF_DEF_Arr64_Anon_7b4debcb
-#define CVF_DEF_Arr64_Anon_7b4debcb
-typedef struct Arr64_Anon_7b4debcb Arr64_Anon_7b4debcb;
-#endif
-#ifndef CVF_DEF_Arr64_Anon_a810cdd4
-#define CVF_DEF_Arr64_Anon_a810cdd4
-typedef struct Arr64_Anon_a810cdd4 Arr64_Anon_a810cdd4;
 #endif
 #ifndef CVF_DEF_Arr6_f32
 #define CVF_DEF_Arr6_f32
@@ -1402,6 +1500,14 @@ typedef struct { GoIface* *p; int len, cap; } Slice_GoIfacePtr;
 #define CVF_DEF_Slice_GoOpaque_ggpo_PlayerPtr
 typedef struct { GoOpaque /* ggpo.Player */ *p; int len, cap; } Slice_GoOpaque_ggpo_PlayerPtr;
 #endif
+#ifndef CVF_DEF_Slice_GoOpaque_invalidtypePtr
+#define CVF_DEF_Slice_GoOpaque_invalidtypePtr
+typedef struct { GoOpaque /* invalid type */ *p; int len, cap; } Slice_GoOpaque_invalidtypePtr;
+#endif
+#ifndef CVF_DEF_Slice_GoOpaque_list_ElementPtrPtr
+#define CVF_DEF_Slice_GoOpaque_list_ElementPtrPtr
+typedef struct { GoOpaque /* list.Element */* *p; int len, cap; } Slice_GoOpaque_list_ElementPtrPtr;
+#endif
 #ifndef CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
 #define CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
 typedef struct { GoOpaque /* lua.LFunction */* *p; int len, cap; } Slice_GoOpaque_lua_LFunctionPtrPtr;
@@ -1490,9 +1596,9 @@ typedef struct { SelectChar *p; int len, cap; } Slice_SelectChar;
 #define CVF_DEF_Slice_SelectStage
 typedef struct { SelectStage *p; int len, cap; } Slice_SelectStage;
 #endif
-#ifndef CVF_DEF_Slice_ShaderProgram_GLES32Ptr
-#define CVF_DEF_Slice_ShaderProgram_GLES32Ptr
-typedef struct { ShaderProgram_GLES32* *p; int len, cap; } Slice_ShaderProgram_GLES32Ptr;
+#ifndef CVF_DEF_Slice_ShaderProgram_GL33Ptr
+#define CVF_DEF_Slice_ShaderProgram_GL33Ptr
+typedef struct { ShaderProgram_GL33* *p; int len, cap; } Slice_ShaderProgram_GL33Ptr;
 #endif
 #ifndef CVF_DEF_Slice_ShadowSpritePtr
 #define CVF_DEF_Slice_ShadowSpritePtr
@@ -1558,6 +1664,22 @@ typedef struct { TextSprite* *p; int len, cap; } Slice_TextSpritePtr;
 #define CVF_DEF_Slice_TextureAtlasPtr
 typedef struct { TextureAtlas* *p; int len, cap; } Slice_TextureAtlasPtr;
 #endif
+#ifndef CVF_DEF_Slice_Texture_VKPtr
+#define CVF_DEF_Slice_Texture_VKPtr
+typedef struct { Texture_VK* *p; int len, cap; } Slice_Texture_VKPtr;
+#endif
+#ifndef CVF_DEF_Slice_VulkanBuffer
+#define CVF_DEF_Slice_VulkanBuffer
+typedef struct { VulkanBuffer *p; int len, cap; } Slice_VulkanBuffer;
+#endif
+#ifndef CVF_DEF_Slice_VulkanMemoryBlockPtr
+#define CVF_DEF_Slice_VulkanMemoryBlockPtr
+typedef struct { VulkanMemoryBlock* *p; int len, cap; } Slice_VulkanMemoryBlockPtr;
+#endif
+#ifndef CVF_DEF_Slice_VulkanSwapchainInfoPtr
+#define CVF_DEF_Slice_VulkanSwapchainInfoPtr
+typedef struct { VulkanSwapchainInfo* *p; int len, cap; } Slice_VulkanSwapchainInfoPtr;
+#endif
 #ifndef CVF_DEF_Slice_WinType
 #define CVF_DEF_Slice_WinType
 typedef struct { WinType *p; int len, cap; } Slice_WinType;
@@ -1593,6 +1715,10 @@ typedef struct { expValueFrame* *p; int len, cap; } Slice_expValueFramePtr;
 #ifndef CVF_DEF_Slice_f32
 #define CVF_DEF_Slice_f32
 typedef struct { f32 *p; int len, cap; } Slice_f32;
+#endif
+#ifndef CVF_DEF_Slice_f64
+#define CVF_DEF_Slice_f64
+typedef struct { f64 *p; int len, cap; } Slice_f64;
 #endif
 #ifndef CVF_DEF_Slice_i16
 #define CVF_DEF_Slice_i16
@@ -1642,167 +1768,167 @@ typedef struct { u8 *p; int len, cap; } Slice_u8;
 #define CVF_DEF_Slice_upnpMapping
 typedef struct { upnpMapping *p; int len, cap; } Slice_upnpMapping;
 #endif
-typedef Slice_scParam victoryQuote;
-typedef Slice_SoundChannel SoundChannels;
-typedef Slice_scParam cameraCtrl;
-typedef Slice_scParam defenceMulSet;
-typedef Slice_scParam hitAdd;
-typedef Slice_scParam hitFallVel;
-typedef Slice_scParam modifyPlayer;
-typedef Slice_scParam screenBound;
-typedef Slice_scParam selfState;
-typedef Slice_scParam gravity;
-typedef Slice_scParam loadFile;
-typedef Slice_scParam makeDust;
-typedef Slice_scParam modifyReflection;
-typedef Slice_scParam targetAdd;
-typedef Slice_scParam targetBind;
-typedef Slice_scParam targetGuardPointsAdd;
-typedef Slice_scParam targetPowerAdd;
-typedef Slice_scParam afterImageTime;
-typedef Slice_scParam assertSpecial;
-typedef Slice_scParam explodBindTime;
-typedef Slice_scParam getHitVarSet;
-typedef Slice_scParam text;
-typedef Slice_scParam transformSprite;
-typedef Slice_scParam attackDist;
-typedef Slice_scParam destroySelf;
-typedef Slice_scParam hitOverride;
-typedef Slice_scParam playSnd;
-typedef Slice_scParam varRangeSet;
-typedef Slice_scParam zoom;
-typedef Slice_scParam guardPointsSet;
-typedef Slice_scParam powerSet;
-typedef Slice_scParam redLifeSet;
-typedef Slice_scParam sndPan;
-typedef Slice_scParam bgPalFX;
-typedef Slice_scParam height;
-typedef Slice_scParam lifeSet;
-typedef Slice_scParam modifyBGCtrl;
-typedef Slice_scParam moveHitReset;
-typedef Slice_scParam stateTypeSet;
-typedef Slice_scParam afterImage;
-typedef Slice_scParam assertAnalogVector;
-typedef Slice_scParam clearClipboard;
-typedef Slice_scParam dialogue;
-typedef Slice_scParam matchRestart;
-typedef Slice_scParam sprPriority;
-typedef Slice_BytecodeValue BytecodeStack;
-typedef Slice_scParam createPlatform;
-typedef Slice_scParam hitDef;
-typedef Slice_scParam modifyReversalDef;
-typedef Slice_scParam shiftInput;
-typedef Slice_scParam displayToClipboard;
-typedef Slice_scParam allPalFX;
 typedef Slice_scParam angleAdd;
-typedef Slice_scParam assertInput;
+typedef Slice_scParam assertCommand;
+typedef Slice_scParam hitDef;
+typedef Slice_scParam modifyProjectile;
+typedef Slice_scParam text;
+typedef Slice_scParam allPalFX;
+typedef Slice_scParam dizzySet;
+typedef Slice_scParam removeText;
+typedef Slice_scParam roundTimeAdd;
+typedef Slice_scParam shiftInput;
+typedef Slice_scParam trans;
+typedef Slice_scParam varSet;
+typedef Slice_scParam modifyBgm;
+typedef Slice_scParam targetBind;
+typedef Slice_scParam varRandom;
+typedef Slice_scParam clearClipboard;
+typedef Slice_scParam modifyReversalDef;
+typedef Slice_scParam removeStoryboard;
+typedef Slice_scParam velAdd;
+typedef Slice_scParam bindToRoot;
+typedef Slice_scParam explodBindTime;
+typedef Slice_scParam gravity;
+typedef Slice_scParam hitFallSet;
+typedef Slice_scParam shaderSet;
+typedef Slice_scParam targetScoreAdd;
+typedef Slice_scParam bindToTarget;
+typedef Slice_SoundChannel SoundChannels;
+typedef Slice_scParam getHitVarSet;
+typedef Slice_scParam modifyExplod;
+typedef Slice_scParam notHitBy;
+typedef Slice_scParam superPause;
+typedef Slice_scParam hitVelSet;
+typedef Slice_scParam modifyStageBG;
+typedef Slice_scParam victoryQuote;
+typedef Slice_scParam stateTypeSet;
+typedef Slice_scParam targetGuardPointsAdd;
+typedef Slice_scParam remapSprite;
+typedef Slice_scParam attackMulSet;
+typedef Slice_scParam lifebarAction;
+typedef Slice_scParam modifyReflection;
+typedef Slice_scParam palFX;
+typedef Slice_scParam powerAdd;
+typedef Slice_scParam targetAdd;
+typedef Slice_scParam height;
+typedef Slice_scParam modifyStoryboard;
+typedef Slice_scParam turn;
+typedef Slice_scParam changeAnim;
+typedef Slice_scParam changeMovelist;
+typedef Slice_scParam guardPointsAdd;
+typedef Slice_scParam hitAdd;
+typedef Slice_scParam modifyPlayer;
+typedef Slice_scParam modifyStageVar;
+typedef Slice_scParam offset;
+typedef Slice_scParam stopSnd;
+typedef Slice_scParam lifeAdd;
 typedef Slice_scParam posSet;
 typedef Slice_scParam targetDizzyPointsAdd;
-typedef Slice_scParam targetLifeAdd;
-typedef Slice_scParam angleDraw;
-typedef Slice_scParam angleMul;
-typedef Slice_scParam offset;
-typedef Slice_scParam removeStoryboard;
-typedef Slice_scParam roundTimeAdd;
-typedef Slice_scParam turn;
-typedef Slice_scParam changeAnim2;
-typedef Slice_scParam modifyStageBG;
-typedef Slice_scParam modifyStageVar;
-typedef Slice_scParam overrideClsn;
 typedef Slice_scParam transformClsn;
-typedef Slice_OpCode StateExpr;
-typedef Slice_scParam assertCommand;
-typedef Slice_scParam ctrlSet;
-typedef Slice_scParam dizzySet;
-typedef Slice_scParam remapPal;
-typedef Slice_scParam targetRedLifeAdd;
-typedef Slice_scParam bindToRoot;
-typedef Slice_scParam gameMakeAnim;
-typedef Slice_scParam posAdd;
-typedef Slice_SpriteDataPtr DrawList;
-typedef Slice_scParam modifySnd;
-typedef Slice_scParam powerAdd;
-typedef Slice_scParam remapSprite;
-typedef Slice_scParam shaderSet;
-typedef Slice_scParam tagOut;
-typedef Slice_scParam varSet;
-typedef Slice_ReflectionSpritePtr ReflectionList;
-typedef Slice_scParam groundLevelOffset;
-typedef Slice_scParam depth;
-typedef Slice_scParam mapReset;
-typedef Slice_scParam saveState;
-typedef Slice_scParam velMul;
-typedef Slice_scParam projectile;
-typedef Slice_scParam storyboard;
-typedef Slice_scParam dizzyPointsSet;
-typedef Slice_scParam guardPointsAdd;
-typedef Slice_scParam modifyBgm;
-typedef Slice_scParam pause;
-typedef Slice_scParam playBgm;
-typedef Slice_scParam scoreAdd;
-typedef Slice_scParam stopSnd;
-typedef Slice_scParam guardBreakSet;
-typedef Slice_scParam runState;
-typedef Slice_scParam targetFacing;
-typedef Slice_scParam hitFallDamage;
-typedef Slice_scParam mapSet;
-typedef Slice_scParam modifyText;
-typedef Slice_scParam notHitBy;
-typedef Slice_scParam tagIn;
-typedef Slice_scParam hitFallSet;
-typedef Slice_scParam removeText;
 typedef Slice_scParam velSet;
-typedef Slice_scParam width;
-typedef Slice_OpCode BytecodeExp;
-typedef Slice_scParam changeMovelist;
+typedef Slice_scParam redLifeSet;
+typedef Slice_scParam attackDist;
+typedef Slice_scParam destroySelf;
+typedef Slice_scParam explod;
+typedef Slice_scParam playSnd;
+typedef Slice_scParam roundTimeSet;
+typedef Slice_scParam tagOut;
+typedef Slice_ReflectionSpritePtr ReflectionList;
+typedef Slice_scParam dialogue;
+typedef Slice_scParam hitFallDamage;
 typedef Slice_scParam loadState;
-typedef Slice_scParam modifyStoryboard;
-typedef Slice_scParam palFX;
-typedef Slice_scParam removePlatform;
-typedef Slice_scParam velAdd;
-typedef Slice_scParam appendToClipboard;
-typedef Slice_scParam dizzyPointsAdd;
-typedef Slice_scParam fallEnvShake;
-typedef Slice_scParam modifyExplod;
-typedef Slice_scParam angleSet;
-typedef Slice_scParam changeState;
-typedef Slice_scParam hitBy;
-typedef Slice_scParam printToConsole;
+typedef Slice_scParam modifyText;
+typedef Slice_scParam posFreeze;
 typedef Slice_scParam removeExplod;
 typedef Slice_scParam targetVelAdd;
-typedef Slice_scParam targetVelSet;
+typedef Slice_OpCode StateExpr;
+typedef Slice_scParam printToConsole;
+typedef Slice_scParam scoreAdd;
+typedef Slice_scParam cameraCtrl;
+typedef Slice_scParam appendToClipboard;
+typedef Slice_scParam lifeSet;
+typedef Slice_scParam width;
+typedef Slice_scParam gameMakeAnim;
+typedef Slice_scParam bgPalFX;
+typedef Slice_scParam assertInput;
+typedef Slice_scParam depth;
 typedef Slice_scParam depthBound;
-typedef Slice_scParam helper;
-typedef Slice_scParam targetState;
-typedef Slice_scParam attackMulSet;
-typedef Slice_scParam modifyHitDef;
-typedef Slice_scParam targetScoreAdd;
-typedef Slice_scParam StateControllerBase;
-typedef Slice_scParam explod;
-typedef Slice_scParam hitVelSet;
-typedef Slice_scParam playerPush;
-typedef Slice_scParam redLifeAdd;
-typedef Slice_scParam reversalDef;
-typedef Slice_scParam roundTimeSet;
-typedef Slice_scParam bindToParent;
-typedef Slice_scParam envColor;
-typedef Slice_scParam posFreeze;
-typedef Slice_scParam saveFile;
-typedef Slice_scParam stateDef;
-typedef Slice_scParam envShake;
-typedef Slice_scParam lifeAdd;
-typedef Slice_scParam lifebarAction;
-typedef Slice_scParam modifyBGCtrl3d;
-typedef Slice_scParam modifyProjectile;
-typedef Slice_ShadowSpritePtr ShadowList;
-typedef Slice_scParam modifyShadow;
-typedef Slice_scParam superPause;
 typedef Slice_scParam forceFeedback;
-typedef Slice_scParam bindToTarget;
-typedef Slice_scParam changeAnim;
+typedef Slice_scParam mapReset;
+typedef Slice_scParam sndPan;
+typedef Slice_scParam reversalDef;
+typedef Slice_scParam saveFile;
+typedef Slice_scParam targetState;
+typedef Slice_scParam varRangeSet;
+typedef Slice_scParam angleDraw;
+typedef Slice_scParam dizzyPointsSet;
+typedef Slice_scParam playerPush;
+typedef Slice_scParam sprPriority;
 typedef Slice_scParam targetDrop;
-typedef Slice_scParam trans;
-typedef Slice_scParam varRandom;
+typedef Slice_scParam afterImage;
+typedef Slice_scParam afterImageTime;
+typedef Slice_scParam assertAnalogVector;
+typedef Slice_scParam assertSpecial;
+typedef Slice_scParam changeState;
+typedef Slice_scParam guardPointsSet;
+typedef Slice_scParam selfState;
+typedef Slice_scParam tagIn;
+typedef Slice_scParam targetFacing;
+typedef Slice_scParam zoom;
+typedef Slice_OpCode BytecodeExp;
+typedef Slice_scParam displayToClipboard;
+typedef Slice_scParam modifyShadow;
+typedef Slice_scParam overrideClsn;
+typedef Slice_scParam ctrlSet;
+typedef Slice_scParam makeDust;
+typedef Slice_scParam modifySnd;
+typedef Slice_scParam posAdd;
+typedef Slice_scParam redLifeAdd;
+typedef Slice_scParam remapPal;
+typedef Slice_scParam removePlatform;
+typedef Slice_scParam storyboard;
+typedef Slice_scParam defenceMulSet;
+typedef Slice_scParam dizzyPointsAdd;
+typedef Slice_scParam groundLevelOffset;
+typedef Slice_scParam helper;
+typedef Slice_scParam pause;
+typedef Slice_scParam screenBound;
+typedef Slice_scParam targetLifeAdd;
+typedef Slice_scParam targetPowerAdd;
+typedef Slice_scParam bindToParent;
+typedef Slice_scParam angleMul;
+typedef Slice_scParam fallEnvShake;
+typedef Slice_scParam runState;
+typedef Slice_scParam transformSprite;
+typedef Slice_scParam stateDef;
+typedef Slice_scParam hitOverride;
+typedef Slice_scParam mapSet;
+typedef Slice_scParam targetRedLifeAdd;
+typedef Slice_scParam targetVelSet;
+typedef Slice_scParam velMul;
+typedef Slice_BytecodeValue BytecodeStack;
+typedef Slice_scParam changeAnim2;
+typedef Slice_scParam hitBy;
+typedef Slice_scParam hitFallVel;
+typedef Slice_scParam playBgm;
+typedef Slice_scParam powerSet;
+typedef Slice_scParam projectile;
+typedef Slice_scParam angleSet;
+typedef Slice_scParam envShake;
+typedef Slice_scParam matchRestart;
+typedef Slice_scParam modifyBGCtrl;
+typedef Slice_scParam modifyHitDef;
+typedef Slice_scParam moveHitReset;
+typedef Slice_scParam saveState;
+typedef Slice_SpriteDataPtr DrawList;
+typedef Slice_ShadowSpritePtr ShadowList;
+typedef Slice_scParam StateControllerBase;
+typedef Slice_scParam guardBreakSet;
+typedef Slice_scParam loadFile;
+typedef Slice_scParam createPlatform;
+typedef Slice_scParam envColor;
+typedef Slice_scParam modifyBGCtrl3d;
 #ifndef CVF_DEF_Slice_BytecodeExp
 #define CVF_DEF_Slice_BytecodeExp
 typedef struct { BytecodeExp *p; int len, cap; } Slice_BytecodeExp;
@@ -2284,9 +2410,13 @@ typedef struct FilesProperties FilesProperties;
 #define CVF_TD_FontProperties
 typedef struct FontProperties FontProperties;
 #endif
-#ifndef CVF_TD_FontRenderer_GLES32
-#define CVF_TD_FontRenderer_GLES32
-typedef struct FontRenderer_GLES32 FontRenderer_GLES32;
+#ifndef CVF_TD_FontRenderer_GL33
+#define CVF_TD_FontRenderer_GL33
+typedef struct FontRenderer_GL33 FontRenderer_GL33;
+#endif
+#ifndef CVF_TD_FontRenderer_VK
+#define CVF_TD_FontRenderer_VK
+typedef struct FontRenderer_VK FontRenderer_VK;
 #endif
 #ifndef CVF_TD_color
 #define CVF_TD_color
@@ -2296,17 +2426,21 @@ typedef struct color color;
 #define CVF_TD_ShaderPalFX
 typedef struct ShaderPalFX ShaderPalFX;
 #endif
-#ifndef CVF_TD_Font_GLES32
-#define CVF_TD_Font_GLES32
-typedef struct Font_GLES32 Font_GLES32;
+#ifndef CVF_TD_Font_GL33
+#define CVF_TD_Font_GL33
+typedef struct Font_GL33 Font_GL33;
+#endif
+#ifndef CVF_TD_Font_VK
+#define CVF_TD_Font_VK
+typedef struct Font_VK Font_VK;
 #endif
 #ifndef CVF_TD_ForceFeedbackParams
 #define CVF_TD_ForceFeedbackParams
 typedef struct ForceFeedbackParams ForceFeedbackParams;
 #endif
-#ifndef CVF_TD_GLES32State
-#define CVF_TD_GLES32State
-typedef struct GLES32State GLES32State;
+#ifndef CVF_TD_GL33State
+#define CVF_TD_GL33State
+typedef struct GL33State GL33State;
 #endif
 #ifndef CVF_TD_GLTFAnimatableProperty
 #define CVF_TD_GLTFAnimatableProperty
@@ -2684,13 +2818,93 @@ typedef struct ReflectionSprite ReflectionSprite;
 #define CVF_TD_RenderParams
 typedef struct RenderParams RenderParams;
 #endif
-#ifndef CVF_TD_vitaBatch
-#define CVF_TD_vitaBatch
-typedef struct vitaBatch vitaBatch;
+#ifndef CVF_TD_Renderer_GL33
+#define CVF_TD_Renderer_GL33
+typedef struct Renderer_GL33 Renderer_GL33;
 #endif
-#ifndef CVF_TD_Renderer_GLES32
-#define CVF_TD_Renderer_GLES32
-typedef struct Renderer_GLES32 Renderer_GLES32;
+#ifndef CVF_TD_VulkanBuffer
+#define CVF_TD_VulkanBuffer
+typedef struct VulkanBuffer VulkanBuffer;
+#endif
+#ifndef CVF_TD_VulkanSpriteTexture
+#define CVF_TD_VulkanSpriteTexture
+typedef struct VulkanSpriteTexture VulkanSpriteTexture;
+#endif
+#ifndef CVF_TD_VulkanModelTexture
+#define CVF_TD_VulkanModelTexture
+typedef struct VulkanModelTexture VulkanModelTexture;
+#endif
+#ifndef CVF_TD_VulkanShadowMapTexture
+#define CVF_TD_VulkanShadowMapTexture
+typedef struct VulkanShadowMapTexture VulkanShadowMapTexture;
+#endif
+#ifndef CVF_TD_VulkanModelSpecializationConstants0
+#define CVF_TD_VulkanModelSpecializationConstants0
+typedef struct VulkanModelSpecializationConstants0 VulkanModelSpecializationConstants0;
+#endif
+#ifndef CVF_TD_VulkanModelSpecializationConstants1
+#define CVF_TD_VulkanModelSpecializationConstants1
+typedef struct VulkanModelSpecializationConstants1 VulkanModelSpecializationConstants1;
+#endif
+#ifndef CVF_TD_VulkanModelPipelineState
+#define CVF_TD_VulkanModelPipelineState
+typedef struct VulkanModelPipelineState VulkanModelPipelineState;
+#endif
+#ifndef CVF_TD_VulkanBlendState
+#define CVF_TD_VulkanBlendState
+typedef struct VulkanBlendState VulkanBlendState;
+#endif
+#ifndef CVF_TD_VulkanPipelineState
+#define CVF_TD_VulkanPipelineState
+typedef struct VulkanPipelineState VulkanPipelineState;
+#endif
+#ifndef CVF_TD_VulkanShadowMapPipelineState
+#define CVF_TD_VulkanShadowMapPipelineState
+typedef struct VulkanShadowMapPipelineState VulkanShadowMapPipelineState;
+#endif
+#ifndef CVF_TD_VulkanSpriteProgramVertUniformBufferObject
+#define CVF_TD_VulkanSpriteProgramVertUniformBufferObject
+typedef struct VulkanSpriteProgramVertUniformBufferObject VulkanSpriteProgramVertUniformBufferObject;
+#endif
+#ifndef CVF_TD_VulkanSpriteProgramFragUniformBufferObject
+#define CVF_TD_VulkanSpriteProgramFragUniformBufferObject
+typedef struct VulkanSpriteProgramFragUniformBufferObject VulkanSpriteProgramFragUniformBufferObject;
+#endif
+#ifndef CVF_TD_VulkanLightUniform
+#define CVF_TD_VulkanLightUniform
+typedef struct VulkanLightUniform VulkanLightUniform;
+#endif
+#ifndef CVF_TD_VulkanModelProgramUniformBufferObject0
+#define CVF_TD_VulkanModelProgramUniformBufferObject0
+typedef struct VulkanModelProgramUniformBufferObject0 VulkanModelProgramUniformBufferObject0;
+#endif
+#ifndef CVF_TD_VulkanModelProgramUniformBufferObject1
+#define CVF_TD_VulkanModelProgramUniformBufferObject1
+typedef struct VulkanModelProgramUniformBufferObject1 VulkanModelProgramUniformBufferObject1;
+#endif
+#ifndef CVF_TD_VulkanModelProgramUniformBufferObject2
+#define CVF_TD_VulkanModelProgramUniformBufferObject2
+typedef struct VulkanModelProgramUniformBufferObject2 VulkanModelProgramUniformBufferObject2;
+#endif
+#ifndef CVF_TD_VulkanShadowMapProgramUniformBufferObject0
+#define CVF_TD_VulkanShadowMapProgramUniformBufferObject0
+typedef struct VulkanShadowMapProgramUniformBufferObject0 VulkanShadowMapProgramUniformBufferObject0;
+#endif
+#ifndef CVF_TD_VulkanShadowMapProgramUniformBufferObject1
+#define CVF_TD_VulkanShadowMapProgramUniformBufferObject1
+typedef struct VulkanShadowMapProgramUniformBufferObject1 VulkanShadowMapProgramUniformBufferObject1;
+#endif
+#ifndef CVF_TD_VulkanShadowMapProgramUniformBufferObject2
+#define CVF_TD_VulkanShadowMapProgramUniformBufferObject2
+typedef struct VulkanShadowMapProgramUniformBufferObject2 VulkanShadowMapProgramUniformBufferObject2;
+#endif
+#ifndef CVF_TD_VulkanShadowMapProgramPushConstant
+#define CVF_TD_VulkanShadowMapProgramPushConstant
+typedef struct VulkanShadowMapProgramPushConstant VulkanShadowMapProgramPushConstant;
+#endif
+#ifndef CVF_TD_VKState
+#define CVF_TD_VKState
+typedef struct VKState VKState;
 #endif
 #ifndef CVF_TD_Renderer_VK
 #define CVF_TD_Renderer_VK
@@ -2788,13 +3002,9 @@ typedef struct SpriteTextureAtlas SpriteTextureAtlas;
 #define CVF_TD_Sff
 typedef struct Sff Sff;
 #endif
-#ifndef CVF_TD_uniCacheEnt
-#define CVF_TD_uniCacheEnt
-typedef struct uniCacheEnt uniCacheEnt;
-#endif
-#ifndef CVF_TD_ShaderProgram_GLES32
-#define CVF_TD_ShaderProgram_GLES32
-typedef struct ShaderProgram_GLES32 ShaderProgram_GLES32;
+#ifndef CVF_TD_ShaderProgram_GL33
+#define CVF_TD_ShaderProgram_GL33
+typedef struct ShaderProgram_GL33 ShaderProgram_GL33;
 #endif
 #ifndef CVF_TD_ShadowSprite
 #define CVF_TD_ShadowSprite
@@ -2900,9 +3110,13 @@ typedef struct TextSprite TextSprite;
 #define CVF_TD_TextureAtlas
 typedef struct TextureAtlas TextureAtlas;
 #endif
-#ifndef CVF_TD_Texture_GLES32
-#define CVF_TD_Texture_GLES32
-typedef struct Texture_GLES32 Texture_GLES32;
+#ifndef CVF_TD_Texture_GL33
+#define CVF_TD_Texture_GL33
+typedef struct Texture_GL33 Texture_GL33;
+#endif
+#ifndef CVF_TD_Texture_VK
+#define CVF_TD_Texture_VK
+typedef struct Texture_VK Texture_VK;
 #endif
 #ifndef CVF_TD_TypedValue
 #define CVF_TD_TypedValue
@@ -2911,6 +3125,50 @@ typedef struct TypedValue TypedValue;
 #ifndef CVF_TD_UndefinedFormatter
 #define CVF_TD_UndefinedFormatter
 typedef struct UndefinedFormatter UndefinedFormatter;
+#endif
+#ifndef CVF_TD_VulkanAllocation
+#define CVF_TD_VulkanAllocation
+typedef struct VulkanAllocation VulkanAllocation;
+#endif
+#ifndef CVF_TD_VulkanOOMRecord
+#define CVF_TD_VulkanOOMRecord
+typedef struct VulkanOOMRecord VulkanOOMRecord;
+#endif
+#ifndef CVF_TD_VulkanAllocator
+#define CVF_TD_VulkanAllocator
+typedef struct VulkanAllocator VulkanAllocator;
+#endif
+#ifndef CVF_TD_VulkanFreeRegion
+#define CVF_TD_VulkanFreeRegion
+typedef struct VulkanFreeRegion VulkanFreeRegion;
+#endif
+#ifndef CVF_TD_VulkanMemoryBlock
+#define CVF_TD_VulkanMemoryBlock
+typedef struct VulkanMemoryBlock VulkanMemoryBlock;
+#endif
+#ifndef CVF_TD_VulkanProgramInfo
+#define CVF_TD_VulkanProgramInfo
+typedef struct VulkanProgramInfo VulkanProgramInfo;
+#endif
+#ifndef CVF_TD_VulkanRenderInfo
+#define CVF_TD_VulkanRenderInfo
+typedef struct VulkanRenderInfo VulkanRenderInfo;
+#endif
+#ifndef CVF_TD_VulkanRenderTargetInfo
+#define CVF_TD_VulkanRenderTargetInfo
+typedef struct VulkanRenderTargetInfo VulkanRenderTargetInfo;
+#endif
+#ifndef CVF_TD_VulkanResource
+#define CVF_TD_VulkanResource
+typedef struct VulkanResource VulkanResource;
+#endif
+#ifndef CVF_TD_VulkanSamplerInfo
+#define CVF_TD_VulkanSamplerInfo
+typedef struct VulkanSamplerInfo VulkanSamplerInfo;
+#endif
+#ifndef CVF_TD_VulkanSwapchainInfo
+#define CVF_TD_VulkanSwapchainInfo
+typedef struct VulkanSwapchainInfo VulkanSwapchainInfo;
 #endif
 #ifndef CVF_TD_Window
 #define CVF_TD_Window
@@ -3012,6 +3270,10 @@ typedef struct rankingEntry rankingEntry;
 #define CVF_TD_rankingRow
 typedef struct rankingRow rankingRow;
 #endif
+#ifndef CVF_TD_reisenAudioStreamer
+#define CVF_TD_reisenAudioStreamer
+typedef struct reisenAudioStreamer reisenAudioStreamer;
+#endif
 #ifndef CVF_TD_runTally
 #define CVF_TD_runTally
 typedef struct runTally runTally;
@@ -3023,6 +3285,10 @@ typedef struct scParam scParam;
 #ifndef CVF_TD_sffv1PalState
 #define CVF_TD_sffv1PalState
 typedef struct sffv1PalState sffv1PalState;
+#endif
+#ifndef CVF_TD_sliceHeader
+#define CVF_TD_sliceHeader
+typedef struct sliceHeader sliceHeader;
 #endif
 #ifndef CVF_TD_soundPanView
 #define CVF_TD_soundPanView
@@ -6217,10 +6483,18 @@ struct FontProperties {
     Arr2_i32 Offset;
 };
 
-struct FontRenderer_GLES32 {
-    ShaderProgram_GLES32* shaderProgram;
+struct FontRenderer_GL33 {
+    ShaderProgram_GL33* shaderProgram;
     u32 vao;
     u32 vbo;
+};
+
+struct FontRenderer_VK {
+    GoOpaque /* invalid type */ device;
+    VulkanProgramInfo* program;
+    Slice_GoOpaque_invalidtypePtr descriptorPools;
+    GoOpaque /* list.List */ freeDescriptors;
+    GoIface coveragePalTex;
 };
 
 struct color {
@@ -6239,7 +6513,7 @@ struct ShaderPalFX {
     i32 invblend;
 };
 
-struct Font_GLES32 {
+struct Font_GL33 {
     Map_i32_characterPtr fontChar;
     GoOpaque /* truetype.Font */* ttf;
     i32 scale;
@@ -6248,6 +6522,21 @@ struct Font_GLES32 {
     Slice_TextureAtlasPtr textures;
     color color;
     ShaderPalFX shaderPalFX;
+    CustomShaderRenderData customShader;
+};
+
+struct Font_VK {
+    Map_i32_characterPtr fontChar;
+    GoOpaque /* truetype.Font */* ttf;
+    i32 scale;
+    u32 vao;
+    u32 vbo;
+    u32 program;
+    color color;
+    ShaderPalFX shaderPalFX;
+    Arr2_f32 resolution;
+    Slice_TextureAtlasPtr textures;
+    Slice_GoOpaque_list_ElementPtrPtr descriptors;
     CustomShaderRenderData customShader;
 };
 
@@ -6260,31 +6549,7 @@ struct ForceFeedbackParams {
     FFBWaveform waveform;
 };
 
-struct Anon_5596a083 {
-    i32 v;
-    bool ok;
-};
-#ifndef CVF_BODY_Arr64_Anon_5596a083
-#define CVF_BODY_Arr64_Anon_5596a083
-struct Arr64_Anon_5596a083 { Anon_5596a083 v[64]; };
-#endif
-struct Anon_a810cdd4 {
-    Arr4_f32 v;
-    u8 n;
-};
-#ifndef CVF_BODY_Arr64_Anon_a810cdd4
-#define CVF_BODY_Arr64_Anon_a810cdd4
-struct Arr64_Anon_a810cdd4 { Anon_a810cdd4 v[64]; };
-#endif
-struct Anon_7b4debcb {
-    Arr16_f32 v;
-    bool ok;
-};
-#ifndef CVF_BODY_Arr64_Anon_7b4debcb
-#define CVF_BODY_Arr64_Anon_7b4debcb
-struct Arr64_Anon_7b4debcb { Anon_7b4debcb v[64]; };
-#endif
-struct GLES32State {
+struct GL33State {
     u32 program;
     bool depthTest;
     bool depthMask;
@@ -6300,9 +6565,6 @@ struct GLES32State {
     Slice_u64 texCacheLastUsed;
     u64 texCacheTimer;
     Map_u32_i32 uniformICache;
-    Arr64_Anon_5596a083 uniArrI;
-    Arr64_Anon_a810cdd4 uniArrF;
-    Arr64_Anon_7b4debcb uniArrM;
     Map_u32_f32 uniformF1Cache;
     Map_u32_Arr2_f32 uniformF2Cache;
     Map_u32_Arr3_f32 uniformF3Cache;
@@ -9011,74 +9273,36 @@ struct RenderParams {
     CustomShaderRenderData customShader;
 };
 
-#ifndef CVF_BODY_Arr192_bool
-#define CVF_BODY_Arr192_bool
-struct Arr192_bool { bool v[192]; };
-#endif
-#ifndef CVF_BODY_Arr2_u64
-#define CVF_BODY_Arr2_u64
-struct Arr2_u64 { u64 v[2]; };
-#endif
-struct vitaBatch {
-    bool enabled;
-    Slice_f32 pend;
-    int n;
-    Slice_f32 cur;
-    Arr4_f32 spUV;
-    Arr4_f32 palUV;
-    u32 locSp;
-    u32 locPal;
-    bool ptrOK;
-    int flushes;
-    int quads;
-    bool lazy;
-    Arr64_Anon_5596a083 haveI;
-    Arr64_Anon_a810cdd4 haveF;
-    Arr64_Anon_7b4debcb haveM;
-    Arr192_bool dirty;
-    Slice_i32 dirtyList;
-    Arr2_i32 slotLoc;
-    Arr2_i32 slotUnit;
-    Arr2_u64 slotUse;
-    u64 slotTick;
-    f32 texSel;
-};
-
 #ifndef CVF_BODY_Arr2_u32
 #define CVF_BODY_Arr2_u32
 struct Arr2_u32 { u32 v[2]; };
 #endif
-struct Renderer_GLES32 {
+struct Renderer_GL33 {
     u32 fbo;
     u32 fbo_texture;
     u32 rbo_depth;
     u32 fbo_f;
-    Texture_GLES32* fbo_f_texture;
+    Texture_GL33* fbo_f_texture;
     u32 fbo_shadow;
     u32 fbo_shadow_cube_texture;
     u32 fbo_env;
     Slice_u32 fbo_pp;
     Slice_u32 fbo_pp_texture;
     u32 postVertBuffer;
-    Slice_ShaderProgram_GLES32Ptr postShaderSelect;
-    Map_u32_ShaderProgram_GLES32Ptr customShaders;
+    Slice_ShaderProgram_GL33Ptr postShaderSelect;
+    ShaderProgram_GL33* spriteShader;
+    u32 vertexBuffer;
+    Map_u32_ShaderProgram_GL33Ptr customShaders;
     Map_GoString_u32 customShaderMap;
     u32 nextShaderID;
-    ShaderProgram_GLES32* currentProgram;
-    Texture_GLES32* grabTexture;
-    ShaderProgram_GLES32* spriteShader;
-    u32 vertexBuffer;
-    ShaderProgram_GLES32* shadowMapShader;
-    ShaderProgram_GLES32* modelShader;
-    ShaderProgram_GLES32* panoramaToCubeMapShader;
-    ShaderProgram_GLES32* cubemapFilteringShader;
+    ShaderProgram_GL33* currentProgram;
+    ShaderProgram_GL33* shadowMapShader;
+    ShaderProgram_GL33* modelShader;
+    ShaderProgram_GL33* panoramaToCubeMapShader;
+    ShaderProgram_GL33* cubemapFilteringShader;
     Arr2_u32 modelVertexBuffer;
     Arr2_u32 modelIndexBuffer;
     u32 spriteVAO;
-    Slice_f32 vitaVerts;
-    u32 vitaLocPos;
-    u32 vitaLocUV;
-    vitaBatch vb;
     u32 modelVAO;
     u32 modelEnvVAO;
     u32 postVAO;
@@ -9086,10 +9310,13 @@ struct Renderer_GLES32 {
     u32 capturePBO;
     int capturePBOSize;
     bool capturePending;
+    Texture_GL33* grabTexture;
+    u32 grabFbo;
     bool enableModel;
     bool enableShadow;
+    bool debugMode;
     union {
-        GLES32State GLES32State_;
+        GL33State GL33State_;
         struct {
             u32 program;
             bool depthTest;
@@ -9106,9 +9333,6 @@ struct Renderer_GLES32 {
             Slice_u64 texCacheLastUsed;
             u64 texCacheTimer;
             Map_u32_i32 uniformICache;
-            Arr64_Anon_5596a083 uniArrI;
-            Arr64_Anon_a810cdd4 uniArrF;
-            Arr64_Anon_7b4debcb uniArrM;
             Map_u32_f32 uniformF1Cache;
             Map_u32_Arr2_f32 uniformF2Cache;
             Map_u32_Arr3_f32 uniformF3Cache;
@@ -9126,9 +9350,646 @@ struct Renderer_GLES32 {
     };
 };
 
+struct VulkanBuffer {
+    GoOpaque /* invalid type */ buffer;
+    GoOpaque /* invalid type */ bufferMemory;
+    GoOpaque /* unsafe.Pointer */ data;
+    uintptr_t size;
+};
+
+struct VulkanSpriteTexture {
+    Texture_VK* spriteTexture;
+    Texture_VK* palTexture;
+    Texture_VK* customTex1;
+    Texture_VK* customTex2;
+};
+
+struct VulkanModelTexture {
+    Texture_VK* lambertianEnvSampler;
+    Texture_VK* GGXEnvSampler;
+    Texture_VK* GGXLUT;
+    Texture_VK* jointMatricesTexture;
+    Texture_VK* morphTargetTexture;
+    Texture_VK* tex;
+    Texture_VK* normalMap;
+    Texture_VK* metallicRoughnessMap;
+    Texture_VK* ambientOcclusionMap;
+    Texture_VK* emissionMap;
+};
+
+struct VulkanShadowMapTexture {
+    Texture_VK* jointMatricesTexture;
+    Texture_VK* morphTargetTexture;
+    Texture_VK* tex;
+};
+
+#ifndef CVF_BODY_Arr3_bool
+#define CVF_BODY_Arr3_bool
+struct Arr3_bool { bool v[3]; };
+#endif
+struct VulkanModelSpecializationConstants0 {
+    bool useJoint0;
+    Arr3_bool _padding0;
+    bool useJoint1;
+    Arr3_bool _padding1;
+    bool useNormal;
+    Arr3_bool _padding2;
+    bool useTangent;
+    Arr3_bool _padding3;
+    bool useVertColor;
+    Arr3_bool _padding4;
+    bool useOutlineAttribute;
+    Arr3_bool _padding5;
+};
+
+struct VulkanModelSpecializationConstants1 {
+    bool useTexture;
+    Arr3_bool _padding0;
+    bool useNormalMap;
+    Arr3_bool _padding1;
+    bool useMetallicRoughnessMap;
+    Arr3_bool _padding2;
+    bool useEmissionMap;
+    Arr3_bool _padding3;
+    bool useShadowMap;
+    Arr3_bool _padding4;
+};
+
+struct VulkanModelPipelineState {
+    bool depthTest;
+    bool depthMask;
+    bool invertFrontFace;
+    bool doubleSided;
+    bool useUV;
+    PrimitiveMode primitiveMode;
+    union {
+        VulkanModelSpecializationConstants0 VulkanModelSpecializationConstants0_;
+        struct {
+            bool useJoint0;
+            Arr3_bool _sh6__padding0;
+            bool useJoint1;
+            Arr3_bool _sh6__padding1;
+            bool useNormal;
+            Arr3_bool _sh6__padding2;
+            bool useTangent;
+            Arr3_bool _sh6__padding3;
+            bool useVertColor;
+            Arr3_bool _sh6__padding4;
+            bool useOutlineAttribute;
+            Arr3_bool _padding5;
+        };
+    };
+    union {
+        VulkanModelSpecializationConstants1 VulkanModelSpecializationConstants1_;
+        struct {
+            bool useTexture;
+            Arr3_bool _sh7__padding0;
+            bool useNormalMap;
+            Arr3_bool _sh7__padding1;
+            bool useMetallicRoughnessMap;
+            Arr3_bool _sh7__padding2;
+            bool useEmissionMap;
+            Arr3_bool _sh7__padding3;
+            bool useShadowMap;
+            Arr3_bool _sh7__padding4;
+        };
+    };
+};
+
+struct VulkanBlendState {
+    BlendEquation op;
+    BlendFunc src;
+    BlendFunc dst;
+};
+
+struct VulkanPipelineState {
+    union {
+        VulkanModelPipelineState VulkanModelPipelineState_;
+        struct {
+            bool depthTest;
+            bool depthMask;
+            bool invertFrontFace;
+            bool doubleSided;
+            bool useUV;
+            PrimitiveMode primitiveMode;
+            VulkanModelSpecializationConstants0 VulkanModelSpecializationConstants0;
+            VulkanModelSpecializationConstants1 VulkanModelSpecializationConstants1;
+        };
+    };
+    union {
+        VulkanBlendState VulkanBlendState_;
+        struct {
+            BlendEquation op;
+            BlendFunc src;
+            BlendFunc dst;
+        };
+    };
+};
+
+struct VulkanShadowMapPipelineState {
+    bool invertFrontFace;
+    bool doubleSided;
+    bool useUV;
+    PrimitiveMode primitiveMode;
+    union {
+        VulkanModelSpecializationConstants0 VulkanModelSpecializationConstants0_;
+        struct {
+            bool useJoint0;
+            Arr3_bool _sh4__padding0;
+            bool useJoint1;
+            Arr3_bool _sh4__padding1;
+            bool useNormal;
+            Arr3_bool _sh4__padding2;
+            bool useTangent;
+            Arr3_bool _sh4__padding3;
+            bool useVertColor;
+            Arr3_bool _sh4__padding4;
+            bool useOutlineAttribute;
+            Arr3_bool _padding5;
+        };
+    };
+    union {
+        VulkanModelSpecializationConstants1 VulkanModelSpecializationConstants1_;
+        struct {
+            bool useTexture;
+            Arr3_bool _sh5__padding0;
+            bool useNormalMap;
+            Arr3_bool _sh5__padding1;
+            bool useMetallicRoughnessMap;
+            Arr3_bool _sh5__padding2;
+            bool useEmissionMap;
+            Arr3_bool _sh5__padding3;
+            bool useShadowMap;
+            Arr3_bool _sh5__padding4;
+        };
+    };
+};
+
+struct VulkanSpriteProgramVertUniformBufferObject {
+    Arr16_f32 modelView;
+    Arr16_f32 projection;
+};
+
+struct VulkanSpriteProgramFragUniformBufferObject {
+    Arr4_f32 x1x2x4x3;
+    Arr4_f32 tint;
+    Arr3_f32 add;
+    u32 _padding;
+    Arr3_f32 mult;
+    f32 alpha;
+    f32 gray;
+    f32 hue;
+    i32 mask;
+    u32 isFlat;
+    u32 isRgba;
+    u32 isTrapez;
+    u32 neg;
+    f32 iTime;
+    Arr2_f32 iResolution;
+    f32 aspectRatio;
+    f32 sTime;
+};
+
+struct VulkanLightUniform {
+    Arr3_f32 direction;
+    f32 lightRange;
+    Arr3_f32 color;
+    f32 intensity;
+    Arr3_f32 position;
+    f32 innerConeCos;
+    f32 outerConeCos;
+    i32 lightType;
+    f32 shadowBias;
+    f32 shadowMapFar;
+};
+
+#ifndef CVF_BODY_Arr4_Arr16_f32
+#define CVF_BODY_Arr4_Arr16_f32
+struct Arr4_Arr16_f32 { Arr16_f32 v[4]; };
+#endif
+#ifndef CVF_BODY_Arr4_VulkanLightUniform
+#define CVF_BODY_Arr4_VulkanLightUniform
+struct Arr4_VulkanLightUniform { VulkanLightUniform v[4]; };
+#endif
+struct VulkanModelProgramUniformBufferObject0 {
+    Arr16_f32 viewMatrix;
+    Arr16_f32 projectionMatrix;
+    Arr4_Arr16_f32 lightMatrices;
+    Arr4_VulkanLightUniform lights;
+    Arr12_f32 environmentRotation;
+    Arr3_f32 cameraPosition;
+    f32 environmentIntensity;
+    i32 mipCount;
+};
+
+struct VulkanModelProgramUniformBufferObject1 {
+    Arr12_f32 texTransform;
+    Arr12_f32 normalMapTransform;
+    Arr12_f32 metallicRoughnessMapTransform;
+    Arr12_f32 ambientOcclusionMapTransform;
+    Arr12_f32 emissionMapTransform;
+    Arr4_f32 baseColorFactor;
+    Arr3_f32 emission;
+    u32 _padding;
+    Arr2_f32 metallicRoughness;
+    f32 ambientOcclusionStrength;
+    f32 alphaThreshold;
+    bool unlit;
+    Arr3_bool _padding2;
+    bool enableAlpha;
+};
+
+#ifndef CVF_BODY_Arr2_Arr4_f32
+#define CVF_BODY_Arr2_Arr4_f32
+struct Arr2_Arr4_f32 { Arr4_f32 v[2]; };
+#endif
+struct VulkanModelProgramUniformBufferObject2 {
+    Arr16_f32 modelMatrix;
+    Arr16_f32 normalMatrix;
+    i32 numJoints;
+    i32 numTargets;
+    i32 morphTargetTextureDimension;
+    u32 numVertices;
+    Arr2_Arr4_f32 morphTargetWeight;
+    Arr4_f32 morphTargetOffset;
+    f32 meshOutline;
+    f32 modelGray;
+    f32 modelHue;
+    u32 _padding;
+    Arr3_f32 modelAdd;
+    u32 _padding2;
+    Arr3_f32 modelMult;
+    f32 _padding3;
+    u32 neg;
+};
+
+#ifndef CVF_BODY_Arr24_Arr16_f32
+#define CVF_BODY_Arr24_Arr16_f32
+struct Arr24_Arr16_f32 { Arr16_f32 v[24]; };
+#endif
+#ifndef CVF_BODY_Arr24_f32
+#define CVF_BODY_Arr24_f32
+struct Arr24_f32 { f32 v[24]; };
+#endif
+struct VulkanShadowMapProgramUniformBufferObject0 {
+    Arr24_Arr16_f32 lightMatrices;
+    Arr4_VulkanLightUniform lights;
+    Arr24_f32 layers;
+};
+
+struct VulkanShadowMapProgramUniformBufferObject1 {
+    Arr12_f32 texTransform;
+    Arr4_f32 baseColorFactor;
+    f32 alphaThreshold;
+    bool enableAlpha;
+};
+
+struct VulkanShadowMapProgramUniformBufferObject2 {
+    i32 numJoints;
+    i32 numTargets;
+    i32 morphTargetTextureDimension;
+    Arr2_Arr4_f32 morphTargetWeight;
+    Arr4_f32 morphTargetOffset;
+};
+
+struct VulkanShadowMapProgramPushConstant {
+    Arr16_f32 model;
+    i32 numVertices;
+    i32 lightIndex;
+};
+
+struct VKState {
+    VulkanProgramInfo* currentProgram;
+    VulkanProgramInfo* boundProgram;
+    GoOpaque /* invalid type */ currentPipeline;
+    GoOpaque /* invalid type */ currentShadowmMapPipeline;
+    VulkanSpriteTexture currentSpriteTexture;
+    VulkanModelTexture currentModelTexture;
+    VulkanModelTexture currentShadowMapTexture;
+    GoOpaque /* invalid type */ scissor;
+    u32 spriteVertUniformBufferOffset;
+    u32 spriteFragUniformBufferOffset;
+    u32 modelVertAttrOffset;
+    u32 modelVertexBufferIndex;
+    u32 modelUniformBufferOffset1;
+    u32 modelUniformBufferOffset2;
+    u32 numShadowMapLayers;
+    u32 shadowMapVertAttrOffset;
+    u32 shadowMapUniformBufferOffset1;
+    u32 shadowMapUniformBufferOffset2;
+    union {
+        VulkanSpriteTexture VulkanSpriteTexture_;
+        struct {
+            Texture_VK* spriteTexture;
+            Texture_VK* palTexture;
+            Texture_VK* customTex1;
+            Texture_VK* customTex2;
+        };
+    };
+    union {
+        VulkanModelTexture VulkanModelTexture_;
+        struct {
+            Texture_VK* lambertianEnvSampler;
+            Texture_VK* GGXEnvSampler;
+            Texture_VK* GGXLUT;
+            Texture_VK* _sh19_jointMatricesTexture;
+            Texture_VK* _sh19_morphTargetTexture;
+            Texture_VK* _sh19_tex;
+            Texture_VK* normalMap;
+            Texture_VK* metallicRoughnessMap;
+            Texture_VK* ambientOcclusionMap;
+            Texture_VK* emissionMap;
+        };
+    };
+    union {
+        VulkanShadowMapTexture VulkanShadowMapTexture_;
+        struct {
+            Texture_VK* _sh20_jointMatricesTexture;
+            Texture_VK* _sh20_morphTargetTexture;
+            Texture_VK* _sh20_tex;
+        };
+    };
+    union {
+        VulkanPipelineState VulkanPipelineState_;
+        struct {
+            VulkanModelPipelineState VulkanModelPipelineState;
+            VulkanBlendState VulkanBlendState;
+        };
+    };
+    union {
+        VulkanShadowMapPipelineState VulkanShadowMapPipelineState_;
+        struct {
+            bool invertFrontFace;
+            bool doubleSided;
+            bool useUV;
+            PrimitiveMode primitiveMode;
+            VulkanModelSpecializationConstants0 VulkanModelSpecializationConstants0;
+            VulkanModelSpecializationConstants1 VulkanModelSpecializationConstants1;
+        };
+    };
+    union {
+        VulkanSpriteProgramVertUniformBufferObject VulkanSpriteProgramVertUniformBufferObject_;
+        struct {
+            Arr16_f32 modelView;
+            Arr16_f32 projection;
+        };
+    };
+    union {
+        VulkanSpriteProgramFragUniformBufferObject VulkanSpriteProgramFragUniformBufferObject_;
+        struct {
+            Arr4_f32 x1x2x4x3;
+            Arr4_f32 tint;
+            Arr3_f32 add;
+            u32 _sh24__padding;
+            Arr3_f32 mult;
+            f32 alpha;
+            f32 gray;
+            f32 hue;
+            i32 mask;
+            u32 isFlat;
+            u32 isRgba;
+            u32 isTrapez;
+            u32 _sh24_neg;
+            f32 iTime;
+            Arr2_f32 iResolution;
+            f32 aspectRatio;
+            f32 sTime;
+        };
+    };
+    union {
+        VulkanModelProgramUniformBufferObject0 VulkanModelProgramUniformBufferObject0_;
+        struct {
+            Arr16_f32 viewMatrix;
+            Arr16_f32 projectionMatrix;
+            Arr4_Arr16_f32 _sh25_lightMatrices;
+            Arr4_VulkanLightUniform _sh25_lights;
+            Arr12_f32 environmentRotation;
+            Arr3_f32 cameraPosition;
+            f32 environmentIntensity;
+            i32 mipCount;
+        };
+    };
+    union {
+        VulkanModelProgramUniformBufferObject1 VulkanModelProgramUniformBufferObject1_;
+        struct {
+            Arr12_f32 _sh26_texTransform;
+            Arr12_f32 normalMapTransform;
+            Arr12_f32 metallicRoughnessMapTransform;
+            Arr12_f32 ambientOcclusionMapTransform;
+            Arr12_f32 emissionMapTransform;
+            Arr4_f32 _sh26_baseColorFactor;
+            Arr3_f32 emission;
+            u32 _sh26__padding;
+            Arr2_f32 metallicRoughness;
+            f32 ambientOcclusionStrength;
+            f32 _sh26_alphaThreshold;
+            bool unlit;
+            Arr3_bool _sh26__padding2;
+            bool _sh26_enableAlpha;
+        };
+    };
+    union {
+        VulkanModelProgramUniformBufferObject2 VulkanModelProgramUniformBufferObject2_;
+        struct {
+            Arr16_f32 modelMatrix;
+            Arr16_f32 normalMatrix;
+            i32 _sh27_numJoints;
+            i32 _sh27_numTargets;
+            i32 _sh27_morphTargetTextureDimension;
+            u32 _sh27_numVertices;
+            Arr2_Arr4_f32 _sh27_morphTargetWeight;
+            Arr4_f32 _sh27_morphTargetOffset;
+            f32 meshOutline;
+            f32 modelGray;
+            f32 modelHue;
+            u32 _sh27__padding;
+            Arr3_f32 modelAdd;
+            u32 _sh27__padding2;
+            Arr3_f32 modelMult;
+            f32 _padding3;
+            u32 _sh27_neg;
+        };
+    };
+    union {
+        VulkanShadowMapProgramUniformBufferObject0 VulkanShadowMapProgramUniformBufferObject0_;
+        struct {
+            Arr24_Arr16_f32 _sh28_lightMatrices;
+            Arr4_VulkanLightUniform _sh28_lights;
+            Arr24_f32 layers;
+        };
+    };
+    union {
+        VulkanShadowMapProgramUniformBufferObject1 VulkanShadowMapProgramUniformBufferObject1_;
+        struct {
+            Arr12_f32 _sh29_texTransform;
+            Arr4_f32 _sh29_baseColorFactor;
+            f32 _sh29_alphaThreshold;
+            bool _sh29_enableAlpha;
+        };
+    };
+    union {
+        VulkanShadowMapProgramUniformBufferObject2 VulkanShadowMapProgramUniformBufferObject2_;
+        struct {
+            i32 _sh30_numJoints;
+            i32 _sh30_numTargets;
+            i32 _sh30_morphTargetTextureDimension;
+            Arr2_Arr4_f32 _sh30_morphTargetWeight;
+            Arr4_f32 _sh30_morphTargetOffset;
+        };
+    };
+    union {
+        VulkanShadowMapProgramPushConstant VulkanShadowMapProgramPushConstant_;
+        struct {
+            Arr16_f32 model;
+            i32 _sh31_numVertices;
+            i32 lightIndex;
+        };
+    };
+};
+
+#ifndef CVF_BODY_Arr2_GoOpaque_chanPtr
+#define CVF_BODY_Arr2_GoOpaque_chanPtr
+struct Arr2_GoOpaque_chanPtr { GoOpaque /* chan */ v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_VulkanRenderInfoPtr
+#define CVF_BODY_Arr2_VulkanRenderInfoPtr
+struct Arr2_VulkanRenderInfoPtr { VulkanRenderInfo* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_VulkanBuffer
+#define CVF_BODY_Arr2_VulkanBuffer
+struct Arr2_VulkanBuffer { VulkanBuffer v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_Slice_GoOpaque_invalidtypePtr
+#define CVF_BODY_Arr2_Slice_GoOpaque_invalidtypePtr
+struct Arr2_Slice_GoOpaque_invalidtypePtr { Slice_GoOpaque_invalidtypePtr v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_VulkanRenderTargetInfoPtr
+#define CVF_BODY_Arr2_VulkanRenderTargetInfoPtr
+struct Arr2_VulkanRenderTargetInfoPtr { VulkanRenderTargetInfo* v[2]; };
+#endif
 struct Renderer_VK {
-    Renderer_GLES32* embed_Renderer_GLES32;
+    bool firstFrame;
+    Arr2_GoOpaque_chanPtr destroyResourceQueues;
+    u32 destroyResourceQueueIndex;
+    bool enableModel;
+    bool enableShadow;
+    bool renderShadowMap;
+    GoOpaque /* sync.WaitGroup */ waitGroup;
+    Slice_GoOpaque_invalidtypePtr gpuDevices;
+    u32 gpuIndex;
+    bool setVSync;
+    GoOpaque /* invalid type */ instance;
+    GoOpaque /* invalid type */ surface;
+    GoOpaque /* invalid type */ device;
+    GoOpaque /* invalid type */ queue;
+    u32 descriptorPoolSize;
+    GoOpaque /* invalid type */ descriptorPool;
+    Slice_GoOpaque_invalidtypePtr commandPools;
+    Slice_GoOpaque_invalidtypePtr commandBuffers;
+    Slice_GoOpaque_invalidtypePtr fences;
+    Slice_GoOpaque_invalidtypePtr semaphores;
+    Slice_VulkanSwapchainInfoPtr swapchains;
+    Arr2_VulkanRenderInfoPtr mainRenderPass;
+    VulkanRenderInfo* swapchainRenderPass;
+    VulkanRenderInfo* postProcessingRenderPass;
+    Slice_GoOpaque_invalidtypePtr spriteSamplers;
+    Map_VulkanSamplerInfo_GoOpaque_invalidtypePtr samplers;
+    uintptr_t vertexBufferOffset;
+    Slice_VulkanBuffer vertexBuffers;
+    Arr2_VulkanBuffer stagingBuffers;
+    Slice_VulkanBuffer modelVertexBuffers;
+    Slice_VulkanBuffer modelIndexBuffers;
+    Arr2_bool stagingBufferFences;
+    u32 stagingBufferIndex;
+    u32 stagingBufferOffset;
+    Arr2_Slice_GoOpaque_invalidtypePtr stagingImageBarriers;
+    Map_GoOpaque_invalidtypePtr_Slice_GoOpaque_invalidtypePtr stagingImageCopyRegions;
+    Slice_GoOpaque_invalidtypePtr tempCommands;
+    Slice_GoOpaque_invalidtypePtr usedCommands;
+    GoOpaque /* invalid type */ pipelineCache;
+    VulkanProgramInfo* spriteProgram;
+    VulkanProgramInfo* modelProgram;
+    VulkanProgramInfo* shadowMapProgram;
+    VulkanProgramInfo* postProcessingProgram;
+    VulkanProgramInfo* panoramaToCubeMapProgram;
+    VulkanProgramInfo* cubemapFilteringProgram;
+    VulkanProgramInfo* lutProgram;
+    VulkanRenderTargetInfo* mainRenderTarget;
+    Arr2_VulkanRenderTargetInfoPtr renderTargets;
+    Texture_VK* shadowMapTextures;
+    Texture_VK* dummyTexture;
+    Texture_VK* dummyNormalTexture;
+    Texture_VK* dummyWhiteTexture;
+    Texture_VK* dummyCubeTexture;
+    Slice_Texture_VKPtr fixedSizeTextures;
+    f32 maxAnisotropy;
+    u32 minUniformBufferOffsetAlignment;
+    u32 maxImageArrayLayers;
+    Map_GoOpaque_invalidtypePtr_u32 memoryTypeMap;
+    u64 allocatedImageMemory;
+    GoOpaque /* invalid type */ deviceLocalHeapSize;
+    u32 deviceLocalHeapIndex;
+    VulkanAllocator* allocator;
+    Map_u32_VulkanProgramInfoPtr customPrograms;
+    Map_GoString_u32 customShaderMap;
+    u32 nextShaderID;
+    bool shouldDoPerDrawPushDrawConstants;
+    bool hasPushDescriptors;
     bool surfaceLost;
+    bool frameOpen;
+    bool shadowPassActive;
+    bool shadowCmdRecorded;
+    GoOpaque /* invalid type */ droidDescriptorPool;
+    Map_VulkanProgramInfoPtr_Map_u32_GoOpaque_invalidtypePtr droidBindingState;
+    GoOpaque /* sync.Mutex */ poolMutex;
+    GoOpaque /* sync.Mutex */ surfaceMutex;
+    Texture_VK* grabTexture;
+    u64 currentFrameNumber;
+    Map_Texture_VKPtr_bool swappableTextures;
+    bool budgetEnabled;
+    GoOpaque /* invalid type */ memoryBudget;
+    u64 lastSwapFrame;
+    GoOpaque /* invalid type */ totalImageBytesAllocated;
+    int vramSwapThresholdPercent;
+    int vramSwapCooldownFrames;
+    bool vramFallbackEnabled;
+    union {
+        VKState VKState_;
+        struct {
+            VulkanProgramInfo* currentProgram;
+            VulkanProgramInfo* boundProgram;
+            GoOpaque /* invalid type */ currentPipeline;
+            GoOpaque /* invalid type */ currentShadowmMapPipeline;
+            VulkanSpriteTexture currentSpriteTexture;
+            VulkanModelTexture currentModelTexture;
+            VulkanModelTexture currentShadowMapTexture;
+            GoOpaque /* invalid type */ scissor;
+            u32 spriteVertUniformBufferOffset;
+            u32 spriteFragUniformBufferOffset;
+            u32 modelVertAttrOffset;
+            u32 modelVertexBufferIndex;
+            u32 modelUniformBufferOffset1;
+            u32 modelUniformBufferOffset2;
+            u32 numShadowMapLayers;
+            u32 shadowMapVertAttrOffset;
+            u32 shadowMapUniformBufferOffset1;
+            u32 shadowMapUniformBufferOffset2;
+            VulkanSpriteTexture VulkanSpriteTexture;
+            VulkanModelTexture VulkanModelTexture;
+            VulkanShadowMapTexture VulkanShadowMapTexture;
+            VulkanPipelineState VulkanPipelineState;
+            VulkanShadowMapPipelineState VulkanShadowMapPipelineState;
+            VulkanSpriteProgramVertUniformBufferObject VulkanSpriteProgramVertUniformBufferObject;
+            VulkanSpriteProgramFragUniformBufferObject VulkanSpriteProgramFragUniformBufferObject;
+            VulkanModelProgramUniformBufferObject0 VulkanModelProgramUniformBufferObject0;
+            VulkanModelProgramUniformBufferObject1 VulkanModelProgramUniformBufferObject1;
+            VulkanModelProgramUniformBufferObject2 VulkanModelProgramUniformBufferObject2;
+            VulkanShadowMapProgramUniformBufferObject0 VulkanShadowMapProgramUniformBufferObject0;
+            VulkanShadowMapProgramUniformBufferObject1 VulkanShadowMapProgramUniformBufferObject1;
+            VulkanShadowMapProgramUniformBufferObject2 VulkanShadowMapProgramUniformBufferObject2;
+            VulkanShadowMapProgramPushConstant VulkanShadowMapProgramPushConstant;
+        };
+    };
 };
 
 #ifndef CVF_BODY_Arr8_InputBits
@@ -9497,25 +10358,13 @@ struct Sff {
     };
 };
 
-struct uniCacheEnt {
-    u8* p;
-    int n;
-    i32 loc;
-};
-
-#ifndef CVF_BODY_Arr24_uniCacheEnt
-#define CVF_BODY_Arr24_uniCacheEnt
-struct Arr24_uniCacheEnt { uniCacheEnt v[24]; };
-#endif
-struct ShaderProgram_GLES32 {
+struct ShaderProgram_GL33 {
     u32 program;
     Map_GoString_i32 attributes;
     Map_GoString_i32 uniforms;
     Map_GoString_int textures;
     GoString name;
     bool needsGrabPass;
-    Arr24_uniCacheEnt uniCache;
-    int uniCacheN;
 };
 
 struct ShadowSprite {
@@ -10162,7 +11011,7 @@ struct TextureAtlas {
     GoOpaque /* list.List */* skyline;
 };
 
-struct Texture_GLES32 {
+struct Texture_GL33 {
     i32 width;
     i32 height;
     i32 depth;
@@ -10170,7 +11019,28 @@ struct Texture_GLES32 {
     Arr4_f32 uvst;
     bool filter;
     u32 handle;
-    Texture_GLES32* root;
+    Texture_GL33* root;
+};
+
+struct Texture_VK {
+    i32 width;
+    i32 height;
+    i32 depth;
+    bool filter;
+    u32 mipLevels;
+    Arr2_i32 offset;
+    Arr4_f32 uvst;
+    GoOpaque /* invalid type */ img;
+    GoOpaque /* invalid type */ imageView;
+    GoOpaque /* invalid type */ sampler;
+    VulkanAllocation* allocation;
+    Texture_VK* parent;
+    TextureResidency residency;
+    u64 lastUsedFrame;
+    Slice_u8 hostBackingBuffer;
+    bool hostVisibleUploaded;
+    bool nonSwappable;
+    bool needsReload;
 };
 
 struct TypedValue {
@@ -10181,6 +11051,116 @@ struct TypedValue {
 
 struct UndefinedFormatter {
     char _empty;
+};
+
+struct VulkanAllocation {
+    GoOpaque /* invalid type */ deviceMemory;
+    GoOpaque /* invalid type */ offset;
+    GoOpaque /* invalid type */ size;
+    u32 memoryTypeIndex;
+    u32 memoryTypeBits;
+    GoOpaque /* invalid type */ memProperties;
+    u32 blockID;
+    bool dedicated;
+    bool isDeviceLocal;
+    bool isHostVisible;
+};
+
+struct VulkanOOMRecord {
+    GoString FailedAt;
+    GoOpaque /* invalid type */ RequestedSize;
+    GoOpaque /* invalid type */ RequestedAlign;
+    GoOpaque /* invalid type */ RequestedProperty;
+    u32 MemoryTypeIndex;
+    u32 MemoryTypeBits;
+    bool WasDedicated;
+    GoString VulkanError;
+    GoOpaque /* invalid type */ HeapSize;
+    f64 TrackedDedicatedMB;
+    f64 TrackedSuballocMB;
+    int BlockCount;
+};
+
+struct VulkanAllocator {
+    Renderer_VK* renderer;
+    u64 totalImageAllocations;
+    u64 totalBufferAllocations;
+    u64 totalImageBytesRequested;
+    u64 totalBufferBytesRequested;
+    Map_u64_u32 memoryTypeCache;
+    GoOpaque /* sync.Mutex */ mu;
+    Slice_VulkanMemoryBlockPtr blocks;
+    u32 nextBlockID;
+    GoOpaque /* invalid type */ smallImageThreshold;
+    GoOpaque /* invalid type */ blockSize;
+    Map_GoOpaque_invalidtypePtr_VulkanAllocationPtr allocations;
+    VulkanOOMRecord lastOOM;
+};
+
+struct VulkanFreeRegion {
+    GoOpaque /* invalid type */ offset;
+    GoOpaque /* invalid type */ size;
+    VulkanFreeRegion* next;
+};
+
+struct VulkanMemoryBlock {
+    u32 id;
+    GoOpaque /* invalid type */ deviceMemory;
+    GoOpaque /* invalid type */ size;
+    GoOpaque /* invalid type */ used;
+    VulkanFreeRegion* freeList;
+    u32 memoryTypeBits;
+    GoOpaque /* invalid type */ memProperties;
+    u32 memoryTypeIndex;
+};
+
+struct VulkanProgramInfo {
+    GoOpaque /* invalid type */ pipelineLayout;
+    Slice_GoOpaque_invalidtypePtr descriptorSetLayouts;
+    Slice_GoOpaque_invalidtypePtr pipelines;
+    Map_GoIface_int pipelineIndexMap;
+    Slice_VulkanBuffer uniformBuffers;
+    u32 uniformBufferOffset;
+    u32 uniformSize;
+    Map_GoIface_u32 uniformOffsetMap;
+    GoOpaque /* invalid type */ vertShader;
+    GoOpaque /* invalid type */ fragShader;
+    bool needsGrabPass;
+    GoOpaque /* invalid type */ droidDescriptorSet;
+};
+
+struct VulkanRenderInfo {
+    GoOpaque /* invalid type */ renderPass;
+};
+
+struct VulkanRenderTargetInfo {
+    Texture_VK* texture;
+    Texture_VK* depthTexture;
+    GoOpaque /* invalid type */ framebuffer;
+    GoOpaque /* invalid type */ descriptorSet;
+};
+
+struct VulkanResource {
+    VulkanResourceType resourceType;
+    Slice_GoIface resources;
+};
+
+struct VulkanSamplerInfo {
+    TextureSamplingParam magFilter;
+    TextureSamplingParam minFilter;
+    TextureSamplingParam wrapS;
+    TextureSamplingParam wrapT;
+};
+
+struct VulkanSwapchainInfo {
+    GoOpaque /* invalid type */ swapchain;
+    u32 currentImageIndex;
+    u32 imageCount;
+    Slice_GoOpaque_invalidtypePtr images;
+    Slice_GoOpaque_invalidtypePtr imageViews;
+    Slice_GoOpaque_invalidtypePtr framebuffers;
+    GoOpaque /* invalid type */ extent;
+    GoOpaque /* invalid type */ format;
 };
 
 struct Window {
@@ -10303,13 +11283,35 @@ struct bgMusic {
 };
 
 struct bgVideo {
+    GoOpaque /* chan */ errs;
+    GoOpaque /* chan */ frameBuffer;
+    GoOpaque /* chan */ audioBuffer;
+    GoOpaque /* chan */ quit;
+    GoOpaque /* chan */ done;
+    GoOpaque /* invalid type */ audioStream;
+    GoOpaque /* invalid type */ videoStream;
+    GoOpaque /* invalid type */ media;
+    bool loop;
     GoIface texture;
+    GoOpaque /* time.Time */ startWall;
+    i64 basePTS;
+    bool haveBasePTS;
+    i64 elapsedPTS;
+    GoOpaque /* image.RGBA */* lastFrame;
+    int volume;
+    BgVideoScaleMode scaleMode;
+    BgVideoScaleFilter flag;
+    bool playing;
     bool visible;
     bool muted;
+    GoOpaque /* beep.Ctrl */* videoCtrl;
+    GoOpaque /* effects.Volume */* videoVol;
+    int audioSampleRate;
+    bool inMixer;
 };
 
 struct boundTexture {
-    Texture_GLES32* tex;
+    Texture_GL33* tex;
     u32 handle;
     u32 target;
 };
@@ -10477,6 +11479,12 @@ struct rankingRow {
     TextSprite* nameDataActive2;
 };
 
+struct reisenAudioStreamer {
+    GoOpaque /* chan */ ch;
+    Slice_f64 pending;
+    bool closed;
+};
+
 struct runTally {
     i32 timeTicks;
     int winP1;
@@ -10495,6 +11503,12 @@ struct sffv1PalState {
     int current;
     i64 location;
     i64 initialLocation;
+};
+
+struct sliceHeader {
+    uintptr_t Data;
+    int Len;
+    int Cap;
 };
 
 struct soundPanView {
@@ -10840,9 +11854,9 @@ GO_SLICE_FUNCS(Slice_SelectChar, SelectChar)
 #define CVF_FN_Slice_SelectStage
 GO_SLICE_FUNCS(Slice_SelectStage, SelectStage)
 #endif
-#ifndef CVF_FN_Slice_ShaderProgram_GLES32Ptr
-#define CVF_FN_Slice_ShaderProgram_GLES32Ptr
-GO_SLICE_FUNCS(Slice_ShaderProgram_GLES32Ptr, ShaderProgram_GLES32*)
+#ifndef CVF_FN_Slice_ShaderProgram_GL33Ptr
+#define CVF_FN_Slice_ShaderProgram_GL33Ptr
+GO_SLICE_FUNCS(Slice_ShaderProgram_GL33Ptr, ShaderProgram_GL33*)
 #endif
 #ifndef CVF_FN_Slice_ShadowSpritePtr
 #define CVF_FN_Slice_ShadowSpritePtr
@@ -10924,6 +11938,22 @@ GO_SLICE_FUNCS(Slice_TextSpritePtr, TextSprite*)
 #define CVF_FN_Slice_TextureAtlasPtr
 GO_SLICE_FUNCS(Slice_TextureAtlasPtr, TextureAtlas*)
 #endif
+#ifndef CVF_FN_Slice_Texture_VKPtr
+#define CVF_FN_Slice_Texture_VKPtr
+GO_SLICE_FUNCS(Slice_Texture_VKPtr, Texture_VK*)
+#endif
+#ifndef CVF_FN_Slice_VulkanBuffer
+#define CVF_FN_Slice_VulkanBuffer
+GO_SLICE_FUNCS(Slice_VulkanBuffer, VulkanBuffer)
+#endif
+#ifndef CVF_FN_Slice_VulkanMemoryBlockPtr
+#define CVF_FN_Slice_VulkanMemoryBlockPtr
+GO_SLICE_FUNCS(Slice_VulkanMemoryBlockPtr, VulkanMemoryBlock*)
+#endif
+#ifndef CVF_FN_Slice_VulkanSwapchainInfoPtr
+#define CVF_FN_Slice_VulkanSwapchainInfoPtr
+GO_SLICE_FUNCS(Slice_VulkanSwapchainInfoPtr, VulkanSwapchainInfo*)
+#endif
 #ifndef CVF_FN_Slice_WinType
 #define CVF_FN_Slice_WinType
 GO_SLICE_FUNCS_A(Slice_WinType, WinType)
@@ -10959,6 +11989,10 @@ GO_SLICE_FUNCS(Slice_expValueFramePtr, expValueFrame*)
 #ifndef CVF_FN_Slice_f32
 #define CVF_FN_Slice_f32
 GO_SLICE_FUNCS_A(Slice_f32, f32)
+#endif
+#ifndef CVF_FN_Slice_f64
+#define CVF_FN_Slice_f64
+GO_SLICE_FUNCS_A(Slice_f64, f64)
 #endif
 #ifndef CVF_FN_Slice_i16
 #define CVF_FN_Slice_i16
@@ -11023,6 +12057,14 @@ GO_MAP_FUNCS(Map_Arr2_u16_bool, Arr2_u16, bool, false)
 #ifndef CVF_FN_Map_Arr2_u16_int
 #define CVF_FN_Map_Arr2_u16_int
 GO_MAP_FUNCS(Map_Arr2_u16_int, Arr2_u16, int, false)
+#endif
+#ifndef CVF_FN_Map_GoIface_int
+#define CVF_FN_Map_GoIface_int
+GO_MAP_FUNCS(Map_GoIface_int, GoIface, int, false)
+#endif
+#ifndef CVF_FN_Map_GoIface_u32
+#define CVF_FN_Map_GoIface_u32
+GO_MAP_FUNCS(Map_GoIface_u32, GoIface, u32, false)
 #endif
 #ifndef CVF_FN_Map_GoString_AnimationPropertiesPtr
 #define CVF_FN_Map_GoString_AnimationPropertiesPtr
@@ -11156,6 +12198,14 @@ GO_MAP_FUNCS(Map_GoString_u8, GoString, u8, true)
 #define CVF_FN_Map_ShortcutKey_ShortcutScriptPtr
 GO_MAP_FUNCS(Map_ShortcutKey_ShortcutScriptPtr, ShortcutKey, ShortcutScript*, false)
 #endif
+#ifndef CVF_FN_Map_Texture_VKPtr_bool
+#define CVF_FN_Map_Texture_VKPtr_bool
+GO_MAP_FUNCS(Map_Texture_VKPtr_bool, Texture_VK*, bool, false)
+#endif
+#ifndef CVF_FN_Map_VulkanProgramInfoPtr_Map_u32_GoOpaque_invalidtypePtr
+#define CVF_FN_Map_VulkanProgramInfoPtr_Map_u32_GoOpaque_invalidtypePtr
+GO_MAP_FUNCS(Map_VulkanProgramInfoPtr_Map_u32_GoOpaque_invalidtypePtr, VulkanProgramInfo*, Map_u32_GoOpaque_invalidtypePtr, false)
+#endif
 #ifndef CVF_FN_Map_bgVideoPtr_Anon_fa4d6974
 #define CVF_FN_Map_bgVideoPtr_Anon_fa4d6974
 GO_MAP_FUNCS(Map_bgVideoPtr_Anon_fa4d6974, bgVideo*, Anon_fa4d6974, false)
@@ -11272,13 +12322,17 @@ GO_MAP_FUNCS(Map_u32_Arr3_f32, u32, Arr3_f32, false)
 #define CVF_FN_Map_u32_Arr4_f32
 GO_MAP_FUNCS(Map_u32_Arr4_f32, u32, Arr4_f32, false)
 #endif
-#ifndef CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
-#define CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
-GO_MAP_FUNCS(Map_u32_ShaderProgram_GLES32Ptr, u32, ShaderProgram_GLES32*, false)
+#ifndef CVF_FN_Map_u32_ShaderProgram_GL33Ptr
+#define CVF_FN_Map_u32_ShaderProgram_GL33Ptr
+GO_MAP_FUNCS(Map_u32_ShaderProgram_GL33Ptr, u32, ShaderProgram_GL33*, false)
 #endif
 #ifndef CVF_FN_Map_u32_Slice_f32
 #define CVF_FN_Map_u32_Slice_f32
 GO_MAP_FUNCS(Map_u32_Slice_f32, u32, Slice_f32, false)
+#endif
+#ifndef CVF_FN_Map_u32_VulkanProgramInfoPtr
+#define CVF_FN_Map_u32_VulkanProgramInfoPtr
+GO_MAP_FUNCS(Map_u32_VulkanProgramInfoPtr, u32, VulkanProgramInfo*, false)
 #endif
 #ifndef CVF_FN_Map_u32_f32
 #define CVF_FN_Map_u32_f32
@@ -11291,6 +12345,10 @@ GO_MAP_FUNCS(Map_u32_i32, u32, i32, false)
 #ifndef CVF_FN_Map_u32_u32
 #define CVF_FN_Map_u32_u32
 GO_MAP_FUNCS(Map_u32_u32, u32, u32, false)
+#endif
+#ifndef CVF_FN_Map_u64_u32
+#define CVF_FN_Map_u64_u32
+GO_MAP_FUNCS(Map_u64_u32, u64, u32, false)
 #endif
 #ifndef CVF_FN_Map_uintptr_t_int
 #define CVF_FN_Map_uintptr_t_int

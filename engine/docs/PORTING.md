@@ -167,3 +167,30 @@ stay as verified references and for the optimised paths later.
 | System / fight loop | system.go | |
 | Commands / input | input.go | |
 | Sprites (SFF) | image.go | (render phase) |
+
+### Status 2026-11-19 06:00 — build configuration `cvf`, Lua VM translated
+
+- gotoc translates several Go packages (GOTOC_PKGS): the Lua VM
+  (gopher-lua and its parser) is translated with the game. cgo binding
+  packages (GOTOC_BIND_PKGS: go-sdl2, the GL bindings) are type-checked
+  for their signatures and real struct layouts; their functions are
+  implemented by hand in C.
+- New build tag `cvf` in the Ikemen fork (tools/ikemen/cvf_engine*.go):
+  the native engine uses the desktop platform files (SDL window, GL 3.3
+  renderer) and `vitaPerf` (= isVita || cvfEngine) keeps the Vita port's
+  simulation-equivalent performance paths (var cache, bytecode fusion,
+  explod/SpriteData reuse, synchronous gfx tasks) in every native build.
+  Platform quirks (vitaGL, memory-card file system, 30 fps lock, TinyGo GC
+  workarounds) stay behind `isVita`.
+- The headless translation under `cvf` reproduces the Vita reference dump
+  byte for byte — once the fight aspect matches.
+- **Finding: the fight aspect is simulation state.** The Vita build forces
+  FightAspectWidth/Height = 0,0 (full-panel fights) while the PC default is
+  -1,-1 (stage-aspect letterbox); with -1 the same match diverges at tick
+  ~12 (a helper's float var, screen-relative). Every native build now uses
+  0,0. Existing Go builds that cross-play (CvF Online PC vs Vita) are
+  exposed to the same desync when settings differ.
+- The non-vita Go build of this fork did not compile (itoa, vitaHalfTick
+  only in the Vita file); fixed.
+- Embedded structs: fields Go does not promote (shadowed or ambiguous)
+  keep their layout slot under a private name (`_sh<i>_<name>`).

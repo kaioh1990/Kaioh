@@ -1,5 +1,5 @@
 diff --git a/src/anim.go b/src/anim.go
-index f4c200f..f0494a6 100644
+index f4c200f..dc67a93 100644
 --- a/src/anim.go
 +++ b/src/anim.go
 @@ -1371,11 +1371,19 @@ func (at AnimationTable) get(no int32) *Animation {
@@ -27,7 +27,7 @@ index f4c200f..f0494a6 100644
  }
  
  func newSpriteData() *SpriteData {
-+	if isVita {
++	if vitaPerf {
 +		// Per-frame pool: SpriteData is only used while the frame is built
 +		// and drawn (afterimages copy it), and allocating ~100 of these per
 +		// frame kept the Vita's garbage collector busy.
@@ -825,7 +825,7 @@ index 0000000..d837da0
 +}
 diff --git a/src/bc_fuse.go b/src/bc_fuse.go
 new file mode 100644
-index 0000000..f3ed928
+index 0000000..2f7e453
 --- /dev/null
 +++ b/src/bc_fuse.go
 @@ -0,0 +1,355 @@
@@ -854,7 +854,7 @@ index 0000000..f3ed928
 +func fuseEnabled() bool {
 +	if fuseFlag < 0 {
 +		fuseFlag = 0
-+		if isVita && FileExist("vita_nofuse.txt") == "" {
++		if vitaPerf && FileExist("vita_nofuse.txt") == "" {
 +			fuseFlag = 1
 +		}
 +	}
@@ -1945,7 +1945,7 @@ index 0000000..891ae89
 +}
 diff --git a/src/bcprof.go b/src/bcprof.go
 new file mode 100644
-index 0000000..eb3e2ab
+index 0000000..b5a3f07
 --- /dev/null
 +++ b/src/bcprof.go
 @@ -0,0 +1,276 @@
@@ -2195,7 +2195,7 @@ index 0000000..eb3e2ab
 +var stateHashTick int
 +
 +func vitaStateHashTick() {
-+	if !isVita || !vitaStateHashEnabled() || sys.roundState() < 1 {
++	if !vitaPerf || !vitaStateHashEnabled() || sys.roundState() < 1 {
 +		return
 +	}
 +	stateHashTick++
@@ -2239,7 +2239,7 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..2d2a55f 100644
+index 276abbf..81d6fe1 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
 @@ -445,6 +445,42 @@ const (
@@ -6307,7 +6307,7 @@ index 276abbf..2d2a55f 100644
  	if sb == c.ss.sb {
  		ctrlsps = c.ss.ps
  	}
-+	if c.specGen != specGen && c.helperIndex == 0 && isVita {
++	if c.specGen != specGen && c.helperIndex == 0 && vitaPerf {
 +		specChar(c)
 +	}
  	sys.bcVar = sys.bcVarStack.Alloc(int(sb.numVars))
@@ -6402,7 +6402,7 @@ index 0000000..0cee43a
 +// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lkubridge_stub_weak -lstdc++ -lsupc++ -lm
 +import "C"
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..d92df4f 100644
+index 19bf05a..cae0b3e 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -6,6 +6,7 @@ import (
@@ -6719,7 +6719,7 @@ index 19bf05a..d92df4f 100644
  		sys.appendToConsole(c.warn() + fmt.Sprintf("var index %v must be positive", i))
  		return BytecodeUndefined()
  	}
-+	if isVita {
++	if vitaPerf {
 +		// Direct-mapped read cache in front of the map (var(n) is read ~40k
 +		// times per tick on the Vita). Entries are keyed on the map identity
 +		// and a write generation, so any write or map replacement misses.
@@ -6739,7 +6739,7 @@ index 19bf05a..d92df4f 100644
  		return BytecodeUndefined()
  	}
  
-+	if isVita {
++	if vitaPerf {
 +		e := &c.varCache[uint32(i)&31]
 +		mp := *(*uintptr)(unsafe.Pointer(&c.cnsfvar))
 +		if e.key == i && e.gen == c.varGen && e.mp == mp && e.isF {
@@ -6756,7 +6756,7 @@ index 19bf05a..d92df4f 100644
  	}
  
  	c.cnsvar[i] = v       // Create or update the key
-+	if isVita {
++	if vitaPerf {
 +		c.varCachePut(i)
 +	}
  	return BytecodeInt(v) // We also return the value because var assignment can be used in expressions
@@ -6766,7 +6766,7 @@ index 19bf05a..d92df4f 100644
  	}
  
  	c.cnsfvar[i] = v
-+	if isVita {
++	if vitaPerf {
 +		c.fvarCachePut(i)
 +	}
  	return BytecodeFloat(v)
@@ -6782,7 +6782,7 @@ index 19bf05a..d92df4f 100644
  	} else {
  		c.cnsvar[i] = v
  	}
-+	if isVita {
++	if vitaPerf {
 +		c.varCachePut(i)
 +	}
  	return BytecodeInt(c.cnsvar[i])
@@ -6792,7 +6792,7 @@ index 19bf05a..d92df4f 100644
  	} else {
  		c.cnsfvar[i] = v
  	}
-+	if isVita {
++	if vitaPerf {
 +		c.fvarCachePut(i)
 +	}
  	return BytecodeFloat(c.cnsfvar[i])
@@ -7237,7 +7237,7 @@ index a741eab..e7080c4 100644
  	basename := filepath.Base(filename)
  	ext := filepath.Ext(basename)
 diff --git a/src/compiler.go b/src/compiler.go
-index 768df8d..b44d1c3 100644
+index 768df8d..2c876de 100644
 --- a/src/compiler.go
 +++ b/src/compiler.go
 @@ -10,8 +10,6 @@ import (
@@ -10706,7 +10706,7 @@ index 768df8d..b44d1c3 100644
  							return err
  						}
  
-+						if isVita && c.stateNo < 0 {
++						if vitaPerf && c.stateNo < 0 {
 +							if isAll {
 +								rawAll = append(rawAll, data)
 +							} else {
@@ -10727,7 +10727,7 @@ index 768df8d..b44d1c3 100644
 +				if isVita && c.stateNo == -3 {
 +					bcProfNameCtl(sctrl, c.block, sctrlHeader)
 +				}
-+				if isVita && c.stateNo < 0 {
++				if vitaPerf && c.stateNo < 0 {
 +					specRegister(c.block, rawAll, rawTr, trexist)
 +				}
  				if len(c.block.trigger) == 0 && c.block.persistent == 1 && !c.block.ignorehitpause {
@@ -10998,7 +10998,7 @@ index 762ee1f..72f4fae 100644
  			if numStr == "" || strings.Trim(numStr, "0123456789") != "" {
  				continue
 diff --git a/src/config.go b/src/config.go
-index d39783d..6bb3e64 100644
+index d39783d..ffb50e8 100644
 --- a/src/config.go
 +++ b/src/config.go
 @@ -291,7 +291,9 @@ func loadConfig(def string) (*Config, error) {
@@ -11011,7 +11011,7 @@ index d39783d..6bb3e64 100644
  
  	assignFrom := func(src *ini.File) {
  		if src == nil {
-@@ -319,12 +321,31 @@ func loadConfig(def string) (*Config, error) {
+@@ -319,12 +321,36 @@ func loadConfig(def string) (*Config, error) {
  
  	// Apply precedence: struct zero/default tags < defaultConfig.ini < user config
  	assignFrom(defaultOnlyIni)
@@ -11032,7 +11032,12 @@ index d39783d..6bb3e64 100644
 +		c.Video.ExternalShaders = nil
 +		c.Video.EnableModel = false
 +		c.Video.EnableModelShadow = false
-+		// Full-panel fights (no letterboxed stage-aspect viewport).
++	}
++	if vitaPerf {
++		// Full-panel fights (no letterboxed stage-aspect viewport). The fight
++		// aspect reaches the simulation (screen-relative triggers and camera
++		// bounds), so every native build uses the same value as the Vita for
++		// identical game state across devices (rollback netplay).
 +		c.Video.FightAspectWidth, c.Video.FightAspectHeight = 0, 0
 +	}
 +	vitaTrace("cfg: normalized")
@@ -11043,7 +11048,7 @@ index d39783d..6bb3e64 100644
  	c.Save(def)
  	return &c, nil
  }
-@@ -474,6 +495,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
+@@ -474,6 +500,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
  
  // SetValueUpdate sets the value based on the query string and updates the IniFile.
  func (c *Config) SetValueUpdate(query string, value interface{}) error {
@@ -12887,7 +12892,7 @@ index 0000000..897ab9c
 +	}
 +}
 diff --git a/src/fightscreen.go b/src/fightscreen.go
-index 51867f3..07356b9 100644
+index 51867f3..9df8de7 100644
 --- a/src/fightscreen.go
 +++ b/src/fightscreen.go
 @@ -2894,7 +2894,7 @@ func (cs *ComboShake) update() {
@@ -12933,7 +12938,7 @@ index 51867f3..07356b9 100644
  				}
  				if is.LoadFile("fightfx.sff", []string{def, sys.motif.Def, "", "data/"}, "",
  					func(filename string) error {
-+						if isVita && fs.sff != nil && fs.sff.filename == filename {
++						if vitaPerf && fs.sff != nil && fs.sff.filename == filename {
 +							// Same file as the lifebar SFF (CvF uses fightfx.sff for both):
 +							// share it instead of decoding a second 65 MB copy.
 +							*ffx.sff = *fs.sff
@@ -12995,7 +13000,7 @@ index db5d1ab..1dba70a 100644
  	if err := json.Indent(&buf, data, "", "  "); err == nil {
  		data = buf.Bytes()
 diff --git a/src/image.go b/src/image.go
-index ee44670..11ba4fe 100644
+index ee44670..78646f9 100644
 --- a/src/image.go
 +++ b/src/image.go
 @@ -48,7 +48,14 @@ type PalFXDef struct {
@@ -13135,7 +13140,7 @@ index ee44670..11ba4fe 100644
 +// one OS thread, so it runs right away instead: queueing would keep each
 +// decoded sprite's pixels alive until the next frame (70+ MB for fightfx.sff).
 +func runGfxTask(f func()) {
-+	if isVita {
++	if vitaPerf {
 +		f()
 +		return
 +	}
@@ -16737,7 +16742,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..bd7563d 100644
+index 2698d35..dcb8d27 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -16945,7 +16950,7 @@ index 2698d35..bd7563d 100644
 +	bcIdxDepth = 0
 +	bcProfFrame()
 +	vitaStateHashTick()
-+	if isVita && len(s.chars) > 0 && len(s.chars[0]) > 0 {
++	if vitaPerf && len(s.chars) > 0 && len(s.chars[0]) > 0 {
 +		stateDumpTickFn()
 +	}
  	if s.matchPaused() {
@@ -17711,10 +17716,10 @@ index 0000000..51e0ffb
 +func (bgv *bgVideo) Close()               {}
 diff --git a/src/vita_platform.go b/src/vita_platform.go
 new file mode 100644
-index 0000000..ae20a1b
+index 0000000..7ce06e9
 --- /dev/null
 +++ b/src/vita_platform.go
-@@ -0,0 +1,666 @@
+@@ -0,0 +1,647 @@
 +//go:build vita
 +
 +package main
@@ -17955,25 +17960,6 @@ index 0000000..ae20a1b
 +	n := C.CString(name)
 +	defer C.free(unsafe.Pointer(n))
 +	return C.vita_gl_proc(n)
-+}
-+
-+func itoa(i int) string {
-+	neg := i < 0
-+	if neg {
-+		i = -i
-+	}
-+	b := []byte{}
-+	for {
-+		b = append([]byte{byte('0' + i%10)}, b...)
-+		i /= 10
-+		if i == 0 {
-+			break
-+		}
-+	}
-+	if neg {
-+		b = append([]byte{'-'}, b...)
-+	}
-+	return string(b)
 +}
 +
 +func fmtHex(v uint32) string {
@@ -18383,10 +18369,10 @@ index 0000000..ae20a1b
 +func vitaMatchEnd() { vitaInMatch = false }
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..8825e7d
+index 0000000..dcfc7fe
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,59 @@
 +//go:build !vita
 +
 +package main
@@ -18408,6 +18394,7 @@ index 0000000..8825e7d
 +func vitaShaderSources(name string) (string, string, bool) { return "", "", false }
 +func fmtHex(v uint32) string                               { return "" }
 +func vitaTrace(string)                                     {}
++var vitaHalfTick int
 +func vitaCRC(string)                                       {}
 +func vitaMem(string)                                       {}
 +func vitaPerfTick(bool)                                    {}

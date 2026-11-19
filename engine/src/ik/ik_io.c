@@ -781,3 +781,4 @@ GoString image_Rectangle_String(GoImageRect r) {
     return go_bytes2str((Slice_u8){(u8 *)tmp, n, n});
 }
 GoString binary_littleEndian_String(GoOpaque o) { (void)o; return GOSTR("LittleEndian"); }
+GoImageRect image_RGBA_Bounds(GoOpaque *recv) { (void)recv; return (GoImageRect){{0, 0}, {0, 0}}; }  // images are not decoded headless

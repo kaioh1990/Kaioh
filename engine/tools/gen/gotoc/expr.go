@@ -484,7 +484,7 @@ func (t *Tx) sliceExpr(e *ast.SliceExpr) string {
 
 func (t *Tx) composite(e *ast.CompositeLit) string {
 	ty := t.typeOf(e)
-	if n, ok := ty.(*types.Named); ok && n.Obj().Pkg() != nil && !isOwn(n.Obj().Pkg()) {
+	if n, ok := ty.(*types.Named); ok && n.Obj().Pkg() != nil && !ownTypes(n.Obj().Pkg()) {
 		if _, isStruct := n.Underlying().(*types.Struct); isStruct {
 			// standard-library struct values are opaque in C
 			if _, mapped := extStructs[types.TypeString(n, qual)]; mapped {

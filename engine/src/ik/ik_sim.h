@@ -558,9 +558,9 @@ typedef struct ast_UnaryLenOpExpr ast_UnaryLenOpExpr;
 typedef struct ast_UnaryMinusOpExpr ast_UnaryMinusOpExpr;
 typedef struct ast_UnaryNotOpExpr ast_UnaryNotOpExpr;
 typedef struct ast_WhileStmt ast_WhileStmt;
-typedef struct fontSpec_L5dbadc fontSpec_L5dbadc;
-typedef struct fontSpec_L7f0e5c fontSpec_L7f0e5c;
-typedef struct kv_L9db1e9 kv_L9db1e9;
+typedef struct fontSpec_L7f1af4 fontSpec_L7f1af4;
+typedef struct fontSpec_Ldb8059 fontSpec_Ldb8059;
+typedef struct kv_L9db835 kv_L9db835;
 typedef struct lua_ApiError lua_ApiError;
 typedef struct lua_CompileError lua_CompileError;
 typedef struct lua_DbgCall lua_DbgCall;
@@ -597,19 +597,19 @@ typedef struct lua_opProp lua_opProp;
 typedef struct lua_registry lua_registry;
 typedef struct lua_varNamePool lua_varNamePool;
 typedef struct lua_varNamePoolValue lua_varNamePoolValue;
-typedef struct ov_L267e05 ov_L267e05;
-typedef struct pair_L97e23b pair_L97e23b;
-typedef struct pair_Ld68840 pair_Ld68840;
+typedef struct ov_L2966a0 ov_L2966a0;
+typedef struct pair_L801455 pair_L801455;
+typedef struct pair_L9a2a44 pair_L9a2a44;
 typedef struct parse_Error parse_Error;
 typedef struct parse_Lexer parse_Lexer;
 typedef struct parse_Scanner parse_Scanner;
 typedef struct parse_yyParserImpl parse_yyParserImpl;
 typedef struct parse_yySymType parse_yySymType;
 typedef struct pm_Error pm_Error;
-typedef struct pv_Lad4e0a pv_Lad4e0a;
-typedef struct qvPlayer_L280889 qvPlayer_L280889;
-typedef struct slotRef_L806444 slotRef_L806444;
-typedef struct spec_Ldfe552 spec_Ldfe552;
+typedef struct pv_Lb05621 pv_Lb05621;
+typedef struct qvPlayer_L0d5fea qvPlayer_L0d5fea;
+typedef struct slotRef_Leab5e0 slotRef_Leab5e0;
+typedef struct spec_Lda920c spec_Lda920c;
 typedef struct Anon_3c59f47a Anon_3c59f47a;
 typedef struct Anon_84767b5c Anon_84767b5c;
 typedef struct Anon_8aabe1e9 Anon_8aabe1e9;
@@ -1093,9 +1093,9 @@ typedef struct { i8 *p; int len, cap; } Slice_i8;
 #define CVF_DEF_Slice_int
 typedef struct { int *p; int len, cap; } Slice_int;
 #endif
-#ifndef CVF_DEF_Slice_kv_L9db1e9
-#define CVF_DEF_Slice_kv_L9db1e9
-typedef struct { kv_L9db1e9 *p; int len, cap; } Slice_kv_L9db1e9;
+#ifndef CVF_DEF_Slice_kv_L9db835
+#define CVF_DEF_Slice_kv_L9db835
+typedef struct { kv_L9db835 *p; int len, cap; } Slice_kv_L9db835;
 #endif
 #ifndef CVF_DEF_Slice_lua_DbgCall
 #define CVF_DEF_Slice_lua_DbgCall
@@ -1145,33 +1145,33 @@ typedef struct { lua_varNamePoolValue *p; int len, cap; } Slice_lua_varNamePoolV
 #define CVF_DEF_Slice_nameFact
 typedef struct { nameFact *p; int len, cap; } Slice_nameFact;
 #endif
-#ifndef CVF_DEF_Slice_ov_L267e05
-#define CVF_DEF_Slice_ov_L267e05
-typedef struct { ov_L267e05 *p; int len, cap; } Slice_ov_L267e05;
+#ifndef CVF_DEF_Slice_ov_L2966a0
+#define CVF_DEF_Slice_ov_L2966a0
+typedef struct { ov_L2966a0 *p; int len, cap; } Slice_ov_L2966a0;
 #endif
-#ifndef CVF_DEF_Slice_pair_L97e23b
-#define CVF_DEF_Slice_pair_L97e23b
-typedef struct { pair_L97e23b *p; int len, cap; } Slice_pair_L97e23b;
+#ifndef CVF_DEF_Slice_pair_L801455
+#define CVF_DEF_Slice_pair_L801455
+typedef struct { pair_L801455 *p; int len, cap; } Slice_pair_L801455;
 #endif
-#ifndef CVF_DEF_Slice_pair_Ld68840
-#define CVF_DEF_Slice_pair_Ld68840
-typedef struct { pair_Ld68840 *p; int len, cap; } Slice_pair_Ld68840;
+#ifndef CVF_DEF_Slice_pair_L9a2a44
+#define CVF_DEF_Slice_pair_L9a2a44
+typedef struct { pair_L9a2a44 *p; int len, cap; } Slice_pair_L9a2a44;
 #endif
 #ifndef CVF_DEF_Slice_parse_yySymType
 #define CVF_DEF_Slice_parse_yySymType
 typedef struct { parse_yySymType *p; int len, cap; } Slice_parse_yySymType;
 #endif
-#ifndef CVF_DEF_Slice_pv_Lad4e0a
-#define CVF_DEF_Slice_pv_Lad4e0a
-typedef struct { pv_Lad4e0a *p; int len, cap; } Slice_pv_Lad4e0a;
+#ifndef CVF_DEF_Slice_pv_Lb05621
+#define CVF_DEF_Slice_pv_Lb05621
+typedef struct { pv_Lb05621 *p; int len, cap; } Slice_pv_Lb05621;
 #endif
 #ifndef CVF_DEF_Slice_queryPart
 #define CVF_DEF_Slice_queryPart
 typedef struct { queryPart *p; int len, cap; } Slice_queryPart;
 #endif
-#ifndef CVF_DEF_Slice_qvPlayer_L280889
-#define CVF_DEF_Slice_qvPlayer_L280889
-typedef struct { qvPlayer_L280889 *p; int len, cap; } Slice_qvPlayer_L280889;
+#ifndef CVF_DEF_Slice_qvPlayer_L0d5fea
+#define CVF_DEF_Slice_qvPlayer_L0d5fea
+typedef struct { qvPlayer_L0d5fea *p; int len, cap; } Slice_qvPlayer_L0d5fea;
 #endif
 #ifndef CVF_DEF_Slice_rankingEntryPtr
 #define CVF_DEF_Slice_rankingEntryPtr
@@ -1189,13 +1189,13 @@ typedef struct { scParam *p; int len, cap; } Slice_scParam;
 #define CVF_DEF_Slice_scRunFn
 typedef struct { scRunFn *p; int len, cap; } Slice_scRunFn;
 #endif
-#ifndef CVF_DEF_Slice_slotRef_L806444
-#define CVF_DEF_Slice_slotRef_L806444
-typedef struct { slotRef_L806444 *p; int len, cap; } Slice_slotRef_L806444;
+#ifndef CVF_DEF_Slice_slotRef_Leab5e0
+#define CVF_DEF_Slice_slotRef_Leab5e0
+typedef struct { slotRef_Leab5e0 *p; int len, cap; } Slice_slotRef_Leab5e0;
 #endif
-#ifndef CVF_DEF_Slice_spec_Ldfe552
-#define CVF_DEF_Slice_spec_Ldfe552
-typedef struct { spec_Ldfe552 *p; int len, cap; } Slice_spec_Ldfe552;
+#ifndef CVF_DEF_Slice_spec_Lda920c
+#define CVF_DEF_Slice_spec_Lda920c
+typedef struct { spec_Lda920c *p; int len, cap; } Slice_spec_Lda920c;
 #endif
 #ifndef CVF_DEF_Slice_stageRollbackBgState
 #define CVF_DEF_Slice_stageRollbackBgState
@@ -1517,13 +1517,13 @@ typedef GoMap Map_int_Slice_int;
 #define CVF_DEF_Map_int_bool
 typedef GoMap Map_int_bool;
 #endif
-#ifndef CVF_DEF_Map_int_fontSpec_L5dbadc
-#define CVF_DEF_Map_int_fontSpec_L5dbadc
-typedef GoMap Map_int_fontSpec_L5dbadc;
+#ifndef CVF_DEF_Map_int_fontSpec_L7f1af4
+#define CVF_DEF_Map_int_fontSpec_L7f1af4
+typedef GoMap Map_int_fontSpec_L7f1af4;
 #endif
-#ifndef CVF_DEF_Map_int_fontSpec_L7f0e5c
-#define CVF_DEF_Map_int_fontSpec_L7f0e5c
-typedef GoMap Map_int_fontSpec_L7f0e5c;
+#ifndef CVF_DEF_Map_int_fontSpec_Ldb8059
+#define CVF_DEF_Map_int_fontSpec_Ldb8059
+typedef GoMap Map_int_fontSpec_Ldb8059;
 #endif
 #ifndef CVF_DEF_Map_int_int
 #define CVF_DEF_Map_int_int
@@ -2119,9 +2119,9 @@ struct ast_UnaryLenOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node No
 struct ast_UnaryMinusOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Expr; };
 struct ast_UnaryNotOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Expr; };
 struct ast_WhileStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; ast_Expr Condition; Slice_ast_Stmt Stmts; };
-struct fontSpec_L5dbadc { GoString path; i32 height; };
-struct fontSpec_L7f0e5c { GoString path; i32 height; };
-struct kv_L9db1e9 { bcProfKey k; u64 v; };
+struct fontSpec_L7f1af4 { GoString path; i32 height; };
+struct fontSpec_Ldb8059 { GoString path; i32 height; };
+struct kv_L9db835 { bcProfKey k; u64 v; };
 struct lua_ApiError { lua_ApiErrorType Type; lua_LValue Object; GoString StackTrace; GoIface Cause; };
 struct lua_CompileError { lua_funcContext* context; int Line; GoString Message; };
 struct lua_DbgCall { GoString Name; int Pc; };
@@ -2157,18 +2157,18 @@ struct lua_opProp { GoString Name; bool IsTest; bool SetRegA; lua_opArgMode Mode
 struct lua_registry { Slice_lua_LValue array; int top; int growBy; int maxSize; lua_allocator* alloc; lua_registryHandler handler; };
 struct lua_varNamePool { Slice_GoString names; int offset; };
 struct lua_varNamePoolValue { int Index; GoString Name; };
-struct ov_L267e05 { OpCode o; u64 v; };
-struct pair_L97e23b { Projectile* pr; f32 dist; };
-struct pair_Ld68840 { Char* ch; f32 dist; };
+struct ov_L2966a0 { OpCode o; u64 v; };
+struct pair_L801455 { Char* ch; f32 dist; };
+struct pair_L9a2a44 { Projectile* pr; f32 dist; };
 struct parse_Error { ast_Position Pos; GoString Message; GoString Token; };
 struct parse_Lexer { parse_Scanner* scanner; Slice_ast_Stmt Stmts; bool PNewLine; ast_Token Token; int PrevTokenType; };
 struct parse_Scanner { ast_Position Pos; GoOpaque /* bufio.Reader */* reader; };
 struct parse_yyParserImpl { parse_yySymType lval; Arr16_parse_yySymType stack; int char_; };
 struct pm_Error { int Pos; GoString Message; };
-struct pv_Lad4e0a { u16 p; u64 v; };
-struct qvPlayer_L280889 { GoString character; int player; int num; int pal; f32 ai; int input; };
-struct slotRef_L806444 { int idx; PlayerVictoryProperties* p; i32 order; };
-struct spec_Ldfe552 { GoString prefix; i32 varType; };
+struct pv_Lb05621 { u16 p; u64 v; };
+struct qvPlayer_L0d5fea { GoString character; int player; int num; int pal; f32 ai; int input; };
+struct slotRef_Leab5e0 { int idx; PlayerVictoryProperties* p; i32 order; };
+struct spec_Lda920c { GoString prefix; i32 varType; };
 struct Anon_3c59f47a { GoString name; Arr4_ResultAnnouncement* data; Arr4_bool* exists; };
 struct Anon_8aabe1e9 { int ok; int fail; int native; int generic; };
 struct Anon_dcdcacfc { int exprs; int fused; };
@@ -2630,9 +2630,9 @@ GO_SLICE_FUNCS_A(Slice_i8, i8)
 #define CVF_FN_Slice_int
 GO_SLICE_FUNCS_A(Slice_int, int)
 #endif
-#ifndef CVF_FN_Slice_kv_L9db1e9
-#define CVF_FN_Slice_kv_L9db1e9
-GO_SLICE_FUNCS_A(Slice_kv_L9db1e9, kv_L9db1e9)
+#ifndef CVF_FN_Slice_kv_L9db835
+#define CVF_FN_Slice_kv_L9db835
+GO_SLICE_FUNCS_A(Slice_kv_L9db835, kv_L9db835)
 #endif
 #ifndef CVF_FN_Slice_lua_DbgCall
 #define CVF_FN_Slice_lua_DbgCall
@@ -2682,33 +2682,33 @@ GO_SLICE_FUNCS(Slice_lua_varNamePoolValue, lua_varNamePoolValue)
 #define CVF_FN_Slice_nameFact
 GO_SLICE_FUNCS(Slice_nameFact, nameFact)
 #endif
-#ifndef CVF_FN_Slice_ov_L267e05
-#define CVF_FN_Slice_ov_L267e05
-GO_SLICE_FUNCS_A(Slice_ov_L267e05, ov_L267e05)
+#ifndef CVF_FN_Slice_ov_L2966a0
+#define CVF_FN_Slice_ov_L2966a0
+GO_SLICE_FUNCS_A(Slice_ov_L2966a0, ov_L2966a0)
 #endif
-#ifndef CVF_FN_Slice_pair_L97e23b
-#define CVF_FN_Slice_pair_L97e23b
-GO_SLICE_FUNCS(Slice_pair_L97e23b, pair_L97e23b)
+#ifndef CVF_FN_Slice_pair_L801455
+#define CVF_FN_Slice_pair_L801455
+GO_SLICE_FUNCS(Slice_pair_L801455, pair_L801455)
 #endif
-#ifndef CVF_FN_Slice_pair_Ld68840
-#define CVF_FN_Slice_pair_Ld68840
-GO_SLICE_FUNCS(Slice_pair_Ld68840, pair_Ld68840)
+#ifndef CVF_FN_Slice_pair_L9a2a44
+#define CVF_FN_Slice_pair_L9a2a44
+GO_SLICE_FUNCS(Slice_pair_L9a2a44, pair_L9a2a44)
 #endif
 #ifndef CVF_FN_Slice_parse_yySymType
 #define CVF_FN_Slice_parse_yySymType
 GO_SLICE_FUNCS(Slice_parse_yySymType, parse_yySymType)
 #endif
-#ifndef CVF_FN_Slice_pv_Lad4e0a
-#define CVF_FN_Slice_pv_Lad4e0a
-GO_SLICE_FUNCS_A(Slice_pv_Lad4e0a, pv_Lad4e0a)
+#ifndef CVF_FN_Slice_pv_Lb05621
+#define CVF_FN_Slice_pv_Lb05621
+GO_SLICE_FUNCS_A(Slice_pv_Lb05621, pv_Lb05621)
 #endif
 #ifndef CVF_FN_Slice_queryPart
 #define CVF_FN_Slice_queryPart
 GO_SLICE_FUNCS(Slice_queryPart, queryPart)
 #endif
-#ifndef CVF_FN_Slice_qvPlayer_L280889
-#define CVF_FN_Slice_qvPlayer_L280889
-GO_SLICE_FUNCS(Slice_qvPlayer_L280889, qvPlayer_L280889)
+#ifndef CVF_FN_Slice_qvPlayer_L0d5fea
+#define CVF_FN_Slice_qvPlayer_L0d5fea
+GO_SLICE_FUNCS(Slice_qvPlayer_L0d5fea, qvPlayer_L0d5fea)
 #endif
 #ifndef CVF_FN_Slice_rankingEntryPtr
 #define CVF_FN_Slice_rankingEntryPtr
@@ -2726,13 +2726,13 @@ GO_SLICE_FUNCS(Slice_scParam, scParam)
 #define CVF_FN_Slice_scRunFn
 GO_SLICE_FUNCS(Slice_scRunFn, scRunFn)
 #endif
-#ifndef CVF_FN_Slice_slotRef_L806444
-#define CVF_FN_Slice_slotRef_L806444
-GO_SLICE_FUNCS(Slice_slotRef_L806444, slotRef_L806444)
+#ifndef CVF_FN_Slice_slotRef_Leab5e0
+#define CVF_FN_Slice_slotRef_Leab5e0
+GO_SLICE_FUNCS(Slice_slotRef_Leab5e0, slotRef_Leab5e0)
 #endif
-#ifndef CVF_FN_Slice_spec_Ldfe552
-#define CVF_FN_Slice_spec_Ldfe552
-GO_SLICE_FUNCS(Slice_spec_Ldfe552, spec_Ldfe552)
+#ifndef CVF_FN_Slice_spec_Lda920c
+#define CVF_FN_Slice_spec_Lda920c
+GO_SLICE_FUNCS(Slice_spec_Lda920c, spec_Lda920c)
 #endif
 #ifndef CVF_FN_Slice_stageRollbackBgState
 #define CVF_FN_Slice_stageRollbackBgState
@@ -3054,13 +3054,13 @@ GO_MAP_FUNCS(Map_int_Slice_int, int, Slice_int, false)
 #define CVF_FN_Map_int_bool
 GO_MAP_FUNCS(Map_int_bool, int, bool, false)
 #endif
-#ifndef CVF_FN_Map_int_fontSpec_L5dbadc
-#define CVF_FN_Map_int_fontSpec_L5dbadc
-GO_MAP_FUNCS(Map_int_fontSpec_L5dbadc, int, fontSpec_L5dbadc, false)
+#ifndef CVF_FN_Map_int_fontSpec_L7f1af4
+#define CVF_FN_Map_int_fontSpec_L7f1af4
+GO_MAP_FUNCS(Map_int_fontSpec_L7f1af4, int, fontSpec_L7f1af4, false)
 #endif
-#ifndef CVF_FN_Map_int_fontSpec_L7f0e5c
-#define CVF_FN_Map_int_fontSpec_L7f0e5c
-GO_MAP_FUNCS(Map_int_fontSpec_L7f0e5c, int, fontSpec_L7f0e5c, false)
+#ifndef CVF_FN_Map_int_fontSpec_Ldb8059
+#define CVF_FN_Map_int_fontSpec_Ldb8059
+GO_MAP_FUNCS(Map_int_fontSpec_Ldb8059, int, fontSpec_Ldb8059, false)
 #endif
 #ifndef CVF_FN_Map_int_int
 #define CVF_FN_Map_int_int
@@ -3533,6 +3533,7 @@ GoIface zip_ReadCloser_Close(GoZipReadCloser* recv); // func (*zip.ReadCloser).C
 GoImageNRGBA* image_NewNRGBA(GoImageRect a0); // func image.NewNRGBA(r image.Rectangle) *image.NRGBA
 GoImageRect image_NRGBA_Bounds(GoImageNRGBA* recv); // func (*image.NRGBA).Bounds() image.Rectangle
 GoImageRect image_Paletted_Bounds(GoImagePaletted* recv); // func (*image.Paletted).Bounds() image.Rectangle
+GoImageRect image_RGBA_Bounds(GoOpaque /* image.RGBA */* recv); // func (*image.RGBA).Bounds() image.Rectangle
 GoImageRect image_Rectangle_Bounds(GoImageRect recv); // func (image.Rectangle).Bounds() image.Rectangle
 GoOpaque /* bufio.Reader */* bufio_NewReaderSize(GoIface a0, int a1); // func bufio.NewReaderSize(rd io.Reader, size int) *bufio.Reader
 GoOpaque /* bufio.Scanner */* bufio_NewScanner(GoIface a0); // func bufio.NewScanner(r io.Reader) *bufio.Scanner
@@ -3855,10 +3856,13 @@ extern Arr56_GoString g_parse_yyToknames;
 void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
+#define GO_TID_P_beep_Ctrl 891
 #define GO_TID_P_bufio_Reader 480
 #define GO_TID_P_bytes_Reader 670
+#define GO_TID_P_effects_Volume 893
 #define GO_TID_P_image_NRGBA 350
 #define GO_TID_P_image_Paletted 349
+#define GO_TID_P_image_RGBA 887
 #define GO_TID_P_ini_File 696
 #define GO_TID_P_ini_Key 708
 #define GO_TID_P_ini_Section 705
@@ -3869,7 +3873,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_os_file 499
 #define GO_TID_P_reflect_SliceHeader 408
 #define GO_TID_P_strings_Reader 102
-#define GO_TID_P_sync_Cond 1253
+#define GO_TID_P_sync_Cond 1265
 #define GO_TID_P_time_Location 680
 #define GO_TID_P_time_zone 686
 #define GO_TID_P_zip_File 676
@@ -3880,15 +3884,18 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_atomic_Int32 702
 #define GO_TID_atomic_Pointer_os_dirInfo_ 509
 #define GO_TID_atomic_noCopy 516
+#define GO_TID_beep_Ctrl 892
 #define GO_TID_beep_Format 752
 #define GO_TID_beep_SampleRate 753
 #define GO_TID_binary_littleEndian 343
 #define GO_TID_bufio_Reader 481
 #define GO_TID_bytes_Reader 671
 #define GO_TID_color_Palette 743
+#define GO_TID_effects_Volume 894
 #define GO_TID_image_NRGBA 744
 #define GO_TID_image_Paletted 740
 #define GO_TID_image_Point 742
+#define GO_TID_image_RGBA 888
 #define GO_TID_image_Rectangle 741
 #define GO_TID_ini_DebugFunc 699
 #define GO_TID_ini_File 697
@@ -3911,13 +3918,13 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_reflect_SliceHeader 409
 #define GO_TID_sort_StringSlice 357
 #define GO_TID_strings_Reader 383
-#define GO_TID_sync_Cond 1254
+#define GO_TID_sync_Cond 1266
 #define GO_TID_sync_Mutex 513
 #define GO_TID_sync_Once 690
 #define GO_TID_sync_RWMutex 701
-#define GO_TID_sync_copyChecker 1256
+#define GO_TID_sync_copyChecker 1268
 #define GO_TID_sync_noCopy 514
-#define GO_TID_sync_notifyList 1255
+#define GO_TID_sync_notifyList 1267
 #define GO_TID_syscall_Iovec 507
 #define GO_TID_time_Duration 381
 #define GO_TID_time_Location 681
@@ -5576,6 +5583,7 @@ f64 fn_cvfAtan(f64 x);
 f64 fn_cvfAsin(f64 x);
 f64 fn_cvfAcos(f64 x);
 f64 fn_cvfAtan2(f64 y, f64 x);
+GoString fn_itoa(int i);
 cvfRulesT* fn_cvfRulesLoad(void);
 bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
 bool fn_cvfClampInvincibility(Char* c, i32* time_);
@@ -6077,24 +6085,42 @@ void fn_FillRect(Arr4_i32 rect, u32 color, Arr2_i32 alpha, PalFX* fx);
 TextureAtlas* fn_CreateTextureAtlas(i32 width, i32 height, i32 depth, bool filter);
 Ret_Arr4_f32__bool TextureAtlas_AddImage(TextureAtlas* ta, i32 width, i32 height, i32 stride, Slice_u8 data);
 GoIface fn_NewPaletteTexture(void);
-Ret_GoIface__GoIface Renderer_GLES32_newTexture(Renderer_GLES32* r, i32 width, i32 height, i32 depth, bool filter);
-GoIface Renderer_GLES32_newSubTexture(Renderer_GLES32* r, GoIface tex, i32 width, i32 height, Arr4_f32 uvst);
-void Texture_GLES32_SetData(Texture_GLES32* t, Slice_u8 data);
-void Texture_GLES32_SetSubData(Texture_GLES32* t, Slice_u8 data);
-i32 Texture_GLES32_GetWidth(Texture_GLES32* t);
-i32 Texture_GLES32_GetHeight(Texture_GLES32* t);
-GoString Renderer_GLES32_GetName(Renderer_GLES32* r);
-void Renderer_GLES32_Close(Renderer_GLES32* r);
-void Renderer_GLES32_BeginFrame(Renderer_GLES32* r, bool clearColor);
-void Renderer_GLES32_EndFrame(Renderer_GLES32* r);
-void Renderer_GLES32_Await(Renderer_GLES32* r);
-void Renderer_GLES32_BeginScreenshot(Renderer_GLES32* r, int width, int height);
-bool Renderer_GLES32_FinishScreenshot(Renderer_GLES32* r, Slice_u8 data, int width, int height);
-void Renderer_GLES32_SetModelVertexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u8 values);
-void Renderer_GLES32_SetModelIndexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u32 values);
-GoOpaque /* mgl32.Mat4 */ Renderer_GLES32_PerspectiveProjectionMatrix(Renderer_GLES32* r, f32 angle, f32 aspect, f32 near, f32 far);
-u32 Renderer_GLES32_LoadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName, Slice_u8 shaderData);
-void Renderer_GLES32_UnloadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName);
+Ret_GoIface__GoIface Renderer_GL33_newTexture(Renderer_GL33* r, i32 width, i32 height, i32 depth, bool filter);
+GoIface Renderer_GL33_newSubTexture(Renderer_GL33* r, GoIface tex, i32 width, i32 height, Arr4_f32 uvst);
+void Texture_GL33_SetData(Texture_GL33* t, Slice_u8 data);
+void Texture_GL33_SetSubData(Texture_GL33* t, Slice_u8 data);
+i32 Texture_GL33_GetWidth(Texture_GL33* t);
+i32 Texture_GL33_GetHeight(Texture_GL33* t);
+GoString Renderer_GL33_GetName(Renderer_GL33* r);
+void Renderer_GL33_Close(Renderer_GL33* r);
+void Renderer_GL33_BeginFrame(Renderer_GL33* r, bool clearColor);
+void Renderer_GL33_EndFrame(Renderer_GL33* r);
+void Renderer_GL33_Await(Renderer_GL33* r);
+void Renderer_GL33_BeginScreenshot(Renderer_GL33* r, int width, int height);
+bool Renderer_GL33_FinishScreenshot(Renderer_GL33* r, Slice_u8 data, int width, int height);
+void Renderer_GL33_SetModelVertexData(Renderer_GL33* r, u32 bufferIndex, Slice_u8 values);
+void Renderer_GL33_SetModelIndexData(Renderer_GL33* r, u32 bufferIndex, Slice_u32 values);
+GoOpaque /* mgl32.Mat4 */ Renderer_GL33_PerspectiveProjectionMatrix(Renderer_GL33* r, f32 angle, f32 aspect, f32 near, f32 far);
+u32 Renderer_GL33_LoadCustomSpriteShader(Renderer_GL33* r, GoString shaderName, Slice_u8 shaderData);
+void Renderer_GL33_UnloadCustomSpriteShader(Renderer_GL33* r, GoString shaderName);
+Ret_GoIface__GoIface Renderer_VK_newTexture(Renderer_VK* r, i32 width, i32 height, i32 depth, bool filter);
+GoIface Renderer_VK_newSubTexture(Renderer_VK* r, GoIface tex, i32 width, i32 height, Arr4_f32 uvst);
+void Texture_VK_SetData(Texture_VK* t, Slice_u8 textureData);
+void Texture_VK_SetSubData(Texture_VK* t, Slice_u8 data);
+i32 Texture_VK_GetWidth(Texture_VK* t);
+i32 Texture_VK_GetHeight(Texture_VK* t);
+GoString Renderer_VK_GetName(Renderer_VK* r);
+void Renderer_VK_Close(Renderer_VK* r);
+void Renderer_VK_BeginFrame(Renderer_VK* r, bool clearColor);
+void Renderer_VK_EndFrame(Renderer_VK* r);
+void Renderer_VK_Await(Renderer_VK* r);
+void Renderer_VK_BeginScreenshot(Renderer_VK* r, int width, int height);
+bool Renderer_VK_FinishScreenshot(Renderer_VK* r, Slice_u8 data, int width, int height);
+void Renderer_VK_SetModelVertexData(Renderer_VK* r, u32 bufferIndex, Slice_u8 values);
+void Renderer_VK_SetModelIndexData(Renderer_VK* r, u32 bufferIndex, Slice_u32 values);
+GoOpaque /* mgl32.Mat4 */ Renderer_VK_PerspectiveProjectionMatrix(Renderer_VK* r, f32 angle, f32 aspect, f32 near, f32 far);
+u32 Renderer_VK_LoadCustomSpriteShader(Renderer_VK* r, GoString shaderName, Slice_u8 shaderData);
+void Renderer_VK_UnloadCustomSpriteShader(Renderer_VK* r, GoString shaderName);
 bool RollbackSystem_hijackRunMatch(RollbackSystem* rs);
 Arr14_bool RollbackSystem_readRollbackInput(RollbackSystem* rs, int controller);
 Arr6_i8 RollbackSystem_readRollbackInputAnalog(RollbackSystem* rs, int controller);
@@ -6491,24 +6517,18 @@ void bgVideo_Reset(bgVideo* bgv);
 void bgVideo_updateAudioVolume(bgVideo* bgv);
 void bgVideo_MixerCleared(bgVideo* bgv);
 void bgVideo_Close(bgVideo* bgv);
-GoString fn_itoa(int i);
 GoString fn_fmtHex(u32 v);
-void fn_vitaTrace(GoString s);
-void fn_vitaMem(GoString tag);
-void fn_vitaPerfBegin(void);
-void fn_vitaPerfEnd(int i);
-void fn_vitaPerfTick(bool skipped);
-void fn_vitaDiagFrame(void);
-bool fn_vitaDiagSkip(int part);
-bool fn_vitaDrawCensusDue(void);
-void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 layerno);
-void fn_vitaGCTrigger(uintptr_t n);
+void fn_vitaTrace(GoString _p0);
+void fn_vitaMem(GoString _p0);
+void fn_vitaPerfTick(bool _p0);
+void fn_vitaGCTrigger(uintptr_t _p0);
 void fn_vitaRoundGC(void);
+void fn_vitaPerfBegin(void);
 u32 fn_vitaNowUs(void);
-void fn_vitaPhase(int ph);
+void fn_vitaPerfEnd(int _p0);
+void fn_vitaPhase(int _p0);
 bool fn_vitaHalfRate(void);
 void fn_vitaMatchEnd(void);
-void Renderer_VK_Await(Renderer_VK* r);
 Arr4_f32 fn_NormalizeRect_f32(Arr4_f32 rect);
 Slice_Arr2_i32 fn_SliceDelete_Arr2_i32(Slice_Arr2_i32 slice, int i);
 Slice_GoString fn_SortedKeys_Slice_GoString(Map_GoString_Slice_GoString m);

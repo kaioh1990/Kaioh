@@ -31,6 +31,12 @@ var ownPkgs = map[*types.Package]bool{}
 
 func isOwn(pk *types.Package) bool { return pk != nil && ownPkgs[pk] }
 
+// bindPkgs: cgo binding packages (GOTOC_BIND_PKGS). Their types get real C
+// layouts like own types; their functions stay extern (hand-written C).
+var bindPkgs = map[*types.Package]bool{}
+
+func ownTypes(pk *types.Package) bool { return pk != nil && (ownPkgs[pk] || bindPkgs[pk]) }
+
 // keyPrefix: function keys and C names of non-main packages carry the
 // package name ("lua.LState.Push", lua_LState_Push).
 func keyPrefix(pk *types.Package) string {
@@ -46,6 +52,7 @@ func keyPrefix(pk *types.Package) string {
 type srcImporter struct {
 	p        *Prog
 	want     map[string]bool
+	bind     map[string]bool // GOTOC_BIND_PKGS: cgo bindings, typed but implemented in C
 	fallback types.ImporterFrom
 	done     map[string]*types.Package
 	conf     *types.Config
@@ -54,17 +61,33 @@ type srcImporter struct {
 func (im *srcImporter) Import(path string) (*types.Package, error) { return im.ImportFrom(path, "", 0) }
 
 func (im *srcImporter) ImportFrom(path, dir string, mode types.ImportMode) (*types.Package, error) {
-	if !im.want[path] {
+	if !im.want[path] && !im.bind[path] {
 		return im.fallback.ImportFrom(path, dir, mode)
 	}
 	if pk, ok := im.done[path]; ok {
 		return pk, nil
 	}
 	ctx := build.Default
-	ctx.CgoEnabled = false
+	ctx.CgoEnabled = im.bind[path]
 	bp, err := ctx.Import(path, dir, 0)
 	if err != nil {
 		return nil, err
+	}
+	if im.bind[path] {
+		// cgo binding: keep its cgo files for the Go-level signatures; the
+		// functions themselves are implemented by hand in C (src/platform)
+		var files []*ast.File
+		for _, f := range append(bp.GoFiles, bp.CgoFiles...) {
+			af, err := parser.ParseFile(im.p.fset, filepath.Join(bp.Dir, f), nil, 0)
+			if err == nil {
+				files = append(files, af)
+			}
+		}
+		conf := &types.Config{FakeImportC: true, Importer: im, Error: im.conf.Error}
+		pk, _ := conf.Check(path, im.p.fset, files, &types.Info{})
+		im.done[path] = pk
+		bindPkgs[pk] = true
+		return pk, nil
 	}
 	var files []*ast.File
 	for _, f := range bp.GoFiles {
@@ -109,6 +132,9 @@ func (p *Prog) addFuncs(f *ast.File, pk *types.Package) {
 func load(dir string) *Prog {
 	ctx := build.Default
 	ctx.BuildTags = []string{"vita"}
+	if t, ok := os.LookupEnv("GOTOC_TAGS"); ok { // build configuration (default: vita)
+		ctx.BuildTags = strings.Fields(strings.ReplaceAll(t, ",", " "))
+	}
 	ctx.CgoEnabled = true // keep cgo files of the main package (FakeImportC)
 	bp, _ := ctx.ImportDir(dir, 0)
 	p := &Prog{fset: token.NewFileSet(), funcs: map[string]*ast.FuncDecl{}, own: map[*types.Package]bool{}, initFuncs: map[*types.Package][]string{}}
@@ -131,11 +157,16 @@ func load(dir string) *Prog {
 			fmt.Fprintln(os.Stderr, "type error:", err)
 		}
 	}
-	im := &srcImporter{p: p, want: map[string]bool{}, done: map[string]*types.Package{},
+	im := &srcImporter{p: p, want: map[string]bool{}, bind: map[string]bool{}, done: map[string]*types.Package{},
 		fallback: importer.ForCompiler(p.fset, "source", nil).(types.ImporterFrom)}
 	for _, path := range strings.Split(os.Getenv("GOTOC_PKGS"), ",") {
 		if path != "" {
 			im.want[path] = true
+		}
+	}
+	for _, path := range strings.Split(os.Getenv("GOTOC_BIND_PKGS"), ",") {
+		if path != "" {
+			im.bind[path] = true
 		}
 	}
 	im.conf = &types.Config{Importer: im, Error: errf}
