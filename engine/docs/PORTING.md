@@ -210,3 +210,16 @@ stay as verified references and for the optimised paths later.
 - Known gaps: placeholders for net/http/exec/xml/tabwriter (117 functions,
   src/ik/ik_unsupported.c) - online play still to port; Vita/iOS/Android
   front ends; .app bundling; input not yet exercised by hand.
+
+### Status 2026-11-19 09:35
+
+- Audio fixed: 64-bit int limit constants (beep's `math.MaxInt64` end marker)
+  now map to the 32-bit limits in gotoc.
+- cvf-online-5 rules ported from patches/ikemen-cvf-online.patch:
+  SpecialCooldown/SpecialStates, FightAspect (shared, gameplay) and WideView
+  (display only). Reference fight with the old rules still 54f8ae06…; with the
+  cvf-online-5 rules the match is deterministic (4334350c…) on Linux; macOS
+  arm64 still reproduces 54f8ae06….
+- Not yet cross-checked against a Go build with the new rules (the container
+  lacks the ffmpeg dev libraries the Go build needs); next check is a
+  two-device match against the iOS build.
