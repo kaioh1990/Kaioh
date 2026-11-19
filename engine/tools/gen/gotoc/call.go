@@ -45,8 +45,7 @@ func (t *Tx) call(c *ast.CallExpr) string {
 	}
 	fn := t.calleeFunc(c)
 	if fn == nil {
-		// call through a func value
-		return t.TODO(c, "indirect call")
+		return t.indirectCall(c)
 	}
 	sig := fn.Type().(*types.Signature)
 	args := t.callArgs(c, sig)

@@ -130,7 +130,7 @@ func (t *Tx) expr(e ast.Expr) string {
 	case *ast.TypeAssertExpr:
 		return t.TODO(e, "type assertion")
 	case *ast.FuncLit:
-		return t.TODO(e, "func literal")
+		return t.funcLit(e)
 	case *ast.KeyValueExpr:
 		return t.TODO(e, "key/value")
 	}
@@ -152,6 +152,9 @@ func (t *Tx) ident(e *ast.Ident) string {
 	case *types.Var:
 		if o.Parent() == t.p.pkg.Scope() {
 			return "g_" + o.Name() // package-level variable
+		}
+		if t.captured[o] {
+			return "(*_env->" + cVarName(e.Name) + ")"
 		}
 		return cVarName(e.Name)
 	case *types.Func:
@@ -287,7 +290,17 @@ func (t *Tx) binary(e *ast.BinaryExpr) string {
 			return fmt.Sprintf("(%smemcmp(&(%s){%s}, &(%s){%s}, sizeof(%s)) == 0)", op, cbase(opType), t.expr(e.X), cbase(opType), t.expr(e.Y), cbase(opType))
 		}
 		if _, ok := opType.Underlying().(*types.Interface); ok {
-			return t.TODO(e, "interface comparison")
+			op := "=="
+			if e.Op == token.NEQ {
+				op = "!="
+			}
+			if id, ok := e.Y.(*ast.Ident); ok && id.Name == "nil" {
+				return "(" + t.expr(e.X) + ".type " + op + " 0)"
+			}
+			if id, ok := e.X.(*ast.Ident); ok && id.Name == "nil" {
+				return "(" + t.expr(e.Y) + ".type " + op + " 0)"
+			}
+			return "(" + "go_iface_eq(" + t.expr(e.X) + ", " + t.expr(e.Y) + ") " + op + " true)"
 		}
 	}
 	return "(" + t.exprConv(e.X, opType) + " " + e.Op.String() + " " + t.exprConv(e.Y, opType) + ")"

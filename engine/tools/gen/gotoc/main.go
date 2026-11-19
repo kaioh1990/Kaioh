@@ -75,6 +75,10 @@ func main() {
 		fmt.Println(pr)
 	}
 	fmt.Println()
+	for _, l := range lifted {
+		fmt.Println(l)
+	}
+	fmt.Println()
 	for _, b := range bodies {
 		fmt.Println(b)
 	}

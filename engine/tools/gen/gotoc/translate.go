@@ -11,8 +11,12 @@ import (
 )
 
 // Translator state for one function.
+type bytesBuffer = bytes.Buffer
+
 type Tx struct {
 	p        *Prog
+	captured map[types.Object]bool // inside a lifted closure: vars reached through _env
+	outerFn  string
 	out      *bytes.Buffer
 	ind      int
 	todo     int

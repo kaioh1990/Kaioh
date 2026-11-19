@@ -31,8 +31,33 @@ is translated mechanically and then fixed up by hand:
 - First run: char.go 452 functions / 144 TODO, bytecode.go 312 / 52,
   system.go 228 / 153, anim.go 74 / 32.
 
-Hand-written modules (rng, detmath, anim playback, values, AIR, cooked
-content) replace their Go counterparts via `overrides.txt`.
+After closures were added (lifted to static functions with an environment
+of pointers to captured variables), remaining TODO sites: char.go 13,
+bytecode.go 14, system.go 50, anim.go 3, common.go 8, input.go 2,
+fightscreen.go 11.
+
+### Plan from here (decided 2026-11-19 00:45)
+
+Translate *all* simulation code consistently, including Ikemen's CNS
+compiler (compiler.go, compiler_functions.go), instead of mixing generated
+code with hand-written replacements:
+
+1. gotoc gains reachability: start from a headless fight runner's roots
+   (load characters and stage, run match ticks) and translate only reached
+   functions; unreached callees become stubs. Render/audio/platform types
+   are overridden to opaque handles.
+2. gencdefs generates the data model from `System` (sys) downward with
+   the same overrides.
+3. A small C runtime (core/gort.c) provides slices, maps (deterministic
+   insertion order), strings, interface values and the Go-semantics
+   arithmetic helpers.
+4. Compile, fix, then replay the reference fight and compare per-tick
+   dumps with the Ikemen build.
+5. Then optimise: arenas + memcpy rollback, AOT script compilation, render
+   thread, native platform layers.
+
+The hand-written modules (rng, detmath, anim, values, AIR, cooked content)
+stay as verified references and for the optimised paths later.
 
 ## Conventions
 
