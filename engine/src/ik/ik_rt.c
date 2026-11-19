@@ -1158,3 +1158,45 @@ Ret_int__GoIface fmt_Sscanf(GoString str, GoString format, Slice_GoIface args) {
     }
     return r;
 }
+
+GoIface strings_Builder_WriteByte(GoOpaque *recv, u8 c) {
+    char ch = (char)c;
+    strings_Builder_WriteString(recv, (GoString){&ch, 1});
+    return (GoIface){0};
+}
+
+int utf8_RuneCountInString(GoString s) {
+    int n = 0;
+    for (int i = 0; i < s.len; n++) {
+        i32 r;
+        i += go_decode_rune(s, i, &r);
+    }
+    return n;
+}
+
+// ---------------------------------------------------------------- sort.Sort
+// Only sort.StringSlice (optionally wrapped in sort.Reverse) reaches sort.Sort
+// in the translated code; other Interface implementations panic loudly.
+enum { GO_TID_SORT_REVERSE = 96 };
+GoIface sort_Reverse(GoIface data) { return (GoIface){GO_TID_SORT_REVERSE, go_box(GoIface, data)}; }
+int sort_StringSlice_Len(Slice_GoString recv) { return recv.len; }
+
+typedef struct { Slice_GoString *s; bool rev; } StrLessEnv;
+static bool str_less(void *env, int i, int j) {
+    StrLessEnv *e = (StrLessEnv *)env;
+    GoString a = e->s->p[i], b = e->s->p[j];
+    if (e->rev) { GoString t = a; a = b; b = t; }
+    int n = a.len < b.len ? a.len : b.len;
+    int c = memcmp(a.p, b.p, (size_t)n);
+    return c < 0 || (c == 0 && a.len < b.len);
+}
+void sort_Sort(GoIface data) {
+    bool rev = false;
+    if (data.type == GO_TID_SORT_REVERSE) {
+        rev = true;
+        data = *(GoIface *)data.data;
+    }
+    if (data.type != GO_TID_sort_StringSlice) go_panic_str("sort.Sort: unsupported sort.Interface implementation");
+    StrLessEnv env = {(Slice_GoString *)data.data, rev};
+    go_sort_slice(env.s, sizeof(GoString), (GoFunc){(void *)str_less, &env});
+}

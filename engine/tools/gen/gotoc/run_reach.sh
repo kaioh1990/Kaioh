@@ -1,7 +1,7 @@
 #!/bin/sh
 # Regenerates the reachable-simulation translation.
 # Usage: run_reach.sh IKEMEN_SRC_DIR OUT.c   (GOTOC_HDR: header path)
-export GOTOC_EXCLUDE=cvfcook.go,font.go,input_sdl.go,luacache.go,model.go,motif.go,music.go,netplay.go,render.go,render_gles32.go,render_vk.go,sound.go,spec_match.go,storyboard.go,system_sdl.go,util_android.go,util_desktop.go,util_ios.go,util_raw.go,util_vita.go,video_ffmpeg.go,video_stub_vita.go,vita_platform.go,vita_platform_other.go,vk_stub_vita.go,rollback.go,audio_sdl.go,sound_xm.go,compiler_bchash.go
+export GOTOC_EXCLUDE=cvfcook.go,font.go,input_sdl.go,luacache.go,model.go,music.go,netplay.go,render.go,render_gles32.go,render_vk.go,sound.go,spec_match.go,storyboard.go,system_sdl.go,util_android.go,util_desktop.go,util_ios.go,util_raw.go,util_vita.go,video_ffmpeg.go,video_stub_vita.go,vita_platform.go,vita_platform_other.go,vk_stub_vita.go,rollback.go,audio_sdl.go,sound_xm.go,compiler_bchash.go
 # simulation functions living in otherwise excluded (platform) files
 export GOTOC_INCLUDE_FUNCS=Rotation.IsZero,itoa,fmtHex,Motif.resolvePath
 # functions implemented by hand in src/ik (ik_native.c)

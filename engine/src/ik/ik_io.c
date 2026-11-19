@@ -610,3 +610,72 @@ GoString os_Getenv(GoString key) {
     const char *v = getenv(go_strz(key));
     return v ? go_cstr(strdup(v)) : (GoString){"", 0};
 }
+
+// ---------------------------------------------------------------- Lua
+// No Lua state in the headless engine: globals are nil, chunks do nothing.
+static int lnil_tag;
+GoIface lua_LNil = {GO_TID_ERRSTR - 1, &lnil_tag};  // a unique non-nil interface value
+GoIface lua_LState_GetGlobal(GoOpaque *l, GoString name) {
+    (void)l, (void)name;
+    return lua_LNil;
+}
+GoIface lua_LState_CallByParam(GoOpaque *l, GoOpaque p, Slice_GoIface args) {
+    (void)l, (void)p, (void)args;
+    return (GoIface){0};
+}
+GoIface lua_LState_DoString(GoOpaque *l, GoString src) {
+    (void)l, (void)src;
+    return (GoIface){0};
+}
+GoIface lua_LState_Get(GoOpaque *l, int i) {
+    (void)l, (void)i;
+    return lua_LNil;
+}
+void lua_LState_Pop(GoOpaque *l, int n) { (void)l, (void)n; }
+
+// ---------------------------------------------------------------- os.ReadFile
+Ret_Slice_u8__GoIface os_ReadFile(GoString name) {
+    Ret_Slice_u8__GoIface r = {0};
+    Ret_GoOpaque_os_FilePtrPtr__GoIface o = open_mode(name, "rb");
+    if (o.r1.type) {
+        r.r1 = o.r1;
+        return r;
+    }
+    RtFile *rf = (RtFile *)o.r0;
+    fseek(rf->f, 0, SEEK_END);
+    long n = ftell(rf->f);
+    fseek(rf->f, 0, SEEK_SET);
+    if (n < 0) n = 0;
+    r.r0.p = (u8 *)malloc((size_t)n + 1);
+    r.r0.len = r.r0.cap = (int)fread(r.r0.p, 1, (size_t)n, rf->f);
+    fclose(rf->f);
+    free(rf);
+    return r;
+}
+
+// ---------------------------------------------------------------- inert JSON / matrix stand-ins
+// gjson/sjson/encoding/json are only used by the stats and save-data code and
+// mgl32 by the 3D motif renderer; none affect the simulation. The headless
+// build treats every JSON document as empty and matrices as zero.
+GoOpaque gjson_GetBytes(Slice_u8 a0, GoString a1) { (void)a0; (void)a1; return (GoOpaque){0}; }
+GoOpaque gjson_Result_Get(GoOpaque recv, GoString a0) { (void)recv; (void)a0; return (GoOpaque){0}; }
+bool gjson_Result_Exists(GoOpaque recv) { (void)recv; return false; }
+bool gjson_Result_IsArray(GoOpaque recv) { (void)recv; return false; }
+f64 gjson_Result_Float(GoOpaque recv) { (void)recv; return 0; }
+i64 gjson_Result_Int(GoOpaque recv) { (void)recv; return 0; }
+void gjson_Result_ForEach(GoOpaque recv, GoFunc a0) { (void)recv; (void)a0; }
+Ret_Slice_u8__GoIface sjson_SetBytes(Slice_u8 a0, GoString a1, GoIface a2) {
+    (void)a1; (void)a2;
+    return (Ret_Slice_u8__GoIface){a0, {0}};
+}
+GoIface json_Indent(GoOpaque *a0, Slice_u8 a1, GoString a2, GoString a3) {
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    return (GoIface){0};
+}
+Slice_u8 bytes_Buffer_Bytes(GoOpaque *recv) { (void)recv; return (Slice_u8){0}; }
+GoOpaque mgl32_HomogRotate3DX(f32 a) { (void)a; return (GoOpaque){0}; }
+GoOpaque mgl32_HomogRotate3DY(f32 a) { (void)a; return (GoOpaque){0}; }
+GoOpaque mgl32_HomogRotate3DZ(f32 a) { (void)a; return (GoOpaque){0}; }
+GoOpaque mgl32_Mat4_Mul4(GoOpaque a, GoOpaque b) { (void)a; (void)b; return (GoOpaque){0}; }
+GoOpaque mgl32_Scale3D(f32 x, f32 y, f32 z) { (void)x; (void)y; (void)z; return (GoOpaque){0}; }
+GoOpaque mgl32_Translate3D(f32 x, f32 y, f32 z) { (void)x; (void)y; (void)z; return (GoOpaque){0}; }

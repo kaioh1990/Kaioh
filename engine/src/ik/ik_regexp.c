@@ -696,3 +696,61 @@ GoString regexp_Regexp_ReplaceAllString(GoOpaque *recv, GoString src, GoString r
     for (int k = last; k < src.len; k++) buf = go_append_Slice_u8(buf, (u8)src.p[k]);
     return go_bytes2str(buf);
 }
+
+// Leftmost-first matches of the whole expression, Go's empty-match rules.
+#define RX_FOREACH_MATCH(re, s, n, cap, BODY)                                   \
+    do {                                                                        \
+        int _n = (n) < 0 ? (s).len + 1 : (n);                                   \
+        for (int _pos = 0, _i = 0, _prev = -1; _i < _n && _pos <= (s).len;) {   \
+            if (!re_exec((re), (s), _pos, (cap))) break;                        \
+            bool _accept = true;                                                \
+            if ((cap)[1] == _pos) {                                             \
+                if ((cap)[0] == _prev) _accept = false;                         \
+                _pos += rune_width((s), _pos);                                  \
+            } else {                                                            \
+                _pos = (cap)[1];                                                \
+            }                                                                   \
+            _prev = (cap)[1];                                                   \
+            if (_accept) {                                                      \
+                BODY;                                                           \
+                _i++;                                                           \
+            }                                                                   \
+        }                                                                       \
+    } while (0)
+
+Slice_Slice_int regexp_Regexp_FindAllStringIndex(GoOpaque *recv, GoString s, int n) {
+    RxRe *re = (RxRe *)recv;
+    int cap[2 * 64];
+    Slice_Slice_int out = {0};
+    RX_FOREACH_MATCH(re, s, n, cap, {
+        Slice_int m = {0};
+        m = go_append_Slice_int(m, cap[0]);
+        m = go_append_Slice_int(m, cap[1]);
+        out = go_append_Slice_Slice_int(out, m);
+    });
+    return out;
+}
+
+Slice_int regexp_Regexp_FindStringSubmatchIndex(GoOpaque *recv, GoString s) {
+    RxRe *re = (RxRe *)recv;
+    int cap[2 * 64];
+    Slice_int out = {0};
+    if (re->ncap >= 63 || !re_exec(re, s, 0, cap)) return out;
+    for (int k = 0; k < 2 * (re->ncap + 1); k++) out = go_append_Slice_int(out, cap[k]);
+    return out;
+}
+
+GoString regexp_Regexp_ReplaceAllStringFunc(GoOpaque *recv, GoString src, GoFunc repl) {
+    RxRe *re = (RxRe *)recv;
+    int cap[2 * 64];
+    Slice_u8 buf = {0};
+    int last = 0;
+    RX_FOREACH_MATCH(re, src, -1, cap, {
+        for (int k = last; k < cap[0]; k++) buf = go_append_Slice_u8(buf, (u8)src.p[k]);
+        GoString r = ((GoString(*)(void *, GoString))repl.fn)(repl.env, (GoString){src.p + cap[0], cap[1] - cap[0]});
+        for (int k = 0; k < r.len; k++) buf = go_append_Slice_u8(buf, (u8)r.p[k]);
+        last = cap[1];
+    });
+    for (int k = last; k < src.len; k++) buf = go_append_Slice_u8(buf, (u8)src.p[k]);
+    return go_bytes2str(buf);
+}
