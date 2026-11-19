@@ -51,6 +51,7 @@ func cvfHeadlessMain(args []string) int32 {
 		LogMessage("loadConfig: %v", err)
 		return -1
 	}
+	cvfApplyDisplay(cfg)
 	sys.cfg = *cfg
 
 	// ---- System.init without window/renderer/audio/Lua

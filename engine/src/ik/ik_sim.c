@@ -1378,18 +1378,18 @@ static Slice_u8 lambda_27(Env_lambda_27 *_env, Slice_u8 dst, u8 c) {
     return GO_APPEND(Slice_u8, dst, c);
 }
 
-typedef struct Env_lambda_28 { Slice_sjson_val_Lfd4cad *vals; } Env_lambda_28;
+typedef struct Env_lambda_28 { Slice_sjson_val_L5ecfcd *vals; } Env_lambda_28;
 static bool lambda_28(Env_lambda_28 *_env, gjson_Result _p0, gjson_Result vres) {
-    (*_env->vals) = GO_APPEND(Slice_sjson_val_Lfd4cad, (*_env->vals), (sjson_val_Lfd4cad){.res = vres});
+    (*_env->vals) = GO_APPEND(Slice_sjson_val_L5ecfcd, (*_env->vals), (sjson_val_L5ecfcd){.res = vres});
     return true;
 }
 
-typedef struct Env_lambda_29 { Slice_sjson_val_Lfd4cad *vals; } Env_lambda_29;
+typedef struct Env_lambda_29 { Slice_sjson_val_L5ecfcd *vals; } Env_lambda_29;
 static bool lambda_29(Env_lambda_29 *_env, int i, int j) {
     return ((*_env->vals).p[i].index > (*_env->vals).p[j].index);
 }
 
-typedef struct Env_lambda_30 { Slice_sjson_val_Lfd4cad *vals; } Env_lambda_30;
+typedef struct Env_lambda_30 { Slice_sjson_val_L5ecfcd *vals; } Env_lambda_30;
 static bool lambda_30(Env_lambda_30 *_env, int i, int j) {
     return ((*_env->vals).p[i].index > (*_env->vals).p[j].index);
 }
@@ -7060,7 +7060,7 @@ static void lambda_485(Env_lambda_485 *_env) {
     }
 }
 
-typedef struct Env_lambda_486 { Slice_pair_L9a2a44 *pairs; } Env_lambda_486;
+typedef struct Env_lambda_486 { Slice_pair_L912ecb *pairs; } Env_lambda_486;
 static bool lambda_486(Env_lambda_486 *_env, int i, int j) {
     if ((*_env->pairs).p[i].dist != (*_env->pairs).p[j].dist) {
         return ((*_env->pairs).p[i].dist < (*_env->pairs).p[j].dist);
@@ -7068,7 +7068,7 @@ static bool lambda_486(Env_lambda_486 *_env, int i, int j) {
     return ((*_env->pairs).p[i].pr->id < (*_env->pairs).p[j].pr->id);
 }
 
-typedef struct Env_lambda_487 { Slice_pair_L9a2a44 *pairs; } Env_lambda_487;
+typedef struct Env_lambda_487 { Slice_pair_L912ecb *pairs; } Env_lambda_487;
 static bool lambda_487(Env_lambda_487 *_env, int i, int j) {
     if ((*_env->pairs).p[i].dist != (*_env->pairs).p[j].dist) {
         return ((*_env->pairs).p[i].dist < (*_env->pairs).p[j].dist);
@@ -7115,7 +7115,7 @@ static Ret_f32__f32 lambda_490(Env_lambda_490 *_env, Char* char_, i32 box) {
     return (Ret_f32__f32){char_->CharSystemVar_.depthPlayer.v[0], char_->CharSystemVar_.depthPlayer.v[1]};
 }
 
-typedef struct Env_lambda_491 { Slice_pair_L801455 *pairs; } Env_lambda_491;
+typedef struct Env_lambda_491 { Slice_pair_Lb56028 *pairs; } Env_lambda_491;
 static bool lambda_491(Env_lambda_491 *_env, int i, int j) {
     if (fn_Abs_f32((*_env->pairs).p[i].dist) != fn_Abs_f32((*_env->pairs).p[j].dist)) {
         return (fn_Abs_f32((*_env->pairs).p[i].dist) < fn_Abs_f32((*_env->pairs).p[j].dist));
@@ -7123,7 +7123,7 @@ static bool lambda_491(Env_lambda_491 *_env, int i, int j) {
     return ((*_env->pairs).p[i].ch->id < (*_env->pairs).p[j].ch->id);
 }
 
-typedef struct Env_lambda_492 { Slice_pair_L801455 *pairs; } Env_lambda_492;
+typedef struct Env_lambda_492 { Slice_pair_Lb56028 *pairs; } Env_lambda_492;
 static bool lambda_492(Env_lambda_492 *_env, int i, int j) {
     if (fn_Abs_f32((*_env->pairs).p[i].dist) != fn_Abs_f32((*_env->pairs).p[j].dist)) {
         return (fn_Abs_f32((*_env->pairs).p[i].dist) < fn_Abs_f32((*_env->pairs).p[j].dist));
@@ -7131,7 +7131,7 @@ static bool lambda_492(Env_lambda_492 *_env, int i, int j) {
     return ((*_env->pairs).p[i].ch->id < (*_env->pairs).p[j].ch->id);
 }
 
-typedef struct Env_lambda_493 { Map_int_fontSpec_L7f1af4 *fntSpecs; } Env_lambda_493;
+typedef struct Env_lambda_493 { Map_int_fontSpec_Lf3d9de *fntSpecs; } Env_lambda_493;
 static void lambda_493(Env_lambda_493 *_env, IniSection is) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&is);
@@ -7155,7 +7155,7 @@ static void lambda_493(Env_lambda_493 *_env, IniSection is) {
                 }
                 int idx = ((int)fn_Atoi(go_substr(rest, 0, j)));
                 GoString tail = go_substr(rest, j, -1);
-                fontSpec_L7f1af4 fs = Map_int_fontSpec_L7f1af4_get(&(*_env->fntSpecs), idx, NULL);
+                fontSpec_Lf3d9de fs = Map_int_fontSpec_Lf3d9de_get(&(*_env->fntSpecs), idx, NULL);
                 if (go_streq(tail, GOSTR(""))) {
                     fs.path = v;
                 } else {
@@ -7163,7 +7163,7 @@ static void lambda_493(Env_lambda_493 *_env, IniSection is) {
                         fs.height = ((i32)fn_Atoi(v));
                     }
                 }
-                Map_int_fontSpec_L7f1af4_set(&(*_env->fntSpecs), idx, fs);
+                Map_int_fontSpec_Lf3d9de_set(&(*_env->fntSpecs), idx, fs);
             }
             _cont3:;
         }
@@ -7489,8 +7489,8 @@ static GoIface lambda_499(Env_lambda_499 *_env, GoString filename) {
     return err;
 }
 
-typedef struct Env_lambda_500 { CharGlobalInfo* *gi; fontSpec_L7f1af4 *spec; int *i; } Env_lambda_500;
-typedef struct Env_lambda_501 { CharGlobalInfo* *gi; fontSpec_L7f1af4 *spec; int *i; GoString *filename; } Env_lambda_501;
+typedef struct Env_lambda_500 { CharGlobalInfo* *gi; fontSpec_Lf3d9de *spec; int *i; } Env_lambda_500;
+typedef struct Env_lambda_501 { CharGlobalInfo* *gi; fontSpec_Lf3d9de *spec; int *i; GoString *filename; } Env_lambda_501;
 static void lambda_501(Env_lambda_501 *_env) {
     i32 h = -1;
     if ((*_env->spec).height != 0) {
@@ -17390,7 +17390,7 @@ static GoIface lambda_937(Env_lambda_937 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_938 { Map_int_fontSpec_Le9fdb4 *fntSpecs; } Env_lambda_938;
+typedef struct Env_lambda_938 { Map_int_fontSpec_Lf2d3a3 *fntSpecs; } Env_lambda_938;
 static void lambda_938(Env_lambda_938 *_env, IniSection is) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&is);
@@ -17414,7 +17414,7 @@ static void lambda_938(Env_lambda_938 *_env, IniSection is) {
                 }
                 int idx = ((int)fn_Atoi(go_substr(rest, 0, j)));
                 GoString tail = go_substr(rest, j, -1);
-                fontSpec_Le9fdb4 fs = Map_int_fontSpec_Le9fdb4_get(&(*_env->fntSpecs), idx, NULL);
+                fontSpec_Lf2d3a3 fs = Map_int_fontSpec_Lf2d3a3_get(&(*_env->fntSpecs), idx, NULL);
                 if (go_streq(tail, GOSTR(""))) {
                     fs.path = v;
                 } else {
@@ -17422,14 +17422,14 @@ static void lambda_938(Env_lambda_938 *_env, IniSection is) {
                         fs.height = ((i32)fn_Atoi(v));
                     }
                 }
-                Map_int_fontSpec_Le9fdb4_set(&(*_env->fntSpecs), idx, fs);
+                Map_int_fontSpec_Lf2d3a3_set(&(*_env->fntSpecs), idx, fs);
             }
             _cont3:;
         }
     }
 }
 
-typedef struct Env_lambda_939 { FightScreen* *fs; int *i; fontSpec_Le9fdb4 *spec; } Env_lambda_939;
+typedef struct Env_lambda_939 { FightScreen* *fs; int *i; fontSpec_Lf2d3a3 *spec; } Env_lambda_939;
 static GoIface lambda_939(Env_lambda_939 *_env, GoString filename) {
     i32 h = -1;
     if ((*_env->spec).height != 0) {
@@ -17569,13 +17569,13 @@ static GoString lambda_949(Env_lambda_949 *_env, GoString s, int n) {
 }
 
 typedef struct Env_lambda_950 { char _unused; } Env_lambda_950;
-static Slice_wrapToken_L8ac62d lambda_950(Env_lambda_950 *_env, GoString s) {
-    Slice_wrapToken_L8ac62d out = {0};
+static Slice_wrapToken_L7ae040 lambda_950(Env_lambda_950 *_env, GoString s) {
+    Slice_wrapToken_L7ae040 out = {0};
     {
         int i = 0;
         for (; i < s.len; ) {
             if (strings_HasPrefix(go_substr(s, i, -1), GOSTR("\\n"))) {
-                out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 2, .rawRunes = 2});
+                out = GO_APPEND(Slice_wrapToken_L7ae040, out, (wrapToken_L7ae040){.kind = 2, .rawRunes = 2});
                 i += 2;
                 continue;
             }
@@ -17586,7 +17586,7 @@ static Slice_wrapToken_L8ac62d lambda_950(Env_lambda_950 *_env, GoString s) {
                 i32 _t3 = r;
                 do {
                     if ((_t3 == 10)) {
-                        out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 2, .rawRunes = 1});
+                        out = GO_APPEND(Slice_wrapToken_L7ae040, out, (wrapToken_L7ae040){.kind = 2, .rawRunes = 1});
                         i += size;
                         goto _cont1;
                     } else if ((_t3 == 32) || (_t3 == 9)) {
@@ -17608,7 +17608,7 @@ static Slice_wrapToken_L8ac62d lambda_950(Env_lambda_950 *_env, GoString s) {
                                 _cont4:;
                             }
                         }
-                        out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 1, .text = go_substr(s, start, i), .rawRunes = rawRunes});
+                        out = GO_APPEND(Slice_wrapToken_L7ae040, out, (wrapToken_L7ae040){.kind = 1, .text = go_substr(s, start, i), .rawRunes = rawRunes});
                         goto _cont1;
                     } else {
                         int start = i;
@@ -17629,7 +17629,7 @@ static Slice_wrapToken_L8ac62d lambda_950(Env_lambda_950 *_env, GoString s) {
                                 _cont6:;
                             }
                         }
-                        out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 0, .text = go_substr(s, start, i), .rawRunes = rawRunes});
+                        out = GO_APPEND(Slice_wrapToken_L7ae040, out, (wrapToken_L7ae040){.kind = 0, .text = go_substr(s, start, i), .rawRunes = rawRunes});
                     }
                 } while (0);
             }
@@ -18316,18 +18316,18 @@ static void lambda_985(Env_lambda_985 *_env, GoOpaque /* reflect.Value */ v, GoO
     }
 }
 
-typedef struct Env_lambda_987 { Map_GoString_musicHolder_Leb5279Ptr *propMap; } Env_lambda_987;
-static musicHolder_Leb5279* lambda_987(Env_lambda_987 *_env, GoString prefix) {
+typedef struct Env_lambda_987 { Map_GoString_musicHolder_L1a0c39Ptr *propMap; } Env_lambda_987;
+static musicHolder_L1a0c39* lambda_987(Env_lambda_987 *_env, GoString prefix) {
     {
-        bool _t1; musicHolder_Leb5279* _t2 = Map_GoString_musicHolder_Leb5279Ptr_get(&(*_env->propMap), prefix, &_t1);
-        musicHolder_Leb5279* h = _t2;
+        bool _t1; musicHolder_L1a0c39* _t2 = Map_GoString_musicHolder_L1a0c39Ptr_get(&(*_env->propMap), prefix, &_t1);
+        musicHolder_L1a0c39* h = _t2;
         bool ok = _t1;
         if (ok) {
             return h;
         }
     }
-    musicHolder_Leb5279* h = go_box(musicHolder_Leb5279, (musicHolder_Leb5279){0});
-    Map_GoString_musicHolder_Leb5279Ptr_set(&(*_env->propMap), prefix, h);
+    musicHolder_L1a0c39* h = go_box(musicHolder_L1a0c39, (musicHolder_L1a0c39){0});
+    Map_GoString_musicHolder_L1a0c39Ptr_set(&(*_env->propMap), prefix, h);
     return h;
 }
 
@@ -18375,7 +18375,7 @@ static void lambda_991(Env_lambda_991 *_env, int n) {
     }
 }
 
-static int lambda_990(Env_lambda_990 *_env, musicHolder_Leb5279* h) {
+static int lambda_990(Env_lambda_990 *_env, musicHolder_L1a0c39* h) {
     int maxLen__hv = h->Bgm.len; __typeof__(maxLen__hv) *maxLen__h = &maxLen__hv;
     GoFunc check = ((GoFunc){(void *)lambda_991, &(Env_lambda_991){maxLen__h}});
     ((void (*)(void *, int))(check).fn)((check).env, h->Loop.len);
@@ -18875,7 +18875,7 @@ static GoIface lambda_1006(Env_lambda_1006 *_env, GoString filename) {
 
 typedef struct Env_lambda_1010 { GoString *def; Motif *m; } Env_lambda_1010;
 typedef struct Env_lambda_1011 { GoString *def; Motif *m; } Env_lambda_1011;
-static void lambda_1011(Env_lambda_1011 *_env, secPair_L1f01c6 pair) {
+static void lambda_1011(Env_lambda_1011 *_env, secPair_L027aea pair) {
     GoOpaque /* ini.Section */* section = pair.sec;
     GoString sectionName = pair.name;
     {
@@ -18916,8 +18916,8 @@ static void lambda_1010(Env_lambda_1010 *_env, GoOpaque /* ini.File */* src) {
     if (src == NULL) {
         return;
     }
-    Slice_secPair_L1f01c6 baseSecs = {0};
-    Slice_secPair_L1f01c6 langSecs = {0};
+    Slice_secPair_L027aea baseSecs = {0};
+    Slice_secPair_L027aea langSecs = {0};
     GoString curLang = fn_SelectedLanguage();
     {
         Slice_GoOpaque_ini_SectionPtrPtr _t2 = ini_File_Sections(src);
@@ -18962,10 +18962,10 @@ static void lambda_1010(Env_lambda_1010 *_env, GoOpaque /* ini.File */* src) {
             }
             if (has) {
                 if (go_streq(lang, curLang)) {
-                    langSecs = GO_APPEND(Slice_secPair_L1f01c6, langSecs, (secPair_L1f01c6){s, logical});
+                    langSecs = GO_APPEND(Slice_secPair_L027aea, langSecs, (secPair_L027aea){s, logical});
                 }
             } else {
-                baseSecs = GO_APPEND(Slice_secPair_L1f01c6, baseSecs, (secPair_L1f01c6){s, logical});
+                baseSecs = GO_APPEND(Slice_secPair_L027aea, baseSecs, (secPair_L027aea){s, logical});
             }
             nextSection:;
             _cont3:;
@@ -18973,18 +18973,18 @@ static void lambda_1010(Env_lambda_1010 *_env, GoOpaque /* ini.File */* src) {
     }
     GoFunc process = ((GoFunc){(void *)lambda_1011, &(Env_lambda_1011){_env->def, _env->m}});
     {
-        Slice_secPair_L1f01c6 _t9 = baseSecs;
+        Slice_secPair_L027aea _t9 = baseSecs;
         for (int _t8 = 0; _t8 < _t9.len; _t8++) {
-            secPair_L1f01c6 sp = _t9.p[_t8];
-            ((void (*)(void *, secPair_L1f01c6))(process).fn)((process).env, sp);
+            secPair_L027aea sp = _t9.p[_t8];
+            ((void (*)(void *, secPair_L027aea))(process).fn)((process).env, sp);
             _cont10:;
         }
     }
     {
-        Slice_secPair_L1f01c6 _t12 = langSecs;
+        Slice_secPair_L027aea _t12 = langSecs;
         for (int _t11 = 0; _t11 < _t12.len; _t11++) {
-            secPair_L1f01c6 sp = _t12.p[_t11];
-            ((void (*)(void *, secPair_L1f01c6))(process).fn)((process).env, sp);
+            secPair_L027aea sp = _t12.p[_t11];
+            ((void (*)(void *, secPair_L027aea))(process).fn)((process).env, sp);
             _cont13:;
         }
     }
@@ -19484,7 +19484,7 @@ static void lambda_1037(Env_lambda_1037 *_env, Char* c) {
     Map_int_bool_set(&(*_env->usedMember), mn, true);
 }
 
-typedef struct Env_lambda_1038 { Slice_slotRef_L64fd25 *slots; } Env_lambda_1038;
+typedef struct Env_lambda_1038 { Slice_slotRef_L64c566 *slots; } Env_lambda_1038;
 static bool lambda_1038(Env_lambda_1038 *_env, int i, int j) {
     if ((*_env->slots).p[i].order == (*_env->slots).p[j].order) {
         return ((*_env->slots).p[i].idx < (*_env->slots).p[j].idx);
@@ -19492,7 +19492,7 @@ static bool lambda_1038(Env_lambda_1038 *_env, int i, int j) {
     return ((*_env->slots).p[i].order < (*_env->slots).p[j].order);
 }
 
-typedef struct Env_lambda_1039 { Slice_slotRef_L64fd25 *slots; } Env_lambda_1039;
+typedef struct Env_lambda_1039 { Slice_slotRef_L64c566 *slots; } Env_lambda_1039;
 static bool lambda_1039(Env_lambda_1039 *_env, int i, int j) {
     if ((*_env->slots).p[i].order == (*_env->slots).p[j].order) {
         return ((*_env->slots).p[i].idx < (*_env->slots).p[j].idx);
@@ -24218,7 +24218,7 @@ static void lambda_1261(Env_lambda_1261 *_env, GoString sec, Slice_GoString path
 
 typedef struct Env_lambda_1265 { lua_LState* *l; GoFunc *getTbl; GoFunc *isEmpty; GoFunc *isSpacerKey; } Env_lambda_1265;
 typedef struct Env_lambda_1266 { GoFunc *isEmpty; GoString *pref; } Env_lambda_1266;
-typedef struct Env_lambda_1267 { GoFunc *isEmpty; GoString *pref; GoString *lp; Map_GoString_entry_L681a49 *byFlat; Slice_GoString *order; } Env_lambda_1267;
+typedef struct Env_lambda_1267 { GoFunc *isEmpty; GoString *pref; GoString *lp; Map_GoString_entry_L1de7c7 *byFlat; Slice_GoString *order; } Env_lambda_1267;
 static void lambda_1267(Env_lambda_1267 *_env, GoOpaque /* ini.Section */* s) {
     if (s == NULL) {
         return;
@@ -24239,27 +24239,27 @@ static void lambda_1267(Env_lambda_1267 *_env, GoOpaque /* ini.Section */* s) {
                     base = go_substr(base, (i + 1), -1);
                 }
             }
-            entry_L681a49 e = (entry_L681a49){.flat = strings_ReplaceAll(p, GOSTR("."), GOSTR("_")), .base = strings_ToLower(base), .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
+            entry_L1de7c7 e = (entry_L1de7c7){.flat = strings_ReplaceAll(p, GOSTR("."), GOSTR("_")), .base = strings_ToLower(base), .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
             {
-                bool _t4; entry_L681a49 _t5 = Map_GoString_entry_L681a49_get(&(*_env->byFlat), e.flat, &_t4);
+                bool _t4; entry_L1de7c7 _t5 = Map_GoString_entry_L1de7c7_get(&(*_env->byFlat), e.flat, &_t4);
                 bool ok = _t4;
                 if (!ok) {
                     (*_env->order) = GO_APPEND(Slice_GoString, (*_env->order), e.flat);
                 }
             }
-            Map_GoString_entry_L681a49_set(&(*_env->byFlat), e.flat, e);
+            Map_GoString_entry_L1de7c7_set(&(*_env->byFlat), e.flat, e);
             _cont3:;
         }
     }
 }
 
-static Slice_entry_L681a49 lambda_1266(Env_lambda_1266 *_env, GoOpaque /* ini.File */* file, GoString sec) {
-    Slice_entry_L681a49 out = {0};
+static Slice_entry_L1de7c7 lambda_1266(Env_lambda_1266 *_env, GoOpaque /* ini.File */* file, GoString sec) {
+    Slice_entry_L1de7c7 out = {0};
     if ((file == NULL) || go_streq(sec, GOSTR(""))) {
         return out;
     }
     GoString lp__hv = strings_ToLower((*_env->pref)); __typeof__(lp__hv) *lp__h = &lp__hv;
-    Map_GoString_entry_L681a49 byFlat__hv = Map_GoString_entry_L681a49_make(0); __typeof__(byFlat__hv) *byFlat__h = &byFlat__hv;
+    Map_GoString_entry_L1de7c7 byFlat__hv = Map_GoString_entry_L1de7c7_make(0); __typeof__(byFlat__hv) *byFlat__h = &byFlat__hv;
     Slice_GoString order__hv = {0}; __typeof__(order__hv) *order__h = &order__hv;
     GoFunc addFrom = ((GoFunc){(void *)lambda_1267, &(Env_lambda_1267){_env->isEmpty, _env->pref, lp__h, byFlat__h, order__h}});
     {
@@ -24280,7 +24280,7 @@ static Slice_entry_L681a49 lambda_1266(Env_lambda_1266 *_env, GoOpaque /* ini.Fi
         Slice_GoString _t6 = (*order__h);
         for (int _t5 = 0; _t5 < _t6.len; _t5++) {
             GoString flat = _t6.p[_t5];
-            out = GO_APPEND(Slice_entry_L681a49, out, Map_GoString_entry_L681a49_get(&(*byFlat__h), flat, NULL));
+            out = GO_APPEND(Slice_entry_L1de7c7, out, Map_GoString_entry_L1de7c7_get(&(*byFlat__h), flat, NULL));
             _cont7:;
         }
     }
@@ -24304,11 +24304,11 @@ static bool lambda_1268(Env_lambda_1268 *_env, GoString flat) {
 }
 
 typedef struct Env_lambda_1269 { GoFunc *isSpacerKey; Map_GoString_bool *seenFlat; Map_GoString_bool *seenBase; Map_GoString_bool *disabledFlat; Map_GoString_bool *disabledBase; GoFunc *isUnderDisabled; Slice_GoString *final; } Env_lambda_1269;
-static void lambda_1269(Env_lambda_1269 *_env, Slice_entry_L681a49 arr, bool isDefault) {
+static void lambda_1269(Env_lambda_1269 *_env, Slice_entry_L1de7c7 arr, bool isDefault) {
     {
-        Slice_entry_L681a49 _t2 = arr;
+        Slice_entry_L1de7c7 _t2 = arr;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L681a49 e = _t2.p[_t1];
+            entry_L1de7c7 e = _t2.p[_t1];
             if (e.disabled) {
                 Map_GoString_bool_set(&(*_env->disabledFlat), e.flat, true);
                 continue;
@@ -24350,8 +24350,8 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
         return;
     }
     GoFunc collect = ((GoFunc){(void *)lambda_1266, &(Env_lambda_1266){_env->isEmpty, pref__h}});
-    Slice_entry_L681a49 user = ((Slice_entry_L681a49 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, sec);
-    Slice_entry_L681a49 defs = ((Slice_entry_L681a49 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, sec);
+    Slice_entry_L1de7c7 user = ((Slice_entry_L1de7c7 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, sec);
+    Slice_entry_L1de7c7 defs = ((Slice_entry_L1de7c7 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, sec);
     Map_GoString_bool seenFlat__hv = Map_GoString_bool_make(0); __typeof__(seenFlat__hv) *seenFlat__h = &seenFlat__hv;
     Map_GoString_bool seenBase__hv = Map_GoString_bool_make(0); __typeof__(seenBase__hv) *seenBase__h = &seenBase__hv;
     Map_GoString_bool *disabledFlat__h = go_box(Map_GoString_bool, Map_GoString_bool_make(0));
@@ -24359,9 +24359,9 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
     Map_GoString_bool enabledBase = Map_GoString_bool_make(0);
     Map_GoString_bool userDisabledBase = Map_GoString_bool_make(0);
     {
-        Slice_entry_L681a49 _t2 = user;
+        Slice_entry_L1de7c7 _t2 = user;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L681a49 e = _t2.p[_t1];
+            entry_L1de7c7 e = _t2.p[_t1];
             if (e.disabled) {
                 Map_GoString_bool_set(&(*disabledFlat__h), e.flat, true);
                 Map_GoString_bool_set(&userDisabledBase, e.base, true);
@@ -24384,8 +24384,8 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
     GoFunc isUnderDisabled__hv = ((GoFunc){(void *)lambda_1268, go_box(Env_lambda_1268, ((Env_lambda_1268){disabledFlat__h}))}); __typeof__(isUnderDisabled__hv) *isUnderDisabled__h = &isUnderDisabled__hv;
     Slice_GoString *final__h = go_box(Slice_GoString, {0});
     GoFunc process = ((GoFunc){(void *)lambda_1269, &(Env_lambda_1269){_env->isSpacerKey, seenFlat__h, seenBase__h, disabledFlat__h, disabledBase__h, isUnderDisabled__h, final__h}});
-    ((void (*)(void *, Slice_entry_L681a49, bool))(process).fn)((process).env, user, false);
-    ((void (*)(void *, Slice_entry_L681a49, bool))(process).fn)((process).env, defs, true);
+    ((void (*)(void *, Slice_entry_L1de7c7, bool))(process).fn)((process).env, user, false);
+    ((void (*)(void *, Slice_entry_L1de7c7, bool))(process).fn)((process).env, defs, true);
     go_sort_slice_stable((void *)GO_TMPADDR(Slice_GoString, (*final__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1271, go_box(Env_lambda_1271, ((Env_lambda_1271){final__h}))}));
     lua_LTable* t = lua_LState_NewTable((*_env->l));
     {
@@ -24401,7 +24401,7 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
 
 typedef struct Env_lambda_1272 { lua_LState* *l; GoFunc *getTbl; GoFunc *isEmpty; } Env_lambda_1272;
 typedef struct Env_lambda_1273 { GoFunc *isEmpty; } Env_lambda_1273;
-typedef struct Env_lambda_1274 { GoFunc *isEmpty; GoString *lp; Map_GoString_entry_L24a51f *byKey; Slice_GoString *order; } Env_lambda_1274;
+typedef struct Env_lambda_1274 { GoFunc *isEmpty; GoString *lp; Map_GoString_entry_L380e40 *byKey; Slice_GoString *order; } Env_lambda_1274;
 static void lambda_1274(Env_lambda_1274 *_env, GoOpaque /* ini.Section */* s) {
     if (s == NULL) {
         return;
@@ -24425,28 +24425,28 @@ static void lambda_1274(Env_lambda_1274 *_env, GoOpaque /* ini.Section */* s) {
                 elem = strings_ToLower(ps.p[0]);
                 field = strings_ToLower(ps.p[(ps.len - 1)]);
             }
-            entry_L24a51f e = (entry_L24a51f){.elem = elem, .field = field, .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
+            entry_L380e40 e = (entry_L380e40){.elem = elem, .field = field, .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
             GoString key = go_strcat(go_strcat(elem, GOSTR("|")), field);
             {
-                bool _t4; entry_L24a51f _t5 = Map_GoString_entry_L24a51f_get(&(*_env->byKey), key, &_t4);
+                bool _t4; entry_L380e40 _t5 = Map_GoString_entry_L380e40_get(&(*_env->byKey), key, &_t4);
                 bool ok = _t4;
                 if (!ok) {
                     (*_env->order) = GO_APPEND(Slice_GoString, (*_env->order), key);
                 }
             }
-            Map_GoString_entry_L24a51f_set(&(*_env->byKey), key, e);
+            Map_GoString_entry_L380e40_set(&(*_env->byKey), key, e);
             _cont3:;
         }
     }
 }
 
-static Slice_entry_L24a51f lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.File */* file, GoString sec) {
-    Slice_entry_L24a51f out = {0};
+static Slice_entry_L380e40 lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.File */* file, GoString sec) {
+    Slice_entry_L380e40 out = {0};
     if ((file == NULL) || go_streq(sec, GOSTR(""))) {
         return out;
     }
     GoString lp__hv = strings_ToLower(GOSTR("teammenu.itemname.")); __typeof__(lp__hv) *lp__h = &lp__hv;
-    Map_GoString_entry_L24a51f byKey__hv = Map_GoString_entry_L24a51f_make(0); __typeof__(byKey__hv) *byKey__h = &byKey__hv;
+    Map_GoString_entry_L380e40 byKey__hv = Map_GoString_entry_L380e40_make(0); __typeof__(byKey__hv) *byKey__h = &byKey__hv;
     Slice_GoString order__hv = {0}; __typeof__(order__hv) *order__h = &order__hv;
     GoFunc addFrom = ((GoFunc){(void *)lambda_1274, &(Env_lambda_1274){_env->isEmpty, lp__h, byKey__h, order__h}});
     {
@@ -24467,7 +24467,7 @@ static Slice_entry_L24a51f lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.Fi
         Slice_GoString _t6 = (*order__h);
         for (int _t5 = 0; _t5 < _t6.len; _t5++) {
             GoString k = _t6.p[_t5];
-            out = GO_APPEND(Slice_entry_L24a51f, out, Map_GoString_entry_L24a51f_get(&(*byKey__h), k, NULL));
+            out = GO_APPEND(Slice_entry_L380e40, out, Map_GoString_entry_L380e40_get(&(*byKey__h), k, NULL));
             _cont7:;
         }
     }
@@ -24476,26 +24476,26 @@ static Slice_entry_L24a51f lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.Fi
 }
 
 typedef struct Env_lambda_1275 { char _unused; } Env_lambda_1275;
-static Map_GoString_Slice_entry_L24a51f lambda_1275(Env_lambda_1275 *_env, Slice_entry_L24a51f arr) {
-    Map_GoString_Slice_entry_L24a51f m = Map_GoString_Slice_entry_L24a51f_make(0);
+static Map_GoString_Slice_entry_L380e40 lambda_1275(Env_lambda_1275 *_env, Slice_entry_L380e40 arr) {
+    Map_GoString_Slice_entry_L380e40 m = Map_GoString_Slice_entry_L380e40_make(0);
     {
-        Slice_entry_L24a51f _t2 = arr;
+        Slice_entry_L380e40 _t2 = arr;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L24a51f e = _t2.p[_t1];
-            Map_GoString_Slice_entry_L24a51f_set(&m, e.elem, GO_APPEND(Slice_entry_L24a51f, Map_GoString_Slice_entry_L24a51f_get(&m, e.elem, NULL), e));
+            entry_L380e40 e = _t2.p[_t1];
+            Map_GoString_Slice_entry_L380e40_set(&m, e.elem, GO_APPEND(Slice_entry_L380e40, Map_GoString_Slice_entry_L380e40_get(&m, e.elem, NULL), e));
             _cont3:;
         }
     }
     return m;
 }
 
-typedef struct Env_lambda_1276 { Map_GoString_Slice_entry_L24a51f *uBy; Map_GoString_Slice_entry_L24a51f *dBy; } Env_lambda_1276;
+typedef struct Env_lambda_1276 { Map_GoString_Slice_entry_L380e40 *uBy; Map_GoString_Slice_entry_L380e40 *dBy; } Env_lambda_1276;
 typedef struct Env_lambda_1277 { Map_GoString_bool *seen; Map_GoString_bool *disabled; Slice_GoString *final; } Env_lambda_1277;
-static void lambda_1277(Env_lambda_1277 *_env, Slice_entry_L24a51f a) {
+static void lambda_1277(Env_lambda_1277 *_env, Slice_entry_L380e40 a) {
     {
-        Slice_entry_L24a51f _t2 = a;
+        Slice_entry_L380e40 _t2 = a;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L24a51f e = _t2.p[_t1];
+            entry_L380e40 e = _t2.p[_t1];
             if (e.disabled) {
                 bool _t4 = true;
                 bool _t5 = true;
@@ -24518,8 +24518,8 @@ static Slice_GoString lambda_1276(Env_lambda_1276 *_env, GoString elem) {
     Map_GoString_bool disabled__hv = Map_GoString_bool_make(0); __typeof__(disabled__hv) *disabled__h = &disabled__hv;
     Slice_GoString final__hv = {0}; __typeof__(final__hv) *final__h = &final__hv;
     GoFunc process = ((GoFunc){(void *)lambda_1277, &(Env_lambda_1277){seen__h, disabled__h, final__h}});
-    ((void (*)(void *, Slice_entry_L24a51f))(process).fn)((process).env, Map_GoString_Slice_entry_L24a51f_get(&(*_env->uBy), strings_ToLower(elem), NULL));
-    ((void (*)(void *, Slice_entry_L24a51f))(process).fn)((process).env, Map_GoString_Slice_entry_L24a51f_get(&(*_env->dBy), strings_ToLower(elem), NULL));
+    ((void (*)(void *, Slice_entry_L380e40))(process).fn)((process).env, Map_GoString_Slice_entry_L380e40_get(&(*_env->uBy), strings_ToLower(elem), NULL));
+    ((void (*)(void *, Slice_entry_L380e40))(process).fn)((process).env, Map_GoString_Slice_entry_L380e40_get(&(*_env->dBy), strings_ToLower(elem), NULL));
     return (*final__h);
 }
 
@@ -24556,11 +24556,11 @@ static void lambda_1272(Env_lambda_1272 *_env, GoString primary, Slice_GoString 
         return;
     }
     GoFunc collect = ((GoFunc){(void *)lambda_1273, &(Env_lambda_1273){_env->isEmpty}});
-    Slice_entry_L24a51f user = ((Slice_entry_L24a51f (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, primary);
-    Slice_entry_L24a51f defs = ((Slice_entry_L24a51f (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, primary);
+    Slice_entry_L380e40 user = ((Slice_entry_L380e40 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, primary);
+    Slice_entry_L380e40 defs = ((Slice_entry_L380e40 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, primary);
     GoFunc groupByElem = ((GoFunc){(void *)lambda_1275, &(Env_lambda_1275){0}});
-    Map_GoString_Slice_entry_L24a51f *uBy__h = go_box(Map_GoString_Slice_entry_L24a51f, ((Map_GoString_Slice_entry_L24a51f (*)(void *, Slice_entry_L24a51f))(groupByElem).fn)((groupByElem).env, user));
-    Map_GoString_Slice_entry_L24a51f *dBy__h = go_box(Map_GoString_Slice_entry_L24a51f, ((Map_GoString_Slice_entry_L24a51f (*)(void *, Slice_entry_L24a51f))(groupByElem).fn)((groupByElem).env, defs));
+    Map_GoString_Slice_entry_L380e40 *uBy__h = go_box(Map_GoString_Slice_entry_L380e40, ((Map_GoString_Slice_entry_L380e40 (*)(void *, Slice_entry_L380e40))(groupByElem).fn)((groupByElem).env, user));
+    Map_GoString_Slice_entry_L380e40 *dBy__h = go_box(Map_GoString_Slice_entry_L380e40, ((Map_GoString_Slice_entry_L380e40 (*)(void *, Slice_entry_L380e40))(groupByElem).fn)((groupByElem).env, defs));
     GoFunc *computeOrder__h = go_box(GoFunc, ((GoFunc){(void *)lambda_1276, go_box(Env_lambda_1276, ((Env_lambda_1276){uBy__h, dBy__h}))}));
     Slice_GoString *defaultOrder__h = go_box(Slice_GoString, ((Slice_GoString (*)(void *, GoString))((*computeOrder__h)).fn)(((*computeOrder__h)).env, GOSTR("default")));
     lua_LTable* *orders__h = go_box(lua_LTable*, lua_LState_NewTable((*_env->l)));
@@ -32103,15 +32103,15 @@ static bool lambda_1762(Env_lambda_1762 *_env, GoString logical) {
 }
 
 typedef struct Env_lambda_1763 { GoString *def; Storyboard *s; } Env_lambda_1763;
-static GoIface lambda_1763(Env_lambda_1763 *_env, Slice_secPair_Ld26ba1 list) {
+static GoIface lambda_1763(Env_lambda_1763 *_env, Slice_secPair_L3fd79d list) {
     GoString *clearcolor__h = go_box(GoString, (GoString){0});
     GoString *clearalpha__h = go_box(GoString, (GoString){0});
     GoString *clearlayerno__h = go_box(GoString, (GoString){0});
     GoString *layerallpos__h = go_box(GoString, (GoString){0});
     {
-        Slice_secPair_Ld26ba1 _t2 = list;
+        Slice_secPair_L3fd79d _t2 = list;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            secPair_Ld26ba1 sp = _t2.p[_t1];
+            secPair_L3fd79d sp = _t2.p[_t1];
             GoOpaque /* ini.Section */* section = sp.sec;
             GoString sectionName = sp.name;
             GoString l = strings_ToLower(sectionName);
@@ -32189,8 +32189,8 @@ static GoIface lambda_1761(Env_lambda_1761 *_env, GoOpaque /* ini.File */* src) 
     if (src == NULL) {
         return (GoIface){0};
     }
-    Slice_secPair_Ld26ba1 baseSecs = {0};
-    Slice_secPair_Ld26ba1 langSecs = {0};
+    Slice_secPair_L3fd79d baseSecs = {0};
+    Slice_secPair_L3fd79d langSecs = {0};
     GoString curLang = fn_SelectedLanguage();
     GoFunc interesting = ((GoFunc){(void *)lambda_1762, &(Env_lambda_1762){0}});
     {
@@ -32214,23 +32214,23 @@ static GoIface lambda_1761(Env_lambda_1761 *_env, GoOpaque /* ini.File */* src) 
             }
             if (has) {
                 if (go_streq(lang, curLang)) {
-                    langSecs = GO_APPEND(Slice_secPair_Ld26ba1, langSecs, (secPair_Ld26ba1){s, logical});
+                    langSecs = GO_APPEND(Slice_secPair_L3fd79d, langSecs, (secPair_L3fd79d){s, logical});
                 }
             } else {
-                baseSecs = GO_APPEND(Slice_secPair_Ld26ba1, baseSecs, (secPair_Ld26ba1){s, logical});
+                baseSecs = GO_APPEND(Slice_secPair_L3fd79d, baseSecs, (secPair_L3fd79d){s, logical});
             }
             _cont3:;
         }
     }
     GoFunc process = ((GoFunc){(void *)lambda_1763, &(Env_lambda_1763){_env->def, _env->s}});
     {
-        GoIface err = ((GoIface (*)(void *, Slice_secPair_Ld26ba1))(process).fn)((process).env, baseSecs);
+        GoIface err = ((GoIface (*)(void *, Slice_secPair_L3fd79d))(process).fn)((process).env, baseSecs);
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = ((GoIface (*)(void *, Slice_secPair_Ld26ba1))(process).fn)((process).env, langSecs);
+        GoIface err = ((GoIface (*)(void *, Slice_secPair_L3fd79d))(process).fn)((process).env, langSecs);
         if (err.type != 0) {
             return err;
         }
@@ -32328,7 +32328,7 @@ static int lambda_1769(Env_lambda_1769 *_env, GoString key) {
     return ((int)fn_Atoi(num));
 }
 
-typedef struct Env_lambda_1770 { Slice_entry_L5cd011 *items; } Env_lambda_1770;
+typedef struct Env_lambda_1770 { Slice_entry_Lfb5793 *items; } Env_lambda_1770;
 static bool lambda_1770(Env_lambda_1770 *_env, int i, int j) {
     if ((*_env->items).p[i].start != (*_env->items).p[j].start) {
         return ((*_env->items).p[i].start < (*_env->items).p[j].start);
@@ -32339,7 +32339,7 @@ static bool lambda_1770(Env_lambda_1770 *_env, int i, int j) {
     return (go_strcmp(strings_ToLower((*_env->items).p[i].key), strings_ToLower((*_env->items).p[j].key)) < 0);
 }
 
-typedef struct Env_lambda_1771 { Slice_entry_L5cd011 *items; } Env_lambda_1771;
+typedef struct Env_lambda_1771 { Slice_entry_Lfb5793 *items; } Env_lambda_1771;
 static bool lambda_1771(Env_lambda_1771 *_env, int i, int j) {
     if ((*_env->items).p[i].start != (*_env->items).p[j].start) {
         return ((*_env->items).p[i].start < (*_env->items).p[j].start);
@@ -44001,7 +44001,7 @@ Ret_bool__GoIface protocol_UdpProtocol_OnSyncRequest(protocol_UdpProtocol* u, me
 void protocol_UdpProtocol_OnMsg(protocol_UdpProtocol* u, messages_UDPMessage msg, int length) {
     bool handled = false;
     GoIface err = {0};
-    Slice_protocol_UdpProtocolDispatchFunc_Lfb2994 table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_Lfb2994, protocol_UdpProtocolDispatchFunc_Lfb2994, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
+    Slice_protocol_UdpProtocolDispatchFunc_L521273 table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_L521273, protocol_UdpProtocolDispatchFunc_L521273, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
     u16 seq = iface_Header_e9556084(msg).SequenceNumber;
     if ((iface_Header_e9556084(msg).HeaderType != 1U) && (iface_Header_e9556084(msg).HeaderType != 2U)) {
         if (iface_Header_e9556084(msg).Magic != u->remoteMagicNumber) {
@@ -58574,7 +58574,7 @@ Ret_Slice_u8__GoIface sjson_setComplexPath(GoString jstr, GoString path, GoStrin
         jstr = go_bytes2str(njson);
     }
     if (res.Indexes.len > 0) {
-        Slice_sjson_val_Lfd4cad *vals__h = go_box(Slice_sjson_val_Lfd4cad, GO_MAKE(Slice_sjson_val_Lfd4cad, sjson_val_Lfd4cad, 0, res.Indexes.len));
+        Slice_sjson_val_L5ecfcd *vals__h = go_box(Slice_sjson_val_L5ecfcd, GO_MAKE(Slice_sjson_val_L5ecfcd, sjson_val_L5ecfcd, 0, res.Indexes.len));
         gjson_Result_ForEach(res, ((GoFunc){(void *)lambda_28, go_box(Env_lambda_28, ((Env_lambda_28){vals__h}))}));
         if (res.Indexes.len != (*vals__h).len) {
             return (Ret_Slice_u8__GoIface){go_str2bytes(jstr), ((GoIface){200, (void *)(g_sjson_errNoChange)})};
@@ -58586,11 +58586,11 @@ Ret_Slice_u8__GoIface sjson_setComplexPath(GoString jstr, GoString path, GoStrin
                 _cont1:;
             }
         }
-        go_sort_slice_stable((void *)GO_TMPADDR(Slice_sjson_val_Lfd4cad, (*vals__h)), sizeof(sjson_val_Lfd4cad), ((GoFunc){(void *)lambda_30, go_box(Env_lambda_30, ((Env_lambda_30){vals__h}))}));
+        go_sort_slice_stable((void *)GO_TMPADDR(Slice_sjson_val_L5ecfcd, (*vals__h)), sizeof(sjson_val_L5ecfcd), ((GoFunc){(void *)lambda_30, go_box(Env_lambda_30, ((Env_lambda_30){vals__h}))}));
         {
-            Slice_sjson_val_Lfd4cad _t3 = (*vals__h);
+            Slice_sjson_val_L5ecfcd _t3 = (*vals__h);
             for (int _t2 = 0; _t2 < _t3.len; _t2++) {
-                sjson_val_Lfd4cad val = _t3.p[_t2];
+                sjson_val_L5ecfcd val = _t3.p[_t2];
                 gjson_Result vres = val.res;
                 int _t5 = val.index;
                 int index = _t5;
@@ -82117,11 +82117,14 @@ bool changeState_Run(changeState sc, Char* c, Slice_i32 _p1) {
             _cont3:;
         }
     }
+    if (fn_cvfBlockSpecial(crun, v)) {
+        return false;
+    }
     Char_changeState(crun, v, a, ctrl, ffx);
     return stop;
 }
 
-// selfState.Run (bytecode.go:6061), 0 TODO
+// selfState.Run (bytecode.go:6064), 0 TODO
 bool selfState_Run(selfState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("SelfState"));
     if (crun == NULL) {
@@ -82177,7 +82180,7 @@ bool selfState_Run(selfState sc, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// tagIn.Run (bytecode.go:6111), 0 TODO
+// tagIn.Run (bytecode.go:6114), 0 TODO
 bool tagIn_Run(tagIn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("TagIn"));
     if (crun == NULL) {
@@ -82270,7 +82273,7 @@ bool tagIn_Run(tagIn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// tagOut.Run (bytecode.go:6203), 0 TODO
+// tagOut.Run (bytecode.go:6206), 0 TODO
 bool tagOut_Run(tagOut sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TagOut"));
     if (crun == NULL) {
@@ -82348,7 +82351,7 @@ bool tagOut_Run(tagOut sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// destroySelf.Run (bytecode.go:6280), 0 TODO
+// destroySelf.Run (bytecode.go:6283), 0 TODO
 bool destroySelf_Run(destroySelf sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("DestroySelf"));
     if (crun == NULL) {
@@ -82389,7 +82392,7 @@ bool destroySelf_Run(destroySelf sc, Char* c, Slice_i32 _p1) {
     return (Char_destroySelf(crun, rec, rem, rtx) && self);
 }
 
-// changeAnim.Run (bytecode.go:6318), 0 TODO
+// changeAnim.Run (bytecode.go:6321), 0 TODO
 bool changeAnim_Run(changeAnim sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("ChangeAnim"));
     if (crun == NULL) {
@@ -82458,7 +82461,7 @@ bool changeAnim_Run(changeAnim sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeAnim2.Run (bytecode.go:6369), 0 TODO
+// changeAnim2.Run (bytecode.go:6372), 0 TODO
 bool changeAnim2_Run(changeAnim2 sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("ChangeAnim2"));
     if (crun == NULL) {
@@ -82517,7 +82520,7 @@ bool changeAnim2_Run(changeAnim2 sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// helper.Run (bytecode.go:6454), 0 TODO
+// helper.Run (bytecode.go:6457), 0 TODO
 bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 37U, GOSTR("Helper"));
     if (crun == NULL) {
@@ -82679,7 +82682,7 @@ bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// ctrlSet.Run (bytecode.go:6601), 0 TODO
+// ctrlSet.Run (bytecode.go:6604), 0 TODO
 bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("CtrlSet"));
     if (crun == NULL) {
@@ -82710,7 +82713,7 @@ bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// runState.Run (bytecode.go:6627), 0 TODO
+// runState.Run (bytecode.go:6630), 0 TODO
 bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RunState"));
     if (crun == NULL) {
@@ -82747,7 +82750,7 @@ bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posSet.Run (bytecode.go:6662), 0 TODO
+// posSet.Run (bytecode.go:6665), 0 TODO
 bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosSet"));
     if (crun == NULL) {
@@ -82794,7 +82797,7 @@ bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posAdd.Run (bytecode.go:6699), 0 TODO
+// posAdd.Run (bytecode.go:6702), 0 TODO
 bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosAdd"));
     if (crun == NULL) {
@@ -82841,7 +82844,7 @@ bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velSet.Run (bytecode.go:6736), 0 TODO
+// velSet.Run (bytecode.go:6739), 0 TODO
 bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelSet"));
     if (crun == NULL) {
@@ -82876,7 +82879,7 @@ bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velAdd.Run (bytecode.go:6761), 0 TODO
+// velAdd.Run (bytecode.go:6764), 0 TODO
 bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelAdd"));
     if (crun == NULL) {
@@ -82911,7 +82914,7 @@ bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velMul.Run (bytecode.go:6786), 0 TODO
+// velMul.Run (bytecode.go:6789), 0 TODO
 bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelMul"));
     if (crun == NULL) {
@@ -82945,12 +82948,12 @@ bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isPalFXParam (bytecode.go:6807), 0 TODO
+// isPalFXParam (bytecode.go:6810), 0 TODO
 bool fn_isPalFXParam(u8 paramID) {
     return ((paramID >= 0U) && (paramID <= 10U));
 }
 
-// palFX.runSub (bytecode.go:6829), 0 TODO
+// palFX.runSub (bytecode.go:6832), 0 TODO
 void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -83026,7 +83029,7 @@ void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeEx
     }
 }
 
-// palFX.Run (bytecode.go:6900), 0 TODO
+// palFX.Run (bytecode.go:6903), 0 TODO
 bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("PalFX"));
     if (crun == NULL) {
@@ -83066,7 +83069,7 @@ bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// allPalFX.Run (bytecode.go:6937), 0 TODO
+// allPalFX.Run (bytecode.go:6940), 0 TODO
 bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     PalFX_clear(g_sys.allPalFX);
     {
@@ -83087,7 +83090,7 @@ bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bgPalFX.Run (bytecode.go:6956), 0 TODO
+// bgPalFX.Run (bytecode.go:6959), 0 TODO
 bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     i32 bgid = -1;
     int bgidx = -1;
@@ -83140,7 +83143,7 @@ bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.Run (bytecode.go:7078), 0 TODO
+// explod.Run (bytecode.go:7081), 0 TODO
 bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 115U, GOSTR("Explod"));
     if (crun == NULL) {
@@ -83460,7 +83463,7 @@ bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.parseInterpolation (bytecode.go:7385), 0 TODO
+// explod.parseInterpolation (bytecode.go:7388), 0 TODO
 bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_BytecodeExp exp_, PalFXDef* pfd) {
     {
         u8 _t1 = paramID;
@@ -83538,7 +83541,7 @@ bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_
     return true;
 }
 
-// modifyExplod.Run (bytecode.go:7465), 0 TODO
+// modifyExplod.Run (bytecode.go:7468), 0 TODO
 bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     modifyExplod *sc__h = go_box(modifyExplod, sc);
     Char* *c__h = go_box(Char*, c);
@@ -83662,7 +83665,7 @@ bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gameMakeAnim.Run (bytecode.go:8112), 0 TODO
+// gameMakeAnim.Run (bytecode.go:8115), 0 TODO
 bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("GameMakeAnim"));
     if (crun == NULL) {
@@ -83732,12 +83735,12 @@ bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isAfterImageParam (bytecode.go:8172), 0 TODO
+// isAfterImageParam (bytecode.go:8175), 0 TODO
 bool fn_isAfterImageParam(u8 paramID) {
     return ((paramID >= 11U) && (paramID <= 32U));
 }
 
-// afterImage.runSub (bytecode.go:8205), 0 TODO
+// afterImage.runSub (bytecode.go:8208), 0 TODO
 void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 paramID, Slice_BytecodeExp exp_) {
     if ((paramID < 26U) || (paramID > 32U)) {
         ai->needsetup = true;
@@ -83885,7 +83888,7 @@ void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 pa
     }
 }
 
-// afterImage.Run (bytecode.go:8354), 0 TODO
+// afterImage.Run (bytecode.go:8357), 0 TODO
 bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 33U, GOSTR("AfterImage"));
     if (crun == NULL) {
@@ -83920,7 +83923,7 @@ bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// afterImageTime.Run (bytecode.go:8393), 0 TODO
+// afterImageTime.Run (bytecode.go:8396), 0 TODO
 bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("AfterImageTime"));
     if (crun == NULL) {
@@ -83958,12 +83961,12 @@ bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isHitDefParam (bytecode.go:8419), 0 TODO
+// isHitDefParam (bytecode.go:8422), 0 TODO
 bool fn_isHitDefParam(u8 paramID) {
     return (((paramID >= 33U) && (paramID <= 153U)) || fn_isPalFXParam(paramID));
 }
 
-// hitDef.runSub (bytecode.go:8554), 0 TODO
+// hitDef.runSub (bytecode.go:8557), 0 TODO
 void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -84358,7 +84361,7 @@ void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp
     }
 }
 
-// hitDef.Run (bytecode.go:8943), 0 TODO
+// hitDef.Run (bytecode.go:8946), 0 TODO
 bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("HitDef"));
     if (crun == NULL) {
@@ -84392,7 +84395,7 @@ bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// reversalDef.Run (bytecode.go:8990), 0 TODO
+// reversalDef.Run (bytecode.go:8993), 0 TODO
 bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ReversalDef"));
     if (crun == NULL) {
@@ -84435,7 +84438,7 @@ bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// projectile.Run (bytecode.go:9083), 0 TODO
+// projectile.Run (bytecode.go:9086), 0 TODO
 bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 203U, GOSTR("Projectile"));
     if (crun == NULL) {
@@ -84722,7 +84725,7 @@ bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyHitDef.Run (bytecode.go:9367), 0 TODO
+// modifyHitDef.Run (bytecode.go:9370), 0 TODO
 bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("ModifyHitDef"));
     if (crun == NULL) {
@@ -84754,7 +84757,7 @@ bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReversalDef.Run (bytecode.go:9399), 0 TODO
+// modifyReversalDef.Run (bytecode.go:9402), 0 TODO
 bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ModifyReversalDef"));
     if (crun == NULL) {
@@ -84798,7 +84801,7 @@ bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyProjectile.Run (bytecode.go:9438), 0 TODO
+// modifyProjectile.Run (bytecode.go:9441), 0 TODO
 bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     modifyProjectile *sc__h = go_box(modifyProjectile, sc);
     Char* *c__h = go_box(Char*, c);
@@ -84870,7 +84873,7 @@ bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// width.Run (bytecode.go:10579), 0 TODO
+// width.Run (bytecode.go:10582), 0 TODO
 bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Width"));
     if (crun == NULL) {
@@ -84924,7 +84927,7 @@ bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sprPriority.Run (bytecode.go:10627), 0 TODO
+// sprPriority.Run (bytecode.go:10630), 0 TODO
 bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("SprPriority"));
     if (crun == NULL) {
@@ -84960,7 +84963,7 @@ bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varSet.Run (bytecode.go:10660), 0 TODO
+// varSet.Run (bytecode.go:10663), 0 TODO
 bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarSet"));
     if (crun == NULL) {
@@ -85010,7 +85013,7 @@ bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// turn.Run (bytecode.go:10700), 0 TODO
+// turn.Run (bytecode.go:10703), 0 TODO
 bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Turn"));
     if (crun == NULL) {
@@ -85040,7 +85043,7 @@ bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetFacing.Run (bytecode.go:10726), 0 TODO
+// targetFacing.Run (bytecode.go:10729), 0 TODO
 bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetFacing"));
     if (crun == NULL) {
@@ -85083,7 +85086,7 @@ bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetBind.Run (bytecode.go:10763), 0 TODO
+// targetBind.Run (bytecode.go:10766), 0 TODO
 bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetBind"));
     if (crun == NULL) {
@@ -85138,7 +85141,7 @@ bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToTarget.Run (bytecode.go:10812), 0 TODO
+// bindToTarget.Run (bytecode.go:10815), 0 TODO
 bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("BindToTarget"));
     if (crun == NULL) {
@@ -85201,7 +85204,7 @@ bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetLifeAdd.Run (bytecode.go:10866), 0 TODO
+// targetLifeAdd.Run (bytecode.go:10869), 0 TODO
 bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("TargetLifeAdd"));
     if (crun == NULL) {
@@ -85260,7 +85263,7 @@ bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetState.Run (bytecode.go:10911), 0 TODO
+// targetState.Run (bytecode.go:10914), 0 TODO
 bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetState"));
     if (crun == NULL) {
@@ -85303,7 +85306,7 @@ bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelSet.Run (bytecode.go:10949), 0 TODO
+// targetVelSet.Run (bytecode.go:10952), 0 TODO
 bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelSet"));
     if (crun == NULL) {
@@ -85367,7 +85370,7 @@ bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelAdd.Run (bytecode.go:11005), 0 TODO
+// targetVelAdd.Run (bytecode.go:11008), 0 TODO
 bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelAdd"));
     if (crun == NULL) {
@@ -85431,7 +85434,7 @@ bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetPowerAdd.Run (bytecode.go:11059), 0 TODO
+// targetPowerAdd.Run (bytecode.go:11062), 0 TODO
 bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetPowerAdd"));
     if (crun == NULL) {
@@ -85474,7 +85477,7 @@ bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDrop.Run (bytecode.go:11094), 0 TODO
+// targetDrop.Run (bytecode.go:11097), 0 TODO
 bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("TargetDrop"));
     if (crun == NULL) {
@@ -85514,7 +85517,7 @@ bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeAdd.Run (bytecode.go:11127), 0 TODO
+// lifeAdd.Run (bytecode.go:11130), 0 TODO
 bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("LifeAdd"));
     if (crun == NULL) {
@@ -85557,7 +85560,7 @@ bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeSet.Run (bytecode.go:11162), 0 TODO
+// lifeSet.Run (bytecode.go:11165), 0 TODO
 bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("LifeSet"));
     if (crun == NULL) {
@@ -85587,7 +85590,7 @@ bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerAdd.Run (bytecode.go:11186), 0 TODO
+// powerAdd.Run (bytecode.go:11189), 0 TODO
 bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerAdd"));
     if (crun == NULL) {
@@ -85617,7 +85620,7 @@ bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerSet.Run (bytecode.go:11210), 0 TODO
+// powerSet.Run (bytecode.go:11213), 0 TODO
 bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerSet"));
     if (crun == NULL) {
@@ -85647,7 +85650,7 @@ bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitVelSet.Run (bytecode.go:11237), 0 TODO
+// hitVelSet.Run (bytecode.go:11240), 0 TODO
 bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("HitVelSet"));
     if (crun == NULL) {
@@ -85687,7 +85690,7 @@ bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// screenBound.Run (bytecode.go:11272), 0 TODO
+// screenBound.Run (bytecode.go:11275), 0 TODO
 bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ScreenBound"));
     if (crun == NULL) {
@@ -85730,7 +85733,7 @@ bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posFreeze.Run (bytecode.go:11310), 0 TODO
+// posFreeze.Run (bytecode.go:11313), 0 TODO
 bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PosFreeze"));
     if (crun == NULL) {
@@ -85762,7 +85765,7 @@ bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envShake.Run (bytecode.go:11342), 0 TODO
+// envShake.Run (bytecode.go:11345), 0 TODO
 bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     EnvShake_clear(&g_sys.SystemStateVars_.envShake);
     {
@@ -85805,7 +85808,7 @@ bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitOverride.Run (bytecode.go:11391), 0 TODO
+// hitOverride.Run (bytecode.go:11394), 0 TODO
 bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("HitOverride"));
     if (crun == NULL) {
@@ -85868,7 +85871,7 @@ bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// pause.Run (bytecode.go:11462), 0 TODO
+// pause.Run (bytecode.go:11465), 0 TODO
 bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("Pause"));
     if (crun == NULL) {
@@ -85911,7 +85914,7 @@ bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// superPause.Run (bytecode.go:11506), 0 TODO
+// superPause.Run (bytecode.go:11509), 0 TODO
 bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 12U, GOSTR("SuperPause"));
     if (crun == NULL) {
@@ -86015,7 +86018,7 @@ bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// trans.Run (bytecode.go:11607), 0 TODO
+// trans.Run (bytecode.go:11610), 0 TODO
 bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Trans"));
     if (crun == NULL) {
@@ -86055,7 +86058,7 @@ bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playerPush.Run (bytecode.go:11658), 0 TODO
+// playerPush.Run (bytecode.go:11661), 0 TODO
 bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PlayerPush"));
     if (crun == NULL) {
@@ -86090,7 +86093,7 @@ bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stateTypeValue (bytecode.go:11690), 0 TODO
+// stateTypeValue (bytecode.go:11693), 0 TODO
 Ret_i32__bool fn_stateTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -86117,7 +86120,7 @@ Ret_i32__bool fn_stateTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// moveTypeValue (bytecode.go:11709), 0 TODO
+// moveTypeValue (bytecode.go:11712), 0 TODO
 Ret_i32__bool fn_moveTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -86142,7 +86145,7 @@ Ret_i32__bool fn_moveTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// physicsTypeValue (bytecode.go:11726), 0 TODO
+// physicsTypeValue (bytecode.go:11729), 0 TODO
 Ret_i32__bool fn_physicsTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -86169,7 +86172,7 @@ Ret_i32__bool fn_physicsTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// evalTypeExp (bytecode.go:11747), 0 TODO
+// evalTypeExp (bytecode.go:11750), 0 TODO
 Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoFunc conv) {
     if (exp_.len < 2) {
         return (Ret_i32__bool){BytecodeExp_evalI(exp_.p[0], c), true};
@@ -86177,7 +86180,7 @@ Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoF
     return fn_evalTypeString(exp_.p[0], c, name, conv);
 }
 
-// evalTypeString (bytecode.go:11754), 0 TODO
+// evalTypeString (bytecode.go:11757), 0 TODO
 Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc conv) {
     BytecodeValue v = BytecodeExp_run(be, c);
     if (v.vtype != 4) {
@@ -86193,7 +86196,7 @@ Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc c
     return (Ret_i32__bool){t, ok};
 }
 
-// stateTypeSet.Run (bytecode.go:11767), 0 TODO
+// stateTypeSet.Run (bytecode.go:11770), 0 TODO
 bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("StateTypeSet"));
     if (crun == NULL) {
@@ -86254,7 +86257,7 @@ bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleDraw.Run (bytecode.go:11813), 0 TODO
+// angleDraw.Run (bytecode.go:11816), 0 TODO
 bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AngleDraw"));
     if (crun == NULL) {
@@ -86299,7 +86302,7 @@ bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleSet.Run (bytecode.go:11855), 0 TODO
+// angleSet.Run (bytecode.go:11858), 0 TODO
 bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleSet"));
     if (crun == NULL) {
@@ -86339,7 +86342,7 @@ bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleAdd.Run (bytecode.go:11891), 0 TODO
+// angleAdd.Run (bytecode.go:11894), 0 TODO
 bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleAdd"));
     if (crun == NULL) {
@@ -86373,7 +86376,7 @@ bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleMul.Run (bytecode.go:11921), 0 TODO
+// angleMul.Run (bytecode.go:11924), 0 TODO
 bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleMul"));
     if (crun == NULL) {
@@ -86413,7 +86416,7 @@ bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envColor.Run (bytecode.go:11956), 0 TODO
+// envColor.Run (bytecode.go:11959), 0 TODO
 bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     g_sys.SystemStateVars_.envcol = (Arr3_i32){{255, 255, 255}};
     g_sys.SystemStateVars_.envcol_time = 1;
@@ -86448,7 +86451,7 @@ bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// displayToClipboard.Run (bytecode.go:11985), 0 TODO
+// displayToClipboard.Run (bytecode.go:11988), 0 TODO
 bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DisplayToClipboard"));
     if (crun == NULL) {
@@ -86495,7 +86498,7 @@ bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// appendToClipboard.Run (bytecode.go:12016), 0 TODO
+// appendToClipboard.Run (bytecode.go:12019), 0 TODO
 bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AppendToClipBoard"));
     if (crun == NULL) {
@@ -86541,7 +86544,7 @@ bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// clearClipboard.Run (bytecode.go:12051), 0 TODO
+// clearClipboard.Run (bytecode.go:12054), 0 TODO
 bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ClearClipboard"));
     if (crun == NULL) {
@@ -86571,7 +86574,7 @@ bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// makeDust.Run (bytecode.go:12077), 0 TODO
+// makeDust.Run (bytecode.go:12080), 0 TODO
 bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MakeDust"));
     if (crun == NULL) {
@@ -86632,7 +86635,7 @@ bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackDist.Run (bytecode.go:12139), 0 TODO
+// attackDist.Run (bytecode.go:12142), 0 TODO
 bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AttackDist"));
     if (crun == NULL) {
@@ -86676,7 +86679,7 @@ bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackMulSet.Run (bytecode.go:12185), 0 TODO
+// attackMulSet.Run (bytecode.go:12188), 0 TODO
 bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AttackMulSet"));
     if (crun == NULL) {
@@ -86718,7 +86721,7 @@ bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// defenceMulSet.Run (bytecode.go:12223), 0 TODO
+// defenceMulSet.Run (bytecode.go:12226), 0 TODO
 bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("DefenceMulSet"));
     if (crun == NULL) {
@@ -86765,7 +86768,7 @@ bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// fallEnvShake.Run (bytecode.go:12272), 0 TODO
+// fallEnvShake.Run (bytecode.go:12275), 0 TODO
 bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("FallEnvShake"));
     if (crun == NULL) {
@@ -86800,7 +86803,7 @@ bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallDamage.Run (bytecode.go:12313), 0 TODO
+// hitFallDamage.Run (bytecode.go:12316), 0 TODO
 bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallDamage"));
     if (crun == NULL) {
@@ -86830,7 +86833,7 @@ bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallVel.Run (bytecode.go:12337), 0 TODO
+// hitFallVel.Run (bytecode.go:12340), 0 TODO
 bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallVel"));
     if (crun == NULL) {
@@ -86860,7 +86863,7 @@ bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallSet.Run (bytecode.go:12364), 0 TODO
+// hitFallSet.Run (bytecode.go:12367), 0 TODO
 bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("HitFallSet"));
     if (crun == NULL) {
@@ -86911,7 +86914,7 @@ bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRangeSet.Run (bytecode.go:12403), 0 TODO
+// varRangeSet.Run (bytecode.go:12406), 0 TODO
 bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarRangeSet"));
     if (crun == NULL) {
@@ -86951,7 +86954,7 @@ bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapPal.Run (bytecode.go:12439), 0 TODO
+// remapPal.Run (bytecode.go:12442), 0 TODO
 bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemapPal"));
     if (crun == NULL) {
@@ -86992,7 +86995,7 @@ bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stopSnd.Run (bytecode.go:12474), 0 TODO
+// stopSnd.Run (bytecode.go:12477), 0 TODO
 bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("StopSnd"));
     if (crun == NULL) {
@@ -87034,7 +87037,7 @@ bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sndPan.Run (bytecode.go:12509), 0 TODO
+// sndPan.Run (bytecode.go:12512), 0 TODO
 bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("SndPan"));
     if (crun == NULL) {
@@ -87088,7 +87091,7 @@ bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRandom.Run (bytecode.go:12547), 0 TODO
+// varRandom.Run (bytecode.go:12550), 0 TODO
 bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("VarRandom"));
     if (crun == NULL) {
@@ -87133,7 +87136,7 @@ bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gravity.Run (bytecode.go:12579), 0 TODO
+// gravity.Run (bytecode.go:12582), 0 TODO
 bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Gravity"));
     if (crun == NULL) {
@@ -87163,7 +87166,7 @@ bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToParent.Run (bytecode.go:12605), 0 TODO
+// bindToParent.Run (bytecode.go:12608), 0 TODO
 bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToParent"));
     if (crun == NULL) {
@@ -87226,7 +87229,7 @@ bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToRoot.Run (bytecode.go:12653), 0 TODO
+// bindToRoot.Run (bytecode.go:12656), 0 TODO
 bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToRoot"));
     if (crun == NULL) {
@@ -87289,7 +87292,7 @@ bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeExplod.Run (bytecode.go:12707), 0 TODO
+// removeExplod.Run (bytecode.go:12710), 0 TODO
 bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveExplod"));
     if (crun == NULL) {
@@ -87324,7 +87327,7 @@ bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explodBindTime.Run (bytecode.go:12737), 0 TODO
+// explodBindTime.Run (bytecode.go:12740), 0 TODO
 bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ExplodBindTime"));
     if (crun == NULL) {
@@ -87359,7 +87362,7 @@ bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// moveHitReset.Run (bytecode.go:12765), 0 TODO
+// moveHitReset.Run (bytecode.go:12768), 0 TODO
 bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MoveHitReset"));
     if (crun == NULL) {
@@ -87389,7 +87392,7 @@ bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitAdd.Run (bytecode.go:12789), 0 TODO
+// hitAdd.Run (bytecode.go:12792), 0 TODO
 bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitAdd"));
     if (crun == NULL) {
@@ -87419,7 +87422,7 @@ bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// offset.Run (bytecode.go:12814), 0 TODO
+// offset.Run (bytecode.go:12817), 0 TODO
 bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("Offset"));
     if (crun == NULL) {
@@ -87451,7 +87454,7 @@ bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// victoryQuote.Run (bytecode.go:12840), 0 TODO
+// victoryQuote.Run (bytecode.go:12843), 0 TODO
 bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("VictoryQuote"));
     if (crun == NULL) {
@@ -87483,7 +87486,7 @@ bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// zoom.Run (bytecode.go:12871), 0 TODO
+// zoom.Run (bytecode.go:12874), 0 TODO
 bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     Arr2_f32 pos = (Arr2_f32){{0x0p+00f, 0x0p+00f}};
     i32 t = 1;
@@ -87550,7 +87553,7 @@ bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// forceFeedback.Run (bytecode.go:12946), 0 TODO
+// forceFeedback.Run (bytecode.go:12949), 0 TODO
 bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("ForceFeedback"));
     if (crun == NULL) {
@@ -87657,7 +87660,7 @@ bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertCommand.Run (bytecode.go:13053), 0 TODO
+// assertCommand.Run (bytecode.go:13056), 0 TODO
 bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AssertCommand"));
     if (crun == NULL) {
@@ -87692,7 +87695,7 @@ bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertAnalogVector.Run (bytecode.go:13087), 0 TODO
+// assertAnalogVector.Run (bytecode.go:13090), 0 TODO
 bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("AssertAnalogVector"));
     if (crun == NULL) {
@@ -87740,7 +87743,7 @@ bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertInput.Run (bytecode.go:13130), 0 TODO
+// assertInput.Run (bytecode.go:13133), 0 TODO
 bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AssertInput"));
     if (crun == NULL) {
@@ -87782,7 +87785,7 @@ bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeMovelist.Run (bytecode.go:13166), 0 TODO
+// changeMovelist.Run (bytecode.go:13169), 0 TODO
 bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ChangeMovelist"));
     if (crun == NULL) {
@@ -87822,7 +87825,7 @@ bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dialogue.Run (bytecode.go:13198), 0 TODO
+// dialogue.Run (bytecode.go:13201), 0 TODO
 bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     if (!g_sys.motif.di.enabled) {
         return false;
@@ -87865,7 +87868,7 @@ bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsAdd.Run (bytecode.go:13236), 0 TODO
+// dizzyPointsAdd.Run (bytecode.go:13239), 0 TODO
 bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DizzyPointsAdd"));
     if (crun == NULL) {
@@ -87898,7 +87901,7 @@ bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsSet.Run (bytecode.go:13263), 0 TODO
+// dizzyPointsSet.Run (bytecode.go:13266), 0 TODO
 bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzyPointsSet"));
     if (crun == NULL) {
@@ -87928,7 +87931,7 @@ bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzySet.Run (bytecode.go:13287), 0 TODO
+// dizzySet.Run (bytecode.go:13290), 0 TODO
 bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzySet"));
     if (crun == NULL) {
@@ -87959,7 +87962,7 @@ bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardBreakSet.Run (bytecode.go:13312), 0 TODO
+// guardBreakSet.Run (bytecode.go:13315), 0 TODO
 bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardBreakSet"));
     if (crun == NULL) {
@@ -87990,7 +87993,7 @@ bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsAdd.Run (bytecode.go:13338), 0 TODO
+// guardPointsAdd.Run (bytecode.go:13341), 0 TODO
 bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("GuardPointsAdd"));
     if (crun == NULL) {
@@ -88023,7 +88026,7 @@ bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsSet.Run (bytecode.go:13365), 0 TODO
+// guardPointsSet.Run (bytecode.go:13368), 0 TODO
 bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardPointsSet"));
     if (crun == NULL) {
@@ -88053,7 +88056,7 @@ bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifebarAction.Run (bytecode.go:13400), 0 TODO
+// lifebarAction.Run (bytecode.go:13403), 0 TODO
 bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 23U, GOSTR("LifebarAction"));
     if (crun == NULL) {
@@ -88142,7 +88145,7 @@ bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// loadState.Run (bytecode.go:13484), 0 TODO
+// loadState.Run (bytecode.go:13487), 0 TODO
 bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -88168,7 +88171,7 @@ bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapSet.Run (bytecode.go:13507), 0 TODO
+// mapSet.Run (bytecode.go:13510), 0 TODO
 bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MapSet"));
     if (crun == NULL) {
@@ -88214,7 +88217,7 @@ bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// matchRestart.Run (bytecode.go:13564), 0 TODO
+// matchRestart.Run (bytecode.go:13567), 0 TODO
 bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     GoString s = (GoString){0};
     bool reloadFlag = false;
@@ -88336,7 +88339,7 @@ bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// printToConsole.Run (bytecode.go:13662), 0 TODO
+// printToConsole.Run (bytecode.go:13665), 0 TODO
 bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     Slice_GoIface params = (Slice_GoIface){0};
     {
@@ -88372,7 +88375,7 @@ bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeAdd.Run (bytecode.go:13688), 0 TODO
+// redLifeAdd.Run (bytecode.go:13691), 0 TODO
 bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RedLifeAdd"));
     if (crun == NULL) {
@@ -88405,7 +88408,7 @@ bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeSet.Run (bytecode.go:13715), 0 TODO
+// redLifeSet.Run (bytecode.go:13718), 0 TODO
 bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RedLifeSet"));
     if (crun == NULL) {
@@ -88435,7 +88438,7 @@ bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapSprite.Run (bytecode.go:13742), 0 TODO
+// remapSprite.Run (bytecode.go:13745), 0 TODO
 bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("RemapSprite"));
     if (crun == NULL) {
@@ -88486,7 +88489,7 @@ bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeAdd.Run (bytecode.go:13792), 0 TODO
+// roundTimeAdd.Run (bytecode.go:13795), 0 TODO
 bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -88514,7 +88517,7 @@ bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeSet.Run (bytecode.go:13813), 0 TODO
+// roundTimeSet.Run (bytecode.go:13816), 0 TODO
 bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -88542,7 +88545,7 @@ bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// saveFile.Run (bytecode.go:13837), 0 TODO
+// saveFile.Run (bytecode.go:13840), 0 TODO
 bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -88685,7 +88688,7 @@ bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// loadFile.Run (bytecode.go:13924), 0 TODO
+// loadFile.Run (bytecode.go:13927), 0 TODO
 bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -88876,7 +88879,7 @@ bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// saveState.Run (bytecode.go:14050), 0 TODO
+// saveState.Run (bytecode.go:14053), 0 TODO
 bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -88902,7 +88905,7 @@ bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// scoreAdd.Run (bytecode.go:14070), 0 TODO
+// scoreAdd.Run (bytecode.go:14073), 0 TODO
 bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ScoreAdd"));
     if (crun == NULL) {
@@ -88932,7 +88935,7 @@ bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shaderSet.Run (bytecode.go:14104), 0 TODO
+// shaderSet.Run (bytecode.go:14107), 0 TODO
 bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("ShaderSet"));
     if (crun == NULL) {
@@ -89023,7 +89026,7 @@ bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// storyboard.Run (bytecode.go:14191), 0 TODO
+// storyboard.Run (bytecode.go:14194), 0 TODO
 bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("Storyboard"));
     if (crun == NULL) {
@@ -89118,7 +89121,7 @@ bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStoryboard.Run (bytecode.go:14263), 0 TODO
+// modifyStoryboard.Run (bytecode.go:14266), 0 TODO
 bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* *c__h = go_box(Char*, c);
     Char* *crun__h = go_box(Char*, fn_getRedirectedChar((*c__h), sc, 9U, GOSTR("ModifyStoryboard")));
@@ -89134,7 +89137,7 @@ bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeStoryboard.Run (bytecode.go:14356), 0 TODO
+// removeStoryboard.Run (bytecode.go:14359), 0 TODO
 bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RemoveStoryboard"));
     if (crun == NULL) {
@@ -89161,7 +89164,7 @@ bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl.Run (bytecode.go:14401), 0 TODO
+// modifyBGCtrl.Run (bytecode.go:14404), 0 TODO
 bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -89333,7 +89336,7 @@ bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl3d.Run (bytecode.go:14540), 0 TODO
+// modifyBGCtrl3d.Run (bytecode.go:14543), 0 TODO
 bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -89381,7 +89384,7 @@ bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBgm.Run (bytecode.go:14584), 0 TODO
+// modifyBgm.Run (bytecode.go:14587), 0 TODO
 bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     if (g_sys.bgm.ctrl == NULL) {
         return false;
@@ -89488,7 +89491,7 @@ bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifySnd.Run (bytecode.go:14685), 0 TODO
+// modifySnd.Run (bytecode.go:14688), 0 TODO
 bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 14U, GOSTR("ModifySnd"));
     if (crun == NULL) {
@@ -89663,7 +89666,7 @@ bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playBgm.Run (bytecode.go:14830), 0 TODO
+// playBgm.Run (bytecode.go:14833), 0 TODO
 bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("PlayBGM"));
     if (crun == NULL) {
@@ -89815,7 +89818,7 @@ bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDizzyPointsAdd.Run (bytecode.go:14918), 0 TODO
+// targetDizzyPointsAdd.Run (bytecode.go:14921), 0 TODO
 bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetDizzyPointsAdd"));
     if (crun == NULL) {
@@ -89861,7 +89864,7 @@ bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetGuardPointsAdd.Run (bytecode.go:14958), 0 TODO
+// targetGuardPointsAdd.Run (bytecode.go:14961), 0 TODO
 bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetGuardPointsAdd"));
     if (crun == NULL) {
@@ -89907,7 +89910,7 @@ bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetRedLifeAdd.Run (bytecode.go:14998), 0 TODO
+// targetRedLifeAdd.Run (bytecode.go:15001), 0 TODO
 bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetRedLifeAdd"));
     if (crun == NULL) {
@@ -89956,7 +89959,7 @@ bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetScoreAdd.Run (bytecode.go:15041), 0 TODO
+// targetScoreAdd.Run (bytecode.go:15044), 0 TODO
 bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetScoreAdd"));
     if (crun == NULL) {
@@ -89999,7 +90002,7 @@ bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// text.Run (bytecode.go:15108), 0 TODO
+// text.Run (bytecode.go:15111), 0 TODO
 bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 44U, GOSTR("Text"));
     if (crun == NULL) {
@@ -90268,7 +90271,7 @@ bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyText.Run (bytecode.go:15346), 0 TODO
+// modifyText.Run (bytecode.go:15349), 0 TODO
 bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     modifyText *sc__h = go_box(modifyText, sc);
     Char* *c__h = go_box(Char*, c);
@@ -90326,7 +90329,7 @@ bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeText.Run (bytecode.go:15678), 0 TODO
+// removeText.Run (bytecode.go:15681), 0 TODO
 bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveText"));
     if (crun == NULL) {
@@ -90361,7 +90364,7 @@ bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// createPlatform.Run (bytecode.go:15717), 0 TODO
+// createPlatform.Run (bytecode.go:15720), 0 TODO
 bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("CreatePlatform"));
     if (crun == NULL) {
@@ -90416,7 +90419,7 @@ bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageVar.Run (bytecode.go:15869), 0 TODO
+// modifyStageVar.Run (bytecode.go:15872), 0 TODO
 bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     Stage* s = g_sys.stage;
     bool shouldResetCamera = false;
@@ -90739,7 +90742,7 @@ bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// cameraCtrl.Run (bytecode.go:16185), 0 TODO
+// cameraCtrl.Run (bytecode.go:16188), 0 TODO
 bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -90780,7 +90783,7 @@ bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// height.Run (bytecode.go:16217), 0 TODO
+// height.Run (bytecode.go:16220), 0 TODO
 bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Height"));
     if (crun == NULL) {
@@ -90817,7 +90820,7 @@ bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depth.Run (bytecode.go:16251), 0 TODO
+// depth.Run (bytecode.go:16254), 0 TODO
 bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Depth"));
     if (crun == NULL) {
@@ -90871,7 +90874,7 @@ bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depthBound.Run (bytecode.go:16299), 0 TODO
+// depthBound.Run (bytecode.go:16302), 0 TODO
 bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DepthBound"));
     if (crun == NULL) {
@@ -90907,7 +90910,7 @@ bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyPlayer.Run (bytecode.go:16354), 0 TODO
+// modifyPlayer.Run (bytecode.go:16357), 0 TODO
 bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 21U, GOSTR("ModifyPlayer"));
     if (crun == NULL) {
@@ -91027,7 +91030,7 @@ bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// getHitVarSet.Run (bytecode.go:16516), 0 TODO
+// getHitVarSet.Run (bytecode.go:16519), 0 TODO
 bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 48U, GOSTR("GetHitVarSet"));
     if (crun == NULL) {
@@ -91150,7 +91153,7 @@ bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// groundLevelOffset.Run (bytecode.go:16634), 0 TODO
+// groundLevelOffset.Run (bytecode.go:16637), 0 TODO
 bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GroundLevelOffset"));
     if (crun == NULL) {
@@ -91181,7 +91184,7 @@ bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetAdd.Run (bytecode.go:16660), 0 TODO
+// targetAdd.Run (bytecode.go:16663), 0 TODO
 bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("TargetAdd"));
     if (crun == NULL) {
@@ -91213,7 +91216,7 @@ bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformClsn.Run (bytecode.go:16692), 0 TODO
+// transformClsn.Run (bytecode.go:16695), 0 TODO
 bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TransformClsn"));
     if (crun == NULL) {
@@ -91290,7 +91293,7 @@ bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformSprite.Run (bytecode.go:16763), 0 TODO
+// transformSprite.Run (bytecode.go:16766), 0 TODO
 bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TransformSprite"));
     if (crun == NULL) {
@@ -91334,7 +91337,7 @@ bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageBG.Run (bytecode.go:16827), 0 TODO
+// modifyStageBG.Run (bytecode.go:16830), 0 TODO
 bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     modifyStageBG *sc__h = go_box(modifyStageBG, sc);
     Char* *c__h = go_box(Char*, c);
@@ -91387,7 +91390,7 @@ bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyShadow.Run (bytecode.go:17062), 0 TODO
+// modifyShadow.Run (bytecode.go:17065), 0 TODO
 bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyShadow"));
     if (crun == NULL) {
@@ -91537,7 +91540,7 @@ bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReflection.Run (bytecode.go:17223), 0 TODO
+// modifyReflection.Run (bytecode.go:17226), 0 TODO
 bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyReflection"));
     if (crun == NULL) {
@@ -91687,7 +91690,7 @@ bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shiftInput.Run (bytecode.go:17360), 0 TODO
+// shiftInput.Run (bytecode.go:17363), 0 TODO
 bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ShiftInput"));
     if (crun == NULL) {
@@ -91739,7 +91742,7 @@ bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// overrideClsn.Run (bytecode.go:17410), 0 TODO
+// overrideClsn.Run (bytecode.go:17413), 0 TODO
 bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("OverrideClsn"));
     if (crun == NULL) {
@@ -91814,7 +91817,7 @@ bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapReset.Run (bytecode.go:17480), 0 TODO
+// mapReset.Run (bytecode.go:17483), 0 TODO
 bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MapReset"));
     if (crun == NULL) {
@@ -91847,13 +91850,13 @@ bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// newStateBytecode (bytecode.go:17518), 0 TODO
+// newStateBytecode (bytecode.go:17521), 0 TODO
 StateBytecode* fn_newStateBytecode(int pn) {
     StateBytecode* sb = go_box(StateBytecode, (StateBytecode){.stateType = 1, .moveType = 32768, .physics = 16, .playerNo = pn, .block = (*fn_newStateBlock())});
     return sb;
 }
 
-// StateBytecode.init (bytecode.go:17529), 0 TODO
+// StateBytecode.init (bytecode.go:17532), 0 TODO
 void StateBytecode_init(StateBytecode* sb, Char* c) {
     g_sys.workingState = sb;
     StateType _t1 = sb->stateType;
@@ -91914,7 +91917,7 @@ void StateBytecode_init(StateBytecode* sb, Char* c) {
     stateDef_Run(sb->stateDef, c);
 }
 
-// StateBytecode.run (bytecode.go:17585), 0 TODO
+// StateBytecode.run (bytecode.go:17588), 0 TODO
 bool StateBytecode_run(StateBytecode* sb, Char* c) {
     bool changeState = {0};
     Slice_i32 _t1 = sb->ctrlsps;
@@ -91945,7 +91948,7 @@ bool StateBytecode_run(StateBytecode* sb, Char* c) {
     return changeState;
 }
 
-// BytecodeExp.pushTrigger (bytecode.go:17611), 0 TODO
+// BytecodeExp.pushTrigger (bytecode.go:17614), 0 TODO
 void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     {
         OpCode _t1 = t;
@@ -91995,7 +91998,7 @@ void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     }
 }
 
-// BytecodeExp.cmpConst (bytecode.go:17657), 0 TODO
+// BytecodeExp.cmpConst (bytecode.go:17660), 0 TODO
 void BytecodeExp_cmpConst(BytecodeExp be, OpCode cmp, BytecodeValue k) {
     {
         OpCode _t1 = cmp;
@@ -94327,7 +94330,7 @@ Slice_ProjectilePtr Projectile_sortOthersByDistance(Projectile* p, Slice_Project
     if (projectiles.len < 2) {
         return projectiles;
     }
-    Slice_pair_L9a2a44 *pairs__h = go_box(Slice_pair_L9a2a44, GO_MAKE(Slice_pair_L9a2a44, pair_L9a2a44, projectiles.len, 0));
+    Slice_pair_L912ecb *pairs__h = go_box(Slice_pair_L912ecb, GO_MAKE(Slice_pair_L912ecb, pair_L912ecb, projectiles.len, 0));
     {
         Slice_ProjectilePtr _t2 = projectiles;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -94337,16 +94340,16 @@ Slice_ProjectilePtr Projectile_sortOthersByDistance(Projectile* p, Slice_Project
             f32 dy = ((p->pos.v[1] * p->localscl) - (pr->pos.v[1] * pr->localscl));
             f32 dz = ((p->pos.v[2] * p->localscl) - (pr->pos.v[2] * pr->localscl));
             f32 dist = (((dx * dx) + (dy * dy)) + (dz * dz));
-            (*pairs__h).p[idx] = (pair_L9a2a44){.pr = pr, .dist = dist};
+            (*pairs__h).p[idx] = (pair_L912ecb){.pr = pr, .dist = dist};
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_pair_L9a2a44, (*pairs__h)), sizeof(pair_L9a2a44), ((GoFunc){(void *)lambda_487, go_box(Env_lambda_487, ((Env_lambda_487){pairs__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_pair_L912ecb, (*pairs__h)), sizeof(pair_L912ecb), ((GoFunc){(void *)lambda_487, go_box(Env_lambda_487, ((Env_lambda_487){pairs__h}))}));
     {
-        Slice_pair_L9a2a44 _t5 = (*pairs__h);
+        Slice_pair_L912ecb _t5 = (*pairs__h);
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
             int i = _t4;
-            pair_L9a2a44 pair = _t5.p[_t4];
+            pair_L912ecb pair = _t5.p[_t4];
             projectiles.p[i] = pair.pr;
             _cont6:;
         }
@@ -94680,7 +94683,7 @@ void StateState_clear(StateState* ss) {
     ss->sb = go_box(StateBytecode, (StateBytecode){0});
 }
 
-// newChar (char.go:3843), 0 TODO
+// newChar (char.go:3844), 0 TODO
 Char* fn_newChar(int n, int idx) {
     Char* c = {0};
     c = go_box(Char, (Char){0});
@@ -94689,12 +94692,12 @@ Char* fn_newChar(int n, int idx) {
     return c;
 }
 
-// Char.warn (char.go:3849), 0 TODO
+// Char.warn (char.go:3850), 0 TODO
 GoString Char_warn(Char* c) {
     return fmt_Sprintf(GOSTR("%v: WARNING: %v (%v) in state %v: "), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){2, go_box_a(int, g_sys.SystemStateVars_.tickCount)}), ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){5, go_box_a(i32, c->ss.no)})));
 }
 
-// Char.panic (char.go:3853), 0 TODO
+// Char.panic (char.go:3854), 0 TODO
 void Char_panic(Char* c, GoString msg) {
     StateBytecode* st = c->ss.sb;
     if (g_sys.workingState != st) {
@@ -94703,7 +94706,7 @@ void Char_panic(Char* c, GoString msg) {
     go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("%s\nChar name: %v\nState source: %v\nState dump: %+v\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){17, go_box(GoString, msg)}), ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){17, go_box(GoString, g_sys.cgi.v[st->playerNo].def)}), ((GoIface){302, (void *)(st)}))))}));
 }
 
-// Char.init (char.go:3862), 0 TODO
+// Char.init (char.go:3863), 0 TODO
 void Char_init(Char* c, int n, int idx) {
     (*c) = (Char){.playerNo = n, .helperIndex = idx, .controller = n, .analogAxes = (Arr6_f32){{}}, .animPN = n, .id = -1, .parentId = -1, .hoverIdx = -1, .mctype = 0, .ownpal = true, .facing = 0x1p+00f, .minus = 3, .winquote = -1, .movelist = 0, .zScale = 0x1p+00f, .CharSystemVar_ = (CharSystemVar){.superDefenseMul = 0x1p+00f, .fallDefenseMul = 0x1p+00f, .customDefense = 0x1p+00f, .finalDefense = 0x1p+00, .projection = 0}};
     if (idx == 0) {
@@ -94725,7 +94728,7 @@ void Char_init(Char* c, int n, int idx) {
     Char_clearState(c);
 }
 
-// Char.clearState (char.go:3921), 0 TODO
+// Char.clearState (char.go:3922), 0 TODO
 void Char_clearState(Char* c) {
     StateState_clear(&c->ss);
     HitDef_reset(&c->hitdef, c, NULL);
@@ -94759,7 +94762,7 @@ void Char_clearState(Char* c) {
     CustomShader_clear(&c->customShader);
 }
 
-// Char.clsnOverlapTrigger (char.go:3946), 0 TODO
+// Char.clsnOverlapTrigger (char.go:3947), 0 TODO
 bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2) {
     Char* getter = System_playerID(&g_sys, pid);
     if (getter == NULL) {
@@ -94780,18 +94783,18 @@ bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2) {
     return Char_clsnCheck(c, getter, box1, box2, false);
 }
 
-// Char.enemyNearP2Clear (char.go:3988), 0 TODO
+// Char.enemyNearP2Clear (char.go:3989), 0 TODO
 void Char_enemyNearP2Clear(Char* c) {
     c->enemyNearList = GO_SLICE(Slice_i32, c->enemyNearList, 0, 0);
     c->p2EnemyList = GO_SLICE(Slice_i32, c->p2EnemyList, 0, 0);
 }
 
-// Char.sortOthersByDistance (char.go:3994), 0 TODO
+// Char.sortOthersByDistance (char.go:3995), 0 TODO
 Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2list) {
     if (enemies.len < 2) {
         return enemies;
     }
-    Slice_pair_L801455 *pairs__h = go_box(Slice_pair_L801455, GO_MAKE(Slice_pair_L801455, pair_L801455, enemies.len, 0));
+    Slice_pair_Lb56028 *pairs__h = go_box(Slice_pair_Lb56028, GO_MAKE(Slice_pair_Lb56028, pair_Lb56028, enemies.len, 0));
     {
         Slice_CharPtr _t2 = enemies;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -94812,16 +94815,16 @@ Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2l
                 }
                 sortDist = ((f32)fn_cvfHypot(((f64)effectiveX), ((f64)distZ)));
             }
-            (*pairs__h).p[idx] = (pair_L801455){.ch = e, .dist = sortDist};
+            (*pairs__h).p[idx] = (pair_Lb56028){.ch = e, .dist = sortDist};
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_pair_L801455, (*pairs__h)), sizeof(pair_L801455), ((GoFunc){(void *)lambda_492, go_box(Env_lambda_492, ((Env_lambda_492){pairs__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_pair_Lb56028, (*pairs__h)), sizeof(pair_Lb56028), ((GoFunc){(void *)lambda_492, go_box(Env_lambda_492, ((Env_lambda_492){pairs__h}))}));
     {
-        Slice_pair_L801455 _t7 = (*pairs__h);
+        Slice_pair_Lb56028 _t7 = (*pairs__h);
         for (int _t6 = 0; _t6 < _t7.len; _t6++) {
             int i = _t6;
-            pair_L801455 p = _t7.p[_t6];
+            pair_Lb56028 p = _t7.p[_t6];
             enemies.p[i] = p.ch;
             _cont8:;
         }
@@ -94829,7 +94832,7 @@ Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2l
     return enemies;
 }
 
-// Char.prepareNextRound (char.go:4059), 0 TODO
+// Char.prepareNextRound (char.go:4060), 0 TODO
 void Char_prepareNextRound(Char* c) {
     Char_sysVarRangeSet(c, 0, 2147483647, 0);
     Char_sysFvarRangeSet(c, 0, 2147483647, 0x0p+00f);
@@ -94859,7 +94862,7 @@ void Char_prepareNextRound(Char* c) {
     CustomShader_clear(&c->customShader);
 }
 
-// Char.gi (char.go:4101), 0 TODO
+// Char.gi (char.go:4102), 0 TODO
 CharGlobalInfo* Char_gi(Char* c) {
     if (c->stillLoading) {
         go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("gi() called on char %v (pn %v) while it's still loading"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){2, go_box_a(int, c->playerNo)}))))}));
@@ -94867,12 +94870,12 @@ CharGlobalInfo* Char_gi(Char* c) {
     return (&g_sys.cgi.v[c->playerNo]);
 }
 
-// Char.stOgi (char.go:4110), 0 TODO
+// Char.stOgi (char.go:4111), 0 TODO
 CharGlobalInfo* Char_stOgi(Char* c) {
     return Char_gi(Char_stateOwner(c));
 }
 
-// Char.stWgi (char.go:4120), 0 TODO
+// Char.stWgi (char.go:4121), 0 TODO
 CharGlobalInfo* Char_stWgi(Char* c) {
     if (c->minus == 0) {
         return Char_stOgi(c);
@@ -94881,12 +94884,12 @@ CharGlobalInfo* Char_stWgi(Char* c) {
     }
 }
 
-// Char.si (char.go:4129), 0 TODO
+// Char.si (char.go:4130), 0 TODO
 SelectChar* Char_si(Char* c) {
     return (&g_sys.sel.charlist.p[c->selectNo]);
 }
 
-// Char.ocd (char.go:4133), 0 TODO
+// Char.ocd (char.go:4134), 0 TODO
 OverrideCharData* Char_ocd(Char* c) {
     int team = c->teamside;
     if (team == -1) {
@@ -94901,7 +94904,7 @@ OverrideCharData* Char_ocd(Char* c) {
     return GameParams_ensureOverride(g_sys.sel.gameParams, team, c->memberNo);
 }
 
-// Char.applyMapOverrides (char.go:4147), 0 TODO
+// Char.applyMapOverrides (char.go:4148), 0 TODO
 void Char_applyMapOverrides(Char* c) {
     OverrideCharData* _t1 = Char_ocd(c);
     OverrideCharData* ocd = _t1;
@@ -94922,7 +94925,7 @@ void Char_applyMapOverrides(Char* c) {
     }
 }
 
-// Char.resetModifyPlayer (char.go:4162), 0 TODO
+// Char.resetModifyPlayer (char.go:4163), 0 TODO
 void Char_resetModifyPlayer(Char* c) {
     CharGlobalInfo* _t1 = Char_gi(c);
     CharGlobalInfo* gi = _t1;
@@ -94937,7 +94940,7 @@ void Char_resetModifyPlayer(Char* c) {
     c->movelist = 0;
 }
 
-// Char.load (char.go:4176), 0 TODO
+// Char.load (char.go:4177), 0 TODO
 GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
     Char* *c__h = go_box(Char*, c);
     CharGlobalInfo* *gi__h = go_box(CharGlobalInfo*, gi);
@@ -94988,7 +94991,7 @@ GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
     bool lanMapArray = _t15;
     bool shaders = true;
     bool lanShaders = true;
-    Map_int_fontSpec_L7f1af4 fntSpecs__hv = Map_int_fontSpec_L7f1af4_make(0); __typeof__(fntSpecs__hv) *fntSpecs__h = &fntSpecs__hv;
+    Map_int_fontSpec_Lf3d9de fntSpecs__hv = Map_int_fontSpec_Lf3d9de_make(0); __typeof__(fntSpecs__hv) *fntSpecs__h = &fntSpecs__hv;
     GoFunc parseFonts = ((GoFunc){(void *)lambda_493, &(Env_lambda_493){fntSpecs__h}});
     GoString *langPrefix__h = go_box(GoString, go_strcat(g_sys.cfg.Config.Language, GOSTR(".")));
     {
@@ -95256,7 +95259,7 @@ GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
         GoMapIter _t59 = gomap_iter((GoMap *)&(*fntSpecs__h));
         while (gomap_next(&_t59)) {
             int idx = *(int *)_t59.key;
-            fontSpec_L7f1af4 *spec__h = go_box(fontSpec_L7f1af4, *(fontSpec_L7f1af4 *)_t59.val);
+            fontSpec_Lf3d9de *spec__h = go_box(fontSpec_Lf3d9de, *(fontSpec_Lf3d9de *)_t59.val);
             if ((*spec__h).path.len == 0) {
                 continue;
             }
@@ -95269,7 +95272,7 @@ GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
     return (GoIface){0};
 }
 
-// Char.loadPalettes (char.go:4769), 0 TODO
+// Char.loadPalettes (char.go:4770), 0 TODO
 void Char_loadPalettes(Char* c) {
     CharGlobalInfo* _t1 = Char_gi(c);
     CharGlobalInfo* gi__hv = _t1; __typeof__(gi__hv) *gi__h = &gi__hv;
@@ -95461,7 +95464,7 @@ void Char_loadPalettes(Char* c) {
     (*gi__h)->remappedpal = (Arr2_i32){{1, (*gi__h)->palno}};
 }
 
-// Char.loadFx (char.go:4941), 0 TODO
+// Char.loadFx (char.go:4942), 0 TODO
 GoIface Char_loadFx(Char* c, GoString def, CharGlobalInfo* gi) {
     gi->fxPath = (Slice_GoString){0};
     Ret_GoString__GoIface _t1 = fn_LoadText(def);
@@ -95567,20 +95570,20 @@ GoIface Char_loadFx(Char* c, GoString def, CharGlobalInfo* gi) {
     return (GoIface){0};
 }
 
-// Char.clearHitCount (char.go:5012), 0 TODO
+// Char.clearHitCount (char.go:5013), 0 TODO
 void Char_clearHitCount(Char* c) {
     c->CharSystemVar_.hitCount = 0;
     c->CharSystemVar_.uniqHitCount = 0;
     c->CharSystemVar_.guardCount = 0;
 }
 
-// Char.clearMoveHit (char.go:5018), 0 TODO
+// Char.clearMoveHit (char.go:5019), 0 TODO
 void Char_clearMoveHit(Char* c) {
     c->mctime = 0;
     c->CharSystemVar_.counterHit = false;
 }
 
-// Char.changeAnimEx (char.go:5030), 0 TODO
+// Char.changeAnimEx (char.go:5031), 0 TODO
 void Char_changeAnimEx(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx) {
     Animation* a = Char_getAnimSprite(c, animNo, animPlayerNo, spritePlayerNo, ffx, c->ownpal);
     if (a == NULL) {
@@ -95607,7 +95610,7 @@ void Char_changeAnimEx(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo
     Char_updateCurFrame(c);
 }
 
-// Char.changeAnim (char.go:5071), 0 TODO
+// Char.changeAnim (char.go:5072), 0 TODO
 void Char_changeAnim(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx) {
     if ((animNo < 0) && (animNo != -2)) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("attempted change to negative anim (different from -2)"), (Slice_GoIface){0})));
@@ -95632,7 +95635,7 @@ void Char_changeAnim(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, 
     Char_changeAnimEx(c, animNo, animPlayerNo, spritePlayerNo, ffx);
 }
 
-// Char.changeAnim2 (char.go:5099), 0 TODO
+// Char.changeAnim2 (char.go:5100), 0 TODO
 void Char_changeAnim2(Char* c, i32 animNo, int animPlayerNo, GoString ffx) {
     if ((animNo < 0) && (animNo != -2)) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("attempted change to negative anim (different from -2)"), (Slice_GoIface){0})));
@@ -95641,7 +95644,7 @@ void Char_changeAnim2(Char* c, i32 animNo, int animPlayerNo, GoString ffx) {
     Char_changeAnimEx(c, animNo, animPlayerNo, c->playerNo, ffx);
 }
 
-// Char.setAnimElem (char.go:5108), 0 TODO
+// Char.setAnimElem (char.go:5109), 0 TODO
 void Char_setAnimElem(Char* c, i32 elem, i32 elemtime) {
     if (c->anim == NULL) {
         return;
@@ -95663,7 +95666,7 @@ void Char_setAnimElem(Char* c, i32 elem, i32 elemtime) {
     Char_updateCurFrame(c);
 }
 
-// Char.setAnimElemTo (char.go:5136), 0 TODO
+// Char.setAnimElemTo (char.go:5137), 0 TODO
 void Char_setAnimElemTo(Char* c, Animation* anim, i32* animelem) {
     if (anim != NULL) {
         if (((*animelem) < 1) || (((int)(*animelem)) > anim->frames.len)) {
@@ -95673,12 +95676,12 @@ void Char_setAnimElemTo(Char* c, Animation* anim, i32* animelem) {
     }
 }
 
-// Char.scf (char.go:5166), 0 TODO
+// Char.scf (char.go:5167), 0 TODO
 bool Char_scf(Char* c, SystemCharFlag scf) {
     return ((c->CharSystemVar_.systemFlag & scf) != 0U);
 }
 
-// Char.setSCF (char.go:5170), 0 TODO
+// Char.setSCF (char.go:5171), 0 TODO
 void Char_setSCF(Char* c, SystemCharFlag scf, bool on) {
     if (on) {
         c->CharSystemVar_.systemFlag |= scf;
@@ -95690,12 +95693,12 @@ void Char_setSCF(Char* c, SystemCharFlag scf, bool on) {
     }
 }
 
-// Char.csf (char.go:5182), 0 TODO
+// Char.csf (char.go:5183), 0 TODO
 bool Char_csf(Char* c, CharSpecialFlag csf) {
     return ((c->CharSystemVar_.specialFlag & csf) != 0U);
 }
 
-// Char.setCSF (char.go:5186), 0 TODO
+// Char.setCSF (char.go:5187), 0 TODO
 void Char_setCSF(Char* c, CharSpecialFlag csf, bool on) {
     if (on) {
         c->CharSystemVar_.specialFlag |= csf;
@@ -95704,12 +95707,12 @@ void Char_setCSF(Char* c, CharSpecialFlag csf, bool on) {
     }
 }
 
-// Char.asf (char.go:5194), 0 TODO
+// Char.asf (char.go:5195), 0 TODO
 bool Char_asf(Char* c, AssertSpecialFlag asf) {
     return ((c->CharSystemVar_.assertFlag & asf) != 0U);
 }
 
-// Char.setASF (char.go:5198), 0 TODO
+// Char.setASF (char.go:5199), 0 TODO
 void Char_setASF(Char* c, AssertSpecialFlag asf, bool on) {
     if (on) {
         c->CharSystemVar_.assertFlag |= asf;
@@ -95718,7 +95721,7 @@ void Char_setASF(Char* c, AssertSpecialFlag asf, bool on) {
     }
 }
 
-// Char.parent (char.go:5206), 0 TODO
+// Char.parent (char.go:5207), 0 TODO
 Char* Char_parent(Char* c, bool log_) {
     if (c->helperIndex == 0) {
         if (log_) {
@@ -95741,12 +95744,12 @@ Char* Char_parent(Char* c, bool log_) {
     return p;
 }
 
-// Char.parentExist (char.go:5230), 0 TODO
+// Char.parentExist (char.go:5231), 0 TODO
 bool Char_parentExist(Char* c) {
     return (Char_parent(c, false) != NULL);
 }
 
-// Char.root (char.go:5234), 0 TODO
+// Char.root (char.go:5235), 0 TODO
 Char* Char_root(Char* c, bool log_) {
     if (c->helperIndex == 0) {
         if (log_) {
@@ -95757,13 +95760,13 @@ Char* Char_root(Char* c, bool log_) {
     return g_sys.chars.v[c->playerNo].p[0];
 }
 
-// Char.stateOwner (char.go:5247), 0 TODO
+// Char.stateOwner (char.go:5248), 0 TODO
 Char* Char_stateOwner(Char* c) {
     int pn = c->ss.sb->playerNo;
     return g_sys.chars.v[pn].p[0];
 }
 
-// Char.helperTrigger (char.go:5252), 0 TODO
+// Char.helperTrigger (char.go:5253), 0 TODO
 Char* Char_helperTrigger(Char* c, i32 id, int idx) {
     if (idx < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), GOSTR("helper redirection index cannot be negative")));
@@ -95791,7 +95794,7 @@ Char* Char_helperTrigger(Char* c, i32 id, int idx) {
     return NULL;
 }
 
-// Char.getHelperChainIndex (char.go:5285), 0 TODO
+// Char.getHelperChainIndex (char.go:5286), 0 TODO
 Char* Char_getHelperChainIndex(Char* c, i32 idx) {
     if (idx <= 0) {
         return c;
@@ -95840,7 +95843,7 @@ Char* Char_getHelperChainIndex(Char* c, i32 idx) {
     return NULL;
 }
 
-// Char.helperIndexTrigger (char.go:5345), 0 TODO
+// Char.helperIndexTrigger (char.go:5346), 0 TODO
 Char* Char_helperIndexTrigger(Char* c, i32 idx) {
     Char* ch = Char_getHelperChainIndex(c, idx);
     if (ch == NULL) {
@@ -95849,7 +95852,7 @@ Char* Char_helperIndexTrigger(Char* c, i32 idx) {
     return ch;
 }
 
-// Char.helperIndexExist (char.go:5355), 0 TODO
+// Char.helperIndexExist (char.go:5356), 0 TODO
 BytecodeValue Char_helperIndexExist(Char* c, BytecodeValue id) {
     if (BytecodeValue_IsUndefined(id)) {
         return fn_BytecodeUndefined();
@@ -95857,7 +95860,7 @@ BytecodeValue Char_helperIndexExist(Char* c, BytecodeValue id) {
     return fn_BytecodeBool((Char_getHelperChainIndex(c, BytecodeValue_ToI(id)) != NULL));
 }
 
-// Char.indexTrigger (char.go:5362), 0 TODO
+// Char.indexTrigger (char.go:5363), 0 TODO
 i32 Char_indexTrigger(Char* c) {
     i32 searchIdx = 0;
     {
@@ -95876,7 +95879,7 @@ i32 Char_indexTrigger(Char* c) {
     return -1;
 }
 
-// Char.targetTrigger (char.go:5384), 0 TODO
+// Char.targetTrigger (char.go:5385), 0 TODO
 Char* Char_targetTrigger(Char* c, i32 id, int idx) {
     if (idx < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), GOSTR("target redirection index cannot be negative")));
@@ -95901,7 +95904,7 @@ Char* Char_targetTrigger(Char* c, i32 id, int idx) {
     return NULL;
 }
 
-// Char.partner (char.go:5409), 0 TODO
+// Char.partner (char.go:5410), 0 TODO
 Char* Char_partner(Char* c, i32 n, bool log_) {
     n = go_max_i32(0, n);
     if (((int)n) > 4) {
@@ -95928,7 +95931,7 @@ Char* Char_partner(Char* c, i32 n, bool log_) {
     return NULL;
 }
 
-// Char.partnerTag (char.go:5438), 0 TODO
+// Char.partnerTag (char.go:5439), 0 TODO
 Char* Char_partnerTag(Char* c, i32 n) {
     n = go_max_i32(0, n);
     if (((int)n) > 4) {
@@ -95944,7 +95947,7 @@ Char* Char_partnerTag(Char* c, i32 n) {
     return NULL;
 }
 
-// Char.enemy (char.go:5453), 0 TODO
+// Char.enemy (char.go:5454), 0 TODO
 Char* Char_enemy(Char* c, i32 n) {
     if (n < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("has no enemy with index %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, n)})))));
@@ -95968,7 +95971,7 @@ Char* Char_enemy(Char* c, i32 n) {
     return NULL;
 }
 
-// Char.enemyNearTrigger (char.go:5477), 0 TODO
+// Char.enemyNearTrigger (char.go:5478), 0 TODO
 Char* Char_enemyNearTrigger(Char* c, i32 n) {
     Char* e = CharList_enemyNear(&g_sys.charList, c, n, false);
     if (e == NULL) {
@@ -95977,7 +95980,7 @@ Char* Char_enemyNearTrigger(Char* c, i32 n) {
     return e;
 }
 
-// Char.p2 (char.go:5490), 0 TODO
+// Char.p2 (char.go:5491), 0 TODO
 Char* Char_p2(Char* c) {
     Char* p = CharList_enemyNear(&g_sys.charList, c, 0, true);
     if (p != NULL) {
@@ -95986,7 +95989,7 @@ Char* Char_p2(Char* c) {
     return p;
 }
 
-// Char.playerIDTrigger (char.go:5502), 0 TODO
+// Char.playerIDTrigger (char.go:5503), 0 TODO
 Char* Char_playerIDTrigger(Char* c, i32 id, bool log_) {
     Char* ch = System_playerID(&g_sys, id);
     if (log_ && (ch == NULL)) {
@@ -95995,7 +95998,7 @@ Char* Char_playerIDTrigger(Char* c, i32 id, bool log_) {
     return ch;
 }
 
-// Char.playerIndexTrigger (char.go:5512), 0 TODO
+// Char.playerIndexTrigger (char.go:5513), 0 TODO
 Char* Char_playerIndexTrigger(Char* c, i32 idx) {
     Char* ch = System_playerIndex(&g_sys, idx);
     if (ch == NULL) {
@@ -96004,7 +96007,7 @@ Char* Char_playerIndexTrigger(Char* c, i32 idx) {
     return ch;
 }
 
-// Char.playerTrigger (char.go:5522), 0 TODO
+// Char.playerTrigger (char.go:5523), 0 TODO
 Char* Char_playerTrigger(Char* c, int pn, bool log_) {
     int idx = (pn - 1);
     Char* root = System_getCharRoot(&g_sys, idx);
@@ -96014,7 +96017,7 @@ Char* Char_playerTrigger(Char* c, int pn, bool log_) {
     return root;
 }
 
-// Char.isEnemyOf (char.go:5532), 0 TODO
+// Char.isEnemyOf (char.go:5533), 0 TODO
 bool Char_isEnemyOf(Char* c, Char* e) {
     if (Char_scf(e, 2U)) {
         return false;
@@ -96028,7 +96031,7 @@ bool Char_isEnemyOf(Char* c, Char* e) {
     return true;
 }
 
-// Char.getAILevel (char.go:5555), 0 TODO
+// Char.getAILevel (char.go:5556), 0 TODO
 f32 Char_getAILevel(Char* c) {
     if ((c->helperIndex != 0) && (Char_gi(c)->mugenver.v[0] == 1U)) {
         return 0x0p+00f;
@@ -96039,7 +96042,7 @@ f32 Char_getAILevel(Char* c) {
     return 0x0p+00f;
 }
 
-// Char.setAILevel (char.go:5565), 0 TODO
+// Char.setAILevel (char.go:5566), 0 TODO
 void Char_setAILevel(Char* c, f32 level) {
     if ((c->playerNo < 0) || (c->playerNo >= 12)) {
         return;
@@ -96059,12 +96062,12 @@ void Char_setAILevel(Char* c, f32 level) {
     }
 }
 
-// Char.alive (char.go:5579), 0 TODO
+// Char.alive (char.go:5580), 0 TODO
 bool Char_alive(Char* c) {
     return (!Char_scf(c, 32U));
 }
 
-// Char.activelyFighting (char.go:5585), 0 TODO
+// Char.activelyFighting (char.go:5586), 0 TODO
 bool Char_activelyFighting(Char* c) {
     if (((c->teamside < 0) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return false;
@@ -96072,7 +96075,7 @@ bool Char_activelyFighting(Char* c) {
     return true;
 }
 
-// Char.animElemNo (char.go:5592), 0 TODO
+// Char.animElemNo (char.go:5593), 0 TODO
 BytecodeValue Char_animElemNo(Char* c, i32 time_) {
     if ((c->anim != NULL) && (time_ >= (-c->anim->curtime))) {
         return fn_BytecodeInt(Animation_AnimElemNo(c->anim, time_));
@@ -96080,7 +96083,7 @@ BytecodeValue Char_animElemNo(Char* c, i32 time_) {
     return fn_BytecodeUndefined();
 }
 
-// Char.animElemTime (char.go:5599), 0 TODO
+// Char.animElemTime (char.go:5600), 0 TODO
 BytecodeValue Char_animElemTime(Char* c, i32 elem) {
     if (((elem >= 1) && (c->anim != NULL)) && (((int)elem) <= c->anim->frames.len)) {
         return fn_BytecodeInt(Animation_AnimElemTime(c->anim, elem));
@@ -96088,7 +96091,7 @@ BytecodeValue Char_animElemTime(Char* c, i32 elem) {
     return fn_BytecodeUndefined();
 }
 
-// Char.animExist (char.go:5609), 0 TODO
+// Char.animExist (char.go:5610), 0 TODO
 BytecodeValue Char_animExist(Char* c, BytecodeValue anim) {
     if (BytecodeValue_IsUndefined(anim)) {
         return fn_BytecodeUndefined();
@@ -96100,7 +96103,7 @@ BytecodeValue Char_animExist(Char* c, BytecodeValue anim) {
     return fn_BytecodeBool((Map_i32_AnimationPtr_get(&g_sys.cgi.v[pn].animTable.anims, BytecodeValue_ToI(anim), NULL) != NULL));
 }
 
-// Char.selfAnimExist (char.go:5623), 0 TODO
+// Char.selfAnimExist (char.go:5624), 0 TODO
 BytecodeValue Char_selfAnimExist(Char* c, BytecodeValue anim) {
     if (BytecodeValue_IsUndefined(anim)) {
         return fn_BytecodeUndefined();
@@ -96108,7 +96111,7 @@ BytecodeValue Char_selfAnimExist(Char* c, BytecodeValue anim) {
     return fn_BytecodeBool((Map_i32_AnimationPtr_get(&Char_gi(c)->animTable.anims, BytecodeValue_ToI(anim), NULL) != NULL));
 }
 
-// Char.animTime (char.go:5630), 0 TODO
+// Char.animTime (char.go:5631), 0 TODO
 i32 Char_animTime(Char* c) {
     if (c->anim != NULL) {
         return Animation_AnimTime(c->anim);
@@ -96116,7 +96119,7 @@ i32 Char_animTime(Char* c) {
     return 0;
 }
 
-// Char.updateCurFrame (char.go:5638), 0 TODO
+// Char.updateCurFrame (char.go:5639), 0 TODO
 void Char_updateCurFrame(Char* c) {
     if (c->anim != NULL) {
         c->curFrame = Animation_CurrentFrame(c->anim);
@@ -96125,7 +96128,7 @@ void Char_updateCurFrame(Char* c) {
     }
 }
 
-// Char.backEdge (char.go:5646), 0 TODO
+// Char.backEdge (char.go:5647), 0 TODO
 f32 Char_backEdge(Char* c) {
     if (c->facing < 0x0p+00f) {
         return Char_rightEdge(c);
@@ -96133,7 +96136,7 @@ f32 Char_backEdge(Char* c) {
     return Char_leftEdge(c);
 }
 
-// Char.backEdgeBodyDist (char.go:5653), 0 TODO
+// Char.backEdgeBodyDist (char.go:5654), 0 TODO
 f32 Char_backEdgeBodyDist(Char* c) {
     f32 offset = 0x0p+00f;
     if ((Char_stWgi(c)->ikemenver.v[0] == 0U) && (Char_stWgi(c)->ikemenver.v[1] == 0U)) {
@@ -96148,7 +96151,7 @@ f32 Char_backEdgeBodyDist(Char* c) {
     return ((Char_backEdgeDist(c) - c->CharSystemVar_.widthEdge.v[1]) - offset);
 }
 
-// Char.backEdgeDist (char.go:5667), 0 TODO
+// Char.backEdgeDist (char.go:5668), 0 TODO
 f32 Char_backEdgeDist(Char* c) {
     if (c->facing < 0x0p+00f) {
         return ((g_sys.SystemStateVars_.xmax / c->localscl) - c->pos.v[0]);
@@ -96156,27 +96159,27 @@ f32 Char_backEdgeDist(Char* c) {
     return (c->pos.v[0] - (g_sys.SystemStateVars_.xmin / c->localscl));
 }
 
-// Char.bottomEdge (char.go:5674), 0 TODO
+// Char.bottomEdge (char.go:5675), 0 TODO
 f32 Char_bottomEdge(Char* c) {
     return ((g_sys.SystemStateVars_.cam.ScreenPos.v[1] / c->localscl) + Char_gameHeight(c));
 }
 
-// Char.botBoundBodyDist (char.go:5678), 0 TODO
+// Char.botBoundBodyDist (char.go:5679), 0 TODO
 f32 Char_botBoundBodyDist(Char* c) {
     return (Char_botBoundDist(c) - c->CharSystemVar_.depthEdge.v[1]);
 }
 
-// Char.botBoundDist (char.go:5682), 0 TODO
+// Char.botBoundDist (char.go:5683), 0 TODO
 f32 Char_botBoundDist(Char* c) {
     return ((g_sys.SystemStateVars_.zmax / c->localscl) - c->pos.v[2]);
 }
 
-// Char.canRecover (char.go:5686), 0 TODO
+// Char.canRecover (char.go:5687), 0 TODO
 bool Char_canRecover(Char* c) {
     return (c->ghv.fall_recover && (c->ghv.fall_time >= c->ghv.fall_recovertime));
 }
 
-// Char.comboCount (char.go:5690), 0 TODO
+// Char.comboCount (char.go:5691), 0 TODO
 i32 Char_comboCount(Char* c) {
     if (c->teamside == -1) {
         return 0;
@@ -96184,7 +96187,7 @@ i32 Char_comboCount(Char* c) {
     return g_sys.SystemStateVars_.comboCount.v[c->teamside];
 }
 
-// Char.command (char.go:5697), 0 TODO
+// Char.command (char.go:5698), 0 TODO
 bool Char_command(Char* c, int pn, int i) {
     if ((!c->keyctrl.v[0]) || (c->cmd.p == 0)) {
         return false;
@@ -96214,7 +96217,7 @@ bool Char_command(Char* c, int pn, int i) {
     return false;
 }
 
-// Char.commandByName (char.go:5732), 0 TODO
+// Char.commandByName (char.go:5733), 0 TODO
 bool Char_commandByName(Char* c, GoString name) {
     if (c->cmd.p == 0) {
         return false;
@@ -96225,7 +96228,7 @@ bool Char_commandByName(Char* c, GoString name) {
     return (ok && Char_command(c, c->playerNo, i));
 }
 
-// Char.assertCommand (char.go:5740), 0 TODO
+// Char.assertCommand (char.go:5741), 0 TODO
 void Char_assertCommand(Char* c, GoString name, i32 time_) {
     if (go_streq(name, GOSTR(""))) {
         CommandList* cmdList = (&c->cmd.p[c->playerNo]);
@@ -96259,22 +96262,22 @@ void Char_assertCommand(Char* c, GoString name, i32 time_) {
     }
 }
 
-// Char.constp (char.go:5772), 0 TODO
+// Char.constp (char.go:5773), 0 TODO
 BytecodeValue Char_constp(Char* c, f32 coordinate, f32 value) {
     return fn_BytecodeFloat(((((f32)Char_stOgi(c)->localcoord.v[0]) / coordinate) * value));
 }
 
-// Char.ctrl (char.go:5776), 0 TODO
+// Char.ctrl (char.go:5777), 0 TODO
 bool Char_ctrl(Char* c) {
     return (((Char_scf(c, 1U) && (!Char_scf(c, 256U))) && (!Char_scf(c, 4U))) && (!Char_scf(c, 16U)));
 }
 
-// Char.drawgame (char.go:5781), 0 TODO
+// Char.drawgame (char.go:5782), 0 TODO
 bool Char_drawgame(Char* c) {
     return ((System_roundState(&g_sys) >= 3) && (g_sys.SystemStateVars_.winTeam < 0));
 }
 
-// Char.frontEdge (char.go:5785), 0 TODO
+// Char.frontEdge (char.go:5786), 0 TODO
 f32 Char_frontEdge(Char* c) {
     if (c->facing > 0x0p+00f) {
         return Char_rightEdge(c);
@@ -96282,7 +96285,7 @@ f32 Char_frontEdge(Char* c) {
     return Char_leftEdge(c);
 }
 
-// Char.frontEdgeBodyDist (char.go:5792), 0 TODO
+// Char.frontEdgeBodyDist (char.go:5793), 0 TODO
 f32 Char_frontEdgeBodyDist(Char* c) {
     f32 offset = 0x0p+00f;
     if ((Char_stWgi(c)->ikemenver.v[0] == 0U) && (Char_stWgi(c)->ikemenver.v[1] == 0U)) {
@@ -96297,7 +96300,7 @@ f32 Char_frontEdgeBodyDist(Char* c) {
     return ((Char_frontEdgeDist(c) - c->CharSystemVar_.widthEdge.v[0]) - offset);
 }
 
-// Char.frontEdgeDist (char.go:5805), 0 TODO
+// Char.frontEdgeDist (char.go:5806), 0 TODO
 f32 Char_frontEdgeDist(Char* c) {
     if (c->facing > 0x0p+00f) {
         return ((g_sys.SystemStateVars_.xmax / c->localscl) - c->pos.v[0]);
@@ -96305,17 +96308,17 @@ f32 Char_frontEdgeDist(Char* c) {
     return (c->pos.v[0] - (g_sys.SystemStateVars_.xmin / c->localscl));
 }
 
-// Char.gameHeight (char.go:5812), 0 TODO
+// Char.gameHeight (char.go:5813), 0 TODO
 f32 Char_gameHeight(Char* c) {
     return (Char_screenHeight(c) / g_sys.SystemStateVars_.cam.Scale);
 }
 
-// Char.gameWidth (char.go:5816), 0 TODO
+// Char.gameWidth (char.go:5817), 0 TODO
 f32 Char_gameWidth(Char* c) {
     return (Char_screenWidth(c) / g_sys.SystemStateVars_.cam.Scale);
 }
 
-// Char.runOrderTrigger (char.go:5829), 0 TODO
+// Char.runOrderTrigger (char.go:5830), 0 TODO
 i32 Char_runOrderTrigger(Char* c) {
     {
         Slice_CharPtr _t2 = g_sys.charList.runOrder;
@@ -96331,7 +96334,7 @@ i32 Char_runOrderTrigger(Char* c) {
     return -1;
 }
 
-// Char.powerOwner (char.go:5840), 0 TODO
+// Char.powerOwner (char.go:5841), 0 TODO
 Char* Char_powerOwner(Char* c) {
     if (g_sys.cfg.Options.Team.PowerShare && (((c->teamside == 0) || (c->teamside == 1)))) {
         return g_sys.chars.v[c->teamside].p[0];
@@ -96339,27 +96342,27 @@ Char* Char_powerOwner(Char* c) {
     return g_sys.chars.v[c->playerNo].p[0];
 }
 
-// Char.getPower (char.go:5851), 0 TODO
+// Char.getPower (char.go:5852), 0 TODO
 i32 Char_getPower(Char* c) {
     return Char_powerOwner(c)->power;
 }
 
-// Char.hitDefAttr (char.go:5855), 0 TODO
+// Char.hitDefAttr (char.go:5856), 0 TODO
 bool Char_hitDefAttr(Char* c, i32 attr) {
     return ((c->ss.moveType == 131072) && HitDef_testAttr(&c->hitdef, attr));
 }
 
-// Char.hitOver (char.go:5859), 0 TODO
+// Char.hitOver (char.go:5860), 0 TODO
 bool Char_hitOver(Char* c) {
     return (c->ghv.hittime < 0);
 }
 
-// Char.hitShakeOver (char.go:5863), 0 TODO
+// Char.hitShakeOver (char.go:5864), 0 TODO
 bool Char_hitShakeOver(Char* c) {
     return (c->ghv.hitshaketime <= 0);
 }
 
-// Char.isHelper (char.go:5867), 0 TODO
+// Char.isHelper (char.go:5868), 0 TODO
 bool Char_isHelper(Char* c, i32 id, int idx) {
     if (c->helperIndex == 0) {
         return false;
@@ -96403,12 +96406,12 @@ bool Char_isHelper(Char* c, i32 id, int idx) {
     return false;
 }
 
-// Char.isPlayerType (char.go:5927), 0 TODO
+// Char.isPlayerType (char.go:5928), 0 TODO
 bool Char_isPlayerType(Char* c) {
     return ((c->helperIndex == 0) || (c->helperType == 2));
 }
 
-// Char.isHost (char.go:5931), 0 TODO
+// Char.isHost (char.go:5932), 0 TODO
 bool Char_isHost(Char* c) {
     if (((g_sys.netConnection == NULL) && (g_sys.replayFile == NULL)) && (g_sys.rollback.session == NULL)) {
         return false;
@@ -96428,7 +96431,7 @@ bool Char_isHost(Char* c) {
     return (c->playerNo == host);
 }
 
-// Char.jugglePoints (char.go:5959), 0 TODO
+// Char.jugglePoints (char.go:5960), 0 TODO
 i32 Char_jugglePoints(Char* c, i32 id) {
     i32 max_ = Char_gi(c)->data.airjuggle;
     {
@@ -96445,12 +96448,12 @@ i32 Char_jugglePoints(Char* c, i32 id) {
     return max_;
 }
 
-// Char.leftEdge (char.go:5974), 0 TODO
+// Char.leftEdge (char.go:5975), 0 TODO
 f32 Char_leftEdge(Char* c) {
     return (g_sys.SystemStateVars_.cam.ScreenPos.v[0] / c->localscl);
 }
 
-// Char.lose (char.go:5978), 0 TODO
+// Char.lose (char.go:5979), 0 TODO
 bool Char_lose(Char* c) {
     if (c->teamside == -1) {
         return false;
@@ -96458,17 +96461,17 @@ bool Char_lose(Char* c) {
     return (g_sys.SystemStateVars_.winTeam == ((~c->playerNo) & 1));
 }
 
-// Char.loseKO (char.go:5985), 0 TODO
+// Char.loseKO (char.go:5986), 0 TODO
 bool Char_loseKO(Char* c) {
     return (Char_lose(c) && (g_sys.SystemStateVars_.finishType == 1));
 }
 
-// Char.loseTime (char.go:5989), 0 TODO
+// Char.loseTime (char.go:5990), 0 TODO
 bool Char_loseTime(Char* c) {
     return (Char_lose(c) && (g_sys.SystemStateVars_.finishType == 3));
 }
 
-// Char.moveContact (char.go:5993), 0 TODO
+// Char.moveContact (char.go:5994), 0 TODO
 i32 Char_moveContact(Char* c) {
     if (c->mctype != 2) {
         return fn_Abs_i32(c->mctime);
@@ -96476,7 +96479,7 @@ i32 Char_moveContact(Char* c) {
     return 0;
 }
 
-// Char.moveCountered (char.go:6000), 0 TODO
+// Char.moveCountered (char.go:6001), 0 TODO
 i32 Char_moveCountered(Char* c) {
     if (c->CharSystemVar_.counterHit) {
         return fn_Abs_i32(c->mctime);
@@ -96484,7 +96487,7 @@ i32 Char_moveCountered(Char* c) {
     return 0;
 }
 
-// Char.moveGuarded (char.go:6007), 0 TODO
+// Char.moveGuarded (char.go:6008), 0 TODO
 i32 Char_moveGuarded(Char* c) {
     if (c->mctype == 1) {
         return fn_Abs_i32(c->mctime);
@@ -96492,7 +96495,7 @@ i32 Char_moveGuarded(Char* c) {
     return 0;
 }
 
-// Char.moveHit (char.go:6014), 0 TODO
+// Char.moveHit (char.go:6015), 0 TODO
 i32 Char_moveHit(Char* c) {
     if (c->mctype == 0) {
         return fn_Abs_i32(c->mctime);
@@ -96500,7 +96503,7 @@ i32 Char_moveHit(Char* c) {
     return 0;
 }
 
-// Char.moveReversed (char.go:6021), 0 TODO
+// Char.moveReversed (char.go:6022), 0 TODO
 i32 Char_moveReversed(Char* c) {
     if (c->mctype == 2) {
         return fn_Abs_i32(c->mctime);
@@ -96508,7 +96511,7 @@ i32 Char_moveReversed(Char* c) {
     return 0;
 }
 
-// Char.numEnemy (char.go:6028), 0 TODO
+// Char.numEnemy (char.go:6029), 0 TODO
 i32 Char_numEnemy(Char* c) {
     i32 n = 0;
     {
@@ -96524,7 +96527,7 @@ i32 Char_numEnemy(Char* c) {
     return n;
 }
 
-// Char.numExplod (char.go:6042), 0 TODO
+// Char.numExplod (char.go:6043), 0 TODO
 BytecodeValue Char_numExplod(Char* c, BytecodeValue eid) {
     if (BytecodeValue_IsUndefined(eid)) {
         return fn_BytecodeUndefined();
@@ -96544,7 +96547,7 @@ BytecodeValue Char_numExplod(Char* c, BytecodeValue eid) {
     return fn_BytecodeInt(total);
 }
 
-// Char.numPlayer (char.go:6059), 0 TODO
+// Char.numPlayer (char.go:6060), 0 TODO
 i32 Char_numPlayer(Char* c) {
     i32 count = 0;
     {
@@ -96560,7 +96563,7 @@ i32 Char_numPlayer(Char* c) {
     return count;
 }
 
-// Char.numText (char.go:6075), 0 TODO
+// Char.numText (char.go:6076), 0 TODO
 BytecodeValue Char_numText(Char* c, BytecodeValue textid) {
     if (BytecodeValue_IsUndefined(textid)) {
         return fn_BytecodeUndefined();
@@ -96571,7 +96574,7 @@ BytecodeValue Char_numText(Char* c, BytecodeValue textid) {
     return fn_BytecodeInt(total);
 }
 
-// Char.soundVar (char.go:6087), 0 TODO
+// Char.soundVar (char.go:6088), 0 TODO
 BytecodeValue Char_soundVar(Char* c, BytecodeValue chid, OpCode vtype) {
     if (BytecodeValue_IsUndefined(chid)) {
         return fn_BytecodeUndefined();
@@ -96709,7 +96712,7 @@ BytecodeValue Char_soundVar(Char* c, BytecodeValue chid, OpCode vtype) {
     return fn_BytecodeUndefined();
 }
 
-// Char.numHelper (char.go:6194), 0 TODO
+// Char.numHelper (char.go:6195), 0 TODO
 BytecodeValue Char_numHelper(Char* c, BytecodeValue hid) {
     if (BytecodeValue_IsUndefined(hid)) {
         return fn_BytecodeUndefined();
@@ -96729,7 +96732,7 @@ BytecodeValue Char_numHelper(Char* c, BytecodeValue hid) {
     return fn_BytecodeInt(count);
 }
 
-// Char.numPartner (char.go:6211), 0 TODO
+// Char.numPartner (char.go:6212), 0 TODO
 i32 Char_numPartner(Char* c) {
     if ((((g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] != 1) && (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] != 3))) || (c->teamside == -1)) {
         return 0;
@@ -96737,14 +96740,14 @@ i32 Char_numPartner(Char* c) {
     return (g_sys.SystemStateVars_.numSimul.v[(c->playerNo & 1)] - 1);
 }
 
-// Char.numProj (char.go:6218), 0 TODO
+// Char.numProj (char.go:6219), 0 TODO
 i32 Char_numProj(Char* c) {
     Slice_ProjectilePtr projs = Char_getMultipleProjs(c, -1, -1, false);
     i32 total = ((i32)projs.len);
     return total;
 }
 
-// Char.numProjID (char.go:6225), 0 TODO
+// Char.numProjID (char.go:6226), 0 TODO
 BytecodeValue Char_numProjID(Char* c, BytecodeValue pid) {
     if (BytecodeValue_IsUndefined(pid)) {
         return fn_BytecodeUndefined();
@@ -96759,7 +96762,7 @@ BytecodeValue Char_numProjID(Char* c, BytecodeValue pid) {
     return fn_BytecodeInt(total);
 }
 
-// Char.numTarget (char.go:6243), 0 TODO
+// Char.numTarget (char.go:6244), 0 TODO
 BytecodeValue Char_numTarget(Char* c, BytecodeValue hid) {
     if (BytecodeValue_IsUndefined(hid)) {
         return fn_BytecodeUndefined();
@@ -96788,7 +96791,7 @@ BytecodeValue Char_numTarget(Char* c, BytecodeValue hid) {
     return fn_BytecodeInt(n);
 }
 
-// Char.palfxvar (char.go:6260), 0 TODO
+// Char.palfxvar (char.go:6261), 0 TODO
 i32 Char_palfxvar(Char* c, i32 x) {
     i32 n = 0;
     if (x >= 4) {
@@ -96825,7 +96828,7 @@ i32 Char_palfxvar(Char* c, i32 x) {
     return n;
 }
 
-// Char.palfxvar2 (char.go:6292), 0 TODO
+// Char.palfxvar2 (char.go:6293), 0 TODO
 f32 Char_palfxvar2(Char* c, i32 x) {
     f32 n = 0x1p+00f;
     if (x > 1) {
@@ -96848,7 +96851,7 @@ f32 Char_palfxvar2(Char* c, i32 x) {
     return (n * 0x1p+08f);
 }
 
-// Char.pauseTimeTrigger (char.go:6310), 0 TODO
+// Char.pauseTimeTrigger (char.go:6311), 0 TODO
 i32 Char_pauseTimeTrigger(Char* c) {
     i32 p = 0;
     if ((g_sys.SystemStateVars_.supertime > 0) && (c->CharSystemVar_.prevSuperMovetime == 0)) {
@@ -96860,12 +96863,12 @@ i32 Char_pauseTimeTrigger(Char* c) {
     return p;
 }
 
-// Char.canOwnProjectiles (char.go:6321), 0 TODO
+// Char.canOwnProjectiles (char.go:6322), 0 TODO
 bool Char_canOwnProjectiles(Char* c) {
     return ((c->helperIndex == 0) || c->ownProjectile);
 }
 
-// Char.projTimeTrigger (char.go:6325), 0 TODO
+// Char.projTimeTrigger (char.go:6326), 0 TODO
 BytecodeValue Char_projTimeTrigger(Char* c, BytecodeValue pid, GoFunc match) {
     if (BytecodeValue_IsUndefined(pid)) {
         return fn_BytecodeUndefined();
@@ -96877,37 +96880,37 @@ BytecodeValue Char_projTimeTrigger(Char* c, BytecodeValue pid, GoFunc match) {
     return fn_BytecodeInt(c->pctime);
 }
 
-// Char.projCancelTime (char.go:6338), 0 TODO
+// Char.projCancelTime (char.go:6339), 0 TODO
 BytecodeValue Char_projCancelTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_504, go_box(Env_lambda_504, ((Env_lambda_504){0}))}));
 }
 
-// Char.projContactTime (char.go:6344), 0 TODO
+// Char.projContactTime (char.go:6345), 0 TODO
 BytecodeValue Char_projContactTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_505, go_box(Env_lambda_505, ((Env_lambda_505){0}))}));
 }
 
-// Char.projGuardedTime (char.go:6350), 0 TODO
+// Char.projGuardedTime (char.go:6351), 0 TODO
 BytecodeValue Char_projGuardedTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_506, go_box(Env_lambda_506, ((Env_lambda_506){0}))}));
 }
 
-// Char.projHitTime (char.go:6356), 0 TODO
+// Char.projHitTime (char.go:6357), 0 TODO
 BytecodeValue Char_projHitTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_507, go_box(Env_lambda_507, ((Env_lambda_507){0}))}));
 }
 
-// Char.reversalDefAttr (char.go:6362), 0 TODO
+// Char.reversalDefAttr (char.go:6363), 0 TODO
 bool Char_reversalDefAttr(Char* c, i32 attr) {
     return HitDef_testReversalAttr(&c->hitdef, attr);
 }
 
-// Char.rightEdge (char.go:6366), 0 TODO
+// Char.rightEdge (char.go:6367), 0 TODO
 f32 Char_rightEdge(Char* c) {
     return ((g_sys.SystemStateVars_.cam.ScreenPos.v[0] / c->localscl) + Char_gameWidth(c));
 }
 
-// Char.roundsExisted (char.go:6370), 0 TODO
+// Char.roundsExisted (char.go:6371), 0 TODO
 i32 Char_roundsExisted(Char* c) {
     if (c->teamside == -1) {
         return (g_sys.SystemStateVars_.roundNo - 1);
@@ -96915,7 +96918,7 @@ i32 Char_roundsExisted(Char* c) {
     return g_sys.SystemStateVars_.roundsExisted.v[(c->playerNo & 1)];
 }
 
-// Char.roundsWon (char.go:6377), 0 TODO
+// Char.roundsWon (char.go:6378), 0 TODO
 i32 Char_roundsWon(Char* c) {
     if (c->teamside == -1) {
         return 0;
@@ -96923,21 +96926,21 @@ i32 Char_roundsWon(Char* c) {
     return g_sys.SystemStateVars_.wins.v[(c->playerNo & 1)];
 }
 
-// Char.screenPosX (char.go:6387), 0 TODO
+// Char.screenPosX (char.go:6388), 0 TODO
 f32 Char_screenPosX(Char* c) {
     f32 scaledOffset = (g_sys.SystemStateVars_.cam.Offset.v[0] / g_sys.SystemStateVars_.zoom.resultScale);
     f32 camLeft = ((g_sys.SystemStateVars_.zoom.resultPos.v[0] - scaledOffset) - (g_sys.SystemStateVars_.cam.halfWidth / g_sys.SystemStateVars_.zoom.resultScale));
     return (c->pos.v[0] - (camLeft / c->localscl));
 }
 
-// Char.screenPosY (char.go:6393), 0 TODO
+// Char.screenPosY (char.go:6394), 0 TODO
 f32 Char_screenPosY(Char* c) {
     f32 groundRef = (Camera_GroundLevel(&g_sys.SystemStateVars_.cam) + g_sys.SystemStateVars_.cam.Offset.v[1]);
     f32 camTop = (((g_sys.SystemStateVars_.zoom.resultPos.v[1] - groundRef)) / g_sys.SystemStateVars_.zoom.resultScale);
     return (c->pos.v[1] - (camTop / c->localscl));
 }
 
-// Char.screenHeight (char.go:6399), 0 TODO
+// Char.screenHeight (char.go:6400), 0 TODO
 f32 Char_screenHeight(Char* c) {
     f32 aspect = System_getFightAspect(&g_sys);
     if (!System_middleOfMatch(&g_sys)) {
@@ -96947,12 +96950,12 @@ f32 Char_screenHeight(Char* c) {
     return ((f32)go_f2i32((height + 0x1p-01f)));
 }
 
-// Char.screenWidth (char.go:6413), 0 TODO
+// Char.screenWidth (char.go:6414), 0 TODO
 f32 Char_screenWidth(Char* c) {
     return ((f32)Char_stOgi(c)->localcoord.v[0]);
 }
 
-// Char.selfStatenoExist (char.go:6417), 0 TODO
+// Char.selfStatenoExist (char.go:6418), 0 TODO
 BytecodeValue Char_selfStatenoExist(Char* c, BytecodeValue stateno) {
     if (BytecodeValue_IsUndefined(stateno)) {
         return fn_BytecodeUndefined();
@@ -96962,7 +96965,7 @@ BytecodeValue Char_selfStatenoExist(Char* c, BytecodeValue stateno) {
     return fn_BytecodeBool(ok);
 }
 
-// Char.stageFrontEdgeDist (char.go:6427), 0 TODO
+// Char.stageFrontEdgeDist (char.go:6428), 0 TODO
 f32 Char_stageFrontEdgeDist(Char* c) {
     f32 corner = 0x0p+00f;
     f32 camStart = (((f32)g_sys.SystemStateVars_.cam.stageCamera_.startx) * g_sys.SystemStateVars_.cam.stageCamera_.localscl);
@@ -96975,7 +96978,7 @@ f32 Char_stageFrontEdgeDist(Char* c) {
     }
 }
 
-// Char.stageBackEdgeDist (char.go:6441), 0 TODO
+// Char.stageBackEdgeDist (char.go:6442), 0 TODO
 f32 Char_stageBackEdgeDist(Char* c) {
     f32 corner = 0x0p+00f;
     f32 camStart = (((f32)g_sys.SystemStateVars_.cam.stageCamera_.startx) * g_sys.SystemStateVars_.cam.stageCamera_.localscl);
@@ -96988,7 +96991,7 @@ f32 Char_stageBackEdgeDist(Char* c) {
     }
 }
 
-// Char.teamLeader (char.go:6455), 0 TODO
+// Char.teamLeader (char.go:6456), 0 TODO
 int Char_teamLeader(Char* c) {
     if (((c->teamside == -1) || (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] == 0)) || (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] == 2)) {
         return (c->playerNo + 1);
@@ -96996,7 +96999,7 @@ int Char_teamLeader(Char* c) {
     return (g_sys.SystemStateVars_.teamLeader.v[(c->playerNo & 1)] + 1);
 }
 
-// Char.teamSize (char.go:6462), 0 TODO
+// Char.teamSize (char.go:6463), 0 TODO
 i32 Char_teamSize(Char* c) {
     if (c->teamside == -1) {
         i32 n = 0;
@@ -97017,7 +97020,7 @@ i32 Char_teamSize(Char* c) {
     return g_sys.SystemStateVars_.numSimul.v[(c->playerNo & 1)];
 }
 
-// Char.getTeamOrder (char.go:6479), 0 TODO
+// Char.getTeamOrder (char.go:6480), 0 TODO
 Slice_int Char_getTeamOrder(Char* c) {
     int count = ((int)g_sys.SystemStateVars_.numSimul.v[c->teamside]);
     Slice_int *team__h = go_box(Slice_int, GO_MAKE_A(Slice_int, int, 0, count));
@@ -97036,7 +97039,7 @@ Slice_int Char_getTeamOrder(Char* c) {
     return (*team__h);
 }
 
-// Char.updateTeamOrder (char.go:6504), 0 TODO
+// Char.updateTeamOrder (char.go:6505), 0 TODO
 void Char_updateTeamOrder(Char* c, Slice_int team) {
     if (team.len == 0) {
         return;
@@ -97054,7 +97057,7 @@ void Char_updateTeamOrder(Char* c, Slice_int team) {
     FightScreen_syncTeamOrder(&g_sys.fightScreen, side);
 }
 
-// Char.changeTagOrder (char.go:6521), 0 TODO
+// Char.changeTagOrder (char.go:6522), 0 TODO
 void Char_changeTagOrder(Char* c, int targetMN) {
     if (g_sys.SystemStateVars_.tmode.v[c->teamside] != 3) {
         return;
@@ -97075,7 +97078,7 @@ void Char_changeTagOrder(Char* c, int targetMN) {
     Char_updateTeamOrder(c, team);
 }
 
-// Char.changeTagLeader (char.go:6549), 0 TODO
+// Char.changeTagLeader (char.go:6550), 0 TODO
 void Char_changeTagLeader(Char* c, int nextLeaderPN) {
     if (g_sys.SystemStateVars_.tmode.v[c->teamside] != 3) {
         return;
@@ -97129,22 +97132,22 @@ void Char_changeTagLeader(Char* c, int nextLeaderPN) {
     Char_updateTeamOrder(c, team);
 }
 
-// Char.topEdge (char.go:6617), 0 TODO
+// Char.topEdge (char.go:6618), 0 TODO
 f32 Char_topEdge(Char* c) {
     return (g_sys.SystemStateVars_.cam.ScreenPos.v[1] / c->localscl);
 }
 
-// Char.topBoundBodyDist (char.go:6621), 0 TODO
+// Char.topBoundBodyDist (char.go:6622), 0 TODO
 f32 Char_topBoundBodyDist(Char* c) {
     return (Char_topBoundDist(c) - c->CharSystemVar_.depthEdge.v[0]);
 }
 
-// Char.topBoundDist (char.go:6625), 0 TODO
+// Char.topBoundDist (char.go:6626), 0 TODO
 f32 Char_topBoundDist(Char* c) {
     return (c->pos.v[2] - (g_sys.SystemStateVars_.zmin / c->localscl));
 }
 
-// Char.win (char.go:6629), 0 TODO
+// Char.win (char.go:6630), 0 TODO
 bool Char_win(Char* c) {
     if (c->teamside == -1) {
         return false;
@@ -97152,32 +97155,32 @@ bool Char_win(Char* c) {
     return (g_sys.SystemStateVars_.winTeam == (c->playerNo & 1));
 }
 
-// Char.winKO (char.go:6636), 0 TODO
+// Char.winKO (char.go:6637), 0 TODO
 bool Char_winKO(Char* c) {
     return (Char_win(c) && (g_sys.SystemStateVars_.finishType == 1));
 }
 
-// Char.winTime (char.go:6640), 0 TODO
+// Char.winTime (char.go:6641), 0 TODO
 bool Char_winTime(Char* c) {
     return (Char_win(c) && (g_sys.SystemStateVars_.finishType == 3));
 }
 
-// Char.winPerfect (char.go:6644), 0 TODO
+// Char.winPerfect (char.go:6645), 0 TODO
 bool Char_winPerfect(Char* c) {
     return ((Char_win(c) && (g_sys.SystemStateVars_.winType.v[(c->playerNo & 1)] >= 11)) && (g_sys.SystemStateVars_.winType.v[(c->playerNo & 1)] < 19));
 }
 
-// Char.winClutch (char.go:6648), 0 TODO
+// Char.winClutch (char.go:6649), 0 TODO
 bool Char_winClutch(Char* c) {
     return (Char_win(c) && (g_sys.SystemStateVars_.winType.v[(c->playerNo & 1)] >= 19));
 }
 
-// Char.winType (char.go:6652), 0 TODO
+// Char.winType (char.go:6653), 0 TODO
 bool Char_winType(Char* c, WinType wt) {
     return (Char_win(c) && (g_sys.SystemStateVars_.winTrigger.v[(c->playerNo & 1)] == wt));
 }
 
-// Char.getOwnChannels (char.go:6658), 0 TODO
+// Char.getOwnChannels (char.go:6659), 0 TODO
 Slice_SoundChannelPtr Char_getOwnChannels(Char* c, i32 chNo) {
     Slice_SoundChannelPtr found = {0};
     {
@@ -97195,7 +97198,7 @@ Slice_SoundChannelPtr Char_getOwnChannels(Char* c, i32 chNo) {
     return found;
 }
 
-// Char.playSound (char.go:6670), 0 TODO
+// Char.playSound (char.go:6671), 0 TODO
 void Char_playSound(Char* c, PlaySndParams* params) {
     if ((params->group < 0) || g_sys.SystemStateVars_.noCharSoundFlg) {
         return;
@@ -97271,7 +97274,7 @@ void Char_playSound(Char* c, PlaySndParams* params) {
     }
 }
 
-// Char.autoTurn (char.go:6763), 0 TODO
+// Char.autoTurn (char.go:6764), 0 TODO
 void Char_autoTurn(Char* c) {
     if ((((c->helperIndex == 0) && (!Char_asf(c, 4U))) && g_sys.stage->autoturn) && Char_shouldFaceP2(c)) {
         {
@@ -97292,7 +97295,7 @@ void Char_autoTurn(Char* c) {
     }
 }
 
-// Char.updateFBFlip (char.go:6781), 0 TODO
+// Char.updateFBFlip (char.go:6782), 0 TODO
 void Char_updateFBFlip(Char* c) {
     f32 setting = TypedValue_ToF(Map_GoString_TypedValue_get(&Char_gi(c)->constants, GOSTR("input.fbflipenemydistance"), NULL));
     c->fbFlip = (c->facing < 0x0p+00f);
@@ -97311,7 +97314,7 @@ void Char_updateFBFlip(Char* c) {
     }
 }
 
-// Char.shouldFaceP2 (char.go:6807), 0 TODO
+// Char.shouldFaceP2 (char.go:6808), 0 TODO
 bool Char_shouldFaceP2(Char* c) {
     Char* e = Char_p2(c);
     if (e == NULL) {
@@ -97332,7 +97335,7 @@ bool Char_shouldFaceP2(Char* c) {
     return false;
 }
 
-// Char.stateChange1 (char.go:6834), 0 TODO
+// Char.stateChange1 (char.go:6835), 0 TODO
 bool Char_stateChange1(Char* c, i32 no, int pn) {
     if (g_sys.SystemStateVars_.changeStateNest >= 2500) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("state machine stuck in loop (stopped after %v loops): %v -> %v -> %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){5, go_box_a(i32, g_sys.SystemStateVars_.changeStateNest)}), ((GoIface){5, go_box_a(i32, c->ss.prevno)}), ((GoIface){5, go_box_a(i32, c->ss.no)}), ((GoIface){5, go_box_a(i32, no)})))));
@@ -97431,7 +97434,7 @@ bool Char_stateChange1(Char* c, i32 no, int pn) {
     return true;
 }
 
-// Char.stateChange2 (char.go:6975), 0 TODO
+// Char.stateChange2 (char.go:6976), 0 TODO
 bool Char_stateChange2(Char* c) {
     if (c->stchtmp && (!Char_hitPause(c))) {
         StateBytecode_init(c->ss.sb, c);
@@ -97463,7 +97466,7 @@ bool Char_stateChange2(Char* c) {
     return false;
 }
 
-// Char.changeStateEx (char.go:6998), 0 TODO
+// Char.changeStateEx (char.go:6999), 0 TODO
 void Char_changeStateEx(Char* c, i32 no, int pn, i32 anim, i32 ctrl, GoString ffx) {
     if (((((((c->minus <= 0) && Char_scf(c, 1U)) && (System_roundState(&g_sys) <= 2)) && (Char_stWgi(c)->ikemenver.v[0] == 0U)) && (Char_stWgi(c)->ikemenver.v[1] == 0U)) && (((c->ss.stateType == 1) || (c->ss.stateType == 2)))) && (!Char_asf(c, 16777216U))) {
         Char_autoTurn(c);
@@ -97489,12 +97492,12 @@ void Char_changeStateEx(Char* c, i32 no, int pn, i32 anim, i32 ctrl, GoString ff
     }
 }
 
-// Char.changeState (char.go:7029), 0 TODO
+// Char.changeState (char.go:7030), 0 TODO
 void Char_changeState(Char* c, i32 no, i32 anim, i32 ctrl, GoString ffx) {
     Char_changeStateEx(c, no, c->ss.sb->playerNo, anim, ctrl, ffx);
 }
 
-// Char.runState (char.go:7035), 0 TODO
+// Char.runState (char.go:7036), 0 TODO
 void Char_runState(Char* c, i32 no, int pn) {
     if (c->runStateNest >= 2500) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("state machine stuck in loop (stopped after %v loops): ran state %v from state %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){5, go_box_a(i32, c->runStateNest)}), ((GoIface){5, go_box_a(i32, no)}), ((GoIface){5, go_box_a(i32, c->ss.no)})))));
@@ -97549,7 +97552,7 @@ void Char_runState(Char* c, i32 no, int pn) {
     c->runStateNest--;
 }
 
-// Char.selfState (char.go:7093), 0 TODO
+// Char.selfState (char.go:7094), 0 TODO
 void Char_selfState(Char* c, i32 no, i32 anim, i32 readplayerid, i32 ctrl, GoString ffx) {
     int playerno = 0;
     if (readplayerid >= 0) {
@@ -97560,7 +97563,7 @@ void Char_selfState(Char* c, i32 no, i32 anim, i32 readplayerid, i32 ctrl, GoStr
     Char_changeStateEx(c, no, playerno, anim, ctrl, ffx);
 }
 
-// Char.destroy (char.go:7103), 0 TODO
+// Char.destroy (char.go:7104), 0 TODO
 void Char_destroy(Char* c) {
     if (c->helperIndex == 0) {
         return;
@@ -97625,7 +97628,7 @@ void Char_destroy(Char* c) {
     Char_setCSF(c, 2U, true);
 }
 
-// Char.destroySelf (char.go:7157), 0 TODO
+// Char.destroySelf (char.go:7158), 0 TODO
 bool Char_destroySelf(Char* c, bool recursive, bool removeexplods, bool removetexts) {
     if ((c->helperIndex <= 0) || Char_asf(c, 144115188075855872U)) {
         return false;
@@ -97658,7 +97661,7 @@ bool Char_destroySelf(Char* c, bool recursive, bool removeexplods, bool removete
     return true;
 }
 
-// Char.newHelper (char.go:7188), 0 TODO
+// Char.newHelper (char.go:7189), 0 TODO
 Char* Char_newHelper(Char* c) {
     Char* h = {0};
     int hidx = 1;
@@ -97714,7 +97717,7 @@ Char* Char_newHelper(Char* c) {
     return h;
 }
 
-// Char.helperInit (char.go:7246), 0 TODO
+// Char.helperInit (char.go:7247), 0 TODO
 void Char_helperInit(Char* c, Char* h, i32 st, PosType pt, Arr3_f32 pos, i32 facing, Arr2_i32 rp) {
     Arr3_f32 p = Char_helperPos(c, pt, pos, facing, (&h->facing), h->localscl, false);
     Char_setPosX(h, p.v[0], true);
@@ -97745,7 +97748,7 @@ void Char_helperInit(Char* c, Char* h, i32 st, PosType pt, Arr3_f32 pos, i32 fac
     Char_actionPrepare(h);
 }
 
-// Char.helperPos (char.go:7283), 0 TODO
+// Char.helperPos (char.go:7284), 0 TODO
 Arr3_f32 Char_helperPos(Char* c, PosType pt, Arr3_f32 pos, i32 facing, f32* dstFacing, f32 localscl, bool isProj) {
     Arr3_f32 p = {0};
     if (facing < 0) {
@@ -97814,7 +97817,7 @@ Arr3_f32 Char_helperPos(Char* c, PosType pt, Arr3_f32 pos, i32 facing, f32* dstF
     return p;
 }
 
-// Char.spawnExplod (char.go:7347), 0 TODO
+// Char.spawnExplod (char.go:7348), 0 TODO
 Ret_ExplodPtr__int Char_spawnExplod(Char* c) {
     Slice_ExplodPtr* playerExplods = (&g_sys.explods.v[c->playerNo]);
     if ((*playerExplods).len >= g_sys.cfg.Config.ExplodMax) {
@@ -97853,7 +97856,7 @@ Ret_ExplodPtr__int Char_spawnExplod(Char* c) {
     return (Ret_ExplodPtr__int){e, idx};
 }
 
-// Char.getMultipleExplods (char.go:7389), 0 TODO
+// Char.getMultipleExplods (char.go:7390), 0 TODO
 Slice_ExplodPtr Char_getMultipleExplods(Char* c, i32 id, int idx, bool log_) {
     Slice_ExplodPtr expls = {0};
     if ((g_sys.explods.v[c->playerNo].len > 0) && (idx < g_sys.explods.v[c->playerNo].len)) {
@@ -97886,7 +97889,7 @@ Slice_ExplodPtr Char_getMultipleExplods(Char* c, i32 id, int idx, bool log_) {
     return expls;
 }
 
-// Char.getSingleExplod (char.go:7422), 0 TODO
+// Char.getSingleExplod (char.go:7423), 0 TODO
 Explod* Char_getSingleExplod(Char* c, i32 id, int idx, bool log_) {
     if (idx < 0) {
         if (log_) {
@@ -97914,7 +97917,7 @@ Explod* Char_getSingleExplod(Char* c, i32 id, int idx, bool log_) {
     return NULL;
 }
 
-// Char.explodDrawPal (char.go:7447), 0 TODO
+// Char.explodDrawPal (char.go:7448), 0 TODO
 Arr2_i32 Char_explodDrawPal(Char* c, Explod* e) {
     if (e->palfx->remap.len == 0) {
         return (Arr2_i32){{0, 0}};
@@ -97922,7 +97925,7 @@ Arr2_i32 Char_explodDrawPal(Char* c, Explod* e) {
     return Char_getDrawPal(c, e->palfx->remap.p[0]);
 }
 
-// Char.commitExplod (char.go:7455), 0 TODO
+// Char.commitExplod (char.go:7456), 0 TODO
 void Char_commitExplod(Char* c, int i) {
     Explod* e = g_sys.explods.v[c->playerNo].p[i];
     Explod_setAnim(e);
@@ -97990,7 +97993,7 @@ void Char_commitExplod(Char* c, int i) {
     Animation_UpdateSprite(e->anim);
 }
 
-// Char.explodBindTime (char.go:7538), 0 TODO
+// Char.explodBindTime (char.go:7539), 0 TODO
 void Char_explodBindTime(Char* c, i32 id, i32 time_) {
     {
         Slice_ExplodPtr _t2 = g_sys.explods.v[c->playerNo];
@@ -98005,7 +98008,7 @@ void Char_explodBindTime(Char* c, i32 id, i32 time_) {
     }
 }
 
-// Char.removeExplod (char.go:7548), 0 TODO
+// Char.removeExplod (char.go:7549), 0 TODO
 void Char_removeExplod(Char* c, i32 id, i32 idx) {
     Slice_ExplodPtr* playerExplods = (&g_sys.explods.v[c->playerNo]);
     bool removedAny = false;
@@ -98032,7 +98035,7 @@ void Char_removeExplod(Char* c, i32 id, i32 idx) {
     }
 }
 
-// Char.spawnText (char.go:7575), 0 TODO
+// Char.spawnText (char.go:7576), 0 TODO
 TextSprite* Char_spawnText(Char* c) {
     Slice_TextSpritePtr* playerTexts = (&g_sys.chartexts.v[c->playerNo]);
     if ((*playerTexts).len >= g_sys.cfg.Config.TextMax) {
@@ -98044,7 +98047,7 @@ TextSprite* Char_spawnText(Char* c) {
     return ts;
 }
 
-// Char.getMultipleTexts (char.go:7593), 0 TODO
+// Char.getMultipleTexts (char.go:7594), 0 TODO
 Slice_TextSpritePtr Char_getMultipleTexts(Char* c, i32 id, int idx, bool log_) {
     Slice_TextSpritePtr texts = {0};
     if ((g_sys.chartexts.v[c->playerNo].len > 0) && (idx < g_sys.chartexts.v[c->playerNo].len)) {
@@ -98077,7 +98080,7 @@ Slice_TextSpritePtr Char_getMultipleTexts(Char* c, i32 id, int idx, bool log_) {
     return texts;
 }
 
-// Char.removeText (char.go:7626), 0 TODO
+// Char.removeText (char.go:7627), 0 TODO
 void Char_removeText(Char* c, i32 id, i32 index) {
     Slice_TextSpritePtr* playerTexts = (&g_sys.chartexts.v[c->playerNo]);
     bool removedAny = false;
@@ -98108,7 +98111,7 @@ void Char_removeText(Char* c, i32 id, i32 index) {
     }
 }
 
-// Char.getAnimSprite (char.go:7657), 0 TODO
+// Char.getAnimSprite (char.go:7658), 0 TODO
 Animation* Char_getAnimSprite(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx, bool ownpal) {
     Animation* a = Char_getAnim(g_sys.chars.v[animPlayerNo].p[0], animNo, ffx);
     if (a == NULL) {
@@ -98118,13 +98121,13 @@ Animation* Char_getAnimSprite(Char* c, i32 animNo, int animPlayerNo, int spriteP
     return a;
 }
 
-// Char.getSelfAnimSprite (char.go:7672), 0 TODO
+// Char.getSelfAnimSprite (char.go:7673), 0 TODO
 Animation* Char_getSelfAnimSprite(Char* c, i32 animNo, GoString ffx, bool ownpal) {
     Animation* a = Char_getAnimSprite(c, animNo, c->playerNo, c->playerNo, ffx, ownpal);
     return a;
 }
 
-// Char.getShadowReflectionSprite (char.go:7679), 0 TODO
+// Char.getShadowReflectionSprite (char.go:7680), 0 TODO
 Animation* Char_getShadowReflectionSprite(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx, bool ownpal, GoString scname) {
     if (animPlayerNo < 0) {
         animPlayerNo = c->playerNo;
@@ -98145,7 +98148,7 @@ Animation* Char_getShadowReflectionSprite(Char* c, i32 animNo, int animPlayerNo,
     return Char_getAnimSprite(c, animNo, animPlayerNo, spritePlayerNo, ffx, ownpal);
 }
 
-// Char.getAnim (char.go:7699), 0 TODO
+// Char.getAnim (char.go:7700), 0 TODO
 Animation* Char_getAnim(Char* c, i32 n, GoString ffx) {
     Animation* a = {0};
     if (n == -2) {
@@ -98171,7 +98174,7 @@ Animation* Char_getAnim(Char* c, i32 n, GoString ffx) {
     return a;
 }
 
-// Char.animSpriteSetup (char.go:7758), 0 TODO
+// Char.animSpriteSetup (char.go:7759), 0 TODO
 void Char_animSpriteSetup(Char* c, Animation* a, int spritePN, GoString ffx, bool ownpal) {
     if (((a == NULL) || (spritePN < 0)) || (spritePN >= 12)) {
         return;
@@ -98235,7 +98238,7 @@ void Char_animSpriteSetup(Char* c, Animation* a, int spritePN, GoString ffx, boo
     }
 }
 
-// Char.posReset (char.go:7823), 0 TODO
+// Char.posReset (char.go:7824), 0 TODO
 void Char_posReset(Char* c) {
     if (((c->teamside == -1) || (c->playerNo < 0)) || (c->playerNo >= 12)) {
         c->facing = 0x1p+00f;
@@ -98253,7 +98256,7 @@ void Char_posReset(Char* c) {
     c->vel.v[2] = 0x0p+00f;
 }
 
-// Char.setPosX (char.go:7840), 0 TODO
+// Char.setPosX (char.go:7841), 0 TODO
 void Char_setPosX(Char* c, f32 x, bool all) {
     if (c->pos.v[0] != x) {
         if (Char_isPlayerType(c)) {
@@ -98271,7 +98274,7 @@ void Char_setPosX(Char* c, f32 x, bool all) {
     }
 }
 
-// Char.setPosY (char.go:7858), 0 TODO
+// Char.setPosY (char.go:7859), 0 TODO
 void Char_setPosY(Char* c, f32 y, bool all) {
     c->pos.v[1] = y;
     if (all) {
@@ -98282,7 +98285,7 @@ void Char_setPosY(Char* c, f32 y, bool all) {
     }
 }
 
-// Char.setPosZ (char.go:7866), 0 TODO
+// Char.setPosZ (char.go:7867), 0 TODO
 void Char_setPosZ(Char* c, f32 z, bool all) {
     if (c->pos.v[2] != z) {
         if (Char_isPlayerType(c)) {
@@ -98300,22 +98303,22 @@ void Char_setPosZ(Char* c, f32 z, bool all) {
     }
 }
 
-// Char.addX (char.go:7882), 0 TODO
+// Char.addX (char.go:7883), 0 TODO
 void Char_addX(Char* c, f32 x) {
     Char_setPosX(c, (c->pos.v[0] + (x * c->facing)), true);
 }
 
-// Char.addY (char.go:7886), 0 TODO
+// Char.addY (char.go:7887), 0 TODO
 void Char_addY(Char* c, f32 y) {
     Char_setPosY(c, (c->pos.v[1] + y), true);
 }
 
-// Char.addZ (char.go:7890), 0 TODO
+// Char.addZ (char.go:7891), 0 TODO
 void Char_addZ(Char* c, f32 z) {
     Char_setPosZ(c, (c->pos.v[2] + z), false);
 }
 
-// Char.hitAdd (char.go:7894), 0 TODO
+// Char.hitAdd (char.go:7895), 0 TODO
 void Char_hitAdd(Char* c, i32 h) {
     if (h == 0) {
         return;
@@ -98357,7 +98360,7 @@ void Char_hitAdd(Char* c, i32 h) {
     }
 }
 
-// Char.spawnProjectile (char.go:7930), 0 TODO
+// Char.spawnProjectile (char.go:7931), 0 TODO
 Projectile* Char_spawnProjectile(Char* c) {
     Slice_ProjectilePtr* playerProjs = (&g_sys.projs.v[c->playerNo]);
     if ((*playerProjs).len >= g_sys.cfg.Config.ProjectileMax) {
@@ -98371,7 +98374,7 @@ Projectile* Char_spawnProjectile(Char* c) {
     return p;
 }
 
-// Char.commitProjectile (char.go:7949), 0 TODO
+// Char.commitProjectile (char.go:7950), 0 TODO
 void Char_commitProjectile(Char* c, Projectile* p, PosType pt, f32 offx, f32 offy, f32 offz, bool op, i32 rpg, i32 rpn, bool clsnscale) {
     if (p->id < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("negative projID %v clamped to 0"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, p->id)})))));
@@ -98432,7 +98435,7 @@ void Char_commitProjectile(Char* c, Projectile* p, PosType pt, f32 offx, f32 off
     }
 }
 
-// Char.projDrawPal (char.go:8032), 0 TODO
+// Char.projDrawPal (char.go:8033), 0 TODO
 Arr2_i32 Char_projDrawPal(Char* c, Projectile* p) {
     if (p->palfx->remap.len == 0) {
         return (Arr2_i32){{0, 0}};
@@ -98440,7 +98443,7 @@ Arr2_i32 Char_projDrawPal(Char* c, Projectile* p) {
     return Char_getDrawPal(c, p->palfx->remap.p[0]);
 }
 
-// Char.getMultipleProjs (char.go:8040), 0 TODO
+// Char.getMultipleProjs (char.go:8041), 0 TODO
 Slice_ProjectilePtr Char_getMultipleProjs(Char* c, i32 id, int idx, bool log_) {
     Slice_ProjectilePtr projs = {0};
     if (!Char_canOwnProjectiles(c)) {
@@ -98479,7 +98482,7 @@ Slice_ProjectilePtr Char_getMultipleProjs(Char* c, i32 id, int idx, bool log_) {
     return projs;
 }
 
-// Char.getSingleProj (char.go:8083), 0 TODO
+// Char.getSingleProj (char.go:8084), 0 TODO
 Projectile* Char_getSingleProj(Char* c, i32 id, int idx, bool log_) {
     if (idx < 0) {
         if (log_) {
@@ -98494,7 +98497,7 @@ Projectile* Char_getSingleProj(Char* c, i32 id, int idx, bool log_) {
     return NULL;
 }
 
-// Char.clsnScaleLocal (char.go:8152), 0 TODO
+// Char.clsnScaleLocal (char.go:8153), 0 TODO
 Arr2_f32 Char_clsnScaleLocal(Char* c) {
     if (((c->helperIndex != 0) && c->ownclsnscale) && (c->animPN == c->playerNo)) {
         return (Arr2_f32){{c->size.xscale, c->size.yscale}};
@@ -98506,12 +98509,12 @@ Arr2_f32 Char_clsnScaleLocal(Char* c) {
     return (Arr2_f32){{0x1p+00f, 0x1p+00f}};
 }
 
-// Char.sizeBoxScaleWorld (char.go:8180), 0 TODO
+// Char.sizeBoxScaleWorld (char.go:8181), 0 TODO
 Arr2_f32 Char_sizeBoxScaleWorld(Char* c) {
     return (Arr2_f32){{c->baselocalscl, c->baselocalscl}};
 }
 
-// Char.gethitAnimtype (char.go:8184), 0 TODO
+// Char.gethitAnimtype (char.go:8185), 0 TODO
 Reaction Char_gethitAnimtype(Char* c) {
     if (c->ghv.fallflag) {
         return c->ghv.fall_animtype;
@@ -98528,12 +98531,12 @@ Reaction Char_gethitAnimtype(Char* c) {
     }
 }
 
-// Char.isTargetBound (char.go:8198), 0 TODO
+// Char.isTargetBound (char.go:8199), 0 TODO
 bool Char_isTargetBound(Char* c) {
     return GetHitVar_idMatch(c->ghv, c->CharSystemVar_.bindToId);
 }
 
-// Char.initConstants (char.go:8202), 0 TODO
+// Char.initConstants (char.go:8203), 0 TODO
 void Char_initConstants(Char* c, CharGlobalInfo* gi) {
     CharData_init(&gi->data);
     gi->attackBase = 100;
@@ -98630,7 +98633,7 @@ void Char_initConstants(Char* c, CharGlobalInfo* gi) {
     Map_GoString_TypedValue_set(&gi->constants, GOSTR("input.fbflipenemydistance"), (TypedValue){.Type = 1, .Num = -0x1p+00});
 }
 
-// Char.initCnsVar (char.go:8308), 0 TODO
+// Char.initCnsVar (char.go:8309), 0 TODO
 void Char_initCnsVar(Char* c) {
     c->varGen++;
     c->cnsvar = Map_i32_i32_make(0);
@@ -98639,7 +98642,7 @@ void Char_initCnsVar(Char* c) {
     c->cnssysfvar = Map_i32_f32_make(0);
 }
 
-// Char.varGet (char.go:8316), 0 TODO
+// Char.varGet (char.go:8317), 0 TODO
 BytecodeValue Char_varGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("var index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98664,7 +98667,7 @@ BytecodeValue Char_varGet(Char* c, i32 i) {
     return fn_BytecodeInt(0);
 }
 
-// Char.fvarGet (char.go:8344), 0 TODO
+// Char.fvarGet (char.go:8345), 0 TODO
 BytecodeValue Char_fvarGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("fvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98689,7 +98692,7 @@ BytecodeValue Char_fvarGet(Char* c, i32 i) {
     return fn_BytecodeFloat(0x0p+00f);
 }
 
-// Char.sysVarGet (char.go:8367), 0 TODO
+// Char.sysVarGet (char.go:8368), 0 TODO
 BytecodeValue Char_sysVarGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98704,7 +98707,7 @@ BytecodeValue Char_sysVarGet(Char* c, i32 i) {
     return fn_BytecodeInt(0);
 }
 
-// Char.sysFvarGet (char.go:8380), 0 TODO
+// Char.sysFvarGet (char.go:8381), 0 TODO
 BytecodeValue Char_sysFvarGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysfvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98719,7 +98722,7 @@ BytecodeValue Char_sysFvarGet(Char* c, i32 i) {
     return fn_BytecodeFloat(0x0p+00f);
 }
 
-// Char.cnsVarSet (char.go:8393), 0 TODO
+// Char.cnsVarSet (char.go:8394), 0 TODO
 BytecodeValue Char_cnsVarSet(Char* c, i32 i, BytecodeValue value, i32 scType, i32 varType) {
     Char* target = c;
     {
@@ -98765,7 +98768,7 @@ BytecodeValue Char_cnsVarSet(Char* c, i32 i, BytecodeValue value, i32 scType, i3
     return fn_BytecodeUndefined();
 }
 
-// Char.varSet (char.go:8433), 0 TODO
+// Char.varSet (char.go:8434), 0 TODO
 BytecodeValue Char_varSet(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("var index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98778,7 +98781,7 @@ BytecodeValue Char_varSet(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(v);
 }
 
-// Char.fvarSet (char.go:8446), 0 TODO
+// Char.fvarSet (char.go:8447), 0 TODO
 BytecodeValue Char_fvarSet(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("fvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98791,7 +98794,7 @@ BytecodeValue Char_fvarSet(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(v);
 }
 
-// Char.sysVarSet (char.go:8459), 0 TODO
+// Char.sysVarSet (char.go:8460), 0 TODO
 BytecodeValue Char_sysVarSet(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98801,7 +98804,7 @@ BytecodeValue Char_sysVarSet(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(v);
 }
 
-// Char.sysFvarSet (char.go:8469), 0 TODO
+// Char.sysFvarSet (char.go:8470), 0 TODO
 BytecodeValue Char_sysFvarSet(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysfvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98811,7 +98814,7 @@ BytecodeValue Char_sysFvarSet(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(v);
 }
 
-// Char.varAdd (char.go:8479), 0 TODO
+// Char.varAdd (char.go:8480), 0 TODO
 BytecodeValue Char_varAdd(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("var index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98833,7 +98836,7 @@ BytecodeValue Char_varAdd(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(Map_i32_i32_get(&c->cnsvar, i, NULL));
 }
 
-// Char.fvarAdd (char.go:8497), 0 TODO
+// Char.fvarAdd (char.go:8498), 0 TODO
 BytecodeValue Char_fvarAdd(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("fvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98854,7 +98857,7 @@ BytecodeValue Char_fvarAdd(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(Map_i32_f32_get(&c->cnsfvar, i, NULL));
 }
 
-// Char.sysVarAdd (char.go:8514), 0 TODO
+// Char.sysVarAdd (char.go:8515), 0 TODO
 BytecodeValue Char_sysVarAdd(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98872,7 +98875,7 @@ BytecodeValue Char_sysVarAdd(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(Map_i32_i32_get(&c->cnssysvar, i, NULL));
 }
 
-// Char.sysFvarAdd (char.go:8528), 0 TODO
+// Char.sysFvarAdd (char.go:8529), 0 TODO
 BytecodeValue Char_sysFvarAdd(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysfvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -98890,29 +98893,29 @@ BytecodeValue Char_sysFvarAdd(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(Map_i32_f32_get(&c->cnssysfvar, i, NULL));
 }
 
-// Char.varRangeSet (char.go:8589), 0 TODO
+// Char.varRangeSet (char.go:8590), 0 TODO
 void Char_varRangeSet(Char* c, i32 first, i32 last, i32 val) {
     c->varGen++;
     fn_varRangeSetSub_i32(c, (&c->cnsvar), first, last, val);
 }
 
-// Char.fvarRangeSet (char.go:8594), 0 TODO
+// Char.fvarRangeSet (char.go:8595), 0 TODO
 void Char_fvarRangeSet(Char* c, i32 first, i32 last, f32 val) {
     c->varGen++;
     fn_varRangeSetSub_f32(c, (&c->cnsfvar), first, last, val);
 }
 
-// Char.sysVarRangeSet (char.go:8599), 0 TODO
+// Char.sysVarRangeSet (char.go:8600), 0 TODO
 void Char_sysVarRangeSet(Char* c, i32 first, i32 last, i32 val) {
     fn_varRangeSetSub_i32(c, (&c->cnssysvar), first, last, val);
 }
 
-// Char.sysFvarRangeSet (char.go:8603), 0 TODO
+// Char.sysFvarRangeSet (char.go:8604), 0 TODO
 void Char_sysFvarRangeSet(Char* c, i32 first, i32 last, f32 val) {
     fn_varRangeSetSub_f32(c, (&c->cnssysfvar), first, last, val);
 }
 
-// Char.setFacing (char.go:8607), 0 TODO
+// Char.setFacing (char.go:8608), 0 TODO
 void Char_setFacing(Char* c, f32 f) {
     if (f != 0x0p+00f) {
         if (((c->facing < 0x0p+00f)) != ((f < 0x0p+00f))) {
@@ -98922,7 +98925,7 @@ void Char_setFacing(Char* c, f32 f) {
     }
 }
 
-// Char.getMultipleStageBg (char.go:8617), 0 TODO
+// Char.getMultipleStageBg (char.go:8618), 0 TODO
 Slice_backGroundPtr Char_getMultipleStageBg(Char* c, i32 id, int idx, bool log_) {
     Slice_backGroundPtr filteredBg = {0};
     if ((g_sys.stage->bg.len > 0) && (idx < g_sys.stage->bg.len)) {
@@ -98955,7 +98958,7 @@ Slice_backGroundPtr Char_getMultipleStageBg(Char* c, i32 id, int idx, bool log_)
     return filteredBg;
 }
 
-// Char.getSingleStageBg (char.go:8651), 0 TODO
+// Char.getSingleStageBg (char.go:8652), 0 TODO
 backGround* Char_getSingleStageBg(Char* c, i32 id, int idx, bool log_) {
     if (idx < 0) {
         if (log_) {
@@ -98970,7 +98973,7 @@ backGround* Char_getSingleStageBg(Char* c, i32 id, int idx, bool log_) {
     return NULL;
 }
 
-// Char.numStageBG (char.go:8669), 0 TODO
+// Char.numStageBG (char.go:8670), 0 TODO
 BytecodeValue Char_numStageBG(Char* c, BytecodeValue id) {
     if (BytecodeValue_IsUndefined(id)) {
         return fn_BytecodeUndefined();
@@ -98981,7 +98984,7 @@ BytecodeValue Char_numStageBG(Char* c, BytecodeValue id) {
     return fn_BytecodeInt(total);
 }
 
-// Char.getTarget (char.go:8682), 0 TODO
+// Char.getTarget (char.go:8683), 0 TODO
 Slice_i32 Char_getTarget(Char* c, i32 id, int idx) {
     if ((id < 0) && (idx < 0)) {
         return c->targets;
@@ -99009,7 +99012,7 @@ Slice_i32 Char_getTarget(Char* c, i32 id, int idx) {
     return (Slice_i32){0};
 }
 
-// Char.targetFacing (char.go:8710), 0 TODO
+// Char.targetFacing (char.go:8711), 0 TODO
 void Char_targetFacing(Char* c, Slice_i32 tar, i32 f) {
     if (f == 0) {
         return;
@@ -99033,7 +99036,7 @@ void Char_targetFacing(Char* c, Slice_i32 tar, i32 f) {
     }
 }
 
-// Char.targetBind (char.go:8725), 0 TODO
+// Char.targetBind (char.go:8726), 0 TODO
 void Char_targetBind(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z) {
     {
         Slice_i32 _t2 = tar;
@@ -99056,7 +99059,7 @@ void Char_targetBind(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z) {
     }
 }
 
-// Char.bindToTarget (char.go:8739), 0 TODO
+// Char.bindToTarget (char.go:8740), 0 TODO
 void Char_bindToTarget(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z, HMF hmf) {
     if (tar.len > 0) {
         {
@@ -99090,7 +99093,7 @@ void Char_bindToTarget(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z, H
     }
 }
 
-// Char.targetLifeAdd (char.go:8773), 0 TODO
+// Char.targetLifeAdd (char.go:8774), 0 TODO
 void Char_targetLifeAdd(Char* c, Slice_i32 tar, i32 add, bool kill, bool absolute, bool dizzy, bool redlife) {
     if (add == 0) {
         return;
@@ -99126,7 +99129,7 @@ void Char_targetLifeAdd(Char* c, Slice_i32 tar, i32 add, bool kill, bool absolut
     }
 }
 
-// Char.targetPowerAdd (char.go:8805), 0 TODO
+// Char.targetPowerAdd (char.go:8806), 0 TODO
 void Char_targetPowerAdd(Char* c, Slice_i32 tar, i32 power) {
     if (power == 0) {
         return;
@@ -99146,7 +99149,7 @@ void Char_targetPowerAdd(Char* c, Slice_i32 tar, i32 power) {
     }
 }
 
-// Char.targetDizzyPointsAdd (char.go:8816), 0 TODO
+// Char.targetDizzyPointsAdd (char.go:8817), 0 TODO
 void Char_targetDizzyPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     if (add == 0) {
         return;
@@ -99166,7 +99169,7 @@ void Char_targetDizzyPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     }
 }
 
-// Char.targetGuardPointsAdd (char.go:8827), 0 TODO
+// Char.targetGuardPointsAdd (char.go:8828), 0 TODO
 void Char_targetGuardPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     if (add == 0) {
         return;
@@ -99186,7 +99189,7 @@ void Char_targetGuardPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     }
 }
 
-// Char.targetRedLifeAdd (char.go:8838), 0 TODO
+// Char.targetRedLifeAdd (char.go:8839), 0 TODO
 void Char_targetRedLifeAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     if (add == 0) {
         return;
@@ -99206,7 +99209,7 @@ void Char_targetRedLifeAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     }
 }
 
-// Char.targetScoreAdd (char.go:8849), 0 TODO
+// Char.targetScoreAdd (char.go:8850), 0 TODO
 void Char_targetScoreAdd(Char* c, Slice_i32 tar, f32 s) {
     if (s == 0x0p+00f) {
         return;
@@ -99226,7 +99229,7 @@ void Char_targetScoreAdd(Char* c, Slice_i32 tar, f32 s) {
     }
 }
 
-// Char.targetState (char.go:8860), 0 TODO
+// Char.targetState (char.go:8861), 0 TODO
 void Char_targetState(Char* c, Slice_i32 tar, i32 state) {
     if ((tar.len > 0) && (state >= 0)) {
         int pn = c->ss.sb->playerNo;
@@ -99250,7 +99253,7 @@ void Char_targetState(Char* c, Slice_i32 tar, i32 state) {
     }
 }
 
-// Char.targetVelSetX (char.go:8875), 0 TODO
+// Char.targetVelSetX (char.go:8876), 0 TODO
 void Char_targetVelSetX(Char* c, Slice_i32 tar, f32 x) {
     {
         Slice_i32 _t2 = tar;
@@ -99268,7 +99271,7 @@ void Char_targetVelSetX(Char* c, Slice_i32 tar, f32 x) {
     }
 }
 
-// Char.targetVelSetY (char.go:8884), 0 TODO
+// Char.targetVelSetY (char.go:8885), 0 TODO
 void Char_targetVelSetY(Char* c, Slice_i32 tar, f32 y) {
     {
         Slice_i32 _t2 = tar;
@@ -99286,7 +99289,7 @@ void Char_targetVelSetY(Char* c, Slice_i32 tar, f32 y) {
     }
 }
 
-// Char.targetVelSetZ (char.go:8893), 0 TODO
+// Char.targetVelSetZ (char.go:8894), 0 TODO
 void Char_targetVelSetZ(Char* c, Slice_i32 tar, f32 z) {
     {
         Slice_i32 _t2 = tar;
@@ -99304,7 +99307,7 @@ void Char_targetVelSetZ(Char* c, Slice_i32 tar, f32 z) {
     }
 }
 
-// Char.targetVelAddX (char.go:8902), 0 TODO
+// Char.targetVelAddX (char.go:8903), 0 TODO
 void Char_targetVelAddX(Char* c, Slice_i32 tar, f32 x) {
     {
         Slice_i32 _t2 = tar;
@@ -99322,7 +99325,7 @@ void Char_targetVelAddX(Char* c, Slice_i32 tar, f32 x) {
     }
 }
 
-// Char.targetVelAddY (char.go:8911), 0 TODO
+// Char.targetVelAddY (char.go:8912), 0 TODO
 void Char_targetVelAddY(Char* c, Slice_i32 tar, f32 y) {
     {
         Slice_i32 _t2 = tar;
@@ -99340,7 +99343,7 @@ void Char_targetVelAddY(Char* c, Slice_i32 tar, f32 y) {
     }
 }
 
-// Char.targetVelAddZ (char.go:8920), 0 TODO
+// Char.targetVelAddZ (char.go:8921), 0 TODO
 void Char_targetVelAddZ(Char* c, Slice_i32 tar, f32 z) {
     {
         Slice_i32 _t2 = tar;
@@ -99358,7 +99361,7 @@ void Char_targetVelAddZ(Char* c, Slice_i32 tar, f32 z) {
     }
 }
 
-// Char.targetDrop (char.go:8929), 0 TODO
+// Char.targetDrop (char.go:8930), 0 TODO
 void Char_targetDrop(Char* c, i32 excludeid, i32 excludechar, bool keepone) {
     Slice_i32 tg = {0};
     if (keepone && (excludechar > 0)) {
@@ -99440,7 +99443,7 @@ void Char_targetDrop(Char* c, i32 excludeid, i32 excludechar, bool keepone) {
     }
 }
 
-// Char.attackTrigger (char.go:8988), 0 TODO
+// Char.attackTrigger (char.go:8989), 0 TODO
 f32 Char_attackTrigger(Char* c) {
     f64 base = ((f64)Char_gi(c)->attackBase);
     f64 mul = ((f64)c->CharSystemVar_.attackMul.v[0]);
@@ -99449,7 +99452,7 @@ f32 Char_attackTrigger(Char* c) {
     return ((f32)cleaned);
 }
 
-// Char.defenceTrigger (char.go:9002), 0 TODO
+// Char.defenceTrigger (char.go:9003), 0 TODO
 f32 Char_defenceTrigger(Char* c) {
     f64 def = ((f64)c->CharSystemVar_.finalDefense);
     f64 result = (def * 0x1.9p+06);
@@ -99457,7 +99460,7 @@ f32 Char_defenceTrigger(Char* c) {
     return ((f32)clean);
 }
 
-// Char.computeDamage (char.go:9011), 0 TODO
+// Char.computeDamage (char.go:9012), 0 TODO
 i32 Char_computeDamage(Char* c, f64 damage, bool kill, bool absolute, f32 atkmul, Char* attacker, bool bounds) {
     if ((damage == 0x0p+00) || ((!absolute) && (atkmul == 0x0p+00f))) {
         return 0;
@@ -99480,7 +99483,7 @@ i32 Char_computeDamage(Char* c, f64 damage, bool kill, bool absolute, f32 atkmul
     return int_;
 }
 
-// Char.lifeAdd (char.go:9042), 0 TODO
+// Char.lifeAdd (char.go:9043), 0 TODO
 void Char_lifeAdd(Char* c, f64 add, bool kill, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -99511,7 +99514,7 @@ void Char_lifeAdd(Char* c, f64 add, bool kill, bool absolute) {
     Char_lifeSet(c, new_life_i32);
 }
 
-// Char.lifeSet (char.go:9082), 0 TODO
+// Char.lifeSet (char.go:9083), 0 TODO
 void Char_lifeSet(Char* c, i32 life) {
     if (Char_alive(c) && System_roundNoDamage(&g_sys)) {
         return;
@@ -99583,7 +99586,7 @@ void Char_lifeSet(Char* c, i32 life) {
     }
 }
 
-// Char.setPower (char.go:9141), 0 TODO
+// Char.setPower (char.go:9142), 0 TODO
 void Char_setPower(Char* c, i32 pow_) {
     if (g_sys.SystemStateVars_.intro < 0) {
         return;
@@ -99595,7 +99598,7 @@ void Char_setPower(Char* c, i32 pow_) {
     }
 }
 
-// Char.powerAdd (char.go:9154), 0 TODO
+// Char.powerAdd (char.go:9155), 0 TODO
 void Char_powerAdd(Char* c, i32 add) {
     if (add == 0) {
         return;
@@ -99604,12 +99607,12 @@ void Char_powerAdd(Char* c, i32 add) {
     Char_setPower(Char_powerOwner(c), int_);
 }
 
-// Char.powerSet (char.go:9164), 0 TODO
+// Char.powerSet (char.go:9165), 0 TODO
 void Char_powerSet(Char* c, i32 pow_) {
     Char_setPower(Char_powerOwner(c), pow_);
 }
 
-// Char.dizzyPointsAdd (char.go:9168), 0 TODO
+// Char.dizzyPointsAdd (char.go:9169), 0 TODO
 void Char_dizzyPointsAdd(Char* c, f64 add, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -99621,14 +99624,14 @@ void Char_dizzyPointsAdd(Char* c, f64 add, bool absolute) {
     Char_dizzyPointsSet(c, int_);
 }
 
-// Char.dizzyPointsSet (char.go:9180), 0 TODO
+// Char.dizzyPointsSet (char.go:9181), 0 TODO
 void Char_dizzyPointsSet(Char* c, i32 set) {
     if (Char_dizzyEnabled(c) && (!System_roundNoDamage(&g_sys))) {
         c->dizzyPoints = fn_Clamp_i32(set, 0, c->dizzyPointsMax);
     }
 }
 
-// Char.guardPointsAdd (char.go:9186), 0 TODO
+// Char.guardPointsAdd (char.go:9187), 0 TODO
 void Char_guardPointsAdd(Char* c, f64 add, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -99640,14 +99643,14 @@ void Char_guardPointsAdd(Char* c, f64 add, bool absolute) {
     Char_guardPointsSet(c, int_);
 }
 
-// Char.guardPointsSet (char.go:9198), 0 TODO
+// Char.guardPointsSet (char.go:9199), 0 TODO
 void Char_guardPointsSet(Char* c, i32 set) {
     if (Char_guardBreakEnabled(c) && (!System_roundNoDamage(&g_sys))) {
         c->guardPoints = fn_Clamp_i32(set, 0, c->guardPointsMax);
     }
 }
 
-// Char.redLifeAdd (char.go:9204), 0 TODO
+// Char.redLifeAdd (char.go:9205), 0 TODO
 void Char_redLifeAdd(Char* c, f64 add, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -99659,7 +99662,7 @@ void Char_redLifeAdd(Char* c, f64 add, bool absolute) {
     Char_redLifeSet(c, int_);
 }
 
-// Char.redLifeSet (char.go:9216), 0 TODO
+// Char.redLifeSet (char.go:9217), 0 TODO
 void Char_redLifeSet(Char* c, i32 set) {
     if (!Char_alive(c)) {
         c->redLife = 0;
@@ -99682,7 +99685,7 @@ void Char_redLifeSet(Char* c, i32 set) {
     }
 }
 
-// Char.score (char.go:9234), 0 TODO
+// Char.score (char.go:9235), 0 TODO
 f32 Char_score(Char* c) {
     if (c->teamside == -1) {
         return 0x0p+00f;
@@ -99690,7 +99693,7 @@ f32 Char_score(Char* c) {
     return g_sys.SystemStateVars_.scorePoints.v[c->teamside];
 }
 
-// Char.scoreAdd (char.go:9241), 0 TODO
+// Char.scoreAdd (char.go:9242), 0 TODO
 void Char_scoreAdd(Char* c, f32 val) {
     if (((val == 0x0p+00f) || (c->teamside == -1)) || Char_asf(c, 140737488355328U)) {
         return;
@@ -99698,7 +99701,7 @@ void Char_scoreAdd(Char* c, f32 val) {
     g_sys.SystemStateVars_.scorePoints.v[c->teamside] += val;
 }
 
-// Char.scoreTotal (char.go:9248), 0 TODO
+// Char.scoreTotal (char.go:9249), 0 TODO
 f32 Char_scoreTotal(Char* c) {
     if (c->teamside == -1) {
         return 0x0p+00f;
@@ -99718,7 +99721,7 @@ f32 Char_scoreTotal(Char* c) {
     return s;
 }
 
-// Char.consecutiveWins (char.go:9262), 0 TODO
+// Char.consecutiveWins (char.go:9263), 0 TODO
 i32 Char_consecutiveWins(Char* c) {
     if (c->teamside == -1) {
         return 0;
@@ -99726,22 +99729,22 @@ i32 Char_consecutiveWins(Char* c) {
     return g_sys.SystemStateVars_.consecutiveWins.v[c->teamside];
 }
 
-// Char.dizzyEnabled (char.go:9269), 0 TODO
+// Char.dizzyEnabled (char.go:9270), 0 TODO
 bool Char_dizzyEnabled(Char* c) {
     return g_sys.fightScreen.stunbar;
 }
 
-// Char.guardBreakEnabled (char.go:9287), 0 TODO
+// Char.guardBreakEnabled (char.go:9288), 0 TODO
 bool Char_guardBreakEnabled(Char* c) {
     return g_sys.fightScreen.guardbar;
 }
 
-// Char.redLifeEnabled (char.go:9305), 0 TODO
+// Char.redLifeEnabled (char.go:9306), 0 TODO
 bool Char_redLifeEnabled(Char* c) {
     return g_sys.fightScreen.redlifebar;
 }
 
-// Char.distX (char.go:9323), 0 TODO
+// Char.distX (char.go:9324), 0 TODO
 f32 Char_distX(Char* c, Char* opp, Char* oc) {
     f32 cpos = (c->pos.v[0] * c->localscl);
     f32 opos = (opp->pos.v[0] * opp->localscl);
@@ -99766,7 +99769,7 @@ f32 Char_distX(Char* c, Char* opp, Char* oc) {
     return dist;
 }
 
-// Char.distY (char.go:9346), 0 TODO
+// Char.distY (char.go:9347), 0 TODO
 f32 Char_distY(Char* c, Char* opp, Char* oc) {
     f32 cpos = (c->pos.v[1] * c->localscl);
     f32 opos = (opp->pos.v[1] * opp->localscl);
@@ -99783,14 +99786,14 @@ f32 Char_distY(Char* c, Char* opp, Char* oc) {
     return (((opos - cpos)) / oc->localscl);
 }
 
-// Char.distZ (char.go:9360), 0 TODO
+// Char.distZ (char.go:9361), 0 TODO
 f32 Char_distZ(Char* c, Char* opp, Char* oc) {
     f32 cpos = (c->pos.v[2] * c->localscl);
     f32 opos = (opp->pos.v[2] * opp->localscl);
     return (((opos - cpos)) / oc->localscl);
 }
 
-// Char.bodyDistX (char.go:9367), 0 TODO
+// Char.bodyDistX (char.go:9368), 0 TODO
 f32 Char_bodyDistX(Char* c, Char* opp, Char* oc) {
     f32 dist = Char_distX(c, opp, oc);
     Slice_ClsnFinal cboxes = Char_getClsnLocal(c, 3);
@@ -99810,7 +99813,7 @@ f32 Char_bodyDistX(Char* c, Char* opp, Char* oc) {
     return ((dist - cw) + oppw);
 }
 
-// Char.bodyDistY (char.go:9401), 0 TODO
+// Char.bodyDistY (char.go:9402), 0 TODO
 f32 Char_bodyDistY(Char* c, Char* opp, Char* oc) {
     Slice_ClsnFinal cboxes = Char_getClsnLocal(c, 3);
     Slice_ClsnFinal oppboxes = Char_getClsnLocal(opp, 3);
@@ -99833,7 +99836,7 @@ f32 Char_bodyDistY(Char* c, Char* opp, Char* oc) {
     return 0x0p+00f;
 }
 
-// Char.bodyDistZ (char.go:9426), 0 TODO
+// Char.bodyDistZ (char.go:9427), 0 TODO
 f32 Char_bodyDistZ(Char* c, Char* opp, Char* oc) {
     f32 ctop = (((c->pos.v[2] - c->CharSystemVar_.depthPlayer.v[0])) * c->localscl);
     f32 cbot = (((c->pos.v[2] + c->CharSystemVar_.depthPlayer.v[1])) * c->localscl);
@@ -99850,7 +99853,7 @@ f32 Char_bodyDistZ(Char* c, Char* opp, Char* oc) {
     }
 }
 
-// Char.rdDistX (char.go:9441), 0 TODO
+// Char.rdDistX (char.go:9442), 0 TODO
 BytecodeValue Char_rdDistX(Char* c, Char* rd, Char* oc) {
     if (rd == NULL) {
         return fn_BytecodeUndefined();
@@ -99862,7 +99865,7 @@ BytecodeValue Char_rdDistX(Char* c, Char* rd, Char* oc) {
     return fn_BytecodeFloat(dist);
 }
 
-// Char.rdDistY (char.go:9455), 0 TODO
+// Char.rdDistY (char.go:9456), 0 TODO
 BytecodeValue Char_rdDistY(Char* c, Char* rd, Char* oc) {
     if (rd == NULL) {
         return fn_BytecodeUndefined();
@@ -99874,7 +99877,7 @@ BytecodeValue Char_rdDistY(Char* c, Char* rd, Char* oc) {
     return fn_BytecodeFloat(dist);
 }
 
-// Char.rdDistZ (char.go:9469), 0 TODO
+// Char.rdDistZ (char.go:9470), 0 TODO
 BytecodeValue Char_rdDistZ(Char* c, Char* rd, Char* oc) {
     if (rd == NULL) {
         return fn_BytecodeUndefined();
@@ -99883,7 +99886,7 @@ BytecodeValue Char_rdDistZ(Char* c, Char* rd, Char* oc) {
     return fn_BytecodeFloat(dist);
 }
 
-// Char.p2BodyDistX (char.go:9477), 0 TODO
+// Char.p2BodyDistX (char.go:9478), 0 TODO
 BytecodeValue Char_p2BodyDistX(Char* c, Char* oc) {
     {
         Char* _t1 = Char_p2(c);
@@ -99900,7 +99903,7 @@ BytecodeValue Char_p2BodyDistX(Char* c, Char* oc) {
     }
 }
 
-// Char.p2BodyDistY (char.go:9489), 0 TODO
+// Char.p2BodyDistY (char.go:9490), 0 TODO
 BytecodeValue Char_p2BodyDistY(Char* c, Char* oc) {
     {
         Char* _t1 = Char_p2(c);
@@ -99917,7 +99920,7 @@ BytecodeValue Char_p2BodyDistY(Char* c, Char* oc) {
     }
 }
 
-// Char.p2BodyDistZ (char.go:9499), 0 TODO
+// Char.p2BodyDistZ (char.go:9500), 0 TODO
 BytecodeValue Char_p2BodyDistZ(Char* c, Char* oc) {
     {
         Char* _t1 = Char_p2(c);
@@ -99930,7 +99933,7 @@ BytecodeValue Char_p2BodyDistZ(Char* c, Char* oc) {
     }
 }
 
-// Char.setPauseTime (char.go:9507), 0 TODO
+// Char.setPauseTime (char.go:9508), 0 TODO
 void Char_setPauseTime(Char* c, i32 pausetime, i32 movetime) {
     if ((((~pausetime) < g_sys.SystemStateVars_.pausetimebuffer) || (g_sys.SystemStateVars_.pauseplayerno == c->playerNo)) || (c->playerNo != c->ss.sb->playerNo)) {
         g_sys.SystemStateVars_.pausetimebuffer = (~pausetime);
@@ -99949,7 +99952,7 @@ void Char_setPauseTime(Char* c, i32 pausetime, i32 movetime) {
     }
 }
 
-// Char.setSuperPauseTime (char.go:9525), 0 TODO
+// Char.setSuperPauseTime (char.go:9526), 0 TODO
 void Char_setSuperPauseTime(Char* c, i32 pausetime, i32 movetime, bool unhittable, f32 p2defmul) {
     if ((((~pausetime) < g_sys.SystemStateVars_.supertimebuffer) || (g_sys.SystemStateVars_.superplayerno == c->playerNo)) || (c->playerNo != c->ss.sb->playerNo)) {
         g_sys.SystemStateVars_.supertimebuffer = (~pausetime);
@@ -99992,7 +99995,7 @@ void Char_setSuperPauseTime(Char* c, i32 pausetime, i32 movetime, bool unhittabl
     }
 }
 
-// Char.propagateIgnoreDarkenTime (char.go:9569), 0 TODO
+// Char.propagateIgnoreDarkenTime (char.go:9570), 0 TODO
 void Char_propagateIgnoreDarkenTime(Char* c) {
     i32 value = c->CharSystemVar_.ignoreDarkenTime;
     Char* top = c;
@@ -100036,7 +100039,7 @@ void Char_propagateIgnoreDarkenTime(Char* c) {
     }
 }
 
-// Char.getPalfx (char.go:9607), 0 TODO
+// Char.getPalfx (char.go:9608), 0 TODO
 PalFX* Char_getPalfx(Char* c) {
     if (c->palfx != NULL) {
         return c->palfx;
@@ -100054,37 +100057,37 @@ PalFX* Char_getPalfx(Char* c) {
     return c->palfx;
 }
 
-// Char.getPalMap (char.go:9625), 0 TODO
+// Char.getPalMap (char.go:9626), 0 TODO
 Slice_int Char_getPalMap(Char* c) {
     return Char_getPalfx(c)->remap;
 }
 
-// Char.pause (char.go:9629), 0 TODO
+// Char.pause (char.go:9630), 0 TODO
 bool Char_pause(Char* c) {
     return (c->acttmp <= -2);
 }
 
-// Char.hitPause (char.go:9633), 0 TODO
+// Char.hitPause (char.go:9634), 0 TODO
 bool Char_hitPause(Char* c) {
     return (c->CharSystemVar_.hitPauseTime > 0);
 }
 
-// Char.angleSet (char.go:9637), 0 TODO
+// Char.angleSet (char.go:9638), 0 TODO
 void Char_angleSet(Char* c, f32 a) {
     c->CharSystemVar_.rot.angle = a;
 }
 
-// Char.XangleSet (char.go:9641), 0 TODO
+// Char.XangleSet (char.go:9642), 0 TODO
 void Char_XangleSet(Char* c, f32 xa) {
     c->CharSystemVar_.rot.xangle = xa;
 }
 
-// Char.YangleSet (char.go:9645), 0 TODO
+// Char.YangleSet (char.go:9646), 0 TODO
 void Char_YangleSet(Char* c, f32 ya) {
     c->CharSystemVar_.rot.yangle = ya;
 }
 
-// Char.inputWait (char.go:9649), 0 TODO
+// Char.inputWait (char.go:9650), 0 TODO
 bool Char_inputWait(Char* c) {
     if (Char_asf(c, 4503599627370496U)) {
         return false;
@@ -100098,7 +100101,7 @@ bool Char_inputWait(Char* c) {
     return false;
 }
 
-// Char.makeDust (char.go:9666), 0 TODO
+// Char.makeDust (char.go:9667), 0 TODO
 void Char_makeDust(Char* c, f32 x, f32 y, f32 z, int spacing) {
     if (Char_asf(c, 8796093022208U)) {
         return;
@@ -100130,7 +100133,7 @@ void Char_makeDust(Char* c, f32 x, f32 y, f32 z, int spacing) {
     }
 }
 
-// Char.hitFallDamage (char.go:9695), 0 TODO
+// Char.hitFallDamage (char.go:9696), 0 TODO
 void Char_hitFallDamage(Char* c) {
     if (c->ss.moveType == 65536) {
         Char_lifeAdd(c, (-((f64)c->ghv.fall_damage)), c->ghv.fall_kill, false);
@@ -100138,7 +100141,7 @@ void Char_hitFallDamage(Char* c) {
     }
 }
 
-// Char.hitFallVel (char.go:9702), 0 TODO
+// Char.hitFallVel (char.go:9703), 0 TODO
 void Char_hitFallVel(Char* c) {
     if (c->ss.moveType == 65536) {
         if (!math_IsNaN(((f64)c->ghv.fall_xvelocity))) {
@@ -100151,7 +100154,7 @@ void Char_hitFallVel(Char* c) {
     }
 }
 
-// Char.hitFallSet (char.go:9714), 0 TODO
+// Char.hitFallSet (char.go:9715), 0 TODO
 void Char_hitFallSet(Char* c, i32 f, f32 xv, f32 yv, f32 zv) {
     if (f >= 0) {
         c->ghv.fallflag = (f != 0);
@@ -100167,7 +100170,7 @@ void Char_hitFallSet(Char* c, i32 f, f32 xv, f32 yv, f32 zv) {
     }
 }
 
-// Char.remapPal (char.go:9729), 0 TODO
+// Char.remapPal (char.go:9730), 0 TODO
 void Char_remapPal(Char* c, PalFX* pfx, Arr2_i32 src, Arr2_i32 dst) {
     if ((src.v[0] == -1) && (dst.v[0] == -1)) {
         pfx->remap = (Slice_int){0};
@@ -100241,7 +100244,7 @@ void Char_remapPal(Char* c, PalFX* pfx, Arr2_i32 src, Arr2_i32 dst) {
     Char_gi(c)->remappedpal = (Arr2_i32){{dst.v[0], dst.v[1]}};
 }
 
-// Char.forceRemapPal (char.go:9821), 0 TODO
+// Char.forceRemapPal (char.go:9822), 0 TODO
 void Char_forceRemapPal(Char* c, PalFX* pfx, Arr2_i32 dst) {
     if ((dst.v[0] < 0) || (dst.v[1] < 0)) {
         return;
@@ -100277,7 +100280,7 @@ void Char_forceRemapPal(Char* c, PalFX* pfx, Arr2_i32 dst) {
     }
 }
 
-// Char.getDrawPal (char.go:9858), 0 TODO
+// Char.getDrawPal (char.go:9859), 0 TODO
 Arr2_i32 Char_getDrawPal(Char* c, int palIndex) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&Char_gi(c)->palettedata->palList.PalTable);
@@ -100293,7 +100296,7 @@ Arr2_i32 Char_getDrawPal(Char* c, int palIndex) {
     return (Arr2_i32){{0, 0}};
 }
 
-// Char.drawPal (char.go:9867), 0 TODO
+// Char.drawPal (char.go:9868), 0 TODO
 Arr2_i32 Char_drawPal(Char* c) {
     if ((c->anim == NULL) || (c->anim->spr == NULL)) {
         return (Arr2_i32){{0, 0}};
@@ -100306,7 +100309,7 @@ Arr2_i32 Char_drawPal(Char* c) {
     return Char_getDrawPal(c, source);
 }
 
-// Char.remapSprite (char.go:9882), 0 TODO
+// Char.remapSprite (char.go:9883), 0 TODO
 void Char_remapSprite(Char* c, Arr2_i32 src, Arr2_i32 dst) {
     if ((((src.v[0] == -1) || (src.v[1] == -1)) || (dst.v[0] == -1)) || (dst.v[1] == -1)) {
         return;
@@ -100321,7 +100324,7 @@ void Char_remapSprite(Char* c, Arr2_i32 src, Arr2_i32 dst) {
     Map_i32_Arr2_i32_set(GO_TMPADDR(Map_i32_Arr2_i32, Map_i32_RemapTable_get(&c->remapSpr, src.v[0], NULL)), src.v[1], (Arr2_i32){{dst.v[0], dst.v[1]}});
 }
 
-// Char.remapSpritePreset (char.go:9892), 0 TODO
+// Char.remapSpritePreset (char.go:9893), 0 TODO
 void Char_remapSpritePreset(Char* c, GoString preset) {
     {
         bool _t1; RemapPreset _t2 = Map_GoString_RemapPreset_get(&Char_gi(c)->remapPreset, preset, &_t1);
@@ -100350,7 +100353,7 @@ void Char_remapSpritePreset(Char* c, GoString preset) {
     }
 }
 
-// Char.mapIndexedKey (char.go:9906), 0 TODO
+// Char.mapIndexedKey (char.go:9907), 0 TODO
 GoString Char_mapIndexedKey(Char* c, GoString name, i32 index) {
     if (index < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("map index cannot be negative: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, index)})))));
@@ -100362,7 +100365,7 @@ GoString Char_mapIndexedKey(Char* c, GoString name, i32 index) {
     return go_strcat(go_strcat(go_strcat(name, GOSTR("[")), strconv_Itoa(((int)index))), GOSTR("]"));
 }
 
-// Char.mapSet (char.go:9920), 0 TODO
+// Char.mapSet (char.go:9921), 0 TODO
 BytecodeValue Char_mapSet(Char* c, GoString s, BytecodeValue value, i32 scType) {
     if (go_streq(s, GOSTR(""))) {
         return fn_BytecodeUndefined();
@@ -100372,7 +100375,7 @@ BytecodeValue Char_mapSet(Char* c, GoString s, BytecodeValue value, i32 scType) 
     return TypedValue_ToBV(mv);
 }
 
-// Char.mapSetValue (char.go:9931), 0 TODO
+// Char.mapSetValue (char.go:9932), 0 TODO
 void Char_mapSetValue(Char* c, GoString s, TypedValue mv, i32 scType) {
     if (go_streq(s, GOSTR(""))) {
         return;
@@ -100425,7 +100428,7 @@ void Char_mapSetValue(Char* c, GoString s, TypedValue mv, i32 scType) {
     }
 }
 
-// Char.mapApply (char.go:9969), 0 TODO
+// Char.mapApply (char.go:9970), 0 TODO
 void Char_mapApply(Char* c, Map_GoString_TypedValue m, GoString key, TypedValue mv, bool isAdd) {
     if (!isAdd) {
         Map_GoString_TypedValue_set(&m, key, mv);
@@ -100441,7 +100444,7 @@ void Char_mapApply(Char* c, Map_GoString_TypedValue m, GoString key, TypedValue 
     Map_GoString_TypedValue_set(&m, key, fn_TypedValueOf((*sum__h)));
 }
 
-// Char.mapReset (char.go:9987), 0 TODO
+// Char.mapReset (char.go:9988), 0 TODO
 void Char_mapReset(Char* c, Slice_GoString exclude) {
     if (c->mapArray.m == 0) {
         c->mapArray = Map_GoString_TypedValue_make(0);
@@ -100510,7 +100513,7 @@ void Char_mapReset(Char* c, Slice_GoString exclude) {
     }
 }
 
-// Char.appendDialogue (char.go:10046), 0 TODO
+// Char.appendDialogue (char.go:10047), 0 TODO
 void Char_appendDialogue(Char* c, GoString s, bool reset) {
     if (reset) {
         c->dialogue = (Slice_GoString){0};
@@ -100518,7 +100521,7 @@ void Char_appendDialogue(Char* c, GoString s, bool reset) {
     c->dialogue = GO_APPEND(Slice_GoString, c->dialogue, s);
 }
 
-// Char.appendToClipboard (char.go:10053), 0 TODO
+// Char.appendToClipboard (char.go:10054), 0 TODO
 void Char_appendToClipboard(Char* c, int pn, int sn, Slice_GoIface a) {
     Slice_GoString spl = g_sys.stringPool.v[pn].List;
     if ((sn >= 0) && (sn < spl.len)) {
@@ -100541,17 +100544,17 @@ void Char_appendToClipboard(Char* c, int pn, int sn, Slice_GoIface a) {
     }
 }
 
-// Char.inGuardState (char.go:10069), 0 TODO
+// Char.inGuardState (char.go:10070), 0 TODO
 bool Char_inGuardState(Char* c) {
     return ((((c->ss.no == 120) || (((c->ss.no >= 130) && (c->ss.no <= 132)))) || (c->ss.no == 140)) || (((c->ss.no >= 150) && (c->ss.no <= 155))));
 }
 
-// Char.gravity (char.go:10074), 0 TODO
+// Char.gravity (char.go:10075), 0 TODO
 void Char_gravity(Char* c) {
     c->vel.v[1] += (Char_gi(c)->movement.yaccel * ((c->baselocalscl / c->localscl)));
 }
 
-// Char.getStandFriction (char.go:10078), 0 TODO
+// Char.getStandFriction (char.go:10079), 0 TODO
 f32 Char_getStandFriction(Char* c) {
     if ((c->ss.moveType == 65536) && (!math_IsNaN(((f64)c->ghv.stand_friction)))) {
         return c->ghv.stand_friction;
@@ -100559,7 +100562,7 @@ f32 Char_getStandFriction(Char* c) {
     return Char_gi(c)->movement.stand.friction;
 }
 
-// Char.getCrouchFriction (char.go:10085), 0 TODO
+// Char.getCrouchFriction (char.go:10086), 0 TODO
 f32 Char_getCrouchFriction(Char* c) {
     if ((c->ss.moveType == 65536) && (!math_IsNaN(((f64)c->ghv.crouch_friction)))) {
         return c->ghv.crouch_friction;
@@ -100567,7 +100570,7 @@ f32 Char_getCrouchFriction(Char* c) {
     return Char_gi(c)->movement.crouch.friction;
 }
 
-// Char.checkCornerPush (char.go:10093), 0 TODO
+// Char.checkCornerPush (char.go:10094), 0 TODO
 Ret_f32__f32 Char_checkCornerPush(Char* c) {
     f32 pushDist = {0};
     f32 pushMul = {0};
@@ -100631,7 +100634,7 @@ Ret_f32__f32 Char_checkCornerPush(Char* c) {
     return (Ret_f32__f32){pushDist, pushMul};
 }
 
-// Char.posUpdate (char.go:10187), 0 TODO
+// Char.posUpdate (char.go:10188), 0 TODO
 void Char_posUpdate(Char* c) {
     Ret_f32__f32 _t1 = Char_checkCornerPush(c);
     f32 pushDist = _t1.r0;
@@ -100705,14 +100708,14 @@ void Char_posUpdate(Char* c) {
     c->CharSystemVar_.bindPosAdd = (Arr3_f32){{0x0p+00f, 0x0p+00f, 0x0p+00f}};
 }
 
-// Char.addTarget (char.go:10263), 0 TODO
+// Char.addTarget (char.go:10264), 0 TODO
 void Char_addTarget(Char* c, i32 id) {
     if (!Char_hasTarget(c, id)) {
         c->targets = GO_APPEND(Slice_i32, c->targets, id);
     }
 }
 
-// Char.hasTarget (char.go:10269), 0 TODO
+// Char.hasTarget (char.go:10270), 0 TODO
 bool Char_hasTarget(Char* c, i32 id) {
     {
         Slice_i32 _t2 = c->targets;
@@ -100727,7 +100730,7 @@ bool Char_hasTarget(Char* c, i32 id) {
     return false;
 }
 
-// Char.hasTargetOfHitdef (char.go:10278), 0 TODO
+// Char.hasTargetOfHitdef (char.go:10279), 0 TODO
 bool Char_hasTargetOfHitdef(Char* c, i32 id) {
     {
         Slice_i32 _t2 = c->hitdefTargets;
@@ -100742,7 +100745,7 @@ bool Char_hasTargetOfHitdef(Char* c, i32 id) {
     return false;
 }
 
-// Char.targetAddSctrl (char.go:10287), 0 TODO
+// Char.targetAddSctrl (char.go:10288), 0 TODO
 void Char_targetAddSctrl(Char* c, i32 id) {
     Char* t = System_playerID(&g_sys, id);
     if (t == NULL) {
@@ -100753,7 +100756,7 @@ void Char_targetAddSctrl(Char* c, i32 id) {
     GetHitVar_addId(&t->ghv, c->id, Char_gi(c)->data.airjuggle);
 }
 
-// Char.setBindTime (char.go:10303), 0 TODO
+// Char.setBindTime (char.go:10304), 0 TODO
 void Char_setBindTime(Char* c, i32 time_) {
     if (time_ == 0) {
         Char_resetBind(c);
@@ -100762,14 +100765,14 @@ void Char_setBindTime(Char* c, i32 time_) {
     c->CharSystemVar_.bindTime = time_;
 }
 
-// Char.resetBind (char.go:10311), 0 TODO
+// Char.resetBind (char.go:10312), 0 TODO
 void Char_resetBind(Char* c) {
     c->CharSystemVar_.bindTime = 0;
     c->CharSystemVar_.bindToId = -1;
     c->CharSystemVar_.bindFacing = 0x0p+00f;
 }
 
-// Char.setBindToId (char.go:10317), 0 TODO
+// Char.setBindToId (char.go:10318), 0 TODO
 void Char_setBindToId(Char* c, Char* to, bool isTargetBind) {
     c->CharSystemVar_.bindToId = to->id;
     if ((c->CharSystemVar_.bindFacing == 0x0p+00f) && isTargetBind) {
@@ -100780,7 +100783,7 @@ void Char_setBindToId(Char* c, Char* to, bool isTargetBind) {
     }
 }
 
-// Char.updateBinding (char.go:10336), 0 TODO
+// Char.updateBinding (char.go:10337), 0 TODO
 void Char_updateBinding(Char* c) {
     if ((c->CharSystemVar_.bindTime == 0) && (c->CharSystemVar_.bindToId > 0)) {
         Char_resetBind(c);
@@ -100807,7 +100810,7 @@ void Char_updateBinding(Char* c) {
     Char_bindToPlayer(c, bt);
 }
 
-// Char.bindToPlayer (char.go:10375), 0 TODO
+// Char.bindToPlayer (char.go:10376), 0 TODO
 void Char_bindToPlayer(Char* c, Char* bt) {
     if (!math_IsNaN(((f64)c->CharSystemVar_.bindPos.v[0]))) {
         f32 f = bt->facing;
@@ -100845,7 +100848,7 @@ void Char_bindToPlayer(Char* c, Char* bt) {
     }
 }
 
-// Char.trackableByCamera (char.go:10421), 0 TODO
+// Char.trackableByCamera (char.go:10422), 0 TODO
 bool Char_trackableByCamera(Char* c) {
     if (Char_scf(c, 256U)) {
         return false;
@@ -100859,7 +100862,7 @@ bool Char_trackableByCamera(Char* c) {
     return false;
 }
 
-// Char.xScreenBound (char.go:10434), 0 TODO
+// Char.xScreenBound (char.go:10435), 0 TODO
 void Char_xScreenBound(Char* c) {
     f32 x = c->pos.v[0];
     f32 before = x;
@@ -100885,7 +100888,7 @@ void Char_xScreenBound(Char* c) {
     }
 }
 
-// Char.zDepthBound (char.go:10462), 0 TODO
+// Char.zDepthBound (char.go:10463), 0 TODO
 void Char_zDepthBound(Char* c) {
     if (!Char_csf(c, 512U)) {
         return;
@@ -100900,7 +100903,7 @@ void Char_zDepthBound(Char* c) {
     }
 }
 
-// Char.xPlatformBound (char.go:10478), 0 TODO
+// Char.xPlatformBound (char.go:10479), 0 TODO
 void Char_xPlatformBound(Char* c, f32 pxmin, f32 pxmax) {
     f32 x = c->pos.v[0];
     if (c->ss.stateType != 4) {
@@ -100920,14 +100923,14 @@ void Char_xPlatformBound(Char* c, f32 pxmin, f32 pxmax) {
     Char_xScreenBound(c);
 }
 
-// Char.gethitBindClear (char.go:10491), 0 TODO
+// Char.gethitBindClear (char.go:10492), 0 TODO
 void Char_gethitBindClear(Char* c) {
     if (Char_isTargetBound(c)) {
         Char_resetBind(c);
     }
 }
 
-// Char.dropTargets (char.go:10498), 0 TODO
+// Char.dropTargets (char.go:10499), 0 TODO
 void Char_dropTargets(Char* c) {
     if ((c->hitdef.reversal_attr == 0) || (c->hitdef.reversal_attr == INT32_MIN)) {
         int i = 0;
@@ -100958,7 +100961,7 @@ void Char_dropTargets(Char* c) {
     }
 }
 
-// Char.removeTarget (char.go:10523), 0 TODO
+// Char.removeTarget (char.go:10524), 0 TODO
 void Char_removeTarget(Char* c, i32 pid) {
     {
         Slice_i32 _t2 = c->targets;
@@ -100974,7 +100977,7 @@ void Char_removeTarget(Char* c, i32 pid) {
     }
 }
 
-// Char.exitTarget (char.go:10533), 0 TODO
+// Char.exitTarget (char.go:10534), 0 TODO
 void Char_exitTarget(Char* c) {
     if (c->hittmp >= 0) {
         {
@@ -100999,17 +101002,17 @@ void Char_exitTarget(Char* c) {
     }
 }
 
-// Char.offsetX (char.go:10551), 0 TODO
+// Char.offsetX (char.go:10552), 0 TODO
 f32 Char_offsetX(Char* c) {
     return ((((f32)c->size.draw.offset.v[0]) * c->facing) + (c->offset.v[0] / c->localscl));
 }
 
-// Char.offsetY (char.go:10555), 0 TODO
+// Char.offsetY (char.go:10556), 0 TODO
 f32 Char_offsetY(Char* c) {
     return (((f32)c->size.draw.offset.v[1]) + (c->offset.v[1] / c->localscl));
 }
 
-// Char.flattenClsnProxies (char.go:10560), 0 TODO
+// Char.flattenClsnProxies (char.go:10561), 0 TODO
 Slice_CharPtr Char_flattenClsnProxies(Char* c) {
     bool hasProxy = false;
     {
@@ -101054,7 +101057,7 @@ Slice_CharPtr Char_flattenClsnProxies(Char* c) {
     return list;
 }
 
-// Char.baseSizeBox (char.go:10595), 0 TODO
+// Char.baseSizeBox (char.go:10596), 0 TODO
 Arr4_f32 Char_baseSizeBox(Char* c) {
     {
         StateType _t1 = c->ss.stateType;
@@ -101072,7 +101075,7 @@ Arr4_f32 Char_baseSizeBox(Char* c) {
     }
 }
 
-// Char.sizeToBox (char.go:10609), 0 TODO
+// Char.sizeToBox (char.go:10610), 0 TODO
 Arr4_f32 Char_sizeToBox(Char* c) {
     Arr4_f32 base = Char_baseSizeBox(c);
     f32 front = base.v[2];
@@ -101098,18 +101101,18 @@ Arr4_f32 Char_sizeToBox(Char* c) {
     return (Arr4_f32){{back, top, front, bottom}};
 }
 
-// Char.baseDepth (char.go:10637), 0 TODO
+// Char.baseDepth (char.go:10638), 0 TODO
 Arr2_f32 Char_baseDepth(Char* c) {
     return (Arr2_f32){{(-c->size.depth.v[0]), c->size.depth.v[1]}};
 }
 
-// Char.depthToBox (char.go:10643), 0 TODO
+// Char.depthToBox (char.go:10644), 0 TODO
 Arr2_f32 Char_depthToBox(Char* c) {
     Arr2_f32 base = Char_baseDepth(c);
     return (Arr2_f32){{(base.v[0] - c->CharSystemVar_.depthPlayer.v[0]), (base.v[1] + c->CharSystemVar_.depthPlayer.v[1])}};
 }
 
-// Char.getClsnUnscaled (char.go:10649), 0 TODO
+// Char.getClsnUnscaled (char.go:10650), 0 TODO
 Slice_ClsnFinal Char_getClsnUnscaled(Char* c, i32 group) {
     if ((group < 1) || (group > 4)) {
         return (Slice_ClsnFinal){0};
@@ -101157,7 +101160,7 @@ Slice_ClsnFinal Char_getClsnUnscaled(Char* c, i32 group) {
     return (*buffer);
 }
 
-// Char.getClsnLocal (char.go:10706), 0 TODO
+// Char.getClsnLocal (char.go:10707), 0 TODO
 Slice_ClsnFinal Char_getClsnLocal(Char* c, i32 group) {
     Char* c__hv = c; __typeof__(c__hv) *c__h = &c__hv;
     Slice_ClsnFinal boxes__hv = Char_getClsnUnscaled((*c__h), group); __typeof__(boxes__hv) *boxes__h = &boxes__hv;
@@ -101250,7 +101253,7 @@ Slice_ClsnFinal Char_getClsnLocal(Char* c, i32 group) {
     return (*boxes__h);
 }
 
-// Char.getClsnWorld (char.go:10795), 0 TODO
+// Char.getClsnWorld (char.go:10796), 0 TODO
 Slice_ClsnFinal Char_getClsnWorld(Char* c, i32 group) {
     Slice_ClsnFinal boxes = Char_getClsnLocal(c, group);
     if (boxes.len == 0) {
@@ -101277,7 +101280,7 @@ Slice_ClsnFinal Char_getClsnWorld(Char* c, i32 group) {
     return boxes;
 }
 
-// Char.resetClsnModifiers (char.go:10820), 0 TODO
+// Char.resetClsnModifiers (char.go:10821), 0 TODO
 void Char_resetClsnModifiers(Char* c) {
     {
         for (int _t1 = 0; _t1 < 4; _t1++) {
@@ -101295,7 +101298,7 @@ void Char_resetClsnModifiers(Char* c) {
     }
 }
 
-// Char.projClsnCheck (char.go:10830), 0 TODO
+// Char.projClsnCheck (char.go:10831), 0 TODO
 bool Char_projClsnCheck(Char* c, Projectile* p, i32 cbox, i32 pbox, bool fromHitdef) {
     if ((((p->anim == NULL) || (c->curFrame == NULL)) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return false;
@@ -101322,7 +101325,7 @@ bool Char_projClsnCheck(Char* c, Projectile* p, i32 cbox, i32 pbox, bool fromHit
     return false;
 }
 
-// Char.projClsnCheckSingle (char.go:10859), 0 TODO
+// Char.projClsnCheckSingle (char.go:10860), 0 TODO
 bool Char_projClsnCheckSingle(Char* c, Projectile* p, i32 cbox, i32 pbox, bool fromHitdef) {
     if (((p->anim == NULL) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return false;
@@ -101383,7 +101386,7 @@ bool Char_projClsnCheckSingle(Char* c, Projectile* p, i32 cbox, i32 pbox, bool f
     return overlap;
 }
 
-// Char.projClsnOverlapTrigger (char.go:10928), 0 TODO
+// Char.projClsnOverlapTrigger (char.go:10929), 0 TODO
 bool Char_projClsnOverlapTrigger(Char* c, int index, i32 targetID, i32 boxType) {
     Projectile* proj = Char_getSingleProj(c, -1, index, true);
     if (proj == NULL) {
@@ -101405,7 +101408,7 @@ bool Char_projClsnOverlapTrigger(Char* c, int index, i32 targetID, i32 boxType) 
     return (Char_projClsnCheck(target, proj, boxType, 1, false) || Char_projClsnCheck(target, proj, boxType, 2, false));
 }
 
-// Char.clsnCheck (char.go:10959), 0 TODO
+// Char.clsnCheck (char.go:10960), 0 TODO
 bool Char_clsnCheck(Char* c, Char* getter, i32 charbox, i32 getterbox, bool fromHitdef) {
     if ((((c == NULL) || (getter == NULL)) || (c->anim == NULL)) || (getter->anim == NULL)) {
         return false;
@@ -101445,7 +101448,7 @@ bool Char_clsnCheck(Char* c, Char* getter, i32 charbox, i32 getterbox, bool from
     return false;
 }
 
-// Char.clsnCheckSingle (char.go:10999), 0 TODO
+// Char.clsnCheckSingle (char.go:11000), 0 TODO
 bool Char_clsnCheckSingle(Char* c, Char* getter, i32 charbox, i32 getterbox, bool fromHitdef) {
     if ((((c == NULL) || (getter == NULL)) || (c->anim == NULL)) || (getter->anim == NULL)) {
         return false;
@@ -101497,7 +101500,7 @@ bool Char_clsnCheckSingle(Char* c, Char* getter, i32 charbox, i32 getterbox, boo
     return overlap;
 }
 
-// Char.hitByAttrTrigger (char.go:11066), 0 TODO
+// Char.hitByAttrTrigger (char.go:11067), 0 TODO
 bool Char_hitByAttrTrigger(Char* c, i32 attr) {
     if (c->CharSystemVar_.unhittableTime > 0) {
         return false;
@@ -101506,7 +101509,7 @@ bool Char_hitByAttrTrigger(Char* c, i32 attr) {
     return Char_checkHitByAllSlots(c, -1, -1, attr, attrsca, -1, -1);
 }
 
-// Char.checkHitBySlot (char.go:11080), 0 TODO
+// Char.checkHitBySlot (char.go:11081), 0 TODO
 bool Char_checkHitBySlot(Char* c, HitBy hb, int getterno, i32 getterid, i32 ghdattr, i32 attrsca) {
     bool attrCheck = (hb.flag >= 0);
     bool scaMatch = ((hb.flag & attrsca) != 0);
@@ -101523,7 +101526,7 @@ bool Char_checkHitBySlot(Char* c, HitBy hb, int getterno, i32 getterid, i32 ghda
     return allMatch;
 }
 
-// Char.checkHitByAllSlots (char.go:11108), 0 TODO
+// Char.checkHitByAllSlots (char.go:11109), 0 TODO
 bool Char_checkHitByAllSlots(Char* c, int getterno, i32 getterid, i32 ghdattr, i32 attrsca, i32 boxgroup, i32 boxindex) {
     bool stackHit = false;
     bool hasStackSlot = false;
@@ -101556,7 +101559,7 @@ bool Char_checkHitByAllSlots(Char* c, int getterno, i32 getterid, i32 ghdattr, i
     return nonStackHit;
 }
 
-// Char.attrCheck (char.go:11148), 0 TODO
+// Char.attrCheck (char.go:11149), 0 TODO
 bool Char_attrCheck(Char* c, Char* getter, HitDef* ghd, StateType gstyp) {
     if (c->CharSystemVar_.unhittableTime > 0) {
         return false;
@@ -101622,7 +101625,7 @@ bool Char_attrCheck(Char* c, Char* getter, HitDef* ghd, StateType gstyp) {
     return true;
 }
 
-// Char.attrCheckBox (char.go:11256), 0 TODO
+// Char.attrCheckBox (char.go:11257), 0 TODO
 bool Char_attrCheckBox(Char* c, Char* getter, HitDef* ghd, StateType gstyp, i32 boxgroup, i32 boxindex) {
     i32 attrsca = (ghd->attr & 63);
     if (((Char_stWgi(getter)->ikemenver.v[0] == 0U) && (Char_stWgi(getter)->ikemenver.v[1] == 0U)) && (gstyp != 16)) {
@@ -101631,7 +101634,7 @@ bool Char_attrCheckBox(Char* c, Char* getter, HitDef* ghd, StateType gstyp, i32 
     return Char_checkHitByAllSlots(c, getter->playerNo, getter->id, ghd->attr, attrsca, boxgroup, boxindex);
 }
 
-// Char.hasBoxHitBy (char.go:11268), 0 TODO
+// Char.hasBoxHitBy (char.go:11269), 0 TODO
 bool Char_hasBoxHitBy(Char* c) {
     {
         for (int _t1 = 0; _t1 < 8; _t1++) {
@@ -101645,7 +101648,7 @@ bool Char_hasBoxHitBy(Char* c) {
     return false;
 }
 
-// Char.hittableByChar (char.go:11278), 0 TODO
+// Char.hittableByChar (char.go:11279), 0 TODO
 bool Char_hittableByChar(Char* c, Char* getter, HitDef* ghd, StateType gst, bool proj) {
     Char* c__hv = c; __typeof__(c__hv) *c__h = &c__hv;
     Char* getter__hv = getter; __typeof__(getter__hv) *getter__h = &getter__hv;
@@ -101703,7 +101706,7 @@ bool Char_hittableByChar(Char* c, Char* getter, HitDef* ghd, StateType gst, bool
     return true;
 }
 
-// Char.hitspark (char.go:11367), 0 TODO
+// Char.hitspark (char.go:11368), 0 TODO
 void Char_hitspark(Char* c, Char* getter, Projectile* proj, i32 animNo, GoString ffx, f32 sparkangle, Arr2_f32 sparkscale) {
     Arr4_f32 getterBase = Char_baseSizeBox(getter);
     f32 getterScale = Char_sizeBoxScaleWorld(getter).v[0];
@@ -101771,7 +101774,7 @@ void Char_hitspark(Char* c, Char* getter, Projectile* proj, i32 animNo, GoString
     }
 }
 
-// Char.hitResultCheck (char.go:11468), 0 TODO
+// Char.hitResultCheck (char.go:11469), 0 TODO
 i32 Char_hitResultCheck(Char* c, Char* getter, Projectile* proj) {
     Char* c__hv = c; __typeof__(c__hv) *c__h = &c__hv;
     Char* getter__hv = getter; __typeof__(getter__hv) *getter__h = &getter__hv;
@@ -102487,12 +102490,13 @@ i32 Char_hitResultCheck(Char* c, Char* getter, Projectile* proj) {
     return hitResult;
 }
 
-// Char.actionPrepare (char.go:12325), 0 TODO
+// Char.actionPrepare (char.go:12326), 0 TODO
 void Char_actionPrepare(Char* c) {
     if (((c->minus != 3) || Char_csf(c, 2U)) || Char_scf(c, 2U)) {
         return;
     }
     c->pauseBool = false;
+    fn_cvfSpecialTick(c);
     if (c->cmd.p != 0) {
         if (g_sys.SystemStateVars_.supertime > 0) {
             c->pauseBool = (c->CharSystemVar_.superMovetime == 0);
@@ -102670,7 +102674,7 @@ void Char_actionPrepare(Char* c) {
     }
 }
 
-// Char.actionRun (char.go:12543), 0 TODO
+// Char.actionRun (char.go:12545), 0 TODO
 void Char_actionRun(Char* c) {
     if (((c->minus != 3) || Char_csf(c, 2U)) || Char_scf(c, 2U)) {
         return;
@@ -102886,7 +102890,7 @@ void Char_actionRun(Char* c) {
     c->minus = 1;
 }
 
-// Char.actionFinish (char.go:12798), 0 TODO
+// Char.actionFinish (char.go:12800), 0 TODO
 void Char_actionFinish(Char* c) {
     if (((c->minus < 1) || Char_csf(c, 2U)) || Char_scf(c, 2U)) {
         return;
@@ -102931,7 +102935,7 @@ void Char_actionFinish(Char* c) {
     c->minus = 2;
 }
 
-// Char.track (char.go:12861), 0 TODO
+// Char.track (char.go:12863), 0 TODO
 void Char_track(Char* c) {
     if (!Char_trackableByCamera(c)) {
         return;
@@ -102986,7 +102990,7 @@ void Char_track(Char* c) {
     }
 }
 
-// Char.update (char.go:12924), 0 TODO
+// Char.update (char.go:12926), 0 TODO
 void Char_update(Char* c) {
     if (Char_scf(c, 2U)) {
         return;
@@ -103125,7 +103129,7 @@ void Char_update(Char* c) {
     }
 }
 
-// Char.tick (char.go:13096), 0 TODO
+// Char.tick (char.go:13098), 0 TODO
 void Char_tick(Char* c) {
     if (Char_scf(c, 2U)) {
         return;
@@ -103308,7 +103312,7 @@ void Char_tick(Char* c) {
     }
 }
 
-// Char.debugHitByState (char.go:13294), 0 TODO
+// Char.debugHitByState (char.go:13296), 0 TODO
 Ret_bool__bool__GoString__i32 Char_debugHitByState(Char* c, i32 boxgroup, i32 boxindex) {
     bool hb = {0};
     bool mtk = {0};
@@ -103351,7 +103355,7 @@ Ret_bool__bool__GoString__i32 Char_debugHitByState(Char* c, i32 boxgroup, i32 bo
     return (Ret_bool__bool__GoString__i32){hb, mtk, txt, flags};
 }
 
-// Char.cueDebugDraw (char.go:13343), 0 TODO
+// Char.cueDebugDraw (char.go:13345), 0 TODO
 void Char_cueDebugDraw(Char* c) {
     Char* c__hv = c; __typeof__(c__hv) *c__h = &c__hv;
     f32 x = ((*c__h)->pos.v[0] * (*c__h)->localscl);
@@ -103514,7 +103518,7 @@ void Char_cueDebugDraw(Char* c) {
     }
 }
 
-// Char.cueDraw (char.go:13538), 0 TODO
+// Char.cueDraw (char.go:13540), 0 TODO
 void Char_cueDraw(Char* c) {
     if ((c->helperIndex < 0) || Char_scf(c, 2U)) {
         return;
@@ -103681,7 +103685,7 @@ void Char_cueDraw(Char* c) {
     }
 }
 
-// CharList.clear (char.go:13813), 0 TODO
+// CharList.clear (char.go:13815), 0 TODO
 void CharList_clear(CharList* cl) {
     (*cl) = (CharList){.idMap = Map_i32_CharPtr_make(0)};
     g_sys.SystemStateVars_.lastCharId = go_max_i32(0, (g_sys.cfg.Config.HelperMax - 1));
@@ -103704,7 +103708,7 @@ void CharList_clear(CharList* cl) {
     }
 }
 
-// CharList.add (char.go:13834), 0 TODO
+// CharList.add (char.go:13836), 0 TODO
 void CharList_add(CharList* cl, Char* c) {
     {
         bool _t1; Char* _t2 = Map_i32_CharPtr_get(&cl->idMap, c->id, &_t1);
@@ -103718,7 +103722,7 @@ void CharList_add(CharList* cl, Char* c) {
     Map_i32_CharPtr_set(&cl->idMap, c->id, c);
 }
 
-// CharList.delete (char.go:13849), 0 TODO
+// CharList.delete (char.go:13851), 0 TODO
 void CharList_delete(CharList* cl, Char* dc) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&cl->idMap);
@@ -103758,7 +103762,7 @@ void CharList_delete(CharList* cl, Char* dc) {
     }
 }
 
-// CharList.audit (char.go:13903), 0 TODO
+// CharList.audit (char.go:13905), 0 TODO
 void CharList_audit(CharList* cl) {
     Map_CharPtr_bool inCreation = Map_CharPtr_bool_make(cl->creationOrder.len);
     {
@@ -103858,7 +103862,7 @@ void CharList_audit(CharList* cl) {
     }
 }
 
-// CharList.commandUpdate (char.go:13971), 0 TODO
+// CharList.commandUpdate (char.go:13973), 0 TODO
 void CharList_commandUpdate(CharList* cl) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -103948,7 +103952,7 @@ void CharList_commandUpdate(CharList* cl) {
     }
 }
 
-// CharList.updateRunOrder (char.go:14060), 0 TODO
+// CharList.updateRunOrder (char.go:14062), 0 TODO
 void CharList_updateRunOrder(CharList* cl) {
     CharList* *cl__h = go_box(CharList*, cl);
     GoFunc *getPriority__h = go_box(GoFunc, ((GoFunc){(void *)lambda_520, go_box(Env_lambda_520, ((Env_lambda_520){0}))}));
@@ -103963,7 +103967,7 @@ void CharList_updateRunOrder(CharList* cl) {
     }
 }
 
-// CharList.action (char.go:14114), 0 TODO
+// CharList.action (char.go:14116), 0 TODO
 void CharList_action(CharList* cl) {
     CharList_updateRunOrder(cl);
     CharList_commandUpdate(cl);
@@ -103996,7 +104000,7 @@ void CharList_action(CharList* cl) {
     }
 }
 
-// CharList.xScreenBound (char.go:14143), 0 TODO
+// CharList.xScreenBound (char.go:14145), 0 TODO
 void CharList_xScreenBound(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -104008,7 +104012,7 @@ void CharList_xScreenBound(CharList* cl) {
     }
 }
 
-// CharList.update (char.go:14150), 0 TODO
+// CharList.update (char.go:14152), 0 TODO
 void CharList_update(CharList* cl) {
     if (System_tickFrame(&g_sys)) {
         {
@@ -104035,7 +104039,7 @@ void CharList_update(CharList* cl) {
     }
 }
 
-// CharList.hitDetectionPlayer (char.go:14173), 0 TODO
+// CharList.hitDetectionPlayer (char.go:14175), 0 TODO
 void CharList_hitDetectionPlayer(CharList* cl, Char* c) {
     if (Char_scf(c, 256U) || Char_scf(c, 2U)) {
         return;
@@ -104265,7 +104269,7 @@ void CharList_hitDetectionPlayer(CharList* cl, Char* c) {
     }
 }
 
-// CharList.hitDetectionProjectile (char.go:14453), 0 TODO
+// CharList.hitDetectionProjectile (char.go:14455), 0 TODO
 void CharList_hitDetectionProjectile(CharList* cl, Char* getter) {
     Char* getter__hv = getter; __typeof__(getter__hv) *getter__h = &getter__hv;
     if (Char_scf((*getter__h), 256U) || Char_scf((*getter__h), 2U)) {
@@ -104370,7 +104374,7 @@ void CharList_hitDetectionProjectile(CharList* cl, Char* getter) {
     }
 }
 
-// CharList.pushDetection (char.go:14638), 0 TODO
+// CharList.pushDetection (char.go:14640), 0 TODO
 void CharList_pushDetection(CharList* cl, Char* c) {
     if (((!Char_csf(c, 64U)) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return;
@@ -104685,7 +104689,7 @@ void CharList_pushDetection(CharList* cl, Char* c) {
     }
 }
 
-// CharList.rebindIfPushed (char.go:14992), 0 TODO
+// CharList.rebindIfPushed (char.go:14994), 0 TODO
 void CharList_rebindIfPushed(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -104702,7 +104706,7 @@ void CharList_rebindIfPushed(CharList* cl) {
     }
 }
 
-// CharList.collisionDetection (char.go:15004), 0 TODO
+// CharList.collisionDetection (char.go:15006), 0 TODO
 void CharList_collisionDetection(CharList* cl) {
     CharList* *cl__h = go_box(CharList*, cl);
     Slice_int *sortedOrder__h = go_box(Slice_int, GO_MAKE_A(Slice_int, int, (*cl__h)->runOrder.len, 0));
@@ -104751,7 +104755,7 @@ void CharList_collisionDetection(CharList* cl) {
     }
 }
 
-// CharList.tick (char.go:15068), 0 TODO
+// CharList.tick (char.go:15070), 0 TODO
 void CharList_tick(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -104763,7 +104767,7 @@ void CharList_tick(CharList* cl) {
     }
 }
 
-// CharList.cueDraw (char.go:15076), 0 TODO
+// CharList.cueDraw (char.go:15078), 0 TODO
 void CharList_cueDraw(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -104775,7 +104779,7 @@ void CharList_cueDraw(CharList* cl) {
     }
 }
 
-// CharList.enemyNear (char.go:15101), 0 TODO
+// CharList.enemyNear (char.go:15103), 0 TODO
 Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list) {
     if (n < 0) {
         return NULL;
@@ -104837,7 +104841,7 @@ Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list) {
     return NULL;
 }
 
-// Char.varCachePut (char.go:15201), 0 TODO
+// Char.varCachePut (char.go:15203), 0 TODO
 void Char_varCachePut(Char* c, i32 i) {
     if (i < 0) {
         return;
@@ -104846,7 +104850,7 @@ void Char_varCachePut(Char* c, i32 i) {
     c->varCache.v[(((u32)i) & 31U)] = (varCacheEnt){.key = i, .gen = c->varGen, .mp = mp, .ival = Map_i32_i32_get(&c->cnsvar, i, NULL)};
 }
 
-// Char.fvarCachePut (char.go:15209), 0 TODO
+// Char.fvarCachePut (char.go:15211), 0 TODO
 void Char_fvarCachePut(Char* c, i32 i) {
     if (i < 0) {
         return;
@@ -119287,9 +119291,9 @@ Ret_i32__BytecodeExp__bool__GoIface CharCompiler_varSetNewerSub(CharCompiler* c,
     GoString trimmed = strings_TrimSpace(name);
     GoString lowered = strings_ToLower(trimmed);
     {
-        Slice_spec_Lda920c _t2 = GO_SLICE_LIT(Slice_spec_Lda920c, spec_Lda920c, 4, (spec_Lda920c){GOSTR("sysfvar"), 3}, (spec_Lda920c){GOSTR("sysvar"), 2}, (spec_Lda920c){GOSTR("fvar"), 1}, (spec_Lda920c){GOSTR("var"), 0});
+        Slice_spec_L83f120 _t2 = GO_SLICE_LIT(Slice_spec_L83f120, spec_L83f120, 4, (spec_L83f120){GOSTR("sysfvar"), 3}, (spec_L83f120){GOSTR("sysvar"), 2}, (spec_L83f120){GOSTR("fvar"), 1}, (spec_L83f120){GOSTR("var"), 0});
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            spec_Lda920c s = _t2.p[_t1];
+            spec_L83f120 s = _t2.p[_t1];
             if (!strings_HasPrefix(lowered, s.prefix)) {
                 continue;
             }
@@ -122673,7 +122677,7 @@ Ret_upnpDevicePtr__GoIface fn_upnpDescribe(GoString loc) {
     Slice_u8 body = _t2.r0;
     iface_Close_143b0862(resp->Body);
     GoOpaque /* xml.Decoder */* dec = xml_NewDecoder(((GoIface){155, (void *)(bytes_NewReader(body))}));
-    svc_Lc6dc42* found = NULL;
+    svc_L9ef632* found = NULL;
     {
         for (; 1; ) {
             Ret_GoIface__GoIface _t4 = xml_Decoder_Token(dec);
@@ -122689,7 +122693,7 @@ Ret_upnpDevicePtr__GoIface fn_upnpDescribe(GoString loc) {
                 GoXmlStartElement *se__h = go_box(GoXmlStartElement, _t6);
                 bool ok = _t7;
                 if (ok && go_streq((*se__h).Name.Local, GOSTR("service"))) {
-                    svc_Lc6dc42 *s__h = go_box(svc_Lc6dc42, {0});
+                    svc_L9ef632 *s__h = go_box(svc_L9ef632, {0});
                     if ((xml_Decoder_DecodeElement(dec, ((GoIface){470, (void *)((&(*s__h)))}), (&(*se__h))).type == 0) && ((strings_Contains((*s__h).ServiceType, GOSTR("WANIPConnection")) || strings_Contains((*s__h).ServiceType, GOSTR("WANPPPConnection"))))) {
                         found = (&(*s__h));
                         break;
@@ -123009,7 +123013,7 @@ void fn_cvfOnlineScriptInit(lua_LState* l) {
     fn_luaRegister(l, GOSTR("cvfGetNetplayPort"), ((GoFunc){(void *)lambda_912, go_box(Env_lambda_912, ((Env_lambda_912){0}))}));
 }
 
-// cvfRulesLoad (cvf_online.go:697), 0 TODO
+// cvfRulesLoad (cvf_online.go:706), 0 TODO
 cvfRulesT* fn_cvfRulesLoad(void) {
     volatile bool _df4 = false; volatile GoFunc _df4_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -123085,6 +123089,29 @@ cvfRulesT* fn_cvfRulesLoad(void) {
                                 r->mpScaleMilli = go_f2i32((((*s__h) * 0x1.f4p+09) + 0x1p-01));
                             }
                         }
+                    } else if (go_streq(_t9, GOSTR("specialcooldown"))) {
+                        fmt_Sscan(v, GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){131, (void *)((&r->specialCD))})));
+                    } else if (go_streq(_t9, GOSTR("specialstates"))) {
+                        i32 *lo__h = go_box_a(i32, 0);
+                        i32 *hi__h = go_box_a(i32, 0);
+                        {
+                            Ret_int__GoIface _t14 = fmt_Sscanf(strings_ReplaceAll(v, GOSTR(" "), GOSTR("")), GOSTR("%d-%d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){131, (void *)((&(*lo__h)))}), ((GoIface){131, (void *)((&(*hi__h)))})));
+                            int n = _t14.r0;
+                            if (n == 2) {
+                                i32 _t15 = (*lo__h);
+                                i32 _t16 = (*hi__h);
+                                r->specialLo = _t15;
+                                r->specialHi = _t16;
+                            }
+                        }
+                    } else if (go_streq(_t9, GOSTR("wideview"))) {
+                        r->wideView = (go_streq(v, GOSTR("1")) || strings_EqualFold(v, GOSTR("true")));
+                    } else if (go_streq(_t9, GOSTR("fightaspect"))) {
+                        if (strings_EqualFold(v, GOSTR("stage"))) {
+                            r->fightAspect = (Arr2_i32){{-1, -1}};
+                        } else {
+                            fmt_Sscanf(strings_ReplaceAll(v, GOSTR(" "), GOSTR("")), GOSTR("%d:%d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){131, (void *)((&r->fightAspect.v[0]))}), ((GoIface){131, (void *)((&r->fightAspect.v[1]))})));
+                        }
                     } else if (go_streq(_t9, GOSTR("rulesauthor"))) {
                         r->author = strings_ToLower(v);
                     }
@@ -123094,16 +123121,16 @@ cvfRulesT* fn_cvfRulesLoad(void) {
         }
     }
     {
-        cvfRulesT* _t14 = r;
+        cvfRulesT* _t17 = r;
         go_panic_top = _pf.prev;
         if (_df4) { _df4 = false; ((GoIface (*)(void *))_df4_f.fn)(_df4_f.env); }
-        return _t14;
+        return _t17;
     }
     go_panic_top = _pf.prev;
     if (_df4) { _df4 = false; ((GoIface (*)(void *))_df4_f.fn)(_df4_f.env); }
 }
 
-// cvfRulesT.appliesTo (cvf_online.go:741), 0 TODO
+// cvfRulesT.appliesTo (cvf_online.go:765), 0 TODO
 bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c) {
     if ((c == NULL) || (c->helperIndex != 0)) {
         return false;
@@ -123111,7 +123138,7 @@ bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c) {
     return (go_streq(r->author, GOSTR("")) || go_streq(Char_gi(c)->authorLow, r->author));
 }
 
-// cvfClampInvincibility (cvf_online.go:749), 0 TODO
+// cvfClampInvincibility (cvf_online.go:773), 0 TODO
 bool fn_cvfClampInvincibility(Char* c, i32* time_) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if (((r->iframeCap <= 0) || (c->ss.moveType != 131072)) || (!cvfRulesT_appliesTo(r, c))) {
@@ -123131,7 +123158,7 @@ bool fn_cvfClampInvincibility(Char* c, i32* time_) {
     return true;
 }
 
-// cvfScaleMPGain (cvf_online.go:769), 0 TODO
+// cvfScaleMPGain (cvf_online.go:793), 0 TODO
 i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if ((((v <= 0) || (i != r->mpVar)) || (r->mpScaleMilli == 1000)) || (!cvfRulesT_appliesTo(r, c))) {
@@ -123143,12 +123170,75 @@ i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v) {
     return go_div32(total, 1000);
 }
 
-// cvfDebugf (cvf_online.go:783), 0 TODO
+// cvfDebugf (cvf_online.go:807), 0 TODO
 void fn_cvfDebugf(GoString format, Slice_GoIface args) {
     if (g_cvfDebugOn && (g_cvfDebugCount < 200)) {
         g_cvfDebugCount++;
         fmt_Fprintf(((GoIface){146, (void *)(os_Stderr)}), go_strcat(go_strcat(GOSTR("[cvf] "), format), GOSTR("\n")), args);
     }
+}
+
+// cvfApplyDisplay (cvf_online.go:823), 0 TODO
+void fn_cvfApplyDisplay(Config* cfg) {
+    {
+        Arr2_i32 a = fn_cvfRulesLoad()->fightAspect;
+        if ((a.v[0] != 0) && (a.v[1] != 0)) {
+            i32 _t1 = a.v[0];
+            i32 _t2 = a.v[1];
+            cfg->Video.FightAspectWidth = _t1;
+            cfg->Video.FightAspectHeight = _t2;
+        }
+    }
+    {
+        i32 _t3 = g_cvfScreen.v[0];
+        i32 _t4 = g_cvfScreen.v[1];
+        i32 w = _t3;
+        i32 h = _t4;
+        if ((h > 0) && ((w * 9) != (h * 16))) {
+            i32 gw = go_div32((cfg->Video.GameHeight * w), h);
+            {
+                i32 minW = go_div32((cfg->Video.GameHeight * 4), 3);
+                if (gw < minW) {
+                    gw = minW;
+                }
+            }
+            cfg->Video.GameWidth = (gw & ~1);
+        }
+    }
+}
+
+// cvfSpecialTick (cvf_online.go:865), 0 TODO
+void fn_cvfSpecialTick(Char* c) {
+    cvfRulesT* r = fn_cvfRulesLoad();
+    if ((r->specialCD <= 0) || (!cvfRulesT_appliesTo(r, c))) {
+        return;
+    }
+    if (((c->ss.moveType == 131072) && (c->ss.no >= r->specialLo)) && (c->ss.no <= r->specialHi)) {
+        c->cvfSpecialCD = r->specialCD;
+    } else {
+        if ((c->cvfSpecialCD > 0) && (!Char_hitPause(c))) {
+            c->cvfSpecialCD--;
+        }
+    }
+}
+
+// cvfBlockSpecial (cvf_online.go:879), 0 TODO
+bool fn_cvfBlockSpecial(Char* c, i32 no) {
+    cvfRulesT* r = fn_cvfRulesLoad();
+    if ((((c->cvfSpecialCD <= 0) || (no < r->specialLo)) || (no > r->specialHi)) || (!cvfRulesT_appliesTo(r, c))) {
+        return false;
+    }
+    if ((c->ss.no >= r->specialLo) && (c->ss.no <= r->specialHi)) {
+        return false;
+    }
+    bool _t1; StateBytecode* _t2 = Map_i32_StateBytecodePtr_get(&g_sys.cgi.v[c->ss.sb->playerNo].states, no, &_t1);
+    StateBytecode* st = _t2;
+    bool ok = _t1;
+    if ((!ok) || (st->moveType != 131072)) {
+        return false;
+    }
+    fn_cvfDebugf(GOSTR("special blocked %s state %d, %d frames left"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){5, go_box_a(i32, no)}), ((GoIface){5, go_box_a(i32, c->cvfSpecialCD)})));
+    return true;
 }
 
 // cvfLazySoundsEnabled (cvf_sound_lazy.go:40), 0 TODO
@@ -123380,6 +123470,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
         fn_LogMessage(GOSTR("loadConfig: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, err));
         return -1;
     }
+    fn_cvfApplyDisplay(cfg);
     g_sys.cfg = (*cfg);
     System_setGameSize(&g_sys, go_f2i32(g_sys.SystemStateVars_.gameWidth), go_f2i32(g_sys.SystemStateVars_.gameHeight));
     {
@@ -123416,7 +123507,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     i32 roundTime = ((i32)g_sys.cfg.Options.Time);
     fn_cvfSetFightScreenElements(g_sys.cfg.Options.GuardBreak, g_sys.cfg.Options.Dizzy, g_sys.cfg.Options.RedLife);
     i32 frames = g_sys.fightScreen.time->framespercount;
-    Slice_qvPlayer_L0bbea3 players = {0};
+    Slice_qvPlayer_L33fb2d players = {0};
     Arr2_i32 teamMode = (Arr2_i32){{0, 0}};
     Arr2_i32 numChars = (Arr2_i32){{0, 0}};
     Map_GoString_Map_int_bool assignedPals = Map_GoString_Map_int_bool_make(0);
@@ -123489,7 +123580,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
                     input = ((int)fn_Atoi(s));
                 }
             }
-            players = GO_APPEND(Slice_qvPlayer_L0bbea3, players, (qvPlayer_L0bbea3){.character = v, .player = player, .num = num, .pal = pal, .ai = ai, .input = input});
+            players = GO_APPEND(Slice_qvPlayer_L33fb2d, players, (qvPlayer_L33fb2d){.character = v, .player = player, .num = num, .pal = pal, .ai = ai, .input = input});
             fn_cvfRefresh();
             _cont10:;
         }
@@ -123630,9 +123721,9 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     int ref = 0;
     Map_GoString_int charDef = Map_GoString_int_make(0);
     {
-        Slice_qvPlayer_L0bbea3 _t47 = players;
+        Slice_qvPlayer_L33fb2d _t47 = players;
         for (int _t46 = 0; _t46 < _t47.len; _t46++) {
-            qvPlayer_L0bbea3 v = _t47.p[_t46];
+            qvPlayer_L33fb2d v = _t47.p[_t46];
             GoString key = strings_ToLower(v.character);
             bool _t49; int _t50 = Map_GoString_int_get(&charDef, key, &_t49);
             int charRef = _t50;
@@ -123659,7 +123750,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     return fn_cvfGame();
 }
 
-// cvfSetFightScreenElements (cvfheadless.go:235), 0 TODO
+// cvfSetFightScreenElements (cvfheadless.go:236), 0 TODO
 void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) {
     g_sys.fightScreen.guardbar = guardbar;
     g_sys.fightScreen.stunbar = stunbar;
@@ -123712,7 +123803,7 @@ void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) 
     }
 }
 
-// cvfSetTeamMode (cvfheadless.go:260), 0 TODO
+// cvfSetTeamMode (cvfheadless.go:261), 0 TODO
 void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     g_sys.sel.selected.v[side] = (Slice_Arr2_int){0};
     g_sys.SystemStateVars_.tmode.v[side] = tm;
@@ -123727,7 +123818,7 @@ void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     }
 }
 
-// cvfGame (cvfheadless.go:275), 0 TODO
+// cvfGame (cvfheadless.go:276), 0 TODO
 i32 fn_cvfGame(void) {
     g_sys.SystemStateVars_.keyString = GOSTR("");
     g_sys.SystemStateVars_.keyInput = 0x0p+00;
@@ -123821,7 +123912,7 @@ i32 fn_cvfGame(void) {
     return winp;
 }
 
-// cvfRefresh (cvfheadless.go:355), 0 TODO
+// cvfRefresh (cvfheadless.go:356), 0 TODO
 void fn_cvfRefresh(void) {
     System_luaDiscardDrawQueue(&g_sys);
     if (Fade_isActive(g_sys.motif.fadeOut)) {
@@ -128201,14 +128292,14 @@ Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def) {
                                     _cont16:;
                                 }
                             }
-                            Map_int_fontSpec_Le9fdb4 fntSpecs__hv = Map_int_fontSpec_Le9fdb4_make(0); __typeof__(fntSpecs__hv) *fntSpecs__h = &fntSpecs__hv;
+                            Map_int_fontSpec_Lf2d3a3 fntSpecs__hv = Map_int_fontSpec_Lf2d3a3_make(0); __typeof__(fntSpecs__hv) *fntSpecs__h = &fntSpecs__hv;
                             GoFunc parseFonts = ((GoFunc){(void *)lambda_938, &(Env_lambda_938){fntSpecs__h}});
                             ((void (*)(void *, IniSection))(parseFonts).fn)((parseFonts).env, (*is__h));
                             {
                                 GoMapIter _t19 = gomap_iter((GoMap *)&(*fntSpecs__h));
                                 while (gomap_next(&_t19)) {
                                     int *i__h = go_box_a(int, *(int *)_t19.key);
-                                    fontSpec_Le9fdb4 *spec__h = go_box(fontSpec_Le9fdb4, *(fontSpec_Le9fdb4 *)_t19.val);
+                                    fontSpec_Lf2d3a3 *spec__h = go_box(fontSpec_Lf2d3a3, *(fontSpec_Lf2d3a3 *)_t19.val);
                                     if ((*spec__h).path.len == 0) {
                                         continue;
                                     }
@@ -130585,7 +130676,7 @@ void TextSprite_wrapText(TextSprite* ts, GoString fullLine, int typedLen) {
     i32 spacingXAdd__hv = go_f2i32(math_Round(((f64)(*ts__h)->textSpacing.v[0]))); __typeof__(spacingXAdd__hv) *spacingXAdd__h = &spacingXAdd__hv;
     i32 lineLen = TextSprite_getLineLength((*ts__h), true);
     GoFunc measureWidth = ((GoFunc){(void *)lambda_951, &(Env_lambda_951){ts__h, spacingXAdd__h}});
-    Slice_wrapToken_L8ac62d tokens = ((Slice_wrapToken_L8ac62d (*)(void *, GoString))(tokenize).fn)((tokenize).env, fullLine);
+    Slice_wrapToken_L7ae040 tokens = ((Slice_wrapToken_L7ae040 (*)(void *, GoString))(tokenize).fn)((tokenize).env, fullLine);
     GoOpaque /* strings.Builder */ result = {0};
     GoOpaque /* strings.Builder */ currentLine__hv = {0}; __typeof__(currentLine__hv) *currentLine__h = &currentLine__hv;
     int remaining__hv = typedLen; __typeof__(remaining__hv) *remaining__h = &remaining__hv;
@@ -130594,14 +130685,14 @@ void TextSprite_wrapText(TextSprite* ts, GoString fullLine, int typedLen) {
     GoFunc flushPendingVisible = ((GoFunc){(void *)lambda_952, &(Env_lambda_952){runePrefix__h, currentLine__h, remaining__h, pendingSpaces__h, pendingSpacesRunes__h}});
     loop:;
     {
-        Slice_wrapToken_L8ac62d _t2 = tokens;
+        Slice_wrapToken_L7ae040 _t2 = tokens;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            wrapToken_L8ac62d tok = _t2.p[_t1];
+            wrapToken_L7ae040 tok = _t2.p[_t1];
             if ((*remaining__h) <= 0) {
                 break;
             }
             {
-                wrapTokenKind_Ld9d083 _t4 = tok.kind;
+                wrapTokenKind_Leb1bb0 _t4 = tok.kind;
                 do {
                     if ((_t4 == 1)) {
                         (*pendingSpaces__h) = go_strcat((*pendingSpaces__h), tok.text);
@@ -137339,7 +137430,7 @@ Music fn_parseMusicSection(GoOpaque /* ini.Section */* section) {
     if (section == NULL) {
         return Map_GoString_Slice_bgMusicPtr_make(0);
     }
-    Map_GoString_musicHolder_Leb5279Ptr propMap__hv = Map_GoString_musicHolder_Leb5279Ptr_make(0); __typeof__(propMap__hv) *propMap__h = &propMap__hv;
+    Map_GoString_musicHolder_L1a0c39Ptr propMap__hv = Map_GoString_musicHolder_L1a0c39Ptr_make(0); __typeof__(propMap__hv) *propMap__h = &propMap__hv;
     GoFunc get = ((GoFunc){(void *)lambda_987, &(Env_lambda_987){propMap__h}});
     GoFunc appendI32PtrList = ((GoFunc){(void *)lambda_988, &(Env_lambda_988){0}});
     GoFunc appendF32PtrList = ((GoFunc){(void *)lambda_989, &(Env_lambda_989){0}});
@@ -137371,28 +137462,28 @@ Music fn_parseMusicSection(GoOpaque /* ini.Section */* section) {
                 GoString _t8 = property;
                 do {
                     if (go_streq(_t8, GOSTR("bgm")) || go_streq(_t8, GOSTR("bgmusic"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         h->Bgm = GO_APPEND_SLICE(Slice_GoString, h->Bgm, values);
                     } else if (go_streq(_t8, GOSTR("bgm.loop")) || go_streq(_t8, GOSTR("bgmloop"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->Loop), values);
                     } else if (go_streq(_t8, GOSTR("bgm.volume")) || go_streq(_t8, GOSTR("bgmvolume"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->Volume), values);
                     } else if (go_streq(_t8, GOSTR("bgm.loopstart")) || go_streq(_t8, GOSTR("bgmloopstart"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->LoopStart), values);
                     } else if (go_streq(_t8, GOSTR("bgm.loopend")) || go_streq(_t8, GOSTR("bgmloopend"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->LoopEnd), values);
                     } else if (go_streq(_t8, GOSTR("bgm.startposition")) || go_streq(_t8, GOSTR("bgmstartposition"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->StartPosition), values);
                     } else if (go_streq(_t8, GOSTR("bgm.freqmul")) || go_streq(_t8, GOSTR("bgmfreqmul"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_f32Ptr*, Slice_GoString))(appendF32PtrList).fn)((appendF32PtrList).env, (&h->FreqMul), values);
                     } else if (go_streq(_t8, GOSTR("bgm.loopcount")) || go_streq(_t8, GOSTR("bgmloopcount"))) {
-                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_L1a0c39* h = ((musicHolder_L1a0c39* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->LoopCount), values);
                     } else {
                         goto _cont3;
@@ -137407,11 +137498,11 @@ Music fn_parseMusicSection(GoOpaque /* ini.Section */* section) {
         GoMapIter _t10 = gomap_iter((GoMap *)&(*propMap__h));
         while (gomap_next(&_t10)) {
             GoString prefix = *(GoString *)_t10.key;
-            musicHolder_Leb5279* holder = *(musicHolder_Leb5279* *)_t10.val;
+            musicHolder_L1a0c39* holder = *(musicHolder_L1a0c39* *)_t10.val;
             if ((((((((holder->Bgm.len == 0) && (holder->Loop.len == 0)) && (holder->Volume.len == 0)) && (holder->LoopStart.len == 0)) && (holder->LoopEnd.len == 0)) && (holder->StartPosition.len == 0)) && (holder->FreqMul.len == 0)) && (holder->LoopCount.len == 0)) {
                 continue;
             }
-            int count = ((int (*)(void *, musicHolder_Leb5279*))(maxSize).fn)((maxSize).env, holder);
+            int count = ((int (*)(void *, musicHolder_L1a0c39*))(maxSize).fn)((maxSize).env, holder);
             {
                 int i = 0;
                 for (; i < count; i++) {
@@ -140822,6 +140913,7 @@ void fn_realMain(void) {
         fn_Logcat(go_strcat(GOSTR("LOG: loadConfig failed: "), iface_Error_319077b5(err)));
         go_panic_iface(0, err);
     }
+    fn_cvfApplyDisplay(cfg);
     if (go_streq(ik_goos(), GOSTR("ios"))) {
         cfg->Video.RenderMode = GOSTR("Vulkan 1.3");
     }
@@ -140860,7 +140952,7 @@ void fn_realMain(void) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// processCommandLine (main.go:259), 0 TODO
+// processCommandLine (main.go:260), 0 TODO
 void fn_processCommandLine(void) {
     if (GO_SLICE(Slice_GoString, os_Args, 1, -1).len > 0) {
         g_sys.cmdFlags = Map_GoString_GoString_make(0);
@@ -140935,13 +141027,13 @@ void fn_processCommandLine(void) {
     }
 }
 
-// handleExit (main.go:380), 0 TODO
+// handleExit (main.go:381), 0 TODO
 void fn_handleExit(void) {
     System_shutdown(&g_sys);
     os_Exit(0);
 }
 
-// handlePanic (main.go:386), 0 TODO
+// handlePanic (main.go:387), 0 TODO
 void fn_handlePanic(GoIface r) {
     GoOpaque /* time.Time */ now = time_Now();
     GoOpaque /* runtime.MemStats */ *mem__h = go_box(GoOpaque /* runtime.MemStats */, {0});
@@ -141448,14 +141540,14 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                         }
                     }
                     GoString val = (GoString){0};
-                    valueSource_L8814da src = 0;
+                    valueSource_L9a4065 src = 0;
                     {
                         Ret_GoString__bool _t10 = ((Ret_GoString__bool (*)(void *, GoOpaque /* ini.File */*, GoString, GoString))(get).fn)((get).env, (*user__h), sp.DstSec, dstKey);
                         GoString v = _t10.r0;
                         bool ok = _t10.r1;
                         if (ok) {
                             GoString _t11 = v;
-                            valueSource_L8814da _t12 = 1;
+                            valueSource_L9a4065 _t12 = 1;
                             val = _t11;
                             src = _t12;
                         } else {
@@ -141465,7 +141557,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                                 bool ok = _t13.r1;
                                 if (ok) {
                                     GoString _t14 = v;
-                                    valueSource_L8814da _t15 = 2;
+                                    valueSource_L9a4065 _t15 = 2;
                                     val = _t14;
                                     src = _t15;
                                 } else {
@@ -141475,7 +141567,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                                         bool ok = _t16.r1;
                                         if (ok) {
                                             GoString _t17 = v;
-                                            valueSource_L8814da _t18 = 3;
+                                            valueSource_L9a4065 _t18 = 3;
                                             val = _t17;
                                             src = _t18;
                                         } else {
@@ -141485,7 +141577,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                                                 bool ok = _t19.r1;
                                                 if (ok) {
                                                     GoString _t20 = v;
-                                                    valueSource_L8814da _t21 = 4;
+                                                    valueSource_L9a4065 _t21 = 4;
                                                     val = _t20;
                                                     src = _t21;
                                                 } else {
@@ -141507,7 +141599,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                         }
                     }
                     {
-                        valueSource_L8814da _t22 = src;
+                        valueSource_L9a4065 _t22 = src;
                         do {
                             if ((_t22 == 2) || (_t22 == 4)) {
                                 Map_GoString_bool_set(&m->inheritedKeys, query, true);
@@ -141518,7 +141610,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                     }
                     if ((*user__h) != NULL) {
                         {
-                            valueSource_L8814da _t23 = src;
+                            valueSource_L9a4065 _t23 = src;
                             do {
                                 if ((_t23 == 1)) {
                                 } else if ((_t23 == 2)) {
@@ -142000,11 +142092,11 @@ void Motif_applyPostParsePosAdjustments(Motif* m) {
         }
     }
     {
-        Slice_namePos_L64e64f names = GO_SLICE_LIT(Slice_namePos_L64e64f, namePos_L64e64f, 8, (namePos_L64e64f){m->VsScreen.P1.Name.TextProperties_.TextSpriteData, m->VsScreen.P1.Name.Pos}, (namePos_L64e64f){m->VsScreen.P2.Name.TextProperties_.TextSpriteData, m->VsScreen.P2.Name.Pos}, (namePos_L64e64f){m->VsScreen.P3.Name.TextProperties_.TextSpriteData, m->VsScreen.P3.Name.Pos}, (namePos_L64e64f){m->VsScreen.P4.Name.TextProperties_.TextSpriteData, m->VsScreen.P4.Name.Pos}, (namePos_L64e64f){m->VsScreen.P5.Name.TextProperties_.TextSpriteData, m->VsScreen.P5.Name.Pos}, (namePos_L64e64f){m->VsScreen.P6.Name.TextProperties_.TextSpriteData, m->VsScreen.P6.Name.Pos}, (namePos_L64e64f){m->VsScreen.P7.Name.TextProperties_.TextSpriteData, m->VsScreen.P7.Name.Pos}, (namePos_L64e64f){m->VsScreen.P8.Name.TextProperties_.TextSpriteData, m->VsScreen.P8.Name.Pos});
+        Slice_namePos_L844887 names = GO_SLICE_LIT(Slice_namePos_L844887, namePos_L844887, 8, (namePos_L844887){m->VsScreen.P1.Name.TextProperties_.TextSpriteData, m->VsScreen.P1.Name.Pos}, (namePos_L844887){m->VsScreen.P2.Name.TextProperties_.TextSpriteData, m->VsScreen.P2.Name.Pos}, (namePos_L844887){m->VsScreen.P3.Name.TextProperties_.TextSpriteData, m->VsScreen.P3.Name.Pos}, (namePos_L844887){m->VsScreen.P4.Name.TextProperties_.TextSpriteData, m->VsScreen.P4.Name.Pos}, (namePos_L844887){m->VsScreen.P5.Name.TextProperties_.TextSpriteData, m->VsScreen.P5.Name.Pos}, (namePos_L844887){m->VsScreen.P6.Name.TextProperties_.TextSpriteData, m->VsScreen.P6.Name.Pos}, (namePos_L844887){m->VsScreen.P7.Name.TextProperties_.TextSpriteData, m->VsScreen.P7.Name.Pos}, (namePos_L844887){m->VsScreen.P8.Name.TextProperties_.TextSpriteData, m->VsScreen.P8.Name.Pos});
         {
-            Slice_namePos_L64e64f _t14 = names;
+            Slice_namePos_L844887 _t14 = names;
             for (int _t13 = 0; _t13 < _t14.len; _t13++) {
-                namePos_L64e64f n = _t14.p[_t13];
+                namePos_L844887 n = _t14.p[_t13];
                 ((void (*)(void *, TextSprite*, f32, f32))((*textSetPos__h)).fn)(((*textSetPos__h)).env, n.ts, n.pos.v[0], n.pos.v[1]);
                 _cont15:;
             }
@@ -145347,8 +145439,8 @@ void MotifVictory_step(MotifVictory* vi, Motif* m) {
 
 // MotifVictory.draw (motif.go:6447), 0 TODO
 void MotifVictory_draw(MotifVictory* vi, Motif* m, i16 layerno) {
-    Slice_slotRef_L64fd25 *slots__h = go_box(Slice_slotRef_L64fd25, GO_SLICE_LIT(Slice_slotRef_L64fd25, slotRef_L64fd25, 8, (slotRef_L64fd25){0, (&m->VictoryScreen.P1), m->VictoryScreen.P1.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){1, (&m->VictoryScreen.P2), m->VictoryScreen.P2.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){2, (&m->VictoryScreen.P3), m->VictoryScreen.P3.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){3, (&m->VictoryScreen.P4), m->VictoryScreen.P4.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){4, (&m->VictoryScreen.P5), m->VictoryScreen.P5.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){5, (&m->VictoryScreen.P6), m->VictoryScreen.P6.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){6, (&m->VictoryScreen.P7), m->VictoryScreen.P7.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){7, (&m->VictoryScreen.P8), m->VictoryScreen.P8.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}));
-    go_sort_slice_stable((void *)GO_TMPADDR(Slice_slotRef_L64fd25, (*slots__h)), sizeof(slotRef_L64fd25), ((GoFunc){(void *)lambda_1039, go_box(Env_lambda_1039, ((Env_lambda_1039){slots__h}))}));
+    Slice_slotRef_L64c566 *slots__h = go_box(Slice_slotRef_L64c566, GO_SLICE_LIT(Slice_slotRef_L64c566, slotRef_L64c566, 8, (slotRef_L64c566){0, (&m->VictoryScreen.P1), m->VictoryScreen.P1.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64c566){1, (&m->VictoryScreen.P2), m->VictoryScreen.P2.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64c566){2, (&m->VictoryScreen.P3), m->VictoryScreen.P3.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64c566){3, (&m->VictoryScreen.P4), m->VictoryScreen.P4.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64c566){4, (&m->VictoryScreen.P5), m->VictoryScreen.P5.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64c566){5, (&m->VictoryScreen.P6), m->VictoryScreen.P6.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64c566){6, (&m->VictoryScreen.P7), m->VictoryScreen.P7.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64c566){7, (&m->VictoryScreen.P8), m->VictoryScreen.P8.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}));
+    go_sort_slice_stable((void *)GO_TMPADDR(Slice_slotRef_L64c566, (*slots__h)), sizeof(slotRef_L64c566), ((GoFunc){(void *)lambda_1039, go_box(Env_lambda_1039, ((Env_lambda_1039){slots__h}))}));
     Rect_Draw(m->VictoryScreen.Overlay.RectData, layerno);
     if (m->VictoryBgDef.BgClearColor.v[0] >= 0) {
         Rect_Draw(m->VictoryBgDef.RectData, layerno);
@@ -145357,17 +145449,17 @@ void MotifVictory_draw(MotifVictory* vi, Motif* m, i16 layerno) {
         BGDef_Draw(m->VictoryBgDef.BGDef, ((i32)layerno), 0x0p+00f, 0x0p+00f, 0x1p+00f);
     }
     {
-        Slice_slotRef_L64fd25 _t2 = (*slots__h);
+        Slice_slotRef_L64c566 _t2 = (*slots__h);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            slotRef_L64fd25 s = _t2.p[_t1];
+            slotRef_L64c566 s = _t2.p[_t1];
             Anim_Draw(s.p->Face2.FaceProperties_.AnimationCharPreloadProperties_.AnimData, layerno);
             _cont3:;
         }
     }
     {
-        Slice_slotRef_L64fd25 _t5 = (*slots__h);
+        Slice_slotRef_L64c566 _t5 = (*slots__h);
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
-            slotRef_L64fd25 s = _t5.p[_t4];
+            slotRef_L64c566 s = _t5.p[_t4];
             Anim_Draw(s.p->FaceProperties_.AnimationCharPreloadProperties_.AnimData, layerno);
             _cont6:;
         }
@@ -162419,7 +162511,7 @@ void Storyboard_reset(Storyboard* s) {
 // Storyboard.buildDialogueQueue (storyboard.go:734), 0 TODO
 void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps) {
     GoFunc parseLayerIndex = ((GoFunc){(void *)lambda_1769, &(Env_lambda_1769){0}});
-    Slice_entry_L5cd011 *items__h = go_box(Slice_entry_L5cd011, {0});
+    Slice_entry_Lfb5793 *items__h = go_box(Slice_entry_Lfb5793, {0});
     {
         Slice_GoString _t2 = fn_SortedKeys_LayerPropertiesPtr(sceneProps->Layer);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -162428,16 +162520,16 @@ void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps) {
             if (((lp == NULL) || (lp->TextSpriteData == NULL)) || go_streq(lp->Text, GOSTR(""))) {
                 continue;
             }
-            (*items__h) = GO_APPEND(Slice_entry_L5cd011, (*items__h), (entry_L5cd011){.key = key, .lp = lp, .start = lp->StartTime, .idx = ((int (*)(void *, GoString))(parseLayerIndex).fn)((parseLayerIndex).env, key)});
+            (*items__h) = GO_APPEND(Slice_entry_Lfb5793, (*items__h), (entry_Lfb5793){.key = key, .lp = lp, .start = lp->StartTime, .idx = ((int (*)(void *, GoString))(parseLayerIndex).fn)((parseLayerIndex).env, key)});
             _cont3:;
         }
     }
-    go_sort_slice_stable((void *)GO_TMPADDR(Slice_entry_L5cd011, (*items__h)), sizeof(entry_L5cd011), ((GoFunc){(void *)lambda_1771, go_box(Env_lambda_1771, ((Env_lambda_1771){items__h}))}));
+    go_sort_slice_stable((void *)GO_TMPADDR(Slice_entry_Lfb5793, (*items__h)), sizeof(entry_Lfb5793), ((GoFunc){(void *)lambda_1771, go_box(Env_lambda_1771, ((Env_lambda_1771){items__h}))}));
     s->dialogueLayers = GO_SLICE(Slice_LayerPropertiesPtr, s->dialogueLayers, 0, 0);
     {
-        Slice_entry_L5cd011 _t5 = (*items__h);
+        Slice_entry_Lfb5793 _t5 = (*items__h);
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
-            entry_L5cd011 it = _t5.p[_t4];
+            entry_Lfb5793 it = _t5.p[_t4];
             s->dialogueLayers = GO_APPEND(Slice_LayerPropertiesPtr, s->dialogueLayers, it.lp);
             _cont6:;
         }
@@ -171836,6 +171928,7 @@ int g_cvfMaxFrames;
 GoOpaque /* regexp.Regexp */* g_cvfNameRe;
 cvfOnlineState* g_cvfOnline;
 cvfRulesT g_cvfRules;
+Arr2_i32 g_cvfScreen;
 Arr6_f64 g_cvf_cos;
 Arr6_f64 g_cvf_sin;
 Arr3_f64 g_cvf_tanP;
@@ -183015,7 +183108,7 @@ void ik_init_globals(void) {
     g_cvfMPi4 = (Arr20_u64){{1U, 5040379952546458195U, 17892431488136887169ULL, 13169980181085364355ULL, 18204331823439776451ULL, 7946843935494350272U, 905889640498799673U, 18175356263134875261ULL, 15061281708168349961ULL, 15220161563773041794ULL, 8296664548579374057U, 4109744767560208502U, 4607516669194743839U, 16023283104648321598ULL, 15739233654134936430ULL, 11424645774684705882ULL, 16883842788696515318ULL, 8795094592981902804U, 15561835991111744016ULL, 12395701187267450711ULL}};
     g_cvfOnline = go_box(cvfOnlineState, (cvfOnlineState){.httpClient = go_box(GoHttpClient, (GoHttpClient){.Timeout = 70000000000LL}), .buildTag = GOSTR("cvf-online-1")});
     g_cvfNameRe = regexp_MustCompile(GOSTR("[^\\p{L}\\p{N} _.\\-!?']"));
-    g_cvfRules = (cvfRulesT){.exemptLo = 1000, .exemptHi = 1099, .mpVar = -1, .mpScaleMilli = 1000};
+    g_cvfRules = (cvfRulesT){.exemptLo = 1000, .exemptHi = 1099, .mpVar = -1, .mpScaleMilli = 1000, .specialLo = 1100, .specialHi = 2999};
     g_cvfDebugOn = (!go_streq(os_Getenv(GOSTR("CVF_RULES_DEBUG")), GOSTR("")));
     g_jsonFileCache = (Anon_ec483023){.m = Map_GoString_Slice_u8_make(0)};
     g_luaChunkCache = Map_lua_LStatePtr_Map_GoString_lua_LFunctionPtr_make(0);
@@ -183202,7 +183295,7 @@ static const RField ik_rf_487[] = {{"Extensions", "", "json:\"extensions,omitemp
 static const RField ik_rf_488[] = {{"Magic", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Magic), false}, {"Version", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Version), false}, {"Length", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Length), false}, {"JSONHeader", "", "", &ik_rt[489], offsetof(gltf_glbHeader, JSONHeader), false}, };
 static const RField ik_rf_489[] = {{"Length", "", "", &ik_rt[9], offsetof(gltf_chunkHeader, Length), false}, {"Type", "", "", &ik_rt[9], offsetof(gltf_chunkHeader, Type), false}, };
 static const RField ik_rf_497[] = {{"msg", "github.com/tidwall/sjson", "", &ik_rt[13], offsetof(sjson_errorType, msg), false}, };
-static const RField ik_rf_499[] = {{"index", "github.com/tidwall/sjson", "", &ik_rt[1], offsetof(sjson_val_Lfd4cad, index), false}, {"res", "github.com/tidwall/sjson", "", &ik_rt[500], offsetof(sjson_val_Lfd4cad, res), false}, };
+static const RField ik_rf_499[] = {{"index", "github.com/tidwall/sjson", "", &ik_rt[1], offsetof(sjson_val_L5ecfcd, index), false}, {"res", "github.com/tidwall/sjson", "", &ik_rt[500], offsetof(sjson_val_L5ecfcd, res), false}, };
 static const RField ik_rf_500[] = {{"Type", "", "", &ik_rt[501], offsetof(gjson_Result, Type), false}, {"Raw", "", "", &ik_rt[13], offsetof(gjson_Result, Raw), false}, {"Str", "", "", &ik_rt[13], offsetof(gjson_Result, Str), false}, {"Num", "", "", &ik_rt[12], offsetof(gjson_Result, Num), false}, {"Index", "", "", &ik_rt[1], offsetof(gjson_Result, Index), false}, {"Indexes", "", "", &ik_rt[25], offsetof(gjson_Result, Indexes), false}, };
 static const RField ik_rf_506[] = {{"Metatable", "", "", &ik_rt[507], offsetof(lua_LTable, Metatable), false}, {"array", "github.com/yuin/gopher-lua", "", &ik_rt[508], offsetof(lua_LTable, array), false}, {"dict", "github.com/yuin/gopher-lua", "", &ik_rt[509], offsetof(lua_LTable, dict), false}, {"strdict", "github.com/yuin/gopher-lua", "", &ik_rt[510], offsetof(lua_LTable, strdict), false}, {"keys", "github.com/yuin/gopher-lua", "", &ik_rt[508], offsetof(lua_LTable, keys), false}, {"k2i", "github.com/yuin/gopher-lua", "", &ik_rt[511], offsetof(lua_LTable, k2i), false}, };
 static const RField ik_rf_513[] = {{"IsG", "", "", &ik_rt[0], offsetof(lua_LFunction, IsG), false}, {"Env", "", "", &ik_rt[505], offsetof(lua_LFunction, Env), false}, {"Proto", "", "", &ik_rt[514], offsetof(lua_LFunction, Proto), false}, {"GFunction", "", "", &ik_rt[522], offsetof(lua_LFunction, GFunction), false}, {"Upvalues", "", "", &ik_rt[523], offsetof(lua_LFunction, Upvalues), false}, };
@@ -183318,7 +183411,7 @@ static const RField ik_rf_817[] = {{"persistent", "main", "", &ik_rt[4], offseto
 static const RField ik_rf_825[] = {{"all", "main", "", &ik_rt[826], offsetof(specGuard, all), false}, {"trig", "main", "", &ik_rt[826], offsetof(specGuard, trig), false}, {"trigUnknown", "main", "", &ik_rt[763], offsetof(specGuard, trigUnknown), false}, };
 static const RField ik_rf_828[] = {{"who", "main", "", &ik_rt[2], offsetof(nameFact, who), false}, {"author", "main", "", &ik_rt[0], offsetof(nameFact, author), false}, {"val", "main", "", &ik_rt[13], offsetof(nameFact, val), false}, {"kind", "main", "", &ik_rt[2], offsetof(nameFact, kind), false}, };
 static const RField ik_rf_831[] = {{"owner", "main", "", &ik_rt[832], offsetof(specList, owner), false}, {"gen", "main", "", &ik_rt[9], offsetof(specList, gen), false}, {"ctrls", "main", "", &ik_rt[820], offsetof(specList, ctrls), false}, {"runs", "main", "", &ik_rt[822], offsetof(specList, runs), false}, {"isBlock", "main", "", &ik_rt[763], offsetof(specList, isBlock), false}, };
-static const RField ik_rf_833[] = {{"specGen", "main", "", &ik_rt[9], offsetof(Char, specGen), false}, {"name", "main", "", &ik_rt[13], offsetof(Char, name), false}, {"palfx", "main", "", &ik_rt[807], offsetof(Char, palfx), false}, {"anim", "main", "", &ik_rt[770], offsetof(Char, anim), false}, {"animBackup", "main", "", &ik_rt[770], offsetof(Char, animBackup), false}, {"curFrame", "main", "", &ik_rt[834], offsetof(Char, curFrame), false}, {"cmd", "main", "", &ik_rt[835], offsetof(Char, cmd), false}, {"ss", "main", "", &ik_rt[854], offsetof(Char, ss), false}, {"controller", "main", "", &ik_rt[1], offsetof(Char, controller), false}, {"playerNo", "main", "", &ik_rt[1], offsetof(Char, playerNo), false}, {"helperIndex", "main", "", &ik_rt[1], offsetof(Char, helperIndex), false}, {"id", "main", "", &ik_rt[4], offsetof(Char, id), false}, {"helperId", "main", "", &ik_rt[4], offsetof(Char, helperId), false}, {"parentId", "main", "", &ik_rt[4], offsetof(Char, parentId), false}, {"teamside", "main", "", &ik_rt[1], offsetof(Char, teamside), false}, {"keyctrl", "main", "", &ik_rt[841], offsetof(Char, keyctrl), false}, {"helperType", "main", "", &ik_rt[4], offsetof(Char, helperType), false}, {"isclsnproxy", "main", "", &ik_rt[0], offsetof(Char, isclsnproxy), false}, {"animPN", "main", "", &ik_rt[1], offsetof(Char, animPN), false}, {"spritePN", "main", "", &ik_rt[1], offsetof(Char, spritePN), false}, {"animNo", "main", "", &ik_rt[4], offsetof(Char, animNo), false}, {"animFfx", "main", "", &ik_rt[13], offsetof(Char, animFfx), false}, {"prevAnimNo", "main", "", &ik_rt[4], offsetof(Char, prevAnimNo), false}, {"life", "main", "", &ik_rt[4], offsetof(Char, life), false}, {"lifeMax", "main", "", &ik_rt[4], offsetof(Char, lifeMax), false}, {"power", "main", "", &ik_rt[4], offsetof(Char, power), false}, {"powerMax", "main", "", &ik_rt[4], offsetof(Char, powerMax), false}, {"dizzyPoints", "main", "", &ik_rt[4], offsetof(Char, dizzyPoints), false}, {"dizzyPointsMax", "main", "", &ik_rt[4], offsetof(Char, dizzyPointsMax), false}, {"guardPoints", "main", "", &ik_rt[4], offsetof(Char, guardPoints), false}, {"guardPointsMax", "main", "", &ik_rt[4], offsetof(Char, guardPointsMax), false}, {"redLife", "main", "", &ik_rt[4], offsetof(Char, redLife), false}, {"juggle", "main", "", &ik_rt[4], offsetof(Char, juggle), false}, {"baselocalscl", "main", "", &ik_rt[11], offsetof(Char, baselocalscl), false}, {"localscl", "main", "", &ik_rt[11], offsetof(Char, localscl), false}, {"animlocalscl", "main", "", &ik_rt[11], offsetof(Char, animlocalscl), false}, {"size", "main", "", &ik_rt[862], offsetof(Char, size), false}, {"clsnOverrides", "main", "", &ik_rt[869], offsetof(Char, clsnOverrides), false}, {"clsnTransforms", "main", "", &ik_rt[872], offsetof(Char, clsnTransforms), false}, {"zScale", "main", "", &ik_rt[11], offsetof(Char, zScale), false}, {"hitdef", "main", "", &ik_rt[875], offsetof(Char, hitdef), false}, {"ghv", "main", "", &ik_rt[880], offsetof(Char, ghv), false}, {"mhv", "main", "", &ik_rt[882], offsetof(Char, mhv), false}, {"hitby", "main", "", &ik_rt[883], offsetof(Char, hitby), false}, {"cvfMPRem", "main", "", &ik_rt[4], offsetof(Char, cvfMPRem), false}, {"hover", "main", "", &ik_rt[885], offsetof(Char, hover), false}, {"hoverIdx", "main", "", &ik_rt[1], offsetof(Char, hoverIdx), false}, {"hoverKeepState", "main", "", &ik_rt[0], offsetof(Char, hoverKeepState), false}, {"mctype", "main", "", &ik_rt[887], offsetof(Char, mctype), false}, {"mctime", "main", "", &ik_rt[4], offsetof(Char, mctime), false}, {"children", "main", "", &ik_rt[60], offsetof(Char, children), false}, {"targets", "main", "", &ik_rt[60], offsetof(Char, targets), false}, {"hitdefTargets", "main", "", &ik_rt[60], offsetof(Char, hitdefTargets), false}, {"hitdefTargetsBuffer", "main", "", &ik_rt[60], offsetof(Char, hitdefTargetsBuffer), false}, {"enemyNearList", "main", "", &ik_rt[60], offsetof(Char, enemyNearList), false}, {"p2EnemyList", "main", "", &ik_rt[60], offsetof(Char, p2EnemyList), false}, {"p2EnemyBackup", "main", "", &ik_rt[4], offsetof(Char, p2EnemyBackup), false}, {"pos", "main", "", &ik_rt[457], offsetof(Char, pos), false}, {"interPos", "main", "", &ik_rt[457], offsetof(Char, interPos), false}, {"oldPos", "main", "", &ik_rt[457], offsetof(Char, oldPos), false}, {"vel", "main", "", &ik_rt[457], offsetof(Char, vel), false}, {"facing", "main", "", &ik_rt[11], offsetof(Char, facing), false}, {"fbFlip", "main", "", &ik_rt[0], offsetof(Char, fbFlip), false}, {"cnsvar", "main", "", &ik_rt[888], offsetof(Char, cnsvar), false}, {"varGen", "main", "", &ik_rt[9], offsetof(Char, varGen), false}, {"varCache", "main", "", &ik_rt[889], offsetof(Char, varCache), false}, {"cnsfvar", "main", "", &ik_rt[891], offsetof(Char, cnsfvar), false}, {"cnssysvar", "main", "", &ik_rt[888], offsetof(Char, cnssysvar), false}, {"cnssysfvar", "main", "", &ik_rt[891], offsetof(Char, cnssysfvar), false}, {"CharSystemVar", "", "", &ik_rt[892], offsetof(Char, CharSystemVar_), true}, {"aimg", "main", "", &ik_rt[897], offsetof(Char, aimg), false}, {"p1facing", "main", "", &ik_rt[11], offsetof(Char, p1facing), false}, {"cpucmd", "main", "", &ik_rt[4], offsetof(Char, cpucmd), false}, {"offset", "main", "", &ik_rt[806], offsetof(Char, offset), false}, {"stchtmp", "main", "", &ik_rt[0], offsetof(Char, stchtmp), false}, {"inguarddist", "main", "", &ik_rt[0], offsetof(Char, inguarddist), false}, {"pushed", "main", "", &ik_rt[0], offsetof(Char, pushed), false}, {"hitdefContact", "main", "", &ik_rt[0], offsetof(Char, hitdefContact), false}, {"atktmp", "main", "", &ik_rt[2], offsetof(Char, atktmp), false}, {"hittmp", "main", "", &ik_rt[2], offsetof(Char, hittmp), false}, {"acttmp", "main", "", &ik_rt[2], offsetof(Char, acttmp), false}, {"minus", "main", "", &ik_rt[2], offsetof(Char, minus), false}, {"runStateNest", "main", "", &ik_rt[4], offsetof(Char, runStateNest), false}, {"inRunState", "main", "", &ik_rt[0], offsetof(Char, inRunState), false}, {"platformPosY", "main", "", &ik_rt[11], offsetof(Char, platformPosY), false}, {"groundAngle", "main", "", &ik_rt[11], offsetof(Char, groundAngle), false}, {"ownpal", "main", "", &ik_rt[0], offsetof(Char, ownpal), false}, {"ownProjectile", "main", "", &ik_rt[0], offsetof(Char, ownProjectile), false}, {"winquote", "main", "", &ik_rt[4], offsetof(Char, winquote), false}, {"movelist", "main", "", &ik_rt[4], offsetof(Char, movelist), false}, {"memberNo", "main", "", &ik_rt[1], offsetof(Char, memberNo), false}, {"selectNo", "main", "", &ik_rt[1], offsetof(Char, selectNo), false}, {"inheritJuggle", "main", "", &ik_rt[4], offsetof(Char, inheritJuggle), false}, {"inheritChannels", "main", "", &ik_rt[4], offsetof(Char, inheritChannels), false}, {"mapArray", "main", "", &ik_rt[903], offsetof(Char, mapArray), false}, {"mapDefault", "main", "", &ik_rt[903], offsetof(Char, mapDefault), false}, {"remapSpr", "main", "", &ik_rt[803], offsetof(Char, remapSpr), false}, {"clipboardText", "main", "", &ik_rt[210], offsetof(Char, clipboardText), false}, {"dialogue", "main", "", &ik_rt[210], offsetof(Char, dialogue), false}, {"immortal", "main", "", &ik_rt[0], offsetof(Char, immortal), false}, {"kovelocity", "main", "", &ik_rt[0], offsetof(Char, kovelocity), false}, {"preserve", "main", "", &ik_rt[0], offsetof(Char, preserve), false}, {"inputFlag", "main", "", &ik_rt[906], offsetof(Char, inputFlag), false}, {"inputShift", "main", "", &ik_rt[907], offsetof(Char, inputShift), false}, {"pauseBool", "main", "", &ik_rt[0], offsetof(Char, pauseBool), false}, {"downHitOffset", "main", "", &ik_rt[0], offsetof(Char, downHitOffset), false}, {"koEchoTimer", "main", "", &ik_rt[4], offsetof(Char, koEchoTimer), false}, {"groundLevel", "main", "", &ik_rt[11], offsetof(Char, groundLevel), false}, {"prevGroundLevel", "main", "", &ik_rt[11], offsetof(Char, prevGroundLevel), false}, {"shadowAnim", "main", "", &ik_rt[770], offsetof(Char, shadowAnim), false}, {"shadowAnimelem", "main", "", &ik_rt[4], offsetof(Char, shadowAnimelem), false}, {"shadowColor", "main", "", &ik_rt[65], offsetof(Char, shadowColor), false}, {"shadowIntensity", "main", "", &ik_rt[4], offsetof(Char, shadowIntensity), false}, {"shadowKeeptransform", "main", "", &ik_rt[0], offsetof(Char, shadowKeeptransform), false}, {"shadowOffset", "main", "", &ik_rt[806], offsetof(Char, shadowOffset), false}, {"shadowWindow", "main", "", &ik_rt[450], offsetof(Char, shadowWindow), false}, {"shadowXscale", "main", "", &ik_rt[11], offsetof(Char, shadowXscale), false}, {"shadowXshear", "main", "", &ik_rt[11], offsetof(Char, shadowXshear), false}, {"shadowYscale", "main", "", &ik_rt[11], offsetof(Char, shadowYscale), false}, {"shadowRot", "main", "", &ik_rt[802], offsetof(Char, shadowRot), false}, {"shadowProjection", "main", "", &ik_rt[894], offsetof(Char, shadowProjection), false}, {"shadowfLength", "main", "", &ik_rt[11], offsetof(Char, shadowfLength), false}, {"shadowShader", "main", "", &ik_rt[901], offsetof(Char, shadowShader), false}, {"shadowShaderSet", "main", "", &ik_rt[0], offsetof(Char, shadowShaderSet), false}, {"reflectAnim", "main", "", &ik_rt[770], offsetof(Char, reflectAnim), false}, {"reflectAnimelem", "main", "", &ik_rt[4], offsetof(Char, reflectAnimelem), false}, {"reflectColor", "main", "", &ik_rt[65], offsetof(Char, reflectColor), false}, {"reflectIntensity", "main", "", &ik_rt[4], offsetof(Char, reflectIntensity), false}, {"reflectKeeptransform", "main", "", &ik_rt[0], offsetof(Char, reflectKeeptransform), false}, {"reflectOffset", "main", "", &ik_rt[806], offsetof(Char, reflectOffset), false}, {"reflectWindow", "main", "", &ik_rt[450], offsetof(Char, reflectWindow), false}, {"reflectXscale", "main", "", &ik_rt[11], offsetof(Char, reflectXscale), false}, {"reflectXshear", "main", "", &ik_rt[11], offsetof(Char, reflectXshear), false}, {"reflectYscale", "main", "", &ik_rt[11], offsetof(Char, reflectYscale), false}, {"reflectRot", "main", "", &ik_rt[802], offsetof(Char, reflectRot), false}, {"reflectProjection", "main", "", &ik_rt[894], offsetof(Char, reflectProjection), false}, {"reflectfLength", "main", "", &ik_rt[11], offsetof(Char, reflectfLength), false}, {"reflectShader", "main", "", &ik_rt[901], offsetof(Char, reflectShader), false}, {"reflectShaderSet", "main", "", &ik_rt[0], offsetof(Char, reflectShaderSet), false}, {"ownclsnscale", "main", "", &ik_rt[0], offsetof(Char, ownclsnscale), false}, {"pushPriority", "main", "", &ik_rt[4], offsetof(Char, pushPriority), false}, {"pushAffectTeam", "main", "", &ik_rt[4], offsetof(Char, pushAffectTeam), false}, {"prevfallflag", "main", "", &ik_rt[0], offsetof(Char, prevfallflag), false}, {"makeDustSpacing", "main", "", &ik_rt[1], offsetof(Char, makeDustSpacing), false}, {"hitStateChangeIdx", "main", "", &ik_rt[4], offsetof(Char, hitStateChangeIdx), false}, {"currentSctrlIndex", "main", "", &ik_rt[4], offsetof(Char, currentSctrlIndex), false}, {"analogAxes", "main", "", &ik_rt[908], offsetof(Char, analogAxes), false}, {"enableSyncId", "main", "", &ik_rt[0], offsetof(Char, enableSyncId), false}, {"customShader", "main", "", &ik_rt[901], offsetof(Char, customShader), false}, {"pctype", "main", "", &ik_rt[909], offsetof(Char, pctype), false}, {"pctime", "main", "", &ik_rt[4], offsetof(Char, pctime), false}, {"pcid", "main", "", &ik_rt[4], offsetof(Char, pcid), false}, {"clsnBuffers", "main", "", &ik_rt[910], offsetof(Char, clsnBuffers), false}, {"stillLoading", "main", "", &ik_rt[0], offsetof(Char, stillLoading), false}, {"clsnFilterBuf", "main", "", &ik_rt[911], offsetof(Char, clsnFilterBuf), false}, };
+static const RField ik_rf_833[] = {{"specGen", "main", "", &ik_rt[9], offsetof(Char, specGen), false}, {"name", "main", "", &ik_rt[13], offsetof(Char, name), false}, {"palfx", "main", "", &ik_rt[807], offsetof(Char, palfx), false}, {"anim", "main", "", &ik_rt[770], offsetof(Char, anim), false}, {"animBackup", "main", "", &ik_rt[770], offsetof(Char, animBackup), false}, {"curFrame", "main", "", &ik_rt[834], offsetof(Char, curFrame), false}, {"cmd", "main", "", &ik_rt[835], offsetof(Char, cmd), false}, {"ss", "main", "", &ik_rt[854], offsetof(Char, ss), false}, {"controller", "main", "", &ik_rt[1], offsetof(Char, controller), false}, {"playerNo", "main", "", &ik_rt[1], offsetof(Char, playerNo), false}, {"helperIndex", "main", "", &ik_rt[1], offsetof(Char, helperIndex), false}, {"id", "main", "", &ik_rt[4], offsetof(Char, id), false}, {"helperId", "main", "", &ik_rt[4], offsetof(Char, helperId), false}, {"parentId", "main", "", &ik_rt[4], offsetof(Char, parentId), false}, {"teamside", "main", "", &ik_rt[1], offsetof(Char, teamside), false}, {"keyctrl", "main", "", &ik_rt[841], offsetof(Char, keyctrl), false}, {"helperType", "main", "", &ik_rt[4], offsetof(Char, helperType), false}, {"isclsnproxy", "main", "", &ik_rt[0], offsetof(Char, isclsnproxy), false}, {"animPN", "main", "", &ik_rt[1], offsetof(Char, animPN), false}, {"spritePN", "main", "", &ik_rt[1], offsetof(Char, spritePN), false}, {"animNo", "main", "", &ik_rt[4], offsetof(Char, animNo), false}, {"animFfx", "main", "", &ik_rt[13], offsetof(Char, animFfx), false}, {"prevAnimNo", "main", "", &ik_rt[4], offsetof(Char, prevAnimNo), false}, {"life", "main", "", &ik_rt[4], offsetof(Char, life), false}, {"lifeMax", "main", "", &ik_rt[4], offsetof(Char, lifeMax), false}, {"power", "main", "", &ik_rt[4], offsetof(Char, power), false}, {"powerMax", "main", "", &ik_rt[4], offsetof(Char, powerMax), false}, {"dizzyPoints", "main", "", &ik_rt[4], offsetof(Char, dizzyPoints), false}, {"dizzyPointsMax", "main", "", &ik_rt[4], offsetof(Char, dizzyPointsMax), false}, {"guardPoints", "main", "", &ik_rt[4], offsetof(Char, guardPoints), false}, {"guardPointsMax", "main", "", &ik_rt[4], offsetof(Char, guardPointsMax), false}, {"redLife", "main", "", &ik_rt[4], offsetof(Char, redLife), false}, {"juggle", "main", "", &ik_rt[4], offsetof(Char, juggle), false}, {"baselocalscl", "main", "", &ik_rt[11], offsetof(Char, baselocalscl), false}, {"localscl", "main", "", &ik_rt[11], offsetof(Char, localscl), false}, {"animlocalscl", "main", "", &ik_rt[11], offsetof(Char, animlocalscl), false}, {"size", "main", "", &ik_rt[862], offsetof(Char, size), false}, {"clsnOverrides", "main", "", &ik_rt[869], offsetof(Char, clsnOverrides), false}, {"clsnTransforms", "main", "", &ik_rt[872], offsetof(Char, clsnTransforms), false}, {"zScale", "main", "", &ik_rt[11], offsetof(Char, zScale), false}, {"hitdef", "main", "", &ik_rt[875], offsetof(Char, hitdef), false}, {"ghv", "main", "", &ik_rt[880], offsetof(Char, ghv), false}, {"mhv", "main", "", &ik_rt[882], offsetof(Char, mhv), false}, {"hitby", "main", "", &ik_rt[883], offsetof(Char, hitby), false}, {"cvfMPRem", "main", "", &ik_rt[4], offsetof(Char, cvfMPRem), false}, {"cvfSpecialCD", "main", "", &ik_rt[4], offsetof(Char, cvfSpecialCD), false}, {"hover", "main", "", &ik_rt[885], offsetof(Char, hover), false}, {"hoverIdx", "main", "", &ik_rt[1], offsetof(Char, hoverIdx), false}, {"hoverKeepState", "main", "", &ik_rt[0], offsetof(Char, hoverKeepState), false}, {"mctype", "main", "", &ik_rt[887], offsetof(Char, mctype), false}, {"mctime", "main", "", &ik_rt[4], offsetof(Char, mctime), false}, {"children", "main", "", &ik_rt[60], offsetof(Char, children), false}, {"targets", "main", "", &ik_rt[60], offsetof(Char, targets), false}, {"hitdefTargets", "main", "", &ik_rt[60], offsetof(Char, hitdefTargets), false}, {"hitdefTargetsBuffer", "main", "", &ik_rt[60], offsetof(Char, hitdefTargetsBuffer), false}, {"enemyNearList", "main", "", &ik_rt[60], offsetof(Char, enemyNearList), false}, {"p2EnemyList", "main", "", &ik_rt[60], offsetof(Char, p2EnemyList), false}, {"p2EnemyBackup", "main", "", &ik_rt[4], offsetof(Char, p2EnemyBackup), false}, {"pos", "main", "", &ik_rt[457], offsetof(Char, pos), false}, {"interPos", "main", "", &ik_rt[457], offsetof(Char, interPos), false}, {"oldPos", "main", "", &ik_rt[457], offsetof(Char, oldPos), false}, {"vel", "main", "", &ik_rt[457], offsetof(Char, vel), false}, {"facing", "main", "", &ik_rt[11], offsetof(Char, facing), false}, {"fbFlip", "main", "", &ik_rt[0], offsetof(Char, fbFlip), false}, {"cnsvar", "main", "", &ik_rt[888], offsetof(Char, cnsvar), false}, {"varGen", "main", "", &ik_rt[9], offsetof(Char, varGen), false}, {"varCache", "main", "", &ik_rt[889], offsetof(Char, varCache), false}, {"cnsfvar", "main", "", &ik_rt[891], offsetof(Char, cnsfvar), false}, {"cnssysvar", "main", "", &ik_rt[888], offsetof(Char, cnssysvar), false}, {"cnssysfvar", "main", "", &ik_rt[891], offsetof(Char, cnssysfvar), false}, {"CharSystemVar", "", "", &ik_rt[892], offsetof(Char, CharSystemVar_), true}, {"aimg", "main", "", &ik_rt[897], offsetof(Char, aimg), false}, {"p1facing", "main", "", &ik_rt[11], offsetof(Char, p1facing), false}, {"cpucmd", "main", "", &ik_rt[4], offsetof(Char, cpucmd), false}, {"offset", "main", "", &ik_rt[806], offsetof(Char, offset), false}, {"stchtmp", "main", "", &ik_rt[0], offsetof(Char, stchtmp), false}, {"inguarddist", "main", "", &ik_rt[0], offsetof(Char, inguarddist), false}, {"pushed", "main", "", &ik_rt[0], offsetof(Char, pushed), false}, {"hitdefContact", "main", "", &ik_rt[0], offsetof(Char, hitdefContact), false}, {"atktmp", "main", "", &ik_rt[2], offsetof(Char, atktmp), false}, {"hittmp", "main", "", &ik_rt[2], offsetof(Char, hittmp), false}, {"acttmp", "main", "", &ik_rt[2], offsetof(Char, acttmp), false}, {"minus", "main", "", &ik_rt[2], offsetof(Char, minus), false}, {"runStateNest", "main", "", &ik_rt[4], offsetof(Char, runStateNest), false}, {"inRunState", "main", "", &ik_rt[0], offsetof(Char, inRunState), false}, {"platformPosY", "main", "", &ik_rt[11], offsetof(Char, platformPosY), false}, {"groundAngle", "main", "", &ik_rt[11], offsetof(Char, groundAngle), false}, {"ownpal", "main", "", &ik_rt[0], offsetof(Char, ownpal), false}, {"ownProjectile", "main", "", &ik_rt[0], offsetof(Char, ownProjectile), false}, {"winquote", "main", "", &ik_rt[4], offsetof(Char, winquote), false}, {"movelist", "main", "", &ik_rt[4], offsetof(Char, movelist), false}, {"memberNo", "main", "", &ik_rt[1], offsetof(Char, memberNo), false}, {"selectNo", "main", "", &ik_rt[1], offsetof(Char, selectNo), false}, {"inheritJuggle", "main", "", &ik_rt[4], offsetof(Char, inheritJuggle), false}, {"inheritChannels", "main", "", &ik_rt[4], offsetof(Char, inheritChannels), false}, {"mapArray", "main", "", &ik_rt[903], offsetof(Char, mapArray), false}, {"mapDefault", "main", "", &ik_rt[903], offsetof(Char, mapDefault), false}, {"remapSpr", "main", "", &ik_rt[803], offsetof(Char, remapSpr), false}, {"clipboardText", "main", "", &ik_rt[210], offsetof(Char, clipboardText), false}, {"dialogue", "main", "", &ik_rt[210], offsetof(Char, dialogue), false}, {"immortal", "main", "", &ik_rt[0], offsetof(Char, immortal), false}, {"kovelocity", "main", "", &ik_rt[0], offsetof(Char, kovelocity), false}, {"preserve", "main", "", &ik_rt[0], offsetof(Char, preserve), false}, {"inputFlag", "main", "", &ik_rt[906], offsetof(Char, inputFlag), false}, {"inputShift", "main", "", &ik_rt[907], offsetof(Char, inputShift), false}, {"pauseBool", "main", "", &ik_rt[0], offsetof(Char, pauseBool), false}, {"downHitOffset", "main", "", &ik_rt[0], offsetof(Char, downHitOffset), false}, {"koEchoTimer", "main", "", &ik_rt[4], offsetof(Char, koEchoTimer), false}, {"groundLevel", "main", "", &ik_rt[11], offsetof(Char, groundLevel), false}, {"prevGroundLevel", "main", "", &ik_rt[11], offsetof(Char, prevGroundLevel), false}, {"shadowAnim", "main", "", &ik_rt[770], offsetof(Char, shadowAnim), false}, {"shadowAnimelem", "main", "", &ik_rt[4], offsetof(Char, shadowAnimelem), false}, {"shadowColor", "main", "", &ik_rt[65], offsetof(Char, shadowColor), false}, {"shadowIntensity", "main", "", &ik_rt[4], offsetof(Char, shadowIntensity), false}, {"shadowKeeptransform", "main", "", &ik_rt[0], offsetof(Char, shadowKeeptransform), false}, {"shadowOffset", "main", "", &ik_rt[806], offsetof(Char, shadowOffset), false}, {"shadowWindow", "main", "", &ik_rt[450], offsetof(Char, shadowWindow), false}, {"shadowXscale", "main", "", &ik_rt[11], offsetof(Char, shadowXscale), false}, {"shadowXshear", "main", "", &ik_rt[11], offsetof(Char, shadowXshear), false}, {"shadowYscale", "main", "", &ik_rt[11], offsetof(Char, shadowYscale), false}, {"shadowRot", "main", "", &ik_rt[802], offsetof(Char, shadowRot), false}, {"shadowProjection", "main", "", &ik_rt[894], offsetof(Char, shadowProjection), false}, {"shadowfLength", "main", "", &ik_rt[11], offsetof(Char, shadowfLength), false}, {"shadowShader", "main", "", &ik_rt[901], offsetof(Char, shadowShader), false}, {"shadowShaderSet", "main", "", &ik_rt[0], offsetof(Char, shadowShaderSet), false}, {"reflectAnim", "main", "", &ik_rt[770], offsetof(Char, reflectAnim), false}, {"reflectAnimelem", "main", "", &ik_rt[4], offsetof(Char, reflectAnimelem), false}, {"reflectColor", "main", "", &ik_rt[65], offsetof(Char, reflectColor), false}, {"reflectIntensity", "main", "", &ik_rt[4], offsetof(Char, reflectIntensity), false}, {"reflectKeeptransform", "main", "", &ik_rt[0], offsetof(Char, reflectKeeptransform), false}, {"reflectOffset", "main", "", &ik_rt[806], offsetof(Char, reflectOffset), false}, {"reflectWindow", "main", "", &ik_rt[450], offsetof(Char, reflectWindow), false}, {"reflectXscale", "main", "", &ik_rt[11], offsetof(Char, reflectXscale), false}, {"reflectXshear", "main", "", &ik_rt[11], offsetof(Char, reflectXshear), false}, {"reflectYscale", "main", "", &ik_rt[11], offsetof(Char, reflectYscale), false}, {"reflectRot", "main", "", &ik_rt[802], offsetof(Char, reflectRot), false}, {"reflectProjection", "main", "", &ik_rt[894], offsetof(Char, reflectProjection), false}, {"reflectfLength", "main", "", &ik_rt[11], offsetof(Char, reflectfLength), false}, {"reflectShader", "main", "", &ik_rt[901], offsetof(Char, reflectShader), false}, {"reflectShaderSet", "main", "", &ik_rt[0], offsetof(Char, reflectShaderSet), false}, {"ownclsnscale", "main", "", &ik_rt[0], offsetof(Char, ownclsnscale), false}, {"pushPriority", "main", "", &ik_rt[4], offsetof(Char, pushPriority), false}, {"pushAffectTeam", "main", "", &ik_rt[4], offsetof(Char, pushAffectTeam), false}, {"prevfallflag", "main", "", &ik_rt[0], offsetof(Char, prevfallflag), false}, {"makeDustSpacing", "main", "", &ik_rt[1], offsetof(Char, makeDustSpacing), false}, {"hitStateChangeIdx", "main", "", &ik_rt[4], offsetof(Char, hitStateChangeIdx), false}, {"currentSctrlIndex", "main", "", &ik_rt[4], offsetof(Char, currentSctrlIndex), false}, {"analogAxes", "main", "", &ik_rt[908], offsetof(Char, analogAxes), false}, {"enableSyncId", "main", "", &ik_rt[0], offsetof(Char, enableSyncId), false}, {"customShader", "main", "", &ik_rt[901], offsetof(Char, customShader), false}, {"pctype", "main", "", &ik_rt[909], offsetof(Char, pctype), false}, {"pctime", "main", "", &ik_rt[4], offsetof(Char, pctime), false}, {"pcid", "main", "", &ik_rt[4], offsetof(Char, pcid), false}, {"clsnBuffers", "main", "", &ik_rt[910], offsetof(Char, clsnBuffers), false}, {"stillLoading", "main", "", &ik_rt[0], offsetof(Char, stillLoading), false}, {"clsnFilterBuf", "main", "", &ik_rt[911], offsetof(Char, clsnFilterBuf), false}, };
 static const RField ik_rf_836[] = {{"Buffer", "", "", &ik_rt[837], offsetof(CommandList, Buffer), false}, {"Names", "", "", &ik_rt[843], offsetof(CommandList, Names), false}, {"nameCache", "main", "", &ik_rt[844], offsetof(CommandList, nameCache), false}, {"Commands", "", "", &ik_rt[846], offsetof(CommandList, Commands), false}, {"DefaultTime", "", "", &ik_rt[4], offsetof(CommandList, DefaultTime), false}, {"DefaultStepTime", "", "", &ik_rt[4], offsetof(CommandList, DefaultStepTime), false}, {"DefaultAutoGreater", "", "", &ik_rt[0], offsetof(CommandList, DefaultAutoGreater), false}, {"DefaultBufferTime", "", "", &ik_rt[4], offsetof(CommandList, DefaultBufferTime), false}, {"DefaultBufferHitpause", "", "", &ik_rt[0], offsetof(CommandList, DefaultBufferHitpause), false}, {"DefaultBufferPauseEnd", "", "", &ik_rt[0], offsetof(CommandList, DefaultBufferPauseEnd), false}, {"DefaultBufferShared", "", "", &ik_rt[0], offsetof(CommandList, DefaultBufferShared), false}, };
 static const RField ik_rf_838[] = {{"InputReader", "", "", &ik_rt[839], offsetof(InputBuffer, InputReader), false}, {"Bb", "", "", &ik_rt[4], offsetof(InputBuffer, Bb), false}, {"Db", "", "", &ik_rt[4], offsetof(InputBuffer, Db), false}, {"Fb", "", "", &ik_rt[4], offsetof(InputBuffer, Fb), false}, {"Ub", "", "", &ik_rt[4], offsetof(InputBuffer, Ub), false}, {"Lb", "", "", &ik_rt[4], offsetof(InputBuffer, Lb), false}, {"Rb", "", "", &ik_rt[4], offsetof(InputBuffer, Rb), false}, {"Nb", "", "", &ik_rt[4], offsetof(InputBuffer, Nb), false}, {"ab", "main", "", &ik_rt[4], offsetof(InputBuffer, ab), false}, {"bb", "main", "", &ik_rt[4], offsetof(InputBuffer, bb), false}, {"cb", "main", "", &ik_rt[4], offsetof(InputBuffer, cb), false}, {"xb", "main", "", &ik_rt[4], offsetof(InputBuffer, xb), false}, {"yb", "main", "", &ik_rt[4], offsetof(InputBuffer, yb), false}, {"zb", "main", "", &ik_rt[4], offsetof(InputBuffer, zb), false}, {"sb", "main", "", &ik_rt[4], offsetof(InputBuffer, sb), false}, {"db", "main", "", &ik_rt[4], offsetof(InputBuffer, db), false}, {"wb", "main", "", &ik_rt[4], offsetof(InputBuffer, wb), false}, {"mb", "main", "", &ik_rt[4], offsetof(InputBuffer, mb), false}, {"Bp", "", "", &ik_rt[4], offsetof(InputBuffer, Bp), false}, {"Dp", "", "", &ik_rt[4], offsetof(InputBuffer, Dp), false}, {"Fp", "", "", &ik_rt[4], offsetof(InputBuffer, Fp), false}, {"Up", "", "", &ik_rt[4], offsetof(InputBuffer, Up), false}, {"Lp", "", "", &ik_rt[4], offsetof(InputBuffer, Lp), false}, {"Rp", "", "", &ik_rt[4], offsetof(InputBuffer, Rp), false}, {"Np", "", "", &ik_rt[4], offsetof(InputBuffer, Np), false}, {"ap", "main", "", &ik_rt[4], offsetof(InputBuffer, ap), false}, {"bp", "main", "", &ik_rt[4], offsetof(InputBuffer, bp), false}, {"cp", "main", "", &ik_rt[4], offsetof(InputBuffer, cp), false}, {"xp", "main", "", &ik_rt[4], offsetof(InputBuffer, xp), false}, {"yp", "main", "", &ik_rt[4], offsetof(InputBuffer, yp), false}, {"zp", "main", "", &ik_rt[4], offsetof(InputBuffer, zp), false}, {"sp", "main", "", &ik_rt[4], offsetof(InputBuffer, sp), false}, {"dp", "main", "", &ik_rt[4], offsetof(InputBuffer, dp), false}, {"wp", "main", "", &ik_rt[4], offsetof(InputBuffer, wp), false}, {"mp", "main", "", &ik_rt[4], offsetof(InputBuffer, mp), false}, };
 static const RField ik_rf_840[] = {{"SocdAllow", "", "", &ik_rt[841], offsetof(InputReader, SocdAllow), false}, {"SocdFirst", "", "", &ik_rt[841], offsetof(InputReader, SocdFirst), false}, {"ButtonAssistBuffer", "", "", &ik_rt[842], offsetof(InputReader, ButtonAssistBuffer), false}, };
@@ -183357,7 +183450,7 @@ static const RField ik_rf_920[] = {{"o", "main", "", &ik_rt[819], offsetof(ov_L2
 static const RField ik_rf_922[] = {{"p", "main", "", &ik_rt[8], offsetof(pv_Lb05621, p), false}, {"v", "main", "", &ik_rt[10], offsetof(pv_Lb05621, v), false}, };
 static const RField ik_rf_925[] = {{"s", "main", "", &ik_rt[926], offsetof(StreamLooper, s), false}, {"loopcount", "main", "", &ik_rt[1], offsetof(StreamLooper, loopcount), false}, {"loopstart", "main", "", &ik_rt[1], offsetof(StreamLooper, loopstart), false}, {"loopend", "main", "", &ik_rt[1], offsetof(StreamLooper, loopend), false}, {"err", "main", "", &ik_rt[84], offsetof(StreamLooper, err), false}, };
 static const RField ik_rf_930[] = {{"vtype", "main", "", &ik_rt[905], offsetof(BytecodeValue, vtype), false}, {"value", "main", "", &ik_rt[12], offsetof(BytecodeValue, value), false}, };
-static const RField ik_rf_932[] = {{"pr", "main", "", &ik_rt[933], offsetof(pair_L9a2a44, pr), false}, {"dist", "main", "", &ik_rt[11], offsetof(pair_L9a2a44, dist), false}, };
+static const RField ik_rf_932[] = {{"pr", "main", "", &ik_rt[933], offsetof(pair_L912ecb, pr), false}, {"dist", "main", "", &ik_rt[11], offsetof(pair_L912ecb, dist), false}, };
 static const RField ik_rf_934[] = {{"playerno", "main", "", &ik_rt[1], offsetof(Projectile, playerno), false}, {"ownerId", "main", "", &ik_rt[4], offsetof(Projectile, ownerId), false}, {"id", "main", "", &ik_rt[4], offsetof(Projectile, id), false}, {"status", "main", "", &ik_rt[935], offsetof(Projectile, status), false}, {"hitdef", "main", "", &ik_rt[875], offsetof(Projectile, hitdef), false}, {"animNo", "main", "", &ik_rt[4], offsetof(Projectile, animNo), false}, {"anim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, anim_ffx), false}, {"hitanim", "main", "", &ik_rt[4], offsetof(Projectile, hitanim), false}, {"hitanim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, hitanim_ffx), false}, {"remanim", "main", "", &ik_rt[4], offsetof(Projectile, remanim), false}, {"remanim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, remanim_ffx), false}, {"cancelanim", "main", "", &ik_rt[4], offsetof(Projectile, cancelanim), false}, {"cancelanim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, cancelanim_ffx), false}, {"scale", "main", "", &ik_rt[806], offsetof(Projectile, scale), false}, {"rot", "main", "", &ik_rt[802], offsetof(Projectile, rot), false}, {"projection", "main", "", &ik_rt[894], offsetof(Projectile, projection), false}, {"fLength", "main", "", &ik_rt[11], offsetof(Projectile, fLength), false}, {"clsnScale", "main", "", &ik_rt[806], offsetof(Projectile, clsnScale), false}, {"clsnAngle", "main", "", &ik_rt[11], offsetof(Projectile, clsnAngle), false}, {"zScale", "main", "", &ik_rt[11], offsetof(Projectile, zScale), false}, {"remove", "main", "", &ik_rt[0], offsetof(Projectile, remove), false}, {"removetime", "main", "", &ik_rt[4], offsetof(Projectile, removetime), false}, {"velocity", "main", "", &ik_rt[457], offsetof(Projectile, velocity), false}, {"remvelocity", "main", "", &ik_rt[457], offsetof(Projectile, remvelocity), false}, {"accel", "main", "", &ik_rt[457], offsetof(Projectile, accel), false}, {"velmul", "main", "", &ik_rt[457], offsetof(Projectile, velmul), false}, {"hits", "main", "", &ik_rt[4], offsetof(Projectile, hits), false}, {"totalhits", "main", "", &ik_rt[4], offsetof(Projectile, totalhits), false}, {"misstime", "main", "", &ik_rt[4], offsetof(Projectile, misstime), false}, {"priority", "main", "", &ik_rt[4], offsetof(Projectile, priority), false}, {"priorityPoints", "main", "", &ik_rt[4], offsetof(Projectile, priorityPoints), false}, {"sprpriority", "main", "", &ik_rt[4], offsetof(Projectile, sprpriority), false}, {"layerno", "main", "", &ik_rt[4], offsetof(Projectile, layerno), false}, {"edgebound", "main", "", &ik_rt[4], offsetof(Projectile, edgebound), false}, {"stagebound", "main", "", &ik_rt[4], offsetof(Projectile, stagebound), false}, {"heightbound", "main", "", &ik_rt[805], offsetof(Projectile, heightbound), false}, {"depthbound", "main", "", &ik_rt[4], offsetof(Projectile, depthbound), false}, {"pos", "main", "", &ik_rt[457], offsetof(Projectile, pos), false}, {"interPos", "main", "", &ik_rt[457], offsetof(Projectile, interPos), false}, {"facing", "main", "", &ik_rt[11], offsetof(Projectile, facing), false}, {"removefacing", "main", "", &ik_rt[11], offsetof(Projectile, removefacing), false}, {"shadow", "main", "", &ik_rt[65], offsetof(Projectile, shadow), false}, {"reflection", "main", "", &ik_rt[4], offsetof(Projectile, reflection), false}, {"supermovetime", "main", "", &ik_rt[4], offsetof(Projectile, supermovetime), false}, {"pausemovetime", "main", "", &ik_rt[4], offsetof(Projectile, pausemovetime), false}, {"anim", "main", "", &ik_rt[770], offsetof(Projectile, anim), false}, {"curmisstime", "main", "", &ik_rt[4], offsetof(Projectile, curmisstime), false}, {"hitpause", "main", "", &ik_rt[4], offsetof(Projectile, hitpause), false}, {"oldPos", "main", "", &ik_rt[457], offsetof(Projectile, oldPos), false}, {"newPos", "main", "", &ik_rt[457], offsetof(Projectile, newPos), false}, {"aimg", "main", "", &ik_rt[897], offsetof(Projectile, aimg), false}, {"palfx", "main", "", &ik_rt[807], offsetof(Projectile, palfx), false}, {"window", "main", "", &ik_rt[450], offsetof(Projectile, window), false}, {"xshear", "main", "", &ik_rt[11], offsetof(Projectile, xshear), false}, {"localscl", "main", "", &ik_rt[11], offsetof(Projectile, localscl), false}, {"baselocalscl", "main", "", &ik_rt[11], offsetof(Projectile, baselocalscl), false}, {"parentAttackMul", "main", "", &ik_rt[450], offsetof(Projectile, parentAttackMul), false}, {"platform", "main", "", &ik_rt[0], offsetof(Projectile, platform), false}, {"platformWidth", "main", "", &ik_rt[806], offsetof(Projectile, platformWidth), false}, {"platformHeight", "main", "", &ik_rt[806], offsetof(Projectile, platformHeight), false}, {"platformAngle", "main", "", &ik_rt[11], offsetof(Projectile, platformAngle), false}, {"platformFence", "main", "", &ik_rt[0], offsetof(Projectile, platformFence), false}, {"freezeflag", "main", "", &ik_rt[0], offsetof(Projectile, freezeflag), false}, {"contactflag", "main", "", &ik_rt[0], offsetof(Projectile, contactflag), false}, {"time", "main", "", &ik_rt[4], offsetof(Projectile, time), false}, {"removeDone", "main", "", &ik_rt[0], offsetof(Projectile, removeDone), false}, {"customShader", "main", "", &ik_rt[901], offsetof(Projectile, customShader), false}, {"pauseBool", "main", "", &ik_rt[0], offsetof(Projectile, pauseBool), false}, {"clsnBuffers", "main", "", &ik_rt[910], offsetof(Projectile, clsnBuffers), false}, };
 static const RField ik_rf_938[] = {{"reader", "main", "", &ik_rt[340], offsetof(zipMemFileReader, reader), false}, {"zipArchive", "main", "", &ik_rt[939], offsetof(zipMemFileReader, zipArchive), false}, };
 static const RField ik_rf_961[] = {{"f", "main", "", &ik_rt[263], offsetof(vitaBufFile, f), false}, {"buf", "main", "", &ik_rt[16], offsetof(vitaBufFile, buf), false}, {"bufStart", "main", "", &ik_rt[5], offsetof(vitaBufFile, bufStart), false}, {"pos", "main", "", &ik_rt[5], offsetof(vitaBufFile, pos), false}, };
@@ -183388,7 +183481,7 @@ static const RField ik_rf_1170[] = {{"Joystick", "", "ini:\"Joystick\"", &ik_rt[
 static const RField ik_rf_1172[] = {{"w", "main", "", &ik_rt[4], offsetof(nullTexture, w), false}, {"h", "main", "", &ik_rt[4], offsetof(nullTexture, h), false}, };
 static const RField ik_rf_1174[] = {{"Name", "", "json:\"name\"", &ik_rt[13], offsetof(Anon_906f4fd5, Name), false}, };
 static const RField ik_rf_1179[] = {{"IP", "", "json:\"ip\"", &ik_rt[13], offsetof(Anon_a3823e0d, IP), false}, };
-static const RField ik_rf_1185[] = {{"ServiceType", "", "xml:\"serviceType\"", &ik_rt[13], offsetof(svc_Lc6dc42, ServiceType), false}, {"ControlURL", "", "xml:\"controlURL\"", &ik_rt[13], offsetof(svc_Lc6dc42, ControlURL), false}, };
+static const RField ik_rf_1185[] = {{"ServiceType", "", "xml:\"serviceType\"", &ik_rt[13], offsetof(svc_L9ef632, ServiceType), false}, {"ControlURL", "", "xml:\"controlURL\"", &ik_rt[13], offsetof(svc_L9ef632, ControlURL), false}, };
 static const RField ik_rf_1187[] = {{"ID", "", "json:\"id\"", &ik_rt[13], offsetof(Anon_78e9d625, ID), false}, {"Token", "", "json:\"token\"", &ik_rt[13], offsetof(Anon_78e9d625, Token), false}, {"IP", "", "json:\"ip\"", &ik_rt[13], offsetof(Anon_78e9d625, IP), false}, };
 static const RField ik_rf_1189[] = {{"Open", "", "json:\"open\"", &ik_rt[13], offsetof(Anon_be668d3d, Open), false}, };
 static const RField ik_rf_1194[] = {{"ID", "", "json:\"id\"", &ik_rt[13], offsetof(cvfRoom, ID), false}, {"Name", "", "json:\"name\"", &ik_rt[13], offsetof(cvfRoom, Name), false}, {"IP", "", "json:\"ip\"", &ik_rt[13], offsetof(cvfRoom, IP), false}, {"Port", "", "json:\"port\"", &ik_rt[1], offsetof(cvfRoom, Port), false}, {"UDPPort", "", "json:\"udp_port\"", &ik_rt[1], offsetof(cvfRoom, UDPPort), false}, {"Version", "", "json:\"version\"", &ik_rt[13], offsetof(cvfRoom, Version), false}, {"Open", "", "json:\"open\"", &ik_rt[13], offsetof(cvfRoom, Open), false}, {"AgeSec", "", "json:\"age_sec\"", &ik_rt[1], offsetof(cvfRoom, AgeSec), false}, };
@@ -183596,7 +183689,7 @@ static const RField ik_rf_1535[] = {{"winEnabled", "main", "", &ik_rt[0], offset
 static const RField ik_rf_1537[] = {{"enabled", "main", "", &ik_rt[0], offsetof(MotifHiscore, enabled), false}, {"active", "main", "", &ik_rt[0], offsetof(MotifHiscore, active), false}, {"initialized", "main", "", &ik_rt[0], offsetof(MotifHiscore, initialized), false}, {"counter", "main", "", &ik_rt[4], offsetof(MotifHiscore, counter), false}, {"endTimer", "main", "", &ik_rt[4], offsetof(MotifHiscore, endTimer), false}, {"place", "main", "", &ik_rt[4], offsetof(MotifHiscore, place), false}, {"mode", "main", "", &ik_rt[13], offsetof(MotifHiscore, mode), false}, {"rows", "main", "", &ik_rt[1538], offsetof(MotifHiscore, rows), false}, {"statsRaw", "main", "", &ik_rt[13], offsetof(MotifHiscore, statsRaw), false}, {"endTime", "main", "", &ik_rt[4], offsetof(MotifHiscore, endTime), false}, {"noFade", "main", "", &ik_rt[0], offsetof(MotifHiscore, noFade), false}, {"noBgs", "main", "", &ik_rt[0], offsetof(MotifHiscore, noBgs), false}, {"noOverlay", "main", "", &ik_rt[0], offsetof(MotifHiscore, noOverlay), false}, {"rankActiveCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, rankActiveCount), false}, {"resultActiveCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, resultActiveCount), false}, {"nameActiveCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, nameActiveCount), false}, {"rankUseActive2", "main", "", &ik_rt[0], offsetof(MotifHiscore, rankUseActive2), false}, {"resultUseActive2", "main", "", &ik_rt[0], offsetof(MotifHiscore, resultUseActive2), false}, {"nameUseActive2", "main", "", &ik_rt[0], offsetof(MotifHiscore, nameUseActive2), false}, {"input", "main", "", &ik_rt[0], offsetof(MotifHiscore, input), false}, {"letters", "main", "", &ik_rt[25], offsetof(MotifHiscore, letters), false}, {"timerCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, timerCount), false}, {"timerFrames", "main", "", &ik_rt[4], offsetof(MotifHiscore, timerFrames), false}, {"haveSaved", "main", "", &ik_rt[0], offsetof(MotifHiscore, haveSaved), false}, };
 static const RField ik_rf_1539[] = {{"score", "main", "", &ik_rt[1], offsetof(rankingRow, score), false}, {"time", "main", "", &ik_rt[12], offsetof(rankingRow, time), false}, {"win", "main", "", &ik_rt[1], offsetof(rankingRow, win), false}, {"name", "main", "", &ik_rt[13], offsetof(rankingRow, name), false}, {"pals", "main", "", &ik_rt[60], offsetof(rankingRow, pals), false}, {"chars", "main", "", &ik_rt[210], offsetof(rankingRow, chars), false}, {"bgs", "main", "", &ik_rt[1540], offsetof(rankingRow, bgs), false}, {"faces", "main", "", &ik_rt[1540], offsetof(rankingRow, faces), false}, {"rankData", "main", "", &ik_rt[1258], offsetof(rankingRow, rankData), false}, {"resultData", "main", "", &ik_rt[1258], offsetof(rankingRow, resultData), false}, {"nameData", "main", "", &ik_rt[1258], offsetof(rankingRow, nameData), false}, {"rankDataActive", "main", "", &ik_rt[1258], offsetof(rankingRow, rankDataActive), false}, {"rankDataActive2", "main", "", &ik_rt[1258], offsetof(rankingRow, rankDataActive2), false}, {"resultDataActive", "main", "", &ik_rt[1258], offsetof(rankingRow, resultDataActive), false}, {"resultDataActive2", "main", "", &ik_rt[1258], offsetof(rankingRow, resultDataActive2), false}, {"nameDataActive", "main", "", &ik_rt[1258], offsetof(rankingRow, nameDataActive), false}, {"nameDataActive2", "main", "", &ik_rt[1258], offsetof(rankingRow, nameDataActive2), false}, };
 static const RField ik_rf_1541[] = {{"enabled", "main", "", &ik_rt[0], offsetof(MotifMenu, enabled), false}, {"active", "main", "", &ik_rt[0], offsetof(MotifMenu, active), false}, {"initialized", "main", "", &ik_rt[0], offsetof(MotifMenu, initialized), false}, {"state", "main", "", &ik_rt[1542], offsetof(MotifMenu, state), false}, {"reopenLock", "main", "", &ik_rt[0], offsetof(MotifMenu, reopenLock), false}, };
-static const RField ik_rf_1548[] = {{"idx", "main", "", &ik_rt[1], offsetof(slotRef_L64fd25, idx), false}, {"p", "main", "", &ik_rt[1549], offsetof(slotRef_L64fd25, p), false}, {"order", "main", "", &ik_rt[4], offsetof(slotRef_L64fd25, order), false}, };
+static const RField ik_rf_1548[] = {{"idx", "main", "", &ik_rt[1], offsetof(slotRef_L64c566, idx), false}, {"p", "main", "", &ik_rt[1549], offsetof(slotRef_L64c566, p), false}, {"order", "main", "", &ik_rt[4], offsetof(slotRef_L64c566, order), false}, };
 static const RField ik_rf_1565[] = {{"FormatVersion", "", "json:\"format_version\"", &ik_rt[8], offsetof(ReplayHeader, FormatVersion), false}, {"SyncVersion", "", "json:\"sync_version\"", &ik_rt[8], offsetof(ReplayHeader, SyncVersion), false}, {"Strict", "", "json:\"strict,omitempty\"", &ik_rt[1566], offsetof(ReplayHeader, Strict), false}, {"Host", "", "json:\"host,omitempty\"", &ik_rt[1566], offsetof(ReplayHeader, Host), false}, {"ContentFingerprint", "", "json:\"content_fingerprint,omitempty\"", &ik_rt[13], offsetof(ReplayHeader, ContentFingerprint), false}, };
 static const RField ik_rf_1567[] = {{"Path", "", "json:\"path\"", &ik_rt[13], offsetof(SyncSetting, Path), false}, {"Value", "", "json:\"value\"", &ik_rt[13], offsetof(SyncSetting, Value), false}, };
 static const RField ik_rf_1568[] = {{"SyncVersion", "", "json:\"sync_version\"", &ik_rt[8], offsetof(SyncHandshake, SyncVersion), false}, {"Strict", "", "json:\"strict,omitempty\"", &ik_rt[1566], offsetof(SyncHandshake, Strict), false}, {"Host", "", "json:\"host,omitempty\"", &ik_rt[1566], offsetof(SyncHandshake, Host), false}, {"RollbackPort", "", "json:\"rollback_port,omitempty\"", &ik_rt[1], offsetof(SyncHandshake, RollbackPort), false}, {"ContentFingerprint", "", "json:\"content_fingerprint,omitempty\"", &ik_rt[13], offsetof(SyncHandshake, ContentFingerprint), false}, };
@@ -183713,7 +183806,7 @@ static const RField ik_rf_1851[] = {{"buf", "main", "", &ik_rt[1852], offsetof(B
 static const RField ik_rf_1853[] = {{"f", "github.com/ikemen-engine/beep/v2", "", &ik_rt[87], offsetof(beep_Buffer, f), false}, {"data", "github.com/ikemen-engine/beep/v2", "", &ik_rt[16], offsetof(beep_Buffer, data), false}, {"tmp", "github.com/ikemen-engine/beep/v2", "", &ik_rt[16], offsetof(beep_Buffer, tmp), false}, };
 static const RField ik_rf_1856[] = {{"streamer", "main", "", &ik_rt[91], offsetof(SoundEffect, streamer), false}, {"panner", "main", "", &ik_rt[1857], offsetof(SoundEffect, panner), false}, {"volume", "main", "", &ik_rt[11], offsetof(SoundEffect, volume), false}, {"duckMul", "main", "", &ik_rt[11], offsetof(SoundEffect, duckMul), false}, {"pan", "main", "", &ik_rt[11], offsetof(SoundEffect, pan), false}, {"sourceID", "main", "", &ik_rt[4], offsetof(SoundEffect, sourceID), false}, {"sourceX", "main", "", &ik_rt[11], offsetof(SoundEffect, sourceX), false}, {"lastPan", "main", "", &ik_rt[11], offsetof(SoundEffect, lastPan), false}, {"priority", "main", "", &ik_rt[4], offsetof(SoundEffect, priority), false}, {"loop", "main", "", &ik_rt[4], offsetof(SoundEffect, loop), false}, {"freqmul", "main", "", &ik_rt[11], offsetof(SoundEffect, freqmul), false}, {"startPos", "main", "", &ik_rt[1], offsetof(SoundEffect, startPos), false}, };
 static const RField ik_rf_1858[] = {{"streamer", "main", "", &ik_rt[91], offsetof(soundPanner, streamer), false}, {"request", "main", "", &ik_rt[1859], offsetof(soundPanner, request), false}, };
-static const RField ik_rf_1868[] = {{"key", "main", "", &ik_rt[13], offsetof(entry_L5cd011, key), false}, {"lp", "main", "", &ik_rt[1708], offsetof(entry_L5cd011, lp), false}, {"start", "main", "", &ik_rt[4], offsetof(entry_L5cd011, start), false}, {"idx", "main", "", &ik_rt[1], offsetof(entry_L5cd011, idx), false}, };
+static const RField ik_rf_1868[] = {{"key", "main", "", &ik_rt[13], offsetof(entry_Lfb5793, key), false}, {"lp", "main", "", &ik_rt[1708], offsetof(entry_Lfb5793, lp), false}, {"start", "main", "", &ik_rt[4], offsetof(entry_Lfb5793, start), false}, {"idx", "main", "", &ik_rt[1], offsetof(entry_Lfb5793, idx), false}, };
 static const RField ik_rf_1870[] = {{"dev", "main", "", &ik_rt[1871], offsetof(SDLSpeaker, dev), false}, {"mixer", "main", "", &ik_rt[1872], offsetof(SDLSpeaker, mixer), false}, {"mu", "main", "", &ik_rt[280], offsetof(SDLSpeaker, mu), false}, {"sampleRate", "main", "", &ik_rt[88], offsetof(SDLSpeaker, sampleRate), false}, {"bufferSize", "main", "", &ik_rt[1], offsetof(SDLSpeaker, bufferSize), false}, {"buf", "main", "", &ik_rt[1845], offsetof(SDLSpeaker, buf), false}, {"out", "main", "", &ik_rt[16], offsetof(SDLSpeaker, out), false}, };
 static const RField ik_rf_1873[] = {{"streamers", "github.com/ikemen-engine/beep/v2", "", &ik_rt[1874], offsetof(beep_Mixer, streamers), false}, {"stopWhenEmpty", "github.com/ikemen-engine/beep/v2", "", &ik_rt[0], offsetof(beep_Mixer, stopWhenEmpty), false}, };
 static const RField ik_rf_1876[] = {{"streamer", "main", "", &ik_rt[91], offsetof(Normalizer, streamer), false}, {"mul", "main", "", &ik_rt[12], offsetof(Normalizer, mul), false}, {"l", "main", "", &ik_rt[1877], offsetof(Normalizer, l), false}, {"r", "main", "", &ik_rt[1877], offsetof(Normalizer, r), false}, };
@@ -184261,8 +184354,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(GoString*), "", "", &ik_rt[13], NULL, 0, 0, NULL, 199, false, "*string"},
     {22, sizeof(sjson_errorType*), "", "", &ik_rt[497], NULL, 0, 0, NULL, 200, false, "*sjson.errorType"},
     {25, sizeof(sjson_errorType), "errorType", "github.com/tidwall/sjson", NULL, NULL, 0, 1, ik_rf_497, 960, false, "sjson.errorType"},
-    {23, sizeof(Slice_sjson_val_Lfd4cad), "", "", &ik_rt[499], NULL, 0, 0, NULL, 201, false, "[]sjson.val"},
-    {25, sizeof(sjson_val_Lfd4cad), "val", "github.com/tidwall/sjson", NULL, NULL, 0, 2, ik_rf_499, 961, false, "sjson.val"},
+    {23, sizeof(Slice_sjson_val_L5ecfcd), "", "", &ik_rt[499], NULL, 0, 0, NULL, 201, false, "[]sjson.val"},
+    {25, sizeof(sjson_val_L5ecfcd), "val", "github.com/tidwall/sjson", NULL, NULL, 0, 2, ik_rf_499, 961, false, "sjson.val"},
     {25, sizeof(gjson_Result), "Result", "github.com/tidwall/gjson", NULL, NULL, 0, 6, ik_rf_500, 962, false, "gjson.Result"},
     {2, sizeof(gjson_Type), "Type", "github.com/tidwall/gjson", NULL, NULL, 0, 0, NULL, 963, false, "gjson.Type"},
     {25, sizeof(sjson_dtype), "dtype", "github.com/tidwall/sjson", NULL, NULL, 0, 0, NULL, 202, false, "sjson.dtype"},
@@ -184596,7 +184689,7 @@ const RType ik_rt[1974] = {
     {22, sizeof(specList*), "", "", &ik_rt[831], NULL, 0, 0, NULL, 1189, false, "*main.specList"},
     {25, sizeof(specList), "specList", "main", NULL, NULL, 0, 5, ik_rf_831, 1190, false, "main.specList"},
     {22, sizeof(Char*), "", "", &ik_rt[833], NULL, 0, 0, NULL, 1191, false, "*main.Char"},
-    {25, sizeof(Char), "Char", "main", NULL, NULL, 0, 155, ik_rf_833, 1192, false, "main.Char"},
+    {25, sizeof(Char), "Char", "main", NULL, NULL, 0, 156, ik_rf_833, 1192, false, "main.Char"},
     {22, sizeof(AnimFrame*), "", "", &ik_rt[798], NULL, 0, 0, NULL, 1193, false, "*main.AnimFrame"},
     {23, sizeof(Slice_CommandList), "", "", &ik_rt[836], NULL, 0, 0, NULL, 1194, false, "[]main.CommandList"},
     {25, sizeof(CommandList), "CommandList", "main", NULL, NULL, 0, 11, ik_rf_836, 1195, false, "main.CommandList"},
@@ -184694,8 +184787,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(Map_i32_i32*), "", "", &ik_rt[888], NULL, 0, 0, NULL, 298, false, "*map[int32]int32"},
     {22, sizeof(Map_i32_f32*), "", "", &ik_rt[891], NULL, 0, 0, NULL, 299, false, "*map[int32]float32"},
     {25, sizeof(BytecodeValue), "BytecodeValue", "main", NULL, NULL, 0, 2, ik_rf_930, 300, false, "main.BytecodeValue"},
-    {23, sizeof(Slice_pair_L9a2a44), "", "", &ik_rt[932], NULL, 0, 0, NULL, 301, false, "[]main.pair"},
-    {25, sizeof(pair_L9a2a44), "pair", "main", NULL, NULL, 0, 2, ik_rf_932, 1270, false, "main.pair"},
+    {23, sizeof(Slice_pair_L912ecb), "", "", &ik_rt[932], NULL, 0, 0, NULL, 301, false, "[]main.pair"},
+    {25, sizeof(pair_L912ecb), "pair", "main", NULL, NULL, 0, 2, ik_rf_932, 1270, false, "main.pair"},
     {22, sizeof(Projectile*), "", "", &ik_rt[934], NULL, 0, 0, NULL, 1271, false, "*main.Projectile"},
     {25, sizeof(Projectile), "Projectile", "main", NULL, NULL, 0, 69, ik_rf_934, 1272, false, "main.Projectile"},
     {5, sizeof(ProjStatus), "ProjStatus", "main", NULL, NULL, 0, 0, NULL, 1273, false, "main.ProjStatus"},
@@ -184947,8 +185040,8 @@ const RType ik_rt[1974] = {
     {25, sizeof(GoXmlName), "Name", "encoding/xml", NULL, NULL, 0, 0, NULL, 1350, false, "xml.Name"},
     {23, sizeof(Slice_GoOpaque_xml_AttrPtr), "", "", &ik_rt[1183], NULL, 0, 0, NULL, 1351, false, "[]xml.Attr"},
     {25, sizeof(GoOpaque /* xml.Attr */), "Attr", "encoding/xml", NULL, NULL, 0, 0, NULL, 1352, false, "xml.Attr"},
-    {22, sizeof(svc_Lc6dc42*), "", "", &ik_rt[1185], NULL, 0, 0, NULL, 470, false, "*main.svc"},
-    {25, sizeof(svc_Lc6dc42), "svc", "main", NULL, NULL, 0, 2, ik_rf_1185, 1353, false, "main.svc"},
+    {22, sizeof(svc_L9ef632*), "", "", &ik_rt[1185], NULL, 0, 0, NULL, 470, false, "*main.svc"},
+    {25, sizeof(svc_L9ef632), "svc", "main", NULL, NULL, 0, 2, ik_rf_1185, 1353, false, "main.svc"},
     {22, sizeof(Anon_78e9d625*), "", "", &ik_rt[1187], NULL, 0, 0, NULL, 471, false, "*struct{ID string \"json:\\\"id\\\"\"; Token string \"json:\\\"token\\\"\"; IP string \"json:\\\"ip\\\"\"}"},
     {25, sizeof(Anon_78e9d625), "", "", NULL, NULL, 0, 3, ik_rf_1187, 1354, false, "struct{ID string \"json:\\\"id\\\"\"; Token string \"json:\\\"token\\\"\"; IP string \"json:\\\"ip\\\"\"}"},
     {22, sizeof(Anon_be668d3d*), "", "", &ik_rt[1189], NULL, 0, 0, NULL, 472, false, "*struct{Open string \"json:\\\"open\\\"\"}"},
@@ -185310,8 +185403,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(SelectInfoProperties*), "", "", &ik_rt[1397], NULL, 0, 0, NULL, 499, false, "*main.SelectInfoProperties"},
     {22, sizeof(Anon_c0ebc6d1*), "", "", &ik_rt[1362], NULL, 0, 0, NULL, 500, false, "*struct{main.TextProperties; Wait main.AnimationTextProperties \"ini:\\\"wait\\\"\"; Storyboard string \"ini:\\\"storyboard\\\" lookup:\\\"def,,data/\\\"\"}"},
     {23, sizeof(Slice_GoString), "StringSlice", "sort", &ik_rt[13], NULL, 0, 0, NULL, 501, false, "sort.StringSlice"},
-    {23, sizeof(Slice_slotRef_L64fd25), "", "", &ik_rt[1548], NULL, 0, 0, NULL, 502, false, "[]main.slotRef"},
-    {25, sizeof(slotRef_L64fd25), "slotRef", "main", NULL, NULL, 0, 3, ik_rf_1548, 1669, false, "main.slotRef"},
+    {23, sizeof(Slice_slotRef_L64c566), "", "", &ik_rt[1548], NULL, 0, 0, NULL, 502, false, "[]main.slotRef"},
+    {25, sizeof(slotRef_L64c566), "slotRef", "main", NULL, NULL, 0, 3, ik_rf_1548, 1669, false, "main.slotRef"},
     {22, sizeof(PlayerVictoryProperties*), "", "", &ik_rt[1473], NULL, 0, 0, NULL, 1670, false, "*main.PlayerVictoryProperties"},
     {22, sizeof(GoOpaque /* net.TCPListener */*), "", "", &ik_rt[1551], NULL, 0, 0, NULL, 503, false, "*net.TCPListener"},
     {25, sizeof(GoOpaque /* net.TCPListener */), "TCPListener", "net", NULL, NULL, 0, 0, NULL, 1671, false, "net.TCPListener"},
@@ -185630,8 +185723,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(Slice_AnimFrame*), "", "", &ik_rt[797], NULL, 0, 0, NULL, 566, false, "*[]main.AnimFrame"},
     {22, sizeof(RemapPreset*), "", "", &ik_rt[803], NULL, 0, 0, NULL, 567, false, "*main.RemapPreset"},
     {22, sizeof(RemapTable*), "", "", &ik_rt[804], NULL, 0, 0, NULL, 568, false, "*main.RemapTable"},
-    {23, sizeof(Slice_entry_L5cd011), "", "", &ik_rt[1868], NULL, 0, 0, NULL, 574, false, "[]main.entry"},
-    {25, sizeof(entry_L5cd011), "entry", "main", NULL, NULL, 0, 4, ik_rf_1868, 1944, false, "main.entry"},
+    {23, sizeof(Slice_entry_Lfb5793), "", "", &ik_rt[1868], NULL, 0, 0, NULL, 574, false, "[]main.entry"},
+    {25, sizeof(entry_Lfb5793), "entry", "main", NULL, NULL, 0, 4, ik_rf_1868, 1944, false, "main.entry"},
     {22, sizeof(SDLSpeaker*), "", "", &ik_rt[1870], NULL, 0, 0, NULL, 575, false, "*main.SDLSpeaker"},
     {25, sizeof(SDLSpeaker), "SDLSpeaker", "main", NULL, NULL, 0, 7, ik_rf_1870, 1945, false, "main.SDLSpeaker"},
     {10, sizeof(sdl_AudioDeviceID), "AudioDeviceID", "github.com/veandco/go-sdl2/sdl", NULL, NULL, 0, 0, NULL, 1946, false, "sdl.AudioDeviceID"},
@@ -185743,7 +185836,7 @@ const RType *const ik_rt_by_tid[2035] = {NULL, &ik_rt[0], &ik_rt[1], &ik_rt[2], 
 const int ik_rt_by_tid_count = 2035;
 
 const unsigned char ik_tid_kind[2038] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0,0,17,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,101,0,0,101,100,0,101,17,0,17,0,0,100,0,0,0,0,101,101,2,10,101,101,101,101,101,101,0,101,101,101,101,0,101,101,2,101,101,101,101,101,101,101,0,101,101,0,0,101,101,0,101,101,101,101,101,0,101,101,17,101,101,101,101,17,0,0,101,101,0,101,0,101,0,0,101,101,101,101,101,101,0,101,101,101,101,101,101,101,101,0,101,101,101,100,0,100,101,101,100,0,0,14,17,101,101,101,101,101,101,0,1,0,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,10,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,0,100,101,101,17,100,100,100,101,100,0,100,100,100,0,8,101,0,0,0,101,101,101,0,100,101,100,101,101,0,0,0,0,0,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,101,101,101,0,101,101,0,101,101,101,101,101,100,101,101,101,101,100,101,101,101,100,100,101,101,7,101,0,101,101,101,101,101,0,101,101,101,101,100,100,101,101,101,101,100,0,101,0,0,0,0,101,101,101,100,17,101,101,101,101,101,100,100,101,101,0,2,0,101,0,101,101,0,101,101,0,0,101,0,0,101,0,101,5,0,101,101,101,101,101,101,101,101,0,5,0,100,100,0,100,101,101,101,101,101,101,0,0,100,0,0,100,101,101,101,6,100,101,0,101,0,0,0,0,0,0,0,0,101,0,3,0,0,0,100,100,0,0,0,5,0,101,0,100,0,0,0,2,100,0,0,9,0,0,100,0,0,0,0,0,0,100,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,2,0,0,101,0,0,0,100,101,0,0,8,0,100,0,101,0,0,8,100,101,0,0,8,8,101,0,100,0,101,0,0,101,0,101,0,101,0,0,100,101,0,100,101,0,100,101,0,101,0,100,101,0,0,100,0,100,101,0,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,101,0,100,101,0,100,101,0,101,0,101,0,100,0,100,101,0,0,101,0,0,101,0,0,0,0,100,0,0,0,0,100,0,100,100,100,0,100,0,100,0,100,0,100,0,0,0,0,100,100,0,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,2,0,0,101,0,0,0,0,101,100,0,0,0,0,0,101,0,0,0,101,0,0,0,0,100,0,0,0,0,0,0,100,0,101,2,0,0,100,0,100,101,0,100,0,0,0,0,0,100,0,0,100,0,100,0,0,0,101,0,0,0,100,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,100,0,100,0,0,0,100,0,0,101,100,0,0,0,0,0,100,101,0,9,8,101,0,0,0,100,101,0,100,101,0,0,8,100,101,0,8,0,100,101,0,100,101,0,9,100,101,0,101,0,101,0,101,100,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,8,100,101,0,100,101,0,0,8,100,100,101,0,0,100,101,0,9,9,9,100,101,0,100,101,0,100,101,0,0,0,0,0,2,0,100,0,0,0,0,101,0,100,100,101,0,100,0,0,100,101,0,101,0,101,0,100,101,0,101,0,0,0,101,0,0,100,0,0,101,0,0,0,2,0,0,101,0,101,0,101,0,101,0,0,101,0,100,0,0,0,0,0,100,0,0,0,0,0,0,0,0,0,0,100,0,0,0,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,0,0,101,0,101,0,101,0,2,100,0,100,101,0,0,0,0,101,0,0,101,0,101,0,0,0,100,100,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,0,0,100,0,0,0,100,0,0,0,100,9,0,0,100,101,0,0,0,0,0,100,0,100,101,0,101,0,0,0,0,0,101,0,0,101,0,100,101,0,101,0,0,101,0,100,0,100,0,0,101,0,5,100,0,0,0,0,0,0,101,0,0,100,100,100,0,101,0,100,100,0,0,101,0,101,0,101,100,0,101,0,0,0,0,0,100,100,0,100,0,100,0,8,0,5,5,0,100,0,0,0,0,0,0,0,0,0,100,0,0,100,0,0,5,5,5,0,0,100,0,0,0,0,0,5,0,0,0,11,5,10,10,101,0,100,100,0,0,0,2,4,100,0,5,0,100,0,0,0,0,0,0,0,0,101,0,5,0,101,0,0,100,101,0,0,0,101,0,100,0,100,0,101,101,0,0,100,0,0,0,0,101,0,8,8,0,5,5,12,101,0,0,0,100,0,100,101,0,0,101,0,100,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,100,0,0,100,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,2,2,100,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,101,0,0,100,0,0,0,0,0,101,0,100,100,0,0,0,0,0,0,101,0,0,0,100,101,0,100,101,0,0,0,8,100,101,0,100,101,0,8,100,101,0,101,0,0,0,100,100,101,0,8,0,0,100,101,0,100,101,0,101,8,100,101,0,8,100,101,0,100,0,8,101,0,0,100,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,5,0,101,0,0,0,0,5,5,0,0,0,0,0,100,0,5,0,0,0,0,0,0,101,0,0,0,0,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,100,0,0,100,0,0,0,0,0,100,0,100,0,5,2,0,101,0,101,0,0,0,0,8,0,0,0,0,0,0,0,0,0,0,0,8,0,0,0,0,2,0,10,0,5,0,0,0,0,5,0,0,100,0,100,0,101,0,5,5,0,0,100,0,100,100,0,0,0,0,0,100,101,0,0,101,0,0,0,0,101,0,0,100,101,0,0,0,100,101,0,0,100,101,0,0,100,101,0,100,0,100,101,0,0,101,0,0,100,101,0,0,101,0,0,0,101,0,100,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,101,0,0,101,0,0,101,0,0,101,0,0,0,0,0,101,0,0,0,101,0,0,0,101,0,0,0,100,0,100,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,8,0,0,100,0,0,100,0,100,0,0,0,100,0,0,0,0,0,0,100,0,0,101,0,0,12,100,0,5,100,0,0,100,0,2,0,100,2,0,0,0,0,0,0,0,0,100,0,100,0,100,0,0,100,0,100,0,100,0,0,100,0,0,0,100,0,100,0,100,0,101,0,0,101,0,0,0,0,0,10,0,100,0,101,0,10,0,0,0,0,100,100,101,0,0,101,0,0,0,2,100,0,0,0,0,101,0,0,0,101,0,101,0,101,0,2,0,100,0,101,0,0,100,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,5,8,0,10,5,10,0,101,101,101};
-const unsigned ik_tid_size[2038] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,0,sizeof(Slice_u8),0,0,sizeof(GoOpaque),sizeof(GoOpaque),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,0,0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_Lfd4cad),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_L9db835),sizeof(Slice_ov_L2966a0),sizeof(Slice_pv_Lb05621),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_L9a2a44),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,0,0,0,0,0,sizeof(GoXmlStartElement),0,0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L64fd25),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_L5cd011),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoNetUDPAddr),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(GoOpaque),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoIoLimitedReader),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_Lfd4cad),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoReflectSliceHeader),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(ast_FuncCallExpr),sizeof(ast_ExprBase),sizeof(ast_Node),sizeof(Slice_ast_Expr),sizeof(ast_Comma3Expr),sizeof(ast_NumberExpr),sizeof(ast_ConstExprBase),sizeof(lua_constLValueExpr),sizeof(ast_LabelStmt),sizeof(ast_StmtBase),sizeof(ast_AssignStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(Slice_ast_Stmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_FuncDefStmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),0,sizeof(ast_ParList),sizeof(ast_ReturnStmt),sizeof(ast_IfStmt),sizeof(ast_BreakStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_GotoStmt),sizeof(ast_IdentExpr),sizeof(ast_AttrGetExpr),sizeof(ast_StringExpr),sizeof(ast_NilExpr),sizeof(ast_LogicalOpExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_TableExpr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(ast_ArithmeticOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(ast_Position),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(ast_Token),sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(Arr16_parse_yySymType),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_Error),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_L9db835),sizeof(bcProfKey),sizeof(ov_L2966a0),sizeof(pv_Lb05621),sizeof(StreamLooper),sizeof(pair_L9a2a44),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(GoNetIPNet),sizeof(Slice_u8),sizeof(Anon_a3823e0d),sizeof(GoXmlName),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_Lc6dc42),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(GoOpaque),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Texture_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,0,sizeof(GL33State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),0,0,0,0,0,0,sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L64fd25),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoNetTCPAddr),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_L5cd011),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK),0,0,0};
+const unsigned ik_tid_size[2038] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,0,sizeof(Slice_u8),0,0,sizeof(GoOpaque),sizeof(GoOpaque),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,0,0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_L5ecfcd),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_L9db835),sizeof(Slice_ov_L2966a0),sizeof(Slice_pv_Lb05621),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_L912ecb),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,0,0,0,0,0,sizeof(GoXmlStartElement),0,0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L64c566),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_Lfb5793),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoNetUDPAddr),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(GoOpaque),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoIoLimitedReader),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_L5ecfcd),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoReflectSliceHeader),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(ast_FuncCallExpr),sizeof(ast_ExprBase),sizeof(ast_Node),sizeof(Slice_ast_Expr),sizeof(ast_Comma3Expr),sizeof(ast_NumberExpr),sizeof(ast_ConstExprBase),sizeof(lua_constLValueExpr),sizeof(ast_LabelStmt),sizeof(ast_StmtBase),sizeof(ast_AssignStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(Slice_ast_Stmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_FuncDefStmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),0,sizeof(ast_ParList),sizeof(ast_ReturnStmt),sizeof(ast_IfStmt),sizeof(ast_BreakStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_GotoStmt),sizeof(ast_IdentExpr),sizeof(ast_AttrGetExpr),sizeof(ast_StringExpr),sizeof(ast_NilExpr),sizeof(ast_LogicalOpExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_TableExpr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(ast_ArithmeticOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(ast_Position),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(ast_Token),sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(Arr16_parse_yySymType),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_Error),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_L9db835),sizeof(bcProfKey),sizeof(ov_L2966a0),sizeof(pv_Lb05621),sizeof(StreamLooper),sizeof(pair_L912ecb),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(GoNetIPNet),sizeof(Slice_u8),sizeof(Anon_a3823e0d),sizeof(GoXmlName),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_L9ef632),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(GoOpaque),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Texture_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,0,sizeof(GL33State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),0,0,0,0,0,0,sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L64c566),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoNetTCPAddr),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_Lfb5793),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK),0,0,0};
 const int ik_tid_count = 2038;
 GoIface ik_binread_any(GoIface r, GoIface x, int big) {
     switch (x.type) {
