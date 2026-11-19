@@ -223,13 +223,27 @@ When injection IS needed (pure UIKit apps without scene support):
 | "Library not loaded" after patching | Binary corruption from improper LC_LOAD_DYLIB removal | Start from clean original binary |
 | Install fails: InvalidCompanionAppBundleIdentifier | Watch app's WKCompanionAppBundleIdentifier doesn't match new bundle ID | Update WKCompanionAppBundleIdentifier in Watch app plist, CFBundleIdentifier in Watch app + extension, and WKAppBundleIdentifier in Watch extension's NSExtensionAttributes |
 | Install fails: entitlements "invalid length in entitlement blob" | Entitlements extracted in DER format | Extract with `codesign -d --entitlements - --xml` to get XML format |
-| Crash: `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke` | iOS 27.1 enforces scene lifecycle for SDK 27.1 apps without UIApplicationSceneManifest | Inject scene delegate: add UIApplicationSceneManifest to Info.plist + DuoSceneDelegate.dylib + LC_LOAD_DYLIB |
+| Crash: `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke` | iOS 27 enforces scene lifecycle for SDK ≥27.0 apps without UIApplicationSceneManifest | Inject scene delegate: add UIApplicationSceneManifest to Info.plist + DuoSceneDelegate.dylib + LC_LOAD_DYLIB |
+| WKWebView "Oops" / web content fails after re-sign | Re-signing with dev cert breaks server-side integrity checks (e.g. Steam Library) | Not fixable — this is a server-side check, not caused by SDK bump or scene delegate. Confirmed by testing re-sign-only (no SDK bump) which still fails. |
+| Scene lifecycle enforced at SDK 27.0, not just 27.1 | Tested: SDK 27.0 without scene delegate still crashes with scene lifecycle enforcement | Use SDK 27.1 (same enforcement) with scene delegate |
+
+## Scene Delegate Approaches (Lessons Learned)
+
+For apps that need an injected scene delegate, the approach matters:
+
+| Approach | Result | Why |
+|----------|--------|-----|
+| Scene delegate creates NEW window | App works but may break web views | Conflicts with app's own window management |
+| Empty/minimal scene delegate (no-op) | Black screen | UIKit expects scene delegate to set up window when scene lifecycle is active |
+| Swizzle UIWindow methods + minimal delegate | **Best approach** — app's own window management runs untouched | Swizzles `makeKeyAndVisible` and `setHidden:` to auto-assign windowScene to any window the app creates. Scene delegate just captures the scene reference. |
+
+**Recommended swizzle approach**: Instead of a scene delegate that takes over window management, swizzle `UIWindow.makeKeyAndVisible` and `UIWindow.setHidden:` to automatically assign the global `UIWindowScene` to any window that doesn't have one. The scene delegate's only job is to capture the scene reference. This preserves the app's native window lifecycle.
 
 ## Tested Apps
 
 | App | Scene Delegate Needed? | Zerofill Fix Needed? | Notes |
 |-----|----------------------|---------------------|-------|
-| Steam | Yes (injected) | No | Pure UIKit, no scene support |
+| Steam | Yes (swizzle approach) | No | Pure UIKit, no scene support. Library tab broken due to re-signing (server-side check), not fixable. Store/Profile tabs work. |
 | LocalSend | No | No | Already had scene support |
 | iTorrent | No | No | Already had scene support |
-| BatteryCam (Eufy) | Yes (injected) | Yes (13 frameworks) | Kotlin Multiplatform (KMP) app, has Watch app requiring bundle ID fixup |
+| BatteryCam (Eufy) | Yes (injected) | Yes (13 frameworks) | Kotlin Multiplatform (KMP) app, crashes in MegaCommonFramework regardless — incompatible with iOS 27. Has Watch app requiring bundle ID fixup. |
