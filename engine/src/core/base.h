@@ -38,13 +38,16 @@ typedef struct CvfArena {
     u8 *base;
     size_t used, cap;
     bool owns;
+    bool grow;       // content arenas: chain a new block when full
+    void *prev;      // previous block chain (growable arenas)
 } CvfArena;
 
-void cvf_arena_init(CvfArena *a, size_t cap);
+void cvf_arena_init(CvfArena *a, size_t cap);           // fixed size
+void cvf_arena_init_growable(CvfArena *a, size_t block);
 void cvf_arena_free(CvfArena *a);
 void *cvf_arena_alloc(CvfArena *a, size_t size, size_t align);
 void *cvf_arena_zalloc(CvfArena *a, size_t size, size_t align);
-static inline void cvf_arena_reset(CvfArena *a) { a->used = 0; }
+static inline void cvf_arena_reset(CvfArena *a) { a->used = sizeof(void *); }
 #define CVF_NEW(arena, T) ((T *)cvf_arena_zalloc((arena), sizeof(T), _Alignof(T)))
 #define CVF_NEW_N(arena, T, n) ((T *)cvf_arena_zalloc((arena), sizeof(T) * (size_t)(n), _Alignof(T)))
 char *cvf_arena_strdup(CvfArena *a, const char *s, size_t n);

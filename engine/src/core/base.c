@@ -28,18 +28,46 @@ void cvf_fatal(const char *fmt, ...) {
 void cvf_arena_init(CvfArena *a, size_t cap) {
     a->base = (u8 *)malloc(cap);
     if (!a->base) cvf_fatal("arena: cannot allocate %zu bytes", cap);
-    a->used = 0;
+    a->used = sizeof(void *);  // first word: chain link for growable arenas
     a->cap = cap;
     a->owns = true;
+    a->grow = false;
+    a->prev = NULL;
 }
 
+void cvf_arena_init_growable(CvfArena *a, size_t block) {
+    cvf_arena_init(a, block);
+    a->grow = true;
+}
+
+// Growable blocks keep a pointer to the previous block in their first word.
 void cvf_arena_free(CvfArena *a) {
-    if (a->owns) free(a->base);
+    if (a->owns) {
+        void *prev = a->prev;
+        free(a->base);
+        while (prev) {
+            void *pp = *(void **)prev;
+            free(prev);
+            prev = pp;
+        }
+    }
     *a = (CvfArena){0};
 }
 
 void *cvf_arena_alloc(CvfArena *a, size_t size, size_t align) {
     size_t off = (a->used + (align - 1)) & ~(align - 1);
+    if (off + size > a->cap && a->grow) {
+        size_t ncap = a->cap;
+        while (ncap < size + 64) ncap *= 2;
+        u8 *nb = (u8 *)malloc(ncap);
+        if (!nb) cvf_fatal("arena: cannot allocate %zu bytes", ncap);
+        *(void **)a->base = a->prev;  // old block becomes part of the chain
+        a->prev = a->base;
+        a->base = nb;
+        a->cap = ncap;
+        a->used = sizeof(void *);
+        off = (a->used + (align - 1)) & ~(align - 1);
+    }
     if (off + size > a->cap) cvf_fatal("arena full (%zu + %zu > %zu)", off, size, a->cap);
     a->used = off + size;
     return a->base + off;
