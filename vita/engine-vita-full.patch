@@ -475,6 +475,688 @@ index ac9143a..5b51042 100644
  }
  
  func (s *SDLSpeaker) Play(st beep.Streamer) {
+diff --git a/src/bc_compile.go b/src/bc_compile.go
+new file mode 100644
+index 0000000..bdbf118
+--- /dev/null
++++ b/src/bc_compile.go
+@@ -0,0 +1,676 @@
++package main
++
++// Trigger expression compiler (PS Vita).
++//
++// The bytecode interpreter (BytecodeExp.run) spends most of a fight's CPU
++// time on dispatch: a switch over ~700 opcodes, operand decoding and a
++// push/pop on the global value stack for every operation. This file turns a
++// trigger expression, once at load time, into a tree of Go closures that
++// pass values directly.
++//
++// Exactness rules (the Vita must stay bit-identical with the PC build):
++//   - Every node computes its value with the same helper the interpreter
++//     uses (BytecodeExp.eq, Char.varGet, ...), in the same order.
++//   - Short-circuit jumps (jz8/jnz8/jud8) keep the tested value as the
++//     result, exactly like the interpreter leaves it on the stack.
++//   - A redirection (enemy, helper(...), ...) applies to the following
++//     operations up to and including the first one that does not "continue"
++//     in the interpreter (redirects themselves and run_caller continue);
++//     after that, operations use the original character again.
++//   - Opcodes without a native node run the interpreter's own case for that
++//     single opcode (runOC on a one-op slice), with the same current and
++//     original characters; their stack effect comes from bc_gen.go, which is
++//     generated from the interpreter source.
++//   - Anything the compiler cannot model exactly (unknown stack effect,
++//     unusual jumps, stack shuffles) makes it give up on the whole
++//     expression, which then stays interpreted.
++
++type cnode func(t, oc *Char) BytecodeValue
++
++var bcCompileStats struct{ ok, fail, native, generic int }
++
++type cparser struct {
++	be    BytecodeExp
++	fail  bool
++	depth int
++}
++
++// compileExp returns a closure equivalent to be.run(c) (call it as
++// n(c, c)), or nil when the expression must stay interpreted.
++func compileExp(be BytecodeExp) cnode {
++	if len(be) == 0 {
++		return nil
++	}
++	p := &cparser{be: be}
++	st, end := p.parse(0, len(be), nil, false)
++	if p.fail || len(st) != 1 || end != len(be) || st[0] == nil {
++		bcCompileStats.fail++
++		return nil
++	}
++	bcCompileStats.ok++
++	return st[0]
++}
++
++func (p *cparser) popFrom(st *[]cnode) cnode {
++	s := *st
++	if len(s) == 0 || s[len(s)-1] == nil {
++		p.fail = true
++		return nil
++	}
++	n := s[len(s)-1]
++	*st = s[:len(s)-1]
++	return n
++}
++
++// parse runs the symbolic stack machine over be[s:e] starting with stack
++// init; startRedir says whether the first op runs with the redirect target.
++// It returns the final stack and where parsing stopped.
++func (p *cparser) parse(s, e int, init []cnode, startRedir bool) ([]cnode, int) {
++	p.depth++
++	defer func() { p.depth-- }()
++	if p.depth > 48 {
++		p.fail = true
++		return nil, e
++	}
++	be := p.be
++	st := append([]cnode(nil), init...)
++	redir := startRedir
++	i := s
++	for i < e && !p.fail {
++		op := be[i]
++		i++
++		useT := redir
++		redir = false // most ops end a redirect (no "continue")
++		switch op {
++		case OC_nop:
++			redir = useT
++		case OC_rdreset:
++		case OC_jz8, OC_jnz8, OC_jud8:
++			if i >= e {
++				p.fail = true
++				break
++			}
++			off := int(uint8(be[i]))
++			target := len(be)
++			if off != 0 {
++				target = i + 1 + off
++			}
++			if target > e || target <= i+1 {
++				p.fail = true
++				break
++			}
++			a := p.popFrom(&st)
++			if p.fail {
++				break
++			}
++			// Not-taken path: "pop; <rest>" leaving exactly one value.
++			rest, rend := p.parse(i+1, target, []cnode{nil}, false)
++			if p.fail || rend != target || len(rest) != 1 || rest[0] == nil {
++				p.fail = true
++				break
++			}
++			b := rest[0]
++			switch op {
++			case OC_jz8:
++				st = append(st, func(t, oc *Char) BytecodeValue {
++					if v := a(t, oc); !v.ToB() {
++						return v
++					}
++					return b(t, oc)
++				})
++			case OC_jnz8:
++				st = append(st, func(t, oc *Char) BytecodeValue {
++					if v := a(t, oc); v.ToB() {
++						return v
++					}
++					return b(t, oc)
++				})
++			default:
++				st = append(st, func(t, oc *Char) BytecodeValue {
++					if v := a(t, oc); v.IsUndefined() {
++						return v
++					}
++					return b(t, oc)
++				})
++			}
++			i = target
++		case OC_jmp8:
++			if i < e && be[i] == 0 && e == len(be) {
++				return st, e // jump to the end: the result is the top
++			}
++			p.fail = true
++		case OC_pop:
++			// Only the placeholder for a jump's tested value may be
++			// dropped: its evaluation belongs to the jump node.
++			if len(st) == 0 || st[len(st)-1] != nil {
++				p.fail = true
++				break
++			}
++			st = st[:len(st)-1]
++		case OC_int8:
++			v := BytecodeInt(int32(int8(be[i])))
++			i++
++			st = append(st, func(*Char, *Char) BytecodeValue { return v })
++		case OC_int:
++			v := BytecodeInt(bcI32(be, i))
++			i += 4
++			st = append(st, func(*Char, *Char) BytecodeValue { return v })
++		case OC_float:
++			arr := []byte{byte(be[i]), byte(be[i+1]), byte(be[i+2]), byte(be[i+3])}
++			v := BytecodeFloat(Float32frombytes(arr))
++			i += 4
++			st = append(st, func(*Char, *Char) BytecodeValue { return v })
++		case OC_string:
++			v := BytecodeValue{VT_String, float64(be.readInt32At(i))}
++			i += 4
++			st = append(st, func(*Char, *Char) BytecodeValue { return v })
++		case OC_run_caller:
++			l := be.PeekLength(i)
++			sub := compileExp(be[i+4 : i+4+l])
++			if sub == nil {
++				p.fail = true
++				break
++			}
++			i += 4 + l
++			st = append(st, func(t, oc *Char) BytecodeValue { return sub(oc, oc) })
++			redir = useT // continue: the redirect stays active
++		case OC_run_redir:
++			l := be.PeekLength(i)
++			sub := compileExp(be[i+4 : i+4+l])
++			if sub == nil {
++				p.fail = true
++				break
++			}
++			i += 4 + l
++			ut := useT
++			st = append(st, func(t, oc *Char) BytecodeValue {
++				c := oc
++				if ut {
++					c = t
++				}
++				return sub(c, c) // a nested run: its original char is c
++			})
++		case OC_enemy, OC_enemynear, OC_partner, OC_helper, OC_target, OC_parent, OC_root,
++			OC_player, OC_playerid, OC_playerindex, OC_helperindex, OC_p2, OC_stateowner:
++			n := p.redirect(op, &i, e, useT, &st)
++			if !p.fail {
++				st = append(st, n)
++			}
++		case OC_ifelse:
++			v3 := p.popFrom(&st)
++			v2 := p.popFrom(&st)
++			cond := p.popFrom(&st)
++			if p.fail {
++				break
++			}
++			st = append(st, func(t, oc *Char) BytecodeValue {
++				cv := cond(t, oc)
++				a := v2(t, oc)
++				b := v3(t, oc)
++				if cv.ToB() {
++					return a
++				}
++				return b
++			})
++		default:
++			n := p.simple(op, &i, e, useT, &st)
++			if !p.fail {
++				st = append(st, n)
++			}
++		}
++	}
++	if redir {
++		p.fail = true
++	}
++	return st, e
++}
++
++// redirect parses a redirection opcode and its block.
++func (p *cparser) redirect(op OpCode, ip *int, e int, useT bool, st *[]cnode) cnode {
++	be := p.be
++	i := *ip
++	var a1, a2 cnode
++	switch op {
++	case OC_helper, OC_target:
++		a2 = p.popFrom(st)
++		a1 = p.popFrom(st)
++	case OC_enemy, OC_enemynear, OC_partner, OC_player, OC_playerid, OC_playerindex, OC_helperindex:
++		a1 = p.popFrom(st)
++	}
++	resolve := redirResolver(op)
++	if p.fail || i+4 > e || resolve == nil {
++		p.fail = true
++		return nil
++	}
++	l := be.PeekLength(i)
++	bs, bend := i+4, i+4+l
++	if l <= 0 || bend > e {
++		p.fail = true
++		return nil
++	}
++	bst, end := p.parse(bs, bend, nil, true)
++	if p.fail || end != bend || len(bst) != 1 || bst[0] == nil {
++		p.fail = true
++		return nil
++	}
++	blk := bst[0]
++	*ip = bend
++	ut := useT
++	return func(t, oc *Char) BytecodeValue {
++		c := oc
++		if ut {
++			c = t
++		}
++		var x1, x2 BytecodeValue
++		if a1 != nil {
++			x1 = a1(t, oc)
++		}
++		if a2 != nil {
++			x2 = a2(t, oc)
++		}
++		tgt := resolve(c, x1, x2)
++		if tgt == nil {
++			return BytecodeUndefined()
++		}
++		return blk(tgt, oc)
++	}
++}
++
++func redirResolver(op OpCode) func(c *Char, x1, x2 BytecodeValue) *Char {
++	switch op {
++	case OC_enemy:
++		return func(c *Char, x1, _ BytecodeValue) *Char { return c.enemy(x1.ToI()) }
++	case OC_enemynear:
++		return func(c *Char, x1, _ BytecodeValue) *Char { return c.enemyNearTrigger(x1.ToI()) }
++	case OC_partner:
++		return func(c *Char, x1, _ BytecodeValue) *Char { return c.partner(x1.ToI(), true) }
++	case OC_helper:
++		return func(c *Char, x1, x2 BytecodeValue) *Char { return c.helperTrigger(x1.ToI(), int(x2.ToI())) }
++	case OC_target:
++		return func(c *Char, x1, x2 BytecodeValue) *Char { return c.targetTrigger(x1.ToI(), int(x2.ToI())) }
++	case OC_parent:
++		return func(c *Char, _, _ BytecodeValue) *Char { return c.parent(true) }
++	case OC_root:
++		return func(c *Char, _, _ BytecodeValue) *Char { return c.root(true) }
++	case OC_player:
++		return func(c *Char, x1, _ BytecodeValue) *Char { return c.playerTrigger(int(x1.ToI()), true) }
++	case OC_playerid:
++		return func(c *Char, x1, _ BytecodeValue) *Char { return c.playerIDTrigger(x1.ToI(), true) }
++	case OC_playerindex:
++		return func(c *Char, x1, _ BytecodeValue) *Char { return c.playerIndexTrigger(x1.ToI()) }
++	case OC_helperindex:
++		return func(c *Char, x1, _ BytecodeValue) *Char { return c.helperIndexTrigger(x1.ToI()) }
++	case OC_p2:
++		return func(c *Char, _, _ BytecodeValue) *Char { return c.p2() }
++	case OC_stateowner:
++		return func(c *Char, _, _ BytecodeValue) *Char { return c.stateOwner() }
++	}
++	return nil
++}
++
++// simple handles every other opcode: native nodes for the frequent ones,
++// otherwise a generic node that runs the interpreter case.
++func (p *cparser) simple(op OpCode, ip *int, e int, useT bool, st *[]cnode) cnode {
++	be := p.be
++	start := *ip - 1
++	// Stack effect and operand length.
++	var arity, operand int
++	switch op {
++	case OC_const_, OC_ex_, OC_ex2_, OC_ex3_:
++		if *ip >= e {
++			p.fail = true
++			return nil
++		}
++		sub := be[*ip]
++		var tab map[OpCode][2]int8
++		switch op {
++		case OC_const_:
++			tab = bcGenSubConst
++		case OC_ex_:
++			tab = bcGenSubEx
++		case OC_ex2_:
++			tab = bcGenSubEx2
++		default:
++			tab = bcGenSubEx3
++		}
++		r, ok := tab[sub]
++		if !ok {
++			p.fail = true
++			return nil
++		}
++		arity, operand = int(r[0]), 1+int(r[1])
++	default:
++		r, ok := bcGenMain[op]
++		if !ok {
++			p.fail = true
++			return nil
++		}
++		arity, operand = int(r[0]), int(r[1])
++	}
++	end := *ip + operand
++	if end > e || len(*st) < arity {
++		p.fail = true
++		return nil
++	}
++	args := make([]cnode, arity)
++	for k := arity - 1; k >= 0; k-- {
++		args[k] = p.popFrom(st)
++	}
++	if p.fail {
++		return nil
++	}
++	*ip = end
++	if n := nativeNode(op, be, start, args, useT); n != nil {
++		bcCompileStats.native++
++		return n
++	}
++	bcCompileStats.generic++
++	seg := append(BytecodeExp(nil), be[start:end]...)
++	ut := useT
++	switch arity {
++	case 0:
++		return func(t, oc *Char) BytecodeValue {
++			c := oc
++			if ut {
++				c = t
++			}
++			return seg.runOC(c, oc)
++		}
++	case 1:
++		a0 := args[0]
++		return func(t, oc *Char) BytecodeValue {
++			v0 := a0(t, oc)
++			c := oc
++			if ut {
++				c = t
++			}
++			sys.bcStack.Push(v0)
++			return seg.runOC(c, oc)
++		}
++	default:
++		return func(t, oc *Char) BytecodeValue {
++			var vs [4]BytecodeValue
++			var big []BytecodeValue
++			if len(args) > len(vs) {
++				big = make([]BytecodeValue, len(args))
++			}
++			for k, a := range args {
++				if big != nil {
++					big[k] = a(t, oc)
++				} else {
++					vs[k] = a(t, oc)
++				}
++			}
++			c := oc
++			if ut {
++				c = t
++			}
++			for k := range args {
++				if big != nil {
++					sys.bcStack.Push(big[k])
++				} else {
++					sys.bcStack.Push(vs[k])
++				}
++			}
++			return seg.runOC(c, oc)
++		}
++	}
++}
++
++// nativeNode returns a direct implementation of op, mirroring the
++// interpreter case line for line, or nil.
++func nativeNode(op OpCode, be BytecodeExp, start int, args []cnode, useT bool) cnode {
++	var bx BytecodeExp // receiver for the value helpers (stateless)
++	switch len(args) {
++	case 2:
++		a, b := args[0], args[1]
++		var f func(*BytecodeValue, BytecodeValue)
++		switch op {
++		case OC_add:
++			f = bx.add
++		case OC_sub:
++			f = bx.sub
++		case OC_mul:
++			f = bx.mul
++		case OC_div:
++			f = bx.div
++		case OC_mod:
++			f = bx.mod
++		case OC_eq:
++			f = bx.eq
++		case OC_ne:
++			f = bx.ne
++		case OC_gt:
++			f = bx.gt
++		case OC_ge:
++			f = bx.ge
++		case OC_lt:
++			f = bx.lt
++		case OC_le:
++			f = bx.le
++		case OC_bland:
++			f = bx.bland
++		case OC_blor:
++			f = bx.blor
++		case OC_blxor:
++			f = bx.blxor
++		case OC_bwand:
++			f = bx.bwand
++		case OC_bwor:
++			f = bx.bwor
++		case OC_bwxor:
++			f = bx.bwxor
++		}
++		if f == nil {
++			return nil
++		}
++		return func(t, oc *Char) BytecodeValue {
++			v1 := a(t, oc)
++			v2 := b(t, oc)
++			f(&v1, v2)
++			return v1
++		}
++	case 3:
++		switch op {
++		case OC_range_ii, OC_range_ie, OC_range_ei, OC_range_ee:
++			a, b, c3 := args[0], args[1], args[2]
++			kind := op
++			return func(t, oc *Char) BytecodeValue {
++				v1 := a(t, oc)
++				v2 := b(t, oc)
++				v3 := c3(t, oc)
++				bx.rangeCheck(&v1, v2, v3, kind)
++				return v1
++			}
++		}
++		return nil
++	case 1:
++		a := args[0]
++		switch op {
++		case OC_neg:
++			return func(t, oc *Char) BytecodeValue { v := a(t, oc); bx.neg(&v); return v }
++		case OC_blnot:
++			return func(t, oc *Char) BytecodeValue { v := a(t, oc); bx.blnot(&v); return v }
++		case OC_bwnot:
++			return func(t, oc *Char) BytecodeValue { v := a(t, oc); bx.bwnot(&v); return v }
++		case OC_abs:
++			return func(t, oc *Char) BytecodeValue { v := a(t, oc); bx.abs(&v); return v }
++		case OC_floor:
++			return func(t, oc *Char) BytecodeValue { v := a(t, oc); bx.floor(&v); return v }
++		case OC_ceil:
++			return func(t, oc *Char) BytecodeValue { v := a(t, oc); bx.ceil(&v); return v }
++		}
++		var g func(c *Char, v BytecodeValue) BytecodeValue
++		switch op {
++		case OC_var:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.varGet(v.ToI()) }
++		case OC_fvar:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.fvarGet(v.ToI()) }
++		case OC_sysvar:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.sysVarGet(v.ToI()) }
++		case OC_sysfvar:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.sysFvarGet(v.ToI()) }
++		case OC_numhelper:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.numHelper(v) }
++		case OC_numexplod:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.numExplod(v) }
++		case OC_numprojid:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.numProjID(v) }
++		case OC_selfanimexist:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.selfAnimExist(v) }
++		case OC_animexist:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.animExist(v) }
++		case OC_animelemtime:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.animElemTime(v.ToI()) }
++		case OC_animelemno:
++			g = func(c *Char, v BytecodeValue) BytecodeValue { return c.animElemNo(v.ToI()) }
++		}
++		if g == nil {
++			return nil
++		}
++		ut := useT
++		return func(t, oc *Char) BytecodeValue {
++			v := a(t, oc)
++			c := oc
++			if ut {
++				c = t
++			}
++			return g(c, v)
++		}
++	case 0:
++		var g func(c *Char) BytecodeValue
++		switch op {
++		case OC_stateno:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.ss.no) }
++		case OC_prevstateno:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.ss.prevno) }
++		case OC_anim:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.animNo) }
++		case OC_time:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.ss.time) }
++		case OC_life:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.life) }
++		case OC_lifemax:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.lifeMax) }
++		case OC_ctrl:
++			g = func(c *Char) BytecodeValue { return BytecodeBool(c.ctrl()) }
++		case OC_alive:
++			g = func(c *Char) BytecodeValue { return BytecodeBool(c.alive()) }
++		case OC_facing:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(int32(c.facing)) }
++		case OC_roundstate:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(sys.roundState()) }
++		case OC_gametime:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(sys.gameTime()) }
++		case OC_numenemy:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.numEnemy()) }
++		case OC_numpartner:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.numPartner()) }
++		case OC_movecontact:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.moveContact()) }
++		case OC_movehit:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.moveHit()) }
++		case OC_moveguarded:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.moveGuarded()) }
++		case OC_power:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.getPower()) }
++		case OC_powermax:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.powerMax) }
++		case OC_random:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(Rand(0, 999)) }
++		case OC_animtime:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.animTime()) }
++		case OC_numproj:
++			g = func(c *Char) BytecodeValue { return BytecodeInt(c.numProj()) }
++		}
++		if g == nil {
++			return nil
++		}
++		ut := useT
++		return func(t, oc *Char) BytecodeValue {
++			if ut {
++				return g(t)
++			}
++			return g(oc)
++		}
++	}
++	return nil
++}
++
++// ---- integration ----
++
++var cjitOn = -1
++var cjitCheck = false
++
++// cjitEnabled: on the Vita unless ux0:data/CvF/vita_nojit.txt exists;
++// vita_jitcheck.txt runs both paths and logs any difference (emulator use).
++func cjitEnabled() bool {
++	if cjitOn < 0 {
++		cjitOn = 0
++		if fuseEnabled() && FileExist("vita_nojit.txt") == "" {
++			cjitOn = 1
++		}
++		cjitCheck = FileExist("vita_jitcheck.txt") != ""
++	}
++	return cjitOn == 1
++}
++
++// compileBlockTriggers saves an unfused copy of the trigger of every block
++// in b. Must run before fuseBytecode (the compiler reads the unfused
++// bytecode). The closure itself is built on first use, from evalTrigger:
++// character loading runs on a goroutine with a small fixed stack (256 KB in
++// TinyGo), too small for the recursive parser on long trigger chains,
++// whereas the game loop runs on the main stack. It also skips the work for
++// the many controllers that never run in a given match.
++func compileBlockTriggers(b *StateBlock) {
++	if b == nil || !cjitEnabled() {
++		return
++	}
++	if len(b.trigger) > 0 && b.ctrig == nil && b.trigRaw == nil {
++		b.trigRaw = append(BytecodeExp(nil), b.trigger...)
++	}
++	if b.elseBlock != nil {
++		compileBlockTriggers(b.elseBlock)
++	}
++	for _, sc := range b.ctrls {
++		if sb, ok := sc.(*StateBlock); ok {
++			compileBlockTriggers(sb)
++		}
++	}
++}
++
++// cjitStatsLine reports how many triggers were compiled so far.
++func cjitStatsLine() string {
++	return "jit: compiled triggers " + itoa(bcCompileStats.ok) + ", interpreted " + itoa(bcCompileStats.fail) +
++		"; native ops " + itoa(bcCompileStats.native) + ", generic " + itoa(bcCompileStats.generic)
++}
++
++var cjitMismatch int
++
++// evalTrigger evaluates b's trigger with the compiled closure when present.
++func (b *StateBlock) evalTrigger(c *Char) bool {
++	if b.trigRaw != nil {
++		b.ctrig = compileExp(b.trigRaw)
++		b.trigRaw = nil
++	}
++	if b.ctrig == nil {
++		return b.trigger.evalB(c)
++	}
++	if !cjitCheck {
++		return b.ctrig(c, c).ToB()
++	}
++	seed := sys.randseed
++	vc := b.ctrig(c, c)
++	seedC := sys.randseed
++	sys.randseed = seed
++	vi := b.trigger.run(c)
++	if vc != vi || seedC != sys.randseed {
++		cjitMismatch++
++		if cjitMismatch <= 40 {
++			vitaTrace("jitcheck: MISMATCH p" + itoa(c.playerNo) + " st " + itoa(int(c.ss.no)) +
++				" compiled " + vc.ToS() + "/" + itoa(int(vc.vtype)) + " interp " + vi.ToS() + "/" + itoa(int(vi.vtype)) +
++				" seeds " + itoa(int(seedC)) + "/" + itoa(int(sys.randseed)))
++		}
++	}
++	return vi.ToB()
++}
 diff --git a/src/bc_fuse.go b/src/bc_fuse.go
 new file mode 100644
 index 0000000..f3ed928
@@ -836,6 +1518,765 @@ index 0000000..f3ed928
 +		}
 +	}
 +}
+diff --git a/src/bc_gen.go b/src/bc_gen.go
+new file mode 100644
+index 0000000..891ae89
+--- /dev/null
++++ b/src/bc_gen.go
+@@ -0,0 +1,753 @@
++// Code generated by genarity.py from bytecode.go. DO NOT EDIT.
++
++package main
++
++var bcGenMain = map[OpCode][2]int8{
++	OC_int8: {0, 1},
++	OC_eq8: {1, 2},
++	OC_ne8: {1, 2},
++	OC_lt8: {1, 2},
++	OC_gt8: {1, 2},
++	OC_le8: {1, 2},
++	OC_ge8: {1, 2},
++	OC_eq32: {1, 5},
++	OC_ne32: {1, 5},
++	OC_lt32: {1, 5},
++	OC_gt32: {1, 5},
++	OC_le32: {1, 5},
++	OC_ge32: {1, 5},
++	OC_range_ii8: {1, 4},
++	OC_range_ie8: {1, 4},
++	OC_range_ei8: {1, 4},
++	OC_range_ee8: {1, 4},
++	OC_range_ii32: {1, 10},
++	OC_range_ie32: {1, 10},
++	OC_range_ei32: {1, 10},
++	OC_range_ee32: {1, 10},
++	OC_int: {0, 4},
++	OC_int64: {0, 8},
++	OC_float: {0, 4},
++	OC_string: {0, 4},
++	OC_neg: {1, 0},
++	OC_bwnot: {1, 0},
++	OC_blnot: {1, 0},
++	OC_pow: {2, 0},
++	OC_mul: {2, 0},
++	OC_div: {2, 0},
++	OC_mod: {2, 0},
++	OC_add: {2, 0},
++	OC_sub: {2, 0},
++	OC_gt: {2, 0},
++	OC_ge: {2, 0},
++	OC_lt: {2, 0},
++	OC_le: {2, 0},
++	OC_range_ii: {3, 0},
++	OC_range_ie: {3, 0},
++	OC_range_ei: {3, 0},
++	OC_range_ee: {3, 0},
++	OC_eq: {2, 0},
++	OC_ne: {2, 0},
++	OC_bwand: {2, 0},
++	OC_bwxor: {2, 0},
++	OC_bwor: {2, 0},
++	OC_bland: {2, 0},
++	OC_blxor: {2, 0},
++	OC_blor: {2, 0},
++	OC_abs: {1, 0},
++	OC_exp: {1, 0},
++	OC_ln: {1, 0},
++	OC_log: {2, 0},
++	OC_cos: {1, 0},
++	OC_sin: {1, 0},
++	OC_tan: {1, 0},
++	OC_acos: {1, 0},
++	OC_asin: {1, 0},
++	OC_atan: {1, 0},
++	OC_floor: {1, 0},
++	OC_ceil: {1, 0},
++	OC_alive: {0, 0},
++	OC_anim: {0, 0},
++	OC_animelemno: {1, 0},
++	OC_animelemtime: {1, 0},
++	OC_animexist: {1, 0},
++	OC_animtime: {0, 0},
++	OC_backedge: {0, 0},
++	OC_backedgebodydist: {0, 0},
++	OC_backedgedist: {0, 0},
++	OC_bottomedge: {0, 0},
++	OC_camerapos_x: {0, 0},
++	OC_camerapos_y: {0, 0},
++	OC_camerazoom: {0, 0},
++	OC_canrecover: {0, 0},
++	OC_command: {1, 0},
++	OC_selfcommand: {1, 0},
++	OC_ctrl: {0, 0},
++	OC_facing: {0, 0},
++	OC_frontedge: {0, 0},
++	OC_frontedgebodydist: {0, 0},
++	OC_frontedgedist: {0, 0},
++	OC_gametime: {0, 0},
++	OC_hitcount: {0, 0},
++	OC_hitfall: {0, 0},
++	OC_hitover: {0, 0},
++	OC_hitpausetime: {0, 0},
++	OC_hitshakeover: {0, 0},
++	OC_hitvel_x: {0, 0},
++	OC_hitvel_y: {0, 0},
++	OC_hitvel_z: {0, 0},
++	OC_id: {0, 0},
++	OC_inguarddist: {0, 0},
++	OC_ishelper: {2, 0},
++	OC_leftedge: {0, 0},
++	OC_life: {0, 0},
++	OC_lifemax: {0, 0},
++	OC_movecontact: {0, 0},
++	OC_moveguarded: {0, 0},
++	OC_movehit: {0, 0},
++	OC_movereversed: {0, 0},
++	OC_numenemy: {0, 0},
++	OC_numexplod: {1, 0},
++	OC_numhelper: {1, 0},
++	OC_numpartner: {0, 0},
++	OC_numproj: {0, 0},
++	OC_numprojid: {1, 0},
++	OC_numtarget: {1, 0},
++	OC_numtext: {1, 0},
++	OC_palno: {0, 0},
++	OC_pos_x: {0, 0},
++	OC_pos_y: {0, 0},
++	OC_power: {0, 0},
++	OC_powermax: {0, 0},
++	OC_playeridexist: {1, 0},
++	OC_prevstateno: {0, 0},
++	OC_projcanceltime: {1, 0},
++	OC_projcontacttime: {1, 0},
++	OC_projguardedtime: {1, 0},
++	OC_projhittime: {1, 0},
++	OC_random: {0, 0},
++	OC_rightedge: {0, 0},
++	OC_roundstate: {0, 0},
++	OC_roundswon: {0, 0},
++	OC_screenheight: {0, 0},
++	OC_screenpos_x: {0, 0},
++	OC_screenpos_y: {0, 0},
++	OC_screenwidth: {0, 0},
++	OC_selfanimexist: {1, 0},
++	OC_stateno: {0, 0},
++	OC_teamside: {0, 0},
++	OC_time: {0, 0},
++	OC_topedge: {0, 0},
++	OC_uniqhitcount: {0, 0},
++	OC_vel_x: {0, 0},
++	OC_vel_y: {0, 0},
++	OC_vel_z: {0, 0},
++	OC_var: {1, 0},
++	OC_sysvar: {1, 0},
++	OC_fvar: {1, 0},
++	OC_sysfvar: {1, 0},
++	OC_localvar: {0, 1},
++}
++
++var bcGenSubConst = map[OpCode][2]int8{
++	OC_const_data_life: {0, 0},
++	OC_const_data_power: {0, 0},
++	OC_const_data_dizzypoints: {0, 0},
++	OC_const_data_guardpoints: {0, 0},
++	OC_const_data_attack: {0, 0},
++	OC_const_data_defence: {0, 0},
++	OC_const_data_fall_defence_up: {0, 0},
++	OC_const_data_fall_defence_mul: {0, 0},
++	OC_const_data_liedown_time: {0, 0},
++	OC_const_data_airjuggle: {0, 0},
++	OC_const_data_sparkno: {0, 0},
++	OC_const_data_guard_sparkno: {0, 0},
++	OC_const_data_hitsound_channel: {0, 0},
++	OC_const_data_guardsound_channel: {0, 0},
++	OC_const_data_ko_echo: {0, 0},
++	OC_const_data_volume: {0, 0},
++	OC_const_data_intpersistindex: {0, 0},
++	OC_const_data_floatpersistindex: {0, 0},
++	OC_const_size_xscale: {0, 0},
++	OC_const_size_yscale: {0, 0},
++	OC_const_size_ground_back: {0, 0},
++	OC_const_size_ground_front: {0, 0},
++	OC_const_size_air_back: {0, 0},
++	OC_const_size_air_front: {0, 0},
++	OC_const_size_height: {0, 0},
++	OC_const_size_attack_dist_width_front: {0, 0},
++	OC_const_size_attack_dist_width_back: {0, 0},
++	OC_const_size_attack_dist_height_top: {0, 0},
++	OC_const_size_attack_dist_height_bottom: {0, 0},
++	OC_const_size_attack_dist_depth_top: {0, 0},
++	OC_const_size_attack_dist_depth_bottom: {0, 0},
++	OC_const_size_attack_depth_top: {0, 0},
++	OC_const_size_attack_depth_bottom: {0, 0},
++	OC_const_size_proj_attack_dist_width_front: {0, 0},
++	OC_const_size_proj_attack_dist_width_back: {0, 0},
++	OC_const_size_proj_attack_dist_height_top: {0, 0},
++	OC_const_size_proj_attack_dist_height_bottom: {0, 0},
++	OC_const_size_proj_attack_dist_depth_top: {0, 0},
++	OC_const_size_proj_attack_dist_depth_bottom: {0, 0},
++	OC_const_size_proj_doscale: {0, 0},
++	OC_const_size_head_pos_x: {0, 0},
++	OC_const_size_head_pos_y: {0, 0},
++	OC_const_size_mid_pos_x: {0, 0},
++	OC_const_size_mid_pos_y: {0, 0},
++	OC_const_size_shadowoffset: {0, 0},
++	OC_const_size_draw_offset_x: {0, 0},
++	OC_const_size_draw_offset_y: {0, 0},
++	OC_const_size_depth_top: {0, 0},
++	OC_const_size_depth_bottom: {0, 0},
++	OC_const_size_weight: {0, 0},
++	OC_const_size_pushfactor: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_add_x: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_add_y: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_back: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_down: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_fwd: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_mul_x: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_mul_y: {0, 0},
++	OC_const_velocity_air_gethit_airrecover_up: {0, 0},
++	OC_const_velocity_air_gethit_groundrecover_x: {0, 0},
++	OC_const_velocity_air_gethit_groundrecover_y: {0, 0},
++	OC_const_velocity_air_gethit_ko_add_x: {0, 0},
++	OC_const_velocity_air_gethit_ko_add_y: {0, 0},
++	OC_const_velocity_air_gethit_ko_ymin: {0, 0},
++	OC_const_velocity_airjump_back_x: {0, 0},
++	OC_const_velocity_airjump_down_x: {0, 0},
++	OC_const_velocity_airjump_down_y: {0, 0},
++	OC_const_velocity_airjump_down_z: {0, 0},
++	OC_const_velocity_airjump_fwd_x: {0, 0},
++	OC_const_velocity_airjump_neu_x: {0, 0},
++	OC_const_velocity_airjump_up_x: {0, 0},
++	OC_const_velocity_airjump_up_y: {0, 0},
++	OC_const_velocity_airjump_up_z: {0, 0},
++	OC_const_velocity_airjump_y: {0, 0},
++	OC_const_velocity_ground_gethit_ko_add_x: {0, 0},
++	OC_const_velocity_ground_gethit_ko_add_y: {0, 0},
++	OC_const_velocity_ground_gethit_ko_xmul: {0, 0},
++	OC_const_velocity_ground_gethit_ko_ymin: {0, 0},
++	OC_const_velocity_jump_back_x: {0, 0},
++	OC_const_velocity_jump_down_x: {0, 0},
++	OC_const_velocity_jump_down_y: {0, 0},
++	OC_const_velocity_jump_down_z: {0, 0},
++	OC_const_velocity_jump_fwd_x: {0, 0},
++	OC_const_velocity_jump_neu_x: {0, 0},
++	OC_const_velocity_jump_up_x: {0, 0},
++	OC_const_velocity_jump_up_y: {0, 0},
++	OC_const_velocity_jump_up_z: {0, 0},
++	OC_const_velocity_jump_y: {0, 0},
++	OC_const_velocity_run_back_x: {0, 0},
++	OC_const_velocity_run_back_y: {0, 0},
++	OC_const_velocity_run_down_x: {0, 0},
++	OC_const_velocity_run_down_y: {0, 0},
++	OC_const_velocity_run_down_z: {0, 0},
++	OC_const_velocity_run_fwd_x: {0, 0},
++	OC_const_velocity_run_fwd_y: {0, 0},
++	OC_const_velocity_run_up_x: {0, 0},
++	OC_const_velocity_run_up_y: {0, 0},
++	OC_const_velocity_run_up_z: {0, 0},
++	OC_const_velocity_runjump_back_x: {0, 0},
++	OC_const_velocity_runjump_back_y: {0, 0},
++	OC_const_velocity_runjump_down_x: {0, 0},
++	OC_const_velocity_runjump_down_y: {0, 0},
++	OC_const_velocity_runjump_down_z: {0, 0},
++	OC_const_velocity_runjump_fwd_x: {0, 0},
++	OC_const_velocity_runjump_up_x: {0, 0},
++	OC_const_velocity_runjump_up_y: {0, 0},
++	OC_const_velocity_runjump_up_z: {0, 0},
++	OC_const_velocity_runjump_y: {0, 0},
++	OC_const_velocity_walk_back_x: {0, 0},
++	OC_const_velocity_walk_down_x: {0, 0},
++	OC_const_velocity_walk_down_y: {0, 0},
++	OC_const_velocity_walk_down_z: {0, 0},
++	OC_const_velocity_walk_fwd_x: {0, 0},
++	OC_const_velocity_walk_up_x: {0, 0},
++	OC_const_velocity_walk_up_y: {0, 0},
++	OC_const_velocity_walk_up_z: {0, 0},
++	OC_const_movement_airjump_num: {0, 0},
++	OC_const_movement_airjump_height: {0, 0},
++	OC_const_movement_yaccel: {0, 0},
++	OC_const_movement_stand_friction: {0, 0},
++	OC_const_movement_crouch_friction: {0, 0},
++	OC_const_movement_stand_friction_threshold: {0, 0},
++	OC_const_movement_crouch_friction_threshold: {0, 0},
++	OC_const_movement_air_gethit_groundlevel: {0, 0},
++	OC_const_movement_air_gethit_groundrecover_ground_threshold: {0, 0},
++	OC_const_movement_air_gethit_groundrecover_groundlevel: {0, 0},
++	OC_const_movement_air_gethit_airrecover_threshold: {0, 0},
++	OC_const_movement_air_gethit_airrecover_yaccel: {0, 0},
++	OC_const_movement_air_gethit_trip_groundlevel: {0, 0},
++	OC_const_movement_down_bounce_offset_x: {0, 0},
++	OC_const_movement_down_bounce_offset_y: {0, 0},
++	OC_const_movement_down_bounce_yaccel: {0, 0},
++	OC_const_movement_down_bounce_groundlevel: {0, 0},
++	OC_const_movement_down_gethit_offset_x: {0, 0},
++	OC_const_movement_down_gethit_offset_y: {0, 0},
++	OC_const_movement_down_friction_threshold: {0, 0},
++	OC_const_authorname: {0, 0},
++	OC_const_displayname: {0, 0},
++	OC_const_name: {0, 0},
++	OC_const_stagevar_info_author: {0, 0},
++	OC_const_stagevar_info_displayname: {0, 0},
++	OC_const_stagevar_info_ikemenversion_major: {0, 0},
++	OC_const_stagevar_info_ikemenversion_minor: {0, 0},
++	OC_const_stagevar_info_ikemenversion_patch: {0, 0},
++	OC_const_stagevar_info_mugenversion_major: {0, 0},
++	OC_const_stagevar_info_mugenversion_minor: {0, 0},
++	OC_const_stagevar_info_name: {0, 0},
++	OC_const_stagevar_camera_autocenter: {0, 0},
++	OC_const_stagevar_camera_boundleft: {0, 0},
++	OC_const_stagevar_camera_boundright: {0, 0},
++	OC_const_stagevar_camera_boundhigh: {0, 0},
++	OC_const_stagevar_camera_boundlow: {0, 0},
++	OC_const_stagevar_camera_floortension: {0, 0},
++	OC_const_stagevar_camera_lowestcap: {0, 0},
++	OC_const_stagevar_camera_tension: {0, 0},
++	OC_const_stagevar_camera_tensionvel: {0, 0},
++	OC_const_stagevar_camera_cuthigh: {0, 0},
++	OC_const_stagevar_camera_cutlow: {0, 0},
++	OC_const_stagevar_camera_tensionhigh: {0, 0},
++	OC_const_stagevar_camera_tensionlow: {0, 0},
++	OC_const_stagevar_camera_startzoom: {0, 0},
++	OC_const_stagevar_camera_verticalfollow: {0, 0},
++	OC_const_stagevar_camera_zoomout: {0, 0},
++	OC_const_stagevar_camera_zoomin: {0, 0},
++	OC_const_stagevar_camera_zoomindelay: {0, 0},
++	OC_const_stagevar_camera_zoominspeed: {0, 0},
++	OC_const_stagevar_camera_zoomoutspeed: {0, 0},
++	OC_const_stagevar_camera_yscrollspeed: {0, 0},
++	OC_const_stagevar_camera_ytension_enable: {0, 0},
++	OC_const_stagevar_playerinfo_leftbound: {0, 0},
++	OC_const_stagevar_playerinfo_rightbound: {0, 0},
++	OC_const_stagevar_playerinfo_topbound: {0, 0},
++	OC_const_stagevar_playerinfo_botbound: {0, 0},
++	OC_const_stagevar_playerinfo_p1startx: {0, 0},
++	OC_const_stagevar_playerinfo_p2startx: {0, 0},
++	OC_const_stagevar_playerinfo_p1starty: {0, 0},
++	OC_const_stagevar_playerinfo_p2starty: {0, 0},
++	OC_const_stagevar_playerinfo_p1startz: {0, 0},
++	OC_const_stagevar_playerinfo_p2startz: {0, 0},
++	OC_const_stagevar_playerinfo_p1facing: {0, 0},
++	OC_const_stagevar_playerinfo_p2facing: {0, 0},
++	OC_const_stagevar_scaling_topz: {0, 0},
++	OC_const_stagevar_scaling_botz: {0, 0},
++	OC_const_stagevar_scaling_topscale: {0, 0},
++	OC_const_stagevar_scaling_botscale: {0, 0},
++	OC_const_stagevar_bound_screenleft: {0, 0},
++	OC_const_stagevar_bound_screenright: {0, 0},
++	OC_const_stagevar_stageinfo_autoturn: {0, 0},
++	OC_const_stagevar_stageinfo_localcoord_x: {0, 0},
++	OC_const_stagevar_stageinfo_localcoord_y: {0, 0},
++	OC_const_stagevar_stageinfo_resetbg: {0, 0},
++	OC_const_stagevar_stageinfo_xscale: {0, 0},
++	OC_const_stagevar_stageinfo_yscale: {0, 0},
++	OC_const_stagevar_stageinfo_zoffset: {0, 0},
++	OC_const_stagevar_stageinfo_zoffsetlink: {0, 0},
++	OC_const_stagevar_shadow_intensity: {0, 0},
++	OC_const_stagevar_shadow_color_r: {0, 0},
++	OC_const_stagevar_shadow_color_g: {0, 0},
++	OC_const_stagevar_shadow_color_b: {0, 0},
++	OC_const_stagevar_shadow_yscale: {0, 0},
++	OC_const_stagevar_shadow_ydelta: {0, 0},
++	OC_const_stagevar_shadow_fade_range_begin: {0, 0},
++	OC_const_stagevar_shadow_fade_range_end: {0, 0},
++	OC_const_stagevar_shadow_xshear: {0, 0},
++	OC_const_stagevar_shadow_offset_x: {0, 0},
++	OC_const_stagevar_shadow_offset_y: {0, 0},
++	OC_const_stagevar_shadow_shader: {0, 0},
++	OC_const_stagevar_reflection_intensity: {0, 0},
++	OC_const_stagevar_reflection_yscale: {0, 0},
++	OC_const_stagevar_reflection_ydelta: {0, 0},
++	OC_const_stagevar_reflection_fade_range_begin: {0, 0},
++	OC_const_stagevar_reflection_fade_range_end: {0, 0},
++	OC_const_stagevar_reflection_offset_x: {0, 0},
++	OC_const_stagevar_reflection_offset_y: {0, 0},
++	OC_const_stagevar_reflection_xshear: {0, 0},
++	OC_const_stagevar_reflection_color_r: {0, 0},
++	OC_const_stagevar_reflection_color_g: {0, 0},
++	OC_const_stagevar_reflection_color_b: {0, 0},
++	OC_const_stagevar_reflection_shader: {0, 0},
++	OC_const_constants: {0, 4},
++	OC_const_stage_constants: {0, 4},
++}
++
++var bcGenSubEx = map[OpCode][2]int8{
++	OC_ex_p2dist_x: {0, 0},
++	OC_ex_p2dist_y: {0, 0},
++	OC_ex_p2dist_z: {0, 0},
++	OC_ex_p2bodydist_x: {0, 0},
++	OC_ex_p2bodydist_y: {0, 0},
++	OC_ex_p2bodydist_z: {0, 0},
++	OC_ex_parentdist_x: {0, 0},
++	OC_ex_parentdist_y: {0, 0},
++	OC_ex_parentdist_z: {0, 0},
++	OC_ex_rootdist_x: {0, 0},
++	OC_ex_rootdist_y: {0, 0},
++	OC_ex_rootdist_z: {0, 0},
++	OC_ex_win: {0, 0},
++	OC_ex_winko: {0, 0},
++	OC_ex_wintime: {0, 0},
++	OC_ex_winclutch: {0, 0},
++	OC_ex_winperfect: {0, 0},
++	OC_ex_winspecial: {0, 0},
++	OC_ex_winhyper: {0, 0},
++	OC_ex_lose: {0, 0},
++	OC_ex_loseko: {0, 0},
++	OC_ex_losetime: {0, 0},
++	OC_ex_drawgame: {0, 0},
++	OC_ex_matchover: {0, 0},
++	OC_ex_matchno: {0, 0},
++	OC_ex_roundno: {0, 0},
++	OC_ex_roundsexisted: {0, 0},
++	OC_ex_ishometeam: {0, 0},
++	OC_ex_tickspersecond: {0, 0},
++	OC_ex_const240p: {1, 0},
++	OC_ex_const480p: {1, 0},
++	OC_ex_const720p: {1, 0},
++	OC_ex_const1080p: {1, 0},
++	OC_ex_gethitvar_animtype: {0, 0},
++	OC_ex_gethitvar_air_animtype: {0, 0},
++	OC_ex_gethitvar_ground_animtype: {0, 0},
++	OC_ex_gethitvar_fall_animtype: {0, 0},
++	OC_ex_gethitvar_type: {0, 0},
++	OC_ex_gethitvar_airtype: {0, 0},
++	OC_ex_gethitvar_groundtype: {0, 0},
++	OC_ex_gethitvar_damage: {0, 0},
++	OC_ex_gethitvar_guardcount: {0, 0},
++	OC_ex_gethitvar_hitcount: {0, 0},
++	OC_ex_gethitvar_fallcount: {0, 0},
++	OC_ex_gethitvar_hitshaketime: {0, 0},
++	OC_ex_gethitvar_hittime: {0, 0},
++	OC_ex_gethitvar_stand_friction: {0, 0},
++	OC_ex_gethitvar_crouch_friction: {0, 0},
++	OC_ex_gethitvar_slidetime: {0, 0},
++	OC_ex_gethitvar_ctrltime: {0, 0},
++	OC_ex_gethitvar_down_recovertime: {0, 0},
++	OC_ex_gethitvar_xoff: {0, 0},
++	OC_ex_gethitvar_yoff: {0, 0},
++	OC_ex_gethitvar_zoff: {0, 0},
++	OC_ex_gethitvar_xvel: {0, 0},
++	OC_ex_gethitvar_yvel: {0, 0},
++	OC_ex_gethitvar_zvel: {0, 0},
++	OC_ex_gethitvar_xaccel: {0, 0},
++	OC_ex_gethitvar_yaccel: {0, 0},
++	OC_ex_gethitvar_zaccel: {0, 0},
++	OC_ex_gethitvar_xveladd: {0, 0},
++	OC_ex_gethitvar_yveladd: {0, 0},
++	OC_ex_gethitvar_chainid: {0, 0},
++	OC_ex_gethitvar_guarded: {0, 0},
++	OC_ex_gethitvar_isbound: {0, 0},
++	OC_ex_gethitvar_fall: {0, 0},
++	OC_ex_gethitvar_fall_damage: {0, 0},
++	OC_ex_gethitvar_fall_yvel: {0, 0},
++	OC_ex_gethitvar_fall_recover: {0, 0},
++	OC_ex_gethitvar_fall_time: {0, 0},
++	OC_ex_gethitvar_fall_recovertime: {0, 0},
++	OC_ex_gethitvar_fall_kill: {0, 0},
++	OC_ex_gethitvar_fall_envshake_time: {0, 0},
++	OC_ex_gethitvar_fall_envshake_freq: {0, 0},
++	OC_ex_gethitvar_fall_envshake_phase: {0, 0},
++	OC_ex_gethitvar_fall_envshake_mul: {0, 0},
++	OC_ex_gethitvar_fall_envshake_dir: {0, 0},
++	OC_ex_gethitvar_fall_envshake_diradd: {0, 0},
++	OC_ex_gethitvar_fall_envshake_decay: {0, 0},
++	OC_ex_gethitvar_dizzypoints: {0, 0},
++	OC_ex_gethitvar_guardpoints: {0, 0},
++	OC_ex_gethitvar_playerid: {0, 0},
++	OC_ex_gethitvar_playerno: {0, 0},
++	OC_ex_gethitvar_projid: {0, 0},
++	OC_ex_gethitvar_redlife: {0, 0},
++	OC_ex_gethitvar_score: {0, 0},
++	OC_ex_gethitvar_hitdamage: {0, 0},
++	OC_ex_gethitvar_guarddamage: {0, 0},
++	OC_ex_gethitvar_power: {0, 0},
++	OC_ex_gethitvar_hitpower: {0, 0},
++	OC_ex_gethitvar_guardpower: {0, 0},
++	OC_ex_gethitvar_kill: {0, 0},
++	OC_ex_gethitvar_priority: {0, 0},
++	OC_ex_gethitvar_facing: {0, 0},
++	OC_ex_gethitvar_ground_velocity_x: {0, 0},
++	OC_ex_gethitvar_ground_velocity_y: {0, 0},
++	OC_ex_gethitvar_ground_velocity_z: {0, 0},
++	OC_ex_gethitvar_air_velocity_x: {0, 0},
++	OC_ex_gethitvar_air_velocity_y: {0, 0},
++	OC_ex_gethitvar_air_velocity_z: {0, 0},
++	OC_ex_gethitvar_down_velocity_x: {0, 0},
++	OC_ex_gethitvar_down_velocity_y: {0, 0},
++	OC_ex_gethitvar_down_velocity_z: {0, 0},
++	OC_ex_gethitvar_guard_velocity_x: {0, 0},
++	OC_ex_gethitvar_guard_velocity_y: {0, 0},
++	OC_ex_gethitvar_guard_velocity_z: {0, 0},
++	OC_ex_gethitvar_airguard_velocity_x: {0, 0},
++	OC_ex_gethitvar_airguard_velocity_y: {0, 0},
++	OC_ex_gethitvar_airguard_velocity_z: {0, 0},
++	OC_ex_gethitvar_frame: {0, 0},
++	OC_ex_gethitvar_down_recover: {0, 0},
++	OC_ex_gethitvar_keepstate: {0, 0},
++	OC_ex_gethitvar_guardko: {0, 0},
++	OC_ex_gethitvar_sparkx: {0, 0},
++	OC_ex_gethitvar_sparky: {0, 0},
++	OC_ex_gethitvar_teamside: {0, 0},
++	OC_ex_animlength: {0, 0},
++	OC_ex_animplayerno: {0, 0},
++	OC_ex_spriteplayerno: {0, 0},
++	OC_ex_attack: {0, 0},
++	OC_ex_clsnoverlap: {3, 0},
++	OC_ex_combocount: {0, 0},
++	OC_ex_consecutivewins: {0, 0},
++	OC_ex_decisiveround: {0, 0},
++	OC_ex_defence: {0, 0},
++	OC_ex_dizzy: {0, 0},
++	OC_ex_dizzypoints: {0, 0},
++	OC_ex_dizzypointsmax: {0, 0},
++	OC_ex_fighttime: {0, 0},
++	OC_ex_firstattack: {0, 0},
++	OC_ex_float: {1, 0},
++	OC_ex_gamemode: {0, 0},
++	OC_ex_groundangle: {0, 0},
++	OC_ex_guardbreak: {0, 0},
++	OC_ex_guardpoints: {0, 0},
++	OC_ex_guardpointsmax: {0, 0},
++	OC_ex_helperindexexist: {1, 0},
++	OC_ex_hitoverridden: {0, 0},
++	OC_ex_ikemenversion_major: {0, 0},
++	OC_ex_ikemenversion_minor: {0, 0},
++	OC_ex_ikemenversion_patch: {0, 0},
++	OC_ex_incustomanim: {0, 0},
++	OC_ex_isassertedchar: {0, 8},
++	OC_ex_isassertedglobal: {0, 4},
++	OC_ex_ishost: {0, 0},
++	OC_ex_jugglepoints: {1, 0},
++	OC_ex_localcoord_x: {0, 0},
++	OC_ex_localcoord_y: {0, 0},
++	OC_ex_max: {2, 0},
++	OC_ex_min: {2, 0},
++	OC_ex_movehitvar_cornerpush_velmul: {0, 0},
++	OC_ex_movehitvar_cornerpush_veloff: {0, 0},
++	OC_ex_movehitvar_frame: {0, 0},
++	OC_ex_movehitvar_playerid: {0, 0},
++	OC_ex_movehitvar_power: {0, 0},
++	OC_ex_movehitvar_overridden: {0, 0},
++	OC_ex_movehitvar_playerno: {0, 0},
++	OC_ex_movehitvar_sparkx: {0, 0},
++	OC_ex_movehitvar_sparky: {0, 0},
++	OC_ex_movehitvar_uniqhit: {0, 0},
++	OC_ex_numplayer: {0, 0},
++	OC_ex_clamp: {3, 0},
++	OC_ex_sign: {1, 0},
++	OC_ex_rad: {1, 0},
++	OC_ex_deg: {1, 0},
++	OC_ex_lastplayerid: {0, 0},
++	OC_ex_lerp: {3, 0},
++	OC_ex_memberno: {0, 0},
++	OC_ex_movecountered: {0, 0},
++	OC_ex_mugenversion_major: {0, 0},
++	OC_ex_mugenversion_minor: {0, 0},
++	OC_ex_pausetime: {0, 0},
++	OC_ex_playerno: {0, 0},
++	OC_ex_playerindexexist: {1, 0},
++	OC_ex_playernoexist: {1, 0},
++	OC_ex_randomrange: {2, 0},
++	OC_ex_receiveddamage: {0, 0},
++	OC_ex_receivedhits: {0, 0},
++	OC_ex_redlife: {0, 0},
++	OC_ex_round: {2, 0},
++	OC_ex_roundtime: {0, 0},
++	OC_ex_score: {0, 0},
++	OC_ex_scoretotal: {0, 0},
++	OC_ex_selfstatenoexist: {1, 0},
++	OC_ex_sprpriority: {0, 0},
++	OC_ex_stagebackedgedist: {0, 0},
++	OC_ex_stagefrontedgedist: {0, 0},
++	OC_ex_stagetime: {0, 0},
++	OC_ex_standby: {0, 0},
++	OC_ex_teamleader: {0, 0},
++	OC_ex_teamsize: {0, 0},
++	OC_ex_timeelapsed: {0, 0},
++	OC_ex_timeremaining: {0, 0},
++	OC_ex_timetotal: {0, 0},
++	OC_ex_pos_z: {0, 0},
++	OC_ex_vel_z: {0, 0},
++	OC_ex_prevanim: {0, 0},
++	OC_ex_scale_z: {0, 0},
++	OC_ex_offset_x: {0, 0},
++	OC_ex_offset_y: {0, 0},
++	OC_ex_alpha_s: {0, 0},
++	OC_ex_alpha_d: {0, 0},
++}
++
++var bcGenSubEx2 = map[OpCode][2]int8{
++	OC_ex2_envshakevar_time: {0, 0},
++	OC_ex2_envshakevar_freq: {0, 0},
++	OC_ex2_envshakevar_phase: {0, 0},
++	OC_ex2_envshakevar_ampl: {0, 0},
++	OC_ex2_envshakevar_dir: {0, 0},
++	OC_ex2_envshakevar_diradd: {0, 0},
++	OC_ex2_envshakevar_decay: {0, 0},
++	OC_ex2_index: {0, 0},
++	OC_ex2_fightscreenvar_info_author: {0, 0},
++	OC_ex2_fightscreenvar_info_localcoord_x: {0, 0},
++	OC_ex2_fightscreenvar_info_localcoord_y: {0, 0},
++	OC_ex2_fightscreenvar_info_name: {0, 0},
++	OC_ex2_fightscreenvar_round_ctrl_time: {0, 0},
++	OC_ex2_fightscreenvar_round_over_hittime: {0, 0},
++	OC_ex2_fightscreenvar_round_over_time: {0, 0},
++	OC_ex2_fightscreenvar_round_over_waittime: {0, 0},
++	OC_ex2_fightscreenvar_round_over_wintime: {0, 0},
++	OC_ex2_fightscreenvar_round_slow_time: {0, 0},
++	OC_ex2_fightscreenvar_round_start_waittime: {0, 0},
++	OC_ex2_fightscreenvar_round_callfight_time: {0, 0},
++	OC_ex2_fightscreenvar_time_framespercount: {0, 0},
++	OC_ex2_groundlevel: {0, 0},
++	OC_ex2_layerno: {0, 0},
++	OC_ex2_runorder: {0, 0},
++	OC_ex2_palfxvar_time: {0, 0},
++	OC_ex2_palfxvar_addr: {0, 0},
++	OC_ex2_palfxvar_addg: {0, 0},
++	OC_ex2_palfxvar_addb: {0, 0},
++	OC_ex2_palfxvar_mulr: {0, 0},
++	OC_ex2_palfxvar_mulg: {0, 0},
++	OC_ex2_palfxvar_mulb: {0, 0},
++	OC_ex2_palfxvar_color: {0, 0},
++	OC_ex2_palfxvar_hue: {0, 0},
++	OC_ex2_palfxvar_invertall: {0, 0},
++	OC_ex2_palfxvar_invertblend: {0, 0},
++	OC_ex2_palfxvar_bg_time: {0, 0},
++	OC_ex2_palfxvar_bg_addr: {0, 0},
++	OC_ex2_palfxvar_bg_addg: {0, 0},
++	OC_ex2_palfxvar_bg_addb: {0, 0},
++	OC_ex2_palfxvar_bg_mulr: {0, 0},
++	OC_ex2_palfxvar_bg_mulg: {0, 0},
++	OC_ex2_palfxvar_bg_mulb: {0, 0},
++	OC_ex2_palfxvar_bg_color: {0, 0},
++	OC_ex2_palfxvar_bg_hue: {0, 0},
++	OC_ex2_palfxvar_bg_invertall: {0, 0},
++	OC_ex2_palfxvar_all_time: {0, 0},
++	OC_ex2_palfxvar_all_addr: {0, 0},
++	OC_ex2_palfxvar_all_addg: {0, 0},
++	OC_ex2_palfxvar_all_addb: {0, 0},
++	OC_ex2_palfxvar_all_mulr: {0, 0},
++	OC_ex2_palfxvar_all_mulg: {0, 0},
++	OC_ex2_palfxvar_all_mulb: {0, 0},
++	OC_ex2_palfxvar_all_color: {0, 0},
++	OC_ex2_palfxvar_all_hue: {0, 0},
++	OC_ex2_palfxvar_all_invertall: {0, 0},
++	OC_ex2_palfxvar_all_invertblend: {0, 0},
++	OC_ex2_introstate: {0, 0},
++	OC_ex2_outrostate: {0, 0},
++	OC_ex2_bgmvar_filename: {0, 0},
++	OC_ex2_bgmvar_freqmul: {0, 0},
++	OC_ex2_bgmvar_loop: {0, 0},
++	OC_ex2_bgmvar_startposition: {0, 0},
++	OC_ex2_bgmvar_volume: {0, 0},
++	OC_ex2_clsnvar_back: {2, 0},
++	OC_ex2_clsnvar_top: {2, 0},
++	OC_ex2_clsnvar_front: {2, 0},
++	OC_ex2_clsnvar_bottom: {2, 0},
++	OC_ex2_debugmode_accel: {0, 0},
++	OC_ex2_debugmode_clsndisplay: {0, 0},
++	OC_ex2_debugmode_debugdisplay: {0, 0},
++	OC_ex2_debugmode_lifebarhide: {0, 0},
++	OC_ex2_debugmode_roundreset: {0, 0},
++	OC_ex2_debugmode_wireframedisplay: {0, 0},
++	OC_ex2_drawpal_group: {0, 0},
++	OC_ex2_fightscreenstate_fightdisplay: {0, 0},
++	OC_ex2_fightscreenstate_kodisplay: {0, 0},
++	OC_ex2_fightscreenstate_rounddisplay: {0, 0},
++	OC_ex2_fightscreenstate_windisplay: {0, 0},
++	OC_ex2_motifstate_challenger: {0, 0},
++	OC_ex2_motifstate_continuescreen: {0, 0},
++	OC_ex2_motifstate_demo: {0, 0},
++	OC_ex2_motifstate_dialogue: {0, 0},
++	OC_ex2_motifstate_menu: {0, 0},
++	OC_ex2_motifstate_victoryscreen: {0, 0},
++	OC_ex2_motifstate_winscreen: {0, 0},
++	OC_ex2_motifstate_hiscore: {0, 0},
++	OC_ex2_gamevar_pausetime: {0, 0},
++	OC_ex2_gamevar_slowtime: {0, 0},
++	OC_ex2_gamevar_superpausetime: {0, 0},
++	OC_ex2_gamevar_persistlife: {0, 0},
++	OC_ex2_gamevar_persistmusic: {0, 0},
++	OC_ex2_gamevar_persistrounds: {0, 0},
++	OC_ex2_gamevar_hidebars: {0, 0},
++	OC_ex2_hitbyattr: {0, 4},
++	OC_ex2_soundvar_volumescale: {1, 0},
++	OC_ex2_botboundbodydist: {0, 0},
++	OC_ex2_botbounddist: {0, 0},
++	OC_ex2_topboundbodydist: {0, 0},
++	OC_ex2_numstagebg: {1, 0},
++	OC_ex2_xshear: {0, 0},
++	OC_ex2_zoomvar_scale: {0, 0},
++	OC_ex2_zoomvar_pos_x: {0, 0},
++	OC_ex2_zoomvar_pos_y: {0, 0},
++	OC_ex2_zoomvar_lag: {0, 0},
++	OC_ex2_zoomvar_endlag: {0, 0},
++	OC_ex2_zoomvar_time: {0, 0},
++	OC_ex2_projclsnoverlap: {3, 0},
++	OC_ex2_attackmul: {0, 0},
++	OC_ex2_defencemul: {0, 0},
++	OC_ex2_guardcount: {0, 0},
++	OC_ex2_airjumpcount: {0, 0},
++	OC_ex2_parentexist: {0, 0},
++	OC_ex2_shader: {0, 0},
++}
++
++var bcGenSubEx3 = map[OpCode][2]int8{
++	OC_ex3_analog_leftx: {0, 0},
++	OC_ex3_analog_lefty: {0, 0},
++	OC_ex3_analog_rightx: {0, 0},
++	OC_ex3_analog_righty: {0, 0},
++	OC_ex3_analog_lefttrigger: {0, 0},
++	OC_ex3_analog_righttrigger: {0, 0},
++	OC_ex3_hitdefvar_guard_dist_width_back: {0, 0},
++	OC_ex3_hitdefvar_guard_dist_width_front: {0, 0},
++	OC_ex3_hitdefvar_guard_dist_height_bottom: {0, 0},
++	OC_ex3_hitdefvar_guard_dist_height_top: {0, 0},
++	OC_ex3_hitdefvar_guard_dist_depth_bottom: {0, 0},
++	OC_ex3_hitdefvar_guard_dist_depth_top: {0, 0},
++	OC_ex3_hitdefvar_guard_pausetime: {0, 0},
++	OC_ex3_hitdefvar_guard_shaketime: {0, 0},
++	OC_ex3_hitdefvar_guard_sparkno: {0, 0},
++	OC_ex3_hitdefvar_guarddamage: {0, 0},
++	OC_ex3_hitdefvar_guardsound_group: {0, 0},
++	OC_ex3_hitdefvar_guardsound_number: {0, 0},
++	OC_ex3_hitdefvar_hitdamage: {0, 0},
++	OC_ex3_hitdefvar_hitsound_group: {0, 0},
++	OC_ex3_hitdefvar_hitsound_number: {0, 0},
++	OC_ex3_hitdefvar_id: {0, 0},
++	OC_ex3_hitdefvar_p1stateno: {0, 0},
++	OC_ex3_hitdefvar_p2stateno: {0, 0},
++	OC_ex3_hitdefvar_pausetime: {0, 0},
++	OC_ex3_hitdefvar_priority: {0, 0},
++	OC_ex3_hitdefvar_shaketime: {0, 0},
++	OC_ex3_hitdefvar_sparkno: {0, 0},
++	OC_ex3_hitdefvar_sparkx: {0, 0},
++	OC_ex3_hitdefvar_sparky: {0, 0},
++	OC_ex3_hitdefvar_xaccel: {0, 0},
++	OC_ex3_hitdefvar_yaccel: {0, 0},
++	OC_ex3_hitdefvar_zaccel: {0, 0},
++	OC_ex3_hitdefvar_ground_velocity_x: {0, 0},
++	OC_ex3_hitdefvar_ground_velocity_y: {0, 0},
++	OC_ex3_hitdefvar_ground_velocity_z: {0, 0},
++	OC_ex3_hitdefvar_air_velocity_x: {0, 0},
++	OC_ex3_hitdefvar_air_velocity_y: {0, 0},
++	OC_ex3_hitdefvar_air_velocity_z: {0, 0},
++	OC_ex3_hitdefvar_down_velocity_x: {0, 0},
++	OC_ex3_hitdefvar_down_velocity_y: {0, 0},
++	OC_ex3_hitdefvar_down_velocity_z: {0, 0},
++	OC_ex3_hitdefvar_guard_velocity_x: {0, 0},
++	OC_ex3_hitdefvar_guard_velocity_y: {0, 0},
++	OC_ex3_hitdefvar_guard_velocity_z: {0, 0},
++	OC_ex3_hitdefvar_airguard_velocity_x: {0, 0},
++	OC_ex3_hitdefvar_airguard_velocity_y: {0, 0},
++	OC_ex3_hitdefvar_airguard_velocity_z: {0, 0},
++	OC_ex3_hitdefvar_ground_cornerpush_veloff: {0, 0},
++	OC_ex3_hitdefvar_air_cornerpush_veloff: {0, 0},
++	OC_ex3_hitdefvar_down_cornerpush_veloff: {0, 0},
++	OC_ex3_hitdefvar_guard_cornerpush_veloff: {0, 0},
++	OC_ex3_hitdefvar_airguard_cornerpush_veloff: {0, 0},
++	OC_ex3_hitdefvar_fall_xvelocity: {0, 0},
++	OC_ex3_hitdefvar_fall_yvelocity: {0, 0},
++	OC_ex3_inrunstate: {0, 0},
++}
 diff --git a/src/bcprof.go b/src/bcprof.go
 new file mode 100644
 index 0000000..eb3e2ab
@@ -1132,7 +2573,7 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..aa662e6 100644
+index 276abbf..5d6f5a4 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
 @@ -445,6 +445,42 @@ const (
@@ -1390,10 +2831,17 @@ index 276abbf..aa662e6 100644
  }
  
  func (BytecodeExp) sign(v1 *BytecodeValue) {
-@@ -2236,8 +2330,30 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+@@ -2235,9 +2329,36 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+ }
  
  func (be BytecodeExp) run(c *Char) BytecodeValue {
- 	oc := c
+-	oc := c
++	return be.runOC(c, c)
++}
++
++// runOC is run with an explicit original character (the one redirects
++// return to); the trigger compiler uses it for single opcodes.
++func (be BytecodeExp) runOC(c, oc *Char) BytecodeValue {
 +	// The opcode cursor is shared with helpers through ip, which points into
 +	// a preallocated per-depth slot: taking &i made every call heap-allocate
 +	// the cursor (thousands of allocations per frame under TinyGo).
@@ -1421,7 +2869,7 @@ index 276abbf..aa662e6 100644
  		switch opc {
  		case OC_jud8:
  			if sys.bcStack.Top().IsUndefined() {
-@@ -2268,7 +2384,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2268,7 +2389,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			fallthrough
  		case OC_jmp:
@@ -1430,7 +2878,7 @@ index 276abbf..aa662e6 100644
  		case OC_player:
  			pn := int(sys.bcStack.Pop().ToI())
  			if c = c.playerTrigger(pn, true); c != nil {
-@@ -2278,21 +2394,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2278,21 +2399,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			// Invalid: Push undefined and use the length header to jump over the block
  			sys.bcStack.Push(BytecodeUndefined())
@@ -1455,7 +2903,7 @@ index 276abbf..aa662e6 100644
  		case OC_helper:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2301,7 +2417,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2301,7 +2422,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -1464,7 +2912,7 @@ index 276abbf..aa662e6 100644
  		case OC_target:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2310,63 +2426,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2310,63 +2431,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -1537,7 +2985,7 @@ index 276abbf..aa662e6 100644
  		case OC_rdreset:
  			// Reset the current redirection
  			// A redirect only lasts one opcode, so this empty case ends it
-@@ -2375,22 +2491,129 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2375,22 +2496,129 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			// Evaluate block as the redirect target. No continue, so the redirect ends after it
  			// Ex: "parent, cond(alive, life, 0)" reads both alive and life from parent
  			sys.bcStack.Push(be[i+4 : i+4+l].run(c))
@@ -1671,7 +3119,7 @@ index 276abbf..aa662e6 100644
  			i += 8
  		case OC_float:
  			arr := make([]byte, 4)
-@@ -2402,7 +2625,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2402,7 +2630,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			sys.bcStack.PushF(flo)
  			i += 4
  		case OC_string:
@@ -1683,7 +3131,7 @@ index 276abbf..aa662e6 100644
  		case OC_neg:
  			be.neg(sys.bcStack.Top())
  		case OC_bwnot:
-@@ -2556,7 +2782,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2556,7 +2787,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  					redir = oc.ss.sb.playerNo
  					pno = c.ss.sb.playerNo
  				}
@@ -1692,7 +3140,7 @@ index 276abbf..aa662e6 100644
  				ok = found && c.command(pno, cmdPos)
  			}
  			sys.bcStack.PushB(ok)
-@@ -2564,7 +2790,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2564,7 +2795,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			cmdName := sys.bcStack.Pop()
  			ok := false
  			if c.cmd != nil && cmdName.vtype == VT_String {
@@ -1701,7 +3149,7 @@ index 276abbf..aa662e6 100644
  				ok = found && c.command(sys.workingState.playerNo, cmdPos)
  			}
  			sys.bcStack.PushB(ok)
-@@ -2599,7 +2825,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2599,7 +2830,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_hitcount:
  			sys.bcStack.PushI(c.hitCount)
  		case OC_hitdefattr:
@@ -1711,7 +3159,7 @@ index 276abbf..aa662e6 100644
  			if attr == -2 { // String value on the stack
  				attr = evalTriggerAttr(c, sys.bcStack.Pop())
  			}
-@@ -2747,15 +2974,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2747,15 +2979,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_vel_z:
  			sys.bcStack.PushF(c.vel[2] * (c.localscl / oc.localscl))
  		case OC_assign_:
@@ -1742,7 +3190,7 @@ index 276abbf..aa662e6 100644
  		case OC_var:
  			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
  		case OC_sysvar:
-@@ -2770,6 +3007,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2770,6 +3012,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		}
  		c = oc
  	}
@@ -1750,7 +3198,7 @@ index 276abbf..aa662e6 100644
  	return sys.bcStack.Pop()
  }
  
-@@ -3812,7 +4050,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
+@@ -3812,7 +4055,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
  			sys.bcStack.Push(BytecodeUndefined())
  		}
  	case OC_ex_isassertedchar:
@@ -1759,7 +3207,7 @@ index 276abbf..aa662e6 100644
  		*i += 8
  	case OC_ex_isassertedglobal:
  		flag := be.ReadIntAt(i)
-@@ -5017,7 +5255,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
+@@ -5017,7 +5260,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
  		//		continue
  		//	}
  		//}
@@ -1776,18 +3224,20 @@ index 276abbf..aa662e6 100644
  			changeState = true
  			break
  		}
-@@ -5089,6 +5335,10 @@ type StateBlock struct {
+@@ -5089,6 +5340,12 @@ type StateBlock struct {
  	trigger             BytecodeExp
  	elseBlock           *StateBlock
  	ctrls               []StateController
 +	runs                []scRunFn // ctrls[i].Run resolved once (see sc_runfn.go)
 +	isBlock             []bool    // ctrls[i] is a *StateBlock (resolved with runs)
 +	specGuard           *specGuard // match specialisation (spec_match.go)
++	ctrig               cnode      // compiled trigger (bc_compile.go)
++	trigRaw             BytecodeExp // unfused trigger, compiled on first use
 +	spec                *specList
  	// Loop fields
  	loopBlock        bool
  	nestedInLoop     bool
-@@ -5104,6 +5354,18 @@ func newStateBlock() *StateBlock {
+@@ -5104,6 +5361,18 @@ func newStateBlock() *StateBlock {
  	return &StateBlock{persistent: 1, persistentIndex: -1, ignorehitpause: false}
  }
  
@@ -1806,7 +3256,7 @@ index 276abbf..aa662e6 100644
  func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  	c.currentSctrlIndex = b.persistentIndex
  	// For Mugen compatibility, if in hitpause and this SCTRL has the same index
-@@ -5189,15 +5451,13 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5189,15 +5458,13 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			// Run state controllers
  			if !interrupt {
@@ -1828,7 +3278,14 @@ index 276abbf..aa662e6 100644
  						if sys.loopBreak {
  							sys.loopBreak = false
  							interrupt = true
-@@ -5244,15 +5504,26 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5238,21 +5505,32 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+ 			}
+ 		}
+ 	} else {
+-		if len(b.trigger) > 0 && !b.trigger.evalB(c) {
++		if len(b.trigger) > 0 && !b.evalTrigger(c) {
+ 			if b.elseBlock != nil {
+ 				return b.elseBlock.Run(c, ps)
  			}
  			return false
  		}
@@ -1862,7 +3319,7 @@ index 276abbf..aa662e6 100644
  				return true
  			}
  		}
-@@ -5375,7 +5646,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
+@@ -5375,7 +5653,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
  				sys.workBe = sys.workBe[:n]
  			}
  			for m := 0; m < int(n); m++ {
@@ -1871,7 +3328,7 @@ index 276abbf..aa662e6 100644
  				i += 4
  				sys.workBe[m] = (*(*BytecodeExp)(unsafe.Pointer(&scb)))[i : i+int(l)]
  				i += int(l)
-@@ -5402,7 +5673,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5402,7 +5680,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  			n := scb[i]
  			i++
  			for m := 0; m < int(n); m++ {
@@ -1880,7 +3337,7 @@ index 276abbf..aa662e6 100644
  				i += 4 + int(l)
  			}
  			if id == paramID {
-@@ -5414,21 +5685,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5414,21 +5692,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -1912,7 +3369,7 @@ index 276abbf..aa662e6 100644
  }
  
  type stateDef StateControllerBase
-@@ -5530,6 +5799,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +5806,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -1922,7 +3379,7 @@ index 276abbf..aa662e6 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -6653,7 +6925,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,7 +6932,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -1931,7 +3388,7 @@ index 276abbf..aa662e6 100644
  	pfx.invertblend = -2 // Forcing 1.1 behavior
  
  	StateControllerBase(sc).run(c, func(paramID byte, exp []BytecodeExp) bool {
-@@ -13610,6 +13882,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13610,6 +13889,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  			sys.appendToConsole(crun.warn() + "LoadFile: cannot read var data")
  			return false
  		}
@@ -1939,7 +3396,7 @@ index 276abbf..aa662e6 100644
  		crun.cnsvar = loaded
  	case 2: // Fvar
  		var loaded map[int32]float32
-@@ -13617,6 +13890,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13617,6 +13897,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  			sys.appendToConsole(crun.warn() + "LoadFile: cannot read fvar data")
  			return false
  		}
@@ -1947,7 +3404,7 @@ index 276abbf..aa662e6 100644
  		crun.cnsfvar = loaded
  	}
  	return false
-@@ -17134,6 +17408,9 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
+@@ -17134,6 +17415,9 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
  	if sb == c.ss.sb {
  		ctrlsps = c.ss.ps
  	}
@@ -1957,7 +3414,7 @@ index 276abbf..aa662e6 100644
  	sys.bcVar = sys.bcVarStack.Alloc(int(sb.numVars))
  	sys.workingState = sb
  	changeState = sb.block.Run(c, ctrlsps)
-@@ -17147,3 +17424,68 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
+@@ -17147,3 +17431,68 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
  	sys.bcVarStack.Clear()
  	return
  }
@@ -11777,10 +13234,10 @@ index 123d9e3..6082e7a 100644
  	}
 diff --git a/src/spec_match.go b/src/spec_match.go
 new file mode 100644
-index 0000000..b2934e7
+index 0000000..a925909
 --- /dev/null
 +++ b/src/spec_match.go
-@@ -0,0 +1,354 @@
+@@ -0,0 +1,359 @@
 +package main
 +
 +import (
@@ -12134,7 +13591,12 @@ index 0000000..b2934e7
 +}
 +
 +// specRound invalidates all reduced lists (called at round start).
-+func specRound() { specGen++ }
++func specRound() {
++	specGen++
++	if cjitOn == 1 {
++		vitaTrace(cjitStatsLine())
++	}
++}
 diff --git a/src/stage.go b/src/stage.go
 index 9b29416..4bd85c5 100644
 --- a/src/stage.go
@@ -12184,7 +13646,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..e8c8a75 100644
+index 2698d35..53aeaa6 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -12855,7 +14317,7 @@ index 2698d35..e8c8a75 100644
  		if l.err = p.load(cdef, gi); l.err != nil {
  			if errors.Is(l.err, ErrLoadingCanceled) {
  				l.state = LS_Cancel
-@@ -6322,7 +6473,23 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6322,7 +6473,26 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		}
  
  		// Compile character states
@@ -12870,6 +14332,9 @@ index 2698d35..e8c8a75 100644
 +		if l.err == nil {
 +			for _, sb := range gi.states {
 +				hoistTriggers(sb)
++				if isVita {
++					compileBlockTriggers(&sb.block)
++				}
 +				fuseBytecode(sb)
 +			}
 +			if isVita {
@@ -12880,7 +14345,7 @@ index 2698d35..e8c8a75 100644
  			if attached {
  				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
  			} else {
-@@ -6820,13 +6987,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6990,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -12896,7 +14361,7 @@ index 2698d35..e8c8a75 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +7002,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +7005,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -12909,7 +14374,7 @@ index 2698d35..e8c8a75 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +7029,7 @@ type ZoomEffect struct {
+@@ -6862,6 +7032,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -12917,7 +14382,7 @@ index 2698d35..e8c8a75 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +7045,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +7048,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -12925,7 +14390,7 @@ index 2698d35..e8c8a75 100644
  }
  
  // Step the zoom variables
-@@ -7042,6 +7211,7 @@ func (s *System) restoreCharVars(c *Char) {
+@@ -7042,6 +7214,7 @@ func (s *System) restoreCharVars(c *Char) {
  		return
  	}
  

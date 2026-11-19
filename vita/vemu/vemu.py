@@ -1166,6 +1166,15 @@ def mem_bad(uc, access, address, size, value, ud):
     return False
 mu.hook_add(UC_HOOK_MEM_INVALID, mem_bad)
 
+# VEMU_BREAK=sym1|sym2: print a backtrace each time one of these runs (first 5)
+_brk_n = [0]
+for _bn in filter(None, os.environ.get('VEMU_BREAK', '').split('|')):
+    if _bn in byname:
+        _ba = L2R(byname[_bn])
+        def _bh(uc, ad, sz, ud, _bn=_bn):
+            _brk_n[0] += 1
+            if _brk_n[0] <= 5: dump('break ' + _bn)
+        mu.hook_add(UC_HOOK_CODE, _bh, begin=_ba, end=_ba + 1)
 # ---------------------------------------------------------------- run
 say('[vemu] entry %s, %d stubs, %d gl hooks, root %s' % (symbolize(e_entry), len(stubs), len(gl_hooks), ROOT))
 mu.reg_write(UC_ARM_REG_LR, MAGIC)
