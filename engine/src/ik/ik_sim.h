@@ -7135,6 +7135,7 @@ typedef struct { upnpDevice* r0; GoIface r1; } Ret_upnpDevicePtr__GoIface;
 #include "ik/ik_rt.h"
 
 // std-library entry points (ik_rt.c)
+GoChan* context_cancelCtx_Done(GoOpaque /* context.cancelCtx */* recv); // func (*context.cancelCtx).Done() <-chan struct{}
 GoChan* time_After(i64 a0); // func time.After(d time.Duration) <-chan time.Time
 GoIface binary_Write(GoIface a0, GoIface a1, GoIface a2); // func binary.Write(w io.Writer, order binary.ByteOrder, data any) error
 GoIface bufio_Reader_UnreadByte(GoOpaque /* bufio.Reader */* recv); // func (*bufio.Reader).UnreadByte() error
@@ -7144,6 +7145,7 @@ GoIface bufio_Writer_WriteByte(GoOpaque /* bufio.Writer */* recv, u8 a0); // fun
 GoIface bytes_Buffer_WriteByte(GoOpaque /* bytes.Buffer */* recv, u8 a0); // func (*bytes.Buffer).WriteByte(c byte) error
 GoIface color_ModelFunc(GoFunc a0); // func color.ModelFunc(f func(color.Color) color.Color) color.Model
 GoIface context_Background(void); // func context.Background() context.Context
+GoIface context_cancelCtx_Err(GoOpaque /* context.cancelCtx */* recv); // func (*context.cancelCtx).Err() error
 GoIface errors_New(GoString a0); // func errors.New(text string) error
 GoIface exec_Cmd_Start(GoOpaque /* exec.Cmd */* recv); // func (*exec.Cmd).Start() error
 GoIface exec_Cmd_Wait(GoOpaque /* exec.Cmd */* recv); // func (*exec.Cmd).Wait() error
@@ -7258,6 +7260,7 @@ GoString binary_bigEndian_String(GoOpaque /* binary.bigEndian */ recv); // func 
 GoString binary_littleEndian_String(GoOpaque /* binary.littleEndian */ recv); // func (binary.littleEndian).String() string
 GoString bufio_Scanner_Text(GoOpaque /* bufio.Scanner */* recv); // func (*bufio.Scanner).Text() string
 GoString bytes_Buffer_String(GoOpaque /* bytes.Buffer */* recv); // func (*bytes.Buffer).String() string
+GoString context_cancelCtx_String(GoOpaque /* context.cancelCtx */* recv); // func (*context.cancelCtx).String() string
 GoString exec_Cmd_String(GoOpaque /* exec.Cmd */* recv); // func (*exec.Cmd).String() string
 GoString exec_ExitError_Error(GoOpaque /* exec.ExitError */* recv); // func (*exec.ExitError).Error() string
 GoString filepath_Base(GoString a0); // func filepath.Base(path string) string
@@ -7413,7 +7416,7 @@ Ret_int__GoIface fmt_Println(Slice_GoIface a0); // func fmt.Println(a ...any) (n
 Ret_int__GoIface fmt_Scanln(Slice_GoIface a0); // func fmt.Scanln(a ...any) (n int, err error)
 Ret_int__GoIface fmt_Sscan(GoString a0, Slice_GoIface a1); // func fmt.Sscan(str string, a ...any) (n int, err error)
 Ret_int__GoIface fmt_Sscanf(GoString a0, GoString a1, Slice_GoIface a2); // func fmt.Sscanf(str string, format string, a ...any) (n int, err error)
-Ret_int__GoIface io_LimitedReader_Read(GoOpaque /* io.LimitedReader */* recv, Slice_u8 a0); // func (*io.LimitedReader).Read(p []byte) (n int, err error)
+Ret_int__GoIface io_LimitedReader_Read(GoIoLimitedReader* recv, Slice_u8 a0); // func (*io.LimitedReader).Read(p []byte) (n int, err error)
 Ret_int__GoIface io_ReadAtLeast(GoIface a0, Slice_u8 a1, int a2); // func io.ReadAtLeast(r io.Reader, buf []byte, min int) (n int, err error)
 Ret_int__GoIface io_ReadFull(GoIface a0, Slice_u8 a1); // func io.ReadFull(r io.Reader, buf []byte) (n int, err error)
 Ret_int__GoIface net_TCPConn_Read(GoOpaque /* net.TCPConn */* recv, Slice_u8 a0); // promoted func (*net.conn).Read(b []byte) (int, error)
@@ -7993,6 +7996,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_bufio_Writer 123
 #define GO_TID_P_bytes_Buffer 101
 #define GO_TID_P_bytes_Reader 155
+#define GO_TID_P_context_cancelCtx 2037
 #define GO_TID_P_exec_Cmd 1067
 #define GO_TID_P_exec_ExitError 251
 #define GO_TID_P_image_Alpha 105

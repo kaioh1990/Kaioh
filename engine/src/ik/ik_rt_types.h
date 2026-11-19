@@ -111,6 +111,10 @@ typedef struct GoHttpResponse {
 typedef struct GoUrlURL {
     GoString Scheme, Opaque, Host, Path, RawQuery, Fragment;
 } GoUrlURL;
+typedef struct GoIoLimitedReader {
+    GoIface R;
+    i64 N;
+} GoIoLimitedReader;
 typedef struct GoImageConfig {
     GoIface ColorModel;
     int Width, Height;

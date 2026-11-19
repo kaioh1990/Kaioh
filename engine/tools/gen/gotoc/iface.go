@@ -508,7 +508,7 @@ var stdIfaceAlias = map[string]string{
 // Standard-library types the C runtime itself puts into interface values
 // (net.Dial and net.ListenPacket return *net.TCPConn / *net.UDPConn): they
 // need type ids and dispatch cases even though no translated code boxes them.
-var runtimeTypes = []string{"net.UDPConn", "net.TCPConn", "net.UDPAddr", "net.TCPAddr", "net.OpError"}
+var runtimeTypes = []string{"net.UDPConn", "net.TCPConn", "net.UDPAddr", "net.TCPAddr", "net.OpError", "context.cancelCtx", "io.LimitedReader"}
 
 func registerRuntimeTypes(p *Prog) {
 	seen := map[*types.Package]bool{}

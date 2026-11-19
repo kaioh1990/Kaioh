@@ -278,3 +278,78 @@ Ret_u32__u32__u32__u32 color_NRGBA_RGBA(GoOpaque c) {  // premultiplied 16-bit, 
 // wall-clock times in local time)
 static GoOpaque time_loc_local, time_loc_utc;
 GoOpaque *time_Local = &time_loc_local, *time_UTC = &time_loc_utc;
+
+// ---------------------------------------------------------------- context
+// Background and WithCancel (the BGM loader cancels superseded loads).
+// Every context is a *context.cancelCtx made here; Background's is never
+// cancelled.
+#ifndef GO_TID_P_context_cancelCtx
+#define GO_TID_P_context_cancelCtx (-40)
+#endif
+typedef struct RtCtx {
+    GoChan *done;
+    bool cancelled;
+    struct RtCtx **kids;
+    int nkids, capkids;
+} RtCtx;
+static RtCtx *ctx_new(void) {
+    RtCtx *c = (RtCtx *)gc_calloc(1, sizeof *c);
+    c->done = go_chan_make(1, 0);
+    return c;
+}
+static void ctx_cancel(RtCtx *c) {
+    if (c->cancelled) return;
+    c->cancelled = true;
+    go_chan_close(c->done);
+    for (int i = 0; i < c->nkids; i++) ctx_cancel(c->kids[i]);
+}
+static void ctx_cancel_fn(void *env) { ctx_cancel((RtCtx *)env); }
+GoIface context_Background(void) {
+    static RtCtx *bg;
+    if (!bg) bg = ctx_new();  // reachable from the data segment: a GC root
+    return (GoIface){GO_TID_P_context_cancelCtx, bg};
+}
+Ret_GoIface__GoFunc context_WithCancel(GoIface parent) {
+    RtCtx *c = ctx_new();
+    if (parent.type == GO_TID_P_context_cancelCtx && parent.data) {
+        RtCtx *p = (RtCtx *)parent.data;
+        if (p->cancelled) {
+            ctx_cancel(c);
+        } else {
+            if (p->nkids == p->capkids) {
+                int n = p->capkids ? p->capkids * 2 : 4;
+                RtCtx **k = (RtCtx **)gc_calloc((size_t)n, sizeof *k);
+                if (p->nkids) memcpy(k, p->kids, sizeof *k * (size_t)p->nkids);
+                p->kids = k, p->capkids = n;
+            }
+            p->kids[p->nkids++] = c;
+        }
+    }
+    return (Ret_GoIface__GoFunc){{GO_TID_P_context_cancelCtx, c}, {(void *)ctx_cancel_fn, c}};
+}
+GoChan *context_cancelCtx_Done(GoOpaque *c) { return ((RtCtx *)c)->done; }
+GoIface context_cancelCtx_Err(GoOpaque *c) { return ((RtCtx *)c)->cancelled ? go_error(GOSTR("context canceled")) : (GoIface){0}; }
+GoString context_cancelCtx_String(GoOpaque *c) { (void)c; return GOSTR("context.WithCancel"); }
+
+// ---------------------------------------------------------------- io.LimitReader, bytes.TrimSpace
+#ifndef GO_TID_P_io_LimitedReader
+#define GO_TID_P_io_LimitedReader (-41)
+#endif
+GoIface io_LimitReader(GoIface r, i64 n) {
+    GoIoLimitedReader *l = go_new(GoIoLimitedReader);
+    l->R = r, l->N = n;
+    return (GoIface){GO_TID_P_io_LimitedReader, l};
+}
+Ret_int__GoIface io_LimitedReader_Read(GoIoLimitedReader *l, Slice_u8 p) {
+    if (l->N <= 0) return (Ret_int__GoIface){0, io_EOF};
+    if ((i64)p.len > l->N) p.len = (int)l->N;
+    Ret_int__GoIface r = ik_io_Read(l->R, p);
+    l->N -= r.r0;
+    return r;
+}
+Slice_u8 bytes_TrimSpace(Slice_u8 s) {
+    int a = 0, b = s.len;
+    while (a < b && (s.p[a] == ' ' || s.p[a] == '\t' || s.p[a] == '\n' || s.p[a] == '\r' || s.p[a] == '\v' || s.p[a] == '\f')) a++;
+    while (b > a && (s.p[b - 1] == ' ' || s.p[b - 1] == '\t' || s.p[b - 1] == '\n' || s.p[b - 1] == '\r' || s.p[b - 1] == '\v' || s.p[b - 1] == '\f')) b--;
+    return (Slice_u8){s.p + a, b - a, s.cap - a};
+}
