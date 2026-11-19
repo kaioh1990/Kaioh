@@ -4250,7 +4250,7 @@ struct lua_fixedCallFrameStack { Slice_lua_callFrame array; int sp; };
 struct lua_flagScanner { u8 flag; GoString start; GoString end; Slice_u8 buf; GoString str; int Length; int Pos; bool HasFlag; bool ChangeFlag; };
 struct lua_funcContext { lua_FunctionProto* Proto; lua_codeStore* Code; lua_funcContext* Parent; lua_varNamePool* Upvalues; lua_codeBlock* Block; Slice_lua_codeBlockPtr Blocks; int regTop; int labelId; Map_int_int labelPc; int gotosCount; Map_int_lua_gotoLabelDescPtr unresolvedGotos; };
 struct lua_gotoLabelDesc { int Id; GoString Name; int Pc; int Line; int NumActiveLocalVars; };
-struct lua_lFile { GoOpaque /* os.File */* fp; GoOpaque /* exec.Cmd */* pp; GoIface writer; GoOpaque /* bufio.Reader */* reader; GoIface stdout; bool closed; };
+struct lua_lFile { GoOpaque /* os.File */* fp; GoOpaque /* exec.Cmd */* pp; GoIface writer; GoOpaque /* bufio.Reader */* reader; GoIface stdout_; bool closed; };
 struct lua_lValueArraySorter { lua_LState* L; lua_LFunction* Fn; Slice_lua_LValue Values; };
 struct lua_lblabels { int t; int f; int e; bool b; };
 struct lua_luaLib { GoString libName; lua_LGFunction libFunc; };

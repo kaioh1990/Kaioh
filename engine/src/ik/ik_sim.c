@@ -62917,7 +62917,7 @@ Ret_lua_LUserDataPtr__GoIface lua_newFile(lua_LState* L, GoOpaque /* os.File */*
             return (Ret_lua_LUserDataPtr__GoIface){NULL, err};
         }
     }
-    lua_lFile* lfile = go_box(lua_lFile, (lua_lFile){.fp = file, .pp = NULL, .writer = (GoIface){0}, .reader = NULL, .stdout = (GoIface){0}, .closed = false});
+    lua_lFile* lfile = go_box(lua_lFile, (lua_lFile){.fp = file, .pp = NULL, .writer = (GoIface){0}, .reader = NULL, .stdout_ = (GoIface){0}, .closed = false});
     ud->Value = ((GoIface){250, (void *)(lfile)});
     if (writable) {
         lfile->writer = ((GoIface){146, (void *)(file)});
@@ -62936,7 +62936,7 @@ Ret_lua_LUserDataPtr__GoIface lua_newProcess(lua_LState* L, GoString cmd, bool w
     GoString c = _t1.r0;
     Slice_GoString args = _t1.r1;
     GoOpaque /* exec.Cmd */* pp = exec_Command(c, args);
-    lua_lFile* lfile = go_box(lua_lFile, (lua_lFile){.fp = NULL, .pp = pp, .writer = (GoIface){0}, .reader = NULL, .stdout = (GoIface){0}, .closed = false});
+    lua_lFile* lfile = go_box(lua_lFile, (lua_lFile){.fp = NULL, .pp = pp, .writer = (GoIface){0}, .reader = NULL, .stdout_ = (GoIface){0}, .closed = false});
     ud->Value = ((GoIface){250, (void *)(lfile)});
     GoIface err = {0};
     if (writable) {
@@ -62946,9 +62946,9 @@ Ret_lua_LUserDataPtr__GoIface lua_newProcess(lua_LState* L, GoString cmd, bool w
     }
     if (readable) {
         Ret_GoIface__GoIface _t3 = exec_Cmd_StdoutPipe(pp);
-        lfile->stdout = _t3.r0;
+        lfile->stdout_ = _t3.r0;
         err = _t3.r1;
-        lfile->reader = bufio_NewReaderSize(lfile->stdout, 4096);
+        lfile->reader = bufio_NewReaderSize(lfile->stdout_, 4096);
     }
     if (err.type != 0) {
         return (Ret_lua_LUserDataPtr__GoIface){NULL, err};
@@ -63155,8 +63155,8 @@ int lua_fileCloseAux(lua_LState* L, lua_lFile* file) {
                 lua_LState_Push(L, ((GoIface){213, go_box_a(lua_LBool, g_lua_LTrue)}));
                 return 1;
             } else if ((_t4 == 1)) {
-                if (file->stdout.type != 0) {
-                    iface_Close_143b0862(file->stdout);
+                if (file->stdout_.type != 0) {
+                    iface_Close_143b0862(file->stdout_);
                 }
                 err = exec_Cmd_Wait(file->pp);
                 int exitStatus = 0;
@@ -183265,7 +183265,7 @@ static const RField ik_rf_650[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(as
 static const RField ik_rf_652[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_StringConcatOpExpr, ExprBase_), true}, {"Lhs", "", "", &ik_rt[579], offsetof(ast_StringConcatOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[579], offsetof(ast_StringConcatOpExpr, Rhs), false}, };
 static const RField ik_rf_654[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_UnaryMinusOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[579], offsetof(ast_UnaryMinusOpExpr, Expr), false}, };
 static const RField ik_rf_656[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_UnaryLenOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[579], offsetof(ast_UnaryLenOpExpr, Expr), false}, };
-static const RField ik_rf_658[] = {{"fp", "github.com/yuin/gopher-lua", "", &ik_rt[263], offsetof(lua_lFile, fp), false}, {"pp", "github.com/yuin/gopher-lua", "", &ik_rt[659], offsetof(lua_lFile, pp), false}, {"writer", "github.com/yuin/gopher-lua", "", &ik_rt[20], offsetof(lua_lFile, writer), false}, {"reader", "github.com/yuin/gopher-lua", "", &ik_rt[349], offsetof(lua_lFile, reader), false}, {"stdout", "github.com/yuin/gopher-lua", "", &ik_rt[689], offsetof(lua_lFile, stdout), false}, {"closed", "github.com/yuin/gopher-lua", "", &ik_rt[0], offsetof(lua_lFile, closed), false}, };
+static const RField ik_rf_658[] = {{"fp", "github.com/yuin/gopher-lua", "", &ik_rt[263], offsetof(lua_lFile, fp), false}, {"pp", "github.com/yuin/gopher-lua", "", &ik_rt[659], offsetof(lua_lFile, pp), false}, {"writer", "github.com/yuin/gopher-lua", "", &ik_rt[20], offsetof(lua_lFile, writer), false}, {"reader", "github.com/yuin/gopher-lua", "", &ik_rt[349], offsetof(lua_lFile, reader), false}, {"stdout", "github.com/yuin/gopher-lua", "", &ik_rt[689], offsetof(lua_lFile, stdout_), false}, {"closed", "github.com/yuin/gopher-lua", "", &ik_rt[0], offsetof(lua_lFile, closed), false}, };
 static const RField ik_rf_688[] = {{"in", "os/exec", "", &ik_rt[13], offsetof(Anon_6c40a18c, in), false}, {"out", "os/exec", "", &ik_rt[13], offsetof(Anon_6c40a18c, out), false}, };
 static const RField ik_rf_694[] = {{"Pos", "", "", &ik_rt[695], offsetof(parse_Error, Pos), false}, {"Message", "", "", &ik_rt[13], offsetof(parse_Error, Message), false}, {"Token", "", "", &ik_rt[13], offsetof(parse_Error, Token), false}, };
 static const RField ik_rf_695[] = {{"Source", "", "", &ik_rt[13], offsetof(ast_Position, Source), false}, {"Line", "", "", &ik_rt[1], offsetof(ast_Position, Line), false}, {"Column", "", "", &ik_rt[1], offsetof(ast_Position, Column), false}, };

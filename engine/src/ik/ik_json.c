@@ -3,6 +3,7 @@
 // UseNumber) into any type - interfaces get Go's generic values
 // (map[string]any, []any, float64 or json.Number, string, bool, nil).
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 

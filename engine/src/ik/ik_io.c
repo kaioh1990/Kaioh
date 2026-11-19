@@ -6,6 +6,12 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
+#if defined(_WIN32)
+#include <direct.h>
+#define cvf_mkdir(p, perm) _mkdir(p)
+#else
+#define cvf_mkdir(p, perm) mkdir(p, (mode_t)((perm) & 0777))
+#endif
 #include "core/detmath.h"
 #include "ik/ik_sim.h"
 
@@ -820,7 +826,7 @@ GoIface os_MkdirAll(GoString path, u32 perm) {
             char c = buf[i];
             buf[i] = 0;
             struct stat st;
-            if (stat(buf, &st) != 0 && mkdir(buf, (mode_t)(perm & 0777)) != 0) return go_errorf("mkdir %s: failed", buf);
+            if (stat(buf, &st) != 0 && cvf_mkdir(buf, perm) != 0) return go_errorf("mkdir %s: failed", buf);
             buf[i] = c;
         }
     }

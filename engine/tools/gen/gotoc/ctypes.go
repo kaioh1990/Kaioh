@@ -268,7 +268,8 @@ func anonName(st *types.Struct) string {
 
 func cField(name string) string {
 	switch name {
-	case "char", "int", "float", "double", "long", "short", "signed", "unsigned", "auto", "register", "static", "extern", "volatile", "const", "struct", "union", "enum", "typedef", "sizeof", "default", "case", "do", "while", "for", "if", "else", "switch", "break", "continue", "return", "goto", "void", "inline", "restrict", "bool", "true", "false":
+	case "char", "int", "float", "double", "long", "short", "signed", "unsigned", "auto", "register", "static", "extern", "volatile", "const", "struct", "union", "enum", "typedef", "sizeof", "default", "case", "do", "while", "for", "if", "else", "switch", "break", "continue", "return", "goto", "void", "inline", "restrict", "bool", "true", "false",
+		"stdin", "stdout", "stderr", "errno", "assert", "NULL": // C library macros
 		return name + "_"
 	}
 	return name

@@ -74,6 +74,12 @@ add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
 target_link_libraries(cvf_ik PUBLIC cvf_core SDL2::SDL2)
 # generated code: warnings are not actionable here
 target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w)
+# GCC 14 makes these permanent errors; the translation relies on C's
+# lenient pointer conversions between equivalent generated types
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(cvf_ik PRIVATE -Wno-error=incompatible-pointer-types
+    -Wno-error=int-conversion -Wno-error=implicit-function-declaration)
+endif()
 set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)  # GNU statement expressions, typeof
 add_executable(cvf_headless src/app/headless_main.c)
 target_link_libraries(cvf_headless PRIVATE cvf_ik)
@@ -82,5 +88,13 @@ target_compile_options(cvf_headless PRIVATE ${CVF_DETERMINISM_FLAGS})
 # The game (SDL2 window, OpenGL renderer, Lua menus)
 add_executable(cvf src/app/game_main.c)
 target_link_libraries(cvf PRIVATE cvf_ik)
+if(WIN32)
+  target_link_libraries(cvf_ik PUBLIC ws2_32)
+endif()
+if(MINGW)
+  # self-contained executables (no libgcc/libwinpthread DLLs to ship)
+  target_link_options(cvf PRIVATE -static)
+  target_link_options(cvf_headless PRIVATE -static)
+endif()
 target_compile_options(cvf PRIVATE ${CVF_DETERMINISM_FLAGS})
 set_target_properties(cvf PROPERTIES C_EXTENSIONS ON)
