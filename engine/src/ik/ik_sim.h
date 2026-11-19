@@ -1254,7 +1254,7 @@ typedef struct sjson_errorType sjson_errorType;
 typedef struct sjson_pathResult sjson_pathResult;
 typedef struct sjson_sliceHeader sjson_sliceHeader;
 typedef struct sjson_stringHeader sjson_stringHeader;
-typedef struct sjson_val_L5ecfcd sjson_val_L5ecfcd;
+typedef struct sjson_val_L7df47a sjson_val_L7df47a;
 typedef struct slotRef_L64c566 slotRef_L64c566;
 typedef struct spec_L83f120 spec_L83f120;
 typedef struct svc_L9ef632 svc_L9ef632;
@@ -1400,7 +1400,7 @@ typedef GoIface polling_PollSink;
 typedef GoIface polling_Poller;
 typedef int pretty_byKind;
 typedef int pretty_jtype;
-typedef GoFunc protocol_UdpProtocolDispatchFunc_L521273;
+typedef GoFunc protocol_UdpProtocolDispatchFunc_L67de03;
 typedef int protocol_UdpProtocolEventType;
 typedef int protocol_UdpProtocolState;
 typedef GoIface raster_Painter;
@@ -2416,9 +2416,9 @@ typedef struct { protocol_QueueEntry *p; int len, cap; } Slice_protocol_QueueEnt
 #define CVF_DEF_Slice_protocol_UdpProtocol
 typedef struct { protocol_UdpProtocol *p; int len, cap; } Slice_protocol_UdpProtocol;
 #endif
-#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_L521273
-#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_L521273
-typedef struct { protocol_UdpProtocolDispatchFunc_L521273 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_L521273;
+#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_L67de03
+#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_L67de03
+typedef struct { protocol_UdpProtocolDispatchFunc_L67de03 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_L67de03;
 #endif
 #ifndef CVF_DEF_Slice_protocol_UdpProtocolEvent
 #define CVF_DEF_Slice_protocol_UdpProtocolEvent
@@ -2476,9 +2476,9 @@ typedef struct { secPair_L3fd79d *p; int len, cap; } Slice_secPair_L3fd79d;
 #define CVF_DEF_Slice_sjson_pathResult
 typedef struct { sjson_pathResult *p; int len, cap; } Slice_sjson_pathResult;
 #endif
-#ifndef CVF_DEF_Slice_sjson_val_L5ecfcd
-#define CVF_DEF_Slice_sjson_val_L5ecfcd
-typedef struct { sjson_val_L5ecfcd *p; int len, cap; } Slice_sjson_val_L5ecfcd;
+#ifndef CVF_DEF_Slice_sjson_val_L7df47a
+#define CVF_DEF_Slice_sjson_val_L7df47a
+typedef struct { sjson_val_L7df47a *p; int len, cap; } Slice_sjson_val_L7df47a;
 #endif
 #ifndef CVF_DEF_Slice_slotRef_L64c566
 #define CVF_DEF_Slice_slotRef_L64c566
@@ -4402,7 +4402,7 @@ struct sjson_errorType { GoString msg; };
 struct sjson_pathResult { GoString part; GoString gpart; GoString path; bool force; bool more; };
 struct sjson_sliceHeader { void* data; int len; int cap; };
 struct sjson_stringHeader { void* data; int len; };
-struct sjson_val_L5ecfcd { int index; gjson_Result res; };
+struct sjson_val_L7df47a { int index; gjson_Result res; };
 struct slotRef_L64c566 { int idx; PlayerVictoryProperties* p; i32 order; };
 struct spec_L83f120 { GoString prefix; i32 varType; };
 struct svc_L9ef632 { GoString ServiceType; GoString ControlURL; };
@@ -5422,9 +5422,9 @@ GO_SLICE_FUNCS(Slice_protocol_QueueEntry, protocol_QueueEntry)
 #define CVF_FN_Slice_protocol_UdpProtocol
 GO_SLICE_FUNCS(Slice_protocol_UdpProtocol, protocol_UdpProtocol)
 #endif
-#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_L521273
-#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_L521273
-GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_L521273, protocol_UdpProtocolDispatchFunc_L521273)
+#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_L67de03
+#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_L67de03
+GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_L67de03, protocol_UdpProtocolDispatchFunc_L67de03)
 #endif
 #ifndef CVF_FN_Slice_protocol_UdpProtocolEvent
 #define CVF_FN_Slice_protocol_UdpProtocolEvent
@@ -5482,9 +5482,9 @@ GO_SLICE_FUNCS(Slice_secPair_L3fd79d, secPair_L3fd79d)
 #define CVF_FN_Slice_sjson_pathResult
 GO_SLICE_FUNCS(Slice_sjson_pathResult, sjson_pathResult)
 #endif
-#ifndef CVF_FN_Slice_sjson_val_L5ecfcd
-#define CVF_FN_Slice_sjson_val_L5ecfcd
-GO_SLICE_FUNCS(Slice_sjson_val_L5ecfcd, sjson_val_L5ecfcd)
+#ifndef CVF_FN_Slice_sjson_val_L7df47a
+#define CVF_FN_Slice_sjson_val_L7df47a
+GO_SLICE_FUNCS(Slice_sjson_val_L7df47a, sjson_val_L7df47a)
 #endif
 #ifndef CVF_FN_Slice_slotRef_L64c566
 #define CVF_FN_Slice_slotRef_L64c566
@@ -11447,6 +11447,8 @@ bool fn_cvfClampInvincibility(Char* c, i32* time_);
 i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v);
 void fn_cvfDebugf(GoString format, Slice_GoIface args);
 void fn_cvfApplyDisplay(Config* cfg);
+bool System_cvfWideView(System* s);
+f32 System_cvfClampWideView(System* s, f32 x, f32 scl);
 void fn_cvfSpecialTick(Char* c);
 bool fn_cvfBlockSpecial(Char* c, i32 no);
 bool fn_cvfLazySoundsEnabled(void);
