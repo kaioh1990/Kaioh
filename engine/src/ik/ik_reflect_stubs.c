@@ -2,3 +2,5 @@
 // reflect entry points not implemented by ik_reflect.c.
 #include "ik/ik_sim.h"
 
+GoIface reflect_TypeOf(GoIface a0) { (void)a0; go_panic_str("reflect_TypeOf: not implemented"); }
+GoString reflect_Kind_String(uintptr_t recv) { (void)recv; go_panic_str("reflect_Kind_String: not implemented"); }

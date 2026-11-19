@@ -53,7 +53,7 @@ func (t *Tx) call(c *ast.CallExpr) string {
 		return t.indirectCall(c)
 	}
 	sig := fn.Type().(*types.Signature)
-	if fn.Pkg() != t.p.pkg && (sig.TypeParams() != nil || isGenericInstance(t, c)) {
+	if !isOwn(fn.Pkg()) && (sig.TypeParams() != nil || isGenericInstance(t, c)) {
 		if r := t.special(c, fn, nil); r != "" {
 			return r
 		}
@@ -101,7 +101,7 @@ func (t *Tx) call(c *ast.CallExpr) string {
 		recv := t.methodRecv(se.X, sel, sig)
 		return fmt.Sprintf("%s(%s%s)", cFuncName(t.p, fn), recv, prependComma(args))
 	}
-	if fn.Pkg() != t.p.pkg {
+	if !isOwn(fn.Pkg()) {
 		if r := t.special(c, fn, args); r != "" {
 			return r
 		}

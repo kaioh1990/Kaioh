@@ -42,11 +42,11 @@ func reach(p *Prog, roots []string) map[string]bool {
 				rt = pt.Elem()
 			}
 			if n, ok := rt.(*types.Named); ok {
-				return n.Obj().Name() + "." + fn.Name()
+				return keyPrefix(n.Obj().Pkg()) + n.Obj().Name() + "." + fn.Name()
 			}
 			return "" // interface method
 		}
-		return fn.Name()
+		return keyPrefix(fn.Pkg()) + fn.Name()
 	}
 	seen := map[string]bool{}
 	queue := append([]string{}, roots...)
@@ -87,13 +87,13 @@ func reachVisitor(p *Prog, queue *[]string, byName map[string][]string, keyOf fu
 	visit = func(n ast.Node) bool {
 			switch x := n.(type) {
 			case *ast.Ident:
-				if v, ok := p.info.Uses[x].(*types.Var); ok && v.Pkg() == p.pkg && v.Parent() == p.pkg.Scope() && !varSeen[v] {
+				if v, ok := p.info.Uses[x].(*types.Var); ok && isOwn(v.Pkg()) && v.Parent() == v.Pkg().Scope() && !varSeen[v] {
 					varSeen[v] = true
 					if rhs := initOf[v]; rhs != nil {
 						ast.Inspect(rhs, visit)
 					}
 				}
-				if fn, ok := p.info.Uses[x].(*types.Func); ok && fn.Pkg() == p.pkg {
+				if fn, ok := p.info.Uses[x].(*types.Func); ok && isOwn(fn.Pkg()) {
 					if kk := keyOf(fn); kk != "" {
 						*queue = append(*queue, kk)
 					} else {
@@ -105,7 +105,7 @@ func reachVisitor(p *Prog, queue *[]string, byName map[string][]string, keyOf fu
 					if fn, ok := sel.Obj().(*types.Func); ok {
 						if _, isIface := sel.Recv().Underlying().(*types.Interface); isIface {
 							*queue = append(*queue, byName[fn.Name()]...)
-						} else if kk := keyOf(fn); kk != "" && fn.Pkg() == p.pkg {
+						} else if kk := keyOf(fn); kk != "" && isOwn(fn.Pkg()) {
 							*queue = append(*queue, kk)
 						}
 					}

@@ -8,6 +8,8 @@ export GOTOC_INCLUDE_FUNCS=Rotation.IsZero,itoa,fmtHex,Motif.resolvePath
 export GOTOC_NATIVE_FUNCS=decodeShiftJIS,cvfGcSafepoint
 # platform/render/diagnostic functions in otherwise translated files
 export GOTOC_EXCLUDE_FUNCS=runGfxTask,GetKeyboardState,saveScreenshot,parseMusicSection,Char.cueDebugDraw,AnimTextSnd.Draw,FightScreenCombo.draw,Loader.runTread,System.drawDebugText,modifyBgm.Run,modifySnd.Run,Layout.DrawText
+# Go packages translated besides main (the Lua VM the menus run on)
+export GOTOC_PKGS=${GOTOC_PKGS-github.com/yuin/gopher-lua,github.com/yuin/gopher-lua/ast,github.com/yuin/gopher-lua/parse,github.com/yuin/gopher-lua/pm}
 export GOTOC_GEN_TYPES=${GOTOC_GEN_TYPES:-/home/claude/kaioh/engine/src/core/gen_types.h}
 # type-check in module mode (resolves pure-Go dependencies such as go-ini)
 export PATH=/tmp/claude-0/-home-claude/54342c0c-22b1-5a32-9784-78de9b3a8983/scratchpad/goroot/bin:$PATH GOTOOLCHAIN=local GOFLAGS=-mod=mod GOPROXY=off CGO_ENABLED=0

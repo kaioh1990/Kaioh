@@ -2,9 +2,11 @@
 // Archives (zip), PNG and gob are not supported by the headless simulation:
 // those calls return errors and Ikemen's own fallbacks take over.
 #include <dirent.h>
+#include <math.h>
 #include <stdio.h>
 #include <sys/stat.h>
 
+#include "core/detmath.h"
 #include "ik/ik_sim.h"
 
 static GoString eof_s = {"EOF", 3};
@@ -573,12 +575,6 @@ int list_List_Len(GoOpaque *recv) {
     return 0;
 }
 
-void lua_LState_RaiseError(GoOpaque *recv, GoString fmt, Slice_GoIface args) {
-    (void)recv;
-    GoString s = go_sprintf(fmt, args.p, args.len);
-    go_panic_str(go_strz(s));
-}
-
 // bufio.Scanner (lines) over an io.Reader: reads everything up front.
 typedef struct RtScanner {
     Slice_u8 data;
@@ -610,28 +606,6 @@ GoString os_Getenv(GoString key) {
     const char *v = getenv(go_strz(key));
     return v ? go_cstr(gc_strdup(v)) : (GoString){"", 0};
 }
-
-// ---------------------------------------------------------------- Lua
-// No Lua state in the headless engine: globals are nil, chunks do nothing.
-static int lnil_tag;
-GoIface lua_LNil = {GO_TID_ERRSTR - 1, &lnil_tag};  // a unique non-nil interface value
-GoIface lua_LState_GetGlobal(GoOpaque *l, GoString name) {
-    (void)l, (void)name;
-    return lua_LNil;
-}
-GoIface lua_LState_CallByParam(GoOpaque *l, GoOpaque p, Slice_GoIface args) {
-    (void)l, (void)p, (void)args;
-    return (GoIface){0};
-}
-GoIface lua_LState_DoString(GoOpaque *l, GoString src) {
-    (void)l, (void)src;
-    return (GoIface){0};
-}
-GoIface lua_LState_Get(GoOpaque *l, int i) {
-    (void)l, (void)i;
-    return lua_LNil;
-}
-void lua_LState_Pop(GoOpaque *l, int n) { (void)l, (void)n; }
 
 // ---------------------------------------------------------------- os.ReadFile
 Ret_Slice_u8__GoIface os_ReadFile(GoString name) {
@@ -672,10 +646,138 @@ GoIface json_Indent(GoOpaque *a0, Slice_u8 a1, GoString a2, GoString a3) {
     (void)a0; (void)a1; (void)a2; (void)a3;
     return (GoIface){0};
 }
-Slice_u8 bytes_Buffer_Bytes(GoOpaque *recv) { (void)recv; return (Slice_u8){0}; }
 GoOpaque mgl32_HomogRotate3DX(f32 a) { (void)a; return (GoOpaque){0}; }
 GoOpaque mgl32_HomogRotate3DY(f32 a) { (void)a; return (GoOpaque){0}; }
 GoOpaque mgl32_HomogRotate3DZ(f32 a) { (void)a; return (GoOpaque){0}; }
 GoOpaque mgl32_Mat4_Mul4(GoOpaque a, GoOpaque b) { (void)a; (void)b; return (GoOpaque){0}; }
 GoOpaque mgl32_Scale3D(f32 x, f32 y, f32 z) { (void)x; (void)y; (void)z; return (GoOpaque){0}; }
 GoOpaque mgl32_Translate3D(f32 x, f32 y, f32 z) { (void)x; (void)y; (void)z; return (GoOpaque){0}; }
+
+
+// ---------------------------------------------------------------- bytes.Buffer (value type, zero value usable)
+typedef struct RtBuf {
+    u8 *p;
+    int len, cap, off;  // unread bytes are p[off:len]
+} RtBuf;
+_Static_assert(sizeof(RtBuf) <= sizeof(GoOpaque), "bytes.Buffer fits");
+static void buf_put(RtBuf *b, const void *src, int n) {
+    if (b->len + n > b->cap) {
+        int nc = b->cap ? b->cap * 2 : 64;
+        while (nc < b->len + n) nc *= 2;
+        b->p = (u8 *)gc_realloc(b->p, (size_t)nc);
+        b->cap = nc;
+    }
+    memcpy(b->p + b->len, src, (size_t)n);
+    b->len += n;
+}
+GoIface bytes_Buffer_WriteByte(GoOpaque *recv, u8 c) {
+    buf_put((RtBuf *)recv, &c, 1);
+    return (GoIface){0};
+}
+Ret_int__GoIface bytes_Buffer_WriteString(GoOpaque *recv, GoString s) {
+    buf_put((RtBuf *)recv, s.p, s.len);
+    return (Ret_int__GoIface){s.len, {0}};
+}
+Slice_u8 bytes_Buffer_Bytes(GoOpaque *recv) {
+    RtBuf *b = (RtBuf *)recv;
+    return (Slice_u8){b->p + b->off, b->len - b->off, b->cap - b->off};
+}
+GoString bytes_Buffer_String(GoOpaque *recv) {
+    RtBuf *b = (RtBuf *)recv;
+    return go_bytes2str((Slice_u8){b->p + b->off, b->len - b->off, b->len - b->off});
+}
+
+// ---------------------------------------------------------------- strings.Reader
+typedef struct RtStrReader {
+    GoString s;
+    i64 i;
+} RtStrReader;
+GoOpaque *strings_NewReader(GoString s) {
+    RtStrReader *r = (RtStrReader *)gc_alloc(sizeof *r);
+    r->s = s;
+    return (GoOpaque *)r;
+}
+Ret_int__GoIface strings_Reader_Read(GoOpaque *recv, Slice_u8 b) {
+    RtStrReader *r = (RtStrReader *)recv;
+    if (r->i >= r->s.len) return (Ret_int__GoIface){0, io_EOF};
+    int n = (int)(r->s.len - r->i) < b.len ? (int)(r->s.len - r->i) : b.len;
+    memcpy(b.p, r->s.p + r->i, (size_t)n);
+    r->i += n;
+    return (Ret_int__GoIface){n, {0}};
+}
+Ret_i64__GoIface strings_Reader_Seek(GoOpaque *recv, i64 off, int whence) {
+    RtStrReader *r = (RtStrReader *)recv;
+    i64 abs = whence == 0 ? off : whence == 1 ? r->i + off : r->s.len + off;
+    if (abs < 0) return (Ret_i64__GoIface){0, go_errorf("strings.Reader.Seek: negative position")};
+    r->i = abs;
+    return (Ret_i64__GoIface){abs, {0}};
+}
+int strings_Reader_Len(GoOpaque *recv) {
+    RtStrReader *r = (RtStrReader *)recv;
+    return r->i >= r->s.len ? 0 : (int)(r->s.len - r->i);
+}
+GoString strings_Repeat(GoString s, int n) {
+    if (n <= 0 || !s.len) return (GoString){"", 0};
+    char *p = (char *)gc_alloc_atomic((size_t)s.len * (size_t)n + 1);
+    for (int i = 0; i < n; i++) memcpy(p + (size_t)i * s.len, s.p, (size_t)s.len);
+    return (GoString){p, s.len * n};
+}
+
+// ---------------------------------------------------------------- bufio.Reader (reads its source up front)
+typedef struct RtBufReader {
+    Slice_u8 data;
+    int pos;
+} RtBufReader;
+GoOpaque *bufio_NewReaderSize(GoIface rd, int size) {
+    (void)size;
+    RtBufReader *r = (RtBufReader *)gc_alloc(sizeof *r);
+    r->data = io_ReadAll(rd).r0;
+    return (GoOpaque *)r;
+}
+Ret_u8__GoIface bufio_Reader_ReadByte(GoOpaque *recv) {
+    RtBufReader *r = (RtBufReader *)recv;
+    if (r->pos >= r->data.len) return (Ret_u8__GoIface){0, io_EOF};
+    return (Ret_u8__GoIface){r->data.p[r->pos++], {0}};
+}
+GoIface bufio_Reader_UnreadByte(GoOpaque *recv) {
+    RtBufReader *r = (RtBufReader *)recv;
+    if (r->pos <= 0) return go_errorf("bufio: invalid use of UnreadByte");
+    r->pos--;
+    return (GoIface){0};
+}
+Ret_int__GoIface bufio_Reader_Read(GoOpaque *recv, Slice_u8 b) {
+    RtBufReader *r = (RtBufReader *)recv;
+    if (r->pos >= r->data.len) return (Ret_int__GoIface){0, io_EOF};
+    int n = r->data.len - r->pos < b.len ? r->data.len - r->pos : b.len;
+    memcpy(b.p, r->data.p + r->pos, (size_t)n);
+    r->pos += n;
+    return (Ret_int__GoIface){n, {0}};
+}
+
+// ---------------------------------------------------------------- misc
+f64 math_Mod(f64 x, f64 y) { return fmod(x, y); }  // exact (IEEE), same as Go
+f64 math_Pow(f64 x, f64 y) { return cvf_pow(x, y); }  // Go's algorithm (core/detmath)
+i32 atomic_AddInt32(i32 *p, i32 d) { return *p += d; }  // single-threaded
+GoIface os_Remove(GoString name) {
+    return remove(go_strz(name)) == 0 ? (GoIface){0} : go_errorf("remove %.*s: failed", name.len, name.p);
+}
+// fmt.Stringer implementations of foreign types (only reached through %v)
+GoString time_Time_String(GoOpaque t) { (void)t; return GOSTR("0001-01-01 00:00:00 +0000 UTC"); }
+GoString time_Location_String(GoOpaque *l) { (void)l; return GOSTR("UTC"); }
+GoString time_Duration_String(i64 d) {
+    char tmp[32];
+    int n = snprintf(tmp, sizeof tmp, "%lldns", (long long)d);
+    return go_bytes2str((Slice_u8){(u8 *)tmp, n, n});
+}
+GoString mgl32_Mat4_String(GoOpaque m) { (void)m; return GOSTR("[mat4]"); }
+GoString image_Point_String(GoImagePoint p) {
+    char tmp[48];
+    int n = snprintf(tmp, sizeof tmp, "(%d,%d)", p.X, p.Y);
+    return go_bytes2str((Slice_u8){(u8 *)tmp, n, n});
+}
+GoString image_Rectangle_String(GoImageRect r) {
+    char tmp[96];
+    int n = snprintf(tmp, sizeof tmp, "(%d,%d)-(%d,%d)", r.Min.X, r.Min.Y, r.Max.X, r.Max.Y);
+    return go_bytes2str((Slice_u8){(u8 *)tmp, n, n});
+}
+GoString binary_littleEndian_String(GoOpaque o) { (void)o; return GOSTR("LittleEndian"); }

@@ -154,7 +154,7 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 		for _, id := range ids {
 			ty := typeByID[id]
 			ms := types.NewMethodSet(ty)
-			sel := ms.Lookup(p.pkg, im.name)
+			sel := ms.Lookup(im.method.Pkg(), im.name)
 			if sel == nil {
 				continue
 			}
@@ -340,9 +340,15 @@ func tidDefines(p *Prog) string {
 		if s, ok := ty.(*types.Slice); ok && basicKind(s.Elem()) == types.Uint8 {
 			out = append(out, fmt.Sprintf("#define GO_TID_S_uint8 %d", id))
 		}
-		if n, ok := base.(*types.Named); ok && n.Obj().Pkg() != nil && n.Obj().Pkg() != p.pkg {
+		if n, ok := base.(*types.Named); ok && n.Obj().Pkg() != nil && !isOwn(n.Obj().Pkg()) {
 			ts := types.TypeString(ty, func(p *types.Package) string { return p.Name() })
 			ts = strings.NewReplacer("*", "P_", ".", "_", "[]", "S_").Replace(ts)
+			ts = strings.Map(func(r rune) rune { // generic instances: Pointer[x] -> Pointer_x_
+				if r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+					return r
+				}
+				return '_'
+			}, ts)
 			out = append(out, fmt.Sprintf("#define GO_TID_%s %d", ts, id))
 		}
 	}

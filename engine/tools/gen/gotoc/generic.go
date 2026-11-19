@@ -122,7 +122,7 @@ func (t *Tx) genericCall(c *ast.CallExpr, fn *types.Func) (string, *types.Signat
 		parts = append(parts, mangle(a))
 	}
 	name := cFuncName(t.p, fn) + "_" + strings.Join(parts, "_")
-	if _, ok := genInsts[name]; !ok && fn.Pkg() == t.p.pkg {
+	if _, ok := genInsts[name]; !ok && isOwn(fn.Pkg()) {
 		gi := &genInst{fn: fn, targs: targs, name: name}
 		genInsts[name] = gi
 		genPending = append(genPending, gi)

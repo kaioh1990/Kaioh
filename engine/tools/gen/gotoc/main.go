@@ -15,6 +15,10 @@ import (
 func main() {
 	p := load(os.Args[1])
 	pkg = p.pkg
+	ownPkgs[p.pkg] = true
+	for pk := range p.own {
+		ownPkgs[pk] = true
+	}
 	if b, err := os.ReadFile(os.Getenv("GENCDEFS_OVERRIDES")); err == nil {
 		for _, ln := range strings.Split(string(b), "\n") {
 			f := strings.Fields(ln)
@@ -45,9 +49,13 @@ func main() {
 		}
 	}
 	var keys []string
+	var initKeys []string // init functions of translated packages always run
+	for _, pk := range p.pkgOrder {
+		initKeys = append(initKeys, p.initFuncs[pk]...)
+	}
 	for _, a := range os.Args[2:] {
 		if strings.HasPrefix(a, "reach:") {
-			for k := range reach(p, strings.Split(strings.TrimPrefix(a, "reach:"), ",")) {
+			for k := range reach(p, append(strings.Split(strings.TrimPrefix(a, "reach:"), ","), initKeys...)) {
 				keys = append(keys, k)
 			}
 			continue
@@ -68,9 +76,12 @@ func main() {
 		}
 		keys = append(keys, a)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		return p.fset.Position(p.funcs[keys[i]].Pos()).Offset < p.fset.Position(p.funcs[keys[j]].Pos()).Offset ||
-			p.fset.Position(p.funcs[keys[i]].Pos()).Filename < p.fset.Position(p.funcs[keys[j]].Pos()).Filename
+	sort.Slice(keys, func(i, j int) bool { // reproducible output: by file, then position
+		pi, pj := p.fset.Position(p.funcs[keys[i]].Pos()), p.fset.Position(p.funcs[keys[j]].Pos())
+		if pi.Filename != pj.Filename {
+			return pi.Filename < pj.Filename
+		}
+		return pi.Offset < pj.Offset
 	})
 	total := 0
 	var stubs []string
@@ -192,20 +203,29 @@ func main() {
 	initTx.out = new(bytesBuffer)
 	initTx.w("void ik_init_globals(void) {")
 	initTx.ind++
-	for _, ini := range p.info.InitOrder {
-		used := false
-		for _, l := range ini.Lhs {
-			if usedGlobals[l] {
-				used = true
+	// Go order: per package (dependencies first), variables then init()
+	for _, pk := range p.pkgOrder {
+		for _, ini := range p.info.InitOrder {
+			if ini.Lhs[0].Pkg() != pk {
+				continue
+			}
+			used := false
+			for _, l := range ini.Lhs {
+				if usedGlobals[l] {
+					used = true
+				}
+			}
+			if !used {
+				continue
+			}
+			if len(ini.Lhs) == 1 {
+				initTx.w("%s = %s;", gName(ini.Lhs[0]), initTx.exprConv(ini.Rhs, ini.Lhs[0].Type()))
+			} else {
+				initTx.w("%s;", initTx.TODO(ini.Rhs, "multi-value package initializer"))
 			}
 		}
-		if !used {
-			continue
-		}
-		if len(ini.Lhs) == 1 {
-			initTx.w("g_%s = %s;", ini.Lhs[0].Name(), initTx.exprConv(ini.Rhs, ini.Lhs[0].Type()))
-		} else {
-			initTx.w("%s;", initTx.TODO(ini.Rhs, "multi-value package initializer"))
+		for _, k := range p.initFuncs[pk] {
+			initTx.w("%s();", initFuncName(p.info.Defs[p.funcs[k].Name].(*types.Func)))
 		}
 	}
 	initTx.ind--
@@ -243,7 +263,7 @@ func main() {
 	}
 	h.WriteString("\n// package variables\n")
 	for _, v := range gvars {
-		fmt.Fprintf(&h, "extern %s g_%s;\n", cbase(v.Type()), v.Name())
+		fmt.Fprintf(&h, "extern %s %s;\n", cbase(v.Type()), gName(v))
 	}
 	h.WriteString("void ik_init_globals(void);\n\n")
 	h.WriteString("GoIface ik_binread_any(GoIface r, GoIface x, int big);\n")
@@ -280,7 +300,7 @@ func main() {
 	}
 	fmt.Println("// ---- package variables")
 	for _, v := range gvars {
-		fmt.Printf("%s g_%s;\n", cbase(v.Type()), v.Name())
+		fmt.Printf("%s %s;\n", cbase(v.Type()), gName(v))
 	}
 	fmt.Println(initTx.out.String())
 	fmt.Println(rtTables)

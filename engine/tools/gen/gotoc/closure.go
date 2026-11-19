@@ -27,7 +27,7 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 			return true
 		}
 		v, ok := t.p.info.Uses[id].(*types.Var)
-		if !ok || v.Parent() == t.p.pkg.Scope() || v.IsField() || v.Pkg() != t.p.pkg {
+		if !ok || v.IsField() || !isOwn(v.Pkg()) || v.Parent() == v.Pkg().Scope() {
 			return true
 		}
 		if v.Pos() < e.Pos() || v.Pos() > e.End() {

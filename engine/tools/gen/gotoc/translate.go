@@ -85,15 +85,24 @@ func cFuncName(p *Prog, obj *types.Func) string {
 			rt = pt.Elem()
 		}
 		if n, ok := rt.(*types.Named); ok {
-			if obj.Pkg() != nil && obj.Pkg() != p.pkg {
+			if obj.Pkg() != nil && !isOwn(obj.Pkg()) {
 				externs[obj] = true
+				return obj.Pkg().Name() + "_" + n.Obj().Name() + "_" + obj.Name()
+			}
+			if obj.Pkg() != nil && obj.Pkg().Name() != "main" {
 				return obj.Pkg().Name() + "_" + n.Obj().Name() + "_" + obj.Name()
 			}
 			return n.Obj().Name() + "_" + obj.Name()
 		}
 	}
-	if obj.Pkg() != p.pkg && obj.Pkg() != nil {
+	if !isOwn(obj.Pkg()) && obj.Pkg() != nil {
 		externs[obj] = true
+		return obj.Pkg().Name() + "_" + obj.Name()
+	}
+	if obj.Name() == "init" && sig.Recv() == nil {
+		return initFuncName(obj)
+	}
+	if obj.Pkg() != nil && obj.Pkg().Name() != "main" {
 		return obj.Pkg().Name() + "_" + obj.Name()
 	}
 	return "fn_" + obj.Name()
@@ -357,7 +366,13 @@ func (t *Tx) stmt(s ast.Stmt) {
 					}
 					ty := t.ctype(obj.Type())
 					if len(sp.Values) > i {
-						t.w("%s", t.declObj(obj, ty, t.exprConv(sp.Values[i], obj.Type())))
+						val := t.exprConv(sp.Values[i], obj.Type())
+						if usesName(sp.Values[i], n.Name) { // var x = f(x): outer x
+							tm := t.newTmp()
+							t.w("%s %s = %s;", ty, tm, val)
+							val = tm
+						}
+						t.w("%s", t.declObj(obj, ty, val))
 					} else {
 						t.w("%s", t.declObj(obj, ty, zeroValue(obj.Type())))
 					}
@@ -896,7 +911,14 @@ func (t *Tx) assign(s *ast.AssignStmt) {
 					t.w("%s = %s;", t.expr(id), t.exprConv(s.Rhs[0], t.typeOf(id)))
 					return
 				}
-				t.w("%s", t.declObj(obj, t.ctype(obj.Type()), t.exprConv(s.Rhs[0], obj.Type())))
+				val := t.exprConv(s.Rhs[0], obj.Type())
+				if usesName(s.Rhs[0], id.Name) {
+					// x := f(x): Go's rhs sees the outer x, C's initializer the new one
+					tm := t.newTmp()
+					t.w("%s %s = %s;", t.ctype(obj.Type()), tm, val)
+					val = tm
+				}
+				t.w("%s", t.declObj(obj, t.ctype(obj.Type()), val))
 				return
 			}
 			t.w("%s;", t.assignExpr(lhs, s.Tok, s.Rhs[0]))
@@ -1056,4 +1078,16 @@ func (t *Tx) assignExpr(lhs ast.Expr, tok token.Token, rhs ast.Expr) string {
 		return l + " &= ~(" + t.exprConv(rhs, lt) + ")"
 	}
 	return l + " " + tok.String() + " " + t.exprConv(rhs, lt)
+}
+
+// usesName reports whether e mentions an identifier spelled name.
+func usesName(e ast.Expr, name string) bool {
+	found := false
+	ast.Inspect(e, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == name {
+			found = true
+		}
+		return !found
+	})
+	return found
 }

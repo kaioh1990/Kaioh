@@ -18,7 +18,92 @@ type Prog struct {
 	files []*ast.File
 	pkg   *types.Package
 	info  *types.Info
-	funcs map[string]*ast.FuncDecl // "Recv.Name" or "Name"
+	funcs map[string]*ast.FuncDecl // "Recv.Name" or "Name"; "pkg.Recv.Name" outside main
+	own   map[*types.Package]bool  // packages translated besides main (GOTOC_PKGS)
+	// initialisation order: packages in dependency order (main last) and
+	// each package's init functions in source order
+	pkgOrder  []*types.Package
+	initFuncs map[*types.Package][]string
+}
+
+// ownPkgs: every translated package, main included (set by main()).
+var ownPkgs = map[*types.Package]bool{}
+
+func isOwn(pk *types.Package) bool { return pk != nil && ownPkgs[pk] }
+
+// keyPrefix: function keys and C names of non-main packages carry the
+// package name ("lua.LState.Push", lua_LState_Push).
+func keyPrefix(pk *types.Package) string {
+	if pk == nil || pk.Name() == "main" {
+		return ""
+	}
+	return pk.Name() + "."
+}
+
+// srcImporter type-checks the GOTOC_PKGS packages from source into the
+// shared types.Info (so their bodies can be translated) and leaves every
+// other import to the default source importer.
+type srcImporter struct {
+	p        *Prog
+	want     map[string]bool
+	fallback types.ImporterFrom
+	done     map[string]*types.Package
+	conf     *types.Config
+}
+
+func (im *srcImporter) Import(path string) (*types.Package, error) { return im.ImportFrom(path, "", 0) }
+
+func (im *srcImporter) ImportFrom(path, dir string, mode types.ImportMode) (*types.Package, error) {
+	if !im.want[path] {
+		return im.fallback.ImportFrom(path, dir, mode)
+	}
+	if pk, ok := im.done[path]; ok {
+		return pk, nil
+	}
+	ctx := build.Default
+	ctx.CgoEnabled = false
+	bp, err := ctx.Import(path, dir, 0)
+	if err != nil {
+		return nil, err
+	}
+	var files []*ast.File
+	for _, f := range bp.GoFiles {
+		af, err := parser.ParseFile(im.p.fset, filepath.Join(bp.Dir, f), nil, parser.ParseComments)
+		if err == nil {
+			files = append(files, af)
+		}
+	}
+	pk, _ := im.conf.Check(path, im.p.fset, files, im.p.info)
+	im.done[path] = pk
+	im.p.own[pk] = true
+	im.p.pkgOrder = append(im.p.pkgOrder, pk)
+	for _, f := range files {
+		im.p.addFuncs(f, pk)
+	}
+	return pk, nil
+}
+
+func (p *Prog) addFuncs(f *ast.File, pk *types.Package) {
+	for _, d := range f.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if p.info.Defs[fd.Name] == nil {
+			fmt.Fprintln(os.Stderr, "skipping undeclared func", funcKey(fd), p.fset.Position(fd.Pos()))
+			continue
+		}
+		if fd.Name.Name == "init" && fd.Recv == nil {
+			if pk.Name() == "main" {
+				continue // main's init functions are platform setup (thread locking)
+			}
+			k := fmt.Sprintf("%sinit#%d", keyPrefix(pk), len(p.initFuncs[pk]))
+			p.initFuncs[pk] = append(p.initFuncs[pk], k)
+			p.funcs[k] = fd
+			continue
+		}
+		p.funcs[keyPrefix(pk)+funcKey(fd)] = fd
+	}
 }
 
 func load(dir string) *Prog {
@@ -26,7 +111,7 @@ func load(dir string) *Prog {
 	ctx.BuildTags = []string{"vita"}
 	ctx.CgoEnabled = true // keep cgo files of the main package (FakeImportC)
 	bp, _ := ctx.ImportDir(dir, 0)
-	p := &Prog{fset: token.NewFileSet(), funcs: map[string]*ast.FuncDecl{}}
+	p := &Prog{fset: token.NewFileSet(), funcs: map[string]*ast.FuncDecl{}, own: map[*types.Package]bool{}, initFuncs: map[*types.Package][]string{}}
 	for _, f := range append(bp.GoFiles, bp.CgoFiles...) {
 		af, err := parser.ParseFile(p.fset, filepath.Join(dir, f), nil, parser.ParseComments)
 		if err == nil {
@@ -41,24 +126,24 @@ func load(dir string) *Prog {
 		Instances:  map[*ast.Ident]types.Instance{},
 		Implicits:  map[ast.Node]types.Object{},
 	}
-	conf := types.Config{FakeImportC: true, Importer: importer.ForCompiler(p.fset, "source", nil), Error: func(err error) {
+	errf := func(err error) {
 		if f := os.Getenv("GOTOC_TYPE_ERRORS"); f != "" && strings.Contains(err.Error(), f) {
 			fmt.Fprintln(os.Stderr, "type error:", err)
 		}
-	}}
-	p.pkg, _ = conf.Check("main", p.fset, p.files, p.info)
-	for _, f := range p.files {
-		for _, d := range f.Decls {
-			fd, ok := d.(*ast.FuncDecl)
-			if !ok {
-				continue
-			}
-			if p.info.Defs[fd.Name] == nil {
-				fmt.Fprintln(os.Stderr, "skipping undeclared func", funcKey(fd), p.fset.Position(fd.Pos()))
-				continue
-			}
-			p.funcs[funcKey(fd)] = fd
+	}
+	im := &srcImporter{p: p, want: map[string]bool{}, done: map[string]*types.Package{},
+		fallback: importer.ForCompiler(p.fset, "source", nil).(types.ImporterFrom)}
+	for _, path := range strings.Split(os.Getenv("GOTOC_PKGS"), ",") {
+		if path != "" {
+			im.want[path] = true
 		}
+	}
+	im.conf = &types.Config{Importer: im, Error: errf}
+	conf := types.Config{FakeImportC: true, Importer: im, Error: errf}
+	p.pkg, _ = conf.Check("main", p.fset, p.files, p.info)
+	p.pkgOrder = append(p.pkgOrder, p.pkg)
+	for _, f := range p.files {
+		p.addFuncs(f, p.pkg)
 	}
 	return p
 }
@@ -75,4 +160,29 @@ func funcKey(fd *ast.FuncDecl) string {
 		t = ix.X
 	}
 	return t.(*ast.Ident).Name + "." + fd.Name.Name
+}
+
+// gName: C name of an own package-level variable.
+func gName(v *types.Var) string {
+	if v.Pkg() != nil && v.Pkg().Name() != "main" {
+		return "g_" + v.Pkg().Name() + "_" + v.Name()
+	}
+	return "g_" + v.Name()
+}
+
+// init functions: one C function per declaration, run by ik_init_globals.
+var initNames = map[*types.Func]string{}
+var initOrderFns []*types.Func
+
+func initFuncName(fn *types.Func) string {
+	if n, ok := initNames[fn]; ok {
+		return n
+	}
+	pfx := "fn_"
+	if fn.Pkg() != nil && fn.Pkg().Name() != "main" {
+		pfx = fn.Pkg().Name() + "_"
+	}
+	n := fmt.Sprintf("%sinit_%d", pfx, len(initNames))
+	initNames[fn] = n
+	return n
 }

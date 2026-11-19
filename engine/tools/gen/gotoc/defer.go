@@ -49,7 +49,7 @@ func heapVarsOf(p *Prog, region ast.Node) (map[types.Object]bool, map[types.Obje
 			break
 		}
 		if id, ok := x.(*ast.Ident); ok {
-			if v, ok := p.info.Uses[id].(*types.Var); ok && !v.IsField() && v.Parent() != p.pkg.Scope() && v.Pkg() == p.pkg &&
+			if v, ok := p.info.Uses[id].(*types.Var); ok && !v.IsField() && isOwn(v.Pkg()) && v.Parent() != v.Pkg().Scope() &&
 				v.Pos() >= region.Pos() && v.Pos() <= region.End() {
 				out[v] = true
 			}
@@ -76,7 +76,7 @@ func heapVarsOf(p *Prog, region ast.Node) (map[types.Object]bool, map[types.Obje
 				return true
 			}
 			v, ok := p.info.Uses[id].(*types.Var)
-			if !ok || v.IsField() || v.Parent() == p.pkg.Scope() || v.Pkg() != p.pkg {
+			if !ok || v.IsField() || !isOwn(v.Pkg()) || v.Parent() == v.Pkg().Scope() {
 				return true
 			}
 			if v.Pos() < region.Pos() || v.Pos() > region.End() {
@@ -197,7 +197,7 @@ func (t *Tx) deferStmt(s *ast.DeferStmt) {
 	switch {
 	case fn != nil && !isSel:
 		call = fmt.Sprintf("%s(%s)", cFuncName(t.p, fn), strings.Join(temps, ", "))
-		if fn.Pkg() != t.p.pkg {
+		if !isOwn(fn.Pkg()) {
 			externs[fn] = true
 		}
 	case fn != nil && isSel && t.p.info.Selections[se] == nil:

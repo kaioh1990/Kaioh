@@ -166,9 +166,9 @@ func (t *Tx) ident(e *ast.Ident) string {
 	}
 	switch o := obj.(type) {
 	case *types.Var:
-		if o.Parent() == t.p.pkg.Scope() {
+		if o.Pkg() != nil && o.Parent() == o.Pkg().Scope() && isOwn(o.Pkg()) {
 			usedGlobals[o] = true
-			return "g_" + o.Name() // package-level variable
+			return gName(o) // package-level variable
 		}
 		if t.captured[o] {
 			return "(*_env->" + cVarName(e.Name) + ")"
@@ -192,8 +192,14 @@ func (t *Tx) selector(e *ast.SelectorExpr) string {
 	if id, ok := e.X.(*ast.Ident); ok {
 		if pn, ok := t.p.info.Uses[id].(*types.PkgName); ok {
 			if fn, ok := t.p.info.Uses[e.Sel].(*types.Func); ok {
-				externs[fn] = true
+				if !isOwn(fn.Pkg()) {
+					externs[fn] = true
+				}
 				return t.funcValue(fn)
+			}
+			if v, ok := t.p.info.Uses[e.Sel].(*types.Var); ok && isOwn(v.Pkg()) {
+				usedGlobals[v] = true
+				return gName(v)
 			}
 			if c, ok := t.p.info.Uses[e.Sel].(*types.Const); ok {
 				return constLit(c.Val(), c.Type())
@@ -478,7 +484,7 @@ func (t *Tx) sliceExpr(e *ast.SliceExpr) string {
 
 func (t *Tx) composite(e *ast.CompositeLit) string {
 	ty := t.typeOf(e)
-	if n, ok := ty.(*types.Named); ok && n.Obj().Pkg() != nil && n.Obj().Pkg() != t.p.pkg {
+	if n, ok := ty.(*types.Named); ok && n.Obj().Pkg() != nil && !isOwn(n.Obj().Pkg()) {
 		if _, isStruct := n.Underlying().(*types.Struct); isStruct {
 			// standard-library struct values are opaque in C
 			if _, mapped := extStructs[types.TypeString(n, qual)]; mapped {

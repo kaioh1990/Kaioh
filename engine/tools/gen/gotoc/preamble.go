@@ -89,6 +89,16 @@ func typePreamble() string {
 	for _, n := range keys(anm) {
 		fmt.Fprintf(&b, "typedef struct %s %s;\n", n, n)
 	}
+	// named non-struct types whose C type needs no slice/map/array typedef
+	// (interfaces, numbers, funcs, pointers) come before the slices of them
+	earlyLocal := map[string]bool{}
+	for _, n := range keys(ln) {
+		switch localTypes[n].Underlying().(type) {
+		case *types.Interface, *types.Basic, *types.Signature, *types.Pointer:
+			fmt.Fprintf(&b, "typedef %s %s;\n", cbase(localTypes[n].Underlying()), n)
+			earlyLocal[n] = true
+		}
+	}
 	for _, n := range keys(sn) {
 		fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef struct { %s *p; int len, cap; } %s;\n#endif\n", n, n, cbase(sliceTypes[n]), n)
 	}
@@ -96,7 +106,7 @@ func typePreamble() string {
 		fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef GoMap %s;\n#endif\n", n, n, n)
 	}
 	for _, n := range keys(ln) {
-		if _, ok := localTypes[n].Underlying().(*types.Struct); !ok {
+		if _, ok := localTypes[n].Underlying().(*types.Struct); !ok && !earlyLocal[n] {
 			fmt.Fprintf(&b, "typedef %s %s;\n", cbase(localTypes[n].Underlying()), n)
 		}
 	}

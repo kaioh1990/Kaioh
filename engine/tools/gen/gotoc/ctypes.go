@@ -23,15 +23,29 @@ func fmtFloat_unused(f float64) string {
 }
 
 func isPkgNamed(t types.Type) (string, bool) {
-	if n, ok := t.(*types.Named); ok && n.Obj().Pkg() == pkg {
-		if n.Obj().Parent() != nil && n.Obj().Parent() != pkg.Scope() {
+	if n, ok := t.(*types.Named); ok && isOwn(n.Obj().Pkg()) {
+		pk := n.Obj().Pkg()
+		pfx := ""
+		if pk != pkg {
+			pfx = pk.Name() + "_"
+		}
+		if n.Obj().Parent() != nil && n.Obj().Parent() != pk.Scope() {
 			// function-local type: unique name, body emitted by typePreamble
 			pos := fmt.Sprint(n.Obj().Pos())
 			h := uint32(2166136261)
 			for i := 0; i < len(pos); i++ {
 				h = (h ^ uint32(pos[i])) * 16777619
 			}
-			name := fmt.Sprintf("%s_L%06x", n.Obj().Name(), h&0xffffff)
+			name := fmt.Sprintf("%s%s_L%06x", pfx, n.Obj().Name(), h&0xffffff)
+			localTypes[name] = n
+			return name, true
+		}
+		if pfx != "" {
+			// types of other translated packages: bodies emitted like local types
+			name := pfx + n.Obj().Name()
+			if n.TypeArgs().Len() > 0 {
+				name += "_" + mangleTypeArgs(n)
+			}
 			localTypes[name] = n
 			return name, true
 		}
@@ -296,4 +310,12 @@ func isInvalid(ty types.Type) bool {
 		return isInvalid(p.Elem())
 	}
 	return false
+}
+
+func mangleTypeArgs(n *types.Named) string {
+	var parts []string
+	for i := 0; i < n.TypeArgs().Len(); i++ {
+		parts = append(parts, mangle(n.TypeArgs().At(i)))
+	}
+	return strings.Join(parts, "_")
 }

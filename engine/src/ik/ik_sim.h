@@ -5,9 +5,17 @@
 #include "core/gen_consts.h"
 #include "ik/ik_rt_types.h"
 
+#ifndef CVF_DEF_Arr0_Anon_84767b5c
+#define CVF_DEF_Arr0_Anon_84767b5c
+typedef struct Arr0_Anon_84767b5c Arr0_Anon_84767b5c;
+#endif
 #ifndef CVF_DEF_Arr0_GoOpaque_os_dirInfoPtrPtr
 #define CVF_DEF_Arr0_GoOpaque_os_dirInfoPtrPtr
 typedef struct Arr0_GoOpaque_os_dirInfoPtrPtr Arr0_GoOpaque_os_dirInfoPtrPtr;
+#endif
+#ifndef CVF_DEF_Arr0_GoString
+#define CVF_DEF_Arr0_GoString
+typedef struct Arr0_GoString Arr0_GoString;
 #endif
 #ifndef CVF_DEF_Arr100_GoString
 #define CVF_DEF_Arr100_GoString
@@ -28,6 +36,14 @@ typedef struct Arr10_Arr2_GoString Arr10_Arr2_GoString;
 #ifndef CVF_DEF_Arr10_CommandKey
 #define CVF_DEF_Arr10_CommandKey
 typedef struct Arr10_CommandKey Arr10_CommandKey;
+#endif
+#ifndef CVF_DEF_Arr126_i8
+#define CVF_DEF_Arr126_i8
+typedef struct Arr126_i8 Arr126_i8;
+#endif
+#ifndef CVF_DEF_Arr128_lua_LValue
+#define CVF_DEF_Arr128_lua_LValue
+typedef struct Arr128_lua_LValue Arr128_lua_LValue;
 #endif
 #ifndef CVF_DEF_Arr12_AiInput
 #define CVF_DEF_Arr12_AiInput
@@ -97,6 +113,22 @@ typedef struct Arr16_Anon_bfbab8ed Arr16_Anon_bfbab8ed;
 #define CVF_DEF_Arr16_f32
 typedef struct Arr16_f32 Arr16_f32;
 #endif
+#ifndef CVF_DEF_Arr16_parse_yySymType
+#define CVF_DEF_Arr16_parse_yySymType
+typedef struct Arr16_parse_yySymType Arr16_parse_yySymType;
+#endif
+#ifndef CVF_DEF_Arr193_i16
+#define CVF_DEF_Arr193_i16
+typedef struct Arr193_i16 Arr193_i16;
+#endif
+#ifndef CVF_DEF_Arr193_i8
+#define CVF_DEF_Arr193_i8
+typedef struct Arr193_i8 Arr193_i8;
+#endif
+#ifndef CVF_DEF_Arr1_i8
+#define CVF_DEF_Arr1_i8
+typedef struct Arr1_i8 Arr1_i8;
+#endif
 #ifndef CVF_DEF_Arr1_u8
 #define CVF_DEF_Arr1_u8
 typedef struct Arr1_u8 Arr1_u8;
@@ -108,6 +140,10 @@ typedef struct Arr20_FSBgTextSnd Arr20_FSBgTextSnd;
 #ifndef CVF_DEF_Arr20_u64
 #define CVF_DEF_Arr20_u64
 typedef struct Arr20_u64 Arr20_u64;
+#endif
+#ifndef CVF_DEF_Arr22_i8
+#define CVF_DEF_Arr22_i8
+typedef struct Arr22_i8 Arr22_i8;
 #endif
 #ifndef CVF_DEF_Arr256_bool
 #define CVF_DEF_Arr256_bool
@@ -124,6 +160,10 @@ typedef struct Arr256_u32 Arr256_u32;
 #ifndef CVF_DEF_Arr256_u64
 #define CVF_DEF_Arr256_u64
 typedef struct Arr256_u64 Arr256_u64;
+#endif
+#ifndef CVF_DEF_Arr26_u8
+#define CVF_DEF_Arr26_u8
+typedef struct Arr26_u8 Arr26_u8;
 #endif
 #ifndef CVF_DEF_Arr2_AnimLayout
 #define CVF_DEF_Arr2_AnimLayout
@@ -253,6 +293,10 @@ typedef struct Arr32_cmdNameCacheEnt Arr32_cmdNameCacheEnt;
 #define CVF_DEF_Arr32_varCacheEnt
 typedef struct Arr32_varCacheEnt Arr32_varCacheEnt;
 #endif
+#ifndef CVF_DEF_Arr35_i8
+#define CVF_DEF_Arr35_i8
+typedef struct Arr35_i8 Arr35_i8;
+#endif
 #ifndef CVF_DEF_Arr3_BytecodeExp
 #define CVF_DEF_Arr3_BytecodeExp
 typedef struct Arr3_BytecodeExp Arr3_BytecodeExp;
@@ -292,6 +336,10 @@ typedef struct Arr3_u16 Arr3_u16;
 #ifndef CVF_DEF_Arr3_u8
 #define CVF_DEF_Arr3_u8
 typedef struct Arr3_u8 Arr3_u8;
+#endif
+#ifndef CVF_DEF_Arr42_lua_instFunc
+#define CVF_DEF_Arr42_lua_instFunc
+typedef struct Arr42_lua_instFunc Arr42_lua_instFunc;
 #endif
 #ifndef CVF_DEF_Arr4_Arr2_f32
 #define CVF_DEF_Arr4_Arr2_f32
@@ -357,9 +405,17 @@ typedef struct Arr4_u16 Arr4_u16;
 #define CVF_DEF_Arr4_u8
 typedef struct Arr4_u8 Arr4_u8;
 #endif
+#ifndef CVF_DEF_Arr56_GoString
+#define CVF_DEF_Arr56_GoString
+typedef struct Arr56_GoString Arr56_GoString;
+#endif
 #ifndef CVF_DEF_Arr5_f64
 #define CVF_DEF_Arr5_f64
 typedef struct Arr5_f64 Arr5_f64;
+#endif
+#ifndef CVF_DEF_Arr616_u8
+#define CVF_DEF_Arr616_u8
+typedef struct Arr616_u8 Arr616_u8;
 #endif
 #ifndef CVF_DEF_Arr6_CommandKey
 #define CVF_DEF_Arr6_CommandKey
@@ -429,6 +485,14 @@ typedef struct Arr8_f32 Arr8_f32;
 #define CVF_DEF_Arr8_i32
 typedef struct Arr8_i32 Arr8_i32;
 #endif
+#ifndef CVF_DEF_Arr8_lua_callFrame
+#define CVF_DEF_Arr8_lua_callFrame
+typedef struct Arr8_lua_callFrame Arr8_lua_callFrame;
+#endif
+#ifndef CVF_DEF_Arr97_i8
+#define CVF_DEF_Arr97_i8
+typedef struct Arr97_i8 Arr97_i8;
+#endif
 #ifndef CVF_DEF_Arr9_AnimTextSnd
 #define CVF_DEF_Arr9_AnimTextSnd
 typedef struct Arr9_AnimTextSnd Arr9_AnimTextSnd;
@@ -441,6 +505,10 @@ typedef struct Arr9_Anon_f8c1b65b Arr9_Anon_f8c1b65b;
 #define CVF_DEF_Arr9_Arr2_i32
 typedef struct Arr9_Arr2_i32 Arr9_Arr2_i32;
 #endif
+#ifndef CVF_DEF_Arr9_GoString
+#define CVF_DEF_Arr9_GoString
+typedef struct Arr9_GoString Arr9_GoString;
+#endif
 #ifndef CVF_DEF_Arr9_bool
 #define CVF_DEF_Arr9_bool
 typedef struct Arr9_bool Arr9_bool;
@@ -449,22 +517,126 @@ typedef struct Arr9_bool Arr9_bool;
 #define CVF_DEF_Arr9_f32
 typedef struct Arr9_f32 Arr9_f32;
 #endif
+typedef struct ast_ArithmeticOpExpr ast_ArithmeticOpExpr;
+typedef struct ast_AssignStmt ast_AssignStmt;
+typedef struct ast_AttrGetExpr ast_AttrGetExpr;
+typedef struct ast_BreakStmt ast_BreakStmt;
+typedef struct ast_Comma3Expr ast_Comma3Expr;
+typedef struct ast_ConstExprBase ast_ConstExprBase;
+typedef struct ast_DoBlockStmt ast_DoBlockStmt;
+typedef struct ast_ExprBase ast_ExprBase;
+typedef struct ast_FalseExpr ast_FalseExpr;
+typedef struct ast_Field ast_Field;
+typedef struct ast_FuncCallExpr ast_FuncCallExpr;
+typedef struct ast_FuncCallStmt ast_FuncCallStmt;
+typedef struct ast_FuncDefStmt ast_FuncDefStmt;
+typedef struct ast_FuncName ast_FuncName;
+typedef struct ast_FunctionExpr ast_FunctionExpr;
+typedef struct ast_GenericForStmt ast_GenericForStmt;
+typedef struct ast_GotoStmt ast_GotoStmt;
+typedef struct ast_IdentExpr ast_IdentExpr;
+typedef struct ast_IfStmt ast_IfStmt;
+typedef struct ast_LabelStmt ast_LabelStmt;
+typedef struct ast_LocalAssignStmt ast_LocalAssignStmt;
+typedef struct ast_LogicalOpExpr ast_LogicalOpExpr;
+typedef struct ast_NilExpr ast_NilExpr;
+typedef struct ast_Node ast_Node;
+typedef struct ast_NumberExpr ast_NumberExpr;
+typedef struct ast_NumberForStmt ast_NumberForStmt;
+typedef struct ast_ParList ast_ParList;
+typedef struct ast_Position ast_Position;
+typedef struct ast_RelationalOpExpr ast_RelationalOpExpr;
+typedef struct ast_RepeatStmt ast_RepeatStmt;
+typedef struct ast_ReturnStmt ast_ReturnStmt;
+typedef struct ast_StmtBase ast_StmtBase;
+typedef struct ast_StringConcatOpExpr ast_StringConcatOpExpr;
+typedef struct ast_StringExpr ast_StringExpr;
+typedef struct ast_TableExpr ast_TableExpr;
+typedef struct ast_Token ast_Token;
+typedef struct ast_TrueExpr ast_TrueExpr;
+typedef struct ast_UnaryLenOpExpr ast_UnaryLenOpExpr;
+typedef struct ast_UnaryMinusOpExpr ast_UnaryMinusOpExpr;
+typedef struct ast_UnaryNotOpExpr ast_UnaryNotOpExpr;
+typedef struct ast_WhileStmt ast_WhileStmt;
 typedef struct fontSpec_L5dbadc fontSpec_L5dbadc;
 typedef struct fontSpec_L7f0e5c fontSpec_L7f0e5c;
 typedef struct kv_L9db1e9 kv_L9db1e9;
+typedef struct lua_ApiError lua_ApiError;
+typedef struct lua_CompileError lua_CompileError;
+typedef struct lua_DbgCall lua_DbgCall;
+typedef struct lua_DbgLocalInfo lua_DbgLocalInfo;
+typedef struct lua_Debug lua_Debug;
+typedef struct lua_FunctionProto lua_FunctionProto;
+typedef struct lua_Global lua_Global;
+typedef struct lua_LFunction lua_LFunction;
+typedef struct lua_LNilType lua_LNilType;
+typedef struct lua_LState lua_LState;
+typedef struct lua_LTable lua_LTable;
+typedef struct lua_LUserData lua_LUserData;
+typedef struct lua_Options lua_Options;
+typedef struct lua_P lua_P;
+typedef struct lua_Upvalue lua_Upvalue;
+typedef struct lua_allocator lua_allocator;
+typedef struct lua_assigncontext lua_assigncontext;
+typedef struct lua_autoGrowingCallFrameStack lua_autoGrowingCallFrameStack;
+typedef struct lua_callFrame lua_callFrame;
+typedef struct lua_callFrameStackSegment lua_callFrameStackSegment;
+typedef struct lua_codeBlock lua_codeBlock;
+typedef struct lua_codeStore lua_codeStore;
+typedef struct lua_constLValueExpr lua_constLValueExpr;
+typedef struct lua_expcontext lua_expcontext;
+typedef struct lua_fixedCallFrameStack lua_fixedCallFrameStack;
+typedef struct lua_flagScanner lua_flagScanner;
+typedef struct lua_funcContext lua_funcContext;
+typedef struct lua_gotoLabelDesc lua_gotoLabelDesc;
+typedef struct lua_iface lua_iface;
+typedef struct lua_lFile lua_lFile;
+typedef struct lua_lValueArraySorter lua_lValueArraySorter;
+typedef struct lua_lblabels lua_lblabels;
+typedef struct lua_opProp lua_opProp;
+typedef struct lua_registry lua_registry;
+typedef struct lua_varNamePool lua_varNamePool;
+typedef struct lua_varNamePoolValue lua_varNamePoolValue;
 typedef struct ov_L267e05 ov_L267e05;
 typedef struct pair_L97e23b pair_L97e23b;
 typedef struct pair_Ld68840 pair_Ld68840;
+typedef struct parse_Error parse_Error;
+typedef struct parse_Lexer parse_Lexer;
+typedef struct parse_Scanner parse_Scanner;
+typedef struct parse_yyParserImpl parse_yyParserImpl;
+typedef struct parse_yySymType parse_yySymType;
+typedef struct pm_Error pm_Error;
 typedef struct pv_Lad4e0a pv_Lad4e0a;
 typedef struct qvPlayer_L280889 qvPlayer_L280889;
 typedef struct slotRef_L806444 slotRef_L806444;
 typedef struct spec_Ldfe552 spec_Ldfe552;
 typedef struct Anon_3c59f47a Anon_3c59f47a;
+typedef struct Anon_84767b5c Anon_84767b5c;
 typedef struct Anon_8aabe1e9 Anon_8aabe1e9;
 typedef struct Anon_dcdcacfc Anon_dcdcacfc;
 typedef struct Anon_ec483023 Anon_ec483023;
 typedef struct Anon_ed5d50f3 Anon_ed5d50f3;
 typedef struct Anon_f8c1b65b Anon_f8c1b65b;
+typedef GoIface ast_Expr;
+typedef GoIface ast_PositionHolder;
+typedef GoIface ast_Stmt;
+typedef int lua_ApiErrorType;
+typedef bool lua_LBool;
+typedef GoFunc lua_LGFunction;
+typedef f64 lua_LNumber;
+typedef GoString lua_LString;
+typedef GoIface lua_LValue;
+typedef int lua_LValueType;
+typedef GoIface lua_callFrameStack;
+typedef int lua_expContextType;
+typedef GoFunc lua_instFunc;
+typedef int lua_lFileType;
+typedef int lua_opArgMode;
+typedef int lua_opType;
+typedef GoIface lua_registryHandler;
+typedef u16 lua_segIdx;
+typedef GoIface parse_yyLexer;
+typedef GoIface parse_yyParser;
 #ifndef CVF_DEF_Slice_AnimFrame
 #define CVF_DEF_Slice_AnimFrame
 typedef struct { AnimFrame *p; int len, cap; } Slice_AnimFrame;
@@ -628,6 +800,10 @@ typedef struct { GoOpaque /* ini.Section */* *p; int len, cap; } Slice_GoOpaque_
 #ifndef CVF_DEF_Slice_GoOpaque_invalidtypePtr
 #define CVF_DEF_Slice_GoOpaque_invalidtypePtr
 typedef struct { GoOpaque /* invalid type */ *p; int len, cap; } Slice_GoOpaque_invalidtypePtr;
+#endif
+#ifndef CVF_DEF_Slice_GoOpaque_os_FilePtrPtr
+#define CVF_DEF_Slice_GoOpaque_os_FilePtrPtr
+typedef struct { GoOpaque /* os.File */* *p; int len, cap; } Slice_GoOpaque_os_FilePtrPtr;
 #endif
 #ifndef CVF_DEF_Slice_GoOpaque_reflect_ValuePtr
 #define CVF_DEF_Slice_GoOpaque_reflect_ValuePtr
@@ -841,6 +1017,18 @@ typedef struct { TextureAtlas* *p; int len, cap; } Slice_TextureAtlasPtr;
 #define CVF_DEF_Slice_WinType
 typedef struct { WinType *p; int len, cap; } Slice_WinType;
 #endif
+#ifndef CVF_DEF_Slice_ast_Expr
+#define CVF_DEF_Slice_ast_Expr
+typedef struct { ast_Expr *p; int len, cap; } Slice_ast_Expr;
+#endif
+#ifndef CVF_DEF_Slice_ast_FieldPtr
+#define CVF_DEF_Slice_ast_FieldPtr
+typedef struct { ast_Field* *p; int len, cap; } Slice_ast_FieldPtr;
+#endif
+#ifndef CVF_DEF_Slice_ast_Stmt
+#define CVF_DEF_Slice_ast_Stmt
+typedef struct { ast_Stmt *p; int len, cap; } Slice_ast_Stmt;
+#endif
 #ifndef CVF_DEF_Slice_backGroundPtr
 #define CVF_DEF_Slice_backGroundPtr
 typedef struct { backGround* *p; int len, cap; } Slice_backGroundPtr;
@@ -877,6 +1065,10 @@ typedef struct { f32 *p; int len, cap; } Slice_f32;
 #define CVF_DEF_Slice_f32Ptr
 typedef struct { f32* *p; int len, cap; } Slice_f32Ptr;
 #endif
+#ifndef CVF_DEF_Slice_f64
+#define CVF_DEF_Slice_f64
+typedef struct { f64 *p; int len, cap; } Slice_f64;
+#endif
 #ifndef CVF_DEF_Slice_i16
 #define CVF_DEF_Slice_i16
 typedef struct { i16 *p; int len, cap; } Slice_i16;
@@ -905,6 +1097,50 @@ typedef struct { int *p; int len, cap; } Slice_int;
 #define CVF_DEF_Slice_kv_L9db1e9
 typedef struct { kv_L9db1e9 *p; int len, cap; } Slice_kv_L9db1e9;
 #endif
+#ifndef CVF_DEF_Slice_lua_DbgCall
+#define CVF_DEF_Slice_lua_DbgCall
+typedef struct { lua_DbgCall *p; int len, cap; } Slice_lua_DbgCall;
+#endif
+#ifndef CVF_DEF_Slice_lua_DbgLocalInfoPtr
+#define CVF_DEF_Slice_lua_DbgLocalInfoPtr
+typedef struct { lua_DbgLocalInfo* *p; int len, cap; } Slice_lua_DbgLocalInfoPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_FunctionProtoPtr
+#define CVF_DEF_Slice_lua_FunctionProtoPtr
+typedef struct { lua_FunctionProto* *p; int len, cap; } Slice_lua_FunctionProtoPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_LValue
+#define CVF_DEF_Slice_lua_LValue
+typedef struct { lua_LValue *p; int len, cap; } Slice_lua_LValue;
+#endif
+#ifndef CVF_DEF_Slice_lua_UpvaluePtr
+#define CVF_DEF_Slice_lua_UpvaluePtr
+typedef struct { lua_Upvalue* *p; int len, cap; } Slice_lua_UpvaluePtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_assigncontextPtr
+#define CVF_DEF_Slice_lua_assigncontextPtr
+typedef struct { lua_assigncontext* *p; int len, cap; } Slice_lua_assigncontextPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_callFrame
+#define CVF_DEF_Slice_lua_callFrame
+typedef struct { lua_callFrame *p; int len, cap; } Slice_lua_callFrame;
+#endif
+#ifndef CVF_DEF_Slice_lua_callFrameStackSegmentPtr
+#define CVF_DEF_Slice_lua_callFrameStackSegmentPtr
+typedef struct { lua_callFrameStackSegment* *p; int len, cap; } Slice_lua_callFrameStackSegmentPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_codeBlockPtr
+#define CVF_DEF_Slice_lua_codeBlockPtr
+typedef struct { lua_codeBlock* *p; int len, cap; } Slice_lua_codeBlockPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_opProp
+#define CVF_DEF_Slice_lua_opProp
+typedef struct { lua_opProp *p; int len, cap; } Slice_lua_opProp;
+#endif
+#ifndef CVF_DEF_Slice_lua_varNamePoolValue
+#define CVF_DEF_Slice_lua_varNamePoolValue
+typedef struct { lua_varNamePoolValue *p; int len, cap; } Slice_lua_varNamePoolValue;
+#endif
 #ifndef CVF_DEF_Slice_nameFact
 #define CVF_DEF_Slice_nameFact
 typedef struct { nameFact *p; int len, cap; } Slice_nameFact;
@@ -920,6 +1156,10 @@ typedef struct { pair_L97e23b *p; int len, cap; } Slice_pair_L97e23b;
 #ifndef CVF_DEF_Slice_pair_Ld68840
 #define CVF_DEF_Slice_pair_Ld68840
 typedef struct { pair_Ld68840 *p; int len, cap; } Slice_pair_Ld68840;
+#endif
+#ifndef CVF_DEF_Slice_parse_yySymType
+#define CVF_DEF_Slice_parse_yySymType
+typedef struct { parse_yySymType *p; int len, cap; } Slice_parse_yySymType;
 #endif
 #ifndef CVF_DEF_Slice_pv_Lad4e0a
 #define CVF_DEF_Slice_pv_Lad4e0a
@@ -1145,6 +1385,14 @@ typedef GoMap Map_GoString_f32;
 #define CVF_DEF_Map_GoString_int
 typedef GoMap Map_GoString_int;
 #endif
+#ifndef CVF_DEF_Map_GoString_lua_LValue
+#define CVF_DEF_Map_GoString_lua_LValue
+typedef GoMap Map_GoString_lua_LValue;
+#endif
+#ifndef CVF_DEF_Map_GoString_lua_gotoLabelDescPtr
+#define CVF_DEF_Map_GoString_lua_gotoLabelDescPtr
+typedef GoMap Map_GoString_lua_gotoLabelDescPtr;
+#endif
 #ifndef CVF_DEF_Map_GoString_scFunc
 #define CVF_DEF_Map_GoString_scFunc
 typedef GoMap Map_GoString_scFunc;
@@ -1281,6 +1529,22 @@ typedef GoMap Map_int_fontSpec_L7f0e5c;
 #define CVF_DEF_Map_int_int
 typedef GoMap Map_int_int;
 #endif
+#ifndef CVF_DEF_Map_int_lua_LValue
+#define CVF_DEF_Map_int_lua_LValue
+typedef GoMap Map_int_lua_LValue;
+#endif
+#ifndef CVF_DEF_Map_int_lua_gotoLabelDescPtr
+#define CVF_DEF_Map_int_lua_gotoLabelDescPtr
+typedef GoMap Map_int_lua_gotoLabelDescPtr;
+#endif
+#ifndef CVF_DEF_Map_lua_LValue_int
+#define CVF_DEF_Map_lua_LValue_int
+typedef GoMap Map_lua_LValue_int;
+#endif
+#ifndef CVF_DEF_Map_lua_LValue_lua_LValue
+#define CVF_DEF_Map_lua_LValue_lua_LValue
+typedef GoMap Map_lua_LValue_lua_LValue;
+#endif
 #ifndef CVF_DEF_Map_u16_GoFunc
 #define CVF_DEF_Map_u16_GoFunc
 typedef GoMap Map_u16_GoFunc;
@@ -1297,9 +1561,19 @@ typedef GoMap Map_u32Ptr_GoIface;
 #define CVF_DEF_Map_u32_Slice_f32
 typedef GoMap Map_u32_Slice_f32;
 #endif
+typedef GoOpaque /* chan */ lua_LChannel;
+struct Anon_84767b5c { int state; int token; GoString msg; };
+#ifndef CVF_BODY_Arr0_Anon_84767b5c
+#define CVF_BODY_Arr0_Anon_84767b5c
+struct Arr0_Anon_84767b5c { Anon_84767b5c v[0]; };
+#endif
 #ifndef CVF_BODY_Arr0_GoOpaque_os_dirInfoPtrPtr
 #define CVF_BODY_Arr0_GoOpaque_os_dirInfoPtrPtr
 struct Arr0_GoOpaque_os_dirInfoPtrPtr { GoOpaque /* os.dirInfo */* v[0]; };
+#endif
+#ifndef CVF_BODY_Arr0_GoString
+#define CVF_BODY_Arr0_GoString
+struct Arr0_GoString { GoString v[0]; };
 #endif
 #ifndef CVF_BODY_Arr100_GoString
 #define CVF_BODY_Arr100_GoString
@@ -1324,6 +1598,14 @@ struct Arr10_Arr2_GoString { Arr2_GoString v[10]; };
 #ifndef CVF_BODY_Arr10_CommandKey
 #define CVF_BODY_Arr10_CommandKey
 struct Arr10_CommandKey { CommandKey v[10]; };
+#endif
+#ifndef CVF_BODY_Arr126_i8
+#define CVF_BODY_Arr126_i8
+struct Arr126_i8 { i8 v[126]; };
+#endif
+#ifndef CVF_BODY_Arr128_lua_LValue
+#define CVF_BODY_Arr128_lua_LValue
+struct Arr128_lua_LValue { lua_LValue v[128]; };
 #endif
 #ifndef CVF_BODY_Arr12_AiInput
 #define CVF_BODY_Arr12_AiInput
@@ -1393,6 +1675,25 @@ struct Arr16_Anon_bfbab8ed { Anon_bfbab8ed v[16]; };
 #define CVF_BODY_Arr16_f32
 struct Arr16_f32 { f32 v[16]; };
 #endif
+struct ast_Position { GoString Source; int Line; int Column; };
+struct ast_Token { int Type; GoString Name; GoString Str; ast_Position Pos; };
+struct parse_yySymType { int yys; ast_Token token; Slice_ast_Stmt stmts; ast_Stmt stmt; ast_FuncName* funcname; ast_FunctionExpr* funcexpr; Slice_ast_Expr exprlist; ast_Expr expr; Slice_ast_FieldPtr fieldlist; ast_Field* field; GoString fieldsep; Slice_GoString namelist; ast_ParList* parlist; };
+#ifndef CVF_BODY_Arr16_parse_yySymType
+#define CVF_BODY_Arr16_parse_yySymType
+struct Arr16_parse_yySymType { parse_yySymType v[16]; };
+#endif
+#ifndef CVF_BODY_Arr193_i16
+#define CVF_BODY_Arr193_i16
+struct Arr193_i16 { i16 v[193]; };
+#endif
+#ifndef CVF_BODY_Arr193_i8
+#define CVF_BODY_Arr193_i8
+struct Arr193_i8 { i8 v[193]; };
+#endif
+#ifndef CVF_BODY_Arr1_i8
+#define CVF_BODY_Arr1_i8
+struct Arr1_i8 { i8 v[1]; };
+#endif
 #ifndef CVF_BODY_Arr1_u8
 #define CVF_BODY_Arr1_u8
 struct Arr1_u8 { u8 v[1]; };
@@ -1404,6 +1705,10 @@ struct Arr20_FSBgTextSnd { FSBgTextSnd v[20]; };
 #ifndef CVF_BODY_Arr20_u64
 #define CVF_BODY_Arr20_u64
 struct Arr20_u64 { u64 v[20]; };
+#endif
+#ifndef CVF_BODY_Arr22_i8
+#define CVF_BODY_Arr22_i8
+struct Arr22_i8 { i8 v[22]; };
 #endif
 #ifndef CVF_BODY_Arr256_bool
 #define CVF_BODY_Arr256_bool
@@ -1420,6 +1725,10 @@ struct Arr256_u32 { u32 v[256]; };
 #ifndef CVF_BODY_Arr256_u64
 #define CVF_BODY_Arr256_u64
 struct Arr256_u64 { u64 v[256]; };
+#endif
+#ifndef CVF_BODY_Arr26_u8
+#define CVF_BODY_Arr26_u8
+struct Arr26_u8 { u8 v[26]; };
 #endif
 #ifndef CVF_BODY_Arr2_AnimLayout
 #define CVF_BODY_Arr2_AnimLayout
@@ -1549,6 +1858,10 @@ struct Arr32_cmdNameCacheEnt { cmdNameCacheEnt v[32]; };
 #define CVF_BODY_Arr32_varCacheEnt
 struct Arr32_varCacheEnt { varCacheEnt v[32]; };
 #endif
+#ifndef CVF_BODY_Arr35_i8
+#define CVF_BODY_Arr35_i8
+struct Arr35_i8 { i8 v[35]; };
+#endif
 #ifndef CVF_BODY_Arr3_BytecodeExp
 #define CVF_BODY_Arr3_BytecodeExp
 struct Arr3_BytecodeExp { BytecodeExp v[3]; };
@@ -1588,6 +1901,10 @@ struct Arr3_u16 { u16 v[3]; };
 #ifndef CVF_BODY_Arr3_u8
 #define CVF_BODY_Arr3_u8
 struct Arr3_u8 { u8 v[3]; };
+#endif
+#ifndef CVF_BODY_Arr42_lua_instFunc
+#define CVF_BODY_Arr42_lua_instFunc
+struct Arr42_lua_instFunc { lua_instFunc v[42]; };
 #endif
 #ifndef CVF_BODY_Arr4_Arr2_f32
 #define CVF_BODY_Arr4_Arr2_f32
@@ -1649,9 +1966,17 @@ struct Arr4_u16 { u16 v[4]; };
 #define CVF_BODY_Arr4_u8
 struct Arr4_u8 { u8 v[4]; };
 #endif
+#ifndef CVF_BODY_Arr56_GoString
+#define CVF_BODY_Arr56_GoString
+struct Arr56_GoString { GoString v[56]; };
+#endif
 #ifndef CVF_BODY_Arr5_f64
 #define CVF_BODY_Arr5_f64
 struct Arr5_f64 { f64 v[5]; };
+#endif
+#ifndef CVF_BODY_Arr616_u8
+#define CVF_BODY_Arr616_u8
+struct Arr616_u8 { u8 v[616]; };
 #endif
 #ifndef CVF_BODY_Arr6_CommandKey
 #define CVF_BODY_Arr6_CommandKey
@@ -1721,6 +2046,15 @@ struct Arr8_f32 { f32 v[8]; };
 #define CVF_BODY_Arr8_i32
 struct Arr8_i32 { i32 v[8]; };
 #endif
+struct lua_callFrame { int Idx; lua_LFunction* Fn; lua_callFrame* Parent; int Pc; int Base; int LocalBase; int ReturnBase; int NArgs; int NRet; int TailCall; };
+#ifndef CVF_BODY_Arr8_lua_callFrame
+#define CVF_BODY_Arr8_lua_callFrame
+struct Arr8_lua_callFrame { lua_callFrame v[8]; };
+#endif
+#ifndef CVF_BODY_Arr97_i8
+#define CVF_BODY_Arr97_i8
+struct Arr97_i8 { i8 v[97]; };
+#endif
 #ifndef CVF_BODY_Arr9_AnimTextSnd
 #define CVF_BODY_Arr9_AnimTextSnd
 struct Arr9_AnimTextSnd { AnimTextSnd v[9]; };
@@ -1734,6 +2068,10 @@ struct Arr9_Anon_f8c1b65b { Anon_f8c1b65b v[9]; };
 #define CVF_BODY_Arr9_Arr2_i32
 struct Arr9_Arr2_i32 { Arr2_i32 v[9]; };
 #endif
+#ifndef CVF_BODY_Arr9_GoString
+#define CVF_BODY_Arr9_GoString
+struct Arr9_GoString { GoString v[9]; };
+#endif
 #ifndef CVF_BODY_Arr9_bool
 #define CVF_BODY_Arr9_bool
 struct Arr9_bool { bool v[9]; };
@@ -1742,12 +2080,91 @@ struct Arr9_bool { bool v[9]; };
 #define CVF_BODY_Arr9_f32
 struct Arr9_f32 { f32 v[9]; };
 #endif
+struct ast_Node { int line; int lastline; };
+struct ast_ExprBase { union { ast_Node Node_; struct { int line; int lastline; }; }; };
+struct ast_ArithmeticOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; GoString Operator; ast_Expr Lhs; ast_Expr Rhs; };
+struct ast_StmtBase { union { ast_Node Node_; struct { int line; int lastline; }; }; };
+struct ast_AssignStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; Slice_ast_Expr Lhs; Slice_ast_Expr Rhs; };
+struct ast_AttrGetExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Object; ast_Expr Key; };
+struct ast_BreakStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; };
+struct ast_Comma3Expr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; bool AdjustRet; };
+struct ast_ConstExprBase { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; };
+struct ast_DoBlockStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; Slice_ast_Stmt Stmts; };
+struct ast_FalseExpr { union { ast_ConstExprBase ConstExprBase_; struct { ast_ExprBase ExprBase_; }; }; };
+struct ast_Field { ast_Expr Key; ast_Expr Value; };
+struct ast_FuncCallExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Func; ast_Expr Receiver; GoString Method; Slice_ast_Expr Args; bool AdjustRet; };
+struct ast_FuncCallStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; ast_Expr Expr; };
+struct ast_FuncDefStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; ast_FuncName* Name; ast_FunctionExpr* Func; };
+struct ast_FuncName { ast_Expr Func; ast_Expr Receiver; GoString Method; };
+struct ast_FunctionExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_ParList* ParList; Slice_ast_Stmt Stmts; };
+struct ast_GenericForStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; Slice_GoString Names; Slice_ast_Expr Exprs; Slice_ast_Stmt Stmts; };
+struct ast_GotoStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; GoString Label; };
+struct ast_IdentExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; GoString Value; };
+struct ast_IfStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; ast_Expr Condition; Slice_ast_Stmt Then; Slice_ast_Stmt Else; };
+struct ast_LabelStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; GoString Name; };
+struct ast_LocalAssignStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; Slice_GoString Names; Slice_ast_Expr Exprs; };
+struct ast_LogicalOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; GoString Operator; ast_Expr Lhs; ast_Expr Rhs; };
+struct ast_NilExpr { union { ast_ConstExprBase ConstExprBase_; struct { ast_ExprBase ExprBase_; }; }; };
+struct ast_NumberExpr { union { ast_ConstExprBase ConstExprBase_; struct { ast_ExprBase ExprBase_; }; }; GoString Value; };
+struct ast_NumberForStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; GoString Name; ast_Expr Init; ast_Expr Limit; ast_Expr Step; Slice_ast_Stmt Stmts; };
+struct ast_ParList { bool HasVargs; Slice_GoString Names; };
+struct ast_RelationalOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; GoString Operator; ast_Expr Lhs; ast_Expr Rhs; };
+struct ast_RepeatStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; ast_Expr Condition; Slice_ast_Stmt Stmts; };
+struct ast_ReturnStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; Slice_ast_Expr Exprs; };
+struct ast_StringConcatOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Lhs; ast_Expr Rhs; };
+struct ast_StringExpr { union { ast_ConstExprBase ConstExprBase_; struct { ast_ExprBase ExprBase_; }; }; GoString Value; };
+struct ast_TableExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; Slice_ast_FieldPtr Fields; };
+struct ast_TrueExpr { union { ast_ConstExprBase ConstExprBase_; struct { ast_ExprBase ExprBase_; }; }; };
+struct ast_UnaryLenOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Expr; };
+struct ast_UnaryMinusOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Expr; };
+struct ast_UnaryNotOpExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; ast_Expr Expr; };
+struct ast_WhileStmt { union { ast_StmtBase StmtBase_; struct { ast_Node Node_; }; }; ast_Expr Condition; Slice_ast_Stmt Stmts; };
 struct fontSpec_L5dbadc { GoString path; i32 height; };
 struct fontSpec_L7f0e5c { GoString path; i32 height; };
 struct kv_L9db1e9 { bcProfKey k; u64 v; };
+struct lua_ApiError { lua_ApiErrorType Type; lua_LValue Object; GoString StackTrace; GoIface Cause; };
+struct lua_CompileError { lua_funcContext* context; int Line; GoString Message; };
+struct lua_DbgCall { GoString Name; int Pc; };
+struct lua_DbgLocalInfo { GoString Name; int StartPc; int EndPc; };
+struct lua_Debug { lua_callFrame* frame; GoString Name; GoString What; GoString Source; int CurrentLine; int NUpvalues; int LineDefined; int LastLineDefined; };
+struct lua_FunctionProto { GoString SourceName; int LineDefined; int LastLineDefined; u8 NumUpvalues; u8 NumParameters; u8 IsVarArg; u8 NumUsedRegisters; Slice_u32 Code; Slice_lua_LValue Constants; Slice_lua_FunctionProtoPtr FunctionPrototypes; Slice_int DbgSourcePositions; Slice_lua_DbgLocalInfoPtr DbgLocals; Slice_lua_DbgCall DbgCalls; Slice_GoString DbgUpvalues; Slice_GoString stringConstants; };
+struct lua_Global { lua_LState* MainThread; lua_LState* CurrentThread; lua_LTable* Registry; lua_LTable* Global; Map_int_lua_LValue builtinMts; Slice_GoOpaque_os_FilePtrPtr tempFiles; i32 gccount; };
+struct lua_LFunction { bool IsG; lua_LTable* Env; lua_FunctionProto* Proto; lua_LGFunction GFunction; Slice_lua_UpvaluePtr Upvalues; };
+struct lua_LNilType { char _empty; };
+struct lua_Options { int CallStackSize; int RegistrySize; int RegistryMaxSize; int RegistryGrowStep; bool SkipOpenLibs; bool IncludeGoStackTrace; bool MinimizeStackMemory; };
+struct lua_LState { lua_Global* G; lua_LState* Parent; lua_LTable* Env; GoFunc Panic; bool Dead; lua_Options Options; i32 stop; lua_registry* reg; lua_callFrameStack stack; lua_allocator* alloc; lua_callFrame* currentFrame; bool wrapped; lua_Upvalue* uvcache; bool hasErrorFunc; GoFunc mainLoop; GoIface ctx; };
+struct lua_LTable { lua_LValue Metatable; Slice_lua_LValue array; Map_lua_LValue_lua_LValue dict; Map_GoString_lua_LValue strdict; Slice_lua_LValue keys; Map_lua_LValue_int k2i; };
+struct lua_LUserData { GoIface Value; lua_LTable* Env; lua_LValue Metatable; };
+struct lua_P { lua_LValue Fn; int NRet; bool Protect; lua_LFunction* Handler; };
+struct lua_Upvalue { lua_Upvalue* next; lua_registry* reg; int index; lua_LValue value; bool closed; };
+struct lua_allocator { int size; Slice_f64 fptrs; GoOpaque /* reflect.SliceHeader */* fheader; lua_LValue scratchValue; lua_iface* scratchValueP; };
+struct lua_assigncontext { lua_expcontext* ec; int keyrk; int valuerk; bool keyks; bool needmove; };
+struct lua_autoGrowingCallFrameStack { Slice_lua_callFrameStackSegmentPtr segments; lua_segIdx segIdx; u8 segSp; };
+struct lua_callFrameStackSegment { Arr8_lua_callFrame array; };
+struct lua_codeBlock { lua_varNamePool* LocalVars; int BreakLabel; lua_codeBlock* Parent; bool RefUpvalue; int LineStart; int LastLine; Map_GoString_lua_gotoLabelDescPtr labels; int firstGotoIndex; };
+struct lua_codeStore { Slice_u32 codes; Slice_int lines; int pc; };
+struct lua_constLValueExpr { union { ast_ExprBase ExprBase_; struct { ast_Node Node_; }; }; lua_LValue Value; };
+struct lua_expcontext { lua_expContextType ctype; int reg; int varargopt; };
+struct lua_fixedCallFrameStack { Slice_lua_callFrame array; int sp; };
+struct lua_flagScanner { u8 flag; GoString start; GoString end; Slice_u8 buf; GoString str; int Length; int Pos; bool HasFlag; bool ChangeFlag; };
+struct lua_funcContext { lua_FunctionProto* Proto; lua_codeStore* Code; lua_funcContext* Parent; lua_varNamePool* Upvalues; lua_codeBlock* Block; Slice_lua_codeBlockPtr Blocks; int regTop; int labelId; Map_int_int labelPc; int gotosCount; Map_int_lua_gotoLabelDescPtr unresolvedGotos; };
+struct lua_gotoLabelDesc { int Id; GoString Name; int Pc; int Line; int NumActiveLocalVars; };
+struct lua_iface { void* itab; void* word; };
+struct lua_lFile { GoOpaque /* os.File */* fp; GoOpaque /* exec.Cmd */* pp; GoIface writer; GoOpaque /* bufio.Reader */* reader; GoIface stdout; bool closed; };
+struct lua_lValueArraySorter { lua_LState* L; lua_LFunction* Fn; Slice_lua_LValue Values; };
+struct lua_lblabels { int t; int f; int e; bool b; };
+struct lua_opProp { GoString Name; bool IsTest; bool SetRegA; lua_opArgMode ModeArgB; lua_opArgMode ModeArgC; lua_opType Type; };
+struct lua_registry { Slice_lua_LValue array; int top; int growBy; int maxSize; lua_allocator* alloc; lua_registryHandler handler; };
+struct lua_varNamePool { Slice_GoString names; int offset; };
+struct lua_varNamePoolValue { int Index; GoString Name; };
 struct ov_L267e05 { OpCode o; u64 v; };
 struct pair_L97e23b { Projectile* pr; f32 dist; };
 struct pair_Ld68840 { Char* ch; f32 dist; };
+struct parse_Error { ast_Position Pos; GoString Message; GoString Token; };
+struct parse_Lexer { parse_Scanner* scanner; Slice_ast_Stmt Stmts; bool PNewLine; ast_Token Token; int PrevTokenType; };
+struct parse_Scanner { ast_Position Pos; GoOpaque /* bufio.Reader */* reader; };
+struct parse_yyParserImpl { parse_yySymType lval; Arr16_parse_yySymType stack; int char_; };
+struct pm_Error { int Pos; GoString Message; };
 struct pv_Lad4e0a { u16 p; u64 v; };
 struct qvPlayer_L280889 { GoString character; int player; int num; int pal; f32 ai; int input; };
 struct slotRef_L806444 { int idx; PlayerVictoryProperties* p; i32 order; };
@@ -1920,6 +2337,10 @@ GO_SLICE_FUNCS(Slice_GoOpaque_ini_SectionPtrPtr, GoOpaque /* ini.Section */*)
 #ifndef CVF_FN_Slice_GoOpaque_invalidtypePtr
 #define CVF_FN_Slice_GoOpaque_invalidtypePtr
 GO_SLICE_FUNCS(Slice_GoOpaque_invalidtypePtr, GoOpaque /* invalid type */)
+#endif
+#ifndef CVF_FN_Slice_GoOpaque_os_FilePtrPtr
+#define CVF_FN_Slice_GoOpaque_os_FilePtrPtr
+GO_SLICE_FUNCS(Slice_GoOpaque_os_FilePtrPtr, GoOpaque /* os.File */*)
 #endif
 #ifndef CVF_FN_Slice_GoOpaque_reflect_ValuePtr
 #define CVF_FN_Slice_GoOpaque_reflect_ValuePtr
@@ -2133,6 +2554,18 @@ GO_SLICE_FUNCS(Slice_TextureAtlasPtr, TextureAtlas*)
 #define CVF_FN_Slice_WinType
 GO_SLICE_FUNCS_A(Slice_WinType, WinType)
 #endif
+#ifndef CVF_FN_Slice_ast_Expr
+#define CVF_FN_Slice_ast_Expr
+GO_SLICE_FUNCS(Slice_ast_Expr, ast_Expr)
+#endif
+#ifndef CVF_FN_Slice_ast_FieldPtr
+#define CVF_FN_Slice_ast_FieldPtr
+GO_SLICE_FUNCS(Slice_ast_FieldPtr, ast_Field*)
+#endif
+#ifndef CVF_FN_Slice_ast_Stmt
+#define CVF_FN_Slice_ast_Stmt
+GO_SLICE_FUNCS(Slice_ast_Stmt, ast_Stmt)
+#endif
 #ifndef CVF_FN_Slice_backGroundPtr
 #define CVF_FN_Slice_backGroundPtr
 GO_SLICE_FUNCS(Slice_backGroundPtr, backGround*)
@@ -2169,6 +2602,10 @@ GO_SLICE_FUNCS_A(Slice_f32, f32)
 #define CVF_FN_Slice_f32Ptr
 GO_SLICE_FUNCS(Slice_f32Ptr, f32*)
 #endif
+#ifndef CVF_FN_Slice_f64
+#define CVF_FN_Slice_f64
+GO_SLICE_FUNCS_A(Slice_f64, f64)
+#endif
 #ifndef CVF_FN_Slice_i16
 #define CVF_FN_Slice_i16
 GO_SLICE_FUNCS_A(Slice_i16, i16)
@@ -2197,6 +2634,50 @@ GO_SLICE_FUNCS_A(Slice_int, int)
 #define CVF_FN_Slice_kv_L9db1e9
 GO_SLICE_FUNCS_A(Slice_kv_L9db1e9, kv_L9db1e9)
 #endif
+#ifndef CVF_FN_Slice_lua_DbgCall
+#define CVF_FN_Slice_lua_DbgCall
+GO_SLICE_FUNCS(Slice_lua_DbgCall, lua_DbgCall)
+#endif
+#ifndef CVF_FN_Slice_lua_DbgLocalInfoPtr
+#define CVF_FN_Slice_lua_DbgLocalInfoPtr
+GO_SLICE_FUNCS(Slice_lua_DbgLocalInfoPtr, lua_DbgLocalInfo*)
+#endif
+#ifndef CVF_FN_Slice_lua_FunctionProtoPtr
+#define CVF_FN_Slice_lua_FunctionProtoPtr
+GO_SLICE_FUNCS(Slice_lua_FunctionProtoPtr, lua_FunctionProto*)
+#endif
+#ifndef CVF_FN_Slice_lua_LValue
+#define CVF_FN_Slice_lua_LValue
+GO_SLICE_FUNCS(Slice_lua_LValue, lua_LValue)
+#endif
+#ifndef CVF_FN_Slice_lua_UpvaluePtr
+#define CVF_FN_Slice_lua_UpvaluePtr
+GO_SLICE_FUNCS(Slice_lua_UpvaluePtr, lua_Upvalue*)
+#endif
+#ifndef CVF_FN_Slice_lua_assigncontextPtr
+#define CVF_FN_Slice_lua_assigncontextPtr
+GO_SLICE_FUNCS(Slice_lua_assigncontextPtr, lua_assigncontext*)
+#endif
+#ifndef CVF_FN_Slice_lua_callFrame
+#define CVF_FN_Slice_lua_callFrame
+GO_SLICE_FUNCS(Slice_lua_callFrame, lua_callFrame)
+#endif
+#ifndef CVF_FN_Slice_lua_callFrameStackSegmentPtr
+#define CVF_FN_Slice_lua_callFrameStackSegmentPtr
+GO_SLICE_FUNCS(Slice_lua_callFrameStackSegmentPtr, lua_callFrameStackSegment*)
+#endif
+#ifndef CVF_FN_Slice_lua_codeBlockPtr
+#define CVF_FN_Slice_lua_codeBlockPtr
+GO_SLICE_FUNCS(Slice_lua_codeBlockPtr, lua_codeBlock*)
+#endif
+#ifndef CVF_FN_Slice_lua_opProp
+#define CVF_FN_Slice_lua_opProp
+GO_SLICE_FUNCS(Slice_lua_opProp, lua_opProp)
+#endif
+#ifndef CVF_FN_Slice_lua_varNamePoolValue
+#define CVF_FN_Slice_lua_varNamePoolValue
+GO_SLICE_FUNCS(Slice_lua_varNamePoolValue, lua_varNamePoolValue)
+#endif
 #ifndef CVF_FN_Slice_nameFact
 #define CVF_FN_Slice_nameFact
 GO_SLICE_FUNCS(Slice_nameFact, nameFact)
@@ -2212,6 +2693,10 @@ GO_SLICE_FUNCS(Slice_pair_L97e23b, pair_L97e23b)
 #ifndef CVF_FN_Slice_pair_Ld68840
 #define CVF_FN_Slice_pair_Ld68840
 GO_SLICE_FUNCS(Slice_pair_Ld68840, pair_Ld68840)
+#endif
+#ifndef CVF_FN_Slice_parse_yySymType
+#define CVF_FN_Slice_parse_yySymType
+GO_SLICE_FUNCS(Slice_parse_yySymType, parse_yySymType)
 #endif
 #ifndef CVF_FN_Slice_pv_Lad4e0a
 #define CVF_FN_Slice_pv_Lad4e0a
@@ -2437,6 +2922,14 @@ GO_MAP_FUNCS(Map_GoString_f32, GoString, f32, true)
 #define CVF_FN_Map_GoString_int
 GO_MAP_FUNCS(Map_GoString_int, GoString, int, true)
 #endif
+#ifndef CVF_FN_Map_GoString_lua_LValue
+#define CVF_FN_Map_GoString_lua_LValue
+GO_MAP_FUNCS(Map_GoString_lua_LValue, GoString, lua_LValue, true)
+#endif
+#ifndef CVF_FN_Map_GoString_lua_gotoLabelDescPtr
+#define CVF_FN_Map_GoString_lua_gotoLabelDescPtr
+GO_MAP_FUNCS(Map_GoString_lua_gotoLabelDescPtr, GoString, lua_gotoLabelDesc*, true)
+#endif
 #ifndef CVF_FN_Map_GoString_scFunc
 #define CVF_FN_Map_GoString_scFunc
 GO_MAP_FUNCS(Map_GoString_scFunc, GoString, scFunc, true)
@@ -2572,6 +3065,22 @@ GO_MAP_FUNCS(Map_int_fontSpec_L7f0e5c, int, fontSpec_L7f0e5c, false)
 #ifndef CVF_FN_Map_int_int
 #define CVF_FN_Map_int_int
 GO_MAP_FUNCS(Map_int_int, int, int, false)
+#endif
+#ifndef CVF_FN_Map_int_lua_LValue
+#define CVF_FN_Map_int_lua_LValue
+GO_MAP_FUNCS(Map_int_lua_LValue, int, lua_LValue, false)
+#endif
+#ifndef CVF_FN_Map_int_lua_gotoLabelDescPtr
+#define CVF_FN_Map_int_lua_gotoLabelDescPtr
+GO_MAP_FUNCS(Map_int_lua_gotoLabelDescPtr, int, lua_gotoLabelDesc*, false)
+#endif
+#ifndef CVF_FN_Map_lua_LValue_int
+#define CVF_FN_Map_lua_LValue_int
+GO_MAP_FUNCS(Map_lua_LValue_int, lua_LValue, int, false)
+#endif
+#ifndef CVF_FN_Map_lua_LValue_lua_LValue
+#define CVF_FN_Map_lua_LValue_lua_LValue
+GO_MAP_FUNCS(Map_lua_LValue_lua_LValue, lua_LValue, lua_LValue, false)
 #endif
 #ifndef CVF_FN_Map_u16_GoFunc
 #define CVF_FN_Map_u16_GoFunc
@@ -2782,6 +3291,10 @@ typedef struct { Slice_GoString r0; GoIface r1; } Ret_Slice_GoString__GoIface;
 #define CVF_RET_Ret_Slice_GoString__int__GoIface
 typedef struct { Slice_GoString r0; int r1; GoIface r2; } Ret_Slice_GoString__int__GoIface;
 #endif
+#ifndef CVF_RET_Ret_Slice_ast_Stmt__GoIface
+#define CVF_RET_Ret_Slice_ast_Stmt__GoIface
+typedef struct { Slice_ast_Stmt r0; GoIface r1; } Ret_Slice_ast_Stmt__GoIface;
+#endif
 #ifndef CVF_RET_Ret_Slice_cnode__int
 #define CVF_RET_Ret_Slice_cnode__int
 typedef struct { Slice_cnode r0; int r1; } Ret_Slice_cnode__int;
@@ -2821,6 +3334,10 @@ typedef struct { Storyboard* r0; GoIface r1; } Ret_StoryboardPtr__GoIface;
 #ifndef CVF_RET_Ret_TransType__Arr2_i32
 #define CVF_RET_Ret_TransType__Arr2_i32
 typedef struct { TransType r0; Arr2_i32 r1; } Ret_TransType__Arr2_i32;
+#endif
+#ifndef CVF_RET_Ret_ast_Token__GoIface
+#define CVF_RET_Ret_ast_Token__GoIface
+typedef struct { ast_Token r0; GoIface r1; } Ret_ast_Token__GoIface;
 #endif
 #ifndef CVF_RET_Ret_backGroundPtr__GoIface
 #define CVF_RET_Ret_backGroundPtr__GoIface
@@ -2870,6 +3387,10 @@ typedef struct { f32 r0; f32 r1; f32 r2; f32 r3; } Ret_f32__f32__f32__f32;
 #define CVF_RET_Ret_f64__GoIface
 typedef struct { f64 r0; GoIface r1; } Ret_f64__GoIface;
 #endif
+#ifndef CVF_RET_Ret_f64__bool
+#define CVF_RET_Ret_f64__bool
+typedef struct { f64 r0; bool r1; } Ret_f64__bool;
+#endif
 #ifndef CVF_RET_Ret_f64__f64
 #define CVF_RET_Ret_f64__f64
 typedef struct { f64 r0; f64 r1; } Ret_f64__f64;
@@ -2914,6 +3435,10 @@ typedef struct { i64 r0; GoIface r1; } Ret_i64__GoIface;
 #define CVF_RET_Ret_int__GoIface
 typedef struct { int r0; GoIface r1; } Ret_int__GoIface;
 #endif
+#ifndef CVF_RET_Ret_int__Slice_lua_assigncontextPtr
+#define CVF_RET_Ret_int__Slice_lua_assigncontextPtr
+typedef struct { int r0; Slice_lua_assigncontextPtr r1; } Ret_int__Slice_lua_assigncontextPtr;
+#endif
 #ifndef CVF_RET_Ret_int__Slice_u32
 #define CVF_RET_Ret_int__Slice_u32
 typedef struct { int r0; Slice_u32 r1; } Ret_int__Slice_u32;
@@ -2934,6 +3459,34 @@ typedef struct { int r0; int r1; GoString r2; bool r3; } Ret_int__int__GoString_
 #define CVF_RET_Ret_int__int__int
 typedef struct { int r0; int r1; int r2; } Ret_int__int__int;
 #endif
+#ifndef CVF_RET_Ret_int__lua_codeBlockPtr
+#define CVF_RET_Ret_int__lua_codeBlockPtr
+typedef struct { int r0; lua_codeBlock* r1; } Ret_int__lua_codeBlockPtr;
+#endif
+#ifndef CVF_RET_Ret_lua_DebugPtr__bool
+#define CVF_RET_Ret_lua_DebugPtr__bool
+typedef struct { lua_Debug* r0; bool r1; } Ret_lua_DebugPtr__bool;
+#endif
+#ifndef CVF_RET_Ret_lua_FunctionProtoPtr__GoIface
+#define CVF_RET_Ret_lua_FunctionProtoPtr__GoIface
+typedef struct { lua_FunctionProto* r0; GoIface r1; } Ret_lua_FunctionProtoPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_lua_LFunctionPtr__GoIface
+#define CVF_RET_Ret_lua_LFunctionPtr__GoIface
+typedef struct { lua_LFunction* r0; GoIface r1; } Ret_lua_LFunctionPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_lua_LFunctionPtr__bool
+#define CVF_RET_Ret_lua_LFunctionPtr__bool
+typedef struct { lua_LFunction* r0; bool r1; } Ret_lua_LFunctionPtr__bool;
+#endif
+#ifndef CVF_RET_Ret_lua_LNumber__GoIface
+#define CVF_RET_Ret_lua_LNumber__GoIface
+typedef struct { lua_LNumber r0; GoIface r1; } Ret_lua_LNumber__GoIface;
+#endif
+#ifndef CVF_RET_Ret_lua_LNumber__bool
+#define CVF_RET_Ret_lua_LNumber__bool
+typedef struct { lua_LNumber r0; bool r1; } Ret_lua_LNumber__bool;
+#endif
 #ifndef CVF_RET_Ret_u64__GoIface
 #define CVF_RET_Ret_u64__GoIface
 typedef struct { u64 r0; GoIface r1; } Ret_u64__GoIface;
@@ -2946,6 +3499,10 @@ typedef struct { u64 r0; f64 r1; } Ret_u64__f64;
 #define CVF_RET_Ret_u64__u64
 typedef struct { u64 r0; u64 r1; } Ret_u64__u64;
 #endif
+#ifndef CVF_RET_Ret_u8__GoIface
+#define CVF_RET_Ret_u8__GoIface
+typedef struct { u8 r0; GoIface r1; } Ret_u8__GoIface;
+#endif
 #ifndef CVF_RET_Ret_u8__u8
 #define CVF_RET_Ret_u8__u8
 typedef struct { u8 r0; u8 r1; } Ret_u8__u8;
@@ -2954,19 +3511,19 @@ typedef struct { u8 r0; u8 r1; } Ret_u8__u8;
 #include "ik/ik_rt.h"
 
 // std-library entry points (ik_rt.c)
+GoIface bufio_Reader_UnreadByte(GoOpaque /* bufio.Reader */* recv); // func (*bufio.Reader).UnreadByte() error
 GoIface bufio_Writer_Flush(GoOpaque /* bufio.Writer */* recv); // func (*bufio.Writer).Flush() error
+GoIface bytes_Buffer_WriteByte(GoOpaque /* bytes.Buffer */* recv, u8 a0); // func (*bytes.Buffer).WriteByte(c byte) error
 GoIface errors_New(GoString a0); // func errors.New(text string) error
 GoIface fmt_Errorf(GoString a0, Slice_GoIface a1); // func fmt.Errorf(format string, a ...any) (err error)
 GoIface gob_Decoder_Decode(GoOpaque /* gob.Decoder */* recv, GoIface a0); // func (*gob.Decoder).Decode(e any) error
 GoIface gob_Encoder_Encode(GoOpaque /* gob.Encoder */* recv, GoIface a0); // func (*gob.Encoder).Encode(e any) error
 GoIface ini_File_SaveTo(GoOpaque /* ini.File */* recv, GoString a0); // func (*ini.File).SaveTo(filename string) error
 GoIface json_Indent(GoOpaque /* bytes.Buffer */* a0, Slice_u8 a1, GoString a2, GoString a3); // func json.Indent(dst *bytes.Buffer, src []byte, prefix string, indent string) error
-GoIface lua_LState_CallByParam(GoOpaque /* lua.LState */* recv, GoOpaque /* lua.P */ a0, Slice_GoIface a1); // func (*lua.LState).CallByParam(cp lua.P, args ...lua.LValue) error
-GoIface lua_LState_DoString(GoOpaque /* lua.LState */* recv, GoString a0); // func (*lua.LState).DoString(source string) error
-GoIface lua_LState_Get(GoOpaque /* lua.LState */* recv, int a0); // func (*lua.LState).Get(idx int) lua.LValue
-GoIface lua_LState_GetGlobal(GoOpaque /* lua.LState */* recv, GoString a0); // func (*lua.LState).GetGlobal(name string) lua.LValue
 GoIface os_File_Close(GoOpaque /* os.File */* recv); // func (*os.File).Close() error
+GoIface os_Remove(GoString a0); // func os.Remove(name string) error
 GoIface os_WriteFile(GoString a0, Slice_u8 a1, u32 a2); // func os.WriteFile(name string, data []byte, perm os.FileMode) error
+GoIface reflect_TypeOf(GoIface a0); // func reflect.TypeOf(i any) reflect.Type
 GoIface reflect_Value_Interface(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Interface() (i any)
 GoIface reflect_Value_Type(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Type() reflect.Type
 GoIface sort_Reverse(GoIface a0); // func sort.Reverse(data sort.Interface) sort.Interface
@@ -2977,6 +3534,7 @@ GoImageNRGBA* image_NewNRGBA(GoImageRect a0); // func image.NewNRGBA(r image.Rec
 GoImageRect image_NRGBA_Bounds(GoImageNRGBA* recv); // func (*image.NRGBA).Bounds() image.Rectangle
 GoImageRect image_Paletted_Bounds(GoImagePaletted* recv); // func (*image.Paletted).Bounds() image.Rectangle
 GoImageRect image_Rectangle_Bounds(GoImageRect recv); // func (image.Rectangle).Bounds() image.Rectangle
+GoOpaque /* bufio.Reader */* bufio_NewReaderSize(GoIface a0, int a1); // func bufio.NewReaderSize(rd io.Reader, size int) *bufio.Reader
 GoOpaque /* bufio.Scanner */* bufio_NewScanner(GoIface a0); // func bufio.NewScanner(r io.Reader) *bufio.Scanner
 GoOpaque /* bufio.Writer */* bufio_NewWriterSize(GoIface a0, int a1); // func bufio.NewWriterSize(w io.Writer, size int) *bufio.Writer
 GoOpaque /* bytes.Reader */* bytes_NewReader(Slice_u8 a0); // func bytes.NewReader(b []byte) *bytes.Reader
@@ -3004,9 +3562,12 @@ GoOpaque /* reflect.Value */ reflect_Value_Index(GoOpaque /* reflect.Value */ re
 GoOpaque /* reflect.Value */ reflect_Value_MapIndex(GoOpaque /* reflect.Value */ recv, GoOpaque /* reflect.Value */ a0); // func (reflect.Value).MapIndex(key reflect.Value) reflect.Value
 GoOpaque /* reflect.Value */ reflect_Zero(GoIface a0); // func reflect.Zero(typ reflect.Type) reflect.Value
 GoOpaque /* regexp.Regexp */* regexp_MustCompile(GoString a0); // func regexp.MustCompile(str string) *regexp.Regexp
+GoOpaque /* strings.Reader */* strings_NewReader(GoString a0); // func strings.NewReader(s string) *strings.Reader
 GoOpaque /* time.Time */ time_Now(void); // func time.Now() time.Time
 GoOpaque /* time.Time */ time_Time_Add(GoOpaque /* time.Time */ recv, i64 a0); // func (time.Time).Add(d time.Duration) time.Time
+GoString binary_littleEndian_String(GoOpaque /* binary.littleEndian */ recv); // func (binary.littleEndian).String() string
 GoString bufio_Scanner_Text(GoOpaque /* bufio.Scanner */* recv); // func (*bufio.Scanner).Text() string
+GoString bytes_Buffer_String(GoOpaque /* bytes.Buffer */* recv); // func (*bytes.Buffer).String() string
 GoString filepath_Base(GoString a0); // func filepath.Base(path string) string
 GoString filepath_Clean(GoString a0); // func filepath.Clean(path string) string
 GoString filepath_Dir(GoString a0); // func filepath.Dir(path string) string
@@ -3015,12 +3576,17 @@ GoString filepath_Join(Slice_GoString a0); // func filepath.Join(elem ...string)
 GoString filepath_ToSlash(GoString a0); // func filepath.ToSlash(path string) string
 GoString fmt_Sprint(Slice_GoIface a0); // func fmt.Sprint(a ...any) string
 GoString fmt_Sprintf(GoString a0, Slice_GoIface a1); // func fmt.Sprintf(format string, a ...any) string
+GoString image_Point_String(GoImagePoint recv); // func (image.Point).String() string
+GoString image_Rectangle_String(GoImageRect recv); // func (image.Rectangle).String() string
 GoString ini_Key_Name(GoOpaque /* ini.Key */* recv); // func (*ini.Key).Name() string
+GoString ini_Key_String(GoOpaque /* ini.Key */* recv); // func (*ini.Key).String() string
 GoString ini_Key_Value(GoOpaque /* ini.Key */* recv); // func (*ini.Key).Value() string
 GoString ini_Section_Name(GoOpaque /* ini.Section */* recv); // func (*ini.Section).Name() string
+GoString mgl32_Mat4_String(GoOpaque /* mgl32.Mat4 */ recv); // func (mgl32.Mat4).String() string
 GoString os_File_Name(GoOpaque /* os.File */* recv); // func (*os.File).Name() string
 GoString os_Getenv(GoString a0); // func os.Getenv(key string) string
 GoString path_Join(Slice_GoString a0); // func path.Join(elem ...string) string
+GoString reflect_Kind_String(uintptr_t recv); // func (reflect.Kind).String() string
 GoString reflect_StructTag_Get(GoString recv, GoString a0); // func (reflect.StructTag).Get(key string) string
 GoString reflect_Value_String(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).String() string
 GoString regexp_Regexp_ReplaceAllString(GoOpaque /* regexp.Regexp */* recv, GoString a0, GoString a1); // func (*regexp.Regexp).ReplaceAllString(src string, repl string) string
@@ -3029,6 +3595,7 @@ GoString strconv_Itoa(int a0); // func strconv.Itoa(i int) string
 GoString strings_Builder_String(GoOpaque /* strings.Builder */* recv); // func (*strings.Builder).String() string
 GoString strings_Clone(GoString a0); // func strings.Clone(s string) string
 GoString strings_Join(Slice_GoString a0, GoString a1); // func strings.Join(elems []string, sep string) string
+GoString strings_Repeat(GoString a0, int a1); // func strings.Repeat(s string, count int) string
 GoString strings_Replace(GoString a0, GoString a1, GoString a2, int a3); // func strings.Replace(s string, old string, new string, n int) string
 GoString strings_ReplaceAll(GoString a0, GoString a1, GoString a2); // func strings.ReplaceAll(s string, old string, new string) string
 GoString strings_ToLower(GoString a0); // func strings.ToLower(s string) string
@@ -3039,6 +3606,9 @@ GoString strings_TrimLeftFunc(GoString a0, GoFunc a1); // func strings.TrimLeftF
 GoString strings_TrimPrefix(GoString a0, GoString a1); // func strings.TrimPrefix(s string, prefix string) string
 GoString strings_TrimSpace(GoString a0); // func strings.TrimSpace(s string) string
 GoString strings_TrimSuffix(GoString a0, GoString a1); // func strings.TrimSuffix(s string, suffix string) string
+GoString time_Duration_String(i64 recv); // func (time.Duration).String() string
+GoString time_Location_String(GoOpaque /* time.Location */* recv); // func (*time.Location).String() string
+GoString time_Time_String(GoOpaque /* time.Time */ recv); // func (time.Time).String() string
 Ret_GoIface__GoIface os_Stat(GoString a0); // func os.Stat(name string) (os.FileInfo, error)
 Ret_GoIface__GoIface png_Decode(GoIface a0); // func png.Decode(r io.Reader) (image.Image, error)
 Ret_GoIface__GoIface zip_File_Open(GoZipFile* recv); // func (*zip.File).Open() (io.ReadCloser, error)
@@ -3065,7 +3635,10 @@ Ret_f64__int math_Frexp(f64 a0); // func math.Frexp(f float64) (frac float64, ex
 Ret_i64__GoIface bytes_Reader_Seek(GoOpaque /* bytes.Reader */* recv, i64 a0, int a1); // func (*bytes.Reader).Seek(offset int64, whence int) (int64, error)
 Ret_i64__GoIface os_File_Seek(GoOpaque /* os.File */* recv, i64 a0, int a1); // func (*os.File).Seek(offset int64, whence int) (ret int64, err error)
 Ret_i64__GoIface strconv_ParseInt(GoString a0, int a1, int a2); // func strconv.ParseInt(s string, base int, bitSize int) (i int64, err error)
+Ret_i64__GoIface strings_Reader_Seek(GoOpaque /* strings.Reader */* recv, i64 a0, int a1); // func (*strings.Reader).Seek(offset int64, whence int) (int64, error)
+Ret_int__GoIface bufio_Reader_Read(GoOpaque /* bufio.Reader */* recv, Slice_u8 a0); // func (*bufio.Reader).Read(p []byte) (n int, err error)
 Ret_int__GoIface bufio_Writer_Write(GoOpaque /* bufio.Writer */* recv, Slice_u8 a0); // func (*bufio.Writer).Write(p []byte) (nn int, err error)
+Ret_int__GoIface bytes_Buffer_WriteString(GoOpaque /* bytes.Buffer */* recv, GoString a0); // func (*bytes.Buffer).WriteString(s string) (n int, err error)
 Ret_int__GoIface bytes_Reader_Read(GoOpaque /* bytes.Reader */* recv, Slice_u8 a0); // func (*bytes.Reader).Read(b []byte) (n int, err error)
 Ret_int__GoIface fmt_Fprintf(GoIface a0, GoString a1, Slice_GoIface a2); // func fmt.Fprintf(w io.Writer, format string, a ...any) (n int, err error)
 Ret_int__GoIface fmt_Printf(GoString a0, Slice_GoIface a1); // func fmt.Printf(format string, a ...any) (n int, err error)
@@ -3077,9 +3650,11 @@ Ret_int__GoIface io_ReadFull(GoIface a0, Slice_u8 a1); // func io.ReadFull(r io.
 Ret_int__GoIface os_File_Read(GoOpaque /* os.File */* recv, Slice_u8 a0); // func (*os.File).Read(b []byte) (n int, err error)
 Ret_int__GoIface strconv_Atoi(GoString a0); // func strconv.Atoi(s string) (int, error)
 Ret_int__GoIface strings_Builder_WriteString(GoOpaque /* strings.Builder */* recv, GoString a0); // func (*strings.Builder).WriteString(s string) (int, error)
+Ret_int__GoIface strings_Reader_Read(GoOpaque /* strings.Reader */* recv, Slice_u8 a0); // func (*strings.Reader).Read(b []byte) (n int, err error)
 Ret_u64__GoIface strconv_ParseUint(GoString a0, int a1, int a2); // func strconv.ParseUint(s string, base int, bitSize int) (uint64, error)
 Ret_u64__u64 bits_Add64(u64 a0, u64 a1, u64 a2); // func bits.Add64(x uint64, y uint64, carry uint64) (sum uint64, carryOut uint64)
 Ret_u64__u64 bits_Mul64(u64 a0, u64 a1); // func bits.Mul64(x uint64, y uint64) (hi uint64, lo uint64)
+Ret_u8__GoIface bufio_Reader_ReadByte(GoOpaque /* bufio.Reader */* recv); // func (*bufio.Reader).ReadByte() (byte, error)
 Slice_GoOpaque_ini_KeyPtrPtr ini_Section_Keys(GoOpaque /* ini.Section */* recv); // func (*ini.Section).Keys() []*ini.Key
 Slice_GoOpaque_ini_SectionPtrPtr ini_File_Sections(GoOpaque /* ini.File */* recv); // func (*ini.File).Sections() []*ini.Section
 Slice_GoOpaque_reflect_ValuePtr reflect_Value_MapKeys(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).MapKeys() []reflect.Value
@@ -3115,8 +3690,11 @@ bool strings_HasSuffix(GoString a0, GoString a1); // func strings.HasSuffix(s st
 bool unicode_IsSpace(i32 a0); // func unicode.IsSpace(r rune) bool
 f64 gjson_Result_Float(GoOpaque /* gjson.Result */ recv); // func (gjson.Result).Float() float64
 f64 math_Ldexp(f64 a0, int a1); // func math.Ldexp(frac float64, exp int) float64
+f64 math_Mod(f64 a0, f64 a1); // func math.Mod(x float64, y float64) float64
+f64 math_Pow(f64 a0, f64 a1); // func math.Pow(x float64, y float64) float64
 f64 math_Pow10(int a0); // func math.Pow10(n int) float64
 f64 reflect_Value_Float(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Float() float64
+i32 atomic_AddInt32(i32* a0, i32 a1); // func atomic.AddInt32(addr *int32, delta int32) (new int32)
 i32 unicode_ToLower(i32 a0); // func unicode.ToLower(r rune) rune
 i32 unicode_ToUpper(i32 a0); // func unicode.ToUpper(r rune) rune
 i64 gjson_Result_Int(GoOpaque /* gjson.Result */ recv); // func (gjson.Result).Int() int64
@@ -3130,12 +3708,14 @@ int bytes_Reader_Len(GoOpaque /* bytes.Reader */* recv); // func (*bytes.Reader)
 int list_List_Len(GoOpaque /* list.List */* recv); // func (*list.List).Len() int
 int reflect_Value_Len(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Len() int
 int reflect_Value_NumField(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).NumField() int
+int runtime_Stack(Slice_u8 a0, bool a1); // func runtime.Stack(buf []byte, all bool) int
 int sort_StringSlice_Len(Slice_GoString recv); // func (sort.StringSlice).Len() int
 int strings_Index(GoString a0, GoString a1); // func strings.Index(s string, substr string) int
 int strings_IndexAny(GoString a0, GoString a1); // func strings.IndexAny(s string, chars string) int
 int strings_IndexByte(GoString a0, u8 a1); // func strings.IndexByte(s string, c byte) int
 int strings_IndexFunc(GoString a0, GoFunc a1); // func strings.IndexFunc(s string, f func(rune) bool) int
 int strings_LastIndex(GoString a0, GoString a1); // func strings.LastIndex(s string, substr string) int
+int strings_Reader_Len(GoOpaque /* strings.Reader */* recv); // func (*strings.Reader).Len() int
 int utf8_RuneCountInString(GoString a0); // func utf8.RuneCountInString(s string) (n int)
 u32 binary_littleEndian_Uint32(GoOpaque /* binary.littleEndian */ recv, Slice_u8 a0); // func (binary.littleEndian).Uint32(b []byte) uint32
 uintptr_t reflect_Value_Kind(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Kind() reflect.Kind
@@ -3144,8 +3724,6 @@ void draw_Draw(GoIface a0, GoImageRect a1, GoIface a2, GoImagePoint a3, int a4);
 void gjson_Result_ForEach(GoOpaque /* gjson.Result */ recv, GoFunc a0); // func (gjson.Result).ForEach(iterator func(key gjson.Result, value gjson.Result) bool)
 void ini_Key_SetValue(GoOpaque /* ini.Key */* recv, GoString a0); // func (*ini.Key).SetValue(v string)
 void ini_Section_DeleteKey(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).DeleteKey(name string)
-void lua_LState_Pop(GoOpaque /* lua.LState */* recv, int a0); // func (*lua.LState).Pop(n int)
-void lua_LState_RaiseError(GoOpaque /* lua.LState */* recv, GoString a0, Slice_GoIface a1); // func (*lua.LState).RaiseError(format string, args ...interface{})
 void os_Exit(int a0); // func os.Exit(code int)
 void reflect_Value_Set(GoOpaque /* reflect.Value */ recv, GoOpaque /* reflect.Value */ a0); // func (reflect.Value).Set(x reflect.Value)
 void reflect_Value_SetBool(GoOpaque /* reflect.Value */ recv, bool a0); // func (reflect.Value).SetBool(x bool)
@@ -3161,6 +3739,7 @@ void sort_Strings(Slice_GoString a0); // func sort.Strings(x []string)
 void sync_Mutex_Lock(GoOpaque /* sync.Mutex */* recv); // func (*sync.Mutex).Lock()
 void sync_Mutex_Unlock(GoOpaque /* sync.Mutex */* recv); // func (*sync.Mutex).Unlock()
 void sync_Once_Do(GoOpaque /* sync.Once */* recv, GoFunc a0); // func (*sync.Once).Do(f func())
+void sync_Pool_Put(GoOpaque /* sync.Pool */* recv, GoIface a0); // func (*sync.Pool).Put(x any)
 void sync_RWMutex_Lock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).Lock()
 void sync_RWMutex_RLock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).RLock()
 void sync_RWMutex_RUnlock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).RUnlock()
@@ -3168,8 +3747,22 @@ void sync_RWMutex_Unlock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMu
 void time_Sleep(i64 a0); // func time.Sleep(d time.Duration)
 
 // package variables
+extern bool g_lua_CompatVarArg;
 extern GoIface g_ErrLoadingCanceled;
+extern int g_lua_FieldsPerFlush;
+extern lua_LBool g_lua_LFalse;
+extern lua_LValue g_lua_LNil;
+extern lua_LBool g_lua_LTrue;
+extern GoString g_lua_LuaDirSep;
+extern GoString g_lua_LuaLDir;
+extern GoString g_lua_LuaOS;
+extern GoString g_lua_LuaPathDefault;
+extern int g_lua_MaxArrayIndex;
+extern int g_lua_MaxTableGetLoop;
 extern Map_GoString_int g_StringToButtonLUT;
+extern lua_expcontext* g_lua__ecnone0;
+extern lua_expcontext* g_lua__ecnonem1;
+extern lua_expcontext* g_lua__ecnonem2;
 extern Animation* g_animReuse;
 extern Arr9_Anon_f8c1b65b g_attackTypeStrings;
 extern Anon_8aabe1e9 g_bcCompileStats;
@@ -3209,6 +3802,7 @@ extern Arr6_f64 g_cvf_sin;
 extern Arr3_f64 g_cvf_tanP;
 extern Arr5_f64 g_cvf_tanQ;
 extern Slice_u8 g_defaultConfig;
+extern lua_expcontext* g_lua_ecfuncdef;
 extern Arr12_CharPtr g_enemyNearScratch;
 extern int g_fuseFlag;
 extern Anon_dcdcacfc g_fuseStats;
@@ -3217,12 +3811,19 @@ extern bool g_hwProf;
 extern bool g_hwProfDone;
 extern Input g_input;
 extern Anon_ec483023 g_jsonFileCache;
+extern Arr42_lua_instFunc g_lua_jumpTable;
+extern Arr9_GoString g_lua_lValueNames;
 extern Tiling g_notiling;
 extern NullStateController g_nullStateController;
+extern Slice_lua_opProp g_lua_opProps;
+extern Arr128_lua_LValue g_lua_preloads;
+extern Map_GoString_int g_parse_reservedWords;
 extern Slice_i32 g_sdKeys;
+extern GoOpaque /* sync.Pool */ g_lua_segmentPool;
 extern u32 g_specGen;
 extern Arr256_bool g_specialSymbolTable;
 extern Anon_ed5d50f3 g_spriteDataPool;
+extern GoOpaque /* time.Time */ g_lua_startedAt;
 extern Slice_u8 g_stateDumpBuf;
 extern GoOpaque /* os.File */* g_stateDumpF;
 extern int g_stateDumpOn;
@@ -3235,187 +3836,436 @@ extern int g_vitaHalfTick;
 extern int g_vitaStateHashOn;
 extern bool g_vitaTraceDeep;
 extern bool g_vitaTraceOn;
+extern Arr616_u8 g_parse_yyAct;
+extern Arr193_i16 g_parse_yyChk;
+extern int g_parse_yyDebug;
+extern Arr193_i8 g_parse_yyDef;
+extern Arr0_Anon_84767b5c g_parse_yyErrorMessages;
+extern bool g_parse_yyErrorVerbose;
+extern Arr22_i8 g_parse_yyExca;
+extern Arr193_i16 g_parse_yyPact;
+extern Arr26_u8 g_parse_yyPgo;
+extern Arr97_i8 g_parse_yyR1;
+extern Arr97_i8 g_parse_yyR2;
+extern Arr0_GoString g_parse_yyStatenames;
+extern Arr126_i8 g_parse_yyTok1;
+extern Arr35_i8 g_parse_yyTok2;
+extern Arr1_i8 g_parse_yyTok3;
+extern Arr56_GoString g_parse_yyToknames;
 void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
-#define GO_TID_P_bytes_Reader 548
-#define GO_TID_P_image_NRGBA 319
-#define GO_TID_P_image_Paletted 318
-#define GO_TID_P_ini_File 505
-#define GO_TID_P_ini_Key 517
-#define GO_TID_P_ini_Section 514
-#define GO_TID_P_list_Element 372
-#define GO_TID_P_list_List 369
-#define GO_TID_P_os_File 262
-#define GO_TID_P_os_dirInfo 481
-#define GO_TID_P_os_file 469
-#define GO_TID_P_sync_Cond 1083
-#define GO_TID_P_time_Location 558
-#define GO_TID_P_time_zone 564
-#define GO_TID_P_zip_File 554
-#define GO_TID_P_zip_ReadCloser 550
-#define GO_TID_P_zip_Reader 565
-#define GO_TID_S_uint8 290
-#define GO_TID_atomic_Bool 569
-#define GO_TID_atomic_Int32 511
-#define GO_TID_atomic_Pointer_os_dirInfo_ 479
-#define GO_TID_atomic_noCopy 486
-#define GO_TID_beep_Format 635
-#define GO_TID_beep_SampleRate 636
-#define GO_TID_binary_littleEndian 311
-#define GO_TID_bytes_Reader 549
-#define GO_TID_color_Palette 1095
-#define GO_TID_image_NRGBA 1096
-#define GO_TID_image_Paletted 1092
-#define GO_TID_image_Point 1094
-#define GO_TID_image_Rectangle 1093
-#define GO_TID_ini_DebugFunc 508
-#define GO_TID_ini_File 506
-#define GO_TID_ini_Key 518
-#define GO_TID_ini_LoadOptions 507
-#define GO_TID_ini_NameMapper 521
-#define GO_TID_ini_Section 515
-#define GO_TID_ini_ValueMapper 522
-#define GO_TID_list_Element 371
-#define GO_TID_list_List 370
-#define GO_TID_lua_LBool 104
-#define GO_TID_mgl32_Mat4 739
-#define GO_TID_os_File 468
-#define GO_TID_os_dirInfo 482
-#define GO_TID_os_file 470
-#define GO_TID_poll_FD 471
-#define GO_TID_poll_SysFile 474
-#define GO_TID_poll_fdMutex 472
-#define GO_TID_poll_pollDesc 478
-#define GO_TID_reflect_Kind 305
-#define GO_TID_sort_StringSlice 323
-#define GO_TID_sync_Cond 1084
-#define GO_TID_sync_Mutex 483
-#define GO_TID_sync_Once 568
-#define GO_TID_sync_RWMutex 510
-#define GO_TID_sync_copyChecker 1086
-#define GO_TID_sync_noCopy 484
-#define GO_TID_sync_notifyList 1085
-#define GO_TID_syscall_Iovec 477
-#define GO_TID_time_Duration 325
-#define GO_TID_time_Location 559
-#define GO_TID_time_Time 557
-#define GO_TID_time_zone 561
-#define GO_TID_time_zoneTrans 563
-#define GO_TID_zip_Decompressor 567
-#define GO_TID_zip_File 555
-#define GO_TID_zip_FileHeader 556
-#define GO_TID_zip_ReadCloser 551
-#define GO_TID_zip_Reader 552
-#define GO_TID_zip_fileListEntry 571
+#define GO_TID_P_bufio_Reader 480
+#define GO_TID_P_bytes_Reader 670
+#define GO_TID_P_image_NRGBA 350
+#define GO_TID_P_image_Paletted 349
+#define GO_TID_P_ini_File 696
+#define GO_TID_P_ini_Key 708
+#define GO_TID_P_ini_Section 705
+#define GO_TID_P_list_Element 544
+#define GO_TID_P_list_List 541
+#define GO_TID_P_os_File 171
+#define GO_TID_P_os_dirInfo 511
+#define GO_TID_P_os_file 499
+#define GO_TID_P_reflect_SliceHeader 408
+#define GO_TID_P_strings_Reader 102
+#define GO_TID_P_sync_Cond 1253
+#define GO_TID_P_time_Location 680
+#define GO_TID_P_time_zone 686
+#define GO_TID_P_zip_File 676
+#define GO_TID_P_zip_ReadCloser 672
+#define GO_TID_P_zip_Reader 687
+#define GO_TID_S_uint8 183
+#define GO_TID_atomic_Bool 691
+#define GO_TID_atomic_Int32 702
+#define GO_TID_atomic_Pointer_os_dirInfo_ 509
+#define GO_TID_atomic_noCopy 516
+#define GO_TID_beep_Format 752
+#define GO_TID_beep_SampleRate 753
+#define GO_TID_binary_littleEndian 343
+#define GO_TID_bufio_Reader 481
+#define GO_TID_bytes_Reader 671
+#define GO_TID_color_Palette 743
+#define GO_TID_image_NRGBA 744
+#define GO_TID_image_Paletted 740
+#define GO_TID_image_Point 742
+#define GO_TID_image_Rectangle 741
+#define GO_TID_ini_DebugFunc 699
+#define GO_TID_ini_File 697
+#define GO_TID_ini_Key 709
+#define GO_TID_ini_LoadOptions 698
+#define GO_TID_ini_NameMapper 712
+#define GO_TID_ini_Section 706
+#define GO_TID_ini_ValueMapper 713
+#define GO_TID_list_Element 543
+#define GO_TID_list_List 542
+#define GO_TID_mgl32_Mat4 776
+#define GO_TID_os_File 498
+#define GO_TID_os_dirInfo 512
+#define GO_TID_os_file 500
+#define GO_TID_poll_FD 501
+#define GO_TID_poll_SysFile 504
+#define GO_TID_poll_fdMutex 502
+#define GO_TID_poll_pollDesc 508
+#define GO_TID_reflect_Kind 354
+#define GO_TID_reflect_SliceHeader 409
+#define GO_TID_sort_StringSlice 357
+#define GO_TID_strings_Reader 383
+#define GO_TID_sync_Cond 1254
+#define GO_TID_sync_Mutex 513
+#define GO_TID_sync_Once 690
+#define GO_TID_sync_RWMutex 701
+#define GO_TID_sync_copyChecker 1256
+#define GO_TID_sync_noCopy 514
+#define GO_TID_sync_notifyList 1255
+#define GO_TID_syscall_Iovec 507
+#define GO_TID_time_Duration 381
+#define GO_TID_time_Location 681
+#define GO_TID_time_Time 679
+#define GO_TID_time_zone 683
+#define GO_TID_time_zoneTrans 685
+#define GO_TID_zip_Decompressor 689
+#define GO_TID_zip_File 677
+#define GO_TID_zip_FileHeader 678
+#define GO_TID_zip_ReadCloser 673
+#define GO_TID_zip_Reader 674
+#define GO_TID_zip_fileListEntry 693
+void lua_init_0(void);
+lua_LValue lua_allocator_LNumber2I(lua_allocator* al, lua_LNumber v);
+int ast_Node_Line(ast_Node* self);
+void ast_Node_SetLine(ast_Node* self, int line);
+int ast_Node_LastLine(ast_Node* self);
+void ast_Node_SetLastLine(ast_Node* self, int line);
+GoString ast_Token_String(ast_Token* self);
+GoString lua_LState_Where(lua_LState* ls, int level);
+Ret_lua_LFunctionPtr__GoIface lua_LState_LoadString(lua_LState* ls, GoString source);
+GoIface lua_LState_DoString(lua_LState* ls, GoString source);
+void lua_ecupdate(lua_expcontext* ec, lua_expContextType ctype, int reg, int varargopt);
+lua_expcontext* lua_ecnone(int varargopt);
+bool lua_shouldmove(lua_expcontext* ec, int reg);
+int lua_sline(ast_PositionHolder pos);
+int lua_eline(ast_PositionHolder pos);
+int lua_savereg(lua_expcontext* ec, int reg);
+void lua_raiseCompileError(lua_funcContext* context, int line, GoString format, Slice_GoIface args);
+bool lua_isVarArgReturnExpr(ast_Expr expr);
+Ret_lua_LNumber__bool lua_lnumberValue(ast_Expr expr);
+lua_gotoLabelDesc* lua_newLabelDesc(int id, GoString name, int pc, int line, int n);
+void lua_gotoLabelDesc_SetNumActiveLocalVars(lua_gotoLabelDesc* l, int n);
+GoString lua_CompileError_Error(lua_CompileError* e);
+void lua_codeStore_Add(lua_codeStore* cd, u32 inst, int line);
+void lua_codeStore_AddABC(lua_codeStore* cd, int op, int a, int b, int c, int line);
+void lua_codeStore_AddABx(lua_codeStore* cd, int op, int a, int bx, int line);
+void lua_codeStore_AddASbx(lua_codeStore* cd, int op, int a, int sbx, int line);
+void lua_codeStore_PropagateKMV(lua_codeStore* cd, int top, int* save, int* reg, int inc);
+void lua_codeStore_PropagateMV(lua_codeStore* cd, int top, int* save, int* reg, int inc);
+void lua_codeStore_AddLoadNil(lua_codeStore* cd, int a, int b, int line);
+void lua_codeStore_SetOpCode(lua_codeStore* cd, int pc, int v);
+void lua_codeStore_SetA(lua_codeStore* cd, int pc, int v);
+void lua_codeStore_SetB(lua_codeStore* cd, int pc, int v);
+void lua_codeStore_SetC(lua_codeStore* cd, int pc, int v);
+void lua_codeStore_SetSbx(lua_codeStore* cd, int pc, int v);
+u32 lua_codeStore_At(lua_codeStore* cd, int pc);
+Slice_u32 lua_codeStore_List(lua_codeStore* cd);
+Slice_int lua_codeStore_PosList(lua_codeStore* cd);
+int lua_codeStore_LastPC(lua_codeStore* cd);
+u32 lua_codeStore_Last(lua_codeStore* cd);
+void lua_codeStore_Pop(lua_codeStore* cd);
+lua_varNamePool* lua_newVarNamePool(int offset);
+Slice_GoString lua_varNamePool_Names(lua_varNamePool* vp);
+Slice_lua_varNamePoolValue lua_varNamePool_List(lua_varNamePool* vp);
+int lua_varNamePool_LastIndex(lua_varNamePool* vp);
+int lua_varNamePool_Find(lua_varNamePool* vp, GoString name);
+int lua_varNamePool_RegisterUnique(lua_varNamePool* vp, GoString name);
+int lua_varNamePool_Register(lua_varNamePool* vp, GoString name);
+lua_codeBlock* lua_newCodeBlock(lua_varNamePool* localvars, int blabel, lua_codeBlock* parent, ast_PositionHolder pos, int firstGotoIndex);
+lua_gotoLabelDesc* lua_codeBlock_AddLabel(lua_codeBlock* b, lua_gotoLabelDesc* label);
+lua_gotoLabelDesc* lua_codeBlock_GetLabel(lua_codeBlock* b, GoString label);
+int lua_codeBlock_LocalVarsCount(lua_codeBlock* b);
+lua_funcContext* lua_newFuncContext(GoString sourcename, lua_funcContext* parent);
+void lua_funcContext_CheckUnresolvedGoto(lua_funcContext* fc);
+void lua_funcContext_AddUnresolvedGoto(lua_funcContext* fc, lua_gotoLabelDesc* label);
+void lua_funcContext_AddNamedLabel(lua_funcContext* fc, lua_gotoLabelDesc* label);
+void lua_funcContext_ResolveGoto(lua_funcContext* fc, lua_gotoLabelDesc* from, lua_gotoLabelDesc* to, int index);
+bool lua_funcContext_FindLabel(lua_funcContext* fc, lua_codeBlock* block, lua_gotoLabelDesc* gotoLabel, int i);
+void lua_funcContext_ResolveCurrentBlockGotosWithParentBlock(lua_funcContext* fc);
+void lua_funcContext_ResolveForwardGoto(lua_funcContext* fc, lua_gotoLabelDesc* target);
+int lua_funcContext_NewLabel(lua_funcContext* fc);
+void lua_funcContext_SetLabelPc(lua_funcContext* fc, int label, int pc);
+int lua_funcContext_GetLabelPc(lua_funcContext* fc, int label);
+int lua_funcContext_ConstIndex(lua_funcContext* fc, lua_LValue value);
+int lua_funcContext_BlockLocalVarsCount(lua_funcContext* fc);
+int lua_funcContext_RegisterLocalVar(lua_funcContext* fc, GoString name);
+Ret_int__lua_codeBlockPtr lua_funcContext_FindLocalVarAndBlock(lua_funcContext* fc, GoString name);
+int lua_funcContext_FindLocalVar(lua_funcContext* fc, GoString name);
+void lua_funcContext_EnterBlock(lua_funcContext* fc, int blabel, ast_PositionHolder pos);
+int lua_funcContext_CloseUpvalues(lua_funcContext* fc);
+int lua_funcContext_LeaveBlock(lua_funcContext* fc);
+void lua_funcContext_EndScope(lua_funcContext* fc);
+void lua_funcContext_SetRegTop(lua_funcContext* fc, int top);
+int lua_funcContext_RegTop(lua_funcContext* fc);
+void lua_compileChunk(lua_funcContext* context, Slice_ast_Stmt chunk, bool untilFollows);
+void lua_compileBlock(lua_funcContext* context, Slice_ast_Stmt chunk);
+void lua_compileStmt(lua_funcContext* context, ast_Stmt stmt, bool isLastStmt);
+Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtLeft(lua_funcContext* context, ast_AssignStmt* stmt);
+Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtRight(lua_funcContext* context, ast_AssignStmt* stmt, int reg, Slice_lua_assigncontextPtr acs);
+void lua_compileAssignStmt(lua_funcContext* context, ast_AssignStmt* stmt);
+void lua_compileRegAssignment(lua_funcContext* context, Slice_GoString names, Slice_ast_Expr exprs, int reg, int nvars, int line);
+void lua_compileLocalAssignStmt(lua_funcContext* context, ast_LocalAssignStmt* stmt);
+void lua_compileReturnStmt(lua_funcContext* context, ast_ReturnStmt* stmt);
+void lua_compileIfStmt(lua_funcContext* context, ast_IfStmt* stmt);
+void lua_compileBranchCondition(lua_funcContext* context, int reg, ast_Expr expr, int thenlabel, int elselabel, bool hasnextcond);
+void lua_compileWhileStmt(lua_funcContext* context, ast_WhileStmt* stmt);
+void lua_compileRepeatStmt(lua_funcContext* context, ast_RepeatStmt* stmt);
+void lua_compileBreakStmt(lua_funcContext* context, ast_BreakStmt* stmt);
+void lua_compileFuncDefStmt(lua_funcContext* context, ast_FuncDefStmt* stmt);
+void lua_compileNumberForStmt(lua_funcContext* context, ast_NumberForStmt* stmt);
+void lua_compileGenericForStmt(lua_funcContext* context, ast_GenericForStmt* stmt);
+void lua_compileLabelStmt(lua_funcContext* context, ast_LabelStmt* stmt, bool isLastStmt);
+void lua_compileGotoStmt(lua_funcContext* context, ast_GotoStmt* stmt);
+int lua_compileExpr(lua_funcContext* context, int reg, ast_Expr expr, lua_expcontext* ec);
+void lua_compileExprWithPropagation(lua_funcContext* context, ast_Expr expr, int* reg, int* save, GoFunc propergator);
+void lua_compileExprWithKMVPropagation(lua_funcContext* context, ast_Expr expr, int* reg, int* save);
+void lua_compileExprWithMVPropagation(lua_funcContext* context, ast_Expr expr, int* reg, int* save);
+ast_Expr lua_constFold(ast_Expr exp_);
+void lua_compileFunctionExpr(lua_funcContext* context, ast_FunctionExpr* funcexpr, lua_expcontext* ec);
+void lua_compileTableExpr(lua_funcContext* context, int reg, ast_TableExpr* ex, lua_expcontext* ec);
+void lua_compileArithmeticOpExpr(lua_funcContext* context, int reg, ast_ArithmeticOpExpr* expr, lua_expcontext* ec);
+void lua_compileStringConcatOpExpr(lua_funcContext* context, int reg, ast_StringConcatOpExpr* expr, lua_expcontext* ec);
+void lua_compileUnaryOpExpr(lua_funcContext* context, int reg, ast_Expr expr, lua_expcontext* ec);
+void lua_compileRelationalOpExprAux(lua_funcContext* context, int reg, ast_RelationalOpExpr* expr, int flip, int label);
+void lua_compileRelationalOpExpr(lua_funcContext* context, int reg, ast_RelationalOpExpr* expr, lua_expcontext* ec);
+void lua_compileLogicalOpExpr(lua_funcContext* context, int reg, ast_LogicalOpExpr* expr, lua_expcontext* ec);
+void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr expr, lua_expcontext* ec, int thenlabel, int elselabel, bool hasnextcond, lua_lblabels* lb);
+int lua_compileFuncCallExpr(lua_funcContext* context, int reg, ast_FuncCallExpr* expr, lua_expcontext* ec);
+int lua_loadRk(lua_funcContext* context, int* reg, ast_Expr expr, lua_LValue cnst);
+lua_expContextType lua_getIdentRefType(lua_funcContext* context, lua_funcContext* current, ast_IdentExpr* expr);
+GoString lua_getExprName(lua_funcContext* context, ast_Expr expr);
+void lua_patchCode(lua_funcContext* context);
+Ret_lua_FunctionProtoPtr__GoIface lua_Compile(Slice_ast_Stmt chunk, GoString name);
+void lua_init_1(void);
+lua_LValue lua_Upvalue_Value(lua_Upvalue* uv);
+void lua_Upvalue_SetValue(lua_Upvalue* uv, lua_LValue value);
+void lua_Upvalue_Close(lua_Upvalue* uv);
+bool lua_Upvalue_IsClosed(lua_Upvalue* uv);
+lua_FunctionProto* lua_newFunctionProto(GoString name);
+GoString lua_FunctionProto_String(lua_FunctionProto* fp);
+GoString lua_FunctionProto_str(lua_FunctionProto* fp, int level, int count);
+lua_LFunction* lua_newLFunctionL(lua_FunctionProto* proto, lua_LTable* env, int nupvalue);
+lua_lFileType lua_lFile_Type(lua_lFile* file);
+GoString lua_lFile_Name(lua_lFile* file);
+int lua_opGetOpCode(u32 inst);
+void lua_opSetOpCode(u32* inst, int opcode);
+int lua_opGetArgA(u32 inst);
+void lua_opSetArgA(u32* inst, int arg);
+int lua_opGetArgB(u32 inst);
+void lua_opSetArgB(u32* inst, int arg);
+int lua_opGetArgC(u32 inst);
+void lua_opSetArgC(u32* inst, int arg);
+int lua_opGetArgBx(u32 inst);
+void lua_opSetArgBx(u32* inst, int arg);
+int lua_opGetArgSbx(u32 inst);
+void lua_opSetArgSbx(u32* inst, int arg);
+u32 lua_opCreateABC(int op, int a, int b, int c);
+u32 lua_opCreateABx(int op, int a, int bx);
+u32 lua_opCreateASbx(int op, int a, int sbx);
+bool lua_opIsK(int value);
+int lua_opRkAsk(int value);
+GoString lua_opToString(u32 inst);
+void lua_init_2(void);
+GoString parse_Error_Error(parse_Error* e);
+void parse_writeChar(GoOpaque /* bytes.Buffer */* buf, int c);
+bool parse_isDecimal(int ch);
+bool parse_isIdent(int ch, int pos);
+bool parse_isDigit(int ch);
+parse_Scanner* parse_NewScanner(GoIface reader, GoString source);
+parse_Error* parse_Scanner_Error(parse_Scanner* sc, GoString tok, GoString msg);
+parse_Error* parse_Scanner_TokenError(parse_Scanner* sc, ast_Token tok, GoString msg);
+int parse_Scanner_readNext(parse_Scanner* sc);
+void parse_Scanner_Newline(parse_Scanner* sc, int ch);
+int parse_Scanner_Next(parse_Scanner* sc);
+int parse_Scanner_Peek(parse_Scanner* sc);
+int parse_Scanner_skipWhiteSpace(parse_Scanner* sc, i64 whitespace);
+GoIface parse_Scanner_skipComments(parse_Scanner* sc, int ch);
+GoIface parse_Scanner_scanIdent(parse_Scanner* sc, int ch, GoOpaque /* bytes.Buffer */* buf);
+GoIface parse_Scanner_scanDecimal(parse_Scanner* sc, int ch, GoOpaque /* bytes.Buffer */* buf);
+GoIface parse_Scanner_scanNumber(parse_Scanner* sc, int ch, GoOpaque /* bytes.Buffer */* buf);
+GoIface parse_Scanner_scanString(parse_Scanner* sc, int quote, GoOpaque /* bytes.Buffer */* buf);
+GoIface parse_Scanner_scanEscape(parse_Scanner* sc, int ch, GoOpaque /* bytes.Buffer */* buf);
+Ret_int__int parse_Scanner_countSep(parse_Scanner* sc, int ch);
+GoIface parse_Scanner_scanMultilineString(parse_Scanner* sc, int ch, GoOpaque /* bytes.Buffer */* buf);
+Ret_ast_Token__GoIface parse_Scanner_Scan(parse_Scanner* sc, parse_Lexer* lexer);
+int parse_Lexer_Lex(parse_Lexer* lx, parse_yySymType* lval);
+void parse_Lexer_Error(parse_Lexer* lx, GoString message);
+void parse_Lexer_TokenError(parse_Lexer* lx, ast_Token tok, GoString message);
+Ret_Slice_ast_Stmt__GoIface parse_Parse(GoIface reader, GoString name);
+GoString parse_TokenName(int c);
+parse_yyParser parse_yyNewParser(void);
+GoString parse_yyTokname(int c);
+GoString parse_yyStatname(int s);
+GoString parse_yyErrorMessage(int state, int lookAhead);
+Ret_int__int parse_yylex1(parse_yyLexer lex, parse_yySymType* lval);
+int parse_yyParse(parse_yyLexer yylex);
+int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex);
+GoString pm_Error_Error(pm_Error* e);
+lua_ApiError* lua_newApiError(lua_ApiErrorType code, lua_LValue object);
+lua_ApiError* lua_newApiErrorS(lua_ApiErrorType code, GoString message);
+lua_ApiError* lua_newApiErrorE(lua_ApiErrorType code, GoIface err);
+GoString lua_ApiError_Error(lua_ApiError* e);
+bool lua_fixedCallFrameStack_IsEmpty(lua_fixedCallFrameStack* cs);
+bool lua_fixedCallFrameStack_IsFull(lua_fixedCallFrameStack* cs);
+void lua_fixedCallFrameStack_Push(lua_fixedCallFrameStack* cs, lua_callFrame v);
+int lua_fixedCallFrameStack_Sp(lua_fixedCallFrameStack* cs);
+void lua_fixedCallFrameStack_SetSp(lua_fixedCallFrameStack* cs, int sp);
+lua_callFrame* lua_fixedCallFrameStack_Last(lua_fixedCallFrameStack* cs);
+lua_callFrame* lua_fixedCallFrameStack_At(lua_fixedCallFrameStack* cs, int sp);
+lua_callFrame* lua_fixedCallFrameStack_Pop(lua_fixedCallFrameStack* cs);
+void lua_fixedCallFrameStack_FreeAll(lua_fixedCallFrameStack* cs);
+lua_callFrameStackSegment* lua_newCallFrameStackSegment(void);
+void lua_freeCallFrameStackSegment(lua_callFrameStackSegment* seg);
+bool lua_autoGrowingCallFrameStack_IsEmpty(lua_autoGrowingCallFrameStack* cs);
+bool lua_autoGrowingCallFrameStack_IsFull(lua_autoGrowingCallFrameStack* cs);
+void lua_autoGrowingCallFrameStack_FreeAll(lua_autoGrowingCallFrameStack* cs);
+void lua_autoGrowingCallFrameStack_Push(lua_autoGrowingCallFrameStack* cs, lua_callFrame v);
+int lua_autoGrowingCallFrameStack_Sp(lua_autoGrowingCallFrameStack* cs);
+void lua_autoGrowingCallFrameStack_SetSp(lua_autoGrowingCallFrameStack* cs, int sp);
+lua_callFrame* lua_autoGrowingCallFrameStack_Last(lua_autoGrowingCallFrameStack* cs);
+lua_callFrame* lua_autoGrowingCallFrameStack_At(lua_autoGrowingCallFrameStack* cs, int sp);
+lua_callFrame* lua_autoGrowingCallFrameStack_Pop(lua_autoGrowingCallFrameStack* cs);
+void lua_registry_resize(lua_registry* rg, int requiredSize);
+void lua_registry_forceResize(lua_registry* rg, int newSize);
+void lua_registry_SetTop(lua_registry* rg, int top);
+int lua_registry_Top(lua_registry* rg);
+void lua_registry_Push(lua_registry* rg, lua_LValue v);
+lua_LValue lua_registry_Pop(lua_registry* rg);
+lua_LValue lua_registry_Get(lua_registry* rg, int reg);
+void lua_registry_Insert(lua_registry* rg, lua_LValue value, int reg);
+void lua_registry_Set(lua_registry* rg, int reg, lua_LValue val);
+void lua_registry_SetNumber(lua_registry* rg, int reg, lua_LNumber val);
+bool lua_registry_IsFull(lua_registry* rg);
+void lua_panicWithoutTraceback(lua_LState* L);
+void lua_LState_closeAllUpvalues(lua_LState* ls);
+void lua_LState_raiseError(lua_LState* ls, int level, GoString format, Slice_GoIface args);
+GoString lua_LState_where(lua_LState* ls, int level, bool skipg);
+GoString lua_LState_stackTrace(lua_LState* ls, int level);
+GoString lua_LState_formattedFrameFuncName(lua_LState* ls, lua_callFrame* fr);
+Ret_GoString__bool lua_LState_frameFuncName(lua_LState* ls, lua_callFrame* fr);
+void lua_LState_kill(lua_LState* ls);
+int lua_LState_indexToReg(lua_LState* ls, int idx);
+int lua_LState_currentLocalBase(lua_LState* ls);
+lua_LTable* lua_LState_currentEnv(lua_LState* ls);
+lua_LValue lua_LState_rkValue(lua_LState* ls, int idx);
+GoString lua_LState_rkString(lua_LState* ls, int idx);
+void lua_LState_closeUpvalues(lua_LState* ls, int idx);
+lua_Upvalue* lua_LState_findUpvalue(lua_LState* ls, int idx);
+lua_LValue lua_LState_metatable(lua_LState* ls, lua_LValue lvalue, bool rawget);
+lua_LValue lua_LState_metaOp1(lua_LState* ls, lua_LValue lvalue, GoString event);
+lua_LValue lua_LState_metaOp2(lua_LState* ls, lua_LValue value1, lua_LValue value2, GoString event);
+Ret_lua_LFunctionPtr__bool lua_LState_metaCall(lua_LState* ls, lua_LValue lvalue);
+void lua_LState_pushCallFrame(lua_LState* ls, lua_callFrame cf, lua_LValue fn, bool meta);
+void lua_LState_callR(lua_LState* ls, int nargs, int nret, int rbase);
+lua_LValue lua_LState_getField(lua_LState* ls, lua_LValue obj, lua_LValue key);
+lua_LValue lua_LState_getFieldString(lua_LState* ls, lua_LValue obj, GoString key);
+void lua_LState_setField(lua_LState* ls, lua_LValue obj, lua_LValue key, lua_LValue value);
+void lua_LState_setFieldString(lua_LState* ls, lua_LValue obj, GoString key, lua_LValue value);
+void lua_LState_Close(lua_LState* ls);
+int lua_LState_GetTop(lua_LState* ls);
+void lua_LState_SetTop(lua_LState* ls, int idx);
+lua_LValue lua_LState_Get(lua_LState* ls, int idx);
+void lua_LState_Push(lua_LState* ls, lua_LValue value);
+void lua_LState_Pop(lua_LState* ls, int n);
+void lua_LState_registryOverflow(lua_LState* ls);
+void lua_LState_RaiseError(lua_LState* ls, GoString format, Slice_GoIface args);
+void lua_LState_Error(lua_LState* ls, lua_LValue lv, int level);
+Ret_lua_DebugPtr__bool lua_LState_GetStack(lua_LState* ls, int level);
+lua_LValue lua_LState_GetField(lua_LState* ls, lua_LValue obj, GoString skey);
+void lua_LState_RawSet(lua_LState* ls, lua_LTable* tb, lua_LValue key, lua_LValue value);
+lua_LValue lua_LState_GetGlobal(lua_LState* ls, GoString name);
+Ret_lua_LFunctionPtr__GoIface lua_LState_Load(lua_LState* ls, GoIface reader, GoString name);
+void lua_LState_Call(lua_LState* ls, int nargs, int nret);
+GoIface lua_LState_PCall(lua_LState* ls, int nargs, int nret, lua_LFunction* errfunc);
+GoIface lua_LState_CallByParam(lua_LState* ls, lua_P cp, Slice_lua_LValue args);
+void lua_LState_XMoveTo(lua_LState* ls, lua_LState* other, int n);
+lua_callFrame* lua_LState_RemoveCallerFrame(lua_LState* ls);
+int lua_lValueArraySorter_Len(lua_lValueArraySorter lv);
+lua_LTable* lua_newLTable(int acap, int hcap);
+int lua_LTable_Len(lua_LTable* tb);
+void lua_LTable_RawSet(lua_LTable* tb, lua_LValue key, lua_LValue value);
+void lua_LTable_RawSetInt(lua_LTable* tb, int key, lua_LValue value);
+void lua_LTable_RawSetString(lua_LTable* tb, GoString key, lua_LValue value);
+void lua_LTable_RawSetH(lua_LTable* tb, lua_LValue key, lua_LValue value);
+lua_LValue lua_LTable_RawGet(lua_LTable* tb, lua_LValue key);
+lua_LValue lua_LTable_RawGetString(lua_LTable* tb, GoString key);
+int lua_intMin(int a, int b);
+int lua_intMax(int a, int b);
+GoString lua_flagScanner_String(lua_flagScanner* fs);
+bool lua_isInteger(lua_LNumber v);
+bool lua_isArrayKey(lua_LNumber v);
+Ret_lua_LNumber__GoIface lua_parseNumber(GoString number);
+int lua_int2Fb(int val);
+int lua_strCmp(GoString s1, GoString s2);
+GoString lua_LValueType_String(lua_LValueType vt);
+bool lua_LVIsFalse(lua_LValue v);
+bool lua_LVAsBool(lua_LValue v);
+GoString lua_LVAsString(lua_LValue v);
+bool lua_LVCanConvToString(lua_LValue v);
+GoString lua_LNilType_String(lua_LNilType* nl);
+lua_LValueType lua_LNilType_Type(lua_LNilType* nl);
+Ret_f64__bool lua_LNilType_assertFloat64(lua_LNilType* nl);
+Ret_lua_LFunctionPtr__bool lua_LNilType_assertFunction(lua_LNilType* nl);
+GoString lua_LBool_String(lua_LBool bl);
+lua_LValueType lua_LBool_Type(lua_LBool bl);
+Ret_f64__bool lua_LBool_assertFloat64(lua_LBool bl);
+Ret_lua_LFunctionPtr__bool lua_LBool_assertFunction(lua_LBool bl);
+GoString lua_LString_String(lua_LString st);
+lua_LValueType lua_LString_Type(lua_LString st);
+Ret_f64__bool lua_LString_assertFloat64(lua_LString st);
+Ret_lua_LFunctionPtr__bool lua_LString_assertFunction(lua_LString st);
+GoString lua_LNumber_String(lua_LNumber nm);
+lua_LValueType lua_LNumber_Type(lua_LNumber nm);
+Ret_f64__bool lua_LNumber_assertFloat64(lua_LNumber nm);
+Ret_lua_LFunctionPtr__bool lua_LNumber_assertFunction(lua_LNumber nm);
+GoString lua_LTable_String(lua_LTable* tb);
+lua_LValueType lua_LTable_Type(lua_LTable* tb);
+Ret_f64__bool lua_LTable_assertFloat64(lua_LTable* tb);
+Ret_lua_LFunctionPtr__bool lua_LTable_assertFunction(lua_LTable* tb);
+GoString lua_LFunction_String(lua_LFunction* fn);
+lua_LValueType lua_LFunction_Type(lua_LFunction* fn);
+Ret_f64__bool lua_LFunction_assertFloat64(lua_LFunction* fn);
+Ret_lua_LFunctionPtr__bool lua_LFunction_assertFunction(lua_LFunction* fn);
+GoString lua_LState_String(lua_LState* ls);
+lua_LValueType lua_LState_Type(lua_LState* ls);
+Ret_f64__bool lua_LState_assertFloat64(lua_LState* ls);
+Ret_lua_LFunctionPtr__bool lua_LState_assertFunction(lua_LState* ls);
+GoString lua_LUserData_String(lua_LUserData* ud);
+lua_LValueType lua_LUserData_Type(lua_LUserData* ud);
+Ret_f64__bool lua_LUserData_assertFloat64(lua_LUserData* ud);
+Ret_lua_LFunctionPtr__bool lua_LUserData_assertFunction(lua_LUserData* ud);
+GoString lua_LChannel_String(lua_LChannel ch);
+lua_LValueType lua_LChannel_Type(lua_LChannel ch);
+Ret_f64__bool lua_LChannel_assertFloat64(lua_LChannel ch);
+Ret_lua_LFunctionPtr__bool lua_LChannel_assertFunction(lua_LChannel ch);
+void lua_switchToParentThread(lua_LState* L, int nargs, bool haserror, bool kill);
+bool lua_callGFunction(lua_LState* L, bool tailcall);
+void lua_init_3(void);
+int lua_opArith(lua_LState* L, u32 inst, lua_callFrame* baseframe);
+lua_LNumber lua_luaModulo(lua_LNumber lhs, lua_LNumber rhs);
+lua_LNumber lua_numberArith(lua_LState* L, int opcode, lua_LNumber lhs, lua_LNumber rhs);
+lua_LValue lua_objectArith(lua_LState* L, int opcode, lua_LValue lhs, lua_LValue rhs);
+lua_LValue lua_stringConcat(lua_LState* L, int total, int last);
+bool lua_lessThan(lua_LState* L, lua_LValue lhs, lua_LValue rhs);
+bool lua_equals(lua_LState* L, lua_LValue lhs, lua_LValue rhs, bool raw);
+bool lua_objectRationalWithError(lua_LState* L, lua_LValue lhs, lua_LValue rhs, GoString event);
+int lua_objectRational(lua_LState* L, lua_LValue lhs, lua_LValue rhs, GoString event);
 AnimFrame* fn_newAnimFrame(void);
+Ret_AnimFramePtr__GoIface fn_ReadAnimFrame(GoString line);
+Animation* fn_newAnimation(Sff* sff, PaletteList* pal);
 AnimCompiler* fn_newAnimCompiler(Sff* sff, PaletteList* pal, bool log_);
-u64 fn_bcProfNow(void);
 void AnimCompiler_warnf(AnimCompiler* ac, GoString format, Slice_GoIface args);
-void Renderer_VK_Await(Renderer_VK* r);
-void fn_chk(GoIface err);
-GoString StateType_TriggerValue(StateType st);
-Ret_Slice_cnode__int cparser_parse(cparser* p, int s, int e, Slice_cnode init, bool startRedir);
-Ret_Slice_Arr4_f32__GoIface AnimCompiler_readClsn(AnimCompiler* ac, u8 clsnType, i32 size);
-GoIface CharCompiler_hitBySub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString sctrlName);
-void Fade_reset(Fade* fa);
-Ret_bool__GoIface fn_ExecFunc(GoOpaque /* lua.LState */* l, GoString funcName);
 GoIface AnimCompiler_errorf(AnimCompiler* ac, int line, GoString format, Slice_GoIface args);
 void AnimCompiler_compileText(AnimCompiler* ac, GoString filename, GoString text);
 AnimationTable AnimCompiler_finalize(AnimCompiler* ac);
 Ret_AnimationPtr__GoIface AnimCompiler_readAnimation(AnimCompiler* ac);
-Fade* fn_newFade(void);
-StageProps fn_newStageProps(void);
-cnode cparser_popFrom(cparser* p, Slice_cnode* st);
-i32 fn_Random(void);
-void fn_ShowErrorDialog(GoString message);
-Ret_int__int__GoString__bool fn_parseOverrideKey(GoString key);
-bool fn_vitaBCHashEnabled(void);
-GoIface bgVideo_Open(bgVideo* bgv, GoString filename, int volume, BgVideoScaleMode sm, BgVideoScaleFilter sf, bool loop);
-GoIface bgVideo_Tick(bgVideo* bgv);
-Ret_AnimFramePtr__GoIface fn_ReadAnimFrame(GoString line);
-bool fn_bcProfRun(Char* c, StateBytecode* sb, i32 st);
-Animation* fn_newAnimation(Sff* sff, PaletteList* pal);
-cnode fn_compileExp(BytecodeExp be);
-GoIface fn_luaDoStringCached(GoOpaque /* lua.LState */* l, GoString src);
-void fn_Srand(i32 s);
-void WinType_SetPerfect(WinType* wt);
-i32 fn_Rand(i32 min_, i32 max_);
-f64 fn_round2(f64 x);
-i32 Fade_animLength(Fade* fa);
-bool CommandStepKey_IsDirectionPress(CommandStepKey ck);
-void fn_jsonFileCacheReset(void);
-GoString fn_defKey(GoString p);
-f32 fn_RandF32(f32 min_, f32 max_);
-void WinType_SetClutch(WinType* wt);
-i32 fn_RandI(i32 x, i32 y);
-scRunFn fn_scRunFunc(StateController sc);
-bool fn_stateDumpEnabled(void);
-void bgAction_clear(bgAction* bga);
-void bgAction_action(bgAction* bga, bool updateTime);
-void bgVideo_SetPlaying(bgVideo* bgv, bool on);
-void SDLSpeaker_Close(SDLSpeaker* s);
-cnode cparser_redirect(cparser* p, OpCode op, int* ip, int e, bool useT, Slice_cnode* st);
-GoFunc fn_redirResolver(OpCode op);
-cnode cparser_simple(cparser* p, OpCode op, int* ip, int e, bool useT, Slice_cnode* st);
-cnode fn_nativeNode(OpCode op, BytecodeExp be, int start, Slice_cnode args, bool useT);
-CharCompiler* fn_newCharCompiler(void);
-bool fn_fuseEnabled(void);
-f32 fn_RandF(f32 x, f32 y);
-void fn_fuseBytecode(StateBytecode* sb);
-void fn_bcProfFrame(void);
-void fn_fuseBlock(StateBlock* b);
-void fn_fuseController(StateController sc);
-int fn_opLen(OpCode op);
-void fn_fuseExp(BytecodeExp be);
-GoString fn_attrString(i32 attr);
-GoString fn_flagString(i32 flag);
-void fn_fuseExp1(BytecodeExp be);
-bool fn_isSimpleTrigger(OpCode t);
-stageCamera* fn_newStageCamera(void);
-bool fn_isCmp8(OpCode op);
-bool fn_isCmp32(OpCode op);
-OpCode fn_cmpOf8(OpCode op);
-OpCode fn_cmpOf32(OpCode op);
-void fn_fuseLines(BytecodeExp be);
-f32 fn_Rad(f32 f);
-f32 fn_Cos(f32 f);
-f32 fn_Sin(f32 f);
-i32 fn_hitFlagMask(GoString s);
-void DebugClsn_Add(DebugClsn* dc, Slice_ClsnFinal boxes, f32 x, f32 y, f32 facing);
-i32 fn_evalHitFlag(Slice_BytecodeExp exp_, Char* c);
-Camera* fn_newCamera(void);
-void bgVideo_SetVisible(bgVideo* bgv, bool on);
-void bgVideo_Reset(bgVideo* bgv);
-void bgVideo_updateAudioVolume(bgVideo* bgv);
-void bgVideo_MixerCleared(bgVideo* bgv);
-void bgVideo_Close(bgVideo* bgv);
-bool CommandStepKey_IsDirectionRelease(CommandStepKey ck);
-i32 Fade_colorFadeTime(Fade* fa, i32 animLen);
-void fn_hoistTriggers(StateBytecode* sb);
-f32 fn_Pow(f32 x, f32 y);
-void fn_vitaBCHashLog(GoString def, int pn, CharGlobalInfo* gi, Map_i32_StateBytecodePtr states, int consoleFrom);
-bool CommandStepKey_IsButtonPress(CommandStepKey ck);
-void fn_cvfGcSafepoint(bool fighting);
-Ret_GoString__bool fn_parseMapKey(GoString key);
-Slice_GoString fn_selectedCharKeys(void);
-i32 Fade_duration(Fade* fa);
-Slice_u8 fn_sdF(Slice_u8 b, f32 f);
-PalFXDef fn_palFXDefDefault(void);
-bool CommandStepKey_IsButtonRelease(CommandStepKey ck);
-f64 fn_cvfExp(f64 x);
-f64 fn_cvfExpmulti(f64 hi, f64 lo, int k);
-f64 fn_cvfLog(f64 x);
-i32 fn_cvfHeadlessMain(Slice_GoString args);
-FightFx* fn_newFightFx(void);
-GoIface fn_loadCommonFightFx(GoString def, bool isMainThread);
-runTally fn_tallyRun(void);
-GoIface fn_loadFightFx(GoString def, bool isCharFX, bool isMainThread);
-PalFX* fn_newPalFX(void);
-void PalFX_clearWithNeg(PalFX* pf, bool neg);
-void PalFX_clear(PalFX* pf);
-PalFX fn_identityPalFX(void);
-PalFX PalFX_sample(PalFX* pf);
+Ret_Slice_Arr4_f32__GoIface AnimCompiler_readClsn(AnimCompiler* ac, u8 clsnType, i32 size);
 Ret_i32__AnimationPtr__GoIface AnimCompiler_readAction(AnimCompiler* ac);
 void Animation_Reset(Animation* a);
 bool Animation_isBlank(Animation* a);
@@ -3474,96 +4324,68 @@ Animation* PreloadedAnims_get(PreloadedAnims pa, i32 grp, i32 idx);
 void PreloadedAnims_addAnim(PreloadedAnims pa, Animation* anim, i32 no);
 void PreloadedAnims_addSprite(PreloadedAnims pa, Sff* sff, u16 grp, u16 idx);
 void PreloadedAnims_updateSff(PreloadedAnims pa, Sff* sff);
+void SDLSpeaker_Close(SDLSpeaker* s);
+cnode fn_compileExp(BytecodeExp be);
+cnode cparser_popFrom(cparser* p, Slice_cnode* st);
+Ret_Slice_cnode__int cparser_parse(cparser* p, int s, int e, Slice_cnode init, bool startRedir);
+cnode cparser_redirect(cparser* p, OpCode op, int* ip, int e, bool useT, Slice_cnode* st);
+GoFunc fn_redirResolver(OpCode op);
+cnode cparser_simple(cparser* p, OpCode op, int* ip, int e, bool useT, Slice_cnode* st);
+cnode fn_nativeNode(OpCode op, BytecodeExp be, int start, Slice_cnode args, bool useT);
 bool fn_cjitEnabled(void);
 void fn_compileBlockTriggers(StateBlock* b);
 bool StateBlock_evalTrigger(StateBlock* b, Char* c);
-void fn_initLUTs(void);
-bool RollbackSystem_hijackRunMatch(RollbackSystem* rs);
-Ret_OpCode__int fn_hoistGuard(BytecodeExp t);
-void Fade_init(Fade* fa, Fade* dest, bool isFadeIn);
-void fn_hoistBlock(StateBlock* b);
-void Fade_step(Fade* fa);
-void Fade_drawRect(Fade* fa, Arr4_i32 rect, u32 color, i32 alpha);
-Ret_GoString__GoString__bool fn_parseKV(GoString s);
-Ret_bool__bool fn_parseBoolLoose(GoString s);
-bool fn_isMusicKey(GoString key);
-GoIface xmStreamer_Close(xmStreamer* x);
-GameState* fn_NewGameState(void);
-void GameState_LoadState(GameState* gs, int stateID);
-GoString fn_extractPrefixFromMusicKey(GoString key);
-Ret_GoString__Slice_GoString fn_splitMusicParamValue(GoString v);
-int xmStreamer_Position(xmStreamer* x);
-GoIface xmStreamer_Seek(xmStreamer* x, int p);
-int xmStreamer_Len(xmStreamer* x);
-Animation* Animation_Clone(Animation* a, GameStatePool* gsp);
-Slice_u8 fn_sdI(Slice_u8 b, i64 v);
-void fn_stateDumpTickFn(void);
+bool fn_fuseEnabled(void);
+void fn_fuseBytecode(StateBytecode* sb);
+void fn_fuseBlock(StateBlock* b);
+void fn_fuseController(StateController sc);
+int fn_opLen(OpCode op);
+void fn_fuseExp(BytecodeExp be);
+void fn_fuseExp1(BytecodeExp be);
+bool fn_isSimpleTrigger(OpCode t);
+bool fn_isCmp8(OpCode op);
+bool fn_isCmp32(OpCode op);
+OpCode fn_cmpOf8(OpCode op);
+OpCode fn_cmpOf32(OpCode op);
+void fn_fuseLines(BytecodeExp be);
+u64 fn_bcProfNow(void);
+bool fn_bcProfRun(Char* c, StateBytecode* sb, i32 st);
+void fn_bcProfFrame(void);
 void fn_bcProfCtl(int i, StateController sc, u64 ops);
 void fn_bcProfNameCtl(StateController sc, StateBlock* b, GoString header);
 GoString fn_bcProfCtlName(StateController sc);
 void fn_bcProfCtlDump(u64 n);
-void BGDef_runBgCtrl(BGDef* s, bgCtrl* bgc);
 bool fn_vitaStateHashEnabled(void);
 void fn_vitaStateHashTick(void);
+void BGDef_runBgCtrl(BGDef* s, bgCtrl* bgc);
 void BGDef_action(BGDef* s);
 void BGDef_step(BGDef* s);
 void BGDef_Draw(BGDef* s, i32 layer, f32 x, f32 y, f32 scl);
 Arr4_i32 bgDrawTransform_window(bgDrawTransform* t, Arr4_i32 window, Arr2_f32 localScl);
 void BGDef_draw(BGDef* s, i32 layer, f32 x, f32 y, f32 scl, bgDrawTransform* transform);
 void BGDef_Reset(BGDef* s);
-void Camera_Reset(Camera* c);
+GoString StateType_TriggerValue(StateType st);
+GoString fn_attrString(i32 attr);
+GoString fn_flagString(i32 flag);
+i32 fn_hitFlagMask(GoString s);
+i32 fn_evalHitFlag(Slice_BytecodeExp exp_, Char* c);
 i32 fn_evalAttr(Slice_BytecodeExp exp_, Char* c, bool hitdef);
 i32 fn_evalTriggerAttr(Char* c, BytecodeValue v);
-void DebugClsn_draw(DebugClsn* dc, u32 color, Arr2_i32 blendAlpha);
 i32 fn_evalTriggerHitFlag(Char* c, BytecodeValue v);
 GoString MoveType_TriggerValue(MoveType mt);
-void CharData_init(CharData* cd);
 StringPool* fn_NewStringPool(void);
 void StringPool_Clear(StringPool* sp);
 int StringPool_Add(StringPool* sp, GoString s);
-void Camera_Init(Camera* c);
-void Camera_ResetTracking(Camera* c);
-void Camera_setScreenPos(Camera* c, f32 x, f32 y, f32 scl);
-void CharSize_init(CharSize* cs);
-void Camera_SaveRestoreTracking(Camera* c);
-void Camera_Update(Camera* c, f32 scl, f32 x, f32 y);
-f32 Camera_XBound(Camera* c, f32 scl, f32 x);
-void CharVelocity_init(CharVelocity* cv);
-f32 Camera_MinZoomScale(Camera* c);
-f32 Camera_YBound(Camera* c, f32 scl, f32 y);
-f32 Camera_BaseScale(Camera* c);
-f32 Camera_GroundLevel(Camera* c);
-void CharMovement_init(CharMovement* cm);
-Ret_f32__f32__f32 Camera_action(Camera* c, f32 x, f32 y, f32 scale, bool pause);
-Ret_f32__f32__f32 Camera_reduceZoomSpeed(Camera* c, f32 newLeft, f32 newRight, f32 newScale, f32 oldLeft, f32 oldRight, f32 oldScale);
-Ret_f32__f32 Camera_keepScreenEdge(Camera* c, f32 left, f32 right);
-Ret_f32__f32 Camera_keepStageEdge(Camera* c, f32 left, f32 right);
-Ret_f32__f32__f32 Camera_hardLimit(Camera* c, f32 left, f32 right);
-f32 Camera_reduceYScrollSpeed(Camera* c, f32 newY, f32 oldY);
-void HitDef_reset(HitDef* hd, Char* c, Projectile* proj);
-void HitDef_finalizeParams(HitDef* hd, Char* c, Projectile* proj);
-f32 Camera_boundY(Camera* c, f32 y, f32 scale);
-bool Camera_zoomEnabled(Camera* c);
-void HitDef_updateStateType(HitDef* hd, StateType stateType);
-bool HitDef_testAttr(HitDef* hd, i32 attr);
-bool HitDef_testReversalAttr(HitDef* hd, i32 attr);
-void GetHitVar_reset(GetHitVar* ghv, Char* c);
 int StringPool_add(StringPool* sp, GoString s);
 bool BytecodeValue_IsNone(BytecodeValue bv);
 bool BytecodeValue_IsUndefined(BytecodeValue bv);
 f32 BytecodeValue_ToF(BytecodeValue bv);
 i32 BytecodeValue_ToI(BytecodeValue bv);
-void GetHitVar_selectiveReset(GetHitVar* ghv, Char* c);
 i64 BytecodeValue_ToI64(BytecodeValue bv);
 bool BytecodeValue_ToB(BytecodeValue bv);
 GoIface BytecodeValue_ToAny(BytecodeValue bv);
-void GetHitVar_clearOff(GetHitVar* ghv);
-i32 GetHitVar_chainId(GetHitVar ghv);
 GoString BytecodeValue_ToS(BytecodeValue bv);
-bool GetHitVar_idMatch(GetHitVar ghv, i32 id);
 GoString BytecodeValue_toLowS(BytecodeValue bv);
-i32 GetHitVar_getJuggle(GetHitVar ghv, i32 id, i32 defaultJuggle);
-void GetHitVar_dropPlayerId(GetHitVar* ghv, i32 id);
 void BytecodeValue_SetF(BytecodeValue* bv, f32 f);
 void BytecodeValue_SetI(BytecodeValue* bv, i32 i);
 void BytecodeValue_SetB(BytecodeValue* bv, bool b);
@@ -3577,12 +4399,6 @@ BytecodeValue fn_BytecodeString(GoString s);
 TypedValue fn_TypedValueOf(BytecodeValue bv);
 BytecodeValue TypedValue_ToBV(TypedValue mv);
 f32 TypedValue_ToF(TypedValue mv);
-void GetHitVar_addId(GetHitVar* ghv, i32 id, i32 juggle);
-bool GetHitVar_testAttr(GetHitVar* ghv, i32 attr);
-void HitBy_clear(HitBy* hb);
-void HitOverride_clear(HitOverride* ho);
-void MoveHitVar_clear(MoveHitVar* mhv);
-AfterImage* fn_newAfterImage(void);
 void BytecodeStack_Clear(BytecodeStack* bs);
 void BytecodeStack_Push(BytecodeStack* bs, BytecodeValue bv);
 void fn_bcStackGrow(BytecodeStack* bs, BytecodeValue bv);
@@ -3591,9 +4407,6 @@ void BytecodeStack_PushI64(BytecodeStack* bs, i64 i);
 void BytecodeStack_PushF(BytecodeStack* bs, f32 f);
 void BytecodeStack_PushB(BytecodeStack* bs, bool b);
 void BytecodeStack_PushS(BytecodeStack* bs, GoString s);
-void AfterImage_setPalColor(AfterImage* ai, i32 color);
-void AfterImage_setPalHueShift(AfterImage* ai, i32 huesh);
-void AfterImage_setPalInvertall(AfterImage* ai, bool invertall);
 BytecodeValue* BytecodeStack_Top(BytecodeStack bs);
 BytecodeValue BytecodeStack_Pop(BytecodeStack* bs);
 void BytecodeStack_Dup(BytecodeStack* bs);
@@ -3606,15 +4419,6 @@ void BytecodeExp_appendI32Op(BytecodeExp* be, OpCode op, i32 addr);
 void BytecodeExp_appendI64Op(BytecodeExp* be, OpCode op, i64 addr);
 i32 BytecodeExp_ReadIntAt(BytecodeExp be, int* i);
 GoString BytecodeExp_ReadPoolStringAt(BytecodeExp be, int* i);
-void AfterImage_setPalInvertblend(AfterImage* ai, i32 invertblend);
-void AfterImage_setPalBrightR(AfterImage* ai, i32 addr);
-void AfterImage_setPalBrightG(AfterImage* ai, i32 addg);
-void AfterImage_setPalBrightB(AfterImage* ai, i32 addb);
-void AfterImage_setPalContrastR(AfterImage* ai, i32 mulr);
-void AfterImage_setPalContrastG(AfterImage* ai, i32 mulg);
-void AfterImage_setPalContrastB(AfterImage* ai, i32 mulb);
-void AfterImage_setup(AfterImage* ai, Char* c);
-void AfterImage_recAfterImg(AfterImage* ai, SpriteData* sd, bool hitpause);
 GoString BytecodeExp_readMapKey(BytecodeExp be, int* i);
 int BytecodeExp_PeekLength(BytecodeExp be, int i);
 i32 fn_bcI32(Slice_OpCode b, int i);
@@ -3623,7 +4427,6 @@ i32 BytecodeExp_readInt32At(BytecodeExp be, int i);
 void BytecodeExp_neg(BytecodeExp _recv, BytecodeValue* v);
 void BytecodeExp_bwnot(BytecodeExp _recv, BytecodeValue* v);
 void BytecodeExp_blnot(BytecodeExp _recv, BytecodeValue* v);
-bool AfterImage_isActive(AfterImage* ai);
 void BytecodeExp_pow(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, int pn);
 void BytecodeExp_mul(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_div(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
@@ -3631,14 +4434,11 @@ void BytecodeExp_mod(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_add(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_sub(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_gt(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
-void AfterImage_recAndCue(AfterImage* ai, SpriteData* sd, int playerNo, bool rec, bool hitpause);
 void BytecodeExp_ge(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_lt(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_le(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_rangeCheck(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue min_, BytecodeValue max_, OpCode op);
 void BytecodeExp_eq(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
-Explod* fn_newExplod(void);
-void Explod_clear(Explod* e);
 void BytecodeExp_ne(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_bwand(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_bwxor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
@@ -3647,14 +4447,6 @@ void BytecodeExp_bland(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_blxor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_blor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_abs(BytecodeExp _recv, BytecodeValue* v1);
-Explod* Explod_initFromChar(Explod* e, Char* c);
-Char* Explod_root(Explod* e);
-Char* Explod_parent(Explod* e);
-void Explod_setAllPosX(Explod* e, f32 x);
-void Explod_setAllPosY(Explod* e, f32 y);
-void Explod_setAllPosZ(Explod* e, f32 z);
-void Explod_setBind(Explod* e, i32 bId);
-void Explod_setPos(Explod* e, Char* c);
 void BytecodeExp_exp(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_ln(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_log(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
@@ -3665,66 +4457,28 @@ void BytecodeExp_acos(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_asin(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_atan(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_floor(BytecodeExp _recv, BytecodeValue* v1);
-bool Explod_matchId(Explod* e, i32 eid, i32 pid);
 void BytecodeExp_ceil(BytecodeExp _recv, BytecodeValue* v1);
-void Explod_setAnim(Explod* e);
 void BytecodeExp_max(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_min(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_random(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_round(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_clamp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3);
-void Explod_setAnimElem(Explod* e);
 void BytecodeExp_atan2(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2);
 void BytecodeExp_sign(BytecodeExp _recv, BytecodeValue* v1);
-bool Explod_pauseStatus(Explod* e);
 void BytecodeExp_rad(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_deg(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_lerp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3);
 BytecodeValue BytecodeExp_run(BytecodeExp be, Char* c);
-void Explod_flagForRemoval(Explod* e);
 BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc);
-void Explod_update(Explod* e);
-void Explod_cueDraw(Explod* e);
-void Explod_stepInterpolation(Explod* e);
 void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i);
-void Explod_resetInterpolation(Explod* e, PalFXDef* pfd);
-f32 Explod_trueFacing(Explod* e);
-Projectile* fn_newProjectile(void);
-void Projectile_clear(Projectile* p);
-Projectile* Projectile_initFromChar(Projectile* p, Char* c);
-void Projectile_setAllPos(Projectile* p, Arr3_f32 pos);
-bool Projectile_isActive(Projectile* p);
-bool Projectile_pauseStatus(Projectile* p);
-void Projectile_update(Projectile* p);
 void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc);
 void BytecodeExp_run_ex(BytecodeExp be, Char* c, int* i, Char* oc);
 void BytecodeExp_run_ex2(BytecodeExp be, Char* c, int* i, Char* oc);
-void Projectile_flagProjCancel(Projectile* p);
-void Projectile_cancelHits(Projectile* p, Projectile* opp);
-Slice_ClsnFinal Projectile_getClsn(Projectile* p, i32 group);
-Slice_ProjectilePtr Projectile_sortOthersByDistance(Projectile* p, Slice_ProjectilePtr projectiles);
 void BytecodeExp_run_ex3(BytecodeExp be, Char* c, int* i, Char* oc);
 f32 BytecodeExp_evalF(BytecodeExp be, Char* c);
-void Projectile_tradeDetection(Projectile* p, int playerNo, int index);
-void Projectile_tick(Projectile* p);
-void Projectile_animStep(Projectile* p);
-void Projectile_cueDraw(Projectile* p);
-Char* Projectile_root(Projectile* p);
-Char* Projectile_owner(Projectile* p);
-Char* Projectile_warnChar(Projectile* p);
-Map_int_GoString fn_loadMovelists(GoString def, IniSection is);
-CharGlobalInfo fn_newCharGlobalInfo(void);
 i32 BytecodeExp_evalI(BytecodeExp be, Char* c);
 i64 BytecodeExp_evalI64(BytecodeExp be, Char* c);
 bool BytecodeExp_evalB(BytecodeExp be, Char* c);
-void StateState_changeStateType(StateState* ss, StateType t);
-void StateState_changeMoveType(StateState* ss, MoveType t);
-void StateState_clear(StateState* ss);
-Char* fn_newChar(int n, int idx);
-GoString Char_warn(Char* c);
-void Char_panic(Char* c, GoString msg);
-void Char_init(Char* c, int n, int idx);
-void Char_clearState(Char* c);
 GoString BytecodeExp_evalS(BytecodeExp be, Char* c);
 GoString BytecodeExp_evalSLower(BytecodeExp be, Char* c);
 bool NullStateController_Run(NullStateController _recv, Char* _p0, Slice_i32 _p1);
@@ -3801,21 +4555,6 @@ bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1);
 bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1);
 bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1);
 bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1);
-bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2);
-void Char_enemyNearP2Clear(Char* c);
-Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2list);
-void Char_prepareNextRound(Char* c);
-CharGlobalInfo* Char_gi(Char* c);
-CharGlobalInfo* Char_stOgi(Char* c);
-CharGlobalInfo* Char_stWgi(Char* c);
-SelectChar* Char_si(Char* c);
-OverrideCharData* Char_ocd(Char* c);
-void Char_applyMapOverrides(Char* c);
-void Char_resetModifyPlayer(Char* c);
-GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi);
-void Char_loadPalettes(Char* c);
-GoIface Char_loadFx(Char* c, GoString def, CharGlobalInfo* gi);
-void Char_clearHitCount(Char* c);
 bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1);
 bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1);
 bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1);
@@ -3857,6 +4596,201 @@ bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1);
 bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1);
 bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1);
 bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1);
+bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1);
+bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1);
+bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1);
+bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1);
+bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1);
+bool offset_Run(offset sc, Char* c, Slice_i32 _p1);
+bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1);
+bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1);
+bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1);
+bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1);
+bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1);
+bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1);
+bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1);
+bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1);
+bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1);
+bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1);
+bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1);
+bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1);
+bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1);
+bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1);
+bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1);
+bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1);
+bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1);
+bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1);
+bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1);
+bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1);
+bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1);
+bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1);
+bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1);
+bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1);
+bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1);
+bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1);
+bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1);
+bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1);
+bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1);
+bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1);
+bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1);
+bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1);
+bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1);
+bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1);
+bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1);
+bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1);
+bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1);
+bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1);
+bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1);
+bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1);
+bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1);
+bool text_Run(text sc, Char* c, Slice_i32 _p1);
+bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1);
+bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1);
+bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1);
+bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1);
+bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1);
+bool height_Run(height sc, Char* c, Slice_i32 _p1);
+bool depth_Run(depth sc, Char* c, Slice_i32 _p1);
+bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1);
+bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1);
+bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1);
+bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1);
+bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1);
+bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1);
+bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1);
+bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1);
+bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1);
+bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1);
+bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1);
+bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1);
+bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1);
+StateBytecode* fn_newStateBytecode(int pn);
+void StateBytecode_init(StateBytecode* sb, Char* c);
+bool StateBytecode_run(StateBytecode* sb, Char* c);
+void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t);
+void BytecodeExp_cmpConst(BytecodeExp be, OpCode cmp, BytecodeValue k);
+stageCamera* fn_newStageCamera(void);
+Camera* fn_newCamera(void);
+void Camera_Reset(Camera* c);
+void Camera_Init(Camera* c);
+void Camera_ResetTracking(Camera* c);
+void Camera_setScreenPos(Camera* c, f32 x, f32 y, f32 scl);
+void Camera_SaveRestoreTracking(Camera* c);
+void Camera_Update(Camera* c, f32 scl, f32 x, f32 y);
+f32 Camera_XBound(Camera* c, f32 scl, f32 x);
+f32 Camera_MinZoomScale(Camera* c);
+f32 Camera_YBound(Camera* c, f32 scl, f32 y);
+f32 Camera_BaseScale(Camera* c);
+f32 Camera_GroundLevel(Camera* c);
+Ret_f32__f32__f32 Camera_action(Camera* c, f32 x, f32 y, f32 scale, bool pause);
+Ret_f32__f32__f32 Camera_reduceZoomSpeed(Camera* c, f32 newLeft, f32 newRight, f32 newScale, f32 oldLeft, f32 oldRight, f32 oldScale);
+Ret_f32__f32 Camera_keepScreenEdge(Camera* c, f32 left, f32 right);
+Ret_f32__f32 Camera_keepStageEdge(Camera* c, f32 left, f32 right);
+Ret_f32__f32__f32 Camera_hardLimit(Camera* c, f32 left, f32 right);
+f32 Camera_reduceYScrollSpeed(Camera* c, f32 newY, f32 oldY);
+f32 Camera_boundY(Camera* c, f32 y, f32 scale);
+bool Camera_zoomEnabled(Camera* c);
+void DebugClsn_Add(DebugClsn* dc, Slice_ClsnFinal boxes, f32 x, f32 y, f32 facing);
+void DebugClsn_draw(DebugClsn* dc, u32 color, Arr2_i32 blendAlpha);
+void CharData_init(CharData* cd);
+void CharSize_init(CharSize* cs);
+void CharVelocity_init(CharVelocity* cv);
+void CharMovement_init(CharMovement* cm);
+void HitDef_reset(HitDef* hd, Char* c, Projectile* proj);
+void HitDef_finalizeParams(HitDef* hd, Char* c, Projectile* proj);
+void HitDef_updateStateType(HitDef* hd, StateType stateType);
+bool HitDef_testAttr(HitDef* hd, i32 attr);
+bool HitDef_testReversalAttr(HitDef* hd, i32 attr);
+void GetHitVar_reset(GetHitVar* ghv, Char* c);
+void GetHitVar_selectiveReset(GetHitVar* ghv, Char* c);
+void GetHitVar_clearOff(GetHitVar* ghv);
+i32 GetHitVar_chainId(GetHitVar ghv);
+bool GetHitVar_idMatch(GetHitVar ghv, i32 id);
+i32 GetHitVar_getJuggle(GetHitVar ghv, i32 id, i32 defaultJuggle);
+void GetHitVar_dropPlayerId(GetHitVar* ghv, i32 id);
+void GetHitVar_addId(GetHitVar* ghv, i32 id, i32 juggle);
+bool GetHitVar_testAttr(GetHitVar* ghv, i32 attr);
+void HitBy_clear(HitBy* hb);
+void HitOverride_clear(HitOverride* ho);
+void MoveHitVar_clear(MoveHitVar* mhv);
+AfterImage* fn_newAfterImage(void);
+void AfterImage_setPalColor(AfterImage* ai, i32 color);
+void AfterImage_setPalHueShift(AfterImage* ai, i32 huesh);
+void AfterImage_setPalInvertall(AfterImage* ai, bool invertall);
+void AfterImage_setPalInvertblend(AfterImage* ai, i32 invertblend);
+void AfterImage_setPalBrightR(AfterImage* ai, i32 addr);
+void AfterImage_setPalBrightG(AfterImage* ai, i32 addg);
+void AfterImage_setPalBrightB(AfterImage* ai, i32 addb);
+void AfterImage_setPalContrastR(AfterImage* ai, i32 mulr);
+void AfterImage_setPalContrastG(AfterImage* ai, i32 mulg);
+void AfterImage_setPalContrastB(AfterImage* ai, i32 mulb);
+void AfterImage_setup(AfterImage* ai, Char* c);
+void AfterImage_recAfterImg(AfterImage* ai, SpriteData* sd, bool hitpause);
+bool AfterImage_isActive(AfterImage* ai);
+void AfterImage_recAndCue(AfterImage* ai, SpriteData* sd, int playerNo, bool rec, bool hitpause);
+Explod* fn_newExplod(void);
+void Explod_clear(Explod* e);
+Explod* Explod_initFromChar(Explod* e, Char* c);
+Char* Explod_root(Explod* e);
+Char* Explod_parent(Explod* e);
+void Explod_setAllPosX(Explod* e, f32 x);
+void Explod_setAllPosY(Explod* e, f32 y);
+void Explod_setAllPosZ(Explod* e, f32 z);
+void Explod_setBind(Explod* e, i32 bId);
+void Explod_setPos(Explod* e, Char* c);
+bool Explod_matchId(Explod* e, i32 eid, i32 pid);
+void Explod_setAnim(Explod* e);
+void Explod_setAnimElem(Explod* e);
+bool Explod_pauseStatus(Explod* e);
+void Explod_flagForRemoval(Explod* e);
+void Explod_update(Explod* e);
+void Explod_cueDraw(Explod* e);
+void Explod_stepInterpolation(Explod* e);
+void Explod_resetInterpolation(Explod* e, PalFXDef* pfd);
+f32 Explod_trueFacing(Explod* e);
+Projectile* fn_newProjectile(void);
+void Projectile_clear(Projectile* p);
+Projectile* Projectile_initFromChar(Projectile* p, Char* c);
+void Projectile_setAllPos(Projectile* p, Arr3_f32 pos);
+bool Projectile_isActive(Projectile* p);
+bool Projectile_pauseStatus(Projectile* p);
+void Projectile_update(Projectile* p);
+void Projectile_flagProjCancel(Projectile* p);
+void Projectile_cancelHits(Projectile* p, Projectile* opp);
+Slice_ClsnFinal Projectile_getClsn(Projectile* p, i32 group);
+Slice_ProjectilePtr Projectile_sortOthersByDistance(Projectile* p, Slice_ProjectilePtr projectiles);
+void Projectile_tradeDetection(Projectile* p, int playerNo, int index);
+void Projectile_tick(Projectile* p);
+void Projectile_animStep(Projectile* p);
+void Projectile_cueDraw(Projectile* p);
+Char* Projectile_root(Projectile* p);
+Char* Projectile_owner(Projectile* p);
+Char* Projectile_warnChar(Projectile* p);
+Map_int_GoString fn_loadMovelists(GoString def, IniSection is);
+CharGlobalInfo fn_newCharGlobalInfo(void);
+void StateState_changeStateType(StateState* ss, StateType t);
+void StateState_changeMoveType(StateState* ss, MoveType t);
+void StateState_clear(StateState* ss);
+Char* fn_newChar(int n, int idx);
+GoString Char_warn(Char* c);
+void Char_panic(Char* c, GoString msg);
+void Char_init(Char* c, int n, int idx);
+void Char_clearState(Char* c);
+bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2);
+void Char_enemyNearP2Clear(Char* c);
+Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2list);
+void Char_prepareNextRound(Char* c);
+CharGlobalInfo* Char_gi(Char* c);
+CharGlobalInfo* Char_stOgi(Char* c);
+CharGlobalInfo* Char_stWgi(Char* c);
+SelectChar* Char_si(Char* c);
+OverrideCharData* Char_ocd(Char* c);
+void Char_applyMapOverrides(Char* c);
+void Char_resetModifyPlayer(Char* c);
+GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi);
+void Char_loadPalettes(Char* c);
+GoIface Char_loadFx(Char* c, GoString def, CharGlobalInfo* gi);
+void Char_clearHitCount(Char* c);
 void Char_clearMoveHit(Char* c);
 void Char_changeAnimEx(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx);
 void Char_changeAnim(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx);
@@ -4180,90 +5114,17 @@ void Char_hitspark(Char* c, Char* getter, Projectile* proj, i32 animNo, GoString
 i32 Char_hitResultCheck(Char* c, Char* getter, Projectile* proj);
 void Char_actionPrepare(Char* c);
 void Char_actionRun(Char* c);
-bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1);
-bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1);
-bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1);
-bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1);
-bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1);
 void Char_actionFinish(Char* c);
-bool offset_Run(offset sc, Char* c, Slice_i32 _p1);
-bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1);
-bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1);
-bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1);
-bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1);
-bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1);
 void Char_track(Char* c);
 void Char_update(Char* c);
-bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1);
-bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1);
-bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1);
 void Char_tick(Char* c);
-bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1);
-bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1);
-bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1);
-bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1);
-bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1);
-bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1);
-bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1);
-bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1);
-bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1);
-bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1);
-bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1);
-bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1);
-bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1);
 void Char_cueDebugDraw(Char* c);
-bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1);
-bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1);
-bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1);
-bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1);
 void Char_cueDraw(Char* c);
-bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1);
-bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1);
-bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1);
-bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1);
-bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1);
-bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1);
 void CharList_clear(CharList* cl);
-bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1);
-bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1);
-bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1);
 void CharList_add(CharList* cl, Char* c);
 void CharList_delete(CharList* cl, Char* dc);
 void CharList_audit(CharList* cl);
 void CharList_commandUpdate(CharList* cl);
-bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1);
-bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1);
-bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1);
-bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1);
-bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1);
-bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1);
-bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1);
-bool text_Run(text sc, Char* c, Slice_i32 _p1);
-bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1);
-bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1);
-bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1);
-bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1);
-bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1);
-bool height_Run(height sc, Char* c, Slice_i32 _p1);
-bool depth_Run(depth sc, Char* c, Slice_i32 _p1);
-bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1);
-bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1);
-bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1);
-bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1);
-bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1);
-bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1);
-bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1);
-bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1);
-bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1);
-bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1);
-bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1);
-bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1);
-bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1);
-StateBytecode* fn_newStateBytecode(int pn);
-void StateBytecode_init(StateBytecode* sb, Char* c);
-bool StateBytecode_run(StateBytecode* sb, Char* c);
-void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t);
-void BytecodeExp_cmpConst(BytecodeExp be, OpCode cmp, BytecodeValue k);
 void CharList_updateRunOrder(CharList* cl);
 void CharList_action(CharList* cl);
 void CharList_xScreenBound(CharList* cl);
@@ -4278,182 +5139,46 @@ void CharList_cueDraw(CharList* cl);
 Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list);
 void Char_varCachePut(Char* c, i32 i);
 void Char_fvarCachePut(Char* c, i32 i);
+i32 fn_Random(void);
+void fn_Srand(i32 s);
+i32 fn_Rand(i32 min_, i32 max_);
+f32 fn_RandF32(f32 min_, f32 max_);
+i32 fn_RandI(i32 x, i32 y);
+f32 fn_RandF(f32 x, f32 y);
+f32 fn_Rad(f32 f);
+f32 fn_Cos(f32 f);
+f32 fn_Sin(f32 f);
+f32 fn_Pow(f32 x, f32 y);
 f32 fn_Lerp(f32 x, f32 y, f32 a);
-BytecodeExp fn_stripPrefix(BytecodeExp t, int n);
 i32 fn_Ceil(f32 x);
 i32 fn_Floor(f32 x);
 bool fn_IsNumeric(GoString s);
 bool fn_IsInt(GoString s);
 i32 fn_Atoi(GoString str);
-GoOpaqueVal* fn_newFnt(void);
 f64 fn_Atof(GoString str);
-Ret_StateController__GoIface CharCompiler_hitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_notHitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
-ResultsScreenProperties* fn_resultsScreenForMode(GoString mode);
-bool fn_cvfIsOddInt(f64 x);
-Arr14_bool fn_GetKeyboardState(KeyConfig kc);
-Ret_StateController__GoIface CharCompiler_assertSpecial(CharCompiler* c, IniSection is, StateControllerBase* sc);
-f64 fn_cvfPow(f64 x, f64 y);
-void fn_cookChar(GoString cdef, int pn, CharGlobalInfo* gi);
-void Fade_draw(Fade* fa);
-void fn_WithSpeakerLock(GoFunc f);
-Animation* Animation_CloneState(Animation* anim);
-stageShaderDef fn_newStageShaderDef(void);
-bool fn_modeCleared(GoString mode, int matches);
-Ret_GoOpaqueValPtr__GoIface fn_loadFnt(GoString filename, i32 height);
-Ret_GoString__bool fn_rankingTypeFor(GoString mode);
-bool fn_rankingWouldPlace(GoString mode);
-Ret_GoString__int fn_iniFirstValue(GoOpaque /* ini.Key */* k);
-Arr14_bool fn_GetJoystickState(KeyConfig kc);
 Arr4_Arr2_f32 fn_RectRotate(Arr4_f32 rect, Arr2_f32 pivot, f32 angle);
 Ret_bool__f32__f32 fn_RectIntersect(Arr4_f32 rect1, Arr4_f32 rect2, f32 angle1, f32 angle2, Arr2_f32 pivot1, Arr2_f32 pivot2);
 Ret_bool__f32__f32 fn_RectIntersectAABB(Arr4_f32 rect1, Arr4_f32 rect2);
-f64 fn_cvfHypot(f64 p, f64 q);
 Ret_bool__f32__f32 fn_RectIntersectSAT(Arr4_f32 rect1, Arr4_f32 rect2, Arr2_f32 pivot1, Arr2_f32 pivot2, f32 angle1, f32 angle2);
 i32 fn_F64toI32(f64 f);
 Ret_i32__bool fn_readDigit(GoString d);
-FSText* fn_newFSText(void);
-void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar);
-GoOpaqueVal* fn_getFont(Map_int_GoOpaqueValPtr f, i32 idx);
-FSText* fn_readFSText(GoString pre, IniSection is, GoString str, i16 ln, Map_int_GoOpaqueValPtr f, i32 align);
 i32 fn_Btoi(bool b);
-void fn_overlayUserFirstWins(GoOpaque /* ini.File */* dst, GoOpaque /* ini.File */* user);
 i16 fn_I32ToI16(i32 i32_);
 f64 fn_RoundFloat(f64 val, int precision);
 GoString fn_NormalizeNewlines(GoString input);
-void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt);
-i32 fn_cvfGame(void);
-void fn_cvfRefresh(void);
 Ret_GoString__GoIface fn_LoadText(GoString filename);
 Ret_GoOpaque_ini_FilePtrPtr__GoIface fn_LoadINIText(GoString text, GoIniLoadOptions opts);
 Ret_GoOpaque_ini_FilePtrPtr__GoString__GoIface fn_LoadINIFile(GoString filename, GoIniLoadOptions opts);
-Ret_ConfigPtr__GoIface fn_loadConfig(GoString def);
-f64 fn_cvfCos(f64 x);
 GoString fn_decodeShiftJIS(GoString input);
-void FSText_SetColor(FSText* txt, i32 r, i32 g, i32 b, i32 a);
-void FSText_step(FSText* txt);
-void FSText_resetTxtPfx(FSText* txt);
-FSBgTextSnd fn_newFSBgTextSnd(void);
-FSBgTextSnd fn_readFSBgTextSnd(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
-void FSBgTextSnd_step(FSBgTextSnd* bts, GoOpaqueVal* snd);
-void FSBgTextSnd_reset(FSBgTextSnd* bts);
-void FSBgTextSnd_bgDraw(FSBgTextSnd* bts, i16 layerno);
-void FSBgTextSnd_draw(FSBgTextSnd* bts, i16 layerno, Map_int_GoOpaqueValPtr f);
-Map_i32_AnimLayoutPtr fn_readMultipleValues(GoString pre, GoString name, IniSection is, Sff* sff, AnimationTable at);
-Map_f32_AnimLayoutPtr fn_readMultipleValuesF(GoString pre, GoString name, IniSection is, Sff* sff, AnimationTable at);
-Map_i32_FSTextPtr fn_readMultipleFSText(GoString pre, GoString name, IniSection is, GoString fmtstr, i16 ln, Map_int_GoOpaqueValPtr f, i32 align);
-Ret_i32__i32 fn_calcBarFillRect(i32 pos, Arr2_i32 range_, f32 offset, f32 scale, f32 screenScale, f32 midPos, f32 fill);
-GoIface fn_writeStatsPretty(GoString path, Slice_u8 data);
-void PalFX_sinAdd(PalFX* pf, Arr3_i32* color);
-void PalFX_sinMul(PalFX* pf, Arr3_i32* color);
-void PalFX_sinColor(PalFX* pf, f32* color);
-void NetConnection_Close(NetConnection* nc);
-bool fn_tagInsensitiveKeys(GoReflectStructField sf);
-void PalFX_sinHueshift(PalFX* pf, f32* color);
-bool Music_HasPrefix(Music m, GoString prefix);
-bool fn_tagKeyFirstMap(GoReflectStructField sf);
-void KeyConfig_swap(KeyConfig* kc, KeyConfig* kc2);
-GoOpaque /* invalid type */ fn_StringToKey(GoString s);
-Slice_queryPart fn_parseQueryPath(GoString query);
-void PalFX_refresh(PalFX* pf);
-Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findFieldByINITag(GoOpaque /* reflect.Value */ v, GoString tag);
-int Input_GetMaxJoystickCount(Input* input);
-void Music_Append(Music m, Music other);
-void Music_Override(Music m, Music other);
-void PalFX_tickTimers(PalFX* pf);
-void PalFX_step(PalFX* pf);
-PalFX PalFX_stacked(PalFX base, PalFX extra, TransType blendMode, Arr2_i32 alpha);
-Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findMapFieldWithTag(GoOpaque /* reflect.Value */ v, GoString tag);
-PalFX* PalFX_withStacked(PalFX* pf, PalFX* extra, TransType blendMode, Arr2_i32 alpha);
-Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findDefaultField(GoOpaque /* reflect.Value */ v);
-void fn_processCommandLine(void);
-GoString fn_normalizeMusicPrefix(GoString prefix);
-GoIface NetConnection_Stop(NetConnection* nc);
-void fn_initMaps(GoOpaque /* reflect.Value */ v);
-bool Input_IsJoystickPresent(Input* input, int joy);
-PalFX* PalFX_withStackedColor(PalFX* pf, f32 r, f32 g, f32 b);
-Palette* fn_newPaldata(void);
-CommandKeyRemap* fn_NewCommandKeyRemap(void);
-InputReader* fn_NewInputReader(void);
-void InputReader_Reset(InputReader* ir);
-Arr14_bool InputReader_LocalInput(InputReader* ir, int in);
-Ret_bool__bool__bool__bool InputReader_SocdResolution(InputReader* ir, bool U, bool D, bool B, bool F);
-Arr6_f32 Input_GetJoystickAxes(Input* input, int joy);
-Slice_u8 Input_GetJoystickButtons(Input* input, int joy);
-GoString Input_GetJoystickGUID(Input* input, int joy);
-void Music_AppendParams(Music m, Slice_GoString entries);
-Ret_EnvironmentPtr__GoIface fn_loadEnvironment(GoString filepath);
-void Input_RumbleController(Input* input, int joy, u16 lo, u16 hi, u32 ticks);
-GoString fn_CheckAxisForDpad(Arr6_f32* axes, int base);
-void Music_DebugDump(Music m, GoString label);
-GoString fn_CheckAxisForTrigger(Arr6_f32* axes);
-bool Fade_isFading(Fade* fa);
-Slice_GoString fn_expandMusicKV(GoString key, GoString value);
-AnimFrame AnimFrame_Clone(AnimFrame* af);
-bool Fade_isActive(Fade* fa);
-void fn_startFadeOut(Fade* tmpl, Fade* dest, bool overrideBlack, FadeStartPolicy policy);
-void fn_startFadeOutFrom(Fade* tmpl, Fade* dest, Fade* fi, bool overrideBlack, FadeStartPolicy policy);
-GoIface SwapSeeker_Seek(SwapSeeker* sw, int p);
-int SwapSeeker_Position(SwapSeeker* sw);
-int SwapSeeker_Len(SwapSeeker* sw);
-bool Rotation_IsZero(Rotation* r);
-Ret_StateControllerBase__bool fn_scBase(StateController sc);
-backGround* fn_newBackGround(Sff* sff);
-Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m);
-SelectCharParams* fn_newSelectCharParams(void);
-void fn_specRegister(StateBlock* b, Slice_GoString all, Slice_Slice_GoString trig, Slice_i8 trexist);
-GoIface BufferSeeker_Seek(BufferSeeker* b, int p);
-int BufferSeeker_Position(BufferSeeker* b);
-int BufferSeeker_Len(BufferSeeker* b);
-void stageShaderDef_readShader(stageShaderDef* d, IniSection is);
-Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m);
-Ret_backGroundPtr__GoIface fn_readBackGround(IniSection is, backGround* link, Sff* sff, AnimationTable at, StageProps sProps, GoString def, i32 startlayer);
-void GameState_SaveState(GameState* gs, int stateID);
-GetHitVar* GetHitVar_Clone(GetHitVar* ghv);
-AfterImage* AfterImage_Clone(AfterImage* ai, GameStatePool* gsp);
-Explod* Explod_Clone(Explod* e, GameStatePool* gsp);
-statsRollbackState StatsLog_saveRollbackState(StatsLog* s);
-void statsRollbackState_load(statsRollbackState state, StatsLog* s);
 GoString fn_FileExist(GoString filename);
 GoString fn_SearchFile(GoString file, Slice_GoString dirs, Slice_GoString defaultDirs);
 GoIface fn_LoadFile(GoString* file, Slice_GoString dirs, GoString defaultDir, GoFunc load);
 Ret_GoString__GoString fn_SplitPath(GoString p);
 GoString fn_StripComment(GoString s);
 Slice_GoString fn_SplitAndTrim(GoString str, GoString sep);
-Ret_StateController__GoIface CharCompiler_playSnd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void Config_initStruct(Config* c);
-void Config_normalize(Config* c);
-f64 fn_cvfSin(f64 x);
-void PaletteList_init(PaletteList* pl);
-LifeBar* fn_newLifeBar(void);
-LifeBar* fn_readLifeBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-Ret_ModelPtr__GoIface fn_loadglTFModel(GoString filepath);
-void fn_applyDefaultsToValue(GoOpaque /* reflect.Value */ v);
-PaletteList PaletteList_copyMap(PaletteList* pl);
-void PaletteList_SetSource(PaletteList* pl, int i, Slice_u32 p);
-void fn_setDefaultFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoReflectStructField fieldType, GoString defTag);
-Ret_int__Slice_u32 PaletteList_NewPal(PaletteList* pl);
-Slice_u32 PaletteList_Get(PaletteList* pl, int i);
-Arr9_bool InputReader_ButtonAssistCheck(InputReader* ir, Arr9_bool current);
 GoString fn_OldSprintf(GoString f, Slice_GoIface a);
 Ret_GoString__GoString fn_SectionName(GoString sec);
 bool fn_HasExtension(GoString file, GoString ext);
-GoString CharCompiler_tokenizer(CharCompiler* c, GoString* in);
-int fn_indexSpecialSymbol(GoString s);
-GoIface CharCompiler_changeStateSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-f64 fn_cvfTan(f64 x);
-void LifeBar_step(LifeBar* lb, int charpn, LifeBar* lbr);
-GoString CharCompiler_toLower(CharCompiler* c, GoString s);
-GoString CharCompiler_tokenizerCS(CharCompiler* _recv, GoString* in);
-Ret_StateController__GoIface CharCompiler_changeState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_selfState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_tagIn(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_tagOut(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void Config_sysSet(Config* c);
-Ret_u64__f64 fn_cvfTrigReduce(f64 x);
-void LifeBar_reset(LifeBar* lb);
-void LifeBar_bgDraw(LifeBar* lb, i16 layerno, int charpn);
-void LifeBar_draw(LifeBar* lb, i16 layerno, int charpn, LifeBar* lbr, Map_int_GoOpaqueValPtr f);
 Arr3_u16 fn_ParseIkemenVersion(GoString versionStr);
 Arr2_u16 fn_ParseMugenVersion(GoString versionStr);
 GoString Error_Error(Error e);
@@ -4464,12 +5189,6 @@ Ret_IniSection__GoString__GoString fn_ReadIniSection(Slice_GoString lines, int* 
 void IniSection_Parse(IniSection is, Slice_GoString lines, int* i);
 GoIface IniSection_LoadFile(IniSection is, GoString name, Slice_GoString dirs, GoString defaultDir, GoFunc load);
 bool IniSection_ReadI32(IniSection is, GoString name, Slice_i32Ptr out);
-Ret_GoString__int__int__int__int__int__f32__int Music_Read(Music m, GoString key, GoString def);
-bool Music_Play(Music m, GoString key, GoString path);
-Arr14_bool NetConnection_readNetInput(NetConnection* nc, int i);
-Arr6_i8 NetConnection_readNetInputAnalog(NetConnection* nc, int i);
-bool NetConnection_AnyButton(NetConnection* nc);
-GoIface NetConnection_Synchronize(NetConnection* nc);
 bool IniSection_ReadF32(IniSection is, GoString name, Slice_f32Ptr out);
 bool IniSection_ReadBool(IniSection is, GoString name, Slice_boolPtr out);
 bool IniSection_readI32ForStage(IniSection is, GoString name, Slice_i32Ptr out);
@@ -4490,124 +5209,12 @@ AnimLayout fn_newAnimLayout(Sff* sff, i16 ln);
 AnimLayout fn_ReadAnimLayout(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln);
 void AnimLayout_Read(AnimLayout* al, GoString pre, IniSection is, AnimationTable at, i16 ln);
 void AnimLayout_Reset(AnimLayout* al);
-int CharCompiler_isOperator(CharCompiler* _recv, GoString token);
-GoIface CharCompiler_operator(CharCompiler* c, GoString* in);
-Ret_StateController__GoIface CharCompiler_destroySelf(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_GoIface__GoIface Config_GetValue(Config* c, GoString query);
-cvfRulesT* fn_cvfRulesLoad(void);
-Ret_i32__GoIface CharCompiler_integer2(CharCompiler* c, GoString* in);
-BytecodeValue CharCompiler_number(CharCompiler* c, GoString token);
-bool fn_numberCandidate(GoString token);
-Ret_i32__GoIface CharCompiler_attr(CharCompiler* c, GoString text, bool hitdef);
-GoIface CharCompiler_changeAnimSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface Config_SetValueUpdate(Config* c, GoString query, GoIface value);
-GoIface Config_Save(Config* c, GoString file);
-bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
-Ret_i32__GoIface fn_attrMask(GoString text, bool hitdef, bool strict, GoFunc warn);
-Ret_i32__GoIface CharCompiler_trgAttr(CharCompiler* c, GoString* in);
-bool fn_isAttrLiteral(GoString tok);
-bool fn_isHitFlagLiteral(GoString tok);
-GoIface CharCompiler_checkOpeningParenthesis(CharCompiler* c, GoString* in);
-GoIface CharCompiler_checkOpeningParenthesisCS(CharCompiler* c, GoString* in);
-GoIface CharCompiler_checkClosingParenthesis(CharCompiler* c);
-Ret_bool__GoIface CharCompiler_checkEquality(CharCompiler* c, GoString* in);
-Ret_OpCode__OpCode__i32__i32__GoIface CharCompiler_intRange(CharCompiler* c, GoString* in);
-void CharCompiler_compareValues(CharCompiler* c, bool _range, GoString* in);
-GoIface CharCompiler_evaluateComparison(CharCompiler* c, BytecodeExp* out, GoString* in, bool required);
-Ret_BytecodeValue__GoIface CharCompiler_oneArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
-Ret_BytecodeValue__BytecodeValue__GoIface CharCompiler_twoOptArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
-Ret_BytecodeValue__GoIface CharCompiler_mathFunc(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, OpCode oc, GoFunc f);
-Ret_GoString__GoIface CharCompiler_readOldProjectileID(CharCompiler* c, GoString* in, GoString trname, int baseLen, BytecodeExp* out);
-Ret_i32__GoIface CharCompiler_parseOldAnimElemStyle(CharCompiler* c, GoString* in, GoString name);
-Ret_StateController__GoIface CharCompiler_changeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_changeAnim2(CharCompiler* c, IniSection is, StateControllerBase* sc);
-bool fn_cvfClampInvincibility(Char* c, i32* time_);
-i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v);
-void fn_cvfDebugf(GoString format, Slice_GoIface args);
-Ret_BytecodeValue__GoIface CharCompiler_expValue(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
-expValueFrame* CharCompiler_getFrame(CharCompiler* c);
-GoIface CharCompiler_expVar(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool isSys, bool isF);
-TextSprite* fn_NewTextSprite(void);
-void TextSprite_Clear(TextSprite* ts);
-void Rect_Draw(Rect* r, i16 ln);
-Arr4_i32 Rect_drawWindow(Rect* r);
-SelectStageParams* fn_newSelectStageParams(void);
-Projectile* Projectile_clone(Projectile* p, GameStatePool* gsp);
-void ShaderTexture_clear(ShaderTexture* st);
-void ShaderTexture_step(ShaderTexture* st);
-OverrideCharData* fn_newOverrideCharData(void);
-void CustomShader_set(CustomShader* cs, GoString name, GoString key);
-int StreamLooper_Len(StreamLooper* b);
-int StreamLooper_Position(StreamLooper* b);
-GoIface StreamLooper_Seek(StreamLooper* b, int p);
-Bgm* fn_newBgm(void);
-void Bgm_Stop(Bgm* bgm);
-void Bgm_Open(Bgm* bgm, GoString filename, int loop, int bgmVolume, int bgmLoopStart, int bgmLoopEnd, int startPosition, f32 freqmul, int loopcount);
-void fn_specChar(Char* c);
-void CommandList_CopyTo(CommandList* src, CommandList* dst);
-StateState StateState_Clone(StateState* ss);
-RemapPreset fn_cloneRemapPreset(RemapPreset src, GameStatePool* gsp);
-Char Char_Clone(Char* c, GameStatePool* gsp);
-void StatsLog_startMatch(StatsLog* s);
-void StatsLog_addRound(StatsLog* s, i32 index, i32 timer, Arr2_i32 score, Arr2_Slice_StatsFighterState fighters);
-StatsMatch* StatsLog_currentStatsMatch(StatsLog* s);
-void Window_SwapBuffers(Window* w);
-void StatsLog_discardCurrentMatch(StatsLog* s);
-void StatsLog_nextRound(StatsLog* s);
-GoString TeamMode_TriggerValue(TeamMode tm);
-void StoryboardManager_add(StoryboardManager* m, Storyboard* s);
-void StoryboardManager_update(StoryboardManager* m);
-void StoryboardManager_step(StoryboardManager* m);
-void StoryboardManager_draw(StoryboardManager* m, i16 layerno);
-void StoryboardManager_drawFade(StoryboardManager* m);
-void StoryboardManager_remove(StoryboardManager* m, i32 ownerID, i32 id);
-void StoryboardManager_clear(StoryboardManager* m, int playerNo);
-Ret_StateController__GoIface CharCompiler_helper(CharCompiler* c, IniSection is, StateControllerBase* sc);
-f64 fn_cvfXatan(f64 x);
-void TextSprite_SetLocalcoordChar(TextSprite* ts, Arr2_i32 lc);
-f64 fn_cvfSatan(f64 x);
-void TextSprite_SetPos(TextSprite* ts, f32 x, f32 y);
-f64 fn_cvfAtan(f64 x);
-f64 fn_cvfAsin(f64 x);
-f64 fn_cvfAcos(f64 x);
-f64 fn_cvfAtan2(f64 y, f64 x);
-PowerBar* fn_newPowerBar(void);
-Ret_StateController__GoIface CharCompiler_ctrlSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_runState(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_explodSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_explodInterpolate(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void TextSprite_AddPos(TextSprite* ts, f32 x, f32 y);
-void TextSprite_SetScale(TextSprite* ts, f32 xscl, f32 yscl);
-void TextSprite_ApplyScaleRatio(TextSprite* ts);
-void TextSprite_SetColor(TextSprite* ts, i32 r, i32 g, i32 b, i32 a);
-void TextSprite_SetVelocity(TextSprite* ts, f32 xvel, f32 yvel);
-PowerBar* fn_readPowerBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void TextSprite_SetMaxDist(TextSprite* ts, f32 x, f32 y);
-void TextSprite_SetAccel(TextSprite* ts, f32 xacc, f32 yacc);
-void TextSprite_wrapText(TextSprite* ts, GoString fullLine, int typedLen);
-void PowerBar_step(PowerBar* pb, int charpn, PowerBar* pbr, GoOpaqueVal* snd);
-void PowerBar_reset(PowerBar* pb);
-void PowerBar_bgDraw(PowerBar* pb, i16 layerno, int charpn);
-void PowerBar_draw(PowerBar* pb, i16 layerno, int charpn, PowerBar* pbr, Map_int_GoOpaqueValPtr f);
-GuardBar* fn_newGuardBar(void);
-GuardBar* fn_readGuardBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void fn_StepTypewriter(GoString fullLine, int* typedLen, i32* charDelayCounter, bool* lineFullyRendered, f32 delay);
-void TextSprite_Update(TextSprite* ts);
-void TextSprite_Draw(TextSprite* ts, i16 ln);
-void TextSprite_draw(TextSprite* ts, i16 ln, Arr4_i32* clip);
 void AnimLayout_Action(AnimLayout* al);
 bool AnimLayout_HasAnim(AnimLayout* al);
 void AnimLayout_Draw(AnimLayout* al, f32 x, f32 y, i16 layerno, f32 scale);
 void fn_ReadPalFX(GoString pre, IniSection is, PalFX* pfx);
 AnimTextSnd* fn_newAnimTextSnd(Sff* sff, i16 ln);
 AnimTextSnd* fn_ReadAnimTextSnd(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
-GoIface CharCompiler_expText(CharCompiler* c, GoString* in);
-void TextSprite_Reset(TextSprite* ts);
-Ret_StateController__GoIface CharCompiler_explod(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_eqne(CharCompiler* c, GoString* in, GoFunc f);
-GoIface CharCompiler_flagTrigger(CharCompiler* c, BytecodeExp* out, GoString* in, GoFunc pushSelf, GoFunc tryKeyword);
-Ret_i32__GoIface CharCompiler_flagSub(CharCompiler* c, GoString* in);
-void GuardBar_step(GuardBar* gb, int charpn, GuardBar* gbr, GoOpaqueVal* snd);
 void AnimTextSnd_Read(AnimTextSnd* ats, GoString pre, IniSection is, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
 void AnimTextSnd_Reset(AnimTextSnd* ats);
 void AnimTextSnd_Action(AnimTextSnd* ats);
@@ -4626,16 +5233,43 @@ Ret_i64__GoIface vitaBufFile_Seek(vitaBufFile* b, i64 offset, int whence);
 GoIface vitaBufFile_Close(vitaBufFile* b);
 GoString fn_LowercaseNoExtension(GoString filename);
 void fn_SafeGo(GoFunc f);
-Ret_StateController__GoIface CharCompiler_modifyExplod(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_gameMakeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_posSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void GuardBar_reset(GuardBar* gb);
-void GuardBar_bgDraw(GuardBar* gb, i16 layerno, int charpn);
+CharCompiler* fn_newCharCompiler(void);
+GoString CharCompiler_tokenizer(CharCompiler* c, GoString* in);
+int fn_indexSpecialSymbol(GoString s);
+GoString CharCompiler_toLower(CharCompiler* c, GoString s);
+GoString CharCompiler_tokenizerCS(CharCompiler* _recv, GoString* in);
+int CharCompiler_isOperator(CharCompiler* _recv, GoString token);
+GoIface CharCompiler_operator(CharCompiler* c, GoString* in);
+Ret_i32__GoIface CharCompiler_integer2(CharCompiler* c, GoString* in);
+BytecodeValue CharCompiler_number(CharCompiler* c, GoString token);
+bool fn_numberCandidate(GoString token);
+Ret_i32__GoIface CharCompiler_attr(CharCompiler* c, GoString text, bool hitdef);
+Ret_i32__GoIface fn_attrMask(GoString text, bool hitdef, bool strict, GoFunc warn);
+Ret_i32__GoIface CharCompiler_trgAttr(CharCompiler* c, GoString* in);
+bool fn_isAttrLiteral(GoString tok);
+bool fn_isHitFlagLiteral(GoString tok);
+GoIface CharCompiler_checkOpeningParenthesis(CharCompiler* c, GoString* in);
+GoIface CharCompiler_checkOpeningParenthesisCS(CharCompiler* c, GoString* in);
+GoIface CharCompiler_checkClosingParenthesis(CharCompiler* c);
+Ret_bool__GoIface CharCompiler_checkEquality(CharCompiler* c, GoString* in);
+Ret_OpCode__OpCode__i32__i32__GoIface CharCompiler_intRange(CharCompiler* c, GoString* in);
+void CharCompiler_compareValues(CharCompiler* c, bool _range, GoString* in);
+GoIface CharCompiler_evaluateComparison(CharCompiler* c, BytecodeExp* out, GoString* in, bool required);
+Ret_BytecodeValue__GoIface CharCompiler_oneArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
+Ret_BytecodeValue__BytecodeValue__GoIface CharCompiler_twoOptArg(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool appendVal, Slice_BytecodeValue defval);
+Ret_BytecodeValue__GoIface CharCompiler_mathFunc(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, OpCode oc, GoFunc f);
+Ret_GoString__GoIface CharCompiler_readOldProjectileID(CharCompiler* c, GoString* in, GoString trname, int baseLen, BytecodeExp* out);
+Ret_i32__GoIface CharCompiler_parseOldAnimElemStyle(CharCompiler* c, GoString* in, GoString name);
+Ret_BytecodeValue__GoIface CharCompiler_expValue(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd);
+expValueFrame* CharCompiler_getFrame(CharCompiler* c);
+GoIface CharCompiler_expVar(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd, bool isSys, bool isF);
+GoIface CharCompiler_expText(CharCompiler* c, GoString* in);
+GoIface CharCompiler_eqne(CharCompiler* c, GoString* in, GoFunc f);
+GoIface CharCompiler_flagTrigger(CharCompiler* c, BytecodeExp* out, GoString* in, GoFunc pushSelf, GoFunc tryKeyword);
+Ret_i32__GoIface CharCompiler_flagSub(CharCompiler* c, GoString* in);
 GoIface CharCompiler_flagRHS(CharCompiler* c, GoString* in);
 bool CharCompiler_nextIsEqne(CharCompiler* c, GoString* in);
-Ret_StateController__GoIface CharCompiler_posSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_BytecodeExp__GoIface CharCompiler_parseStringExp(CharCompiler* c, GoString* in);
-void GuardBar_draw(GuardBar* gb, i16 layerno, int charpn, GuardBar* gbr, Map_int_GoOpaqueValPtr f);
 Ret_i32__BytecodeExp__bool__GoIface CharCompiler_parseAttrComparison(CharCompiler* c, GoString* in, bool allowExpr, bool tolerateMalformed);
 Ret_i32__BytecodeExp__bool__GoIface CharCompiler_parseHitFlagComparison(CharCompiler* c, GoString* in);
 void CharCompiler_emitAttrOrHitFlagTest(CharCompiler* c, BytecodeExp* out, bool rd, i32 value, BytecodeExp stringExp, bool not, Slice_OpCode ops);
@@ -4664,28 +5298,6 @@ Ret_BytecodeValue__GoIface CharCompiler_expBoolAnd(CharCompiler* c, BytecodeExp*
 Ret_BytecodeValue__GoIface CharCompiler_expBoolXor(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expBoolOr(CharCompiler* c, BytecodeExp* out, GoString* in);
 Ret_BytecodeValue__GoIface CharCompiler_expBoolOrSub(CharCompiler* c, BytecodeExp* out, GoString* in);
-Ret_StateController__GoIface CharCompiler_posAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_velSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_velAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_velMul(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_modifyShadow(CharCompiler* c, IniSection is, StateControllerBase* sc);
-StunBar* fn_newStunBar(void);
-StunBar* fn_readStunBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-Ret_StateController__GoIface CharCompiler_modifyReflection(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void StunBar_step(StunBar* sb, int charpn, StunBar* sbr, GoOpaqueVal* snd);
-void StunBar_reset(StunBar* sb);
-GoIface CharCompiler_palFXSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
-void StunBar_bgDraw(StunBar* sb, i16 layerno, int charpn);
-Ret_StateController__GoIface CharCompiler_palFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_allPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_bgPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_afterImageSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
-Ret_StateController__GoIface CharCompiler_afterImage(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Ret_StateController__GoIface CharCompiler_afterImageTime(CharCompiler* c, IniSection is, StateControllerBase* sc);
-GoIface CharCompiler_parseAttrExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, bool hitdef);
-GoIface CharCompiler_parseHitFlag(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
-GoIface CharCompiler_parseHitFlagExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
-GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_BytecodeExp__GoIface CharCompiler_typedExp(CharCompiler* c, GoString* in, ValueType vt);
 BytecodeExp fn_cloneExp(BytecodeExp be);
 BytecodeExp* CharCompiler_getScratch(CharCompiler* c);
@@ -4735,34 +5347,6 @@ Ret_GoString__GoIface CharCompiler_readString(CharCompiler* c, GoString* line);
 Ret_GoString__bool__GoIface CharCompiler_readSentenceLine(CharCompiler* c, GoString* line);
 Ret_GoString__bool__GoIface CharCompiler_readSentence(CharCompiler* c, GoString* line);
 GoIface CharCompiler_statementEnd(CharCompiler* c, GoString* line);
-void StunBar_draw(StunBar* sb, i16 layerno, int charpn, StunBar* sbr, Map_int_GoOpaqueValPtr f);
-FightScreenFace* fn_newFightScreenFace(void);
-FightScreenFace* fn_readFightScreenFace(GoString pre, IniSection is, Sff* sff, AnimationTable at);
-void FightScreenFace_step(FightScreenFace* fa, int charpn, FightScreenFace* refFace);
-void FightScreenFace_reset(FightScreenFace* fa);
-void FightScreenFace_bgDraw(FightScreenFace* fa, i16 layerno);
-void FightScreenFace_draw(FightScreenFace* fa, i16 layerno, int charpn, FightScreenFace* refFace);
-void FightScreenFace_drawTeammates(FightScreenFace* fa, i16 layerno);
-FightScreenName* fn_newFightScreenName(void);
-FightScreenName* fn_readFightScreenName(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenName_step(FightScreenName* nm);
-void FightScreenName_reset(FightScreenName* nm);
-void FightScreenName_bgDraw(FightScreenName* nm, i16 layerno);
-void FightScreenName_draw(FightScreenName* nm, i16 layerno, int charpn, Map_int_GoOpaqueValPtr f, int side);
-void FightScreenName_drawTeammates(FightScreenName* nm, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-FightScreenWinIcon* fn_newFightScreenWinIcon(void);
-FightScreenWinIcon* fn_readFightScreenWinIcon(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenWinIcon_add(FightScreenWinIcon* wi, WinType wt);
-void FightScreenWinIcon_step(FightScreenWinIcon* wi, i32 numwin);
-void FightScreenWinIcon_reset(FightScreenWinIcon* wi);
-void FightScreenWinIcon_clear(FightScreenWinIcon* wi);
-void FightScreenWinIcon_draw(FightScreenWinIcon* wi, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-FightScreenTime* fn_newFightScreenTime(void);
-FightScreenTime* fn_readFightScreenTime(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenTime_step(FightScreenTime* ti);
-void FightScreenTime_reset(FightScreenTime* ti);
-void FightScreenTime_bgDraw(FightScreenTime* ti, i16 layerno);
-void FightScreenTime_draw(FightScreenTime* ti, i16 layerno, Map_int_GoOpaqueValPtr f);
 GoIface CharCompiler_readKeyValue(CharCompiler* c, IniSection is, GoString end, GoString* line);
 GoIface CharCompiler_varNameCheck(CharCompiler* c, GoString nm);
 Ret_Slice_GoString__GoIface CharCompiler_varNames(CharCompiler* c, GoString end, GoString* line);
@@ -4779,61 +5363,52 @@ GoIface CharCompiler_stateBlock(CharCompiler* c, GoString* line, StateBlock* bl,
 GoIface CharCompiler_stateCompileZSS(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, GoString filetext, Map_GoString_TypedValue constants);
 Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char* p, GoString def, CharGlobalInfo* gi);
 GoString CharCompiler_charWarn(CharCompiler* c);
-void CustomShader_clear(CustomShader* cs);
-void GameState_savePalFX(GameState* gs);
-void StoryboardManager_clearSound(StoryboardManager* m);
-CustomShaderRenderData CustomShader_renderData(CustomShader* cs, bool act);
-Ret_GoIface__GoIface Renderer_GLES32_newTexture(Renderer_GLES32* r, i32 width, i32 height, i32 depth, bool filter);
-GoIface Renderer_GLES32_newSubTexture(Renderer_GLES32* r, GoIface tex, i32 width, i32 height, Arr4_f32 uvst);
-GameParams* fn_newGameParams(void);
-GameParams* fn_newGameParamsFromMotif(Motif* m);
-void Texture_GLES32_SetData(Texture_GLES32* t, Slice_u8 data);
-void Texture_GLES32_SetSubData(Texture_GLES32* t, Slice_u8 data);
-void fn_specRound(void);
-void GameState_saveCharData(GameState* gs, GameStatePool* gsp);
-void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp);
-Slice_GoString GameParams_MusicEntries(GameParams* p);
-Arr14_bool RollbackSystem_readRollbackInput(RollbackSystem* rs, int controller);
-Arr6_i8 RollbackSystem_readRollbackInputAnalog(RollbackSystem* rs, int controller);
-bool RollbackSystem_anyButton(RollbackSystem* rs);
-void RollbackLogger_logRoundSkipCheck(RollbackLogger* g, i32 fadeoutStart, bool anyButton, bool roundnotskip, bool skipEligible, bool matchEndDialogue);
-void RollbackLogger_logRoundAdvanceCheck(RollbackLogger* g, bool roundOver, bool tickFrame, bool motifEndActive, bool fightLoopEnd, bool holdPostMatch, bool canAdvance);
-void GameState_saveExplodData(GameState* gs, GameStatePool* gsp);
-void GameState_saveCharTextData(GameState* gs);
-Ret_StoryboardPtr__GoIface fn_loadStoryboard(GoString def);
-OverrideCharData* GameParams_ensureOverride(GameParams* p, int team, int member);
-void GameParams_AppendParams(GameParams* p, Slice_GoString entries);
-void Bgm_SetPaused(Bgm* bgm, bool pause);
-void backGround_reset(backGround* bg);
-void backGround_changeAnim(backGround* bg, i32 animNo, AnimationTable table);
-void backGround_draw(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip);
-void GameState_loadPalFX(GameState* gs);
-void GameState_loadCharData(GameState* gs, GameStatePool* gsp);
-void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp);
-void GameState_loadExplodData(GameState* gs, GameStatePool* gsp);
-void GameState_loadCharTextData(GameState* gs);
-bool GameState_stageCanMutate(GameState* gs);
-CharList CharList_Clone(CharList* cl, GameStatePool* gsp);
-PalFX* PalFX_Clone(PalFX* pf);
-Command Command_clone(Command* c);
-Ret_int__int Window_GetSize(Window* w);
-GoString fn_itoa(int i);
-void Window_UpdateDebugFPS(Window* w);
-void Window_pollEvents(Window* w);
-bool Window_shouldClose(Window* w);
-bool Window_Focused(Window* w);
-void Window_Close(Window* w);
-GoString fn_fmtHex(u32 v);
-void fn_vitaTrace(GoString s);
-void fn_vitaMem(GoString tag);
-void fn_vitaPerfBegin(void);
-void fn_vitaPerfEnd(int i);
-void fn_vitaPerfTick(bool skipped);
+bool fn_vitaBCHashEnabled(void);
+void fn_vitaBCHashLog(GoString def, int pn, CharGlobalInfo* gi, Map_i32_StateBytecodePtr states, int consoleFrom);
+GoIface CharCompiler_hitBySub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString sctrlName);
+Ret_StateController__GoIface CharCompiler_hitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_notHitBy(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_assertSpecial(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_playSnd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_changeStateSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_changeState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_selfState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_tagIn(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_tagOut(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_destroySelf(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_changeAnimSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_changeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_changeAnim2(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_helper(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_ctrlSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_runState(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_explodSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_explodInterpolate(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_explod(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyExplod(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_gameMakeAnim(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_posSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_posSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_posAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_velSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_velAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_velMul(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyShadow(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_modifyReflection(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_palFXSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
+Ret_StateController__GoIface CharCompiler_palFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_allPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_bgPalFX(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_afterImageSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix);
+Ret_StateController__GoIface CharCompiler_afterImage(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_StateController__GoIface CharCompiler_afterImageTime(CharCompiler* c, IniSection is, StateControllerBase* sc);
+GoIface CharCompiler_parseAttrExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, bool hitdef);
+GoIface CharCompiler_parseHitFlag(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
+GoIface CharCompiler_parseHitFlagExpression(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data);
+GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_hitDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_modifyHitDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_reversalDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
-FightScreenCombo* fn_newFightScreenCombo(void);
-FightScreenCombo* fn_readFightScreenCombo(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f, int side);
 Ret_StateController__GoIface CharCompiler_modifyReversalDef(CharCompiler* c, IniSection is, StateControllerBase* sc);
 GoIface CharCompiler_projectileSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_projectile(CharCompiler* c, IniSection is, StateControllerBase* sc);
@@ -4847,34 +5422,15 @@ Ret_StateController__GoIface CharCompiler_varSet(CharCompiler* c, IniSection is,
 Ret_StateController__GoIface CharCompiler_varAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_parentVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_parentVarAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenCombo_step(FightScreenCombo* co, int side, i32 hits, i32 damage, f32 percentage);
-void FightScreenCombo_reset(FightScreenCombo* co);
-void FightScreenCombo_draw(FightScreenCombo* co, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-void ComboShake_reset(ComboShake* cs);
-void ComboShake_restart(ComboShake* cs);
-void ComboShake_setDefaultPhase(ComboShake* cs);
-void ComboShake_update(ComboShake* cs);
-FSMsg* fn_newFSMsg(int side);
-Slice_FSMsgPtr fn_insertFSMsg(Slice_FSMsgPtr array, FSMsg* value, int index);
-Slice_FSMsgPtr fn_removeFSMsg(Slice_FSMsgPtr array, int index);
-bool FSMsg_isEqual(FSMsg* m, FSMsg* other);
-FightScreenAction* fn_newFightScreenAction(void);
-FightScreenAction* fn_readFightScreenAction(GoString pre, IniSection is, Map_int_GoOpaqueValPtr f);
-void FightScreenAction_step(FightScreenAction* ac, int leader);
 Ret_StateController__GoIface CharCompiler_rootVarSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenAction_reset(FightScreenAction* ac, int leader);
 Ret_StateController__GoIface CharCompiler_rootVarAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenAction_draw(FightScreenAction* ac, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
 Ret_StateController__GoIface CharCompiler_turn(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_targetFacing(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_targetBind(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_bindToTarget(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_targetLifeAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
-FightScreenRound* fn_newFightScreenRound(GoOpaqueVal* snd);
 Ret_StateController__GoIface CharCompiler_targetState(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_targetVelSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-Fade* fn_readLbFade(GoString pre, IniSection is, Sff* sff, AnimationTable at, GoOpaqueVal* snd);
-FightScreenRound* fn_readFightScreenRound(IniSection is, Sff* sff, AnimationTable at, GoOpaqueVal* snd, Map_int_GoOpaqueValPtr f);
 Ret_StateController__GoIface CharCompiler_targetVelAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_targetPowerAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_targetDrop(CharCompiler* c, IniSection is, StateControllerBase* sc);
@@ -4887,8 +5443,6 @@ Ret_StateController__GoIface CharCompiler_screenBound(CharCompiler* c, IniSectio
 Ret_StateController__GoIface CharCompiler_posFreeze(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_envShake(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_hitOverride(CharCompiler* c, IniSection is, StateControllerBase* sc);
-i32 FightScreenRound_overTime(FightScreenRound* ro);
-bool FightScreenRound_act(FightScreenRound* ro);
 Ret_StateController__GoIface CharCompiler_pause(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_superPause(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_trans(CharCompiler* c, IniSection is, StateControllerBase* sc);
@@ -4898,18 +5452,14 @@ GoIface CharCompiler_parseTypeExpression(CharCompiler* c, StateControllerBase* s
 Ret_StateController__GoIface CharCompiler_stateTypeSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_angleDraw(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_angleSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenRound_handleRoundIntro(FightScreenRound* ro);
-void FightScreenRound_handleRoundOutro(FightScreenRound* ro);
 Ret_StateController__GoIface CharCompiler_angleAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_angleMul(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_envColor(CharCompiler* c, IniSection is, StateControllerBase* sc);
 GoIface CharCompiler_displayToClipboardSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenRound_reset(FightScreenRound* ro);
 Ret_StateController__GoIface CharCompiler_displayToClipboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_appendToClipboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_clearClipboard(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_makeDust(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenRound_draw(FightScreenRound* ro, i16 layerno, Map_int_GoOpaqueValPtr f);
 Ret_StateController__GoIface CharCompiler_attackDist(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_attackMulSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_defenceMulSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
@@ -4932,31 +5482,9 @@ Ret_StateController__GoIface CharCompiler_moveHitReset(CharCompiler* c, IniSecti
 Ret_StateController__GoIface CharCompiler_hitAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_offset(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_victoryQuote(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenRound_drawFade(FightScreenRound* ro);
-FightScreenTimer* fn_newFightScreenTimer(void);
-FightScreenTimer* fn_readFightScreenTimer(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenTimer_step(FightScreenTimer* tr);
-void FightScreenTimer_reset(FightScreenTimer* tr);
-void FightScreenTimer_bgDraw(FightScreenTimer* tr, i16 layerno);
 Ret_StateController__GoIface CharCompiler_zoom(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_forceFeedback(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenTimer_draw(FightScreenTimer* tr, i16 layerno, Map_int_GoOpaqueValPtr f);
-FightScreenScore* fn_newFightScreenScore(void);
-FightScreenScore* fn_readFightScreenScore(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenScore_step(FightScreenScore* sc);
-void FightScreenScore_reset(FightScreenScore* sc);
-void FightScreenScore_bgDraw(FightScreenScore* sc, i16 layerno);
-void FightScreenScore_draw(FightScreenScore* sc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-FightScreenMatch* fn_newFightScreenMatch(void);
-FightScreenMatch* fn_readFightScreenMatch(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenMatch_step(FightScreenMatch* ma);
-void FightScreenMatch_reset(FightScreenMatch* ma);
-void FightScreenMatch_bgDraw(FightScreenMatch* ma, i16 layerno);
-void FightScreenMatch_draw(FightScreenMatch* ma, i16 layerno, Map_int_GoOpaqueValPtr f);
-FightScreenAiLevel* fn_newFightScreenAiLevel(void);
-FightScreenAiLevel* fn_readFightScreenAiLevel(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
 Ret_StateController__GoIface CharCompiler_assertAnalogVector(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenAiLevel_step(FightScreenAiLevel* ai);
 Ret_StateController__GoIface CharCompiler_assertInput(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_changeMovelist(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_dialogue(CharCompiler* c, IniSection is, StateControllerBase* sc);
@@ -4966,20 +5494,6 @@ Ret_StateController__GoIface CharCompiler_dizzySet(CharCompiler* c, IniSection i
 Ret_StateController__GoIface CharCompiler_guardBreakSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_guardPointsAdd(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_guardPointsSet(CharCompiler* c, IniSection is, StateControllerBase* sc);
-void FightScreenAiLevel_reset(FightScreenAiLevel* ai);
-void FightScreenAiLevel_bgDraw(FightScreenAiLevel* ai, i16 layerno);
-void FightScreenAiLevel_draw(FightScreenAiLevel* ai, i16 layerno, Map_int_GoOpaqueValPtr f, f32 ailv);
-FightScreenWinCount* fn_newFightScreenWinCount(void);
-FightScreenWinCount* fn_readFightScreenWinCount(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenWinCount_step(FightScreenWinCount* wc);
-void FightScreenWinCount_reset(FightScreenWinCount* wc);
-void FightScreenWinCount_bgDraw(FightScreenWinCount* wc, i16 layerno);
-void FightScreenWinCount_draw(FightScreenWinCount* wc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
-FightScreenMode* fn_newFightScreenMode(void);
-Map_GoString_FightScreenModePtr fn_readFightScreenMode(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
-void FightScreenMode_step(FightScreenMode* mo);
-void FightScreenMode_reset(FightScreenMode* mo);
-void FightScreenMode_bgDraw(FightScreenMode* mo, i16 layerno);
 Ret_StateController__GoIface CharCompiler_lifebarAction(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_loadState(CharCompiler* c, IniSection is, StateControllerBase* sc);
 GoIface CharCompiler_mapSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc);
@@ -5039,6 +5553,176 @@ GoIface CharCompiler_shaderSub(CharCompiler* c, IniSection is, StateControllerBa
 Ret_StateController__GoIface CharCompiler_shiftInput(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_overrideClsn(CharCompiler* c, IniSection is, StateControllerBase* sc);
 Ret_StateController__GoIface CharCompiler_null(CharCompiler* c, IniSection is, StateControllerBase* sc);
+Ret_ConfigPtr__GoIface fn_loadConfig(GoString def);
+void Config_initStruct(Config* c);
+void Config_normalize(Config* c);
+void Config_sysSet(Config* c);
+Ret_GoIface__GoIface Config_GetValue(Config* c, GoString query);
+GoIface Config_SetValueUpdate(Config* c, GoString query, GoIface value);
+GoIface Config_Save(Config* c, GoString file);
+f64 fn_cvfExp(f64 x);
+f64 fn_cvfExpmulti(f64 hi, f64 lo, int k);
+f64 fn_cvfLog(f64 x);
+bool fn_cvfIsOddInt(f64 x);
+f64 fn_cvfPow(f64 x, f64 y);
+f64 fn_cvfHypot(f64 p, f64 q);
+f64 fn_cvfCos(f64 x);
+f64 fn_cvfSin(f64 x);
+f64 fn_cvfTan(f64 x);
+Ret_u64__f64 fn_cvfTrigReduce(f64 x);
+f64 fn_cvfXatan(f64 x);
+f64 fn_cvfSatan(f64 x);
+f64 fn_cvfAtan(f64 x);
+f64 fn_cvfAsin(f64 x);
+f64 fn_cvfAcos(f64 x);
+f64 fn_cvfAtan2(f64 y, f64 x);
+cvfRulesT* fn_cvfRulesLoad(void);
+bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
+bool fn_cvfClampInvincibility(Char* c, i32* time_);
+i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v);
+void fn_cvfDebugf(GoString format, Slice_GoIface args);
+void fn_cookChar(GoString cdef, int pn, CharGlobalInfo* gi);
+void fn_cvfGcSafepoint(bool fighting);
+i32 fn_cvfHeadlessMain(Slice_GoString args);
+void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar);
+void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt);
+i32 fn_cvfGame(void);
+void fn_cvfRefresh(void);
+void WinType_SetPerfect(WinType* wt);
+void WinType_SetClutch(WinType* wt);
+FightFx* fn_newFightFx(void);
+GoIface fn_loadCommonFightFx(GoString def, bool isMainThread);
+GoIface fn_loadFightFx(GoString def, bool isCharFX, bool isMainThread);
+FSText* fn_newFSText(void);
+GoOpaqueVal* fn_getFont(Map_int_GoOpaqueValPtr f, i32 idx);
+FSText* fn_readFSText(GoString pre, IniSection is, GoString str, i16 ln, Map_int_GoOpaqueValPtr f, i32 align);
+void FSText_SetColor(FSText* txt, i32 r, i32 g, i32 b, i32 a);
+void FSText_step(FSText* txt);
+void FSText_resetTxtPfx(FSText* txt);
+FSBgTextSnd fn_newFSBgTextSnd(void);
+FSBgTextSnd fn_readFSBgTextSnd(GoString pre, IniSection is, Sff* sff, AnimationTable at, i16 ln, Map_int_GoOpaqueValPtr f);
+void FSBgTextSnd_step(FSBgTextSnd* bts, GoOpaqueVal* snd);
+void FSBgTextSnd_reset(FSBgTextSnd* bts);
+void FSBgTextSnd_bgDraw(FSBgTextSnd* bts, i16 layerno);
+void FSBgTextSnd_draw(FSBgTextSnd* bts, i16 layerno, Map_int_GoOpaqueValPtr f);
+Map_i32_AnimLayoutPtr fn_readMultipleValues(GoString pre, GoString name, IniSection is, Sff* sff, AnimationTable at);
+Map_f32_AnimLayoutPtr fn_readMultipleValuesF(GoString pre, GoString name, IniSection is, Sff* sff, AnimationTable at);
+Map_i32_FSTextPtr fn_readMultipleFSText(GoString pre, GoString name, IniSection is, GoString fmtstr, i16 ln, Map_int_GoOpaqueValPtr f, i32 align);
+Ret_i32__i32 fn_calcBarFillRect(i32 pos, Arr2_i32 range_, f32 offset, f32 scale, f32 screenScale, f32 midPos, f32 fill);
+LifeBar* fn_newLifeBar(void);
+LifeBar* fn_readLifeBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void LifeBar_step(LifeBar* lb, int charpn, LifeBar* lbr);
+void LifeBar_reset(LifeBar* lb);
+void LifeBar_bgDraw(LifeBar* lb, i16 layerno, int charpn);
+void LifeBar_draw(LifeBar* lb, i16 layerno, int charpn, LifeBar* lbr, Map_int_GoOpaqueValPtr f);
+PowerBar* fn_newPowerBar(void);
+PowerBar* fn_readPowerBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void PowerBar_step(PowerBar* pb, int charpn, PowerBar* pbr, GoOpaqueVal* snd);
+void PowerBar_reset(PowerBar* pb);
+void PowerBar_bgDraw(PowerBar* pb, i16 layerno, int charpn);
+void PowerBar_draw(PowerBar* pb, i16 layerno, int charpn, PowerBar* pbr, Map_int_GoOpaqueValPtr f);
+GuardBar* fn_newGuardBar(void);
+GuardBar* fn_readGuardBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void GuardBar_step(GuardBar* gb, int charpn, GuardBar* gbr, GoOpaqueVal* snd);
+void GuardBar_reset(GuardBar* gb);
+void GuardBar_bgDraw(GuardBar* gb, i16 layerno, int charpn);
+void GuardBar_draw(GuardBar* gb, i16 layerno, int charpn, GuardBar* gbr, Map_int_GoOpaqueValPtr f);
+StunBar* fn_newStunBar(void);
+StunBar* fn_readStunBar(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void StunBar_step(StunBar* sb, int charpn, StunBar* sbr, GoOpaqueVal* snd);
+void StunBar_reset(StunBar* sb);
+void StunBar_bgDraw(StunBar* sb, i16 layerno, int charpn);
+void StunBar_draw(StunBar* sb, i16 layerno, int charpn, StunBar* sbr, Map_int_GoOpaqueValPtr f);
+FightScreenFace* fn_newFightScreenFace(void);
+FightScreenFace* fn_readFightScreenFace(GoString pre, IniSection is, Sff* sff, AnimationTable at);
+void FightScreenFace_step(FightScreenFace* fa, int charpn, FightScreenFace* refFace);
+void FightScreenFace_reset(FightScreenFace* fa);
+void FightScreenFace_bgDraw(FightScreenFace* fa, i16 layerno);
+void FightScreenFace_draw(FightScreenFace* fa, i16 layerno, int charpn, FightScreenFace* refFace);
+void FightScreenFace_drawTeammates(FightScreenFace* fa, i16 layerno);
+FightScreenName* fn_newFightScreenName(void);
+FightScreenName* fn_readFightScreenName(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenName_step(FightScreenName* nm);
+void FightScreenName_reset(FightScreenName* nm);
+void FightScreenName_bgDraw(FightScreenName* nm, i16 layerno);
+void FightScreenName_draw(FightScreenName* nm, i16 layerno, int charpn, Map_int_GoOpaqueValPtr f, int side);
+void FightScreenName_drawTeammates(FightScreenName* nm, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenWinIcon* fn_newFightScreenWinIcon(void);
+FightScreenWinIcon* fn_readFightScreenWinIcon(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenWinIcon_add(FightScreenWinIcon* wi, WinType wt);
+void FightScreenWinIcon_step(FightScreenWinIcon* wi, i32 numwin);
+void FightScreenWinIcon_reset(FightScreenWinIcon* wi);
+void FightScreenWinIcon_clear(FightScreenWinIcon* wi);
+void FightScreenWinIcon_draw(FightScreenWinIcon* wi, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenTime* fn_newFightScreenTime(void);
+FightScreenTime* fn_readFightScreenTime(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenTime_step(FightScreenTime* ti);
+void FightScreenTime_reset(FightScreenTime* ti);
+void FightScreenTime_bgDraw(FightScreenTime* ti, i16 layerno);
+void FightScreenTime_draw(FightScreenTime* ti, i16 layerno, Map_int_GoOpaqueValPtr f);
+FightScreenCombo* fn_newFightScreenCombo(void);
+FightScreenCombo* fn_readFightScreenCombo(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f, int side);
+void FightScreenCombo_step(FightScreenCombo* co, int side, i32 hits, i32 damage, f32 percentage);
+void FightScreenCombo_reset(FightScreenCombo* co);
+void FightScreenCombo_draw(FightScreenCombo* co, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+void ComboShake_reset(ComboShake* cs);
+void ComboShake_restart(ComboShake* cs);
+void ComboShake_setDefaultPhase(ComboShake* cs);
+void ComboShake_update(ComboShake* cs);
+FSMsg* fn_newFSMsg(int side);
+Slice_FSMsgPtr fn_insertFSMsg(Slice_FSMsgPtr array, FSMsg* value, int index);
+Slice_FSMsgPtr fn_removeFSMsg(Slice_FSMsgPtr array, int index);
+bool FSMsg_isEqual(FSMsg* m, FSMsg* other);
+FightScreenAction* fn_newFightScreenAction(void);
+FightScreenAction* fn_readFightScreenAction(GoString pre, IniSection is, Map_int_GoOpaqueValPtr f);
+void FightScreenAction_step(FightScreenAction* ac, int leader);
+void FightScreenAction_reset(FightScreenAction* ac, int leader);
+void FightScreenAction_draw(FightScreenAction* ac, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenRound* fn_newFightScreenRound(GoOpaqueVal* snd);
+Fade* fn_readLbFade(GoString pre, IniSection is, Sff* sff, AnimationTable at, GoOpaqueVal* snd);
+FightScreenRound* fn_readFightScreenRound(IniSection is, Sff* sff, AnimationTable at, GoOpaqueVal* snd, Map_int_GoOpaqueValPtr f);
+i32 FightScreenRound_overTime(FightScreenRound* ro);
+bool FightScreenRound_act(FightScreenRound* ro);
+void FightScreenRound_handleRoundIntro(FightScreenRound* ro);
+void FightScreenRound_handleRoundOutro(FightScreenRound* ro);
+void FightScreenRound_reset(FightScreenRound* ro);
+void FightScreenRound_draw(FightScreenRound* ro, i16 layerno, Map_int_GoOpaqueValPtr f);
+void FightScreenRound_drawFade(FightScreenRound* ro);
+FightScreenTimer* fn_newFightScreenTimer(void);
+FightScreenTimer* fn_readFightScreenTimer(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenTimer_step(FightScreenTimer* tr);
+void FightScreenTimer_reset(FightScreenTimer* tr);
+void FightScreenTimer_bgDraw(FightScreenTimer* tr, i16 layerno);
+void FightScreenTimer_draw(FightScreenTimer* tr, i16 layerno, Map_int_GoOpaqueValPtr f);
+FightScreenScore* fn_newFightScreenScore(void);
+FightScreenScore* fn_readFightScreenScore(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenScore_step(FightScreenScore* sc);
+void FightScreenScore_reset(FightScreenScore* sc);
+void FightScreenScore_bgDraw(FightScreenScore* sc, i16 layerno);
+void FightScreenScore_draw(FightScreenScore* sc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenMatch* fn_newFightScreenMatch(void);
+FightScreenMatch* fn_readFightScreenMatch(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenMatch_step(FightScreenMatch* ma);
+void FightScreenMatch_reset(FightScreenMatch* ma);
+void FightScreenMatch_bgDraw(FightScreenMatch* ma, i16 layerno);
+void FightScreenMatch_draw(FightScreenMatch* ma, i16 layerno, Map_int_GoOpaqueValPtr f);
+FightScreenAiLevel* fn_newFightScreenAiLevel(void);
+FightScreenAiLevel* fn_readFightScreenAiLevel(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenAiLevel_step(FightScreenAiLevel* ai);
+void FightScreenAiLevel_reset(FightScreenAiLevel* ai);
+void FightScreenAiLevel_bgDraw(FightScreenAiLevel* ai, i16 layerno);
+void FightScreenAiLevel_draw(FightScreenAiLevel* ai, i16 layerno, Map_int_GoOpaqueValPtr f, f32 ailv);
+FightScreenWinCount* fn_newFightScreenWinCount(void);
+FightScreenWinCount* fn_readFightScreenWinCount(GoString pre, IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenWinCount_step(FightScreenWinCount* wc);
+void FightScreenWinCount_reset(FightScreenWinCount* wc);
+void FightScreenWinCount_bgDraw(FightScreenWinCount* wc, i16 layerno);
+void FightScreenWinCount_draw(FightScreenWinCount* wc, i16 layerno, Map_int_GoOpaqueValPtr f, int side);
+FightScreenMode* fn_newFightScreenMode(void);
+Map_GoString_FightScreenModePtr fn_readFightScreenMode(IniSection is, Sff* sff, AnimationTable at, Map_int_GoOpaqueValPtr f);
+void FightScreenMode_step(FightScreenMode* mo);
+void FightScreenMode_reset(FightScreenMode* mo);
+void FightScreenMode_bgDraw(FightScreenMode* mo, i16 layerno);
 void FightScreenMode_draw(FightScreenMode* mo, i16 layerno, Map_int_GoOpaqueValPtr f);
 Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def);
 void FightScreen_step(FightScreen* fs);
@@ -5052,123 +5736,77 @@ void FightScreen_resolvePath(FightScreen* fs);
 void FightScreen_appendAction(FightScreen* fs, Char* c, FSMsg* msg, i32 refresh);
 void FightScreen_addComboHits(FightScreen* fs, int side, i32 n);
 void FightScreen_syncTeamOrder(FightScreen* fs, int side);
+GoOpaqueVal* fn_newFnt(void);
+Ret_GoOpaqueValPtr__GoIface fn_loadFnt(GoString filename, i32 height);
+TextSprite* fn_NewTextSprite(void);
+void TextSprite_Clear(TextSprite* ts);
+void TextSprite_SetLocalcoordChar(TextSprite* ts, Arr2_i32 lc);
+void TextSprite_SetPos(TextSprite* ts, f32 x, f32 y);
+void TextSprite_AddPos(TextSprite* ts, f32 x, f32 y);
+void TextSprite_SetScale(TextSprite* ts, f32 xscl, f32 yscl);
+void TextSprite_ApplyScaleRatio(TextSprite* ts);
+void TextSprite_SetColor(TextSprite* ts, i32 r, i32 g, i32 b, i32 a);
+void TextSprite_SetVelocity(TextSprite* ts, f32 xvel, f32 yvel);
+void TextSprite_SetMaxDist(TextSprite* ts, f32 x, f32 y);
+void TextSprite_SetAccel(TextSprite* ts, f32 xacc, f32 yacc);
+void TextSprite_wrapText(TextSprite* ts, GoString fullLine, int typedLen);
+void fn_StepTypewriter(GoString fullLine, int* typedLen, i32* charDelayCounter, bool* lineFullyRendered, f32 delay);
+void TextSprite_Update(TextSprite* ts);
+void TextSprite_Draw(TextSprite* ts, i16 ln);
+void TextSprite_draw(TextSprite* ts, i16 ln, Arr4_i32* clip);
+void TextSprite_Reset(TextSprite* ts);
+f64 fn_round2(f64 x);
+GoString fn_defKey(GoString p);
+Slice_GoString fn_selectedCharKeys(void);
+runTally fn_tallyRun(void);
+ResultsScreenProperties* fn_resultsScreenForMode(GoString mode);
+bool fn_modeCleared(GoString mode, int matches);
+Ret_GoString__bool fn_rankingTypeFor(GoString mode);
+bool fn_rankingWouldPlace(GoString mode);
+GoIface fn_writeStatsPretty(GoString path, Slice_u8 data);
+PalFXDef fn_palFXDefDefault(void);
+PalFX* fn_newPalFX(void);
+void PalFX_clearWithNeg(PalFX* pf, bool neg);
+void PalFX_clear(PalFX* pf);
+PalFX fn_identityPalFX(void);
+PalFX PalFX_sample(PalFX* pf);
+void PalFX_sinAdd(PalFX* pf, Arr3_i32* color);
+void PalFX_sinMul(PalFX* pf, Arr3_i32* color);
+void PalFX_sinColor(PalFX* pf, f32* color);
+void PalFX_sinHueshift(PalFX* pf, f32* color);
+void PalFX_refresh(PalFX* pf);
+void PalFX_tickTimers(PalFX* pf);
+void PalFX_step(PalFX* pf);
+PalFX PalFX_stacked(PalFX base, PalFX extra, TransType blendMode, Arr2_i32 alpha);
+PalFX* PalFX_withStacked(PalFX* pf, PalFX* extra, TransType blendMode, Arr2_i32 alpha);
+PalFX* PalFX_withStackedColor(PalFX* pf, f32 r, f32 g, f32 b);
+Palette* fn_newPaldata(void);
+void PaletteList_init(PaletteList* pl);
+PaletteList PaletteList_copyMap(PaletteList* pl);
+void PaletteList_SetSource(PaletteList* pl, int i, Slice_u32 p);
+Ret_int__Slice_u32 PaletteList_NewPal(PaletteList* pl);
+Slice_u32 PaletteList_Get(PaletteList* pl, int i);
 void PaletteList_Remap(PaletteList* pl, int source, int destination);
 void PaletteList_ResetRemap(PaletteList* pl);
-bool fn_isZeroValue(GoOpaque /* reflect.Value */ v);
 Slice_int PaletteList_GetPalMap(PaletteList* pl);
 bool PaletteList_SwapPalMap(PaletteList* pl, Slice_int* palMap);
-Slice_GoString fn_buildLookupDirs(GoString lookupTag, GoString baseDef);
 Slice_u8 fn_Pal32ToBytes(Slice_u32 pal);
 GoIface fn_NewTextureFromPalette(Slice_u32 pal);
 Ret_Slice_u32__GoIface fn_readActPalette(GoString filename);
 bool Sprite_isBlank(Sprite* s);
-GoString fn_resolveWithLookup(GoString in, GoString lookupTag, GoString baseDef);
-GoIface fn_setFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoIface value, GoString defTag, GoString keyPath, GoString lookupTag, GoString baseDef);
-void Music_act(Music m);
-InputBuffer* fn_NewInputBuffer(void);
-void InputBuffer_Reset(InputBuffer* ib);
-void InputBuffer_updateInputTime(InputBuffer* ib, bool U, bool D, bool L, bool R, bool B, bool F, bool a, bool b, bool c, bool x, bool y, bool z, bool s, bool d, bool w, bool m);
-void Bgm_UpdateVolume(Bgm* bgm);
-void backGround_drawTransformed(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip, bgDrawTransform* transform);
-CommandList CommandList_Clone(CommandList* cl);
-void fn_vitaDiagFrame(void);
-GameStatePool fn_NewGameStatePool(void);
-i32 InputBuffer_State(InputBuffer* __, CommandStepKey ck);
 Sprite* fn_newSprite(void);
-i32 Texture_GLES32_GetWidth(Texture_GLES32* t);
-void Bgm_Seek(Bgm* bgm, int positionSample);
-i32 Texture_GLES32_GetHeight(Texture_GLES32* t);
-GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item);
-void RollbackSession_TruncateReplayFrom(RollbackSession* rs, i32 time_);
-GoOpaqueVal* fn_newSnd(void);
 void Sprite_shareCopy(Sprite* s, Sprite* src);
 Slice_u32 Sprite_GetPal(Sprite* s, PaletteList* pl);
 GoIface Sprite_GetPalTex(Sprite* s, PaletteList* pl);
-GoString Renderer_GLES32_GetName(Renderer_GLES32* r);
 void Sprite_SetPxl(Sprite* s, Slice_u8 px);
-bool NetConnection_Update(NetConnection* nc);
 void Sprite_SetRaw(Sprite* s, Slice_u8 data, i32 sprWidth, i32 sprHeight, i32 sprDepth);
 GoIface Sprite_readHeader(Sprite* s, GoIface r, u32* ofs, u32* size, u16* link);
-Ret_bool__GoOpaque_reflect_ValuePtr__GoIface fn_assignToPatternMap(GoOpaque /* reflect.Value */ v, GoString lastPartName, GoIface value, bool final, GoString baseDef);
 GoIface Sprite_readPcxHeader(Sprite* s, GoIface r, i64 offset);
 Slice_u8 Sprite_RlePcxDecode(Sprite* s, Slice_u8 rle);
-Ret_bool__GoIface fn_assignToFlattenMapField(GoOpaque /* reflect.Value */ fieldVal, GoReflectStructField sf, Slice_queryPart parts, int currentIndex, GoIface value, GoString baseDef, GoFunc extractNames);
 GoIface Sprite_read(Sprite* s, GoIface f, SffHeader* sh, i64 offset, u32 datasize, u32 nextSubheader, Sprite* prev, PaletteList* pl, bool isCharFirstSprite);
-void ReplayFile_Close(ReplayFile* rf);
-Arr14_bool ReplayFile_readReplayInput(ReplayFile* rf, int i);
-bool fn_elemHasFieldWithINITag(GoIface elemType, GoString name);
-Arr6_i8 ReplayFile_readReplayInputAnalog(ReplayFile* rf, int i);
-bool ReplayFile_AnyButton(ReplayFile* rf);
 GoIface Sprite_readHeaderV2(Sprite* s, GoIface r, u32* ofs, u32* size, u32 lofs, u32 tofs, u16* link);
 Slice_u8 Sprite_Rle8Decode(Sprite* s, Slice_u8 rle);
 Slice_u8 Sprite_Rle5Decode(Sprite* s, Slice_u8 rle);
-GoIface fn_assignField(GoIface structPtr, Slice_queryPart parts, GoIface value, GoString baseDef);
-i32 InputBuffer_StateCharge(InputBuffer* ib, CommandStepKey ck);
-void ReplayFile_Synchronize(ReplayFile* rf);
-void fn_RenderSprite(RenderParams rpIn);
-bool ReplayFile_Update(ReplayFile* rf);
-i64 LoopTimer_usToWaitThisLoop(LoopTimer* lt);
-void RollbackSession_Close(RollbackSession* r);
-Ret_GoOpaqueValPtr__GoIface fn_LoadSnd(GoString filename);
-GoOpaqueVal* Snd_Get(GoOpaqueVal* s, Arr2_i32 gn);
-bool Snd_play(GoOpaqueVal* s, Arr2_i32 gn, i32 volumescale, f32 pan, int loopstart, int loopend, int startposition, Slice_bool keepOnMatchEnd);
-void SoundChannel_Reset(SoundChannel* s);
-void SoundChannel_Play(SoundChannel* s, GoOpaqueVal* sound, i32 group, i32 number, i32 loop, f32 freqmul, int loopStart, int loopEnd, int startPosition);
-bool SoundChannel_IsPlaying(SoundChannel* s);
-bgCtrl* fn_newBgCtrl(void);
-GoIface bgCtrl_read(bgCtrl* bgc, IniSection is, int idx);
-void SoundChannel_SetPaused(SoundChannel* s, bool pause);
-void SoundChannel_SetVolume(SoundChannel* s, f32 vol);
-void SoundChannel_SetPan(SoundChannel* s, f32 p, f32 ls, i32 sourceID);
-void SoundChannel_SetPriority(SoundChannel* s, i32 priority);
-bool bgCtrl_xEnable(bgCtrl* bgc);
-bool bgCtrl_yEnable(bgCtrl* bgc);
-void Stage_applyShaderDef(Stage* s, stageShaderDef* def, CustomShader* cs);
-SelectStage* Stage_si(Stage* s);
-Animation* fightScreenAnimationStateCloner_clone(fightScreenAnimationStateCloner* cl, Animation* anim);
-AnimTextSnd fightScreenAnimationStateCloner_cloneAnimTextSnd(fightScreenAnimationStateCloner* cl, AnimTextSnd src);
-FightScreenRound* FightScreenRound_Clone(FightScreenRound* ro);
-FightScreen FightScreen_Clone(FightScreen* fs);
-Arr4_f64 fn_getViewport(f64 srcW, f64 srcH, f64 dstW, f64 dstH);
-bool System_middleOfMatch(System* s);
-bool System_skipMotifScaling(System* s);
-f32 System_getFightAspect(System* s);
-bool fn_vitaDiagSkip(int part);
-bool fn_vitaDrawCensusDue(void);
-void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 layerno);
-f32 System_getMotifAspect(System* s);
-f32 System_getCurrentAspect(System* s);
-drawAspectState fn_aspectStateForSize(i32 w, i32 h);
-void System_setGameSize(System* s, i32 w, i32 h);
-void System_applyFightAspect(System* s);
-void fn_vitaGCTrigger(uintptr_t n);
-void fn_vitaRoundGC(void);
-u32 fn_vitaNowUs(void);
-stageRollbackState Stage_CloneRollbackState(Stage* s);
-drawAspectState System_captureAspectState(System* s);
-void stageRollbackState_Load(stageRollbackState* ss, Stage* s);
-Ret_Map_i32_StagePtr__StagePtr fn_cloneStageList(GameStatePool* gsp, Map_i32_StagePtr src, Stage* active);
-Stage* Stage_Clone(Stage* s, GameStatePool* gsp);
-TextSprite* fn_cloneTextSprite(TextSprite* ts);
-Anim* Anim_CloneState(Anim* anim);
-Fade* Fade_Clone(Fade* fa);
-MotifContinue MotifContinue_Clone(MotifContinue* co);
-DialogueToken fn_cloneDialogueToken(DialogueToken t);
-DialogueParsedLine fn_cloneDialogueParsedLine(DialogueParsedLine src);
-MotifDialogue MotifDialogue_Clone(MotifDialogue* di);
-rankingRow rankingRow_Clone(rankingRow* rr);
-MotifHiscore MotifHiscore_Clone(MotifHiscore* hi);
-MotifWin MotifWin_Clone(MotifWin* wi);
-Motif Motif_Clone(Motif* m, bool postMatch);
-Music fn_cloneMusicMapShallow(Music src);
-Slice_StoryboardPtr fn_cloneStoryboards(Slice_StoryboardPtr src);
-void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps);
-void Storyboard_syncDialoguePosToTime(Storyboard* s);
-void Storyboard_init(Storyboard* s);
-void Storyboard_step(Storyboard* s);
-void Storyboard_draw(Storyboard* s, i16 layerno);
-void System_restoreAspectState(System* s, drawAspectState st);
-void fn_vitaPhase(int ph);
 Slice_u8 Sprite_Lz5Decode(Sprite* s, Slice_u8 rle);
 GoIface Sprite_readV2(Sprite* s, GoIface f, i64 offset, u32 datasize);
 GoIface Sprite_CachePalTex(Sprite* s, Slice_u32 pal);
@@ -5177,24 +5815,63 @@ GoIface SffHeader_Read(SffHeader* sh, GoIface r, u32* lofs, u32* tofs);
 Sff* fn_newSff(SffType sffType);
 Sff* fn_findActiveSff(GoString filename);
 bool fn_loadingCanceled(void);
-bool Command_GreaterCheckFail(Command* c, int i, InputBuffer* ibuf);
 Ret_SffPtr__GoIface fn_loadSff(GoString filename, SffType sffType, bool isMainThread, bool isActPal);
-GoString fn_resolveSectionForWrite(GoOpaque /* ini.File */* f, GoString sec);
 void sffv1PalState_update(sffv1PalState* p, Sprite* sprite, u8 ps, u32 xofs);
 Ret_Slice_u32__GoIface fn_readSffv1Palette(GoIface f, GoFunc read, i64 offset);
 Ret_SffPtr__Slice_i32__GoIface fn_preloadSff(GoString filename, SffType sffType, Map_Arr2_u16_bool preloadSpr);
 GoIface Sff_loadPalettes(Sff* s, GoIface f, u32 lofs);
 Ret_Slice_u32__GoIface Sff_ReadPalette(Sff* s, GoIface f, i64 offset, u32 size);
 Sprite* Sff_GetSprite(Sff* s, u16 g, u16 n);
-GoIface fn_updateINIFile(GoIface obj, GoOpaque /* ini.File */* iniFile, GoString query, GoString value);
-Ret_bool__GoOpaque_reflect_ValuePtr fn_getValueFromPatternMap(GoOpaque /* reflect.Value */ v, GoString partName);
-Ret_GoIface__GoIface fn_GetValue(GoIface structPtr, GoString query);
 Sprite* Sff_cloneSpriteWithPal(Sff* s, u16 g, u16 n, PaletteList* pl);
 void fn_requestScreenshot(void);
 void fn_saveScreenshot(Slice_u8 data, int width, int height, GoString filename);
+void fn_runGfxTask(GoFunc f);
+Ret_GoString__int fn_iniFirstValue(GoOpaque /* ini.Key */* k);
+void fn_overlayUserFirstWins(GoOpaque /* ini.File */* dst, GoOpaque /* ini.File */* user);
+bool fn_tagInsensitiveKeys(GoReflectStructField sf);
+bool fn_tagKeyFirstMap(GoReflectStructField sf);
+Slice_queryPart fn_parseQueryPath(GoString query);
+Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findFieldByINITag(GoOpaque /* reflect.Value */ v, GoString tag);
+Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findMapFieldWithTag(GoOpaque /* reflect.Value */ v, GoString tag);
+Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool fn_findDefaultField(GoOpaque /* reflect.Value */ v);
+void fn_initMaps(GoOpaque /* reflect.Value */ v);
+void fn_applyDefaultsToValue(GoOpaque /* reflect.Value */ v);
+void fn_setDefaultFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoReflectStructField fieldType, GoString defTag);
+bool fn_isZeroValue(GoOpaque /* reflect.Value */ v);
+Slice_GoString fn_buildLookupDirs(GoString lookupTag, GoString baseDef);
+GoString fn_resolveWithLookup(GoString in, GoString lookupTag, GoString baseDef);
+GoIface fn_setFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoIface value, GoString defTag, GoString keyPath, GoString lookupTag, GoString baseDef);
+Ret_bool__GoOpaque_reflect_ValuePtr__GoIface fn_assignToPatternMap(GoOpaque /* reflect.Value */ v, GoString lastPartName, GoIface value, bool final, GoString baseDef);
+Ret_bool__GoIface fn_assignToFlattenMapField(GoOpaque /* reflect.Value */ fieldVal, GoReflectStructField sf, Slice_queryPart parts, int currentIndex, GoIface value, GoString baseDef, GoFunc extractNames);
+bool fn_elemHasFieldWithINITag(GoIface elemType, GoString name);
+GoIface fn_assignField(GoIface structPtr, Slice_queryPart parts, GoIface value, GoString baseDef);
+GoString fn_resolveSectionForWrite(GoOpaque /* ini.File */* f, GoString sec);
+GoIface fn_updateINIFile(GoIface obj, GoOpaque /* ini.File */* iniFile, GoString query, GoString value);
+Ret_bool__GoOpaque_reflect_ValuePtr fn_getValueFromPatternMap(GoOpaque /* reflect.Value */ v, GoString partName);
+Ret_GoIface__GoIface fn_GetValue(GoIface structPtr, GoString query);
 GoIface fn_SetValue(GoIface structPtr, GoString query, GoIface val);
 GoIface fn_SetValueUpdate(GoIface obj, GoOpaque /* ini.File */* iniFile, GoString query, GoIface value);
 GoIface fn_SaveINI(GoOpaque /* ini.File */* iniFile, GoString filePath);
+Music fn_parseMusicSection(GoOpaque /* ini.Section */* section);
+bool CommandStepKey_IsDirectionPress(CommandStepKey ck);
+bool CommandStepKey_IsDirectionRelease(CommandStepKey ck);
+bool CommandStepKey_IsButtonPress(CommandStepKey ck);
+bool CommandStepKey_IsButtonRelease(CommandStepKey ck);
+Arr14_bool fn_GetKeyboardState(KeyConfig kc);
+Arr14_bool fn_GetJoystickState(KeyConfig kc);
+void KeyConfig_swap(KeyConfig* kc, KeyConfig* kc2);
+CommandKeyRemap* fn_NewCommandKeyRemap(void);
+InputReader* fn_NewInputReader(void);
+void InputReader_Reset(InputReader* ir);
+Arr14_bool InputReader_LocalInput(InputReader* ir, int in);
+Ret_bool__bool__bool__bool InputReader_SocdResolution(InputReader* ir, bool U, bool D, bool B, bool F);
+Arr9_bool InputReader_ButtonAssistCheck(InputReader* ir, Arr9_bool current);
+InputBuffer* fn_NewInputBuffer(void);
+void InputBuffer_Reset(InputBuffer* ib);
+void InputBuffer_updateInputTime(InputBuffer* ib, bool U, bool D, bool L, bool R, bool B, bool F, bool a, bool b, bool c, bool x, bool y, bool z, bool s, bool d, bool w, bool m);
+i32 InputBuffer_State(InputBuffer* __, CommandStepKey ck);
+i32 InputBuffer_StateCharge(InputBuffer* ib, CommandStepKey ck);
+bool Command_GreaterCheckFail(Command* c, int i, InputBuffer* ibuf);
 Arr14_bool AiInput_Buttons(AiInput* ai);
 void AiInput_Update(AiInput* ai, f32 level);
 bool AiInput_U(AiInput* ai);
@@ -5211,24 +5888,6 @@ bool AiInput_s(AiInput* ai);
 bool AiInput_d(AiInput* ai);
 bool AiInput_w(AiInput* ai);
 bool AiInput_m(AiInput* ai);
-void fn_runGfxTask(GoFunc f);
-Music fn_parseMusicSection(GoOpaque /* ini.Section */* section);
-bool System_canUseFullResolutionAspect(System* s);
-bool fn_vitaHalfRate(void);
-bool System_motifOverlayActive(System* s);
-bool System_shouldComposeFullResolution(System* s);
-Arr4_i32 System_fightViewport(System* s);
-void fn_vitaMatchEnd(void);
-Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b);
-Ret_Arr4_i32__bool System_fightDrawClip(System* s);
-void System_setGameAspect(System* s);
-bool System_eventUpdate(System* s);
-void System_runMainThreadTask(System* s);
-bool System_await(System* s, int fps);
-soundPanView System_soundPanView(System* s);
-void System_renderFrame(System* s);
-bool System_update(System* s);
-Stage* fn_newStage(GoString def);
 bool CommandStep_IsSingleDirection(CommandStep* cs);
 bool CommandStep_IsDirToButton(CommandStep* cs, CommandStep next);
 bool CommandStep_EqualSteps(CommandStep cs, CommandStep n);
@@ -5236,7 +5895,6 @@ Command* fn_newCommand(void);
 GoIface Command_ReadCommandSymbols(Command* c, GoString cmdstr, CommandKeyRemap* kr);
 void Command_AutoGreaterExpand(Command* c);
 void Command_ApplyBackwardCompatibility(Command* c, GoString charName);
-void Model_calculateTextureTransform(Model* mdl);
 void Command_Clear(Command* c, bool bufreset);
 void Command_Step(Command* c, InputBuffer* ibuf, bool ai, bool isHelper, bool hpbuf, bool pausebuf, i32 extratime);
 CommandList* fn_NewCommandList(InputBuffer* cb);
@@ -5253,6 +5911,23 @@ bool CommandList_GetState(CommandList* cl, GoString name);
 void CommandList_CopyList(CommandList* cl, CommandList src);
 bool CommandList_IsControllerButtonPressed(CommandList* cl, GoString token, int controllerIdx);
 Ret_int__bool CommandList_lookupName(CommandList* cl, GoString name);
+void fn_initLUTs(void);
+GoOpaque /* invalid type */ fn_StringToKey(GoString s);
+int Input_GetMaxJoystickCount(Input* input);
+bool Input_IsJoystickPresent(Input* input, int joy);
+Arr6_f32 Input_GetJoystickAxes(Input* input, int joy);
+Slice_u8 Input_GetJoystickButtons(Input* input, int joy);
+GoString Input_GetJoystickGUID(Input* input, int joy);
+void Input_RumbleController(Input* input, int joy, u16 lo, u16 hi, u32 ticks);
+GoString fn_CheckAxisForDpad(Arr6_f32* axes, int base);
+GoString fn_CheckAxisForTrigger(Arr6_f32* axes);
+void fn_jsonFileCacheReset(void);
+GoIface fn_luaDoStringCached(lua_LState* l, GoString src);
+void fn_chk(GoIface err);
+void fn_processCommandLine(void);
+Ret_EnvironmentPtr__GoIface fn_loadEnvironment(GoString filepath);
+Ret_ModelPtr__GoIface fn_loadglTFModel(GoString filepath);
+void Model_calculateTextureTransform(Model* mdl);
 void Model_draw(Model* model, u32 bufferIndex, int sceneNumber, int layerNumber, int defaultLayerNumber, Arr3_f32 offset, GoOpaque /* mgl32.Mat4 */ proj, GoOpaque /* mgl32.Mat4 */ view, GoOpaque /* mgl32.Mat4 */ viewProjMatrix, f32 outlineConst);
 void Stage_drawModel(Stage* s, Arr2_f32 pos, f32 yofs, f32 scl, i32 layerNumber);
 void GLTFAnimation_toggle(GLTFAnimation* anim, bool enabled);
@@ -5354,10 +6029,61 @@ bool MotifWin_initResultsVariant(MotifWin* wi, Motif* m, GoString sectionName);
 bool MotifWin_initWinScreen(MotifWin* wi, Motif* m);
 void MotifWin_step(MotifWin* wi, Motif* m);
 void MotifWin_draw(MotifWin* wi, Motif* m, i16 layerno);
+bool Music_HasPrefix(Music m, GoString prefix);
+void Music_Append(Music m, Music other);
+void Music_Override(Music m, Music other);
+GoString fn_normalizeMusicPrefix(GoString prefix);
+void Music_AppendParams(Music m, Slice_GoString entries);
+void Music_DebugDump(Music m, GoString label);
+Ret_GoString__int__int__int__int__int__f32__int Music_Read(Music m, GoString key, GoString def);
+bool Music_Play(Music m, GoString key, GoString path);
+void Music_act(Music m);
+void NetConnection_Close(NetConnection* nc);
+GoIface NetConnection_Stop(NetConnection* nc);
+Arr14_bool NetConnection_readNetInput(NetConnection* nc, int i);
+Arr6_i8 NetConnection_readNetInputAnalog(NetConnection* nc, int i);
+bool NetConnection_AnyButton(NetConnection* nc);
+GoIface NetConnection_Synchronize(NetConnection* nc);
+bool NetConnection_Update(NetConnection* nc);
+void ReplayFile_Close(ReplayFile* rf);
+Arr14_bool ReplayFile_readReplayInput(ReplayFile* rf, int i);
+Arr6_i8 ReplayFile_readReplayInputAnalog(ReplayFile* rf, int i);
+bool ReplayFile_AnyButton(ReplayFile* rf);
+void ReplayFile_Synchronize(ReplayFile* rf);
+bool ReplayFile_Update(ReplayFile* rf);
+Fade* fn_newFade(void);
+void Fade_reset(Fade* fa);
+i32 Fade_animLength(Fade* fa);
+i32 Fade_colorFadeTime(Fade* fa, i32 animLen);
+i32 Fade_duration(Fade* fa);
+void Fade_init(Fade* fa, Fade* dest, bool isFadeIn);
+void Fade_step(Fade* fa);
+void Fade_drawRect(Fade* fa, Arr4_i32 rect, u32 color, i32 alpha);
+void Fade_draw(Fade* fa);
+bool Fade_isFading(Fade* fa);
+bool Fade_isActive(Fade* fa);
+void fn_startFadeOut(Fade* tmpl, Fade* dest, bool overrideBlack, FadeStartPolicy policy);
+void fn_startFadeOutFrom(Fade* tmpl, Fade* dest, Fade* fi, bool overrideBlack, FadeStartPolicy policy);
+void Rect_Draw(Rect* r, i16 ln);
+Arr4_i32 Rect_drawWindow(Rect* r);
+bool Rotation_IsZero(Rotation* r);
+void ShaderTexture_clear(ShaderTexture* st);
+void ShaderTexture_step(ShaderTexture* st);
+void CustomShader_set(CustomShader* cs, GoString name, GoString key);
+void CustomShader_clear(CustomShader* cs);
+CustomShaderRenderData CustomShader_renderData(CustomShader* cs, bool act);
+void fn_RenderSprite(RenderParams rpIn);
 void fn_FillRect(Arr4_i32 rect, u32 color, Arr2_i32 alpha, PalFX* fx);
 TextureAtlas* fn_CreateTextureAtlas(i32 width, i32 height, i32 depth, bool filter);
 Ret_Arr4_f32__bool TextureAtlas_AddImage(TextureAtlas* ta, i32 width, i32 height, i32 stride, Slice_u8 data);
 GoIface fn_NewPaletteTexture(void);
+Ret_GoIface__GoIface Renderer_GLES32_newTexture(Renderer_GLES32* r, i32 width, i32 height, i32 depth, bool filter);
+GoIface Renderer_GLES32_newSubTexture(Renderer_GLES32* r, GoIface tex, i32 width, i32 height, Arr4_f32 uvst);
+void Texture_GLES32_SetData(Texture_GLES32* t, Slice_u8 data);
+void Texture_GLES32_SetSubData(Texture_GLES32* t, Slice_u8 data);
+i32 Texture_GLES32_GetWidth(Texture_GLES32* t);
+i32 Texture_GLES32_GetHeight(Texture_GLES32* t);
+GoString Renderer_GLES32_GetName(Renderer_GLES32* r);
 void Renderer_GLES32_Close(Renderer_GLES32* r);
 void Renderer_GLES32_BeginFrame(Renderer_GLES32* r, bool clearColor);
 void Renderer_GLES32_EndFrame(Renderer_GLES32* r);
@@ -5369,18 +6095,99 @@ void Renderer_GLES32_SetModelIndexData(Renderer_GLES32* r, u32 bufferIndex, Slic
 GoOpaque /* mgl32.Mat4 */ Renderer_GLES32_PerspectiveProjectionMatrix(Renderer_GLES32* r, f32 angle, f32 aspect, f32 near, f32 far);
 u32 Renderer_GLES32_LoadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName, Slice_u8 shaderData);
 void Renderer_GLES32_UnloadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName);
+bool RollbackSystem_hijackRunMatch(RollbackSystem* rs);
+Arr14_bool RollbackSystem_readRollbackInput(RollbackSystem* rs, int controller);
+Arr6_i8 RollbackSystem_readRollbackInputAnalog(RollbackSystem* rs, int controller);
+bool RollbackSystem_anyButton(RollbackSystem* rs);
+void RollbackLogger_logRoundSkipCheck(RollbackLogger* g, i32 fadeoutStart, bool anyButton, bool roundnotskip, bool skipEligible, bool matchEndDialogue);
+void RollbackLogger_logRoundAdvanceCheck(RollbackLogger* g, bool roundOver, bool tickFrame, bool motifEndActive, bool fightLoopEnd, bool holdPostMatch, bool canAdvance);
+void RollbackSession_TruncateReplayFrom(RollbackSession* rs, i32 time_);
+i64 LoopTimer_usToWaitThisLoop(LoopTimer* lt);
+void RollbackSession_Close(RollbackSession* r);
+void fn_hoistTriggers(StateBytecode* sb);
+Ret_OpCode__int fn_hoistGuard(BytecodeExp t);
+void fn_hoistBlock(StateBlock* b);
+BytecodeExp fn_stripPrefix(BytecodeExp t, int n);
+scRunFn fn_scRunFunc(StateController sc);
+Ret_StateControllerBase__bool fn_scBase(StateController sc);
+Ret_bool__GoIface fn_ExecFunc(lua_LState* l, GoString funcName);
+Ret_int__int__GoString__bool fn_parseOverrideKey(GoString key);
+Ret_GoString__bool fn_parseMapKey(GoString key);
+Ret_GoString__GoString__bool fn_parseKV(GoString s);
+Ret_bool__bool fn_parseBoolLoose(GoString s);
+bool fn_isMusicKey(GoString key);
+GoString fn_extractPrefixFromMusicKey(GoString key);
+Ret_GoString__Slice_GoString fn_splitMusicParamValue(GoString v);
+Slice_GoString fn_expandMusicKV(GoString key, GoString value);
+SelectCharParams* fn_newSelectCharParams(void);
+SelectStageParams* fn_newSelectStageParams(void);
+OverrideCharData* fn_newOverrideCharData(void);
+GameParams* fn_newGameParams(void);
+GameParams* fn_newGameParamsFromMotif(Motif* m);
+Slice_GoString GameParams_MusicEntries(GameParams* p);
+OverrideCharData* GameParams_ensureOverride(GameParams* p, int team, int member);
+void GameParams_AppendParams(GameParams* p, Slice_GoString entries);
+void fn_WithSpeakerLock(GoFunc f);
+GoIface SwapSeeker_Seek(SwapSeeker* sw, int p);
+int SwapSeeker_Position(SwapSeeker* sw);
+int SwapSeeker_Len(SwapSeeker* sw);
+GoIface BufferSeeker_Seek(BufferSeeker* b, int p);
+int BufferSeeker_Position(BufferSeeker* b);
+int BufferSeeker_Len(BufferSeeker* b);
+int StreamLooper_Len(StreamLooper* b);
+int StreamLooper_Position(StreamLooper* b);
+GoIface StreamLooper_Seek(StreamLooper* b, int p);
+Bgm* fn_newBgm(void);
+void Bgm_Stop(Bgm* bgm);
+void Bgm_Open(Bgm* bgm, GoString filename, int loop, int bgmVolume, int bgmLoopStart, int bgmLoopEnd, int startPosition, f32 freqmul, int loopcount);
+void Bgm_SetPaused(Bgm* bgm, bool pause);
+void Bgm_UpdateVolume(Bgm* bgm);
+void Bgm_Seek(Bgm* bgm, int positionSample);
+GoOpaqueVal* fn_newSnd(void);
+Ret_GoOpaqueValPtr__GoIface fn_LoadSnd(GoString filename);
+GoOpaqueVal* Snd_Get(GoOpaqueVal* s, Arr2_i32 gn);
+bool Snd_play(GoOpaqueVal* s, Arr2_i32 gn, i32 volumescale, f32 pan, int loopstart, int loopend, int startposition, Slice_bool keepOnMatchEnd);
+void SoundChannel_Reset(SoundChannel* s);
+void SoundChannel_Play(SoundChannel* s, GoOpaqueVal* sound, i32 group, i32 number, i32 loop, f32 freqmul, int loopStart, int loopEnd, int startPosition);
+bool SoundChannel_IsPlaying(SoundChannel* s);
+void SoundChannel_SetPaused(SoundChannel* s, bool pause);
+void SoundChannel_SetVolume(SoundChannel* s, f32 vol);
+void SoundChannel_SetPan(SoundChannel* s, f32 p, f32 ls, i32 sourceID);
+void SoundChannel_SetPriority(SoundChannel* s, i32 priority);
 void SoundChannels_SetSize(SoundChannels* s, i32 size);
 SoundChannel* SoundChannels_Request(SoundChannels* s, i32 pid, i32 chNo, bool lowpriority, i32 priority);
 SoundChannel* SoundChannels_Get(SoundChannels* s, i32 pid, i32 ch);
-Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef);
-Storyboard Storyboard_Clone(Storyboard* s);
-void System_tickSound(System* s);
-void System_applyPauseFocusVolume(System* s);
 bool SoundChannels_Play(SoundChannels* s, GoOpaqueVal* sound, i32 group, i32 number, i32 volumescale, f32 pan, int loopStart, int loopEnd, int startPosition, Slice_bool keepOnMatchEnd);
 void SoundChannels_StopAll(SoundChannels* s);
 void SoundChannels_Tick(SoundChannels* s, soundPanView view);
 void SoundChannels_Duck(SoundChannels* s, f32 duckMul, bool freeze);
 PlaySndParams* fn_newPlaySndParams(void);
+GoIface xmStreamer_Close(xmStreamer* x);
+int xmStreamer_Position(xmStreamer* x);
+GoIface xmStreamer_Seek(xmStreamer* x, int p);
+int xmStreamer_Len(xmStreamer* x);
+void fn_specRegister(StateBlock* b, Slice_GoString all, Slice_Slice_GoString trig, Slice_i8 trexist);
+void fn_specChar(Char* c);
+void fn_specRound(void);
+StageProps fn_newStageProps(void);
+void bgAction_clear(bgAction* bga);
+void bgAction_action(bgAction* bga, bool updateTime);
+stageShaderDef fn_newStageShaderDef(void);
+backGround* fn_newBackGround(Sff* sff);
+void stageShaderDef_readShader(stageShaderDef* d, IniSection is);
+Ret_backGroundPtr__GoIface fn_readBackGround(IniSection is, backGround* link, Sff* sff, AnimationTable at, StageProps sProps, GoString def, i32 startlayer);
+void backGround_reset(backGround* bg);
+void backGround_changeAnim(backGround* bg, i32 animNo, AnimationTable table);
+void backGround_draw(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip);
+void backGround_drawTransformed(backGround bg, Arr2_f32 pos, f32 drawscl, f32 bgscl, f32 stglscl, Arr2_f32 stgscl, f32 shakeY, bool isStage, Arr4_i32 overdrawClip, bgDrawTransform* transform);
+bgCtrl* fn_newBgCtrl(void);
+GoIface bgCtrl_read(bgCtrl* bgc, IniSection is, int idx);
+bool bgCtrl_xEnable(bgCtrl* bgc);
+bool bgCtrl_yEnable(bgCtrl* bgc);
+void Stage_applyShaderDef(Stage* s, stageShaderDef* def, CustomShader* cs);
+SelectStage* Stage_si(Stage* s);
+Stage* fn_newStage(GoString def);
+Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef);
 void Stage_updateLocalScale(Stage* s, f32 gameWidth);
 Slice_backGroundPtr Stage_getBg(Stage* s, i32 id);
 Slice_NodePtr Stage_get3DBg(Stage* s, u32 id);
@@ -5389,8 +6196,126 @@ void Stage_setShaderTex(Stage* s, ShaderTexture* st, bgShaderTex def);
 void Stage_bgCtrlAction(Stage* s);
 void Stage_runBgCtrl(Stage* s, bgCtrl* bgc);
 bool Stage_paused(Stage* s);
+void Stage_action(Stage* s);
+void Stage_tick(Stage* s);
+void Stage_draw(Stage* s, i32 layer, f32 x, f32 y, f32 scl);
+void Stage_reset(Stage* s);
+void Stage_destroy(Stage* s);
+GoString Stage_warn(Stage* s);
+modifyBGCtrlShader Stage_newModifyBGCtrlShader(Stage* s);
+void Stage_modifyBGCtrl(Stage* s, i32 id, Arr3_i32 t, Arr3_i32 v, f32 x, f32 y, Arr2_i32 src, Arr2_i32 dst, Arr3_i32 add, Arr3_i32 mul, Arr4_i32 sinadd, Arr4_i32 sinmul, Arr2_i32 sincolor, Arr2_i32 sinhue, i32 invall, i32 invblend, f32 color, f32 hue, modifyBGCtrlShader shader);
+void Stage_modifyBGCtrl3d(Stage* s, u32 id, Arr3_i32 t, Arr3_i32 v);
+GameState* fn_NewGameState(void);
+void GameState_LoadState(GameState* gs, int stateID);
+void GameState_SaveState(GameState* gs, int stateID);
+void CommandList_CopyTo(CommandList* src, CommandList* dst);
+void GameState_savePalFX(GameState* gs);
+void GameState_saveCharData(GameState* gs, GameStatePool* gsp);
+void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp);
+void GameState_saveExplodData(GameState* gs, GameStatePool* gsp);
+void GameState_saveCharTextData(GameState* gs);
+void GameState_loadPalFX(GameState* gs);
+void GameState_loadCharData(GameState* gs, GameStatePool* gsp);
+void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp);
+void GameState_loadExplodData(GameState* gs, GameStatePool* gsp);
+void GameState_loadCharTextData(GameState* gs);
+bool GameState_stageCanMutate(GameState* gs);
+GoString GameState_String(GameState* gs);
+GoString Char_String(Char cs);
+GameStatePool fn_NewGameStatePool(void);
+GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item);
+Animation* Animation_Clone(Animation* a, GameStatePool* gsp);
+Animation* Animation_CloneState(Animation* anim);
+AnimFrame AnimFrame_Clone(AnimFrame* af);
+GetHitVar* GetHitVar_Clone(GetHitVar* ghv);
+AfterImage* AfterImage_Clone(AfterImage* ai, GameStatePool* gsp);
+Explod* Explod_Clone(Explod* e, GameStatePool* gsp);
+Projectile* Projectile_clone(Projectile* p, GameStatePool* gsp);
+StateState StateState_Clone(StateState* ss);
+RemapPreset fn_cloneRemapPreset(RemapPreset src, GameStatePool* gsp);
+Char Char_Clone(Char* c, GameStatePool* gsp);
+CharList CharList_Clone(CharList* cl, GameStatePool* gsp);
+PalFX* PalFX_Clone(PalFX* pf);
+Command Command_clone(Command* c);
+CommandList CommandList_Clone(CommandList* cl);
+Animation* fightScreenAnimationStateCloner_clone(fightScreenAnimationStateCloner* cl, Animation* anim);
+AnimTextSnd fightScreenAnimationStateCloner_cloneAnimTextSnd(fightScreenAnimationStateCloner* cl, AnimTextSnd src);
+FightScreenRound* FightScreenRound_Clone(FightScreenRound* ro);
+FightScreen FightScreen_Clone(FightScreen* fs);
+stageRollbackState Stage_CloneRollbackState(Stage* s);
+void stageRollbackState_Load(stageRollbackState* ss, Stage* s);
+Ret_Map_i32_StagePtr__StagePtr fn_cloneStageList(GameStatePool* gsp, Map_i32_StagePtr src, Stage* active);
+Stage* Stage_Clone(Stage* s, GameStatePool* gsp);
+TextSprite* fn_cloneTextSprite(TextSprite* ts);
+Anim* Anim_CloneState(Anim* anim);
+Fade* Fade_Clone(Fade* fa);
+MotifContinue MotifContinue_Clone(MotifContinue* co);
+DialogueToken fn_cloneDialogueToken(DialogueToken t);
+DialogueParsedLine fn_cloneDialogueParsedLine(DialogueParsedLine src);
+MotifDialogue MotifDialogue_Clone(MotifDialogue* di);
+rankingRow rankingRow_Clone(rankingRow* rr);
+MotifHiscore MotifHiscore_Clone(MotifHiscore* hi);
+MotifWin MotifWin_Clone(MotifWin* wi);
+Motif Motif_Clone(Motif* m, bool postMatch);
+Music fn_cloneMusicMapShallow(Music src);
+Slice_StoryboardPtr fn_cloneStoryboards(Slice_StoryboardPtr src);
+Storyboard Storyboard_Clone(Storyboard* s);
 BGDef* BGDef_Clone(BGDef* s);
 CustomShader CustomShader_Clone(CustomShader* cs, GameStatePool* gsp);
+bool fn_stateDumpEnabled(void);
+Slice_u8 fn_sdF(Slice_u8 b, f32 f);
+Slice_u8 fn_sdI(Slice_u8 b, i64 v);
+void fn_stateDumpTickFn(void);
+Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m);
+Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m);
+statsRollbackState StatsLog_saveRollbackState(StatsLog* s);
+void statsRollbackState_load(statsRollbackState state, StatsLog* s);
+void StatsLog_startMatch(StatsLog* s);
+void StatsLog_addRound(StatsLog* s, i32 index, i32 timer, Arr2_i32 score, Arr2_Slice_StatsFighterState fighters);
+StatsMatch* StatsLog_currentStatsMatch(StatsLog* s);
+void StatsLog_discardCurrentMatch(StatsLog* s);
+void StatsLog_nextRound(StatsLog* s);
+void StoryboardManager_add(StoryboardManager* m, Storyboard* s);
+void StoryboardManager_update(StoryboardManager* m);
+void StoryboardManager_step(StoryboardManager* m);
+void StoryboardManager_draw(StoryboardManager* m, i16 layerno);
+void StoryboardManager_drawFade(StoryboardManager* m);
+void StoryboardManager_remove(StoryboardManager* m, i32 ownerID, i32 id);
+void StoryboardManager_clear(StoryboardManager* m, int playerNo);
+void StoryboardManager_clearSound(StoryboardManager* m);
+Ret_StoryboardPtr__GoIface fn_loadStoryboard(GoString def);
+void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps);
+void Storyboard_syncDialoguePosToTime(Storyboard* s);
+void Storyboard_init(Storyboard* s);
+void Storyboard_step(Storyboard* s);
+void Storyboard_draw(Storyboard* s, i16 layerno);
+GoString TeamMode_TriggerValue(TeamMode tm);
+Arr4_f64 fn_getViewport(f64 srcW, f64 srcH, f64 dstW, f64 dstH);
+bool System_middleOfMatch(System* s);
+bool System_skipMotifScaling(System* s);
+f32 System_getFightAspect(System* s);
+f32 System_getMotifAspect(System* s);
+f32 System_getCurrentAspect(System* s);
+drawAspectState fn_aspectStateForSize(i32 w, i32 h);
+void System_setGameSize(System* s, i32 w, i32 h);
+void System_applyFightAspect(System* s);
+drawAspectState System_captureAspectState(System* s);
+void System_restoreAspectState(System* s, drawAspectState st);
+bool System_canUseFullResolutionAspect(System* s);
+bool System_motifOverlayActive(System* s);
+bool System_shouldComposeFullResolution(System* s);
+Arr4_i32 System_fightViewport(System* s);
+Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b);
+Ret_Arr4_i32__bool System_fightDrawClip(System* s);
+void System_setGameAspect(System* s);
+bool System_eventUpdate(System* s);
+void System_runMainThreadTask(System* s);
+bool System_await(System* s, int fps);
+soundPanView System_soundPanView(System* s);
+void System_renderFrame(System* s);
+bool System_update(System* s);
+void System_tickSound(System* s);
+void System_applyPauseFocusVolume(System* s);
 void System_resetRemapInput(System* s);
 void System_loaderReset(System* s);
 GoIface System_synchronize(System* s);
@@ -5431,15 +6356,7 @@ void System_appendToConsole(System* s, GoString str);
 void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a);
 void System_luaFlushDrawQueue(System* s);
 void System_luaDiscardDrawQueue(System* s);
-void Stage_action(Stage* s);
-void Stage_tick(Stage* s);
-void Stage_draw(Stage* s, i32 layer, f32 x, f32 y, f32 scl);
 void System_printBytecodeError(System* s, GoString str);
-void Stage_reset(Stage* s);
-void Stage_destroy(Stage* s);
-GoString Stage_warn(Stage* s);
-modifyBGCtrlShader Stage_newModifyBGCtrlShader(Stage* s);
-void Stage_modifyBGCtrl(Stage* s, i32 id, Arr3_i32 t, Arr3_i32 v, f32 x, f32 y, Arr2_i32 src, Arr2_i32 dst, Arr3_i32 add, Arr3_i32 mul, Arr4_i32 sinadd, Arr4_i32 sinmul, Arr2_i32 sincolor, Arr2_i32 sinhue, i32 invall, i32 invblend, f32 color, f32 hue, modifyBGCtrlShader shader);
 void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bool shell, bool console);
 f32 System_updateZScale(System* s, f32 pos, f32 localscale);
 bool System_zEnabled(System* s);
@@ -5458,7 +6375,6 @@ void System_clearAllSound(System* s);
 void System_clearPlayerAssets(System* s, int pn, bool forceDestroy);
 bool System_handleStageSwap(System* s);
 void System_updateMusicMaps(System* s);
-void Stage_modifyBGCtrl3d(Stage* s, u32 id, Arr3_i32 t, Arr3_i32 v);
 void System_resetRound(System* s);
 bool System_debugPaused(System* s);
 bool System_motifPauseGame(System* s);
@@ -5513,6 +6429,7 @@ void RoundStartBackup_Save(RoundStartBackup* bk);
 void RoundStartBackup_Restore(RoundStartBackup* bk);
 SelectChar* fn_newSelectChar(void);
 SelectStage* fn_newSelectStage(void);
+GoString PreloadState_String(PreloadState ps);
 Select* fn_newSelect(void);
 void Select_ensureStagePreloadSlot(Select* s, int ref);
 GoIface Select_preloadCharAssets(Select* s, int ref);
@@ -5558,9 +6475,43 @@ bool System_isCustomShaderActive(System* s, GoString key);
 Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name);
 void System_cleanCustomShaders(System* s);
 bool System_shouldHideWithBars(System* s);
+void Window_SwapBuffers(Window* w);
+Ret_int__int Window_GetSize(Window* w);
+void Window_UpdateDebugFPS(Window* w);
+void Window_pollEvents(Window* w);
+bool Window_shouldClose(Window* w);
+bool Window_Focused(Window* w);
+void Window_Close(Window* w);
+void fn_ShowErrorDialog(GoString message);
+GoIface bgVideo_Open(bgVideo* bgv, GoString filename, int volume, BgVideoScaleMode sm, BgVideoScaleFilter sf, bool loop);
+GoIface bgVideo_Tick(bgVideo* bgv);
+void bgVideo_SetPlaying(bgVideo* bgv, bool on);
+void bgVideo_SetVisible(bgVideo* bgv, bool on);
+void bgVideo_Reset(bgVideo* bgv);
+void bgVideo_updateAudioVolume(bgVideo* bgv);
+void bgVideo_MixerCleared(bgVideo* bgv);
+void bgVideo_Close(bgVideo* bgv);
+GoString fn_itoa(int i);
+GoString fn_fmtHex(u32 v);
+void fn_vitaTrace(GoString s);
+void fn_vitaMem(GoString tag);
+void fn_vitaPerfBegin(void);
+void fn_vitaPerfEnd(int i);
+void fn_vitaPerfTick(bool skipped);
+void fn_vitaDiagFrame(void);
+bool fn_vitaDiagSkip(int part);
+bool fn_vitaDrawCensusDue(void);
+void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 layerno);
+void fn_vitaGCTrigger(uintptr_t n);
+void fn_vitaRoundGC(void);
+u32 fn_vitaNowUs(void);
+void fn_vitaPhase(int ph);
+bool fn_vitaHalfRate(void);
+void fn_vitaMatchEnd(void);
+void Renderer_VK_Await(Renderer_VK* r);
 Arr4_f32 fn_NormalizeRect_f32(Arr4_f32 rect);
-Slice_GoString fn_SortedKeys_Slice_GoString(Map_GoString_Slice_GoString m);
 Slice_Arr2_i32 fn_SliceDelete_Arr2_i32(Slice_Arr2_i32 slice, int i);
+Slice_GoString fn_SortedKeys_Slice_GoString(Map_GoString_Slice_GoString m);
 Slice_int fn_sliceMove_int(Slice_int array, int srcIndex, int dstIndex);
 Slice_i32 fn_SliceGrow_i32(Slice_i32 slice, int n);
 Slice_i32 fn_SliceDelete_i32(Slice_i32 slice, int i);
@@ -5571,18 +6522,20 @@ void fn_varRangeSetSub_f32(Char* c, Map_i32_f32* m, i32 first, i32 last, f32 val
 Slice_ClsnFinal fn_SliceDelete_ClsnFinal(Slice_ClsnFinal slice, int i);
 Slice_CharPtr fn_SliceDelete_CharPtr(Slice_CharPtr slice, int i);
 Slice_u8 fn_SliceDelete_u8(Slice_u8 slice, int i);
+Slice_GoString fn_SortedKeys_GoString(Map_GoString_GoString m);
 i32 fn_resolvePBKey_AnimLayoutPtr(Map_i32_AnimLayoutPtr m, i32 pbval, i32 max_);
 i32 fn_resolvePBKey_FSTextPtr(Map_i32_FSTextPtr m, i32 pbval, i32 max_);
-Slice_GoString fn_SortedKeys_GoString(Map_GoString_GoString m);
 Slice_FSMsgPtr fn_SliceDelete_FSMsgPtr(Slice_FSMsgPtr slice, int i);
-Arr4_i32 fn_NormalizeRect_i32(Arr4_i32 rect);
-f32 fn_CalculateAspect_i32(i32 w, i32 h);
 Slice_DialogueToken fn_SliceDelete_DialogueToken(Slice_DialogueToken slice, int i);
+Arr4_i32 fn_NormalizeRect_i32(Arr4_i32 rect);
 Slice_GoString fn_SortedKeys_ScenePropertiesPtr(Map_GoString_ScenePropertiesPtr m);
+f32 fn_CalculateAspect_i32(i32 w, i32 h);
 Slice_ProjectilePtr fn_PointerSliceReset_Projectile(Slice_ProjectilePtr slice);
 Slice_ExplodPtr fn_PointerSliceReset_Explod(Slice_ExplodPtr slice);
 Slice_TextSpritePtr fn_PointerSliceReset_TextSprite(Slice_TextSpritePtr slice);
 Slice_CharPtr fn_PointerSliceReset_Char(Slice_CharPtr slice);
+lua_callFrame* iface_At_8ce03d65(GoIface _x, int _a0);
+#define ik_iface_At iface_At_8ce03d65
 void iface_Await_818fc0bc(GoIface _x);
 #define ik_iface_Await iface_Await_818fc0bc
 void iface_BeginFrame_76a6ff7e(GoIface _x, bool _a0);
@@ -5597,12 +6550,14 @@ GoIface iface_Elem_91ee7c7d(GoIface _x);
 #define ik_iface_Elem iface_Elem_91ee7c7d
 void iface_EndFrame_818fc0bc(GoIface _x);
 #define ik_iface_EndFrame iface_EndFrame_818fc0bc
+void iface_Error_28c7af72(GoIface _x, GoString _a0);
 GoString iface_Error_319077b5(GoIface _x);
-#define ik_iface_Error iface_Error_319077b5
 GoReflectStructField iface_Field_15ec044c(GoIface _x, int _a0);
 #define ik_iface_Field iface_Field_15ec044c
 bool iface_FinishScreenshot_4c49171d(GoIface _x, Slice_u8 _a0, int _a1, int _a2);
 #define ik_iface_FinishScreenshot iface_FinishScreenshot_4c49171d
+void iface_FreeAll_818fc0bc(GoIface _x);
+#define ik_iface_FreeAll iface_FreeAll_818fc0bc
 i32 iface_GetHeight_e545a9d8(GoIface _x);
 #define ik_iface_GetHeight iface_GetHeight_e545a9d8
 GoString iface_GetName_319077b5(GoIface _x);
@@ -5611,20 +6566,38 @@ i32 iface_GetWidth_e545a9d8(GoIface _x);
 #define ik_iface_GetWidth iface_GetWidth_e545a9d8
 bool iface_IsDir_e665c38c(GoIface _x);
 #define ik_iface_IsDir iface_IsDir_e665c38c
+bool iface_IsEmpty_e665c38c(GoIface _x);
+#define ik_iface_IsEmpty iface_IsEmpty_e665c38c
+bool iface_IsFull_e665c38c(GoIface _x);
+#define ik_iface_IsFull iface_IsFull_e665c38c
 GoIface iface_Key_91ee7c7d(GoIface _x);
 #define ik_iface_Key iface_Key_91ee7c7d
 uintptr_t iface_Kind_1d8722d3(GoIface _x);
 #define ik_iface_Kind iface_Kind_1d8722d3
+int iface_LastLine_a218166d(GoIface _x);
+#define ik_iface_LastLine iface_LastLine_a218166d
+lua_callFrame* iface_Last_a22caa4b(GoIface _x);
+#define ik_iface_Last iface_Last_a22caa4b
 int iface_Len_a218166d(GoIface _x);
 #define ik_iface_Len iface_Len_a218166d
+int iface_Lex_d4c62dc2(GoIface _x, parse_yySymType* _a0);
+#define ik_iface_Lex iface_Lex_d4c62dc2
+int iface_Line_a218166d(GoIface _x);
+#define ik_iface_Line iface_Line_a218166d
 GoString iface_Name_319077b5(GoIface _x);
 #define ik_iface_Name iface_Name_319077b5
 int iface_NumField_a218166d(GoIface _x);
 #define ik_iface_NumField iface_NumField_a218166d
+int iface_Parse_63e54e20(GoIface _x, parse_yyLexer _a0);
+#define ik_iface_Parse iface_Parse_63e54e20
 GoOpaque /* mgl32.Mat4 */ iface_PerspectiveProjectionMatrix_8a1228e3(GoIface _x, f32 _a0, f32 _a1, f32 _a2, f32 _a3);
 #define ik_iface_PerspectiveProjectionMatrix iface_PerspectiveProjectionMatrix_8a1228e3
+lua_callFrame* iface_Pop_a22caa4b(GoIface _x);
+#define ik_iface_Pop iface_Pop_a22caa4b
 int iface_Position_a218166d(GoIface _x);
 #define ik_iface_Position iface_Position_a218166d
+void iface_Push_e1d48a37(GoIface _x, lua_callFrame _a0);
+#define ik_iface_Push iface_Push_e1d48a37
 Ret_int__GoIface iface_Read_32c5b18d(GoIface _x, Slice_u8 _a0);
 #define ik_iface_Read iface_Read_32c5b18d
 bool iface_Run_c5596a8a(GoIface _x, Char* _a0, Slice_i32 _a1);
@@ -5633,10 +6606,28 @@ Ret_i64__GoIface iface_Seek_aaefa177(GoIface _x, i64 _a0, int _a1);
 #define ik_iface_Seek iface_Seek_aaefa177
 void iface_SetData_a8625030(GoIface _x, Slice_u8 _a0);
 #define ik_iface_SetData iface_SetData_a8625030
+void iface_SetLastLine_83b24cfd(GoIface _x, int _a0);
+#define ik_iface_SetLastLine iface_SetLastLine_83b24cfd
+void iface_SetLine_83b24cfd(GoIface _x, int _a0);
+#define ik_iface_SetLine iface_SetLine_83b24cfd
+void iface_SetSp_bc7e4c4e(GoIface _x, int _a0);
+#define ik_iface_SetSp iface_SetSp_bc7e4c4e
 void iface_SetSubData_a8625030(GoIface _x, Slice_u8 _a0);
 #define ik_iface_SetSubData iface_SetSubData_a8625030
+int iface_Sp_a218166d(GoIface _x);
+#define ik_iface_Sp iface_Sp_a218166d
+GoString iface_String_319077b5(GoIface _x);
+#define ik_iface_String iface_String_319077b5
+lua_LValueType iface_Type_22ad5bb1(GoIface _x);
+#define ik_iface_Type iface_Type_22ad5bb1
+Ret_f64__bool iface_assertFloat64_829630eb(GoIface _x);
+#define ik_iface_assertFloat64 iface_assertFloat64_829630eb
+Ret_lua_LFunctionPtr__bool iface_assertFunction_36815341(GoIface _x);
+#define ik_iface_assertFunction iface_assertFunction_36815341
 GoIface iface_newSubTexture_ec504342(GoIface _x, GoIface _a0, i32 _a1, i32 _a2, Arr4_f32 _a3);
 #define ik_iface_newSubTexture iface_newSubTexture_ec504342
 Ret_GoIface__GoIface iface_newTexture_96deffff(GoIface _x, i32 _a0, i32 _a1, i32 _a2, bool _a3);
 #define ik_iface_newTexture iface_newTexture_96deffff
+void iface_registryOverflow_818fc0bc(GoIface _x);
+#define ik_iface_registryOverflow iface_registryOverflow_818fc0bc
 #endif
