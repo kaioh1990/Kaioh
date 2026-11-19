@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "formats/air.h"
+#include "core/cooked.h"
 
 static u64 H;
 static void mix(u64 v) { H = (H ^ v) * 1099511628211ull; }
@@ -68,7 +69,42 @@ static int airdigest(int argc, char **argv) {
     return 0;
 }
 
+static int type_counts[400], kind_counts[256], unknowns;
+static void census_block(const CvfBlock *b);
+static void census_ctrls(const CvfCtrl *cs, u32 n) {
+    for (u32 i = 0; i < n; i++) {
+        const CvfCtrl *c = &cs[i];
+        kind_counts[c->kind]++;
+        if (c->kind == CVF_CTL_BLOCK) census_block(c->block);
+        else if (c->kind == CVF_CTL_SCB && c->sctype >= 0) type_counts[c->sctype]++;
+        else if (c->unknown_type) { unknowns++; if (unknowns < 10) printf("unknown controller type %s\n", c->unknown_type); }
+    }
+}
+static void census_block(const CvfBlock *b) {
+    census_ctrls(b->ctrls, b->nctrls);
+    if (b->else_block) census_block(b->else_block);
+}
+
+static int cooked(int argc, char **argv) {
+    for (int f = 0; f < argc; f++) {
+        CvfCookedChar c;
+        if (!cvf_cooked_load(&c, argv[f])) { printf("%s: load failed\n", argv[f]); continue; }
+        printf("%s: %s by %s, %u states, %u functions, %u strings, %u constants\n", argv[f], c.name, c.author,
+               c.nstates, c.nfuncs, c.npool, c.nconst);
+        for (u32 i = 0; i < c.nstates; i++) census_block(&c.states[i].block);
+        for (u32 i = 0; i < c.nfuncs; i++) census_ctrls(c.funcs[i].ctrls, c.funcs[i].nctrls);
+        cvf_cooked_free(&c);
+    }
+    printf("kinds: block %d scb %d callfunc %d expr %d varassign %d break %d continue %d null %d unknown %d\n",
+           kind_counts[0], kind_counts[1], kind_counts[2], kind_counts[3], kind_counts[4], kind_counts[5], kind_counts[6],
+           kind_counts[7], unknowns);
+    for (int t = 0; t < cvf_sctype_count; t++)
+        if (type_counts[t]) printf("  %s %d\n", cvf_sctype_names[t], type_counts[t]);
+    return 0;
+}
+
 int main(int argc, char **argv) {
+    if (argc >= 2 && !strcmp(argv[1], "cooked")) return cooked(argc - 2, argv + 2);
     if (argc >= 2 && !strcmp(argv[1], "airdigest")) return airdigest(argc - 2, argv + 2);
     fprintf(stderr, "usage: cvftool airdigest FILE...\n");
     return 2;
