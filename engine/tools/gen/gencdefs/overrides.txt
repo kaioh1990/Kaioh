@@ -1,0 +1,26 @@
+# Go type -> C type supplied by hand-written engine code
+Animation CvfAnim
+AnimFrame CvfAnimFrame
+AnimationTable CvfAnimTable
+StateBytecode CvfStateDef
+StateBlock CvfBlock
+Sff void
+Snd void
+Sprite void
+Fnt void
+PalInfo GoOpaqueVal
+PaletteList GoOpaqueVal
+Palette void
+Texture GoIface
+SpriteTextureAtlas void
+TextureAtlas void
+CustomShaderRenderData GoOpaqueVal
+ShaderTexture GoOpaqueVal
+bgMusic void
+lazySound void
+specGuard void
+specList void
+nameFact GoOpaqueVal
+SffHeader GoOpaqueVal
+Sound void
+FntCharImage void
