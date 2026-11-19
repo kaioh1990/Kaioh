@@ -221,6 +221,9 @@ When injection IS needed (pure UIKit apps without scene support):
 | App installs but letterboxed | SDK not bumped in all architectures | Ensure FAT binary handling patches all arches |
 | Signing fails | Frameworks not signed before main app | Sign frameworks first, app last |
 | "Library not loaded" after patching | Binary corruption from improper LC_LOAD_DYLIB removal | Start from clean original binary |
+| Install fails: InvalidCompanionAppBundleIdentifier | Watch app's WKCompanionAppBundleIdentifier doesn't match new bundle ID | Update WKCompanionAppBundleIdentifier in Watch app plist, CFBundleIdentifier in Watch app + extension, and WKAppBundleIdentifier in Watch extension's NSExtensionAttributes |
+| Install fails: entitlements "invalid length in entitlement blob" | Entitlements extracted in DER format | Extract with `codesign -d --entitlements - --xml` to get XML format |
+| Crash: `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke` | iOS 27.1 enforces scene lifecycle for SDK 27.1 apps without UIApplicationSceneManifest | Inject scene delegate: add UIApplicationSceneManifest to Info.plist + DuoSceneDelegate.dylib + LC_LOAD_DYLIB |
 
 ## Tested Apps
 
@@ -229,4 +232,4 @@ When injection IS needed (pure UIKit apps without scene support):
 | Steam | Yes (injected) | No | Pure UIKit, no scene support |
 | LocalSend | No | No | Already had scene support |
 | iTorrent | No | No | Already had scene support |
-| BatteryCam (Eufy) | No | Yes (13 frameworks) | React Native — scene delegate causes crash |
+| BatteryCam (Eufy) | Yes (injected) | Yes (13 frameworks) | Kotlin Multiplatform (KMP) app, has Watch app requiring bundle ID fixup |
