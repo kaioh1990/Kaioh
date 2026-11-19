@@ -206,6 +206,10 @@ func main() {
 	initTx.out = new(bytesBuffer)
 	initTx.w("void ik_init_globals(void) {")
 	initTx.ind++
+	embedDecls, embedInits := emitEmbeds(findEmbeds(p, p.files))
+	for _, s := range embedInits {
+		initTx.w("%s", s)
+	}
 	// Go order: per package (dependencies first), variables then init()
 	for _, pk := range p.pkgOrder {
 		for _, ini := range p.initOrder {
@@ -307,6 +311,7 @@ func main() {
 	for _, v := range gvars {
 		fmt.Printf("%s %s;\n", cbase(v.Type()), gName(v))
 	}
+	fmt.Println(embedDecls)
 	fmt.Println(initTx.out.String())
 	fmt.Println(rtTables)
 	fmt.Println(tidKindTable())

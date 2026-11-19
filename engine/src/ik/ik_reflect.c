@@ -569,3 +569,36 @@ bool rt_type_AssignableTo(const RType *t, GoIface u) {
 bool rt_type_Comparable(const RType *t) {
     return t->kind != K_SLICE && t->kind != K_MAP && t->kind != K_FUNC;
 }
+
+// ---------------------------------------------------------------- more
+GoIface reflect_TypeOf(GoIface a0) { return type_iface(value_of(a0).t); }
+
+bool reflect_Value_CanAddr(GoOpaque recv) { return (unpack(recv).flags & F_ADDR) != 0; }
+
+GoOpaque reflect_Value_Addr(GoOpaque recv) {
+    RVal v = unpack(recv);
+    if (!(v.flags & F_ADDR)) go_panic_str("reflect.Value.Addr of unaddressable value");
+    void **cell = (void **)gc_alloc(sizeof(void *));
+    *cell = v.ptr;
+    return pack((RVal){ptr_to(v.t), cell, v.flags & F_RO});
+}
+
+uintptr_t reflect_Value_Pointer(GoOpaque recv) {
+    RVal v = unpack(recv);
+    if (!v.t) return 0;
+    switch (v.t->kind) {
+    case K_PTR: case K_UNSAFEPTR: case K_MAP: case K_CHAN: case K_FUNC: return (uintptr_t) * (void **)v.ptr;
+    case K_SLICE: return (uintptr_t)((GoSliceHdr *)v.ptr)->p;
+    default: go_panic_str("reflect.Value.Pointer of non-pointer kind");
+    }
+}
+void *reflect_Value_UnsafePointer(GoOpaque recv) { return (void *)reflect_Value_Pointer(recv); }
+
+GoString reflect_Kind_String(uintptr_t k) {
+    static const char *const names[] = {"invalid", "bool", "int", "int8", "int16", "int32", "int64", "uint",
+                                        "uint8", "uint16", "uint32", "uint64", "uintptr", "float32", "float64",
+                                        "complex64", "complex128", "array", "chan", "func", "interface", "map",
+                                        "ptr", "slice", "string", "struct", "unsafe.Pointer"};
+    if (k < sizeof names / sizeof names[0]) return go_cstr(names[k]);
+    return go_cstr("kind?");
+}

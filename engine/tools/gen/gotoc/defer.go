@@ -160,7 +160,7 @@ func (t *Tx) deferStmt(s *ast.DeferStmt) {
 	c := s.Call
 	t.tmp++
 	id := fmt.Sprintf("_df%d", t.tmp)
-	t.deferDecl = append(t.deferDecl, fmt.Sprintf("bool %s = false;", id))
+	t.deferDecl = append(t.deferDecl, fmt.Sprintf("volatile bool %s = false;", id))
 	ft := t.typeOf(c.Fun)
 	sig, _ := ft.(*types.Signature)
 	if sig == nil {
@@ -186,7 +186,7 @@ func (t *Tx) deferStmt(s *ast.DeferStmt) {
 			ty = t.ctype(sig.Params().At(i).Type())
 		}
 		tn := fmt.Sprintf("%s_a%d", id, i)
-		t.deferDecl = append(t.deferDecl, fmt.Sprintf("%s %s;", ty, tn))
+		t.deferDecl = append(t.deferDecl, fmt.Sprintf("volatile %s %s;", ty, tn))
 		t.w("%s = %s;", tn, a)
 		temps = append(temps, tn)
 	}
@@ -206,7 +206,7 @@ func (t *Tx) deferStmt(s *ast.DeferStmt) {
 	default:
 		// closure, method value or func-typed value: keep it as a GoFunc
 		fv := id + "_f"
-		t.deferDecl = append(t.deferDecl, fmt.Sprintf("GoFunc %s;", fv))
+		t.deferDecl = append(t.deferDecl, fmt.Sprintf("volatile GoFunc %s;", fv))
 		if isSel && t.p.info.Selections[se] != nil && t.p.info.Selections[se].Kind() == types.MethodVal {
 			t.w("%s = %s;", fv, t.methodValue(se, t.p.info.Selections[se]))
 		} else {
@@ -226,6 +226,9 @@ func (t *Tx) deferStmt(s *ast.DeferStmt) {
 
 // runDefers emits the deferred calls registered so far (in reverse).
 func (t *Tx) runDefers() {
+	if t.hasPF {
+		t.w("go_panic_top = _pf.prev;")
+	}
 	for i := len(t.defers) - 1; i >= 0; i-- {
 		d := t.defers[i]
 		t.w("if (%s) { %s = false; %s; }", d.flag, d.flag, d.call)
@@ -233,7 +236,48 @@ func (t *Tx) runDefers() {
 }
 
 func (t *Tx) finishDefers(body string) string {
+	if t.hasPF {
+		// landing of a panic: every deferred call registered so far, then
+		// return normally if one of them recovered
+		var l []string
+		for i := len(t.defers) - 1; i >= 0; i-- {
+			d := t.defers[i]
+			l = append(l, fmt.Sprintf("if (%s) { %s = false; %s; }", d.flag, d.flag, d.call))
+		}
+		l = append(l, "if (go_panicking) go_panic_continue();")
+		switch {
+		case len(t.namedRes) > 0:
+			sub := &Tx{p: t.p, namedRes: t.namedRes, results: t.results, retType: t.retType}
+			l = append(l, sub.returnNamed())
+		case t.retType == "void" || t.retType == "":
+			l = append(l, "return;")
+		default:
+			l = append(l, fmt.Sprintf("{ %s _z; memset(&_z, 0, sizeof _z); return _z; }", t.retType))
+		}
+		body = strings.Replace(body, pfLandingMarker, strings.Join(l, " "), 1)
+	}
 	return strings.Replace(body, deferMarker, strings.Join(t.deferDecl, " "), 1)
+}
+
+const pfLandingMarker = "/*@PFLANDING@*/"
+
+// panicFrame: pushes the function's GoPanicFrame (after the deferred-call
+// slots and named results exist); the landing is filled in by finishDefers.
+func (t *Tx) panicFrame() {
+	if !t.hasPF {
+		return
+	}
+	t.w("GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;")
+	t.w("if (setjmp(_pf.jb)) { %s }", pfLandingMarker)
+}
+
+// pfVolatile: named results of a function with a panic frame are volatile
+// (they are read after longjmp).
+func (t *Tx) pfVolatile(v *types.Var, decl string) string {
+	if t.hasPF && !t.heap[v] {
+		return "volatile " + decl
+	}
+	return decl
 }
 
 // funcUsesDefer reports whether body contains a defer outside nested literals.

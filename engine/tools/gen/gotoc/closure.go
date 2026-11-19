@@ -77,17 +77,19 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 	sub.w("static %s %s(%s) {", ret, name, strings.Join(params, ", "))
 	sub.ind++
 	sub.heap, sub.stackBox, sub.nonEsc = heapVarsOf(t.p, e)
-	if funcUsesDefer(e.Body) {
+	sub.hasPF = funcUsesDefer(e.Body)
+	if sub.hasPF {
 		sub.w("%s", deferMarker)
 	}
 	sub.heapParams(sig)
 	for i := 0; i < sig.Results().Len(); i++ {
 		v := sig.Results().At(i)
 		if v.Name() != "" && v.Name() != "_" {
-			sub.w("%s", sub.declObj(v, cbase(v.Type()), zeroValue(v.Type())))
+			sub.w("%s", sub.pfVolatile(v, sub.declObj(v, cbase(v.Type()), zeroValue(v.Type()))))
 			sub.namedRes = append(sub.namedRes, sub.varRef(v))
 		}
 	}
+	sub.panicFrame()
 	for _, st := range e.Body.List {
 		sub.stmt(st)
 	}

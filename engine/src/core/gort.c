@@ -1,6 +1,7 @@
 #include "core/gort.h"
 
 #include <stdio.h>
+#include <string.h>
 
 GoString go_cstr(const char *s) { return (GoString){s, s ? (int)strlen(s) : 0}; }
 
@@ -108,7 +109,7 @@ int go_copy_impl(void *dst, int dlen, const void *src, int slen, size_t elem) {
 // ---------------------------------------------------------------- maps
 typedef struct GoMapImpl {
     size_t ksize, vsize;
-    bool strkey;
+    int keykind;  // 0 bytes, 1 string, 2 interface
     int n, cap;      // entries (including deleted)
     int live;
     u8 *ents;        // n entries of (u8 used, key, value), stride
@@ -125,15 +126,17 @@ static u64 hash_bytes(const void *p, size_t n) {
 }
 
 static u64 key_hash(GoMapImpl *m, const void *k) {
-    if (m->strkey) {
+    if (m->keykind == 1) {
         const GoString *s = (const GoString *)k;
         return hash_bytes(s->p, (size_t)s->len);
     }
+    if (m->keykind == 2) return go_iface_hash(*(const GoIface *)k);
     return hash_bytes(k, m->ksize);
 }
 
 static bool key_eq(GoMapImpl *m, const void *a, const void *b) {
-    if (m->strkey) return go_streq(*(const GoString *)a, *(const GoString *)b);
+    if (m->keykind == 1) return go_streq(*(const GoString *)a, *(const GoString *)b);
+    if (m->keykind == 2) return go_iface_eq(*(const GoIface *)a, *(const GoIface *)b);
     return memcmp(a, b, m->ksize) == 0;
 }
 
@@ -157,11 +160,11 @@ static void rehash(GoMapImpl *m, int nslots) {
     }
 }
 
-GoMap gomap_make(size_t ksize, size_t vsize, bool strkey) {
+GoMap gomap_make(size_t ksize, size_t vsize, int keykind) {
     GoMapImpl *m = (GoMapImpl *)gc_calloc(1, sizeof *m);
     m->ksize = ksize;
     m->vsize = vsize;
-    m->strkey = strkey;
+    m->keykind = keykind;
     m->stride = 8 + ((ksize + 7) & ~(size_t)7) + ((vsize + 7) & ~(size_t)7);
     return (GoMap){m};
 }
@@ -186,8 +189,8 @@ void *gomap_find(GoMap *gm, const void *key) {
     return s < 0 ? NULL : ENT_VAL(gm->m, gm->m->slots[s] - 1);
 }
 
-void *gomap_put(GoMap *gm, const void *key, size_t ksize, size_t vsize, bool strkey) {
-    if (!gm->m) *gm = gomap_make(ksize, vsize, strkey);
+void *gomap_put(GoMap *gm, const void *key, size_t ksize, size_t vsize, int keykind) {
+    if (!gm->m) *gm = gomap_make(ksize, vsize, keykind);
     GoMapImpl *m = gm->m;
     u32 h = (u32)key_hash(m, key);
     if (m->nslots) {
@@ -276,7 +279,47 @@ void *go_box_impl(const void *v, size_t n) {
     return p;
 }
 
-void go_panic_str(const char *msg) { cvf_fatal("go panic: %s", msg); }
+GoPanicFrame *go_panic_top;
+GoIface go_panic_val;
+bool go_panicking;
+static GoString panic_desc(GoIface v);
+
+void go_panic_raise(GoIface v) {
+    go_panic_val = v;
+    go_panicking = true;
+    go_panic_continue();
+}
+void go_panic_continue(void) {
+    GoPanicFrame *f = go_panic_top;
+    if (f) {
+        go_panic_top = f->prev;
+        longjmp(f->jb, 1);
+    }
+    GoString d = panic_desc(go_panic_val);
+    cvf_fatal("go panic: %.*s", (int)d.len, d.p);
+}
+GoIface go_recover(void) {
+    if (!go_panicking) return (GoIface){0};
+    go_panicking = false;
+    GoIface v = go_panic_val;
+    go_panic_val = (GoIface){0};
+    return v;
+}
+// GO_TID_string = 17, runtime errors = 99 (ik_rt.h)
+static GoString panic_desc(GoIface v) {
+    if (v.type == 17 && v.data) return *(GoString *)v.data;
+    if (v.type == 99 && v.data) return *(GoString *)v.data;
+    return (GoString){"(non-string panic value)", 24};
+}
+static GoIface panic_box_str(GoString m) {
+    GoString *p = (GoString *)gc_alloc(sizeof *p);
+    *p = m;
+    return (GoIface){17, p};
+}
+void go_panic_str(const char *msg) { go_panic_raise(panic_box_str((GoString){msg, (int)strlen(msg)})); }
+void go_panic_gostr(GoString m) { go_panic_raise(panic_box_str(m)); }
+void go_panic_s(int u, GoString m) { (void)u; go_panic_gostr(m); }
+void go_panic_other(int u, ...) { (void)u; go_panic_str("panic"); }
 
 f64 go_nan(void) {
     u64 u = 0x7FF8000000000001ull;
@@ -309,3 +352,10 @@ GoString go_runes2str(const i32 *r, int n) {  // string([]rune)
     }
     return (GoString){p, w};
 }
+
+// Programs without the generated type tables (unit tests, tools) get
+// byte-wise fallbacks; ik_rt.c provides the real definitions.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) bool go_iface_eq(GoIface a, GoIface b) { return a.type == b.type && a.data == b.data; }
+__attribute__((weak)) u64 go_iface_hash(GoIface a) { return hash_bytes(&a, sizeof a); }
+#endif

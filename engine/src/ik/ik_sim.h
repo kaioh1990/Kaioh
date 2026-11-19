@@ -3183,7 +3183,7 @@ struct Arr100_GoString { GoString v[100]; };
 #define CVF_BODY_Arr1024_f32
 struct Arr1024_f32 { f32 v[1024]; };
 #endif
-struct freetype_cacheEntry { bool valid; truetype_Index glyph; fixed_Int26_6 advanceWidth; GoOpaque /* image.Alpha */* mask; GoImagePoint offset; };
+struct freetype_cacheEntry { bool valid; truetype_Index glyph; fixed_Int26_6 advanceWidth; GoImageAlpha* mask; GoImagePoint offset; };
 #ifndef CVF_BODY_Arr1024_freetype_cacheEntry
 #define CVF_BODY_Arr1024_freetype_cacheEntry
 struct Arr1024_freetype_cacheEntry { freetype_cacheEntry v[1024]; };
@@ -4366,11 +4366,11 @@ struct pretty_pair { int kstart; int kend; int vstart; int vend; };
 struct protocol_QueueEntry { i64 queueTime; GoString destIp; messages_UDPMessage msg; int destPort; };
 struct pv_Lb05621 { u16 p; u64 v; };
 struct qvPlayer_Lef8db5 { GoString character; int player; int num; int pal; f32 ai; int input; };
-struct raster_AlphaOverPainter { GoOpaque /* image.Alpha */* Image; };
-struct raster_AlphaSrcPainter { GoOpaque /* image.Alpha */* Image; };
+struct raster_AlphaOverPainter { GoImageAlpha* Image; };
+struct raster_AlphaSrcPainter { GoImageAlpha* Image; };
 struct raster_GammaCorrectionPainter { raster_Painter Painter; Arr256_u16 a; bool gammaIsOne; };
 struct raster_MonochromePainter { raster_Painter Painter; int y; int x0; int x1; };
-struct raster_RGBAPainter { GoOpaque /* image.RGBA */* Image; int Op; u32 cr; u32 cg; u32 cb; u32 ca; };
+struct raster_RGBAPainter { GoImageRGBA* Image; int Op; u32 cr; u32 cg; u32 cb; u32 ca; };
 struct raster_Rasterizer { bool UseNonZeroWinding; int Dx; int Dy; int width; int splitScale2; int splitScale3; fixed_Point26_6 a; int xi; int yi; int area; int cover; Slice_raster_cell cell; Slice_int cellIndex; Arr256_raster_cell cellBuf; Arr64_int cellIndexBuf; Arr64_raster_Span spanBuf; };
 struct rgbe_decoder { GoIface r; GoOpaque /* image.Config */ config; f64 exposure; rgbe_imageMode mode; };
 struct sdl_AudioSpec { i32 Freq; sdl_AudioFormat Format; u8 Channels; u8 Silence; u16 Samples; u16 _; u32 Size; sdl_AudioCallback Callback; void* UserData; };
@@ -4411,7 +4411,7 @@ struct transport_sendRequest { messages_UDPMessage msg; GoString remoteIp; int r
 struct truetype_HMetric { fixed_Int26_6 AdvanceWidth; fixed_Int26_6 LeftSideBearing; };
 struct truetype_Options { f64 Size; f64 DPI; font_Hinting Hinting; int GlyphCacheEntries; int SubPixelsX; int SubPixelsY; };
 struct truetype_VMetric { fixed_Int26_6 AdvanceHeight; fixed_Int26_6 TopSideBearing; };
-struct truetype_face { truetype_Font* f; font_Hinting hinting; fixed_Int26_6 scale; u32 subPixelX; fixed_Int26_6 subPixelBiasX; fixed_Int26_6 subPixelMaskX; u32 subPixelY; fixed_Int26_6 subPixelBiasY; fixed_Int26_6 subPixelMaskY; GoOpaque /* image.Alpha */* masks; Slice_truetype_glyphCacheEntry glyphCache; raster_Rasterizer r; raster_Painter p; int paintOffset; int maxw; int maxh; truetype_GlyphBuf glyphBuf; Arr256_truetype_indexCacheEntry indexCache; };
+struct truetype_face { truetype_Font* f; font_Hinting hinting; fixed_Int26_6 scale; u32 subPixelX; fixed_Int26_6 subPixelBiasX; fixed_Int26_6 subPixelMaskX; u32 subPixelY; fixed_Int26_6 subPixelBiasY; fixed_Int26_6 subPixelMaskY; GoImageAlpha* masks; Slice_truetype_glyphCacheEntry glyphCache; raster_Rasterizer r; raster_Painter p; int paintOffset; int maxw; int maxh; truetype_GlyphBuf glyphBuf; Arr256_truetype_indexCacheEntry indexCache; };
 struct truetype_facePainter { truetype_face* a; };
 struct truetype_glyphCacheKey { truetype_Index index; u8 fx; u8 fy; };
 struct truetype_glyphCacheVal { fixed_Int26_6 advanceWidth; GoImagePoint offset; int gw; int gh; };
@@ -5614,11 +5614,11 @@ GO_MAP_FUNCS(Map_CharPtr_bool, Char*, bool, false)
 #endif
 #ifndef CVF_FN_Map_GoIface_int
 #define CVF_FN_Map_GoIface_int
-GO_MAP_FUNCS(Map_GoIface_int, GoIface, int, false)
+GO_MAP_FUNCS(Map_GoIface_int, GoIface, int, 2)
 #endif
 #ifndef CVF_FN_Map_GoIface_u32
 #define CVF_FN_Map_GoIface_u32
-GO_MAP_FUNCS(Map_GoIface_u32, GoIface, u32, false)
+GO_MAP_FUNCS(Map_GoIface_u32, GoIface, u32, 2)
 #endif
 #ifndef CVF_FN_Map_GoOpaque_invalidtypePtr_Slice_GoOpaque_invalidtypePtr
 #define CVF_FN_Map_GoOpaque_invalidtypePtr_Slice_GoOpaque_invalidtypePtr
@@ -6058,11 +6058,11 @@ GO_MAP_FUNCS(Map_lua_LTablePtr_Anon_fa4d6974, lua_LTable*, Anon_fa4d6974, false)
 #endif
 #ifndef CVF_FN_Map_lua_LValue_int
 #define CVF_FN_Map_lua_LValue_int
-GO_MAP_FUNCS(Map_lua_LValue_int, lua_LValue, int, false)
+GO_MAP_FUNCS(Map_lua_LValue_int, lua_LValue, int, 2)
 #endif
 #ifndef CVF_FN_Map_lua_LValue_lua_LValue
 #define CVF_FN_Map_lua_LValue_lua_LValue
-GO_MAP_FUNCS(Map_lua_LValue_lua_LValue, lua_LValue, lua_LValue, false)
+GO_MAP_FUNCS(Map_lua_LValue_lua_LValue, lua_LValue, lua_LValue, 2)
 #endif
 #ifndef CVF_FN_Map_paletteCopyKey_Slice_u32
 #define CVF_FN_Map_paletteCopyKey_Slice_u32
@@ -6713,9 +6713,9 @@ typedef struct { f64 r0; f64 r1; f64 r2; f64 r3; } Ret_f64__f64__f64__f64;
 #define CVF_RET_Ret_f64__int
 typedef struct { f64 r0; int r1; } Ret_f64__int;
 #endif
-#ifndef CVF_RET_Ret_fixed_Int26_6__GoOpaque_image_AlphaPtrPtr__GoImagePoint__GoIface
-#define CVF_RET_Ret_fixed_Int26_6__GoOpaque_image_AlphaPtrPtr__GoImagePoint__GoIface
-typedef struct { fixed_Int26_6 r0; GoOpaque /* image.Alpha */* r1; GoImagePoint r2; GoIface r3; } Ret_fixed_Int26_6__GoOpaque_image_AlphaPtrPtr__GoImagePoint__GoIface;
+#ifndef CVF_RET_Ret_fixed_Int26_6__GoImageAlphaPtr__GoImagePoint__GoIface
+#define CVF_RET_Ret_fixed_Int26_6__GoImageAlphaPtr__GoImagePoint__GoIface
+typedef struct { fixed_Int26_6 r0; GoImageAlpha* r1; GoImagePoint r2; GoIface r3; } Ret_fixed_Int26_6__GoImageAlphaPtr__GoImagePoint__GoIface;
 #endif
 #ifndef CVF_RET_Ret_fixed_Int26_6__bool
 #define CVF_RET_Ret_fixed_Int26_6__bool
@@ -7198,17 +7198,19 @@ GoIface sync_Pool_Get(GoOpaque /* sync.Pool */* recv); // func (*sync.Pool).Get(
 GoIface tabwriter_Writer_Flush(GoOpaque /* tabwriter.Writer */* recv); // func (*tabwriter.Writer).Flush() error
 GoIface xml_Decoder_DecodeElement(GoOpaque /* xml.Decoder */* recv, GoIface a0, GoOpaque /* xml.StartElement */* a1); // func (*xml.Decoder).DecodeElement(v any, start *xml.StartElement) error
 GoIface zip_ReadCloser_Close(GoZipReadCloser* recv); // func (*zip.ReadCloser).Close() error
+GoImageAlpha* image_NewAlpha(GoImageRect a0); // func image.NewAlpha(r image.Rectangle) *image.Alpha
 GoImageNRGBA* image_NewNRGBA(GoImageRect a0); // func image.NewNRGBA(r image.Rectangle) *image.NRGBA
 GoImagePoint image_Point_Add(GoImagePoint recv, GoImagePoint a0); // func (image.Point).Add(q image.Point) image.Point
-GoImageRect image_Alpha_Bounds(GoOpaque /* image.Alpha */* recv); // func (*image.Alpha).Bounds() image.Rectangle
+GoImageRGBA* image_NewRGBA(GoImageRect a0); // func image.NewRGBA(r image.Rectangle) *image.RGBA
+GoImageRect image_Alpha_Bounds(GoImageAlpha* recv); // func (*image.Alpha).Bounds() image.Rectangle
 GoImageRect image_NRGBA_Bounds(GoImageNRGBA* recv); // func (*image.NRGBA).Bounds() image.Rectangle
 GoImageRect image_Paletted_Bounds(GoImagePaletted* recv); // func (*image.Paletted).Bounds() image.Rectangle
-GoImageRect image_RGBA_Bounds(GoOpaque /* image.RGBA */* recv); // func (*image.RGBA).Bounds() image.Rectangle
+GoImageRect image_RGBA_Bounds(GoImageRGBA* recv); // func (*image.RGBA).Bounds() image.Rectangle
 GoImageRect image_Rect(int a0, int a1, int a2, int a3); // func image.Rect(x0 int, y0 int, x1 int, y1 int) image.Rectangle
 GoImageRect image_Rectangle_Add(GoImageRect recv, GoImagePoint a0); // func (image.Rectangle).Add(p image.Point) image.Rectangle
 GoImageRect image_Rectangle_Bounds(GoImageRect recv); // func (image.Rectangle).Bounds() image.Rectangle
 GoImageRect image_Rectangle_Intersect(GoImageRect recv, GoImageRect a0); // func (image.Rectangle).Intersect(s image.Rectangle) image.Rectangle
-GoImageRect image_Uniform_Bounds(GoOpaque /* image.Uniform */* recv); // func (*image.Uniform).Bounds() image.Rectangle
+GoImageRect image_Uniform_Bounds(GoImageUniform* recv); // func (*image.Uniform).Bounds() image.Rectangle
 GoOpaque /* bufio.Reader */* bufio_NewReader(GoIface a0); // func bufio.NewReader(rd io.Reader) *bufio.Reader
 GoOpaque /* bufio.Reader */* bufio_NewReaderSize(GoIface a0, int a1); // func bufio.NewReaderSize(rd io.Reader, size int) *bufio.Reader
 GoOpaque /* bufio.Scanner */* bufio_NewScanner(GoIface a0); // func bufio.NewScanner(r io.Reader) *bufio.Scanner
@@ -7220,8 +7222,6 @@ GoOpaque /* dialog.MsgBuilder */* dialog_MsgBuilder_Title(GoOpaque /* dialog.Msg
 GoOpaque /* exec.Cmd */* exec_Command(GoString a0, Slice_GoString a1); // func exec.Command(name string, arg ...string) *exec.Cmd
 GoOpaque /* gob.Decoder */* gob_NewDecoder(GoIface a0); // func gob.NewDecoder(r io.Reader) *gob.Decoder
 GoOpaque /* gob.Encoder */* gob_NewEncoder(GoIface a0); // func gob.NewEncoder(w io.Writer) *gob.Encoder
-GoOpaque /* image.Alpha */* image_NewAlpha(GoImageRect a0); // func image.NewAlpha(r image.Rectangle) *image.Alpha
-GoOpaque /* image.RGBA */* image_NewRGBA(GoImageRect a0); // func image.NewRGBA(r image.Rectangle) *image.RGBA
 GoOpaque /* ini.File */* ini_Empty(Slice_GoIniLoadOptions a0); // func ini.Empty(opts ...ini.LoadOptions) *ini.File
 GoOpaque /* ini.Key */* ini_Section_Key(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).Key(name string) *ini.Key
 GoOpaque /* ini.Section */* ini_File_Section(GoOpaque /* ini.File */* recv, GoString a0); // func (*ini.File).Section(name string) *ini.Section
@@ -7436,7 +7436,7 @@ Ret_sdl_GLContext__GoIface sdl_Window_GLCreateContext(sdl_Window* recv); // func
 Ret_sdl_SurfacePtr__GoIface sdl_CreateRGBSurfaceWithFormat(u32 a0, i32 a1, i32 a2, i32 a3, u32 a4); // func sdl.CreateRGBSurfaceWithFormat(flags uint32, width int32, height int32, depth int32, format uint32) (*sdl.Surface, error)
 Ret_sdl_WindowPtr__GoIface sdl_CreateWindow(GoString a0, i32 a1, i32 a2, i32 a3, i32 a4, sdl_WindowFlags a5); // func sdl.CreateWindow(title string, x int32, y int32, w int32, h int32, flags sdl.WindowFlags) (*sdl.Window, error)
 Ret_u32__u32__u32__u32 color_NRGBA_RGBA(GoOpaque /* color.NRGBA */ recv); // func (color.NRGBA).RGBA() (r uint32, g uint32, b uint32, a uint32)
-Ret_u32__u32__u32__u32 image_Uniform_RGBA(GoOpaque /* image.Uniform */* recv); // func (*image.Uniform).RGBA() (r uint32, g uint32, b uint32, a uint32)
+Ret_u32__u32__u32__u32 image_Uniform_RGBA(GoImageUniform* recv); // func (*image.Uniform).RGBA() (r uint32, g uint32, b uint32, a uint32)
 Ret_u64__GoIface strconv_ParseUint(GoString a0, int a1, int a2); // func strconv.ParseUint(s string, base int, bitSize int) (uint64, error)
 Ret_u64__u64 bits_Add64(u64 a0, u64 a1, u64 a2); // func bits.Add64(x uint64, y uint64, carry uint64) (sum uint64, carryOut uint64)
 Ret_u64__u64 bits_Mul64(u64 a0, u64 a1); // func bits.Mul64(x uint64, y uint64) (hi uint64, lo uint64)
@@ -7980,6 +7980,7 @@ extern Arr56_GoString g_parse_yyToknames;
 void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
+#define GO_TID_M_string_any 197
 #define GO_TID_P_abi_Type 1303
 #define GO_TID_P_bufio_Reader 160
 #define GO_TID_P_bufio_Writer 123
@@ -8001,7 +8002,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_net_TCPConn 507
 #define GO_TID_P_net_TCPListener 505
 #define GO_TID_P_net_UDPAddr 153
-#define GO_TID_P_net_netFD 1678
+#define GO_TID_P_net_netFD 1677
 #define GO_TID_P_os_File 146
 #define GO_TID_P_os_Process 1082
 #define GO_TID_P_os_ProcessState 1090
@@ -8011,7 +8012,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_reflect_SliceHeader 992
 #define GO_TID_P_strings_Builder 474
 #define GO_TID_P_strings_Reader 211
-#define GO_TID_P_sync_Cond 1895
+#define GO_TID_P_sync_Cond 1894
 #define GO_TID_P_sync_Mutex 582
 #define GO_TID_P_sync_Once 841
 #define GO_TID_P_syscall_Credential 1076
@@ -8023,6 +8024,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_zip_File 1284
 #define GO_TID_P_zip_ReadCloser 1280
 #define GO_TID_P_zip_Reader 1295
+#define GO_TID_S_any 198
 #define GO_TID_S_uint8 114
 #define GO_TID_abi_Kind 1306
 #define GO_TID_abi_NameOff 1308
@@ -8033,8 +8035,8 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_atomic_Int32 1086
 #define GO_TID_atomic_Pointer_os_dirInfo_ 797
 #define GO_TID_atomic_Uint32 1084
-#define GO_TID_atomic_Uint64 1948
-#define GO_TID_atomic_align64 1949
+#define GO_TID_atomic_Uint64 1947
+#define GO_TID_atomic_align64 1948
 #define GO_TID_atomic_noCopy 804
 #define GO_TID_binary_bigEndian 117
 #define GO_TID_binary_littleEndian 118
@@ -8047,6 +8049,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_color_Palette 1394
 #define GO_TID_exec_Cmd 1073
 #define GO_TID_exec_ExitError 1101
+#define GO_TID_float64 14
 #define GO_TID_image_Alpha 601
 #define GO_TID_image_NRGBA 1395
 #define GO_TID_image_Paletted 1393
@@ -8066,15 +8069,15 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_net_IP 845
 #define GO_TID_net_IPMask 1353
 #define GO_TID_net_IPNet 1352
-#define GO_TID_net_KeepAliveConfig 1682
-#define GO_TID_net_ListenConfig 1680
-#define GO_TID_net_TCPAddr 1684
-#define GO_TID_net_TCPConn 1685
-#define GO_TID_net_TCPListener 1677
+#define GO_TID_net_KeepAliveConfig 1681
+#define GO_TID_net_ListenConfig 1679
+#define GO_TID_net_TCPAddr 1683
+#define GO_TID_net_TCPConn 1684
+#define GO_TID_net_TCPListener 1676
 #define GO_TID_net_UDPAddr 844
-#define GO_TID_net_conn 1686
-#define GO_TID_net_mptcpStatusListen 1683
-#define GO_TID_net_netFD 1679
+#define GO_TID_net_conn 1685
+#define GO_TID_net_mptcpStatusListen 1682
+#define GO_TID_net_netFD 1678
 #define GO_TID_os_File 786
 #define GO_TID_os_Process 1083
 #define GO_TID_os_ProcessState 1091
@@ -8090,37 +8093,37 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_reflect_Value 1302
 #define GO_TID_reflect_flag 1310
 #define GO_TID_runtime_Cleanup 1089
-#define GO_TID_sdl_AudioDeviceID 1952
-#define GO_TID_sdl_ButtonState 2035
+#define GO_TID_sdl_AudioDeviceID 1951
+#define GO_TID_sdl_ButtonState 2034
 #define GO_TID_sdl_CommonEvent 583
 #define GO_TID_sdl_ControllerAxisEvent 585
 #define GO_TID_sdl_ControllerButtonEvent 586
-#define GO_TID_sdl_EventType 1958
-#define GO_TID_sdl_GameControllerAxis 2033
-#define GO_TID_sdl_GameControllerButton 2034
+#define GO_TID_sdl_EventType 1957
+#define GO_TID_sdl_GameControllerAxis 2032
+#define GO_TID_sdl_GameControllerButton 2033
 #define GO_TID_sdl_JoyDeviceAddedEvent 591
 #define GO_TID_sdl_JoyDeviceRemovedEvent 592
-#define GO_TID_sdl_JoystickID 2032
+#define GO_TID_sdl_JoystickID 2031
 #define GO_TID_sdl_KeyboardEvent 588
-#define GO_TID_sdl_Keycode 1709
-#define GO_TID_sdl_Keymod 2038
-#define GO_TID_sdl_Keysym 2036
+#define GO_TID_sdl_Keycode 1708
+#define GO_TID_sdl_Keymod 2037
+#define GO_TID_sdl_Keysym 2035
 #define GO_TID_sdl_QuitEvent 587
-#define GO_TID_sdl_Scancode 2037
+#define GO_TID_sdl_Scancode 2036
 #define GO_TID_sdl_TextInputEvent 590
 #define GO_TID_sdl_WindowEvent 589
-#define GO_TID_sdl_WindowEventID 2039
+#define GO_TID_sdl_WindowEventID 2038
 #define GO_TID_sort_StringSlice 503
 #define GO_TID_strings_Builder 1361
 #define GO_TID_strings_Reader 1009
-#define GO_TID_sync_Cond 1896
+#define GO_TID_sync_Cond 1895
 #define GO_TID_sync_Mutex 801
 #define GO_TID_sync_Once 842
 #define GO_TID_sync_RWMutex 1085
-#define GO_TID_sync_WaitGroup 1962
-#define GO_TID_sync_copyChecker 1898
+#define GO_TID_sync_WaitGroup 1961
+#define GO_TID_sync_copyChecker 1897
 #define GO_TID_sync_noCopy 802
-#define GO_TID_sync_notifyList 1897
+#define GO_TID_sync_notifyList 1896
 #define GO_TID_syscall_Credential 1077
 #define GO_TID_syscall_Iovec 794
 #define GO_TID_syscall_Rusage 1093
@@ -8152,7 +8155,7 @@ static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
     switch (t) { case 101: case 123: case 474: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 108: case 126: case 128: case 130: case 136: case 146: case 151: case 305: case 306: case 505: case 507: case 518: case 647: case 1280: case 1678: return true; default: return false; }
+    switch (t) { case 108: case 126: case 128: case 130: case 136: case 146: case 151: case 305: case 306: case 505: case 507: case 518: case 647: case 1280: case 1677: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
     switch (t) { case 146: case 155: case 169: case 211: case 305: case 306: case 736: return true; default: return false; }
@@ -8245,8 +8248,8 @@ f32 mgl32_Vec4_Y(mgl32_Vec4 v);
 f32 mgl32_Vec4_W(mgl32_Vec4 v);
 fixed_Point26_6 freetype_Pt(int x, int y);
 void freetype_Context_drawContour(freetype_Context* c, Slice_truetype_Point ps, fixed_Int26_6 dx, fixed_Int26_6 dy);
-Ret_fixed_Int26_6__GoOpaque_image_AlphaPtrPtr__GoImagePoint__GoIface freetype_Context_rasterize(freetype_Context* c, truetype_Index glyph, fixed_Int26_6 fx, fixed_Int26_6 fy);
-Ret_fixed_Int26_6__GoOpaque_image_AlphaPtrPtr__GoImagePoint__GoIface freetype_Context_glyph(freetype_Context* c, truetype_Index glyph, fixed_Point26_6 p);
+Ret_fixed_Int26_6__GoImageAlphaPtr__GoImagePoint__GoIface freetype_Context_rasterize(freetype_Context* c, truetype_Index glyph, fixed_Int26_6 fx, fixed_Int26_6 fy);
+Ret_fixed_Int26_6__GoImageAlphaPtr__GoImagePoint__GoIface freetype_Context_glyph(freetype_Context* c, truetype_Index glyph, fixed_Point26_6 p);
 Ret_fixed_Point26_6__GoIface freetype_Context_DrawString(freetype_Context* c, GoString s, fixed_Point26_6 p);
 void freetype_Context_recalc(freetype_Context* c);
 void freetype_Context_SetDPI(freetype_Context* c, f64 dpi);
@@ -8262,7 +8265,7 @@ GoString raster_Path_String(raster_Path p);
 void raster_PainterFunc_Paint(raster_PainterFunc f, Slice_raster_Span ss, bool done);
 void raster_AlphaOverPainter_Paint(raster_AlphaOverPainter r, Slice_raster_Span ss, bool done);
 void raster_AlphaSrcPainter_Paint(raster_AlphaSrcPainter r, Slice_raster_Span ss, bool done);
-raster_AlphaSrcPainter raster_NewAlphaSrcPainter(GoOpaque /* image.Alpha */* m);
+raster_AlphaSrcPainter raster_NewAlphaSrcPainter(GoImageAlpha* m);
 void raster_RGBAPainter_Paint(raster_RGBAPainter* r, Slice_raster_Span ss, bool done);
 void raster_RGBAPainter_SetColor(raster_RGBAPainter* r, GoIface c);
 void raster_MonochromePainter_Paint(raster_MonochromePainter* m, Slice_raster_Span ss, bool done);
@@ -13200,4 +13203,5 @@ Ret_Texture__GoIface iface_newTexture_96deffff(GoIface _x, i32 _a0, i32 _a1, i32
 #define ik_iface_newTexture iface_newTexture_96deffff
 void iface_registryOverflow_818fc0bc(GoIface _x);
 #define ik_iface_registryOverflow iface_registryOverflow_818fc0bc
+bool ik_fmt_method(GoIface x, GoString *out);
 #endif

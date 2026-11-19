@@ -425,7 +425,7 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 	case "print", "println":
 		return "((void)0)"
 	case "recover":
-		return "((GoIface){0})" // panics abort in the C runtime
+		return "go_recover()"
 	}
 	if name == "close" {
 		return "go_chan_close(" + t.expr(c.Args[0]) + ")"

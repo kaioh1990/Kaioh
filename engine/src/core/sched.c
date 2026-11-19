@@ -92,6 +92,9 @@ __asm__(".text\n"
 // ---------------------------------------------------------------- goroutines
 enum { G_RUNNABLE, G_RUNNING, G_BLOCKED, G_SLEEPING, G_DEAD };
 
+struct GoPanicFrame;
+extern struct GoPanicFrame *go_panic_top;
+
 typedef struct Coro {
     void *sp;          // saved stack pointer while suspended
     uint8_t *stack;    // lowest address (NULL: the main thread's stack)
@@ -104,6 +107,7 @@ typedef struct Coro {
     int64_t wake;      // sleeping until (go_mono_ns)
     struct Coro *next; // run queue / sleep list
     struct Coro *allnext;
+    struct GoPanicFrame *panic_top;  // innermost recover frame of this goroutine (gort.h)
 #if defined(_WIN32)
     void *fiber;
 #elif !defined(__x86_64__) && !defined(__aarch64__)
@@ -166,6 +170,8 @@ static void switch_to(Coro *next) {
         return;
     }
     Coro *prev = cur;
+    prev->panic_top = go_panic_top;
+    go_panic_top = next->panic_top;
     cur = next;
     next->state = G_RUNNING;
 #if defined(_WIN32)

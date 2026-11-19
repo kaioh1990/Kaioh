@@ -7,6 +7,7 @@
 #include "ik/ik_sim.h"
 
 extern const unsigned char ik_tid_kind[];
+bool ik_fmt_method(GoIface x, GoString *out);  // generated (gotoc)
 extern const int ik_tid_count;
 
 // ---------------------------------------------------------------- buffer
@@ -349,6 +350,18 @@ static void fmt_value(Buf *b, const Spec *sp, char verb, GoIface x) {
             gc_free(q.p);
         } else {
             pad_put(b, sp, s.p, s.len, false);
+        }
+        return;
+    }
+    GoString ms;
+    if ((verb == 'v' || verb == 's' || verb == 'q') && ik_fmt_method(x, &ms)) {  // Error() / String()
+        if (verb == 'q') {
+            Buf q = {0};
+            quote_into(&q, ms);
+            pad_put(b, sp, q.p, q.len, false);
+            gc_free(q.p);
+        } else {
+            pad_put(b, sp, ms.p, ms.len, false);
         }
         return;
     }

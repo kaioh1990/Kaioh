@@ -58,6 +58,43 @@ bool go_iface_eq(GoIface a, GoIface b) {
     return memcmp(a.data, b.data, size) == 0;
 }
 
+void go_panic_iface(int u, GoIface v) {
+    (void)u;
+    go_panic_raise(v);
+}
+
+static u64 fnv(u64 h, const void *p, size_t n) {
+    const u8 *b = (const u8 *)p;
+    for (size_t i = 0; i < n; i++) h = (h ^ b[i]) * 1099511628211ull;
+    return h;
+}
+
+// hash consistent with go_iface_eq: equal values hash equally
+u64 go_iface_hash(GoIface a) {
+    u64 h = fnv(1469598103934665603ull, &a.type, sizeof a.type);
+    if (a.type == 0) return h;
+    if (a.type == GO_TID_ERRSTR || a.type == GO_TID_FILEINFO) return fnv(h, &a.data, sizeof a.data);
+    int kind = a.type < 20 ? a.type : (a.type < ik_tid_count ? ik_tid_kind[a.type] : 0);
+    if (kind == GO_TID_string) {
+        GoString s = *(GoString *)a.data;
+        return fnv(h, s.p, (size_t)s.len);
+    }
+    unsigned size = 0;
+    switch (kind) {
+    case GO_TID_bool: case GO_TID_i8: case GO_TID_u8: size = 1; break;
+    case GO_TID_i16: case GO_TID_u16: size = 2; break;
+    case GO_TID_i32: case GO_TID_u32: size = 4; break;
+    case GO_TID_i64: case GO_TID_u64: size = 8; break;
+    case GO_TID_int: size = sizeof(int); break;
+    case GO_TID_uint: case GO_TID_uintptr: size = sizeof(uintptr_t); break;
+    case GO_TID_f32: { f32 f = *(f32 *)a.data; if (f == 0) f = 0; return fnv(h, &f, 4); }
+    case GO_TID_f64: { f64 f = *(f64 *)a.data; if (f == 0) f = 0; return fnv(h, &f, 8); }
+    default: size = a.type < ik_tid_count ? ik_tid_size[a.type] : 0;
+    }
+    if (size == 0) return fnv(h, &a.data, sizeof a.data);  // pointer identity
+    return fnv(h, a.data, size);
+}
+
 GoIface errors_New(GoString a0) { return go_error(a0); }
 bool errors_Is(GoIface a0, GoIface a1) {
     if (a0.type == GO_TID_ERRSTR && a1.type == GO_TID_ERRSTR) return a0.data == a1.data;

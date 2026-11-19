@@ -309,6 +309,9 @@ func main() {
 		if isStringT(mt.Key()) {
 			sk = "true"
 		}
+		if types.IsInterface(mt.Key()) {
+			sk = "2" // interface keys: Go equality (go_iface_eq)
+		}
 		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\nGO_MAP_FUNCS(%s, %s, %s, %s)\n#endif\n", n, n, n, k, v, sk)
 	}
 	b.WriteString("#endif\n")

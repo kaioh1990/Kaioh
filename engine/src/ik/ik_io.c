@@ -428,14 +428,6 @@ Ret_GoIface__GoIface zip_File_Open(GoZipFile *recv) {
     (void)recv;
     return (Ret_GoIface__GoIface){{0}, go_error(GOSTR("zip: not supported"))};
 }
-Ret_GoIface__GoIface png_Decode(GoIface a0) {
-    (void)a0;
-    return (Ret_GoIface__GoIface){{0}, go_error(GOSTR("png: not supported in the headless simulation"))};
-}
-GoIface png_Encode(GoIface a0, GoIface a1) {
-    (void)a0, (void)a1;
-    return go_error(GOSTR("png: not supported"));
-}
 GoOpaque *gob_NewDecoder(GoIface a0) {
     (void)a0;
     return (GoOpaque *)gc_calloc(1, sizeof(GoOpaque));
@@ -452,23 +444,6 @@ GoIface gob_Encoder_Encode(GoOpaque *recv, GoIface a0) {
     (void)recv, (void)a0;
     return go_error(GOSTR("gob: not supported"));
 }
-GoImageNRGBA *image_NewNRGBA(GoImageRect r) {
-    GoImageNRGBA *m = (GoImageNRGBA *)gc_calloc(1, sizeof *m);
-    int w = r.Max.X - r.Min.X, h = r.Max.Y - r.Min.Y;
-    m->Rect = r;
-    m->Stride = 4 * w;
-    m->Pix = (Slice_u8){(u8 *)gc_calloc_atomic((size_t)(w * h * 4 > 0 ? w * h * 4 : 1), 1), w * h * 4, w * h * 4};
-    return m;
-}
-GoImageRect image_Rect(int x0, int y0, int x1, int y1) {
-    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
-    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
-    return (GoImageRect){{x0, y0}, {x1, y1}};
-}
-GoImageRect image_NRGBA_Bounds(GoImageNRGBA *recv) { return recv->Rect; }
-GoImageRect image_Paletted_Bounds(GoImagePaletted *recv) { return recv->Rect; }
-void draw_Draw(GoIface a0, GoImageRect a1, GoIface a2, GoImagePoint a3, int a4) { (void)a0, (void)a1, (void)a2, (void)a3, (void)a4; }
-
 // net: online play is implemented natively elsewhere (not by translation).
 GoIface net_conn_LocalAddr(GoOpaque *recv) {
     (void)recv;
@@ -626,10 +601,6 @@ Ret_Slice_u8__GoIface os_ReadFile(GoString name) {
 // gjson/sjson/encoding/json are only used by the stats and save-data code and
 // none affect the simulation. The headless build treats every JSON
 // document as empty.
-GoIface json_Indent(GoOpaque *a0, Slice_u8 a1, GoString a2, GoString a3) {
-    (void)a0; (void)a1; (void)a2; (void)a3;
-    return (GoIface){0};
-}
 
 
 // ---------------------------------------------------------------- bytes.Buffer (value type, zero value usable)
@@ -758,9 +729,8 @@ GoString image_Rectangle_String(GoImageRect r) {
     return go_bytes2str((Slice_u8){(u8 *)tmp, n, n});
 }
 GoString binary_littleEndian_String(GoOpaque o) { (void)o; return GOSTR("LittleEndian"); }
-GoImageRect image_RGBA_Bounds(GoOpaque *recv) { (void)recv; return (GoImageRect){{0, 0}, {0, 0}}; }  // images are not decoded headless
 
-GoOpaque *os_Stdin, *base64_StdEncoding, *image_White;  // not used by the native engine's I/O
+GoOpaque *os_Stdin, *base64_StdEncoding;  // not used by the native engine's I/O
 GoIface io_Discard, ioutil_Discard;
 GoIface color_AlphaModel, color_YCbCrModel, color_RGBAModel, color_RGBA64Model, color_GrayModel, color_Gray16Model;  // image/color is not translated
 static GoString err_closed_pipe = {"io: read/write on closed pipe", 29};

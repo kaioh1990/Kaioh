@@ -155,6 +155,10 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 			ids = append(ids, id)
 		}
 		sort.Ints(ids)
+		fmtM := (im.name == "Error" || im.name == "String") && ret == "GoString" && len(argNames) == 0 && fmtDisp[im.name] == ""
+		if fmtM {
+			fmtDisp[im.name] = n
+		}
 		for _, id := range ids {
 			ty := typeByID[id]
 			ms := types.NewMethodSet(ty)
@@ -184,6 +188,9 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 			default:
 				recv = fmt.Sprintf("*(%s *)_x.data", cbase(ty))
 			}
+			if fmtM {
+				fmtIDs[im.name] = append(fmtIDs[im.name], id)
+			}
 			call := fmt.Sprintf("%s(%s%s)", methodCName(p, mfn, ty), recv, prependComma(argNames))
 			if ret == "void" {
 				fmt.Fprintf(&b, "    case %d: %s; return;\n", id, call)
@@ -198,8 +205,26 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 		}
 		bodies = append(bodies, b.String())
 	}
+	// fmt's %v/%s/%q call Error() and String() methods (ik_fmt.c)
+	var f strings.Builder
+	f.WriteString("bool ik_fmt_method(GoIface x, GoString *out) {\n    switch (x.type) {\n")
+	done := map[int]bool{}
+	for _, m := range []string{"Error", "String"} {
+		for _, id := range fmtIDs[m] {
+			if !done[id] {
+				done[id] = true
+				fmt.Fprintf(&f, "    case %d: *out = %s(x); return true;\n", id, fmtDisp[m])
+			}
+		}
+	}
+	f.WriteString("    default: return false;\n    }\n}\n")
+	protos = append(protos, "bool ik_fmt_method(GoIface x, GoString *out);")
+	bodies = append(bodies, f.String())
 	return
 }
+
+var fmtDisp = map[string]string{}
+var fmtIDs = map[string][]int{}
 
 // typeSwitch translates `switch v := x.(type)` into an if-chain on the id.
 func (t *Tx) typeSwitch(s *ast.TypeSwitchStmt) {
@@ -367,6 +392,15 @@ func tidDefines(p *Prog) string {
 		if s, ok := ty.(*types.Slice); ok && basicKind(s.Elem()) == types.Uint8 {
 			out = append(out, fmt.Sprintf("#define GO_TID_S_uint8 %d", id))
 		}
+		// generic JSON values (ik_json.c)
+		switch types.TypeString(ty, nil) {
+		case "[]interface{}", "[]any":
+			out = append(out, fmt.Sprintf("#define GO_TID_S_any %d", id))
+		case "map[string]interface{}", "map[string]any":
+			out = append(out, fmt.Sprintf("#define GO_TID_M_string_any %d", id))
+		case "float64":
+			out = append(out, fmt.Sprintf("#define GO_TID_float64 %d", id))
+		}
 		if n, ok := base.(*types.Named); ok && n.Obj().Pkg() != nil && !isOwn(n.Obj().Pkg()) {
 			ts := types.TypeString(ty, func(p *types.Package) string { return p.Name() })
 			ts = strings.NewReplacer("*", "P_", ".", "_", "[]", "S_").Replace(ts)
@@ -416,6 +450,8 @@ func tidKindTable() string {
 		default:
 			if c := cbase(ty); !strings.Contains(c, "/*") && c != "void" {
 				sizes[id] = "sizeof(" + c + ")"
+			} else if strings.HasPrefix(c, "GoOpaque ") { // foreign value types are boxed as GoOpaque
+				sizes[id] = "sizeof(GoOpaque)"
 			}
 		}
 	}
@@ -432,13 +468,16 @@ func dispNameCount(name string) int {
 	return c
 }
 
-var byteRuneRe = regexp.MustCompile(`\bbyte\b|\brune\b`)
+var byteRuneRe = regexp.MustCompile(`\bbyte\b|\brune\b|(^|[^.\w])any\b`)
 
 // canonTypeKey: identical types get identical keys (byte = uint8, rune = int32).
 func canonTypeKey(ty types.Type) string {
 	return byteRuneRe.ReplaceAllStringFunc(types.TypeString(types.Unalias(ty), qual), func(m string) string {
 		if m == "byte" {
 			return "uint8"
+		}
+		if strings.HasSuffix(m, "any") { // the predeclared alias any = interface{}
+			return m[:len(m)-3] + "interface{}"
 		}
 		return "int32"
 	})

@@ -60,6 +60,19 @@ typedef struct GoImagePaletted {
     GoImageRect Rect;
     Slice_GoIface Palette;
 } GoImagePaletted;
+typedef struct GoImageRGBA {  // premultiplied
+    Slice_u8 Pix;
+    int Stride;
+    GoImageRect Rect;
+} GoImageRGBA;
+typedef struct GoImageAlpha {
+    Slice_u8 Pix;
+    int Stride;
+    GoImageRect Rect;
+} GoImageAlpha;
+typedef struct GoImageUniform {
+    GoIface C;
+} GoImageUniform;
 
 // archive/zip (archives are not supported: OpenReader always fails)
 typedef struct GoZipFile GoZipFile;

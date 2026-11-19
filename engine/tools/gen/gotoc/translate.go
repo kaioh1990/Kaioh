@@ -34,6 +34,7 @@ type Tx struct {
 	nonEsc   map[*ast.FuncLit]bool // literals whose environment can live on the stack
 	defers   []deferInfo
 	deferDecl []string
+	hasPF     bool // function pushes a GoPanicFrame (has deferred calls)
 }
 
 func (t *Tx) w(format string, a ...any) {
@@ -249,7 +250,8 @@ func (t *Tx) translateFunc(fd *ast.FuncDecl) string {
 	t.w("%s {", hdr)
 	t.ind++
 	t.heap, t.stackBox, t.nonEsc = heapVarsOf(t.p, fd)
-	if fd.Body != nil && funcUsesDefer(fd.Body) {
+	t.hasPF = fd.Body != nil && funcUsesDefer(fd.Body)
+	if t.hasPF {
 		t.w("%s", deferMarker)
 	}
 	t.heapParams(sig)
@@ -258,10 +260,11 @@ func (t *Tx) translateFunc(fd *ast.FuncDecl) string {
 	for i := 0; i < sig.Results().Len(); i++ {
 		v := sig.Results().At(i)
 		if v.Name() != "" && v.Name() != "_" {
-			t.w("%s", t.declObj(v, t.ctype(v.Type()), "{0}"))
+			t.w("%s", t.pfVolatile(v, t.declObj(v, t.ctype(v.Type()), "{0}")))
 			t.namedRes = append(t.namedRes, t.varRef(v))
 		}
 	}
+	t.panicFrame()
 	if fd.Body != nil {
 		for _, s := range fd.Body.List {
 			t.stmt(s)
@@ -439,7 +442,7 @@ func (t *Tx) labeled(s *ast.LabeledStmt) {
 }
 
 func (t *Tx) ret(s *ast.ReturnStmt) {
-	if len(t.defers) > 0 {
+	if len(t.defers) > 0 || t.hasPF {
 		// results are evaluated before the deferred calls run
 		t.w("{")
 		t.ind++
@@ -572,8 +575,13 @@ func (t *Tx) forStmt(s *ast.ForStmt, label string) {
 	}
 	// post statement rendered inline when simple
 	post := ""
+	postStmt := false // post statement emitted after the body (tuple assignments)
 	if s.Post != nil {
-		post = t.simpleStmtInline(s.Post)
+		if a, ok := s.Post.(*ast.AssignStmt); ok && len(a.Lhs) > 1 && len(a.Rhs) == 1 {
+			postStmt = true
+		} else {
+			post = t.simpleStmtInline(s.Post)
+		}
 	}
 	t.w("for (; %s; %s) {", cond, post)
 	t.ind++
@@ -584,6 +592,9 @@ func (t *Tx) forStmt(s *ast.ForStmt, label string) {
 	t.leaveLoop(cl)
 	if label != "" {
 		t.w("%s_continue:;", label)
+	}
+	if postStmt {
+		t.stmt(s.Post)
 	}
 	t.ind--
 	t.w("}")

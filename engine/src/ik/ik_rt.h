@@ -103,7 +103,8 @@ enum { IK_KIND_SLICE = 100, IK_KIND_POINTER = 101 };
 extern const unsigned char ik_tid_kind[];
 extern const int ik_tid_count;
 // further standard-library variables the game refers to
-extern GoOpaque *os_Stdin, *base64_StdEncoding, *image_White, *time_Local, *time_UTC;
+extern GoOpaque *os_Stdin, *base64_StdEncoding, *time_Local, *time_UTC;
+extern GoImageUniform *image_White, *image_Black, *image_Transparent, *image_Opaque;
 extern GoIface io_Discard, io_ErrClosedPipe, ioutil_Discard;
 extern GoIface color_AlphaModel, color_YCbCrModel, color_RGBAModel, color_RGBA64Model, color_GrayModel, color_Gray16Model;
 extern GoImagePoint image_ZP;

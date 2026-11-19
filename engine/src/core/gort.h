@@ -84,9 +84,10 @@ typedef struct GoMapIter {
     void *key, *val;
 } GoMapIter;
 
-GoMap gomap_make(size_t ksize, size_t vsize, bool strkey);
+// key kinds: 0 = compared as bytes, 1 = GoString, 2 = GoIface (Go equality)
+GoMap gomap_make(size_t ksize, size_t vsize, int keykind);
 void *gomap_find(GoMap *m, const void *key);            // NULL if absent
-void *gomap_put(GoMap *m, const void *key, size_t ksize, size_t vsize, bool strkey);  // inserts zero value
+void *gomap_put(GoMap *m, const void *key, size_t ksize, size_t vsize, int keykind);  // inserts zero value
 void gomap_del(GoMap *m, const void *key);
 void gomap_clear(GoMap *m);  // maps.Clear: keeps the storage
 int gomap_len(const GoMap *m);
@@ -115,6 +116,7 @@ typedef struct GoIface {
     void *data;
 } GoIface;
 bool go_iface_eq(GoIface a, GoIface b);  // defined with the type tables (ik_rt.c)
+u64 go_iface_hash(GoIface a);           // consistent with go_iface_eq
 
 typedef struct GoFunc {
     void *fn;
@@ -133,8 +135,26 @@ void *go_box_atomic_impl(const void *v, size_t n);
 #define go_box_a(T, ...) ((T *)go_box_atomic_impl(&(T[1]){__VA_ARGS__}, sizeof(T)))  // pointer-free T
 #define go_new(T) ((T *)gc_calloc(1, sizeof(T)))
 #define go_new_atomic(T) ((T *)gc_alloc_atomic(sizeof(T)))
+// panic/recover: functions with deferred calls push a GoPanicFrame
+// (setjmp); a panic longjmps to the innermost one, which runs its deferred
+// calls - recover() there stops the panic - and otherwise passes it on.
+#include <setjmp.h>
+typedef struct GoPanicFrame {
+    jmp_buf jb;
+    struct GoPanicFrame *prev;
+} GoPanicFrame;
+extern GoPanicFrame *go_panic_top;  // per goroutine (switched by sched.c)
+extern GoIface go_panic_val;
+extern bool go_panicking;
+_Noreturn void go_panic_raise(GoIface v);
+_Noreturn void go_panic_continue(void);  // after the deferred calls: still panicking
+GoIface go_recover(void);
 _Noreturn void go_panic_str(const char *msg);
-#define go_panic(x) go_panic_str("panic")
+_Noreturn void go_panic_gostr(GoString msg);
+_Noreturn void go_panic_s(int, GoString msg);
+_Noreturn void go_panic_iface(int, GoIface v);  // ik_rt.c: prints strings and errors
+_Noreturn void go_panic_other(int, ...);
+#define go_panic(x) _Generic((x), GoString: go_panic_s, GoIface: go_panic_iface, default: go_panic_other)(0, x)
 
 // ---------------------------------------------------------------- numbers
 f64 go_nan(void);

@@ -2,13 +2,7 @@
 // reflect entry points not implemented by ik_reflect.c.
 #include "ik/ik_sim.h"
 
-GoIface reflect_TypeOf(GoIface a0) { (void)a0; go_panic_str("reflect_TypeOf: not implemented"); }
-GoOpaque /* reflect.Value */ reflect_Value_Addr(GoOpaque /* reflect.Value */ recv) { (void)recv; go_panic_str("reflect_Value_Addr: not implemented"); }
-GoString reflect_Kind_String(uintptr_t recv) { (void)recv; go_panic_str("reflect_Kind_String: not implemented"); }
 Ret_GoOpaque_reflect_ValuePtr__bool reflect_Value_Recv(GoOpaque /* reflect.Value */ recv) { (void)recv; go_panic_str("reflect_Value_Recv: not implemented"); }
 Ret_int__GoOpaque_reflect_ValuePtr__bool reflect_Select(Slice_GoOpaque_reflect_SelectCasePtr a0) { (void)a0; go_panic_str("reflect_Select: not implemented"); }
-bool reflect_Value_CanAddr(GoOpaque /* reflect.Value */ recv) { (void)recv; go_panic_str("reflect_Value_CanAddr: not implemented"); }
-uintptr_t reflect_Value_Pointer(GoOpaque /* reflect.Value */ recv) { (void)recv; go_panic_str("reflect_Value_Pointer: not implemented"); }
 void reflect_Value_Close(GoOpaque /* reflect.Value */ recv) { (void)recv; go_panic_str("reflect_Value_Close: not implemented"); }
 void reflect_Value_Send(GoOpaque /* reflect.Value */ recv, GoOpaque /* reflect.Value */ a0) { (void)recv; (void)a0; go_panic_str("reflect_Value_Send: not implemented"); }
-void* reflect_Value_UnsafePointer(GoOpaque /* reflect.Value */ recv) { (void)recv; go_panic_str("reflect_Value_UnsafePointer: not implemented"); }
