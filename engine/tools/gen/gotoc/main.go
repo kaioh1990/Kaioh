@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"go/types"
 	"os"
 	"sort"
 	"strings"
@@ -20,8 +21,19 @@ func main() {
 			}
 		}
 	}
+	for _, f := range strings.Split(os.Getenv("GOTOC_EXCLUDE"), ",") {
+		if f != "" {
+			excludedFiles[f] = true
+		}
+	}
 	var keys []string
 	for _, a := range os.Args[2:] {
+		if strings.HasPrefix(a, "reach:") {
+			for k := range reach(p, strings.Split(strings.TrimPrefix(a, "reach:"), ",")) {
+				keys = append(keys, k)
+			}
+			continue
+		}
 		if strings.HasPrefix(a, "all:") {
 			file := strings.TrimPrefix(a, "all:")
 			for _, f := range p.files {
@@ -43,6 +55,7 @@ func main() {
 			p.fset.Position(p.funcs[keys[i]].Pos()).Filename < p.fset.Position(p.funcs[keys[j]].Pos()).Filename
 	})
 	total := 0
+	var stubs []string
 	var bodies []string
 	var protos []string
 	for _, k := range keys {
@@ -55,7 +68,37 @@ func main() {
 			continue // generic: hand-written helpers
 		}
 		tx := &Tx{p: p}
-		body := tx.translateFunc(fd)
+		var body string
+		if isExcluded(p, k) {
+			hdr, sig := tx.funcHeader(fd)
+			protos = append(protos, hdr+";")
+			ret := ""
+			if sig.Results().Len() > 0 {
+				ret = " return (" + tx.retTypeOf(sig.Results(), cFuncName(p, p.info.Defs[fd.Name].(*types.Func))) + "){0};"
+				if sig.Results().Len() == 1 {
+					rt := sig.Results().At(0).Type()
+					switch rt.Underlying().(type) {
+					case *types.Basic, *types.Pointer, *types.Signature:
+						ret = " return 0;"
+						if isString(rt) {
+							ret = " return (GoString){0};"
+						}
+					}
+				}
+			}
+			stubs = append(stubs, fmt.Sprintf("%s {%s } /* stub: %s */", hdr, ret, k))
+			continue
+		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Fprintf(os.Stderr, "translator crash in %s: %v\n", k, r)
+					body = "/* translator crash: " + fmt.Sprint(r) + " */"
+					tx.todo++
+				}
+			}()
+			body = tx.translateFunc(fd)
+		}()
 		hdr, _ := tx.funcHeader(fd)
 		protos = append(protos, hdr+";")
 		total += tx.todo
@@ -82,5 +125,9 @@ func main() {
 	for _, b := range bodies {
 		fmt.Println(b)
 	}
-	fmt.Fprintf(os.Stderr, "%d functions, %d TODO\n", len(bodies), total)
+	fmt.Println("// ---- stubs (excluded files)")
+	for _, st := range stubs {
+		fmt.Println(st)
+	}
+	fmt.Fprintf(os.Stderr, "%d functions, %d TODO, %d stubs\n", len(bodies), total, len(stubs))
 }

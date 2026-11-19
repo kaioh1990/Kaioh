@@ -201,9 +201,9 @@ func (t *Tx) fieldPath(x ast.Expr, sel *types.Selection) string {
 		s := st.Underlying().(*types.Struct)
 		f := s.Field(idx)
 		if ptr {
-			base = base + "->" + f.Name()
+			base = base + "->" + embName(f)
 		} else {
-			base = base + "." + f.Name()
+			base = base + "." + embName(f)
 		}
 		cur = f.Type()
 	}
@@ -414,7 +414,7 @@ func (t *Tx) composite(e *ast.CompositeLit) string {
 						ft = u.Field(k).Type()
 					}
 				}
-				parts = append(parts, "."+name+" = "+t.exprConv(kv.Value, ft))
+				parts = append(parts, "."+cField(name)+" = "+t.exprConv(kv.Value, ft))
 			} else {
 				parts = append(parts, t.exprConv(el, u.Field(i).Type()))
 			}

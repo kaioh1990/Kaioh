@@ -52,7 +52,24 @@ func (t *Tx) call(c *ast.CallExpr) string {
 	// generic functions (Min, Max, Abs, Clamp, ...)
 	if sig.TypeParams() != nil || isGenericInstance(t, c) {
 		inst := t.instanceType(c)
-		return fmt.Sprintf("%s_%s(%s)", cFuncName(t.p, fn), mangle(inst), strings.Join(args, ", "))
+		m := mangle(inst)
+		// plain argument list (generic variadics: Min(a, b, ...), Max(...))
+		var plain []string
+		for _, a := range c.Args {
+			plain = append(plain, t.exprConv(a, inst))
+		}
+		switch fn.Name() {
+		case "Min", "Max":
+			if c.Ellipsis.IsValid() {
+				return t.TODO(c, "generic Min/Max over slice")
+			}
+			s := plain[0]
+			for _, a := range plain[1:] {
+				s = fmt.Sprintf("go_%s_%s(%s, %s)", strings.ToLower(fn.Name()), m, s, a)
+			}
+			return s
+		}
+		return fmt.Sprintf("%s_%s(%s)", cFuncName(t.p, fn), m, strings.Join(plain, ", "))
 	}
 	if sig.Recv() != nil {
 		se, ok := c.Fun.(*ast.SelectorExpr)
@@ -151,9 +168,9 @@ func (t *Tx) methodRecv(x ast.Expr, sel *types.Selection, sig *types.Signature) 
 		}
 		f := st.Underlying().(*types.Struct).Field(idx)
 		if ptr {
-			base += "->" + f.Name()
+			base += "->" + embName(f)
 		} else {
-			base += "." + f.Name()
+			base += "." + embName(f)
 		}
 		cur = f.Type()
 	}

@@ -78,6 +78,18 @@ func main() {
 		}
 	}
 	want := os.Args[4:]
+	if len(want) == 1 && want[0] == "ALL" {
+		want = nil
+		for _, n := range sc.Names() {
+			if tn, ok := sc.Lookup(n).(*types.TypeName); ok && !tn.IsAlias() {
+				if _, isNamed := tn.Type().(*types.Named); isNamed {
+					if tn.Type().(*types.Named).TypeParams() == nil {
+						want = append(want, n)
+					}
+				}
+			}
+		}
+	}
 	emitted := map[string]bool{}
 	var order []string
 	var visit func(n string)
@@ -157,6 +169,15 @@ func main() {
 		obj := sc.Lookup(n)
 		switch u := obj.Type().Underlying().(type) {
 		case *types.Struct:
+			for i := 0; i < u.NumFields(); i++ {
+				ensureAnon(bb, u.Field(i).Type())
+				ensureArrs(bb, u.Field(i).Type())
+				if es, ok := u.Field(i).Type().Underlying().(*types.Struct); ok && u.Field(i).Embedded() {
+					for k := 0; k < es.NumFields(); k++ {
+						ensureArrs(bb, es.Field(k).Type())
+					}
+				}
+			}
 			fmt.Fprintf(bb, "struct %s {\n", n)
 			for i := 0; i < u.NumFields(); i++ {
 				f := u.Field(i)
@@ -165,16 +186,16 @@ func main() {
 					// Promoted fields: anonymous struct inside a union with the
 					// whole embedded value (both c.X and c.Embedded work).
 					if es, ok := f.Type().Underlying().(*types.Struct); ok {
-						fmt.Fprintf(bb, "    union {\n        %s %s;\n        struct {\n", cbase(f.Type()), name)
+						fmt.Fprintf(bb, "    union {\n        %s %s_;\n        struct {\n", cbase(f.Type()), name)
 						for k := 0; k < es.NumFields(); k++ {
-							fmt.Fprintf(bb, "            %s;\n", cdecl(es.Field(k).Type(), es.Field(k).Name()))
+							fmt.Fprintf(bb, "            %s;\n", cdecl(es.Field(k).Type(), cField(es.Field(k).Name())))
 						}
 						bb.WriteString("        };\n    };\n")
 						continue
 					}
 					name = "embed_" + name
 				}
-				fmt.Fprintf(bb, "    %s;\n", cdecl(f.Type(), name))
+				fmt.Fprintf(bb, "    %s;\n", cdecl(f.Type(), cField(name)))
 			}
 			if u.NumFields() == 0 {
 				bb.WriteString("    char _empty;\n")
@@ -194,10 +215,14 @@ func main() {
 	}
 	sort.Strings(mn0)
 	for _, n := range mn0 {
-		fmt.Fprintf(&b, "typedef GoMap %s; /* %s */\n", n, types.TypeString(mapTypes[n], qual))
+		fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef GoMap %s; /* %s */\n#endif\n", n, n, n, types.TypeString(mapTypes[n], qual))
 	}
 	for _, t := range plainNamed {
 		b.WriteString(t)
+	}
+
+	for _, n := range anonOrder {
+		fmt.Fprintf(&b, "typedef struct %s %s;\n", n, n)
 	}
 	var an []string
 	for n := range arrTypes {
@@ -205,7 +230,7 @@ func main() {
 	}
 	sort.Strings(an)
 	for _, n := range an {
-		fmt.Fprintf(&b, "typedef %s %s[%d];\n", cbase(arrTypes[n].Elem()), n, arrTypes[n].Len())
+		fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef struct %s %s;\n#endif\n", n, n, n, n)
 	}
 	// slice and map typedefs (element types may be incomplete: pointers only)
 	var sn []string
@@ -213,14 +238,84 @@ func main() {
 		sn = append(sn, n)
 	}
 	sort.Strings(sn)
-	for _, n := range sn {
-		fmt.Fprintf(&b, "typedef struct { %s *p; int len, cap; } %s;\n", cbase(sliceTypes[n]), n)
-	}
+	// slices in dependency order: a slice of a named slice type needs that
+	// type's typedef first
+	namedSliceDone := map[string]bool{}
+	sliceDone := map[string]bool{}
+	pendingNamed := map[string]string{}
 	for _, t := range sliceNamed {
-		b.WriteString(t)
+		f := strings.Fields(strings.TrimSuffix(strings.TrimSpace(t), ";"))
+		pendingNamed[f[len(f)-1]] = t
+	}
+	for progress := true; progress; {
+		progress = false
+		for _, n := range sn {
+			if sliceDone[n] {
+				continue
+			}
+			el := cbase(sliceTypes[n])
+			dep := strings.TrimRight(el, "*")
+			if _, isNamedSlice := pendingNamed[dep]; isNamedSlice && !namedSliceDone[dep] {
+				continue
+			}
+			if _, isSlice := sliceTypes[dep]; isSlice && !sliceDone[dep] {
+				continue
+			}
+			fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef struct { %s *p; int len, cap; } %s;\n#endif\n", n, n, el, n)
+			sliceDone[n] = true
+			progress = true
+		}
+		for name, t := range pendingNamed {
+			if namedSliceDone[name] {
+				continue
+			}
+			f := strings.Fields(t)
+			if len(f) >= 2 && sliceDone[f[1]] {
+				b.WriteString(t)
+				namedSliceDone[name] = true
+				progress = true
+			}
+		}
 	}
 	b.WriteString("\n")
+	// typedefs for any struct body not forward-declared yet
+	for _, ln := range strings.Split(body.String(), "\n") {
+		if strings.HasPrefix(ln, "struct ") && strings.HasSuffix(ln, " {") {
+			n := strings.TrimSuffix(strings.TrimPrefix(ln, "struct "), " {")
+			if !strings.HasPrefix(n, "Anon_") {
+				fmt.Fprintf(&b, "#ifndef CVF_TD_%s\n#define CVF_TD_%s\ntypedef struct %s %s;\n#endif\n", n, n, n, n)
+			}
+		}
+	}
 	b.WriteString(body.String())
+	var restArr strings.Builder
+	for _, n := range an {
+		ensureArrs(&restArr, arrTypes[n])
+	}
+	for _, n := range anonOrder {
+		ensureAnon(&restArr, anonStructs[n])
+	}
+	b.WriteString(restArr.String())
+	// helper instantiations (need complete element types)
+	for _, n := range sn {
+		el := cbase(sliceTypes[n])
+		if strings.HasPrefix(el, "void") || strings.Contains(el, "/*") {
+			continue
+		}
+		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\nGO_SLICE_FUNCS(%s, %s)\n#endif\n", n, n, n, el)
+	}
+	for _, n := range mn0 {
+		mt := mapTypes[n]
+		k, v := cbase(mt.Key()), cbase(mt.Elem())
+		if strings.Contains(k+v, "/*") || k == "void" || v == "void" {
+			continue
+		}
+		sk := "false"
+		if isStringT(mt.Key()) {
+			sk = "true"
+		}
+		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\nGO_MAP_FUNCS(%s, %s, %s, %s)\n#endif\n", n, n, n, k, v, sk)
+	}
 	b.WriteString("#endif\n")
 	os.WriteFile(os.Args[3], []byte(b.String()), 0o644)
 }
@@ -293,6 +388,12 @@ func valueDepsField(t types.Type) []string {
 	switch u := t.(type) {
 	case *types.Array:
 		return valueDepsField(u.Elem())
+	case *types.Struct:
+		var out []string
+		for i := 0; i < u.NumFields(); i++ {
+			out = append(out, valueDepsField(u.Field(i).Type())...)
+		}
+		return out
 	case *types.Slice:
 		// slice typedefs need the element type declared (typedef only)
 		return nil
@@ -312,6 +413,61 @@ func mangle(t types.Type) string {
 		s = s[:i] + "_" + strings.Trim(r.Replace(s[i+3:]), "*")
 	}
 	return r.Replace(s)
+}
+
+var arrEmitted = map[string]bool{}
+
+// ensureArrs emits the struct wrappers of array types used by a field
+// (Go arrays are values: wrapping them gives C the same copy semantics).
+var anonEmitted = map[string]bool{}
+
+func ensureAnon(bb *strings.Builder, t types.Type) {
+	st, ok := t.(*types.Struct)
+	if !ok {
+		if a, ok2 := t.(*types.Array); ok2 {
+			ensureAnon(bb, a.Elem())
+		}
+		return
+	}
+	n := anonName(st)
+	if anonEmitted[n] {
+		return
+	}
+	anonEmitted[n] = true
+	for i := 0; i < st.NumFields(); i++ {
+		ensureAnon(bb, st.Field(i).Type())
+		ensureArrs(bb, st.Field(i).Type())
+	}
+	fmt.Fprintf(bb, "struct %s {\n", n)
+	for i := 0; i < st.NumFields(); i++ {
+		fmt.Fprintf(bb, "    %s;\n", cdecl(st.Field(i).Type(), cField(st.Field(i).Name())))
+	}
+	if st.NumFields() == 0 {
+		bb.WriteString("    char _empty;\n")
+	}
+	bb.WriteString("};\n")
+}
+
+func ensureArrs(bb *strings.Builder, t types.Type) {
+	a, ok := t.(*types.Array)
+	if !ok {
+		if _, named := isPkgNamed(t); !named {
+			if a2, ok2 := t.Underlying().(*types.Array); ok2 {
+				a, ok = a2, true
+			}
+		}
+	}
+	if !ok {
+		return
+	}
+	ensureAnon(bb, a.Elem())
+	ensureArrs(bb, a.Elem())
+	n := cbase(a)
+	if arrEmitted[n] {
+		return
+	}
+	arrEmitted[n] = true
+	fmt.Fprintf(bb, "#ifndef CVF_BODY_%s\n#define CVF_BODY_%s\nstruct %s { %s v[%d]; };\n#endif\n", n, n, n, cbase(a.Elem()), a.Len())
 }
 
 func cbase(t types.Type) string {
@@ -372,11 +528,18 @@ func cbase(t types.Type) string {
 		arrTypes[n] = u
 		return n
 	case *types.Named:
+		switch u.Underlying().(type) {
+		case *types.Interface:
+			return "GoIface"
+		case *types.Basic, *types.Pointer, *types.Slice, *types.Map, *types.Signature:
+			return cbase(u.Underlying())
+		}
 		return "GoOpaque /* " + types.TypeString(u, qual) + " */"
 	case *types.Chan:
 		return "GoOpaque /* chan */"
 	case *types.Struct:
-		return "struct { char _anon; } /* anon struct */"
+		n := anonName(u)
+		return n
 	}
 	return "GoOpaque /* " + t.String() + " */"
 }
@@ -389,25 +552,35 @@ func qual(p *types.Package) string {
 }
 
 func cdecl(t types.Type, name string) string {
-	switch u := t.(type) {
-	case *types.Array:
-		var dims string
-		for {
-			dims += fmt.Sprintf("[%d]", u.Len())
-			if e, ok := u.Elem().(*types.Array); ok {
-				if _, named := isPkgNamed(u.Elem()); !named {
-					u = e
-					continue
-				}
-			}
-			break
-		}
-		return cbase(u.Elem()) + " " + name + dims
-	}
-	if _, ok := isPkgNamed(t); !ok {
-		if a, ok := t.Underlying().(*types.Array); ok && t == t.Underlying() {
-			return cdecl(a, name)
-		}
-	}
 	return cbase(t) + " " + name
+}
+
+func isStringT(t types.Type) bool {
+	b, ok := t.Underlying().(*types.Basic)
+	return ok && b.Info()&types.IsString != 0
+}
+
+var anonStructs = map[string]*types.Struct{}
+var anonOrder []string
+
+func anonName(st *types.Struct) string {
+	key := types.TypeString(st, qual)
+	h := uint32(2166136261)
+	for i := 0; i < len(key); i++ {
+		h = (h ^ uint32(key[i])) * 16777619
+	}
+	n := fmt.Sprintf("Anon_%08x", h)
+	if _, ok := anonStructs[n]; !ok {
+		anonStructs[n] = st
+		anonOrder = append(anonOrder, n)
+	}
+	return n
+}
+
+func cField(name string) string {
+	switch name {
+	case "char", "int", "float", "double", "long", "short", "signed", "unsigned", "auto", "register", "static", "extern", "volatile", "const", "struct", "union", "enum", "typedef", "sizeof", "default", "case", "do", "while", "for", "if", "else", "switch", "break", "continue", "return", "goto", "void", "inline", "restrict", "bool", "true", "false":
+		return name + "_"
+	}
+	return name
 }

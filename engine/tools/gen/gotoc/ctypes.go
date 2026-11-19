@@ -171,11 +171,18 @@ func cbase(t types.Type) string {
 		arrTypes[n] = u
 		return n
 	case *types.Named:
+		switch u.Underlying().(type) {
+		case *types.Interface:
+			return "GoIface"
+		case *types.Basic, *types.Pointer, *types.Slice, *types.Map, *types.Signature:
+			return cbase(u.Underlying())
+		}
 		return "GoOpaque /* " + types.TypeString(u, qual) + " */"
 	case *types.Chan:
 		return "GoOpaque /* chan */"
 	case *types.Struct:
-		return "struct { char _anon; } /* anon struct */"
+		n := anonName(u)
+		return n
 	}
 	return "GoOpaque /* " + t.String() + " */"
 }
@@ -198,4 +205,41 @@ func mangle(t types.Type) string {
 		s = s[:i] + "_" + strings.Trim(r.Replace(s[i+3:]), "*")
 	}
 	return r.Replace(s)
+}
+
+var anonStructs = map[string]*types.Struct{}
+var anonOrder []string
+
+func anonName(st *types.Struct) string {
+	key := types.TypeString(st, qual)
+	h := uint32(2166136261)
+	for i := 0; i < len(key); i++ {
+		h = (h ^ uint32(key[i])) * 16777619
+	}
+	n := fmt.Sprintf("Anon_%08x", h)
+	if _, ok := anonStructs[n]; !ok {
+		anonStructs[n] = st
+		anonOrder = append(anonOrder, n)
+	}
+	return n
+}
+
+func cField(name string) string {
+	switch name {
+	case "char", "int", "float", "double", "long", "short", "signed", "unsigned", "auto", "register", "static", "extern", "volatile", "const", "struct", "union", "enum", "typedef", "sizeof", "default", "case", "do", "while", "for", "if", "else", "switch", "break", "continue", "return", "goto", "void", "inline", "restrict", "bool", "true", "false":
+		return name + "_"
+	}
+	return name
+}
+
+// embName: embedded struct fields are emitted as "<Type>_" (whole value),
+// with their fields promoted through an anonymous struct.
+func embName(f *types.Var) string {
+	if f.Embedded() {
+		if _, ok := f.Type().Underlying().(*types.Struct); ok {
+			return f.Name() + "_"
+		}
+		return "embed_" + f.Name()
+	}
+	return cField(f.Name())
 }

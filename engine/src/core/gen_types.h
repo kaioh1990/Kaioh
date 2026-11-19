@@ -4,9 +4,50 @@
 
 #include "core/gort.h"
 
+typedef struct AIrampProperties AIrampProperties;
 typedef struct CustomShader CustomShader;
 typedef struct AfterImage AfterImage;
+typedef struct AiInput AiInput;
+typedef struct Rotation Rotation;
+typedef struct Anim Anim;
+typedef struct AnimationTable AnimationTable;
+typedef struct AnimCompiler AnimCompiler;
+typedef struct AnimFrame AnimFrame;
+typedef struct Layout Layout;
+typedef struct AnimLayout AnimLayout;
+typedef struct FSText FSText;
+typedef struct AnimTextSnd AnimTextSnd;
+typedef struct Tiling Tiling;
+typedef struct Animation Animation;
+typedef struct AnimationCharPreloadProperties AnimationCharPreloadProperties;
+typedef struct AnimationProperties AnimationProperties;
+typedef struct AnimationStagePreloadProperties AnimationStagePreloadProperties;
+typedef struct AnimationTextProperties AnimationTextProperties;
+typedef struct FadeProperties FadeProperties;
+typedef struct TextProperties TextProperties;
+typedef struct TweenProperties TweenProperties;
+typedef struct BoxCursorProperties BoxCursorProperties;
+typedef struct BoxBgProperties BoxBgProperties;
+typedef struct MenuProperties MenuProperties;
+typedef struct TimerProperties TimerProperties;
+typedef struct AttractModeProperties AttractModeProperties;
+typedef struct bgAction bgAction;
+typedef struct StageProps StageProps;
+typedef struct BGDef BGDef;
+typedef struct BgAnimationProperties BgAnimationProperties;
+typedef struct BgDefProperties BgDefProperties;
+typedef struct Bgm Bgm;
+typedef struct BgmProperties BgmProperties;
+typedef struct BoundingBox BoundingBox;
+typedef struct BufferSeeker BufferSeeker;
 typedef struct BytecodeFunction BytecodeFunction;
+typedef struct BytecodeValue BytecodeValue;
+typedef struct CallFunction CallFunction;
+typedef struct stageCamera stageCamera;
+typedef struct Camera Camera;
+typedef struct CellOverrideProperties CellOverrideProperties;
+typedef struct OverlayProperties OverlayProperties;
+typedef struct ChallengerInfoProperties ChallengerInfoProperties;
 typedef struct StateState StateState;
 typedef struct CharSize CharSize;
 typedef struct PalFXDef PalFXDef;
@@ -16,109 +57,2924 @@ typedef struct MoveHitVar MoveHitVar;
 typedef struct HitBy HitBy;
 typedef struct HitOverride HitOverride;
 typedef struct varCacheEnt varCacheEnt;
-typedef struct Rotation Rotation;
 typedef struct CharSystemVar CharSystemVar;
 typedef struct Char Char;
+typedef struct CharCompiler CharCompiler;
 typedef struct CharData CharData;
 typedef struct CharVelocity CharVelocity;
 typedef struct CharMovement CharMovement;
 typedef struct CharGlobalInfo CharGlobalInfo;
+typedef struct CharList CharList;
+typedef struct CharVarBackup CharVarBackup;
 typedef struct ClsnFinal ClsnFinal;
 typedef struct ClsnOverride ClsnOverride;
 typedef struct ClsnTransform ClsnTransform;
+typedef struct ComboShake ComboShake;
 typedef struct Command Command;
+typedef struct CommandKeyRemap CommandKeyRemap;
 typedef struct cmdNameCacheEnt cmdNameCacheEnt;
 typedef struct CommandList CommandList;
+typedef struct CommandSpec CommandSpec;
 typedef struct CommandStep CommandStep;
 typedef struct CommandStepKey CommandStepKey;
+typedef struct RollbackProperties RollbackProperties;
+typedef struct Config Config;
+typedef struct ContinueCounterProperties ContinueCounterProperties;
+typedef struct PlayerContinueProperties PlayerContinueProperties;
+typedef struct ContinueScreenProperties ContinueScreenProperties;
+typedef struct ControllerState ControllerState;
+typedef struct DebugClsn DebugClsn;
+typedef struct DebugClsnText DebugClsnText;
+typedef struct DemoModeProperties DemoModeProperties;
+typedef struct PlayerDialogueProperties PlayerDialogueProperties;
+typedef struct DialogueInfoProperties DialogueInfoProperties;
+typedef struct DialogueParsedLine DialogueParsedLine;
+typedef struct DialogueToken DialogueToken;
+typedef struct EnvShake EnvShake;
+typedef struct Environment Environment;
 typedef struct Explod Explod;
+typedef struct FSBgTextSnd FSBgTextSnd;
+typedef struct FSMsg FSMsg;
+typedef struct FaceParams FaceParams;
+typedef struct FaceProperties FaceProperties;
+typedef struct Fade Fade;
+typedef struct FightFx FightFx;
+typedef struct FightScreen FightScreen;
+typedef struct FightScreenAction FightScreenAction;
+typedef struct FightScreenAiLevel FightScreenAiLevel;
+typedef struct FightScreenCombo FightScreenCombo;
+typedef struct FightScreenFace FightScreenFace;
+typedef struct FightScreenMatch FightScreenMatch;
+typedef struct FightScreenMode FightScreenMode;
+typedef struct FightScreenName FightScreenName;
+typedef struct ResultAnnouncement ResultAnnouncement;
+typedef struct FightScreenRound FightScreenRound;
+typedef struct FightScreenScore FightScreenScore;
+typedef struct FightScreenTime FightScreenTime;
+typedef struct FightScreenTimer FightScreenTimer;
+typedef struct FightScreenWinCount FightScreenWinCount;
+typedef struct FightScreenWinIcon FightScreenWinIcon;
+typedef struct FilesProperties FilesProperties;
+typedef struct FontProperties FontProperties;
+typedef struct FontRenderer_GLES32 FontRenderer_GLES32;
+typedef struct color color;
+typedef struct ShaderPalFX ShaderPalFX;
+typedef struct Font_GLES32 Font_GLES32;
+typedef struct ForceFeedbackParams ForceFeedbackParams;
+typedef struct GLES32State GLES32State;
+typedef struct GLTFAnimatableProperty GLTFAnimatableProperty;
+typedef struct GLTFAnimation GLTFAnimation;
+typedef struct GLTFAnimationChannel GLTFAnimationChannel;
+typedef struct GLTFAnimationSampler GLTFAnimationSampler;
+typedef struct GLTFLight GLTFLight;
+typedef struct GLTFTexture GLTFTexture;
+typedef struct GameParams GameParams;
+typedef struct ZoomEffect ZoomEffect;
+typedef struct SystemStateVars SystemStateVars;
+typedef struct InfoProperties InfoProperties;
+typedef struct TextMapProperties TextMapProperties;
+typedef struct TextInputProperties TextInputProperties;
+typedef struct TitleInfoProperties TitleInfoProperties;
+typedef struct InfoBoxProperties InfoBoxProperties;
+typedef struct PlayerCursorProperties PlayerCursorProperties;
+typedef struct ItemProperties ItemProperties;
+typedef struct PlayerSelectProperties PlayerSelectProperties;
+typedef struct SelectInfoProperties SelectInfoProperties;
+typedef struct ValueIconVsProperties ValueIconVsProperties;
+typedef struct PlayerVsProperties PlayerVsProperties;
+typedef struct VsScreenProperties VsScreenProperties;
+typedef struct StoryboardProperties StoryboardProperties;
+typedef struct PlayerLoseProperties PlayerLoseProperties;
+typedef struct PlayerVictoryProperties PlayerVictoryProperties;
+typedef struct VictoryScreenProperties VictoryScreenProperties;
+typedef struct PlayerResultsProperties PlayerResultsProperties;
+typedef struct WinScreenProperties WinScreenProperties;
+typedef struct OptionInfoProperties OptionInfoProperties;
+typedef struct ReplayInfoProperties ReplayInfoProperties;
+typedef struct HiscoreInfoProperties HiscoreInfoProperties;
+typedef struct WarningInfoProperties WarningInfoProperties;
+typedef struct MotifChallenger MotifChallenger;
+typedef struct MotifContinue MotifContinue;
+typedef struct MotifDemo MotifDemo;
+typedef struct MotifDialogue MotifDialogue;
+typedef struct MotifVictory MotifVictory;
+typedef struct MotifWin MotifWin;
+typedef struct MotifHiscore MotifHiscore;
+typedef struct MotifMenu MotifMenu;
+typedef struct Motif Motif;
+typedef struct storyboardPlacement storyboardPlacement;
+typedef struct Storyboard Storyboard;
+typedef struct stageRollbackState stageRollbackState;
+typedef struct statsRollbackState statsRollbackState;
+typedef struct Select Select;
+typedef struct GameState GameState;
+typedef struct GameStatePool GameStatePool;
+typedef struct StatsLog StatsLog;
+typedef struct GameStatsSnapshot GameStatsSnapshot;
+typedef struct GlyphProperties GlyphProperties;
+typedef struct GuardBar GuardBar;
+typedef struct InheritSpec InheritSpec;
+typedef struct Input Input;
 typedef struct InputBuffer InputBuffer;
 typedef struct InputReader InputReader;
+typedef struct KeyConfig KeyConfig;
+typedef struct KeysProperties KeysProperties;
+typedef struct PalFxProperties PalFxProperties;
+typedef struct LayerProperties LayerProperties;
+typedef struct LifeBar LifeBar;
+typedef struct Loader Loader;
+typedef struct LoopBreak LoopBreak;
+typedef struct LoopContinue LoopContinue;
+typedef struct LoopTimer LoopTimer;
+typedef struct Material Material;
+typedef struct MovelistGlyphsProperties MovelistGlyphsProperties;
+typedef struct MenuInfoProperties MenuInfoProperties;
+typedef struct Mesh Mesh;
+typedef struct Model Model;
+typedef struct MorphTarget MorphTarget;
+typedef struct NetBuffer NetBuffer;
+typedef struct NetConnection NetConnection;
+typedef struct Node Node;
+typedef struct Normalizer Normalizer;
+typedef struct NormalizerLR NormalizerLR;
+typedef struct NullStateController NullStateController;
+typedef struct OverrideCharData OverrideCharData;
 typedef struct PalFX PalFX;
+typedef struct PalTexture PalTexture;
+typedef struct Plane Plane;
+typedef struct Platform Platform;
+typedef struct PlaySndParams PlaySndParams;
+typedef struct PlayerCursorStateProperties PlayerCursorStateProperties;
+typedef struct PowerBar PowerBar;
+typedef struct PreloadEntry PreloadEntry;
+typedef struct Primitive Primitive;
+typedef struct ProjTradeDist ProjTradeDist;
 typedef struct Projectile Projectile;
+typedef struct Rect Rect;
+typedef struct ReflectionSprite ReflectionSprite;
+typedef struct RenderParams RenderParams;
+typedef struct vitaBatch vitaBatch;
+typedef struct Renderer_GLES32 Renderer_GLES32;
+typedef struct Renderer_VK Renderer_VK;
+typedef struct ReplayFile ReplayFile;
+typedef struct ReplayHeader ReplayHeader;
+typedef struct ResultsScreenProperties ResultsScreenProperties;
+typedef struct RollbackLogger RollbackLogger;
+typedef struct RollbackSession RollbackSession;
+typedef struct RollbackSystem RollbackSystem;
+typedef struct bgShaderTex bgShaderTex;
+typedef struct stageShaderDef stageShaderDef;
+typedef struct stageShadow stageShadow;
+typedef struct stagePlayer stagePlayer;
+typedef struct Stage Stage;
+typedef struct RoundStartBackup RoundStartBackup;
+typedef struct SDLSpeaker SDLSpeaker;
+typedef struct Scene Scene;
+typedef struct SceneProperties SceneProperties;
+typedef struct SelectChar SelectChar;
+typedef struct SelectCharParams SelectCharParams;
+typedef struct SelectStage SelectStage;
+typedef struct SelectStageParams SelectStageParams;
+typedef struct SessionConfigOverride SessionConfigOverride;
+typedef struct uniCacheEnt uniCacheEnt;
+typedef struct ShaderProgram_GLES32 ShaderProgram_GLES32;
+typedef struct ShadowSprite ShadowSprite;
+typedef struct ShortcutKey ShortcutKey;
+typedef struct ShortcutScript ShortcutScript;
+typedef struct Skin Skin;
+typedef struct SoundChannel SoundChannel;
+typedef struct SoundEffect SoundEffect;
+typedef struct SoundProperties SoundProperties;
 typedef struct SpriteData SpriteData;
+typedef struct varAssign varAssign;
+typedef struct StateBlock StateBlock;
+typedef struct StateBytecode StateBytecode;
+typedef struct StatsFighterState StatsFighterState;
+typedef struct StatsMatch StatsMatch;
+typedef struct StatsRound StatsRound;
+typedef struct StoryboardManager StoryboardManager;
+typedef struct StreamLooper StreamLooper;
+typedef struct StringPool StringPool;
+typedef struct StunBar StunBar;
+typedef struct SwapSeeker SwapSeeker;
+typedef struct SyncHandshake SyncHandshake;
+typedef struct SyncSetting SyncSetting;
+typedef struct System System;
+typedef struct TeamModesProperties TeamModesProperties;
+typedef struct TextSprite TextSprite;
+typedef struct Texture_GLES32 Texture_GLES32;
 typedef struct TypedValue TypedValue;
+typedef struct UndefinedFormatter UndefinedFormatter;
+typedef struct Window Window;
+typedef struct backGround backGround;
+typedef struct bcHasher bcHasher;
+typedef struct bcProfKey bcProfKey;
+typedef struct bgCtrl bgCtrl;
+typedef struct bgDrawTransform bgDrawTransform;
+typedef struct bgVideo bgVideo;
+typedef struct boundTexture boundTexture;
+typedef struct character character;
+typedef struct cookW cookW;
+typedef struct cparser cparser;
+typedef struct cvfOnlineState cvfOnlineState;
+typedef struct cvfRoom cvfRoom;
+typedef struct cvfRulesT cvfRulesT;
+typedef struct drawAspectState drawAspectState;
+typedef struct expValueFrame expValueFrame;
+typedef struct fightScreenAnimationStateCloner fightScreenAnimationStateCloner;
+typedef struct lowerCacheEntry lowerCacheEntry;
+typedef struct modifyBGCtrlShader modifyBGCtrlShader;
+typedef struct paletteCopyKey paletteCopyKey;
+typedef struct queryPart queryPart;
+typedef struct rankingEntry rankingEntry;
+typedef struct rankingRow rankingRow;
+typedef struct runTally runTally;
+typedef struct scParam scParam;
+typedef struct sffv1PalState sffv1PalState;
+typedef struct soundPanView soundPanView;
+typedef struct soundPanner soundPanner;
+typedef struct specFacts specFacts;
+typedef struct stageRollbackBgState stageRollbackBgState;
+typedef struct upnpDevice upnpDevice;
+typedef struct upnpMapping upnpMapping;
+typedef struct victoryEntry victoryEntry;
+typedef struct vitaBufFile vitaBufFile;
+typedef struct xmStreamer xmStreamer;
+typedef struct zipMemFileReader zipMemFileReader;
 
+#ifndef CVF_DEF_Map_Arr2_i32_AnimationPtr
+#define CVF_DEF_Map_Arr2_i32_AnimationPtr
+typedef GoMap Map_Arr2_i32_AnimationPtr; /* map[[2]int32]*Animation */
+#endif
+#ifndef CVF_DEF_Map_Arr2_u16_bool
+#define CVF_DEF_Map_Arr2_u16_bool
+typedef GoMap Map_Arr2_u16_bool; /* map[[2]uint16]bool */
+#endif
+#ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
+#define CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
+typedef GoMap Map_GoOpaque_invalidtypePtr_bool; /* map[invalid type]bool */
+#endif
+#ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
+#define CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
+typedef GoMap Map_GoOpaque_invalidtypePtr_u8; /* map[invalid type]byte */
+#endif
+#ifndef CVF_DEF_Map_GoString_AnimationPropertiesPtr
+#define CVF_DEF_Map_GoString_AnimationPropertiesPtr
+typedef GoMap Map_GoString_AnimationPropertiesPtr; /* map[string]*AnimationProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_Arr2_i32
+#define CVF_DEF_Map_GoString_Arr2_i32
+typedef GoMap Map_GoString_Arr2_i32; /* map[string][2]int32 */
+#endif
+#ifndef CVF_DEF_Map_GoString_BgAnimationPropertiesPtr
+#define CVF_DEF_Map_GoString_BgAnimationPropertiesPtr
+typedef GoMap Map_GoString_BgAnimationPropertiesPtr; /* map[string]*BgAnimationProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_BgDefPropertiesPtr
+#define CVF_DEF_Map_GoString_BgDefPropertiesPtr
+typedef GoMap Map_GoString_BgDefPropertiesPtr; /* map[string]*BgDefProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_BytecodeFunction
+#define CVF_DEF_Map_GoString_BytecodeFunction
 typedef GoMap Map_GoString_BytecodeFunction; /* map[string]BytecodeFunction */
+#endif
+#ifndef CVF_DEF_Map_GoString_CellOverridePropertiesPtr
+#define CVF_DEF_Map_GoString_CellOverridePropertiesPtr
+typedef GoMap Map_GoString_CellOverridePropertiesPtr; /* map[string]*CellOverrideProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_CommandSpec
+#define CVF_DEF_Map_GoString_CommandSpec
+typedef GoMap Map_GoString_CommandSpec; /* map[string]CommandSpec */
+#endif
+#ifndef CVF_DEF_Map_GoString_ContinueCounterPropertiesPtr
+#define CVF_DEF_Map_GoString_ContinueCounterPropertiesPtr
+typedef GoMap Map_GoString_ContinueCounterPropertiesPtr; /* map[string]*ContinueCounterProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_FightFxPtr
+#define CVF_DEF_Map_GoString_FightFxPtr
+typedef GoMap Map_GoString_FightFxPtr; /* map[string]*FightFx */
+#endif
+#ifndef CVF_DEF_Map_GoString_FightScreenModePtr
+#define CVF_DEF_Map_GoString_FightScreenModePtr
+typedef GoMap Map_GoString_FightScreenModePtr; /* map[string]*FightScreenMode */
+#endif
+#ifndef CVF_DEF_Map_GoString_FontPropertiesPtr
+#define CVF_DEF_Map_GoString_FontPropertiesPtr
+typedef GoMap Map_GoString_FontPropertiesPtr; /* map[string]*FontProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_GlyphPropertiesPtr
+#define CVF_DEF_Map_GoString_GlyphPropertiesPtr
+typedef GoMap Map_GoString_GlyphPropertiesPtr; /* map[string]*GlyphProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_GoString
+#define CVF_DEF_Map_GoString_GoString
 typedef GoMap Map_GoString_GoString; /* map[string]string */
+#endif
+#ifndef CVF_DEF_Map_GoString_KeysPropertiesPtr
+#define CVF_DEF_Map_GoString_KeysPropertiesPtr
+typedef GoMap Map_GoString_KeysPropertiesPtr; /* map[string]*KeysProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_LayerPropertiesPtr
+#define CVF_DEF_Map_GoString_LayerPropertiesPtr
+typedef GoMap Map_GoString_LayerPropertiesPtr; /* map[string]*LayerProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_MenuInfoPropertiesPtr
+#define CVF_DEF_Map_GoString_MenuInfoPropertiesPtr
+typedef GoMap Map_GoString_MenuInfoPropertiesPtr; /* map[string]*MenuInfoProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_PlayerCursorStatePropertiesPtr
+#define CVF_DEF_Map_GoString_PlayerCursorStatePropertiesPtr
+typedef GoMap Map_GoString_PlayerCursorStatePropertiesPtr; /* map[string]*PlayerCursorStateProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_RemapPreset
+#define CVF_DEF_Map_GoString_RemapPreset
 typedef GoMap Map_GoString_RemapPreset; /* map[string]RemapPreset */
-typedef GoMap Map_GoString_Slice_voidPtr; /* map[string][]*bgMusic */
+#endif
+#ifndef CVF_DEF_Map_GoString_ResultsScreenPropertiesPtr
+#define CVF_DEF_Map_GoString_ResultsScreenPropertiesPtr
+typedef GoMap Map_GoString_ResultsScreenPropertiesPtr; /* map[string]*ResultsScreenProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_ScenePropertiesPtr
+#define CVF_DEF_Map_GoString_ScenePropertiesPtr
+typedef GoMap Map_GoString_ScenePropertiesPtr; /* map[string]*SceneProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_Slice_GoOpaqueValPtr
+#define CVF_DEF_Map_GoString_Slice_GoOpaqueValPtr
+typedef GoMap Map_GoString_Slice_GoOpaqueValPtr; /* map[string][]*bgMusic */
+#endif
+#ifndef CVF_DEF_Map_GoString_Slice_GoString
+#define CVF_DEF_Map_GoString_Slice_GoString
+typedef GoMap Map_GoString_Slice_GoString; /* map[string][]string */
+#endif
+#ifndef CVF_DEF_Map_GoString_SoundPropertiesPtr
+#define CVF_DEF_Map_GoString_SoundPropertiesPtr
+typedef GoMap Map_GoString_SoundPropertiesPtr; /* map[string]*SoundProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_TeamModesPropertiesPtr
+#define CVF_DEF_Map_GoString_TeamModesPropertiesPtr
+typedef GoMap Map_GoString_TeamModesPropertiesPtr; /* map[string]*TeamModesProperties */
+#endif
+#ifndef CVF_DEF_Map_GoString_TypedValue
+#define CVF_DEF_Map_GoString_TypedValue
 typedef GoMap Map_GoString_TypedValue; /* map[string]TypedValue */
+#endif
+#ifndef CVF_DEF_Map_GoString_bool
+#define CVF_DEF_Map_GoString_bool
+typedef GoMap Map_GoString_bool; /* map[string]bool */
+#endif
+#ifndef CVF_DEF_Map_GoString_f32
+#define CVF_DEF_Map_GoString_f32
+typedef GoMap Map_GoString_f32; /* map[string]float32 */
+#endif
+#ifndef CVF_DEF_Map_GoString_i32
+#define CVF_DEF_Map_GoString_i32
+typedef GoMap Map_GoString_i32; /* map[string]int32 */
+#endif
+#ifndef CVF_DEF_Map_GoString_int
+#define CVF_DEF_Map_GoString_int
 typedef GoMap Map_GoString_int; /* map[string]int */
+#endif
+#ifndef CVF_DEF_Map_GoString_scFunc
+#define CVF_DEF_Map_GoString_scFunc
+typedef GoMap Map_GoString_scFunc; /* map[string]scFunc */
+#endif
+#ifndef CVF_DEF_Map_GoString_u32
+#define CVF_DEF_Map_GoString_u32
+typedef GoMap Map_GoString_u32; /* map[string]uint32 */
+#endif
+#ifndef CVF_DEF_Map_GoString_u8
+#define CVF_DEF_Map_GoString_u8
+typedef GoMap Map_GoString_u8; /* map[string]uint8 */
+#endif
+#ifndef CVF_DEF_Map_ShortcutKey_ShortcutScriptPtr
+#define CVF_DEF_Map_ShortcutKey_ShortcutScriptPtr
+typedef GoMap Map_ShortcutKey_ShortcutScriptPtr; /* map[ShortcutKey]*ShortcutScript */
+#endif
+#ifndef CVF_DEF_Map_bgVideoPtr_Anon_fa4d6974
+#define CVF_DEF_Map_bgVideoPtr_Anon_fa4d6974
+typedef GoMap Map_bgVideoPtr_Anon_fa4d6974; /* map[*bgVideo]struct{} */
+#endif
+#ifndef CVF_DEF_Map_f32_AnimLayoutPtr
+#define CVF_DEF_Map_f32_AnimLayoutPtr
+typedef GoMap Map_f32_AnimLayoutPtr; /* map[float32]*AnimLayout */
+#endif
+#ifndef CVF_DEF_Map_i32_AnimLayoutPtr
+#define CVF_DEF_Map_i32_AnimLayoutPtr
+typedef GoMap Map_i32_AnimLayoutPtr; /* map[int32]*AnimLayout */
+#endif
+#ifndef CVF_DEF_Map_i32_AnimationPtr
+#define CVF_DEF_Map_i32_AnimationPtr
+typedef GoMap Map_i32_AnimationPtr; /* map[int32]*Animation */
+#endif
+#ifndef CVF_DEF_Map_i32_Arr2_i32
+#define CVF_DEF_Map_i32_Arr2_i32
 typedef GoMap Map_i32_Arr2_i32; /* map[int32][2]int32 */
-typedef GoMap Map_i32_CvfStateDefPtr; /* map[int32]*StateBytecode */
+#endif
+#ifndef CVF_DEF_Map_i32_CharPtr
+#define CVF_DEF_Map_i32_CharPtr
+typedef GoMap Map_i32_CharPtr; /* map[int32]*Char */
+#endif
+#ifndef CVF_DEF_Map_i32_FSTextPtr
+#define CVF_DEF_Map_i32_FSTextPtr
+typedef GoMap Map_i32_FSTextPtr; /* map[int32]*FSText */
+#endif
+#ifndef CVF_DEF_Map_i32_RemapTable
+#define CVF_DEF_Map_i32_RemapTable
 typedef GoMap Map_i32_RemapTable; /* map[int32]RemapTable */
+#endif
+#ifndef CVF_DEF_Map_i32_StagePtr
+#define CVF_DEF_Map_i32_StagePtr
+typedef GoMap Map_i32_StagePtr; /* map[int32]*Stage */
+#endif
+#ifndef CVF_DEF_Map_i32_StateBytecodePtr
+#define CVF_DEF_Map_i32_StateBytecodePtr
+typedef GoMap Map_i32_StateBytecodePtr; /* map[int32]*StateBytecode */
+#endif
+#ifndef CVF_DEF_Map_i32_bool
+#define CVF_DEF_Map_i32_bool
+typedef GoMap Map_i32_bool; /* map[int32]bool */
+#endif
+#ifndef CVF_DEF_Map_i32_characterPtr
+#define CVF_DEF_Map_i32_characterPtr
+typedef GoMap Map_i32_characterPtr; /* map[rune]*character */
+#endif
+#ifndef CVF_DEF_Map_i32_f32
+#define CVF_DEF_Map_i32_f32
 typedef GoMap Map_i32_f32; /* map[int32]float32 */
+#endif
+#ifndef CVF_DEF_Map_i32_i32
+#define CVF_DEF_Map_i32_i32
 typedef GoMap Map_i32_i32; /* map[int32]int32 */
+#endif
+#ifndef CVF_DEF_Map_int_Arr12_Arr6_i8
+#define CVF_DEF_Map_int_Arr12_Arr6_i8
+typedef GoMap Map_int_Arr12_Arr6_i8; /* map[int][12][6]int8 */
+#endif
+#ifndef CVF_DEF_Map_int_Arr12_InputBits
+#define CVF_DEF_Map_int_Arr12_InputBits
+typedef GoMap Map_int_Arr12_InputBits; /* map[int][12]InputBits */
+#endif
+#ifndef CVF_DEF_Map_int_CharVarBackup
+#define CVF_DEF_Map_int_CharVarBackup
+typedef GoMap Map_int_CharVarBackup; /* map[int]CharVarBackup */
+#endif
+#ifndef CVF_DEF_Map_int_GameStatePtr
+#define CVF_DEF_Map_int_GameStatePtr
+typedef GoMap Map_int_GameStatePtr; /* map[int]*GameState */
+#endif
+#ifndef CVF_DEF_Map_int_GoOpaqueVal
+#define CVF_DEF_Map_int_GoOpaqueVal
 typedef GoMap Map_int_GoOpaqueVal; /* map[int]PalInfo */
+#endif
+#ifndef CVF_DEF_Map_int_GoOpaqueValPtr
+#define CVF_DEF_Map_int_GoOpaqueValPtr
+typedef GoMap Map_int_GoOpaqueValPtr; /* map[int]*Fnt */
+#endif
+#ifndef CVF_DEF_Map_int_GoString
+#define CVF_DEF_Map_int_GoString
 typedef GoMap Map_int_GoString; /* map[int]string */
-typedef GoMap Map_int_voidPtr; /* map[int]*Fnt */
+#endif
+#ifndef CVF_DEF_Map_int_Slice_DialogueToken
+#define CVF_DEF_Map_int_Slice_DialogueToken
+typedef GoMap Map_int_Slice_DialogueToken; /* map[int][]DialogueToken */
+#endif
+#ifndef CVF_DEF_Map_int_Slice_GoIface
+#define CVF_DEF_Map_int_Slice_GoIface
+typedef GoMap Map_int_Slice_GoIface; /* map[int][]interface{} */
+#endif
+#ifndef CVF_DEF_Map_int_int
+#define CVF_DEF_Map_int_int
+typedef GoMap Map_int_int; /* map[int]int */
+#endif
+#ifndef CVF_DEF_Map_paletteCopyKey_Slice_u32
+#define CVF_DEF_Map_paletteCopyKey_Slice_u32
+typedef GoMap Map_paletteCopyKey_Slice_u32; /* map[paletteCopyKey][]uint32 */
+#endif
+#ifndef CVF_DEF_Map_u32_Arr2_f32
+#define CVF_DEF_Map_u32_Arr2_f32
+typedef GoMap Map_u32_Arr2_f32; /* map[uint32][2]float32 */
+#endif
+#ifndef CVF_DEF_Map_u32_Arr3_f32
+#define CVF_DEF_Map_u32_Arr3_f32
+typedef GoMap Map_u32_Arr3_f32; /* map[uint32][3]float32 */
+#endif
+#ifndef CVF_DEF_Map_u32_Arr4_f32
+#define CVF_DEF_Map_u32_Arr4_f32
+typedef GoMap Map_u32_Arr4_f32; /* map[uint32][4]float32 */
+#endif
+#ifndef CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
+#define CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
+typedef GoMap Map_u32_ShaderProgram_GLES32Ptr; /* map[uint32]*ShaderProgram_GLES32 */
+#endif
+#ifndef CVF_DEF_Map_u32_Slice_f32
+#define CVF_DEF_Map_u32_Slice_f32
+typedef GoMap Map_u32_Slice_f32; /* map[uint32][]float32 */
+#endif
+#ifndef CVF_DEF_Map_u32_f32
+#define CVF_DEF_Map_u32_f32
+typedef GoMap Map_u32_f32; /* map[uint32]float32 */
+#endif
+#ifndef CVF_DEF_Map_u32_i32
+#define CVF_DEF_Map_u32_i32
+typedef GoMap Map_u32_i32; /* map[uint32]int32 */
+#endif
+#ifndef CVF_DEF_Map_u32_u32
+#define CVF_DEF_Map_u32_u32
+typedef GoMap Map_u32_u32; /* map[uint32]uint32 */
+#endif
+#ifndef CVF_DEF_Map_uintptr_t_int
+#define CVF_DEF_Map_uintptr_t_int
+typedef GoMap Map_uintptr_t_int; /* map[uintptr]int */
+#endif
 typedef i32 TransType;
+typedef u8 AlphaMode;
+typedef i32 Projection;
+typedef Map_i32_RemapTable RemapPreset;
 typedef u64 AssertSpecialFlag;
+typedef i32 AttackType;
+typedef GoIface AudioSink;
+typedef u8 BGMState;
+typedef i32 BgType;
+typedef i32 BgVideoScaleFilter;
+typedef i32 BgVideoScaleMode;
+typedef i32 BgcType;
+typedef int BlendEquation;
+typedef int BlendFunc;
+typedef int ValueType;
+typedef int CameraView;
 typedef i32 StateType;
 typedef i32 MoveType;
 typedef i32 Reaction;
 typedef i32 TradeType;
 typedef i32 HitType;
 typedef i32 MoveContact;
-typedef i32 Projection;
 typedef u32 SystemCharFlag;
 typedef u32 CharSpecialFlag;
-typedef Map_i32_RemapTable RemapPreset;
 typedef i16 InputBits;
 typedef i32 ProjContact;
-typedef Map_GoString_Slice_voidPtr Music;
+typedef Map_GoString_Slice_GoOpaqueValPtr Music;
 typedef u8 CommandKey;
+typedef u8 Direction;
+typedef GoString Error;
 typedef i32 PosType;
 typedef i32 Space;
+typedef u8 FFBWaveform;
+typedef int FadeStartPolicy;
+typedef Map_GoString_GoString IniSection;
+typedef i32 FinishType;
+typedef GoIface Font;
+typedef GoIface FontRenderer;
+typedef u8 GLTFAnimationType;
+typedef u8 GLTFAnimationInterpolation;
+typedef u8 LightType;
+typedef u32 GlobalSpecialFlag;
+typedef i32 WinType;
+typedef i32 TeamMode;
+typedef i32 MenuState;
+typedef i32 HMF;
+typedef i32 HitFlag;
+typedef i32 LoaderState;
+typedef u8 LoadingPhase;
+typedef i32 MusicSource;
+typedef int NetState;
+typedef u8 Trans;
+typedef u8 OpCode;
+typedef i32 PreloadState;
+typedef Map_Arr2_i32_AnimationPtr PreloadedAnims;
+typedef u8 PrimitiveMode;
 typedef i32 ProjStatus;
 typedef Map_i32_Arr2_i32 RemapTable;
+typedef GoIface Renderer;
+typedef int SffType;
+typedef GoFunc cnode;
 typedef GoIface StateController;
-typedef int ValueType;
+typedef GoString SyncScope;
+typedef int TextureSamplingParam;
+typedef GoIface TtfFont;
+typedef u8 expLevel;
+typedef Map_paletteCopyKey_Slice_u32 paletteCopier;
+typedef GoFunc scFunc;
+typedef GoFunc scRunFn;
+typedef struct Anon_7cc92e70 Anon_7cc92e70;
+typedef struct Anon_53468e2e Anon_53468e2e;
+typedef struct Anon_4c4ed5ec Anon_4c4ed5ec;
+typedef struct Anon_a632ad85 Anon_a632ad85;
+typedef struct Anon_af4c965e Anon_af4c965e;
+typedef struct Anon_39b99353 Anon_39b99353;
+typedef struct Anon_f665a959 Anon_f665a959;
+typedef struct Anon_9f553815 Anon_9f553815;
+typedef struct Anon_a316b3f5 Anon_a316b3f5;
+typedef struct Anon_2dddc38c Anon_2dddc38c;
+typedef struct Anon_0a015777 Anon_0a015777;
+typedef struct Anon_b4b8c731 Anon_b4b8c731;
+typedef struct Anon_161374c1 Anon_161374c1;
+typedef struct Anon_73c55e1f Anon_73c55e1f;
+typedef struct Anon_4ad773ee Anon_4ad773ee;
+typedef struct Anon_bf560d5f Anon_bf560d5f;
+typedef struct Anon_a5a80400 Anon_a5a80400;
+typedef struct Anon_fc37ce89 Anon_fc37ce89;
+typedef struct Anon_dfb9041b Anon_dfb9041b;
+typedef struct Anon_1f176b16 Anon_1f176b16;
+typedef struct Anon_7bb06b75 Anon_7bb06b75;
+typedef struct Anon_5591596d Anon_5591596d;
+typedef struct Anon_5f13cb02 Anon_5f13cb02;
+typedef struct Anon_040fa437 Anon_040fa437;
+typedef struct Anon_811d7c45 Anon_811d7c45;
+typedef struct Anon_caf3f353 Anon_caf3f353;
+typedef struct Anon_3d0fed52 Anon_3d0fed52;
+typedef struct Anon_22d84747 Anon_22d84747;
+typedef struct Anon_7d4762ec Anon_7d4762ec;
+typedef struct Anon_3e054d73 Anon_3e054d73;
+typedef struct Anon_6d248a4b Anon_6d248a4b;
+typedef struct Anon_b995bd4c Anon_b995bd4c;
+typedef struct Anon_3d4c64d3 Anon_3d4c64d3;
+typedef struct Anon_df3b96d4 Anon_df3b96d4;
+typedef struct Anon_b508c0f6 Anon_b508c0f6;
+typedef struct Anon_8b0a23b6 Anon_8b0a23b6;
+typedef struct Anon_fd62af00 Anon_fd62af00;
+typedef struct Anon_688ad72e Anon_688ad72e;
+typedef struct Anon_f88a21f4 Anon_f88a21f4;
+typedef struct Anon_16644dc7 Anon_16644dc7;
+typedef struct Anon_c4dc6fdd Anon_c4dc6fdd;
+typedef struct Anon_14b37acc Anon_14b37acc;
+typedef struct Anon_54db43aa Anon_54db43aa;
+typedef struct Anon_c6dbd0bf Anon_c6dbd0bf;
+typedef struct Anon_7293d90f Anon_7293d90f;
+typedef struct Anon_e464c8fd Anon_e464c8fd;
+typedef struct Anon_8f8dfbf8 Anon_8f8dfbf8;
+typedef struct Anon_dbc08b28 Anon_dbc08b28;
+typedef struct Anon_0f20e66b Anon_0f20e66b;
+typedef struct Anon_1df292c6 Anon_1df292c6;
+typedef struct Anon_57e999ad Anon_57e999ad;
+typedef struct Anon_c18ae172 Anon_c18ae172;
+typedef struct Anon_18c0a914 Anon_18c0a914;
+typedef struct Anon_ab19bc50 Anon_ab19bc50;
+typedef struct Anon_b0b30749 Anon_b0b30749;
+typedef struct Anon_4dfef77c Anon_4dfef77c;
+typedef struct Anon_902873b9 Anon_902873b9;
+typedef struct Anon_e71bdd7c Anon_e71bdd7c;
+typedef struct Anon_f91950c2 Anon_f91950c2;
+typedef struct Anon_3d522be3 Anon_3d522be3;
+typedef struct Anon_5b4e0f1b Anon_5b4e0f1b;
+typedef struct Anon_7671e252 Anon_7671e252;
+typedef struct Anon_99a01e83 Anon_99a01e83;
+typedef struct Anon_18609da4 Anon_18609da4;
+typedef struct Anon_e861adfc Anon_e861adfc;
+typedef struct Anon_6fca328f Anon_6fca328f;
+typedef struct Anon_15785e54 Anon_15785e54;
+typedef struct Anon_558f4cc9 Anon_558f4cc9;
+typedef struct Anon_c5e8a111 Anon_c5e8a111;
+typedef struct Anon_b511f76b Anon_b511f76b;
+typedef struct Anon_784a3f6d Anon_784a3f6d;
+typedef struct Anon_eceff868 Anon_eceff868;
+typedef struct Anon_31b1f748 Anon_31b1f748;
+typedef struct Anon_c29ce860 Anon_c29ce860;
+typedef struct Anon_b525c883 Anon_b525c883;
+typedef struct Anon_828756c7 Anon_828756c7;
+typedef struct Anon_3b80bc6b Anon_3b80bc6b;
+typedef struct Anon_75b723d6 Anon_75b723d6;
+typedef struct Anon_7feba13e Anon_7feba13e;
+typedef struct Anon_f8e10808 Anon_f8e10808;
+typedef struct Anon_ad3827b6 Anon_ad3827b6;
+typedef struct Anon_a61ac1b3 Anon_a61ac1b3;
+typedef struct Anon_4d998b97 Anon_4d998b97;
+typedef struct Anon_52ad6e9d Anon_52ad6e9d;
+typedef struct Anon_5596a083 Anon_5596a083;
+typedef struct Anon_a810cdd4 Anon_a810cdd4;
+typedef struct Anon_7b4debcb Anon_7b4debcb;
+typedef struct Anon_0f1da223 Anon_0f1da223;
+typedef struct Anon_c0ebc6d1 Anon_c0ebc6d1;
+typedef struct Anon_53386e74 Anon_53386e74;
+typedef struct Anon_35963cd2 Anon_35963cd2;
+typedef struct Anon_7b12115d Anon_7b12115d;
+typedef struct Anon_9b54a510 Anon_9b54a510;
+typedef struct Anon_e3e96c5e Anon_e3e96c5e;
+typedef struct Anon_cf68abeb Anon_cf68abeb;
+typedef struct Anon_24a77732 Anon_24a77732;
+typedef struct Anon_d18cf56f Anon_d18cf56f;
+typedef struct Anon_0c2b6cfe Anon_0c2b6cfe;
+typedef struct Anon_03d1af3e Anon_03d1af3e;
+typedef struct Anon_14dc7311 Anon_14dc7311;
+typedef struct Anon_c49cb36c Anon_c49cb36c;
+typedef struct Anon_29e67731 Anon_29e67731;
+typedef struct Anon_5b6e6123 Anon_5b6e6123;
+typedef struct Anon_ad883348 Anon_ad883348;
+typedef struct Anon_4a620174 Anon_4a620174;
+typedef struct Anon_769242ee Anon_769242ee;
+typedef struct Anon_92897767 Anon_92897767;
+typedef struct Anon_5d3c67a8 Anon_5d3c67a8;
+typedef struct Anon_5977501b Anon_5977501b;
+typedef struct Anon_a257727c Anon_a257727c;
+typedef struct Anon_f634dd61 Anon_f634dd61;
+typedef struct Anon_ba1e3273 Anon_ba1e3273;
+typedef struct Anon_4b8a3264 Anon_4b8a3264;
+typedef struct Anon_8a2bb521 Anon_8a2bb521;
+typedef struct Anon_85848459 Anon_85848459;
+typedef struct Anon_c9a00f79 Anon_c9a00f79;
+typedef struct Anon_cdcd6158 Anon_cdcd6158;
+typedef struct Anon_de509dfb Anon_de509dfb;
+typedef struct Anon_1f7505bf Anon_1f7505bf;
+typedef struct Anon_2f3f233c Anon_2f3f233c;
+typedef struct Anon_c466bc00 Anon_c466bc00;
+typedef struct Anon_50c501fc Anon_50c501fc;
+typedef struct Anon_b4e107d9 Anon_b4e107d9;
+typedef struct Anon_b1cc637d Anon_b1cc637d;
+typedef struct Anon_8517cd1e Anon_8517cd1e;
+typedef struct Anon_b4ab5e02 Anon_b4ab5e02;
+typedef struct Anon_ce6aad93 Anon_ce6aad93;
+typedef struct Anon_a9c08002 Anon_a9c08002;
+typedef struct Anon_194d600d Anon_194d600d;
+typedef struct Anon_863d0e0f Anon_863d0e0f;
+typedef struct Anon_e71eca9f Anon_e71eca9f;
+typedef struct Anon_c6d21910 Anon_c6d21910;
+typedef struct Anon_1412bee7 Anon_1412bee7;
+typedef struct Anon_52e3ca2e Anon_52e3ca2e;
+typedef struct Anon_90dcfa72 Anon_90dcfa72;
+typedef struct Anon_858938ca Anon_858938ca;
+typedef struct Anon_465a578c Anon_465a578c;
+typedef struct Anon_87407db8 Anon_87407db8;
+typedef struct Anon_2b2cdbcc Anon_2b2cdbcc;
+typedef struct Anon_7c0f0eeb Anon_7c0f0eeb;
+typedef struct Anon_0107677c Anon_0107677c;
+typedef struct Anon_e6c808e7 Anon_e6c808e7;
+typedef struct Anon_800e850a Anon_800e850a;
+typedef struct Anon_ed9bef7d Anon_ed9bef7d;
+typedef struct Anon_fc15f840 Anon_fc15f840;
+typedef struct Anon_fa4d6974 Anon_fa4d6974;
+typedef struct Anon_bfbab8ed Anon_bfbab8ed;
+typedef struct Anon_47424b23 Anon_47424b23;
+typedef struct Anon_65fa1d9f Anon_65fa1d9f;
+#ifndef CVF_DEF_Arr100_GoString
+#define CVF_DEF_Arr100_GoString
 typedef struct Arr100_GoString Arr100_GoString;
+#endif
+#ifndef CVF_DEF_Arr1024_lowerCacheEntry
+#define CVF_DEF_Arr1024_lowerCacheEntry
+typedef struct Arr1024_lowerCacheEntry Arr1024_lowerCacheEntry;
+#endif
+#ifndef CVF_DEF_Arr10_AnimLayout
+#define CVF_DEF_Arr10_AnimLayout
+typedef struct Arr10_AnimLayout Arr10_AnimLayout;
+#endif
+#ifndef CVF_DEF_Arr12_AiInput
+#define CVF_DEF_Arr12_AiInput
+typedef struct Arr12_AiInput Arr12_AiInput;
+#endif
+#ifndef CVF_DEF_Arr12_Arr6_i8
+#define CVF_DEF_Arr12_Arr6_i8
+typedef struct Arr12_Arr6_i8 Arr12_Arr6_i8;
+#endif
+#ifndef CVF_DEF_Arr12_CharGlobalInfo
+#define CVF_DEF_Arr12_CharGlobalInfo
+typedef struct Arr12_CharGlobalInfo Arr12_CharGlobalInfo;
+#endif
+#ifndef CVF_DEF_Arr12_ControllerStatePtr
+#define CVF_DEF_Arr12_ControllerStatePtr
+typedef struct Arr12_ControllerStatePtr Arr12_ControllerStatePtr;
+#endif
+#ifndef CVF_DEF_Arr12_ForceFeedbackParams
+#define CVF_DEF_Arr12_ForceFeedbackParams
+typedef struct Arr12_ForceFeedbackParams Arr12_ForceFeedbackParams;
+#endif
+#ifndef CVF_DEF_Arr12_GoOpaque_invalidtypePtr
+#define CVF_DEF_Arr12_GoOpaque_invalidtypePtr
+typedef struct Arr12_GoOpaque_invalidtypePtr Arr12_GoOpaque_invalidtypePtr;
+#endif
+#ifndef CVF_DEF_Arr12_InputBits
+#define CVF_DEF_Arr12_InputBits
+typedef struct Arr12_InputBits Arr12_InputBits;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_Char
+#define CVF_DEF_Arr12_Slice_Char
+typedef struct Arr12_Slice_Char Arr12_Slice_Char;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_CharPtr
+#define CVF_DEF_Arr12_Slice_CharPtr
+typedef struct Arr12_Slice_CharPtr Arr12_Slice_CharPtr;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_ExplodPtr
+#define CVF_DEF_Arr12_Slice_ExplodPtr
+typedef struct Arr12_Slice_ExplodPtr Arr12_Slice_ExplodPtr;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_ProjectilePtr
+#define CVF_DEF_Arr12_Slice_ProjectilePtr
+typedef struct Arr12_Slice_ProjectilePtr Arr12_Slice_ProjectilePtr;
+#endif
+#ifndef CVF_DEF_Arr12_Slice_TextSpritePtr
+#define CVF_DEF_Arr12_Slice_TextSpritePtr
+typedef struct Arr12_Slice_TextSpritePtr Arr12_Slice_TextSpritePtr;
+#endif
+#ifndef CVF_DEF_Arr12_SoundChannels
+#define CVF_DEF_Arr12_SoundChannels
+typedef struct Arr12_SoundChannels Arr12_SoundChannels;
+#endif
+#ifndef CVF_DEF_Arr12_StringPool
+#define CVF_DEF_Arr12_StringPool
+typedef struct Arr12_StringPool Arr12_StringPool;
+#endif
+#ifndef CVF_DEF_Arr12_bool
+#define CVF_DEF_Arr12_bool
+typedef struct Arr12_bool Arr12_bool;
+#endif
+#ifndef CVF_DEF_Arr12_f32
+#define CVF_DEF_Arr12_f32
+typedef struct Arr12_f32 Arr12_f32;
+#endif
+#ifndef CVF_DEF_Arr12_i32
+#define CVF_DEF_Arr12_i32
+typedef struct Arr12_i32 Arr12_i32;
+#endif
+#ifndef CVF_DEF_Arr12_int
+#define CVF_DEF_Arr12_int
+typedef struct Arr12_int Arr12_int;
+#endif
+#ifndef CVF_DEF_Arr12_stagePlayer
+#define CVF_DEF_Arr12_stagePlayer
+typedef struct Arr12_stagePlayer Arr12_stagePlayer;
+#endif
+#ifndef CVF_DEF_Arr16_Anon_bfbab8ed
+#define CVF_DEF_Arr16_Anon_bfbab8ed
+typedef struct Arr16_Anon_bfbab8ed Arr16_Anon_bfbab8ed;
+#endif
+#ifndef CVF_DEF_Arr16_f32
+#define CVF_DEF_Arr16_f32
 typedef struct Arr16_f32 Arr16_f32;
+#endif
+#ifndef CVF_DEF_Arr192_bool
+#define CVF_DEF_Arr192_bool
+typedef struct Arr192_bool Arr192_bool;
+#endif
+#ifndef CVF_DEF_Arr20_FSBgTextSnd
+#define CVF_DEF_Arr20_FSBgTextSnd
+typedef struct Arr20_FSBgTextSnd Arr20_FSBgTextSnd;
+#endif
+#ifndef CVF_DEF_Arr24_uniCacheEnt
+#define CVF_DEF_Arr24_uniCacheEnt
+typedef struct Arr24_uniCacheEnt Arr24_uniCacheEnt;
+#endif
+#ifndef CVF_DEF_Arr2_AnimLayout
+#define CVF_DEF_Arr2_AnimLayout
+typedef struct Arr2_AnimLayout Arr2_AnimLayout;
+#endif
+#ifndef CVF_DEF_Arr2_AnimTextSnd
+#define CVF_DEF_Arr2_AnimTextSnd
+typedef struct Arr2_AnimTextSnd Arr2_AnimTextSnd;
+#endif
+#ifndef CVF_DEF_Arr2_Anon_65fa1d9f
+#define CVF_DEF_Arr2_Anon_65fa1d9f
+typedef struct Arr2_Anon_65fa1d9f Arr2_Anon_65fa1d9f;
+#endif
+#ifndef CVF_DEF_Arr2_Arr32_AnimLayout
+#define CVF_DEF_Arr2_Arr32_AnimLayout
+typedef struct Arr2_Arr32_AnimLayout Arr2_Arr32_AnimLayout;
+#endif
+#ifndef CVF_DEF_Arr2_Arr4_bool
+#define CVF_DEF_Arr2_Arr4_bool
+typedef struct Arr2_Arr4_bool Arr2_Arr4_bool;
+#endif
+#ifndef CVF_DEF_Arr2_CharGlobalInfo
+#define CVF_DEF_Arr2_CharGlobalInfo
+typedef struct Arr2_CharGlobalInfo Arr2_CharGlobalInfo;
+#endif
+#ifndef CVF_DEF_Arr2_CharPtr
+#define CVF_DEF_Arr2_CharPtr
+typedef struct Arr2_CharPtr Arr2_CharPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FaceParams
+#define CVF_DEF_Arr2_FaceParams
+typedef struct Arr2_FaceParams Arr2_FaceParams;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenActionPtr
+#define CVF_DEF_Arr2_FightScreenActionPtr
+typedef struct Arr2_FightScreenActionPtr Arr2_FightScreenActionPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenAiLevelPtr
+#define CVF_DEF_Arr2_FightScreenAiLevelPtr
+typedef struct Arr2_FightScreenAiLevelPtr Arr2_FightScreenAiLevelPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenComboPtr
+#define CVF_DEF_Arr2_FightScreenComboPtr
+typedef struct Arr2_FightScreenComboPtr Arr2_FightScreenComboPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenScorePtr
+#define CVF_DEF_Arr2_FightScreenScorePtr
+typedef struct Arr2_FightScreenScorePtr Arr2_FightScreenScorePtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenWinCountPtr
+#define CVF_DEF_Arr2_FightScreenWinCountPtr
+typedef struct Arr2_FightScreenWinCountPtr Arr2_FightScreenWinCountPtr;
+#endif
+#ifndef CVF_DEF_Arr2_FightScreenWinIconPtr
+#define CVF_DEF_Arr2_FightScreenWinIconPtr
+typedef struct Arr2_FightScreenWinIconPtr Arr2_FightScreenWinIconPtr;
+#endif
+#ifndef CVF_DEF_Arr2_GoString
+#define CVF_DEF_Arr2_GoString
+typedef struct Arr2_GoString Arr2_GoString;
+#endif
+#ifndef CVF_DEF_Arr2_Rotation
+#define CVF_DEF_Arr2_Rotation
 typedef struct Arr2_Rotation Arr2_Rotation;
+#endif
+#ifndef CVF_DEF_Arr2_Slice_Arr2_int
+#define CVF_DEF_Arr2_Slice_Arr2_int
+typedef struct Arr2_Slice_Arr2_int Arr2_Slice_Arr2_int;
+#endif
+#ifndef CVF_DEF_Arr2_Slice_StatsFighterState
+#define CVF_DEF_Arr2_Slice_StatsFighterState
+typedef struct Arr2_Slice_StatsFighterState Arr2_Slice_StatsFighterState;
+#endif
+#ifndef CVF_DEF_Arr2_Slice_int
+#define CVF_DEF_Arr2_Slice_int
+typedef struct Arr2_Slice_int Arr2_Slice_int;
+#endif
+#ifndef CVF_DEF_Arr2_TeamMode
+#define CVF_DEF_Arr2_TeamMode
+typedef struct Arr2_TeamMode Arr2_TeamMode;
+#endif
+#ifndef CVF_DEF_Arr2_WinType
+#define CVF_DEF_Arr2_WinType
+typedef struct Arr2_WinType Arr2_WinType;
+#endif
+#ifndef CVF_DEF_Arr2_bgShaderTex
+#define CVF_DEF_Arr2_bgShaderTex
+typedef struct Arr2_bgShaderTex Arr2_bgShaderTex;
+#endif
+#ifndef CVF_DEF_Arr2_bool
+#define CVF_DEF_Arr2_bool
+typedef struct Arr2_bool Arr2_bool;
+#endif
+#ifndef CVF_DEF_Arr2_f32
+#define CVF_DEF_Arr2_f32
 typedef struct Arr2_f32 Arr2_f32;
+#endif
+#ifndef CVF_DEF_Arr2_f64
+#define CVF_DEF_Arr2_f64
+typedef struct Arr2_f64 Arr2_f64;
+#endif
+#ifndef CVF_DEF_Arr2_i32
+#define CVF_DEF_Arr2_i32
 typedef struct Arr2_i32 Arr2_i32;
+#endif
+#ifndef CVF_DEF_Arr2_int
+#define CVF_DEF_Arr2_int
 typedef struct Arr2_int Arr2_int;
+#endif
+#ifndef CVF_DEF_Arr2_u16
+#define CVF_DEF_Arr2_u16
 typedef struct Arr2_u16 Arr2_u16;
+#endif
+#ifndef CVF_DEF_Arr2_u32
+#define CVF_DEF_Arr2_u32
+typedef struct Arr2_u32 Arr2_u32;
+#endif
+#ifndef CVF_DEF_Arr2_u64
+#define CVF_DEF_Arr2_u64
+typedef struct Arr2_u64 Arr2_u64;
+#endif
+#ifndef CVF_DEF_Arr32_AnimLayout
+#define CVF_DEF_Arr32_AnimLayout
+typedef struct Arr32_AnimLayout Arr32_AnimLayout;
+#endif
+#ifndef CVF_DEF_Arr32_Arr6_i8
+#define CVF_DEF_Arr32_Arr6_i8
+typedef struct Arr32_Arr6_i8 Arr32_Arr6_i8;
+#endif
+#ifndef CVF_DEF_Arr32_InputBits
+#define CVF_DEF_Arr32_InputBits
+typedef struct Arr32_InputBits Arr32_InputBits;
+#endif
+#ifndef CVF_DEF_Arr32_cmdNameCacheEnt
+#define CVF_DEF_Arr32_cmdNameCacheEnt
 typedef struct Arr32_cmdNameCacheEnt Arr32_cmdNameCacheEnt;
+#endif
+#ifndef CVF_DEF_Arr32_varCacheEnt
+#define CVF_DEF_Arr32_varCacheEnt
 typedef struct Arr32_varCacheEnt Arr32_varCacheEnt;
+#endif
+#ifndef CVF_DEF_Arr3_BytecodeExp
+#define CVF_DEF_Arr3_BytecodeExp
+typedef struct Arr3_BytecodeExp Arr3_BytecodeExp;
+#endif
+#ifndef CVF_DEF_Arr3_Slice_GoFunc
+#define CVF_DEF_Arr3_Slice_GoFunc
+typedef struct Arr3_Slice_GoFunc Arr3_Slice_GoFunc;
+#endif
+#ifndef CVF_DEF_Arr3_Slice_OverrideCharData
+#define CVF_DEF_Arr3_Slice_OverrideCharData
+typedef struct Arr3_Slice_OverrideCharData Arr3_Slice_OverrideCharData;
+#endif
+#ifndef CVF_DEF_Arr3_f32
+#define CVF_DEF_Arr3_f32
 typedef struct Arr3_f32 Arr3_f32;
+#endif
+#ifndef CVF_DEF_Arr3_i32
+#define CVF_DEF_Arr3_i32
 typedef struct Arr3_i32 Arr3_i32;
+#endif
+#ifndef CVF_DEF_Arr3_int
+#define CVF_DEF_Arr3_int
+typedef struct Arr3_int Arr3_int;
+#endif
+#ifndef CVF_DEF_Arr3_u16
+#define CVF_DEF_Arr3_u16
 typedef struct Arr3_u16 Arr3_u16;
+#endif
+#ifndef CVF_DEF_Arr4_ResultAnnouncement
+#define CVF_DEF_Arr4_ResultAnnouncement
+typedef struct Arr4_ResultAnnouncement Arr4_ResultAnnouncement;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_ClsnFinal
+#define CVF_DEF_Arr4_Slice_ClsnFinal
 typedef struct Arr4_Slice_ClsnFinal Arr4_Slice_ClsnFinal;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_ClsnOverride
+#define CVF_DEF_Arr4_Slice_ClsnOverride
 typedef struct Arr4_Slice_ClsnOverride Arr4_Slice_ClsnOverride;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_ClsnTransform
+#define CVF_DEF_Arr4_Slice_ClsnTransform
 typedef struct Arr4_Slice_ClsnTransform Arr4_Slice_ClsnTransform;
+#endif
+#ifndef CVF_DEF_Arr4_Slice_i32
+#define CVF_DEF_Arr4_Slice_i32
+typedef struct Arr4_Slice_i32 Arr4_Slice_i32;
+#endif
+#ifndef CVF_DEF_Arr4_bool
+#define CVF_DEF_Arr4_bool
 typedef struct Arr4_bool Arr4_bool;
+#endif
+#ifndef CVF_DEF_Arr4_f32
+#define CVF_DEF_Arr4_f32
 typedef struct Arr4_f32 Arr4_f32;
+#endif
+#ifndef CVF_DEF_Arr4_i32
+#define CVF_DEF_Arr4_i32
 typedef struct Arr4_i32 Arr4_i32;
+#endif
+#ifndef CVF_DEF_Arr64_AnimationPtr
+#define CVF_DEF_Arr64_AnimationPtr
+typedef struct Arr64_AnimationPtr Arr64_AnimationPtr;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_5596a083
+#define CVF_DEF_Arr64_Anon_5596a083
+typedef struct Arr64_Anon_5596a083 Arr64_Anon_5596a083;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_7b4debcb
+#define CVF_DEF_Arr64_Anon_7b4debcb
+typedef struct Arr64_Anon_7b4debcb Arr64_Anon_7b4debcb;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_a810cdd4
+#define CVF_DEF_Arr64_Anon_a810cdd4
+typedef struct Arr64_Anon_a810cdd4 Arr64_Anon_a810cdd4;
+#endif
+#ifndef CVF_DEF_Arr6_f32
+#define CVF_DEF_Arr6_f32
 typedef struct Arr6_f32 Arr6_f32;
+#endif
+#ifndef CVF_DEF_Arr6_i32
+#define CVF_DEF_Arr6_i32
 typedef struct Arr6_i32 Arr6_i32;
+#endif
+#ifndef CVF_DEF_Arr6_i8
+#define CVF_DEF_Arr6_i8
+typedef struct Arr6_i8 Arr6_i8;
+#endif
+#ifndef CVF_DEF_Arr7_f32
+#define CVF_DEF_Arr7_f32
+typedef struct Arr7_f32 Arr7_f32;
+#endif
+#ifndef CVF_DEF_Arr8_Arr6_i8
+#define CVF_DEF_Arr8_Arr6_i8
+typedef struct Arr8_Arr6_i8 Arr8_Arr6_i8;
+#endif
+#ifndef CVF_DEF_Arr8_HitBy
+#define CVF_DEF_Arr8_HitBy
 typedef struct Arr8_HitBy Arr8_HitBy;
+#endif
+#ifndef CVF_DEF_Arr8_HitOverride
+#define CVF_DEF_Arr8_HitOverride
 typedef struct Arr8_HitOverride Arr8_HitOverride;
+#endif
+#ifndef CVF_DEF_Arr8_InputBits
+#define CVF_DEF_Arr8_InputBits
+typedef struct Arr8_InputBits Arr8_InputBits;
+#endif
+#ifndef CVF_DEF_Arr8_NetBuffer
+#define CVF_DEF_Arr8_NetBuffer
+typedef struct Arr8_NetBuffer Arr8_NetBuffer;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_FightScreenFacePtr
+#define CVF_DEF_Arr8_Slice_FightScreenFacePtr
+typedef struct Arr8_Slice_FightScreenFacePtr Arr8_Slice_FightScreenFacePtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_FightScreenNamePtr
+#define CVF_DEF_Arr8_Slice_FightScreenNamePtr
+typedef struct Arr8_Slice_FightScreenNamePtr Arr8_Slice_FightScreenNamePtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_GuardBarPtr
+#define CVF_DEF_Arr8_Slice_GuardBarPtr
+typedef struct Arr8_Slice_GuardBarPtr Arr8_Slice_GuardBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_LifeBarPtr
+#define CVF_DEF_Arr8_Slice_LifeBarPtr
+typedef struct Arr8_Slice_LifeBarPtr Arr8_Slice_LifeBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_PowerBarPtr
+#define CVF_DEF_Arr8_Slice_PowerBarPtr
+typedef struct Arr8_Slice_PowerBarPtr Arr8_Slice_PowerBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_Slice_StunBarPtr
+#define CVF_DEF_Arr8_Slice_StunBarPtr
+typedef struct Arr8_Slice_StunBarPtr Arr8_Slice_StunBarPtr;
+#endif
+#ifndef CVF_DEF_Arr8_f32
+#define CVF_DEF_Arr8_f32
+typedef struct Arr8_f32 Arr8_f32;
+#endif
+#ifndef CVF_DEF_Arr8_i32
+#define CVF_DEF_Arr8_i32
 typedef struct Arr8_i32 Arr8_i32;
+#endif
+#ifndef CVF_DEF_Arr90_GoString
+#define CVF_DEF_Arr90_GoString
+typedef struct Arr90_GoString Arr90_GoString;
+#endif
+#ifndef CVF_DEF_Arr9_AnimTextSnd
+#define CVF_DEF_Arr9_AnimTextSnd
+typedef struct Arr9_AnimTextSnd Arr9_AnimTextSnd;
+#endif
+#ifndef CVF_DEF_Arr9_Arr2_i32
+#define CVF_DEF_Arr9_Arr2_i32
+typedef struct Arr9_Arr2_i32 Arr9_Arr2_i32;
+#endif
+#ifndef CVF_DEF_Arr9_bool
+#define CVF_DEF_Arr9_bool
 typedef struct Arr9_bool Arr9_bool;
+#endif
+#ifndef CVF_DEF_Arr9_f32
+#define CVF_DEF_Arr9_f32
+typedef struct Arr9_f32 Arr9_f32;
+#endif
+#ifndef CVF_DEF_Slice_AnimFrame
+#define CVF_DEF_Slice_AnimFrame
+typedef struct { AnimFrame *p; int len, cap; } Slice_AnimFrame;
+#endif
+#ifndef CVF_DEF_Slice_AnimPtr
+#define CVF_DEF_Slice_AnimPtr
+typedef struct { Anim* *p; int len, cap; } Slice_AnimPtr;
+#endif
+#ifndef CVF_DEF_Slice_Arr2_f32
+#define CVF_DEF_Slice_Arr2_f32
+typedef struct { Arr2_f32 *p; int len, cap; } Slice_Arr2_f32;
+#endif
+#ifndef CVF_DEF_Slice_Arr2_f64
+#define CVF_DEF_Slice_Arr2_f64
+typedef struct { Arr2_f64 *p; int len, cap; } Slice_Arr2_f64;
+#endif
+#ifndef CVF_DEF_Slice_Arr2_i32
+#define CVF_DEF_Slice_Arr2_i32
 typedef struct { Arr2_i32 *p; int len, cap; } Slice_Arr2_i32;
+#endif
+#ifndef CVF_DEF_Slice_Arr2_int
+#define CVF_DEF_Slice_Arr2_int
 typedef struct { Arr2_int *p; int len, cap; } Slice_Arr2_int;
+#endif
+#ifndef CVF_DEF_Slice_Arr4_f32
+#define CVF_DEF_Slice_Arr4_f32
+typedef struct { Arr4_f32 *p; int len, cap; } Slice_Arr4_f32;
+#endif
+#ifndef CVF_DEF_Slice_Arr6_i8
+#define CVF_DEF_Slice_Arr6_i8
+typedef struct { Arr6_i8 *p; int len, cap; } Slice_Arr6_i8;
+#endif
+#ifndef CVF_DEF_Slice_Arr7_f32
+#define CVF_DEF_Slice_Arr7_f32
+typedef struct { Arr7_f32 *p; int len, cap; } Slice_Arr7_f32;
+#endif
+#ifndef CVF_DEF_Slice_Arr8_Arr6_i8
+#define CVF_DEF_Slice_Arr8_Arr6_i8
+typedef struct { Arr8_Arr6_i8 *p; int len, cap; } Slice_Arr8_Arr6_i8;
+#endif
+#ifndef CVF_DEF_Slice_Arr8_InputBits
+#define CVF_DEF_Slice_Arr8_InputBits
+typedef struct { Arr8_InputBits *p; int len, cap; } Slice_Arr8_InputBits;
+#endif
+#ifndef CVF_DEF_Slice_BytecodeValue
+#define CVF_DEF_Slice_BytecodeValue
+typedef struct { BytecodeValue *p; int len, cap; } Slice_BytecodeValue;
+#endif
+#ifndef CVF_DEF_Slice_Char
+#define CVF_DEF_Slice_Char
+typedef struct { Char *p; int len, cap; } Slice_Char;
+#endif
+#ifndef CVF_DEF_Slice_CharPtr
+#define CVF_DEF_Slice_CharPtr
+typedef struct { Char* *p; int len, cap; } Slice_CharPtr;
+#endif
+#ifndef CVF_DEF_Slice_ClsnFinal
+#define CVF_DEF_Slice_ClsnFinal
 typedef struct { ClsnFinal *p; int len, cap; } Slice_ClsnFinal;
+#endif
+#ifndef CVF_DEF_Slice_ClsnOverride
+#define CVF_DEF_Slice_ClsnOverride
 typedef struct { ClsnOverride *p; int len, cap; } Slice_ClsnOverride;
+#endif
+#ifndef CVF_DEF_Slice_ClsnTransform
+#define CVF_DEF_Slice_ClsnTransform
 typedef struct { ClsnTransform *p; int len, cap; } Slice_ClsnTransform;
+#endif
+#ifndef CVF_DEF_Slice_Command
+#define CVF_DEF_Slice_Command
 typedef struct { Command *p; int len, cap; } Slice_Command;
+#endif
+#ifndef CVF_DEF_Slice_CommandList
+#define CVF_DEF_Slice_CommandList
 typedef struct { CommandList *p; int len, cap; } Slice_CommandList;
+#endif
+#ifndef CVF_DEF_Slice_CommandListPtr
+#define CVF_DEF_Slice_CommandListPtr
+typedef struct { CommandList* *p; int len, cap; } Slice_CommandListPtr;
+#endif
+#ifndef CVF_DEF_Slice_CommandStep
+#define CVF_DEF_Slice_CommandStep
 typedef struct { CommandStep *p; int len, cap; } Slice_CommandStep;
+#endif
+#ifndef CVF_DEF_Slice_CommandStepKey
+#define CVF_DEF_Slice_CommandStepKey
 typedef struct { CommandStepKey *p; int len, cap; } Slice_CommandStepKey;
+#endif
+#ifndef CVF_DEF_Slice_DebugClsnText
+#define CVF_DEF_Slice_DebugClsnText
+typedef struct { DebugClsnText *p; int len, cap; } Slice_DebugClsnText;
+#endif
+#ifndef CVF_DEF_Slice_DialogueParsedLine
+#define CVF_DEF_Slice_DialogueParsedLine
+typedef struct { DialogueParsedLine *p; int len, cap; } Slice_DialogueParsedLine;
+#endif
+#ifndef CVF_DEF_Slice_DialogueToken
+#define CVF_DEF_Slice_DialogueToken
+typedef struct { DialogueToken *p; int len, cap; } Slice_DialogueToken;
+#endif
+#ifndef CVF_DEF_Slice_ExplodPtr
+#define CVF_DEF_Slice_ExplodPtr
+typedef struct { Explod* *p; int len, cap; } Slice_ExplodPtr;
+#endif
+#ifndef CVF_DEF_Slice_FSMsgPtr
+#define CVF_DEF_Slice_FSMsgPtr
+typedef struct { FSMsg* *p; int len, cap; } Slice_FSMsgPtr;
+#endif
+#ifndef CVF_DEF_Slice_FightScreenFacePtr
+#define CVF_DEF_Slice_FightScreenFacePtr
+typedef struct { FightScreenFace* *p; int len, cap; } Slice_FightScreenFacePtr;
+#endif
+#ifndef CVF_DEF_Slice_FightScreenNamePtr
+#define CVF_DEF_Slice_FightScreenNamePtr
+typedef struct { FightScreenName* *p; int len, cap; } Slice_FightScreenNamePtr;
+#endif
+#ifndef CVF_DEF_Slice_GLTFAnimationChannelPtr
+#define CVF_DEF_Slice_GLTFAnimationChannelPtr
+typedef struct { GLTFAnimationChannel* *p; int len, cap; } Slice_GLTFAnimationChannelPtr;
+#endif
+#ifndef CVF_DEF_Slice_GLTFAnimationPtr
+#define CVF_DEF_Slice_GLTFAnimationPtr
+typedef struct { GLTFAnimation* *p; int len, cap; } Slice_GLTFAnimationPtr;
+#endif
+#ifndef CVF_DEF_Slice_GLTFAnimationSamplerPtr
+#define CVF_DEF_Slice_GLTFAnimationSamplerPtr
+typedef struct { GLTFAnimationSampler* *p; int len, cap; } Slice_GLTFAnimationSamplerPtr;
+#endif
+#ifndef CVF_DEF_Slice_GLTFLight
+#define CVF_DEF_Slice_GLTFLight
+typedef struct { GLTFLight *p; int len, cap; } Slice_GLTFLight;
+#endif
+#ifndef CVF_DEF_Slice_GLTFTexturePtr
+#define CVF_DEF_Slice_GLTFTexturePtr
+typedef struct { GLTFTexture* *p; int len, cap; } Slice_GLTFTexturePtr;
+#endif
+#ifndef CVF_DEF_Slice_GoFunc
+#define CVF_DEF_Slice_GoFunc
+typedef struct { GoFunc *p; int len, cap; } Slice_GoFunc;
+#endif
+#ifndef CVF_DEF_Slice_GoIface
+#define CVF_DEF_Slice_GoIface
+typedef struct { GoIface *p; int len, cap; } Slice_GoIface;
+#endif
+#ifndef CVF_DEF_Slice_GoIfacePtr
+#define CVF_DEF_Slice_GoIfacePtr
+typedef struct { GoIface* *p; int len, cap; } Slice_GoIfacePtr;
+#endif
+#ifndef CVF_DEF_Slice_GoOpaqueValPtr
+#define CVF_DEF_Slice_GoOpaqueValPtr
+typedef struct { GoOpaqueVal* *p; int len, cap; } Slice_GoOpaqueValPtr;
+#endif
+#ifndef CVF_DEF_Slice_GoOpaque_ggpo_PlayerPtr
+#define CVF_DEF_Slice_GoOpaque_ggpo_PlayerPtr
+typedef struct { GoOpaque /* ggpo.Player */ *p; int len, cap; } Slice_GoOpaque_ggpo_PlayerPtr;
+#endif
+#ifndef CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
+#define CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
+typedef struct { GoOpaque /* lua.LFunction */* *p; int len, cap; } Slice_GoOpaque_lua_LFunctionPtrPtr;
+#endif
+#ifndef CVF_DEF_Slice_GoString
+#define CVF_DEF_Slice_GoString
 typedef struct { GoString *p; int len, cap; } Slice_GoString;
+#endif
+#ifndef CVF_DEF_Slice_GuardBarPtr
+#define CVF_DEF_Slice_GuardBarPtr
+typedef struct { GuardBar* *p; int len, cap; } Slice_GuardBarPtr;
+#endif
+#ifndef CVF_DEF_Slice_InputBits
+#define CVF_DEF_Slice_InputBits
+typedef struct { InputBits *p; int len, cap; } Slice_InputBits;
+#endif
+#ifndef CVF_DEF_Slice_KeyConfig
+#define CVF_DEF_Slice_KeyConfig
+typedef struct { KeyConfig *p; int len, cap; } Slice_KeyConfig;
+#endif
+#ifndef CVF_DEF_Slice_LayerPropertiesPtr
+#define CVF_DEF_Slice_LayerPropertiesPtr
+typedef struct { LayerProperties* *p; int len, cap; } Slice_LayerPropertiesPtr;
+#endif
+#ifndef CVF_DEF_Slice_LifeBarPtr
+#define CVF_DEF_Slice_LifeBarPtr
+typedef struct { LifeBar* *p; int len, cap; } Slice_LifeBarPtr;
+#endif
+#ifndef CVF_DEF_Slice_MaterialPtr
+#define CVF_DEF_Slice_MaterialPtr
+typedef struct { Material* *p; int len, cap; } Slice_MaterialPtr;
+#endif
+#ifndef CVF_DEF_Slice_MeshPtr
+#define CVF_DEF_Slice_MeshPtr
+typedef struct { Mesh* *p; int len, cap; } Slice_MeshPtr;
+#endif
+#ifndef CVF_DEF_Slice_MorphTargetPtr
+#define CVF_DEF_Slice_MorphTargetPtr
+typedef struct { MorphTarget* *p; int len, cap; } Slice_MorphTargetPtr;
+#endif
+#ifndef CVF_DEF_Slice_NodePtr
+#define CVF_DEF_Slice_NodePtr
+typedef struct { Node* *p; int len, cap; } Slice_NodePtr;
+#endif
+#ifndef CVF_DEF_Slice_OpCode
+#define CVF_DEF_Slice_OpCode
+typedef struct { OpCode *p; int len, cap; } Slice_OpCode;
+#endif
+#ifndef CVF_DEF_Slice_OverrideCharData
+#define CVF_DEF_Slice_OverrideCharData
+typedef struct { OverrideCharData *p; int len, cap; } Slice_OverrideCharData;
+#endif
+#ifndef CVF_DEF_Slice_PalFXPtr
+#define CVF_DEF_Slice_PalFXPtr
 typedef struct { PalFX* *p; int len, cap; } Slice_PalFXPtr;
+#endif
+#ifndef CVF_DEF_Slice_PowerBarPtr
+#define CVF_DEF_Slice_PowerBarPtr
+typedef struct { PowerBar* *p; int len, cap; } Slice_PowerBarPtr;
+#endif
+#ifndef CVF_DEF_Slice_PreloadEntry
+#define CVF_DEF_Slice_PreloadEntry
+typedef struct { PreloadEntry *p; int len, cap; } Slice_PreloadEntry;
+#endif
+#ifndef CVF_DEF_Slice_PrimitivePtr
+#define CVF_DEF_Slice_PrimitivePtr
+typedef struct { Primitive* *p; int len, cap; } Slice_PrimitivePtr;
+#endif
+#ifndef CVF_DEF_Slice_ProjectilePtr
+#define CVF_DEF_Slice_ProjectilePtr
+typedef struct { Projectile* *p; int len, cap; } Slice_ProjectilePtr;
+#endif
+#ifndef CVF_DEF_Slice_ReflectionSpritePtr
+#define CVF_DEF_Slice_ReflectionSpritePtr
+typedef struct { ReflectionSprite* *p; int len, cap; } Slice_ReflectionSpritePtr;
+#endif
+#ifndef CVF_DEF_Slice_ScenePtr
+#define CVF_DEF_Slice_ScenePtr
+typedef struct { Scene* *p; int len, cap; } Slice_ScenePtr;
+#endif
+#ifndef CVF_DEF_Slice_SelectChar
+#define CVF_DEF_Slice_SelectChar
+typedef struct { SelectChar *p; int len, cap; } Slice_SelectChar;
+#endif
+#ifndef CVF_DEF_Slice_SelectStage
+#define CVF_DEF_Slice_SelectStage
+typedef struct { SelectStage *p; int len, cap; } Slice_SelectStage;
+#endif
+#ifndef CVF_DEF_Slice_ShaderProgram_GLES32Ptr
+#define CVF_DEF_Slice_ShaderProgram_GLES32Ptr
+typedef struct { ShaderProgram_GLES32* *p; int len, cap; } Slice_ShaderProgram_GLES32Ptr;
+#endif
+#ifndef CVF_DEF_Slice_ShadowSpritePtr
+#define CVF_DEF_Slice_ShadowSpritePtr
+typedef struct { ShadowSprite* *p; int len, cap; } Slice_ShadowSpritePtr;
+#endif
+#ifndef CVF_DEF_Slice_SkinPtr
+#define CVF_DEF_Slice_SkinPtr
+typedef struct { Skin* *p; int len, cap; } Slice_SkinPtr;
+#endif
+#ifndef CVF_DEF_Slice_Slice_Command
+#define CVF_DEF_Slice_Slice_Command
 typedef struct { Slice_Command *p; int len, cap; } Slice_Slice_Command;
+#endif
+#ifndef CVF_DEF_Slice_SoundChannel
+#define CVF_DEF_Slice_SoundChannel
+typedef struct { SoundChannel *p; int len, cap; } Slice_SoundChannel;
+#endif
+#ifndef CVF_DEF_Slice_SpriteData
+#define CVF_DEF_Slice_SpriteData
 typedef struct { SpriteData *p; int len, cap; } Slice_SpriteData;
+#endif
+#ifndef CVF_DEF_Slice_SpriteDataPtr
+#define CVF_DEF_Slice_SpriteDataPtr
+typedef struct { SpriteData* *p; int len, cap; } Slice_SpriteDataPtr;
+#endif
+#ifndef CVF_DEF_Slice_StateController
+#define CVF_DEF_Slice_StateController
 typedef struct { StateController *p; int len, cap; } Slice_StateController;
+#endif
+#ifndef CVF_DEF_Slice_StatsFighterState
+#define CVF_DEF_Slice_StatsFighterState
+typedef struct { StatsFighterState *p; int len, cap; } Slice_StatsFighterState;
+#endif
+#ifndef CVF_DEF_Slice_StatsMatch
+#define CVF_DEF_Slice_StatsMatch
+typedef struct { StatsMatch *p; int len, cap; } Slice_StatsMatch;
+#endif
+#ifndef CVF_DEF_Slice_StatsRound
+#define CVF_DEF_Slice_StatsRound
+typedef struct { StatsRound *p; int len, cap; } Slice_StatsRound;
+#endif
+#ifndef CVF_DEF_Slice_StoryboardPtr
+#define CVF_DEF_Slice_StoryboardPtr
+typedef struct { Storyboard* *p; int len, cap; } Slice_StoryboardPtr;
+#endif
+#ifndef CVF_DEF_Slice_StunBarPtr
+#define CVF_DEF_Slice_StunBarPtr
+typedef struct { StunBar* *p; int len, cap; } Slice_StunBarPtr;
+#endif
+#ifndef CVF_DEF_Slice_SyncSetting
+#define CVF_DEF_Slice_SyncSetting
+typedef struct { SyncSetting *p; int len, cap; } Slice_SyncSetting;
+#endif
+#ifndef CVF_DEF_Slice_TextSpritePtr
+#define CVF_DEF_Slice_TextSpritePtr
+typedef struct { TextSprite* *p; int len, cap; } Slice_TextSpritePtr;
+#endif
+#ifndef CVF_DEF_Slice_WinType
+#define CVF_DEF_Slice_WinType
+typedef struct { WinType *p; int len, cap; } Slice_WinType;
+#endif
+#ifndef CVF_DEF_Slice_backGroundPtr
+#define CVF_DEF_Slice_backGroundPtr
+typedef struct { backGround* *p; int len, cap; } Slice_backGroundPtr;
+#endif
+#ifndef CVF_DEF_Slice_bgCtrl
+#define CVF_DEF_Slice_bgCtrl
+typedef struct { bgCtrl *p; int len, cap; } Slice_bgCtrl;
+#endif
+#ifndef CVF_DEF_Slice_bool
+#define CVF_DEF_Slice_bool
 typedef struct { bool *p; int len, cap; } Slice_bool;
+#endif
+#ifndef CVF_DEF_Slice_boundTexture
+#define CVF_DEF_Slice_boundTexture
+typedef struct { boundTexture *p; int len, cap; } Slice_boundTexture;
+#endif
+#ifndef CVF_DEF_Slice_cvfRoom
+#define CVF_DEF_Slice_cvfRoom
+typedef struct { cvfRoom *p; int len, cap; } Slice_cvfRoom;
+#endif
+#ifndef CVF_DEF_Slice_expValueFramePtr
+#define CVF_DEF_Slice_expValueFramePtr
+typedef struct { expValueFrame* *p; int len, cap; } Slice_expValueFramePtr;
+#endif
+#ifndef CVF_DEF_Slice_f32
+#define CVF_DEF_Slice_f32
+typedef struct { f32 *p; int len, cap; } Slice_f32;
+#endif
+#ifndef CVF_DEF_Slice_i16
+#define CVF_DEF_Slice_i16
+typedef struct { i16 *p; int len, cap; } Slice_i16;
+#endif
+#ifndef CVF_DEF_Slice_i32
+#define CVF_DEF_Slice_i32
 typedef struct { i32 *p; int len, cap; } Slice_i32;
+#endif
+#ifndef CVF_DEF_Slice_int
+#define CVF_DEF_Slice_int
 typedef struct { int *p; int len, cap; } Slice_int;
-typedef struct { void* *p; int len, cap; } Slice_voidPtr;
+#endif
+#ifndef CVF_DEF_Slice_rankingRow
+#define CVF_DEF_Slice_rankingRow
+typedef struct { rankingRow *p; int len, cap; } Slice_rankingRow;
+#endif
+#ifndef CVF_DEF_Slice_scParam
+#define CVF_DEF_Slice_scParam
+typedef struct { scParam *p; int len, cap; } Slice_scParam;
+#endif
+#ifndef CVF_DEF_Slice_scRunFn
+#define CVF_DEF_Slice_scRunFn
+typedef struct { scRunFn *p; int len, cap; } Slice_scRunFn;
+#endif
+#ifndef CVF_DEF_Slice_stageRollbackBgState
+#define CVF_DEF_Slice_stageRollbackBgState
+typedef struct { stageRollbackBgState *p; int len, cap; } Slice_stageRollbackBgState;
+#endif
+#ifndef CVF_DEF_Slice_u32
+#define CVF_DEF_Slice_u32
+typedef struct { u32 *p; int len, cap; } Slice_u32;
+#endif
+#ifndef CVF_DEF_Slice_u64
+#define CVF_DEF_Slice_u64
+typedef struct { u64 *p; int len, cap; } Slice_u64;
+#endif
+#ifndef CVF_DEF_Slice_u8
+#define CVF_DEF_Slice_u8
+typedef struct { u8 *p; int len, cap; } Slice_u8;
+#endif
+#ifndef CVF_DEF_Slice_upnpMapping
+#define CVF_DEF_Slice_upnpMapping
+typedef struct { upnpMapping *p; int len, cap; } Slice_upnpMapping;
+#endif
+typedef Slice_scParam modifyStageVar;
+typedef Slice_scParam offset;
+typedef Slice_scParam powerSet;
+typedef Slice_scParam removeText;
+typedef Slice_scParam bindToTarget;
+typedef Slice_scParam fallEnvShake;
+typedef Slice_scParam modifyExplod;
+typedef Slice_scParam projectile;
+typedef Slice_scParam tagIn;
+typedef Slice_scParam velMul;
+typedef Slice_scParam angleMul;
+typedef Slice_scParam guardBreakSet;
+typedef Slice_scParam hitVelSet;
+typedef Slice_scParam lifeSet;
+typedef Slice_scParam palFX;
+typedef Slice_scParam playerPush;
+typedef Slice_scParam tagOut;
+typedef Slice_scParam appendToClipboard;
+typedef Slice_scParam attackDist;
+typedef Slice_scParam modifyReflection;
+typedef Slice_scParam modifyStoryboard;
+typedef Slice_scParam targetFacing;
+typedef Slice_scParam transformClsn;
+typedef Slice_scParam victoryQuote;
+typedef Slice_scParam cameraCtrl;
+typedef Slice_scParam modifySnd;
+typedef Slice_scParam modifyStageBG;
+typedef Slice_scParam roundTimeSet;
+typedef Slice_scParam width;
+typedef Slice_scParam afterImageTime;
+typedef Slice_scParam clearClipboard;
+typedef Slice_scParam varRangeSet;
+typedef Slice_scParam createPlatform;
+typedef Slice_scParam dialogue;
+typedef Slice_scParam modifyPlayer;
+typedef Slice_scParam pause;
+typedef Slice_scParam redLifeAdd;
+typedef Slice_scParam removeStoryboard;
+typedef Slice_scParam saveFile;
+typedef Slice_scParam angleDraw;
+typedef Slice_scParam hitFallSet;
+typedef Slice_scParam mapSet;
+typedef Slice_scParam matchRestart;
+typedef Slice_scParam targetGuardPointsAdd;
+typedef Slice_scParam height;
+typedef Slice_scParam angleAdd;
+typedef Slice_scParam hitOverride;
+typedef Slice_scParam notHitBy;
+typedef Slice_scParam stopSnd;
+typedef Slice_scParam allPalFX;
+typedef Slice_scParam assertInput;
+typedef Slice_scParam helper;
+typedef Slice_scParam targetDrop;
+typedef Slice_scParam varRandom;
+typedef Slice_SpriteDataPtr DrawList;
+typedef Slice_scParam assertAnalogVector;
+typedef Slice_scParam destroySelf;
+typedef Slice_scParam lifebarAction;
+typedef Slice_scParam storyboard;
+typedef Slice_scParam stateDef;
+typedef Slice_scParam assertSpecial;
+typedef Slice_scParam attackMulSet;
+typedef Slice_scParam loadState;
+typedef Slice_scParam reversalDef;
+typedef Slice_scParam targetRedLifeAdd;
+typedef Slice_scParam velAdd;
+typedef Slice_scParam forceFeedback;
+typedef Slice_scParam modifyHitDef;
+typedef Slice_scParam removePlatform;
+typedef Slice_scParam modifyBGCtrl;
+typedef Slice_scParam remapSprite;
+typedef Slice_scParam sndPan;
+typedef Slice_scParam sprPriority;
+typedef Slice_scParam targetBind;
+typedef Slice_scParam afterImage;
+typedef Slice_scParam depthBound;
+typedef Slice_scParam envColor;
+typedef Slice_scParam gravity;
+typedef Slice_scParam hitDef;
+typedef Slice_scParam lifeAdd;
+typedef Slice_scParam modifyProjectile;
+typedef Slice_scParam zoom;
+typedef Slice_scParam playBgm;
+typedef Slice_scParam bindToRoot;
+typedef Slice_scParam targetVelAdd;
+typedef Slice_scParam envShake;
+typedef Slice_ShadowSpritePtr ShadowList;
+typedef Slice_scParam StateControllerBase;
+typedef Slice_scParam modifyText;
+typedef Slice_scParam saveState;
+typedef Slice_scParam screenBound;
+typedef Slice_scParam targetAdd;
+typedef Slice_BytecodeValue BytecodeStack;
+typedef Slice_scParam mapReset;
+typedef Slice_scParam posSet;
+typedef Slice_scParam remapPal;
+typedef Slice_scParam removeExplod;
+typedef Slice_scParam shiftInput;
+typedef Slice_scParam bindToParent;
+typedef Slice_scParam changeAnim;
+typedef Slice_scParam changeAnim2;
+typedef Slice_scParam dizzySet;
+typedef Slice_scParam modifyBGCtrl3d;
+typedef Slice_scParam modifyBgm;
+typedef Slice_scParam targetLifeAdd;
+typedef Slice_scParam targetState;
+typedef Slice_scParam angleSet;
+typedef Slice_scParam dizzyPointsSet;
+typedef Slice_scParam hitFallDamage;
+typedef Slice_scParam modifyReversalDef;
+typedef Slice_scParam redLifeSet;
+typedef Slice_scParam scoreAdd;
+typedef Slice_scParam targetDizzyPointsAdd;
+typedef Slice_OpCode BytecodeExp;
+typedef Slice_scParam explod;
+typedef Slice_scParam makeDust;
+typedef Slice_scParam modifyShadow;
+typedef Slice_scParam powerAdd;
+typedef Slice_scParam printToConsole;
+typedef Slice_scParam targetPowerAdd;
+typedef Slice_scParam trans;
+typedef Slice_scParam roundTimeAdd;
+typedef Slice_scParam ctrlSet;
+typedef Slice_scParam dizzyPointsAdd;
+typedef Slice_scParam playSnd;
+typedef Slice_scParam changeState;
+typedef Slice_scParam displayToClipboard;
+typedef Slice_scParam guardPointsAdd;
+typedef Slice_scParam guardPointsSet;
+typedef Slice_scParam hitAdd;
+typedef Slice_scParam posAdd;
+typedef Slice_scParam bgPalFX;
+typedef Slice_scParam defenceMulSet;
+typedef Slice_scParam velSet;
+typedef Slice_scParam depth;
+typedef Slice_scParam groundLevelOffset;
+typedef Slice_scParam selfState;
+typedef Slice_scParam shaderSet;
+typedef Slice_scParam targetVelSet;
+typedef Slice_scParam turn;
+typedef Slice_SoundChannel SoundChannels;
+typedef Slice_scParam changeMovelist;
+typedef Slice_scParam getHitVarSet;
+typedef Slice_scParam posFreeze;
+typedef Slice_scParam targetScoreAdd;
+typedef Slice_scParam text;
+typedef Slice_scParam assertCommand;
+typedef Slice_scParam gameMakeAnim;
+typedef Slice_scParam loadFile;
+typedef Slice_scParam moveHitReset;
+typedef Slice_scParam overrideClsn;
+typedef Slice_scParam runState;
+typedef Slice_scParam transformSprite;
+typedef Slice_OpCode StateExpr;
+typedef Slice_scParam explodBindTime;
+typedef Slice_scParam hitFallVel;
+typedef Slice_scParam stateTypeSet;
+typedef Slice_scParam superPause;
+typedef Slice_scParam varSet;
+typedef Slice_ReflectionSpritePtr ReflectionList;
+typedef Slice_scParam hitBy;
+#ifndef CVF_DEF_Slice_BytecodeExp
+#define CVF_DEF_Slice_BytecodeExp
+typedef struct { BytecodeExp *p; int len, cap; } Slice_BytecodeExp;
+#endif
+#ifndef CVF_DEF_Slice_BytecodeExpPtr
+#define CVF_DEF_Slice_BytecodeExpPtr
+typedef struct { BytecodeExp* *p; int len, cap; } Slice_BytecodeExpPtr;
+#endif
+#ifndef CVF_DEF_Slice_Slice_u8
+#define CVF_DEF_Slice_Slice_u8
+typedef struct { Slice_u8 *p; int len, cap; } Slice_Slice_u8;
+#endif
+#ifndef CVF_DEF_Slice_Slice_Slice_u8
+#define CVF_DEF_Slice_Slice_Slice_u8
+typedef struct { Slice_Slice_u8 *p; int len, cap; } Slice_Slice_Slice_u8;
+#endif
 
+#ifndef CVF_TD_AIrampProperties
+#define CVF_TD_AIrampProperties
+typedef struct AIrampProperties AIrampProperties;
+#endif
+#ifndef CVF_TD_CustomShader
+#define CVF_TD_CustomShader
+typedef struct CustomShader CustomShader;
+#endif
+#ifndef CVF_TD_AfterImage
+#define CVF_TD_AfterImage
+typedef struct AfterImage AfterImage;
+#endif
+#ifndef CVF_TD_AiInput
+#define CVF_TD_AiInput
+typedef struct AiInput AiInput;
+#endif
+#ifndef CVF_TD_Rotation
+#define CVF_TD_Rotation
+typedef struct Rotation Rotation;
+#endif
+#ifndef CVF_TD_Anim
+#define CVF_TD_Anim
+typedef struct Anim Anim;
+#endif
+#ifndef CVF_TD_AnimationTable
+#define CVF_TD_AnimationTable
+typedef struct AnimationTable AnimationTable;
+#endif
+#ifndef CVF_TD_AnimCompiler
+#define CVF_TD_AnimCompiler
+typedef struct AnimCompiler AnimCompiler;
+#endif
+#ifndef CVF_TD_AnimFrame
+#define CVF_TD_AnimFrame
+typedef struct AnimFrame AnimFrame;
+#endif
+#ifndef CVF_TD_Layout
+#define CVF_TD_Layout
+typedef struct Layout Layout;
+#endif
+#ifndef CVF_TD_AnimLayout
+#define CVF_TD_AnimLayout
+typedef struct AnimLayout AnimLayout;
+#endif
+#ifndef CVF_TD_FSText
+#define CVF_TD_FSText
+typedef struct FSText FSText;
+#endif
+#ifndef CVF_TD_AnimTextSnd
+#define CVF_TD_AnimTextSnd
+typedef struct AnimTextSnd AnimTextSnd;
+#endif
+#ifndef CVF_TD_Tiling
+#define CVF_TD_Tiling
+typedef struct Tiling Tiling;
+#endif
+#ifndef CVF_TD_Animation
+#define CVF_TD_Animation
+typedef struct Animation Animation;
+#endif
+#ifndef CVF_TD_AnimationCharPreloadProperties
+#define CVF_TD_AnimationCharPreloadProperties
+typedef struct AnimationCharPreloadProperties AnimationCharPreloadProperties;
+#endif
+#ifndef CVF_TD_AnimationProperties
+#define CVF_TD_AnimationProperties
+typedef struct AnimationProperties AnimationProperties;
+#endif
+#ifndef CVF_TD_AnimationStagePreloadProperties
+#define CVF_TD_AnimationStagePreloadProperties
+typedef struct AnimationStagePreloadProperties AnimationStagePreloadProperties;
+#endif
+#ifndef CVF_TD_AnimationTextProperties
+#define CVF_TD_AnimationTextProperties
+typedef struct AnimationTextProperties AnimationTextProperties;
+#endif
+#ifndef CVF_TD_FadeProperties
+#define CVF_TD_FadeProperties
+typedef struct FadeProperties FadeProperties;
+#endif
+#ifndef CVF_TD_TextProperties
+#define CVF_TD_TextProperties
+typedef struct TextProperties TextProperties;
+#endif
+#ifndef CVF_TD_TweenProperties
+#define CVF_TD_TweenProperties
+typedef struct TweenProperties TweenProperties;
+#endif
+#ifndef CVF_TD_BoxCursorProperties
+#define CVF_TD_BoxCursorProperties
+typedef struct BoxCursorProperties BoxCursorProperties;
+#endif
+#ifndef CVF_TD_BoxBgProperties
+#define CVF_TD_BoxBgProperties
+typedef struct BoxBgProperties BoxBgProperties;
+#endif
+#ifndef CVF_TD_MenuProperties
+#define CVF_TD_MenuProperties
+typedef struct MenuProperties MenuProperties;
+#endif
+#ifndef CVF_TD_TimerProperties
+#define CVF_TD_TimerProperties
+typedef struct TimerProperties TimerProperties;
+#endif
+#ifndef CVF_TD_AttractModeProperties
+#define CVF_TD_AttractModeProperties
+typedef struct AttractModeProperties AttractModeProperties;
+#endif
+#ifndef CVF_TD_bgAction
+#define CVF_TD_bgAction
+typedef struct bgAction bgAction;
+#endif
+#ifndef CVF_TD_StageProps
+#define CVF_TD_StageProps
+typedef struct StageProps StageProps;
+#endif
+#ifndef CVF_TD_BGDef
+#define CVF_TD_BGDef
+typedef struct BGDef BGDef;
+#endif
+#ifndef CVF_TD_BgAnimationProperties
+#define CVF_TD_BgAnimationProperties
+typedef struct BgAnimationProperties BgAnimationProperties;
+#endif
+#ifndef CVF_TD_BgDefProperties
+#define CVF_TD_BgDefProperties
+typedef struct BgDefProperties BgDefProperties;
+#endif
+#ifndef CVF_TD_Bgm
+#define CVF_TD_Bgm
+typedef struct Bgm Bgm;
+#endif
+#ifndef CVF_TD_BgmProperties
+#define CVF_TD_BgmProperties
+typedef struct BgmProperties BgmProperties;
+#endif
+#ifndef CVF_TD_BoundingBox
+#define CVF_TD_BoundingBox
+typedef struct BoundingBox BoundingBox;
+#endif
+#ifndef CVF_TD_BufferSeeker
+#define CVF_TD_BufferSeeker
+typedef struct BufferSeeker BufferSeeker;
+#endif
+#ifndef CVF_TD_BytecodeFunction
+#define CVF_TD_BytecodeFunction
+typedef struct BytecodeFunction BytecodeFunction;
+#endif
+#ifndef CVF_TD_BytecodeValue
+#define CVF_TD_BytecodeValue
+typedef struct BytecodeValue BytecodeValue;
+#endif
+#ifndef CVF_TD_CallFunction
+#define CVF_TD_CallFunction
+typedef struct CallFunction CallFunction;
+#endif
+#ifndef CVF_TD_stageCamera
+#define CVF_TD_stageCamera
+typedef struct stageCamera stageCamera;
+#endif
+#ifndef CVF_TD_Camera
+#define CVF_TD_Camera
+typedef struct Camera Camera;
+#endif
+#ifndef CVF_TD_CellOverrideProperties
+#define CVF_TD_CellOverrideProperties
+typedef struct CellOverrideProperties CellOverrideProperties;
+#endif
+#ifndef CVF_TD_OverlayProperties
+#define CVF_TD_OverlayProperties
+typedef struct OverlayProperties OverlayProperties;
+#endif
+#ifndef CVF_TD_ChallengerInfoProperties
+#define CVF_TD_ChallengerInfoProperties
+typedef struct ChallengerInfoProperties ChallengerInfoProperties;
+#endif
+#ifndef CVF_TD_StateState
+#define CVF_TD_StateState
+typedef struct StateState StateState;
+#endif
+#ifndef CVF_TD_CharSize
+#define CVF_TD_CharSize
+typedef struct CharSize CharSize;
+#endif
+#ifndef CVF_TD_PalFXDef
+#define CVF_TD_PalFXDef
+typedef struct PalFXDef PalFXDef;
+#endif
+#ifndef CVF_TD_HitDef
+#define CVF_TD_HitDef
+typedef struct HitDef HitDef;
+#endif
+#ifndef CVF_TD_GetHitVar
+#define CVF_TD_GetHitVar
+typedef struct GetHitVar GetHitVar;
+#endif
+#ifndef CVF_TD_MoveHitVar
+#define CVF_TD_MoveHitVar
+typedef struct MoveHitVar MoveHitVar;
+#endif
+#ifndef CVF_TD_HitBy
+#define CVF_TD_HitBy
+typedef struct HitBy HitBy;
+#endif
+#ifndef CVF_TD_HitOverride
+#define CVF_TD_HitOverride
+typedef struct HitOverride HitOverride;
+#endif
+#ifndef CVF_TD_varCacheEnt
+#define CVF_TD_varCacheEnt
+typedef struct varCacheEnt varCacheEnt;
+#endif
+#ifndef CVF_TD_CharSystemVar
+#define CVF_TD_CharSystemVar
+typedef struct CharSystemVar CharSystemVar;
+#endif
+#ifndef CVF_TD_Char
+#define CVF_TD_Char
+typedef struct Char Char;
+#endif
+#ifndef CVF_TD_CharCompiler
+#define CVF_TD_CharCompiler
+typedef struct CharCompiler CharCompiler;
+#endif
+#ifndef CVF_TD_CharData
+#define CVF_TD_CharData
+typedef struct CharData CharData;
+#endif
+#ifndef CVF_TD_CharVelocity
+#define CVF_TD_CharVelocity
+typedef struct CharVelocity CharVelocity;
+#endif
+#ifndef CVF_TD_CharMovement
+#define CVF_TD_CharMovement
+typedef struct CharMovement CharMovement;
+#endif
+#ifndef CVF_TD_CharGlobalInfo
+#define CVF_TD_CharGlobalInfo
+typedef struct CharGlobalInfo CharGlobalInfo;
+#endif
+#ifndef CVF_TD_CharList
+#define CVF_TD_CharList
+typedef struct CharList CharList;
+#endif
+#ifndef CVF_TD_CharVarBackup
+#define CVF_TD_CharVarBackup
+typedef struct CharVarBackup CharVarBackup;
+#endif
+#ifndef CVF_TD_ClsnFinal
+#define CVF_TD_ClsnFinal
+typedef struct ClsnFinal ClsnFinal;
+#endif
+#ifndef CVF_TD_ClsnOverride
+#define CVF_TD_ClsnOverride
+typedef struct ClsnOverride ClsnOverride;
+#endif
+#ifndef CVF_TD_ClsnTransform
+#define CVF_TD_ClsnTransform
+typedef struct ClsnTransform ClsnTransform;
+#endif
+#ifndef CVF_TD_ComboShake
+#define CVF_TD_ComboShake
+typedef struct ComboShake ComboShake;
+#endif
+#ifndef CVF_TD_Command
+#define CVF_TD_Command
+typedef struct Command Command;
+#endif
+#ifndef CVF_TD_CommandKeyRemap
+#define CVF_TD_CommandKeyRemap
+typedef struct CommandKeyRemap CommandKeyRemap;
+#endif
+#ifndef CVF_TD_cmdNameCacheEnt
+#define CVF_TD_cmdNameCacheEnt
+typedef struct cmdNameCacheEnt cmdNameCacheEnt;
+#endif
+#ifndef CVF_TD_CommandList
+#define CVF_TD_CommandList
+typedef struct CommandList CommandList;
+#endif
+#ifndef CVF_TD_CommandSpec
+#define CVF_TD_CommandSpec
+typedef struct CommandSpec CommandSpec;
+#endif
+#ifndef CVF_TD_CommandStep
+#define CVF_TD_CommandStep
+typedef struct CommandStep CommandStep;
+#endif
+#ifndef CVF_TD_CommandStepKey
+#define CVF_TD_CommandStepKey
+typedef struct CommandStepKey CommandStepKey;
+#endif
+#ifndef CVF_TD_RollbackProperties
+#define CVF_TD_RollbackProperties
+typedef struct RollbackProperties RollbackProperties;
+#endif
+#ifndef CVF_TD_Config
+#define CVF_TD_Config
+typedef struct Config Config;
+#endif
+#ifndef CVF_TD_ContinueCounterProperties
+#define CVF_TD_ContinueCounterProperties
+typedef struct ContinueCounterProperties ContinueCounterProperties;
+#endif
+#ifndef CVF_TD_PlayerContinueProperties
+#define CVF_TD_PlayerContinueProperties
+typedef struct PlayerContinueProperties PlayerContinueProperties;
+#endif
+#ifndef CVF_TD_ContinueScreenProperties
+#define CVF_TD_ContinueScreenProperties
+typedef struct ContinueScreenProperties ContinueScreenProperties;
+#endif
+#ifndef CVF_TD_ControllerState
+#define CVF_TD_ControllerState
+typedef struct ControllerState ControllerState;
+#endif
+#ifndef CVF_TD_DebugClsn
+#define CVF_TD_DebugClsn
+typedef struct DebugClsn DebugClsn;
+#endif
+#ifndef CVF_TD_DebugClsnText
+#define CVF_TD_DebugClsnText
+typedef struct DebugClsnText DebugClsnText;
+#endif
+#ifndef CVF_TD_DemoModeProperties
+#define CVF_TD_DemoModeProperties
+typedef struct DemoModeProperties DemoModeProperties;
+#endif
+#ifndef CVF_TD_PlayerDialogueProperties
+#define CVF_TD_PlayerDialogueProperties
+typedef struct PlayerDialogueProperties PlayerDialogueProperties;
+#endif
+#ifndef CVF_TD_DialogueInfoProperties
+#define CVF_TD_DialogueInfoProperties
+typedef struct DialogueInfoProperties DialogueInfoProperties;
+#endif
+#ifndef CVF_TD_DialogueParsedLine
+#define CVF_TD_DialogueParsedLine
+typedef struct DialogueParsedLine DialogueParsedLine;
+#endif
+#ifndef CVF_TD_DialogueToken
+#define CVF_TD_DialogueToken
+typedef struct DialogueToken DialogueToken;
+#endif
+#ifndef CVF_TD_EnvShake
+#define CVF_TD_EnvShake
+typedef struct EnvShake EnvShake;
+#endif
+#ifndef CVF_TD_Environment
+#define CVF_TD_Environment
+typedef struct Environment Environment;
+#endif
+#ifndef CVF_TD_Explod
+#define CVF_TD_Explod
+typedef struct Explod Explod;
+#endif
+#ifndef CVF_TD_FSBgTextSnd
+#define CVF_TD_FSBgTextSnd
+typedef struct FSBgTextSnd FSBgTextSnd;
+#endif
+#ifndef CVF_TD_FSMsg
+#define CVF_TD_FSMsg
+typedef struct FSMsg FSMsg;
+#endif
+#ifndef CVF_TD_FaceParams
+#define CVF_TD_FaceParams
+typedef struct FaceParams FaceParams;
+#endif
+#ifndef CVF_TD_FaceProperties
+#define CVF_TD_FaceProperties
+typedef struct FaceProperties FaceProperties;
+#endif
+#ifndef CVF_TD_Fade
+#define CVF_TD_Fade
+typedef struct Fade Fade;
+#endif
+#ifndef CVF_TD_FightFx
+#define CVF_TD_FightFx
+typedef struct FightFx FightFx;
+#endif
+#ifndef CVF_TD_FightScreen
+#define CVF_TD_FightScreen
+typedef struct FightScreen FightScreen;
+#endif
+#ifndef CVF_TD_FightScreenAction
+#define CVF_TD_FightScreenAction
+typedef struct FightScreenAction FightScreenAction;
+#endif
+#ifndef CVF_TD_FightScreenAiLevel
+#define CVF_TD_FightScreenAiLevel
+typedef struct FightScreenAiLevel FightScreenAiLevel;
+#endif
+#ifndef CVF_TD_FightScreenCombo
+#define CVF_TD_FightScreenCombo
+typedef struct FightScreenCombo FightScreenCombo;
+#endif
+#ifndef CVF_TD_FightScreenFace
+#define CVF_TD_FightScreenFace
+typedef struct FightScreenFace FightScreenFace;
+#endif
+#ifndef CVF_TD_FightScreenMatch
+#define CVF_TD_FightScreenMatch
+typedef struct FightScreenMatch FightScreenMatch;
+#endif
+#ifndef CVF_TD_FightScreenMode
+#define CVF_TD_FightScreenMode
+typedef struct FightScreenMode FightScreenMode;
+#endif
+#ifndef CVF_TD_FightScreenName
+#define CVF_TD_FightScreenName
+typedef struct FightScreenName FightScreenName;
+#endif
+#ifndef CVF_TD_ResultAnnouncement
+#define CVF_TD_ResultAnnouncement
+typedef struct ResultAnnouncement ResultAnnouncement;
+#endif
+#ifndef CVF_TD_FightScreenRound
+#define CVF_TD_FightScreenRound
+typedef struct FightScreenRound FightScreenRound;
+#endif
+#ifndef CVF_TD_FightScreenScore
+#define CVF_TD_FightScreenScore
+typedef struct FightScreenScore FightScreenScore;
+#endif
+#ifndef CVF_TD_FightScreenTime
+#define CVF_TD_FightScreenTime
+typedef struct FightScreenTime FightScreenTime;
+#endif
+#ifndef CVF_TD_FightScreenTimer
+#define CVF_TD_FightScreenTimer
+typedef struct FightScreenTimer FightScreenTimer;
+#endif
+#ifndef CVF_TD_FightScreenWinCount
+#define CVF_TD_FightScreenWinCount
+typedef struct FightScreenWinCount FightScreenWinCount;
+#endif
+#ifndef CVF_TD_FightScreenWinIcon
+#define CVF_TD_FightScreenWinIcon
+typedef struct FightScreenWinIcon FightScreenWinIcon;
+#endif
+#ifndef CVF_TD_FilesProperties
+#define CVF_TD_FilesProperties
+typedef struct FilesProperties FilesProperties;
+#endif
+#ifndef CVF_TD_FontProperties
+#define CVF_TD_FontProperties
+typedef struct FontProperties FontProperties;
+#endif
+#ifndef CVF_TD_FontRenderer_GLES32
+#define CVF_TD_FontRenderer_GLES32
+typedef struct FontRenderer_GLES32 FontRenderer_GLES32;
+#endif
+#ifndef CVF_TD_color
+#define CVF_TD_color
+typedef struct color color;
+#endif
+#ifndef CVF_TD_ShaderPalFX
+#define CVF_TD_ShaderPalFX
+typedef struct ShaderPalFX ShaderPalFX;
+#endif
+#ifndef CVF_TD_Font_GLES32
+#define CVF_TD_Font_GLES32
+typedef struct Font_GLES32 Font_GLES32;
+#endif
+#ifndef CVF_TD_ForceFeedbackParams
+#define CVF_TD_ForceFeedbackParams
+typedef struct ForceFeedbackParams ForceFeedbackParams;
+#endif
+#ifndef CVF_TD_GLES32State
+#define CVF_TD_GLES32State
+typedef struct GLES32State GLES32State;
+#endif
+#ifndef CVF_TD_GLTFAnimatableProperty
+#define CVF_TD_GLTFAnimatableProperty
+typedef struct GLTFAnimatableProperty GLTFAnimatableProperty;
+#endif
+#ifndef CVF_TD_GLTFAnimation
+#define CVF_TD_GLTFAnimation
+typedef struct GLTFAnimation GLTFAnimation;
+#endif
+#ifndef CVF_TD_GLTFAnimationChannel
+#define CVF_TD_GLTFAnimationChannel
+typedef struct GLTFAnimationChannel GLTFAnimationChannel;
+#endif
+#ifndef CVF_TD_GLTFAnimationSampler
+#define CVF_TD_GLTFAnimationSampler
+typedef struct GLTFAnimationSampler GLTFAnimationSampler;
+#endif
+#ifndef CVF_TD_GLTFLight
+#define CVF_TD_GLTFLight
+typedef struct GLTFLight GLTFLight;
+#endif
+#ifndef CVF_TD_GLTFTexture
+#define CVF_TD_GLTFTexture
+typedef struct GLTFTexture GLTFTexture;
+#endif
+#ifndef CVF_TD_GameParams
+#define CVF_TD_GameParams
+typedef struct GameParams GameParams;
+#endif
+#ifndef CVF_TD_ZoomEffect
+#define CVF_TD_ZoomEffect
+typedef struct ZoomEffect ZoomEffect;
+#endif
+#ifndef CVF_TD_SystemStateVars
+#define CVF_TD_SystemStateVars
+typedef struct SystemStateVars SystemStateVars;
+#endif
+#ifndef CVF_TD_InfoProperties
+#define CVF_TD_InfoProperties
+typedef struct InfoProperties InfoProperties;
+#endif
+#ifndef CVF_TD_TextMapProperties
+#define CVF_TD_TextMapProperties
+typedef struct TextMapProperties TextMapProperties;
+#endif
+#ifndef CVF_TD_TextInputProperties
+#define CVF_TD_TextInputProperties
+typedef struct TextInputProperties TextInputProperties;
+#endif
+#ifndef CVF_TD_TitleInfoProperties
+#define CVF_TD_TitleInfoProperties
+typedef struct TitleInfoProperties TitleInfoProperties;
+#endif
+#ifndef CVF_TD_InfoBoxProperties
+#define CVF_TD_InfoBoxProperties
+typedef struct InfoBoxProperties InfoBoxProperties;
+#endif
+#ifndef CVF_TD_PlayerCursorProperties
+#define CVF_TD_PlayerCursorProperties
+typedef struct PlayerCursorProperties PlayerCursorProperties;
+#endif
+#ifndef CVF_TD_ItemProperties
+#define CVF_TD_ItemProperties
+typedef struct ItemProperties ItemProperties;
+#endif
+#ifndef CVF_TD_PlayerSelectProperties
+#define CVF_TD_PlayerSelectProperties
+typedef struct PlayerSelectProperties PlayerSelectProperties;
+#endif
+#ifndef CVF_TD_SelectInfoProperties
+#define CVF_TD_SelectInfoProperties
+typedef struct SelectInfoProperties SelectInfoProperties;
+#endif
+#ifndef CVF_TD_ValueIconVsProperties
+#define CVF_TD_ValueIconVsProperties
+typedef struct ValueIconVsProperties ValueIconVsProperties;
+#endif
+#ifndef CVF_TD_PlayerVsProperties
+#define CVF_TD_PlayerVsProperties
+typedef struct PlayerVsProperties PlayerVsProperties;
+#endif
+#ifndef CVF_TD_VsScreenProperties
+#define CVF_TD_VsScreenProperties
+typedef struct VsScreenProperties VsScreenProperties;
+#endif
+#ifndef CVF_TD_StoryboardProperties
+#define CVF_TD_StoryboardProperties
+typedef struct StoryboardProperties StoryboardProperties;
+#endif
+#ifndef CVF_TD_PlayerLoseProperties
+#define CVF_TD_PlayerLoseProperties
+typedef struct PlayerLoseProperties PlayerLoseProperties;
+#endif
+#ifndef CVF_TD_PlayerVictoryProperties
+#define CVF_TD_PlayerVictoryProperties
+typedef struct PlayerVictoryProperties PlayerVictoryProperties;
+#endif
+#ifndef CVF_TD_VictoryScreenProperties
+#define CVF_TD_VictoryScreenProperties
+typedef struct VictoryScreenProperties VictoryScreenProperties;
+#endif
+#ifndef CVF_TD_PlayerResultsProperties
+#define CVF_TD_PlayerResultsProperties
+typedef struct PlayerResultsProperties PlayerResultsProperties;
+#endif
+#ifndef CVF_TD_WinScreenProperties
+#define CVF_TD_WinScreenProperties
+typedef struct WinScreenProperties WinScreenProperties;
+#endif
+#ifndef CVF_TD_OptionInfoProperties
+#define CVF_TD_OptionInfoProperties
+typedef struct OptionInfoProperties OptionInfoProperties;
+#endif
+#ifndef CVF_TD_ReplayInfoProperties
+#define CVF_TD_ReplayInfoProperties
+typedef struct ReplayInfoProperties ReplayInfoProperties;
+#endif
+#ifndef CVF_TD_HiscoreInfoProperties
+#define CVF_TD_HiscoreInfoProperties
+typedef struct HiscoreInfoProperties HiscoreInfoProperties;
+#endif
+#ifndef CVF_TD_WarningInfoProperties
+#define CVF_TD_WarningInfoProperties
+typedef struct WarningInfoProperties WarningInfoProperties;
+#endif
+#ifndef CVF_TD_MotifChallenger
+#define CVF_TD_MotifChallenger
+typedef struct MotifChallenger MotifChallenger;
+#endif
+#ifndef CVF_TD_MotifContinue
+#define CVF_TD_MotifContinue
+typedef struct MotifContinue MotifContinue;
+#endif
+#ifndef CVF_TD_MotifDemo
+#define CVF_TD_MotifDemo
+typedef struct MotifDemo MotifDemo;
+#endif
+#ifndef CVF_TD_MotifDialogue
+#define CVF_TD_MotifDialogue
+typedef struct MotifDialogue MotifDialogue;
+#endif
+#ifndef CVF_TD_MotifVictory
+#define CVF_TD_MotifVictory
+typedef struct MotifVictory MotifVictory;
+#endif
+#ifndef CVF_TD_MotifWin
+#define CVF_TD_MotifWin
+typedef struct MotifWin MotifWin;
+#endif
+#ifndef CVF_TD_MotifHiscore
+#define CVF_TD_MotifHiscore
+typedef struct MotifHiscore MotifHiscore;
+#endif
+#ifndef CVF_TD_MotifMenu
+#define CVF_TD_MotifMenu
+typedef struct MotifMenu MotifMenu;
+#endif
+#ifndef CVF_TD_Motif
+#define CVF_TD_Motif
+typedef struct Motif Motif;
+#endif
+#ifndef CVF_TD_storyboardPlacement
+#define CVF_TD_storyboardPlacement
+typedef struct storyboardPlacement storyboardPlacement;
+#endif
+#ifndef CVF_TD_Storyboard
+#define CVF_TD_Storyboard
+typedef struct Storyboard Storyboard;
+#endif
+#ifndef CVF_TD_stageRollbackState
+#define CVF_TD_stageRollbackState
+typedef struct stageRollbackState stageRollbackState;
+#endif
+#ifndef CVF_TD_statsRollbackState
+#define CVF_TD_statsRollbackState
+typedef struct statsRollbackState statsRollbackState;
+#endif
+#ifndef CVF_TD_Select
+#define CVF_TD_Select
+typedef struct Select Select;
+#endif
+#ifndef CVF_TD_GameState
+#define CVF_TD_GameState
+typedef struct GameState GameState;
+#endif
+#ifndef CVF_TD_GameStatePool
+#define CVF_TD_GameStatePool
+typedef struct GameStatePool GameStatePool;
+#endif
+#ifndef CVF_TD_StatsLog
+#define CVF_TD_StatsLog
+typedef struct StatsLog StatsLog;
+#endif
+#ifndef CVF_TD_GameStatsSnapshot
+#define CVF_TD_GameStatsSnapshot
+typedef struct GameStatsSnapshot GameStatsSnapshot;
+#endif
+#ifndef CVF_TD_GlyphProperties
+#define CVF_TD_GlyphProperties
+typedef struct GlyphProperties GlyphProperties;
+#endif
+#ifndef CVF_TD_GuardBar
+#define CVF_TD_GuardBar
+typedef struct GuardBar GuardBar;
+#endif
+#ifndef CVF_TD_InheritSpec
+#define CVF_TD_InheritSpec
+typedef struct InheritSpec InheritSpec;
+#endif
+#ifndef CVF_TD_Input
+#define CVF_TD_Input
+typedef struct Input Input;
+#endif
+#ifndef CVF_TD_InputBuffer
+#define CVF_TD_InputBuffer
+typedef struct InputBuffer InputBuffer;
+#endif
+#ifndef CVF_TD_InputReader
+#define CVF_TD_InputReader
+typedef struct InputReader InputReader;
+#endif
+#ifndef CVF_TD_KeyConfig
+#define CVF_TD_KeyConfig
+typedef struct KeyConfig KeyConfig;
+#endif
+#ifndef CVF_TD_KeysProperties
+#define CVF_TD_KeysProperties
+typedef struct KeysProperties KeysProperties;
+#endif
+#ifndef CVF_TD_PalFxProperties
+#define CVF_TD_PalFxProperties
+typedef struct PalFxProperties PalFxProperties;
+#endif
+#ifndef CVF_TD_LayerProperties
+#define CVF_TD_LayerProperties
+typedef struct LayerProperties LayerProperties;
+#endif
+#ifndef CVF_TD_LifeBar
+#define CVF_TD_LifeBar
+typedef struct LifeBar LifeBar;
+#endif
+#ifndef CVF_TD_Loader
+#define CVF_TD_Loader
+typedef struct Loader Loader;
+#endif
+#ifndef CVF_TD_LoopBreak
+#define CVF_TD_LoopBreak
+typedef struct LoopBreak LoopBreak;
+#endif
+#ifndef CVF_TD_LoopContinue
+#define CVF_TD_LoopContinue
+typedef struct LoopContinue LoopContinue;
+#endif
+#ifndef CVF_TD_LoopTimer
+#define CVF_TD_LoopTimer
+typedef struct LoopTimer LoopTimer;
+#endif
+#ifndef CVF_TD_Material
+#define CVF_TD_Material
+typedef struct Material Material;
+#endif
+#ifndef CVF_TD_MovelistGlyphsProperties
+#define CVF_TD_MovelistGlyphsProperties
+typedef struct MovelistGlyphsProperties MovelistGlyphsProperties;
+#endif
+#ifndef CVF_TD_MenuInfoProperties
+#define CVF_TD_MenuInfoProperties
+typedef struct MenuInfoProperties MenuInfoProperties;
+#endif
+#ifndef CVF_TD_Mesh
+#define CVF_TD_Mesh
+typedef struct Mesh Mesh;
+#endif
+#ifndef CVF_TD_Model
+#define CVF_TD_Model
+typedef struct Model Model;
+#endif
+#ifndef CVF_TD_MorphTarget
+#define CVF_TD_MorphTarget
+typedef struct MorphTarget MorphTarget;
+#endif
+#ifndef CVF_TD_NetBuffer
+#define CVF_TD_NetBuffer
+typedef struct NetBuffer NetBuffer;
+#endif
+#ifndef CVF_TD_NetConnection
+#define CVF_TD_NetConnection
+typedef struct NetConnection NetConnection;
+#endif
+#ifndef CVF_TD_Node
+#define CVF_TD_Node
+typedef struct Node Node;
+#endif
+#ifndef CVF_TD_Normalizer
+#define CVF_TD_Normalizer
+typedef struct Normalizer Normalizer;
+#endif
+#ifndef CVF_TD_NormalizerLR
+#define CVF_TD_NormalizerLR
+typedef struct NormalizerLR NormalizerLR;
+#endif
+#ifndef CVF_TD_NullStateController
+#define CVF_TD_NullStateController
+typedef struct NullStateController NullStateController;
+#endif
+#ifndef CVF_TD_OverrideCharData
+#define CVF_TD_OverrideCharData
+typedef struct OverrideCharData OverrideCharData;
+#endif
+#ifndef CVF_TD_PalFX
+#define CVF_TD_PalFX
+typedef struct PalFX PalFX;
+#endif
+#ifndef CVF_TD_PalTexture
+#define CVF_TD_PalTexture
+typedef struct PalTexture PalTexture;
+#endif
+#ifndef CVF_TD_Plane
+#define CVF_TD_Plane
+typedef struct Plane Plane;
+#endif
+#ifndef CVF_TD_Platform
+#define CVF_TD_Platform
+typedef struct Platform Platform;
+#endif
+#ifndef CVF_TD_PlaySndParams
+#define CVF_TD_PlaySndParams
+typedef struct PlaySndParams PlaySndParams;
+#endif
+#ifndef CVF_TD_PlayerCursorStateProperties
+#define CVF_TD_PlayerCursorStateProperties
+typedef struct PlayerCursorStateProperties PlayerCursorStateProperties;
+#endif
+#ifndef CVF_TD_PowerBar
+#define CVF_TD_PowerBar
+typedef struct PowerBar PowerBar;
+#endif
+#ifndef CVF_TD_PreloadEntry
+#define CVF_TD_PreloadEntry
+typedef struct PreloadEntry PreloadEntry;
+#endif
+#ifndef CVF_TD_Primitive
+#define CVF_TD_Primitive
+typedef struct Primitive Primitive;
+#endif
+#ifndef CVF_TD_ProjTradeDist
+#define CVF_TD_ProjTradeDist
+typedef struct ProjTradeDist ProjTradeDist;
+#endif
+#ifndef CVF_TD_Projectile
+#define CVF_TD_Projectile
+typedef struct Projectile Projectile;
+#endif
+#ifndef CVF_TD_Rect
+#define CVF_TD_Rect
+typedef struct Rect Rect;
+#endif
+#ifndef CVF_TD_ReflectionSprite
+#define CVF_TD_ReflectionSprite
+typedef struct ReflectionSprite ReflectionSprite;
+#endif
+#ifndef CVF_TD_RenderParams
+#define CVF_TD_RenderParams
+typedef struct RenderParams RenderParams;
+#endif
+#ifndef CVF_TD_vitaBatch
+#define CVF_TD_vitaBatch
+typedef struct vitaBatch vitaBatch;
+#endif
+#ifndef CVF_TD_Renderer_GLES32
+#define CVF_TD_Renderer_GLES32
+typedef struct Renderer_GLES32 Renderer_GLES32;
+#endif
+#ifndef CVF_TD_Renderer_VK
+#define CVF_TD_Renderer_VK
+typedef struct Renderer_VK Renderer_VK;
+#endif
+#ifndef CVF_TD_ReplayFile
+#define CVF_TD_ReplayFile
+typedef struct ReplayFile ReplayFile;
+#endif
+#ifndef CVF_TD_ReplayHeader
+#define CVF_TD_ReplayHeader
+typedef struct ReplayHeader ReplayHeader;
+#endif
+#ifndef CVF_TD_ResultsScreenProperties
+#define CVF_TD_ResultsScreenProperties
+typedef struct ResultsScreenProperties ResultsScreenProperties;
+#endif
+#ifndef CVF_TD_RollbackLogger
+#define CVF_TD_RollbackLogger
+typedef struct RollbackLogger RollbackLogger;
+#endif
+#ifndef CVF_TD_RollbackSession
+#define CVF_TD_RollbackSession
+typedef struct RollbackSession RollbackSession;
+#endif
+#ifndef CVF_TD_RollbackSystem
+#define CVF_TD_RollbackSystem
+typedef struct RollbackSystem RollbackSystem;
+#endif
+#ifndef CVF_TD_bgShaderTex
+#define CVF_TD_bgShaderTex
+typedef struct bgShaderTex bgShaderTex;
+#endif
+#ifndef CVF_TD_stageShaderDef
+#define CVF_TD_stageShaderDef
+typedef struct stageShaderDef stageShaderDef;
+#endif
+#ifndef CVF_TD_stageShadow
+#define CVF_TD_stageShadow
+typedef struct stageShadow stageShadow;
+#endif
+#ifndef CVF_TD_stagePlayer
+#define CVF_TD_stagePlayer
+typedef struct stagePlayer stagePlayer;
+#endif
+#ifndef CVF_TD_Stage
+#define CVF_TD_Stage
+typedef struct Stage Stage;
+#endif
+#ifndef CVF_TD_RoundStartBackup
+#define CVF_TD_RoundStartBackup
+typedef struct RoundStartBackup RoundStartBackup;
+#endif
+#ifndef CVF_TD_SDLSpeaker
+#define CVF_TD_SDLSpeaker
+typedef struct SDLSpeaker SDLSpeaker;
+#endif
+#ifndef CVF_TD_Scene
+#define CVF_TD_Scene
+typedef struct Scene Scene;
+#endif
+#ifndef CVF_TD_SceneProperties
+#define CVF_TD_SceneProperties
+typedef struct SceneProperties SceneProperties;
+#endif
+#ifndef CVF_TD_SelectChar
+#define CVF_TD_SelectChar
+typedef struct SelectChar SelectChar;
+#endif
+#ifndef CVF_TD_SelectCharParams
+#define CVF_TD_SelectCharParams
+typedef struct SelectCharParams SelectCharParams;
+#endif
+#ifndef CVF_TD_SelectStage
+#define CVF_TD_SelectStage
+typedef struct SelectStage SelectStage;
+#endif
+#ifndef CVF_TD_SelectStageParams
+#define CVF_TD_SelectStageParams
+typedef struct SelectStageParams SelectStageParams;
+#endif
+#ifndef CVF_TD_SessionConfigOverride
+#define CVF_TD_SessionConfigOverride
+typedef struct SessionConfigOverride SessionConfigOverride;
+#endif
+#ifndef CVF_TD_uniCacheEnt
+#define CVF_TD_uniCacheEnt
+typedef struct uniCacheEnt uniCacheEnt;
+#endif
+#ifndef CVF_TD_ShaderProgram_GLES32
+#define CVF_TD_ShaderProgram_GLES32
+typedef struct ShaderProgram_GLES32 ShaderProgram_GLES32;
+#endif
+#ifndef CVF_TD_ShadowSprite
+#define CVF_TD_ShadowSprite
+typedef struct ShadowSprite ShadowSprite;
+#endif
+#ifndef CVF_TD_ShortcutKey
+#define CVF_TD_ShortcutKey
+typedef struct ShortcutKey ShortcutKey;
+#endif
+#ifndef CVF_TD_ShortcutScript
+#define CVF_TD_ShortcutScript
+typedef struct ShortcutScript ShortcutScript;
+#endif
+#ifndef CVF_TD_Skin
+#define CVF_TD_Skin
+typedef struct Skin Skin;
+#endif
+#ifndef CVF_TD_SoundChannel
+#define CVF_TD_SoundChannel
+typedef struct SoundChannel SoundChannel;
+#endif
+#ifndef CVF_TD_SoundEffect
+#define CVF_TD_SoundEffect
+typedef struct SoundEffect SoundEffect;
+#endif
+#ifndef CVF_TD_SoundProperties
+#define CVF_TD_SoundProperties
+typedef struct SoundProperties SoundProperties;
+#endif
+#ifndef CVF_TD_SpriteData
+#define CVF_TD_SpriteData
+typedef struct SpriteData SpriteData;
+#endif
+#ifndef CVF_TD_varAssign
+#define CVF_TD_varAssign
+typedef struct varAssign varAssign;
+#endif
+#ifndef CVF_TD_StateBlock
+#define CVF_TD_StateBlock
+typedef struct StateBlock StateBlock;
+#endif
+#ifndef CVF_TD_StateBytecode
+#define CVF_TD_StateBytecode
+typedef struct StateBytecode StateBytecode;
+#endif
+#ifndef CVF_TD_StatsFighterState
+#define CVF_TD_StatsFighterState
+typedef struct StatsFighterState StatsFighterState;
+#endif
+#ifndef CVF_TD_StatsMatch
+#define CVF_TD_StatsMatch
+typedef struct StatsMatch StatsMatch;
+#endif
+#ifndef CVF_TD_StatsRound
+#define CVF_TD_StatsRound
+typedef struct StatsRound StatsRound;
+#endif
+#ifndef CVF_TD_StoryboardManager
+#define CVF_TD_StoryboardManager
+typedef struct StoryboardManager StoryboardManager;
+#endif
+#ifndef CVF_TD_StreamLooper
+#define CVF_TD_StreamLooper
+typedef struct StreamLooper StreamLooper;
+#endif
+#ifndef CVF_TD_StringPool
+#define CVF_TD_StringPool
+typedef struct StringPool StringPool;
+#endif
+#ifndef CVF_TD_StunBar
+#define CVF_TD_StunBar
+typedef struct StunBar StunBar;
+#endif
+#ifndef CVF_TD_SwapSeeker
+#define CVF_TD_SwapSeeker
+typedef struct SwapSeeker SwapSeeker;
+#endif
+#ifndef CVF_TD_SyncHandshake
+#define CVF_TD_SyncHandshake
+typedef struct SyncHandshake SyncHandshake;
+#endif
+#ifndef CVF_TD_SyncSetting
+#define CVF_TD_SyncSetting
+typedef struct SyncSetting SyncSetting;
+#endif
+#ifndef CVF_TD_System
+#define CVF_TD_System
+typedef struct System System;
+#endif
+#ifndef CVF_TD_TeamModesProperties
+#define CVF_TD_TeamModesProperties
+typedef struct TeamModesProperties TeamModesProperties;
+#endif
+#ifndef CVF_TD_TextSprite
+#define CVF_TD_TextSprite
+typedef struct TextSprite TextSprite;
+#endif
+#ifndef CVF_TD_Texture_GLES32
+#define CVF_TD_Texture_GLES32
+typedef struct Texture_GLES32 Texture_GLES32;
+#endif
+#ifndef CVF_TD_TypedValue
+#define CVF_TD_TypedValue
+typedef struct TypedValue TypedValue;
+#endif
+#ifndef CVF_TD_UndefinedFormatter
+#define CVF_TD_UndefinedFormatter
+typedef struct UndefinedFormatter UndefinedFormatter;
+#endif
+#ifndef CVF_TD_Window
+#define CVF_TD_Window
+typedef struct Window Window;
+#endif
+#ifndef CVF_TD_backGround
+#define CVF_TD_backGround
+typedef struct backGround backGround;
+#endif
+#ifndef CVF_TD_bcHasher
+#define CVF_TD_bcHasher
+typedef struct bcHasher bcHasher;
+#endif
+#ifndef CVF_TD_bcProfKey
+#define CVF_TD_bcProfKey
+typedef struct bcProfKey bcProfKey;
+#endif
+#ifndef CVF_TD_bgCtrl
+#define CVF_TD_bgCtrl
+typedef struct bgCtrl bgCtrl;
+#endif
+#ifndef CVF_TD_bgDrawTransform
+#define CVF_TD_bgDrawTransform
+typedef struct bgDrawTransform bgDrawTransform;
+#endif
+#ifndef CVF_TD_bgVideo
+#define CVF_TD_bgVideo
+typedef struct bgVideo bgVideo;
+#endif
+#ifndef CVF_TD_boundTexture
+#define CVF_TD_boundTexture
+typedef struct boundTexture boundTexture;
+#endif
+#ifndef CVF_TD_character
+#define CVF_TD_character
+typedef struct character character;
+#endif
+#ifndef CVF_TD_cookW
+#define CVF_TD_cookW
+typedef struct cookW cookW;
+#endif
+#ifndef CVF_TD_cparser
+#define CVF_TD_cparser
+typedef struct cparser cparser;
+#endif
+#ifndef CVF_TD_cvfOnlineState
+#define CVF_TD_cvfOnlineState
+typedef struct cvfOnlineState cvfOnlineState;
+#endif
+#ifndef CVF_TD_cvfRoom
+#define CVF_TD_cvfRoom
+typedef struct cvfRoom cvfRoom;
+#endif
+#ifndef CVF_TD_cvfRulesT
+#define CVF_TD_cvfRulesT
+typedef struct cvfRulesT cvfRulesT;
+#endif
+#ifndef CVF_TD_drawAspectState
+#define CVF_TD_drawAspectState
+typedef struct drawAspectState drawAspectState;
+#endif
+#ifndef CVF_TD_expValueFrame
+#define CVF_TD_expValueFrame
+typedef struct expValueFrame expValueFrame;
+#endif
+#ifndef CVF_TD_fightScreenAnimationStateCloner
+#define CVF_TD_fightScreenAnimationStateCloner
+typedef struct fightScreenAnimationStateCloner fightScreenAnimationStateCloner;
+#endif
+#ifndef CVF_TD_lowerCacheEntry
+#define CVF_TD_lowerCacheEntry
+typedef struct lowerCacheEntry lowerCacheEntry;
+#endif
+#ifndef CVF_TD_modifyBGCtrlShader
+#define CVF_TD_modifyBGCtrlShader
+typedef struct modifyBGCtrlShader modifyBGCtrlShader;
+#endif
+#ifndef CVF_TD_paletteCopyKey
+#define CVF_TD_paletteCopyKey
+typedef struct paletteCopyKey paletteCopyKey;
+#endif
+#ifndef CVF_TD_queryPart
+#define CVF_TD_queryPart
+typedef struct queryPart queryPart;
+#endif
+#ifndef CVF_TD_rankingEntry
+#define CVF_TD_rankingEntry
+typedef struct rankingEntry rankingEntry;
+#endif
+#ifndef CVF_TD_rankingRow
+#define CVF_TD_rankingRow
+typedef struct rankingRow rankingRow;
+#endif
+#ifndef CVF_TD_runTally
+#define CVF_TD_runTally
+typedef struct runTally runTally;
+#endif
+#ifndef CVF_TD_scParam
+#define CVF_TD_scParam
+typedef struct scParam scParam;
+#endif
+#ifndef CVF_TD_sffv1PalState
+#define CVF_TD_sffv1PalState
+typedef struct sffv1PalState sffv1PalState;
+#endif
+#ifndef CVF_TD_soundPanView
+#define CVF_TD_soundPanView
+typedef struct soundPanView soundPanView;
+#endif
+#ifndef CVF_TD_soundPanner
+#define CVF_TD_soundPanner
+typedef struct soundPanner soundPanner;
+#endif
+#ifndef CVF_TD_specFacts
+#define CVF_TD_specFacts
+typedef struct specFacts specFacts;
+#endif
+#ifndef CVF_TD_stageRollbackBgState
+#define CVF_TD_stageRollbackBgState
+typedef struct stageRollbackBgState stageRollbackBgState;
+#endif
+#ifndef CVF_TD_upnpDevice
+#define CVF_TD_upnpDevice
+typedef struct upnpDevice upnpDevice;
+#endif
+#ifndef CVF_TD_upnpMapping
+#define CVF_TD_upnpMapping
+typedef struct upnpMapping upnpMapping;
+#endif
+#ifndef CVF_TD_victoryEntry
+#define CVF_TD_victoryEntry
+typedef struct victoryEntry victoryEntry;
+#endif
+#ifndef CVF_TD_vitaBufFile
+#define CVF_TD_vitaBufFile
+typedef struct vitaBufFile vitaBufFile;
+#endif
+#ifndef CVF_TD_xmStreamer
+#define CVF_TD_xmStreamer
+typedef struct xmStreamer xmStreamer;
+#endif
+#ifndef CVF_TD_zipMemFileReader
+#define CVF_TD_zipMemFileReader
+typedef struct zipMemFileReader zipMemFileReader;
+#endif
+#ifndef CVF_BODY_Arr2_i32
+#define CVF_BODY_Arr2_i32
+struct Arr2_i32 { i32 v[2]; };
+#endif
+struct AIrampProperties {
+    Arr2_i32 Start;
+    Arr2_i32 End;
+};
+
+#ifndef CVF_BODY_Arr16_f32
+#define CVF_BODY_Arr16_f32
 struct Arr16_f32 { f32 v[16]; };
+#endif
 struct CustomShader {
     GoString name;
     GoString key;
@@ -132,9 +2988,14 @@ struct CustomShader {
     bool afterimage;
 };
 
+#ifndef CVF_BODY_Arr3_i32
+#define CVF_BODY_Arr3_i32
 struct Arr3_i32 { i32 v[3]; };
+#endif
+#ifndef CVF_BODY_Arr3_f32
+#define CVF_BODY_Arr3_f32
 struct Arr3_f32 { f32 v[3]; };
-struct Arr2_i32 { i32 v[2]; };
+#endif
 struct AfterImage {
     i32 time;
     i32 length;
@@ -160,11 +3021,828 @@ struct AfterImage {
     bool shaderInherit;
 };
 
+struct AiInput {
+    i32 dir;
+    i32 dirt;
+    i32 at;
+    i32 bt;
+    i32 ct;
+    i32 xt;
+    i32 yt;
+    i32 zt;
+    i32 st;
+    i32 dt;
+    i32 wt;
+    i32 mt;
+};
+
+struct Rotation {
+    f32 angle;
+    f32 xangle;
+    f32 yangle;
+};
+
+#ifndef CVF_BODY_Arr4_i32
+#define CVF_BODY_Arr4_i32
+struct Arr4_i32 { i32 v[4]; };
+#endif
+#ifndef CVF_BODY_Arr2_f32
+#define CVF_BODY_Arr2_f32
+struct Arr2_f32 { f32 v[2]; };
+#endif
+#ifndef CVF_BODY_Arr4_f32
+#define CVF_BODY_Arr4_f32
+struct Arr4_f32 { f32 v[4]; };
+#endif
+struct Anim {
+    Animation* anim;
+    f32 x;
+    f32 y;
+    f32 xscl;
+    f32 yscl;
+    Arr4_i32 window;
+    f32 xshear;
+    i32 projection;
+    f32 fLength;
+    Rotation rot;
+    f32 xvel;
+    f32 yvel;
+    PalFX* palfx;
+    i16 layerno;
+    f32 localScale;
+    i32 offsetX;
+    Arr2_f32 friction;
+    Arr2_f32 accel;
+    Arr2_f32 vel;
+    Arr2_f32 maxDist;
+    f32 facing;
+    i32 lastUpdateFrame;
+    Arr2_f32 offsetInit;
+    Arr2_f32 scaleInit;
+    Arr4_f32 windowInit;
+    Arr2_f32 velocityInit;
+};
+
+struct AnimationTable {
+    Map_i32_AnimationPtr anims;
+    GoString filename;
+};
+
+struct AnimCompiler {
+    GoOpaqueVal* sff;
+    GoOpaqueVal* pal;
+    AnimationTable at;
+    Map_i32_bool seen;
+    Slice_GoString lines;
+    int i;
+    GoString filename;
+    GoString mainFile;
+    i32 animNo;
+    bool log;
+    bool finalized;
+};
+
+struct AnimFrame {
+    i32 Time;
+    i32 Group;
+    i32 Number;
+    i32 Xoffset;
+    i32 Yoffset;
+    TransType TransType;
+    u8 SrcAlpha;
+    u8 DstAlpha;
+    i8 Hscale;
+    i8 Vscale;
+    f32 Xscale;
+    f32 Yscale;
+    f32 Angle;
+    Slice_Arr4_f32 Clsn1;
+    Slice_Arr4_f32 Clsn2;
+};
+
+struct Layout {
+    Arr2_f32 offset;
+    i8 facing;
+    i8 vfacing;
+    i16 layerno;
+    Arr2_f32 scale;
+    Rotation rot;
+    Projection projection;
+    f32 fLength;
+    f32 xshear;
+    Arr4_i32 window;
+};
+
+struct AnimLayout {
+    Animation* anim;
+    Layout lay;
+    PalFX* palfx;
+};
+
+#ifndef CVF_BODY_Arr8_i32
+#define CVF_BODY_Arr8_i32
+struct Arr8_i32 { i32 v[8]; };
+#endif
+struct FSText {
+    Arr8_i32 font;
+    GoOpaqueVal* fnt;
+    GoString text;
+    Layout lay;
+    PalFX* palfx;
+    Arr4_f32 frgba;
+    i32 pfxtime;
+};
+
+struct AnimTextSnd {
+    Arr2_i32 snd;
+    FSText text;
+    AnimLayout animLayout;
+    i32 displaytime;
+    i32 cnt;
+};
+
+struct Tiling {
+    i32 xflag;
+    i32 yflag;
+    i32 xspacing;
+    i32 yspacing;
+};
+
+struct Animation {
+    GoOpaqueVal* sff;
+    GoOpaqueVal* palettedata;
+    GoOpaqueVal* spr;
+    Slice_AnimFrame frames;
+    Tiling tile;
+    i32 loopstart;
+    Slice_i32 interpolate_offset;
+    Slice_i32 interpolate_scale;
+    Slice_i32 interpolate_angle;
+    Slice_i32 interpolate_blend;
+    i32 curtime;
+    i32 curelem;
+    i32 curelemtime;
+    i32 lastActionFrame;
+    i32 drawidx;
+    i32 totaltime;
+    i32 looptime;
+    i32 prelooptime;
+    i16 mask;
+    TransType transType;
+    i16 srcAlpha;
+    i16 dstAlpha;
+    bool newframe;
+    bool loopend;
+    f32 interpolate_offset_x;
+    f32 interpolate_offset_y;
+    f32 scale_x;
+    f32 scale_y;
+    Rotation rot;
+    TransType curtrans;
+    f32 interpolate_blend_srcalpha;
+    f32 interpolate_blend_dstalpha;
+    RemapPreset remap;
+    Arr2_f32 start_scale;
+    bool isParallax;
+    bool parallaxRot;
+    bool isVideo;
+    bool phantomPixel;
+    i32 copyAction;
+    bool warnMissing;
+    i32 loopcount;
+    GoString filename;
+    i32 actionNumber;
+};
+
+struct AnimationCharPreloadProperties {
+    i32 Anim;
+    Arr2_i32 Spr;
+    Arr2_f32 Offset;
+    i32 Facing;
+    Arr2_f32 Scale;
+    f32 Xshear;
+    f32 Angle;
+    f32 XAngle;
+    f32 YAngle;
+    GoString Projection;
+    f32 Focallength;
+    i16 Layerno;
+    Arr4_i32 Window;
+    Arr2_i32 Localcoord;
+    Anim* AnimData;
+    bool ApplyPal;
+    i32 DrawOrder;
+};
+
+struct AnimationProperties {
+    i32 Anim;
+    Arr2_i32 Spr;
+    Arr2_f32 Offset;
+    i32 Facing;
+    Arr2_f32 Scale;
+    f32 Xshear;
+    f32 Angle;
+    f32 XAngle;
+    f32 YAngle;
+    GoString Projection;
+    f32 Focallength;
+    i16 Layerno;
+    Arr4_i32 Window;
+    Arr2_i32 Localcoord;
+    Anim* AnimData;
+};
+
+struct AnimationStagePreloadProperties {
+    i32 Anim;
+    Arr2_i32 Spr;
+    Arr2_f32 Offset;
+    i32 Facing;
+    Arr2_f32 Scale;
+    f32 Xshear;
+    f32 Angle;
+    f32 XAngle;
+    f32 YAngle;
+    GoString Projection;
+    f32 Focallength;
+    i16 Layerno;
+    Arr4_i32 Window;
+    Arr2_i32 Localcoord;
+    Anim* AnimData;
+};
+
+struct AnimationTextProperties {
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
+    Arr8_i32 Font;
+    GoString Text;
+    TextSprite* TextSpriteData;
+};
+
+struct FadeProperties {
+    i32 Time;
+    Arr3_i32 Col;
+    i32 Anim;
+    Arr2_i32 Localcoord;
+    Anim* AnimData;
+    Arr2_i32 Snd;
+    Fade* FadeData;
+};
+
+struct TextProperties {
+    Arr8_i32 Font;
+    Arr2_f32 Offset;
+    Arr2_f32 Scale;
+    f32 Xshear;
+    f32 Angle;
+    f32 XAngle;
+    f32 YAngle;
+    GoString Projection;
+    f32 Focallength;
+    GoString Text;
+    i16 Layerno;
+    Arr4_i32 Window;
+    Arr2_i32 Localcoord;
+    TextSprite* TextSpriteData;
+};
+
+struct Anon_7cc92e70 {
+    bool Snap;
+};
+struct TweenProperties {
+    Arr2_f32 Factor;
+    bool Snap;
+    Anon_7cc92e70 Wrap;
+};
+
+struct BoxCursorProperties {
+    bool Visible;
+    Arr4_i32 Coords;
+    Arr3_i32 Col;
+    i16 Layerno;
+    Arr2_i32 Localcoord;
+    Arr3_i32 Pulse;
+    Rect* RectData;
+    TweenProperties Tween;
+};
+
+struct BoxBgProperties {
+    bool Visible;
+    Arr3_i32 Col;
+    Arr2_i32 Alpha;
+    i16 Layerno;
+    Arr2_i32 Localcoord;
+    Rect* RectData;
+};
+
+struct Anon_4c4ed5ec {
+    TextProperties TextProperties;
+    Map_GoString_BgAnimationPropertiesPtr Bg;
+};
+struct Anon_a632ad85 {
+    TextProperties TextProperties;
+    TextProperties Active;
+};
+struct Anon_af4c965e {
+    TextProperties TextProperties;
+    TextProperties Active;
+    TextProperties Conflict;
+};
+struct Anon_39b99353 {
+    GoString KeyCode;
+};
+struct Anon_53468e2e {
+    TextProperties TextProperties;
+    bool Uppercase;
+    Arr2_f32 Spacing;
+    TweenProperties Tween;
+    Map_GoString_BgAnimationPropertiesPtr Bg;
+    Anon_4c4ed5ec Active;
+    Anon_a632ad85 Selected;
+    Anon_af4c965e Value;
+    Anon_a632ad85 Info;
+    Anon_39b99353 Delete;
+    Anon_39b99353 Rename;
+};
+struct Anon_9f553815 {
+    Arr2_f32 Y;
+};
+struct Anon_f665a959 {
+    Anon_9f553815 Margins;
+    i32 VisibleItems;
+};
+struct Anon_a316b3f5 {
+    AnimationProperties Up;
+    AnimationProperties Down;
+};
+struct Anon_2dddc38c {
+    bool Uppercase;
+};
+struct Anon_0a015777 {
+    Slice_GoString Key;
+};
+struct MenuProperties {
+    Arr2_f32 Pos;
+    TweenProperties Tween;
+    Anon_53468e2e Item;
+    Anon_f665a959 Window;
+    BoxCursorProperties BoxCursor;
+    BoxBgProperties BoxBg;
+    Anon_a316b3f5 Arrow;
+    Anon_2dddc38c Title;
+    Anon_0a015777 Next;
+    Anon_0a015777 Previous;
+    Anon_0a015777 Add;
+    Anon_0a015777 Subtract;
+    Anon_0a015777 Cancel;
+    Anon_0a015777 Done;
+    Anon_0a015777 Hiscore;
+    Map_GoString_GoString Unlock;
+    Map_GoString_GoString Valuename;
+    Map_GoString_GoString Itemname;
+};
+
+struct TimerProperties {
+    union {
+        TextProperties TextProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
+    i32 Count;
+    i32 Framespercount;
+    i32 Displaytime;
+};
+
+struct Anon_161374c1 {
+    Arr2_i32 Snd;
+};
+struct Anon_73c55e1f {
+    Map_GoString_Arr2_i32 Snd;
+};
+struct Anon_b4b8c731 {
+    Anon_161374c1 Move;
+    Anon_73c55e1f Done;
+    Map_GoString_Arr2_i32 Snd;
+};
+struct Anon_4ad773ee {
+    TextProperties TextProperties;
+    Arr2_i32 Snd;
+    GoString KeyCode;
+};
+struct Anon_bf560d5f {
+    GoString Storyboard;
+};
+struct Anon_fc37ce89 {
+    TextProperties TextProperties;
+    i32 Blinktime;
+};
+struct Anon_dfb9041b {
+    TextProperties TextProperties;
+    i32 Blinktime;
+    Slice_GoString Key;
+};
+struct Anon_a5a80400 {
+    GoString Storyboard;
+    Anon_161374c1 Done;
+    i32 Time;
+    Anon_fc37ce89 Insert;
+    Anon_dfb9041b Press;
+    TimerProperties Timer;
+};
+struct AttractModeProperties {
+    bool Enabled;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    TextProperties Title;
+    MenuProperties Menu;
+    Anon_b4b8c731 Cursor;
+    Anon_161374c1 Cancel;
+    Anon_4ad773ee Credits;
+    Anon_39b99353 Options;
+    Anon_bf560d5f Logo;
+    Anon_bf560d5f Intro;
+    Anon_a5a80400 Start;
+};
+
+struct bgAction {
+    Arr2_f32 offset;
+    Arr2_f32 sinoffset;
+    Arr2_f32 pos;
+    Arr2_f32 vel;
+    Arr2_f32 radius;
+    Arr2_i32 sintime;
+    Arr2_i32 sinlooptime;
+};
+
+struct StageProps {
+    bool roundpos;
+};
+
+struct BGDef {
+    GoString def;
+    Arr2_i32 localcoord;
+    GoOpaqueVal* sff;
+    AnimationTable animTable;
+    Slice_backGroundPtr bg;
+    Slice_bgCtrl bgc;
+    bgAction bga;
+    i32 time;
+    bool resetbg;
+    i32 lastTick;
+    f32 localscl;
+    Arr2_f32 scale;
+    StageProps stageprops;
+    Arr3_i32 bgclearcolor;
+    i32 startlayer;
+    Model* model;
+    i32 sceneNumber;
+    f32 fov;
+    f32 near;
+    f32 far;
+    Arr3_f32 modelOffset;
+    Arr3_f32 modelRotate;
+    Arr3_f32 modelScale;
+};
+
+struct BgAnimationProperties {
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
+    Arr2_f32 Spacing;
+};
+
+struct BgDefProperties {
+    GoOpaqueVal* Sff;
+    BGDef* BGDef;
+    GoString Spr;
+    Arr3_i32 BgClearColor;
+    Arr2_i32 BgClearAlpha;
+    i16 BgClearLayerno;
+    i32 StartLayer;
+    Arr2_i32 Localcoord;
+    Rect* RectData;
+};
+
+struct Bgm {
+    GoString filename;
+    int bgmVolume;
+    int loop;
+    GoIface streamer;
+    GoOpaque /* beep.Ctrl */* ctrl;
+    GoOpaque /* effects.Volume */* volctrl;
+    GoString format;
+    f32 freqmul;
+    int sampleRate;
+    int startPos;
+    GoOpaque /* sync.Mutex */ mu;
+    GoFunc cancel;
+};
+
+struct BgmProperties {
+    Slice_GoString Bgm;
+    Slice_i32 Loop;
+    Slice_i32 Volume;
+    Slice_i32 LoopStart;
+    Slice_i32 LoopEnd;
+    Slice_i32 StartPosition;
+    Slice_f32 FreqMul;
+    Slice_i32 LoopCount;
+};
+
+struct BoundingBox {
+    Arr3_f32 min;
+    Arr3_f32 max;
+};
+
+struct BufferSeeker {
+    GoOpaque /* beep.Buffer */* buf;
+    int pos;
+    GoIface str;
+};
+
 struct BytecodeFunction {
     i32 numVars;
     i32 numArgs;
     i32 numRets;
     Slice_StateController ctrls;
+};
+
+struct BytecodeValue {
+    ValueType vtype;
+    f64 value;
+};
+
+struct CallFunction {
+    GoString name;
+    BytecodeExp arg;
+    Slice_u8 ret;
+    i32 numArgs;
+};
+
+struct stageCamera {
+    i32 startx;
+    i32 starty;
+    i32 boundleft;
+    i32 boundright;
+    i32 boundhigh;
+    i32 boundlow;
+    i32 zboundtop;
+    i32 zboundbot;
+    f32 verticalfollow;
+    i32 floortension;
+    i32 tensionhigh;
+    i32 tensionlow;
+    bool lowestcap;
+    i32 tension;
+    i32 ztension;
+    f32 tensionvel;
+    f32 ztensionvel;
+    i32 overdrawhigh;
+    i32 overdrawlow;
+    i32 cuthigh;
+    i32 cutlow;
+    Arr2_i32 localcoord;
+    f32 localscl;
+    i32 zoffset;
+    f32 ztopscale;
+    f32 zbotscale;
+    f32 depthtoscreen;
+    f32 topz;
+    f32 botz;
+    f32 startzoom;
+    f32 zoomin;
+    f32 zoomout;
+    bool ytensionenable;
+    bool autocenter;
+    bool zautocenter;
+    bool zoomanchor;
+    f32 boundhighzoomdelta;
+    f32 verticalfollowzoomdelta;
+    f32 zoomindelay;
+    f32 zoomindelaytime;
+    f32 zoominspeed;
+    f32 zoomoutspeed;
+    f32 yscrollspeed;
+    f32 fov;
+    f32 yshift;
+    f32 far;
+    f32 near;
+    f32 aspectcorrection;
+    f32 zoomanchorcorrection;
+    f32 ywithoutbound;
+    f32 zwithoutbound;
+    f32 highest;
+    f32 prevHighest;
+    f32 zfrontest;
+    f32 prevZfrontest;
+    f32 zbackest;
+    f32 prevZbackest;
+    f32 lowest;
+    f32 prevLowest;
+    f32 leftest;
+    f32 prevLeftest;
+    f32 rightest;
+    f32 prevRightest;
+    f32 leftestvel;
+    f32 rightestvel;
+    bool skipSmoothing;
+    f32 maxRight;
+    f32 minLeft;
+    bool autoZoom;
+};
+
+struct Camera {
+    union {
+        stageCamera stageCamera_;
+        struct {
+            i32 startx;
+            i32 starty;
+            i32 boundleft;
+            i32 boundright;
+            i32 boundhigh;
+            i32 boundlow;
+            i32 zboundtop;
+            i32 zboundbot;
+            f32 verticalfollow;
+            i32 floortension;
+            i32 tensionhigh;
+            i32 tensionlow;
+            bool lowestcap;
+            i32 tension;
+            i32 ztension;
+            f32 tensionvel;
+            f32 ztensionvel;
+            i32 overdrawhigh;
+            i32 overdrawlow;
+            i32 cuthigh;
+            i32 cutlow;
+            Arr2_i32 localcoord;
+            f32 localscl;
+            i32 zoffset;
+            f32 ztopscale;
+            f32 zbotscale;
+            f32 depthtoscreen;
+            f32 topz;
+            f32 botz;
+            f32 startzoom;
+            f32 zoomin;
+            f32 zoomout;
+            bool ytensionenable;
+            bool autocenter;
+            bool zautocenter;
+            bool zoomanchor;
+            f32 boundhighzoomdelta;
+            f32 verticalfollowzoomdelta;
+            f32 zoomindelay;
+            f32 zoomindelaytime;
+            f32 zoominspeed;
+            f32 zoomoutspeed;
+            f32 yscrollspeed;
+            f32 fov;
+            f32 yshift;
+            f32 far;
+            f32 near;
+            f32 aspectcorrection;
+            f32 zoomanchorcorrection;
+            f32 ywithoutbound;
+            f32 zwithoutbound;
+            f32 highest;
+            f32 prevHighest;
+            f32 zfrontest;
+            f32 prevZfrontest;
+            f32 zbackest;
+            f32 prevZbackest;
+            f32 lowest;
+            f32 prevLowest;
+            f32 leftest;
+            f32 prevLeftest;
+            f32 rightest;
+            f32 prevRightest;
+            f32 leftestvel;
+            f32 rightestvel;
+            bool skipSmoothing;
+            f32 maxRight;
+            f32 minLeft;
+            bool autoZoom;
+        };
+    };
+    CameraView View;
+    Arr2_f32 Pos;
+    Arr2_f32 ScreenPos;
+    Arr2_f32 Offset;
+    f32 XMin;
+    f32 XMax;
+    f32 Scale;
+    f32 MinScale;
+    f32 boundL;
+    f32 boundR;
+    f32 boundH;
+    f32 boundLo;
+    f32 zoff;
+    f32 halfWidth;
+    Char* FollowChar;
+    f32 LegacyZoomMin;
+    f32 LegacyZoomMax;
+    f32 ExtraBoundH;
+};
+
+struct CellOverrideProperties {
+    Arr2_f32 Offset;
+    Arr2_f32 Spacing;
+    i32 Facing;
+    bool Skip;
+    Arr2_f32 Scale;
+    f32 XShear;
+    f32 Angle;
+    f32 XAngle;
+    f32 YAngle;
+    GoString Projection;
+    f32 FocalLength;
+};
+
+struct OverlayProperties {
+    Arr3_i32 Col;
+    Arr2_i32 Alpha;
+    i16 Layerno;
+    Arr4_i32 Window;
+    Arr2_i32 Localcoord;
+    Rect* RectData;
+};
+
+struct Anon_1f176b16 {
+    i32 Time;
+};
+struct Anon_7bb06b75 {
+    Arr2_i32 Snd;
+    i32 Time;
+};
+struct Anon_5591596d {
+    TextProperties TextProperties;
+    i32 Displaytime;
+};
+struct Anon_5f13cb02 {
+    AnimationProperties AnimationProperties;
+    i32 Displaytime;
+};
+struct ChallengerInfoProperties {
+    bool Enabled;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    i32 Time;
+    Anon_1f176b16 Pause;
+    Anon_7bb06b75 Snd;
+    Slice_GoString Key;
+    Anon_5591596d Text;
+    Anon_5f13cb02 Bg;
+    OverlayProperties Overlay;
 };
 
 struct StateState {
@@ -178,11 +3856,31 @@ struct StateState {
     i32 no;
     i32 prevno;
     i32 time;
-    CvfStateDef* sb;
+    StateBytecode* sb;
 };
 
-struct Arr4_f32 { f32 v[4]; };
-struct Arr2_f32 { f32 v[2]; };
+struct Anon_811d7c45 {
+    Arr2_f32 width;
+    Arr2_f32 height;
+    Arr2_f32 depth;
+};
+struct Anon_040fa437 {
+    Anon_811d7c45 dist;
+    Arr2_f32 depth;
+};
+struct Anon_3d0fed52 {
+    Anon_811d7c45 dist;
+};
+struct Anon_caf3f353 {
+    Anon_3d0fed52 attack;
+    i32 doscale;
+};
+struct Anon_22d84747 {
+    Arr2_f32 pos;
+};
+struct Anon_7d4762ec {
+    Arr2_f32 offset;
+};
 struct CharSize {
     f32 xscale;
     f32 yscale;
@@ -190,19 +3888,21 @@ struct CharSize {
     Arr4_f32 crouchbox;
     Arr4_f32 airbox;
     Arr4_f32 downbox;
-    struct { char _anon; } /* anon struct */ attack;
-    struct { char _anon; } /* anon struct */ proj;
-    struct { char _anon; } /* anon struct */ head;
-    struct { char _anon; } /* anon struct */ mid;
+    Anon_040fa437 attack;
+    Anon_caf3f353 proj;
+    Anon_22d84747 head;
+    Anon_22d84747 mid;
     f32 shadowoffset;
-    struct { char _anon; } /* anon struct */ draw;
+    Anon_7d4762ec draw;
     Arr2_f32 depth;
     i32 weight;
     f32 pushfactor;
 };
 
-struct Arr4_i32 { i32 v[4]; };
+#ifndef CVF_BODY_Arr6_i32
+#define CVF_BODY_Arr6_i32
 struct Arr6_i32 { i32 v[6]; };
+#endif
 struct PalFXDef {
     i32 time;
     f32 color;
@@ -224,7 +3924,6 @@ struct PalFXDef {
     i32 itime;
 };
 
-struct Arr8_i32 { i32 v[8]; };
 struct HitDef {
     bool isprojectile;
     int statePN;
@@ -495,12 +4194,6 @@ struct varCacheEnt {
     bool isF;
 };
 
-struct Rotation {
-    f32 angle;
-    f32 xangle;
-    f32 yangle;
-};
-
 struct CharSystemVar {
     i32 airJumpCount;
     AssertSpecialFlag assertFlag;
@@ -550,21 +4243,45 @@ struct CharSystemVar {
     i32 prevSuperMovetime;
 };
 
+#ifndef CVF_BODY_Arr4_bool
+#define CVF_BODY_Arr4_bool
 struct Arr4_bool { bool v[4]; };
+#endif
+#ifndef CVF_BODY_Arr4_Slice_ClsnOverride
+#define CVF_BODY_Arr4_Slice_ClsnOverride
 struct Arr4_Slice_ClsnOverride { Slice_ClsnOverride v[4]; };
+#endif
+#ifndef CVF_BODY_Arr4_Slice_ClsnTransform
+#define CVF_BODY_Arr4_Slice_ClsnTransform
 struct Arr4_Slice_ClsnTransform { Slice_ClsnTransform v[4]; };
+#endif
+#ifndef CVF_BODY_Arr8_HitBy
+#define CVF_BODY_Arr8_HitBy
 struct Arr8_HitBy { HitBy v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_HitOverride
+#define CVF_BODY_Arr8_HitOverride
 struct Arr8_HitOverride { HitOverride v[8]; };
+#endif
+#ifndef CVF_BODY_Arr32_varCacheEnt
+#define CVF_BODY_Arr32_varCacheEnt
 struct Arr32_varCacheEnt { varCacheEnt v[32]; };
+#endif
+#ifndef CVF_BODY_Arr6_f32
+#define CVF_BODY_Arr6_f32
 struct Arr6_f32 { f32 v[6]; };
+#endif
+#ifndef CVF_BODY_Arr4_Slice_ClsnFinal
+#define CVF_BODY_Arr4_Slice_ClsnFinal
 struct Arr4_Slice_ClsnFinal { Slice_ClsnFinal v[4]; };
+#endif
 struct Char {
     u32 specGen;
     GoString name;
     PalFX* palfx;
-    CvfAnim* anim;
-    CvfAnim* animBackup;
-    CvfAnimFrame* curFrame;
+    Animation* anim;
+    Animation* animBackup;
+    AnimFrame* curFrame;
     Slice_CommandList cmd;
     StateState ss;
     int controller;
@@ -629,7 +4346,7 @@ struct Char {
     Map_i32_i32 cnssysvar;
     Map_i32_f32 cnssysfvar;
     union {
-        CharSystemVar CharSystemVar;
+        CharSystemVar CharSystemVar_;
         struct {
             i32 airJumpCount;
             AssertSpecialFlag assertFlag;
@@ -718,7 +4435,7 @@ struct Char {
     i32 koEchoTimer;
     f32 groundLevel;
     f32 prevGroundLevel;
-    CvfAnim* shadowAnim;
+    Animation* shadowAnim;
     i32 shadowAnimelem;
     Arr3_i32 shadowColor;
     i32 shadowIntensity;
@@ -733,7 +4450,7 @@ struct Char {
     f32 shadowfLength;
     CustomShader shadowShader;
     bool shadowShaderSet;
-    CvfAnim* reflectAnim;
+    Animation* reflectAnim;
     i32 reflectAnimelem;
     Arr3_i32 reflectColor;
     i32 reflectIntensity;
@@ -766,6 +4483,43 @@ struct Char {
     Slice_ClsnFinal clsnFilterBuf;
 };
 
+struct CharCompiler {
+    CommandList* cmdl;
+    GoString previousOperator;
+    bool reverseOrder;
+    bool norange;
+    GoString token;
+    int playerNo;
+    CharGlobalInfo* targetGi;
+    Map_GoString_scFunc scmap;
+    StateBlock* block;
+    Slice_GoString lines;
+    int i;
+    Map_GoString_u8 vars;
+    Map_GoString_BytecodeFunction funcs;
+    i32 stateNo;
+    bool zssMode;
+    GoString currentFile;
+    Arr1024_lowerCacheEntry* lowerCache;
+    Slice_BytecodeExpPtr scratch;
+    int scratchDepth;
+    Slice_expValueFramePtr frames;
+    int frameDepth;
+};
+
+struct Anon_3e054d73 {
+    i32 defence_up;
+    f32 defence_mul;
+};
+struct Anon_6d248a4b {
+    i32 time;
+};
+struct Anon_b995bd4c {
+    i32 sparkno;
+};
+struct Anon_3d4c64d3 {
+    i32 echo;
+};
 struct CharData {
     i32 life;
     i32 power;
@@ -773,41 +4527,147 @@ struct CharData {
     i32 guardpoints;
     i32 attack;
     i32 defence;
-    struct { char _anon; } /* anon struct */ fall;
-    struct { char _anon; } /* anon struct */ liedown;
+    Anon_3e054d73 fall;
+    Anon_6d248a4b liedown;
     i32 airjuggle;
     i32 sparkno;
-    struct { char _anon; } /* anon struct */ guard;
+    Anon_b995bd4c guard;
     i32 hitsound_channel;
     i32 guardsound_channel;
-    struct { char _anon; } /* anon struct */ ko;
+    Anon_3d4c64d3 ko;
     i32 volume;
     i32 intpersistindex;
     i32 floatpersistindex;
 };
 
+struct Anon_df3b96d4 {
+    f32 fwd;
+    f32 back;
+    Arr3_f32 up;
+    Arr3_f32 down;
+};
+struct Anon_b508c0f6 {
+    Arr2_f32 fwd;
+    Arr2_f32 back;
+    Arr3_f32 up;
+    Arr3_f32 down;
+};
+struct Anon_8b0a23b6 {
+    Arr2_f32 neu;
+    f32 back;
+    f32 fwd;
+    Arr3_f32 up;
+    Arr3_f32 down;
+};
+struct Anon_fd62af00 {
+    Arr2_f32 back;
+    Arr2_f32 fwd;
+    Arr3_f32 up;
+    Arr3_f32 down;
+};
+struct Anon_16644dc7 {
+    Arr2_f32 mul;
+    Arr2_f32 add;
+    f32 back;
+    f32 fwd;
+    f32 up;
+    f32 down;
+};
+struct Anon_c4dc6fdd {
+    Arr2_f32 add;
+    f32 ymin;
+};
+struct Anon_f88a21f4 {
+    Arr2_f32 groundrecover;
+    Anon_16644dc7 airrecover;
+    Anon_c4dc6fdd ko;
+};
+struct Anon_688ad72e {
+    Anon_f88a21f4 gethit;
+};
+struct Anon_c6dbd0bf {
+    f32 xmul;
+    Arr2_f32 add;
+    f32 ymin;
+};
+struct Anon_54db43aa {
+    Anon_c6dbd0bf ko;
+};
+struct Anon_14b37acc {
+    Anon_54db43aa gethit;
+};
 struct CharVelocity {
-    struct { char _anon; } /* anon struct */ walk;
-    struct { char _anon; } /* anon struct */ run;
-    struct { char _anon; } /* anon struct */ jump;
-    struct { char _anon; } /* anon struct */ runjump;
-    struct { char _anon; } /* anon struct */ airjump;
-    struct { char _anon; } /* anon struct */ air;
-    struct { char _anon; } /* anon struct */ ground;
+    Anon_df3b96d4 walk;
+    Anon_b508c0f6 run;
+    Anon_8b0a23b6 jump;
+    Anon_fd62af00 runjump;
+    Anon_8b0a23b6 airjump;
+    Anon_688ad72e air;
+    Anon_14b37acc ground;
 };
 
-struct CharMovement {
-    struct { char _anon; } /* anon struct */ airjump;
+struct Anon_7293d90f {
+    i32 num;
+    f32 height;
+};
+struct Anon_e464c8fd {
+    f32 friction;
+    f32 friction_threshold;
+};
+struct Anon_1df292c6 {
+    f32 threshold;
+};
+struct Anon_0f20e66b {
+    Anon_1df292c6 ground;
+    f32 groundlevel;
+};
+struct Anon_57e999ad {
+    f32 threshold;
     f32 yaccel;
-    struct { char _anon; } /* anon struct */ stand;
-    struct { char _anon; } /* anon struct */ crouch;
-    struct { char _anon; } /* anon struct */ air;
-    struct { char _anon; } /* anon struct */ down;
+};
+struct Anon_c18ae172 {
+    f32 groundlevel;
+};
+struct Anon_dbc08b28 {
+    f32 groundlevel;
+    Anon_0f20e66b groundrecover;
+    Anon_57e999ad airrecover;
+    Anon_c18ae172 trip;
+};
+struct Anon_8f8dfbf8 {
+    Anon_dbc08b28 gethit;
+};
+struct Anon_ab19bc50 {
+    Arr2_f32 offset;
+    f32 yaccel;
+    f32 groundlevel;
+};
+struct Anon_18c0a914 {
+    Anon_ab19bc50 bounce;
+    Anon_7d4762ec gethit;
+    f32 friction_threshold;
+};
+struct CharMovement {
+    Anon_7293d90f airjump;
+    f32 yaccel;
+    Anon_e464c8fd stand;
+    Anon_e464c8fd crouch;
+    Anon_8f8dfbf8 air;
+    Anon_18c0a914 down;
 };
 
+#ifndef CVF_BODY_Arr3_u16
+#define CVF_BODY_Arr3_u16
 struct Arr3_u16 { u16 v[3]; };
+#endif
+#ifndef CVF_BODY_Arr2_u16
+#define CVF_BODY_Arr2_u16
 struct Arr2_u16 { u16 v[2]; };
+#endif
+#ifndef CVF_BODY_Arr100_GoString
+#define CVF_BODY_Arr100_GoString
 struct Arr100_GoString { GoString v[100]; };
+#endif
 struct CharGlobalInfo {
     GoString def;
     GoString name;
@@ -819,10 +4679,10 @@ struct CharGlobalInfo {
     GoString authorLow;
     GoString lifebarname;
     GoString defaultLifebarname;
-    void* sff;
-    void* palettedata;
-    void* snd;
-    CvfAnimTable animTable;
+    GoOpaqueVal* sff;
+    GoOpaqueVal* palettedata;
+    GoOpaqueVal* snd;
+    AnimationTable animTable;
     Map_int_GoOpaqueVal palInfo;
     i32 palno;
     Arr3_u16 ikemenver;
@@ -830,7 +4690,7 @@ struct CharGlobalInfo {
     CharData data;
     CharVelocity velocity;
     CharMovement movement;
-    Map_i32_CvfStateDefPtr states;
+    Map_i32_StateBytecodePtr states;
     Map_GoString_BytecodeFunction callFuncs;
     Arr100_GoString quotes;
     Map_int_GoString movelists;
@@ -840,7 +4700,7 @@ struct CharGlobalInfo {
     Arr2_i32 remappedpal;
     Arr2_i32 localcoord;
     f32 rawlocalscl;
-    Map_int_voidPtr fnt;
+    Map_int_GoOpaqueValPtr fnt;
     GoString fightfxPrefix;
     Slice_GoString fxPath;
     Music music;
@@ -848,6 +4708,19 @@ struct CharGlobalInfo {
     i32 defenceBase;
     bool canMutateStage;
     Map_GoString_GoString customShaders;
+};
+
+struct CharList {
+    Slice_CharPtr creationOrder;
+    Slice_CharPtr runOrder;
+    Map_i32_CharPtr idMap;
+    bool enemyNearChanged;
+};
+
+struct CharVarBackup {
+    Map_i32_i32 cnsvar;
+    Map_i32_f32 cnsfvar;
+    Map_GoString_TypedValue mapArray;
 };
 
 struct ClsnFinal {
@@ -866,6 +4739,20 @@ struct ClsnTransform {
     Arr2_f32 scale;
     f32 angle;
     Arr2_f32 pivot;
+};
+
+struct ComboShake {
+    i32 time;
+    f32 ampl;
+    f32 scale;
+    f32 freq;
+    f32 phase;
+    f32 dir;
+    f32 diradd;
+    f32 decay;
+    i32 curTime;
+    Arr2_f32 curOffset;
+    f32 curScale;
 };
 
 struct Command {
@@ -887,6 +4774,19 @@ struct Command {
     Slice_int loopOrder;
 };
 
+struct CommandKeyRemap {
+    CommandKey a;
+    CommandKey b;
+    CommandKey c;
+    CommandKey x;
+    CommandKey y;
+    CommandKey z;
+    CommandKey s;
+    CommandKey d;
+    CommandKey w;
+    CommandKey m;
+};
+
 struct cmdNameCacheEnt {
     u8* p;
     int n;
@@ -894,7 +4794,10 @@ struct cmdNameCacheEnt {
     bool ok;
 };
 
+#ifndef CVF_BODY_Arr32_cmdNameCacheEnt
+#define CVF_BODY_Arr32_cmdNameCacheEnt
 struct Arr32_cmdNameCacheEnt { cmdNameCacheEnt v[32]; };
+#endif
 struct CommandList {
     InputBuffer* Buffer;
     Map_GoString_int Names;
@@ -907,6 +4810,15 @@ struct CommandList {
     bool DefaultBufferHitpause;
     bool DefaultBufferPauseEnd;
     bool DefaultBufferShared;
+};
+
+struct CommandSpec {
+    GoString Cmd;
+    i32 Time;
+    i32 BufTime;
+    bool BufferHitpause;
+    bool BufferPauseend;
+    i32 StepTime;
 };
 
 struct CommandStep {
@@ -924,9 +4836,413 @@ struct CommandStepKey {
     i32 chargetime;
 };
 
+struct RollbackProperties {
+    int Port;
+    int FrameDelay;
+    int DisconnectNotifyStart;
+    int DisconnectTimeout;
+    bool StateLogsEnabled;
+    bool GgpoLogsEnabled;
+    bool SaveStageData;
+    bool DesyncTest;
+    int DesyncTestFrames;
+    bool DesyncTestAI;
+};
+
+struct Anon_b0b30749 {
+    Map_GoString_Slice_GoString Air;
+    Map_GoString_Slice_GoString Cmd;
+    Map_GoString_Slice_GoString Const;
+    Map_GoString_Slice_GoString States;
+    Map_GoString_Slice_GoString Fx;
+    Map_GoString_Slice_GoString Shaders;
+    Map_GoString_Slice_GoString Modules;
+    Map_GoString_Slice_GoString Lua;
+};
+struct Anon_902873b9 {
+    i32 Wins;
+    i32 MaxDrawGames;
+};
+struct Anon_e71bdd7c {
+    bool Duplicates;
+    bool LifeShare;
+    bool PowerShare;
+    f32 SingleVsTeamLife;
+};
+struct Anon_3d522be3 {
+    i32 Wins;
+};
+struct Anon_f91950c2 {
+    int Min;
+    int Max;
+    Anon_3d522be3 Match;
+    bool LoseOnKO;
+};
+struct Anon_5b4e0f1b {
+    int Min;
+    int Max;
+    Anon_3d522be3 Match;
+    bool LoseOnKO;
+    f32 TimeScaling;
+};
+struct Anon_99a01e83 {
+    f32 Base;
+    f32 Bonus;
+};
+struct Anon_7671e252 {
+    int Min;
+    int Max;
+    Anon_99a01e83 Recovery;
+};
+struct Anon_4dfef77c {
+    int Difficulty;
+    f32 Life;
+    i32 Time;
+    int GameSpeed;
+    int GameSpeedStep;
+    Anon_902873b9 Match;
+    int Credits;
+    bool QuickContinue;
+    bool AutoGuard;
+    bool GuardBreak;
+    bool Dizzy;
+    bool RedLife;
+    Anon_e71bdd7c Team;
+    Anon_f91950c2 Simul;
+    Anon_5b4e0f1b Tag;
+    Anon_7671e252 Turns;
+};
+struct Anon_18609da4 {
+    GoString Motif;
+    int Players;
+    GoString Language;
+    i32 AfterImageMax;
+    int ExplodMax;
+    i32 HelperMax;
+    int ProjectileMax;
+    int PaletteMax;
+    int TextMax;
+    bool TickInterpolation;
+    bool ZoomActive;
+    bool EscOpensMenu;
+    bool VsScreenLoading;
+    bool TurnsLoading;
+    i32 BootLoadingMode;
+    bool FirstRun;
+    GoString WindowTitle;
+    Slice_GoString WindowIcon;
+    GoString System;
+    GoString ScreenshotFolder;
+    GoString TrainingChar;
+    GoString TrainingStage;
+    GoString GamepadMappings;
+    bool LegacyTime;
+};
+struct Anon_e861adfc {
+    bool AllowDebugMode;
+    bool AllowDebugKeys;
+    int ClipboardRows;
+    int ConsoleRows;
+    bool ClsnDarken;
+    bool DumpLuaTables;
+    GoString Font;
+    f32 FontScale;
+    GoString StartStage;
+    f32 ForceStageZoomout;
+    f32 ForceStageZoomin;
+    bool ForceStageAutoZoom;
+    bool KeepSpritesOnReload;
+    bool RetryLoadOnError;
+    bool MacOSUseCommandKey;
+    int SpeedTest;
+};
+struct Anon_6fca328f {
+    GoString RenderMode;
+    i32 GameWidth;
+    i32 GameHeight;
+    int WindowWidth;
+    int WindowHeight;
+    int Framerate;
+    int VSync;
+    bool Fullscreen;
+    bool Borderless;
+    bool RGBSpriteBilinearFilter;
+    i32 MSAA;
+    bool WindowCentered;
+    Slice_GoString ExternalShaders;
+    bool WindowScaleMode;
+    i32 FightAspectWidth;
+    i32 FightAspectHeight;
+    bool KeepAspect;
+    bool RendererDebugMode;
+    bool EnableModel;
+    bool EnableModelShadow;
+    i32 LifeBarTextureAtlasSize;
+    i32 StageTextureAtlasSize;
+    i32 CharacterTextureAtlasSize;
+    i32 FontTextureAtlasSize;
+    i32 TextureAtlasSize;
+    int ImageSuballocThresholdKB;
+    int ImageSuballocBlockSizeMB;
+    bool VRAMFallbackEnabled;
+    int VRAMSwapThresholdPercent;
+    int VRAMSwapCooldownFrames;
+};
+struct Anon_15785e54 {
+    i32 SampleRate;
+    GoString SoundFont;
+    bool StereoEffects;
+    f32 PanningRange;
+    i32 WavChannels;
+    int MasterVolume;
+    int PauseMasterVolume;
+    int WavVolume;
+    int BGMVolume;
+    bool BGMRAMBuffer;
+    int MaxBGMVolume;
+    bool AudioDucking;
+    int AudioResampleQuality;
+    int FocusLossVolume;
+};
+struct Anon_c5e8a111 {
+    bool RandomColor;
+    bool SurvivalColor;
+    bool Ramping;
+};
+struct Anon_b511f76b {
+    AIrampProperties AIramp;
+};
+struct Anon_558f4cc9 {
+    Anon_c5e8a111 AI;
+    Anon_b511f76b Arcade;
+    Anon_b511f76b Team;
+    Anon_b511f76b Survival;
+};
+struct Anon_784a3f6d {
+    int ListenPort;
+    int SyncTimeout;
+    int LoadingTimeout;
+    bool RollbackNetcode;
+    Map_GoString_GoString IP;
+    RollbackProperties Rollback;
+};
+struct Anon_eceff868 {
+    bool ButtonAssist;
+    int SOCDResolution;
+    f32 ControllerStickSensitivity;
+    f32 XinputTriggerSensitivity;
+    i32 UiRepeatDelay;
+    i32 UiRepeatRate;
+    i32 PauseExitDelay;
+};
+struct Config {
+    GoString Def;
+    GoOpaque /* ini.File */* IniFile;
+    GoOpaque /* ini.File */* DefaultOnlyIni;
+    Anon_b0b30749 Common;
+    Anon_4dfef77c Options;
+    Anon_18609da4 Config;
+    Anon_e861adfc Debug;
+    Anon_6fca328f Video;
+    Anon_15785e54 Sound;
+    Anon_558f4cc9 Arcade;
+    Anon_784a3f6d Netplay;
+    Anon_eceff868 Input;
+    Map_GoString_KeysPropertiesPtr Keys;
+    Map_GoString_KeysPropertiesPtr Joystick;
+};
+
+struct ContinueCounterProperties {
+    i32 SkipTime;
+    Arr2_i32 Snd;
+};
+
+struct Anon_31b1f748 {
+    Slice_i32 State;
+};
+struct PlayerContinueProperties {
+    Slice_i32 State;
+    Anon_31b1f748 Yes;
+    Anon_31b1f748 No;
+};
+
+struct Anon_c29ce860 {
+    bool Enabled;
+};
+struct Anon_b525c883 {
+    bool Enabled;
+};
+struct Anon_828756c7 {
+    Slice_GoString Key;
+    Arr2_i32 Snd;
+};
+struct Anon_3b80bc6b {
+    AnimationProperties AnimationProperties;
+    i32 StartTime;
+    i32 EndTime;
+    Anon_161374c1 Default;
+    i32 SkipStart;
+    Map_GoString_ContinueCounterPropertiesPtr MapCounts;
+    ContinueCounterProperties End;
+};
+struct ContinueScreenProperties {
+    bool Enabled;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    Arr2_f32 Pos;
+    TextProperties Continue;
+    Anon_a632ad85 Yes;
+    Anon_a632ad85 No;
+    Anon_c29ce860 Sounds;
+    Anon_b525c883 LegacyMode;
+    Anon_c29ce860 GameOver;
+    Anon_828756c7 Move;
+    Anon_161374c1 Cancel;
+    Anon_828756c7 Done;
+    Anon_0a015777 Skip;
+    OverlayProperties Overlay;
+    PlayerContinueProperties P1;
+    PlayerContinueProperties P2;
+    PlayerContinueProperties P3;
+    PlayerContinueProperties P4;
+    PlayerContinueProperties P5;
+    PlayerContinueProperties P6;
+    PlayerContinueProperties P7;
+    PlayerContinueProperties P8;
+    TextProperties Credits;
+    Anon_3b80bc6b Counter;
+};
+
+#ifndef CVF_BODY_Arr6_i8
+#define CVF_BODY_Arr6_i8
+struct Arr6_i8 { i8 v[6]; };
+#endif
+struct ControllerState {
+    Arr6_i8 Axes;
+    Map_GoOpaque_invalidtypePtr_u8 Buttons;
+    bool HasRumble;
+};
+
+struct DebugClsn {
+    Slice_Arr7_f32 rects;
+    GoIface palTex;
+};
+
+struct DebugClsnText {
+    f32 x;
+    f32 y;
+    GoString text;
+    i32 r;
+    i32 g;
+    i32 b;
+    i32 a;
+};
+
+struct Anon_75b723d6 {
+    i32 WaitTime;
+};
+struct Anon_f8e10808 {
+    bool Display;
+};
+struct Anon_7feba13e {
+    i32 EndTime;
+    bool PlayBgm;
+    bool StopBgm;
+    Anon_f8e10808 Bars;
+};
+struct Anon_ad3827b6 {
+    i32 WaitCycles;
+};
+struct DemoModeProperties {
+    bool Enabled;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    Anon_75b723d6 Title;
+    Anon_7feba13e Fight;
+    Anon_ad3827b6 Intro;
+    bool DebugInfo;
+    Anon_c29ce860 Select;
+    Anon_c29ce860 VsScreen;
+    Anon_0a015777 Cancel;
+};
+
+struct Anon_a61ac1b3 {
+    AnimationProperties AnimationProperties;
+    AnimationProperties Active;
+};
+struct Anon_4d998b97 {
+    TextProperties TextProperties;
+    Arr2_f32 TextSpacing;
+    i32 TextDelay;
+    GoString TextWrap;
+};
+struct PlayerDialogueProperties {
+    AnimationProperties Bg;
+    Anon_a61ac1b3 Face;
+    TextProperties Name;
+    Anon_4d998b97 Text;
+    AnimationProperties Active;
+};
+
+struct DialogueInfoProperties {
+    bool Enabled;
+    i32 StartTime;
+    i32 EndTime;
+    i32 SwitchTime;
+    i32 SkipTime;
+    Anon_0a015777 Skip;
+    Anon_0a015777 Cancel;
+    PlayerDialogueProperties P1;
+    PlayerDialogueProperties P2;
+};
+
+struct DialogueParsedLine {
+    int side;
+    GoString text;
+    Map_int_Slice_DialogueToken tokens;
+    int typedCnt;
+};
+
+struct DialogueToken {
+    GoString param;
+    int side;
+    GoString redirection;
+    int pn;
+    Slice_GoIface value;
+};
+
+struct EnvShake {
+    i32 time;
+    f32 freq;
+    f32 ampl;
+    f32 phase;
+    f32 mul;
+    f32 dir;
+    f32 diradd;
+    f32 decay;
+    i32 curTime;
+    Arr2_f32 curOffset;
+};
+
+struct Environment {
+    GLTFTexture* hdrTexture;
+    GLTFTexture* cubeMapTexture;
+    GLTFTexture* lambertianTexture;
+    GLTFTexture* GGXTexture;
+    GLTFTexture* GGXLUT;
+    i32 lambertianSampleCount;
+    i32 GGXSampleCount;
+    i32 GGXLUTSampleCount;
+    i32 mipmapLevels;
+    f32 environmentIntensity;
+};
+
+#ifndef CVF_BODY_Arr2_Rotation
+#define CVF_BODY_Arr2_Rotation
 struct Arr2_Rotation { Rotation v[2]; };
+#endif
 struct Explod {
-    CvfAnim* spareAnim;
+    Animation* spareAnim;
     PalFX* sparePal;
     PalFX* ownPalfx;
     i32 id;
@@ -957,7 +5273,7 @@ struct Explod {
     i32 reflection;
     i32 supermovetime;
     i32 pausemovetime;
-    CvfAnim* anim;
+    Animation* anim;
     i32 animNo;
     GoString anim_ffx;
     int animPN;
@@ -1009,6 +5325,2098 @@ struct Explod {
     CustomShader customShader;
 };
 
+struct FSBgTextSnd {
+    Arr2_i32 pos;
+    FSText text;
+    AnimLayout bg;
+    i32 time;
+    i32 displaytime;
+    Arr2_i32 snd;
+    i32 sndtime;
+    i32 timer;
+};
+
+struct FSMsg {
+    i32 resttime;
+    i32 agetimer;
+    f32 counterX;
+    GoString text;
+    i32 fontNo;
+    i32 fontBank;
+    i32 fontAlign;
+    Arr4_i32 fontColor;
+    bool fontColorSet;
+    PalFX* palfx;
+    AnimLayout bg;
+    AnimLayout front;
+    bool del;
+    Arr2_i32 snd;
+    GoString snd_ffx;
+    Arr2_i32 spr;
+    i32 animNo;
+    GoString anim_ffx;
+    bool top;
+};
+
+struct FaceParams {
+    int grp;
+    int idx;
+    int pn;
+};
+
+struct Anon_52ad6e9d {
+    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    Slice_GoString Key;
+};
+struct FaceProperties {
+    union {
+        AnimationCharPreloadProperties AnimationCharPreloadProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+            bool ApplyPal;
+            i32 DrawOrder;
+        };
+    };
+    Anon_52ad6e9d Done;
+    AnimationProperties Random;
+    AnimationProperties Loading;
+    AnimationProperties Slot;
+    Arr2_f32 Velocity;
+    Arr2_f32 MaxDist;
+    Arr2_f32 Accel;
+    Arr2_f32 Friction;
+    Arr2_f32 Pos;
+    i32 Num;
+    Arr2_f32 Spacing;
+    bool Padding;
+};
+
+struct Fade {
+    bool active;
+    i32 time;
+    i32 totalTime;
+    i32 overlayDelay;
+    Arr3_i32 col;
+    u32 colEncoded;
+    Anim* animData;
+    bool isFadeIn;
+    i32 timeRemaining;
+    Arr2_i32 snd;
+    GoOpaqueVal* sndSource;
+};
+
+struct FightFx {
+    AnimationTable animTable;
+    GoString fileName;
+    GoOpaqueVal* sff;
+    GoOpaqueVal* snd;
+    f32 fx_scale;
+    Arr2_i32 localcoord;
+    int refCount;
+    bool isCharFX;
+};
+
+#ifndef CVF_BODY_Arr2_int
+#define CVF_BODY_Arr2_int
+struct Arr2_int { int v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_Slice_int
+#define CVF_BODY_Arr2_Slice_int
+struct Arr2_Slice_int { Slice_int v[2]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_LifeBarPtr
+#define CVF_BODY_Arr8_Slice_LifeBarPtr
+struct Arr8_Slice_LifeBarPtr { Slice_LifeBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_PowerBarPtr
+#define CVF_BODY_Arr8_Slice_PowerBarPtr
+struct Arr8_Slice_PowerBarPtr { Slice_PowerBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_GuardBarPtr
+#define CVF_BODY_Arr8_Slice_GuardBarPtr
+struct Arr8_Slice_GuardBarPtr { Slice_GuardBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_StunBarPtr
+#define CVF_BODY_Arr8_Slice_StunBarPtr
+struct Arr8_Slice_StunBarPtr { Slice_StunBarPtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_FightScreenFacePtr
+#define CVF_BODY_Arr8_Slice_FightScreenFacePtr
+struct Arr8_Slice_FightScreenFacePtr { Slice_FightScreenFacePtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Slice_FightScreenNamePtr
+#define CVF_BODY_Arr8_Slice_FightScreenNamePtr
+struct Arr8_Slice_FightScreenNamePtr { Slice_FightScreenNamePtr v[8]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenWinIconPtr
+#define CVF_BODY_Arr2_FightScreenWinIconPtr
+struct Arr2_FightScreenWinIconPtr { FightScreenWinIcon* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenComboPtr
+#define CVF_BODY_Arr2_FightScreenComboPtr
+struct Arr2_FightScreenComboPtr { FightScreenCombo* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenActionPtr
+#define CVF_BODY_Arr2_FightScreenActionPtr
+struct Arr2_FightScreenActionPtr { FightScreenAction* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenScorePtr
+#define CVF_BODY_Arr2_FightScreenScorePtr
+struct Arr2_FightScreenScorePtr { FightScreenScore* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenAiLevelPtr
+#define CVF_BODY_Arr2_FightScreenAiLevelPtr
+struct Arr2_FightScreenAiLevelPtr { FightScreenAiLevel* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_FightScreenWinCountPtr
+#define CVF_BODY_Arr2_FightScreenWinCountPtr
+struct Arr2_FightScreenWinCountPtr { FightScreenWinCount* v[2]; };
+#endif
+struct FightScreen {
+    GoString def;
+    GoString name;
+    GoString nameLow;
+    GoString author;
+    GoString authorLow;
+    Arr2_i32 localcoord;
+    Arr3_u16 ikemenver;
+    Arr2_u16 mugenver;
+    f32 offsetX;
+    f32 offsetY;
+    f32 scale;
+    f32 portraitScale;
+    AnimationTable animTable;
+    GoOpaqueVal* sff;
+    GoOpaqueVal* snd;
+    Map_int_GoOpaqueValPtr fnt;
+    Arr2_int curLayout;
+    Arr2_Slice_int teamOrder;
+    Arr8_Slice_LifeBarPtr lifeBars;
+    Arr8_Slice_PowerBarPtr powerBars;
+    Arr8_Slice_GuardBarPtr guardBars;
+    Arr8_Slice_StunBarPtr stunBars;
+    Arr8_Slice_FightScreenFacePtr faces;
+    Arr8_Slice_FightScreenNamePtr names;
+    Arr2_FightScreenWinIconPtr winIcons;
+    FightScreenTime* time;
+    Arr2_FightScreenComboPtr combos;
+    Arr2_FightScreenActionPtr actions;
+    FightScreenRound* round;
+    FightScreenTimer* timer;
+    Arr2_FightScreenScorePtr scores;
+    FightScreenMatch* match;
+    Arr2_FightScreenAiLevelPtr aiLevels;
+    Arr2_FightScreenWinCountPtr winCounts;
+    Map_GoString_FightScreenModePtr modes;
+    Map_GoString_int missing;
+    bool active;
+    bool bars;
+    bool mode;
+    bool redlifebar;
+    bool guardbar;
+    bool stunbar;
+    bool hidebars;
+    f32 fnt_scale;
+    int fx_limit;
+};
+
+struct FightScreenAction {
+    int oldleader;
+    Arr2_i32 pos;
+    Arr2_i32 spacing;
+    f32 start_x;
+    FSText text;
+    i32 displaytime;
+    f32 showspeed;
+    f32 hidespeed;
+    Slice_FSMsgPtr messages;
+    IniSection is;
+    i32 max;
+};
+
+struct FightScreenAiLevel {
+    Arr2_i32 pos;
+    FSText text;
+    AnimLayout bg;
+    AnimLayout top;
+    GoString separator;
+    i32 places;
+    Map_GoString_bool enabled;
+    bool active;
+};
+
+struct FightScreenCombo {
+    Arr2_i32 pos;
+    f32 start_x;
+    Map_i32_FSTextPtr counter;
+    Map_i32_FSTextPtr text;
+    AnimLayout bg;
+    AnimLayout top;
+    i32 displaytime;
+    f32 showspeed;
+    f32 hidespeed;
+    GoString separator;
+    i32 places;
+    i32 shownHits;
+    i32 shownDmg;
+    f32 shownPct;
+    i32 resttime;
+    f32 counterX;
+    bool autoalign;
+    bool newCombo;
+    ComboShake counterShake;
+    ComboShake textShake;
+};
+
+struct FightScreenFace {
+    Arr2_i32 pos;
+    AnimLayout bg;
+    AnimLayout bg0;
+    AnimLayout bg1;
+    AnimLayout bg2;
+    AnimLayout top;
+    AnimLayout ko;
+    Arr2_i32 face_spr;
+    GoOpaqueVal* face;
+    Layout face_lay;
+    bool face_palshare;
+    bool face_palfxshare;
+    bool face_darkenshare;
+    Arr2_i32 teammate_pos;
+    Arr2_i32 teammate_spacing;
+    AnimLayout teammate_bg;
+    AnimLayout teammate_bg0;
+    AnimLayout teammate_bg1;
+    AnimLayout teammate_bg2;
+    AnimLayout teammate_top;
+    AnimLayout teammate_ko;
+    Arr2_i32 teammate_face_spr;
+    Slice_GoOpaqueValPtr teammate_face;
+    Layout teammate_face_lay;
+    Slice_f32 teammate_scale;
+    bool teammate_ko_hide;
+    bool teammate_face_palshare;
+    i32 numko;
+    Arr2_i32 old_spr;
+    Arr2_i32 old_pal;
+    PalFX* face_pfx;
+    Slice_PalFXPtr teammate_face_pfx;
+    bool leaderontop;
+};
+
+struct FightScreenMatch {
+    Arr2_i32 pos;
+    FSText text;
+    AnimLayout bg;
+    AnimLayout top;
+    Map_GoString_bool enabled;
+    bool active;
+};
+
+struct FightScreenMode {
+    Arr2_i32 pos;
+    FSText text;
+    AnimLayout bg;
+    AnimLayout top;
+};
+
+struct FightScreenName {
+    Arr2_i32 pos;
+    FSText name;
+    AnimLayout bg;
+    AnimLayout top;
+    Arr2_i32 teammate_pos;
+    Arr2_i32 teammate_spacing;
+    FSText teammate_name;
+    Slice_GoString teammate_name_strings;
+    AnimLayout teammate_bg;
+    i32 numko;
+    bool teammate_ko_hide;
+    bool leaderontop;
+};
+
+#ifndef CVF_BODY_Arr2_AnimTextSnd
+#define CVF_BODY_Arr2_AnimTextSnd
+struct Arr2_AnimTextSnd { AnimTextSnd v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_AnimLayout
+#define CVF_BODY_Arr2_AnimLayout
+struct Arr2_AnimLayout { AnimLayout v[2]; };
+#endif
+#ifndef CVF_BODY_Arr32_AnimLayout
+#define CVF_BODY_Arr32_AnimLayout
+struct Arr32_AnimLayout { AnimLayout v[32]; };
+#endif
+#ifndef CVF_BODY_Arr2_Arr32_AnimLayout
+#define CVF_BODY_Arr2_Arr32_AnimLayout
+struct Arr2_Arr32_AnimLayout { Arr32_AnimLayout v[2]; };
+#endif
+struct ResultAnnouncement {
+    Arr2_AnimTextSnd text;
+    Arr2_AnimLayout top;
+    Arr2_Arr32_AnimLayout bg;
+};
+
+#ifndef CVF_BODY_Arr9_AnimTextSnd
+#define CVF_BODY_Arr9_AnimTextSnd
+struct Arr9_AnimTextSnd { AnimTextSnd v[9]; };
+#endif
+#ifndef CVF_BODY_Arr4_ResultAnnouncement
+#define CVF_BODY_Arr4_ResultAnnouncement
+struct Arr4_ResultAnnouncement { ResultAnnouncement v[4]; };
+#endif
+#ifndef CVF_BODY_Arr2_Arr4_bool
+#define CVF_BODY_Arr2_Arr4_bool
+struct Arr2_Arr4_bool { Arr4_bool v[2]; };
+#endif
+#ifndef CVF_BODY_Arr20_FSBgTextSnd
+#define CVF_BODY_Arr20_FSBgTextSnd
+struct Arr20_FSBgTextSnd { FSBgTextSnd v[20]; };
+#endif
+struct FightScreenRound {
+    GoOpaqueVal* snd;
+    Arr2_i32 pos;
+    i32 start_waittime;
+    i32 round_time;
+    i32 round_sndtime;
+    i32 roundDisplayTimer;
+    i32 roundDisplayPhase;
+    Arr9_AnimTextSnd round;
+    AnimTextSnd round_default;
+    AnimLayout round_default_top;
+    Arr32_AnimLayout round_default_bg;
+    AnimTextSnd round_single;
+    AnimLayout round_single_top;
+    Arr32_AnimLayout round_single_bg;
+    AnimTextSnd round_final;
+    AnimLayout round_final_top;
+    Arr32_AnimLayout round_final_bg;
+    i32 fight_time;
+    i32 fight_sndtime;
+    i32 fightDisplayTimer;
+    i32 fightDisplayPhase;
+    AnimTextSnd fight;
+    AnimLayout fight_top;
+    Arr32_AnimLayout fight_bg;
+    i32 ctrl_time;
+    i32 ko_time;
+    i32 ko_sndtime;
+    i32 koDisplayTimer;
+    i32 koDisplayPhase;
+    bool outroStarted;
+    f32 outroFrameAcc;
+    i32 dko_time;
+    i32 dko_sndtime;
+    bool dko_showdraw;
+    i32 to_time;
+    i32 to_sndtime;
+    AnimTextSnd ko;
+    AnimTextSnd dko;
+    AnimTextSnd to;
+    AnimLayout ko_top;
+    Arr32_AnimLayout ko_bg;
+    AnimLayout dko_top;
+    Arr32_AnimLayout dko_bg;
+    AnimLayout to_top;
+    Arr32_AnimLayout to_bg;
+    i32 slow_time;
+    i32 slow_fadetime;
+    f32 slow_speed;
+    i32 over_waittime;
+    i32 over_hittime;
+    i32 over_wintime;
+    i32 over_forcewintime;
+    i32 over_time;
+    i32 win_time;
+    i32 win_sndtime;
+    i32 winDisplayTimer;
+    i32 winDisplayPhase;
+    Arr4_ResultAnnouncement win;
+    Arr4_ResultAnnouncement aiLose;
+    Arr4_ResultAnnouncement aiWin;
+    Arr2_Arr4_bool aiWinExists;
+    Arr2_Arr4_bool aiLoseExists;
+    AnimTextSnd drawgame;
+    AnimLayout drawgame_top;
+    Arr32_AnimLayout drawgame_bg;
+    bool timerActive;
+    Arr20_FSBgTextSnd winType;
+    Fade* fadeIn;
+    Fade* fadeOut;
+    i32 shutterTimer;
+    i32 shutter_time;
+    u32 shutter_col;
+    i32 callfight_time;
+    i32 clutch_threshold;
+};
+
+#ifndef CVF_BODY_Arr2_GoString
+#define CVF_BODY_Arr2_GoString
+struct Arr2_GoString { GoString v[2]; };
+#endif
+struct FightScreenScore {
+    Arr2_i32 pos;
+    FSText text;
+    AnimLayout bg;
+    AnimLayout top;
+    Arr2_GoString separator;
+    i32 pad;
+    i32 places;
+    f32 min;
+    f32 max;
+    Map_GoString_bool enabled;
+    bool active;
+};
+
+struct FightScreenTime {
+    Arr2_i32 pos;
+    Map_i32_FSTextPtr counter;
+    AnimLayout bg;
+    AnimLayout top;
+    i32 framespercount;
+    i32 activeIdx;
+};
+
+struct FightScreenTimer {
+    Arr2_i32 pos;
+    FSText text;
+    AnimLayout bg;
+    AnimLayout top;
+    Map_GoString_bool enabled;
+    bool active;
+};
+
+struct FightScreenWinCount {
+    Arr2_i32 pos;
+    FSText text;
+    AnimLayout bg;
+    AnimLayout top;
+    i32 wins;
+    Map_GoString_bool enabled;
+    bool active;
+};
+
+#ifndef CVF_BODY_Arr10_AnimLayout
+#define CVF_BODY_Arr10_AnimLayout
+struct Arr10_AnimLayout { AnimLayout v[10]; };
+#endif
+struct FightScreenWinIcon {
+    Arr2_i32 pos;
+    Arr2_i32 iconoffset;
+    i32 useiconupto;
+    FSText counter;
+    AnimLayout bg0;
+    AnimLayout top;
+    Arr10_AnimLayout icon;
+    Slice_WinType wins;
+    int numWins;
+    Animation* added;
+    Animation* addedP;
+    Animation* addedC;
+};
+
+struct FilesProperties {
+    GoString Spr;
+    GoString Snd;
+    Anon_bf560d5f Logo;
+    Anon_bf560d5f Intro;
+    GoString Select;
+    GoString Fight;
+    Map_GoString_FontPropertiesPtr Font;
+    GoString Glyphs;
+    GoString Module;
+    GoString Model;
+};
+
+struct FontProperties {
+    GoString Font;
+    i32 Height;
+    GoString Type;
+    Arr2_u16 Size;
+    Arr2_i32 Spacing;
+    Arr2_i32 Offset;
+};
+
+struct FontRenderer_GLES32 {
+    ShaderProgram_GLES32* shaderProgram;
+    u32 vao;
+    u32 vbo;
+};
+
+struct color {
+    f32 r;
+    f32 g;
+    f32 b;
+    f32 a;
+};
+
+struct ShaderPalFX {
+    bool neg;
+    Arr3_f32 add;
+    Arr3_f32 mult;
+    f32 gray;
+    f32 hue;
+    i32 invblend;
+};
+
+struct Font_GLES32 {
+    Map_i32_characterPtr fontChar;
+    GoOpaque /* truetype.Font */* ttf;
+    i32 scale;
+    int windowWidth;
+    int windowHeight;
+    Slice_GoOpaqueValPtr textures;
+    color color;
+    ShaderPalFX shaderPalFX;
+    GoOpaqueVal customShader;
+};
+
+struct ForceFeedbackParams {
+    u32 timer;
+    f32 start;
+    f32 d1;
+    f32 d2;
+    f32 d3;
+    FFBWaveform waveform;
+};
+
+struct Anon_5596a083 {
+    i32 v;
+    bool ok;
+};
+#ifndef CVF_BODY_Arr64_Anon_5596a083
+#define CVF_BODY_Arr64_Anon_5596a083
+struct Arr64_Anon_5596a083 { Anon_5596a083 v[64]; };
+#endif
+struct Anon_a810cdd4 {
+    Arr4_f32 v;
+    u8 n;
+};
+#ifndef CVF_BODY_Arr64_Anon_a810cdd4
+#define CVF_BODY_Arr64_Anon_a810cdd4
+struct Arr64_Anon_a810cdd4 { Anon_a810cdd4 v[64]; };
+#endif
+struct Anon_7b4debcb {
+    Arr16_f32 v;
+    bool ok;
+};
+#ifndef CVF_BODY_Arr64_Anon_7b4debcb
+#define CVF_BODY_Arr64_Anon_7b4debcb
+struct Arr64_Anon_7b4debcb { Anon_7b4debcb v[64]; };
+#endif
+struct GLES32State {
+    u32 program;
+    bool depthTest;
+    bool depthMask;
+    bool invertFrontFace;
+    bool doubleSided;
+    bool blendEnabled;
+    BlendEquation blendEquation;
+    BlendFunc blendSrc;
+    BlendFunc blendDst;
+    Arr4_i32 scissorRect;
+    bool scissorEnabled;
+    Slice_boundTexture boundTex;
+    Slice_u64 texCacheLastUsed;
+    u64 texCacheTimer;
+    Map_u32_i32 uniformICache;
+    Arr64_Anon_5596a083 uniArrI;
+    Arr64_Anon_a810cdd4 uniArrF;
+    Arr64_Anon_7b4debcb uniArrM;
+    Map_u32_f32 uniformF1Cache;
+    Map_u32_Arr2_f32 uniformF2Cache;
+    Map_u32_Arr3_f32 uniformF3Cache;
+    Map_u32_Arr4_f32 uniformF4Cache;
+    bool useUV;
+    bool useNormal;
+    bool useTangent;
+    bool useVertColor;
+    bool useJoint0;
+    bool useJoint1;
+    bool useOutlineAttribute;
+    Map_u32_u32 boundBuffers;
+    u32 currentVAO;
+};
+
+struct GLTFAnimatableProperty {
+    GoIface restValue;
+    GoIface animatedValue;
+    bool isAnimated;
+};
+
+struct GLTFAnimation {
+    u32 id;
+    GoString name;
+    bool enabled;
+    bool defaultEnabled;
+    f32 duration;
+    f32 time;
+    i32 loopCount;
+    i32 loop;
+    Slice_GLTFAnimationChannelPtr channels;
+    Slice_GLTFAnimationSamplerPtr samplers;
+};
+
+struct GLTFAnimationChannel {
+    GLTFAnimatableProperty* target;
+    GLTFAnimationType targetType;
+    u32* elemIndex;
+    u32* nodeIndex;
+    u32 samplerIndex;
+};
+
+struct GLTFAnimationSampler {
+    u32 inputIndex;
+    Slice_f32 output;
+    GLTFAnimationInterpolation interpolation;
+};
+
+struct GLTFLight {
+    Arr3_f32 direction;
+    Arr3_f32 position;
+    GLTFAnimatableProperty lightRange;
+    GLTFAnimatableProperty color;
+    GLTFAnimatableProperty intensity;
+    GLTFAnimatableProperty innerConeAngle;
+    GLTFAnimatableProperty outerConeAngle;
+    LightType lightType;
+    GLTFAnimatableProperty shadowMapNear;
+    GLTFAnimatableProperty shadowMapFar;
+    GLTFAnimatableProperty shadowMapBottom;
+    GLTFAnimatableProperty shadowMapTop;
+    GLTFAnimatableProperty shadowMapLeft;
+    GLTFAnimatableProperty shadowMapRight;
+    GLTFAnimatableProperty shadowMapBias;
+};
+
+struct GLTFTexture {
+    GoIface tex;
+};
+
+#ifndef CVF_BODY_Arr3_Slice_OverrideCharData
+#define CVF_BODY_Arr3_Slice_OverrideCharData
+struct Arr3_Slice_OverrideCharData { Slice_OverrideCharData v[3]; };
+#endif
+struct GameParams {
+    Slice_GoString musicEntries;
+    bool Continue;
+    bool QuickContinue;
+    i32 Order;
+    GoString Stage;
+    f32 AI;
+    i32 Time;
+    bool VsScreen;
+    bool VictoryScreen;
+    bool WinScreen;
+    bool PauseMenu;
+    bool RankingCondition;
+    GoString LuaCode;
+    bool PersistLife;
+    bool PersistMusic;
+    bool PersistRounds;
+    bool CharParamAI;
+    bool CharParamArcadePath;
+    bool CharParamMusic;
+    bool CharParamRounds;
+    bool CharParamSingle;
+    bool CharParamStage;
+    bool CharParamTime;
+    Arr2_i32 TurnsOffset;
+    Arr3_Slice_OverrideCharData ocd;
+    Slice_GoString Raw;
+};
+
+struct ZoomEffect {
+    bool active;
+    i32 time;
+    f32 lag;
+    f32 endLag;
+    f32 scale;
+    f32 curScale;
+    Arr2_f32 pos;
+    Arr2_f32 curPos;
+    bool cameraBound;
+    bool stageBound;
+    Arr2_f32 resultPos;
+    f32 resultScale;
+    bool resultValid;
+};
+
+#ifndef CVF_BODY_Arr12_AiInput
+#define CVF_BODY_Arr12_AiInput
+struct Arr12_AiInput { AiInput v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_ForceFeedbackParams
+#define CVF_BODY_Arr12_ForceFeedbackParams
+struct Arr12_ForceFeedbackParams { ForceFeedbackParams v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_int
+#define CVF_BODY_Arr12_int
+struct Arr12_int { int v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_f32
+#define CVF_BODY_Arr12_f32
+struct Arr12_f32 { f32 v[12]; };
+#endif
+#ifndef CVF_BODY_Arr2_WinType
+#define CVF_BODY_Arr2_WinType
+struct Arr2_WinType { WinType v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_bool
+#define CVF_BODY_Arr2_bool
+struct Arr2_bool { bool v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_TeamMode
+#define CVF_BODY_Arr2_TeamMode
+struct Arr2_TeamMode { TeamMode v[2]; };
+#endif
+#ifndef CVF_BODY_Arr12_bool
+#define CVF_BODY_Arr12_bool
+struct Arr12_bool { bool v[12]; };
+#endif
+#ifndef CVF_BODY_Arr3_int
+#define CVF_BODY_Arr3_int
+struct Arr3_int { int v[3]; };
+#endif
+struct SystemStateVars {
+    i32 randseed;
+    i32 matchTime;
+    i32 curRoundTime;
+    i32 persistRoundCount;
+    i32 curPlayTime;
+    Arr12_AiInput aiInput;
+    Arr12_ForceFeedbackParams ffbparams;
+    Arr12_int inputRemap;
+    Arr12_f32 aiLevel;
+    Camera cam;
+    i32 pausetime;
+    bool pausebg;
+    i32 pauseendcmdbuftime;
+    i32 pausetimebuffer;
+    int pauseplayerno;
+    i32 supertimebuffer;
+    i32 supertime;
+    bool superpausebg;
+    i32 superendcmdbuftime;
+    int superplayerno;
+    f32 superbrightness;
+    EnvShake envShake;
+    GlobalSpecialFlag specialFlag;
+    Arr3_i32 envcol;
+    i32 envcol_time;
+    Arr4_i32 scrrect;
+    f32 gameWidth;
+    f32 gameHeight;
+    f32 widthScale;
+    f32 heightScale;
+    bool gameEnd;
+    bool frameSkip;
+    bool paused;
+    bool frameStepFlag;
+    f32 brightness;
+    f32 brightnessOld;
+    i32 maxRoundTime;
+    i32 curFramesPerCount;
+    i32 matchNo;
+    i32 roundNo;
+    i32 intro;
+    Arr2_int lastHitter;
+    int winTeam;
+    Arr2_WinType winType;
+    Arr2_WinType winTrigger;
+    Arr2_i32 matchWins;
+    Arr2_i32 wins;
+    Arr2_i32 roundsExisted;
+    i32 draws;
+    Arr2_i32 maxDraws;
+    Arr2_bool effectiveLoss;
+    Arr2_TeamMode tmode;
+    Arr2_i32 numSimul;
+    Arr2_i32 numTurns;
+    bool esc;
+    bool envcol_under;
+    i32 lastCharId;
+    int tickCount;
+    int oldTickCount;
+    f32 tickCountF;
+    f32 lastTick;
+    f32 nextAddTime;
+    f32 oldNextAddTime;
+    i32 uiFrameCounter;
+    f32 xmin;
+    f32 xmax;
+    f32 zmin;
+    f32 zmax;
+    bool winskipped;
+    bool roundResetFlg;
+    bool roundResetMatchStart;
+    bool reloadFlg;
+    bool reloadStageFlg;
+    bool reloadFightScreenFlg;
+    Arr12_bool reloadCharSlot;
+    f32 turbo;
+    ZoomEffect zoom;
+    FinishType finishType;
+    i32 winwaittime;
+    i32 slowtime;
+    i32 changeStateNest;
+    bool nomusic;
+    i32 timerStart;
+    Arr2_int teamLeader;
+    bool postMatchFlg;
+    Arr2_f32 scoreStart;
+    Arr2_f32 scorePoints;
+    Arr2_i32 comboCount;
+    Arr2_bool decisiveRound;
+    GoString gameMode;
+    i32 credits;
+    Arr2_i32 consecutiveWins;
+    Arr3_int firstAttack;
+    int home;
+    bool stageLoop;
+    bool dialogueHideBars;
+    int dialogueForce;
+    bool playBgmFlg;
+    GoOpaque /* invalid type */ keyInput;
+    GoString keyString;
+    int lastInputController;
+    GoString uiLastInputToken;
+    i32 uiConsumeInputFrame;
+    GoString uiRepeatToken;
+    int uiRepeatController;
+    i32 uiRepeatFrame;
+    bool endMatch;
+    bool noCharSoundFlg;
+    bool fightLoopEnd;
+    bool continueFlg;
+    bool matchResetFlg;
+    int stageLoopNo;
+    bool introSkipCall;
+    i32 preMatchTime;
+    bool loopBreak;
+    bool loopContinue;
+    i32 winposetime;
+};
+
+struct InfoProperties {
+    GoString Name;
+    GoString Author;
+    GoString VersionDate;
+    GoString MugenVersion;
+    GoString IkemenVersion;
+    Arr2_i32 Localcoord;
+};
+
+struct TextMapProperties {
+    Arr8_i32 Font;
+    Arr2_f32 Offset;
+    Arr2_f32 Scale;
+    f32 Xshear;
+    f32 Angle;
+    f32 XAngle;
+    f32 YAngle;
+    GoString Projection;
+    f32 Focallength;
+    Map_GoString_GoString Text;
+    i16 Layerno;
+    Arr4_i32 Window;
+    Arr2_i32 Localcoord;
+    TextSprite* TextSpriteData;
+};
+
+struct TextInputProperties {
+    union {
+        TextMapProperties TextMapProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            Map_GoString_GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
+    OverlayProperties Overlay;
+    Anon_39b99353 Confirm;
+    Anon_39b99353 Trim;
+    Anon_39b99353 Truncate;
+    Anon_39b99353 Paste;
+};
+
+struct Anon_0f1da223 {
+    Anon_161374c1 Move;
+    Anon_73c55e1f Done;
+};
+struct Anon_c0ebc6d1 {
+    TextProperties TextProperties;
+    AnimationTextProperties Wait;
+    GoString Storyboard;
+};
+struct Anon_53386e74 {
+    TextProperties Title;
+    TextProperties Info;
+    TextProperties Version;
+    OverlayProperties Overlay;
+};
+struct Anon_35963cd2 {
+    TextMapProperties TextMapProperties;
+    OverlayProperties Overlay;
+};
+struct TitleInfoProperties {
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    TextProperties Title;
+    MenuProperties Menu;
+    Anon_0f1da223 Cursor;
+    Anon_161374c1 Cancel;
+    Anon_c0ebc6d1 Loading;
+    Anon_53386e74 Footer;
+    Anon_35963cd2 Connecting;
+    TextInputProperties TextInput;
+};
+
+struct InfoBoxProperties {
+    TextProperties Title;
+    TextProperties Text;
+    OverlayProperties Overlay;
+    GoString KeyCode;
+};
+
+struct PlayerCursorProperties {
+    Arr2_i32 StartCell;
+    Map_GoString_AnimationPropertiesPtr Active;
+    Map_GoString_PlayerCursorStatePropertiesPtr Done;
+    Map_GoString_PlayerCursorStatePropertiesPtr Preview;
+    Anon_161374c1 Move;
+    bool Blink;
+    i32 SwitchTime;
+    TweenProperties Tween;
+    bool Reset;
+    bool Persist;
+};
+
+struct Anon_7b12115d {
+    TextMapProperties TextMapProperties;
+    i32 Switchtime;
+};
+struct ItemProperties {
+    union {
+        TextMapProperties TextMapProperties_;
+        struct {
+            Arr8_i32 Font;
+            Arr2_f32 Offset;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            Map_GoString_GoString Text;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            TextSprite* TextSpriteData;
+        };
+    };
+    Arr2_f32 Spacing;
+    TweenProperties Tween;
+    Anon_7b12115d Active;
+    TextMapProperties Active2;
+    AnimationProperties Cursor;
+    bool Uppercase;
+};
+
+struct Anon_9b54a510 {
+    Anon_161374c1 Move;
+};
+struct Anon_cf68abeb {
+    GoString Text;
+};
+struct Anon_e3e96c5e {
+    TextProperties TextProperties;
+    i32 Num;
+    Arr2_f32 Spacing;
+    Anon_cf68abeb Random;
+};
+struct Anon_d18cf56f {
+    Map_GoString_BgAnimationPropertiesPtr Bg;
+};
+struct Anon_0c2b6cfe {
+    AnimationTextProperties AnimationTextProperties;
+};
+struct Anon_14dc7311 {
+    AnimationProperties Icon;
+};
+struct Anon_03d1af3e {
+    Arr2_i32 Snd;
+    AnimationProperties Icon;
+    Anon_14dc7311 Empty;
+    Arr2_f32 Spacing;
+};
+struct Anon_24a77732 {
+    Arr2_f32 Pos;
+    Map_GoString_BgAnimationPropertiesPtr Bg;
+    Anon_d18cf56f Active;
+    Anon_0c2b6cfe SelfTitle;
+    Anon_0c2b6cfe EnemyTitle;
+    Anon_161374c1 Move;
+    Anon_03d1af3e Value;
+    Anon_828756c7 Done;
+    Anon_0a015777 Cancel;
+    Anon_0a015777 Next;
+    Anon_0a015777 Previous;
+    Anon_0a015777 Add;
+    Anon_0a015777 Subtract;
+    ItemProperties Item;
+};
+struct Anon_29e67731 {
+    Slice_GoString Key;
+    GoString Text;
+};
+struct Anon_5b6e6123 {
+    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    Arr2_i32 Snd;
+};
+struct Anon_c49cb36c {
+    Arr2_f32 Pos;
+    Anon_0a015777 Next;
+    Anon_0a015777 Previous;
+    Anon_828756c7 Done;
+    Anon_828756c7 Cancel;
+    Anon_29e67731 Random;
+    Anon_161374c1 Value;
+    Anon_5b6e6123 Preview;
+    TextProperties Number;
+    TextProperties Text;
+    AnimationProperties Bg;
+};
+struct PlayerSelectProperties {
+    PlayerCursorProperties Cursor;
+    Anon_9b54a510 Random;
+    FaceProperties Face;
+    FaceProperties Face2;
+    Anon_e3e96c5e Name;
+    Anon_161374c1 Swap;
+    Anon_161374c1 Select;
+    Anon_24a77732 TeamMenu;
+    Anon_c49cb36c PalMenu;
+};
+
+struct Anon_4a620174 {
+    AnimationProperties AnimationProperties;
+    i32 SwitchTime;
+};
+struct Anon_ad883348 {
+    Arr2_i32 Size;
+    Arr2_f32 Spacing;
+    Anon_0a015777 Up;
+    Anon_0a015777 Down;
+    Anon_0a015777 Left;
+    Anon_0a015777 Right;
+    AnimationProperties Bg;
+    Anon_4a620174 Random;
+    Map_GoString_CellOverridePropertiesPtr MapCell;
+    AnimationProperties Slot;
+};
+struct Anon_92897767 {
+    i32 SwitchTime;
+    bool ApplyPal;
+};
+struct Anon_769242ee {
+    Anon_92897767 Random;
+};
+struct Anon_a257727c {
+    bool Cancel;
+};
+struct Anon_5977501b {
+    Anon_a257727c Snd;
+};
+struct Anon_5d3c67a8 {
+    Anon_5977501b Move;
+};
+struct Anon_ba1e3273 {
+    TextProperties TextProperties;
+    i32 Switchtime;
+};
+struct Anon_4b8a3264 {
+    TextProperties TextProperties;
+    Arr2_i32 Snd;
+};
+struct Anon_8a2bb521 {
+    AnimationStagePreloadProperties AnimationStagePreloadProperties;
+    AnimationProperties Bg;
+    AnimationProperties Random;
+    AnimationProperties Loading;
+    AnimationProperties Slot;
+};
+struct Anon_f634dd61 {
+    Arr2_f32 Pos;
+    TextProperties TextProperties;
+    Anon_cf68abeb Random;
+    i32 Randomselect;
+    Anon_ba1e3273 Active;
+    TextProperties Active2;
+    Anon_4b8a3264 Done;
+    Anon_161374c1 Move;
+    Anon_161374c1 Swap;
+    Anon_8a2bb521 Portrait;
+};
+struct Anon_85848459 {
+    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    AnimationProperties Loading;
+};
+struct Anon_cdcd6158 {
+    bool Wrapping;
+};
+struct Anon_c9a00f79 {
+    Anon_cdcd6158 Move;
+    Map_GoString_TeamModesPropertiesPtr Itemname;
+};
+struct SelectInfoProperties {
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    i32 Rows;
+    i32 Columns;
+    bool Wrapping;
+    Arr2_f32 Pos;
+    bool ShowEmptyBoxes;
+    bool MoveOverEmptyBoxes;
+    bool SearchEmptyBoxesUp;
+    bool SearchEmptyBoxesDown;
+    Anon_ad883348 Cell;
+    PlayerSelectProperties P1;
+    PlayerSelectProperties P2;
+    PlayerSelectProperties P3;
+    PlayerSelectProperties P4;
+    PlayerSelectProperties P5;
+    PlayerSelectProperties P6;
+    PlayerSelectProperties P7;
+    PlayerSelectProperties P8;
+    Anon_769242ee PalMenu;
+    Anon_5d3c67a8 Random;
+    Anon_f634dd61 Stage;
+    Anon_0a015777 Done;
+    Anon_828756c7 Cancel;
+    Anon_85848459 Portrait;
+    TextMapProperties Title;
+    TextMapProperties Record;
+    Anon_c9a00f79 TeamMenu;
+    TimerProperties Timer;
+    i32 PaletteSelect;
+    bool CoopQueue;
+};
+
+struct ValueIconVsProperties {
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
+    Arr2_f32 Spacing;
+};
+
+struct Anon_de509dfb {
+    TextProperties TextProperties;
+    Arr2_f32 Pos;
+    i32 Num;
+    Arr2_f32 Spacing;
+};
+struct Anon_1f7505bf {
+    AnimationProperties AnimationProperties;
+    AnimationProperties Done;
+};
+struct Anon_c466bc00 {
+    ValueIconVsProperties Icon;
+};
+struct Anon_2f3f233c {
+    ValueIconVsProperties Icon;
+    Anon_c466bc00 Empty;
+    Arr2_i32 Snd;
+};
+struct PlayerVsProperties {
+    union {
+        FaceProperties FaceProperties_;
+        struct {
+            AnimationCharPreloadProperties AnimationCharPreloadProperties;
+            Anon_52ad6e9d Done;
+            AnimationProperties Random;
+            AnimationProperties Loading;
+            AnimationProperties Slot;
+            Arr2_f32 Velocity;
+            Arr2_f32 MaxDist;
+            Arr2_f32 Accel;
+            Arr2_f32 Friction;
+            Arr2_f32 Pos;
+            i32 Num;
+            Arr2_f32 Spacing;
+            bool Padding;
+        };
+    };
+    FaceProperties Face2;
+    Slice_GoString Key;
+    Anon_de509dfb Name;
+    Anon_1f7505bf Icon;
+    Anon_2f3f233c Value;
+};
+
+struct Anon_50c501fc {
+    Slice_GoString Key;
+    i32 Time;
+};
+struct Anon_b1cc637d {
+    AnimationStagePreloadProperties AnimationStagePreloadProperties;
+    AnimationProperties Bg;
+    AnimationProperties Loading;
+};
+struct Anon_b4e107d9 {
+    Arr2_f32 Pos;
+    TextProperties TextProperties;
+    Anon_b1cc637d Portrait;
+    Arr2_i32 Snd;
+};
+struct Anon_8517cd1e {
+    AnimationTextProperties AnimationTextProperties;
+    AnimationTextProperties Done;
+    AnimationTextProperties Wait;
+    GoString Storyboard;
+};
+struct VsScreenProperties {
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    i32 Time;
+    TextProperties Match;
+    Anon_c29ce860 OrderSelect;
+    PlayerVsProperties P1;
+    PlayerVsProperties P2;
+    PlayerVsProperties P3;
+    PlayerVsProperties P4;
+    PlayerVsProperties P5;
+    PlayerVsProperties P6;
+    PlayerVsProperties P7;
+    PlayerVsProperties P8;
+    TimerProperties Timer;
+    Anon_50c501fc Done;
+    Anon_0a015777 Skip;
+    Anon_0a015777 Cancel;
+    Anon_b4e107d9 Stage;
+    Anon_8517cd1e Loading;
+};
+
+struct StoryboardProperties {
+    bool Enabled;
+    GoString Storyboard;
+};
+
+struct PlayerLoseProperties {
+    union {
+        FaceProperties FaceProperties_;
+        struct {
+            AnimationCharPreloadProperties AnimationCharPreloadProperties;
+            Anon_52ad6e9d Done;
+            AnimationProperties Random;
+            AnimationProperties Loading;
+            AnimationProperties Slot;
+            Arr2_f32 Velocity;
+            Arr2_f32 MaxDist;
+            Arr2_f32 Accel;
+            Arr2_f32 Friction;
+            Arr2_f32 Pos;
+            i32 Num;
+            Arr2_f32 Spacing;
+            bool Padding;
+        };
+    };
+    i32 Brightness;
+};
+
+struct Anon_b4ab5e02 {
+    FaceProperties FaceProperties;
+    PlayerLoseProperties Lose;
+};
+struct PlayerVictoryProperties {
+    union {
+        FaceProperties FaceProperties_;
+        struct {
+            AnimationCharPreloadProperties AnimationCharPreloadProperties;
+            Anon_52ad6e9d Done;
+            AnimationProperties Random;
+            AnimationProperties Loading;
+            AnimationProperties Slot;
+            Arr2_f32 Velocity;
+            Arr2_f32 MaxDist;
+            Arr2_f32 Accel;
+            Arr2_f32 Friction;
+            Arr2_f32 Pos;
+            i32 Num;
+            Arr2_f32 Spacing;
+            bool Padding;
+        };
+    };
+    PlayerLoseProperties Lose;
+    Anon_b4ab5e02 Face2;
+    TextProperties Name;
+    Slice_i32 State;
+};
+
+struct Anon_ce6aad93 {
+    Anon_c29ce860 TeamKo;
+};
+struct Anon_a9c08002 {
+    TextProperties TextProperties;
+    Arr2_f32 TextSpacing;
+    i32 TextDelay;
+    GoString TextWrap;
+    i32 DisplayTime;
+};
+struct VictoryScreenProperties {
+    bool Enabled;
+    Anon_c29ce860 KeepSide;
+    Anon_c29ce860 Sounds;
+    Anon_c29ce860 Cpu;
+    Anon_c29ce860 Vs;
+    Anon_ce6aad93 Winner;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    i32 Time;
+    TextProperties WinName;
+    Anon_a9c08002 WinQuote;
+    OverlayProperties Overlay;
+    Anon_0a015777 Skip;
+    Anon_0a015777 Cancel;
+    PlayerVictoryProperties P1;
+    PlayerVictoryProperties P2;
+    PlayerVictoryProperties P3;
+    PlayerVictoryProperties P4;
+    PlayerVictoryProperties P5;
+    PlayerVictoryProperties P6;
+    PlayerVictoryProperties P7;
+    PlayerVictoryProperties P8;
+};
+
+struct PlayerResultsProperties {
+    Slice_i32 State;
+    Anon_31b1f748 Win;
+};
+
+struct Anon_194d600d {
+    TextProperties TextProperties;
+    i32 DisplayTime;
+};
+struct WinScreenProperties {
+    bool Enabled;
+    Anon_c29ce860 Sounds;
+    Map_GoString_GoString Results;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    Anon_1f176b16 Pose;
+    Anon_1f176b16 State;
+    Anon_194d600d WinText;
+    OverlayProperties Overlay;
+    Anon_0a015777 Cancel;
+    PlayerResultsProperties P1;
+    PlayerResultsProperties P2;
+    PlayerResultsProperties P3;
+    PlayerResultsProperties P4;
+    PlayerResultsProperties P5;
+    PlayerResultsProperties P6;
+    PlayerResultsProperties P7;
+    PlayerResultsProperties P8;
+};
+
+struct Anon_863d0e0f {
+    Anon_161374c1 Move;
+    Anon_161374c1 Done;
+};
+struct Anon_c6d21910 {
+    Arr2_f32 MenuOffset;
+    TextProperties Playerno;
+};
+struct Anon_e71eca9f {
+    Anon_c6d21910 P1;
+    Anon_c6d21910 P2;
+    Anon_39b99353 Unbind;
+    MenuProperties MenuProperties;
+};
+struct OptionInfoProperties {
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    TextProperties Title;
+    MenuProperties Menu;
+    Anon_863d0e0f Cursor;
+    Anon_161374c1 Cancel;
+    TextInputProperties TextInput;
+    Anon_e71eca9f KeyMenu;
+    Map_GoString_GoString Itemname;
+};
+
+struct ReplayInfoProperties {
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    TextProperties Title;
+    MenuProperties Menu;
+    Anon_863d0e0f Cursor;
+    Anon_161374c1 Cancel;
+};
+
+struct Anon_1412bee7 {
+    TextMapProperties TextMapProperties;
+    bool Uppercase;
+    TextProperties Rank;
+    TextProperties Result;
+    TextProperties Name;
+    TextProperties Face;
+};
+struct Anon_90dcfa72 {
+    AnimationCharPreloadProperties AnimationCharPreloadProperties;
+    i32 Num;
+    Arr2_f32 Spacing;
+    AnimationProperties Bg;
+    AnimationProperties Unknown;
+};
+struct Anon_52e3ca2e {
+    Arr2_f32 Offset;
+    Arr2_f32 Spacing;
+    ItemProperties Rank;
+    ItemProperties Result;
+    ItemProperties Name;
+    Anon_90dcfa72 Face;
+};
+struct Anon_858938ca {
+    Anon_9f553815 Margins;
+    i32 VisibleItems;
+    i32 Width;
+};
+struct Anon_465a578c {
+    Slice_GoString Key;
+    Arr2_i32 Snd;
+    i32 Time;
+};
+struct HiscoreInfoProperties {
+    bool Enabled;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    i32 Time;
+    Arr2_f32 Pos;
+    Map_GoString_GoString Ranking;
+    Anon_1412bee7 Title;
+    Anon_52e3ca2e Item;
+    TimerProperties Timer;
+    Anon_858938ca Window;
+    OverlayProperties Overlay;
+    Anon_0a015777 Next;
+    Anon_0a015777 Previous;
+    Anon_465a578c Done;
+    Anon_828756c7 Cancel;
+    Anon_161374c1 Move;
+    Slice_GoString Glyphs;
+};
+
+struct Anon_87407db8 {
+    TextMapProperties TextMapProperties;
+    GoString TextWrap;
+};
+struct WarningInfoProperties {
+    TextProperties Title;
+    Anon_87407db8 Text;
+    OverlayProperties Overlay;
+    Anon_161374c1 Cancel;
+    Anon_161374c1 Done;
+};
+
+struct MotifChallenger {
+    bool enabled;
+    bool active;
+    bool initialized;
+    i32 counter;
+    i32 endTimer;
+    int controllerNo;
+    bool lifebarActive;
+};
+
+struct MotifContinue {
+    bool enabled;
+    bool active;
+    bool initialized;
+    i32 counter;
+    i32 endTimer;
+    i32 waitTimer;
+    bool showEndAnim;
+    i32 credits;
+    bool yesSide;
+    bool selected;
+    Slice_GoString counts;
+    int pn;
+};
+
+struct MotifDemo {
+    bool enabled;
+    bool active;
+    bool initialized;
+    i32 counter;
+    i32 endTimer;
+};
+
+#ifndef CVF_BODY_Arr2_FaceParams
+#define CVF_BODY_Arr2_FaceParams
+struct Arr2_FaceParams { FaceParams v[2]; };
+#endif
+struct MotifDialogue {
+    bool enabled;
+    bool active;
+    bool initialized;
+    i32 counter;
+    Char* char_;
+    Arr2_FaceParams faceParams;
+    Slice_DialogueParsedLine parsed;
+    int textNum;
+    bool lineFullyRendered;
+    i32 charDelayCounter;
+    int activeSide;
+    int talkingSide;
+    int wait;
+    int switchCounter;
+    int endCounter;
+    bool atMatchEnd;
+    bool matchEndDone;
+};
+
+struct MotifVictory {
+    bool enabled;
+    bool active;
+    bool initialized;
+    i32 counter;
+    i32 endTimer;
+    bool stateDone;
+    GoString text;
+    bool lineFullyRendered;
+    i32 charDelayCounter;
+    int typedCnt;
+};
+
+#ifndef CVF_BODY_Arr4_Slice_i32
+#define CVF_BODY_Arr4_Slice_i32
+struct Arr4_Slice_i32 { Slice_i32 v[4]; };
+#endif
+struct MotifWin {
+    bool winEnabled;
+    bool loseEnabled;
+    bool active;
+    bool initialized;
+    i32 counter;
+    i32 endTimer;
+    Fade* fadeIn;
+    Fade* fadeOut;
+    bool stateDone;
+    bool soundsEnabled;
+    i32 fadeOutTime;
+    i32 time;
+    Slice_GoString keyCancel;
+    Arr4_Slice_i32 p1States;
+    Arr4_Slice_i32 p2States;
+    i32 stateTime;
+    ResultsScreenProperties* resultsScreen;
+    BgDefProperties* resultsBgDef;
+    GoString resultsKey;
+};
+
+struct MotifHiscore {
+    bool enabled;
+    bool active;
+    bool initialized;
+    i32 counter;
+    i32 endTimer;
+    i32 place;
+    GoString mode;
+    Slice_rankingRow rows;
+    GoString statsRaw;
+    i32 endTime;
+    bool noFade;
+    bool noBgs;
+    bool noOverlay;
+    i32 rankActiveCount;
+    i32 resultActiveCount;
+    i32 nameActiveCount;
+    bool rankUseActive2;
+    bool resultUseActive2;
+    bool nameUseActive2;
+    bool input;
+    Slice_int letters;
+    i32 timerCount;
+    i32 timerFrames;
+    bool haveSaved;
+};
+
+struct MotifMenu {
+    bool enabled;
+    bool active;
+    bool initialized;
+    MenuState state;
+    bool reopenLock;
+};
+
+struct Motif {
+    GoOpaque /* ini.File */* IniFile;
+    GoOpaque /* ini.File */* UserIniFile;
+    GoOpaque /* ini.File */* DefaultOnlyIni;
+    AnimationTable AnimTable;
+    GoOpaqueVal* Sff;
+    GoOpaqueVal* Snd;
+    Map_int_GoOpaqueValPtr Fnt;
+    GoOpaqueVal* GlyphsSff;
+    Model* Model;
+    Music Music;
+    GoString Def;
+    InfoProperties Info;
+    FilesProperties Files;
+    Map_GoString_GoString Languages;
+    TitleInfoProperties TitleInfo;
+    BgDefProperties TitleBgDef;
+    InfoBoxProperties InfoBox;
+    SelectInfoProperties SelectInfo;
+    BgDefProperties SelectBgDef;
+    VsScreenProperties VsScreen;
+    BgDefProperties VersusBgDef;
+    DemoModeProperties DemoMode;
+    ContinueScreenProperties ContinueScreen;
+    BgDefProperties ContinueBgDef;
+    StoryboardProperties GameOverScreen;
+    VictoryScreenProperties VictoryScreen;
+    BgDefProperties VictoryBgDef;
+    WinScreenProperties WinScreen;
+    BgDefProperties WinBgDef;
+    StoryboardProperties DefaultEnding;
+    StoryboardProperties EndCredits;
+    Map_GoString_ResultsScreenPropertiesPtr ResultsScreen;
+    Map_GoString_BgDefPropertiesPtr ResultsBgDef;
+    OptionInfoProperties OptionInfo;
+    BgDefProperties OptionBgDef;
+    ReplayInfoProperties ReplayInfo;
+    BgDefProperties ReplayBgDef;
+    Map_GoString_MenuInfoPropertiesPtr PauseMenu;
+    Map_GoString_BgDefPropertiesPtr PauseBgDef;
+    AttractModeProperties AttractMode;
+    BgDefProperties AttractBgDef;
+    ChallengerInfoProperties ChallengerInfo;
+    BgDefProperties ChallengerBgDef;
+    DialogueInfoProperties DialogueInfo;
+    HiscoreInfoProperties HiscoreInfo;
+    BgDefProperties HiscoreBgDef;
+    WarningInfoProperties WarningInfo;
+    Map_GoString_GlyphPropertiesPtr Glyphs;
+    Map_GoString_int fntIndexByKey;
+    Map_GoString_bool inheritedKeys;
+    MotifChallenger ch;
+    MotifContinue co;
+    MotifDemo de;
+    MotifDialogue di;
+    MotifVictory vi;
+    MotifWin wi;
+    MotifHiscore hi;
+    MotifMenu me;
+    Fade* fadeIn;
+    Fade* fadeOut;
+    FadeStartPolicy fadePolicy;
+};
+
+struct storyboardPlacement {
+    Space space;
+    Arr2_f32 pos;
+    Arr2_f32 offset;
+    Arr2_f32 scale;
+    f32 facing;
+    i32 bindID;
+    i32 bindtime;
+};
+
+struct Anon_7c0f0eeb {
+    Slice_GoString Skip;
+    Slice_GoString Cancel;
+};
+struct Anon_2b2cdbcc {
+    GoString Spr;
+    GoString Snd;
+    Map_GoString_FontPropertiesPtr Font;
+    GoString Model;
+    int StartScene;
+    Anon_7c0f0eeb Key;
+    bool StopMusic;
+    bool DisableCancel;
+    bool WaitForLoading;
+};
+struct Storyboard {
+    GoOpaque /* ini.File */* IniFile;
+    AnimationTable AnimTable;
+    GoOpaqueVal* Sff;
+    GoOpaqueVal* Snd;
+    Map_int_GoOpaqueValPtr Fnt;
+    Model* Model;
+    GoString Def;
+    InfoProperties Info;
+    Anon_2b2cdbcc SceneDef;
+    Map_GoString_ScenePropertiesPtr Scene;
+    Map_GoString_int fntIndexByKey;
+    bool active;
+    bool initialized;
+    i32 counter;
+    i32 endTimer;
+    Slice_GoString sceneKeys;
+    int currentSceneIndex;
+    bool canceled;
+    bool musicPlaying;
+    FadeStartPolicy fadePolicy;
+    Slice_LayerPropertiesPtr dialogueLayers;
+    int dialoguePos;
+    bool netReady;
+    bool loadEnding;
+    bool inMatch;
+    i32 id;
+    i32 ownerID;
+    int playerNo;
+    storyboardPlacement placement;
+    Fade* fadeIn;
+    Fade* fadeOut;
+};
+
+struct stageRollbackState {
+    i32 stageTime;
+    bgAction bga;
+    BGMState bgmState;
+    Slice_stageRollbackBgState bg;
+};
+
+struct statsRollbackState {
+    int matches;
+    int rounds;
+};
+
+#ifndef CVF_BODY_Arr2_Slice_Arr2_int
+#define CVF_BODY_Arr2_Slice_Arr2_int
+struct Arr2_Slice_Arr2_int { Slice_Arr2_int v[2]; };
+#endif
+struct Select {
+    Slice_SelectChar charlist;
+    Slice_SelectStage stagelist;
+    Arr2_Slice_Arr2_int selected;
+    int selectedStageNo;
+    Map_i32_bool charAnimPreload;
+    Map_i32_bool stageAnimPreload;
+    Map_Arr2_u16_bool charSpritePreload;
+    Map_Arr2_u16_bool stageSpritePreload;
+    Map_int_GoString cdefOverwrite;
+    Map_int_int palOverwrite;
+    GoString sdefOverwrite;
+    Music music;
+    GameParams* gameParams;
+    GoOpaque /* sync.Mutex */ preloadMu;
+    GoOpaque /* sync.Cond */* preloadCond;
+    bool preloadWorkerRun;
+    i64 preloadOrder;
+    Slice_PreloadEntry charPreload;
+    Slice_PreloadEntry stagePreload;
+};
+
+#ifndef CVF_BODY_Arr12_Slice_CharPtr
+#define CVF_BODY_Arr12_Slice_CharPtr
+struct Arr12_Slice_CharPtr { Slice_CharPtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_Char
+#define CVF_BODY_Arr12_Slice_Char
+struct Arr12_Slice_Char { Slice_Char v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_ProjectilePtr
+#define CVF_BODY_Arr12_Slice_ProjectilePtr
+struct Arr12_Slice_ProjectilePtr { Slice_ProjectilePtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_ExplodPtr
+#define CVF_BODY_Arr12_Slice_ExplodPtr
+struct Arr12_Slice_ExplodPtr { Slice_ExplodPtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_Slice_TextSpritePtr
+#define CVF_BODY_Arr12_Slice_TextSpritePtr
+struct Arr12_Slice_TextSpritePtr { Slice_TextSpritePtr v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_CharGlobalInfo
+#define CVF_BODY_Arr12_CharGlobalInfo
+struct Arr12_CharGlobalInfo { CharGlobalInfo v[12]; };
+#endif
+struct GameState {
+    Slice_u8 bytes;
+    int id;
+    bool saved;
+    i32 frame;
+    bool isSpeculativeFrame;
+    union {
+        SystemStateVars SystemStateVars_;
+        struct {
+            i32 randseed;
+            i32 matchTime;
+            i32 curRoundTime;
+            i32 persistRoundCount;
+            i32 curPlayTime;
+            Arr12_AiInput aiInput;
+            Arr12_ForceFeedbackParams ffbparams;
+            Arr12_int inputRemap;
+            Arr12_f32 aiLevel;
+            Camera cam;
+            i32 pausetime;
+            bool pausebg;
+            i32 pauseendcmdbuftime;
+            i32 pausetimebuffer;
+            int pauseplayerno;
+            i32 supertimebuffer;
+            i32 supertime;
+            bool superpausebg;
+            i32 superendcmdbuftime;
+            int superplayerno;
+            f32 superbrightness;
+            EnvShake envShake;
+            GlobalSpecialFlag specialFlag;
+            Arr3_i32 envcol;
+            i32 envcol_time;
+            Arr4_i32 scrrect;
+            f32 gameWidth;
+            f32 gameHeight;
+            f32 widthScale;
+            f32 heightScale;
+            bool gameEnd;
+            bool frameSkip;
+            bool paused;
+            bool frameStepFlag;
+            f32 brightness;
+            f32 brightnessOld;
+            i32 maxRoundTime;
+            i32 curFramesPerCount;
+            i32 matchNo;
+            i32 roundNo;
+            i32 intro;
+            Arr2_int lastHitter;
+            int winTeam;
+            Arr2_WinType winType;
+            Arr2_WinType winTrigger;
+            Arr2_i32 matchWins;
+            Arr2_i32 wins;
+            Arr2_i32 roundsExisted;
+            i32 draws;
+            Arr2_i32 maxDraws;
+            Arr2_bool effectiveLoss;
+            Arr2_TeamMode tmode;
+            Arr2_i32 numSimul;
+            Arr2_i32 numTurns;
+            bool esc;
+            bool envcol_under;
+            i32 lastCharId;
+            int tickCount;
+            int oldTickCount;
+            f32 tickCountF;
+            f32 lastTick;
+            f32 nextAddTime;
+            f32 oldNextAddTime;
+            i32 uiFrameCounter;
+            f32 xmin;
+            f32 xmax;
+            f32 zmin;
+            f32 zmax;
+            bool winskipped;
+            bool roundResetFlg;
+            bool roundResetMatchStart;
+            bool reloadFlg;
+            bool reloadStageFlg;
+            bool reloadFightScreenFlg;
+            Arr12_bool reloadCharSlot;
+            f32 turbo;
+            ZoomEffect zoom;
+            FinishType finishType;
+            i32 winwaittime;
+            i32 slowtime;
+            i32 changeStateNest;
+            bool nomusic;
+            i32 timerStart;
+            Arr2_int teamLeader;
+            bool postMatchFlg;
+            Arr2_f32 scoreStart;
+            Arr2_f32 scorePoints;
+            Arr2_i32 comboCount;
+            Arr2_bool decisiveRound;
+            GoString gameMode;
+            i32 credits;
+            Arr2_i32 consecutiveWins;
+            Arr3_int firstAttack;
+            int home;
+            bool stageLoop;
+            bool dialogueHideBars;
+            int dialogueForce;
+            bool playBgmFlg;
+            GoOpaque /* invalid type */ keyInput;
+            GoString keyString;
+            int lastInputController;
+            GoString uiLastInputToken;
+            i32 uiConsumeInputFrame;
+            GoString uiRepeatToken;
+            int uiRepeatController;
+            i32 uiRepeatFrame;
+            bool endMatch;
+            bool noCharSoundFlg;
+            bool fightLoopEnd;
+            bool continueFlg;
+            bool matchResetFlg;
+            int stageLoopNo;
+            bool introSkipCall;
+            i32 preMatchTime;
+            bool loopBreak;
+            bool loopContinue;
+            i32 winposetime;
+        };
+    };
+    Arr12_Slice_CharPtr chars;
+    Arr12_Slice_Char charData;
+    Arr12_Slice_ProjectilePtr projs;
+    Arr12_Slice_ExplodPtr explods;
+    Arr12_Slice_TextSpritePtr chartexts;
+    CharList charList;
+    PalFX* allPalFX;
+    PalFX* bgPalFX;
+    BytecodeStack bcStack;
+    BytecodeStack bcVarStack;
+    Slice_BytecodeValue bcVar;
+    Slice_BytecodeExp workBe;
+    Slice_u32 workpal;
+    Slice_KeyConfig keyConfig;
+    Slice_KeyConfig joystickConfig;
+    FightScreen fightScreen;
+    Motif motif;
+    Storyboard storyboard;
+    Slice_StoryboardPtr matchStoryboards;
+    Arr12_CharGlobalInfo cgi;
+    Slice_i32 timerRounds;
+    Stage* stageRef;
+    Stage* stage;
+    Map_i32_StagePtr stageList;
+    stageRollbackState stageState;
+    statsRollbackState statsState;
+    Slice_Arr2_f32 scoreRounds;
+    Select sel;
+    bool dialogueFlg;
+    Slice_i32 timerCount;
+    Slice_CommandListPtr commandLists;
+    Slice_GoOpaqueValPtr matchMusicSel;
+    i32 netTime;
+};
+
+struct GameStatePool {
+    GoOpaque /* sync.Pool */ gameStatePool;
+    GoOpaque /* sync.Pool */ stringIntMapPool;
+    GoOpaque /* sync.Pool */ stringTypedValueMapPool;
+    GoOpaque /* sync.Pool */ animationTablePool;
+    GoOpaque /* sync.Pool */ mapArraySlicePool;
+    GoOpaque /* sync.Pool */ int32CharPointerMapPool;
+    GoOpaque /* sync.Pool */ int32int32MapPool;
+    GoOpaque /* sync.Pool */ int32float32MapPool;
+    GoOpaque /* sync.Pool */ remapPresetPool;
+    GoOpaque /* sync.Pool */ remapTablePool;
+    GoOpaque /* sync.Pool */ animFrameSlicePool;
+    Map_int_Slice_GoIface poolObjs;
+    int curStateID;
+};
+
+struct StatsLog {
+    Slice_StatsMatch Matches;
+};
+
+struct GameStatsSnapshot {
+    StatsLog StatsLog;
+    bool ContinueFlg;
+    i32 PersistRoundCount;
+};
+
+struct GlyphProperties {
+    Arr2_i32 Spr;
+    Arr2_f32 Offset;
+    Arr2_f32 Scale;
+    i16 Layerno;
+    Arr2_i32 Localcoord;
+    Anim* AnimData;
+    Arr2_i32 Size;
+};
+
+struct GuardBar {
+    Arr2_i32 pos;
+    Arr2_i32 range_x;
+    Arr2_i32 range_y;
+    Map_f32_AnimLayoutPtr bg0;
+    Map_f32_AnimLayoutPtr bg1;
+    Map_f32_AnimLayoutPtr bg2;
+    AnimLayout top;
+    AnimLayout mid;
+    AnimLayout warn;
+    Arr2_i32 warn_range;
+    Map_i32_FSTextPtr value;
+    Map_f32_AnimLayoutPtr front;
+    AnimLayout shift;
+    f32 midpower;
+    f32 midpowerMin;
+    bool invertfill;
+    bool scalefill;
+    bool leaderontop;
+};
+
+struct InheritSpec {
+    GoString SrcSec;
+    GoString SrcPrefix;
+    GoString DstSec;
+    GoString DstPrefix;
+};
+
+#ifndef CVF_BODY_Arr12_GoOpaque_invalidtypePtr
+#define CVF_BODY_Arr12_GoOpaque_invalidtypePtr
+struct Arr12_GoOpaque_invalidtypePtr { GoOpaque /* invalid type */ v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_ControllerStatePtr
+#define CVF_BODY_Arr12_ControllerStatePtr
+struct Arr12_ControllerStatePtr { ControllerState* v[12]; };
+#endif
+struct Input {
+    Arr12_GoOpaque_invalidtypePtr controllers;
+    Arr12_ControllerStatePtr controllerstate;
+};
+
 struct InputBuffer {
     InputReader* InputReader;
     i32 Bb;
@@ -1047,16 +7455,397 @@ struct InputBuffer {
     i32 mp;
 };
 
+#ifndef CVF_BODY_Arr9_bool
+#define CVF_BODY_Arr9_bool
 struct Arr9_bool { bool v[9]; };
+#endif
 struct InputReader {
     Arr4_bool SocdAllow;
     Arr4_bool SocdFirst;
     Arr9_bool ButtonAssistBuffer;
 };
 
+struct KeyConfig {
+    int Joy;
+    int dU;
+    int dD;
+    int dL;
+    int dR;
+    int bA;
+    int bB;
+    int bC;
+    int bX;
+    int bY;
+    int bZ;
+    int bS;
+    int bD;
+    int bW;
+    int bM;
+    bool isInitialized;
+    bool rumbleOn;
+    GoString GUID;
+};
+
+struct KeysProperties {
+    int Joystick;
+    GoString Up;
+    GoString Down;
+    GoString Left;
+    GoString Right;
+    GoString A;
+    GoString B;
+    GoString C;
+    GoString X;
+    GoString Y;
+    GoString Z;
+    GoString Start;
+    GoString D;
+    GoString W;
+    GoString Menu;
+    GoString GUID;
+    bool RumbleOn;
+};
+
+struct PalFxProperties {
+    i32 Time;
+    f32 Color;
+    f32 Hue;
+    Arr3_i32 Add;
+    Arr3_i32 Mul;
+    Arr4_i32 SinAdd;
+    Arr4_i32 SinMul;
+    Arr2_i32 SinColor;
+    Arr2_i32 SinHue;
+    bool InvertAll;
+    i32 InvertBlend;
+    PalFX* PalFxData;
+};
+
+struct LayerProperties {
+    i32 Anim;
+    Arr2_i32 Spr;
+    Arr2_f32 Offset;
+    i32 Facing;
+    Arr2_f32 Scale;
+    f32 Xshear;
+    f32 Angle;
+    f32 XAngle;
+    f32 YAngle;
+    GoString Projection;
+    f32 Focallength;
+    i16 Layerno;
+    Arr4_i32 Window;
+    Arr2_i32 Localcoord;
+    Arr2_f32 Accel;
+    Arr2_f32 Velocity;
+    Arr2_f32 Friction;
+    Anim* AnimData;
+    Arr8_i32 Font;
+    GoString Text;
+    TextSprite* TextSpriteData;
+    PalFxProperties PalFx;
+    Arr2_f32 TextSpacing;
+    f32 TextDelay;
+    GoString TextWrap;
+    Arr4_i32 TextWindow;
+    i32 StartTime;
+    i32 EndTime;
+    int typedLen;
+    i32 charDelayCounter;
+    bool lineFullyRendered;
+};
+
+struct LifeBar {
+    Arr2_i32 pos;
+    Arr2_i32 range_x;
+    Arr2_i32 range_y;
+    Map_f32_AnimLayoutPtr bg0;
+    Map_f32_AnimLayoutPtr bg1;
+    Map_f32_AnimLayoutPtr bg2;
+    AnimLayout top;
+    AnimLayout mid;
+    Map_i32_AnimLayoutPtr red;
+    Map_f32_AnimLayoutPtr front;
+    AnimLayout shift;
+    AnimLayout warn;
+    Arr2_i32 warn_range;
+    Map_i32_FSTextPtr value;
+    Map_i32_FSTextPtr red_value;
+    f32 toplife;
+    f32 oldlife;
+    f32 midlife;
+    f32 midlifeMin;
+    i32 mlifetime;
+    bool mid_shift;
+    bool mid_freeze;
+    i32 mid_delay;
+    f32 mid_mult;
+    f32 mid_steps;
+    bool gethit;
+    bool scalefill;
+    bool leaderontop;
+};
+
+struct Loader {
+    LoaderState state;
+    GoOpaque /* chan */ loadExit;
+    GoIface err;
+    GoOpaque /* chan */ cancelCh;
+    GoOpaque /* sync.Once */ cancelOnce;
+};
+
+struct LoopBreak {
+    char _empty;
+};
+
+struct LoopContinue {
+    char _empty;
+};
+
+struct LoopTimer {
+    f32 lastAdvantage;
+    i64 usPergameLoop;
+    int usExtraToWait;
+    int framesToSpreadWait;
+    i64 waitCount;
+    i64 timeWait;
+    i64 waitTotal;
+};
+
+#ifndef CVF_BODY_Arr9_f32
+#define CVF_BODY_Arr9_f32
+struct Arr9_f32 { f32 v[9]; };
+#endif
+struct Material {
+    GoString name;
+    AlphaMode alphaMode;
+    GLTFAnimatableProperty alphaCutoff;
+    u32* textureIndex;
+    GLTFAnimatableProperty textureOffset;
+    GLTFAnimatableProperty textureRotation;
+    GLTFAnimatableProperty textureScale;
+    Arr9_f32 textureTransform;
+    u32* normalMapIndex;
+    GLTFAnimatableProperty normalMapOffset;
+    GLTFAnimatableProperty normalMapRotation;
+    GLTFAnimatableProperty normalMapScale;
+    Arr9_f32 normalMapTransform;
+    u32* ambientOcclusionMapIndex;
+    GLTFAnimatableProperty ambientOcclusionMapOffset;
+    GLTFAnimatableProperty ambientOcclusionMapRotation;
+    GLTFAnimatableProperty ambientOcclusionMapScale;
+    Arr9_f32 ambientOcclusionMapTransform;
+    u32* metallicRoughnessMapIndex;
+    GLTFAnimatableProperty metallicRoughnessMapOffset;
+    GLTFAnimatableProperty metallicRoughnessMapRotation;
+    GLTFAnimatableProperty metallicRoughnessMapScale;
+    Arr9_f32 metallicRoughnessMapTransform;
+    u32* emissionMapIndex;
+    GLTFAnimatableProperty emissionMapOffset;
+    GLTFAnimatableProperty emissionMapRotation;
+    GLTFAnimatableProperty emissionMapScale;
+    Arr9_f32 emissionMapTransform;
+    GLTFAnimatableProperty baseColorFactor;
+    bool doubleSided;
+    GLTFAnimatableProperty ambientOcclusion;
+    GLTFAnimatableProperty metallic;
+    GLTFAnimatableProperty roughness;
+    GLTFAnimatableProperty emission;
+    bool unlit;
+};
+
+struct MovelistGlyphsProperties {
+    Arr2_f32 Offset;
+    Arr2_f32 Scale;
+    i16 Layerno;
+    Arr2_i32 Localcoord;
+    Arr2_f32 Spacing;
+};
+
+struct Anon_e6c808e7 {
+    TextProperties TextProperties;
+    bool Uppercase;
+};
+struct Anon_800e850a {
+    TextProperties TextProperties;
+    Arr2_f32 Spacing;
+};
+struct Anon_0107677c {
+    Arr2_f32 Pos;
+    Anon_e6c808e7 Title;
+    Anon_800e850a Text;
+    MovelistGlyphsProperties Glyphs;
+    Anon_858938ca Window;
+    OverlayProperties Overlay;
+    Anon_a316b3f5 Arrow;
+    Map_GoString_GoString Itemname;
+};
+struct MenuInfoProperties {
+    bool Enabled;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    TextProperties Title;
+    MenuProperties Menu;
+    bool HideBars;
+    Anon_863d0e0f Cursor;
+    Anon_161374c1 Cancel;
+    Anon_161374c1 Enter;
+    Anon_161374c1 Exit;
+    OverlayProperties Overlay;
+    Anon_0107677c Movelist;
+};
+
+struct Mesh {
+    GoString name;
+    GLTFAnimatableProperty morphTargetWeights;
+    Slice_PrimitivePtr primitives;
+};
+
+struct Model {
+    Slice_ScenePtr scenes;
+    Slice_NodePtr nodes;
+    Slice_MeshPtr meshes;
+    Slice_GLTFTexturePtr textures;
+    Slice_MaterialPtr materials;
+    Arr3_f32 offset;
+    Arr3_f32 rotation;
+    Arr3_f32 scale;
+    PalFX* pfx;
+    Map_u32_Slice_f32 animationTimeStamps;
+    Slice_GLTFAnimationPtr animations;
+    Slice_SkinPtr skins;
+    Slice_u8 vertexBuffer;
+    Slice_u32 elementBuffer;
+    Slice_GLTFLight lights;
+    Environment* environment;
+};
+
+struct MorphTarget {
+    u32* positionIndex;
+    u32* normalIndex;
+    u32* tangentIndex;
+    u32* uvIndex;
+    u32* colorIndex;
+    u32 targetType;
+    u32 offset;
+    Slice_f32 positionBuffer;
+    Slice_f32 uvBuffer;
+    Slice_f32 normalBuffer;
+    Slice_f32 tangentBuffer;
+    Slice_f32 colorBuffer;
+};
+
+#ifndef CVF_BODY_Arr32_InputBits
+#define CVF_BODY_Arr32_InputBits
+struct Arr32_InputBits { InputBits v[32]; };
+#endif
+#ifndef CVF_BODY_Arr32_Arr6_i8
+#define CVF_BODY_Arr32_Arr6_i8
+struct Arr32_Arr6_i8 { Arr6_i8 v[32]; };
+#endif
+struct NetBuffer {
+    Arr32_InputBits buf;
+    Arr32_Arr6_i8 axisBuf;
+    i32 curT;
+    i32 inpT;
+    i32 senT;
+    InputReader* InputReader;
+};
+
+#ifndef CVF_BODY_Arr8_NetBuffer
+#define CVF_BODY_Arr8_NetBuffer
+struct Arr8_NetBuffer { NetBuffer v[8]; };
+#endif
+struct NetConnection {
+    GoOpaque /* net.TCPListener */* ln;
+    GoOpaque /* net.TCPConn */* conn;
+    NetState st;
+    GoOpaque /* chan */ sendEnd;
+    GoOpaque /* chan */ recvEnd;
+    Arr8_NetBuffer buf;
+    int locIn;
+    int remIn;
+    i32 time;
+    GoOpaque /* time.Time */ stoppedStarted;
+    i32 delay;
+    GoOpaque /* os.File */* recording;
+    bool host;
+    i32 preMatchTime;
+    GoOpaque /* chan */ closing;
+    GoOpaque /* sync.Once */ closeOnce;
+    bool uiInputDebounced;
+    bool headerWritten;
+    LoadingPhase loadingPhase;
+    GoOpaque /* time.Time */ loadingStarted;
+    int rollbackRemotePort;
+};
+
+struct Node {
+    u32 id;
+    bool visible;
+    u32* meshIndex;
+    GLTFAnimatableProperty transition;
+    GLTFAnimatableProperty rotation;
+    GLTFAnimatableProperty scale;
+    bool transformChanged;
+    GoOpaque /* mgl32.Mat4 */ localTransform;
+    GoOpaque /* mgl32.Mat4 */ worldTransform;
+    GoOpaque /* mgl32.Mat4 */ normalMatrix;
+    Slice_u32 childrenIndex;
+    Trans trans;
+    bool castShadow;
+    bool zWrite;
+    bool zTest;
+    u32* parentIndex;
+    u32* lightIndex;
+    Arr3_f32 lightDirection;
+    GLTFAnimatableProperty shadowMapNear;
+    GLTFAnimatableProperty shadowMapFar;
+    GLTFAnimatableProperty shadowMapBottom;
+    GLTFAnimatableProperty shadowMapTop;
+    GLTFAnimatableProperty shadowMapLeft;
+    GLTFAnimatableProperty shadowMapRight;
+    GLTFAnimatableProperty shadowMapBias;
+    u32* skin;
+    GLTFAnimatableProperty morphTargetWeights;
+    Slice_u32 activeMorphTargets;
+    int* layerNumber;
+    GLTFAnimatableProperty meshOutline;
+};
+
+struct Normalizer {
+    GoIface streamer;
+    f64 mul;
+    NormalizerLR* l;
+    NormalizerLR* r;
+};
+
+struct NormalizerLR {
+    f64 edge;
+    f64 edgeDelta;
+    f64 gain;
+    f64 average;
+    f64 bias;
+    f64 bias2;
+};
+
+struct NullStateController {
+    char _empty;
+};
+
+struct OverrideCharData {
+    i32 life;
+    i32 lifeMax;
+    i32 power;
+    i32 dizzyPoints;
+    i32 guardPoints;
+    Map_GoString_f32 maps;
+    bool existed;
+};
+
 struct PalFX {
     union {
-        PalFXDef PalFXDef;
+        PalFXDef PalFXDef_;
         struct {
             i32 time;
             f32 color;
@@ -1092,6 +7881,145 @@ struct PalFX {
     bool eInterpolate;
     i32 eiTime;
     Slice_int remap;
+};
+
+struct PalTexture {
+    Slice_GoIfacePtr textures;
+    u32 size;
+    GoOpaque /* list.List */* emptySlot;
+};
+
+struct Plane {
+    Arr3_f32 Normal;
+    f32 D;
+};
+
+struct Platform {
+    GoString name;
+    i32 id;
+    Arr2_f32 pos;
+    Arr2_i32 size;
+    Arr2_i32 offset;
+    i32 anim;
+    i32 activeTime;
+    bool isSolid;
+    bool borderFall;
+    bool destroySelf;
+    f32 localScale;
+    i32 ownerID;
+};
+
+struct PlaySndParams {
+    GoString ffx;
+    i32 group;
+    i32 number;
+    i32 channel;
+    i32 volume;
+    f32 pan;
+    i32 sourceID;
+    f32 localScale;
+    f32 freqMul;
+    bool lowPriority;
+    i32 priority;
+    int startPosition;
+    i32 loopCount;
+    int loopStart;
+    int loopEnd;
+    bool stopOnGetHit;
+    bool stopOnChangeState;
+    bool log;
+};
+
+struct PlayerCursorStateProperties {
+    union {
+        AnimationProperties AnimationProperties_;
+        struct {
+            i32 Anim;
+            Arr2_i32 Spr;
+            Arr2_f32 Offset;
+            i32 Facing;
+            Arr2_f32 Scale;
+            f32 Xshear;
+            f32 Angle;
+            f32 XAngle;
+            f32 YAngle;
+            GoString Projection;
+            f32 Focallength;
+            i16 Layerno;
+            Arr4_i32 Window;
+            Arr2_i32 Localcoord;
+            Anim* AnimData;
+        };
+    };
+    Arr2_i32 Snd;
+};
+
+#ifndef CVF_BODY_Arr9_Arr2_i32
+#define CVF_BODY_Arr9_Arr2_i32
+struct Arr9_Arr2_i32 { Arr2_i32 v[9]; };
+#endif
+struct PowerBar {
+    Arr2_i32 pos;
+    Arr2_i32 range_x;
+    Arr2_i32 range_y;
+    Map_i32_AnimLayoutPtr bg0;
+    Map_i32_AnimLayoutPtr bg1;
+    Map_i32_AnimLayoutPtr bg2;
+    AnimLayout top;
+    AnimLayout mid;
+    Map_i32_AnimLayoutPtr front;
+    AnimLayout shift;
+    Map_i32_FSTextPtr counter;
+    i32 counter_rounding;
+    Map_i32_FSTextPtr value;
+    i32 value_rounding;
+    Arr9_Arr2_i32 level_snd;
+    Arr2_i32 levelmax_snd;
+    f32 midpower;
+    f32 midpowerMin;
+    i32 prevLevel;
+    i32 prevPower;
+    bool levelbars;
+    bool scalefill;
+    bool leaderontop;
+};
+
+struct PreloadEntry {
+    PreloadState State;
+    int Priority;
+    i64 Order;
+};
+
+#ifndef CVF_BODY_Arr8_f32
+#define CVF_BODY_Arr8_f32
+struct Arr8_f32 { f32 v[8]; };
+#endif
+struct Primitive {
+    u32 numVertices;
+    u32 numIndices;
+    u32 vertexBufferOffset;
+    u32 elementBufferOffset;
+    u32* materialIndex;
+    bool useUV;
+    bool useNormal;
+    bool useTangent;
+    bool useVertexColor;
+    bool useJoint0;
+    bool useJoint1;
+    bool useOutlineAttribute;
+    PrimitiveMode mode;
+    Slice_MorphTargetPtr morphTargets;
+    GLTFTexture* morphTargetTexture;
+    u32 morphTargetCount;
+    Arr4_f32 morphTargetOffset;
+    Arr8_f32 morphTargetWeight;
+    BoundingBox boundingBox;
+};
+
+struct ProjTradeDist {
+    Projectile* pr;
+    f32 dist;
+    int sortIdx;
 };
 
 struct Projectile {
@@ -1140,7 +8068,7 @@ struct Projectile {
     i32 reflection;
     i32 supermovetime;
     i32 pausemovetime;
-    CvfAnim* anim;
+    Animation* anim;
     i32 curmisstime;
     i32 hitpause;
     Arr3_f32 oldPos;
@@ -1166,8 +8094,625 @@ struct Projectile {
     Arr4_Slice_ClsnFinal clsnBuffers;
 };
 
+struct Rect {
+    Arr4_i32 window;
+    u32 col;
+    Arr2_i32 alpha;
+    i32 time;
+    i16 layerno;
+    f32 localScale;
+    i32 offsetX;
+    f32 pulseMid;
+    f32 pulseAmp;
+    f32 pulsePhase;
+    f32 pulsePhaseStep;
+    bool autoAlpha;
+    Arr4_f32 windowInit;
+};
+
+struct ReflectionSprite {
+    SpriteData* embed_SpriteData;
+    f32 groundLevel;
+    i32 reflectColor;
+    i32 reflectIntensity;
+    bool reflectKeeptransform;
+    Arr2_f32 reflectOffset;
+    Arr4_f32 reflectWindow;
+    f32 reflectXscale;
+    f32 reflectXshear;
+    f32 reflectYscale;
+    Rotation reflectRot;
+    i32 reflectProjection;
+    f32 reflectfLength;
+    GoOpaqueVal reflectShader;
+    bool inheritShader;
+};
+
+struct RenderParams {
+    GoIface tex;
+    GoIface paltex;
+    Arr2_u16 size;
+    f32 x;
+    f32 y;
+    Tiling tile;
+    f32 xts;
+    f32 xbs;
+    f32 ys;
+    f32 vs;
+    f32 rxadd;
+    f32 xas;
+    f32 yas;
+    Rotation rot;
+    bool parallaxRot;
+    u32 tint;
+    TransType blendMode;
+    Arr2_i32 blendAlpha;
+    i32 mask;
+    PalFX* pfx;
+    Arr4_i32* window;
+    f32 rcx;
+    f32 rcy;
+    Arr2_f32 rcOffset;
+    i32 projectionMode;
+    f32 fLength;
+    f32 xOffset;
+    f32 yOffset;
+    GoString shader;
+    GoOpaqueVal customShader;
+};
+
+#ifndef CVF_BODY_Arr192_bool
+#define CVF_BODY_Arr192_bool
+struct Arr192_bool { bool v[192]; };
+#endif
+#ifndef CVF_BODY_Arr2_u64
+#define CVF_BODY_Arr2_u64
+struct Arr2_u64 { u64 v[2]; };
+#endif
+struct vitaBatch {
+    bool enabled;
+    Slice_f32 pend;
+    int n;
+    Slice_f32 cur;
+    Arr4_f32 spUV;
+    Arr4_f32 palUV;
+    u32 locSp;
+    u32 locPal;
+    bool ptrOK;
+    int flushes;
+    int quads;
+    bool lazy;
+    Arr64_Anon_5596a083 haveI;
+    Arr64_Anon_a810cdd4 haveF;
+    Arr64_Anon_7b4debcb haveM;
+    Arr192_bool dirty;
+    Slice_i32 dirtyList;
+    Arr2_i32 slotLoc;
+    Arr2_i32 slotUnit;
+    Arr2_u64 slotUse;
+    u64 slotTick;
+    f32 texSel;
+};
+
+#ifndef CVF_BODY_Arr2_u32
+#define CVF_BODY_Arr2_u32
+struct Arr2_u32 { u32 v[2]; };
+#endif
+struct Renderer_GLES32 {
+    u32 fbo;
+    u32 fbo_texture;
+    u32 rbo_depth;
+    u32 fbo_f;
+    Texture_GLES32* fbo_f_texture;
+    u32 fbo_shadow;
+    u32 fbo_shadow_cube_texture;
+    u32 fbo_env;
+    Slice_u32 fbo_pp;
+    Slice_u32 fbo_pp_texture;
+    u32 postVertBuffer;
+    Slice_ShaderProgram_GLES32Ptr postShaderSelect;
+    Map_u32_ShaderProgram_GLES32Ptr customShaders;
+    Map_GoString_u32 customShaderMap;
+    u32 nextShaderID;
+    ShaderProgram_GLES32* currentProgram;
+    Texture_GLES32* grabTexture;
+    ShaderProgram_GLES32* spriteShader;
+    u32 vertexBuffer;
+    ShaderProgram_GLES32* shadowMapShader;
+    ShaderProgram_GLES32* modelShader;
+    ShaderProgram_GLES32* panoramaToCubeMapShader;
+    ShaderProgram_GLES32* cubemapFilteringShader;
+    Arr2_u32 modelVertexBuffer;
+    Arr2_u32 modelIndexBuffer;
+    u32 spriteVAO;
+    Slice_f32 vitaVerts;
+    u32 vitaLocPos;
+    u32 vitaLocUV;
+    vitaBatch vb;
+    u32 modelVAO;
+    u32 modelEnvVAO;
+    u32 postVAO;
+    Slice_u8 vertexScratch;
+    u32 capturePBO;
+    int capturePBOSize;
+    bool capturePending;
+    bool enableModel;
+    bool enableShadow;
+    union {
+        GLES32State GLES32State_;
+        struct {
+            u32 program;
+            bool depthTest;
+            bool depthMask;
+            bool invertFrontFace;
+            bool doubleSided;
+            bool blendEnabled;
+            BlendEquation blendEquation;
+            BlendFunc blendSrc;
+            BlendFunc blendDst;
+            Arr4_i32 scissorRect;
+            bool scissorEnabled;
+            Slice_boundTexture boundTex;
+            Slice_u64 texCacheLastUsed;
+            u64 texCacheTimer;
+            Map_u32_i32 uniformICache;
+            Arr64_Anon_5596a083 uniArrI;
+            Arr64_Anon_a810cdd4 uniArrF;
+            Arr64_Anon_7b4debcb uniArrM;
+            Map_u32_f32 uniformF1Cache;
+            Map_u32_Arr2_f32 uniformF2Cache;
+            Map_u32_Arr3_f32 uniformF3Cache;
+            Map_u32_Arr4_f32 uniformF4Cache;
+            bool useUV;
+            bool useNormal;
+            bool useTangent;
+            bool useVertColor;
+            bool useJoint0;
+            bool useJoint1;
+            bool useOutlineAttribute;
+            Map_u32_u32 boundBuffers;
+            u32 currentVAO;
+        };
+    };
+};
+
+struct Renderer_VK {
+    Renderer_GLES32* embed_Renderer_GLES32;
+    bool surfaceLost;
+};
+
+#ifndef CVF_BODY_Arr8_InputBits
+#define CVF_BODY_Arr8_InputBits
+struct Arr8_InputBits { InputBits v[8]; };
+#endif
+#ifndef CVF_BODY_Arr8_Arr6_i8
+#define CVF_BODY_Arr8_Arr6_i8
+struct Arr8_Arr6_i8 { Arr6_i8 v[8]; };
+#endif
+struct ReplayFile {
+    GoOpaque /* os.File */* file;
+    Arr8_InputBits ibit;
+    Arr8_Arr6_i8 iaxes;
+    i32 preMatchTime;
+    Slice_SyncSetting strictSettings;
+    Slice_SyncSetting hostSettings;
+    GoString contentFingerprint;
+};
+
+struct ReplayHeader {
+    u16 FormatVersion;
+    u16 SyncVersion;
+    Slice_SyncSetting Strict;
+    Slice_SyncSetting Host;
+    GoString ContentFingerprint;
+};
+
+struct ResultsScreenProperties {
+    bool Enabled;
+    Anon_c29ce860 Sounds;
+    i32 RoundsToWin;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    Anon_1f176b16 Show;
+    Anon_1f176b16 State;
+    Anon_194d600d WinsText;
+    OverlayProperties Overlay;
+    Anon_0a015777 Cancel;
+    PlayerResultsProperties P1;
+    PlayerResultsProperties P2;
+    PlayerResultsProperties P3;
+    PlayerResultsProperties P4;
+    PlayerResultsProperties P5;
+    PlayerResultsProperties P6;
+    PlayerResultsProperties P7;
+    PlayerResultsProperties P8;
+};
+
+#ifndef CVF_BODY_Arr90_GoString
+#define CVF_BODY_Arr90_GoString
+struct Arr90_GoString { GoString v[90]; };
+#endif
+struct RollbackLogger {
+    GoString filename;
+    GoOpaque /* strings.Builder */ currentLog;
+    Arr90_GoString logs;
+};
+
+#ifndef CVF_BODY_Arr12_InputBits
+#define CVF_BODY_Arr12_InputBits
+struct Arr12_InputBits { InputBits v[12]; };
+#endif
+struct RollbackSession {
+    GoIface backend;
+    Map_int_GameStatePtr saveStates;
+    i64 now;
+    i64 next;
+    Slice_GoOpaque_ggpo_PlayerPtr players;
+    Slice_int handles;
+    GoOpaque /* os.File */* recording;
+    bool connected;
+    GoString host;
+    int playerNo;
+    int syncProgress;
+    bool synchronized;
+    bool syncTest;
+    int run;
+    GoString remoteIp;
+    int currentPlayer;
+    int currentPlayerHandle;
+    int remotePlayerHandle;
+    LoopTimer loopTimer;
+    Map_int_Arr12_InputBits inputs;
+    Map_int_Arr12_Arr6_i8 analogInputs;
+    RollbackProperties config;
+    RollbackLogger log;
+    GoString timestamp;
+    i32 netTime;
+    Slice_Arr8_InputBits replayInputs;
+    Slice_Arr8_Arr6_i8 replayAnalogInputs;
+    Arr12_InputBits lastConfirmedInput;
+    Slice_InputBits inputBits;
+    bool inRollback;
+    bool replaySaved;
+};
+
+struct RollbackSystem {
+    RollbackSession* session;
+    NetConnection* netConnection;
+    Slice_InputBits ggpoInputs;
+    Slice_Arr6_i8 ggpoAnalogInputs;
+};
+
+struct bgShaderTex {
+    i32 animNo;
+    Arr2_i32 sprNo;
+};
+
+#ifndef CVF_BODY_Arr2_bgShaderTex
+#define CVF_BODY_Arr2_bgShaderTex
+struct Arr2_bgShaderTex { bgShaderTex v[2]; };
+#endif
+struct stageShaderDef {
+    GoString shaderName;
+    Arr16_f32 shaderParams;
+    Arr2_bgShaderTex shaderTex;
+};
+
+struct stageShadow {
+    union {
+        stageShaderDef stageShaderDef_;
+        struct {
+            GoString shaderName;
+            Arr16_f32 shaderParams;
+            Arr2_bgShaderTex shaderTex;
+        };
+    };
+    i32 intensity;
+    u32 color;
+    f32 xscale;
+    f32 yscale;
+    i32 fadeend;
+    i32 fadebgn;
+    f32 xshear;
+    Rotation rot;
+    f32 fLength;
+    Projection projection;
+    Arr2_f32 offset;
+    Arr4_f32 window;
+    f32 ydelta;
+    i32 layerno;
+    CustomShader shader;
+};
+
+struct stagePlayer {
+    i32 startx;
+    i32 starty;
+    i32 startz;
+    i32 facing;
+};
+
+#ifndef CVF_BODY_Arr12_stagePlayer
+#define CVF_BODY_Arr12_stagePlayer
+struct Arr12_stagePlayer { stagePlayer v[12]; };
+#endif
+struct Stage {
+    GoString def;
+    GoString name;
+    GoString displayname;
+    GoString author;
+    GoString nameLow;
+    GoString displaynameLow;
+    GoString authorLow;
+    Slice_GoString attachedchardef;
+    GoOpaqueVal* sff;
+    AnimationTable animTable;
+    Slice_backGroundPtr bg;
+    Slice_bgCtrl bgc;
+    bgAction bga;
+    stageShadow sdw;
+    stageShadow reflection;
+    Arr12_stagePlayer p;
+    f32 leftbound;
+    f32 rightbound;
+    i32 screenleft;
+    i32 screenright;
+    i32 zoffsetlink;
+    bool hires;
+    bool autoturn;
+    bool resetbg;
+    bool debugbg;
+    Arr3_i32 bgclearcolor;
+    f32 localscl;
+    Arr2_f32 scale;
+    bool mainstage;
+    stageCamera stageCamera;
+    i32 stageTime;
+    Music music;
+    BGMState bgmState;
+    f32 bgmratio;
+    i32 bgmtrigger;
+    Map_GoString_TypedValue constants;
+    i32 partnerspacing;
+    Arr3_u16 ikemenver;
+    Arr2_u16 mugenver;
+    bool reload;
+    StageProps stageprops;
+    Model* model;
+    f32 topbound;
+    f32 botbound;
+    Map_GoString_GoString customShaders;
+};
+
+struct RoundStartBackup {
+    Arr12_Slice_Char charBackup;
+    Arr12_CharGlobalInfo cgiBackup;
+    Stage stageBackup;
+    Arr2_i32 oldWins;
+    i32 oldDraws;
+    Arr2_int oldTeamLeader;
+    i32 lastCharId;
+};
+
+struct SDLSpeaker {
+    GoOpaque /* invalid type */ dev;
+    GoOpaque /* beep.Mixer */* mixer;
+    GoOpaque /* sync.Mutex */ mu;
+    int sampleRate;
+    int bufferSize;
+    Slice_Arr2_f64 buf;
+    Slice_u8 out;
+};
+
+struct Scene {
+    Slice_u32 nodes;
+    GoString name;
+    Slice_u32 lightNodes;
+    u32* imageBasedLight;
+};
+
+struct Anon_ed9bef7d {
+    Arr2_f32 Pos;
+};
+struct Anon_fc15f840 {
+    BGDef* BGDef;
+    GoString Name;
+};
+struct SceneProperties {
+    Anon_1f176b16 End;
+    FadeProperties FadeIn;
+    FadeProperties FadeOut;
+    Arr3_i32 ClearColor;
+    Arr2_i32 ClearAlpha;
+    i16 ClearLayerno;
+    Rect* RectData;
+    Anon_ed9bef7d Layerall;
+    Map_GoString_LayerPropertiesPtr Layer;
+    Map_GoString_SoundPropertiesPtr Sound;
+    Anon_fc15f840 Bg;
+    BgmProperties Bgm;
+    Music Music;
+    int* Jump;
+};
+
+struct SelectChar {
+    GoString def;
+    GoString name;
+    GoString lifebarname;
+    GoString author;
+    GoString sound;
+    GoString intro;
+    GoString ending;
+    GoString arcadepath;
+    Slice_i32 pal;
+    Slice_i32 pal_defaults;
+    Slice_i32 pal_keymap;
+    Slice_GoString pal_files;
+    Arr2_i32 localcoord;
+    f32 portraitscale;
+    Arr2_f32 cns_scale;
+    PreloadedAnims anims;
+    GoOpaqueVal* sff;
+    Music music;
+    SelectCharParams* scp;
+    GoString preloadAnim;
+    GoString preloadSprite;
+};
+
+struct SelectCharParams {
+    Slice_GoString musicEntries;
+    i32 AI;
+    bool VsScreen;
+    bool VictoryScreen;
+    i32 Rounds;
+    i32 Time;
+    bool Single;
+    i32 IncludeStage;
+    bool Bonus;
+    bool Exclude;
+    i32 Hidden;
+    i32 Order;
+    i32 OrderSurvival;
+    GoString ArcadePath;
+    GoString Unlock;
+    GoString SlotSelect;
+    GoString SlotNext;
+    GoString SlotPrevious;
+    Slice_GoString Raw;
+};
+
+struct SelectStage {
+    GoString def;
+    GoString name;
+    Slice_GoString attachedchardef;
+    Arr2_i32 localcoord;
+    f32 portraitscale;
+    PreloadedAnims anims;
+    GoOpaqueVal* sff;
+    Music music;
+    SelectStageParams* ssp;
+    GoString preloadSprite;
+};
+
+struct SelectStageParams {
+    Slice_GoString musicEntries;
+    Slice_i32 Order;
+    GoString Unlock;
+    GoString SlotSelect;
+    GoString SlotNext;
+    GoString SlotPrevious;
+    Slice_GoString Raw;
+};
+
+struct SessionConfigOverride {
+    bool Active;
+    GoString Source;
+    Slice_SyncSetting Strict;
+    Slice_SyncSetting OriginalHost;
+    Slice_SyncSetting AppliedHost;
+    u16 SyncVersion;
+    GoString ContentFingerprint;
+};
+
+struct uniCacheEnt {
+    u8* p;
+    int n;
+    i32 loc;
+};
+
+#ifndef CVF_BODY_Arr24_uniCacheEnt
+#define CVF_BODY_Arr24_uniCacheEnt
+struct Arr24_uniCacheEnt { uniCacheEnt v[24]; };
+#endif
+struct ShaderProgram_GLES32 {
+    u32 program;
+    Map_GoString_i32 attributes;
+    Map_GoString_i32 uniforms;
+    Map_GoString_int textures;
+    GoString name;
+    bool needsGrabPass;
+    Arr24_uniCacheEnt uniCache;
+    int uniCacheN;
+};
+
+struct ShadowSprite {
+    SpriteData* embed_SpriteData;
+    f32 groundLevel;
+    i32 shadowColor;
+    i32 shadowAlpha;
+    i32 shadowIntensity;
+    bool shadowKeeptransform;
+    Arr2_f32 shadowOffset;
+    Arr4_f32 shadowWindow;
+    f32 shadowXscale;
+    f32 shadowXshear;
+    f32 shadowYscale;
+    Rotation shadowRot;
+    i32 shadowProjection;
+    f32 shadowfLength;
+    GoOpaqueVal shadowShader;
+    bool inheritShader;
+};
+
+struct ShortcutKey {
+    GoOpaque /* invalid type */ Key;
+    GoOpaque /* invalid type */ Mod;
+};
+
+struct ShortcutScript {
+    bool Activate;
+    GoString Script;
+    bool Pause;
+    bool DebugKey;
+};
+
+struct Skin {
+    Slice_u32 joints;
+    Slice_f32 inverseBindMatrices;
+    GLTFTexture* texture;
+};
+
+struct SoundChannel {
+    GoIface streamer;
+    SoundEffect* sfx;
+    GoOpaque /* beep.Ctrl */* ctrl;
+    GoOpaqueVal* sound;
+    i32 playerID;
+    i32 channelNo;
+    bool stopOnGetHit;
+    bool stopOnChangeState;
+    i32 group;
+    i32 number;
+    i32 timeStamp;
+    bool keepOnMatchEnd;
+};
+
+struct SoundEffect {
+    GoIface streamer;
+    soundPanner* panner;
+    f32 volume;
+    f32 duckMul;
+    f32 pan;
+    i32 sourceID;
+    f32 sourceX;
+    f32 lastPan;
+    i32 priority;
+    i32 loop;
+    f32 freqmul;
+    int startPos;
+};
+
+struct SoundProperties {
+    Arr2_i32 Value;
+    i32 StartTime;
+    i32 VolumeScale;
+    f32 Pan;
+    int LoopStart;
+    int LoopEnd;
+    int StartPosition;
+};
+
 struct SpriteData {
-    CvfAnim* anim;
+    Animation* anim;
     PalFX* pfx;
     Arr2_f32 pos;
     Arr2_f32 scl;
@@ -1193,10 +8738,1584 @@ struct SpriteData {
     GoOpaqueVal customShader;
 };
 
+struct varAssign {
+    u8 vari;
+    BytecodeExp be;
+};
+
+#ifndef CVF_BODY_Arr3_BytecodeExp
+#define CVF_BODY_Arr3_BytecodeExp
+struct Arr3_BytecodeExp { BytecodeExp v[3]; };
+#endif
+struct StateBlock {
+    i32 persistent;
+    i32 persistentIndex;
+    bool ignorehitpause;
+    bool ctrlsIgnorehitpause;
+    BytecodeExp trigger;
+    StateBlock* elseBlock;
+    Slice_StateController ctrls;
+    Slice_scRunFn runs;
+    Slice_bool isBlock;
+    GoOpaqueVal* specGuard;
+    cnode ctrig;
+    BytecodeExp trigRaw;
+    GoOpaqueVal* spec;
+    bool loopBlock;
+    bool nestedInLoop;
+    bool forLoop;
+    bool forAssign;
+    varAssign forCtrlVar;
+    Arr3_BytecodeExp forExpression;
+    i32 forBegin;
+    i32 forEnd;
+    i32 forIncrement;
+};
+
+struct StateBytecode {
+    StateType stateType;
+    BytecodeExp stateTypeExp;
+    MoveType moveType;
+    BytecodeExp moveTypeExp;
+    StateType physics;
+    BytecodeExp physicsExp;
+    int playerNo;
+    stateDef stateDef;
+    StateBlock block;
+    Slice_i32 ctrlsps;
+    i32 numVars;
+};
+
+struct StatsFighterState {
+    GoString Name;
+    i32 ID;
+    int MemberNo;
+    int SelectNo;
+    f32 AILevel;
+    i32 PalNo;
+    i32 Life;
+    i32 LifeMax;
+    i32 WinQuote;
+    bool Win;
+    bool WinKO;
+    bool WinTime;
+    bool WinPerfect;
+    bool WinClutch;
+    bool WinSpecial;
+    bool WinHyper;
+    bool DrawGame;
+    bool KO;
+    bool OverKO;
+};
+
+struct StatsMatch {
+    i32 MatchTime;
+    i32 RoundTime;
+    int WinSide;
+    i32 LastRound;
+    i32 Draws;
+    Arr2_i32 Wins;
+    Arr2_i32 TeamModes;
+    Arr2_i32 TotalScore;
+    Slice_StatsRound Rounds;
+};
+
+#ifndef CVF_BODY_Arr2_Slice_StatsFighterState
+#define CVF_BODY_Arr2_Slice_StatsFighterState
+struct Arr2_Slice_StatsFighterState { Slice_StatsFighterState v[2]; };
+#endif
+struct StatsRound {
+    i32 Index;
+    i32 Timer;
+    Arr2_i32 Score;
+    Arr2_Slice_StatsFighterState Fighters;
+};
+
+struct StoryboardManager {
+    Slice_StoryboardPtr instances;
+    Map_bgVideoPtr_Anon_fa4d6974 retainedVideos;
+};
+
+struct StreamLooper {
+    GoIface s;
+    int loopcount;
+    int loopstart;
+    int loopend;
+    GoIface err;
+};
+
+struct Anon_bfbab8ed {
+    u8* p;
+    int n;
+    int idx;
+};
+#ifndef CVF_BODY_Arr16_Anon_bfbab8ed
+#define CVF_BODY_Arr16_Anon_bfbab8ed
+struct Arr16_Anon_bfbab8ed { Anon_bfbab8ed v[16]; };
+#endif
+struct StringPool {
+    Slice_GoString List;
+    Slice_GoString ListLow;
+    Map_GoString_int Map;
+    Arr16_Anon_bfbab8ed pcache;
+};
+
+struct StunBar {
+    Arr2_i32 pos;
+    Arr2_i32 range_x;
+    Arr2_i32 range_y;
+    Map_f32_AnimLayoutPtr bg0;
+    Map_f32_AnimLayoutPtr bg1;
+    Map_f32_AnimLayoutPtr bg2;
+    AnimLayout top;
+    AnimLayout mid;
+    Arr2_i32 warn_range;
+    AnimLayout warn;
+    Map_i32_FSTextPtr value;
+    Map_f32_AnimLayoutPtr front;
+    AnimLayout shift;
+    f32 midpower;
+    f32 midpowerMin;
+    bool invertfill;
+    bool scalefill;
+    bool leaderontop;
+};
+
+struct SwapSeeker {
+    GoOpaque /* sync.RWMutex */ mu;
+    GoIface ss;
+};
+
+struct SyncHandshake {
+    u16 SyncVersion;
+    Slice_SyncSetting Strict;
+    Slice_SyncSetting Host;
+    int RollbackPort;
+    GoString ContentFingerprint;
+};
+
+struct SyncSetting {
+    GoString Path;
+    GoString Value;
+};
+
+struct Anon_47424b23 {
+    GoOpaque /* time.Time */ nextTime;
+    GoOpaque /* time.Time */ lastDraw;
+};
+#ifndef CVF_BODY_Arr12_SoundChannels
+#define CVF_BODY_Arr12_SoundChannels
+struct Arr12_SoundChannels { SoundChannels v[12]; };
+#endif
+#ifndef CVF_BODY_Arr2_CharPtr
+#define CVF_BODY_Arr2_CharPtr
+struct Arr2_CharPtr { Char* v[2]; };
+#endif
+#ifndef CVF_BODY_Arr2_CharGlobalInfo
+#define CVF_BODY_Arr2_CharGlobalInfo
+struct Arr2_CharGlobalInfo { CharGlobalInfo v[2]; };
+#endif
+#ifndef CVF_BODY_Arr12_StringPool
+#define CVF_BODY_Arr12_StringPool
+struct Arr12_StringPool { StringPool v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_i32
+#define CVF_BODY_Arr12_i32
+struct Arr12_i32 { i32 v[12]; };
+#endif
+#ifndef CVF_BODY_Arr3_Slice_GoFunc
+#define CVF_BODY_Arr3_Slice_GoFunc
+struct Arr3_Slice_GoFunc { Slice_GoFunc v[3]; };
+#endif
+struct System {
+    union {
+        SystemStateVars SystemStateVars_;
+        struct {
+            i32 randseed;
+            i32 matchTime;
+            i32 curRoundTime;
+            i32 persistRoundCount;
+            i32 curPlayTime;
+            Arr12_AiInput aiInput;
+            Arr12_ForceFeedbackParams ffbparams;
+            Arr12_int inputRemap;
+            Arr12_f32 aiLevel;
+            Camera cam;
+            i32 pausetime;
+            bool pausebg;
+            i32 pauseendcmdbuftime;
+            i32 pausetimebuffer;
+            int pauseplayerno;
+            i32 supertimebuffer;
+            i32 supertime;
+            bool superpausebg;
+            i32 superendcmdbuftime;
+            int superplayerno;
+            f32 superbrightness;
+            EnvShake envShake;
+            GlobalSpecialFlag specialFlag;
+            Arr3_i32 envcol;
+            i32 envcol_time;
+            Arr4_i32 scrrect;
+            f32 gameWidth;
+            f32 gameHeight;
+            f32 widthScale;
+            f32 heightScale;
+            bool gameEnd;
+            bool frameSkip;
+            bool paused;
+            bool frameStepFlag;
+            f32 brightness;
+            f32 brightnessOld;
+            i32 maxRoundTime;
+            i32 curFramesPerCount;
+            i32 matchNo;
+            i32 roundNo;
+            i32 intro;
+            Arr2_int lastHitter;
+            int winTeam;
+            Arr2_WinType winType;
+            Arr2_WinType winTrigger;
+            Arr2_i32 matchWins;
+            Arr2_i32 wins;
+            Arr2_i32 roundsExisted;
+            i32 draws;
+            Arr2_i32 maxDraws;
+            Arr2_bool effectiveLoss;
+            Arr2_TeamMode tmode;
+            Arr2_i32 numSimul;
+            Arr2_i32 numTurns;
+            bool esc;
+            bool envcol_under;
+            i32 lastCharId;
+            int tickCount;
+            int oldTickCount;
+            f32 tickCountF;
+            f32 lastTick;
+            f32 nextAddTime;
+            f32 oldNextAddTime;
+            i32 uiFrameCounter;
+            f32 xmin;
+            f32 xmax;
+            f32 zmin;
+            f32 zmax;
+            bool winskipped;
+            bool roundResetFlg;
+            bool roundResetMatchStart;
+            bool reloadFlg;
+            bool reloadStageFlg;
+            bool reloadFightScreenFlg;
+            Arr12_bool reloadCharSlot;
+            f32 turbo;
+            ZoomEffect zoom;
+            FinishType finishType;
+            i32 winwaittime;
+            i32 slowtime;
+            i32 changeStateNest;
+            bool nomusic;
+            i32 timerStart;
+            Arr2_int teamLeader;
+            bool postMatchFlg;
+            Arr2_f32 scoreStart;
+            Arr2_f32 scorePoints;
+            Arr2_i32 comboCount;
+            Arr2_bool decisiveRound;
+            GoString gameMode;
+            i32 credits;
+            Arr2_i32 consecutiveWins;
+            Arr3_int firstAttack;
+            int home;
+            bool stageLoop;
+            bool dialogueHideBars;
+            int dialogueForce;
+            bool playBgmFlg;
+            GoOpaque /* invalid type */ keyInput;
+            GoString keyString;
+            int lastInputController;
+            GoString uiLastInputToken;
+            i32 uiConsumeInputFrame;
+            GoString uiRepeatToken;
+            int uiRepeatController;
+            i32 uiRepeatFrame;
+            bool endMatch;
+            bool noCharSoundFlg;
+            bool fightLoopEnd;
+            bool continueFlg;
+            bool matchResetFlg;
+            int stageLoopNo;
+            bool introSkipCall;
+            i32 preMatchTime;
+            bool loopBreak;
+            bool loopContinue;
+            i32 winposetime;
+        };
+    };
+    Window* window;
+    Anon_47424b23 redrawWait;
+    TextSprite* debugFont;
+    bool debugDisplay;
+    Arr2_int debugRef;
+    i32 debugLastID;
+    GoOpaque /* beep.Mixer */* soundMixer;
+    GoOpaque /* beep.Mixer */* videoMixer;
+    Bgm bgm;
+    Slice_GoOpaqueValPtr matchMusicSel;
+    int pauseSoundVolume;
+    int focusSoundVolume;
+    bool focusMuted;
+    bool duckingFlag;
+    bool motifDuckingFlag;
+    SoundChannels soundChannels;
+    Arr12_SoundChannels charSoundChannels;
+    PalFX* allPalFX;
+    PalFX* bgPalFX;
+    FightScreen fightScreen;
+    Motif motif;
+    Storyboard storyboard;
+    StoryboardManager matchStoryboards;
+    Config cfg;
+    Map_GoString_FightFxPtr ffx;
+    Select sel;
+    Map_GoOpaque_invalidtypePtr_bool keyState;
+    NetConnection* netConnection;
+    ReplayFile* replayFile;
+    Slice_KeyConfig keyConfig;
+    Slice_KeyConfig joystickConfig;
+    Loader loader;
+    Arr12_Slice_CharPtr chars;
+    CharList charList;
+    Arr12_CharGlobalInfo cgi;
+    GoOpaque /* sync.RWMutex */ selMutex;
+    GoOpaque /* sync.Mutex */ loadMutex;
+    Arr2_int turnsPreloadMember;
+    Arr2_CharPtr preloadedChars;
+    Arr2_CharGlobalInfo preloadedCgi;
+    GoOpaque /* sync.Mutex */ preloadedCharsMutex;
+    bool ignoreMostErrors;
+    Arr12_StringPool stringPool;
+    BytecodeStack bcStack;
+    BytecodeStack bcVarStack;
+    Slice_BytecodeValue bcVar;
+    Char* workingChar;
+    StateBytecode* workingState;
+    Stage* stage;
+    Map_i32_StagePtr stageList;
+    Map_GoString_Arr2_i32 stageLocalcoords;
+    bool wireframeDisplay;
+    Map_ShortcutKey_ShortcutScriptPtr shortcutScripts;
+    GoOpaque /* chan */ commandLine;
+    Char* debugWC;
+    Arr12_Slice_ProjectilePtr projs;
+    Arr12_Slice_ExplodPtr explods;
+    Slice_ExplodPtr explodDrawOrder;
+    Arr12_Slice_TextSpritePtr chartexts;
+    DrawList spriteList;
+    ShadowList shadowList;
+    ReflectionList reflectionList;
+    Arr12_i32 afterImageCount;
+    DebugClsn debugc1hit;
+    DebugClsn debugc1rev;
+    DebugClsn debugc1not;
+    DebugClsn debugc1stb;
+    DebugClsn debugc2;
+    DebugClsn debugc2hb;
+    DebugClsn debugc2mtk;
+    DebugClsn debugc2grd;
+    DebugClsn debugc2stb;
+    DebugClsn debugcsize;
+    DebugClsn debugcdummy;
+    DebugClsn debugcross;
+    f32 debugAccel;
+    GoOpaqueVal clsnSpr;
+    bool clsnDisplay;
+    bool lifebarHide;
+    GoOpaque /* chan */ mainThreadTask;
+    Slice_u32 workpal;
+    Slice_BytecodeExp workBe;
+    Slice_i32 timerCount;
+    Map_GoString_GoString cmdFlags;
+    GoIface whitePalTex;
+    bool usePalette;
+    bool gameRunning;
+    bool escPending;
+    Slice_CharPtr hitDetectionSort;
+    Slice_ProjectilePtr projectileTradeSort;
+    PalTexture palTexture;
+    union {
+        GoOpaqueVal SpriteTextureAtlas_;
+        struct {
+            i32 textureSize;
+            Slice_GoOpaqueValPtr textures8;
+            Slice_GoOpaqueValPtr textures32;
+        };
+    };
+    i32 msaa;
+    Slice_Slice_Slice_u8 externalShaders;
+    Slice_GoIface windowMainIcon;
+    i32 frameCounter;
+    int captureNum;
+    Slice_i32 timerRounds;
+    Slice_Arr2_f32 scoreRounds;
+    StatsLog statsLog;
+    bool maxPowerMode;
+    Slice_DebugClsnText debugClsnText;
+    Slice_GoString consoleText;
+    GoOpaque /* lua.LState */* luaLState;
+    GoOpaque /* lua.LFunction */* statusLFunc;
+    Slice_GoOpaque_lua_LFunctionPtrPtr listLFunc;
+    Arr12_bool reloadPreserveVars;
+    Map_int_CharVarBackup charVarsBackup;
+    Map_GoString_bool loadedCustomShaders;
+    GameStatePool statePool;
+    Slice_CommandListPtr commandLists;
+    int rollbackStateID;
+    GameStatePool savePool;
+    GameStatePool loadPool;
+    RollbackSystem rollback;
+    RollbackProperties rollbackConfig;
+    GameState* saveState;
+    bool saveStateFlag;
+    bool loadStateFlag;
+    RoundStartBackup roundBackup;
+    RoundStartBackup matchBackup;
+    f32 gameFPS;
+    u64 gameFPSprevcount;
+    bool isTakingScreenshot;
+    bool screenshotInFlight;
+    Arr2_int screenshotSize;
+    GoString screenshotFile;
+    bool keepAliveProfile;
+    GoOpaque /* sync.Once */ keepAliveOnce;
+    GoOpaque /* time.Time */ keepAlivePrev;
+    GoOpaque /* time.Time */ keepAliveStart;
+    int keepAliveCount;
+    Slice_GoFunc luaDrawPreOps;
+    Arr3_Slice_GoFunc luaDrawLayerOps;
+    Map_GoString_CommandSpec uiCommandRegistry;
+    GoString baseDir;
+    SessionConfigOverride netplayOverride;
+    GoString sessionWarning;
+};
+
+struct TeamModesProperties {
+    GoString Single;
+    GoString Simul;
+    GoString Turns;
+    GoString Tag;
+};
+
+struct TextSprite {
+    i32 ownerid;
+    i32 id;
+    GoString text;
+    GoString textInit;
+    GoString template;
+    Slice_GoIface params;
+    GoOpaqueVal* fnt;
+    i32 bank;
+    i32 align;
+    f32 x;
+    f32 y;
+    f32 xscl;
+    f32 yscl;
+    Arr4_i32 window;
+    f32 xshear;
+    Rotation rot;
+    i32 projection;
+    f32 fLength;
+    f32 xvel;
+    f32 yvel;
+    f32 localScale;
+    f32 scaleRatio;
+    i32 offsetX;
+    i16 layerno;
+    PalFX* palfx;
+    Arr4_f32 frgba;
+    i32 removetime;
+    f32 elapsedTicks;
+    Arr2_f32 textSpacing;
+    f32 textDelay;
+    bool textWrap;
+    Arr2_f32 vel;
+    Arr2_f32 accel;
+    Arr2_f32 friction;
+    Arr2_f32 maxDist;
+    bool hidewithbars;
+    Arr2_f32 offsetInit;
+    Arr2_f32 scaleInit;
+    Arr4_f32 windowInit;
+    Arr2_f32 velocityInit;
+    CustomShader customShader;
+};
+
+struct Texture_GLES32 {
+    i32 width;
+    i32 height;
+    i32 depth;
+    Arr2_i32 offset;
+    Arr4_f32 uvst;
+    bool filter;
+    u32 handle;
+    Texture_GLES32* root;
+};
+
 struct TypedValue {
     ValueType Type;
     f64 Num;
     GoString Str;
 };
 
+struct UndefinedFormatter {
+    char _empty;
+};
+
+struct Window {
+    GoOpaque /* invalid type */ embed_Window;
+    GoString title;
+    int x;
+    int y;
+    int w;
+    int h;
+    bool fullscreen;
+    bool closeflag;
+    bool focused;
+    bool renderingPaused;
+};
+
+struct backGround {
+    BgType _type;
+    PalFX* palfx;
+    Animation* anim;
+    bgAction bga;
+    bgVideo* video;
+    i32 id;
+    Arr2_f32 start;
+    f32 xofs;
+    Arr2_f32 delta;
+    Arr2_i32 width;
+    Arr2_f32 xscale;
+    Arr2_f32 rasterx;
+    f32 yscalestart;
+    f32 yscaledelta;
+    i32 actionno;
+    Arr2_f32 startv;
+    Arr2_f32 startrad;
+    Arr2_i32 startsint;
+    Arr2_i32 startsinlt;
+    bool visible;
+    bool enabled;
+    bool positionlink;
+    i32 layerno;
+    bool autoresizeparallax;
+    bool autoresizeparallaxSet;
+    bool hasMaskwindow;
+    Arr4_i32 startrect;
+    Arr2_f32 windowdelta;
+    Arr2_f32 scalestart;
+    Arr2_f32 scaledelta;
+    Arr2_f32 zoomdelta;
+    bool zoomdeltaSet;
+    Arr2_f32 zoomscaledelta;
+    f32 xbottomzoomdelta;
+    bool roundpos;
+    Rotation rot;
+    f32 fLength;
+    Projection projection;
+    f32 xshear;
+    CustomShader customShader;
+    stageShaderDef startShader;
+    bool bgctrlShaderSet;
+    bool bgctrlShaderActive;
+};
+
+struct bcHasher {
+    u64 sum;
+    int bytes;
+    Map_uintptr_t_int seen;
+};
+
+struct bcProfKey {
+    int pn;
+    i32 hid;
+    i32 st;
+};
+
+struct bgCtrl {
+    Slice_backGroundPtr bg;
+    Slice_NodePtr node;
+    Slice_GLTFAnimationPtr anim;
+    i32 starttime;
+    i32 endtime;
+    i32 looptime;
+    BgcType _type;
+    f32 x;
+    f32 y;
+    Arr3_i32 v;
+    Arr2_i32 src;
+    Arr2_i32 dst;
+    Arr3_i32 add;
+    Arr3_i32 mul;
+    Arr4_i32 sinadd;
+    Arr4_i32 sinmul;
+    Arr2_i32 sincolor;
+    Arr2_i32 sinhue;
+    bool invall;
+    i32 invblend;
+    f32 color;
+    f32 hue;
+    bool positionlink;
+    int idx;
+    i32 sctrlid;
+    GoString shaderName;
+    Arr16_f32 shaderParams;
+    Arr2_bgShaderTex shaderTex;
+};
+
+struct bgDrawTransform {
+    Space space;
+    Arr2_f32 offset;
+    Arr2_f32 scale;
+};
+
+struct bgVideo {
+    GoIface texture;
+    bool visible;
+    bool muted;
+};
+
+struct boundTexture {
+    Texture_GLES32* tex;
+    u32 handle;
+    u32 target;
+};
+
+struct character {
+    u32 textureID;
+    GoIface texture;
+    Arr4_f32 uv;
+    int width;
+    int height;
+    int advance;
+    int bearingH;
+    int bearingV;
+};
+
+struct cookW {
+    Slice_u8 b;
+};
+
+struct cparser {
+    BytecodeExp be;
+    bool fail;
+    int depth;
+};
+
+struct cvfOnlineState {
+    GoOpaque /* sync.Mutex */ mu;
+    GoString lobbyURL;
+    GoString buildTag;
+    GoString playerName;
+    bool configRead;
+    GoOpaque /* invalid type */ httpClient;
+    GoString publicIP;
+    GoString publicIPErr;
+    bool publicBusy;
+    GoString upnpStatus;
+    Slice_upnpMapping upnpMapped;
+    bool hosting;
+    int hostPort;
+    GoString roomID;
+    GoString roomToken;
+    GoString roomOpen;
+    GoString lobbyHostErr;
+    GoOpaque /* chan */ hostStop;
+    Slice_cvfRoom rooms;
+    GoString roomsErr;
+    bool roomsBusy;
+    GoOpaque /* time.Time */ roomsFetched;
+    int roomsRequests;
+};
+
+struct cvfRoom {
+    GoString ID;
+    GoString Name;
+    GoString IP;
+    int Port;
+    int UDPPort;
+    GoString Version;
+    GoString Open;
+    int AgeSec;
+};
+
+struct cvfRulesT {
+    bool loaded;
+    i32 iframeCap;
+    i32 exemptLo;
+    i32 exemptHi;
+    i32 mpVar;
+    i32 mpScaleMilli;
+    GoString author;
+};
+
+struct drawAspectState {
+    f32 gameWidth;
+    f32 gameHeight;
+    f32 widthScale;
+    f32 heightScale;
+};
+
+struct expValueFrame {
+    BytecodeExp be1;
+    BytecodeExp be2;
+    BytecodeExp be3;
+    BytecodeExp be;
+    BytecodeValue bv;
+    BytecodeValue bv1;
+};
+
+#ifndef CVF_BODY_Arr64_AnimationPtr
+#define CVF_BODY_Arr64_AnimationPtr
+struct Arr64_AnimationPtr { Animation* v[64]; };
+#endif
+struct fightScreenAnimationStateCloner {
+    Arr64_AnimationPtr src;
+    Arr64_AnimationPtr dst;
+    int count;
+};
+
+struct lowerCacheEntry {
+    GoString src;
+    GoString low;
+};
+
+struct Anon_65fa1d9f {
+    i32 animNo;
+    Arr2_i32 sprNo;
+};
+#ifndef CVF_BODY_Arr2_Anon_65fa1d9f
+#define CVF_BODY_Arr2_Anon_65fa1d9f
+struct Arr2_Anon_65fa1d9f { Anon_65fa1d9f v[2]; };
+#endif
+struct modifyBGCtrlShader {
+    bool nameSet;
+    GoString name;
+    Arr16_f32 params;
+    Arr2_Anon_65fa1d9f tex;
+};
+
+struct paletteCopyKey {
+    u32* first;
+    int count;
+};
+
+struct queryPart {
+    GoString name;
+    GoString* index;
+};
+
+struct rankingEntry {
+    int Score;
+    f64 Time;
+    int Win;
+    int Lose;
+    int Consecutive;
+    GoString Name;
+    Slice_GoString Chars;
+    i32 Tmode;
+    i32 AILevel;
+};
+
+struct rankingRow {
+    int score;
+    f64 time;
+    int win;
+    GoString name;
+    Slice_i32 pals;
+    Slice_GoString chars;
+    Slice_AnimPtr bgs;
+    Slice_AnimPtr faces;
+    TextSprite* rankData;
+    TextSprite* resultData;
+    TextSprite* nameData;
+    TextSprite* rankDataActive;
+    TextSprite* rankDataActive2;
+    TextSprite* resultDataActive;
+    TextSprite* resultDataActive2;
+    TextSprite* nameDataActive;
+    TextSprite* nameDataActive2;
+};
+
+struct runTally {
+    i32 timeTicks;
+    int winP1;
+    int loseP1;
+    int consecP1;
+    int scoreP1;
+};
+
+struct scParam {
+    u8 id;
+    Slice_BytecodeExp exp;
+};
+
+struct sffv1PalState {
+    int state;
+    int current;
+    i64 location;
+    i64 initialLocation;
+};
+
+struct soundPanView {
+    f32 x;
+    f32 scale;
+    f32 width;
+};
+
+struct soundPanner {
+    GoIface streamer;
+    GoOpaque /* atomic.Uint64 */ request;
+};
+
+struct specFacts {
+    bool noPartner;
+    GoString selfName;
+    GoString selfAuthor;
+    bool enemyKnown;
+    GoString enemyName;
+    GoString enemyAuth;
+};
+
+struct stageRollbackBgState {
+    bgAction bga;
+    i32 actionno;
+    bool enabled;
+};
+
+struct upnpDevice {
+    GoString controlURL;
+    GoString service;
+    GoString localIP;
+};
+
+struct upnpMapping {
+    GoString controlURL;
+    GoString service;
+    int port;
+    GoString proto;
+};
+
+struct victoryEntry {
+    int side;
+    int memberNo;
+    int cn;
+    int pal;
+    Char* c;
+};
+
+struct vitaBufFile {
+    GoOpaque /* os.File */* f;
+    Slice_u8 buf;
+    i64 bufStart;
+    i64 pos;
+};
+
+struct xmStreamer {
+    GoOpaque /* invalid type */ ctx;
+    int channels;
+    int sampleRate;
+    Slice_i16 buffer;
+    bool closed;
+    GoIface err;
+    int posFrames;
+    int totalFrames;
+};
+
+struct zipMemFileReader {
+    GoOpaque /* bytes.Reader */* reader;
+    GoOpaque /* zip.ReadCloser */* zipArchive;
+};
+
+#ifndef CVF_BODY_Arr1024_lowerCacheEntry
+#define CVF_BODY_Arr1024_lowerCacheEntry
+struct Arr1024_lowerCacheEntry { lowerCacheEntry v[1024]; };
+#endif
+#ifndef CVF_BODY_Arr12_Arr6_i8
+#define CVF_BODY_Arr12_Arr6_i8
+struct Arr12_Arr6_i8 { Arr6_i8 v[12]; };
+#endif
+#ifndef CVF_BODY_Arr2_f64
+#define CVF_BODY_Arr2_f64
+struct Arr2_f64 { f64 v[2]; };
+#endif
+#ifndef CVF_BODY_Arr7_f32
+#define CVF_BODY_Arr7_f32
+struct Arr7_f32 { f32 v[7]; };
+#endif
+struct Anon_fa4d6974 {
+    char _empty;
+};
+#ifndef CVF_FN_Slice_AnimFrame
+#define CVF_FN_Slice_AnimFrame
+GO_SLICE_FUNCS(Slice_AnimFrame, AnimFrame)
+#endif
+#ifndef CVF_FN_Slice_AnimPtr
+#define CVF_FN_Slice_AnimPtr
+GO_SLICE_FUNCS(Slice_AnimPtr, Anim*)
+#endif
+#ifndef CVF_FN_Slice_Arr2_f32
+#define CVF_FN_Slice_Arr2_f32
+GO_SLICE_FUNCS(Slice_Arr2_f32, Arr2_f32)
+#endif
+#ifndef CVF_FN_Slice_Arr2_f64
+#define CVF_FN_Slice_Arr2_f64
+GO_SLICE_FUNCS(Slice_Arr2_f64, Arr2_f64)
+#endif
+#ifndef CVF_FN_Slice_Arr2_i32
+#define CVF_FN_Slice_Arr2_i32
+GO_SLICE_FUNCS(Slice_Arr2_i32, Arr2_i32)
+#endif
+#ifndef CVF_FN_Slice_Arr2_int
+#define CVF_FN_Slice_Arr2_int
+GO_SLICE_FUNCS(Slice_Arr2_int, Arr2_int)
+#endif
+#ifndef CVF_FN_Slice_Arr4_f32
+#define CVF_FN_Slice_Arr4_f32
+GO_SLICE_FUNCS(Slice_Arr4_f32, Arr4_f32)
+#endif
+#ifndef CVF_FN_Slice_Arr6_i8
+#define CVF_FN_Slice_Arr6_i8
+GO_SLICE_FUNCS(Slice_Arr6_i8, Arr6_i8)
+#endif
+#ifndef CVF_FN_Slice_Arr7_f32
+#define CVF_FN_Slice_Arr7_f32
+GO_SLICE_FUNCS(Slice_Arr7_f32, Arr7_f32)
+#endif
+#ifndef CVF_FN_Slice_Arr8_Arr6_i8
+#define CVF_FN_Slice_Arr8_Arr6_i8
+GO_SLICE_FUNCS(Slice_Arr8_Arr6_i8, Arr8_Arr6_i8)
+#endif
+#ifndef CVF_FN_Slice_Arr8_InputBits
+#define CVF_FN_Slice_Arr8_InputBits
+GO_SLICE_FUNCS(Slice_Arr8_InputBits, Arr8_InputBits)
+#endif
+#ifndef CVF_FN_Slice_BytecodeExp
+#define CVF_FN_Slice_BytecodeExp
+GO_SLICE_FUNCS(Slice_BytecodeExp, BytecodeExp)
+#endif
+#ifndef CVF_FN_Slice_BytecodeExpPtr
+#define CVF_FN_Slice_BytecodeExpPtr
+GO_SLICE_FUNCS(Slice_BytecodeExpPtr, BytecodeExp*)
+#endif
+#ifndef CVF_FN_Slice_BytecodeValue
+#define CVF_FN_Slice_BytecodeValue
+GO_SLICE_FUNCS(Slice_BytecodeValue, BytecodeValue)
+#endif
+#ifndef CVF_FN_Slice_Char
+#define CVF_FN_Slice_Char
+GO_SLICE_FUNCS(Slice_Char, Char)
+#endif
+#ifndef CVF_FN_Slice_CharPtr
+#define CVF_FN_Slice_CharPtr
+GO_SLICE_FUNCS(Slice_CharPtr, Char*)
+#endif
+#ifndef CVF_FN_Slice_ClsnFinal
+#define CVF_FN_Slice_ClsnFinal
+GO_SLICE_FUNCS(Slice_ClsnFinal, ClsnFinal)
+#endif
+#ifndef CVF_FN_Slice_ClsnOverride
+#define CVF_FN_Slice_ClsnOverride
+GO_SLICE_FUNCS(Slice_ClsnOverride, ClsnOverride)
+#endif
+#ifndef CVF_FN_Slice_ClsnTransform
+#define CVF_FN_Slice_ClsnTransform
+GO_SLICE_FUNCS(Slice_ClsnTransform, ClsnTransform)
+#endif
+#ifndef CVF_FN_Slice_Command
+#define CVF_FN_Slice_Command
+GO_SLICE_FUNCS(Slice_Command, Command)
+#endif
+#ifndef CVF_FN_Slice_CommandList
+#define CVF_FN_Slice_CommandList
+GO_SLICE_FUNCS(Slice_CommandList, CommandList)
+#endif
+#ifndef CVF_FN_Slice_CommandListPtr
+#define CVF_FN_Slice_CommandListPtr
+GO_SLICE_FUNCS(Slice_CommandListPtr, CommandList*)
+#endif
+#ifndef CVF_FN_Slice_CommandStep
+#define CVF_FN_Slice_CommandStep
+GO_SLICE_FUNCS(Slice_CommandStep, CommandStep)
+#endif
+#ifndef CVF_FN_Slice_CommandStepKey
+#define CVF_FN_Slice_CommandStepKey
+GO_SLICE_FUNCS(Slice_CommandStepKey, CommandStepKey)
+#endif
+#ifndef CVF_FN_Slice_DebugClsnText
+#define CVF_FN_Slice_DebugClsnText
+GO_SLICE_FUNCS(Slice_DebugClsnText, DebugClsnText)
+#endif
+#ifndef CVF_FN_Slice_DialogueParsedLine
+#define CVF_FN_Slice_DialogueParsedLine
+GO_SLICE_FUNCS(Slice_DialogueParsedLine, DialogueParsedLine)
+#endif
+#ifndef CVF_FN_Slice_DialogueToken
+#define CVF_FN_Slice_DialogueToken
+GO_SLICE_FUNCS(Slice_DialogueToken, DialogueToken)
+#endif
+#ifndef CVF_FN_Slice_ExplodPtr
+#define CVF_FN_Slice_ExplodPtr
+GO_SLICE_FUNCS(Slice_ExplodPtr, Explod*)
+#endif
+#ifndef CVF_FN_Slice_FSMsgPtr
+#define CVF_FN_Slice_FSMsgPtr
+GO_SLICE_FUNCS(Slice_FSMsgPtr, FSMsg*)
+#endif
+#ifndef CVF_FN_Slice_FightScreenFacePtr
+#define CVF_FN_Slice_FightScreenFacePtr
+GO_SLICE_FUNCS(Slice_FightScreenFacePtr, FightScreenFace*)
+#endif
+#ifndef CVF_FN_Slice_FightScreenNamePtr
+#define CVF_FN_Slice_FightScreenNamePtr
+GO_SLICE_FUNCS(Slice_FightScreenNamePtr, FightScreenName*)
+#endif
+#ifndef CVF_FN_Slice_GLTFAnimationChannelPtr
+#define CVF_FN_Slice_GLTFAnimationChannelPtr
+GO_SLICE_FUNCS(Slice_GLTFAnimationChannelPtr, GLTFAnimationChannel*)
+#endif
+#ifndef CVF_FN_Slice_GLTFAnimationPtr
+#define CVF_FN_Slice_GLTFAnimationPtr
+GO_SLICE_FUNCS(Slice_GLTFAnimationPtr, GLTFAnimation*)
+#endif
+#ifndef CVF_FN_Slice_GLTFAnimationSamplerPtr
+#define CVF_FN_Slice_GLTFAnimationSamplerPtr
+GO_SLICE_FUNCS(Slice_GLTFAnimationSamplerPtr, GLTFAnimationSampler*)
+#endif
+#ifndef CVF_FN_Slice_GLTFLight
+#define CVF_FN_Slice_GLTFLight
+GO_SLICE_FUNCS(Slice_GLTFLight, GLTFLight)
+#endif
+#ifndef CVF_FN_Slice_GLTFTexturePtr
+#define CVF_FN_Slice_GLTFTexturePtr
+GO_SLICE_FUNCS(Slice_GLTFTexturePtr, GLTFTexture*)
+#endif
+#ifndef CVF_FN_Slice_GoFunc
+#define CVF_FN_Slice_GoFunc
+GO_SLICE_FUNCS(Slice_GoFunc, GoFunc)
+#endif
+#ifndef CVF_FN_Slice_GoIface
+#define CVF_FN_Slice_GoIface
+GO_SLICE_FUNCS(Slice_GoIface, GoIface)
+#endif
+#ifndef CVF_FN_Slice_GoIfacePtr
+#define CVF_FN_Slice_GoIfacePtr
+GO_SLICE_FUNCS(Slice_GoIfacePtr, GoIface*)
+#endif
+#ifndef CVF_FN_Slice_GoOpaqueValPtr
+#define CVF_FN_Slice_GoOpaqueValPtr
+GO_SLICE_FUNCS(Slice_GoOpaqueValPtr, GoOpaqueVal*)
+#endif
+#ifndef CVF_FN_Slice_GoString
+#define CVF_FN_Slice_GoString
+GO_SLICE_FUNCS(Slice_GoString, GoString)
+#endif
+#ifndef CVF_FN_Slice_GuardBarPtr
+#define CVF_FN_Slice_GuardBarPtr
+GO_SLICE_FUNCS(Slice_GuardBarPtr, GuardBar*)
+#endif
+#ifndef CVF_FN_Slice_InputBits
+#define CVF_FN_Slice_InputBits
+GO_SLICE_FUNCS(Slice_InputBits, InputBits)
+#endif
+#ifndef CVF_FN_Slice_KeyConfig
+#define CVF_FN_Slice_KeyConfig
+GO_SLICE_FUNCS(Slice_KeyConfig, KeyConfig)
+#endif
+#ifndef CVF_FN_Slice_LayerPropertiesPtr
+#define CVF_FN_Slice_LayerPropertiesPtr
+GO_SLICE_FUNCS(Slice_LayerPropertiesPtr, LayerProperties*)
+#endif
+#ifndef CVF_FN_Slice_LifeBarPtr
+#define CVF_FN_Slice_LifeBarPtr
+GO_SLICE_FUNCS(Slice_LifeBarPtr, LifeBar*)
+#endif
+#ifndef CVF_FN_Slice_MaterialPtr
+#define CVF_FN_Slice_MaterialPtr
+GO_SLICE_FUNCS(Slice_MaterialPtr, Material*)
+#endif
+#ifndef CVF_FN_Slice_MeshPtr
+#define CVF_FN_Slice_MeshPtr
+GO_SLICE_FUNCS(Slice_MeshPtr, Mesh*)
+#endif
+#ifndef CVF_FN_Slice_MorphTargetPtr
+#define CVF_FN_Slice_MorphTargetPtr
+GO_SLICE_FUNCS(Slice_MorphTargetPtr, MorphTarget*)
+#endif
+#ifndef CVF_FN_Slice_NodePtr
+#define CVF_FN_Slice_NodePtr
+GO_SLICE_FUNCS(Slice_NodePtr, Node*)
+#endif
+#ifndef CVF_FN_Slice_OpCode
+#define CVF_FN_Slice_OpCode
+GO_SLICE_FUNCS(Slice_OpCode, OpCode)
+#endif
+#ifndef CVF_FN_Slice_OverrideCharData
+#define CVF_FN_Slice_OverrideCharData
+GO_SLICE_FUNCS(Slice_OverrideCharData, OverrideCharData)
+#endif
+#ifndef CVF_FN_Slice_PalFXPtr
+#define CVF_FN_Slice_PalFXPtr
+GO_SLICE_FUNCS(Slice_PalFXPtr, PalFX*)
+#endif
+#ifndef CVF_FN_Slice_PowerBarPtr
+#define CVF_FN_Slice_PowerBarPtr
+GO_SLICE_FUNCS(Slice_PowerBarPtr, PowerBar*)
+#endif
+#ifndef CVF_FN_Slice_PreloadEntry
+#define CVF_FN_Slice_PreloadEntry
+GO_SLICE_FUNCS(Slice_PreloadEntry, PreloadEntry)
+#endif
+#ifndef CVF_FN_Slice_PrimitivePtr
+#define CVF_FN_Slice_PrimitivePtr
+GO_SLICE_FUNCS(Slice_PrimitivePtr, Primitive*)
+#endif
+#ifndef CVF_FN_Slice_ProjectilePtr
+#define CVF_FN_Slice_ProjectilePtr
+GO_SLICE_FUNCS(Slice_ProjectilePtr, Projectile*)
+#endif
+#ifndef CVF_FN_Slice_ReflectionSpritePtr
+#define CVF_FN_Slice_ReflectionSpritePtr
+GO_SLICE_FUNCS(Slice_ReflectionSpritePtr, ReflectionSprite*)
+#endif
+#ifndef CVF_FN_Slice_ScenePtr
+#define CVF_FN_Slice_ScenePtr
+GO_SLICE_FUNCS(Slice_ScenePtr, Scene*)
+#endif
+#ifndef CVF_FN_Slice_SelectChar
+#define CVF_FN_Slice_SelectChar
+GO_SLICE_FUNCS(Slice_SelectChar, SelectChar)
+#endif
+#ifndef CVF_FN_Slice_SelectStage
+#define CVF_FN_Slice_SelectStage
+GO_SLICE_FUNCS(Slice_SelectStage, SelectStage)
+#endif
+#ifndef CVF_FN_Slice_ShaderProgram_GLES32Ptr
+#define CVF_FN_Slice_ShaderProgram_GLES32Ptr
+GO_SLICE_FUNCS(Slice_ShaderProgram_GLES32Ptr, ShaderProgram_GLES32*)
+#endif
+#ifndef CVF_FN_Slice_ShadowSpritePtr
+#define CVF_FN_Slice_ShadowSpritePtr
+GO_SLICE_FUNCS(Slice_ShadowSpritePtr, ShadowSprite*)
+#endif
+#ifndef CVF_FN_Slice_SkinPtr
+#define CVF_FN_Slice_SkinPtr
+GO_SLICE_FUNCS(Slice_SkinPtr, Skin*)
+#endif
+#ifndef CVF_FN_Slice_Slice_Command
+#define CVF_FN_Slice_Slice_Command
+GO_SLICE_FUNCS(Slice_Slice_Command, Slice_Command)
+#endif
+#ifndef CVF_FN_Slice_Slice_Slice_u8
+#define CVF_FN_Slice_Slice_Slice_u8
+GO_SLICE_FUNCS(Slice_Slice_Slice_u8, Slice_Slice_u8)
+#endif
+#ifndef CVF_FN_Slice_Slice_u8
+#define CVF_FN_Slice_Slice_u8
+GO_SLICE_FUNCS(Slice_Slice_u8, Slice_u8)
+#endif
+#ifndef CVF_FN_Slice_SoundChannel
+#define CVF_FN_Slice_SoundChannel
+GO_SLICE_FUNCS(Slice_SoundChannel, SoundChannel)
+#endif
+#ifndef CVF_FN_Slice_SpriteData
+#define CVF_FN_Slice_SpriteData
+GO_SLICE_FUNCS(Slice_SpriteData, SpriteData)
+#endif
+#ifndef CVF_FN_Slice_SpriteDataPtr
+#define CVF_FN_Slice_SpriteDataPtr
+GO_SLICE_FUNCS(Slice_SpriteDataPtr, SpriteData*)
+#endif
+#ifndef CVF_FN_Slice_StateController
+#define CVF_FN_Slice_StateController
+GO_SLICE_FUNCS(Slice_StateController, StateController)
+#endif
+#ifndef CVF_FN_Slice_StatsFighterState
+#define CVF_FN_Slice_StatsFighterState
+GO_SLICE_FUNCS(Slice_StatsFighterState, StatsFighterState)
+#endif
+#ifndef CVF_FN_Slice_StatsMatch
+#define CVF_FN_Slice_StatsMatch
+GO_SLICE_FUNCS(Slice_StatsMatch, StatsMatch)
+#endif
+#ifndef CVF_FN_Slice_StatsRound
+#define CVF_FN_Slice_StatsRound
+GO_SLICE_FUNCS(Slice_StatsRound, StatsRound)
+#endif
+#ifndef CVF_FN_Slice_StoryboardPtr
+#define CVF_FN_Slice_StoryboardPtr
+GO_SLICE_FUNCS(Slice_StoryboardPtr, Storyboard*)
+#endif
+#ifndef CVF_FN_Slice_StunBarPtr
+#define CVF_FN_Slice_StunBarPtr
+GO_SLICE_FUNCS(Slice_StunBarPtr, StunBar*)
+#endif
+#ifndef CVF_FN_Slice_SyncSetting
+#define CVF_FN_Slice_SyncSetting
+GO_SLICE_FUNCS(Slice_SyncSetting, SyncSetting)
+#endif
+#ifndef CVF_FN_Slice_TextSpritePtr
+#define CVF_FN_Slice_TextSpritePtr
+GO_SLICE_FUNCS(Slice_TextSpritePtr, TextSprite*)
+#endif
+#ifndef CVF_FN_Slice_WinType
+#define CVF_FN_Slice_WinType
+GO_SLICE_FUNCS(Slice_WinType, WinType)
+#endif
+#ifndef CVF_FN_Slice_backGroundPtr
+#define CVF_FN_Slice_backGroundPtr
+GO_SLICE_FUNCS(Slice_backGroundPtr, backGround*)
+#endif
+#ifndef CVF_FN_Slice_bgCtrl
+#define CVF_FN_Slice_bgCtrl
+GO_SLICE_FUNCS(Slice_bgCtrl, bgCtrl)
+#endif
+#ifndef CVF_FN_Slice_bool
+#define CVF_FN_Slice_bool
+GO_SLICE_FUNCS(Slice_bool, bool)
+#endif
+#ifndef CVF_FN_Slice_boundTexture
+#define CVF_FN_Slice_boundTexture
+GO_SLICE_FUNCS(Slice_boundTexture, boundTexture)
+#endif
+#ifndef CVF_FN_Slice_cvfRoom
+#define CVF_FN_Slice_cvfRoom
+GO_SLICE_FUNCS(Slice_cvfRoom, cvfRoom)
+#endif
+#ifndef CVF_FN_Slice_expValueFramePtr
+#define CVF_FN_Slice_expValueFramePtr
+GO_SLICE_FUNCS(Slice_expValueFramePtr, expValueFrame*)
+#endif
+#ifndef CVF_FN_Slice_f32
+#define CVF_FN_Slice_f32
+GO_SLICE_FUNCS(Slice_f32, f32)
+#endif
+#ifndef CVF_FN_Slice_i16
+#define CVF_FN_Slice_i16
+GO_SLICE_FUNCS(Slice_i16, i16)
+#endif
+#ifndef CVF_FN_Slice_i32
+#define CVF_FN_Slice_i32
+GO_SLICE_FUNCS(Slice_i32, i32)
+#endif
+#ifndef CVF_FN_Slice_int
+#define CVF_FN_Slice_int
+GO_SLICE_FUNCS(Slice_int, int)
+#endif
+#ifndef CVF_FN_Slice_rankingRow
+#define CVF_FN_Slice_rankingRow
+GO_SLICE_FUNCS(Slice_rankingRow, rankingRow)
+#endif
+#ifndef CVF_FN_Slice_scParam
+#define CVF_FN_Slice_scParam
+GO_SLICE_FUNCS(Slice_scParam, scParam)
+#endif
+#ifndef CVF_FN_Slice_scRunFn
+#define CVF_FN_Slice_scRunFn
+GO_SLICE_FUNCS(Slice_scRunFn, scRunFn)
+#endif
+#ifndef CVF_FN_Slice_stageRollbackBgState
+#define CVF_FN_Slice_stageRollbackBgState
+GO_SLICE_FUNCS(Slice_stageRollbackBgState, stageRollbackBgState)
+#endif
+#ifndef CVF_FN_Slice_u32
+#define CVF_FN_Slice_u32
+GO_SLICE_FUNCS(Slice_u32, u32)
+#endif
+#ifndef CVF_FN_Slice_u64
+#define CVF_FN_Slice_u64
+GO_SLICE_FUNCS(Slice_u64, u64)
+#endif
+#ifndef CVF_FN_Slice_u8
+#define CVF_FN_Slice_u8
+GO_SLICE_FUNCS(Slice_u8, u8)
+#endif
+#ifndef CVF_FN_Slice_upnpMapping
+#define CVF_FN_Slice_upnpMapping
+GO_SLICE_FUNCS(Slice_upnpMapping, upnpMapping)
+#endif
+#ifndef CVF_FN_Map_Arr2_i32_AnimationPtr
+#define CVF_FN_Map_Arr2_i32_AnimationPtr
+GO_MAP_FUNCS(Map_Arr2_i32_AnimationPtr, Arr2_i32, Animation*, false)
+#endif
+#ifndef CVF_FN_Map_Arr2_u16_bool
+#define CVF_FN_Map_Arr2_u16_bool
+GO_MAP_FUNCS(Map_Arr2_u16_bool, Arr2_u16, bool, false)
+#endif
+#ifndef CVF_FN_Map_GoString_AnimationPropertiesPtr
+#define CVF_FN_Map_GoString_AnimationPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_AnimationPropertiesPtr, GoString, AnimationProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Arr2_i32
+#define CVF_FN_Map_GoString_Arr2_i32
+GO_MAP_FUNCS(Map_GoString_Arr2_i32, GoString, Arr2_i32, true)
+#endif
+#ifndef CVF_FN_Map_GoString_BgAnimationPropertiesPtr
+#define CVF_FN_Map_GoString_BgAnimationPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_BgAnimationPropertiesPtr, GoString, BgAnimationProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_BgDefPropertiesPtr
+#define CVF_FN_Map_GoString_BgDefPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_BgDefPropertiesPtr, GoString, BgDefProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_BytecodeFunction
+#define CVF_FN_Map_GoString_BytecodeFunction
+GO_MAP_FUNCS(Map_GoString_BytecodeFunction, GoString, BytecodeFunction, true)
+#endif
+#ifndef CVF_FN_Map_GoString_CellOverridePropertiesPtr
+#define CVF_FN_Map_GoString_CellOverridePropertiesPtr
+GO_MAP_FUNCS(Map_GoString_CellOverridePropertiesPtr, GoString, CellOverrideProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_CommandSpec
+#define CVF_FN_Map_GoString_CommandSpec
+GO_MAP_FUNCS(Map_GoString_CommandSpec, GoString, CommandSpec, true)
+#endif
+#ifndef CVF_FN_Map_GoString_ContinueCounterPropertiesPtr
+#define CVF_FN_Map_GoString_ContinueCounterPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_ContinueCounterPropertiesPtr, GoString, ContinueCounterProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_FightFxPtr
+#define CVF_FN_Map_GoString_FightFxPtr
+GO_MAP_FUNCS(Map_GoString_FightFxPtr, GoString, FightFx*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_FightScreenModePtr
+#define CVF_FN_Map_GoString_FightScreenModePtr
+GO_MAP_FUNCS(Map_GoString_FightScreenModePtr, GoString, FightScreenMode*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_FontPropertiesPtr
+#define CVF_FN_Map_GoString_FontPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_FontPropertiesPtr, GoString, FontProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_GlyphPropertiesPtr
+#define CVF_FN_Map_GoString_GlyphPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_GlyphPropertiesPtr, GoString, GlyphProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_GoString
+#define CVF_FN_Map_GoString_GoString
+GO_MAP_FUNCS(Map_GoString_GoString, GoString, GoString, true)
+#endif
+#ifndef CVF_FN_Map_GoString_KeysPropertiesPtr
+#define CVF_FN_Map_GoString_KeysPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_KeysPropertiesPtr, GoString, KeysProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_LayerPropertiesPtr
+#define CVF_FN_Map_GoString_LayerPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_LayerPropertiesPtr, GoString, LayerProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_MenuInfoPropertiesPtr
+#define CVF_FN_Map_GoString_MenuInfoPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_MenuInfoPropertiesPtr, GoString, MenuInfoProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_PlayerCursorStatePropertiesPtr
+#define CVF_FN_Map_GoString_PlayerCursorStatePropertiesPtr
+GO_MAP_FUNCS(Map_GoString_PlayerCursorStatePropertiesPtr, GoString, PlayerCursorStateProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_RemapPreset
+#define CVF_FN_Map_GoString_RemapPreset
+GO_MAP_FUNCS(Map_GoString_RemapPreset, GoString, RemapPreset, true)
+#endif
+#ifndef CVF_FN_Map_GoString_ResultsScreenPropertiesPtr
+#define CVF_FN_Map_GoString_ResultsScreenPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_ResultsScreenPropertiesPtr, GoString, ResultsScreenProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_ScenePropertiesPtr
+#define CVF_FN_Map_GoString_ScenePropertiesPtr
+GO_MAP_FUNCS(Map_GoString_ScenePropertiesPtr, GoString, SceneProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Slice_GoOpaqueValPtr
+#define CVF_FN_Map_GoString_Slice_GoOpaqueValPtr
+GO_MAP_FUNCS(Map_GoString_Slice_GoOpaqueValPtr, GoString, Slice_GoOpaqueValPtr, true)
+#endif
+#ifndef CVF_FN_Map_GoString_Slice_GoString
+#define CVF_FN_Map_GoString_Slice_GoString
+GO_MAP_FUNCS(Map_GoString_Slice_GoString, GoString, Slice_GoString, true)
+#endif
+#ifndef CVF_FN_Map_GoString_SoundPropertiesPtr
+#define CVF_FN_Map_GoString_SoundPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_SoundPropertiesPtr, GoString, SoundProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_TeamModesPropertiesPtr
+#define CVF_FN_Map_GoString_TeamModesPropertiesPtr
+GO_MAP_FUNCS(Map_GoString_TeamModesPropertiesPtr, GoString, TeamModesProperties*, true)
+#endif
+#ifndef CVF_FN_Map_GoString_TypedValue
+#define CVF_FN_Map_GoString_TypedValue
+GO_MAP_FUNCS(Map_GoString_TypedValue, GoString, TypedValue, true)
+#endif
+#ifndef CVF_FN_Map_GoString_bool
+#define CVF_FN_Map_GoString_bool
+GO_MAP_FUNCS(Map_GoString_bool, GoString, bool, true)
+#endif
+#ifndef CVF_FN_Map_GoString_f32
+#define CVF_FN_Map_GoString_f32
+GO_MAP_FUNCS(Map_GoString_f32, GoString, f32, true)
+#endif
+#ifndef CVF_FN_Map_GoString_i32
+#define CVF_FN_Map_GoString_i32
+GO_MAP_FUNCS(Map_GoString_i32, GoString, i32, true)
+#endif
+#ifndef CVF_FN_Map_GoString_int
+#define CVF_FN_Map_GoString_int
+GO_MAP_FUNCS(Map_GoString_int, GoString, int, true)
+#endif
+#ifndef CVF_FN_Map_GoString_scFunc
+#define CVF_FN_Map_GoString_scFunc
+GO_MAP_FUNCS(Map_GoString_scFunc, GoString, scFunc, true)
+#endif
+#ifndef CVF_FN_Map_GoString_u32
+#define CVF_FN_Map_GoString_u32
+GO_MAP_FUNCS(Map_GoString_u32, GoString, u32, true)
+#endif
+#ifndef CVF_FN_Map_GoString_u8
+#define CVF_FN_Map_GoString_u8
+GO_MAP_FUNCS(Map_GoString_u8, GoString, u8, true)
+#endif
+#ifndef CVF_FN_Map_ShortcutKey_ShortcutScriptPtr
+#define CVF_FN_Map_ShortcutKey_ShortcutScriptPtr
+GO_MAP_FUNCS(Map_ShortcutKey_ShortcutScriptPtr, ShortcutKey, ShortcutScript*, false)
+#endif
+#ifndef CVF_FN_Map_bgVideoPtr_Anon_fa4d6974
+#define CVF_FN_Map_bgVideoPtr_Anon_fa4d6974
+GO_MAP_FUNCS(Map_bgVideoPtr_Anon_fa4d6974, bgVideo*, Anon_fa4d6974, false)
+#endif
+#ifndef CVF_FN_Map_f32_AnimLayoutPtr
+#define CVF_FN_Map_f32_AnimLayoutPtr
+GO_MAP_FUNCS(Map_f32_AnimLayoutPtr, f32, AnimLayout*, false)
+#endif
+#ifndef CVF_FN_Map_i32_AnimLayoutPtr
+#define CVF_FN_Map_i32_AnimLayoutPtr
+GO_MAP_FUNCS(Map_i32_AnimLayoutPtr, i32, AnimLayout*, false)
+#endif
+#ifndef CVF_FN_Map_i32_AnimationPtr
+#define CVF_FN_Map_i32_AnimationPtr
+GO_MAP_FUNCS(Map_i32_AnimationPtr, i32, Animation*, false)
+#endif
+#ifndef CVF_FN_Map_i32_Arr2_i32
+#define CVF_FN_Map_i32_Arr2_i32
+GO_MAP_FUNCS(Map_i32_Arr2_i32, i32, Arr2_i32, false)
+#endif
+#ifndef CVF_FN_Map_i32_CharPtr
+#define CVF_FN_Map_i32_CharPtr
+GO_MAP_FUNCS(Map_i32_CharPtr, i32, Char*, false)
+#endif
+#ifndef CVF_FN_Map_i32_FSTextPtr
+#define CVF_FN_Map_i32_FSTextPtr
+GO_MAP_FUNCS(Map_i32_FSTextPtr, i32, FSText*, false)
+#endif
+#ifndef CVF_FN_Map_i32_RemapTable
+#define CVF_FN_Map_i32_RemapTable
+GO_MAP_FUNCS(Map_i32_RemapTable, i32, RemapTable, false)
+#endif
+#ifndef CVF_FN_Map_i32_StagePtr
+#define CVF_FN_Map_i32_StagePtr
+GO_MAP_FUNCS(Map_i32_StagePtr, i32, Stage*, false)
+#endif
+#ifndef CVF_FN_Map_i32_StateBytecodePtr
+#define CVF_FN_Map_i32_StateBytecodePtr
+GO_MAP_FUNCS(Map_i32_StateBytecodePtr, i32, StateBytecode*, false)
+#endif
+#ifndef CVF_FN_Map_i32_bool
+#define CVF_FN_Map_i32_bool
+GO_MAP_FUNCS(Map_i32_bool, i32, bool, false)
+#endif
+#ifndef CVF_FN_Map_i32_characterPtr
+#define CVF_FN_Map_i32_characterPtr
+GO_MAP_FUNCS(Map_i32_characterPtr, i32, character*, false)
+#endif
+#ifndef CVF_FN_Map_i32_f32
+#define CVF_FN_Map_i32_f32
+GO_MAP_FUNCS(Map_i32_f32, i32, f32, false)
+#endif
+#ifndef CVF_FN_Map_i32_i32
+#define CVF_FN_Map_i32_i32
+GO_MAP_FUNCS(Map_i32_i32, i32, i32, false)
+#endif
+#ifndef CVF_FN_Map_int_Arr12_Arr6_i8
+#define CVF_FN_Map_int_Arr12_Arr6_i8
+GO_MAP_FUNCS(Map_int_Arr12_Arr6_i8, int, Arr12_Arr6_i8, false)
+#endif
+#ifndef CVF_FN_Map_int_Arr12_InputBits
+#define CVF_FN_Map_int_Arr12_InputBits
+GO_MAP_FUNCS(Map_int_Arr12_InputBits, int, Arr12_InputBits, false)
+#endif
+#ifndef CVF_FN_Map_int_CharVarBackup
+#define CVF_FN_Map_int_CharVarBackup
+GO_MAP_FUNCS(Map_int_CharVarBackup, int, CharVarBackup, false)
+#endif
+#ifndef CVF_FN_Map_int_GameStatePtr
+#define CVF_FN_Map_int_GameStatePtr
+GO_MAP_FUNCS(Map_int_GameStatePtr, int, GameState*, false)
+#endif
+#ifndef CVF_FN_Map_int_GoOpaqueVal
+#define CVF_FN_Map_int_GoOpaqueVal
+GO_MAP_FUNCS(Map_int_GoOpaqueVal, int, GoOpaqueVal, false)
+#endif
+#ifndef CVF_FN_Map_int_GoOpaqueValPtr
+#define CVF_FN_Map_int_GoOpaqueValPtr
+GO_MAP_FUNCS(Map_int_GoOpaqueValPtr, int, GoOpaqueVal*, false)
+#endif
+#ifndef CVF_FN_Map_int_GoString
+#define CVF_FN_Map_int_GoString
+GO_MAP_FUNCS(Map_int_GoString, int, GoString, false)
+#endif
+#ifndef CVF_FN_Map_int_Slice_DialogueToken
+#define CVF_FN_Map_int_Slice_DialogueToken
+GO_MAP_FUNCS(Map_int_Slice_DialogueToken, int, Slice_DialogueToken, false)
+#endif
+#ifndef CVF_FN_Map_int_Slice_GoIface
+#define CVF_FN_Map_int_Slice_GoIface
+GO_MAP_FUNCS(Map_int_Slice_GoIface, int, Slice_GoIface, false)
+#endif
+#ifndef CVF_FN_Map_int_int
+#define CVF_FN_Map_int_int
+GO_MAP_FUNCS(Map_int_int, int, int, false)
+#endif
+#ifndef CVF_FN_Map_paletteCopyKey_Slice_u32
+#define CVF_FN_Map_paletteCopyKey_Slice_u32
+GO_MAP_FUNCS(Map_paletteCopyKey_Slice_u32, paletteCopyKey, Slice_u32, false)
+#endif
+#ifndef CVF_FN_Map_u32_Arr2_f32
+#define CVF_FN_Map_u32_Arr2_f32
+GO_MAP_FUNCS(Map_u32_Arr2_f32, u32, Arr2_f32, false)
+#endif
+#ifndef CVF_FN_Map_u32_Arr3_f32
+#define CVF_FN_Map_u32_Arr3_f32
+GO_MAP_FUNCS(Map_u32_Arr3_f32, u32, Arr3_f32, false)
+#endif
+#ifndef CVF_FN_Map_u32_Arr4_f32
+#define CVF_FN_Map_u32_Arr4_f32
+GO_MAP_FUNCS(Map_u32_Arr4_f32, u32, Arr4_f32, false)
+#endif
+#ifndef CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
+#define CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
+GO_MAP_FUNCS(Map_u32_ShaderProgram_GLES32Ptr, u32, ShaderProgram_GLES32*, false)
+#endif
+#ifndef CVF_FN_Map_u32_Slice_f32
+#define CVF_FN_Map_u32_Slice_f32
+GO_MAP_FUNCS(Map_u32_Slice_f32, u32, Slice_f32, false)
+#endif
+#ifndef CVF_FN_Map_u32_f32
+#define CVF_FN_Map_u32_f32
+GO_MAP_FUNCS(Map_u32_f32, u32, f32, false)
+#endif
+#ifndef CVF_FN_Map_u32_i32
+#define CVF_FN_Map_u32_i32
+GO_MAP_FUNCS(Map_u32_i32, u32, i32, false)
+#endif
+#ifndef CVF_FN_Map_u32_u32
+#define CVF_FN_Map_u32_u32
+GO_MAP_FUNCS(Map_u32_u32, u32, u32, false)
+#endif
+#ifndef CVF_FN_Map_uintptr_t_int
+#define CVF_FN_Map_uintptr_t_int
+GO_MAP_FUNCS(Map_uintptr_t_int, uintptr_t, int, false)
+#endif
 #endif

@@ -59,6 +59,22 @@ code with hand-written replacements:
 The hand-written modules (rng, detmath, anim, values, AIR, cooked content)
 stay as verified references and for the optimised paths later.
 
+### Status 2026-11-19 01:10
+
+- gencdefs ALL: the entire Ikemen data model (388 structs) compiles as C
+  (src/core/gen_types.h). Embedded structs: `union { T T_; struct {...}; }`.
+  C-keyword field names get a `_` suffix (cField).
+- gotoc reach (roots Loader.load, System.runMatch, System.resetRound,
+  System.loadStart; excluded render/menus/platform/vita-perf files):
+  1789 functions, 147 TODO, 176 stubs, ~78k lines.
+- First compile of the translation: 9302 errors. Next translator work:
+  1. package-level variables (g_sys etc.) + initializers/init();
+  2. interface values: type ids, boxing conversions, per-method
+     dispatchers, type switches/assertions (StateController, error);
+  3. Go std shims: strings, strconv, sort, fmt (Sprintf with %v/%d/%s/%f),
+     filepath, encoding/binary, regexp (few);
+  4. `reflect` uses (Value_*) in state_clone/compiler: stub or rewrite.
+
 ## Conventions
 
 - Determinism flags in CMakeLists.txt: no FMA contraction, no fast-math,
