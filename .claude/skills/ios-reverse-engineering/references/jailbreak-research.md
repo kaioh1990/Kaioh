@@ -128,6 +128,66 @@ Disabling 2G/3G and changing Wi-Fi behavior means:
 - Recent PAC bypass research: Various academic papers
 - iOS kernel cache analysis tools
 
+## CVE-2024-23222 Deep Analysis (Coruna Entry Point)
+
+### Vulnerability: DFG Concurrent Compilation TOCTOU
+
+**Affected code**: `Source/JavaScriptCore/dfg/DFGGraph.cpp` → `tryGetConstantProperty()`
+**Vulnerable commit**: `77a6809901292311fc674150434d829d3dd2bf0c`
+**Fix commit**: `64714692967ad278155fcae66c5cb0f853b3bf34`
+
+### Root Cause
+
+DFG (Data Flow Graph) compilation runs on a **background thread**. When the compiler encounters a property access on an object it believes is constant, it calls `tryGetConstantProperty()`:
+
+1. Takes the object's `cellLock`, reads the current structure
+2. Verifies the structure is in the expected structure set
+3. Reads the property value via `getDirectConcurrently()`
+4. Returns the "constant" value to fold into compiled code
+
+**The flaw**: Between when the compiler reads the value (step 3) and when compiled code is installed/runs on the main thread, the object can be mutated:
+- Structure transitions happen
+- Property values change
+- The referenced cell gets freed by GC
+
+Result: compiled code uses a dangling pointer → **use-after-free**
+
+### The Fix (3 key changes)
+
+1. **New `DFGDesiredObjectProperties` class**: Records `{object, offset} → {value, structure}` pairs — what the compiler assumed during constant folding
+
+2. **Main-thread validation in `Plan::isStillValidOnMainThread()`**: Before installing compiled code, verify that all assumed property values are still correct. If any changed, discard the compilation.
+
+3. **Narrowed constant folding conditions**: If structure transitions aren't being watched, only allow folding when the structure set has exactly 1 entry (prevents transitivity attacks where an object transitions through intermediate structures).
+
+### PoC Mechanics
+
+**`poc_det3.js` (deterministic, needs `--useConcurrentJIT=0`)**:
+```
+1. Create: s = { val: siblings[0], pad: 13 }; Object.seal(s)
+2. Hot loop: read s.val 60,000 times → DFG constant-folds s.val
+3. Mid-loop (at iteration 16,000): set s.val = 0, free siblings, force GC
+4. DFG-compiled code still reads freed cell → crash/corruption
+```
+
+**`race_v7.js` (natural race, no flags needed)**:
+```
+Same concept but tries multiple timing windows (K=1500..48000)
+and multiple GC storm rounds to hit the race condition naturally.
+```
+
+### Why This Matters for iOS 27 Research
+
+CVE-2024-23222 itself is patched on iOS 27. But it teaches us:
+- **JIT compiler TOCTOU bugs are a class of vulnerability**, not a one-off
+- The DFG/FTL compilation pipeline has inherent concurrency risks
+- Lockdown Mode disables JIT → different code path → may have similar logic bugs in the interpreter tier
+- The exploit primitive (type confusion → arbitrary R/W) is the same pattern needed for any jailbreak
+
+### Hardware Test Plan
+- **iPad Mini (iOS 27.0.1)**: Primary test device — lower risk
+- **iPhone Duo (iOS 27.1)**: Target device — only after iPad Mini validation
+
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
 - iPhone Duo likely uses A-series or M-series chip with full PAC/PPL/KTRR
