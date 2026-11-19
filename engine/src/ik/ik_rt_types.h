@@ -70,6 +70,15 @@ typedef struct GoImageAlpha {
     int Stride;
     GoImageRect Rect;
 } GoImageAlpha;
+// reflect.StringHeader / SliceHeader: same layouts as GoString and slices
+typedef struct GoReflectStringHeader {
+    uintptr_t Data;
+    int Len;
+} GoReflectStringHeader;
+typedef struct GoReflectSliceHeader {
+    uintptr_t Data;
+    int Len, Cap;
+} GoReflectSliceHeader;
 typedef struct GoImageUniform {
     GoIface C;
 } GoImageUniform;

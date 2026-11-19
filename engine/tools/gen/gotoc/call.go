@@ -408,7 +408,9 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 		m := mt.Underlying().(*types.Map)
 		return fmt.Sprintf("%s_delete(&%s, %s)", cbase(m), t.expr(c.Args[0]), t.exprConv(c.Args[1], m.Key()))
 	case "panic":
-		return "go_panic(" + t.expr(c.Args[0]) + ")"
+		// the value is boxed like any interface conversion, so recover()
+		// returns it with its dynamic type (gopher-lua: *ApiError)
+		return "go_panic_iface(0, " + t.exprConv(c.Args[0], types.NewInterfaceType(nil, nil)) + ")"
 	case "min", "max":
 		ty := t.typeOf(c)
 		var args []string

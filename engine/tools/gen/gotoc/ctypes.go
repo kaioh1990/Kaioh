@@ -295,6 +295,8 @@ var extStructs = map[string]string{
 	"image.RGBA":      "GoImageRGBA",
 	"image.Alpha":     "GoImageAlpha",
 	"image.Uniform":   "GoImageUniform",
+	"reflect.StringHeader": "GoReflectStringHeader",
+	"reflect.SliceHeader":  "GoReflectSliceHeader",
 	"zip.ReadCloser":  "GoZipReadCloser",
 	"zip.File":        "GoZipFile",
 	"reflect.StructField": "GoReflectStructField",

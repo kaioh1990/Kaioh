@@ -16137,7 +16137,7 @@ index 0000000..79f68c8
 +	return nil, false
 +}
 diff --git a/src/script.go b/src/script.go
-index 5443f25..6964b35 100644
+index 5443f25..9e6bdfe 100644
 --- a/src/script.go
 +++ b/src/script.go
 @@ -1,6 +1,7 @@
@@ -16230,7 +16230,7 @@ index 5443f25..6964b35 100644
  		/*Check whether resources are currently being loaded.
  		@function loading
  		@treturn boolean loading `true` if the loader is in `LS_Loading` state.*/
-+		if isVita && sys.loader.state == LS_Loading {
++		if coopGoroutines && sys.loader.state == LS_Loading {
 +			// Goroutines are cooperative on the Vita: let the loader run while
 +			// scripts poll this in a loop (e.g. "while loading() do end").
 +			runtime.Gosched()
@@ -16254,7 +16254,7 @@ index 5443f25..6964b35 100644
  		@treturn boolean `true` if assets are still being preloaded.*/
 -		l.Push(lua.LBool(!sys.sel.AllPreloadsReady()))
 +		ready := sys.sel.AllPreloadsReady()
-+		if isVita && !ready {
++		if coopGoroutines && !ready {
 +			runtime.Gosched()
 +		}
 +		l.Push(lua.LBool(!ready))
@@ -16867,7 +16867,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..dcb8d27 100644
+index 2698d35..6c1aae5 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -16895,7 +16895,20 @@ index 2698d35..dcb8d27 100644
  	s.whitePalTex = NewPaletteTexture()
  	s.whitePalTex.SetSubData(pal32ToBytes(whitepal))
  	s.SpriteTextureAtlas.textureSize = 2048
-@@ -818,7 +825,8 @@ func (s *System) setGameAspect() {
+@@ -549,7 +556,12 @@ func (s *System) init(w, h int32) *lua.LState {
+ 		}
+ 
+ 		// Error print?
++		// (not with cooperative goroutines: a blocking stdin read would
++		// stop the whole program)
+ 		SafeGo(func() {
++			if coopGoroutines {
++				return
++			}
+ 			stdin := bufio.NewScanner(os.Stdin)
+ 			for stdin.Scan() {
+ 				if err := stdin.Err(); err != nil {
+@@ -818,7 +830,8 @@ func (s *System) setGameAspect() {
  	}
  	// The active stage may not be registered in stageList.
  	sys.stage.updateLocalScale(sys.gameWidth)
@@ -16905,7 +16918,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 {
  			// Raw scale adjusted to the new game width
  			p[0].baselocalscl = p[0].gi().rawlocalscl * (sys.gameWidth / 320)
-@@ -879,6 +887,18 @@ func (s *System) keepAlive() {
+@@ -879,6 +892,18 @@ func (s *System) keepAlive() {
  }
  
  func (s *System) await(fps int) bool {
@@ -16924,10 +16937,14 @@ index 2698d35..dcb8d27 100644
  	if !s.frameSkip && !s.window.renderingPaused {
  		// Render the finished frame
  		gfx.EndFrame()
-@@ -955,6 +975,25 @@ func (s *System) await(fps int) bool {
+@@ -955,6 +980,29 @@ func (s *System) await(fps int) bool {
  
  	s.eventUpdate()
  
++	if cvfEngine {
++		runtime.Gosched() // let background loaders run (coopGoroutines)
++	}
++
 +	if isVita {
 +		// Locked 30 fps in fights: logic runs every tick at 60 Hz, every
 +		// second tick is drawn. Deterministic alternation replaces the
@@ -16950,7 +16967,7 @@ index 2698d35..dcb8d27 100644
  	return !s.gameEnd
  }
  
-@@ -990,7 +1029,14 @@ func (s *System) renderFrame() {
+@@ -990,7 +1038,14 @@ func (s *System) renderFrame() {
  	}
  
  	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
@@ -16966,7 +16983,7 @@ index 2698d35..dcb8d27 100644
  	s.draw(dx, dy, dscl)
  
  	// Lua
-@@ -2264,7 +2310,8 @@ func (s *System) pruneCharId() {
+@@ -2264,7 +2319,8 @@ func (s *System) pruneCharId() {
  
  	// At this point we're still checking the previous round's player ID's
  	// However that works out well for Turns mode because it means a joining player won't reuse the ID of a defeated player
@@ -16976,7 +16993,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 && p[0] != nil && p[0].id > s.lastCharId {
  			s.lastCharId = p[0].id
  		}
-@@ -2289,7 +2336,8 @@ func (s *System) newCharId() int32 {
+@@ -2289,7 +2345,8 @@ func (s *System) newCharId() int32 {
  		// This method scanned sys.chars instead but that's worse
  		for {
  			conflict := false
@@ -16986,7 +17003,7 @@ index 2698d35..dcb8d27 100644
  				for _, c := range p {
  					if c != nil && c.id == newid && !c.csf(CSF_destroy) {
  						// Note: We only recycle destroyed helper ID's because the ID's refresh each round, unlike Mugen
-@@ -2445,7 +2493,9 @@ func (s *System) updateMusicMaps() {
+@@ -2445,7 +2502,9 @@ func (s *System) updateMusicMaps() {
  		s.matchMusicSel = s.matchMusicSel[:0]
  	}
  
@@ -16997,7 +17014,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2478,6 +2528,10 @@ func (s *System) updateMusicMaps() {
+@@ -2478,6 +2537,10 @@ func (s *System) updateMusicMaps() {
  
  // TODO: This function is still a bit overloaded because it's handling some selections instead of doing a pure reset
  func (s *System) resetRound() {
@@ -17008,7 +17025,7 @@ index 2698d35..dcb8d27 100644
  	if s.sel.gameParams.PersistRounds && !s.roundResetFlg && !s.reloadFlg {
  		s.persistRoundCount++
  	}
-@@ -2533,7 +2587,8 @@ func (s *System) resetRound() {
+@@ -2533,7 +2596,8 @@ func (s *System) resetRound() {
  	}
  
  	// Reset characters
@@ -17018,7 +17035,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2562,7 +2617,8 @@ func (s *System) resetRound() {
+@@ -2562,7 +2626,8 @@ func (s *System) resetRound() {
  	}
  
  	// Place characters in state 5900
@@ -17028,7 +17045,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2691,7 +2747,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
+@@ -2691,7 +2756,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
  	sys.allPalFX = newPalFX()
  	sys.bgPalFX = newPalFX()
  	sys.resetGblEffect()
@@ -17038,7 +17055,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 {
  			sys.clearPlayerAssets(i, forceDestroy)
  		}
-@@ -2727,7 +2784,8 @@ func (s *System) globalCollision() {
+@@ -2727,7 +2793,8 @@ func (s *System) globalCollision() {
  /*
  // This is never called
  func (s *System) posReset() {
@@ -17048,7 +17065,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 {
  			p[0].posReset()
  		}
-@@ -2763,7 +2821,8 @@ func (s *System) runIntroSkip() {
+@@ -2763,7 +2830,8 @@ func (s *System) runIntroSkip() {
  		s.specialFlag = kept
  
  		// Reset all characters
@@ -17058,7 +17075,7 @@ index 2698d35..dcb8d27 100644
  			if len(p) > 0 {
  				s.clearPlayerAssets(i, false)
  				p[0].posReset()
-@@ -2775,6 +2834,7 @@ func (s *System) runIntroSkip() {
+@@ -2775,6 +2843,7 @@ func (s *System) runIntroSkip() {
  
  // TODO: Maybe these could get a more thorough clear between matches, to prevent holding onto previous character sprites
  func (s *System) clearSpriteData() {
@@ -17066,7 +17083,7 @@ index 2698d35..dcb8d27 100644
  	// Main sprites
  	s.spriteList = s.spriteList[:0]
  
-@@ -2834,6 +2894,14 @@ func (s *System) screenright() float32 {
+@@ -2834,6 +2903,14 @@ func (s *System) screenright() float32 {
  // Core game logic. Chars, stage, projectiles, etc
  // The part that can rewind and fast forward during rollbacks
  func (s *System) action() {
@@ -17081,7 +17098,7 @@ index 2698d35..dcb8d27 100644
  	if s.matchPaused() {
  		return
  	}
-@@ -2849,7 +2917,9 @@ func (s *System) action() {
+@@ -2849,7 +2926,9 @@ func (s *System) action() {
  
  	// In version 0.99 this was moved to before sys.action() for undocumented reasons
  	// Moving it here preserves whatever behavior that implemented while not keeping the stage oddly outside the main loop
@@ -17091,7 +17108,7 @@ index 2698d35..dcb8d27 100644
  
  	// Run "tick frame"
  	if s.tickFrame() {
-@@ -2907,6 +2977,7 @@ func (s *System) action() {
+@@ -2907,6 +2986,7 @@ func (s *System) action() {
  
  		// Run the main character logic
  		s.charList.action()
@@ -17099,7 +17116,7 @@ index 2698d35..dcb8d27 100644
  
  		// The following must be placed after char action or they will lag behind 1 frame
  		s.allPalFX.step()
-@@ -2918,18 +2989,24 @@ func (s *System) action() {
+@@ -2918,18 +2998,24 @@ func (s *System) action() {
  
  	// This function runs every tick
  	// It should be placed between "tick frame" and "tick next frame"
@@ -17124,7 +17141,7 @@ index 2698d35..dcb8d27 100644
  	}
  
  	// Run camera
-@@ -2945,6 +3022,11 @@ func (s *System) action() {
+@@ -2945,6 +3031,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -17136,7 +17153,7 @@ index 2698d35..dcb8d27 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2960,7 +3042,9 @@ func (s *System) action() {
+@@ -2960,7 +3051,9 @@ func (s *System) action() {
  	s.charList.xScreenBound()
  
  	// Note: Explod update must happen after hit detection. Because hit sparks are also explods
@@ -17146,7 +17163,7 @@ index 2698d35..dcb8d27 100644
  	s.charTextsUpdate()
  	s.matchStoryboards.update()
  
-@@ -2998,9 +3082,9 @@ func (s *System) action() {
+@@ -2998,9 +3091,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -17159,7 +17176,7 @@ index 2698d35..dcb8d27 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3102,13 @@ func (s *System) action() {
+@@ -3018,6 +3111,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -17173,7 +17190,7 @@ index 2698d35..dcb8d27 100644
  	return
  }
  
-@@ -3046,7 +3137,7 @@ func (s *System) uiAction() {
+@@ -3046,7 +3146,7 @@ func (s *System) uiAction() {
  	// Needs to happen after motif update or motif inputs will lag 1 frame
  	for _, key := range SortedKeys(sys.cfg.Common.Lua) {
  		for _, v := range sys.cfg.Common.Lua[key] {
@@ -17182,7 +17199,7 @@ index 2698d35..dcb8d27 100644
  				sys.luaLState.RaiseError("Error executing Lua code: %s\n%v", v, err.Error())
  			}
  		}
-@@ -3330,7 +3421,8 @@ func (s *System) stepRoundState() {
+@@ -3330,7 +3430,8 @@ func (s *System) stepRoundState() {
  		}
  	} else if s.intro > 0 {
  		if s.intro == s.fightScreen.round.ctrl_time {
@@ -17192,7 +17209,7 @@ index 2698d35..dcb8d27 100644
  				if len(p) > 0 {
  					if p[0].activelyFighting() && !p[0].asf(ASF_nointroreset) {
  						p[0].posReset() // Technically we don't really need this step
-@@ -3340,7 +3432,8 @@ func (s *System) stepRoundState() {
+@@ -3340,7 +3441,8 @@ func (s *System) stepRoundState() {
  		}
  		s.intro--
  		if s.intro == 0 {
@@ -17202,7 +17219,7 @@ index 2698d35..dcb8d27 100644
  				if len(p) > 0 {
  					if p[0].alive() {
  						p[0].setSCF(SCF_over_alive, false)
-@@ -3429,7 +3522,8 @@ func (s *System) stepRoundState() {
+@@ -3429,7 +3531,8 @@ func (s *System) stepRoundState() {
  			// Check if game can proceed into roundstate 4
  			if s.winwaittime > 0 {
  				if s.intro == rs4t-1 {
@@ -17212,7 +17229,7 @@ index 2698d35..dcb8d27 100644
  						if len(p) == 0 {
  							continue
  						}
-@@ -3455,7 +3549,8 @@ func (s *System) stepRoundState() {
+@@ -3455,7 +3558,8 @@ func (s *System) stepRoundState() {
  
  			// Disable ctrl (once) at the first frame of roundstate 4
  			if s.intro == rs4t-1 {
@@ -17222,7 +17239,7 @@ index 2698d35..dcb8d27 100644
  					if len(p) > 0 {
  						p[0].setSCF(SCF_ctrl, false)
  					}
-@@ -3502,7 +3597,8 @@ func (s *System) stepRoundState() {
+@@ -3502,7 +3606,8 @@ func (s *System) stepRoundState() {
  		// Send characters to win/lose poses
  		// In Mugen this loop can run at any point after the win poses have started, hence "<="
  		if s.winposetime <= 0 {
@@ -17232,7 +17249,7 @@ index 2698d35..dcb8d27 100644
  				if len(p) == 0 {
  					continue
  				}
-@@ -3657,7 +3753,8 @@ func (s *System) roundEndDecision() bool {
+@@ -3657,7 +3762,8 @@ func (s *System) roundEndDecision() bool {
  
  	// Update win triggers if finish type was changed
  	if ft != s.finishType {
@@ -17242,7 +17259,7 @@ index 2698d35..dcb8d27 100644
  			if len(p) > 0 && p[0].teamside != -1 && ko[^i&1] {
  				for _, h := range p {
  					for _, tid := range h.targets {
-@@ -3678,6 +3775,7 @@ func (s *System) roundEndDecision() bool {
+@@ -3678,6 +3784,7 @@ func (s *System) roundEndDecision() bool {
  }
  
  func (s *System) draw(x, y, scl float32) {
@@ -17250,7 +17267,7 @@ index 2698d35..dcb8d27 100644
  	s.brightnessOld = s.brightness
  	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
  	s.brightness = 1.0
-@@ -3714,30 +3812,42 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3714,30 +3821,42 @@ func (s *System) draw(x, y, scl float32) {
  		// Draw stage elements with layerNo == -1
  		if !s.gsf(GSF_nobg) {
  			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
@@ -17299,7 +17316,7 @@ index 2698d35..dcb8d27 100644
  
  		// Draw char texts layer -1
  		s.drawCharTexts(-1)
-@@ -3750,9 +3860,13 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3750,9 +3869,13 @@ func (s *System) draw(x, y, scl float32) {
  		// TODO: Make shadows render in same layers as their sources?
  		if !s.gsf(GSF_globalnoshadow) {
  			if s.stage.reflection.layerno >= 0 {
@@ -17315,7 +17332,7 @@ index 2698d35..dcb8d27 100644
  		}
  
  		//off := s.envShake.getOffset()
-@@ -3790,7 +3904,9 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3790,7 +3913,9 @@ func (s *System) draw(x, y, scl float32) {
  		//}
  
  		// Draw fight screen layer 0
@@ -17326,7 +17343,7 @@ index 2698d35..dcb8d27 100644
  
  		// Draw char texts layer 0
  		s.drawCharTexts(0)
-@@ -3807,14 +3923,20 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3807,14 +3932,20 @@ func (s *System) draw(x, y, scl float32) {
  
  	// Draw character sprites in layer 0
  	if s.envcol_time == 0 || s.envcol_under {
@@ -17350,7 +17367,7 @@ index 2698d35..dcb8d27 100644
  
  	// Draw char texts layer 1
  	s.drawCharTexts(1)
-@@ -3823,10 +3945,14 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3823,10 +3954,14 @@ func (s *System) draw(x, y, scl float32) {
  	s.motif.draw(1)
  
  	// Draw character sprites in layer 1 (old "ontop")
@@ -17367,7 +17384,7 @@ index 2698d35..dcb8d27 100644
  
  	// Draw char texts layer 2
  	s.drawCharTexts(2)
-@@ -3939,7 +4065,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
+@@ -3939,7 +4074,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
  		y := 240 - panelState.gameHeight
  		if s.statusLFunc != nil {
  			s.debugFont.SetColor(255, 255, 255, 255)
@@ -17377,7 +17394,7 @@ index 2698d35..dcb8d27 100644
  				if len(p) > 0 {
  					top := s.luaLState.GetTop()
  					if s.luaLState.CallByParam(lua.P{Fn: s.statusLFunc, NRet: 1,
-@@ -4048,13 +4175,23 @@ func (s *System) runMatch() (reload bool) {
+@@ -4048,13 +4184,23 @@ func (s *System) runMatch() (reload bool) {
  		s.debugAccel = 1
  	}
  
@@ -17402,7 +17419,7 @@ index 2698d35..dcb8d27 100644
  			if len(p) > 0 {
  				forceDestroy := s.matchOver() ||
  					(s.tmode[i&1] == TM_Turns && p[0].teamside != -1 && s.effectiveLoss[i&1])
-@@ -4128,7 +4265,7 @@ func (s *System) runMatch() (reload bool) {
+@@ -4128,7 +4274,7 @@ func (s *System) runMatch() (reload bool) {
  
  		for _, v := range s.shortcutScripts {
  			if v.Activate {
@@ -17411,7 +17428,7 @@ index 2698d35..dcb8d27 100644
  					s.luaLState.RaiseError("Error executing Lua code: %s\n%v", v.Script, err.Error())
  				}
  			}
-@@ -4150,10 +4287,14 @@ func (s *System) runMatch() (reload bool) {
+@@ -4150,10 +4296,14 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Update game state
@@ -17426,7 +17443,7 @@ index 2698d35..dcb8d27 100644
  
  		// Patch: Pause stage videos while game is paused
  		// This is necessary for the time being because videos are paused in the stage's action() and pauses now just skip that entirely
-@@ -4242,8 +4383,13 @@ func (s *System) runMatch() (reload bool) {
+@@ -4242,8 +4392,13 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Cue sprites, then render
@@ -17440,7 +17457,7 @@ index 2698d35..dcb8d27 100644
  
  		// Update system. Break if update returns false (engine shutdown).
  		if !s.update() {
-@@ -4266,7 +4412,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4266,7 +4421,8 @@ func (s *System) runMatch() (reload bool) {
  
  func (s *System) SetupCharRoundStart() {
  	// Prepare next round for all players
@@ -17450,7 +17467,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 {
  			p[0].prepareNextRound()
  		}
-@@ -4274,7 +4421,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4274,7 +4430,8 @@ func (s *System) SetupCharRoundStart() {
  
  	// For power sharing, set maximum power to the highest one in the team
  	if s.cfg.Options.Team.PowerShare {
@@ -17460,7 +17477,7 @@ index 2698d35..dcb8d27 100644
  			if len(p) > 0 && p[0].teamside != -1 {
  				pmax := Max(s.cgi[i&1].data.power, s.cgi[i].data.power)
  				for j := i & 1; j < MaxSimul*2; j += 2 {
-@@ -4287,7 +4435,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4287,7 +4444,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Calculate maximum life for all characters
@@ -17470,7 +17487,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 {
  			// Get max life, and adjust based on team mode
  			var lmax float32
-@@ -4344,7 +4493,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4344,7 +4502,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's dizzy and guard points
@@ -17480,7 +17497,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 {
  			if p[0].ocd().dizzyPoints > 0 {
  				p[0].dizzyPoints = p[0].ocd().dizzyPoints
-@@ -4360,7 +4510,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4360,7 +4519,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's state
@@ -17490,7 +17507,7 @@ index 2698d35..dcb8d27 100644
  		if len(p) > 0 {
  			if p[0].roundsExisted() == 0 && (s.roundNo == 1 || s.tmode[i&1] == TM_Turns) {
  				// If round 1 or a new character in Turns mode, initialize values
-@@ -4413,7 +4564,8 @@ func (s *System) runNextRound() bool {
+@@ -4413,7 +4573,8 @@ func (s *System) runNextRound() bool {
  			for i := range s.roundsExisted {
  				s.roundsExisted[i]++
  			}
@@ -17500,7 +17517,7 @@ index 2698d35..dcb8d27 100644
  				if len(p) > 0 {
  					if s.tmode[i&1] != TM_Turns || !s.effectiveLoss[i&1] {
  						p[0].life = p[0].lifeMax
-@@ -4518,7 +4670,8 @@ type RoundStartBackup struct {
+@@ -4518,7 +4679,8 @@ type RoundStartBackup struct {
  func (bk *RoundStartBackup) Save() {
  	// Save characters
  	// We save helpers as well because of "preserve" parameter
@@ -17510,7 +17527,7 @@ index 2698d35..dcb8d27 100644
  		if len(chars) == 0 {
  			// Backups are reused, so discard characters saved for this slot in a previous round
  			bk.charBackup[i] = nil
-@@ -4584,7 +4737,8 @@ func (bk *RoundStartBackup) Save() {
+@@ -4584,7 +4746,8 @@ func (bk *RoundStartBackup) Save() {
  
  func (bk *RoundStartBackup) Restore() {
  	// Restore characters
@@ -17520,7 +17537,7 @@ index 2698d35..dcb8d27 100644
  		if len(chars) == 0 {
  			continue
  		}
-@@ -4628,6 +4782,7 @@ func (bk *RoundStartBackup) Restore() {
+@@ -4628,6 +4791,7 @@ func (bk *RoundStartBackup) Restore() {
  			// Remake the CNS variable maps
  			// Then restore only var and fvar (losing sysvar and sysfvar)
  			c.initCnsVar()
@@ -17528,7 +17545,7 @@ index 2698d35..dcb8d27 100644
  			for k, v := range bkup.cnsvar {
  				c.cnsvar[k] = v
  			}
-@@ -5050,6 +5205,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -5050,6 +5214,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -17538,7 +17555,7 @@ index 2698d35..dcb8d27 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -5318,6 +5476,13 @@ func (s *Select) AddChar(def string) *SelectChar {
+@@ -5318,6 +5485,13 @@ func (s *Select) AddChar(def string) *SelectChar {
  		LogMessage("Failed to add char: %v (%s)", defPathFromSelect, reason)
  		return nil
  	}
@@ -17552,7 +17569,7 @@ index 2698d35..dcb8d27 100644
  
  	// Print a message for every loaded character. Just muted at the moment
  	defer func() {
-@@ -6304,6 +6469,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6304,6 +6478,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		if l.cancelRequested() || l.state == LS_Cancel || sys.gameEnd {
  			return 0
  		}
@@ -17560,7 +17577,7 @@ index 2698d35..dcb8d27 100644
  		if l.err = p.load(cdef, gi); l.err != nil {
  			if errors.Is(l.err, ErrLoadingCanceled) {
  				l.state = LS_Cancel
-@@ -6322,7 +6488,29 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6322,7 +6497,29 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		}
  
  		// Compile character states
@@ -17591,7 +17608,7 @@ index 2698d35..dcb8d27 100644
  			if attached {
  				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
  			} else {
-@@ -6820,13 +7008,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +7017,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -17607,7 +17624,7 @@ index 2698d35..dcb8d27 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +7023,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +7032,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -17620,7 +17637,7 @@ index 2698d35..dcb8d27 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +7050,7 @@ type ZoomEffect struct {
+@@ -6862,6 +7059,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -17628,7 +17645,7 @@ index 2698d35..dcb8d27 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +7066,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +7075,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -17636,7 +17653,7 @@ index 2698d35..dcb8d27 100644
  }
  
  // Step the zoom variables
-@@ -7042,6 +7232,7 @@ func (s *System) restoreCharVars(c *Char) {
+@@ -7042,6 +7241,7 @@ func (s *System) restoreCharVars(c *Char) {
  		return
  	}
  

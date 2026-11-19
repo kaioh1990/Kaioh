@@ -1049,7 +1049,7 @@ GoIface sync_Pool_Get(GoOpaque *p) {
     return ((GoIface(*)(void *))f.fn)(f.env);
 }
 void sync_Pool_Put(GoOpaque *p, GoIface x) { (void)p, (void)x; }
-void runtime_Gosched(void) {}
+void runtime_Gosched(void) { go_yield(); }
 GoOpaque time_Now(void) { return (GoOpaque){{0}}; }
 GoOpaque time_Time_Add(GoOpaque t, i64 d) {
     (void)d;

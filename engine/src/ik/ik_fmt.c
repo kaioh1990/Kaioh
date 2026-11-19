@@ -546,14 +546,25 @@ GoString fmt_Sprintf(GoString a0, Slice_GoIface a1) { return go_sprintf(a0, a1.p
 GoString fmt_Sprint(Slice_GoIface a0) { return go_sprint(a0.p, a0.len, false); }
 GoIface fmt_Errorf(GoString a0, Slice_GoIface a1) { return go_error(go_sprintf(a0, a1.p, a1.len)); }
 
+// fmt.Print* write to standard output, unbuffered like Go's os.Stdout
+static void out_write(GoString s) {
+    fwrite(s.p, 1, (size_t)s.len, stdout);
+    fflush(stdout);
+}
 Ret_int__GoIface fmt_Printf(GoString a0, Slice_GoIface a1) {
     GoString s = go_sprintf(a0, a1.p, a1.len);
-    cvf_log("%.*s", s.len, s.p);
+    out_write(s);
+    return (Ret_int__GoIface){s.len, {0}};
+}
+Ret_int__GoIface fmt_Print(Slice_GoIface a0) {
+    GoString s = go_sprint(a0.p, a0.len, false);
+    out_write(s);
     return (Ret_int__GoIface){s.len, {0}};
 }
 Ret_int__GoIface fmt_Println(Slice_GoIface a0) {
     GoString s = go_sprint(a0.p, a0.len, true);
-    cvf_log("%.*s", s.len, s.p);
+    out_write(s);
+    out_write((GoString){"\n", 1});
     return (Ret_int__GoIface){s.len + 1, {0}};
 }
 Ret_int__GoIface fmt_Fprintf(GoIface w, GoString a1, Slice_GoIface a2) {

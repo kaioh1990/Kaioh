@@ -976,9 +976,9 @@ typedef struct effects_equalizer effects_equalizer;
 typedef struct effects_mono effects_mono;
 typedef struct effects_section effects_section;
 typedef struct effects_swap effects_swap;
-typedef struct entry_L296fb0 entry_L296fb0;
-typedef struct entry_L4be5ac entry_L4be5ac;
-typedef struct entry_L7d2014 entry_L7d2014;
+typedef struct entry_L24a51f entry_L24a51f;
+typedef struct entry_L5cd011 entry_L5cd011;
+typedef struct entry_L681a49 entry_L681a49;
 typedef struct errors_x_fundamental errors_x_fundamental;
 typedef struct errors_x_withMessage errors_x_withMessage;
 typedef struct errors_x_withStack errors_x_withStack;
@@ -989,8 +989,8 @@ typedef struct fixed_Rectangle26_6 fixed_Rectangle26_6;
 typedef struct flac2_Encoder flac2_Encoder;
 typedef struct flac2_Stream flac2_Stream;
 typedef struct flac_decoder flac_decoder;
-typedef struct fontSpec_L6297e3 fontSpec_L6297e3;
 typedef struct fontSpec_L7f1af4 fontSpec_L7f1af4;
+typedef struct fontSpec_Le9fdb4 fontSpec_Le9fdb4;
 typedef struct frame2_Frame frame2_Frame;
 typedef struct frame2_Header frame2_Header;
 typedef struct frame2_RicePartition frame2_RicePartition;
@@ -1170,8 +1170,8 @@ typedef struct midi_decoder midi_decoder;
 typedef struct mp32_decoder mp32_decoder;
 typedef struct mp3_Decoder mp3_Decoder;
 typedef struct mp3_source mp3_source;
-typedef struct musicHolder_L8e91b3 musicHolder_L8e91b3;
-typedef struct namePos_L01a34b namePos_L01a34b;
+typedef struct musicHolder_Leb5279 musicHolder_Leb5279;
+typedef struct namePos_L64e64f namePos_L64e64f;
 typedef struct oggvorbis_Reader oggvorbis_Reader;
 typedef struct oggvorbis_oggReader oggvorbis_oggReader;
 typedef struct oggvorbis_page oggvorbis_page;
@@ -1215,7 +1215,7 @@ typedef struct protocol_UdpProtocolEvent protocol_UdpProtocolEvent;
 typedef struct protocol_UdpProtocolStateInfo protocol_UdpProtocolStateInfo;
 typedef struct protocol_UdpProtocolStats protocol_UdpProtocolStats;
 typedef struct pv_Lb05621 pv_Lb05621;
-typedef struct qvPlayer_Lef8db5 qvPlayer_Lef8db5;
+typedef struct qvPlayer_L0bbea3 qvPlayer_L0bbea3;
 typedef struct raster_AlphaOverPainter raster_AlphaOverPainter;
 typedef struct raster_AlphaSrcPainter raster_AlphaSrcPainter;
 typedef struct raster_GammaCorrectionPainter raster_GammaCorrectionPainter;
@@ -1245,8 +1245,8 @@ typedef struct sdl_Surface sdl_Surface;
 typedef struct sdl_TextInputEvent sdl_TextInputEvent;
 typedef struct sdl_Window sdl_Window;
 typedef struct sdl_WindowEvent sdl_WindowEvent;
-typedef struct secPair_Laa37ab secPair_Laa37ab;
-typedef struct secPair_Lfcf5f3 secPair_Lfcf5f3;
+typedef struct secPair_L1f01c6 secPair_L1f01c6;
+typedef struct secPair_Ld26ba1 secPair_Ld26ba1;
 typedef struct sideinfo_SideInfo sideinfo_SideInfo;
 typedef struct sjson_Options sjson_Options;
 typedef struct sjson_dtype sjson_dtype;
@@ -1254,10 +1254,10 @@ typedef struct sjson_errorType sjson_errorType;
 typedef struct sjson_pathResult sjson_pathResult;
 typedef struct sjson_sliceHeader sjson_sliceHeader;
 typedef struct sjson_stringHeader sjson_stringHeader;
-typedef struct sjson_val_Lb76261 sjson_val_Lb76261;
-typedef struct slotRef_L1be2fe slotRef_L1be2fe;
+typedef struct sjson_val_L98a5cb sjson_val_L98a5cb;
+typedef struct slotRef_L64fd25 slotRef_L64fd25;
 typedef struct spec_Lda920c spec_Lda920c;
-typedef struct svc_L6800f0 svc_L6800f0;
+typedef struct svc_Lc6dc42 svc_Lc6dc42;
 typedef struct sync_x_TimeSync sync_x_TimeSync;
 typedef struct transport_MessageChannelItem transport_MessageChannelItem;
 typedef struct transport_Udp transport_Udp;
@@ -1305,7 +1305,7 @@ typedef struct wav_formatchunk wav_formatchunk;
 typedef struct wav_formatchunkextensible wav_formatchunkextensible;
 typedef struct wav_guid wav_guid;
 typedef struct wav_header wav_header;
-typedef struct wrapToken_La42eeb wrapToken_La42eeb;
+typedef struct wrapToken_L8ac62d wrapToken_L8ac62d;
 typedef struct Anon_194875d7 Anon_194875d7;
 typedef struct Anon_28bd7e47 Anon_28bd7e47;
 typedef struct Anon_3c59f47a Anon_3c59f47a;
@@ -1400,7 +1400,7 @@ typedef GoIface polling_PollSink;
 typedef GoIface polling_Poller;
 typedef int pretty_byKind;
 typedef int pretty_jtype;
-typedef GoFunc protocol_UdpProtocolDispatchFunc_Lf48ee4;
+typedef GoFunc protocol_UdpProtocolDispatchFunc_Lcc8c17;
 typedef int protocol_UdpProtocolEventType;
 typedef int protocol_UdpProtocolState;
 typedef GoIface raster_Painter;
@@ -1437,9 +1437,9 @@ typedef u16 truetype_NameID;
 typedef GoString truetype_UnsupportedError;
 typedef i16 truetype_f2dot14;
 typedef u32 truetype_pointType;
-typedef int valueSource_Lceda46;
+typedef int valueSource_L8814da;
 typedef GoIface vorbis2_floor;
-typedef int wrapTokenKind_Lbc646a;
+typedef int wrapTokenKind_Ld9d083;
 #ifndef CVF_DEF_Slice_AnimFrame
 #define CVF_DEF_Slice_AnimFrame
 typedef struct { AnimFrame *p; int len, cap; } Slice_AnimFrame;
@@ -2056,17 +2056,17 @@ typedef struct { cvfRoom *p; int len, cap; } Slice_cvfRoom;
 #define CVF_DEF_Slice_effects_section
 typedef struct { effects_section *p; int len, cap; } Slice_effects_section;
 #endif
-#ifndef CVF_DEF_Slice_entry_L296fb0
-#define CVF_DEF_Slice_entry_L296fb0
-typedef struct { entry_L296fb0 *p; int len, cap; } Slice_entry_L296fb0;
+#ifndef CVF_DEF_Slice_entry_L24a51f
+#define CVF_DEF_Slice_entry_L24a51f
+typedef struct { entry_L24a51f *p; int len, cap; } Slice_entry_L24a51f;
 #endif
-#ifndef CVF_DEF_Slice_entry_L4be5ac
-#define CVF_DEF_Slice_entry_L4be5ac
-typedef struct { entry_L4be5ac *p; int len, cap; } Slice_entry_L4be5ac;
+#ifndef CVF_DEF_Slice_entry_L5cd011
+#define CVF_DEF_Slice_entry_L5cd011
+typedef struct { entry_L5cd011 *p; int len, cap; } Slice_entry_L5cd011;
 #endif
-#ifndef CVF_DEF_Slice_entry_L7d2014
-#define CVF_DEF_Slice_entry_L7d2014
-typedef struct { entry_L7d2014 *p; int len, cap; } Slice_entry_L7d2014;
+#ifndef CVF_DEF_Slice_entry_L681a49
+#define CVF_DEF_Slice_entry_L681a49
+typedef struct { entry_L681a49 *p; int len, cap; } Slice_entry_L681a49;
 #endif
 #ifndef CVF_DEF_Slice_expValueFramePtr
 #define CVF_DEF_Slice_expValueFramePtr
@@ -2356,9 +2356,9 @@ typedef struct { meta_CueSheetTrackIndex *p; int len, cap; } Slice_meta_CueSheet
 #define CVF_DEF_Slice_meta_SeekPoint
 typedef struct { meta_SeekPoint *p; int len, cap; } Slice_meta_SeekPoint;
 #endif
-#ifndef CVF_DEF_Slice_namePos_L01a34b
-#define CVF_DEF_Slice_namePos_L01a34b
-typedef struct { namePos_L01a34b *p; int len, cap; } Slice_namePos_L01a34b;
+#ifndef CVF_DEF_Slice_namePos_L64e64f
+#define CVF_DEF_Slice_namePos_L64e64f
+typedef struct { namePos_L64e64f *p; int len, cap; } Slice_namePos_L64e64f;
 #endif
 #ifndef CVF_DEF_Slice_ov_L2966a0
 #define CVF_DEF_Slice_ov_L2966a0
@@ -2416,9 +2416,9 @@ typedef struct { protocol_QueueEntry *p; int len, cap; } Slice_protocol_QueueEnt
 #define CVF_DEF_Slice_protocol_UdpProtocol
 typedef struct { protocol_UdpProtocol *p; int len, cap; } Slice_protocol_UdpProtocol;
 #endif
-#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4
-#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4
-typedef struct { protocol_UdpProtocolDispatchFunc_Lf48ee4 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4;
+#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
+#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
+typedef struct { protocol_UdpProtocolDispatchFunc_Lcc8c17 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17;
 #endif
 #ifndef CVF_DEF_Slice_protocol_UdpProtocolEvent
 #define CVF_DEF_Slice_protocol_UdpProtocolEvent
@@ -2432,9 +2432,9 @@ typedef struct { pv_Lb05621 *p; int len, cap; } Slice_pv_Lb05621;
 #define CVF_DEF_Slice_queryPart
 typedef struct { queryPart *p; int len, cap; } Slice_queryPart;
 #endif
-#ifndef CVF_DEF_Slice_qvPlayer_Lef8db5
-#define CVF_DEF_Slice_qvPlayer_Lef8db5
-typedef struct { qvPlayer_Lef8db5 *p; int len, cap; } Slice_qvPlayer_Lef8db5;
+#ifndef CVF_DEF_Slice_qvPlayer_L0bbea3
+#define CVF_DEF_Slice_qvPlayer_L0bbea3
+typedef struct { qvPlayer_L0bbea3 *p; int len, cap; } Slice_qvPlayer_L0bbea3;
 #endif
 #ifndef CVF_DEF_Slice_rankingEntryPtr
 #define CVF_DEF_Slice_rankingEntryPtr
@@ -2464,25 +2464,25 @@ typedef struct { scRunFn *p; int len, cap; } Slice_scRunFn;
 #define CVF_DEF_Slice_sdl_GameControllerButton
 typedef struct { sdl_GameControllerButton *p; int len, cap; } Slice_sdl_GameControllerButton;
 #endif
-#ifndef CVF_DEF_Slice_secPair_Laa37ab
-#define CVF_DEF_Slice_secPair_Laa37ab
-typedef struct { secPair_Laa37ab *p; int len, cap; } Slice_secPair_Laa37ab;
+#ifndef CVF_DEF_Slice_secPair_L1f01c6
+#define CVF_DEF_Slice_secPair_L1f01c6
+typedef struct { secPair_L1f01c6 *p; int len, cap; } Slice_secPair_L1f01c6;
 #endif
-#ifndef CVF_DEF_Slice_secPair_Lfcf5f3
-#define CVF_DEF_Slice_secPair_Lfcf5f3
-typedef struct { secPair_Lfcf5f3 *p; int len, cap; } Slice_secPair_Lfcf5f3;
+#ifndef CVF_DEF_Slice_secPair_Ld26ba1
+#define CVF_DEF_Slice_secPair_Ld26ba1
+typedef struct { secPair_Ld26ba1 *p; int len, cap; } Slice_secPair_Ld26ba1;
 #endif
 #ifndef CVF_DEF_Slice_sjson_pathResult
 #define CVF_DEF_Slice_sjson_pathResult
 typedef struct { sjson_pathResult *p; int len, cap; } Slice_sjson_pathResult;
 #endif
-#ifndef CVF_DEF_Slice_sjson_val_Lb76261
-#define CVF_DEF_Slice_sjson_val_Lb76261
-typedef struct { sjson_val_Lb76261 *p; int len, cap; } Slice_sjson_val_Lb76261;
+#ifndef CVF_DEF_Slice_sjson_val_L98a5cb
+#define CVF_DEF_Slice_sjson_val_L98a5cb
+typedef struct { sjson_val_L98a5cb *p; int len, cap; } Slice_sjson_val_L98a5cb;
 #endif
-#ifndef CVF_DEF_Slice_slotRef_L1be2fe
-#define CVF_DEF_Slice_slotRef_L1be2fe
-typedef struct { slotRef_L1be2fe *p; int len, cap; } Slice_slotRef_L1be2fe;
+#ifndef CVF_DEF_Slice_slotRef_L64fd25
+#define CVF_DEF_Slice_slotRef_L64fd25
+typedef struct { slotRef_L64fd25 *p; int len, cap; } Slice_slotRef_L64fd25;
 #endif
 #ifndef CVF_DEF_Slice_spec_Lda920c
 #define CVF_DEF_Slice_spec_Lda920c
@@ -2564,9 +2564,9 @@ typedef struct { vorbis2_mode *p; int len, cap; } Slice_vorbis2_mode;
 #define CVF_DEF_Slice_vorbis2_residue
 typedef struct { vorbis2_residue *p; int len, cap; } Slice_vorbis2_residue;
 #endif
-#ifndef CVF_DEF_Slice_wrapToken_La42eeb
-#define CVF_DEF_Slice_wrapToken_La42eeb
-typedef struct { wrapToken_La42eeb *p; int len, cap; } Slice_wrapToken_La42eeb;
+#ifndef CVF_DEF_Slice_wrapToken_L8ac62d
+#define CVF_DEF_Slice_wrapToken_L8ac62d
+typedef struct { wrapToken_L8ac62d *p; int len, cap; } Slice_wrapToken_L8ac62d;
 #endif
 #ifndef CVF_DEF_Map_Arr2_i32_AnimationPtr
 #define CVF_DEF_Map_Arr2_i32_AnimationPtr
@@ -2756,9 +2756,9 @@ typedef GoMap Map_GoString_Slice_IniSection;
 #define CVF_DEF_Map_GoString_Slice_bgMusicPtr
 typedef GoMap Map_GoString_Slice_bgMusicPtr;
 #endif
-#ifndef CVF_DEF_Map_GoString_Slice_entry_L296fb0
-#define CVF_DEF_Map_GoString_Slice_entry_L296fb0
-typedef GoMap Map_GoString_Slice_entry_L296fb0;
+#ifndef CVF_DEF_Map_GoString_Slice_entry_L24a51f
+#define CVF_DEF_Map_GoString_Slice_entry_L24a51f
+typedef GoMap Map_GoString_Slice_entry_L24a51f;
 #endif
 #ifndef CVF_DEF_Map_GoString_Slice_u8
 #define CVF_DEF_Map_GoString_Slice_u8
@@ -2780,13 +2780,13 @@ typedef GoMap Map_GoString_TypedValue;
 #define CVF_DEF_Map_GoString_bool
 typedef GoMap Map_GoString_bool;
 #endif
-#ifndef CVF_DEF_Map_GoString_entry_L296fb0
-#define CVF_DEF_Map_GoString_entry_L296fb0
-typedef GoMap Map_GoString_entry_L296fb0;
+#ifndef CVF_DEF_Map_GoString_entry_L24a51f
+#define CVF_DEF_Map_GoString_entry_L24a51f
+typedef GoMap Map_GoString_entry_L24a51f;
 #endif
-#ifndef CVF_DEF_Map_GoString_entry_L7d2014
-#define CVF_DEF_Map_GoString_entry_L7d2014
-typedef GoMap Map_GoString_entry_L7d2014;
+#ifndef CVF_DEF_Map_GoString_entry_L681a49
+#define CVF_DEF_Map_GoString_entry_L681a49
+typedef GoMap Map_GoString_entry_L681a49;
 #endif
 #ifndef CVF_DEF_Map_GoString_f32
 #define CVF_DEF_Map_GoString_f32
@@ -2824,9 +2824,9 @@ typedef GoMap Map_GoString_lua_LValue;
 #define CVF_DEF_Map_GoString_lua_gotoLabelDescPtr
 typedef GoMap Map_GoString_lua_gotoLabelDescPtr;
 #endif
-#ifndef CVF_DEF_Map_GoString_musicHolder_L8e91b3Ptr
-#define CVF_DEF_Map_GoString_musicHolder_L8e91b3Ptr
-typedef GoMap Map_GoString_musicHolder_L8e91b3Ptr;
+#ifndef CVF_DEF_Map_GoString_musicHolder_Leb5279Ptr
+#define CVF_DEF_Map_GoString_musicHolder_Leb5279Ptr
+typedef GoMap Map_GoString_musicHolder_Leb5279Ptr;
 #endif
 #ifndef CVF_DEF_Map_GoString_scFunc
 #define CVF_DEF_Map_GoString_scFunc
@@ -3012,13 +3012,13 @@ typedef GoMap Map_int_Slice_int;
 #define CVF_DEF_Map_int_bool
 typedef GoMap Map_int_bool;
 #endif
-#ifndef CVF_DEF_Map_int_fontSpec_L6297e3
-#define CVF_DEF_Map_int_fontSpec_L6297e3
-typedef GoMap Map_int_fontSpec_L6297e3;
-#endif
 #ifndef CVF_DEF_Map_int_fontSpec_L7f1af4
 #define CVF_DEF_Map_int_fontSpec_L7f1af4
 typedef GoMap Map_int_fontSpec_L7f1af4;
+#endif
+#ifndef CVF_DEF_Map_int_fontSpec_Le9fdb4
+#define CVF_DEF_Map_int_fontSpec_Le9fdb4
+typedef GoMap Map_int_fontSpec_Le9fdb4;
 #endif
 #ifndef CVF_DEF_Map_int_int
 #define CVF_DEF_Map_int_int
@@ -4140,9 +4140,9 @@ struct effects_equalizer { beep_Streamer streamer; Slice_effects_section section
 struct effects_mono { beep_Streamer Streamer; };
 struct effects_section { Arr2_Slice_f64 a; Arr2_Slice_f64 b; Slice_Arr2_f64 xPast; Slice_Arr2_f64 yPast; };
 struct effects_swap { beep_Streamer Streamer; };
-struct entry_L296fb0 { GoString elem; GoString field; bool disabled; };
-struct entry_L4be5ac { GoString key; LayerProperties* lp; i32 start; int idx; };
-struct entry_L7d2014 { GoString flat; GoString base; bool disabled; };
+struct entry_L24a51f { GoString elem; GoString field; bool disabled; };
+struct entry_L5cd011 { GoString key; LayerProperties* lp; i32 start; int idx; };
+struct entry_L681a49 { GoString flat; GoString base; bool disabled; };
 struct errors_x_fundamental { GoString msg; errors_x_stack* embed_stack; };
 struct errors_x_withMessage { GoIface cause; GoString msg; };
 struct errors_x_withStack { GoIface embed_error; errors_x_stack* embed_stack; };
@@ -4151,8 +4151,8 @@ struct errutil_position { GoString file; int line; GoString callee; };
 struct flac2_Encoder { flac2_Stream* embed_Stream; GoIface w; u16 blockSizeMin; u16 blockSizeMax; u32 frameSizeMin; u32 frameSizeMax; GoIface md5sum; u64 nsamples; u64 curNum; };
 struct flac2_Stream { meta_StreamInfo* Info; Slice_meta_BlockPtr Blocks; meta_SeekTable* seekTable; int seekTableSize; i64 dataStart; GoIface r; };
 struct flac_decoder { GoIface r; flac2_Stream* stream; frame2_Frame* frame; int posInFrame; GoIface err; bool seekEnabled; bool hasFixedBlockSize; };
-struct fontSpec_L6297e3 { GoString path; i32 height; };
 struct fontSpec_L7f1af4 { GoString path; i32 height; };
+struct fontSpec_Le9fdb4 { GoString path; i32 height; };
 struct frame2_Header { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; };
 struct frame2_Frame { union { frame2_Header Header_; struct { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; }; }; Slice_frame2_SubframePtr Subframes; hashutil_Hash16 crc; bits_x2_Reader* br; GoIface hr; GoIface r; };
 struct frame2_RicePartition { uintptr_t Param; uintptr_t EscapedBitsPerSample; };
@@ -4325,8 +4325,8 @@ struct midi_decoder { meltysynth_Synthesizer* synth; meltysynth_MidiFile* mf; me
 struct mp32_decoder { GoIface closer; mp3_Decoder* d; beep_Format f; int pos; GoIface err; };
 struct mp3_Decoder { mp3_source* source; int sampleRate; i64 length; Slice_i64 frameStarts; Slice_u8 buf; frame_Frame* frame; i64 pos; i64 bytesPerFrame; };
 struct mp3_source { GoIface reader; Slice_u8 buf; i64 pos; };
-struct musicHolder_L8e91b3 { Slice_GoString Bgm; Slice_i32Ptr Loop; Slice_i32Ptr Volume; Slice_i32Ptr LoopStart; Slice_i32Ptr LoopEnd; Slice_i32Ptr StartPosition; Slice_f32Ptr FreqMul; Slice_i32Ptr LoopCount; };
-struct namePos_L01a34b { TextSprite* ts; Arr2_f32 pos; };
+struct musicHolder_Leb5279 { Slice_GoString Bgm; Slice_i32Ptr Loop; Slice_i32Ptr Volume; Slice_i32Ptr LoopStart; Slice_i32Ptr LoopEnd; Slice_i32Ptr StartPosition; Slice_f32Ptr FreqMul; Slice_i32Ptr LoopCount; };
+struct namePos_L64e64f { TextSprite* ts; Arr2_f32 pos; };
 struct oggvorbis_pageHeader { Arr4_u8 CapturePattern; u8 StreamStructureVersion; u8 HeaderTypeFlag; i64 AbsoluteGranulePosition; u32 StreamSerialNumber; u32 PageSequenceNumber; u32 PageChecksum; u8 PageSegments; };
 struct oggvorbis_page { union { oggvorbis_pageHeader pageHeader_; struct { Arr4_u8 CapturePattern; u8 StreamStructureVersion; u8 HeaderTypeFlag; i64 AbsoluteGranulePosition; u32 StreamSerialNumber; u32 PageSequenceNumber; u32 PageChecksum; u8 PageSegments; }; }; u32 headerChecksum; int packetCount; Slice_int packetSizes; int totalSize; bool needsContinue; Slice_Slice_u8 packets; };
 struct oggvorbis_oggReader { GoIface source; GoIface seeker; Slice_u8 buffer; oggvorbis_page currentPage; i64 lastPagePosition; int packetIndex; bool ready; bool lastPacket; };
@@ -4367,7 +4367,7 @@ struct pretty_byKeyVal { bool sorted; Slice_u8 json; Slice_u8 buf; Slice_pretty_
 struct pretty_pair { int kstart; int kend; int vstart; int vend; };
 struct protocol_QueueEntry { i64 queueTime; GoString destIp; messages_UDPMessage msg; int destPort; };
 struct pv_Lb05621 { u16 p; u64 v; };
-struct qvPlayer_Lef8db5 { GoString character; int player; int num; int pal; f32 ai; int input; };
+struct qvPlayer_L0bbea3 { GoString character; int player; int num; int pal; f32 ai; int input; };
 struct raster_AlphaOverPainter { GoImageAlpha* Image; };
 struct raster_AlphaSrcPainter { GoImageAlpha* Image; };
 struct raster_GammaCorrectionPainter { raster_Painter Painter; Arr256_u16 a; bool gammaIsOne; };
@@ -4393,8 +4393,8 @@ struct sdl_Rect { i32 X; i32 Y; i32 W; i32 H; };
 struct sdl_Surface { u32 flags; sdl_PixelFormat* Format; i32 W; i32 H; i32 Pitch; void* pixels; void* UserData; i32 locked; void* lockData; sdl_Rect ClipRect; void* _; i32 RefCount; };
 struct sdl_TextInputEvent { sdl_EventType Type; u32 Timestamp; u32 WindowID; GoString Text; };
 struct sdl_WindowEvent { sdl_EventType Type; u32 Timestamp; u32 WindowID; sdl_WindowEventID Event; i32 Data1; i32 Data2; };
-struct secPair_Laa37ab { GoOpaque /* ini.Section */* sec; GoString name; };
-struct secPair_Lfcf5f3 { GoOpaque /* ini.Section */* sec; GoString name; };
+struct secPair_L1f01c6 { GoOpaque /* ini.Section */* sec; GoString name; };
+struct secPair_Ld26ba1 { GoOpaque /* ini.Section */* sec; GoString name; };
 struct sideinfo_SideInfo { int MainDataBegin; int PrivateBits; Arr2_Arr4_int Scfsi; Arr2_Arr2_int Part2_3Length; Arr2_Arr2_int BigValues; Arr2_Arr2_int GlobalGain; Arr2_Arr2_int ScalefacCompress; Arr2_Arr2_int WinSwitchFlag; Arr2_Arr2_int BlockType; Arr2_Arr2_int MixedBlockFlag; Arr2_Arr2_Arr3_int TableSelect; Arr2_Arr2_Arr3_int SubblockGain; Arr2_Arr2_int Region0Count; Arr2_Arr2_int Region1Count; Arr2_Arr2_int Preflag; Arr2_Arr2_int ScalefacScale; Arr2_Arr2_int Count1TableSelect; Arr2_Arr2_int Count1; };
 struct sjson_Options { bool Optimistic; bool ReplaceInPlace; };
 struct sjson_dtype { char _empty; };
@@ -4402,10 +4402,10 @@ struct sjson_errorType { GoString msg; };
 struct sjson_pathResult { GoString part; GoString gpart; GoString path; bool force; bool more; };
 struct sjson_sliceHeader { void* data; int len; int cap; };
 struct sjson_stringHeader { void* data; int len; };
-struct sjson_val_Lb76261 { int index; gjson_Result res; };
-struct slotRef_L1be2fe { int idx; PlayerVictoryProperties* p; i32 order; };
+struct sjson_val_L98a5cb { int index; gjson_Result res; };
+struct slotRef_L64fd25 { int idx; PlayerVictoryProperties* p; i32 order; };
 struct spec_Lda920c { GoString prefix; i32 varType; };
-struct svc_L6800f0 { GoString ServiceType; GoString ControlURL; };
+struct svc_Lc6dc42 { GoString ServiceType; GoString ControlURL; };
 struct transport_peerAddress { GoString Ip; int Port; };
 struct transport_MessageChannelItem { transport_peerAddress Peer; messages_UDPMessage Message; int Length; };
 struct transport_Udp { transport_UdpStats Stats; GoIface socket; transport_MessageHandler messageHandler; GoIface listener; int localPort; GoString ipAddress; GoChan* sendChan; GoChan* done; GoChan* sendDone; GoOpaque /* sync.Once */* closeOnce; };
@@ -4438,7 +4438,7 @@ struct wav_decoder { GoIface r; wav_header h; i32 hsz; i32 pos; GoIface err; };
 struct wav_formatchunk { i16 NumChans; i32 SampleRate; i32 ByteRate; i16 BytesPerFrame; i16 BitsPerSample; };
 struct wav_guid { i32 Data1; i16 Data2; i16 Data3; Arr8_u8 Data4; };
 struct wav_formatchunkextensible { union { wav_formatchunk formatchunk_; struct { i16 NumChans; i32 SampleRate; i32 ByteRate; i16 BytesPerFrame; i16 BitsPerSample; }; }; i16 SubFormatSize; i16 Samples; i32 ChannelMask; wav_guid SubFormat; };
-struct wrapToken_La42eeb { wrapTokenKind_Lbc646a kind; GoString text; int rawRunes; };
+struct wrapToken_L8ac62d { wrapTokenKind_Ld9d083 kind; GoString text; int rawRunes; };
 struct Anon_194875d7 { GoString name; GoOpaque /* os.File */* file; bool writable; bool readable; };
 struct Anon_28bd7e47 { GoString sec; Slice_GoString path; };
 struct Anon_3c59f47a { GoString name; Arr4_ResultAnnouncement* data; Arr4_bool* exists; };
@@ -5038,17 +5038,17 @@ GO_SLICE_FUNCS(Slice_cvfRoom, cvfRoom)
 #define CVF_FN_Slice_effects_section
 GO_SLICE_FUNCS(Slice_effects_section, effects_section)
 #endif
-#ifndef CVF_FN_Slice_entry_L296fb0
-#define CVF_FN_Slice_entry_L296fb0
-GO_SLICE_FUNCS(Slice_entry_L296fb0, entry_L296fb0)
+#ifndef CVF_FN_Slice_entry_L24a51f
+#define CVF_FN_Slice_entry_L24a51f
+GO_SLICE_FUNCS(Slice_entry_L24a51f, entry_L24a51f)
 #endif
-#ifndef CVF_FN_Slice_entry_L4be5ac
-#define CVF_FN_Slice_entry_L4be5ac
-GO_SLICE_FUNCS(Slice_entry_L4be5ac, entry_L4be5ac)
+#ifndef CVF_FN_Slice_entry_L5cd011
+#define CVF_FN_Slice_entry_L5cd011
+GO_SLICE_FUNCS(Slice_entry_L5cd011, entry_L5cd011)
 #endif
-#ifndef CVF_FN_Slice_entry_L7d2014
-#define CVF_FN_Slice_entry_L7d2014
-GO_SLICE_FUNCS(Slice_entry_L7d2014, entry_L7d2014)
+#ifndef CVF_FN_Slice_entry_L681a49
+#define CVF_FN_Slice_entry_L681a49
+GO_SLICE_FUNCS(Slice_entry_L681a49, entry_L681a49)
 #endif
 #ifndef CVF_FN_Slice_expValueFramePtr
 #define CVF_FN_Slice_expValueFramePtr
@@ -5362,9 +5362,9 @@ GO_SLICE_FUNCS(Slice_meta_SeekPoint, meta_SeekPoint)
 #define CVF_FN_Slice_nameFact
 GO_SLICE_FUNCS(Slice_nameFact, nameFact)
 #endif
-#ifndef CVF_FN_Slice_namePos_L01a34b
-#define CVF_FN_Slice_namePos_L01a34b
-GO_SLICE_FUNCS(Slice_namePos_L01a34b, namePos_L01a34b)
+#ifndef CVF_FN_Slice_namePos_L64e64f
+#define CVF_FN_Slice_namePos_L64e64f
+GO_SLICE_FUNCS(Slice_namePos_L64e64f, namePos_L64e64f)
 #endif
 #ifndef CVF_FN_Slice_ov_L2966a0
 #define CVF_FN_Slice_ov_L2966a0
@@ -5422,9 +5422,9 @@ GO_SLICE_FUNCS(Slice_protocol_QueueEntry, protocol_QueueEntry)
 #define CVF_FN_Slice_protocol_UdpProtocol
 GO_SLICE_FUNCS(Slice_protocol_UdpProtocol, protocol_UdpProtocol)
 #endif
-#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4
-#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4
-GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4, protocol_UdpProtocolDispatchFunc_Lf48ee4)
+#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
+#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17
+GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17, protocol_UdpProtocolDispatchFunc_Lcc8c17)
 #endif
 #ifndef CVF_FN_Slice_protocol_UdpProtocolEvent
 #define CVF_FN_Slice_protocol_UdpProtocolEvent
@@ -5438,9 +5438,9 @@ GO_SLICE_FUNCS_A(Slice_pv_Lb05621, pv_Lb05621)
 #define CVF_FN_Slice_queryPart
 GO_SLICE_FUNCS(Slice_queryPart, queryPart)
 #endif
-#ifndef CVF_FN_Slice_qvPlayer_Lef8db5
-#define CVF_FN_Slice_qvPlayer_Lef8db5
-GO_SLICE_FUNCS(Slice_qvPlayer_Lef8db5, qvPlayer_Lef8db5)
+#ifndef CVF_FN_Slice_qvPlayer_L0bbea3
+#define CVF_FN_Slice_qvPlayer_L0bbea3
+GO_SLICE_FUNCS(Slice_qvPlayer_L0bbea3, qvPlayer_L0bbea3)
 #endif
 #ifndef CVF_FN_Slice_rankingEntryPtr
 #define CVF_FN_Slice_rankingEntryPtr
@@ -5470,25 +5470,25 @@ GO_SLICE_FUNCS(Slice_scRunFn, scRunFn)
 #define CVF_FN_Slice_sdl_GameControllerButton
 GO_SLICE_FUNCS_A(Slice_sdl_GameControllerButton, sdl_GameControllerButton)
 #endif
-#ifndef CVF_FN_Slice_secPair_Laa37ab
-#define CVF_FN_Slice_secPair_Laa37ab
-GO_SLICE_FUNCS(Slice_secPair_Laa37ab, secPair_Laa37ab)
+#ifndef CVF_FN_Slice_secPair_L1f01c6
+#define CVF_FN_Slice_secPair_L1f01c6
+GO_SLICE_FUNCS(Slice_secPair_L1f01c6, secPair_L1f01c6)
 #endif
-#ifndef CVF_FN_Slice_secPair_Lfcf5f3
-#define CVF_FN_Slice_secPair_Lfcf5f3
-GO_SLICE_FUNCS(Slice_secPair_Lfcf5f3, secPair_Lfcf5f3)
+#ifndef CVF_FN_Slice_secPair_Ld26ba1
+#define CVF_FN_Slice_secPair_Ld26ba1
+GO_SLICE_FUNCS(Slice_secPair_Ld26ba1, secPair_Ld26ba1)
 #endif
 #ifndef CVF_FN_Slice_sjson_pathResult
 #define CVF_FN_Slice_sjson_pathResult
 GO_SLICE_FUNCS(Slice_sjson_pathResult, sjson_pathResult)
 #endif
-#ifndef CVF_FN_Slice_sjson_val_Lb76261
-#define CVF_FN_Slice_sjson_val_Lb76261
-GO_SLICE_FUNCS(Slice_sjson_val_Lb76261, sjson_val_Lb76261)
+#ifndef CVF_FN_Slice_sjson_val_L98a5cb
+#define CVF_FN_Slice_sjson_val_L98a5cb
+GO_SLICE_FUNCS(Slice_sjson_val_L98a5cb, sjson_val_L98a5cb)
 #endif
-#ifndef CVF_FN_Slice_slotRef_L1be2fe
-#define CVF_FN_Slice_slotRef_L1be2fe
-GO_SLICE_FUNCS(Slice_slotRef_L1be2fe, slotRef_L1be2fe)
+#ifndef CVF_FN_Slice_slotRef_L64fd25
+#define CVF_FN_Slice_slotRef_L64fd25
+GO_SLICE_FUNCS(Slice_slotRef_L64fd25, slotRef_L64fd25)
 #endif
 #ifndef CVF_FN_Slice_spec_Lda920c
 #define CVF_FN_Slice_spec_Lda920c
@@ -5578,9 +5578,9 @@ GO_SLICE_FUNCS(Slice_vorbis2_mode, vorbis2_mode)
 #define CVF_FN_Slice_vorbis2_residue
 GO_SLICE_FUNCS(Slice_vorbis2_residue, vorbis2_residue)
 #endif
-#ifndef CVF_FN_Slice_wrapToken_La42eeb
-#define CVF_FN_Slice_wrapToken_La42eeb
-GO_SLICE_FUNCS(Slice_wrapToken_La42eeb, wrapToken_La42eeb)
+#ifndef CVF_FN_Slice_wrapToken_L8ac62d
+#define CVF_FN_Slice_wrapToken_L8ac62d
+GO_SLICE_FUNCS(Slice_wrapToken_L8ac62d, wrapToken_L8ac62d)
 #endif
 #ifndef CVF_FN_Map_Arr2_i32_AnimationPtr
 #define CVF_FN_Map_Arr2_i32_AnimationPtr
@@ -5770,9 +5770,9 @@ GO_MAP_FUNCS(Map_GoString_Slice_IniSection, GoString, Slice_IniSection, true)
 #define CVF_FN_Map_GoString_Slice_bgMusicPtr
 GO_MAP_FUNCS(Map_GoString_Slice_bgMusicPtr, GoString, Slice_bgMusicPtr, true)
 #endif
-#ifndef CVF_FN_Map_GoString_Slice_entry_L296fb0
-#define CVF_FN_Map_GoString_Slice_entry_L296fb0
-GO_MAP_FUNCS(Map_GoString_Slice_entry_L296fb0, GoString, Slice_entry_L296fb0, true)
+#ifndef CVF_FN_Map_GoString_Slice_entry_L24a51f
+#define CVF_FN_Map_GoString_Slice_entry_L24a51f
+GO_MAP_FUNCS(Map_GoString_Slice_entry_L24a51f, GoString, Slice_entry_L24a51f, true)
 #endif
 #ifndef CVF_FN_Map_GoString_Slice_u8
 #define CVF_FN_Map_GoString_Slice_u8
@@ -5794,13 +5794,13 @@ GO_MAP_FUNCS(Map_GoString_TypedValue, GoString, TypedValue, true)
 #define CVF_FN_Map_GoString_bool
 GO_MAP_FUNCS(Map_GoString_bool, GoString, bool, true)
 #endif
-#ifndef CVF_FN_Map_GoString_entry_L296fb0
-#define CVF_FN_Map_GoString_entry_L296fb0
-GO_MAP_FUNCS(Map_GoString_entry_L296fb0, GoString, entry_L296fb0, true)
+#ifndef CVF_FN_Map_GoString_entry_L24a51f
+#define CVF_FN_Map_GoString_entry_L24a51f
+GO_MAP_FUNCS(Map_GoString_entry_L24a51f, GoString, entry_L24a51f, true)
 #endif
-#ifndef CVF_FN_Map_GoString_entry_L7d2014
-#define CVF_FN_Map_GoString_entry_L7d2014
-GO_MAP_FUNCS(Map_GoString_entry_L7d2014, GoString, entry_L7d2014, true)
+#ifndef CVF_FN_Map_GoString_entry_L681a49
+#define CVF_FN_Map_GoString_entry_L681a49
+GO_MAP_FUNCS(Map_GoString_entry_L681a49, GoString, entry_L681a49, true)
 #endif
 #ifndef CVF_FN_Map_GoString_f32
 #define CVF_FN_Map_GoString_f32
@@ -5838,9 +5838,9 @@ GO_MAP_FUNCS(Map_GoString_lua_LValue, GoString, lua_LValue, true)
 #define CVF_FN_Map_GoString_lua_gotoLabelDescPtr
 GO_MAP_FUNCS(Map_GoString_lua_gotoLabelDescPtr, GoString, lua_gotoLabelDesc*, true)
 #endif
-#ifndef CVF_FN_Map_GoString_musicHolder_L8e91b3Ptr
-#define CVF_FN_Map_GoString_musicHolder_L8e91b3Ptr
-GO_MAP_FUNCS(Map_GoString_musicHolder_L8e91b3Ptr, GoString, musicHolder_L8e91b3*, true)
+#ifndef CVF_FN_Map_GoString_musicHolder_Leb5279Ptr
+#define CVF_FN_Map_GoString_musicHolder_Leb5279Ptr
+GO_MAP_FUNCS(Map_GoString_musicHolder_Leb5279Ptr, GoString, musicHolder_Leb5279*, true)
 #endif
 #ifndef CVF_FN_Map_GoString_scFunc
 #define CVF_FN_Map_GoString_scFunc
@@ -6026,13 +6026,13 @@ GO_MAP_FUNCS(Map_int_Slice_int, int, Slice_int, false)
 #define CVF_FN_Map_int_bool
 GO_MAP_FUNCS(Map_int_bool, int, bool, false)
 #endif
-#ifndef CVF_FN_Map_int_fontSpec_L6297e3
-#define CVF_FN_Map_int_fontSpec_L6297e3
-GO_MAP_FUNCS(Map_int_fontSpec_L6297e3, int, fontSpec_L6297e3, false)
-#endif
 #ifndef CVF_FN_Map_int_fontSpec_L7f1af4
 #define CVF_FN_Map_int_fontSpec_L7f1af4
 GO_MAP_FUNCS(Map_int_fontSpec_L7f1af4, int, fontSpec_L7f1af4, false)
+#endif
+#ifndef CVF_FN_Map_int_fontSpec_Le9fdb4
+#define CVF_FN_Map_int_fontSpec_Le9fdb4
+GO_MAP_FUNCS(Map_int_fontSpec_Le9fdb4, int, fontSpec_Le9fdb4, false)
 #endif
 #ifndef CVF_FN_Map_int_int
 #define CVF_FN_Map_int_int
@@ -8172,7 +8172,7 @@ static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.L
     switch (t) { case 204: case 205: case 206: case 207: case 208: case 209: case 212: case 213: case 253: case 273: case 527: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 109: case 111: case 120: case 148: case 161: case 166: case 187: case 188: case 189: case 200: case 210: case 249: case 251: case 254: case 269: case 275: case 281: case 873: return true; default: return false; }
+    switch (t) { case 109: case 111: case 120: case 148: case 161: case 166: case 187: case 188: case 189: case 200: case 210: case 215: case 251: case 254: case 260: case 275: case 281: case 873: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
     switch (t) { default: return false; }

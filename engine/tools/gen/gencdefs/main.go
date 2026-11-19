@@ -583,6 +583,11 @@ func cbase(t types.Type) string {
 		case *types.Basic, *types.Pointer, *types.Slice, *types.Map, *types.Signature:
 			return cbase(u.Underlying())
 		}
+		// standard-library structs with C layouts in ik_rt_types.h (as gotoc's
+		// extStructs); referenced through pointers here, so the tag suffices
+		if c, ok := genExtStructs[types.TypeString(u, func(p *types.Package) string { return p.Name() })]; ok {
+			return "struct " + c
+		}
 		return "GoOpaque /* " + types.TypeString(u, qual) + " */"
 	case *types.Chan:
 		return "GoChan*"
@@ -656,4 +661,9 @@ func promotedNames(st *types.Struct) map[string]bool {
 		}
 	}
 	return out
+}
+
+var genExtStructs = map[string]string{
+	"reflect.SliceHeader":  "GoReflectSliceHeader",
+	"reflect.StringHeader": "GoReflectStringHeader",
 }

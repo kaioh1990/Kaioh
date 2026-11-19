@@ -1378,18 +1378,18 @@ static Slice_u8 lambda_27(Env_lambda_27 *_env, Slice_u8 dst, u8 c) {
     return GO_APPEND(Slice_u8, dst, c);
 }
 
-typedef struct Env_lambda_28 { Slice_sjson_val_Lb76261 *vals; } Env_lambda_28;
+typedef struct Env_lambda_28 { Slice_sjson_val_L98a5cb *vals; } Env_lambda_28;
 static bool lambda_28(Env_lambda_28 *_env, gjson_Result _p0, gjson_Result vres) {
-    (*_env->vals) = GO_APPEND(Slice_sjson_val_Lb76261, (*_env->vals), (sjson_val_Lb76261){.res = vres});
+    (*_env->vals) = GO_APPEND(Slice_sjson_val_L98a5cb, (*_env->vals), (sjson_val_L98a5cb){.res = vres});
     return true;
 }
 
-typedef struct Env_lambda_29 { Slice_sjson_val_Lb76261 *vals; } Env_lambda_29;
+typedef struct Env_lambda_29 { Slice_sjson_val_L98a5cb *vals; } Env_lambda_29;
 static bool lambda_29(Env_lambda_29 *_env, int i, int j) {
     return ((*_env->vals).p[i].index > (*_env->vals).p[j].index);
 }
 
-typedef struct Env_lambda_30 { Slice_sjson_val_Lb76261 *vals; } Env_lambda_30;
+typedef struct Env_lambda_30 { Slice_sjson_val_L98a5cb *vals; } Env_lambda_30;
 static bool lambda_30(Env_lambda_30 *_env, int i, int j) {
     return ((*_env->vals).p[i].index > (*_env->vals).p[j].index);
 }
@@ -1401,13 +1401,13 @@ static void lambda_31(Env_lambda_31 *_env) {
         if (rcv.type != 0) {
             {
                 GoIface _t1 = rcv;
-                lua_CompileError* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 249) _t2 = ((lua_CompileError*)_t1.data);
-                bool _t3 = _t1.type == 249;
+                lua_CompileError* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 215) _t2 = ((lua_CompileError*)_t1.data);
+                bool _t3 = _t1.type == 215;
                 bool ok = _t3;
                 if (ok) {
                     (*_env->err) = rcv;
                 } else {
-                    go_panic(rcv);
+                    go_panic_iface(0, rcv);
                 }
             }
         }
@@ -1440,14 +1440,14 @@ static void lambda_34(Env_lambda_34 *_env) {
         if (v.type != 0) {
             {
                 GoIface _t1 = v;
-                pm_Error* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 269) _t2 = ((pm_Error*)_t1.data);
-                bool _t3 = _t1.type == 269;
+                pm_Error* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 260) _t2 = ((pm_Error*)_t1.data);
+                bool _t3 = _t1.type == 260;
                 pm_Error* perr = _t2;
                 bool ok = _t3;
                 if (ok) {
-                    (*_env->err) = ((GoIface){269, (void *)(perr)});
+                    (*_env->err) = ((GoIface){260, (void *)(perr)});
                 } else {
-                    go_panic(v);
+                    go_panic_iface(0, v);
                 }
             }
         }
@@ -1562,7 +1562,7 @@ static void lambda_37(Env_lambda_37 *_env) {
                         lua_switchToParentThread((*_env->L), 1, true, true);
                     }
                 } else {
-                    go_panic(rcv);
+                    go_panic_iface(0, rcv);
                 }
             }
         }
@@ -7961,7 +7961,7 @@ typedef struct Env_lambda_538 { GoFunc *f; } Env_lambda_538;
 typedef struct Env_lambda_539 { char _unused; } Env_lambda_539;
 typedef struct Env_lambda_540 { GoIface *r; } Env_lambda_540;
 static void lambda_540(Env_lambda_540 *_env) {
-    go_panic((*_env->r));
+    go_panic_iface(0, (*_env->r));
 }
 
 static void lambda_539(Env_lambda_539 *_env) {
@@ -17390,7 +17390,7 @@ static GoIface lambda_937(Env_lambda_937 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_938 { Map_int_fontSpec_L6297e3 *fntSpecs; } Env_lambda_938;
+typedef struct Env_lambda_938 { Map_int_fontSpec_Le9fdb4 *fntSpecs; } Env_lambda_938;
 static void lambda_938(Env_lambda_938 *_env, IniSection is) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&is);
@@ -17414,7 +17414,7 @@ static void lambda_938(Env_lambda_938 *_env, IniSection is) {
                 }
                 int idx = ((int)fn_Atoi(go_substr(rest, 0, j)));
                 GoString tail = go_substr(rest, j, -1);
-                fontSpec_L6297e3 fs = Map_int_fontSpec_L6297e3_get(&(*_env->fntSpecs), idx, NULL);
+                fontSpec_Le9fdb4 fs = Map_int_fontSpec_Le9fdb4_get(&(*_env->fntSpecs), idx, NULL);
                 if (go_streq(tail, GOSTR(""))) {
                     fs.path = v;
                 } else {
@@ -17422,14 +17422,14 @@ static void lambda_938(Env_lambda_938 *_env, IniSection is) {
                         fs.height = ((i32)fn_Atoi(v));
                     }
                 }
-                Map_int_fontSpec_L6297e3_set(&(*_env->fntSpecs), idx, fs);
+                Map_int_fontSpec_Le9fdb4_set(&(*_env->fntSpecs), idx, fs);
             }
             _cont3:;
         }
     }
 }
 
-typedef struct Env_lambda_939 { FightScreen* *fs; int *i; fontSpec_L6297e3 *spec; } Env_lambda_939;
+typedef struct Env_lambda_939 { FightScreen* *fs; int *i; fontSpec_Le9fdb4 *spec; } Env_lambda_939;
 static GoIface lambda_939(Env_lambda_939 *_env, GoString filename) {
     i32 h = -1;
     if ((*_env->spec).height != 0) {
@@ -17569,13 +17569,13 @@ static GoString lambda_949(Env_lambda_949 *_env, GoString s, int n) {
 }
 
 typedef struct Env_lambda_950 { char _unused; } Env_lambda_950;
-static Slice_wrapToken_La42eeb lambda_950(Env_lambda_950 *_env, GoString s) {
-    Slice_wrapToken_La42eeb out = {0};
+static Slice_wrapToken_L8ac62d lambda_950(Env_lambda_950 *_env, GoString s) {
+    Slice_wrapToken_L8ac62d out = {0};
     {
         int i = 0;
         for (; i < s.len; ) {
             if (strings_HasPrefix(go_substr(s, i, -1), GOSTR("\\n"))) {
-                out = GO_APPEND(Slice_wrapToken_La42eeb, out, (wrapToken_La42eeb){.kind = 2, .rawRunes = 2});
+                out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 2, .rawRunes = 2});
                 i += 2;
                 continue;
             }
@@ -17586,7 +17586,7 @@ static Slice_wrapToken_La42eeb lambda_950(Env_lambda_950 *_env, GoString s) {
                 i32 _t3 = r;
                 do {
                     if ((_t3 == 10)) {
-                        out = GO_APPEND(Slice_wrapToken_La42eeb, out, (wrapToken_La42eeb){.kind = 2, .rawRunes = 1});
+                        out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 2, .rawRunes = 1});
                         i += size;
                         goto _cont1;
                     } else if ((_t3 == 32) || (_t3 == 9)) {
@@ -17608,7 +17608,7 @@ static Slice_wrapToken_La42eeb lambda_950(Env_lambda_950 *_env, GoString s) {
                                 _cont4:;
                             }
                         }
-                        out = GO_APPEND(Slice_wrapToken_La42eeb, out, (wrapToken_La42eeb){.kind = 1, .text = go_substr(s, start, i), .rawRunes = rawRunes});
+                        out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 1, .text = go_substr(s, start, i), .rawRunes = rawRunes});
                         goto _cont1;
                     } else {
                         int start = i;
@@ -17629,7 +17629,7 @@ static Slice_wrapToken_La42eeb lambda_950(Env_lambda_950 *_env, GoString s) {
                                 _cont6:;
                             }
                         }
-                        out = GO_APPEND(Slice_wrapToken_La42eeb, out, (wrapToken_La42eeb){.kind = 0, .text = go_substr(s, start, i), .rawRunes = rawRunes});
+                        out = GO_APPEND(Slice_wrapToken_L8ac62d, out, (wrapToken_L8ac62d){.kind = 0, .text = go_substr(s, start, i), .rawRunes = rawRunes});
                     }
                 } while (0);
             }
@@ -18316,18 +18316,18 @@ static void lambda_985(Env_lambda_985 *_env, GoOpaque /* reflect.Value */ v, GoO
     }
 }
 
-typedef struct Env_lambda_987 { Map_GoString_musicHolder_L8e91b3Ptr *propMap; } Env_lambda_987;
-static musicHolder_L8e91b3* lambda_987(Env_lambda_987 *_env, GoString prefix) {
+typedef struct Env_lambda_987 { Map_GoString_musicHolder_Leb5279Ptr *propMap; } Env_lambda_987;
+static musicHolder_Leb5279* lambda_987(Env_lambda_987 *_env, GoString prefix) {
     {
-        bool _t1; musicHolder_L8e91b3* _t2 = Map_GoString_musicHolder_L8e91b3Ptr_get(&(*_env->propMap), prefix, &_t1);
-        musicHolder_L8e91b3* h = _t2;
+        bool _t1; musicHolder_Leb5279* _t2 = Map_GoString_musicHolder_Leb5279Ptr_get(&(*_env->propMap), prefix, &_t1);
+        musicHolder_Leb5279* h = _t2;
         bool ok = _t1;
         if (ok) {
             return h;
         }
     }
-    musicHolder_L8e91b3* h = go_box(musicHolder_L8e91b3, (musicHolder_L8e91b3){0});
-    Map_GoString_musicHolder_L8e91b3Ptr_set(&(*_env->propMap), prefix, h);
+    musicHolder_Leb5279* h = go_box(musicHolder_Leb5279, (musicHolder_Leb5279){0});
+    Map_GoString_musicHolder_Leb5279Ptr_set(&(*_env->propMap), prefix, h);
     return h;
 }
 
@@ -18375,7 +18375,7 @@ static void lambda_991(Env_lambda_991 *_env, int n) {
     }
 }
 
-static int lambda_990(Env_lambda_990 *_env, musicHolder_L8e91b3* h) {
+static int lambda_990(Env_lambda_990 *_env, musicHolder_Leb5279* h) {
     int maxLen__hv = h->Bgm.len; __typeof__(maxLen__hv) *maxLen__h = &maxLen__hv;
     GoFunc check = ((GoFunc){(void *)lambda_991, &(Env_lambda_991){maxLen__h}});
     ((void (*)(void *, int))(check).fn)((check).env, h->Loop.len);
@@ -18875,7 +18875,7 @@ static GoIface lambda_1006(Env_lambda_1006 *_env, GoString filename) {
 
 typedef struct Env_lambda_1010 { GoString *def; Motif *m; } Env_lambda_1010;
 typedef struct Env_lambda_1011 { GoString *def; Motif *m; } Env_lambda_1011;
-static void lambda_1011(Env_lambda_1011 *_env, secPair_Lfcf5f3 pair) {
+static void lambda_1011(Env_lambda_1011 *_env, secPair_L1f01c6 pair) {
     GoOpaque /* ini.Section */* section = pair.sec;
     GoString sectionName = pair.name;
     {
@@ -18916,8 +18916,8 @@ static void lambda_1010(Env_lambda_1010 *_env, GoOpaque /* ini.File */* src) {
     if (src == NULL) {
         return;
     }
-    Slice_secPair_Lfcf5f3 baseSecs = {0};
-    Slice_secPair_Lfcf5f3 langSecs = {0};
+    Slice_secPair_L1f01c6 baseSecs = {0};
+    Slice_secPair_L1f01c6 langSecs = {0};
     GoString curLang = fn_SelectedLanguage();
     {
         Slice_GoOpaque_ini_SectionPtrPtr _t2 = ini_File_Sections(src);
@@ -18962,10 +18962,10 @@ static void lambda_1010(Env_lambda_1010 *_env, GoOpaque /* ini.File */* src) {
             }
             if (has) {
                 if (go_streq(lang, curLang)) {
-                    langSecs = GO_APPEND(Slice_secPair_Lfcf5f3, langSecs, (secPair_Lfcf5f3){s, logical});
+                    langSecs = GO_APPEND(Slice_secPair_L1f01c6, langSecs, (secPair_L1f01c6){s, logical});
                 }
             } else {
-                baseSecs = GO_APPEND(Slice_secPair_Lfcf5f3, baseSecs, (secPair_Lfcf5f3){s, logical});
+                baseSecs = GO_APPEND(Slice_secPair_L1f01c6, baseSecs, (secPair_L1f01c6){s, logical});
             }
             nextSection:;
             _cont3:;
@@ -18973,18 +18973,18 @@ static void lambda_1010(Env_lambda_1010 *_env, GoOpaque /* ini.File */* src) {
     }
     GoFunc process = ((GoFunc){(void *)lambda_1011, &(Env_lambda_1011){_env->def, _env->m}});
     {
-        Slice_secPair_Lfcf5f3 _t9 = baseSecs;
+        Slice_secPair_L1f01c6 _t9 = baseSecs;
         for (int _t8 = 0; _t8 < _t9.len; _t8++) {
-            secPair_Lfcf5f3 sp = _t9.p[_t8];
-            ((void (*)(void *, secPair_Lfcf5f3))(process).fn)((process).env, sp);
+            secPair_L1f01c6 sp = _t9.p[_t8];
+            ((void (*)(void *, secPair_L1f01c6))(process).fn)((process).env, sp);
             _cont10:;
         }
     }
     {
-        Slice_secPair_Lfcf5f3 _t12 = langSecs;
+        Slice_secPair_L1f01c6 _t12 = langSecs;
         for (int _t11 = 0; _t11 < _t12.len; _t11++) {
-            secPair_Lfcf5f3 sp = _t12.p[_t11];
-            ((void (*)(void *, secPair_Lfcf5f3))(process).fn)((process).env, sp);
+            secPair_L1f01c6 sp = _t12.p[_t11];
+            ((void (*)(void *, secPair_L1f01c6))(process).fn)((process).env, sp);
             _cont13:;
         }
     }
@@ -19484,7 +19484,7 @@ static void lambda_1037(Env_lambda_1037 *_env, Char* c) {
     Map_int_bool_set(&(*_env->usedMember), mn, true);
 }
 
-typedef struct Env_lambda_1038 { Slice_slotRef_L1be2fe *slots; } Env_lambda_1038;
+typedef struct Env_lambda_1038 { Slice_slotRef_L64fd25 *slots; } Env_lambda_1038;
 static bool lambda_1038(Env_lambda_1038 *_env, int i, int j) {
     if ((*_env->slots).p[i].order == (*_env->slots).p[j].order) {
         return ((*_env->slots).p[i].idx < (*_env->slots).p[j].idx);
@@ -19492,7 +19492,7 @@ static bool lambda_1038(Env_lambda_1038 *_env, int i, int j) {
     return ((*_env->slots).p[i].order < (*_env->slots).p[j].order);
 }
 
-typedef struct Env_lambda_1039 { Slice_slotRef_L1be2fe *slots; } Env_lambda_1039;
+typedef struct Env_lambda_1039 { Slice_slotRef_L64fd25 *slots; } Env_lambda_1039;
 static bool lambda_1039(Env_lambda_1039 *_env, int i, int j) {
     if ((*_env->slots).p[i].order == (*_env->slots).p[j].order) {
         return ((*_env->slots).p[i].idx < (*_env->slots).p[j].idx);
@@ -19995,7 +19995,7 @@ static void lambda_1068(Env_lambda_1068 *_env, u32 source, u32 gltype, u32 id, u
     }
     fn_LogMessage(GOSTR("[GL Debug] %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, message)})));
     if (severity == 37190U) {
-        go_panic(GOSTR("Critical OpenGL Error Detected!"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("Critical OpenGL Error Detected!"))}));
     }
 }
 
@@ -20033,7 +20033,7 @@ static void lambda_1070(Env_lambda_1070 *_env) {
             if ((*_env->rs)->session->config.DesyncTest) {
                 RollbackLogger_updateStateLogs(&(*_env->rs)->session->log);
                 RollbackLogger_saveStateLogs(&(*_env->rs)->session->log);
-                go_panic(GOSTR("RaiseDesyncError"));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("RaiseDesyncError"))}));
             }
         }
     }
@@ -20052,7 +20052,7 @@ static void lambda_1072(Env_lambda_1072 *_env) {
             if ((*_env->r)->config.DesyncTest) {
                 RollbackLogger_updateStateLogs(&(*_env->r)->log);
                 RollbackLogger_saveStateLogs(&(*_env->r)->log);
-                go_panic(GOSTR("RaiseDesyncError"));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("RaiseDesyncError"))}));
             }
         }
     }
@@ -23900,7 +23900,7 @@ static int lambda_1248(Env_lambda_1248 *_env, lua_LState* l) {
 
 typedef struct Env_lambda_1249 { char _unused; } Env_lambda_1249;
 static int lambda_1249(Env_lambda_1249 *_env, lua_LState* l) {
-    if (false && (g_sys.loader.state == 1)) {
+    if (true && (g_sys.loader.state == 1)) {
         runtime_Gosched();
     }
     lua_LState_Push(l, ((GoIface){213, go_box_a(lua_LBool, ((lua_LBool)(g_sys.loader.state == 1)))}));
@@ -24218,7 +24218,7 @@ static void lambda_1261(Env_lambda_1261 *_env, GoString sec, Slice_GoString path
 
 typedef struct Env_lambda_1265 { lua_LState* *l; GoFunc *getTbl; GoFunc *isEmpty; GoFunc *isSpacerKey; } Env_lambda_1265;
 typedef struct Env_lambda_1266 { GoFunc *isEmpty; GoString *pref; } Env_lambda_1266;
-typedef struct Env_lambda_1267 { GoFunc *isEmpty; GoString *pref; GoString *lp; Map_GoString_entry_L7d2014 *byFlat; Slice_GoString *order; } Env_lambda_1267;
+typedef struct Env_lambda_1267 { GoFunc *isEmpty; GoString *pref; GoString *lp; Map_GoString_entry_L681a49 *byFlat; Slice_GoString *order; } Env_lambda_1267;
 static void lambda_1267(Env_lambda_1267 *_env, GoOpaque /* ini.Section */* s) {
     if (s == NULL) {
         return;
@@ -24239,27 +24239,27 @@ static void lambda_1267(Env_lambda_1267 *_env, GoOpaque /* ini.Section */* s) {
                     base = go_substr(base, (i + 1), -1);
                 }
             }
-            entry_L7d2014 e = (entry_L7d2014){.flat = strings_ReplaceAll(p, GOSTR("."), GOSTR("_")), .base = strings_ToLower(base), .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
+            entry_L681a49 e = (entry_L681a49){.flat = strings_ReplaceAll(p, GOSTR("."), GOSTR("_")), .base = strings_ToLower(base), .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
             {
-                bool _t4; entry_L7d2014 _t5 = Map_GoString_entry_L7d2014_get(&(*_env->byFlat), e.flat, &_t4);
+                bool _t4; entry_L681a49 _t5 = Map_GoString_entry_L681a49_get(&(*_env->byFlat), e.flat, &_t4);
                 bool ok = _t4;
                 if (!ok) {
                     (*_env->order) = GO_APPEND(Slice_GoString, (*_env->order), e.flat);
                 }
             }
-            Map_GoString_entry_L7d2014_set(&(*_env->byFlat), e.flat, e);
+            Map_GoString_entry_L681a49_set(&(*_env->byFlat), e.flat, e);
             _cont3:;
         }
     }
 }
 
-static Slice_entry_L7d2014 lambda_1266(Env_lambda_1266 *_env, GoOpaque /* ini.File */* file, GoString sec) {
-    Slice_entry_L7d2014 out = {0};
+static Slice_entry_L681a49 lambda_1266(Env_lambda_1266 *_env, GoOpaque /* ini.File */* file, GoString sec) {
+    Slice_entry_L681a49 out = {0};
     if ((file == NULL) || go_streq(sec, GOSTR(""))) {
         return out;
     }
     GoString lp__hv = strings_ToLower((*_env->pref)); __typeof__(lp__hv) *lp__h = &lp__hv;
-    Map_GoString_entry_L7d2014 byFlat__hv = Map_GoString_entry_L7d2014_make(0); __typeof__(byFlat__hv) *byFlat__h = &byFlat__hv;
+    Map_GoString_entry_L681a49 byFlat__hv = Map_GoString_entry_L681a49_make(0); __typeof__(byFlat__hv) *byFlat__h = &byFlat__hv;
     Slice_GoString order__hv = {0}; __typeof__(order__hv) *order__h = &order__hv;
     GoFunc addFrom = ((GoFunc){(void *)lambda_1267, &(Env_lambda_1267){_env->isEmpty, _env->pref, lp__h, byFlat__h, order__h}});
     {
@@ -24280,7 +24280,7 @@ static Slice_entry_L7d2014 lambda_1266(Env_lambda_1266 *_env, GoOpaque /* ini.Fi
         Slice_GoString _t6 = (*order__h);
         for (int _t5 = 0; _t5 < _t6.len; _t5++) {
             GoString flat = _t6.p[_t5];
-            out = GO_APPEND(Slice_entry_L7d2014, out, Map_GoString_entry_L7d2014_get(&(*byFlat__h), flat, NULL));
+            out = GO_APPEND(Slice_entry_L681a49, out, Map_GoString_entry_L681a49_get(&(*byFlat__h), flat, NULL));
             _cont7:;
         }
     }
@@ -24304,11 +24304,11 @@ static bool lambda_1268(Env_lambda_1268 *_env, GoString flat) {
 }
 
 typedef struct Env_lambda_1269 { GoFunc *isSpacerKey; Map_GoString_bool *seenFlat; Map_GoString_bool *seenBase; Map_GoString_bool *disabledFlat; Map_GoString_bool *disabledBase; GoFunc *isUnderDisabled; Slice_GoString *final; } Env_lambda_1269;
-static void lambda_1269(Env_lambda_1269 *_env, Slice_entry_L7d2014 arr, bool isDefault) {
+static void lambda_1269(Env_lambda_1269 *_env, Slice_entry_L681a49 arr, bool isDefault) {
     {
-        Slice_entry_L7d2014 _t2 = arr;
+        Slice_entry_L681a49 _t2 = arr;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L7d2014 e = _t2.p[_t1];
+            entry_L681a49 e = _t2.p[_t1];
             if (e.disabled) {
                 Map_GoString_bool_set(&(*_env->disabledFlat), e.flat, true);
                 continue;
@@ -24350,8 +24350,8 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
         return;
     }
     GoFunc collect = ((GoFunc){(void *)lambda_1266, &(Env_lambda_1266){_env->isEmpty, pref__h}});
-    Slice_entry_L7d2014 user = ((Slice_entry_L7d2014 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, sec);
-    Slice_entry_L7d2014 defs = ((Slice_entry_L7d2014 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, sec);
+    Slice_entry_L681a49 user = ((Slice_entry_L681a49 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, sec);
+    Slice_entry_L681a49 defs = ((Slice_entry_L681a49 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, sec);
     Map_GoString_bool seenFlat__hv = Map_GoString_bool_make(0); __typeof__(seenFlat__hv) *seenFlat__h = &seenFlat__hv;
     Map_GoString_bool seenBase__hv = Map_GoString_bool_make(0); __typeof__(seenBase__hv) *seenBase__h = &seenBase__hv;
     Map_GoString_bool *disabledFlat__h = go_box(Map_GoString_bool, Map_GoString_bool_make(0));
@@ -24359,9 +24359,9 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
     Map_GoString_bool enabledBase = Map_GoString_bool_make(0);
     Map_GoString_bool userDisabledBase = Map_GoString_bool_make(0);
     {
-        Slice_entry_L7d2014 _t2 = user;
+        Slice_entry_L681a49 _t2 = user;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L7d2014 e = _t2.p[_t1];
+            entry_L681a49 e = _t2.p[_t1];
             if (e.disabled) {
                 Map_GoString_bool_set(&(*disabledFlat__h), e.flat, true);
                 Map_GoString_bool_set(&userDisabledBase, e.base, true);
@@ -24384,8 +24384,8 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
     GoFunc isUnderDisabled__hv = ((GoFunc){(void *)lambda_1268, go_box(Env_lambda_1268, ((Env_lambda_1268){disabledFlat__h}))}); __typeof__(isUnderDisabled__hv) *isUnderDisabled__h = &isUnderDisabled__hv;
     Slice_GoString *final__h = go_box(Slice_GoString, {0});
     GoFunc process = ((GoFunc){(void *)lambda_1269, &(Env_lambda_1269){_env->isSpacerKey, seenFlat__h, seenBase__h, disabledFlat__h, disabledBase__h, isUnderDisabled__h, final__h}});
-    ((void (*)(void *, Slice_entry_L7d2014, bool))(process).fn)((process).env, user, false);
-    ((void (*)(void *, Slice_entry_L7d2014, bool))(process).fn)((process).env, defs, true);
+    ((void (*)(void *, Slice_entry_L681a49, bool))(process).fn)((process).env, user, false);
+    ((void (*)(void *, Slice_entry_L681a49, bool))(process).fn)((process).env, defs, true);
     go_sort_slice_stable((void *)GO_TMPADDR(Slice_GoString, (*final__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1271, go_box(Env_lambda_1271, ((Env_lambda_1271){final__h}))}));
     lua_LTable* t = lua_LState_NewTable((*_env->l));
     {
@@ -24401,7 +24401,7 @@ static void lambda_1265(Env_lambda_1265 *_env, GoString sec, Slice_GoString path
 
 typedef struct Env_lambda_1272 { lua_LState* *l; GoFunc *getTbl; GoFunc *isEmpty; } Env_lambda_1272;
 typedef struct Env_lambda_1273 { GoFunc *isEmpty; } Env_lambda_1273;
-typedef struct Env_lambda_1274 { GoFunc *isEmpty; GoString *lp; Map_GoString_entry_L296fb0 *byKey; Slice_GoString *order; } Env_lambda_1274;
+typedef struct Env_lambda_1274 { GoFunc *isEmpty; GoString *lp; Map_GoString_entry_L24a51f *byKey; Slice_GoString *order; } Env_lambda_1274;
 static void lambda_1274(Env_lambda_1274 *_env, GoOpaque /* ini.Section */* s) {
     if (s == NULL) {
         return;
@@ -24425,28 +24425,28 @@ static void lambda_1274(Env_lambda_1274 *_env, GoOpaque /* ini.Section */* s) {
                 elem = strings_ToLower(ps.p[0]);
                 field = strings_ToLower(ps.p[(ps.len - 1)]);
             }
-            entry_L296fb0 e = (entry_L296fb0){.elem = elem, .field = field, .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
+            entry_L24a51f e = (entry_L24a51f){.elem = elem, .field = field, .disabled = ((bool (*)(void *, GoString))((*_env->isEmpty)).fn)(((*_env->isEmpty)).env, ini_Key_Value(k))};
             GoString key = go_strcat(go_strcat(elem, GOSTR("|")), field);
             {
-                bool _t4; entry_L296fb0 _t5 = Map_GoString_entry_L296fb0_get(&(*_env->byKey), key, &_t4);
+                bool _t4; entry_L24a51f _t5 = Map_GoString_entry_L24a51f_get(&(*_env->byKey), key, &_t4);
                 bool ok = _t4;
                 if (!ok) {
                     (*_env->order) = GO_APPEND(Slice_GoString, (*_env->order), key);
                 }
             }
-            Map_GoString_entry_L296fb0_set(&(*_env->byKey), key, e);
+            Map_GoString_entry_L24a51f_set(&(*_env->byKey), key, e);
             _cont3:;
         }
     }
 }
 
-static Slice_entry_L296fb0 lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.File */* file, GoString sec) {
-    Slice_entry_L296fb0 out = {0};
+static Slice_entry_L24a51f lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.File */* file, GoString sec) {
+    Slice_entry_L24a51f out = {0};
     if ((file == NULL) || go_streq(sec, GOSTR(""))) {
         return out;
     }
     GoString lp__hv = strings_ToLower(GOSTR("teammenu.itemname.")); __typeof__(lp__hv) *lp__h = &lp__hv;
-    Map_GoString_entry_L296fb0 byKey__hv = Map_GoString_entry_L296fb0_make(0); __typeof__(byKey__hv) *byKey__h = &byKey__hv;
+    Map_GoString_entry_L24a51f byKey__hv = Map_GoString_entry_L24a51f_make(0); __typeof__(byKey__hv) *byKey__h = &byKey__hv;
     Slice_GoString order__hv = {0}; __typeof__(order__hv) *order__h = &order__hv;
     GoFunc addFrom = ((GoFunc){(void *)lambda_1274, &(Env_lambda_1274){_env->isEmpty, lp__h, byKey__h, order__h}});
     {
@@ -24467,7 +24467,7 @@ static Slice_entry_L296fb0 lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.Fi
         Slice_GoString _t6 = (*order__h);
         for (int _t5 = 0; _t5 < _t6.len; _t5++) {
             GoString k = _t6.p[_t5];
-            out = GO_APPEND(Slice_entry_L296fb0, out, Map_GoString_entry_L296fb0_get(&(*byKey__h), k, NULL));
+            out = GO_APPEND(Slice_entry_L24a51f, out, Map_GoString_entry_L24a51f_get(&(*byKey__h), k, NULL));
             _cont7:;
         }
     }
@@ -24476,26 +24476,26 @@ static Slice_entry_L296fb0 lambda_1273(Env_lambda_1273 *_env, GoOpaque /* ini.Fi
 }
 
 typedef struct Env_lambda_1275 { char _unused; } Env_lambda_1275;
-static Map_GoString_Slice_entry_L296fb0 lambda_1275(Env_lambda_1275 *_env, Slice_entry_L296fb0 arr) {
-    Map_GoString_Slice_entry_L296fb0 m = Map_GoString_Slice_entry_L296fb0_make(0);
+static Map_GoString_Slice_entry_L24a51f lambda_1275(Env_lambda_1275 *_env, Slice_entry_L24a51f arr) {
+    Map_GoString_Slice_entry_L24a51f m = Map_GoString_Slice_entry_L24a51f_make(0);
     {
-        Slice_entry_L296fb0 _t2 = arr;
+        Slice_entry_L24a51f _t2 = arr;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L296fb0 e = _t2.p[_t1];
-            Map_GoString_Slice_entry_L296fb0_set(&m, e.elem, GO_APPEND(Slice_entry_L296fb0, Map_GoString_Slice_entry_L296fb0_get(&m, e.elem, NULL), e));
+            entry_L24a51f e = _t2.p[_t1];
+            Map_GoString_Slice_entry_L24a51f_set(&m, e.elem, GO_APPEND(Slice_entry_L24a51f, Map_GoString_Slice_entry_L24a51f_get(&m, e.elem, NULL), e));
             _cont3:;
         }
     }
     return m;
 }
 
-typedef struct Env_lambda_1276 { Map_GoString_Slice_entry_L296fb0 *uBy; Map_GoString_Slice_entry_L296fb0 *dBy; } Env_lambda_1276;
+typedef struct Env_lambda_1276 { Map_GoString_Slice_entry_L24a51f *uBy; Map_GoString_Slice_entry_L24a51f *dBy; } Env_lambda_1276;
 typedef struct Env_lambda_1277 { Map_GoString_bool *seen; Map_GoString_bool *disabled; Slice_GoString *final; } Env_lambda_1277;
-static void lambda_1277(Env_lambda_1277 *_env, Slice_entry_L296fb0 a) {
+static void lambda_1277(Env_lambda_1277 *_env, Slice_entry_L24a51f a) {
     {
-        Slice_entry_L296fb0 _t2 = a;
+        Slice_entry_L24a51f _t2 = a;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            entry_L296fb0 e = _t2.p[_t1];
+            entry_L24a51f e = _t2.p[_t1];
             if (e.disabled) {
                 bool _t4 = true;
                 bool _t5 = true;
@@ -24518,8 +24518,8 @@ static Slice_GoString lambda_1276(Env_lambda_1276 *_env, GoString elem) {
     Map_GoString_bool disabled__hv = Map_GoString_bool_make(0); __typeof__(disabled__hv) *disabled__h = &disabled__hv;
     Slice_GoString final__hv = {0}; __typeof__(final__hv) *final__h = &final__hv;
     GoFunc process = ((GoFunc){(void *)lambda_1277, &(Env_lambda_1277){seen__h, disabled__h, final__h}});
-    ((void (*)(void *, Slice_entry_L296fb0))(process).fn)((process).env, Map_GoString_Slice_entry_L296fb0_get(&(*_env->uBy), strings_ToLower(elem), NULL));
-    ((void (*)(void *, Slice_entry_L296fb0))(process).fn)((process).env, Map_GoString_Slice_entry_L296fb0_get(&(*_env->dBy), strings_ToLower(elem), NULL));
+    ((void (*)(void *, Slice_entry_L24a51f))(process).fn)((process).env, Map_GoString_Slice_entry_L24a51f_get(&(*_env->uBy), strings_ToLower(elem), NULL));
+    ((void (*)(void *, Slice_entry_L24a51f))(process).fn)((process).env, Map_GoString_Slice_entry_L24a51f_get(&(*_env->dBy), strings_ToLower(elem), NULL));
     return (*final__h);
 }
 
@@ -24556,11 +24556,11 @@ static void lambda_1272(Env_lambda_1272 *_env, GoString primary, Slice_GoString 
         return;
     }
     GoFunc collect = ((GoFunc){(void *)lambda_1273, &(Env_lambda_1273){_env->isEmpty}});
-    Slice_entry_L296fb0 user = ((Slice_entry_L296fb0 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, primary);
-    Slice_entry_L296fb0 defs = ((Slice_entry_L296fb0 (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, primary);
+    Slice_entry_L24a51f user = ((Slice_entry_L24a51f (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.UserIniFile, primary);
+    Slice_entry_L24a51f defs = ((Slice_entry_L24a51f (*)(void *, GoOpaque /* ini.File */*, GoString))(collect).fn)((collect).env, g_sys.motif.IniFile, primary);
     GoFunc groupByElem = ((GoFunc){(void *)lambda_1275, &(Env_lambda_1275){0}});
-    Map_GoString_Slice_entry_L296fb0 *uBy__h = go_box(Map_GoString_Slice_entry_L296fb0, ((Map_GoString_Slice_entry_L296fb0 (*)(void *, Slice_entry_L296fb0))(groupByElem).fn)((groupByElem).env, user));
-    Map_GoString_Slice_entry_L296fb0 *dBy__h = go_box(Map_GoString_Slice_entry_L296fb0, ((Map_GoString_Slice_entry_L296fb0 (*)(void *, Slice_entry_L296fb0))(groupByElem).fn)((groupByElem).env, defs));
+    Map_GoString_Slice_entry_L24a51f *uBy__h = go_box(Map_GoString_Slice_entry_L24a51f, ((Map_GoString_Slice_entry_L24a51f (*)(void *, Slice_entry_L24a51f))(groupByElem).fn)((groupByElem).env, user));
+    Map_GoString_Slice_entry_L24a51f *dBy__h = go_box(Map_GoString_Slice_entry_L24a51f, ((Map_GoString_Slice_entry_L24a51f (*)(void *, Slice_entry_L24a51f))(groupByElem).fn)((groupByElem).env, defs));
     GoFunc *computeOrder__h = go_box(GoFunc, ((GoFunc){(void *)lambda_1276, go_box(Env_lambda_1276, ((Env_lambda_1276){uBy__h, dBy__h}))}));
     Slice_GoString *defaultOrder__h = go_box(Slice_GoString, ((Slice_GoString (*)(void *, GoString))((*computeOrder__h)).fn)(((*computeOrder__h)).env, GOSTR("default")));
     lua_LTable* *orders__h = go_box(lua_LTable*, lua_LState_NewTable((*_env->l)));
@@ -25357,7 +25357,7 @@ static int lambda_1303(Env_lambda_1303 *_env, lua_LState* _p0) {
 typedef struct Env_lambda_1304 { char _unused; } Env_lambda_1304;
 static int lambda_1304(Env_lambda_1304 *_env, lua_LState* l) {
     bool ready = Select_AllPreloadsReady(&g_sys.sel);
-    if (false && (!ready)) {
+    if (true && (!ready)) {
         runtime_Gosched();
     }
     lua_LState_Push(l, ((GoIface){213, go_box_a(lua_LBool, ((lua_LBool)(!ready)))}));
@@ -32103,15 +32103,15 @@ static bool lambda_1762(Env_lambda_1762 *_env, GoString logical) {
 }
 
 typedef struct Env_lambda_1763 { GoString *def; Storyboard *s; } Env_lambda_1763;
-static GoIface lambda_1763(Env_lambda_1763 *_env, Slice_secPair_Laa37ab list) {
+static GoIface lambda_1763(Env_lambda_1763 *_env, Slice_secPair_Ld26ba1 list) {
     GoString *clearcolor__h = go_box(GoString, (GoString){0});
     GoString *clearalpha__h = go_box(GoString, (GoString){0});
     GoString *clearlayerno__h = go_box(GoString, (GoString){0});
     GoString *layerallpos__h = go_box(GoString, (GoString){0});
     {
-        Slice_secPair_Laa37ab _t2 = list;
+        Slice_secPair_Ld26ba1 _t2 = list;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            secPair_Laa37ab sp = _t2.p[_t1];
+            secPair_Ld26ba1 sp = _t2.p[_t1];
             GoOpaque /* ini.Section */* section = sp.sec;
             GoString sectionName = sp.name;
             GoString l = strings_ToLower(sectionName);
@@ -32189,8 +32189,8 @@ static GoIface lambda_1761(Env_lambda_1761 *_env, GoOpaque /* ini.File */* src) 
     if (src == NULL) {
         return (GoIface){0};
     }
-    Slice_secPair_Laa37ab baseSecs = {0};
-    Slice_secPair_Laa37ab langSecs = {0};
+    Slice_secPair_Ld26ba1 baseSecs = {0};
+    Slice_secPair_Ld26ba1 langSecs = {0};
     GoString curLang = fn_SelectedLanguage();
     GoFunc interesting = ((GoFunc){(void *)lambda_1762, &(Env_lambda_1762){0}});
     {
@@ -32214,23 +32214,23 @@ static GoIface lambda_1761(Env_lambda_1761 *_env, GoOpaque /* ini.File */* src) 
             }
             if (has) {
                 if (go_streq(lang, curLang)) {
-                    langSecs = GO_APPEND(Slice_secPair_Laa37ab, langSecs, (secPair_Laa37ab){s, logical});
+                    langSecs = GO_APPEND(Slice_secPair_Ld26ba1, langSecs, (secPair_Ld26ba1){s, logical});
                 }
             } else {
-                baseSecs = GO_APPEND(Slice_secPair_Laa37ab, baseSecs, (secPair_Laa37ab){s, logical});
+                baseSecs = GO_APPEND(Slice_secPair_Ld26ba1, baseSecs, (secPair_Ld26ba1){s, logical});
             }
             _cont3:;
         }
     }
     GoFunc process = ((GoFunc){(void *)lambda_1763, &(Env_lambda_1763){_env->def, _env->s}});
     {
-        GoIface err = ((GoIface (*)(void *, Slice_secPair_Laa37ab))(process).fn)((process).env, baseSecs);
+        GoIface err = ((GoIface (*)(void *, Slice_secPair_Ld26ba1))(process).fn)((process).env, baseSecs);
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = ((GoIface (*)(void *, Slice_secPair_Laa37ab))(process).fn)((process).env, langSecs);
+        GoIface err = ((GoIface (*)(void *, Slice_secPair_Ld26ba1))(process).fn)((process).env, langSecs);
         if (err.type != 0) {
             return err;
         }
@@ -32328,7 +32328,7 @@ static int lambda_1769(Env_lambda_1769 *_env, GoString key) {
     return ((int)fn_Atoi(num));
 }
 
-typedef struct Env_lambda_1770 { Slice_entry_L4be5ac *items; } Env_lambda_1770;
+typedef struct Env_lambda_1770 { Slice_entry_L5cd011 *items; } Env_lambda_1770;
 static bool lambda_1770(Env_lambda_1770 *_env, int i, int j) {
     if ((*_env->items).p[i].start != (*_env->items).p[j].start) {
         return ((*_env->items).p[i].start < (*_env->items).p[j].start);
@@ -32339,7 +32339,7 @@ static bool lambda_1770(Env_lambda_1770 *_env, int i, int j) {
     return (go_strcmp(strings_ToLower((*_env->items).p[i].key), strings_ToLower((*_env->items).p[j].key)) < 0);
 }
 
-typedef struct Env_lambda_1771 { Slice_entry_L4be5ac *items; } Env_lambda_1771;
+typedef struct Env_lambda_1771 { Slice_entry_L5cd011 *items; } Env_lambda_1771;
 static bool lambda_1771(Env_lambda_1771 *_env, int i, int j) {
     if ((*_env->items).p[i].start != (*_env->items).p[j].start) {
         return ((*_env->items).p[i].start < (*_env->items).p[j].start);
@@ -32352,6 +32352,9 @@ static bool lambda_1771(Env_lambda_1771 *_env, int i, int j) {
 
 typedef struct Env_lambda_1772 { System* *s; } Env_lambda_1772;
 static void lambda_1772(Env_lambda_1772 *_env) {
+    if (true) {
+        return;
+    }
     GoOpaque /* bufio.Scanner */* stdin_ = bufio_NewScanner(((GoIface){146, (void *)(os_Stdin)}));
     {
         for (; bufio_Scanner_Scan(stdin_); ) {
@@ -34127,7 +34130,7 @@ GoString raster_Path_String(raster_Path p) {
                         s = go_strcat(s, go_strcat(GOSTR("A3"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){106, go_box(Slice_fixed_Int26_6, GO_SLICE(raster_Path, p, (i + 1), (i + 7)))})))));
                         i += 8;
                     } else {
-                        go_panic(GOSTR("freetype/raster: bad path"));
+                        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("freetype/raster: bad path"))}));
                     }
                 } while (0);
             }
@@ -34333,7 +34336,7 @@ void raster_MonochromePainter_Paint(raster_MonochromePainter* m, Slice_raster_Sp
                 ss.p[0] = finalSpan;
                 iface_Paint_61a99391(m->Painter, ss, true);
             } else {
-                go_panic(GOSTR("unreachable"));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("unreachable"))}));
             }
         }
         int _t7 = 0;
@@ -34710,7 +34713,7 @@ void raster_Rasterizer_Add2(raster_Rasterizer* r, fixed_Point26_6 b, fixed_Point
         }
     }
     if (nsplit > 16) {
-        go_panic(go_strcat(GOSTR("freetype/raster: Add2 nsplit too large: "), strconv_Itoa(nsplit)));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, go_strcat(GOSTR("freetype/raster: Add2 nsplit too large: "), strconv_Itoa(nsplit)))}));
     }
     Arr35_fixed_Point26_6 pStack = {0};
     Arr17_int sStack = {0};
@@ -37942,7 +37945,7 @@ Slice_u8 f322_Bytes(GoIface byteOrder, Slice_f32 values) {
             } else if (go_iface_eq(_t1, ((GoIface){118, go_box(GoOpaque /* binary.littleEndian */, binary_LittleEndian)}))) {
                 le = true;
             } else {
-                go_panic(fmt_Sprintf(GOSTR("invalid byte order %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, byteOrder)));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("invalid byte order %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, byteOrder)))}));
             }
         } while (0);
     }
@@ -40483,7 +40486,7 @@ int beep_Format_encode(beep_Format f, bool signed_, Slice_u8 p, Arr2_f64 sample)
                     }
                 }
             } else {
-                go_panic(fmt_Errorf(GOSTR("format: encode: invalid number of channels: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, f.NumChannels)}))));
+                go_panic_iface(0, fmt_Errorf(GOSTR("format: encode: invalid number of channels: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, f.NumChannels)}))));
             }
         } while (0);
     }
@@ -40524,7 +40527,7 @@ Ret_Arr2_f64__int beep_Format_decode(beep_Format f, bool signed_, Slice_u8 p) {
                 }
                 return (Ret_Arr2_f64__int){sample, beep_Format_Width(f)};
             } else {
-                go_panic(fmt_Errorf(GOSTR("format: decode: invalid number of channels: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, f.NumChannels)}))));
+                go_panic_iface(0, fmt_Errorf(GOSTR("format: decode: invalid number of channels: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, f.NumChannels)}))));
             }
         } while (0);
     }
@@ -41704,10 +41707,10 @@ beep_Resampler* beep_Resample(int quality, beep_SampleRate old, beep_SampleRate 
 // github.com/ikemen-engine/beep/v2.ResampleRatio (resample.go:48), 0 TODO
 beep_Resampler* beep_ResampleRatio(int quality, f64 ratio, beep_Streamer s) {
     if ((quality < 1) || (64 < quality)) {
-        go_panic(fmt_Errorf(GOSTR("resample: invalid quality: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, quality)}))));
+        go_panic_iface(0, fmt_Errorf(GOSTR("resample: invalid quality: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, quality)}))));
     }
     if (((ratio <= 0x0p+00) || math_IsInf(ratio, 0)) || math_IsNaN(ratio)) {
-        go_panic(fmt_Errorf(GOSTR("resample: invalid ratio: %f"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){14, go_box_a(f64, ratio)}))));
+        go_panic_iface(0, fmt_Errorf(GOSTR("resample: invalid ratio: %f"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){14, go_box_a(f64, ratio)}))));
     }
     return go_box(beep_Resampler, (beep_Resampler){.s = s, .ratio = ratio, .buf1 = GO_MAKE_A(Slice_Arr2_f64, Arr2_f64, 512, 0), .buf2 = GO_MAKE_A(Slice_Arr2_f64, Arr2_f64, 512, 0), .pts = GO_MAKE(Slice_beep_point, beep_point, (quality * 2), 0), .weights = beep_lagrangeWeights((quality * 2)), .off = -512, .pos = 0x0p+00, .end = 9223372036854775807LL});
 }
@@ -41785,7 +41788,7 @@ GoIface beep_Resampler_Err(beep_Resampler* r) {
 // github.com/ikemen-engine/beep/v2.Resampler.SetRatio (resample.go:169), 0 TODO
 void beep_Resampler_SetRatio(beep_Resampler* r, f64 ratio) {
     if (((ratio <= 0x0p+00) || math_IsInf(ratio, 0)) || math_IsNaN(ratio)) {
-        go_panic(fmt_Errorf(GOSTR("resample: invalid ratio: %f"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){14, go_box_a(f64, ratio)}))));
+        go_panic_iface(0, fmt_Errorf(GOSTR("resample: invalid ratio: %f"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){14, go_box_a(f64, ratio)}))));
     }
     r->pos *= (r->ratio / ratio);
     r->ratio = ratio;
@@ -42424,7 +42427,7 @@ GoIface wav_decoder_Seek(wav_decoder* d, int p) {
     GoIface seeker = _t1;
     bool ok = _t2;
     if (!ok) {
-        go_panic(fmt_Errorf(GOSTR("wav: seek: resource is not io.Seeker"), (Slice_GoIface){0}));
+        go_panic_iface(0, fmt_Errorf(GOSTR("wav: seek: resource is not io.Seeker"), (Slice_GoIface){0}));
     }
     if ((p < 0) || (wav_decoder_Len(d) < p)) {
         return fmt_Errorf(GOSTR("wav: seek position %v out of range [%v, %v]"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){2, go_box_a(int, p)}), ((GoIface){2, go_box_a(int, 0)}), ((GoIface){2, go_box_a(int, wav_decoder_Len(d))})));
@@ -42534,7 +42537,7 @@ input_InputQueue input_NewInputQueue(int id, int inputSize) {
             inputs.p[i] = _t4.r0;
             err = _t4.r1;
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             _cont3:;
         }
@@ -42544,7 +42547,7 @@ input_InputQueue input_NewInputQueue(int id, int inputSize) {
     input_GameInput prediction = _t5.r0;
     err = _t5.r1;
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     return (input_InputQueue){.id = id, .firstFrame = true, .lastUserAddedFrame = -1, .firstIncorrectFrame = -1, .lastFrameRequested = -1, .lastAddedFrame = -1, .prediction = prediction, .inputs = inputs};
 }
@@ -42663,7 +42666,7 @@ GoIface input_InputQueue_AddInput(input_InputQueue* i, input_GameInput* input) {
     newFrame = _t1.r0;
     err = _t1.r1;
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     if (newFrame != -1) {
         input_InputQueue_AddDelayedInputToQueue(i, input, newFrame);
@@ -42695,7 +42698,7 @@ GoIface input_InputQueue_AddDelayedInputToQueue(input_InputQueue* i, input_GameI
         bool equal = _t1.r0;
         GoIface err = _t1.r1;
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         if ((i->firstIncorrectFrame == -1) && (!equal)) {
             log_Logger_Printf(g_util2_Log, GOSTR("frame %d does not match prediction.  marking error.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, frameNumber)})));
@@ -42734,7 +42737,7 @@ Ret_int__GoIface input_InputQueue_AdvanceQueueHead(input_InputQueue* i, int fram
             input_GameInput *lastFrame__h = go_box(input_GameInput, i->inputs.p[input_previousFrame(i->head)]);
             GoIface err = input_InputQueue_AddDelayedInputToQueue(i, (&(*lastFrame__h)), expectedFrame);
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             expectedFrame++;
             _cont1:;
@@ -43356,7 +43359,7 @@ polling_Poll polling_NewPoll(void) {
 void polling_Poll_RegisterLoop(polling_Poll* p, polling_PollSink sink, Slice_u8 cookie) {
     GoIface err = buffer_StaticBuffer_PushBack_polling_PollSinkCb(&p->loopSinks, (polling_PollSinkCb){.sink = sink, .cookie = cookie});
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
 }
 
@@ -43373,7 +43376,7 @@ bool polling_Poll_Pump(polling_Poll* p, Slice_polling_FuncTimeType timeFunc) {
             polling_PollSinkCb cb = _t2.r0;
             GoIface err = _t2.r1;
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             if (timeFunc.len != 0) {
                 finished = (!((iface_OnLoopPoll_b84e9fb3(cb.sink, timeFunc.p[0]) || finished)));
@@ -43505,7 +43508,7 @@ bool protocol_UdpProtocol_OnLoopPoll(protocol_UdpProtocol* u, polling_FuncTimeTy
     i64 nextInterval = 0;
     GoIface err = protocol_UdpProtocol_PumpSendQueue(u);
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     {
         protocol_UdpProtocolState _t1 = u->currentState;
@@ -43526,7 +43529,7 @@ bool protocol_UdpProtocol_OnLoopPoll(protocol_UdpProtocol* u, polling_FuncTimeTy
                     log_Logger_Printf(g_util2_Log, GOSTR("Haven't exchanged packets in a while (last received:%d  last sent:%d).  Resending.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){2, go_box_a(int, u->lastRecievedInput.Frame)}), ((GoIface){2, go_box_a(int, u->lastSentInput.Frame)})));
                     GoIface err = protocol_UdpProtocol_SendPendingOutput(u);
                     if (err.type != 0) {
-                        go_panic(err);
+                        go_panic_iface(0, err);
                     }
                     u->state.lastInputPacketRecvTime = now;
                 }
@@ -43586,7 +43589,7 @@ GoIface protocol_UdpProtocol_SendPendingOutput(protocol_UdpProtocol* u) {
         input_GameInput input = _t1.r0;
         GoIface err = _t1.r1;
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         inputMsg->StartFrame = ((u32)input.Frame);
         inputMsg->InputSize = ((u8)input.Size);
@@ -43601,7 +43604,7 @@ GoIface protocol_UdpProtocol_SendPendingOutput(protocol_UdpProtocol* u) {
                 GoIface err = _t3.r1;
                 inputMsg->Checksum = current.Checksum;
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
                 inputMsg->Bits = GO_APPEND_SLICE(Slice_u8, inputMsg->Bits, current.Bits);
                 last = current;
@@ -43646,11 +43649,11 @@ Ret_protocol_UdpProtocolEventPtr__GoIface protocol_UdpProtocol_GetEvent(protocol
     protocol_UdpProtocolEvent *e__h = go_box(protocol_UdpProtocolEvent, _t1.r0);
     GoIface err = _t1.r1;
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     err = buffer_RingBuffer_Pop_protocol_UdpProtocolEvent(&u->eventQueue);
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     return (Ret_protocol_UdpProtocolEventPtr__GoIface){(&(*e__h)), (GoIface){0}};
 }
@@ -43660,7 +43663,7 @@ void protocol_UdpProtocol_QueueEvent(protocol_UdpProtocol* u, protocol_UdpProtoc
     log_Logger_Printf(g_util2_Log, GOSTR("Queueing event %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){145, go_box(protocol_UdpProtocolEvent, (*evt))})));
     GoIface err = buffer_RingBuffer_Push_protocol_UdpProtocolEvent(&u->eventQueue, (*evt));
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
 }
 
@@ -43689,16 +43692,16 @@ void protocol_UdpProtocol_SendMsg(protocol_UdpProtocol* u, messages_UDPMessage m
     iface_SetHeader_1d5744c2(msg, u->magicNumber, u->nextSendSeq);
     u->nextSendSeq++;
     if (go_streq(u->peerAddress, GOSTR(""))) {
-        go_panic(GOSTR("peerAdress empty, why?"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("peerAdress empty, why?"))}));
     }
     GoIface err = {0};
     err = buffer_RingBuffer_Push_protocol_QueueEntry(&u->sendQueue, protocol_NewQueEntry(time_Time_UnixMilli(time_Now()), u->peerAddress, u->peerPort, msg));
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     err = protocol_UdpProtocol_PumpSendQueue(u);
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
 }
 
@@ -43768,14 +43771,14 @@ Ret_bool__GoIface protocol_UdpProtocol_OnInput(protocol_UdpProtocol* u, messages
             input_GameInput input = _t4.r0;
             GoIface err = _t4.r1;
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             if (((i32)input.Frame) < inputMessage->AckFrame) {
                 log_Logger_Printf(g_util2_Log, GOSTR("Throwing away pending output frame %d\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, input.Frame)})));
                 u->lastAckedInput = input;
                 GoIface err = buffer_RingBuffer_Pop_input_GameInput(&u->pendingOutput);
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
             } else {
                 break;
@@ -43795,14 +43798,14 @@ Ret_bool__GoIface protocol_UdpProtocol_OnInputAck(protocol_UdpProtocol* u, messa
             input_GameInput input = _t2.r0;
             GoIface err = _t2.r1;
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             if (((i32)input.Frame) < inputAck->AckFrame) {
                 log_Logger_Printf(g_util2_Log, GOSTR("Throwing away pending output frame %d\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, input.Frame)})));
                 u->lastAckedInput = input;
                 err = buffer_RingBuffer_Pop_input_GameInput(&u->pendingOutput);
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
             } else {
                 break;
@@ -43867,7 +43870,7 @@ GoIface protocol_UdpProtocol_PumpSendQueue(protocol_UdpProtocol* u) {
             entry = _t2.r0;
             err = _t2.r1;
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             if (u->sendLatency > 0LL) {
                 i64 jitter = ((go_div64((u->sendLatency * 2LL), 3LL)) + (go_div64((go_rem64(rand_Int63(), u->sendLatency)), 3LL)));
@@ -43889,7 +43892,7 @@ GoIface protocol_UdpProtocol_PumpSendQueue(protocol_UdpProtocol* u) {
             }
             GoIface err = buffer_RingBuffer_Pop_protocol_QueueEntry(&u->sendQueue);
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             _cont1:;
         }
@@ -43908,7 +43911,7 @@ void protocol_UdpProtocol_ClearSendQueue(protocol_UdpProtocol* u) {
         for (; !buffer_RingBuffer_Empty_protocol_QueueEntry(&u->sendQueue); ) {
             GoIface err = buffer_RingBuffer_Pop_protocol_QueueEntry(&u->sendQueue);
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             _cont1:;
         }
@@ -43938,12 +43941,12 @@ void protocol_UdpProtocol_SendInput(protocol_UdpProtocol* u, input_GameInput* in
             sync_x_TimeSync_AdvanceFrames(&u->timesync, input, u->localFrameAdvantage, u->remoteFrameAdvantage);
             GoIface err = buffer_RingBuffer_Push_input_GameInput(&u->pendingOutput, (*input));
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
         }
         GoIface err = protocol_UdpProtocol_SendPendingOutput(u);
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
     }
 }
@@ -43998,7 +44001,7 @@ Ret_bool__GoIface protocol_UdpProtocol_OnSyncRequest(protocol_UdpProtocol* u, me
 void protocol_UdpProtocol_OnMsg(protocol_UdpProtocol* u, messages_UDPMessage msg, int length) {
     bool handled = false;
     GoIface err = {0};
-    Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4 table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_Lf48ee4, protocol_UdpProtocolDispatchFunc_Lf48ee4, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
+    Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17 table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_Lcc8c17, protocol_UdpProtocolDispatchFunc_Lcc8c17, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
     u16 seq = iface_Header_e9556084(msg).SequenceNumber;
     if ((iface_Header_e9556084(msg).HeaderType != 1U) && (iface_Header_e9556084(msg).HeaderType != 2U)) {
         if (iface_Header_e9556084(msg).Magic != u->remoteMagicNumber) {
@@ -44021,7 +44024,7 @@ void protocol_UdpProtocol_OnMsg(protocol_UdpProtocol* u, messages_UDPMessage msg
         err = _t1.r1;
     }
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     if (handled) {
         u->lastRecvTime = time_Time_UnixMilli(time_Now());
@@ -44462,7 +44465,7 @@ GoIface ggpo_Peer_AddLocalInput(ggpo_Peer* p, ggpo_PlayerHandle player, Slice_u8
     (*localInput__h) = _t1.r0;
     err = _t1.r1;
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     if (!ggpo_Sync_AddLocalInput(&p->sync, (*queue__h), (&(*localInput__h)))) {
         return ((GoIface){148, go_box(ggpo_Error, (ggpo_Error){.Code = 4, .Name = GOSTR("ErrorCodePredictionThreshod")})});
@@ -44530,7 +44533,7 @@ GoIface ggpo_Peer_AdvanceFrame(ggpo_Peer* p, u32 checksum) {
     ggpo_Sync_AdvanceFrame(&p->sync);
     GoIface err = ggpo_Peer_Idle(p, 0, (Slice_polling_FuncTimeType){0});
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     return (GoIface){0};
 }
@@ -44551,7 +44554,7 @@ void ggpo_Peer_PollUdpProtocolEvents(ggpo_Peer* p) {
                     } else {
                         GoIface err = ggpo_Peer_OnUdpProtocolPeerEvent(p, evt, i);
                         if (err.type != 0) {
-                            go_panic(err);
+                            go_panic_iface(0, err);
                         }
                     }
                     _cont2:;
@@ -44611,7 +44614,7 @@ GoIface ggpo_Peer_OnUdpProtocolPeerEvent(ggpo_Peer* p, protocol_UdpProtocolEvent
             } else if ((_t1 == 4)) {
                 GoIface err = ggpo_Peer_DisconnectPlayer(p, handle);
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
             }
         } while (0);
@@ -45159,7 +45162,7 @@ void ggpo_Sync_SetLastConfirmedFrame(ggpo_Sync* s, int frame) {
             for (; i < s->config.numPlayers; i++) {
                 GoIface err = input_InputQueue_DiscardConfirmedFrames(&s->inputQueues.p[i], (frame - 1));
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
                 _cont1:;
             }
@@ -45181,7 +45184,7 @@ bool ggpo_Sync_AddLocalInput(ggpo_Sync* s, int queue, input_GameInput* input) {
     input->Frame = s->frameCount;
     GoIface err = input_InputQueue_AddInput(&s->inputQueues.p[queue], input);
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     return true;
 }
@@ -45190,7 +45193,7 @@ bool ggpo_Sync_AddLocalInput(ggpo_Sync* s, int queue, input_GameInput* input) {
 void ggpo_Sync_AddRemoteInput(ggpo_Sync* s, int queue, input_GameInput* input) {
     GoIface err = input_InputQueue_AddInput(&s->inputQueues.p[queue], input);
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
 }
 
@@ -45209,7 +45212,7 @@ Ret_Slice_Slice_u8__int ggpo_Sync_GetConfirmedInputs(ggpo_Sync* s, int frame) {
                 Ret_bool__GoIface _t2 = input_InputQueue_GetConfirmedInput(&s->inputQueues.p[i], frame, (&(*input__h)));
                 GoIface err = _t2.r1;
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
             }
             values = GO_APPEND(Slice_Slice_u8, values, (*input__h).Bits);
@@ -45234,7 +45237,7 @@ Ret_Slice_Slice_u8__int ggpo_Sync_SynchronizeInputs(ggpo_Sync* s) {
                 Ret_bool__GoIface _t2 = input_InputQueue_GetInput(&s->inputQueues.p[i], s->frameCount, (&(*input__h)));
                 GoIface err = _t2.r1;
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
             }
             values = GO_APPEND(Slice_Slice_u8, values, (*input__h).Bits);
@@ -45250,7 +45253,7 @@ void ggpo_Sync_CheckSimulation(ggpo_Sync* s, int timeout) {
     if (!ggpo_Sync_CheckSimulationConsistency(s, (&(*seekTo__h)))) {
         GoIface err = ggpo_Sync_AdjustSimulation(s, (*seekTo__h));
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
     }
 }
@@ -45270,7 +45273,7 @@ GoIface ggpo_Sync_AdjustSimulation(ggpo_Sync* s, int seekTo) {
     s->rollingBack = true;
     GoIface err = ggpo_Sync_LoadFrame(s, seekTo);
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     if (s->frameCount != seekTo) {
         return errors_New(GOSTR("ggpo Sync AdjustSimulation: s.frameCount != seekTo"));
@@ -45302,7 +45305,7 @@ GoIface ggpo_Sync_LoadFrame(ggpo_Sync* s, int frame) {
     s->savedState.head = _t1.r0;
     err = _t1.r1;
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     ggpo_savedFrame state = s->savedState.frames.p[s->savedState.head];
     log_Logger_Printf(g_util2_Log, GOSTR("=== Loading frame info %d (checksum: %08x).\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){2, go_box_a(int, state.frame)}), ((GoIface){2, go_box_a(int, state.checksum)})));
@@ -45401,7 +45404,7 @@ void ggpo_Sync_ResetPrediction(ggpo_Sync* s, int frameNumber) {
         for (; i < s->config.numPlayers; i++) {
             GoIface err = input_InputQueue_ResetPrediction(&s->inputQueues.p[i], frameNumber);
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             _cont1:;
         }
@@ -45474,7 +45477,7 @@ Ret_Slice_Slice_u8__GoIface ggpo_SyncTest_SyncInput(ggpo_SyncTest* s, int* discc
         info = _t1.r0;
         err = _t1.r1;
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         s->lastInput = (*input_GameInput_Clone(&info.input));
     } else {
@@ -45516,12 +45519,12 @@ GoIface ggpo_SyncTest_AdvanceFrame(ggpo_SyncTest* s, u32 checksum) {
     info.checksum = ggpo_Sync_GetLastSavedFrame(&s->sync).checksum;
     err = buffer_RingBuffer_Push_ggpo_savedInfo(&s->savedFrames, info);
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     if ((frame - s->lastVerified) == s->checkDistance) {
         err = ggpo_Sync_LoadFrame(&s->sync, s->lastVerified);
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         s->rollingBack = true;
         {
@@ -45531,16 +45534,16 @@ GoIface ggpo_SyncTest_AdvanceFrame(ggpo_SyncTest* s, u32 checksum) {
                 info = _t2.r0;
                 err = _t2.r1;
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
                 err = buffer_RingBuffer_Pop_ggpo_savedInfo(&s->savedFrames);
                 if (err.type != 0) {
-                    go_panic(err);
+                    go_panic_iface(0, err);
                 }
                 if (info.frame != ggpo_Sync_FrameCount(&s->sync)) {
                     log_Logger_Printf(g_util2_Log, GOSTR("Frame number %d does not match saved frame number %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){2, go_box_a(int, info.frame)}), ((GoIface){2, go_box_a(int, frame)})));
                     if (s->strict) {
-                        go_panic(GOSTR("RaiseSyncError"));
+                        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("RaiseSyncError"))}));
                     } else {
                         log_Logger_Println(g_util2_Log, GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, GOSTR("RaiseSyncError: Continuing as normal."))})));
                     }
@@ -45551,7 +45554,7 @@ GoIface ggpo_SyncTest_AdvanceFrame(ggpo_SyncTest* s, u32 checksum) {
                     ggpo_SyncTest_LogGameStates(s, info);
                     log_Logger_Printf(g_util2_Log, GOSTR("Checksum for frame %d does not match saved (%d != %d)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){2, go_box_a(int, frame)}), ((GoIface){2, go_box_a(int, checksum)}), ((GoIface){2, go_box_a(int, info.checksum)})));
                     if (s->strict) {
-                        go_panic(GOSTR("RaiseSyncError"));
+                        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("RaiseSyncError"))}));
                     } else {
                         log_Logger_Println(g_util2_Log, GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, GOSTR("RaiseSyncError: Continuing as normal.."))})));
                     }
@@ -46358,7 +46361,7 @@ Ret_u32__Slice_u8 dds_readDWORD(Slice_u8 buf) {
 // github.com/lukegb/dds.readBits (bits.go:27), 0 TODO
 u32 dds_readBits(Slice_u8 buf, u32 n) {
     if (((n & 7U) != 0U) || (n > 32U)) {
-        go_panic(fmt_Sprintf(GOSTR("can't read %d bits"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){10, go_box_a(u32, n)}))));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("can't read %d bits"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){10, go_box_a(u32, n)}))))}));
     }
     u32 u = 0;
     u32 x = go_divu32(n, 8U);
@@ -48611,7 +48614,7 @@ Ret_int__GoIface bufseekio_ReadSeeker_Read(bufseekio_ReadSeeker* b, Slice_u8 p) 
             n = _t1.r0;
             b->err = _t1.r1;
             if (n < 0) {
-                go_panic(g_bufseekio_errNegativeRead);
+                go_panic_iface(0, g_bufseekio_errNegativeRead);
             }
             b->pos += ((i64)n);
             return (Ret_int__GoIface){n, bufseekio_ReadSeeker_readErr(b)};
@@ -48623,7 +48626,7 @@ Ret_int__GoIface bufseekio_ReadSeeker_Read(bufseekio_ReadSeeker* b, Slice_u8 p) 
         n = _t2.r0;
         b->err = _t2.r1;
         if (n < 0) {
-            go_panic(g_bufseekio_errNegativeRead);
+            go_panic_iface(0, g_bufseekio_errNegativeRead);
         }
         if (n == 0) {
             return (Ret_int__GoIface){0, bufseekio_ReadSeeker_readErr(b)};
@@ -51268,7 +51271,7 @@ bool meltysynth_modulationEnvelope_process(meltysynth_modulationEnvelope* env, i
                     } else if ((_t2 == 2)) {
                         endTime = env->decayStartTime;
                     } else {
-                        go_panic(GOSTR("invalid envelope stage"));
+                        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("invalid envelope stage"))}));
                     }
                 } while (0);
             }
@@ -51298,7 +51301,7 @@ bool meltysynth_modulationEnvelope_process(meltysynth_modulationEnvelope* env, i
                 env->value = ((f32)math_Max(((((f64)env->releaseLevel) * ((f64)env->releaseSlope)) * ((env->releaseEndTime - currentTime))), 0x0p+00));
                 return (env->value > 0x1.0624dep-10f);
             } else {
-                go_panic(GOSTR("invalid envelope stage."));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("invalid envelope stage."))}));
             }
         } while (0);
     }
@@ -53501,7 +53504,7 @@ bool meltysynth_volumeEnvelope_process(meltysynth_volumeEnvelope* env, i32 sampl
                     } else if ((_t2 == 2)) {
                         endTime = env->decayStartTime;
                     } else {
-                        go_panic(GOSTR("invalid envelope stage"));
+                        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("invalid envelope stage"))}));
                     }
                 } while (0);
             }
@@ -53536,7 +53539,7 @@ bool meltysynth_volumeEnvelope_process(meltysynth_volumeEnvelope* env, i32 sampl
                 env->priority = env->value;
                 return (env->value > 0x1.0624dep-10f);
             } else {
-                go_panic(GOSTR("invalid envelope stage"));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("invalid envelope stage"))}));
             }
         } while (0);
     }
@@ -58571,7 +58574,7 @@ Ret_Slice_u8__GoIface sjson_setComplexPath(GoString jstr, GoString path, GoStrin
         jstr = go_bytes2str(njson);
     }
     if (res.Indexes.len > 0) {
-        Slice_sjson_val_Lb76261 *vals__h = go_box(Slice_sjson_val_Lb76261, GO_MAKE(Slice_sjson_val_Lb76261, sjson_val_Lb76261, 0, res.Indexes.len));
+        Slice_sjson_val_L98a5cb *vals__h = go_box(Slice_sjson_val_L98a5cb, GO_MAKE(Slice_sjson_val_L98a5cb, sjson_val_L98a5cb, 0, res.Indexes.len));
         gjson_Result_ForEach(res, ((GoFunc){(void *)lambda_28, go_box(Env_lambda_28, ((Env_lambda_28){vals__h}))}));
         if (res.Indexes.len != (*vals__h).len) {
             return (Ret_Slice_u8__GoIface){go_str2bytes(jstr), ((GoIface){200, (void *)(g_sjson_errNoChange)})};
@@ -58583,11 +58586,11 @@ Ret_Slice_u8__GoIface sjson_setComplexPath(GoString jstr, GoString path, GoStrin
                 _cont1:;
             }
         }
-        go_sort_slice_stable((void *)GO_TMPADDR(Slice_sjson_val_Lb76261, (*vals__h)), sizeof(sjson_val_Lb76261), ((GoFunc){(void *)lambda_30, go_box(Env_lambda_30, ((Env_lambda_30){vals__h}))}));
+        go_sort_slice_stable((void *)GO_TMPADDR(Slice_sjson_val_L98a5cb, (*vals__h)), sizeof(sjson_val_L98a5cb), ((GoFunc){(void *)lambda_30, go_box(Env_lambda_30, ((Env_lambda_30){vals__h}))}));
         {
-            Slice_sjson_val_Lb76261 _t3 = (*vals__h);
+            Slice_sjson_val_L98a5cb _t3 = (*vals__h);
             for (int _t2 = 0; _t2 < _t3.len; _t2++) {
-                sjson_val_Lb76261 val = _t3.p[_t2];
+                sjson_val_L98a5cb val = _t3.p[_t2];
                 gjson_Result vres = val.res;
                 int _t5 = val.index;
                 int index = _t5;
@@ -58754,7 +58757,7 @@ void lua_init_11(void) {
 // github.com/yuin/gopher-lua.newAllocator (alloc.go:37), 0 TODO
 lua_allocator* lua_newAllocator(int size) {
     lua_allocator* al = go_box(lua_allocator, (lua_allocator){.size = size, .fptrs = GO_MAKE_A(Slice_f64, f64, 0, size), .fheader = NULL});
-    al->fheader = ((GoOpaque /* reflect.SliceHeader */*)((void*)(&al->fptrs)));
+    al->fheader = ((GoReflectSliceHeader*)((void*)(&al->fptrs)));
     al->scratchValue = ((GoIface){204, go_box_a(lua_LNumber, 0x0p+00)});
     al->scratchValueP = ((lua_iface*)((void*)(&al->scratchValue)));
     return al;
@@ -58767,7 +58770,7 @@ lua_LValue lua_allocator_LNumber2I(lua_allocator* al, lua_LNumber v) {
     }
     if (al->fptrs.cap == al->fptrs.len) {
         al->fptrs = GO_MAKE_A(Slice_f64, f64, 0, al->size);
-        al->fheader = ((GoOpaque /* reflect.SliceHeader */*)((void*)(&al->fptrs)));
+        al->fheader = ((GoReflectSliceHeader*)((void*)(&al->fptrs)));
     }
     al->fptrs = GO_APPEND(Slice_f64, al->fptrs, ((f64)v));
     f64* fptr = (&al->fptrs.p[(al->fptrs.len - 1)]);
@@ -60207,7 +60210,7 @@ int lua_channelClose(lua_LState* L) {
 // github.com/yuin/gopher-lua.ecupdate (compile.go:68), 0 TODO
 void lua_ecupdate(lua_expcontext* ec, lua_expContextType ctype, int reg, int varargopt) {
     if (((ec == g_lua__ecnone0) || (ec == g_lua__ecnonem1)) || (ec == g_lua__ecnonem2)) {
-        go_panic(GOSTR("can not update ec cache"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("can not update ec cache"))}));
     }
     ec->ctype = ctype;
     ec->reg = reg;
@@ -60261,7 +60264,7 @@ int lua_savereg(lua_expcontext* ec, int reg) {
 // github.com/yuin/gopher-lua.raiseCompileError (compile.go:112), 0 TODO
 void lua_raiseCompileError(lua_funcContext* context, int line, GoString format, Slice_GoIface args) {
     GoString msg = fmt_Sprintf(format, args);
-    go_panic(go_box(lua_CompileError, (lua_CompileError){.context = context, .Line = line, .Message = msg}));
+    go_panic_iface(0, ((GoIface){215, (void *)(go_box(lua_CompileError, (lua_CompileError){.context = context, .Line = line, .Message = msg}))}));
 }
 
 // github.com/yuin/gopher-lua.isVarArgReturnExpr (compile.go:117), 0 TODO
@@ -60269,10 +60272,10 @@ bool lua_isVarArgReturnExpr(ast_Expr expr) {
     {
         GoIface _t1 = expr;
         do {
-            if (_t1.type == 215) {
+            if (_t1.type == 216) {
                 ast_FuncCallExpr* ex = ((ast_FuncCallExpr*)_t1.data);
                 return (!ex->AdjustRet);
-            } else if (_t1.type == 216) {
+            } else if (_t1.type == 217) {
                 ast_Comma3Expr* ex = ((ast_Comma3Expr*)_t1.data);
                 return (!ex->AdjustRet);
             }
@@ -60285,8 +60288,8 @@ bool lua_isVarArgReturnExpr(ast_Expr expr) {
 Ret_lua_LNumber__bool lua_lnumberValue(ast_Expr expr) {
     {
         GoIface _t1 = expr;
-        ast_NumberExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 217) _t2 = ((ast_NumberExpr*)_t1.data);
-        bool _t3 = _t1.type == 217;
+        ast_NumberExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 218) _t2 = ((ast_NumberExpr*)_t1.data);
+        bool _t3 = _t1.type == 218;
         ast_NumberExpr* ex = _t2;
         bool ok = _t3;
         if (ok) {
@@ -60300,8 +60303,8 @@ Ret_lua_LNumber__bool lua_lnumberValue(ast_Expr expr) {
         } else {
             {
                 GoIface _t5 = expr;
-                lua_constLValueExpr* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 218) _t6 = ((lua_constLValueExpr*)_t5.data);
-                bool _t7 = _t5.type == 218;
+                lua_constLValueExpr* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 219) _t6 = ((lua_constLValueExpr*)_t5.data);
+                bool _t7 = _t5.type == 219;
                 lua_constLValueExpr* ex = _t6;
                 bool ok = _t7;
                 if (ok) {
@@ -60837,8 +60840,8 @@ void lua_compileChunk(lua_funcContext* context, Slice_ast_Stmt chunk, bool until
                 int j = (i + 1);
                 for (; j < chunk.len; j++) {
                     GoIface _t5 = chunk.p[j];
-                    ast_LabelStmt* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 219) _t6 = ((ast_LabelStmt*)_t5.data);
-                    bool _t7 = _t5.type == 219;
+                    ast_LabelStmt* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 220) _t6 = ((ast_LabelStmt*)_t5.data);
+                    bool _t7 = _t5.type == 220;
                     bool ok = _t7;
                     if (!ok) {
                         lastStmt = false;
@@ -60861,7 +60864,7 @@ void lua_compileBlock(lua_funcContext* context, Slice_ast_Stmt chunk) {
     ast_Node* ph = go_box(ast_Node, (ast_Node){0});
     ast_Node_SetLine(ph, lua_sline(chunk.p[0]));
     ast_Node_SetLastLine(ph, lua_eline(chunk.p[(chunk.len - 1)]));
-    lua_funcContext_EnterBlock(context, 0, ((GoIface){220, (void *)(ph)}));
+    lua_funcContext_EnterBlock(context, 0, ((GoIface){221, (void *)(ph)}));
     {
         Slice_ast_Stmt _t2 = chunk;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -60872,8 +60875,8 @@ void lua_compileBlock(lua_funcContext* context, Slice_ast_Stmt chunk) {
                 int j = (i + 1);
                 for (; j < chunk.len; j++) {
                     GoIface _t5 = chunk.p[j];
-                    ast_LabelStmt* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 219) _t6 = ((ast_LabelStmt*)_t5.data);
-                    bool _t7 = _t5.type == 219;
+                    ast_LabelStmt* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 220) _t6 = ((ast_LabelStmt*)_t5.data);
+                    bool _t7 = _t5.type == 220;
                     bool ok = _t7;
                     if (!ok) {
                         lastStmt = false;
@@ -60894,48 +60897,48 @@ void lua_compileStmt(lua_funcContext* context, ast_Stmt stmt, bool isLastStmt) {
     {
         GoIface _t1 = stmt;
         do {
-            if (_t1.type == 221) {
+            if (_t1.type == 222) {
                 ast_AssignStmt* st = ((ast_AssignStmt*)_t1.data);
                 lua_compileAssignStmt(context, st);
-            } else if (_t1.type == 222) {
+            } else if (_t1.type == 223) {
                 ast_LocalAssignStmt* st = ((ast_LocalAssignStmt*)_t1.data);
                 lua_compileLocalAssignStmt(context, st);
-            } else if (_t1.type == 223) {
+            } else if (_t1.type == 224) {
                 ast_FuncCallStmt* st = ((ast_FuncCallStmt*)_t1.data);
                 lua_compileFuncCallExpr(context, lua_funcContext_RegTop(context), ((ast_FuncCallExpr*)(st->Expr).data), lua_ecnone(-1));
-            } else if (_t1.type == 224) {
+            } else if (_t1.type == 225) {
                 ast_DoBlockStmt* st = ((ast_DoBlockStmt*)_t1.data);
-                lua_funcContext_EnterBlock(context, 0, ((GoIface){224, (void *)(st)}));
+                lua_funcContext_EnterBlock(context, 0, ((GoIface){225, (void *)(st)}));
                 lua_compileChunk(context, st->Stmts, false);
                 lua_funcContext_LeaveBlock(context);
-            } else if (_t1.type == 225) {
+            } else if (_t1.type == 226) {
                 ast_WhileStmt* st = ((ast_WhileStmt*)_t1.data);
                 lua_compileWhileStmt(context, st);
-            } else if (_t1.type == 226) {
+            } else if (_t1.type == 227) {
                 ast_RepeatStmt* st = ((ast_RepeatStmt*)_t1.data);
                 lua_compileRepeatStmt(context, st);
-            } else if (_t1.type == 227) {
+            } else if (_t1.type == 228) {
                 ast_FuncDefStmt* st = ((ast_FuncDefStmt*)_t1.data);
                 lua_compileFuncDefStmt(context, st);
-            } else if (_t1.type == 228) {
+            } else if (_t1.type == 229) {
                 ast_ReturnStmt* st = ((ast_ReturnStmt*)_t1.data);
                 lua_compileReturnStmt(context, st);
-            } else if (_t1.type == 229) {
+            } else if (_t1.type == 230) {
                 ast_IfStmt* st = ((ast_IfStmt*)_t1.data);
                 lua_compileIfStmt(context, st);
-            } else if (_t1.type == 230) {
+            } else if (_t1.type == 231) {
                 ast_BreakStmt* st = ((ast_BreakStmt*)_t1.data);
                 lua_compileBreakStmt(context, st);
-            } else if (_t1.type == 231) {
+            } else if (_t1.type == 232) {
                 ast_NumberForStmt* st = ((ast_NumberForStmt*)_t1.data);
                 lua_compileNumberForStmt(context, st);
-            } else if (_t1.type == 232) {
+            } else if (_t1.type == 233) {
                 ast_GenericForStmt* st = ((ast_GenericForStmt*)_t1.data);
                 lua_compileGenericForStmt(context, st);
-            } else if (_t1.type == 219) {
+            } else if (_t1.type == 220) {
                 ast_LabelStmt* st = ((ast_LabelStmt*)_t1.data);
                 lua_compileLabelStmt(context, st, isLastStmt);
-            } else if (_t1.type == 233) {
+            } else if (_t1.type == 234) {
                 ast_GotoStmt* st = ((ast_GotoStmt*)_t1.data);
                 lua_compileGotoStmt(context, st);
             }
@@ -60954,7 +60957,7 @@ Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtLeft(lua_funcContext* c
             {
                 GoIface _t4 = lhs;
                 do {
-                    if (_t4.type == 234) {
+                    if (_t4.type == 235) {
                         ast_IdentExpr* st = ((ast_IdentExpr*)_t4.data);
                         lua_expContextType identtype = lua_getIdentRefType(context, context, st);
                         lua_expcontext* ec = go_box(lua_expcontext, (lua_expcontext){identtype, 256, 0});
@@ -60971,7 +60974,7 @@ Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtLeft(lua_funcContext* c
                             } while (0);
                         }
                         acs = GO_APPEND(Slice_lua_assigncontextPtr, acs, go_box(lua_assigncontext, (lua_assigncontext){ec, 0, 0, false, false}));
-                    } else if (_t4.type == 235) {
+                    } else if (_t4.type == 236) {
                         ast_AttrGetExpr* st = ((ast_AttrGetExpr*)_t4.data);
                         lua_assigncontext* ac = go_box(lua_assigncontext, (lua_assigncontext){go_box(lua_expcontext, (lua_expcontext){3, 256, 0}), 0, 0, false, false});
                         lua_compileExprWithKMVPropagation(context, st->Object, (&(*reg__h)), (&ac->ec->reg));
@@ -60979,8 +60982,8 @@ Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtLeft(lua_funcContext* c
                         (*reg__h) += lua_compileExpr(context, (*reg__h), st->Key, lua_ecnone(0));
                         {
                             GoIface _t6 = st->Key;
-                            ast_StringExpr* _t7; memset(&_t7, 0, sizeof _t7); if (_t6.type == 236) _t7 = ((ast_StringExpr*)_t6.data);
-                            bool _t8 = _t6.type == 236;
+                            ast_StringExpr* _t7; memset(&_t7, 0, sizeof _t7); if (_t6.type == 237) _t7 = ((ast_StringExpr*)_t6.data);
+                            bool _t8 = _t6.type == 237;
                             bool ok = _t8;
                             if (ok) {
                                 ac->keyks = true;
@@ -60989,7 +60992,7 @@ Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtLeft(lua_funcContext* c
                         acs = GO_APPEND(Slice_lua_assigncontextPtr, acs, ac);
                     } else {
                         GoIface st = _t4;
-                        go_panic(GOSTR("invalid left expression."));
+                        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("invalid left expression."))}));
                     }
                 } while (0);
             }
@@ -61012,7 +61015,7 @@ Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtRight(lua_funcContext* 
             lua_expcontext* ec = _t2;
             ast_Expr expr = (ast_Expr){0};
             if (namesassigned >= lenexprs) {
-                expr = ((GoIface){237, (void *)(go_box(ast_NilExpr, (ast_NilExpr){0}))});
+                expr = ((GoIface){238, (void *)(go_box(ast_NilExpr, (ast_NilExpr){0}))});
                 iface_SetLine_83b24cfd(expr, lua_sline(stmt->Lhs.p[namesassigned]));
                 iface_SetLastLine_83b24cfd(expr, lua_eline(stmt->Lhs.p[namesassigned]));
             } else {
@@ -61043,8 +61046,8 @@ Ret_int__Slice_lua_assigncontextPtr lua_compileAssignStmtRight(lua_funcContext* 
             if (ec->ctype == 3) {
                 {
                     GoIface _t4 = expr;
-                    ast_LogicalOpExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 238) _t5 = ((ast_LogicalOpExpr*)_t4.data);
-                    bool _t6 = _t4.type == 238;
+                    ast_LogicalOpExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 239) _t5 = ((ast_LogicalOpExpr*)_t4.data);
+                    bool _t6 = _t4.type == 239;
                     bool ok = _t6;
                     if (!ok) {
                         lua_codeStore_PropagateKMV(context->Code, lua_funcContext_RegTop(context), (&ac->valuerk), (&(*reg__h)), reginc);
@@ -61169,17 +61172,17 @@ void lua_compileLocalAssignStmt(lua_funcContext* context, ast_LocalAssignStmt* s
     if ((stmt->Names.len == 1) && (stmt->Exprs.len == 1)) {
         {
             GoIface _t1 = stmt->Exprs.p[0];
-            ast_FunctionExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 239) _t2 = ((ast_FunctionExpr*)_t1.data);
-            bool _t3 = _t1.type == 239;
+            ast_FunctionExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 240) _t2 = ((ast_FunctionExpr*)_t1.data);
+            bool _t3 = _t1.type == 240;
             bool ok = _t3;
             if (ok) {
                 lua_funcContext_RegisterLocalVar(context, stmt->Names.p[0]);
-                lua_compileRegAssignment(context, stmt->Names, stmt->Exprs, reg, stmt->Names.len, lua_sline(((GoIface){222, (void *)(stmt)})));
+                lua_compileRegAssignment(context, stmt->Names, stmt->Exprs, reg, stmt->Names.len, lua_sline(((GoIface){223, (void *)(stmt)})));
                 return;
             }
         }
     }
-    lua_compileRegAssignment(context, stmt->Names, stmt->Exprs, reg, stmt->Names.len, lua_sline(((GoIface){222, (void *)(stmt)})));
+    lua_compileRegAssignment(context, stmt->Names, stmt->Exprs, reg, stmt->Names.len, lua_sline(((GoIface){223, (void *)(stmt)})));
     {
         Slice_GoString _t5 = stmt->Names;
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -61201,24 +61204,24 @@ void lua_compileReturnStmt(lua_funcContext* context, ast_ReturnStmt* stmt) {
         {
             GoIface _t1 = stmt->Exprs.p[0];
             do {
-                if (_t1.type == 234) {
+                if (_t1.type == 235) {
                     ast_IdentExpr* ex = ((ast_IdentExpr*)_t1.data);
                     {
                         int idx = lua_funcContext_FindLocalVar(context, ex->Value);
                         if (idx > -1) {
-                            lua_codeStore_AddABC(code, 33, idx, 2, 0, lua_sline(((GoIface){228, (void *)(stmt)})));
+                            lua_codeStore_AddABC(code, 33, idx, 2, 0, lua_sline(((GoIface){229, (void *)(stmt)})));
                             return;
                         }
                     }
-                } else if (_t1.type == 215) {
+                } else if (_t1.type == 216) {
                     ast_FuncCallExpr* ex = ((ast_FuncCallExpr*)_t1.data);
                     if (ex->AdjustRet) {
-                        reg += lua_compileExpr(context, reg, ((GoIface){215, (void *)(ex)}), lua_ecnone(0));
+                        reg += lua_compileExpr(context, reg, ((GoIface){216, (void *)(ex)}), lua_ecnone(0));
                     } else {
-                        reg += lua_compileExpr(context, reg, ((GoIface){215, (void *)(ex)}), lua_ecnone(-2));
+                        reg += lua_compileExpr(context, reg, ((GoIface){216, (void *)(ex)}), lua_ecnone(-2));
                         lua_codeStore_SetOpCode(code, lua_codeStore_LastPC(code), 32);
                     }
-                    lua_codeStore_AddABC(code, 33, a, 0, 0, lua_sline(((GoIface){228, (void *)(stmt)})));
+                    lua_codeStore_AddABC(code, 33, a, 0, 0, lua_sline(((GoIface){229, (void *)(stmt)})));
                     return;
                 }
             } while (0);
@@ -61242,7 +61245,7 @@ void lua_compileReturnStmt(lua_funcContext* context, ast_ReturnStmt* stmt) {
     if (lastisvaarg) {
         count = 0;
     }
-    lua_codeStore_AddABC(context->Code, 33, a, count, 0, lua_sline(((GoIface){228, (void *)(stmt)})));
+    lua_codeStore_AddABC(context->Code, 33, a, count, 0, lua_sline(((GoIface){229, (void *)(stmt)})));
 }
 
 // github.com/yuin/gopher-lua.compileIfStmt (compile.go:912), 0 TODO
@@ -61254,7 +61257,7 @@ void lua_compileIfStmt(lua_funcContext* context, ast_IfStmt* stmt) {
     lua_funcContext_SetLabelPc(context, thenlabel, lua_codeStore_LastPC(context->Code));
     lua_compileBlock(context, stmt->Then);
     if (stmt->Else.len > 0) {
-        lua_codeStore_AddASbx(context->Code, 25, 0, endlabel, lua_sline(((GoIface){229, (void *)(stmt)})));
+        lua_codeStore_AddASbx(context->Code, 25, 0, endlabel, lua_sline(((GoIface){230, (void *)(stmt)})));
     }
     lua_funcContext_SetLabelPc(context, elselabel, lua_codeStore_LastPC(context->Code));
     if (stmt->Else.len > 0) {
@@ -61276,22 +61279,22 @@ void lua_compileBranchCondition(lua_funcContext* context, int reg, ast_Expr expr
     {
         GoIface _t1 = expr;
         do {
-            if (_t1.type == 240 || _t1.type == 237) {
+            if (_t1.type == 241 || _t1.type == 238) {
                 GoIface ex = _t1;
                 if (!hasnextcond) {
                     lua_codeStore_AddASbx(code, 25, 0, elselabel, lua_sline(expr));
                     return;
                 }
-            } else if (_t1.type == 241 || _t1.type == 217 || _t1.type == 236) {
+            } else if (_t1.type == 242 || _t1.type == 218 || _t1.type == 237) {
                 GoIface ex = _t1;
                 if (!hasnextcond) {
                     return;
                 }
-            } else if (_t1.type == 242) {
+            } else if (_t1.type == 243) {
                 ast_UnaryNotOpExpr* ex = ((ast_UnaryNotOpExpr*)_t1.data);
                 lua_compileBranchCondition(context, (*reg__h), ex->Expr, elselabel, thenlabel, (!hasnextcond));
                 return;
-            } else if (_t1.type == 238) {
+            } else if (_t1.type == 239) {
                 ast_LogicalOpExpr* ex = ((ast_LogicalOpExpr*)_t1.data);
                 {
                     GoString _t2 = ex->Operator;
@@ -61310,7 +61313,7 @@ void lua_compileBranchCondition(lua_funcContext* context, int reg, ast_Expr expr
                     } while (0);
                 }
                 return;
-            } else if (_t1.type == 243) {
+            } else if (_t1.type == 244) {
                 ast_RelationalOpExpr* ex = ((ast_RelationalOpExpr*)_t1.data);
                 lua_compileRelationalOpExprAux(context, (*reg__h), ex, flip, jumplabel);
                 return;
@@ -61331,10 +61334,10 @@ void lua_compileWhileStmt(lua_funcContext* context, ast_WhileStmt* stmt) {
     lua_funcContext_SetLabelPc(context, condlabel, lua_codeStore_LastPC(context->Code));
     lua_compileBranchCondition(context, lua_funcContext_RegTop(context), stmt->Condition, thenlabel, elselabel, false);
     lua_funcContext_SetLabelPc(context, thenlabel, lua_codeStore_LastPC(context->Code));
-    lua_funcContext_EnterBlock(context, elselabel, ((GoIface){225, (void *)(stmt)}));
+    lua_funcContext_EnterBlock(context, elselabel, ((GoIface){226, (void *)(stmt)}));
     lua_compileChunk(context, stmt->Stmts, false);
     lua_funcContext_CloseUpvalues(context);
-    lua_codeStore_AddASbx(context->Code, 25, 0, condlabel, lua_eline(((GoIface){225, (void *)(stmt)})));
+    lua_codeStore_AddASbx(context->Code, 25, 0, condlabel, lua_eline(((GoIface){226, (void *)(stmt)})));
     lua_funcContext_LeaveBlock(context);
     lua_funcContext_SetLabelPc(context, elselabel, lua_codeStore_LastPC(context->Code));
 }
@@ -61346,17 +61349,17 @@ void lua_compileRepeatStmt(lua_funcContext* context, ast_RepeatStmt* stmt) {
     int elselabel = lua_funcContext_NewLabel(context);
     lua_funcContext_SetLabelPc(context, initlabel, lua_codeStore_LastPC(context->Code));
     lua_funcContext_SetLabelPc(context, elselabel, lua_codeStore_LastPC(context->Code));
-    lua_funcContext_EnterBlock(context, thenlabel, ((GoIface){226, (void *)(stmt)}));
+    lua_funcContext_EnterBlock(context, thenlabel, ((GoIface){227, (void *)(stmt)}));
     lua_compileChunk(context, stmt->Stmts, true);
     lua_compileBranchCondition(context, lua_funcContext_RegTop(context), stmt->Condition, thenlabel, elselabel, false);
     lua_funcContext_SetLabelPc(context, thenlabel, lua_codeStore_LastPC(context->Code));
     int n = lua_funcContext_LeaveBlock(context);
     if (n > -1) {
         int label = lua_funcContext_NewLabel(context);
-        lua_codeStore_AddASbx(context->Code, 25, 0, label, lua_eline(((GoIface){226, (void *)(stmt)})));
+        lua_codeStore_AddASbx(context->Code, 25, 0, label, lua_eline(((GoIface){227, (void *)(stmt)})));
         lua_funcContext_SetLabelPc(context, elselabel, lua_codeStore_LastPC(context->Code));
-        lua_codeStore_AddABC(context->Code, 38, n, 0, 0, lua_eline(((GoIface){226, (void *)(stmt)})));
-        lua_codeStore_AddASbx(context->Code, 25, 0, initlabel, lua_eline(((GoIface){226, (void *)(stmt)})));
+        lua_codeStore_AddABC(context->Code, 38, n, 0, 0, lua_eline(((GoIface){227, (void *)(stmt)})));
+        lua_codeStore_AddASbx(context->Code, 25, 0, initlabel, lua_eline(((GoIface){227, (void *)(stmt)})));
         lua_funcContext_SetLabelPc(context, label, lua_codeStore_LastPC(context->Code));
     }
 }
@@ -61370,16 +61373,16 @@ void lua_compileBreakStmt(lua_funcContext* context, ast_BreakStmt* stmt) {
                 int label = block->BreakLabel;
                 if (label != 0) {
                     if (block->RefUpvalue) {
-                        lua_codeStore_AddABC(context->Code, 38, lua_varNamePool_LastIndex(block->Parent->LocalVars), 0, 0, lua_sline(((GoIface){230, (void *)(stmt)})));
+                        lua_codeStore_AddABC(context->Code, 38, lua_varNamePool_LastIndex(block->Parent->LocalVars), 0, 0, lua_sline(((GoIface){231, (void *)(stmt)})));
                     }
-                    lua_codeStore_AddASbx(context->Code, 25, 0, label, lua_sline(((GoIface){230, (void *)(stmt)})));
+                    lua_codeStore_AddASbx(context->Code, 25, 0, label, lua_sline(((GoIface){231, (void *)(stmt)})));
                     return;
                 }
             }
             _cont1:;
         }
     }
-    lua_raiseCompileError(context, lua_sline(((GoIface){230, (void *)(stmt)})), GOSTR("no loop to break"), (Slice_GoIface){0});
+    lua_raiseCompileError(context, lua_sline(((GoIface){231, (void *)(stmt)})), GOSTR("no loop to break"), (Slice_GoIface){0});
 }
 
 // github.com/yuin/gopher-lua.compileFuncDefStmt (compile.go:1033), 0 TODO
@@ -61389,13 +61392,13 @@ void lua_compileFuncDefStmt(lua_funcContext* context, ast_FuncDefStmt* stmt) {
         int *treg__h = go_box_a(int, 0);
         int kreg = 0;
         lua_compileExprWithKMVPropagation(context, stmt->Name->Receiver, (&(*reg__h)), (&(*treg__h)));
-        kreg = lua_loadRk(context, (&(*reg__h)), ((GoIface){239, (void *)(stmt->Func)}), ((GoIface){205, go_box(lua_LString, stmt->Name->Method)}));
-        lua_compileExpr(context, (*reg__h), ((GoIface){239, (void *)(stmt->Func)}), g_lua_ecfuncdef);
+        kreg = lua_loadRk(context, (&(*reg__h)), ((GoIface){240, (void *)(stmt->Func)}), ((GoIface){205, go_box(lua_LString, stmt->Name->Method)}));
+        lua_compileExpr(context, (*reg__h), ((GoIface){240, (void *)(stmt->Func)}), g_lua_ecfuncdef);
         lua_codeStore_AddABC(context->Code, 11, (*treg__h), kreg, (*reg__h), lua_sline(stmt->Name->Receiver));
     } else {
-        ast_AssignStmt* astmt = go_box(ast_AssignStmt, (ast_AssignStmt){.Lhs = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, stmt->Name->Func), .Rhs = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, ((GoIface){239, (void *)(stmt->Func)}))});
-        ast_Node_SetLine(&astmt->StmtBase_.Node_, lua_sline(((GoIface){239, (void *)(stmt->Func)})));
-        ast_Node_SetLastLine(&astmt->StmtBase_.Node_, lua_eline(((GoIface){239, (void *)(stmt->Func)})));
+        ast_AssignStmt* astmt = go_box(ast_AssignStmt, (ast_AssignStmt){.Lhs = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, stmt->Name->Func), .Rhs = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, ((GoIface){240, (void *)(stmt->Func)}))});
+        ast_Node_SetLine(&astmt->StmtBase_.Node_, lua_sline(((GoIface){240, (void *)(stmt->Func)})));
+        ast_Node_SetLastLine(&astmt->StmtBase_.Node_, lua_eline(((GoIface){240, (void *)(stmt->Func)})));
         lua_compileAssignStmt(context, astmt);
     }
 }
@@ -61405,7 +61408,7 @@ void lua_compileNumberForStmt(lua_funcContext* context, ast_NumberForStmt* stmt)
     lua_codeStore* code = context->Code;
     int endlabel = lua_funcContext_NewLabel(context);
     lua_expcontext* ec = go_box(lua_expcontext, (lua_expcontext){0});
-    lua_funcContext_EnterBlock(context, endlabel, ((GoIface){231, (void *)(stmt)}));
+    lua_funcContext_EnterBlock(context, endlabel, ((GoIface){232, (void *)(stmt)}));
     int reg = lua_funcContext_RegTop(context);
     int rindex = lua_funcContext_RegisterLocalVar(context, GOSTR("(for index)"));
     lua_ecupdate(ec, 2, rindex, 0);
@@ -61417,18 +61420,18 @@ void lua_compileNumberForStmt(lua_funcContext* context, ast_NumberForStmt* stmt)
     reg = lua_funcContext_RegTop(context);
     int rstep = lua_funcContext_RegisterLocalVar(context, GOSTR("(for step)"));
     if (stmt->Step.type == 0) {
-        stmt->Step = ((GoIface){217, (void *)(go_box(ast_NumberExpr, (ast_NumberExpr){.Value = GOSTR("1")}))});
+        stmt->Step = ((GoIface){218, (void *)(go_box(ast_NumberExpr, (ast_NumberExpr){.Value = GOSTR("1")}))});
         iface_SetLine_83b24cfd(stmt->Step, lua_sline(stmt->Init));
     }
     lua_ecupdate(ec, 2, rstep, 0);
     lua_compileExpr(context, reg, stmt->Step, ec);
-    lua_codeStore_AddASbx(code, 35, rindex, 0, lua_sline(((GoIface){231, (void *)(stmt)})));
+    lua_codeStore_AddASbx(code, 35, rindex, 0, lua_sline(((GoIface){232, (void *)(stmt)})));
     lua_funcContext_RegisterLocalVar(context, stmt->Name);
     int bodypc = lua_codeStore_LastPC(code);
     lua_compileChunk(context, stmt->Stmts, false);
     lua_funcContext_LeaveBlock(context);
     int flpc = lua_codeStore_LastPC(code);
-    lua_codeStore_AddASbx(code, 34, rindex, (bodypc - ((flpc + 1))), lua_sline(((GoIface){231, (void *)(stmt)})));
+    lua_codeStore_AddASbx(code, 34, rindex, (bodypc - ((flpc + 1))), lua_sline(((GoIface){232, (void *)(stmt)})));
     lua_funcContext_SetLabelPc(context, endlabel, lua_codeStore_LastPC(code));
     lua_codeStore_SetSbx(code, bodypc, (flpc - bodypc));
 }
@@ -61440,12 +61443,12 @@ void lua_compileGenericForStmt(lua_funcContext* context, ast_GenericForStmt* stm
     int bodylabel = lua_funcContext_NewLabel(context);
     int fllabel = lua_funcContext_NewLabel(context);
     int nnames = stmt->Names.len;
-    lua_funcContext_EnterBlock(context, endlabel, ((GoIface){232, (void *)(stmt)}));
+    lua_funcContext_EnterBlock(context, endlabel, ((GoIface){233, (void *)(stmt)}));
     int rgen = lua_funcContext_RegisterLocalVar(context, GOSTR("(for generator)"));
     lua_funcContext_RegisterLocalVar(context, GOSTR("(for state)"));
     lua_funcContext_RegisterLocalVar(context, GOSTR("(for control)"));
-    lua_compileRegAssignment(context, stmt->Names, stmt->Exprs, (lua_funcContext_RegTop(context) - 3), 3, lua_sline(((GoIface){232, (void *)(stmt)})));
-    lua_codeStore_AddASbx(code, 25, 0, fllabel, lua_sline(((GoIface){232, (void *)(stmt)})));
+    lua_compileRegAssignment(context, stmt->Names, stmt->Exprs, (lua_funcContext_RegTop(context) - 3), 3, lua_sline(((GoIface){233, (void *)(stmt)})));
+    lua_codeStore_AddASbx(code, 25, 0, fllabel, lua_sline(((GoIface){233, (void *)(stmt)})));
     {
         Slice_GoString _t2 = stmt->Names;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -61458,15 +61461,15 @@ void lua_compileGenericForStmt(lua_funcContext* context, ast_GenericForStmt* stm
     lua_compileChunk(context, stmt->Stmts, false);
     lua_funcContext_LeaveBlock(context);
     lua_funcContext_SetLabelPc(context, fllabel, lua_codeStore_LastPC(code));
-    lua_codeStore_AddABC(code, 36, rgen, 0, nnames, lua_sline(((GoIface){232, (void *)(stmt)})));
-    lua_codeStore_AddASbx(code, 25, 0, bodylabel, lua_sline(((GoIface){232, (void *)(stmt)})));
+    lua_codeStore_AddABC(code, 36, rgen, 0, nnames, lua_sline(((GoIface){233, (void *)(stmt)})));
+    lua_codeStore_AddASbx(code, 25, 0, bodylabel, lua_sline(((GoIface){233, (void *)(stmt)})));
     lua_funcContext_SetLabelPc(context, endlabel, lua_codeStore_LastPC(code));
 }
 
 // github.com/yuin/gopher-lua.compileLabelStmt (compile.go:1123), 0 TODO
 void lua_compileLabelStmt(lua_funcContext* context, ast_LabelStmt* stmt, bool isLastStmt) {
     int labelId = lua_funcContext_NewLabel(context);
-    lua_gotoLabelDesc* label = lua_newLabelDesc(labelId, stmt->Name, lua_codeStore_LastPC(context->Code), lua_sline(((GoIface){219, (void *)(stmt)})), lua_funcContext_BlockLocalVarsCount(context));
+    lua_gotoLabelDesc* label = lua_newLabelDesc(labelId, stmt->Name, lua_codeStore_LastPC(context->Code), lua_sline(((GoIface){220, (void *)(stmt)})), lua_funcContext_BlockLocalVarsCount(context));
     lua_funcContext_AddNamedLabel(context, label);
     if (isLastStmt) {
         lua_gotoLabelDesc_SetNumActiveLocalVars(label, lua_codeBlock_LocalVarsCount(context->Block->Parent));
@@ -61476,9 +61479,9 @@ void lua_compileLabelStmt(lua_funcContext* context, ast_LabelStmt* stmt, bool is
 
 // github.com/yuin/gopher-lua.compileGotoStmt (compile.go:1133), 0 TODO
 void lua_compileGotoStmt(lua_funcContext* context, ast_GotoStmt* stmt) {
-    lua_codeStore_AddABC(context->Code, 38, 0, 0, 0, lua_sline(((GoIface){233, (void *)(stmt)})));
-    lua_codeStore_AddASbx(context->Code, 25, 0, 0, lua_sline(((GoIface){233, (void *)(stmt)})));
-    lua_gotoLabelDesc* label = lua_newLabelDesc(-1, stmt->Label, lua_codeStore_LastPC(context->Code), lua_sline(((GoIface){233, (void *)(stmt)})), lua_funcContext_BlockLocalVarsCount(context));
+    lua_codeStore_AddABC(context->Code, 38, 0, 0, 0, lua_sline(((GoIface){234, (void *)(stmt)})));
+    lua_codeStore_AddASbx(context->Code, 25, 0, 0, lua_sline(((GoIface){234, (void *)(stmt)})));
+    lua_gotoLabelDesc* label = lua_newLabelDesc(-1, stmt->Label, lua_codeStore_LastPC(context->Code), lua_sline(((GoIface){234, (void *)(stmt)})), lua_funcContext_BlockLocalVarsCount(context));
     lua_funcContext_AddUnresolvedGoto(context, label);
     lua_funcContext_FindLabel(context, context->Block, label, (context->gotosCount - 1));
 }
@@ -61495,11 +61498,11 @@ int lua_compileExpr(lua_funcContext* context, int reg, ast_Expr expr, lua_expcon
     {
         GoIface _t1 = expr;
         do {
-            if (_t1.type == 236) {
+            if (_t1.type == 237) {
                 ast_StringExpr* ex = ((ast_StringExpr*)_t1.data);
-                lua_codeStore_AddABx(code, 2, sreg, lua_funcContext_ConstIndex(context, ((GoIface){205, go_box(lua_LString, ex->Value)})), lua_sline(((GoIface){236, (void *)(ex)})));
+                lua_codeStore_AddABx(code, 2, sreg, lua_funcContext_ConstIndex(context, ((GoIface){205, go_box(lua_LString, ex->Value)})), lua_sline(((GoIface){237, (void *)(ex)})));
                 return sused;
-            } else if (_t1.type == 217) {
+            } else if (_t1.type == 218) {
                 ast_NumberExpr* ex = ((ast_NumberExpr*)_t1.data);
                 Ret_lua_LNumber__GoIface _t2 = lua_parseNumber(ex->Value);
                 lua_LNumber num = _t2.r0;
@@ -61507,52 +61510,52 @@ int lua_compileExpr(lua_funcContext* context, int reg, ast_Expr expr, lua_expcon
                 if (err.type != 0) {
                     num = ((lua_LNumber)math_NaN());
                 }
-                lua_codeStore_AddABx(code, 2, sreg, lua_funcContext_ConstIndex(context, ((GoIface){204, go_box_a(lua_LNumber, num)})), lua_sline(((GoIface){217, (void *)(ex)})));
+                lua_codeStore_AddABx(code, 2, sreg, lua_funcContext_ConstIndex(context, ((GoIface){204, go_box_a(lua_LNumber, num)})), lua_sline(((GoIface){218, (void *)(ex)})));
                 return sused;
-            } else if (_t1.type == 218) {
+            } else if (_t1.type == 219) {
                 lua_constLValueExpr* ex = ((lua_constLValueExpr*)_t1.data);
-                lua_codeStore_AddABx(code, 2, sreg, lua_funcContext_ConstIndex(context, ex->Value), lua_sline(((GoIface){218, (void *)(ex)})));
+                lua_codeStore_AddABx(code, 2, sreg, lua_funcContext_ConstIndex(context, ex->Value), lua_sline(((GoIface){219, (void *)(ex)})));
                 return sused;
-            } else if (_t1.type == 237) {
+            } else if (_t1.type == 238) {
                 ast_NilExpr* ex = ((ast_NilExpr*)_t1.data);
-                lua_codeStore_AddLoadNil(code, sreg, sreg, lua_sline(((GoIface){237, (void *)(ex)})));
-                return sused;
-            } else if (_t1.type == 240) {
-                ast_FalseExpr* ex = ((ast_FalseExpr*)_t1.data);
-                lua_codeStore_AddABC(code, 3, sreg, 0, 0, lua_sline(((GoIface){240, (void *)(ex)})));
+                lua_codeStore_AddLoadNil(code, sreg, sreg, lua_sline(((GoIface){238, (void *)(ex)})));
                 return sused;
             } else if (_t1.type == 241) {
-                ast_TrueExpr* ex = ((ast_TrueExpr*)_t1.data);
-                lua_codeStore_AddABC(code, 3, sreg, 1, 0, lua_sline(((GoIface){241, (void *)(ex)})));
+                ast_FalseExpr* ex = ((ast_FalseExpr*)_t1.data);
+                lua_codeStore_AddABC(code, 3, sreg, 0, 0, lua_sline(((GoIface){241, (void *)(ex)})));
                 return sused;
-            } else if (_t1.type == 234) {
+            } else if (_t1.type == 242) {
+                ast_TrueExpr* ex = ((ast_TrueExpr*)_t1.data);
+                lua_codeStore_AddABC(code, 3, sreg, 1, 0, lua_sline(((GoIface){242, (void *)(ex)})));
+                return sused;
+            } else if (_t1.type == 235) {
                 ast_IdentExpr* ex = ((ast_IdentExpr*)_t1.data);
                 {
                     lua_expContextType _t3 = lua_getIdentRefType(context, context, ex);
                     do {
                         if ((_t3 == 0)) {
-                            lua_codeStore_AddABx(code, 6, sreg, lua_funcContext_ConstIndex(context, ((GoIface){205, go_box(lua_LString, ex->Value)})), lua_sline(((GoIface){234, (void *)(ex)})));
+                            lua_codeStore_AddABx(code, 6, sreg, lua_funcContext_ConstIndex(context, ((GoIface){205, go_box(lua_LString, ex->Value)})), lua_sline(((GoIface){235, (void *)(ex)})));
                         } else if ((_t3 == 1)) {
-                            lua_codeStore_AddABC(code, 5, sreg, lua_varNamePool_RegisterUnique(context->Upvalues, ex->Value), 0, lua_sline(((GoIface){234, (void *)(ex)})));
+                            lua_codeStore_AddABC(code, 5, sreg, lua_varNamePool_RegisterUnique(context->Upvalues, ex->Value), 0, lua_sline(((GoIface){235, (void *)(ex)})));
                         } else if ((_t3 == 2)) {
                             int b = lua_funcContext_FindLocalVar(context, ex->Value);
-                            lua_codeStore_AddABC(code, 0, sreg, b, 0, lua_sline(((GoIface){234, (void *)(ex)})));
+                            lua_codeStore_AddABC(code, 0, sreg, b, 0, lua_sline(((GoIface){235, (void *)(ex)})));
                         }
                     } while (0);
                 }
                 return sused;
-            } else if (_t1.type == 216) {
+            } else if (_t1.type == 217) {
                 ast_Comma3Expr* ex = ((ast_Comma3Expr*)_t1.data);
                 if (context->Proto->IsVarArg == 0U) {
-                    lua_raiseCompileError(context, lua_sline(((GoIface){216, (void *)(ex)})), GOSTR("cannot use '...' outside a vararg function"), (Slice_GoIface){0});
+                    lua_raiseCompileError(context, lua_sline(((GoIface){217, (void *)(ex)})), GOSTR("cannot use '...' outside a vararg function"), (Slice_GoIface){0});
                 }
                 context->Proto->IsVarArg &= 251U;
-                lua_codeStore_AddABC(code, 40, sreg, (2 + ec->varargopt), 0, lua_sline(((GoIface){216, (void *)(ex)})));
+                lua_codeStore_AddABC(code, 40, sreg, (2 + ec->varargopt), 0, lua_sline(((GoIface){217, (void *)(ex)})));
                 if ((lua_funcContext_RegTop(context) > (((sreg + 2) + ec->varargopt))) || (ec->varargopt < -1)) {
                     return 0;
                 }
                 return ((((sreg + 1) + ec->varargopt)) - (*reg__h));
-            } else if (_t1.type == 235) {
+            } else if (_t1.type == 236) {
                 ast_AttrGetExpr* ex = ((ast_AttrGetExpr*)_t1.data);
                 int a = sreg;
                 int *b__h = go_box_a(int, (*reg__h));
@@ -61562,49 +61565,49 @@ int lua_compileExpr(lua_funcContext* context, int reg, ast_Expr expr, lua_expcon
                 int opcode = 7;
                 {
                     GoIface _t4 = ex->Key;
-                    ast_StringExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 236) _t5 = ((ast_StringExpr*)_t4.data);
-                    bool _t6 = _t4.type == 236;
+                    ast_StringExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 237) _t5 = ((ast_StringExpr*)_t4.data);
+                    bool _t6 = _t4.type == 237;
                     bool ok = _t6;
                     if (ok) {
                         opcode = 8;
                     }
                 }
-                lua_codeStore_AddABC(code, opcode, a, (*b__h), (*c__h), lua_sline(((GoIface){235, (void *)(ex)})));
+                lua_codeStore_AddABC(code, opcode, a, (*b__h), (*c__h), lua_sline(((GoIface){236, (void *)(ex)})));
                 return sused;
-            } else if (_t1.type == 244) {
+            } else if (_t1.type == 245) {
                 ast_TableExpr* ex = ((ast_TableExpr*)_t1.data);
                 lua_compileTableExpr(context, (*reg__h), ex, ec);
                 return 1;
-            } else if (_t1.type == 245) {
+            } else if (_t1.type == 246) {
                 ast_ArithmeticOpExpr* ex = ((ast_ArithmeticOpExpr*)_t1.data);
                 lua_compileArithmeticOpExpr(context, (*reg__h), ex, ec);
                 return sused;
-            } else if (_t1.type == 246) {
+            } else if (_t1.type == 247) {
                 ast_StringConcatOpExpr* ex = ((ast_StringConcatOpExpr*)_t1.data);
                 lua_compileStringConcatOpExpr(context, (*reg__h), ex, ec);
                 return sused;
-            } else if (_t1.type == 247 || _t1.type == 242 || _t1.type == 248) {
+            } else if (_t1.type == 248 || _t1.type == 243 || _t1.type == 249) {
                 GoIface ex = _t1;
                 lua_compileUnaryOpExpr(context, (*reg__h), ex, ec);
                 return sused;
-            } else if (_t1.type == 243) {
+            } else if (_t1.type == 244) {
                 ast_RelationalOpExpr* ex = ((ast_RelationalOpExpr*)_t1.data);
                 lua_compileRelationalOpExpr(context, (*reg__h), ex, ec);
                 return sused;
-            } else if (_t1.type == 238) {
+            } else if (_t1.type == 239) {
                 ast_LogicalOpExpr* ex = ((ast_LogicalOpExpr*)_t1.data);
                 lua_compileLogicalOpExpr(context, (*reg__h), ex, ec);
                 return sused;
-            } else if (_t1.type == 215) {
+            } else if (_t1.type == 216) {
                 ast_FuncCallExpr* ex = ((ast_FuncCallExpr*)_t1.data);
                 return lua_compileFuncCallExpr(context, (*reg__h), ex, ec);
-            } else if (_t1.type == 239) {
+            } else if (_t1.type == 240) {
                 ast_FunctionExpr* ex = ((ast_FunctionExpr*)_t1.data);
                 lua_funcContext* childcontext = lua_newFuncContext(context->Proto->SourceName, context);
                 lua_compileFunctionExpr(childcontext, ex, ec);
                 int protono = context->Proto->FunctionPrototypes.len;
                 context->Proto->FunctionPrototypes = GO_APPEND(Slice_lua_FunctionProtoPtr, context->Proto->FunctionPrototypes, childcontext->Proto);
-                lua_codeStore_AddABx(code, 39, sreg, protono, lua_sline(((GoIface){239, (void *)(ex)})));
+                lua_codeStore_AddABx(code, 39, sreg, protono, lua_sline(((GoIface){240, (void *)(ex)})));
                 {
                     Slice_lua_varNamePoolValue _t8 = lua_varNamePool_List(childcontext->Upvalues);
                     for (int _t7 = 0; _t7 < _t8.len; _t7++) {
@@ -61613,14 +61616,14 @@ int lua_compileExpr(lua_funcContext* context, int reg, ast_Expr expr, lua_expcon
                         int localidx = _t10.r0;
                         lua_codeBlock* block = _t10.r1;
                         if (localidx > -1) {
-                            lua_codeStore_AddABC(code, 0, 0, localidx, 0, lua_sline(((GoIface){239, (void *)(ex)})));
+                            lua_codeStore_AddABC(code, 0, 0, localidx, 0, lua_sline(((GoIface){240, (void *)(ex)})));
                             block->RefUpvalue = true;
                         } else {
                             int upvalueidx = lua_varNamePool_Find(context->Upvalues, upvalue.Name);
                             if (upvalueidx < 0) {
                                 upvalueidx = lua_varNamePool_RegisterUnique(context->Upvalues, upvalue.Name);
                             }
-                            lua_codeStore_AddABC(code, 5, 0, upvalueidx, 0, lua_sline(((GoIface){239, (void *)(ex)})));
+                            lua_codeStore_AddABC(code, 5, 0, upvalueidx, 0, lua_sline(((GoIface){240, (void *)(ex)})));
                         }
                         _cont9:;
                     }
@@ -61628,7 +61631,7 @@ int lua_compileExpr(lua_funcContext* context, int reg, ast_Expr expr, lua_expcon
                 return sused;
             } else {
                 GoIface ex = _t1;
-                go_panic(fmt_Sprintf(GOSTR("expr %v not implemented."), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, iface_Name_319077b5(iface_Elem_91ee7c7d(reflect_TypeOf(ex))))}))));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("expr %v not implemented."), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, iface_Name_319077b5(iface_Elem_91ee7c7d(reflect_TypeOf(ex))))}))))}));
             }
         } while (0);
     }
@@ -61639,8 +61642,8 @@ void lua_compileExprWithPropagation(lua_funcContext* context, ast_Expr expr, int
     int reginc = lua_compileExpr(context, (*reg), expr, lua_ecnone(0));
     {
         GoIface _t1 = expr;
-        ast_LogicalOpExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 238) _t2 = ((ast_LogicalOpExpr*)_t1.data);
-        bool _t3 = _t1.type == 238;
+        ast_LogicalOpExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 239) _t2 = ((ast_LogicalOpExpr*)_t1.data);
+        bool _t3 = _t1.type == 239;
         bool ok = _t3;
         if (ok) {
             (*save) = (*reg);
@@ -61666,7 +61669,7 @@ ast_Expr lua_constFold(ast_Expr exp_) {
     {
         GoIface _t1 = exp_;
         do {
-            if (_t1.type == 245) {
+            if (_t1.type == 246) {
                 ast_ArithmeticOpExpr* expr = ((ast_ArithmeticOpExpr*)_t1.data);
                 Ret_lua_LNumber__bool _t2 = lua_lnumberValue(lua_constFold(expr->Lhs));
                 lua_LNumber lvalue = _t2.r0;
@@ -61679,26 +61682,26 @@ ast_Expr lua_constFold(ast_Expr exp_) {
                         GoString _t4 = expr->Operator;
                         do {
                             if (go_streq(_t4, GOSTR("+"))) {
-                                return ((GoIface){218, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue + rvalue))})}))});
+                                return ((GoIface){219, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue + rvalue))})}))});
                             } else if (go_streq(_t4, GOSTR("-"))) {
-                                return ((GoIface){218, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue - rvalue))})}))});
+                                return ((GoIface){219, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue - rvalue))})}))});
                             } else if (go_streq(_t4, GOSTR("*"))) {
-                                return ((GoIface){218, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue * rvalue))})}))});
+                                return ((GoIface){219, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue * rvalue))})}))});
                             } else if (go_streq(_t4, GOSTR("/"))) {
-                                return ((GoIface){218, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue / rvalue))})}))});
+                                return ((GoIface){219, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, (lvalue / rvalue))})}))});
                             } else if (go_streq(_t4, GOSTR("%"))) {
-                                return ((GoIface){218, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, lua_luaModulo(lvalue, rvalue))})}))});
+                                return ((GoIface){219, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, lua_luaModulo(lvalue, rvalue))})}))});
                             } else if (go_streq(_t4, GOSTR("^"))) {
-                                return ((GoIface){218, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, ((lua_LNumber)math_Pow(((f64)lvalue), ((f64)rvalue))))})}))});
+                                return ((GoIface){219, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, ((lua_LNumber)math_Pow(((f64)lvalue), ((f64)rvalue))))})}))});
                             } else {
-                                go_panic(fmt_Sprintf(GOSTR("unknown binop: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, expr->Operator)}))));
+                                go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("unknown binop: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, expr->Operator)}))))}));
                             }
                         } while (0);
                     }
                 } else {
-                    return ((GoIface){245, (void *)(expr)});
+                    return ((GoIface){246, (void *)(expr)});
                 }
-            } else if (_t1.type == 247) {
+            } else if (_t1.type == 248) {
                 ast_UnaryMinusOpExpr* expr = ((ast_UnaryMinusOpExpr*)_t1.data);
                 expr->Expr = lua_constFold(expr->Expr);
                 {
@@ -61706,10 +61709,10 @@ ast_Expr lua_constFold(ast_Expr exp_) {
                     lua_LNumber value = _t5.r0;
                     bool ok = _t5.r1;
                     if (ok) {
-                        return ((GoIface){218, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, ((lua_LNumber)(-value)))})}))});
+                        return ((GoIface){219, (void *)(go_box(lua_constLValueExpr, (lua_constLValueExpr){.Value = ((GoIface){204, go_box_a(lua_LNumber, ((lua_LNumber)(-value)))})}))});
                     }
                 }
-                return ((GoIface){247, (void *)(expr)});
+                return ((GoIface){248, (void *)(expr)});
             } else {
                 GoIface expr = _t1;
                 return exp_;
@@ -61720,8 +61723,8 @@ ast_Expr lua_constFold(ast_Expr exp_) {
 
 // github.com/yuin/gopher-lua.compileFunctionExpr (compile.go:1306), 0 TODO
 void lua_compileFunctionExpr(lua_funcContext* context, ast_FunctionExpr* funcexpr, lua_expcontext* ec) {
-    context->Proto->LineDefined = lua_sline(((GoIface){239, (void *)(funcexpr)}));
-    context->Proto->LastLineDefined = lua_eline(((GoIface){239, (void *)(funcexpr)}));
+    context->Proto->LineDefined = lua_sline(((GoIface){240, (void *)(funcexpr)}));
+    context->Proto->LastLineDefined = lua_eline(((GoIface){240, (void *)(funcexpr)}));
     if (funcexpr->ParList->Names.len > 200) {
         lua_raiseCompileError(context, context->Proto->LineDefined, GOSTR("register overflow"), (Slice_GoIface){0});
     }
@@ -61748,7 +61751,7 @@ void lua_compileFunctionExpr(lua_funcContext* context, ast_FunctionExpr* funcexp
         context->Proto->IsVarArg |= 2U;
     }
     lua_compileChunk(context, funcexpr->Stmts, false);
-    lua_codeStore_AddABC(context->Code, 33, 0, 1, 0, lua_eline(((GoIface){239, (void *)(funcexpr)})));
+    lua_codeStore_AddABC(context->Code, 33, 0, 1, 0, lua_eline(((GoIface){240, (void *)(funcexpr)})));
     lua_funcContext_EndScope(context);
     lua_funcContext_CheckUnresolvedGoto(context);
     context->Proto->Code = lua_codeStore_List(context->Code);
@@ -61783,7 +61786,7 @@ void lua_compileTableExpr(lua_funcContext* context, int reg, ast_TableExpr* ex, 
     lua_codeStore* code = context->Code;
     int tablereg = (*reg__h);
     (*reg__h)++;
-    lua_codeStore_AddABC(code, 13, tablereg, 0, 0, lua_sline(((GoIface){244, (void *)(ex)})));
+    lua_codeStore_AddABC(code, 13, tablereg, 0, 0, lua_sline(((GoIface){245, (void *)(ex)})));
     int tablepc = lua_codeStore_LastPC(code);
     int regbase = (*reg__h);
     int arraycount = 0;
@@ -61811,14 +61814,14 @@ void lua_compileTableExpr(lua_funcContext* context, int reg, ast_TableExpr* ex, 
                 int opcode = 11;
                 {
                     GoIface _t4 = field->Key;
-                    ast_StringExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 236) _t5 = ((ast_StringExpr*)_t4.data);
-                    bool _t6 = _t4.type == 236;
+                    ast_StringExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 237) _t5 = ((ast_StringExpr*)_t4.data);
+                    bool _t6 = _t4.type == 237;
                     bool ok = _t6;
                     if (ok) {
                         opcode = 12;
                     }
                 }
-                lua_codeStore_AddABC(code, opcode, tablereg, (*b__h), (*c__h), lua_sline(((GoIface){244, (void *)(ex)})));
+                lua_codeStore_AddABC(code, opcode, tablereg, (*b__h), (*c__h), lua_sline(((GoIface){245, (void *)(ex)})));
                 (*reg__h) = regorg;
             }
             int flush = go_rem32(arraycount, g_lua_FieldsPerFlush);
@@ -61851,29 +61854,29 @@ void lua_compileTableExpr(lua_funcContext* context, int reg, ast_TableExpr* ex, 
     lua_codeStore_SetB(code, tablepc, lua_int2Fb(arraycount));
     lua_codeStore_SetC(code, tablepc, lua_int2Fb((ex->Fields.len - arraycount)));
     if (lua_shouldmove(ec, tablereg)) {
-        lua_codeStore_AddABC(code, 0, ec->reg, tablereg, 0, lua_sline(((GoIface){244, (void *)(ex)})));
+        lua_codeStore_AddABC(code, 0, ec->reg, tablereg, 0, lua_sline(((GoIface){245, (void *)(ex)})));
     }
 }
 
 // github.com/yuin/gopher-lua.compileArithmeticOpExpr (compile.go:1420), 0 TODO
 void lua_compileArithmeticOpExpr(lua_funcContext* context, int reg, ast_ArithmeticOpExpr* expr, lua_expcontext* ec) {
     int *reg__h = go_box_a(int, reg);
-    ast_Expr exp_ = lua_constFold(((GoIface){245, (void *)(expr)}));
+    ast_Expr exp_ = lua_constFold(((GoIface){246, (void *)(expr)}));
     {
         GoIface _t1 = exp_;
-        lua_constLValueExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 218) _t2 = ((lua_constLValueExpr*)_t1.data);
-        bool _t3 = _t1.type == 218;
+        lua_constLValueExpr* _t2; memset(&_t2, 0, sizeof _t2); if (_t1.type == 219) _t2 = ((lua_constLValueExpr*)_t1.data);
+        bool _t3 = _t1.type == 219;
         lua_constLValueExpr* ex = _t2;
         bool ok = _t3;
         if (ok) {
-            iface_SetLine_83b24cfd(exp_, lua_sline(((GoIface){245, (void *)(expr)})));
-            lua_compileExpr(context, (*reg__h), ((GoIface){218, (void *)(ex)}), ec);
+            iface_SetLine_83b24cfd(exp_, lua_sline(((GoIface){246, (void *)(expr)})));
+            lua_compileExpr(context, (*reg__h), ((GoIface){219, (void *)(ex)}), ec);
             return;
         }
     }
     GoIface _t4 = exp_;
-    ast_ArithmeticOpExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 245) _t5 = ((ast_ArithmeticOpExpr*)_t4.data);
-    bool _t6 = _t4.type == 245;
+    ast_ArithmeticOpExpr* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 246) _t5 = ((ast_ArithmeticOpExpr*)_t4.data);
+    bool _t6 = _t4.type == 246;
     expr = _t5;
     int a = lua_savereg(ec, (*reg__h));
     int *b__h = go_box_a(int, (*reg__h));
@@ -61899,7 +61902,7 @@ void lua_compileArithmeticOpExpr(lua_funcContext* context, int reg, ast_Arithmet
             }
         } while (0);
     }
-    lua_codeStore_AddABC(context->Code, op, a, (*b__h), (*c__h), lua_sline(((GoIface){245, (void *)(expr)})));
+    lua_codeStore_AddABC(context->Code, op, a, (*b__h), (*c__h), lua_sline(((GoIface){246, (void *)(expr)})));
 }
 
 // github.com/yuin/gopher-lua.compileStringConcatOpExpr (compile.go:1452), 0 TODO
@@ -61911,8 +61914,8 @@ void lua_compileStringConcatOpExpr(lua_funcContext* context, int reg, ast_String
         for (; current.type != 0; ) {
             {
                 GoIface _t2 = current;
-                ast_StringConcatOpExpr* _t3; memset(&_t3, 0, sizeof _t3); if (_t2.type == 246) _t3 = ((ast_StringConcatOpExpr*)_t2.data);
-                bool _t4 = _t2.type == 246;
+                ast_StringConcatOpExpr* _t3; memset(&_t3, 0, sizeof _t3); if (_t2.type == 247) _t3 = ((ast_StringConcatOpExpr*)_t2.data);
+                bool _t4 = _t2.type == 247;
                 ast_StringConcatOpExpr* ex = _t3;
                 bool ok = _t4;
                 if (ok) {
@@ -61936,7 +61939,7 @@ void lua_compileStringConcatOpExpr(lua_funcContext* context, int reg, ast_String
             _cont5:;
         }
     }
-    lua_codeStore_AddABC(code, 24, a, basereg, (basereg + crange), lua_sline(((GoIface){246, (void *)(expr)})));
+    lua_codeStore_AddABC(code, 24, a, basereg, (basereg + crange), lua_sline(((GoIface){247, (void *)(expr)})));
 }
 
 // github.com/yuin/gopher-lua.compileUnaryOpExpr (compile.go:1473), 0 TODO
@@ -61948,36 +61951,36 @@ void lua_compileUnaryOpExpr(lua_funcContext* context, int reg, ast_Expr expr, lu
     {
         GoIface _t1 = expr;
         do {
-            if (_t1.type == 247) {
+            if (_t1.type == 248) {
                 ast_UnaryMinusOpExpr* ex = ((ast_UnaryMinusOpExpr*)_t1.data);
-                ast_Expr exp_ = lua_constFold(((GoIface){247, (void *)(ex)}));
+                ast_Expr exp_ = lua_constFold(((GoIface){248, (void *)(ex)}));
                 {
                     GoIface _t2 = exp_;
-                    lua_constLValueExpr* _t3; memset(&_t3, 0, sizeof _t3); if (_t2.type == 218) _t3 = ((lua_constLValueExpr*)_t2.data);
-                    bool _t4 = _t2.type == 218;
+                    lua_constLValueExpr* _t3; memset(&_t3, 0, sizeof _t3); if (_t2.type == 219) _t3 = ((lua_constLValueExpr*)_t2.data);
+                    bool _t4 = _t2.type == 219;
                     lua_constLValueExpr* lvexpr = _t3;
                     bool ok = _t4;
                     if (ok) {
                         iface_SetLine_83b24cfd(exp_, lua_sline(expr));
-                        lua_compileExpr(context, (*reg__h), ((GoIface){218, (void *)(lvexpr)}), ec);
+                        lua_compileExpr(context, (*reg__h), ((GoIface){219, (void *)(lvexpr)}), ec);
                         return;
                     }
                 }
                 GoIface _t5 = exp_;
-                ast_UnaryMinusOpExpr* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 247) _t6 = ((ast_UnaryMinusOpExpr*)_t5.data);
-                bool _t7 = _t5.type == 247;
+                ast_UnaryMinusOpExpr* _t6; memset(&_t6, 0, sizeof _t6); if (_t5.type == 248) _t6 = ((ast_UnaryMinusOpExpr*)_t5.data);
+                bool _t7 = _t5.type == 248;
                 ex = _t6;
                 operandexpr = ex->Expr;
                 opcode = 21;
-            } else if (_t1.type == 242) {
+            } else if (_t1.type == 243) {
                 ast_UnaryNotOpExpr* ex = ((ast_UnaryNotOpExpr*)_t1.data);
                 {
                     GoIface _t8 = ex->Expr;
                     do {
-                        if (_t8.type == 241) {
+                        if (_t8.type == 242) {
                             lua_codeStore_AddABC(code, 3, lua_savereg(ec, (*reg__h)), 0, 0, lua_sline(expr));
                             return;
-                        } else if (_t8.type == 240 || _t8.type == 237) {
+                        } else if (_t8.type == 241 || _t8.type == 238) {
                             lua_codeStore_AddABC(code, 3, lua_savereg(ec, (*reg__h)), 1, 0, lua_sline(expr));
                             return;
                         } else {
@@ -61986,7 +61989,7 @@ void lua_compileUnaryOpExpr(lua_funcContext* context, int reg, ast_Expr expr, lu
                         }
                     } while (0);
                 }
-            } else if (_t1.type == 248) {
+            } else if (_t1.type == 249) {
                 ast_UnaryLenOpExpr* ex = ((ast_UnaryLenOpExpr*)_t1.data);
                 opcode = 23;
                 operandexpr = ex->Expr;
@@ -62011,21 +62014,21 @@ void lua_compileRelationalOpExprAux(lua_funcContext* context, int reg, ast_Relat
         GoString _t1 = expr->Operator;
         do {
             if (go_streq(_t1, GOSTR("<"))) {
-                lua_codeStore_AddABC(code, 27, (0 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){243, (void *)(expr)})));
+                lua_codeStore_AddABC(code, 27, (0 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){244, (void *)(expr)})));
             } else if (go_streq(_t1, GOSTR(">"))) {
-                lua_codeStore_AddABC(code, 27, (0 ^ flip), (*c__h), (*b__h), lua_sline(((GoIface){243, (void *)(expr)})));
+                lua_codeStore_AddABC(code, 27, (0 ^ flip), (*c__h), (*b__h), lua_sline(((GoIface){244, (void *)(expr)})));
             } else if (go_streq(_t1, GOSTR("<="))) {
-                lua_codeStore_AddABC(code, 28, (0 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){243, (void *)(expr)})));
+                lua_codeStore_AddABC(code, 28, (0 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){244, (void *)(expr)})));
             } else if (go_streq(_t1, GOSTR(">="))) {
-                lua_codeStore_AddABC(code, 28, (0 ^ flip), (*c__h), (*b__h), lua_sline(((GoIface){243, (void *)(expr)})));
+                lua_codeStore_AddABC(code, 28, (0 ^ flip), (*c__h), (*b__h), lua_sline(((GoIface){244, (void *)(expr)})));
             } else if (go_streq(_t1, GOSTR("=="))) {
-                lua_codeStore_AddABC(code, 26, (0 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){243, (void *)(expr)})));
+                lua_codeStore_AddABC(code, 26, (0 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){244, (void *)(expr)})));
             } else if (go_streq(_t1, GOSTR("~="))) {
-                lua_codeStore_AddABC(code, 26, (1 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){243, (void *)(expr)})));
+                lua_codeStore_AddABC(code, 26, (1 ^ flip), (*b__h), (*c__h), lua_sline(((GoIface){244, (void *)(expr)})));
             }
         } while (0);
     }
-    lua_codeStore_AddASbx(code, 25, 0, label, lua_sline(((GoIface){243, (void *)(expr)})));
+    lua_codeStore_AddASbx(code, 25, 0, label, lua_sline(((GoIface){244, (void *)(expr)})));
 }
 
 // github.com/yuin/gopher-lua.compileRelationalOpExpr (compile.go:1534), 0 TODO
@@ -62034,9 +62037,9 @@ void lua_compileRelationalOpExpr(lua_funcContext* context, int reg, ast_Relation
     lua_codeStore* code = context->Code;
     int jumplabel = lua_funcContext_NewLabel(context);
     lua_compileRelationalOpExprAux(context, reg, expr, 1, jumplabel);
-    lua_codeStore_AddABC(code, 3, a, 0, 1, lua_sline(((GoIface){243, (void *)(expr)})));
+    lua_codeStore_AddABC(code, 3, a, 0, 1, lua_sline(((GoIface){244, (void *)(expr)})));
     lua_funcContext_SetLabelPc(context, jumplabel, lua_codeStore_LastPC(code));
-    lua_codeStore_AddABC(code, 3, a, 1, 0, lua_sline(((GoIface){243, (void *)(expr)})));
+    lua_codeStore_AddABC(code, 3, a, 1, 0, lua_sline(((GoIface){244, (void *)(expr)})));
 }
 
 // github.com/yuin/gopher-lua.compileLogicalOpExpr (compile.go:1544), 0 TODO
@@ -62057,9 +62060,9 @@ void lua_compileLogicalOpExpr(lua_funcContext* context, int reg, ast_LogicalOpEx
     }
     if (lb->b) {
         lua_funcContext_SetLabelPc(context, lb->f, lua_codeStore_LastPC(code));
-        lua_codeStore_AddABC(code, 3, a, 0, 1, lua_sline(((GoIface){238, (void *)(expr)})));
+        lua_codeStore_AddABC(code, 3, a, 0, 1, lua_sline(((GoIface){239, (void *)(expr)})));
         lua_funcContext_SetLabelPc(context, lb->t, lua_codeStore_LastPC(code));
-        lua_codeStore_AddABC(code, 3, a, 1, 0, lua_sline(((GoIface){238, (void *)(expr)})));
+        lua_codeStore_AddABC(code, 3, a, 1, 0, lua_sline(((GoIface){239, (void *)(expr)})));
     }
     u32 lastinst = lua_codeStore_Last(code);
     if ((lua_opGetOpCode(lastinst) == 25) && (lua_opGetArgSbx(lastinst) == endlabel)) {
@@ -62080,7 +62083,7 @@ void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr exp
     {
         GoIface _t1 = expr;
         do {
-            if (_t1.type == 240) {
+            if (_t1.type == 241) {
                 ast_FalseExpr* ex = ((ast_FalseExpr*)_t1.data);
                 if (elselabel == lb->e) {
                     lua_codeStore_AddASbx(code, 25, 0, lb->f, lua_sline(expr));
@@ -62089,7 +62092,7 @@ void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr exp
                     lua_codeStore_AddASbx(code, 25, 0, elselabel, lua_sline(expr));
                 }
                 return;
-            } else if (_t1.type == 237) {
+            } else if (_t1.type == 238) {
                 ast_NilExpr* ex = ((ast_NilExpr*)_t1.data);
                 if (elselabel == lb->e) {
                     lua_compileExpr(context, reg, expr, ec);
@@ -62098,7 +62101,7 @@ void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr exp
                     lua_codeStore_AddASbx(code, 25, 0, elselabel, lua_sline(expr));
                 }
                 return;
-            } else if (_t1.type == 241) {
+            } else if (_t1.type == 242) {
                 ast_TrueExpr* ex = ((ast_TrueExpr*)_t1.data);
                 if (thenlabel == lb->e) {
                     lua_codeStore_AddASbx(code, 25, 0, lb->t, lua_sline(expr));
@@ -62107,7 +62110,7 @@ void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr exp
                     lua_codeStore_AddASbx(code, 25, 0, thenlabel, lua_sline(expr));
                 }
                 return;
-            } else if (_t1.type == 217 || _t1.type == 236) {
+            } else if (_t1.type == 218 || _t1.type == 237) {
                 GoIface ex = _t1;
                 if (thenlabel == lb->e) {
                     lua_compileExpr(context, reg, expr, ec);
@@ -62116,7 +62119,7 @@ void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr exp
                     lua_codeStore_AddASbx(code, 25, 0, thenlabel, lua_sline(expr));
                 }
                 return;
-            } else if (_t1.type == 238) {
+            } else if (_t1.type == 239) {
                 ast_LogicalOpExpr* ex = ((ast_LogicalOpExpr*)_t1.data);
                 {
                     GoString _t2 = ex->Operator;
@@ -62135,7 +62138,7 @@ void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr exp
                     } while (0);
                 }
                 return;
-            } else if (_t1.type == 243) {
+            } else if (_t1.type == 244) {
                 ast_RelationalOpExpr* ex = ((ast_RelationalOpExpr*)_t1.data);
                 if (thenlabel == elselabel) {
                     flip ^= 1;
@@ -62163,8 +62166,8 @@ void lua_compileLogicalOpExprAux(lua_funcContext* context, int reg, ast_Expr exp
     bool isLastOr = ((thenlabel == lb->e) && hasnextcond);
     {
         GoIface _t3 = expr;
-        ast_IdentExpr* _t4; memset(&_t4, 0, sizeof _t4); if (_t3.type == 234) _t4 = ((ast_IdentExpr*)_t3.data);
-        bool _t5 = _t3.type == 234;
+        ast_IdentExpr* _t4; memset(&_t4, 0, sizeof _t4); if (_t3.type == 235) _t4 = ((ast_IdentExpr*)_t3.data);
+        bool _t5 = _t3.type == 235;
         ast_IdentExpr* ident = _t4;
         bool ok = _t5;
         if ((ok && ((isLastAnd || isLastOr))) && (lua_getIdentRefType(context, context, ident) == 2)) {
@@ -62213,8 +62216,8 @@ int lua_compileFuncCallExpr(lua_funcContext* context, int reg, ast_FuncCallExpr*
     } else {
         int *b__h = go_box_a(int, (*reg__h));
         lua_compileExprWithMVPropagation(context, expr->Receiver, (&(*reg__h)), (&(*b__h)));
-        int c = lua_loadRk(context, (&(*reg__h)), ((GoIface){215, (void *)(expr)}), ((GoIface){205, go_box(lua_LString, expr->Method)}));
-        lua_codeStore_AddABC(context->Code, 14, funcreg, (*b__h), c, lua_sline(((GoIface){215, (void *)(expr)})));
+        int c = lua_loadRk(context, (&(*reg__h)), ((GoIface){216, (void *)(expr)}), ((GoIface){205, go_box(lua_LString, expr->Method)}));
+        lua_codeStore_AddABC(context->Code, 14, funcreg, (*b__h), c, lua_sline(((GoIface){216, (void *)(expr)})));
         (*reg__h) = ((*b__h) + 1);
         int reg2 = (funcreg + 2);
         if (reg2 > (*reg__h)) {
@@ -62241,10 +62244,10 @@ int lua_compileFuncCallExpr(lua_funcContext* context, int reg, ast_FuncCallExpr*
     if (islastvararg) {
         b = 0;
     }
-    lua_codeStore_AddABC(context->Code, 31, funcreg, b, (ec->varargopt + 2), lua_sline(((GoIface){215, (void *)(expr)})));
+    lua_codeStore_AddABC(context->Code, 31, funcreg, b, (ec->varargopt + 2), lua_sline(((GoIface){216, (void *)(expr)})));
     context->Proto->DbgCalls = GO_APPEND(Slice_lua_DbgCall, context->Proto->DbgCalls, (lua_DbgCall){.Pc = lua_codeStore_LastPC(context->Code), .Name = name});
     if ((ec->varargopt == 0) && lua_shouldmove(ec, funcreg)) {
-        lua_codeStore_AddABC(context->Code, 0, ec->reg, funcreg, 0, lua_sline(((GoIface){215, (void *)(expr)})));
+        lua_codeStore_AddABC(context->Code, 0, ec->reg, funcreg, 0, lua_sline(((GoIface){216, (void *)(expr)})));
         return 1;
     }
     if ((lua_funcContext_RegTop(context) > (((funcreg + 2) + ec->varargopt))) || (ec->varargopt < -1)) {
@@ -62286,15 +62289,15 @@ GoString lua_getExprName(lua_funcContext* context, ast_Expr expr) {
     {
         GoIface _t1 = expr;
         do {
-            if (_t1.type == 234) {
+            if (_t1.type == 235) {
                 ast_IdentExpr* ex = ((ast_IdentExpr*)_t1.data);
                 return ex->Value;
-            } else if (_t1.type == 235) {
+            } else if (_t1.type == 236) {
                 ast_AttrGetExpr* ex = ((ast_AttrGetExpr*)_t1.data);
                 {
                     GoIface _t2 = ex->Key;
                     do {
-                        if (_t2.type == 236) {
+                        if (_t2.type == 237) {
                             ast_StringExpr* kex = ((ast_StringExpr*)_t2.data);
                             return kex->Value;
                         }
@@ -63802,7 +63805,7 @@ GoString lua_loGetPath(GoString env, GoString defpath) {
         GoString dir = _t1.r0;
         GoIface err = _t1.r1;
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         path = strings_Replace(path, GOSTR("!"), dir, -1);
     }
@@ -65124,7 +65127,7 @@ int parse_Lexer_Lex(parse_Lexer* lx, parse_yySymType* lval) {
     ast_Token tok = _t1.r0;
     GoIface err = _t1.r1;
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     if (tok.Type < 0) {
         return 0;
@@ -65136,12 +65139,12 @@ int parse_Lexer_Lex(parse_Lexer* lx, parse_yySymType* lval) {
 
 // github.com/yuin/gopher-lua/parse.Lexer.Error (lexer.go:460), 0 TODO
 void parse_Lexer_Error(parse_Lexer* lx, GoString message) {
-    go_panic(parse_Scanner_Error(lx->scanner, lx->Token.Str, message));
+    go_panic_iface(0, ((GoIface){254, (void *)(parse_Scanner_Error(lx->scanner, lx->Token.Str, message))}));
 }
 
 // github.com/yuin/gopher-lua/parse.Lexer.TokenError (lexer.go:464), 0 TODO
 void parse_Lexer_TokenError(parse_Lexer* lx, ast_Token tok, GoString message) {
-    go_panic(parse_Scanner_TokenError(lx->scanner, tok, message));
+    go_panic_iface(0, ((GoIface){254, (void *)(parse_Scanner_TokenError(lx->scanner, tok, message))}));
 }
 
 // github.com/yuin/gopher-lua/parse.Parse (lexer.go:468), 0 TODO
@@ -65586,7 +65589,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 8)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){221, (void *)(go_box(ast_AssignStmt, (ast_AssignStmt){.Lhs = yyDollar.p[1].exprlist, .Rhs = yyDollar.p[3].exprlist}))});
+                    yyVAL.stmt = ((GoIface){222, (void *)(go_box(ast_AssignStmt, (ast_AssignStmt){.Lhs = yyDollar.p[1].exprlist, .Rhs = yyDollar.p[3].exprlist}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, iface_Line_a218166d(yyDollar.p[1].exprlist.p[0]));
                 }
             } else if ((_t11 == 9)) {
@@ -65594,13 +65597,13 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
                 {
                     {
                         GoIface _t21 = yyDollar.p[1].expr;
-                        ast_FuncCallExpr* _t22; memset(&_t22, 0, sizeof _t22); if (_t21.type == 215) _t22 = ((ast_FuncCallExpr*)_t21.data);
-                        bool _t23 = _t21.type == 215;
+                        ast_FuncCallExpr* _t22; memset(&_t22, 0, sizeof _t22); if (_t21.type == 216) _t22 = ((ast_FuncCallExpr*)_t21.data);
+                        bool _t23 = _t21.type == 216;
                         bool ok = _t23;
                         if (!ok) {
                             parse_Lexer_Error(((parse_Lexer*)(yylex).data), GOSTR("parse error"));
                         } else {
-                            yyVAL.stmt = ((GoIface){223, (void *)(go_box(ast_FuncCallStmt, (ast_FuncCallStmt){.Expr = yyDollar.p[1].expr}))});
+                            yyVAL.stmt = ((GoIface){224, (void *)(go_box(ast_FuncCallStmt, (ast_FuncCallStmt){.Expr = yyDollar.p[1].expr}))});
                             iface_SetLine_83b24cfd(yyVAL.stmt, iface_Line_a218166d(yyDollar.p[1].expr));
                         }
                     }
@@ -65608,28 +65611,28 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 10)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){224, (void *)(go_box(ast_DoBlockStmt, (ast_DoBlockStmt){.Stmts = yyDollar.p[2].stmts}))});
+                    yyVAL.stmt = ((GoIface){225, (void *)(go_box(ast_DoBlockStmt, (ast_DoBlockStmt){.Stmts = yyDollar.p[2].stmts}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, yyDollar.p[3].token.Pos.Line);
                 }
             } else if ((_t11 == 11)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){225, (void *)(go_box(ast_WhileStmt, (ast_WhileStmt){.Condition = yyDollar.p[2].expr, .Stmts = yyDollar.p[4].stmts}))});
+                    yyVAL.stmt = ((GoIface){226, (void *)(go_box(ast_WhileStmt, (ast_WhileStmt){.Condition = yyDollar.p[2].expr, .Stmts = yyDollar.p[4].stmts}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, yyDollar.p[5].token.Pos.Line);
                 }
             } else if ((_t11 == 12)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){226, (void *)(go_box(ast_RepeatStmt, (ast_RepeatStmt){.Condition = yyDollar.p[4].expr, .Stmts = yyDollar.p[2].stmts}))});
+                    yyVAL.stmt = ((GoIface){227, (void *)(go_box(ast_RepeatStmt, (ast_RepeatStmt){.Condition = yyDollar.p[4].expr, .Stmts = yyDollar.p[2].stmts}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, iface_Line_a218166d(yyDollar.p[4].expr));
                 }
             } else if ((_t11 == 13)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 6), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){229, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[2].expr, .Then = yyDollar.p[4].stmts}))});
+                    yyVAL.stmt = ((GoIface){230, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[2].expr, .Then = yyDollar.p[4].stmts}))});
                     ast_Stmt cur = yyVAL.stmt;
                     {
                         Slice_ast_Stmt _t25 = yyDollar.p[5].stmts;
@@ -65646,7 +65649,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 14)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 8), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){229, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[2].expr, .Then = yyDollar.p[4].stmts}))});
+                    yyVAL.stmt = ((GoIface){230, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[2].expr, .Then = yyDollar.p[4].stmts}))});
                     ast_Stmt cur = yyVAL.stmt;
                     {
                         Slice_ast_Stmt _t28 = yyDollar.p[5].stmts;
@@ -65664,60 +65667,60 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 15)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 9), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){231, (void *)(go_box(ast_NumberForStmt, (ast_NumberForStmt){.Name = yyDollar.p[2].token.Str, .Init = yyDollar.p[4].expr, .Limit = yyDollar.p[6].expr, .Stmts = yyDollar.p[8].stmts}))});
+                    yyVAL.stmt = ((GoIface){232, (void *)(go_box(ast_NumberForStmt, (ast_NumberForStmt){.Name = yyDollar.p[2].token.Str, .Init = yyDollar.p[4].expr, .Limit = yyDollar.p[6].expr, .Stmts = yyDollar.p[8].stmts}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, yyDollar.p[9].token.Pos.Line);
                 }
             } else if ((_t11 == 16)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 11), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){231, (void *)(go_box(ast_NumberForStmt, (ast_NumberForStmt){.Name = yyDollar.p[2].token.Str, .Init = yyDollar.p[4].expr, .Limit = yyDollar.p[6].expr, .Step = yyDollar.p[8].expr, .Stmts = yyDollar.p[10].stmts}))});
+                    yyVAL.stmt = ((GoIface){232, (void *)(go_box(ast_NumberForStmt, (ast_NumberForStmt){.Name = yyDollar.p[2].token.Str, .Init = yyDollar.p[4].expr, .Limit = yyDollar.p[6].expr, .Step = yyDollar.p[8].expr, .Stmts = yyDollar.p[10].stmts}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, yyDollar.p[11].token.Pos.Line);
                 }
             } else if ((_t11 == 17)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 7), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){232, (void *)(go_box(ast_GenericForStmt, (ast_GenericForStmt){.Names = yyDollar.p[2].namelist, .Exprs = yyDollar.p[4].exprlist, .Stmts = yyDollar.p[6].stmts}))});
+                    yyVAL.stmt = ((GoIface){233, (void *)(go_box(ast_GenericForStmt, (ast_GenericForStmt){.Names = yyDollar.p[2].namelist, .Exprs = yyDollar.p[4].exprlist, .Stmts = yyDollar.p[6].stmts}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, yyDollar.p[7].token.Pos.Line);
                 }
             } else if ((_t11 == 18)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){227, (void *)(go_box(ast_FuncDefStmt, (ast_FuncDefStmt){.Name = yyDollar.p[2].funcname, .Func = yyDollar.p[3].funcexpr}))});
+                    yyVAL.stmt = ((GoIface){228, (void *)(go_box(ast_FuncDefStmt, (ast_FuncDefStmt){.Name = yyDollar.p[2].funcname, .Func = yyDollar.p[3].funcexpr}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, ast_Node_LastLine(&yyDollar.p[3].funcexpr->ExprBase_.Node_));
                 }
             } else if ((_t11 == 19)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){222, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = GO_SLICE_LIT(Slice_GoString, GoString, 1, yyDollar.p[3].token.Str), .Exprs = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, ((GoIface){239, (void *)(yyDollar.p[4].funcexpr)}))}))});
+                    yyVAL.stmt = ((GoIface){223, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = GO_SLICE_LIT(Slice_GoString, GoString, 1, yyDollar.p[3].token.Str), .Exprs = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, ((GoIface){240, (void *)(yyDollar.p[4].funcexpr)}))}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.stmt, ast_Node_LastLine(&yyDollar.p[4].funcexpr->ExprBase_.Node_));
                 }
             } else if ((_t11 == 20)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){222, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = yyDollar.p[2].namelist, .Exprs = yyDollar.p[4].exprlist}))});
+                    yyVAL.stmt = ((GoIface){223, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = yyDollar.p[2].namelist, .Exprs = yyDollar.p[4].exprlist}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 21)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){222, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = yyDollar.p[2].namelist, .Exprs = (Slice_ast_Expr){0}}))});
+                    yyVAL.stmt = ((GoIface){223, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = yyDollar.p[2].namelist, .Exprs = (Slice_ast_Expr){0}}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 22)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){219, (void *)(go_box(ast_LabelStmt, (ast_LabelStmt){.Name = yyDollar.p[2].token.Str}))});
+                    yyVAL.stmt = ((GoIface){220, (void *)(go_box(ast_LabelStmt, (ast_LabelStmt){.Name = yyDollar.p[2].token.Str}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 23)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){233, (void *)(go_box(ast_GotoStmt, (ast_GotoStmt){.Label = yyDollar.p[2].token.Str}))});
+                    yyVAL.stmt = ((GoIface){234, (void *)(go_box(ast_GotoStmt, (ast_GotoStmt){.Label = yyDollar.p[2].token.Str}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 24)) {
@@ -65728,25 +65731,25 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 25)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
                 {
-                    yyVAL.stmts = GO_APPEND(Slice_ast_Stmt, yyDollar.p[1].stmts, ((GoIface){229, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[3].expr, .Then = yyDollar.p[5].stmts}))}));
+                    yyVAL.stmts = GO_APPEND(Slice_ast_Stmt, yyDollar.p[1].stmts, ((GoIface){230, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[3].expr, .Then = yyDollar.p[5].stmts}))}));
                     iface_SetLine_83b24cfd(yyVAL.stmts.p[(yyVAL.stmts.len - 1)], yyDollar.p[2].token.Pos.Line);
                 }
             } else if ((_t11 == 26)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){228, (void *)(go_box(ast_ReturnStmt, (ast_ReturnStmt){.Exprs = (Slice_ast_Expr){0}}))});
+                    yyVAL.stmt = ((GoIface){229, (void *)(go_box(ast_ReturnStmt, (ast_ReturnStmt){.Exprs = (Slice_ast_Expr){0}}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 27)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){228, (void *)(go_box(ast_ReturnStmt, (ast_ReturnStmt){.Exprs = yyDollar.p[2].exprlist}))});
+                    yyVAL.stmt = ((GoIface){229, (void *)(go_box(ast_ReturnStmt, (ast_ReturnStmt){.Exprs = yyDollar.p[2].exprlist}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 28)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.stmt = ((GoIface){230, (void *)(go_box(ast_BreakStmt, (ast_BreakStmt){0}))});
+                    yyVAL.stmt = ((GoIface){231, (void *)(go_box(ast_BreakStmt, (ast_BreakStmt){0}))});
                     iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 29)) {
@@ -65762,7 +65765,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 31)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.funcname = go_box(ast_FuncName, (ast_FuncName){.Func = ((GoIface){234, (void *)(go_box(ast_IdentExpr, (ast_IdentExpr){.Value = yyDollar.p[1].token.Str}))})});
+                    yyVAL.funcname = go_box(ast_FuncName, (ast_FuncName){.Func = ((GoIface){235, (void *)(go_box(ast_IdentExpr, (ast_IdentExpr){.Value = yyDollar.p[1].token.Str}))})});
                     iface_SetLine_83b24cfd(yyVAL.funcname->Func, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 32)) {
@@ -65770,9 +65773,9 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
                 {
                     ast_StringExpr* key = go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[3].token.Str});
                     ast_Node_SetLine(&key->ConstExprBase_.ExprBase_.Node_, yyDollar.p[3].token.Pos.Line);
-                    ast_AttrGetExpr* fn = go_box(ast_AttrGetExpr, (ast_AttrGetExpr){.Object = yyDollar.p[1].funcname->Func, .Key = ((GoIface){236, (void *)(key)})});
+                    ast_AttrGetExpr* fn = go_box(ast_AttrGetExpr, (ast_AttrGetExpr){.Object = yyDollar.p[1].funcname->Func, .Key = ((GoIface){237, (void *)(key)})});
                     ast_Node_SetLine(&fn->ExprBase_.Node_, yyDollar.p[3].token.Pos.Line);
-                    yyVAL.funcname = go_box(ast_FuncName, (ast_FuncName){.Func = ((GoIface){235, (void *)(fn)})});
+                    yyVAL.funcname = go_box(ast_FuncName, (ast_FuncName){.Func = ((GoIface){236, (void *)(fn)})});
                 }
             } else if ((_t11 == 33)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
@@ -65787,13 +65790,13 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 35)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){234, (void *)(go_box(ast_IdentExpr, (ast_IdentExpr){.Value = yyDollar.p[1].token.Str}))});
+                    yyVAL.expr = ((GoIface){235, (void *)(go_box(ast_IdentExpr, (ast_IdentExpr){.Value = yyDollar.p[1].token.Str}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 36)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){235, (void *)(go_box(ast_AttrGetExpr, (ast_AttrGetExpr){.Object = yyDollar.p[1].expr, .Key = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){236, (void *)(go_box(ast_AttrGetExpr, (ast_AttrGetExpr){.Object = yyDollar.p[1].expr, .Key = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 37)) {
@@ -65801,7 +65804,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
                 {
                     ast_StringExpr* key = go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[3].token.Str});
                     ast_Node_SetLine(&key->ConstExprBase_.ExprBase_.Node_, yyDollar.p[3].token.Pos.Line);
-                    yyVAL.expr = ((GoIface){235, (void *)(go_box(ast_AttrGetExpr, (ast_AttrGetExpr){.Object = yyDollar.p[1].expr, .Key = ((GoIface){236, (void *)(key)})}))});
+                    yyVAL.expr = ((GoIface){236, (void *)(go_box(ast_AttrGetExpr, (ast_AttrGetExpr){.Object = yyDollar.p[1].expr, .Key = ((GoIface){237, (void *)(key)})}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 38)) {
@@ -65827,31 +65830,31 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 42)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){237, (void *)(go_box(ast_NilExpr, (ast_NilExpr){0}))});
+                    yyVAL.expr = ((GoIface){238, (void *)(go_box(ast_NilExpr, (ast_NilExpr){0}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 43)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){240, (void *)(go_box(ast_FalseExpr, (ast_FalseExpr){0}))});
+                    yyVAL.expr = ((GoIface){241, (void *)(go_box(ast_FalseExpr, (ast_FalseExpr){0}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 44)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){241, (void *)(go_box(ast_TrueExpr, (ast_TrueExpr){0}))});
+                    yyVAL.expr = ((GoIface){242, (void *)(go_box(ast_TrueExpr, (ast_TrueExpr){0}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 45)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){217, (void *)(go_box(ast_NumberExpr, (ast_NumberExpr){.Value = yyDollar.p[1].token.Str}))});
+                    yyVAL.expr = ((GoIface){218, (void *)(go_box(ast_NumberExpr, (ast_NumberExpr){.Value = yyDollar.p[1].token.Str}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 46)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){216, (void *)(go_box(ast_Comma3Expr, (ast_Comma3Expr){0}))});
+                    yyVAL.expr = ((GoIface){217, (void *)(go_box(ast_Comma3Expr, (ast_Comma3Expr){0}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 47)) {
@@ -65877,115 +65880,115 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 51)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){238, (void *)(go_box(ast_LogicalOpExpr, (ast_LogicalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("or"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){239, (void *)(go_box(ast_LogicalOpExpr, (ast_LogicalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("or"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 52)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){238, (void *)(go_box(ast_LogicalOpExpr, (ast_LogicalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("and"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){239, (void *)(go_box(ast_LogicalOpExpr, (ast_LogicalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("and"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 53)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){243, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR(">"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR(">"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 54)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){243, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("<"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("<"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 55)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){243, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR(">="), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR(">="), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 56)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){243, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("<="), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("<="), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 57)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){243, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("=="), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("=="), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 58)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){243, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("~="), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("~="), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 59)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){246, (void *)(go_box(ast_StringConcatOpExpr, (ast_StringConcatOpExpr){.Lhs = yyDollar.p[1].expr, .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){247, (void *)(go_box(ast_StringConcatOpExpr, (ast_StringConcatOpExpr){.Lhs = yyDollar.p[1].expr, .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 60)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("+"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){246, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("+"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 61)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("-"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){246, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("-"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 62)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("*"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){246, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("*"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 63)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("/"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){246, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("/"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 64)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("%"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){246, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("%"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 65)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("^"), .Rhs = yyDollar.p[3].expr}))});
+                    yyVAL.expr = ((GoIface){246, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("^"), .Rhs = yyDollar.p[3].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 66)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){247, (void *)(go_box(ast_UnaryMinusOpExpr, (ast_UnaryMinusOpExpr){.Expr = yyDollar.p[2].expr}))});
+                    yyVAL.expr = ((GoIface){248, (void *)(go_box(ast_UnaryMinusOpExpr, (ast_UnaryMinusOpExpr){.Expr = yyDollar.p[2].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[2].expr));
                 }
             } else if ((_t11 == 67)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){242, (void *)(go_box(ast_UnaryNotOpExpr, (ast_UnaryNotOpExpr){.Expr = yyDollar.p[2].expr}))});
+                    yyVAL.expr = ((GoIface){243, (void *)(go_box(ast_UnaryNotOpExpr, (ast_UnaryNotOpExpr){.Expr = yyDollar.p[2].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[2].expr));
                 }
             } else if ((_t11 == 68)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){248, (void *)(go_box(ast_UnaryLenOpExpr, (ast_UnaryLenOpExpr){.Expr = yyDollar.p[2].expr}))});
+                    yyVAL.expr = ((GoIface){249, (void *)(go_box(ast_UnaryLenOpExpr, (ast_UnaryLenOpExpr){.Expr = yyDollar.p[2].expr}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[2].expr));
                 }
             } else if ((_t11 == 69)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){236, (void *)(go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[1].token.Str}))});
+                    yyVAL.expr = ((GoIface){237, (void *)(go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[1].token.Str}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 70)) {
@@ -66008,8 +66011,8 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
                 {
                     {
                         GoIface _t30 = yyDollar.p[2].expr;
-                        ast_Comma3Expr* _t31; memset(&_t31, 0, sizeof _t31); if (_t30.type == 216) _t31 = ((ast_Comma3Expr*)_t30.data);
-                        bool _t32 = _t30.type == 216;
+                        ast_Comma3Expr* _t31; memset(&_t31, 0, sizeof _t31); if (_t30.type == 217) _t31 = ((ast_Comma3Expr*)_t30.data);
+                        bool _t32 = _t30.type == 217;
                         ast_Comma3Expr* ex = _t31;
                         bool ok = _t32;
                         if (ok) {
@@ -66028,13 +66031,13 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 75)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){215, (void *)(go_box(ast_FuncCallExpr, (ast_FuncCallExpr){.Func = yyDollar.p[1].expr, .Args = yyDollar.p[2].exprlist}))});
+                    yyVAL.expr = ((GoIface){216, (void *)(go_box(ast_FuncCallExpr, (ast_FuncCallExpr){.Func = yyDollar.p[1].expr, .Args = yyDollar.p[2].exprlist}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 76)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){215, (void *)(go_box(ast_FuncCallExpr, (ast_FuncCallExpr){.Method = yyDollar.p[3].token.Str, .Receiver = yyDollar.p[1].expr, .Args = yyDollar.p[4].exprlist}))});
+                    yyVAL.expr = ((GoIface){216, (void *)(go_box(ast_FuncCallExpr, (ast_FuncCallExpr){.Method = yyDollar.p[3].token.Str, .Receiver = yyDollar.p[1].expr, .Args = yyDollar.p[4].exprlist}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
                 }
             } else if ((_t11 == 77)) {
@@ -66066,7 +66069,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 81)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){239, (void *)(go_box(ast_FunctionExpr, (ast_FunctionExpr){.ParList = yyDollar.p[2].funcexpr->ParList, .Stmts = yyDollar.p[2].funcexpr->Stmts}))});
+                    yyVAL.expr = ((GoIface){240, (void *)(go_box(ast_FunctionExpr, (ast_FunctionExpr){.ParList = yyDollar.p[2].funcexpr->ParList, .Stmts = yyDollar.p[2].funcexpr->Stmts}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                     iface_SetLastLine_83b24cfd(yyVAL.expr, ast_Node_LastLine(&yyDollar.p[2].funcexpr->ExprBase_.Node_));
                 }
@@ -66104,13 +66107,13 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 87)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_TableExpr, (ast_TableExpr){.Fields = (Slice_ast_FieldPtr){0}}))});
+                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_TableExpr, (ast_TableExpr){.Fields = (Slice_ast_FieldPtr){0}}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 88)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.expr = ((GoIface){244, (void *)(go_box(ast_TableExpr, (ast_TableExpr){.Fields = yyDollar.p[2].fieldlist}))});
+                    yyVAL.expr = ((GoIface){245, (void *)(go_box(ast_TableExpr, (ast_TableExpr){.Fields = yyDollar.p[2].fieldlist}))});
                     iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 89)) {
@@ -66131,7 +66134,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             } else if ((_t11 == 92)) {
                 yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
                 {
-                    yyVAL.field = go_box(ast_Field, (ast_Field){.Key = ((GoIface){236, (void *)(go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[1].token.Str}))}), .Value = yyDollar.p[3].expr});
+                    yyVAL.field = go_box(ast_Field, (ast_Field){.Key = ((GoIface){237, (void *)(go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[1].token.Str}))}), .Value = yyDollar.p[3].expr});
                     iface_SetLine_83b24cfd(yyVAL.field->Key, yyDollar.p[1].token.Pos.Line);
                 }
             } else if ((_t11 == 93)) {
@@ -66417,7 +66420,7 @@ pm_class pm_parseClass(pm_scanner* sc, bool allowset) {
                 }
                 return ((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))});
             } else if ((_t1 == -1)) {
-                go_panic(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("unexpected EOS"), (Slice_GoIface){0}));
+                go_panic_iface(0, ((GoIface){260, (void *)(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("unexpected EOS"), (Slice_GoIface){0}))}));
             } else {
                 return ((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))});
             }
@@ -66440,7 +66443,7 @@ pm_class pm_parseClassSet(pm_scanner* sc) {
                 int _t2 = ch;
                 do {
                     if ((_t2 == -1)) {
-                        go_panic(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("unexpected EOS"), (Slice_GoIface){0}));
+                        go_panic_iface(0, ((GoIface){260, (void *)(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("unexpected EOS"), (Slice_GoIface){0}))}));
                     } else if ((_t2 == 93)) {
                         if (set->Classes.len > 0) {
                             pm_scanner_Next(sc);
@@ -66471,7 +66474,7 @@ pm_class pm_parseClassSet(pm_scanner* sc) {
                 pm_class begin = set->Classes.p[(set->Classes.len - 2)];
                 pm_class end = set->Classes.p[(set->Classes.len - 1)];
                 set->Classes = GO_SLICE(Slice_pm_class, set->Classes, 0, (set->Classes.len - 2));
-                set->Classes = GO_APPEND(Slice_pm_class, set->Classes, ((GoIface){260, (void *)(go_box(pm_rangeClass, (pm_rangeClass){begin, end}))}));
+                set->Classes = GO_APPEND(Slice_pm_class, set->Classes, ((GoIface){261, (void *)(go_box(pm_rangeClass, (pm_rangeClass){begin, end}))}));
                 isrange = false;
             }
             _cont1:;
@@ -66481,7 +66484,7 @@ pm_class pm_parseClassSet(pm_scanner* sc) {
     if (isrange) {
         set->Classes = GO_APPEND(Slice_pm_class, set->Classes, ((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){45}))}));
     }
-    return ((GoIface){261, (void *)(set)});
+    return ((GoIface){262, (void *)(set)});
 }
 
 // github.com/yuin/gopher-lua/pm.parsePattern (pm.go:377), 0 TODO
@@ -66506,58 +66509,58 @@ pm_seqPattern* pm_parsePattern(pm_scanner* sc, bool toplevel) {
                             int _t3 = pm_scanner_Peek(sc);
                             do {
                                 if ((_t3 == 48)) {
-                                    go_panic(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("invalid capture index"), (Slice_GoIface){0}));
+                                    go_panic_iface(0, ((GoIface){260, (void *)(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("invalid capture index"), (Slice_GoIface){0}))}));
                                 } else if ((_t3 == 49) || (_t3 == 50) || (_t3 == 51) || (_t3 == 52) || (_t3 == 53) || (_t3 == 54) || (_t3 == 55) || (_t3 == 56) || (_t3 == 57)) {
-                                    pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){262, (void *)(go_box(pm_numberPattern, (pm_numberPattern){(pm_scanner_Next(sc) - 48)}))}));
+                                    pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){263, (void *)(go_box(pm_numberPattern, (pm_numberPattern){(pm_scanner_Next(sc) - 48)}))}));
                                 } else if ((_t3 == 98)) {
                                     pm_scanner_Next(sc);
-                                    pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){263, (void *)(go_box(pm_bracePattern, (pm_bracePattern){pm_scanner_Next(sc), pm_scanner_Next(sc)}))}));
+                                    pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){264, (void *)(go_box(pm_bracePattern, (pm_bracePattern){pm_scanner_Next(sc), pm_scanner_Next(sc)}))}));
                                 } else {
                                     pm_scanner_Restore(sc);
-                                    pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){264, (void *)(go_box(pm_singlePattern, (pm_singlePattern){pm_parseClass(sc, true)}))}));
+                                    pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){265, (void *)(go_box(pm_singlePattern, (pm_singlePattern){pm_parseClass(sc, true)}))}));
                                 }
                             } while (0);
                         }
                     } else if ((_t2 == 46) || (_t2 == 91) || (_t2 == 93)) {
-                        pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){264, (void *)(go_box(pm_singlePattern, (pm_singlePattern){pm_parseClass(sc, true)}))}));
+                        pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){265, (void *)(go_box(pm_singlePattern, (pm_singlePattern){pm_parseClass(sc, true)}))}));
                     } else if ((_t2 == 41)) {
                         if (toplevel) {
-                            go_panic(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("invalid ')'"), (Slice_GoIface){0}));
+                            go_panic_iface(0, ((GoIface){260, (void *)(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("invalid ')'"), (Slice_GoIface){0}))}));
                         }
                         return pat;
                     } else if ((_t2 == 40)) {
                         pm_scanner_Next(sc);
                         if (pm_scanner_Peek(sc) == 41) {
                             pm_scanner_Next(sc);
-                            pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){265, (void *)(go_box(pm_posCapPattern, (pm_posCapPattern){0}))}));
+                            pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){266, (void *)(go_box(pm_posCapPattern, (pm_posCapPattern){0}))}));
                         } else {
-                            pm_capPattern* ret = go_box(pm_capPattern, (pm_capPattern){((GoIface){266, (void *)(pm_parsePattern(sc, false))})});
+                            pm_capPattern* ret = go_box(pm_capPattern, (pm_capPattern){((GoIface){267, (void *)(pm_parsePattern(sc, false))})});
                             if (pm_scanner_Peek(sc) != 41) {
-                                go_panic(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("unfinished capture"), (Slice_GoIface){0}));
+                                go_panic_iface(0, ((GoIface){260, (void *)(pm_newError(pm_scanner_CurrentPos(sc), GOSTR("unfinished capture"), (Slice_GoIface){0}))}));
                             }
                             pm_scanner_Next(sc);
-                            pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){267, (void *)(ret)}));
+                            pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){268, (void *)(ret)}));
                         }
                     } else if ((_t2 == 42) || (_t2 == 43) || (_t2 == 45) || (_t2 == 63)) {
                         pm_scanner_Next(sc);
                         if (pat->Patterns.len > 0) {
                             GoIface _t4 = pat->Patterns.p[(pat->Patterns.len - 1)];
-                            pm_singlePattern* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 264) _t5 = ((pm_singlePattern*)_t4.data);
-                            bool _t6 = _t4.type == 264;
+                            pm_singlePattern* _t5; memset(&_t5, 0, sizeof _t5); if (_t4.type == 265) _t5 = ((pm_singlePattern*)_t4.data);
+                            bool _t6 = _t4.type == 265;
                             pm_singlePattern* spat = _t5;
                             bool ok = _t6;
                             if (ok) {
                                 pat->Patterns = GO_SLICE(Slice_pm_pattern, pat->Patterns, 0, (pat->Patterns.len - 1));
-                                pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){268, (void *)(go_box(pm_repeatPattern, (pm_repeatPattern){ch, spat->Class}))}));
+                                pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){269, (void *)(go_box(pm_repeatPattern, (pm_repeatPattern){ch, spat->Class}))}));
                                 goto _cont1;
                             }
                         }
-                        pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){264, (void *)(go_box(pm_singlePattern, (pm_singlePattern){((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))})}))}));
+                        pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){265, (void *)(go_box(pm_singlePattern, (pm_singlePattern){((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))})}))}));
                     } else if ((_t2 == 36)) {
                         if (toplevel && (((pm_scanner_NextPos(sc) == (pm_scanner_Length(sc) - 1)) || (pm_scanner_NextPos(sc) == -1)))) {
                             pat->MustTail = true;
                         } else {
-                            pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){264, (void *)(go_box(pm_singlePattern, (pm_singlePattern){((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))})}))}));
+                            pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){265, (void *)(go_box(pm_singlePattern, (pm_singlePattern){((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))})}))}));
                         }
                         pm_scanner_Next(sc);
                     } else if ((_t2 == -1)) {
@@ -66565,7 +66568,7 @@ pm_seqPattern* pm_parsePattern(pm_scanner* sc, bool toplevel) {
                         goto exit;
                     } else {
                         pm_scanner_Next(sc);
-                        pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){264, (void *)(go_box(pm_singlePattern, (pm_singlePattern){((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))})}))}));
+                        pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){265, (void *)(go_box(pm_singlePattern, (pm_singlePattern){((GoIface){257, (void *)(go_box(pm_charClass, (pm_charClass){ch}))})}))}));
                     }
                 } while (0);
             }
@@ -66589,10 +66592,10 @@ Slice_pm_inst pm_compilePattern(pm_pattern p, Slice_pm_iptrPtr ps) {
     {
         GoIface _t1 = p;
         do {
-            if (_t1.type == 264) {
+            if (_t1.type == 265) {
                 pm_singlePattern* pat = ((pm_singlePattern*)_t1.data);
                 ptr->insts = GO_APPEND(Slice_pm_inst, ptr->insts, (pm_inst){0, pat->Class, -1, -1});
-            } else if (_t1.type == 266) {
+            } else if (_t1.type == 267) {
                 pm_seqPattern* pat = ((pm_seqPattern*)_t1.data);
                 {
                     Slice_pm_pattern _t3 = pat->Patterns;
@@ -66602,7 +66605,7 @@ Slice_pm_inst pm_compilePattern(pm_pattern p, Slice_pm_iptrPtr ps) {
                         _cont4:;
                     }
                 }
-            } else if (_t1.type == 268) {
+            } else if (_t1.type == 269) {
                 pm_repeatPattern* pat = ((pm_repeatPattern*)_t1.data);
                 int idx = ptr->insts.len;
                 {
@@ -66619,11 +66622,11 @@ Slice_pm_inst pm_compilePattern(pm_pattern p, Slice_pm_iptrPtr ps) {
                         }
                     } while (0);
                 }
-            } else if (_t1.type == 265) {
+            } else if (_t1.type == 266) {
                 pm_posCapPattern* pat = ((pm_posCapPattern*)_t1.data);
                 ptr->insts = GO_APPEND(Slice_pm_inst, ptr->insts, (pm_inst){6, (pm_class){0}, ptr->capture, -1});
                 ptr->capture += 2;
-            } else if (_t1.type == 267) {
+            } else if (_t1.type == 268) {
                 pm_capPattern* pat = ((pm_capPattern*)_t1.data);
                 int _t6 = ptr->capture;
                 int _t7 = (ptr->capture + 1);
@@ -66633,10 +66636,10 @@ Slice_pm_inst pm_compilePattern(pm_pattern p, Slice_pm_iptrPtr ps) {
                 ptr->insts = GO_APPEND(Slice_pm_inst, ptr->insts, (pm_inst){5, (pm_class){0}, c0, -1});
                 pm_compilePattern(pat->Pattern, GO_SLICE_LIT(Slice_pm_iptrPtr, pm_iptr*, 1, ptr));
                 ptr->insts = GO_APPEND(Slice_pm_inst, ptr->insts, (pm_inst){5, (pm_class){0}, c1, -1});
-            } else if (_t1.type == 263) {
+            } else if (_t1.type == 264) {
                 pm_bracePattern* pat = ((pm_bracePattern*)_t1.data);
                 ptr->insts = GO_APPEND(Slice_pm_inst, ptr->insts, (pm_inst){7, (pm_class){0}, pat->Begin, pat->End});
-            } else if (_t1.type == 262) {
+            } else if (_t1.type == 263) {
                 pm_numberPattern* pat = ((pm_numberPattern*)_t1.data);
                 ptr->insts = GO_APPEND(Slice_pm_inst, ptr->insts, (pm_inst){8, (pm_class){0}, pat->N, -1});
             }
@@ -66731,7 +66734,7 @@ Ret_bool__int__pm_MatchDataPtr pm_recursiveVM(Slice_u8 src, Slice_pm_inst insts,
             } else if ((_t1 == 8)) {
                 int idx = (inst.Operand1 * 2);
                 if (idx >= (pm_MatchData_CaptureLength(m) - 1)) {
-                    go_panic(pm_newError(-2, GOSTR("invalid capture index"), (Slice_GoIface){0}));
+                    go_panic_iface(0, ((GoIface){260, (void *)(pm_newError(-2, GOSTR("invalid capture index"), (Slice_GoIface){0}))}));
                 }
                 Slice_u8 capture = GO_SLICE(Slice_u8, src, pm_MatchData_Capture(m, idx), pm_MatchData_Capture(m, (idx + 1)));
                 {
@@ -66749,7 +66752,7 @@ Ret_bool__int__pm_MatchDataPtr pm_recursiveVM(Slice_u8 src, Slice_pm_inst insts,
             }
         } while (0);
     }
-    go_panic(GOSTR("should not reach here"));
+    go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("should not reach here"))}));
 }
 
 // github.com/yuin/gopher-lua/pm.Find (pm.go:609), 0 TODO
@@ -66762,7 +66765,7 @@ Ret_Slice_pm_MatchDataPtr__GoIface pm_Find(GoString p, Slice_u8 src, int offset,
     _df1_f = ((GoFunc){(void *)lambda_34, go_box(Env_lambda_34, ((Env_lambda_34){err__h}))});
     _df1 = true;
     pm_seqPattern* pat = pm_parsePattern(pm_newScanner(go_str2bytes(p)), true);
-    Slice_pm_inst insts = pm_compilePattern(((GoIface){266, (void *)(pat)}), (Slice_pm_iptrPtr){0});
+    Slice_pm_inst insts = pm_compilePattern(((GoIface){267, (void *)(pat)}), (Slice_pm_iptrPtr){0});
     matches = (Slice_pm_MatchDataPtr){0};
     {
         int sp = offset;
@@ -66925,7 +66928,7 @@ void lua_autoGrowingCallFrameStack_Push(lua_autoGrowingCallFrameStack* cs, lua_c
             cs->segments.p[cs->segIdx] = curSeg;
             cs->segSp = 0U;
         } else {
-            go_panic(GOSTR("lua callstack overflow"));
+            go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("lua callstack overflow"))}));
         }
     }
     curSeg->array.v[cs->segSp] = v;
@@ -67143,13 +67146,13 @@ lua_Global* lua_newGlobal(void) {
 void lua_panicWithTraceback(lua_LState* L) {
     lua_ApiError* err = lua_newApiError(2, lua_LState_Get(L, -1));
     err->StackTrace = lua_LState_stackTrace(L, 0);
-    go_panic(err);
+    go_panic_iface(0, ((GoIface){210, (void *)(err)}));
 }
 
 // github.com/yuin/gopher-lua.panicWithoutTraceback (state.go:604), 0 TODO
 void lua_panicWithoutTraceback(lua_LState* L) {
     lua_ApiError* err = lua_newApiError(2, lua_LState_Get(L, -1));
-    go_panic(err);
+    go_panic_iface(0, ((GoIface){210, (void *)(err)}));
 }
 
 // github.com/yuin/gopher-lua.newLState (state.go:609), 0 TODO
@@ -70067,11 +70070,11 @@ int lua_strCmp(GoString s1, GoString s2) {
 Slice_u8 lua_unsafeFastStringToReadOnlyBytes(GoString s) {
     GoString *s__h = go_box(GoString, s);
     Slice_u8 *bs__h = go_box(Slice_u8, {0});
-    GoOpaque /* reflect.StringHeader */* sh = ((GoOpaque /* reflect.StringHeader */*)((void*)(&(*s__h))));
-    GoOpaque /* reflect.SliceHeader */* bh = ((GoOpaque /* reflect.SliceHeader */*)((void*)(&(*bs__h))));
-    (*(uintptr_t *)go_scratch(sizeof(uintptr_t))) = (*(uintptr_t *)go_scratch(sizeof(uintptr_t)));
-    (*(int *)go_scratch(sizeof(int))) = (*(int *)go_scratch(sizeof(int)));
-    (*(int *)go_scratch(sizeof(int))) = (*(int *)go_scratch(sizeof(int)));
+    GoReflectStringHeader* sh = ((GoReflectStringHeader*)((void*)(&(*s__h))));
+    GoReflectSliceHeader* bh = ((GoReflectSliceHeader*)((void*)(&(*bs__h))));
+    bh->Data = sh->Data;
+    bh->Cap = sh->Len;
+    bh->Len = sh->Len;
     return (*bs__h);
     return (*bs__h);
 }
@@ -70614,7 +70617,7 @@ lua_LNumber lua_numberArith(lua_LState* L, int opcode, lua_LNumber lhs, lua_LNum
             }
         } while (0);
     }
-    go_panic(GOSTR("should not reach here"));
+    go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("should not reach here"))}));
     return 0x0p+00;
 }
 
@@ -71105,7 +71108,7 @@ u32 vorbis2_bitReader_Read1(vorbis2_bitReader* r) {
 // github.com/jfreymuth/vorbis.bitReader.read (bitreader.go:36), 0 TODO
 u32 vorbis2_bitReader_read(vorbis2_bitReader* r, uintptr_t n, uintptr_t bits) {
     if (n > bits) {
-        go_panic(GOSTR("invalid argument"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("invalid argument"))}));
     }
     u32 result = 0;
     uintptr_t written = 0;
@@ -89049,7 +89052,7 @@ bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
                         s = _t9.r0;
                         err = _t9.r1;
                         if (err.type != 0) {
-                            go_panic(err);
+                            go_panic_iface(0, err);
                         }
                     } else if ((_t8 == 1U)) {
                         sid = go_max_i32(0, BytecodeExp_evalI(exp_.p[0], c));
@@ -94697,7 +94700,7 @@ void Char_panic(Char* c, GoString msg) {
     if (g_sys.workingState != st) {
         st = g_sys.workingState;
     }
-    go_panic(fmt_Sprintf(GOSTR("%s\nChar name: %v\nState source: %v\nState dump: %+v\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){17, go_box(GoString, msg)}), ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){17, go_box(GoString, g_sys.cgi.v[st->playerNo].def)}), ((GoIface){302, (void *)(st)}))));
+    go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("%s\nChar name: %v\nState source: %v\nState dump: %+v\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){17, go_box(GoString, msg)}), ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){17, go_box(GoString, g_sys.cgi.v[st->playerNo].def)}), ((GoIface){302, (void *)(st)}))))}));
 }
 
 // Char.init (char.go:3862), 0 TODO
@@ -94859,7 +94862,7 @@ void Char_prepareNextRound(Char* c) {
 // Char.gi (char.go:4101), 0 TODO
 CharGlobalInfo* Char_gi(Char* c) {
     if (c->stillLoading) {
-        go_panic(fmt_Sprintf(GOSTR("gi() called on char %v (pn %v) while it's still loading"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){2, go_box_a(int, c->playerNo)}))));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("gi() called on char %v (pn %v) while it's still loading"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){2, go_box_a(int, c->playerNo)}))))}));
     }
     return (&g_sys.cgi.v[c->playerNo]);
 }
@@ -103707,7 +103710,7 @@ void CharList_add(CharList* cl, Char* c) {
         bool _t1; Char* _t2 = Map_i32_CharPtr_get(&cl->idMap, c->id, &_t1);
         bool exist = _t1;
         if (exist) {
-            go_panic(GOSTR("Attempted to overwrite an active Char in CharList"));
+            go_panic_iface(0, ((GoIface){281, go_box(Error, GOSTR("Attempted to overwrite an active Char in CharList"))}));
         }
     }
     cl->creationOrder = GO_APPEND(Slice_CharPtr, cl->creationOrder, c);
@@ -103763,7 +103766,7 @@ void CharList_audit(CharList* cl) {
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
             Char* c = _t2.p[_t1];
             if (Map_CharPtr_bool_get(&inCreation, c, NULL)) {
-                go_panic(GOSTR("CharList.creationOrder contains a duplicate char"));
+                go_panic_iface(0, ((GoIface){281, go_box(Error, GOSTR("CharList.creationOrder contains a duplicate char"))}));
             }
             Map_CharPtr_bool_set(&inCreation, c, true);
             _cont3:;
@@ -103775,21 +103778,21 @@ void CharList_audit(CharList* cl) {
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
             Char* c = _t5.p[_t4];
             if (Map_CharPtr_bool_get(&inRun, c, NULL)) {
-                go_panic(GOSTR("CharList.runOrder contains a duplicate char"));
+                go_panic_iface(0, ((GoIface){281, go_box(Error, GOSTR("CharList.runOrder contains a duplicate char"))}));
             }
             Map_CharPtr_bool_set(&inRun, c, true);
             _cont6:;
         }
     }
     if (cl->creationOrder.len != cl->runOrder.len) {
-        go_panic(GOSTR("CharList.creationOrder and runOrder lengths differ"));
+        go_panic_iface(0, ((GoIface){281, go_box(Error, GOSTR("CharList.creationOrder and runOrder lengths differ"))}));
     }
     {
         Slice_CharPtr _t8 = cl->creationOrder;
         for (int _t7 = 0; _t7 < _t8.len; _t7++) {
             Char* c = _t8.p[_t7];
             if (!Map_CharPtr_bool_get(&inRun, c, NULL)) {
-                go_panic(GOSTR("CharList.creationOrder contains a char missing from runOrder"));
+                go_panic_iface(0, ((GoIface){281, go_box(Error, GOSTR("CharList.creationOrder contains a char missing from runOrder"))}));
             }
             _cont9:;
         }
@@ -103799,7 +103802,7 @@ void CharList_audit(CharList* cl) {
         for (int _t10 = 0; _t10 < _t11.len; _t10++) {
             Char* c = _t11.p[_t10];
             if (!Map_CharPtr_bool_get(&inCreation, c, NULL)) {
-                go_panic(GOSTR("CharList.runOrder contains a char missing from creationOrder"));
+                go_panic_iface(0, ((GoIface){281, go_box(Error, GOSTR("CharList.runOrder contains a char missing from creationOrder"))}));
             }
             _cont12:;
         }
@@ -103810,21 +103813,21 @@ void CharList_audit(CharList* cl) {
         for (int _t13 = 0; _t13 < _t14.len; _t13++) {
             Char* c = _t14.p[_t13];
             if (Map_i32_bool_get(&ids, c->id, NULL)) {
-                go_panic(fmt_Sprintf(GOSTR("CharList contains duplicate char ID %d (%s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){17, go_box(GoString, c->name)}))));
+                go_panic_iface(0, ((GoIface){281, go_box(Error, fmt_Sprintf(GOSTR("CharList contains duplicate char ID %d (%s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){17, go_box(GoString, c->name)}))))}));
             }
             Map_i32_bool_set(&ids, c->id, true);
             _cont15:;
         }
     }
     if (Map_i32_CharPtr_len(&cl->idMap) != cl->creationOrder.len) {
-        go_panic(GOSTR("CharList.idMap and creationOrder lengths differ"));
+        go_panic_iface(0, ((GoIface){281, go_box(Error, GOSTR("CharList.idMap and creationOrder lengths differ"))}));
     }
     {
         Slice_CharPtr _t17 = cl->creationOrder;
         for (int _t16 = 0; _t16 < _t17.len; _t16++) {
             Char* c = _t17.p[_t16];
             if (Map_i32_CharPtr_get(&cl->idMap, c->id, NULL) != c) {
-                go_panic(fmt_Sprintf(GOSTR("CharList.idMap entry mismatch (id: %d, name: %s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){17, go_box(GoString, c->name)}))));
+                go_panic_iface(0, ((GoIface){281, go_box(Error, fmt_Sprintf(GOSTR("CharList.idMap entry mismatch (id: %d, name: %s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){17, go_box(GoString, c->name)}))))}));
             }
             _cont18:;
         }
@@ -103848,7 +103851,7 @@ void CharList_audit(CharList* cl) {
                 }
             }
             if (!found) {
-                go_panic(fmt_Sprintf(GOSTR("CharList contains char missing from sys.chars (playerNo: %d, helperIndex: %d, id: %d, name: %s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){2, go_box_a(int, c->playerNo)}), ((GoIface){2, go_box_a(int, c->helperIndex)}), ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){17, go_box(GoString, c->name)}))));
+                go_panic_iface(0, ((GoIface){281, go_box(Error, fmt_Sprintf(GOSTR("CharList contains char missing from sys.chars (playerNo: %d, helperIndex: %d, id: %d, name: %s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){2, go_box_a(int, c->playerNo)}), ((GoIface){2, go_box_a(int, c->helperIndex)}), ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){17, go_box(GoString, c->name)}))))}));
             }
             _cont21:;
         }
@@ -122184,7 +122187,7 @@ f64 fn_cvfAtan2(f64 y, f64 x) {
     return q;
 }
 
-// itoa (cvf_engine_common.go:10), 0 TODO
+// itoa (cvf_engine_common.go:16), 0 TODO
 GoString fn_itoa(int i) {
     bool neg = (i < 0);
     if (neg) {
@@ -122670,7 +122673,7 @@ Ret_upnpDevicePtr__GoIface fn_upnpDescribe(GoString loc) {
     Slice_u8 body = _t2.r0;
     iface_Close_143b0862((*(GoIface *)go_scratch(sizeof(GoIface))));
     GoOpaque /* xml.Decoder */* dec = xml_NewDecoder(((GoIface){155, (void *)(bytes_NewReader(body))}));
-    svc_L6800f0* found = NULL;
+    svc_Lc6dc42* found = NULL;
     {
         for (; 1; ) {
             Ret_GoIface__GoIface _t4 = xml_Decoder_Token(dec);
@@ -122686,7 +122689,7 @@ Ret_upnpDevicePtr__GoIface fn_upnpDescribe(GoString loc) {
                 GoOpaque /* xml.StartElement */ *se__h = go_box(GoOpaque /* xml.StartElement */, _t6);
                 bool ok = _t7;
                 if (ok && go_streq((*(GoString *)go_scratch(sizeof(GoString))), GOSTR("service"))) {
-                    svc_L6800f0 *s__h = go_box(svc_L6800f0, {0});
+                    svc_Lc6dc42 *s__h = go_box(svc_Lc6dc42, {0});
                     if ((xml_Decoder_DecodeElement(dec, ((GoIface){470, (void *)((&(*s__h)))}), (&(*se__h))).type == 0) && ((strings_Contains((*s__h).ServiceType, GOSTR("WANIPConnection")) || strings_Contains((*s__h).ServiceType, GOSTR("WANPPPConnection"))))) {
                         found = (&(*s__h));
                         break;
@@ -123413,7 +123416,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     i32 roundTime = ((i32)g_sys.cfg.Options.Time);
     fn_cvfSetFightScreenElements(g_sys.cfg.Options.GuardBreak, g_sys.cfg.Options.Dizzy, g_sys.cfg.Options.RedLife);
     i32 frames = g_sys.fightScreen.time->framespercount;
-    Slice_qvPlayer_Lef8db5 players = {0};
+    Slice_qvPlayer_L0bbea3 players = {0};
     Arr2_i32 teamMode = (Arr2_i32){{0, 0}};
     Arr2_i32 numChars = (Arr2_i32){{0, 0}};
     Map_GoString_Map_int_bool assignedPals = Map_GoString_Map_int_bool_make(0);
@@ -123486,7 +123489,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
                     input = ((int)fn_Atoi(s));
                 }
             }
-            players = GO_APPEND(Slice_qvPlayer_Lef8db5, players, (qvPlayer_Lef8db5){.character = v, .player = player, .num = num, .pal = pal, .ai = ai, .input = input});
+            players = GO_APPEND(Slice_qvPlayer_L0bbea3, players, (qvPlayer_L0bbea3){.character = v, .player = player, .num = num, .pal = pal, .ai = ai, .input = input});
             fn_cvfRefresh();
             _cont10:;
         }
@@ -123627,9 +123630,9 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     int ref = 0;
     Map_GoString_int charDef = Map_GoString_int_make(0);
     {
-        Slice_qvPlayer_Lef8db5 _t47 = players;
+        Slice_qvPlayer_L0bbea3 _t47 = players;
         for (int _t46 = 0; _t46 < _t47.len; _t46++) {
-            qvPlayer_Lef8db5 v = _t47.p[_t46];
+            qvPlayer_L0bbea3 v = _t47.p[_t46];
             GoString key = strings_ToLower(v.character);
             bool _t49; int _t50 = Map_GoString_int_get(&charDef, key, &_t49);
             int charRef = _t50;
@@ -128198,14 +128201,14 @@ Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def) {
                                     _cont16:;
                                 }
                             }
-                            Map_int_fontSpec_L6297e3 fntSpecs__hv = Map_int_fontSpec_L6297e3_make(0); __typeof__(fntSpecs__hv) *fntSpecs__h = &fntSpecs__hv;
+                            Map_int_fontSpec_Le9fdb4 fntSpecs__hv = Map_int_fontSpec_Le9fdb4_make(0); __typeof__(fntSpecs__hv) *fntSpecs__h = &fntSpecs__hv;
                             GoFunc parseFonts = ((GoFunc){(void *)lambda_938, &(Env_lambda_938){fntSpecs__h}});
                             ((void (*)(void *, IniSection))(parseFonts).fn)((parseFonts).env, (*is__h));
                             {
                                 GoMapIter _t19 = gomap_iter((GoMap *)&(*fntSpecs__h));
                                 while (gomap_next(&_t19)) {
                                     int *i__h = go_box_a(int, *(int *)_t19.key);
-                                    fontSpec_L6297e3 *spec__h = go_box(fontSpec_L6297e3, *(fontSpec_L6297e3 *)_t19.val);
+                                    fontSpec_Le9fdb4 *spec__h = go_box(fontSpec_Le9fdb4, *(fontSpec_Le9fdb4 *)_t19.val);
                                     if ((*spec__h).path.len == 0) {
                                         continue;
                                     }
@@ -130036,7 +130039,7 @@ void fn_LoadFntSff(Fnt* f, GoString fontfile, GoString filename) {
     Sff* sff = _t1.r0;
     GoIface err = _t1.r1;
     if (err.type != 0) {
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     Slice_u32 pal_default = {0};
     {
@@ -130582,7 +130585,7 @@ void TextSprite_wrapText(TextSprite* ts, GoString fullLine, int typedLen) {
     i32 spacingXAdd__hv = go_f2i32(math_Round(((f64)(*ts__h)->textSpacing.v[0]))); __typeof__(spacingXAdd__hv) *spacingXAdd__h = &spacingXAdd__hv;
     i32 lineLen = TextSprite_getLineLength((*ts__h), true);
     GoFunc measureWidth = ((GoFunc){(void *)lambda_951, &(Env_lambda_951){ts__h, spacingXAdd__h}});
-    Slice_wrapToken_La42eeb tokens = ((Slice_wrapToken_La42eeb (*)(void *, GoString))(tokenize).fn)((tokenize).env, fullLine);
+    Slice_wrapToken_L8ac62d tokens = ((Slice_wrapToken_L8ac62d (*)(void *, GoString))(tokenize).fn)((tokenize).env, fullLine);
     GoOpaque /* strings.Builder */ result = {0};
     GoOpaque /* strings.Builder */ currentLine__hv = {0}; __typeof__(currentLine__hv) *currentLine__h = &currentLine__hv;
     int remaining__hv = typedLen; __typeof__(remaining__hv) *remaining__h = &remaining__hv;
@@ -130591,14 +130594,14 @@ void TextSprite_wrapText(TextSprite* ts, GoString fullLine, int typedLen) {
     GoFunc flushPendingVisible = ((GoFunc){(void *)lambda_952, &(Env_lambda_952){runePrefix__h, currentLine__h, remaining__h, pendingSpaces__h, pendingSpacesRunes__h}});
     loop:;
     {
-        Slice_wrapToken_La42eeb _t2 = tokens;
+        Slice_wrapToken_L8ac62d _t2 = tokens;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            wrapToken_La42eeb tok = _t2.p[_t1];
+            wrapToken_L8ac62d tok = _t2.p[_t1];
             if ((*remaining__h) <= 0) {
                 break;
             }
             {
-                wrapTokenKind_Lbc646a _t4 = tok.kind;
+                wrapTokenKind_Ld9d083 _t4 = tok.kind;
                 do {
                     if ((_t4 == 1)) {
                         (*pendingSpaces__h) = go_strcat((*pendingSpaces__h), tok.text);
@@ -132973,7 +132976,7 @@ GoIface Sprite_readV2(Sprite* s, GoIface f, i64 offset, u32 datasize) {
                 {
                     GoIface err = go_binread(f, (void *)GO_TMPADDR(Slice_u8, px)->p, sizeof(u8), GO_TMPADDR(Slice_u8, px)->len, 0);
                     if (err.type != 0) {
-                        go_panic(err);
+                        go_panic_iface(0, err);
                     }
                 }
             }
@@ -137336,7 +137339,7 @@ Music fn_parseMusicSection(GoOpaque /* ini.Section */* section) {
     if (section == NULL) {
         return Map_GoString_Slice_bgMusicPtr_make(0);
     }
-    Map_GoString_musicHolder_L8e91b3Ptr propMap__hv = Map_GoString_musicHolder_L8e91b3Ptr_make(0); __typeof__(propMap__hv) *propMap__h = &propMap__hv;
+    Map_GoString_musicHolder_Leb5279Ptr propMap__hv = Map_GoString_musicHolder_Leb5279Ptr_make(0); __typeof__(propMap__hv) *propMap__h = &propMap__hv;
     GoFunc get = ((GoFunc){(void *)lambda_987, &(Env_lambda_987){propMap__h}});
     GoFunc appendI32PtrList = ((GoFunc){(void *)lambda_988, &(Env_lambda_988){0}});
     GoFunc appendF32PtrList = ((GoFunc){(void *)lambda_989, &(Env_lambda_989){0}});
@@ -137368,28 +137371,28 @@ Music fn_parseMusicSection(GoOpaque /* ini.Section */* section) {
                 GoString _t8 = property;
                 do {
                     if (go_streq(_t8, GOSTR("bgm")) || go_streq(_t8, GOSTR("bgmusic"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         h->Bgm = GO_APPEND_SLICE(Slice_GoString, h->Bgm, values);
                     } else if (go_streq(_t8, GOSTR("bgm.loop")) || go_streq(_t8, GOSTR("bgmloop"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->Loop), values);
                     } else if (go_streq(_t8, GOSTR("bgm.volume")) || go_streq(_t8, GOSTR("bgmvolume"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->Volume), values);
                     } else if (go_streq(_t8, GOSTR("bgm.loopstart")) || go_streq(_t8, GOSTR("bgmloopstart"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->LoopStart), values);
                     } else if (go_streq(_t8, GOSTR("bgm.loopend")) || go_streq(_t8, GOSTR("bgmloopend"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->LoopEnd), values);
                     } else if (go_streq(_t8, GOSTR("bgm.startposition")) || go_streq(_t8, GOSTR("bgmstartposition"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->StartPosition), values);
                     } else if (go_streq(_t8, GOSTR("bgm.freqmul")) || go_streq(_t8, GOSTR("bgmfreqmul"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_f32Ptr*, Slice_GoString))(appendF32PtrList).fn)((appendF32PtrList).env, (&h->FreqMul), values);
                     } else if (go_streq(_t8, GOSTR("bgm.loopcount")) || go_streq(_t8, GOSTR("bgmloopcount"))) {
-                        musicHolder_L8e91b3* h = ((musicHolder_L8e91b3* (*)(void *, GoString))(get).fn)((get).env, prefix);
+                        musicHolder_Leb5279* h = ((musicHolder_Leb5279* (*)(void *, GoString))(get).fn)((get).env, prefix);
                         ((void (*)(void *, Slice_i32Ptr*, Slice_GoString))(appendI32PtrList).fn)((appendI32PtrList).env, (&h->LoopCount), values);
                     } else {
                         goto _cont3;
@@ -137404,11 +137407,11 @@ Music fn_parseMusicSection(GoOpaque /* ini.Section */* section) {
         GoMapIter _t10 = gomap_iter((GoMap *)&(*propMap__h));
         while (gomap_next(&_t10)) {
             GoString prefix = *(GoString *)_t10.key;
-            musicHolder_L8e91b3* holder = *(musicHolder_L8e91b3* *)_t10.val;
+            musicHolder_Leb5279* holder = *(musicHolder_Leb5279* *)_t10.val;
             if ((((((((holder->Bgm.len == 0) && (holder->Loop.len == 0)) && (holder->Volume.len == 0)) && (holder->LoopStart.len == 0)) && (holder->LoopEnd.len == 0)) && (holder->StartPosition.len == 0)) && (holder->FreqMul.len == 0)) && (holder->LoopCount.len == 0)) {
                 continue;
             }
-            int count = ((int (*)(void *, musicHolder_L8e91b3*))(maxSize).fn)((maxSize).env, holder);
+            int count = ((int (*)(void *, musicHolder_Leb5279*))(maxSize).fn)((maxSize).env, holder);
             {
                 int i = 0;
                 for (; i < count; i++) {
@@ -140641,7 +140644,7 @@ GoIface fn_luaDoStringCached(lua_LState* l, GoString src) {
 void fn_chk(GoIface err) {
     if (err.type != 0) {
         fn_ShowErrorDialog(iface_Error_319077b5(err));
-        go_panic(err);
+        go_panic_iface(0, err);
     }
 }
 
@@ -140650,7 +140653,7 @@ bool fn_chkEX(GoIface err, GoString txt, bool crash) {
     if (err.type != 0) {
         fn_ShowErrorDialog(go_strcat(txt, iface_Error_319077b5(err)));
         if (crash) {
-            go_panic(go_strcat(txt, iface_Error_319077b5(err)));
+            go_panic_iface(0, ((GoIface){281, go_box(Error, go_strcat(txt, iface_Error_319077b5(err)))}));
         }
         return true;
     }
@@ -140681,7 +140684,7 @@ void fn_realMain(void) {
         sdl_GLSetAttribute(((sdl_GLattr)SDL_GL_ALPHA_SIZE), 0);
         sdl_GLSetAttribute(((sdl_GLattr)SDL_GL_DEPTH_SIZE), 24);
         if (go_streq(g_sys.baseDir, GOSTR(""))) {
-            go_panic(GOSTR("FATAL: Android baseDir not set"));
+            go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("FATAL: Android baseDir not set"))}));
         }
         fn_Logcat(go_strcat(GOSTR("sys.baseDir is: "), g_sys.baseDir));
         {
@@ -140722,7 +140725,7 @@ void fn_realMain(void) {
             fn_Logcat(GOSTR("Inside realMain..."));
             runtime_LockOSThread();
             if (go_streq(g_sys.baseDir, GOSTR(""))) {
-                go_panic(GOSTR("FATAL: iOS baseDir not set"));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("FATAL: iOS baseDir not set"))}));
             }
             fn_Logcat(go_strcat(GOSTR("sys.baseDir is: "), g_sys.baseDir));
             {
@@ -140817,7 +140820,7 @@ void fn_realMain(void) {
     GoIface err = _t10.r1;
     if (err.type != 0) {
         fn_Logcat(go_strcat(GOSTR("LOG: loadConfig failed: "), iface_Error_319077b5(err)));
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     if (false) {
         cfg->Video.RenderMode = GOSTR("Vulkan 1.3");
@@ -140832,7 +140835,7 @@ void fn_realMain(void) {
     err = _t11.r1;
     if (err.type != 0) {
         fn_Logcat(go_strcat(GOSTR("LOG: LUA OPEN FAILED: "), iface_Error_319077b5(err)));
-        go_panic(err);
+        go_panic_iface(0, err);
     }
     os_File_Close(ftemp);
     fn_vitaTrace(GOSTR("main: sys.init"));
@@ -140849,7 +140852,7 @@ void fn_realMain(void) {
                     return;
                 }
             }
-            go_panic(err);
+            go_panic_iface(0, err);
         }
     }
     fn_handleExit();
@@ -141445,14 +141448,14 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                         }
                     }
                     GoString val = (GoString){0};
-                    valueSource_Lceda46 src = 0;
+                    valueSource_L8814da src = 0;
                     {
                         Ret_GoString__bool _t10 = ((Ret_GoString__bool (*)(void *, GoOpaque /* ini.File */*, GoString, GoString))(get).fn)((get).env, (*user__h), sp.DstSec, dstKey);
                         GoString v = _t10.r0;
                         bool ok = _t10.r1;
                         if (ok) {
                             GoString _t11 = v;
-                            valueSource_Lceda46 _t12 = 1;
+                            valueSource_L8814da _t12 = 1;
                             val = _t11;
                             src = _t12;
                         } else {
@@ -141462,7 +141465,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                                 bool ok = _t13.r1;
                                 if (ok) {
                                     GoString _t14 = v;
-                                    valueSource_Lceda46 _t15 = 2;
+                                    valueSource_L8814da _t15 = 2;
                                     val = _t14;
                                     src = _t15;
                                 } else {
@@ -141472,7 +141475,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                                         bool ok = _t16.r1;
                                         if (ok) {
                                             GoString _t17 = v;
-                                            valueSource_Lceda46 _t18 = 3;
+                                            valueSource_L8814da _t18 = 3;
                                             val = _t17;
                                             src = _t18;
                                         } else {
@@ -141482,7 +141485,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                                                 bool ok = _t19.r1;
                                                 if (ok) {
                                                     GoString _t20 = v;
-                                                    valueSource_Lceda46 _t21 = 4;
+                                                    valueSource_L8814da _t21 = 4;
                                                     val = _t20;
                                                     src = _t21;
                                                 } else {
@@ -141504,7 +141507,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                         }
                     }
                     {
-                        valueSource_Lceda46 _t22 = src;
+                        valueSource_L8814da _t22 = src;
                         do {
                             if ((_t22 == 2) || (_t22 == 4)) {
                                 Map_GoString_bool_set(&m->inheritedKeys, query, true);
@@ -141515,7 +141518,7 @@ void Motif_mergeWithInheritance(Motif* m, Slice_InheritSpec specs) {
                     }
                     if ((*user__h) != NULL) {
                         {
-                            valueSource_Lceda46 _t23 = src;
+                            valueSource_L8814da _t23 = src;
                             do {
                                 if ((_t23 == 1)) {
                                 } else if ((_t23 == 2)) {
@@ -141997,11 +142000,11 @@ void Motif_applyPostParsePosAdjustments(Motif* m) {
         }
     }
     {
-        Slice_namePos_L01a34b names = GO_SLICE_LIT(Slice_namePos_L01a34b, namePos_L01a34b, 8, (namePos_L01a34b){m->VsScreen.P1.Name.TextProperties_.TextSpriteData, m->VsScreen.P1.Name.Pos}, (namePos_L01a34b){m->VsScreen.P2.Name.TextProperties_.TextSpriteData, m->VsScreen.P2.Name.Pos}, (namePos_L01a34b){m->VsScreen.P3.Name.TextProperties_.TextSpriteData, m->VsScreen.P3.Name.Pos}, (namePos_L01a34b){m->VsScreen.P4.Name.TextProperties_.TextSpriteData, m->VsScreen.P4.Name.Pos}, (namePos_L01a34b){m->VsScreen.P5.Name.TextProperties_.TextSpriteData, m->VsScreen.P5.Name.Pos}, (namePos_L01a34b){m->VsScreen.P6.Name.TextProperties_.TextSpriteData, m->VsScreen.P6.Name.Pos}, (namePos_L01a34b){m->VsScreen.P7.Name.TextProperties_.TextSpriteData, m->VsScreen.P7.Name.Pos}, (namePos_L01a34b){m->VsScreen.P8.Name.TextProperties_.TextSpriteData, m->VsScreen.P8.Name.Pos});
+        Slice_namePos_L64e64f names = GO_SLICE_LIT(Slice_namePos_L64e64f, namePos_L64e64f, 8, (namePos_L64e64f){m->VsScreen.P1.Name.TextProperties_.TextSpriteData, m->VsScreen.P1.Name.Pos}, (namePos_L64e64f){m->VsScreen.P2.Name.TextProperties_.TextSpriteData, m->VsScreen.P2.Name.Pos}, (namePos_L64e64f){m->VsScreen.P3.Name.TextProperties_.TextSpriteData, m->VsScreen.P3.Name.Pos}, (namePos_L64e64f){m->VsScreen.P4.Name.TextProperties_.TextSpriteData, m->VsScreen.P4.Name.Pos}, (namePos_L64e64f){m->VsScreen.P5.Name.TextProperties_.TextSpriteData, m->VsScreen.P5.Name.Pos}, (namePos_L64e64f){m->VsScreen.P6.Name.TextProperties_.TextSpriteData, m->VsScreen.P6.Name.Pos}, (namePos_L64e64f){m->VsScreen.P7.Name.TextProperties_.TextSpriteData, m->VsScreen.P7.Name.Pos}, (namePos_L64e64f){m->VsScreen.P8.Name.TextProperties_.TextSpriteData, m->VsScreen.P8.Name.Pos});
         {
-            Slice_namePos_L01a34b _t14 = names;
+            Slice_namePos_L64e64f _t14 = names;
             for (int _t13 = 0; _t13 < _t14.len; _t13++) {
-                namePos_L01a34b n = _t14.p[_t13];
+                namePos_L64e64f n = _t14.p[_t13];
                 ((void (*)(void *, TextSprite*, f32, f32))((*textSetPos__h)).fn)(((*textSetPos__h)).env, n.ts, n.pos.v[0], n.pos.v[1]);
                 _cont15:;
             }
@@ -145344,8 +145347,8 @@ void MotifVictory_step(MotifVictory* vi, Motif* m) {
 
 // MotifVictory.draw (motif.go:6447), 0 TODO
 void MotifVictory_draw(MotifVictory* vi, Motif* m, i16 layerno) {
-    Slice_slotRef_L1be2fe *slots__h = go_box(Slice_slotRef_L1be2fe, GO_SLICE_LIT(Slice_slotRef_L1be2fe, slotRef_L1be2fe, 8, (slotRef_L1be2fe){0, (&m->VictoryScreen.P1), m->VictoryScreen.P1.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L1be2fe){1, (&m->VictoryScreen.P2), m->VictoryScreen.P2.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L1be2fe){2, (&m->VictoryScreen.P3), m->VictoryScreen.P3.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L1be2fe){3, (&m->VictoryScreen.P4), m->VictoryScreen.P4.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L1be2fe){4, (&m->VictoryScreen.P5), m->VictoryScreen.P5.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L1be2fe){5, (&m->VictoryScreen.P6), m->VictoryScreen.P6.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L1be2fe){6, (&m->VictoryScreen.P7), m->VictoryScreen.P7.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L1be2fe){7, (&m->VictoryScreen.P8), m->VictoryScreen.P8.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}));
-    go_sort_slice_stable((void *)GO_TMPADDR(Slice_slotRef_L1be2fe, (*slots__h)), sizeof(slotRef_L1be2fe), ((GoFunc){(void *)lambda_1039, go_box(Env_lambda_1039, ((Env_lambda_1039){slots__h}))}));
+    Slice_slotRef_L64fd25 *slots__h = go_box(Slice_slotRef_L64fd25, GO_SLICE_LIT(Slice_slotRef_L64fd25, slotRef_L64fd25, 8, (slotRef_L64fd25){0, (&m->VictoryScreen.P1), m->VictoryScreen.P1.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){1, (&m->VictoryScreen.P2), m->VictoryScreen.P2.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){2, (&m->VictoryScreen.P3), m->VictoryScreen.P3.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){3, (&m->VictoryScreen.P4), m->VictoryScreen.P4.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){4, (&m->VictoryScreen.P5), m->VictoryScreen.P5.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){5, (&m->VictoryScreen.P6), m->VictoryScreen.P6.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){6, (&m->VictoryScreen.P7), m->VictoryScreen.P7.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_L64fd25){7, (&m->VictoryScreen.P8), m->VictoryScreen.P8.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}));
+    go_sort_slice_stable((void *)GO_TMPADDR(Slice_slotRef_L64fd25, (*slots__h)), sizeof(slotRef_L64fd25), ((GoFunc){(void *)lambda_1039, go_box(Env_lambda_1039, ((Env_lambda_1039){slots__h}))}));
     Rect_Draw(m->VictoryScreen.Overlay.RectData, layerno);
     if (m->VictoryBgDef.BgClearColor.v[0] >= 0) {
         Rect_Draw(m->VictoryBgDef.RectData, layerno);
@@ -145354,17 +145357,17 @@ void MotifVictory_draw(MotifVictory* vi, Motif* m, i16 layerno) {
         BGDef_Draw(m->VictoryBgDef.BGDef, ((i32)layerno), 0x0p+00f, 0x0p+00f, 0x1p+00f);
     }
     {
-        Slice_slotRef_L1be2fe _t2 = (*slots__h);
+        Slice_slotRef_L64fd25 _t2 = (*slots__h);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
-            slotRef_L1be2fe s = _t2.p[_t1];
+            slotRef_L64fd25 s = _t2.p[_t1];
             Anim_Draw(s.p->Face2.FaceProperties_.AnimationCharPreloadProperties_.AnimData, layerno);
             _cont3:;
         }
     }
     {
-        Slice_slotRef_L1be2fe _t5 = (*slots__h);
+        Slice_slotRef_L64fd25 _t5 = (*slots__h);
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
-            slotRef_L1be2fe s = _t5.p[_t4];
+            slotRef_L64fd25 s = _t5.p[_t4];
             Anim_Draw(s.p->FaceProperties_.AnimationCharPreloadProperties_.AnimData, layerno);
             _cont6:;
         }
@@ -149811,10 +149814,10 @@ Ret_i32__i32__bool TextureAtlas_FindPlaceToInsert(TextureAtlas* ta, i32 width, i
 // TextureAtlas.Resize (render.go:1469), 0 TODO
 void TextureAtlas_Resize(TextureAtlas* ta, i32 width, i32 height) {
     if (width < ta->width) {
-        go_panic(GOSTR("New width cannot be smaller than old width"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("New width cannot be smaller than old width"))}));
     }
     if (height < ta->height) {
-        go_panic(GOSTR("New height cannot be smaller than old height"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("New height cannot be smaller than old height"))}));
     }
     Ret_Texture__GoIface _t1 = iface_newTexture_96deffff(g_gfx, width, height, ta->depth, ta->filter);
     Texture t = _t1.r0;
@@ -151082,7 +151085,7 @@ i32 Renderer_GL33_uniformLoc(Renderer_GL33* r, ShaderProgram_GL33* s, GoString n
     i32 loc = _t2;
     bool ok = _t1;
     if (!ok) {
-        go_panic(fmt_Sprintf(GOSTR("Uniform '%s' not registered in %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, name)}), ((GoIface){17, go_box(GoString, s->name)}))));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("Uniform '%s' not registered in %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, name)}), ((GoIface){17, go_box(GoString, s->name)}))))}));
     }
     return loc;
 }
@@ -151120,7 +151123,7 @@ void Renderer_GL33_SetTextureSub(Renderer_GL33* r, Map_GoString_i32 uMap, Map_Go
     i32 loc = _t2;
     bool ok = _t1;
     if (!ok) {
-        go_panic(fmt_Sprintf(GOSTR("Texture uniform '%s' not registered"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, name)}))));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("Texture uniform '%s' not registered"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, name)}))))}));
     }
     {
         GoString _t3 = name;
@@ -151457,7 +151460,7 @@ bool RollbackSystem_hijackRunMatch(RollbackSystem* rs) {
             rs->session->now = time_Time_UnixMilli(time_Now());
             GoIface err = iface_Idle_1b7d9b25(rs->session->backend, go_f2i32(math_Max(0x0p+00, ((f64)((rs->session->next - rs->session->now) - 1LL)))), (Slice_polling_FuncTimeType){0});
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             if (((rs->netConnection != NULL) && (!rs->session->synchronized)) && time_Time_After(time_Now(), syncDeadline)) {
                 NetConnection_fail(rs->netConnection, fmt_Errorf(GOSTR("Timed out establishing rollback connection to %s (local UDP port %d).\nCheck UDP forwarding and firewall settings on both peers."), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, net_JoinHostPort(rs->session->remoteIp, fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, rs->netConnection->rollbackRemotePort)})))))}), ((GoIface){2, go_box_a(int, rs->session->config.Port)}))));
@@ -151606,7 +151609,7 @@ bool RollbackSystem_runFrame(RollbackSystem* rs) {
             _df4 = true;
             GoIface err = iface_AdvanceFrame_ef5bcc1c((*rs__h)->session->backend, RollbackSession_LiveChecksum((*rs__h)->session));
             if (err.type != 0) {
-                go_panic(err);
+                go_panic_iface(0, err);
             }
             if (g_sys.SystemStateVars_.esc || (!keepRunning)) {
                 {
@@ -152054,7 +152057,7 @@ void RollbackSession_AdvanceFrame(RollbackSession* r, int flags) {
         _df4 = true;
         GoIface err = iface_AdvanceFrame_ef5bcc1c((*r__h)->backend, RollbackSession_LiveChecksum((*r__h)));
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
     }
     go_panic_top = _pf.prev;
@@ -152190,7 +152193,7 @@ GoIface RollbackSession_InitP1(RollbackSession* rs, int numPlayers, int localPor
         GoOpaque /* os.File */* f = _t1.r0;
         GoIface err = _t1.r1;
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         GoOpaque /* log.Logger */* logger = log_New(((GoIface){146, (void *)(f)}), GOSTR("Logger:"), 19);
         ggpo_EnableLogs();
@@ -152214,13 +152217,13 @@ GoIface RollbackSession_InitP1(RollbackSession* rs, int numPlayers, int localPor
     ggpo_PlayerHandle *handle__h = go_box_a(ggpo_PlayerHandle, 0);
     GoIface result = ggpo_Peer_AddPlayer(&(*peer__h), (&(*player__h)), (&(*handle__h)));
     if (result.type != 0) {
-        go_panic(GOSTR("panic"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("panic"))}));
     }
     rs->handles = GO_APPEND(Slice_ggpo_PlayerHandle, rs->handles, (*handle__h));
     ggpo_PlayerHandle *handle2__h = go_box_a(ggpo_PlayerHandle, 0);
     result = ggpo_Peer_AddPlayer(&(*peer__h), (&(*player2__h)), (&(*handle2__h)));
     if (result.type != 0) {
-        go_panic(GOSTR("panic"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("panic"))}));
     }
     rs->handles = GO_APPEND(Slice_ggpo_PlayerHandle, rs->handles, (*handle2__h));
     rs->currentPlayer = ((int)(*handle__h));
@@ -152241,7 +152244,7 @@ GoIface RollbackSession_InitP2(RollbackSession* rs, int numPlayers, int localPor
         GoOpaque /* os.File */* f = _t1.r0;
         GoIface err = _t1.r1;
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         GoOpaque /* log.Logger */* logger = log_New(((GoIface){146, (void *)(f)}), GOSTR("Logger:"), 19);
         ggpo_EnableLogs();
@@ -152265,13 +152268,13 @@ GoIface RollbackSession_InitP2(RollbackSession* rs, int numPlayers, int localPor
     ggpo_PlayerHandle *handle__h = go_box_a(ggpo_PlayerHandle, 0);
     GoIface result = ggpo_Peer_AddPlayer(&(*peer__h), (&(*player__h)), (&(*handle__h)));
     if (result.type != 0) {
-        go_panic(GOSTR("panic"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("panic"))}));
     }
     rs->handles = GO_APPEND(Slice_ggpo_PlayerHandle, rs->handles, (*handle__h));
     ggpo_PlayerHandle *handle2__h = go_box_a(ggpo_PlayerHandle, 0);
     result = ggpo_Peer_AddPlayer(&(*peer__h), (&(*player2__h)), (&(*handle2__h)));
     if (result.type != 0) {
-        go_panic(GOSTR("panic"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("panic"))}));
     }
     rs->handles = GO_APPEND(Slice_ggpo_PlayerHandle, rs->handles, (*handle2__h));
     rs->currentPlayer = ((int)(*handle2__h));
@@ -152293,7 +152296,7 @@ void RollbackSession_InitSyncTest(RollbackSession* rs, int numPlayers) {
         GoOpaque /* os.File */* f = _t1.r0;
         GoIface err = _t1.r1;
         if (err.type != 0) {
-            go_panic(err);
+            go_panic_iface(0, err);
         }
         GoOpaque /* log.Logger */* logger = log_New(((GoIface){146, (void *)(f)}), GOSTR("Logger:"), 19);
         ggpo_EnableLogs();
@@ -152313,13 +152316,13 @@ void RollbackSession_InitSyncTest(RollbackSession* rs, int numPlayers) {
     ggpo_PlayerHandle *handle__h = go_box_a(ggpo_PlayerHandle, 0);
     GoIface result = ggpo_SyncTest_AddPlayer(&(*peer__h), (&(*player__h)), (&(*handle__h)));
     if (result.type != 0) {
-        go_panic(GOSTR("panic"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("panic"))}));
     }
     rs->handles = GO_APPEND(Slice_ggpo_PlayerHandle, rs->handles, (*handle__h));
     ggpo_PlayerHandle *handle2__h = go_box_a(ggpo_PlayerHandle, 0);
     result = ggpo_SyncTest_AddPlayer(&(*peer__h), (&(*player2__h)), (&(*handle2__h)));
     if (result.type != 0) {
-        go_panic(GOSTR("panic"));
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("panic"))}));
     }
     rs->handles = GO_APPEND(Slice_ggpo_PlayerHandle, rs->handles, (*handle2__h));
     ggpo_SyncTest_SetDisconnectTimeout(&(*peer__h), 3000);
@@ -162416,7 +162419,7 @@ void Storyboard_reset(Storyboard* s) {
 // Storyboard.buildDialogueQueue (storyboard.go:734), 0 TODO
 void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps) {
     GoFunc parseLayerIndex = ((GoFunc){(void *)lambda_1769, &(Env_lambda_1769){0}});
-    Slice_entry_L4be5ac *items__h = go_box(Slice_entry_L4be5ac, {0});
+    Slice_entry_L5cd011 *items__h = go_box(Slice_entry_L5cd011, {0});
     {
         Slice_GoString _t2 = fn_SortedKeys_LayerPropertiesPtr(sceneProps->Layer);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -162425,16 +162428,16 @@ void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps) {
             if (((lp == NULL) || (lp->TextSpriteData == NULL)) || go_streq(lp->Text, GOSTR(""))) {
                 continue;
             }
-            (*items__h) = GO_APPEND(Slice_entry_L4be5ac, (*items__h), (entry_L4be5ac){.key = key, .lp = lp, .start = lp->StartTime, .idx = ((int (*)(void *, GoString))(parseLayerIndex).fn)((parseLayerIndex).env, key)});
+            (*items__h) = GO_APPEND(Slice_entry_L5cd011, (*items__h), (entry_L5cd011){.key = key, .lp = lp, .start = lp->StartTime, .idx = ((int (*)(void *, GoString))(parseLayerIndex).fn)((parseLayerIndex).env, key)});
             _cont3:;
         }
     }
-    go_sort_slice_stable((void *)GO_TMPADDR(Slice_entry_L4be5ac, (*items__h)), sizeof(entry_L4be5ac), ((GoFunc){(void *)lambda_1771, go_box(Env_lambda_1771, ((Env_lambda_1771){items__h}))}));
+    go_sort_slice_stable((void *)GO_TMPADDR(Slice_entry_L5cd011, (*items__h)), sizeof(entry_L5cd011), ((GoFunc){(void *)lambda_1771, go_box(Env_lambda_1771, ((Env_lambda_1771){items__h}))}));
     s->dialogueLayers = GO_SLICE(Slice_LayerPropertiesPtr, s->dialogueLayers, 0, 0);
     {
-        Slice_entry_L4be5ac _t5 = (*items__h);
+        Slice_entry_L5cd011 _t5 = (*items__h);
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
-            entry_L4be5ac it = _t5.p[_t4];
+            entry_L5cd011 it = _t5.p[_t4];
             s->dialogueLayers = GO_APPEND(Slice_LayerPropertiesPtr, s->dialogueLayers, it.lp);
             _cont6:;
         }
@@ -162874,7 +162877,7 @@ lua_LState* System_init(System* s, i32 w, i32 h) {
             sdl_GLContext ctx = _t7.r0;
             GoIface err = _t7.r1;
             if (err.type != 0) {
-                go_panic(fmt_Sprintf(GOSTR("Could not initialize context :( Reason? %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, err)));
+                go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("Could not initialize context :( Reason? %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, err)))}));
             } else {
                 sdl_Window_GLMakeCurrent((*s__h)->window->embed_Window, ctx);
             }
@@ -162999,7 +163002,7 @@ lua_LState* System_init(System* s, i32 w, i32 h) {
                     if (err.type != 0) {
                         GoString dErr = go_strcat(GOSTR("Icon file can not be found.\nPanic: "), iface_Error_319077b5(err));
                         fn_ShowErrorDialog(dErr);
-                        go_panic(dErr);
+                        go_panic_iface(0, ((GoIface){281, go_box(Error, dErr)}));
                     }
                     Ret_GoIface__GoString__GoIface _t25 = image_Decode(f.p[i]);
                     (*s__h)->windowMainIcon.p[i] = _t25.r0;
@@ -163015,7 +163018,7 @@ lua_LState* System_init(System* s, i32 w, i32 h) {
     return l;
 }
 
-// System.shutdown (system.go:573), 0 TODO
+// System.shutdown (system.go:578), 0 TODO
 void System_shutdown(System* s) {
     if (!g_sys.SystemStateVars_.gameEnd) {
         g_sys.SystemStateVars_.gameEnd = true;
@@ -163030,7 +163033,7 @@ void System_shutdown(System* s) {
     }
 }
 
-// getViewport (system.go:587), 0 TODO
+// getViewport (system.go:592), 0 TODO
 Arr4_f64 fn_getViewport(f64 srcW, f64 srcH, f64 dstW, f64 dstH) {
     f64 fromRatio = (srcW * dstH);
     f64 toRatio = (srcH * dstW);
@@ -163050,12 +163053,12 @@ Arr4_f64 fn_getViewport(f64 srcW, f64 srcH, f64 dstW, f64 dstH) {
     return (Arr4_f64){{0x0p+00, 0x0p+00, srcW, srcH}};
 }
 
-// System.middleOfMatch (system.go:607), 0 TODO
+// System.middleOfMatch (system.go:612), 0 TODO
 bool System_middleOfMatch(System* s) {
     return ((s->gameRunning && (!s->SystemStateVars_.fightLoopEnd)) && (!s->SystemStateVars_.postMatchFlg));
 }
 
-// System.skipMotifScaling (system.go:614), 0 TODO
+// System.skipMotifScaling (system.go:619), 0 TODO
 bool System_skipMotifScaling(System* s) {
     if (((System_middleOfMatch(s) || s->SystemStateVars_.postMatchFlg)) && (s->stage != NULL)) {
         return (System_getFightAspect(s) > System_getMotifAspect(s));
@@ -163064,7 +163067,7 @@ bool System_skipMotifScaling(System* s) {
     return (fn_CalculateAspect_i32(lc.v[0], lc.v[1]) > System_getMotifAspect(s));
 }
 
-// System.getFightAspect (system.go:623), 0 TODO
+// System.getFightAspect (system.go:628), 0 TODO
 f32 System_getFightAspect(System* s) {
     if (((s->cfg.Video.FightAspectWidth < 0) && (s->cfg.Video.FightAspectHeight < 0)) && (s->stage != NULL)) {
         Arr2_i32 coord = s->stage->stageCamera.localcoord;
@@ -163078,12 +163081,12 @@ f32 System_getFightAspect(System* s) {
     return System_getMotifAspect(s);
 }
 
-// System.getMotifAspect (system.go:643), 0 TODO
+// System.getMotifAspect (system.go:648), 0 TODO
 f32 System_getMotifAspect(System* s) {
     return fn_CalculateAspect_i32(s->SystemStateVars_.scrrect.v[2], s->SystemStateVars_.scrrect.v[3]);
 }
 
-// System.getCurrentAspect (system.go:649), 0 TODO
+// System.getCurrentAspect (system.go:654), 0 TODO
 f32 System_getCurrentAspect(System* s) {
     if (((s->SystemStateVars_.postMatchFlg && System_skipMotifScaling(s))) || ((System_middleOfMatch(s) && (!System_shouldComposeFullResolution(s))))) {
         return System_getFightAspect(s);
@@ -163091,7 +163094,7 @@ f32 System_getCurrentAspect(System* s) {
     return System_getMotifAspect(s);
 }
 
-// aspectStateForSize (system.go:657), 0 TODO
+// aspectStateForSize (system.go:662), 0 TODO
 drawAspectState fn_aspectStateForSize(i32 w, i32 h) {
     i32 baseWidth = 320;
     i32 baseHeight = 240;
@@ -163110,7 +163113,7 @@ drawAspectState fn_aspectStateForSize(i32 w, i32 h) {
     return st;
 }
 
-// System.setGameSize (system.go:681), 0 TODO
+// System.setGameSize (system.go:686), 0 TODO
 void System_setGameSize(System* s, i32 w, i32 h) {
     i32 _t1 = w;
     i32 _t2 = h;
@@ -163119,7 +163122,7 @@ void System_setGameSize(System* s, i32 w, i32 h) {
     System_restoreAspectState(s, fn_aspectStateForSize(w, h));
 }
 
-// System.applyFightAspect (system.go:687), 0 TODO
+// System.applyFightAspect (system.go:692), 0 TODO
 void System_applyFightAspect(System* s) {
     f32 baseHeight = 0x1.ep+07f;
     f32 aspectGame = 0;
@@ -163154,12 +163157,12 @@ void System_applyFightAspect(System* s) {
     s->SystemStateVars_.heightScale = (((f32)s->SystemStateVars_.scrrect.v[3]) / ((f32)s->SystemStateVars_.gameHeight));
 }
 
-// System.captureAspectState (system.go:727), 0 TODO
+// System.captureAspectState (system.go:732), 0 TODO
 drawAspectState System_captureAspectState(System* s) {
     return (drawAspectState){.gameWidth = s->SystemStateVars_.gameWidth, .gameHeight = s->SystemStateVars_.gameHeight, .widthScale = s->SystemStateVars_.widthScale, .heightScale = s->SystemStateVars_.heightScale};
 }
 
-// System.restoreAspectState (system.go:736), 0 TODO
+// System.restoreAspectState (system.go:741), 0 TODO
 void System_restoreAspectState(System* s, drawAspectState st) {
     s->SystemStateVars_.gameWidth = st.gameWidth;
     s->SystemStateVars_.gameHeight = st.gameHeight;
@@ -163167,7 +163170,7 @@ void System_restoreAspectState(System* s, drawAspectState st) {
     s->SystemStateVars_.heightScale = st.heightScale;
 }
 
-// System.withAspectState (system.go:743), 0 TODO
+// System.withAspectState (system.go:748), 0 TODO
 void System_withAspectState(System* s, drawAspectState st, GoFunc fn) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163182,7 +163185,7 @@ void System_withAspectState(System* s, drawAspectState st, GoFunc fn) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.wrapDrawWithAspectState (system.go:750), 0 TODO
+// System.wrapDrawWithAspectState (system.go:755), 0 TODO
 GoFunc System_wrapDrawWithAspectState(System* s, GoFunc fn) {
     System* *s__h = go_box(System*, s);
     GoFunc *fn__h = go_box(GoFunc, fn);
@@ -163193,22 +163196,22 @@ GoFunc System_wrapDrawWithAspectState(System* s, GoFunc fn) {
     return ((GoFunc){(void *)lambda_1773, go_box(Env_lambda_1773, ((Env_lambda_1773){s__h, fn__h, st__h}))});
 }
 
-// System.canUseFullResolutionAspect (system.go:765), 0 TODO
+// System.canUseFullResolutionAspect (system.go:770), 0 TODO
 bool System_canUseFullResolutionAspect(System* s) {
     return (s->cfg.Video.KeepAspect && (!System_skipMotifScaling(s)));
 }
 
-// System.motifOverlayActive (system.go:769), 0 TODO
+// System.motifOverlayActive (system.go:774), 0 TODO
 bool System_motifOverlayActive(System* s) {
     return (s->motif.di.active || ((s->motif.me.active && (s->motif.me.state != 0)) && (s->motif.me.state != 4)));
 }
 
-// System.shouldComposeFullResolution (system.go:774), 0 TODO
+// System.shouldComposeFullResolution (system.go:779), 0 TODO
 bool System_shouldComposeFullResolution(System* s) {
     return (System_canUseFullResolutionAspect(s) && ((((!System_middleOfMatch(s)) || System_motifOverlayActive(s)) || s->debugDisplay)));
 }
 
-// System.fightViewport (system.go:779), 0 TODO
+// System.fightViewport (system.go:784), 0 TODO
 Arr4_i32 System_fightViewport(System* s) {
     Arr4_i32 viewport = s->SystemStateVars_.scrrect;
     f32 fightAspect = System_getFightAspect(s);
@@ -163230,7 +163233,7 @@ Arr4_i32 System_fightViewport(System* s) {
     return viewport;
 }
 
-// intersectRect (system.go:801), 0 TODO
+// intersectRect (system.go:806), 0 TODO
 Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b) {
     i32 x1 = go_max_i32(a.v[0], b.v[0]);
     i32 y1 = go_max_i32(a.v[1], b.v[1]);
@@ -163242,7 +163245,7 @@ Arr4_i32 fn_intersectRect(Arr4_i32 a, Arr4_i32 b) {
     return (Arr4_i32){{x1, y1, (x2 - x1), (y2 - y1)}};
 }
 
-// System.fightDrawClip (system.go:812), 0 TODO
+// System.fightDrawClip (system.go:817), 0 TODO
 Ret_Arr4_i32__bool System_fightDrawClip(System* s) {
     if (!System_shouldComposeFullResolution(s)) {
         return (Ret_Arr4_i32__bool){s->SystemStateVars_.scrrect, false};
@@ -163251,7 +163254,7 @@ Ret_Arr4_i32__bool System_fightDrawClip(System* s) {
     return (Ret_Arr4_i32__bool){viewport, (!go_eq_Arr4_i32(viewport, s->SystemStateVars_.scrrect))};
 }
 
-// System.setGameAspect (system.go:820), 0 TODO
+// System.setGameAspect (system.go:825), 0 TODO
 void System_setGameAspect(System* s) {
     System_applyFightAspect(&g_sys);
     {
@@ -163277,7 +163280,7 @@ void System_setGameAspect(System* s) {
     FightScreen_setScale(&g_sys.fightScreen);
 }
 
-// System.eventUpdate (system.go:840), 0 TODO
+// System.eventUpdate (system.go:845), 0 TODO
 bool System_eventUpdate(System* s) {
     s->SystemStateVars_.esc = false;
     {
@@ -163293,7 +163296,7 @@ bool System_eventUpdate(System* s) {
     return (!s->SystemStateVars_.gameEnd);
 }
 
-// System.runMainThreadTask (system.go:850), 0 TODO
+// System.runMainThreadTask (system.go:855), 0 TODO
 void System_runMainThreadTask(System* s) {
     {
         for (; 1; ) {
@@ -163316,7 +163319,7 @@ void System_runMainThreadTask(System* s) {
     }
 }
 
-// System.keepAlive (system.go:861), 0 TODO
+// System.keepAlive (system.go:866), 0 TODO
 void System_keepAlive(System* s) {
     if (s->keepAliveProfile) {
         GoOpaque /* time.Time */ now = time_Now();
@@ -163342,7 +163345,7 @@ void System_keepAlive(System* s) {
     Window_pollEvents(s->window);
 }
 
-// System.await (system.go:889), 0 TODO
+// System.await (system.go:894), 0 TODO
 bool System_await(System* s, int fps) {
     volatile bool _df2 = false; volatile GoFunc _df2_f; volatile bool _df3 = false; volatile bool _df3_a0; volatile GoFunc _df3_f;
     System* *s__h = go_box(System*, s);
@@ -163415,6 +163418,9 @@ bool System_await(System* s, int fps) {
         } while (0);
     }
     System_eventUpdate((*s__h));
+    if (true) {
+        runtime_Gosched();
+    }
     if (false) {
         if (fn_vitaHalfRate()) {
             g_vitaHalfTick++;
@@ -163437,7 +163443,7 @@ bool System_await(System* s, int fps) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// System.soundPanView (system.go:1000), 0 TODO
+// System.soundPanView (system.go:1009), 0 TODO
 soundPanView System_soundPanView(System* s) {
     soundPanView view = {0};
     view.width = s->SystemStateVars_.gameWidth;
@@ -163451,7 +163457,7 @@ soundPanView System_soundPanView(System* s) {
     return view;
 }
 
-// System.renderFrame (system.go:1012), 0 TODO
+// System.renderFrame (system.go:1021), 0 TODO
 void System_renderFrame(System* s) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163511,7 +163517,7 @@ void System_renderFrame(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.update (system.go:1061), 0 TODO
+// System.update (system.go:1070), 0 TODO
 bool System_update(System* s) {
     s->frameCounter++;
     bool rollbackMatchStarting = ((s->rollback.session != NULL) && (s->rollback.netConnection != NULL));
@@ -163563,7 +163569,7 @@ bool System_update(System* s) {
     return System_await(s, System_gameRenderSpeed(s));
 }
 
-// System.tickSound (system.go:1123), 0 TODO
+// System.tickSound (system.go:1132), 0 TODO
 void System_tickSound(System* s) {
     soundPanView view = System_soundPanView(s);
     SoundChannels_Tick(&s->soundChannels, view);
@@ -163592,7 +163598,7 @@ void System_tickSound(System* s) {
     }
 }
 
-// System.applyPauseFocusVolume (system.go:1145), 0 TODO
+// System.applyPauseFocusVolume (system.go:1154), 0 TODO
 void System_applyPauseFocusVolume(System* s) {
     s->focusMuted = (((s->cfg.Sound.FocusLossVolume < 100) && (s->window != NULL)) && (!Window_Focused(s->window)));
     s->pauseSoundVolume = 100;
@@ -163629,7 +163635,7 @@ void System_applyPauseFocusVolume(System* s) {
     }
 }
 
-// System.resetRemapInput (system.go:1188), 0 TODO
+// System.resetRemapInput (system.go:1197), 0 TODO
 void System_resetRemapInput(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -163640,7 +163646,7 @@ void System_resetRemapInput(System* s) {
     }
 }
 
-// System.loaderReset (system.go:1194), 0 TODO
+// System.loaderReset (system.go:1203), 0 TODO
 void System_loaderReset(System* s) {
     i32 _t1 = 1;
     Arr2_i32 _t2 = (Arr2_i32){{}};
@@ -163654,13 +163660,13 @@ void System_loaderReset(System* s) {
     Loader_reset(&s->loader);
 }
 
-// System.loadStart (system.go:1200), 0 TODO
+// System.loadStart (system.go:1209), 0 TODO
 void System_loadStart(System* s) {
     System_loaderReset(s);
     Loader_runTread(&s->loader);
 }
 
-// System.releaseReloadingCharFx (system.go:1206), 0 TODO
+// System.releaseReloadingCharFx (system.go:1215), 0 TODO
 void System_releaseReloadingCharFx(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163746,7 +163752,7 @@ void System_releaseReloadingCharFx(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.dropCanceledLoadData (system.go:1259), 0 TODO
+// System.dropCanceledLoadData (system.go:1268), 0 TODO
 void System_dropCanceledLoadData(System* s) {
     volatile bool _df6 = false; volatile GoFunc _df6_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -163807,7 +163813,7 @@ void System_dropCanceledLoadData(System* s) {
     if (_df6) { _df6 = false; ((void (*)(void *))_df6_f.fn)(_df6_f.env); }
 }
 
-// System.loadCancel (system.go:1296), 0 TODO
+// System.loadCancel (system.go:1305), 0 TODO
 void System_loadCancel(System* s) {
     Loader_reset(&s->loader);
     System_dropCanceledLoadData(s);
@@ -163816,7 +163822,7 @@ void System_loadCancel(System* s) {
     }
 }
 
-// System.synchronize (system.go:1304), 0 TODO
+// System.synchronize (system.go:1313), 0 TODO
 GoIface System_synchronize(System* s) {
     if (s->replayFile != NULL) {
         ReplayFile_Synchronize(s->replayFile);
@@ -163828,7 +163834,7 @@ GoIface System_synchronize(System* s) {
     return (GoIface){0};
 }
 
-// System.anyHardButton (system.go:1332), 0 TODO
+// System.anyHardButton (system.go:1341), 0 TODO
 bool System_anyHardButton(System* s) {
     Slice_int hardButtonIdx = GO_SLICE_LIT(Slice_int, int, 6, 4, 5, 6, 7, 8, 9);
     {
@@ -163870,7 +163876,7 @@ bool System_anyHardButton(System* s) {
     return false;
 }
 
-// System.anyButton (system.go:1357), 0 TODO
+// System.anyButton (system.go:1366), 0 TODO
 bool System_anyButton(System* s) {
     if (s->replayFile != NULL) {
         return ReplayFile_AnyButton(s->replayFile);
@@ -163884,7 +163890,7 @@ bool System_anyButton(System* s) {
     return System_anyHardButton(s);
 }
 
-// System.buttonController (system.go:1370), 0 TODO
+// System.buttonController (system.go:1379), 0 TODO
 int System_buttonController(System* s, Slice_GoString btns) {
     {
         Slice_GoString _t2 = btns;
@@ -163907,7 +163913,7 @@ int System_buttonController(System* s, Slice_GoString btns) {
     return -1;
 }
 
-// System.stepCommandLists (system.go:1381), 0 TODO
+// System.stepCommandLists (system.go:1390), 0 TODO
 void System_stepCommandLists(System* s) {
     {
         Slice_CommandListPtr _t2 = s->commandLists;
@@ -163925,14 +163931,14 @@ void System_stepCommandLists(System* s) {
     }
 }
 
-// System.uiResetTokenGuard (system.go:1394), 0 TODO
+// System.uiResetTokenGuard (system.go:1403), 0 TODO
 void System_uiResetTokenGuard(System* s) {
     s->SystemStateVars_.uiConsumeInputFrame = (s->frameCounter + 1);
     s->SystemStateVars_.uiLastInputToken = GOSTR("");
     s->SystemStateVars_.lastInputController = -1;
 }
 
-// System.uiRepeatShouldFire (system.go:1400), 0 TODO
+// System.uiRepeatShouldFire (system.go:1409), 0 TODO
 bool System_uiRepeatShouldFire(System* s, i32 held) {
     if (held <= 1) {
         return false;
@@ -163943,7 +163949,7 @@ bool System_uiRepeatShouldFire(System* s, i32 held) {
     return (go_rem32(((held - ((1 + s->cfg.Input.UiRepeatDelay)))), s->cfg.Input.UiRepeatRate) == 0);
 }
 
-// System.uiControllerKey (system.go:1412), 0 TODO
+// System.uiControllerKey (system.go:1421), 0 TODO
 int System_uiControllerKey(System* s, int controllerIdx) {
     if (controllerIdx < 0) {
         return controllerIdx;
@@ -163954,7 +163960,7 @@ int System_uiControllerKey(System* s, int controllerIdx) {
     return controllerIdx;
 }
 
-// System.uiConsumeTokenThisFrame (system.go:1422), 0 TODO
+// System.uiConsumeTokenThisFrame (system.go:1431), 0 TODO
 bool System_uiConsumeTokenThisFrame(System* s, int controller, GoString tok) {
     if (((s->SystemStateVars_.uiRepeatFrame == s->frameCounter) && (s->SystemStateVars_.uiRepeatController == controller)) && go_streq(s->SystemStateVars_.uiRepeatToken, tok)) {
         return true;
@@ -163965,7 +163971,7 @@ bool System_uiConsumeTokenThisFrame(System* s, int controller, GoString tok) {
     return false;
 }
 
-// System.uiRawInput (system.go:1436), 0 TODO
+// System.uiRawInput (system.go:1445), 0 TODO
 bool System_uiRawInput(System* s, Slice_GoString btns, int controllerIdx) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     Slice_GoString btns__hv = btns; __typeof__(btns__hv) *btns__h = &btns__hv;
@@ -163988,7 +163994,7 @@ bool System_uiRawInput(System* s, Slice_GoString btns, int controllerIdx) {
     return false;
 }
 
-// System.uiIsKeyAction (system.go:1552), 0 TODO
+// System.uiIsKeyAction (system.go:1561), 0 TODO
 bool System_uiIsKeyAction(System* s, GoString name) {
     {
         GoString _t1 = name;
@@ -164002,7 +164008,7 @@ bool System_uiIsKeyAction(System* s, GoString name) {
     }
 }
 
-// System.uiDefaultTokens (system.go:1563), 0 TODO
+// System.uiDefaultTokens (system.go:1572), 0 TODO
 Slice_GoString System_uiDefaultTokens(System* s, int pn, bool joystick) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     GoString defaultNoKey__hv = ini_Key_String(ini_Section_Key(ini_File_Section((*s__h)->cfg.DefaultOnlyIni, GOSTR("Keys_P3")), GOSTR("menu"))); __typeof__(defaultNoKey__hv) *defaultNoKey__h = &defaultNoKey__hv;
@@ -164017,7 +164023,7 @@ Slice_GoString System_uiDefaultTokens(System* s, int pn, bool joystick) {
     return GO_SLICE_LIT(Slice_GoString, GoString, 14, ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("up")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("down")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("left")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("right")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("a")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("b")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("c")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("x")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("y")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("z")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("start")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("d")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("w")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("menu")));
 }
 
-// System.uiSetConfigDefaults (system.go:1587), 0 TODO
+// System.uiSetConfigDefaults (system.go:1596), 0 TODO
 void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_bool enabled) {
     if (pn < 1) {
         return;
@@ -164071,7 +164077,7 @@ void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_b
     System_uiResetTokenGuard(s);
 }
 
-// System.uiRegisterCommand (system.go:1643), 0 TODO
+// System.uiRegisterCommand (system.go:1652), 0 TODO
 GoIface System_uiRegisterCommand(System* s, GoString name, CommandSpec spec) {
     name = strings_TrimSpace(name);
     spec.Cmd = strings_TrimSpace(spec.Cmd);
@@ -164115,7 +164121,7 @@ GoIface System_uiRegisterCommand(System* s, GoString name, CommandSpec spec) {
     return (GoIface){0};
 }
 
-// System.uiApplyCommandRegistry (system.go:1672), 0 TODO
+// System.uiApplyCommandRegistry (system.go:1681), 0 TODO
 GoIface System_uiApplyCommandRegistry(System* s, CommandList* cl) {
     if ((cl == NULL) || (Map_GoString_CommandSpec_len(&s->uiCommandRegistry) == 0)) {
         return (GoIface){0};
@@ -164144,7 +164150,7 @@ GoIface System_uiApplyCommandRegistry(System* s, CommandList* cl) {
     return (GoIface){0};
 }
 
-// System.uiEnsureCommandLists (system.go:1687), 0 TODO
+// System.uiEnsureCommandLists (system.go:1696), 0 TODO
 GoIface System_uiEnsureCommandLists(System* s, int total) {
     Slice_GoString def = GO_SLICE_LIT(Slice_GoString, GoString, 15, GOSTR("D"), GOSTR("U"), GOSTR("L"), GOSTR("R"), GOSTR("a"), GOSTR("b"), GOSTR("c"), GOSTR("x"), GOSTR("y"), GOSTR("z"), GOSTR("s"), GOSTR("d"), GOSTR("w"), GOSTR("m"), GOSTR("/s"));
     CommandList* dcl = fn_NewCommandList(NULL);
@@ -164199,12 +164205,12 @@ GoIface System_uiEnsureCommandLists(System* s, int total) {
     return (GoIface){0};
 }
 
-// System.netplay (system.go:1730), 0 TODO
+// System.netplay (system.go:1739), 0 TODO
 bool System_netplay(System* s) {
     return (((s->rollback.session != NULL) || (s->netConnection != NULL)) || (s->replayFile != NULL));
 }
 
-// System.usesRollbackMatch (system.go:1734), 0 TODO
+// System.usesRollbackMatch (system.go:1743), 0 TODO
 bool System_usesRollbackMatch(System* s) {
     if (s->replayFile != NULL) {
         return false;
@@ -164212,17 +164218,17 @@ bool System_usesRollbackMatch(System* s) {
     return ((s->rollback.session != NULL) || (((s->netConnection == NULL) && (s->cfg.Netplay.Rollback.DesyncTestFrames > 0))));
 }
 
-// System.escExit (system.go:1742), 0 TODO
+// System.escExit (system.go:1751), 0 TODO
 bool System_escExit(System* s) {
     return (s->SystemStateVars_.esc && ((((!s->sel.gameParams->PauseMenu) || (!s->cfg.Config.EscOpensMenu)) || ((s->motif.AttractMode.Enabled && (s->SystemStateVars_.credits == 0))))));
 }
 
-// System.matchOver (system.go:1747), 0 TODO
+// System.matchOver (system.go:1756), 0 TODO
 bool System_matchOver(System* s) {
     return (((s->SystemStateVars_.wins.v[0] > 0) && (s->SystemStateVars_.wins.v[0] >= s->SystemStateVars_.matchWins.v[0])) || ((s->SystemStateVars_.wins.v[1] > 0) && (s->SystemStateVars_.wins.v[1] >= s->SystemStateVars_.matchWins.v[1])));
 }
 
-// System.anyChar (system.go:1753), 0 TODO
+// System.anyChar (system.go:1762), 0 TODO
 Char* System_anyChar(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -164243,7 +164249,7 @@ Char* System_anyChar(System* s) {
     return NULL;
 }
 
-// System.playerID (system.go:1764), 0 TODO
+// System.playerID (system.go:1773), 0 TODO
 Char* System_playerID(System* s, i32 id) {
     if (id < 0) {
         return NULL;
@@ -164260,7 +164266,7 @@ Char* System_playerID(System* s, i32 id) {
     return c;
 }
 
-// System.playerIDExist (system.go:1784), 0 TODO
+// System.playerIDExist (system.go:1793), 0 TODO
 BytecodeValue System_playerIDExist(System* s, BytecodeValue id) {
     if (BytecodeValue_IsUndefined(id)) {
         return fn_BytecodeUndefined();
@@ -164269,7 +164275,7 @@ BytecodeValue System_playerIDExist(System* s, BytecodeValue id) {
     return fn_BytecodeBool((c != NULL));
 }
 
-// System.playerIndex (system.go:1792), 0 TODO
+// System.playerIndex (system.go:1801), 0 TODO
 Char* System_playerIndex(System* s, i32 idx) {
     if ((idx < 0) || (((int)idx) >= g_sys.charList.runOrder.len)) {
         return NULL;
@@ -164291,7 +164297,7 @@ Char* System_playerIndex(System* s, i32 idx) {
     return NULL;
 }
 
-// System.playerIndexExist (system.go:1817), 0 TODO
+// System.playerIndexExist (system.go:1826), 0 TODO
 BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx) {
     if (BytecodeValue_IsUndefined(idx)) {
         return fn_BytecodeUndefined();
@@ -164300,7 +164306,7 @@ BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx) {
     return fn_BytecodeBool((char_ != NULL));
 }
 
-// System.getCharRoot (system.go:1826), 0 TODO
+// System.getCharRoot (system.go:1835), 0 TODO
 Char* System_getCharRoot(System* s, int idx) {
     if ((idx < 0) || (idx >= 12)) {
         return NULL;
@@ -164312,7 +164318,7 @@ Char* System_getCharRoot(System* s, int idx) {
     return p.p[0];
 }
 
-// System.playerNoExist (system.go:1837), 0 TODO
+// System.playerNoExist (system.go:1846), 0 TODO
 BytecodeValue System_playerNoExist(System* s, BytecodeValue pn) {
     if (BytecodeValue_IsUndefined(pn)) {
         return fn_BytecodeUndefined();
@@ -164322,7 +164328,7 @@ BytecodeValue System_playerNoExist(System* s, BytecodeValue pn) {
     return fn_BytecodeBool((c != NULL));
 }
 
-// System.palfxvar (system.go:1846), 0 TODO
+// System.palfxvar (system.go:1855), 0 TODO
 i32 System_palfxvar(System* s, i32 x, i32 y) {
     i32 n = 0;
     if (x >= 4) {
@@ -164363,7 +164369,7 @@ i32 System_palfxvar(System* s, i32 x, i32 y) {
     return n;
 }
 
-// System.palfxvar2 (system.go:1882), 0 TODO
+// System.palfxvar2 (system.go:1891), 0 TODO
 f32 System_palfxvar2(System* s, i32 x, i32 y) {
     f32 n = 0x1p+00f;
     if (x > 1) {
@@ -164390,27 +164396,27 @@ f32 System_palfxvar2(System* s, i32 x, i32 y) {
     return (n * 0x1p+08f);
 }
 
-// System.screenHeight (system.go:1905), 0 TODO
+// System.screenHeight (system.go:1914), 0 TODO
 f32 System_screenHeight(System* s) {
     return ((f32)s->SystemStateVars_.gameHeight);
 }
 
-// System.screenWidth (system.go:1910), 0 TODO
+// System.screenWidth (system.go:1919), 0 TODO
 f32 System_screenWidth(System* s) {
     return ((f32)s->SystemStateVars_.gameWidth);
 }
 
-// System.roundEnded (system.go:1914), 0 TODO
+// System.roundEnded (system.go:1923), 0 TODO
 bool System_roundEnded(System* s) {
     return (s->SystemStateVars_.intro < (-s->fightScreen.round->over_hittime));
 }
 
-// System.roundNoDamage (system.go:1919), 0 TODO
+// System.roundNoDamage (system.go:1928), 0 TODO
 bool System_roundNoDamage(System* s) {
     return (((g_sys.SystemStateVars_.intro < 0) && (g_sys.SystemStateVars_.intro <= (-g_sys.fightScreen.round->over_hittime))) && (g_sys.SystemStateVars_.intro >= (-g_sys.fightScreen.round->over_waittime)));
 }
 
-// System.gameTime (system.go:1924), 0 TODO
+// System.gameTime (system.go:1933), 0 TODO
 i32 System_gameTime(System* s) {
     i32 pmTime = 0;
     if (g_sys.netConnection != NULL) {
@@ -164425,7 +164431,7 @@ i32 System_gameTime(System* s) {
     return (g_sys.SystemStateVars_.matchTime + pmTime);
 }
 
-// System.roundState (system.go:1940), 0 TODO
+// System.roundState (system.go:1949), 0 TODO
 i32 System_roundState(System* s) {
     {
         do {
@@ -164444,7 +164450,7 @@ i32 System_roundState(System* s) {
     }
 }
 
-// System.introState (system.go:1957), 0 TODO
+// System.introState (system.go:1966), 0 TODO
 i32 System_introState(System* s) {
     {
         do {
@@ -164466,7 +164472,7 @@ i32 System_introState(System* s) {
     }
 }
 
-// System.outroState (system.go:1983), 0 TODO
+// System.outroState (system.go:1992), 0 TODO
 i32 System_outroState(System* s) {
     {
         do {
@@ -164489,23 +164495,23 @@ i32 System_outroState(System* s) {
     }
 }
 
-// System.roundOver (system.go:2009), 0 TODO
+// System.roundOver (system.go:2018), 0 TODO
 bool System_roundOver(System* s) {
     return (s->SystemStateVars_.intro < (-((s->fightScreen.round->over_waittime + FightScreenRound_overTime(s->fightScreen.round)))));
 }
 
-// System.roundIsSingle (system.go:2018), 0 TODO
+// System.roundIsSingle (system.go:2027), 0 TODO
 bool System_roundIsSingle(System* s) {
     return ((((!s->sel.gameParams->PersistRounds) && (s->SystemStateVars_.roundNo == 1)) && s->SystemStateVars_.decisiveRound.v[0]) && s->SystemStateVars_.decisiveRound.v[1]);
 }
 
-// System.maxDrawsReached (system.go:2022), 0 TODO
+// System.maxDrawsReached (system.go:2031), 0 TODO
 bool System_maxDrawsReached(System* s, int team) {
     i32 limit = s->SystemStateVars_.maxDraws.v[team];
     return ((limit >= 0) && (s->SystemStateVars_.draws >= limit));
 }
 
-// System.roundIsFinal (system.go:2029), 0 TODO
+// System.roundIsFinal (system.go:2038), 0 TODO
 bool System_roundIsFinal(System* s) {
     if (s->sel.gameParams->PersistRounds) {
         return false;
@@ -164519,7 +164525,7 @@ bool System_roundIsFinal(System* s) {
     return (System_maxDrawsReached(s, 0) && System_maxDrawsReached(s, 1));
 }
 
-// System.winnerTeam (system.go:2045), 0 TODO
+// System.winnerTeam (system.go:2054), 0 TODO
 i32 System_winnerTeam(System* s) {
     i32 winp = -1;
     if (!s->SystemStateVars_.endMatch) {
@@ -164540,12 +164546,12 @@ i32 System_winnerTeam(System* s) {
     return winp;
 }
 
-// System.gsf (system.go:2063), 0 TODO
+// System.gsf (system.go:2072), 0 TODO
 bool System_gsf(System* s, GlobalSpecialFlag gsf) {
     return ((s->SystemStateVars_.specialFlag & gsf) != 0U);
 }
 
-// System.setGSF (system.go:2067), 0 TODO
+// System.setGSF (system.go:2076), 0 TODO
 void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on) {
     if (on) {
         s->SystemStateVars_.specialFlag |= gsf;
@@ -164554,7 +164560,7 @@ void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on) {
     }
 }
 
-// System.appendToConsole (system.go:2075), 0 TODO
+// System.appendToConsole (system.go:2084), 0 TODO
 void System_appendToConsole(System* s, GoString str) {
     s->consoleText = GO_APPEND(Slice_GoString, s->consoleText, str);
     if (s->consoleText.len > s->cfg.Debug.ConsoleRows) {
@@ -164562,7 +164568,7 @@ void System_appendToConsole(System* s, GoString str) {
     }
 }
 
-// System.printToConsole (system.go:2082), 0 TODO
+// System.printToConsole (system.go:2091), 0 TODO
 void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     Slice_GoString spl = s->stringPool.v[pn].List;
     if ((sn >= 0) && (sn < spl.len)) {
@@ -164578,7 +164584,7 @@ void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     }
 }
 
-// System.luaQueuePreDraw (system.go:2094), 0 TODO
+// System.luaQueuePreDraw (system.go:2103), 0 TODO
 void System_luaQueuePreDraw(System* s, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -164587,7 +164593,7 @@ void System_luaQueuePreDraw(System* s, GoFunc fn) {
     s->luaDrawPreOps = GO_APPEND(Slice_GoFunc, s->luaDrawPreOps, fn);
 }
 
-// System.luaQueueLayerDraw (system.go:2101), 0 TODO
+// System.luaQueueLayerDraw (system.go:2110), 0 TODO
 void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -164603,7 +164609,7 @@ void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     s->luaDrawLayerOps.v[layer] = GO_APPEND(Slice_GoFunc, s->luaDrawLayerOps.v[layer], fn);
 }
 
-// System.luaFlushDrawQueue (system.go:2118), 0 TODO
+// System.luaFlushDrawQueue (system.go:2127), 0 TODO
 void System_luaFlushDrawQueue(System* s) {
     {
         Slice_GoFunc _t2 = s->luaDrawPreOps;
@@ -164631,7 +164637,7 @@ void System_luaFlushDrawQueue(System* s) {
     }
 }
 
-// System.luaDiscardDrawQueue (system.go:2132), 0 TODO
+// System.luaDiscardDrawQueue (system.go:2141), 0 TODO
 void System_luaDiscardDrawQueue(System* s) {
     s->luaDrawPreOps = GO_SLICE(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
     {
@@ -164643,7 +164649,7 @@ void System_luaDiscardDrawQueue(System* s) {
     }
 }
 
-// System.printBytecodeError (system.go:2142), 0 TODO
+// System.printBytecodeError (system.go:2151), 0 TODO
 void System_printBytecodeError(System* s, GoString str) {
     if ((s->loader.state == 2) && (s->workingChar != NULL)) {
         System_appendToConsole(s, go_strcat(Char_warn(g_sys.workingChar), str));
@@ -164654,7 +164660,7 @@ void System_printBytecodeError(System* s, GoString str) {
     }
 }
 
-// System.loadTime (system.go:2152), 0 TODO
+// System.loadTime (system.go:2161), 0 TODO
 void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bool shell, bool console) {
     i64 elapsed = time_Since(start);
     str = fmt_Sprintf(GOSTR("%v; Load time: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, str)}), ((GoIface){578, go_box_a(i64, elapsed)})));
@@ -164666,7 +164672,7 @@ void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bo
     }
 }
 
-// System.updateZScale (system.go:2165), 0 TODO
+// System.updateZScale (system.go:2174), 0 TODO
 f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     f32 _t1 = (g_sys.stage->stageCamera.topz / localscale);
     f32 topz = _t1;
@@ -164687,12 +164693,12 @@ f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     return scale;
 }
 
-// System.zEnabled (system.go:2180), 0 TODO
+// System.zEnabled (system.go:2189), 0 TODO
 bool System_zEnabled(System* s) {
     return (s->SystemStateVars_.zmin != s->SystemStateVars_.zmax);
 }
 
-// System.drawposXYfromZ (system.go:2185), 0 TODO
+// System.drawposXYfromZ (system.go:2194), 0 TODO
 Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos, f32 zscale) {
     Arr2_f32 outpos = {0};
     outpos.v[0] = ((((inpos.v[0] - s->SystemStateVars_.cam.Pos.v[0])) * zscale) + s->SystemStateVars_.cam.Pos.v[0]);
@@ -164702,12 +164708,12 @@ Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos
     return outpos;
 }
 
-// System.posZtoYoffset (system.go:2194), 0 TODO
+// System.posZtoYoffset (system.go:2203), 0 TODO
 f32 System_posZtoYoffset(System* s, f32 zpos, f32 localscl) {
     return ((zpos * localscl) * s->stage->stageCamera.depthtoscreen);
 }
 
-// System.zAxisOverlap (system.go:2200), 0 TODO
+// System.zAxisOverlap (system.go:2209), 0 TODO
 bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1, f32 posz2, f32 top2, f32 bot2, f32 localscl2) {
     if (!System_zEnabled(s)) {
         return true;
@@ -164719,7 +164725,7 @@ bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1
     return ((max1 >= min2) && (min1 <= max2));
 }
 
-// System.clsnOverlap (system.go:2213), 0 TODO
+// System.clsnOverlap (system.go:2222), 0 TODO
 Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f32 pos1, f32 facing1, Slice_ClsnFinal boxes2, Arr2_f32 pos2, f32 facing2) {
     if ((boxes1.len == 0) || (boxes2.len == 0)) {
         return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
@@ -164778,7 +164784,7 @@ Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f3
     return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
 }
 
-// System.initPlayerID (system.go:2267), 0 TODO
+// System.initPlayerID (system.go:2276), 0 TODO
 void System_initPlayerID(System* s) {
     GoFunc assignID = ((GoFunc){(void *)lambda_1782, &(Env_lambda_1782){0}});
     if (g_sys.SystemStateVars_.roundNo > 1) {
@@ -164807,7 +164813,7 @@ void System_initPlayerID(System* s) {
     }
 }
 
-// System.pruneCharId (system.go:2308), 0 TODO
+// System.pruneCharId (system.go:2317), 0 TODO
 void System_pruneCharId(System* s) {
     s->SystemStateVars_.lastCharId = go_max_i32(0, (g_sys.cfg.Config.HelperMax - 1));
     {
@@ -164822,7 +164828,7 @@ void System_pruneCharId(System* s) {
     }
 }
 
-// System.newCharId (system.go:2322), 0 TODO
+// System.newCharId (system.go:2331), 0 TODO
 i32 System_newCharId(System* s) {
     i32 newid = (s->SystemStateVars_.lastCharId + 1);
     {
@@ -164842,7 +164848,7 @@ i32 System_newCharId(System* s) {
     return newid;
 }
 
-// System.resetGblEffect (system.go:2363), 0 TODO
+// System.resetGblEffect (system.go:2372), 0 TODO
 void System_resetGblEffect(System* s) {
     PalFX_clear(s->allPalFX);
     PalFX_clear(s->bgPalFX);
@@ -164860,7 +164866,7 @@ void System_resetGblEffect(System* s) {
     s->SystemStateVars_.specialFlag = 0U;
 }
 
-// System.clearAllCharSounds (system.go:2375), 0 TODO
+// System.clearAllCharSounds (system.go:2384), 0 TODO
 void System_clearAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -164871,7 +164877,7 @@ void System_clearAllCharSounds(System* s) {
     }
 }
 
-// System.stopAllCharSounds (system.go:2382), 0 TODO
+// System.stopAllCharSounds (system.go:2391), 0 TODO
 void System_stopAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -164882,7 +164888,7 @@ void System_stopAllCharSounds(System* s) {
     }
 }
 
-// System.clearMatchSound (system.go:2388), 0 TODO
+// System.clearMatchSound (system.go:2397), 0 TODO
 void System_clearMatchSound(System* s) {
     StoryboardManager_clearSound(&s->matchStoryboards);
     {
@@ -164914,7 +164920,7 @@ void System_clearMatchSound(System* s) {
     }
 }
 
-// System.clearAllSound (system.go:2412), 0 TODO
+// System.clearAllSound (system.go:2421), 0 TODO
 void System_clearAllSound(System* s) {
     System* *s__h = go_box(System*, s);
     SoundChannels_StopAll(&(*s__h)->soundChannels);
@@ -164922,7 +164928,7 @@ void System_clearAllSound(System* s) {
     System_clearMatchSound((*s__h));
 }
 
-// System.clearPlayerAssets (system.go:2422), 0 TODO
+// System.clearPlayerAssets (system.go:2431), 0 TODO
 void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     StoryboardManager_clear(&s->matchStoryboards, pn);
     if (s->chars.v[pn].len > 0) {
@@ -164952,7 +164958,7 @@ void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     s->explodDrawOrder = fn_PointerSliceReset_Explod(s->explodDrawOrder);
 }
 
-// System.handleStageSwap (system.go:2452), 0 TODO
+// System.handleStageSwap (system.go:2461), 0 TODO
 bool System_handleStageSwap(System* s) {
     System* *s__h = go_box(System*, s);
     i32 roundRef = 0;
@@ -164995,7 +165001,7 @@ bool System_handleStageSwap(System* s) {
     return swap;
 }
 
-// System.updateMusicMaps (system.go:2489), 0 TODO
+// System.updateMusicMaps (system.go:2498), 0 TODO
 void System_updateMusicMaps(System* s) {
     bool newMatchMusic = ((s->SystemStateVars_.roundNo == 1) && (!s->SystemStateVars_.roundResetFlg));
     if (newMatchMusic) {
@@ -165037,7 +165043,7 @@ void System_updateMusicMaps(System* s) {
     }
 }
 
-// System.resetRound (system.go:2530), 0 TODO
+// System.resetRound (system.go:2539), 0 TODO
 void System_resetRound(System* s) {
     fn_specRound();
     if (false) {
@@ -165158,12 +165164,12 @@ void System_resetRound(System* s) {
     iface_Await_818fc0bc(g_gfx);
 }
 
-// System.debugPaused (system.go:2652), 0 TODO
+// System.debugPaused (system.go:2661), 0 TODO
 bool System_debugPaused(System* s) {
     return ((s->SystemStateVars_.paused && (!s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.motifPauseGame (system.go:2656), 0 TODO
+// System.motifPauseGame (system.go:2665), 0 TODO
 bool System_motifPauseGame(System* s) {
     if (s->motif.me.active) {
         return true;
@@ -165174,12 +165180,12 @@ bool System_motifPauseGame(System* s) {
     return false;
 }
 
-// System.matchPaused (system.go:2669), 0 TODO
+// System.matchPaused (system.go:2678), 0 TODO
 bool System_matchPaused(System* s) {
     return (System_debugPaused(s) || System_motifPauseGame(s));
 }
 
-// System.motifPauseMusic (system.go:2673), 0 TODO
+// System.motifPauseMusic (system.go:2682), 0 TODO
 bool System_motifPauseMusic(System* s) {
     if (s->motif.ch.active && (s->motif.ch.counter >= s->motif.ChallengerInfo.Pause.Time)) {
         return true;
@@ -165187,17 +165193,17 @@ bool System_motifPauseMusic(System* s) {
     return false;
 }
 
-// System.tickFrame (system.go:2682), 0 TODO
+// System.tickFrame (system.go:2691), 0 TODO
 bool System_tickFrame(System* s) {
     return ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.tickNextFrame (system.go:2692), 0 TODO
+// System.tickNextFrame (system.go:2701), 0 TODO
 bool System_tickNextFrame(System* s) {
     return ((go_f2i32((s->SystemStateVars_.tickCountF + s->SystemStateVars_.nextAddTime)) > s->SystemStateVars_.tickCount) && ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag) || (s->SystemStateVars_.oldTickCount >= s->SystemStateVars_.tickCount))));
 }
 
-// System.tickInterpolation (system.go:2699), 0 TODO
+// System.tickInterpolation (system.go:2708), 0 TODO
 f32 System_tickInterpolation(System* s) {
     if (System_tickNextFrame(s)) {
         return 0x1p+00f;
@@ -165209,12 +165215,12 @@ f32 System_tickInterpolation(System* s) {
     return 0x1p+00f;
 }
 
-// System.uiTick (system.go:2713), 0 TODO
+// System.uiTick (system.go:2722), 0 TODO
 bool System_uiTick(System* s) {
     return ((System_tickFrame(s) || System_debugPaused(s)) || s->motif.me.active);
 }
 
-// System.addFrameTime (system.go:2717), 0 TODO
+// System.addFrameTime (system.go:2726), 0 TODO
 bool System_addFrameTime(System* s, f32 t) {
     if (System_debugPaused(s)) {
         s->SystemStateVars_.oldNextAddTime = 0x0p+00f;
@@ -165235,7 +165241,7 @@ bool System_addFrameTime(System* s, f32 t) {
     return true;
 }
 
-// System.resetFrameTime (system.go:2737), 0 TODO
+// System.resetFrameTime (system.go:2746), 0 TODO
 void System_resetFrameTime(System* s) {
     int _t1 = 0;
     int _t2 = -1;
@@ -165253,7 +165259,7 @@ void System_resetFrameTime(System* s) {
     s->redrawWait.lastDraw = time_Now();
 }
 
-// System.resetMatchData (system.go:2746), 0 TODO
+// System.resetMatchData (system.go:2755), 0 TODO
 void System_resetMatchData(System* s, bool forceDestroy) {
     g_sys.allPalFX = fn_newPalFX();
     g_sys.bgPalFX = fn_newPalFX();
@@ -165270,7 +165276,7 @@ void System_resetMatchData(System* s, bool forceDestroy) {
     }
 }
 
-// System.charUpdate (system.go:2758), 0 TODO
+// System.charUpdate (system.go:2767), 0 TODO
 void System_charUpdate(System* s) {
     CharList_update(&s->charList);
     System_projectileUpdate(s);
@@ -165279,7 +165285,7 @@ void System_charUpdate(System* s) {
     }
 }
 
-// System.globalCollision (system.go:2770), 0 TODO
+// System.globalCollision (system.go:2779), 0 TODO
 void System_globalCollision(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165301,7 +165307,7 @@ void System_globalCollision(System* s) {
     s->projectileTradeSort = fn_PointerSliceReset_Projectile(s->projectileTradeSort);
 }
 
-// System.runIntroSkip (system.go:2797), 0 TODO
+// System.runIntroSkip (system.go:2806), 0 TODO
 void System_runIntroSkip(System* s) {
     if ((!System_gsf(s, 4U)) || System_gsf(s, 16384U)) {
         return;
@@ -165333,7 +165339,7 @@ void System_runIntroSkip(System* s) {
     }
 }
 
-// System.clearSpriteData (system.go:2836), 0 TODO
+// System.clearSpriteData (system.go:2845), 0 TODO
 void System_clearSpriteData(System* s) {
     fn_spriteDataPoolReset();
     s->spriteList = GO_SLICE(DrawList, s->spriteList, 0, 0);
@@ -165361,7 +165367,7 @@ void System_clearSpriteData(System* s) {
     }
 }
 
-// System.cueDraw (system.go:2867), 0 TODO
+// System.cueDraw (system.go:2876), 0 TODO
 void System_cueDraw(System* s) {
     if (s->SystemStateVars_.frameSkip) {
         return;
@@ -165385,17 +165391,17 @@ void System_cueDraw(System* s) {
     System_explodCueDraw(s);
 }
 
-// System.screenleft (system.go:2886), 0 TODO
+// System.screenleft (system.go:2895), 0 TODO
 f32 System_screenleft(System* s) {
     return (((f32)s->stage->screenleft) * s->stage->localscl);
 }
 
-// System.screenright (system.go:2890), 0 TODO
+// System.screenright (system.go:2899), 0 TODO
 f32 System_screenright(System* s) {
     return (((f32)s->stage->screenright) * s->stage->localscl);
 }
 
-// System.action (system.go:2896), 0 TODO
+// System.action (system.go:2905), 0 TODO
 void System_action(System* s) {
     g_bcIdxDepth = 0;
     fn_bcProfFrame();
@@ -165583,7 +165589,7 @@ void System_action(System* s) {
     return;
 }
 
-// System.uiAction (system.go:3115), 0 TODO
+// System.uiAction (system.go:3124), 0 TODO
 void System_uiAction(System* s) {
     if (!System_uiTick(s)) {
         return;
@@ -165618,7 +165624,7 @@ void System_uiAction(System* s) {
     }
 }
 
-// System.projectileUpdate (system.go:3148), 0 TODO
+// System.projectileUpdate (system.go:3157), 0 TODO
 void System_projectileUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165643,7 +165649,7 @@ void System_projectileUpdate(System* s) {
     }
 }
 
-// System.projectilePrune (system.go:3166), 0 TODO
+// System.projectilePrune (system.go:3175), 0 TODO
 void System_projectilePrune(System* s, int pn) {
     Slice_ProjectilePtr playerProjs = s->projs.v[pn];
     int writeIdx = 0;
@@ -165663,7 +165669,7 @@ void System_projectilePrune(System* s, int pn) {
     s->projs.v[pn] = GO_SLICE(Slice_ProjectilePtr, playerProjs, 0, writeIdx);
 }
 
-// System.explodUpdate (system.go:3184), 0 TODO
+// System.explodUpdate (system.go:3193), 0 TODO
 void System_explodUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165688,7 +165694,7 @@ void System_explodUpdate(System* s) {
     }
 }
 
-// System.explodCueDraw (system.go:3206), 0 TODO
+// System.explodCueDraw (system.go:3215), 0 TODO
 void System_explodCueDraw(System* s) {
     System* *s__h = go_box(System*, s);
     (*s__h)->explodDrawOrder = GO_SLICE(Slice_ExplodPtr, (*s__h)->explodDrawOrder, 0, 0);
@@ -165721,7 +165727,7 @@ void System_explodCueDraw(System* s) {
     }
 }
 
-// System.explodPrune (system.go:3259), 0 TODO
+// System.explodPrune (system.go:3268), 0 TODO
 void System_explodPrune(System* s, int pn) {
     Slice_ExplodPtr playerExplods = s->explods.v[pn];
     int writeIdx = 0;
@@ -165741,7 +165747,7 @@ void System_explodPrune(System* s, int pn) {
     s->explods.v[pn] = GO_SLICE(Slice_ExplodPtr, playerExplods, 0, writeIdx);
 }
 
-// System.charTextsUpdate (system.go:3275), 0 TODO
+// System.charTextsUpdate (system.go:3284), 0 TODO
 void System_charTextsUpdate(System* s) {
     if (!System_tickFrame(&g_sys)) {
         return;
@@ -165772,7 +165778,7 @@ void System_charTextsUpdate(System* s) {
     }
 }
 
-// System.charTextsPrune (system.go:3301), 0 TODO
+// System.charTextsPrune (system.go:3310), 0 TODO
 void System_charTextsPrune(System* s, int pn) {
     Slice_TextSpritePtr playerTexts = s->chartexts.v[pn];
     int writeIdx = 0;
@@ -165792,7 +165798,7 @@ void System_charTextsPrune(System* s, int pn) {
     s->chartexts.v[pn] = GO_SLICE(Slice_TextSpritePtr, playerTexts, 0, writeIdx);
 }
 
-// System.globalTick (system.go:3316), 0 TODO
+// System.globalTick (system.go:3325), 0 TODO
 void System_globalTick(System* s) {
     Stage_tick(s->stage);
     CharList_tick(&s->charList);
@@ -165813,7 +165819,7 @@ void System_globalTick(System* s) {
     s->SystemStateVars_.matchTime++;
 }
 
-// System.getSlowtime (system.go:3329), 0 TODO
+// System.getSlowtime (system.go:3338), 0 TODO
 i32 System_getSlowtime(System* s) {
     if (((s->SystemStateVars_.slowtime > 0) && (s->SystemStateVars_.intro < 0)) && (s->SystemStateVars_.curRoundTime != 0)) {
         return s->SystemStateVars_.slowtime;
@@ -165821,7 +165827,7 @@ i32 System_getSlowtime(System* s) {
     return 0;
 }
 
-// System.timeElapsed (system.go:3336), 0 TODO
+// System.timeElapsed (system.go:3345), 0 TODO
 i32 System_timeElapsed(System* s) {
     if (s->SystemStateVars_.maxRoundTime > 0) {
         return (s->SystemStateVars_.maxRoundTime - s->SystemStateVars_.curRoundTime);
@@ -165829,7 +165835,7 @@ i32 System_timeElapsed(System* s) {
     return s->SystemStateVars_.curPlayTime;
 }
 
-// System.timeRemaining (system.go:3345), 0 TODO
+// System.timeRemaining (system.go:3354), 0 TODO
 i32 System_timeRemaining(System* s) {
     if (s->SystemStateVars_.curRoundTime >= 0) {
         return s->SystemStateVars_.curRoundTime;
@@ -165837,7 +165843,7 @@ i32 System_timeRemaining(System* s) {
     return -1;
 }
 
-// System.timeTotal (system.go:3352), 0 TODO
+// System.timeTotal (system.go:3361), 0 TODO
 i32 System_timeTotal(System* s) {
     i32 t = s->SystemStateVars_.timerStart;
     {
@@ -165854,7 +165860,7 @@ i32 System_timeTotal(System* s) {
     return t;
 }
 
-// System.matchEndDialoguePending (system.go:3363), 0 TODO
+// System.matchEndDialoguePending (system.go:3372), 0 TODO
 bool System_matchEndDialoguePending(System* s) {
     if ((s->SystemStateVars_.postMatchFlg || (s->SystemStateVars_.dialogueForce != 0)) || s->motif.di.matchEndDone) {
         return false;
@@ -165874,7 +165880,7 @@ bool System_matchEndDialoguePending(System* s) {
     return (System_maxDrawsReached(s, 0) || System_maxDrawsReached(s, 1));
 }
 
-// System.shouldStartMatchEndDialogue (system.go:3383), 0 TODO
+// System.shouldStartMatchEndDialogue (system.go:3392), 0 TODO
 bool System_shouldStartMatchEndDialogue(System* s) {
     if (((!System_matchEndDialoguePending(s)) || (!System_matchOver(s))) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -165885,7 +165891,7 @@ bool System_shouldStartMatchEndDialogue(System* s) {
     return (((s->SystemStateVars_.intro + s->fightScreen.round->over_waittime) + s->fightScreen.round->over_time) <= 0);
 }
 
-// System.holdPostMatchForDialogue (system.go:3393), 0 TODO
+// System.holdPostMatchForDialogue (system.go:3402), 0 TODO
 bool System_holdPostMatchForDialogue(System* s) {
     if ((s->SystemStateVars_.dialogueForce != 0) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -165902,7 +165908,7 @@ bool System_holdPostMatchForDialogue(System* s) {
     return false;
 }
 
-// System.stepRoundState (system.go:3410), 0 TODO
+// System.stepRoundState (system.go:3419), 0 TODO
 void System_stepRoundState(System* s) {
     if (!FightScreenRound_act(s->fightScreen.round)) {
         return;
@@ -166112,7 +166118,7 @@ void System_stepRoundState(System* s) {
     }
 }
 
-// System.roundEndDecision (system.go:3636), 0 TODO
+// System.roundEndDecision (system.go:3645), 0 TODO
 bool System_roundEndDecision(System* s) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     GoFunc checkPerfect = ((GoFunc){(void *)lambda_1787, &(Env_lambda_1787){s__h}});
@@ -166266,7 +166272,7 @@ bool System_roundEndDecision(System* s) {
     return ((ko.v[0] || ko.v[1]) || ((*s__h)->SystemStateVars_.curRoundTime == 0));
 }
 
-// System.draw (system.go:3777), 0 TODO
+// System.draw (system.go:3786), 0 TODO
 void System_draw(System* s, f32 x, f32 y, f32 scl) {
     fn_vitaDiagFrame();
     s->SystemStateVars_.brightnessOld = s->SystemStateVars_.brightness;
@@ -166366,7 +166372,7 @@ void System_draw(System* s, f32 x, f32 y, f32 scl) {
     Motif_draw(&s->motif, 3);
 }
 
-// System.drawCharTexts (system.go:3967), 0 TODO
+// System.drawCharTexts (system.go:3976), 0 TODO
 void System_drawCharTexts(System* s, i16 layerno) {
     Arr4_i32* clip = NULL;
     {
@@ -166393,7 +166399,7 @@ void System_drawCharTexts(System* s, i16 layerno) {
     }
 }
 
-// System.drawTop (system.go:3979), 0 TODO
+// System.drawTop (system.go:3988), 0 TODO
 void System_drawTop(System* s) {
     s->SystemStateVars_.brightness = s->SystemStateVars_.brightnessOld;
     if (s->clsnDisplay) {
@@ -166413,7 +166419,7 @@ void System_drawTop(System* s) {
     }
 }
 
-// System.debugTextScale (system.go:4013), 0 TODO
+// System.debugTextScale (system.go:4022), 0 TODO
 Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     f32 sx = {0};
     f32 sy = {0};
@@ -166435,7 +166441,7 @@ Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     return (Ret_f32__f32){sx, sy};
 }
 
-// System.drawDebugText (system.go:4028), 0 TODO
+// System.drawDebugText (system.go:4037), 0 TODO
 void System_drawDebugText(System* s, drawAspectState logicState) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     System* *s__h = go_box(System*, s);
@@ -166561,7 +166567,7 @@ void System_drawDebugText(System* s, drawAspectState logicState) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.keepMatchRunning (system.go:4148), 0 TODO
+// System.keepMatchRunning (system.go:4157), 0 TODO
 bool System_keepMatchRunning(System* s) {
     if (!s->SystemStateVars_.endMatch) {
         return true;
@@ -166572,7 +166578,7 @@ bool System_keepMatchRunning(System* s) {
     return false;
 }
 
-// System.runMatch (system.go:4163), 0 TODO
+// System.runMatch (system.go:4172), 0 TODO
 bool System_runMatch(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f; volatile bool _df3 = false; volatile GoFunc _df3_f;
     System* *s__h = go_box(System*, s);
@@ -166799,7 +166805,7 @@ bool System_runMatch(System* s) {
     return reload;
 }
 
-// System.SetupCharRoundStart (system.go:4413), 0 TODO
+// System.SetupCharRoundStart (system.go:4422), 0 TODO
 void System_SetupCharRoundStart(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -166949,7 +166955,7 @@ void System_SetupCharRoundStart(System* s) {
     }
 }
 
-// System.runNextRound (system.go:4542), 0 TODO
+// System.runNextRound (system.go:4551), 0 TODO
 bool System_runNextRound(System* s) {
     bool _t1 = System_roundOver(s);
     bool roundOver = _t1;
@@ -167039,14 +167045,14 @@ bool System_runNextRound(System* s) {
     return true;
 }
 
-// System.gameLogicSpeed (system.go:4618), 0 TODO
+// System.gameLogicSpeed (system.go:4627), 0 TODO
 i32 System_gameLogicSpeed(System* s) {
     i32 base = ((i32)(60 + (s->cfg.Options.GameSpeed * s->cfg.Options.GameSpeedStep)));
     i32 spd = go_f2i32((((f32)base) * s->debugAccel));
     return go_max_i32(1, spd);
 }
 
-// System.gameRenderSpeed (system.go:4624), 0 TODO
+// System.gameRenderSpeed (system.go:4633), 0 TODO
 int System_gameRenderSpeed(System* s) {
     i32 spd = 0;
     if ((((!s->gameRunning) || s->motif.me.active) || (s->rollback.session != NULL)) || (s->replayFile != NULL)) {
@@ -167057,7 +167063,7 @@ int System_gameRenderSpeed(System* s) {
     return ((int)go_max_i32(1, spd));
 }
 
-// System.debugModeAllowed (system.go:4637), 0 TODO
+// System.debugModeAllowed (system.go:4646), 0 TODO
 bool System_debugModeAllowed(System* s) {
     if ((s->netConnection != NULL) || (s->rollback.session != NULL)) {
         return false;
@@ -167065,7 +167071,7 @@ bool System_debugModeAllowed(System* s) {
     return s->cfg.Debug.AllowDebugMode;
 }
 
-// System.inRollback (system.go:4645), 0 TODO
+// System.inRollback (system.go:4654), 0 TODO
 bool System_inRollback(System* s) {
     if (s->rollback.session != NULL) {
         return s->rollback.session->inRollback;
@@ -167073,7 +167079,7 @@ bool System_inRollback(System* s) {
     return false;
 }
 
-// System.isSpeculativeFrame (system.go:4652), 0 TODO
+// System.isSpeculativeFrame (system.go:4661), 0 TODO
 bool System_isSpeculativeFrame(System* s) {
     if (s->rollback.session != NULL) {
         return (!s->rollback.session->inRollback);
@@ -167081,7 +167087,7 @@ bool System_isSpeculativeFrame(System* s) {
     return false;
 }
 
-// RoundStartBackup.Save (system.go:4670), 0 TODO
+// RoundStartBackup.Save (system.go:4679), 0 TODO
 void RoundStartBackup_Save(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -167173,7 +167179,7 @@ void RoundStartBackup_Save(RoundStartBackup* bk) {
     bk->lastCharId = g_sys.SystemStateVars_.lastCharId;
 }
 
-// RoundStartBackup.Restore (system.go:4738), 0 TODO
+// RoundStartBackup.Restore (system.go:4747), 0 TODO
 void RoundStartBackup_Restore(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -167290,17 +167296,17 @@ void RoundStartBackup_Restore(RoundStartBackup* bk) {
     g_sys.SystemStateVars_.lastCharId = bk->lastCharId;
 }
 
-// newSelectChar (system.go:4860), 0 TODO
+// newSelectChar (system.go:4869), 0 TODO
 SelectChar* fn_newSelectChar(void) {
     return go_box(SelectChar, (SelectChar){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .cns_scale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .scp = fn_newSelectCharParams()});
 }
 
-// newSelectStage (system.go:4884), 0 TODO
+// newSelectStage (system.go:4893), 0 TODO
 SelectStage* fn_newSelectStage(void) {
     return go_box(SelectStage, (SelectStage){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .ssp = fn_newSelectStageParams()});
 }
 
-// PreloadState.String (system.go:4926), 0 TODO
+// PreloadState.String (system.go:4935), 0 TODO
 GoString PreloadState_String(PreloadState ps) {
     {
         PreloadState _t1 = ps;
@@ -167319,12 +167325,12 @@ GoString PreloadState_String(PreloadState ps) {
     return GOSTR("idle");
 }
 
-// newSelect (system.go:4954), 0 TODO
+// newSelect (system.go:4963), 0 TODO
 Select* fn_newSelect(void) {
     return go_box(Select, (Select){.selectedStageNo = -1, .charAnimPreload = Map_i32_bool_make(0), .stageAnimPreload = Map_i32_bool_make(0), .charSpritePreload = ({ Map_Arr2_u16_bool _m = Map_Arr2_u16_bool_make(2); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 0U}}, true); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 1U}}, true); (Map_Arr2_u16_bool)_m; }), .stageSpritePreload = Map_Arr2_u16_bool_make(0), .palOverwrite = Map_int_int_make(0), .cdefOverwrite = Map_int_GoString_make(0), .music = Map_GoString_Slice_bgMusicPtr_make(0), .gameParams = fn_newGameParams()});
 }
 
-// Select.initPreloadSync (system.go:4969), 0 TODO
+// Select.initPreloadSync (system.go:4978), 0 TODO
 void Select_initPreloadSync(Select* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167339,7 +167345,7 @@ void Select_initPreloadSync(Select* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.ensurePreloadWorker (system.go:4977), 0 TODO
+// Select.ensurePreloadWorker (system.go:4986), 0 TODO
 void Select_ensurePreloadWorker(Select* s) {
     Select* *s__h = go_box(Select*, s);
     Select_initPreloadSync((*s__h));
@@ -167353,7 +167359,7 @@ void Select_ensurePreloadWorker(Select* s) {
     fn_SafeGo(((GoFunc){(void *)lambda_1794, go_box(Env_lambda_1794, ((Env_lambda_1794){s__h}))}));
 }
 
-// Select.ensureCharPreloadSlot (system.go:4991), 0 TODO
+// Select.ensureCharPreloadSlot (system.go:5000), 0 TODO
 void Select_ensureCharPreloadSlot(Select* s, int ref) {
     if (ref < 0) {
         return;
@@ -167366,7 +167372,7 @@ void Select_ensureCharPreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.ensureStagePreloadSlot (system.go:5000), 0 TODO
+// Select.ensureStagePreloadSlot (system.go:5009), 0 TODO
 void Select_ensureStagePreloadSlot(Select* s, int ref) {
     if (ref <= 0) {
         return;
@@ -167380,7 +167386,7 @@ void Select_ensureStagePreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.QueueCharPreload (system.go:5010), 0 TODO
+// Select.QueueCharPreload (system.go:5019), 0 TODO
 void Select_QueueCharPreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Select* *s__h = go_box(Select*, s);
@@ -167441,7 +167447,7 @@ void Select_QueueCharPreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.QueueStagePreload (system.go:5048), 0 TODO
+// Select.QueueStagePreload (system.go:5057), 0 TODO
 void Select_QueueStagePreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Select* *s__h = go_box(Select*, s);
@@ -167502,7 +167508,7 @@ void Select_QueueStagePreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.CharPreloadStatus (system.go:5086), 0 TODO
+// Select.CharPreloadStatus (system.go:5095), 0 TODO
 PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167536,7 +167542,7 @@ PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.StagePreloadStatus (system.go:5099), 0 TODO
+// Select.StagePreloadStatus (system.go:5108), 0 TODO
 PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167570,7 +167576,7 @@ PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.AllPreloadsReady (system.go:5112), 0 TODO
+// Select.AllPreloadsReady (system.go:5121), 0 TODO
 bool Select_AllPreloadsReady(Select* s) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -167636,7 +167642,7 @@ bool Select_AllPreloadsReady(Select* s) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.preloadWorkerLoop (system.go:5134), 0 TODO
+// Select.preloadWorkerLoop (system.go:5143), 0 TODO
 void Select_preloadWorkerLoop(Select* s) {
     Select_initPreloadSync(s);
     {
@@ -167696,7 +167702,7 @@ void Select_preloadWorkerLoop(Select* s) {
                             err = Select_preloadStageAssets(s, ref);
                         }
                         if (err.type != 0) {
-                            go_panic(fmt_Sprintf(GOSTR("Preloading error: %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, err)));
+                            go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("Preloading error: %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, err)))}));
                         }
                         sync_Mutex_Lock(&s->preloadMu);
                         if (go_streq(kind, GOSTR("char"))) {
@@ -167717,7 +167723,7 @@ void Select_preloadWorkerLoop(Select* s) {
     }
 }
 
-// Select.preloadCharAssets (system.go:5203), 0 TODO
+// Select.preloadCharAssets (system.go:5212), 0 TODO
 GoIface Select_preloadCharAssets(Select* s, int ref) {
     Select* *s__h = go_box(Select*, s);
     if ((ref < 0) || (ref >= (*s__h)->charlist.len)) {
@@ -167844,7 +167850,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.preloadStageAssets (system.go:5315), 0 TODO
+// Select.preloadStageAssets (system.go:5324), 0 TODO
 GoIface Select_preloadStageAssets(Select* s, int ref) {
     if ((ref <= 0) || (ref > s->stagelist.len)) {
         return (GoIface){0};
@@ -167925,7 +167931,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.GetCharNo (system.go:5382), 0 TODO
+// Select.GetCharNo (system.go:5391), 0 TODO
 int Select_GetCharNo(Select* s, int i) {
     int n = i;
     if (s->charlist.len > 0) {
@@ -167937,7 +167943,7 @@ int Select_GetCharNo(Select* s, int i) {
     return n;
 }
 
-// Select.GetChar (system.go:5393), 0 TODO
+// Select.GetChar (system.go:5402), 0 TODO
 SelectChar* Select_GetChar(Select* s, int i) {
     if (s->charlist.len == 0) {
         return NULL;
@@ -167946,7 +167952,7 @@ SelectChar* Select_GetChar(Select* s, int i) {
     return (&s->charlist.p[n]);
 }
 
-// Select.ValidatePalette (system.go:5402), 0 TODO
+// Select.ValidatePalette (system.go:5411), 0 TODO
 int Select_ValidatePalette(Select* s, int charRef, int requested) {
     if ((charRef < 0) || (charRef >= s->charlist.len)) {
         return 1;
@@ -167978,14 +167984,14 @@ int Select_ValidatePalette(Select* s, int charRef, int requested) {
     return ((int)sc->pal.p[0]);
 }
 
-// Select.SelectStage (system.go:5426), 0 TODO
+// Select.SelectStage (system.go:5435), 0 TODO
 void Select_SelectStage(Select* s, int n) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selectedStageNo = n;
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// Select.GetStage (system.go:5432), 0 TODO
+// Select.GetStage (system.go:5441), 0 TODO
 SelectStage* Select_GetStage(Select* s, int n) {
     if (s->stagelist.len == 0) {
         return NULL;
@@ -167997,7 +168003,7 @@ SelectStage* Select_GetStage(Select* s, int n) {
     return (&s->stagelist.p[(n - 1)]);
 }
 
-// getDefaultDefPathInZip (system.go:5443), 0 TODO
+// getDefaultDefPathInZip (system.go:5452), 0 TODO
 Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     GoString path1 = {0};
     GoString path2 = {0};
@@ -168008,7 +168014,7 @@ Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     return (Ret_GoString__GoString){path1, path2};
 }
 
-// Select.AddChar (system.go:5450), 0 TODO
+// Select.AddChar (system.go:5459), 0 TODO
 SelectChar* Select_AddChar(Select* s, GoString def) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168328,7 +168334,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
         {
             GoIface err = Select_preloadCharAssets(s, (s->charlist.len - 1));
             if (err.type != 0) {
-                go_panic(fmt_Errorf(GOSTR("failed to preload %v: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*sc__h)->def)}), err)));
+                go_panic_iface(0, fmt_Errorf(GOSTR("failed to preload %v: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*sc__h)->def)}), err)));
             }
         }
     }
@@ -168342,7 +168348,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// Select.AddStage (system.go:5711), 0 TODO
+// Select.AddStage (system.go:5720), 0 TODO
 Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoString *def__h = go_box(GoString, def);
@@ -168567,7 +168573,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
         {
             GoIface err = Select_preloadStageAssets(s, s->stagelist.len);
             if (err.type != 0) {
-                go_panic(fmt_Errorf(GOSTR("failed to preload %v: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*def__h))}), err)));
+                go_panic_iface(0, fmt_Errorf(GOSTR("failed to preload %v: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*def__h))}), err)));
             }
         }
     }
@@ -168581,7 +168587,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.AddSelectedChar (system.go:5892), 0 TODO
+// Select.AddSelectedChar (system.go:5901), 0 TODO
 bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     int _t1 = 0;
     int _t2 = Select_GetCharNo(s, cn);
@@ -168612,7 +168618,7 @@ bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     return true;
 }
 
-// Select.ClearSelected (system.go:5917), 0 TODO
+// Select.ClearSelected (system.go:5926), 0 TODO
 void Select_ClearSelected(Select* s) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selected = (Arr2_Slice_Arr2_int){{}};
@@ -168622,12 +168628,12 @@ void Select_ClearSelected(Select* s) {
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// newLoader (system.go:5947), 0 TODO
+// newLoader (system.go:5956), 0 TODO
 Loader* fn_newLoader(void) {
     return go_box(Loader, (Loader){.state = 0, .loadExit = go_chan_make(sizeof(LoaderState), 1)});
 }
 
-// Loader.requestCancel (system.go:5951), 0 TODO
+// Loader.requestCancel (system.go:5960), 0 TODO
 void Loader_requestCancel(Loader* l) {
     Loader* *l__h = go_box(Loader*, l);
     if ((*l__h)->cancelCh == NULL) {
@@ -168636,7 +168642,7 @@ void Loader_requestCancel(Loader* l) {
     sync_Once_Do(&(*l__h)->cancelOnce, ((GoFunc){(void *)lambda_1808, go_box(Env_lambda_1808, ((Env_lambda_1808){l__h}))}));
 }
 
-// Loader.cancelRequested (system.go:5958), 0 TODO
+// Loader.cancelRequested (system.go:5967), 0 TODO
 bool Loader_cancelRequested(Loader* l) {
     if (l->cancelCh == NULL) {
         return false;
@@ -168656,12 +168662,12 @@ bool Loader_cancelRequested(Loader* l) {
     }
 }
 
-// System.turnsPreloadActive (system.go:5980), 0 TODO
+// System.turnsPreloadActive (system.go:5989), 0 TODO
 bool System_turnsPreloadActive(System* s) {
     return (s->cfg.Config.TurnsLoading && (((s->turnsPreloadMember.v[0] >= 0) || (s->turnsPreloadMember.v[1] >= 0))));
 }
 
-// System.startNextTurnsPreload (system.go:5984), 0 TODO
+// System.startNextTurnsPreload (system.go:5993), 0 TODO
 void System_startNextTurnsPreload(System* s) {
     if (((!s->cfg.Config.TurnsLoading) || (s->loader.state == 1)) || (s->loader.state == 3)) {
         return;
@@ -168717,7 +168723,7 @@ void System_startNextTurnsPreload(System* s) {
     }
 }
 
-// System.finishTurnsPreloadForRollback (system.go:6028), 0 TODO
+// System.finishTurnsPreloadForRollback (system.go:6037), 0 TODO
 bool System_finishTurnsPreloadForRollback(System* s) {
     if (!System_turnsPreloadActive(s)) {
         return true;
@@ -168729,7 +168735,7 @@ bool System_finishTurnsPreloadForRollback(System* s) {
                 do {
                     if ((_t2 == 3)) {
                         if (s->loader.err.type != 0) {
-                            go_panic(s->loader.err);
+                            go_panic_iface(0, s->loader.err);
                         }
                         return false;
                     } else if ((_t2 == 4)) {
@@ -168750,7 +168756,7 @@ bool System_finishTurnsPreloadForRollback(System* s) {
     return true;
 }
 
-// System.remapCharSlotRefs (system.go:6054), 0 TODO
+// System.remapCharSlotRefs (system.go:6063), 0 TODO
 void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int newSlot) {
     int oldCPU = (oldSlot ^ -1);
     int newCPU = (newSlot ^ -1);
@@ -168791,7 +168797,7 @@ void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int n
     }
 }
 
-// System.rebindCgiStateOwners (system.go:6086), 0 TODO
+// System.rebindCgiStateOwners (system.go:6095), 0 TODO
 void System_rebindCgiStateOwners(System* s, int pn) {
     if (((pn < 0) || (pn >= 12)) || (s->cgi.v[pn].states.m == 0)) {
         return;
@@ -168820,7 +168826,7 @@ void System_rebindCgiStateOwners(System* s, int pn) {
     }
 }
 
-// System.removePlayerFromCharList (system.go:6105), 0 TODO
+// System.removePlayerFromCharList (system.go:6114), 0 TODO
 void System_removePlayerFromCharList(System* s, int pn) {
     {
         for (; 1; ) {
@@ -168845,7 +168851,7 @@ void System_removePlayerFromCharList(System* s, int pn) {
     }
 }
 
-// System.getPreloadedCharAndCgi (system.go:6122), 0 TODO
+// System.getPreloadedCharAndCgi (system.go:6131), 0 TODO
 Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168863,7 +168869,7 @@ Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.setPreloadedChar (system.go:6128), 0 TODO
+// System.setPreloadedChar (system.go:6137), 0 TODO
 void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168877,7 +168883,7 @@ void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.clearPreloadedChars (system.go:6135), 0 TODO
+// System.clearPreloadedChars (system.go:6144), 0 TODO
 void System_clearPreloadedChars(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168891,7 +168897,7 @@ void System_clearPreloadedChars(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.activateTurnsSlot (system.go:6142), 0 TODO
+// System.activateTurnsSlot (system.go:6151), 0 TODO
 void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     int team = (slot & 1);
     {
@@ -168919,7 +168925,7 @@ void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     }
 }
 
-// System.activateNextTurnsFighters (system.go:6167), 0 TODO
+// System.activateNextTurnsFighters (system.go:6176), 0 TODO
 void System_activateNextTurnsFighters(System* s) {
     {
         int team = 0;
@@ -168976,7 +168982,7 @@ void System_activateNextTurnsFighters(System* s) {
     }
 }
 
-// Loader.loadCharacter (system.go:6219), 0 TODO
+// Loader.loadCharacter (system.go:6228), 0 TODO
 int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     volatile bool _df19 = false; volatile GoFunc _df19_f; volatile bool _df26 = false; volatile GoFunc _df26_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -169369,7 +169375,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     if (_df19) { _df19 = false; ((void (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// Loader.prepareTurnsFaces (system.go:6560), 0 TODO
+// Loader.prepareTurnsFaces (system.go:6569), 0 TODO
 void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScreenName* nm, Slice_int teamChars, Slice_Arr2_int teamSel) {
     i32 off = 0;
     if (g_sys.sel.gameParams != NULL) {
@@ -169450,7 +169456,7 @@ void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScree
     }
 }
 
-// Loader.loadStage (system.go:6676), 0 TODO
+// Loader.loadStage (system.go:6685), 0 TODO
 bool Loader_loadStage(Loader* l) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -169521,7 +169527,7 @@ bool Loader_loadStage(Loader* l) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Loader.load (system.go:6742), 0 TODO
+// Loader.load (system.go:6751), 0 TODO
 void Loader_load(Loader* l) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Loader* *l__h = go_box(Loader*, l);
@@ -169723,7 +169729,7 @@ void Loader_load(Loader* l) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Loader.reset (system.go:6895), 0 TODO
+// Loader.reset (system.go:6904), 0 TODO
 void Loader_reset(Loader* l) {
     {
         LoaderState _t1 = l->state;
@@ -169766,13 +169772,13 @@ void Loader_reset(Loader* l) {
     }
 }
 
-// Loader.retryAfterError (system.go:6933), 0 TODO
+// Loader.retryAfterError (system.go:6942), 0 TODO
 void Loader_retryAfterError(Loader* l) {
     ({ LoaderState _t1; go_chan_recv(l->loadExit, &_t1); _t1; });
     Loader_reset(l);
 }
 
-// Loader.runTread (system.go:6938), 0 TODO
+// Loader.runTread (system.go:6947), 0 TODO
 bool Loader_runTread(Loader* l) {
     Loader* *l__h = go_box(Loader*, l);
     if ((*l__h)->state != 0) {
@@ -169785,12 +169791,12 @@ bool Loader_runTread(Loader* l) {
     return true;
 }
 
-// EnvShake.clear (system.go:6965), 0 TODO
+// EnvShake.clear (system.go:6974), 0 TODO
 void EnvShake_clear(EnvShake* es) {
     (*es) = (EnvShake){.freq = 0x1.ep+05f, .phase = ((f32)math_NaN()), .ampl = -0x1p+02f, .mul = 0x1p+00f};
 }
 
-// EnvShake.restart (system.go:6974), 0 TODO
+// EnvShake.restart (system.go:6983), 0 TODO
 void EnvShake_restart(EnvShake* es) {
     if (es->time <= 0) {
         EnvShake_clear(es);
@@ -169799,7 +169805,7 @@ void EnvShake_restart(EnvShake* es) {
     es->curTime = es->time;
 }
 
-// EnvShake.setDefaultPhase (system.go:6982), 0 TODO
+// EnvShake.setDefaultPhase (system.go:6991), 0 TODO
 void EnvShake_setDefaultPhase(EnvShake* es) {
     if (math_IsNaN(((f64)es->phase))) {
         if (es->freq >= 0x1.68p+06f) {
@@ -169810,7 +169816,7 @@ void EnvShake_setDefaultPhase(EnvShake* es) {
     }
 }
 
-// EnvShake.update (system.go:6992), 0 TODO
+// EnvShake.update (system.go:7001), 0 TODO
 void EnvShake_update(EnvShake* es) {
     if (es->curTime <= 0) {
         if (es->time > 0) {
@@ -169845,12 +169851,12 @@ void EnvShake_update(EnvShake* es) {
     es->curTime--;
 }
 
-// EnvShake.getOffset (system.go:7036), 0 TODO
+// EnvShake.getOffset (system.go:7045), 0 TODO
 Arr2_f32 EnvShake_getOffset(EnvShake* es) {
     return es->curOffset;
 }
 
-// ZoomEffect.reset (system.go:7056), 0 TODO
+// ZoomEffect.reset (system.go:7065), 0 TODO
 void ZoomEffect_reset(ZoomEffect* z) {
     z->active = false;
     z->time = 0;
@@ -169867,7 +169873,7 @@ void ZoomEffect_reset(ZoomEffect* z) {
     z->resultValid = false;
 }
 
-// ZoomEffect.update (system.go:7073), 0 TODO
+// ZoomEffect.update (system.go:7082), 0 TODO
 void ZoomEffect_update(ZoomEffect* z) {
     if (!z->active) {
         return;
@@ -169914,7 +169920,7 @@ void ZoomEffect_update(ZoomEffect* z) {
     }
 }
 
-// ZoomEffect.computeCamera (system.go:7133), 0 TODO
+// ZoomEffect.computeCamera (system.go:7142), 0 TODO
 Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl) {
     f32 dx = {0};
     f32 dy = {0};
@@ -169970,7 +169976,7 @@ Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl)
     return (Ret_f32__f32__f32){dx, dy, dscl};
 }
 
-// System.saveCharVars (system.go:7204), 0 TODO
+// System.saveCharVars (system.go:7213), 0 TODO
 void System_saveCharVars(System* s, int pn) {
     if (s->chars.v[pn].len == 0) {
         return;
@@ -170007,7 +170013,7 @@ void System_saveCharVars(System* s, int pn) {
     Map_int_CharVarBackup_set(&s->charVarsBackup, pn, bk);
 }
 
-// System.restoreCharVars (system.go:7229), 0 TODO
+// System.restoreCharVars (system.go:7238), 0 TODO
 void System_restoreCharVars(System* s, Char* c) {
     bool _t1; CharVarBackup _t2 = Map_int_CharVarBackup_get(&s->charVarsBackup, c->playerNo, &_t1);
     CharVarBackup bk = _t2;
@@ -170047,7 +170053,7 @@ void System_restoreCharVars(System* s, Char* c) {
     Map_int_CharVarBackup_delete(&s->charVarsBackup, c->playerNo);
 }
 
-// System.loadCustomShader (system.go:7252), 0 TODO
+// System.loadCustomShader (system.go:7261), 0 TODO
 void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString name, GoString filename, Slice_u8 data) {
     Slice_u8 *data__h = go_box(Slice_u8, data);
     GoString *key__h = go_box(GoString, filepath_ToSlash(filepath_Clean(filename)));
@@ -170060,7 +170066,7 @@ void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString 
     { GoFunc _t1 = ((GoFunc){(void *)lambda_1815, go_box(Env_lambda_1815, ((Env_lambda_1815){data__h, key__h}))}); go_chan_send(s->mainThreadTask, &_t1); }
 }
 
-// System.loadCustomShaderFile (system.go:7268), 0 TODO
+// System.loadCustomShaderFile (system.go:7277), 0 TODO
 void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoString name, GoString path, Slice_GoString dirs) {
     System* *s__h = go_box(System*, s);
     Map_GoString_GoString *shaders__h = go_box(Map_GoString_GoString, shaders);
@@ -170072,7 +170078,7 @@ void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoStr
     fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1816, go_box(Env_lambda_1816, ((Env_lambda_1816){s__h, shaders__h, name__h}))}));
 }
 
-// System.loadCommonShaders (system.go:7290), 0 TODO
+// System.loadCommonShaders (system.go:7299), 0 TODO
 GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice_GoString dirs) {
     System* *s__h = go_box(System*, s);
     Map_GoString_GoString *shaders__h = go_box(Map_GoString_GoString, shaders);
@@ -170100,7 +170106,7 @@ GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice
     return (GoIface){0};
 }
 
-// System.isCustomShaderActive (system.go:7320), 0 TODO
+// System.isCustomShaderActive (system.go:7329), 0 TODO
 bool System_isCustomShaderActive(System* s, GoString key) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -170184,7 +170190,7 @@ bool System_isCustomShaderActive(System* s, GoString key) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// System.resolveCharShader (system.go:7354), 0 TODO
+// System.resolveCharShader (system.go:7363), 0 TODO
 Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     if (go_streq(name, GOSTR(""))) {
         return (Ret_GoString__bool){GOSTR(""), true};
@@ -170198,7 +170204,7 @@ Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     return (Ret_GoString__bool){key, ok};
 }
 
-// System.cleanCustomShaders (system.go:7365), 0 TODO
+// System.cleanCustomShaders (system.go:7374), 0 TODO
 void System_cleanCustomShaders(System* s) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&s->loadedCustomShaders);
@@ -170213,12 +170219,12 @@ void System_cleanCustomShaders(System* s) {
     }
 }
 
-// System.shouldHideWithBars (system.go:7379), 0 TODO
+// System.shouldHideWithBars (system.go:7388), 0 TODO
 bool System_shouldHideWithBars(System* s) {
     return (((!FightScreen_visible(&s->fightScreen)) || System_gsf(s, 8U)) || (!s->fightScreen.bars));
 }
 
-// pal32ToBytes (system.go:7383), 0 TODO
+// pal32ToBytes (system.go:7392), 0 TODO
 Slice_u8 fn_pal32ToBytes(Slice_u32 pal) {
     return ((Slice_u8){(((u8*)((void*)(&pal.p[0])))), (int)((pal.len * 4)), (int)((pal.len * 4))});
 }
@@ -170782,7 +170788,7 @@ void fn_LoadFntTtf(Fnt* f, GoString fontfile, GoString filename, i32 height) {
             fileDir = _t1.r0;
             err = _t1.r1;
             if (err.type != 0) {
-                go_panic(fmt_Errorf(GOSTR("failed to find ttf font %v: %w"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, fileDir)}), err)));
+                go_panic_iface(0, fmt_Errorf(GOSTR("failed to find ttf font %v: %w"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, fileDir)}), err)));
             }
         }
     }
@@ -170795,7 +170801,7 @@ void fn_LoadFntTtf(Fnt* f, GoString fontfile, GoString filename, i32 height) {
     GoIface ttf = _t2.r0;
     GoIface err = _t2.r1;
     if (err.type != 0) {
-        go_panic(fmt_Errorf(GOSTR("failed to load ttf font %v: %w"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, fileDir)}), err)));
+        go_panic_iface(0, fmt_Errorf(GOSTR("failed to load ttf font %v: %w"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, fileDir)}), err)));
     }
     f->ttf = ttf;
     f->palettes = GO_MAKE_A(Slice_Arr256_u32, Arr256_u32, 1, 0);
@@ -183192,7 +183198,7 @@ static const RField ik_rf_487[] = {{"Extensions", "", "json:\"extensions,omitemp
 static const RField ik_rf_488[] = {{"Magic", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Magic), false}, {"Version", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Version), false}, {"Length", "", "", &ik_rt[9], offsetof(gltf_glbHeader, Length), false}, {"JSONHeader", "", "", &ik_rt[489], offsetof(gltf_glbHeader, JSONHeader), false}, };
 static const RField ik_rf_489[] = {{"Length", "", "", &ik_rt[9], offsetof(gltf_chunkHeader, Length), false}, {"Type", "", "", &ik_rt[9], offsetof(gltf_chunkHeader, Type), false}, };
 static const RField ik_rf_497[] = {{"msg", "github.com/tidwall/sjson", "", &ik_rt[13], offsetof(sjson_errorType, msg), false}, };
-static const RField ik_rf_499[] = {{"index", "github.com/tidwall/sjson", "", &ik_rt[1], offsetof(sjson_val_Lb76261, index), false}, {"res", "github.com/tidwall/sjson", "", &ik_rt[500], offsetof(sjson_val_Lb76261, res), false}, };
+static const RField ik_rf_499[] = {{"index", "github.com/tidwall/sjson", "", &ik_rt[1], offsetof(sjson_val_L98a5cb, index), false}, {"res", "github.com/tidwall/sjson", "", &ik_rt[500], offsetof(sjson_val_L98a5cb, res), false}, };
 static const RField ik_rf_500[] = {{"Type", "", "", &ik_rt[501], offsetof(gjson_Result, Type), false}, {"Raw", "", "", &ik_rt[13], offsetof(gjson_Result, Raw), false}, {"Str", "", "", &ik_rt[13], offsetof(gjson_Result, Str), false}, {"Num", "", "", &ik_rt[12], offsetof(gjson_Result, Num), false}, {"Index", "", "", &ik_rt[1], offsetof(gjson_Result, Index), false}, {"Indexes", "", "", &ik_rt[25], offsetof(gjson_Result, Indexes), false}, };
 static const RField ik_rf_506[] = {{"Metatable", "", "", &ik_rt[507], offsetof(lua_LTable, Metatable), false}, {"array", "github.com/yuin/gopher-lua", "", &ik_rt[508], offsetof(lua_LTable, array), false}, {"dict", "github.com/yuin/gopher-lua", "", &ik_rt[509], offsetof(lua_LTable, dict), false}, {"strdict", "github.com/yuin/gopher-lua", "", &ik_rt[510], offsetof(lua_LTable, strdict), false}, {"keys", "github.com/yuin/gopher-lua", "", &ik_rt[508], offsetof(lua_LTable, keys), false}, {"k2i", "github.com/yuin/gopher-lua", "", &ik_rt[511], offsetof(lua_LTable, k2i), false}, };
 static const RField ik_rf_513[] = {{"IsG", "", "", &ik_rt[0], offsetof(lua_LFunction, IsG), false}, {"Env", "", "", &ik_rt[505], offsetof(lua_LFunction, Env), false}, {"Proto", "", "", &ik_rt[514], offsetof(lua_LFunction, Proto), false}, {"GFunction", "", "", &ik_rt[522], offsetof(lua_LFunction, GFunction), false}, {"Upvalues", "", "", &ik_rt[523], offsetof(lua_LFunction, Upvalues), false}, };
@@ -183209,72 +183215,72 @@ static const RField ik_rf_541[] = {{"MainThread", "", "", &ik_rt[538], offsetof(
 static const RField ik_rf_545[] = {{"CallStackSize", "", "", &ik_rt[1], offsetof(lua_Options, CallStackSize), false}, {"RegistrySize", "", "", &ik_rt[1], offsetof(lua_Options, RegistrySize), false}, {"RegistryMaxSize", "", "", &ik_rt[1], offsetof(lua_Options, RegistryMaxSize), false}, {"RegistryGrowStep", "", "", &ik_rt[1], offsetof(lua_Options, RegistryGrowStep), false}, {"SkipOpenLibs", "", "", &ik_rt[0], offsetof(lua_Options, SkipOpenLibs), false}, {"IncludeGoStackTrace", "", "", &ik_rt[0], offsetof(lua_Options, IncludeGoStackTrace), false}, {"MinimizeStackMemory", "", "", &ik_rt[0], offsetof(lua_Options, MinimizeStackMemory), false}, };
 static const RField ik_rf_548[] = {{"Idx", "", "", &ik_rt[1], offsetof(lua_callFrame, Idx), false}, {"Fn", "", "", &ik_rt[512], offsetof(lua_callFrame, Fn), false}, {"Parent", "", "", &ik_rt[547], offsetof(lua_callFrame, Parent), false}, {"Pc", "", "", &ik_rt[1], offsetof(lua_callFrame, Pc), false}, {"Base", "", "", &ik_rt[1], offsetof(lua_callFrame, Base), false}, {"LocalBase", "", "", &ik_rt[1], offsetof(lua_callFrame, LocalBase), false}, {"ReturnBase", "", "", &ik_rt[1], offsetof(lua_callFrame, ReturnBase), false}, {"NArgs", "", "", &ik_rt[1], offsetof(lua_callFrame, NArgs), false}, {"NRet", "", "", &ik_rt[1], offsetof(lua_callFrame, NRet), false}, {"TailCall", "", "", &ik_rt[1], offsetof(lua_callFrame, TailCall), false}, };
 static const RField ik_rf_552[] = {{"Type", "", "", &ik_rt[553], offsetof(lua_ApiError, Type), false}, {"Object", "", "", &ik_rt[507], offsetof(lua_ApiError, Object), false}, {"StackTrace", "", "", &ik_rt[13], offsetof(lua_ApiError, StackTrace), false}, {"Cause", "", "", &ik_rt[84], offsetof(lua_ApiError, Cause), false}, };
-static const RField ik_rf_560[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_FuncCallExpr, ExprBase_), true}, {"Func", "", "", &ik_rt[563], offsetof(ast_FuncCallExpr, Func), false}, {"Receiver", "", "", &ik_rt[563], offsetof(ast_FuncCallExpr, Receiver), false}, {"Method", "", "", &ik_rt[13], offsetof(ast_FuncCallExpr, Method), false}, {"Args", "", "", &ik_rt[564], offsetof(ast_FuncCallExpr, Args), false}, {"AdjustRet", "", "", &ik_rt[0], offsetof(ast_FuncCallExpr, AdjustRet), false}, };
-static const RField ik_rf_561[] = {{"Node", "", "", &ik_rt[562], offsetof(ast_ExprBase, Node_), true}, };
-static const RField ik_rf_562[] = {{"line", "github.com/yuin/gopher-lua/ast", "", &ik_rt[1], offsetof(ast_Node, line), false}, {"lastline", "github.com/yuin/gopher-lua/ast", "", &ik_rt[1], offsetof(ast_Node, lastline), false}, };
-static const RField ik_rf_566[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_Comma3Expr, ExprBase_), true}, {"AdjustRet", "", "", &ik_rt[0], offsetof(ast_Comma3Expr, AdjustRet), false}, };
-static const RField ik_rf_568[] = {{"ConstExprBase", "", "", &ik_rt[569], offsetof(ast_NumberExpr, ConstExprBase_), true}, {"Value", "", "", &ik_rt[13], offsetof(ast_NumberExpr, Value), false}, };
-static const RField ik_rf_569[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_ConstExprBase, ExprBase_), true}, };
-static const RField ik_rf_571[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(lua_constLValueExpr, ExprBase_), true}, {"Value", "", "", &ik_rt[507], offsetof(lua_constLValueExpr, Value), false}, };
-static const RField ik_rf_573[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_LabelStmt, StmtBase_), true}, {"Name", "", "", &ik_rt[13], offsetof(ast_LabelStmt, Name), false}, };
-static const RField ik_rf_574[] = {{"Node", "", "", &ik_rt[562], offsetof(ast_StmtBase, Node_), true}, };
-static const RField ik_rf_577[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_AssignStmt, StmtBase_), true}, {"Lhs", "", "", &ik_rt[564], offsetof(ast_AssignStmt, Lhs), false}, {"Rhs", "", "", &ik_rt[564], offsetof(ast_AssignStmt, Rhs), false}, };
-static const RField ik_rf_579[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_LocalAssignStmt, StmtBase_), true}, {"Names", "", "", &ik_rt[210], offsetof(ast_LocalAssignStmt, Names), false}, {"Exprs", "", "", &ik_rt[564], offsetof(ast_LocalAssignStmt, Exprs), false}, };
-static const RField ik_rf_581[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_FuncCallStmt, StmtBase_), true}, {"Expr", "", "", &ik_rt[563], offsetof(ast_FuncCallStmt, Expr), false}, };
-static const RField ik_rf_583[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_DoBlockStmt, StmtBase_), true}, {"Stmts", "", "", &ik_rt[584], offsetof(ast_DoBlockStmt, Stmts), false}, };
-static const RField ik_rf_587[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_WhileStmt, StmtBase_), true}, {"Condition", "", "", &ik_rt[563], offsetof(ast_WhileStmt, Condition), false}, {"Stmts", "", "", &ik_rt[584], offsetof(ast_WhileStmt, Stmts), false}, };
-static const RField ik_rf_589[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_RepeatStmt, StmtBase_), true}, {"Condition", "", "", &ik_rt[563], offsetof(ast_RepeatStmt, Condition), false}, {"Stmts", "", "", &ik_rt[584], offsetof(ast_RepeatStmt, Stmts), false}, };
-static const RField ik_rf_591[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_FuncDefStmt, StmtBase_), true}, {"Name", "", "", &ik_rt[592], offsetof(ast_FuncDefStmt, Name), false}, {"Func", "", "", &ik_rt[594], offsetof(ast_FuncDefStmt, Func), false}, };
-static const RField ik_rf_593[] = {{"Func", "", "", &ik_rt[563], offsetof(ast_FuncName, Func), false}, {"Receiver", "", "", &ik_rt[563], offsetof(ast_FuncName, Receiver), false}, {"Method", "", "", &ik_rt[13], offsetof(ast_FuncName, Method), false}, };
-static const RField ik_rf_595[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_FunctionExpr, ExprBase_), true}, {"ParList", "", "", &ik_rt[596], offsetof(ast_FunctionExpr, ParList), false}, {"Stmts", "", "", &ik_rt[584], offsetof(ast_FunctionExpr, Stmts), false}, };
-static const RField ik_rf_597[] = {{"HasVargs", "", "", &ik_rt[0], offsetof(ast_ParList, HasVargs), false}, {"Names", "", "", &ik_rt[210], offsetof(ast_ParList, Names), false}, };
-static const RField ik_rf_599[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_ReturnStmt, StmtBase_), true}, {"Exprs", "", "", &ik_rt[564], offsetof(ast_ReturnStmt, Exprs), false}, };
-static const RField ik_rf_601[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_IfStmt, StmtBase_), true}, {"Condition", "", "", &ik_rt[563], offsetof(ast_IfStmt, Condition), false}, {"Then", "", "", &ik_rt[584], offsetof(ast_IfStmt, Then), false}, {"Else", "", "", &ik_rt[584], offsetof(ast_IfStmt, Else), false}, };
-static const RField ik_rf_603[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_BreakStmt, StmtBase_), true}, };
-static const RField ik_rf_605[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_NumberForStmt, StmtBase_), true}, {"Name", "", "", &ik_rt[13], offsetof(ast_NumberForStmt, Name), false}, {"Init", "", "", &ik_rt[563], offsetof(ast_NumberForStmt, Init), false}, {"Limit", "", "", &ik_rt[563], offsetof(ast_NumberForStmt, Limit), false}, {"Step", "", "", &ik_rt[563], offsetof(ast_NumberForStmt, Step), false}, {"Stmts", "", "", &ik_rt[584], offsetof(ast_NumberForStmt, Stmts), false}, };
-static const RField ik_rf_607[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_GenericForStmt, StmtBase_), true}, {"Names", "", "", &ik_rt[210], offsetof(ast_GenericForStmt, Names), false}, {"Exprs", "", "", &ik_rt[564], offsetof(ast_GenericForStmt, Exprs), false}, {"Stmts", "", "", &ik_rt[584], offsetof(ast_GenericForStmt, Stmts), false}, };
-static const RField ik_rf_609[] = {{"StmtBase", "", "", &ik_rt[574], offsetof(ast_GotoStmt, StmtBase_), true}, {"Label", "", "", &ik_rt[13], offsetof(ast_GotoStmt, Label), false}, };
-static const RField ik_rf_611[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_IdentExpr, ExprBase_), true}, {"Value", "", "", &ik_rt[13], offsetof(ast_IdentExpr, Value), false}, };
-static const RField ik_rf_613[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_AttrGetExpr, ExprBase_), true}, {"Object", "", "", &ik_rt[563], offsetof(ast_AttrGetExpr, Object), false}, {"Key", "", "", &ik_rt[563], offsetof(ast_AttrGetExpr, Key), false}, };
-static const RField ik_rf_615[] = {{"ConstExprBase", "", "", &ik_rt[569], offsetof(ast_StringExpr, ConstExprBase_), true}, {"Value", "", "", &ik_rt[13], offsetof(ast_StringExpr, Value), false}, };
-static const RField ik_rf_617[] = {{"ConstExprBase", "", "", &ik_rt[569], offsetof(ast_NilExpr, ConstExprBase_), true}, };
-static const RField ik_rf_619[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_LogicalOpExpr, ExprBase_), true}, {"Operator", "", "", &ik_rt[13], offsetof(ast_LogicalOpExpr, Operator), false}, {"Lhs", "", "", &ik_rt[563], offsetof(ast_LogicalOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[563], offsetof(ast_LogicalOpExpr, Rhs), false}, };
-static const RField ik_rf_621[] = {{"ConstExprBase", "", "", &ik_rt[569], offsetof(ast_FalseExpr, ConstExprBase_), true}, };
-static const RField ik_rf_623[] = {{"ConstExprBase", "", "", &ik_rt[569], offsetof(ast_TrueExpr, ConstExprBase_), true}, };
-static const RField ik_rf_625[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_UnaryNotOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[563], offsetof(ast_UnaryNotOpExpr, Expr), false}, };
-static const RField ik_rf_627[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_RelationalOpExpr, ExprBase_), true}, {"Operator", "", "", &ik_rt[13], offsetof(ast_RelationalOpExpr, Operator), false}, {"Lhs", "", "", &ik_rt[563], offsetof(ast_RelationalOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[563], offsetof(ast_RelationalOpExpr, Rhs), false}, };
-static const RField ik_rf_629[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_TableExpr, ExprBase_), true}, {"Fields", "", "", &ik_rt[630], offsetof(ast_TableExpr, Fields), false}, };
-static const RField ik_rf_632[] = {{"Key", "", "", &ik_rt[563], offsetof(ast_Field, Key), false}, {"Value", "", "", &ik_rt[563], offsetof(ast_Field, Value), false}, };
-static const RField ik_rf_634[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_ArithmeticOpExpr, ExprBase_), true}, {"Operator", "", "", &ik_rt[13], offsetof(ast_ArithmeticOpExpr, Operator), false}, {"Lhs", "", "", &ik_rt[563], offsetof(ast_ArithmeticOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[563], offsetof(ast_ArithmeticOpExpr, Rhs), false}, };
-static const RField ik_rf_636[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_StringConcatOpExpr, ExprBase_), true}, {"Lhs", "", "", &ik_rt[563], offsetof(ast_StringConcatOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[563], offsetof(ast_StringConcatOpExpr, Rhs), false}, };
-static const RField ik_rf_638[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_UnaryMinusOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[563], offsetof(ast_UnaryMinusOpExpr, Expr), false}, };
-static const RField ik_rf_640[] = {{"ExprBase", "", "", &ik_rt[561], offsetof(ast_UnaryLenOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[563], offsetof(ast_UnaryLenOpExpr, Expr), false}, };
-static const RField ik_rf_642[] = {{"context", "github.com/yuin/gopher-lua", "", &ik_rt[643], offsetof(lua_CompileError, context), false}, {"Line", "", "", &ik_rt[1], offsetof(lua_CompileError, Line), false}, {"Message", "", "", &ik_rt[13], offsetof(lua_CompileError, Message), false}, };
-static const RField ik_rf_644[] = {{"Proto", "", "", &ik_rt[514], offsetof(lua_funcContext, Proto), false}, {"Code", "", "", &ik_rt[645], offsetof(lua_funcContext, Code), false}, {"Parent", "", "", &ik_rt[643], offsetof(lua_funcContext, Parent), false}, {"Upvalues", "", "", &ik_rt[647], offsetof(lua_funcContext, Upvalues), false}, {"Block", "", "", &ik_rt[649], offsetof(lua_funcContext, Block), false}, {"Blocks", "", "", &ik_rt[654], offsetof(lua_funcContext, Blocks), false}, {"regTop", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_funcContext, regTop), false}, {"labelId", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_funcContext, labelId), false}, {"labelPc", "github.com/yuin/gopher-lua", "", &ik_rt[655], offsetof(lua_funcContext, labelPc), false}, {"gotosCount", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_funcContext, gotosCount), false}, {"unresolvedGotos", "github.com/yuin/gopher-lua", "", &ik_rt[656], offsetof(lua_funcContext, unresolvedGotos), false}, };
-static const RField ik_rf_646[] = {{"codes", "github.com/yuin/gopher-lua", "", &ik_rt[471], offsetof(lua_codeStore, codes), false}, {"lines", "github.com/yuin/gopher-lua", "", &ik_rt[25], offsetof(lua_codeStore, lines), false}, {"pc", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_codeStore, pc), false}, };
-static const RField ik_rf_648[] = {{"names", "github.com/yuin/gopher-lua", "", &ik_rt[210], offsetof(lua_varNamePool, names), false}, {"offset", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_varNamePool, offset), false}, };
-static const RField ik_rf_650[] = {{"LocalVars", "", "", &ik_rt[647], offsetof(lua_codeBlock, LocalVars), false}, {"BreakLabel", "", "", &ik_rt[1], offsetof(lua_codeBlock, BreakLabel), false}, {"Parent", "", "", &ik_rt[649], offsetof(lua_codeBlock, Parent), false}, {"RefUpvalue", "", "", &ik_rt[0], offsetof(lua_codeBlock, RefUpvalue), false}, {"LineStart", "", "", &ik_rt[1], offsetof(lua_codeBlock, LineStart), false}, {"LastLine", "", "", &ik_rt[1], offsetof(lua_codeBlock, LastLine), false}, {"labels", "github.com/yuin/gopher-lua", "", &ik_rt[651], offsetof(lua_codeBlock, labels), false}, {"firstGotoIndex", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_codeBlock, firstGotoIndex), false}, };
-static const RField ik_rf_653[] = {{"Id", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, Id), false}, {"Name", "", "", &ik_rt[13], offsetof(lua_gotoLabelDesc, Name), false}, {"Pc", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, Pc), false}, {"Line", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, Line), false}, {"NumActiveLocalVars", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, NumActiveLocalVars), false}, };
+static const RField ik_rf_560[] = {{"context", "github.com/yuin/gopher-lua", "", &ik_rt[561], offsetof(lua_CompileError, context), false}, {"Line", "", "", &ik_rt[1], offsetof(lua_CompileError, Line), false}, {"Message", "", "", &ik_rt[13], offsetof(lua_CompileError, Message), false}, };
+static const RField ik_rf_562[] = {{"Proto", "", "", &ik_rt[514], offsetof(lua_funcContext, Proto), false}, {"Code", "", "", &ik_rt[563], offsetof(lua_funcContext, Code), false}, {"Parent", "", "", &ik_rt[561], offsetof(lua_funcContext, Parent), false}, {"Upvalues", "", "", &ik_rt[565], offsetof(lua_funcContext, Upvalues), false}, {"Block", "", "", &ik_rt[567], offsetof(lua_funcContext, Block), false}, {"Blocks", "", "", &ik_rt[572], offsetof(lua_funcContext, Blocks), false}, {"regTop", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_funcContext, regTop), false}, {"labelId", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_funcContext, labelId), false}, {"labelPc", "github.com/yuin/gopher-lua", "", &ik_rt[573], offsetof(lua_funcContext, labelPc), false}, {"gotosCount", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_funcContext, gotosCount), false}, {"unresolvedGotos", "github.com/yuin/gopher-lua", "", &ik_rt[574], offsetof(lua_funcContext, unresolvedGotos), false}, };
+static const RField ik_rf_564[] = {{"codes", "github.com/yuin/gopher-lua", "", &ik_rt[471], offsetof(lua_codeStore, codes), false}, {"lines", "github.com/yuin/gopher-lua", "", &ik_rt[25], offsetof(lua_codeStore, lines), false}, {"pc", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_codeStore, pc), false}, };
+static const RField ik_rf_566[] = {{"names", "github.com/yuin/gopher-lua", "", &ik_rt[210], offsetof(lua_varNamePool, names), false}, {"offset", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_varNamePool, offset), false}, };
+static const RField ik_rf_568[] = {{"LocalVars", "", "", &ik_rt[565], offsetof(lua_codeBlock, LocalVars), false}, {"BreakLabel", "", "", &ik_rt[1], offsetof(lua_codeBlock, BreakLabel), false}, {"Parent", "", "", &ik_rt[567], offsetof(lua_codeBlock, Parent), false}, {"RefUpvalue", "", "", &ik_rt[0], offsetof(lua_codeBlock, RefUpvalue), false}, {"LineStart", "", "", &ik_rt[1], offsetof(lua_codeBlock, LineStart), false}, {"LastLine", "", "", &ik_rt[1], offsetof(lua_codeBlock, LastLine), false}, {"labels", "github.com/yuin/gopher-lua", "", &ik_rt[569], offsetof(lua_codeBlock, labels), false}, {"firstGotoIndex", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_codeBlock, firstGotoIndex), false}, };
+static const RField ik_rf_571[] = {{"Id", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, Id), false}, {"Name", "", "", &ik_rt[13], offsetof(lua_gotoLabelDesc, Name), false}, {"Pc", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, Pc), false}, {"Line", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, Line), false}, {"NumActiveLocalVars", "", "", &ik_rt[1], offsetof(lua_gotoLabelDesc, NumActiveLocalVars), false}, };
+static const RField ik_rf_576[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_FuncCallExpr, ExprBase_), true}, {"Func", "", "", &ik_rt[579], offsetof(ast_FuncCallExpr, Func), false}, {"Receiver", "", "", &ik_rt[579], offsetof(ast_FuncCallExpr, Receiver), false}, {"Method", "", "", &ik_rt[13], offsetof(ast_FuncCallExpr, Method), false}, {"Args", "", "", &ik_rt[580], offsetof(ast_FuncCallExpr, Args), false}, {"AdjustRet", "", "", &ik_rt[0], offsetof(ast_FuncCallExpr, AdjustRet), false}, };
+static const RField ik_rf_577[] = {{"Node", "", "", &ik_rt[578], offsetof(ast_ExprBase, Node_), true}, };
+static const RField ik_rf_578[] = {{"line", "github.com/yuin/gopher-lua/ast", "", &ik_rt[1], offsetof(ast_Node, line), false}, {"lastline", "github.com/yuin/gopher-lua/ast", "", &ik_rt[1], offsetof(ast_Node, lastline), false}, };
+static const RField ik_rf_582[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_Comma3Expr, ExprBase_), true}, {"AdjustRet", "", "", &ik_rt[0], offsetof(ast_Comma3Expr, AdjustRet), false}, };
+static const RField ik_rf_584[] = {{"ConstExprBase", "", "", &ik_rt[585], offsetof(ast_NumberExpr, ConstExprBase_), true}, {"Value", "", "", &ik_rt[13], offsetof(ast_NumberExpr, Value), false}, };
+static const RField ik_rf_585[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_ConstExprBase, ExprBase_), true}, };
+static const RField ik_rf_587[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(lua_constLValueExpr, ExprBase_), true}, {"Value", "", "", &ik_rt[507], offsetof(lua_constLValueExpr, Value), false}, };
+static const RField ik_rf_589[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_LabelStmt, StmtBase_), true}, {"Name", "", "", &ik_rt[13], offsetof(ast_LabelStmt, Name), false}, };
+static const RField ik_rf_590[] = {{"Node", "", "", &ik_rt[578], offsetof(ast_StmtBase, Node_), true}, };
+static const RField ik_rf_593[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_AssignStmt, StmtBase_), true}, {"Lhs", "", "", &ik_rt[580], offsetof(ast_AssignStmt, Lhs), false}, {"Rhs", "", "", &ik_rt[580], offsetof(ast_AssignStmt, Rhs), false}, };
+static const RField ik_rf_595[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_LocalAssignStmt, StmtBase_), true}, {"Names", "", "", &ik_rt[210], offsetof(ast_LocalAssignStmt, Names), false}, {"Exprs", "", "", &ik_rt[580], offsetof(ast_LocalAssignStmt, Exprs), false}, };
+static const RField ik_rf_597[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_FuncCallStmt, StmtBase_), true}, {"Expr", "", "", &ik_rt[579], offsetof(ast_FuncCallStmt, Expr), false}, };
+static const RField ik_rf_599[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_DoBlockStmt, StmtBase_), true}, {"Stmts", "", "", &ik_rt[600], offsetof(ast_DoBlockStmt, Stmts), false}, };
+static const RField ik_rf_603[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_WhileStmt, StmtBase_), true}, {"Condition", "", "", &ik_rt[579], offsetof(ast_WhileStmt, Condition), false}, {"Stmts", "", "", &ik_rt[600], offsetof(ast_WhileStmt, Stmts), false}, };
+static const RField ik_rf_605[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_RepeatStmt, StmtBase_), true}, {"Condition", "", "", &ik_rt[579], offsetof(ast_RepeatStmt, Condition), false}, {"Stmts", "", "", &ik_rt[600], offsetof(ast_RepeatStmt, Stmts), false}, };
+static const RField ik_rf_607[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_FuncDefStmt, StmtBase_), true}, {"Name", "", "", &ik_rt[608], offsetof(ast_FuncDefStmt, Name), false}, {"Func", "", "", &ik_rt[610], offsetof(ast_FuncDefStmt, Func), false}, };
+static const RField ik_rf_609[] = {{"Func", "", "", &ik_rt[579], offsetof(ast_FuncName, Func), false}, {"Receiver", "", "", &ik_rt[579], offsetof(ast_FuncName, Receiver), false}, {"Method", "", "", &ik_rt[13], offsetof(ast_FuncName, Method), false}, };
+static const RField ik_rf_611[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_FunctionExpr, ExprBase_), true}, {"ParList", "", "", &ik_rt[612], offsetof(ast_FunctionExpr, ParList), false}, {"Stmts", "", "", &ik_rt[600], offsetof(ast_FunctionExpr, Stmts), false}, };
+static const RField ik_rf_613[] = {{"HasVargs", "", "", &ik_rt[0], offsetof(ast_ParList, HasVargs), false}, {"Names", "", "", &ik_rt[210], offsetof(ast_ParList, Names), false}, };
+static const RField ik_rf_615[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_ReturnStmt, StmtBase_), true}, {"Exprs", "", "", &ik_rt[580], offsetof(ast_ReturnStmt, Exprs), false}, };
+static const RField ik_rf_617[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_IfStmt, StmtBase_), true}, {"Condition", "", "", &ik_rt[579], offsetof(ast_IfStmt, Condition), false}, {"Then", "", "", &ik_rt[600], offsetof(ast_IfStmt, Then), false}, {"Else", "", "", &ik_rt[600], offsetof(ast_IfStmt, Else), false}, };
+static const RField ik_rf_619[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_BreakStmt, StmtBase_), true}, };
+static const RField ik_rf_621[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_NumberForStmt, StmtBase_), true}, {"Name", "", "", &ik_rt[13], offsetof(ast_NumberForStmt, Name), false}, {"Init", "", "", &ik_rt[579], offsetof(ast_NumberForStmt, Init), false}, {"Limit", "", "", &ik_rt[579], offsetof(ast_NumberForStmt, Limit), false}, {"Step", "", "", &ik_rt[579], offsetof(ast_NumberForStmt, Step), false}, {"Stmts", "", "", &ik_rt[600], offsetof(ast_NumberForStmt, Stmts), false}, };
+static const RField ik_rf_623[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_GenericForStmt, StmtBase_), true}, {"Names", "", "", &ik_rt[210], offsetof(ast_GenericForStmt, Names), false}, {"Exprs", "", "", &ik_rt[580], offsetof(ast_GenericForStmt, Exprs), false}, {"Stmts", "", "", &ik_rt[600], offsetof(ast_GenericForStmt, Stmts), false}, };
+static const RField ik_rf_625[] = {{"StmtBase", "", "", &ik_rt[590], offsetof(ast_GotoStmt, StmtBase_), true}, {"Label", "", "", &ik_rt[13], offsetof(ast_GotoStmt, Label), false}, };
+static const RField ik_rf_627[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_IdentExpr, ExprBase_), true}, {"Value", "", "", &ik_rt[13], offsetof(ast_IdentExpr, Value), false}, };
+static const RField ik_rf_629[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_AttrGetExpr, ExprBase_), true}, {"Object", "", "", &ik_rt[579], offsetof(ast_AttrGetExpr, Object), false}, {"Key", "", "", &ik_rt[579], offsetof(ast_AttrGetExpr, Key), false}, };
+static const RField ik_rf_631[] = {{"ConstExprBase", "", "", &ik_rt[585], offsetof(ast_StringExpr, ConstExprBase_), true}, {"Value", "", "", &ik_rt[13], offsetof(ast_StringExpr, Value), false}, };
+static const RField ik_rf_633[] = {{"ConstExprBase", "", "", &ik_rt[585], offsetof(ast_NilExpr, ConstExprBase_), true}, };
+static const RField ik_rf_635[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_LogicalOpExpr, ExprBase_), true}, {"Operator", "", "", &ik_rt[13], offsetof(ast_LogicalOpExpr, Operator), false}, {"Lhs", "", "", &ik_rt[579], offsetof(ast_LogicalOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[579], offsetof(ast_LogicalOpExpr, Rhs), false}, };
+static const RField ik_rf_637[] = {{"ConstExprBase", "", "", &ik_rt[585], offsetof(ast_FalseExpr, ConstExprBase_), true}, };
+static const RField ik_rf_639[] = {{"ConstExprBase", "", "", &ik_rt[585], offsetof(ast_TrueExpr, ConstExprBase_), true}, };
+static const RField ik_rf_641[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_UnaryNotOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[579], offsetof(ast_UnaryNotOpExpr, Expr), false}, };
+static const RField ik_rf_643[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_RelationalOpExpr, ExprBase_), true}, {"Operator", "", "", &ik_rt[13], offsetof(ast_RelationalOpExpr, Operator), false}, {"Lhs", "", "", &ik_rt[579], offsetof(ast_RelationalOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[579], offsetof(ast_RelationalOpExpr, Rhs), false}, };
+static const RField ik_rf_645[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_TableExpr, ExprBase_), true}, {"Fields", "", "", &ik_rt[646], offsetof(ast_TableExpr, Fields), false}, };
+static const RField ik_rf_648[] = {{"Key", "", "", &ik_rt[579], offsetof(ast_Field, Key), false}, {"Value", "", "", &ik_rt[579], offsetof(ast_Field, Value), false}, };
+static const RField ik_rf_650[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_ArithmeticOpExpr, ExprBase_), true}, {"Operator", "", "", &ik_rt[13], offsetof(ast_ArithmeticOpExpr, Operator), false}, {"Lhs", "", "", &ik_rt[579], offsetof(ast_ArithmeticOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[579], offsetof(ast_ArithmeticOpExpr, Rhs), false}, };
+static const RField ik_rf_652[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_StringConcatOpExpr, ExprBase_), true}, {"Lhs", "", "", &ik_rt[579], offsetof(ast_StringConcatOpExpr, Lhs), false}, {"Rhs", "", "", &ik_rt[579], offsetof(ast_StringConcatOpExpr, Rhs), false}, };
+static const RField ik_rf_654[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_UnaryMinusOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[579], offsetof(ast_UnaryMinusOpExpr, Expr), false}, };
+static const RField ik_rf_656[] = {{"ExprBase", "", "", &ik_rt[577], offsetof(ast_UnaryLenOpExpr, ExprBase_), true}, {"Expr", "", "", &ik_rt[579], offsetof(ast_UnaryLenOpExpr, Expr), false}, };
 static const RField ik_rf_658[] = {{"fp", "github.com/yuin/gopher-lua", "", &ik_rt[263], offsetof(lua_lFile, fp), false}, {"pp", "github.com/yuin/gopher-lua", "", &ik_rt[659], offsetof(lua_lFile, pp), false}, {"writer", "github.com/yuin/gopher-lua", "", &ik_rt[20], offsetof(lua_lFile, writer), false}, {"reader", "github.com/yuin/gopher-lua", "", &ik_rt[349], offsetof(lua_lFile, reader), false}, {"stdout", "github.com/yuin/gopher-lua", "", &ik_rt[689], offsetof(lua_lFile, stdout), false}, {"closed", "github.com/yuin/gopher-lua", "", &ik_rt[0], offsetof(lua_lFile, closed), false}, };
 static const RField ik_rf_688[] = {{"in", "os/exec", "", &ik_rt[13], offsetof(Anon_6c40a18c, in), false}, {"out", "os/exec", "", &ik_rt[13], offsetof(Anon_6c40a18c, out), false}, };
 static const RField ik_rf_694[] = {{"Pos", "", "", &ik_rt[695], offsetof(parse_Error, Pos), false}, {"Message", "", "", &ik_rt[13], offsetof(parse_Error, Message), false}, {"Token", "", "", &ik_rt[13], offsetof(parse_Error, Token), false}, };
 static const RField ik_rf_695[] = {{"Source", "", "", &ik_rt[13], offsetof(ast_Position, Source), false}, {"Line", "", "", &ik_rt[1], offsetof(ast_Position, Line), false}, {"Column", "", "", &ik_rt[1], offsetof(ast_Position, Column), false}, };
-static const RField ik_rf_697[] = {{"scanner", "github.com/yuin/gopher-lua/parse", "", &ik_rt[698], offsetof(parse_Lexer, scanner), false}, {"Stmts", "", "", &ik_rt[584], offsetof(parse_Lexer, Stmts), false}, {"PNewLine", "", "", &ik_rt[0], offsetof(parse_Lexer, PNewLine), false}, {"Token", "", "", &ik_rt[700], offsetof(parse_Lexer, Token), false}, {"PrevTokenType", "", "", &ik_rt[1], offsetof(parse_Lexer, PrevTokenType), false}, };
+static const RField ik_rf_697[] = {{"scanner", "github.com/yuin/gopher-lua/parse", "", &ik_rt[698], offsetof(parse_Lexer, scanner), false}, {"Stmts", "", "", &ik_rt[600], offsetof(parse_Lexer, Stmts), false}, {"PNewLine", "", "", &ik_rt[0], offsetof(parse_Lexer, PNewLine), false}, {"Token", "", "", &ik_rt[700], offsetof(parse_Lexer, Token), false}, {"PrevTokenType", "", "", &ik_rt[1], offsetof(parse_Lexer, PrevTokenType), false}, };
 static const RField ik_rf_699[] = {{"Pos", "", "", &ik_rt[695], offsetof(parse_Scanner, Pos), false}, {"reader", "github.com/yuin/gopher-lua/parse", "", &ik_rt[349], offsetof(parse_Scanner, reader), false}, };
 static const RField ik_rf_700[] = {{"Type", "", "", &ik_rt[1], offsetof(ast_Token, Type), false}, {"Name", "", "", &ik_rt[13], offsetof(ast_Token, Name), false}, {"Str", "", "", &ik_rt[13], offsetof(ast_Token, Str), false}, {"Pos", "", "", &ik_rt[695], offsetof(ast_Token, Pos), false}, };
 static const RField ik_rf_702[] = {{"lval", "github.com/yuin/gopher-lua/parse", "", &ik_rt[703], offsetof(parse_yyParserImpl, lval), false}, {"stack", "github.com/yuin/gopher-lua/parse", "", &ik_rt[704], offsetof(parse_yyParserImpl, stack), false}, {"char", "github.com/yuin/gopher-lua/parse", "", &ik_rt[1], offsetof(parse_yyParserImpl, char_), false}, };
-static const RField ik_rf_703[] = {{"yys", "github.com/yuin/gopher-lua/parse", "", &ik_rt[1], offsetof(parse_yySymType, yys), false}, {"token", "github.com/yuin/gopher-lua/parse", "", &ik_rt[700], offsetof(parse_yySymType, token), false}, {"stmts", "github.com/yuin/gopher-lua/parse", "", &ik_rt[584], offsetof(parse_yySymType, stmts), false}, {"stmt", "github.com/yuin/gopher-lua/parse", "", &ik_rt[585], offsetof(parse_yySymType, stmt), false}, {"funcname", "github.com/yuin/gopher-lua/parse", "", &ik_rt[592], offsetof(parse_yySymType, funcname), false}, {"funcexpr", "github.com/yuin/gopher-lua/parse", "", &ik_rt[594], offsetof(parse_yySymType, funcexpr), false}, {"exprlist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[564], offsetof(parse_yySymType, exprlist), false}, {"expr", "github.com/yuin/gopher-lua/parse", "", &ik_rt[563], offsetof(parse_yySymType, expr), false}, {"fieldlist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[630], offsetof(parse_yySymType, fieldlist), false}, {"field", "github.com/yuin/gopher-lua/parse", "", &ik_rt[631], offsetof(parse_yySymType, field), false}, {"fieldsep", "github.com/yuin/gopher-lua/parse", "", &ik_rt[13], offsetof(parse_yySymType, fieldsep), false}, {"namelist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[210], offsetof(parse_yySymType, namelist), false}, {"parlist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[596], offsetof(parse_yySymType, parlist), false}, };
+static const RField ik_rf_703[] = {{"yys", "github.com/yuin/gopher-lua/parse", "", &ik_rt[1], offsetof(parse_yySymType, yys), false}, {"token", "github.com/yuin/gopher-lua/parse", "", &ik_rt[700], offsetof(parse_yySymType, token), false}, {"stmts", "github.com/yuin/gopher-lua/parse", "", &ik_rt[600], offsetof(parse_yySymType, stmts), false}, {"stmt", "github.com/yuin/gopher-lua/parse", "", &ik_rt[601], offsetof(parse_yySymType, stmt), false}, {"funcname", "github.com/yuin/gopher-lua/parse", "", &ik_rt[608], offsetof(parse_yySymType, funcname), false}, {"funcexpr", "github.com/yuin/gopher-lua/parse", "", &ik_rt[610], offsetof(parse_yySymType, funcexpr), false}, {"exprlist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[580], offsetof(parse_yySymType, exprlist), false}, {"expr", "github.com/yuin/gopher-lua/parse", "", &ik_rt[579], offsetof(parse_yySymType, expr), false}, {"fieldlist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[646], offsetof(parse_yySymType, fieldlist), false}, {"field", "github.com/yuin/gopher-lua/parse", "", &ik_rt[647], offsetof(parse_yySymType, field), false}, {"fieldsep", "github.com/yuin/gopher-lua/parse", "", &ik_rt[13], offsetof(parse_yySymType, fieldsep), false}, {"namelist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[210], offsetof(parse_yySymType, namelist), false}, {"parlist", "github.com/yuin/gopher-lua/parse", "", &ik_rt[612], offsetof(parse_yySymType, parlist), false}, };
 static const RField ik_rf_706[] = {{"Ch", "", "", &ik_rt[1], offsetof(pm_charClass, Ch), false}, };
 static const RField ik_rf_708[] = {{"Class", "", "", &ik_rt[1], offsetof(pm_singleClass, Class), false}, };
-static const RField ik_rf_712[] = {{"Begin", "", "", &ik_rt[713], offsetof(pm_rangeClass, Begin), false}, {"End", "", "", &ik_rt[713], offsetof(pm_rangeClass, End), false}, };
-static const RField ik_rf_715[] = {{"IsNot", "", "", &ik_rt[0], offsetof(pm_setClass, IsNot), false}, {"Classes", "", "", &ik_rt[716], offsetof(pm_setClass, Classes), false}, };
-static const RField ik_rf_718[] = {{"N", "", "", &ik_rt[1], offsetof(pm_numberPattern, N), false}, };
-static const RField ik_rf_720[] = {{"Begin", "", "", &ik_rt[1], offsetof(pm_bracePattern, Begin), false}, {"End", "", "", &ik_rt[1], offsetof(pm_bracePattern, End), false}, };
-static const RField ik_rf_722[] = {{"Class", "", "", &ik_rt[713], offsetof(pm_singlePattern, Class), false}, };
-static const RField ik_rf_726[] = {{"MustHead", "", "", &ik_rt[0], offsetof(pm_seqPattern, MustHead), false}, {"MustTail", "", "", &ik_rt[0], offsetof(pm_seqPattern, MustTail), false}, {"Patterns", "", "", &ik_rt[727], offsetof(pm_seqPattern, Patterns), false}, };
-static const RField ik_rf_730[] = {{"Pattern", "", "", &ik_rt[728], offsetof(pm_capPattern, Pattern), false}, };
-static const RField ik_rf_732[] = {{"Type", "", "", &ik_rt[1], offsetof(pm_repeatPattern, Type), false}, {"Class", "", "", &ik_rt[713], offsetof(pm_repeatPattern, Class), false}, };
-static const RField ik_rf_734[] = {{"Pos", "", "", &ik_rt[1], offsetof(pm_Error, Pos), false}, {"Message", "", "", &ik_rt[13], offsetof(pm_Error, Message), false}, };
+static const RField ik_rf_712[] = {{"Pos", "", "", &ik_rt[1], offsetof(pm_Error, Pos), false}, {"Message", "", "", &ik_rt[13], offsetof(pm_Error, Message), false}, };
+static const RField ik_rf_714[] = {{"Begin", "", "", &ik_rt[715], offsetof(pm_rangeClass, Begin), false}, {"End", "", "", &ik_rt[715], offsetof(pm_rangeClass, End), false}, };
+static const RField ik_rf_717[] = {{"IsNot", "", "", &ik_rt[0], offsetof(pm_setClass, IsNot), false}, {"Classes", "", "", &ik_rt[718], offsetof(pm_setClass, Classes), false}, };
+static const RField ik_rf_720[] = {{"N", "", "", &ik_rt[1], offsetof(pm_numberPattern, N), false}, };
+static const RField ik_rf_722[] = {{"Begin", "", "", &ik_rt[1], offsetof(pm_bracePattern, Begin), false}, {"End", "", "", &ik_rt[1], offsetof(pm_bracePattern, End), false}, };
+static const RField ik_rf_724[] = {{"Class", "", "", &ik_rt[715], offsetof(pm_singlePattern, Class), false}, };
+static const RField ik_rf_728[] = {{"MustHead", "", "", &ik_rt[0], offsetof(pm_seqPattern, MustHead), false}, {"MustTail", "", "", &ik_rt[0], offsetof(pm_seqPattern, MustTail), false}, {"Patterns", "", "", &ik_rt[729], offsetof(pm_seqPattern, Patterns), false}, };
+static const RField ik_rf_732[] = {{"Pattern", "", "", &ik_rt[730], offsetof(pm_capPattern, Pattern), false}, };
+static const RField ik_rf_734[] = {{"Type", "", "", &ik_rt[1], offsetof(pm_repeatPattern, Type), false}, {"Class", "", "", &ik_rt[715], offsetof(pm_repeatPattern, Class), false}, };
 static const RField ik_rf_736[] = {{"array", "github.com/yuin/gopher-lua", "", &ik_rt[737], offsetof(lua_fixedCallFrameStack, array), false}, {"sp", "github.com/yuin/gopher-lua", "", &ik_rt[1], offsetof(lua_fixedCallFrameStack, sp), false}, };
 static const RField ik_rf_739[] = {{"array", "github.com/yuin/gopher-lua", "", &ik_rt[740], offsetof(lua_callFrameStackSegment, array), false}, };
 static const RField ik_rf_742[] = {{"segments", "github.com/yuin/gopher-lua", "", &ik_rt[743], offsetof(lua_autoGrowingCallFrameStack, segments), false}, {"segIdx", "github.com/yuin/gopher-lua", "", &ik_rt[744], offsetof(lua_autoGrowingCallFrameStack, segIdx), false}, {"segSp", "github.com/yuin/gopher-lua", "", &ik_rt[7], offsetof(lua_autoGrowingCallFrameStack, segSp), false}, };
@@ -183378,7 +183384,7 @@ static const RField ik_rf_1170[] = {{"Joystick", "", "ini:\"Joystick\"", &ik_rt[
 static const RField ik_rf_1172[] = {{"w", "main", "", &ik_rt[4], offsetof(nullTexture, w), false}, {"h", "main", "", &ik_rt[4], offsetof(nullTexture, h), false}, };
 static const RField ik_rf_1174[] = {{"Name", "", "json:\"name\"", &ik_rt[13], offsetof(Anon_906f4fd5, Name), false}, };
 static const RField ik_rf_1179[] = {{"IP", "", "json:\"ip\"", &ik_rt[13], offsetof(Anon_a3823e0d, IP), false}, };
-static const RField ik_rf_1185[] = {{"ServiceType", "", "xml:\"serviceType\"", &ik_rt[13], offsetof(svc_L6800f0, ServiceType), false}, {"ControlURL", "", "xml:\"controlURL\"", &ik_rt[13], offsetof(svc_L6800f0, ControlURL), false}, };
+static const RField ik_rf_1185[] = {{"ServiceType", "", "xml:\"serviceType\"", &ik_rt[13], offsetof(svc_Lc6dc42, ServiceType), false}, {"ControlURL", "", "xml:\"controlURL\"", &ik_rt[13], offsetof(svc_Lc6dc42, ControlURL), false}, };
 static const RField ik_rf_1187[] = {{"ID", "", "json:\"id\"", &ik_rt[13], offsetof(Anon_78e9d625, ID), false}, {"Token", "", "json:\"token\"", &ik_rt[13], offsetof(Anon_78e9d625, Token), false}, {"IP", "", "json:\"ip\"", &ik_rt[13], offsetof(Anon_78e9d625, IP), false}, };
 static const RField ik_rf_1189[] = {{"Open", "", "json:\"open\"", &ik_rt[13], offsetof(Anon_be668d3d, Open), false}, };
 static const RField ik_rf_1194[] = {{"ID", "", "json:\"id\"", &ik_rt[13], offsetof(cvfRoom, ID), false}, {"Name", "", "json:\"name\"", &ik_rt[13], offsetof(cvfRoom, Name), false}, {"IP", "", "json:\"ip\"", &ik_rt[13], offsetof(cvfRoom, IP), false}, {"Port", "", "json:\"port\"", &ik_rt[1], offsetof(cvfRoom, Port), false}, {"UDPPort", "", "json:\"udp_port\"", &ik_rt[1], offsetof(cvfRoom, UDPPort), false}, {"Version", "", "json:\"version\"", &ik_rt[13], offsetof(cvfRoom, Version), false}, {"Open", "", "json:\"open\"", &ik_rt[13], offsetof(cvfRoom, Open), false}, {"AgeSec", "", "json:\"age_sec\"", &ik_rt[1], offsetof(cvfRoom, AgeSec), false}, };
@@ -183586,7 +183592,7 @@ static const RField ik_rf_1535[] = {{"winEnabled", "main", "", &ik_rt[0], offset
 static const RField ik_rf_1537[] = {{"enabled", "main", "", &ik_rt[0], offsetof(MotifHiscore, enabled), false}, {"active", "main", "", &ik_rt[0], offsetof(MotifHiscore, active), false}, {"initialized", "main", "", &ik_rt[0], offsetof(MotifHiscore, initialized), false}, {"counter", "main", "", &ik_rt[4], offsetof(MotifHiscore, counter), false}, {"endTimer", "main", "", &ik_rt[4], offsetof(MotifHiscore, endTimer), false}, {"place", "main", "", &ik_rt[4], offsetof(MotifHiscore, place), false}, {"mode", "main", "", &ik_rt[13], offsetof(MotifHiscore, mode), false}, {"rows", "main", "", &ik_rt[1538], offsetof(MotifHiscore, rows), false}, {"statsRaw", "main", "", &ik_rt[13], offsetof(MotifHiscore, statsRaw), false}, {"endTime", "main", "", &ik_rt[4], offsetof(MotifHiscore, endTime), false}, {"noFade", "main", "", &ik_rt[0], offsetof(MotifHiscore, noFade), false}, {"noBgs", "main", "", &ik_rt[0], offsetof(MotifHiscore, noBgs), false}, {"noOverlay", "main", "", &ik_rt[0], offsetof(MotifHiscore, noOverlay), false}, {"rankActiveCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, rankActiveCount), false}, {"resultActiveCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, resultActiveCount), false}, {"nameActiveCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, nameActiveCount), false}, {"rankUseActive2", "main", "", &ik_rt[0], offsetof(MotifHiscore, rankUseActive2), false}, {"resultUseActive2", "main", "", &ik_rt[0], offsetof(MotifHiscore, resultUseActive2), false}, {"nameUseActive2", "main", "", &ik_rt[0], offsetof(MotifHiscore, nameUseActive2), false}, {"input", "main", "", &ik_rt[0], offsetof(MotifHiscore, input), false}, {"letters", "main", "", &ik_rt[25], offsetof(MotifHiscore, letters), false}, {"timerCount", "main", "", &ik_rt[4], offsetof(MotifHiscore, timerCount), false}, {"timerFrames", "main", "", &ik_rt[4], offsetof(MotifHiscore, timerFrames), false}, {"haveSaved", "main", "", &ik_rt[0], offsetof(MotifHiscore, haveSaved), false}, };
 static const RField ik_rf_1539[] = {{"score", "main", "", &ik_rt[1], offsetof(rankingRow, score), false}, {"time", "main", "", &ik_rt[12], offsetof(rankingRow, time), false}, {"win", "main", "", &ik_rt[1], offsetof(rankingRow, win), false}, {"name", "main", "", &ik_rt[13], offsetof(rankingRow, name), false}, {"pals", "main", "", &ik_rt[60], offsetof(rankingRow, pals), false}, {"chars", "main", "", &ik_rt[210], offsetof(rankingRow, chars), false}, {"bgs", "main", "", &ik_rt[1540], offsetof(rankingRow, bgs), false}, {"faces", "main", "", &ik_rt[1540], offsetof(rankingRow, faces), false}, {"rankData", "main", "", &ik_rt[1258], offsetof(rankingRow, rankData), false}, {"resultData", "main", "", &ik_rt[1258], offsetof(rankingRow, resultData), false}, {"nameData", "main", "", &ik_rt[1258], offsetof(rankingRow, nameData), false}, {"rankDataActive", "main", "", &ik_rt[1258], offsetof(rankingRow, rankDataActive), false}, {"rankDataActive2", "main", "", &ik_rt[1258], offsetof(rankingRow, rankDataActive2), false}, {"resultDataActive", "main", "", &ik_rt[1258], offsetof(rankingRow, resultDataActive), false}, {"resultDataActive2", "main", "", &ik_rt[1258], offsetof(rankingRow, resultDataActive2), false}, {"nameDataActive", "main", "", &ik_rt[1258], offsetof(rankingRow, nameDataActive), false}, {"nameDataActive2", "main", "", &ik_rt[1258], offsetof(rankingRow, nameDataActive2), false}, };
 static const RField ik_rf_1541[] = {{"enabled", "main", "", &ik_rt[0], offsetof(MotifMenu, enabled), false}, {"active", "main", "", &ik_rt[0], offsetof(MotifMenu, active), false}, {"initialized", "main", "", &ik_rt[0], offsetof(MotifMenu, initialized), false}, {"state", "main", "", &ik_rt[1542], offsetof(MotifMenu, state), false}, {"reopenLock", "main", "", &ik_rt[0], offsetof(MotifMenu, reopenLock), false}, };
-static const RField ik_rf_1548[] = {{"idx", "main", "", &ik_rt[1], offsetof(slotRef_L1be2fe, idx), false}, {"p", "main", "", &ik_rt[1549], offsetof(slotRef_L1be2fe, p), false}, {"order", "main", "", &ik_rt[4], offsetof(slotRef_L1be2fe, order), false}, };
+static const RField ik_rf_1548[] = {{"idx", "main", "", &ik_rt[1], offsetof(slotRef_L64fd25, idx), false}, {"p", "main", "", &ik_rt[1549], offsetof(slotRef_L64fd25, p), false}, {"order", "main", "", &ik_rt[4], offsetof(slotRef_L64fd25, order), false}, };
 static const RField ik_rf_1565[] = {{"FormatVersion", "", "json:\"format_version\"", &ik_rt[8], offsetof(ReplayHeader, FormatVersion), false}, {"SyncVersion", "", "json:\"sync_version\"", &ik_rt[8], offsetof(ReplayHeader, SyncVersion), false}, {"Strict", "", "json:\"strict,omitempty\"", &ik_rt[1566], offsetof(ReplayHeader, Strict), false}, {"Host", "", "json:\"host,omitempty\"", &ik_rt[1566], offsetof(ReplayHeader, Host), false}, {"ContentFingerprint", "", "json:\"content_fingerprint,omitempty\"", &ik_rt[13], offsetof(ReplayHeader, ContentFingerprint), false}, };
 static const RField ik_rf_1567[] = {{"Path", "", "json:\"path\"", &ik_rt[13], offsetof(SyncSetting, Path), false}, {"Value", "", "json:\"value\"", &ik_rt[13], offsetof(SyncSetting, Value), false}, };
 static const RField ik_rf_1568[] = {{"SyncVersion", "", "json:\"sync_version\"", &ik_rt[8], offsetof(SyncHandshake, SyncVersion), false}, {"Strict", "", "json:\"strict,omitempty\"", &ik_rt[1566], offsetof(SyncHandshake, Strict), false}, {"Host", "", "json:\"host,omitempty\"", &ik_rt[1566], offsetof(SyncHandshake, Host), false}, {"RollbackPort", "", "json:\"rollback_port,omitempty\"", &ik_rt[1], offsetof(SyncHandshake, RollbackPort), false}, {"ContentFingerprint", "", "json:\"content_fingerprint,omitempty\"", &ik_rt[13], offsetof(SyncHandshake, ContentFingerprint), false}, };
@@ -183675,7 +183681,7 @@ static const RField ik_rf_1762[] = {{"startx", "main", "", &ik_rt[4], offsetof(s
 static const RField ik_rf_1765[] = {{"stageTime", "main", "", &ik_rt[4], offsetof(stageRollbackState, stageTime), false}, {"bga", "main", "", &ik_rt[1376], offsetof(stageRollbackState, bga), false}, {"bgmState", "main", "", &ik_rt[1763], offsetof(stageRollbackState, bgmState), false}, {"bg", "main", "", &ik_rt[1766], offsetof(stageRollbackState, bg), false}, };
 static const RField ik_rf_1767[] = {{"bga", "main", "", &ik_rt[1376], offsetof(stageRollbackBgState, bga), false}, {"actionno", "main", "", &ik_rt[4], offsetof(stageRollbackBgState, actionno), false}, {"enabled", "main", "", &ik_rt[0], offsetof(stageRollbackBgState, enabled), false}, };
 static const RField ik_rf_1768[] = {{"matches", "main", "", &ik_rt[1], offsetof(statsRollbackState, matches), false}, {"rounds", "main", "", &ik_rt[1], offsetof(statsRollbackState, rounds), false}, };
-static const RField ik_rf_1770[] = {{"charlist", "main", "", &ik_rt[1771], offsetof(Select, charlist), false}, {"stagelist", "main", "", &ik_rt[1776], offsetof(Select, stagelist), false}, {"selected", "main", "", &ik_rt[1780], offsetof(Select, selected), false}, {"selectedStageNo", "main", "", &ik_rt[1], offsetof(Select, selectedStageNo), false}, {"charAnimPreload", "main", "", &ik_rt[1781], offsetof(Select, charAnimPreload), false}, {"stageAnimPreload", "main", "", &ik_rt[1781], offsetof(Select, stageAnimPreload), false}, {"charSpritePreload", "main", "", &ik_rt[795], offsetof(Select, charSpritePreload), false}, {"stageSpritePreload", "main", "", &ik_rt[795], offsetof(Select, stageSpritePreload), false}, {"cdefOverwrite", "main", "", &ik_rt[1756], offsetof(Select, cdefOverwrite), false}, {"palOverwrite", "main", "", &ik_rt[655], offsetof(Select, palOverwrite), false}, {"sdefOverwrite", "main", "", &ik_rt[13], offsetof(Select, sdefOverwrite), false}, {"music", "main", "", &ik_rt[1326], offsetof(Select, music), false}, {"gameParams", "main", "", &ik_rt[1782], offsetof(Select, gameParams), false}, {"preloadMu", "main", "", &ik_rt[280], offsetof(Select, preloadMu), false}, {"preloadCond", "main", "", &ik_rt[1788], offsetof(Select, preloadCond), false}, {"preloadWorkerRun", "main", "", &ik_rt[0], offsetof(Select, preloadWorkerRun), false}, {"preloadOrder", "main", "", &ik_rt[5], offsetof(Select, preloadOrder), false}, {"charPreload", "main", "", &ik_rt[1793], offsetof(Select, charPreload), false}, {"stagePreload", "main", "", &ik_rt[1793], offsetof(Select, stagePreload), false}, };
+static const RField ik_rf_1770[] = {{"charlist", "main", "", &ik_rt[1771], offsetof(Select, charlist), false}, {"stagelist", "main", "", &ik_rt[1776], offsetof(Select, stagelist), false}, {"selected", "main", "", &ik_rt[1780], offsetof(Select, selected), false}, {"selectedStageNo", "main", "", &ik_rt[1], offsetof(Select, selectedStageNo), false}, {"charAnimPreload", "main", "", &ik_rt[1781], offsetof(Select, charAnimPreload), false}, {"stageAnimPreload", "main", "", &ik_rt[1781], offsetof(Select, stageAnimPreload), false}, {"charSpritePreload", "main", "", &ik_rt[795], offsetof(Select, charSpritePreload), false}, {"stageSpritePreload", "main", "", &ik_rt[795], offsetof(Select, stageSpritePreload), false}, {"cdefOverwrite", "main", "", &ik_rt[1756], offsetof(Select, cdefOverwrite), false}, {"palOverwrite", "main", "", &ik_rt[573], offsetof(Select, palOverwrite), false}, {"sdefOverwrite", "main", "", &ik_rt[13], offsetof(Select, sdefOverwrite), false}, {"music", "main", "", &ik_rt[1326], offsetof(Select, music), false}, {"gameParams", "main", "", &ik_rt[1782], offsetof(Select, gameParams), false}, {"preloadMu", "main", "", &ik_rt[280], offsetof(Select, preloadMu), false}, {"preloadCond", "main", "", &ik_rt[1788], offsetof(Select, preloadCond), false}, {"preloadWorkerRun", "main", "", &ik_rt[0], offsetof(Select, preloadWorkerRun), false}, {"preloadOrder", "main", "", &ik_rt[5], offsetof(Select, preloadOrder), false}, {"charPreload", "main", "", &ik_rt[1793], offsetof(Select, charPreload), false}, {"stagePreload", "main", "", &ik_rt[1793], offsetof(Select, stagePreload), false}, };
 static const RField ik_rf_1772[] = {{"def", "main", "", &ik_rt[13], offsetof(SelectChar, def), false}, {"name", "main", "", &ik_rt[13], offsetof(SelectChar, name), false}, {"lifebarname", "main", "", &ik_rt[13], offsetof(SelectChar, lifebarname), false}, {"author", "main", "", &ik_rt[13], offsetof(SelectChar, author), false}, {"sound", "main", "", &ik_rt[13], offsetof(SelectChar, sound), false}, {"intro", "main", "", &ik_rt[13], offsetof(SelectChar, intro), false}, {"ending", "main", "", &ik_rt[13], offsetof(SelectChar, ending), false}, {"arcadepath", "main", "", &ik_rt[13], offsetof(SelectChar, arcadepath), false}, {"pal", "main", "", &ik_rt[60], offsetof(SelectChar, pal), false}, {"pal_defaults", "main", "", &ik_rt[60], offsetof(SelectChar, pal_defaults), false}, {"pal_keymap", "main", "", &ik_rt[60], offsetof(SelectChar, pal_keymap), false}, {"pal_files", "main", "", &ik_rt[210], offsetof(SelectChar, pal_files), false}, {"localcoord", "main", "", &ik_rt[805], offsetof(SelectChar, localcoord), false}, {"portraitscale", "main", "", &ik_rt[11], offsetof(SelectChar, portraitscale), false}, {"cns_scale", "main", "", &ik_rt[806], offsetof(SelectChar, cns_scale), false}, {"anims", "main", "", &ik_rt[1773], offsetof(SelectChar, anims), false}, {"sff", "main", "", &ik_rt[772], offsetof(SelectChar, sff), false}, {"music", "main", "", &ik_rt[1326], offsetof(SelectChar, music), false}, {"scp", "main", "", &ik_rt[1774], offsetof(SelectChar, scp), false}, {"preloadAnim", "main", "", &ik_rt[13], offsetof(SelectChar, preloadAnim), false}, {"preloadSprite", "main", "", &ik_rt[13], offsetof(SelectChar, preloadSprite), false}, };
 static const RField ik_rf_1775[] = {{"musicEntries", "main", "ini:\"musicEntries\"", &ik_rt[210], offsetof(SelectCharParams, musicEntries), false}, {"AI", "", "ini:\"ai\"", &ik_rt[4], offsetof(SelectCharParams, AI), false}, {"VsScreen", "", "ini:\"vsscreen\"", &ik_rt[0], offsetof(SelectCharParams, VsScreen), false}, {"VictoryScreen", "", "ini:\"victoryscreen\"", &ik_rt[0], offsetof(SelectCharParams, VictoryScreen), false}, {"Rounds", "", "ini:\"rounds\"", &ik_rt[4], offsetof(SelectCharParams, Rounds), false}, {"Time", "", "ini:\"time\"", &ik_rt[4], offsetof(SelectCharParams, Time), false}, {"Single", "", "ini:\"single\"", &ik_rt[0], offsetof(SelectCharParams, Single), false}, {"IncludeStage", "", "ini:\"includestage\"", &ik_rt[4], offsetof(SelectCharParams, IncludeStage), false}, {"Bonus", "", "ini:\"bonus\"", &ik_rt[0], offsetof(SelectCharParams, Bonus), false}, {"Exclude", "", "ini:\"exclude\"", &ik_rt[0], offsetof(SelectCharParams, Exclude), false}, {"Hidden", "", "ini:\"hidden\"", &ik_rt[4], offsetof(SelectCharParams, Hidden), false}, {"Order", "", "ini:\"order\"", &ik_rt[4], offsetof(SelectCharParams, Order), false}, {"OrderSurvival", "", "ini:\"ordersurvival\"", &ik_rt[4], offsetof(SelectCharParams, OrderSurvival), false}, {"ArcadePath", "", "ini:\"arcadepath\"", &ik_rt[13], offsetof(SelectCharParams, ArcadePath), false}, {"Unlock", "", "ini:\"unlock\"", &ik_rt[13], offsetof(SelectCharParams, Unlock), false}, {"SlotSelect", "", "ini:\"slotselect\"", &ik_rt[13], offsetof(SelectCharParams, SlotSelect), false}, {"SlotNext", "", "ini:\"slotnext\"", &ik_rt[13], offsetof(SelectCharParams, SlotNext), false}, {"SlotPrevious", "", "ini:\"slotprevious\"", &ik_rt[13], offsetof(SelectCharParams, SlotPrevious), false}, {"Raw", "", "ini:\"raw\"", &ik_rt[210], offsetof(SelectCharParams, Raw), false}, };
 static const RField ik_rf_1777[] = {{"def", "main", "", &ik_rt[13], offsetof(SelectStage, def), false}, {"name", "main", "", &ik_rt[13], offsetof(SelectStage, name), false}, {"attachedchardef", "main", "", &ik_rt[210], offsetof(SelectStage, attachedchardef), false}, {"localcoord", "main", "", &ik_rt[805], offsetof(SelectStage, localcoord), false}, {"portraitscale", "main", "", &ik_rt[11], offsetof(SelectStage, portraitscale), false}, {"anims", "main", "", &ik_rt[1773], offsetof(SelectStage, anims), false}, {"sff", "main", "", &ik_rt[772], offsetof(SelectStage, sff), false}, {"music", "main", "", &ik_rt[1326], offsetof(SelectStage, music), false}, {"ssp", "main", "", &ik_rt[1778], offsetof(SelectStage, ssp), false}, {"preloadSprite", "main", "", &ik_rt[13], offsetof(SelectStage, preloadSprite), false}, };
@@ -183703,7 +183709,7 @@ static const RField ik_rf_1851[] = {{"buf", "main", "", &ik_rt[1852], offsetof(B
 static const RField ik_rf_1853[] = {{"f", "github.com/ikemen-engine/beep/v2", "", &ik_rt[87], offsetof(beep_Buffer, f), false}, {"data", "github.com/ikemen-engine/beep/v2", "", &ik_rt[16], offsetof(beep_Buffer, data), false}, {"tmp", "github.com/ikemen-engine/beep/v2", "", &ik_rt[16], offsetof(beep_Buffer, tmp), false}, };
 static const RField ik_rf_1856[] = {{"streamer", "main", "", &ik_rt[91], offsetof(SoundEffect, streamer), false}, {"panner", "main", "", &ik_rt[1857], offsetof(SoundEffect, panner), false}, {"volume", "main", "", &ik_rt[11], offsetof(SoundEffect, volume), false}, {"duckMul", "main", "", &ik_rt[11], offsetof(SoundEffect, duckMul), false}, {"pan", "main", "", &ik_rt[11], offsetof(SoundEffect, pan), false}, {"sourceID", "main", "", &ik_rt[4], offsetof(SoundEffect, sourceID), false}, {"sourceX", "main", "", &ik_rt[11], offsetof(SoundEffect, sourceX), false}, {"lastPan", "main", "", &ik_rt[11], offsetof(SoundEffect, lastPan), false}, {"priority", "main", "", &ik_rt[4], offsetof(SoundEffect, priority), false}, {"loop", "main", "", &ik_rt[4], offsetof(SoundEffect, loop), false}, {"freqmul", "main", "", &ik_rt[11], offsetof(SoundEffect, freqmul), false}, {"startPos", "main", "", &ik_rt[1], offsetof(SoundEffect, startPos), false}, };
 static const RField ik_rf_1858[] = {{"streamer", "main", "", &ik_rt[91], offsetof(soundPanner, streamer), false}, {"request", "main", "", &ik_rt[1859], offsetof(soundPanner, request), false}, };
-static const RField ik_rf_1868[] = {{"key", "main", "", &ik_rt[13], offsetof(entry_L4be5ac, key), false}, {"lp", "main", "", &ik_rt[1708], offsetof(entry_L4be5ac, lp), false}, {"start", "main", "", &ik_rt[4], offsetof(entry_L4be5ac, start), false}, {"idx", "main", "", &ik_rt[1], offsetof(entry_L4be5ac, idx), false}, };
+static const RField ik_rf_1868[] = {{"key", "main", "", &ik_rt[13], offsetof(entry_L5cd011, key), false}, {"lp", "main", "", &ik_rt[1708], offsetof(entry_L5cd011, lp), false}, {"start", "main", "", &ik_rt[4], offsetof(entry_L5cd011, start), false}, {"idx", "main", "", &ik_rt[1], offsetof(entry_L5cd011, idx), false}, };
 static const RField ik_rf_1870[] = {{"dev", "main", "", &ik_rt[1871], offsetof(SDLSpeaker, dev), false}, {"mixer", "main", "", &ik_rt[1872], offsetof(SDLSpeaker, mixer), false}, {"mu", "main", "", &ik_rt[280], offsetof(SDLSpeaker, mu), false}, {"sampleRate", "main", "", &ik_rt[88], offsetof(SDLSpeaker, sampleRate), false}, {"bufferSize", "main", "", &ik_rt[1], offsetof(SDLSpeaker, bufferSize), false}, {"buf", "main", "", &ik_rt[1845], offsetof(SDLSpeaker, buf), false}, {"out", "main", "", &ik_rt[16], offsetof(SDLSpeaker, out), false}, };
 static const RField ik_rf_1873[] = {{"streamers", "github.com/ikemen-engine/beep/v2", "", &ik_rt[1874], offsetof(beep_Mixer, streamers), false}, {"stopWhenEmpty", "github.com/ikemen-engine/beep/v2", "", &ik_rt[0], offsetof(beep_Mixer, stopWhenEmpty), false}, };
 static const RField ik_rf_1876[] = {{"streamer", "main", "", &ik_rt[91], offsetof(Normalizer, streamer), false}, {"mul", "main", "", &ik_rt[12], offsetof(Normalizer, mul), false}, {"l", "main", "", &ik_rt[1877], offsetof(Normalizer, l), false}, {"r", "main", "", &ik_rt[1877], offsetof(Normalizer, r), false}, };
@@ -184251,8 +184257,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(GoString*), "", "", &ik_rt[13], NULL, 0, 0, NULL, 199, false, "*string"},
     {22, sizeof(sjson_errorType*), "", "", &ik_rt[497], NULL, 0, 0, NULL, 200, false, "*sjson.errorType"},
     {25, sizeof(sjson_errorType), "errorType", "github.com/tidwall/sjson", NULL, NULL, 0, 1, ik_rf_497, 960, false, "sjson.errorType"},
-    {23, sizeof(Slice_sjson_val_Lb76261), "", "", &ik_rt[499], NULL, 0, 0, NULL, 201, false, "[]sjson.val"},
-    {25, sizeof(sjson_val_Lb76261), "val", "github.com/tidwall/sjson", NULL, NULL, 0, 2, ik_rf_499, 961, false, "sjson.val"},
+    {23, sizeof(Slice_sjson_val_L98a5cb), "", "", &ik_rt[499], NULL, 0, 0, NULL, 201, false, "[]sjson.val"},
+    {25, sizeof(sjson_val_L98a5cb), "val", "github.com/tidwall/sjson", NULL, NULL, 0, 2, ik_rf_499, 961, false, "sjson.val"},
     {25, sizeof(gjson_Result), "Result", "github.com/tidwall/gjson", NULL, NULL, 0, 6, ik_rf_500, 962, false, "gjson.Result"},
     {2, sizeof(gjson_Type), "Type", "github.com/tidwall/gjson", NULL, NULL, 0, 0, NULL, 963, false, "gjson.Type"},
     {25, sizeof(sjson_dtype), "dtype", "github.com/tidwall/sjson", NULL, NULL, 0, 0, NULL, 202, false, "sjson.dtype"},
@@ -184284,8 +184290,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(lua_allocator*), "", "", &ik_rt[529], NULL, 0, 0, NULL, 984, false, "*lua.allocator"},
     {25, sizeof(lua_allocator), "allocator", "github.com/yuin/gopher-lua", NULL, NULL, 0, 5, ik_rf_529, 985, false, "lua.allocator"},
     {23, sizeof(Slice_f64), "", "", &ik_rt[12], NULL, 0, 0, NULL, 986, false, "[]float64"},
-    {22, sizeof(GoOpaque /* reflect.SliceHeader */*), "", "", &ik_rt[532], NULL, 0, 0, NULL, 987, false, "*reflect.SliceHeader"},
-    {25, sizeof(GoOpaque /* reflect.SliceHeader */), "SliceHeader", "reflect", NULL, NULL, 0, 0, NULL, 988, false, "reflect.SliceHeader"},
+    {22, sizeof(GoReflectSliceHeader*), "", "", &ik_rt[532], NULL, 0, 0, NULL, 987, false, "*reflect.SliceHeader"},
+    {25, sizeof(GoReflectSliceHeader), "SliceHeader", "reflect", NULL, NULL, 0, 0, NULL, 988, false, "reflect.SliceHeader"},
     {22, sizeof(lua_iface*), "", "", &ik_rt[534], NULL, 0, 0, NULL, 989, false, "*lua.iface"},
     {25, sizeof(lua_iface), "iface", "github.com/yuin/gopher-lua", NULL, NULL, 0, 2, ik_rf_534, 990, false, "lua.iface"},
     {20, sizeof(lua_registryHandler), "registryHandler", "github.com/yuin/gopher-lua", NULL, NULL, 0, 0, NULL, 0, false, "lua.registryHandler"},
@@ -184312,104 +184318,104 @@ const RType ik_rt[1974] = {
     {18, sizeof(lua_LChannel), "LChannel", "github.com/yuin/gopher-lua", NULL, NULL, 0, 0, NULL, 212, false, "lua.LChannel"},
     {1, sizeof(lua_LBool), "LBool", "github.com/yuin/gopher-lua", NULL, NULL, 0, 0, NULL, 213, false, "lua.LBool"},
     {18, sizeof(GoChan*), "", "", NULL, NULL, 0, 0, NULL, 214, false, "chan lua.LValue"},
-    {22, sizeof(ast_FuncCallExpr*), "", "", &ik_rt[560], NULL, 0, 0, NULL, 215, false, "*ast.FuncCallExpr"},
-    {25, sizeof(ast_FuncCallExpr), "FuncCallExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 6, ik_rf_560, 1005, false, "ast.FuncCallExpr"},
-    {25, sizeof(ast_ExprBase), "ExprBase", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_561, 1006, false, "ast.ExprBase"},
-    {25, sizeof(ast_Node), "Node", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_562, 1007, false, "ast.Node"},
+    {22, sizeof(lua_CompileError*), "", "", &ik_rt[560], NULL, 0, 0, NULL, 215, false, "*lua.CompileError"},
+    {25, sizeof(lua_CompileError), "CompileError", "github.com/yuin/gopher-lua", NULL, NULL, 0, 3, ik_rf_560, 1005, false, "lua.CompileError"},
+    {22, sizeof(lua_funcContext*), "", "", &ik_rt[562], NULL, 0, 0, NULL, 1006, false, "*lua.funcContext"},
+    {25, sizeof(lua_funcContext), "funcContext", "github.com/yuin/gopher-lua", NULL, NULL, 0, 11, ik_rf_562, 1007, false, "lua.funcContext"},
+    {22, sizeof(lua_codeStore*), "", "", &ik_rt[564], NULL, 0, 0, NULL, 1008, false, "*lua.codeStore"},
+    {25, sizeof(lua_codeStore), "codeStore", "github.com/yuin/gopher-lua", NULL, NULL, 0, 3, ik_rf_564, 1009, false, "lua.codeStore"},
+    {22, sizeof(lua_varNamePool*), "", "", &ik_rt[566], NULL, 0, 0, NULL, 1010, false, "*lua.varNamePool"},
+    {25, sizeof(lua_varNamePool), "varNamePool", "github.com/yuin/gopher-lua", NULL, NULL, 0, 2, ik_rf_566, 1011, false, "lua.varNamePool"},
+    {22, sizeof(lua_codeBlock*), "", "", &ik_rt[568], NULL, 0, 0, NULL, 1012, false, "*lua.codeBlock"},
+    {25, sizeof(lua_codeBlock), "codeBlock", "github.com/yuin/gopher-lua", NULL, NULL, 0, 8, ik_rf_568, 1013, false, "lua.codeBlock"},
+    {21, sizeof(Map_GoString_lua_gotoLabelDescPtr), "", "", &ik_rt[570], &ik_rt[13], 0, 0, NULL, 1014, true, "map[string]*lua.gotoLabelDesc"},
+    {22, sizeof(lua_gotoLabelDesc*), "", "", &ik_rt[571], NULL, 0, 0, NULL, 1015, false, "*lua.gotoLabelDesc"},
+    {25, sizeof(lua_gotoLabelDesc), "gotoLabelDesc", "github.com/yuin/gopher-lua", NULL, NULL, 0, 5, ik_rf_571, 1016, false, "lua.gotoLabelDesc"},
+    {23, sizeof(Slice_lua_codeBlockPtr), "", "", &ik_rt[567], NULL, 0, 0, NULL, 1017, false, "[]*lua.codeBlock"},
+    {21, sizeof(Map_int_int), "", "", &ik_rt[1], &ik_rt[1], 0, 0, NULL, 1018, false, "map[int]int"},
+    {21, sizeof(Map_int_lua_gotoLabelDescPtr), "", "", &ik_rt[570], &ik_rt[1], 0, 0, NULL, 1019, false, "map[int]*lua.gotoLabelDesc"},
+    {22, sizeof(ast_FuncCallExpr*), "", "", &ik_rt[576], NULL, 0, 0, NULL, 216, false, "*ast.FuncCallExpr"},
+    {25, sizeof(ast_FuncCallExpr), "FuncCallExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 6, ik_rf_576, 1020, false, "ast.FuncCallExpr"},
+    {25, sizeof(ast_ExprBase), "ExprBase", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_577, 1021, false, "ast.ExprBase"},
+    {25, sizeof(ast_Node), "Node", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_578, 1022, false, "ast.Node"},
     {20, sizeof(ast_Expr), "Expr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 0, NULL, 0, false, "ast.Expr"},
-    {23, sizeof(Slice_ast_Expr), "", "", &ik_rt[563], NULL, 0, 0, NULL, 1008, false, "[]ast.Expr"},
-    {22, sizeof(ast_Comma3Expr*), "", "", &ik_rt[566], NULL, 0, 0, NULL, 216, false, "*ast.Comma3Expr"},
-    {25, sizeof(ast_Comma3Expr), "Comma3Expr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_566, 1009, false, "ast.Comma3Expr"},
-    {22, sizeof(ast_NumberExpr*), "", "", &ik_rt[568], NULL, 0, 0, NULL, 217, false, "*ast.NumberExpr"},
-    {25, sizeof(ast_NumberExpr), "NumberExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_568, 1010, false, "ast.NumberExpr"},
-    {25, sizeof(ast_ConstExprBase), "ConstExprBase", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_569, 1011, false, "ast.ConstExprBase"},
-    {22, sizeof(lua_constLValueExpr*), "", "", &ik_rt[571], NULL, 0, 0, NULL, 218, false, "*lua.constLValueExpr"},
-    {25, sizeof(lua_constLValueExpr), "constLValueExpr", "github.com/yuin/gopher-lua", NULL, NULL, 0, 2, ik_rf_571, 1012, false, "lua.constLValueExpr"},
-    {22, sizeof(ast_LabelStmt*), "", "", &ik_rt[573], NULL, 0, 0, NULL, 219, false, "*ast.LabelStmt"},
-    {25, sizeof(ast_LabelStmt), "LabelStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_573, 1013, false, "ast.LabelStmt"},
-    {25, sizeof(ast_StmtBase), "StmtBase", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_574, 1014, false, "ast.StmtBase"},
-    {22, sizeof(ast_Node*), "", "", &ik_rt[562], NULL, 0, 0, NULL, 220, false, "*ast.Node"},
-    {22, sizeof(ast_AssignStmt*), "", "", &ik_rt[577], NULL, 0, 0, NULL, 221, false, "*ast.AssignStmt"},
-    {25, sizeof(ast_AssignStmt), "AssignStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_577, 1015, false, "ast.AssignStmt"},
-    {22, sizeof(ast_LocalAssignStmt*), "", "", &ik_rt[579], NULL, 0, 0, NULL, 222, false, "*ast.LocalAssignStmt"},
-    {25, sizeof(ast_LocalAssignStmt), "LocalAssignStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_579, 1016, false, "ast.LocalAssignStmt"},
-    {22, sizeof(ast_FuncCallStmt*), "", "", &ik_rt[581], NULL, 0, 0, NULL, 223, false, "*ast.FuncCallStmt"},
-    {25, sizeof(ast_FuncCallStmt), "FuncCallStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_581, 1017, false, "ast.FuncCallStmt"},
-    {22, sizeof(ast_DoBlockStmt*), "", "", &ik_rt[583], NULL, 0, 0, NULL, 224, false, "*ast.DoBlockStmt"},
-    {25, sizeof(ast_DoBlockStmt), "DoBlockStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_583, 1018, false, "ast.DoBlockStmt"},
-    {23, sizeof(Slice_ast_Stmt), "", "", &ik_rt[585], NULL, 0, 0, NULL, 1019, false, "[]ast.Stmt"},
+    {23, sizeof(Slice_ast_Expr), "", "", &ik_rt[579], NULL, 0, 0, NULL, 1023, false, "[]ast.Expr"},
+    {22, sizeof(ast_Comma3Expr*), "", "", &ik_rt[582], NULL, 0, 0, NULL, 217, false, "*ast.Comma3Expr"},
+    {25, sizeof(ast_Comma3Expr), "Comma3Expr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_582, 1024, false, "ast.Comma3Expr"},
+    {22, sizeof(ast_NumberExpr*), "", "", &ik_rt[584], NULL, 0, 0, NULL, 218, false, "*ast.NumberExpr"},
+    {25, sizeof(ast_NumberExpr), "NumberExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_584, 1025, false, "ast.NumberExpr"},
+    {25, sizeof(ast_ConstExprBase), "ConstExprBase", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_585, 1026, false, "ast.ConstExprBase"},
+    {22, sizeof(lua_constLValueExpr*), "", "", &ik_rt[587], NULL, 0, 0, NULL, 219, false, "*lua.constLValueExpr"},
+    {25, sizeof(lua_constLValueExpr), "constLValueExpr", "github.com/yuin/gopher-lua", NULL, NULL, 0, 2, ik_rf_587, 1027, false, "lua.constLValueExpr"},
+    {22, sizeof(ast_LabelStmt*), "", "", &ik_rt[589], NULL, 0, 0, NULL, 220, false, "*ast.LabelStmt"},
+    {25, sizeof(ast_LabelStmt), "LabelStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_589, 1028, false, "ast.LabelStmt"},
+    {25, sizeof(ast_StmtBase), "StmtBase", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_590, 1029, false, "ast.StmtBase"},
+    {22, sizeof(ast_Node*), "", "", &ik_rt[578], NULL, 0, 0, NULL, 221, false, "*ast.Node"},
+    {22, sizeof(ast_AssignStmt*), "", "", &ik_rt[593], NULL, 0, 0, NULL, 222, false, "*ast.AssignStmt"},
+    {25, sizeof(ast_AssignStmt), "AssignStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_593, 1030, false, "ast.AssignStmt"},
+    {22, sizeof(ast_LocalAssignStmt*), "", "", &ik_rt[595], NULL, 0, 0, NULL, 223, false, "*ast.LocalAssignStmt"},
+    {25, sizeof(ast_LocalAssignStmt), "LocalAssignStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_595, 1031, false, "ast.LocalAssignStmt"},
+    {22, sizeof(ast_FuncCallStmt*), "", "", &ik_rt[597], NULL, 0, 0, NULL, 224, false, "*ast.FuncCallStmt"},
+    {25, sizeof(ast_FuncCallStmt), "FuncCallStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_597, 1032, false, "ast.FuncCallStmt"},
+    {22, sizeof(ast_DoBlockStmt*), "", "", &ik_rt[599], NULL, 0, 0, NULL, 225, false, "*ast.DoBlockStmt"},
+    {25, sizeof(ast_DoBlockStmt), "DoBlockStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_599, 1033, false, "ast.DoBlockStmt"},
+    {23, sizeof(Slice_ast_Stmt), "", "", &ik_rt[601], NULL, 0, 0, NULL, 1034, false, "[]ast.Stmt"},
     {20, sizeof(ast_Stmt), "Stmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 0, NULL, 0, false, "ast.Stmt"},
-    {22, sizeof(ast_WhileStmt*), "", "", &ik_rt[587], NULL, 0, 0, NULL, 225, false, "*ast.WhileStmt"},
-    {25, sizeof(ast_WhileStmt), "WhileStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_587, 1020, false, "ast.WhileStmt"},
-    {22, sizeof(ast_RepeatStmt*), "", "", &ik_rt[589], NULL, 0, 0, NULL, 226, false, "*ast.RepeatStmt"},
-    {25, sizeof(ast_RepeatStmt), "RepeatStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_589, 1021, false, "ast.RepeatStmt"},
-    {22, sizeof(ast_FuncDefStmt*), "", "", &ik_rt[591], NULL, 0, 0, NULL, 227, false, "*ast.FuncDefStmt"},
-    {25, sizeof(ast_FuncDefStmt), "FuncDefStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_591, 1022, false, "ast.FuncDefStmt"},
-    {22, sizeof(ast_FuncName*), "", "", &ik_rt[593], NULL, 0, 0, NULL, 1023, false, "*ast.FuncName"},
-    {25, sizeof(ast_FuncName), "FuncName", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_593, 1024, false, "ast.FuncName"},
-    {22, sizeof(ast_FunctionExpr*), "", "", &ik_rt[595], NULL, 0, 0, NULL, 239, false, "*ast.FunctionExpr"},
-    {25, sizeof(ast_FunctionExpr), "FunctionExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_595, 1025, false, "ast.FunctionExpr"},
-    {22, sizeof(ast_ParList*), "", "", &ik_rt[597], NULL, 0, 0, NULL, 1026, false, "*ast.ParList"},
-    {25, sizeof(ast_ParList), "ParList", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_597, 1027, false, "ast.ParList"},
-    {22, sizeof(ast_ReturnStmt*), "", "", &ik_rt[599], NULL, 0, 0, NULL, 228, false, "*ast.ReturnStmt"},
-    {25, sizeof(ast_ReturnStmt), "ReturnStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_599, 1028, false, "ast.ReturnStmt"},
-    {22, sizeof(ast_IfStmt*), "", "", &ik_rt[601], NULL, 0, 0, NULL, 229, false, "*ast.IfStmt"},
-    {25, sizeof(ast_IfStmt), "IfStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_601, 1029, false, "ast.IfStmt"},
-    {22, sizeof(ast_BreakStmt*), "", "", &ik_rt[603], NULL, 0, 0, NULL, 230, false, "*ast.BreakStmt"},
-    {25, sizeof(ast_BreakStmt), "BreakStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_603, 1030, false, "ast.BreakStmt"},
-    {22, sizeof(ast_NumberForStmt*), "", "", &ik_rt[605], NULL, 0, 0, NULL, 231, false, "*ast.NumberForStmt"},
-    {25, sizeof(ast_NumberForStmt), "NumberForStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 6, ik_rf_605, 1031, false, "ast.NumberForStmt"},
-    {22, sizeof(ast_GenericForStmt*), "", "", &ik_rt[607], NULL, 0, 0, NULL, 232, false, "*ast.GenericForStmt"},
-    {25, sizeof(ast_GenericForStmt), "GenericForStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_607, 1032, false, "ast.GenericForStmt"},
-    {22, sizeof(ast_GotoStmt*), "", "", &ik_rt[609], NULL, 0, 0, NULL, 233, false, "*ast.GotoStmt"},
-    {25, sizeof(ast_GotoStmt), "GotoStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_609, 1033, false, "ast.GotoStmt"},
-    {22, sizeof(ast_IdentExpr*), "", "", &ik_rt[611], NULL, 0, 0, NULL, 234, false, "*ast.IdentExpr"},
-    {25, sizeof(ast_IdentExpr), "IdentExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_611, 1034, false, "ast.IdentExpr"},
-    {22, sizeof(ast_AttrGetExpr*), "", "", &ik_rt[613], NULL, 0, 0, NULL, 235, false, "*ast.AttrGetExpr"},
-    {25, sizeof(ast_AttrGetExpr), "AttrGetExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_613, 1035, false, "ast.AttrGetExpr"},
-    {22, sizeof(ast_StringExpr*), "", "", &ik_rt[615], NULL, 0, 0, NULL, 236, false, "*ast.StringExpr"},
-    {25, sizeof(ast_StringExpr), "StringExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_615, 1036, false, "ast.StringExpr"},
-    {22, sizeof(ast_NilExpr*), "", "", &ik_rt[617], NULL, 0, 0, NULL, 237, false, "*ast.NilExpr"},
-    {25, sizeof(ast_NilExpr), "NilExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_617, 1037, false, "ast.NilExpr"},
-    {22, sizeof(ast_LogicalOpExpr*), "", "", &ik_rt[619], NULL, 0, 0, NULL, 238, false, "*ast.LogicalOpExpr"},
-    {25, sizeof(ast_LogicalOpExpr), "LogicalOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_619, 1038, false, "ast.LogicalOpExpr"},
-    {22, sizeof(ast_FalseExpr*), "", "", &ik_rt[621], NULL, 0, 0, NULL, 240, false, "*ast.FalseExpr"},
-    {25, sizeof(ast_FalseExpr), "FalseExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_621, 1039, false, "ast.FalseExpr"},
-    {22, sizeof(ast_TrueExpr*), "", "", &ik_rt[623], NULL, 0, 0, NULL, 241, false, "*ast.TrueExpr"},
-    {25, sizeof(ast_TrueExpr), "TrueExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_623, 1040, false, "ast.TrueExpr"},
-    {22, sizeof(ast_UnaryNotOpExpr*), "", "", &ik_rt[625], NULL, 0, 0, NULL, 242, false, "*ast.UnaryNotOpExpr"},
-    {25, sizeof(ast_UnaryNotOpExpr), "UnaryNotOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_625, 1041, false, "ast.UnaryNotOpExpr"},
-    {22, sizeof(ast_RelationalOpExpr*), "", "", &ik_rt[627], NULL, 0, 0, NULL, 243, false, "*ast.RelationalOpExpr"},
-    {25, sizeof(ast_RelationalOpExpr), "RelationalOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_627, 1042, false, "ast.RelationalOpExpr"},
-    {22, sizeof(ast_TableExpr*), "", "", &ik_rt[629], NULL, 0, 0, NULL, 244, false, "*ast.TableExpr"},
-    {25, sizeof(ast_TableExpr), "TableExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_629, 1043, false, "ast.TableExpr"},
-    {23, sizeof(Slice_ast_FieldPtr), "", "", &ik_rt[631], NULL, 0, 0, NULL, 1044, false, "[]*ast.Field"},
-    {22, sizeof(ast_Field*), "", "", &ik_rt[632], NULL, 0, 0, NULL, 1045, false, "*ast.Field"},
-    {25, sizeof(ast_Field), "Field", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_632, 1046, false, "ast.Field"},
-    {22, sizeof(ast_ArithmeticOpExpr*), "", "", &ik_rt[634], NULL, 0, 0, NULL, 245, false, "*ast.ArithmeticOpExpr"},
-    {25, sizeof(ast_ArithmeticOpExpr), "ArithmeticOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_634, 1047, false, "ast.ArithmeticOpExpr"},
-    {22, sizeof(ast_StringConcatOpExpr*), "", "", &ik_rt[636], NULL, 0, 0, NULL, 246, false, "*ast.StringConcatOpExpr"},
-    {25, sizeof(ast_StringConcatOpExpr), "StringConcatOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_636, 1048, false, "ast.StringConcatOpExpr"},
-    {22, sizeof(ast_UnaryMinusOpExpr*), "", "", &ik_rt[638], NULL, 0, 0, NULL, 247, false, "*ast.UnaryMinusOpExpr"},
-    {25, sizeof(ast_UnaryMinusOpExpr), "UnaryMinusOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_638, 1049, false, "ast.UnaryMinusOpExpr"},
-    {22, sizeof(ast_UnaryLenOpExpr*), "", "", &ik_rt[640], NULL, 0, 0, NULL, 248, false, "*ast.UnaryLenOpExpr"},
-    {25, sizeof(ast_UnaryLenOpExpr), "UnaryLenOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_640, 1050, false, "ast.UnaryLenOpExpr"},
-    {22, sizeof(lua_CompileError*), "", "", &ik_rt[642], NULL, 0, 0, NULL, 249, false, "*lua.CompileError"},
-    {25, sizeof(lua_CompileError), "CompileError", "github.com/yuin/gopher-lua", NULL, NULL, 0, 3, ik_rf_642, 1051, false, "lua.CompileError"},
-    {22, sizeof(lua_funcContext*), "", "", &ik_rt[644], NULL, 0, 0, NULL, 1052, false, "*lua.funcContext"},
-    {25, sizeof(lua_funcContext), "funcContext", "github.com/yuin/gopher-lua", NULL, NULL, 0, 11, ik_rf_644, 1053, false, "lua.funcContext"},
-    {22, sizeof(lua_codeStore*), "", "", &ik_rt[646], NULL, 0, 0, NULL, 1054, false, "*lua.codeStore"},
-    {25, sizeof(lua_codeStore), "codeStore", "github.com/yuin/gopher-lua", NULL, NULL, 0, 3, ik_rf_646, 1055, false, "lua.codeStore"},
-    {22, sizeof(lua_varNamePool*), "", "", &ik_rt[648], NULL, 0, 0, NULL, 1056, false, "*lua.varNamePool"},
-    {25, sizeof(lua_varNamePool), "varNamePool", "github.com/yuin/gopher-lua", NULL, NULL, 0, 2, ik_rf_648, 1057, false, "lua.varNamePool"},
-    {22, sizeof(lua_codeBlock*), "", "", &ik_rt[650], NULL, 0, 0, NULL, 1058, false, "*lua.codeBlock"},
-    {25, sizeof(lua_codeBlock), "codeBlock", "github.com/yuin/gopher-lua", NULL, NULL, 0, 8, ik_rf_650, 1059, false, "lua.codeBlock"},
-    {21, sizeof(Map_GoString_lua_gotoLabelDescPtr), "", "", &ik_rt[652], &ik_rt[13], 0, 0, NULL, 1060, true, "map[string]*lua.gotoLabelDesc"},
-    {22, sizeof(lua_gotoLabelDesc*), "", "", &ik_rt[653], NULL, 0, 0, NULL, 1061, false, "*lua.gotoLabelDesc"},
-    {25, sizeof(lua_gotoLabelDesc), "gotoLabelDesc", "github.com/yuin/gopher-lua", NULL, NULL, 0, 5, ik_rf_653, 1062, false, "lua.gotoLabelDesc"},
-    {23, sizeof(Slice_lua_codeBlockPtr), "", "", &ik_rt[649], NULL, 0, 0, NULL, 1063, false, "[]*lua.codeBlock"},
-    {21, sizeof(Map_int_int), "", "", &ik_rt[1], &ik_rt[1], 0, 0, NULL, 1064, false, "map[int]int"},
-    {21, sizeof(Map_int_lua_gotoLabelDescPtr), "", "", &ik_rt[652], &ik_rt[1], 0, 0, NULL, 1065, false, "map[int]*lua.gotoLabelDesc"},
+    {22, sizeof(ast_WhileStmt*), "", "", &ik_rt[603], NULL, 0, 0, NULL, 226, false, "*ast.WhileStmt"},
+    {25, sizeof(ast_WhileStmt), "WhileStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_603, 1035, false, "ast.WhileStmt"},
+    {22, sizeof(ast_RepeatStmt*), "", "", &ik_rt[605], NULL, 0, 0, NULL, 227, false, "*ast.RepeatStmt"},
+    {25, sizeof(ast_RepeatStmt), "RepeatStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_605, 1036, false, "ast.RepeatStmt"},
+    {22, sizeof(ast_FuncDefStmt*), "", "", &ik_rt[607], NULL, 0, 0, NULL, 228, false, "*ast.FuncDefStmt"},
+    {25, sizeof(ast_FuncDefStmt), "FuncDefStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_607, 1037, false, "ast.FuncDefStmt"},
+    {22, sizeof(ast_FuncName*), "", "", &ik_rt[609], NULL, 0, 0, NULL, 1038, false, "*ast.FuncName"},
+    {25, sizeof(ast_FuncName), "FuncName", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_609, 1039, false, "ast.FuncName"},
+    {22, sizeof(ast_FunctionExpr*), "", "", &ik_rt[611], NULL, 0, 0, NULL, 240, false, "*ast.FunctionExpr"},
+    {25, sizeof(ast_FunctionExpr), "FunctionExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_611, 1040, false, "ast.FunctionExpr"},
+    {22, sizeof(ast_ParList*), "", "", &ik_rt[613], NULL, 0, 0, NULL, 1041, false, "*ast.ParList"},
+    {25, sizeof(ast_ParList), "ParList", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_613, 1042, false, "ast.ParList"},
+    {22, sizeof(ast_ReturnStmt*), "", "", &ik_rt[615], NULL, 0, 0, NULL, 229, false, "*ast.ReturnStmt"},
+    {25, sizeof(ast_ReturnStmt), "ReturnStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_615, 1043, false, "ast.ReturnStmt"},
+    {22, sizeof(ast_IfStmt*), "", "", &ik_rt[617], NULL, 0, 0, NULL, 230, false, "*ast.IfStmt"},
+    {25, sizeof(ast_IfStmt), "IfStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_617, 1044, false, "ast.IfStmt"},
+    {22, sizeof(ast_BreakStmt*), "", "", &ik_rt[619], NULL, 0, 0, NULL, 231, false, "*ast.BreakStmt"},
+    {25, sizeof(ast_BreakStmt), "BreakStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_619, 1045, false, "ast.BreakStmt"},
+    {22, sizeof(ast_NumberForStmt*), "", "", &ik_rt[621], NULL, 0, 0, NULL, 232, false, "*ast.NumberForStmt"},
+    {25, sizeof(ast_NumberForStmt), "NumberForStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 6, ik_rf_621, 1046, false, "ast.NumberForStmt"},
+    {22, sizeof(ast_GenericForStmt*), "", "", &ik_rt[623], NULL, 0, 0, NULL, 233, false, "*ast.GenericForStmt"},
+    {25, sizeof(ast_GenericForStmt), "GenericForStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_623, 1047, false, "ast.GenericForStmt"},
+    {22, sizeof(ast_GotoStmt*), "", "", &ik_rt[625], NULL, 0, 0, NULL, 234, false, "*ast.GotoStmt"},
+    {25, sizeof(ast_GotoStmt), "GotoStmt", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_625, 1048, false, "ast.GotoStmt"},
+    {22, sizeof(ast_IdentExpr*), "", "", &ik_rt[627], NULL, 0, 0, NULL, 235, false, "*ast.IdentExpr"},
+    {25, sizeof(ast_IdentExpr), "IdentExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_627, 1049, false, "ast.IdentExpr"},
+    {22, sizeof(ast_AttrGetExpr*), "", "", &ik_rt[629], NULL, 0, 0, NULL, 236, false, "*ast.AttrGetExpr"},
+    {25, sizeof(ast_AttrGetExpr), "AttrGetExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_629, 1050, false, "ast.AttrGetExpr"},
+    {22, sizeof(ast_StringExpr*), "", "", &ik_rt[631], NULL, 0, 0, NULL, 237, false, "*ast.StringExpr"},
+    {25, sizeof(ast_StringExpr), "StringExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_631, 1051, false, "ast.StringExpr"},
+    {22, sizeof(ast_NilExpr*), "", "", &ik_rt[633], NULL, 0, 0, NULL, 238, false, "*ast.NilExpr"},
+    {25, sizeof(ast_NilExpr), "NilExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_633, 1052, false, "ast.NilExpr"},
+    {22, sizeof(ast_LogicalOpExpr*), "", "", &ik_rt[635], NULL, 0, 0, NULL, 239, false, "*ast.LogicalOpExpr"},
+    {25, sizeof(ast_LogicalOpExpr), "LogicalOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_635, 1053, false, "ast.LogicalOpExpr"},
+    {22, sizeof(ast_FalseExpr*), "", "", &ik_rt[637], NULL, 0, 0, NULL, 241, false, "*ast.FalseExpr"},
+    {25, sizeof(ast_FalseExpr), "FalseExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_637, 1054, false, "ast.FalseExpr"},
+    {22, sizeof(ast_TrueExpr*), "", "", &ik_rt[639], NULL, 0, 0, NULL, 242, false, "*ast.TrueExpr"},
+    {25, sizeof(ast_TrueExpr), "TrueExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 1, ik_rf_639, 1055, false, "ast.TrueExpr"},
+    {22, sizeof(ast_UnaryNotOpExpr*), "", "", &ik_rt[641], NULL, 0, 0, NULL, 243, false, "*ast.UnaryNotOpExpr"},
+    {25, sizeof(ast_UnaryNotOpExpr), "UnaryNotOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_641, 1056, false, "ast.UnaryNotOpExpr"},
+    {22, sizeof(ast_RelationalOpExpr*), "", "", &ik_rt[643], NULL, 0, 0, NULL, 244, false, "*ast.RelationalOpExpr"},
+    {25, sizeof(ast_RelationalOpExpr), "RelationalOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_643, 1057, false, "ast.RelationalOpExpr"},
+    {22, sizeof(ast_TableExpr*), "", "", &ik_rt[645], NULL, 0, 0, NULL, 245, false, "*ast.TableExpr"},
+    {25, sizeof(ast_TableExpr), "TableExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_645, 1058, false, "ast.TableExpr"},
+    {23, sizeof(Slice_ast_FieldPtr), "", "", &ik_rt[647], NULL, 0, 0, NULL, 1059, false, "[]*ast.Field"},
+    {22, sizeof(ast_Field*), "", "", &ik_rt[648], NULL, 0, 0, NULL, 1060, false, "*ast.Field"},
+    {25, sizeof(ast_Field), "Field", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_648, 1061, false, "ast.Field"},
+    {22, sizeof(ast_ArithmeticOpExpr*), "", "", &ik_rt[650], NULL, 0, 0, NULL, 246, false, "*ast.ArithmeticOpExpr"},
+    {25, sizeof(ast_ArithmeticOpExpr), "ArithmeticOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 4, ik_rf_650, 1062, false, "ast.ArithmeticOpExpr"},
+    {22, sizeof(ast_StringConcatOpExpr*), "", "", &ik_rt[652], NULL, 0, 0, NULL, 247, false, "*ast.StringConcatOpExpr"},
+    {25, sizeof(ast_StringConcatOpExpr), "StringConcatOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 3, ik_rf_652, 1063, false, "ast.StringConcatOpExpr"},
+    {22, sizeof(ast_UnaryMinusOpExpr*), "", "", &ik_rt[654], NULL, 0, 0, NULL, 248, false, "*ast.UnaryMinusOpExpr"},
+    {25, sizeof(ast_UnaryMinusOpExpr), "UnaryMinusOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_654, 1064, false, "ast.UnaryMinusOpExpr"},
+    {22, sizeof(ast_UnaryLenOpExpr*), "", "", &ik_rt[656], NULL, 0, 0, NULL, 249, false, "*ast.UnaryLenOpExpr"},
+    {25, sizeof(ast_UnaryLenOpExpr), "UnaryLenOpExpr", "github.com/yuin/gopher-lua/ast", NULL, NULL, 0, 2, ik_rf_656, 1065, false, "ast.UnaryLenOpExpr"},
     {22, sizeof(lua_lFile*), "", "", &ik_rt[658], NULL, 0, 0, NULL, 250, false, "*lua.lFile"},
     {25, sizeof(lua_lFile), "lFile", "github.com/yuin/gopher-lua", NULL, NULL, 0, 6, ik_rf_658, 1066, false, "lua.lFile"},
     {22, sizeof(GoOpaque /* exec.Cmd */*), "", "", &ik_rt[660], NULL, 0, 0, NULL, 1067, false, "*exec.Cmd"},
@@ -184464,30 +184470,30 @@ const RType ik_rt[1974] = {
     {25, sizeof(pm_singleClass), "singleClass", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 1, ik_rf_708, 1107, false, "pm.singleClass"},
     {22, sizeof(pm_dotClass*), "", "", &ik_rt[710], NULL, 0, 0, NULL, 259, false, "*pm.dotClass"},
     {25, sizeof(pm_dotClass), "dotClass", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 0, NULL, 1108, false, "pm.dotClass"},
-    {22, sizeof(pm_rangeClass*), "", "", &ik_rt[712], NULL, 0, 0, NULL, 260, false, "*pm.rangeClass"},
-    {25, sizeof(pm_rangeClass), "rangeClass", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_712, 1109, false, "pm.rangeClass"},
+    {22, sizeof(pm_Error*), "", "", &ik_rt[712], NULL, 0, 0, NULL, 260, false, "*pm.Error"},
+    {25, sizeof(pm_Error), "Error", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_712, 1109, false, "pm.Error"},
+    {22, sizeof(pm_rangeClass*), "", "", &ik_rt[714], NULL, 0, 0, NULL, 261, false, "*pm.rangeClass"},
+    {25, sizeof(pm_rangeClass), "rangeClass", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_714, 1110, false, "pm.rangeClass"},
     {20, sizeof(pm_class), "class", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 0, NULL, 0, false, "pm.class"},
-    {22, sizeof(pm_setClass*), "", "", &ik_rt[715], NULL, 0, 0, NULL, 261, false, "*pm.setClass"},
-    {25, sizeof(pm_setClass), "setClass", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_715, 1110, false, "pm.setClass"},
-    {23, sizeof(Slice_pm_class), "", "", &ik_rt[713], NULL, 0, 0, NULL, 1111, false, "[]pm.class"},
-    {22, sizeof(pm_numberPattern*), "", "", &ik_rt[718], NULL, 0, 0, NULL, 262, false, "*pm.numberPattern"},
-    {25, sizeof(pm_numberPattern), "numberPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 1, ik_rf_718, 1112, false, "pm.numberPattern"},
-    {22, sizeof(pm_bracePattern*), "", "", &ik_rt[720], NULL, 0, 0, NULL, 263, false, "*pm.bracePattern"},
-    {25, sizeof(pm_bracePattern), "bracePattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_720, 1113, false, "pm.bracePattern"},
-    {22, sizeof(pm_singlePattern*), "", "", &ik_rt[722], NULL, 0, 0, NULL, 264, false, "*pm.singlePattern"},
-    {25, sizeof(pm_singlePattern), "singlePattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 1, ik_rf_722, 1114, false, "pm.singlePattern"},
-    {22, sizeof(pm_posCapPattern*), "", "", &ik_rt[724], NULL, 0, 0, NULL, 265, false, "*pm.posCapPattern"},
-    {25, sizeof(pm_posCapPattern), "posCapPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 0, NULL, 1115, false, "pm.posCapPattern"},
-    {22, sizeof(pm_seqPattern*), "", "", &ik_rt[726], NULL, 0, 0, NULL, 266, false, "*pm.seqPattern"},
-    {25, sizeof(pm_seqPattern), "seqPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 3, ik_rf_726, 1116, false, "pm.seqPattern"},
-    {23, sizeof(Slice_pm_pattern), "", "", &ik_rt[728], NULL, 0, 0, NULL, 1117, false, "[]pm.pattern"},
+    {22, sizeof(pm_setClass*), "", "", &ik_rt[717], NULL, 0, 0, NULL, 262, false, "*pm.setClass"},
+    {25, sizeof(pm_setClass), "setClass", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_717, 1111, false, "pm.setClass"},
+    {23, sizeof(Slice_pm_class), "", "", &ik_rt[715], NULL, 0, 0, NULL, 1112, false, "[]pm.class"},
+    {22, sizeof(pm_numberPattern*), "", "", &ik_rt[720], NULL, 0, 0, NULL, 263, false, "*pm.numberPattern"},
+    {25, sizeof(pm_numberPattern), "numberPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 1, ik_rf_720, 1113, false, "pm.numberPattern"},
+    {22, sizeof(pm_bracePattern*), "", "", &ik_rt[722], NULL, 0, 0, NULL, 264, false, "*pm.bracePattern"},
+    {25, sizeof(pm_bracePattern), "bracePattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_722, 1114, false, "pm.bracePattern"},
+    {22, sizeof(pm_singlePattern*), "", "", &ik_rt[724], NULL, 0, 0, NULL, 265, false, "*pm.singlePattern"},
+    {25, sizeof(pm_singlePattern), "singlePattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 1, ik_rf_724, 1115, false, "pm.singlePattern"},
+    {22, sizeof(pm_posCapPattern*), "", "", &ik_rt[726], NULL, 0, 0, NULL, 266, false, "*pm.posCapPattern"},
+    {25, sizeof(pm_posCapPattern), "posCapPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 0, NULL, 1116, false, "pm.posCapPattern"},
+    {22, sizeof(pm_seqPattern*), "", "", &ik_rt[728], NULL, 0, 0, NULL, 267, false, "*pm.seqPattern"},
+    {25, sizeof(pm_seqPattern), "seqPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 3, ik_rf_728, 1117, false, "pm.seqPattern"},
+    {23, sizeof(Slice_pm_pattern), "", "", &ik_rt[730], NULL, 0, 0, NULL, 1118, false, "[]pm.pattern"},
     {20, sizeof(pm_pattern), "pattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 0, NULL, 0, false, "pm.pattern"},
-    {22, sizeof(pm_capPattern*), "", "", &ik_rt[730], NULL, 0, 0, NULL, 267, false, "*pm.capPattern"},
-    {25, sizeof(pm_capPattern), "capPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 1, ik_rf_730, 1118, false, "pm.capPattern"},
-    {22, sizeof(pm_repeatPattern*), "", "", &ik_rt[732], NULL, 0, 0, NULL, 268, false, "*pm.repeatPattern"},
-    {25, sizeof(pm_repeatPattern), "repeatPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_732, 1119, false, "pm.repeatPattern"},
-    {22, sizeof(pm_Error*), "", "", &ik_rt[734], NULL, 0, 0, NULL, 269, false, "*pm.Error"},
-    {25, sizeof(pm_Error), "Error", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_734, 1120, false, "pm.Error"},
+    {22, sizeof(pm_capPattern*), "", "", &ik_rt[732], NULL, 0, 0, NULL, 268, false, "*pm.capPattern"},
+    {25, sizeof(pm_capPattern), "capPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 1, ik_rf_732, 1119, false, "pm.capPattern"},
+    {22, sizeof(pm_repeatPattern*), "", "", &ik_rt[734], NULL, 0, 0, NULL, 269, false, "*pm.repeatPattern"},
+    {25, sizeof(pm_repeatPattern), "repeatPattern", "github.com/yuin/gopher-lua/pm", NULL, NULL, 0, 2, ik_rf_734, 1120, false, "pm.repeatPattern"},
     {22, sizeof(lua_fixedCallFrameStack*), "", "", &ik_rt[736], NULL, 0, 0, NULL, 270, false, "*lua.fixedCallFrameStack"},
     {25, sizeof(lua_fixedCallFrameStack), "fixedCallFrameStack", "github.com/yuin/gopher-lua", NULL, NULL, 0, 2, ik_rf_736, 1121, false, "lua.fixedCallFrameStack"},
     {23, sizeof(Slice_lua_callFrame), "", "", &ik_rt[548], NULL, 0, 0, NULL, 1122, false, "[]lua.callFrame"},
@@ -184937,8 +184943,8 @@ const RType ik_rt[1974] = {
     {25, sizeof(GoOpaque /* xml.Name */), "Name", "encoding/xml", NULL, NULL, 0, 0, NULL, 1350, false, "xml.Name"},
     {23, sizeof(Slice_GoOpaque_xml_AttrPtr), "", "", &ik_rt[1183], NULL, 0, 0, NULL, 1351, false, "[]xml.Attr"},
     {25, sizeof(GoOpaque /* xml.Attr */), "Attr", "encoding/xml", NULL, NULL, 0, 0, NULL, 1352, false, "xml.Attr"},
-    {22, sizeof(svc_L6800f0*), "", "", &ik_rt[1185], NULL, 0, 0, NULL, 470, false, "*main.svc"},
-    {25, sizeof(svc_L6800f0), "svc", "main", NULL, NULL, 0, 2, ik_rf_1185, 1353, false, "main.svc"},
+    {22, sizeof(svc_Lc6dc42*), "", "", &ik_rt[1185], NULL, 0, 0, NULL, 470, false, "*main.svc"},
+    {25, sizeof(svc_Lc6dc42), "svc", "main", NULL, NULL, 0, 2, ik_rf_1185, 1353, false, "main.svc"},
     {22, sizeof(Anon_78e9d625*), "", "", &ik_rt[1187], NULL, 0, 0, NULL, 471, false, "*struct{ID string \"json:\\\"id\\\"\"; Token string \"json:\\\"token\\\"\"; IP string \"json:\\\"ip\\\"\"}"},
     {25, sizeof(Anon_78e9d625), "", "", NULL, NULL, 0, 3, ik_rf_1187, 1354, false, "struct{ID string \"json:\\\"id\\\"\"; Token string \"json:\\\"token\\\"\"; IP string \"json:\\\"ip\\\"\"}"},
     {22, sizeof(Anon_be668d3d*), "", "", &ik_rt[1189], NULL, 0, 0, NULL, 472, false, "*struct{Open string \"json:\\\"open\\\"\"}"},
@@ -185300,8 +185306,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(SelectInfoProperties*), "", "", &ik_rt[1397], NULL, 0, 0, NULL, 499, false, "*main.SelectInfoProperties"},
     {22, sizeof(Anon_c0ebc6d1*), "", "", &ik_rt[1362], NULL, 0, 0, NULL, 500, false, "*struct{main.TextProperties; Wait main.AnimationTextProperties \"ini:\\\"wait\\\"\"; Storyboard string \"ini:\\\"storyboard\\\" lookup:\\\"def,,data/\\\"\"}"},
     {23, sizeof(Slice_GoString), "StringSlice", "sort", &ik_rt[13], NULL, 0, 0, NULL, 501, false, "sort.StringSlice"},
-    {23, sizeof(Slice_slotRef_L1be2fe), "", "", &ik_rt[1548], NULL, 0, 0, NULL, 502, false, "[]main.slotRef"},
-    {25, sizeof(slotRef_L1be2fe), "slotRef", "main", NULL, NULL, 0, 3, ik_rf_1548, 1669, false, "main.slotRef"},
+    {23, sizeof(Slice_slotRef_L64fd25), "", "", &ik_rt[1548], NULL, 0, 0, NULL, 502, false, "[]main.slotRef"},
+    {25, sizeof(slotRef_L64fd25), "slotRef", "main", NULL, NULL, 0, 3, ik_rf_1548, 1669, false, "main.slotRef"},
     {22, sizeof(PlayerVictoryProperties*), "", "", &ik_rt[1473], NULL, 0, 0, NULL, 1670, false, "*main.PlayerVictoryProperties"},
     {22, sizeof(GoOpaque /* net.TCPListener */*), "", "", &ik_rt[1551], NULL, 0, 0, NULL, 503, false, "*net.TCPListener"},
     {25, sizeof(GoOpaque /* net.TCPListener */), "TCPListener", "net", NULL, NULL, 0, 0, NULL, 1671, false, "net.TCPListener"},
@@ -185620,8 +185626,8 @@ const RType ik_rt[1974] = {
     {22, sizeof(Slice_AnimFrame*), "", "", &ik_rt[797], NULL, 0, 0, NULL, 566, false, "*[]main.AnimFrame"},
     {22, sizeof(RemapPreset*), "", "", &ik_rt[803], NULL, 0, 0, NULL, 567, false, "*main.RemapPreset"},
     {22, sizeof(RemapTable*), "", "", &ik_rt[804], NULL, 0, 0, NULL, 568, false, "*main.RemapTable"},
-    {23, sizeof(Slice_entry_L4be5ac), "", "", &ik_rt[1868], NULL, 0, 0, NULL, 574, false, "[]main.entry"},
-    {25, sizeof(entry_L4be5ac), "entry", "main", NULL, NULL, 0, 4, ik_rf_1868, 1944, false, "main.entry"},
+    {23, sizeof(Slice_entry_L5cd011), "", "", &ik_rt[1868], NULL, 0, 0, NULL, 574, false, "[]main.entry"},
+    {25, sizeof(entry_L5cd011), "entry", "main", NULL, NULL, 0, 4, ik_rf_1868, 1944, false, "main.entry"},
     {22, sizeof(SDLSpeaker*), "", "", &ik_rt[1870], NULL, 0, 0, NULL, 575, false, "*main.SDLSpeaker"},
     {25, sizeof(SDLSpeaker), "SDLSpeaker", "main", NULL, NULL, 0, 7, ik_rf_1870, 1945, false, "main.SDLSpeaker"},
     {10, sizeof(sdl_AudioDeviceID), "AudioDeviceID", "github.com/veandco/go-sdl2/sdl", NULL, NULL, 0, 0, NULL, 1946, false, "sdl.AudioDeviceID"},
@@ -185729,11 +185735,11 @@ const RType ik_rt[1974] = {
     {25, sizeof(FontRenderer_VK), "FontRenderer_VK", "main", NULL, NULL, 0, 5, ik_rf_1973, 2034, false, "main.FontRenderer_VK"},
 };
 const int ik_rt_count = 1974;
-const RType *const ik_rt_by_tid[2035] = {NULL, &ik_rt[0], &ik_rt[1], &ik_rt[2], &ik_rt[3], &ik_rt[4], &ik_rt[5], &ik_rt[6], &ik_rt[7], &ik_rt[8], &ik_rt[9], &ik_rt[10], &ik_rt[275], &ik_rt[11], &ik_rt[12], NULL, NULL, &ik_rt[13], &ik_rt[284], NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &ik_rt[14], &ik_rt[18], NULL, &ik_rt[26], &ik_rt[27], &ik_rt[31], &ik_rt[33], &ik_rt[34], &ik_rt[71], NULL, &ik_rt[72], NULL, NULL, &ik_rt[16], NULL, NULL, &ik_rt[73], &ik_rt[74], &ik_rt[75], &ik_rt[78], &ik_rt[80], &ik_rt[81], &ik_rt[82], &ik_rt[85], &ik_rt[89], &ik_rt[92], &ik_rt[126], &ik_rt[190], NULL, &ik_rt[196], &ik_rt[232], &ik_rt[233], &ik_rt[234], NULL, &ik_rt[238], &ik_rt[239], &ik_rt[242], &ik_rt[243], &ik_rt[246], &ik_rt[248], &ik_rt[250], &ik_rt[252], &ik_rt[256], &ik_rt[258], &ik_rt[260], &ik_rt[263], &ik_rt[285], &ik_rt[291], NULL, &ik_rt[292], &ik_rt[314], &ik_rt[327], &ik_rt[336], &ik_rt[339], &ik_rt[340], &ik_rt[342], &ik_rt[273], &ik_rt[343], &ik_rt[344], &ik_rt[349], &ik_rt[351], &ik_rt[352], &ik_rt[353], &ik_rt[354], &ik_rt[356], &ik_rt[358], &ik_rt[359], &ik_rt[360], &ik_rt[361], &ik_rt[105], &ik_rt[204], &ik_rt[96], NULL, &ik_rt[364], NULL, NULL, &ik_rt[365], &ik_rt[369], &ik_rt[373], &ik_rt[375], &ik_rt[376], &ik_rt[382], &ik_rt[383], &ik_rt[384], &ik_rt[386], &ik_rt[387], &ik_rt[391], &ik_rt[395], &ik_rt[397], &ik_rt[399], &ik_rt[401], &ik_rt[488], &ik_rt[490], &ik_rt[491], &ik_rt[492], &ik_rt[135], &ik_rt[493], &ik_rt[494], &ik_rt[495], &ik_rt[496], &ik_rt[498], &ik_rt[502], NULL, &ik_rt[503], &ik_rt[504], &ik_rt[505], &ik_rt[512], &ik_rt[536], &ik_rt[538], &ik_rt[551], &ik_rt[554], &ik_rt[556], &ik_rt[557], &ik_rt[558], &ik_rt[559], &ik_rt[565], &ik_rt[567], &ik_rt[570], &ik_rt[572], &ik_rt[575], &ik_rt[576], &ik_rt[578], &ik_rt[580], &ik_rt[582], &ik_rt[586], &ik_rt[588], &ik_rt[590], &ik_rt[598], &ik_rt[600], &ik_rt[602], &ik_rt[604], &ik_rt[606], &ik_rt[608], &ik_rt[610], &ik_rt[612], &ik_rt[614], &ik_rt[616], &ik_rt[618], &ik_rt[594], &ik_rt[620], &ik_rt[622], &ik_rt[624], &ik_rt[626], &ik_rt[628], &ik_rt[633], &ik_rt[635], &ik_rt[637], &ik_rt[639], &ik_rt[641], &ik_rt[657], &ik_rt[690], &ik_rt[679], &ik_rt[692], &ik_rt[693], &ik_rt[696], &ik_rt[701], &ik_rt[705], &ik_rt[707], &ik_rt[709], &ik_rt[711], &ik_rt[714], &ik_rt[717], &ik_rt[719], &ik_rt[721], &ik_rt[723], &ik_rt[725], &ik_rt[729], &ik_rt[731], &ik_rt[733], &ik_rt[735], &ik_rt[738], &ik_rt[741], &ik_rt[745], &ik_rt[747], &ik_rt[752], &ik_rt[754], &ik_rt[756], &ik_rt[471], &ik_rt[757], &ik_rt[759], &ik_rt[764], &ik_rt[25], &ik_rt[765], &ik_rt[813], &ik_rt[816], &ik_rt[915], &ik_rt[913], &ik_rt[916], &ik_rt[919], &ik_rt[921], &ik_rt[923], &ik_rt[819], &ik_rt[924], &ik_rt[903], &ik_rt[888], &ik_rt[891], &ik_rt[927], &ik_rt[928], &ik_rt[929], &ik_rt[930], &ik_rt[931], &ik_rt[857], &ik_rt[936], &ik_rt[937], &ik_rt[960], &ik_rt[962], &ik_rt[963], &ik_rt[964], &ik_rt[965], &ik_rt[966], &ik_rt[210], &ik_rt[968], &ik_rt[978], &ik_rt[979], &ik_rt[980], &ik_rt[981], &ik_rt[982], &ik_rt[983], &ik_rt[984], &ik_rt[985], &ik_rt[986], &ik_rt[987], &ik_rt[988], &ik_rt[989], &ik_rt[990], &ik_rt[991], &ik_rt[992], &ik_rt[993], &ik_rt[994], &ik_rt[995], &ik_rt[996], &ik_rt[997], &ik_rt[998], &ik_rt[999], &ik_rt[1000], &ik_rt[1001], &ik_rt[1002], &ik_rt[1003], &ik_rt[1004], &ik_rt[1005], &ik_rt[1006], &ik_rt[1007], &ik_rt[1008], &ik_rt[1009], &ik_rt[1010], &ik_rt[1011], &ik_rt[1012], &ik_rt[1013], &ik_rt[1014], &ik_rt[1015], &ik_rt[1016], &ik_rt[1017], &ik_rt[1018], &ik_rt[1019], &ik_rt[1020], &ik_rt[1021], &ik_rt[1022], &ik_rt[1023], &ik_rt[1024], &ik_rt[1025], &ik_rt[1026], &ik_rt[1027], &ik_rt[1028], &ik_rt[1029], &ik_rt[1030], &ik_rt[1031], &ik_rt[1032], &ik_rt[1033], &ik_rt[1034], &ik_rt[1035], &ik_rt[1036], &ik_rt[1037], &ik_rt[1038], &ik_rt[1039], &ik_rt[1040], &ik_rt[1041], &ik_rt[1042], &ik_rt[1043], &ik_rt[1044], &ik_rt[1045], &ik_rt[1046], &ik_rt[1047], &ik_rt[1048], &ik_rt[1049], &ik_rt[1050], &ik_rt[1051], &ik_rt[1052], &ik_rt[1053], &ik_rt[1054], &ik_rt[1055], &ik_rt[1056], &ik_rt[1057], &ik_rt[1058], &ik_rt[1059], &ik_rt[1060], &ik_rt[1061], &ik_rt[1062], &ik_rt[1063], &ik_rt[1064], &ik_rt[1065], &ik_rt[1066], &ik_rt[1067], &ik_rt[1068], &ik_rt[1069], &ik_rt[1070], &ik_rt[1071], &ik_rt[1072], &ik_rt[1073], &ik_rt[1074], &ik_rt[1075], &ik_rt[1076], &ik_rt[1077], &ik_rt[1078], &ik_rt[1079], &ik_rt[1080], &ik_rt[1081], &ik_rt[1082], &ik_rt[1083], &ik_rt[1084], &ik_rt[1085], &ik_rt[1086], &ik_rt[1087], &ik_rt[1088], &ik_rt[1089], &ik_rt[1090], &ik_rt[1091], &ik_rt[1092], &ik_rt[1093], &ik_rt[1094], &ik_rt[1095], &ik_rt[1096], &ik_rt[1097], &ik_rt[1098], &ik_rt[1099], &ik_rt[1100], &ik_rt[1101], &ik_rt[1102], &ik_rt[1103], &ik_rt[1104], &ik_rt[1105], &ik_rt[1106], &ik_rt[1107], &ik_rt[1108], &ik_rt[1109], &ik_rt[1110], &ik_rt[1111], &ik_rt[1112], &ik_rt[1113], &ik_rt[1114], &ik_rt[1115], &ik_rt[1116], &ik_rt[1117], &ik_rt[1118], &ik_rt[1119], &ik_rt[1120], &ik_rt[1121], &ik_rt[1122], &ik_rt[1123], &ik_rt[1124], &ik_rt[1125], &ik_rt[1126], &ik_rt[1127], &ik_rt[1128], &ik_rt[1171], &ik_rt[1173], &ik_rt[1144], &ik_rt[1175], &ik_rt[1178], &ik_rt[1180], &ik_rt[1184], &ik_rt[1186], &ik_rt[1188], &ik_rt[1190], &ik_rt[1192], &ik_rt[1193], &ik_rt[1195], &ik_rt[1197], &ik_rt[1219], &ik_rt[1226], &ik_rt[171], &ik_rt[1228], &ik_rt[1230], &ik_rt[1199], &ik_rt[1233], &ik_rt[1236], &ik_rt[1237], &ik_rt[1240], &ik_rt[1242], &ik_rt[772], &ik_rt[1243], &ik_rt[1245], &ik_rt[1247], &ik_rt[1258], &ik_rt[807], &ik_rt[1260], &ik_rt[1246], &ik_rt[1262], &ik_rt[1271], &ik_rt[1544], &ik_rt[1545], &ik_rt[1546], &ik_rt[1547], &ik_rt[1550], &ik_rt[1559], &ik_rt[1561], &ik_rt[1564], &ik_rt[1566], &ik_rt[1568], &ik_rt[1569], &ik_rt[805], &ik_rt[1206], &ik_rt[1570], &ik_rt[810], &ik_rt[1571], &ik_rt[1798], &ik_rt[1821], &ik_rt[1826], &ik_rt[1827], &ik_rt[1370], &ik_rt[1264], &ik_rt[770], &ik_rt[1274], &ik_rt[1328], &ik_rt[195], &ik_rt[1212], &ik_rt[1828], &ik_rt[1829], &ik_rt[771], &ik_rt[1830], &ik_rt[1371], &ik_rt[1373], &ik_rt[1374], &ik_rt[1797], &ik_rt[837], &ik_rt[838], &ik_rt[1774], &ik_rt[1782], &ik_rt[1831], &ik_rt[1839], &ik_rt[1778], &ik_rt[1129], &ik_rt[1272], &ik_rt[1719], &ik_rt[1261], &ik_rt[1840], &ik_rt[1590], &ik_rt[1259], &ik_rt[1267], &ik_rt[1841], &ik_rt[1387], &ik_rt[1843], &ik_rt[1385], &ik_rt[1850], &ik_rt[1854], &ik_rt[1855], &ik_rt[806], &ik_rt[1593], &ik_rt[1588], &ik_rt[1613], &ik_rt[861], &ik_rt[457], &ik_rt[60], &ik_rt[1861], &ik_rt[1862], &ik_rt[1863], &ik_rt[1864], &ik_rt[1865], &ik_rt[1866], &ik_rt[843], &ik_rt[1611], &ik_rt[797], &ik_rt[803], &ik_rt[804], &ik_rt[1867], &ik_rt[1869], &ik_rt[1872], &ik_rt[1875], &ik_rt[187], &ik_rt[1602], &ik_rt[1879], &ik_rt[1880], &ik_rt[1882], &ik_rt[1956], &ik_rt[1959], &ik_rt[1962], &ik_rt[1963], &ik_rt[1967], &ik_rt[1969], &ik_rt[1970], &ik_rt[1971], &ik_rt[1972], &ik_rt[15], &ik_rt[17], &ik_rt[19], &ik_rt[21], &ik_rt[22], &ik_rt[23], &ik_rt[24], &ik_rt[28], &ik_rt[29], &ik_rt[30], &ik_rt[32], &ik_rt[35], &ik_rt[36], &ik_rt[37], &ik_rt[38], &ik_rt[39], &ik_rt[40], &ik_rt[41], &ik_rt[42], &ik_rt[43], &ik_rt[44], &ik_rt[45], &ik_rt[46], &ik_rt[47], &ik_rt[48], &ik_rt[49], &ik_rt[50], &ik_rt[51], &ik_rt[52], &ik_rt[53], &ik_rt[54], &ik_rt[56], &ik_rt[57], &ik_rt[58], &ik_rt[59], &ik_rt[61], &ik_rt[62], &ik_rt[63], &ik_rt[64], &ik_rt[65], &ik_rt[66], &ik_rt[67], &ik_rt[68], &ik_rt[69], &ik_rt[70], &ik_rt[76], &ik_rt[79], &ik_rt[83], &ik_rt[86], &ik_rt[87], &ik_rt[88], &ik_rt[90], &ik_rt[93], &ik_rt[94], &ik_rt[95], &ik_rt[97], &ik_rt[98], &ik_rt[99], &ik_rt[100], &ik_rt[101], &ik_rt[102], &ik_rt[103], &ik_rt[106], &ik_rt[107], &ik_rt[108], &ik_rt[109], &ik_rt[110], &ik_rt[111], &ik_rt[112], &ik_rt[113], &ik_rt[114], &ik_rt[115], &ik_rt[116], &ik_rt[117], &ik_rt[118], &ik_rt[119], &ik_rt[120], &ik_rt[121], &ik_rt[122], &ik_rt[124], &ik_rt[125], &ik_rt[127], &ik_rt[128], &ik_rt[129], &ik_rt[130], &ik_rt[131], &ik_rt[132], &ik_rt[133], &ik_rt[134], &ik_rt[136], &ik_rt[137], &ik_rt[138], &ik_rt[139], &ik_rt[140], &ik_rt[141], &ik_rt[142], &ik_rt[143], &ik_rt[144], &ik_rt[145], &ik_rt[146], &ik_rt[147], &ik_rt[148], &ik_rt[149], &ik_rt[150], &ik_rt[151], &ik_rt[152], &ik_rt[153], &ik_rt[154], &ik_rt[155], &ik_rt[156], &ik_rt[157], &ik_rt[158], &ik_rt[159], &ik_rt[160], &ik_rt[161], &ik_rt[162], &ik_rt[163], &ik_rt[164], &ik_rt[165], &ik_rt[166], &ik_rt[167], &ik_rt[168], &ik_rt[169], &ik_rt[170], &ik_rt[172], &ik_rt[173], &ik_rt[174], &ik_rt[175], &ik_rt[176], &ik_rt[177], &ik_rt[178], &ik_rt[179], &ik_rt[180], &ik_rt[181], &ik_rt[182], &ik_rt[183], &ik_rt[184], &ik_rt[185], &ik_rt[186], &ik_rt[188], &ik_rt[189], &ik_rt[191], &ik_rt[193], &ik_rt[194], &ik_rt[197], &ik_rt[198], &ik_rt[199], &ik_rt[200], &ik_rt[202], &ik_rt[203], &ik_rt[205], &ik_rt[206], &ik_rt[207], &ik_rt[208], &ik_rt[209], &ik_rt[211], &ik_rt[212], &ik_rt[213], &ik_rt[214], &ik_rt[216], &ik_rt[217], &ik_rt[218], &ik_rt[219], &ik_rt[220], &ik_rt[221], &ik_rt[222], &ik_rt[223], &ik_rt[224], &ik_rt[225], &ik_rt[226], &ik_rt[227], &ik_rt[228], &ik_rt[229], &ik_rt[230], &ik_rt[231], &ik_rt[235], &ik_rt[236], &ik_rt[237], &ik_rt[240], &ik_rt[241], &ik_rt[244], &ik_rt[245], &ik_rt[247], &ik_rt[249], &ik_rt[251], &ik_rt[253], &ik_rt[254], &ik_rt[255], &ik_rt[257], &ik_rt[259], &ik_rt[261], &ik_rt[262], &ik_rt[264], &ik_rt[265], &ik_rt[266], &ik_rt[267], &ik_rt[268], &ik_rt[269], &ik_rt[270], &ik_rt[271], &ik_rt[272], &ik_rt[274], NULL, &ik_rt[276], &ik_rt[277], &ik_rt[278], &ik_rt[279], &ik_rt[280], &ik_rt[281], &ik_rt[282], &ik_rt[283], NULL, &ik_rt[286], &ik_rt[287], &ik_rt[288], &ik_rt[289], &ik_rt[293], &ik_rt[294], &ik_rt[295], &ik_rt[297], &ik_rt[299], &ik_rt[300], &ik_rt[301], &ik_rt[302], &ik_rt[303], &ik_rt[304], &ik_rt[305], &ik_rt[306], &ik_rt[307], &ik_rt[308], &ik_rt[309], &ik_rt[310], &ik_rt[311], &ik_rt[312], &ik_rt[313], &ik_rt[315], &ik_rt[318], &ik_rt[319], &ik_rt[320], &ik_rt[321], &ik_rt[322], &ik_rt[323], &ik_rt[324], &ik_rt[325], &ik_rt[326], &ik_rt[331], &ik_rt[332], &ik_rt[333], &ik_rt[334], &ik_rt[335], &ik_rt[337], &ik_rt[338], &ik_rt[341], &ik_rt[345], &ik_rt[346], &ik_rt[347], &ik_rt[348], &ik_rt[350], &ik_rt[355], &ik_rt[357], &ik_rt[362], &ik_rt[366], &ik_rt[367], &ik_rt[368], &ik_rt[370], &ik_rt[371], &ik_rt[372], &ik_rt[374], &ik_rt[377], &ik_rt[378], &ik_rt[379], &ik_rt[380], &ik_rt[381], &ik_rt[385], &ik_rt[388], &ik_rt[389], &ik_rt[390], &ik_rt[392], &ik_rt[393], &ik_rt[394], &ik_rt[396], &ik_rt[398], &ik_rt[400], &ik_rt[402], &ik_rt[403], &ik_rt[404], &ik_rt[405], &ik_rt[406], &ik_rt[407], &ik_rt[408], &ik_rt[409], &ik_rt[410], &ik_rt[411], &ik_rt[412], &ik_rt[413], &ik_rt[414], &ik_rt[415], &ik_rt[416], &ik_rt[417], &ik_rt[418], &ik_rt[419], &ik_rt[420], &ik_rt[421], &ik_rt[422], &ik_rt[423], &ik_rt[424], &ik_rt[425], &ik_rt[426], &ik_rt[427], &ik_rt[428], &ik_rt[429], &ik_rt[430], &ik_rt[431], &ik_rt[432], &ik_rt[433], &ik_rt[434], &ik_rt[435], &ik_rt[436], &ik_rt[437], &ik_rt[438], &ik_rt[439], &ik_rt[440], &ik_rt[441], &ik_rt[442], &ik_rt[443], &ik_rt[444], &ik_rt[445], &ik_rt[446], &ik_rt[447], &ik_rt[448], &ik_rt[449], &ik_rt[450], &ik_rt[451], &ik_rt[452], &ik_rt[453], &ik_rt[454], &ik_rt[455], &ik_rt[456], &ik_rt[458], &ik_rt[459], &ik_rt[460], &ik_rt[461], &ik_rt[462], &ik_rt[463], &ik_rt[464], &ik_rt[465], &ik_rt[466], &ik_rt[467], &ik_rt[468], &ik_rt[469], &ik_rt[470], &ik_rt[472], &ik_rt[473], &ik_rt[474], &ik_rt[475], &ik_rt[476], &ik_rt[477], &ik_rt[478], &ik_rt[479], &ik_rt[480], &ik_rt[481], &ik_rt[482], &ik_rt[483], &ik_rt[484], &ik_rt[485], &ik_rt[486], &ik_rt[487], &ik_rt[489], &ik_rt[497], &ik_rt[499], &ik_rt[500], &ik_rt[501], &ik_rt[506], &ik_rt[508], &ik_rt[509], &ik_rt[510], &ik_rt[511], &ik_rt[513], &ik_rt[514], &ik_rt[515], &ik_rt[516], &ik_rt[517], &ik_rt[518], &ik_rt[519], &ik_rt[520], &ik_rt[521], &ik_rt[522], &ik_rt[523], &ik_rt[524], &ik_rt[525], &ik_rt[526], &ik_rt[527], &ik_rt[528], &ik_rt[529], &ik_rt[530], &ik_rt[531], &ik_rt[532], &ik_rt[533], &ik_rt[534], &ik_rt[537], &ik_rt[539], &ik_rt[540], &ik_rt[541], &ik_rt[542], &ik_rt[543], &ik_rt[544], &ik_rt[545], &ik_rt[547], &ik_rt[548], &ik_rt[549], &ik_rt[552], &ik_rt[553], &ik_rt[555], &ik_rt[560], &ik_rt[561], &ik_rt[562], &ik_rt[564], &ik_rt[566], &ik_rt[568], &ik_rt[569], &ik_rt[571], &ik_rt[573], &ik_rt[574], &ik_rt[577], &ik_rt[579], &ik_rt[581], &ik_rt[583], &ik_rt[584], &ik_rt[587], &ik_rt[589], &ik_rt[591], &ik_rt[592], &ik_rt[593], &ik_rt[595], &ik_rt[596], &ik_rt[597], &ik_rt[599], &ik_rt[601], &ik_rt[603], &ik_rt[605], &ik_rt[607], &ik_rt[609], &ik_rt[611], &ik_rt[613], &ik_rt[615], &ik_rt[617], &ik_rt[619], &ik_rt[621], &ik_rt[623], &ik_rt[625], &ik_rt[627], &ik_rt[629], &ik_rt[630], &ik_rt[631], &ik_rt[632], &ik_rt[634], &ik_rt[636], &ik_rt[638], &ik_rt[640], &ik_rt[642], &ik_rt[643], &ik_rt[644], &ik_rt[645], &ik_rt[646], &ik_rt[647], &ik_rt[648], &ik_rt[649], &ik_rt[650], &ik_rt[651], &ik_rt[652], &ik_rt[653], &ik_rt[654], &ik_rt[655], &ik_rt[656], &ik_rt[658], &ik_rt[659], &ik_rt[660], &ik_rt[661], &ik_rt[662], &ik_rt[663], &ik_rt[664], &ik_rt[665], &ik_rt[666], &ik_rt[667], &ik_rt[668], &ik_rt[669], &ik_rt[670], &ik_rt[671], &ik_rt[672], &ik_rt[673], &ik_rt[674], &ik_rt[675], &ik_rt[676], &ik_rt[677], &ik_rt[678], &ik_rt[680], &ik_rt[681], &ik_rt[682], &ik_rt[683], &ik_rt[684], &ik_rt[685], &ik_rt[686], &ik_rt[687], &ik_rt[688], &ik_rt[691], &ik_rt[694], &ik_rt[695], &ik_rt[697], &ik_rt[698], &ik_rt[699], &ik_rt[700], &ik_rt[702], &ik_rt[703], &ik_rt[704], &ik_rt[706], &ik_rt[708], &ik_rt[710], &ik_rt[712], &ik_rt[715], &ik_rt[716], &ik_rt[718], &ik_rt[720], &ik_rt[722], &ik_rt[724], &ik_rt[726], &ik_rt[727], &ik_rt[730], &ik_rt[732], &ik_rt[734], &ik_rt[736], &ik_rt[737], &ik_rt[739], &ik_rt[740], &ik_rt[742], &ik_rt[743], &ik_rt[744], &ik_rt[746], &ik_rt[748], &ik_rt[749], &ik_rt[750], &ik_rt[751], &ik_rt[753], &ik_rt[755], &ik_rt[758], &ik_rt[760], &ik_rt[761], &ik_rt[762], &ik_rt[763], &ik_rt[766], &ik_rt[767], &ik_rt[768], &ik_rt[769], &ik_rt[773], &ik_rt[774], &ik_rt[775], &ik_rt[776], &ik_rt[777], &ik_rt[778], &ik_rt[780], &ik_rt[781], &ik_rt[782], &ik_rt[783], &ik_rt[784], &ik_rt[785], &ik_rt[786], &ik_rt[787], &ik_rt[788], &ik_rt[789], &ik_rt[790], &ik_rt[791], &ik_rt[792], &ik_rt[793], &ik_rt[794], &ik_rt[795], &ik_rt[796], &ik_rt[798], &ik_rt[799], &ik_rt[800], &ik_rt[801], &ik_rt[802], &ik_rt[808], &ik_rt[809], &ik_rt[811], &ik_rt[812], &ik_rt[814], &ik_rt[815], &ik_rt[817], &ik_rt[818], &ik_rt[820], &ik_rt[822], &ik_rt[823], &ik_rt[824], &ik_rt[825], &ik_rt[826], &ik_rt[827], &ik_rt[828], &ik_rt[829], &ik_rt[830], &ik_rt[831], &ik_rt[832], &ik_rt[833], &ik_rt[834], &ik_rt[835], &ik_rt[836], &ik_rt[839], &ik_rt[840], &ik_rt[841], &ik_rt[842], &ik_rt[844], &ik_rt[845], &ik_rt[846], &ik_rt[847], &ik_rt[848], &ik_rt[849], &ik_rt[850], &ik_rt[851], &ik_rt[852], &ik_rt[853], &ik_rt[854], &ik_rt[855], &ik_rt[856], &ik_rt[858], &ik_rt[859], &ik_rt[860], &ik_rt[862], &ik_rt[863], &ik_rt[864], &ik_rt[865], &ik_rt[866], &ik_rt[867], &ik_rt[868], &ik_rt[869], &ik_rt[870], &ik_rt[871], &ik_rt[872], &ik_rt[873], &ik_rt[874], &ik_rt[875], &ik_rt[876], &ik_rt[877], &ik_rt[878], &ik_rt[879], &ik_rt[880], &ik_rt[881], &ik_rt[882], &ik_rt[883], &ik_rt[884], &ik_rt[885], &ik_rt[886], &ik_rt[887], &ik_rt[889], &ik_rt[890], &ik_rt[892], &ik_rt[893], &ik_rt[894], &ik_rt[895], &ik_rt[896], &ik_rt[897], &ik_rt[898], &ik_rt[899], &ik_rt[900], &ik_rt[901], &ik_rt[902], &ik_rt[904], &ik_rt[905], &ik_rt[906], &ik_rt[907], &ik_rt[908], &ik_rt[909], &ik_rt[910], &ik_rt[911], &ik_rt[912], &ik_rt[914], &ik_rt[917], &ik_rt[918], &ik_rt[920], &ik_rt[922], &ik_rt[925], &ik_rt[932], &ik_rt[933], &ik_rt[934], &ik_rt[935], &ik_rt[938], &ik_rt[939], &ik_rt[940], &ik_rt[941], &ik_rt[943], &ik_rt[944], &ik_rt[945], &ik_rt[946], &ik_rt[947], &ik_rt[948], &ik_rt[949], &ik_rt[950], &ik_rt[951], &ik_rt[952], &ik_rt[953], &ik_rt[954], &ik_rt[955], &ik_rt[956], &ik_rt[957], &ik_rt[958], &ik_rt[959], &ik_rt[961], &ik_rt[967], &ik_rt[969], &ik_rt[970], &ik_rt[971], &ik_rt[972], &ik_rt[973], &ik_rt[974], &ik_rt[975], &ik_rt[976], &ik_rt[977], &ik_rt[1130], &ik_rt[1131], &ik_rt[1132], &ik_rt[1133], &ik_rt[1134], &ik_rt[1136], &ik_rt[1137], &ik_rt[1138], &ik_rt[1139], &ik_rt[1140], &ik_rt[1141], &ik_rt[1142], &ik_rt[1143], &ik_rt[1145], &ik_rt[1146], &ik_rt[1147], &ik_rt[1148], &ik_rt[1149], &ik_rt[1150], &ik_rt[1151], &ik_rt[1152], &ik_rt[1153], &ik_rt[1154], &ik_rt[1155], &ik_rt[1156], &ik_rt[1157], &ik_rt[1158], &ik_rt[1159], &ik_rt[1160], &ik_rt[1161], &ik_rt[1162], &ik_rt[1163], &ik_rt[1164], &ik_rt[1165], &ik_rt[1166], &ik_rt[1167], &ik_rt[1168], &ik_rt[1169], &ik_rt[1170], &ik_rt[1172], &ik_rt[1174], &ik_rt[1176], &ik_rt[1177], &ik_rt[1179], &ik_rt[1181], &ik_rt[1182], &ik_rt[1183], &ik_rt[1185], &ik_rt[1187], &ik_rt[1189], &ik_rt[1191], &ik_rt[1194], &ik_rt[1196], &ik_rt[1198], &ik_rt[1200], &ik_rt[1201], &ik_rt[1202], &ik_rt[1203], &ik_rt[1204], &ik_rt[1205], &ik_rt[1207], &ik_rt[1208], &ik_rt[1209], &ik_rt[1210], &ik_rt[1211], &ik_rt[1213], &ik_rt[1214], &ik_rt[1215], &ik_rt[1216], &ik_rt[1217], &ik_rt[1218], &ik_rt[1220], &ik_rt[1221], &ik_rt[1222], &ik_rt[1223], &ik_rt[1224], &ik_rt[1225], &ik_rt[1227], &ik_rt[1229], &ik_rt[1231], &ik_rt[1234], &ik_rt[1235], &ik_rt[1238], &ik_rt[1239], &ik_rt[1241], &ik_rt[1244], &ik_rt[1248], &ik_rt[1249], &ik_rt[1250], &ik_rt[1251], &ik_rt[1252], &ik_rt[1253], &ik_rt[1254], &ik_rt[1255], &ik_rt[1257], &ik_rt[1263], &ik_rt[1265], &ik_rt[1266], &ik_rt[1268], &ik_rt[1269], &ik_rt[1270], &ik_rt[1273], &ik_rt[1275], &ik_rt[1276], &ik_rt[1277], &ik_rt[1278], &ik_rt[1279], &ik_rt[1280], &ik_rt[1281], &ik_rt[1282], &ik_rt[1283], &ik_rt[1284], &ik_rt[1285], &ik_rt[1286], &ik_rt[1287], &ik_rt[1288], &ik_rt[1289], &ik_rt[1290], &ik_rt[1291], &ik_rt[1292], &ik_rt[1293], &ik_rt[1294], &ik_rt[1295], &ik_rt[1296], &ik_rt[1297], &ik_rt[1298], &ik_rt[1299], &ik_rt[1300], &ik_rt[1301], &ik_rt[1302], &ik_rt[1303], &ik_rt[1304], &ik_rt[1305], &ik_rt[1306], &ik_rt[1307], &ik_rt[1308], &ik_rt[1309], &ik_rt[1310], &ik_rt[1311], &ik_rt[1312], &ik_rt[1313], &ik_rt[1314], &ik_rt[1315], &ik_rt[1316], &ik_rt[1317], &ik_rt[1318], &ik_rt[1319], &ik_rt[1320], &ik_rt[1321], &ik_rt[1322], &ik_rt[1323], &ik_rt[1324], &ik_rt[1325], &ik_rt[1326], &ik_rt[1327], &ik_rt[1329], &ik_rt[1330], &ik_rt[1331], &ik_rt[1332], &ik_rt[1333], &ik_rt[1334], &ik_rt[1335], &ik_rt[1336], &ik_rt[1337], &ik_rt[1338], &ik_rt[1339], &ik_rt[1340], &ik_rt[1341], &ik_rt[1342], &ik_rt[1343], &ik_rt[1344], &ik_rt[1345], &ik_rt[1346], &ik_rt[1347], &ik_rt[1348], &ik_rt[1349], &ik_rt[1350], &ik_rt[1351], &ik_rt[1352], &ik_rt[1353], &ik_rt[1354], &ik_rt[1355], &ik_rt[1356], &ik_rt[1357], &ik_rt[1358], &ik_rt[1359], &ik_rt[1360], &ik_rt[1361], &ik_rt[1362], &ik_rt[1363], &ik_rt[1364], &ik_rt[1365], &ik_rt[1366], &ik_rt[1367], &ik_rt[1368], &ik_rt[1369], &ik_rt[1372], &ik_rt[1375], &ik_rt[1376], &ik_rt[1377], &ik_rt[1378], &ik_rt[1379], &ik_rt[1380], &ik_rt[1381], &ik_rt[1383], &ik_rt[1384], &ik_rt[1386], &ik_rt[1388], &ik_rt[1389], &ik_rt[1390], &ik_rt[1391], &ik_rt[1392], &ik_rt[1393], &ik_rt[1394], &ik_rt[1395], &ik_rt[1396], &ik_rt[1397], &ik_rt[1398], &ik_rt[1399], &ik_rt[1400], &ik_rt[1401], &ik_rt[1402], &ik_rt[1403], &ik_rt[1404], &ik_rt[1405], &ik_rt[1406], &ik_rt[1407], &ik_rt[1408], &ik_rt[1409], &ik_rt[1410], &ik_rt[1411], &ik_rt[1412], &ik_rt[1413], &ik_rt[1414], &ik_rt[1415], &ik_rt[1416], &ik_rt[1417], &ik_rt[1418], &ik_rt[1419], &ik_rt[1420], &ik_rt[1421], &ik_rt[1422], &ik_rt[1423], &ik_rt[1424], &ik_rt[1425], &ik_rt[1426], &ik_rt[1427], &ik_rt[1428], &ik_rt[1429], &ik_rt[1430], &ik_rt[1431], &ik_rt[1432], &ik_rt[1433], &ik_rt[1434], &ik_rt[1435], &ik_rt[1436], &ik_rt[1437], &ik_rt[1438], &ik_rt[1439], &ik_rt[1440], &ik_rt[1441], &ik_rt[1442], &ik_rt[1443], &ik_rt[1444], &ik_rt[1445], &ik_rt[1446], &ik_rt[1447], &ik_rt[1448], &ik_rt[1449], &ik_rt[1450], &ik_rt[1451], &ik_rt[1452], &ik_rt[1453], &ik_rt[1454], &ik_rt[1455], &ik_rt[1456], &ik_rt[1457], &ik_rt[1458], &ik_rt[1459], &ik_rt[1460], &ik_rt[1461], &ik_rt[1462], &ik_rt[1463], &ik_rt[1464], &ik_rt[1465], &ik_rt[1466], &ik_rt[1467], &ik_rt[1468], &ik_rt[1469], &ik_rt[1470], &ik_rt[1471], &ik_rt[1472], &ik_rt[1473], &ik_rt[1474], &ik_rt[1475], &ik_rt[1476], &ik_rt[1477], &ik_rt[1478], &ik_rt[1479], &ik_rt[1480], &ik_rt[1481], &ik_rt[1482], &ik_rt[1483], &ik_rt[1484], &ik_rt[1485], &ik_rt[1486], &ik_rt[1487], &ik_rt[1488], &ik_rt[1489], &ik_rt[1490], &ik_rt[1491], &ik_rt[1492], &ik_rt[1493], &ik_rt[1494], &ik_rt[1495], &ik_rt[1496], &ik_rt[1497], &ik_rt[1498], &ik_rt[1499], &ik_rt[1500], &ik_rt[1501], &ik_rt[1502], &ik_rt[1503], &ik_rt[1504], &ik_rt[1505], &ik_rt[1506], &ik_rt[1507], &ik_rt[1508], &ik_rt[1509], &ik_rt[1510], &ik_rt[1511], &ik_rt[1512], &ik_rt[1513], &ik_rt[1514], &ik_rt[1515], &ik_rt[1516], &ik_rt[1517], &ik_rt[1518], &ik_rt[1519], &ik_rt[1520], &ik_rt[1521], &ik_rt[1522], &ik_rt[1523], &ik_rt[1524], &ik_rt[1525], &ik_rt[1526], &ik_rt[1527], &ik_rt[1528], &ik_rt[1529], &ik_rt[1530], &ik_rt[1531], &ik_rt[1532], &ik_rt[1533], &ik_rt[1534], &ik_rt[1535], &ik_rt[1536], &ik_rt[1537], &ik_rt[1538], &ik_rt[1539], &ik_rt[1540], &ik_rt[1541], &ik_rt[1542], &ik_rt[1543], &ik_rt[1548], &ik_rt[1549], &ik_rt[1551], &ik_rt[1552], &ik_rt[1553], &ik_rt[1555], &ik_rt[1556], &ik_rt[1557], &ik_rt[1558], &ik_rt[1560], &ik_rt[1562], &ik_rt[1563], &ik_rt[1565], &ik_rt[1567], &ik_rt[1572], &ik_rt[1573], &ik_rt[1574], &ik_rt[1575], &ik_rt[1576], &ik_rt[1577], &ik_rt[1578], &ik_rt[1579], &ik_rt[1580], &ik_rt[1581], &ik_rt[1582], &ik_rt[1583], &ik_rt[1584], &ik_rt[1585], &ik_rt[1586], &ik_rt[1587], &ik_rt[1589], &ik_rt[1591], &ik_rt[1592], &ik_rt[1594], &ik_rt[1595], &ik_rt[1596], &ik_rt[1597], &ik_rt[1598], &ik_rt[1599], &ik_rt[1600], &ik_rt[1601], &ik_rt[1603], &ik_rt[1604], &ik_rt[1605], &ik_rt[1606], &ik_rt[1607], &ik_rt[1608], &ik_rt[1609], &ik_rt[1610], &ik_rt[1612], &ik_rt[1614], &ik_rt[1615], &ik_rt[1616], &ik_rt[1617], &ik_rt[1618], &ik_rt[1619], &ik_rt[1620], &ik_rt[1621], &ik_rt[1622], &ik_rt[1623], &ik_rt[1624], &ik_rt[1625], &ik_rt[1626], &ik_rt[1627], &ik_rt[1628], &ik_rt[1629], &ik_rt[1630], &ik_rt[1631], &ik_rt[1632], &ik_rt[1633], &ik_rt[1634], &ik_rt[1635], &ik_rt[1636], &ik_rt[1637], &ik_rt[1638], &ik_rt[1639], &ik_rt[1640], &ik_rt[1641], &ik_rt[1642], &ik_rt[1643], &ik_rt[1644], &ik_rt[1645], &ik_rt[1646], &ik_rt[1647], &ik_rt[1648], &ik_rt[1649], &ik_rt[1650], &ik_rt[1651], &ik_rt[1652], &ik_rt[1653], &ik_rt[1654], &ik_rt[1655], &ik_rt[1656], &ik_rt[1657], &ik_rt[1658], &ik_rt[1659], &ik_rt[1660], &ik_rt[1661], &ik_rt[1662], &ik_rt[1663], &ik_rt[1664], &ik_rt[1665], &ik_rt[1666], &ik_rt[1667], &ik_rt[1668], &ik_rt[1669], &ik_rt[1670], &ik_rt[1671], &ik_rt[1672], &ik_rt[1673], &ik_rt[1674], &ik_rt[1675], &ik_rt[1676], &ik_rt[1677], &ik_rt[1678], &ik_rt[1679], &ik_rt[1680], &ik_rt[1681], &ik_rt[1682], &ik_rt[1683], &ik_rt[1684], &ik_rt[1685], &ik_rt[1686], &ik_rt[1687], &ik_rt[1688], &ik_rt[1689], &ik_rt[1690], &ik_rt[1691], &ik_rt[1692], &ik_rt[1693], &ik_rt[1694], &ik_rt[1695], &ik_rt[1696], &ik_rt[1697], &ik_rt[1698], &ik_rt[1699], &ik_rt[1700], &ik_rt[1701], &ik_rt[1702], &ik_rt[1703], &ik_rt[1704], &ik_rt[1705], &ik_rt[1706], &ik_rt[1707], &ik_rt[1708], &ik_rt[1709], &ik_rt[1710], &ik_rt[1711], &ik_rt[1712], &ik_rt[1713], &ik_rt[1714], &ik_rt[1715], &ik_rt[1716], &ik_rt[1717], &ik_rt[1718], &ik_rt[1720], &ik_rt[1721], &ik_rt[1722], &ik_rt[1723], &ik_rt[1724], &ik_rt[1725], &ik_rt[1726], &ik_rt[1727], &ik_rt[1728], &ik_rt[1729], &ik_rt[1730], &ik_rt[1731], &ik_rt[1732], &ik_rt[1733], &ik_rt[1734], &ik_rt[1735], &ik_rt[1736], &ik_rt[1737], &ik_rt[1738], &ik_rt[1739], &ik_rt[1740], &ik_rt[1741], &ik_rt[1742], &ik_rt[1743], &ik_rt[1744], &ik_rt[1745], &ik_rt[1746], &ik_rt[1747], &ik_rt[1748], &ik_rt[1749], &ik_rt[1750], &ik_rt[1751], &ik_rt[1752], &ik_rt[1753], &ik_rt[1754], &ik_rt[1755], &ik_rt[1756], &ik_rt[1757], &ik_rt[1758], &ik_rt[1759], &ik_rt[1760], &ik_rt[1761], &ik_rt[1762], &ik_rt[1763], &ik_rt[1764], &ik_rt[1765], &ik_rt[1766], &ik_rt[1767], &ik_rt[1768], &ik_rt[1769], &ik_rt[1770], &ik_rt[1771], &ik_rt[1772], &ik_rt[1773], &ik_rt[1775], &ik_rt[1776], &ik_rt[1777], &ik_rt[1779], &ik_rt[1780], &ik_rt[1781], &ik_rt[1783], &ik_rt[1784], &ik_rt[1785], &ik_rt[1786], &ik_rt[1787], &ik_rt[1788], &ik_rt[1789], &ik_rt[1791], &ik_rt[1792], &ik_rt[1793], &ik_rt[1794], &ik_rt[1795], &ik_rt[1796], &ik_rt[1799], &ik_rt[1801], &ik_rt[1802], &ik_rt[1803], &ik_rt[1804], &ik_rt[1805], &ik_rt[1806], &ik_rt[1807], &ik_rt[1808], &ik_rt[1809], &ik_rt[1810], &ik_rt[1811], &ik_rt[1812], &ik_rt[1813], &ik_rt[1814], &ik_rt[1815], &ik_rt[1816], &ik_rt[1817], &ik_rt[1818], &ik_rt[1819], &ik_rt[1820], &ik_rt[1822], &ik_rt[1823], &ik_rt[1824], &ik_rt[1825], &ik_rt[1832], &ik_rt[1833], &ik_rt[1834], &ik_rt[1835], &ik_rt[1836], &ik_rt[1837], &ik_rt[1838], &ik_rt[1842], &ik_rt[1844], &ik_rt[1845], &ik_rt[1846], &ik_rt[1847], &ik_rt[1848], &ik_rt[1849], &ik_rt[1851], &ik_rt[1852], &ik_rt[1853], &ik_rt[1856], &ik_rt[1857], &ik_rt[1858], &ik_rt[1859], &ik_rt[1860], &ik_rt[1868], &ik_rt[1870], &ik_rt[1871], &ik_rt[1873], &ik_rt[1874], &ik_rt[1876], &ik_rt[1877], &ik_rt[1878], &ik_rt[1881], &ik_rt[1883], &ik_rt[1884], &ik_rt[1885], &ik_rt[1886], &ik_rt[1887], &ik_rt[1888], &ik_rt[1889], &ik_rt[1890], &ik_rt[1891], &ik_rt[1892], &ik_rt[1893], &ik_rt[1894], &ik_rt[1895], &ik_rt[1896], &ik_rt[1897], &ik_rt[1898], &ik_rt[1899], &ik_rt[1900], &ik_rt[1901], &ik_rt[1902], &ik_rt[1903], &ik_rt[1904], &ik_rt[1905], &ik_rt[1906], &ik_rt[1907], &ik_rt[1908], &ik_rt[1909], &ik_rt[1910], &ik_rt[1911], &ik_rt[1912], &ik_rt[1913], &ik_rt[1914], &ik_rt[1915], &ik_rt[1916], &ik_rt[1917], &ik_rt[1918], &ik_rt[1919], &ik_rt[1920], &ik_rt[1921], &ik_rt[1922], &ik_rt[1923], &ik_rt[1924], &ik_rt[1925], &ik_rt[1926], &ik_rt[1927], &ik_rt[1928], &ik_rt[1929], &ik_rt[1930], &ik_rt[1931], &ik_rt[1932], &ik_rt[1933], &ik_rt[1934], &ik_rt[1935], &ik_rt[1936], &ik_rt[1937], &ik_rt[1938], &ik_rt[1939], &ik_rt[1940], &ik_rt[1941], &ik_rt[1942], &ik_rt[1943], &ik_rt[1944], &ik_rt[1945], &ik_rt[1946], &ik_rt[1947], &ik_rt[1948], &ik_rt[1949], &ik_rt[1950], &ik_rt[1951], &ik_rt[1952], &ik_rt[1953], &ik_rt[1954], &ik_rt[1955], &ik_rt[1957], &ik_rt[1958], &ik_rt[1960], &ik_rt[1961], &ik_rt[1964], &ik_rt[1965], &ik_rt[1966], &ik_rt[1968], &ik_rt[1973]};
+const RType *const ik_rt_by_tid[2035] = {NULL, &ik_rt[0], &ik_rt[1], &ik_rt[2], &ik_rt[3], &ik_rt[4], &ik_rt[5], &ik_rt[6], &ik_rt[7], &ik_rt[8], &ik_rt[9], &ik_rt[10], &ik_rt[275], &ik_rt[11], &ik_rt[12], NULL, NULL, &ik_rt[13], &ik_rt[284], NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &ik_rt[14], &ik_rt[18], NULL, &ik_rt[26], &ik_rt[27], &ik_rt[31], &ik_rt[33], &ik_rt[34], &ik_rt[71], NULL, &ik_rt[72], NULL, NULL, &ik_rt[16], NULL, NULL, &ik_rt[73], &ik_rt[74], &ik_rt[75], &ik_rt[78], &ik_rt[80], &ik_rt[81], &ik_rt[82], &ik_rt[85], &ik_rt[89], &ik_rt[92], &ik_rt[126], &ik_rt[190], NULL, &ik_rt[196], &ik_rt[232], &ik_rt[233], &ik_rt[234], NULL, &ik_rt[238], &ik_rt[239], &ik_rt[242], &ik_rt[243], &ik_rt[246], &ik_rt[248], &ik_rt[250], &ik_rt[252], &ik_rt[256], &ik_rt[258], &ik_rt[260], &ik_rt[263], &ik_rt[285], &ik_rt[291], NULL, &ik_rt[292], &ik_rt[314], &ik_rt[327], &ik_rt[336], &ik_rt[339], &ik_rt[340], &ik_rt[342], &ik_rt[273], &ik_rt[343], &ik_rt[344], &ik_rt[349], &ik_rt[351], &ik_rt[352], &ik_rt[353], &ik_rt[354], &ik_rt[356], &ik_rt[358], &ik_rt[359], &ik_rt[360], &ik_rt[361], &ik_rt[105], &ik_rt[204], &ik_rt[96], NULL, &ik_rt[364], NULL, NULL, &ik_rt[365], &ik_rt[369], &ik_rt[373], &ik_rt[375], &ik_rt[376], &ik_rt[382], &ik_rt[383], &ik_rt[384], &ik_rt[386], &ik_rt[387], &ik_rt[391], &ik_rt[395], &ik_rt[397], &ik_rt[399], &ik_rt[401], &ik_rt[488], &ik_rt[490], &ik_rt[491], &ik_rt[492], &ik_rt[135], &ik_rt[493], &ik_rt[494], &ik_rt[495], &ik_rt[496], &ik_rt[498], &ik_rt[502], NULL, &ik_rt[503], &ik_rt[504], &ik_rt[505], &ik_rt[512], &ik_rt[536], &ik_rt[538], &ik_rt[551], &ik_rt[554], &ik_rt[556], &ik_rt[557], &ik_rt[558], &ik_rt[559], &ik_rt[575], &ik_rt[581], &ik_rt[583], &ik_rt[586], &ik_rt[588], &ik_rt[591], &ik_rt[592], &ik_rt[594], &ik_rt[596], &ik_rt[598], &ik_rt[602], &ik_rt[604], &ik_rt[606], &ik_rt[614], &ik_rt[616], &ik_rt[618], &ik_rt[620], &ik_rt[622], &ik_rt[624], &ik_rt[626], &ik_rt[628], &ik_rt[630], &ik_rt[632], &ik_rt[634], &ik_rt[610], &ik_rt[636], &ik_rt[638], &ik_rt[640], &ik_rt[642], &ik_rt[644], &ik_rt[649], &ik_rt[651], &ik_rt[653], &ik_rt[655], &ik_rt[657], &ik_rt[690], &ik_rt[679], &ik_rt[692], &ik_rt[693], &ik_rt[696], &ik_rt[701], &ik_rt[705], &ik_rt[707], &ik_rt[709], &ik_rt[711], &ik_rt[713], &ik_rt[716], &ik_rt[719], &ik_rt[721], &ik_rt[723], &ik_rt[725], &ik_rt[727], &ik_rt[731], &ik_rt[733], &ik_rt[735], &ik_rt[738], &ik_rt[741], &ik_rt[745], &ik_rt[747], &ik_rt[752], &ik_rt[754], &ik_rt[756], &ik_rt[471], &ik_rt[757], &ik_rt[759], &ik_rt[764], &ik_rt[25], &ik_rt[765], &ik_rt[813], &ik_rt[816], &ik_rt[915], &ik_rt[913], &ik_rt[916], &ik_rt[919], &ik_rt[921], &ik_rt[923], &ik_rt[819], &ik_rt[924], &ik_rt[903], &ik_rt[888], &ik_rt[891], &ik_rt[927], &ik_rt[928], &ik_rt[929], &ik_rt[930], &ik_rt[931], &ik_rt[857], &ik_rt[936], &ik_rt[937], &ik_rt[960], &ik_rt[962], &ik_rt[963], &ik_rt[964], &ik_rt[965], &ik_rt[966], &ik_rt[210], &ik_rt[968], &ik_rt[978], &ik_rt[979], &ik_rt[980], &ik_rt[981], &ik_rt[982], &ik_rt[983], &ik_rt[984], &ik_rt[985], &ik_rt[986], &ik_rt[987], &ik_rt[988], &ik_rt[989], &ik_rt[990], &ik_rt[991], &ik_rt[992], &ik_rt[993], &ik_rt[994], &ik_rt[995], &ik_rt[996], &ik_rt[997], &ik_rt[998], &ik_rt[999], &ik_rt[1000], &ik_rt[1001], &ik_rt[1002], &ik_rt[1003], &ik_rt[1004], &ik_rt[1005], &ik_rt[1006], &ik_rt[1007], &ik_rt[1008], &ik_rt[1009], &ik_rt[1010], &ik_rt[1011], &ik_rt[1012], &ik_rt[1013], &ik_rt[1014], &ik_rt[1015], &ik_rt[1016], &ik_rt[1017], &ik_rt[1018], &ik_rt[1019], &ik_rt[1020], &ik_rt[1021], &ik_rt[1022], &ik_rt[1023], &ik_rt[1024], &ik_rt[1025], &ik_rt[1026], &ik_rt[1027], &ik_rt[1028], &ik_rt[1029], &ik_rt[1030], &ik_rt[1031], &ik_rt[1032], &ik_rt[1033], &ik_rt[1034], &ik_rt[1035], &ik_rt[1036], &ik_rt[1037], &ik_rt[1038], &ik_rt[1039], &ik_rt[1040], &ik_rt[1041], &ik_rt[1042], &ik_rt[1043], &ik_rt[1044], &ik_rt[1045], &ik_rt[1046], &ik_rt[1047], &ik_rt[1048], &ik_rt[1049], &ik_rt[1050], &ik_rt[1051], &ik_rt[1052], &ik_rt[1053], &ik_rt[1054], &ik_rt[1055], &ik_rt[1056], &ik_rt[1057], &ik_rt[1058], &ik_rt[1059], &ik_rt[1060], &ik_rt[1061], &ik_rt[1062], &ik_rt[1063], &ik_rt[1064], &ik_rt[1065], &ik_rt[1066], &ik_rt[1067], &ik_rt[1068], &ik_rt[1069], &ik_rt[1070], &ik_rt[1071], &ik_rt[1072], &ik_rt[1073], &ik_rt[1074], &ik_rt[1075], &ik_rt[1076], &ik_rt[1077], &ik_rt[1078], &ik_rt[1079], &ik_rt[1080], &ik_rt[1081], &ik_rt[1082], &ik_rt[1083], &ik_rt[1084], &ik_rt[1085], &ik_rt[1086], &ik_rt[1087], &ik_rt[1088], &ik_rt[1089], &ik_rt[1090], &ik_rt[1091], &ik_rt[1092], &ik_rt[1093], &ik_rt[1094], &ik_rt[1095], &ik_rt[1096], &ik_rt[1097], &ik_rt[1098], &ik_rt[1099], &ik_rt[1100], &ik_rt[1101], &ik_rt[1102], &ik_rt[1103], &ik_rt[1104], &ik_rt[1105], &ik_rt[1106], &ik_rt[1107], &ik_rt[1108], &ik_rt[1109], &ik_rt[1110], &ik_rt[1111], &ik_rt[1112], &ik_rt[1113], &ik_rt[1114], &ik_rt[1115], &ik_rt[1116], &ik_rt[1117], &ik_rt[1118], &ik_rt[1119], &ik_rt[1120], &ik_rt[1121], &ik_rt[1122], &ik_rt[1123], &ik_rt[1124], &ik_rt[1125], &ik_rt[1126], &ik_rt[1127], &ik_rt[1128], &ik_rt[1171], &ik_rt[1173], &ik_rt[1144], &ik_rt[1175], &ik_rt[1178], &ik_rt[1180], &ik_rt[1184], &ik_rt[1186], &ik_rt[1188], &ik_rt[1190], &ik_rt[1192], &ik_rt[1193], &ik_rt[1195], &ik_rt[1197], &ik_rt[1219], &ik_rt[1226], &ik_rt[171], &ik_rt[1228], &ik_rt[1230], &ik_rt[1199], &ik_rt[1233], &ik_rt[1236], &ik_rt[1237], &ik_rt[1240], &ik_rt[1242], &ik_rt[772], &ik_rt[1243], &ik_rt[1245], &ik_rt[1247], &ik_rt[1258], &ik_rt[807], &ik_rt[1260], &ik_rt[1246], &ik_rt[1262], &ik_rt[1271], &ik_rt[1544], &ik_rt[1545], &ik_rt[1546], &ik_rt[1547], &ik_rt[1550], &ik_rt[1559], &ik_rt[1561], &ik_rt[1564], &ik_rt[1566], &ik_rt[1568], &ik_rt[1569], &ik_rt[805], &ik_rt[1206], &ik_rt[1570], &ik_rt[810], &ik_rt[1571], &ik_rt[1798], &ik_rt[1821], &ik_rt[1826], &ik_rt[1827], &ik_rt[1370], &ik_rt[1264], &ik_rt[770], &ik_rt[1274], &ik_rt[1328], &ik_rt[195], &ik_rt[1212], &ik_rt[1828], &ik_rt[1829], &ik_rt[771], &ik_rt[1830], &ik_rt[1371], &ik_rt[1373], &ik_rt[1374], &ik_rt[1797], &ik_rt[837], &ik_rt[838], &ik_rt[1774], &ik_rt[1782], &ik_rt[1831], &ik_rt[1839], &ik_rt[1778], &ik_rt[1129], &ik_rt[1272], &ik_rt[1719], &ik_rt[1261], &ik_rt[1840], &ik_rt[1590], &ik_rt[1259], &ik_rt[1267], &ik_rt[1841], &ik_rt[1387], &ik_rt[1843], &ik_rt[1385], &ik_rt[1850], &ik_rt[1854], &ik_rt[1855], &ik_rt[806], &ik_rt[1593], &ik_rt[1588], &ik_rt[1613], &ik_rt[861], &ik_rt[457], &ik_rt[60], &ik_rt[1861], &ik_rt[1862], &ik_rt[1863], &ik_rt[1864], &ik_rt[1865], &ik_rt[1866], &ik_rt[843], &ik_rt[1611], &ik_rt[797], &ik_rt[803], &ik_rt[804], &ik_rt[1867], &ik_rt[1869], &ik_rt[1872], &ik_rt[1875], &ik_rt[187], &ik_rt[1602], &ik_rt[1879], &ik_rt[1880], &ik_rt[1882], &ik_rt[1956], &ik_rt[1959], &ik_rt[1962], &ik_rt[1963], &ik_rt[1967], &ik_rt[1969], &ik_rt[1970], &ik_rt[1971], &ik_rt[1972], &ik_rt[15], &ik_rt[17], &ik_rt[19], &ik_rt[21], &ik_rt[22], &ik_rt[23], &ik_rt[24], &ik_rt[28], &ik_rt[29], &ik_rt[30], &ik_rt[32], &ik_rt[35], &ik_rt[36], &ik_rt[37], &ik_rt[38], &ik_rt[39], &ik_rt[40], &ik_rt[41], &ik_rt[42], &ik_rt[43], &ik_rt[44], &ik_rt[45], &ik_rt[46], &ik_rt[47], &ik_rt[48], &ik_rt[49], &ik_rt[50], &ik_rt[51], &ik_rt[52], &ik_rt[53], &ik_rt[54], &ik_rt[56], &ik_rt[57], &ik_rt[58], &ik_rt[59], &ik_rt[61], &ik_rt[62], &ik_rt[63], &ik_rt[64], &ik_rt[65], &ik_rt[66], &ik_rt[67], &ik_rt[68], &ik_rt[69], &ik_rt[70], &ik_rt[76], &ik_rt[79], &ik_rt[83], &ik_rt[86], &ik_rt[87], &ik_rt[88], &ik_rt[90], &ik_rt[93], &ik_rt[94], &ik_rt[95], &ik_rt[97], &ik_rt[98], &ik_rt[99], &ik_rt[100], &ik_rt[101], &ik_rt[102], &ik_rt[103], &ik_rt[106], &ik_rt[107], &ik_rt[108], &ik_rt[109], &ik_rt[110], &ik_rt[111], &ik_rt[112], &ik_rt[113], &ik_rt[114], &ik_rt[115], &ik_rt[116], &ik_rt[117], &ik_rt[118], &ik_rt[119], &ik_rt[120], &ik_rt[121], &ik_rt[122], &ik_rt[124], &ik_rt[125], &ik_rt[127], &ik_rt[128], &ik_rt[129], &ik_rt[130], &ik_rt[131], &ik_rt[132], &ik_rt[133], &ik_rt[134], &ik_rt[136], &ik_rt[137], &ik_rt[138], &ik_rt[139], &ik_rt[140], &ik_rt[141], &ik_rt[142], &ik_rt[143], &ik_rt[144], &ik_rt[145], &ik_rt[146], &ik_rt[147], &ik_rt[148], &ik_rt[149], &ik_rt[150], &ik_rt[151], &ik_rt[152], &ik_rt[153], &ik_rt[154], &ik_rt[155], &ik_rt[156], &ik_rt[157], &ik_rt[158], &ik_rt[159], &ik_rt[160], &ik_rt[161], &ik_rt[162], &ik_rt[163], &ik_rt[164], &ik_rt[165], &ik_rt[166], &ik_rt[167], &ik_rt[168], &ik_rt[169], &ik_rt[170], &ik_rt[172], &ik_rt[173], &ik_rt[174], &ik_rt[175], &ik_rt[176], &ik_rt[177], &ik_rt[178], &ik_rt[179], &ik_rt[180], &ik_rt[181], &ik_rt[182], &ik_rt[183], &ik_rt[184], &ik_rt[185], &ik_rt[186], &ik_rt[188], &ik_rt[189], &ik_rt[191], &ik_rt[193], &ik_rt[194], &ik_rt[197], &ik_rt[198], &ik_rt[199], &ik_rt[200], &ik_rt[202], &ik_rt[203], &ik_rt[205], &ik_rt[206], &ik_rt[207], &ik_rt[208], &ik_rt[209], &ik_rt[211], &ik_rt[212], &ik_rt[213], &ik_rt[214], &ik_rt[216], &ik_rt[217], &ik_rt[218], &ik_rt[219], &ik_rt[220], &ik_rt[221], &ik_rt[222], &ik_rt[223], &ik_rt[224], &ik_rt[225], &ik_rt[226], &ik_rt[227], &ik_rt[228], &ik_rt[229], &ik_rt[230], &ik_rt[231], &ik_rt[235], &ik_rt[236], &ik_rt[237], &ik_rt[240], &ik_rt[241], &ik_rt[244], &ik_rt[245], &ik_rt[247], &ik_rt[249], &ik_rt[251], &ik_rt[253], &ik_rt[254], &ik_rt[255], &ik_rt[257], &ik_rt[259], &ik_rt[261], &ik_rt[262], &ik_rt[264], &ik_rt[265], &ik_rt[266], &ik_rt[267], &ik_rt[268], &ik_rt[269], &ik_rt[270], &ik_rt[271], &ik_rt[272], &ik_rt[274], NULL, &ik_rt[276], &ik_rt[277], &ik_rt[278], &ik_rt[279], &ik_rt[280], &ik_rt[281], &ik_rt[282], &ik_rt[283], NULL, &ik_rt[286], &ik_rt[287], &ik_rt[288], &ik_rt[289], &ik_rt[293], &ik_rt[294], &ik_rt[295], &ik_rt[297], &ik_rt[299], &ik_rt[300], &ik_rt[301], &ik_rt[302], &ik_rt[303], &ik_rt[304], &ik_rt[305], &ik_rt[306], &ik_rt[307], &ik_rt[308], &ik_rt[309], &ik_rt[310], &ik_rt[311], &ik_rt[312], &ik_rt[313], &ik_rt[315], &ik_rt[318], &ik_rt[319], &ik_rt[320], &ik_rt[321], &ik_rt[322], &ik_rt[323], &ik_rt[324], &ik_rt[325], &ik_rt[326], &ik_rt[331], &ik_rt[332], &ik_rt[333], &ik_rt[334], &ik_rt[335], &ik_rt[337], &ik_rt[338], &ik_rt[341], &ik_rt[345], &ik_rt[346], &ik_rt[347], &ik_rt[348], &ik_rt[350], &ik_rt[355], &ik_rt[357], &ik_rt[362], &ik_rt[366], &ik_rt[367], &ik_rt[368], &ik_rt[370], &ik_rt[371], &ik_rt[372], &ik_rt[374], &ik_rt[377], &ik_rt[378], &ik_rt[379], &ik_rt[380], &ik_rt[381], &ik_rt[385], &ik_rt[388], &ik_rt[389], &ik_rt[390], &ik_rt[392], &ik_rt[393], &ik_rt[394], &ik_rt[396], &ik_rt[398], &ik_rt[400], &ik_rt[402], &ik_rt[403], &ik_rt[404], &ik_rt[405], &ik_rt[406], &ik_rt[407], &ik_rt[408], &ik_rt[409], &ik_rt[410], &ik_rt[411], &ik_rt[412], &ik_rt[413], &ik_rt[414], &ik_rt[415], &ik_rt[416], &ik_rt[417], &ik_rt[418], &ik_rt[419], &ik_rt[420], &ik_rt[421], &ik_rt[422], &ik_rt[423], &ik_rt[424], &ik_rt[425], &ik_rt[426], &ik_rt[427], &ik_rt[428], &ik_rt[429], &ik_rt[430], &ik_rt[431], &ik_rt[432], &ik_rt[433], &ik_rt[434], &ik_rt[435], &ik_rt[436], &ik_rt[437], &ik_rt[438], &ik_rt[439], &ik_rt[440], &ik_rt[441], &ik_rt[442], &ik_rt[443], &ik_rt[444], &ik_rt[445], &ik_rt[446], &ik_rt[447], &ik_rt[448], &ik_rt[449], &ik_rt[450], &ik_rt[451], &ik_rt[452], &ik_rt[453], &ik_rt[454], &ik_rt[455], &ik_rt[456], &ik_rt[458], &ik_rt[459], &ik_rt[460], &ik_rt[461], &ik_rt[462], &ik_rt[463], &ik_rt[464], &ik_rt[465], &ik_rt[466], &ik_rt[467], &ik_rt[468], &ik_rt[469], &ik_rt[470], &ik_rt[472], &ik_rt[473], &ik_rt[474], &ik_rt[475], &ik_rt[476], &ik_rt[477], &ik_rt[478], &ik_rt[479], &ik_rt[480], &ik_rt[481], &ik_rt[482], &ik_rt[483], &ik_rt[484], &ik_rt[485], &ik_rt[486], &ik_rt[487], &ik_rt[489], &ik_rt[497], &ik_rt[499], &ik_rt[500], &ik_rt[501], &ik_rt[506], &ik_rt[508], &ik_rt[509], &ik_rt[510], &ik_rt[511], &ik_rt[513], &ik_rt[514], &ik_rt[515], &ik_rt[516], &ik_rt[517], &ik_rt[518], &ik_rt[519], &ik_rt[520], &ik_rt[521], &ik_rt[522], &ik_rt[523], &ik_rt[524], &ik_rt[525], &ik_rt[526], &ik_rt[527], &ik_rt[528], &ik_rt[529], &ik_rt[530], &ik_rt[531], &ik_rt[532], &ik_rt[533], &ik_rt[534], &ik_rt[537], &ik_rt[539], &ik_rt[540], &ik_rt[541], &ik_rt[542], &ik_rt[543], &ik_rt[544], &ik_rt[545], &ik_rt[547], &ik_rt[548], &ik_rt[549], &ik_rt[552], &ik_rt[553], &ik_rt[555], &ik_rt[560], &ik_rt[561], &ik_rt[562], &ik_rt[563], &ik_rt[564], &ik_rt[565], &ik_rt[566], &ik_rt[567], &ik_rt[568], &ik_rt[569], &ik_rt[570], &ik_rt[571], &ik_rt[572], &ik_rt[573], &ik_rt[574], &ik_rt[576], &ik_rt[577], &ik_rt[578], &ik_rt[580], &ik_rt[582], &ik_rt[584], &ik_rt[585], &ik_rt[587], &ik_rt[589], &ik_rt[590], &ik_rt[593], &ik_rt[595], &ik_rt[597], &ik_rt[599], &ik_rt[600], &ik_rt[603], &ik_rt[605], &ik_rt[607], &ik_rt[608], &ik_rt[609], &ik_rt[611], &ik_rt[612], &ik_rt[613], &ik_rt[615], &ik_rt[617], &ik_rt[619], &ik_rt[621], &ik_rt[623], &ik_rt[625], &ik_rt[627], &ik_rt[629], &ik_rt[631], &ik_rt[633], &ik_rt[635], &ik_rt[637], &ik_rt[639], &ik_rt[641], &ik_rt[643], &ik_rt[645], &ik_rt[646], &ik_rt[647], &ik_rt[648], &ik_rt[650], &ik_rt[652], &ik_rt[654], &ik_rt[656], &ik_rt[658], &ik_rt[659], &ik_rt[660], &ik_rt[661], &ik_rt[662], &ik_rt[663], &ik_rt[664], &ik_rt[665], &ik_rt[666], &ik_rt[667], &ik_rt[668], &ik_rt[669], &ik_rt[670], &ik_rt[671], &ik_rt[672], &ik_rt[673], &ik_rt[674], &ik_rt[675], &ik_rt[676], &ik_rt[677], &ik_rt[678], &ik_rt[680], &ik_rt[681], &ik_rt[682], &ik_rt[683], &ik_rt[684], &ik_rt[685], &ik_rt[686], &ik_rt[687], &ik_rt[688], &ik_rt[691], &ik_rt[694], &ik_rt[695], &ik_rt[697], &ik_rt[698], &ik_rt[699], &ik_rt[700], &ik_rt[702], &ik_rt[703], &ik_rt[704], &ik_rt[706], &ik_rt[708], &ik_rt[710], &ik_rt[712], &ik_rt[714], &ik_rt[717], &ik_rt[718], &ik_rt[720], &ik_rt[722], &ik_rt[724], &ik_rt[726], &ik_rt[728], &ik_rt[729], &ik_rt[732], &ik_rt[734], &ik_rt[736], &ik_rt[737], &ik_rt[739], &ik_rt[740], &ik_rt[742], &ik_rt[743], &ik_rt[744], &ik_rt[746], &ik_rt[748], &ik_rt[749], &ik_rt[750], &ik_rt[751], &ik_rt[753], &ik_rt[755], &ik_rt[758], &ik_rt[760], &ik_rt[761], &ik_rt[762], &ik_rt[763], &ik_rt[766], &ik_rt[767], &ik_rt[768], &ik_rt[769], &ik_rt[773], &ik_rt[774], &ik_rt[775], &ik_rt[776], &ik_rt[777], &ik_rt[778], &ik_rt[780], &ik_rt[781], &ik_rt[782], &ik_rt[783], &ik_rt[784], &ik_rt[785], &ik_rt[786], &ik_rt[787], &ik_rt[788], &ik_rt[789], &ik_rt[790], &ik_rt[791], &ik_rt[792], &ik_rt[793], &ik_rt[794], &ik_rt[795], &ik_rt[796], &ik_rt[798], &ik_rt[799], &ik_rt[800], &ik_rt[801], &ik_rt[802], &ik_rt[808], &ik_rt[809], &ik_rt[811], &ik_rt[812], &ik_rt[814], &ik_rt[815], &ik_rt[817], &ik_rt[818], &ik_rt[820], &ik_rt[822], &ik_rt[823], &ik_rt[824], &ik_rt[825], &ik_rt[826], &ik_rt[827], &ik_rt[828], &ik_rt[829], &ik_rt[830], &ik_rt[831], &ik_rt[832], &ik_rt[833], &ik_rt[834], &ik_rt[835], &ik_rt[836], &ik_rt[839], &ik_rt[840], &ik_rt[841], &ik_rt[842], &ik_rt[844], &ik_rt[845], &ik_rt[846], &ik_rt[847], &ik_rt[848], &ik_rt[849], &ik_rt[850], &ik_rt[851], &ik_rt[852], &ik_rt[853], &ik_rt[854], &ik_rt[855], &ik_rt[856], &ik_rt[858], &ik_rt[859], &ik_rt[860], &ik_rt[862], &ik_rt[863], &ik_rt[864], &ik_rt[865], &ik_rt[866], &ik_rt[867], &ik_rt[868], &ik_rt[869], &ik_rt[870], &ik_rt[871], &ik_rt[872], &ik_rt[873], &ik_rt[874], &ik_rt[875], &ik_rt[876], &ik_rt[877], &ik_rt[878], &ik_rt[879], &ik_rt[880], &ik_rt[881], &ik_rt[882], &ik_rt[883], &ik_rt[884], &ik_rt[885], &ik_rt[886], &ik_rt[887], &ik_rt[889], &ik_rt[890], &ik_rt[892], &ik_rt[893], &ik_rt[894], &ik_rt[895], &ik_rt[896], &ik_rt[897], &ik_rt[898], &ik_rt[899], &ik_rt[900], &ik_rt[901], &ik_rt[902], &ik_rt[904], &ik_rt[905], &ik_rt[906], &ik_rt[907], &ik_rt[908], &ik_rt[909], &ik_rt[910], &ik_rt[911], &ik_rt[912], &ik_rt[914], &ik_rt[917], &ik_rt[918], &ik_rt[920], &ik_rt[922], &ik_rt[925], &ik_rt[932], &ik_rt[933], &ik_rt[934], &ik_rt[935], &ik_rt[938], &ik_rt[939], &ik_rt[940], &ik_rt[941], &ik_rt[943], &ik_rt[944], &ik_rt[945], &ik_rt[946], &ik_rt[947], &ik_rt[948], &ik_rt[949], &ik_rt[950], &ik_rt[951], &ik_rt[952], &ik_rt[953], &ik_rt[954], &ik_rt[955], &ik_rt[956], &ik_rt[957], &ik_rt[958], &ik_rt[959], &ik_rt[961], &ik_rt[967], &ik_rt[969], &ik_rt[970], &ik_rt[971], &ik_rt[972], &ik_rt[973], &ik_rt[974], &ik_rt[975], &ik_rt[976], &ik_rt[977], &ik_rt[1130], &ik_rt[1131], &ik_rt[1132], &ik_rt[1133], &ik_rt[1134], &ik_rt[1136], &ik_rt[1137], &ik_rt[1138], &ik_rt[1139], &ik_rt[1140], &ik_rt[1141], &ik_rt[1142], &ik_rt[1143], &ik_rt[1145], &ik_rt[1146], &ik_rt[1147], &ik_rt[1148], &ik_rt[1149], &ik_rt[1150], &ik_rt[1151], &ik_rt[1152], &ik_rt[1153], &ik_rt[1154], &ik_rt[1155], &ik_rt[1156], &ik_rt[1157], &ik_rt[1158], &ik_rt[1159], &ik_rt[1160], &ik_rt[1161], &ik_rt[1162], &ik_rt[1163], &ik_rt[1164], &ik_rt[1165], &ik_rt[1166], &ik_rt[1167], &ik_rt[1168], &ik_rt[1169], &ik_rt[1170], &ik_rt[1172], &ik_rt[1174], &ik_rt[1176], &ik_rt[1177], &ik_rt[1179], &ik_rt[1181], &ik_rt[1182], &ik_rt[1183], &ik_rt[1185], &ik_rt[1187], &ik_rt[1189], &ik_rt[1191], &ik_rt[1194], &ik_rt[1196], &ik_rt[1198], &ik_rt[1200], &ik_rt[1201], &ik_rt[1202], &ik_rt[1203], &ik_rt[1204], &ik_rt[1205], &ik_rt[1207], &ik_rt[1208], &ik_rt[1209], &ik_rt[1210], &ik_rt[1211], &ik_rt[1213], &ik_rt[1214], &ik_rt[1215], &ik_rt[1216], &ik_rt[1217], &ik_rt[1218], &ik_rt[1220], &ik_rt[1221], &ik_rt[1222], &ik_rt[1223], &ik_rt[1224], &ik_rt[1225], &ik_rt[1227], &ik_rt[1229], &ik_rt[1231], &ik_rt[1234], &ik_rt[1235], &ik_rt[1238], &ik_rt[1239], &ik_rt[1241], &ik_rt[1244], &ik_rt[1248], &ik_rt[1249], &ik_rt[1250], &ik_rt[1251], &ik_rt[1252], &ik_rt[1253], &ik_rt[1254], &ik_rt[1255], &ik_rt[1257], &ik_rt[1263], &ik_rt[1265], &ik_rt[1266], &ik_rt[1268], &ik_rt[1269], &ik_rt[1270], &ik_rt[1273], &ik_rt[1275], &ik_rt[1276], &ik_rt[1277], &ik_rt[1278], &ik_rt[1279], &ik_rt[1280], &ik_rt[1281], &ik_rt[1282], &ik_rt[1283], &ik_rt[1284], &ik_rt[1285], &ik_rt[1286], &ik_rt[1287], &ik_rt[1288], &ik_rt[1289], &ik_rt[1290], &ik_rt[1291], &ik_rt[1292], &ik_rt[1293], &ik_rt[1294], &ik_rt[1295], &ik_rt[1296], &ik_rt[1297], &ik_rt[1298], &ik_rt[1299], &ik_rt[1300], &ik_rt[1301], &ik_rt[1302], &ik_rt[1303], &ik_rt[1304], &ik_rt[1305], &ik_rt[1306], &ik_rt[1307], &ik_rt[1308], &ik_rt[1309], &ik_rt[1310], &ik_rt[1311], &ik_rt[1312], &ik_rt[1313], &ik_rt[1314], &ik_rt[1315], &ik_rt[1316], &ik_rt[1317], &ik_rt[1318], &ik_rt[1319], &ik_rt[1320], &ik_rt[1321], &ik_rt[1322], &ik_rt[1323], &ik_rt[1324], &ik_rt[1325], &ik_rt[1326], &ik_rt[1327], &ik_rt[1329], &ik_rt[1330], &ik_rt[1331], &ik_rt[1332], &ik_rt[1333], &ik_rt[1334], &ik_rt[1335], &ik_rt[1336], &ik_rt[1337], &ik_rt[1338], &ik_rt[1339], &ik_rt[1340], &ik_rt[1341], &ik_rt[1342], &ik_rt[1343], &ik_rt[1344], &ik_rt[1345], &ik_rt[1346], &ik_rt[1347], &ik_rt[1348], &ik_rt[1349], &ik_rt[1350], &ik_rt[1351], &ik_rt[1352], &ik_rt[1353], &ik_rt[1354], &ik_rt[1355], &ik_rt[1356], &ik_rt[1357], &ik_rt[1358], &ik_rt[1359], &ik_rt[1360], &ik_rt[1361], &ik_rt[1362], &ik_rt[1363], &ik_rt[1364], &ik_rt[1365], &ik_rt[1366], &ik_rt[1367], &ik_rt[1368], &ik_rt[1369], &ik_rt[1372], &ik_rt[1375], &ik_rt[1376], &ik_rt[1377], &ik_rt[1378], &ik_rt[1379], &ik_rt[1380], &ik_rt[1381], &ik_rt[1383], &ik_rt[1384], &ik_rt[1386], &ik_rt[1388], &ik_rt[1389], &ik_rt[1390], &ik_rt[1391], &ik_rt[1392], &ik_rt[1393], &ik_rt[1394], &ik_rt[1395], &ik_rt[1396], &ik_rt[1397], &ik_rt[1398], &ik_rt[1399], &ik_rt[1400], &ik_rt[1401], &ik_rt[1402], &ik_rt[1403], &ik_rt[1404], &ik_rt[1405], &ik_rt[1406], &ik_rt[1407], &ik_rt[1408], &ik_rt[1409], &ik_rt[1410], &ik_rt[1411], &ik_rt[1412], &ik_rt[1413], &ik_rt[1414], &ik_rt[1415], &ik_rt[1416], &ik_rt[1417], &ik_rt[1418], &ik_rt[1419], &ik_rt[1420], &ik_rt[1421], &ik_rt[1422], &ik_rt[1423], &ik_rt[1424], &ik_rt[1425], &ik_rt[1426], &ik_rt[1427], &ik_rt[1428], &ik_rt[1429], &ik_rt[1430], &ik_rt[1431], &ik_rt[1432], &ik_rt[1433], &ik_rt[1434], &ik_rt[1435], &ik_rt[1436], &ik_rt[1437], &ik_rt[1438], &ik_rt[1439], &ik_rt[1440], &ik_rt[1441], &ik_rt[1442], &ik_rt[1443], &ik_rt[1444], &ik_rt[1445], &ik_rt[1446], &ik_rt[1447], &ik_rt[1448], &ik_rt[1449], &ik_rt[1450], &ik_rt[1451], &ik_rt[1452], &ik_rt[1453], &ik_rt[1454], &ik_rt[1455], &ik_rt[1456], &ik_rt[1457], &ik_rt[1458], &ik_rt[1459], &ik_rt[1460], &ik_rt[1461], &ik_rt[1462], &ik_rt[1463], &ik_rt[1464], &ik_rt[1465], &ik_rt[1466], &ik_rt[1467], &ik_rt[1468], &ik_rt[1469], &ik_rt[1470], &ik_rt[1471], &ik_rt[1472], &ik_rt[1473], &ik_rt[1474], &ik_rt[1475], &ik_rt[1476], &ik_rt[1477], &ik_rt[1478], &ik_rt[1479], &ik_rt[1480], &ik_rt[1481], &ik_rt[1482], &ik_rt[1483], &ik_rt[1484], &ik_rt[1485], &ik_rt[1486], &ik_rt[1487], &ik_rt[1488], &ik_rt[1489], &ik_rt[1490], &ik_rt[1491], &ik_rt[1492], &ik_rt[1493], &ik_rt[1494], &ik_rt[1495], &ik_rt[1496], &ik_rt[1497], &ik_rt[1498], &ik_rt[1499], &ik_rt[1500], &ik_rt[1501], &ik_rt[1502], &ik_rt[1503], &ik_rt[1504], &ik_rt[1505], &ik_rt[1506], &ik_rt[1507], &ik_rt[1508], &ik_rt[1509], &ik_rt[1510], &ik_rt[1511], &ik_rt[1512], &ik_rt[1513], &ik_rt[1514], &ik_rt[1515], &ik_rt[1516], &ik_rt[1517], &ik_rt[1518], &ik_rt[1519], &ik_rt[1520], &ik_rt[1521], &ik_rt[1522], &ik_rt[1523], &ik_rt[1524], &ik_rt[1525], &ik_rt[1526], &ik_rt[1527], &ik_rt[1528], &ik_rt[1529], &ik_rt[1530], &ik_rt[1531], &ik_rt[1532], &ik_rt[1533], &ik_rt[1534], &ik_rt[1535], &ik_rt[1536], &ik_rt[1537], &ik_rt[1538], &ik_rt[1539], &ik_rt[1540], &ik_rt[1541], &ik_rt[1542], &ik_rt[1543], &ik_rt[1548], &ik_rt[1549], &ik_rt[1551], &ik_rt[1552], &ik_rt[1553], &ik_rt[1555], &ik_rt[1556], &ik_rt[1557], &ik_rt[1558], &ik_rt[1560], &ik_rt[1562], &ik_rt[1563], &ik_rt[1565], &ik_rt[1567], &ik_rt[1572], &ik_rt[1573], &ik_rt[1574], &ik_rt[1575], &ik_rt[1576], &ik_rt[1577], &ik_rt[1578], &ik_rt[1579], &ik_rt[1580], &ik_rt[1581], &ik_rt[1582], &ik_rt[1583], &ik_rt[1584], &ik_rt[1585], &ik_rt[1586], &ik_rt[1587], &ik_rt[1589], &ik_rt[1591], &ik_rt[1592], &ik_rt[1594], &ik_rt[1595], &ik_rt[1596], &ik_rt[1597], &ik_rt[1598], &ik_rt[1599], &ik_rt[1600], &ik_rt[1601], &ik_rt[1603], &ik_rt[1604], &ik_rt[1605], &ik_rt[1606], &ik_rt[1607], &ik_rt[1608], &ik_rt[1609], &ik_rt[1610], &ik_rt[1612], &ik_rt[1614], &ik_rt[1615], &ik_rt[1616], &ik_rt[1617], &ik_rt[1618], &ik_rt[1619], &ik_rt[1620], &ik_rt[1621], &ik_rt[1622], &ik_rt[1623], &ik_rt[1624], &ik_rt[1625], &ik_rt[1626], &ik_rt[1627], &ik_rt[1628], &ik_rt[1629], &ik_rt[1630], &ik_rt[1631], &ik_rt[1632], &ik_rt[1633], &ik_rt[1634], &ik_rt[1635], &ik_rt[1636], &ik_rt[1637], &ik_rt[1638], &ik_rt[1639], &ik_rt[1640], &ik_rt[1641], &ik_rt[1642], &ik_rt[1643], &ik_rt[1644], &ik_rt[1645], &ik_rt[1646], &ik_rt[1647], &ik_rt[1648], &ik_rt[1649], &ik_rt[1650], &ik_rt[1651], &ik_rt[1652], &ik_rt[1653], &ik_rt[1654], &ik_rt[1655], &ik_rt[1656], &ik_rt[1657], &ik_rt[1658], &ik_rt[1659], &ik_rt[1660], &ik_rt[1661], &ik_rt[1662], &ik_rt[1663], &ik_rt[1664], &ik_rt[1665], &ik_rt[1666], &ik_rt[1667], &ik_rt[1668], &ik_rt[1669], &ik_rt[1670], &ik_rt[1671], &ik_rt[1672], &ik_rt[1673], &ik_rt[1674], &ik_rt[1675], &ik_rt[1676], &ik_rt[1677], &ik_rt[1678], &ik_rt[1679], &ik_rt[1680], &ik_rt[1681], &ik_rt[1682], &ik_rt[1683], &ik_rt[1684], &ik_rt[1685], &ik_rt[1686], &ik_rt[1687], &ik_rt[1688], &ik_rt[1689], &ik_rt[1690], &ik_rt[1691], &ik_rt[1692], &ik_rt[1693], &ik_rt[1694], &ik_rt[1695], &ik_rt[1696], &ik_rt[1697], &ik_rt[1698], &ik_rt[1699], &ik_rt[1700], &ik_rt[1701], &ik_rt[1702], &ik_rt[1703], &ik_rt[1704], &ik_rt[1705], &ik_rt[1706], &ik_rt[1707], &ik_rt[1708], &ik_rt[1709], &ik_rt[1710], &ik_rt[1711], &ik_rt[1712], &ik_rt[1713], &ik_rt[1714], &ik_rt[1715], &ik_rt[1716], &ik_rt[1717], &ik_rt[1718], &ik_rt[1720], &ik_rt[1721], &ik_rt[1722], &ik_rt[1723], &ik_rt[1724], &ik_rt[1725], &ik_rt[1726], &ik_rt[1727], &ik_rt[1728], &ik_rt[1729], &ik_rt[1730], &ik_rt[1731], &ik_rt[1732], &ik_rt[1733], &ik_rt[1734], &ik_rt[1735], &ik_rt[1736], &ik_rt[1737], &ik_rt[1738], &ik_rt[1739], &ik_rt[1740], &ik_rt[1741], &ik_rt[1742], &ik_rt[1743], &ik_rt[1744], &ik_rt[1745], &ik_rt[1746], &ik_rt[1747], &ik_rt[1748], &ik_rt[1749], &ik_rt[1750], &ik_rt[1751], &ik_rt[1752], &ik_rt[1753], &ik_rt[1754], &ik_rt[1755], &ik_rt[1756], &ik_rt[1757], &ik_rt[1758], &ik_rt[1759], &ik_rt[1760], &ik_rt[1761], &ik_rt[1762], &ik_rt[1763], &ik_rt[1764], &ik_rt[1765], &ik_rt[1766], &ik_rt[1767], &ik_rt[1768], &ik_rt[1769], &ik_rt[1770], &ik_rt[1771], &ik_rt[1772], &ik_rt[1773], &ik_rt[1775], &ik_rt[1776], &ik_rt[1777], &ik_rt[1779], &ik_rt[1780], &ik_rt[1781], &ik_rt[1783], &ik_rt[1784], &ik_rt[1785], &ik_rt[1786], &ik_rt[1787], &ik_rt[1788], &ik_rt[1789], &ik_rt[1791], &ik_rt[1792], &ik_rt[1793], &ik_rt[1794], &ik_rt[1795], &ik_rt[1796], &ik_rt[1799], &ik_rt[1801], &ik_rt[1802], &ik_rt[1803], &ik_rt[1804], &ik_rt[1805], &ik_rt[1806], &ik_rt[1807], &ik_rt[1808], &ik_rt[1809], &ik_rt[1810], &ik_rt[1811], &ik_rt[1812], &ik_rt[1813], &ik_rt[1814], &ik_rt[1815], &ik_rt[1816], &ik_rt[1817], &ik_rt[1818], &ik_rt[1819], &ik_rt[1820], &ik_rt[1822], &ik_rt[1823], &ik_rt[1824], &ik_rt[1825], &ik_rt[1832], &ik_rt[1833], &ik_rt[1834], &ik_rt[1835], &ik_rt[1836], &ik_rt[1837], &ik_rt[1838], &ik_rt[1842], &ik_rt[1844], &ik_rt[1845], &ik_rt[1846], &ik_rt[1847], &ik_rt[1848], &ik_rt[1849], &ik_rt[1851], &ik_rt[1852], &ik_rt[1853], &ik_rt[1856], &ik_rt[1857], &ik_rt[1858], &ik_rt[1859], &ik_rt[1860], &ik_rt[1868], &ik_rt[1870], &ik_rt[1871], &ik_rt[1873], &ik_rt[1874], &ik_rt[1876], &ik_rt[1877], &ik_rt[1878], &ik_rt[1881], &ik_rt[1883], &ik_rt[1884], &ik_rt[1885], &ik_rt[1886], &ik_rt[1887], &ik_rt[1888], &ik_rt[1889], &ik_rt[1890], &ik_rt[1891], &ik_rt[1892], &ik_rt[1893], &ik_rt[1894], &ik_rt[1895], &ik_rt[1896], &ik_rt[1897], &ik_rt[1898], &ik_rt[1899], &ik_rt[1900], &ik_rt[1901], &ik_rt[1902], &ik_rt[1903], &ik_rt[1904], &ik_rt[1905], &ik_rt[1906], &ik_rt[1907], &ik_rt[1908], &ik_rt[1909], &ik_rt[1910], &ik_rt[1911], &ik_rt[1912], &ik_rt[1913], &ik_rt[1914], &ik_rt[1915], &ik_rt[1916], &ik_rt[1917], &ik_rt[1918], &ik_rt[1919], &ik_rt[1920], &ik_rt[1921], &ik_rt[1922], &ik_rt[1923], &ik_rt[1924], &ik_rt[1925], &ik_rt[1926], &ik_rt[1927], &ik_rt[1928], &ik_rt[1929], &ik_rt[1930], &ik_rt[1931], &ik_rt[1932], &ik_rt[1933], &ik_rt[1934], &ik_rt[1935], &ik_rt[1936], &ik_rt[1937], &ik_rt[1938], &ik_rt[1939], &ik_rt[1940], &ik_rt[1941], &ik_rt[1942], &ik_rt[1943], &ik_rt[1944], &ik_rt[1945], &ik_rt[1946], &ik_rt[1947], &ik_rt[1948], &ik_rt[1949], &ik_rt[1950], &ik_rt[1951], &ik_rt[1952], &ik_rt[1953], &ik_rt[1954], &ik_rt[1955], &ik_rt[1957], &ik_rt[1958], &ik_rt[1960], &ik_rt[1961], &ik_rt[1964], &ik_rt[1965], &ik_rt[1966], &ik_rt[1968], &ik_rt[1973]};
 const int ik_rt_by_tid_count = 2035;
 
-const unsigned char ik_tid_kind[2035] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0,0,17,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,101,0,0,101,100,0,101,17,0,17,0,0,100,0,0,0,0,101,101,2,10,101,101,101,101,101,101,0,101,101,101,101,0,101,101,2,101,101,101,101,101,101,101,0,101,101,0,0,101,101,0,101,101,101,101,101,0,101,101,17,101,101,101,101,17,0,0,101,101,0,101,0,101,0,0,101,101,101,101,101,101,0,101,101,101,101,101,101,101,101,0,101,101,101,100,0,100,101,101,100,0,0,14,17,101,101,101,101,101,101,0,1,0,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,10,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,0,100,101,101,17,100,100,100,101,100,0,100,100,100,0,8,101,0,0,0,101,101,101,0,100,101,100,101,101,0,0,0,0,0,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,101,101,101,0,101,101,0,101,101,101,101,101,100,101,101,101,101,100,101,101,101,100,100,101,101,7,101,0,101,101,101,101,101,0,101,101,101,101,100,100,101,101,101,101,100,0,101,0,0,0,0,101,101,101,100,17,101,101,101,101,101,100,100,101,101,0,2,0,101,0,101,101,0,101,101,0,0,101,0,0,101,0,101,5,0,101,101,101,101,101,101,101,101,0,5,0,100,100,0,100,101,101,101,101,101,101,0,0,100,0,0,100,101,101,101,6,100,101,0,101,0,0,0,0,0,0,0,0,101,0,3,0,0,0,100,100,0,0,0,5,0,101,0,100,0,0,0,2,100,0,0,9,0,0,100,0,0,0,0,0,0,100,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,2,0,0,101,0,0,0,100,101,0,0,8,0,100,0,101,0,0,8,100,101,0,0,8,8,101,0,100,0,101,0,0,101,0,101,0,101,0,0,100,101,0,100,101,0,100,101,0,101,0,100,101,0,0,100,0,100,101,0,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,101,0,100,101,0,100,101,0,101,0,101,0,100,0,100,101,0,0,101,0,0,101,0,0,0,0,100,0,0,0,0,100,0,100,100,100,0,100,0,100,0,100,0,100,0,0,0,0,100,100,0,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,2,0,0,101,0,0,0,0,101,100,0,0,0,0,0,101,0,0,0,101,0,0,0,0,100,0,0,0,0,0,0,100,0,101,2,0,0,100,0,100,101,0,100,0,0,0,0,0,100,0,0,100,0,100,0,0,0,101,0,0,0,100,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,100,0,100,0,0,0,100,0,0,101,100,0,0,0,0,0,100,101,0,9,8,101,0,0,0,100,101,0,100,101,0,0,8,100,101,0,8,0,100,101,0,100,101,0,9,100,101,0,101,0,101,0,101,100,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,8,100,101,0,100,101,0,0,8,100,100,101,0,0,100,101,0,9,9,9,100,101,0,100,101,0,100,101,0,0,0,0,0,2,0,100,0,0,0,0,101,0,100,100,101,0,100,0,0,100,101,0,101,0,101,0,100,101,0,101,0,0,0,101,0,0,100,0,0,101,0,0,0,2,0,0,0,0,100,0,0,0,0,0,0,0,0,0,0,100,0,0,0,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,0,0,101,0,101,0,101,0,101,0,0,101,0,100,0,0,0,101,0,101,0,101,0,2,100,0,100,101,0,0,0,0,101,0,0,101,0,101,0,0,0,100,100,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,100,0,0,0,0,0,100,0,0,0,0,100,0,0,0,100,9,0,0,100,101,0,0,0,0,0,100,0,100,101,0,101,0,0,0,0,0,101,0,0,101,0,100,101,0,101,0,0,101,0,100,0,100,0,0,101,0,5,100,0,0,0,0,0,0,101,0,0,100,100,100,0,101,0,100,100,0,0,101,0,101,0,101,100,0,101,0,0,0,0,0,100,100,0,100,0,100,0,8,0,5,5,0,100,0,0,0,0,0,0,0,0,0,100,0,0,100,0,0,5,5,5,0,0,100,0,0,0,0,0,5,0,0,0,11,5,10,10,101,0,100,100,0,0,0,2,4,100,0,5,0,100,0,0,0,0,0,0,0,0,101,0,5,0,101,0,0,100,101,0,0,0,101,0,100,0,100,0,101,101,0,0,100,0,0,0,0,101,0,8,8,0,5,5,12,101,0,0,0,100,0,100,101,0,0,101,0,100,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,100,0,0,100,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,2,2,100,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,101,0,0,100,0,0,0,0,0,101,0,100,100,0,0,0,0,0,0,101,0,0,0,100,101,0,100,101,0,0,0,8,100,101,0,100,101,0,8,100,101,0,101,0,0,0,100,100,101,0,8,0,0,100,101,0,100,101,0,101,8,100,101,0,8,100,101,0,100,0,8,101,0,0,100,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,5,0,101,0,0,0,0,5,5,0,0,0,0,0,100,0,5,0,0,0,0,0,0,101,0,0,0,0,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,100,0,0,100,0,0,0,0,0,100,0,100,0,5,2,0,101,0,101,0,0,0,0,8,0,0,0,0,0,0,0,0,0,0,0,8,0,0,0,0,2,0,10,0,5,0,0,0,0,5,0,0,100,0,100,0,101,0,5,5,0,0,100,0,100,100,0,0,0,0,0,100,101,0,0,101,0,0,0,0,101,0,0,100,101,0,0,0,100,101,0,0,100,101,0,0,100,101,0,100,0,100,101,0,0,101,0,0,100,101,0,0,101,0,0,0,101,0,100,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,101,0,0,101,0,0,101,0,0,101,0,0,0,0,0,101,0,0,0,101,0,0,0,101,0,0,0,100,0,100,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,8,0,0,100,0,0,100,0,100,0,0,0,100,0,0,0,0,0,0,100,0,0,101,0,0,12,100,0,5,100,0,0,100,0,2,0,100,2,0,0,0,0,0,0,0,0,100,0,100,0,100,0,0,100,0,100,0,100,0,0,100,0,0,0,100,0,100,0,100,0,101,0,0,101,0,0,0,0,0,10,0,100,0,101,0,10,0,0,0,0,100,100,101,0,0,101,0,0,0,2,100,0,0,0,0,101,0,0,0,101,0,101,0,101,0,2,0,100,0,101,0,0,100,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,5,8,0,10,5,10,0};
-const unsigned ik_tid_size[2035] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,0,sizeof(Slice_u8),0,0,sizeof(GoOpaque),sizeof(GoOpaque),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,0,0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_Lb76261),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_L9db835),sizeof(Slice_ov_L2966a0),sizeof(Slice_pv_Lb05621),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_L9a2a44),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,0,0,0,0,0,sizeof(GoOpaque),0,0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L1be2fe),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_L4be5ac),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(GoOpaque),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoOpaque),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_Lb76261),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoOpaque),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(ast_FuncCallExpr),sizeof(ast_ExprBase),sizeof(ast_Node),sizeof(Slice_ast_Expr),sizeof(ast_Comma3Expr),sizeof(ast_NumberExpr),sizeof(ast_ConstExprBase),sizeof(lua_constLValueExpr),sizeof(ast_LabelStmt),sizeof(ast_StmtBase),sizeof(ast_AssignStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(Slice_ast_Stmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_FuncDefStmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),0,sizeof(ast_ParList),sizeof(ast_ReturnStmt),sizeof(ast_IfStmt),sizeof(ast_BreakStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_GotoStmt),sizeof(ast_IdentExpr),sizeof(ast_AttrGetExpr),sizeof(ast_StringExpr),sizeof(ast_NilExpr),sizeof(ast_LogicalOpExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_TableExpr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(ast_ArithmeticOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(ast_Position),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(ast_Token),sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(Arr16_parse_yySymType),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(pm_Error),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_L9db835),sizeof(bcProfKey),sizeof(ov_L2966a0),sizeof(pv_Lb05621),sizeof(StreamLooper),sizeof(pair_L9a2a44),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(Anon_a3823e0d),sizeof(GoOpaque),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_L6800f0),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(GoOpaque),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Texture_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,0,sizeof(GL33State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),0,0,0,0,0,0,sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L1be2fe),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_L4be5ac),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK)};
+const unsigned char ik_tid_kind[2035] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0,0,17,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,101,0,0,101,100,0,101,17,0,17,0,0,100,0,0,0,0,101,101,2,10,101,101,101,101,101,101,0,101,101,101,101,0,101,101,2,101,101,101,101,101,101,101,0,101,101,0,0,101,101,0,101,101,101,101,101,0,101,101,17,101,101,101,101,17,0,0,101,101,0,101,0,101,0,0,101,101,101,101,101,101,0,101,101,101,101,101,101,101,101,0,101,101,101,100,0,100,101,101,100,0,0,14,17,101,101,101,101,101,101,0,1,0,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,10,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,0,100,101,101,17,100,100,100,101,100,0,100,100,100,0,8,101,0,0,0,101,101,101,0,100,101,100,101,101,0,0,0,0,0,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,101,101,101,0,101,101,0,101,101,101,101,101,100,101,101,101,101,100,101,101,101,100,100,101,101,7,101,0,101,101,101,101,101,0,101,101,101,101,100,100,101,101,101,101,100,0,101,0,0,0,0,101,101,101,100,17,101,101,101,101,101,100,100,101,101,0,2,0,101,0,101,101,0,101,101,0,0,101,0,0,101,0,101,5,0,101,101,101,101,101,101,101,101,0,5,0,100,100,0,100,101,101,101,101,101,101,0,0,100,0,0,100,101,101,101,6,100,101,0,101,0,0,0,0,0,0,0,0,101,0,3,0,0,0,100,100,0,0,0,5,0,101,0,100,0,0,0,2,100,0,0,9,0,0,100,0,0,0,0,0,0,100,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,2,0,0,101,0,0,0,100,101,0,0,8,0,100,0,101,0,0,8,100,101,0,0,8,8,101,0,100,0,101,0,0,101,0,101,0,101,0,0,100,101,0,100,101,0,100,101,0,101,0,100,101,0,0,100,0,100,101,0,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,101,0,100,101,0,100,101,0,101,0,101,0,100,0,100,101,0,0,101,0,0,101,0,0,0,0,100,0,0,0,0,100,0,100,100,100,0,100,0,100,0,100,0,100,0,0,0,0,100,100,0,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,2,0,0,101,0,0,0,0,101,100,0,0,0,0,0,101,0,0,0,101,0,0,0,0,100,0,0,0,0,0,0,100,0,101,2,0,0,100,0,100,101,0,100,0,0,0,0,0,100,0,0,100,0,100,0,0,0,101,0,0,0,100,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,100,0,100,0,0,0,100,0,0,101,100,0,0,0,0,0,100,101,0,9,8,101,0,0,0,100,101,0,100,101,0,0,8,100,101,0,8,0,100,101,0,100,101,0,9,100,101,0,101,0,101,0,101,100,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,8,100,101,0,100,101,0,0,8,100,100,101,0,0,100,101,0,9,9,9,100,101,0,100,101,0,100,101,0,0,0,0,0,2,0,100,0,0,0,0,101,0,100,100,101,0,100,0,0,100,101,0,101,0,101,0,100,101,0,101,0,0,0,101,0,0,100,0,0,101,0,0,0,2,0,0,101,0,101,0,101,0,101,0,0,101,0,100,0,0,0,0,0,100,0,0,0,0,0,0,0,0,0,0,100,0,0,0,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,0,0,101,0,101,0,101,0,2,100,0,100,101,0,0,0,0,101,0,0,101,0,101,0,0,0,100,100,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,0,0,100,0,0,0,100,0,0,0,100,9,0,0,100,101,0,0,0,0,0,100,0,100,101,0,101,0,0,0,0,0,101,0,0,101,0,100,101,0,101,0,0,101,0,100,0,100,0,0,101,0,5,100,0,0,0,0,0,0,101,0,0,100,100,100,0,101,0,100,100,0,0,101,0,101,0,101,100,0,101,0,0,0,0,0,100,100,0,100,0,100,0,8,0,5,5,0,100,0,0,0,0,0,0,0,0,0,100,0,0,100,0,0,5,5,5,0,0,100,0,0,0,0,0,5,0,0,0,11,5,10,10,101,0,100,100,0,0,0,2,4,100,0,5,0,100,0,0,0,0,0,0,0,0,101,0,5,0,101,0,0,100,101,0,0,0,101,0,100,0,100,0,101,101,0,0,100,0,0,0,0,101,0,8,8,0,5,5,12,101,0,0,0,100,0,100,101,0,0,101,0,100,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,100,0,0,100,0,0,0,0,0,0,0,0,0,100,101,0,0,0,0,2,2,100,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,101,0,0,100,0,0,0,0,0,101,0,100,100,0,0,0,0,0,0,101,0,0,0,100,101,0,100,101,0,0,0,8,100,101,0,100,101,0,8,100,101,0,101,0,0,0,100,100,101,0,8,0,0,100,101,0,100,101,0,101,8,100,101,0,8,100,101,0,100,0,8,101,0,0,100,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,5,0,101,0,0,0,0,5,5,0,0,0,0,0,100,0,5,0,0,0,0,0,0,101,0,0,0,0,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,100,0,0,100,0,0,0,0,0,100,0,100,0,5,2,0,101,0,101,0,0,0,0,8,0,0,0,0,0,0,0,0,0,0,0,8,0,0,0,0,2,0,10,0,5,0,0,0,0,5,0,0,100,0,100,0,101,0,5,5,0,0,100,0,100,100,0,0,0,0,0,100,101,0,0,101,0,0,0,0,101,0,0,100,101,0,0,0,100,101,0,0,100,101,0,0,100,101,0,100,0,100,101,0,0,101,0,0,100,101,0,0,101,0,0,0,101,0,100,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,101,0,0,101,0,0,101,0,0,101,0,0,0,0,0,101,0,0,0,101,0,0,0,101,0,0,0,100,0,100,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,8,0,0,100,0,0,100,0,100,0,0,0,100,0,0,0,0,0,0,100,0,0,101,0,0,12,100,0,5,100,0,0,100,0,2,0,100,2,0,0,0,0,0,0,0,0,100,0,100,0,100,0,0,100,0,100,0,100,0,0,100,0,0,0,100,0,100,0,100,0,101,0,0,101,0,0,0,0,0,10,0,100,0,101,0,10,0,0,0,0,100,100,101,0,0,101,0,0,0,2,100,0,0,0,0,101,0,0,0,101,0,101,0,101,0,2,0,100,0,101,0,0,100,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,5,8,0,10,5,10,0};
+const unsigned ik_tid_size[2035] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,0,sizeof(Slice_u8),0,0,sizeof(GoOpaque),sizeof(GoOpaque),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,0,0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_L98a5cb),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_L9db835),sizeof(Slice_ov_L2966a0),sizeof(Slice_pv_Lb05621),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_L9a2a44),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,0,0,0,0,0,sizeof(GoOpaque),0,0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L64fd25),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_L5cd011),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(GoOpaque),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoOpaque),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_L98a5cb),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoReflectSliceHeader),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(ast_FuncCallExpr),sizeof(ast_ExprBase),sizeof(ast_Node),sizeof(Slice_ast_Expr),sizeof(ast_Comma3Expr),sizeof(ast_NumberExpr),sizeof(ast_ConstExprBase),sizeof(lua_constLValueExpr),sizeof(ast_LabelStmt),sizeof(ast_StmtBase),sizeof(ast_AssignStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(Slice_ast_Stmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_FuncDefStmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),0,sizeof(ast_ParList),sizeof(ast_ReturnStmt),sizeof(ast_IfStmt),sizeof(ast_BreakStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_GotoStmt),sizeof(ast_IdentExpr),sizeof(ast_AttrGetExpr),sizeof(ast_StringExpr),sizeof(ast_NilExpr),sizeof(ast_LogicalOpExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_TableExpr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(ast_ArithmeticOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(ast_Position),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(ast_Token),sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(Arr16_parse_yySymType),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_Error),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_L9db835),sizeof(bcProfKey),sizeof(ov_L2966a0),sizeof(pv_Lb05621),sizeof(StreamLooper),sizeof(pair_L9a2a44),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(GoOpaque),sizeof(Slice_u8),sizeof(Anon_a3823e0d),sizeof(GoOpaque),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_Lc6dc42),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(GoOpaque),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Texture_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,0,sizeof(GL33State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),0,0,0,0,0,0,sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L64fd25),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_L5cd011),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK)};
 const int ik_tid_count = 2035;
 GoIface ik_binread_any(GoIface r, GoIface x, int big) {
     switch (x.type) {
@@ -185763,7 +185769,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big) {
     case 196: return go_binread(r, ((GoSliceHdr *)x.data)->p, sizeof(i16), ((GoSliceHdr *)x.data)->len, big);
     case 253: return go_binread(r, x.data, sizeof(lua_LNumber), 1, big);
     case 259: return big ? binread_pm_dotClass_1(r, x.data) : binread_pm_dotClass_0(r, x.data);
-    case 265: return big ? binread_pm_posCapPattern_1(r, x.data) : binread_pm_posCapPattern_0(r, x.data);
+    case 266: return big ? binread_pm_posCapPattern_1(r, x.data) : binread_pm_posCapPattern_0(r, x.data);
     case 273: return big ? binread_lua_LNilType_1(r, x.data) : binread_lua_LNilType_0(r, x.data);
     case 278: return go_binread(r, ((GoSliceHdr *)x.data)->p, sizeof(u32), ((GoSliceHdr *)x.data)->len, big);
     case 286: return go_binread(r, ((GoSliceHdr *)x.data)->p, sizeof(OpCode), ((GoSliceHdr *)x.data)->len, big);
@@ -186046,10 +186052,10 @@ GoString iface_Error_319077b5(GoIface _x) {
     case 188: return errors_x_withMessage_Error((errors_x_withMessage*)_x.data);
     case 200: return sjson_errorType_Error((sjson_errorType*)_x.data);
     case 210: return lua_ApiError_Error((lua_ApiError*)_x.data);
-    case 249: return lua_CompileError_Error((lua_CompileError*)_x.data);
+    case 215: return lua_CompileError_Error((lua_CompileError*)_x.data);
     case 251: return exec_ExitError_Error((GoOpaque /* exec.ExitError */*)_x.data);
     case 254: return parse_Error_Error((parse_Error*)_x.data);
-    case 269: return pm_Error_Error((pm_Error*)_x.data);
+    case 260: return pm_Error_Error((pm_Error*)_x.data);
     case 275: return errutil_ErrInfo_Error((errutil_ErrInfo*)_x.data);
     case 281: return Error_Error(*(Error *)_x.data);
     default: { GoString z; memset(&z, 0, sizeof z); return z; }
@@ -186235,40 +186241,40 @@ uintptr_t iface_Kind_1d8722d3(GoIface _x) {
 
 int iface_LastLine_a218166d(GoIface _x) {
     switch (_x.type) {
-    case 215: return ast_Node_LastLine((ast_FuncCallExpr*)_x.data);
-    case 216: return ast_Node_LastLine((ast_Comma3Expr*)_x.data);
-    case 217: return ast_Node_LastLine((ast_NumberExpr*)_x.data);
-    case 218: return ast_Node_LastLine((lua_constLValueExpr*)_x.data);
-    case 219: return ast_Node_LastLine((ast_LabelStmt*)_x.data);
-    case 220: return ast_Node_LastLine((ast_Node*)_x.data);
-    case 221: return ast_Node_LastLine((ast_AssignStmt*)_x.data);
-    case 222: return ast_Node_LastLine((ast_LocalAssignStmt*)_x.data);
-    case 223: return ast_Node_LastLine((ast_FuncCallStmt*)_x.data);
-    case 224: return ast_Node_LastLine((ast_DoBlockStmt*)_x.data);
-    case 225: return ast_Node_LastLine((ast_WhileStmt*)_x.data);
-    case 226: return ast_Node_LastLine((ast_RepeatStmt*)_x.data);
-    case 227: return ast_Node_LastLine((ast_FuncDefStmt*)_x.data);
-    case 228: return ast_Node_LastLine((ast_ReturnStmt*)_x.data);
-    case 229: return ast_Node_LastLine((ast_IfStmt*)_x.data);
-    case 230: return ast_Node_LastLine((ast_BreakStmt*)_x.data);
-    case 231: return ast_Node_LastLine((ast_NumberForStmt*)_x.data);
-    case 232: return ast_Node_LastLine((ast_GenericForStmt*)_x.data);
-    case 233: return ast_Node_LastLine((ast_GotoStmt*)_x.data);
-    case 234: return ast_Node_LastLine((ast_IdentExpr*)_x.data);
-    case 235: return ast_Node_LastLine((ast_AttrGetExpr*)_x.data);
-    case 236: return ast_Node_LastLine((ast_StringExpr*)_x.data);
-    case 237: return ast_Node_LastLine((ast_NilExpr*)_x.data);
-    case 238: return ast_Node_LastLine((ast_LogicalOpExpr*)_x.data);
-    case 239: return ast_Node_LastLine((ast_FunctionExpr*)_x.data);
-    case 240: return ast_Node_LastLine((ast_FalseExpr*)_x.data);
-    case 241: return ast_Node_LastLine((ast_TrueExpr*)_x.data);
-    case 242: return ast_Node_LastLine((ast_UnaryNotOpExpr*)_x.data);
-    case 243: return ast_Node_LastLine((ast_RelationalOpExpr*)_x.data);
-    case 244: return ast_Node_LastLine((ast_TableExpr*)_x.data);
-    case 245: return ast_Node_LastLine((ast_ArithmeticOpExpr*)_x.data);
-    case 246: return ast_Node_LastLine((ast_StringConcatOpExpr*)_x.data);
-    case 247: return ast_Node_LastLine((ast_UnaryMinusOpExpr*)_x.data);
-    case 248: return ast_Node_LastLine((ast_UnaryLenOpExpr*)_x.data);
+    case 216: return ast_Node_LastLine((ast_FuncCallExpr*)_x.data);
+    case 217: return ast_Node_LastLine((ast_Comma3Expr*)_x.data);
+    case 218: return ast_Node_LastLine((ast_NumberExpr*)_x.data);
+    case 219: return ast_Node_LastLine((lua_constLValueExpr*)_x.data);
+    case 220: return ast_Node_LastLine((ast_LabelStmt*)_x.data);
+    case 221: return ast_Node_LastLine((ast_Node*)_x.data);
+    case 222: return ast_Node_LastLine((ast_AssignStmt*)_x.data);
+    case 223: return ast_Node_LastLine((ast_LocalAssignStmt*)_x.data);
+    case 224: return ast_Node_LastLine((ast_FuncCallStmt*)_x.data);
+    case 225: return ast_Node_LastLine((ast_DoBlockStmt*)_x.data);
+    case 226: return ast_Node_LastLine((ast_WhileStmt*)_x.data);
+    case 227: return ast_Node_LastLine((ast_RepeatStmt*)_x.data);
+    case 228: return ast_Node_LastLine((ast_FuncDefStmt*)_x.data);
+    case 229: return ast_Node_LastLine((ast_ReturnStmt*)_x.data);
+    case 230: return ast_Node_LastLine((ast_IfStmt*)_x.data);
+    case 231: return ast_Node_LastLine((ast_BreakStmt*)_x.data);
+    case 232: return ast_Node_LastLine((ast_NumberForStmt*)_x.data);
+    case 233: return ast_Node_LastLine((ast_GenericForStmt*)_x.data);
+    case 234: return ast_Node_LastLine((ast_GotoStmt*)_x.data);
+    case 235: return ast_Node_LastLine((ast_IdentExpr*)_x.data);
+    case 236: return ast_Node_LastLine((ast_AttrGetExpr*)_x.data);
+    case 237: return ast_Node_LastLine((ast_StringExpr*)_x.data);
+    case 238: return ast_Node_LastLine((ast_NilExpr*)_x.data);
+    case 239: return ast_Node_LastLine((ast_LogicalOpExpr*)_x.data);
+    case 240: return ast_Node_LastLine((ast_FunctionExpr*)_x.data);
+    case 241: return ast_Node_LastLine((ast_FalseExpr*)_x.data);
+    case 242: return ast_Node_LastLine((ast_TrueExpr*)_x.data);
+    case 243: return ast_Node_LastLine((ast_UnaryNotOpExpr*)_x.data);
+    case 244: return ast_Node_LastLine((ast_RelationalOpExpr*)_x.data);
+    case 245: return ast_Node_LastLine((ast_TableExpr*)_x.data);
+    case 246: return ast_Node_LastLine((ast_ArithmeticOpExpr*)_x.data);
+    case 247: return ast_Node_LastLine((ast_StringConcatOpExpr*)_x.data);
+    case 248: return ast_Node_LastLine((ast_UnaryMinusOpExpr*)_x.data);
+    case 249: return ast_Node_LastLine((ast_UnaryLenOpExpr*)_x.data);
     default: { int z; memset(&z, 0, sizeof z); return z; }
     }
 }
@@ -186317,40 +186323,40 @@ int iface_Lex_d4c62dc2(GoIface _x, parse_yySymType* _a0) {
 
 int iface_Line_a218166d(GoIface _x) {
     switch (_x.type) {
-    case 215: return ast_Node_Line((ast_FuncCallExpr*)_x.data);
-    case 216: return ast_Node_Line((ast_Comma3Expr*)_x.data);
-    case 217: return ast_Node_Line((ast_NumberExpr*)_x.data);
-    case 218: return ast_Node_Line((lua_constLValueExpr*)_x.data);
-    case 219: return ast_Node_Line((ast_LabelStmt*)_x.data);
-    case 220: return ast_Node_Line((ast_Node*)_x.data);
-    case 221: return ast_Node_Line((ast_AssignStmt*)_x.data);
-    case 222: return ast_Node_Line((ast_LocalAssignStmt*)_x.data);
-    case 223: return ast_Node_Line((ast_FuncCallStmt*)_x.data);
-    case 224: return ast_Node_Line((ast_DoBlockStmt*)_x.data);
-    case 225: return ast_Node_Line((ast_WhileStmt*)_x.data);
-    case 226: return ast_Node_Line((ast_RepeatStmt*)_x.data);
-    case 227: return ast_Node_Line((ast_FuncDefStmt*)_x.data);
-    case 228: return ast_Node_Line((ast_ReturnStmt*)_x.data);
-    case 229: return ast_Node_Line((ast_IfStmt*)_x.data);
-    case 230: return ast_Node_Line((ast_BreakStmt*)_x.data);
-    case 231: return ast_Node_Line((ast_NumberForStmt*)_x.data);
-    case 232: return ast_Node_Line((ast_GenericForStmt*)_x.data);
-    case 233: return ast_Node_Line((ast_GotoStmt*)_x.data);
-    case 234: return ast_Node_Line((ast_IdentExpr*)_x.data);
-    case 235: return ast_Node_Line((ast_AttrGetExpr*)_x.data);
-    case 236: return ast_Node_Line((ast_StringExpr*)_x.data);
-    case 237: return ast_Node_Line((ast_NilExpr*)_x.data);
-    case 238: return ast_Node_Line((ast_LogicalOpExpr*)_x.data);
-    case 239: return ast_Node_Line((ast_FunctionExpr*)_x.data);
-    case 240: return ast_Node_Line((ast_FalseExpr*)_x.data);
-    case 241: return ast_Node_Line((ast_TrueExpr*)_x.data);
-    case 242: return ast_Node_Line((ast_UnaryNotOpExpr*)_x.data);
-    case 243: return ast_Node_Line((ast_RelationalOpExpr*)_x.data);
-    case 244: return ast_Node_Line((ast_TableExpr*)_x.data);
-    case 245: return ast_Node_Line((ast_ArithmeticOpExpr*)_x.data);
-    case 246: return ast_Node_Line((ast_StringConcatOpExpr*)_x.data);
-    case 247: return ast_Node_Line((ast_UnaryMinusOpExpr*)_x.data);
-    case 248: return ast_Node_Line((ast_UnaryLenOpExpr*)_x.data);
+    case 216: return ast_Node_Line((ast_FuncCallExpr*)_x.data);
+    case 217: return ast_Node_Line((ast_Comma3Expr*)_x.data);
+    case 218: return ast_Node_Line((ast_NumberExpr*)_x.data);
+    case 219: return ast_Node_Line((lua_constLValueExpr*)_x.data);
+    case 220: return ast_Node_Line((ast_LabelStmt*)_x.data);
+    case 221: return ast_Node_Line((ast_Node*)_x.data);
+    case 222: return ast_Node_Line((ast_AssignStmt*)_x.data);
+    case 223: return ast_Node_Line((ast_LocalAssignStmt*)_x.data);
+    case 224: return ast_Node_Line((ast_FuncCallStmt*)_x.data);
+    case 225: return ast_Node_Line((ast_DoBlockStmt*)_x.data);
+    case 226: return ast_Node_Line((ast_WhileStmt*)_x.data);
+    case 227: return ast_Node_Line((ast_RepeatStmt*)_x.data);
+    case 228: return ast_Node_Line((ast_FuncDefStmt*)_x.data);
+    case 229: return ast_Node_Line((ast_ReturnStmt*)_x.data);
+    case 230: return ast_Node_Line((ast_IfStmt*)_x.data);
+    case 231: return ast_Node_Line((ast_BreakStmt*)_x.data);
+    case 232: return ast_Node_Line((ast_NumberForStmt*)_x.data);
+    case 233: return ast_Node_Line((ast_GenericForStmt*)_x.data);
+    case 234: return ast_Node_Line((ast_GotoStmt*)_x.data);
+    case 235: return ast_Node_Line((ast_IdentExpr*)_x.data);
+    case 236: return ast_Node_Line((ast_AttrGetExpr*)_x.data);
+    case 237: return ast_Node_Line((ast_StringExpr*)_x.data);
+    case 238: return ast_Node_Line((ast_NilExpr*)_x.data);
+    case 239: return ast_Node_Line((ast_LogicalOpExpr*)_x.data);
+    case 240: return ast_Node_Line((ast_FunctionExpr*)_x.data);
+    case 241: return ast_Node_Line((ast_FalseExpr*)_x.data);
+    case 242: return ast_Node_Line((ast_TrueExpr*)_x.data);
+    case 243: return ast_Node_Line((ast_UnaryNotOpExpr*)_x.data);
+    case 244: return ast_Node_Line((ast_RelationalOpExpr*)_x.data);
+    case 245: return ast_Node_Line((ast_TableExpr*)_x.data);
+    case 246: return ast_Node_Line((ast_ArithmeticOpExpr*)_x.data);
+    case 247: return ast_Node_Line((ast_StringConcatOpExpr*)_x.data);
+    case 248: return ast_Node_Line((ast_UnaryMinusOpExpr*)_x.data);
+    case 249: return ast_Node_Line((ast_UnaryLenOpExpr*)_x.data);
     default: { int z; memset(&z, 0, sizeof z); return z; }
     }
 }
@@ -186399,8 +186405,8 @@ bool iface_Matches_22b82a6e(GoIface _x, int _a0) {
     case 257: return pm_charClass_Matches((pm_charClass*)_x.data, _a0);
     case 258: return pm_singleClass_Matches((pm_singleClass*)_x.data, _a0);
     case 259: return pm_dotClass_Matches((pm_dotClass*)_x.data, _a0);
-    case 260: return pm_rangeClass_Matches((pm_rangeClass*)_x.data, _a0);
-    case 261: return pm_setClass_Matches((pm_setClass*)_x.data, _a0);
+    case 261: return pm_rangeClass_Matches((pm_rangeClass*)_x.data, _a0);
+    case 262: return pm_setClass_Matches((pm_setClass*)_x.data, _a0);
     default: { bool z; memset(&z, 0, sizeof z); return z; }
     }
 }
@@ -186893,80 +186899,80 @@ void iface_SetHeader_1d5744c2(GoIface _x, u16 _a0, u16 _a1) {
 
 void iface_SetLastLine_83b24cfd(GoIface _x, int _a0) {
     switch (_x.type) {
-    case 215: ast_Node_SetLastLine((ast_FuncCallExpr*)_x.data, _a0); return;
-    case 216: ast_Node_SetLastLine((ast_Comma3Expr*)_x.data, _a0); return;
-    case 217: ast_Node_SetLastLine((ast_NumberExpr*)_x.data, _a0); return;
-    case 218: ast_Node_SetLastLine((lua_constLValueExpr*)_x.data, _a0); return;
-    case 219: ast_Node_SetLastLine((ast_LabelStmt*)_x.data, _a0); return;
-    case 220: ast_Node_SetLastLine((ast_Node*)_x.data, _a0); return;
-    case 221: ast_Node_SetLastLine((ast_AssignStmt*)_x.data, _a0); return;
-    case 222: ast_Node_SetLastLine((ast_LocalAssignStmt*)_x.data, _a0); return;
-    case 223: ast_Node_SetLastLine((ast_FuncCallStmt*)_x.data, _a0); return;
-    case 224: ast_Node_SetLastLine((ast_DoBlockStmt*)_x.data, _a0); return;
-    case 225: ast_Node_SetLastLine((ast_WhileStmt*)_x.data, _a0); return;
-    case 226: ast_Node_SetLastLine((ast_RepeatStmt*)_x.data, _a0); return;
-    case 227: ast_Node_SetLastLine((ast_FuncDefStmt*)_x.data, _a0); return;
-    case 228: ast_Node_SetLastLine((ast_ReturnStmt*)_x.data, _a0); return;
-    case 229: ast_Node_SetLastLine((ast_IfStmt*)_x.data, _a0); return;
-    case 230: ast_Node_SetLastLine((ast_BreakStmt*)_x.data, _a0); return;
-    case 231: ast_Node_SetLastLine((ast_NumberForStmt*)_x.data, _a0); return;
-    case 232: ast_Node_SetLastLine((ast_GenericForStmt*)_x.data, _a0); return;
-    case 233: ast_Node_SetLastLine((ast_GotoStmt*)_x.data, _a0); return;
-    case 234: ast_Node_SetLastLine((ast_IdentExpr*)_x.data, _a0); return;
-    case 235: ast_Node_SetLastLine((ast_AttrGetExpr*)_x.data, _a0); return;
-    case 236: ast_Node_SetLastLine((ast_StringExpr*)_x.data, _a0); return;
-    case 237: ast_Node_SetLastLine((ast_NilExpr*)_x.data, _a0); return;
-    case 238: ast_Node_SetLastLine((ast_LogicalOpExpr*)_x.data, _a0); return;
-    case 239: ast_Node_SetLastLine((ast_FunctionExpr*)_x.data, _a0); return;
-    case 240: ast_Node_SetLastLine((ast_FalseExpr*)_x.data, _a0); return;
-    case 241: ast_Node_SetLastLine((ast_TrueExpr*)_x.data, _a0); return;
-    case 242: ast_Node_SetLastLine((ast_UnaryNotOpExpr*)_x.data, _a0); return;
-    case 243: ast_Node_SetLastLine((ast_RelationalOpExpr*)_x.data, _a0); return;
-    case 244: ast_Node_SetLastLine((ast_TableExpr*)_x.data, _a0); return;
-    case 245: ast_Node_SetLastLine((ast_ArithmeticOpExpr*)_x.data, _a0); return;
-    case 246: ast_Node_SetLastLine((ast_StringConcatOpExpr*)_x.data, _a0); return;
-    case 247: ast_Node_SetLastLine((ast_UnaryMinusOpExpr*)_x.data, _a0); return;
-    case 248: ast_Node_SetLastLine((ast_UnaryLenOpExpr*)_x.data, _a0); return;
+    case 216: ast_Node_SetLastLine((ast_FuncCallExpr*)_x.data, _a0); return;
+    case 217: ast_Node_SetLastLine((ast_Comma3Expr*)_x.data, _a0); return;
+    case 218: ast_Node_SetLastLine((ast_NumberExpr*)_x.data, _a0); return;
+    case 219: ast_Node_SetLastLine((lua_constLValueExpr*)_x.data, _a0); return;
+    case 220: ast_Node_SetLastLine((ast_LabelStmt*)_x.data, _a0); return;
+    case 221: ast_Node_SetLastLine((ast_Node*)_x.data, _a0); return;
+    case 222: ast_Node_SetLastLine((ast_AssignStmt*)_x.data, _a0); return;
+    case 223: ast_Node_SetLastLine((ast_LocalAssignStmt*)_x.data, _a0); return;
+    case 224: ast_Node_SetLastLine((ast_FuncCallStmt*)_x.data, _a0); return;
+    case 225: ast_Node_SetLastLine((ast_DoBlockStmt*)_x.data, _a0); return;
+    case 226: ast_Node_SetLastLine((ast_WhileStmt*)_x.data, _a0); return;
+    case 227: ast_Node_SetLastLine((ast_RepeatStmt*)_x.data, _a0); return;
+    case 228: ast_Node_SetLastLine((ast_FuncDefStmt*)_x.data, _a0); return;
+    case 229: ast_Node_SetLastLine((ast_ReturnStmt*)_x.data, _a0); return;
+    case 230: ast_Node_SetLastLine((ast_IfStmt*)_x.data, _a0); return;
+    case 231: ast_Node_SetLastLine((ast_BreakStmt*)_x.data, _a0); return;
+    case 232: ast_Node_SetLastLine((ast_NumberForStmt*)_x.data, _a0); return;
+    case 233: ast_Node_SetLastLine((ast_GenericForStmt*)_x.data, _a0); return;
+    case 234: ast_Node_SetLastLine((ast_GotoStmt*)_x.data, _a0); return;
+    case 235: ast_Node_SetLastLine((ast_IdentExpr*)_x.data, _a0); return;
+    case 236: ast_Node_SetLastLine((ast_AttrGetExpr*)_x.data, _a0); return;
+    case 237: ast_Node_SetLastLine((ast_StringExpr*)_x.data, _a0); return;
+    case 238: ast_Node_SetLastLine((ast_NilExpr*)_x.data, _a0); return;
+    case 239: ast_Node_SetLastLine((ast_LogicalOpExpr*)_x.data, _a0); return;
+    case 240: ast_Node_SetLastLine((ast_FunctionExpr*)_x.data, _a0); return;
+    case 241: ast_Node_SetLastLine((ast_FalseExpr*)_x.data, _a0); return;
+    case 242: ast_Node_SetLastLine((ast_TrueExpr*)_x.data, _a0); return;
+    case 243: ast_Node_SetLastLine((ast_UnaryNotOpExpr*)_x.data, _a0); return;
+    case 244: ast_Node_SetLastLine((ast_RelationalOpExpr*)_x.data, _a0); return;
+    case 245: ast_Node_SetLastLine((ast_TableExpr*)_x.data, _a0); return;
+    case 246: ast_Node_SetLastLine((ast_ArithmeticOpExpr*)_x.data, _a0); return;
+    case 247: ast_Node_SetLastLine((ast_StringConcatOpExpr*)_x.data, _a0); return;
+    case 248: ast_Node_SetLastLine((ast_UnaryMinusOpExpr*)_x.data, _a0); return;
+    case 249: ast_Node_SetLastLine((ast_UnaryLenOpExpr*)_x.data, _a0); return;
     default: return;
     }
 }
 
 void iface_SetLine_83b24cfd(GoIface _x, int _a0) {
     switch (_x.type) {
-    case 215: ast_Node_SetLine((ast_FuncCallExpr*)_x.data, _a0); return;
-    case 216: ast_Node_SetLine((ast_Comma3Expr*)_x.data, _a0); return;
-    case 217: ast_Node_SetLine((ast_NumberExpr*)_x.data, _a0); return;
-    case 218: ast_Node_SetLine((lua_constLValueExpr*)_x.data, _a0); return;
-    case 219: ast_Node_SetLine((ast_LabelStmt*)_x.data, _a0); return;
-    case 220: ast_Node_SetLine((ast_Node*)_x.data, _a0); return;
-    case 221: ast_Node_SetLine((ast_AssignStmt*)_x.data, _a0); return;
-    case 222: ast_Node_SetLine((ast_LocalAssignStmt*)_x.data, _a0); return;
-    case 223: ast_Node_SetLine((ast_FuncCallStmt*)_x.data, _a0); return;
-    case 224: ast_Node_SetLine((ast_DoBlockStmt*)_x.data, _a0); return;
-    case 225: ast_Node_SetLine((ast_WhileStmt*)_x.data, _a0); return;
-    case 226: ast_Node_SetLine((ast_RepeatStmt*)_x.data, _a0); return;
-    case 227: ast_Node_SetLine((ast_FuncDefStmt*)_x.data, _a0); return;
-    case 228: ast_Node_SetLine((ast_ReturnStmt*)_x.data, _a0); return;
-    case 229: ast_Node_SetLine((ast_IfStmt*)_x.data, _a0); return;
-    case 230: ast_Node_SetLine((ast_BreakStmt*)_x.data, _a0); return;
-    case 231: ast_Node_SetLine((ast_NumberForStmt*)_x.data, _a0); return;
-    case 232: ast_Node_SetLine((ast_GenericForStmt*)_x.data, _a0); return;
-    case 233: ast_Node_SetLine((ast_GotoStmt*)_x.data, _a0); return;
-    case 234: ast_Node_SetLine((ast_IdentExpr*)_x.data, _a0); return;
-    case 235: ast_Node_SetLine((ast_AttrGetExpr*)_x.data, _a0); return;
-    case 236: ast_Node_SetLine((ast_StringExpr*)_x.data, _a0); return;
-    case 237: ast_Node_SetLine((ast_NilExpr*)_x.data, _a0); return;
-    case 238: ast_Node_SetLine((ast_LogicalOpExpr*)_x.data, _a0); return;
-    case 239: ast_Node_SetLine((ast_FunctionExpr*)_x.data, _a0); return;
-    case 240: ast_Node_SetLine((ast_FalseExpr*)_x.data, _a0); return;
-    case 241: ast_Node_SetLine((ast_TrueExpr*)_x.data, _a0); return;
-    case 242: ast_Node_SetLine((ast_UnaryNotOpExpr*)_x.data, _a0); return;
-    case 243: ast_Node_SetLine((ast_RelationalOpExpr*)_x.data, _a0); return;
-    case 244: ast_Node_SetLine((ast_TableExpr*)_x.data, _a0); return;
-    case 245: ast_Node_SetLine((ast_ArithmeticOpExpr*)_x.data, _a0); return;
-    case 246: ast_Node_SetLine((ast_StringConcatOpExpr*)_x.data, _a0); return;
-    case 247: ast_Node_SetLine((ast_UnaryMinusOpExpr*)_x.data, _a0); return;
-    case 248: ast_Node_SetLine((ast_UnaryLenOpExpr*)_x.data, _a0); return;
+    case 216: ast_Node_SetLine((ast_FuncCallExpr*)_x.data, _a0); return;
+    case 217: ast_Node_SetLine((ast_Comma3Expr*)_x.data, _a0); return;
+    case 218: ast_Node_SetLine((ast_NumberExpr*)_x.data, _a0); return;
+    case 219: ast_Node_SetLine((lua_constLValueExpr*)_x.data, _a0); return;
+    case 220: ast_Node_SetLine((ast_LabelStmt*)_x.data, _a0); return;
+    case 221: ast_Node_SetLine((ast_Node*)_x.data, _a0); return;
+    case 222: ast_Node_SetLine((ast_AssignStmt*)_x.data, _a0); return;
+    case 223: ast_Node_SetLine((ast_LocalAssignStmt*)_x.data, _a0); return;
+    case 224: ast_Node_SetLine((ast_FuncCallStmt*)_x.data, _a0); return;
+    case 225: ast_Node_SetLine((ast_DoBlockStmt*)_x.data, _a0); return;
+    case 226: ast_Node_SetLine((ast_WhileStmt*)_x.data, _a0); return;
+    case 227: ast_Node_SetLine((ast_RepeatStmt*)_x.data, _a0); return;
+    case 228: ast_Node_SetLine((ast_FuncDefStmt*)_x.data, _a0); return;
+    case 229: ast_Node_SetLine((ast_ReturnStmt*)_x.data, _a0); return;
+    case 230: ast_Node_SetLine((ast_IfStmt*)_x.data, _a0); return;
+    case 231: ast_Node_SetLine((ast_BreakStmt*)_x.data, _a0); return;
+    case 232: ast_Node_SetLine((ast_NumberForStmt*)_x.data, _a0); return;
+    case 233: ast_Node_SetLine((ast_GenericForStmt*)_x.data, _a0); return;
+    case 234: ast_Node_SetLine((ast_GotoStmt*)_x.data, _a0); return;
+    case 235: ast_Node_SetLine((ast_IdentExpr*)_x.data, _a0); return;
+    case 236: ast_Node_SetLine((ast_AttrGetExpr*)_x.data, _a0); return;
+    case 237: ast_Node_SetLine((ast_StringExpr*)_x.data, _a0); return;
+    case 238: ast_Node_SetLine((ast_NilExpr*)_x.data, _a0); return;
+    case 239: ast_Node_SetLine((ast_LogicalOpExpr*)_x.data, _a0); return;
+    case 240: ast_Node_SetLine((ast_FunctionExpr*)_x.data, _a0); return;
+    case 241: ast_Node_SetLine((ast_FalseExpr*)_x.data, _a0); return;
+    case 242: ast_Node_SetLine((ast_TrueExpr*)_x.data, _a0); return;
+    case 243: ast_Node_SetLine((ast_UnaryNotOpExpr*)_x.data, _a0); return;
+    case 244: ast_Node_SetLine((ast_RelationalOpExpr*)_x.data, _a0); return;
+    case 245: ast_Node_SetLine((ast_TableExpr*)_x.data, _a0); return;
+    case 246: ast_Node_SetLine((ast_ArithmeticOpExpr*)_x.data, _a0); return;
+    case 247: ast_Node_SetLine((ast_StringConcatOpExpr*)_x.data, _a0); return;
+    case 248: ast_Node_SetLine((ast_UnaryMinusOpExpr*)_x.data, _a0); return;
+    case 249: ast_Node_SetLine((ast_UnaryLenOpExpr*)_x.data, _a0); return;
     default: return;
     }
 }
@@ -187449,10 +187455,10 @@ bool ik_fmt_method(GoIface x, GoString *out) {
     case 188: *out = iface_Error_319077b5(x); return true;
     case 200: *out = iface_Error_319077b5(x); return true;
     case 210: *out = iface_Error_319077b5(x); return true;
-    case 249: *out = iface_Error_319077b5(x); return true;
+    case 215: *out = iface_Error_319077b5(x); return true;
     case 251: *out = iface_Error_319077b5(x); return true;
     case 254: *out = iface_Error_319077b5(x); return true;
-    case 269: *out = iface_Error_319077b5(x); return true;
+    case 260: *out = iface_Error_319077b5(x); return true;
     case 275: *out = iface_Error_319077b5(x); return true;
     case 281: *out = iface_Error_319077b5(x); return true;
     case 101: *out = iface_String_319077b5(x); return true;
