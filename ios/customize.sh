@@ -49,6 +49,8 @@ fi
 plutil -replace UIFileSharingEnabled -bool YES "$PLIST"
 plutil -replace LSSupportsOpeningDocumentsInPlace -bool YES "$PLIST"
 plutil -replace CADisableMinimumFrameDurationOnPhone -bool YES "$PLIST" # 120 Hz on ProMotion iPhones
+# vInputKit only talks to a Steam Controller over Bluetooth when this key exists.
+plutil -replace NSBluetoothAlwaysUsageDescription -string "CvF Online connects to your Steam Controller over Bluetooth." "$PLIST"
 plutil -replace NSLocalNetworkUsageDescription -string "CvF Online uses your local network to find and play people near you, and to open a port on your router for online matches." "$PLIST"
 # Nearby play: iPhone/iPad find each other over Bonjour (direct peer-to-peer Wi-Fi).
 plutil -replace NSBonjourServices -json '["_cvfnearby._tcp","_cvfnearby._udp"]' "$PLIST"
