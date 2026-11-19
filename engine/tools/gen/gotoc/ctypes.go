@@ -9,6 +9,7 @@ import (
 var pkg *types.Package
 
 var sliceTypes = map[string]types.Type{}
+var localTypes = map[string]*types.Named{}
 var mapTypes = map[string]*types.Map{}
 var arrTypes = map[string]*types.Array{}
 var overrides = map[string]string{}
@@ -23,6 +24,17 @@ func fmtFloat_unused(f float64) string {
 
 func isPkgNamed(t types.Type) (string, bool) {
 	if n, ok := t.(*types.Named); ok && n.Obj().Pkg() == pkg {
+		if n.Obj().Parent() != nil && n.Obj().Parent() != pkg.Scope() {
+			// function-local type: unique name, body emitted by typePreamble
+			pos := fmt.Sprint(n.Obj().Pos())
+			h := uint32(2166136261)
+			for i := 0; i < len(pos); i++ {
+				h = (h ^ uint32(pos[i])) * 16777619
+			}
+			name := fmt.Sprintf("%s_L%06x", n.Obj().Name(), h&0xffffff)
+			localTypes[name] = n
+			return name, true
+		}
 		return n.Obj().Name(), true
 	}
 	return "", false
@@ -180,6 +192,11 @@ func cbase(t types.Type) string {
 		return "GoOpaque /* " + types.TypeString(u, qual) + " */"
 	case *types.Chan:
 		return "GoOpaque /* chan */"
+	case *types.TypeParam:
+		if s, ok := curSubst[u]; ok {
+			return cbase(s)
+		}
+		return "GoOpaque /* type param */"
 	case *types.Struct:
 		n := anonName(u)
 		return n

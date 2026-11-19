@@ -23,6 +23,7 @@ GoString go_strcat(GoString a, GoString b);
 GoString go_substr(GoString s, int lo, int hi);  // hi < 0: to end
 GoString go_rune2str(i32 r);
 const char *go_strz(GoString s);  // NUL-terminated copy (scratch, rotating)
+int go_decode_rune(GoString s, int i, i32 *r);  // utf8.DecodeRuneInString at i: width (>= 1)
 
 // ---------------------------------------------------------------- slices
 // Every slice type is `struct { T *p; int len, cap; }` (generated).
@@ -35,8 +36,9 @@ void *go_slice_grow(void *p, int len, int *cap, int need, size_t elem);
     ((T){(E *)calloc((size_t)((c) > 0 ? (c) : 1), sizeof(E)), (n), ((c) > (n) ? (c) : (n))})
 // append(s, v): grows like Go (amortised doubling), shares storage when
 // capacity allows (aliasing semantics preserved).
-#define GO_APPEND(T, s, v) go_append_##T((s), (v))
-#define GO_APPEND_SLICE(T, s, s2) go_append_slice_##T((s), (s2))
+// (variadic so compound-literal arguments with commas pass through)
+#define GO_APPEND(T, s, ...) go_append_##T((s), (__VA_ARGS__))
+#define GO_APPEND_SLICE(T, s, ...) go_append_slice_##T((s), (__VA_ARGS__))
 #define GO_COPY(dst, src) go_copy_impl((dst).p, (dst).len, (src).p, (src).len, sizeof(*(dst).p))
 int go_copy_impl(void *dst, int dlen, const void *src, int slen, size_t elem);
 #define GO_SLICE_LIT(T, E, n, ...) go_slice_lit_##T((E[]){__VA_ARGS__}, (n))
@@ -101,7 +103,7 @@ typedef struct GoIface {
     int type;  // 0 = nil
     void *data;
 } GoIface;
-bool go_iface_eq(GoIface a, GoIface b);
+bool go_iface_eq(GoIface a, GoIface b);  // defined with the type tables (ik_rt.c)
 
 typedef struct GoFunc {
     void *fn;
@@ -115,7 +117,7 @@ typedef GoOpaque GoOpaqueVal;
 
 // ---------------------------------------------------------------- memory
 void *go_box_impl(const void *v, size_t n);
-#define go_box(T, v) ((T *)go_box_impl(&(T[1]){v}, sizeof(T)))
+#define go_box(T, ...) ((T *)go_box_impl(&(T[1]){__VA_ARGS__}, sizeof(T)))
 #define go_new(T) ((T *)calloc(1, sizeof(T)))
 _Noreturn void go_panic_str(const char *msg);
 #define go_panic(x) go_panic_str("panic")

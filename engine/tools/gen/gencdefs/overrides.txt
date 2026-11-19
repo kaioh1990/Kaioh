@@ -1,21 +1,11 @@
 # Go type -> C type supplied by hand-written engine code
-Sff GoOpaqueVal
 Snd GoOpaqueVal
-Sprite GoOpaqueVal
 Fnt GoOpaqueVal
-PalInfo GoOpaqueVal
-PaletteList GoOpaqueVal
-Palette GoOpaqueVal
 Texture GoIface
-SpriteTextureAtlas GoOpaqueVal
-TextureAtlas GoOpaqueVal
-CustomShaderRenderData GoOpaqueVal
-ShaderTexture GoOpaqueVal
 bgMusic GoOpaqueVal
 lazySound GoOpaqueVal
 specGuard GoOpaqueVal
 specList GoOpaqueVal
 nameFact GoOpaqueVal
-SffHeader GoOpaqueVal
 Sound GoOpaqueVal
 FntCharImage GoOpaqueVal

@@ -35,7 +35,7 @@ func (t *Tx) calleeFunc(c *ast.CallExpr) *types.Func {
 func (t *Tx) call(c *ast.CallExpr) string {
 	// type conversion
 	if tv := t.p.info.Types[c.Fun]; tv.IsType() {
-		return t.conversion(tv.Type, c.Args[0])
+		return t.conversion(substT(tv.Type), c.Args[0])
 	}
 	// builtins
 	if id, ok := c.Fun.(*ast.Ident); ok {
@@ -48,8 +48,13 @@ func (t *Tx) call(c *ast.CallExpr) string {
 		return t.indirectCall(c)
 	}
 	sig := fn.Type().(*types.Signature)
+	if (sig.TypeParams() != nil || isGenericInstance(t, c)) && !simpleGeneric[fn.Name()] && sig.Recv() == nil {
+		if name, isig := t.genericCall(c, fn); name != "" {
+			return name + "(" + strings.Join(t.callArgs(c, isig), ", ") + ")"
+		}
+	}
 	args := t.callArgs(c, sig)
-	// generic functions (Min, Max, Abs, Clamp, ...)
+	// generic helpers with hand-written C versions (gort.h): Min, Max, Abs, Sign, Clamp
 	if sig.TypeParams() != nil || isGenericInstance(t, c) {
 		inst := t.instanceType(c)
 		m := mangle(inst)
@@ -81,13 +86,16 @@ func (t *Tx) call(c *ast.CallExpr) string {
 			return t.TODO(c, "method expression call")
 		}
 		if _, isIface := sel.Recv().Underlying().(*types.Interface); isIface {
-			return fmt.Sprintf("IFACE_CALL(%s, %s%s)", t.expr(se.X), fn.Name(), prependComma(args))
+			return t.ifaceCall(se, fn, args)
 		}
 		recv := t.methodRecv(se.X, sel, sig)
 		return fmt.Sprintf("%s(%s%s)", cFuncName(t.p, fn), recv, prependComma(args))
 	}
 	if fn.Pkg() != t.p.pkg {
-		return fmt.Sprintf("%s_%s(%s)", fn.Pkg().Name(), fn.Name(), strings.Join(args, ", "))
+		if r := t.special(c, fn, args); r != "" {
+			return r
+		}
+		return fmt.Sprintf("%s(%s)", cFuncName(t.p, fn), strings.Join(args, ", "))
 	}
 	return fmt.Sprintf("%s(%s)", cFuncName(t.p, fn), strings.Join(args, ", "))
 }
@@ -138,7 +146,7 @@ func (t *Tx) callArgs(c *ast.CallExpr, sig *types.Signature) []string {
 			for _, a2 := range c.Args[np-1:] {
 				tail = append(tail, t.exprConv(a2, st.Elem()))
 			}
-			args = append(args, fmt.Sprintf("GO_SLICE_LIT(%s, %s, %d, %s)", cbase(st), cbase(st.Elem()), len(tail), strings.Join(tail, ", ")))
+			args = append(args, fmt.Sprintf("GO_SLICE_LIT(%s, %s, %d, %s)", cbase(st.Underlying()), cbase(st.Elem()), len(tail), strings.Join(tail, ", ")))
 			return args
 		}
 		if i < np {
@@ -186,6 +194,7 @@ func (t *Tx) methodRecv(x ast.Expr, sel *types.Selection, sig *types.Signature) 
 }
 
 func (t *Tx) conversion(to types.Type, arg ast.Expr) string {
+	to = substT(to)
 	from := t.typeOf(arg)
 	if tv := t.p.info.Types[arg]; tv.Value != nil {
 		return constLit(tv.Value, to)
@@ -215,7 +224,7 @@ func (t *Tx) conversion(to types.Type, arg ast.Expr) string {
 		}
 	}
 	if _, ok := to.Underlying().(*types.Interface); ok {
-		return t.TODO(arg, "conversion to interface")
+		return t.box(x, from)
 	}
 	// same underlying type: nothing to do in C (typedefs)
 	if types.Identical(from.Underlying(), to.Underlying()) {
@@ -251,21 +260,21 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 				return fmt.Sprint(a.Len())
 			}
 		case *types.Map:
-			return cbase(xt) + "_len(&" + x + ")"
+			return cbase(xt.Underlying()) + "_len(&" + x + ")"
 		}
 		return t.TODO(c, name)
 	case "append":
 		st := t.typeOf(c.Args[0])
 		if c.Ellipsis.IsValid() {
 			if isString(t.typeOf(c.Args[1])) {
-				return fmt.Sprintf("GO_APPEND_SLICE(%s, %s, go_str2bytes(%s))", cbase(st), t.expr(c.Args[0]), t.expr(c.Args[1]))
+				return fmt.Sprintf("GO_APPEND_SLICE(%s, %s, go_str2bytes(%s))", cbase(st.Underlying()), t.expr(c.Args[0]), t.expr(c.Args[1]))
 			}
-			return fmt.Sprintf("GO_APPEND_SLICE(%s, %s, %s)", cbase(st), t.expr(c.Args[0]), t.expr(c.Args[1]))
+			return fmt.Sprintf("GO_APPEND_SLICE(%s, %s, %s)", cbase(st.Underlying()), t.expr(c.Args[0]), t.expr(c.Args[1]))
 		}
 		s := t.expr(c.Args[0])
 		elem := st.Underlying().(*types.Slice).Elem()
 		for _, a := range c.Args[1:] {
-			s = fmt.Sprintf("GO_APPEND(%s, %s, %s)", cbase(st), s, t.exprConv(a, elem))
+			s = fmt.Sprintf("GO_APPEND(%s, %s, %s)", cbase(st.Underlying()), s, t.exprConv(a, elem))
 		}
 		return s
 	case "make":
@@ -288,7 +297,7 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 			if len(c.Args) > 1 {
 				n = t.expr(c.Args[1])
 			}
-			return cbase(ty) + "_make(" + n + ")"
+			return cbase(ty.Underlying()) + "_make(" + n + ")"
 		}
 		return t.TODO(c, "make")
 	case "new":
@@ -299,7 +308,7 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 	case "delete":
 		mt := t.typeOf(c.Args[0])
 		m := mt.Underlying().(*types.Map)
-		return fmt.Sprintf("%s_delete(&%s, %s)", cbase(mt), t.expr(c.Args[0]), t.exprConv(c.Args[1], m.Key()))
+		return fmt.Sprintf("%s_delete(&%s, %s)", cbase(m), t.expr(c.Args[0]), t.exprConv(c.Args[1], m.Key()))
 	case "panic":
 		return "go_panic(" + t.expr(c.Args[0]) + ")"
 	case "min", "max":
@@ -317,6 +326,10 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 		return t.TODO(c, "clear")
 	case "print", "println":
 		return "((void)0)"
+	case "recover":
+		return "((GoIface){0})" // panics abort in the C runtime
 	}
 	return t.TODO(c, "builtin "+name)
 }
+
+var simpleGeneric = map[string]bool{"Min": true, "Max": true, "Abs": true, "Sign": true, "Clamp": true}

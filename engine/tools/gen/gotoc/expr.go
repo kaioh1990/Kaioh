@@ -12,8 +12,13 @@ import (
 )
 
 func (t *Tx) exprConv(e ast.Expr, target types.Type) string {
+	target = substT(target)
 	tv := t.p.info.Types[e]
 	if tv.Value != nil && target != nil {
+		if isIface(target) {
+			ct := defaultType(tv.Type)
+			return t.box(constLit(tv.Value, ct), ct)
+		}
 		return constLit(tv.Value, target)
 	}
 	// nil to slice/map/interface
@@ -23,6 +28,12 @@ func (t *Tx) exprConv(e ast.Expr, target types.Type) string {
 			return "NULL"
 		default:
 			return "(" + cbase(target) + "){0}"
+		}
+	}
+	if target != nil && isIface(target) {
+		from := t.typeOf(e)
+		if from != nil && !isIface(from) {
+			return t.box(t.expr(e), from)
 		}
 	}
 	return t.expr(e)
@@ -128,7 +139,7 @@ func (t *Tx) expr(e ast.Expr) string {
 	case *ast.CompositeLit:
 		return t.composite(e)
 	case *ast.TypeAssertExpr:
-		return t.TODO(e, "type assertion")
+		return t.typeAssert(e)
 	case *ast.FuncLit:
 		return t.funcLit(e)
 	case *ast.KeyValueExpr:
@@ -151,10 +162,14 @@ func (t *Tx) ident(e *ast.Ident) string {
 	switch o := obj.(type) {
 	case *types.Var:
 		if o.Parent() == t.p.pkg.Scope() {
+			usedGlobals[o] = true
 			return "g_" + o.Name() // package-level variable
 		}
 		if t.captured[o] {
 			return "(*_env->" + cVarName(e.Name) + ")"
+		}
+		if t.heap[o] {
+			return "(*" + cVarName(e.Name) + "__h)"
 		}
 		return cVarName(e.Name)
 	case *types.Func:
@@ -182,7 +197,7 @@ func (t *Tx) selector(e *ast.SelectorExpr) string {
 	case types.FieldVal:
 		return t.fieldPath(e.X, sel)
 	case types.MethodVal:
-		return t.TODO(e, "method value")
+		return t.methodValue(e, sel)
 	}
 	return t.TODO(e, "method expr")
 }
@@ -289,18 +304,41 @@ func (t *Tx) binary(e *ast.BinaryExpr) string {
 			}
 			return fmt.Sprintf("(%smemcmp(&(%s){%s}, &(%s){%s}, sizeof(%s)) == 0)", op, cbase(opType), t.expr(e.X), cbase(opType), t.expr(e.Y), cbase(opType))
 		}
-		if _, ok := opType.Underlying().(*types.Interface); ok {
-			op := "=="
-			if e.Op == token.NEQ {
-				op = "!="
+		op := "=="
+		if e.Op == token.NEQ {
+			op = "!="
+		}
+		isNil := func(x ast.Expr) bool {
+			id, ok := x.(*ast.Ident)
+			return ok && id.Name == "nil" && t.p.info.Uses[id] == types.Universe.Lookup("nil")
+		}
+		// comparisons with nil
+		if isNil(e.X) || isNil(e.Y) {
+			other, ot := e.X, lt
+			if isNil(e.X) {
+				other, ot = e.Y, rt
 			}
-			if id, ok := e.Y.(*ast.Ident); ok && id.Name == "nil" {
-				return "(" + t.expr(e.X) + ".type " + op + " 0)"
+			field := ""
+			switch ot.Underlying().(type) {
+			case *types.Interface:
+				field = ".type"
+			case *types.Map:
+				field = ".m"
+			case *types.Slice:
+				field = ".p"
+			case *types.Signature:
+				field = ".fn"
 			}
-			if id, ok := e.X.(*ast.Ident); ok && id.Name == "nil" {
-				return "(" + t.expr(e.Y) + ".type " + op + " 0)"
+			if field != "" {
+				return "(" + t.expr(other) + field + " " + op + " 0)"
 			}
-			return "(" + "go_iface_eq(" + t.expr(e.X) + ", " + t.expr(e.Y) + ") " + op + " true)"
+		}
+		if isIface(lt) || isIface(rt) {
+			it := lt
+			if !isIface(lt) {
+				it = rt
+			}
+			return "(go_iface_eq(" + t.exprConv(e.X, it) + ", " + t.exprConv(e.Y, it) + ") " + op + " true)"
 		}
 	}
 	return "(" + t.exprConv(e.X, opType) + " " + e.Op.String() + " " + t.exprConv(e.Y, opType) + ")"
@@ -409,12 +447,14 @@ func (t *Tx) composite(e *ast.CompositeLit) string {
 			if kv, ok := el.(*ast.KeyValueExpr); ok {
 				name := kv.Key.(*ast.Ident).Name
 				var ft types.Type
+				cname := cField(name)
 				for k := 0; k < u.NumFields(); k++ {
 					if u.Field(k).Name() == name {
 						ft = u.Field(k).Type()
+						cname = embName(u.Field(k))
 					}
 				}
-				parts = append(parts, "."+cField(name)+" = "+t.exprConv(kv.Value, ft))
+				parts = append(parts, "."+cname+" = "+t.exprConv(kv.Value, ft))
 			} else {
 				parts = append(parts, t.exprConv(el, u.Field(i).Type()))
 			}
@@ -441,12 +481,25 @@ func (t *Tx) composite(e *ast.CompositeLit) string {
 		if len(parts) == 0 {
 			return "(" + cbase(ty) + "){0}"
 		}
-		return fmt.Sprintf("GO_SLICE_LIT(%s, %s, %d, %s)", cbase(ty), cbase(u.Elem()), len(parts), strings.Join(parts, ", "))
+		return fmt.Sprintf("GO_SLICE_LIT(%s, %s, %d, %s)", cbase(u), cbase(u.Elem()), len(parts), strings.Join(parts, ", "))
 	case *types.Map:
+		mn := cbase(u)
 		if len(e.Elts) == 0 {
-			return cbase(ty) + "_make(0)"
+			return mn + "_make(0)"
 		}
-		return t.TODO(e, "map literal")
+		// GNU statement expression: build the map in place
+		var b strings.Builder
+		fmt.Fprintf(&b, "({ %s _m = %s_make(%d);", mn, mn, len(e.Elts))
+		for _, el := range e.Elts {
+			kv := el.(*ast.KeyValueExpr)
+			k := t.compositeElem(kv.Key, u.Key())
+			v := t.compositeElem(kv.Value, u.Elem())
+			fmt.Fprintf(&b, " %s_set(&_m, %s, %s);", mn, k, v)
+		}
+		fmt.Fprintf(&b, " (%s)_m; })", cbase(ty))
+		return b.String()
 	}
 	return t.TODO(e, "composite")
 }
+
+func (t *Tx) compositeElem(e ast.Expr, ty types.Type) string { return t.exprConv(e, ty) }

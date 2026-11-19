@@ -40,6 +40,38 @@ GoString go_rune2str(i32 r) {
     return (GoString){p, n};
 }
 
+int go_decode_rune(GoString s, int i, i32 *r) {
+    const u8 *p = (const u8 *)s.p + i;
+    int n = s.len - i;
+    u8 c = p[0];
+    if (c < 0x80) {
+        *r = c;
+        return 1;
+    }
+    int len = 0;
+    i32 v = 0, min = 0;
+    if (c >= 0xC2 && c <= 0xDF) len = 2, v = c & 0x1F, min = 0x80;
+    else if (c >= 0xE0 && c <= 0xEF) len = 3, v = c & 0x0F, min = 0x800;
+    else if (c >= 0xF0 && c <= 0xF4) len = 4, v = c & 0x07, min = 0x10000;
+    if (!len || len > n) {
+        *r = 0xFFFD;
+        return 1;
+    }
+    for (int k = 1; k < len; k++) {
+        if ((p[k] & 0xC0) != 0x80) {
+            *r = 0xFFFD;
+            return 1;
+        }
+        v = (v << 6) | (p[k] & 0x3F);
+    }
+    if (v < min || v > 0x10FFFF || (v >= 0xD800 && v <= 0xDFFF)) {
+        *r = 0xFFFD;
+        return 1;
+    }
+    *r = v;
+    return len;
+}
+
 const char *go_strz(GoString s) {
     static char bufs[8][1024];
     static int k;
@@ -194,8 +226,6 @@ bool gomap_next(GoMapIter *it) {
     }
     return false;
 }
-
-bool go_iface_eq(GoIface a, GoIface b) { return a.type == b.type && a.data == b.data; }
 
 void *go_box_impl(const void *v, size_t n) {
     void *p = malloc(n ? n : 1);

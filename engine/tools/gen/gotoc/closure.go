@@ -11,6 +11,7 @@ import (
 // Lifted closures: every func literal becomes a static C function taking
 // its environment (pointers to captured variables) as the first argument.
 var lifted []string
+var usedGlobals = map[*types.Var]bool{}
 var liftN int
 
 func (t *Tx) funcLit(e *ast.FuncLit) string {
@@ -75,22 +76,28 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 	sub.out = new(bytesBuffer)
 	sub.w("static %s %s(%s) {", ret, name, strings.Join(params, ", "))
 	sub.ind++
+	sub.heap = heapVarsOf(t.p, e)
+	if funcUsesDefer(e.Body) {
+		sub.w("%s", deferMarker)
+	}
+	sub.heapParams(sig)
 	for i := 0; i < sig.Results().Len(); i++ {
 		v := sig.Results().At(i)
 		if v.Name() != "" && v.Name() != "_" {
-			sub.w("%s %s = %s;", cbase(v.Type()), cVarName(v.Name()), zeroValue(v.Type()))
-			sub.namedRes = append(sub.namedRes, cVarName(v.Name()))
+			sub.w("%s", sub.declObj(v, cbase(v.Type()), zeroValue(v.Type())))
+			sub.namedRes = append(sub.namedRes, sub.varRef(v))
 		}
 	}
 	for _, st := range e.Body.List {
 		sub.stmt(st)
 	}
+	sub.runDefers()
 	if len(sub.namedRes) > 0 {
 		sub.w("%s", sub.returnNamed())
 	}
 	sub.ind--
 	sub.w("}")
-	body.WriteString(sub.out.String())
+	body.WriteString(sub.finishDefers(sub.out.String()))
 	t.todo += sub.todo
 	lifted = append(lifted, body.String())
 
@@ -100,6 +107,8 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 	for _, o := range capList {
 		if t.captured[o] {
 			inits = append(inits, "_env->"+cVarName(o.Name()))
+		} else if t.heap[o] {
+			inits = append(inits, cVarName(o.Name())+"__h")
 		} else {
 			inits = append(inits, "&"+cVarName(o.Name()))
 		}
@@ -121,9 +130,6 @@ func (t *Tx) indirectCall(c *ast.CallExpr) string {
 		return t.TODO(c, "indirect call: not a func")
 	}
 	ret := t.retTypeOf(sig.Results(), fmt.Sprintf("fnval_%p", sig))
-	if sig.Results().Len() > 1 {
-		return t.TODO(c, "indirect call with multiple results")
-	}
 	ptypes := []string{"void *"}
 	for i := 0; i < sig.Params().Len(); i++ {
 		ptypes = append(ptypes, cbase(sig.Params().At(i).Type()))

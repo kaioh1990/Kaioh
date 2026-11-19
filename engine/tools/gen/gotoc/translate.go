@@ -26,6 +26,12 @@ type Tx struct {
 	retType  string
 	labels   map[string]bool
 	namedRes []string
+	instName string // monomorphised generic instance being translated
+	loopCont []string // continue labels of enclosing loops
+	inSwitch int      // switch nesting inside the innermost loop
+	heap     map[types.Object]bool // locals captured by closures (heap-allocated)
+	defers   []deferInfo
+	deferDecl []string
 }
 
 func (t *Tx) w(format string, a ...any) {
@@ -54,14 +60,14 @@ func shortFile(f string) string {
 
 func (t *Tx) typeOf(e ast.Expr) types.Type {
 	if tv, ok := t.p.info.Types[e]; ok {
-		return tv.Type
+		return substT(tv.Type)
 	}
 	if id, ok := e.(*ast.Ident); ok {
 		if o := t.p.info.Uses[id]; o != nil {
-			return o.Type()
+			return substT(o.Type())
 		}
 		if o := t.p.info.Defs[id]; o != nil {
-			return o.Type()
+			return substT(o.Type())
 		}
 	}
 	return nil
@@ -77,10 +83,15 @@ func cFuncName(p *Prog, obj *types.Func) string {
 			rt = pt.Elem()
 		}
 		if n, ok := rt.(*types.Named); ok {
+			if obj.Pkg() != nil && obj.Pkg() != p.pkg {
+				externs[obj] = true
+				return obj.Pkg().Name() + "_" + n.Obj().Name() + "_" + obj.Name()
+			}
 			return n.Obj().Name() + "_" + obj.Name()
 		}
 	}
 	if obj.Pkg() != p.pkg && obj.Pkg() != nil {
+		externs[obj] = true
 		return obj.Pkg().Name() + "_" + obj.Name()
 	}
 	return "fn_" + obj.Name()
@@ -177,7 +188,11 @@ func (t *Tx) funcHeader(fd *ast.FuncDecl) (string, *types.Signature) {
 		params = []string{"void"}
 	}
 	ret := t.retTypeOf(sig.Results(), cFuncName(t.p, obj))
-	return fmt.Sprintf("%s %s(%s)", ret, cFuncName(t.p, obj), strings.Join(params, ", ")), sig
+	name := cFuncName(t.p, obj)
+	if t.instName != "" {
+		name = t.instName
+	}
+	return fmt.Sprintf("%s %s(%s)", ret, name, strings.Join(params, ", ")), sig
 }
 
 var multiRets = map[string]string{}
@@ -189,7 +204,18 @@ func (t *Tx) retTypeOf(res *types.Tuple, fname string) string {
 	case 1:
 		return t.ctype(res.At(0).Type())
 	}
-	name := "Ret_" + fname
+	var parts []string
+	for i := 0; i < res.Len(); i++ {
+		parts = append(parts, mangle(res.At(i).Type()))
+	}
+	name := "Ret_" + strings.Join(parts, "__")
+	if len(name) > 80 {
+		h := uint32(2166136261)
+		for i := 0; i < len(name); i++ {
+			h = (h ^ uint32(name[i])) * 16777619
+		}
+		name = fmt.Sprintf("Ret_%s_%08x", name[4:40], h)
+	}
 	var f []string
 	for i := 0; i < res.Len(); i++ {
 		f = append(f, fmt.Sprintf("%s r%d;", t.ctype(res.At(i).Type()), i))
@@ -208,13 +234,18 @@ func (t *Tx) translateFunc(fd *ast.FuncDecl) string {
 	t.retType = t.retTypeOf(sig.Results(), cFuncName(t.p, obj))
 	t.w("%s {", hdr)
 	t.ind++
+	t.heap = heapVarsOf(t.p, fd)
+	if fd.Body != nil && funcUsesDefer(fd.Body) {
+		t.w("%s", deferMarker)
+	}
+	t.heapParams(sig)
 	// named results
 	t.namedRes = nil
 	for i := 0; i < sig.Results().Len(); i++ {
 		v := sig.Results().At(i)
 		if v.Name() != "" && v.Name() != "_" {
-			t.w("%s %s = {0};", t.ctype(v.Type()), cVarName(v.Name()))
-			t.namedRes = append(t.namedRes, cVarName(v.Name()))
+			t.w("%s", t.declObj(v, t.ctype(v.Type()), "{0}"))
+			t.namedRes = append(t.namedRes, t.varRef(v))
 		}
 	}
 	if fd.Body != nil {
@@ -222,12 +253,13 @@ func (t *Tx) translateFunc(fd *ast.FuncDecl) string {
 			t.stmt(s)
 		}
 	}
+	t.runDefers()
 	if len(t.namedRes) > 0 {
 		t.w("%s", t.returnNamed())
 	}
 	t.ind--
 	t.w("}")
-	return t.out.String()
+	return t.finishDefers(t.out.String())
 }
 
 func (t *Tx) returnNamed() string {
@@ -270,7 +302,7 @@ func (t *Tx) stmt(s ast.Stmt) {
 	case *ast.SwitchStmt:
 		t.switchStmt(s, "")
 	case *ast.TypeSwitchStmt:
-		t.w("%s;", t.TODO(s, "type switch"))
+		t.typeSwitch(s)
 	case *ast.BranchStmt:
 		switch s.Tok {
 		case token.BREAK:
@@ -282,6 +314,8 @@ func (t *Tx) stmt(s ast.Stmt) {
 		case token.CONTINUE:
 			if s.Label != nil {
 				t.w("goto %s_continue;", s.Label.Name)
+			} else if t.inSwitch > 0 && len(t.loopCont) > 0 {
+				t.w("goto %s;", t.loopCont[len(t.loopCont)-1]) // continue from inside a (do-while) switch
 			} else {
 				t.w("continue;")
 			}
@@ -307,17 +341,20 @@ func (t *Tx) stmt(s ast.Stmt) {
 					}
 					ty := t.ctype(obj.Type())
 					if len(sp.Values) > i {
-						t.w("%s %s = %s;", ty, cVarName(n.Name), t.exprConv(sp.Values[i], obj.Type()))
+						t.w("%s", t.declObj(obj, ty, t.exprConv(sp.Values[i], obj.Type())))
 					} else {
-						t.w("%s %s = %s;", ty, cVarName(n.Name), zeroValue(obj.Type()))
+						t.w("%s", t.declObj(obj, ty, zeroValue(obj.Type())))
 					}
 				}
 			case *ast.TypeSpec:
-				t.w("%s;", t.TODO(s, "local type"))
+				// hoisted to the header (typePreamble); referencing it registers it
+				if obj := t.p.info.Defs[sp.Name]; obj != nil {
+					cbase(obj.Type())
+				}
 			}
 		}
 	case *ast.DeferStmt:
-		t.w("%s;", t.TODO(s, "defer"))
+		t.deferStmt(s)
 	case *ast.GoStmt:
 		t.w("%s;", t.TODO(s, "go"))
 	case *ast.EmptyStmt:
@@ -361,6 +398,40 @@ func (t *Tx) labeled(s *ast.LabeledStmt) {
 }
 
 func (t *Tx) ret(s *ast.ReturnStmt) {
+	if len(t.defers) > 0 {
+		// results are evaluated before the deferred calls run
+		t.w("{")
+		t.ind++
+		if len(s.Results) > 0 {
+			rv := t.newTmp()
+			var val string
+			switch {
+			case t.results.Len() == 1:
+				val = t.exprConv(s.Results[0], t.results.At(0).Type())
+			case len(s.Results) == 1:
+				val = t.expr(s.Results[0])
+			default:
+				var vs []string
+				for i, r := range s.Results {
+					vs = append(vs, t.exprConv(r, t.results.At(i).Type()))
+				}
+				val = fmt.Sprintf("(%s){%s}", t.retType, strings.Join(vs, ", "))
+			}
+			t.w("%s %s = %s;", t.retType, rv, val)
+			t.runDefers()
+			t.w("return %s;", rv)
+		} else {
+			t.runDefers()
+			if len(t.namedRes) > 0 {
+				t.w("%s", t.returnNamed())
+			} else {
+				t.w("return;")
+			}
+		}
+		t.ind--
+		t.w("}")
+		return
+	}
 	if len(s.Results) == 0 {
 		if len(t.namedRes) > 0 {
 			t.w("%s", t.returnNamed())
@@ -461,9 +532,11 @@ func (t *Tx) forStmt(s *ast.ForStmt, label string) {
 	}
 	t.w("for (; %s; %s) {", cond, post)
 	t.ind++
+	cl := t.enterLoop()
 	for _, st := range s.Body.List {
 		t.stmt(st)
 	}
+	t.leaveLoop(cl)
 	if label != "" {
 		t.w("%s_continue:;", label)
 	}
@@ -502,17 +575,30 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 		return
 	}
 	key, val := "", ""
+	define := s.Tok == token.DEFINE
+	var keyObj, valObj types.Object
 	if s.Key != nil {
 		if id, ok := s.Key.(*ast.Ident); !ok || id.Name != "_" {
 			key = t.expr(s.Key)
+			if define {
+				keyObj = t.p.info.Defs[id]
+			}
 		}
 	}
 	if s.Value != nil {
 		if id, ok := s.Value.(*ast.Ident); !ok || id.Name != "_" {
 			val = t.expr(s.Value)
+			if define {
+				valObj = t.p.info.Defs[s.Value.(*ast.Ident)]
+			}
 		}
 	}
-	define := s.Tok == token.DEFINE
+	decl := func(o types.Object, ctype, v string) string {
+		if o == nil {
+			return fmt.Sprintf("%s = %s;", "/*?*/_", v)
+		}
+		return t.declObj(o, ctype, v)
+	}
 	idx := t.newTmp()
 	t.w("{")
 	t.ind++
@@ -543,14 +629,14 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 		t.ind++
 		if key != "" {
 			if define {
-				t.w("int %s = %s;", key, idx)
+				t.w("%s", decl(keyObj, "int", idx))
 			} else {
 				t.w("%s = %s;", key, idx)
 			}
 		}
 		if val != "" {
 			if define {
-				t.w("%s %s = %s;", t.ctype(elem), val, access)
+				t.w("%s", decl(valObj, t.ctype(elem), access))
 			} else {
 				t.w("%s = %s;", val, access)
 			}
@@ -559,13 +645,24 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 		if u.Info()&types.IsString != 0 {
 			xs := t.newTmp()
 			t.w("GoString %s = %s;", xs, t.expr(s.X))
-			t.w("for (int %s = 0; %s < %s.len; %s++) { /* bytes, not runes */", idx, idx, xs, idx)
+			w := t.newTmp()
+			r := t.newTmp()
+			t.w("for (int %s = 0, %s = 0; %s < %s.len; %s += %s) {", idx, w, idx, xs, idx, w)
 			t.ind++
+			t.w("i32 %s; %s = go_decode_rune(%s, %s, &%s);", r, w, xs, idx, r)
 			if key != "" {
-				t.w("int %s = %s;", key, idx)
+				if define {
+					t.w("%s", decl(keyObj, "int", idx))
+				} else {
+					t.w("%s = %s;", key, idx)
+				}
 			}
 			if val != "" {
-				t.w("i32 %s = (u8)%s.p[%s];", val, xs, idx)
+				if define {
+					t.w("%s", decl(valObj, "i32", r))
+				} else {
+					t.w("%s = %s;", val, r)
+				}
 			}
 		} else {
 			// range over int
@@ -573,7 +670,7 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 			t.ind++
 			if key != "" {
 				if define {
-					t.w("int %s = %s;", key, idx)
+					t.w("%s", decl(keyObj, "int", idx))
 				} else {
 					t.w("%s = %s;", key, idx)
 				}
@@ -586,10 +683,20 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 		t.w("while (gomap_next(&%s)) {", it)
 		t.ind++
 		if key != "" {
-			t.w("%s %s = *(%s *)%s.key;", t.ctype(u.Key()), key, t.ctype(u.Key()), it)
+			kv := fmt.Sprintf("*(%s *)%s.key", t.ctype(u.Key()), it)
+			if define {
+				t.w("%s", decl(keyObj, t.ctype(u.Key()), kv))
+			} else {
+				t.w("%s = %s;", key, kv)
+			}
 		}
 		if val != "" {
-			t.w("%s %s = *(%s *)%s.val;", t.ctype(u.Elem()), val, t.ctype(u.Elem()), it)
+			vv := fmt.Sprintf("*(%s *)%s.val", t.ctype(u.Elem()), it)
+			if define {
+				t.w("%s", decl(valObj, t.ctype(u.Elem()), vv))
+			} else {
+				t.w("%s = %s;", val, vv)
+			}
 		}
 		_ = mt
 	default:
@@ -598,9 +705,11 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 		t.w("}")
 		return
 	}
+	cl := t.enterLoop()
 	for _, st := range s.Body.List {
 		t.stmt(st)
 	}
+	t.leaveLoop(cl)
 	if label != "" {
 		t.w("%s_continue:;", label)
 	}
@@ -608,6 +717,26 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 	t.w("}")
 	t.ind--
 	t.w("}")
+}
+
+type loopSave struct {
+	inSwitch int
+	label    string
+}
+
+func (t *Tx) enterLoop() loopSave {
+	t.tmp++
+	l := fmt.Sprintf("_cont%d", t.tmp)
+	s := loopSave{t.inSwitch, l}
+	t.loopCont = append(t.loopCont, l)
+	t.inSwitch = 0
+	return s
+}
+
+func (t *Tx) leaveLoop(s loopSave) {
+	t.w("%s:;", s.label)
+	t.loopCont = t.loopCont[:len(t.loopCont)-1]
+	t.inSwitch = s.inSwitch
 }
 
 func (t *Tx) switchStmt(s *ast.SwitchStmt, label string) {
@@ -626,6 +755,8 @@ func (t *Tx) switchStmt(s *ast.SwitchStmt, label string) {
 	// Emit as a do { if-chain } while(0) so that "break" leaves the switch.
 	t.w("do {")
 	t.ind++
+	t.inSwitch++
+	defer func() { t.inSwitch-- }()
 	clauses := s.Body.List
 	var deflt *ast.CaseClause
 	first := true
@@ -712,10 +843,10 @@ func (t *Tx) assign(s *ast.AssignStmt) {
 				}
 				obj := t.p.info.Defs[id]
 				if obj == nil { // redeclared: plain assignment
-					t.w("%s = %s;", cVarName(id.Name), t.exprConv(s.Rhs[0], t.typeOf(id)))
+					t.w("%s = %s;", t.expr(id), t.exprConv(s.Rhs[0], t.typeOf(id)))
 					return
 				}
-				t.w("%s %s = %s;", t.ctype(obj.Type()), cVarName(id.Name), t.exprConv(s.Rhs[0], obj.Type()))
+				t.w("%s", t.declObj(obj, t.ctype(obj.Type()), t.exprConv(s.Rhs[0], obj.Type())))
 				return
 			}
 			t.w("%s;", t.assignExpr(lhs, s.Tok, s.Rhs[0]))
@@ -739,7 +870,7 @@ func (t *Tx) assign(s *ast.AssignStmt) {
 			if s.Tok == token.DEFINE {
 				id := l.(*ast.Ident)
 				if obj := t.p.info.Defs[id]; obj != nil {
-					t.w("%s %s = %s;", t.ctype(obj.Type()), cVarName(id.Name), tmps[i])
+					t.w("%s", t.declObj(obj, t.ctype(obj.Type()), tmps[i]))
 					continue
 				}
 			}
@@ -760,7 +891,24 @@ func (t *Tx) assign(s *ast.AssignStmt) {
 				return
 			}
 		case *ast.TypeAssertExpr:
-			t.w("%s;", t.TODO(s, "comma-ok type assertion"))
+			ta := s.Rhs[0].(*ast.TypeAssertExpr)
+			ty := t.p.info.Types[ta.Type].Type
+			xv := t.newTmp()
+			t.w("GoIface %s = %s;", xv, t.expr(ta.X))
+			var cond, val string
+			if isIface(ty) {
+				cond = t.implementsCond(xv, ty)
+				val = xv
+			} else {
+				cond = fmt.Sprintf("%s.type == %d", xv, typeID(ty))
+				z := t.newTmp()
+				t.w("%s %s; memset(&%s, 0, sizeof %s); if (%s) %s = %s;", cbase(ty), z, z, z, cond, z, t.unbox(xv, ty))
+				val = z
+			}
+			okv := t.newTmp()
+			t.w("bool %s = %s;", okv, cond)
+			t.defOrSet(s.Lhs[0], s.Tok, val, ty)
+			t.defOrSet(s.Lhs[1], s.Tok, okv, types.Typ[types.Bool])
 			return
 		}
 	}
@@ -780,10 +928,8 @@ func (t *Tx) assign(s *ast.AssignStmt) {
 }
 
 func (t *Tx) callRetType(e ast.Expr) string {
-	if c, ok := e.(*ast.CallExpr); ok {
-		if fn := t.calleeFunc(c); fn != nil {
-			return "Ret_" + cFuncName(t.p, fn)
-		}
+	if tup, ok := t.typeOf(e).(*types.Tuple); ok {
+		return t.retTypeOf(tup, "")
 	}
 	return "/*?*/RetUnknown"
 }
@@ -795,7 +941,7 @@ func (t *Tx) defOrSet(l ast.Expr, tok token.Token, val string, ty types.Type) {
 		}
 		if tok == token.DEFINE {
 			if obj := t.p.info.Defs[id]; obj != nil {
-				t.w("%s %s = %s;", t.ctype(obj.Type()), cVarName(id.Name), val)
+				t.w("%s", t.declObj(obj, t.ctype(obj.Type()), val))
 				return
 			}
 		}
