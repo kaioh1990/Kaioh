@@ -28,10 +28,12 @@ static void test_rng(void) {
 }
 
 void test_formats(int *failures, int *checks);
+void test_detmath(int *failures, int *checks);
 
 int main(int argc, char **argv) {
     test_rng();
     test_formats(&failures, &checks);
+    test_detmath(&failures, &checks);
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
