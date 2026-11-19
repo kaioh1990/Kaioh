@@ -190,8 +190,8 @@ Ret_i64__GoIface bytes_Reader_Seek(GoOpaque *recv, i64 off, int whence) {
 // Reads through the interface's Read method (generated dispatcher).
 static Ret_int__GoIface iread(GoIface r, u8 *p, int n) {
     Slice_u8 s = {p, n, n};
-#ifdef ik_iface_Read
-    return ik_iface_Read(r, s);
+#ifdef ik_io_Read
+    return ik_io_Read(r, s);
 #else
     (void)r, (void)s;
     return (Ret_int__GoIface){0, io_EOF};
@@ -527,7 +527,6 @@ GoIface bufio_Writer_Flush(GoOpaque *recv) {
     return (GoIface){0};
 }
 
-void beep_Mixer_Clear(GoOpaque *recv) { (void)recv; }
 
 int bytes_Reader_Len(GoOpaque *recv) {
     RtBytesReader *r = (RtBytesReader *)recv;
@@ -570,10 +569,6 @@ _Noreturn void os_Exit(int code) { exit(code); }
 
 GoImageRect image_Rectangle_Bounds(GoImageRect recv) { return recv; }
 
-int list_List_Len(GoOpaque *recv) {
-    (void)recv;
-    return 0;
-}
 
 // bufio.Scanner (lines) over an io.Reader: reads everything up front.
 typedef struct RtScanner {
@@ -629,29 +624,12 @@ Ret_Slice_u8__GoIface os_ReadFile(GoString name) {
 
 // ---------------------------------------------------------------- inert JSON / matrix stand-ins
 // gjson/sjson/encoding/json are only used by the stats and save-data code and
-// mgl32 by the 3D motif renderer; none affect the simulation. The headless
-// build treats every JSON document as empty and matrices as zero.
-GoOpaque gjson_GetBytes(Slice_u8 a0, GoString a1) { (void)a0; (void)a1; return (GoOpaque){0}; }
-GoOpaque gjson_Result_Get(GoOpaque recv, GoString a0) { (void)recv; (void)a0; return (GoOpaque){0}; }
-bool gjson_Result_Exists(GoOpaque recv) { (void)recv; return false; }
-bool gjson_Result_IsArray(GoOpaque recv) { (void)recv; return false; }
-f64 gjson_Result_Float(GoOpaque recv) { (void)recv; return 0; }
-i64 gjson_Result_Int(GoOpaque recv) { (void)recv; return 0; }
-void gjson_Result_ForEach(GoOpaque recv, GoFunc a0) { (void)recv; (void)a0; }
-Ret_Slice_u8__GoIface sjson_SetBytes(Slice_u8 a0, GoString a1, GoIface a2) {
-    (void)a1; (void)a2;
-    return (Ret_Slice_u8__GoIface){a0, {0}};
-}
+// none affect the simulation. The headless build treats every JSON
+// document as empty.
 GoIface json_Indent(GoOpaque *a0, Slice_u8 a1, GoString a2, GoString a3) {
     (void)a0; (void)a1; (void)a2; (void)a3;
     return (GoIface){0};
 }
-GoOpaque mgl32_HomogRotate3DX(f32 a) { (void)a; return (GoOpaque){0}; }
-GoOpaque mgl32_HomogRotate3DY(f32 a) { (void)a; return (GoOpaque){0}; }
-GoOpaque mgl32_HomogRotate3DZ(f32 a) { (void)a; return (GoOpaque){0}; }
-GoOpaque mgl32_Mat4_Mul4(GoOpaque a, GoOpaque b) { (void)a; (void)b; return (GoOpaque){0}; }
-GoOpaque mgl32_Scale3D(f32 x, f32 y, f32 z) { (void)x; (void)y; (void)z; return (GoOpaque){0}; }
-GoOpaque mgl32_Translate3D(f32 x, f32 y, f32 z) { (void)x; (void)y; (void)z; return (GoOpaque){0}; }
 
 
 // ---------------------------------------------------------------- bytes.Buffer (value type, zero value usable)
@@ -769,7 +747,6 @@ GoString time_Duration_String(i64 d) {
     int n = snprintf(tmp, sizeof tmp, "%lldns", (long long)d);
     return go_bytes2str((Slice_u8){(u8 *)tmp, n, n});
 }
-GoString mgl32_Mat4_String(GoOpaque m) { (void)m; return GOSTR("[mat4]"); }
 GoString image_Point_String(GoImagePoint p) {
     char tmp[48];
     int n = snprintf(tmp, sizeof tmp, "(%d,%d)", p.X, p.Y);
@@ -782,3 +759,173 @@ GoString image_Rectangle_String(GoImageRect r) {
 }
 GoString binary_littleEndian_String(GoOpaque o) { (void)o; return GOSTR("LittleEndian"); }
 GoImageRect image_RGBA_Bounds(GoOpaque *recv) { (void)recv; return (GoImageRect){{0, 0}, {0, 0}}; }  // images are not decoded headless
+
+GoOpaque *os_Stdin, *base64_StdEncoding, *image_White;  // not used by the native engine's I/O
+GoIface io_Discard, ioutil_Discard;
+GoIface color_AlphaModel, color_YCbCrModel, color_RGBAModel, color_RGBA64Model, color_GrayModel, color_Gray16Model;  // image/color is not translated
+static GoString err_closed_pipe = {"io: read/write on closed pipe", 29};
+GoIface io_ErrClosedPipe = {GO_TID_ERRSTR, &err_closed_pipe};
+GoImagePoint image_ZP;
+
+// ---------------------------------------------------------------- more buffers and readers
+int bytes_Buffer_Len(GoOpaque *recv) {
+    RtBuf *b = (RtBuf *)recv;
+    return b->len - b->off;
+}
+Ret_int__GoIface bytes_Buffer_Write(GoOpaque *recv, Slice_u8 p) {
+    buf_put((RtBuf *)recv, p.p, p.len);
+    return (Ret_int__GoIface){p.len, {0}};
+}
+Ret_int__GoIface bytes_Buffer_Read(GoOpaque *recv, Slice_u8 p) {
+    RtBuf *b = (RtBuf *)recv;
+    int n = b->len - b->off;
+    if (n <= 0) return (Ret_int__GoIface){0, p.len ? io_EOF : (GoIface){0}};
+    if (n > p.len) n = p.len;
+    memcpy(p.p, b->p + b->off, (size_t)n);
+    b->off += n;
+    return (Ret_int__GoIface){n, {0}};
+}
+Ret_u8__GoIface bytes_Buffer_ReadByte(GoOpaque *recv) {
+    RtBuf *b = (RtBuf *)recv;
+    if (b->off >= b->len) return (Ret_u8__GoIface){0, io_EOF};
+    return (Ret_u8__GoIface){b->p[b->off++], {0}};
+}
+Ret_u8__GoIface strings_Reader_ReadByte(GoOpaque *recv) {
+    RtStrReader *r = (RtStrReader *)recv;
+    if (r->i >= r->s.len) return (Ret_u8__GoIface){0, io_EOF};
+    return (Ret_u8__GoIface){(u8)r->s.p[r->i++], {0}};
+}
+GoOpaque *bufio_NewReader(GoIface rd) { return bufio_NewReaderSize(rd, 4096); }
+Ret_Slice_u8__GoIface bufio_Reader_Peek(GoOpaque *recv, int n) {
+    RtBufReader *r = (RtBufReader *)recv;
+    int avail = r->data.len - r->pos;
+    Ret_Slice_u8__GoIface o = {{r->data.p + r->pos, n < avail ? n : avail, n < avail ? n : avail}, {0}};
+    if (avail < n) o.r1 = io_EOF;
+    return o;
+}
+Ret_int__GoIface bufio_Reader_Discard(GoOpaque *recv, int n) {
+    RtBufReader *r = (RtBufReader *)recv;
+    int avail = r->data.len - r->pos;
+    if (n > avail) {
+        r->pos = r->data.len;
+        return (Ret_int__GoIface){avail, io_EOF};
+    }
+    r->pos += n;
+    return (Ret_int__GoIface){n, {0}};
+}
+Ret_Slice_u8__bool__GoIface bufio_Reader_ReadLine(GoOpaque *recv) {
+    RtBufReader *r = (RtBufReader *)recv;
+    Ret_Slice_u8__bool__GoIface o = {0};
+    if (r->pos >= r->data.len) {
+        o.r2 = io_EOF;
+        return o;
+    }
+    int st = r->pos, e = st;
+    while (e < r->data.len && r->data.p[e] != '\n') e++;
+    r->pos = e < r->data.len ? e + 1 : e;
+    if (e > st && r->data.p[e - 1] == '\r') e--;
+    o.r0 = (Slice_u8){r->data.p + st, e - st, e - st};
+    return o;
+}
+GoIface bufio_Scanner_Err(GoOpaque *recv) { (void)recv; return (GoIface){0}; }
+GoOpaque *bufio_NewWriter(GoIface w) { return bufio_NewWriterSize(w, 4096); }
+GoIface bufio_Writer_WriteByte(GoOpaque *recv, u8 c) { return bufio_Writer_Write(recv, (Slice_u8){&c, 1, 1}).r1; }
+Ret_Slice_u8__GoIface ioutil_ReadAll(GoIface r) { return io_ReadAll(r); }
+
+// ---------------------------------------------------------------- files
+Ret_int__GoIface os_File_Write(GoOpaque *recv, Slice_u8 b) {
+    RtFile *f = (RtFile *)recv;
+    size_t n = fwrite(b.p, 1, (size_t)b.len, f->f);
+    return (Ret_int__GoIface){(int)n, n == (size_t)b.len ? (GoIface){0} : go_errorf("write %.*s: failed", f->name.len, f->name.p)};
+}
+GoIface os_File_SetReadDeadline(GoOpaque *recv, GoOpaque t) { (void)recv, (void)t; return (GoIface){0}; }
+GoIface os_MkdirAll(GoString path, u32 perm) {
+    char *p = (char *)go_strz(path);
+    char buf[4096];
+    size_t n = strlen(p);
+    if (n >= sizeof buf) return go_errorf("mkdir: path too long");
+    memcpy(buf, p, n + 1);
+    for (size_t i = 1; i <= n; i++) {
+        if (buf[i] == '/' || buf[i] == 0) {
+            char c = buf[i];
+            buf[i] = 0;
+            struct stat st;
+            if (stat(buf, &st) != 0 && mkdir(buf, (mode_t)(perm & 0777)) != 0) return go_errorf("mkdir %s: failed", buf);
+            buf[i] = c;
+        }
+    }
+    return (GoIface){0};
+}
+Ret_GoString__GoIface os_Executable(void) { return (Ret_GoString__GoIface){{"", 0}, go_errorf("os.Executable: not supported")}; }
+
+// filepath.Walk / WalkDir: lexical order, directories before their contents.
+static GoIface walk(GoString root, GoFunc fn, bool dirEntry) {
+    Ret_GoIface__GoIface st = os_Stat(root);
+    GoIface (*cb)(void *, GoString, GoIface, GoIface) = (GoIface(*)(void *, GoString, GoIface, GoIface))fn.fn;
+    if (st.r1.type) return cb(fn.env, root, (GoIface){0}, st.r1);
+    GoIface e = cb(fn.env, root, st.r0, (GoIface){0});
+    if (e.type) return e;  // includes filepath.SkipDir: not distinguished
+    if (!((RtFileInfo *)st.r0.data)->dir) return (GoIface){0};
+    Slice_GoString names = {0};
+    DIR *d = opendir(go_strz(root));
+    if (!d) return (GoIface){0};
+    struct dirent *de;
+    while ((de = readdir(d)))
+        if (strcmp(de->d_name, ".") && strcmp(de->d_name, ".."))
+            names = go_append_Slice_GoString(names, go_cstr(gc_strdup(de->d_name)));
+    closedir(d);
+    for (int i = 1; i < names.len; i++)  // sort names
+        for (int j = i; j > 0 && strcmp(go_strz(names.p[j - 1]), go_strz(names.p[j])) > 0; j--) {
+            GoString t = names.p[j];
+            names.p[j] = names.p[j - 1];
+            names.p[j - 1] = t;
+        }
+    for (int i = 0; i < names.len; i++) {
+        GoString sub = filepath_Join(GO_SLICE_LIT(Slice_GoString, GoString, 2, root, names.p[i]));
+        e = walk(sub, fn, dirEntry);
+        if (e.type) return e;
+    }
+    return (GoIface){0};
+}
+GoIface filepath_Walk(GoString root, GoFunc fn) { return walk(root, fn, false); }
+GoIface filepath_WalkDir(GoString root, GoFunc fn) { return walk(root, fn, true); }
+
+// ---------------------------------------------------------------- io copying (generic Read/Write dispatch)
+Ret_int__GoIface io_ReadAtLeast(GoIface r, Slice_u8 buf, int min) {
+    int n = 0;
+    GoIface err = {0};
+    while (n < min && !err.type) {
+        Ret_int__GoIface rr = iread(r, buf.p + n, buf.len - n);
+        n += rr.r0;
+        err = rr.r1;
+    }
+    if (n >= min) err = (GoIface){0};
+    else if (n > 0 && go_iface_eq(err, io_EOF)) err = io_ErrUnexpectedEOF;
+    return (Ret_int__GoIface){n, err};
+}
+Ret_i64__GoIface io_CopyN(GoIface dst, GoIface src, i64 limit) {
+    u8 tmp[16384];
+    i64 total = 0;
+    for (;;) {
+        int want = (int)sizeof tmp;
+        if (limit >= 0 && limit - total < want) want = (int)(limit - total);
+        if (want <= 0) break;
+        Ret_int__GoIface rr = iread(src, tmp, want);
+        if (rr.r0 > 0) {
+#ifdef ik_io_Write
+            Ret_int__GoIface wr = ik_io_Write(dst, (Slice_u8){tmp, rr.r0, rr.r0});
+            if (wr.r1.type) return (Ret_i64__GoIface){total, wr.r1};
+#endif
+            total += rr.r0;
+        }
+        if (rr.r1.type) {
+            if (go_iface_eq(rr.r1, io_EOF)) {
+                if (limit >= 0 && total < limit) return (Ret_i64__GoIface){total, io_EOF};
+                break;
+            }
+            return (Ret_i64__GoIface){total, rr.r1};
+        }
+    }
+    return (Ret_i64__GoIface){total, {0}};
+}
+Ret_i64__GoIface io_Copy(GoIface dst, GoIface src) { return io_CopyN(dst, src, -1); }

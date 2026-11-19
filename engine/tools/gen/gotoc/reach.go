@@ -53,7 +53,7 @@ func reach(p *Prog, roots []string) map[string]bool {
 	// package variables: their initializers run at startup, so functions
 	// they reference are reachable too
 	initOf := map[*types.Var]ast.Expr{}
-	for _, ini := range p.info.InitOrder {
+	for _, ini := range p.initOrder {
 		for _, l := range ini.Lhs {
 			initOf[l] = ini.Rhs
 		}

@@ -27,7 +27,7 @@ func isPkgNamed(t types.Type) (string, bool) {
 		pk := n.Obj().Pkg()
 		pfx := ""
 		if pk != pkg {
-			pfx = pk.Name() + "_"
+			pfx = pkgPrefix(pk) + "_"
 		}
 		if n.Obj().Parent() != nil && n.Obj().Parent() != pk.Scope() {
 			// function-local type: unique name, body emitted by typePreamble
@@ -44,6 +44,9 @@ func isPkgNamed(t types.Type) (string, bool) {
 			// types of other translated packages: bodies emitted like local types
 			name := pfx + n.Obj().Name()
 			if n.TypeArgs().Len() > 0 {
+				if si, ok := substT(n).(*types.Named); ok {
+					n = si // instance with concrete arguments (inside monomorphised code)
+				}
 				name += "_" + mangleTypeArgs(n)
 			}
 			localTypes[name] = n
@@ -300,8 +303,14 @@ func isInvalid(ty types.Type) bool {
 	if ty == nil {
 		return true
 	}
+	ty = types.Unalias(ty)
 	if b, ok := ty.(*types.Basic); ok && b.Kind() == types.Invalid {
 		return true
+	}
+	if n, ok := ty.(*types.Named); ok {
+		if _, isC := bindCType[n.Obj()]; isC {
+			return false // binding type declared as a C type: has a C layout
+		}
 	}
 	if b, ok := ty.Underlying().(*types.Basic); ok && b.Kind() == types.Invalid {
 		return true

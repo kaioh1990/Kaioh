@@ -41,6 +41,9 @@ func externProtos(p *Prog) []string {
 		}
 		out = append(out, fmt.Sprintf("%s %s(%s); // %s", tx.retTypeOf(sig.Results(), ""), name, strings.Join(ps, ", "), types.ObjectString(fn, qual)))
 	}
+	for _, pr := range promotedProtos {
+		out = append(out, pr)
+	}
 	sort.Strings(out)
 	return out
 }
@@ -49,6 +52,10 @@ func externProtos(p *Prog) []string {
 func (t *Tx) special(c *ast.CallExpr, fn *types.Func, args []string) string {
 	if fn.Pkg().Name() == "maps" && fn.Name() == "Clear" { // maps or golang.org/x/exp/maps
 		return fmt.Sprintf("gomap_clear((GoMap *)%s)", t.mapAddr(c.Args[0]))
+	}
+	if fn.Pkg().Name() == "maps" && fn.Name() == "Clone" {
+		mt := t.typeOf(c.Args[0])
+		return fmt.Sprintf("((%s)gomap_clone((GoMap *)%s))", cbase(mt), t.mapAddr(c.Args[0]))
 	}
 	if fn.Pkg().Name() == "slices" && fn.Name() == "Clone" {
 		st := t.typeOf(c.Args[0])
@@ -127,6 +134,10 @@ func binreadHelper(ty types.Type, big int) string {
 				}
 			}
 		case *types.Struct:
+			if n, ok := ty.(*types.Named); ok && n.Obj().Pkg() != nil && !ownTypes(n.Obj().Pkg()) {
+				fmt.Fprintf(&b, "    /* opaque %s */\n", types.TypeString(ty, qual))
+				return // standard-library struct: opaque in C
+			}
 			for i := 0; i < u.NumFields(); i++ {
 				f := u.Field(i)
 				walk(expr+"."+embName(f), f.Type())

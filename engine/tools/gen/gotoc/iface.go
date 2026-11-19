@@ -123,6 +123,10 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 		if dispNameCount(im.name) == 1 {
 			protos = append(protos, fmt.Sprintf("#define ik_iface_%s %s", im.name, n))
 		}
+		// standard interfaces the runtime calls back into, by exact signature
+		if alias, ok := stdIfaceAlias[im.name+sigKey(sig)]; ok {
+			protos = append(protos, fmt.Sprintf("#define %s %s", alias, n))
+		}
 		var b strings.Builder
 		b.WriteString(hdr + " {\n    switch (_x.type) {\n")
 		if isReflectTypeMethod(im.method) {
@@ -180,7 +184,7 @@ func emitDispatchers(p *Prog) (protos []string, bodies []string) {
 			default:
 				recv = fmt.Sprintf("*(%s *)_x.data", cbase(ty))
 			}
-			call := fmt.Sprintf("%s(%s%s)", cFuncName(p, mfn), recv, prependComma(argNames))
+			call := fmt.Sprintf("%s(%s%s)", methodCName(p, mfn, ty), recv, prependComma(argNames))
 			if ret == "void" {
 				fmt.Fprintf(&b, "    case %d: %s; return;\n", id, call)
 			} else {
@@ -296,21 +300,44 @@ func (t *Tx) unbox(xv string, ty types.Type) string {
 	return fmt.Sprintf("(*(%s *)%s.data)", cbase(ty), xv)
 }
 
-// implementsCond: x's dynamic type implements interface ty (all boxed
-// types are known, so this is an id list).
+// implementsCond: x's dynamic type implements interface ty. Type ids are
+// assigned while translating, so the id list is only known at the end: the
+// test is a call of ik_impl_N, generated with the header (implFuncs).
+var implIfaces []*types.Interface
+var implIndex = map[string]int{}
+
 func (t *Tx) implementsCond(xv string, ty types.Type) string {
 	it := ty.Underlying().(*types.Interface)
-	var ids []string
-	for id, ct := range typeByID {
-		if types.Implements(ct, it) {
-			ids = append(ids, fmt.Sprintf("%s.type == %d", xv, id))
+	key := types.TypeString(it, nil)
+	n, ok := implIndex[key]
+	if !ok {
+		n = len(implIfaces)
+		implIndex[key] = n
+		implIfaces = append(implIfaces, it)
+	}
+	return fmt.Sprintf("ik_impl_%d(%s.type)", n, xv)
+}
+
+func implFuncs() string {
+	var b strings.Builder
+	for n, it := range implIfaces {
+		var ids []int
+		for id, ct := range typeByID {
+			if types.Implements(ct, it) {
+				ids = append(ids, id)
+			}
 		}
+		sort.Ints(ids)
+		fmt.Fprintf(&b, "static inline bool ik_impl_%d(int t) { // %s\n    switch (t) {", n, types.TypeString(it, func(p *types.Package) string { return p.Name() }))
+		for _, id := range ids {
+			fmt.Fprintf(&b, " case %d:", id)
+		}
+		if len(ids) > 0 {
+			b.WriteString(" return true;")
+		}
+		b.WriteString(" default: return false; }\n}\n")
 	}
-	sort.Strings(ids)
-	if len(ids) == 0 {
-		return "0"
-	}
-	return "(" + strings.Join(ids, " || ") + ")"
+	return b.String()
 }
 
 func (t *Tx) typeAssert(e *ast.TypeAssertExpr) string {
@@ -370,8 +397,13 @@ func tidKindTable() string {
 		kinds[i] = "0"
 	}
 	for id, ty := range typeByID {
-		if b, ok := ty.Underlying().(*types.Basic); ok {
-			kinds[id] = fmt.Sprint(int(b.Kind()))
+		switch u := ty.Underlying().(type) {
+		case *types.Basic:
+			kinds[id] = fmt.Sprint(int(u.Kind()))
+		case *types.Slice:
+			kinds[id] = "100" // IK_KIND_SLICE
+		case *types.Pointer:
+			kinds[id] = "101" // IK_KIND_POINTER
 		}
 	}
 	sizes := make([]string, maxID+1)
@@ -410,4 +442,25 @@ func canonTypeKey(ty types.Type) string {
 		}
 		return "int32"
 	})
+}
+
+// sigKey: parameter and result types of a signature, without names.
+func sigKey(sig *types.Signature) string {
+	var ps, rs []string
+	for i := 0; i < sig.Params().Len(); i++ {
+		ps = append(ps, types.TypeString(sig.Params().At(i).Type(), nil))
+	}
+	for i := 0; i < sig.Results().Len(); i++ {
+		rs = append(rs, types.TypeString(sig.Results().At(i).Type(), nil))
+	}
+	return "(" + strings.Join(ps, ",") + ")(" + strings.Join(rs, ",") + ")"
+}
+
+var stdIfaceAlias = map[string]string{
+	"Read([]byte)(int,error)":  "ik_io_Read",  // io.Reader
+	"Write([]byte)(int,error)": "ik_io_Write", // io.Writer
+	"Close()(error)":           "ik_io_Close", // io.Closer
+	"Len()(int)":               "ik_sort_Len", // sort.Interface
+	"Less(int,int)(bool)":      "ik_sort_Less",
+	"Swap(int,int)()":          "ik_sort_Swap",
 }

@@ -29,6 +29,8 @@ var cvfFrames, cvfMaxFrames int
 
 func cvfHeadlessMain(args []string) int32 {
 	cvfHeadless = true
+	gfx = &nullRenderer{} // GPU resources are created but never drawn
+	CreatePalTexture(256)
 	if n, err := strconv.Atoi(os.Getenv("CVF_FRAMES")); err == nil {
 		cvfMaxFrames = n
 	}

@@ -39,11 +39,25 @@ func (t *Tx) methodValue(e *ast.SelectorExpr, sel *types.Selection) string {
 		}
 		return fmt.Sprintf("((GoFunc){(void *)%s, go_box(GoIface, %s)})", name, t.expr(e.X))
 	}
+	if len(sel.Index()) > 1 {
+		// promoted through a foreign struct's embedded field: the method is
+		// called on the outer (pointer) type, see foreignPromoted
+		if call := t.foreignPromoted(e.X, fn, sig); call != "" {
+			name := strings.TrimSuffix(strings.SplitN(call, "(", 2)[0], "(")
+			xt := cbase(t.typeOf(e.X))
+			th := "mvp_" + name
+			if _, ok := methodThunks[th]; !ok {
+				methodThunks[th] = fmt.Sprintf("static %s %s(void *_env%s) { %s%s((%s)_env%s); }",
+					ret, th, prependComma(params), retKw, name, xt, prependComma(args))
+			}
+			return fmt.Sprintf("((GoFunc){(void *)%s, (void *)(%s)})", th, t.expr(e.X))
+		}
+	}
 	// promoted methods: walk to the embedded receiver
 	recv := t.methodRecv(e.X, sel, sig)
 	_, wantPtr := sig.Recv().Type().(*types.Pointer)
 	rt := sig.Recv().Type()
-	cf := cFuncName(t.p, fn)
+	cf := methodCName(t.p, fn, sel.Recv())
 	name := "mv_" + cf
 	if _, ok := methodThunks[name]; !ok {
 		var r string

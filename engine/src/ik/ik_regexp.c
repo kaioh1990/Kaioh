@@ -754,3 +754,10 @@ GoString regexp_Regexp_ReplaceAllStringFunc(GoOpaque *recv, GoString src, GoFunc
     for (int k = last; k < src.len; k++) buf = go_append_Slice_u8(buf, (u8)src.p[k]);
     return go_bytes2str(buf);
 }
+
+GoString regexp_Regexp_FindString(GoOpaque *recv, GoString s) {
+    RxRe *re = (RxRe *)recv;
+    int cap[2 * 64];
+    if (!re_exec(re, s, 0, cap)) return (GoString){"", 0};
+    return (GoString){s.p + cap[0], cap[1] - cap[0]};
+}

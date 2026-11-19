@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/types"
 	"strings"
 )
@@ -23,6 +24,12 @@ func (t *Tx) calleeFunc(c *ast.CallExpr) *types.Func {
 			return fn
 		}
 	case *ast.IndexExpr:
+		if id := identOf(f.X); id != nil {
+			if fn, ok := t.p.info.Uses[id].(*types.Func); ok {
+				return fn
+			}
+		}
+	case *ast.IndexListExpr: // f[K, V](...)
 		if id := identOf(f.X); id != nil {
 			if fn, ok := t.p.info.Uses[id].(*types.Func); ok {
 				return fn
@@ -58,7 +65,7 @@ func (t *Tx) call(c *ast.CallExpr) string {
 			return r
 		}
 	}
-	if (sig.TypeParams() != nil || isGenericInstance(t, c)) && !simpleGeneric[fn.Name()] && sig.Recv() == nil {
+	if (sig.TypeParams() != nil || isGenericInstance(t, c)) && !(simpleGeneric[fn.Name()] && fn.Pkg() == t.p.pkg) && sig.Recv() == nil {
 		if name, isig := t.genericCall(c, fn); name != "" {
 			return name + "(" + strings.Join(t.callArgs(c, isig), ", ") + ")"
 		}
@@ -98,8 +105,15 @@ func (t *Tx) call(c *ast.CallExpr) string {
 		if _, isIface := sel.Recv().Underlying().(*types.Interface); isIface {
 			return t.ifaceCall(se, fn, args)
 		}
+		if len(sel.Index()) > 1 {
+			// method promoted from an embedded field of a foreign struct
+			// (net.TCPConn.Close from net.conn): call it on the outer type
+			if r := t.foreignPromoted(se.X, fn, sig); r != "" {
+				return fmt.Sprintf("%s%s)", r, prependComma(args))
+			}
+		}
 		recv := t.methodRecv(se.X, sel, sig)
-		return fmt.Sprintf("%s(%s%s)", cFuncName(t.p, fn), recv, prependComma(args))
+		return fmt.Sprintf("%s(%s%s)", methodCName(t.p, fn, sel.Recv()), recv, prependComma(args))
 	}
 	if !isOwn(fn.Pkg()) {
 		if r := t.special(c, fn, args); r != "" {
@@ -203,13 +217,45 @@ func (t *Tx) methodRecv(x ast.Expr, sel *types.Selection, sig *types.Signature) 
 	return base
 }
 
+// foreignPromoted returns "name(recv" for a method reached through an
+// embedded field of a non-translated struct, registering its prototype.
+func (t *Tx) foreignPromoted(x ast.Expr, fn *types.Func, sig *types.Signature) string {
+	xt := t.typeOf(x)
+	base := xt
+	if p, ok := base.(*types.Pointer); ok {
+		base = p.Elem()
+	}
+	n, ok := base.(*types.Named)
+	if !ok || n.Obj().Pkg() == nil || ownTypes(n.Obj().Pkg()) {
+		return ""
+	}
+	name := pkgPrefix(n.Obj().Pkg()) + "_" + n.Obj().Name() + "_" + fn.Name()
+	if _, done := promotedProtos[name]; !done {
+		tx := &Tx{p: t.p}
+		ps := []string{cbase(xt) + " recv"}
+		for i := 0; i < sig.Params().Len(); i++ {
+			ps = append(ps, fmt.Sprintf("%s a%d", cbase(sig.Params().At(i).Type()), i))
+		}
+		promotedProtos[name] = fmt.Sprintf("%s %s(%s); // promoted %s", tx.retTypeOf(sig.Results(), ""), name, strings.Join(ps, ", "), types.ObjectString(fn, qual))
+	}
+	return name + "(" + t.expr(x)
+}
+
+var promotedProtos = map[string]string{}
+
 func (t *Tx) conversion(to types.Type, arg ast.Expr) string {
 	to = substT(to)
 	if id, ok := arg.(*ast.Ident); ok && id.Name == "nil" {
 		return t.exprConv(arg, to)
 	}
 	from := t.typeOf(arg)
-	if tv := t.p.info.Types[arg]; tv.Value != nil {
+	if tv := t.p.info.Types[arg]; known(tv.Value) {
+		if s, ok := to.Underlying().(*types.Slice); ok && tv.Value.Kind() == constant.String {
+			if basicKind(s.Elem()) == types.Int32 {
+				return "go_str2runes(" + constLit(tv.Value, nil) + ")" // []rune("...")
+			}
+			return "go_str2bytes(" + constLit(tv.Value, nil) + ")" // []byte("...")
+		}
 		return constLit(tv.Value, to)
 	}
 	if from != nil && isInvalid(from) {
@@ -234,13 +280,26 @@ func (t *Tx) conversion(to types.Type, arg ast.Expr) string {
 		if isInteger(from) {
 			return "go_rune2str(" + x + ")"
 		}
+		if s, ok := from.Underlying().(*types.Slice); ok && basicKind(s.Elem()) == types.Int32 {
+			return "go_runes2str(" + x + ".p, " + x + ".len)" // string([]rune)
+		}
 	case isString(from):
 		if s, ok := to.Underlying().(*types.Slice); ok && basicKind(s.Elem()) == types.Uint8 {
 			return "go_str2bytes(" + x + ")"
 		}
+		if s, ok := to.Underlying().(*types.Slice); ok && basicKind(s.Elem()) == types.Int32 {
+			return "go_str2runes(" + x + ")"
+		}
 	}
 	if _, ok := to.Underlying().(*types.Interface); ok {
 		return t.box(x, from)
+	}
+	// distinct named structs (or arrays) with the same layout: reinterpret
+	if types.Identical(from.Underlying(), to.Underlying()) && cbase(from) != cbase(to) {
+		switch from.Underlying().(type) {
+		case *types.Struct, *types.Array:
+			return fmt.Sprintf("({ %s _cv = %s; *(%s *)&_cv; })", cbase(from), x, cbase(to))
+		}
 	}
 	// same underlying type: nothing to do in C (typedefs)
 	if types.Identical(from.Underlying(), to.Underlying()) {

@@ -93,14 +93,32 @@ func typePreamble() string {
 	// (interfaces, numbers, funcs, pointers) come before the slices of them
 	earlyLocal := map[string]bool{}
 	for _, n := range keys(ln) {
+		if lay, ok := bindTypedef(localTypes[n]); ok { // binding type declared as a C type
+			fmt.Fprintf(&b, "typedef %s %s;\n", lay, n)
+			earlyLocal[n] = true
+			continue
+		}
 		switch localTypes[n].Underlying().(type) {
 		case *types.Interface, *types.Basic, *types.Signature, *types.Pointer:
 			fmt.Fprintf(&b, "typedef %s %s;\n", cbase(localTypes[n].Underlying()), n)
 			earlyLocal[n] = true
 		}
 	}
+	sliceDone := map[string]bool{}
+	var emitSlice func(n string)
+	emitSlice = func(n string) { // element slice types first ([][]T needs []T)
+		if sliceDone[n] {
+			return
+		}
+		sliceDone[n] = true
+		el := cbase(sliceTypes[n])
+		if _, isSlice := sliceTypes[el]; isSlice {
+			emitSlice(el)
+		}
+		fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef struct { %s *p; int len, cap; } %s;\n#endif\n", n, n, el, n)
+	}
 	for _, n := range keys(sn) {
-		fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef struct { %s *p; int len, cap; } %s;\n#endif\n", n, n, cbase(sliceTypes[n]), n)
+		emitSlice(n)
 	}
 	for _, n := range keys(mn) {
 		fmt.Fprintf(&b, "#ifndef CVF_DEF_%s\n#define CVF_DEF_%s\ntypedef GoMap %s;\n#endif\n", n, n, n)

@@ -1200,3 +1200,52 @@ void sort_Sort(GoIface data) {
     StrLessEnv env = {(Slice_GoString *)data.data, rev};
     go_sort_slice(env.s, sizeof(GoString), (GoFunc){(void *)str_less, &env});
 }
+
+struct GoRunes go_str2runes_impl(GoString s) {
+    struct GoRunes r = {0};
+    r.p = (i32 *)gc_alloc_atomic(sizeof(i32) * (size_t)(s.len ? s.len : 1));
+    for (int i = 0; i < s.len;) {
+        i32 c;
+        i += go_decode_rune(s, i, &c);
+        r.p[r.len++] = c;
+    }
+    r.cap = r.len;
+    return r;
+}
+
+Ret_int__GoIface strings_Builder_Write(GoOpaque *recv, Slice_u8 p) {
+    return strings_Builder_WriteString(recv, (GoString){(const char *)p.p, p.len});
+}
+Ret_int__GoIface strings_Builder_WriteRune(GoOpaque *recv, i32 r) { return strings_Builder_WriteString(recv, go_rune2str(r)); }
+int strings_Count(GoString s, GoString sub) {
+    if (!sub.len) return utf8_RuneCountInString(s) + 1;
+    int n = 0;
+    for (int i = 0; i + sub.len <= s.len;) {
+        if (!memcmp(s.p + i, sub.p, (size_t)sub.len)) {
+            n++;
+            i += sub.len;
+        } else {
+            i++;
+        }
+    }
+    return n;
+}
+GoString strings_Title(GoString s) {  // ASCII word starts upper-cased (deprecated Go API)
+    char *p = (char *)gc_alloc_atomic((size_t)s.len + 1);
+    memcpy(p, s.p, (size_t)s.len);
+    for (int i = 0; i < s.len; i++)
+        if ((i == 0 || p[i - 1] == ' ' || p[i - 1] == '\t' || p[i - 1] == '-' || p[i - 1] == '_') && p[i] >= 'a' && p[i] <= 'z')
+            p[i] -= 32;
+    return (GoString){p, s.len};
+}
+
+// sort.Stable: insertion sort through the sort.Interface dispatchers
+void sort_Stable(GoIface data) {
+#if defined(ik_sort_Len) && defined(ik_sort_Less) && defined(ik_sort_Swap)
+    int n = ik_sort_Len(data);
+    for (int i = 1; i < n; i++)
+        for (int j = i; j > 0 && ik_sort_Less(data, j, j - 1); j--) ik_sort_Swap(data, j, j - 1);
+#else
+    sort_Sort(data);
+#endif
+}

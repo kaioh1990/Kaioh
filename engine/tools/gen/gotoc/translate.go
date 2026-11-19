@@ -87,23 +87,23 @@ func cFuncName(p *Prog, obj *types.Func) string {
 		if n, ok := rt.(*types.Named); ok {
 			if obj.Pkg() != nil && !isOwn(obj.Pkg()) {
 				externs[obj] = true
-				return obj.Pkg().Name() + "_" + n.Obj().Name() + "_" + obj.Name()
+				return pkgPrefix(obj.Pkg()) + "_" + n.Obj().Name() + "_" + obj.Name()
 			}
 			if obj.Pkg() != nil && obj.Pkg().Name() != "main" {
-				return obj.Pkg().Name() + "_" + n.Obj().Name() + "_" + obj.Name()
+				return pkgPrefix(obj.Pkg()) + "_" + n.Obj().Name() + "_" + obj.Name()
 			}
 			return n.Obj().Name() + "_" + obj.Name()
 		}
 	}
 	if !isOwn(obj.Pkg()) && obj.Pkg() != nil {
 		externs[obj] = true
-		return obj.Pkg().Name() + "_" + obj.Name()
+		return pkgPrefix(obj.Pkg()) + "_" + obj.Name()
 	}
 	if obj.Name() == "init" && sig.Recv() == nil {
 		return initFuncName(obj)
 	}
 	if obj.Pkg() != nil && obj.Pkg().Name() != "main" {
-		return obj.Pkg().Name() + "_" + obj.Name()
+		return pkgPrefix(obj.Pkg()) + "_" + obj.Name()
 	}
 	return "fn_" + obj.Name()
 }
@@ -418,6 +418,10 @@ func zeroValue(ty types.Type) string {
 
 func (t *Tx) labeled(s *ast.LabeledStmt) {
 	name := s.Label.Name
+	switch s.Stmt.(type) {
+	case *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt:
+		t.w("%s:;", name) // the label may also be a goto target
+	}
 	switch st := s.Stmt.(type) {
 	case *ast.ForStmt:
 		t.forStmt(st, name)
@@ -1035,6 +1039,10 @@ func (t *Tx) defOrSet(l ast.Expr, tok token.Token, val string, ty types.Type) {
 				return
 			}
 		}
+	}
+	// a, b = f(): a concrete result stored into an interface-typed target
+	if lt := t.typeOf(l); lt != nil && ty != nil && isIface(lt) && !isIface(ty) && !isInvalid(ty) {
+		val = t.box(val, ty)
 	}
 	t.w("%s = %s;", t.lvalue(l), val)
 }

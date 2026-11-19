@@ -1,7 +1,2 @@
-# Go type -> C type supplied by hand-written engine code
-Snd GoOpaqueVal
-Fnt GoOpaqueVal
-Texture GoIface
-lazySound GoOpaqueVal
-Sound GoOpaqueVal
-FntCharImage GoOpaqueVal
+# Go type -> C type supplied by hand-written engine code (none: the whole
+# data model is generated)

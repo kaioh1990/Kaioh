@@ -94,6 +94,19 @@ void go_sort_slice_stable(void *slice_hdr, size_t elem, GoFunc less);
 
 GoString go_bytes2str(Slice_u8 b);
 Slice_u8 go_str2bytes(GoString s);
+struct GoRunes { i32 *p; int len, cap; };  // layout of []rune (Slice_i32)
+struct GoRunes go_str2runes_impl(GoString s);
+#define go_str2runes(s) ({ struct GoRunes _r = go_str2runes_impl(s); *(Slice_i32 *)&_r; })  // []rune(s)
+GoMap gomap_clone(GoMap *m);
+// ik_tid_kind[type id]: basic kinds (go/types BasicKind), or:
+enum { IK_KIND_SLICE = 100, IK_KIND_POINTER = 101 };
+extern const unsigned char ik_tid_kind[];
+extern const int ik_tid_count;
+// further standard-library variables the game refers to
+extern GoOpaque *os_Stdin, *base64_StdEncoding, *image_White, *time_Local, *time_UTC;
+extern GoIface io_Discard, io_ErrClosedPipe, ioutil_Discard;
+extern GoIface color_AlphaModel, color_YCbCrModel, color_RGBAModel, color_RGBA64Model, color_GrayModel, color_Gray16Model;
+extern GoImagePoint image_ZP;
 
 // Formatting (fmt verbs used by Ikemen: v d s f g e q x X c t, widths,
 // precision, flags - + 0 space #).

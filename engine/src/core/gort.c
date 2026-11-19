@@ -284,3 +284,28 @@ f64 go_nan(void) {
     memcpy(&f, &u, 8);
     return f;
 }
+
+GoMap gomap_clone(GoMap *gm) {
+    GoMapImpl *m = gm->m;
+    if (!m) return (GoMap){0};
+    GoMapImpl *c = (GoMapImpl *)gc_alloc(sizeof *c);
+    *c = *m;
+    c->ents = (u8 *)gc_alloc(m->stride * (size_t)(m->cap ? m->cap : 1));
+    memcpy(c->ents, m->ents, m->stride * (size_t)m->n);
+    if (m->nslots) {
+        c->slots = (i32 *)gc_alloc_atomic(sizeof(i32) * (size_t)m->nslots);
+        memcpy(c->slots, m->slots, sizeof(i32) * (size_t)m->nslots);
+    }
+    return (GoMap){c};
+}
+
+GoString go_runes2str(const i32 *r, int n) {  // string([]rune)
+    char *p = (char *)gc_alloc_atomic((size_t)n * 4 + 1);
+    int w = 0;
+    for (int i = 0; i < n; i++) {
+        GoString e = go_rune2str(r[i]);
+        memcpy(p + w, e.p, (size_t)e.len);
+        w += e.len;
+    }
+    return (GoString){p, w};
+}

@@ -14,10 +14,13 @@ import (
 func (t *Tx) exprConv(e ast.Expr, target types.Type) string {
 	target = substT(target)
 	if target != nil && isInvalid(target) {
+		if isBindConstExpr(t, e) || !isInvalid(t.typeOf(e)) {
+			return t.expr(e) // C constant expressions; typed operands of them
+		}
 		return "((GoOpaque){{0}}) /* unresolved type */"
 	}
 	tv := t.p.info.Types[e]
-	if tv.Value != nil && target != nil {
+	if known(tv.Value) && target != nil {
 		if isIface(target) {
 			ct := defaultType(tv.Type)
 			return t.box(constLit(tv.Value, ct), ct)
@@ -45,9 +48,6 @@ func (t *Tx) exprConv(e ast.Expr, target types.Type) string {
 }
 
 func constLit(v constant.Value, ty types.Type) string {
-	if ty == nil {
-		return v.ExactString()
-	}
 	switch v.Kind() {
 	case constant.String:
 		return goStrLit(constant.StringVal(v))
@@ -56,6 +56,9 @@ func constLit(v constant.Value, ty types.Type) string {
 			return "true"
 		}
 		return "false"
+	}
+	if ty == nil {
+		return v.ExactString()
 	}
 	if isFloat(ty) {
 		f, _ := constant.Float64Val(constant.ToFloat(v))
@@ -115,13 +118,18 @@ func goStrLit(s string) string {
 
 func (t *Tx) expr(e ast.Expr) string {
 	tv := t.p.info.Types[e]
-	if tv.Value != nil {
+	if known(tv.Value) {
 		return constLit(tv.Value, tv.Type)
 	}
 	switch e := e.(type) {
 	case *ast.Ident:
 		return t.ident(e)
 	case *ast.BasicLit:
+		// untyped literal the checker recorded no value for (inside an
+		// expression with unresolved C types): evaluate the token itself
+		if v := constant.MakeFromLiteral(e.Value, e.Kind, 0); v.Kind() != constant.Unknown {
+			return constLit(v, nil)
+		}
 		return e.Value
 	case *ast.ParenExpr:
 		return "(" + t.expr(e.X) + ")"
@@ -180,6 +188,9 @@ func (t *Tx) ident(e *ast.Ident) string {
 	case *types.Func:
 		return t.funcValue(o)
 	case *types.Const:
+		if cn, ok := bindCConst[o]; ok {
+			return bindConstRef(t, o, cn)
+		}
 		return constLit(o.Val(), o.Type())
 	case *types.Nil:
 		return "NULL"
@@ -202,9 +213,12 @@ func (t *Tx) selector(e *ast.SelectorExpr) string {
 				return gName(v)
 			}
 			if c, ok := t.p.info.Uses[e.Sel].(*types.Const); ok {
+				if cn, ok := bindCConst[c]; ok { // binding constant defined in C (SDL.h)
+					return bindConstRef(t, c, cn)
+				}
 				return constLit(c.Val(), c.Type())
 			}
-			return pn.Imported().Name() + "_" + e.Sel.Name
+			return pkgPrefix(pn.Imported()) + "_" + e.Sel.Name
 		}
 	}
 	sel := t.p.info.Selections[e]
@@ -280,7 +294,7 @@ func (t *Tx) binary(e *ast.BinaryExpr) string {
 	case token.LAND, token.LOR:
 		return "(" + t.expr(e.X) + " " + e.Op.String() + " " + t.expr(e.Y) + ")"
 	}
-	if isString(lt) || isString(rt) {
+	if (isString(lt) || isString(rt)) && !isIface(lt) && !isIface(rt) {
 		switch e.Op {
 		case token.ADD:
 			return "go_strcat(" + t.expr(e.X) + ", " + t.expr(e.Y) + ")"
@@ -294,7 +308,7 @@ func (t *Tx) binary(e *ast.BinaryExpr) string {
 	}
 	// operand types for untyped constants: use the other side
 	opType := lt
-	if t.p.info.Types[e.X].Value != nil && rt != nil {
+	if known(t.p.info.Types[e.X].Value) && rt != nil {
 		opType = rt
 	}
 	if opType == nil {
@@ -388,7 +402,7 @@ func intSuffix(ty types.Type) string {
 }
 
 func (t *Tx) shift(op, x string, xt types.Type, count ast.Expr) string {
-	if tv := t.p.info.Types[count]; tv.Value != nil {
+	if tv := t.p.info.Types[count]; known(tv.Value) {
 		c, _ := constant.Int64Val(constant.ToInt(tv.Value))
 		if c < int64(intBits(xt)) {
 			if op == "shl" {
@@ -467,8 +481,24 @@ func (t *Tx) sliceExpr(e *ast.SliceExpr) string {
 	if e.High != nil {
 		hi = t.expr(e.High)
 	}
-	if e.Slice3 {
-		return t.TODO(e, "3-index slice")
+	if e.Slice3 { // s[lo:hi:max]: capacity max-lo
+		x := t.expr(e.X)
+		mx := t.expr(e.Max)
+		var st string
+		switch u := xt.Underlying().(type) {
+		case *types.Slice:
+			st = cbase(xt)
+		case *types.Array:
+			st = cbase(types.NewSlice(u.Elem()))
+			x = "((" + st + "){" + x + ".v, " + fmt.Sprint(u.Len()) + ", " + fmt.Sprint(u.Len()) + "})"
+		case *types.Pointer:
+			a := u.Elem().Underlying().(*types.Array)
+			st = cbase(types.NewSlice(a.Elem()))
+			x = "((" + st + "){" + x + "->v, " + fmt.Sprint(a.Len()) + ", " + fmt.Sprint(a.Len()) + "})"
+		default:
+			return t.TODO(e, "3-index slice")
+		}
+		return fmt.Sprintf("({ %s _s3 = %s; int _l3 = %s, _m3 = %s; (%s){_s3.p + _l3, (%s) - _l3, _m3 - _l3}; })", st, x, lo, mx, st, hi)
 	}
 	switch u := xt.Underlying().(type) {
 	case *types.Slice:
@@ -572,3 +602,10 @@ normal:
 }
 
 func (t *Tx) compositeElem(e ast.Expr, ty types.Type) string { return t.exprConv(e, ty) }
+
+func bindConstRef(t *Tx, c *types.Const, cn string) string {
+	if isInvalid(c.Type()) { // untyped C value
+		return "(" + cn + ")"
+	}
+	return "((" + t.ctype(c.Type()) + ")" + cn + ")"
+}

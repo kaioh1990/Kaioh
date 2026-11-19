@@ -24,6 +24,9 @@ type Prog struct {
 	// each package's init functions in source order
 	pkgOrder  []*types.Package
 	initFuncs map[*types.Package][]string
+	// package variable initializers of every translated package (go/types
+	// resets Info.InitOrder on each Check, so it is collected per package)
+	initOrder []*types.Initializer
 }
 
 // ownPkgs: every translated package, main included (set by main()).
@@ -43,7 +46,7 @@ func keyPrefix(pk *types.Package) string {
 	if pk == nil || pk.Name() == "main" {
 		return ""
 	}
-	return pk.Name() + "."
+	return pk.Path() + "." // unique even for packages sharing a name
 }
 
 // srcImporter type-checks the GOTOC_PKGS packages from source into the
@@ -52,6 +55,9 @@ func keyPrefix(pk *types.Package) string {
 type srcImporter struct {
 	p        *Prog
 	want     map[string]bool
+	auto     bool            // GOTOC_PKGS=auto,...: every third-party import (minus GOTOC_SKIP_PKGS)
+	skip     map[string]bool
+	stdWant  map[string]bool // GOTOC_STD_PKGS: standard-library packages to translate
 	bind     map[string]bool // GOTOC_BIND_PKGS: cgo bindings, typed but implemented in C
 	fallback types.ImporterFrom
 	done     map[string]*types.Package
@@ -61,7 +67,7 @@ type srcImporter struct {
 func (im *srcImporter) Import(path string) (*types.Package, error) { return im.ImportFrom(path, "", 0) }
 
 func (im *srcImporter) ImportFrom(path, dir string, mode types.ImportMode) (*types.Package, error) {
-	if !im.want[path] && !im.bind[path] {
+	if !im.wanted(path, dir) && !im.bind[path] {
 		return im.fallback.ImportFrom(path, dir, mode)
 	}
 	if pk, ok := im.done[path]; ok {
@@ -84,8 +90,12 @@ func (im *srcImporter) ImportFrom(path, dir string, mode types.ImportMode) (*typ
 			}
 		}
 		conf := &types.Config{FakeImportC: true, Importer: im, Error: im.conf.Error}
-		pk, _ := conf.Check(path, im.p.fset, files, &types.Info{})
+		binfo := &types.Info{Defs: map[*ast.Ident]types.Object{}}
+		rewriteBindTypes(files)
+		pk, _ := conf.Check(path, im.p.fset, files, binfo)
+		recordBindC(files, binfo)
 		im.done[path] = pk
+		registerPkg(pk)
 		bindPkgs[pk] = true
 		return pk, nil
 	}
@@ -97,7 +107,9 @@ func (im *srcImporter) ImportFrom(path, dir string, mode types.ImportMode) (*typ
 		}
 	}
 	pk, _ := im.conf.Check(path, im.p.fset, files, im.p.info)
+	im.p.takeInitOrder()
 	im.done[path] = pk
+	registerPkg(pk)
 	im.p.own[pk] = true
 	im.p.pkgOrder = append(im.p.pkgOrder, pk)
 	for _, f := range files {
@@ -158,9 +170,12 @@ func load(dir string) *Prog {
 		}
 	}
 	im := &srcImporter{p: p, want: map[string]bool{}, bind: map[string]bool{}, done: map[string]*types.Package{},
+		skip: pkgSet("GOTOC_SKIP_PKGS"), stdWant: pkgSet("GOTOC_STD_PKGS"),
 		fallback: importer.ForCompiler(p.fset, "source", nil).(types.ImporterFrom)}
 	for _, path := range strings.Split(os.Getenv("GOTOC_PKGS"), ",") {
-		if path != "" {
+		if path == "auto" {
+			im.auto = true
+		} else if path != "" {
 			im.want[path] = true
 		}
 	}
@@ -172,6 +187,7 @@ func load(dir string) *Prog {
 	im.conf = &types.Config{Importer: im, Error: errf}
 	conf := types.Config{FakeImportC: true, Importer: im, Error: errf}
 	p.pkg, _ = conf.Check("main", p.fset, p.files, p.info)
+	p.takeInitOrder()
 	p.pkgOrder = append(p.pkgOrder, p.pkg)
 	for _, f := range p.files {
 		p.addFuncs(f, p.pkg)
@@ -190,13 +206,16 @@ func funcKey(fd *ast.FuncDecl) string {
 	if ix, ok := t.(*ast.IndexExpr); ok {
 		t = ix.X
 	}
+	if ix, ok := t.(*ast.IndexListExpr); ok { // T[K, V]
+		t = ix.X
+	}
 	return t.(*ast.Ident).Name + "." + fd.Name.Name
 }
 
 // gName: C name of an own package-level variable.
 func gName(v *types.Var) string {
 	if v.Pkg() != nil && v.Pkg().Name() != "main" {
-		return "g_" + v.Pkg().Name() + "_" + v.Name()
+		return "g_" + pkgPrefix(v.Pkg()) + "_" + v.Name()
 	}
 	return "g_" + v.Name()
 }
@@ -211,9 +230,40 @@ func initFuncName(fn *types.Func) string {
 	}
 	pfx := "fn_"
 	if fn.Pkg() != nil && fn.Pkg().Name() != "main" {
-		pfx = fn.Pkg().Name() + "_"
+		pfx = pkgPrefix(fn.Pkg()) + "_"
 	}
 	n := fmt.Sprintf("%sinit_%d", pfx, len(initNames))
 	initNames[fn] = n
 	return n
+}
+
+func (im *srcImporter) wanted(path, dir string) bool {
+	if im.want[path] || im.stdWant[path] {
+		return true
+	}
+	if !im.auto || im.skip[path] || path == "C" || path == "unsafe" {
+		return false
+	}
+	for sk := range im.skip { // prefix entries: "golang.org/x/exp/..."
+		if strings.HasSuffix(sk, "/...") && strings.HasPrefix(path, strings.TrimSuffix(sk, "...")) {
+			return false
+		}
+	}
+	bp, err := build.Default.Import(path, dir, build.FindOnly)
+	return err == nil && !bp.Goroot // third-party (module) package
+}
+
+func pkgSet(env string) map[string]bool {
+	m := map[string]bool{}
+	for _, p := range strings.Split(os.Getenv(env), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			m[p] = true
+		}
+	}
+	return m
+}
+
+func (p *Prog) takeInitOrder() {
+	p.initOrder = append(p.initOrder, p.info.InitOrder...)
+	p.info.InitOrder = nil
 }

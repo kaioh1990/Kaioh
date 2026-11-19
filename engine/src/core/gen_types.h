@@ -117,8 +117,12 @@ typedef struct FightScreenTimer FightScreenTimer;
 typedef struct FightScreenWinCount FightScreenWinCount;
 typedef struct FightScreenWinIcon FightScreenWinIcon;
 typedef struct FilesProperties FilesProperties;
+typedef struct Fnt Fnt;
+typedef struct FntCharImage FntCharImage;
 typedef struct FontProperties FontProperties;
 typedef struct FontRenderer_GL33 FontRenderer_GL33;
+typedef struct list_Element list_Element;
+typedef struct list_List list_List;
 typedef struct FontRenderer_VK FontRenderer_VK;
 typedef struct color color;
 typedef struct ShaderPalFX ShaderPalFX;
@@ -271,6 +275,9 @@ typedef struct ShadowSprite ShadowSprite;
 typedef struct ShortcutKey ShortcutKey;
 typedef struct ShortcutScript ShortcutScript;
 typedef struct Skin Skin;
+typedef struct Snd Snd;
+typedef struct beep_Format beep_Format;
+typedef struct Sound Sound;
 typedef struct SoundChannel SoundChannel;
 typedef struct SoundEffect SoundEffect;
 typedef struct SoundProperties SoundProperties;
@@ -312,6 +319,9 @@ typedef struct Window Window;
 typedef struct backGround backGround;
 typedef struct bcHasher bcHasher;
 typedef struct bcProfKey bcProfKey;
+typedef struct beep_Buffer beep_Buffer;
+typedef struct beep_Ctrl beep_Ctrl;
+typedef struct beep_Mixer beep_Mixer;
 typedef struct bgCtrl bgCtrl;
 typedef struct bgDrawTransform bgDrawTransform;
 typedef struct bgMusic bgMusic;
@@ -324,11 +334,32 @@ typedef struct cvfOnlineState cvfOnlineState;
 typedef struct cvfRoom cvfRoom;
 typedef struct cvfRulesT cvfRulesT;
 typedef struct drawAspectState drawAspectState;
+typedef struct effects_Volume effects_Volume;
 typedef struct expValueFrame expValueFrame;
 typedef struct fightScreenAnimationStateCloner fightScreenAnimationStateCloner;
+typedef struct fixed_Point26_6 fixed_Point26_6;
+typedef struct fixed_Rectangle26_6 fixed_Rectangle26_6;
+typedef struct ggpo_RemotePlayer ggpo_RemotePlayer;
+typedef struct ggpo_Player ggpo_Player;
+typedef struct lazySound lazySound;
 typedef struct lowerCacheEntry lowerCacheEntry;
+typedef struct lua_DbgCall lua_DbgCall;
+typedef struct lua_DbgLocalInfo lua_DbgLocalInfo;
+typedef struct lua_FunctionProto lua_FunctionProto;
+typedef struct lua_Global lua_Global;
+typedef struct lua_LFunction lua_LFunction;
+typedef struct lua_Options lua_Options;
+typedef struct lua_LState lua_LState;
+typedef struct lua_LTable lua_LTable;
+typedef struct lua_Upvalue lua_Upvalue;
+typedef struct lua_allocator lua_allocator;
+typedef struct lua_callFrame lua_callFrame;
+typedef struct lua_iface lua_iface;
+typedef struct lua_registry lua_registry;
 typedef struct modifyBGCtrlShader modifyBGCtrlShader;
 typedef struct nameFact nameFact;
+typedef struct nullRenderer nullRenderer;
+typedef struct nullTexture nullTexture;
 typedef struct paletteCopyKey paletteCopyKey;
 typedef struct queryPart queryPart;
 typedef struct rankingEntry rankingEntry;
@@ -336,6 +367,8 @@ typedef struct rankingRow rankingRow;
 typedef struct reisenAudioStreamer reisenAudioStreamer;
 typedef struct runTally runTally;
 typedef struct scParam scParam;
+typedef struct sdl_GameController sdl_GameController;
+typedef struct sdl_Window sdl_Window;
 typedef struct sffv1PalState sffv1PalState;
 typedef struct sliceHeader sliceHeader;
 typedef struct soundPanView soundPanView;
@@ -344,6 +377,8 @@ typedef struct specFacts specFacts;
 typedef struct specGuard specGuard;
 typedef struct specList specList;
 typedef struct stageRollbackBgState stageRollbackBgState;
+typedef struct truetype_Font truetype_Font;
+typedef struct truetype_cm truetype_cm;
 typedef struct upnpDevice upnpDevice;
 typedef struct upnpMapping upnpMapping;
 typedef struct victoryEntry victoryEntry;
@@ -354,6 +389,10 @@ typedef struct zipMemFileReader zipMemFileReader;
 #ifndef CVF_DEF_Map_Arr2_i32_AnimationPtr
 #define CVF_DEF_Map_Arr2_i32_AnimationPtr
 typedef GoMap Map_Arr2_i32_AnimationPtr; /* map[[2]int32]*Animation */
+#endif
+#ifndef CVF_DEF_Map_Arr2_i32_SoundPtr
+#define CVF_DEF_Map_Arr2_i32_SoundPtr
+typedef GoMap Map_Arr2_i32_SoundPtr; /* map[[2]int32]*Sound */
 #endif
 #ifndef CVF_DEF_Map_Arr2_u16_SpritePtr
 #define CVF_DEF_Map_Arr2_u16_SpritePtr
@@ -383,17 +422,9 @@ typedef GoMap Map_GoOpaque_invalidtypePtr_Slice_GoOpaque_invalidtypePtr; /* map[
 #define CVF_DEF_Map_GoOpaque_invalidtypePtr_VulkanAllocationPtr
 typedef GoMap Map_GoOpaque_invalidtypePtr_VulkanAllocationPtr; /* map[invalid type]*VulkanAllocation */
 #endif
-#ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
-#define CVF_DEF_Map_GoOpaque_invalidtypePtr_bool
-typedef GoMap Map_GoOpaque_invalidtypePtr_bool; /* map[Key]bool */
-#endif
 #ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_u32
 #define CVF_DEF_Map_GoOpaque_invalidtypePtr_u32
 typedef GoMap Map_GoOpaque_invalidtypePtr_u32; /* map[invalid type]uint32 */
-#endif
-#ifndef CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
-#define CVF_DEF_Map_GoOpaque_invalidtypePtr_u8
-typedef GoMap Map_GoOpaque_invalidtypePtr_u8; /* map[invalid type]byte */
 #endif
 #ifndef CVF_DEF_Map_GoString_AnimationPropertiesPtr
 #define CVF_DEF_Map_GoString_AnimationPropertiesPtr
@@ -511,6 +542,10 @@ typedef GoMap Map_GoString_i32; /* map[string]int32 */
 #define CVF_DEF_Map_GoString_int
 typedef GoMap Map_GoString_int; /* map[string]int */
 #endif
+#ifndef CVF_DEF_Map_GoString_lua_LValue
+#define CVF_DEF_Map_GoString_lua_LValue
+typedef GoMap Map_GoString_lua_LValue; /* map[string]lua.LValue */
+#endif
 #ifndef CVF_DEF_Map_GoString_scFunc
 #define CVF_DEF_Map_GoString_scFunc
 typedef GoMap Map_GoString_scFunc; /* map[string]scFunc */
@@ -567,6 +602,14 @@ typedef GoMap Map_i32_CharPtr; /* map[int32]*Char */
 #define CVF_DEF_Map_i32_FSTextPtr
 typedef GoMap Map_i32_FSTextPtr; /* map[int32]*FSText */
 #endif
+#ifndef CVF_DEF_Map_i32_FntCharImagePtr
+#define CVF_DEF_Map_i32_FntCharImagePtr
+typedef GoMap Map_i32_FntCharImagePtr; /* map[rune]*FntCharImage */
+#endif
+#ifndef CVF_DEF_Map_i32_Map_i32_FntCharImagePtr
+#define CVF_DEF_Map_i32_Map_i32_FntCharImagePtr
+typedef GoMap Map_i32_Map_i32_FntCharImagePtr; /* map[int32]map[rune]*FntCharImage */
+#endif
 #ifndef CVF_DEF_Map_i32_RemapTable
 #define CVF_DEF_Map_i32_RemapTable
 typedef GoMap Map_i32_RemapTable; /* map[int32]RemapTable */
@@ -607,13 +650,13 @@ typedef GoMap Map_int_Arr12_InputBits; /* map[int][12]InputBits */
 #define CVF_DEF_Map_int_CharVarBackup
 typedef GoMap Map_int_CharVarBackup; /* map[int]CharVarBackup */
 #endif
+#ifndef CVF_DEF_Map_int_FntPtr
+#define CVF_DEF_Map_int_FntPtr
+typedef GoMap Map_int_FntPtr; /* map[int]*Fnt */
+#endif
 #ifndef CVF_DEF_Map_int_GameStatePtr
 #define CVF_DEF_Map_int_GameStatePtr
 typedef GoMap Map_int_GameStatePtr; /* map[int]*GameState */
-#endif
-#ifndef CVF_DEF_Map_int_GoOpaqueValPtr
-#define CVF_DEF_Map_int_GoOpaqueValPtr
-typedef GoMap Map_int_GoOpaqueValPtr; /* map[int]*Fnt */
 #endif
 #ifndef CVF_DEF_Map_int_GoString
 #define CVF_DEF_Map_int_GoString
@@ -639,9 +682,33 @@ typedef GoMap Map_int_Slice_int; /* map[int][]int */
 #define CVF_DEF_Map_int_int
 typedef GoMap Map_int_int; /* map[int]int */
 #endif
+#ifndef CVF_DEF_Map_int_lua_LValue
+#define CVF_DEF_Map_int_lua_LValue
+typedef GoMap Map_int_lua_LValue; /* map[int]lua.LValue */
+#endif
+#ifndef CVF_DEF_Map_lua_LValue_int
+#define CVF_DEF_Map_lua_LValue_int
+typedef GoMap Map_lua_LValue_int; /* map[lua.LValue]int */
+#endif
+#ifndef CVF_DEF_Map_lua_LValue_lua_LValue
+#define CVF_DEF_Map_lua_LValue_lua_LValue
+typedef GoMap Map_lua_LValue_lua_LValue; /* map[lua.LValue]lua.LValue */
+#endif
 #ifndef CVF_DEF_Map_paletteCopyKey_Slice_u32
 #define CVF_DEF_Map_paletteCopyKey_Slice_u32
 typedef GoMap Map_paletteCopyKey_Slice_u32; /* map[paletteCopyKey][]uint32 */
+#endif
+#ifndef CVF_DEF_Map_sdl_GameControllerButton_u8
+#define CVF_DEF_Map_sdl_GameControllerButton_u8
+typedef GoMap Map_sdl_GameControllerButton_u8; /* map[sdl.GameControllerButton]byte */
+#endif
+#ifndef CVF_DEF_Map_sdl_Keycode_bool
+#define CVF_DEF_Map_sdl_Keycode_bool
+typedef GoMap Map_sdl_Keycode_bool; /* map[Key]bool */
+#endif
+#ifndef CVF_DEF_Map_u32Ptr_Texture
+#define CVF_DEF_Map_u32Ptr_Texture
+typedef GoMap Map_u32Ptr_Texture; /* map[*uint32]Texture */
 #endif
 #ifndef CVF_DEF_Map_u32_Arr2_f32
 #define CVF_DEF_Map_u32_Arr2_f32
@@ -691,223 +758,6 @@ typedef GoMap Map_u64_u32; /* map[uint64]uint32 */
 #define CVF_DEF_Map_uintptr_t_int
 typedef GoMap Map_uintptr_t_int; /* map[uintptr]int */
 #endif
-typedef i32 TransType;
-typedef u8 AlphaMode;
-typedef i32 Projection;
-typedef Map_i32_RemapTable RemapPreset;
-typedef u64 AssertSpecialFlag;
-typedef i32 AttackType;
-typedef GoIface AudioSink;
-typedef u8 BGMState;
-typedef i32 BgType;
-typedef i32 BgVideoScaleFilter;
-typedef i32 BgVideoScaleMode;
-typedef i32 BgcType;
-typedef int BlendEquation;
-typedef int BlendFunc;
-typedef int ValueType;
-typedef int CameraView;
-typedef i32 StateType;
-typedef i32 MoveType;
-typedef i32 Reaction;
-typedef i32 TradeType;
-typedef i32 HitType;
-typedef i32 MoveContact;
-typedef u32 SystemCharFlag;
-typedef u32 CharSpecialFlag;
-typedef i16 InputBits;
-typedef i32 ProjContact;
-typedef Map_GoString_Slice_bgMusicPtr Music;
-typedef u8 CommandKey;
-typedef u8 Direction;
-typedef GoString Error;
-typedef i32 PosType;
-typedef i32 Space;
-typedef u8 FFBWaveform;
-typedef int FadeStartPolicy;
-typedef Map_GoString_GoString IniSection;
-typedef i32 FinishType;
-typedef GoIface Font;
-typedef GoIface FontRenderer;
-typedef u8 GLTFAnimationType;
-typedef u8 GLTFAnimationInterpolation;
-typedef u8 LightType;
-typedef u32 GlobalSpecialFlag;
-typedef i32 WinType;
-typedef i32 TeamMode;
-typedef i32 MenuState;
-typedef i32 HMF;
-typedef i32 HitFlag;
-typedef i32 LoaderState;
-typedef u8 LoadingPhase;
-typedef i32 MusicSource;
-typedef int NetState;
-typedef u8 Trans;
-typedef u8 OpCode;
-typedef i32 PreloadState;
-typedef Map_Arr2_i32_AnimationPtr PreloadedAnims;
-typedef u8 PrimitiveMode;
-typedef i32 ProjStatus;
-typedef Map_i32_Arr2_i32 RemapTable;
-typedef GoIface Renderer;
-typedef int SffType;
-typedef GoFunc cnode;
-typedef GoIface StateController;
-typedef GoString SyncScope;
-typedef int TextureResidency;
-typedef int TextureSamplingParam;
-typedef GoIface TtfFont;
-typedef int VulkanResourceType;
-typedef u8 expLevel;
-typedef Map_paletteCopyKey_Slice_u32 paletteCopier;
-typedef GoFunc scFunc;
-typedef GoFunc scRunFn;
-typedef struct Anon_7cc92e70 Anon_7cc92e70;
-typedef struct Anon_53468e2e Anon_53468e2e;
-typedef struct Anon_4c4ed5ec Anon_4c4ed5ec;
-typedef struct Anon_a632ad85 Anon_a632ad85;
-typedef struct Anon_af4c965e Anon_af4c965e;
-typedef struct Anon_39b99353 Anon_39b99353;
-typedef struct Anon_f665a959 Anon_f665a959;
-typedef struct Anon_9f553815 Anon_9f553815;
-typedef struct Anon_a316b3f5 Anon_a316b3f5;
-typedef struct Anon_2dddc38c Anon_2dddc38c;
-typedef struct Anon_0a015777 Anon_0a015777;
-typedef struct Anon_b4b8c731 Anon_b4b8c731;
-typedef struct Anon_161374c1 Anon_161374c1;
-typedef struct Anon_73c55e1f Anon_73c55e1f;
-typedef struct Anon_4ad773ee Anon_4ad773ee;
-typedef struct Anon_bf560d5f Anon_bf560d5f;
-typedef struct Anon_a5a80400 Anon_a5a80400;
-typedef struct Anon_fc37ce89 Anon_fc37ce89;
-typedef struct Anon_dfb9041b Anon_dfb9041b;
-typedef struct Anon_1f176b16 Anon_1f176b16;
-typedef struct Anon_7bb06b75 Anon_7bb06b75;
-typedef struct Anon_5591596d Anon_5591596d;
-typedef struct Anon_5f13cb02 Anon_5f13cb02;
-typedef struct Anon_040fa437 Anon_040fa437;
-typedef struct Anon_811d7c45 Anon_811d7c45;
-typedef struct Anon_caf3f353 Anon_caf3f353;
-typedef struct Anon_3d0fed52 Anon_3d0fed52;
-typedef struct Anon_22d84747 Anon_22d84747;
-typedef struct Anon_7d4762ec Anon_7d4762ec;
-typedef struct Anon_3e054d73 Anon_3e054d73;
-typedef struct Anon_6d248a4b Anon_6d248a4b;
-typedef struct Anon_b995bd4c Anon_b995bd4c;
-typedef struct Anon_3d4c64d3 Anon_3d4c64d3;
-typedef struct Anon_df3b96d4 Anon_df3b96d4;
-typedef struct Anon_b508c0f6 Anon_b508c0f6;
-typedef struct Anon_8b0a23b6 Anon_8b0a23b6;
-typedef struct Anon_fd62af00 Anon_fd62af00;
-typedef struct Anon_688ad72e Anon_688ad72e;
-typedef struct Anon_f88a21f4 Anon_f88a21f4;
-typedef struct Anon_16644dc7 Anon_16644dc7;
-typedef struct Anon_c4dc6fdd Anon_c4dc6fdd;
-typedef struct Anon_14b37acc Anon_14b37acc;
-typedef struct Anon_54db43aa Anon_54db43aa;
-typedef struct Anon_c6dbd0bf Anon_c6dbd0bf;
-typedef struct Anon_7293d90f Anon_7293d90f;
-typedef struct Anon_e464c8fd Anon_e464c8fd;
-typedef struct Anon_8f8dfbf8 Anon_8f8dfbf8;
-typedef struct Anon_dbc08b28 Anon_dbc08b28;
-typedef struct Anon_0f20e66b Anon_0f20e66b;
-typedef struct Anon_1df292c6 Anon_1df292c6;
-typedef struct Anon_57e999ad Anon_57e999ad;
-typedef struct Anon_c18ae172 Anon_c18ae172;
-typedef struct Anon_18c0a914 Anon_18c0a914;
-typedef struct Anon_ab19bc50 Anon_ab19bc50;
-typedef struct Anon_b0b30749 Anon_b0b30749;
-typedef struct Anon_4dfef77c Anon_4dfef77c;
-typedef struct Anon_902873b9 Anon_902873b9;
-typedef struct Anon_e71bdd7c Anon_e71bdd7c;
-typedef struct Anon_f91950c2 Anon_f91950c2;
-typedef struct Anon_3d522be3 Anon_3d522be3;
-typedef struct Anon_5b4e0f1b Anon_5b4e0f1b;
-typedef struct Anon_7671e252 Anon_7671e252;
-typedef struct Anon_99a01e83 Anon_99a01e83;
-typedef struct Anon_18609da4 Anon_18609da4;
-typedef struct Anon_e861adfc Anon_e861adfc;
-typedef struct Anon_6fca328f Anon_6fca328f;
-typedef struct Anon_15785e54 Anon_15785e54;
-typedef struct Anon_558f4cc9 Anon_558f4cc9;
-typedef struct Anon_c5e8a111 Anon_c5e8a111;
-typedef struct Anon_b511f76b Anon_b511f76b;
-typedef struct Anon_784a3f6d Anon_784a3f6d;
-typedef struct Anon_eceff868 Anon_eceff868;
-typedef struct Anon_31b1f748 Anon_31b1f748;
-typedef struct Anon_c29ce860 Anon_c29ce860;
-typedef struct Anon_b525c883 Anon_b525c883;
-typedef struct Anon_828756c7 Anon_828756c7;
-typedef struct Anon_3b80bc6b Anon_3b80bc6b;
-typedef struct Anon_75b723d6 Anon_75b723d6;
-typedef struct Anon_7feba13e Anon_7feba13e;
-typedef struct Anon_f8e10808 Anon_f8e10808;
-typedef struct Anon_ad3827b6 Anon_ad3827b6;
-typedef struct Anon_a61ac1b3 Anon_a61ac1b3;
-typedef struct Anon_4d998b97 Anon_4d998b97;
-typedef struct Anon_52ad6e9d Anon_52ad6e9d;
-typedef struct Anon_0f1da223 Anon_0f1da223;
-typedef struct Anon_c0ebc6d1 Anon_c0ebc6d1;
-typedef struct Anon_53386e74 Anon_53386e74;
-typedef struct Anon_35963cd2 Anon_35963cd2;
-typedef struct Anon_7b12115d Anon_7b12115d;
-typedef struct Anon_9b54a510 Anon_9b54a510;
-typedef struct Anon_e3e96c5e Anon_e3e96c5e;
-typedef struct Anon_cf68abeb Anon_cf68abeb;
-typedef struct Anon_24a77732 Anon_24a77732;
-typedef struct Anon_d18cf56f Anon_d18cf56f;
-typedef struct Anon_0c2b6cfe Anon_0c2b6cfe;
-typedef struct Anon_03d1af3e Anon_03d1af3e;
-typedef struct Anon_14dc7311 Anon_14dc7311;
-typedef struct Anon_c49cb36c Anon_c49cb36c;
-typedef struct Anon_29e67731 Anon_29e67731;
-typedef struct Anon_5b6e6123 Anon_5b6e6123;
-typedef struct Anon_ad883348 Anon_ad883348;
-typedef struct Anon_4a620174 Anon_4a620174;
-typedef struct Anon_769242ee Anon_769242ee;
-typedef struct Anon_92897767 Anon_92897767;
-typedef struct Anon_5d3c67a8 Anon_5d3c67a8;
-typedef struct Anon_5977501b Anon_5977501b;
-typedef struct Anon_a257727c Anon_a257727c;
-typedef struct Anon_f634dd61 Anon_f634dd61;
-typedef struct Anon_ba1e3273 Anon_ba1e3273;
-typedef struct Anon_4b8a3264 Anon_4b8a3264;
-typedef struct Anon_8a2bb521 Anon_8a2bb521;
-typedef struct Anon_85848459 Anon_85848459;
-typedef struct Anon_c9a00f79 Anon_c9a00f79;
-typedef struct Anon_cdcd6158 Anon_cdcd6158;
-typedef struct Anon_de509dfb Anon_de509dfb;
-typedef struct Anon_1f7505bf Anon_1f7505bf;
-typedef struct Anon_2f3f233c Anon_2f3f233c;
-typedef struct Anon_c466bc00 Anon_c466bc00;
-typedef struct Anon_50c501fc Anon_50c501fc;
-typedef struct Anon_b4e107d9 Anon_b4e107d9;
-typedef struct Anon_b1cc637d Anon_b1cc637d;
-typedef struct Anon_8517cd1e Anon_8517cd1e;
-typedef struct Anon_b4ab5e02 Anon_b4ab5e02;
-typedef struct Anon_ce6aad93 Anon_ce6aad93;
-typedef struct Anon_a9c08002 Anon_a9c08002;
-typedef struct Anon_194d600d Anon_194d600d;
-typedef struct Anon_863d0e0f Anon_863d0e0f;
-typedef struct Anon_e71eca9f Anon_e71eca9f;
-typedef struct Anon_c6d21910 Anon_c6d21910;
-typedef struct Anon_1412bee7 Anon_1412bee7;
-typedef struct Anon_52e3ca2e Anon_52e3ca2e;
-typedef struct Anon_90dcfa72 Anon_90dcfa72;
-typedef struct Anon_858938ca Anon_858938ca;
-typedef struct Anon_465a578c Anon_465a578c;
-typedef struct Anon_87407db8 Anon_87407db8;
-typedef struct Anon_2b2cdbcc Anon_2b2cdbcc;
-typedef struct Anon_7c0f0eeb Anon_7c0f0eeb;
-typedef struct Anon_0107677c Anon_0107677c;
-typedef struct Anon_e6c808e7 Anon_e6c808e7;
-typedef struct Anon_800e850a Anon_800e850a;
-typedef struct Anon_ed9bef7d Anon_ed9bef7d;
-typedef struct Anon_fc15f840 Anon_fc15f840;
-typedef struct Anon_fa4d6974 Anon_fa4d6974;
-typedef struct Anon_bfbab8ed Anon_bfbab8ed;
-typedef struct Anon_47424b23 Anon_47424b23;
-typedef struct Anon_65fa1d9f Anon_65fa1d9f;
 #ifndef CVF_DEF_Arr100_GoString
 #define CVF_DEF_Arr100_GoString
 typedef struct Arr100_GoString Arr100_GoString;
@@ -939,10 +789,6 @@ typedef struct Arr12_ControllerStatePtr Arr12_ControllerStatePtr;
 #ifndef CVF_DEF_Arr12_ForceFeedbackParams
 #define CVF_DEF_Arr12_ForceFeedbackParams
 typedef struct Arr12_ForceFeedbackParams Arr12_ForceFeedbackParams;
-#endif
-#ifndef CVF_DEF_Arr12_GoOpaque_invalidtypePtr
-#define CVF_DEF_Arr12_GoOpaque_invalidtypePtr
-typedef struct Arr12_GoOpaque_invalidtypePtr Arr12_GoOpaque_invalidtypePtr;
 #endif
 #ifndef CVF_DEF_Arr12_InputBits
 #define CVF_DEF_Arr12_InputBits
@@ -992,6 +838,10 @@ typedef struct Arr12_i32 Arr12_i32;
 #define CVF_DEF_Arr12_int
 typedef struct Arr12_int Arr12_int;
 #endif
+#ifndef CVF_DEF_Arr12_sdl_GameControllerPtr
+#define CVF_DEF_Arr12_sdl_GameControllerPtr
+typedef struct Arr12_sdl_GameControllerPtr Arr12_sdl_GameControllerPtr;
+#endif
 #ifndef CVF_DEF_Arr12_stagePlayer
 #define CVF_DEF_Arr12_stagePlayer
 typedef struct Arr12_stagePlayer Arr12_stagePlayer;
@@ -1015,6 +865,10 @@ typedef struct Arr24_Arr16_f32 Arr24_Arr16_f32;
 #ifndef CVF_DEF_Arr24_f32
 #define CVF_DEF_Arr24_f32
 typedef struct Arr24_f32 Arr24_f32;
+#endif
+#ifndef CVF_DEF_Arr256_u32
+#define CVF_DEF_Arr256_u32
+typedef struct Arr256_u32 Arr256_u32;
 #endif
 #ifndef CVF_DEF_Arr2_AnimLayout
 #define CVF_DEF_Arr2_AnimLayout
@@ -1175,6 +1029,10 @@ typedef struct Arr32_InputBits Arr32_InputBits;
 #ifndef CVF_DEF_Arr32_cmdNameCacheEnt
 #define CVF_DEF_Arr32_cmdNameCacheEnt
 typedef struct Arr32_cmdNameCacheEnt Arr32_cmdNameCacheEnt;
+#endif
+#ifndef CVF_DEF_Arr32_u8
+#define CVF_DEF_Arr32_u8
+typedef struct Arr32_u8 Arr32_u8;
 #endif
 #ifndef CVF_DEF_Arr32_varCacheEnt
 #define CVF_DEF_Arr32_varCacheEnt
@@ -1348,6 +1206,240 @@ typedef struct Arr9_bool Arr9_bool;
 #define CVF_DEF_Arr9_f32
 typedef struct Arr9_f32 Arr9_f32;
 #endif
+typedef i32 TransType;
+typedef u8 AlphaMode;
+typedef i32 Projection;
+typedef Map_i32_RemapTable RemapPreset;
+typedef u64 AssertSpecialFlag;
+typedef i32 AttackType;
+typedef GoIface AudioSink;
+typedef u8 BGMState;
+typedef i32 BgType;
+typedef i32 BgVideoScaleFilter;
+typedef i32 BgVideoScaleMode;
+typedef i32 BgcType;
+typedef GoIface beep_StreamSeeker;
+typedef int beep_SampleRate;
+typedef int BlendEquation;
+typedef int BlendFunc;
+typedef GoIface beep_Streamer;
+typedef int ValueType;
+typedef int CameraView;
+typedef i32 StateType;
+typedef i32 MoveType;
+typedef i32 Reaction;
+typedef i32 TradeType;
+typedef i32 HitType;
+typedef i32 MoveContact;
+typedef u32 SystemCharFlag;
+typedef u32 CharSpecialFlag;
+typedef i16 InputBits;
+typedef i32 ProjContact;
+typedef Map_GoString_Slice_bgMusicPtr Music;
+typedef u8 CommandKey;
+typedef GoIface Texture;
+typedef u8 Direction;
+typedef GoString Error;
+typedef i32 PosType;
+typedef i32 Space;
+typedef u8 FFBWaveform;
+typedef int FadeStartPolicy;
+typedef Map_GoString_GoString IniSection;
+typedef i32 FinishType;
+typedef GoIface TtfFont;
+typedef GoIface Font;
+typedef GoIface FontRenderer;
+typedef u8 GLTFAnimationType;
+typedef u8 GLTFAnimationInterpolation;
+typedef u8 LightType;
+typedef u32 GlobalSpecialFlag;
+typedef i32 WinType;
+typedef i32 TeamMode;
+typedef i32 sdl_Keycode;
+typedef i32 MenuState;
+typedef i32 HMF;
+typedef i32 HitFlag;
+typedef i32 LoaderState;
+typedef u8 LoadingPhase;
+typedef i32 MusicSource;
+typedef int NetState;
+typedef Arr16_f32 mgl32_Mat4;
+typedef u8 Trans;
+typedef u8 OpCode;
+typedef i32 PreloadState;
+typedef Map_Arr2_i32_AnimationPtr PreloadedAnims;
+typedef u8 PrimitiveMode;
+typedef i32 ProjStatus;
+typedef Map_i32_Arr2_i32 RemapTable;
+typedef GoIface Renderer;
+typedef GoIface ggpo_Backend;
+typedef int ggpo_PlayerHandle;
+typedef u32 sdl_AudioDeviceID;
+typedef int SffType;
+typedef i32 sdl_Keymod;
+typedef GoFunc cnode;
+typedef GoIface StateController;
+typedef GoString SyncScope;
+typedef int TextureResidency;
+typedef int TextureSamplingParam;
+typedef int VulkanResourceType;
+typedef u8 expLevel;
+typedef i32 fixed_Int26_6;
+typedef int ggpo_PlayerType;
+typedef GoFunc lua_LGFunction;
+typedef GoIface lua_callFrameStack;
+typedef GoIface lua_LValue;
+typedef GoIface lua_registryHandler;
+typedef Map_paletteCopyKey_Slice_u32 paletteCopier;
+typedef GoFunc scFunc;
+typedef GoFunc scRunFn;
+typedef i32 sdl_GameControllerButton;
+typedef struct Anon_7cc92e70 Anon_7cc92e70;
+typedef struct Anon_53468e2e Anon_53468e2e;
+typedef struct Anon_4c4ed5ec Anon_4c4ed5ec;
+typedef struct Anon_a632ad85 Anon_a632ad85;
+typedef struct Anon_af4c965e Anon_af4c965e;
+typedef struct Anon_39b99353 Anon_39b99353;
+typedef struct Anon_f665a959 Anon_f665a959;
+typedef struct Anon_9f553815 Anon_9f553815;
+typedef struct Anon_a316b3f5 Anon_a316b3f5;
+typedef struct Anon_2dddc38c Anon_2dddc38c;
+typedef struct Anon_0a015777 Anon_0a015777;
+typedef struct Anon_b4b8c731 Anon_b4b8c731;
+typedef struct Anon_161374c1 Anon_161374c1;
+typedef struct Anon_73c55e1f Anon_73c55e1f;
+typedef struct Anon_4ad773ee Anon_4ad773ee;
+typedef struct Anon_bf560d5f Anon_bf560d5f;
+typedef struct Anon_a5a80400 Anon_a5a80400;
+typedef struct Anon_fc37ce89 Anon_fc37ce89;
+typedef struct Anon_dfb9041b Anon_dfb9041b;
+typedef struct Anon_1f176b16 Anon_1f176b16;
+typedef struct Anon_7bb06b75 Anon_7bb06b75;
+typedef struct Anon_5591596d Anon_5591596d;
+typedef struct Anon_5f13cb02 Anon_5f13cb02;
+typedef struct Anon_040fa437 Anon_040fa437;
+typedef struct Anon_811d7c45 Anon_811d7c45;
+typedef struct Anon_caf3f353 Anon_caf3f353;
+typedef struct Anon_3d0fed52 Anon_3d0fed52;
+typedef struct Anon_22d84747 Anon_22d84747;
+typedef struct Anon_7d4762ec Anon_7d4762ec;
+typedef struct Anon_3e054d73 Anon_3e054d73;
+typedef struct Anon_6d248a4b Anon_6d248a4b;
+typedef struct Anon_b995bd4c Anon_b995bd4c;
+typedef struct Anon_3d4c64d3 Anon_3d4c64d3;
+typedef struct Anon_df3b96d4 Anon_df3b96d4;
+typedef struct Anon_b508c0f6 Anon_b508c0f6;
+typedef struct Anon_8b0a23b6 Anon_8b0a23b6;
+typedef struct Anon_fd62af00 Anon_fd62af00;
+typedef struct Anon_688ad72e Anon_688ad72e;
+typedef struct Anon_f88a21f4 Anon_f88a21f4;
+typedef struct Anon_16644dc7 Anon_16644dc7;
+typedef struct Anon_c4dc6fdd Anon_c4dc6fdd;
+typedef struct Anon_14b37acc Anon_14b37acc;
+typedef struct Anon_54db43aa Anon_54db43aa;
+typedef struct Anon_c6dbd0bf Anon_c6dbd0bf;
+typedef struct Anon_7293d90f Anon_7293d90f;
+typedef struct Anon_e464c8fd Anon_e464c8fd;
+typedef struct Anon_8f8dfbf8 Anon_8f8dfbf8;
+typedef struct Anon_dbc08b28 Anon_dbc08b28;
+typedef struct Anon_0f20e66b Anon_0f20e66b;
+typedef struct Anon_1df292c6 Anon_1df292c6;
+typedef struct Anon_57e999ad Anon_57e999ad;
+typedef struct Anon_c18ae172 Anon_c18ae172;
+typedef struct Anon_18c0a914 Anon_18c0a914;
+typedef struct Anon_ab19bc50 Anon_ab19bc50;
+typedef struct Anon_b0b30749 Anon_b0b30749;
+typedef struct Anon_4dfef77c Anon_4dfef77c;
+typedef struct Anon_902873b9 Anon_902873b9;
+typedef struct Anon_e71bdd7c Anon_e71bdd7c;
+typedef struct Anon_f91950c2 Anon_f91950c2;
+typedef struct Anon_3d522be3 Anon_3d522be3;
+typedef struct Anon_5b4e0f1b Anon_5b4e0f1b;
+typedef struct Anon_7671e252 Anon_7671e252;
+typedef struct Anon_99a01e83 Anon_99a01e83;
+typedef struct Anon_18609da4 Anon_18609da4;
+typedef struct Anon_e861adfc Anon_e861adfc;
+typedef struct Anon_6fca328f Anon_6fca328f;
+typedef struct Anon_15785e54 Anon_15785e54;
+typedef struct Anon_558f4cc9 Anon_558f4cc9;
+typedef struct Anon_c5e8a111 Anon_c5e8a111;
+typedef struct Anon_b511f76b Anon_b511f76b;
+typedef struct Anon_784a3f6d Anon_784a3f6d;
+typedef struct Anon_eceff868 Anon_eceff868;
+typedef struct Anon_31b1f748 Anon_31b1f748;
+typedef struct Anon_c29ce860 Anon_c29ce860;
+typedef struct Anon_b525c883 Anon_b525c883;
+typedef struct Anon_828756c7 Anon_828756c7;
+typedef struct Anon_3b80bc6b Anon_3b80bc6b;
+typedef struct Anon_75b723d6 Anon_75b723d6;
+typedef struct Anon_7feba13e Anon_7feba13e;
+typedef struct Anon_f8e10808 Anon_f8e10808;
+typedef struct Anon_ad3827b6 Anon_ad3827b6;
+typedef struct Anon_a61ac1b3 Anon_a61ac1b3;
+typedef struct Anon_4d998b97 Anon_4d998b97;
+typedef struct Anon_52ad6e9d Anon_52ad6e9d;
+typedef struct Anon_0f1da223 Anon_0f1da223;
+typedef struct Anon_c0ebc6d1 Anon_c0ebc6d1;
+typedef struct Anon_53386e74 Anon_53386e74;
+typedef struct Anon_35963cd2 Anon_35963cd2;
+typedef struct Anon_7b12115d Anon_7b12115d;
+typedef struct Anon_9b54a510 Anon_9b54a510;
+typedef struct Anon_e3e96c5e Anon_e3e96c5e;
+typedef struct Anon_cf68abeb Anon_cf68abeb;
+typedef struct Anon_24a77732 Anon_24a77732;
+typedef struct Anon_d18cf56f Anon_d18cf56f;
+typedef struct Anon_0c2b6cfe Anon_0c2b6cfe;
+typedef struct Anon_03d1af3e Anon_03d1af3e;
+typedef struct Anon_14dc7311 Anon_14dc7311;
+typedef struct Anon_c49cb36c Anon_c49cb36c;
+typedef struct Anon_29e67731 Anon_29e67731;
+typedef struct Anon_5b6e6123 Anon_5b6e6123;
+typedef struct Anon_ad883348 Anon_ad883348;
+typedef struct Anon_4a620174 Anon_4a620174;
+typedef struct Anon_769242ee Anon_769242ee;
+typedef struct Anon_92897767 Anon_92897767;
+typedef struct Anon_5d3c67a8 Anon_5d3c67a8;
+typedef struct Anon_5977501b Anon_5977501b;
+typedef struct Anon_a257727c Anon_a257727c;
+typedef struct Anon_f634dd61 Anon_f634dd61;
+typedef struct Anon_ba1e3273 Anon_ba1e3273;
+typedef struct Anon_4b8a3264 Anon_4b8a3264;
+typedef struct Anon_8a2bb521 Anon_8a2bb521;
+typedef struct Anon_85848459 Anon_85848459;
+typedef struct Anon_c9a00f79 Anon_c9a00f79;
+typedef struct Anon_cdcd6158 Anon_cdcd6158;
+typedef struct Anon_de509dfb Anon_de509dfb;
+typedef struct Anon_1f7505bf Anon_1f7505bf;
+typedef struct Anon_2f3f233c Anon_2f3f233c;
+typedef struct Anon_c466bc00 Anon_c466bc00;
+typedef struct Anon_50c501fc Anon_50c501fc;
+typedef struct Anon_b4e107d9 Anon_b4e107d9;
+typedef struct Anon_b1cc637d Anon_b1cc637d;
+typedef struct Anon_8517cd1e Anon_8517cd1e;
+typedef struct Anon_b4ab5e02 Anon_b4ab5e02;
+typedef struct Anon_ce6aad93 Anon_ce6aad93;
+typedef struct Anon_a9c08002 Anon_a9c08002;
+typedef struct Anon_194d600d Anon_194d600d;
+typedef struct Anon_863d0e0f Anon_863d0e0f;
+typedef struct Anon_e71eca9f Anon_e71eca9f;
+typedef struct Anon_c6d21910 Anon_c6d21910;
+typedef struct Anon_1412bee7 Anon_1412bee7;
+typedef struct Anon_52e3ca2e Anon_52e3ca2e;
+typedef struct Anon_90dcfa72 Anon_90dcfa72;
+typedef struct Anon_858938ca Anon_858938ca;
+typedef struct Anon_465a578c Anon_465a578c;
+typedef struct Anon_87407db8 Anon_87407db8;
+typedef struct Anon_2b2cdbcc Anon_2b2cdbcc;
+typedef struct Anon_7c0f0eeb Anon_7c0f0eeb;
+typedef struct Anon_0107677c Anon_0107677c;
+typedef struct Anon_e6c808e7 Anon_e6c808e7;
+typedef struct Anon_800e850a Anon_800e850a;
+typedef struct Anon_ed9bef7d Anon_ed9bef7d;
+typedef struct Anon_fc15f840 Anon_fc15f840;
+typedef struct Anon_fa4d6974 Anon_fa4d6974;
+typedef struct Anon_bfbab8ed Anon_bfbab8ed;
+typedef struct Anon_47424b23 Anon_47424b23;
+typedef struct Anon_65fa1d9f Anon_65fa1d9f;
 #ifndef CVF_DEF_Slice_AnimFrame
 #define CVF_DEF_Slice_AnimFrame
 typedef struct { AnimFrame *p; int len, cap; } Slice_AnimFrame;
@@ -1355,6 +1447,10 @@ typedef struct { AnimFrame *p; int len, cap; } Slice_AnimFrame;
 #ifndef CVF_DEF_Slice_AnimPtr
 #define CVF_DEF_Slice_AnimPtr
 typedef struct { Anim* *p; int len, cap; } Slice_AnimPtr;
+#endif
+#ifndef CVF_DEF_Slice_Arr256_u32
+#define CVF_DEF_Slice_Arr256_u32
+typedef struct { Arr256_u32 *p; int len, cap; } Slice_Arr256_u32;
 #endif
 #ifndef CVF_DEF_Slice_Arr2_f32
 #define CVF_DEF_Slice_Arr2_f32
@@ -1492,25 +1588,13 @@ typedef struct { GoFunc *p; int len, cap; } Slice_GoFunc;
 #define CVF_DEF_Slice_GoIface
 typedef struct { GoIface *p; int len, cap; } Slice_GoIface;
 #endif
-#ifndef CVF_DEF_Slice_GoIfacePtr
-#define CVF_DEF_Slice_GoIfacePtr
-typedef struct { GoIface* *p; int len, cap; } Slice_GoIfacePtr;
-#endif
-#ifndef CVF_DEF_Slice_GoOpaque_ggpo_PlayerPtr
-#define CVF_DEF_Slice_GoOpaque_ggpo_PlayerPtr
-typedef struct { GoOpaque /* ggpo.Player */ *p; int len, cap; } Slice_GoOpaque_ggpo_PlayerPtr;
-#endif
 #ifndef CVF_DEF_Slice_GoOpaque_invalidtypePtr
 #define CVF_DEF_Slice_GoOpaque_invalidtypePtr
 typedef struct { GoOpaque /* invalid type */ *p; int len, cap; } Slice_GoOpaque_invalidtypePtr;
 #endif
-#ifndef CVF_DEF_Slice_GoOpaque_list_ElementPtrPtr
-#define CVF_DEF_Slice_GoOpaque_list_ElementPtrPtr
-typedef struct { GoOpaque /* list.Element */* *p; int len, cap; } Slice_GoOpaque_list_ElementPtrPtr;
-#endif
-#ifndef CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
-#define CVF_DEF_Slice_GoOpaque_lua_LFunctionPtrPtr
-typedef struct { GoOpaque /* lua.LFunction */* *p; int len, cap; } Slice_GoOpaque_lua_LFunctionPtrPtr;
+#ifndef CVF_DEF_Slice_GoOpaque_os_FilePtrPtr
+#define CVF_DEF_Slice_GoOpaque_os_FilePtrPtr
+typedef struct { GoOpaque /* os.File */* *p; int len, cap; } Slice_GoOpaque_os_FilePtrPtr;
 #endif
 #ifndef CVF_DEF_Slice_GoString
 #define CVF_DEF_Slice_GoString
@@ -1616,6 +1700,10 @@ typedef struct { Slice_Command *p; int len, cap; } Slice_Slice_Command;
 #define CVF_DEF_Slice_SoundChannel
 typedef struct { SoundChannel *p; int len, cap; } Slice_SoundChannel;
 #endif
+#ifndef CVF_DEF_Slice_Sprite
+#define CVF_DEF_Slice_Sprite
+typedef struct { Sprite *p; int len, cap; } Slice_Sprite;
+#endif
 #ifndef CVF_DEF_Slice_SpriteData
 #define CVF_DEF_Slice_SpriteData
 typedef struct { SpriteData *p; int len, cap; } Slice_SpriteData;
@@ -1660,9 +1748,17 @@ typedef struct { SyncSetting *p; int len, cap; } Slice_SyncSetting;
 #define CVF_DEF_Slice_TextSpritePtr
 typedef struct { TextSprite* *p; int len, cap; } Slice_TextSpritePtr;
 #endif
+#ifndef CVF_DEF_Slice_Texture
+#define CVF_DEF_Slice_Texture
+typedef struct { Texture *p; int len, cap; } Slice_Texture;
+#endif
 #ifndef CVF_DEF_Slice_TextureAtlasPtr
 #define CVF_DEF_Slice_TextureAtlasPtr
 typedef struct { TextureAtlas* *p; int len, cap; } Slice_TextureAtlasPtr;
+#endif
+#ifndef CVF_DEF_Slice_TexturePtr
+#define CVF_DEF_Slice_TexturePtr
+typedef struct { Texture* *p; int len, cap; } Slice_TexturePtr;
 #endif
 #ifndef CVF_DEF_Slice_Texture_VKPtr
 #define CVF_DEF_Slice_Texture_VKPtr
@@ -1687,6 +1783,10 @@ typedef struct { WinType *p; int len, cap; } Slice_WinType;
 #ifndef CVF_DEF_Slice_backGroundPtr
 #define CVF_DEF_Slice_backGroundPtr
 typedef struct { backGround* *p; int len, cap; } Slice_backGroundPtr;
+#endif
+#ifndef CVF_DEF_Slice_beep_Streamer
+#define CVF_DEF_Slice_beep_Streamer
+typedef struct { beep_Streamer *p; int len, cap; } Slice_beep_Streamer;
 #endif
 #ifndef CVF_DEF_Slice_bgCtrl
 #define CVF_DEF_Slice_bgCtrl
@@ -1720,6 +1820,14 @@ typedef struct { f32 *p; int len, cap; } Slice_f32;
 #define CVF_DEF_Slice_f64
 typedef struct { f64 *p; int len, cap; } Slice_f64;
 #endif
+#ifndef CVF_DEF_Slice_ggpo_Player
+#define CVF_DEF_Slice_ggpo_Player
+typedef struct { ggpo_Player *p; int len, cap; } Slice_ggpo_Player;
+#endif
+#ifndef CVF_DEF_Slice_ggpo_PlayerHandle
+#define CVF_DEF_Slice_ggpo_PlayerHandle
+typedef struct { ggpo_PlayerHandle *p; int len, cap; } Slice_ggpo_PlayerHandle;
+#endif
 #ifndef CVF_DEF_Slice_i16
 #define CVF_DEF_Slice_i16
 typedef struct { i16 *p; int len, cap; } Slice_i16;
@@ -1731,6 +1839,34 @@ typedef struct { i32 *p; int len, cap; } Slice_i32;
 #ifndef CVF_DEF_Slice_int
 #define CVF_DEF_Slice_int
 typedef struct { int *p; int len, cap; } Slice_int;
+#endif
+#ifndef CVF_DEF_Slice_list_ElementPtr
+#define CVF_DEF_Slice_list_ElementPtr
+typedef struct { list_Element* *p; int len, cap; } Slice_list_ElementPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_DbgCall
+#define CVF_DEF_Slice_lua_DbgCall
+typedef struct { lua_DbgCall *p; int len, cap; } Slice_lua_DbgCall;
+#endif
+#ifndef CVF_DEF_Slice_lua_DbgLocalInfoPtr
+#define CVF_DEF_Slice_lua_DbgLocalInfoPtr
+typedef struct { lua_DbgLocalInfo* *p; int len, cap; } Slice_lua_DbgLocalInfoPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_FunctionProtoPtr
+#define CVF_DEF_Slice_lua_FunctionProtoPtr
+typedef struct { lua_FunctionProto* *p; int len, cap; } Slice_lua_FunctionProtoPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_LFunctionPtr
+#define CVF_DEF_Slice_lua_LFunctionPtr
+typedef struct { lua_LFunction* *p; int len, cap; } Slice_lua_LFunctionPtr;
+#endif
+#ifndef CVF_DEF_Slice_lua_LValue
+#define CVF_DEF_Slice_lua_LValue
+typedef struct { lua_LValue *p; int len, cap; } Slice_lua_LValue;
+#endif
+#ifndef CVF_DEF_Slice_lua_UpvaluePtr
+#define CVF_DEF_Slice_lua_UpvaluePtr
+typedef struct { lua_Upvalue* *p; int len, cap; } Slice_lua_UpvaluePtr;
 #endif
 #ifndef CVF_DEF_Slice_nameFact
 #define CVF_DEF_Slice_nameFact
@@ -1752,6 +1888,10 @@ typedef struct { scRunFn *p; int len, cap; } Slice_scRunFn;
 #define CVF_DEF_Slice_stageRollbackBgState
 typedef struct { stageRollbackBgState *p; int len, cap; } Slice_stageRollbackBgState;
 #endif
+#ifndef CVF_DEF_Slice_truetype_cm
+#define CVF_DEF_Slice_truetype_cm
+typedef struct { truetype_cm *p; int len, cap; } Slice_truetype_cm;
+#endif
 #ifndef CVF_DEF_Slice_u32
 #define CVF_DEF_Slice_u32
 typedef struct { u32 *p; int len, cap; } Slice_u32;
@@ -1768,167 +1908,167 @@ typedef struct { u8 *p; int len, cap; } Slice_u8;
 #define CVF_DEF_Slice_upnpMapping
 typedef struct { upnpMapping *p; int len, cap; } Slice_upnpMapping;
 #endif
-typedef Slice_BytecodeValue BytecodeStack;
-typedef Slice_scParam changeState;
-typedef Slice_scParam ctrlSet;
-typedef Slice_scParam depthBound;
-typedef Slice_scParam gameMakeAnim;
-typedef Slice_scParam reversalDef;
-typedef Slice_scParam shiftInput;
-typedef Slice_scParam targetVelAdd;
-typedef Slice_scParam hitFallSet;
-typedef Slice_scParam modifyStoryboard;
-typedef Slice_scParam roundTimeAdd;
-typedef Slice_scParam stopSnd;
-typedef Slice_OpCode BytecodeExp;
-typedef Slice_scParam assertCommand;
-typedef Slice_scParam modifyShadow;
-typedef Slice_scParam moveHitReset;
-typedef Slice_scParam victoryQuote;
-typedef Slice_scParam zoom;
-typedef Slice_scParam angleMul;
-typedef Slice_scParam cameraCtrl;
-typedef Slice_scParam posFreeze;
-typedef Slice_scParam removePlatform;
-typedef Slice_scParam transformClsn;
-typedef Slice_scParam velMul;
-typedef Slice_scParam assertInput;
-typedef Slice_scParam envShake;
-typedef Slice_scParam hitOverride;
-typedef Slice_scParam varRandom;
-typedef Slice_scParam remapSprite;
 typedef Slice_scParam guardPointsSet;
+typedef Slice_scParam helper;
 typedef Slice_scParam mapSet;
-typedef Slice_scParam modifyReflection;
-typedef Slice_ShadowSpritePtr ShadowList;
-typedef Slice_scParam modifyPlayer;
-typedef Slice_scParam powerSet;
-typedef Slice_scParam selfState;
-typedef Slice_scParam targetLifeAdd;
-typedef Slice_scParam targetRedLifeAdd;
-typedef Slice_OpCode StateExpr;
-typedef Slice_scParam createPlatform;
-typedef Slice_scParam screenBound;
-typedef Slice_scParam targetAdd;
-typedef Slice_scParam targetFacing;
-typedef Slice_scParam targetScoreAdd;
-typedef Slice_SoundChannel SoundChannels;
-typedef Slice_scParam appendToClipboard;
-typedef Slice_scParam attackDist;
-typedef Slice_scParam displayToClipboard;
-typedef Slice_scParam playBgm;
-typedef Slice_scParam trans;
-typedef Slice_scParam loadState;
-typedef Slice_scParam posAdd;
-typedef Slice_scParam varSet;
-typedef Slice_scParam velAdd;
-typedef Slice_scParam explod;
-typedef Slice_scParam modifyText;
-typedef Slice_scParam removeText;
-typedef Slice_scParam varRangeSet;
-typedef Slice_scParam bgPalFX;
-typedef Slice_scParam modifyStageVar;
-typedef Slice_scParam removeExplod;
-typedef Slice_scParam velSet;
-typedef Slice_scParam envColor;
+typedef Slice_scParam reversalDef;
+typedef Slice_scParam stateTypeSet;
+typedef Slice_scParam angleAdd;
 typedef Slice_scParam modifyStageBG;
-typedef Slice_scParam superPause;
-typedef Slice_scParam afterImage;
-typedef Slice_scParam clearClipboard;
-typedef Slice_scParam depth;
-typedef Slice_scParam dizzySet;
-typedef Slice_scParam groundLevelOffset;
-typedef Slice_scParam targetDrop;
-typedef Slice_scParam text;
-typedef Slice_scParam stateDef;
-typedef Slice_scParam angleDraw;
-typedef Slice_scParam guardBreakSet;
-typedef Slice_scParam lifeSet;
-typedef Slice_scParam playerPush;
-typedef Slice_scParam removeStoryboard;
-typedef Slice_scParam targetPowerAdd;
-typedef Slice_SpriteDataPtr DrawList;
-typedef Slice_scParam StateControllerBase;
-typedef Slice_scParam modifyExplod;
-typedef Slice_scParam modifyReversalDef;
-typedef Slice_scParam projectile;
-typedef Slice_scParam redLifeSet;
-typedef Slice_scParam remapPal;
-typedef Slice_scParam tagOut;
+typedef Slice_scParam printToConsole;
+typedef Slice_BytecodeValue BytecodeStack;
+typedef Slice_scParam bindToParent;
 typedef Slice_scParam bindToRoot;
 typedef Slice_scParam forceFeedback;
-typedef Slice_scParam posSet;
-typedef Slice_scParam width;
-typedef Slice_scParam angleAdd;
-typedef Slice_scParam overrideClsn;
-typedef Slice_scParam roundTimeSet;
-typedef Slice_scParam sndPan;
-typedef Slice_scParam stateTypeSet;
-typedef Slice_scParam turn;
-typedef Slice_scParam assertSpecial;
-typedef Slice_scParam changeMovelist;
-typedef Slice_scParam runState;
-typedef Slice_scParam sprPriority;
-typedef Slice_scParam targetBind;
-typedef Slice_scParam transformSprite;
-typedef Slice_scParam getHitVarSet;
-typedef Slice_scParam hitFallDamage;
-typedef Slice_scParam hitFallVel;
-typedef Slice_scParam mapReset;
-typedef Slice_scParam targetDizzyPointsAdd;
-typedef Slice_ReflectionSpritePtr ReflectionList;
-typedef Slice_scParam assertAnalogVector;
-typedef Slice_scParam pause;
-typedef Slice_scParam powerAdd;
-typedef Slice_scParam allPalFX;
-typedef Slice_scParam changeAnim;
-typedef Slice_scParam destroySelf;
-typedef Slice_scParam fallEnvShake;
+typedef Slice_scParam modifyBGCtrl3d;
 typedef Slice_scParam offset;
-typedef Slice_scParam printToConsole;
-typedef Slice_scParam targetState;
-typedef Slice_scParam attackMulSet;
-typedef Slice_scParam dizzyPointsAdd;
+typedef Slice_scParam shiftInput;
+typedef Slice_scParam depth;
+typedef Slice_scParam getHitVarSet;
+typedef Slice_scParam height;
+typedef Slice_scParam loadState;
+typedef Slice_scParam posAdd;
+typedef Slice_scParam remapPal;
+typedef Slice_scParam removeExplod;
+typedef Slice_scParam saveState;
+typedef Slice_scParam lifebarAction;
+typedef Slice_scParam overrideClsn;
+typedef Slice_scParam targetDizzyPointsAdd;
+typedef Slice_scParam width;
+typedef Slice_scParam changeMovelist;
+typedef Slice_scParam palFX;
+typedef Slice_scParam redLifeAdd;
 typedef Slice_scParam hitDef;
 typedef Slice_scParam hitVelSet;
-typedef Slice_scParam modifyBgm;
-typedef Slice_scParam modifyHitDef;
-typedef Slice_scParam bindToParent;
-typedef Slice_scParam defenceMulSet;
-typedef Slice_scParam explodBindTime;
-typedef Slice_scParam makeDust;
 typedef Slice_scParam notHitBy;
-typedef Slice_scParam redLifeAdd;
-typedef Slice_scParam gravity;
-typedef Slice_scParam hitBy;
-typedef Slice_scParam storyboard;
-typedef Slice_scParam bindToTarget;
-typedef Slice_scParam changeAnim2;
-typedef Slice_scParam guardPointsAdd;
-typedef Slice_scParam helper;
-typedef Slice_scParam afterImageTime;
-typedef Slice_scParam lifebarAction;
+typedef Slice_scParam playerPush;
+typedef Slice_scParam projectile;
+typedef Slice_scParam velMul;
+typedef Slice_scParam changeAnim;
 typedef Slice_scParam modifyBGCtrl;
-typedef Slice_scParam palFX;
+typedef Slice_scParam modifyShadow;
 typedef Slice_scParam targetGuardPointsAdd;
-typedef Slice_scParam height;
-typedef Slice_scParam dizzyPointsSet;
-typedef Slice_scParam matchRestart;
-typedef Slice_scParam playSnd;
-typedef Slice_scParam saveFile;
-typedef Slice_scParam saveState;
-typedef Slice_scParam scoreAdd;
-typedef Slice_scParam dialogue;
-typedef Slice_scParam hitAdd;
-typedef Slice_scParam lifeAdd;
-typedef Slice_scParam loadFile;
-typedef Slice_scParam modifyBGCtrl3d;
-typedef Slice_scParam modifyProjectile;
-typedef Slice_scParam modifySnd;
-typedef Slice_scParam shaderSet;
+typedef Slice_scParam trans;
+typedef Slice_OpCode BytecodeExp;
 typedef Slice_scParam angleSet;
-typedef Slice_scParam tagIn;
+typedef Slice_scParam assertInput;
+typedef Slice_scParam envShake;
+typedef Slice_scParam modifyBgm;
+typedef Slice_scParam playBgm;
+typedef Slice_scParam selfState;
+typedef Slice_scParam tagOut;
+typedef Slice_scParam hitFallSet;
+typedef Slice_scParam saveFile;
+typedef Slice_scParam screenBound;
+typedef Slice_scParam targetDrop;
+typedef Slice_scParam targetState;
+typedef Slice_scParam displayToClipboard;
+typedef Slice_scParam modifyHitDef;
+typedef Slice_scParam removePlatform;
+typedef Slice_scParam varSet;
+typedef Slice_scParam appendToClipboard;
+typedef Slice_scParam defenceMulSet;
+typedef Slice_scParam modifyProjectile;
+typedef Slice_scParam removeStoryboard;
 typedef Slice_scParam targetVelSet;
+typedef Slice_scParam createPlatform;
+typedef Slice_scParam fallEnvShake;
+typedef Slice_scParam loadFile;
+typedef Slice_scParam sprPriority;
+typedef Slice_SpriteDataPtr DrawList;
+typedef Slice_scParam hitFallDamage;
+typedef Slice_scParam modifyReversalDef;
+typedef Slice_scParam playSnd;
+typedef Slice_scParam transformSprite;
+typedef Slice_scParam assertAnalogVector;
+typedef Slice_scParam explodBindTime;
+typedef Slice_scParam hitBy;
+typedef Slice_scParam matchRestart;
+typedef Slice_scParam targetVelAdd;
+typedef Slice_scParam angleDraw;
+typedef Slice_scParam depthBound;
+typedef Slice_scParam dizzyPointsSet;
+typedef Slice_scParam groundLevelOffset;
+typedef Slice_scParam modifyReflection;
+typedef Slice_scParam superPause;
+typedef Slice_scParam modifySnd;
+typedef Slice_scParam powerAdd;
+typedef Slice_scParam runState;
+typedef Slice_scParam targetScoreAdd;
+typedef Slice_scParam hitAdd;
+typedef Slice_scParam targetRedLifeAdd;
+typedef Slice_scParam zoom;
+typedef Slice_scParam bindToTarget;
+typedef Slice_scParam dizzySet;
+typedef Slice_scParam gravity;
+typedef Slice_scParam makeDust;
+typedef Slice_scParam modifyExplod;
+typedef Slice_scParam posFreeze;
+typedef Slice_scParam ctrlSet;
+typedef Slice_scParam modifyStoryboard;
+typedef Slice_scParam pause;
+typedef Slice_scParam targetPowerAdd;
+typedef Slice_scParam attackDist;
+typedef Slice_scParam cameraCtrl;
+typedef Slice_scParam lifeSet;
+typedef Slice_scParam powerSet;
+typedef Slice_scParam removeText;
+typedef Slice_scParam roundTimeAdd;
+typedef Slice_scParam storyboard;
+typedef Slice_scParam varRandom;
+typedef Slice_scParam dizzyPointsAdd;
+typedef Slice_scParam hitOverride;
+typedef Slice_scParam dialogue;
+typedef Slice_scParam moveHitReset;
+typedef Slice_scParam redLifeSet;
+typedef Slice_scParam shaderSet;
+typedef Slice_scParam targetFacing;
+typedef Slice_scParam transformClsn;
+typedef Slice_SoundChannel SoundChannels;
+typedef Slice_scParam bgPalFX;
+typedef Slice_scParam gameMakeAnim;
+typedef Slice_scParam hitFallVel;
+typedef Slice_scParam sndPan;
+typedef Slice_scParam velAdd;
+typedef Slice_ReflectionSpritePtr ReflectionList;
+typedef Slice_scParam allPalFX;
+typedef Slice_scParam assertCommand;
+typedef Slice_scParam guardBreakSet;
+typedef Slice_scParam lifeAdd;
+typedef Slice_scParam mapReset;
+typedef Slice_scParam modifyText;
+typedef Slice_scParam targetAdd;
+typedef Slice_OpCode StateExpr;
+typedef Slice_scParam scoreAdd;
+typedef Slice_scParam text;
+typedef Slice_scParam varRangeSet;
+typedef Slice_scParam StateControllerBase;
+typedef Slice_scParam assertSpecial;
+typedef Slice_scParam posSet;
+typedef Slice_scParam stopSnd;
+typedef Slice_scParam targetLifeAdd;
+typedef Slice_scParam victoryQuote;
+typedef Slice_scParam stateDef;
+typedef Slice_scParam angleMul;
+typedef Slice_scParam changeAnim2;
+typedef Slice_scParam clearClipboard;
+typedef Slice_scParam envColor;
+typedef Slice_scParam modifyPlayer;
+typedef Slice_scParam afterImage;
+typedef Slice_scParam changeState;
+typedef Slice_scParam explod;
+typedef Slice_scParam modifyStageVar;
+typedef Slice_scParam remapSprite;
+typedef Slice_scParam velSet;
+typedef Slice_ShadowSpritePtr ShadowList;
+typedef Slice_scParam attackMulSet;
+typedef Slice_scParam guardPointsAdd;
+typedef Slice_scParam targetBind;
+typedef Slice_scParam afterImageTime;
+typedef Slice_scParam destroySelf;
+typedef Slice_scParam turn;
+typedef Slice_scParam roundTimeSet;
+typedef Slice_scParam tagIn;
 #ifndef CVF_DEF_Slice_BytecodeExp
 #define CVF_DEF_Slice_BytecodeExp
 typedef struct { BytecodeExp *p; int len, cap; } Slice_BytecodeExp;
@@ -2406,6 +2546,14 @@ typedef struct FightScreenWinIcon FightScreenWinIcon;
 #define CVF_TD_FilesProperties
 typedef struct FilesProperties FilesProperties;
 #endif
+#ifndef CVF_TD_Fnt
+#define CVF_TD_Fnt
+typedef struct Fnt Fnt;
+#endif
+#ifndef CVF_TD_FntCharImage
+#define CVF_TD_FntCharImage
+typedef struct FntCharImage FntCharImage;
+#endif
 #ifndef CVF_TD_FontProperties
 #define CVF_TD_FontProperties
 typedef struct FontProperties FontProperties;
@@ -2413,6 +2561,14 @@ typedef struct FontProperties FontProperties;
 #ifndef CVF_TD_FontRenderer_GL33
 #define CVF_TD_FontRenderer_GL33
 typedef struct FontRenderer_GL33 FontRenderer_GL33;
+#endif
+#ifndef CVF_TD_list_Element
+#define CVF_TD_list_Element
+typedef struct list_Element list_Element;
+#endif
+#ifndef CVF_TD_list_List
+#define CVF_TD_list_List
+typedef struct list_List list_List;
 #endif
 #ifndef CVF_TD_FontRenderer_VK
 #define CVF_TD_FontRenderer_VK
@@ -3022,6 +3178,18 @@ typedef struct ShortcutScript ShortcutScript;
 #define CVF_TD_Skin
 typedef struct Skin Skin;
 #endif
+#ifndef CVF_TD_Snd
+#define CVF_TD_Snd
+typedef struct Snd Snd;
+#endif
+#ifndef CVF_TD_beep_Format
+#define CVF_TD_beep_Format
+typedef struct beep_Format beep_Format;
+#endif
+#ifndef CVF_TD_Sound
+#define CVF_TD_Sound
+typedef struct Sound Sound;
+#endif
 #ifndef CVF_TD_SoundChannel
 #define CVF_TD_SoundChannel
 typedef struct SoundChannel SoundChannel;
@@ -3186,6 +3354,18 @@ typedef struct bcHasher bcHasher;
 #define CVF_TD_bcProfKey
 typedef struct bcProfKey bcProfKey;
 #endif
+#ifndef CVF_TD_beep_Buffer
+#define CVF_TD_beep_Buffer
+typedef struct beep_Buffer beep_Buffer;
+#endif
+#ifndef CVF_TD_beep_Ctrl
+#define CVF_TD_beep_Ctrl
+typedef struct beep_Ctrl beep_Ctrl;
+#endif
+#ifndef CVF_TD_beep_Mixer
+#define CVF_TD_beep_Mixer
+typedef struct beep_Mixer beep_Mixer;
+#endif
 #ifndef CVF_TD_bgCtrl
 #define CVF_TD_bgCtrl
 typedef struct bgCtrl bgCtrl;
@@ -3234,6 +3414,10 @@ typedef struct cvfRulesT cvfRulesT;
 #define CVF_TD_drawAspectState
 typedef struct drawAspectState drawAspectState;
 #endif
+#ifndef CVF_TD_effects_Volume
+#define CVF_TD_effects_Volume
+typedef struct effects_Volume effects_Volume;
+#endif
 #ifndef CVF_TD_expValueFrame
 #define CVF_TD_expValueFrame
 typedef struct expValueFrame expValueFrame;
@@ -3242,9 +3426,81 @@ typedef struct expValueFrame expValueFrame;
 #define CVF_TD_fightScreenAnimationStateCloner
 typedef struct fightScreenAnimationStateCloner fightScreenAnimationStateCloner;
 #endif
+#ifndef CVF_TD_fixed_Point26_6
+#define CVF_TD_fixed_Point26_6
+typedef struct fixed_Point26_6 fixed_Point26_6;
+#endif
+#ifndef CVF_TD_fixed_Rectangle26_6
+#define CVF_TD_fixed_Rectangle26_6
+typedef struct fixed_Rectangle26_6 fixed_Rectangle26_6;
+#endif
+#ifndef CVF_TD_ggpo_RemotePlayer
+#define CVF_TD_ggpo_RemotePlayer
+typedef struct ggpo_RemotePlayer ggpo_RemotePlayer;
+#endif
+#ifndef CVF_TD_ggpo_Player
+#define CVF_TD_ggpo_Player
+typedef struct ggpo_Player ggpo_Player;
+#endif
+#ifndef CVF_TD_lazySound
+#define CVF_TD_lazySound
+typedef struct lazySound lazySound;
+#endif
 #ifndef CVF_TD_lowerCacheEntry
 #define CVF_TD_lowerCacheEntry
 typedef struct lowerCacheEntry lowerCacheEntry;
+#endif
+#ifndef CVF_TD_lua_DbgCall
+#define CVF_TD_lua_DbgCall
+typedef struct lua_DbgCall lua_DbgCall;
+#endif
+#ifndef CVF_TD_lua_DbgLocalInfo
+#define CVF_TD_lua_DbgLocalInfo
+typedef struct lua_DbgLocalInfo lua_DbgLocalInfo;
+#endif
+#ifndef CVF_TD_lua_FunctionProto
+#define CVF_TD_lua_FunctionProto
+typedef struct lua_FunctionProto lua_FunctionProto;
+#endif
+#ifndef CVF_TD_lua_Global
+#define CVF_TD_lua_Global
+typedef struct lua_Global lua_Global;
+#endif
+#ifndef CVF_TD_lua_LFunction
+#define CVF_TD_lua_LFunction
+typedef struct lua_LFunction lua_LFunction;
+#endif
+#ifndef CVF_TD_lua_Options
+#define CVF_TD_lua_Options
+typedef struct lua_Options lua_Options;
+#endif
+#ifndef CVF_TD_lua_LState
+#define CVF_TD_lua_LState
+typedef struct lua_LState lua_LState;
+#endif
+#ifndef CVF_TD_lua_LTable
+#define CVF_TD_lua_LTable
+typedef struct lua_LTable lua_LTable;
+#endif
+#ifndef CVF_TD_lua_Upvalue
+#define CVF_TD_lua_Upvalue
+typedef struct lua_Upvalue lua_Upvalue;
+#endif
+#ifndef CVF_TD_lua_allocator
+#define CVF_TD_lua_allocator
+typedef struct lua_allocator lua_allocator;
+#endif
+#ifndef CVF_TD_lua_callFrame
+#define CVF_TD_lua_callFrame
+typedef struct lua_callFrame lua_callFrame;
+#endif
+#ifndef CVF_TD_lua_iface
+#define CVF_TD_lua_iface
+typedef struct lua_iface lua_iface;
+#endif
+#ifndef CVF_TD_lua_registry
+#define CVF_TD_lua_registry
+typedef struct lua_registry lua_registry;
 #endif
 #ifndef CVF_TD_modifyBGCtrlShader
 #define CVF_TD_modifyBGCtrlShader
@@ -3253,6 +3509,14 @@ typedef struct modifyBGCtrlShader modifyBGCtrlShader;
 #ifndef CVF_TD_nameFact
 #define CVF_TD_nameFact
 typedef struct nameFact nameFact;
+#endif
+#ifndef CVF_TD_nullRenderer
+#define CVF_TD_nullRenderer
+typedef struct nullRenderer nullRenderer;
+#endif
+#ifndef CVF_TD_nullTexture
+#define CVF_TD_nullTexture
+typedef struct nullTexture nullTexture;
 #endif
 #ifndef CVF_TD_paletteCopyKey
 #define CVF_TD_paletteCopyKey
@@ -3281,6 +3545,14 @@ typedef struct runTally runTally;
 #ifndef CVF_TD_scParam
 #define CVF_TD_scParam
 typedef struct scParam scParam;
+#endif
+#ifndef CVF_TD_sdl_GameController
+#define CVF_TD_sdl_GameController
+typedef struct sdl_GameController sdl_GameController;
+#endif
+#ifndef CVF_TD_sdl_Window
+#define CVF_TD_sdl_Window
+typedef struct sdl_Window sdl_Window;
 #endif
 #ifndef CVF_TD_sffv1PalState
 #define CVF_TD_sffv1PalState
@@ -3313,6 +3585,14 @@ typedef struct specList specList;
 #ifndef CVF_TD_stageRollbackBgState
 #define CVF_TD_stageRollbackBgState
 typedef struct stageRollbackBgState stageRollbackBgState;
+#endif
+#ifndef CVF_TD_truetype_Font
+#define CVF_TD_truetype_Font
+typedef struct truetype_Font truetype_Font;
+#endif
+#ifndef CVF_TD_truetype_cm
+#define CVF_TD_truetype_cm
+typedef struct truetype_cm truetype_cm;
 #endif
 #ifndef CVF_TD_upnpDevice
 #define CVF_TD_upnpDevice
@@ -3528,7 +3808,7 @@ struct Arr8_i32 { i32 v[8]; };
 #endif
 struct FSText {
     Arr8_i32 font;
-    GoOpaqueVal* fnt;
+    Fnt* fnt;
     GoString text;
     Layout lay;
     PalFX* palfx;
@@ -4084,12 +4364,12 @@ struct Bgm {
     GoString filename;
     int bgmVolume;
     int loop;
-    GoIface streamer;
-    GoOpaque /* beep.Ctrl */* ctrl;
-    GoOpaque /* effects.Volume */* volctrl;
+    beep_StreamSeeker streamer;
+    beep_Ctrl* ctrl;
+    effects_Volume* volctrl;
     GoString format;
     f32 freqmul;
-    int sampleRate;
+    beep_SampleRate sampleRate;
     int startPos;
     GoOpaque /* sync.Mutex */ mu;
     GoFunc cancel;
@@ -4112,9 +4392,9 @@ struct BoundingBox {
 };
 
 struct BufferSeeker {
-    GoOpaque /* beep.Buffer */* buf;
+    beep_Buffer* buf;
     int pos;
-    GoIface str;
+    beep_Streamer str;
 };
 
 struct BytecodeFunction {
@@ -5227,7 +5507,7 @@ struct CharGlobalInfo {
     GoString defaultLifebarname;
     Sff* sff;
     Palette* palettedata;
-    GoOpaqueVal* snd;
+    Snd* snd;
     AnimationTable animTable;
     Map_int_PalInfo palInfo;
     i32 palno;
@@ -5246,7 +5526,7 @@ struct CharGlobalInfo {
     Arr2_i32 remappedpal;
     Arr2_i32 localcoord;
     f32 rawlocalscl;
-    Map_int_GoOpaqueValPtr fnt;
+    Map_int_FntPtr fnt;
     GoString fightfxPrefix;
     Slice_GoString fxPath;
     Music music;
@@ -5684,7 +5964,7 @@ struct Arr6_i8 { i8 v[6]; };
 #endif
 struct ControllerState {
     Arr6_i8 Axes;
-    Map_GoOpaque_invalidtypePtr_u8 Buttons;
+    Map_sdl_GameControllerButton_u8 Buttons;
     bool HasRumble;
 };
 
@@ -5693,13 +5973,13 @@ struct CustomShaderRenderData {
     Arr16_f32 params;
     i32 time;
     f32 sTime;
-    GoIface tex1;
-    GoIface tex2;
+    Texture tex1;
+    Texture tex2;
 };
 
 struct DebugClsn {
     Slice_Arr7_f32 rects;
-    GoIface palTex;
+    Texture palTex;
 };
 
 struct DebugClsnText {
@@ -6048,14 +6328,14 @@ struct Fade {
     bool isFadeIn;
     i32 timeRemaining;
     Arr2_i32 snd;
-    GoOpaqueVal* sndSource;
+    Snd* sndSource;
 };
 
 struct FightFx {
     AnimationTable animTable;
     GoString fileName;
     Sff* sff;
-    GoOpaqueVal* snd;
+    Snd* snd;
     f32 fx_scale;
     Arr2_i32 localcoord;
     int refCount;
@@ -6133,8 +6413,8 @@ struct FightScreen {
     f32 portraitScale;
     AnimationTable animTable;
     Sff* sff;
-    GoOpaqueVal* snd;
-    Map_int_GoOpaqueValPtr fnt;
+    Snd* snd;
+    Map_int_FntPtr fnt;
     Arr2_int curLayout;
     Arr2_Slice_int teamOrder;
     Arr8_Slice_LifeBarPtr lifeBars;
@@ -6320,7 +6600,7 @@ struct Arr2_Arr4_bool { Arr4_bool v[2]; };
 struct Arr20_FSBgTextSnd { FSBgTextSnd v[20]; };
 #endif
 struct FightScreenRound {
-    GoOpaqueVal* snd;
+    Snd* snd;
     Arr2_i32 pos;
     i32 start_waittime;
     i32 round_time;
@@ -6474,6 +6754,31 @@ struct FilesProperties {
     GoString Model;
 };
 
+struct Fnt {
+    Map_i32_Map_i32_FntCharImagePtr images;
+    Slice_Arr256_u32 palettes;
+    Slice_u8 coldepth;
+    u16 ver;
+    u16 ver2;
+    GoString Type;
+    GoString BankType;
+    Arr2_u16 Size;
+    Arr2_i32 Spacing;
+    i32 colors;
+    Arr2_i32 offset;
+    TtfFont ttf;
+    Texture paltex;
+    i32 lastPalBank;
+    u32* lastPalBase;
+    Map_u32Ptr_Texture paltexCache;
+};
+
+struct FntCharImage {
+    u16 ofs;
+    u16 w;
+    Slice_Sprite img;
+};
+
 struct FontProperties {
     GoString Font;
     i32 Height;
@@ -6489,12 +6794,24 @@ struct FontRenderer_GL33 {
     u32 vbo;
 };
 
+struct list_Element {
+    list_Element* next;
+    list_Element* prev;
+    list_List* list;
+    GoIface Value;
+};
+
+struct list_List {
+    list_Element root;
+    int len;
+};
+
 struct FontRenderer_VK {
     GoOpaque /* invalid type */ device;
     VulkanProgramInfo* program;
     Slice_GoOpaque_invalidtypePtr descriptorPools;
-    GoOpaque /* list.List */ freeDescriptors;
-    GoIface coveragePalTex;
+    list_List freeDescriptors;
+    Texture coveragePalTex;
 };
 
 struct color {
@@ -6515,7 +6832,7 @@ struct ShaderPalFX {
 
 struct Font_GL33 {
     Map_i32_characterPtr fontChar;
-    GoOpaque /* truetype.Font */* ttf;
+    truetype_Font* ttf;
     i32 scale;
     int windowWidth;
     int windowHeight;
@@ -6527,7 +6844,7 @@ struct Font_GL33 {
 
 struct Font_VK {
     Map_i32_characterPtr fontChar;
-    GoOpaque /* truetype.Font */* ttf;
+    truetype_Font* ttf;
     i32 scale;
     u32 vao;
     u32 vbo;
@@ -6536,7 +6853,7 @@ struct Font_VK {
     ShaderPalFX shaderPalFX;
     Arr2_f32 resolution;
     Slice_TextureAtlasPtr textures;
-    Slice_GoOpaque_list_ElementPtrPtr descriptors;
+    Slice_list_ElementPtr descriptors;
     CustomShaderRenderData customShader;
 };
 
@@ -6632,7 +6949,7 @@ struct GLTFLight {
 };
 
 struct GLTFTexture {
-    GoIface tex;
+    Texture tex;
 };
 
 #ifndef CVF_BODY_Arr3_Slice_OverrideCharData
@@ -6819,7 +7136,7 @@ struct SystemStateVars {
     bool dialogueHideBars;
     int dialogueForce;
     bool playBgmFlg;
-    GoOpaque /* invalid type */ keyInput;
+    sdl_Keycode keyInput;
     GoString keyString;
     int lastInputController;
     GoString uiLastInputToken;
@@ -8054,8 +8371,8 @@ struct Motif {
     GoOpaque /* ini.File */* DefaultOnlyIni;
     AnimationTable AnimTable;
     Sff* Sff;
-    GoOpaqueVal* Snd;
-    Map_int_GoOpaqueValPtr Fnt;
+    Snd* Snd;
+    Map_int_FntPtr Fnt;
     Sff* GlyphsSff;
     Model* Model;
     Music Music;
@@ -8141,8 +8458,8 @@ struct Storyboard {
     GoOpaque /* ini.File */* IniFile;
     AnimationTable AnimTable;
     Sff* Sff;
-    GoOpaqueVal* Snd;
-    Map_int_GoOpaqueValPtr Fnt;
+    Snd* Snd;
+    Map_int_FntPtr Fnt;
     Model* Model;
     GoString Def;
     InfoProperties Info;
@@ -8340,7 +8657,7 @@ struct GameState {
             bool dialogueHideBars;
             int dialogueForce;
             bool playBgmFlg;
-            GoOpaque /* invalid type */ keyInput;
+            sdl_Keycode keyInput;
             GoString keyString;
             int lastInputController;
             GoString uiLastInputToken;
@@ -8460,16 +8777,16 @@ struct InheritSpec {
     GoString DstPrefix;
 };
 
-#ifndef CVF_BODY_Arr12_GoOpaque_invalidtypePtr
-#define CVF_BODY_Arr12_GoOpaque_invalidtypePtr
-struct Arr12_GoOpaque_invalidtypePtr { GoOpaque /* invalid type */ v[12]; };
+#ifndef CVF_BODY_Arr12_sdl_GameControllerPtr
+#define CVF_BODY_Arr12_sdl_GameControllerPtr
+struct Arr12_sdl_GameControllerPtr { sdl_GameController* v[12]; };
 #endif
 #ifndef CVF_BODY_Arr12_ControllerStatePtr
 #define CVF_BODY_Arr12_ControllerStatePtr
 struct Arr12_ControllerStatePtr { ControllerState* v[12]; };
 #endif
 struct Input {
-    Arr12_GoOpaque_invalidtypePtr controllers;
+    Arr12_sdl_GameControllerPtr controllers;
     Arr12_ControllerStatePtr controllerstate;
 };
 
@@ -8880,9 +9197,9 @@ struct Node {
     GLTFAnimatableProperty rotation;
     GLTFAnimatableProperty scale;
     bool transformChanged;
-    GoOpaque /* mgl32.Mat4 */ localTransform;
-    GoOpaque /* mgl32.Mat4 */ worldTransform;
-    GoOpaque /* mgl32.Mat4 */ normalMatrix;
+    mgl32_Mat4 localTransform;
+    mgl32_Mat4 worldTransform;
+    mgl32_Mat4 normalMatrix;
     Slice_u32 childrenIndex;
     Trans trans;
     bool castShadow;
@@ -8906,7 +9223,7 @@ struct Node {
 };
 
 struct Normalizer {
-    GoIface streamer;
+    beep_Streamer streamer;
     f64 mul;
     NormalizerLR* l;
     NormalizerLR* r;
@@ -8983,9 +9300,9 @@ struct PalInfo {
 };
 
 struct PalTexture {
-    Slice_GoIfacePtr textures;
+    Slice_TexturePtr textures;
     u32 size;
-    GoOpaque /* list.List */* emptySlot;
+    list_List* emptySlot;
 };
 
 struct PaletteList {
@@ -8993,7 +9310,7 @@ struct PaletteList {
     Slice_int paletteMap;
     Map_Arr2_u16_int PalTable;
     Map_Arr2_u16_int numcols;
-    Slice_GoIface PalTex;
+    Slice_Texture PalTex;
     Map_int_Slice_int duplicatePals;
 };
 
@@ -9241,8 +9558,8 @@ struct ReflectionSprite {
 };
 
 struct RenderParams {
-    GoIface tex;
-    GoIface paltex;
+    Texture tex;
+    Texture paltex;
     Arr2_u16 size;
     f32 x;
     f32 y;
@@ -9353,7 +9670,7 @@ struct Renderer_GL33 {
 struct VulkanBuffer {
     GoOpaque /* invalid type */ buffer;
     GoOpaque /* invalid type */ bufferMemory;
-    GoOpaque /* unsafe.Pointer */ data;
+    void* data;
     uintptr_t size;
 };
 
@@ -10054,12 +10371,12 @@ struct RollbackLogger {
 struct Arr12_InputBits { InputBits v[12]; };
 #endif
 struct RollbackSession {
-    GoIface backend;
+    ggpo_Backend backend;
     Map_int_GameStatePtr saveStates;
     i64 now;
     i64 next;
-    Slice_GoOpaque_ggpo_PlayerPtr players;
-    Slice_int handles;
+    Slice_ggpo_Player players;
+    Slice_ggpo_PlayerHandle handles;
     GoOpaque /* os.File */* recording;
     bool connected;
     GoString host;
@@ -10070,8 +10387,8 @@ struct RollbackSession {
     int run;
     GoString remoteIp;
     int currentPlayer;
-    int currentPlayerHandle;
-    int remotePlayerHandle;
+    ggpo_PlayerHandle currentPlayerHandle;
+    ggpo_PlayerHandle remotePlayerHandle;
     LoopTimer loopTimer;
     Map_int_Arr12_InputBits inputs;
     Map_int_Arr12_Arr6_i8 analogInputs;
@@ -10205,10 +10522,10 @@ struct RoundStartBackup {
 };
 
 struct SDLSpeaker {
-    GoOpaque /* invalid type */ dev;
-    GoOpaque /* beep.Mixer */* mixer;
+    sdl_AudioDeviceID dev;
+    beep_Mixer* mixer;
     GoOpaque /* sync.Mutex */ mu;
-    int sampleRate;
+    beep_SampleRate sampleRate;
     int bufferSize;
     Slice_Arr2_f64 buf;
     Slice_u8 out;
@@ -10387,8 +10704,8 @@ struct ShadowSprite {
 };
 
 struct ShortcutKey {
-    GoOpaque /* invalid type */ Key;
-    GoOpaque /* invalid type */ Mod;
+    sdl_Keycode Key;
+    sdl_Keymod Mod;
 };
 
 struct ShortcutScript {
@@ -10404,11 +10721,31 @@ struct Skin {
     GLTFTexture* texture;
 };
 
+struct Snd {
+    Map_Arr2_i32_SoundPtr table;
+    u16 ver;
+    u16 ver2;
+    GoString filename;
+};
+
+struct beep_Format {
+    beep_SampleRate SampleRate;
+    int NumChannels;
+    int Precision;
+};
+
+struct Sound {
+    Slice_u8 wavData;
+    beep_Format format;
+    int length;
+    lazySound* lazy;
+};
+
 struct SoundChannel {
-    GoIface streamer;
+    beep_StreamSeeker streamer;
     SoundEffect* sfx;
-    GoOpaque /* beep.Ctrl */* ctrl;
-    GoOpaqueVal* sound;
+    beep_Ctrl* ctrl;
+    Sound* sound;
     i32 playerID;
     i32 channelNo;
     bool stopOnGetHit;
@@ -10420,7 +10757,7 @@ struct SoundChannel {
 };
 
 struct SoundEffect {
-    GoIface streamer;
+    beep_Streamer streamer;
     soundPanner* panner;
     f32 volume;
     f32 duckMul;
@@ -10450,7 +10787,7 @@ struct Arr2_i16 { i16 v[2]; };
 #endif
 struct Sprite {
     Slice_u32 Pal;
-    GoIface Tex;
+    Texture Tex;
     u16 Group;
     u16 Number;
     Arr2_u16 Size;
@@ -10459,7 +10796,7 @@ struct Sprite {
     int rle;
     u8 coldepth;
     Slice_u32 paltemp;
-    GoIface PalTex;
+    Texture PalTex;
     bool sffv1BasePal;
     SpriteTextureAtlas* textureAtlas;
 };
@@ -10590,7 +10927,7 @@ struct StoryboardManager {
 };
 
 struct StreamLooper {
-    GoIface s;
+    beep_StreamSeeker s;
     int loopcount;
     int loopstart;
     int loopend;
@@ -10636,7 +10973,7 @@ struct StunBar {
 
 struct SwapSeeker {
     GoOpaque /* sync.RWMutex */ mu;
-    GoIface ss;
+    beep_StreamSeeker ss;
 };
 
 struct SyncHandshake {
@@ -10782,7 +11119,7 @@ struct System {
             bool dialogueHideBars;
             int dialogueForce;
             bool playBgmFlg;
-            GoOpaque /* invalid type */ keyInput;
+            sdl_Keycode keyInput;
             GoString keyString;
             int lastInputController;
             GoString uiLastInputToken;
@@ -10809,8 +11146,8 @@ struct System {
     bool debugDisplay;
     Arr2_int debugRef;
     i32 debugLastID;
-    GoOpaque /* beep.Mixer */* soundMixer;
-    GoOpaque /* beep.Mixer */* videoMixer;
+    beep_Mixer* soundMixer;
+    beep_Mixer* videoMixer;
     Bgm bgm;
     Slice_bgMusicPtr matchMusicSel;
     int pauseSoundVolume;
@@ -10829,7 +11166,7 @@ struct System {
     Config cfg;
     Map_GoString_FightFxPtr ffx;
     Select sel;
-    Map_GoOpaque_invalidtypePtr_bool keyState;
+    Map_sdl_Keycode_bool keyState;
     NetConnection* netConnection;
     ReplayFile* replayFile;
     Slice_KeyConfig keyConfig;
@@ -10887,7 +11224,7 @@ struct System {
     Slice_BytecodeExp workBe;
     Slice_i32 timerCount;
     Map_GoString_GoString cmdFlags;
-    GoIface whitePalTex;
+    Texture whitePalTex;
     bool usePalette;
     bool gameRunning;
     bool escPending;
@@ -10913,9 +11250,9 @@ struct System {
     bool maxPowerMode;
     Slice_DebugClsnText debugClsnText;
     Slice_GoString consoleText;
-    GoOpaque /* lua.LState */* luaLState;
-    GoOpaque /* lua.LFunction */* statusLFunc;
-    Slice_GoOpaque_lua_LFunctionPtrPtr listLFunc;
+    lua_LState* luaLState;
+    lua_LFunction* statusLFunc;
+    Slice_lua_LFunctionPtr listLFunc;
     Arr12_bool reloadPreserveVars;
     Map_int_CharVarBackup charVarsBackup;
     Map_GoString_bool loadedCustomShaders;
@@ -10964,7 +11301,7 @@ struct TextSprite {
     GoString textInit;
     GoString template;
     Slice_GoIface params;
-    GoOpaqueVal* fnt;
+    Fnt* fnt;
     i32 bank;
     i32 align;
     f32 x;
@@ -11002,13 +11339,13 @@ struct TextSprite {
 };
 
 struct TextureAtlas {
-    GoIface texture;
+    Texture texture;
     i32 width;
     i32 height;
     i32 depth;
     bool filter;
     bool resize;
-    GoOpaque /* list.List */* skyline;
+    list_List* skyline;
 };
 
 struct Texture_GL33 {
@@ -11164,7 +11501,7 @@ struct VulkanSwapchainInfo {
 };
 
 struct Window {
-    GoOpaque /* invalid type */ embed_Window;
+    sdl_Window* embed_Window;
     GoString title;
     int x;
     int y;
@@ -11234,6 +11571,22 @@ struct bcProfKey {
     i32 st;
 };
 
+struct beep_Buffer {
+    beep_Format f;
+    Slice_u8 data;
+    Slice_u8 tmp;
+};
+
+struct beep_Ctrl {
+    beep_Streamer Streamer;
+    bool Paused;
+};
+
+struct beep_Mixer {
+    Slice_beep_Streamer streamers;
+    bool stopWhenEmpty;
+};
+
 struct bgCtrl {
     Slice_backGroundPtr bg;
     Slice_NodePtr node;
@@ -11292,7 +11645,7 @@ struct bgVideo {
     GoOpaque /* invalid type */ videoStream;
     GoOpaque /* invalid type */ media;
     bool loop;
-    GoIface texture;
+    Texture texture;
     GoOpaque /* time.Time */ startWall;
     i64 basePTS;
     bool haveBasePTS;
@@ -11304,9 +11657,9 @@ struct bgVideo {
     bool playing;
     bool visible;
     bool muted;
-    GoOpaque /* beep.Ctrl */* videoCtrl;
-    GoOpaque /* effects.Volume */* videoVol;
-    int audioSampleRate;
+    beep_Ctrl* videoCtrl;
+    effects_Volume* videoVol;
+    beep_SampleRate audioSampleRate;
     bool inMixer;
 };
 
@@ -11318,7 +11671,7 @@ struct boundTexture {
 
 struct character {
     u32 textureID;
-    GoIface texture;
+    Texture texture;
     Arr4_f32 uv;
     int width;
     int height;
@@ -11391,6 +11744,13 @@ struct drawAspectState {
     f32 heightScale;
 };
 
+struct effects_Volume {
+    beep_Streamer Streamer;
+    f64 Base;
+    f64 Volume;
+    bool Silent;
+};
+
 struct expValueFrame {
     BytecodeExp be1;
     BytecodeExp be2;
@@ -11410,9 +11770,167 @@ struct fightScreenAnimationStateCloner {
     int count;
 };
 
+struct fixed_Point26_6 {
+    fixed_Int26_6 X;
+    fixed_Int26_6 Y;
+};
+
+struct fixed_Rectangle26_6 {
+    fixed_Point26_6 Min;
+    fixed_Point26_6 Max;
+};
+
+struct ggpo_RemotePlayer {
+    GoString IpAdress;
+    int Port;
+};
+
+struct ggpo_Player {
+    int Size;
+    ggpo_PlayerType PlayerType;
+    int PlayerNum;
+    ggpo_RemotePlayer Remote;
+};
+
+struct lazySound {
+    GoString filename;
+    i64 offset;
+    u32 size;
+    i8 state;
+    u64 lastUse;
+};
+
 struct lowerCacheEntry {
     GoString src;
     GoString low;
+};
+
+struct lua_DbgCall {
+    GoString Name;
+    int Pc;
+};
+
+struct lua_DbgLocalInfo {
+    GoString Name;
+    int StartPc;
+    int EndPc;
+};
+
+struct lua_FunctionProto {
+    GoString SourceName;
+    int LineDefined;
+    int LastLineDefined;
+    u8 NumUpvalues;
+    u8 NumParameters;
+    u8 IsVarArg;
+    u8 NumUsedRegisters;
+    Slice_u32 Code;
+    Slice_lua_LValue Constants;
+    Slice_lua_FunctionProtoPtr FunctionPrototypes;
+    Slice_int DbgSourcePositions;
+    Slice_lua_DbgLocalInfoPtr DbgLocals;
+    Slice_lua_DbgCall DbgCalls;
+    Slice_GoString DbgUpvalues;
+    Slice_GoString stringConstants;
+};
+
+struct lua_Global {
+    lua_LState* MainThread;
+    lua_LState* CurrentThread;
+    lua_LTable* Registry;
+    lua_LTable* Global;
+    Map_int_lua_LValue builtinMts;
+    Slice_GoOpaque_os_FilePtrPtr tempFiles;
+    i32 gccount;
+};
+
+struct lua_LFunction {
+    bool IsG;
+    lua_LTable* Env;
+    lua_FunctionProto* Proto;
+    lua_LGFunction GFunction;
+    Slice_lua_UpvaluePtr Upvalues;
+};
+
+struct lua_Options {
+    int CallStackSize;
+    int RegistrySize;
+    int RegistryMaxSize;
+    int RegistryGrowStep;
+    bool SkipOpenLibs;
+    bool IncludeGoStackTrace;
+    bool MinimizeStackMemory;
+};
+
+struct lua_LState {
+    lua_Global* G;
+    lua_LState* Parent;
+    lua_LTable* Env;
+    GoFunc Panic;
+    bool Dead;
+    lua_Options Options;
+    i32 stop;
+    lua_registry* reg;
+    lua_callFrameStack stack;
+    lua_allocator* alloc;
+    lua_callFrame* currentFrame;
+    bool wrapped;
+    lua_Upvalue* uvcache;
+    bool hasErrorFunc;
+    GoFunc mainLoop;
+    GoIface ctx;
+};
+
+struct lua_LTable {
+    lua_LValue Metatable;
+    Slice_lua_LValue array;
+    Map_lua_LValue_lua_LValue dict;
+    Map_GoString_lua_LValue strdict;
+    Slice_lua_LValue keys;
+    Map_lua_LValue_int k2i;
+};
+
+struct lua_Upvalue {
+    lua_Upvalue* next;
+    lua_registry* reg;
+    int index;
+    lua_LValue value;
+    bool closed;
+};
+
+struct lua_allocator {
+    int size;
+    Slice_f64 fptrs;
+    GoOpaque /* reflect.SliceHeader */* fheader;
+    lua_LValue scratchValue;
+    lua_iface* scratchValueP;
+};
+
+struct lua_callFrame {
+    int Idx;
+    lua_LFunction* Fn;
+    lua_callFrame* Parent;
+    int Pc;
+    int Base;
+    int LocalBase;
+    int ReturnBase;
+    int NArgs;
+    int NRet;
+    int TailCall;
+};
+
+struct lua_iface {
+    void* itab;
+    void* word;
+};
+
+struct lua_registry {
+    Slice_lua_LValue array;
+    int top;
+    int growBy;
+    int maxSize;
+    lua_allocator* alloc;
+    lua_registryHandler handler;
 };
 
 struct Anon_65fa1d9f {
@@ -11435,6 +11953,15 @@ struct nameFact {
     bool author;
     GoString val;
     i8 kind;
+};
+
+struct nullRenderer {
+    char _empty;
+};
+
+struct nullTexture {
+    i32 w;
+    i32 h;
 };
 
 struct paletteCopyKey {
@@ -11498,6 +12025,18 @@ struct scParam {
     Slice_BytecodeExp exp;
 };
 
+#ifndef CVF_BODY_Arr32_u8
+#define CVF_BODY_Arr32_u8
+struct Arr32_u8 { u8 v[32]; };
+#endif
+struct sdl_GameController {
+    Arr32_u8 _;
+};
+
+struct sdl_Window {
+    Arr32_u8 _;
+};
+
 struct sffv1PalState {
     int state;
     int current;
@@ -11518,7 +12057,7 @@ struct soundPanView {
 };
 
 struct soundPanner {
-    GoIface streamer;
+    beep_Streamer streamer;
     GoOpaque /* atomic.Uint64 */ request;
 };
 
@@ -11549,6 +12088,45 @@ struct stageRollbackBgState {
     bgAction bga;
     i32 actionno;
     bool enabled;
+};
+
+struct truetype_Font {
+    Slice_u8 cmap;
+    Slice_u8 cvt;
+    Slice_u8 fpgm;
+    Slice_u8 glyf;
+    Slice_u8 hdmx;
+    Slice_u8 head;
+    Slice_u8 hhea;
+    Slice_u8 hmtx;
+    Slice_u8 kern;
+    Slice_u8 loca;
+    Slice_u8 maxp;
+    Slice_u8 name;
+    Slice_u8 os2;
+    Slice_u8 prep;
+    Slice_u8 vmtx;
+    Slice_u8 cmapIndexes;
+    Slice_truetype_cm cm;
+    int locaOffsetFormat;
+    int nGlyph;
+    int nHMetric;
+    int nKern;
+    i32 fUnitsPerEm;
+    i32 ascent;
+    i32 descent;
+    fixed_Rectangle26_6 bounds;
+    u16 maxTwilightPoints;
+    u16 maxStorage;
+    u16 maxFunctionDefs;
+    u16 maxStackElements;
+};
+
+struct truetype_cm {
+    u32 start;
+    u32 end;
+    u32 delta;
+    u32 offset;
 };
 
 struct upnpDevice {
@@ -11603,6 +12181,10 @@ struct Arr1024_lowerCacheEntry { lowerCacheEntry v[1024]; };
 #define CVF_BODY_Arr12_Arr6_i8
 struct Arr12_Arr6_i8 { Arr6_i8 v[12]; };
 #endif
+#ifndef CVF_BODY_Arr256_u32
+#define CVF_BODY_Arr256_u32
+struct Arr256_u32 { u32 v[256]; };
+#endif
 #ifndef CVF_BODY_Arr2_f64
 #define CVF_BODY_Arr2_f64
 struct Arr2_f64 { f64 v[2]; };
@@ -11621,6 +12203,10 @@ GO_SLICE_FUNCS(Slice_AnimFrame, AnimFrame)
 #ifndef CVF_FN_Slice_AnimPtr
 #define CVF_FN_Slice_AnimPtr
 GO_SLICE_FUNCS(Slice_AnimPtr, Anim*)
+#endif
+#ifndef CVF_FN_Slice_Arr256_u32
+#define CVF_FN_Slice_Arr256_u32
+GO_SLICE_FUNCS_A(Slice_Arr256_u32, Arr256_u32)
 #endif
 #ifndef CVF_FN_Slice_Arr2_f32
 #define CVF_FN_Slice_Arr2_f32
@@ -11766,10 +12352,6 @@ GO_SLICE_FUNCS(Slice_GoFunc, GoFunc)
 #define CVF_FN_Slice_GoIface
 GO_SLICE_FUNCS(Slice_GoIface, GoIface)
 #endif
-#ifndef CVF_FN_Slice_GoIfacePtr
-#define CVF_FN_Slice_GoIfacePtr
-GO_SLICE_FUNCS(Slice_GoIfacePtr, GoIface*)
-#endif
 #ifndef CVF_FN_Slice_GoString
 #define CVF_FN_Slice_GoString
 GO_SLICE_FUNCS(Slice_GoString, GoString)
@@ -11890,6 +12472,10 @@ GO_SLICE_FUNCS(Slice_Slice_u8, Slice_u8)
 #define CVF_FN_Slice_SoundChannel
 GO_SLICE_FUNCS(Slice_SoundChannel, SoundChannel)
 #endif
+#ifndef CVF_FN_Slice_Sprite
+#define CVF_FN_Slice_Sprite
+GO_SLICE_FUNCS(Slice_Sprite, Sprite)
+#endif
 #ifndef CVF_FN_Slice_SpriteData
 #define CVF_FN_Slice_SpriteData
 GO_SLICE_FUNCS(Slice_SpriteData, SpriteData)
@@ -11934,9 +12520,17 @@ GO_SLICE_FUNCS(Slice_SyncSetting, SyncSetting)
 #define CVF_FN_Slice_TextSpritePtr
 GO_SLICE_FUNCS(Slice_TextSpritePtr, TextSprite*)
 #endif
+#ifndef CVF_FN_Slice_Texture
+#define CVF_FN_Slice_Texture
+GO_SLICE_FUNCS(Slice_Texture, Texture)
+#endif
 #ifndef CVF_FN_Slice_TextureAtlasPtr
 #define CVF_FN_Slice_TextureAtlasPtr
 GO_SLICE_FUNCS(Slice_TextureAtlasPtr, TextureAtlas*)
+#endif
+#ifndef CVF_FN_Slice_TexturePtr
+#define CVF_FN_Slice_TexturePtr
+GO_SLICE_FUNCS(Slice_TexturePtr, Texture*)
 #endif
 #ifndef CVF_FN_Slice_Texture_VKPtr
 #define CVF_FN_Slice_Texture_VKPtr
@@ -11961,6 +12555,10 @@ GO_SLICE_FUNCS_A(Slice_WinType, WinType)
 #ifndef CVF_FN_Slice_backGroundPtr
 #define CVF_FN_Slice_backGroundPtr
 GO_SLICE_FUNCS(Slice_backGroundPtr, backGround*)
+#endif
+#ifndef CVF_FN_Slice_beep_Streamer
+#define CVF_FN_Slice_beep_Streamer
+GO_SLICE_FUNCS(Slice_beep_Streamer, beep_Streamer)
 #endif
 #ifndef CVF_FN_Slice_bgCtrl
 #define CVF_FN_Slice_bgCtrl
@@ -11994,6 +12592,14 @@ GO_SLICE_FUNCS_A(Slice_f32, f32)
 #define CVF_FN_Slice_f64
 GO_SLICE_FUNCS_A(Slice_f64, f64)
 #endif
+#ifndef CVF_FN_Slice_ggpo_Player
+#define CVF_FN_Slice_ggpo_Player
+GO_SLICE_FUNCS(Slice_ggpo_Player, ggpo_Player)
+#endif
+#ifndef CVF_FN_Slice_ggpo_PlayerHandle
+#define CVF_FN_Slice_ggpo_PlayerHandle
+GO_SLICE_FUNCS_A(Slice_ggpo_PlayerHandle, ggpo_PlayerHandle)
+#endif
 #ifndef CVF_FN_Slice_i16
 #define CVF_FN_Slice_i16
 GO_SLICE_FUNCS_A(Slice_i16, i16)
@@ -12005,6 +12611,34 @@ GO_SLICE_FUNCS_A(Slice_i32, i32)
 #ifndef CVF_FN_Slice_int
 #define CVF_FN_Slice_int
 GO_SLICE_FUNCS_A(Slice_int, int)
+#endif
+#ifndef CVF_FN_Slice_list_ElementPtr
+#define CVF_FN_Slice_list_ElementPtr
+GO_SLICE_FUNCS(Slice_list_ElementPtr, list_Element*)
+#endif
+#ifndef CVF_FN_Slice_lua_DbgCall
+#define CVF_FN_Slice_lua_DbgCall
+GO_SLICE_FUNCS(Slice_lua_DbgCall, lua_DbgCall)
+#endif
+#ifndef CVF_FN_Slice_lua_DbgLocalInfoPtr
+#define CVF_FN_Slice_lua_DbgLocalInfoPtr
+GO_SLICE_FUNCS(Slice_lua_DbgLocalInfoPtr, lua_DbgLocalInfo*)
+#endif
+#ifndef CVF_FN_Slice_lua_FunctionProtoPtr
+#define CVF_FN_Slice_lua_FunctionProtoPtr
+GO_SLICE_FUNCS(Slice_lua_FunctionProtoPtr, lua_FunctionProto*)
+#endif
+#ifndef CVF_FN_Slice_lua_LFunctionPtr
+#define CVF_FN_Slice_lua_LFunctionPtr
+GO_SLICE_FUNCS(Slice_lua_LFunctionPtr, lua_LFunction*)
+#endif
+#ifndef CVF_FN_Slice_lua_LValue
+#define CVF_FN_Slice_lua_LValue
+GO_SLICE_FUNCS(Slice_lua_LValue, lua_LValue)
+#endif
+#ifndef CVF_FN_Slice_lua_UpvaluePtr
+#define CVF_FN_Slice_lua_UpvaluePtr
+GO_SLICE_FUNCS(Slice_lua_UpvaluePtr, lua_Upvalue*)
 #endif
 #ifndef CVF_FN_Slice_nameFact
 #define CVF_FN_Slice_nameFact
@@ -12026,6 +12660,10 @@ GO_SLICE_FUNCS(Slice_scRunFn, scRunFn)
 #define CVF_FN_Slice_stageRollbackBgState
 GO_SLICE_FUNCS_A(Slice_stageRollbackBgState, stageRollbackBgState)
 #endif
+#ifndef CVF_FN_Slice_truetype_cm
+#define CVF_FN_Slice_truetype_cm
+GO_SLICE_FUNCS(Slice_truetype_cm, truetype_cm)
+#endif
 #ifndef CVF_FN_Slice_u32
 #define CVF_FN_Slice_u32
 GO_SLICE_FUNCS_A(Slice_u32, u32)
@@ -12045,6 +12683,10 @@ GO_SLICE_FUNCS(Slice_upnpMapping, upnpMapping)
 #ifndef CVF_FN_Map_Arr2_i32_AnimationPtr
 #define CVF_FN_Map_Arr2_i32_AnimationPtr
 GO_MAP_FUNCS(Map_Arr2_i32_AnimationPtr, Arr2_i32, Animation*, false)
+#endif
+#ifndef CVF_FN_Map_Arr2_i32_SoundPtr
+#define CVF_FN_Map_Arr2_i32_SoundPtr
+GO_MAP_FUNCS(Map_Arr2_i32_SoundPtr, Arr2_i32, Sound*, false)
 #endif
 #ifndef CVF_FN_Map_Arr2_u16_SpritePtr
 #define CVF_FN_Map_Arr2_u16_SpritePtr
@@ -12182,6 +12824,10 @@ GO_MAP_FUNCS(Map_GoString_i32, GoString, i32, true)
 #define CVF_FN_Map_GoString_int
 GO_MAP_FUNCS(Map_GoString_int, GoString, int, true)
 #endif
+#ifndef CVF_FN_Map_GoString_lua_LValue
+#define CVF_FN_Map_GoString_lua_LValue
+GO_MAP_FUNCS(Map_GoString_lua_LValue, GoString, lua_LValue, true)
+#endif
 #ifndef CVF_FN_Map_GoString_scFunc
 #define CVF_FN_Map_GoString_scFunc
 GO_MAP_FUNCS(Map_GoString_scFunc, GoString, scFunc, true)
@@ -12234,6 +12880,14 @@ GO_MAP_FUNCS(Map_i32_CharPtr, i32, Char*, false)
 #define CVF_FN_Map_i32_FSTextPtr
 GO_MAP_FUNCS(Map_i32_FSTextPtr, i32, FSText*, false)
 #endif
+#ifndef CVF_FN_Map_i32_FntCharImagePtr
+#define CVF_FN_Map_i32_FntCharImagePtr
+GO_MAP_FUNCS(Map_i32_FntCharImagePtr, i32, FntCharImage*, false)
+#endif
+#ifndef CVF_FN_Map_i32_Map_i32_FntCharImagePtr
+#define CVF_FN_Map_i32_Map_i32_FntCharImagePtr
+GO_MAP_FUNCS(Map_i32_Map_i32_FntCharImagePtr, i32, Map_i32_FntCharImagePtr, false)
+#endif
 #ifndef CVF_FN_Map_i32_RemapTable
 #define CVF_FN_Map_i32_RemapTable
 GO_MAP_FUNCS(Map_i32_RemapTable, i32, RemapTable, false)
@@ -12274,13 +12928,13 @@ GO_MAP_FUNCS(Map_int_Arr12_InputBits, int, Arr12_InputBits, false)
 #define CVF_FN_Map_int_CharVarBackup
 GO_MAP_FUNCS(Map_int_CharVarBackup, int, CharVarBackup, false)
 #endif
+#ifndef CVF_FN_Map_int_FntPtr
+#define CVF_FN_Map_int_FntPtr
+GO_MAP_FUNCS(Map_int_FntPtr, int, Fnt*, false)
+#endif
 #ifndef CVF_FN_Map_int_GameStatePtr
 #define CVF_FN_Map_int_GameStatePtr
 GO_MAP_FUNCS(Map_int_GameStatePtr, int, GameState*, false)
-#endif
-#ifndef CVF_FN_Map_int_GoOpaqueValPtr
-#define CVF_FN_Map_int_GoOpaqueValPtr
-GO_MAP_FUNCS(Map_int_GoOpaqueValPtr, int, GoOpaqueVal*, false)
 #endif
 #ifndef CVF_FN_Map_int_GoString
 #define CVF_FN_Map_int_GoString
@@ -12306,9 +12960,33 @@ GO_MAP_FUNCS(Map_int_Slice_int, int, Slice_int, false)
 #define CVF_FN_Map_int_int
 GO_MAP_FUNCS(Map_int_int, int, int, false)
 #endif
+#ifndef CVF_FN_Map_int_lua_LValue
+#define CVF_FN_Map_int_lua_LValue
+GO_MAP_FUNCS(Map_int_lua_LValue, int, lua_LValue, false)
+#endif
+#ifndef CVF_FN_Map_lua_LValue_int
+#define CVF_FN_Map_lua_LValue_int
+GO_MAP_FUNCS(Map_lua_LValue_int, lua_LValue, int, false)
+#endif
+#ifndef CVF_FN_Map_lua_LValue_lua_LValue
+#define CVF_FN_Map_lua_LValue_lua_LValue
+GO_MAP_FUNCS(Map_lua_LValue_lua_LValue, lua_LValue, lua_LValue, false)
+#endif
 #ifndef CVF_FN_Map_paletteCopyKey_Slice_u32
 #define CVF_FN_Map_paletteCopyKey_Slice_u32
 GO_MAP_FUNCS(Map_paletteCopyKey_Slice_u32, paletteCopyKey, Slice_u32, false)
+#endif
+#ifndef CVF_FN_Map_sdl_GameControllerButton_u8
+#define CVF_FN_Map_sdl_GameControllerButton_u8
+GO_MAP_FUNCS(Map_sdl_GameControllerButton_u8, sdl_GameControllerButton, u8, false)
+#endif
+#ifndef CVF_FN_Map_sdl_Keycode_bool
+#define CVF_FN_Map_sdl_Keycode_bool
+GO_MAP_FUNCS(Map_sdl_Keycode_bool, sdl_Keycode, bool, false)
+#endif
+#ifndef CVF_FN_Map_u32Ptr_Texture
+#define CVF_FN_Map_u32Ptr_Texture
+GO_MAP_FUNCS(Map_u32Ptr_Texture, u32*, Texture, false)
 #endif
 #ifndef CVF_FN_Map_u32_Arr2_f32
 #define CVF_FN_Map_u32_Arr2_f32

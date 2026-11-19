@@ -132,9 +132,58 @@ func (t *Tx) genericCall(c *ast.CallExpr, fn *types.Func) (string, *types.Signat
 
 func bindTypeParams(fn *types.Func, targs []types.Type) map[*types.TypeParam]types.Type {
 	m := map[*types.TypeParam]types.Type{}
-	tps := fn.Type().(*types.Signature).TypeParams()
+	sig := fn.Type().(*types.Signature)
+	tps := sig.TypeParams()
+	if rtp := sig.RecvTypeParams(); rtp != nil && rtp.Len() > 0 {
+		tps = rtp // method of a generic type: parameters come from the receiver
+	}
 	for i := 0; i < tps.Len() && i < len(targs); i++ {
 		m[tps.At(i)] = targs[i]
 	}
 	return m
+}
+
+// methodCName: C name of a method; methods of instantiated generic types
+// (RingBuffer[GameInput].Push) are monomorphised like generic functions.
+func methodCName(p *Prog, fn *types.Func, recv types.Type) string {
+	base := substT(recv)
+	if pt, ok := base.(*types.Pointer); ok {
+		base = pt.Elem()
+	}
+	n, ok := base.(*types.Named)
+	if !ok || n.TypeArgs().Len() == 0 || !isOwn(fn.Pkg()) {
+		return cFuncName(p, fn)
+	}
+	orig := fn.Origin()
+	var targs []types.Type
+	var parts []string
+	for i := 0; i < n.TypeArgs().Len(); i++ {
+		a := substT(n.TypeArgs().At(i))
+		targs = append(targs, a)
+		parts = append(parts, mangle(a))
+	}
+	name := cFuncName(p, orig) + "_" + strings.Join(parts, "_")
+	if _, ok := genInsts[name]; !ok {
+		gi := &genInst{fn: orig, targs: targs, name: name}
+		genInsts[name] = gi
+		genPending = append(genPending, gi)
+	}
+	return name
+}
+
+// isGenericMethodDecl: a method declared on a generic type (translated only
+// per instantiation).
+func isGenericMethodDecl(fd *ast.FuncDecl) bool {
+	if fd.Recv == nil || len(fd.Recv.List) == 0 {
+		return false
+	}
+	t := fd.Recv.List[0].Type
+	if s, ok := t.(*ast.StarExpr); ok {
+		t = s.X
+	}
+	switch t.(type) {
+	case *ast.IndexExpr, *ast.IndexListExpr:
+		return true
+	}
+	return false
 }

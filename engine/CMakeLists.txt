@@ -54,12 +54,30 @@ endif()
 
 # Translated Ikemen simulation (tools/gen/gotoc) and the headless match runner
 # used to verify it tick-for-tick against the reference state dumps.
-file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c)
+# SDL2: a CMake package (SDL2::SDL2) or explicit CVF_SDL2_INCLUDE_DIR /
+# CVF_SDL2_LIBRARY (headers directory containing SDL.h).
+find_package(SDL2 CONFIG QUIET)
+if(NOT TARGET SDL2::SDL2)
+  if(NOT CVF_SDL2_INCLUDE_DIR OR NOT CVF_SDL2_LIBRARY)
+    message(FATAL_ERROR "SDL2 not found: set CVF_SDL2_INCLUDE_DIR and CVF_SDL2_LIBRARY")
+  endif()
+  add_library(SDL2::SDL2 UNKNOWN IMPORTED)
+  set_target_properties(SDL2::SDL2 PROPERTIES IMPORTED_LOCATION "${CVF_SDL2_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${CVF_SDL2_INCLUDE_DIR}")
+endif()
+
+file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c)
 add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
-target_link_libraries(cvf_ik PUBLIC cvf_core)
+target_link_libraries(cvf_ik PUBLIC cvf_core SDL2::SDL2)
 # generated code: warnings are not actionable here
 target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w)
 set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)  # GNU statement expressions, typeof
 add_executable(cvf_headless src/app/headless_main.c)
 target_link_libraries(cvf_headless PRIVATE cvf_ik)
 target_compile_options(cvf_headless PRIVATE ${CVF_DETERMINISM_FLAGS})
+
+# The game (SDL2 window, OpenGL renderer, Lua menus)
+add_executable(cvf src/app/game_main.c)
+target_link_libraries(cvf PRIVATE cvf_ik)
+target_compile_options(cvf PRIVATE ${CVF_DETERMINISM_FLAGS})
+set_target_properties(cvf PROPERTIES C_EXTENSIONS ON)
