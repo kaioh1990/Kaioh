@@ -70,6 +70,52 @@ typedef struct GoImageAlpha {
     int Stride;
     GoImageRect Rect;
 } GoImageAlpha;
+// net, net/http, net/url, image (fields the game reads; ik_net.c, ik_http.c)
+typedef struct GoNetUDPAddr {
+    Slice_u8 IP;
+    int Port;
+    GoString Zone;
+} GoNetUDPAddr;
+typedef struct GoNetTCPAddr {
+    Slice_u8 IP;
+    int Port;
+    GoString Zone;
+} GoNetTCPAddr;
+typedef struct GoNetIPNet {
+    Slice_u8 IP, Mask;
+} GoNetIPNet;
+typedef struct GoNetInterface {
+    int Index, MTU;
+    GoString Name;
+    Slice_u8 HardwareAddr;
+    uintptr_t Flags;
+} GoNetInterface;
+typedef struct GoNetDialer {
+    i64 Timeout;
+} GoNetDialer;
+typedef struct GoHttpClient {
+    i64 Timeout;
+} GoHttpClient;
+typedef struct GoHttpRequest {
+    GoString Method;
+    GoMap Header;  // http.Header
+    GoString url_;
+    GoIface body_;
+} GoHttpRequest;
+typedef struct GoHttpResponse {
+    GoString Status;
+    int StatusCode;
+    GoMap Header;
+    GoIface Body;
+} GoHttpResponse;
+typedef struct GoUrlURL {
+    GoString Scheme, Opaque, Host, Path, RawQuery, Fragment;
+} GoUrlURL;
+typedef struct GoImageConfig {
+    GoIface ColorModel;
+    int Width, Height;
+} GoImageConfig;
+
 // reflect.StringHeader / SliceHeader: same layouts as GoString and slices
 typedef struct GoReflectStringHeader {
     uintptr_t Data;

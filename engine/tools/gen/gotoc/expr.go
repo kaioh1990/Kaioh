@@ -253,7 +253,7 @@ func (t *Tx) fieldPath(x ast.Expr, sel *types.Selection) string {
 		if c := cbase(st); strings.HasPrefix(c, "GoOpaque") {
 			// field of an opaque (platform library) struct: a zeroed scratch slot
 			ft := sel.Type()
-			return fmt.Sprintf("(*(%s *)go_scratch(sizeof(%s)))", cbase(ft), cbase(ft))
+			return fmt.Sprintf("(*(%s *)go_scratch(sizeof(%s)) /* opaque %s.%s */)", cbase(ft), cbase(ft), types.TypeString(st, func(p *types.Package) string { return p.Name() }), f.Name())
 		}
 		if ptr {
 			base = base + "->" + embName(f)

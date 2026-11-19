@@ -667,4 +667,10 @@ func promotedNames(st *types.Struct) map[string]bool {
 var genExtStructs = map[string]string{
 	"reflect.SliceHeader":  "GoReflectSliceHeader",
 	"reflect.StringHeader": "GoReflectStringHeader",
+	"net.UDPAddr":          "GoNetUDPAddr",
+	"net.TCPAddr":          "GoNetTCPAddr",
+	"http.Client":          "GoHttpClient",
+	"http.Request":         "GoHttpRequest",
+	"http.Response":        "GoHttpResponse",
+	"url.URL":              "GoUrlURL",
 }

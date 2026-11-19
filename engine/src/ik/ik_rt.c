@@ -1050,35 +1050,6 @@ GoIface sync_Pool_Get(GoOpaque *p) {
 }
 void sync_Pool_Put(GoOpaque *p, GoIface x) { (void)p, (void)x; }
 void runtime_Gosched(void) { go_yield(); }
-GoOpaque time_Now(void) { return (GoOpaque){{0}}; }
-GoOpaque time_Time_Add(GoOpaque t, i64 d) {
-    (void)d;
-    return t;
-}
-bool time_Time_After(GoOpaque a, GoOpaque b) {
-    (void)a, (void)b;
-    return false;
-}
-i64 time_Since(GoOpaque t) {
-    (void)t;
-    return 0;
-}
-i64 time_Time_Sub(GoOpaque a, GoOpaque b) {
-    (void)a, (void)b;
-    return 0;
-}
-i64 time_Time_UnixMilli(GoOpaque t) {
-    (void)t;
-    return 0;
-}
-i64 time_Time_UnixNano(GoOpaque t) {
-    (void)t;
-    return 0;
-}
-GoString time_Time_Format(GoOpaque t, GoString f) {
-    (void)t, (void)f;
-    return GOSTR("0000-00-00");
-}
 void time_Sleep(i64 d) { go_sleep_ns(d); }  // other goroutines run meanwhile
 GoOpaque *log_New(GoIface w, GoString prefix, int flags) {
     (void)w, (void)prefix, (void)flags;

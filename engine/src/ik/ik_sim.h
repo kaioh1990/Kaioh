@@ -1628,6 +1628,10 @@ typedef struct { GoIface *p; int len, cap; } Slice_GoIface;
 #define CVF_DEF_Slice_GoIniLoadOptions
 typedef struct { GoIniLoadOptions *p; int len, cap; } Slice_GoIniLoadOptions;
 #endif
+#ifndef CVF_DEF_Slice_GoNetInterface
+#define CVF_DEF_Slice_GoNetInterface
+typedef struct { GoNetInterface *p; int len, cap; } Slice_GoNetInterface;
+#endif
 #ifndef CVF_DEF_Slice_GoOpaque_ini_FilePtrPtr
 #define CVF_DEF_Slice_GoOpaque_ini_FilePtrPtr
 typedef struct { GoOpaque /* ini.File */* *p; int len, cap; } Slice_GoOpaque_ini_FilePtrPtr;
@@ -1643,10 +1647,6 @@ typedef struct { GoOpaque /* ini.Section */* *p; int len, cap; } Slice_GoOpaque_
 #ifndef CVF_DEF_Slice_GoOpaque_invalidtypePtr
 #define CVF_DEF_Slice_GoOpaque_invalidtypePtr
 typedef struct { GoOpaque /* invalid type */ *p; int len, cap; } Slice_GoOpaque_invalidtypePtr;
-#endif
-#ifndef CVF_DEF_Slice_GoOpaque_net_InterfacePtr
-#define CVF_DEF_Slice_GoOpaque_net_InterfacePtr
-typedef struct { GoOpaque /* net.Interface */ *p; int len, cap; } Slice_GoOpaque_net_InterfacePtr;
 #endif
 #ifndef CVF_DEF_Slice_GoOpaque_os_FilePtrPtr
 #define CVF_DEF_Slice_GoOpaque_os_FilePtrPtr
@@ -4374,7 +4374,7 @@ struct raster_GammaCorrectionPainter { raster_Painter Painter; Arr256_u16 a; boo
 struct raster_MonochromePainter { raster_Painter Painter; int y; int x0; int x1; };
 struct raster_RGBAPainter { GoImageRGBA* Image; int Op; u32 cr; u32 cg; u32 cb; u32 ca; };
 struct raster_Rasterizer { bool UseNonZeroWinding; int Dx; int Dy; int width; int splitScale2; int splitScale3; fixed_Point26_6 a; int xi; int yi; int area; int cover; Slice_raster_cell cell; Slice_int cellIndex; Arr256_raster_cell cellBuf; Arr64_int cellIndexBuf; Arr64_raster_Span spanBuf; };
-struct rgbe_decoder { GoIface r; GoOpaque /* image.Config */ config; f64 exposure; rgbe_imageMode mode; };
+struct rgbe_decoder { GoIface r; GoImageConfig config; f64 exposure; rgbe_imageMode mode; };
 struct sdl_AudioSpec { i32 Freq; sdl_AudioFormat Format; u8 Channels; u8 Silence; u16 Samples; u16 _; u32 Size; sdl_AudioCallback Callback; void* UserData; };
 struct sdl_Color { u8 R; u8 G; u8 B; u8 A; };
 struct sdl_CommonEvent { sdl_EventType Type; u32 Timestamp; };
@@ -4642,6 +4642,10 @@ GO_SLICE_FUNCS(Slice_GoIface, GoIface)
 #define CVF_FN_Slice_GoIniLoadOptions
 GO_SLICE_FUNCS(Slice_GoIniLoadOptions, GoIniLoadOptions)
 #endif
+#ifndef CVF_FN_Slice_GoNetInterface
+#define CVF_FN_Slice_GoNetInterface
+GO_SLICE_FUNCS(Slice_GoNetInterface, GoNetInterface)
+#endif
 #ifndef CVF_FN_Slice_GoOpaque_ini_FilePtrPtr
 #define CVF_FN_Slice_GoOpaque_ini_FilePtrPtr
 GO_SLICE_FUNCS(Slice_GoOpaque_ini_FilePtrPtr, GoOpaque /* ini.File */*)
@@ -4657,10 +4661,6 @@ GO_SLICE_FUNCS(Slice_GoOpaque_ini_SectionPtrPtr, GoOpaque /* ini.Section */*)
 #ifndef CVF_FN_Slice_GoOpaque_invalidtypePtr
 #define CVF_FN_Slice_GoOpaque_invalidtypePtr
 GO_SLICE_FUNCS(Slice_GoOpaque_invalidtypePtr, GoOpaque /* invalid type */)
-#endif
-#ifndef CVF_FN_Slice_GoOpaque_net_InterfacePtr
-#define CVF_FN_Slice_GoOpaque_net_InterfacePtr
-GO_SLICE_FUNCS(Slice_GoOpaque_net_InterfacePtr, GoOpaque /* net.Interface */)
 #endif
 #ifndef CVF_FN_Slice_GoOpaque_os_FilePtrPtr
 #define CVF_FN_Slice_GoOpaque_os_FilePtrPtr
@@ -6231,6 +6231,14 @@ typedef struct { Fnt* r0; GoIface r1; } Ret_FntPtr__GoIface;
 #define CVF_RET_Ret_Font_GL33Ptr__GoIface
 typedef struct { Font_GL33* r0; GoIface r1; } Ret_Font_GL33Ptr__GoIface;
 #endif
+#ifndef CVF_RET_Ret_GoHttpRequestPtr__GoIface
+#define CVF_RET_Ret_GoHttpRequestPtr__GoIface
+typedef struct { GoHttpRequest* r0; GoIface r1; } Ret_GoHttpRequestPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_GoHttpResponsePtr__GoIface
+#define CVF_RET_Ret_GoHttpResponsePtr__GoIface
+typedef struct { GoHttpResponse* r0; GoIface r1; } Ret_GoHttpResponsePtr__GoIface;
+#endif
 #ifndef CVF_RET_Ret_GoIface__GoFunc
 #define CVF_RET_Ret_GoIface__GoFunc
 typedef struct { GoIface r0; GoFunc r1; } Ret_GoIface__GoFunc;
@@ -6247,17 +6255,9 @@ typedef struct { GoIface r0; GoString r1; GoIface r2; } Ret_GoIface__GoString__G
 #define CVF_RET_Ret_GoIface__bool__GoIface
 typedef struct { GoIface r0; bool r1; GoIface r2; } Ret_GoIface__bool__GoIface;
 #endif
-#ifndef CVF_RET_Ret_GoOpaque_http_RequestPtrPtr__GoIface
-#define CVF_RET_Ret_GoOpaque_http_RequestPtrPtr__GoIface
-typedef struct { GoOpaque /* http.Request */* r0; GoIface r1; } Ret_GoOpaque_http_RequestPtrPtr__GoIface;
-#endif
-#ifndef CVF_RET_Ret_GoOpaque_http_ResponsePtrPtr__GoIface
-#define CVF_RET_Ret_GoOpaque_http_ResponsePtrPtr__GoIface
-typedef struct { GoOpaque /* http.Response */* r0; GoIface r1; } Ret_GoOpaque_http_ResponsePtrPtr__GoIface;
-#endif
-#ifndef CVF_RET_Ret_GoOpaque_image_ConfigPtr__GoIface
-#define CVF_RET_Ret_GoOpaque_image_ConfigPtr__GoIface
-typedef struct { GoOpaque /* image.Config */ r0; GoIface r1; } Ret_GoOpaque_image_ConfigPtr__GoIface;
+#ifndef CVF_RET_Ret_GoImageConfig__GoIface
+#define CVF_RET_Ret_GoImageConfig__GoIface
+typedef struct { GoImageConfig r0; GoIface r1; } Ret_GoImageConfig__GoIface;
 #endif
 #ifndef CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoIface
 #define CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoIface
@@ -6302,10 +6302,6 @@ typedef struct { GoOpaque /* reflect.Value */ r0; bool r1; } Ret_GoOpaque_reflec
 #ifndef CVF_RET_Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface
 #define CVF_RET_Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface
 typedef struct { GoOpaque /* regexp.Regexp */* r0; GoIface r1; } Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface;
-#endif
-#ifndef CVF_RET_Ret_GoOpaque_url_URLPtrPtr__GoIface
-#define CVF_RET_Ret_GoOpaque_url_URLPtrPtr__GoIface
-typedef struct { GoOpaque /* url.URL */* r0; GoIface r1; } Ret_GoOpaque_url_URLPtrPtr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_GoOpaque_user_UserPtrPtr__GoIface
 #define CVF_RET_Ret_GoOpaque_user_UserPtrPtr__GoIface
@@ -6354,6 +6350,10 @@ typedef struct { GoString r0; int r1; int r2; int r3; int r4; int r5; f32 r6; in
 #ifndef CVF_RET_Ret_GoString__lua_LValue
 #define CVF_RET_Ret_GoString__lua_LValue
 typedef struct { GoString r0; lua_LValue r1; } Ret_GoString__lua_LValue;
+#endif
+#ifndef CVF_RET_Ret_GoUrlURLPtr__GoIface
+#define CVF_RET_Ret_GoUrlURLPtr__GoIface
+typedef struct { GoUrlURL* r0; GoIface r1; } Ret_GoUrlURLPtr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_GoZipReadCloserPtr__GoIface
 #define CVF_RET_Ret_GoZipReadCloserPtr__GoIface
@@ -6431,9 +6431,9 @@ typedef struct { Slice_BytecodeExp r0; GoIface r1; } Ret_Slice_BytecodeExp__GoIf
 #define CVF_RET_Ret_Slice_GoIface__GoIface
 typedef struct { Slice_GoIface r0; GoIface r1; } Ret_Slice_GoIface__GoIface;
 #endif
-#ifndef CVF_RET_Ret_Slice_GoOpaque_net_InterfacePtr__GoIface
-#define CVF_RET_Ret_Slice_GoOpaque_net_InterfacePtr__GoIface
-typedef struct { Slice_GoOpaque_net_InterfacePtr r0; GoIface r1; } Ret_Slice_GoOpaque_net_InterfacePtr__GoIface;
+#ifndef CVF_RET_Ret_Slice_GoNetInterface__GoIface
+#define CVF_RET_Ret_Slice_GoNetInterface__GoIface
+typedef struct { Slice_GoNetInterface r0; GoIface r1; } Ret_Slice_GoNetInterface__GoIface;
 #endif
 #ifndef CVF_RET_Ret_Slice_GoString__GoIface
 #define CVF_RET_Ret_Slice_GoString__GoIface
@@ -7279,11 +7279,12 @@ GoString ini_Key_Value(GoOpaque /* ini.Key */* recv); // func (*ini.Key).Value()
 GoString ini_Section_Name(GoOpaque /* ini.Section */* recv); // func (*ini.Section).Name() string
 GoString json_Number_String(GoString recv); // func (json.Number).String() string
 GoString net_IPMask_String(Slice_u8 recv); // func (net.IPMask).String() string
-GoString net_IPNet_String(GoOpaque /* net.IPNet */* recv); // func (*net.IPNet).String() string
+GoString net_IPNet_String(GoNetIPNet* recv); // func (*net.IPNet).String() string
 GoString net_IP_String(Slice_u8 recv); // func (net.IP).String() string
 GoString net_JoinHostPort(GoString a0, GoString a1); // func net.JoinHostPort(host string, port string) string
-GoString net_TCPAddr_String(GoOpaque /* net.TCPAddr */* recv); // func (*net.TCPAddr).String() string
-GoString net_UDPAddr_String(GoOpaque /* net.UDPAddr */* recv); // func (*net.UDPAddr).String() string
+GoString net_OpError_Error(GoOpaque /* net.OpError */* recv); // func (*net.OpError).Error() string
+GoString net_TCPAddr_String(GoNetTCPAddr* recv); // func (*net.TCPAddr).String() string
+GoString net_UDPAddr_String(GoNetUDPAddr* recv); // func (*net.UDPAddr).String() string
 GoString os_File_Name(GoOpaque /* os.File */* recv); // func (*os.File).Name() string
 GoString os_Getenv(GoString a0); // func os.Getenv(key string) string
 GoString os_ProcessState_String(GoOpaque /* os.ProcessState */* recv); // func (*os.ProcessState).String() string
@@ -7324,13 +7325,17 @@ GoString time_Duration_String(i64 recv); // func (time.Duration).String() string
 GoString time_Location_String(GoOpaque /* time.Location */* recv); // func (*time.Location).String() string
 GoString time_Time_Format(GoOpaque /* time.Time */ recv, GoString a0); // func (time.Time).Format(layout string) string
 GoString time_Time_String(GoOpaque /* time.Time */ recv); // func (time.Time).String() string
-GoString url_URL_Hostname(GoOpaque /* url.URL */* recv); // func (*url.URL).Hostname() string
-GoString url_URL_String(GoOpaque /* url.URL */* recv); // func (*url.URL).String() string
+GoString url_URL_Hostname(GoUrlURL* recv); // func (*url.URL).Hostname() string
+GoString url_URL_String(GoUrlURL* recv); // func (*url.URL).String() string
+Ret_GoHttpRequestPtr__GoIface http_NewRequest(GoString a0, GoString a1, GoIface a2); // func http.NewRequest(method string, url string, body io.Reader) (*http.Request, error)
+Ret_GoHttpResponsePtr__GoIface http_Client_Do(GoHttpClient* recv, GoHttpRequest* a0); // func (*http.Client).Do(req *http.Request) (*http.Response, error)
+Ret_GoHttpResponsePtr__GoIface http_Client_Get(GoHttpClient* recv, GoString a0); // func (*http.Client).Get(url string) (resp *http.Response, err error)
+Ret_GoHttpResponsePtr__GoIface http_Client_Post(GoHttpClient* recv, GoString a0, GoString a1, GoIface a2); // func (*http.Client).Post(url string, contentType string, body io.Reader) (resp *http.Response, err error)
 Ret_GoIface__GoFunc context_WithCancel(GoIface a0); // func context.WithCancel(parent context.Context) (ctx context.Context, cancel context.CancelFunc)
 Ret_GoIface__GoIface exec_Cmd_StdinPipe(GoOpaque /* exec.Cmd */* recv); // func (*exec.Cmd).StdinPipe() (io.WriteCloser, error)
 Ret_GoIface__GoIface exec_Cmd_StdoutPipe(GoOpaque /* exec.Cmd */* recv); // func (*exec.Cmd).StdoutPipe() (io.ReadCloser, error)
 Ret_GoIface__GoIface net_Dial(GoString a0, GoString a1); // func net.Dial(network string, address string) (net.Conn, error)
-Ret_GoIface__GoIface net_Dialer_Dial(GoOpaque /* net.Dialer */* recv, GoString a0, GoString a1); // func (*net.Dialer).Dial(network string, address string) (net.Conn, error)
+Ret_GoIface__GoIface net_Dialer_Dial(GoNetDialer* recv, GoString a0, GoString a1); // func (*net.Dialer).Dial(network string, address string) (net.Conn, error)
 Ret_GoIface__GoIface net_Listen(GoString a0, GoString a1); // func net.Listen(network string, address string) (net.Listener, error)
 Ret_GoIface__GoIface net_ListenPacket(GoString a0, GoString a1); // func net.ListenPacket(network string, address string) (net.PacketConn, error)
 Ret_GoIface__GoIface os_Stat(GoString a0); // func os.Stat(name string) (os.FileInfo, error)
@@ -7338,10 +7343,6 @@ Ret_GoIface__GoIface png_Decode(GoIface a0); // func png.Decode(r io.Reader) (im
 Ret_GoIface__GoIface xml_Decoder_Token(GoOpaque /* xml.Decoder */* recv); // func (*xml.Decoder).Token() (xml.Token, error)
 Ret_GoIface__GoIface zip_File_Open(GoZipFile* recv); // func (*zip.File).Open() (io.ReadCloser, error)
 Ret_GoIface__GoString__GoIface image_Decode(GoIface a0); // func image.Decode(r io.Reader) (image.Image, string, error)
-Ret_GoOpaque_http_RequestPtrPtr__GoIface http_NewRequest(GoString a0, GoString a1, GoIface a2); // func http.NewRequest(method string, url string, body io.Reader) (*http.Request, error)
-Ret_GoOpaque_http_ResponsePtrPtr__GoIface http_Client_Do(GoOpaque /* http.Client */* recv, GoOpaque /* http.Request */* a0); // func (*http.Client).Do(req *http.Request) (*http.Response, error)
-Ret_GoOpaque_http_ResponsePtrPtr__GoIface http_Client_Get(GoOpaque /* http.Client */* recv, GoString a0); // func (*http.Client).Get(url string) (resp *http.Response, err error)
-Ret_GoOpaque_http_ResponsePtrPtr__GoIface http_Client_Post(GoOpaque /* http.Client */* recv, GoString a0, GoString a1, GoIface a2); // func (*http.Client).Post(url string, contentType string, body io.Reader) (resp *http.Response, err error)
 Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_Load(GoIface a0, Slice_GoIface a1); // func ini.Load(source interface{}, others ...interface{}) (*ini.File, error)
 Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_LoadSources(GoIniLoadOptions a0, GoIface a1, Slice_GoIface a2); // func ini.LoadSources(opts ini.LoadOptions, source interface{}, others ...interface{}) (_ *ini.File, err error)
 Ret_GoOpaque_ini_KeyPtrPtr__GoIface ini_Section_GetKey(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).GetKey(name string) (*ini.Key, error)
@@ -7357,8 +7358,6 @@ Ret_GoOpaque_os_ProcessPtrPtr__GoIface os_StartProcess(GoString a0, Slice_GoStri
 Ret_GoOpaque_os_ProcessStatePtrPtr__GoIface os_Process_Wait(GoOpaque /* os.Process */* recv); // func (*os.Process).Wait() (*os.ProcessState, error)
 Ret_GoOpaque_reflect_ValuePtr__bool reflect_Value_Recv(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Recv() (x reflect.Value, ok bool)
 Ret_GoOpaque_regexp_RegexpPtrPtr__GoIface regexp_Compile(GoString a0); // func regexp.Compile(expr string) (*regexp.Regexp, error)
-Ret_GoOpaque_url_URLPtrPtr__GoIface url_Parse(GoString a0); // func url.Parse(rawURL string) (*url.URL, error)
-Ret_GoOpaque_url_URLPtrPtr__GoIface url_URL_Parse(GoOpaque /* url.URL */* recv, GoString a0); // func (*url.URL).Parse(ref string) (*url.URL, error)
 Ret_GoOpaque_user_UserPtrPtr__GoIface user_Current(void); // func user.Current() (*user.User, error)
 Ret_GoString__GoIface filepath_Abs(GoString a0); // func filepath.Abs(path string) (string, error)
 Ret_GoString__GoIface os_Executable(void); // func os.Executable() (string, error)
@@ -7366,9 +7365,11 @@ Ret_GoString__GoIface sdl_GetClipboardText(void); // func sdl.GetClipboardText()
 Ret_GoString__GoIface strconv_Unquote(GoString a0); // func strconv.Unquote(s string) (string, error)
 Ret_GoString__GoIface url_PathUnescape(GoString a0); // func url.PathUnescape(s string) (string, error)
 Ret_GoString__GoString__bool strings_Cut(GoString a0, GoString a1); // func strings.Cut(s string, sep string) (before string, after string, found bool)
+Ret_GoUrlURLPtr__GoIface url_Parse(GoString a0); // func url.Parse(rawURL string) (*url.URL, error)
+Ret_GoUrlURLPtr__GoIface url_URL_Parse(GoUrlURL* recv, GoString a0); // func (*url.URL).Parse(ref string) (*url.URL, error)
 Ret_GoZipReadCloserPtr__GoIface zip_OpenReader(GoString a0); // func zip.OpenReader(name string) (*zip.ReadCloser, error)
-Ret_Slice_GoIface__GoIface net_Interface_Addrs(GoOpaque /* net.Interface */* recv); // func (*net.Interface).Addrs() ([]net.Addr, error)
-Ret_Slice_GoOpaque_net_InterfacePtr__GoIface net_Interfaces(void); // func net.Interfaces() ([]net.Interface, error)
+Ret_Slice_GoIface__GoIface net_Interface_Addrs(GoNetInterface* recv); // func (*net.Interface).Addrs() ([]net.Addr, error)
+Ret_Slice_GoNetInterface__GoIface net_Interfaces(void); // func net.Interfaces() ([]net.Interface, error)
 Ret_Slice_GoString__GoIface filepath_Glob(GoString a0); // func filepath.Glob(pattern string) (matches []string, err error)
 Ret_Slice_u8__GoIface base64_Encoding_DecodeString(GoOpaque /* base64.Encoding */* recv, GoString a0); // func (*base64.Encoding).DecodeString(s string) ([]byte, error)
 Ret_Slice_u8__GoIface bufio_Reader_Peek(GoOpaque /* bufio.Reader */* recv, int a0); // func (*bufio.Reader).Peek(n int) ([]byte, error)
@@ -7417,6 +7418,7 @@ Ret_int__GoIface io_ReadAtLeast(GoIface a0, Slice_u8 a1, int a2); // func io.Rea
 Ret_int__GoIface io_ReadFull(GoIface a0, Slice_u8 a1); // func io.ReadFull(r io.Reader, buf []byte) (n int, err error)
 Ret_int__GoIface net_TCPConn_Read(GoOpaque /* net.TCPConn */* recv, Slice_u8 a0); // promoted func (*net.conn).Read(b []byte) (int, error)
 Ret_int__GoIface net_TCPConn_Write(GoOpaque /* net.TCPConn */* recv, Slice_u8 a0); // promoted func (*net.conn).Write(b []byte) (int, error)
+Ret_int__GoIface net_UDPConn_WriteTo(GoOpaque /* net.UDPConn */* recv, Slice_u8 a0, GoIface a1); // func (*net.UDPConn).WriteTo(b []byte, addr net.Addr) (int, error)
 Ret_int__GoIface net_conn_Read(GoOpaque /* net.conn */* recv, Slice_u8 a0); // func (*net.conn).Read(b []byte) (int, error)
 Ret_int__GoIface net_conn_Write(GoOpaque /* net.conn */* recv, Slice_u8 a0); // func (*net.conn).Write(b []byte) (int, error)
 Ret_int__GoIface net_netFD_Read(GoOpaque /* net.netFD */* recv, Slice_u8 a0); // func (*net.netFD).Read(p []byte) (n int, err error)
@@ -7431,6 +7433,7 @@ Ret_int__GoIface strings_Builder_WriteRune(GoOpaque /* strings.Builder */* recv,
 Ret_int__GoIface strings_Builder_WriteString(GoOpaque /* strings.Builder */* recv, GoString a0); // func (*strings.Builder).WriteString(s string) (int, error)
 Ret_int__GoIface strings_Reader_Read(GoOpaque /* strings.Reader */* recv, Slice_u8 a0); // func (*strings.Reader).Read(b []byte) (n int, err error)
 Ret_int__GoIface tabwriter_Writer_Write(GoOpaque /* tabwriter.Writer */* recv, Slice_u8 a0); // func (*tabwriter.Writer).Write(buf []byte) (n int, err error)
+Ret_int__GoIface__GoIface net_UDPConn_ReadFrom(GoOpaque /* net.UDPConn */* recv, Slice_u8 a0); // func (*net.UDPConn).ReadFrom(b []byte) (int, net.Addr, error)
 Ret_int__GoOpaque_reflect_ValuePtr__bool reflect_Select(Slice_GoOpaque_reflect_SelectCasePtr a0); // func reflect.Select(cases []reflect.SelectCase) (chosen int, recv reflect.Value, recvOK bool)
 Ret_sdl_AudioDeviceID__GoIface sdl_OpenAudioDevice(GoString a0, bool a1, sdl_AudioSpec* a2, sdl_AudioSpec* a3, sdl_AudioDeviceAllowFlags a4); // func sdl.OpenAudioDevice(device string, isCapture bool, desired *sdl.AudioSpec, obtained *sdl.AudioSpec, allowedChanges sdl.AudioDeviceAllowFlags) (sdl.AudioDeviceID, error)
 Ret_sdl_DisplayMode__GoIface sdl_GetDesktopDisplayMode(int a0); // func sdl.GetDesktopDisplayMode(displayIndex int) (mode sdl.DisplayMode, err error)
@@ -7465,6 +7468,7 @@ Slice_u8 bytes_Buffer_Bytes(GoOpaque /* bytes.Buffer */* recv); // func (*bytes.
 Slice_u8 bytes_TrimSpace(Slice_u8 a0); // func bytes.TrimSpace(s []byte) []byte
 Slice_u8 debug_Stack(void); // func debug.Stack() []byte
 Slice_u8 net_IP_To4(Slice_u8 recv); // func (net.IP).To4() net.IP
+Slice_u8 net_IPv4(u8 a0, u8 a1, u8 a2, u8 a3); // func net.IPv4(a byte, b byte, c byte, d byte) net.IP
 Slice_u8 net_ParseIP(GoString a0); // func net.ParseIP(s string) net.IP
 Slice_u8 sdl_Surface_Pixels(sdl_Surface* recv); // func (*sdl.Surface).Pixels() []byte
 Slice_u8 strconv_AppendInt(Slice_u8 a0, i64 a1, int a2); // func strconv.AppendInt(dst []byte, i int64, base int) []byte
@@ -7483,6 +7487,7 @@ bool ini_Section_HasKey(GoOpaque /* ini.Section */* recv, GoString a0); // func 
 bool net_IP_Equal(Slice_u8 recv, Slice_u8 a0); // func (net.IP).Equal(x net.IP) bool
 bool net_IP_IsLinkLocalUnicast(Slice_u8 recv); // func (net.IP).IsLinkLocalUnicast() bool
 bool net_IP_IsLoopback(Slice_u8 recv); // func (net.IP).IsLoopback() bool
+bool net_OpError_Timeout(GoOpaque /* net.OpError */* recv); // func (*net.OpError).Timeout() bool
 bool os_IsNotExist(GoIface a0); // func os.IsNotExist(err error) bool
 bool os_ProcessState_Success(GoOpaque /* os.ProcessState */* recv); // func (*os.ProcessState).Success() bool
 bool reflect_DeepEqual(GoIface a0, GoIface a1); // func reflect.DeepEqual(x any, y any) bool
@@ -8000,10 +8005,12 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_ini_Section 1313
 #define GO_TID_P_io_LimitedReader 190
 #define GO_TID_P_net_IPNet 467
+#define GO_TID_P_net_OpError 2036
 #define GO_TID_P_net_TCPAddr 504
 #define GO_TID_P_net_TCPConn 505
 #define GO_TID_P_net_TCPListener 503
 #define GO_TID_P_net_UDPAddr 153
+#define GO_TID_P_net_UDPConn 2035
 #define GO_TID_P_net_netFD 1672
 #define GO_TID_P_os_File 146
 #define GO_TID_P_os_Process 1077
@@ -8157,7 +8164,7 @@ static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
     switch (t) { case 101: case 123: case 473: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 108: case 126: case 128: case 130: case 136: case 146: case 151: case 304: case 305: case 503: case 505: case 516: case 645: case 1275: case 1672: return true; default: return false; }
+    switch (t) { case 108: case 126: case 128: case 130: case 136: case 146: case 151: case 304: case 305: case 503: case 505: case 516: case 645: case 1275: case 1672: case 2035: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
     switch (t) { case 146: case 155: case 169: case 211: case 304: case 305: case 734: return true; default: return false; }
@@ -8172,10 +8179,10 @@ static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.L
     switch (t) { case 204: case 205: case 206: case 207: case 208: case 209: case 212: case 213: case 253: case 273: case 527: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 109: case 111: case 120: case 148: case 161: case 166: case 187: case 188: case 189: case 200: case 210: case 215: case 251: case 254: case 260: case 275: case 281: case 873: return true; default: return false; }
+    switch (t) { case 109: case 111: case 120: case 148: case 161: case 166: case 187: case 188: case 189: case 200: case 210: case 215: case 251: case 254: case 260: case 275: case 281: case 873: case 2036: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
-    switch (t) { default: return false; }
+    switch (t) { case 2036: return true; default: return false; }
 }
 Ret_GoString__GoIface findfont_Find(GoString fileName);
 bool findfont_isFontFile(GoString fileName);
@@ -8787,7 +8794,7 @@ Ret_u32__Slice_u8 dds_readDWORD(Slice_u8 buf);
 u32 dds_readBits(Slice_u8 buf, u32 n);
 uintptr_t dds_lowestSetBit(u32 n);
 void dds_init_7(void);
-Ret_GoOpaque_image_ConfigPtr__GoIface dds_DecodeConfig(GoIface r);
+Ret_GoImageConfig__GoIface dds_DecodeConfig(GoIface r);
 GoImageRect dds_img_Bounds(dds_img* i);
 GoIface dds_img_At(dds_img* i, int x, int y);
 Ret_GoIface__GoIface dds_Decode(GoIface r);
@@ -8798,7 +8805,7 @@ GoIface rgbe_decoder_appendHeaderAttributes(rgbe_decoder* d, GoString token);
 void rgbe_decoder_decode(rgbe_decoder* d, GoIface dst, int y, Slice_u8 scanline);
 void rgbe_decoder_decodeRLE(rgbe_decoder* d, GoIface dst, int y, Slice_u8 scanline);
 GoIface rgbe_decoder_readRLE(rgbe_decoder* d, Slice_u8 scanline);
-Ret_GoOpaque_image_ConfigPtr__GoIface rgbe_DecodeConfig(GoIface r);
+Ret_GoImageConfig__GoIface rgbe_DecodeConfig(GoIface r);
 Ret_GoIface__GoIface rgbe_Decode(GoIface r);
 void rgbe_init_8(void);
 Ret_GoString__GoIface rgbe_readUntil(GoIface r, u8 delimiter);

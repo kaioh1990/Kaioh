@@ -208,11 +208,6 @@ void sync_Cond_Wait(GoOpaque *c) {  // the Locker is a no-op on one thread
 
 // ---------------------------------------------------------------- time
 f64 time_Duration_Seconds(i64 d) { return (f64)(d / 1000000000) + (f64)(d % 1000000000) / 1e9; }
-bool time_Time_IsZero(GoOpaque t) {
-    for (size_t i = 0; i < sizeof t; i++)
-        if (t._opaque[i]) return false;
-    return true;
-}
 typedef struct AfterEnv {
     GoChan *c;
     i64 d;
@@ -220,7 +215,7 @@ typedef struct AfterEnv {
 static void after_fire(void *e) {
     AfterEnv *a = (AfterEnv *)e;
     go_sleep_ns(a->d);
-    GoOpaque now = {{0}};
+    GoOpaque now = time_Now();
     go_chan_send(a->c, &now);
 }
 GoChan *time_After(i64 d) {

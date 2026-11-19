@@ -41,7 +41,18 @@ typedef struct RtFile {
     FILE *f;
     GoString name;
     bool notexist;
+    // in-memory file (f == NULL): HTTP response bodies (ik_http.c)
+    const u8 *mem;
+    int mem_len, mem_off;
 } RtFile;
+
+// an *os.File reading from memory: an io.ReadCloser the runtime can make
+GoIface rt_mem_file(const u8 *p, int n) {
+    RtFile *f = (RtFile *)gc_calloc(1, sizeof *f);
+    f->mem = p, f->mem_len = n;
+    f->name = GOSTR("<body>");
+    return (GoIface){GO_TID_P_os_File, f};
+}
 
 // Errors from os.Open keep "not exist" detectable by os.IsNotExist.
 typedef struct RtPathErr {
@@ -90,6 +101,14 @@ Ret_int__GoIface os_File_Read(GoOpaque *recv, Slice_u8 b) {
     RtFile *f = (RtFile *)recv;
     Ret_int__GoIface r = {0};
     if (b.len == 0) return r;
+    if (!f->f) {
+        int n = f->mem_len - f->mem_off;
+        if (n > b.len) n = b.len;
+        if (n <= 0) return (Ret_int__GoIface){0, io_EOF};
+        memcpy(b.p, f->mem + f->mem_off, (size_t)n);
+        f->mem_off += n;
+        return (Ret_int__GoIface){n, {0}};
+    }
     size_t n = fread(b.p, 1, (size_t)b.len, f->f);
     r.r0 = (int)n;
     if (n == 0) r.r1 = io_EOF;
@@ -450,28 +469,6 @@ GoIface gob_Encoder_Encode(GoOpaque *recv, GoIface a0) {
     (void)recv, (void)a0;
     return go_error(GOSTR("gob: not supported"));
 }
-// net: online play is implemented natively elsewhere (not by translation).
-GoIface net_conn_LocalAddr(GoOpaque *recv) {
-    (void)recv;
-    return (GoIface){0};
-}
-GoIface net_conn_RemoteAddr(GoOpaque *recv) {
-    (void)recv;
-    return (GoIface){0};
-}
-GoString net_IP_String(Slice_u8 recv) {
-    (void)recv;
-    return GOSTR("");
-}
-GoString net_JoinHostPort(GoString h, GoString p) { return go_strcat(go_strcat(h, GOSTR(":")), p); }
-GoString net_TCPAddr_String(GoOpaque *recv) {
-    (void)recv;
-    return GOSTR("");
-}
-Slice_u8 net_IP_To4(Slice_u8 recv) { return recv; }
-bool net_IP_Equal(Slice_u8 a, Slice_u8 b) { return a.len == b.len && (a.len == 0 || memcmp(a.p, b.p, (size_t)a.len) == 0); }
-bool net_IP_IsLoopback(Slice_u8 recv) { return recv.len >= 1 && recv.p[recv.len == 16 ? 12 : 0] == 127; }
-
 // ---------------------------------------------------------------- bufio
 // bufio.Writer over an io.Writer that is an *os.File (the state dump).
 typedef struct RtBufWriter {
@@ -717,7 +714,6 @@ GoIface os_Remove(GoString name) {
     return remove(go_strz(name)) == 0 ? (GoIface){0} : go_errorf("remove %.*s: failed", name.len, name.p);
 }
 // fmt.Stringer implementations of foreign types (only reached through %v)
-GoString time_Time_String(GoOpaque t) { (void)t; return GOSTR("0001-01-01 00:00:00 +0000 UTC"); }
 GoString time_Location_String(GoOpaque *l) { (void)l; return GOSTR("UTC"); }
 GoString time_Duration_String(i64 d) {
     char tmp[32];

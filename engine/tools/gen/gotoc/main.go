@@ -243,6 +243,7 @@ func main() {
 	}
 	sort.Slice(gvars, func(i, j int) bool { return gvars[i].Name() < gvars[j].Name() })
 	rtTables := emitRTypes(p)
+	registerRuntimeTypes(p)
 	dprotos, dbodies := emitDispatchers(p)
 	translateInstances() // methods of generic types reached through interfaces
 	binAny := binreadAny()

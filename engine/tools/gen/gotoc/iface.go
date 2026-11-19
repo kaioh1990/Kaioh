@@ -503,3 +503,38 @@ var stdIfaceAlias = map[string]string{
 	"Less(int,int)(bool)":      "ik_sort_Less",
 	"Swap(int,int)()":          "ik_sort_Swap",
 }
+
+
+// Standard-library types the C runtime itself puts into interface values
+// (net.Dial and net.ListenPacket return *net.TCPConn / *net.UDPConn): they
+// need type ids and dispatch cases even though no translated code boxes them.
+var runtimeTypes = []string{"net.UDPConn", "net.TCPConn", "net.UDPAddr", "net.TCPAddr", "net.OpError"}
+
+func registerRuntimeTypes(p *Prog) {
+	seen := map[*types.Package]bool{}
+	var visit func(pk *types.Package)
+	byPath := map[string]*types.Package{}
+	visit = func(pk *types.Package) {
+		if pk == nil || seen[pk] {
+			return
+		}
+		seen[pk] = true
+		byPath[pk.Path()] = pk
+		for _, im := range pk.Imports() {
+			visit(im)
+		}
+	}
+	for _, pk := range p.pkgOrder {
+		visit(pk)
+	}
+	for _, n := range runtimeTypes {
+		i := strings.LastIndex(n, ".")
+		pk := byPath[n[:i]]
+		if pk == nil {
+			continue
+		}
+		if tn, ok := pk.Scope().Lookup(n[i+1:]).(*types.TypeName); ok {
+			typeID(types.NewPointer(tn.Type()))
+		}
+	}
+}
