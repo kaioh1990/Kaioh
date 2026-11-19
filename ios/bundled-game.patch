@@ -1076,7 +1076,7 @@ index 84a9608..991d913 100644
      
      // Evaluate active touch locations across the view
 diff --git a/I.K.E.M.E.N-Go/ViewController.m b/I.K.E.M.E.N-Go/ViewController.m
-index e850d21..4b10b3f 100644
+index e850d21..a332b5f 100644
 --- a/I.K.E.M.E.N-Go/ViewController.m
 +++ b/I.K.E.M.E.N-Go/ViewController.m
 @@ -5,6 +5,10 @@
@@ -1290,7 +1290,23 @@ index e850d21..4b10b3f 100644
              free(argv[i]);
          }
          free(argv);
-@@ -423,8 +566,14 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -413,9 +556,13 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+         return;
+     }
+ 
+-    // Now start our SDL code
++    // Now start our SDL code. The engine never returns while the game runs, so it must not
++    // run inside a main-queue block: that would starve every other main-queue block and
++    // callback (CoreBluetooth, which vInputKit uses for the Steam Controller, delivers there).
++    // A delayed perform is a run loop timer, like SDL's own UIKit startup, so the main queue
++    // keeps draining whenever the engine pumps the run loop.
+     self.ikemenStarted = YES;
+-    dispatch_async(dispatch_get_main_queue(), ^{
++    [self performSelector:@selector(cvfRunBlock:) withObject:[^{
+         SDL_SetMainReady();
+         
+         NSString *dbPath = [[NSURL fileURLWithPath:@"external/gamecontrollerdb.txt" relativeToURL:self.assetsFolderURL] path];
+@@ -423,8 +570,14 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
              SDL_SetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE, [dbPath UTF8String]);
          }
  
@@ -1305,7 +1321,7 @@ index e850d21..4b10b3f 100644
          
          // Keep background events allowed
          SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
-@@ -434,13 +583,13 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+@@ -434,17 +587,21 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
  
          // Start SDL_main
          self.overlayView.sdlWasInit = YES;
@@ -1321,7 +1337,16 @@ index e850d21..4b10b3f 100644
              free(argv[i]);
          }
          free(argv);
-@@ -772,6 +921,9 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
+-    });
++    } copy] afterDelay:0];
++}
++
++- (void)cvfRunBlock:(dispatch_block_t)block {
++    block();
+ }
+ 
+ 
+@@ -772,6 +929,9 @@ static NSString * const RestartFolderPickKey = @"ShouldDisplayRestartFolderPicke
  }
  
  - (void)touchOverlayDidTapGameFolder:(TouchOverlayView*)view {
