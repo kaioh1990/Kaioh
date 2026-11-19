@@ -7416,6 +7416,7 @@ Ret_int__GoIface fmt_Println(Slice_GoIface a0); // func fmt.Println(a ...any) (n
 Ret_int__GoIface fmt_Scanln(Slice_GoIface a0); // func fmt.Scanln(a ...any) (n int, err error)
 Ret_int__GoIface fmt_Sscan(GoString a0, Slice_GoIface a1); // func fmt.Sscan(str string, a ...any) (n int, err error)
 Ret_int__GoIface fmt_Sscanf(GoString a0, GoString a1, Slice_GoIface a2); // func fmt.Sscanf(str string, format string, a ...any) (n int, err error)
+Ret_int__GoIface fnv_sum32a_Write(u32* recv, Slice_u8 a0); // func (*fnv.sum32a).Write(data []byte) (int, error)
 Ret_int__GoIface io_LimitedReader_Read(GoIoLimitedReader* recv, Slice_u8 a0); // func (*io.LimitedReader).Read(p []byte) (n int, err error)
 Ret_int__GoIface io_ReadAtLeast(GoIface a0, Slice_u8 a1, int a2); // func io.ReadAtLeast(r io.Reader, buf []byte, min int) (n int, err error)
 Ret_int__GoIface io_ReadFull(GoIface a0, Slice_u8 a1); // func io.ReadFull(r io.Reader, buf []byte) (n int, err error)
@@ -7470,6 +7471,7 @@ Slice_u8 binary_bigEndian_AppendUint32(GoOpaque /* binary.bigEndian */ recv, Sli
 Slice_u8 bytes_Buffer_Bytes(GoOpaque /* bytes.Buffer */* recv); // func (*bytes.Buffer).Bytes() []byte
 Slice_u8 bytes_TrimSpace(Slice_u8 a0); // func bytes.TrimSpace(s []byte) []byte
 Slice_u8 debug_Stack(void); // func debug.Stack() []byte
+Slice_u8 fnv_sum32a_Sum(u32* recv, Slice_u8 a0); // func (*fnv.sum32a).Sum(in []byte) []byte
 Slice_u8 net_IP_To4(Slice_u8 recv); // func (net.IP).To4() net.IP
 Slice_u8 net_IPv4(u8 a0, u8 a1, u8 a2, u8 a3); // func net.IPv4(a byte, b byte, c byte, d byte) net.IP
 Slice_u8 net_ParseIP(GoString a0); // func net.ParseIP(s string) net.IP
@@ -7596,6 +7598,7 @@ u32 binary_bigEndian_Uint32(GoOpaque /* binary.bigEndian */ recv, Slice_u8 a0); 
 u32 binary_littleEndian_Uint32(GoOpaque /* binary.littleEndian */ recv, Slice_u8 a0); // func (binary.littleEndian).Uint32(b []byte) uint32
 u32 bits_Reverse32(u32 a0); // func bits.Reverse32(x uint32) uint32
 u32 crc32_ChecksumIEEE(Slice_u8 a0); // func crc32.ChecksumIEEE(data []byte) uint32
+u32 fnv_sum32a_Sum32(u32* recv); // func (*fnv.sum32a).Sum32() uint32
 u32 gl_CheckFramebufferStatus(u32 a0); // func gl.CheckFramebufferStatus(target uint32) uint32
 u32 gl_CreateProgram(void); // func gl.CreateProgram() uint32
 u32 gl_CreateShader(u32 a0); // func gl.CreateShader(xtype uint32) uint32
@@ -8000,6 +8003,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_context_cancelCtx 2037
 #define GO_TID_P_exec_Cmd 1067
 #define GO_TID_P_exec_ExitError 251
+#define GO_TID_P_fnv_sum32a 2038
 #define GO_TID_P_image_Alpha 105
 #define GO_TID_P_image_NRGBA 487
 #define GO_TID_P_image_Paletted 486

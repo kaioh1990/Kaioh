@@ -3,19 +3,14 @@
 #include <string.h>
 #include "ik/ik_sim.h"
 
-GoIface binary_Write(GoIface a0, GoIface a1, GoIface a2) { return go_errorf("binary_Write: not supported by the native engine yet"); } // func binary.Write(w io.Writer, order binary.ByteOrder, data any) error
 GoIface color_ModelFunc(GoFunc a0) { GoIface r; memset(&r, 0, sizeof r); return r; } // func color.ModelFunc(f func(color.Color) color.Color) color.Model
 GoIface exec_Cmd_Start(GoOpaque /* exec.Cmd */* recv) { return go_errorf("exec_Cmd_Start: not supported by the native engine yet"); } // func (*exec.Cmd).Start() error
 GoIface exec_Cmd_Wait(GoOpaque /* exec.Cmd */* recv) { return go_errorf("exec_Cmd_Wait: not supported by the native engine yet"); } // func (*exec.Cmd).Wait() error
 GoIface exec_ExitError_Sys(GoOpaque /* exec.ExitError */* recv) { GoIface r; memset(&r, 0, sizeof r); return r; } // promoted func (*os.ProcessState).Sys() any
-GoIface fnv_New32a(void) { GoIface r; memset(&r, 0, sizeof r); return r; } // func fnv.New32a() hash.Hash32
 GoIface io_TeeReader(GoIface a0, GoIface a1) { GoIface r; memset(&r, 0, sizeof r); return r; } // func io.TeeReader(r io.Reader, w io.Writer) io.Reader
 GoIface sdl_InitSubSystem(u32 a0) { return go_errorf("sdl_InitSubSystem: not supported by the native engine yet"); } // func sdl.InitSubSystem(flags uint32) error
 GoIface tabwriter_Writer_Flush(GoOpaque /* tabwriter.Writer */* recv) { return go_errorf("tabwriter_Writer_Flush: not supported by the native engine yet"); } // func (*tabwriter.Writer).Flush() error
-GoOpaque * dialog_Message(GoString a0, Slice_GoIface a1) { GoOpaque * r; memset(&r, 0, sizeof r); return r; } // func dialog.Message(format string, args ...interface{}) *dialog.MsgBuilder
-GoOpaque * dialog_MsgBuilder_Title(GoOpaque /* dialog.MsgBuilder */* recv, GoString a0) { GoOpaque * r; memset(&r, 0, sizeof r); return r; } // func (*dialog.MsgBuilder).Title(t string) *dialog.MsgBuilder
 GoOpaque * exec_Command(GoString a0, Slice_GoString a1) { GoOpaque * r; memset(&r, 0, sizeof r); return r; } // func exec.Command(name string, arg ...string) *exec.Cmd
-GoOpaque * ini_Empty(Slice_GoIniLoadOptions a0) { GoOpaque * r; memset(&r, 0, sizeof r); return r; } // func ini.Empty(opts ...ini.LoadOptions) *ini.File
 GoOpaque * tabwriter_NewWriter(GoIface a0, int a1, int a2, int a3, u8 a4, uintptr_t a5) { GoOpaque * r; memset(&r, 0, sizeof r); return r; } // func tabwriter.NewWriter(output io.Writer, minwidth int, tabwidth int, padding int, padchar byte, flags uint) *tabwriter.Writer
 GoString abi_Kind_String(u8 recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (abi.Kind).String() string
 GoString exec_Cmd_String(GoOpaque /* exec.Cmd */* recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (*exec.Cmd).String() string
@@ -24,7 +19,6 @@ GoString os_ProcessState_String(GoOpaque /* os.ProcessState */* recv) { GoString
 GoString syscall_Signal_String(int recv) { GoString r; memset(&r, 0, sizeof r); return r; } // func (syscall.Signal).String() string
 Ret_GoIface__GoIface exec_Cmd_StdinPipe(GoOpaque /* exec.Cmd */* recv) { Ret_GoIface__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("exec_Cmd_StdinPipe: not supported by the native engine yet"); return r; } // func (*exec.Cmd).StdinPipe() (io.WriteCloser, error)
 Ret_GoIface__GoIface exec_Cmd_StdoutPipe(GoOpaque /* exec.Cmd */* recv) { Ret_GoIface__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("exec_Cmd_StdoutPipe: not supported by the native engine yet"); return r; } // func (*exec.Cmd).StdoutPipe() (io.ReadCloser, error)
-Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_Load(GoIface a0, Slice_GoIface a1) { Ret_GoOpaque_ini_FilePtrPtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("ini_Load: not supported by the native engine yet"); return r; } // func ini.Load(source interface{}, others ...interface{}) (*ini.File, error)
 Ret_GoOpaque_os_FilePtrPtr__GoIface ioutil_TempFile(GoString a0, GoString a1) { Ret_GoOpaque_os_FilePtrPtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("ioutil_TempFile: not supported by the native engine yet"); return r; } // func ioutil.TempFile(dir string, pattern string) (f *os.File, err error)
 Ret_GoOpaque_os_ProcessPtrPtr__GoIface os_StartProcess(GoString a0, Slice_GoString a1, GoOpaque /* os.ProcAttr */* a2) { Ret_GoOpaque_os_ProcessPtrPtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("os_StartProcess: not supported by the native engine yet"); return r; } // func os.StartProcess(name string, argv []string, attr *os.ProcAttr) (*os.Process, error)
 Ret_GoOpaque_os_ProcessStatePtrPtr__GoIface os_Process_Wait(GoOpaque /* os.Process */* recv) { Ret_GoOpaque_os_ProcessStatePtrPtr__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("os_Process_Wait: not supported by the native engine yet"); return r; } // func (*os.Process).Wait() (*os.ProcessState, error)
@@ -33,15 +27,10 @@ Ret_Slice_u8__GoIface fs_ReadFile(GoIface a0, GoString a1) { Ret_Slice_u8__GoIfa
 Ret_int__GoIface fmt_Fscanf(GoIface a0, GoString a1, Slice_GoIface a2) { Ret_int__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("fmt_Fscanf: not supported by the native engine yet"); return r; } // func fmt.Fscanf(r io.Reader, format string, a ...any) (n int, err error)
 Ret_int__GoIface tabwriter_Writer_Write(GoOpaque /* tabwriter.Writer */* recv, Slice_u8 a0) { Ret_int__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("tabwriter_Writer_Write: not supported by the native engine yet"); return r; } // func (*tabwriter.Writer).Write(buf []byte) (n int, err error)
 Ret_u8__GoIface bytes_Reader_ReadByte(GoOpaque /* bytes.Reader */* recv) { Ret_u8__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("bytes_Reader_ReadByte: not supported by the native engine yet"); return r; } // func (*bytes.Reader).ReadByte() (byte, error)
-bool dialog_MsgBuilder_YesNo(GoOpaque /* dialog.MsgBuilder */* recv) { bool r; memset(&r, 0, sizeof r); return r; } // func (*dialog.MsgBuilder).YesNo() bool
-bool ini_Section_HasKey(GoOpaque /* ini.Section */* recv, GoString a0) { bool r; memset(&r, 0, sizeof r); return r; } // func (*ini.Section).HasKey(name string) bool
 bool os_ProcessState_Success(GoOpaque /* os.ProcessState */* recv) { bool r; memset(&r, 0, sizeof r); return r; } // func (*os.ProcessState).Success() bool
 int abi_Type_Len(GoOpaque /* abi.Type */* recv) { int r; memset(&r, 0, sizeof r); return r; } // func (*abi.Type).Len() int
-int binary_Size(GoIface a0) { int r; memset(&r, 0, sizeof r); return r; } // func binary.Size(v any) int
 int bufio_Reader_Buffered(GoOpaque /* bufio.Reader */* recv) { int r; memset(&r, 0, sizeof r); return r; } // func (*bufio.Reader).Buffered() int
 int runtime_Stack(Slice_u8 a0, bool a1) { int r; memset(&r, 0, sizeof r); return r; } // func runtime.Stack(buf []byte, all bool) int
 int syscall_WaitStatus_ExitStatus(u32 recv) { int r; memset(&r, 0, sizeof r); return r; } // func (syscall.WaitStatus).ExitStatus() int
-void dialog_MsgBuilder_Error(GoOpaque /* dialog.MsgBuilder */* recv) { } // func (*dialog.MsgBuilder).Error()
 void gob_Register(GoIface a0) { } // func gob.Register(value any)
-void ini_File_DeleteSection(GoOpaque /* ini.File */* recv, GoString a0) { } // func (*ini.File).DeleteSection(name string)
 void runtime_LockOSThread(void) { } // func runtime.LockOSThread()

@@ -616,3 +616,43 @@ GoOpaque *ini_Section_Key(GoOpaque *recv, GoString name) {
     if (r.r1.type) return (GoOpaque *)new_key((GiniSection *)recv, name, GOSTR(""));
     return r.r0;
 }
+
+// ---- ini.Load / ini.Empty / HasKey / DeleteSection (go-ini v1.67 semantics)
+
+Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_Load(GoIface source, Slice_GoIface others) {
+    return ini_LoadSources((GoIniLoadOptions){0}, source, others);
+}
+
+GoOpaque *ini_Empty(Slice_GoIniLoadOptions opts) {
+    GiniFile *f = (GiniFile *)gc_calloc(1, sizeof *f);
+    if (opts.len > 0) f->o = opts.p[0];
+    f->kvdelims = f->o.KeyValueDelimiters.len ? f->o.KeyValueDelimiters : GOSTR("=:");
+    f->childdelim = f->o.ChildSectionDelimiter.len ? f->o.ChildSectionDelimiter : GOSTR(".");
+    parse(f, (GoString){"", 0});
+    return (GoOpaque *)f;
+}
+
+// Same lookup as GetKey (including parent sections), without building an error.
+bool ini_Section_HasKey(GoOpaque *recv, GoString name) {
+    GiniSection *s = (GiniSection *)recv;
+    if (s->f->o.Insensitive || s->f->o.InsensitiveKeys) name = lower(name);
+    if (find_key(s, name)) return true;
+    GoString sname = s->name;
+    for (;;) {
+        int i = strings_LastIndex(sname, s->f->childdelim);
+        if (i < 0) return false;
+        sname.len = i;
+        GiniSection *p = find_section(s->f, sname);
+        if (p) return find_key(p, name) != NULL || ini_Section_HasKey((GoOpaque *)p, name);
+    }
+}
+
+void ini_File_DeleteSection(GoOpaque *recv, GoString name) {
+    GiniFile *f = (GiniFile *)recv;
+    if (name.len == 0) name = DEFAULT_SECTION;
+    if ((f->o.Insensitive || f->o.InsensitiveSections) && !go_streq(name, DEFAULT_SECTION)) name = lower(name);
+    int j = 0;
+    for (int i = 0; i < f->nsecs; i++)
+        if (!go_streq(f->secs[i]->name, name)) f->secs[j++] = f->secs[i];
+    f->nsecs = j;
+}
