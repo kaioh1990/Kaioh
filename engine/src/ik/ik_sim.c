@@ -41712,7 +41712,7 @@ beep_Resampler* beep_ResampleRatio(int quality, f64 ratio, beep_Streamer s) {
     if (((ratio <= 0x0p+00) || math_IsInf(ratio, 0)) || math_IsNaN(ratio)) {
         go_panic_iface(0, fmt_Errorf(GOSTR("resample: invalid ratio: %f"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){14, go_box_a(f64, ratio)}))));
     }
-    return go_box(beep_Resampler, (beep_Resampler){.s = s, .ratio = ratio, .buf1 = GO_MAKE_A(Slice_Arr2_f64, Arr2_f64, 512, 0), .buf2 = GO_MAKE_A(Slice_Arr2_f64, Arr2_f64, 512, 0), .pts = GO_MAKE(Slice_beep_point, beep_point, (quality * 2), 0), .weights = beep_lagrangeWeights((quality * 2)), .off = -512, .pos = 0x0p+00, .end = 9223372036854775807LL});
+    return go_box(beep_Resampler, (beep_Resampler){.s = s, .ratio = ratio, .buf1 = GO_MAKE_A(Slice_Arr2_f64, Arr2_f64, 512, 0), .buf2 = GO_MAKE_A(Slice_Arr2_f64, Arr2_f64, 512, 0), .pts = GO_MAKE(Slice_beep_point, beep_point, (quality * 2), 0), .weights = beep_lagrangeWeights((quality * 2)), .off = -512, .pos = 0x0p+00, .end = INT32_MAX});
 }
 
 // github.com/ikemen-engine/beep/v2.Resampler.Stream (resample.go:91), 0 TODO
@@ -44269,7 +44269,7 @@ GoIface ggpo_Peer_Idle(ggpo_Peer* p, int timeout, Slice_polling_FuncTimeType tim
             }
             log_Logger_Printf(g_util2_Log, GOSTR("last confirmed frame in p2p backend is %d.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, totalMinConfirmed)})));
             if (totalMinConfirmed >= 0) {
-                if (totalMinConfirmed == 9223372036854775807LL) {
+                if (totalMinConfirmed == INT32_MAX) {
                     return ((GoIface){148, go_box(ggpo_Error, (ggpo_Error){.Code = -1, .Name = GOSTR("ErrorCodeGeneralFailure")})});
                 }
                 if (p->numSpectators > 0) {

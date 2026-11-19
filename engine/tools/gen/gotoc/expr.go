@@ -69,6 +69,24 @@ func constLit(v constant.Value, ty types.Type) string {
 	}
 	if isInteger(ty) || basicKind(ty) == types.Invalid {
 		vi := constant.ToInt(v)
+		// int/uint are 32-bit in the C engine (as on the Vita): math.MaxInt,
+		// math.MinInt and math.MaxUint keep their meaning as the type's limits
+		if k := basicKind(ty); (k == types.Int || k == types.Uint || k == types.Uintptr && false) && vi.Kind() == constant.Int {
+			if i, ok := constant.Int64Val(vi); ok && (i > math.MaxInt32 || i < math.MinInt32) {
+				switch {
+				case k == types.Uint && i > math.MaxUint32:
+					return "UINT32_MAX"
+				case k == types.Uint:
+					// fits uint32
+				case i == math.MaxInt64:
+					return "INT32_MAX"
+				case i == math.MinInt64:
+					return "INT32_MIN"
+				}
+			} else if !ok && k == types.Uint {
+				return "UINT32_MAX"
+			}
+		}
 		if vi.Kind() == constant.Int {
 			if i, ok := constant.Int64Val(vi); ok {
 				if isUnsigned(ty) {
