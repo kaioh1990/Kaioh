@@ -133,6 +133,14 @@ stay as verified references and for the optimised paths later.
   CVF_GC_ARENA_MB; build with -DGC_PROFILE for allocation-site sampling
   (gcprof.txt, CVF_GC_PROF_SKIP_MB to skip the load).
 - CMake: `cvf_ik` (translated simulation) and `cvf_headless` targets.
+- **Cross-platform determinism verified**: the CMake Release build on macOS
+  arm64 (Apple M1 Max, Apple clang 21) produces a statedump byte-identical
+  to Linux x86-64 (GCC) for the whole match (md5 54f8ae06…, 287,752 lines).
+  The collector's macOS root discovery works (peak RSS 127 MB there).
+  Speed: ~0.85 ms/tick x86-64 (container), ~1.0 ms/tick M1 Max.
+- Sanitizer builds: ASan's "fake stack" hides locals from the conservative
+  collector; gc.c sets `detect_stack_use_after_return=0` via
+  `__asan_default_options` in ASan builds.
 
 ## Conventions
 

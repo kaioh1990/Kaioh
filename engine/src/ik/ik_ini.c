@@ -4,6 +4,7 @@
 // (AllowShadows), inline comments, surrounding quotes, continuation lines,
 // back-quoted and triple-quoted values. Writing files back (SaveTo) is a
 // no-op: the headless engine never rewrites the user's configuration.
+#include <stdio.h>
 #include "ik/ik_sim.h"
 
 typedef struct GiniKey GiniKey;

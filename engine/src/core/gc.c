@@ -84,6 +84,19 @@ typedef struct GcState {
 } GcState;
 
 static GcState *S;
+
+// AddressSanitizer may move locals to a heap "fake stack" the collector does
+// not scan; sanitizer builds keep locals on the real stack.
+#if defined(__SANITIZE_ADDRESS__)
+#define GC_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define GC_ASAN 1
+#endif
+#endif
+#ifdef GC_ASAN
+const char *__asan_default_options(void) { return "detect_stack_use_after_return=0"; }
+#endif
 #ifdef GC_PROFILE
 static size_t prof_skip = (size_t)-1;
 #endif
