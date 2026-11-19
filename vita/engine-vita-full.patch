@@ -477,10 +477,10 @@ index ac9143a..5b51042 100644
  func (s *SDLSpeaker) Play(st beep.Streamer) {
 diff --git a/src/bc_compile.go b/src/bc_compile.go
 new file mode 100644
-index 0000000..bdbf118
+index 0000000..d837da0
 --- /dev/null
 +++ b/src/bc_compile.go
-@@ -0,0 +1,676 @@
+@@ -0,0 +1,671 @@
 +package main
 +
 +// Trigger expression compiler (PS Vita).
@@ -907,52 +907,45 @@ index 0000000..bdbf118
 +	switch len(args) {
 +	case 2:
 +		a, b := args[0], args[1]
-+		var f func(*BytecodeValue, BytecodeValue)
++		// One closure per operator with a direct call: passing &v1 through a
++		// func value makes TinyGo heap-allocate v1 on every evaluation.
 +		switch op {
 +		case OC_add:
-+			f = bx.add
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.add(&v1, v2); return v1 }
 +		case OC_sub:
-+			f = bx.sub
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.sub(&v1, v2); return v1 }
 +		case OC_mul:
-+			f = bx.mul
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.mul(&v1, v2); return v1 }
 +		case OC_div:
-+			f = bx.div
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.div(&v1, v2); return v1 }
 +		case OC_mod:
-+			f = bx.mod
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.mod(&v1, v2); return v1 }
 +		case OC_eq:
-+			f = bx.eq
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.eq(&v1, v2); return v1 }
 +		case OC_ne:
-+			f = bx.ne
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.ne(&v1, v2); return v1 }
 +		case OC_gt:
-+			f = bx.gt
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.gt(&v1, v2); return v1 }
 +		case OC_ge:
-+			f = bx.ge
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.ge(&v1, v2); return v1 }
 +		case OC_lt:
-+			f = bx.lt
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.lt(&v1, v2); return v1 }
 +		case OC_le:
-+			f = bx.le
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.le(&v1, v2); return v1 }
 +		case OC_bland:
-+			f = bx.bland
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.bland(&v1, v2); return v1 }
 +		case OC_blor:
-+			f = bx.blor
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.blor(&v1, v2); return v1 }
 +		case OC_blxor:
-+			f = bx.blxor
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.blxor(&v1, v2); return v1 }
 +		case OC_bwand:
-+			f = bx.bwand
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.bwand(&v1, v2); return v1 }
 +		case OC_bwor:
-+			f = bx.bwor
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.bwor(&v1, v2); return v1 }
 +		case OC_bwxor:
-+			f = bx.bwxor
++			return func(t, oc *Char) BytecodeValue { v1 := a(t, oc); v2 := b(t, oc); bx.bwxor(&v1, v2); return v1 }
 +		}
-+		if f == nil {
-+			return nil
-+		}
-+		return func(t, oc *Char) BytecodeValue {
-+			v1 := a(t, oc)
-+			v2 := b(t, oc)
-+			f(&v1, v2)
-+			return v1
-+		}
++		return nil
 +	case 3:
 +		switch op {
 +		case OC_range_ii, OC_range_ie, OC_range_ei, OC_range_ee:
@@ -1090,7 +1083,9 @@ index 0000000..bdbf118
 +func cjitEnabled() bool {
 +	if cjitOn < 0 {
 +		cjitOn = 0
-+		if fuseEnabled() && FileExist("vita_nojit.txt") == "" {
++		// Off by default: correct, but measured slower than the fused
++		// interpreter on the Vita (indirect calls). Opt in with vita_jit.txt.
++		if fuseEnabled() && FileExist("vita_jit.txt") != "" && FileExist("vita_nojit.txt") == "" {
 +			cjitOn = 1
 +		}
 +		cjitCheck = FileExist("vita_jitcheck.txt") != ""
@@ -2573,7 +2568,7 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..5d6f5a4 100644
+index 276abbf..1e2983d 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
 @@ -445,6 +445,42 @@ const (
@@ -2661,13 +2656,15 @@ index 276abbf..5d6f5a4 100644
  	i, ok := sp.Map[s]
  	if !ok {
  		i = len(sp.List)
-@@ -1488,7 +1549,16 @@ func (bs *BytecodeStack) Clear() {
+@@ -1487,7 +1548,23 @@ func (bs *BytecodeStack) Clear() {
+ 	*bs = (*bs)[:0]
  }
  
++//go:inline
  func (bs *BytecodeStack) Push(bv BytecodeValue) {
--	*bs = append(*bs, bv)
 +	// Fast path without the runtime append call (TinyGo's append goes through
 +	// sliceAppend + memmove for every push, ~17% of fight frame time on Vita).
++	// Kept tiny so LLVM inlines it; growth lives in bcStackGrow.
 +	s := *bs
 +	if n := len(s); n < cap(s) {
 +		s = s[:n+1]
@@ -2675,11 +2672,51 @@ index 276abbf..5d6f5a4 100644
 +		*bs = s
 +		return
 +	}
-+	*bs = append(s, bv)
++	bcStackGrow(bs, bv)
++}
++
++//go:noinline
++func bcStackGrow(bs *BytecodeStack, bv BytecodeValue) {
+ 	*bs = append(*bs, bv)
  }
  
- func (bs *BytecodeStack) PushI(i int32) {
-@@ -1574,7 +1644,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
+@@ -1511,25 +1588,20 @@ func (bs *BytecodeStack) PushS(s string) {
+ 	bs.Push(BytecodeString(s))
+ }
+ 
++// Top and Pop are kept small enough to inline into the interpreter loop.
++// An empty stack (a compiler bug) still panics, through the bounds check.
++//go:inline
+ func (bs BytecodeStack) Top() *BytecodeValue {
+-	// This should only happen during development
+-	if len(bs) == 0 {
+-		panic(Error("Attempted to access the top of an empty ByteCode stack.\n"))
+-	}
+-
+ 	return &bs[len(bs)-1]
+ }
+ 
+-func (bs *BytecodeStack) Pop() (bv BytecodeValue) {
+-	// This should only happen during development
+-	if len(*bs) == 0 {
+-		panic(Error("Attempted to pop from an empty ByteCode stack.\n"))
+-	}
+-
+-	// Set value to what's at the top of stack. Shift stack
+-	bv, *bs = *bs.Top(), (*bs)[:len(*bs)-1]
+-
+-	return
++//go:inline
++func (bs *BytecodeStack) Pop() BytecodeValue {
++	s := *bs
++	n := len(s) - 1
++	bv := s[n]
++	*bs = s[:n]
++	return bv
+ }
+ 
+ func (bs *BytecodeStack) Dup() {
+@@ -1574,7 +1646,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
  		be.append((*(*[4]OpCode)(unsafe.Pointer(&f)))[:]...)
  	case VT_Int:
  		if bv.value >= -128 && bv.value <= 127 {
@@ -2689,7 +2726,7 @@ index 276abbf..5d6f5a4 100644
  		} else if bv.value >= math.MinInt32 && bv.value <= math.MaxInt32 {
  			be.append(OC_int)
  			i := int32(bv.value)
-@@ -1627,9 +1698,9 @@ func (be *BytecodeExp) appendI64Op(op OpCode, addr int64) {
+@@ -1627,9 +1700,9 @@ func (be *BytecodeExp) appendI64Op(op OpCode, addr int64) {
  	be.append((*(*[8]OpCode)(unsafe.Pointer(&addr)))[:]...)
  }
  
@@ -2701,7 +2738,7 @@ index 276abbf..5d6f5a4 100644
  	*i += 4 // Advance the cursor past the 4 bytes we just read
  	return v
  }
-@@ -1659,11 +1730,34 @@ func (be BytecodeExp) readMapKey(i *int) string {
+@@ -1659,11 +1732,34 @@ func (be BytecodeExp) readMapKey(i *int) string {
  
  // Reads the expression length header at the current pointer
  func (be BytecodeExp) PeekLength(i int) int {
@@ -2737,7 +2774,7 @@ index 276abbf..5d6f5a4 100644
  func (be BytecodeExp) JumpToNext(i *int) {
  	*i += be.PeekLength(*i) + 4
  }
-@@ -2032,7 +2126,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+@@ -2032,7 +2128,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
  	//if v1.IsUndefined() {
  	//	return
  	//}
@@ -2746,7 +2783,7 @@ index 276abbf..5d6f5a4 100644
  }
  
  func (BytecodeExp) ln(v1 *BytecodeValue) {
-@@ -2043,7 +2137,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2139,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -2755,7 +2792,7 @@ index 276abbf..5d6f5a4 100644
  	}
  }
  
-@@ -2056,7 +2150,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2056,7 +2152,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -2764,7 +2801,7 @@ index 276abbf..5d6f5a4 100644
  	}
  }
  
-@@ -2064,42 +2158,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
+@@ -2064,42 +2160,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
  	if v1.IsUndefined() {
  		return
  	}
@@ -2813,7 +2850,7 @@ index 276abbf..5d6f5a4 100644
  }
  
  func (BytecodeExp) floor(v1 *BytecodeValue) {
-@@ -2167,7 +2261,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2167,7 +2263,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -2822,7 +2859,7 @@ index 276abbf..5d6f5a4 100644
  	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
  }
  
-@@ -2190,7 +2284,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2190,7 +2286,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -2831,7 +2868,7 @@ index 276abbf..5d6f5a4 100644
  }
  
  func (BytecodeExp) sign(v1 *BytecodeValue) {
-@@ -2235,9 +2329,36 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+@@ -2235,9 +2331,36 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
  }
  
  func (be BytecodeExp) run(c *Char) BytecodeValue {
@@ -2869,7 +2906,7 @@ index 276abbf..5d6f5a4 100644
  		switch opc {
  		case OC_jud8:
  			if sys.bcStack.Top().IsUndefined() {
-@@ -2268,7 +2389,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2268,7 +2391,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			fallthrough
  		case OC_jmp:
@@ -2878,7 +2915,7 @@ index 276abbf..5d6f5a4 100644
  		case OC_player:
  			pn := int(sys.bcStack.Pop().ToI())
  			if c = c.playerTrigger(pn, true); c != nil {
-@@ -2278,21 +2399,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2278,21 +2401,21 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			}
  			// Invalid: Push undefined and use the length header to jump over the block
  			sys.bcStack.Push(BytecodeUndefined())
@@ -2903,7 +2940,7 @@ index 276abbf..5d6f5a4 100644
  		case OC_helper:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2301,7 +2422,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2301,7 +2424,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -2912,7 +2949,7 @@ index 276abbf..5d6f5a4 100644
  		case OC_target:
  			v2 := sys.bcStack.Pop().ToI()
  			v1 := sys.bcStack.Pop().ToI()
-@@ -2310,63 +2431,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2310,63 +2433,63 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  				continue
  			}
  			sys.bcStack.Push(BytecodeUndefined())
@@ -2985,7 +3022,7 @@ index 276abbf..5d6f5a4 100644
  		case OC_rdreset:
  			// Reset the current redirection
  			// A redirect only lasts one opcode, so this empty case ends it
-@@ -2375,22 +2496,129 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2375,22 +2498,129 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			// Evaluate block as the redirect target. No continue, so the redirect ends after it
  			// Ex: "parent, cond(alive, life, 0)" reads both alive and life from parent
  			sys.bcStack.Push(be[i+4 : i+4+l].run(c))
@@ -3119,7 +3156,7 @@ index 276abbf..5d6f5a4 100644
  			i += 8
  		case OC_float:
  			arr := make([]byte, 4)
-@@ -2402,7 +2630,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2402,7 +2632,10 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			sys.bcStack.PushF(flo)
  			i += 4
  		case OC_string:
@@ -3131,7 +3168,7 @@ index 276abbf..5d6f5a4 100644
  		case OC_neg:
  			be.neg(sys.bcStack.Top())
  		case OC_bwnot:
-@@ -2556,7 +2787,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2556,7 +2789,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  					redir = oc.ss.sb.playerNo
  					pno = c.ss.sb.playerNo
  				}
@@ -3140,7 +3177,7 @@ index 276abbf..5d6f5a4 100644
  				ok = found && c.command(pno, cmdPos)
  			}
  			sys.bcStack.PushB(ok)
-@@ -2564,7 +2795,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2564,7 +2797,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  			cmdName := sys.bcStack.Pop()
  			ok := false
  			if c.cmd != nil && cmdName.vtype == VT_String {
@@ -3149,7 +3186,7 @@ index 276abbf..5d6f5a4 100644
  				ok = found && c.command(sys.workingState.playerNo, cmdPos)
  			}
  			sys.bcStack.PushB(ok)
-@@ -2599,7 +2830,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2599,7 +2832,8 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_hitcount:
  			sys.bcStack.PushI(c.hitCount)
  		case OC_hitdefattr:
@@ -3159,7 +3196,7 @@ index 276abbf..5d6f5a4 100644
  			if attr == -2 { // String value on the stack
  				attr = evalTriggerAttr(c, sys.bcStack.Pop())
  			}
-@@ -2747,15 +2979,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2747,15 +2981,25 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		case OC_vel_z:
  			sys.bcStack.PushF(c.vel[2] * (c.localscl / oc.localscl))
  		case OC_assign_:
@@ -3190,7 +3227,7 @@ index 276abbf..5d6f5a4 100644
  		case OC_var:
  			*sys.bcStack.Top() = c.varGet(sys.bcStack.Top().ToI())
  		case OC_sysvar:
-@@ -2770,6 +3012,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
+@@ -2770,6 +3014,7 @@ func (be BytecodeExp) run(c *Char) BytecodeValue {
  		}
  		c = oc
  	}
@@ -3198,7 +3235,7 @@ index 276abbf..5d6f5a4 100644
  	return sys.bcStack.Pop()
  }
  
-@@ -3812,7 +4055,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
+@@ -3812,7 +4057,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
  			sys.bcStack.Push(BytecodeUndefined())
  		}
  	case OC_ex_isassertedchar:
@@ -3207,7 +3244,7 @@ index 276abbf..5d6f5a4 100644
  		*i += 8
  	case OC_ex_isassertedglobal:
  		flag := be.ReadIntAt(i)
-@@ -5017,7 +5260,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
+@@ -5017,7 +5262,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
  		//		continue
  		//	}
  		//}
@@ -3224,7 +3261,7 @@ index 276abbf..5d6f5a4 100644
  			changeState = true
  			break
  		}
-@@ -5089,6 +5340,12 @@ type StateBlock struct {
+@@ -5089,6 +5342,12 @@ type StateBlock struct {
  	trigger             BytecodeExp
  	elseBlock           *StateBlock
  	ctrls               []StateController
@@ -3237,7 +3274,7 @@ index 276abbf..5d6f5a4 100644
  	// Loop fields
  	loopBlock        bool
  	nestedInLoop     bool
-@@ -5104,6 +5361,18 @@ func newStateBlock() *StateBlock {
+@@ -5104,6 +5363,18 @@ func newStateBlock() *StateBlock {
  	return &StateBlock{persistent: 1, persistentIndex: -1, ignorehitpause: false}
  }
  
@@ -3256,7 +3293,7 @@ index 276abbf..5d6f5a4 100644
  func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  	c.currentSctrlIndex = b.persistentIndex
  	// For Mugen compatibility, if in hitpause and this SCTRL has the same index
-@@ -5189,15 +5458,13 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5189,15 +5460,13 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			// Run state controllers
  			if !interrupt {
@@ -3278,7 +3315,7 @@ index 276abbf..5d6f5a4 100644
  						if sys.loopBreak {
  							sys.loopBreak = false
  							interrupt = true
-@@ -5238,21 +5505,32 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5238,21 +5507,32 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  		}
  	} else {
@@ -3319,7 +3356,7 @@ index 276abbf..5d6f5a4 100644
  				return true
  			}
  		}
-@@ -5375,7 +5653,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
+@@ -5375,7 +5655,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
  				sys.workBe = sys.workBe[:n]
  			}
  			for m := 0; m < int(n); m++ {
@@ -3328,7 +3365,7 @@ index 276abbf..5d6f5a4 100644
  				i += 4
  				sys.workBe[m] = (*(*BytecodeExp)(unsafe.Pointer(&scb)))[i : i+int(l)]
  				i += int(l)
-@@ -5402,7 +5680,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5402,7 +5682,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  			n := scb[i]
  			i++
  			for m := 0; m < int(n); m++ {
@@ -3337,7 +3374,7 @@ index 276abbf..5d6f5a4 100644
  				i += 4 + int(l)
  			}
  			if id == paramID {
-@@ -5414,21 +5692,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5414,21 +5694,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -3369,7 +3406,7 @@ index 276abbf..5d6f5a4 100644
  }
  
  type stateDef StateControllerBase
-@@ -5530,6 +5806,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +5808,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -3379,7 +3416,7 @@ index 276abbf..5d6f5a4 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -6653,7 +6932,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,7 +6934,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -3388,7 +3425,7 @@ index 276abbf..5d6f5a4 100644
  	pfx.invertblend = -2 // Forcing 1.1 behavior
  
  	StateControllerBase(sc).run(c, func(paramID byte, exp []BytecodeExp) bool {
-@@ -13610,6 +13889,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13610,6 +13891,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  			sys.appendToConsole(crun.warn() + "LoadFile: cannot read var data")
  			return false
  		}
@@ -3396,7 +3433,7 @@ index 276abbf..5d6f5a4 100644
  		crun.cnsvar = loaded
  	case 2: // Fvar
  		var loaded map[int32]float32
-@@ -13617,6 +13897,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13617,6 +13899,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  			sys.appendToConsole(crun.warn() + "LoadFile: cannot read fvar data")
  			return false
  		}
@@ -3404,7 +3441,7 @@ index 276abbf..5d6f5a4 100644
  		crun.cnsfvar = loaded
  	}
  	return false
-@@ -17134,6 +17415,9 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
+@@ -17134,6 +17417,9 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
  	if sb == c.ss.sb {
  		ctrlsps = c.ss.ps
  	}
@@ -3414,7 +3451,7 @@ index 276abbf..5d6f5a4 100644
  	sys.bcVar = sys.bcVarStack.Alloc(int(sb.numVars))
  	sys.workingState = sb
  	changeState = sb.block.Run(c, ctrlsps)
-@@ -17147,3 +17431,68 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
+@@ -17147,3 +17433,68 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
  	sys.bcVarStack.Clear()
  	return
  }
@@ -3503,7 +3540,7 @@ index 0000000..0cee43a
 +// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lkubridge_stub_weak -lstdc++ -lsupc++ -lm
 +import "C"
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..bd7fe2a 100644
+index 19bf05a..3e281fc 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -6,6 +6,7 @@ import (
@@ -3744,29 +3781,27 @@ index 19bf05a..bd7fe2a 100644
  	val, ok := c.cnsfvar[i]
  	if ok {
  		return BytecodeFloat(val)
-@@ -8325,6 +8379,7 @@ func (c *Char) cnsVarSet(i int32, value BytecodeValue, scType int32, varType int
+@@ -8331,6 +8385,9 @@ func (c *Char) varSet(i, v int32) BytecodeValue {
+ 	}
+ 
+ 	c.cnsvar[i] = v       // Create or update the key
++	if isVita {
++		c.varCachePut(i)
++	}
+ 	return BytecodeInt(v) // We also return the value because var assignment can be used in expressions
  }
  
- func (c *Char) varSet(i, v int32) BytecodeValue {
-+	c.varGen++
- 	if i < 0 {
- 		sys.appendToConsole(c.warn() + fmt.Sprintf("var index %v must be positive", i))
- 		return BytecodeUndefined()
-@@ -8335,6 +8390,7 @@ func (c *Char) varSet(i, v int32) BytecodeValue {
+@@ -8341,6 +8398,9 @@ func (c *Char) fvarSet(i int32, v float32) BytecodeValue {
+ 	}
+ 
+ 	c.cnsfvar[i] = v
++	if isVita {
++		c.fvarCachePut(i)
++	}
+ 	return BytecodeFloat(v)
  }
  
- func (c *Char) fvarSet(i int32, v float32) BytecodeValue {
-+	c.varGen++
- 	if i < 0 {
- 		sys.appendToConsole(c.warn() + fmt.Sprintf("fvar index %v must be positive", i))
- 		return BytecodeUndefined()
-@@ -8365,11 +8421,13 @@ func (c *Char) sysFvarSet(i int32, v float32) BytecodeValue {
- }
- 
- func (c *Char) varAdd(i, v int32) BytecodeValue {
-+	c.varGen++
- 	if i < 0 {
- 		sys.appendToConsole(c.warn() + fmt.Sprintf("var index %v must be positive", i))
+@@ -8370,11 +8430,15 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -3774,15 +3809,25 @@ index 19bf05a..bd7fe2a 100644
  	if _, ok := c.cnsvar[i]; ok {
  		c.cnsvar[i] += v
  	} else {
-@@ -8379,6 +8437,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+ 		c.cnsvar[i] = v
+ 	}
++	if isVita {
++		c.varCachePut(i)
++	}
+ 	return BytecodeInt(c.cnsvar[i])
  }
  
- func (c *Char) fvarAdd(i int32, v float32) BytecodeValue {
-+	c.varGen++
- 	if i < 0 {
- 		sys.appendToConsole(c.warn() + fmt.Sprintf("fvar index %v must be positive", i))
- 		return BytecodeUndefined()
-@@ -8468,10 +8527,12 @@ func varRangeSetSub[T int32 | float32](c *Char, m *map[int32]T, first, last int3
+@@ -8389,6 +8453,9 @@ func (c *Char) fvarAdd(i int32, v float32) BytecodeValue {
+ 	} else {
+ 		c.cnsfvar[i] = v
+ 	}
++	if isVita {
++		c.fvarCachePut(i)
++	}
+ 	return BytecodeFloat(c.cnsfvar[i])
+ }
+ 
+@@ -8468,10 +8535,12 @@ func varRangeSetSub[T int32 | float32](c *Char, m *map[int32]T, first, last int3
  }
  
  func (c *Char) varRangeSet(first, last, val int32) {
@@ -3795,7 +3840,7 @@ index 19bf05a..bd7fe2a 100644
  	varRangeSetSub(c, &c.cnsfvar, first, last, val)
  }
  
-@@ -9008,7 +9069,8 @@ func (c *Char) lifeSet(life int32) {
+@@ -9008,7 +9077,8 @@ func (c *Char) lifeSet(life int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -3805,7 +3850,7 @@ index 19bf05a..bd7fe2a 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].life = c.life
  			}
-@@ -9100,7 +9162,8 @@ func (c *Char) redLifeSet(set int32) {
+@@ -9100,7 +9170,8 @@ func (c *Char) redLifeSet(set int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -3815,7 +3860,7 @@ index 19bf05a..bd7fe2a 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].redLife = c.redLife
  			}
-@@ -9811,65 +9874,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
+@@ -9811,65 +9882,53 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
  	}
  	key := strings.ToLower(s)
  
@@ -3913,7 +3958,7 @@ index 19bf05a..bd7fe2a 100644
  }
  
  // Used to init, fully reset or partially reset the map array
-@@ -12436,35 +12487,35 @@ func (c *Char) actionRun() {
+@@ -12436,35 +12495,35 @@ func (c *Char) actionRun() {
  	// Run state -4
  	c.minus = -4
  	if sb, ok := c.gi().states[-4]; ok {
@@ -3954,7 +3999,7 @@ index 19bf05a..bd7fe2a 100644
  	}
  
  	// Guarding instructions
-@@ -12495,14 +12546,14 @@ func (c *Char) actionRun() {
+@@ -12495,14 +12554,14 @@ func (c *Char) actionRun() {
  	// Uses minus -4 because its properties are similar
  	c.minus = -4
  	if sb, ok := c.gi().states[-10]; ok {
@@ -3971,7 +4016,7 @@ index 19bf05a..bd7fe2a 100644
  	}
  	if !c.pauseBool {
  		if !c.hitPause() {
-@@ -13710,7 +13761,8 @@ func (cl *CharList) clear() {
+@@ -13710,7 +13769,8 @@ func (cl *CharList) clear() {
  
  	// Clear all player ID's to avoid false conflicts with stale players
  	// TODO: Maybe stale players should be cleared better
@@ -3981,7 +4026,7 @@ index 19bf05a..bd7fe2a 100644
  		for _, c := range p {
  			if c != nil {
  				c.id = -1
-@@ -13858,7 +13910,8 @@ func (cl *CharList) audit() {
+@@ -13858,7 +13918,8 @@ func (cl *CharList) audit() {
  
  func (cl *CharList) commandUpdate() {
  	// Iterate players
@@ -3991,7 +4036,7 @@ index 19bf05a..bd7fe2a 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -14007,9 +14060,11 @@ func (cl *CharList) action() {
+@@ -14007,9 +14068,11 @@ func (cl *CharList) action() {
  	cl.commandUpdate()
  
  	// Prepare characters before performing their actions
@@ -4003,7 +4048,7 @@ index 19bf05a..bd7fe2a 100644
  
  	// Run actions for each character in the sorted list
  	// We use an index-based loop instead of a range so that appended helpers are also processed
-@@ -14019,6 +14074,7 @@ func (cl *CharList) action() {
+@@ -14019,6 +14082,7 @@ func (cl *CharList) action() {
  	}
  
  	// Finish performing character actions
@@ -4011,7 +4056,7 @@ index 19bf05a..bd7fe2a 100644
  	for _, c := range cl.runOrder {
  		c.actionFinish()
  	}
-@@ -14420,8 +14476,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+@@ -14420,8 +14484,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
  				// Check if the character is above the platform's surface
  				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
  					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
@@ -4022,7 +4067,7 @@ index 19bf05a..bd7fe2a 100644
  					oldDistX := (getter.oldPos[0]*getter.localscl - (p.pos[0])*p.localscl) * p.facing
  					onPlatform := func(protrude bool) {
  						getter.platformPosY = ((p.pos[1]+p.platformHeight[0]+p.velocity[1])*p.localscl - angleSinValue*(oldDistX/angleCosValue)) / getter.localscl
-@@ -15065,3 +15121,13 @@ type Platform struct {
+@@ -15065,3 +15129,32 @@ type Platform struct {
  	localScale float32
  	ownerID    int32
  }
@@ -4035,6 +4080,25 @@ index 19bf05a..bd7fe2a 100644
 +	ival int32
 +	fval float32
 +	isF  bool
++}
++
++// varCachePut / fvarCachePut write a value through to the read cache after a
++// single-variable write, so a write no longer invalidates every cached var
++// (CvF sets vars every tick, which kept the cache cold).
++func (c *Char) varCachePut(i int32) {
++	if i < 0 {
++		return
++	}
++	mp := *(*uintptr)(unsafe.Pointer(&c.cnsvar))
++	c.varCache[uint32(i)&31] = varCacheEnt{key: i, gen: c.varGen, mp: mp, ival: c.cnsvar[i]}
++}
++
++func (c *Char) fvarCachePut(i int32) {
++	if i < 0 {
++		return
++	}
++	mp := *(*uintptr)(unsafe.Pointer(&c.cnsfvar))
++	c.varCache[uint32(i)&31] = varCacheEnt{key: i, gen: c.varGen, mp: mp, fval: c.cnsfvar[i], isF: true}
 +}
 diff --git a/src/common.go b/src/common.go
 index a741eab..e7080c4 100644
@@ -13234,10 +13298,10 @@ index 123d9e3..6082e7a 100644
  	}
 diff --git a/src/spec_match.go b/src/spec_match.go
 new file mode 100644
-index 0000000..a925909
+index 0000000..b171e3e
 --- /dev/null
 +++ b/src/spec_match.go
-@@ -0,0 +1,359 @@
+@@ -0,0 +1,378 @@
 +package main
 +
 +import (
@@ -13283,6 +13347,11 @@ index 0000000..a925909
 +	who    int8 // 0 self, 1 first enemy, 2 second enemy
 +	author bool
 +	val    string
++	// kind 0: name/authorname fact above. kind 1: the term is false whenever
++	// the character has no partner (bare "numpartner", "numpartner > N" with
++	// N >= 0, or "abs(partner,var(N)) = M" with M != 0: the failed redirect
++	// yields undefined, abs keeps it, and = compares it as 0).
++	kind int8
 +}
 +
 +type specGuard struct {
@@ -13302,6 +13371,8 @@ index 0000000..a925909
 +
 +var specGen uint32 = 1
 +var specStats struct{ kept, removed int }
++
++var specNoPartnerRe = regexp.MustCompile(`(?i)^(?:numpartner|numpartner\s*>\s*\d+|abs\s*\(\s*partner\s*,\s*var\s*\(\s*\d+\s*\)\s*\)\s*=\s*-?0*[1-9]\d*)$`)
 +
 +var specFactRe = regexp.MustCompile(`(?i)^(?:(enemynear|enemy)\s*(?:\(\s*([01])\s*\))?\s*,\s*)?(name|authorname)\s*=\s*"([^"]*)"$`)
 +
@@ -13381,7 +13452,12 @@ index 0000000..a925909
 +func specLineFacts(line string) []nameFact {
 +	var facts []nameFact
 +	for _, term := range specSplitAnd(line) {
-+		m := specFactRe.FindStringSubmatch(specStripParens(term))
++		t := specStripParens(term)
++		if specNoPartnerRe.MatchString(t) {
++			facts = append(facts, nameFact{kind: 1})
++			continue
++		}
++		m := specFactRe.FindStringSubmatch(t)
 +		if m == nil {
 +			continue
 +		}
@@ -13454,12 +13530,16 @@ index 0000000..a925909
 +}
 +
 +type specFacts struct {
++	noPartner            bool // single mode on both sides and no partner slot in use
 +	selfName, selfAuthor string
 +	enemyKnown           bool // exactly one enemy, 1-vs-1
 +	enemyName, enemyAuth string
 +}
 +
 +func (f *specFacts) isFalse(n nameFact) bool {
++	if n.kind == 1 {
++		return f.noPartner
++	}
 +	switch n.who {
 +	case 0:
 +		if n.author {
@@ -13579,6 +13659,9 @@ index 0000000..a925909
 +			f.enemyKnown = true
 +			f.enemyName, f.enemyAuth = e.gi().name, e.gi().author
 +		}
++		// numPartner() is 0 outside simul/tag, and partner() finds no one
++		// when the partner slot is empty.
++		f.noPartner = c.numPartner() == 0 && c.partner(0, false) == nil
 +	}
 +	specStats.kept, specStats.removed = 0, 0
 +	for no, sb := range gi.states {
