@@ -33,19 +33,39 @@ int go_decode_rune(GoString s, int i, i32 *r);  // utf8.DecodeRuneInString at i:
 void *go_slice_grow(void *p, int len, int *cap, int need, size_t elem);
 void *go_slice_grow_atomic(void *p, int len, int *cap, int need, size_t elem);  // pointer-free elements
 
+// (operands evaluated once; hi < 0: omitted)
 #define GO_SLICE(T, s, lo, hi)                                                         \
-    ((T){(s).p + (lo), ((hi) < 0 ? (s).len : (hi)) - (lo), (s).cap - (lo)})
-#define GO_ARRSLICE(T, arr, n, lo, hi) ((T){(arr) + (lo), ((hi) < 0 ? (n) : (hi)) - (lo), (n) - (lo)})
-#define GO_MAKE(T, E, n, c)                                                            \
-    ((T){(E *)gc_calloc((size_t)((c) > 0 ? (c) : 1), sizeof(E)), (n), ((c) > (n) ? (c) : (n))})
-#define GO_MAKE_A(T, E, n, c)                                                          \
-    ((T){(E *)gc_calloc_atomic((size_t)((c) > 0 ? (c) : 1), sizeof(E)), (n), ((c) > (n) ? (c) : (n))})
+    __extension__({                                                                    \
+        __typeof__(s) _ss = (s);                                                       \
+        int _sl = (int)(lo), _sh = (int)(hi);                                          \
+        (T){_ss.p + _sl, (_sh < 0 ? _ss.len : _sh) - _sl, _ss.cap - _sl};              \
+    })
+#define GO_ARRSLICE(T, arr, n, lo, hi)                                                 \
+    __extension__({                                                                    \
+        __typeof__(&*(arr)) _sa = (arr);                                               \
+        int _sl = (int)(lo), _sh = (int)(hi);                                          \
+        (T){_sa + _sl, (_sh < 0 ? (n) : _sh) - _sl, (n) - _sl};                        \
+    })
+// (n and c are evaluated once: they may have side effects, e.g. make([]T, r.Read8(6)+1))
+#define GO_MAKE_(T, E, n, c, ALLOC)                                                    \
+    __extension__({                                                                    \
+        int _mn = (int)(n), _mc = (int)(c);                                            \
+        if (_mc < _mn) _mc = _mn;                                                      \
+        (T){(E *)ALLOC((size_t)(_mc > 0 ? _mc : 1), sizeof(E)), _mn, _mc};             \
+    })
+#define GO_MAKE(T, E, n, c) GO_MAKE_(T, E, n, c, gc_calloc)
+#define GO_MAKE_A(T, E, n, c) GO_MAKE_(T, E, n, c, gc_calloc_atomic)
 // append(s, v): grows like Go (amortised doubling), shares storage when
 // capacity allows (aliasing semantics preserved).
 // (variadic so compound-literal arguments with commas pass through)
 #define GO_APPEND(T, s, ...) go_append_##T((s), (__VA_ARGS__))
 #define GO_APPEND_SLICE(T, s, ...) go_append_slice_##T((s), (__VA_ARGS__))
-#define GO_COPY(dst, src) go_copy_impl((dst).p, (dst).len, (src).p, (src).len, sizeof(*(dst).p))
+#define GO_COPY(dst, src)                                                              \
+    __extension__({                                                                    \
+        __typeof__(dst) _cd = (dst);                                                   \
+        __typeof__(src) _cs = (src);                                                   \
+        go_copy_impl(_cd.p, _cd.len, _cs.p, _cs.len, sizeof(*_cd.p));                   \
+    })
 int go_copy_impl(void *dst, int dlen, const void *src, int slen, size_t elem);
 #define GO_SLICE_LIT(T, E, n, ...) go_slice_lit_##T((E[]){__VA_ARGS__}, (n))
 

@@ -1398,6 +1398,8 @@ typedef GoIface pm_pattern;
 typedef GoFunc polling_FuncTimeType;
 typedef GoIface polling_PollSink;
 typedef GoIface polling_Poller;
+typedef int pretty_byKind;
+typedef int pretty_jtype;
 typedef GoFunc protocol_UdpProtocolDispatchFunc_Lf48ee4;
 typedef int protocol_UdpProtocolEventType;
 typedef int protocol_UdpProtocolState;
@@ -7460,6 +7462,7 @@ Slice_Slice_int regexp_Regexp_FindAllStringIndex(GoOpaque /* regexp.Regexp */* r
 Slice_int regexp_Regexp_FindStringSubmatchIndex(GoOpaque /* regexp.Regexp */* recv, GoString a0); // func (*regexp.Regexp).FindStringSubmatchIndex(s string) []int
 Slice_u8 binary_bigEndian_AppendUint32(GoOpaque /* binary.bigEndian */ recv, Slice_u8 a0, u32 a1); // func (binary.bigEndian).AppendUint32(b []byte, v uint32) []byte
 Slice_u8 bytes_Buffer_Bytes(GoOpaque /* bytes.Buffer */* recv); // func (*bytes.Buffer).Bytes() []byte
+Slice_u8 bytes_TrimSpace(Slice_u8 a0); // func bytes.TrimSpace(s []byte) []byte
 Slice_u8 debug_Stack(void); // func debug.Stack() []byte
 Slice_u8 net_IP_To4(Slice_u8 recv); // func (net.IP).To4() net.IP
 Slice_u8 net_ParseIP(GoString a0); // func net.ParseIP(s string) net.IP
@@ -7717,7 +7720,6 @@ void sdl_Window_SetResizable(sdl_Window* recv, bool a0); // func (*sdl.Window).S
 void sdl_Window_SetSize(sdl_Window* recv, i32 a0, i32 a1); // func (*sdl.Window).SetSize(w int32, h int32)
 void sort_Ints(Slice_int a0); // func sort.Ints(x []int)
 void sort_Sort(GoIface a0); // func sort.Sort(data sort.Interface)
-void sort_Stable(GoIface a0); // func sort.Stable(data sort.Interface)
 void sort_Strings(Slice_GoString a0); // func sort.Strings(x []string)
 void strings_Builder_Reset(GoOpaque /* strings.Builder */* recv); // func (*strings.Builder).Reset()
 void sync_Cond_Broadcast(GoOpaque /* sync.Cond */* recv); // func (*sync.Cond).Broadcast()
@@ -7981,184 +7983,184 @@ void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_M_string_any 197
-#define GO_TID_P_abi_Type 1303
+#define GO_TID_P_abi_Type 1298
 #define GO_TID_P_bufio_Reader 160
 #define GO_TID_P_bufio_Writer 123
 #define GO_TID_P_bytes_Buffer 101
 #define GO_TID_P_bytes_Reader 155
-#define GO_TID_P_exec_Cmd 1072
+#define GO_TID_P_exec_Cmd 1067
 #define GO_TID_P_exec_ExitError 251
 #define GO_TID_P_image_Alpha 105
-#define GO_TID_P_image_NRGBA 488
-#define GO_TID_P_image_Paletted 487
-#define GO_TID_P_image_RGBA 482
-#define GO_TID_P_image_Uniform 483
-#define GO_TID_P_ini_File 1311
-#define GO_TID_P_ini_Key 1321
-#define GO_TID_P_ini_Section 1318
+#define GO_TID_P_image_NRGBA 487
+#define GO_TID_P_image_Paletted 486
+#define GO_TID_P_image_RGBA 481
+#define GO_TID_P_image_Uniform 482
+#define GO_TID_P_ini_File 1306
+#define GO_TID_P_ini_Key 1316
+#define GO_TID_P_ini_Section 1313
 #define GO_TID_P_io_LimitedReader 190
-#define GO_TID_P_net_IPNet 468
-#define GO_TID_P_net_TCPAddr 506
-#define GO_TID_P_net_TCPConn 507
-#define GO_TID_P_net_TCPListener 505
+#define GO_TID_P_net_IPNet 467
+#define GO_TID_P_net_TCPAddr 504
+#define GO_TID_P_net_TCPConn 505
+#define GO_TID_P_net_TCPListener 503
 #define GO_TID_P_net_UDPAddr 153
-#define GO_TID_P_net_netFD 1677
+#define GO_TID_P_net_netFD 1672
 #define GO_TID_P_os_File 146
-#define GO_TID_P_os_Process 1082
-#define GO_TID_P_os_ProcessState 1090
-#define GO_TID_P_os_dirInfo 799
-#define GO_TID_P_os_file 787
-#define GO_TID_P_os_processHandle 1087
-#define GO_TID_P_reflect_SliceHeader 992
-#define GO_TID_P_strings_Builder 474
+#define GO_TID_P_os_Process 1077
+#define GO_TID_P_os_ProcessState 1085
+#define GO_TID_P_os_dirInfo 797
+#define GO_TID_P_os_file 785
+#define GO_TID_P_os_processHandle 1082
+#define GO_TID_P_reflect_SliceHeader 987
+#define GO_TID_P_strings_Builder 473
 #define GO_TID_P_strings_Reader 211
-#define GO_TID_P_sync_Cond 1894
-#define GO_TID_P_sync_Mutex 582
-#define GO_TID_P_sync_Once 841
-#define GO_TID_P_syscall_Credential 1076
-#define GO_TID_P_syscall_Rusage 1092
-#define GO_TID_P_syscall_SysProcAttr 1074
+#define GO_TID_P_sync_Cond 1889
+#define GO_TID_P_sync_Mutex 580
+#define GO_TID_P_sync_Once 839
+#define GO_TID_P_syscall_Credential 1071
+#define GO_TID_P_syscall_Rusage 1087
+#define GO_TID_P_syscall_SysProcAttr 1069
 #define GO_TID_P_tabwriter_Writer 102
-#define GO_TID_P_time_Location 1288
-#define GO_TID_P_time_zone 1294
-#define GO_TID_P_zip_File 1284
-#define GO_TID_P_zip_ReadCloser 1280
-#define GO_TID_P_zip_Reader 1295
+#define GO_TID_P_time_Location 1283
+#define GO_TID_P_time_zone 1289
+#define GO_TID_P_zip_File 1279
+#define GO_TID_P_zip_ReadCloser 1275
+#define GO_TID_P_zip_Reader 1290
 #define GO_TID_S_any 198
 #define GO_TID_S_uint8 114
-#define GO_TID_abi_Kind 1306
-#define GO_TID_abi_NameOff 1308
-#define GO_TID_abi_TFlag 1305
-#define GO_TID_abi_Type 1304
-#define GO_TID_abi_TypeOff 1309
-#define GO_TID_atomic_Bool 843
-#define GO_TID_atomic_Int32 1086
-#define GO_TID_atomic_Pointer_os_dirInfo_ 797
-#define GO_TID_atomic_Uint32 1084
-#define GO_TID_atomic_Uint64 1947
-#define GO_TID_atomic_align64 1948
-#define GO_TID_atomic_noCopy 804
+#define GO_TID_abi_Kind 1301
+#define GO_TID_abi_NameOff 1303
+#define GO_TID_abi_TFlag 1300
+#define GO_TID_abi_Type 1299
+#define GO_TID_abi_TypeOff 1304
+#define GO_TID_atomic_Bool 841
+#define GO_TID_atomic_Int32 1081
+#define GO_TID_atomic_Pointer_os_dirInfo_ 795
+#define GO_TID_atomic_Uint32 1079
+#define GO_TID_atomic_Uint64 1942
+#define GO_TID_atomic_align64 1943
+#define GO_TID_atomic_noCopy 802
 #define GO_TID_binary_bigEndian 117
 #define GO_TID_binary_littleEndian 118
-#define GO_TID_bufio_Reader 851
-#define GO_TID_bufio_Writer 641
-#define GO_TID_bytes_Buffer 594
-#define GO_TID_bytes_Reader 846
-#define GO_TID_bytes_readOp 595
+#define GO_TID_bufio_Reader 849
+#define GO_TID_bufio_Writer 639
+#define GO_TID_bytes_Buffer 592
+#define GO_TID_bytes_Reader 844
+#define GO_TID_bytes_readOp 593
 #define GO_TID_color_NRGBA 158
-#define GO_TID_color_Palette 1394
-#define GO_TID_exec_Cmd 1073
-#define GO_TID_exec_ExitError 1101
+#define GO_TID_color_Palette 1389
+#define GO_TID_exec_Cmd 1068
+#define GO_TID_exec_ExitError 1096
 #define GO_TID_float64 14
-#define GO_TID_image_Alpha 601
-#define GO_TID_image_NRGBA 1395
-#define GO_TID_image_Paletted 1393
-#define GO_TID_image_Point 603
-#define GO_TID_image_RGBA 1389
-#define GO_TID_image_Rectangle 602
-#define GO_TID_image_Uniform 1390
-#define GO_TID_ini_DebugFunc 1314
-#define GO_TID_ini_File 1312
-#define GO_TID_ini_Key 1322
-#define GO_TID_ini_LoadOptions 1313
-#define GO_TID_ini_NameMapper 1324
-#define GO_TID_ini_Section 1319
-#define GO_TID_ini_ValueMapper 1325
-#define GO_TID_io_LimitedReader 876
-#define GO_TID_json_Number 520
-#define GO_TID_net_IP 845
-#define GO_TID_net_IPMask 1353
-#define GO_TID_net_IPNet 1352
-#define GO_TID_net_KeepAliveConfig 1681
-#define GO_TID_net_ListenConfig 1679
-#define GO_TID_net_TCPAddr 1683
-#define GO_TID_net_TCPConn 1684
-#define GO_TID_net_TCPListener 1676
-#define GO_TID_net_UDPAddr 844
-#define GO_TID_net_conn 1685
-#define GO_TID_net_mptcpStatusListen 1682
-#define GO_TID_net_netFD 1678
-#define GO_TID_os_File 786
-#define GO_TID_os_Process 1083
-#define GO_TID_os_ProcessState 1091
-#define GO_TID_os_dirInfo 800
-#define GO_TID_os_file 788
-#define GO_TID_os_processHandle 1088
-#define GO_TID_poll_FD 789
-#define GO_TID_poll_SysFile 791
-#define GO_TID_poll_fdMutex 790
-#define GO_TID_poll_pollDesc 795
-#define GO_TID_reflect_Kind 489
-#define GO_TID_reflect_SliceHeader 993
-#define GO_TID_reflect_Value 1302
-#define GO_TID_reflect_flag 1310
-#define GO_TID_runtime_Cleanup 1089
-#define GO_TID_sdl_AudioDeviceID 1951
-#define GO_TID_sdl_ButtonState 2034
-#define GO_TID_sdl_CommonEvent 583
-#define GO_TID_sdl_ControllerAxisEvent 585
-#define GO_TID_sdl_ControllerButtonEvent 586
-#define GO_TID_sdl_EventType 1957
-#define GO_TID_sdl_GameControllerAxis 2032
-#define GO_TID_sdl_GameControllerButton 2033
-#define GO_TID_sdl_JoyDeviceAddedEvent 591
-#define GO_TID_sdl_JoyDeviceRemovedEvent 592
-#define GO_TID_sdl_JoystickID 2031
-#define GO_TID_sdl_KeyboardEvent 588
-#define GO_TID_sdl_Keycode 1708
-#define GO_TID_sdl_Keymod 2037
-#define GO_TID_sdl_Keysym 2035
-#define GO_TID_sdl_QuitEvent 587
-#define GO_TID_sdl_Scancode 2036
-#define GO_TID_sdl_TextInputEvent 590
-#define GO_TID_sdl_WindowEvent 589
-#define GO_TID_sdl_WindowEventID 2038
-#define GO_TID_sort_StringSlice 503
-#define GO_TID_strings_Builder 1361
-#define GO_TID_strings_Reader 1009
-#define GO_TID_sync_Cond 1895
-#define GO_TID_sync_Mutex 801
-#define GO_TID_sync_Once 842
-#define GO_TID_sync_RWMutex 1085
-#define GO_TID_sync_WaitGroup 1961
-#define GO_TID_sync_copyChecker 1897
-#define GO_TID_sync_noCopy 802
-#define GO_TID_sync_notifyList 1896
-#define GO_TID_syscall_Credential 1077
-#define GO_TID_syscall_Iovec 794
-#define GO_TID_syscall_Rusage 1093
-#define GO_TID_syscall_Signal 1078
-#define GO_TID_syscall_SysProcAttr 1075
-#define GO_TID_syscall_SysProcIDMap 1080
-#define GO_TID_syscall_Timeval 1094
+#define GO_TID_image_Alpha 599
+#define GO_TID_image_NRGBA 1390
+#define GO_TID_image_Paletted 1388
+#define GO_TID_image_Point 601
+#define GO_TID_image_RGBA 1384
+#define GO_TID_image_Rectangle 600
+#define GO_TID_image_Uniform 1385
+#define GO_TID_ini_DebugFunc 1309
+#define GO_TID_ini_File 1307
+#define GO_TID_ini_Key 1317
+#define GO_TID_ini_LoadOptions 1308
+#define GO_TID_ini_NameMapper 1319
+#define GO_TID_ini_Section 1314
+#define GO_TID_ini_ValueMapper 1320
+#define GO_TID_io_LimitedReader 874
+#define GO_TID_json_Number 518
+#define GO_TID_net_IP 843
+#define GO_TID_net_IPMask 1348
+#define GO_TID_net_IPNet 1347
+#define GO_TID_net_KeepAliveConfig 1676
+#define GO_TID_net_ListenConfig 1674
+#define GO_TID_net_TCPAddr 1678
+#define GO_TID_net_TCPConn 1679
+#define GO_TID_net_TCPListener 1671
+#define GO_TID_net_UDPAddr 842
+#define GO_TID_net_conn 1680
+#define GO_TID_net_mptcpStatusListen 1677
+#define GO_TID_net_netFD 1673
+#define GO_TID_os_File 784
+#define GO_TID_os_Process 1078
+#define GO_TID_os_ProcessState 1086
+#define GO_TID_os_dirInfo 798
+#define GO_TID_os_file 786
+#define GO_TID_os_processHandle 1083
+#define GO_TID_poll_FD 787
+#define GO_TID_poll_SysFile 789
+#define GO_TID_poll_fdMutex 788
+#define GO_TID_poll_pollDesc 793
+#define GO_TID_reflect_Kind 488
+#define GO_TID_reflect_SliceHeader 988
+#define GO_TID_reflect_Value 1297
+#define GO_TID_reflect_flag 1305
+#define GO_TID_runtime_Cleanup 1084
+#define GO_TID_sdl_AudioDeviceID 1946
+#define GO_TID_sdl_ButtonState 2029
+#define GO_TID_sdl_CommonEvent 581
+#define GO_TID_sdl_ControllerAxisEvent 583
+#define GO_TID_sdl_ControllerButtonEvent 584
+#define GO_TID_sdl_EventType 1952
+#define GO_TID_sdl_GameControllerAxis 2027
+#define GO_TID_sdl_GameControllerButton 2028
+#define GO_TID_sdl_JoyDeviceAddedEvent 589
+#define GO_TID_sdl_JoyDeviceRemovedEvent 590
+#define GO_TID_sdl_JoystickID 2026
+#define GO_TID_sdl_KeyboardEvent 586
+#define GO_TID_sdl_Keycode 1703
+#define GO_TID_sdl_Keymod 2032
+#define GO_TID_sdl_Keysym 2030
+#define GO_TID_sdl_QuitEvent 585
+#define GO_TID_sdl_Scancode 2031
+#define GO_TID_sdl_TextInputEvent 588
+#define GO_TID_sdl_WindowEvent 587
+#define GO_TID_sdl_WindowEventID 2033
+#define GO_TID_sort_StringSlice 501
+#define GO_TID_strings_Builder 1356
+#define GO_TID_strings_Reader 1004
+#define GO_TID_sync_Cond 1890
+#define GO_TID_sync_Mutex 799
+#define GO_TID_sync_Once 840
+#define GO_TID_sync_RWMutex 1080
+#define GO_TID_sync_WaitGroup 1956
+#define GO_TID_sync_copyChecker 1892
+#define GO_TID_sync_noCopy 800
+#define GO_TID_sync_notifyList 1891
+#define GO_TID_syscall_Credential 1072
+#define GO_TID_syscall_Iovec 792
+#define GO_TID_syscall_Rusage 1088
+#define GO_TID_syscall_Signal 1073
+#define GO_TID_syscall_SysProcAttr 1070
+#define GO_TID_syscall_SysProcIDMap 1075
+#define GO_TID_syscall_Timeval 1089
 #define GO_TID_syscall_WaitStatus 252
-#define GO_TID_tabwriter_Writer 596
-#define GO_TID_tabwriter_cell 598
-#define GO_TID_time_Duration 580
-#define GO_TID_time_Location 1289
-#define GO_TID_time_Time 1287
-#define GO_TID_time_zone 1291
-#define GO_TID_time_zoneTrans 1293
-#define GO_TID_xml_Attr 1357
-#define GO_TID_xml_Name 1355
-#define GO_TID_xml_StartElement 470
-#define GO_TID_zip_Decompressor 1297
-#define GO_TID_zip_File 1285
-#define GO_TID_zip_FileHeader 1286
-#define GO_TID_zip_ReadCloser 1281
-#define GO_TID_zip_Reader 1282
-#define GO_TID_zip_fileListEntry 1299
+#define GO_TID_tabwriter_Writer 594
+#define GO_TID_tabwriter_cell 596
+#define GO_TID_time_Duration 578
+#define GO_TID_time_Location 1284
+#define GO_TID_time_Time 1282
+#define GO_TID_time_zone 1286
+#define GO_TID_time_zoneTrans 1288
+#define GO_TID_xml_Attr 1352
+#define GO_TID_xml_Name 1350
+#define GO_TID_xml_StartElement 469
+#define GO_TID_zip_Decompressor 1292
+#define GO_TID_zip_File 1280
+#define GO_TID_zip_FileHeader 1281
+#define GO_TID_zip_ReadCloser 1276
+#define GO_TID_zip_Reader 1277
+#define GO_TID_zip_fileListEntry 1294
 static inline bool ik_impl_0(int t) { // interface{Seek(offset int64, whence int) (int64, error)}
-    switch (t) { case 119: case 146: case 155: case 169: case 211: case 305: case 306: case 736: return true; default: return false; }
+    switch (t) { case 119: case 146: case 155: case 169: case 211: case 304: case 305: case 734: return true; default: return false; }
 }
 static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
-    switch (t) { case 101: case 123: case 474: return true; default: return false; }
+    switch (t) { case 101: case 123: case 473: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 108: case 126: case 128: case 130: case 136: case 146: case 151: case 305: case 306: case 505: case 507: case 518: case 647: case 1280: case 1677: return true; default: return false; }
+    switch (t) { case 108: case 126: case 128: case 130: case 136: case 146: case 151: case 304: case 305: case 503: case 505: case 516: case 645: case 1275: case 1672: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
-    switch (t) { case 146: case 155: case 169: case 211: case 305: case 306: case 736: return true; default: return false; }
+    switch (t) { case 146: case 155: case 169: case 211: case 304: case 305: case 734: return true; default: return false; }
 }
 static inline bool ik_impl_4(int t) { // interface{HDRPixel() (p1 float64, p2 float64, p3 float64, pa float64); HDRRGBA() (r float64, g float64, b float64, a float64); HDRXYZA() (x float64, y float64, z float64, a float64); color.Color}
     switch (t) { case 167: case 168: return true; default: return false; }
@@ -8167,10 +8169,10 @@ static inline bool ik_impl_5(int t) { // interface{io.Writer; io.Seeker}
     switch (t) { case 146: return true; default: return false; }
 }
 static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.LValueType; assertFloat64() (float64, bool); assertFunction() (*lua.LFunction, bool); assertString() (string, bool)}
-    switch (t) { case 204: case 205: case 206: case 207: case 208: case 209: case 212: case 213: case 253: case 273: case 529: return true; default: return false; }
+    switch (t) { case 204: case 205: case 206: case 207: case 208: case 209: case 212: case 213: case 253: case 273: case 527: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 109: case 111: case 120: case 148: case 161: case 166: case 187: case 188: case 189: case 200: case 210: case 249: case 251: case 254: case 269: case 276: case 282: case 875: return true; default: return false; }
+    switch (t) { case 109: case 111: case 120: case 148: case 161: case 166: case 187: case 188: case 189: case 200: case 210: case 249: case 251: case 254: case 269: case 275: case 281: case 873: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
     switch (t) { default: return false; }
@@ -9215,6 +9217,8 @@ gjson_Result gjson_Get(GoString json, GoString path);
 gjson_Result gjson_GetBytes(Slice_u8 json, GoString path);
 i32 gjson_runeit(GoString json);
 GoString gjson_unescape(GoString json);
+bool gjson_Result_Less(gjson_Result t, gjson_Result token, bool caseSensitive);
+bool gjson_stringLessInsensitive(GoString a, GoString b);
 Ret_int__gjson_Result__bool gjson_parseAny(GoString json, int i, bool hit);
 Ret_int__bool gjson_validpayload(Slice_u8 data, int i);
 Ret_int__bool gjson_validany(Slice_u8 data, int i);
@@ -9267,6 +9271,11 @@ Slice_u8 pretty_ugly(Slice_u8 dst, Slice_u8 src);
 bool pretty_isNaNOrInf(Slice_u8 src);
 Ret_Slice_u8__int__int__bool pretty_appendPrettyAny(Slice_u8 buf, Slice_u8 json, int i, bool pretty, int width, GoString prefix, GoString indent, bool sortkeys, int tabs, int nl, int max_);
 int pretty_byKeyVal_Len(pretty_byKeyVal* arr);
+bool pretty_byKeyVal_Less(pretty_byKeyVal* arr, int i, int j);
+void pretty_byKeyVal_Swap(pretty_byKeyVal* arr, int i, int j);
+pretty_jtype pretty_getjtype(Slice_u8 v);
+bool pretty_byKeyVal_isLess(pretty_byKeyVal* arr, int i, int j, pretty_byKind kind);
+Slice_u8 pretty_parsestr(Slice_u8 s);
 Ret_Slice_u8__int__int__bool pretty_appendPrettyObject(Slice_u8 buf, Slice_u8 json, int i, u8 open, u8 close, bool pretty, int width, GoString prefix, GoString indent, bool sortkeys, int tabs, int nl, int max_);
 Slice_u8 pretty_sortPairs(Slice_u8 json, Slice_u8 buf, Slice_pretty_pair pairs);
 Ret_Slice_u8__int__int__bool pretty_appendPrettyString(Slice_u8 buf, Slice_u8 json, int i, int nl);
@@ -9817,6 +9826,8 @@ int lua_strSub(lua_LState* L);
 int lua_strUpper(lua_LState* L);
 int lua_luaIndex2StringIndex(GoString str, int i, bool start);
 int lua_lValueArraySorter_Len(lua_lValueArraySorter lv);
+void lua_lValueArraySorter_Swap(lua_lValueArraySorter lv, int i, int j);
+bool lua_lValueArraySorter_Less(lua_lValueArraySorter lv, int i, int j);
 lua_LTable* lua_newLTable(int acap, int hcap);
 int lua_LTable_Len(lua_LTable* tb);
 void lua_LTable_Append(lua_LTable* tb, lua_LValue value);
@@ -9975,6 +9986,8 @@ GoIface vorbis2_floor1_ReadFrom(vorbis2_floor1* f, vorbis2_bitReader* r);
 GoIface vorbis2_floor1_Decode(vorbis2_floor1* f, vorbis2_bitReader* r, Slice_vorbis2_codebook books, u32 n);
 void vorbis2_floor1_Apply(vorbis2_floor1* f, Slice_f32 out, GoIface data);
 int vorbis2_floor1_Len(vorbis2_floor1* f);
+bool vorbis2_floor1_Less(vorbis2_floor1* f, int i, int j);
+void vorbis2_floor1_Swap(vorbis2_floor1* f, int i, int j);
 int vorbis2_lowNeighbor(Slice_u32 v, int index);
 int vorbis2_highNeighbor(Slice_u32 v, int index);
 u32 vorbis2_renderPoint(u32 x0, u32 y0, u32 x1, u32 y1, u32 x);

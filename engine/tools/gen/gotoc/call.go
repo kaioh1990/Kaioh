@@ -60,6 +60,13 @@ func (t *Tx) call(c *ast.CallExpr) string {
 		return t.indirectCall(c)
 	}
 	sig := fn.Type().(*types.Signature)
+	if fn.Pkg() != nil && fn.Pkg().Path() == "sort" && (fn.Name() == "Sort" || fn.Name() == "Stable") && len(c.Args) == 1 {
+		if at := t.typeOf(c.Args[0]); at != nil && !isIface(at) {
+			if r := t.sortCall(c.Args[0], at, fn.Name() == "Stable"); r != "" {
+				return r
+			}
+		}
+	}
 	if !isOwn(fn.Pkg()) && (sig.TypeParams() != nil || isGenericInstance(t, c)) {
 		if r := t.special(c, fn, nil); r != "" {
 			return r
@@ -374,7 +381,7 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 			if len(c.Args) > 2 {
 				cp = t.expr(c.Args[2])
 			} else {
-				cp = n
+				cp = "0" // GO_MAKE: capacity at least the length (n evaluated once)
 			}
 			if pointerFree(u.Elem()) {
 				return fmt.Sprintf("GO_MAKE_A(%s, %s, %s, %s)", cbase(ty), cbase(u.Elem()), n, cp)
@@ -452,4 +459,52 @@ func (t *Tx) unsafeBuiltin(name string, c *ast.CallExpr) string {
 		return fmt.Sprintf("((void *)((char *)(%s) + (%s)))", t.expr(c.Args[0]), t.expr(c.Args[1]))
 	}
 	return t.TODO(c, "unsafe."+name)
+}
+
+
+// sortCall: sort.Sort/sort.Stable on a concrete sort.Interface type calls
+// its Len/Less/Swap methods through generated wrappers (go_sort_iface).
+var sortWrapN int
+
+func (t *Tx) sortCall(arg ast.Expr, ty types.Type, stable bool) string {
+	ms := types.NewMethodSet(types.NewPointer(ty))
+	if _, isPtr := ty.Underlying().(*types.Pointer); isPtr {
+		ms = types.NewMethodSet(ty)
+	}
+	recvOf := func(name string) (string, *types.Func) {
+		var sel *types.Selection
+		for i := 0; i < ms.Len(); i++ {
+			if ms.At(i).Obj().Name() == name {
+				sel = ms.At(i)
+			}
+		}
+		if sel == nil {
+			return "", nil
+		}
+		mfn := sel.Obj().(*types.Func)
+		_, wantPtr := mfn.Type().(*types.Signature).Recv().Type().(*types.Pointer)
+		_, isPtr := ty.Underlying().(*types.Pointer)
+		recv := fmt.Sprintf("*(%s *)e", cbase(ty))
+		if !isPtr && wantPtr {
+			recv = fmt.Sprintf("(%s *)e", cbase(ty))
+		}
+		if isPtr && !wantPtr {
+			recv = fmt.Sprintf("**(%s *)e", cbase(ty))
+		}
+		if !isOwn(mfn.Pkg()) {
+			externs[mfn] = true
+		}
+		return recv, mfn
+	}
+	lr, lenF := recvOf("Len")
+	sr, lessF := recvOf("Less")
+	wr, swapF := recvOf("Swap")
+	if lenF == nil || lessF == nil || swapF == nil {
+		return ""
+	}
+	sortWrapN++
+	n := sortWrapN
+	lifted = append(lifted, fmt.Sprintf("static int ik_sortlen_%d(void *e) { return %s(%s); }\nstatic bool ik_sortless_%d(void *e, int i, int j) { return %s(%s, i, j); }\nstatic void ik_sortswap_%d(void *e, int i, int j) { %s(%s, i, j); }",
+		n, methodCName(t.p, lenF, ty), lr, n, methodCName(t.p, lessF, ty), sr, n, methodCName(t.p, swapF, ty), wr))
+	return fmt.Sprintf("go_sort_iface(go_box(%s, %s), ik_sortlen_%d, ik_sortless_%d, ik_sortswap_%d, %v)", cbase(ty), t.exprConv(arg, ty), n, n, n, stable)
 }

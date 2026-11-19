@@ -101,6 +101,12 @@ func reachVisitor(p *Prog, queue *[]string, byName map[string][]string, keyOf fu
 					}
 				}
 			case *ast.SelectorExpr:
+				// sort.Sort/sort.Stable call Len/Less/Swap (sortCall)
+				if fn, ok := p.info.Uses[x.Sel].(*types.Func); ok && fn.Pkg() != nil && fn.Pkg().Path() == "sort" && (fn.Name() == "Sort" || fn.Name() == "Stable") {
+					for _, m := range []string{"Len", "Less", "Swap"} {
+						*queue = append(*queue, byName[m]...)
+					}
+				}
 				if sel := p.info.Selections[x]; sel != nil {
 					if fn, ok := sel.Obj().(*types.Func); ok {
 						if _, isIface := sel.Recv().Underlying().(*types.Interface); isIface {

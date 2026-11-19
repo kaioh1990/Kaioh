@@ -1286,3 +1286,30 @@ void sort_Stable(GoIface data) {
     sort_Sort(data);
 #endif
 }
+
+// sort.Sort / sort.Stable on a concrete sort.Interface (gotoc sortCall):
+// with only Less/Swap available - insertion sort (stable) for sort.Stable
+// and short inputs, heapsort for sort.Sort (unstable, as Go's is)
+static void sift(void *v, bool (*less)(void *, int, int), void (*swap)(void *, int, int), int root, int n) {
+    for (;;) {
+        int c = 2 * root + 1;
+        if (c >= n) return;
+        if (c + 1 < n && less(v, c, c + 1)) c++;
+        if (!less(v, root, c)) return;
+        swap(v, root, c);
+        root = c;
+    }
+}
+void go_sort_iface(void *v, int (*len)(void *), bool (*less)(void *, int, int), void (*swap)(void *, int, int), bool stable) {
+    int n = len(v);
+    if (stable || n <= 12) {
+        for (int i = 1; i < n; i++)
+            for (int j = i; j > 0 && less(v, j, j - 1); j--) swap(v, j, j - 1);
+        return;
+    }
+    for (int i = (n - 1) / 2; i >= 0; i--) sift(v, less, swap, i, n);
+    for (int i = n - 1; i > 0; i--) {
+        swap(v, 0, i);
+        sift(v, less, swap, 0, i);
+    }
+}

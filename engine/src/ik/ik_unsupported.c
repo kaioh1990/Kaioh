@@ -85,6 +85,7 @@ Ret_int__GoIface net_netFD_Read(GoOpaque /* net.netFD */* recv, Slice_u8 a0) { R
 Ret_int__GoIface net_netFD_Write(GoOpaque /* net.netFD */* recv, Slice_u8 a0) { Ret_int__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("net_netFD_Write: not supported by the native engine yet"); return r; } // func (*net.netFD).Write(p []byte) (nn int, err error)
 Ret_int__GoIface tabwriter_Writer_Write(GoOpaque /* tabwriter.Writer */* recv, Slice_u8 a0) { Ret_int__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("tabwriter_Writer_Write: not supported by the native engine yet"); return r; } // func (*tabwriter.Writer).Write(buf []byte) (n int, err error)
 Ret_u8__GoIface bytes_Reader_ReadByte(GoOpaque /* bytes.Reader */* recv) { Ret_u8__GoIface r; memset(&r, 0, sizeof r); r.r1 = go_errorf("bytes_Reader_ReadByte: not supported by the native engine yet"); return r; } // func (*bytes.Reader).ReadByte() (byte, error)
+Slice_u8 bytes_TrimSpace(Slice_u8 a0) { Slice_u8 r; memset(&r, 0, sizeof r); return r; } // func bytes.TrimSpace(s []byte) []byte
 Slice_u8 net_ParseIP(GoString a0) { Slice_u8 r; memset(&r, 0, sizeof r); return r; } // func net.ParseIP(s string) net.IP
 bool bytes_Equal(Slice_u8 a0, Slice_u8 a1) { bool r; memset(&r, 0, sizeof r); return r; } // func bytes.Equal(a []byte, b []byte) bool
 bool dialog_MsgBuilder_YesNo(GoOpaque /* dialog.MsgBuilder */* recv) { bool r; memset(&r, 0, sizeof r); return r; } // func (*dialog.MsgBuilder).YesNo() bool
