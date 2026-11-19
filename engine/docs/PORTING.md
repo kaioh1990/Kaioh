@@ -14,6 +14,26 @@ phase compiles the cooked bytecode ahead of time to C.
 Cooking currently runs inside the Vita reference build in the emulator
 (`vita_cook.txt` flag): about 5 seconds per character.
 
+## Translation tooling (since 2026-11-19)
+
+Hand-porting ~50k lines of Ikemen's simulation is error-prone, so the bulk
+is translated mechanically and then fixed up by hand:
+
+- `tools/gen/gencdefs`: generates the C data model (structs, slices, maps,
+  constants) from Go type information. Go arrays become struct wrappers
+  (`ArrN_T { T v[N]; }`) to keep value semantics.
+- `tools/gen/gotoc`: translates Go function bodies to C using go/types:
+  methods become `Type_method(recv, ...)`, package functions `fn_Name`,
+  package variables `g_name`, integer division/shift/float->int
+  conversions go through helpers with Go (amd64) semantics. Constructs it
+  cannot translate are emitted as `TODO(/* what at file:line */)` so the C
+  compiler flags them.
+- First run: char.go 452 functions / 144 TODO, bytecode.go 312 / 52,
+  system.go 228 / 153, anim.go 74 / 32.
+
+Hand-written modules (rng, detmath, anim playback, values, AIR, cooked
+content) replace their Go counterparts via `overrides.txt`.
+
 ## Conventions
 
 - Determinism flags in CMakeLists.txt: no FMA contraction, no fast-math,
