@@ -5,7 +5,7 @@ export GOTOC_EXCLUDE=cvfcook.go,font.go,input_sdl.go,luacache.go,model.go,music.
 # simulation functions living in otherwise excluded (platform) files
 export GOTOC_INCLUDE_FUNCS=Rotation.IsZero,itoa,fmtHex,Motif.resolvePath
 # functions implemented by hand in src/ik (ik_native.c)
-export GOTOC_NATIVE_FUNCS=decodeShiftJIS
+export GOTOC_NATIVE_FUNCS=decodeShiftJIS,cvfGcSafepoint
 # platform/render/diagnostic functions in otherwise translated files
 export GOTOC_EXCLUDE_FUNCS=runGfxTask,GetKeyboardState,saveScreenshot,parseMusicSection,Char.cueDebugDraw,AnimTextSnd.Draw,FightScreenCombo.draw,Loader.runTread,System.drawDebugText,modifyBgm.Run,modifySnd.Run,Layout.DrawText
 export GOTOC_GEN_TYPES=${GOTOC_GEN_TYPES:-/home/claude/kaioh/engine/src/core/gen_types.h}

@@ -45,15 +45,15 @@ static Ret_GoOpaque_os_FilePtrPtr__GoIface open_mode(GoString name, const char *
     Ret_GoOpaque_os_FilePtrPtr__GoIface r = {0};
     FILE *f = fopen(go_strz(name), mode);
     if (!f) {
-        RtPathErr *e = (RtPathErr *)malloc(sizeof *e);
+        RtPathErr *e = (RtPathErr *)gc_alloc(sizeof *e);
         e->notexist = true;
         e->msg = go_error_string(path_error("open", name, os_ErrNotExist));
         r.r1 = (GoIface){GO_TID_ERRSTR, e};
         return r;
     }
-    RtFile *rf = (RtFile *)calloc(1, sizeof *rf);
+    RtFile *rf = (RtFile *)gc_calloc(1, sizeof *rf);
     rf->f = f;
-    rf->name = (GoString){strdup(go_strz(name)), name.len};
+    rf->name = (GoString){gc_strdup(go_strz(name)), name.len};
     r.r0 = (GoOpaque *)rf;
     return r;
 }
@@ -123,13 +123,13 @@ Ret_GoIface__GoIface os_Stat(GoString name) {
     Ret_GoIface__GoIface r = {0};
     struct stat st;
     if (stat(go_strz(name), &st) != 0) {
-        RtPathErr *e = (RtPathErr *)malloc(sizeof *e);
+        RtPathErr *e = (RtPathErr *)gc_alloc(sizeof *e);
         e->notexist = true;
         e->msg = go_error_string(path_error("stat", name, os_ErrNotExist));
         r.r1 = (GoIface){GO_TID_ERRSTR, e};
         return r;
     }
-    RtFileInfo *fi = (RtFileInfo *)calloc(1, sizeof *fi);
+    RtFileInfo *fi = (RtFileInfo *)gc_calloc(1, sizeof *fi);
     int k = name.len;
     while (k > 0 && name.p[k - 1] != '/') k--;
     fi->name = (GoString){name.p + k, name.len - k};
@@ -153,7 +153,7 @@ typedef struct RtBytesReader {
 } RtBytesReader;
 
 GoOpaque *bytes_NewReader(Slice_u8 b) {
-    RtBytesReader *r = (RtBytesReader *)calloc(1, sizeof *r);
+    RtBytesReader *r = (RtBytesReader *)gc_calloc(1, sizeof *r);
     r->b = b;
     return (GoOpaque *)r;
 }
@@ -198,11 +198,11 @@ static Ret_int__GoIface iread(GoIface r, u8 *p, int n) {
 
 Ret_Slice_u8__GoIface io_ReadAll(GoIface r) {
     Ret_Slice_u8__GoIface o = {0};
-    Slice_u8 b = {(u8 *)malloc(512), 0, 512};
+    Slice_u8 b = {(u8 *)gc_alloc_atomic(512), 0, 512};
     for (;;) {
         if (b.len == b.cap) {
             b.cap *= 2;
-            b.p = (u8 *)realloc(b.p, (size_t)b.cap);
+            b.p = (u8 *)gc_realloc(b.p, (size_t)b.cap);
         }
         Ret_int__GoIface rr = iread(r, b.p + b.len, b.cap - b.len);
         b.len += rr.r0;
@@ -273,7 +273,7 @@ GoString filepath_Clean(GoString s) {
     int n = rooted ? 1 : 0;
     for (int i = 0; i < np; i++) n += parts[i].len + (i ? 1 : 0);
     if (n == 0) return GOSTR(".");
-    char *p = (char *)malloc((size_t)n + 1);
+    char *p = (char *)gc_alloc_atomic((size_t)n + 1);
     int w = 0;
     if (rooted) p[w++] = '/';
     for (int i = 0; i < np; i++) {
@@ -383,7 +383,7 @@ static void glob_rec(GoString dir, Slice_GoString segs, int k, Slice_GoString *o
     while ((e = readdir(d)) != NULL) {
         int n = (int)strlen(e->d_name);
         if (e->d_name[0] == '.' && seg.p[0] != '.') continue;
-        if (match_elem(seg.p, seg.len, e->d_name, n)) names = go_append_Slice_GoString(names, go_cstr(strdup(e->d_name)));
+        if (match_elem(seg.p, seg.len, e->d_name, n)) names = go_append_Slice_GoString(names, go_cstr(gc_strdup(e->d_name)));
     }
     closedir(d);
     sort_Strings(names);  // Go's Glob returns lexically sorted matches
@@ -436,11 +436,11 @@ GoIface png_Encode(GoIface a0, GoIface a1) {
 }
 GoOpaque *gob_NewDecoder(GoIface a0) {
     (void)a0;
-    return (GoOpaque *)calloc(1, sizeof(GoOpaque));
+    return (GoOpaque *)gc_calloc(1, sizeof(GoOpaque));
 }
 GoOpaque *gob_NewEncoder(GoIface a0) {
     (void)a0;
-    return (GoOpaque *)calloc(1, sizeof(GoOpaque));
+    return (GoOpaque *)gc_calloc(1, sizeof(GoOpaque));
 }
 GoIface gob_Decoder_Decode(GoOpaque *recv, GoIface a0) {
     (void)recv, (void)a0;
@@ -451,11 +451,11 @@ GoIface gob_Encoder_Encode(GoOpaque *recv, GoIface a0) {
     return go_error(GOSTR("gob: not supported"));
 }
 GoImageNRGBA *image_NewNRGBA(GoImageRect r) {
-    GoImageNRGBA *m = (GoImageNRGBA *)calloc(1, sizeof *m);
+    GoImageNRGBA *m = (GoImageNRGBA *)gc_calloc(1, sizeof *m);
     int w = r.Max.X - r.Min.X, h = r.Max.Y - r.Min.Y;
     m->Rect = r;
     m->Stride = 4 * w;
-    m->Pix = (Slice_u8){(u8 *)calloc((size_t)(w * h * 4 > 0 ? w * h * 4 : 1), 1), w * h * 4, w * h * 4};
+    m->Pix = (Slice_u8){(u8 *)gc_calloc_atomic((size_t)(w * h * 4 > 0 ? w * h * 4 : 1), 1), w * h * 4, w * h * 4};
     return m;
 }
 GoImageRect image_Rect(int x0, int y0, int x1, int y1) {
@@ -497,7 +497,7 @@ typedef struct RtBufWriter {
 
 GoOpaque *bufio_NewWriterSize(GoIface w, int size) {
     (void)size;  // stdio buffers already
-    RtBufWriter *b = (RtBufWriter *)calloc(1, sizeof *b);
+    RtBufWriter *b = (RtBufWriter *)gc_calloc(1, sizeof *b);
     b->w = w;
     return (GoOpaque *)b;
 }
@@ -587,7 +587,7 @@ typedef struct RtScanner {
 } RtScanner;
 
 GoOpaque *bufio_NewScanner(GoIface r) {
-    RtScanner *s = (RtScanner *)calloc(1, sizeof *s);
+    RtScanner *s = (RtScanner *)gc_calloc(1, sizeof *s);
     s->data = io_ReadAll(r).r0;
     return (GoOpaque *)s;
 }
@@ -608,7 +608,7 @@ GoString bufio_Scanner_Text(GoOpaque *recv) { return ((RtScanner *)recv)->tok; }
 
 GoString os_Getenv(GoString key) {
     const char *v = getenv(go_strz(key));
-    return v ? go_cstr(strdup(v)) : (GoString){"", 0};
+    return v ? go_cstr(gc_strdup(v)) : (GoString){"", 0};
 }
 
 // ---------------------------------------------------------------- Lua
@@ -646,10 +646,10 @@ Ret_Slice_u8__GoIface os_ReadFile(GoString name) {
     long n = ftell(rf->f);
     fseek(rf->f, 0, SEEK_SET);
     if (n < 0) n = 0;
-    r.r0.p = (u8 *)malloc((size_t)n + 1);
+    r.r0.p = (u8 *)gc_alloc_atomic((size_t)n + 1);
     r.r0.len = r.r0.cap = (int)fread(r.r0.p, 1, (size_t)n, rf->f);
     fclose(rf->f);
-    free(rf);
+    gc_free(rf);
     return r;
 }
 

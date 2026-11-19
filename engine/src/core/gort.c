@@ -16,7 +16,7 @@ int go_strcmp(GoString a, GoString b) {
 GoString go_strcat(GoString a, GoString b) {
     if (!a.len) return b;
     if (!b.len) return a;
-    char *p = (char *)malloc((size_t)(a.len + b.len + 1));
+    char *p = (char *)gc_alloc_atomic((size_t)(a.len + b.len + 1));
     memcpy(p, a.p, (size_t)a.len);
     memcpy(p + a.len, b.p, (size_t)b.len);
     p[a.len + b.len] = 0;
@@ -29,7 +29,7 @@ GoString go_substr(GoString s, int lo, int hi) {
 }
 
 GoString go_rune2str(i32 r) {
-    char *p = (char *)malloc(5);
+    char *p = (char *)gc_alloc_atomic(5);
     int n = 0;
     if (r < 0 || r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF)) r = 0xFFFD;
     if (r < 0x80) p[n++] = (char)r;
@@ -82,19 +82,21 @@ const char *go_strz(GoString s) {
     return b;
 }
 
-void *go_slice_grow(void *p, int len, int *cap, int need, size_t elem) {
+static inline void *slice_grow(void *p, int len, int *cap, int need, size_t elem, bool atomic) {
     int nc = *cap;
     // Go's growth: double small slices, 1.25x large ones (exact capacity
     // only matters for aliasing, which follows from the same rule).
     if (nc < 256) nc = nc ? nc * 2 : 1;
     else nc += (nc + 3 * 256) / 4;
     if (nc < need) nc = need;
-    void *np = malloc(elem * (size_t)nc);
-    if (!np) cvf_fatal("slice grow: out of memory");
+    void *np = atomic ? gc_alloc_atomic(elem * (size_t)nc) : gc_alloc(elem * (size_t)nc);  // zeroed
     if (len) memcpy(np, p, elem * (size_t)len);
-    memset((char *)np + elem * (size_t)len, 0, elem * (size_t)(nc - len));
     *cap = nc;
-    return np;  // old storage stays valid for any alias (no GC: leaked until arena reset)
+    return np;  // old storage stays valid for any alias until unreachable
+}
+void *go_slice_grow(void *p, int len, int *cap, int need, size_t elem) { return slice_grow(p, len, cap, need, elem, false); }
+void *go_slice_grow_atomic(void *p, int len, int *cap, int need, size_t elem) {
+    return slice_grow(p, len, cap, need, elem, true);
 }
 
 int go_copy_impl(void *dst, int dlen, const void *src, int slen, size_t elem) {
@@ -136,24 +138,27 @@ static bool key_eq(GoMapImpl *m, const void *a, const void *b) {
 }
 
 #define ENT(m, i) ((m)->ents + (size_t)(i) * (m)->stride)
+#define ENT_HASH(m, i) (*(u32 *)(ENT(m, i) + 4))  // header: [0] used, [4..8) hash
 #define ENT_KEY(m, i) (ENT(m, i) + 8)
 #define ENT_VAL(m, i) (ENT(m, i) + 8 + (((m)->ksize + 7) & ~(size_t)7))
 
 static void rehash(GoMapImpl *m, int nslots) {
-    free(m->slots);
-    m->nslots = nslots;
-    m->slots = (i32 *)calloc((size_t)nslots, sizeof(i32));
+    if (nslots != m->nslots) {
+        m->nslots = nslots;
+        m->slots = (i32 *)gc_calloc_atomic((size_t)nslots, sizeof(i32));
+    } else {
+        memset(m->slots, 0, sizeof(i32) * (size_t)nslots);
+    }
     for (int i = 0; i < m->n; i++) {
         if (!ENT(m, i)[0]) continue;
-        u64 h = key_hash(m, ENT_KEY(m, i));
-        int s = (int)(h & (u64)(nslots - 1));
+        int s = (int)(ENT_HASH(m, i) & (u32)(nslots - 1));
         while (m->slots[s]) s = (s + 1) & (nslots - 1);
         m->slots[s] = i + 1;
     }
 }
 
 GoMap gomap_make(size_t ksize, size_t vsize, bool strkey) {
-    GoMapImpl *m = (GoMapImpl *)calloc(1, sizeof *m);
+    GoMapImpl *m = (GoMapImpl *)gc_calloc(1, sizeof *m);
     m->ksize = ksize;
     m->vsize = vsize;
     m->strkey = strkey;
@@ -161,16 +166,19 @@ GoMap gomap_make(size_t ksize, size_t vsize, bool strkey) {
     return (GoMap){m};
 }
 
-static int find_slot(GoMapImpl *m, const void *key) {
-    if (!m || !m->nslots) return -1;
-    u64 h = key_hash(m, key);
-    int s = (int)(h & (u64)(m->nslots - 1));
+static int find_slot_h(GoMapImpl *m, const void *key, u32 h) {
+    int s = (int)(h & (u32)(m->nslots - 1));
     while (m->slots[s]) {
         int e = m->slots[s] - 1;
-        if (ENT(m, e)[0] && key_eq(m, ENT_KEY(m, e), key)) return s;
+        if (ENT_HASH(m, e) == h && key_eq(m, ENT_KEY(m, e), key)) return s;
         s = (s + 1) & (m->nslots - 1);
     }
     return -1;
+}
+
+static int find_slot(GoMapImpl *m, const void *key) {
+    if (!m || !m->nslots) return -1;
+    return find_slot_h(m, key, (u32)key_hash(m, key));
 }
 
 void *gomap_find(GoMap *gm, const void *key) {
@@ -181,21 +189,30 @@ void *gomap_find(GoMap *gm, const void *key) {
 void *gomap_put(GoMap *gm, const void *key, size_t ksize, size_t vsize, bool strkey) {
     if (!gm->m) *gm = gomap_make(ksize, vsize, strkey);
     GoMapImpl *m = gm->m;
-    int s = find_slot(m, key);
-    if (s >= 0) return ENT_VAL(m, m->slots[s] - 1);
+    u32 h = (u32)key_hash(m, key);
+    if (m->nslots) {
+        int s = find_slot_h(m, key, h);
+        if (s >= 0) return ENT_VAL(m, m->slots[s] - 1);
+    }
+    if (m->live == 0 && m->n) {
+        // emptied map: start the entry array over (live entries keep
+        // insertion order; no entry exists to be visited by an iterator)
+        m->n = 0;
+        memset(m->slots, 0, sizeof(i32) * (size_t)m->nslots);
+    }
     if (m->n == m->cap) {
         m->cap = m->cap ? m->cap * 2 : 8;
-        m->ents = (u8 *)realloc(m->ents, m->stride * (size_t)m->cap);
+        m->ents = (u8 *)gc_realloc(m->ents, m->stride * (size_t)m->cap);
     }
     int e = m->n++;
     memset(ENT(m, e), 0, m->stride);
     ENT(m, e)[0] = 1;
+    ENT_HASH(m, e) = h;
     memcpy(ENT_KEY(m, e), key, m->ksize);
     m->live++;
     if (m->n * 2 >= m->nslots) rehash(m, m->nslots ? m->nslots * 2 : 16);
     else {
-        u64 h = key_hash(m, key);
-        int ss = (int)(h & (u64)(m->nslots - 1));
+        int ss = (int)(h & (u32)(m->nslots - 1));
         while (m->slots[ss]) ss = (ss + 1) & (m->nslots - 1);
         m->slots[ss] = e + 1;
     }
@@ -204,11 +221,23 @@ void *gomap_put(GoMap *gm, const void *key, size_t ksize, size_t vsize, bool str
 
 void gomap_del(GoMap *gm, const void *key) {
     GoMapImpl *m = gm->m;
-    int s = find_slot(m, key);
-    if (s < 0) return;
-    ENT(m, m->slots[s] - 1)[0] = 0;
+    int i = find_slot(m, key);
+    if (i < 0) return;
+    ENT(m, m->slots[i] - 1)[0] = 0;
     m->live--;
-    rehash(m, m->nslots);  // simple: tombstones are dropped from the index
+    // backward-shift deletion: keep every probe chain unbroken, no tombstones
+    int mask = m->nslots - 1;
+    m->slots[i] = 0;
+    for (int j = (i + 1) & mask; m->slots[j]; j = (j + 1) & mask) {
+        int k = (int)(ENT_HASH(m, m->slots[j] - 1) & (u32)mask);
+        // the entry at j may move to the hole at i unless its home k lies cyclically in (i, j]
+        bool stay = i <= j ? (i < k && k <= j) : (i < k || k <= j);
+        if (!stay) {
+            m->slots[i] = m->slots[j];
+            m->slots[j] = 0;
+            i = j;
+        }
+    }
 }
 
 void gomap_clear(GoMap *gm) {
@@ -235,8 +264,14 @@ bool gomap_next(GoMapIter *it) {
     return false;
 }
 
+void *go_box_atomic_impl(const void *v, size_t n) {
+    void *p = gc_alloc_atomic(n ? n : 1);
+    memcpy(p, v, n);
+    return p;
+}
+
 void *go_box_impl(const void *v, size_t n) {
-    void *p = malloc(n ? n : 1);
+    void *p = gc_alloc(n ? n : 1);
     memcpy(p, v, n);
     return p;
 }

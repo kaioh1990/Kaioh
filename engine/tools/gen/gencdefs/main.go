@@ -283,7 +283,11 @@ func main() {
 		if strings.HasPrefix(el, "void") || strings.Contains(el, "/*") {
 			continue
 		}
-		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\nGO_SLICE_FUNCS(%s, %s)\n#endif\n", n, n, n, el)
+		mac := "GO_SLICE_FUNCS"
+		if pointerFree(sliceTypes[n]) {
+			mac = "GO_SLICE_FUNCS_A"
+		}
+		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\n%s(%s, %s)\n#endif\n", n, n, mac, n, el)
 	}
 	for _, n := range mn0 {
 		mt := mapTypes[n]

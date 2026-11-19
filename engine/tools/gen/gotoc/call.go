@@ -307,6 +307,9 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 			} else {
 				cp = n
 			}
+			if pointerFree(u.Elem()) {
+				return fmt.Sprintf("GO_MAKE_A(%s, %s, %s, %s)", cbase(ty), cbase(u.Elem()), n, cp)
+			}
 			return fmt.Sprintf("GO_MAKE(%s, %s, %s, %s)", cbase(ty), cbase(u.Elem()), n, cp)
 		case *types.Map:
 			n := "0"
@@ -318,6 +321,9 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 		return t.TODO(c, "make")
 	case "new":
 		ty := t.p.info.Types[c.Args[0]].Type
+		if pointerFree(ty) {
+			return fmt.Sprintf("go_new_atomic(%s)", cbase(ty))
+		}
 		return fmt.Sprintf("go_new(%s)", cbase(ty))
 	case "copy":
 		return fmt.Sprintf("GO_COPY(%s, %s)", t.expr(c.Args[0]), t.expr(c.Args[1]))

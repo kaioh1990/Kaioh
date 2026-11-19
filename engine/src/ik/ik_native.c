@@ -7,3 +7,6 @@
 // strings are passed through unchanged.
 // TODO(cvf): Shift_JIS table for legacy Japanese content.
 GoString fn_decodeShiftJIS(GoString input) { return input; }
+
+// cvfGcSafepoint: frame boundary for the collector (see core/gc.h).
+void fn_cvfGcSafepoint(bool fighting) { gc_safepoint(fighting); }

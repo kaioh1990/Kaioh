@@ -178,7 +178,7 @@ func typePreamble() string {
 		if el == "void" {
 			continue
 		}
-		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\nGO_SLICE_FUNCS(%s, %s)\n#endif\n", n, n, n, el)
+		fmt.Fprintf(&b, "#ifndef CVF_FN_%s\n#define CVF_FN_%s\n%s(%s, %s)\n#endif\n", n, n, sliceFuncsMacro(sliceTypes[n]), n, el)
 	}
 	for _, n := range keys(mn) {
 		mt := mapTypes[n]

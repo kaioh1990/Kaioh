@@ -101,6 +101,39 @@ stay as verified references and for the optimised paths later.
   maps for vars, malloc everywhere) - the optimisation phase starts from
   here.
 
+### Status 2026-11-19 03:30 — match end, memory
+
+- motif.go is translated: the match now ends exactly like the reference
+  (Motif.act clears postMatchFlg, Lua exits) and the process exits with the
+  winner. Still all reference lines identical.
+- Memory: the translation never freed anything (peak RSS 1.23 GB for one
+  match). Now every allocation goes through `core/gc.c`, a conservative,
+  non-moving mark-sweep collector (8 KiB size-classed pages, interior
+  pointers, roots = data/bss + stack + registers; Linux, macOS and Windows
+  root discovery). Peak RSS 78 MB, live set ~30 MB.
+- Pointer-free storage is allocated "atomic" (never scanned): gotoc and
+  gencdefs decide per type (`pointerFree`) and emit GO_MAKE_A / go_box_a /
+  go_new_atomic / GO_SLICE_FUNCS_A.
+- gotoc escape analysis (lite): closures that are only called (directly or
+  through a local used only in call position) get their environment on the C
+  stack, and variables only they capture are stack boxes instead of heap
+  boxes.
+- Per-tick garbage: 43 KB → ~5 KB (closure boxing, explod Animation
+  recycling now always on — flagForRemoval keeps the object for the next
+  explod —, DisplayToClipboard/AppendToClipboard only build text while the
+  debug display is on, float literal decoding without a temporary slice,
+  EnemyNear scratch array, in-place map deletes).
+- Collection policy: `System.await` calls `cvfGcSafepoint(fighting)` every
+  frame. While a round is in progress (roundState 2) allocation does not
+  trigger collections unless the fight budget is exceeded
+  (CVF_GC_FIGHT_BUDGET_MB, default 256 MB 64-bit / 48 MB 32-bit); due
+  collections run at frame boundaries outside fights. In the reference match
+  all collections happen during loading and after the KO, none in the fight.
+- Diagnostics: CVF_GC_TRACE=1 (per collection + summary), CVF_GOGC,
+  CVF_GC_ARENA_MB; build with -DGC_PROFILE for allocation-site sampling
+  (gcprof.txt, CVF_GC_PROF_SKIP_MB to skip the load).
+- CMake: `cvf_ik` (translated simulation) and `cvf_headless` targets.
+
 ## Conventions
 
 - Determinism flags in CMakeLists.txt: no FMA contraction, no fast-math,

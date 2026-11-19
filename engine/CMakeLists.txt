@@ -51,3 +51,15 @@ if(CVF_TOOL_SOURCES)
   target_link_libraries(cvftool PRIVATE cvf_core)
   target_compile_options(cvftool PRIVATE ${CVF_DETERMINISM_FLAGS} ${CVF_WARNINGS})
 endif()
+
+# Translated Ikemen simulation (tools/gen/gotoc) and the headless match runner
+# used to verify it tick-for-tick against the reference state dumps.
+file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c)
+add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
+target_link_libraries(cvf_ik PUBLIC cvf_core)
+# generated code: warnings are not actionable here
+target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w)
+set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)  # GNU statement expressions, typeof
+add_executable(cvf_headless src/app/headless_main.c)
+target_link_libraries(cvf_headless PRIVATE cvf_ik)
+target_compile_options(cvf_headless PRIVATE ${CVF_DETERMINISM_FLAGS})

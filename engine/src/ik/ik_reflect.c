@@ -56,7 +56,7 @@ static const RType *ptr_to(const RType *elem) {
     static int nextra;
     for (int i = 0; i < nextra; i++)
         if (extra[i]->elem == elem) return extra[i];
-    RType *t = (RType *)calloc(1, sizeof *t);
+    RType *t = (RType *)gc_calloc(1, sizeof *t);
     t->kind = K_PTR;
     t->size = sizeof(void *);
     t->elem = elem;
@@ -77,7 +77,7 @@ static GoIface box(const RType *t, const void *p) {
     if (!t) return (GoIface){0};
     if (t->kind == K_INTERFACE) return *(const GoIface *)p;
     if (ptr_shaped(t)) return (GoIface){t->tid, *(void *const *)p};
-    void *c = malloc(t->size ? t->size : 1);
+    void *c = gc_alloc(t->size ? t->size : 1);
     memcpy(c, p, t->size);
     return (GoIface){t->tid, c};
 }
@@ -87,7 +87,7 @@ static RVal value_of(GoIface i) {
     const RType *t = by_tid(i.type);
     if (!t) return INVALID;
     if (ptr_shaped(t)) {
-        void **cell = (void **)malloc(sizeof(void *));
+        void **cell = (void **)gc_alloc(sizeof(void *));
         *cell = i.data;
         return (RVal){t, cell, 0};
     }
@@ -189,7 +189,7 @@ GoOpaque reflect_Value_Index(GoOpaque recv, int i) {
     case K_STRING: {
         GoString s = *(GoString *)v.ptr;
         if (i < 0 || i >= s.len) go_panic_str("reflect: string index out of range");
-        u8 *c = (u8 *)malloc(1);
+        u8 *c = (u8 *)gc_alloc(1);
         *c = (u8)s.p[i];
         return pack((RVal){basic(K_UINT8), c, 0});
     }
@@ -348,7 +348,7 @@ GoOpaque reflect_Value_MapIndex(GoOpaque recv, GoOpaque key) {
     if (!v.t || v.t->kind != K_MAP) go_panic_str("reflect: MapIndex on non-map");
     void *e = gomap_find((GoMap *)v.ptr, k.ptr);
     if (!e) return pack(INVALID);
-    void *c = malloc(v.t->elem->size ? v.t->elem->size : 1);
+    void *c = gc_alloc(v.t->elem->size ? v.t->elem->size : 1);
     memcpy(c, e, v.t->elem->size);
     return pack((RVal){v.t->elem, c, v.flags & F_RO});
 }
@@ -370,11 +370,11 @@ Slice_GoOpaque_reflect_ValuePtr reflect_Value_MapKeys(GoOpaque recv) {
     Slice_GoOpaque_reflect_ValuePtr out = {0};
     if (!v.t || v.t->kind != K_MAP) go_panic_str("reflect: MapKeys on non-map");
     int n = gomap_len((GoMap *)v.ptr);
-    out.p = (GoOpaque *)malloc(sizeof(GoOpaque) * (size_t)(n ? n : 1));
+    out.p = (GoOpaque *)gc_alloc(sizeof(GoOpaque) * (size_t)(n ? n : 1));
     out.cap = n;
     GoMapIter it = gomap_iter((GoMap *)v.ptr);
     while (gomap_next(&it)) {
-        void *c = malloc(v.t->key->size ? v.t->key->size : 1);
+        void *c = gc_alloc(v.t->key->size ? v.t->key->size : 1);
         memcpy(c, it.key, v.t->key->size);
         out.p[out.len++] = pack((RVal){v.t->key, c, 0});
     }
@@ -383,7 +383,7 @@ Slice_GoOpaque_reflect_ValuePtr reflect_Value_MapKeys(GoOpaque recv) {
 
 GoOpaque reflect_MakeMap(GoIface typ) {
     const RType *t = (const RType *)typ.data;
-    GoMap *m = (GoMap *)malloc(sizeof(GoMap));
+    GoMap *m = (GoMap *)gc_alloc(sizeof(GoMap));
     *m = gomap_make(t->key->size, t->elem->size, t->strkey);
     return pack((RVal){t, m, 0});
 }
@@ -391,8 +391,8 @@ GoOpaque reflect_MakeMap(GoIface typ) {
 // ---------------------------------------------------------------- slices etc.
 GoOpaque reflect_MakeSlice(GoIface typ, int len, int cap) {
     const RType *t = (const RType *)typ.data;
-    GoSliceHdr *h = (GoSliceHdr *)malloc(sizeof *h);
-    h->p = calloc((size_t)(cap > 0 ? cap : 1), t->elem->size ? t->elem->size : 1);
+    GoSliceHdr *h = (GoSliceHdr *)gc_alloc(sizeof *h);
+    h->p = gc_calloc((size_t)(cap > 0 ? cap : 1), t->elem->size ? t->elem->size : 1);
     h->len = len;
     h->cap = cap;
     return pack((RVal){t, h, 0});
@@ -403,7 +403,7 @@ GoOpaque reflect_Append(GoOpaque s, Slice_GoOpaque_reflect_ValuePtr xs) {
     if (!v.t || v.t->kind != K_SLICE) go_panic_str("reflect: Append on non-slice");
     GoSliceHdr in = *(GoSliceHdr *)v.ptr;
     size_t es = v.t->elem->size;
-    GoSliceHdr *h = (GoSliceHdr *)malloc(sizeof *h);
+    GoSliceHdr *h = (GoSliceHdr *)gc_alloc(sizeof *h);
     *h = in;
     if (h->len + xs.len > h->cap) h->p = go_slice_grow(h->p, h->len, &h->cap, h->len + xs.len, es);
     for (int i = 0; i < xs.len; i++) {
@@ -418,14 +418,14 @@ GoOpaque reflect_Append(GoOpaque s, Slice_GoOpaque_reflect_ValuePtr xs) {
 
 GoOpaque reflect_New(GoIface typ) {
     const RType *t = (const RType *)typ.data;
-    void **cell = (void **)malloc(sizeof(void *));
-    *cell = calloc(1, t->size ? t->size : 1);
+    void **cell = (void **)gc_alloc(sizeof(void *));
+    *cell = gc_calloc(1, t->size ? t->size : 1);
     return pack((RVal){ptr_to(t), cell, 0});
 }
 
 GoOpaque reflect_Zero(GoIface typ) {
     const RType *t = (const RType *)typ.data;
-    return pack((RVal){t, calloc(1, t->size ? t->size : 1), 0});
+    return pack((RVal){t, gc_calloc(1, t->size ? t->size : 1), 0});
 }
 
 // ---------------------------------------------------------------- DeepEqual
@@ -549,7 +549,7 @@ GoReflectStructField rt_type_Field(const RType *t, int i) {
     sf.Type = type_iface(f->type);
     sf.Tag = go_cstr(f->tag);
     sf.Offset = f->offset;
-    sf.Index.p = (int *)malloc(sizeof(int));
+    sf.Index.p = (int *)gc_alloc(sizeof(int));
     sf.Index.p[0] = i;
     sf.Index.len = sf.Index.cap = 1;
     sf.Anonymous = f->anonymous;

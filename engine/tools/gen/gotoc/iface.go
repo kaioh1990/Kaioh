@@ -62,7 +62,7 @@ func (t *Tx) box(x string, from types.Type) string {
 	if _, ok := from.Underlying().(*types.Pointer); ok {
 		return fmt.Sprintf("((GoIface){%d, (void *)(%s)})", id, x)
 	}
-	return fmt.Sprintf("((GoIface){%d, go_box(%s, %s)})", id, cbase(from), x)
+	return fmt.Sprintf("((GoIface){%d, %s(%s, %s)})", id, boxFn(from), cbase(from), x)
 }
 
 func defaultType(ty types.Type) types.Type {

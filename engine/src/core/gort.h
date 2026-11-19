@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include "core/base.h"
+#include "core/gc.h"
 
 // ---------------------------------------------------------------- strings
 typedef struct GoString {
@@ -28,12 +29,15 @@ int go_decode_rune(GoString s, int i, i32 *r);  // utf8.DecodeRuneInString at i:
 // ---------------------------------------------------------------- slices
 // Every slice type is `struct { T *p; int len, cap; }` (generated).
 void *go_slice_grow(void *p, int len, int *cap, int need, size_t elem);
+void *go_slice_grow_atomic(void *p, int len, int *cap, int need, size_t elem);  // pointer-free elements
 
 #define GO_SLICE(T, s, lo, hi)                                                         \
     ((T){(s).p + (lo), ((hi) < 0 ? (s).len : (hi)) - (lo), (s).cap - (lo)})
 #define GO_ARRSLICE(T, arr, n, lo, hi) ((T){(arr) + (lo), ((hi) < 0 ? (n) : (hi)) - (lo), (n) - (lo)})
 #define GO_MAKE(T, E, n, c)                                                            \
-    ((T){(E *)calloc((size_t)((c) > 0 ? (c) : 1), sizeof(E)), (n), ((c) > (n) ? (c) : (n))})
+    ((T){(E *)gc_calloc((size_t)((c) > 0 ? (c) : 1), sizeof(E)), (n), ((c) > (n) ? (c) : (n))})
+#define GO_MAKE_A(T, E, n, c)                                                          \
+    ((T){(E *)gc_calloc_atomic((size_t)((c) > 0 ? (c) : 1), sizeof(E)), (n), ((c) > (n) ? (c) : (n))})
 // append(s, v): grows like Go (amortised doubling), shares storage when
 // capacity allows (aliasing semantics preserved).
 // (variadic so compound-literal arguments with commas pass through)
@@ -43,24 +47,27 @@ void *go_slice_grow(void *p, int len, int *cap, int need, size_t elem);
 int go_copy_impl(void *dst, int dlen, const void *src, int slen, size_t elem);
 #define GO_SLICE_LIT(T, E, n, ...) go_slice_lit_##T((E[]){__VA_ARGS__}, (n))
 
-// Declares the append helpers for one slice type (instantiated in gen code).
-#define GO_SLICE_FUNCS(T, E)                                                           \
+// Declares the append helpers for one slice type (instantiated in gen code);
+// the _A variant is for element types that hold no heap pointers.
+#define GO_SLICE_FUNCS_(T, E, GROW, ALLOC)                                             \
     static inline T go_append_##T(T s, E v) {                                          \
-        if (s.len >= s.cap) s.p = (E *)go_slice_grow(s.p, s.len, &s.cap, s.len + 1, sizeof(E)); \
+        if (s.len >= s.cap) s.p = (E *)GROW(s.p, s.len, &s.cap, s.len + 1, sizeof(E)); \
         s.p[s.len++] = v;                                                              \
         return s;                                                                      \
     }                                                                                  \
     static inline T go_append_slice_##T(T s, T s2) {                                   \
-        if (s.len + s2.len > s.cap) s.p = (E *)go_slice_grow(s.p, s.len, &s.cap, s.len + s2.len, sizeof(E)); \
+        if (s.len + s2.len > s.cap) s.p = (E *)GROW(s.p, s.len, &s.cap, s.len + s2.len, sizeof(E)); \
         if (s2.len) memmove(s.p + s.len, s2.p, sizeof(E) * (size_t)s2.len);            \
         s.len += s2.len;                                                               \
         return s;                                                                      \
     }                                                                                  \
     static inline T go_slice_lit_##T(const E *v, int n) {                              \
-        T s = {(E *)malloc(sizeof(E) * (size_t)(n ? n : 1)), n, n};                     \
+        T s = {(E *)ALLOC(sizeof(E) * (size_t)(n ? n : 1)), n, n};                     \
         memcpy(s.p, v, sizeof(E) * (size_t)n);                                         \
         return s;                                                                      \
     }
+#define GO_SLICE_FUNCS(T, E) GO_SLICE_FUNCS_(T, E, go_slice_grow, gc_alloc)
+#define GO_SLICE_FUNCS_A(T, E) GO_SLICE_FUNCS_(T, E, go_slice_grow_atomic, gc_alloc_atomic)
 
 // ---------------------------------------------------------------- maps
 // Insertion-ordered hash map (deterministic iteration, unlike Go's random
@@ -120,7 +127,10 @@ typedef GoOpaque GoOpaqueVal;
 // ---------------------------------------------------------------- memory
 void *go_box_impl(const void *v, size_t n);
 #define go_box(T, ...) ((T *)go_box_impl(&(T[1]){__VA_ARGS__}, sizeof(T)))
-#define go_new(T) ((T *)calloc(1, sizeof(T)))
+void *go_box_atomic_impl(const void *v, size_t n);
+#define go_box_a(T, ...) ((T *)go_box_atomic_impl(&(T[1]){__VA_ARGS__}, sizeof(T)))  // pointer-free T
+#define go_new(T) ((T *)gc_calloc(1, sizeof(T)))
+#define go_new_atomic(T) ((T *)gc_alloc_atomic(sizeof(T)))
 _Noreturn void go_panic_str(const char *msg);
 #define go_panic(x) go_panic_str("panic")
 

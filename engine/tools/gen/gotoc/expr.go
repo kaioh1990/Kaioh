@@ -255,7 +255,7 @@ func (t *Tx) unary(e *ast.UnaryExpr) string {
 		if cl, ok := e.X.(*ast.CompositeLit); ok {
 			// &T{...}: heap object
 			ty := t.typeOf(cl)
-			return fmt.Sprintf("go_box(%s, %s)", cbase(ty), t.composite(cl))
+			return fmt.Sprintf("%s(%s, %s)", boxFn(ty), cbase(ty), t.composite(cl))
 		}
 		return "(&" + x + ")"
 	case token.ADD:

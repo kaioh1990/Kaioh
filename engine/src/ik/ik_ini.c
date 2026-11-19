@@ -50,12 +50,12 @@ static GiniSection *new_section(GiniFile *f, GoString name) {
         GiniSection *s = find_section(f, name);
         if (s) return s;
     }
-    GiniSection *s = (GiniSection *)calloc(1, sizeof *s);
+    GiniSection *s = (GiniSection *)gc_calloc(1, sizeof *s);
     s->f = f;
     s->name = name;
     if (f->nsecs == f->cap) {
         f->cap = f->cap ? f->cap * 2 : 16;
-        f->secs = (GiniSection **)realloc(f->secs, sizeof(GiniSection *) * (size_t)f->cap);
+        f->secs = (GiniSection **)gc_realloc(f->secs, sizeof(GiniSection *) * (size_t)f->cap);
     }
     f->secs[f->nsecs++] = s;
     return s;
@@ -68,7 +68,7 @@ static GiniKey *find_key(GiniSection *s, GoString name) {
 }
 
 static GiniKey *alloc_key(GiniSection *s, GoString name, GoString val) {
-    GiniKey *k = (GiniKey *)calloc(1, sizeof *k);
+    GiniKey *k = (GiniKey *)gc_calloc(1, sizeof *k);
     k->s = s;
     k->name = name;
     k->value = val;
@@ -90,7 +90,7 @@ static GiniKey *new_key(GiniSection *s, GoString name, GoString val) {
             }
             GiniKey *sh = alloc_key(s, name, val);
             sh->isShadow = true;
-            k->shadows = (GiniKey **)realloc(k->shadows, sizeof(GiniKey *) * (size_t)(k->nshadows + 1));
+            k->shadows = (GiniKey **)gc_realloc(k->shadows, sizeof(GiniKey *) * (size_t)(k->nshadows + 1));
             k->shadows[k->nshadows++] = sh;
         } else {
             k->value = val;
@@ -100,7 +100,7 @@ static GiniKey *new_key(GiniSection *s, GoString name, GoString val) {
     k = alloc_key(s, name, val);
     if (s->nkeys == s->cap) {
         s->cap = s->cap ? s->cap * 2 : 16;
-        s->keys = (GiniKey **)realloc(s->keys, sizeof(GiniKey *) * (size_t)s->cap);
+        s->keys = (GiniKey **)gc_realloc(s->keys, sizeof(GiniKey *) * (size_t)s->cap);
     }
     s->keys[s->nkeys++] = k;
     return k;
@@ -282,7 +282,7 @@ static GoIface parse(GiniFile *f, GoString data) {
                 }
             if (close == -1) return go_errorf("unclosed section: %.*s", line.len, line.p);
             GoString name = {line.p + 1, close - 1};
-            name = go_cstr(strdup(go_strz(name)));
+            name = go_cstr(gc_strdup(go_strz(name)));
             sec = new_section(f, name);
             if (!sec) return go_error(GOSTR("empty section name"));
             count = 1;
@@ -304,7 +304,7 @@ static GoIface parse(GiniFile *f, GoString data) {
             if (e == 1 && f->o.AllowBooleanKeys) {
                 bool err = false;
                 GoString kn = read_value(f, &r, line, &err);
-                GiniKey *k = new_key(sec, go_cstr(strdup(go_strz(kn))), GOSTR("true"));
+                GiniKey *k = new_key(sec, go_cstr(gc_strdup(go_strz(kn))), GOSTR("true"));
                 if (k) k->isBool = true;
                 continue;
             }
@@ -316,14 +316,14 @@ static GoIface parse(GiniFile *f, GoString data) {
             autoincr = true;
             char t[24];
             snprintf(t, sizeof t, "#%d", count++);
-            kname = go_cstr(strdup(t));
+            kname = go_cstr(gc_strdup(t));
         }
         bool err = false;
         GoString value = read_value(f, &r, (GoString){line.p + offset, line.len - offset}, &err);
         if (err) return go_error(GOSTR("missing closing key quote"));
         // own the strings (the source buffer belongs to the caller)
-        kname = go_cstr(strdup(go_strz(kname)));
-        value = (GoString){(const char *)memcpy(malloc((size_t)value.len + 1), value.p, (size_t)value.len), value.len};
+        kname = go_cstr(gc_strdup(go_strz(kname)));
+        value = (GoString){(const char *)memcpy(gc_alloc_atomic((size_t)value.len + 1), value.p, (size_t)value.len), value.len};
         GiniKey *k = new_key(sec, kname, value);
         if (k) k->isAuto = autoincr;
     }
@@ -333,7 +333,7 @@ static GoIface parse(GiniFile *f, GoString data) {
 // ---------------------------------------------------------------- API
 Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_LoadSources(GoIniLoadOptions opts, GoIface source, Slice_GoIface others) {
     Ret_GoOpaque_ini_FilePtrPtr__GoIface r = {0};
-    GiniFile *f = (GiniFile *)calloc(1, sizeof *f);
+    GiniFile *f = (GiniFile *)gc_calloc(1, sizeof *f);
     f->o = opts;
     f->kvdelims = opts.KeyValueDelimiters.len ? opts.KeyValueDelimiters : GOSTR("=:");
     f->childdelim = opts.ChildSectionDelimiter.len ? opts.ChildSectionDelimiter : GOSTR(".");
@@ -375,7 +375,7 @@ Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_LoadSources(GoIniLoadOptions opts, GoIf
 
 Slice_GoOpaque_ini_SectionPtrPtr ini_File_Sections(GoOpaque *recv) {
     GiniFile *f = (GiniFile *)recv;
-    Slice_GoOpaque_ini_SectionPtrPtr s = {(GoOpaque **)malloc(sizeof(void *) * (size_t)(f->nsecs ? f->nsecs : 1)), f->nsecs, f->nsecs};
+    Slice_GoOpaque_ini_SectionPtrPtr s = {(GoOpaque **)gc_alloc(sizeof(void *) * (size_t)(f->nsecs ? f->nsecs : 1)), f->nsecs, f->nsecs};
     for (int i = 0; i < f->nsecs; i++) s.p[i] = (GoOpaque *)f->secs[i];
     return s;
 }
@@ -414,7 +414,7 @@ GoString ini_Section_Name(GoOpaque *recv) { return ((GiniSection *)recv)->name; 
 
 Slice_GoOpaque_ini_KeyPtrPtr ini_Section_Keys(GoOpaque *recv) {
     GiniSection *s = (GiniSection *)recv;
-    Slice_GoOpaque_ini_KeyPtrPtr out = {(GoOpaque **)malloc(sizeof(void *) * (size_t)(s->nkeys ? s->nkeys : 1)), s->nkeys, s->nkeys};
+    Slice_GoOpaque_ini_KeyPtrPtr out = {(GoOpaque **)gc_alloc(sizeof(void *) * (size_t)(s->nkeys ? s->nkeys : 1)), s->nkeys, s->nkeys};
     for (int i = 0; i < s->nkeys; i++) out.p[i] = (GoOpaque *)s->keys[i];
     return out;
 }
@@ -472,7 +472,7 @@ Slice_GoString ini_Key_ValueWithShadows(GoOpaque *recv) {
     if (k->value.len) out = go_append_Slice_GoString(out, k->value);
     for (int i = 0; i < k->nshadows; i++)
         if (k->shadows[i]->value.len) out = go_append_Slice_GoString(out, k->shadows[i]->value);
-    if (!out.p) out = (Slice_GoString){(GoString *)malloc(sizeof(GoString)), 0, 1};  // []string{} is not nil
+    if (!out.p) out = (Slice_GoString){(GoString *)gc_alloc(sizeof(GoString)), 0, 1};  // []string{} is not nil
     return out;
 }
 

@@ -11,8 +11,12 @@ import (
 // ---------------------------------------------------------------- heap vars
 // Locals captured by closures are heap-allocated (Go's escape analysis does
 // the same), so closures that outlive their function stay valid.
-func heapVarsOf(p *Prog, region ast.Node) map[types.Object]bool {
+//
+// Variables captured only by non-escaping literals (see escape.go) and never
+// address-taken are "stack boxes": same pointer-based access, C stack storage.
+func heapVarsOf(p *Prog, region ast.Node) (map[types.Object]bool, map[types.Object]bool, map[*ast.FuncLit]bool) {
 	out := map[types.Object]bool{}
+	nonEsc := nonEscapingLits(p, region)
 	// locals whose address is taken (&x, &x.f, &x[i] on arrays) may outlive
 	// the frame (Go moves them to the heap): allocate them on the heap too
 	ast.Inspect(region, func(n ast.Node) bool {
@@ -52,35 +56,71 @@ func heapVarsOf(p *Prog, region ast.Node) map[types.Object]bool {
 		}
 		return true
 	})
-	ast.Inspect(region, func(n ast.Node) bool {
-		fl, ok := n.(*ast.FuncLit)
-		if !ok || fl == region {
-			return true
-		}
-		ast.Inspect(fl.Body, func(n2 ast.Node) bool {
-			id, ok := n2.(*ast.Ident)
-			if !ok {
+	addr := map[types.Object]bool{}
+	for o := range out {
+		addr[o] = true
+	}
+	escapes := map[types.Object]bool{}
+	var lits []*ast.FuncLit
+	var walk func(n ast.Node)
+	walk = func(n ast.Node) {
+		ast.Inspect(n, func(m ast.Node) bool {
+			if fl, ok := m.(*ast.FuncLit); ok && fl != region && m != n {
+				lits = append(lits, fl)
+				walk(fl.Body)
+				lits = lits[:len(lits)-1]
+				return false
+			}
+			id, ok := m.(*ast.Ident)
+			if !ok || len(lits) == 0 {
 				return true
 			}
 			v, ok := p.info.Uses[id].(*types.Var)
 			if !ok || v.IsField() || v.Parent() == p.pkg.Scope() || v.Pkg() != p.pkg {
 				return true
 			}
-			// declared inside region but outside this literal
-			if v.Pos() >= region.Pos() && v.Pos() <= region.End() && (v.Pos() < fl.Pos() || v.Pos() > fl.End()) {
-				out[v] = true
+			if v.Pos() < region.Pos() || v.Pos() > region.End() {
+				return true
+			}
+			for _, fl := range lits {
+				// declared inside region but outside this literal: captured by it
+				if v.Pos() < fl.Pos() || v.Pos() > fl.End() {
+					out[v] = true
+					if !nonEsc[fl] {
+						escapes[v] = true
+					}
+				}
 			}
 			return true
 		})
-		return true
-	})
-	return out
+	}
+	if fl, ok := region.(*ast.FuncLit); ok {
+		walk(fl.Body)
+	} else {
+		walk(region)
+	}
+	stack := map[types.Object]bool{}
+	for o := range out {
+		if !addr[o] && !escapes[o] {
+			stack[o] = true
+		}
+	}
+	return out, stack, nonEsc
+}
+
+// boxDecl declares the box for heap/stack-boxed variable o with initial value val.
+func (t *Tx) boxDecl(o types.Object, ctype, val string) string {
+	name := cVarName(o.Name())
+	if t.stackBox[o] {
+		return fmt.Sprintf("%s %s__hv = %s; __typeof__(%s__hv) *%s__h = &%s__hv;", ctype, name, val, name, name, name)
+	}
+	return fmt.Sprintf("%s *%s__h = %s(%s, %s);", ctype, name, boxFn(o.Type()), ctype, val)
 }
 
 func (t *Tx) declObj(o types.Object, ctype, val string) string {
 	name := cVarName(o.Name())
 	if t.heap[o] {
-		return fmt.Sprintf("%s *%s__h = go_box(%s, %s);", ctype, name, ctype, val)
+		return t.boxDecl(o, ctype, val)
 	}
 	return fmt.Sprintf("%s %s = %s;", ctype, name, val)
 }
@@ -95,12 +135,12 @@ func (t *Tx) varRef(o types.Object) string {
 // heapParams: re-home captured parameters (call at the top of a body).
 func (t *Tx) heapParams(sig *types.Signature) {
 	if r := sig.Recv(); r != nil && t.heap[r] {
-		t.w("%s *%s__h = go_box(%s, %s);", t.ctype(r.Type()), cVarName(r.Name()), t.ctype(r.Type()), cVarName(r.Name()))
+		t.w("%s", t.boxDecl(r, t.ctype(r.Type()), cVarName(r.Name())))
 	}
 	for i := 0; i < sig.Params().Len(); i++ {
 		v := sig.Params().At(i)
 		if t.heap[v] {
-			t.w("%s *%s__h = go_box(%s, %s);", t.ctype(v.Type()), cVarName(v.Name()), t.ctype(v.Type()), cVarName(v.Name()))
+			t.w("%s", t.boxDecl(v, t.ctype(v.Type()), cVarName(v.Name())))
 		}
 	}
 }

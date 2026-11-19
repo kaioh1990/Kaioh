@@ -20,7 +20,7 @@ GoIface go_errorf(const char *fmt, ...) {
     va_end(ap);
     if (n < 0) n = 0;
     if (n >= (int)sizeof t) n = (int)sizeof t - 1;
-    char *p = (char *)malloc((size_t)n + 1);
+    char *p = (char *)gc_alloc_atomic((size_t)n + 1);
     memcpy(p, t, (size_t)n + 1);
     return go_error((GoString){p, n});
 }
@@ -66,14 +66,14 @@ bool errors_Is(GoIface a0, GoIface a1) {
 
 // ---------------------------------------------------------------- bytes
 GoString go_bytes2str(Slice_u8 b) {
-    char *p = (char *)malloc((size_t)b.len + 1);
+    char *p = (char *)gc_alloc_atomic((size_t)b.len + 1);
     if (b.len) memcpy(p, b.p, (size_t)b.len);
     p[b.len] = 0;
     return (GoString){p, b.len};
 }
 
 Slice_u8 go_str2bytes(GoString s) {
-    Slice_u8 b = {(u8 *)malloc((size_t)(s.len ? s.len : 1)), s.len, s.len};
+    Slice_u8 b = {(u8 *)gc_alloc_atomic((size_t)(s.len ? s.len : 1)), s.len, s.len};
     if (s.len) memcpy(b.p, s.p, (size_t)s.len);
     return b;
 }
@@ -298,7 +298,7 @@ static void ls_init(LessSwap *d, void *hdr, size_t elem, GoFunc less) {
     d->less = less;
     d->base = (u8 *)h->p;
     d->elem = elem;
-    d->big = elem > sizeof d->tmp ? (u8 *)malloc(elem) : NULL;
+    d->big = elem > sizeof d->tmp ? (u8 *)gc_alloc(elem) : NULL;
 }
 
 void go_sort_slice(void *hdr, size_t elem, GoFunc less) {
@@ -306,7 +306,7 @@ void go_sort_slice(void *hdr, size_t elem, GoFunc less) {
     ls_init(&d, hdr, elem, less);
     int n = ((GoSliceHdr *)hdr)->len;
     pdqsort(&d, 0, n, bits_len((unsigned long long)n));
-    free(d.big);
+    gc_free(d.big);
 }
 
 void go_sort_slice_stable(void *hdr, size_t elem, GoFunc less) {
@@ -314,7 +314,7 @@ void go_sort_slice_stable(void *hdr, size_t elem, GoFunc less) {
     LessSwap d;
     ls_init(&d, hdr, elem, less);
     insertion_sort(&d, 0, ((GoSliceHdr *)hdr)->len);
-    free(d.big);
+    gc_free(d.big);
 }
 
 static int cmp_int(const void *a, const void *b) {
@@ -331,7 +331,7 @@ void sort_Strings(Slice_GoString a0) {
 
 // ---------------------------------------------------------------- strings
 static GoString mkstr(const char *p, int n) {
-    char *q = (char *)malloc((size_t)n + 1);
+    char *q = (char *)gc_alloc_atomic((size_t)n + 1);
     if (n) memcpy(q, p, (size_t)n);
     q[n] = 0;
     return (GoString){q, n};
@@ -516,7 +516,7 @@ static GoString map_case(GoString s, bool upper) {
             if (upper ? (c >= 'a' && c <= 'z') : (c >= 'A' && c <= 'Z')) break;
         }
         if (i == s.len) return s;  // Go returns the input unchanged
-        char *p = (char *)malloc((size_t)s.len + 1);
+        char *p = (char *)gc_alloc_atomic((size_t)s.len + 1);
         for (int k = 0; k < s.len; k++) {
             char c = s.p[k];
             if (upper && c >= 'a' && c <= 'z') c -= 32;
@@ -526,7 +526,7 @@ static GoString map_case(GoString s, bool upper) {
         p[s.len] = 0;
         return (GoString){p, s.len};
     }
-    char *p = (char *)malloc((size_t)s.len * 2 + 4);
+    char *p = (char *)gc_alloc_atomic((size_t)s.len * 2 + 4);
     int n = 0;
     for (int i = 0; i < s.len;) {
         i32 r;
@@ -535,7 +535,7 @@ static GoString map_case(GoString s, bool upper) {
         GoString e = go_rune2str(r);
         memcpy(p + n, e.p, (size_t)e.len);
         n += e.len;
-        free((void *)e.p);
+        gc_free((void *)e.p);
     }
     p[n] = 0;
     return (GoString){p, n};
@@ -577,7 +577,7 @@ GoString strings_Replace(GoString s, GoString old, GoString nw, int n) {
     }
     if (m == 0) return s;
     if (n < 0 || m < n) n = m;
-    char *p = (char *)malloc((size_t)(s.len + n * (nw.len - old.len) + 1 > 0 ? s.len + n * (nw.len - old.len) + 1 : 1));
+    char *p = (char *)gc_alloc_atomic((size_t)(s.len + n * (nw.len - old.len) + 1 > 0 ? s.len + n * (nw.len - old.len) + 1 : 1));
     int w = 0, start = 0;
     for (int i = 0; i < n; i++) {
         int j = start;
@@ -646,7 +646,7 @@ GoString strings_Join(Slice_GoString a, GoString sep) {
     if (a.len == 1) return a.p[0];
     int n = sep.len * (a.len - 1);
     for (int i = 0; i < a.len; i++) n += a.p[i].len;
-    char *p = (char *)malloc((size_t)n + 1);
+    char *p = (char *)gc_alloc_atomic((size_t)n + 1);
     int w = 0;
     for (int i = 0; i < a.len; i++) {
         if (i) {
@@ -671,7 +671,7 @@ Ret_int__GoIface strings_Builder_WriteString(GoOpaque *recv, GoString s) {
     if (b->len + s.len + 1 > b->cap) {
         int nc = b->cap ? b->cap * 2 : 32;
         while (nc < b->len + s.len + 1) nc *= 2;
-        b->p = (char *)realloc(b->p, (size_t)nc);
+        b->p = (char *)gc_realloc(b->p, (size_t)nc);
         b->cap = nc;
     }
     memcpy(b->p + b->len, s.p, (size_t)s.len);
@@ -889,7 +889,7 @@ Ret_GoString__GoIface strconv_Unquote(GoString s) {
         r.r0 = (GoString){s.p + 1, s.len - 2};
         return r;
     }
-    char *p = (char *)malloc((size_t)s.len);
+    char *p = (char *)gc_alloc_atomic((size_t)s.len);
     int w = 0;
     for (int i = 1; i < s.len - 1; i++) {
         char c = s.p[i];
@@ -917,7 +917,7 @@ Ret_GoString__GoIface strconv_Unquote(GoString s) {
             }
             break;
         default:
-            free(p);
+            gc_free(p);
             r.r1 = go_error(GOSTR("invalid syntax"));
             return r;
         }
@@ -1045,7 +1045,7 @@ GoString time_Time_Format(GoOpaque t, GoString f) {
 void time_Sleep(i64 d) { (void)d; }
 GoOpaque *log_New(GoIface w, GoString prefix, int flags) {
     (void)w, (void)prefix, (void)flags;
-    return (GoOpaque *)calloc(1, sizeof(GoOpaque));
+    return (GoOpaque *)gc_calloc(1, sizeof(GoOpaque));
 }
 
 // Fields of opaque platform-library structs read and write a zeroed

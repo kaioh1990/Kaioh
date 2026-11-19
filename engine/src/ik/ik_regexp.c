@@ -54,7 +54,7 @@ typedef struct RxP {
 static void seq_push(RxSeq *q, RxNode nd) {
     if (q->n == q->cap) {
         q->cap = q->cap ? q->cap * 2 : 4;
-        q->v = (RxNode *)realloc(q->v, sizeof(RxNode) * (size_t)q->cap);
+        q->v = (RxNode *)gc_realloc(q->v, sizeof(RxNode) * (size_t)q->cap);
     }
     q->v[q->n++] = nd;
 }
@@ -77,7 +77,7 @@ static int dec_rune(const char *p, int n, i32 *r) {
 }
 
 static void add_range(RxRange **rg, int *n, i32 lo, i32 hi) {
-    *rg = (RxRange *)realloc(*rg, sizeof(RxRange) * (size_t)(*n + 1));
+    *rg = (RxRange *)gc_realloc(*rg, sizeof(RxRange) * (size_t)(*n + 1));
     (*rg)[(*n)++] = (RxRange){lo, hi};
 }
 
@@ -132,7 +132,7 @@ static RxRange *negate(RxRange *rg, int n, int *on) {
         if (rg[i].hi + 1 > next) next = rg[i].hi + 1;
     }
     if (next <= 0x10FFFF) add_range(&out, &k, next, 0x10FFFF);
-    free(rg);
+    gc_free(rg);
     *on = k;
     return out;
 }
@@ -160,7 +160,7 @@ static RxNode parse_class(RxP *p) {
             if (add_perl(&sub, &ns, e, &ng)) {
                 if (ng) sub = negate(sub, ns, &ns);
                 for (int k = 0; k < ns; k++) add_range(&nd.rg, &nd.nrg, sub[k].lo, sub[k].hi);
-                free(sub);
+                gc_free(sub);
                 p->i += 2;
                 continue;
             }
@@ -371,7 +371,7 @@ static void parse_seq(RxP *p, RxSeq *q) {
                 rep.greedy = false;
                 j++;
             }
-            rep.body = (RxSeq *)calloc(1, sizeof(RxSeq));
+            rep.body = (RxSeq *)gc_calloc(1, sizeof(RxSeq));
             seq_push(rep.body, q->v[q->n - 1]);
             q->v[q->n - 1] = rep;
             p->i = j;
@@ -390,7 +390,7 @@ static void parse_alt(RxP *p, RxSeq **alts, int *nalts) {
     *alts = NULL;
     *nalts = 0;
     for (;;) {
-        *alts = (RxSeq *)realloc(*alts, sizeof(RxSeq) * (size_t)(*nalts + 1));
+        *alts = (RxSeq *)gc_realloc(*alts, sizeof(RxSeq) * (size_t)(*nalts + 1));
         RxSeq *q = &(*alts)[(*nalts)++];
         memset(q, 0, sizeof *q);
         parse_seq(p, q);
@@ -401,7 +401,7 @@ static void parse_alt(RxP *p, RxSeq **alts, int *nalts) {
 
 static RxRe *re_compile(GoString src, const char **err) {
     RxP p = {src.p, 0, src.len, false, false, false, 0, NULL};
-    RxRe *re = (RxRe *)calloc(1, sizeof *re);
+    RxRe *re = (RxRe *)gc_calloc(1, sizeof *re);
     RxNode top = {0};
     top.kind = N_GROUP;
     top.group = 0;
@@ -409,7 +409,7 @@ static RxRe *re_compile(GoString src, const char **err) {
     if (!p.err && p.i < p.n) p.err = "unexpected )";
     if (p.err) {
         *err = p.err;
-        free(re);
+        gc_free(re);
         return NULL;
     }
     seq_push(&re->top, top);

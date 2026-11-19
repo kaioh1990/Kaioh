@@ -20,6 +20,10 @@ import (
 // cvfHeadless: running without window/renderer (platform calls are skipped).
 var cvfHeadless bool
 
+// cvfGcSafepoint marks a frame boundary for the native engine's garbage
+// collector (implemented in C; nothing to do under the Go runtime).
+func cvfGcSafepoint(fighting bool) {}
+
 // CVF_FRAMES=n stops after n frames (benchmarks).
 var cvfFrames, cvfMaxFrames int
 

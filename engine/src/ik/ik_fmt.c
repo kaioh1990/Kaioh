@@ -19,7 +19,7 @@ static void b_grow(Buf *b, int n) {
     if (b->len + n <= b->cap) return;
     int nc = b->cap ? b->cap * 2 : 64;
     while (nc < b->len + n) nc *= 2;
-    b->p = (char *)realloc(b->p, (size_t)nc);
+    b->p = (char *)gc_realloc(b->p, (size_t)nc);
     b->cap = nc;
 }
 static void b_put(Buf *b, const char *s, int n) {
@@ -35,7 +35,7 @@ static void b_pad(Buf *b, char c, int n) {
 }
 static GoString b_str(Buf *b) {
     if (!b->len) {
-        free(b->p);
+        gc_free(b->p);
         return (GoString){"", 0};
     }
     b_grow(b, 1);
@@ -309,7 +309,7 @@ static void fmt_int(Buf *b, const Spec *sp, char verb, i64 s, u64 u, bool isu) {
         b_put(&q, r.p, r.len);
         b_putc(&q, '\'');
         pad_put(b, sp, q.p, q.len, false);
-        free(q.p);
+        gc_free(q.p);
         return;
     }
     }
@@ -346,7 +346,7 @@ static void fmt_value(Buf *b, const Spec *sp, char verb, GoIface x) {
             Buf q = {0};
             quote_into(&q, s);
             pad_put(b, sp, q.p, q.len, false);
-            free(q.p);
+            gc_free(q.p);
         } else {
             pad_put(b, sp, s.p, s.len, false);
         }
@@ -382,7 +382,7 @@ static void fmt_value(Buf *b, const Spec *sp, char verb, GoIface x) {
         }
         fmt_float(&t, f, v, prec, bits);
         pad_put(b, sp, t.p, t.len, true);
-        free(t.p);
+        gc_free(t.p);
         return;
     }
     if (k == GO_TID_string) {
@@ -391,7 +391,7 @@ static void fmt_value(Buf *b, const Spec *sp, char verb, GoIface x) {
             Buf q = {0};
             quote_into(&q, s);
             pad_put(b, sp, q.p, q.len, false);
-            free(q.p);
+            gc_free(q.p);
         } else if (verb == 'x' || verb == 'X') {
             Buf q = {0};
             for (int i = 0; i < s.len; i++) {
@@ -400,7 +400,7 @@ static void fmt_value(Buf *b, const Spec *sp, char verb, GoIface x) {
                 b_puts(&q, t);
             }
             pad_put(b, sp, q.p, q.len, false);
-            free(q.p);
+            gc_free(q.p);
         } else {
             int n = s.len;
             if (sp->prec >= 0) {  // precision truncates to runes
@@ -557,7 +557,7 @@ void log_Printf(GoString a0, Slice_GoIface a1) {
 GoString strconv_Itoa(int a0) {
     char t[24];
     int n = snprintf(t, sizeof t, "%d", a0);
-    char *p = (char *)malloc((size_t)n + 1);
+    char *p = (char *)gc_alloc_atomic((size_t)n + 1);
     memcpy(p, t, (size_t)n + 1);
     return (GoString){p, n};
 }

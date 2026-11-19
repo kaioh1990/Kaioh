@@ -76,7 +76,7 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 	sub.out = new(bytesBuffer)
 	sub.w("static %s %s(%s) {", ret, name, strings.Join(params, ", "))
 	sub.ind++
-	sub.heap = heapVarsOf(t.p, e)
+	sub.heap, sub.stackBox, sub.nonEsc = heapVarsOf(t.p, e)
 	if funcUsesDefer(e.Body) {
 		sub.w("%s", deferMarker)
 	}
@@ -115,6 +115,10 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 	}
 	if len(inits) == 0 {
 		inits = append(inits, "0")
+	}
+	if t.nonEsc[e] {
+		// runs only while this block is live: environment on the stack
+		return fmt.Sprintf("((GoFunc){(void *)%s, &(%s){%s}})", name, envType, strings.Join(inits, ", "))
 	}
 	return fmt.Sprintf("((GoFunc){(void *)%s, go_box(%s, ((%s){%s}))})", name, envType, envType, strings.Join(inits, ", "))
 }

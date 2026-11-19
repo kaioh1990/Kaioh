@@ -30,6 +30,8 @@ type Tx struct {
 	loopCont []string // continue labels of enclosing loops
 	inSwitch int      // switch nesting inside the innermost loop
 	heap     map[types.Object]bool // locals captured by closures (heap-allocated)
+	stackBox map[types.Object]bool // ... of which only non-escaping closures capture (stack storage)
+	nonEsc   map[*ast.FuncLit]bool // literals whose environment can live on the stack
 	defers   []deferInfo
 	deferDecl []string
 }
@@ -237,7 +239,7 @@ func (t *Tx) translateFunc(fd *ast.FuncDecl) string {
 	t.retType = t.retTypeOf(sig.Results(), cFuncName(t.p, obj))
 	t.w("%s {", hdr)
 	t.ind++
-	t.heap = heapVarsOf(t.p, fd)
+	t.heap, t.stackBox, t.nonEsc = heapVarsOf(t.p, fd)
 	if fd.Body != nil && funcUsesDefer(fd.Body) {
 		t.w("%s", deferMarker)
 	}

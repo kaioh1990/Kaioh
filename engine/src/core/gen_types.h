@@ -1642,167 +1642,167 @@ typedef struct { u8 *p; int len, cap; } Slice_u8;
 #define CVF_DEF_Slice_upnpMapping
 typedef struct { upnpMapping *p; int len, cap; } Slice_upnpMapping;
 #endif
-typedef Slice_scParam helper;
-typedef Slice_scParam hitFallDamage;
-typedef Slice_scParam moveHitReset;
-typedef Slice_scParam notHitBy;
-typedef Slice_scParam removeStoryboard;
-typedef Slice_scParam targetAdd;
-typedef Slice_scParam mapSet;
-typedef Slice_scParam overrideClsn;
-typedef Slice_scParam playBgm;
-typedef Slice_scParam saveFile;
-typedef Slice_scParam targetFacing;
-typedef Slice_scParam victoryQuote;
-typedef Slice_scParam attackDist;
-typedef Slice_scParam dizzySet;
-typedef Slice_scParam explod;
-typedef Slice_scParam roundTimeAdd;
-typedef Slice_scParam tagIn;
-typedef Slice_scParam varRangeSet;
-typedef Slice_scParam varSet;
-typedef Slice_scParam depth;
-typedef Slice_scParam hitDef;
-typedef Slice_scParam loadFile;
-typedef Slice_scParam powerSet;
-typedef Slice_scParam redLifeSet;
-typedef Slice_scParam sprPriority;
-typedef Slice_scParam groundLevelOffset;
-typedef Slice_scParam createPlatform;
-typedef Slice_scParam getHitVarSet;
-typedef Slice_scParam hitVelSet;
-typedef Slice_scParam printToConsole;
-typedef Slice_scParam text;
-typedef Slice_scParam runState;
-typedef Slice_scParam transformSprite;
-typedef Slice_scParam assertCommand;
-typedef Slice_scParam modifyPlayer;
-typedef Slice_scParam remapPal;
-typedef Slice_scParam stopSnd;
-typedef Slice_scParam zoom;
-typedef Slice_scParam stateDef;
-typedef Slice_scParam posSet;
-typedef Slice_scParam saveState;
-typedef Slice_scParam targetVelAdd;
-typedef Slice_scParam appendToClipboard;
-typedef Slice_scParam lifeAdd;
-typedef Slice_scParam modifyBGCtrl;
-typedef Slice_scParam modifyHitDef;
-typedef Slice_scParam posAdd;
-typedef Slice_scParam ctrlSet;
-typedef Slice_scParam redLifeAdd;
-typedef Slice_scParam removeExplod;
-typedef Slice_scParam dizzyPointsAdd;
-typedef Slice_scParam modifyStoryboard;
-typedef Slice_scParam turn;
-typedef Slice_scParam width;
-typedef Slice_scParam afterImageTime;
-typedef Slice_scParam dialogue;
-typedef Slice_scParam fallEnvShake;
-typedef Slice_scParam modifyBGCtrl3d;
-typedef Slice_scParam targetVelSet;
-typedef Slice_scParam velMul;
-typedef Slice_scParam guardBreakSet;
-typedef Slice_scParam defenceMulSet;
-typedef Slice_scParam scoreAdd;
-typedef Slice_scParam transformClsn;
-typedef Slice_scParam velSet;
-typedef Slice_SoundChannel SoundChannels;
-typedef Slice_scParam destroySelf;
-typedef Slice_scParam projectile;
-typedef Slice_scParam targetDrop;
-typedef Slice_scParam velAdd;
-typedef Slice_scParam changeAnim2;
-typedef Slice_scParam changeState;
-typedef Slice_scParam lifeSet;
-typedef Slice_scParam modifyExplod;
-typedef Slice_scParam remapSprite;
-typedef Slice_scParam targetDizzyPointsAdd;
-typedef Slice_scParam targetGuardPointsAdd;
-typedef Slice_scParam bindToTarget;
-typedef Slice_scParam hitBy;
-typedef Slice_scParam loadState;
-typedef Slice_scParam matchRestart;
-typedef Slice_scParam offset;
-typedef Slice_scParam assertAnalogVector;
-typedef Slice_scParam cameraCtrl;
-typedef Slice_scParam depthBound;
-typedef Slice_scParam explodBindTime;
-typedef Slice_scParam mapReset;
-typedef Slice_scParam modifyBgm;
-typedef Slice_scParam palFX;
-typedef Slice_scParam playSnd;
-typedef Slice_scParam reversalDef;
-typedef Slice_scParam shiftInput;
-typedef Slice_scParam tagOut;
-typedef Slice_scParam bgPalFX;
-typedef Slice_scParam dizzyPointsSet;
-typedef Slice_scParam envColor;
-typedef Slice_scParam gameMakeAnim;
-typedef Slice_scParam lifebarAction;
-typedef Slice_scParam pause;
-typedef Slice_scParam roundTimeSet;
-typedef Slice_scParam superPause;
-typedef Slice_scParam allPalFX;
-typedef Slice_scParam angleMul;
-typedef Slice_scParam changeAnim;
-typedef Slice_scParam makeDust;
-typedef Slice_scParam modifyStageBG;
-typedef Slice_scParam sndPan;
-typedef Slice_scParam storyboard;
-typedef Slice_OpCode BytecodeExp;
-typedef Slice_ShadowSpritePtr ShadowList;
-typedef Slice_scParam StateControllerBase;
-typedef Slice_scParam hitFallVel;
-typedef Slice_scParam modifySnd;
-typedef Slice_scParam playerPush;
-typedef Slice_scParam targetScoreAdd;
-typedef Slice_scParam varRandom;
-typedef Slice_ReflectionSpritePtr ReflectionList;
-typedef Slice_scParam afterImage;
-typedef Slice_scParam envShake;
-typedef Slice_scParam posFreeze;
-typedef Slice_BytecodeValue BytecodeStack;
 typedef Slice_scParam bindToRoot;
-typedef Slice_scParam shaderSet;
-typedef Slice_scParam guardPointsAdd;
-typedef Slice_scParam hitAdd;
-typedef Slice_scParam targetRedLifeAdd;
-typedef Slice_scParam targetState;
-typedef Slice_SpriteDataPtr DrawList;
-typedef Slice_scParam guardPointsSet;
-typedef Slice_scParam removeText;
-typedef Slice_scParam assertSpecial;
-typedef Slice_scParam height;
-typedef Slice_scParam hitFallSet;
-typedef Slice_scParam modifyShadow;
-typedef Slice_scParam angleAdd;
-typedef Slice_scParam angleDraw;
-typedef Slice_scParam attackMulSet;
-typedef Slice_scParam hitOverride;
-typedef Slice_scParam modifyReflection;
-typedef Slice_scParam modifyReversalDef;
-typedef Slice_scParam powerAdd;
-typedef Slice_scParam stateTypeSet;
-typedef Slice_scParam bindToParent;
-typedef Slice_scParam selfState;
-typedef Slice_scParam targetPowerAdd;
-typedef Slice_scParam trans;
-typedef Slice_scParam clearClipboard;
-typedef Slice_scParam forceFeedback;
+typedef Slice_scParam matchRestart;
+typedef Slice_scParam roundTimeSet;
+typedef Slice_scParam runState;
+typedef Slice_ShadowSpritePtr ShadowList;
+typedef Slice_scParam defenceMulSet;
+typedef Slice_scParam hitBy;
+typedef Slice_scParam palFX;
+typedef Slice_scParam projectile;
 typedef Slice_scParam screenBound;
-typedef Slice_scParam targetBind;
-typedef Slice_scParam targetLifeAdd;
-typedef Slice_OpCode StateExpr;
-typedef Slice_scParam angleSet;
-typedef Slice_scParam assertInput;
-typedef Slice_scParam displayToClipboard;
+typedef Slice_scParam targetScoreAdd;
+typedef Slice_scParam assertAnalogVector;
+typedef Slice_scParam clearClipboard;
+typedef Slice_scParam createPlatform;
+typedef Slice_scParam modifyText;
+typedef Slice_scParam redLifeSet;
+typedef Slice_scParam targetPowerAdd;
+typedef Slice_ReflectionSpritePtr ReflectionList;
+typedef Slice_scParam modifyExplod;
+typedef Slice_scParam playBgm;
+typedef Slice_scParam stateDef;
+typedef Slice_scParam dizzyPointsAdd;
+typedef Slice_scParam dizzySet;
+typedef Slice_scParam groundLevelOffset;
 typedef Slice_scParam modifyProjectile;
 typedef Slice_scParam modifyStageVar;
-typedef Slice_scParam modifyText;
-typedef Slice_scParam removePlatform;
-typedef Slice_scParam changeMovelist;
+typedef Slice_scParam sndPan;
+typedef Slice_scParam targetGuardPointsAdd;
+typedef Slice_scParam getHitVarSet;
+typedef Slice_scParam playSnd;
+typedef Slice_scParam fallEnvShake;
+typedef Slice_scParam guardPointsSet;
+typedef Slice_scParam varSet;
+typedef Slice_scParam remapPal;
+typedef Slice_scParam saveFile;
+typedef Slice_scParam targetFacing;
+typedef Slice_scParam width;
+typedef Slice_scParam envColor;
+typedef Slice_scParam hitFallVel;
+typedef Slice_scParam posSet;
+typedef Slice_scParam tagOut;
 typedef Slice_scParam gravity;
+typedef Slice_SoundChannel SoundChannels;
+typedef Slice_scParam angleSet;
+typedef Slice_scParam bindToParent;
+typedef Slice_scParam forceFeedback;
+typedef Slice_scParam hitAdd;
+typedef Slice_scParam printToConsole;
+typedef Slice_scParam removeText;
+typedef Slice_scParam allPalFX;
+typedef Slice_scParam helper;
+typedef Slice_scParam hitOverride;
+typedef Slice_scParam scoreAdd;
+typedef Slice_scParam stopSnd;
+typedef Slice_scParam targetState;
+typedef Slice_scParam turn;
+typedef Slice_scParam varRangeSet;
+typedef Slice_scParam modifyReflection;
+typedef Slice_scParam powerAdd;
+typedef Slice_OpCode BytecodeExp;
+typedef Slice_SpriteDataPtr DrawList;
+typedef Slice_scParam height;
+typedef Slice_scParam hitFallSet;
+typedef Slice_scParam removeStoryboard;
+typedef Slice_scParam varRandom;
+typedef Slice_scParam cameraCtrl;
+typedef Slice_scParam changeAnim2;
+typedef Slice_scParam dizzyPointsSet;
+typedef Slice_scParam explod;
+typedef Slice_scParam lifeSet;
+typedef Slice_scParam removePlatform;
+typedef Slice_scParam StateControllerBase;
+typedef Slice_scParam stateTypeSet;
+typedef Slice_scParam storyboard;
+typedef Slice_scParam velSet;
+typedef Slice_scParam afterImageTime;
+typedef Slice_scParam guardBreakSet;
+typedef Slice_scParam modifyReversalDef;
+typedef Slice_scParam modifyShadow;
+typedef Slice_scParam pause;
+typedef Slice_scParam powerSet;
+typedef Slice_scParam sprPriority;
+typedef Slice_scParam text;
+typedef Slice_scParam remapSprite;
+typedef Slice_scParam attackMulSet;
+typedef Slice_scParam ctrlSet;
+typedef Slice_scParam lifeAdd;
+typedef Slice_scParam loadState;
+typedef Slice_scParam modifyPlayer;
+typedef Slice_scParam reversalDef;
+typedef Slice_scParam zoom;
+typedef Slice_scParam attackDist;
+typedef Slice_scParam gameMakeAnim;
+typedef Slice_scParam loadFile;
+typedef Slice_scParam selfState;
+typedef Slice_scParam hitDef;
+typedef Slice_scParam modifyBGCtrl;
+typedef Slice_scParam targetBind;
+typedef Slice_scParam targetVelAdd;
+typedef Slice_scParam lifebarAction;
+typedef Slice_scParam modifyBGCtrl3d;
+typedef Slice_scParam notHitBy;
+typedef Slice_scParam removeExplod;
+typedef Slice_scParam targetDizzyPointsAdd;
+typedef Slice_scParam modifyStoryboard;
+typedef Slice_scParam saveState;
+typedef Slice_scParam guardPointsAdd;
+typedef Slice_scParam hitFallDamage;
+typedef Slice_scParam modifyStageBG;
+typedef Slice_scParam shaderSet;
+typedef Slice_scParam transformClsn;
+typedef Slice_BytecodeValue BytecodeStack;
+typedef Slice_scParam assertCommand;
+typedef Slice_scParam changeMovelist;
+typedef Slice_scParam depth;
+typedef Slice_scParam destroySelf;
+typedef Slice_scParam offset;
+typedef Slice_scParam redLifeAdd;
+typedef Slice_scParam shiftInput;
+typedef Slice_scParam afterImage;
+typedef Slice_scParam assertInput;
+typedef Slice_scParam depthBound;
+typedef Slice_scParam displayToClipboard;
+typedef Slice_scParam explodBindTime;
+typedef Slice_scParam playerPush;
+typedef Slice_scParam targetDrop;
+typedef Slice_scParam targetRedLifeAdd;
+typedef Slice_scParam superPause;
+typedef Slice_scParam modifyBgm;
+typedef Slice_scParam victoryQuote;
+typedef Slice_scParam bindToTarget;
+typedef Slice_scParam changeState;
+typedef Slice_scParam dialogue;
+typedef Slice_scParam velAdd;
+typedef Slice_scParam angleMul;
+typedef Slice_scParam appendToClipboard;
+typedef Slice_scParam assertSpecial;
+typedef Slice_scParam roundTimeAdd;
+typedef Slice_scParam tagIn;
+typedef Slice_scParam targetVelSet;
+typedef Slice_scParam transformSprite;
+typedef Slice_scParam bgPalFX;
+typedef Slice_scParam hitVelSet;
+typedef Slice_scParam modifySnd;
+typedef Slice_scParam moveHitReset;
+typedef Slice_scParam angleDraw;
+typedef Slice_scParam modifyHitDef;
+typedef Slice_scParam overrideClsn;
+typedef Slice_scParam posFreeze;
+typedef Slice_scParam targetAdd;
+typedef Slice_scParam targetLifeAdd;
+typedef Slice_scParam angleAdd;
+typedef Slice_scParam changeAnim;
+typedef Slice_scParam envShake;
+typedef Slice_scParam mapReset;
+typedef Slice_scParam mapSet;
+typedef Slice_scParam velMul;
+typedef Slice_OpCode StateExpr;
+typedef Slice_scParam makeDust;
+typedef Slice_scParam posAdd;
+typedef Slice_scParam trans;
 #ifndef CVF_DEF_Slice_BytecodeExp
 #define CVF_DEF_Slice_BytecodeExp
 typedef struct { BytecodeExp *p; int len, cap; } Slice_BytecodeExp;
@@ -10610,39 +10610,39 @@ GO_SLICE_FUNCS(Slice_AnimPtr, Anim*)
 #endif
 #ifndef CVF_FN_Slice_Arr2_f32
 #define CVF_FN_Slice_Arr2_f32
-GO_SLICE_FUNCS(Slice_Arr2_f32, Arr2_f32)
+GO_SLICE_FUNCS_A(Slice_Arr2_f32, Arr2_f32)
 #endif
 #ifndef CVF_FN_Slice_Arr2_f64
 #define CVF_FN_Slice_Arr2_f64
-GO_SLICE_FUNCS(Slice_Arr2_f64, Arr2_f64)
+GO_SLICE_FUNCS_A(Slice_Arr2_f64, Arr2_f64)
 #endif
 #ifndef CVF_FN_Slice_Arr2_i32
 #define CVF_FN_Slice_Arr2_i32
-GO_SLICE_FUNCS(Slice_Arr2_i32, Arr2_i32)
+GO_SLICE_FUNCS_A(Slice_Arr2_i32, Arr2_i32)
 #endif
 #ifndef CVF_FN_Slice_Arr2_int
 #define CVF_FN_Slice_Arr2_int
-GO_SLICE_FUNCS(Slice_Arr2_int, Arr2_int)
+GO_SLICE_FUNCS_A(Slice_Arr2_int, Arr2_int)
 #endif
 #ifndef CVF_FN_Slice_Arr4_f32
 #define CVF_FN_Slice_Arr4_f32
-GO_SLICE_FUNCS(Slice_Arr4_f32, Arr4_f32)
+GO_SLICE_FUNCS_A(Slice_Arr4_f32, Arr4_f32)
 #endif
 #ifndef CVF_FN_Slice_Arr6_i8
 #define CVF_FN_Slice_Arr6_i8
-GO_SLICE_FUNCS(Slice_Arr6_i8, Arr6_i8)
+GO_SLICE_FUNCS_A(Slice_Arr6_i8, Arr6_i8)
 #endif
 #ifndef CVF_FN_Slice_Arr7_f32
 #define CVF_FN_Slice_Arr7_f32
-GO_SLICE_FUNCS(Slice_Arr7_f32, Arr7_f32)
+GO_SLICE_FUNCS_A(Slice_Arr7_f32, Arr7_f32)
 #endif
 #ifndef CVF_FN_Slice_Arr8_Arr6_i8
 #define CVF_FN_Slice_Arr8_Arr6_i8
-GO_SLICE_FUNCS(Slice_Arr8_Arr6_i8, Arr8_Arr6_i8)
+GO_SLICE_FUNCS_A(Slice_Arr8_Arr6_i8, Arr8_Arr6_i8)
 #endif
 #ifndef CVF_FN_Slice_Arr8_InputBits
 #define CVF_FN_Slice_Arr8_InputBits
-GO_SLICE_FUNCS(Slice_Arr8_InputBits, Arr8_InputBits)
+GO_SLICE_FUNCS_A(Slice_Arr8_InputBits, Arr8_InputBits)
 #endif
 #ifndef CVF_FN_Slice_BytecodeExp
 #define CVF_FN_Slice_BytecodeExp
@@ -10654,7 +10654,7 @@ GO_SLICE_FUNCS(Slice_BytecodeExpPtr, BytecodeExp*)
 #endif
 #ifndef CVF_FN_Slice_BytecodeValue
 #define CVF_FN_Slice_BytecodeValue
-GO_SLICE_FUNCS(Slice_BytecodeValue, BytecodeValue)
+GO_SLICE_FUNCS_A(Slice_BytecodeValue, BytecodeValue)
 #endif
 #ifndef CVF_FN_Slice_Char
 #define CVF_FN_Slice_Char
@@ -10666,15 +10666,15 @@ GO_SLICE_FUNCS(Slice_CharPtr, Char*)
 #endif
 #ifndef CVF_FN_Slice_ClsnFinal
 #define CVF_FN_Slice_ClsnFinal
-GO_SLICE_FUNCS(Slice_ClsnFinal, ClsnFinal)
+GO_SLICE_FUNCS_A(Slice_ClsnFinal, ClsnFinal)
 #endif
 #ifndef CVF_FN_Slice_ClsnOverride
 #define CVF_FN_Slice_ClsnOverride
-GO_SLICE_FUNCS(Slice_ClsnOverride, ClsnOverride)
+GO_SLICE_FUNCS_A(Slice_ClsnOverride, ClsnOverride)
 #endif
 #ifndef CVF_FN_Slice_ClsnTransform
 #define CVF_FN_Slice_ClsnTransform
-GO_SLICE_FUNCS(Slice_ClsnTransform, ClsnTransform)
+GO_SLICE_FUNCS_A(Slice_ClsnTransform, ClsnTransform)
 #endif
 #ifndef CVF_FN_Slice_Command
 #define CVF_FN_Slice_Command
@@ -10694,7 +10694,7 @@ GO_SLICE_FUNCS(Slice_CommandStep, CommandStep)
 #endif
 #ifndef CVF_FN_Slice_CommandStepKey
 #define CVF_FN_Slice_CommandStepKey
-GO_SLICE_FUNCS(Slice_CommandStepKey, CommandStepKey)
+GO_SLICE_FUNCS_A(Slice_CommandStepKey, CommandStepKey)
 #endif
 #ifndef CVF_FN_Slice_DebugClsnText
 #define CVF_FN_Slice_DebugClsnText
@@ -10766,7 +10766,7 @@ GO_SLICE_FUNCS(Slice_GuardBarPtr, GuardBar*)
 #endif
 #ifndef CVF_FN_Slice_InputBits
 #define CVF_FN_Slice_InputBits
-GO_SLICE_FUNCS(Slice_InputBits, InputBits)
+GO_SLICE_FUNCS_A(Slice_InputBits, InputBits)
 #endif
 #ifndef CVF_FN_Slice_KeyConfig
 #define CVF_FN_Slice_KeyConfig
@@ -10798,7 +10798,7 @@ GO_SLICE_FUNCS(Slice_NodePtr, Node*)
 #endif
 #ifndef CVF_FN_Slice_OpCode
 #define CVF_FN_Slice_OpCode
-GO_SLICE_FUNCS(Slice_OpCode, OpCode)
+GO_SLICE_FUNCS_A(Slice_OpCode, OpCode)
 #endif
 #ifndef CVF_FN_Slice_OverrideCharData
 #define CVF_FN_Slice_OverrideCharData
@@ -10814,7 +10814,7 @@ GO_SLICE_FUNCS(Slice_PowerBarPtr, PowerBar*)
 #endif
 #ifndef CVF_FN_Slice_PreloadEntry
 #define CVF_FN_Slice_PreloadEntry
-GO_SLICE_FUNCS(Slice_PreloadEntry, PreloadEntry)
+GO_SLICE_FUNCS_A(Slice_PreloadEntry, PreloadEntry)
 #endif
 #ifndef CVF_FN_Slice_PrimitivePtr
 #define CVF_FN_Slice_PrimitivePtr
@@ -10926,7 +10926,7 @@ GO_SLICE_FUNCS(Slice_TextureAtlasPtr, TextureAtlas*)
 #endif
 #ifndef CVF_FN_Slice_WinType
 #define CVF_FN_Slice_WinType
-GO_SLICE_FUNCS(Slice_WinType, WinType)
+GO_SLICE_FUNCS_A(Slice_WinType, WinType)
 #endif
 #ifndef CVF_FN_Slice_backGroundPtr
 #define CVF_FN_Slice_backGroundPtr
@@ -10942,7 +10942,7 @@ GO_SLICE_FUNCS(Slice_bgMusicPtr, bgMusic*)
 #endif
 #ifndef CVF_FN_Slice_bool
 #define CVF_FN_Slice_bool
-GO_SLICE_FUNCS(Slice_bool, bool)
+GO_SLICE_FUNCS_A(Slice_bool, bool)
 #endif
 #ifndef CVF_FN_Slice_boundTexture
 #define CVF_FN_Slice_boundTexture
@@ -10958,19 +10958,19 @@ GO_SLICE_FUNCS(Slice_expValueFramePtr, expValueFrame*)
 #endif
 #ifndef CVF_FN_Slice_f32
 #define CVF_FN_Slice_f32
-GO_SLICE_FUNCS(Slice_f32, f32)
+GO_SLICE_FUNCS_A(Slice_f32, f32)
 #endif
 #ifndef CVF_FN_Slice_i16
 #define CVF_FN_Slice_i16
-GO_SLICE_FUNCS(Slice_i16, i16)
+GO_SLICE_FUNCS_A(Slice_i16, i16)
 #endif
 #ifndef CVF_FN_Slice_i32
 #define CVF_FN_Slice_i32
-GO_SLICE_FUNCS(Slice_i32, i32)
+GO_SLICE_FUNCS_A(Slice_i32, i32)
 #endif
 #ifndef CVF_FN_Slice_int
 #define CVF_FN_Slice_int
-GO_SLICE_FUNCS(Slice_int, int)
+GO_SLICE_FUNCS_A(Slice_int, int)
 #endif
 #ifndef CVF_FN_Slice_nameFact
 #define CVF_FN_Slice_nameFact
@@ -10990,19 +10990,19 @@ GO_SLICE_FUNCS(Slice_scRunFn, scRunFn)
 #endif
 #ifndef CVF_FN_Slice_stageRollbackBgState
 #define CVF_FN_Slice_stageRollbackBgState
-GO_SLICE_FUNCS(Slice_stageRollbackBgState, stageRollbackBgState)
+GO_SLICE_FUNCS_A(Slice_stageRollbackBgState, stageRollbackBgState)
 #endif
 #ifndef CVF_FN_Slice_u32
 #define CVF_FN_Slice_u32
-GO_SLICE_FUNCS(Slice_u32, u32)
+GO_SLICE_FUNCS_A(Slice_u32, u32)
 #endif
 #ifndef CVF_FN_Slice_u64
 #define CVF_FN_Slice_u64
-GO_SLICE_FUNCS(Slice_u64, u64)
+GO_SLICE_FUNCS_A(Slice_u64, u64)
 #endif
 #ifndef CVF_FN_Slice_u8
 #define CVF_FN_Slice_u8
-GO_SLICE_FUNCS(Slice_u8, u8)
+GO_SLICE_FUNCS_A(Slice_u8, u8)
 #endif
 #ifndef CVF_FN_Slice_upnpMapping
 #define CVF_FN_Slice_upnpMapping
