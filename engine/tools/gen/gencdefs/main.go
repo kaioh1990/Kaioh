@@ -555,7 +555,7 @@ func cbase(t types.Type) string {
 		}
 		return "GoOpaque /* " + types.TypeString(u, qual) + " */"
 	case *types.Chan:
-		return "GoOpaque /* chan */"
+		return "GoChan*"
 	case *types.Struct:
 		n := anonName(u)
 		return n

@@ -9,6 +9,7 @@
 
 #include "core/base.h"
 #include "core/gc.h"
+#include "core/sched.h"
 
 // ---------------------------------------------------------------- strings
 typedef struct GoString {

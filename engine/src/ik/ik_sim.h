@@ -1561,7 +1561,7 @@ typedef GoMap Map_u32Ptr_GoIface;
 #define CVF_DEF_Map_u32_Slice_f32
 typedef GoMap Map_u32_Slice_f32;
 #endif
-typedef GoOpaque /* chan */ lua_LChannel;
+typedef GoChan* lua_LChannel;
 struct Anon_84767b5c { int state; int token; GoString msg; };
 #ifndef CVF_BODY_Arr0_Anon_84767b5c
 #define CVF_BODY_Arr0_Anon_84767b5c
@@ -6529,6 +6529,10 @@ void fn_vitaPerfEnd(int _p0);
 void fn_vitaPhase(int _p0);
 bool fn_vitaHalfRate(void);
 void fn_vitaMatchEnd(void);
+void fn_vitaDiagFrame(void);
+bool fn_vitaDiagSkip(int _p0);
+bool fn_vitaDrawCensusDue(void);
+void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 l);
 Arr4_f32 fn_NormalizeRect_f32(Arr4_f32 rect);
 Slice_Arr2_i32 fn_SliceDelete_Arr2_i32(Slice_Arr2_i32 slice, int i);
 Slice_GoString fn_SortedKeys_Slice_GoString(Map_GoString_Slice_GoString m);
@@ -6604,6 +6608,8 @@ int iface_Lex_d4c62dc2(GoIface _x, parse_yySymType* _a0);
 #define ik_iface_Lex iface_Lex_d4c62dc2
 int iface_Line_a218166d(GoIface _x);
 #define ik_iface_Line iface_Line_a218166d
+u32 iface_LoadCustomSpriteShader_f41f8f35(GoIface _x, GoString _a0, Slice_u8 _a1);
+#define ik_iface_LoadCustomSpriteShader iface_LoadCustomSpriteShader_f41f8f35
 GoString iface_Name_319077b5(GoIface _x);
 #define ik_iface_Name iface_Name_319077b5
 int iface_NumField_a218166d(GoIface _x);
@@ -6630,6 +6636,10 @@ void iface_SetLastLine_83b24cfd(GoIface _x, int _a0);
 #define ik_iface_SetLastLine iface_SetLastLine_83b24cfd
 void iface_SetLine_83b24cfd(GoIface _x, int _a0);
 #define ik_iface_SetLine iface_SetLine_83b24cfd
+void iface_SetModelIndexData_e06c74a6(GoIface _x, u32 _a0, Slice_u32 _a1);
+#define ik_iface_SetModelIndexData iface_SetModelIndexData_e06c74a6
+void iface_SetModelVertexData_ed700385(GoIface _x, u32 _a0, Slice_u8 _a1);
+#define ik_iface_SetModelVertexData iface_SetModelVertexData_ed700385
 void iface_SetSp_bc7e4c4e(GoIface _x, int _a0);
 #define ik_iface_SetSp iface_SetSp_bc7e4c4e
 void iface_SetSubData_a8625030(GoIface _x, Slice_u8 _a0);
@@ -6640,6 +6650,8 @@ GoString iface_String_319077b5(GoIface _x);
 #define ik_iface_String iface_String_319077b5
 lua_LValueType iface_Type_22ad5bb1(GoIface _x);
 #define ik_iface_Type iface_Type_22ad5bb1
+void iface_UnloadCustomSpriteShader_b675cad7(GoIface _x, GoString _a0);
+#define ik_iface_UnloadCustomSpriteShader iface_UnloadCustomSpriteShader_b675cad7
 Ret_f64__bool iface_assertFloat64_829630eb(GoIface _x);
 #define ik_iface_assertFloat64 iface_assertFloat64_829630eb
 Ret_lua_LFunctionPtr__bool iface_assertFunction_36815341(GoIface _x);

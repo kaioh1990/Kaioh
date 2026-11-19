@@ -6386,15 +6386,34 @@ static GoIface lambda_462(Env_lambda_462 *_env, GoString filename) {
 }
 
 typedef struct Env_lambda_463 { CharGlobalInfo* *gi; fontSpec_L7f1af4 *spec; int *i; } Env_lambda_463;
+typedef struct Env_lambda_464 { CharGlobalInfo* *gi; fontSpec_L7f1af4 *spec; int *i; GoString *filename; } Env_lambda_464;
+static void lambda_464(Env_lambda_464 *_env) {
+    i32 h = -1;
+    if ((*_env->spec).height != 0) {
+        h = (*_env->spec).height;
+    }
+    {
+        Ret_GoOpaqueValPtr__GoIface _t1 = fn_loadFnt((*_env->filename), h);
+        GoOpaqueVal* fnt = _t1.r0;
+        GoIface err = _t1.r1;
+        if (err.type != 0) {
+            fn_LogMessage(GOSTR("Failed to load %v (char font): %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*_env->filename))}), err));
+            Map_int_GoOpaqueValPtr_set(&(*_env->gi)->fnt, (*_env->i), fn_newFnt());
+        } else {
+            Map_int_GoOpaqueValPtr_set(&(*_env->gi)->fnt, (*_env->i), fnt);
+        }
+    }
+}
+
 static GoIface lambda_463(Env_lambda_463 *_env, GoString filename) {
     GoString *filename__h = go_box(GoString, filename);
-    TODO(/* stmt *ast.SendStmt at char.go:4750 */);
+    { GoFunc _t1 = ((GoFunc){(void *)lambda_464, go_box(Env_lambda_464, ((Env_lambda_464){_env->gi, _env->spec, _env->i, filename__h}))}); go_chan_send(g_sys.mainThreadTask, &_t1); }
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_464 { CharGlobalInfo* *gi; } Env_lambda_464;
-typedef struct Env_lambda_465 { Slice_u32 *pl; bool *success; } Env_lambda_465;
-static GoIface lambda_465(Env_lambda_465 *_env, GoString file) {
+typedef struct Env_lambda_465 { CharGlobalInfo* *gi; } Env_lambda_465;
+typedef struct Env_lambda_466 { Slice_u32 *pl; bool *success; } Env_lambda_466;
+static GoIface lambda_466(Env_lambda_466 *_env, GoString file) {
     GoIface err = {0};
     Ret_Slice_u32__GoIface _t1 = fn_readActPalette(file);
     (*_env->pl) = _t1.r0;
@@ -6405,36 +6424,31 @@ static GoIface lambda_465(Env_lambda_465 *_env, GoString file) {
     return err;
 }
 
-static Ret_Slice_u32__bool lambda_464(Env_lambda_464 *_env, PalInfo* palPtr) {
+static Ret_Slice_u32__bool lambda_465(Env_lambda_465 *_env, PalInfo* palPtr) {
     Slice_u32 *pl__h = go_box(Slice_u32, {0});
     bool *success__h = go_box_a(bool, false);
-    fn_LoadFile((&palPtr->filename), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*_env->gi)->def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_465, go_box(Env_lambda_465, ((Env_lambda_465){pl__h, success__h}))}));
+    fn_LoadFile((&palPtr->filename), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*_env->gi)->def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_466, go_box(Env_lambda_466, ((Env_lambda_466){pl__h, success__h}))}));
     return (Ret_Slice_u32__bool){(*pl__h), (*success__h)};
-}
-
-typedef struct Env_lambda_466 { char _unused; } Env_lambda_466;
-static bool lambda_466(Env_lambda_466 *_env, ProjContact pc) {
-    return (pc == 2);
 }
 
 typedef struct Env_lambda_467 { char _unused; } Env_lambda_467;
 static bool lambda_467(Env_lambda_467 *_env, ProjContact pc) {
-    return (pc != 2);
+    return (pc == 2);
 }
 
 typedef struct Env_lambda_468 { char _unused; } Env_lambda_468;
 static bool lambda_468(Env_lambda_468 *_env, ProjContact pc) {
-    return (pc == 1);
+    return (pc != 2);
 }
 
 typedef struct Env_lambda_469 { char _unused; } Env_lambda_469;
 static bool lambda_469(Env_lambda_469 *_env, ProjContact pc) {
-    return (pc == 0);
+    return (pc == 1);
 }
 
-typedef struct Env_lambda_470 { Slice_int *team; } Env_lambda_470;
-static bool lambda_470(Env_lambda_470 *_env, int i, int j) {
-    return (g_sys.chars.v[(*_env->team).p[i]].p[0]->memberNo < g_sys.chars.v[(*_env->team).p[j]].p[0]->memberNo);
+typedef struct Env_lambda_470 { char _unused; } Env_lambda_470;
+static bool lambda_470(Env_lambda_470 *_env, ProjContact pc) {
+    return (pc == 0);
 }
 
 typedef struct Env_lambda_471 { Slice_int *team; } Env_lambda_471;
@@ -6442,18 +6456,23 @@ static bool lambda_471(Env_lambda_471 *_env, int i, int j) {
     return (g_sys.chars.v[(*_env->team).p[i]].p[0]->memberNo < g_sys.chars.v[(*_env->team).p[j]].p[0]->memberNo);
 }
 
-typedef struct Env_lambda_472 { char _unused; } Env_lambda_472;
-static void lambda_472(Env_lambda_472 *_env, TextSprite* ts) {
-    TextSprite_Clear(ts);
+typedef struct Env_lambda_472 { Slice_int *team; } Env_lambda_472;
+static bool lambda_472(Env_lambda_472 *_env, int i, int j) {
+    return (g_sys.chars.v[(*_env->team).p[i]].p[0]->memberNo < g_sys.chars.v[(*_env->team).p[j]].p[0]->memberNo);
 }
 
 typedef struct Env_lambda_473 { char _unused; } Env_lambda_473;
-static void lambda_473(Env_lambda_473 *_env, Projectile* p) {
+static void lambda_473(Env_lambda_473 *_env, TextSprite* ts) {
+    TextSprite_Clear(ts);
+}
+
+typedef struct Env_lambda_474 { char _unused; } Env_lambda_474;
+static void lambda_474(Env_lambda_474 *_env, Projectile* p) {
     Projectile_clear(p);
 }
 
-typedef struct Env_lambda_474 { Slice_GoString *lowExcludes; } Env_lambda_474;
-static bool lambda_474(Env_lambda_474 *_env, GoString kLow) {
+typedef struct Env_lambda_475 { Slice_GoString *lowExcludes; } Env_lambda_475;
+static bool lambda_475(Env_lambda_475 *_env, GoString kLow) {
     {
         Slice_GoString _t2 = (*_env->lowExcludes);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -6467,13 +6486,13 @@ static bool lambda_474(Env_lambda_474 *_env, GoString kLow) {
     return false;
 }
 
-typedef struct Env_lambda_475 { Slice_ClsnFinal *boxes; ClsnOverride *mod; } Env_lambda_475;
-static void lambda_475(Env_lambda_475 *_env, int i) {
+typedef struct Env_lambda_476 { Slice_ClsnFinal *boxes; ClsnOverride *mod; } Env_lambda_476;
+static void lambda_476(Env_lambda_476 *_env, int i) {
     (*_env->boxes).p[i].rect = (*_env->mod).rect;
 }
 
-typedef struct Env_lambda_476 { Char* *c; ClsnTransform *ct; } Env_lambda_476;
-static void lambda_476(Env_lambda_476 *_env, ClsnFinal* b) {
+typedef struct Env_lambda_477 { Char* *c; ClsnTransform *ct; } Env_lambda_477;
+static void lambda_477(Env_lambda_477 *_env, ClsnFinal* b) {
     b->rect.v[0] *= (*_env->ct).scale.v[0];
     b->rect.v[1] *= (*_env->ct).scale.v[1];
     b->rect.v[2] *= (*_env->ct).scale.v[0];
@@ -6483,16 +6502,16 @@ static void lambda_476(Env_lambda_476 *_env, ClsnFinal* b) {
     b->pivot.v[1] = ((*_env->ct).pivot.v[1] * (*_env->c)->localscl);
 }
 
-typedef struct Env_lambda_477 { char _unused; } Env_lambda_477;
-static Ret_f32__f32 lambda_477(Env_lambda_477 *_env, Char* char_, i32 box) {
+typedef struct Env_lambda_478 { char _unused; } Env_lambda_478;
+static Ret_f32__f32 lambda_478(Env_lambda_478 *_env, Char* char_, i32 box) {
     if (box == 1) {
         return (Ret_f32__f32){char_->hitdef.attack_depth.v[0], char_->hitdef.attack_depth.v[1]};
     }
     return (Ret_f32__f32){char_->CharSystemVar_.depthPlayer.v[0], char_->CharSystemVar_.depthPlayer.v[1]};
 }
 
-typedef struct Env_lambda_478 { Char* *c; Char* *getter; bool *proj; } Env_lambda_478;
-static bool lambda_478(Env_lambda_478 *_env, HitDef* hd) {
+typedef struct Env_lambda_479 { Char* *c; Char* *getter; bool *proj; } Env_lambda_479;
+static bool lambda_479(Env_lambda_479 *_env, HitDef* hd) {
     if (*_env->proj) {
         return false;
     } else {
@@ -6500,8 +6519,8 @@ static bool lambda_478(Env_lambda_478 *_env, HitDef* hd) {
     }
 }
 
-typedef struct Env_lambda_479 { Char* *c; Char* *getter; } Env_lambda_479;
-static void lambda_479(Env_lambda_479 *_env, Char* origin) {
+typedef struct Env_lambda_480 { Char* *c; Char* *getter; } Env_lambda_480;
+static void lambda_480(Env_lambda_480 *_env, Char* origin) {
     Char_addTarget(origin, (*_env->getter)->id);
     i32 jg = Char_gi(origin)->data.airjuggle;
     {
@@ -6518,8 +6537,8 @@ static void lambda_479(Env_lambda_479 *_env, Char* origin) {
     (*_env->getter)->ghv.targetedBy = GO_APPEND(Slice_Arr2_i32, (*_env->getter)->ghv.targetedBy, (Arr2_i32){{origin->id, (jg - (*_env->c)->juggle)}});
 }
 
-typedef struct Env_lambda_480 { Char* *c; Char* *getter; bool *isProjectile; } Env_lambda_480;
-static void lambda_480(Env_lambda_480 *_env, f32 byf) {
+typedef struct Env_lambda_481 { Char* *c; Char* *getter; bool *isProjectile; } Env_lambda_481;
+static void lambda_481(Env_lambda_481 *_env, f32 byf) {
     if (!(*_env->isProjectile)) {
         if ((*_env->c)->p1facing != 0x0p+00f) {
             byf = (*_env->c)->p1facing;
@@ -6537,8 +6556,8 @@ static void lambda_480(Env_lambda_480 *_env, f32 byf) {
     }
 }
 
-typedef struct Env_lambda_481 { char _unused; } Env_lambda_481;
-static int lambda_481(Env_lambda_481 *_env, Char* c) {
+typedef struct Env_lambda_482 { char _unused; } Env_lambda_482;
+static int lambda_482(Env_lambda_482 *_env, Char* c) {
     if (Char_asf(c, 18014398509481984U) && (!Char_asf(c, 36028797018963968U))) {
         return 100;
     }
@@ -6560,18 +6579,6 @@ static int lambda_481(Env_lambda_481 *_env, Char* c) {
     return 1;
 }
 
-typedef struct Env_lambda_482 { CharList* *cl; GoFunc *getPriority; } Env_lambda_482;
-static bool lambda_482(Env_lambda_482 *_env, int i, int j) {
-    Char* chari = (*_env->cl)->runOrder.p[i];
-    Char* charj = (*_env->cl)->runOrder.p[j];
-    int pri = ((int (*)(void *, Char*))((*_env->getPriority)).fn)(((*_env->getPriority)).env, chari);
-    int prj = ((int (*)(void *, Char*))((*_env->getPriority)).fn)(((*_env->getPriority)).env, charj);
-    if (pri != prj) {
-        return (pri > prj);
-    }
-    return (chari->id < charj->id);
-}
-
 typedef struct Env_lambda_483 { CharList* *cl; GoFunc *getPriority; } Env_lambda_483;
 static bool lambda_483(Env_lambda_483 *_env, int i, int j) {
     Char* chari = (*_env->cl)->runOrder.p[i];
@@ -6584,8 +6591,20 @@ static bool lambda_483(Env_lambda_483 *_env, int i, int j) {
     return (chari->id < charj->id);
 }
 
-typedef struct Env_lambda_484 { Char* *getter; Projectile* *p; f32 *angleSinValue; f32 *angleCosValue; f32 *oldDistX; } Env_lambda_484;
-static void lambda_484(Env_lambda_484 *_env, bool protrude) {
+typedef struct Env_lambda_484 { CharList* *cl; GoFunc *getPriority; } Env_lambda_484;
+static bool lambda_484(Env_lambda_484 *_env, int i, int j) {
+    Char* chari = (*_env->cl)->runOrder.p[i];
+    Char* charj = (*_env->cl)->runOrder.p[j];
+    int pri = ((int (*)(void *, Char*))((*_env->getPriority)).fn)(((*_env->getPriority)).env, chari);
+    int prj = ((int (*)(void *, Char*))((*_env->getPriority)).fn)(((*_env->getPriority)).env, charj);
+    if (pri != prj) {
+        return (pri > prj);
+    }
+    return (chari->id < charj->id);
+}
+
+typedef struct Env_lambda_485 { Char* *getter; Projectile* *p; f32 *angleSinValue; f32 *angleCosValue; f32 *oldDistX; } Env_lambda_485;
+static void lambda_485(Env_lambda_485 *_env, bool protrude) {
     (*_env->getter)->platformPosY = ((((((((*_env->p)->pos.v[1] + (*_env->p)->platformHeight.v[0]) + (*_env->p)->velocity.v[1])) * (*_env->p)->localscl) - ((*_env->angleSinValue) * (((*_env->oldDistX) / (*_env->angleCosValue)))))) / (*_env->getter)->localscl);
     (*_env->getter)->groundAngle = (*_env->p)->platformAngle;
     if ((*_env->getter)->ss.stateType != 4) {
@@ -6601,8 +6620,8 @@ static void lambda_484(Env_lambda_484 *_env, bool protrude) {
     }
 }
 
-typedef struct Env_lambda_485 { char _unused; } Env_lambda_485;
-static int lambda_485(Env_lambda_485 *_env, Char* c) {
+typedef struct Env_lambda_486 { char _unused; } Env_lambda_486;
+static int lambda_486(Env_lambda_486 *_env, Char* c) {
     if (c->hitdef.reversal_attr > 0) {
         return 2;
     }
@@ -6610,18 +6629,6 @@ static int lambda_485(Env_lambda_485 *_env, Char* c) {
         return 1;
     }
     return 0;
-}
-
-typedef struct Env_lambda_486 { CharList* *cl; Slice_int *sortedOrder; GoFunc *getPr; } Env_lambda_486;
-static bool lambda_486(Env_lambda_486 *_env, int i, int j) {
-    Char* chari = (*_env->cl)->runOrder.p[(*_env->sortedOrder).p[i]];
-    Char* charj = (*_env->cl)->runOrder.p[(*_env->sortedOrder).p[j]];
-    int pri = ((int (*)(void *, Char*))((*_env->getPr)).fn)(((*_env->getPr)).env, chari);
-    int prj = ((int (*)(void *, Char*))((*_env->getPr)).fn)(((*_env->getPr)).env, charj);
-    if (pri != prj) {
-        return (pri > prj);
-    }
-    return (chari->id < charj->id);
 }
 
 typedef struct Env_lambda_487 { CharList* *cl; Slice_int *sortedOrder; GoFunc *getPr; } Env_lambda_487;
@@ -6636,8 +6643,20 @@ static bool lambda_487(Env_lambda_487 *_env, int i, int j) {
     return (chari->id < charj->id);
 }
 
-typedef struct Env_lambda_488 { char _unused; } Env_lambda_488;
-static Ret_f32__f32 lambda_488(Env_lambda_488 *_env, Arr4_Arr2_f32 rect, f32 nx, f32 ny) {
+typedef struct Env_lambda_488 { CharList* *cl; Slice_int *sortedOrder; GoFunc *getPr; } Env_lambda_488;
+static bool lambda_488(Env_lambda_488 *_env, int i, int j) {
+    Char* chari = (*_env->cl)->runOrder.p[(*_env->sortedOrder).p[i]];
+    Char* charj = (*_env->cl)->runOrder.p[(*_env->sortedOrder).p[j]];
+    int pri = ((int (*)(void *, Char*))((*_env->getPr)).fn)(((*_env->getPr)).env, chari);
+    int prj = ((int (*)(void *, Char*))((*_env->getPr)).fn)(((*_env->getPr)).env, charj);
+    if (pri != prj) {
+        return (pri > prj);
+    }
+    return (chari->id < charj->id);
+}
+
+typedef struct Env_lambda_489 { char _unused; } Env_lambda_489;
+static Ret_f32__f32 lambda_489(Env_lambda_489 *_env, Arr4_Arr2_f32 rect, f32 nx, f32 ny) {
     f32 min_ = 0;
     f32 max_ = 0;
     min_ = 0x1.fffffep+127f;
@@ -6659,8 +6678,8 @@ static Ret_f32__f32 lambda_488(Env_lambda_488 *_env, Arr4_Arr2_f32 rect, f32 nx,
     return (Ret_f32__f32){min_, max_};
 }
 
-typedef struct Env_lambda_489 { Arr4_Arr2_f32 *r1; Arr4_Arr2_f32 *r2; GoFunc *projectionRange; } Env_lambda_489;
-static bool lambda_489(Env_lambda_489 *_env, f32 nx, f32 ny) {
+typedef struct Env_lambda_490 { Arr4_Arr2_f32 *r1; Arr4_Arr2_f32 *r2; GoFunc *projectionRange; } Env_lambda_490;
+static bool lambda_490(Env_lambda_490 *_env, f32 nx, f32 ny) {
     Ret_f32__f32 _t1 = ((Ret_f32__f32 (*)(void *, Arr4_Arr2_f32, f32, f32))((*_env->projectionRange)).fn)(((*_env->projectionRange)).env, (*_env->r1), nx, ny);
     f32 minA = _t1.r0;
     f32 maxA = _t1.r1;
@@ -6673,8 +6692,8 @@ static bool lambda_489(Env_lambda_489 *_env, f32 nx, f32 ny) {
     return true;
 }
 
-typedef struct Env_lambda_490 { char _unused; } Env_lambda_490;
-static Ret_f32__f32__f32__f32 lambda_490(Env_lambda_490 *_env, Arr4_Arr2_f32 rect) {
+typedef struct Env_lambda_491 { char _unused; } Env_lambda_491;
+static Ret_f32__f32__f32__f32 lambda_491(Env_lambda_491 *_env, Arr4_Arr2_f32 rect) {
     f32 minX = 0;
     f32 maxX = 0;
     f32 minY = 0;
@@ -6709,15 +6728,15 @@ static Ret_f32__f32__f32__f32 lambda_490(Env_lambda_490 *_env, Arr4_Arr2_f32 rec
     return (Ret_f32__f32__f32__f32){minX, maxX, minY, maxY};
 }
 
-typedef struct Env_lambda_491 { char _unused; } Env_lambda_491;
-static bool lambda_491(Env_lambda_491 *_env, GoString file, GoString dir) {
+typedef struct Env_lambda_492 { char _unused; } Env_lambda_492;
+static bool lambda_492(Env_lambda_492 *_env, GoString file, GoString dir) {
     file = strings_ToLower(filepath_ToSlash(file));
     dir = strings_ToLower(filepath_ToSlash(dir));
     return strings_HasPrefix(file, dir);
 }
 
-typedef struct Env_lambda_492 { char _unused; } Env_lambda_492;
-static GoString lambda_492(Env_lambda_492 *_env, GoString dir) {
+typedef struct Env_lambda_493 { char _unused; } Env_lambda_493;
+static GoString lambda_493(Env_lambda_493 *_env, GoString dir) {
     dir = strings_TrimSpace(filepath_ToSlash(dir));
     dir = strings_TrimPrefix(dir, GOSTR("./"));
     if (go_streq(dir, GOSTR(""))) {
@@ -6729,8 +6748,8 @@ static GoString lambda_492(Env_lambda_492 *_env, GoString dir) {
     return dir;
 }
 
-typedef struct Env_lambda_493 { char _unused; } Env_lambda_493;
-static Slice_GoString lambda_493(Env_lambda_493 *_env, Slice_GoString ss, GoString s) {
+typedef struct Env_lambda_494 { char _unused; } Env_lambda_494;
+static Slice_GoString lambda_494(Env_lambda_494 *_env, Slice_GoString ss, GoString s) {
     {
         Slice_GoString _t2 = ss;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -6744,8 +6763,8 @@ static Slice_GoString lambda_493(Env_lambda_493 *_env, Slice_GoString ss, GoStri
     return GO_APPEND(Slice_GoString, ss, s);
 }
 
-typedef struct Env_lambda_494 { Map_GoString_bool *seen; } Env_lambda_494;
-static GoString lambda_494(Env_lambda_494 *_env, GoString candidate) {
+typedef struct Env_lambda_495 { Map_GoString_bool *seen; } Env_lambda_495;
+static GoString lambda_495(Env_lambda_495 *_env, GoString candidate) {
     candidate = filepath_ToSlash(candidate);
     GoString key = strings_ToLower(candidate);
     if (Map_GoString_bool_get(&(*_env->seen), key, NULL)) {
@@ -6755,13 +6774,13 @@ static GoString lambda_494(Env_lambda_494 *_env, GoString candidate) {
     return fn_FileExist(candidate);
 }
 
-typedef struct Env_lambda_495 { char _unused; } Env_lambda_495;
-static GoString lambda_495(Env_lambda_495 *_env, GoString base, GoString name) {
+typedef struct Env_lambda_496 { char _unused; } Env_lambda_496;
+static GoString lambda_496(Env_lambda_496 *_env, GoString base, GoString name) {
     return fn_joinSearchPath(base, name);
 }
 
-typedef struct Env_lambda_496 { GoFunc *addUnique; GoFunc *join; } Env_lambda_496;
-static Slice_GoString lambda_496(Env_lambda_496 *_env, GoString root) {
+typedef struct Env_lambda_497 { GoFunc *addUnique; GoFunc *join; } Env_lambda_497;
+static Slice_GoString lambda_497(Env_lambda_497 *_env, GoString root) {
     root = filepath_ToSlash(strings_TrimSpace(root));
     if (go_streq(root, GOSTR(""))) {
         return GO_SLICE_LIT(Slice_GoString, GoString, 1, GOSTR(""));
@@ -6793,8 +6812,8 @@ static Slice_GoString lambda_496(Env_lambda_496 *_env, GoString root) {
     return bases;
 }
 
-typedef struct Env_lambda_497 { GoString *targetPrefixNoDot; GoString *wildcardToken; } Env_lambda_497;
-static bool lambda_497(Env_lambda_497 *_env, GoString selector) {
+typedef struct Env_lambda_498 { GoString *targetPrefixNoDot; GoString *wildcardToken; } Env_lambda_498;
+static bool lambda_498(Env_lambda_498 *_env, GoString selector) {
     selector = strings_ToLower(strings_TrimSpace(selector));
     {
         Slice_GoString _t2 = strings_Split(selector, GOSTR("|"));
@@ -6810,18 +6829,44 @@ static bool lambda_497(Env_lambda_497 *_env, GoString selector) {
     return false;
 }
 
-typedef struct Env_lambda_498 { GoString *name; } Env_lambda_498;
-static GoIface lambda_498(Env_lambda_498 *_env) {
+typedef struct Env_lambda_499 { GoString *name; } Env_lambda_499;
+static GoIface lambda_499(Env_lambda_499 *_env) {
     return ((GoIface){155, go_box(Error, fmt_Sprintf(GOSTR("%q value must be a quoted string or number"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, (*_env->name))}))))});
 }
 
-typedef struct Env_lambda_499 { CharCompiler* *c; } Env_lambda_499;
-static void lambda_499(Env_lambda_499 *_env, GoString message) {
+typedef struct Env_lambda_500 { GoFunc *f; } Env_lambda_500;
+typedef struct Env_lambda_501 { char _unused; } Env_lambda_501;
+typedef struct Env_lambda_502 { GoIface *r; } Env_lambda_502;
+static void lambda_502(Env_lambda_502 *_env) {
+    go_panic((*_env->r));
+}
+
+static void lambda_501(Env_lambda_501 *_env) {
+    {
+        GoIface *r__h = go_box(GoIface, ((GoIface){0}));
+        if ((*r__h).type != 0) {
+            { GoFunc _t1 = ((GoFunc){(void *)lambda_502, go_box(Env_lambda_502, ((Env_lambda_502){r__h}))}); go_chan_send(g_sys.mainThreadTask, &_t1); }
+        }
+    }
+}
+
+static void lambda_500(Env_lambda_500 *_env) {
+    bool _df1 = false; GoFunc _df1_f;
+    _df1_f = ((GoFunc){(void *)lambda_501, go_box(Env_lambda_501, ((Env_lambda_501){0}))});
+    _df1 = true;
+    ((void (*)(void *))((*_env->f)).fn)(((*_env->f)).env);
+    if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
+}
+
+typedef struct GoEnv_1 { GoFunc f; } GoEnv_1;
+static void go_thunk_1(void *e_) { GoEnv_1 *e = (GoEnv_1 *)e_; ((void (*)(void *))e->f.fn)(e->f.env); }
+typedef struct Env_lambda_503 { CharCompiler* *c; } Env_lambda_503;
+static void lambda_503(Env_lambda_503 *_env, GoString message) {
     System_appendToConsole(&g_sys, go_strcat(CharCompiler_charWarn((*_env->c)), message));
 }
 
-typedef struct Env_lambda_500 { CharCompiler* *c; } Env_lambda_500;
-static Ret_i32__GoIface lambda_500(Env_lambda_500 *_env, GoString* in) {
+typedef struct Env_lambda_504 { CharCompiler* *c; } Env_lambda_504;
+static Ret_i32__GoIface lambda_504(Env_lambda_504 *_env, GoString* in) {
     (*_env->c)->token = CharCompiler_tokenizer((*_env->c), in);
     bool minus = false;
     {
@@ -6841,8 +6886,8 @@ static Ret_i32__GoIface lambda_500(Env_lambda_500 *_env, GoString* in) {
     return (Ret_i32__GoIface){i, (GoIface){0}};
 }
 
-typedef struct Env_lambda_501 { CharCompiler* *c; BytecodeExp* *out; GoString *base; } Env_lambda_501;
-static Ret_GoString__GoIface lambda_501(Env_lambda_501 *_env, GoString msg) {
+typedef struct Env_lambda_505 { CharCompiler* *c; BytecodeExp* *out; GoString *base; } Env_lambda_505;
+static Ret_GoString__GoIface lambda_505(Env_lambda_505 *_env, GoString msg) {
     if (g_sys.ignoreMostErrors) {
         System_appendToConsole(&g_sys, go_strcat(CharCompiler_charWarn((*_env->c)), msg));
         BytecodeExp_appendValue((*_env->out), fn_BytecodeInt(0));
@@ -6851,8 +6896,8 @@ static Ret_GoString__GoIface lambda_501(Env_lambda_501 *_env, GoString msg) {
     return (Ret_GoString__GoIface){GOSTR(""), ((GoIface){155, go_box(Error, msg)})};
 }
 
-typedef struct Env_lambda_502 { CharCompiler* *c; BytecodeExp* *out; GoString* *in; GoFunc *pushSelf; GoFunc *tryKeyword; } Env_lambda_502;
-static GoIface lambda_502(Env_lambda_502 *_env, bool not) {
+typedef struct Env_lambda_506 { CharCompiler* *c; BytecodeExp* *out; GoString* *in; GoFunc *pushSelf; GoFunc *tryKeyword; } Env_lambda_506;
+static GoIface lambda_506(Env_lambda_506 *_env, bool not) {
     Ret_bool__GoIface _t1 = ((Ret_bool__GoIface (*)(void *, bool))((*_env->tryKeyword)).fn)(((*_env->tryKeyword)).env, not);
     bool matched = _t1.r0;
     GoIface err = _t1.r1;
@@ -6881,8 +6926,8 @@ static GoIface lambda_502(Env_lambda_502 *_env, bool not) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_503 { CharCompiler* *c; BytecodeExp* *out; GoString* *in; bool *rd; OpCode *opc; } Env_lambda_503;
-static GoIface lambda_503(Env_lambda_503 *_env, bool not) {
+typedef struct Env_lambda_507 { CharCompiler* *c; BytecodeExp* *out; GoString* *in; bool *rd; OpCode *opc; } Env_lambda_507;
+static GoIface lambda_507(Env_lambda_507 *_env, bool not) {
     BytecodeExp *nameExp__h = go_box(BytecodeExp, {0});
     if (go_streq((*_env->c)->token, GOSTR("\""))) {
         {
@@ -6923,8 +6968,8 @@ static GoIface lambda_503(Env_lambda_503 *_env, bool not) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_504 { BytecodeExp* *out; GoString *trname; } Env_lambda_504;
-static void lambda_504(Env_lambda_504 *_env) {
+typedef struct Env_lambda_508 { BytecodeExp* *out; GoString *trname; } Env_lambda_508;
+static void lambda_508(Env_lambda_508 *_env) {
     if (go_streq((*_env->trname), GOSTR("prevmovetype"))) {
         BytecodeExp_append((*_env->out), GO_SLICE_LIT(Slice_OpCode, OpCode, 3, 159U, 240U, 0U));
     } else {
@@ -6939,8 +6984,8 @@ static void lambda_504(Env_lambda_504 *_env) {
     }
 }
 
-typedef struct Env_lambda_505 { CharCompiler* *c; BytecodeExp* *out; GoString *trname; } Env_lambda_505;
-static Ret_bool__GoIface lambda_505(Env_lambda_505 *_env, bool not) {
+typedef struct Env_lambda_509 { CharCompiler* *c; BytecodeExp* *out; GoString *trname; } Env_lambda_509;
+static Ret_bool__GoIface lambda_509(Env_lambda_509 *_env, bool not) {
     if ((*_env->c)->token.len == 0) {
         return (Ret_bool__GoIface){false, ((GoIface){155, go_box(Error, go_strcat((*_env->trname), GOSTR(" trigger requires a comparison")))})};
     }
@@ -6983,8 +7028,8 @@ static Ret_bool__GoIface lambda_505(Env_lambda_505 *_env, bool not) {
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-typedef struct Env_lambda_506 { BytecodeExp* *out; GoString *trname; } Env_lambda_506;
-static void lambda_506(Env_lambda_506 *_env) {
+typedef struct Env_lambda_510 { BytecodeExp* *out; GoString *trname; } Env_lambda_510;
+static void lambda_510(Env_lambda_510 *_env) {
     if (go_streq((*_env->trname), GOSTR("prevstatetype"))) {
         BytecodeExp_append((*_env->out), GO_SLICE_LIT(Slice_OpCode, OpCode, 3, 159U, 241U, 0U));
     } else {
@@ -6999,8 +7044,8 @@ static void lambda_506(Env_lambda_506 *_env) {
     }
 }
 
-typedef struct Env_lambda_507 { CharCompiler* *c; BytecodeExp* *out; GoString *trname; } Env_lambda_507;
-static Ret_bool__GoIface lambda_507(Env_lambda_507 *_env, bool not) {
+typedef struct Env_lambda_511 { CharCompiler* *c; BytecodeExp* *out; GoString *trname; } Env_lambda_511;
+static Ret_bool__GoIface lambda_511(Env_lambda_511 *_env, bool not) {
     if ((*_env->c)->token.len == 0) {
         return (Ret_bool__GoIface){false, ((GoIface){155, go_box(Error, go_strcat((*_env->trname), GOSTR(" trigger requires a comparison")))})};
     }
@@ -7045,13 +7090,13 @@ static Ret_bool__GoIface lambda_507(Env_lambda_507 *_env, bool not) {
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-typedef struct Env_lambda_508 { BytecodeExp* *out; } Env_lambda_508;
-static void lambda_508(Env_lambda_508 *_env) {
+typedef struct Env_lambda_512 { BytecodeExp* *out; } Env_lambda_512;
+static void lambda_512(Env_lambda_512 *_env) {
     BytecodeExp_append((*_env->out), GO_SLICE_LIT(Slice_OpCode, OpCode, 2, 95U, 255U));
 }
 
-typedef struct Env_lambda_509 { CharCompiler* *c; BytecodeExp* *out; } Env_lambda_509;
-static Ret_bool__GoIface lambda_509(Env_lambda_509 *_env, bool not) {
+typedef struct Env_lambda_513 { CharCompiler* *c; BytecodeExp* *out; } Env_lambda_513;
+static Ret_bool__GoIface lambda_513(Env_lambda_513 *_env, bool not) {
     if ((*_env->c)->token.len == 0) {
         return (Ret_bool__GoIface){false, ((GoIface){155, go_box(Error, GOSTR("TeamMode trigger requires a comparison"))})};
     }
@@ -7079,13 +7124,13 @@ static Ret_bool__GoIface lambda_509(Env_lambda_509 *_env, bool not) {
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-typedef struct Env_lambda_510 { BytecodeExp* *out; } Env_lambda_510;
-static void lambda_510(Env_lambda_510 *_env) {
+typedef struct Env_lambda_514 { BytecodeExp* *out; } Env_lambda_514;
+static void lambda_514(Env_lambda_514 *_env) {
     BytecodeExp_append((*_env->out), GO_SLICE_LIT(Slice_OpCode, OpCode, 3, 159U, 214U, 0U));
 }
 
-typedef struct Env_lambda_511 { CharCompiler* *c; BytecodeExp* *out; } Env_lambda_511;
-static Ret_bool__GoIface lambda_511(Env_lambda_511 *_env, bool not) {
+typedef struct Env_lambda_515 { CharCompiler* *c; BytecodeExp* *out; } Env_lambda_515;
+static Ret_bool__GoIface lambda_515(Env_lambda_515 *_env, bool not) {
     if ((*_env->c)->token.len == 0) {
         return (Ret_bool__GoIface){false, ((GoIface){155, go_box(Error, GOSTR("Physics trigger requires a comparison"))})};
     }
@@ -7113,8 +7158,8 @@ static Ret_bool__GoIface lambda_511(Env_lambda_511 *_env, bool not) {
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-typedef struct Env_lambda_512 { char _unused; } Env_lambda_512;
-static int lambda_512(Env_lambda_512 *_env, GoString s) {
+typedef struct Env_lambda_516 { char _unused; } Env_lambda_516;
+static int lambda_516(Env_lambda_516 *_env, GoString s) {
     int uneven = 0;
     {
         int i = 0;
@@ -7141,8 +7186,8 @@ static int lambda_512(Env_lambda_512 *_env, GoString s) {
     return -1;
 }
 
-typedef struct Env_lambda_513 { char _unused; } Env_lambda_513;
-static Ret_GoString__bool lambda_513(Env_lambda_513 *_env, GoString lhs) {
+typedef struct Env_lambda_517 { char _unused; } Env_lambda_517;
+static Ret_GoString__bool lambda_517(Env_lambda_517 *_env, GoString lhs) {
     lhs = strings_TrimSpace(lhs);
     int i = strings_Index(lhs, GOSTR("("));
     if (i <= 0) {
@@ -7194,8 +7239,8 @@ static Ret_GoString__bool lambda_513(Env_lambda_513 *_env, GoString lhs) {
     return (Ret_GoString__bool){strings_ToLower(strings_TrimSpace(go_substr(lhs, 0, (end + 1)))), true};
 }
 
-typedef struct Env_lambda_514 { CharCompiler* *c; StateControllerBase* *sc; u8 *id; int *numArg; bool *ffxDefault; } Env_lambda_514;
-static GoIface lambda_514(Env_lambda_514 *_env, GoString data) {
+typedef struct Env_lambda_518 { CharCompiler* *c; StateControllerBase* *sc; u8 *id; int *numArg; bool *ffxDefault; } Env_lambda_518;
+static GoIface lambda_518(Env_lambda_518 *_env, GoString data) {
     GoString *data__h = go_box(GoString, data);
     int length = (*data__h).len;
     GoString prefix = CharCompiler_getDataPrefix((*_env->c), (&(*data__h)), (*_env->ffxDefault));
@@ -7235,8 +7280,8 @@ static GoIface lambda_514(Env_lambda_514 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_515 { CharCompiler* *c; StateControllerBase* *sc; GoString *paramName; u8 *id; } Env_lambda_515;
-static GoIface lambda_515(Env_lambda_515 *_env, GoString data) {
+typedef struct Env_lambda_519 { CharCompiler* *c; StateControllerBase* *sc; GoString *paramName; u8 *id; } Env_lambda_519;
+static GoIface lambda_519(Env_lambda_519 *_env, GoString data) {
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, go_strcat((*_env->paramName), GOSTR(" not specified")))});
     }
@@ -7291,8 +7336,8 @@ static GoIface lambda_515(Env_lambda_515 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_516 { CharCompiler* *c; StateControllerBase* *sc; GoString *paramName; u8 *id; } Env_lambda_516;
-static GoIface lambda_516(Env_lambda_516 *_env, GoString data) {
+typedef struct Env_lambda_520 { CharCompiler* *c; StateControllerBase* *sc; GoString *paramName; u8 *id; } Env_lambda_520;
+static GoIface lambda_520(Env_lambda_520 *_env, GoString data) {
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, go_strcat((*_env->paramName), GOSTR(" not specified")))});
     }
@@ -7337,8 +7382,8 @@ static GoIface lambda_516(Env_lambda_516 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_517 { CharCompiler* *c; StateControllerBase* *sc; u8 *id; } Env_lambda_517;
-static GoIface lambda_517(Env_lambda_517 *_env, GoString data) {
+typedef struct Env_lambda_521 { CharCompiler* *c; StateControllerBase* *sc; u8 *id; } Env_lambda_521;
+static GoIface lambda_521(Env_lambda_521 *_env, GoString data) {
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, GOSTR("postype not specified"))});
     }
@@ -7397,8 +7442,8 @@ static GoIface lambda_517(Env_lambda_517 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_518 { CharCompiler* *c; StateControllerBase* *sc; u8 *id; bool *allowNone; } Env_lambda_518;
-static GoIface lambda_518(Env_lambda_518 *_env, GoString data) {
+typedef struct Env_lambda_522 { CharCompiler* *c; StateControllerBase* *sc; u8 *id; bool *allowNone; } Env_lambda_522;
+static GoIface lambda_522(Env_lambda_522 *_env, GoString data) {
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, GOSTR("space not specified"))});
     }
@@ -7433,8 +7478,8 @@ static GoIface lambda_518(Env_lambda_518 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_519 { StateControllerBase* *sc; u8 *id; } Env_lambda_519;
-static GoIface lambda_519(Env_lambda_519 *_env, GoString data) {
+typedef struct Env_lambda_523 { StateControllerBase* *sc; u8 *id; } Env_lambda_523;
+static GoIface lambda_523(Env_lambda_523 *_env, GoString data) {
     Projection proj = 0;
     {
         GoString _t1 = strings_ToLower(strings_TrimSpace(data));
@@ -7454,8 +7499,8 @@ static GoIface lambda_519(Env_lambda_519 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_520 { StateControllerBase* *sc; u8 *id; } Env_lambda_520;
-static GoIface lambda_520(Env_lambda_520 *_env, GoString data) {
+typedef struct Env_lambda_524 { StateControllerBase* *sc; u8 *id; } Env_lambda_524;
+static GoIface lambda_524(Env_lambda_524 *_env, GoString data) {
     if (data.len <= 1) {
         return ((GoIface){155, go_box(Error, GOSTR("savedata not specified"))});
     }
@@ -7478,9 +7523,9 @@ static GoIface lambda_520(Env_lambda_520 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_521 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; GoString *prefix; u8 *id; } Env_lambda_521;
-typedef struct Env_lambda_522 { CharCompiler* *c; Slice_BytecodeExp *exp_; } Env_lambda_522;
-static GoIface lambda_522(Env_lambda_522 *_env, GoString data) {
+typedef struct Env_lambda_525 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; GoString *prefix; u8 *id; } Env_lambda_525;
+typedef struct Env_lambda_526 { CharCompiler* *c; Slice_BytecodeExp *exp_; } Env_lambda_526;
+static GoIface lambda_526(Env_lambda_526 *_env, GoString data) {
     if (strings_TrimSpace(data).len == 0) {
         if ((*_env->c)->zssMode || (!g_sys.ignoreMostErrors)) {
             return ((GoIface){155, go_box(Error, GOSTR("alpha not specified"))});
@@ -7504,7 +7549,7 @@ static GoIface lambda_522(Env_lambda_522 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_521(Env_lambda_521 *_env, GoString data) {
+static GoIface lambda_525(Env_lambda_525 *_env, GoString data) {
     if (strings_TrimSpace(data).len == 0) {
         if ((*_env->c)->zssMode || (!g_sys.ignoreMostErrors)) {
             return ((GoIface){155, go_box(Error, GOSTR("trans type not specified"))});
@@ -7575,7 +7620,7 @@ static GoIface lambda_521(Env_lambda_521 *_env, GoString data) {
         } while (0);
     }
     Slice_BytecodeExp *exp___h = go_box(Slice_BytecodeExp, GO_MAKE(Slice_BytecodeExp, BytecodeExp, 3, 3));
-    (void)(CharCompiler_stateParam((*_env->c), (*_env->is), go_strcat((*_env->prefix), GOSTR("alpha")), false, ((GoFunc){(void *)lambda_522, go_box(Env_lambda_522, ((Env_lambda_522){_env->c, exp___h}))})));
+    (void)(CharCompiler_stateParam((*_env->c), (*_env->is), go_strcat((*_env->prefix), GOSTR("alpha")), false, ((GoFunc){(void *)lambda_526, go_box(Env_lambda_526, ((Env_lambda_526){_env->c, exp___h}))})));
     if ((*exp___h).p[0].p == 0) {
         (*exp___h).p[0] = StateControllerBase_iToExp(*(*_env->sc), GO_SLICE_LIT(Slice_i32, i32, 1, defsrc)).p[0];
     }
@@ -7591,8 +7636,8 @@ static GoIface lambda_521(Env_lambda_521 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_523 { StateControllerBase* *sc; GoString *paramName; u8 *id; } Env_lambda_523;
-static GoIface lambda_523(Env_lambda_523 *_env, GoString data) {
+typedef struct Env_lambda_527 { StateControllerBase* *sc; GoString *paramName; u8 *id; } Env_lambda_527;
+static GoIface lambda_527(Env_lambda_527 *_env, GoString data) {
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, go_strcat(GOSTR("Clsn type not specified for "), (*_env->paramName)))});
     }
@@ -7621,8 +7666,8 @@ static GoIface lambda_523(Env_lambda_523 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_524 { CharCompiler* *c; StateControllerBase* *sc; u8 *opcode; } Env_lambda_524;
-static GoIface lambda_524(Env_lambda_524 *_env, GoString data) {
+typedef struct Env_lambda_528 { CharCompiler* *c; StateControllerBase* *sc; u8 *opcode; } Env_lambda_528;
+static GoIface lambda_528(Env_lambda_528 *_env, GoString data) {
     Slice_GoString parts = strings_Split(data, GOSTR(","));
     Slice_BytecodeExp allBe = {0};
     {
@@ -7652,9 +7697,9 @@ static GoIface lambda_524(Env_lambda_524 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_525 { CharCompiler* *c; IniSection *is; StateBytecode* *sbc; } Env_lambda_525;
-typedef struct Env_lambda_526 { CharCompiler* *c; StateBytecode* *sbc; } Env_lambda_526;
-static GoIface lambda_526(Env_lambda_526 *_env, GoString data) {
+typedef struct Env_lambda_529 { CharCompiler* *c; IniSection *is; StateBytecode* *sbc; } Env_lambda_529;
+typedef struct Env_lambda_530 { CharCompiler* *c; StateBytecode* *sbc; } Env_lambda_530;
+static GoIface lambda_530(Env_lambda_530 *_env, GoString data) {
     Ret_i32__BytecodeExp__GoIface _t1 = CharCompiler_typeExpression((*_env->c), data, GOSTR("statetype"), GOSTR("SCALUscalu"), ((GoFunc){(void *)fv_fn_stateTypeValue, NULL}));
     i32 v = _t1.r0;
     BytecodeExp be = _t1.r1;
@@ -7669,8 +7714,8 @@ static GoIface lambda_526(Env_lambda_526 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_527 { CharCompiler* *c; StateBytecode* *sbc; } Env_lambda_527;
-static GoIface lambda_527(Env_lambda_527 *_env, GoString data) {
+typedef struct Env_lambda_531 { CharCompiler* *c; StateBytecode* *sbc; } Env_lambda_531;
+static GoIface lambda_531(Env_lambda_531 *_env, GoString data) {
     Ret_i32__BytecodeExp__GoIface _t1 = CharCompiler_typeExpression((*_env->c), data, GOSTR("movetype"), GOSTR("IAHUiahu"), ((GoFunc){(void *)fv_fn_moveTypeValue, NULL}));
     i32 v = _t1.r0;
     BytecodeExp be = _t1.r1;
@@ -7685,8 +7730,8 @@ static GoIface lambda_527(Env_lambda_527 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_528 { CharCompiler* *c; StateBytecode* *sbc; } Env_lambda_528;
-static GoIface lambda_528(Env_lambda_528 *_env, GoString data) {
+typedef struct Env_lambda_532 { CharCompiler* *c; StateBytecode* *sbc; } Env_lambda_532;
+static GoIface lambda_532(Env_lambda_532 *_env, GoString data) {
     Ret_i32__BytecodeExp__GoIface _t1 = CharCompiler_typeExpression((*_env->c), data, GOSTR("physics type"), GOSTR("SCANUscanu"), ((GoFunc){(void *)fv_fn_physicsTypeValue, NULL}));
     i32 v = _t1.r0;
     BytecodeExp be = _t1.r1;
@@ -7701,47 +7746,47 @@ static GoIface lambda_528(Env_lambda_528 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_529 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_529;
-static GoIface lambda_529(Env_lambda_529 *_env, GoString data) {
+typedef struct Env_lambda_533 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_533;
+static GoIface lambda_533(Env_lambda_533 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 3, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_530 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_530;
-static GoIface lambda_530(Env_lambda_530 *_env, GoString data) {
+typedef struct Env_lambda_534 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_534;
+static GoIface lambda_534(Env_lambda_534 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 3, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_531 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_531;
-static GoIface lambda_531(Env_lambda_531 *_env, GoString data) {
+typedef struct Env_lambda_535 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_535;
+static GoIface lambda_535(Env_lambda_535 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 2U, data, 3, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_532 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_532;
-static GoIface lambda_532(Env_lambda_532 *_env, GoString data) {
+typedef struct Env_lambda_536 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_536;
+static GoIface lambda_536(Env_lambda_536 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 5U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_525(Env_lambda_525 *_env) {
+static GoIface lambda_529(Env_lambda_529 *_env) {
     StateControllerBase* *sc__h = go_box(StateControllerBase*, fn_newStateControllerBase());
     {
-        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("type"), false, ((GoFunc){(void *)lambda_526, go_box(Env_lambda_526, ((Env_lambda_526){_env->c, _env->sbc}))}));
+        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("type"), false, ((GoFunc){(void *)lambda_530, go_box(Env_lambda_530, ((Env_lambda_530){_env->c, _env->sbc}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t2 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("movetype"), false, ((GoFunc){(void *)lambda_527, go_box(Env_lambda_527, ((Env_lambda_527){_env->c, _env->sbc}))}));
+        GoIface _t2 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("movetype"), false, ((GoFunc){(void *)lambda_531, go_box(Env_lambda_531, ((Env_lambda_531){_env->c, _env->sbc}))}));
         GoIface err = _t2;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t3 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("physics"), false, ((GoFunc){(void *)lambda_528, go_box(Env_lambda_528, ((Env_lambda_528){_env->c, _env->sbc}))}));
+        GoIface _t3 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("physics"), false, ((GoFunc){(void *)lambda_532, go_box(Env_lambda_532, ((Env_lambda_532){_env->c, _env->sbc}))}));
         GoIface err = _t3;
         if (err.type != 0) {
             return err;
@@ -7749,7 +7794,7 @@ static GoIface lambda_525(Env_lambda_525 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("hitcountpersist"), false, ((GoFunc){(void *)lambda_529, go_box(Env_lambda_529, ((Env_lambda_529){_env->c, sc__h, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("hitcountpersist"), false, ((GoFunc){(void *)lambda_533, go_box(Env_lambda_533, ((Env_lambda_533){_env->c, sc__h, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -7759,7 +7804,7 @@ static GoIface lambda_525(Env_lambda_525 *_env) {
     }
     (*b__h) = false;
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("movehitpersist"), false, ((GoFunc){(void *)lambda_530, go_box(Env_lambda_530, ((Env_lambda_530){_env->c, sc__h, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("movehitpersist"), false, ((GoFunc){(void *)lambda_534, go_box(Env_lambda_534, ((Env_lambda_534){_env->c, sc__h, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -7769,7 +7814,7 @@ static GoIface lambda_525(Env_lambda_525 *_env) {
     }
     (*b__h) = false;
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("hitdefpersist"), false, ((GoFunc){(void *)lambda_531, go_box(Env_lambda_531, ((Env_lambda_531){_env->c, sc__h, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("hitdefpersist"), false, ((GoFunc){(void *)lambda_535, go_box(Env_lambda_535, ((Env_lambda_535){_env->c, sc__h, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -7790,7 +7835,7 @@ static GoIface lambda_525(Env_lambda_525 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("juggle"), false, ((GoFunc){(void *)lambda_532, go_box(Env_lambda_532, ((Env_lambda_532){_env->c, sc__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("juggle"), false, ((GoFunc){(void *)lambda_536, go_box(Env_lambda_536, ((Env_lambda_536){_env->c, sc__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -7823,8 +7868,8 @@ static GoIface lambda_525(Env_lambda_525 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_533 { GoString *filetext; } Env_lambda_533;
-static GoIface lambda_533(Env_lambda_533 *_env, GoString fname) {
+typedef struct Env_lambda_537 { GoString *filetext; } Env_lambda_537;
+static GoIface lambda_537(Env_lambda_537 *_env, GoString fname) {
     GoIface err = {0};
     Ret_GoString__GoIface _t1 = fn_LoadText(fname);
     (*_env->filetext) = _t1.r0;
@@ -7832,8 +7877,8 @@ static GoIface lambda_533(Env_lambda_533 *_env, GoString fname) {
     return err;
 }
 
-typedef struct Env_lambda_534 { GoString *filetext; } Env_lambda_534;
-static GoIface lambda_534(Env_lambda_534 *_env, GoString fname) {
+typedef struct Env_lambda_538 { GoString *filetext; } Env_lambda_538;
+static GoIface lambda_538(Env_lambda_538 *_env, GoString fname) {
     GoIface err2 = {0};
     Ret_GoString__GoIface _t1 = fn_LoadText(fname);
     (*_env->filetext) = _t1.r0;
@@ -7841,13 +7886,13 @@ static GoIface lambda_534(Env_lambda_534 *_env, GoString fname) {
     return err2;
 }
 
-typedef struct Env_lambda_535 { CharCompiler* *c; GoString *filename; } Env_lambda_535;
-static GoIface lambda_535(Env_lambda_535 *_env, GoIface err) {
+typedef struct Env_lambda_539 { CharCompiler* *c; GoString *filename; } Env_lambda_539;
+static GoIface lambda_539(Env_lambda_539 *_env, GoIface err) {
     return ((GoIface){155, go_box(Error, fmt_Sprintf(GOSTR("%v:%v:\n%v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){17, go_box(GoString, (*_env->filename))}), ((GoIface){2, go_box_a(int, ((*_env->c)->i + 1))}), ((GoIface){17, go_box(GoString, iface_Error_319077b5(err))}))))});
 }
 
-typedef struct Env_lambda_536 { CharCompiler* *c; scFunc *scf; Slice_BytecodeExp *triggerall; Slice_Slice_BytecodeExp *trigger; Slice_i8 *trexist; bool *warnedMissingTrigger; Slice_GoString *rawAll; Slice_Slice_GoString *rawTr; } Env_lambda_536;
-static GoIface lambda_536(Env_lambda_536 *_env, GoString name, GoString data) {
+typedef struct Env_lambda_540 { CharCompiler* *c; scFunc *scf; Slice_BytecodeExp *triggerall; Slice_Slice_BytecodeExp *trigger; Slice_i8 *trexist; bool *warnedMissingTrigger; Slice_GoString *rawAll; Slice_Slice_GoString *rawTr; } Env_lambda_540;
+static GoIface lambda_540(Env_lambda_540 *_env, GoString name, GoString data) {
     {
         GoString _t1 = name;
         do {
@@ -7971,8 +8016,8 @@ static GoIface lambda_536(Env_lambda_536 *_env, GoString name, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_537 { CharCompiler* *c; GoString* *line; StateBlock* *bl; StateBytecode* *sbc; i32* *numVars; GoIface *err; } Env_lambda_537;
-static GoIface lambda_537(Env_lambda_537 *_env, StateBlock* sbl, GoString* expr) {
+typedef struct Env_lambda_541 { CharCompiler* *c; GoString* *line; StateBlock* *bl; StateBytecode* *sbc; i32* *numVars; GoIface *err; } Env_lambda_541;
+static GoIface lambda_541(Env_lambda_541 *_env, StateBlock* sbl, GoString* expr) {
     {
         GoIface err = CharCompiler_blockAttribSet((*_env->c), (*_env->line), sbl, (*_env->sbc), (((*_env->bl) != NULL) && (*_env->bl)->ctrlsIgnorehitpause), (((*_env->bl) != NULL) && (*_env->bl)->nestedInLoop));
         if (err.type != 0) {
@@ -7998,8 +8043,8 @@ static GoIface lambda_537(Env_lambda_537 *_env, StateBlock* sbl, GoString* expr)
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_538 { CharCompiler* *c; GoString* *line; GoString *header; GoIface *err; GoFunc *compileCaseBlock; GoFunc *readNextCase; } Env_lambda_538;
-static Ret_StateBlockPtr__GoIface lambda_538(Env_lambda_538 *_env, StateBlock* def) {
+typedef struct Env_lambda_542 { CharCompiler* *c; GoString* *line; GoString *header; GoIface *err; GoFunc *compileCaseBlock; GoFunc *readNextCase; } Env_lambda_542;
+static Ret_StateBlockPtr__GoIface lambda_542(Env_lambda_542 *_env, StateBlock* def) {
     GoString *expr__h = go_box(GoString, GOSTR(""));
     {
         GoString _t1 = (*_env->c)->token;
@@ -8073,18 +8118,18 @@ static Ret_StateBlockPtr__GoIface lambda_538(Env_lambda_538 *_env, StateBlock* d
     return (Ret_StateBlockPtr__GoIface){sbl, (GoIface){0}};
 }
 
-typedef struct Env_lambda_539 { char _unused; } Env_lambda_539;
-static void lambda_539(Env_lambda_539 *_env, bool oime) {
+typedef struct Env_lambda_543 { char _unused; } Env_lambda_543;
+static void lambda_543(Env_lambda_543 *_env, bool oime) {
     g_sys.ignoreMostErrors = oime;
 }
 
-typedef struct Env_lambda_540 { CharCompiler* *c; GoString *filename; } Env_lambda_540;
-static GoIface lambda_540(Env_lambda_540 *_env, GoIface err) {
+typedef struct Env_lambda_544 { CharCompiler* *c; GoString *filename; } Env_lambda_544;
+static GoIface lambda_544(Env_lambda_544 *_env, GoIface err) {
     return ((GoIface){155, go_box(Error, fmt_Sprintf(GOSTR("%v:%v:\n%v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){17, go_box(GoString, (*_env->filename))}), ((GoIface){2, go_box_a(int, (*_env->c)->i)}), ((GoIface){17, go_box(GoString, iface_Error_319077b5(err))}))))});
 }
 
-typedef struct Env_lambda_541 { GoString *str; } Env_lambda_541;
-static GoIface lambda_541(Env_lambda_541 *_env, GoString filename) {
+typedef struct Env_lambda_545 { GoString *str; } Env_lambda_545;
+static GoIface lambda_545(Env_lambda_545 *_env, GoString filename) {
     GoIface err = {0};
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     (*_env->str) = _t1.r0;
@@ -8095,8 +8140,8 @@ static GoIface lambda_541(Env_lambda_541 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_542 { GoString *str; } Env_lambda_542;
-static GoIface lambda_542(Env_lambda_542 *_env, GoString filename) {
+typedef struct Env_lambda_546 { GoString *str; } Env_lambda_546;
+static GoIface lambda_546(Env_lambda_546 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString txt = _t1.r0;
     GoIface err = _t1.r1;
@@ -8107,8 +8152,8 @@ static GoIface lambda_542(Env_lambda_542 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_543 { IniSection *is; } Env_lambda_543;
-static void lambda_543(Env_lambda_543 *_env, GoString name, CommandKey* k) {
+typedef struct Env_lambda_547 { IniSection *is; } Env_lambda_547;
+static void lambda_547(Env_lambda_547 *_env, GoString name, CommandKey* k) {
     {
         GoString _t1 = strings_ToLower(Map_GoString_GoString_get(&(*_env->is), name, NULL));
         do {
@@ -8137,8 +8182,8 @@ static void lambda_543(Env_lambda_543 *_env, GoString name, CommandKey* k) {
     }
 }
 
-typedef struct Env_lambda_544 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *new_; } Env_lambda_544;
-static GoIface lambda_544(Env_lambda_544 *_env, GoString data) {
+typedef struct Env_lambda_548 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *new_; } Env_lambda_548;
+static GoIface lambda_548(Env_lambda_548 *_env, GoString data) {
     bool _t1 = true;
     bool _t2 = true;
     (*_env->any) = _t1;
@@ -8146,8 +8191,8 @@ static GoIface lambda_544(Env_lambda_544 *_env, GoString data) {
     return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 0U, data, false);
 }
 
-typedef struct Env_lambda_545 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *new_; } Env_lambda_545;
-static GoIface lambda_545(Env_lambda_545 *_env, GoString data) {
+typedef struct Env_lambda_549 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *new_; } Env_lambda_549;
+static GoIface lambda_549(Env_lambda_549 *_env, GoString data) {
     bool _t1 = true;
     bool _t2 = true;
     (*_env->any) = _t1;
@@ -8156,8 +8201,8 @@ static GoIface lambda_545(Env_lambda_545 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_546 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *new_; } Env_lambda_546;
-static GoIface lambda_546(Env_lambda_546 *_env, GoString data) {
+typedef struct Env_lambda_550 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *new_; } Env_lambda_550;
+static GoIface lambda_550(Env_lambda_550 *_env, GoString data) {
     bool _t1 = true;
     bool _t2 = true;
     (*_env->any) = _t1;
@@ -8166,29 +8211,29 @@ static GoIface lambda_546(Env_lambda_546 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_547 { CharCompiler* *c; StateControllerBase* *sc; bool *new_; } Env_lambda_547;
-static GoIface lambda_547(Env_lambda_547 *_env, GoString data) {
+typedef struct Env_lambda_551 { CharCompiler* *c; StateControllerBase* *sc; bool *new_; } Env_lambda_551;
+static GoIface lambda_551(Env_lambda_551 *_env, GoString data) {
     (*_env->new_) = true;
     CharCompiler_scAdd((*_env->c), (*_env->sc), 5U, data, 2, 1, (Slice_BytecodeExp){0});
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_548 { CharCompiler* *c; StateControllerBase* *sc; bool *new_; } Env_lambda_548;
-static GoIface lambda_548(Env_lambda_548 *_env, GoString data) {
+typedef struct Env_lambda_552 { CharCompiler* *c; StateControllerBase* *sc; bool *new_; } Env_lambda_552;
+static GoIface lambda_552(Env_lambda_552 *_env, GoString data) {
     (*_env->new_) = true;
     CharCompiler_scAdd((*_env->c), (*_env->sc), 6U, data, 3, 1, (Slice_BytecodeExp){0});
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_549 { CharCompiler* *c; StateControllerBase* *sc; bool *new_; } Env_lambda_549;
-static GoIface lambda_549(Env_lambda_549 *_env, GoString data) {
+typedef struct Env_lambda_553 { CharCompiler* *c; StateControllerBase* *sc; bool *new_; } Env_lambda_553;
+static GoIface lambda_553(Env_lambda_553 *_env, GoString data) {
     (*_env->new_) = true;
     CharCompiler_scAdd((*_env->c), (*_env->sc), 2U, data, 2, 1, (Slice_BytecodeExp){0});
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_550 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *old; } Env_lambda_550;
-static GoIface lambda_550(Env_lambda_550 *_env, GoString data) {
+typedef struct Env_lambda_554 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *old; } Env_lambda_554;
+static GoIface lambda_554(Env_lambda_554 *_env, GoString data) {
     bool _t1 = true;
     bool _t2 = true;
     (*_env->any) = _t1;
@@ -8197,8 +8242,8 @@ static GoIface lambda_550(Env_lambda_550 *_env, GoString data) {
     return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 0U, data, false);
 }
 
-typedef struct Env_lambda_551 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *old; } Env_lambda_551;
-static GoIface lambda_551(Env_lambda_551 *_env, GoString data) {
+typedef struct Env_lambda_555 { CharCompiler* *c; StateControllerBase* *sc; bool *any; bool *old; } Env_lambda_555;
+static GoIface lambda_555(Env_lambda_555 *_env, GoString data) {
     bool _t1 = true;
     bool _t2 = true;
     (*_env->any) = _t1;
@@ -8207,8 +8252,8 @@ static GoIface lambda_551(Env_lambda_551 *_env, GoString data) {
     return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 0U, data, false);
 }
 
-typedef struct Env_lambda_552 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_552;
-static GoIface lambda_552(Env_lambda_552 *_env) {
+typedef struct Env_lambda_556 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_556;
+static GoIface lambda_556(Env_lambda_556 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 8U, 2, 1, false);
         if (err.type != 0) {
@@ -8218,8 +8263,8 @@ static GoIface lambda_552(Env_lambda_552 *_env) {
     return CharCompiler_hitBySub((*_env->c), (*_env->is), (*_env->sc), GOSTR("HitBy"));
 }
 
-typedef struct Env_lambda_553 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_553;
-static GoIface lambda_553(Env_lambda_553 *_env) {
+typedef struct Env_lambda_557 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_557;
+static GoIface lambda_557(Env_lambda_557 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 8U, 2, 1, false);
         if (err.type != 0) {
@@ -8229,9 +8274,9 @@ static GoIface lambda_553(Env_lambda_553 *_env) {
     return CharCompiler_hitBySub((*_env->c), (*_env->is), (*_env->sc), GOSTR("NotHitBy"));
 }
 
-typedef struct Env_lambda_554 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_554;
-typedef struct Env_lambda_555 { StateControllerBase* *sc; } Env_lambda_555;
-static GoIface lambda_555(Env_lambda_555 *_env, GoString data) {
+typedef struct Env_lambda_558 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_558;
+typedef struct Env_lambda_559 { StateControllerBase* *sc; } Env_lambda_559;
+static GoIface lambda_559(Env_lambda_559 *_env, GoString data) {
     {
         GoString _t1 = strings_ToLower(data);
         do {
@@ -8397,29 +8442,9 @@ static GoIface lambda_555(Env_lambda_555 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_556 { GoFunc *foo; bool *f; } Env_lambda_556;
-static GoIface lambda_556(Env_lambda_556 *_env, GoString data) {
-    (*_env->f) = true;
-    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
-}
-
-typedef struct Env_lambda_557 { GoFunc *foo; } Env_lambda_557;
-static GoIface lambda_557(Env_lambda_557 *_env, GoString data) {
-    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
-}
-
-typedef struct Env_lambda_558 { GoFunc *foo; } Env_lambda_558;
-static GoIface lambda_558(Env_lambda_558 *_env, GoString data) {
-    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
-}
-
-typedef struct Env_lambda_559 { GoFunc *foo; } Env_lambda_559;
-static GoIface lambda_559(Env_lambda_559 *_env, GoString data) {
-    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
-}
-
-typedef struct Env_lambda_560 { GoFunc *foo; } Env_lambda_560;
+typedef struct Env_lambda_560 { GoFunc *foo; bool *f; } Env_lambda_560;
 static GoIface lambda_560(Env_lambda_560 *_env, GoString data) {
+    (*_env->f) = true;
     return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
 }
 
@@ -8438,7 +8463,27 @@ static GoIface lambda_563(Env_lambda_563 *_env, GoString data) {
     return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
 }
 
-static GoIface lambda_554(Env_lambda_554 *_env) {
+typedef struct Env_lambda_564 { GoFunc *foo; } Env_lambda_564;
+static GoIface lambda_564(Env_lambda_564 *_env, GoString data) {
+    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
+}
+
+typedef struct Env_lambda_565 { GoFunc *foo; } Env_lambda_565;
+static GoIface lambda_565(Env_lambda_565 *_env, GoString data) {
+    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
+}
+
+typedef struct Env_lambda_566 { GoFunc *foo; } Env_lambda_566;
+static GoIface lambda_566(Env_lambda_566 *_env, GoString data) {
+    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
+}
+
+typedef struct Env_lambda_567 { GoFunc *foo; } Env_lambda_567;
+static GoIface lambda_567(Env_lambda_567 *_env, GoString data) {
+    return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
+}
+
+static GoIface lambda_558(Env_lambda_558 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -8451,10 +8496,10 @@ static GoIface lambda_554(Env_lambda_554 *_env) {
             return err;
         }
     }
-    GoFunc *foo__h = go_box(GoFunc, ((GoFunc){(void *)lambda_555, go_box(Env_lambda_555, ((Env_lambda_555){_env->sc}))}));
+    GoFunc *foo__h = go_box(GoFunc, ((GoFunc){(void *)lambda_559, go_box(Env_lambda_559, ((Env_lambda_559){_env->sc}))}));
     bool *f__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag"), false, ((GoFunc){(void *)lambda_556, go_box(Env_lambda_556, ((Env_lambda_556){foo__h, f__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag"), false, ((GoFunc){(void *)lambda_560, go_box(Env_lambda_560, ((Env_lambda_560){foo__h, f__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -8463,43 +8508,43 @@ static GoIface lambda_554(Env_lambda_554 *_env) {
         return ((GoIface){155, go_box(Error, GOSTR("AssertSpecial flag not specified"))});
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag2"), false, ((GoFunc){(void *)lambda_557, go_box(Env_lambda_557, ((Env_lambda_557){foo__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag2"), false, ((GoFunc){(void *)lambda_561, go_box(Env_lambda_561, ((Env_lambda_561){foo__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag3"), false, ((GoFunc){(void *)lambda_558, go_box(Env_lambda_558, ((Env_lambda_558){foo__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag3"), false, ((GoFunc){(void *)lambda_562, go_box(Env_lambda_562, ((Env_lambda_562){foo__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag4"), false, ((GoFunc){(void *)lambda_559, go_box(Env_lambda_559, ((Env_lambda_559){foo__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag4"), false, ((GoFunc){(void *)lambda_563, go_box(Env_lambda_563, ((Env_lambda_563){foo__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag5"), false, ((GoFunc){(void *)lambda_560, go_box(Env_lambda_560, ((Env_lambda_560){foo__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag5"), false, ((GoFunc){(void *)lambda_564, go_box(Env_lambda_564, ((Env_lambda_564){foo__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag6"), false, ((GoFunc){(void *)lambda_561, go_box(Env_lambda_561, ((Env_lambda_561){foo__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag6"), false, ((GoFunc){(void *)lambda_565, go_box(Env_lambda_565, ((Env_lambda_565){foo__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag7"), false, ((GoFunc){(void *)lambda_562, go_box(Env_lambda_562, ((Env_lambda_562){foo__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag7"), false, ((GoFunc){(void *)lambda_566, go_box(Env_lambda_566, ((Env_lambda_566){foo__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag8"), false, ((GoFunc){(void *)lambda_563, go_box(Env_lambda_563, ((Env_lambda_563){foo__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag8"), false, ((GoFunc){(void *)lambda_567, go_box(Env_lambda_567, ((Env_lambda_567){foo__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -8507,8 +8552,8 @@ static GoIface lambda_554(Env_lambda_554 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_564 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_564;
-static GoIface lambda_564(Env_lambda_564 *_env) {
+typedef struct Env_lambda_568 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_568;
+static GoIface lambda_568(Env_lambda_568 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 16U, 2, 1, false);
         if (err.type != 0) {
@@ -8614,18 +8659,18 @@ static GoIface lambda_564(Env_lambda_564 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_565 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_565;
-static GoIface lambda_565(Env_lambda_565 *_env) {
+typedef struct Env_lambda_569 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_569;
+static GoIface lambda_569(Env_lambda_569 *_env) {
     return CharCompiler_changeStateSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_566 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_566;
-static GoIface lambda_566(Env_lambda_566 *_env) {
+typedef struct Env_lambda_570 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_570;
+static GoIface lambda_570(Env_lambda_570 *_env) {
     return CharCompiler_changeStateSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_567 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_567;
-static GoIface lambda_567(Env_lambda_567 *_env) {
+typedef struct Env_lambda_571 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_571;
+static GoIface lambda_571(Env_lambda_571 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 8U, 2, 1, false);
         if (err.type != 0) {
@@ -8683,8 +8728,8 @@ static GoIface lambda_567(Env_lambda_567 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_568 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_568;
-static GoIface lambda_568(Env_lambda_568 *_env) {
+typedef struct Env_lambda_572 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_572;
+static GoIface lambda_572(Env_lambda_572 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
         if (err.type != 0) {
@@ -8724,8 +8769,8 @@ static GoIface lambda_568(Env_lambda_568 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_569 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_569;
-static GoIface lambda_569(Env_lambda_569 *_env) {
+typedef struct Env_lambda_573 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_573;
+static GoIface lambda_573(Env_lambda_573 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -8753,19 +8798,19 @@ static GoIface lambda_569(Env_lambda_569 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_570 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_570;
-static GoIface lambda_570(Env_lambda_570 *_env) {
+typedef struct Env_lambda_574 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_574;
+static GoIface lambda_574(Env_lambda_574 *_env) {
     return CharCompiler_changeAnimSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_571 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_571;
-static GoIface lambda_571(Env_lambda_571 *_env) {
+typedef struct Env_lambda_575 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_575;
+static GoIface lambda_575(Env_lambda_575 *_env) {
     return CharCompiler_changeAnimSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_572 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_572;
-typedef struct Env_lambda_573 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_573;
-static GoIface lambda_573(Env_lambda_573 *_env, GoString data) {
+typedef struct Env_lambda_576 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_576;
+typedef struct Env_lambda_577 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_577;
+static GoIface lambda_577(Env_lambda_577 *_env, GoString data) {
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, GOSTR("helpertype not specified"))});
     }
@@ -8791,8 +8836,8 @@ static GoIface lambda_573(Env_lambda_573 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_574 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_574;
-static GoIface lambda_574(Env_lambda_574 *_env, GoString data) {
+typedef struct Env_lambda_578 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_578;
+static GoIface lambda_578(Env_lambda_578 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 4);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -8803,7 +8848,7 @@ static GoIface lambda_574(Env_lambda_574 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_572(Env_lambda_572 *_env) {
+static GoIface lambda_576(Env_lambda_576 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 37U, 2, 1, false);
         if (err.type != 0) {
@@ -8811,7 +8856,7 @@ static GoIface lambda_572(Env_lambda_572 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("helpertype"), false, ((GoFunc){(void *)lambda_573, go_box(Env_lambda_573, ((Env_lambda_573){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("helpertype"), false, ((GoFunc){(void *)lambda_577, go_box(Env_lambda_577, ((Env_lambda_577){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -8931,7 +8976,7 @@ static GoIface lambda_572(Env_lambda_572 *_env) {
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("keyctrl"), false, ((GoFunc){(void *)lambda_574, go_box(Env_lambda_574, ((Env_lambda_574){_env->c, _env->sc}))}));
+        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("keyctrl"), false, ((GoFunc){(void *)lambda_578, go_box(Env_lambda_578, ((Env_lambda_578){_env->c, _env->sc}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -9062,8 +9107,8 @@ static GoIface lambda_572(Env_lambda_572 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_575 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_575;
-static GoIface lambda_575(Env_lambda_575 *_env) {
+typedef struct Env_lambda_579 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_579;
+static GoIface lambda_579(Env_lambda_579 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -9073,8 +9118,8 @@ static GoIface lambda_575(Env_lambda_575 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 3, 1, true);
 }
 
-typedef struct Env_lambda_576 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_576;
-static GoIface lambda_576(Env_lambda_576 *_env) {
+typedef struct Env_lambda_580 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_580;
+static GoIface lambda_580(Env_lambda_580 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -9090,8 +9135,8 @@ static GoIface lambda_576(Env_lambda_576 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
 }
 
-typedef struct Env_lambda_577 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_577;
-static GoIface lambda_577(Env_lambda_577 *_env) {
+typedef struct Env_lambda_581 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_581;
+static GoIface lambda_581(Env_lambda_581 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 115U, 2, 1, false);
         if (err.type != 0) {
@@ -9107,8 +9152,8 @@ static GoIface lambda_577(Env_lambda_577 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_578 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_578;
-static GoIface lambda_578(Env_lambda_578 *_env) {
+typedef struct Env_lambda_582 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_582;
+static GoIface lambda_582(Env_lambda_582 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 115U, 2, 1, false);
         if (err.type != 0) {
@@ -9136,8 +9181,8 @@ static GoIface lambda_578(Env_lambda_578 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_579 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_579;
-static GoIface lambda_579(Env_lambda_579 *_env) {
+typedef struct Env_lambda_583 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_583;
+static GoIface lambda_583(Env_lambda_583 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -9171,50 +9216,6 @@ static GoIface lambda_579(Env_lambda_579 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_580 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_580;
-static GoIface lambda_580(Env_lambda_580 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
-}
-
-typedef struct Env_lambda_581 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_581;
-static GoIface lambda_581(Env_lambda_581 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
-}
-
-typedef struct Env_lambda_582 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_582;
-static GoIface lambda_582(Env_lambda_582 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
-}
-
-typedef struct Env_lambda_583 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_583;
-static GoIface lambda_583(Env_lambda_583 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
-}
-
 typedef struct Env_lambda_584 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_584;
 static GoIface lambda_584(Env_lambda_584 *_env) {
     {
@@ -9228,6 +9229,50 @@ static GoIface lambda_584(Env_lambda_584 *_env) {
 
 typedef struct Env_lambda_585 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_585;
 static GoIface lambda_585(Env_lambda_585 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
+}
+
+typedef struct Env_lambda_586 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_586;
+static GoIface lambda_586(Env_lambda_586 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
+}
+
+typedef struct Env_lambda_587 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_587;
+static GoIface lambda_587(Env_lambda_587 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
+}
+
+typedef struct Env_lambda_588 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_588;
+static GoIface lambda_588(Env_lambda_588 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
+}
+
+typedef struct Env_lambda_589 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_589;
+static GoIface lambda_589(Env_lambda_589 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 25U, 2, 1, false);
         if (err.type != 0) {
@@ -9357,8 +9402,8 @@ static GoIface lambda_585(Env_lambda_585 *_env) {
     return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_586 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_586;
-static GoIface lambda_586(Env_lambda_586 *_env) {
+typedef struct Env_lambda_590 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_590;
+static GoIface lambda_590(Env_lambda_590 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 25U, 2, 1, false);
         if (err.type != 0) {
@@ -9488,8 +9533,8 @@ static GoIface lambda_586(Env_lambda_586 *_env) {
     return CharCompiler_posSetSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_587 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_587;
-static GoIface lambda_587(Env_lambda_587 *_env, GoString data) {
+typedef struct Env_lambda_591 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_591;
+static GoIface lambda_591(Env_lambda_591 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 3);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -9503,8 +9548,8 @@ static GoIface lambda_587(Env_lambda_587 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_588 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_588;
-static GoIface lambda_588(Env_lambda_588 *_env, GoString data) {
+typedef struct Env_lambda_592 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_592;
+static GoIface lambda_592(Env_lambda_592 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 3);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -9518,8 +9563,8 @@ static GoIface lambda_588(Env_lambda_588 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_589 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_589;
-static GoIface lambda_589(Env_lambda_589 *_env, GoString data) {
+typedef struct Env_lambda_593 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_593;
+static GoIface lambda_593(Env_lambda_593 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 4);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -9533,8 +9578,8 @@ static GoIface lambda_589(Env_lambda_589 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_590 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_590;
-static GoIface lambda_590(Env_lambda_590 *_env, GoString data) {
+typedef struct Env_lambda_594 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_594;
+static GoIface lambda_594(Env_lambda_594 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 4);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -9548,8 +9593,8 @@ static GoIface lambda_590(Env_lambda_590 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_591 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_591;
-static GoIface lambda_591(Env_lambda_591 *_env, GoString data) {
+typedef struct Env_lambda_595 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_595;
+static GoIface lambda_595(Env_lambda_595 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 2);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -9563,8 +9608,8 @@ static GoIface lambda_591(Env_lambda_591 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_592 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_592;
-static GoIface lambda_592(Env_lambda_592 *_env, GoString data) {
+typedef struct Env_lambda_596 { CharCompiler* *c; StateControllerBase* *sc; GoString *prefix; } Env_lambda_596;
+static GoIface lambda_596(Env_lambda_596 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 2);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -9578,8 +9623,8 @@ static GoIface lambda_592(Env_lambda_592 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_593 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_593;
-static GoIface lambda_593(Env_lambda_593 *_env) {
+typedef struct Env_lambda_597 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_597;
+static GoIface lambda_597(Env_lambda_597 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 11U, 2, 1, false);
         if (err.type != 0) {
@@ -9589,13 +9634,13 @@ static GoIface lambda_593(Env_lambda_593 *_env) {
     return CharCompiler_palFXSub((*_env->c), (*_env->is), (*_env->sc), GOSTR(""));
 }
 
-typedef struct Env_lambda_594 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_594;
-static GoIface lambda_594(Env_lambda_594 *_env) {
+typedef struct Env_lambda_598 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_598;
+static GoIface lambda_598(Env_lambda_598 *_env) {
     return CharCompiler_palFXSub((*_env->c), (*_env->is), (*_env->sc), GOSTR(""));
 }
 
-typedef struct Env_lambda_595 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_595;
-static GoIface lambda_595(Env_lambda_595 *_env) {
+typedef struct Env_lambda_599 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_599;
+static GoIface lambda_599(Env_lambda_599 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 11U, 2, 1, false);
         if (err.type != 0) {
@@ -9617,25 +9662,25 @@ static GoIface lambda_595(Env_lambda_595 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_596 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_596;
-static GoIface lambda_596(Env_lambda_596 *_env) {
+typedef struct Env_lambda_600 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_600;
+static GoIface lambda_600(Env_lambda_600 *_env) {
     return CharCompiler_afterImageSub((*_env->c), (*_env->is), (*_env->sc), GOSTR(""));
 }
 
-typedef struct Env_lambda_597 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_597;
-typedef struct Env_lambda_598 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_598;
-static GoIface lambda_598(Env_lambda_598 *_env, GoString data) {
+typedef struct Env_lambda_601 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_601;
+typedef struct Env_lambda_602 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_602;
+static GoIface lambda_602(Env_lambda_602 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_599 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_599;
-static GoIface lambda_599(Env_lambda_599 *_env, GoString data) {
+typedef struct Env_lambda_603 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_603;
+static GoIface lambda_603(Env_lambda_603 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_597(Env_lambda_597 *_env) {
+static GoIface lambda_601(Env_lambda_601 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -9644,14 +9689,14 @@ static GoIface lambda_597(Env_lambda_597 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("time"), false, ((GoFunc){(void *)lambda_598, go_box(Env_lambda_598, ((Env_lambda_598){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("time"), false, ((GoFunc){(void *)lambda_602, go_box(Env_lambda_602, ((Env_lambda_602){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     if (!(*b__h)) {
         {
-            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_599, go_box(Env_lambda_599, ((Env_lambda_599){_env->c, _env->sc, b__h}))}));
+            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_603, go_box(Env_lambda_603, ((Env_lambda_603){_env->c, _env->sc, b__h}))}));
             if (err.type != 0) {
                 return err;
             }
@@ -9663,23 +9708,23 @@ static GoIface lambda_597(Env_lambda_597 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_600 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_600;
-static GoIface lambda_600(Env_lambda_600 *_env, GoString data) {
+typedef struct Env_lambda_604 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_604;
+static GoIface lambda_604(Env_lambda_604 *_env, GoString data) {
     return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 33U, data, true);
 }
 
-typedef struct Env_lambda_601 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_601;
-static GoIface lambda_601(Env_lambda_601 *_env, GoString data) {
+typedef struct Env_lambda_605 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_605;
+static GoIface lambda_605(Env_lambda_605 *_env, GoString data) {
     return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 34U, data);
 }
 
-typedef struct Env_lambda_602 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_602;
-static GoIface lambda_602(Env_lambda_602 *_env, GoString data) {
+typedef struct Env_lambda_606 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_606;
+static GoIface lambda_606(Env_lambda_606 *_env, GoString data) {
     return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 35U, data);
 }
 
-typedef struct Env_lambda_603 { StateControllerBase* *sc; } Env_lambda_603;
-static GoIface lambda_603(Env_lambda_603 *_env, GoString data) {
+typedef struct Env_lambda_607 { StateControllerBase* *sc; } Env_lambda_607;
+static GoIface lambda_607(Env_lambda_607 *_env, GoString data) {
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, GOSTR("affectteam not specified"))});
     }
@@ -9702,8 +9747,8 @@ static GoIface lambda_603(Env_lambda_603 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_604 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_604;
-static GoIface lambda_604(Env_lambda_604 *_env, GoString data) {
+typedef struct Env_lambda_608 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_608;
+static GoIface lambda_608(Env_lambda_608 *_env, GoString data) {
     GoString *data__h = go_box(GoString, data);
     Ret_BytecodeExp__GoIface _t1 = CharCompiler_argExpression((*_env->c), (&(*data__h)), 2);
     BytecodeExp be = _t1.r0;
@@ -9733,14 +9778,14 @@ static GoIface lambda_604(Env_lambda_604 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_605 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_605;
-static GoIface lambda_605(Env_lambda_605 *_env, GoString data) {
+typedef struct Env_lambda_609 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_609;
+static GoIface lambda_609(Env_lambda_609 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 64U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_606 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_606;
-static GoIface lambda_606(Env_lambda_606 *_env, GoString data) {
+typedef struct Env_lambda_610 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_610;
+static GoIface lambda_610(Env_lambda_610 *_env, GoString data) {
     GoString *in__h = go_box(GoString, data);
     {
         (*_env->c)->token = CharCompiler_tokenizer((*_env->c), (&(*in__h)));
@@ -9811,8 +9856,8 @@ static GoIface lambda_606(Env_lambda_606 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_607 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_607;
-static GoIface lambda_607(Env_lambda_607 *_env) {
+typedef struct Env_lambda_611 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_611;
+static GoIface lambda_611(Env_lambda_611 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 154U, 2, 1, false);
         if (err.type != 0) {
@@ -9822,60 +9867,10 @@ static GoIface lambda_607(Env_lambda_607 *_env) {
     return CharCompiler_hitDefSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_608 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_608;
-static GoIface lambda_608(Env_lambda_608 *_env) {
+typedef struct Env_lambda_612 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_612;
+static GoIface lambda_612(Env_lambda_612 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 154U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_hitDefSub((*_env->c), (*_env->is), (*_env->sc));
-}
-
-typedef struct Env_lambda_609 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_609;
-typedef struct Env_lambda_610 { CharCompiler* *c; StateControllerBase* *sc; bool *attrSet; } Env_lambda_610;
-static GoIface lambda_610(Env_lambda_610 *_env, GoString data) {
-    (*_env->attrSet) = true;
-    return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 154U, data, false);
-}
-
-typedef struct Env_lambda_611 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_611;
-static GoIface lambda_611(Env_lambda_611 *_env, GoString data) {
-    return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 155U, data);
-}
-
-typedef struct Env_lambda_612 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_612;
-static GoIface lambda_612(Env_lambda_612 *_env, GoString data) {
-    return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 156U, data);
-}
-
-static GoIface lambda_609(Env_lambda_609 *_env) {
-    GoIface err = {0};
-    {
-        err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 157U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    bool *attrSet__h = go_box_a(bool, false);
-    {
-        err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.attr"), false, ((GoFunc){(void *)lambda_610, go_box(Env_lambda_610, ((Env_lambda_610){_env->c, _env->sc, attrSet__h}))}));
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    if (!(*attrSet__h)) {
-        return ((GoIface){155, go_box(Error, GOSTR("ReversalDef reversal.attr not specified"))});
-    }
-    {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.guardflag"), false, ((GoFunc){(void *)lambda_611, go_box(Env_lambda_611, ((Env_lambda_611){_env->c, _env->sc}))}));
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.guardflag.not"), false, ((GoFunc){(void *)lambda_612, go_box(Env_lambda_612, ((Env_lambda_612){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -9884,8 +9879,9 @@ static GoIface lambda_609(Env_lambda_609 *_env) {
 }
 
 typedef struct Env_lambda_613 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_613;
-typedef struct Env_lambda_614 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_614;
+typedef struct Env_lambda_614 { CharCompiler* *c; StateControllerBase* *sc; bool *attrSet; } Env_lambda_614;
 static GoIface lambda_614(Env_lambda_614 *_env, GoString data) {
+    (*_env->attrSet) = true;
     return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 154U, data, false);
 }
 
@@ -9907,11 +9903,15 @@ static GoIface lambda_613(Env_lambda_613 *_env) {
             return err;
         }
     }
+    bool *attrSet__h = go_box_a(bool, false);
     {
-        err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.attr"), false, ((GoFunc){(void *)lambda_614, go_box(Env_lambda_614, ((Env_lambda_614){_env->c, _env->sc}))}));
+        err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.attr"), false, ((GoFunc){(void *)lambda_614, go_box(Env_lambda_614, ((Env_lambda_614){_env->c, _env->sc, attrSet__h}))}));
         if (err.type != 0) {
             return err;
         }
+    }
+    if (!(*attrSet__h)) {
+        return ((GoIface){155, go_box(Error, GOSTR("ReversalDef reversal.attr not specified"))});
     }
     {
         GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.guardflag"), false, ((GoFunc){(void *)lambda_615, go_box(Env_lambda_615, ((Env_lambda_615){_env->c, _env->sc}))}));
@@ -9929,7 +9929,52 @@ static GoIface lambda_613(Env_lambda_613 *_env) {
 }
 
 typedef struct Env_lambda_617 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_617;
+typedef struct Env_lambda_618 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_618;
+static GoIface lambda_618(Env_lambda_618 *_env, GoString data) {
+    return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 154U, data, false);
+}
+
+typedef struct Env_lambda_619 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_619;
+static GoIface lambda_619(Env_lambda_619 *_env, GoString data) {
+    return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 155U, data);
+}
+
+typedef struct Env_lambda_620 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_620;
+static GoIface lambda_620(Env_lambda_620 *_env, GoString data) {
+    return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 156U, data);
+}
+
 static GoIface lambda_617(Env_lambda_617 *_env) {
+    GoIface err = {0};
+    {
+        err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 157U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.attr"), false, ((GoFunc){(void *)lambda_618, go_box(Env_lambda_618, ((Env_lambda_618){_env->c, _env->sc}))}));
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.guardflag"), false, ((GoFunc){(void *)lambda_619, go_box(Env_lambda_619, ((Env_lambda_619){_env->c, _env->sc}))}));
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("reversal.guardflag.not"), false, ((GoFunc){(void *)lambda_620, go_box(Env_lambda_620, ((Env_lambda_620){_env->c, _env->sc}))}));
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_hitDefSub((*_env->c), (*_env->is), (*_env->sc));
+}
+
+typedef struct Env_lambda_621 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_621;
+static GoIface lambda_621(Env_lambda_621 *_env) {
     {
         GoIface err = CharCompiler_projectileSub((*_env->c), (*_env->is), (*_env->sc));
         if (err.type != 0) {
@@ -9939,8 +9984,8 @@ static GoIface lambda_617(Env_lambda_617 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_618 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_618;
-static GoIface lambda_618(Env_lambda_618 *_env) {
+typedef struct Env_lambda_622 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_622;
+static GoIface lambda_622(Env_lambda_622 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 203U, 2, 1, false);
         if (err.type != 0) {
@@ -9968,9 +10013,9 @@ static GoIface lambda_618(Env_lambda_618 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_619 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_619;
-typedef struct Env_lambda_620 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_620;
-static GoIface lambda_620(Env_lambda_620 *_env, GoString data) {
+typedef struct Env_lambda_623 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_623;
+typedef struct Env_lambda_624 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_624;
+static GoIface lambda_624(Env_lambda_624 *_env, GoString data) {
     (*_env->b) = true;
     if (data.len == 0) {
         return (GoIface){0};
@@ -9978,8 +10023,8 @@ static GoIface lambda_620(Env_lambda_620 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_621 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_621;
-static GoIface lambda_621(Env_lambda_621 *_env, GoString data) {
+typedef struct Env_lambda_625 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_625;
+static GoIface lambda_625(Env_lambda_625 *_env, GoString data) {
     (*_env->b) = true;
     if (data.len == 0) {
         return (GoIface){0};
@@ -9987,7 +10032,7 @@ static GoIface lambda_621(Env_lambda_621 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_619(Env_lambda_619 *_env) {
+static GoIface lambda_623(Env_lambda_623 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -9996,13 +10041,13 @@ static GoIface lambda_619(Env_lambda_619 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("edge"), false, ((GoFunc){(void *)lambda_620, go_box(Env_lambda_620, ((Env_lambda_620){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("edge"), false, ((GoFunc){(void *)lambda_624, go_box(Env_lambda_624, ((Env_lambda_624){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("player"), false, ((GoFunc){(void *)lambda_621, go_box(Env_lambda_621, ((Env_lambda_621){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("player"), false, ((GoFunc){(void *)lambda_625, go_box(Env_lambda_625, ((Env_lambda_625){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -10018,8 +10063,8 @@ static GoIface lambda_619(Env_lambda_619 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_622 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_622;
-static GoIface lambda_622(Env_lambda_622 *_env) {
+typedef struct Env_lambda_626 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_626;
+static GoIface lambda_626(Env_lambda_626 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -10035,15 +10080,15 @@ static GoIface lambda_622(Env_lambda_622 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, false);
 }
 
-typedef struct Env_lambda_623 { GoString *value; bool *hasValue; } Env_lambda_623;
-static GoIface lambda_623(Env_lambda_623 *_env, GoString data) {
+typedef struct Env_lambda_627 { GoString *value; bool *hasValue; } Env_lambda_627;
+static GoIface lambda_627(Env_lambda_627 *_env, GoString data) {
     (*_env->hasValue) = true;
     (*_env->value) = data;
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_624 { CharCompiler* *c; GoFunc *alreadyAssigned; GoString *index; i32 *varType; bool *hasIndex; } Env_lambda_624;
-static GoIface lambda_624(Env_lambda_624 *_env, GoString data, i32 t) {
+typedef struct Env_lambda_628 { CharCompiler* *c; GoFunc *alreadyAssigned; GoString *index; i32 *varType; bool *hasIndex; } Env_lambda_628;
+static GoIface lambda_628(Env_lambda_628 *_env, GoString data, i32 t) {
     if ((*_env->hasIndex) || ((bool (*)(void *))((*_env->alreadyAssigned)).fn)(((*_env->alreadyAssigned)).env)) {
         GoString msg = fmt_Sprintf(GOSTR("VarSet can only set one variable at a time"), (Slice_GoIface){0});
         if ((*_env->c)->zssMode || (!g_sys.ignoreMostErrors)) {
@@ -10057,78 +10102,34 @@ static GoIface lambda_624(Env_lambda_624 *_env, GoString data, i32 t) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_625 { GoFunc *setTargetVar; } Env_lambda_625;
-static GoIface lambda_625(Env_lambda_625 *_env, GoString d) {
+typedef struct Env_lambda_629 { GoFunc *setTargetVar; } Env_lambda_629;
+static GoIface lambda_629(Env_lambda_629 *_env, GoString d) {
     return ((GoIface (*)(void *, GoString, i32))((*_env->setTargetVar)).fn)(((*_env->setTargetVar)).env, d, 0);
 }
 
-typedef struct Env_lambda_626 { GoFunc *setTargetVar; } Env_lambda_626;
-static GoIface lambda_626(Env_lambda_626 *_env, GoString d) {
+typedef struct Env_lambda_630 { GoFunc *setTargetVar; } Env_lambda_630;
+static GoIface lambda_630(Env_lambda_630 *_env, GoString d) {
     return ((GoIface (*)(void *, GoString, i32))((*_env->setTargetVar)).fn)(((*_env->setTargetVar)).env, d, 1);
 }
 
-typedef struct Env_lambda_627 { GoFunc *setTargetVar; } Env_lambda_627;
-static GoIface lambda_627(Env_lambda_627 *_env, GoString d) {
+typedef struct Env_lambda_631 { GoFunc *setTargetVar; } Env_lambda_631;
+static GoIface lambda_631(Env_lambda_631 *_env, GoString d) {
     return ((GoIface (*)(void *, GoString, i32))((*_env->setTargetVar)).fn)(((*_env->setTargetVar)).env, d, 2);
 }
 
-typedef struct Env_lambda_628 { GoFunc *setTargetVar; } Env_lambda_628;
-static GoIface lambda_628(Env_lambda_628 *_env, GoString d) {
+typedef struct Env_lambda_632 { GoFunc *setTargetVar; } Env_lambda_632;
+static GoIface lambda_632(Env_lambda_632 *_env, GoString d) {
     return ((GoIface (*)(void *, GoString, i32))((*_env->setTargetVar)).fn)(((*_env->setTargetVar)).env, d, 3);
 }
 
-typedef struct Env_lambda_629 { CharCompiler* *c; GoString *oldToken; } Env_lambda_629;
-static void lambda_629(Env_lambda_629 *_env) {
+typedef struct Env_lambda_633 { CharCompiler* *c; GoString *oldToken; } Env_lambda_633;
+static void lambda_633(Env_lambda_633 *_env) {
     (*_env->c)->token = (*_env->oldToken);
 }
 
-typedef struct Env_lambda_630 { StateControllerBase* *sc; } Env_lambda_630;
-static bool lambda_630(Env_lambda_630 *_env) {
+typedef struct Env_lambda_634 { StateControllerBase* *sc; } Env_lambda_634;
+static bool lambda_634(Env_lambda_634 *_env) {
     return (StateControllerBase_hasParam(*(*_env->sc), 0U) || StateControllerBase_hasParam(*(*_env->sc), 3U));
-}
-
-typedef struct Env_lambda_631 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_631;
-static GoIface lambda_631(Env_lambda_631 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 0);
-}
-
-typedef struct Env_lambda_632 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_632;
-static GoIface lambda_632(Env_lambda_632 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 1);
-}
-
-typedef struct Env_lambda_633 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_633;
-static GoIface lambda_633(Env_lambda_633 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 2);
-}
-
-typedef struct Env_lambda_634 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_634;
-static GoIface lambda_634(Env_lambda_634 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 3);
 }
 
 typedef struct Env_lambda_635 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_635;
@@ -10139,7 +10140,7 @@ static GoIface lambda_635(Env_lambda_635 *_env) {
             return err;
         }
     }
-    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 4);
+    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 0);
 }
 
 typedef struct Env_lambda_636 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_636;
@@ -10150,11 +10151,55 @@ static GoIface lambda_636(Env_lambda_636 *_env) {
             return err;
         }
     }
-    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 5);
+    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 1);
 }
 
 typedef struct Env_lambda_637 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_637;
 static GoIface lambda_637(Env_lambda_637 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 2);
+}
+
+typedef struct Env_lambda_638 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_638;
+static GoIface lambda_638(Env_lambda_638 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 3);
+}
+
+typedef struct Env_lambda_639 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_639;
+static GoIface lambda_639(Env_lambda_639 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 4);
+}
+
+typedef struct Env_lambda_640 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_640;
+static GoIface lambda_640(Env_lambda_640 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_varSetSub((*_env->c), (*_env->is), (*_env->sc), 5);
+}
+
+typedef struct Env_lambda_641 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_641;
+static GoIface lambda_641(Env_lambda_641 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -10165,8 +10210,8 @@ static GoIface lambda_637(Env_lambda_637 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_638 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_638;
-static GoIface lambda_638(Env_lambda_638 *_env) {
+typedef struct Env_lambda_642 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_642;
+static GoIface lambda_642(Env_lambda_642 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -10194,8 +10239,8 @@ static GoIface lambda_638(Env_lambda_638 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_639 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_639;
-static GoIface lambda_639(Env_lambda_639 *_env) {
+typedef struct Env_lambda_643 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_643;
+static GoIface lambda_643(Env_lambda_643 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -10229,9 +10274,9 @@ static GoIface lambda_639(Env_lambda_639 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_640 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_640;
-typedef struct Env_lambda_641 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_641;
-static GoIface lambda_641(Env_lambda_641 *_env, GoString data) {
+typedef struct Env_lambda_644 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_644;
+typedef struct Env_lambda_645 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_645;
+static GoIface lambda_645(Env_lambda_645 *_env, GoString data) {
     GoString *data__h = go_box(GoString, data);
     Ret_BytecodeExp__GoIface _t1 = CharCompiler_argExpression((*_env->c), (&(*data__h)), 1);
     BytecodeExp be = _t1.r0;
@@ -10279,7 +10324,7 @@ static GoIface lambda_641(Env_lambda_641 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_640(Env_lambda_640 *_env) {
+static GoIface lambda_644(Env_lambda_644 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
         if (err.type != 0) {
@@ -10305,7 +10350,7 @@ static GoIface lambda_640(Env_lambda_640 *_env) {
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos"), false, ((GoFunc){(void *)lambda_641, go_box(Env_lambda_641, ((Env_lambda_641){_env->c, _env->sc}))}));
+        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos"), false, ((GoFunc){(void *)lambda_645, go_box(Env_lambda_645, ((Env_lambda_645){_env->c, _env->sc}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -10320,8 +10365,8 @@ static GoIface lambda_640(Env_lambda_640 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_642 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_642;
-static GoIface lambda_642(Env_lambda_642 *_env) {
+typedef struct Env_lambda_646 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_646;
+static GoIface lambda_646(Env_lambda_646 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 7U, 2, 1, false);
         if (err.type != 0) {
@@ -10373,148 +10418,148 @@ static GoIface lambda_642(Env_lambda_642 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_643 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_643;
-static GoIface lambda_643(Env_lambda_643 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 2U, 2, 1, true);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
-typedef struct Env_lambda_644 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_644;
-static GoIface lambda_644(Env_lambda_644 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("x"), 2U, 1, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("y"), 3U, 1, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("z"), 4U, 1, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
-typedef struct Env_lambda_645 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_645;
-static GoIface lambda_645(Env_lambda_645 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("x"), 2U, 1, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("y"), 3U, 1, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("z"), 4U, 1, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
-typedef struct Env_lambda_646 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_646;
-static GoIface lambda_646(Env_lambda_646 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 2U, 2, 1, true);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
 typedef struct Env_lambda_647 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_647;
 static GoIface lambda_647(Env_lambda_647 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 2U, 2, 1, true);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_648 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_648;
+static GoIface lambda_648(Env_lambda_648 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("x"), 2U, 1, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("y"), 3U, 1, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("z"), 4U, 1, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_649 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_649;
+static GoIface lambda_649(Env_lambda_649 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("x"), 2U, 1, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("y"), 3U, 1, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("z"), 4U, 1, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_650 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_650;
+static GoIface lambda_650(Env_lambda_650 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("index"), 1U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 2U, 2, 1, true);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_651 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_651;
+static GoIface lambda_651(Env_lambda_651 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -10536,8 +10581,8 @@ static GoIface lambda_647(Env_lambda_647 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_648 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_648;
-static GoIface lambda_648(Env_lambda_648 *_env) {
+typedef struct Env_lambda_652 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_652;
+static GoIface lambda_652(Env_lambda_652 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -10565,8 +10610,8 @@ static GoIface lambda_648(Env_lambda_648 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_649 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_649;
-static GoIface lambda_649(Env_lambda_649 *_env) {
+typedef struct Env_lambda_653 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_653;
+static GoIface lambda_653(Env_lambda_653 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -10576,8 +10621,8 @@ static GoIface lambda_649(Env_lambda_649 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
 }
 
-typedef struct Env_lambda_650 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_650;
-static GoIface lambda_650(Env_lambda_650 *_env) {
+typedef struct Env_lambda_654 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_654;
+static GoIface lambda_654(Env_lambda_654 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -10587,8 +10632,8 @@ static GoIface lambda_650(Env_lambda_650 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
 }
 
-typedef struct Env_lambda_651 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_651;
-static GoIface lambda_651(Env_lambda_651 *_env) {
+typedef struct Env_lambda_655 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_655;
+static GoIface lambda_655(Env_lambda_655 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -10598,8 +10643,8 @@ static GoIface lambda_651(Env_lambda_651 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
 }
 
-typedef struct Env_lambda_652 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_652;
-static GoIface lambda_652(Env_lambda_652 *_env) {
+typedef struct Env_lambda_656 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_656;
+static GoIface lambda_656(Env_lambda_656 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -10627,13 +10672,13 @@ static GoIface lambda_652(Env_lambda_652 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_653 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_653;
-typedef struct Env_lambda_654 { char _unused; } Env_lambda_654;
-static GoIface lambda_654(Env_lambda_654 *_env, GoString data) {
+typedef struct Env_lambda_657 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_657;
+typedef struct Env_lambda_658 { char _unused; } Env_lambda_658;
+static GoIface lambda_658(Env_lambda_658 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_653(Env_lambda_653 *_env) {
+static GoIface lambda_657(Env_lambda_657 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -10653,7 +10698,7 @@ static GoIface lambda_653(Env_lambda_653 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("stagebound"), false, ((GoFunc){(void *)lambda_654, go_box(Env_lambda_654, ((Env_lambda_654){0}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("stagebound"), false, ((GoFunc){(void *)lambda_658, go_box(Env_lambda_658, ((Env_lambda_658){0}))}));
         if (err.type != 0) {
             return err;
         }
@@ -10661,14 +10706,14 @@ static GoIface lambda_653(Env_lambda_653 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_655 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_655;
-typedef struct Env_lambda_656 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_656;
-static GoIface lambda_656(Env_lambda_656 *_env, GoString data) {
+typedef struct Env_lambda_659 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_659;
+typedef struct Env_lambda_660 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_660;
+static GoIface lambda_660(Env_lambda_660 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 3, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_655(Env_lambda_655 *_env) {
+static GoIface lambda_659(Env_lambda_659 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -10677,7 +10722,7 @@ static GoIface lambda_655(Env_lambda_655 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_656, go_box(Env_lambda_656, ((Env_lambda_656){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_660, go_box(Env_lambda_660, ((Env_lambda_660){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -10688,8 +10733,8 @@ static GoIface lambda_655(Env_lambda_655 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_657 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_657;
-static GoIface lambda_657(Env_lambda_657 *_env) {
+typedef struct Env_lambda_661 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_661;
+static GoIface lambda_661(Env_lambda_661 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("time"), 0U, 2, 1, false);
         if (err.type != 0) {
@@ -10741,23 +10786,23 @@ static GoIface lambda_657(Env_lambda_657 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_658 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_658;
-typedef struct Env_lambda_659 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_659;
-static GoIface lambda_659(Env_lambda_659 *_env, GoString data) {
+typedef struct Env_lambda_662 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_662;
+typedef struct Env_lambda_663 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_663;
+static GoIface lambda_663(Env_lambda_663 *_env, GoString data) {
     return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 0U, data, false);
 }
 
-typedef struct Env_lambda_660 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_660;
-static GoIface lambda_660(Env_lambda_660 *_env, GoString data) {
+typedef struct Env_lambda_664 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_664;
+static GoIface lambda_664(Env_lambda_664 *_env, GoString data) {
     return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 6U, data);
 }
 
-typedef struct Env_lambda_661 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_661;
-static GoIface lambda_661(Env_lambda_661 *_env, GoString data) {
+typedef struct Env_lambda_665 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_665;
+static GoIface lambda_665(Env_lambda_665 *_env, GoString data) {
     return CharCompiler_parseHitFlagExpression((*_env->c), (*_env->sc), 7U, data);
 }
 
-static GoIface lambda_658(Env_lambda_658 *_env) {
+static GoIface lambda_662(Env_lambda_662 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 9U, 2, 1, false);
         if (err.type != 0) {
@@ -10765,7 +10810,7 @@ static GoIface lambda_658(Env_lambda_658 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("attr"), false, ((GoFunc){(void *)lambda_659, go_box(Env_lambda_659, ((Env_lambda_659){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("attr"), false, ((GoFunc){(void *)lambda_663, go_box(Env_lambda_663, ((Env_lambda_663){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -10807,13 +10852,13 @@ static GoIface lambda_658(Env_lambda_658 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("guardflag"), false, ((GoFunc){(void *)lambda_660, go_box(Env_lambda_660, ((Env_lambda_660){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("guardflag"), false, ((GoFunc){(void *)lambda_664, go_box(Env_lambda_664, ((Env_lambda_664){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("guardflag.not"), false, ((GoFunc){(void *)lambda_661, go_box(Env_lambda_661, ((Env_lambda_661){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("guardflag.not"), false, ((GoFunc){(void *)lambda_665, go_box(Env_lambda_665, ((Env_lambda_665){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -10821,8 +10866,8 @@ static GoIface lambda_658(Env_lambda_658 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_662 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_662;
-static GoIface lambda_662(Env_lambda_662 *_env) {
+typedef struct Env_lambda_666 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_666;
+static GoIface lambda_666(Env_lambda_666 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -10856,8 +10901,8 @@ static GoIface lambda_662(Env_lambda_662 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_663 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_663;
-static GoIface lambda_663(Env_lambda_663 *_env) {
+typedef struct Env_lambda_667 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_667;
+static GoIface lambda_667(Env_lambda_667 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 12U, 2, 1, false);
         if (err.type != 0) {
@@ -10939,8 +10984,8 @@ static GoIface lambda_663(Env_lambda_663 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_664 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_664;
-static GoIface lambda_664(Env_lambda_664 *_env) {
+typedef struct Env_lambda_668 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_668;
+static GoIface lambda_668(Env_lambda_668 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -10956,21 +11001,21 @@ static GoIface lambda_664(Env_lambda_664 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_665 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_665;
-typedef struct Env_lambda_666 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_666;
-static GoIface lambda_666(Env_lambda_666 *_env, GoString data) {
+typedef struct Env_lambda_669 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_669;
+typedef struct Env_lambda_670 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_670;
+static GoIface lambda_670(Env_lambda_670 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 3, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_667 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_667;
-static GoIface lambda_667(Env_lambda_667 *_env, GoString data) {
+typedef struct Env_lambda_671 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_671;
+static GoIface lambda_671(Env_lambda_671 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_668 { StateControllerBase* *sc; bool *any; } Env_lambda_668;
-static GoIface lambda_668(Env_lambda_668 *_env, GoString data) {
+typedef struct Env_lambda_672 { StateControllerBase* *sc; bool *any; } Env_lambda_672;
+static GoIface lambda_672(Env_lambda_672 *_env, GoString data) {
     (*_env->any) = true;
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, GOSTR("affectteam not specified"))});
@@ -10994,7 +11039,7 @@ static GoIface lambda_668(Env_lambda_668 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_665(Env_lambda_665 *_env) {
+static GoIface lambda_669(Env_lambda_669 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11003,19 +11048,19 @@ static GoIface lambda_665(Env_lambda_665 *_env) {
     }
     bool *any__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_666, go_box(Env_lambda_666, ((Env_lambda_666){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_670, go_box(Env_lambda_670, ((Env_lambda_670){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("priority"), false, ((GoFunc){(void *)lambda_667, go_box(Env_lambda_667, ((Env_lambda_667){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("priority"), false, ((GoFunc){(void *)lambda_671, go_box(Env_lambda_671, ((Env_lambda_671){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("affectteam"), false, ((GoFunc){(void *)lambda_668, go_box(Env_lambda_668, ((Env_lambda_668){_env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("affectteam"), false, ((GoFunc){(void *)lambda_672, go_box(Env_lambda_672, ((Env_lambda_672){_env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11026,8 +11071,8 @@ static GoIface lambda_665(Env_lambda_665 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_669 { GoString *data; GoString *name; GoFunc *conv; } Env_lambda_669;
-static Ret_i32__BytecodeExp__GoIface lambda_669(Env_lambda_669 *_env) {
+typedef struct Env_lambda_673 { GoString *data; GoString *name; GoFunc *conv; } Env_lambda_673;
+static Ret_i32__BytecodeExp__GoIface lambda_673(Env_lambda_673 *_env) {
     Ret_i32__bool _t1 = ((Ret_i32__bool (*)(void *, GoString))((*_env->conv)).fn)(((*_env->conv)).env, (*_env->data));
     i32 v = _t1.r0;
     bool ok = _t1.r1;
@@ -11037,64 +11082,64 @@ static Ret_i32__BytecodeExp__GoIface lambda_669(Env_lambda_669 *_env) {
     return (Ret_i32__BytecodeExp__GoIface){v, (BytecodeExp){0}, (GoIface){0}};
 }
 
-typedef struct Env_lambda_670 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_670;
-typedef struct Env_lambda_671 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_671;
-static GoIface lambda_671(Env_lambda_671 *_env, GoString data) {
+typedef struct Env_lambda_674 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_674;
+typedef struct Env_lambda_675 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_675;
+static GoIface lambda_675(Env_lambda_675 *_env, GoString data) {
     return CharCompiler_parseTypeExpression((*_env->c), (*_env->sc), 0U, data, GOSTR("statetype"), GOSTR("SCALUscalu"), ((GoFunc){(void *)fv_fn_stateTypeValue, NULL}));
 }
 
-typedef struct Env_lambda_672 { GoFunc *statetype; bool *b; } Env_lambda_672;
-static GoIface lambda_672(Env_lambda_672 *_env, GoString data) {
+typedef struct Env_lambda_676 { GoFunc *statetype; bool *b; } Env_lambda_676;
+static GoIface lambda_676(Env_lambda_676 *_env, GoString data) {
     (*_env->b) = true;
     return ((GoIface (*)(void *, GoString))((*_env->statetype)).fn)(((*_env->statetype)).env, data);
 }
 
-typedef struct Env_lambda_673 { GoFunc *statetype; } Env_lambda_673;
-static GoIface lambda_673(Env_lambda_673 *_env, GoString data) {
+typedef struct Env_lambda_677 { GoFunc *statetype; } Env_lambda_677;
+static GoIface lambda_677(Env_lambda_677 *_env, GoString data) {
     return ((GoIface (*)(void *, GoString))((*_env->statetype)).fn)(((*_env->statetype)).env, data);
 }
 
-typedef struct Env_lambda_674 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_674;
-static GoIface lambda_674(Env_lambda_674 *_env, GoString data) {
+typedef struct Env_lambda_678 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_678;
+static GoIface lambda_678(Env_lambda_678 *_env, GoString data) {
     return CharCompiler_parseTypeExpression((*_env->c), (*_env->sc), 1U, data, GOSTR("movetype"), GOSTR("IAHUiahu"), ((GoFunc){(void *)fv_fn_moveTypeValue, NULL}));
 }
 
-typedef struct Env_lambda_675 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_675;
-static GoIface lambda_675(Env_lambda_675 *_env, GoString data) {
+typedef struct Env_lambda_679 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_679;
+static GoIface lambda_679(Env_lambda_679 *_env, GoString data) {
     return CharCompiler_parseTypeExpression((*_env->c), (*_env->sc), 2U, data, GOSTR("physics type"), GOSTR("SCANUscanu"), ((GoFunc){(void *)fv_fn_physicsTypeValue, NULL}));
 }
 
-static GoIface lambda_670(Env_lambda_670 *_env) {
+static GoIface lambda_674(Env_lambda_674 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
             return err;
         }
     }
-    GoFunc *statetype__h = go_box(GoFunc, ((GoFunc){(void *)lambda_671, go_box(Env_lambda_671, ((Env_lambda_671){_env->c, _env->sc}))}));
+    GoFunc *statetype__h = go_box(GoFunc, ((GoFunc){(void *)lambda_675, go_box(Env_lambda_675, ((Env_lambda_675){_env->c, _env->sc}))}));
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("statetype"), false, ((GoFunc){(void *)lambda_672, go_box(Env_lambda_672, ((Env_lambda_672){statetype__h, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("statetype"), false, ((GoFunc){(void *)lambda_676, go_box(Env_lambda_676, ((Env_lambda_676){statetype__h, b__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     if (!(*b__h)) {
         {
-            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_673, go_box(Env_lambda_673, ((Env_lambda_673){statetype__h}))}));
+            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_677, go_box(Env_lambda_677, ((Env_lambda_677){statetype__h}))}));
             if (err.type != 0) {
                 return err;
             }
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("movetype"), false, ((GoFunc){(void *)lambda_674, go_box(Env_lambda_674, ((Env_lambda_674){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("movetype"), false, ((GoFunc){(void *)lambda_678, go_box(Env_lambda_678, ((Env_lambda_678){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("physics"), false, ((GoFunc){(void *)lambda_675, go_box(Env_lambda_675, ((Env_lambda_675){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("physics"), false, ((GoFunc){(void *)lambda_679, go_box(Env_lambda_679, ((Env_lambda_679){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11102,8 +11147,8 @@ static GoIface lambda_670(Env_lambda_670 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_676 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_676;
-static GoIface lambda_676(Env_lambda_676 *_env) {
+typedef struct Env_lambda_680 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_680;
+static GoIface lambda_680(Env_lambda_680 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
         if (err.type != 0) {
@@ -11143,8 +11188,8 @@ static GoIface lambda_676(Env_lambda_676 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_677 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_677;
-static GoIface lambda_677(Env_lambda_677 *_env) {
+typedef struct Env_lambda_681 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_681;
+static GoIface lambda_681(Env_lambda_681 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11172,8 +11217,8 @@ static GoIface lambda_677(Env_lambda_677 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_678 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_678;
-static GoIface lambda_678(Env_lambda_678 *_env) {
+typedef struct Env_lambda_682 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_682;
+static GoIface lambda_682(Env_lambda_682 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11201,8 +11246,8 @@ static GoIface lambda_678(Env_lambda_678 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_679 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_679;
-static GoIface lambda_679(Env_lambda_679 *_env) {
+typedef struct Env_lambda_683 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_683;
+static GoIface lambda_683(Env_lambda_683 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11230,9 +11275,9 @@ static GoIface lambda_679(Env_lambda_679 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_680 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_680;
-typedef struct Env_lambda_681 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_681;
-static GoIface lambda_681(Env_lambda_681 *_env, GoString data) {
+typedef struct Env_lambda_684 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_684;
+typedef struct Env_lambda_685 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_685;
+static GoIface lambda_685(Env_lambda_685 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 3);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -11246,9 +11291,9 @@ static GoIface lambda_681(Env_lambda_681 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_680(Env_lambda_680 *_env) {
+static GoIface lambda_684(Env_lambda_684 *_env) {
     {
-        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_681, go_box(Env_lambda_681, ((Env_lambda_681){_env->c, _env->sc}))}));
+        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_685, go_box(Env_lambda_685, ((Env_lambda_685){_env->c, _env->sc}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -11269,8 +11314,8 @@ static GoIface lambda_680(Env_lambda_680 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_682 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_682;
-static GoIface lambda_682(Env_lambda_682 *_env, GoString data) {
+typedef struct Env_lambda_686 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_686;
+static GoIface lambda_686(Env_lambda_686 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 5, 100);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -11281,8 +11326,8 @@ static GoIface lambda_682(Env_lambda_682 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_683 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_683;
-static GoIface lambda_683(Env_lambda_683 *_env, GoString data) {
+typedef struct Env_lambda_687 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_687;
+static GoIface lambda_687(Env_lambda_687 *_env, GoString data) {
     (*_env->b) = true;
     bool notEnclosed = false;
     if ((data.len >= 2) && (((u8)data.p[0]) == 34U)) {
@@ -11305,18 +11350,18 @@ static GoIface lambda_683(Env_lambda_683 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_684 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_684;
-static GoIface lambda_684(Env_lambda_684 *_env) {
+typedef struct Env_lambda_688 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_688;
+static GoIface lambda_688(Env_lambda_688 *_env) {
     return CharCompiler_displayToClipboardSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_685 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_685;
-static GoIface lambda_685(Env_lambda_685 *_env) {
+typedef struct Env_lambda_689 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_689;
+static GoIface lambda_689(Env_lambda_689 *_env) {
     return CharCompiler_displayToClipboardSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_686 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_686;
-static GoIface lambda_686(Env_lambda_686 *_env) {
+typedef struct Env_lambda_690 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_690;
+static GoIface lambda_690(Env_lambda_690 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11327,18 +11372,18 @@ static GoIface lambda_686(Env_lambda_686 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_687 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_687;
-typedef struct Env_lambda_688 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_688;
-static GoIface lambda_688(Env_lambda_688 *_env, GoString data) {
+typedef struct Env_lambda_691 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_691;
+typedef struct Env_lambda_692 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_692;
+static GoIface lambda_692(Env_lambda_692 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_689 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_689;
-static GoIface lambda_689(Env_lambda_689 *_env, GoString data) {
+typedef struct Env_lambda_693 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_693;
+static GoIface lambda_693(Env_lambda_693 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 1, 3, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_687(Env_lambda_687 *_env) {
+static GoIface lambda_691(Env_lambda_691 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11346,13 +11391,13 @@ static GoIface lambda_687(Env_lambda_687 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("spacing"), false, ((GoFunc){(void *)lambda_688, go_box(Env_lambda_688, ((Env_lambda_688){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("spacing"), false, ((GoFunc){(void *)lambda_692, go_box(Env_lambda_692, ((Env_lambda_692){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos"), false, ((GoFunc){(void *)lambda_689, go_box(Env_lambda_689, ((Env_lambda_689){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos"), false, ((GoFunc){(void *)lambda_693, go_box(Env_lambda_693, ((Env_lambda_693){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11366,8 +11411,8 @@ static GoIface lambda_687(Env_lambda_687 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_690 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_690;
-static GoIface lambda_690(Env_lambda_690 *_env) {
+typedef struct Env_lambda_694 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_694;
+static GoIface lambda_694(Env_lambda_694 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11401,38 +11446,38 @@ static GoIface lambda_690(Env_lambda_690 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_691 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_691;
-typedef struct Env_lambda_692 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_692;
-static GoIface lambda_692(Env_lambda_692 *_env, GoString data) {
+typedef struct Env_lambda_695 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_695;
+typedef struct Env_lambda_696 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_696;
+static GoIface lambda_696(Env_lambda_696 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_693 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_693;
-static GoIface lambda_693(Env_lambda_693 *_env, GoString data) {
+typedef struct Env_lambda_697 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_697;
+static GoIface lambda_697(Env_lambda_697 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_694 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_694;
-static GoIface lambda_694(Env_lambda_694 *_env, GoString data) {
+typedef struct Env_lambda_698 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_698;
+static GoIface lambda_698(Env_lambda_698 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 2U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_695 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_695;
-static GoIface lambda_695(Env_lambda_695 *_env, GoString data) {
+typedef struct Env_lambda_699 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_699;
+static GoIface lambda_699(Env_lambda_699 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 3U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_696 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_696;
-static GoIface lambda_696(Env_lambda_696 *_env, GoString data) {
+typedef struct Env_lambda_700 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_700;
+static GoIface lambda_700(Env_lambda_700 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 4U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_691(Env_lambda_691 *_env) {
+static GoIface lambda_695(Env_lambda_695 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
         if (err.type != 0) {
@@ -11441,31 +11486,31 @@ static GoIface lambda_691(Env_lambda_691 *_env) {
     }
     bool *any__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_692, go_box(Env_lambda_692, ((Env_lambda_692){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_696, go_box(Env_lambda_696, ((Env_lambda_696){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("damage"), false, ((GoFunc){(void *)lambda_693, go_box(Env_lambda_693, ((Env_lambda_693){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("damage"), false, ((GoFunc){(void *)lambda_697, go_box(Env_lambda_697, ((Env_lambda_697){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("redlife"), false, ((GoFunc){(void *)lambda_694, go_box(Env_lambda_694, ((Env_lambda_694){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("redlife"), false, ((GoFunc){(void *)lambda_698, go_box(Env_lambda_698, ((Env_lambda_698){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("dizzypoints"), false, ((GoFunc){(void *)lambda_695, go_box(Env_lambda_695, ((Env_lambda_695){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("dizzypoints"), false, ((GoFunc){(void *)lambda_699, go_box(Env_lambda_699, ((Env_lambda_699){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("guardpoints"), false, ((GoFunc){(void *)lambda_696, go_box(Env_lambda_696, ((Env_lambda_696){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("guardpoints"), false, ((GoFunc){(void *)lambda_700, go_box(Env_lambda_700, ((Env_lambda_700){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11476,9 +11521,9 @@ static GoIface lambda_691(Env_lambda_691 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_697 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_697;
-typedef struct Env_lambda_698 { StateControllerBase* *sc; } Env_lambda_698;
-static GoIface lambda_698(Env_lambda_698 *_env, GoString data) {
+typedef struct Env_lambda_701 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_701;
+typedef struct Env_lambda_702 { StateControllerBase* *sc; } Env_lambda_702;
+static GoIface lambda_702(Env_lambda_702 *_env, GoString data) {
     i32 mulType = fn_Atoi(strings_TrimSpace(data));
     if ((mulType >= 0) && (mulType <= 1)) {
         StateControllerBase_add((*_env->sc), 2U, StateControllerBase_iToExp(*(*_env->sc), GO_SLICE_LIT(Slice_i32, i32, 1, mulType)));
@@ -11488,7 +11533,7 @@ static GoIface lambda_698(Env_lambda_698 *_env, GoString data) {
     }
 }
 
-static GoIface lambda_697(Env_lambda_697 *_env) {
+static GoIface lambda_701(Env_lambda_701 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11502,7 +11547,7 @@ static GoIface lambda_697(Env_lambda_697 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("multype"), false, ((GoFunc){(void *)lambda_698, go_box(Env_lambda_698, ((Env_lambda_698){_env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("multype"), false, ((GoFunc){(void *)lambda_702, go_box(Env_lambda_702, ((Env_lambda_702){_env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11516,8 +11561,8 @@ static GoIface lambda_697(Env_lambda_697 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_699 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_699;
-static GoIface lambda_699(Env_lambda_699 *_env) {
+typedef struct Env_lambda_703 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_703;
+static GoIface lambda_703(Env_lambda_703 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11528,8 +11573,8 @@ static GoIface lambda_699(Env_lambda_699 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_700 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_700;
-static GoIface lambda_700(Env_lambda_700 *_env) {
+typedef struct Env_lambda_704 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_704;
+static GoIface lambda_704(Env_lambda_704 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11540,8 +11585,8 @@ static GoIface lambda_700(Env_lambda_700 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_701 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_701;
-static GoIface lambda_701(Env_lambda_701 *_env) {
+typedef struct Env_lambda_705 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_705;
+static GoIface lambda_705(Env_lambda_705 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11552,14 +11597,14 @@ static GoIface lambda_701(Env_lambda_701 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_702 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_702;
-typedef struct Env_lambda_703 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_703;
-static GoIface lambda_703(Env_lambda_703 *_env, GoString data) {
+typedef struct Env_lambda_706 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_706;
+typedef struct Env_lambda_707 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_707;
+static GoIface lambda_707(Env_lambda_707 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_702(Env_lambda_702 *_env) {
+static GoIface lambda_706(Env_lambda_706 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -11568,7 +11613,7 @@ static GoIface lambda_702(Env_lambda_702 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_703, go_box(Env_lambda_703, ((Env_lambda_703){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_707, go_box(Env_lambda_707, ((Env_lambda_707){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11591,20 +11636,20 @@ static GoIface lambda_702(Env_lambda_702 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_704 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_704;
-typedef struct Env_lambda_705 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_705;
-static GoIface lambda_705(Env_lambda_705 *_env, GoString data) {
+typedef struct Env_lambda_708 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_708;
+typedef struct Env_lambda_709 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_709;
+static GoIface lambda_709(Env_lambda_709 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 2U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_706 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_706;
-static GoIface lambda_706(Env_lambda_706 *_env, GoString data) {
+typedef struct Env_lambda_710 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_710;
+static GoIface lambda_710(Env_lambda_710 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 3U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_704(Env_lambda_704 *_env) {
+static GoIface lambda_708(Env_lambda_708 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -11625,14 +11670,14 @@ static GoIface lambda_704(Env_lambda_704 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_705, go_box(Env_lambda_705, ((Env_lambda_705){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_709, go_box(Env_lambda_709, ((Env_lambda_709){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     if (!(*b__h)) {
         {
-            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("fvalue"), false, ((GoFunc){(void *)lambda_706, go_box(Env_lambda_706, ((Env_lambda_706){_env->c, _env->sc, b__h}))}));
+            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("fvalue"), false, ((GoFunc){(void *)lambda_710, go_box(Env_lambda_710, ((Env_lambda_710){_env->c, _env->sc, b__h}))}));
             if (err.type != 0) {
                 return err;
             }
@@ -11644,8 +11689,8 @@ static GoIface lambda_704(Env_lambda_704 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_707 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_707;
-static GoIface lambda_707(Env_lambda_707 *_env) {
+typedef struct Env_lambda_711 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_711;
+static GoIface lambda_711(Env_lambda_711 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -11667,8 +11712,8 @@ static GoIface lambda_707(Env_lambda_707 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_708 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_708;
-static GoIface lambda_708(Env_lambda_708 *_env) {
+typedef struct Env_lambda_712 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_712;
+static GoIface lambda_712(Env_lambda_712 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11684,8 +11729,8 @@ static GoIface lambda_708(Env_lambda_708 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_709 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_709;
-static GoIface lambda_709(Env_lambda_709 *_env) {
+typedef struct Env_lambda_713 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_713;
+static GoIface lambda_713(Env_lambda_713 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -11713,8 +11758,8 @@ static GoIface lambda_709(Env_lambda_709 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_710 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_710;
-static GoIface lambda_710(Env_lambda_710 *_env) {
+typedef struct Env_lambda_714 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_714;
+static GoIface lambda_714(Env_lambda_714 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -11736,8 +11781,8 @@ static GoIface lambda_710(Env_lambda_710 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_711 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_711;
-static GoIface lambda_711(Env_lambda_711 *_env) {
+typedef struct Env_lambda_715 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_715;
+static GoIface lambda_715(Env_lambda_715 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11748,29 +11793,29 @@ static GoIface lambda_711(Env_lambda_711 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_712 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_712;
-static GoIface lambda_712(Env_lambda_712 *_env) {
+typedef struct Env_lambda_716 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_716;
+static GoIface lambda_716(Env_lambda_716 *_env) {
     return CharCompiler_bindToParentSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_713 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_713;
-static GoIface lambda_713(Env_lambda_713 *_env) {
+typedef struct Env_lambda_717 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_717;
+static GoIface lambda_717(Env_lambda_717 *_env) {
     return CharCompiler_bindToParentSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_714 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_714;
-typedef struct Env_lambda_715 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_715;
-static GoIface lambda_715(Env_lambda_715 *_env, GoString data) {
+typedef struct Env_lambda_718 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_718;
+typedef struct Env_lambda_719 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_719;
+static GoIface lambda_719(Env_lambda_719 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_716 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_716;
-static GoIface lambda_716(Env_lambda_716 *_env, GoString data) {
+typedef struct Env_lambda_720 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_720;
+static GoIface lambda_720(Env_lambda_720 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_714(Env_lambda_714 *_env) {
+static GoIface lambda_718(Env_lambda_718 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -11779,13 +11824,13 @@ static GoIface lambda_714(Env_lambda_714 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("id"), false, ((GoFunc){(void *)lambda_715, go_box(Env_lambda_715, ((Env_lambda_715){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("id"), false, ((GoFunc){(void *)lambda_719, go_box(Env_lambda_719, ((Env_lambda_719){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("index"), false, ((GoFunc){(void *)lambda_716, go_box(Env_lambda_716, ((Env_lambda_716){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("index"), false, ((GoFunc){(void *)lambda_720, go_box(Env_lambda_720, ((Env_lambda_720){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11796,14 +11841,14 @@ static GoIface lambda_714(Env_lambda_714 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_717 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_717;
-typedef struct Env_lambda_718 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_718;
-static GoIface lambda_718(Env_lambda_718 *_env, GoString data) {
+typedef struct Env_lambda_721 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_721;
+typedef struct Env_lambda_722 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_722;
+static GoIface lambda_722(Env_lambda_722 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_717(Env_lambda_717 *_env) {
+static GoIface lambda_721(Env_lambda_721 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -11818,7 +11863,7 @@ static GoIface lambda_717(Env_lambda_717 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("time"), false, ((GoFunc){(void *)lambda_718, go_box(Env_lambda_718, ((Env_lambda_718){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("time"), false, ((GoFunc){(void *)lambda_722, go_box(Env_lambda_722, ((Env_lambda_722){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -11834,8 +11879,8 @@ static GoIface lambda_717(Env_lambda_717 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_719 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_719;
-static GoIface lambda_719(Env_lambda_719 *_env) {
+typedef struct Env_lambda_723 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_723;
+static GoIface lambda_723(Env_lambda_723 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11846,8 +11891,8 @@ static GoIface lambda_719(Env_lambda_719 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_720 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_720;
-static GoIface lambda_720(Env_lambda_720 *_env) {
+typedef struct Env_lambda_724 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_724;
+static GoIface lambda_724(Env_lambda_724 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11863,8 +11908,8 @@ static GoIface lambda_720(Env_lambda_720 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_721 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_721;
-static GoIface lambda_721(Env_lambda_721 *_env) {
+typedef struct Env_lambda_725 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_725;
+static GoIface lambda_725(Env_lambda_725 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -11886,8 +11931,8 @@ static GoIface lambda_721(Env_lambda_721 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_722 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_722;
-static GoIface lambda_722(Env_lambda_722 *_env) {
+typedef struct Env_lambda_726 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_726;
+static GoIface lambda_726(Env_lambda_726 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -11903,8 +11948,8 @@ static GoIface lambda_722(Env_lambda_722 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_723 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_723;
-static GoIface lambda_723(Env_lambda_723 *_env) {
+typedef struct Env_lambda_727 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_727;
+static GoIface lambda_727(Env_lambda_727 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("pos"), 0U, 1, 2, false);
         if (err.type != 0) {
@@ -11950,10 +11995,10 @@ static GoIface lambda_723(Env_lambda_723 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_724 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_724;
-typedef struct Env_lambda_725 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_725;
-typedef struct Env_lambda_726 { char _unused; } Env_lambda_726;
-static bool lambda_726(Env_lambda_726 *_env, GoString s) {
+typedef struct Env_lambda_728 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_728;
+typedef struct Env_lambda_729 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_729;
+typedef struct Env_lambda_730 { char _unused; } Env_lambda_730;
+static bool lambda_730(Env_lambda_730 *_env, GoString s) {
     {
         GoString _t1 = s;
         do {
@@ -11965,8 +12010,8 @@ static bool lambda_726(Env_lambda_726 *_env, GoString s) {
     return false;
 }
 
-static GoIface lambda_725(Env_lambda_725 *_env, GoString data) {
-    GoFunc isValidWaveform = ((GoFunc){(void *)lambda_726, &(Env_lambda_726){0}});
+static GoIface lambda_729(Env_lambda_729 *_env, GoString data) {
+    GoFunc isValidWaveform = ((GoFunc){(void *)lambda_730, &(Env_lambda_730){0}});
     data = strings_TrimSpace(data);
     if (data.len == 0) {
         return ((GoIface){155, go_box(Error, GOSTR("waveform not specified"))});
@@ -11998,7 +12043,7 @@ static GoIface lambda_725(Env_lambda_725 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_724(Env_lambda_724 *_env) {
+static GoIface lambda_728(Env_lambda_728 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 7U, 2, 1, false);
         if (err.type != 0) {
@@ -12006,7 +12051,7 @@ static GoIface lambda_724(Env_lambda_724 *_env) {
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("waveform"), false, ((GoFunc){(void *)lambda_725, go_box(Env_lambda_725, ((Env_lambda_725){_env->c, _env->sc}))}));
+        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("waveform"), false, ((GoFunc){(void *)lambda_729, go_box(Env_lambda_729, ((Env_lambda_729){_env->c, _env->sc}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -12051,8 +12096,8 @@ static GoIface lambda_724(Env_lambda_724 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_727 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_727;
-static GoIface lambda_727(Env_lambda_727 *_env) {
+typedef struct Env_lambda_731 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_731;
+static GoIface lambda_731(Env_lambda_731 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 6U, 2, 1, false);
         if (err.type != 0) {
@@ -12098,9 +12143,9 @@ static GoIface lambda_727(Env_lambda_727 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_728 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_728;
-typedef struct Env_lambda_729 { StateControllerBase* *sc; } Env_lambda_729;
-static GoIface lambda_729(Env_lambda_729 *_env, GoString data) {
+typedef struct Env_lambda_732 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_732;
+typedef struct Env_lambda_733 { StateControllerBase* *sc; } Env_lambda_733;
+static GoIface lambda_733(Env_lambda_733 *_env, GoString data) {
     {
         GoString _t1 = data;
         do {
@@ -12144,29 +12189,29 @@ static GoIface lambda_729(Env_lambda_729 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_730 { GoFunc *foo; bool *flagSet; } Env_lambda_730;
-static GoIface lambda_730(Env_lambda_730 *_env, GoString data) {
+typedef struct Env_lambda_734 { GoFunc *foo; bool *flagSet; } Env_lambda_734;
+static GoIface lambda_734(Env_lambda_734 *_env, GoString data) {
     (*_env->flagSet) = true;
     return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
 }
 
-typedef struct Env_lambda_731 { GoFunc *foo; bool *flagSet; } Env_lambda_731;
-static GoIface lambda_731(Env_lambda_731 *_env, GoString data) {
+typedef struct Env_lambda_735 { GoFunc *foo; bool *flagSet; } Env_lambda_735;
+static GoIface lambda_735(Env_lambda_735 *_env, GoString data) {
     (*_env->flagSet) = true;
     return ((GoIface (*)(void *, GoString))((*_env->foo)).fn)(((*_env->foo)).env, data);
 }
 
-static GoIface lambda_728(Env_lambda_728 *_env) {
+static GoIface lambda_732(Env_lambda_732 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
             return err;
         }
     }
-    GoFunc *foo__h = go_box(GoFunc, ((GoFunc){(void *)lambda_729, go_box(Env_lambda_729, ((Env_lambda_729){_env->sc}))}));
+    GoFunc *foo__h = go_box(GoFunc, ((GoFunc){(void *)lambda_733, go_box(Env_lambda_733, ((Env_lambda_733){_env->sc}))}));
     bool *flagSet__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag"), false, ((GoFunc){(void *)lambda_730, go_box(Env_lambda_730, ((Env_lambda_730){foo__h, flagSet__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("flag"), false, ((GoFunc){(void *)lambda_734, go_box(Env_lambda_734, ((Env_lambda_734){foo__h, flagSet__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -12176,7 +12221,7 @@ static GoIface lambda_728(Env_lambda_728 *_env) {
         for (; i <= 8; i++) {
             GoString key = fmt_Sprintf(GOSTR("flag%d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, i)})));
             {
-                GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), key, false, ((GoFunc){(void *)lambda_731, go_box(Env_lambda_731, ((Env_lambda_731){foo__h, flagSet__h}))}));
+                GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), key, false, ((GoFunc){(void *)lambda_735, go_box(Env_lambda_735, ((Env_lambda_735){foo__h, flagSet__h}))}));
                 if (err.type != 0) {
                     return err;
                 }
@@ -12190,8 +12235,8 @@ static GoIface lambda_728(Env_lambda_728 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_732 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_732;
-static GoIface lambda_732(Env_lambda_732 *_env) {
+typedef struct Env_lambda_736 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_736;
+static GoIface lambda_736(Env_lambda_736 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -12207,8 +12252,8 @@ static GoIface lambda_732(Env_lambda_732 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_733 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_733;
-static GoIface lambda_733(Env_lambda_733 *_env) {
+typedef struct Env_lambda_737 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_737;
+static GoIface lambda_737(Env_lambda_737 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -12261,62 +12306,6 @@ static GoIface lambda_733(Env_lambda_733 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_734 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_734;
-static GoIface lambda_734(Env_lambda_734 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("absolute"), 0U, 3, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 1U, 2, 1, true);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
-typedef struct Env_lambda_735 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_735;
-static GoIface lambda_735(Env_lambda_735 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
-}
-
-typedef struct Env_lambda_736 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_736;
-static GoIface lambda_736(Env_lambda_736 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 3, 1, true);
-}
-
-typedef struct Env_lambda_737 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_737;
-static GoIface lambda_737(Env_lambda_737 *_env) {
-    {
-        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 3, 1, true);
-}
-
 typedef struct Env_lambda_738 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_738;
 static GoIface lambda_738(Env_lambda_738 *_env) {
     {
@@ -12353,6 +12342,62 @@ static GoIface lambda_739(Env_lambda_739 *_env) {
 
 typedef struct Env_lambda_740 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_740;
 static GoIface lambda_740(Env_lambda_740 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 3, 1, true);
+}
+
+typedef struct Env_lambda_741 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_741;
+static GoIface lambda_741(Env_lambda_741 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 3, 1, true);
+}
+
+typedef struct Env_lambda_742 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_742;
+static GoIface lambda_742(Env_lambda_742 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("absolute"), 0U, 3, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 1U, 2, 1, true);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_743 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_743;
+static GoIface lambda_743(Env_lambda_743 *_env) {
+    {
+        GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
+}
+
+typedef struct Env_lambda_744 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_744;
+static GoIface lambda_744(Env_lambda_744 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 23U, 2, 1, false);
         if (err.type != 0) {
@@ -12440,15 +12485,15 @@ static GoIface lambda_740(Env_lambda_740 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_741 { StateControllerBase* *sc; } Env_lambda_741;
-static GoIface lambda_741(Env_lambda_741 *_env) {
+typedef struct Env_lambda_745 { StateControllerBase* *sc; } Env_lambda_745;
+static GoIface lambda_745(Env_lambda_745 *_env) {
     StateControllerBase_add((*_env->sc), 0U, (Slice_BytecodeExp){0});
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_742 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_742;
-typedef struct Env_lambda_743 { bool *assign; GoString *mapParam; } Env_lambda_743;
-static GoIface lambda_743(Env_lambda_743 *_env, GoString data) {
+typedef struct Env_lambda_746 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_746;
+typedef struct Env_lambda_747 { bool *assign; GoString *mapParam; } Env_lambda_747;
+static GoIface lambda_747(Env_lambda_747 *_env, GoString data) {
     (*_env->mapParam) = data;
     int ia = strings_Index((*_env->mapParam), GOSTR("="));
     if ((ia > 0) && strings_HasPrefix(strings_ToLower((*_env->mapParam)), GOSTR("map"))) {
@@ -12462,20 +12507,20 @@ static GoIface lambda_743(Env_lambda_743 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_744 { GoString *value; bool *b; } Env_lambda_744;
-static GoIface lambda_744(Env_lambda_744 *_env, GoString data) {
+typedef struct Env_lambda_748 { GoString *value; bool *b; } Env_lambda_748;
+static GoIface lambda_748(Env_lambda_748 *_env, GoString data) {
     (*_env->b) = true;
     (*_env->value) = data;
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_745 { GoString *index; } Env_lambda_745;
-static GoIface lambda_745(Env_lambda_745 *_env, GoString data) {
+typedef struct Env_lambda_749 { GoString *index; } Env_lambda_749;
+static GoIface lambda_749(Env_lambda_749 *_env, GoString data) {
     (*_env->index) = data;
     return (GoIface){0};
 }
 
-static GoIface lambda_742(Env_lambda_742 *_env) {
+static GoIface lambda_746(Env_lambda_746 *_env) {
     bool *assign__h = go_box_a(bool, false);
     GoString *mapParam__h = go_box(GoString, (GoString){0});
     GoString mapName = (GoString){0};
@@ -12529,7 +12574,7 @@ static GoIface lambda_742(Env_lambda_742 *_env) {
     }
     if (go_streq(mapName, GOSTR(""))) {
         {
-            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("map"), false, ((GoFunc){(void *)lambda_743, go_box(Env_lambda_743, ((Env_lambda_743){assign__h, mapParam__h}))}));
+            GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("map"), false, ((GoFunc){(void *)lambda_747, go_box(Env_lambda_747, ((Env_lambda_747){assign__h, mapParam__h}))}));
             if (err.type != 0) {
                 return err;
             }
@@ -12571,13 +12616,13 @@ static GoIface lambda_742(Env_lambda_742 *_env) {
             } else {
                 bool *b__h = go_box_a(bool, false);
                 {
-                    GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_744, go_box(Env_lambda_744, ((Env_lambda_744){value__h, b__h}))}));
+                    GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("value"), false, ((GoFunc){(void *)lambda_748, go_box(Env_lambda_748, ((Env_lambda_748){value__h, b__h}))}));
                     if (err.type != 0) {
                         return err;
                     }
                 }
                 {
-                    GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("index"), false, ((GoFunc){(void *)lambda_745, go_box(Env_lambda_745, ((Env_lambda_745){index__h}))}));
+                    GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("index"), false, ((GoFunc){(void *)lambda_749, go_box(Env_lambda_749, ((Env_lambda_749){index__h}))}));
                     if (err.type != 0) {
                         return err;
                     }
@@ -12644,50 +12689,6 @@ static GoIface lambda_742(Env_lambda_742 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_746 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_746;
-static GoIface lambda_746(Env_lambda_746 *_env) {
-    {
-        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
-typedef struct Env_lambda_747 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_747;
-static GoIface lambda_747(Env_lambda_747 *_env) {
-    {
-        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
-typedef struct Env_lambda_748 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_748;
-static GoIface lambda_748(Env_lambda_748 *_env) {
-    {
-        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
-typedef struct Env_lambda_749 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_749;
-static GoIface lambda_749(Env_lambda_749 *_env) {
-    {
-        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
-        if (err.type != 0) {
-            return err;
-        }
-    }
-    return (GoIface){0};
-}
-
 typedef struct Env_lambda_750 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_750;
 static GoIface lambda_750(Env_lambda_750 *_env) {
     {
@@ -12733,31 +12734,75 @@ static GoIface lambda_753(Env_lambda_753 *_env) {
 }
 
 typedef struct Env_lambda_754 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_754;
-typedef struct Env_lambda_755 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_755;
-static GoIface lambda_755(Env_lambda_755 *_env, GoString data) {
+static GoIface lambda_754(Env_lambda_754 *_env) {
+    {
+        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_755 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_755;
+static GoIface lambda_755(Env_lambda_755 *_env) {
+    {
+        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_756 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_756;
+static GoIface lambda_756(Env_lambda_756 *_env) {
+    {
+        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_757 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_757;
+static GoIface lambda_757(Env_lambda_757 *_env) {
+    {
+        GoIface err = CharCompiler_mapSetSub((*_env->c), (*_env->is), (*_env->sc));
+        if (err.type != 0) {
+            return err;
+        }
+    }
+    return (GoIface){0};
+}
+
+typedef struct Env_lambda_758 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_758;
+typedef struct Env_lambda_759 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_759;
+static GoIface lambda_759(Env_lambda_759 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 4, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_756 { GoFunc *addExclude; } Env_lambda_756;
-static GoIface lambda_756(Env_lambda_756 *_env, GoString data) {
+typedef struct Env_lambda_760 { GoFunc *addExclude; } Env_lambda_760;
+static GoIface lambda_760(Env_lambda_760 *_env, GoString data) {
     return ((GoIface (*)(void *, GoString))((*_env->addExclude)).fn)(((*_env->addExclude)).env, data);
 }
 
-typedef struct Env_lambda_757 { GoFunc *addExclude; } Env_lambda_757;
-static GoIface lambda_757(Env_lambda_757 *_env, GoString data) {
+typedef struct Env_lambda_761 { GoFunc *addExclude; } Env_lambda_761;
+static GoIface lambda_761(Env_lambda_761 *_env, GoString data) {
     return ((GoIface (*)(void *, GoString))((*_env->addExclude)).fn)(((*_env->addExclude)).env, data);
 }
 
-static GoIface lambda_754(Env_lambda_754 *_env) {
+static GoIface lambda_758(Env_lambda_758 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
             return err;
         }
     }
-    GoFunc *addExclude__h = go_box(GoFunc, ((GoFunc){(void *)lambda_755, go_box(Env_lambda_755, ((Env_lambda_755){_env->c, _env->sc}))}));
+    GoFunc *addExclude__h = go_box(GoFunc, ((GoFunc){(void *)lambda_759, go_box(Env_lambda_759, ((Env_lambda_759){_env->c, _env->sc}))}));
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("exclude"), false, ((GoFunc){(void *)lambda_756, go_box(Env_lambda_756, ((Env_lambda_756){addExclude__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("exclude"), false, ((GoFunc){(void *)lambda_760, go_box(Env_lambda_760, ((Env_lambda_760){addExclude__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -12767,7 +12812,7 @@ static GoIface lambda_754(Env_lambda_754 *_env) {
         for (; i <= 8; i++) {
             GoString key = fmt_Sprintf(GOSTR("exclude%d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, i)})));
             {
-                GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), key, false, ((GoFunc){(void *)lambda_757, go_box(Env_lambda_757, ((Env_lambda_757){addExclude__h}))}));
+                GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), key, false, ((GoFunc){(void *)lambda_761, go_box(Env_lambda_761, ((Env_lambda_761){addExclude__h}))}));
                 if (err.type != 0) {
                     return err;
                 }
@@ -12778,48 +12823,48 @@ static GoIface lambda_754(Env_lambda_754 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_758 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_758;
-typedef struct Env_lambda_759 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_759;
-static GoIface lambda_759(Env_lambda_759 *_env, GoString data) {
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 11U, data, 2, 1, (Slice_BytecodeExp){0});
-}
-
-typedef struct Env_lambda_760 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_760;
-static GoIface lambda_760(Env_lambda_760 *_env, GoString data) {
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 12U, data, 2, 1, (Slice_BytecodeExp){0});
-}
-
-typedef struct Env_lambda_761 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_761;
-static GoIface lambda_761(Env_lambda_761 *_env, GoString data) {
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 13U, data, 2, 1, (Slice_BytecodeExp){0});
-}
-
-typedef struct Env_lambda_762 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_762;
-static GoIface lambda_762(Env_lambda_762 *_env, GoString data) {
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 14U, data, 2, 1, (Slice_BytecodeExp){0});
-}
-
+typedef struct Env_lambda_762 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_762;
 typedef struct Env_lambda_763 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_763;
 static GoIface lambda_763(Env_lambda_763 *_env, GoString data) {
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 15U, data, 2, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 11U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_764 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_764;
 static GoIface lambda_764(Env_lambda_764 *_env, GoString data) {
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 16U, data, 2, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 12U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_765 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_765;
 static GoIface lambda_765(Env_lambda_765 *_env, GoString data) {
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 17U, data, 2, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 13U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_766 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_766;
 static GoIface lambda_766(Env_lambda_766 *_env, GoString data) {
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 14U, data, 2, 1, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_767 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_767;
+static GoIface lambda_767(Env_lambda_767 *_env, GoString data) {
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 15U, data, 2, 1, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_768 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_768;
+static GoIface lambda_768(Env_lambda_768 *_env, GoString data) {
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 16U, data, 2, 1, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_769 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_769;
+static GoIface lambda_769(Env_lambda_769 *_env, GoString data) {
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 17U, data, 2, 1, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_770 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_770;
+static GoIface lambda_770(Env_lambda_770 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 18U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_758(Env_lambda_758 *_env) {
+static GoIface lambda_762(Env_lambda_762 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("reload"), 0U, 3, 12, false);
         if (err.type != 0) {
@@ -12887,49 +12932,49 @@ static GoIface lambda_758(Env_lambda_758 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p1palette"), false, ((GoFunc){(void *)lambda_759, go_box(Env_lambda_759, ((Env_lambda_759){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p1palette"), false, ((GoFunc){(void *)lambda_763, go_box(Env_lambda_763, ((Env_lambda_763){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p2palette"), false, ((GoFunc){(void *)lambda_760, go_box(Env_lambda_760, ((Env_lambda_760){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p2palette"), false, ((GoFunc){(void *)lambda_764, go_box(Env_lambda_764, ((Env_lambda_764){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p3palette"), false, ((GoFunc){(void *)lambda_761, go_box(Env_lambda_761, ((Env_lambda_761){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p3palette"), false, ((GoFunc){(void *)lambda_765, go_box(Env_lambda_765, ((Env_lambda_765){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p4palette"), false, ((GoFunc){(void *)lambda_762, go_box(Env_lambda_762, ((Env_lambda_762){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p4palette"), false, ((GoFunc){(void *)lambda_766, go_box(Env_lambda_766, ((Env_lambda_766){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p5palette"), false, ((GoFunc){(void *)lambda_763, go_box(Env_lambda_763, ((Env_lambda_763){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p5palette"), false, ((GoFunc){(void *)lambda_767, go_box(Env_lambda_767, ((Env_lambda_767){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p6palette"), false, ((GoFunc){(void *)lambda_764, go_box(Env_lambda_764, ((Env_lambda_764){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p6palette"), false, ((GoFunc){(void *)lambda_768, go_box(Env_lambda_768, ((Env_lambda_768){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p7palette"), false, ((GoFunc){(void *)lambda_765, go_box(Env_lambda_765, ((Env_lambda_765){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p7palette"), false, ((GoFunc){(void *)lambda_769, go_box(Env_lambda_769, ((Env_lambda_769){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p8palette"), false, ((GoFunc){(void *)lambda_766, go_box(Env_lambda_766, ((Env_lambda_766){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("p8palette"), false, ((GoFunc){(void *)lambda_770, go_box(Env_lambda_770, ((Env_lambda_770){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -12943,9 +12988,9 @@ static GoIface lambda_758(Env_lambda_758 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_767 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_767;
-typedef struct Env_lambda_768 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_768;
-static GoIface lambda_768(Env_lambda_768 *_env, GoString data) {
+typedef struct Env_lambda_771 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_771;
+typedef struct Env_lambda_772 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_772;
+static GoIface lambda_772(Env_lambda_772 *_env, GoString data) {
     if (((data.len < 2) || (((u8)data.p[0]) != 34U)) || (((u8)data.p[(data.len - 1)]) != 34U)) {
         return ((GoIface){155, go_box(Error, GOSTR("source not enclosed in \""))});
     }
@@ -12981,7 +13026,7 @@ static GoIface lambda_768(Env_lambda_768 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_767(Env_lambda_767 *_env) {
+static GoIface lambda_771(Env_lambda_771 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 9U, 2, 1, false);
         if (err.type != 0) {
@@ -12989,7 +13034,7 @@ static GoIface lambda_767(Env_lambda_767 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("source"), false, ((GoFunc){(void *)lambda_768, go_box(Env_lambda_768, ((Env_lambda_768){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("source"), false, ((GoFunc){(void *)lambda_772, go_box(Env_lambda_772, ((Env_lambda_772){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -13045,8 +13090,8 @@ static GoIface lambda_767(Env_lambda_767 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_769 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_769;
-static GoIface lambda_769(Env_lambda_769 *_env) {
+typedef struct Env_lambda_773 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_773;
+static GoIface lambda_773(Env_lambda_773 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, true);
         if (err.type != 0) {
@@ -13158,8 +13203,8 @@ static GoIface lambda_769(Env_lambda_769 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_770 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_770;
-static GoIface lambda_770(Env_lambda_770 *_env) {
+typedef struct Env_lambda_774 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_774;
+static GoIface lambda_774(Env_lambda_774 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, true);
         if (err.type != 0) {
@@ -13181,8 +13226,8 @@ static GoIface lambda_770(Env_lambda_770 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_771 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_771;
-static GoIface lambda_771(Env_lambda_771 *_env) {
+typedef struct Env_lambda_775 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_775;
+static GoIface lambda_775(Env_lambda_775 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 14U, 2, 1, false);
         if (err.type != 0) {
@@ -13276,8 +13321,8 @@ static GoIface lambda_771(Env_lambda_771 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_772 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_772;
-static GoIface lambda_772(Env_lambda_772 *_env) {
+typedef struct Env_lambda_776 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_776;
+static GoIface lambda_776(Env_lambda_776 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("volume"), 0U, 2, 1, false);
         if (err.type != 0) {
@@ -13317,13 +13362,13 @@ static GoIface lambda_772(Env_lambda_772 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_773 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_773;
-static GoIface lambda_773(Env_lambda_773 *_env) {
+typedef struct Env_lambda_777 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_777;
+static GoIface lambda_777(Env_lambda_777 *_env) {
     return CharCompiler_displayToClipboardSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_774 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_774;
-static GoIface lambda_774(Env_lambda_774 *_env) {
+typedef struct Env_lambda_778 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_778;
+static GoIface lambda_778(Env_lambda_778 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -13345,8 +13390,8 @@ static GoIface lambda_774(Env_lambda_774 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_775 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_775;
-static GoIface lambda_775(Env_lambda_775 *_env) {
+typedef struct Env_lambda_779 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_779;
+static GoIface lambda_779(Env_lambda_779 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -13356,8 +13401,8 @@ static GoIface lambda_775(Env_lambda_775 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
 }
 
-typedef struct Env_lambda_776 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_776;
-static GoIface lambda_776(Env_lambda_776 *_env) {
+typedef struct Env_lambda_780 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_780;
+static GoIface lambda_780(Env_lambda_780 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -13391,8 +13436,8 @@ static GoIface lambda_776(Env_lambda_776 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_777 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_777;
-static GoIface lambda_777(Env_lambda_777 *_env) {
+typedef struct Env_lambda_781 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_781;
+static GoIface lambda_781(Env_lambda_781 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -13408,8 +13453,8 @@ static GoIface lambda_777(Env_lambda_777 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_778 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_778;
-static GoIface lambda_778(Env_lambda_778 *_env) {
+typedef struct Env_lambda_782 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_782;
+static GoIface lambda_782(Env_lambda_782 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -13419,24 +13464,24 @@ static GoIface lambda_778(Env_lambda_778 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("value"), 0U, 2, 1, true);
 }
 
-typedef struct Env_lambda_779 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_779;
-static GoIface lambda_779(Env_lambda_779 *_env) {
+typedef struct Env_lambda_783 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_783;
+static GoIface lambda_783(Env_lambda_783 *_env) {
     return CharCompiler_saveLoadFileSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_780 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_780;
-static GoIface lambda_780(Env_lambda_780 *_env) {
+typedef struct Env_lambda_784 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_784;
+static GoIface lambda_784(Env_lambda_784 *_env) {
     return CharCompiler_saveLoadFileSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_781 { StateControllerBase* *sc; } Env_lambda_781;
-static GoIface lambda_781(Env_lambda_781 *_env) {
+typedef struct Env_lambda_785 { StateControllerBase* *sc; } Env_lambda_785;
+static GoIface lambda_785(Env_lambda_785 *_env) {
     StateControllerBase_add((*_env->sc), 0U, (Slice_BytecodeExp){0});
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_782 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_782;
-static GoIface lambda_782(Env_lambda_782 *_env) {
+typedef struct Env_lambda_786 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_786;
+static GoIface lambda_786(Env_lambda_786 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -13452,8 +13497,8 @@ static GoIface lambda_782(Env_lambda_782 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_783 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_783;
-static GoIface lambda_783(Env_lambda_783 *_env) {
+typedef struct Env_lambda_787 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_787;
+static GoIface lambda_787(Env_lambda_787 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 11U, 2, 1, false);
         if (err.type != 0) {
@@ -13499,8 +13544,8 @@ static GoIface lambda_783(Env_lambda_783 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_784 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_784;
-static GoIface lambda_784(Env_lambda_784 *_env) {
+typedef struct Env_lambda_788 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_788;
+static GoIface lambda_788(Env_lambda_788 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 8U, 2, 1, false);
         if (err.type != 0) {
@@ -13516,8 +13561,8 @@ static GoIface lambda_784(Env_lambda_784 *_env) {
     return CharCompiler_storyboardSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_785 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_785;
-static GoIface lambda_785(Env_lambda_785 *_env) {
+typedef struct Env_lambda_789 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_789;
+static GoIface lambda_789(Env_lambda_789 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 9U, 2, 1, false);
         if (err.type != 0) {
@@ -13527,8 +13572,8 @@ static GoIface lambda_785(Env_lambda_785 *_env) {
     return CharCompiler_storyboardSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_786 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_786;
-static GoIface lambda_786(Env_lambda_786 *_env) {
+typedef struct Env_lambda_790 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_790;
+static GoIface lambda_790(Env_lambda_790 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -13538,8 +13583,8 @@ static GoIface lambda_786(Env_lambda_786 *_env) {
     return CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 0U, 2, 1, false);
 }
 
-typedef struct Env_lambda_787 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_787;
-static GoIface lambda_787(Env_lambda_787 *_env) {
+typedef struct Env_lambda_791 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_791;
+static GoIface lambda_791(Env_lambda_791 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -13567,8 +13612,8 @@ static GoIface lambda_787(Env_lambda_787 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_788 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_788;
-static GoIface lambda_788(Env_lambda_788 *_env) {
+typedef struct Env_lambda_792 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_792;
+static GoIface lambda_792(Env_lambda_792 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -13596,8 +13641,8 @@ static GoIface lambda_788(Env_lambda_788 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_789 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_789;
-static GoIface lambda_789(Env_lambda_789 *_env) {
+typedef struct Env_lambda_793 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_793;
+static GoIface lambda_793(Env_lambda_793 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 2, 1, false);
         if (err.type != 0) {
@@ -13625,8 +13670,8 @@ static GoIface lambda_789(Env_lambda_789 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_790 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_790;
-static GoIface lambda_790(Env_lambda_790 *_env) {
+typedef struct Env_lambda_794 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_794;
+static GoIface lambda_794(Env_lambda_794 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -13648,8 +13693,8 @@ static GoIface lambda_790(Env_lambda_790 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_791 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_791;
-static GoIface lambda_791(Env_lambda_791 *_env, GoString data) {
+typedef struct Env_lambda_795 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_795;
+static GoIface lambda_795(Env_lambda_795 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 5, 100);
     Slice_BytecodeExp bes = _t1.r0;
     GoIface err = _t1.r1;
@@ -13660,8 +13705,8 @@ static GoIface lambda_791(Env_lambda_791 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_792 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_792;
-static GoIface lambda_792(Env_lambda_792 *_env, GoString data) {
+typedef struct Env_lambda_796 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_796;
+static GoIface lambda_796(Env_lambda_796 *_env, GoString data) {
     bool notEnclosed = false;
     if ((data.len >= 2) && (((u8)data.p[0]) == 34U)) {
         {
@@ -13683,8 +13728,8 @@ static GoIface lambda_792(Env_lambda_792 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_793 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_793;
-static GoIface lambda_793(Env_lambda_793 *_env) {
+typedef struct Env_lambda_797 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_797;
+static GoIface lambda_797(Env_lambda_797 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 44U, 2, 1, false);
         if (err.type != 0) {
@@ -13694,8 +13739,8 @@ static GoIface lambda_793(Env_lambda_793 *_env) {
     return CharCompiler_textSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_794 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_794;
-static GoIface lambda_794(Env_lambda_794 *_env) {
+typedef struct Env_lambda_798 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_798;
+static GoIface lambda_798(Env_lambda_798 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 44U, 2, 1, false);
         if (err.type != 0) {
@@ -13711,19 +13756,19 @@ static GoIface lambda_794(Env_lambda_794 *_env) {
     return CharCompiler_textSub((*_env->c), (*_env->is), (*_env->sc));
 }
 
-typedef struct Env_lambda_795 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_795;
-typedef struct Env_lambda_796 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_796;
-static GoIface lambda_796(Env_lambda_796 *_env, GoString data) {
+typedef struct Env_lambda_799 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_799;
+typedef struct Env_lambda_800 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_800;
+static GoIface lambda_800(Env_lambda_800 *_env, GoString data) {
     (*_env->b) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_797 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_797;
-static GoIface lambda_797(Env_lambda_797 *_env, GoString data) {
+typedef struct Env_lambda_801 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_801;
+static GoIface lambda_801(Env_lambda_801 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_795(Env_lambda_795 *_env) {
+static GoIface lambda_799(Env_lambda_799 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -13732,13 +13777,13 @@ static GoIface lambda_795(Env_lambda_795 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("id"), false, ((GoFunc){(void *)lambda_796, go_box(Env_lambda_796, ((Env_lambda_796){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("id"), false, ((GoFunc){(void *)lambda_800, go_box(Env_lambda_800, ((Env_lambda_800){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("index"), false, ((GoFunc){(void *)lambda_797, go_box(Env_lambda_797, ((Env_lambda_797){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("index"), false, ((GoFunc){(void *)lambda_801, go_box(Env_lambda_801, ((Env_lambda_801){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -13749,8 +13794,8 @@ static GoIface lambda_795(Env_lambda_795 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_798 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_798;
-static GoIface lambda_798(Env_lambda_798 *_env) {
+typedef struct Env_lambda_802 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_802;
+static GoIface lambda_802(Env_lambda_802 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("camera.boundleft"), 0U, 2, 1, false);
         if (err.type != 0) {
@@ -14228,9 +14273,9 @@ static GoIface lambda_798(Env_lambda_798 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_799 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_799;
-typedef struct Env_lambda_800 { StateControllerBase* *sc; } Env_lambda_800;
-static GoIface lambda_800(Env_lambda_800 *_env, GoString data) {
+typedef struct Env_lambda_803 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_803;
+typedef struct Env_lambda_804 { StateControllerBase* *sc; } Env_lambda_804;
+static GoIface lambda_804(Env_lambda_804 *_env, GoString data) {
     if (data.len == 0) {
         return (GoIface){0};
     }
@@ -14251,7 +14296,7 @@ static GoIface lambda_800(Env_lambda_800 *_env, GoString data) {
     return (GoIface){0};
 }
 
-static GoIface lambda_799(Env_lambda_799 *_env) {
+static GoIface lambda_803(Env_lambda_803 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("followid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -14259,7 +14304,7 @@ static GoIface lambda_799(Env_lambda_799 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("view"), false, ((GoFunc){(void *)lambda_800, go_box(Env_lambda_800, ((Env_lambda_800){_env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("view"), false, ((GoFunc){(void *)lambda_804, go_box(Env_lambda_804, ((Env_lambda_804){_env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -14273,8 +14318,8 @@ static GoIface lambda_799(Env_lambda_799 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_801 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_801;
-static GoIface lambda_801(Env_lambda_801 *_env) {
+typedef struct Env_lambda_805 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_805;
+static GoIface lambda_805(Env_lambda_805 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -14290,9 +14335,9 @@ static GoIface lambda_801(Env_lambda_801 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_802 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_802;
-typedef struct Env_lambda_803 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_803;
-static GoIface lambda_803(Env_lambda_803 *_env, GoString data) {
+typedef struct Env_lambda_806 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_806;
+typedef struct Env_lambda_807 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_807;
+static GoIface lambda_807(Env_lambda_807 *_env, GoString data) {
     (*_env->b) = true;
     if (data.len == 0) {
         return (GoIface){0};
@@ -14300,8 +14345,8 @@ static GoIface lambda_803(Env_lambda_803 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_804 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_804;
-static GoIface lambda_804(Env_lambda_804 *_env, GoString data) {
+typedef struct Env_lambda_808 { CharCompiler* *c; StateControllerBase* *sc; bool *b; } Env_lambda_808;
+static GoIface lambda_808(Env_lambda_808 *_env, GoString data) {
     (*_env->b) = true;
     if (data.len == 0) {
         return (GoIface){0};
@@ -14309,7 +14354,7 @@ static GoIface lambda_804(Env_lambda_804 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_802(Env_lambda_802 *_env) {
+static GoIface lambda_806(Env_lambda_806 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -14318,13 +14363,13 @@ static GoIface lambda_802(Env_lambda_802 *_env) {
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("edge"), false, ((GoFunc){(void *)lambda_803, go_box(Env_lambda_803, ((Env_lambda_803){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("edge"), false, ((GoFunc){(void *)lambda_807, go_box(Env_lambda_807, ((Env_lambda_807){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("player"), false, ((GoFunc){(void *)lambda_804, go_box(Env_lambda_804, ((Env_lambda_804){_env->c, _env->sc, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("player"), false, ((GoFunc){(void *)lambda_808, go_box(Env_lambda_808, ((Env_lambda_808){_env->c, _env->sc, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -14340,8 +14385,8 @@ static GoIface lambda_802(Env_lambda_802 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_805 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_805;
-static GoIface lambda_805(Env_lambda_805 *_env) {
+typedef struct Env_lambda_809 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_809;
+static GoIface lambda_809(Env_lambda_809 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -14363,8 +14408,8 @@ static GoIface lambda_805(Env_lambda_805 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_806 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_806;
-static GoIface lambda_806(Env_lambda_806 *_env) {
+typedef struct Env_lambda_810 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_810;
+static GoIface lambda_810(Env_lambda_810 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 21U, 2, 1, false);
         if (err.type != 0) {
@@ -14500,8 +14545,8 @@ static GoIface lambda_806(Env_lambda_806 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_807 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_807;
-static GoIface lambda_807(Env_lambda_807 *_env) {
+typedef struct Env_lambda_811 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_811;
+static GoIface lambda_811(Env_lambda_811 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -14523,13 +14568,13 @@ static GoIface lambda_807(Env_lambda_807 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_808 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_808;
-typedef struct Env_lambda_809 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_809;
-static GoIface lambda_809(Env_lambda_809 *_env, GoString data) {
+typedef struct Env_lambda_812 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_812;
+typedef struct Env_lambda_813 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_813;
+static GoIface lambda_813(Env_lambda_813 *_env, GoString data) {
     return CharCompiler_parseAttrExpression((*_env->c), (*_env->sc), 2U, data, false);
 }
 
-static GoIface lambda_808(Env_lambda_808 *_env) {
+static GoIface lambda_812(Env_lambda_812 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 48U, 2, 1, false);
         if (err.type != 0) {
@@ -14549,7 +14594,7 @@ static GoIface lambda_808(Env_lambda_808 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("attr"), false, ((GoFunc){(void *)lambda_809, go_box(Env_lambda_809, ((Env_lambda_809){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("attr"), false, ((GoFunc){(void *)lambda_813, go_box(Env_lambda_813, ((Env_lambda_813){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -14821,8 +14866,8 @@ static GoIface lambda_808(Env_lambda_808 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_810 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_810;
-static GoIface lambda_810(Env_lambda_810 *_env) {
+typedef struct Env_lambda_814 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_814;
+static GoIface lambda_814(Env_lambda_814 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -14838,8 +14883,8 @@ static GoIface lambda_810(Env_lambda_810 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_811 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_811;
-static GoIface lambda_811(Env_lambda_811 *_env) {
+typedef struct Env_lambda_815 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_815;
+static GoIface lambda_815(Env_lambda_815 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 1U, 2, 1, false);
         if (err.type != 0) {
@@ -14855,23 +14900,23 @@ static GoIface lambda_811(Env_lambda_811 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_812 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_812;
-typedef struct Env_lambda_813 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_813;
-static GoIface lambda_813(Env_lambda_813 *_env, GoString data) {
+typedef struct Env_lambda_816 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_816;
+typedef struct Env_lambda_817 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_817;
+static GoIface lambda_817(Env_lambda_817 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 2U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_814 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_814;
-static GoIface lambda_814(Env_lambda_814 *_env, GoString data) {
+typedef struct Env_lambda_818 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_818;
+static GoIface lambda_818(Env_lambda_818 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 3U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_815 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_815;
-static GoIface lambda_815(Env_lambda_815 *_env, GoString data) {
+typedef struct Env_lambda_819 { CharCompiler* *c; StateControllerBase* *sc; } Env_lambda_819;
+static GoIface lambda_819(Env_lambda_819 *_env, GoString data) {
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 4U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_812(Env_lambda_812 *_env) {
+static GoIface lambda_816(Env_lambda_816 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 5U, 2, 1, false);
         if (err.type != 0) {
@@ -14891,19 +14936,19 @@ static GoIface lambda_812(Env_lambda_812 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("scale"), false, ((GoFunc){(void *)lambda_813, go_box(Env_lambda_813, ((Env_lambda_813){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("scale"), false, ((GoFunc){(void *)lambda_817, go_box(Env_lambda_817, ((Env_lambda_817){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("angle"), false, ((GoFunc){(void *)lambda_814, go_box(Env_lambda_814, ((Env_lambda_814){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("angle"), false, ((GoFunc){(void *)lambda_818, go_box(Env_lambda_818, ((Env_lambda_818){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pivot"), false, ((GoFunc){(void *)lambda_815, go_box(Env_lambda_815, ((Env_lambda_815){_env->c, _env->sc}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pivot"), false, ((GoFunc){(void *)lambda_819, go_box(Env_lambda_819, ((Env_lambda_819){_env->c, _env->sc}))}));
         if (err.type != 0) {
             return err;
         }
@@ -14911,26 +14956,26 @@ static GoIface lambda_812(Env_lambda_812 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_816 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_816;
-typedef struct Env_lambda_817 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_817;
-static GoIface lambda_817(Env_lambda_817 *_env, GoString data) {
+typedef struct Env_lambda_820 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_820;
+typedef struct Env_lambda_821 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_821;
+static GoIface lambda_821(Env_lambda_821 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 0U, data, 1, 4, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_818 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_818;
-static GoIface lambda_818(Env_lambda_818 *_env, GoString data) {
+typedef struct Env_lambda_822 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_822;
+static GoIface lambda_822(Env_lambda_822 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 3U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-typedef struct Env_lambda_819 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_819;
-static GoIface lambda_819(Env_lambda_819 *_env, GoString data) {
+typedef struct Env_lambda_823 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_823;
+static GoIface lambda_823(Env_lambda_823 *_env, GoString data) {
     (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 1U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_816(Env_lambda_816 *_env) {
+static GoIface lambda_820(Env_lambda_820 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 4U, 1, 1, false);
         if (err.type != 0) {
@@ -14939,19 +14984,19 @@ static GoIface lambda_816(Env_lambda_816 *_env) {
     }
     bool *any__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("window"), false, ((GoFunc){(void *)lambda_817, go_box(Env_lambda_817, ((Env_lambda_817){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("window"), false, ((GoFunc){(void *)lambda_821, go_box(Env_lambda_821, ((Env_lambda_821){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("xshear"), false, ((GoFunc){(void *)lambda_818, go_box(Env_lambda_818, ((Env_lambda_818){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("xshear"), false, ((GoFunc){(void *)lambda_822, go_box(Env_lambda_822, ((Env_lambda_822){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("focallength"), false, ((GoFunc){(void *)lambda_819, go_box(Env_lambda_819, ((Env_lambda_819){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("focallength"), false, ((GoFunc){(void *)lambda_823, go_box(Env_lambda_823, ((Env_lambda_823){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -14975,110 +15020,110 @@ static GoIface lambda_816(Env_lambda_816 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_820 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_820;
-typedef struct Env_lambda_821 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_821;
-static GoIface lambda_821(Env_lambda_821 *_env, GoString data) {
-    (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 13U, data, 2, 1, (Slice_BytecodeExp){0});
-}
-
-typedef struct Env_lambda_822 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_822;
-static GoIface lambda_822(Env_lambda_822 *_env, GoString data) {
-    (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 17U, data, 1, 2, (Slice_BytecodeExp){0});
-}
-
-typedef struct Env_lambda_823 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_823;
-static GoIface lambda_823(Env_lambda_823 *_env, GoString data) {
-    (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 18U, data, 1, 1, (Slice_BytecodeExp){0});
-}
-
-typedef struct Env_lambda_824 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_824;
-static GoIface lambda_824(Env_lambda_824 *_env, GoString data) {
-    (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 19U, data, 1, 2, (Slice_BytecodeExp){0});
-}
-
+typedef struct Env_lambda_824 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_824;
 typedef struct Env_lambda_825 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_825;
 static GoIface lambda_825(Env_lambda_825 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 20U, data, 1, 2, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 13U, data, 2, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_826 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_826;
 static GoIface lambda_826(Env_lambda_826 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 21U, data, 1, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 17U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_827 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_827;
 static GoIface lambda_827(Env_lambda_827 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 22U, data, 2, 2, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 18U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_828 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_828;
 static GoIface lambda_828(Env_lambda_828 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 23U, data, 1, 2, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 19U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_829 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_829;
 static GoIface lambda_829(Env_lambda_829 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 24U, data, 1, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 20U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_830 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_830;
 static GoIface lambda_830(Env_lambda_830 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 25U, data, 1, 2, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 21U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_831 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_831;
 static GoIface lambda_831(Env_lambda_831 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 14U, data, 1, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 22U, data, 2, 2, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_832 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_832;
 static GoIface lambda_832(Env_lambda_832 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 15U, data, 1, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 23U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_833 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_833;
 static GoIface lambda_833(Env_lambda_833 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 16U, data, 1, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 24U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_834 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_834;
 static GoIface lambda_834(Env_lambda_834 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 27U, data, 1, 2, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 25U, data, 1, 2, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_835 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_835;
 static GoIface lambda_835(Env_lambda_835 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 28U, data, 1, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 14U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_836 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_836;
 static GoIface lambda_836(Env_lambda_836 *_env, GoString data) {
     (*_env->any) = true;
-    return CharCompiler_scAdd((*_env->c), (*_env->sc), 29U, data, 1, 1, (Slice_BytecodeExp){0});
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 15U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
 typedef struct Env_lambda_837 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_837;
 static GoIface lambda_837(Env_lambda_837 *_env, GoString data) {
     (*_env->any) = true;
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 16U, data, 1, 1, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_838 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_838;
+static GoIface lambda_838(Env_lambda_838 *_env, GoString data) {
+    (*_env->any) = true;
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 27U, data, 1, 2, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_839 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_839;
+static GoIface lambda_839(Env_lambda_839 *_env, GoString data) {
+    (*_env->any) = true;
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 28U, data, 1, 1, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_840 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_840;
+static GoIface lambda_840(Env_lambda_840 *_env, GoString data) {
+    (*_env->any) = true;
+    return CharCompiler_scAdd((*_env->c), (*_env->sc), 29U, data, 1, 1, (Slice_BytecodeExp){0});
+}
+
+typedef struct Env_lambda_841 { CharCompiler* *c; StateControllerBase* *sc; bool *any; } Env_lambda_841;
+static GoIface lambda_841(Env_lambda_841 *_env, GoString data) {
+    (*_env->any) = true;
     return CharCompiler_scAdd((*_env->c), (*_env->sc), 30U, data, 1, 1, (Slice_BytecodeExp){0});
 }
 
-static GoIface lambda_820(Env_lambda_820 *_env) {
+static GoIface lambda_824(Env_lambda_824 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("id"), 11U, 2, 1, false);
         if (err.type != 0) {
@@ -15093,61 +15138,61 @@ static GoIface lambda_820(Env_lambda_820 *_env) {
     }
     bool *any__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("actionno"), false, ((GoFunc){(void *)lambda_821, go_box(Env_lambda_821, ((Env_lambda_821){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("actionno"), false, ((GoFunc){(void *)lambda_825, go_box(Env_lambda_825, ((Env_lambda_825){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("delta.x"), false, ((GoFunc){(void *)lambda_822, go_box(Env_lambda_822, ((Env_lambda_822){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("delta.x"), false, ((GoFunc){(void *)lambda_826, go_box(Env_lambda_826, ((Env_lambda_826){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("delta.y"), false, ((GoFunc){(void *)lambda_823, go_box(Env_lambda_823, ((Env_lambda_823){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("delta.y"), false, ((GoFunc){(void *)lambda_827, go_box(Env_lambda_827, ((Env_lambda_827){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("layerno"), false, ((GoFunc){(void *)lambda_824, go_box(Env_lambda_824, ((Env_lambda_824){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("layerno"), false, ((GoFunc){(void *)lambda_828, go_box(Env_lambda_828, ((Env_lambda_828){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos.x"), false, ((GoFunc){(void *)lambda_825, go_box(Env_lambda_825, ((Env_lambda_825){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos.x"), false, ((GoFunc){(void *)lambda_829, go_box(Env_lambda_829, ((Env_lambda_829){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos.y"), false, ((GoFunc){(void *)lambda_826, go_box(Env_lambda_826, ((Env_lambda_826){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("pos.y"), false, ((GoFunc){(void *)lambda_830, go_box(Env_lambda_830, ((Env_lambda_830){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("spriteno"), false, ((GoFunc){(void *)lambda_827, go_box(Env_lambda_827, ((Env_lambda_827){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("spriteno"), false, ((GoFunc){(void *)lambda_831, go_box(Env_lambda_831, ((Env_lambda_831){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("start.x"), false, ((GoFunc){(void *)lambda_828, go_box(Env_lambda_828, ((Env_lambda_828){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("start.x"), false, ((GoFunc){(void *)lambda_832, go_box(Env_lambda_832, ((Env_lambda_832){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("start.y"), false, ((GoFunc){(void *)lambda_829, go_box(Env_lambda_829, ((Env_lambda_829){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("start.y"), false, ((GoFunc){(void *)lambda_833, go_box(Env_lambda_833, ((Env_lambda_833){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("scalestart"), false, ((GoFunc){(void *)lambda_830, go_box(Env_lambda_830, ((Env_lambda_830){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("scalestart"), false, ((GoFunc){(void *)lambda_834, go_box(Env_lambda_834, ((Env_lambda_834){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -15166,43 +15211,43 @@ static GoIface lambda_820(Env_lambda_820 *_env) {
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("angle"), false, ((GoFunc){(void *)lambda_831, go_box(Env_lambda_831, ((Env_lambda_831){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("angle"), false, ((GoFunc){(void *)lambda_835, go_box(Env_lambda_835, ((Env_lambda_835){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("xangle"), false, ((GoFunc){(void *)lambda_832, go_box(Env_lambda_832, ((Env_lambda_832){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("xangle"), false, ((GoFunc){(void *)lambda_836, go_box(Env_lambda_836, ((Env_lambda_836){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("yangle"), false, ((GoFunc){(void *)lambda_833, go_box(Env_lambda_833, ((Env_lambda_833){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("yangle"), false, ((GoFunc){(void *)lambda_837, go_box(Env_lambda_837, ((Env_lambda_837){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("velocity.x"), false, ((GoFunc){(void *)lambda_834, go_box(Env_lambda_834, ((Env_lambda_834){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("velocity.x"), false, ((GoFunc){(void *)lambda_838, go_box(Env_lambda_838, ((Env_lambda_838){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("velocity.y"), false, ((GoFunc){(void *)lambda_835, go_box(Env_lambda_835, ((Env_lambda_835){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("velocity.y"), false, ((GoFunc){(void *)lambda_839, go_box(Env_lambda_839, ((Env_lambda_839){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("xshear"), false, ((GoFunc){(void *)lambda_836, go_box(Env_lambda_836, ((Env_lambda_836){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("xshear"), false, ((GoFunc){(void *)lambda_840, go_box(Env_lambda_840, ((Env_lambda_840){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("focallength"), false, ((GoFunc){(void *)lambda_837, go_box(Env_lambda_837, ((Env_lambda_837){_env->c, _env->sc, any__h}))}));
+        GoIface err = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("focallength"), false, ((GoFunc){(void *)lambda_841, go_box(Env_lambda_841, ((Env_lambda_841){_env->c, _env->sc, any__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -15242,8 +15287,8 @@ static GoIface lambda_820(Env_lambda_820 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_838 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex1Anim; } Env_lambda_838;
-static GoIface lambda_838(Env_lambda_838 *_env, GoString data) {
+typedef struct Env_lambda_842 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex1Anim; } Env_lambda_842;
+static GoIface lambda_842(Env_lambda_842 *_env, GoString data) {
     GoString *data__h = go_box(GoString, data);
     Ret_BytecodeExp__GoIface _t1 = CharCompiler_argExpression((*_env->c), (&(*data__h)), 2);
     BytecodeExp be = _t1.r0;
@@ -15255,8 +15300,8 @@ static GoIface lambda_838(Env_lambda_838 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_839 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex1Spr; } Env_lambda_839;
-static GoIface lambda_839(Env_lambda_839 *_env, GoString data) {
+typedef struct Env_lambda_843 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex1Spr; } Env_lambda_843;
+static GoIface lambda_843(Env_lambda_843 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 2);
     Slice_BytecodeExp be = _t1.r0;
     GoIface err = _t1.r1;
@@ -15267,8 +15312,8 @@ static GoIface lambda_839(Env_lambda_839 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_840 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex2Anim; } Env_lambda_840;
-static GoIface lambda_840(Env_lambda_840 *_env, GoString data) {
+typedef struct Env_lambda_844 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex2Anim; } Env_lambda_844;
+static GoIface lambda_844(Env_lambda_844 *_env, GoString data) {
     GoString *data__h = go_box(GoString, data);
     Ret_BytecodeExp__GoIface _t1 = CharCompiler_argExpression((*_env->c), (&(*data__h)), 2);
     BytecodeExp be = _t1.r0;
@@ -15280,8 +15325,8 @@ static GoIface lambda_840(Env_lambda_840 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_841 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex2Spr; } Env_lambda_841;
-static GoIface lambda_841(Env_lambda_841 *_env, GoString data) {
+typedef struct Env_lambda_845 { CharCompiler* *c; StateControllerBase* *sc; u8 *opTex2Spr; } Env_lambda_845;
+static GoIface lambda_845(Env_lambda_845 *_env, GoString data) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs((*_env->c), data, 2, 2);
     Slice_BytecodeExp be = _t1.r0;
     GoIface err = _t1.r1;
@@ -15292,8 +15337,8 @@ static GoIface lambda_841(Env_lambda_841 *_env, GoString data) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_842 { char _unused; } Env_lambda_842;
-static Ret_i32__GoIface lambda_842(Env_lambda_842 *_env, GoString name) {
+typedef struct Env_lambda_846 { char _unused; } Env_lambda_846;
+static Ret_i32__GoIface lambda_846(Env_lambda_846 *_env, GoString name) {
     {
         GoString _t1 = name;
         do {
@@ -15337,9 +15382,9 @@ static Ret_i32__GoIface lambda_842(Env_lambda_842 *_env, GoString name) {
     }
 }
 
-typedef struct Env_lambda_843 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; GoFunc *inputIndex; } Env_lambda_843;
-typedef struct Env_lambda_844 { StateControllerBase* *sc; GoFunc *inputIndex; } Env_lambda_844;
-static GoIface lambda_844(Env_lambda_844 *_env, GoString srcName) {
+typedef struct Env_lambda_847 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; GoFunc *inputIndex; } Env_lambda_847;
+typedef struct Env_lambda_848 { StateControllerBase* *sc; GoFunc *inputIndex; } Env_lambda_848;
+static GoIface lambda_848(Env_lambda_848 *_env, GoString srcName) {
     Ret_i32__GoIface _t1 = ((Ret_i32__GoIface (*)(void *, GoString))((*_env->inputIndex)).fn)(((*_env->inputIndex)).env, srcName);
     i32 srcID = _t1.r0;
     GoIface err = _t1.r1;
@@ -15350,8 +15395,8 @@ static GoIface lambda_844(Env_lambda_844 *_env, GoString srcName) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_845 { StateControllerBase* *sc; GoFunc *inputIndex; } Env_lambda_845;
-static GoIface lambda_845(Env_lambda_845 *_env, GoString dstName) {
+typedef struct Env_lambda_849 { StateControllerBase* *sc; GoFunc *inputIndex; } Env_lambda_849;
+static GoIface lambda_849(Env_lambda_849 *_env, GoString dstName) {
     Ret_i32__GoIface _t1 = ((Ret_i32__GoIface (*)(void *, GoString))((*_env->inputIndex)).fn)(((*_env->inputIndex)).env, dstName);
     i32 dstID = _t1.r0;
     GoIface err = _t1.r1;
@@ -15362,7 +15407,7 @@ static GoIface lambda_845(Env_lambda_845 *_env, GoString dstName) {
     return (GoIface){0};
 }
 
-static GoIface lambda_843(Env_lambda_843 *_env) {
+static GoIface lambda_847(Env_lambda_847 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 2U, 2, 1, false);
         if (err.type != 0) {
@@ -15370,14 +15415,14 @@ static GoIface lambda_843(Env_lambda_843 *_env) {
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("input"), true, ((GoFunc){(void *)lambda_844, go_box(Env_lambda_844, ((Env_lambda_844){_env->sc, _env->inputIndex}))}));
+        GoIface _t1 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("input"), true, ((GoFunc){(void *)lambda_848, go_box(Env_lambda_848, ((Env_lambda_848){_env->sc, _env->inputIndex}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t2 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("output"), true, ((GoFunc){(void *)lambda_845, go_box(Env_lambda_845, ((Env_lambda_845){_env->sc, _env->inputIndex}))}));
+        GoIface _t2 = CharCompiler_stateParam((*_env->c), (*_env->is), GOSTR("output"), true, ((GoFunc){(void *)lambda_849, go_box(Env_lambda_849, ((Env_lambda_849){_env->sc, _env->inputIndex}))}));
         GoIface err = _t2;
         if (err.type != 0) {
             return err;
@@ -15386,8 +15431,8 @@ static GoIface lambda_843(Env_lambda_843 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_846 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_846;
-static GoIface lambda_846(Env_lambda_846 *_env) {
+typedef struct Env_lambda_850 { CharCompiler* *c; IniSection *is; StateControllerBase* *sc; } Env_lambda_850;
+static GoIface lambda_850(Env_lambda_850 *_env) {
     {
         GoIface err = CharCompiler_paramValue((*_env->c), (*_env->is), (*_env->sc), GOSTR("redirectid"), 3U, 2, 1, false);
         if (err.type != 0) {
@@ -15415,8 +15460,8 @@ static GoIface lambda_846(Env_lambda_846 *_env) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_847 { GoString *def; Config *c; } Env_lambda_847;
-static void lambda_847(Env_lambda_847 *_env, GoOpaque /* ini.File */* src) {
+typedef struct Env_lambda_851 { GoString *def; Config *c; } Env_lambda_851;
+static void lambda_851(Env_lambda_851 *_env, GoOpaque /* ini.File */* src) {
     if (src == NULL) {
         return;
     }
@@ -15455,13 +15500,13 @@ static void lambda_847(Env_lambda_847 *_env, GoOpaque /* ini.File */* src) {
     }
 }
 
-typedef struct Env_lambda_848 { char _unused; } Env_lambda_848;
-static int lambda_848(Env_lambda_848 *_env, GoString key) {
+typedef struct Env_lambda_852 { char _unused; } Env_lambda_852;
+static int lambda_852(Env_lambda_852 *_env, GoString key) {
     return ((int)0) /* from an unresolved type */;
 }
 
-typedef struct Env_lambda_849 { bool *isMainThread; } Env_lambda_849;
-static GoIface lambda_849(Env_lambda_849 *_env, GoString filename) {
+typedef struct Env_lambda_853 { bool *isMainThread; } Env_lambda_853;
+static GoIface lambda_853(Env_lambda_853 *_env, GoString filename) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&g_sys.ffx);
         while (gomap_next(&_t2)) {
@@ -15475,8 +15520,8 @@ static GoIface lambda_849(Env_lambda_849 *_env, GoString filename) {
     return fn_loadFightFx(filename, false, (*_env->isMainThread));
 }
 
-typedef struct Env_lambda_850 { bool *isMainThread; FightFx* *ffx; } Env_lambda_850;
-static GoIface lambda_850(Env_lambda_850 *_env, GoString filename) {
+typedef struct Env_lambda_854 { bool *isMainThread; FightFx* *ffx; } Env_lambda_854;
+static GoIface lambda_854(Env_lambda_854 *_env, GoString filename) {
     Ret_SffPtr__GoIface _t1 = fn_loadSff(filename, 4, (*_env->isMainThread), false);
     Sff* s = _t1.r0;
     GoIface err = _t1.r1;
@@ -15487,8 +15532,8 @@ static GoIface lambda_850(Env_lambda_850 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_851 { FightFx* *ffx; } Env_lambda_851;
-static GoIface lambda_851(Env_lambda_851 *_env, GoString filename) {
+typedef struct Env_lambda_855 { FightFx* *ffx; } Env_lambda_855;
+static GoIface lambda_855(Env_lambda_855 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -15499,16 +15544,16 @@ static GoIface lambda_851(Env_lambda_851 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_852 { GoIface *err; FightFx* *ffx; } Env_lambda_852;
-static GoIface lambda_852(Env_lambda_852 *_env, GoString filename) {
+typedef struct Env_lambda_856 { GoIface *err; FightFx* *ffx; } Env_lambda_856;
+static GoIface lambda_856(Env_lambda_856 *_env, GoString filename) {
     Ret_GoOpaqueValPtr__GoIface _t1 = fn_LoadSnd(filename);
     (*_env->ffx)->snd = _t1.r0;
     (*_env->err) = _t1.r1;
     return (*_env->err);
 }
 
-typedef struct Env_lambda_853 { LifeBar* *lb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_853;
-static Arr4_i32 lambda_853(Env_lambda_853 *_env, f32 life) {
+typedef struct Env_lambda_857 { LifeBar* *lb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_857;
+static Arr4_i32 lambda_857(Env_lambda_857 *_env, f32 life) {
     Arr4_i32 r = g_sys.SystemStateVars_.scrrect;
     if ((*_env->lb)->scalefill) {
         life = 0x1p+00f;
@@ -15526,8 +15571,8 @@ static Arr4_i32 lambda_853(Env_lambda_853 *_env, f32 life) {
     return r;
 }
 
-typedef struct Env_lambda_854 { GoString *pre; IniSection *is; } Env_lambda_854;
-static Map_i32_GoString lambda_854(Env_lambda_854 *_env, GoString name) {
+typedef struct Env_lambda_858 { GoString *pre; IniSection *is; } Env_lambda_858;
+static Map_i32_GoString lambda_858(Env_lambda_858 *_env, GoString name) {
     Map_i32_GoString result = Map_i32_GoString_make(0);
     GoString prefix = strings_ToLower(go_strcat((*_env->pre), name));
     {
@@ -15564,8 +15609,8 @@ static Map_i32_GoString lambda_854(Env_lambda_854 *_env, GoString name) {
     return result;
 }
 
-typedef struct Env_lambda_855 { GoString *pre; IniSection *is; Sff* *sff; AnimationTable *at; GoFunc *readPBKeys; } Env_lambda_855;
-static Map_i32_AnimLayoutPtr lambda_855(Env_lambda_855 *_env, GoString name) {
+typedef struct Env_lambda_859 { GoString *pre; IniSection *is; Sff* *sff; AnimationTable *at; GoFunc *readPBKeys; } Env_lambda_859;
+static Map_i32_AnimLayoutPtr lambda_859(Env_lambda_859 *_env, GoString name) {
     Map_i32_AnimLayoutPtr result = Map_i32_AnimLayoutPtr_make(0);
     Map_i32_GoString keys = ((Map_i32_GoString (*)(void *, GoString))((*_env->readPBKeys)).fn)(((*_env->readPBKeys)).env, name);
     {
@@ -15581,8 +15626,8 @@ static Map_i32_AnimLayoutPtr lambda_855(Env_lambda_855 *_env, GoString name) {
     return result;
 }
 
-typedef struct Env_lambda_856 { GoString *pre; IniSection *is; Map_int_GoOpaqueValPtr *f; GoFunc *readPBKeys; } Env_lambda_856;
-static Map_i32_FSTextPtr lambda_856(Env_lambda_856 *_env, GoString name, GoString fmtstr) {
+typedef struct Env_lambda_860 { GoString *pre; IniSection *is; Map_int_GoOpaqueValPtr *f; GoFunc *readPBKeys; } Env_lambda_860;
+static Map_i32_FSTextPtr lambda_860(Env_lambda_860 *_env, GoString name, GoString fmtstr) {
     Map_i32_FSTextPtr result = Map_i32_FSTextPtr_make(0);
     Map_i32_GoString keys = ((Map_i32_GoString (*)(void *, GoString))((*_env->readPBKeys)).fn)(((*_env->readPBKeys)).env, name);
     {
@@ -15597,8 +15642,8 @@ static Map_i32_FSTextPtr lambda_856(Env_lambda_856 *_env, GoString name, GoStrin
     return result;
 }
 
-typedef struct Env_lambda_857 { PowerBar* *pb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_857;
-static Arr4_i32 lambda_857(Env_lambda_857 *_env, f32 power) {
+typedef struct Env_lambda_861 { PowerBar* *pb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_861;
+static Arr4_i32 lambda_861(Env_lambda_861 *_env, f32 power) {
     Arr4_i32 r = g_sys.SystemStateVars_.scrrect;
     if ((*_env->pb)->scalefill) {
         power = 0x1p+00f;
@@ -15616,8 +15661,8 @@ static Arr4_i32 lambda_857(Env_lambda_857 *_env, f32 power) {
     return r;
 }
 
-typedef struct Env_lambda_858 { GuardBar* *gb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_858;
-static Arr4_i32 lambda_858(Env_lambda_858 *_env, f32 points) {
+typedef struct Env_lambda_862 { GuardBar* *gb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_862;
+static Arr4_i32 lambda_862(Env_lambda_862 *_env, f32 points) {
     Arr4_i32 r = g_sys.SystemStateVars_.scrrect;
     if ((*_env->gb)->scalefill) {
         points = 0x1p+00f;
@@ -15635,8 +15680,8 @@ static Arr4_i32 lambda_858(Env_lambda_858 *_env, f32 points) {
     return r;
 }
 
-typedef struct Env_lambda_859 { StunBar* *sb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_859;
-static Arr4_i32 lambda_859(Env_lambda_859 *_env, f32 points) {
+typedef struct Env_lambda_863 { StunBar* *sb; f32 *MidPosX; f32 *MidPosY; } Env_lambda_863;
+static Arr4_i32 lambda_863(Env_lambda_863 *_env, f32 points) {
     Arr4_i32 r = g_sys.SystemStateVars_.scrrect;
     if ((*_env->sb)->scalefill) {
         points = 0x1p+00f;
@@ -15654,8 +15699,8 @@ static Arr4_i32 lambda_859(Env_lambda_859 *_env, f32 points) {
     return r;
 }
 
-typedef struct Env_lambda_860 { IniSection *is; } Env_lambda_860;
-static bool lambda_860(Env_lambda_860 *_env, GoString pre) {
+typedef struct Env_lambda_864 { IniSection *is; } Env_lambda_864;
+static bool lambda_864(Env_lambda_864 *_env, GoString pre) {
     bool _t1; GoString _t2 = Map_GoString_GoString_get(&(*_env->is), go_strcat(pre, GOSTR("text")), &_t1);
     bool okT = _t1;
     bool _t3; GoString _t4 = Map_GoString_GoString_get(&(*_env->is), go_strcat(pre, GOSTR("spr")), &_t3);
@@ -15665,24 +15710,24 @@ static bool lambda_860(Env_lambda_860 *_env, GoString pre) {
     return ((okT || okS) || okA);
 }
 
-typedef struct Env_lambda_861 { IniSection *is; Sff* *sff; AnimationTable *at; Map_int_GoOpaqueValPtr *f; GoFunc *sectionExists; } Env_lambda_861;
-static AnimTextSnd lambda_861(Env_lambda_861 *_env, GoString pPre, GoString pre) {
+typedef struct Env_lambda_865 { IniSection *is; Sff* *sff; AnimationTable *at; Map_int_GoOpaqueValPtr *f; GoFunc *sectionExists; } Env_lambda_865;
+static AnimTextSnd lambda_865(Env_lambda_865 *_env, GoString pPre, GoString pre) {
     if (((bool (*)(void *, GoString))((*_env->sectionExists)).fn)(((*_env->sectionExists)).env, pPre)) {
         return (*fn_ReadAnimTextSnd(pPre, (*_env->is), (*_env->sff), (*_env->at), 1, (*_env->f)));
     }
     return (*fn_ReadAnimTextSnd(pre, (*_env->is), (*_env->sff), (*_env->at), 1, (*_env->f)));
 }
 
-typedef struct Env_lambda_862 { IniSection *is; Sff* *sff; AnimationTable *at; GoFunc *sectionExists; } Env_lambda_862;
-static AnimLayout lambda_862(Env_lambda_862 *_env, GoString pPre, GoString pre) {
+typedef struct Env_lambda_866 { IniSection *is; Sff* *sff; AnimationTable *at; GoFunc *sectionExists; } Env_lambda_866;
+static AnimLayout lambda_866(Env_lambda_866 *_env, GoString pPre, GoString pre) {
     if (((bool (*)(void *, GoString))((*_env->sectionExists)).fn)(((*_env->sectionExists)).env, pPre)) {
         return fn_ReadAnimLayout(pPre, (*_env->is), (*_env->sff), (*_env->at), 1);
     }
     return fn_ReadAnimLayout(pre, (*_env->is), (*_env->sff), (*_env->at), 1);
 }
 
-typedef struct Env_lambda_863 { GoFunc *sectionExists; GoFunc *readLayout; } Env_lambda_863;
-static void lambda_863(Env_lambda_863 *_env, Arr32_AnimLayout* target, GoString pPre, GoString pre) {
+typedef struct Env_lambda_867 { GoFunc *sectionExists; GoFunc *readLayout; } Env_lambda_867;
+static void lambda_867(Env_lambda_867 *_env, Arr32_AnimLayout* target, GoString pPre, GoString pre) {
     {
         for (int _t1 = 0; _t1 < 32; _t1++) {
             int j = _t1;
@@ -15698,8 +15743,8 @@ static void lambda_863(Env_lambda_863 *_env, Arr32_AnimLayout* target, GoString 
     }
 }
 
-typedef struct Env_lambda_864 { FightScreenRound* *ro; } Env_lambda_864;
-static void lambda_864(Env_lambda_864 *_env, AnimTextSnd* ats, i32 elapsed, i32 time_, i32 sndtime, i32 delay, GoString name) {
+typedef struct Env_lambda_868 { FightScreenRound* *ro; } Env_lambda_868;
+static void lambda_868(Env_lambda_868 *_env, AnimTextSnd* ats, i32 elapsed, i32 time_, i32 sndtime, i32 delay, GoString name) {
     if (elapsed == (sndtime + delay)) {
         Snd_play((*_env->ro)->snd, ats->snd, 100, 0x0p+00f, 0, 0, 0, (Slice_bool){0});
     }
@@ -15732,8 +15777,8 @@ static void lambda_864(Env_lambda_864 *_env, AnimTextSnd* ats, i32 elapsed, i32 
     }
 }
 
-typedef struct Env_lambda_865 { char _unused; } Env_lambda_865;
-static void lambda_865(Env_lambda_865 *_env, AnimTextSnd* main_, AnimLayout* top, Slice_AnimLayout bgs) {
+typedef struct Env_lambda_869 { char _unused; } Env_lambda_869;
+static void lambda_869(Env_lambda_869 *_env, AnimTextSnd* main_, AnimLayout* top, Slice_AnimLayout bgs) {
     AnimTextSnd_Reset(main_);
     AnimLayout_Reset(top);
     {
@@ -15746,8 +15791,8 @@ static void lambda_865(Env_lambda_865 *_env, AnimTextSnd* main_, AnimLayout* top
     }
 }
 
-typedef struct Env_lambda_866 { char _unused; } Env_lambda_866;
-static void lambda_866(Env_lambda_866 *_env, Arr4_ResultAnnouncement* res) {
+typedef struct Env_lambda_870 { char _unused; } Env_lambda_870;
+static void lambda_870(Env_lambda_870 *_env, Arr4_ResultAnnouncement* res) {
     {
         for (int _t1 = 0; _t1 < 4; _t1++) {
             int i = _t1;
@@ -15771,14 +15816,14 @@ static void lambda_866(Env_lambda_866 *_env, Arr4_ResultAnnouncement* res) {
     }
 }
 
-typedef struct Env_lambda_867 { IniSection *is; } Env_lambda_867;
-static IniSection lambda_867(Env_lambda_867 *_env, GoString prefixBase, int n) {
+typedef struct Env_lambda_871 { IniSection *is; } Env_lambda_871;
+static IniSection lambda_871(Env_lambda_871 *_env, GoString prefixBase, int n) {
     GoString targetPrefix = fmt_Sprintf(GOSTR("%s%v."), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, prefixBase)}), ((GoIface){2, go_box_a(int, n)})));
     return fn_resolveLifebarPrefixOperators((*_env->is), targetPrefix, prefixBase);
 }
 
-typedef struct Env_lambda_868 { FightScreen* *fs; } Env_lambda_868;
-static GoIface lambda_868(Env_lambda_868 *_env, GoString filename) {
+typedef struct Env_lambda_872 { FightScreen* *fs; } Env_lambda_872;
+static GoIface lambda_872(Env_lambda_872 *_env, GoString filename) {
     Ret_SffPtr__GoIface _t1 = fn_loadSff(filename, 1, true, false);
     Sff* s = _t1.r0;
     GoIface err = _t1.r1;
@@ -15789,8 +15834,8 @@ static GoIface lambda_868(Env_lambda_868 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_869 { FightScreen* *fs; } Env_lambda_869;
-static GoIface lambda_869(Env_lambda_869 *_env, GoString filename) {
+typedef struct Env_lambda_873 { FightScreen* *fs; } Env_lambda_873;
+static GoIface lambda_873(Env_lambda_873 *_env, GoString filename) {
     Ret_GoOpaqueValPtr__GoIface _t1 = fn_LoadSnd(filename);
     GoOpaqueVal* s = _t1.r0;
     GoIface err = _t1.r1;
@@ -15801,8 +15846,8 @@ static GoIface lambda_869(Env_lambda_869 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_870 { FightScreen* *fs; FightFx* *ffx; } Env_lambda_870;
-static GoIface lambda_870(Env_lambda_870 *_env, GoString filename) {
+typedef struct Env_lambda_874 { FightScreen* *fs; FightFx* *ffx; } Env_lambda_874;
+static GoIface lambda_874(Env_lambda_874 *_env, GoString filename) {
     if ((true && ((*_env->fs)->sff != NULL)) && go_streq((*_env->fs)->sff->filename, filename)) {
         (*(*_env->ffx)->sff) = (*(*_env->fs)->sff);
         return (GoIface){0};
@@ -15817,8 +15862,8 @@ static GoIface lambda_870(Env_lambda_870 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_871 { FightFx* *ffx; } Env_lambda_871;
-static GoIface lambda_871(Env_lambda_871 *_env, GoString filename) {
+typedef struct Env_lambda_875 { FightFx* *ffx; } Env_lambda_875;
+static GoIface lambda_875(Env_lambda_875 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -15829,16 +15874,16 @@ static GoIface lambda_871(Env_lambda_871 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_872 { GoIface *err; FightFx* *ffx; } Env_lambda_872;
-static GoIface lambda_872(Env_lambda_872 *_env, GoString filename) {
+typedef struct Env_lambda_876 { GoIface *err; FightFx* *ffx; } Env_lambda_876;
+static GoIface lambda_876(Env_lambda_876 *_env, GoString filename) {
     Ret_GoOpaqueValPtr__GoIface _t1 = fn_LoadSnd(filename);
     (*_env->ffx)->snd = _t1.r0;
     (*_env->err) = _t1.r1;
     return (*_env->err);
 }
 
-typedef struct Env_lambda_873 { char _unused; } Env_lambda_873;
-static GoIface lambda_873(Env_lambda_873 *_env, GoString filename) {
+typedef struct Env_lambda_877 { char _unused; } Env_lambda_877;
+static GoIface lambda_877(Env_lambda_877 *_env, GoString filename) {
     {
         GoIface err = fn_loadFightFx(filename, false, true);
         if (err.type != 0) {
@@ -15848,8 +15893,8 @@ static GoIface lambda_873(Env_lambda_873 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_874 { Map_int_fontSpec_Ldb8059 *fntSpecs; } Env_lambda_874;
-static void lambda_874(Env_lambda_874 *_env, IniSection is) {
+typedef struct Env_lambda_878 { Map_int_fontSpec_Ldb8059 *fntSpecs; } Env_lambda_878;
+static void lambda_878(Env_lambda_878 *_env, IniSection is) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&is);
         while (gomap_next(&_t2)) {
@@ -15887,8 +15932,8 @@ static void lambda_874(Env_lambda_874 *_env, IniSection is) {
     }
 }
 
-typedef struct Env_lambda_875 { FightScreen* *fs; int *i; fontSpec_Ldb8059 *spec; } Env_lambda_875;
-static GoIface lambda_875(Env_lambda_875 *_env, GoString filename) {
+typedef struct Env_lambda_879 { FightScreen* *fs; int *i; fontSpec_Ldb8059 *spec; } Env_lambda_879;
+static GoIface lambda_879(Env_lambda_879 *_env, GoString filename) {
     i32 h = -1;
     if ((*_env->spec).height != 0) {
         h = (*_env->spec).height;
@@ -15907,16 +15952,16 @@ static GoIface lambda_875(Env_lambda_875 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_876 { char _unused; } Env_lambda_876;
-static Ret_int__int__int lambda_876(Env_lambda_876 *_env, bool leaderontop) {
+typedef struct Env_lambda_880 { char _unused; } Env_lambda_880;
+static Ret_int__int__int lambda_880(Env_lambda_880 *_env, bool leaderontop) {
     if (leaderontop) {
         return (Ret_int__int__int){3, -1, -1};
     }
     return (Ret_int__int__int){0, 4, 1};
 }
 
-typedef struct Env_lambda_877 { GoString *fight; } Env_lambda_877;
-static GoIface lambda_877(Env_lambda_877 *_env, GoString filename) {
+typedef struct Env_lambda_881 { GoString *fight; } Env_lambda_881;
+static GoIface lambda_881(Env_lambda_881 *_env, GoString filename) {
     if (go_streq(filename, GOSTR(""))) {
         return (GoIface){0};
     }
@@ -15953,37 +15998,37 @@ static GoIface lambda_877(Env_lambda_877 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_878 { Slice_int *order; } Env_lambda_878;
-static bool lambda_878(Env_lambda_878 *_env, int i, int j) {
+typedef struct Env_lambda_882 { Slice_int *order; } Env_lambda_882;
+static bool lambda_882(Env_lambda_882 *_env, int i, int j) {
     return (g_sys.chars.v[(*_env->order).p[i]].p[0]->memberNo < g_sys.chars.v[(*_env->order).p[j]].p[0]->memberNo);
 }
 
-typedef struct Env_lambda_879 { Slice_int *order; } Env_lambda_879;
-static bool lambda_879(Env_lambda_879 *_env, int i, int j) {
+typedef struct Env_lambda_883 { Slice_int *order; } Env_lambda_883;
+static bool lambda_883(Env_lambda_883 *_env, int i, int j) {
     return (g_sys.chars.v[(*_env->order).p[i]].p[0]->memberNo < g_sys.chars.v[(*_env->order).p[j]].p[0]->memberNo);
 }
 
-typedef struct Env_lambda_880 { Slice_rankingEntryPtr *entries; } Env_lambda_880;
-typedef struct Env_lambda_881 { rankingEntry* *e; } Env_lambda_881;
-static bool lambda_881(Env_lambda_881 *_env, GoOpaque /* gjson.Result */ _p0, GoOpaque /* gjson.Result */ c) {
+typedef struct Env_lambda_884 { Slice_rankingEntryPtr *entries; } Env_lambda_884;
+typedef struct Env_lambda_885 { rankingEntry* *e; } Env_lambda_885;
+static bool lambda_885(Env_lambda_885 *_env, GoOpaque /* gjson.Result */ _p0, GoOpaque /* gjson.Result */ c) {
     (*_env->e)->Chars = GO_APPEND(Slice_GoString, (*_env->e)->Chars, (*(GoString *)go_scratch(sizeof(GoString))));
     return true;
 }
 
-static bool lambda_880(Env_lambda_880 *_env, GoOpaque /* gjson.Result */ _p0, GoOpaque /* gjson.Result */ v) {
+static bool lambda_884(Env_lambda_884 *_env, GoOpaque /* gjson.Result */ _p0, GoOpaque /* gjson.Result */ v) {
     rankingEntry* *e__h = go_box(rankingEntry*, go_box(rankingEntry, (rankingEntry){.Score = ((int)gjson_Result_Int(gjson_Result_Get(v, GOSTR("score")))), .Time = gjson_Result_Float(gjson_Result_Get(v, GOSTR("time"))), .Win = ((int)gjson_Result_Int(gjson_Result_Get(v, GOSTR("win")))), .Lose = ((int)gjson_Result_Int(gjson_Result_Get(v, GOSTR("lose")))), .Consecutive = ((int)gjson_Result_Int(gjson_Result_Get(v, GOSTR("consecutive")))), .Name = (*(GoString *)go_scratch(sizeof(GoString))), .Tmode = ((i32)gjson_Result_Int(gjson_Result_Get(v, GOSTR("tmode")))), .AILevel = ((i32)gjson_Result_Int(gjson_Result_Get(v, GOSTR("ailevel"))))}));
     {
         GoOpaque /* gjson.Result */ ca = gjson_Result_Get(v, GOSTR("chars"));
         if (gjson_Result_Exists(ca) && gjson_Result_IsArray(ca)) {
-            gjson_Result_ForEach(ca, ((GoFunc){(void *)lambda_881, go_box(Env_lambda_881, ((Env_lambda_881){e__h}))}));
+            gjson_Result_ForEach(ca, ((GoFunc){(void *)lambda_885, go_box(Env_lambda_885, ((Env_lambda_885){e__h}))}));
         }
     }
     (*_env->entries) = GO_APPEND(Slice_rankingEntryPtr, (*_env->entries), (*e__h));
     return true;
 }
 
-typedef struct Env_lambda_882 { GoString *rType; Slice_rankingEntryPtr *entries; } Env_lambda_882;
-static bool lambda_882(Env_lambda_882 *_env, int i, int j) {
+typedef struct Env_lambda_886 { GoString *rType; Slice_rankingEntryPtr *entries; } Env_lambda_886;
+static bool lambda_886(Env_lambda_886 *_env, int i, int j) {
     {
         GoString _t1 = (*_env->rType);
         do {
@@ -16003,8 +16048,8 @@ static bool lambda_882(Env_lambda_882 *_env, int i, int j) {
     }
 }
 
-typedef struct Env_lambda_883 { GoString *rType; Slice_rankingEntryPtr *entries; } Env_lambda_883;
-static bool lambda_883(Env_lambda_883 *_env, int i, int j) {
+typedef struct Env_lambda_887 { GoString *rType; Slice_rankingEntryPtr *entries; } Env_lambda_887;
+static bool lambda_887(Env_lambda_887 *_env, int i, int j) {
     {
         GoString _t1 = (*_env->rType);
         do {
@@ -16024,18 +16069,18 @@ static bool lambda_883(Env_lambda_883 *_env, int i, int j) {
     }
 }
 
-typedef struct Env_lambda_884 { GoIface *f; } Env_lambda_884;
-static void lambda_884(Env_lambda_884 *_env) {
+typedef struct Env_lambda_888 { GoIface *f; } Env_lambda_888;
+static void lambda_888(Env_lambda_888 *_env) {
     fn_chk(iface_Close_143b0862((*_env->f)));
 }
 
-typedef struct Env_lambda_885 { Sprite* *s; Sprite* *src; } Env_lambda_885;
-static void lambda_885(Env_lambda_885 *_env) {
+typedef struct Env_lambda_889 { Sprite* *s; Sprite* *src; } Env_lambda_889;
+static void lambda_889(Env_lambda_889 *_env) {
     (*_env->s)->Tex = (*_env->src)->Tex;
 }
 
-typedef struct Env_lambda_886 { Sprite* *s; Slice_u8 *px; } Env_lambda_886;
-static void lambda_886(Env_lambda_886 *_env) {
+typedef struct Env_lambda_890 { Sprite* *s; Slice_u8 *px; } Env_lambda_890;
+static void lambda_890(Env_lambda_890 *_env) {
     if ((((*_env->s)->textureAtlas != NULL) && (((i32)(*_env->s)->Size.v[0]) < go_div32((*_env->s)->textureAtlas->textureSize, 2))) && (((i32)(*_env->s)->Size.v[1]) < go_div32((*_env->s)->textureAtlas->textureSize, 2))) {
         int textureIndex = -1;
         Arr4_f32 uv = {0};
@@ -16066,8 +16111,8 @@ static void lambda_886(Env_lambda_886 *_env) {
     }
 }
 
-typedef struct Env_lambda_887 { Sprite* *s; Slice_u8 *data; i32 *sprWidth; i32 *sprHeight; i32 *sprDepth; } Env_lambda_887;
-static void lambda_887(Env_lambda_887 *_env) {
+typedef struct Env_lambda_891 { Sprite* *s; Slice_u8 *data; i32 *sprWidth; i32 *sprHeight; i32 *sprDepth; } Env_lambda_891;
+static void lambda_891(Env_lambda_891 *_env) {
     if ((((*_env->s)->textureAtlas != NULL) && (((i32)(*_env->sprWidth)) < go_div32((*_env->s)->textureAtlas->textureSize, 2))) && (((i32)(*_env->sprHeight)) < go_div32((*_env->s)->textureAtlas->textureSize, 2))) {
         Slice_u8 data32 = {0};
         if ((*_env->sprDepth) == 24) {
@@ -16116,48 +16161,48 @@ static void lambda_887(Env_lambda_887 *_env) {
     }
 }
 
-typedef struct Env_lambda_888 { GoIface *r; } Env_lambda_888;
-static GoIface lambda_888(Env_lambda_888 *_env, GoIface x) {
-    return ik_binread_any((*_env->r), x, 0);
-}
-
-typedef struct Env_lambda_889 { char _unused; } Env_lambda_889;
-static GoIface lambda_889(Env_lambda_889 *_env, GoIface rd, GoIface x) {
-    return ik_binread_any(rd, x, 0);
-}
-
-typedef struct Env_lambda_890 { GoIface *f; } Env_lambda_890;
-static GoIface lambda_890(Env_lambda_890 *_env, GoIface x) {
-    return ik_binread_any((*_env->f), x, 0);
-}
-
-typedef struct Env_lambda_891 { GoIface *r; } Env_lambda_891;
-static GoIface lambda_891(Env_lambda_891 *_env, GoIface x) {
-    return ik_binread_any((*_env->r), x, 0);
-}
-
 typedef struct Env_lambda_892 { GoIface *r; } Env_lambda_892;
 static GoIface lambda_892(Env_lambda_892 *_env, GoIface x) {
     return ik_binread_any((*_env->r), x, 0);
 }
 
-typedef struct Env_lambda_893 { GoIface *f; } Env_lambda_893;
-static void lambda_893(Env_lambda_893 *_env) {
-    fn_chk(iface_Close_143b0862((*_env->f)));
+typedef struct Env_lambda_893 { char _unused; } Env_lambda_893;
+static GoIface lambda_893(Env_lambda_893 *_env, GoIface rd, GoIface x) {
+    return ik_binread_any(rd, x, 0);
 }
 
 typedef struct Env_lambda_894 { GoIface *f; } Env_lambda_894;
-static void lambda_894(Env_lambda_894 *_env) {
-    fn_chk(iface_Close_143b0862((*_env->f)));
-}
-
-typedef struct Env_lambda_895 { GoIface *f; } Env_lambda_895;
-static GoIface lambda_895(Env_lambda_895 *_env, GoIface x) {
+static GoIface lambda_894(Env_lambda_894 *_env, GoIface x) {
     return ik_binread_any((*_env->f), x, 0);
 }
 
-typedef struct Env_lambda_896 { PaletteList* *pl; Slice_SpritePtr *spriteList; int *i; } Env_lambda_896;
-static void lambda_896(Env_lambda_896 *_env, int srcIdx) {
+typedef struct Env_lambda_895 { GoIface *r; } Env_lambda_895;
+static GoIface lambda_895(Env_lambda_895 *_env, GoIface x) {
+    return ik_binread_any((*_env->r), x, 0);
+}
+
+typedef struct Env_lambda_896 { GoIface *r; } Env_lambda_896;
+static GoIface lambda_896(Env_lambda_896 *_env, GoIface x) {
+    return ik_binread_any((*_env->r), x, 0);
+}
+
+typedef struct Env_lambda_897 { GoIface *f; } Env_lambda_897;
+static void lambda_897(Env_lambda_897 *_env) {
+    fn_chk(iface_Close_143b0862((*_env->f)));
+}
+
+typedef struct Env_lambda_898 { GoIface *f; } Env_lambda_898;
+static void lambda_898(Env_lambda_898 *_env) {
+    fn_chk(iface_Close_143b0862((*_env->f)));
+}
+
+typedef struct Env_lambda_899 { GoIface *f; } Env_lambda_899;
+static GoIface lambda_899(Env_lambda_899 *_env, GoIface x) {
+    return ik_binread_any((*_env->f), x, 0);
+}
+
+typedef struct Env_lambda_900 { PaletteList* *pl; Slice_SpritePtr *spriteList; int *i; } Env_lambda_900;
+static void lambda_900(Env_lambda_900 *_env, int srcIdx) {
     Sprite* _t1 = (*_env->spriteList).p[(*_env->i)];
     Sprite* _t2 = (*_env->spriteList).p[srcIdx];
     Sprite* dst = _t1;
@@ -16170,13 +16215,13 @@ static void lambda_896(Env_lambda_896 *_env, int srcIdx) {
     }
 }
 
-typedef struct Env_lambda_897 { GoIface *f; } Env_lambda_897;
-static GoIface lambda_897(Env_lambda_897 *_env, GoIface x) {
+typedef struct Env_lambda_901 { GoIface *f; } Env_lambda_901;
+static GoIface lambda_901(Env_lambda_901 *_env, GoIface x) {
     return ik_binread_any((*_env->f), x, 0);
 }
 
-typedef struct Env_lambda_898 { char _unused; } Env_lambda_898;
-static void lambda_898(Env_lambda_898 *_env, GoOpaque /* reflect.Value */ fieldVal) {
+typedef struct Env_lambda_902 { char _unused; } Env_lambda_902;
+static void lambda_902(Env_lambda_902 *_env, GoOpaque /* reflect.Value */ fieldVal) {
     {
         uintptr_t _t1 = reflect_Value_Kind(fieldVal);
         do {
@@ -16203,8 +16248,8 @@ static void lambda_898(Env_lambda_898 *_env, GoOpaque /* reflect.Value */ fieldV
     }
 }
 
-typedef struct Env_lambda_899 { char _unused; } Env_lambda_899;
-static Slice_GoString lambda_899(Env_lambda_899 *_env, Slice_queryPart parts) {
+typedef struct Env_lambda_903 { char _unused; } Env_lambda_903;
+static Slice_GoString lambda_903(Env_lambda_903 *_env, Slice_queryPart parts) {
     Slice_GoString names = GO_MAKE(Slice_GoString, GoString, parts.len, parts.len);
     {
         Slice_queryPart _t2 = parts;
@@ -16221,8 +16266,8 @@ static Slice_GoString lambda_899(Env_lambda_899 *_env, Slice_queryPart parts) {
     return names;
 }
 
-typedef struct Env_lambda_900 { Slice_queryPart *parts; GoString *baseDef; GoFunc *extractNames; } Env_lambda_900;
-static Ret_bool__GoIface lambda_900(Env_lambda_900 *_env, GoOpaque /* reflect.Value */ v, queryPart part, GoIface value) {
+typedef struct Env_lambda_904 { Slice_queryPart *parts; GoString *baseDef; GoFunc *extractNames; } Env_lambda_904;
+static Ret_bool__GoIface lambda_904(Env_lambda_904 *_env, GoOpaque /* reflect.Value */ v, queryPart part, GoIface value) {
     if (reflect_Value_Kind(v) == 25U) {
         Ret_GoOpaque_reflect_ValuePtr__GoReflectStructField__bool _t1 = fn_findFieldByINITag(v, part.name);
         GoOpaque /* reflect.Value */ fieldVal = _t1.r0;
@@ -16322,8 +16367,8 @@ static Ret_bool__GoIface lambda_900(Env_lambda_900 *_env, GoOpaque /* reflect.Va
     return (Ret_bool__GoIface){false, (GoIface){0}};
 }
 
-typedef struct Env_lambda_901 { char _unused; } Env_lambda_901;
-static bool lambda_901(Env_lambda_901 *_env, GoOpaque /* reflect.Value */ v, GoString partName) {
+typedef struct Env_lambda_905 { char _unused; } Env_lambda_905;
+static bool lambda_905(Env_lambda_905 *_env, GoOpaque /* reflect.Value */ v, GoString partName) {
     if (reflect_Value_Kind(v) != 25U) {
         return false;
     }
@@ -16354,8 +16399,8 @@ static bool lambda_901(Env_lambda_901 *_env, GoOpaque /* reflect.Value */ v, GoS
     return false;
 }
 
-typedef struct Env_lambda_902 { char _unused; } Env_lambda_902;
-static GoString lambda_902(Env_lambda_902 *_env, GoIface ptr) {
+typedef struct Env_lambda_906 { char _unused; } Env_lambda_906;
+static GoString lambda_906(Env_lambda_906 *_env, GoIface ptr) {
     GoOpaque /* reflect.Value */ v = reflect_ValueOf(ptr);
     if ((reflect_Value_Kind(v) == 22U) && (!reflect_Value_IsNil(v))) {
         v = reflect_Value_Elem(v);
@@ -16369,13 +16414,13 @@ static GoString lambda_902(Env_lambda_902 *_env, GoIface ptr) {
     return GOSTR("");
 }
 
-typedef struct Env_lambda_903 { Slice_u8 *btns; } Env_lambda_903;
-static bool lambda_903(Env_lambda_903 *_env, int idx) {
+typedef struct Env_lambda_907 { Slice_u8 *btns; } Env_lambda_907;
+static bool lambda_907(Env_lambda_907 *_env, int idx) {
     return (((idx >= 0) && (idx < (*_env->btns).len)) && ((*_env->btns).p[idx] != 0U));
 }
 
-typedef struct Env_lambda_904 { Arr6_f32 *axes; } Env_lambda_904;
-static bool lambda_904(Env_lambda_904 *_env, int axisBtn) {
+typedef struct Env_lambda_908 { Arr6_f32 *axes; } Env_lambda_908;
+static bool lambda_908(Env_lambda_908 *_env, int axisBtn) {
     int axis = 0;
     if ((axisBtn == 16) || (axisBtn == 17)) {
         axis = 0;
@@ -16417,8 +16462,8 @@ static bool lambda_904(Env_lambda_904 *_env, int axisBtn) {
     }
 }
 
-typedef struct Env_lambda_905 { InputReader* *ir; int *method; } Env_lambda_905;
-static Ret_bool__bool lambda_905(Env_lambda_905 *_env, bool U, bool D) {
+typedef struct Env_lambda_909 { InputReader* *ir; int *method; } Env_lambda_909;
+static Ret_bool__bool lambda_909(Env_lambda_909 *_env, bool U, bool D) {
     if (((*_env->method) == 1) || ((*_env->method) == 3)) {
         if (U || D) {
             if (!U) {
@@ -16478,8 +16523,8 @@ static Ret_bool__bool lambda_905(Env_lambda_905 *_env, bool U, bool D) {
     return (Ret_bool__bool){U, D};
 }
 
-typedef struct Env_lambda_906 { InputReader* *ir; int *method; } Env_lambda_906;
-static Ret_bool__bool lambda_906(Env_lambda_906 *_env, bool B, bool F) {
+typedef struct Env_lambda_910 { InputReader* *ir; int *method; } Env_lambda_910;
+static Ret_bool__bool lambda_910(Env_lambda_910 *_env, bool B, bool F) {
     if (((*_env->method) == 1) || ((*_env->method) == 3)) {
         if (B || F) {
             if (!B) {
@@ -16539,8 +16584,8 @@ static Ret_bool__bool lambda_906(Env_lambda_906 *_env, bool B, bool F) {
     return (Ret_bool__bool){B, F};
 }
 
-typedef struct Env_lambda_907 { char _unused; } Env_lambda_907;
-static void lambda_907(Env_lambda_907 *_env, bool held, i32* buffer) {
+typedef struct Env_lambda_911 { char _unused; } Env_lambda_911;
+static void lambda_911(Env_lambda_911 *_env, bool held, i32* buffer) {
     if (held != (((*buffer) > 0))) {
         if (held) {
             (*buffer) = 1;
@@ -16556,16 +16601,16 @@ static void lambda_907(Env_lambda_907 *_env, bool held, i32* buffer) {
     }
 }
 
-typedef struct Env_lambda_908 { char _unused; } Env_lambda_908;
-static i32 lambda_908(Env_lambda_908 *_env, i32 buf) {
+typedef struct Env_lambda_912 { char _unused; } Env_lambda_912;
+static i32 lambda_912(Env_lambda_912 *_env, i32 buf) {
     if (buf == 1) {
         return INT32_MIN;
     }
     return buf;
 }
 
-typedef struct Env_lambda_909 { Command* *c; int *i; InputBuffer* *ibuf; } Env_lambda_909;
-static bool lambda_909(Env_lambda_909 *_env, CommandKey k) {
+typedef struct Env_lambda_913 { Command* *c; int *i; InputBuffer* *ibuf; } Env_lambda_913;
+static bool lambda_913(Env_lambda_913 *_env, CommandKey k) {
     if (InputBuffer_State((*_env->ibuf), (CommandStepKey){.key = k, .tilde = false}) == 1) {
         bool allowed = false;
         {
@@ -16604,8 +16649,8 @@ static bool lambda_909(Env_lambda_909 *_env, CommandKey k) {
     return false;
 }
 
-typedef struct Env_lambda_910 { i32 *chance; i32 *time_; } Env_lambda_910;
-static bool lambda_910(Env_lambda_910 *_env, i32* t) {
+typedef struct Env_lambda_914 { i32 *chance; i32 *time_; } Env_lambda_914;
+static bool lambda_914(Env_lambda_914 *_env, i32* t) {
     ((*t))--;
     if ((*t) <= 0) {
         if (fn_Rand(1, (*_env->chance)) == 1) {
@@ -16617,24 +16662,24 @@ static bool lambda_910(Env_lambda_910 *_env, i32* t) {
     return false;
 }
 
-typedef struct Env_lambda_911 { GoString *part; } Env_lambda_911;
-static i32 lambda_911(Env_lambda_911 *_env) {
+typedef struct Env_lambda_915 { GoString *part; } Env_lambda_915;
+static i32 lambda_915(Env_lambda_915 *_env) {
     if ((*_env->part).len > 0) {
         return ((i32)((u8)(*_env->part).p[0]));
     }
     return -1;
 }
 
-typedef struct Env_lambda_912 { GoString *part; GoFunc *getChar; } Env_lambda_912;
-static i32 lambda_912(Env_lambda_912 *_env) {
+typedef struct Env_lambda_916 { GoString *part; GoFunc *getChar; } Env_lambda_916;
+static i32 lambda_916(Env_lambda_916 *_env) {
     if ((*_env->part).len > 0) {
         (*_env->part) = strings_TrimSpace(go_substr((*_env->part), 1, -1));
     }
     return ((i32 (*)(void *))((*_env->getChar)).fn)(((*_env->getChar)).env);
 }
 
-typedef struct Env_lambda_913 { GoFunc *getChar; GoFunc *nextChar; } Env_lambda_913;
-static i32 lambda_913(Env_lambda_913 *_env) {
+typedef struct Env_lambda_917 { GoFunc *getChar; GoFunc *nextChar; } Env_lambda_917;
+static i32 lambda_917(Env_lambda_917 *_env) {
     i32 n = 0;
     {
         for (; 1; ) {
@@ -16651,23 +16696,23 @@ static i32 lambda_913(Env_lambda_913 *_env) {
     return n;
 }
 
-typedef struct Env_lambda_914 { Command* *c; GoString *charName; } Env_lambda_914;
-static void lambda_914(Env_lambda_914 *_env, GoString msg) {
+typedef struct Env_lambda_918 { Command* *c; GoString *charName; } Env_lambda_918;
+static void lambda_918(Env_lambda_918 *_env, GoString msg) {
     GoString fullMsg = go_strcat(fmt_Sprintf(GOSTR("WARNING: Player %s: command '%s' compatibility: "), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*_env->charName))}), ((GoIface){17, go_box(GoString, (*_env->c)->name)}))), msg);
     System_appendToConsole(&g_sys, fullMsg);
     fn_LogMessage(fullMsg, (Slice_GoIface){0});
 }
 
-typedef struct Env_lambda_915 { Arr4_Slice_i32 *p1States; Arr4_Slice_i32 *p2States; } Env_lambda_915;
-static Arr4_Slice_i32 lambda_915(Env_lambda_915 *_env, int side) {
+typedef struct Env_lambda_919 { Arr4_Slice_i32 *p1States; Arr4_Slice_i32 *p2States; } Env_lambda_919;
+static Arr4_Slice_i32 lambda_919(Env_lambda_919 *_env, int side) {
     if (side == 0) {
         return (*_env->p1States);
     }
     return (*_env->p2States);
 }
 
-typedef struct Env_lambda_916 { Map_GoString_GoString *formatSpecifierMap; GoOpaque /* regexp.Regexp */* *re; } Env_lambda_916;
-static GoString lambda_916(Env_lambda_916 *_env, GoString match) {
+typedef struct Env_lambda_920 { Map_GoString_GoString *formatSpecifierMap; GoOpaque /* regexp.Regexp */* *re; } Env_lambda_920;
+static GoString lambda_920(Env_lambda_920 *_env, GoString match) {
     if (go_streq(match, GOSTR("%%"))) {
         return GOSTR("%%");
     }
@@ -16702,8 +16747,8 @@ static GoString lambda_916(Env_lambda_916 *_env, GoString match) {
     return strings_Builder_String(&b);
 }
 
-typedef struct Env_lambda_917 { MotifDialogue* *di; Motif* *m; } Env_lambda_917;
-static void lambda_917(Env_lambda_917 *_env, int side, int pn) {
+typedef struct Env_lambda_921 { MotifDialogue* *di; Motif* *m; } Env_lambda_921;
+static void lambda_921(Env_lambda_921 *_env, int side, int pn) {
     if ((pn <= 0) || (!MotifDialogue_isValidPlayerNo((*_env->di), pn))) {
         return;
     }
@@ -16783,8 +16828,8 @@ static void lambda_917(Env_lambda_917 *_env, int side, int pn) {
     }
 }
 
-typedef struct Env_lambda_918 { int *side; int *maxNum; Slice_victoryEntry *out; Map_int_bool *usedMember; } Env_lambda_918;
-static void lambda_918(Env_lambda_918 *_env, Char* c) {
+typedef struct Env_lambda_922 { int *side; int *maxNum; Slice_victoryEntry *out; Map_int_bool *usedMember; } Env_lambda_922;
+static void lambda_922(Env_lambda_922 *_env, Char* c) {
     if ((c == NULL) || (((int)c->teamside) != (*_env->side))) {
         return;
     }
@@ -16796,35 +16841,35 @@ static void lambda_918(Env_lambda_918 *_env, Char* c) {
     Map_int_bool_set(&(*_env->usedMember), mn, true);
 }
 
-typedef struct Env_lambda_919 { Slice_slotRef_Leab5e0 *slots; } Env_lambda_919;
-static bool lambda_919(Env_lambda_919 *_env, int i, int j) {
+typedef struct Env_lambda_923 { Slice_slotRef_Leab5e0 *slots; } Env_lambda_923;
+static bool lambda_923(Env_lambda_923 *_env, int i, int j) {
     if ((*_env->slots).p[i].order == (*_env->slots).p[j].order) {
         return ((*_env->slots).p[i].idx < (*_env->slots).p[j].idx);
     }
     return ((*_env->slots).p[i].order < (*_env->slots).p[j].order);
 }
 
-typedef struct Env_lambda_920 { Slice_slotRef_Leab5e0 *slots; } Env_lambda_920;
-static bool lambda_920(Env_lambda_920 *_env, int i, int j) {
+typedef struct Env_lambda_924 { Slice_slotRef_Leab5e0 *slots; } Env_lambda_924;
+static bool lambda_924(Env_lambda_924 *_env, int i, int j) {
     if ((*_env->slots).p[i].order == (*_env->slots).p[j].order) {
         return ((*_env->slots).p[i].idx < (*_env->slots).p[j].idx);
     }
     return ((*_env->slots).p[i].order < (*_env->slots).p[j].order);
 }
 
-typedef struct Env_lambda_921 { Fade* *dest; Fade* *use; } Env_lambda_921;
-static void lambda_921(Env_lambda_921 *_env) {
+typedef struct Env_lambda_925 { Fade* *dest; Fade* *use; } Env_lambda_925;
+static void lambda_925(Env_lambda_925 *_env) {
     Fade_init((*_env->use), (*_env->dest), false);
 }
 
-typedef struct Env_lambda_922 { GoString *path; } Env_lambda_922;
-static GoIface lambda_922(Env_lambda_922 *_env, GoString filename) {
+typedef struct Env_lambda_926 { GoString *path; } Env_lambda_926;
+static GoIface lambda_926(Env_lambda_926 *_env, GoString filename) {
     (*_env->path) = filename;
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_923 { Map_GoString_Slice_IniSection *defmap; } Env_lambda_923;
-static Ret_IniSection__GoString lambda_923(Env_lambda_923 *_env, GoString baseName) {
+typedef struct Env_lambda_927 { Map_GoString_Slice_IniSection *defmap; } Env_lambda_927;
+static Ret_IniSection__GoString lambda_927(Env_lambda_927 *_env, GoString baseName) {
     GoString langKey = fmt_Sprintf(GOSTR("%v.%v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, g_sys.cfg.Config.Language)}), ((GoIface){17, go_box(GoString, baseName)})));
     {
         bool _t1; Slice_IniSection _t2 = Map_GoString_Slice_IniSection_get(&(*_env->defmap), langKey, &_t1);
@@ -16845,8 +16890,8 @@ static Ret_IniSection__GoString lambda_923(Env_lambda_923 *_env, GoString baseNa
     return (Ret_IniSection__GoString){(IniSection){0}, GOSTR("")};
 }
 
-typedef struct Env_lambda_924 { Stage* *s; int *ac; } Env_lambda_924;
-static GoIface lambda_924(Env_lambda_924 *_env, GoString filename) {
+typedef struct Env_lambda_928 { Stage* *s; int *ac; } Env_lambda_928;
+static GoIface lambda_928(Env_lambda_928 *_env, GoString filename) {
     {
         for (; (*_env->s)->attachedchardef.len <= (*_env->ac); ) {
             (*_env->s)->attachedchardef = GO_APPEND(Slice_GoString, (*_env->s)->attachedchardef, GOSTR(""));
@@ -16857,8 +16902,8 @@ static GoIface lambda_924(Env_lambda_924 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_925 { GoIface *err; Slice_GoString *submatchall; } Env_lambda_925;
-static GoIface lambda_925(Env_lambda_925 *_env, GoString filename) {
+typedef struct Env_lambda_929 { GoIface *err; Slice_GoString *submatchall; } Env_lambda_929;
+static GoIface lambda_929(Env_lambda_929 *_env, GoString filename) {
     {
         Ret_StagePtr__GoIface _t1 = fn_loadStage(filename, false);
         (*Map_i32_StagePtr_ptr(&g_sys.stageList, fn_Atoi((*_env->submatchall).p[0]))) = _t1.r0;
@@ -16870,8 +16915,8 @@ static GoIface lambda_925(Env_lambda_925 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_926 { Stage* *s; } Env_lambda_926;
-static GoIface lambda_926(Env_lambda_926 *_env, GoString filename) {
+typedef struct Env_lambda_930 { Stage* *s; } Env_lambda_930;
+static GoIface lambda_930(Env_lambda_930 *_env, GoString filename) {
     Ret_SffPtr__GoIface _t1 = fn_loadSff(filename, 3, false, false);
     Sff* sff = _t1.r0;
     GoIface err = _t1.r1;
@@ -16886,8 +16931,8 @@ static GoIface lambda_926(Env_lambda_926 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_927 { Stage* *s; } Env_lambda_927;
-static GoIface lambda_927(Env_lambda_927 *_env, GoString filename) {
+typedef struct Env_lambda_931 { Stage* *s; } Env_lambda_931;
+static GoIface lambda_931(Env_lambda_931 *_env, GoString filename) {
     Ret_ModelPtr__GoIface _t1 = fn_loadglTFModel(filename);
     Model* model = _t1.r0;
     GoIface err = _t1.r1;
@@ -16906,8 +16951,8 @@ static GoIface lambda_927(Env_lambda_927 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_928 { Stage* *s; IniSection *sec; } Env_lambda_928;
-static GoIface lambda_928(Env_lambda_928 *_env, GoString filename) {
+typedef struct Env_lambda_932 { Stage* *s; IniSection *sec; } Env_lambda_932;
+static GoIface lambda_932(Env_lambda_932 *_env, GoString filename) {
     Ret_EnvironmentPtr__GoIface _t1 = fn_loadEnvironment(filename);
     Environment* env = _t1.r0;
     GoIface err = _t1.r1;
@@ -16922,72 +16967,72 @@ static GoIface lambda_928(Env_lambda_928 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_929 { char _unused; } Env_lambda_929;
-static GoIface lambda_929(Env_lambda_929 *_env) {
-    return ((GoIface){368, (void *)(fn_NewGameState())});
-}
-
-typedef struct Env_lambda_930 { char _unused; } Env_lambda_930;
-static GoIface lambda_930(Env_lambda_930 *_env) {
-    Map_GoString_int *si__h = go_box(Map_GoString_int, Map_GoString_int_make(0));
-    return ((GoIface){369, (void *)((&(*si__h)))});
-}
-
-typedef struct Env_lambda_931 { char _unused; } Env_lambda_931;
-static GoIface lambda_931(Env_lambda_931 *_env) {
-    Map_GoString_TypedValue *sm__h = go_box(Map_GoString_TypedValue, Map_GoString_TypedValue_make(0));
-    return ((GoIface){176, (void *)((&(*sm__h)))});
-}
-
-typedef struct Env_lambda_932 { char _unused; } Env_lambda_932;
-static GoIface lambda_932(Env_lambda_932 *_env) {
-    AnimationTable *at__h = go_box(AnimationTable, (AnimationTable){.anims = Map_i32_AnimationPtr_make(0)});
-    return ((GoIface){370, (void *)((&(*at__h)))});
-}
-
 typedef struct Env_lambda_933 { char _unused; } Env_lambda_933;
 static GoIface lambda_933(Env_lambda_933 *_env) {
-    Map_i32_CharPtr *ic__h = go_box(Map_i32_CharPtr, Map_i32_CharPtr_make(0));
-    return ((GoIface){371, (void *)((&(*ic__h)))});
+    return ((GoIface){368, (void *)(fn_NewGameState())});
 }
 
 typedef struct Env_lambda_934 { char _unused; } Env_lambda_934;
 static GoIface lambda_934(Env_lambda_934 *_env) {
-    Slice_AnimFrame *af__h = go_box(Slice_AnimFrame, GO_MAKE(Slice_AnimFrame, AnimFrame, 0, 8));
-    return ((GoIface){372, (void *)((&(*af__h)))});
+    Map_GoString_int *si__h = go_box(Map_GoString_int, Map_GoString_int_make(0));
+    return ((GoIface){369, (void *)((&(*si__h)))});
 }
 
 typedef struct Env_lambda_935 { char _unused; } Env_lambda_935;
 static GoIface lambda_935(Env_lambda_935 *_env) {
-    Map_i32_i32 *ii__h = go_box(Map_i32_i32, Map_i32_i32_make(0));
-    return ((GoIface){177, (void *)((&(*ii__h)))});
+    Map_GoString_TypedValue *sm__h = go_box(Map_GoString_TypedValue, Map_GoString_TypedValue_make(0));
+    return ((GoIface){176, (void *)((&(*sm__h)))});
 }
 
 typedef struct Env_lambda_936 { char _unused; } Env_lambda_936;
 static GoIface lambda_936(Env_lambda_936 *_env) {
-    Map_i32_f32 *if3__h = go_box(Map_i32_f32, Map_i32_f32_make(0));
-    return ((GoIface){178, (void *)((&(*if3__h)))});
+    AnimationTable *at__h = go_box(AnimationTable, (AnimationTable){.anims = Map_i32_AnimationPtr_make(0)});
+    return ((GoIface){370, (void *)((&(*at__h)))});
 }
 
 typedef struct Env_lambda_937 { char _unused; } Env_lambda_937;
 static GoIface lambda_937(Env_lambda_937 *_env) {
-    RemapPreset *rp__h = go_box(RemapPreset, Map_i32_RemapTable_make(0));
-    return ((GoIface){373, (void *)((&(*rp__h)))});
+    Map_i32_CharPtr *ic__h = go_box(Map_i32_CharPtr, Map_i32_CharPtr_make(0));
+    return ((GoIface){371, (void *)((&(*ic__h)))});
 }
 
 typedef struct Env_lambda_938 { char _unused; } Env_lambda_938;
 static GoIface lambda_938(Env_lambda_938 *_env) {
+    Slice_AnimFrame *af__h = go_box(Slice_AnimFrame, GO_MAKE(Slice_AnimFrame, AnimFrame, 0, 8));
+    return ((GoIface){372, (void *)((&(*af__h)))});
+}
+
+typedef struct Env_lambda_939 { char _unused; } Env_lambda_939;
+static GoIface lambda_939(Env_lambda_939 *_env) {
+    Map_i32_i32 *ii__h = go_box(Map_i32_i32, Map_i32_i32_make(0));
+    return ((GoIface){177, (void *)((&(*ii__h)))});
+}
+
+typedef struct Env_lambda_940 { char _unused; } Env_lambda_940;
+static GoIface lambda_940(Env_lambda_940 *_env) {
+    Map_i32_f32 *if3__h = go_box(Map_i32_f32, Map_i32_f32_make(0));
+    return ((GoIface){178, (void *)((&(*if3__h)))});
+}
+
+typedef struct Env_lambda_941 { char _unused; } Env_lambda_941;
+static GoIface lambda_941(Env_lambda_941 *_env) {
+    RemapPreset *rp__h = go_box(RemapPreset, Map_i32_RemapTable_make(0));
+    return ((GoIface){373, (void *)((&(*rp__h)))});
+}
+
+typedef struct Env_lambda_942 { char _unused; } Env_lambda_942;
+static GoIface lambda_942(Env_lambda_942 *_env) {
     RemapTable *rt__h = go_box(RemapTable, Map_i32_Arr2_i32_make(0));
     return ((GoIface){374, (void *)((&(*rt__h)))});
 }
 
-typedef struct Env_lambda_939 { GameStatePool* *gsp; int *stateID; Slice_GoIface *objs; } Env_lambda_939;
-static void lambda_939(Env_lambda_939 *_env) {
+typedef struct Env_lambda_943 { GameStatePool* *gsp; int *stateID; Slice_GoIface *objs; } Env_lambda_943;
+static void lambda_943(Env_lambda_943 *_env) {
     Map_int_Slice_GoIface_set(&(*_env->gsp)->poolObjs, (*_env->stateID), (*_env->objs));
 }
 
-typedef struct Env_lambda_940 { GameStatePool* *gsp; Map_StagePtr_StagePtr *cloned; } Env_lambda_940;
-static Stage* lambda_940(Env_lambda_940 *_env, Stage* s) {
+typedef struct Env_lambda_944 { GameStatePool* *gsp; Map_StagePtr_StagePtr *cloned; } Env_lambda_944;
+static Stage* lambda_944(Env_lambda_944 *_env, Stage* s) {
     if (s == NULL) {
         return NULL;
     }
@@ -17004,33 +17049,33 @@ static Stage* lambda_940(Env_lambda_940 *_env, Stage* s) {
     return c;
 }
 
-typedef struct Env_lambda_941 { char _unused; } Env_lambda_941;
-static bool lambda_941(Env_lambda_941 *_env, int i, int j) {
+typedef struct Env_lambda_945 { char _unused; } Env_lambda_945;
+static bool lambda_945(Env_lambda_945 *_env, int i, int j) {
     return (g_sdKeys.p[i] < g_sdKeys.p[j]);
 }
 
-typedef struct Env_lambda_942 { char _unused; } Env_lambda_942;
-static bool lambda_942(Env_lambda_942 *_env, int i, int j) {
+typedef struct Env_lambda_946 { char _unused; } Env_lambda_946;
+static bool lambda_946(Env_lambda_946 *_env, int i, int j) {
     return (g_sdKeys.p[i] < g_sdKeys.p[j]);
 }
 
-typedef struct Env_lambda_943 { char _unused; } Env_lambda_943;
-static bool lambda_943(Env_lambda_943 *_env, int i, int j) {
+typedef struct Env_lambda_947 { char _unused; } Env_lambda_947;
+static bool lambda_947(Env_lambda_947 *_env, int i, int j) {
     return (g_sdKeys.p[i] < g_sdKeys.p[j]);
 }
 
-typedef struct Env_lambda_944 { char _unused; } Env_lambda_944;
-static bool lambda_944(Env_lambda_944 *_env, int i, int j) {
+typedef struct Env_lambda_948 { char _unused; } Env_lambda_948;
+static bool lambda_948(Env_lambda_948 *_env, int i, int j) {
     return (g_sdKeys.p[i] < g_sdKeys.p[j]);
 }
 
-typedef struct Env_lambda_945 { System* *s; } Env_lambda_945;
-typedef struct Env_lambda_946 { Arr2_int *size; GoString *file; Slice_u8 *data; } Env_lambda_946;
-static void lambda_946(Env_lambda_946 *_env) {
+typedef struct Env_lambda_949 { System* *s; } Env_lambda_949;
+typedef struct Env_lambda_950 { Arr2_int *size; GoString *file; Slice_u8 *data; } Env_lambda_950;
+static void lambda_950(Env_lambda_950 *_env) {
     fn_saveScreenshot((*_env->data), (*_env->size).v[0], (*_env->size).v[1], (*_env->file));
 }
 
-static void lambda_945(Env_lambda_945 *_env) {
+static void lambda_949(Env_lambda_949 *_env) {
     if ((*_env->s)->screenshotInFlight) {
         Arr2_int _t1 = (*_env->s)->screenshotSize;
         GoString _t2 = (*_env->s)->screenshotFile;
@@ -17039,7 +17084,7 @@ static void lambda_945(Env_lambda_945 *_env) {
         Slice_u8 *data__h = go_box(Slice_u8, GO_MAKE_A(Slice_u8, u8, ((4 * (*size__h).v[0]) * (*size__h).v[1]), ((4 * (*size__h).v[0]) * (*size__h).v[1])));
         if (iface_FinishScreenshot_4c49171d(g_gfx, (*data__h), (*size__h).v[0], (*size__h).v[1])) {
             (*_env->s)->screenshotInFlight = false;
-            fn_SafeGo(((GoFunc){(void *)lambda_946, go_box(Env_lambda_946, ((Env_lambda_946){size__h, file__h, data__h}))}));
+            fn_SafeGo(((GoFunc){(void *)lambda_950, go_box(Env_lambda_950, ((Env_lambda_950){size__h, file__h, data__h}))}));
         }
     }
     if ((*_env->s)->isTakingScreenshot && (!(*_env->s)->screenshotInFlight)) {
@@ -17049,17 +17094,17 @@ static void lambda_945(Env_lambda_945 *_env) {
     }
 }
 
-typedef struct Env_lambda_947 { System* *s; Slice_GoString *btns; } Env_lambda_947;
-typedef struct Env_lambda_948 { char _unused; } Env_lambda_948;
-static bool lambda_948(Env_lambda_948 *_env, GoString tok) {
+typedef struct Env_lambda_951 { System* *s; Slice_GoString *btns; } Env_lambda_951;
+typedef struct Env_lambda_952 { char _unused; } Env_lambda_952;
+static bool lambda_952(Env_lambda_952 *_env, GoString tok) {
     bool _t1; int _t2 = Map_GoString_int_get(&g_StringToButtonLUT, tok, &_t1);
     int idx = _t2;
     bool ok = _t1;
     return (((ok && (idx != 25)) && (idx >= 15)) && (idx <= 24));
 }
 
-typedef struct Env_lambda_949 { char _unused; } Env_lambda_949;
-static bool lambda_949(Env_lambda_949 *_env, GoString tok) {
+typedef struct Env_lambda_953 { char _unused; } Env_lambda_953;
+static bool lambda_953(Env_lambda_953 *_env, GoString tok) {
     {
         GoString _t1 = tok;
         do {
@@ -17072,13 +17117,13 @@ static bool lambda_949(Env_lambda_949 *_env, GoString tok) {
     }
 }
 
-static bool lambda_947(Env_lambda_947 *_env, int i, CommandList* cl) {
+static bool lambda_951(Env_lambda_951 *_env, int i, CommandList* cl) {
     if ((cl == NULL) || (cl->Buffer == NULL)) {
         return false;
     }
     int controllerKey = System_uiControllerKey((*_env->s), i);
-    GoFunc isAxisToken = ((GoFunc){(void *)lambda_948, &(Env_lambda_948){0}});
-    GoFunc repeatable = ((GoFunc){(void *)lambda_949, &(Env_lambda_949){0}});
+    GoFunc isAxisToken = ((GoFunc){(void *)lambda_952, &(Env_lambda_952){0}});
+    GoFunc repeatable = ((GoFunc){(void *)lambda_953, &(Env_lambda_953){0}});
     InputBuffer* ib = cl->Buffer;
     {
         Slice_GoString _t2 = (*_env->btns);
@@ -17162,8 +17207,8 @@ static bool lambda_947(Env_lambda_947 *_env, int i, CommandList* cl) {
     return false;
 }
 
-typedef struct Env_lambda_950 { char _unused; } Env_lambda_950;
-static void lambda_950(Env_lambda_950 *_env, int i) {
+typedef struct Env_lambda_954 { char _unused; } Env_lambda_954;
+static void lambda_954(Env_lambda_954 *_env, int i) {
     if ((((i < 0) || (i >= 12)) || (g_sys.chars.v[i].len == 0)) || (g_sys.chars.v[i].p[0] == NULL)) {
         return;
     }
@@ -17176,14 +17221,20 @@ static void lambda_950(Env_lambda_950 *_env, int i) {
     }
 }
 
-typedef struct Env_lambda_951 { System* *s; } Env_lambda_951;
-static void lambda_951(Env_lambda_951 *_env) {
+typedef struct Env_lambda_955 { System* *s; } Env_lambda_955;
+static void lambda_955(Env_lambda_955 *_env) {
     beep_Mixer_Clear((*_env->s)->soundMixer);
     beep_Mixer_Clear((*_env->s)->videoMixer);
 }
 
-typedef struct Env_lambda_952 { System* *s; } Env_lambda_952;
-static bool lambda_952(Env_lambda_952 *_env, int i, int j) {
+typedef struct Env_lambda_956 { System* *s; } Env_lambda_956;
+static void lambda_956(Env_lambda_956 *_env) {
+    iface_SetModelVertexData_ed700385(g_gfx, 0U, (*_env->s)->stage->model->vertexBuffer);
+    iface_SetModelIndexData_e06c74a6(g_gfx, 0U, (*_env->s)->stage->model->elementBuffer);
+}
+
+typedef struct Env_lambda_957 { System* *s; } Env_lambda_957;
+static bool lambda_957(Env_lambda_957 *_env, int i, int j) {
     Explod* _t1 = (*_env->s)->explodDrawOrder.p[i];
     Explod* _t2 = (*_env->s)->explodDrawOrder.p[j];
     Explod* a = _t1;
@@ -17203,8 +17254,8 @@ static bool lambda_952(Env_lambda_952 *_env, int i, int j) {
     return (a->sortindex < b->sortindex);
 }
 
-typedef struct Env_lambda_953 { System* *s; } Env_lambda_953;
-static bool lambda_953(Env_lambda_953 *_env, int i, int j) {
+typedef struct Env_lambda_958 { System* *s; } Env_lambda_958;
+static bool lambda_958(Env_lambda_958 *_env, int i, int j) {
     Explod* _t1 = (*_env->s)->explodDrawOrder.p[i];
     Explod* _t2 = (*_env->s)->explodDrawOrder.p[j];
     Explod* a = _t1;
@@ -17224,8 +17275,8 @@ static bool lambda_953(Env_lambda_953 *_env, int i, int j) {
     return (a->sortindex < b->sortindex);
 }
 
-typedef struct Env_lambda_954 { System* *s; } Env_lambda_954;
-static bool lambda_954(Env_lambda_954 *_env, int team) {
+typedef struct Env_lambda_959 { System* *s; } Env_lambda_959;
+static bool lambda_959(Env_lambda_959 *_env, int team) {
     {
         int i = team;
         for (; i < 8; i += 2) {
@@ -17238,8 +17289,8 @@ static bool lambda_954(Env_lambda_954 *_env, int team) {
     return true;
 }
 
-typedef struct Env_lambda_955 { System* *s; } Env_lambda_955;
-static bool lambda_955(Env_lambda_955 *_env, int team) {
+typedef struct Env_lambda_960 { System* *s; } Env_lambda_960;
+static bool lambda_960(Env_lambda_960 *_env, int team) {
     f32 clutchRatio = (((f32)(*_env->s)->fightScreen.round->clutch_threshold) / 0x1.9p+06f);
     {
         int i = team;
@@ -17256,8 +17307,8 @@ static bool lambda_955(Env_lambda_955 *_env, int team) {
     return true;
 }
 
-typedef struct Env_lambda_956 { System* *s; } Env_lambda_956;
-static void lambda_956(Env_lambda_956 *_env) {
+typedef struct Env_lambda_961 { System* *s; } Env_lambda_961;
+static void lambda_961(Env_lambda_961 *_env) {
     if (false) {
         fn_vitaGCTrigger(33554432U);
         fn_vitaMatchEnd();
@@ -17279,21 +17330,37 @@ static void lambda_956(Env_lambda_956 *_env) {
     }
 }
 
-typedef struct Env_lambda_957 { System* *s; } Env_lambda_957;
-static void lambda_957(Env_lambda_957 *_env) {
+typedef struct Env_lambda_962 { System* *s; } Env_lambda_962;
+static void lambda_962(Env_lambda_962 *_env) {
     if ((((System_matchOver((*_env->s)) || (*_env->s)->SystemStateVars_.esc) || (*_env->s)->SystemStateVars_.endMatch) || (*_env->s)->SystemStateVars_.gameEnd) || (*_env->s)->SystemStateVars_.fightLoopEnd) {
         NetConnection_Stop((*_env->s)->netConnection);
     }
 }
 
-typedef struct Env_lambda_958 { System* *s; } Env_lambda_958;
-static void lambda_958(Env_lambda_958 *_env) {
-    do {
-    } while (0);
+typedef struct Env_lambda_963 { System* *s; } Env_lambda_963;
+static void lambda_963(Env_lambda_963 *_env) {
+    {
+        GoSelCase _t1[1];
+        GoString _t2; bool _t3 = false;
+        _t1[0] = (GoSelCase){(*_env->s)->commandLine, 2, &_t2, &_t3};
+        int _t4 = go_select(_t1, 1, true);
+        do {
+            if (_t4 == 0) {
+                GoString cl = _t2;
+                {
+                    GoIface err = lua_LState_DoString((*_env->s)->luaLState, cl);
+                    if (err.type != 0) {
+                        lua_LState_RaiseError((*_env->s)->luaLState, GOSTR("Error during Debug Input Lua execution:\nCode: %s\nDetails: %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, cl)}), ((GoIface){17, go_box(GoString, iface_Error_319077b5(err))})));
+                    }
+                }
+            } else {
+            }
+        } while (0);
+    }
 }
 
-typedef struct Env_lambda_959 { Select* *s; SelectChar *sc; PreloadedAnims *localAnims; Map_Arr2_u16_bool *listSpr; Sff* *tempSff; } Env_lambda_959;
-static GoIface lambda_959(Env_lambda_959 *_env, GoString filename) {
+typedef struct Env_lambda_964 { Select* *s; SelectChar *sc; PreloadedAnims *localAnims; Map_Arr2_u16_bool *listSpr; Sff* *tempSff; } Env_lambda_964;
+static GoIface lambda_964(Env_lambda_964 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -17328,8 +17395,8 @@ static GoIface lambda_959(Env_lambda_959 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_960 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; Slice_i32 *selPal; } Env_lambda_960;
-static GoIface lambda_960(Env_lambda_960 *_env, GoString file) {
+typedef struct Env_lambda_965 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; Slice_i32 *selPal; } Env_lambda_965;
+static GoIface lambda_965(Env_lambda_965 *_env, GoString file) {
     GoIface err = {0};
     Ret_SffPtr__Slice_i32__GoIface _t1 = fn_preloadSff(file, 0, (*_env->listSpr));
     (*_env->localSff) = _t1.r0;
@@ -17341,8 +17408,8 @@ static GoIface lambda_960(Env_lambda_960 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_961 { GoString *defText; } Env_lambda_961;
-static GoIface lambda_961(Env_lambda_961 *_env, GoString file) {
+typedef struct Env_lambda_966 { GoString *defText; } Env_lambda_966;
+static GoIface lambda_966(Env_lambda_966 *_env, GoString file) {
     Ret_GoString__GoIface _t1 = fn_LoadText(file);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -17353,8 +17420,8 @@ static GoIface lambda_961(Env_lambda_961 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_962 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; } Env_lambda_962;
-static GoIface lambda_962(Env_lambda_962 *_env, GoString file) {
+typedef struct Env_lambda_967 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; } Env_lambda_967;
+static GoIface lambda_967(Env_lambda_967 *_env, GoString file) {
     GoIface err = {0};
     Ret_SffPtr__Slice_i32__GoIface _t1 = fn_preloadSff(file, 3, (*_env->listSpr));
     (*_env->localSff) = _t1.r0;
@@ -17365,21 +17432,21 @@ static GoIface lambda_962(Env_lambda_962 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_963 { SelectChar* *sc; GoString *defPathFromSelect; } Env_lambda_963;
-static SelectChar* lambda_963(Env_lambda_963 *_env, GoString reason) {
+typedef struct Env_lambda_968 { SelectChar* *sc; GoString *defPathFromSelect; } Env_lambda_968;
+static SelectChar* lambda_968(Env_lambda_968 *_env, GoString reason) {
     (*_env->sc)->name = GOSTR("dummyslot");
     fn_LogMessage(GOSTR("Failed to add char: %v (%s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*_env->defPathFromSelect))}), ((GoIface){17, go_box(GoString, reason)})));
     return NULL;
 }
 
-typedef struct Env_lambda_964 { GoOpaque /* time.Time */ *tnow; GoString *defPathFromSelect; } Env_lambda_964;
-static void lambda_964(Env_lambda_964 *_env) {
+typedef struct Env_lambda_969 { GoOpaque /* time.Time */ *tnow; GoString *defPathFromSelect; } Env_lambda_969;
+static void lambda_969(Env_lambda_969 *_env) {
     GoString tstr = fmt_Sprintf(GOSTR("Char: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, (*_env->defPathFromSelect))})));
     System_loadTime(&g_sys, (*_env->tnow), tstr, false, false);
 }
 
-typedef struct Env_lambda_965 { SelectChar* *sc; } Env_lambda_965;
-static GoIface lambda_965(Env_lambda_965 *_env, GoString filename) {
+typedef struct Env_lambda_970 { SelectChar* *sc; } Env_lambda_970;
+static GoIface lambda_970(Env_lambda_970 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -17421,19 +17488,19 @@ static GoIface lambda_965(Env_lambda_965 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_966 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_966;
-static void lambda_966(Env_lambda_966 *_env) {
+typedef struct Env_lambda_971 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_971;
+static void lambda_971(Env_lambda_971 *_env) {
     System_loadTime(&g_sys, (*_env->tnow), (*_env->tstr), false, false);
 }
 
-typedef struct Env_lambda_967 { GoString *finalDefPath; } Env_lambda_967;
-static GoIface lambda_967(Env_lambda_967 *_env, GoString file) {
+typedef struct Env_lambda_972 { GoString *finalDefPath; } Env_lambda_972;
+static GoIface lambda_972(Env_lambda_972 *_env, GoString file) {
     (*_env->finalDefPath) = file;
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_968 { Slice_GoString *lines; GoIface *err; } Env_lambda_968;
-static GoIface lambda_968(Env_lambda_968 *_env, GoString file) {
+typedef struct Env_lambda_973 { Slice_GoString *lines; GoIface *err; } Env_lambda_973;
+static GoIface lambda_973(Env_lambda_973 *_env, GoString file) {
     GoString str = (GoString){0};
     Ret_GoString__GoIface _t1 = fn_LoadText(file);
     str = _t1.r0;
@@ -17445,8 +17512,8 @@ static GoIface lambda_968(Env_lambda_968 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_969 { SelectStage* *ss; int *idx; } Env_lambda_969;
-static GoIface lambda_969(Env_lambda_969 *_env, GoString filename) {
+typedef struct Env_lambda_974 { SelectStage* *ss; int *idx; } Env_lambda_974;
+static GoIface lambda_974(Env_lambda_974 *_env, GoString filename) {
     {
         for (; (*_env->ss)->attachedchardef.len <= (*_env->idx); ) {
             (*_env->ss)->attachedchardef = GO_APPEND(Slice_GoString, (*_env->ss)->attachedchardef, GOSTR(""));
@@ -17457,13 +17524,13 @@ static GoIface lambda_969(Env_lambda_969 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_970 { Loader* *l; } Env_lambda_970;
-static void lambda_970(Env_lambda_970 *_env) {
-    TODO(/* builtin close at system.go:5955 */);
+typedef struct Env_lambda_975 { Loader* *l; } Env_lambda_975;
+static void lambda_975(Env_lambda_975 *_env) {
+    go_chan_close((*_env->l)->cancelCh);
 }
 
-typedef struct Env_lambda_971 { CharGlobalInfo* *gi; GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_971;
-static void lambda_971(Env_lambda_971 *_env) {
+typedef struct Env_lambda_976 { CharGlobalInfo* *gi; GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_976;
+static void lambda_976(Env_lambda_976 *_env) {
     System_loadTime(&g_sys, (*_env->tnow), (*_env->tstr), false, true);
     if (((*_env->gi)->ikemenver.v[0] == 0U) && ((*_env->gi)->ikemenver.v[1] == 0U)) {
         if (((*_env->gi)->mugenver.v[0] == 1U) && ((*_env->gi)->mugenver.v[1] == 1U)) {
@@ -17482,13 +17549,13 @@ static void lambda_971(Env_lambda_971 *_env) {
     }
 }
 
-typedef struct Env_lambda_972 { Char* *p; } Env_lambda_972;
-static void lambda_972(Env_lambda_972 *_env) {
+typedef struct Env_lambda_977 { Char* *p; } Env_lambda_977;
+static void lambda_977(Env_lambda_977 *_env) {
     (*_env->p)->stillLoading = false;
 }
 
-typedef struct Env_lambda_973 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_973;
-static void lambda_973(Env_lambda_973 *_env) {
+typedef struct Env_lambda_978 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_978;
+static void lambda_978(Env_lambda_978 *_env) {
     if (g_sys.stage != NULL) {
         System_loadTime(&g_sys, (*_env->tnow), (*_env->tstr), false, true);
         if ((g_sys.stage->ikemenver.v[0] == 0U) && (g_sys.stage->ikemenver.v[1] == 0U)) {
@@ -17509,13 +17576,13 @@ static void lambda_973(Env_lambda_973 *_env) {
     }
 }
 
-typedef struct Env_lambda_974 { Loader* *l; } Env_lambda_974;
-static void lambda_974(Env_lambda_974 *_env) {
-    TODO(/* stmt *ast.SendStmt at system.go:6744 */);
+typedef struct Env_lambda_979 { Loader* *l; } Env_lambda_979;
+static void lambda_979(Env_lambda_979 *_env) {
+    { LoaderState _t1 = (*_env->l)->state; go_chan_send((*_env->l)->loadExit, &_t1); }
 }
 
-typedef struct Env_lambda_975 { Slice_bool *charDone; } Env_lambda_975;
-static bool lambda_975(Env_lambda_975 *_env) {
+typedef struct Env_lambda_980 { Slice_bool *charDone; } Env_lambda_980;
+static bool lambda_980(Env_lambda_980 *_env) {
     {
         Slice_bool _t2 = (*_env->charDone);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -17529,8 +17596,14 @@ static bool lambda_975(Env_lambda_975 *_env) {
     return true;
 }
 
-typedef struct Env_lambda_976 { System* *s; Map_GoString_GoString *shaders; GoString *name; } Env_lambda_976;
-static GoIface lambda_976(Env_lambda_976 *_env, GoString filename) {
+typedef struct Env_lambda_981 { Slice_u8 *data; GoString *key; } Env_lambda_981;
+static void lambda_981(Env_lambda_981 *_env) {
+    iface_UnloadCustomSpriteShader_b675cad7(g_gfx, (*_env->key));
+    iface_LoadCustomSpriteShader_f41f8f35(g_gfx, (*_env->key), (*_env->data));
+}
+
+typedef struct Env_lambda_982 { System* *s; Map_GoString_GoString *shaders; GoString *name; } Env_lambda_982;
+static GoIface lambda_982(Env_lambda_982 *_env, GoString filename) {
     bool _df2 = false; GoFunc _df2_f;
     Ret_GoIface__GoIface _t1 = fn_OpenFile(filename);
     GoIface f = _t1.r0;
@@ -17561,8 +17634,8 @@ static GoIface lambda_976(Env_lambda_976 *_env, GoString filename) {
     if (_df2) { _df2 = false; ((GoIface (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-typedef struct Env_lambda_977 { System* *s; Map_GoString_GoString *shaders; } Env_lambda_977;
-static GoIface lambda_977(Env_lambda_977 *_env, GoString filename) {
+typedef struct Env_lambda_983 { System* *s; Map_GoString_GoString *shaders; } Env_lambda_983;
+static GoIface lambda_983(Env_lambda_983 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -17602,38 +17675,49 @@ static GoIface lambda_977(Env_lambda_977 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_978 { Slice_GoString *keys; } Env_lambda_978;
-static bool lambda_978(Env_lambda_978 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
-}
-
-typedef struct Env_lambda_979 { Slice_GoString *keys; } Env_lambda_979;
-static bool lambda_979(Env_lambda_979 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
-}
-
-typedef struct Env_lambda_980 { Slice_GoString *keys; } Env_lambda_980;
-static bool lambda_980(Env_lambda_980 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
-}
-
-typedef struct Env_lambda_981 { Slice_GoString *keys; } Env_lambda_981;
-static bool lambda_981(Env_lambda_981 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
-}
-
-typedef struct Env_lambda_982 { Slice_GoString *keys; } Env_lambda_982;
-static bool lambda_982(Env_lambda_982 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
-}
-
-typedef struct Env_lambda_983 { Slice_GoString *keys; } Env_lambda_983;
-static bool lambda_983(Env_lambda_983 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
-}
-
 typedef struct Env_lambda_984 { char _unused; } Env_lambda_984;
-static Arr256_bool lambda_984(Env_lambda_984 *_env) {
+typedef struct Env_lambda_985 { GoString *name; } Env_lambda_985;
+static void lambda_985(Env_lambda_985 *_env) {
+    iface_UnloadCustomSpriteShader_b675cad7(g_gfx, (*_env->name));
+}
+
+static GoFunc lambda_984(Env_lambda_984 *_env, GoString name) {
+    GoString *name__h = go_box(GoString, name);
+    return ((GoFunc){(void *)lambda_985, go_box(Env_lambda_985, ((Env_lambda_985){name__h}))});
+}
+
+typedef struct Env_lambda_986 { Slice_GoString *keys; } Env_lambda_986;
+static bool lambda_986(Env_lambda_986 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_987 { Slice_GoString *keys; } Env_lambda_987;
+static bool lambda_987(Env_lambda_987 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_988 { Slice_GoString *keys; } Env_lambda_988;
+static bool lambda_988(Env_lambda_988 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_989 { Slice_GoString *keys; } Env_lambda_989;
+static bool lambda_989(Env_lambda_989 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_990 { Slice_GoString *keys; } Env_lambda_990;
+static bool lambda_990(Env_lambda_990 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_991 { Slice_GoString *keys; } Env_lambda_991;
+static bool lambda_991(Env_lambda_991 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_992 { char _unused; } Env_lambda_992;
+static Arr256_bool lambda_992(Env_lambda_992 *_env) {
     Arr256_bool t = {0};
     {
         int i = 0;
@@ -25376,7 +25460,7 @@ void DrawList_add(DrawList* dl, SpriteData* sd) {
     (*dl) = GO_APPEND(Slice_SpriteDataPtr, (*dl), sd);
 }
 
-// DrawList.draw (anim.go:1522), 2 TODO
+// DrawList.draw (anim.go:1522), 0 TODO
 void DrawList_draw(DrawList dl, i32 layerno, bool under, f32 cameraX, f32 cameraY, f32 cameraScl) {
     DrawList *dl__h = go_box(DrawList, dl);
     if ((*dl__h).len == 0) {
@@ -25429,8 +25513,8 @@ void DrawList_draw(DrawList dl, i32 layerno, bool under, f32 cameraX, f32 camera
     Ret_Arr4_i32__bool _t8 = System_fightDrawClip(&g_sys);
     Arr4_i32 fightClip = _t8.r0;
     bool clipFight = _t8.r1;
-    if (false && TODO(/* call of unknown function at anim.go:1587 */)) {
-        TODO(/* call of unknown function at anim.go:1588 */);
+    if (false && fn_vitaDrawCensusDue()) {
+        fn_vitaDrawCensus((*dl__h), (*sortList__h), layerno);
     }
     {
         Slice_int _t10 = (*sortList__h);
@@ -45406,7 +45490,7 @@ void Char_resetModifyPlayer(Char* c) {
     c->movelist = 0;
 }
 
-// Char.load (char.go:4176), 1 TODO
+// Char.load (char.go:4176), 0 TODO
 GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
     Char* *c__h = go_box(Char*, c);
     CharGlobalInfo* *gi__h = go_box(CharGlobalInfo*, gi);
@@ -45743,7 +45827,7 @@ void Char_loadPalettes(Char* c) {
     CharGlobalInfo* _t1 = Char_gi(c);
     CharGlobalInfo* gi__hv = _t1; __typeof__(gi__hv) *gi__h = &gi__hv;
     int maxPal = g_sys.cfg.Config.PaletteMax;
-    GoFunc readAct = ((GoFunc){(void *)lambda_464, &(Env_lambda_464){gi__h}});
+    GoFunc readAct = ((GoFunc){(void *)lambda_465, &(Env_lambda_465){gi__h}});
     if ((*gi__h)->sff->header.Version.v[0] == 1U) {
         PaletteList_ResetRemap(&(*gi__h)->palettedata->palList);
         int tmp = 0;
@@ -47337,22 +47421,22 @@ BytecodeValue Char_projTimeTrigger(Char* c, BytecodeValue pid, GoFunc match) {
 
 // Char.projCancelTime (char.go:6338), 0 TODO
 BytecodeValue Char_projCancelTime(Char* c, BytecodeValue pid) {
-    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_466, go_box(Env_lambda_466, ((Env_lambda_466){0}))}));
+    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_467, go_box(Env_lambda_467, ((Env_lambda_467){0}))}));
 }
 
 // Char.projContactTime (char.go:6344), 0 TODO
 BytecodeValue Char_projContactTime(Char* c, BytecodeValue pid) {
-    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_467, go_box(Env_lambda_467, ((Env_lambda_467){0}))}));
+    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_468, go_box(Env_lambda_468, ((Env_lambda_468){0}))}));
 }
 
 // Char.projGuardedTime (char.go:6350), 0 TODO
 BytecodeValue Char_projGuardedTime(Char* c, BytecodeValue pid) {
-    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_468, go_box(Env_lambda_468, ((Env_lambda_468){0}))}));
+    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_469, go_box(Env_lambda_469, ((Env_lambda_469){0}))}));
 }
 
 // Char.projHitTime (char.go:6356), 0 TODO
 BytecodeValue Char_projHitTime(Char* c, BytecodeValue pid) {
-    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_469, go_box(Env_lambda_469, ((Env_lambda_469){0}))}));
+    return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_470, go_box(Env_lambda_470, ((Env_lambda_470){0}))}));
 }
 
 // Char.reversalDefAttr (char.go:6362), 0 TODO
@@ -47490,7 +47574,7 @@ Slice_int Char_getTeamOrder(Char* c) {
             _cont1:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*team__h)), sizeof(int), ((GoFunc){(void *)lambda_471, go_box(Env_lambda_471, ((Env_lambda_471){team__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*team__h)), sizeof(int), ((GoFunc){(void *)lambda_472, go_box(Env_lambda_472, ((Env_lambda_472){team__h}))}));
     return (*team__h);
 }
 
@@ -48496,7 +48580,7 @@ TextSprite* Char_spawnText(Char* c) {
     if ((*playerTexts).len >= g_sys.cfg.Config.TextMax) {
         return NULL;
     }
-    TextSprite* _t1 = fn_RecoverOrAppend_TextSprite(playerTexts, ((GoFunc){(void *)lambda_472, go_box(Env_lambda_472, ((Env_lambda_472){0}))}), ((GoFunc){(void *)fv_fn_NewTextSprite, NULL}));
+    TextSprite* _t1 = fn_RecoverOrAppend_TextSprite(playerTexts, ((GoFunc){(void *)lambda_473, go_box(Env_lambda_473, ((Env_lambda_473){0}))}), ((GoFunc){(void *)fv_fn_NewTextSprite, NULL}));
     TextSprite* ts = _t1;
     ts->ownerid = c->id;
     return ts;
@@ -48823,7 +48907,7 @@ Projectile* Char_spawnProjectile(Char* c) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(root), fmt_Sprintf(GOSTR("Reached limit of %v projectiles. New projectile creation skipped"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, g_sys.cfg.Config.ProjectileMax)})))));
         return NULL;
     }
-    Projectile* _t1 = fn_RecoverOrAppend_Projectile(playerProjs, ((GoFunc){(void *)lambda_473, go_box(Env_lambda_473, ((Env_lambda_473){0}))}), ((GoFunc){(void *)fv_fn_newProjectile, NULL}));
+    Projectile* _t1 = fn_RecoverOrAppend_Projectile(playerProjs, ((GoFunc){(void *)lambda_474, go_box(Env_lambda_474, ((Env_lambda_474){0}))}), ((GoFunc){(void *)fv_fn_newProjectile, NULL}));
     Projectile* p = _t1;
     Projectile_initFromChar(p, c);
     return p;
@@ -50928,7 +51012,7 @@ void Char_mapReset(Char* c, Slice_GoString exclude) {
             _cont6:;
         }
     }
-    GoFunc isExcluded = ((GoFunc){(void *)lambda_474, &(Env_lambda_474){lowExcludes__h}});
+    GoFunc isExcluded = ((GoFunc){(void *)lambda_475, &(Env_lambda_475){lowExcludes__h}});
     {
         GoMapIter _t8 = gomap_iter((GoMap *)&c->mapArray);
         while (gomap_next(&_t8)) {
@@ -51642,7 +51726,7 @@ Slice_ClsnFinal Char_getClsnLocal(Char* c, i32 group) {
         Slice_ClsnOverride _t5 = overrides;
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
             ClsnOverride mod__hv = _t5.p[_t4]; __typeof__(mod__hv) *mod__h = &mod__hv;
-            GoFunc modify = ((GoFunc){(void *)lambda_475, &(Env_lambda_475){boxes__h, mod__h}});
+            GoFunc modify = ((GoFunc){(void *)lambda_476, &(Env_lambda_476){boxes__h, mod__h}});
             {
                 do {
                     if ((go_eq_Arr4_f32((*mod__h).rect, (Arr4_f32){{}}))) {
@@ -51677,7 +51761,7 @@ Slice_ClsnFinal Char_getClsnLocal(Char* c, i32 group) {
         Slice_ClsnTransform _t11 = (*c__h)->clsnTransforms.v[(group - 1)];
         for (int _t10 = 0; _t10 < _t11.len; _t10++) {
             ClsnTransform ct__hv = _t11.p[_t10]; __typeof__(ct__hv) *ct__h = &ct__hv;
-            GoFunc transform = ((GoFunc){(void *)lambda_476, &(Env_lambda_476){c__h, ct__h}});
+            GoFunc transform = ((GoFunc){(void *)lambda_477, &(Env_lambda_477){c__h, ct__h}});
             {
                 do {
                     if (((*ct__h).index < 0)) {
@@ -51852,7 +51936,7 @@ bool Char_projClsnOverlapTrigger(Char* c, int index, i32 targetID, i32 boxType) 
         return false;
     }
     if (System_zEnabled(&g_sys)) {
-        GoFunc getDepth = ((GoFunc){(void *)lambda_477, &(Env_lambda_477){0}});
+        GoFunc getDepth = ((GoFunc){(void *)lambda_478, &(Env_lambda_478){0}});
         Ret_f32__f32 _t1 = ((Ret_f32__f32 (*)(void *, Char*, i32))(getDepth).fn)((getDepth).env, target, boxType);
         f32 top = _t1.r0;
         f32 bot = _t1.r1;
@@ -52117,7 +52201,7 @@ bool Char_hittableByChar(Char* c, Char* getter, HitDef* ghd, StateType gst, bool
     if (((*c__h)->atktmp == 0) || (((((*c__h)->hitdef.attr <= 0) || ((*c__h)->ss.stateType == 8))) && ((*c__h)->hitdef.reversal_attr <= 0))) {
         return true;
     }
-    GoFunc countercheck = ((GoFunc){(void *)lambda_478, &(Env_lambda_478){c__h, getter__h, proj__h}});
+    GoFunc countercheck = ((GoFunc){(void *)lambda_479, &(Env_lambda_479){c__h, getter__h, proj__h}});
     if ((*c__h)->hitdef.reversal_attr > 0) {
         if (ghd->reversal_attr > 0) {
             if (((bool (*)(void *, HitDef*))(countercheck).fn)((countercheck).env, (&(*c__h)->hitdef))) {
@@ -52840,7 +52924,7 @@ i32 Char_hitResultCheck(Char* c, Char* getter, Projectile* proj) {
             Char_targetDrop((*c__h), -1, (*getter__h)->id, true);
         }
         if (((*c__h)->helperIndex != 0) && ((*c__h)->inheritJuggle != 0)) {
-            GoFunc sendJuggle = ((GoFunc){(void *)lambda_479, &(Env_lambda_479){c__h, getter__h}});
+            GoFunc sendJuggle = ((GoFunc){(void *)lambda_480, &(Env_lambda_480){c__h, getter__h}});
             if (((*c__h)->inheritJuggle == 1) && (Char_parent((*c__h), false) != NULL)) {
                 ((void (*)(void *, Char*))(sendJuggle).fn)((sendJuggle).env, Char_parent((*c__h), false));
             } else {
@@ -52856,7 +52940,7 @@ i32 Char_hitResultCheck(Char* c, Char* getter, Projectile* proj) {
         return hitResult;
     }
     (*getter__h)->p1facing = 0x0p+00f;
-    GoFunc invertXvel = ((GoFunc){(void *)lambda_480, &(Env_lambda_480){c__h, getter__h, isProjectile__h}});
+    GoFunc invertXvel = ((GoFunc){(void *)lambda_481, &(Env_lambda_481){c__h, getter__h, isProjectile__h}});
     if ((*getter__h)->hoverIdx >= 0) {
         ((void (*)(void *, f32))(invertXvel).fn)((invertXvel).env, byf);
         return hitResult;
@@ -54203,8 +54287,8 @@ void CharList_commandUpdate(CharList* cl) {
 // CharList.updateRunOrder (char.go:14060), 0 TODO
 void CharList_updateRunOrder(CharList* cl) {
     CharList* *cl__h = go_box(CharList*, cl);
-    GoFunc *getPriority__h = go_box(GoFunc, ((GoFunc){(void *)lambda_481, go_box(Env_lambda_481, ((Env_lambda_481){0}))}));
-    go_sort_slice((void *)GO_TMPADDR(Slice_CharPtr, (*cl__h)->runOrder), sizeof(Char*), ((GoFunc){(void *)lambda_483, go_box(Env_lambda_483, ((Env_lambda_483){cl__h, getPriority__h}))}));
+    GoFunc *getPriority__h = go_box(GoFunc, ((GoFunc){(void *)lambda_482, go_box(Env_lambda_482, ((Env_lambda_482){0}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_CharPtr, (*cl__h)->runOrder), sizeof(Char*), ((GoFunc){(void *)lambda_484, go_box(Env_lambda_484, ((Env_lambda_484){cl__h, getPriority__h}))}));
     {
         Slice_CharPtr _t2 = (*cl__h)->runOrder;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -54570,7 +54654,7 @@ void CharList_hitDetectionProjectile(CharList* cl, Char* getter) {
                             f32 angleSinValue__hv = ((f32)fn_cvfSin(((((f64)(*p__h)->platformAngle) / 0x1.68p+07) * 0x1.921fb54442d18p+01))); __typeof__(angleSinValue__hv) *angleSinValue__h = &angleSinValue__hv;
                             f32 angleCosValue__hv = ((f32)fn_cvfCos(((((f64)(*p__h)->platformAngle) / 0x1.68p+07) * 0x1.921fb54442d18p+01))); __typeof__(angleCosValue__hv) *angleCosValue__h = &angleCosValue__hv;
                             f32 oldDistX__hv = (((((*getter__h)->oldPos.v[0] * (*getter__h)->localscl) - (((*p__h)->pos.v[0]) * (*p__h)->localscl))) * (*p__h)->facing); __typeof__(oldDistX__hv) *oldDistX__h = &oldDistX__hv;
-                            GoFunc onPlatform = ((GoFunc){(void *)lambda_484, &(Env_lambda_484){getter__h, p__h, angleSinValue__h, angleCosValue__h, oldDistX__h}});
+                            GoFunc onPlatform = ((GoFunc){(void *)lambda_485, &(Env_lambda_485){getter__h, p__h, angleSinValue__h, angleCosValue__h, oldDistX__h}});
                             if ((distX >= ((((*p__h)->platformWidth.v[0] * (*angleCosValue__h))) * (*p__h)->localscl)) && (distX <= ((((*p__h)->platformWidth.v[1] * (*angleCosValue__h))) * (*p__h)->localscl))) {
                                 ((void (*)(void *, bool))(onPlatform).fn)((onPlatform).env, false);
                             } else {
@@ -54966,8 +55050,8 @@ void CharList_collisionDetection(CharList* cl) {
             _cont3:;
         }
     }
-    GoFunc *getPr__h = go_box(GoFunc, ((GoFunc){(void *)lambda_485, go_box(Env_lambda_485, ((Env_lambda_485){0}))}));
-    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*sortedOrder__h)), sizeof(int), ((GoFunc){(void *)lambda_487, go_box(Env_lambda_487, ((Env_lambda_487){cl__h, sortedOrder__h, getPr__h}))}));
+    GoFunc *getPr__h = go_box(GoFunc, ((GoFunc){(void *)lambda_486, go_box(Env_lambda_486, ((Env_lambda_486){0}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*sortedOrder__h)), sizeof(int), ((GoFunc){(void *)lambda_488, go_box(Env_lambda_488, ((Env_lambda_488){cl__h, sortedOrder__h, getPr__h}))}));
     {
         Slice_int _t5 = (*sortedOrder__h);
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -55422,8 +55506,8 @@ Ret_bool__f32__f32 fn_RectIntersectAABB(Arr4_f32 rect1, Arr4_f32 rect2) {
 Ret_bool__f32__f32 fn_RectIntersectSAT(Arr4_f32 rect1, Arr4_f32 rect2, Arr2_f32 pivot1, Arr2_f32 pivot2, f32 angle1, f32 angle2) {
     Arr4_Arr2_f32 r1__hv = fn_RectRotate(rect1, pivot1, angle1); __typeof__(r1__hv) *r1__h = &r1__hv;
     Arr4_Arr2_f32 r2__hv = fn_RectRotate(rect2, pivot2, angle2); __typeof__(r2__hv) *r2__h = &r2__hv;
-    GoFunc projectionRange__hv = ((GoFunc){(void *)lambda_488, go_box(Env_lambda_488, ((Env_lambda_488){0}))}); __typeof__(projectionRange__hv) *projectionRange__h = &projectionRange__hv;
-    GoFunc checkAxis = ((GoFunc){(void *)lambda_489, &(Env_lambda_489){r1__h, r2__h, projectionRange__h}});
+    GoFunc projectionRange__hv = ((GoFunc){(void *)lambda_489, go_box(Env_lambda_489, ((Env_lambda_489){0}))}); __typeof__(projectionRange__hv) *projectionRange__h = &projectionRange__hv;
+    GoFunc checkAxis = ((GoFunc){(void *)lambda_490, &(Env_lambda_490){r1__h, r2__h, projectionRange__h}});
     {
         for (int _t1 = 0; _t1 < 4; _t1++) {
             int i = _t1;
@@ -55446,7 +55530,7 @@ Ret_bool__f32__f32 fn_RectIntersectSAT(Arr4_f32 rect1, Arr4_f32 rect2, Arr2_f32 
             _cont4:;
         }
     }
-    GoFunc getBounds = ((GoFunc){(void *)lambda_490, &(Env_lambda_490){0}});
+    GoFunc getBounds = ((GoFunc){(void *)lambda_491, &(Env_lambda_491){0}});
     Ret_f32__f32__f32__f32 _t5 = ((Ret_f32__f32__f32__f32 (*)(void *, Arr4_Arr2_f32))(getBounds).fn)((getBounds).env, (*r1__h));
     f32 minX1 = _t5.r0;
     f32 maxX1 = _t5.r1;
@@ -55750,9 +55834,9 @@ GoString fn_SearchFile(GoString file, Slice_GoString dirs, Slice_GoString defaul
     if (go_streq(file, GOSTR(""))) {
         return GOSTR("");
     }
-    GoFunc hasDirPrefix = ((GoFunc){(void *)lambda_491, &(Env_lambda_491){0}});
-    GoFunc cleanDefaultDir = ((GoFunc){(void *)lambda_492, &(Env_lambda_492){0}});
-    GoFunc addUnique__hv = ((GoFunc){(void *)lambda_493, go_box(Env_lambda_493, ((Env_lambda_493){0}))}); __typeof__(addUnique__hv) *addUnique__h = &addUnique__hv;
+    GoFunc hasDirPrefix = ((GoFunc){(void *)lambda_492, &(Env_lambda_492){0}});
+    GoFunc cleanDefaultDir = ((GoFunc){(void *)lambda_493, &(Env_lambda_493){0}});
+    GoFunc addUnique__hv = ((GoFunc){(void *)lambda_494, go_box(Env_lambda_494, ((Env_lambda_494){0}))}); __typeof__(addUnique__hv) *addUnique__h = &addUnique__hv;
     Slice_GoString roots = dirs;
     Slice_GoString defaults = {0};
     {
@@ -55772,9 +55856,9 @@ GoString fn_SearchFile(GoString file, Slice_GoString dirs, Slice_GoString defaul
         roots = GO_SLICE_LIT(Slice_GoString, GoString, 1, GOSTR(""));
     }
     Map_GoString_bool seen__hv = Map_GoString_bool_make(0); __typeof__(seen__hv) *seen__h = &seen__hv;
-    GoFunc try = ((GoFunc){(void *)lambda_494, &(Env_lambda_494){seen__h}});
-    GoFunc join__hv = ((GoFunc){(void *)lambda_495, go_box(Env_lambda_495, ((Env_lambda_495){0}))}); __typeof__(join__hv) *join__h = &join__hv;
-    GoFunc rootBases = ((GoFunc){(void *)lambda_496, &(Env_lambda_496){addUnique__h, join__h}});
+    GoFunc try = ((GoFunc){(void *)lambda_495, &(Env_lambda_495){seen__h}});
+    GoFunc join__hv = ((GoFunc){(void *)lambda_496, go_box(Env_lambda_496, ((Env_lambda_496){0}))}); __typeof__(join__hv) *join__h = &join__hv;
+    GoFunc rootBases = ((GoFunc){(void *)lambda_497, &(Env_lambda_497){addUnique__h, join__h}});
     {
         Ret_bool__GoString__GoString _t4 = fn_IsZipPath(file);
         bool isZipFull = _t4.r0;
@@ -56130,7 +56214,7 @@ IniSection fn_resolveLifebarPrefixOperators(IniSection is, GoString targetPrefix
     prefixBase = strings_ToLower(strings_TrimSpace(prefixBase));
     GoString targetPrefixNoDot__hv = strings_TrimSuffix(targetPrefix, GOSTR(".")); __typeof__(targetPrefixNoDot__hv) *targetPrefixNoDot__h = &targetPrefixNoDot__hv;
     GoString wildcardToken__hv = go_strcat(prefixBase, GOSTR("*")); __typeof__(wildcardToken__hv) *wildcardToken__h = &wildcardToken__hv;
-    GoFunc matchesTarget = ((GoFunc){(void *)lambda_497, &(Env_lambda_497){targetPrefixNoDot__h, wildcardToken__h}});
+    GoFunc matchesTarget = ((GoFunc){(void *)lambda_498, &(Env_lambda_498){targetPrefixNoDot__h, wildcardToken__h}});
     {
         GoMapIter _t5 = gomap_iter((GoMap *)&is);
         while (gomap_next(&_t5)) {
@@ -56420,7 +56504,7 @@ Ret_GoIface__bool__GoIface IniSection_ReadAutoType(IniSection is, GoString name)
     if (!ok) {
         return (Ret_GoIface__bool__GoIface){(GoIface){0}, false, (GoIface){0}};
     }
-    GoFunc invalidValue = ((GoFunc){(void *)lambda_498, &(Env_lambda_498){name__h}});
+    GoFunc invalidValue = ((GoFunc){(void *)lambda_499, &(Env_lambda_499){name__h}});
     GoString s = strings_TrimSpace(raw);
     if (strings_ContainsRune(s, 34)) {
         if (((s.len < 2) || (((u8)s.p[0]) != 34U)) || (((u8)s.p[(s.len - 1)]) != 34U)) {
@@ -57096,10 +57180,14 @@ GoString fn_LowercaseNoExtension(GoString filename) {
     return strings_ToLower(nameOnly);
 }
 
-// SafeGo (common.go:2063), 1 TODO
+// SafeGo (common.go:2063), 0 TODO
 void fn_SafeGo(GoFunc f) {
     GoFunc *f__h = go_box(GoFunc, f);
-    TODO(/* go at common.go:2064 */);
+    {
+        GoEnv_1 *_t1 = (GoEnv_1 *)gc_alloc(sizeof(GoEnv_1));
+        _t1->f = ((GoFunc){(void *)lambda_500, go_box(Env_lambda_500, ((Env_lambda_500){f__h}))});
+        go_spawn(go_thunk_1, _t1);
+    }
 }
 
 // newCharCompiler (compiler.go:40), 0 TODO
@@ -57460,7 +57548,7 @@ bool fn_numberCandidate(GoString token) {
 Ret_i32__GoIface CharCompiler_attr(CharCompiler* c, GoString text, bool hitdef) {
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     bool strict = ((*c__h)->zssMode || (!g_sys.ignoreMostErrors));
-    return fn_attrMask(text, hitdef, strict, ((GoFunc){(void *)lambda_499, go_box(Env_lambda_499, ((Env_lambda_499){c__h}))}));
+    return fn_attrMask(text, hitdef, strict, ((GoFunc){(void *)lambda_503, go_box(Env_lambda_503, ((Env_lambda_503){c__h}))}));
 }
 
 // attrMask (compiler.go:826), 0 TODO
@@ -57763,7 +57851,7 @@ Ret_OpCode__OpCode__i32__i32__GoIface CharCompiler_intRange(CharCompiler* c, GoS
     }
     GoFunc intf = (GoFunc){0};
     if (g_sys.ignoreMostErrors) {
-        intf = ((GoFunc){(void *)lambda_500, go_box(Env_lambda_500, ((Env_lambda_500){c__h}))});
+        intf = ((GoFunc){(void *)lambda_504, go_box(Env_lambda_504, ((Env_lambda_504){c__h}))});
     } else {
         intf = ((GoFunc){(void *)mv_CharCompiler_integer2, (void *)((*c__h))});
     }
@@ -58090,7 +58178,7 @@ Ret_GoString__GoIface CharCompiler_readOldProjectileID(CharCompiler* c, GoString
     BytecodeExp* out__hv = out; __typeof__(out__hv) *out__h = &out__hv;
     GoString base__hv = go_substr(trname, 0, baseLen); __typeof__(base__hv) *base__h = &base__hv;
     GoString suffix = go_substr(trname, baseLen, -1);
-    GoFunc invalid = ((GoFunc){(void *)lambda_501, &(Env_lambda_501){c__h, out__h, base__h}});
+    GoFunc invalid = ((GoFunc){(void *)lambda_505, &(Env_lambda_505){c__h, out__h, base__h}});
     if (suffix.len > 0) {
         {
             GoString _t2 = suffix;
@@ -58289,7 +58377,7 @@ GoIface CharCompiler_flagTrigger(CharCompiler* c, BytecodeExp* out, GoString* in
         (*c__h)->token = CharCompiler_tokenizer((*c__h), (*in__h));
         return (GoIface){0};
     }
-    return CharCompiler_eqne((*c__h), (*in__h), ((GoFunc){(void *)lambda_502, go_box(Env_lambda_502, ((Env_lambda_502){c__h, out__h, in__h, pushSelf__h, tryKeyword__h}))}));
+    return CharCompiler_eqne((*c__h), (*in__h), ((GoFunc){(void *)lambda_506, go_box(Env_lambda_506, ((Env_lambda_506){c__h, out__h, in__h, pushSelf__h, tryKeyword__h}))}));
 }
 
 // CharCompiler.flagSub (compiler.go:1569), 0 TODO
@@ -63265,7 +63353,7 @@ Ret_BytecodeValue__GoIface CharCompiler_expValueCommand(CharCompiler* c, Bytecod
         (*opc__h) = 68U;
     }
     {
-        GoIface _t1 = CharCompiler_eqne((*c__h), (*in__h), ((GoFunc){(void *)lambda_503, go_box(Env_lambda_503, ((Env_lambda_503){c__h, out__h, in__h, rd__h, opc__h}))}));
+        GoIface _t1 = CharCompiler_eqne((*c__h), (*in__h), ((GoFunc){(void *)lambda_507, go_box(Env_lambda_507, ((Env_lambda_507){c__h, out__h, in__h, rd__h, opc__h}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return (Ret_BytecodeValue__GoIface){fn_bvNone(), err};
@@ -63279,9 +63367,9 @@ Ret_BytecodeValue__GoIface CharCompiler_expValueMoveType(CharCompiler* c, Byteco
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     BytecodeExp* *out__h = go_box(BytecodeExp*, out);
     GoString *trname__h = go_box(GoString, (*c__h)->token);
-    GoFunc pushSelf = ((GoFunc){(void *)lambda_504, go_box(Env_lambda_504, ((Env_lambda_504){out__h, trname__h}))});
+    GoFunc pushSelf = ((GoFunc){(void *)lambda_508, go_box(Env_lambda_508, ((Env_lambda_508){out__h, trname__h}))});
     {
-        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_505, go_box(Env_lambda_505, ((Env_lambda_505){c__h, out__h, trname__h}))}));
+        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_509, go_box(Env_lambda_509, ((Env_lambda_509){c__h, out__h, trname__h}))}));
         if (err.type != 0) {
             return (Ret_BytecodeValue__GoIface){fn_bvNone(), err};
         }
@@ -63294,9 +63382,9 @@ Ret_BytecodeValue__GoIface CharCompiler_expValueStateType(CharCompiler* c, Bytec
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     BytecodeExp* *out__h = go_box(BytecodeExp*, out);
     GoString *trname__h = go_box(GoString, (*c__h)->token);
-    GoFunc pushSelf = ((GoFunc){(void *)lambda_506, go_box(Env_lambda_506, ((Env_lambda_506){out__h, trname__h}))});
+    GoFunc pushSelf = ((GoFunc){(void *)lambda_510, go_box(Env_lambda_510, ((Env_lambda_510){out__h, trname__h}))});
     {
-        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_507, go_box(Env_lambda_507, ((Env_lambda_507){c__h, out__h, trname__h}))}));
+        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_511, go_box(Env_lambda_511, ((Env_lambda_511){c__h, out__h, trname__h}))}));
         if (err.type != 0) {
             return (Ret_BytecodeValue__GoIface){fn_bvNone(), err};
         }
@@ -63308,9 +63396,9 @@ Ret_BytecodeValue__GoIface CharCompiler_expValueStateType(CharCompiler* c, Bytec
 Ret_BytecodeValue__GoIface CharCompiler_expValueTeamMode(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd) {
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     BytecodeExp* *out__h = go_box(BytecodeExp*, out);
-    GoFunc pushSelf = ((GoFunc){(void *)lambda_508, go_box(Env_lambda_508, ((Env_lambda_508){out__h}))});
+    GoFunc pushSelf = ((GoFunc){(void *)lambda_512, go_box(Env_lambda_512, ((Env_lambda_512){out__h}))});
     {
-        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_509, go_box(Env_lambda_509, ((Env_lambda_509){c__h, out__h}))}));
+        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_513, go_box(Env_lambda_513, ((Env_lambda_513){c__h, out__h}))}));
         if (err.type != 0) {
             return (Ret_BytecodeValue__GoIface){fn_bvNone(), err};
         }
@@ -63322,9 +63410,9 @@ Ret_BytecodeValue__GoIface CharCompiler_expValueTeamMode(CharCompiler* c, Byteco
 Ret_BytecodeValue__GoIface CharCompiler_expValuePhysics(CharCompiler* c, BytecodeExp* out, GoString* in, bool rd) {
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     BytecodeExp* *out__h = go_box(BytecodeExp*, out);
-    GoFunc pushSelf = ((GoFunc){(void *)lambda_510, go_box(Env_lambda_510, ((Env_lambda_510){out__h}))});
+    GoFunc pushSelf = ((GoFunc){(void *)lambda_514, go_box(Env_lambda_514, ((Env_lambda_514){out__h}))});
     {
-        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_511, go_box(Env_lambda_511, ((Env_lambda_511){c__h, out__h}))}));
+        GoIface err = CharCompiler_flagTrigger((*c__h), (*out__h), in, pushSelf, ((GoFunc){(void *)lambda_515, go_box(Env_lambda_515, ((Env_lambda_515){c__h, out__h}))}));
         if (err.type != 0) {
             return (Ret_BytecodeValue__GoIface){fn_bvNone(), err};
         }
@@ -64177,8 +64265,8 @@ Ret_i32__bool__bool fn_parseTriggerNumber(GoString name) {
 // CharCompiler.parseSection (compiler.go:6493), 0 TODO
 Ret_IniSection__GoIface CharCompiler_parseSection(CharCompiler* c, GoFunc sctrl) {
     IniSection is = fn_NewIniSection();
-    GoFunc findTopLevelEqual = ((GoFunc){(void *)lambda_512, &(Env_lambda_512){0}});
-    GoFunc parseSpecialParamName = ((GoFunc){(void *)lambda_513, &(Env_lambda_513){0}});
+    GoFunc findTopLevelEqual = ((GoFunc){(void *)lambda_516, &(Env_lambda_516){0}});
+    GoFunc parseSpecialParamName = ((GoFunc){(void *)lambda_517, &(Env_lambda_517){0}});
     {
         for (; c->i < c->lines.len; c->i++) {
             GoString line = strings_TrimSpace(fn_cutComment(c->lines.p[c->i]));
@@ -64454,7 +64542,7 @@ GoIface CharCompiler_paramPrefixValueSub(CharCompiler* c, IniSection is, StateCo
     u8 *id__h = go_box_a(u8, id);
     int *numArg__h = go_box_a(int, numArg);
     bool *ffxDefault__h = go_box_a(bool, ffxDefault);
-    return CharCompiler_stateParam((*c__h), is, name, mandatory, ((GoFunc){(void *)lambda_514, go_box(Env_lambda_514, ((Env_lambda_514){c__h, sc__h, id__h, numArg__h, ffxDefault__h}))}));
+    return CharCompiler_stateParam((*c__h), is, name, mandatory, ((GoFunc){(void *)lambda_518, go_box(Env_lambda_518, ((Env_lambda_518){c__h, sc__h, id__h, numArg__h, ffxDefault__h}))}));
 }
 
 // CharCompiler.exprs (compiler.go:6859), 0 TODO
@@ -64585,7 +64673,7 @@ GoIface CharCompiler_paramAnimtypeSub(CharCompiler* c, IniSection is, StateContr
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     GoString *paramName__h = go_box(GoString, paramName);
     u8 *id__h = go_box_a(u8, id);
-    return CharCompiler_stateParam((*c__h), is, (*paramName__h), false, ((GoFunc){(void *)lambda_515, go_box(Env_lambda_515, ((Env_lambda_515){c__h, sc__h, paramName__h, id__h}))}));
+    return CharCompiler_stateParam((*c__h), is, (*paramName__h), false, ((GoFunc){(void *)lambda_519, go_box(Env_lambda_519, ((Env_lambda_519){c__h, sc__h, paramName__h, id__h}))}));
 }
 
 // CharCompiler.paramHittype (compiler.go:7031), 0 TODO
@@ -64606,7 +64694,7 @@ GoIface CharCompiler_paramHittypeSub(CharCompiler* c, IniSection is, StateContro
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     GoString *paramName__h = go_box(GoString, paramName);
     u8 *id__h = go_box_a(u8, id);
-    return CharCompiler_stateParam((*c__h), is, (*paramName__h), false, ((GoFunc){(void *)lambda_516, go_box(Env_lambda_516, ((Env_lambda_516){c__h, sc__h, paramName__h, id__h}))}));
+    return CharCompiler_stateParam((*c__h), is, (*paramName__h), false, ((GoFunc){(void *)lambda_520, go_box(Env_lambda_520, ((Env_lambda_520){c__h, sc__h, paramName__h, id__h}))}));
 }
 
 // CharCompiler.paramPostype (compiler.go:7081), 0 TODO
@@ -64626,7 +64714,7 @@ GoIface CharCompiler_paramPostypeSub(CharCompiler* c, IniSection is, StateContro
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     u8 *id__h = go_box_a(u8, id);
-    return CharCompiler_stateParam((*c__h), is, GOSTR("postype"), false, ((GoFunc){(void *)lambda_517, go_box(Env_lambda_517, ((Env_lambda_517){c__h, sc__h, id__h}))}));
+    return CharCompiler_stateParam((*c__h), is, GOSTR("postype"), false, ((GoFunc){(void *)lambda_521, go_box(Env_lambda_521, ((Env_lambda_521){c__h, sc__h, id__h}))}));
 }
 
 // CharCompiler.paramSpace (compiler.go:7145), 0 TODO
@@ -64647,7 +64735,7 @@ GoIface CharCompiler_paramSpaceSub(CharCompiler* c, IniSection is, StateControll
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     u8 *id__h = go_box_a(u8, id);
     bool *allowNone__h = go_box_a(bool, allowNone);
-    return CharCompiler_stateParam((*c__h), is, GOSTR("space"), false, ((GoFunc){(void *)lambda_518, go_box(Env_lambda_518, ((Env_lambda_518){c__h, sc__h, id__h, allowNone__h}))}));
+    return CharCompiler_stateParam((*c__h), is, GOSTR("space"), false, ((GoFunc){(void *)lambda_522, go_box(Env_lambda_522, ((Env_lambda_522){c__h, sc__h, id__h, allowNone__h}))}));
 }
 
 // CharCompiler.paramProjection (compiler.go:7184), 0 TODO
@@ -64666,7 +64754,7 @@ GoIface CharCompiler_paramProjection(CharCompiler* c, IniSection is, StateContro
 GoIface CharCompiler_paramProjectionSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString key, u8 id) {
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     u8 *id__h = go_box_a(u8, id);
-    return CharCompiler_stateParam(c, is, key, false, ((GoFunc){(void *)lambda_519, go_box(Env_lambda_519, ((Env_lambda_519){sc__h, id__h}))}));
+    return CharCompiler_stateParam(c, is, key, false, ((GoFunc){(void *)lambda_523, go_box(Env_lambda_523, ((Env_lambda_523){sc__h, id__h}))}));
 }
 
 // CharCompiler.paramSaveData (compiler.go:7212), 0 TODO
@@ -64685,7 +64773,7 @@ GoIface CharCompiler_paramSaveData(CharCompiler* c, IniSection is, StateControll
 GoIface CharCompiler_paramSaveDataSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id) {
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     u8 *id__h = go_box_a(u8, id);
-    return CharCompiler_stateParam(c, is, GOSTR("savedata"), false, ((GoFunc){(void *)lambda_520, go_box(Env_lambda_520, ((Env_lambda_520){sc__h, id__h}))}));
+    return CharCompiler_stateParam(c, is, GOSTR("savedata"), false, ((GoFunc){(void *)lambda_524, go_box(Env_lambda_524, ((Env_lambda_524){sc__h, id__h}))}));
 }
 
 // CharCompiler.paramTrans (compiler.go:7242), 0 TODO
@@ -64710,7 +64798,7 @@ GoIface CharCompiler_paramTrans(CharCompiler* c, IniSection is, StateControllerB
             return (GoIface){0};
         }
     }
-    return CharCompiler_stateParam((*c__h), (*is__h), go_strcat((*prefix__h), GOSTR("trans")), false, ((GoFunc){(void *)lambda_521, go_box(Env_lambda_521, ((Env_lambda_521){c__h, is__h, sc__h, prefix__h, id__h}))}));
+    return CharCompiler_stateParam((*c__h), (*is__h), go_strcat((*prefix__h), GOSTR("trans")), false, ((GoFunc){(void *)lambda_525, go_box(Env_lambda_525, ((Env_lambda_525){c__h, is__h, sc__h, prefix__h, id__h}))}));
 }
 
 // CharCompiler.paramClsnType (compiler.go:7369), 0 TODO
@@ -64730,7 +64818,7 @@ GoIface CharCompiler_paramClsnTypeSub(CharCompiler* c, IniSection is, StateContr
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     GoString *paramName__h = go_box(GoString, paramName);
     u8 *id__h = go_box_a(u8, id);
-    return CharCompiler_stateParam(c, is, (*paramName__h), false, ((GoFunc){(void *)lambda_523, go_box(Env_lambda_523, ((Env_lambda_523){sc__h, paramName__h, id__h}))}));
+    return CharCompiler_stateParam(c, is, (*paramName__h), false, ((GoFunc){(void *)lambda_527, go_box(Env_lambda_527, ((Env_lambda_527){sc__h, paramName__h, id__h}))}));
 }
 
 // CharCompiler.paramStringList (compiler.go:7404), 0 TODO
@@ -64750,7 +64838,7 @@ GoIface CharCompiler_paramStringListSub(CharCompiler* c, IniSection is, StateCon
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     u8 *opcode__h = go_box_a(u8, opcode);
-    return CharCompiler_stateParam((*c__h), is, paramName, false, ((GoFunc){(void *)lambda_524, go_box(Env_lambda_524, ((Env_lambda_524){c__h, sc__h, opcode__h}))}));
+    return CharCompiler_stateParam((*c__h), is, paramName, false, ((GoFunc){(void *)lambda_528, go_box(Env_lambda_528, ((Env_lambda_528){c__h, sc__h, opcode__h}))}));
 }
 
 // CharCompiler.stateDef (compiler.go:7438), 0 TODO
@@ -64764,7 +64852,7 @@ GoIface CharCompiler_stateDef(CharCompiler* c, IniSection is, StateBytecode* sbc
         }
         return (GoIface){0};
     }
-    return CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_525, go_box(Env_lambda_525, ((Env_lambda_525){c__h, is__h, sbc__h}))}));
+    return CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_529, go_box(Env_lambda_529, ((Env_lambda_529){c__h, is__h, sbc__h}))}));
 }
 
 // CharCompiler.stateCompile (compiler.go:7584), 0 TODO
@@ -64772,12 +64860,12 @@ GoIface CharCompiler_stateCompile(CharCompiler* c, Map_i32_StateBytecodePtr stat
     GoString *filename__h = go_box(GoString, filename);
     bool isZss = fn_HasExtension((*filename__h), GOSTR(".zss"));
     GoString *filetext__h = go_box(GoString, (GoString){0});
-    GoIface _t1 = fn_LoadFile((&(*filename__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_533, go_box(Env_lambda_533, ((Env_lambda_533){filetext__h}))}));
+    GoIface _t1 = fn_LoadFile((&(*filename__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_537, go_box(Env_lambda_537, ((Env_lambda_537){filetext__h}))}));
     GoIface err = _t1;
     if (err.type != 0) {
         if (!isZss) {
             GoString *zssAlt__h = go_box(GoString, go_strcat((*filename__h), GOSTR(".zss")));
-            GoIface _t2 = fn_LoadFile((&(*zssAlt__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_534, go_box(Env_lambda_534, ((Env_lambda_534){filetext__h}))}));
+            GoIface _t2 = fn_LoadFile((&(*zssAlt__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_538, go_box(Env_lambda_538, ((Env_lambda_538){filetext__h}))}));
             GoIface err2 = _t2;
             if (err2.type == 0) {
                 isZss = true;
@@ -64805,7 +64893,7 @@ GoIface CharCompiler_stateCompileCNS(CharCompiler* c, Map_i32_StateBytecodePtr s
     int _t2 = 0;
     (*c__h)->lines = _t1;
     (*c__h)->i = _t2;
-    GoFunc errmes = ((GoFunc){(void *)lambda_535, &(Env_lambda_535){c__h, filename__h}});
+    GoFunc errmes = ((GoFunc){(void *)lambda_539, &(Env_lambda_539){c__h, filename__h}});
     Map_i32_bool existInThisFile = Map_i32_bool_make(0);
     (*c__h)->vars = Map_GoString_u8_make(0);
     {
@@ -64887,7 +64975,7 @@ GoIface CharCompiler_stateCompileCNS(CharCompiler* c, Map_i32_StateBytecodePtr s
                     bool *warnedMissingTrigger__h = go_box_a(bool, false);
                     Slice_GoString *rawAll__h = go_box(Slice_GoString, {0});
                     Slice_Slice_GoString *rawTr__h = go_box(Slice_Slice_GoString, {0});
-                    Ret_IniSection__GoIface _t9 = CharCompiler_parseSection((*c__h), ((GoFunc){(void *)lambda_536, go_box(Env_lambda_536, ((Env_lambda_536){c__h, scf__h, triggerall__h, trigger__h, trexist__h, warnedMissingTrigger__h, rawAll__h, rawTr__h}))}));
+                    Ret_IniSection__GoIface _t9 = CharCompiler_parseSection((*c__h), ((GoFunc){(void *)lambda_540, go_box(Env_lambda_540, ((Env_lambda_540){c__h, scf__h, triggerall__h, trigger__h, trexist__h, warnedMissingTrigger__h, rawAll__h, rawTr__h}))}));
                     IniSection is = _t9.r0;
                     GoIface err = _t9.r1;
                     if (err.type != 0) {
@@ -65602,9 +65690,9 @@ GoIface CharCompiler_switchBlock(CharCompiler* c, GoString* line, StateBlock* bl
         }
     }
     CharCompiler_scan((*c__h), (*line__h));
-    GoFunc *compileCaseBlock__h = go_box(GoFunc, ((GoFunc){(void *)lambda_537, go_box(Env_lambda_537, ((Env_lambda_537){c__h, line__h, bl__h, sbc__h, numVars__h, err__h}))}));
+    GoFunc *compileCaseBlock__h = go_box(GoFunc, ((GoFunc){(void *)lambda_541, go_box(Env_lambda_541, ((Env_lambda_541){c__h, line__h, bl__h, sbc__h, numVars__h, err__h}))}));
     GoFunc *readNextCase__h = go_box(GoFunc, (GoFunc){0});
-    (*readNextCase__h) = ((GoFunc){(void *)lambda_538, go_box(Env_lambda_538, ((Env_lambda_538){c__h, line__h, header__h, err__h, compileCaseBlock__h, readNextCase__h}))});
+    (*readNextCase__h) = ((GoFunc){(void *)lambda_542, go_box(Env_lambda_542, ((Env_lambda_542){c__h, line__h, header__h, err__h, compileCaseBlock__h, readNextCase__h}))});
     {
         Ret_StateBlockPtr__GoIface _t2 = ((Ret_StateBlockPtr__GoIface (*)(void *, StateBlock*))((*readNextCase__h)).fn)(((*readNextCase__h)).env, NULL);
         StateBlock* sbl = _t2.r0;
@@ -66125,7 +66213,7 @@ GoIface CharCompiler_stateCompileZSS(CharCompiler* c, Map_i32_StateBytecodePtr s
     (*c__h)->zssMode = true;
     (*c__h)->currentFile = (*filename__h);
     _df1_a0 = g_sys.ignoreMostErrors;
-    _df1_f = ((GoFunc){(void *)lambda_539, go_box(Env_lambda_539, ((Env_lambda_539){0}))});
+    _df1_f = ((GoFunc){(void *)lambda_543, go_box(Env_lambda_543, ((Env_lambda_543){0}))});
     _df1 = true;
     g_sys.ignoreMostErrors = false;
     (*c__h)->block = NULL;
@@ -66133,7 +66221,7 @@ GoIface CharCompiler_stateCompileZSS(CharCompiler* c, Map_i32_StateBytecodePtr s
     int _t3 = 0;
     (*c__h)->lines = _t2;
     (*c__h)->i = _t3;
-    GoFunc errmes = ((GoFunc){(void *)lambda_540, &(Env_lambda_540){c__h, filename__h}});
+    GoFunc errmes = ((GoFunc){(void *)lambda_544, &(Env_lambda_544){c__h, filename__h}});
     Map_i32_bool existInThisFile = Map_i32_bool_make(0);
     Map_GoString_bool funcExistInThisFile = Map_GoString_bool_make(0);
     GoString *line__h = go_box(GoString, (GoString){0});
@@ -66500,7 +66588,7 @@ Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char
     (*str__h) = GOSTR("");
     if ((*cmd__h).len > 0) {
         {
-            GoIface _t17 = fn_LoadFile((&(*cmd__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_541, go_box(Env_lambda_541, ((Env_lambda_541){str__h}))}));
+            GoIface _t17 = fn_LoadFile((&(*cmd__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_545, go_box(Env_lambda_545, ((Env_lambda_545){str__h}))}));
             GoIface err = _t17;
             if (err.type != 0) {
                 return (Ret_Map_i32_StateBytecodePtr__GoIface){(Map_i32_StateBytecodePtr){0}, err};
@@ -66516,7 +66604,7 @@ Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char
                 for (int _t21 = 0; _t21 < _t22.len; _t21++) {
                     GoString *v__h = go_box(GoString, _t22.p[_t21]);
                     {
-                        GoIface _t24 = fn_LoadFile((&(*v__h)), GO_SLICE_LIT(Slice_GoString, GoString, 5, def, g_sys.motif.Def, g_sys.fightScreen.def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_542, go_box(Env_lambda_542, ((Env_lambda_542){str__h}))}));
+                        GoIface _t24 = fn_LoadFile((&(*v__h)), GO_SLICE_LIT(Slice_GoString, GoString, 5, def, g_sys.motif.Def, g_sys.fightScreen.def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_546, go_box(Env_lambda_546, ((Env_lambda_546){str__h}))}));
                         GoIface err = _t24;
                         if (err.type != 0) {
                             return (Ret_Map_i32_StateBytecodePtr__GoIface){(Map_i32_StateBytecodePtr){0}, err};
@@ -66563,7 +66651,7 @@ Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char
                     if (go_streq(_t35, GOSTR("remap"))) {
                         if (remap) {
                             remap = false;
-                            GoFunc rm = ((GoFunc){(void *)lambda_543, &(Env_lambda_543){is__h}});
+                            GoFunc rm = ((GoFunc){(void *)lambda_547, &(Env_lambda_547){is__h}});
                             ((void (*)(void *, GoString, CommandKey*))(rm).fn)((rm).env, GOSTR("x"), (&ckr->x));
                             ((void (*)(void *, GoString, CommandKey*))(rm).fn)((rm).env, GOSTR("y"), (&ckr->y));
                             ((void (*)(void *, GoString, CommandKey*))(rm).fn)((rm).env, GOSTR("z"), (&ckr->z));
@@ -66721,31 +66809,31 @@ GoIface CharCompiler_hitBySub(CharCompiler* c, IniSection is, StateControllerBas
     bool *new___h = go_box_a(bool, false);
     bool *old__h = go_box_a(bool, false);
     {
-        err = CharCompiler_stateParam((*c__h), is, GOSTR("attr"), false, ((GoFunc){(void *)lambda_544, go_box(Env_lambda_544, ((Env_lambda_544){c__h, sc__h, any__h, new___h}))}));
+        err = CharCompiler_stateParam((*c__h), is, GOSTR("attr"), false, ((GoFunc){(void *)lambda_548, go_box(Env_lambda_548, ((Env_lambda_548){c__h, sc__h, any__h, new___h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("playerno"), false, ((GoFunc){(void *)lambda_545, go_box(Env_lambda_545, ((Env_lambda_545){c__h, sc__h, any__h, new___h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("playerno"), false, ((GoFunc){(void *)lambda_549, go_box(Env_lambda_549, ((Env_lambda_549){c__h, sc__h, any__h, new___h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("playerid"), false, ((GoFunc){(void *)lambda_546, go_box(Env_lambda_546, ((Env_lambda_546){c__h, sc__h, any__h, new___h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("playerid"), false, ((GoFunc){(void *)lambda_550, go_box(Env_lambda_550, ((Env_lambda_550){c__h, sc__h, any__h, new___h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("slot"), false, ((GoFunc){(void *)lambda_547, go_box(Env_lambda_547, ((Env_lambda_547){c__h, sc__h, new___h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("slot"), false, ((GoFunc){(void *)lambda_551, go_box(Env_lambda_551, ((Env_lambda_551){c__h, sc__h, new___h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("stack"), false, ((GoFunc){(void *)lambda_548, go_box(Env_lambda_548, ((Env_lambda_548){c__h, sc__h, new___h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("stack"), false, ((GoFunc){(void *)lambda_552, go_box(Env_lambda_552, ((Env_lambda_552){c__h, sc__h, new___h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -66764,7 +66852,7 @@ GoIface CharCompiler_hitBySub(CharCompiler* c, IniSection is, StateControllerBas
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("clsn.index"), false, ((GoFunc){(void *)lambda_549, go_box(Env_lambda_549, ((Env_lambda_549){c__h, sc__h, new___h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("clsn.index"), false, ((GoFunc){(void *)lambda_553, go_box(Env_lambda_553, ((Env_lambda_553){c__h, sc__h, new___h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -66776,14 +66864,14 @@ GoIface CharCompiler_hitBySub(CharCompiler* c, IniSection is, StateControllerBas
         }
     }
     {
-        err = CharCompiler_stateParam((*c__h), is, GOSTR("value"), false, ((GoFunc){(void *)lambda_550, go_box(Env_lambda_550, ((Env_lambda_550){c__h, sc__h, any__h, old__h}))}));
+        err = CharCompiler_stateParam((*c__h), is, GOSTR("value"), false, ((GoFunc){(void *)lambda_554, go_box(Env_lambda_554, ((Env_lambda_554){c__h, sc__h, any__h, old__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     if (!(*any__h)) {
         {
-            err = CharCompiler_stateParam((*c__h), is, GOSTR("value2"), false, ((GoFunc){(void *)lambda_551, go_box(Env_lambda_551, ((Env_lambda_551){c__h, sc__h, any__h, old__h}))}));
+            err = CharCompiler_stateParam((*c__h), is, GOSTR("value2"), false, ((GoFunc){(void *)lambda_555, go_box(Env_lambda_555, ((Env_lambda_555){c__h, sc__h, any__h, old__h}))}));
             if (err.type != 0) {
                 return err;
             }
@@ -66809,7 +66897,7 @@ Ret_StateController__GoIface CharCompiler_hitBy(CharCompiler* c, IniSection is, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitBy* _t1 = ((hitBy*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_552, go_box(Env_lambda_552, ((Env_lambda_552){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_556, go_box(Env_lambda_556, ((Env_lambda_556){c__h, is__h, sc__h}))}));
     hitBy* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){190, go_box(hitBy, (*ret))}), err};
@@ -66821,7 +66909,7 @@ Ret_StateController__GoIface CharCompiler_notHitBy(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     notHitBy* _t1 = ((notHitBy*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_553, go_box(Env_lambda_553, ((Env_lambda_553){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_557, go_box(Env_lambda_557, ((Env_lambda_557){c__h, is__h, sc__h}))}));
     notHitBy* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){191, go_box(notHitBy, (*ret))}), err};
@@ -66833,7 +66921,7 @@ Ret_StateController__GoIface CharCompiler_assertSpecial(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     assertSpecial* _t1 = ((assertSpecial*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_554, go_box(Env_lambda_554, ((Env_lambda_554){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_558, go_box(Env_lambda_558, ((Env_lambda_558){c__h, is__h, sc__h}))}));
     assertSpecial* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){192, go_box(assertSpecial, (*ret))}), err};
@@ -66845,7 +66933,7 @@ Ret_StateController__GoIface CharCompiler_playSnd(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     playSnd* _t1 = ((playSnd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_564, go_box(Env_lambda_564, ((Env_lambda_564){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_568, go_box(Env_lambda_568, ((Env_lambda_568){c__h, is__h, sc__h}))}));
     playSnd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){193, go_box(playSnd, (*ret))}), err};
@@ -66898,7 +66986,7 @@ Ret_StateController__GoIface CharCompiler_changeState(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     changeState* _t1 = ((changeState*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_565, go_box(Env_lambda_565, ((Env_lambda_565){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_569, go_box(Env_lambda_569, ((Env_lambda_569){c__h, is__h, sc__h}))}));
     changeState* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){194, go_box(changeState, (*ret))}), err};
@@ -66910,7 +66998,7 @@ Ret_StateController__GoIface CharCompiler_selfState(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     selfState* _t1 = ((selfState*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_566, go_box(Env_lambda_566, ((Env_lambda_566){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_570, go_box(Env_lambda_570, ((Env_lambda_570){c__h, is__h, sc__h}))}));
     selfState* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){195, go_box(selfState, (*ret))}), err};
@@ -66922,7 +67010,7 @@ Ret_StateController__GoIface CharCompiler_tagIn(CharCompiler* c, IniSection is, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     tagIn* _t1 = ((tagIn*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_567, go_box(Env_lambda_567, ((Env_lambda_567){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_571, go_box(Env_lambda_571, ((Env_lambda_571){c__h, is__h, sc__h}))}));
     tagIn* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){196, go_box(tagIn, (*ret))}), err};
@@ -66934,7 +67022,7 @@ Ret_StateController__GoIface CharCompiler_tagOut(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     tagOut* _t1 = ((tagOut*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_568, go_box(Env_lambda_568, ((Env_lambda_568){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_572, go_box(Env_lambda_572, ((Env_lambda_572){c__h, is__h, sc__h}))}));
     tagOut* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){197, go_box(tagOut, (*ret))}), err};
@@ -66946,7 +67034,7 @@ Ret_StateController__GoIface CharCompiler_destroySelf(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     destroySelf* _t1 = ((destroySelf*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_569, go_box(Env_lambda_569, ((Env_lambda_569){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_573, go_box(Env_lambda_573, ((Env_lambda_573){c__h, is__h, sc__h}))}));
     destroySelf* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){198, go_box(destroySelf, (*ret))}), err};
@@ -67005,7 +67093,7 @@ Ret_StateController__GoIface CharCompiler_changeAnim(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     changeAnim* _t1 = ((changeAnim*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_570, go_box(Env_lambda_570, ((Env_lambda_570){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_574, go_box(Env_lambda_574, ((Env_lambda_574){c__h, is__h, sc__h}))}));
     changeAnim* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){199, go_box(changeAnim, (*ret))}), err};
@@ -67017,7 +67105,7 @@ Ret_StateController__GoIface CharCompiler_changeAnim2(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     changeAnim2* _t1 = ((changeAnim2*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_571, go_box(Env_lambda_571, ((Env_lambda_571){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_575, go_box(Env_lambda_575, ((Env_lambda_575){c__h, is__h, sc__h}))}));
     changeAnim2* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){200, go_box(changeAnim2, (*ret))}), err};
@@ -67029,7 +67117,7 @@ Ret_StateController__GoIface CharCompiler_helper(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     helper* _t1 = ((helper*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_572, go_box(Env_lambda_572, ((Env_lambda_572){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_576, go_box(Env_lambda_576, ((Env_lambda_576){c__h, is__h, sc__h}))}));
     helper* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){201, go_box(helper, (*ret))}), err};
@@ -67041,7 +67129,7 @@ Ret_StateController__GoIface CharCompiler_ctrlSet(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     ctrlSet* _t1 = ((ctrlSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_575, go_box(Env_lambda_575, ((Env_lambda_575){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_579, go_box(Env_lambda_579, ((Env_lambda_579){c__h, is__h, sc__h}))}));
     ctrlSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){202, go_box(ctrlSet, (*ret))}), err};
@@ -67061,7 +67149,7 @@ Ret_StateController__GoIface CharCompiler_runState(CharCompiler* c, IniSection i
         }
     }
     runState* _t3 = ((runState*)(*sc__h));
-    GoIface _t4 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_576, go_box(Env_lambda_576, ((Env_lambda_576){c__h, is__h, sc__h}))}));
+    GoIface _t4 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_580, go_box(Env_lambda_580, ((Env_lambda_580){c__h, is__h, sc__h}))}));
     runState* ret = _t3;
     GoIface err = _t4;
     return (Ret_StateController__GoIface){((GoIface){203, go_box(runState, (*ret))}), err};
@@ -67515,7 +67603,7 @@ Ret_StateController__GoIface CharCompiler_explod(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     explod* _t1 = ((explod*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_577, go_box(Env_lambda_577, ((Env_lambda_577){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_581, go_box(Env_lambda_581, ((Env_lambda_581){c__h, is__h, sc__h}))}));
     explod* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){204, go_box(explod, (*ret))}), err};
@@ -67527,7 +67615,7 @@ Ret_StateController__GoIface CharCompiler_modifyExplod(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyExplod* _t1 = ((modifyExplod*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_578, go_box(Env_lambda_578, ((Env_lambda_578){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_582, go_box(Env_lambda_582, ((Env_lambda_582){c__h, is__h, sc__h}))}));
     modifyExplod* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){205, go_box(modifyExplod, (*ret))}), err};
@@ -67539,7 +67627,7 @@ Ret_StateController__GoIface CharCompiler_gameMakeAnim(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     gameMakeAnim* _t1 = ((gameMakeAnim*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_579, go_box(Env_lambda_579, ((Env_lambda_579){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_583, go_box(Env_lambda_583, ((Env_lambda_583){c__h, is__h, sc__h}))}));
     gameMakeAnim* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){206, go_box(gameMakeAnim, (*ret))}), err};
@@ -67574,7 +67662,7 @@ Ret_StateController__GoIface CharCompiler_posSet(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     posSet* _t1 = ((posSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_580, go_box(Env_lambda_580, ((Env_lambda_580){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_584, go_box(Env_lambda_584, ((Env_lambda_584){c__h, is__h, sc__h}))}));
     posSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){207, go_box(posSet, (*ret))}), err};
@@ -67586,7 +67674,7 @@ Ret_StateController__GoIface CharCompiler_posAdd(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     posAdd* _t1 = ((posAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_581, go_box(Env_lambda_581, ((Env_lambda_581){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_585, go_box(Env_lambda_585, ((Env_lambda_585){c__h, is__h, sc__h}))}));
     posAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){208, go_box(posAdd, (*ret))}), err};
@@ -67598,7 +67686,7 @@ Ret_StateController__GoIface CharCompiler_velSet(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     velSet* _t1 = ((velSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_582, go_box(Env_lambda_582, ((Env_lambda_582){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_586, go_box(Env_lambda_586, ((Env_lambda_586){c__h, is__h, sc__h}))}));
     velSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){209, go_box(velSet, (*ret))}), err};
@@ -67610,7 +67698,7 @@ Ret_StateController__GoIface CharCompiler_velAdd(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     velAdd* _t1 = ((velAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_583, go_box(Env_lambda_583, ((Env_lambda_583){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_587, go_box(Env_lambda_587, ((Env_lambda_587){c__h, is__h, sc__h}))}));
     velAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){210, go_box(velAdd, (*ret))}), err};
@@ -67622,7 +67710,7 @@ Ret_StateController__GoIface CharCompiler_velMul(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     velMul* _t1 = ((velMul*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_584, go_box(Env_lambda_584, ((Env_lambda_584){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_588, go_box(Env_lambda_588, ((Env_lambda_588){c__h, is__h, sc__h}))}));
     velMul* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){211, go_box(velMul, (*ret))}), err};
@@ -67634,7 +67722,7 @@ Ret_StateController__GoIface CharCompiler_modifyShadow(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyShadow* _t1 = ((modifyShadow*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_585, go_box(Env_lambda_585, ((Env_lambda_585){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_589, go_box(Env_lambda_589, ((Env_lambda_589){c__h, is__h, sc__h}))}));
     modifyShadow* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){212, go_box(modifyShadow, (*ret))}), err};
@@ -67646,7 +67734,7 @@ Ret_StateController__GoIface CharCompiler_modifyReflection(CharCompiler* c, IniS
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyReflection* _t1 = ((modifyReflection*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_586, go_box(Env_lambda_586, ((Env_lambda_586){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_590, go_box(Env_lambda_590, ((Env_lambda_590){c__h, is__h, sc__h}))}));
     modifyReflection* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){213, go_box(modifyReflection, (*ret))}), err};
@@ -67679,42 +67767,42 @@ GoIface CharCompiler_palFXSub(CharCompiler* c, IniSection is, StateControllerBas
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("add")), false, ((GoFunc){(void *)lambda_587, go_box(Env_lambda_587, ((Env_lambda_587){c__h, sc__h, prefix__h}))}));
+        GoIface _t1 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("add")), false, ((GoFunc){(void *)lambda_591, go_box(Env_lambda_591, ((Env_lambda_591){c__h, sc__h, prefix__h}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t2 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("mul")), false, ((GoFunc){(void *)lambda_588, go_box(Env_lambda_588, ((Env_lambda_588){c__h, sc__h, prefix__h}))}));
+        GoIface _t2 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("mul")), false, ((GoFunc){(void *)lambda_592, go_box(Env_lambda_592, ((Env_lambda_592){c__h, sc__h, prefix__h}))}));
         GoIface err = _t2;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t3 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sinadd")), false, ((GoFunc){(void *)lambda_589, go_box(Env_lambda_589, ((Env_lambda_589){c__h, sc__h, prefix__h}))}));
+        GoIface _t3 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sinadd")), false, ((GoFunc){(void *)lambda_593, go_box(Env_lambda_593, ((Env_lambda_593){c__h, sc__h, prefix__h}))}));
         GoIface err = _t3;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t4 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sinmul")), false, ((GoFunc){(void *)lambda_590, go_box(Env_lambda_590, ((Env_lambda_590){c__h, sc__h, prefix__h}))}));
+        GoIface _t4 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sinmul")), false, ((GoFunc){(void *)lambda_594, go_box(Env_lambda_594, ((Env_lambda_594){c__h, sc__h, prefix__h}))}));
         GoIface err = _t4;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t5 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sincolor")), false, ((GoFunc){(void *)lambda_591, go_box(Env_lambda_591, ((Env_lambda_591){c__h, sc__h, prefix__h}))}));
+        GoIface _t5 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sincolor")), false, ((GoFunc){(void *)lambda_595, go_box(Env_lambda_595, ((Env_lambda_595){c__h, sc__h, prefix__h}))}));
         GoIface err = _t5;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t6 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sinhue")), false, ((GoFunc){(void *)lambda_592, go_box(Env_lambda_592, ((Env_lambda_592){c__h, sc__h, prefix__h}))}));
+        GoIface _t6 = CharCompiler_stateParam((*c__h), is, go_strcat((*prefix__h), GOSTR("sinhue")), false, ((GoFunc){(void *)lambda_596, go_box(Env_lambda_596, ((Env_lambda_596){c__h, sc__h, prefix__h}))}));
         GoIface err = _t6;
         if (err.type != 0) {
             return err;
@@ -67741,7 +67829,7 @@ Ret_StateController__GoIface CharCompiler_palFX(CharCompiler* c, IniSection is, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     palFX* _t1 = ((palFX*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_593, go_box(Env_lambda_593, ((Env_lambda_593){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_597, go_box(Env_lambda_597, ((Env_lambda_597){c__h, is__h, sc__h}))}));
     palFX* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){214, go_box(palFX, (*ret))}), err};
@@ -67753,7 +67841,7 @@ Ret_StateController__GoIface CharCompiler_allPalFX(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     allPalFX* _t1 = ((allPalFX*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_594, go_box(Env_lambda_594, ((Env_lambda_594){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_598, go_box(Env_lambda_598, ((Env_lambda_598){c__h, is__h, sc__h}))}));
     allPalFX* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){215, go_box(allPalFX, (*ret))}), err};
@@ -67765,7 +67853,7 @@ Ret_StateController__GoIface CharCompiler_bgPalFX(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     bgPalFX* _t1 = ((bgPalFX*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_595, go_box(Env_lambda_595, ((Env_lambda_595){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_599, go_box(Env_lambda_599, ((Env_lambda_599){c__h, is__h, sc__h}))}));
     bgPalFX* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){216, go_box(bgPalFX, (*ret))}), err};
@@ -67893,7 +67981,7 @@ Ret_StateController__GoIface CharCompiler_afterImage(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     afterImage* _t1 = ((afterImage*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_596, go_box(Env_lambda_596, ((Env_lambda_596){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_600, go_box(Env_lambda_600, ((Env_lambda_600){c__h, is__h, sc__h}))}));
     afterImage* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){217, go_box(afterImage, (*ret))}), err};
@@ -67905,7 +67993,7 @@ Ret_StateController__GoIface CharCompiler_afterImageTime(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     afterImageTime* _t1 = ((afterImageTime*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_597, go_box(Env_lambda_597, ((Env_lambda_597){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_601, go_box(Env_lambda_601, ((Env_lambda_601){c__h, is__h, sc__h}))}));
     afterImageTime* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){218, go_box(afterImageTime, (*ret))}), err};
@@ -67972,19 +68060,19 @@ GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBa
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("attr"), false, ((GoFunc){(void *)lambda_600, go_box(Env_lambda_600, ((Env_lambda_600){c__h, sc__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("attr"), false, ((GoFunc){(void *)lambda_604, go_box(Env_lambda_604, ((Env_lambda_604){c__h, sc__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("guardflag"), false, ((GoFunc){(void *)lambda_601, go_box(Env_lambda_601, ((Env_lambda_601){c__h, sc__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("guardflag"), false, ((GoFunc){(void *)lambda_605, go_box(Env_lambda_605, ((Env_lambda_605){c__h, sc__h}))}));
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("hitflag"), false, ((GoFunc){(void *)lambda_602, go_box(Env_lambda_602, ((Env_lambda_602){c__h, sc__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("hitflag"), false, ((GoFunc){(void *)lambda_606, go_box(Env_lambda_606, ((Env_lambda_606){c__h, sc__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -68020,7 +68108,7 @@ GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBa
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("affectteam"), false, ((GoFunc){(void *)lambda_603, go_box(Env_lambda_603, ((Env_lambda_603){sc__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("affectteam"), false, ((GoFunc){(void *)lambda_607, go_box(Env_lambda_607, ((Env_lambda_607){sc__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -68134,7 +68222,7 @@ GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBa
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*c__h), is, GOSTR("priority"), false, ((GoFunc){(void *)lambda_604, go_box(Env_lambda_604, ((Env_lambda_604){c__h, sc__h}))}));
+        GoIface _t1 = CharCompiler_stateParam((*c__h), is, GOSTR("priority"), false, ((GoFunc){(void *)lambda_608, go_box(Env_lambda_608, ((Env_lambda_608){c__h, sc__h}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -68166,7 +68254,7 @@ GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBa
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("p1sprpriority"), false, ((GoFunc){(void *)lambda_605, go_box(Env_lambda_605, ((Env_lambda_605){c__h, sc__h, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("p1sprpriority"), false, ((GoFunc){(void *)lambda_609, go_box(Env_lambda_609, ((Env_lambda_609){c__h, sc__h, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -68450,7 +68538,7 @@ GoIface CharCompiler_hitDefSub(CharCompiler* c, IniSection is, StateControllerBa
         }
     }
     {
-        GoIface _t2 = CharCompiler_stateParam((*c__h), is, GOSTR("ground.velocity"), false, ((GoFunc){(void *)lambda_606, go_box(Env_lambda_606, ((Env_lambda_606){c__h, sc__h}))}));
+        GoIface _t2 = CharCompiler_stateParam((*c__h), is, GOSTR("ground.velocity"), false, ((GoFunc){(void *)lambda_610, go_box(Env_lambda_610, ((Env_lambda_610){c__h, sc__h}))}));
         GoIface err = _t2;
         if (err.type != 0) {
             return err;
@@ -68705,7 +68793,7 @@ Ret_StateController__GoIface CharCompiler_hitDef(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitDef* _t1 = ((hitDef*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_607, go_box(Env_lambda_607, ((Env_lambda_607){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_611, go_box(Env_lambda_611, ((Env_lambda_611){c__h, is__h, sc__h}))}));
     hitDef* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){219, go_box(hitDef, (*ret))}), err};
@@ -68717,7 +68805,7 @@ Ret_StateController__GoIface CharCompiler_modifyHitDef(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyHitDef* _t1 = ((modifyHitDef*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_608, go_box(Env_lambda_608, ((Env_lambda_608){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_612, go_box(Env_lambda_612, ((Env_lambda_612){c__h, is__h, sc__h}))}));
     modifyHitDef* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){220, go_box(modifyHitDef, (*ret))}), err};
@@ -68729,7 +68817,7 @@ Ret_StateController__GoIface CharCompiler_reversalDef(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     reversalDef* _t1 = ((reversalDef*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_609, go_box(Env_lambda_609, ((Env_lambda_609){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_613, go_box(Env_lambda_613, ((Env_lambda_613){c__h, is__h, sc__h}))}));
     reversalDef* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){221, go_box(reversalDef, (*ret))}), err};
@@ -68741,7 +68829,7 @@ Ret_StateController__GoIface CharCompiler_modifyReversalDef(CharCompiler* c, Ini
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyReversalDef* _t1 = ((modifyReversalDef*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_613, go_box(Env_lambda_613, ((Env_lambda_613){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_617, go_box(Env_lambda_617, ((Env_lambda_617){c__h, is__h, sc__h}))}));
     modifyReversalDef* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){222, go_box(modifyReversalDef, (*ret))}), err};
@@ -69040,7 +69128,7 @@ Ret_StateController__GoIface CharCompiler_projectile(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     projectile* _t1 = ((projectile*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_617, go_box(Env_lambda_617, ((Env_lambda_617){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_621, go_box(Env_lambda_621, ((Env_lambda_621){c__h, is__h, sc__h}))}));
     projectile* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){223, go_box(projectile, (*ret))}), err};
@@ -69052,7 +69140,7 @@ Ret_StateController__GoIface CharCompiler_modifyProjectile(CharCompiler* c, IniS
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyProjectile* _t1 = ((modifyProjectile*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_618, go_box(Env_lambda_618, ((Env_lambda_618){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_622, go_box(Env_lambda_622, ((Env_lambda_622){c__h, is__h, sc__h}))}));
     modifyProjectile* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){224, go_box(modifyProjectile, (*ret))}), err};
@@ -69064,7 +69152,7 @@ Ret_StateController__GoIface CharCompiler_width(CharCompiler* c, IniSection is, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     width* _t1 = ((width*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_619, go_box(Env_lambda_619, ((Env_lambda_619){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_623, go_box(Env_lambda_623, ((Env_lambda_623){c__h, is__h, sc__h}))}));
     width* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){225, go_box(width, (*ret))}), err};
@@ -69076,7 +69164,7 @@ Ret_StateController__GoIface CharCompiler_sprPriority(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     sprPriority* _t1 = ((sprPriority*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_622, go_box(Env_lambda_622, ((Env_lambda_622){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_626, go_box(Env_lambda_626, ((Env_lambda_626){c__h, is__h, sc__h}))}));
     sprPriority* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){226, go_box(sprPriority, (*ret))}), err};
@@ -69089,7 +69177,7 @@ Ret_bool__GoIface CharCompiler_varSetOlderSub(CharCompiler* c, IniSection is, St
     GoString *value__h = go_box(GoString, (GoString){0});
     bool *hasValue__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("value"), false, ((GoFunc){(void *)lambda_623, go_box(Env_lambda_623, ((Env_lambda_623){value__h, hasValue__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("value"), false, ((GoFunc){(void *)lambda_627, go_box(Env_lambda_627, ((Env_lambda_627){value__h, hasValue__h}))}));
         if (err.type != 0) {
             return (Ret_bool__GoIface){false, err};
         }
@@ -69100,27 +69188,27 @@ Ret_bool__GoIface CharCompiler_varSetOlderSub(CharCompiler* c, IniSection is, St
     GoString *index__h = go_box(GoString, (GoString){0});
     i32 *varType__h = go_box_a(i32, 0);
     bool *hasIndex__h = go_box_a(bool, false);
-    GoFunc *setTargetVar__h = go_box(GoFunc, ((GoFunc){(void *)lambda_624, go_box(Env_lambda_624, ((Env_lambda_624){c__h, alreadyAssigned__h, index__h, varType__h, hasIndex__h}))}));
+    GoFunc *setTargetVar__h = go_box(GoFunc, ((GoFunc){(void *)lambda_628, go_box(Env_lambda_628, ((Env_lambda_628){c__h, alreadyAssigned__h, index__h, varType__h, hasIndex__h}))}));
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("v"), false, ((GoFunc){(void *)lambda_625, go_box(Env_lambda_625, ((Env_lambda_625){setTargetVar__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("v"), false, ((GoFunc){(void *)lambda_629, go_box(Env_lambda_629, ((Env_lambda_629){setTargetVar__h}))}));
         if (err.type != 0) {
             return (Ret_bool__GoIface){false, err};
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("fv"), false, ((GoFunc){(void *)lambda_626, go_box(Env_lambda_626, ((Env_lambda_626){setTargetVar__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("fv"), false, ((GoFunc){(void *)lambda_630, go_box(Env_lambda_630, ((Env_lambda_630){setTargetVar__h}))}));
         if (err.type != 0) {
             return (Ret_bool__GoIface){false, err};
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("sysv"), false, ((GoFunc){(void *)lambda_627, go_box(Env_lambda_627, ((Env_lambda_627){setTargetVar__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("sysv"), false, ((GoFunc){(void *)lambda_631, go_box(Env_lambda_631, ((Env_lambda_631){setTargetVar__h}))}));
         if (err.type != 0) {
             return (Ret_bool__GoIface){false, err};
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("sysfv"), false, ((GoFunc){(void *)lambda_628, go_box(Env_lambda_628, ((Env_lambda_628){setTargetVar__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("sysfv"), false, ((GoFunc){(void *)lambda_632, go_box(Env_lambda_632, ((Env_lambda_632){setTargetVar__h}))}));
         if (err.type != 0) {
             return (Ret_bool__GoIface){false, err};
         }
@@ -69204,7 +69292,7 @@ Ret_i32__BytecodeExp__bool__GoIface CharCompiler_varSetNewerSub(CharCompiler* c,
                 return (Ret_i32__BytecodeExp__bool__GoIface){0, (BytecodeExp){0}, false, ((GoIface){155, go_box(Error, GOSTR("Missing variable index"))})};
             }
             GoString *oldToken__h = go_box(GoString, (*c__h)->token);
-            _df10_f = ((GoFunc){(void *)lambda_629, go_box(Env_lambda_629, ((Env_lambda_629){c__h, oldToken__h}))});
+            _df10_f = ((GoFunc){(void *)lambda_633, go_box(Env_lambda_633, ((Env_lambda_633){c__h, oldToken__h}))});
             _df10 = true;
             Ret_BytecodeExp__GoIface _t11 = CharCompiler_fullExpression((*c__h), (&(*inner__h)), 2);
             BytecodeExp be = _t11.r0;
@@ -69236,7 +69324,7 @@ Ret_i32__BytecodeExp__bool__GoIface CharCompiler_varSetNewerSub(CharCompiler* c,
 // CharCompiler.varSetSub (compiler_functions.go:2825), 0 TODO
 GoIface CharCompiler_varSetSub(CharCompiler* c, IniSection is, StateControllerBase* sc, i32 scType) {
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
-    GoFunc alreadyAssigned = ((GoFunc){(void *)lambda_630, go_box(Env_lambda_630, ((Env_lambda_630){sc__h}))});
+    GoFunc alreadyAssigned = ((GoFunc){(void *)lambda_634, go_box(Env_lambda_634, ((Env_lambda_634){sc__h}))});
     Ret_bool__GoIface _t1 = CharCompiler_varSetOlderSub(c, is, (*sc__h), alreadyAssigned);
     bool handled = _t1.r0;
     GoIface err = _t1.r1;
@@ -69317,7 +69405,7 @@ Ret_StateController__GoIface CharCompiler_varSet(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varSet* _t1 = ((varSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_631, go_box(Env_lambda_631, ((Env_lambda_631){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_635, go_box(Env_lambda_635, ((Env_lambda_635){c__h, is__h, sc__h}))}));
     varSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){227, go_box(varSet, (*ret))}), err};
@@ -69329,7 +69417,7 @@ Ret_StateController__GoIface CharCompiler_varAdd(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varSet* _t1 = ((varSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_632, go_box(Env_lambda_632, ((Env_lambda_632){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_636, go_box(Env_lambda_636, ((Env_lambda_636){c__h, is__h, sc__h}))}));
     varSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){227, go_box(varSet, (*ret))}), err};
@@ -69341,7 +69429,7 @@ Ret_StateController__GoIface CharCompiler_parentVarSet(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varSet* _t1 = ((varSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_633, go_box(Env_lambda_633, ((Env_lambda_633){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_637, go_box(Env_lambda_637, ((Env_lambda_637){c__h, is__h, sc__h}))}));
     varSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){227, go_box(varSet, (*ret))}), err};
@@ -69353,7 +69441,7 @@ Ret_StateController__GoIface CharCompiler_parentVarAdd(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varSet* _t1 = ((varSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_634, go_box(Env_lambda_634, ((Env_lambda_634){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_638, go_box(Env_lambda_638, ((Env_lambda_638){c__h, is__h, sc__h}))}));
     varSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){227, go_box(varSet, (*ret))}), err};
@@ -69365,7 +69453,7 @@ Ret_StateController__GoIface CharCompiler_rootVarSet(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varSet* _t1 = ((varSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_635, go_box(Env_lambda_635, ((Env_lambda_635){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_639, go_box(Env_lambda_639, ((Env_lambda_639){c__h, is__h, sc__h}))}));
     varSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){227, go_box(varSet, (*ret))}), err};
@@ -69377,7 +69465,7 @@ Ret_StateController__GoIface CharCompiler_rootVarAdd(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varSet* _t1 = ((varSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_636, go_box(Env_lambda_636, ((Env_lambda_636){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_640, go_box(Env_lambda_640, ((Env_lambda_640){c__h, is__h, sc__h}))}));
     varSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){227, go_box(varSet, (*ret))}), err};
@@ -69389,7 +69477,7 @@ Ret_StateController__GoIface CharCompiler_turn(CharCompiler* c, IniSection is, S
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     turn* _t1 = ((turn*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_637, go_box(Env_lambda_637, ((Env_lambda_637){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_641, go_box(Env_lambda_641, ((Env_lambda_641){c__h, is__h, sc__h}))}));
     turn* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){228, go_box(turn, (*ret))}), err};
@@ -69401,7 +69489,7 @@ Ret_StateController__GoIface CharCompiler_targetFacing(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetFacing* _t1 = ((targetFacing*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_638, go_box(Env_lambda_638, ((Env_lambda_638){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_642, go_box(Env_lambda_642, ((Env_lambda_642){c__h, is__h, sc__h}))}));
     targetFacing* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){229, go_box(targetFacing, (*ret))}), err};
@@ -69413,7 +69501,7 @@ Ret_StateController__GoIface CharCompiler_targetBind(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetBind* _t1 = ((targetBind*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_639, go_box(Env_lambda_639, ((Env_lambda_639){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_643, go_box(Env_lambda_643, ((Env_lambda_643){c__h, is__h, sc__h}))}));
     targetBind* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){230, go_box(targetBind, (*ret))}), err};
@@ -69425,7 +69513,7 @@ Ret_StateController__GoIface CharCompiler_bindToTarget(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     bindToTarget* _t1 = ((bindToTarget*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_640, go_box(Env_lambda_640, ((Env_lambda_640){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_644, go_box(Env_lambda_644, ((Env_lambda_644){c__h, is__h, sc__h}))}));
     bindToTarget* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){231, go_box(bindToTarget, (*ret))}), err};
@@ -69437,7 +69525,7 @@ Ret_StateController__GoIface CharCompiler_targetLifeAdd(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetLifeAdd* _t1 = ((targetLifeAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_642, go_box(Env_lambda_642, ((Env_lambda_642){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_646, go_box(Env_lambda_646, ((Env_lambda_646){c__h, is__h, sc__h}))}));
     targetLifeAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){232, go_box(targetLifeAdd, (*ret))}), err};
@@ -69449,7 +69537,7 @@ Ret_StateController__GoIface CharCompiler_targetState(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetState* _t1 = ((targetState*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_643, go_box(Env_lambda_643, ((Env_lambda_643){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_647, go_box(Env_lambda_647, ((Env_lambda_647){c__h, is__h, sc__h}))}));
     targetState* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){233, go_box(targetState, (*ret))}), err};
@@ -69461,7 +69549,7 @@ Ret_StateController__GoIface CharCompiler_targetVelSet(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetVelSet* _t1 = ((targetVelSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_644, go_box(Env_lambda_644, ((Env_lambda_644){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_648, go_box(Env_lambda_648, ((Env_lambda_648){c__h, is__h, sc__h}))}));
     targetVelSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){234, go_box(targetVelSet, (*ret))}), err};
@@ -69473,7 +69561,7 @@ Ret_StateController__GoIface CharCompiler_targetVelAdd(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetVelAdd* _t1 = ((targetVelAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_645, go_box(Env_lambda_645, ((Env_lambda_645){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_649, go_box(Env_lambda_649, ((Env_lambda_649){c__h, is__h, sc__h}))}));
     targetVelAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){235, go_box(targetVelAdd, (*ret))}), err};
@@ -69485,7 +69573,7 @@ Ret_StateController__GoIface CharCompiler_targetPowerAdd(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetPowerAdd* _t1 = ((targetPowerAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_646, go_box(Env_lambda_646, ((Env_lambda_646){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_650, go_box(Env_lambda_650, ((Env_lambda_650){c__h, is__h, sc__h}))}));
     targetPowerAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){236, go_box(targetPowerAdd, (*ret))}), err};
@@ -69497,7 +69585,7 @@ Ret_StateController__GoIface CharCompiler_targetDrop(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetDrop* _t1 = ((targetDrop*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_647, go_box(Env_lambda_647, ((Env_lambda_647){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_651, go_box(Env_lambda_651, ((Env_lambda_651){c__h, is__h, sc__h}))}));
     targetDrop* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){237, go_box(targetDrop, (*ret))}), err};
@@ -69509,7 +69597,7 @@ Ret_StateController__GoIface CharCompiler_lifeAdd(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     lifeAdd* _t1 = ((lifeAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_648, go_box(Env_lambda_648, ((Env_lambda_648){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_652, go_box(Env_lambda_652, ((Env_lambda_652){c__h, is__h, sc__h}))}));
     lifeAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){238, go_box(lifeAdd, (*ret))}), err};
@@ -69521,7 +69609,7 @@ Ret_StateController__GoIface CharCompiler_lifeSet(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     lifeSet* _t1 = ((lifeSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_649, go_box(Env_lambda_649, ((Env_lambda_649){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_653, go_box(Env_lambda_653, ((Env_lambda_653){c__h, is__h, sc__h}))}));
     lifeSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){239, go_box(lifeSet, (*ret))}), err};
@@ -69533,7 +69621,7 @@ Ret_StateController__GoIface CharCompiler_powerAdd(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     powerAdd* _t1 = ((powerAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_650, go_box(Env_lambda_650, ((Env_lambda_650){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_654, go_box(Env_lambda_654, ((Env_lambda_654){c__h, is__h, sc__h}))}));
     powerAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){240, go_box(powerAdd, (*ret))}), err};
@@ -69545,7 +69633,7 @@ Ret_StateController__GoIface CharCompiler_powerSet(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     powerSet* _t1 = ((powerSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_651, go_box(Env_lambda_651, ((Env_lambda_651){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_655, go_box(Env_lambda_655, ((Env_lambda_655){c__h, is__h, sc__h}))}));
     powerSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){241, go_box(powerSet, (*ret))}), err};
@@ -69557,7 +69645,7 @@ Ret_StateController__GoIface CharCompiler_hitVelSet(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitVelSet* _t1 = ((hitVelSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_652, go_box(Env_lambda_652, ((Env_lambda_652){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_656, go_box(Env_lambda_656, ((Env_lambda_656){c__h, is__h, sc__h}))}));
     hitVelSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){242, go_box(hitVelSet, (*ret))}), err};
@@ -69569,7 +69657,7 @@ Ret_StateController__GoIface CharCompiler_screenBound(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     screenBound* _t1 = ((screenBound*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_653, go_box(Env_lambda_653, ((Env_lambda_653){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_657, go_box(Env_lambda_657, ((Env_lambda_657){c__h, is__h, sc__h}))}));
     screenBound* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){243, go_box(screenBound, (*ret))}), err};
@@ -69581,7 +69669,7 @@ Ret_StateController__GoIface CharCompiler_posFreeze(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     posFreeze* _t1 = ((posFreeze*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_655, go_box(Env_lambda_655, ((Env_lambda_655){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_659, go_box(Env_lambda_659, ((Env_lambda_659){c__h, is__h, sc__h}))}));
     posFreeze* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){244, go_box(posFreeze, (*ret))}), err};
@@ -69593,7 +69681,7 @@ Ret_StateController__GoIface CharCompiler_envShake(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     envShake* _t1 = ((envShake*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_657, go_box(Env_lambda_657, ((Env_lambda_657){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_661, go_box(Env_lambda_661, ((Env_lambda_661){c__h, is__h, sc__h}))}));
     envShake* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){245, go_box(envShake, (*ret))}), err};
@@ -69605,7 +69693,7 @@ Ret_StateController__GoIface CharCompiler_hitOverride(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitOverride* _t1 = ((hitOverride*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_658, go_box(Env_lambda_658, ((Env_lambda_658){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_662, go_box(Env_lambda_662, ((Env_lambda_662){c__h, is__h, sc__h}))}));
     hitOverride* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){246, go_box(hitOverride, (*ret))}), err};
@@ -69617,7 +69705,7 @@ Ret_StateController__GoIface CharCompiler_pause(CharCompiler* c, IniSection is, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     pause* _t1 = ((pause*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_662, go_box(Env_lambda_662, ((Env_lambda_662){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_666, go_box(Env_lambda_666, ((Env_lambda_666){c__h, is__h, sc__h}))}));
     pause* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){247, go_box(pause, (*ret))}), err};
@@ -69629,7 +69717,7 @@ Ret_StateController__GoIface CharCompiler_superPause(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     superPause* _t1 = ((superPause*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_663, go_box(Env_lambda_663, ((Env_lambda_663){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_667, go_box(Env_lambda_667, ((Env_lambda_667){c__h, is__h, sc__h}))}));
     superPause* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){248, go_box(superPause, (*ret))}), err};
@@ -69641,7 +69729,7 @@ Ret_StateController__GoIface CharCompiler_trans(CharCompiler* c, IniSection is, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     trans* _t1 = ((trans*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_664, go_box(Env_lambda_664, ((Env_lambda_664){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_668, go_box(Env_lambda_668, ((Env_lambda_668){c__h, is__h, sc__h}))}));
     trans* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){249, go_box(trans, (*ret))}), err};
@@ -69653,7 +69741,7 @@ Ret_StateController__GoIface CharCompiler_playerPush(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     playerPush* _t1 = ((playerPush*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_665, go_box(Env_lambda_665, ((Env_lambda_665){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_669, go_box(Env_lambda_669, ((Env_lambda_669){c__h, is__h, sc__h}))}));
     playerPush* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){250, go_box(playerPush, (*ret))}), err};
@@ -69668,7 +69756,7 @@ Ret_i32__BytecodeExp__GoIface CharCompiler_typeExpression(CharCompiler* c, GoStr
     if ((*data__h).len == 0) {
         return (Ret_i32__BytecodeExp__GoIface){0, (BytecodeExp){0}, ((GoIface){155, go_box(Error, go_strcat((*name__h), GOSTR(" not specified")))})};
     }
-    GoFunc legacy = ((GoFunc){(void *)lambda_669, &(Env_lambda_669){data__h, name__h, conv__h}});
+    GoFunc legacy = ((GoFunc){(void *)lambda_673, &(Env_lambda_673){data__h, name__h, conv__h}});
     if (go_streq(strings_Trim((*data__h), validLetters), GOSTR(""))) {
         return ((Ret_i32__BytecodeExp__GoIface (*)(void *))(legacy).fn)((legacy).env);
     }
@@ -69709,7 +69797,7 @@ Ret_StateController__GoIface CharCompiler_stateTypeSet(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     stateTypeSet* _t1 = ((stateTypeSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_670, go_box(Env_lambda_670, ((Env_lambda_670){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_674, go_box(Env_lambda_674, ((Env_lambda_674){c__h, is__h, sc__h}))}));
     stateTypeSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){251, go_box(stateTypeSet, (*ret))}), err};
@@ -69721,7 +69809,7 @@ Ret_StateController__GoIface CharCompiler_angleDraw(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     angleDraw* _t1 = ((angleDraw*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_676, go_box(Env_lambda_676, ((Env_lambda_676){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_680, go_box(Env_lambda_680, ((Env_lambda_680){c__h, is__h, sc__h}))}));
     angleDraw* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){252, go_box(angleDraw, (*ret))}), err};
@@ -69733,7 +69821,7 @@ Ret_StateController__GoIface CharCompiler_angleSet(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     angleSet* _t1 = ((angleSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_677, go_box(Env_lambda_677, ((Env_lambda_677){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_681, go_box(Env_lambda_681, ((Env_lambda_681){c__h, is__h, sc__h}))}));
     angleSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){253, go_box(angleSet, (*ret))}), err};
@@ -69745,7 +69833,7 @@ Ret_StateController__GoIface CharCompiler_angleAdd(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     angleAdd* _t1 = ((angleAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_678, go_box(Env_lambda_678, ((Env_lambda_678){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_682, go_box(Env_lambda_682, ((Env_lambda_682){c__h, is__h, sc__h}))}));
     angleAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){254, go_box(angleAdd, (*ret))}), err};
@@ -69757,7 +69845,7 @@ Ret_StateController__GoIface CharCompiler_angleMul(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     angleMul* _t1 = ((angleMul*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_679, go_box(Env_lambda_679, ((Env_lambda_679){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_683, go_box(Env_lambda_683, ((Env_lambda_683){c__h, is__h, sc__h}))}));
     angleMul* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){255, go_box(angleMul, (*ret))}), err};
@@ -69769,7 +69857,7 @@ Ret_StateController__GoIface CharCompiler_envColor(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     envColor* _t1 = ((envColor*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_680, go_box(Env_lambda_680, ((Env_lambda_680){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_684, go_box(Env_lambda_684, ((Env_lambda_684){c__h, is__h, sc__h}))}));
     envColor* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){256, go_box(envColor, (*ret))}), err};
@@ -69786,7 +69874,7 @@ GoIface CharCompiler_displayToClipboardSub(CharCompiler* c, IniSection is, State
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*c__h), is, GOSTR("params"), false, ((GoFunc){(void *)lambda_682, go_box(Env_lambda_682, ((Env_lambda_682){c__h, sc__h}))}));
+        GoIface _t1 = CharCompiler_stateParam((*c__h), is, GOSTR("params"), false, ((GoFunc){(void *)lambda_686, go_box(Env_lambda_686, ((Env_lambda_686){c__h, sc__h}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -69794,7 +69882,7 @@ GoIface CharCompiler_displayToClipboardSub(CharCompiler* c, IniSection is, State
     }
     bool *b__h = go_box_a(bool, false);
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("text"), false, ((GoFunc){(void *)lambda_683, go_box(Env_lambda_683, ((Env_lambda_683){c__h, sc__h, b__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("text"), false, ((GoFunc){(void *)lambda_687, go_box(Env_lambda_687, ((Env_lambda_687){c__h, sc__h, b__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -69811,7 +69899,7 @@ Ret_StateController__GoIface CharCompiler_displayToClipboard(CharCompiler* c, In
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     displayToClipboard* _t1 = ((displayToClipboard*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_684, go_box(Env_lambda_684, ((Env_lambda_684){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_688, go_box(Env_lambda_688, ((Env_lambda_688){c__h, is__h, sc__h}))}));
     displayToClipboard* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){257, go_box(displayToClipboard, (*ret))}), err};
@@ -69823,7 +69911,7 @@ Ret_StateController__GoIface CharCompiler_appendToClipboard(CharCompiler* c, Ini
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     appendToClipboard* _t1 = ((appendToClipboard*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_685, go_box(Env_lambda_685, ((Env_lambda_685){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_689, go_box(Env_lambda_689, ((Env_lambda_689){c__h, is__h, sc__h}))}));
     appendToClipboard* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){258, go_box(appendToClipboard, (*ret))}), err};
@@ -69835,7 +69923,7 @@ Ret_StateController__GoIface CharCompiler_clearClipboard(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     clearClipboard* _t1 = ((clearClipboard*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_686, go_box(Env_lambda_686, ((Env_lambda_686){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_690, go_box(Env_lambda_690, ((Env_lambda_690){c__h, is__h, sc__h}))}));
     clearClipboard* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){259, go_box(clearClipboard, (*ret))}), err};
@@ -69847,7 +69935,7 @@ Ret_StateController__GoIface CharCompiler_makeDust(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     makeDust* _t1 = ((makeDust*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_687, go_box(Env_lambda_687, ((Env_lambda_687){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_691, go_box(Env_lambda_691, ((Env_lambda_691){c__h, is__h, sc__h}))}));
     makeDust* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){260, go_box(makeDust, (*ret))}), err};
@@ -69859,7 +69947,7 @@ Ret_StateController__GoIface CharCompiler_attackDist(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     attackDist* _t1 = ((attackDist*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_690, go_box(Env_lambda_690, ((Env_lambda_690){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_694, go_box(Env_lambda_694, ((Env_lambda_694){c__h, is__h, sc__h}))}));
     attackDist* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){261, go_box(attackDist, (*ret))}), err};
@@ -69871,7 +69959,7 @@ Ret_StateController__GoIface CharCompiler_attackMulSet(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     attackMulSet* _t1 = ((attackMulSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_691, go_box(Env_lambda_691, ((Env_lambda_691){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_695, go_box(Env_lambda_695, ((Env_lambda_695){c__h, is__h, sc__h}))}));
     attackMulSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){262, go_box(attackMulSet, (*ret))}), err};
@@ -69883,7 +69971,7 @@ Ret_StateController__GoIface CharCompiler_defenceMulSet(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     defenceMulSet* _t1 = ((defenceMulSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_697, go_box(Env_lambda_697, ((Env_lambda_697){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_701, go_box(Env_lambda_701, ((Env_lambda_701){c__h, is__h, sc__h}))}));
     defenceMulSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){263, go_box(defenceMulSet, (*ret))}), err};
@@ -69895,7 +69983,7 @@ Ret_StateController__GoIface CharCompiler_fallEnvShake(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     fallEnvShake* _t1 = ((fallEnvShake*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_699, go_box(Env_lambda_699, ((Env_lambda_699){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_703, go_box(Env_lambda_703, ((Env_lambda_703){c__h, is__h, sc__h}))}));
     fallEnvShake* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){264, go_box(fallEnvShake, (*ret))}), err};
@@ -69907,7 +69995,7 @@ Ret_StateController__GoIface CharCompiler_hitFallDamage(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitFallDamage* _t1 = ((hitFallDamage*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_700, go_box(Env_lambda_700, ((Env_lambda_700){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_704, go_box(Env_lambda_704, ((Env_lambda_704){c__h, is__h, sc__h}))}));
     hitFallDamage* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){265, go_box(hitFallDamage, (*ret))}), err};
@@ -69919,7 +70007,7 @@ Ret_StateController__GoIface CharCompiler_hitFallVel(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitFallVel* _t1 = ((hitFallVel*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_701, go_box(Env_lambda_701, ((Env_lambda_701){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_705, go_box(Env_lambda_705, ((Env_lambda_705){c__h, is__h, sc__h}))}));
     hitFallVel* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){266, go_box(hitFallVel, (*ret))}), err};
@@ -69931,7 +70019,7 @@ Ret_StateController__GoIface CharCompiler_hitFallSet(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitFallSet* _t1 = ((hitFallSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_702, go_box(Env_lambda_702, ((Env_lambda_702){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_706, go_box(Env_lambda_706, ((Env_lambda_706){c__h, is__h, sc__h}))}));
     hitFallSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){267, go_box(hitFallSet, (*ret))}), err};
@@ -69943,7 +70031,7 @@ Ret_StateController__GoIface CharCompiler_varRangeSet(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varRangeSet* _t1 = ((varRangeSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_704, go_box(Env_lambda_704, ((Env_lambda_704){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_708, go_box(Env_lambda_708, ((Env_lambda_708){c__h, is__h, sc__h}))}));
     varRangeSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){268, go_box(varRangeSet, (*ret))}), err};
@@ -69955,7 +70043,7 @@ Ret_StateController__GoIface CharCompiler_remapPal(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     remapPal* _t1 = ((remapPal*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_707, go_box(Env_lambda_707, ((Env_lambda_707){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_711, go_box(Env_lambda_711, ((Env_lambda_711){c__h, is__h, sc__h}))}));
     remapPal* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){269, go_box(remapPal, (*ret))}), err};
@@ -69967,7 +70055,7 @@ Ret_StateController__GoIface CharCompiler_stopSnd(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     stopSnd* _t1 = ((stopSnd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_708, go_box(Env_lambda_708, ((Env_lambda_708){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_712, go_box(Env_lambda_712, ((Env_lambda_712){c__h, is__h, sc__h}))}));
     stopSnd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){270, go_box(stopSnd, (*ret))}), err};
@@ -69979,7 +70067,7 @@ Ret_StateController__GoIface CharCompiler_sndPan(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     sndPan* _t1 = ((sndPan*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_709, go_box(Env_lambda_709, ((Env_lambda_709){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_713, go_box(Env_lambda_713, ((Env_lambda_713){c__h, is__h, sc__h}))}));
     sndPan* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){271, go_box(sndPan, (*ret))}), err};
@@ -69991,7 +70079,7 @@ Ret_StateController__GoIface CharCompiler_varRandom(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     varRandom* _t1 = ((varRandom*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_710, go_box(Env_lambda_710, ((Env_lambda_710){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_714, go_box(Env_lambda_714, ((Env_lambda_714){c__h, is__h, sc__h}))}));
     varRandom* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){272, go_box(varRandom, (*ret))}), err};
@@ -70003,7 +70091,7 @@ Ret_StateController__GoIface CharCompiler_gravity(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     gravity* _t1 = ((gravity*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_711, go_box(Env_lambda_711, ((Env_lambda_711){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_715, go_box(Env_lambda_715, ((Env_lambda_715){c__h, is__h, sc__h}))}));
     gravity* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){273, go_box(gravity, (*ret))}), err};
@@ -70044,7 +70132,7 @@ Ret_StateController__GoIface CharCompiler_bindToParent(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     bindToParent* _t1 = ((bindToParent*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_712, go_box(Env_lambda_712, ((Env_lambda_712){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_716, go_box(Env_lambda_716, ((Env_lambda_716){c__h, is__h, sc__h}))}));
     bindToParent* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){274, go_box(bindToParent, (*ret))}), err};
@@ -70056,7 +70144,7 @@ Ret_StateController__GoIface CharCompiler_bindToRoot(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     bindToRoot* _t1 = ((bindToRoot*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_713, go_box(Env_lambda_713, ((Env_lambda_713){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_717, go_box(Env_lambda_717, ((Env_lambda_717){c__h, is__h, sc__h}))}));
     bindToRoot* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){275, go_box(bindToRoot, (*ret))}), err};
@@ -70068,7 +70156,7 @@ Ret_StateController__GoIface CharCompiler_removeExplod(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     removeExplod* _t1 = ((removeExplod*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_714, go_box(Env_lambda_714, ((Env_lambda_714){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_718, go_box(Env_lambda_718, ((Env_lambda_718){c__h, is__h, sc__h}))}));
     removeExplod* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){276, go_box(removeExplod, (*ret))}), err};
@@ -70080,7 +70168,7 @@ Ret_StateController__GoIface CharCompiler_explodBindTime(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     explodBindTime* _t1 = ((explodBindTime*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_717, go_box(Env_lambda_717, ((Env_lambda_717){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_721, go_box(Env_lambda_721, ((Env_lambda_721){c__h, is__h, sc__h}))}));
     explodBindTime* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){277, go_box(explodBindTime, (*ret))}), err};
@@ -70092,7 +70180,7 @@ Ret_StateController__GoIface CharCompiler_moveHitReset(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     moveHitReset* _t1 = ((moveHitReset*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_719, go_box(Env_lambda_719, ((Env_lambda_719){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_723, go_box(Env_lambda_723, ((Env_lambda_723){c__h, is__h, sc__h}))}));
     moveHitReset* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){278, go_box(moveHitReset, (*ret))}), err};
@@ -70104,7 +70192,7 @@ Ret_StateController__GoIface CharCompiler_hitAdd(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     hitAdd* _t1 = ((hitAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_720, go_box(Env_lambda_720, ((Env_lambda_720){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_724, go_box(Env_lambda_724, ((Env_lambda_724){c__h, is__h, sc__h}))}));
     hitAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){279, go_box(hitAdd, (*ret))}), err};
@@ -70116,7 +70204,7 @@ Ret_StateController__GoIface CharCompiler_offset(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     offset* _t1 = ((offset*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_721, go_box(Env_lambda_721, ((Env_lambda_721){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_725, go_box(Env_lambda_725, ((Env_lambda_725){c__h, is__h, sc__h}))}));
     offset* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){280, go_box(offset, (*ret))}), err};
@@ -70128,7 +70216,7 @@ Ret_StateController__GoIface CharCompiler_victoryQuote(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     victoryQuote* _t1 = ((victoryQuote*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_722, go_box(Env_lambda_722, ((Env_lambda_722){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_726, go_box(Env_lambda_726, ((Env_lambda_726){c__h, is__h, sc__h}))}));
     victoryQuote* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){281, go_box(victoryQuote, (*ret))}), err};
@@ -70140,7 +70228,7 @@ Ret_StateController__GoIface CharCompiler_zoom(CharCompiler* c, IniSection is, S
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     zoom* _t1 = ((zoom*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_723, go_box(Env_lambda_723, ((Env_lambda_723){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_727, go_box(Env_lambda_727, ((Env_lambda_727){c__h, is__h, sc__h}))}));
     zoom* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){282, go_box(zoom, (*ret))}), err};
@@ -70152,7 +70240,7 @@ Ret_StateController__GoIface CharCompiler_forceFeedback(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     forceFeedback* _t1 = ((forceFeedback*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_724, go_box(Env_lambda_724, ((Env_lambda_724){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_728, go_box(Env_lambda_728, ((Env_lambda_728){c__h, is__h, sc__h}))}));
     forceFeedback* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){283, go_box(forceFeedback, (*ret))}), err};
@@ -70164,7 +70252,7 @@ Ret_StateController__GoIface CharCompiler_assertAnalogVector(CharCompiler* c, In
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     assertAnalogVector* _t1 = ((assertAnalogVector*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_727, go_box(Env_lambda_727, ((Env_lambda_727){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_731, go_box(Env_lambda_731, ((Env_lambda_731){c__h, is__h, sc__h}))}));
     assertAnalogVector* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){284, go_box(assertAnalogVector, (*ret))}), err};
@@ -70176,7 +70264,7 @@ Ret_StateController__GoIface CharCompiler_assertInput(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     assertInput* _t1 = ((assertInput*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_728, go_box(Env_lambda_728, ((Env_lambda_728){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_732, go_box(Env_lambda_732, ((Env_lambda_732){c__h, is__h, sc__h}))}));
     assertInput* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){285, go_box(assertInput, (*ret))}), err};
@@ -70188,7 +70276,7 @@ Ret_StateController__GoIface CharCompiler_changeMovelist(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     changeMovelist* _t1 = ((changeMovelist*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_732, go_box(Env_lambda_732, ((Env_lambda_732){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_736, go_box(Env_lambda_736, ((Env_lambda_736){c__h, is__h, sc__h}))}));
     changeMovelist* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){286, go_box(changeMovelist, (*ret))}), err};
@@ -70200,7 +70288,7 @@ Ret_StateController__GoIface CharCompiler_dialogue(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     dialogue* _t1 = ((dialogue*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_733, go_box(Env_lambda_733, ((Env_lambda_733){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_737, go_box(Env_lambda_737, ((Env_lambda_737){c__h, is__h, sc__h}))}));
     dialogue* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){287, go_box(dialogue, (*ret))}), err};
@@ -70212,7 +70300,7 @@ Ret_StateController__GoIface CharCompiler_dizzyPointsAdd(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     dizzyPointsAdd* _t1 = ((dizzyPointsAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_734, go_box(Env_lambda_734, ((Env_lambda_734){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_738, go_box(Env_lambda_738, ((Env_lambda_738){c__h, is__h, sc__h}))}));
     dizzyPointsAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){288, go_box(dizzyPointsAdd, (*ret))}), err};
@@ -70224,7 +70312,7 @@ Ret_StateController__GoIface CharCompiler_dizzyPointsSet(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     dizzyPointsSet* _t1 = ((dizzyPointsSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_735, go_box(Env_lambda_735, ((Env_lambda_735){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_739, go_box(Env_lambda_739, ((Env_lambda_739){c__h, is__h, sc__h}))}));
     dizzyPointsSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){289, go_box(dizzyPointsSet, (*ret))}), err};
@@ -70236,7 +70324,7 @@ Ret_StateController__GoIface CharCompiler_dizzySet(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     dizzySet* _t1 = ((dizzySet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_736, go_box(Env_lambda_736, ((Env_lambda_736){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_740, go_box(Env_lambda_740, ((Env_lambda_740){c__h, is__h, sc__h}))}));
     dizzySet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){290, go_box(dizzySet, (*ret))}), err};
@@ -70248,7 +70336,7 @@ Ret_StateController__GoIface CharCompiler_guardBreakSet(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     guardBreakSet* _t1 = ((guardBreakSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_737, go_box(Env_lambda_737, ((Env_lambda_737){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_741, go_box(Env_lambda_741, ((Env_lambda_741){c__h, is__h, sc__h}))}));
     guardBreakSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){291, go_box(guardBreakSet, (*ret))}), err};
@@ -70260,7 +70348,7 @@ Ret_StateController__GoIface CharCompiler_guardPointsAdd(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     guardPointsAdd* _t1 = ((guardPointsAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_738, go_box(Env_lambda_738, ((Env_lambda_738){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_742, go_box(Env_lambda_742, ((Env_lambda_742){c__h, is__h, sc__h}))}));
     guardPointsAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){292, go_box(guardPointsAdd, (*ret))}), err};
@@ -70272,7 +70360,7 @@ Ret_StateController__GoIface CharCompiler_guardPointsSet(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     guardPointsSet* _t1 = ((guardPointsSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_739, go_box(Env_lambda_739, ((Env_lambda_739){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_743, go_box(Env_lambda_743, ((Env_lambda_743){c__h, is__h, sc__h}))}));
     guardPointsSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){293, go_box(guardPointsSet, (*ret))}), err};
@@ -70284,7 +70372,7 @@ Ret_StateController__GoIface CharCompiler_lifebarAction(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     lifebarAction* _t1 = ((lifebarAction*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_740, go_box(Env_lambda_740, ((Env_lambda_740){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_744, go_box(Env_lambda_744, ((Env_lambda_744){c__h, is__h, sc__h}))}));
     lifebarAction* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){294, go_box(lifebarAction, (*ret))}), err};
@@ -70294,7 +70382,7 @@ Ret_StateController__GoIface CharCompiler_lifebarAction(CharCompiler* c, IniSect
 Ret_StateController__GoIface CharCompiler_loadState(CharCompiler* c, IniSection is, StateControllerBase* sc) {
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     loadState* _t1 = ((loadState*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec(c, is, ((GoFunc){(void *)lambda_741, go_box(Env_lambda_741, ((Env_lambda_741){sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec(c, is, ((GoFunc){(void *)lambda_745, go_box(Env_lambda_745, ((Env_lambda_745){sc__h}))}));
     loadState* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){295, go_box(loadState, (*ret))}), err};
@@ -70305,7 +70393,7 @@ GoIface CharCompiler_mapSetSub(CharCompiler* c, IniSection is, StateControllerBa
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
-    GoIface _t1 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_742, go_box(Env_lambda_742, ((Env_lambda_742){c__h, is__h, sc__h}))}));
+    GoIface _t1 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_746, go_box(Env_lambda_746, ((Env_lambda_746){c__h, is__h, sc__h}))}));
     GoIface err = _t1;
     return err;
 }
@@ -70316,7 +70404,7 @@ Ret_StateController__GoIface CharCompiler_mapSet(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_746, go_box(Env_lambda_746, ((Env_lambda_746){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_750, go_box(Env_lambda_750, ((Env_lambda_750){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("0"), 2, 1, (Slice_BytecodeExp){0});
@@ -70329,7 +70417,7 @@ Ret_StateController__GoIface CharCompiler_mapAdd(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_747, go_box(Env_lambda_747, ((Env_lambda_747){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_751, go_box(Env_lambda_751, ((Env_lambda_751){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("1"), 2, 1, (Slice_BytecodeExp){0});
@@ -70342,7 +70430,7 @@ Ret_StateController__GoIface CharCompiler_parentMapSet(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_748, go_box(Env_lambda_748, ((Env_lambda_748){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_752, go_box(Env_lambda_752, ((Env_lambda_752){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("2"), 2, 1, (Slice_BytecodeExp){0});
@@ -70355,7 +70443,7 @@ Ret_StateController__GoIface CharCompiler_parentMapAdd(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_749, go_box(Env_lambda_749, ((Env_lambda_749){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_753, go_box(Env_lambda_753, ((Env_lambda_753){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("3"), 2, 1, (Slice_BytecodeExp){0});
@@ -70368,7 +70456,7 @@ Ret_StateController__GoIface CharCompiler_rootMapSet(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_750, go_box(Env_lambda_750, ((Env_lambda_750){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_754, go_box(Env_lambda_754, ((Env_lambda_754){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("4"), 2, 1, (Slice_BytecodeExp){0});
@@ -70381,7 +70469,7 @@ Ret_StateController__GoIface CharCompiler_rootMapAdd(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_751, go_box(Env_lambda_751, ((Env_lambda_751){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_755, go_box(Env_lambda_755, ((Env_lambda_755){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("5"), 2, 1, (Slice_BytecodeExp){0});
@@ -70394,7 +70482,7 @@ Ret_StateController__GoIface CharCompiler_teamMapSet(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_752, go_box(Env_lambda_752, ((Env_lambda_752){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_756, go_box(Env_lambda_756, ((Env_lambda_756){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("6"), 2, 1, (Slice_BytecodeExp){0});
@@ -70407,7 +70495,7 @@ Ret_StateController__GoIface CharCompiler_teamMapAdd(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapSet* _t1 = ((mapSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_753, go_box(Env_lambda_753, ((Env_lambda_753){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_757, go_box(Env_lambda_757, ((Env_lambda_757){c__h, is__h, sc__h}))}));
     mapSet* ret = _t1;
     GoIface err = _t2;
     CharCompiler_scAdd((*c__h), (*sc__h), 1U, GOSTR("7"), 2, 1, (Slice_BytecodeExp){0});
@@ -70420,7 +70508,7 @@ Ret_StateController__GoIface CharCompiler_mapReset(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     mapReset* _t1 = ((mapReset*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_754, go_box(Env_lambda_754, ((Env_lambda_754){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_758, go_box(Env_lambda_758, ((Env_lambda_758){c__h, is__h, sc__h}))}));
     mapReset* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){297, go_box(mapReset, (*ret))}), err};
@@ -70432,7 +70520,7 @@ Ret_StateController__GoIface CharCompiler_matchRestart(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     matchRestart* _t1 = ((matchRestart*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_758, go_box(Env_lambda_758, ((Env_lambda_758){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_762, go_box(Env_lambda_762, ((Env_lambda_762){c__h, is__h, sc__h}))}));
     matchRestart* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){298, go_box(matchRestart, (*ret))}), err};
@@ -70444,7 +70532,7 @@ Ret_StateController__GoIface CharCompiler_playBgm(CharCompiler* c, IniSection is
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     playBgm* _t1 = ((playBgm*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_767, go_box(Env_lambda_767, ((Env_lambda_767){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_771, go_box(Env_lambda_771, ((Env_lambda_771){c__h, is__h, sc__h}))}));
     playBgm* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){299, go_box(playBgm, (*ret))}), err};
@@ -70456,7 +70544,7 @@ Ret_StateController__GoIface CharCompiler_modifyBGCtrl(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyBGCtrl* _t1 = ((modifyBGCtrl*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_769, go_box(Env_lambda_769, ((Env_lambda_769){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_773, go_box(Env_lambda_773, ((Env_lambda_773){c__h, is__h, sc__h}))}));
     modifyBGCtrl* ret = _t1;
     GoIface err = _t2;
     g_sys.cgi.v[(*c__h)->playerNo].canMutateStage = true;
@@ -70469,7 +70557,7 @@ Ret_StateController__GoIface CharCompiler_modifyBGCtrl3d(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyBGCtrl3d* _t1 = ((modifyBGCtrl3d*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_770, go_box(Env_lambda_770, ((Env_lambda_770){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_774, go_box(Env_lambda_774, ((Env_lambda_774){c__h, is__h, sc__h}))}));
     modifyBGCtrl3d* ret = _t1;
     GoIface err = _t2;
     g_sys.cgi.v[(*c__h)->playerNo].canMutateStage = true;
@@ -70482,7 +70570,7 @@ Ret_StateController__GoIface CharCompiler_modifySnd(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifySnd* _t1 = ((modifySnd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_771, go_box(Env_lambda_771, ((Env_lambda_771){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_775, go_box(Env_lambda_775, ((Env_lambda_775){c__h, is__h, sc__h}))}));
     modifySnd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){302, go_box(modifySnd, (*ret))}), err};
@@ -70494,7 +70582,7 @@ Ret_StateController__GoIface CharCompiler_modifyBgm(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyBgm* _t1 = ((modifyBgm*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_772, go_box(Env_lambda_772, ((Env_lambda_772){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_776, go_box(Env_lambda_776, ((Env_lambda_776){c__h, is__h, sc__h}))}));
     modifyBgm* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){303, go_box(modifyBgm, (*ret))}), err};
@@ -70506,7 +70594,7 @@ Ret_StateController__GoIface CharCompiler_printToConsole(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     printToConsole* _t1 = ((printToConsole*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_773, go_box(Env_lambda_773, ((Env_lambda_773){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_777, go_box(Env_lambda_777, ((Env_lambda_777){c__h, is__h, sc__h}))}));
     printToConsole* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){304, go_box(printToConsole, (*ret))}), err};
@@ -70518,7 +70606,7 @@ Ret_StateController__GoIface CharCompiler_redLifeAdd(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     redLifeAdd* _t1 = ((redLifeAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_774, go_box(Env_lambda_774, ((Env_lambda_774){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_778, go_box(Env_lambda_778, ((Env_lambda_778){c__h, is__h, sc__h}))}));
     redLifeAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){305, go_box(redLifeAdd, (*ret))}), err};
@@ -70530,7 +70618,7 @@ Ret_StateController__GoIface CharCompiler_redLifeSet(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     redLifeSet* _t1 = ((redLifeSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_775, go_box(Env_lambda_775, ((Env_lambda_775){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_779, go_box(Env_lambda_779, ((Env_lambda_779){c__h, is__h, sc__h}))}));
     redLifeSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){306, go_box(redLifeSet, (*ret))}), err};
@@ -70542,7 +70630,7 @@ Ret_StateController__GoIface CharCompiler_remapSprite(CharCompiler* c, IniSectio
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     remapSprite* _t1 = ((remapSprite*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_776, go_box(Env_lambda_776, ((Env_lambda_776){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_780, go_box(Env_lambda_780, ((Env_lambda_780){c__h, is__h, sc__h}))}));
     remapSprite* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){307, go_box(remapSprite, (*ret))}), err};
@@ -70554,7 +70642,7 @@ Ret_StateController__GoIface CharCompiler_roundTimeAdd(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     roundTimeAdd* _t1 = ((roundTimeAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_777, go_box(Env_lambda_777, ((Env_lambda_777){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_781, go_box(Env_lambda_781, ((Env_lambda_781){c__h, is__h, sc__h}))}));
     roundTimeAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){308, go_box(roundTimeAdd, (*ret))}), err};
@@ -70566,7 +70654,7 @@ Ret_StateController__GoIface CharCompiler_roundTimeSet(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     roundTimeSet* _t1 = ((roundTimeSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_778, go_box(Env_lambda_778, ((Env_lambda_778){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_782, go_box(Env_lambda_782, ((Env_lambda_782){c__h, is__h, sc__h}))}));
     roundTimeSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){309, go_box(roundTimeSet, (*ret))}), err};
@@ -70613,7 +70701,7 @@ Ret_StateController__GoIface CharCompiler_saveFile(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     saveFile* _t1 = ((saveFile*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_779, go_box(Env_lambda_779, ((Env_lambda_779){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_783, go_box(Env_lambda_783, ((Env_lambda_783){c__h, is__h, sc__h}))}));
     saveFile* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){310, go_box(saveFile, (*ret))}), err};
@@ -70625,7 +70713,7 @@ Ret_StateController__GoIface CharCompiler_loadFile(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     loadFile* _t1 = ((loadFile*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_780, go_box(Env_lambda_780, ((Env_lambda_780){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_784, go_box(Env_lambda_784, ((Env_lambda_784){c__h, is__h, sc__h}))}));
     loadFile* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){311, go_box(loadFile, (*ret))}), err};
@@ -70635,7 +70723,7 @@ Ret_StateController__GoIface CharCompiler_loadFile(CharCompiler* c, IniSection i
 Ret_StateController__GoIface CharCompiler_saveState(CharCompiler* c, IniSection is, StateControllerBase* sc) {
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     saveState* _t1 = ((saveState*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec(c, is, ((GoFunc){(void *)lambda_781, go_box(Env_lambda_781, ((Env_lambda_781){sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec(c, is, ((GoFunc){(void *)lambda_785, go_box(Env_lambda_785, ((Env_lambda_785){sc__h}))}));
     saveState* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){312, go_box(saveState, (*ret))}), err};
@@ -70647,7 +70735,7 @@ Ret_StateController__GoIface CharCompiler_scoreAdd(CharCompiler* c, IniSection i
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     scoreAdd* _t1 = ((scoreAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_782, go_box(Env_lambda_782, ((Env_lambda_782){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_786, go_box(Env_lambda_786, ((Env_lambda_786){c__h, is__h, sc__h}))}));
     scoreAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){313, go_box(scoreAdd, (*ret))}), err};
@@ -70659,7 +70747,7 @@ Ret_StateController__GoIface CharCompiler_shaderSet(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     shaderSet* _t1 = ((shaderSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_783, go_box(Env_lambda_783, ((Env_lambda_783){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_787, go_box(Env_lambda_787, ((Env_lambda_787){c__h, is__h, sc__h}))}));
     shaderSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){314, go_box(shaderSet, (*ret))}), err};
@@ -70718,7 +70806,7 @@ Ret_StateController__GoIface CharCompiler_storyboard(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     storyboard* _t1 = ((storyboard*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_784, go_box(Env_lambda_784, ((Env_lambda_784){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_788, go_box(Env_lambda_788, ((Env_lambda_788){c__h, is__h, sc__h}))}));
     storyboard* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){315, go_box(storyboard, (*ret))}), err};
@@ -70730,7 +70818,7 @@ Ret_StateController__GoIface CharCompiler_modifyStoryboard(CharCompiler* c, IniS
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyStoryboard* _t1 = ((modifyStoryboard*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_785, go_box(Env_lambda_785, ((Env_lambda_785){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_789, go_box(Env_lambda_789, ((Env_lambda_789){c__h, is__h, sc__h}))}));
     modifyStoryboard* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){316, go_box(modifyStoryboard, (*ret))}), err};
@@ -70742,7 +70830,7 @@ Ret_StateController__GoIface CharCompiler_removeStoryboard(CharCompiler* c, IniS
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     removeStoryboard* _t1 = ((removeStoryboard*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_786, go_box(Env_lambda_786, ((Env_lambda_786){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_790, go_box(Env_lambda_790, ((Env_lambda_790){c__h, is__h, sc__h}))}));
     removeStoryboard* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){317, go_box(removeStoryboard, (*ret))}), err};
@@ -70754,7 +70842,7 @@ Ret_StateController__GoIface CharCompiler_targetDizzyPointsAdd(CharCompiler* c, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetDizzyPointsAdd* _t1 = ((targetDizzyPointsAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_787, go_box(Env_lambda_787, ((Env_lambda_787){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_791, go_box(Env_lambda_791, ((Env_lambda_791){c__h, is__h, sc__h}))}));
     targetDizzyPointsAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){318, go_box(targetDizzyPointsAdd, (*ret))}), err};
@@ -70766,7 +70854,7 @@ Ret_StateController__GoIface CharCompiler_targetGuardPointsAdd(CharCompiler* c, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetGuardPointsAdd* _t1 = ((targetGuardPointsAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_788, go_box(Env_lambda_788, ((Env_lambda_788){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_792, go_box(Env_lambda_792, ((Env_lambda_792){c__h, is__h, sc__h}))}));
     targetGuardPointsAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){319, go_box(targetGuardPointsAdd, (*ret))}), err};
@@ -70778,7 +70866,7 @@ Ret_StateController__GoIface CharCompiler_targetRedLifeAdd(CharCompiler* c, IniS
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetRedLifeAdd* _t1 = ((targetRedLifeAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_789, go_box(Env_lambda_789, ((Env_lambda_789){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_793, go_box(Env_lambda_793, ((Env_lambda_793){c__h, is__h, sc__h}))}));
     targetRedLifeAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){320, go_box(targetRedLifeAdd, (*ret))}), err};
@@ -70790,7 +70878,7 @@ Ret_StateController__GoIface CharCompiler_targetScoreAdd(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetScoreAdd* _t1 = ((targetScoreAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_790, go_box(Env_lambda_790, ((Env_lambda_790){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_794, go_box(Env_lambda_794, ((Env_lambda_794){c__h, is__h, sc__h}))}));
     targetScoreAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){321, go_box(targetScoreAdd, (*ret))}), err};
@@ -70819,14 +70907,14 @@ GoIface CharCompiler_textSub(CharCompiler* c, IniSection is, StateControllerBase
         }
     }
     {
-        GoIface _t1 = CharCompiler_stateParam((*c__h), is, GOSTR("params"), false, ((GoFunc){(void *)lambda_791, go_box(Env_lambda_791, ((Env_lambda_791){c__h, sc__h}))}));
+        GoIface _t1 = CharCompiler_stateParam((*c__h), is, GOSTR("params"), false, ((GoFunc){(void *)lambda_795, go_box(Env_lambda_795, ((Env_lambda_795){c__h, sc__h}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("text"), false, ((GoFunc){(void *)lambda_792, go_box(Env_lambda_792, ((Env_lambda_792){c__h, sc__h}))}));
+        GoIface err = CharCompiler_stateParam((*c__h), is, GOSTR("text"), false, ((GoFunc){(void *)lambda_796, go_box(Env_lambda_796, ((Env_lambda_796){c__h, sc__h}))}));
         if (err.type != 0) {
             return err;
         }
@@ -70984,7 +71072,7 @@ Ret_StateController__GoIface CharCompiler_text(CharCompiler* c, IniSection is, S
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     text* _t1 = ((text*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_793, go_box(Env_lambda_793, ((Env_lambda_793){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_797, go_box(Env_lambda_797, ((Env_lambda_797){c__h, is__h, sc__h}))}));
     text* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){322, go_box(text, (*ret))}), err};
@@ -70996,7 +71084,7 @@ Ret_StateController__GoIface CharCompiler_modifyText(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyText* _t1 = ((modifyText*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_794, go_box(Env_lambda_794, ((Env_lambda_794){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_798, go_box(Env_lambda_798, ((Env_lambda_798){c__h, is__h, sc__h}))}));
     modifyText* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){323, go_box(modifyText, (*ret))}), err};
@@ -71008,7 +71096,7 @@ Ret_StateController__GoIface CharCompiler_removeText(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     removeText* _t1 = ((removeText*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_795, go_box(Env_lambda_795, ((Env_lambda_795){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_799, go_box(Env_lambda_799, ((Env_lambda_799){c__h, is__h, sc__h}))}));
     removeText* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){324, go_box(removeText, (*ret))}), err};
@@ -71020,7 +71108,7 @@ Ret_StateController__GoIface CharCompiler_modifyStageVar(CharCompiler* c, IniSec
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyStageVar* _t1 = ((modifyStageVar*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_798, go_box(Env_lambda_798, ((Env_lambda_798){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_802, go_box(Env_lambda_802, ((Env_lambda_802){c__h, is__h, sc__h}))}));
     modifyStageVar* ret = _t1;
     GoIface err = _t2;
     g_sys.cgi.v[(*c__h)->playerNo].canMutateStage = true;
@@ -71033,7 +71121,7 @@ Ret_StateController__GoIface CharCompiler_cameraCtrl(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     cameraCtrl* _t1 = ((cameraCtrl*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_799, go_box(Env_lambda_799, ((Env_lambda_799){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_803, go_box(Env_lambda_803, ((Env_lambda_803){c__h, is__h, sc__h}))}));
     cameraCtrl* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){326, go_box(cameraCtrl, (*ret))}), err};
@@ -71045,7 +71133,7 @@ Ret_StateController__GoIface CharCompiler_height(CharCompiler* c, IniSection is,
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     height* _t1 = ((height*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_801, go_box(Env_lambda_801, ((Env_lambda_801){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_805, go_box(Env_lambda_805, ((Env_lambda_805){c__h, is__h, sc__h}))}));
     height* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){327, go_box(height, (*ret))}), err};
@@ -71057,7 +71145,7 @@ Ret_StateController__GoIface CharCompiler_depth(CharCompiler* c, IniSection is, 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     depth* _t1 = ((depth*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_802, go_box(Env_lambda_802, ((Env_lambda_802){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_806, go_box(Env_lambda_806, ((Env_lambda_806){c__h, is__h, sc__h}))}));
     depth* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){328, go_box(depth, (*ret))}), err};
@@ -71069,7 +71157,7 @@ Ret_StateController__GoIface CharCompiler_depthBound(CharCompiler* c, IniSection
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     depthBound* _t1 = ((depthBound*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_805, go_box(Env_lambda_805, ((Env_lambda_805){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_809, go_box(Env_lambda_809, ((Env_lambda_809){c__h, is__h, sc__h}))}));
     depthBound* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){329, go_box(depthBound, (*ret))}), err};
@@ -71081,7 +71169,7 @@ Ret_StateController__GoIface CharCompiler_modifyPlayer(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyPlayer* _t1 = ((modifyPlayer*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_806, go_box(Env_lambda_806, ((Env_lambda_806){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_810, go_box(Env_lambda_810, ((Env_lambda_810){c__h, is__h, sc__h}))}));
     modifyPlayer* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){330, go_box(modifyPlayer, (*ret))}), err};
@@ -71093,7 +71181,7 @@ Ret_StateController__GoIface CharCompiler_assertCommand(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     assertCommand* _t1 = ((assertCommand*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_807, go_box(Env_lambda_807, ((Env_lambda_807){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_811, go_box(Env_lambda_811, ((Env_lambda_811){c__h, is__h, sc__h}))}));
     assertCommand* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){331, go_box(assertCommand, (*ret))}), err};
@@ -71105,7 +71193,7 @@ Ret_StateController__GoIface CharCompiler_getHitVarSet(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     getHitVarSet* _t1 = ((getHitVarSet*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_808, go_box(Env_lambda_808, ((Env_lambda_808){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_812, go_box(Env_lambda_812, ((Env_lambda_812){c__h, is__h, sc__h}))}));
     getHitVarSet* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){332, go_box(getHitVarSet, (*ret))}), err};
@@ -71117,7 +71205,7 @@ Ret_StateController__GoIface CharCompiler_groundLevelOffset(CharCompiler* c, Ini
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     groundLevelOffset* _t1 = ((groundLevelOffset*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_810, go_box(Env_lambda_810, ((Env_lambda_810){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_814, go_box(Env_lambda_814, ((Env_lambda_814){c__h, is__h, sc__h}))}));
     groundLevelOffset* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){333, go_box(groundLevelOffset, (*ret))}), err};
@@ -71129,7 +71217,7 @@ Ret_StateController__GoIface CharCompiler_targetAdd(CharCompiler* c, IniSection 
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     targetAdd* _t1 = ((targetAdd*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_811, go_box(Env_lambda_811, ((Env_lambda_811){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_815, go_box(Env_lambda_815, ((Env_lambda_815){c__h, is__h, sc__h}))}));
     targetAdd* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){334, go_box(targetAdd, (*ret))}), err};
@@ -71141,7 +71229,7 @@ Ret_StateController__GoIface CharCompiler_transformClsn(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     transformClsn* _t1 = ((transformClsn*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_812, go_box(Env_lambda_812, ((Env_lambda_812){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_816, go_box(Env_lambda_816, ((Env_lambda_816){c__h, is__h, sc__h}))}));
     transformClsn* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){335, go_box(transformClsn, (*ret))}), err};
@@ -71153,7 +71241,7 @@ Ret_StateController__GoIface CharCompiler_transformSprite(CharCompiler* c, IniSe
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     transformSprite* _t1 = ((transformSprite*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_816, go_box(Env_lambda_816, ((Env_lambda_816){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_820, go_box(Env_lambda_820, ((Env_lambda_820){c__h, is__h, sc__h}))}));
     transformSprite* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){336, go_box(transformSprite, (*ret))}), err};
@@ -71165,7 +71253,7 @@ Ret_StateController__GoIface CharCompiler_modifyStageBG(CharCompiler* c, IniSect
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     modifyStageBG* _t1 = ((modifyStageBG*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_820, go_box(Env_lambda_820, ((Env_lambda_820){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_824, go_box(Env_lambda_824, ((Env_lambda_824){c__h, is__h, sc__h}))}));
     modifyStageBG* ret = _t1;
     GoIface err = _t2;
     g_sys.cgi.v[(*c__h)->playerNo].canMutateStage = true;
@@ -71242,28 +71330,28 @@ GoIface CharCompiler_shaderSub(CharCompiler* c, IniSection is, StateControllerBa
         StateControllerBase_add((*sc__h), opShaderParam, allParams);
     }
     {
-        GoIface _t9 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex1.anim")), false, ((GoFunc){(void *)lambda_838, go_box(Env_lambda_838, ((Env_lambda_838){c__h, sc__h, opTex1Anim__h}))}));
+        GoIface _t9 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex1.anim")), false, ((GoFunc){(void *)lambda_842, go_box(Env_lambda_842, ((Env_lambda_842){c__h, sc__h, opTex1Anim__h}))}));
         GoIface err = _t9;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t10 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex1.spr")), false, ((GoFunc){(void *)lambda_839, go_box(Env_lambda_839, ((Env_lambda_839){c__h, sc__h, opTex1Spr__h}))}));
+        GoIface _t10 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex1.spr")), false, ((GoFunc){(void *)lambda_843, go_box(Env_lambda_843, ((Env_lambda_843){c__h, sc__h, opTex1Spr__h}))}));
         GoIface err = _t10;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t11 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex2.anim")), false, ((GoFunc){(void *)lambda_840, go_box(Env_lambda_840, ((Env_lambda_840){c__h, sc__h, opTex2Anim__h}))}));
+        GoIface _t11 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex2.anim")), false, ((GoFunc){(void *)lambda_844, go_box(Env_lambda_844, ((Env_lambda_844){c__h, sc__h, opTex2Anim__h}))}));
         GoIface err = _t11;
         if (err.type != 0) {
             return err;
         }
     }
     {
-        GoIface _t12 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex2.spr")), false, ((GoFunc){(void *)lambda_841, go_box(Env_lambda_841, ((Env_lambda_841){c__h, sc__h, opTex2Spr__h}))}));
+        GoIface _t12 = CharCompiler_stateParam((*c__h), is, go_strcat(prefix, GOSTR("tex2.spr")), false, ((GoFunc){(void *)lambda_845, go_box(Env_lambda_845, ((Env_lambda_845){c__h, sc__h, opTex2Spr__h}))}));
         GoIface err = _t12;
         if (err.type != 0) {
             return err;
@@ -71277,9 +71365,9 @@ Ret_StateController__GoIface CharCompiler_shiftInput(CharCompiler* c, IniSection
     CharCompiler* *c__h = go_box(CharCompiler*, c);
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
-    GoFunc *inputIndex__h = go_box(GoFunc, ((GoFunc){(void *)lambda_842, go_box(Env_lambda_842, ((Env_lambda_842){0}))}));
+    GoFunc *inputIndex__h = go_box(GoFunc, ((GoFunc){(void *)lambda_846, go_box(Env_lambda_846, ((Env_lambda_846){0}))}));
     shiftInput* _t1 = ((shiftInput*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_843, go_box(Env_lambda_843, ((Env_lambda_843){c__h, is__h, sc__h, inputIndex__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_847, go_box(Env_lambda_847, ((Env_lambda_847){c__h, is__h, sc__h, inputIndex__h}))}));
     shiftInput* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){338, go_box(shiftInput, (*ret))}), err};
@@ -71291,7 +71379,7 @@ Ret_StateController__GoIface CharCompiler_overrideClsn(CharCompiler* c, IniSecti
     IniSection *is__h = go_box(IniSection, is);
     StateControllerBase* *sc__h = go_box(StateControllerBase*, sc);
     overrideClsn* _t1 = ((overrideClsn*)(*sc__h));
-    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_846, go_box(Env_lambda_846, ((Env_lambda_846){c__h, is__h, sc__h}))}));
+    GoIface _t2 = CharCompiler_stateSec((*c__h), (*is__h), ((GoFunc){(void *)lambda_850, go_box(Env_lambda_850, ((Env_lambda_850){c__h, is__h, sc__h}))}));
     overrideClsn* ret = _t1;
     GoIface err = _t2;
     return (Ret_StateController__GoIface){((GoIface){339, go_box(overrideClsn, (*ret))}), err};
@@ -71353,7 +71441,7 @@ Ret_ConfigPtr__GoIface fn_loadConfig(GoString def) {
     fn_vitaTrace(GOSTR("cfg: ini parsed"));
     Config_initStruct(&(*c__h));
     fn_vitaTrace(GOSTR("cfg: initStruct done"));
-    GoFunc assignFrom = ((GoFunc){(void *)lambda_847, &(Env_lambda_847){def__h, c__h}});
+    GoFunc assignFrom = ((GoFunc){(void *)lambda_851, &(Env_lambda_851){def__h, c__h}});
     ((void (*)(void *, GoOpaque /* ini.File */*))(assignFrom).fn)((assignFrom).env, defaultOnlyIni);
     fn_vitaTrace(GOSTR("cfg: defaults assigned"));
     ((void (*)(void *, GoOpaque /* ini.File */*))(assignFrom).fn)((assignFrom).env, userIniFile);
@@ -71474,7 +71562,7 @@ void Config_sysSet(Config* c) {
         }
     }
     g_sys.msaa = c->Video.MSAA;
-    GoFunc stoki = ((GoFunc){(void *)lambda_848, &(Env_lambda_848){0}});
+    GoFunc stoki = ((GoFunc){(void *)lambda_852, &(Env_lambda_852){0}});
     {
         int i = 1;
         for (; i <= c->Config.Players; i++) {
@@ -72727,7 +72815,7 @@ GoIface fn_loadCommonFightFx(GoString def, bool isMainThread) {
                 for (int _t4 = 0; _t4 < _t5.len; _t4++) {
                     GoString *v__h = go_box(GoString, _t5.p[_t4]);
                     {
-                        GoIface err = fn_LoadFile((&(*v__h)), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_849, go_box(Env_lambda_849, ((Env_lambda_849){isMainThread__h}))}));
+                        GoIface err = fn_LoadFile((&(*v__h)), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_853, go_box(Env_lambda_853, ((Env_lambda_853){isMainThread__h}))}));
                         if (err.type != 0) {
                             return err;
                         }
@@ -72816,19 +72904,19 @@ GoIface fn_loadFightFx(GoString def, bool isCharFX, bool isMainThread) {
                         if (files) {
                             files = false;
                             {
-                                IniSection_LoadFile(is, GOSTR("sff"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_850, go_box(Env_lambda_850, ((Env_lambda_850){isMainThread__h, ffx__h}))}));
+                                IniSection_LoadFile(is, GOSTR("sff"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_854, go_box(Env_lambda_854, ((Env_lambda_854){isMainThread__h, ffx__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (*err__h);
                                 }
                             }
                             {
-                                IniSection_LoadFile(is, GOSTR("air"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_851, go_box(Env_lambda_851, ((Env_lambda_851){ffx__h}))}));
+                                IniSection_LoadFile(is, GOSTR("air"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_855, go_box(Env_lambda_855, ((Env_lambda_855){ffx__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (*err__h);
                                 }
                             }
                             {
-                                IniSection_LoadFile(is, GOSTR("snd"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_852, go_box(Env_lambda_852, ((Env_lambda_852){err__h, ffx__h}))}));
+                                IniSection_LoadFile(is, GOSTR("snd"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_856, go_box(Env_lambda_856, ((Env_lambda_856){err__h, ffx__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (*err__h);
                                 }
@@ -73391,7 +73479,7 @@ void LifeBar_draw(LifeBar* lb, i16 layerno, int charpn, LifeBar* lbr, Map_int_Go
     i32 redval = (refChar->redLife - refChar->life);
     f32 MidPosX__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameWidth) - 320)) / 0x1p+01f); __typeof__(MidPosX__hv) *MidPosX__h = &MidPosX__hv;
     f32 MidPosY__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameHeight) - 240)) / 0x1p+01f); __typeof__(MidPosY__hv) *MidPosY__h = &MidPosY__hv;
-    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_853, &(Env_lambda_853){lb__h, MidPosX__h, MidPosY__h}});
+    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_857, &(Env_lambda_857){lb__h, MidPosX__h, MidPosY__h}});
     Arr4_i32 _t2 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, lbr->toplife);
     Arr4_i32 _t3 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, lbr->midlife);
     Arr4_i32 _t4 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, redlife);
@@ -73533,9 +73621,9 @@ PowerBar* fn_readPowerBar(GoString pre, IniSection is, Sff* sff, AnimationTable 
     IniSection_ReadI32((*is__h), go_strcat((*pre__h), GOSTR("pos")), GO_SLICE_LIT(Slice_i32Ptr, i32*, 2, (&pb->pos.v[0]), (&pb->pos.v[1])));
     IniSection_ReadI32((*is__h), go_strcat((*pre__h), GOSTR("range.x")), GO_SLICE_LIT(Slice_i32Ptr, i32*, 2, (&pb->range_x.v[0]), (&pb->range_x.v[1])));
     IniSection_ReadI32((*is__h), go_strcat((*pre__h), GOSTR("range.y")), GO_SLICE_LIT(Slice_i32Ptr, i32*, 2, (&pb->range_y.v[0]), (&pb->range_y.v[1])));
-    GoFunc readPBKeys__hv = ((GoFunc){(void *)lambda_854, go_box(Env_lambda_854, ((Env_lambda_854){pre__h, is__h}))}); __typeof__(readPBKeys__hv) *readPBKeys__h = &readPBKeys__hv;
-    GoFunc readMultipeAnimLayouts = ((GoFunc){(void *)lambda_855, &(Env_lambda_855){pre__h, is__h, sff__h, at__h, readPBKeys__h}});
-    GoFunc readMultipleFSTexts = ((GoFunc){(void *)lambda_856, &(Env_lambda_856){pre__h, is__h, f__h, readPBKeys__h}});
+    GoFunc readPBKeys__hv = ((GoFunc){(void *)lambda_858, go_box(Env_lambda_858, ((Env_lambda_858){pre__h, is__h}))}); __typeof__(readPBKeys__hv) *readPBKeys__h = &readPBKeys__hv;
+    GoFunc readMultipeAnimLayouts = ((GoFunc){(void *)lambda_859, &(Env_lambda_859){pre__h, is__h, sff__h, at__h, readPBKeys__h}});
+    GoFunc readMultipleFSTexts = ((GoFunc){(void *)lambda_860, &(Env_lambda_860){pre__h, is__h, f__h, readPBKeys__h}});
     pb->bg0 = ((Map_i32_AnimLayoutPtr (*)(void *, GoString))(readMultipeAnimLayouts).fn)((readMultipeAnimLayouts).env, GOSTR("bg0"));
     {
         bool _t1; AnimLayout* _t2 = Map_i32_AnimLayoutPtr_get(&pb->bg0, 0, &_t1);
@@ -73760,7 +73848,7 @@ void PowerBar_draw(PowerBar* pb, i16 layerno, int charpn, PowerBar* pbr, Map_int
     }
     f32 MidPosX__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameWidth) - 320)) / 0x1p+01f); __typeof__(MidPosX__hv) *MidPosX__h = &MidPosX__hv;
     f32 MidPosY__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameHeight) - 240)) / 0x1p+01f); __typeof__(MidPosY__hv) *MidPosY__h = &MidPosY__hv;
-    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_857, &(Env_lambda_857){pb__h, MidPosX__h, MidPosY__h}});
+    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_861, &(Env_lambda_861){pb__h, MidPosX__h, MidPosY__h}});
     Arr4_i32 _t1 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, power);
     Arr4_i32 _t2 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, pbr->midpower);
     Arr4_i32 *pr__h = go_box_a(Arr4_i32, _t1);
@@ -74017,7 +74105,7 @@ void GuardBar_draw(GuardBar* gb, i16 layerno, int charpn, GuardBar* gbr, Map_int
     }
     f32 MidPosX__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameWidth) - 320)) / 0x1p+01f); __typeof__(MidPosX__hv) *MidPosX__h = &MidPosX__hv;
     f32 MidPosY__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameHeight) - 240)) / 0x1p+01f); __typeof__(MidPosY__hv) *MidPosY__h = &MidPosY__hv;
-    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_858, &(Env_lambda_858){gb__h, MidPosX__h, MidPosY__h}});
+    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_862, &(Env_lambda_862){gb__h, MidPosX__h, MidPosY__h}});
     Arr4_i32 _t1 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, points);
     Arr4_i32 _t2 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, gbr->midpower);
     Arr4_i32 *pr__h = go_box_a(Arr4_i32, _t1);
@@ -74293,7 +74381,7 @@ void StunBar_draw(StunBar* sb, i16 layerno, int charpn, StunBar* sbr, Map_int_Go
     }
     f32 MidPosX__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameWidth) - 320)) / 0x1p+01f); __typeof__(MidPosX__hv) *MidPosX__h = &MidPosX__hv;
     f32 MidPosY__hv = (((f32)(go_f2i32(g_sys.SystemStateVars_.gameHeight) - 240)) / 0x1p+01f); __typeof__(MidPosY__hv) *MidPosY__h = &MidPosY__hv;
-    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_859, &(Env_lambda_859){sb__h, MidPosX__h, MidPosY__h}});
+    GoFunc getBarClipRect = ((GoFunc){(void *)lambda_863, &(Env_lambda_863){sb__h, MidPosX__h, MidPosY__h}});
     Arr4_i32 _t1 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, points);
     Arr4_i32 _t2 = ((Arr4_i32 (*)(void *, f32))(getBarClipRect).fn)((getBarClipRect).env, sbr->midpower);
     Arr4_i32 *pr__h = go_box_a(Arr4_i32, _t1);
@@ -75521,10 +75609,10 @@ FightScreenRound* fn_readFightScreenRound(IniSection is, Sff* sff, AnimationTabl
     IniSection_ReadI32((*is__h), GOSTR("win.time"), GO_SLICE_LIT(Slice_i32Ptr, i32*, 1, (&ro->win_time)));
     ro->win_sndtime = ro->win_time;
     IniSection_ReadI32((*is__h), GOSTR("win.sndtime"), GO_SLICE_LIT(Slice_i32Ptr, i32*, 1, (&ro->win_sndtime)));
-    GoFunc *sectionExists__h = go_box(GoFunc, ((GoFunc){(void *)lambda_860, go_box(Env_lambda_860, ((Env_lambda_860){is__h}))}));
-    GoFunc readATS = ((GoFunc){(void *)lambda_861, &(Env_lambda_861){is__h, sff__h, at__h, f__h, sectionExists__h}});
-    GoFunc readLayout__hv = ((GoFunc){(void *)lambda_862, go_box(Env_lambda_862, ((Env_lambda_862){is__h, sff__h, at__h, sectionExists__h}))}); __typeof__(readLayout__hv) *readLayout__h = &readLayout__hv;
-    GoFunc readBGs = ((GoFunc){(void *)lambda_863, &(Env_lambda_863){sectionExists__h, readLayout__h}});
+    GoFunc *sectionExists__h = go_box(GoFunc, ((GoFunc){(void *)lambda_864, go_box(Env_lambda_864, ((Env_lambda_864){is__h}))}));
+    GoFunc readATS = ((GoFunc){(void *)lambda_865, &(Env_lambda_865){is__h, sff__h, at__h, f__h, sectionExists__h}});
+    GoFunc readLayout__hv = ((GoFunc){(void *)lambda_866, go_box(Env_lambda_866, ((Env_lambda_866){is__h, sff__h, at__h, sectionExists__h}))}); __typeof__(readLayout__hv) *readLayout__h = &readLayout__hv;
+    GoFunc readBGs = ((GoFunc){(void *)lambda_867, &(Env_lambda_867){sectionExists__h, readLayout__h}});
     {
         int i = 0;
         for (; i < 2; i++) {
@@ -75861,7 +75949,7 @@ void FightScreenRound_handleRoundOutro(FightScreenRound* ro) {
         }
         (*ro__h)->timerActive = false;
     }
-    GoFunc stepCallTimers = ((GoFunc){(void *)lambda_864, &(Env_lambda_864){ro__h}});
+    GoFunc stepCallTimers = ((GoFunc){(void *)lambda_868, &(Env_lambda_868){ro__h}});
     if (System_gsf(&g_sys, 65536U)) {
         (*ro__h)->koDisplayPhase = 2;
     }
@@ -76027,8 +76115,8 @@ void FightScreenRound_reset(FightScreenRound* ro) {
     ro->shutterTimer = 0;
     Fade_reset(ro->fadeOut);
     Fade_init(ro->fadeIn, ro->fadeIn, true);
-    GoFunc resetElement = ((GoFunc){(void *)lambda_865, &(Env_lambda_865){0}});
-    GoFunc resetResults = ((GoFunc){(void *)lambda_866, &(Env_lambda_866){0}});
+    GoFunc resetElement = ((GoFunc){(void *)lambda_869, &(Env_lambda_869){0}});
+    GoFunc resetResults = ((GoFunc){(void *)lambda_870, &(Env_lambda_870){0}});
     ((void (*)(void *, AnimTextSnd*, AnimLayout*, Slice_AnimLayout))(resetElement).fn)((resetElement).env, (&ro->round_default), (&ro->round_default_top), GO_ARRSLICE(Slice_AnimLayout, ro->round_default_bg.v, 32, 0, -1));
     {
         for (int _t1 = 0; _t1 < 9; _t1++) {
@@ -76866,7 +76954,7 @@ Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def) {
             IniSection is__hv = _t12.r0; __typeof__(is__hv) *is__h = &is__hv;
             GoString name = _t12.r1;
             GoString subname = _t12.r2;
-            GoFunc resolvedSection = ((GoFunc){(void *)lambda_867, &(Env_lambda_867){is__h}});
+            GoFunc resolvedSection = ((GoFunc){(void *)lambda_871, &(Env_lambda_871){is__h}});
             {
                 GoString _t13 = name;
                 do {
@@ -76888,31 +76976,31 @@ Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def) {
                         if (filesflg) {
                             filesflg = false;
                             {
-                                IniSection_LoadFile((*is__h), GOSTR("sff"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_868, go_box(Env_lambda_868, ((Env_lambda_868){fs__h}))}));
+                                IniSection_LoadFile((*is__h), GOSTR("sff"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_872, go_box(Env_lambda_872, ((Env_lambda_872){fs__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (Ret_FightScreenPtr__GoIface){NULL, (*err__h)};
                                 }
                             }
                             {
-                                IniSection_LoadFile((*is__h), GOSTR("snd"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_869, go_box(Env_lambda_869, ((Env_lambda_869){fs__h}))}));
+                                IniSection_LoadFile((*is__h), GOSTR("snd"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_873, go_box(Env_lambda_873, ((Env_lambda_873){fs__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (Ret_FightScreenPtr__GoIface){NULL, (*err__h)};
                                 }
                             }
                             {
-                                IniSection_LoadFile((*is__h), GOSTR("fightfx.sff"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_870, go_box(Env_lambda_870, ((Env_lambda_870){fs__h, ffx__h}))}));
+                                IniSection_LoadFile((*is__h), GOSTR("fightfx.sff"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_874, go_box(Env_lambda_874, ((Env_lambda_874){fs__h, ffx__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (Ret_FightScreenPtr__GoIface){NULL, (*err__h)};
                                 }
                             }
                             {
-                                IniSection_LoadFile((*is__h), GOSTR("fightfx.air"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_871, go_box(Env_lambda_871, ((Env_lambda_871){ffx__h}))}));
+                                IniSection_LoadFile((*is__h), GOSTR("fightfx.air"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_875, go_box(Env_lambda_875, ((Env_lambda_875){ffx__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (Ret_FightScreenPtr__GoIface){NULL, (*err__h)};
                                 }
                             }
                             {
-                                IniSection_LoadFile((*is__h), GOSTR("common.snd"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_872, go_box(Env_lambda_872, ((Env_lambda_872){err__h, ffx__h}))}));
+                                IniSection_LoadFile((*is__h), GOSTR("common.snd"), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_876, go_box(Env_lambda_876, ((Env_lambda_876){err__h, ffx__h}))}));
                                 if ((*err__h).type != 0) {
                                     return (Ret_FightScreenPtr__GoIface){NULL, (*err__h)};
                                 }
@@ -76921,7 +77009,7 @@ Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def) {
                                 int i = 1;
                                 for (; i <= (*fs__h)->fx_limit; i++) {
                                     {
-                                        GoIface _t17 = IniSection_LoadFile((*is__h), fmt_Sprintf(GOSTR("fx%v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, i)}))), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_873, go_box(Env_lambda_873, ((Env_lambda_873){0}))}));
+                                        GoIface _t17 = IniSection_LoadFile((*is__h), fmt_Sprintf(GOSTR("fx%v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, i)}))), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_877, go_box(Env_lambda_877, ((Env_lambda_877){0}))}));
                                         GoIface err = _t17;
                                         if (err.type != 0) {
                                             return (Ret_FightScreenPtr__GoIface){NULL, err};
@@ -76931,7 +77019,7 @@ Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def) {
                                 }
                             }
                             Map_int_fontSpec_Ldb8059 fntSpecs__hv = Map_int_fontSpec_Ldb8059_make(0); __typeof__(fntSpecs__hv) *fntSpecs__h = &fntSpecs__hv;
-                            GoFunc parseFonts = ((GoFunc){(void *)lambda_874, &(Env_lambda_874){fntSpecs__h}});
+                            GoFunc parseFonts = ((GoFunc){(void *)lambda_878, &(Env_lambda_878){fntSpecs__h}});
                             ((void (*)(void *, IniSection))(parseFonts).fn)((parseFonts).env, (*is__h));
                             {
                                 GoMapIter _t19 = gomap_iter((GoMap *)&(*fntSpecs__h));
@@ -76941,7 +77029,7 @@ Ret_FightScreenPtr__GoIface fn_loadFightScreen(GoString def) {
                                     if ((*spec__h).path.len == 0) {
                                         continue;
                                     }
-                                    (void)(fn_LoadFile((&(*spec__h).path), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR("font/"), ((GoFunc){(void *)lambda_875, go_box(Env_lambda_875, ((Env_lambda_875){fs__h, i__h, spec__h}))})));
+                                    (void)(fn_LoadFile((&(*spec__h).path), GO_SLICE_LIT(Slice_GoString, GoString, 4, def, g_sys.motif.Def, GOSTR(""), GOSTR("data/")), GOSTR("font/"), ((GoFunc){(void *)lambda_879, go_box(Env_lambda_879, ((Env_lambda_879){fs__h, i__h, spec__h}))})));
                                     _cont20:;
                                 }
                             }
@@ -77797,7 +77885,7 @@ bool FightScreen_visible(FightScreen* fs) {
 void FightScreen_draw(FightScreen* fs, i16 layerno) {
     if (FightScreen_visible(fs)) {
         if ((!System_gsf(&g_sys, 8U)) && fs->bars) {
-            GoFunc iterationOrder = ((GoFunc){(void *)lambda_876, &(Env_lambda_876){0}});
+            GoFunc iterationOrder = ((GoFunc){(void *)lambda_880, &(Env_lambda_880){0}});
             {
                 int side = 0;
                 for (; side < 2; side++) {
@@ -78076,7 +78164,7 @@ GoString fn_readMotifFightFromDef(GoString def) {
     }
     GoString *tmp__h = go_box(GoString, def);
     GoString *fight__h = go_box(GoString, (GoString){0});
-    (void)(fn_LoadFile((&(*tmp__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*tmp__h), GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_877, go_box(Env_lambda_877, ((Env_lambda_877){fight__h}))})));
+    (void)(fn_LoadFile((&(*tmp__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*tmp__h), GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_881, go_box(Env_lambda_881, ((Env_lambda_881){fight__h}))})));
     return (*fight__h);
 }
 
@@ -78262,7 +78350,7 @@ void FightScreen_syncTeamOrder(FightScreen* fs, int side) {
             _cont1:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*order__h)), sizeof(int), ((GoFunc){(void *)lambda_879, go_box(Env_lambda_879, ((Env_lambda_879){order__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*order__h)), sizeof(int), ((GoFunc){(void *)lambda_883, go_box(Env_lambda_883, ((Env_lambda_883){order__h}))}));
     fs->teamOrder.v[side] = (*order__h);
 }
 
@@ -78464,7 +78552,7 @@ bool fn_rankingWouldPlace(GoString mode) {
     {
         GoOpaque /* gjson.Result */ arr = gjson_GetBytes(data, rankPath);
         if (gjson_Result_Exists(arr) && gjson_Result_IsArray(arr)) {
-            gjson_Result_ForEach(arr, ((GoFunc){(void *)lambda_880, go_box(Env_lambda_880, ((Env_lambda_880){entries__h}))}));
+            gjson_Result_ForEach(arr, ((GoFunc){(void *)lambda_884, go_box(Env_lambda_884, ((Env_lambda_884){entries__h}))}));
         }
     }
     if ((*entries__h).len < visible) {
@@ -78472,7 +78560,7 @@ bool fn_rankingWouldPlace(GoString mode) {
     }
     rankingEntry* newE = go_box(rankingEntry, (rankingEntry){.Score = tal.scoreP1, .Time = fn_round2((((f64)tal.timeTicks) / 0x1.ep+05)), .Win = tal.winP1, .Lose = tal.loseP1, .Consecutive = tal.consecP1, .Name = GOSTR(""), .Chars = fn_selectedCharKeys(), .Tmode = ((i32)g_sys.SystemStateVars_.tmode.v[0]), .AILevel = ((i32)g_sys.cfg.Options.Difficulty)});
     (*entries__h) = GO_APPEND(Slice_rankingEntryPtr, (*entries__h), newE);
-    go_sort_slice_stable((void *)GO_TMPADDR(Slice_rankingEntryPtr, (*entries__h)), sizeof(rankingEntry*), ((GoFunc){(void *)lambda_883, go_box(Env_lambda_883, ((Env_lambda_883){rType__h, entries__h}))}));
+    go_sort_slice_stable((void *)GO_TMPADDR(Slice_rankingEntryPtr, (*entries__h)), sizeof(rankingEntry*), ((GoFunc){(void *)lambda_887, go_box(Env_lambda_887, ((Env_lambda_887){rType__h, entries__h}))}));
     if ((*entries__h).len > visible) {
         (*entries__h) = GO_SLICE(Slice_rankingEntryPtr, (*entries__h), 0, visible);
     }
@@ -78931,7 +79019,7 @@ Ret_Slice_u32__GoIface fn_readActPalette(GoString filename) {
     if (err.type != 0) {
         return (Ret_Slice_u32__GoIface){(Slice_u32){0}, err};
     }
-    _df2_f = ((GoFunc){(void *)lambda_884, go_box(Env_lambda_884, ((Env_lambda_884){f__h}))});
+    _df2_f = ((GoFunc){(void *)lambda_888, go_box(Env_lambda_888, ((Env_lambda_888){f__h}))});
     _df2 = true;
     Slice_u8 data = GO_MAKE_A(Slice_u8, u8, 768, 768);
     Ret_int__GoIface _t3 = io_ReadFull((*f__h), data);
@@ -78993,7 +79081,7 @@ void Sprite_shareCopy(Sprite* s, Sprite* src) {
         (*s__h)->palidx = (*src__h)->palidx;
     }
     (*s__h)->coldepth = (*src__h)->coldepth;
-    fn_runGfxTask(((GoFunc){(void *)lambda_885, go_box(Env_lambda_885, ((Env_lambda_885){s__h, src__h}))}));
+    fn_runGfxTask(((GoFunc){(void *)lambda_889, go_box(Env_lambda_889, ((Env_lambda_889){s__h, src__h}))}));
 }
 
 // Sprite.GetPal (image.go:875), 0 TODO
@@ -79033,7 +79121,7 @@ void Sprite_SetPxl(Sprite* s, Slice_u8 px) {
     if (((i64)(*px__h).len) != (((i64)(*s__h)->Size.v[0]) * ((i64)(*s__h)->Size.v[1]))) {
         return;
     }
-    fn_runGfxTask(((GoFunc){(void *)lambda_886, go_box(Env_lambda_886, ((Env_lambda_886){s__h, px__h}))}));
+    fn_runGfxTask(((GoFunc){(void *)lambda_890, go_box(Env_lambda_890, ((Env_lambda_890){s__h, px__h}))}));
 }
 
 // Sprite.SetRaw (image.go:948), 0 TODO
@@ -79067,13 +79155,13 @@ void Sprite_SetRaw(Sprite* s, Slice_u8 data, i32 sprWidth, i32 sprHeight, i32 sp
             }
         }
     }
-    fn_runGfxTask(((GoFunc){(void *)lambda_887, go_box(Env_lambda_887, ((Env_lambda_887){s__h, data__h, sprWidth__h, sprHeight__h, sprDepth__h}))}));
+    fn_runGfxTask(((GoFunc){(void *)lambda_891, go_box(Env_lambda_891, ((Env_lambda_891){s__h, data__h, sprWidth__h, sprHeight__h, sprDepth__h}))}));
 }
 
 // Sprite.readHeader (image.go:1006), 0 TODO
 GoIface Sprite_readHeader(Sprite* s, GoIface r, u32* ofs, u32* size, u16* link) {
     GoIface r__hv = r; __typeof__(r__hv) *r__h = &r__hv;
-    GoFunc read = ((GoFunc){(void *)lambda_888, &(Env_lambda_888){r__h}});
+    GoFunc read = ((GoFunc){(void *)lambda_892, &(Env_lambda_892){r__h}});
     {
         GoIface err = ((GoIface (*)(void *, GoIface))(read).fn)((read).env, ((GoIface){344, (void *)(ofs)}));
         if (err.type != 0) {
@@ -79122,7 +79210,7 @@ GoIface Sprite_readPcxHeader(Sprite* s, GoIface r, i64 offset) {
             return fmt_Errorf(GOSTR("readPcxHeader seek error: %w"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, err));
         }
     }
-    GoFunc read = ((GoFunc){(void *)lambda_889, &(Env_lambda_889){0}});
+    GoFunc read = ((GoFunc){(void *)lambda_893, &(Env_lambda_893){0}});
     u16 *dummy__h = go_box_a(u16, 0);
     {
         GoIface err = ((GoIface (*)(void *, GoIface, GoIface))(read).fn)((read).env, r, ((GoIface){346, (void *)((&(*dummy__h)))}));
@@ -79234,7 +79322,7 @@ Slice_u8 Sprite_RlePcxDecode(Sprite* s, Slice_u8 rle) {
 // Sprite.read (image.go:1107), 0 TODO
 GoIface Sprite_read(Sprite* s, GoIface f, SffHeader* sh, i64 offset, u32 datasize, u32 nextSubheader, Sprite* prev, PaletteList* pl, bool isCharFirstSprite) {
     GoIface f__hv = f; __typeof__(f__hv) *f__h = &f__hv;
-    GoFunc read = ((GoFunc){(void *)lambda_890, &(Env_lambda_890){f__h}});
+    GoFunc read = ((GoFunc){(void *)lambda_894, &(Env_lambda_894){f__h}});
     u8 *ps__h = go_box_a(u8, 0);
     {
         GoIface err = ((GoIface (*)(void *, GoIface))(read).fn)((read).env, ((GoIface){347, (void *)((&(*ps__h)))}));
@@ -79358,7 +79446,7 @@ GoIface Sprite_read(Sprite* s, GoIface f, SffHeader* sh, i64 offset, u32 datasiz
 // Sprite.readHeaderV2 (image.go:1221), 0 TODO
 GoIface Sprite_readHeaderV2(Sprite* s, GoIface r, u32* ofs, u32* size, u32 lofs, u32 tofs, u16* link) {
     GoIface r__hv = r; __typeof__(r__hv) *r__h = &r__hv;
-    GoFunc read = ((GoFunc){(void *)lambda_891, &(Env_lambda_891){r__h}});
+    GoFunc read = ((GoFunc){(void *)lambda_895, &(Env_lambda_895){r__h}});
     {
         GoIface err = ((GoIface (*)(void *, GoIface))(read).fn)((read).env, ((GoIface){346, (void *)((&s->Group))}));
         if (err.type != 0) {
@@ -79807,7 +79895,7 @@ GoIface SffHeader_Read(SffHeader* sh, GoIface r, u32* lofs, u32* tofs) {
     if (!go_streq(go_bytes2str(GO_SLICE(Slice_u8, buf, 0, n)), GOSTR("ElecbyteSpr\x00"))) {
         return ((GoIface){155, go_box(Error, GOSTR("Unrecognized SFF file, invalid header"))});
     }
-    GoFunc read = ((GoFunc){(void *)lambda_892, &(Env_lambda_892){r__h}});
+    GoFunc read = ((GoFunc){(void *)lambda_896, &(Env_lambda_896){r__h}});
     {
         GoIface err = ((GoIface (*)(void *, GoIface))(read).fn)((read).env, ((GoIface){347, (void *)((&sh->Version.v[3]))}));
         if (err.type != 0) {
@@ -80021,7 +80109,7 @@ Ret_SffPtr__GoIface fn_loadSff(GoString filename, SffType sffType, bool isMainTh
             return _t5;
         }
     }
-    _df6_f = ((GoFunc){(void *)lambda_893, go_box(Env_lambda_893, ((Env_lambda_893){f__h}))});
+    _df6_f = ((GoFunc){(void *)lambda_897, go_box(Env_lambda_897, ((Env_lambda_897){f__h}))});
     _df6 = true;
     u32 *lofs__h = go_box_a(u32, 0);
     u32 *tofs__h = go_box_a(u32, 0);
@@ -80265,7 +80353,7 @@ Ret_SffPtr__Slice_i32__GoIface fn_preloadSff(GoString filename, SffType sffType,
     if (err.type != 0) {
         return (Ret_SffPtr__Slice_i32__GoIface){NULL, (Slice_i32){0}, err};
     }
-    _df2_f = ((GoFunc){(void *)lambda_894, go_box(Env_lambda_894, ((Env_lambda_894){f__h}))});
+    _df2_f = ((GoFunc){(void *)lambda_898, go_box(Env_lambda_898, ((Env_lambda_898){f__h}))});
     _df2 = true;
     u32 *lofs__h = go_box_a(u32, 0);
     u32 *tofs__h = go_box_a(u32, 0);
@@ -80279,7 +80367,7 @@ Ret_SffPtr__Slice_i32__GoIface fn_preloadSff(GoString filename, SffType sffType,
             }
         }
     }
-    GoFunc read = ((GoFunc){(void *)lambda_895, go_box(Env_lambda_895, ((Env_lambda_895){f__h}))});
+    GoFunc read = ((GoFunc){(void *)lambda_899, go_box(Env_lambda_899, ((Env_lambda_899){f__h}))});
     {
         GoIface err = Sff_loadPalettes(sff, (*f__h), (*lofs__h));
         if (err.type != 0) {
@@ -80398,7 +80486,7 @@ Ret_SffPtr__Slice_i32__GoIface fn_preloadSff(GoString filename, SffType sffType,
                     }
                     if ((*size__h) == 0U) {
                         int base = ((int)(*indexOfPrevious__h));
-                        GoFunc copyPal = ((GoFunc){(void *)lambda_896, &(Env_lambda_896){pl__h, spriteList__h, i__h}});
+                        GoFunc copyPal = ((GoFunc){(void *)lambda_900, &(Env_lambda_900){pl__h, spriteList__h, i__h}});
                         {
                             do {
                                 if ((Map_int_bool_get(&preloadRef, base, NULL))) {
@@ -80667,7 +80755,7 @@ GoIface Sff_loadPalettes(Sff* s, GoIface f, u32 lofs) {
     if (s->header.Version.v[0] == 1U) {
         return (GoIface){0};
     }
-    GoFunc read = ((GoFunc){(void *)lambda_897, &(Env_lambda_897){f__h}});
+    GoFunc read = ((GoFunc){(void *)lambda_901, &(Env_lambda_901){f__h}});
     Map_Arr2_u16_int uniquePals = Map_Arr2_u16_int_make(0);
     {
         int i = 0;
@@ -81334,7 +81422,7 @@ GoIface fn_setFieldValue(GoOpaque /* reflect.Value */ fieldVal, GoIface value, G
     if (false && g_vitaTraceDeep) {
         fn_vitaTrace(go_strcat(GOSTR("    setField kind "), strconv_Itoa(((int)reflect_Value_Kind(fieldVal)))));
     }
-    GoFunc setNil = ((GoFunc){(void *)lambda_898, &(Env_lambda_898){0}});
+    GoFunc setNil = ((GoFunc){(void *)lambda_902, &(Env_lambda_902){0}});
     if (value.type == 0) {
         {
             uintptr_t _t1 = reflect_Value_Kind(fieldVal);
@@ -81803,8 +81891,8 @@ GoIface fn_assignField(GoIface structPtr, Slice_queryPart parts, GoIface value, 
         return fmt_Errorf(GOSTR("structPtr must be a non-nil pointer"), (Slice_GoIface){0});
     }
     bool currentMapInsensitiveKeys = true;
-    GoFunc extractNames__hv = ((GoFunc){(void *)lambda_899, go_box(Env_lambda_899, ((Env_lambda_899){0}))}); __typeof__(extractNames__hv) *extractNames__h = &extractNames__hv;
-    GoFunc assignDirect = ((GoFunc){(void *)lambda_900, &(Env_lambda_900){parts__h, baseDef__h, extractNames__h}});
+    GoFunc extractNames__hv = ((GoFunc){(void *)lambda_903, go_box(Env_lambda_903, ((Env_lambda_903){0}))}); __typeof__(extractNames__hv) *extractNames__h = &extractNames__hv;
+    GoFunc assignDirect = ((GoFunc){(void *)lambda_904, &(Env_lambda_904){parts__h, baseDef__h, extractNames__h}});
     {
         int i = 0;
         for (; i < (*parts__h).len; i++) {
@@ -82103,7 +82191,7 @@ GoIface fn_updateINIFile(GoIface obj, GoOpaque /* ini.File */* iniFile, GoString
     if (parts.len == 0) {
         return fmt_Errorf(GOSTR("invalid query: '%s'"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, query)})));
     }
-    GoFunc getSectionAndKeyForPatternMap = ((GoFunc){(void *)lambda_901, &(Env_lambda_901){0}});
+    GoFunc getSectionAndKeyForPatternMap = ((GoFunc){(void *)lambda_905, &(Env_lambda_905){0}});
     GoOpaque /* reflect.Value */ v = reflect_ValueOf(obj);
     if ((reflect_Value_Kind(v) == 22U) && (!reflect_Value_IsNil(v))) {
         v = reflect_Value_Elem(v);
@@ -82487,7 +82575,7 @@ GoIface fn_SetValue(GoIface structPtr, GoString query, GoIface val) {
     if (parts.len == 0) {
         return fmt_Errorf(GOSTR("invalid query: '%s'"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, query)})));
     }
-    GoFunc extractDef = ((GoFunc){(void *)lambda_902, &(Env_lambda_902){0}});
+    GoFunc extractDef = ((GoFunc){(void *)lambda_906, &(Env_lambda_906){0}});
     if (false && g_vitaTraceDeep) {
         fn_vitaTrace(GOSTR("  SV parsed"));
     }
@@ -82604,8 +82692,8 @@ Arr14_bool fn_GetJoystickState(KeyConfig kc) {
     }
     Arr6_f32 axes__hv = Input_GetJoystickAxes(&g_input, joy); __typeof__(axes__hv) *axes__h = &axes__hv;
     Slice_u8 btns__hv = Input_GetJoystickButtons(&g_input, joy); __typeof__(btns__hv) *btns__h = &btns__hv;
-    GoFunc getBtn = ((GoFunc){(void *)lambda_903, &(Env_lambda_903){btns__h}});
-    GoFunc handleAxisBtn = ((GoFunc){(void *)lambda_904, &(Env_lambda_904){axes__h}});
+    GoFunc getBtn = ((GoFunc){(void *)lambda_907, &(Env_lambda_907){btns__h}});
+    GoFunc handleAxisBtn = ((GoFunc){(void *)lambda_908, &(Env_lambda_908){axes__h}});
     Slice_int axisIndices = GO_SLICE_LIT(Slice_int, int, 14, kc.dU, kc.dD, kc.dL, kc.dR, kc.bA, kc.bB, kc.bC, kc.bX, kc.bY, kc.bZ, kc.bS, kc.bD, kc.bW, kc.bM);
     {
         Slice_int _t2 = axisIndices;
@@ -82699,8 +82787,8 @@ Arr14_bool InputReader_LocalInput(InputReader* ir, int in) {
 Ret_bool__bool__bool__bool InputReader_SocdResolution(InputReader* ir, bool U, bool D, bool B, bool F) {
     InputReader* ir__hv = ir; __typeof__(ir__hv) *ir__h = &ir__hv;
     int method__hv = g_sys.cfg.Input.SOCDResolution; __typeof__(method__hv) *method__h = &method__hv;
-    GoFunc resolveUD = ((GoFunc){(void *)lambda_905, &(Env_lambda_905){ir__h, method__h}});
-    GoFunc resolveBF = ((GoFunc){(void *)lambda_906, &(Env_lambda_906){ir__h, method__h}});
+    GoFunc resolveUD = ((GoFunc){(void *)lambda_909, &(Env_lambda_909){ir__h, method__h}});
+    GoFunc resolveBF = ((GoFunc){(void *)lambda_910, &(Env_lambda_910){ir__h, method__h}});
     Ret_bool__bool _t1 = ((Ret_bool__bool (*)(void *, bool, bool))(resolveUD).fn)((resolveUD).env, U, D);
     U = _t1.r0;
     D = _t1.r1;
@@ -82774,7 +82862,7 @@ void InputBuffer_updateInputTime(InputBuffer* ib, bool U, bool D, bool L, bool R
     ib->dp = ib->db;
     ib->wp = ib->wb;
     ib->mp = ib->mb;
-    GoFunc update = ((GoFunc){(void *)lambda_907, &(Env_lambda_907){0}});
+    GoFunc update = ((GoFunc){(void *)lambda_911, &(Env_lambda_911){0}});
     ((void (*)(void *, bool, i32*))(update).fn)((update).env, U, (&ib->Ub));
     ((void (*)(void *, bool, i32*))(update).fn)((update).env, D, (&ib->Db));
     ((void (*)(void *, bool, i32*))(update).fn)((update).env, L, (&ib->Lb));
@@ -83316,7 +83404,7 @@ i32 InputBuffer_State(InputBuffer* __, CommandStepKey ck) {
 
 // InputBuffer.StateCharge (input.go:1389), 0 TODO
 i32 InputBuffer_StateCharge(InputBuffer* ib, CommandStepKey ck) {
-    GoFunc ignoreRecent = ((GoFunc){(void *)lambda_908, &(Env_lambda_908){0}});
+    GoFunc ignoreRecent = ((GoFunc){(void *)lambda_912, &(Env_lambda_912){0}});
     bool _t1 = (ck.dollar && (!ck.star));
     bool dollar = _t1;
     bool _t2 = ((!ck.dollar) && ck.star);
@@ -83720,7 +83808,7 @@ bool Command_GreaterCheckFail(Command* c, int i, InputBuffer* ibuf) {
             _cont3:;
         }
     }
-    GoFunc checkKey = ((GoFunc){(void *)lambda_909, &(Env_lambda_909){c__h, i__h, ibuf__h}});
+    GoFunc checkKey = ((GoFunc){(void *)lambda_913, &(Env_lambda_913){c__h, i__h, ibuf__h}});
     {
         for (int _t5 = 0; _t5 < 2; _t5++) {
             CommandKey k = ((Arr2_CommandKey){{0U, 1U}}).v[_t5];
@@ -83797,7 +83885,7 @@ void AiInput_Update(AiInput* ai, f32 level) {
     }
     i32 chance__hv = 15; __typeof__(chance__hv) *chance__h = &chance__hv;
     i32 time___hv = 60; __typeof__(time___hv) *time___h = &time___hv;
-    GoFunc jam = ((GoFunc){(void *)lambda_910, &(Env_lambda_910){chance__h, time___h}});
+    GoFunc jam = ((GoFunc){(void *)lambda_914, &(Env_lambda_914){chance__h, time___h}});
     if (((bool (*)(void *, i32*))(jam).fn)((jam).env, (&ai->dirt))) {
         ai->dir = fn_Rand(0, 7);
     }
@@ -84063,9 +84151,9 @@ GoIface Command_ReadCommandSymbols(Command* c, GoString cmdstr, CommandKeyRemap*
                     bool dollar = false;
                     bool star = false;
                     i32 chargetime = 0;
-                    GoFunc *getChar__h = go_box(GoFunc, ((GoFunc){(void *)lambda_911, go_box(Env_lambda_911, ((Env_lambda_911){part__h}))}));
-                    GoFunc nextChar__hv = ((GoFunc){(void *)lambda_912, go_box(Env_lambda_912, ((Env_lambda_912){part__h, getChar__h}))}); __typeof__(nextChar__hv) *nextChar__h = &nextChar__hv;
-                    GoFunc parseChargeTime = ((GoFunc){(void *)lambda_913, &(Env_lambda_913){getChar__h, nextChar__h}});
+                    GoFunc *getChar__h = go_box(GoFunc, ((GoFunc){(void *)lambda_915, go_box(Env_lambda_915, ((Env_lambda_915){part__h}))}));
+                    GoFunc nextChar__hv = ((GoFunc){(void *)lambda_916, go_box(Env_lambda_916, ((Env_lambda_916){part__h, getChar__h}))}); __typeof__(nextChar__hv) *nextChar__h = &nextChar__hv;
+                    GoFunc parseChargeTime = ((GoFunc){(void *)lambda_917, &(Env_lambda_917){getChar__h, nextChar__h}});
                     {
                         for (; (*part__h).len > 0; ) {
                             {
@@ -84314,7 +84402,7 @@ void Command_AutoGreaterExpand(Command* c) {
 void Command_ApplyBackwardCompatibility(Command* c, GoString charName) {
     Command* c__hv = c; __typeof__(c__hv) *c__h = &c__hv;
     GoString charName__hv = charName; __typeof__(charName__hv) *charName__h = &charName__hv;
-    GoFunc doPrint = ((GoFunc){(void *)lambda_914, &(Env_lambda_914){c__h, charName__h}});
+    GoFunc doPrint = ((GoFunc){(void *)lambda_918, &(Env_lambda_918){c__h, charName__h}});
     bool slashModified = false;
     {
         Slice_CommandStep _t2 = (*c__h)->steps;
@@ -85305,7 +85393,7 @@ void Motif_processStateTransitionsBySide(Motif* mo, Arr4_Slice_i32 p1States, Arr
     Arr4_Slice_i32 p2States__hv = p2States; __typeof__(p2States__hv) *p2States__h = &p2States__hv;
     Arr2_bool leaderDone = (Arr2_bool){{false, false}};
     Arr2_int assigned = (Arr2_int){{0, 0}};
-    GoFunc get = ((GoFunc){(void *)lambda_915, &(Env_lambda_915){p1States__h, p2States__h}});
+    GoFunc get = ((GoFunc){(void *)lambda_919, &(Env_lambda_919){p1States__h, p2States__h}});
     {
         int side = 0;
         for (; side < 2; side++) {
@@ -85605,7 +85693,7 @@ GoString fn_formatTimeText(GoString text, f64 totalSec) {
 GoString Motif_replaceFormatSpecifiers(Motif* mo, GoString input) {
     Map_GoString_GoString *formatSpecifierMap__h = go_box(Map_GoString_GoString, ({ Map_GoString_GoString _m = Map_GoString_GoString_make(3); Map_GoString_GoString_set(&_m, GOSTR("i"), GOSTR("d")); Map_GoString_GoString_set(&_m, GOSTR("I"), GOSTR("d")); Map_GoString_GoString_set(&_m, GOSTR("u"), GOSTR("d")); (Map_GoString_GoString)_m; }));
     GoOpaque /* regexp.Regexp */* *re__h = go_box(GoOpaque /* regexp.Regexp */*, regexp_MustCompile(GOSTR("%%|%([-+ #0]*)?(\\d+)?(\\.\\d+)?([hlLzjt]*)?([a-zA-Z])")));
-    return regexp_Regexp_ReplaceAllStringFunc((*re__h), input, ((GoFunc){(void *)lambda_916, go_box(Env_lambda_916, ((Env_lambda_916){formatSpecifierMap__h, re__h}))}));
+    return regexp_Regexp_ReplaceAllStringFunc((*re__h), input, ((GoFunc){(void *)lambda_920, go_box(Env_lambda_920, ((Env_lambda_920){formatSpecifierMap__h, re__h}))}));
 }
 
 // countFmtVerbs (motif.go:3332), 0 TODO
@@ -86624,7 +86712,7 @@ void MotifDialogue_initDefaults(MotifDialogue* di, Motif* m) {
     }
     int selfPn = MotifDialogue_dialogueRedirection((*di__h), GOSTR("self"));
     int enemyPn = MotifDialogue_dialogueRedirection((*di__h), GOSTR("enemy"));
-    GoFunc setSide = ((GoFunc){(void *)lambda_917, &(Env_lambda_917){di__h, m__h}});
+    GoFunc setSide = ((GoFunc){(void *)lambda_921, &(Env_lambda_921){di__h, m__h}});
     ((void (*)(void *, int, int))(setSide).fn)((setSide).env, 1, selfPn);
     ((void (*)(void *, int, int))(setSide).fn)((setSide).env, 2, enemyPn);
 }
@@ -87819,7 +87907,7 @@ Slice_victoryEntry MotifVictory_buildSideOrder(MotifVictory* vi, int side, bool 
     }
     Slice_victoryEntry out__hv = GO_MAKE(Slice_victoryEntry, victoryEntry, 0, (*maxNum__h)); __typeof__(out__hv) *out__h = &out__hv;
     Map_int_bool usedMember__hv = Map_int_bool_make(0); __typeof__(usedMember__hv) *usedMember__h = &usedMember__hv;
-    GoFunc pushLoaded = ((GoFunc){(void *)lambda_918, &(Env_lambda_918){side__h, maxNum__h, out__h, usedMember__h}});
+    GoFunc pushLoaded = ((GoFunc){(void *)lambda_922, &(Env_lambda_922){side__h, maxNum__h, out__h, usedMember__h}});
     if ((*side__h) == winnerSide) {
         int leaderPn = g_sys.SystemStateVars_.lastHitter.v[(*side__h)];
         if (leaderPn < 0) {
@@ -88145,7 +88233,7 @@ void MotifVictory_step(MotifVictory* vi, Motif* m) {
 // MotifVictory.draw (motif.go:6447), 0 TODO
 void MotifVictory_draw(MotifVictory* vi, Motif* m, i16 layerno) {
     Slice_slotRef_Leab5e0 *slots__h = go_box(Slice_slotRef_Leab5e0, GO_SLICE_LIT(Slice_slotRef_Leab5e0, slotRef_Leab5e0, 8, (slotRef_Leab5e0){0, (&m->VictoryScreen.P1), m->VictoryScreen.P1.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_Leab5e0){1, (&m->VictoryScreen.P2), m->VictoryScreen.P2.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_Leab5e0){2, (&m->VictoryScreen.P3), m->VictoryScreen.P3.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_Leab5e0){3, (&m->VictoryScreen.P4), m->VictoryScreen.P4.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_Leab5e0){4, (&m->VictoryScreen.P5), m->VictoryScreen.P5.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_Leab5e0){5, (&m->VictoryScreen.P6), m->VictoryScreen.P6.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_Leab5e0){6, (&m->VictoryScreen.P7), m->VictoryScreen.P7.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}, (slotRef_Leab5e0){7, (&m->VictoryScreen.P8), m->VictoryScreen.P8.FaceProperties_.AnimationCharPreloadProperties_.DrawOrder}));
-    go_sort_slice_stable((void *)GO_TMPADDR(Slice_slotRef_Leab5e0, (*slots__h)), sizeof(slotRef_Leab5e0), ((GoFunc){(void *)lambda_920, go_box(Env_lambda_920, ((Env_lambda_920){slots__h}))}));
+    go_sort_slice_stable((void *)GO_TMPADDR(Slice_slotRef_Leab5e0, (*slots__h)), sizeof(slotRef_Leab5e0), ((GoFunc){(void *)lambda_924, go_box(Env_lambda_924, ((Env_lambda_924){slots__h}))}));
     Rect_Draw(m->VictoryScreen.Overlay.RectData, layerno);
     if (m->VictoryBgDef.BgClearColor.v[0] >= 0) {
         Rect_Draw(m->VictoryBgDef.RectData, layerno);
@@ -88805,7 +88893,7 @@ void fn_startFadeOutFrom(Fade* tmpl, Fade* dest, Fade* fi, bool overrideBlack, F
         }
         return;
     }
-    GoFunc startFresh = ((GoFunc){(void *)lambda_921, &(Env_lambda_921){dest__h, use__h}});
+    GoFunc startFresh = ((GoFunc){(void *)lambda_925, &(Env_lambda_925){dest__h, use__h}});
     if ((fi == NULL) || (!Fade_isFading(fi))) {
         ((void (*)(void *))(startFresh).fn)((startFresh).env);
         return;
@@ -90489,7 +90577,7 @@ Ret_backGroundPtr__GoIface fn_readBackGround(IniSection is, backGround* link, Sf
             bg->video = go_box(bgVideo, (bgVideo){0});
         }
         GoString *path__h = go_box(GoString, Map_GoString_GoString_get(&is, GOSTR("path"), NULL));
-        fn_LoadFile((&(*path__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR("video/"), ((GoFunc){(void *)lambda_922, go_box(Env_lambda_922, ((Env_lambda_922){path__h}))}));
+        fn_LoadFile((&(*path__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR("video/"), ((GoFunc){(void *)lambda_926, go_box(Env_lambda_926, ((Env_lambda_926){path__h}))}));
         if ((*path__h).len != 0) {
             int volume = 100;
             {
@@ -91343,7 +91431,7 @@ Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef) {
             _cont4:;
         }
     }
-    GoFunc getSection = ((GoFunc){(void *)lambda_923, &(Env_lambda_923){defmap__h}});
+    GoFunc getSection = ((GoFunc){(void *)lambda_927, &(Env_lambda_927){defmap__h}});
     {
         Ret_IniSection__GoString _t6 = ((Ret_IniSection__GoString (*)(void *, GoString))(getSection).fn)((getSection).env, GOSTR("info"));
         IniSection sec = _t6.r0;
@@ -91396,7 +91484,7 @@ Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef) {
                         continue;
                     }
                     {
-                        GoIface err = IniSection_LoadFile(sec, i, GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_924, go_box(Env_lambda_924, ((Env_lambda_924){s__h, ac__h}))}));
+                        GoIface err = IniSection_LoadFile(sec, i, GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_928, go_box(Env_lambda_928, ((Env_lambda_928){s__h, ac__h}))}));
                         if (err.type == 0) {
                             (*ac__h)++;
                         }
@@ -91417,7 +91505,7 @@ Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef) {
                             Slice_GoString *submatchall__h = go_box(Slice_GoString, regexp_Regexp_FindAllString(re, k, -1));
                             if ((*submatchall__h).len == 1) {
                                 {
-                                    GoIface _t18 = fn_LoadFile((&(*v__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_925, go_box(Env_lambda_925, ((Env_lambda_925){err__h, submatchall__h}))}));
+                                    GoIface _t18 = fn_LoadFile((&(*v__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_929, go_box(Env_lambda_929, ((Env_lambda_929){err__h, submatchall__h}))}));
                                     GoIface err = _t18;
                                     if (err.type != 0) {
                                         return (Ret_StagePtr__GoIface){NULL, err};
@@ -91634,13 +91722,13 @@ Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef) {
         IniSection sec = _t30.r0;
         if (sec.m != 0) {
             {
-                IniSection_LoadFile(sec, GOSTR("spr"), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_926, go_box(Env_lambda_926, ((Env_lambda_926){s__h}))}));
+                IniSection_LoadFile(sec, GOSTR("spr"), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_930, go_box(Env_lambda_930, ((Env_lambda_930){s__h}))}));
                 if ((*err__h).type != 0) {
                     return (Ret_StagePtr__GoIface){NULL, (*err__h)};
                 }
             }
             {
-                (*err__h) = IniSection_LoadFile(sec, GOSTR("model"), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_927, go_box(Env_lambda_927, ((Env_lambda_927){s__h}))}));
+                (*err__h) = IniSection_LoadFile(sec, GOSTR("model"), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_931, go_box(Env_lambda_931, ((Env_lambda_931){s__h}))}));
                 if ((*err__h).type != 0) {
                     return (Ret_StagePtr__GoIface){NULL, (*err__h)};
                 }
@@ -91713,7 +91801,7 @@ Ret_StagePtr__GoIface fn_loadStage(GoString def, bool maindef) {
                 }
             }
             {
-                (*err__h) = IniSection_LoadFile((*sec__h), GOSTR("environment"), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_928, go_box(Env_lambda_928, ((Env_lambda_928){s__h, sec__h}))}));
+                (*err__h) = IniSection_LoadFile((*sec__h), GOSTR("environment"), GO_SLICE_LIT(Slice_GoString, GoString, 3, def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_932, go_box(Env_lambda_932, ((Env_lambda_932){s__h, sec__h}))}));
                 if ((*err__h).type != 0) {
                     return (Ret_StagePtr__GoIface){NULL, (*err__h)};
                 }
@@ -93280,7 +93368,7 @@ GoString Char_String(Char cs) {
 
 // NewGameStatePool (state.go:566), 0 TODO
 GameStatePool fn_NewGameStatePool(void) {
-    return (GameStatePool){.gameStatePool = go_sync_pool(((GoFunc){(void *)lambda_929, go_box(Env_lambda_929, ((Env_lambda_929){0}))})), .stringIntMapPool = go_sync_pool(((GoFunc){(void *)lambda_930, go_box(Env_lambda_930, ((Env_lambda_930){0}))})), .stringTypedValueMapPool = go_sync_pool(((GoFunc){(void *)lambda_931, go_box(Env_lambda_931, ((Env_lambda_931){0}))})), .animationTablePool = go_sync_pool(((GoFunc){(void *)lambda_932, go_box(Env_lambda_932, ((Env_lambda_932){0}))})), .int32CharPointerMapPool = go_sync_pool(((GoFunc){(void *)lambda_933, go_box(Env_lambda_933, ((Env_lambda_933){0}))})), .animFrameSlicePool = go_sync_pool(((GoFunc){(void *)lambda_934, go_box(Env_lambda_934, ((Env_lambda_934){0}))})), .int32int32MapPool = go_sync_pool(((GoFunc){(void *)lambda_935, go_box(Env_lambda_935, ((Env_lambda_935){0}))})), .int32float32MapPool = go_sync_pool(((GoFunc){(void *)lambda_936, go_box(Env_lambda_936, ((Env_lambda_936){0}))})), .remapPresetPool = go_sync_pool(((GoFunc){(void *)lambda_937, go_box(Env_lambda_937, ((Env_lambda_937){0}))})), .remapTablePool = go_sync_pool(((GoFunc){(void *)lambda_938, go_box(Env_lambda_938, ((Env_lambda_938){0}))})), .poolObjs = Map_int_Slice_GoIface_make(0)};
+    return (GameStatePool){.gameStatePool = go_sync_pool(((GoFunc){(void *)lambda_933, go_box(Env_lambda_933, ((Env_lambda_933){0}))})), .stringIntMapPool = go_sync_pool(((GoFunc){(void *)lambda_934, go_box(Env_lambda_934, ((Env_lambda_934){0}))})), .stringTypedValueMapPool = go_sync_pool(((GoFunc){(void *)lambda_935, go_box(Env_lambda_935, ((Env_lambda_935){0}))})), .animationTablePool = go_sync_pool(((GoFunc){(void *)lambda_936, go_box(Env_lambda_936, ((Env_lambda_936){0}))})), .int32CharPointerMapPool = go_sync_pool(((GoFunc){(void *)lambda_937, go_box(Env_lambda_937, ((Env_lambda_937){0}))})), .animFrameSlicePool = go_sync_pool(((GoFunc){(void *)lambda_938, go_box(Env_lambda_938, ((Env_lambda_938){0}))})), .int32int32MapPool = go_sync_pool(((GoFunc){(void *)lambda_939, go_box(Env_lambda_939, ((Env_lambda_939){0}))})), .int32float32MapPool = go_sync_pool(((GoFunc){(void *)lambda_940, go_box(Env_lambda_940, ((Env_lambda_940){0}))})), .remapPresetPool = go_sync_pool(((GoFunc){(void *)lambda_941, go_box(Env_lambda_941, ((Env_lambda_941){0}))})), .remapTablePool = go_sync_pool(((GoFunc){(void *)lambda_942, go_box(Env_lambda_942, ((Env_lambda_942){0}))})), .poolObjs = Map_int_Slice_GoIface_make(0)};
 }
 
 // GameStatePool.Get (state.go:633), 0 TODO
@@ -93296,7 +93384,7 @@ GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item) {
         Map_int_Slice_GoIface_set(&(*gsp__h)->poolObjs, (*stateID__h), GO_MAKE(Slice_GoIface, GoIface, 0, 50));
         (*objs__h) = Map_int_Slice_GoIface_get(&(*gsp__h)->poolObjs, (*stateID__h), NULL);
     }
-    _df3_f = ((GoFunc){(void *)lambda_939, go_box(Env_lambda_939, ((Env_lambda_939){gsp__h, stateID__h, objs__h}))});
+    _df3_f = ((GoFunc){(void *)lambda_943, go_box(Env_lambda_943, ((Env_lambda_943){gsp__h, stateID__h, objs__h}))});
     _df3 = true;
     {
         GoIface _t4 = item;
@@ -93973,7 +94061,7 @@ Ret_Map_i32_StagePtr__StagePtr fn_cloneStageList(GameStatePool* gsp, Map_i32_Sta
     GameStatePool* gsp__hv = gsp; __typeof__(gsp__hv) *gsp__h = &gsp__hv;
     Map_i32_StagePtr result = Map_i32_StagePtr_make(Map_i32_StagePtr_len(&src));
     Map_StagePtr_StagePtr cloned__hv = Map_StagePtr_StagePtr_make((Map_i32_StagePtr_len(&src) + 1)); __typeof__(cloned__hv) *cloned__h = &cloned__hv;
-    GoFunc cloneOne = ((GoFunc){(void *)lambda_940, &(Env_lambda_940){gsp__h, cloned__h}});
+    GoFunc cloneOne = ((GoFunc){(void *)lambda_944, &(Env_lambda_944){gsp__h, cloned__h}});
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&src);
         while (gomap_next(&_t2)) {
@@ -94650,7 +94738,7 @@ Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     if (g_sdKeys.len == 0) {
         return b;
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_942, go_box(Env_lambda_942, ((Env_lambda_942){0}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_946, go_box(Env_lambda_946, ((Env_lambda_946){0}))}));
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(tag));
     {
         Slice_i32 _t5 = g_sdKeys;
@@ -94683,7 +94771,7 @@ Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m) {
     if (g_sdKeys.len == 0) {
         return b;
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_944, go_box(Env_lambda_944, ((Env_lambda_944){0}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_948, go_box(Env_lambda_948, ((Env_lambda_948){0}))}));
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(tag));
     {
         Slice_i32 _t5 = g_sdKeys;
@@ -95043,9 +95131,20 @@ bool System_eventUpdate(System* s) {
 void System_runMainThreadTask(System* s) {
     {
         for (; 1; ) {
-            do {
-                return;
-            } while (0);
+            {
+                GoSelCase _t2[1];
+                GoFunc _t3; bool _t4 = false;
+                _t2[0] = (GoSelCase){s->mainThreadTask, 2, &_t3, &_t4};
+                int _t5 = go_select(_t2, 1, true);
+                do {
+                    if (_t5 == 0) {
+                        GoFunc f = _t3;
+                        ((void (*)(void *))(f).fn)((f).env);
+                    } else {
+                        return;
+                    }
+                } while (0);
+            }
             _cont1:;
         }
     }
@@ -95073,7 +95172,7 @@ bool System_await(System* s, int fps) {
         }
         Window_UpdateDebugFPS((*s__h)->window);
         if ((*s__h)->screenshotInFlight || (*s__h)->isTakingScreenshot) {
-            _df1_f = ((GoFunc){(void *)lambda_945, go_box(Env_lambda_945, ((Env_lambda_945){s__h}))});
+            _df1_f = ((GoFunc){(void *)lambda_949, go_box(Env_lambda_949, ((Env_lambda_949){s__h}))});
             _df1 = true;
         }
         _df2_a0 = (g_sys.netConnection == NULL);
@@ -95497,7 +95596,7 @@ bool System_uiConsumeTokenThisFrame(System* s, int controller, GoString tok) {
 bool System_uiRawInput(System* s, Slice_GoString btns, int controllerIdx) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     Slice_GoString btns__hv = btns; __typeof__(btns__hv) *btns__h = &btns__hv;
-    GoFunc checkOne = ((GoFunc){(void *)lambda_947, &(Env_lambda_947){s__h, btns__h}});
+    GoFunc checkOne = ((GoFunc){(void *)lambda_951, &(Env_lambda_951){s__h, btns__h}});
     if (controllerIdx >= 0) {
         if (controllerIdx < (*s__h)->commandLists.len) {
             return ((bool (*)(void *, int, CommandList*))(checkOne).fn)((checkOne).env, controllerIdx, (*s__h)->commandLists.p[controllerIdx]);
@@ -96057,7 +96156,7 @@ Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f3
 
 // System.initPlayerID (system.go:2267), 0 TODO
 void System_initPlayerID(System* s) {
-    GoFunc assignID = ((GoFunc){(void *)lambda_950, &(Env_lambda_950){0}});
+    GoFunc assignID = ((GoFunc){(void *)lambda_954, &(Env_lambda_954){0}});
     if (g_sys.SystemStateVars_.roundNo > 1) {
         System_pruneCharId(&g_sys);
     }
@@ -96195,7 +96294,7 @@ void System_clearMatchSound(System* s) {
 void System_clearAllSound(System* s) {
     System* *s__h = go_box(System*, s);
     SoundChannels_StopAll(&(*s__h)->soundChannels);
-    fn_WithSpeakerLock(((GoFunc){(void *)lambda_951, go_box(Env_lambda_951, ((Env_lambda_951){s__h}))}));
+    fn_WithSpeakerLock(((GoFunc){(void *)lambda_955, go_box(Env_lambda_955, ((Env_lambda_955){s__h}))}));
     System_clearMatchSound((*s__h));
 }
 
@@ -96229,7 +96328,7 @@ void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     s->explodDrawOrder = fn_PointerSliceReset_Explod(s->explodDrawOrder);
 }
 
-// System.handleStageSwap (system.go:2452), 1 TODO
+// System.handleStageSwap (system.go:2452), 0 TODO
 bool System_handleStageSwap(System* s) {
     System* *s__h = go_box(System*, s);
     i32 roundRef = 0;
@@ -96265,7 +96364,7 @@ bool System_handleStageSwap(System* s) {
                 swap = true;
             }
             if ((*s__h)->stage->model != NULL) {
-                TODO(/* stmt *ast.SendStmt at system.go:2480 */);
+                { GoFunc _t6 = ((GoFunc){(void *)lambda_956, go_box(Env_lambda_956, ((Env_lambda_956){s__h}))}); go_chan_send(g_sys.mainThreadTask, &_t6); }
             }
         }
     }
@@ -96987,7 +97086,7 @@ void System_explodCueDraw(System* s) {
             _cont2:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_ExplodPtr, (*s__h)->explodDrawOrder), sizeof(Explod*), ((GoFunc){(void *)lambda_953, go_box(Env_lambda_953, ((Env_lambda_953){s__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_ExplodPtr, (*s__h)->explodDrawOrder), sizeof(Explod*), ((GoFunc){(void *)lambda_958, go_box(Env_lambda_958, ((Env_lambda_958){s__h}))}));
     {
         Slice_ExplodPtr _t7 = (*s__h)->explodDrawOrder;
         for (int _t6 = 0; _t6 < _t7.len; _t6++) {
@@ -97392,11 +97491,11 @@ void System_stepRoundState(System* s) {
 // System.roundEndDecision (system.go:3636), 0 TODO
 bool System_roundEndDecision(System* s) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
-    GoFunc checkPerfect = ((GoFunc){(void *)lambda_954, &(Env_lambda_954){s__h}});
+    GoFunc checkPerfect = ((GoFunc){(void *)lambda_959, &(Env_lambda_959){s__h}});
     if ((*s__h)->SystemStateVars_.intro > 0) {
         return false;
     }
-    GoFunc checkClutch = ((GoFunc){(void *)lambda_955, &(Env_lambda_955){s__h}});
+    GoFunc checkClutch = ((GoFunc){(void *)lambda_960, &(Env_lambda_960){s__h}});
     Arr2_bool ko = (Arr2_bool){{true, true}};
     {
         for (int _t1 = 0; _t1 < 2; _t1++) {
@@ -97543,9 +97642,9 @@ bool System_roundEndDecision(System* s) {
     return ((ko.v[0] || ko.v[1]) || ((*s__h)->SystemStateVars_.curRoundTime == 0));
 }
 
-// System.draw (system.go:3777), 15 TODO
+// System.draw (system.go:3777), 0 TODO
 void System_draw(System* s, f32 x, f32 y, f32 scl) {
-    TODO(/* call of unknown function at system.go:3778 */);
+    fn_vitaDiagFrame();
     s->SystemStateVars_.brightnessOld = s->SystemStateVars_.brightness;
     s->SystemStateVars_.brightness = 0x1p+00f;
     if (((s->SystemStateVars_.supertime > 0) && (s->SystemStateVars_.superbrightness >= 0x0p+00f)) && (s->SystemStateVars_.superbrightness < 0x1p+00f)) {
@@ -97569,45 +97668,45 @@ void System_draw(System* s, f32 x, f32 y, f32 scl) {
         fn_FillRect(s->SystemStateVars_.scrrect, fcol, (Arr2_i32){{255, 0}}, NULL);
         if (!System_gsf(s, 16U)) {
             if ((s->stage->ikemenver.v[0] != 0U) || (s->stage->ikemenver.v[1] != 0U)) {
-                if (!(TODO(/* call of unknown function at system.go:3815 */))) {
+                if (!(fn_vitaDiagSkip(1))) {
                     Stage_draw(s->stage, -1, bgx, bgy, scl);
                 }
             }
         }
         if (!System_gsf(s, 2U)) {
             if (s->stage->reflection.layerno < 0) {
-                if (!(TODO(/* call of unknown function at system.go:3824 */))) {
+                if (!(fn_vitaDiagSkip(2))) {
                     ReflectionList_draw(s->reflectionList, x, y, (scl * Camera_BaseScale(&s->SystemStateVars_.cam)));
                 }
             }
         }
-        if (!(TODO(/* call of unknown function at system.go:3831 */))) {
+        if (!(fn_vitaDiagSkip(2))) {
             DrawList_draw(s->spriteList, -1, false, x, y, (scl * Camera_BaseScale(&s->SystemStateVars_.cam)));
         }
         if (!System_gsf(s, 16U)) {
-            if (!(TODO(/* call of unknown function at system.go:3837 */))) {
+            if (!(fn_vitaDiagSkip(1))) {
                 Stage_draw(s->stage, 0, bgx, bgy, scl);
             }
         }
-        if (!(TODO(/* call of unknown function at system.go:3843 */))) {
+        if (!(fn_vitaDiagSkip(2))) {
             DrawList_draw(s->spriteList, 0, true, x, y, (scl * Camera_BaseScale(&s->SystemStateVars_.cam)));
         }
-        if (!(TODO(/* call of unknown function at system.go:3848 */))) {
+        if (!(fn_vitaDiagSkip(3))) {
             FightScreen_draw(&s->fightScreen, -1);
         }
         System_drawCharTexts(s, -1);
         Motif_draw(&s->motif, -1);
         if (!System_gsf(s, 2U)) {
             if (s->stage->reflection.layerno >= 0) {
-                if (!(TODO(/* call of unknown function at system.go:3863 */))) {
+                if (!(fn_vitaDiagSkip(2))) {
                     ReflectionList_draw(s->reflectionList, x, y, (scl * Camera_BaseScale(&s->SystemStateVars_.cam)));
                 }
             }
-            if (!(TODO(/* call of unknown function at system.go:3867 */))) {
+            if (!(fn_vitaDiagSkip(2))) {
                 ShadowList_draw(s->shadowList, x, y, (scl * Camera_BaseScale(&s->SystemStateVars_.cam)));
             }
         }
-        if (!(TODO(/* call of unknown function at system.go:3907 */))) {
+        if (!(fn_vitaDiagSkip(3))) {
             FightScreen_draw(&s->fightScreen, 0);
         }
         System_drawCharTexts(s, 0);
@@ -97618,24 +97717,24 @@ void System_draw(System* s, f32 x, f32 y, f32 scl) {
         fn_FillRect(s->SystemStateVars_.scrrect, ecol, (Arr2_i32){{255, 0}}, NULL);
     }
     if ((s->SystemStateVars_.envcol_time == 0) || s->SystemStateVars_.envcol_under) {
-        if (!(TODO(/* call of unknown function at system.go:3926 */))) {
+        if (!(fn_vitaDiagSkip(2))) {
             DrawList_draw(s->spriteList, 0, false, x, y, (scl * Camera_BaseScale(&s->SystemStateVars_.cam)));
         }
         if ((s->SystemStateVars_.envcol_time == 0) && (!System_gsf(s, 32U))) {
-            if (!(TODO(/* call of unknown function at system.go:3930 */))) {
+            if (!(fn_vitaDiagSkip(1))) {
                 Stage_draw(s->stage, 1, bgx, bgy, scl);
             }
         }
     }
-    if (!(TODO(/* call of unknown function at system.go:3937 */))) {
+    if (!(fn_vitaDiagSkip(3))) {
         FightScreen_draw(&s->fightScreen, 1);
     }
     System_drawCharTexts(s, 1);
     Motif_draw(&s->motif, 1);
-    if (!(TODO(/* call of unknown function at system.go:3948 */))) {
+    if (!(fn_vitaDiagSkip(2))) {
         DrawList_draw(s->spriteList, 1, false, x, y, (scl * Camera_BaseScale(&s->SystemStateVars_.cam)));
     }
-    if (!(TODO(/* call of unknown function at system.go:3953 */))) {
+    if (!(fn_vitaDiagSkip(3))) {
         FightScreen_draw(&s->fightScreen, 2);
     }
     System_drawCharTexts(s, 2);
@@ -97719,7 +97818,7 @@ bool System_runMatch(System* s) {
     if (false) {
         fn_vitaGCTrigger(201326592U);
     }
-    _df1_f = ((GoFunc){(void *)lambda_956, go_box(Env_lambda_956, ((Env_lambda_956){s__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_961, go_box(Env_lambda_961, ((Env_lambda_961){s__h}))});
     _df1 = true;
     {
         GoIface err = System_synchronize((*s__h));
@@ -97734,12 +97833,12 @@ bool System_runMatch(System* s) {
         }
     }
     if ((*s__h)->netConnection != NULL) {
-        _df3_f = ((GoFunc){(void *)lambda_957, go_box(Env_lambda_957, ((Env_lambda_957){s__h}))});
+        _df3_f = ((GoFunc){(void *)lambda_962, go_box(Env_lambda_962, ((Env_lambda_962){s__h}))});
         _df3 = true;
     }
     System_SetupCharRoundStart((*s__h));
     (*s__h)->debugWC = System_anyChar((*s__h));
-    GoFunc debugInput = ((GoFunc){(void *)lambda_958, &(Env_lambda_958){s__h}});
+    GoFunc debugInput = ((GoFunc){(void *)lambda_963, &(Env_lambda_963){s__h}});
     System_resetRound((*s__h));
     RoundStartBackup_Save(&(*s__h)->roundBackup);
     if ((*s__h)->SystemStateVars_.roundNo == 1) {
@@ -98474,7 +98573,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
     if (!go_streq((*sc__h).preloadAnim, GOSTR(""))) {
         GoString *animPath__h = go_box(GoString, (*sc__h).preloadAnim);
         {
-            GoIface _t4 = fn_LoadFile((&(*animPath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 1, (*sc__h).def), GOSTR(""), ((GoFunc){(void *)lambda_959, go_box(Env_lambda_959, ((Env_lambda_959){s__h, sc__h, localAnims__h, listSpr__h, tempSff__h}))}));
+            GoIface _t4 = fn_LoadFile((&(*animPath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 1, (*sc__h).def), GOSTR(""), ((GoFunc){(void *)lambda_964, go_box(Env_lambda_964, ((Env_lambda_964){s__h, sc__h, localAnims__h, listSpr__h, tempSff__h}))}));
             GoIface err = _t4;
             if (err.type != 0) {
                 return err;
@@ -98486,7 +98585,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
         GoString *spritePath__h = go_box(GoString, (*sc__h).preloadSprite);
         Slice_i32 *selPal__h = go_box(Slice_i32, {0});
         {
-            GoIface _t5 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h).def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_960, go_box(Env_lambda_960, ((Env_lambda_960){listSpr__h, localSff__h, selPal__h}))}));
+            GoIface _t5 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h).def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_965, go_box(Env_lambda_965, ((Env_lambda_965){listSpr__h, localSff__h, selPal__h}))}));
             GoIface err = _t5;
             if (err.type != 0) {
                 return err;
@@ -98586,7 +98685,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     GoString *defText__h = go_box(GoString, GOSTR(""));
     GoString *defPath__h = go_box(GoString, ss.def);
     {
-        GoIface _t1 = fn_LoadFile((&(*defPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_961, go_box(Env_lambda_961, ((Env_lambda_961){defText__h}))}));
+        GoIface _t1 = fn_LoadFile((&(*defPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_966, go_box(Env_lambda_966, ((Env_lambda_966){defText__h}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -98631,7 +98730,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     if (!go_streq(ss.preloadSprite, GOSTR(""))) {
         GoString *spritePath__h = go_box(GoString, ss.preloadSprite);
         {
-            GoIface _t11 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, ss.def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_962, go_box(Env_lambda_962, ((Env_lambda_962){listSpr__h, localSff__h}))}));
+            GoIface _t11 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, ss.def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_967, go_box(Env_lambda_967, ((Env_lambda_967){listSpr__h, localSff__h}))}));
             GoIface err = _t11;
             if (err.type != 0) {
                 return err;
@@ -98721,12 +98820,12 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
         (*sc__h)->name = GOSTR("skipslot");
         return NULL;
     }
-    GoFunc useDummy = ((GoFunc){(void *)lambda_963, &(Env_lambda_963){sc__h, defPathFromSelect__h}});
+    GoFunc useDummy = ((GoFunc){(void *)lambda_968, &(Env_lambda_968){sc__h, defPathFromSelect__h}});
     if (false && strings_ContainsAny((*defPathFromSelect__h), GOSTR("<>"))) {
         (*sc__h)->name = GOSTR("dummyslot");
         return NULL;
     }
-    _df3_f = ((GoFunc){(void *)lambda_964, go_box(Env_lambda_964, ((Env_lambda_964){tnow__h, defPathFromSelect__h}))});
+    _df3_f = ((GoFunc){(void *)lambda_969, go_box(Env_lambda_969, ((Env_lambda_969){tnow__h, defPathFromSelect__h}))});
     _df3 = true;
     GoString finalDefPath = (GoString){0};
     bool isZipChar = strings_HasSuffix(strings_ToLower((*defPathFromSelect__h)), GOSTR(".zip"));
@@ -98971,7 +99070,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
             _cont25:;
         }
     }
-    fn_LoadFile((&(*cns_orig__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h)->def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_965, go_box(Env_lambda_965, ((Env_lambda_965){sc__h}))}));
+    fn_LoadFile((&(*cns_orig__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h)->def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_970, go_box(Env_lambda_970, ((Env_lambda_970){sc__h}))}));
     if (anim_orig.len > 0) {
         (*sc__h)->preloadAnim = anim_orig;
     }
@@ -99011,7 +99110,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     GoString *def__h = go_box(GoString, def);
     GoString *tstr__h = go_box(GoString, (GoString){0});
     GoOpaque /* time.Time */ *tnow__h = go_box(GoOpaque /* time.Time */, time_Now());
-    _df1_f = ((GoFunc){(void *)lambda_966, go_box(Env_lambda_966, ((Env_lambda_966){tstr__h, tnow__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_971, go_box(Env_lambda_971, ((Env_lambda_971){tstr__h, tnow__h}))});
     _df1 = true;
     GoString defPathFromSelect = filepath_ToSlash((*def__h));
     (*tstr__h) = fmt_Sprintf(GOSTR("Stage added: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, defPathFromSelect)})));
@@ -99078,7 +99177,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
             (*def__h) = go_strcat((*def__h), GOSTR(".def"));
         }
         {
-            GoIface err = fn_LoadFile((&(*def__h)), GO_SLICE_LIT(Slice_GoString, GoString, 2, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_967, go_box(Env_lambda_967, ((Env_lambda_967){finalDefPath__h}))}));
+            GoIface err = fn_LoadFile((&(*def__h)), GO_SLICE_LIT(Slice_GoString, GoString, 2, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_972, go_box(Env_lambda_972, ((Env_lambda_972){finalDefPath__h}))}));
             if (err.type != 0) {
                 fn_LogMessage(GOSTR("Failed to add stage. File not found: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, (*def__h))})));
                 {
@@ -99092,7 +99191,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     Slice_GoString *lines__h = go_box(Slice_GoString, {0});
     GoIface *err__h = go_box(GoIface, {0});
     {
-        (*err__h) = fn_LoadFile((&(*finalDefPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_968, go_box(Env_lambda_968, ((Env_lambda_968){lines__h, err__h}))}));
+        (*err__h) = fn_LoadFile((&(*finalDefPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_973, go_box(Env_lambda_973, ((Env_lambda_973){lines__h, err__h}))}));
         if ((*err__h).type != 0) {
             fn_LogMessage(GOSTR("Failed to add stage. File read error: %s: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*finalDefPath__h))}), (*err__h)));
             {
@@ -99165,7 +99264,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
                                         key = go_strcat(key, fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, ((*idx__h) + 1))}))));
                                     }
                                     {
-                                        GoIface err = IniSection_LoadFile(isec, key, GO_SLICE_LIT(Slice_GoString, GoString, 3, (*finalDefPath__h), GOSTR(""), GOSTR("data/")), GOSTR("chars/"), ((GoFunc){(void *)lambda_969, go_box(Env_lambda_969, ((Env_lambda_969){ss__h, idx__h}))}));
+                                        GoIface err = IniSection_LoadFile(isec, key, GO_SLICE_LIT(Slice_GoString, GoString, 3, (*finalDefPath__h), GOSTR(""), GOSTR("data/")), GOSTR("chars/"), ((GoFunc){(void *)lambda_974, go_box(Env_lambda_974, ((Env_lambda_974){ss__h, idx__h}))}));
                                         if (err.type != 0) {
                                             continue;
                                         }
@@ -99277,28 +99376,38 @@ void Select_ClearSelected(Select* s) {
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// newLoader (system.go:5947), 2 TODO
+// newLoader (system.go:5947), 0 TODO
 Loader* fn_newLoader(void) {
-    return go_box(Loader, (Loader){.state = 0, .loadExit = TODO(/* make at system.go:5948 */)});
+    return go_box(Loader, (Loader){.state = 0, .loadExit = go_chan_make(sizeof(LoaderState), 1)});
 }
 
-// Loader.requestCancel (system.go:5951), 1 TODO
+// Loader.requestCancel (system.go:5951), 0 TODO
 void Loader_requestCancel(Loader* l) {
     Loader* *l__h = go_box(Loader*, l);
-    if (true /* unresolved type: nil */) {
+    if ((*l__h)->cancelCh == NULL) {
         return;
     }
-    sync_Once_Do(&(*l__h)->cancelOnce, ((GoFunc){(void *)lambda_970, go_box(Env_lambda_970, ((Env_lambda_970){l__h}))}));
+    sync_Once_Do(&(*l__h)->cancelOnce, ((GoFunc){(void *)lambda_975, go_box(Env_lambda_975, ((Env_lambda_975){l__h}))}));
 }
 
 // Loader.cancelRequested (system.go:5958), 0 TODO
 bool Loader_cancelRequested(Loader* l) {
-    if (true /* unresolved type: nil */) {
+    if (l->cancelCh == NULL) {
         return false;
     }
-    do {
-        return false;
-    } while (0);
+    {
+        GoSelCase _t1[1];
+        Anon_fa4d6974 _t2; bool _t3 = false;
+        _t1[0] = (GoSelCase){l->cancelCh, 2, &_t2, &_t3};
+        int _t4 = go_select(_t1, 1, true);
+        do {
+            if (_t4 == 0) {
+                return true;
+            } else {
+                return false;
+            }
+        } while (0);
+    }
 }
 
 // System.turnsPreloadActive (system.go:5980), 0 TODO
@@ -99341,11 +99450,20 @@ void System_startNextTurnsPreload(System* s) {
     }
     s->turnsPreloadMember = next;
     if ((s->loader.state == 2) || (s->loader.state == 4)) {
-        do {
-        } while (0);
+        {
+            GoSelCase _t3[1];
+            LoaderState _t4; bool _t5 = false;
+            _t3[0] = (GoSelCase){s->loader.loadExit, 2, &_t4, &_t5};
+            int _t6 = go_select(_t3, 1, true);
+            do {
+                if (_t6 == 0) {
+                } else {
+                }
+            } while (0);
+        }
         s->loader.state = 0;
         s->loader.err = (GoIface){0};
-        s->loader.cancelCh = (GoOpaque /* chan */){0};
+        s->loader.cancelCh = (GoChan*){0};
         s->loader.cancelOnce = ((GoOpaque){{0}});
     }
     if (s->loader.state == 0) {
@@ -99595,7 +99713,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     }
     GoString *tstr__h = go_box(GoString, (GoString){0});
     GoOpaque /* time.Time */ *tnow__h = go_box(GoOpaque /* time.Time */, time_Now());
-    _df5_f = ((GoFunc){(void *)lambda_971, go_box(Env_lambda_971, ((Env_lambda_971){gi__h, tstr__h, tnow__h}))});
+    _df5_f = ((GoFunc){(void *)lambda_976, go_box(Env_lambda_976, ((Env_lambda_976){gi__h, tstr__h, tnow__h}))});
     _df5 = true;
     GoString cdef = (GoString){0};
     int cdefOWnumber = 0;
@@ -99678,7 +99796,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     }
     if (!sameChar) {
         (*p__h)->stillLoading = true;
-        _df12_f = ((GoFunc){(void *)lambda_972, go_box(Env_lambda_972, ((Env_lambda_972){p__h}))});
+        _df12_f = ((GoFunc){(void *)lambda_977, go_box(Env_lambda_977, ((Env_lambda_977){p__h}))});
         _df12 = true;
         if ((Loader_cancelRequested(l) || (l->state == 4)) || g_sys.SystemStateVars_.gameEnd) {
             {
@@ -99813,7 +99931,7 @@ bool Loader_loadStage(Loader* l) {
         }
         GoString *tstr__h = go_box(GoString, (GoString){0});
         GoOpaque /* time.Time */ *tnow__h = go_box(GoOpaque /* time.Time */, time_Now());
-        _df1_f = ((GoFunc){(void *)lambda_973, go_box(Env_lambda_973, ((Env_lambda_973){tstr__h, tnow__h}))});
+        _df1_f = ((GoFunc){(void *)lambda_978, go_box(Env_lambda_978, ((Env_lambda_978){tstr__h, tnow__h}))});
         _df1 = true;
         sync_RWMutex_RLock(&g_sys.selMutex);
         int stageNo = g_sys.sel.selectedStageNo;
@@ -99864,11 +99982,11 @@ bool Loader_loadStage(Loader* l) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Loader.load (system.go:6742), 1 TODO
+// Loader.load (system.go:6742), 0 TODO
 void Loader_load(Loader* l) {
     bool _df1 = false; GoFunc _df1_f;
     Loader* *l__h = go_box(Loader*, l);
-    _df1_f = ((GoFunc){(void *)lambda_974, go_box(Env_lambda_974, ((Env_lambda_974){l__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_979, go_box(Env_lambda_979, ((Env_lambda_979){l__h}))});
     _df1 = true;
     bool stagedTurns = System_turnsPreloadActive(&g_sys);
     if (!stagedTurns) {
@@ -99928,7 +100046,7 @@ void Loader_load(Loader* l) {
             }
         }
     }
-    GoFunc allCharDone = ((GoFunc){(void *)lambda_975, &(Env_lambda_975){charDone__h}});
+    GoFunc allCharDone = ((GoFunc){(void *)lambda_980, &(Env_lambda_980){charDone__h}});
     {
         for (; (!stageDone) || (!((bool (*)(void *))(allCharDone).fn)((allCharDone).env)); ) {
             if ((Loader_cancelRequested((*l__h)) || ((*l__h)->state == 4)) || g_sys.SystemStateVars_.gameEnd) {
@@ -100055,7 +100173,7 @@ void Loader_load(Loader* l) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Loader.reset (system.go:6895), 1 TODO
+// Loader.reset (system.go:6895), 0 TODO
 void Loader_reset(Loader* l) {
     {
         LoaderState _t1 = l->state;
@@ -100065,26 +100183,35 @@ void Loader_reset(Loader* l) {
             } else if ((_t1 == 1)) {
                 Loader_requestCancel(l);
                 l->state = 4;
-                TODO(/* unary <- at system.go:6904 */);
+                ({ LoaderState _t2; go_chan_recv(l->loadExit, &_t2); _t2; });
             } else {
-                do {
-                } while (0);
+                {
+                    GoSelCase _t3[1];
+                    LoaderState _t4; bool _t5 = false;
+                    _t3[0] = (GoSelCase){l->loadExit, 2, &_t4, &_t5};
+                    int _t6 = go_select(_t3, 1, true);
+                    do {
+                        if (_t6 == 0) {
+                        } else {
+                        }
+                    } while (0);
+                }
             }
         } while (0);
     }
     l->state = 0;
     l->err = (GoIface){0};
-    l->cancelCh = (GoOpaque /* chan */){0};
+    l->cancelCh = (GoChan*){0};
     l->cancelOnce = ((GoOpaque){{0}});
     System_clearPreloadedChars(&g_sys);
     {
-        for (int _t2 = 0; _t2 < 12; _t2++) {
-            int i = _t2;
+        for (int _t7 = 0; _t7 < 12; _t7++) {
+            int i = _t7;
             bool keepPreloadedTurnsPal = ((g_sys.cfg.Config.TurnsLoading && (g_sys.SystemStateVars_.roundNo > 1)) && (g_sys.SystemStateVars_.tmode.v[(i & 1)] == 2));
             if ((g_sys.SystemStateVars_.roundsExisted.v[(i & 1)] == 0) && (!keepPreloadedTurnsPal)) {
                 g_sys.cgi.v[i].palno = -1;
             }
-            _cont3:;
+            _cont8:;
         }
     }
 }
@@ -100351,7 +100478,7 @@ void System_restoreCharVars(System* s, Char* c) {
     Map_int_CharVarBackup_delete(&s->charVarsBackup, c->playerNo);
 }
 
-// System.loadCustomShader (system.go:7252), 1 TODO
+// System.loadCustomShader (system.go:7252), 0 TODO
 void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString name, GoString filename, Slice_u8 data) {
     Slice_u8 *data__h = go_box(Slice_u8, data);
     GoString *key__h = go_box(GoString, filepath_ToSlash(filepath_Clean(filename)));
@@ -100361,7 +100488,7 @@ void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString 
     if (reuse) {
         return;
     }
-    TODO(/* stmt *ast.SendStmt at system.go:7261 */);
+    { GoFunc _t1 = ((GoFunc){(void *)lambda_981, go_box(Env_lambda_981, ((Env_lambda_981){data__h, key__h}))}); go_chan_send(s->mainThreadTask, &_t1); }
 }
 
 // System.loadCustomShaderFile (system.go:7268), 0 TODO
@@ -100373,7 +100500,7 @@ void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoStr
     if (strings_HasPrefix(iface_GetName_319077b5(g_gfx), GOSTR("Vulkan")) && (!strings_HasSuffix(strings_ToLower((*path__h)), GOSTR(".spv")))) {
         (*path__h) = go_strcat((*path__h), GOSTR(".spv"));
     }
-    fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_976, go_box(Env_lambda_976, ((Env_lambda_976){s__h, shaders__h, name__h}))}));
+    fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_982, go_box(Env_lambda_982, ((Env_lambda_982){s__h, shaders__h, name__h}))}));
 }
 
 // System.loadCommonShaders (system.go:7290), 0 TODO
@@ -100389,7 +100516,7 @@ GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice
                 for (int _t4 = 0; _t4 < _t5.len; _t4++) {
                     GoString *v__h = go_box(GoString, _t5.p[_t4]);
                     {
-                        GoIface _t7 = fn_LoadFile((&(*v__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_977, go_box(Env_lambda_977, ((Env_lambda_977){s__h, shaders__h}))}));
+                        GoIface _t7 = fn_LoadFile((&(*v__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_983, go_box(Env_lambda_983, ((Env_lambda_983){s__h, shaders__h}))}));
                         GoIface err = _t7;
                         if (err.type != 0) {
                             return err;
@@ -100492,14 +100619,14 @@ Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     return (Ret_GoString__bool){key, ok};
 }
 
-// System.cleanCustomShaders (system.go:7365), 1 TODO
+// System.cleanCustomShaders (system.go:7365), 0 TODO
 void System_cleanCustomShaders(System* s) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&s->loadedCustomShaders);
         while (gomap_next(&_t2)) {
             GoString sName = *(GoString *)_t2.key;
             if (!System_isCustomShaderActive(s, sName)) {
-                TODO(/* stmt *ast.SendStmt at system.go:7368 */);
+                { GoFunc _t4 = ((GoFunc (*)(void *, GoString))(((GoFunc){(void *)lambda_984, &(Env_lambda_984){0}})).fn)((((GoFunc){(void *)lambda_984, &(Env_lambda_984){0}})).env, sName); go_chan_send(s->mainThreadTask, &_t4); }
                 Map_GoString_bool_delete(&s->loadedCustomShaders, sName);
             }
             _cont3:;
@@ -100556,7 +100683,7 @@ Slice_GoString fn_SortedKeys_Slice_GoString(Map_GoString_Slice_GoString m) {
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_979, go_box(Env_lambda_979, ((Env_lambda_979){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_987, go_box(Env_lambda_987, ((Env_lambda_987){keys__h}))}));
     return (*keys__h);
 }
 
@@ -100774,7 +100901,7 @@ Slice_GoString fn_SortedKeys_GoString(Map_GoString_GoString m) {
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_981, go_box(Env_lambda_981, ((Env_lambda_981){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_989, go_box(Env_lambda_989, ((Env_lambda_989){keys__h}))}));
     return (*keys__h);
 }
 
@@ -100876,7 +101003,7 @@ Slice_GoString fn_SortedKeys_ScenePropertiesPtr(Map_GoString_ScenePropertiesPtr 
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_983, go_box(Env_lambda_983, ((Env_lambda_983){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_991, go_box(Env_lambda_991, ((Env_lambda_991){keys__h}))}));
     return (*keys__h);
 }
 
@@ -101067,7 +101194,7 @@ void ik_init_globals(void) {
     g_vitaStateHashOn = -1;
     g_attackTypeStrings = (Arr9_Anon_f8c1b65b){{(Anon_f8c1b65b){64, GOSTR("NA")}, (Anon_f8c1b65b){128, GOSTR("NT")}, (Anon_f8c1b65b){256, GOSTR("NP")}, (Anon_f8c1b65b){512, GOSTR("SA")}, (Anon_f8c1b65b){1024, GOSTR("ST")}, (Anon_f8c1b65b){2048, GOSTR("SP")}, (Anon_f8c1b65b){4096, GOSTR("HA")}, (Anon_f8c1b65b){8192, GOSTR("HT")}, (Anon_f8c1b65b){16384, GOSTR("HP")}}};
     g_triggerMap = ({ Map_GoString_int _m = Map_GoString_int_make(280); Map_GoString_int_set(&_m, GOSTR("player"), 0); Map_GoString_int_set(&_m, GOSTR("parent"), 0); Map_GoString_int_set(&_m, GOSTR("root"), 0); Map_GoString_int_set(&_m, GOSTR("helper"), 0); Map_GoString_int_set(&_m, GOSTR("target"), 0); Map_GoString_int_set(&_m, GOSTR("partner"), 0); Map_GoString_int_set(&_m, GOSTR("enemy"), 0); Map_GoString_int_set(&_m, GOSTR("enemynear"), 0); Map_GoString_int_set(&_m, GOSTR("playerid"), 0); Map_GoString_int_set(&_m, GOSTR("playerindex"), 0); Map_GoString_int_set(&_m, GOSTR("p2"), 0); Map_GoString_int_set(&_m, GOSTR("stateowner"), 0); Map_GoString_int_set(&_m, GOSTR("helperindex"), 0); Map_GoString_int_set(&_m, GOSTR("abs"), 1); Map_GoString_int_set(&_m, GOSTR("acos"), 1); Map_GoString_int_set(&_m, GOSTR("ailevel"), 1); Map_GoString_int_set(&_m, GOSTR("alive"), 1); Map_GoString_int_set(&_m, GOSTR("anim"), 1); Map_GoString_int_set(&_m, GOSTR("animelem"), 1); Map_GoString_int_set(&_m, GOSTR("animelemno"), 1); Map_GoString_int_set(&_m, GOSTR("animelemtime"), 1); Map_GoString_int_set(&_m, GOSTR("animexist"), 1); Map_GoString_int_set(&_m, GOSTR("animtime"), 1); Map_GoString_int_set(&_m, GOSTR("asin"), 1); Map_GoString_int_set(&_m, GOSTR("atan"), 1); Map_GoString_int_set(&_m, GOSTR("authorname"), 1); Map_GoString_int_set(&_m, GOSTR("backedge"), 1); Map_GoString_int_set(&_m, GOSTR("backedgebodydist"), 1); Map_GoString_int_set(&_m, GOSTR("backedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("bottomedge"), 1); Map_GoString_int_set(&_m, GOSTR("botboundbodydist"), 1); Map_GoString_int_set(&_m, GOSTR("botbounddist"), 1); Map_GoString_int_set(&_m, GOSTR("camerapos"), 1); Map_GoString_int_set(&_m, GOSTR("camerazoom"), 1); Map_GoString_int_set(&_m, GOSTR("canrecover"), 1); Map_GoString_int_set(&_m, GOSTR("ceil"), 1); Map_GoString_int_set(&_m, GOSTR("command"), 1); Map_GoString_int_set(&_m, GOSTR("cond"), 1); Map_GoString_int_set(&_m, GOSTR("const"), 1); Map_GoString_int_set(&_m, GOSTR("const240p"), 1); Map_GoString_int_set(&_m, GOSTR("const480p"), 1); Map_GoString_int_set(&_m, GOSTR("const720p"), 1); Map_GoString_int_set(&_m, GOSTR("cos"), 1); Map_GoString_int_set(&_m, GOSTR("ctrl"), 1); Map_GoString_int_set(&_m, GOSTR("drawgame"), 1); Map_GoString_int_set(&_m, GOSTR("e"), 1); Map_GoString_int_set(&_m, GOSTR("exp"), 1); Map_GoString_int_set(&_m, GOSTR("facing"), 1); Map_GoString_int_set(&_m, GOSTR("floor"), 1); Map_GoString_int_set(&_m, GOSTR("frontedge"), 1); Map_GoString_int_set(&_m, GOSTR("frontedgebodydist"), 1); Map_GoString_int_set(&_m, GOSTR("frontedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("fvar"), 1); Map_GoString_int_set(&_m, GOSTR("gameheight"), 1); Map_GoString_int_set(&_m, GOSTR("gametime"), 1); Map_GoString_int_set(&_m, GOSTR("gamewidth"), 1); Map_GoString_int_set(&_m, GOSTR("gethitvar"), 1); Map_GoString_int_set(&_m, GOSTR("hitbyattr"), 1); Map_GoString_int_set(&_m, GOSTR("hitcount"), 1); Map_GoString_int_set(&_m, GOSTR("hitdefattr"), 1); Map_GoString_int_set(&_m, GOSTR("hitdefvar"), 1); Map_GoString_int_set(&_m, GOSTR("hitfall"), 1); Map_GoString_int_set(&_m, GOSTR("hitover"), 1); Map_GoString_int_set(&_m, GOSTR("hitpausetime"), 1); Map_GoString_int_set(&_m, GOSTR("hitshakeover"), 1); Map_GoString_int_set(&_m, GOSTR("hitvel"), 1); Map_GoString_int_set(&_m, GOSTR("id"), 1); Map_GoString_int_set(&_m, GOSTR("ifelse"), 1); Map_GoString_int_set(&_m, GOSTR("inguarddist"), 1); Map_GoString_int_set(&_m, GOSTR("ishelper"), 1); Map_GoString_int_set(&_m, GOSTR("ishometeam"), 1); Map_GoString_int_set(&_m, GOSTR("leftedge"), 1); Map_GoString_int_set(&_m, GOSTR("life"), 1); Map_GoString_int_set(&_m, GOSTR("lifemax"), 1); Map_GoString_int_set(&_m, GOSTR("ln"), 1); Map_GoString_int_set(&_m, GOSTR("log"), 1); Map_GoString_int_set(&_m, GOSTR("lose"), 1); Map_GoString_int_set(&_m, GOSTR("loseko"), 1); Map_GoString_int_set(&_m, GOSTR("losetime"), 1); Map_GoString_int_set(&_m, GOSTR("matchno"), 1); Map_GoString_int_set(&_m, GOSTR("matchover"), 1); Map_GoString_int_set(&_m, GOSTR("movecontact"), 1); Map_GoString_int_set(&_m, GOSTR("moveguarded"), 1); Map_GoString_int_set(&_m, GOSTR("movehit"), 1); Map_GoString_int_set(&_m, GOSTR("movereversed"), 1); Map_GoString_int_set(&_m, GOSTR("movetype"), 1); Map_GoString_int_set(&_m, GOSTR("name"), 1); Map_GoString_int_set(&_m, GOSTR("numenemy"), 1); Map_GoString_int_set(&_m, GOSTR("numexplod"), 1); Map_GoString_int_set(&_m, GOSTR("numhelper"), 1); Map_GoString_int_set(&_m, GOSTR("numpartner"), 1); Map_GoString_int_set(&_m, GOSTR("numproj"), 1); Map_GoString_int_set(&_m, GOSTR("numprojid"), 1); Map_GoString_int_set(&_m, GOSTR("numstagebg"), 1); Map_GoString_int_set(&_m, GOSTR("numtarget"), 1); Map_GoString_int_set(&_m, GOSTR("numtext"), 1); Map_GoString_int_set(&_m, GOSTR("p1name"), 1); Map_GoString_int_set(&_m, GOSTR("p2bodydist"), 1); Map_GoString_int_set(&_m, GOSTR("p2dist"), 1); Map_GoString_int_set(&_m, GOSTR("p2life"), 1); Map_GoString_int_set(&_m, GOSTR("p2movetype"), 1); Map_GoString_int_set(&_m, GOSTR("p2name"), 1); Map_GoString_int_set(&_m, GOSTR("p2stateno"), 1); Map_GoString_int_set(&_m, GOSTR("p2statetype"), 1); Map_GoString_int_set(&_m, GOSTR("p3name"), 1); Map_GoString_int_set(&_m, GOSTR("p4name"), 1); Map_GoString_int_set(&_m, GOSTR("palno"), 1); Map_GoString_int_set(&_m, GOSTR("parentdist"), 1); Map_GoString_int_set(&_m, GOSTR("parentexist"), 1); Map_GoString_int_set(&_m, GOSTR("pi"), 1); Map_GoString_int_set(&_m, GOSTR("playeridexist"), 1); Map_GoString_int_set(&_m, GOSTR("pos"), 1); Map_GoString_int_set(&_m, GOSTR("power"), 1); Map_GoString_int_set(&_m, GOSTR("powermax"), 1); Map_GoString_int_set(&_m, GOSTR("prevstateno"), 1); Map_GoString_int_set(&_m, GOSTR("projcanceltime"), 1); Map_GoString_int_set(&_m, GOSTR("projcontact"), 1); Map_GoString_int_set(&_m, GOSTR("projcontacttime"), 1); Map_GoString_int_set(&_m, GOSTR("projguarded"), 1); Map_GoString_int_set(&_m, GOSTR("projguardedtime"), 1); Map_GoString_int_set(&_m, GOSTR("projhit"), 1); Map_GoString_int_set(&_m, GOSTR("projhittime"), 1); Map_GoString_int_set(&_m, GOSTR("random"), 1); Map_GoString_int_set(&_m, GOSTR("rightedge"), 1); Map_GoString_int_set(&_m, GOSTR("rootdist"), 1); Map_GoString_int_set(&_m, GOSTR("roundno"), 1); Map_GoString_int_set(&_m, GOSTR("roundsexisted"), 1); Map_GoString_int_set(&_m, GOSTR("roundstate"), 1); Map_GoString_int_set(&_m, GOSTR("roundswon"), 1); Map_GoString_int_set(&_m, GOSTR("screenheight"), 1); Map_GoString_int_set(&_m, GOSTR("screenpos"), 1); Map_GoString_int_set(&_m, GOSTR("screenwidth"), 1); Map_GoString_int_set(&_m, GOSTR("selfanimexist"), 1); Map_GoString_int_set(&_m, GOSTR("sin"), 1); Map_GoString_int_set(&_m, GOSTR("stagebgvar"), 1); Map_GoString_int_set(&_m, GOSTR("stagevar"), 1); Map_GoString_int_set(&_m, GOSTR("stateno"), 1); Map_GoString_int_set(&_m, GOSTR("statetype"), 1); Map_GoString_int_set(&_m, GOSTR("sysfvar"), 1); Map_GoString_int_set(&_m, GOSTR("sysvar"), 1); Map_GoString_int_set(&_m, GOSTR("tan"), 1); Map_GoString_int_set(&_m, GOSTR("teammode"), 1); Map_GoString_int_set(&_m, GOSTR("teamside"), 1); Map_GoString_int_set(&_m, GOSTR("tickspersecond"), 1); Map_GoString_int_set(&_m, GOSTR("time"), 1); Map_GoString_int_set(&_m, GOSTR("timemod"), 1); Map_GoString_int_set(&_m, GOSTR("topedge"), 1); Map_GoString_int_set(&_m, GOSTR("topboundbodydist"), 1); Map_GoString_int_set(&_m, GOSTR("topbounddist"), 1); Map_GoString_int_set(&_m, GOSTR("uniqhitcount"), 1); Map_GoString_int_set(&_m, GOSTR("var"), 1); Map_GoString_int_set(&_m, GOSTR("vel"), 1); Map_GoString_int_set(&_m, GOSTR("win"), 1); Map_GoString_int_set(&_m, GOSTR("winko"), 1); Map_GoString_int_set(&_m, GOSTR("winperfect"), 1); Map_GoString_int_set(&_m, GOSTR("wintime"), 1); Map_GoString_int_set(&_m, GOSTR("ailevelf"), 1); Map_GoString_int_set(&_m, GOSTR("airjumpcount"), 1); Map_GoString_int_set(&_m, GOSTR("alpha"), 1); Map_GoString_int_set(&_m, GOSTR("analog"), 1); Map_GoString_int_set(&_m, GOSTR("angle"), 1); Map_GoString_int_set(&_m, GOSTR("animelemvar"), 1); Map_GoString_int_set(&_m, GOSTR("animlength"), 1); Map_GoString_int_set(&_m, GOSTR("animloopcount"), 1); Map_GoString_int_set(&_m, GOSTR("animplayerno"), 1); Map_GoString_int_set(&_m, GOSTR("animprefix"), 1); Map_GoString_int_set(&_m, GOSTR("atan2"), 1); Map_GoString_int_set(&_m, GOSTR("attack"), 1); Map_GoString_int_set(&_m, GOSTR("attackmul"), 1); Map_GoString_int_set(&_m, GOSTR("bgmvar"), 1); Map_GoString_int_set(&_m, GOSTR("clamp"), 1); Map_GoString_int_set(&_m, GOSTR("clsnoverlap"), 1); Map_GoString_int_set(&_m, GOSTR("clsnvar"), 1); Map_GoString_int_set(&_m, GOSTR("combocount"), 1); Map_GoString_int_set(&_m, GOSTR("consecutivewins"), 1); Map_GoString_int_set(&_m, GOSTR("const1080p"), 1); Map_GoString_int_set(&_m, GOSTR("decisiveround"), 1); Map_GoString_int_set(&_m, GOSTR("defence"), 1); Map_GoString_int_set(&_m, GOSTR("defencemul"), 1); Map_GoString_int_set(&_m, GOSTR("deg"), 1); Map_GoString_int_set(&_m, GOSTR("displayname"), 1); Map_GoString_int_set(&_m, GOSTR("dizzy"), 1); Map_GoString_int_set(&_m, GOSTR("dizzypoints"), 1); Map_GoString_int_set(&_m, GOSTR("dizzypointsmax"), 1); Map_GoString_int_set(&_m, GOSTR("envshakevar"), 1); Map_GoString_int_set(&_m, GOSTR("explodvar"), 1); Map_GoString_int_set(&_m, GOSTR("fightscreenstate"), 1); Map_GoString_int_set(&_m, GOSTR("fightscreenvar"), 1); Map_GoString_int_set(&_m, GOSTR("fighttime"), 1); Map_GoString_int_set(&_m, GOSTR("firstattack"), 1); Map_GoString_int_set(&_m, GOSTR("float"), 1); Map_GoString_int_set(&_m, GOSTR("gamemode"), 1); Map_GoString_int_set(&_m, GOSTR("gameoption"), 1); Map_GoString_int_set(&_m, GOSTR("gamevar"), 1); Map_GoString_int_set(&_m, GOSTR("groundangle"), 1); Map_GoString_int_set(&_m, GOSTR("guardbreak"), 1); Map_GoString_int_set(&_m, GOSTR("guardcount"), 1); Map_GoString_int_set(&_m, GOSTR("guardpoints"), 1); Map_GoString_int_set(&_m, GOSTR("guardpointsmax"), 1); Map_GoString_int_set(&_m, GOSTR("helperindexexist"), 1); Map_GoString_int_set(&_m, GOSTR("helpername"), 1); Map_GoString_int_set(&_m, GOSTR("helpervar"), 1); Map_GoString_int_set(&_m, GOSTR("hitoverridden"), 1); Map_GoString_int_set(&_m, GOSTR("ikemenversion"), 1); Map_GoString_int_set(&_m, GOSTR("incustomanim"), 1); Map_GoString_int_set(&_m, GOSTR("incustomstate"), 1); Map_GoString_int_set(&_m, GOSTR("index"), 1); Map_GoString_int_set(&_m, GOSTR("inputtime"), 1); Map_GoString_int_set(&_m, GOSTR("inrunstate"), 1); Map_GoString_int_set(&_m, GOSTR("introstate"), 1); Map_GoString_int_set(&_m, GOSTR("isasserted"), 1); Map_GoString_int_set(&_m, GOSTR("ishost"), 1); Map_GoString_int_set(&_m, GOSTR("lastplayerid"), 1); Map_GoString_int_set(&_m, GOSTR("layerno"), 1); Map_GoString_int_set(&_m, GOSTR("lerp"), 1); Map_GoString_int_set(&_m, GOSTR("localcoord"), 1); Map_GoString_int_set(&_m, GOSTR("map"), 1); Map_GoString_int_set(&_m, GOSTR("max"), 1); Map_GoString_int_set(&_m, GOSTR("memberno"), 1); Map_GoString_int_set(&_m, GOSTR("min"), 1); Map_GoString_int_set(&_m, GOSTR("motifstate"), 1); Map_GoString_int_set(&_m, GOSTR("motifvar"), 1); Map_GoString_int_set(&_m, GOSTR("movecountered"), 1); Map_GoString_int_set(&_m, GOSTR("movehitvar"), 1); Map_GoString_int_set(&_m, GOSTR("mugenversion"), 1); Map_GoString_int_set(&_m, GOSTR("numplayer"), 1); Map_GoString_int_set(&_m, GOSTR("offset"), 1); Map_GoString_int_set(&_m, GOSTR("outrostate"), 1); Map_GoString_int_set(&_m, GOSTR("p5name"), 1); Map_GoString_int_set(&_m, GOSTR("p6name"), 1); Map_GoString_int_set(&_m, GOSTR("p7name"), 1); Map_GoString_int_set(&_m, GOSTR("p8name"), 1); Map_GoString_int_set(&_m, GOSTR("palfxvar"), 1); Map_GoString_int_set(&_m, GOSTR("pausetime"), 1); Map_GoString_int_set(&_m, GOSTR("physics"), 1); Map_GoString_int_set(&_m, GOSTR("playerindexexist"), 1); Map_GoString_int_set(&_m, GOSTR("playerno"), 1); Map_GoString_int_set(&_m, GOSTR("playernoexist"), 1); Map_GoString_int_set(&_m, GOSTR("prevanim"), 1); Map_GoString_int_set(&_m, GOSTR("prevmovetype"), 1); Map_GoString_int_set(&_m, GOSTR("prevstatetype"), 1); Map_GoString_int_set(&_m, GOSTR("projclsnoverlap"), 1); Map_GoString_int_set(&_m, GOSTR("projvar"), 1); Map_GoString_int_set(&_m, GOSTR("rad"), 1); Map_GoString_int_set(&_m, GOSTR("randomrange"), 1); Map_GoString_int_set(&_m, GOSTR("receiveddamage"), 1); Map_GoString_int_set(&_m, GOSTR("receivedhits"), 1); Map_GoString_int_set(&_m, GOSTR("redlife"), 1); Map_GoString_int_set(&_m, GOSTR("reversaldefattr"), 1); Map_GoString_int_set(&_m, GOSTR("round"), 1); Map_GoString_int_set(&_m, GOSTR("roundtime"), 1); Map_GoString_int_set(&_m, GOSTR("runorder"), 1); Map_GoString_int_set(&_m, GOSTR("scale"), 1); Map_GoString_int_set(&_m, GOSTR("score"), 1); Map_GoString_int_set(&_m, GOSTR("scoretotal"), 1); Map_GoString_int_set(&_m, GOSTR("selfcommand"), 1); Map_GoString_int_set(&_m, GOSTR("selfstatenoexist"), 1); Map_GoString_int_set(&_m, GOSTR("shader"), 1); Map_GoString_int_set(&_m, GOSTR("sign"), 1); Map_GoString_int_set(&_m, GOSTR("soundvar"), 1); Map_GoString_int_set(&_m, GOSTR("spriteplayerno"), 1); Map_GoString_int_set(&_m, GOSTR("spritevar"), 1); Map_GoString_int_set(&_m, GOSTR("sprpriority"), 1); Map_GoString_int_set(&_m, GOSTR("stagebackedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("stageconst"), 1); Map_GoString_int_set(&_m, GOSTR("stagefrontedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("stagetime"), 1); Map_GoString_int_set(&_m, GOSTR("standby"), 1); Map_GoString_int_set(&_m, GOSTR("teamleader"), 1); Map_GoString_int_set(&_m, GOSTR("teamsize"), 1); Map_GoString_int_set(&_m, GOSTR("timeelapsed"), 1); Map_GoString_int_set(&_m, GOSTR("timeremaining"), 1); Map_GoString_int_set(&_m, GOSTR("timetotal"), 1); Map_GoString_int_set(&_m, GOSTR("winclutch"), 1); Map_GoString_int_set(&_m, GOSTR("winhyper"), 1); Map_GoString_int_set(&_m, GOSTR("winspecial"), 1); Map_GoString_int_set(&_m, GOSTR("xangle"), 1); Map_GoString_int_set(&_m, GOSTR("xshear"), 1); Map_GoString_int_set(&_m, GOSTR("yangle"), 1); Map_GoString_int_set(&_m, GOSTR("zoomvar"), 1); (Map_GoString_int)_m; });
-    g_specialSymbolTable = ((Arr256_bool (*)(void *))(((GoFunc){(void *)lambda_984, go_box(Env_lambda_984, ((Env_lambda_984){0}))})).fn)((((GoFunc){(void *)lambda_984, go_box(Env_lambda_984, ((Env_lambda_984){0}))})).env);
+    g_specialSymbolTable = ((Arr256_bool (*)(void *))(((GoFunc){(void *)lambda_992, go_box(Env_lambda_992, ((Env_lambda_992){0}))})).fn)((((GoFunc){(void *)lambda_992, go_box(Env_lambda_992, ((Env_lambda_992){0}))})).env);
     g_cvf_sin = (Arr6_f64){{0x1.5d8fd1fd19ccdp-33, -0x1.ae5e5a9291f5dp-26, 0x1.71de3567d48a1p-19, -0x1.a01a019bfdf03p-13, 0x1.111111110f7dp-07, -0x1.5555555555548p-03}};
     g_cvf_cos = (Arr6_f64){{-0x1.8fa49a0861a9bp-37, 0x1.1ee9d7b4e3f05p-29, -0x1.27e4f7eac4bc6p-22, 0x1.a01a019c844f5p-16, -0x1.6c16c16c14f91p-10, 0x1.555555555554bp-05}};
     g_cvf_tanP = (Arr3_f64){{-0x1.992d8d24f3f38p+13, 0x1.199eca5fc9dddp+20, -0x1.11fead3299176p+24}};
@@ -101079,7 +101206,7 @@ void ik_init_globals(void) {
     g_notiling = (Tiling){0};
     g_specGen = 1U;
     g_stateDumpOn = -1;
-    g_sys = (System){.soundMixer = go_box(GoOpaque /* beep.Mixer */, ((GoOpaque){{0}})), .videoMixer = go_box(GoOpaque /* beep.Mixer */, ((GoOpaque){{0}})), .bgm = (*fn_newBgm()), .pauseSoundVolume = 100, .focusSoundVolume = 100, .allPalFX = fn_newPalFX(), .bgPalFX = fn_newPalFX(), .ffx = Map_GoString_FightFxPtr_make(0), .sel = (*fn_newSelect()), .keyState = Map_GoOpaque_invalidtypePtr_bool_make(0), .loader = (*fn_newLoader()), .ignoreMostErrors = true, .stageList = Map_i32_StagePtr_make(0), .stageLocalcoords = Map_GoString_Arr2_i32_make(0), .commandLine = TODO(/* make at system.go:176 */), .mainThreadTask = TODO(/* make at system.go:177 */), .workpal = GO_MAKE_A(Slice_u32, u32, 256, 256), .saveState = fn_NewGameState(), .statePool = fn_NewGameStatePool(), .savePool = fn_NewGameStatePool(), .loadPool = fn_NewGameStatePool(), .commandLists = GO_MAKE(Slice_CommandListPtr, CommandList*, 0, 0), .debugAccel = 0x1p+00f, .charVarsBackup = Map_int_CharVarBackup_make(0), .SystemStateVars_ = (SystemStateVars){.randseed = ((i32)time_Time_UnixNano(time_Now())), .scrrect = (Arr4_i32){{0, 0, 320, 240}}, .gameWidth = 0x1.4p+08f, .gameHeight = 0x1.ep+07f, .widthScale = 0x1p+00f, .heightScale = 0x1p+00f, .brightness = 0x1p+00f, .maxRoundTime = -1, .matchNo = 1, .numSimul = (Arr2_i32){{2, 2}}, .numTurns = (Arr2_i32){{2, 2}}, .oldNextAddTime = 0x1p+00f, .cam = (*fn_newCamera()), .keyInput = ((GoOpaque){{0}}) /* unresolved type */, .lastInputController = -1, .uiRepeatController = -1}};
+    g_sys = (System){.soundMixer = go_box(GoOpaque /* beep.Mixer */, ((GoOpaque){{0}})), .videoMixer = go_box(GoOpaque /* beep.Mixer */, ((GoOpaque){{0}})), .bgm = (*fn_newBgm()), .pauseSoundVolume = 100, .focusSoundVolume = 100, .allPalFX = fn_newPalFX(), .bgPalFX = fn_newPalFX(), .ffx = Map_GoString_FightFxPtr_make(0), .sel = (*fn_newSelect()), .keyState = Map_GoOpaque_invalidtypePtr_bool_make(0), .loader = (*fn_newLoader()), .ignoreMostErrors = true, .stageList = Map_i32_StagePtr_make(0), .stageLocalcoords = Map_GoString_Arr2_i32_make(0), .commandLine = go_chan_make(sizeof(GoString), 0), .mainThreadTask = go_chan_make(sizeof(GoFunc), 65536), .workpal = GO_MAKE_A(Slice_u32, u32, 256, 256), .saveState = fn_NewGameState(), .statePool = fn_NewGameStatePool(), .savePool = fn_NewGameStatePool(), .loadPool = fn_NewGameStatePool(), .commandLists = GO_MAKE(Slice_CommandListPtr, CommandList*, 0, 0), .debugAccel = 0x1p+00f, .charVarsBackup = Map_int_CharVarBackup_make(0), .SystemStateVars_ = (SystemStateVars){.randseed = ((i32)time_Time_UnixNano(time_Now())), .scrrect = (Arr4_i32){{0, 0, 320, 240}}, .gameWidth = 0x1.4p+08f, .gameHeight = 0x1.ep+07f, .widthScale = 0x1p+00f, .heightScale = 0x1p+00f, .brightness = 0x1p+00f, .maxRoundTime = -1, .matchNo = 1, .numSimul = (Arr2_i32){{2, 2}}, .numTurns = (Arr2_i32){{2, 2}}, .oldNextAddTime = 0x1p+00f, .cam = (*fn_newCamera()), .keyInput = ((GoOpaque){{0}}) /* unresolved type */, .lastInputController = -1, .uiRepeatController = -1}};
     g_ErrLoadingCanceled = errors_New(GOSTR("loading canceled"));
     g_vitaTraceOn = false;
     g_vitaTraceDeep = false;
@@ -102307,10 +102434,10 @@ const RType ik_rt[1193] = {
     {25, sizeof(bgAction), "bgAction", "main", NULL, NULL, 0, 7, ik_rf_780, 880, false, "main.bgAction"},
     {22, sizeof(bgVideo*), "", "", &ik_rt[782], NULL, 0, 0, NULL, 881, false, "*main.bgVideo"},
     {25, sizeof(bgVideo), "bgVideo", "main", NULL, NULL, 0, 25, ik_rf_782, 882, false, "main.bgVideo"},
-    {18, sizeof(GoOpaque /* chan */), "", "", NULL, NULL, 0, 0, NULL, 883, false, "chan error"},
-    {18, sizeof(GoOpaque /* chan */), "", "", NULL, NULL, 0, 0, NULL, 884, false, "chan *image.RGBA"},
-    {18, sizeof(GoOpaque /* chan */), "", "", NULL, NULL, 0, 0, NULL, 885, false, "chan []float64"},
-    {18, sizeof(GoOpaque /* chan */), "", "", NULL, NULL, 0, 0, NULL, 886, false, "chan struct{}"},
+    {18, sizeof(GoChan*), "", "", NULL, NULL, 0, 0, NULL, 883, false, "chan error"},
+    {18, sizeof(GoChan*), "", "", NULL, NULL, 0, 0, NULL, 884, false, "chan *image.RGBA"},
+    {18, sizeof(GoChan*), "", "", NULL, NULL, 0, 0, NULL, 885, false, "chan []float64"},
+    {18, sizeof(GoChan*), "", "", NULL, NULL, 0, 0, NULL, 886, false, "chan struct{}"},
     {0, 0, "invalid type", "", NULL, NULL, 0, 0, NULL, 0, false, "invalid type"},
     {6, sizeof(i64), "Duration", "time", NULL, NULL, 0, 0, NULL, 381, false, "time.Duration"},
     {22, sizeof(GoOpaque /* image.RGBA */*), "", "", &ik_rt[790], NULL, 0, 0, NULL, 887, false, "*image.RGBA"},
@@ -103002,6 +103129,12 @@ int iface_Line_a218166d(GoIface _x) {
     }
 }
 
+u32 iface_LoadCustomSpriteShader_f41f8f35(GoIface _x, GoString _a0, Slice_u8 _a1) {
+    switch (_x.type) {
+    default: { u32 z; memset(&z, 0, sizeof z); return z; }
+    }
+}
+
 GoString iface_Name_319077b5(GoIface _x) {
     switch (_x.type) {
     case GO_TID_RTYPE: return rt_type_Name((const RType *)_x.data);
@@ -103325,6 +103458,18 @@ void iface_SetLine_83b24cfd(GoIface _x, int _a0) {
     }
 }
 
+void iface_SetModelIndexData_e06c74a6(GoIface _x, u32 _a0, Slice_u32 _a1) {
+    switch (_x.type) {
+    default: return;
+    }
+}
+
+void iface_SetModelVertexData_ed700385(GoIface _x, u32 _a0, Slice_u8 _a1) {
+    switch (_x.type) {
+    default: return;
+    }
+}
+
 void iface_SetSp_bc7e4c4e(GoIface _x, int _a0) {
     switch (_x.type) {
     default: return;
@@ -103382,6 +103527,12 @@ lua_LValueType iface_Type_22ad5bb1(GoIface _x) {
     case 153: return lua_LState_Type((lua_LState*)_x.data);
     case 154: return lua_LChannel_Type(*(lua_LChannel *)_x.data);
     default: { lua_LValueType z; memset(&z, 0, sizeof z); return z; }
+    }
+}
+
+void iface_UnloadCustomSpriteShader_b675cad7(GoIface _x, GoString _a0) {
+    switch (_x.type) {
+    default: return;
     }
 }
 
@@ -103647,3 +103798,7 @@ void fn_vitaPerfEnd(int _p0) { } /* stub: vitaPerfEnd */
 void fn_vitaPhase(int _p0) { } /* stub: vitaPhase */
 bool fn_vitaHalfRate(void) { return 0; } /* stub: vitaHalfRate */
 void fn_vitaMatchEnd(void) { } /* stub: vitaMatchEnd */
+void fn_vitaDiagFrame(void) { } /* stub: vitaDiagFrame */
+bool fn_vitaDiagSkip(int _p0) { return 0; } /* stub: vitaDiagSkip */
+bool fn_vitaDrawCensusDue(void) { return 0; } /* stub: vitaDrawCensusDue */
+void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 l) { } /* stub: vitaDrawCensus */

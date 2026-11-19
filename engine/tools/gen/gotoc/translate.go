@@ -387,29 +387,11 @@ func (t *Tx) stmt(s ast.Stmt) {
 	case *ast.DeferStmt:
 		t.deferStmt(s)
 	case *ast.SelectStmt:
-		// Single-threaded: no channel is ever ready, so a select runs its
-		// default clause (and one without default would block forever).
-		var deflt *ast.CommClause
-		for _, cc := range s.Body.List {
-			if c := cc.(*ast.CommClause); c.Comm == nil {
-				deflt = c
-			}
-		}
-		if deflt == nil {
-			t.w("go_panic_str(\"select: no channel can become ready (single-threaded)\");")
-			break
-		}
-		t.w("do {")
-		t.ind++
-		t.inSwitch++
-		for _, st := range deflt.Body {
-			t.stmt(st)
-		}
-		t.inSwitch--
-		t.ind--
-		t.w("} while (0);")
+		t.selectStmt(s)
+	case *ast.SendStmt:
+		t.sendStmt(s)
 	case *ast.GoStmt:
-		t.w("%s;", t.TODO(s, "go"))
+		t.goStmt(s)
 	case *ast.EmptyStmt:
 	default:
 		t.w("%s;", t.TODO(s, fmt.Sprintf("stmt %T", s)))
@@ -426,7 +408,7 @@ func zeroValue(ty types.Type) string {
 			return "false"
 		}
 		return "0"
-	case *types.Pointer:
+	case *types.Pointer, *types.Chan:
 		return "NULL"
 	case *types.Signature:
 		return "(GoFunc){0}"
@@ -758,6 +740,19 @@ func (t *Tx) rangeStmt(s *ast.RangeStmt, label string) {
 			}
 		}
 		_ = mt
+	case *types.Chan:
+		cv, tv, et := t.newTmp(), t.newTmp(), t.ctype(u.Elem())
+		t.w("GoChan *%s = %s;", cv, t.expr(s.X))
+		t.w("for (;;) {")
+		t.ind++
+		t.w("%s %s; if (!go_chan_recv(%s, &%s)) break;", et, tv, cv, tv)
+		if key != "" { // for v := range ch: the element is the "key"
+			if define {
+				t.w("%s", decl(keyObj, et, tv))
+			} else {
+				t.w("%s = %s;", key, tv)
+			}
+		}
 	default:
 		t.w("%s;", t.TODO(s, "range kind"))
 		t.ind--
@@ -960,6 +955,15 @@ func (t *Tx) assign(s *ast.AssignStmt) {
 				t.w("bool %s; %s %s = %s;", ok2, t.ctype(mt.Elem()), val, t.mapGet(r.X, r.Index, mt, "&"+ok2))
 				t.defOrSet(s.Lhs[0], s.Tok, val, mt.Elem())
 				t.defOrSet(s.Lhs[1], s.Tok, ok2, types.Typ[types.Bool])
+				return
+			}
+		case *ast.UnaryExpr:
+			if r.Op == token.ARROW { // v, ok := <-ch
+				el := chanElem(t.typeOf(r.X))
+				val, okv := t.newTmp(), t.newTmp()
+				t.w("%s %s; bool %s = go_chan_recv(%s, &%s);", t.ctype(el), val, okv, t.expr(r.X), val)
+				t.defOrSet(s.Lhs[0], s.Tok, val, el)
+				t.defOrSet(s.Lhs[1], s.Tok, okv, types.Typ[types.Bool])
 				return
 			}
 		case *ast.TypeAssertExpr:

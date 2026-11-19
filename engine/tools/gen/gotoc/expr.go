@@ -249,6 +249,9 @@ func (t *Tx) fieldPath(x ast.Expr, sel *types.Selection) string {
 }
 
 func (t *Tx) unary(e *ast.UnaryExpr) string {
+	if e.Op == token.ARROW {
+		return t.recvExpr(e)
+	}
 	x := t.expr(e.X)
 	switch e.Op {
 	case token.NOT:
@@ -355,8 +358,10 @@ func (t *Tx) binary(e *ast.BinaryExpr) string {
 			if field != "" {
 				return "(" + t.expr(other) + field + " " + op + " 0)"
 			}
-			_, isChan := ot.Underlying().(*types.Chan)
-			if ot == nil || isChan || types.TypeString(ot, qual) == "invalid type" || strings.Contains(cbase(ot), "invalid type") {
+			if _, isChan := ot.Underlying().(*types.Chan); isChan {
+				return "(" + t.expr(other) + " " + op + " NULL)"
+			}
+			if ot == nil || types.TypeString(ot, qual) == "invalid type" || strings.Contains(cbase(ot), "invalid type") {
 				if op == "==" {
 					return "true /* unresolved type: nil */"
 				}

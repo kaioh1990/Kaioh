@@ -36,6 +36,12 @@ void gc_safepoint(bool fighting);
 void gc_disable(void);                  // nestable: no automatic collections
 void gc_enable(void);
 
+// Goroutine support (core/sched.c): top of the running goroutine's stack
+// (0 = the main thread's), and a callback that scans suspended stacks.
+extern uintptr_t (*gc_stack_top_hook)(void);
+extern void (*gc_extra_roots_hook)(void (*scan)(uintptr_t lo, uintptr_t hi));
+uintptr_t gc_main_stack_top(void);
+
 typedef struct GcStats {
     size_t heap_bytes;       // pages in use (small + large)
     size_t live_bytes;       // marked at the last collection

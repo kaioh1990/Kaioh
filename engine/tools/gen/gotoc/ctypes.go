@@ -213,7 +213,7 @@ func cbase(t types.Type) string {
 		}
 		return "GoOpaque /* " + types.TypeString(u, qual) + " */"
 	case *types.Chan:
-		return "GoOpaque /* chan */"
+		return "GoChan*"
 	case *types.TypeParam:
 		if s, ok := curSubst[u]; ok {
 			return cbase(s)

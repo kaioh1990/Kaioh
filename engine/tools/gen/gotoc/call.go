@@ -264,6 +264,9 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 	case "len", "cap":
 		xt := t.typeOf(c.Args[0])
 		x := t.expr(c.Args[0])
+		if _, ok := xt.Underlying().(*types.Chan); ok {
+			return "go_chan_" + name + "(" + x + ")"
+		}
 		switch u := xt.Underlying().(type) {
 		case *types.Slice:
 			return x + "." + name
@@ -295,6 +298,13 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 		return s
 	case "make":
 		ty := t.p.info.Types[c.Args[0]].Type
+		if ch, ok := ty.Underlying().(*types.Chan); ok {
+			n := "0"
+			if len(c.Args) > 1 {
+				n = t.expr(c.Args[1])
+			}
+			return fmt.Sprintf("go_chan_make(sizeof(%s), %s)", t.ctype(ch.Elem()), n)
+		}
 		switch u := ty.Underlying().(type) {
 		case *types.Slice:
 			n := "0"
@@ -345,11 +355,21 @@ func (t *Tx) builtin(name string, c *ast.CallExpr) string {
 		}
 		return s
 	case "clear":
+		x := t.expr(c.Args[0])
+		switch t.typeOf(c.Args[0]).Underlying().(type) {
+		case *types.Map:
+			return "gomap_clear((GoMap *)&(" + x + "))"
+		case *types.Slice:
+			return fmt.Sprintf("({ __typeof__(%s) _c = (%s); memset(_c.p, 0, sizeof(*_c.p) * (size_t)_c.len); (void)0; })", x, x)
+		}
 		return t.TODO(c, "clear")
 	case "print", "println":
 		return "((void)0)"
 	case "recover":
 		return "((GoIface){0})" // panics abort in the C runtime
+	}
+	if name == "close" {
+		return "go_chan_close(" + t.expr(c.Args[0]) + ")"
 	}
 	return t.TODO(c, "builtin "+name)
 }

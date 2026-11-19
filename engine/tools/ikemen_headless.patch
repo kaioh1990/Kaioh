@@ -18369,10 +18369,10 @@ index 0000000..7ce06e9
 +func vitaMatchEnd() { vitaInMatch = false }
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..dcfc7fe
+index 0000000..c3cfd52
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,65 @@
 +//go:build !vita
 +
 +package main
@@ -18432,6 +18432,12 @@ index 0000000..dcfc7fe
 +func vitaHalfRate() bool { return false }
 +
 +func vitaMatchEnd() {}
++
++// Vita frame diagnostics (vita_platform.go)
++func vitaDiagFrame()                                     {}
++func vitaDiagSkip(int) bool                              { return false }
++func vitaDrawCensusDue() bool                            { return false }
++func vitaDrawCensus(dl DrawList, sortList []int, l int32) {}
 diff --git a/src/vita_shaders.go b/src/vita_shaders.go
 new file mode 100644
 index 0000000..a55a213

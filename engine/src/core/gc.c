@@ -343,13 +343,24 @@ static void drain(void) {
     }
 }
 
+uintptr_t (*gc_stack_top_hook)(void);
+void (*gc_extra_roots_hook)(void (*scan)(uintptr_t lo, uintptr_t hi));
+uintptr_t gc_main_stack_top(void) { return S ? S->stack_base : 0; }
+
+static void scan_and_drain(uintptr_t lo, uintptr_t hi) {
+    scan_range(lo, hi);
+    drain();
+}
+
 GC_NO_SANITIZE static __attribute__((noinline)) void mark_stack(void) {
     jmp_buf jb;  // spills callee-saved registers onto the stack
     setjmp(jb);
     volatile uintptr_t here = (uintptr_t)&jb;
     uintptr_t lo = here < (uintptr_t)__builtin_frame_address(0) ? here : (uintptr_t)__builtin_frame_address(0);
-    scan_range(lo, S->stack_base);
+    uintptr_t top = gc_stack_top_hook ? gc_stack_top_hook() : 0;
+    scan_range(lo, top ? top : S->stack_base);  // the running goroutine's stack
     drain();
+    if (gc_extra_roots_hook) gc_extra_roots_hook(scan_and_drain);  // suspended goroutines
 }
 
 // ---------------------------------------------------------------- sweep
