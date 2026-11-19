@@ -115,6 +115,13 @@ typedef struct GoIoLimitedReader {
     GoIface R;
     i64 N;
 } GoIoLimitedReader;
+typedef struct GoXmlName {
+    GoString Space, Local;
+} GoXmlName;
+typedef struct GoXmlStartElement {
+    GoXmlName Name;
+    struct { void *p; int len, cap; } Attr;
+} GoXmlStartElement;
 typedef struct GoImageConfig {
     GoIface ColorModel;
     int Width, Height;

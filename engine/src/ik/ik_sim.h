@@ -7200,7 +7200,7 @@ GoIface sort_Reverse(GoIface a0); // func sort.Reverse(data sort.Interface) sort
 GoIface strings_Builder_WriteByte(GoOpaque /* strings.Builder */* recv, u8 a0); // func (*strings.Builder).WriteByte(c byte) error
 GoIface sync_Pool_Get(GoOpaque /* sync.Pool */* recv); // func (*sync.Pool).Get() any
 GoIface tabwriter_Writer_Flush(GoOpaque /* tabwriter.Writer */* recv); // func (*tabwriter.Writer).Flush() error
-GoIface xml_Decoder_DecodeElement(GoOpaque /* xml.Decoder */* recv, GoIface a0, GoOpaque /* xml.StartElement */* a1); // func (*xml.Decoder).DecodeElement(v any, start *xml.StartElement) error
+GoIface xml_Decoder_DecodeElement(GoOpaque /* xml.Decoder */* recv, GoIface a0, GoXmlStartElement* a1); // func (*xml.Decoder).DecodeElement(v any, start *xml.StartElement) error
 GoIface zip_ReadCloser_Close(GoZipReadCloser* recv); // func (*zip.ReadCloser).Close() error
 GoImageAlpha* image_NewAlpha(GoImageRect a0); // func image.NewAlpha(r image.Rectangle) *image.Alpha
 GoImageNRGBA* image_NewNRGBA(GoImageRect a0); // func image.NewNRGBA(r image.Rectangle) *image.NRGBA

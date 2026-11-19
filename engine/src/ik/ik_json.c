@@ -812,3 +812,146 @@ GoIface json_Decoder_Decode(GoOpaque *recv, GoIface v) {
     if (!e.type) d->off += used;
     return e;
 }
+
+// ---------------------------------------------------------------- encoding/xml (UPnP descriptions)
+// Token() yields xml.StartElement values for start tags (other tokens are
+// opaque non-nil values); DecodeElement fills string fields of a struct
+// from child elements named by `xml:"name"` tags.
+#ifndef GO_TID_xml_StartElement
+#define GO_TID_xml_StartElement (-50)
+#endif
+typedef struct XDec {
+    const char *p;
+    int n, i;
+    int pendingEnd;  // a self-closing element still owes its end token
+    bool loaded;
+    GoIface r;
+} XDec;
+static GoString xname_local(GoString n) {
+    for (int i = n.len - 1; i >= 0; i--)
+        if (n.p[i] == ':') return (GoString){n.p + i + 1, n.len - i - 1};
+    return n;
+}
+GoOpaque *xml_NewDecoder(GoIface r) {
+    XDec *d = (XDec *)gc_calloc(1, sizeof *d);
+    d->r = r;
+    return (GoOpaque *)d;
+}
+static void xload(XDec *d) {
+    if (d->loaded) return;
+    d->loaded = true;
+    Ret_Slice_u8__GoIface all = io_ReadAll(d->r);
+    d->p = (const char *)all.r0.p, d->n = all.r0.len;
+}
+// kind: 1 start, 2 end, 3 text, 0 eof
+static int xnext(XDec *d, GoString *name, GoString *text) {
+    xload(d);
+    if (d->pendingEnd) {
+        d->pendingEnd = 0;
+        return 2;
+    }
+    for (;;) {
+        if (d->i >= d->n) return 0;
+        if (d->p[d->i] != '<') {
+            int s = d->i;
+            while (d->i < d->n && d->p[d->i] != '<') d->i++;
+            *text = (GoString){d->p + s, d->i - s};
+            return 3;
+        }
+        if (d->i + 3 < d->n && !memcmp(d->p + d->i, "<!--", 4)) {
+            const char *e = strstr(d->p + d->i, "-->");
+            d->i = e ? (int)(e - d->p) + 3 : d->n;
+            continue;
+        }
+        if (d->i + 1 < d->n && (d->p[d->i + 1] == '?' || d->p[d->i + 1] == '!')) {
+            while (d->i < d->n && d->p[d->i] != '>') d->i++;
+            d->i++;
+            continue;
+        }
+        bool end = d->i + 1 < d->n && d->p[d->i + 1] == '/';
+        int s = d->i + (end ? 2 : 1), j = s;
+        while (j < d->n && !strchr(" \t\r\n/>", d->p[j])) j++;
+        *name = (GoString){d->p + s, j - s};
+        while (j < d->n && d->p[j] != '>') j++;
+        bool selfclose = j > 0 && d->p[j - 1] == '/';
+        d->i = j + 1;
+        if (end) return 2;
+        if (selfclose) d->pendingEnd = 1;
+        return 1;
+    }
+}
+Ret_GoIface__GoIface xml_Decoder_Token(GoOpaque *recv) {
+    XDec *d = (XDec *)recv;
+    GoString name = {0}, text = {0};
+    int k = xnext(d, &name, &text);
+    if (k == 0) return (Ret_GoIface__GoIface){{0}, io_EOF};
+    if (k == 1) {
+        GoXmlStartElement se;
+        memset(&se, 0, sizeof se);
+        se.Name.Local = go_strcat(xname_local(name), GOSTR(""));
+        return (Ret_GoIface__GoIface){{GO_TID_xml_StartElement, go_box(GoXmlStartElement, se)}, {0}};
+    }
+    return (Ret_GoIface__GoIface){{GO_TID_string, go_box(GoString, text)}, {0}};  // end/char data: opaque here
+}
+static GoString xml_unescape(GoString s) {
+    s = (GoString){s.p, s.len};
+    GoString o = GOSTR("");
+    int st = 0;
+    for (int i = 0; i < s.len; i++) {
+        if (s.p[i] != '&') continue;
+        const char *rep = NULL;
+        int l = 0;
+        if (!strncmp(s.p + i, "&amp;", 5)) rep = "&", l = 5;
+        else if (!strncmp(s.p + i, "&lt;", 4)) rep = "<", l = 4;
+        else if (!strncmp(s.p + i, "&gt;", 4)) rep = ">", l = 4;
+        else if (!strncmp(s.p + i, "&quot;", 6)) rep = "\"", l = 6;
+        else if (!strncmp(s.p + i, "&apos;", 6)) rep = "'", l = 6;
+        if (!rep) continue;
+        o = go_strcat(go_strcat(o, (GoString){s.p + st, i - st}), go_cstr(rep));
+        i += l - 1;
+        st = i + 1;
+    }
+    return go_strcat(o, (GoString){s.p + st, s.len - st});
+}
+GoIface xml_Decoder_DecodeElement(GoOpaque *recv, GoIface v, GoXmlStartElement *start) {
+    (void)start;
+    XDec *d = (XDec *)recv;
+    const RType *pt = by_tid(v.type);
+    if (!pt || pt->kind != K_PTR || pt->elem->kind != K_STRUCT) return go_error(GOSTR("xml: non-pointer passed to Unmarshal"));
+    const RType *t = pt->elem;
+    int depth = 1;
+    const RField *cur = NULL;
+    GoString acc = {0};
+    while (depth > 0) {
+        GoString name = {0}, text = {0};
+        int k = xnext(d, &name, &text);
+        if (k == 0) return go_error(GOSTR("XML syntax error: unexpected EOF"));
+        if (k == 1) {
+            depth++;
+            cur = NULL;
+            if (depth == 2) {
+                GoString ln = xname_local(name);
+                for (int i = 0; i < t->nfield; i++) {
+                    const RField *f = &t->fields[i];
+                    const char *tg = f->tag ? strstr(f->tag, "xml:\"") : NULL;
+                    GoString fn = go_cstr(f->name);
+                    if (tg) {
+                        tg += 5;
+                        const char *e = tg;
+                        while (*e && *e != '"' && *e != ',') e++;
+                        fn = (GoString){tg, (int)(e - tg)};
+                    }
+                    if (go_streq(fn, ln) && f->type->kind == K_STRING) cur = f;
+                }
+                acc = (GoString){"", 0};
+            }
+        } else if (k == 2) {
+            if (depth == 2 && cur) *(GoString *)((u8 *)v.data + cur->offset) = strings_TrimSpace(xml_unescape(acc));
+            depth--;
+            cur = NULL;
+        } else if (cur) {
+            acc = go_strcat(acc, text);
+        }
+    }
+    return (GoIface){0};
+}

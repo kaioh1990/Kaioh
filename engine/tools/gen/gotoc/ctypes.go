@@ -308,6 +308,8 @@ var extStructs = map[string]string{
 	"url.URL":              "GoUrlURL",
 	"image.Config":         "GoImageConfig",
 	"io.LimitedReader":     "GoIoLimitedReader",
+	"xml.Name":             "GoXmlName",
+	"xml.StartElement":     "GoXmlStartElement",
 	"reflect.SliceHeader":  "GoReflectSliceHeader",
 	"zip.ReadCloser":  "GoZipReadCloser",
 	"zip.File":        "GoZipFile",
