@@ -529,7 +529,12 @@ func (s *System) cvfHeadlessAwait() bool {
 		if cvfHeadlessNext.IsZero() || now.Sub(cvfHeadlessNext) > time.Second {
 			cvfHeadlessNext = now
 		}
-		cvfHeadlessNext = cvfHeadlessNext.Add(time.Second / time.Duration(cvfHeadlessFps))
+		wait := time.Second / time.Duration(cvfHeadlessFps)
+		if s.rollback.session != nil {
+			// as System.await: GGPO's time sync stretches the frame
+			wait = s.rollback.session.loopTimer.usToWaitThisLoop()
+		}
+		cvfHeadlessNext = cvfHeadlessNext.Add(wait)
 		if d := cvfHeadlessNext.Sub(now); d > 0 {
 			time.Sleep(d)
 		}

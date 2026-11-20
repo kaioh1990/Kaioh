@@ -83,10 +83,16 @@ Ret_GoOpaque_os_FilePtrPtr__GoIface os_OpenFile(GoString a0, int flags, u32 perm
     (void)perm;
     // O_RDONLY 0, O_WRONLY 1, O_RDWR 2, O_APPEND 0x400, O_CREATE 0x40, O_TRUNC 0x200 (Linux values, as Go uses them)
     const char *mode = "rb";
-    if (flags & 0x400) mode = "ab";
+    if (flags & 0x400) mode = (flags & 2) ? "a+b" : "ab";
     else if (flags & 0x200) mode = (flags & 2) ? "w+b" : "wb";
-    else if (flags & 2) mode = "r+b";
-    else if (flags & 1) mode = (flags & 0x40) ? "wb" : "r+b";
+    else if (flags & 3) {
+        // write or read-write without O_TRUNC: keep the contents; O_CREATE
+        // creates a missing file (fopen has no mode for that: "r+" fails on
+        // a missing file and "w" truncates)
+        Ret_GoOpaque_os_FilePtrPtr__GoIface r = open_mode(a0, "r+b");
+        if (r.r0 || !(flags & 0x40)) return r;
+        mode = (flags & 2) ? "w+b" : "wb";
+    }
     return open_mode(a0, mode);
 }
 

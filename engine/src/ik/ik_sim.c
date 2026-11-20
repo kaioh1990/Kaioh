@@ -124964,7 +124964,11 @@ bool System_cvfHeadlessAwait(System* s) {
         if (time_Time_IsZero(g_cvfHeadlessNext) || (time_Time_Sub(now, g_cvfHeadlessNext) > 1000000000LL)) {
             g_cvfHeadlessNext = now;
         }
-        g_cvfHeadlessNext = time_Time_Add(g_cvfHeadlessNext, go_div64(1000000000LL, ((i64)g_cvfHeadlessFps)));
+        i64 wait = go_div64(1000000000LL, ((i64)g_cvfHeadlessFps));
+        if (s->rollback.session != NULL) {
+            wait = LoopTimer_usToWaitThisLoop(&s->rollback.session->loopTimer);
+        }
+        g_cvfHeadlessNext = time_Time_Add(g_cvfHeadlessNext, wait);
         {
             i64 d = time_Time_Sub(g_cvfHeadlessNext, now);
             if (d > 0LL) {

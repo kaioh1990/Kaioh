@@ -14360,10 +14360,10 @@ index 0000000..e9bae25
 +}
 diff --git a/src/cvfheadless.go b/src/cvfheadless.go
 new file mode 100644
-index 0000000..1b4f856
+index 0000000..db2ef1c
 --- /dev/null
 +++ b/src/cvfheadless.go
-@@ -0,0 +1,540 @@
+@@ -0,0 +1,545 @@
 +package main
 +
 +import (
@@ -14895,7 +14895,12 @@ index 0000000..1b4f856
 +		if cvfHeadlessNext.IsZero() || now.Sub(cvfHeadlessNext) > time.Second {
 +			cvfHeadlessNext = now
 +		}
-+		cvfHeadlessNext = cvfHeadlessNext.Add(time.Second / time.Duration(cvfHeadlessFps))
++		wait := time.Second / time.Duration(cvfHeadlessFps)
++		if s.rollback.session != nil {
++			// as System.await: GGPO's time sync stretches the frame
++			wait = s.rollback.session.loopTimer.usToWaitThisLoop()
++		}
++		cvfHeadlessNext = cvfHeadlessNext.Add(wait)
 +		if d := cvfHeadlessNext.Sub(now); d > 0 {
 +			time.Sleep(d)
 +		}

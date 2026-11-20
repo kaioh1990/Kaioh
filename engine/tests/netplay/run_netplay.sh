@@ -24,6 +24,7 @@
 #   ARGS                 match arguments (default: Alucard vs Richter,
 #                        ParanoiaBG, 1 round)
 #   TIMEOUT              seconds per match (default 600)
+#   GGPO_LOGS=1          GGPO's trace in each instance's save/logs
 #
 # Every scenario must end with both dumps identical, and all scenarios must
 # give the same dump (the inputs depend on the simulated time only, so the
@@ -56,6 +57,7 @@ mkinst() {  # dir listen_port rollback_port
     sed -e "s/^ListenPort .*/ListenPort                     = $2/" \
         -e "s/^Rollback.Port .*/Rollback.Port                  = $3/" \
         -e "s/^ButtonAssist .*/ButtonAssist               = 0/" \
+        -e "s/^Rollback.GgpoLogsEnabled .*/Rollback.GgpoLogsEnabled       = ${GGPO_LOGS:-0}/" \
         "$G/save/config.ini" > "$1/save/config.ini"
     : > "$1/vita_statedump.txt"   # write statedump.txt
     : > "$1/vita_statehash.txt"   # fixed seed
