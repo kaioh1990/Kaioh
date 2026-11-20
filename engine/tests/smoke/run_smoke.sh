@@ -11,7 +11,9 @@
 # BUILDDIR   CMake build with cvf and cvf_nearby_test
 # IKEMEN_DIR an Ikemen GO git tree (tools/gen/setup_ikemen.sh): the scripts
 #            are 6a09392's external/script + patches/ikemen-cvf-online.patch
-# Needs a display (the game opens its window); about a minute.
+# Needs a display (the game opens its window); about 75 s. With an engine
+# that lacks the bindings the current scripts call, the log shows the Lua
+# error ("attempt to call a non-function object" at character select).
 set -e
 E=$(cd "$(dirname "$0")/../.." && pwd)   # engine/
 R=$(cd "$E/.." && pwd)
@@ -64,6 +66,9 @@ PORT=${PORT:-7500}
 cd "$W"
 "$B/cvf" > smoke.log 2>&1 &
 PID=$!
+# a Lua error leaves the engine's error dialog open: give up after 5 minutes
+( sleep 300; kill -9 $PID 2>/dev/null ) &
+DOG=$!
 # while the game hosts Nearby, find it from another process
 i=0
 while [ ! -f smoke-hosting ] && kill -0 $PID 2>/dev/null && [ $i -lt 1200 ]; do sleep 0.1; i=$((i + 1)); done
@@ -74,6 +79,7 @@ if [ -f smoke-hosting ]; then
   touch smoke-scanned
 fi
 wait $PID || true
+kill $DOG 2>/dev/null || true
 grep '^SMOKE' smoke.log || true
 echo "outside Nearby scan: $SCAN"
 grep -q '^SMOKE .*SMOKE OK' smoke.log && [ "$SCAN" = ok ] && echo "smoke: PASS" && exit 0

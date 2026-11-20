@@ -237,3 +237,28 @@ stay as verified references and for the optimised paths later.
 - Verified on macOS arm64 from scratch: old rules 54f8ae06… (287,752 lines),
   cvf-online-5 rules 4334350c… (224,158 lines) — the same as Linux, so the
   new rules are deterministic across x86-64 and arm64 too.
+
+### Status 2026-11-20 — caught up with the current fork (d4d84f7)
+
+- `tools/ikemen_headless.patch` now carries the fork's Nearby, touch tap,
+  name-prompt and motif-label changes (cvf_nearby.go, cvf_p2p_other.go as
+  the desktop variant). The engine registers every `cvf*` Lua function the
+  current scripts call; the native game passes a menu smoke test (title →
+  Versus character select → Online > Host Nearby → Join Nearby,
+  `tests/smoke/run_smoke.sh`) on macOS arm64.
+- Nearby LAN discovery works for real (UDP 7520 probe/reply, subnet sweep):
+  `cvf_nearby_test`, including native ↔ Go interop (`tests/ik/nearby_go`).
+  Apple peer-to-peer, touch taps and the native name box stay stubs on
+  desktop, as in cvf_p2p_other.go.
+- New runtime pieces: crypto/rand, a math/big int64 box, net mask helpers,
+  ResolveUDPAddr, a real `time.Ticker`. Fixed: UDP sends now wait for a
+  full send buffer like Go; `fmt.Fprintf` writes to strings.Builder /
+  bytes.Buffer / files (status texts and the GGPO desync log were lost).
+- Fight aspect: `loadConfig` no longer saves the forced 0,0 into the shared
+  config.ini, and applies the rules' FightAspect on every load.
+- Reference fights unchanged: 54f8ae06… (old rules), 4334350c…
+  (cvf-online-5), macOS arm64 and Linux x86-64.
+- Regenerating without proxy.golang.org (as in the Linux container): build
+  Go 1.27.4 from the github.com/golang/go tag, and replace golang.org/x/*
+  and gopkg.in/ini.v1 with their GitHub mirrors (same sources) in the
+  Ikemen tree's go.mod, locally only; the output is identical to the Mac's.

@@ -68,6 +68,16 @@ Expected results (both identical on Linux x86-64 and macOS arm64):
 Timings on the M-series Mac: full Release build ~27 s (-j10); one reference
 match ~4.1 s wall (old rules) / ~4.3 s (cvf-online-5), loading included.
 
+### Nearby test and menu smoke test
+
+    ./build/release/cvf_nearby_test /tmp/nt      # UDP 7520 must be free; "0 failure(s)"
+    tests/smoke/run_smoke.sh "/path/to/CvF Online" smoke build/release /path/to/dev-ikemen
+
+The smoke test needs a display and the full game (linked read-only); it
+plays title -> Versus character select -> Online > Host Nearby (found by
+`cvf_nearby_test scan` from a second process) -> Join Nearby and prints
+`smoke: PASS` (~75 s). See tests/README.md.
+
 ### Locations on the project Mac
 
 Under `~/Castlevania Fighter Project/CvF Native Engine/`:
@@ -119,7 +129,7 @@ identical sources and are not needed.
       tools/gen/gotoc/regen.sh
 
 It builds gotoc and gencdefs into `build/gen/`, regenerates everything and
-prints `4702 functions, 0 TODO, 79 stubs`, `ik_sim.c syntax errors: 0`,
+prints `4727 functions, 0 TODO, 79 stubs`, `ik_sim.c syntax errors: 0`,
 `31 unsupported functions` (about 60 s). Then rebuild and rerun the reference
 fight. `git status` must show no change in `src/` when nothing was changed.
 
