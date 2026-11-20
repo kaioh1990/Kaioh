@@ -6,6 +6,7 @@
 // The wrappers were generated from the prototypes in ik_sim.h; the helpers
 // at the end and the ES 3.0 fallbacks are hand-written.
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "ik/ik_sim.h"
 
@@ -18,6 +19,15 @@
 #endif
 
 #define CVF_GL_TEXTURE_2D 0x0DE1
+
+// CVF_GL_CHECK=1 (environment or save/cvf_env.txt): glGetError after every
+// void GL call, logging the first errors with the call's name.
+static int gl_check, gl_check_logged;
+static u32 (APIENTRY *p_glGetError_ck)(void);
+static void gl_check_fail(const char *fn, u32 e) {
+    if (gl_check_logged++ < 40) fprintf(stderr, "gles: %s -> error 0x%x\n", fn, e);
+}
+#define CK(fn) do { if (gl_check) { u32 e_ = p_glGetError_ck(); if (e_) gl_check_fail(fn, e_); } } while (0)
 
 static unsigned char (APIENTRY *p_glUnmapBuffer)(u32);
 static i32 (APIENTRY *p_glGetAttribLocation)(u32, u8*);
@@ -101,69 +111,69 @@ u32 gles2_CreateProgram(void) { return p_glCreateProgram(); }
 u32 gles2_CreateShader(u32 a0) { return p_glCreateShader(a0); }
 u32 gles2_GetError(void) { return p_glGetError(); }
 u8* gles2_GetString(u32 a0) { return p_glGetString(a0); }
-void gles2_ActiveTexture(u32 a0) { p_glActiveTexture(a0); }
-void gles2_AttachShader(u32 a0, u32 a1) { p_glAttachShader(a0, a1); }
-void gles2_BindBuffer(u32 a0, u32 a1) { p_glBindBuffer(a0, a1); }
-void gles2_BindRenderbuffer(u32 a0, u32 a1) { p_glBindRenderbuffer(a0, a1); }
-void gles2_BindTexture(u32 a0, u32 a1) { p_glBindTexture(a0, a1); }
-void gles2_BindVertexArray(u32 a0) { p_glBindVertexArray(a0); }
-void gles2_BlendEquation(u32 a0) { p_glBlendEquation(a0); }
-void gles2_BlendFunc(u32 a0, u32 a1) { p_glBlendFunc(a0, a1); }
-void gles2_BlitFramebuffer(i32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, i32 a6, i32 a7, u32 a8, u32 a9) { p_glBlitFramebuffer(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
-void gles2_BufferData(u32 a0, int a1, void* a2, u32 a3) { p_glBufferData(a0, a1, a2, a3); }
-void gles2_BufferSubData(u32 a0, int a1, int a2, void* a3) { p_glBufferSubData(a0, a1, a2, a3); }
-void gles2_Clear(u32 a0) { p_glClear(a0); }
-void gles2_CompileShader(u32 a0) { p_glCompileShader(a0); }
-void gles2_CopyTexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, i32 a6, i32 a7) { p_glCopyTexSubImage2D(a0, a1, a2, a3, a4, a5, a6, a7); }
-void gles2_DeleteFramebuffers(i32 a0, u32* a1) { p_glDeleteFramebuffers(a0, a1); }
-void gles2_DeleteProgram(u32 a0) { p_glDeleteProgram(a0); }
-void gles2_DeleteShader(u32 a0) { p_glDeleteShader(a0); }
-void gles2_DeleteTextures(i32 a0, u32* a1) { p_glDeleteTextures(a0, a1); }
-void gles2_DepthFunc(u32 a0) { p_glDepthFunc(a0); }
-void gles2_DepthMask(bool a0) { p_glDepthMask(a0); }
-void gles2_DetachShader(u32 a0, u32 a1) { p_glDetachShader(a0, a1); }
-void gles2_Disable(u32 a0) { p_glDisable(a0); }
-void gles2_DrawArrays(u32 a0, i32 a1, i32 a2) { p_glDrawArrays(a0, a1, a2); }
-void gles2_DrawBuffers(i32 a0, u32* a1) { p_glDrawBuffers(a0, a1); }
-void gles2_Enable(u32 a0) { p_glEnable(a0); }
-void gles2_EnableVertexAttribArray(u32 a0) { p_glEnableVertexAttribArray(a0); }
-void gles2_Finish(void) { p_glFinish(); }
-void gles2_FramebufferRenderbuffer(u32 a0, u32 a1, u32 a2, u32 a3) { p_glFramebufferRenderbuffer(a0, a1, a2, a3); }
-void gles2_FramebufferTexture2D(u32 a0, u32 a1, u32 a2, u32 a3, i32 a4) { p_glFramebufferTexture2D(a0, a1, a2, a3, a4); }
-void gles2_FrontFace(u32 a0) { p_glFrontFace(a0); }
-void gles2_GenBuffers(i32 a0, u32* a1) { p_glGenBuffers(a0, a1); }
-void gles2_GenFramebuffers(i32 a0, u32* a1) { p_glGenFramebuffers(a0, a1); }
-void gles2_GenRenderbuffers(i32 a0, u32* a1) { p_glGenRenderbuffers(a0, a1); }
-void gles2_GenTextures(i32 a0, u32* a1) { p_glGenTextures(a0, a1); }
-void gles2_GenVertexArrays(i32 a0, u32* a1) { p_glGenVertexArrays(a0, a1); }
-void gles2_GetIntegerv(u32 a0, i32* a1) { p_glGetIntegerv(a0, a1); }
-void gles2_GetProgramInfoLog(u32 a0, i32 a1, i32* a2, u8* a3) { p_glGetProgramInfoLog(a0, a1, a2, a3); }
-void gles2_GetProgramiv(u32 a0, u32 a1, i32* a2) { p_glGetProgramiv(a0, a1, a2); }
-void gles2_GetShaderInfoLog(u32 a0, i32 a1, i32* a2, u8* a3) { p_glGetShaderInfoLog(a0, a1, a2, a3); }
-void gles2_GetShaderiv(u32 a0, u32 a1, i32* a2) { p_glGetShaderiv(a0, a1, a2); }
-void gles2_LinkProgram(u32 a0) { p_glLinkProgram(a0); }
-void gles2_PixelStorei(u32 a0, i32 a1) { p_glPixelStorei(a0, a1); }
-void gles2_ReadBuffer(u32 a0) { p_glReadBuffer(a0); }
-void gles2_ReadPixels(i32 a0, i32 a1, i32 a2, i32 a3, u32 a4, u32 a5, void* a6) { p_glReadPixels(a0, a1, a2, a3, a4, a5, a6); }
-void gles2_RenderbufferStorage(u32 a0, u32 a1, i32 a2, i32 a3) { p_glRenderbufferStorage(a0, a1, a2, a3); }
-void gles2_RenderbufferStorageMultisample(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4) { p_glRenderbufferStorageMultisample(a0, a1, a2, a3, a4); }
-void gles2_Scissor(i32 a0, i32 a1, i32 a2, i32 a3) { p_glScissor(a0, a1, a2, a3); }
-void gles2_ShaderSource(u32 a0, i32 a1, u8** a2, i32* a3) { p_glShaderSource(a0, a1, a2, a3); }
-void gles2_TexImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) { p_glTexImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8); }
-void gles2_TexParameteri(u32 a0, u32 a1, i32 a2) { p_glTexParameteri(a0, a1, a2); }
-void gles2_TexStorage3D(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4, i32 a5) { p_glTexStorage3D(a0, a1, a2, a3, a4, a5); }
-void gles2_TexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) { p_glTexSubImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8); }
-void gles2_Uniform1f(i32 a0, f32 a1) { p_glUniform1f(a0, a1); }
-void gles2_Uniform1fv(i32 a0, i32 a1, f32* a2) { p_glUniform1fv(a0, a1, a2); }
-void gles2_Uniform1i(i32 a0, i32 a1) { p_glUniform1i(a0, a1); }
-void gles2_Uniform2f(i32 a0, f32 a1, f32 a2) { p_glUniform2f(a0, a1, a2); }
-void gles2_Uniform3f(i32 a0, f32 a1, f32 a2, f32 a3) { p_glUniform3f(a0, a1, a2, a3); }
-void gles2_Uniform4f(i32 a0, f32 a1, f32 a2, f32 a3, f32 a4) { p_glUniform4f(a0, a1, a2, a3, a4); }
-void gles2_Uniform4fv(i32 a0, i32 a1, f32* a2) { p_glUniform4fv(a0, a1, a2); }
-void gles2_UniformMatrix4fv(i32 a0, i32 a1, bool a2, f32* a3) { p_glUniformMatrix4fv(a0, a1, a2, a3); }
-void gles2_UseProgram(u32 a0) { p_glUseProgram(a0); }
-void gles2_VertexAttribPointer(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, void* a5) { p_glVertexAttribPointer(a0, a1, a2, a3, a4, a5); }
-void gles2_Viewport(i32 a0, i32 a1, i32 a2, i32 a3) { p_glViewport(a0, a1, a2, a3); }
+void gles2_ActiveTexture(u32 a0) { p_glActiveTexture(a0); CK("glActiveTexture"); }
+void gles2_AttachShader(u32 a0, u32 a1) { p_glAttachShader(a0, a1); CK("glAttachShader"); }
+void gles2_BindBuffer(u32 a0, u32 a1) { p_glBindBuffer(a0, a1); CK("glBindBuffer"); }
+void gles2_BindRenderbuffer(u32 a0, u32 a1) { p_glBindRenderbuffer(a0, a1); CK("glBindRenderbuffer"); }
+void gles2_BindTexture(u32 a0, u32 a1) { p_glBindTexture(a0, a1); CK("glBindTexture"); }
+void gles2_BindVertexArray(u32 a0) { p_glBindVertexArray(a0); CK("glBindVertexArray"); }
+void gles2_BlendEquation(u32 a0) { p_glBlendEquation(a0); CK("glBlendEquation"); }
+void gles2_BlendFunc(u32 a0, u32 a1) { p_glBlendFunc(a0, a1); CK("glBlendFunc"); }
+void gles2_BlitFramebuffer(i32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, i32 a6, i32 a7, u32 a8, u32 a9) { p_glBlitFramebuffer(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9); CK("glBlitFramebuffer"); }
+void gles2_BufferData(u32 a0, int a1, void* a2, u32 a3) { p_glBufferData(a0, a1, a2, a3); CK("glBufferData"); }
+void gles2_BufferSubData(u32 a0, int a1, int a2, void* a3) { p_glBufferSubData(a0, a1, a2, a3); CK("glBufferSubData"); }
+void gles2_Clear(u32 a0) { p_glClear(a0); CK("glClear"); }
+void gles2_CompileShader(u32 a0) { p_glCompileShader(a0); CK("glCompileShader"); }
+void gles2_CopyTexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, i32 a6, i32 a7) { p_glCopyTexSubImage2D(a0, a1, a2, a3, a4, a5, a6, a7); CK("glCopyTexSubImage2D"); }
+void gles2_DeleteFramebuffers(i32 a0, u32* a1) { p_glDeleteFramebuffers(a0, a1); CK("glDeleteFramebuffers"); }
+void gles2_DeleteProgram(u32 a0) { p_glDeleteProgram(a0); CK("glDeleteProgram"); }
+void gles2_DeleteShader(u32 a0) { p_glDeleteShader(a0); CK("glDeleteShader"); }
+void gles2_DeleteTextures(i32 a0, u32* a1) { p_glDeleteTextures(a0, a1); CK("glDeleteTextures"); }
+void gles2_DepthFunc(u32 a0) { p_glDepthFunc(a0); CK("glDepthFunc"); }
+void gles2_DepthMask(bool a0) { p_glDepthMask(a0); CK("glDepthMask"); }
+void gles2_DetachShader(u32 a0, u32 a1) { p_glDetachShader(a0, a1); CK("glDetachShader"); }
+void gles2_Disable(u32 a0) { p_glDisable(a0); CK("glDisable"); }
+void gles2_DrawArrays(u32 a0, i32 a1, i32 a2) { p_glDrawArrays(a0, a1, a2); CK("glDrawArrays"); }
+void gles2_DrawBuffers(i32 a0, u32* a1) { p_glDrawBuffers(a0, a1); CK("glDrawBuffers"); }
+void gles2_Enable(u32 a0) { p_glEnable(a0); CK("glEnable"); }
+void gles2_EnableVertexAttribArray(u32 a0) { p_glEnableVertexAttribArray(a0); CK("glEnableVertexAttribArray"); }
+void gles2_Finish(void) { p_glFinish(); CK("glFinish"); }
+void gles2_FramebufferRenderbuffer(u32 a0, u32 a1, u32 a2, u32 a3) { p_glFramebufferRenderbuffer(a0, a1, a2, a3); CK("glFramebufferRenderbuffer"); }
+void gles2_FramebufferTexture2D(u32 a0, u32 a1, u32 a2, u32 a3, i32 a4) { p_glFramebufferTexture2D(a0, a1, a2, a3, a4); CK("glFramebufferTexture2D"); }
+void gles2_FrontFace(u32 a0) { p_glFrontFace(a0); CK("glFrontFace"); }
+void gles2_GenBuffers(i32 a0, u32* a1) { p_glGenBuffers(a0, a1); CK("glGenBuffers"); }
+void gles2_GenFramebuffers(i32 a0, u32* a1) { p_glGenFramebuffers(a0, a1); CK("glGenFramebuffers"); }
+void gles2_GenRenderbuffers(i32 a0, u32* a1) { p_glGenRenderbuffers(a0, a1); CK("glGenRenderbuffers"); }
+void gles2_GenTextures(i32 a0, u32* a1) { p_glGenTextures(a0, a1); CK("glGenTextures"); }
+void gles2_GenVertexArrays(i32 a0, u32* a1) { p_glGenVertexArrays(a0, a1); CK("glGenVertexArrays"); }
+void gles2_GetIntegerv(u32 a0, i32* a1) { p_glGetIntegerv(a0, a1); CK("glGetIntegerv"); }
+void gles2_GetProgramInfoLog(u32 a0, i32 a1, i32* a2, u8* a3) { p_glGetProgramInfoLog(a0, a1, a2, a3); CK("glGetProgramInfoLog"); }
+void gles2_GetProgramiv(u32 a0, u32 a1, i32* a2) { p_glGetProgramiv(a0, a1, a2); CK("glGetProgramiv"); }
+void gles2_GetShaderInfoLog(u32 a0, i32 a1, i32* a2, u8* a3) { p_glGetShaderInfoLog(a0, a1, a2, a3); CK("glGetShaderInfoLog"); }
+void gles2_GetShaderiv(u32 a0, u32 a1, i32* a2) { p_glGetShaderiv(a0, a1, a2); CK("glGetShaderiv"); }
+void gles2_LinkProgram(u32 a0) { p_glLinkProgram(a0); CK("glLinkProgram"); }
+void gles2_PixelStorei(u32 a0, i32 a1) { p_glPixelStorei(a0, a1); CK("glPixelStorei"); }
+void gles2_ReadBuffer(u32 a0) { p_glReadBuffer(a0); CK("glReadBuffer"); }
+void gles2_ReadPixels(i32 a0, i32 a1, i32 a2, i32 a3, u32 a4, u32 a5, void* a6) { p_glReadPixels(a0, a1, a2, a3, a4, a5, a6); CK("glReadPixels"); }
+void gles2_RenderbufferStorage(u32 a0, u32 a1, i32 a2, i32 a3) { p_glRenderbufferStorage(a0, a1, a2, a3); CK("glRenderbufferStorage"); }
+void gles2_RenderbufferStorageMultisample(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4) { p_glRenderbufferStorageMultisample(a0, a1, a2, a3, a4); CK("glRenderbufferStorageMultisample"); }
+void gles2_Scissor(i32 a0, i32 a1, i32 a2, i32 a3) { p_glScissor(a0, a1, a2, a3); CK("glScissor"); }
+void gles2_ShaderSource(u32 a0, i32 a1, u8** a2, i32* a3) { p_glShaderSource(a0, a1, a2, a3); CK("glShaderSource"); }
+void gles2_TexImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) { p_glTexImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8); CK("glTexImage2D"); }
+void gles2_TexParameteri(u32 a0, u32 a1, i32 a2) { p_glTexParameteri(a0, a1, a2); CK("glTexParameteri"); }
+void gles2_TexStorage3D(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4, i32 a5) { p_glTexStorage3D(a0, a1, a2, a3, a4, a5); CK("glTexStorage3D"); }
+void gles2_TexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) { p_glTexSubImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8); CK("glTexSubImage2D"); }
+void gles2_Uniform1f(i32 a0, f32 a1) { p_glUniform1f(a0, a1); CK("glUniform1f"); }
+void gles2_Uniform1fv(i32 a0, i32 a1, f32* a2) { p_glUniform1fv(a0, a1, a2); CK("glUniform1fv"); }
+void gles2_Uniform1i(i32 a0, i32 a1) { p_glUniform1i(a0, a1); CK("glUniform1i"); }
+void gles2_Uniform2f(i32 a0, f32 a1, f32 a2) { p_glUniform2f(a0, a1, a2); CK("glUniform2f"); }
+void gles2_Uniform3f(i32 a0, f32 a1, f32 a2, f32 a3) { p_glUniform3f(a0, a1, a2, a3); CK("glUniform3f"); }
+void gles2_Uniform4f(i32 a0, f32 a1, f32 a2, f32 a3, f32 a4) { p_glUniform4f(a0, a1, a2, a3, a4); CK("glUniform4f"); }
+void gles2_Uniform4fv(i32 a0, i32 a1, f32* a2) { p_glUniform4fv(a0, a1, a2); CK("glUniform4fv"); }
+void gles2_UniformMatrix4fv(i32 a0, i32 a1, bool a2, f32* a3) { p_glUniformMatrix4fv(a0, a1, a2, a3); CK("glUniformMatrix4fv"); }
+void gles2_UseProgram(u32 a0) { p_glUseProgram(a0); CK("glUseProgram"); }
+void gles2_VertexAttribPointer(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, void* a5) { p_glVertexAttribPointer(a0, a1, a2, a3, a4, a5); CK("glVertexAttribPointer"); }
+void gles2_Viewport(i32 a0, i32 a1, i32 a2, i32 a3) { p_glViewport(a0, a1, a2, a3); CK("glViewport"); }
 void* gles2_MapBufferRange(u32 a0, int a1, int a2, u32 a3) { return p_glMapBufferRange(a0, a1, a2, a3); }
 static void (APIENTRY *p_glFramebufferTexture2D_es)(u32, u32, u32, u32, i32);
 static void (APIENTRY *p_glVertexAttribPointer_es)(u32, i32, u32, unsigned char, i32, void *);
@@ -275,6 +285,8 @@ GoIface gles2_Init(GoFunc getProcAddr) {
     *(void **)&p_glVertexAttribPointer_es = SDL_GL_GetProcAddress("glVertexAttribPointer");
     if (!p_glClear || !p_glCreateShader || !p_glDrawArrays || !p_glBindVertexArray)
         return go_errorf("OpenGL ES: entry points not found (%s)", SDL_GetError());
+    *(void **)&p_glGetError_ck = SDL_GL_GetProcAddress("glGetError");
+    gl_check = getenv("CVF_GL_CHECK") && atoi(getenv("CVF_GL_CHECK")) > 0;
     i32 fb = 0;
     p_glGetIntegerv(CVF_GL_FRAMEBUFFER_BINDING, &fb);
     screen_fbo = (u32)fb;
