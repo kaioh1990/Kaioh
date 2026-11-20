@@ -498,3 +498,11 @@ Each is verifiable as stated; only M7 needs the device.
 5. Is `Documents/Game` the only supported layout from now on, or should the
    all-in-one IPA (`make-full-ipa.py`) stay supported for the native app?
    The design keeps both.
+
+## Answers to the open questions (PM, 2026-11-20)
+
+1. **Sideloadly install:** Apple ID sign mode with the user's Apple ID (Unlimited App IDs), automatic bundle ID, "Enable File Sharing" on, no plugins dropped. Final bundle id on both phones: `com.kaioh1990.cvfonline` (Sideloadly records, installations 17 and 21). The native app must keep this bundle id and be installed the same way (Sideloadly), so Documents (Game, save) survive.
+2. **Devices:** iPhone Duo (iOS 27.1), iPhone 15 Pro Max (iOS 27.2.1), iPad mini (iPadOS 27.0.1). Current deployment target is iOS 17; keep it unless the engine needs newer APIs.
+3. **Cross-play with the Go builds during the switch:** assume yes (friends will run mixed builds). Native must match the Go builds' simulation and handshake; see GAPS.md item 2 (fight width reset) and item 9.
+4. **vInputKit Simulator build:** yes, the xcframework has an arm64 Simulator slice (vInputKit README/INTEGRATION.md). Controllers themselves are only testable on device.
+5. **All-in-one IPA:** not needed. The small IPA + Documents/Game layout is what the user uses.
