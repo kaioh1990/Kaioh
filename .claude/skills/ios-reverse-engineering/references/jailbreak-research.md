@@ -568,8 +568,8 @@ Step 7: Install Sileo ← GOAL
 
 | Step | Description | Status |
 |------|-------------|--------|
-| 1 | CVE-2026-86950 OOB write trigger | **DONE** — trigger.pdf confirmed on iPad Mini (iOS 27.0.1) and iPhone Duo (iOS 27.1) |
-| 2 | Heap feng shui → arbitrary R/W | **IN PROGRESS** — OOB direction solved (negative TX), spray + font built |
+| 1 | CVE-2026-86950 OOB write trigger | **BLOCKED** — bare trigger test confirms OOB does NOT fire on iPad Mini iOS 27.0.1 (Build 24A446). Tested 9 font sizes (128-4096pt), zero crashes, zero crash logs. CoreGraphics patch present. macOS 27.0.1 also patched (guard malloc confirmed). |
+| 2 | Heap feng shui → arbitrary R/W | **BLOCKED** — depends on Step 1 |
 | 3 | Sandbox escape | Not started |
 | 4 | Kernel R/W | Not started |
 | 5 | PAC bypass | Not started |
