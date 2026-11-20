@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -47,29 +48,60 @@ static void read_env_file(const char *assets) {
     fclose(f);
 }
 
-// ---------------------------------------------------------------- main stack report
-// The main goroutine runs on the main thread's stack (1 MB on iOS, together
-// with UIKit's frames). The part below the current frame is filled with a
-// pattern at startup; the deepest overwritten word is the high-water mark.
-#define STACK_MAGIC 0xC5F0C5F0C5F0C5F0ull
+// ---------------------------------------------------------------- engine stack
+// The main goroutine needs about 1 MB of stack (measured in the Simulator,
+// loading the title screen), as much as the whole iOS main thread stack,
+// which UIKit's frames share. The engine therefore runs on a stack of its
+// own (IOS_PORT.md 3.3, plan B): 8 MB, as the macOS main thread, mapped
+// zero-fill-on-demand with a PROT_NONE guard page below it. Frames of UIKit
+// callbacks during the event pump (touches) run on it too.
+#define ENGINE_STACK (8u << 20)
 static uintptr_t stk_lo, stk_hi, stk_peak_logged;
 static unsigned stk_frames;
 
-__attribute__((noinline)) static void stack_paint(void) {
-    pthread_t self = pthread_self();
-    stk_hi = (uintptr_t)pthread_get_stackaddr_np(self);
-    size_t size = pthread_get_stacksize_np(self);
-    uintptr_t sp = (uintptr_t)__builtin_frame_address(0);
-    stk_lo = stk_hi - size + 32 * 1024;  // keep clear of the guard page
-    uintptr_t top = (sp - 4096) & ~(uintptr_t)7;
-    for (uintptr_t a = stk_lo; a < top; a += 8) *(volatile uint64_t *)a = STACK_MAGIC;
-    fprintf(stderr, "cvf: main thread stack %zu KB, %zu KB in use at engine start\n", size / 1024,
-            (size_t)(stk_hi - sp) / 1024);
-}
+// cvf_call_on_stack(top, fn, arg): calls fn(arg) with sp = top, then
+// returns on the original stack. x19 (callee-saved) holds the old sp.
+__asm__(
+    ".text\n"
+    ".p2align 2\n"
+    ".globl _cvf_call_on_stack\n"
+    ".private_extern _cvf_call_on_stack\n"
+    "_cvf_call_on_stack:\n"
+    "  stp x29, x30, [sp, #-16]!\n"
+    "  mov x29, sp\n"
+    "  stp x19, x20, [sp, #-16]!\n"
+    "  mov x19, sp\n"
+    "  mov sp, x0\n"
+    "  mov x0, x2\n"
+    "  blr x1\n"
+    "  mov sp, x19\n"
+    "  ldp x19, x20, [sp], #16\n"
+    "  ldp x29, x30, [sp], #16\n"
+    "  ret\n");
+void cvf_call_on_stack(void *top, void (*fn)(void *), void *arg);
 
+int cvf_ios_run_on_engine_stack(void (*fn)(void *), void *arg) {
+    size_t pg = (size_t)getpagesize();
+    uint8_t *p = (uint8_t *)mmap(NULL, ENGINE_STACK + pg, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (p == MAP_FAILED) {
+        fprintf(stderr, "cvf: cannot map the engine stack, using the main thread's\n");
+        fn(arg);
+        return 0;
+    }
+    mprotect(p, pg, PROT_NONE);
+    stk_lo = (uintptr_t)p + pg;
+    stk_hi = stk_lo + ENGINE_STACK;
+    cvf_call_on_stack((void *)stk_hi, fn, arg);
+    return 1;
+}
+void *cvf_ios_engine_stack_top(void) { return (void *)stk_hi; }
+
+// High-water mark: the lowest word written (fresh pages read as zero).
 static size_t stack_peak(void) {
     uintptr_t a = stk_lo;
-    while (a < stk_hi && *(volatile uint64_t *)a == STACK_MAGIC) a += 8;
+    while (a < stk_hi && *(volatile uint64_t *)a == 0) a += 4096;  // untouched pages
+    if (a > stk_lo) a -= 4096;
+    while (a < stk_hi && *(volatile uint64_t *)a == 0) a += 8;
     return (size_t)(stk_hi - a);
 }
 
@@ -78,8 +110,7 @@ void cvf_ios_frame_tick(void) {
     size_t peak = stack_peak();
     if (peak > stk_peak_logged + 16 * 1024) {
         stk_peak_logged = peak;
-        fprintf(stderr, "cvf: main thread stack peak %zu KB (of %zu KB)\n", peak / 1024,
-                (size_t)(stk_hi - stk_lo + 32 * 1024) / 1024);
+        fprintf(stderr, "cvf: engine stack peak %zu KB (of %u KB)\n", peak / 1024, ENGINE_STACK / 1024);
         fflush(stderr);
     }
 }
@@ -100,7 +131,9 @@ void cvf_ios_prepare(const char *assets) {
         }
         read_env_file(assets);
     }
-    stack_paint();
+    pthread_t self = pthread_self();
+    fprintf(stderr, "cvf: main thread stack %zu KB; engine stack %u KB\n", pthread_get_stacksize_np(self) / 1024,
+            stk_hi ? ENGINE_STACK / 1024 : 0);
 }
 
 // ---------------------------------------------------------------- background

@@ -364,6 +364,10 @@ static void drain(void) {
 uintptr_t (*gc_stack_top_hook)(void);
 void (*gc_extra_roots_hook)(void (*scan)(uintptr_t lo, uintptr_t hi));
 uintptr_t gc_main_stack_top(void) { return S ? S->stack_base : 0; }
+void gc_set_main_stack(void *top) {
+    if (!S) gc_init(top);
+    S->stack_base = (uintptr_t)top;
+}
 
 static void scan_and_drain(uintptr_t lo, uintptr_t hi) {
     scan_range(lo, hi);

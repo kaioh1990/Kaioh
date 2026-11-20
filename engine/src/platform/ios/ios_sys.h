@@ -7,6 +7,9 @@ int cvf_ios_on_main_thread(void);
 // Log file (<assets>/save/logs/cvf.log), save/cvf_env.txt, stack report.
 void cvf_ios_prepare(const char *assets);
 int cvf_ios_chdir(const char *dir);
+// Runs fn(arg) on the engine's own 8 MB stack (plan B of IOS_PORT.md 3.3).
+int cvf_ios_run_on_engine_stack(void (*fn)(void *), void *arg);
+void *cvf_ios_engine_stack_top(void);
 void cvf_ios_frame_tick(void);  // once per frame (stack high-water mark)
 // Background/foreground (IOS_PORT.md 3.7): no GL work while backgrounded.
 void cvf_ios_install_app_watch(void);

@@ -45,10 +45,20 @@ static int run_headless(const char *dir, const char *argstr) {
     exit(w < 0 || fails ? 1 : 0);
 }
 
-int SDL_main(int argc, char **argv) {
+typedef struct MainArgs {
+    int argc;
+    char **argv;
+} MainArgs;
+
+// Runs on the engine stack (cvf_ios_run_on_engine_stack).
+static void engine_main(void *p) {
+    MainArgs *m = (MainArgs *)p;
+    int argc = m->argc;
+    char **argv = m->argv;
     gc_init(&argc);
+    gc_set_main_stack(cvf_ios_engine_stack_top());  // scan this stack, not the main thread's
     const char *hdir = getenv("CVF_HEADLESS_DIR");
-    if (hdir && *hdir) return run_headless(hdir, getenv("CVF_HEADLESS_ARGS"));
+    if (hdir && *hdir) run_headless(hdir, getenv("CVF_HEADLESS_ARGS"));
 
     const char *assets = NULL;
     for (int i = 1; i + 1 < argc; i++)
@@ -71,5 +81,10 @@ int SDL_main(int argc, char **argv) {
     cvf_host_set_running(0);
     cvf_safepoint_hook = NULL;
     fprintf(stderr, "cvf: engine returned\n");
+}
+
+int SDL_main(int argc, char **argv) {
+    MainArgs m = {argc, argv};
+    cvf_ios_run_on_engine_stack(engine_main, &m);
     return 0;
 }

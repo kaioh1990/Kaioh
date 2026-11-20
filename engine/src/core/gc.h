@@ -41,6 +41,9 @@ void gc_enable(void);
 extern uintptr_t (*gc_stack_top_hook)(void);
 extern void (*gc_extra_roots_hook)(void (*scan)(uintptr_t lo, uintptr_t hi));
 uintptr_t gc_main_stack_top(void);
+// The main goroutine runs on a stack of its own (iOS, IOS_PORT.md 3.3 plan
+// B): its top replaces the main thread's stack top for scanning.
+void gc_set_main_stack(void *top);
 
 typedef struct GcStats {
     size_t heap_bytes;       // pages in use (small + large)
