@@ -597,7 +597,10 @@ Ret_int__GoIface net_UDPConn_WriteTo(GoOpaque *c, Slice_u8 b, GoIface addr) {
         // send buffer full (e.g. a subnet sweep waiting on ARP): Go blocks the
         // goroutine until the socket is writable, so wait (cooperatively) too
         go_sleep_ns(1000000);
-        if (!wait_ready(s, true)) return (Ret_int__GoIface){0, op_error("write", "i/o timeout", true)};
+        if (!wait_ready(s, true)) {
+            if (s->closed) continue;  // "use of closed network connection", as Go
+            return (Ret_int__GoIface){0, op_error("write", "i/o timeout", true)};
+        }
     }
 }
 
@@ -679,8 +682,17 @@ Ret_Slice_GoIface__GoIface net_Interface_Addrs(GoNetInterface *it) {
         GoNetIPNet *n = go_new(GoNetIPNet);
         n->IP = ip_bytes(i->ifa_addr);
         if (i->ifa_netmask) {
-            Slice_u8 m = ip_bytes(i->ifa_netmask);
-            n->Mask = fam == AF_INET ? (Slice_u8){m.p + 12, 4, 4} : m;
+            // BSD/macOS may report the netmask with sa_family 0, and ip_bytes
+            // then returns an empty slice: read it by the address's family
+            Slice_u8 m;
+            if (fam == AF_INET) {
+                m = (Slice_u8){(u8 *)gc_alloc_atomic(4), 4, 4};
+                memcpy(m.p, &((const struct sockaddr_in *)i->ifa_netmask)->sin_addr, 4);
+            } else {
+                m = (Slice_u8){(u8 *)gc_alloc_atomic(16), 16, 16};
+                memcpy(m.p, &((const struct sockaddr_in6 *)i->ifa_netmask)->sin6_addr, 16);
+            }
+            n->Mask = m;
         }
         out.p[out.len++] = (GoIface){GO_TID_P_net_IPNet, n};
     }
