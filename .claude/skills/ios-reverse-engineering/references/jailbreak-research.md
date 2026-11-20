@@ -240,6 +240,96 @@ Any event whose bit is set in the forbid mask is rejected at subscription time.
 - **SRD value**: For researchers with SRDs, the notify-only ES provides visibility into kernel-level operations that was previously unavailable on iOS.
 - **Related research**: Calif.io also discovered "Java4Shell" and "Swift-in-the-Kernel" — both pointing to increasing kernel-level instrumentation on iOS.
 
+## CVE-2026-86950: The Great Glyph Grift (Calif.io Research)
+
+**Source**: Dion Blazakis, Josh Maine, Anna Groza — Calif.io, September 30, 2026
+**CVE**: CVE-2026-86950 — CoreGraphics font rendering integer overflow
+**Patched in**: iOS 26.7.1
+**Reporter**: Meta Product Security — "may have been exploited in an extremely sophisticated attack against specific targeted individuals" (= confirmed in-the-wild exploitation)
+**Delivery**: Malicious PDF with crafted TrueType font → WhatsApp auto-preview → zero-click
+
+### The Vulnerability
+
+**Root cause**: Compiler-induced behavioral differential in `aa_double_to_fixed()`, an inline function that converts floating-point coordinates to 12-bit fixed-point (4096 sub-pixels per pixel):
+
+```c
+// VULNERABLE (pre-26.7.1):
+static inline int32_t aa_double_to_fixed(double px) {
+    double v = 0.5 + 4096.0 * px;
+    return (int32_t)v;  // UB when v > INT32_MAX
+}
+```
+
+When `v` exceeds the int32_t range [-2147483648, 2147483647], the cast is **undefined behavior**. Clang compiled this differently in two call sites:
+
+| Call site | ARM64 instruction | Overflow behavior |
+|-----------|------------------|-------------------|
+| `aa_moveto` | `FCVTZS Wd, Dn` | **Saturates** to INT32_MAX |
+| `aa_lineto` | `FCVTZS Vd.2D, Vn.2D` + `XTN` | **Truncates** (wraps) |
+
+For the same overflowing float input, `cur_x` (from moveto) ≠ `new_x` (from lineto).
+
+### The Fix (26.7.1)
+
+```c
+static inline int32_t aa_double_to_fixed(double px) {
+    double v = 0.5 + 4096.0 * px;
+    if (isnan(v)) return 0;
+    if (v < -1073737729.0) return -1073737729;  // -0x3FFFF001
+    if (v >  1073737729.0) return  1073737729;  //  0x3FFFF001
+    return (int32_t)v;
+}
+```
+
+Applied 20+ times across 8 functions: `aa_moveto`, `aa_close`, `aa_lineto`, `aa_cubeto`, `aa_clip_edge`, `aa_quadto`, `aa_clipping`, `aa_rectat`.
+
+### Exploitation Path
+
+1. **PDF with crafted TrueType font**: Composite-glyph scaling transforms + PDF Text matrix produce coordinates that overflow int32_t when multiplied by 4096
+2. **Font rendering via glyph-bitmap cache**: `CGGlyphBitmapCreateWithPathAndDilation` creates rasterizer context with flags clear (no clipping stage), unlike direct path rendering via `ripr_Acquire`
+3. **Bounding box corruption**: In `aa_add_edges`, `dx = new_x - cur_x` wraps due to the saturation vs. truncation differential. The sign-wrapped delta causes neither endpoint to expand the bbox
+4. **Undersized allocation**: `aa_cache_render` allocates coverage buffer sized by the corrupted (too-small) bbox:
+   ```c
+   width_px  = (bbox_max_x - bbox_min_x) / 4096;
+   coverage  = (width_px > 1015) ? malloc(4*(width_px+16))
+                                 : alloca(4*(width_px+16));
+   ```
+5. **OOB write**: Rasterizer writes alpha values beyond the undersized buffer → `EXC_BAD_ACCESS`
+
+### Zero-Click Chain (WhatsApp)
+
+```
+WhatsApp receives PDF attachment
+  → WAAttachmentChecker (Kaleidoscope framework)
+    → ImageIO`PDFReadPlugin::decodeImageData (thumbnail generation)
+      → CGContextDrawPDFPageWithOptions
+        → CGPDFScannerScan → op_Tj (text operator)
+          → CGPDFTextLayoutDrawGlyphs → simple_draw
+            → ripc_DrawGlyphs → draw_glyph_bitmaps → render_glyphs
+              → CGGlyphBitmapCreateWithPathAndDilation
+                → aa_moveto/aa_lineto (differential overflow)
+                  → aa_add_edges (bbox corruption)
+                    → aa_cache_render (undersized buffer → OOB WRITE)
+```
+
+WhatsApp patched by adding `ks_pdf_strict_validation_enabled` in Kaleidoscope to detect malformed `FontFile` streams before they reach CoreGraphics. New defect tags: `MalformedFontProgram`, `UndecodableFontProgram`, `UnverifiedFontProgram`.
+
+### Exploit Primitive
+
+- **Controlled offset OOB 16-bit increment** on two adjacent 16-bit values
+- Attacker controls allocation size
+- Attacker controls heap vs. stack (`alloca` for ≤1015px width, `malloc` for larger)
+- PoC and font generation scripts available on Calif.io's GitHub
+
+### Implications for iOS 27 Research
+
+- This is a **real in-the-wild zero-click** via PDF font rendering — exactly the class of attack relevant to our research
+- CoreGraphics font rendering is a rich attack surface: complex path rasterization with float-to-int conversions
+- The compiler UB differential is a novel bug class — same source code, different machine code at different call sites
+- PDF delivery via messaging apps (WhatsApp, iMessage) enables zero-click
+- Lockdown Mode implications: does Lockdown Mode affect PDF preview generation? If font rendering is restricted, this class of bug is mitigated
+- The `alloca` vs `malloc` choice gives the attacker control over corruption target (stack vs heap)
+
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
 - iPhone Duo likely uses A-series or M-series chip with full PAC/PPL/KTRR
