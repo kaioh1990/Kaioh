@@ -723,6 +723,7 @@ function log(m, c) {
     s.className = c || '';
     s.textContent = m + '\\n';
     document.getElementById('log').appendChild(s);
+    window.scrollTo(0, document.body.scrollHeight);
 }
 
 async function run() {
@@ -813,6 +814,7 @@ async function run() {
     log('\\n=== COMPLETE ===', 'info');
     log('Leaking slots: ' + leaks + '/' + (N/2), leaks > 0 ? 'err' : '');
     log('Session: ' + sid, 'info');
+    window.scrollTo(0, document.body.scrollHeight);
 }
 
 run();
