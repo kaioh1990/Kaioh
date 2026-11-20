@@ -84,6 +84,11 @@ typedef struct GoNetTCPAddr {
 typedef struct GoNetIPNet {
     Slice_u8 IP, Mask;
 } GoNetIPNet;
+typedef struct GoTimeTicker {  // time.Ticker (ik_std2.c)
+    GoChan *C;
+    i64 d;
+    bool stopped;
+} GoTimeTicker;
 typedef struct GoNetInterface {
     int Index, MTU;
     GoString Name;

@@ -272,6 +272,42 @@ static int mask_bits(Slice_u8 m) {
         for (int b = 7; b >= 0 && (m.p[i] >> b & 1); b--) n++;
     return n;
 }
+// net.IPMask / net.IP.Mask / net.CIDRMask, with Go's semantics
+Slice_u8 net_CIDRMask(int ones, int bits) {
+    if ((bits != 32 && bits != 128) || ones < 0 || ones > bits) return (Slice_u8){0};
+    int l = bits / 8;
+    Slice_u8 m = {(u8 *)gc_alloc_atomic((size_t)l), l, l};
+    for (int i = 0; i < l; i++) {
+        int n = ones >= 8 ? 8 : ones;
+        m.p[i] = (u8)(0xff00 >> n);
+        ones -= n;
+    }
+    return m;
+}
+Ret_int__int net_IPMask_Size(Slice_u8 m) {
+    int ones = 0, i = 0;
+    for (; i < m.len && m.p[i] == 0xff; i++) ones += 8;
+    if (i < m.len) {  // a partial byte, then only zeros (else non-canonical: 0, 0)
+        u8 v = m.p[i++];
+        while (v & 0x80) ones++, v = (u8)(v << 1);
+        if (v) return (Ret_int__int){0, 0};
+        for (; i < m.len; i++)
+            if (m.p[i]) return (Ret_int__int){0, 0};
+    }
+    return (Ret_int__int){ones, m.len * 8};
+}
+Slice_u8 net_IP_Mask(Slice_u8 ip, Slice_u8 mask) {
+    if (mask.len == 16 && ip.len == 4) {
+        bool ff = true;
+        for (int i = 0; i < 12; i++) ff = ff && mask.p[i] == 0xff;
+        if (ff) mask = (Slice_u8){mask.p + 12, 4, 4};
+    }
+    if (mask.len == 4 && ip.len == 16 && is_v4(ip)) ip = (Slice_u8){ip.p + 12, 4, 4};
+    if (ip.len != mask.len) return (Slice_u8){0};
+    Slice_u8 out = {(u8 *)gc_alloc_atomic((size_t)ip.len), ip.len, ip.len};
+    for (int i = 0; i < ip.len; i++) out.p[i] = ip.p[i] & mask.p[i];
+    return out;
+}
 GoString net_IPNet_String(GoNetIPNet *n) {
     char b[80];
     GoString ip = net_IP_String(n->IP);
@@ -336,6 +372,23 @@ static bool resolve(GoString addr, bool udp, struct sockaddr_storage *ss, int *l
     *len = (int)pick->ai_addrlen;
     freeaddrinfo(res);
     return true;
+}
+
+Ret_GoNetUDPAddrPtr__GoIface net_ResolveUDPAddr(GoString network, GoString address) {
+    net_init();
+    bool v6 = network.len == 4 && !memcmp(network.p, "udp6", 4);
+    if (!(network.len == 3 && !memcmp(network.p, "udp", 3)) && !(network.len == 4 && !memcmp(network.p, "udp4", 4)) && !v6)
+        return (Ret_GoNetUDPAddrPtr__GoIface){NULL, op_error("resolve", "unknown network", false)};
+    struct sockaddr_storage ss;
+    int sl;
+    const char *err = NULL;
+    if (!resolve(address, true, &ss, &sl, &err)) return (Ret_GoNetUDPAddrPtr__GoIface){NULL, op_error("lookup", err, false)};
+    GoNetUDPAddr *a = (GoNetUDPAddr *)udp_addr_iface((struct sockaddr *)&ss).data;
+    if (network.len == 4 && network.p[3] == '4' && !is_v4(a->IP))
+        return (Ret_GoNetUDPAddrPtr__GoIface){NULL, op_error("lookup", "no suitable address found", false)};
+    // Go leaves IP nil for ":port"
+    if (address.len && address.p[0] == ':') a->IP = (Slice_u8){0};
+    return (Ret_GoNetUDPAddrPtr__GoIface){a, {0}};
 }
 
 // ---------------------------------------------------------------- dial / listen

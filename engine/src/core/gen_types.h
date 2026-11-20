@@ -330,6 +330,10 @@ typedef struct boundTexture boundTexture;
 typedef struct character character;
 typedef struct cookW cookW;
 typedef struct cparser cparser;
+typedef struct cvfNearbyHost cvfNearbyHost;
+typedef struct cvfNearbyNet cvfNearbyNet;
+typedef struct cvfNearbyReply cvfNearbyReply;
+typedef struct cvfNearbyState cvfNearbyState;
 typedef struct cvfOnlineState cvfOnlineState;
 typedef struct cvfRoom cvfRoom;
 typedef struct cvfRulesT cvfRulesT;
@@ -529,6 +533,10 @@ typedef GoMap Map_GoString_TypedValue; /* map[string]TypedValue */
 #ifndef CVF_DEF_Map_GoString_bool
 #define CVF_DEF_Map_GoString_bool
 typedef GoMap Map_GoString_bool; /* map[string]bool */
+#endif
+#ifndef CVF_DEF_Map_GoString_cvfNearbyHostPtr
+#define CVF_DEF_Map_GoString_cvfNearbyHostPtr
+typedef GoMap Map_GoString_cvfNearbyHostPtr; /* map[string]*cvfNearbyHost */
 #endif
 #ifndef CVF_DEF_Map_GoString_f32
 #define CVF_DEF_Map_GoString_f32
@@ -1803,6 +1811,10 @@ typedef struct { bool *p; int len, cap; } Slice_bool;
 #ifndef CVF_DEF_Slice_boundTexture
 #define CVF_DEF_Slice_boundTexture
 typedef struct { boundTexture *p; int len, cap; } Slice_boundTexture;
+#endif
+#ifndef CVF_DEF_Slice_cvfNearbyHost
+#define CVF_DEF_Slice_cvfNearbyHost
+typedef struct { cvfNearbyHost *p; int len, cap; } Slice_cvfNearbyHost;
 #endif
 #ifndef CVF_DEF_Slice_cvfRoom
 #define CVF_DEF_Slice_cvfRoom
@@ -3397,6 +3409,22 @@ typedef struct cookW cookW;
 #ifndef CVF_TD_cparser
 #define CVF_TD_cparser
 typedef struct cparser cparser;
+#endif
+#ifndef CVF_TD_cvfNearbyHost
+#define CVF_TD_cvfNearbyHost
+typedef struct cvfNearbyHost cvfNearbyHost;
+#endif
+#ifndef CVF_TD_cvfNearbyNet
+#define CVF_TD_cvfNearbyNet
+typedef struct cvfNearbyNet cvfNearbyNet;
+#endif
+#ifndef CVF_TD_cvfNearbyReply
+#define CVF_TD_cvfNearbyReply
+typedef struct cvfNearbyReply cvfNearbyReply;
+#endif
+#ifndef CVF_TD_cvfNearbyState
+#define CVF_TD_cvfNearbyState
+typedef struct cvfNearbyState cvfNearbyState;
 #endif
 #ifndef CVF_TD_cvfOnlineState
 #define CVF_TD_cvfOnlineState
@@ -11691,6 +11719,44 @@ struct cparser {
     int depth;
 };
 
+struct cvfNearbyHost {
+    GoString ID;
+    GoString Via;
+    GoString Name;
+    GoString IP;
+    int Port;
+    GoString Version;
+    GoOpaque /* time.Time */ seen;
+};
+
+struct cvfNearbyNet {
+    Slice_u8 self;
+    struct GoNetIPNet* ipnet;
+};
+
+struct cvfNearbyReply {
+    GoString T;
+    GoString Name;
+    int Port;
+    GoString Version;
+    GoString ID;
+};
+
+struct cvfNearbyState {
+    GoOpaque /* sync.Mutex */ mu;
+    GoIface hostConn;
+    GoString hostErr;
+    int hostPort;
+    int hostProbes;
+    GoString hostID;
+    GoChan* scanStop;
+    Map_GoString_cvfNearbyHostPtr hosts;
+    GoString scanErr;
+    GoOpaque /* time.Time */ lastSweep;
+    Slice_GoString extra;
+    Slice_cvfNearbyHost p2p;
+};
+
 struct cvfOnlineState {
     GoOpaque /* sync.Mutex */ mu;
     GoString lobbyURL;
@@ -12582,6 +12648,10 @@ GO_SLICE_FUNCS_A(Slice_bool, bool)
 #define CVF_FN_Slice_boundTexture
 GO_SLICE_FUNCS(Slice_boundTexture, boundTexture)
 #endif
+#ifndef CVF_FN_Slice_cvfNearbyHost
+#define CVF_FN_Slice_cvfNearbyHost
+GO_SLICE_FUNCS(Slice_cvfNearbyHost, cvfNearbyHost)
+#endif
 #ifndef CVF_FN_Slice_cvfRoom
 #define CVF_FN_Slice_cvfRoom
 GO_SLICE_FUNCS(Slice_cvfRoom, cvfRoom)
@@ -12817,6 +12887,10 @@ GO_MAP_FUNCS(Map_GoString_TypedValue, GoString, TypedValue, true)
 #ifndef CVF_FN_Map_GoString_bool
 #define CVF_FN_Map_GoString_bool
 GO_MAP_FUNCS(Map_GoString_bool, GoString, bool, true)
+#endif
+#ifndef CVF_FN_Map_GoString_cvfNearbyHostPtr
+#define CVF_FN_Map_GoString_cvfNearbyHostPtr
+GO_MAP_FUNCS(Map_GoString_cvfNearbyHostPtr, GoString, cvfNearbyHost*, true)
 #endif
 #ifndef CVF_FN_Map_GoString_f32
 #define CVF_FN_Map_GoString_f32

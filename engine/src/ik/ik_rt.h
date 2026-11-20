@@ -132,5 +132,6 @@ extern GoOpaque binary_LittleEndian, binary_BigEndian;
 extern GoOpaque *os_Stderr, *os_Stdout;
 extern Slice_GoString os_Args;
 extern GoString ini_DEFAULT_SECTION;
+extern GoIface crand_Reader;  // crypto/rand.Reader (ik_crypto.c reads the OS source directly)
 
 #endif

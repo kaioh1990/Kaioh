@@ -225,8 +225,29 @@ GoChan *time_After(i64 d) {
     go_spawn(after_fire, a);
     return a->c;
 }
-GoOpaque *time_NewTicker(i64 d) { (void)d; return (GoOpaque *)gc_alloc(sizeof(GoOpaque)); }  // its C field stays nil (never fires)
-void time_Ticker_Stop(GoOpaque *t) { (void)t; }
+// time.Ticker: a goroutine sleeps d and offers a tick on C (capacity 1); like
+// Go, a tick is dropped when the previous one has not been received yet.
+static void ticker_run(void *e) {
+    GoTimeTicker *t = (GoTimeTicker *)e;
+    for (;;) {
+        go_sleep_ns(t->d);
+        if (t->stopped) return;
+        GoOpaque now = time_Now();
+        GoSelCase c = {t->C, 1, &now, NULL};
+        go_select(&c, 1, true);
+    }
+}
+GoTimeTicker *time_NewTicker(i64 d) {
+    if (d <= 0) go_panic_str("non-positive interval for NewTicker");
+    GoTimeTicker *t = go_new(GoTimeTicker);
+    t->C = go_chan_make(sizeof(GoOpaque), 1);
+    t->d = d;
+    go_spawn(ticker_run, t);
+    return t;
+}
+void time_Ticker_Stop(GoTimeTicker *t) {
+    if (t) t->stopped = true;
+}
 
 // ---------------------------------------------------------------- math/rand (global source)
 static u64 rnd_state = 0x9E3779B97F4A7C15ull;

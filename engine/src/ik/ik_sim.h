@@ -1309,6 +1309,7 @@ typedef struct wrapToken_Le4d084 wrapToken_Le4d084;
 typedef struct Anon_194875d7 Anon_194875d7;
 typedef struct Anon_28bd7e47 Anon_28bd7e47;
 typedef struct Anon_3c59f47a Anon_3c59f47a;
+typedef struct Anon_47a7d9c0 Anon_47a7d9c0;
 typedef struct Anon_6c40a18c Anon_6c40a18c;
 typedef struct Anon_712b22f8 Anon_712b22f8;
 typedef struct Anon_78e9d625 Anon_78e9d625;
@@ -1321,6 +1322,7 @@ typedef struct Anon_b2116398 Anon_b2116398;
 typedef struct Anon_be668d3d Anon_be668d3d;
 typedef struct Anon_d4e097a6 Anon_d4e097a6;
 typedef struct Anon_dcdcacfc Anon_dcdcacfc;
+typedef struct Anon_dea90c61 Anon_dea90c61;
 typedef struct Anon_ec483023 Anon_ec483023;
 typedef struct Anon_ed5d50f3 Anon_ed5d50f3;
 typedef struct Anon_f8c1b65b Anon_f8c1b65b;
@@ -2047,6 +2049,14 @@ typedef struct { boundTexture *p; int len, cap; } Slice_boundTexture;
 #ifndef CVF_DEF_Slice_cnode
 #define CVF_DEF_Slice_cnode
 typedef struct { cnode *p; int len, cap; } Slice_cnode;
+#endif
+#ifndef CVF_DEF_Slice_cvfNearbyHost
+#define CVF_DEF_Slice_cvfNearbyHost
+typedef struct { cvfNearbyHost *p; int len, cap; } Slice_cvfNearbyHost;
+#endif
+#ifndef CVF_DEF_Slice_cvfNearbyNet
+#define CVF_DEF_Slice_cvfNearbyNet
+typedef struct { cvfNearbyNet *p; int len, cap; } Slice_cvfNearbyNet;
 #endif
 #ifndef CVF_DEF_Slice_cvfRoom
 #define CVF_DEF_Slice_cvfRoom
@@ -2779,6 +2789,10 @@ typedef GoMap Map_GoString_TypedValue;
 #ifndef CVF_DEF_Map_GoString_bool
 #define CVF_DEF_Map_GoString_bool
 typedef GoMap Map_GoString_bool;
+#endif
+#ifndef CVF_DEF_Map_GoString_cvfNearbyHostPtr
+#define CVF_DEF_Map_GoString_cvfNearbyHostPtr
+typedef GoMap Map_GoString_cvfNearbyHostPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_entry_L53b361
 #define CVF_DEF_Map_GoString_entry_L53b361
@@ -4442,6 +4456,7 @@ struct wrapToken_Le4d084 { wrapTokenKind_La986db kind; GoString text; int rawRun
 struct Anon_194875d7 { GoString name; GoOpaque /* os.File */* file; bool writable; bool readable; };
 struct Anon_28bd7e47 { GoString sec; Slice_GoString path; };
 struct Anon_3c59f47a { GoString name; Arr4_ResultAnnouncement* data; Arr4_bool* exists; };
+struct Anon_47a7d9c0 { union { GoOpaque /* sync.Mutex */ Mutex_; struct { GoOpaque /* sync.noCopy */ _; GoOpaque /* sync.Mutex */ mu; }; }; bool waiting; bool done; GoString result; };
 struct Anon_6c40a18c { GoString in; GoString out; };
 struct Anon_78e9d625 { GoString ID; GoString Token; GoString IP; };
 struct Anon_8aabe1e9 { int ok; int fail; int native; int generic; };
@@ -4452,6 +4467,7 @@ struct Anon_b2116398 { union { GoOpaque /* sync.Mutex */ Mutex_; struct { GoOpaq
 struct Anon_be668d3d { GoString Open; };
 struct Anon_d4e097a6 { RenderParams rp; ShaderPalFX spfx; mgl32_Mat4 modelview; mgl32_Mat4 proj; Arr4_f32 tint; };
 struct Anon_dcdcacfc { int exprs; int fused; };
+struct Anon_dea90c61 { f32 x; f32 y; bool pending; i32 polled; bool used; };
 struct Anon_ec483023 { union { GoOpaque /* sync.Mutex */ Mutex_; struct { GoOpaque /* sync.noCopy */ _; GoOpaque /* sync.Mutex */ mu; }; }; Map_GoString_Slice_u8 m; };
 struct Anon_ed5d50f3 { Slice_Slice_SpriteData chunks; int chunk; int idx; };
 #ifndef CVF_FN_Slice_AnimFrame
@@ -5029,6 +5045,14 @@ GO_SLICE_FUNCS(Slice_boundTexture, boundTexture)
 #ifndef CVF_FN_Slice_cnode
 #define CVF_FN_Slice_cnode
 GO_SLICE_FUNCS(Slice_cnode, cnode)
+#endif
+#ifndef CVF_FN_Slice_cvfNearbyHost
+#define CVF_FN_Slice_cvfNearbyHost
+GO_SLICE_FUNCS(Slice_cvfNearbyHost, cvfNearbyHost)
+#endif
+#ifndef CVF_FN_Slice_cvfNearbyNet
+#define CVF_FN_Slice_cvfNearbyNet
+GO_SLICE_FUNCS(Slice_cvfNearbyNet, cvfNearbyNet)
 #endif
 #ifndef CVF_FN_Slice_cvfRoom
 #define CVF_FN_Slice_cvfRoom
@@ -5794,6 +5818,10 @@ GO_MAP_FUNCS(Map_GoString_TypedValue, GoString, TypedValue, true)
 #define CVF_FN_Map_GoString_bool
 GO_MAP_FUNCS(Map_GoString_bool, GoString, bool, true)
 #endif
+#ifndef CVF_FN_Map_GoString_cvfNearbyHostPtr
+#define CVF_FN_Map_GoString_cvfNearbyHostPtr
+GO_MAP_FUNCS(Map_GoString_cvfNearbyHostPtr, GoString, cvfNearbyHost*, true)
+#endif
 #ifndef CVF_FN_Map_GoString_entry_L53b361
 #define CVF_FN_Map_GoString_entry_L53b361
 GO_MAP_FUNCS(Map_GoString_entry_L53b361, GoString, entry_L53b361, true)
@@ -6259,6 +6287,14 @@ typedef struct { GoIface r0; bool r1; GoIface r2; } Ret_GoIface__bool__GoIface;
 #define CVF_RET_Ret_GoImageConfig__GoIface
 typedef struct { GoImageConfig r0; GoIface r1; } Ret_GoImageConfig__GoIface;
 #endif
+#ifndef CVF_RET_Ret_GoNetUDPAddrPtr__GoIface
+#define CVF_RET_Ret_GoNetUDPAddrPtr__GoIface
+typedef struct { GoNetUDPAddr* r0; GoIface r1; } Ret_GoNetUDPAddrPtr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_GoOpaque_big_IntPtrPtr__GoIface
+#define CVF_RET_Ret_GoOpaque_big_IntPtrPtr__GoIface
+typedef struct { GoOpaque /* big.Int */* r0; GoIface r1; } Ret_GoOpaque_big_IntPtrPtr__GoIface;
+#endif
 #ifndef CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoIface
 #define CVF_RET_Ret_GoOpaque_ini_FilePtrPtr__GoIface
 typedef struct { GoOpaque /* ini.File */* r0; GoIface r1; } Ret_GoOpaque_ini_FilePtrPtr__GoIface;
@@ -6466,6 +6502,10 @@ typedef struct { Slice_ast_Stmt r0; GoIface r1; } Ret_Slice_ast_Stmt__GoIface;
 #ifndef CVF_RET_Ret_Slice_cnode__int
 #define CVF_RET_Ret_Slice_cnode__int
 typedef struct { Slice_cnode r0; int r1; } Ret_Slice_cnode__int;
+#endif
+#ifndef CVF_RET_Ret_Slice_cvfNearbyHost__GoString
+#define CVF_RET_Ret_Slice_cvfNearbyHost__GoString
+typedef struct { Slice_cvfNearbyHost r0; GoString r1; } Ret_Slice_cvfNearbyHost__GoString;
 #endif
 #ifndef CVF_RET_Ret_Slice_f32__GoIface
 #define CVF_RET_Ret_Slice_f32__GoIface
@@ -7215,6 +7255,7 @@ GoImageRect image_Rectangle_Add(GoImageRect recv, GoImagePoint a0); // func (ima
 GoImageRect image_Rectangle_Bounds(GoImageRect recv); // func (image.Rectangle).Bounds() image.Rectangle
 GoImageRect image_Rectangle_Intersect(GoImageRect recv, GoImageRect a0); // func (image.Rectangle).Intersect(s image.Rectangle) image.Rectangle
 GoImageRect image_Uniform_Bounds(GoImageUniform* recv); // func (*image.Uniform).Bounds() image.Rectangle
+GoOpaque /* big.Int */* big_NewInt(i64 a0); // func big.NewInt(x int64) *big.Int
 GoOpaque /* bufio.Reader */* bufio_NewReader(GoIface a0); // func bufio.NewReader(rd io.Reader) *bufio.Reader
 GoOpaque /* bufio.Reader */* bufio_NewReaderSize(GoIface a0, int a1); // func bufio.NewReaderSize(rd io.Reader, size int) *bufio.Reader
 GoOpaque /* bufio.Scanner */* bufio_NewScanner(GoIface a0); // func bufio.NewScanner(r io.Reader) *bufio.Scanner
@@ -7248,7 +7289,6 @@ GoOpaque /* runtime.Func */* runtime_FuncForPC(uintptr_t a0); // func runtime.Fu
 GoOpaque /* strings.Reader */* strings_NewReader(GoString a0); // func strings.NewReader(s string) *strings.Reader
 GoOpaque /* sync.Cond */* sync_NewCond(GoIface a0); // func sync.NewCond(l sync.Locker) *sync.Cond
 GoOpaque /* tabwriter.Writer */* tabwriter_NewWriter(GoIface a0, int a1, int a2, int a3, u8 a4, uintptr_t a5); // func tabwriter.NewWriter(output io.Writer, minwidth int, tabwidth int, padding int, padchar byte, flags uint) *tabwriter.Writer
-GoOpaque /* time.Ticker */* time_NewTicker(i64 a0); // func time.NewTicker(d time.Duration) *time.Ticker
 GoOpaque /* time.Time */ time_Date(int a0, int a1, int a2, int a3, int a4, int a5, int a6, GoOpaque /* time.Location */* a7); // func time.Date(year int, month time.Month, day int, hour int, min int, sec int, nsec int, loc *time.Location) time.Time
 GoOpaque /* time.Time */ time_Now(void); // func time.Now() time.Time
 GoOpaque /* time.Time */ time_Time_Add(GoOpaque /* time.Time */ recv, i64 a0); // func (time.Time).Add(d time.Duration) time.Time
@@ -7330,6 +7370,7 @@ GoString time_Time_Format(GoOpaque /* time.Time */ recv, GoString a0); // func (
 GoString time_Time_String(GoOpaque /* time.Time */ recv); // func (time.Time).String() string
 GoString url_URL_Hostname(GoUrlURL* recv); // func (*url.URL).Hostname() string
 GoString url_URL_String(GoUrlURL* recv); // func (*url.URL).String() string
+GoTimeTicker* time_NewTicker(i64 a0); // func time.NewTicker(d time.Duration) *time.Ticker
 Ret_GoHttpRequestPtr__GoIface http_NewRequest(GoString a0, GoString a1, GoIface a2); // func http.NewRequest(method string, url string, body io.Reader) (*http.Request, error)
 Ret_GoHttpResponsePtr__GoIface http_Client_Do(GoHttpClient* recv, GoHttpRequest* a0); // func (*http.Client).Do(req *http.Request) (*http.Response, error)
 Ret_GoHttpResponsePtr__GoIface http_Client_Get(GoHttpClient* recv, GoString a0); // func (*http.Client).Get(url string) (resp *http.Response, err error)
@@ -7346,6 +7387,8 @@ Ret_GoIface__GoIface png_Decode(GoIface a0); // func png.Decode(r io.Reader) (im
 Ret_GoIface__GoIface xml_Decoder_Token(GoOpaque /* xml.Decoder */* recv); // func (*xml.Decoder).Token() (xml.Token, error)
 Ret_GoIface__GoIface zip_File_Open(GoZipFile* recv); // func (*zip.File).Open() (io.ReadCloser, error)
 Ret_GoIface__GoString__GoIface image_Decode(GoIface a0); // func image.Decode(r io.Reader) (image.Image, string, error)
+Ret_GoNetUDPAddrPtr__GoIface net_ResolveUDPAddr(GoString a0, GoString a1); // func net.ResolveUDPAddr(network string, address string) (*net.UDPAddr, error)
+Ret_GoOpaque_big_IntPtrPtr__GoIface crand_Int(GoIface a0, GoOpaque /* big.Int */* a1); // func rand.Int(rand io.Reader, max *big.Int) (n *big.Int, err error)
 Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_Load(GoIface a0, Slice_GoIface a1); // func ini.Load(source interface{}, others ...interface{}) (*ini.File, error)
 Ret_GoOpaque_ini_FilePtrPtr__GoIface ini_LoadSources(GoIniLoadOptions a0, GoIface a1, Slice_GoIface a2); // func ini.LoadSources(opts ini.LoadOptions, source interface{}, others ...interface{}) (_ *ini.File, err error)
 Ret_GoOpaque_ini_KeyPtrPtr__GoIface ini_Section_GetKey(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).GetKey(name string) (*ini.Key, error)
@@ -7407,6 +7450,7 @@ Ret_int__GoIface bytes_Buffer_Read(GoOpaque /* bytes.Buffer */* recv, Slice_u8 a
 Ret_int__GoIface bytes_Buffer_Write(GoOpaque /* bytes.Buffer */* recv, Slice_u8 a0); // func (*bytes.Buffer).Write(p []byte) (n int, err error)
 Ret_int__GoIface bytes_Buffer_WriteString(GoOpaque /* bytes.Buffer */* recv, GoString a0); // func (*bytes.Buffer).WriteString(s string) (n int, err error)
 Ret_int__GoIface bytes_Reader_Read(GoOpaque /* bytes.Reader */* recv, Slice_u8 a0); // func (*bytes.Reader).Read(b []byte) (n int, err error)
+Ret_int__GoIface crand_Read(Slice_u8 a0); // func rand.Read(b []byte) (n int, err error)
 Ret_int__GoIface fmt_Fprintf(GoIface a0, GoString a1, Slice_GoIface a2); // func fmt.Fprintf(w io.Writer, format string, a ...any) (n int, err error)
 Ret_int__GoIface fmt_Fprintln(GoIface a0, Slice_GoIface a1); // func fmt.Fprintln(w io.Writer, a ...any) (n int, err error)
 Ret_int__GoIface fmt_Fscanf(GoIface a0, GoString a1, Slice_GoIface a2); // func fmt.Fscanf(r io.Reader, format string, a ...any) (n int, err error)
@@ -7439,6 +7483,7 @@ Ret_int__GoIface strings_Reader_Read(GoOpaque /* strings.Reader */* recv, Slice_
 Ret_int__GoIface tabwriter_Writer_Write(GoOpaque /* tabwriter.Writer */* recv, Slice_u8 a0); // func (*tabwriter.Writer).Write(buf []byte) (n int, err error)
 Ret_int__GoIface__GoIface net_UDPConn_ReadFrom(GoOpaque /* net.UDPConn */* recv, Slice_u8 a0); // func (*net.UDPConn).ReadFrom(b []byte) (int, net.Addr, error)
 Ret_int__GoOpaque_reflect_ValuePtr__bool reflect_Select(Slice_GoOpaque_reflect_SelectCasePtr a0); // func reflect.Select(cases []reflect.SelectCase) (chosen int, recv reflect.Value, recvOK bool)
+Ret_int__int net_IPMask_Size(Slice_u8 recv); // func (net.IPMask).Size() (ones int, bits int)
 Ret_sdl_AudioDeviceID__GoIface sdl_OpenAudioDevice(GoString a0, bool a1, sdl_AudioSpec* a2, sdl_AudioSpec* a3, sdl_AudioDeviceAllowFlags a4); // func sdl.OpenAudioDevice(device string, isCapture bool, desired *sdl.AudioSpec, obtained *sdl.AudioSpec, allowedChanges sdl.AudioDeviceAllowFlags) (sdl.AudioDeviceID, error)
 Ret_sdl_DisplayMode__GoIface sdl_GetDesktopDisplayMode(int a0); // func sdl.GetDesktopDisplayMode(displayIndex int) (mode sdl.DisplayMode, err error)
 Ret_sdl_GLContext__GoIface sdl_Window_GLCreateContext(sdl_Window* recv); // func (*sdl.Window).GLCreateContext() (sdl.GLContext, error)
@@ -7472,6 +7517,8 @@ Slice_u8 bytes_Buffer_Bytes(GoOpaque /* bytes.Buffer */* recv); // func (*bytes.
 Slice_u8 bytes_TrimSpace(Slice_u8 a0); // func bytes.TrimSpace(s []byte) []byte
 Slice_u8 debug_Stack(void); // func debug.Stack() []byte
 Slice_u8 fnv_sum32a_Sum(u32* recv, Slice_u8 a0); // func (*fnv.sum32a).Sum(in []byte) []byte
+Slice_u8 net_CIDRMask(int a0, int a1); // func net.CIDRMask(ones int, bits int) net.IPMask
+Slice_u8 net_IP_Mask(Slice_u8 recv, Slice_u8 a0); // func (net.IP).Mask(mask net.IPMask) net.IP
 Slice_u8 net_IP_To4(Slice_u8 recv); // func (net.IP).To4() net.IP
 Slice_u8 net_IPv4(u8 a0, u8 a1, u8 a2, u8 a3); // func net.IPv4(a byte, b byte, c byte, d byte) net.IP
 Slice_u8 net_ParseIP(GoString a0); // func net.ParseIP(s string) net.IP
@@ -7542,6 +7589,7 @@ i32 gl_GetUniformLocation(u32 a0, u8* a1); // func gl.GetUniformLocation(program
 i32 unicode_ToLower(i32 a0); // func unicode.ToLower(r rune) rune
 i32 unicode_ToUpper(i32 a0); // func unicode.ToUpper(r rune) rune
 i32 utf16_DecodeRune(i32 a0, i32 a1); // func utf16.DecodeRune(r1 rune, r2 rune) rune
+i64 big_Int_Int64(GoOpaque /* big.Int */* recv); // func (*big.Int).Int64() int64
 i64 rand_Int63(void); // func rand.Int63() int64
 i64 reflect_Value_Int(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Int() int64
 i64 time_Since(GoOpaque /* time.Time */ a0); // func time.Since(t time.Time) time.Duration
@@ -7744,7 +7792,7 @@ void sync_RWMutex_RLock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMut
 void sync_RWMutex_RUnlock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).RUnlock()
 void sync_RWMutex_Unlock(GoOpaque /* sync.RWMutex */* recv); // func (*sync.RWMutex).Unlock()
 void time_Sleep(i64 a0); // func time.Sleep(d time.Duration)
-void time_Ticker_Stop(GoOpaque /* time.Ticker */* recv); // func (*time.Ticker).Stop()
+void time_Ticker_Stop(GoTimeTicker* recv); // func (*time.Ticker).Stop()
 void* gl_MapBuffer(u32 a0, u32 a1); // func gl.MapBuffer(target uint32, access uint32) unsafe.Pointer
 void* gl_Ptr(GoIface a0); // func gl.Ptr(data interface{}) unsafe.Pointer
 void* gl_PtrOffset(int a0); // func gl.PtrOffset(offset int) unsafe.Pointer
@@ -7856,10 +7904,15 @@ extern bool g_cvfHeadless;
 extern Anon_b2116398 g_cvfLazy;
 extern Arr20_u64 g_cvfMPi4;
 extern int g_cvfMaxFrames;
+extern Anon_47a7d9c0 g_cvfNameAsk;
 extern GoOpaque /* regexp.Regexp */* g_cvfNameRe;
+extern cvfNearbyState* g_cvfNearby;
 extern cvfOnlineState* g_cvfOnline;
 extern cvfRulesT g_cvfRules;
 extern Arr2_i32 g_cvfScreen;
+extern Anon_dea90c61 g_cvfTap;
+extern GoOpaque /* sync.Mutex */ g_cvfTapMu;
+extern bool g_cvfTouchMenus;
 extern Arr6_f64 g_cvf_cos;
 extern Arr6_f64 g_cvf_sin;
 extern Arr3_f64 g_cvf_tanP;
@@ -7995,188 +8048,188 @@ void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_M_string_any 237
-#define GO_TID_P_abi_Type 1298
+#define GO_TID_P_abi_Type 1301
 #define GO_TID_P_bufio_Reader 198
 #define GO_TID_P_bufio_Writer 155
 #define GO_TID_P_bytes_Buffer 137
 #define GO_TID_P_bytes_Reader 189
-#define GO_TID_P_context_cancelCtx 2037
-#define GO_TID_P_exec_Cmd 1082
+#define GO_TID_P_context_cancelCtx 2041
+#define GO_TID_P_exec_Cmd 1085
 #define GO_TID_P_exec_ExitError 259
-#define GO_TID_P_fnv_sum32a 2038
+#define GO_TID_P_fnv_sum32a 2042
 #define GO_TID_P_image_Alpha 141
-#define GO_TID_P_image_NRGBA 487
-#define GO_TID_P_image_Paletted 486
-#define GO_TID_P_image_RGBA 481
-#define GO_TID_P_image_Uniform 482
-#define GO_TID_P_ini_File 1306
-#define GO_TID_P_ini_Key 1316
-#define GO_TID_P_ini_Section 1313
+#define GO_TID_P_image_NRGBA 490
+#define GO_TID_P_image_Paletted 489
+#define GO_TID_P_image_RGBA 484
+#define GO_TID_P_image_Uniform 485
+#define GO_TID_P_ini_File 1309
+#define GO_TID_P_ini_Key 1319
+#define GO_TID_P_ini_Section 1316
 #define GO_TID_P_io_LimitedReader 230
-#define GO_TID_P_net_IPNet 467
-#define GO_TID_P_net_OpError 2036
-#define GO_TID_P_net_TCPAddr 504
-#define GO_TID_P_net_TCPConn 505
-#define GO_TID_P_net_TCPListener 503
+#define GO_TID_P_net_IPNet 464
+#define GO_TID_P_net_OpError 2040
+#define GO_TID_P_net_TCPAddr 507
+#define GO_TID_P_net_TCPConn 508
+#define GO_TID_P_net_TCPListener 506
 #define GO_TID_P_net_UDPAddr 187
-#define GO_TID_P_net_UDPConn 2035
-#define GO_TID_P_net_netFD 1672
+#define GO_TID_P_net_UDPConn 2039
+#define GO_TID_P_net_netFD 1676
 #define GO_TID_P_os_File 180
-#define GO_TID_P_os_Process 1092
-#define GO_TID_P_os_ProcessState 1100
-#define GO_TID_P_os_dirInfo 851
-#define GO_TID_P_os_file 839
-#define GO_TID_P_os_processHandle 1097
-#define GO_TID_P_reflect_SliceHeader 1047
-#define GO_TID_P_strings_Builder 473
+#define GO_TID_P_os_Process 1095
+#define GO_TID_P_os_ProcessState 1103
+#define GO_TID_P_os_dirInfo 854
+#define GO_TID_P_os_file 842
+#define GO_TID_P_os_processHandle 1100
+#define GO_TID_P_reflect_SliceHeader 1050
+#define GO_TID_P_strings_Builder 466
 #define GO_TID_P_strings_Reader 251
-#define GO_TID_P_sync_Cond 1889
-#define GO_TID_P_sync_Mutex 580
-#define GO_TID_P_sync_Once 893
-#define GO_TID_P_syscall_Credential 1086
-#define GO_TID_P_syscall_Rusage 1102
-#define GO_TID_P_syscall_SysProcAttr 1084
+#define GO_TID_P_sync_Cond 1893
+#define GO_TID_P_sync_Mutex 583
+#define GO_TID_P_sync_Once 896
+#define GO_TID_P_syscall_Credential 1089
+#define GO_TID_P_syscall_Rusage 1105
+#define GO_TID_P_syscall_SysProcAttr 1087
 #define GO_TID_P_tabwriter_Writer 138
-#define GO_TID_P_time_Location 1283
-#define GO_TID_P_time_zone 1289
-#define GO_TID_P_zip_File 1279
-#define GO_TID_P_zip_ReadCloser 1275
-#define GO_TID_P_zip_Reader 1290
+#define GO_TID_P_time_Location 1286
+#define GO_TID_P_time_zone 1292
+#define GO_TID_P_zip_File 1282
+#define GO_TID_P_zip_ReadCloser 1278
+#define GO_TID_P_zip_Reader 1293
 #define GO_TID_S_any 238
 #define GO_TID_S_uint8 149
-#define GO_TID_abi_Kind 1301
-#define GO_TID_abi_NameOff 1303
-#define GO_TID_abi_TFlag 1300
-#define GO_TID_abi_Type 1299
-#define GO_TID_abi_TypeOff 1304
-#define GO_TID_atomic_Bool 895
-#define GO_TID_atomic_Int32 1096
-#define GO_TID_atomic_Pointer_os_dirInfo_ 849
-#define GO_TID_atomic_Uint32 1094
-#define GO_TID_atomic_Uint64 1942
-#define GO_TID_atomic_align64 1943
-#define GO_TID_atomic_noCopy 856
+#define GO_TID_abi_Kind 1304
+#define GO_TID_abi_NameOff 1306
+#define GO_TID_abi_TFlag 1303
+#define GO_TID_abi_Type 1302
+#define GO_TID_abi_TypeOff 1307
+#define GO_TID_atomic_Bool 898
+#define GO_TID_atomic_Int32 1099
+#define GO_TID_atomic_Pointer_os_dirInfo_ 852
+#define GO_TID_atomic_Uint32 1097
+#define GO_TID_atomic_Uint64 1946
+#define GO_TID_atomic_align64 1947
+#define GO_TID_atomic_noCopy 859
 #define GO_TID_binary_bigEndian 212
 #define GO_TID_binary_littleEndian 163
-#define GO_TID_bufio_Reader 612
-#define GO_TID_bufio_Writer 693
-#define GO_TID_bytes_Buffer 646
-#define GO_TID_bytes_Reader 898
-#define GO_TID_bytes_readOp 647
+#define GO_TID_bufio_Reader 615
+#define GO_TID_bufio_Writer 696
+#define GO_TID_bytes_Buffer 649
+#define GO_TID_bytes_Reader 901
+#define GO_TID_bytes_readOp 650
 #define GO_TID_color_NRGBA 196
-#define GO_TID_color_Palette 1389
-#define GO_TID_exec_Cmd 1083
-#define GO_TID_exec_ExitError 1111
+#define GO_TID_color_Palette 1393
+#define GO_TID_exec_Cmd 1086
+#define GO_TID_exec_ExitError 1114
 #define GO_TID_float64 14
-#define GO_TID_image_Alpha 653
-#define GO_TID_image_NRGBA 1390
-#define GO_TID_image_Paletted 1388
-#define GO_TID_image_Point 655
-#define GO_TID_image_RGBA 1384
-#define GO_TID_image_Rectangle 654
-#define GO_TID_image_Uniform 1385
-#define GO_TID_ini_DebugFunc 1309
-#define GO_TID_ini_File 1307
-#define GO_TID_ini_Key 1317
-#define GO_TID_ini_LoadOptions 1308
-#define GO_TID_ini_NameMapper 1319
-#define GO_TID_ini_Section 1314
-#define GO_TID_ini_ValueMapper 1320
-#define GO_TID_io_LimitedReader 934
-#define GO_TID_json_Number 518
-#define GO_TID_net_IP 897
-#define GO_TID_net_IPMask 1348
-#define GO_TID_net_IPNet 1347
-#define GO_TID_net_KeepAliveConfig 1676
-#define GO_TID_net_ListenConfig 1674
-#define GO_TID_net_TCPAddr 1678
-#define GO_TID_net_TCPConn 1679
-#define GO_TID_net_TCPListener 1671
-#define GO_TID_net_UDPAddr 896
-#define GO_TID_net_conn 1680
-#define GO_TID_net_mptcpStatusListen 1677
-#define GO_TID_net_netFD 1673
-#define GO_TID_os_File 838
-#define GO_TID_os_Process 1093
-#define GO_TID_os_ProcessState 1101
-#define GO_TID_os_dirInfo 852
-#define GO_TID_os_file 840
-#define GO_TID_os_processHandle 1098
-#define GO_TID_poll_FD 841
-#define GO_TID_poll_SysFile 843
-#define GO_TID_poll_fdMutex 842
-#define GO_TID_poll_pollDesc 847
-#define GO_TID_reflect_Kind 488
-#define GO_TID_reflect_SliceHeader 1048
-#define GO_TID_reflect_Value 1297
-#define GO_TID_reflect_flag 1305
-#define GO_TID_runtime_Cleanup 1099
-#define GO_TID_sdl_AudioDeviceID 1946
-#define GO_TID_sdl_ButtonState 2029
-#define GO_TID_sdl_CommonEvent 581
-#define GO_TID_sdl_ControllerAxisEvent 583
-#define GO_TID_sdl_ControllerButtonEvent 584
-#define GO_TID_sdl_EventType 1952
-#define GO_TID_sdl_GameControllerAxis 2027
-#define GO_TID_sdl_GameControllerButton 2028
-#define GO_TID_sdl_JoyDeviceAddedEvent 589
-#define GO_TID_sdl_JoyDeviceRemovedEvent 590
-#define GO_TID_sdl_JoystickID 2026
-#define GO_TID_sdl_KeyboardEvent 586
-#define GO_TID_sdl_Keycode 1703
-#define GO_TID_sdl_Keymod 2032
-#define GO_TID_sdl_Keysym 2030
-#define GO_TID_sdl_QuitEvent 585
-#define GO_TID_sdl_Scancode 2031
-#define GO_TID_sdl_TextInputEvent 588
-#define GO_TID_sdl_WindowEvent 587
-#define GO_TID_sdl_WindowEventID 2033
-#define GO_TID_sort_StringSlice 501
-#define GO_TID_strings_Builder 1356
-#define GO_TID_strings_Reader 1064
-#define GO_TID_sync_Cond 1890
-#define GO_TID_sync_Mutex 853
-#define GO_TID_sync_Once 894
-#define GO_TID_sync_RWMutex 1095
-#define GO_TID_sync_WaitGroup 1956
-#define GO_TID_sync_copyChecker 1892
-#define GO_TID_sync_noCopy 854
-#define GO_TID_sync_notifyList 1891
-#define GO_TID_syscall_Credential 1087
-#define GO_TID_syscall_Iovec 846
-#define GO_TID_syscall_Rusage 1103
-#define GO_TID_syscall_Signal 1088
-#define GO_TID_syscall_SysProcAttr 1085
-#define GO_TID_syscall_SysProcIDMap 1090
-#define GO_TID_syscall_Timeval 1104
+#define GO_TID_image_Alpha 656
+#define GO_TID_image_NRGBA 1394
+#define GO_TID_image_Paletted 1392
+#define GO_TID_image_Point 658
+#define GO_TID_image_RGBA 1388
+#define GO_TID_image_Rectangle 657
+#define GO_TID_image_Uniform 1389
+#define GO_TID_ini_DebugFunc 1312
+#define GO_TID_ini_File 1310
+#define GO_TID_ini_Key 1320
+#define GO_TID_ini_LoadOptions 1311
+#define GO_TID_ini_NameMapper 1322
+#define GO_TID_ini_Section 1317
+#define GO_TID_ini_ValueMapper 1323
+#define GO_TID_io_LimitedReader 937
+#define GO_TID_json_Number 521
+#define GO_TID_net_IP 900
+#define GO_TID_net_IPMask 1349
+#define GO_TID_net_IPNet 1348
+#define GO_TID_net_KeepAliveConfig 1680
+#define GO_TID_net_ListenConfig 1678
+#define GO_TID_net_TCPAddr 1682
+#define GO_TID_net_TCPConn 1683
+#define GO_TID_net_TCPListener 1675
+#define GO_TID_net_UDPAddr 899
+#define GO_TID_net_conn 1684
+#define GO_TID_net_mptcpStatusListen 1681
+#define GO_TID_net_netFD 1677
+#define GO_TID_os_File 841
+#define GO_TID_os_Process 1096
+#define GO_TID_os_ProcessState 1104
+#define GO_TID_os_dirInfo 855
+#define GO_TID_os_file 843
+#define GO_TID_os_processHandle 1101
+#define GO_TID_poll_FD 844
+#define GO_TID_poll_SysFile 846
+#define GO_TID_poll_fdMutex 845
+#define GO_TID_poll_pollDesc 850
+#define GO_TID_reflect_Kind 491
+#define GO_TID_reflect_SliceHeader 1051
+#define GO_TID_reflect_Value 1300
+#define GO_TID_reflect_flag 1308
+#define GO_TID_runtime_Cleanup 1102
+#define GO_TID_sdl_AudioDeviceID 1950
+#define GO_TID_sdl_ButtonState 2033
+#define GO_TID_sdl_CommonEvent 584
+#define GO_TID_sdl_ControllerAxisEvent 586
+#define GO_TID_sdl_ControllerButtonEvent 587
+#define GO_TID_sdl_EventType 1956
+#define GO_TID_sdl_GameControllerAxis 2031
+#define GO_TID_sdl_GameControllerButton 2032
+#define GO_TID_sdl_JoyDeviceAddedEvent 592
+#define GO_TID_sdl_JoyDeviceRemovedEvent 593
+#define GO_TID_sdl_JoystickID 2030
+#define GO_TID_sdl_KeyboardEvent 589
+#define GO_TID_sdl_Keycode 1707
+#define GO_TID_sdl_Keymod 2036
+#define GO_TID_sdl_Keysym 2034
+#define GO_TID_sdl_QuitEvent 588
+#define GO_TID_sdl_Scancode 2035
+#define GO_TID_sdl_TextInputEvent 591
+#define GO_TID_sdl_WindowEvent 590
+#define GO_TID_sdl_WindowEventID 2037
+#define GO_TID_sort_StringSlice 504
+#define GO_TID_strings_Builder 1350
+#define GO_TID_strings_Reader 1067
+#define GO_TID_sync_Cond 1894
+#define GO_TID_sync_Mutex 856
+#define GO_TID_sync_Once 897
+#define GO_TID_sync_RWMutex 1098
+#define GO_TID_sync_WaitGroup 1960
+#define GO_TID_sync_copyChecker 1896
+#define GO_TID_sync_noCopy 857
+#define GO_TID_sync_notifyList 1895
+#define GO_TID_syscall_Credential 1090
+#define GO_TID_syscall_Iovec 849
+#define GO_TID_syscall_Rusage 1106
+#define GO_TID_syscall_Signal 1091
+#define GO_TID_syscall_SysProcAttr 1088
+#define GO_TID_syscall_SysProcIDMap 1093
+#define GO_TID_syscall_Timeval 1107
 #define GO_TID_syscall_WaitStatus 260
-#define GO_TID_tabwriter_Writer 648
-#define GO_TID_tabwriter_cell 650
-#define GO_TID_time_Duration 578
-#define GO_TID_time_Location 1284
-#define GO_TID_time_Time 1282
-#define GO_TID_time_zone 1286
-#define GO_TID_time_zoneTrans 1288
-#define GO_TID_xml_Attr 1352
-#define GO_TID_xml_Name 1350
-#define GO_TID_xml_StartElement 469
-#define GO_TID_zip_Decompressor 1292
-#define GO_TID_zip_File 1280
-#define GO_TID_zip_FileHeader 1281
-#define GO_TID_zip_ReadCloser 1276
-#define GO_TID_zip_Reader 1277
-#define GO_TID_zip_fileListEntry 1294
+#define GO_TID_tabwriter_Writer 651
+#define GO_TID_tabwriter_cell 653
+#define GO_TID_time_Duration 581
+#define GO_TID_time_Location 1287
+#define GO_TID_time_Time 1285
+#define GO_TID_time_zone 1289
+#define GO_TID_time_zoneTrans 1291
+#define GO_TID_xml_Attr 1357
+#define GO_TID_xml_Name 1355
+#define GO_TID_xml_StartElement 473
+#define GO_TID_zip_Decompressor 1295
+#define GO_TID_zip_File 1283
+#define GO_TID_zip_FileHeader 1284
+#define GO_TID_zip_ReadCloser 1279
+#define GO_TID_zip_Reader 1280
+#define GO_TID_zip_fileListEntry 1297
 static inline bool ik_impl_0(int t) { // interface{Seek(offset int64, whence int) (int64, error)}
-    switch (t) { case 150: case 180: case 189: case 207: case 251: case 304: case 305: case 788: return true; default: return false; }
+    switch (t) { case 150: case 180: case 189: case 207: case 251: case 304: case 305: case 791: return true; default: return false; }
 }
 static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
-    switch (t) { case 137: case 155: case 473: return true; default: return false; }
+    switch (t) { case 137: case 155: case 466: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 503: case 505: case 516: case 699: case 1275: case 1672: case 2035: return true; default: return false; }
+    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 506: case 508: case 519: case 702: case 1278: case 1676: case 2039: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
-    switch (t) { case 180: case 189: case 207: case 251: case 304: case 305: case 788: return true; default: return false; }
+    switch (t) { case 180: case 189: case 207: case 251: case 304: case 305: case 791: return true; default: return false; }
 }
 static inline bool ik_impl_4(int t) { // interface{HDRPixel() (p1 float64, p2 float64, p3 float64, pa float64); HDRRGBA() (r float64, g float64, b float64, a float64); HDRXYZA() (x float64, y float64, z float64, a float64); color.Color}
     switch (t) { case 205: case 206: return true; default: return false; }
@@ -8185,13 +8238,13 @@ static inline bool ik_impl_5(int t) { // interface{io.Writer; io.Seeker}
     switch (t) { case 180: return true; default: return false; }
 }
 static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.LValueType; assertFloat64() (float64, bool); assertFunction() (*lua.LFunction, bool); assertString() (string, bool)}
-    switch (t) { case 244: case 245: case 246: case 247: case 248: case 249: case 252: case 253: case 261: case 279: case 527: return true; default: return false; }
+    switch (t) { case 244: case 245: case 246: case 247: case 248: case 249: case 252: case 253: case 261: case 279: case 530: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 933: case 2036: return true; default: return false; }
+    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 936: case 2040: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
-    switch (t) { case 2036: return true; default: return false; }
+    switch (t) { case 2040: return true; default: return false; }
 }
 parse_yyParser parse_yyNewParser(void);
 GoString parse_yyTokname(int c);
@@ -11383,6 +11436,24 @@ f64 fn_cvfAsin(f64 x);
 f64 fn_cvfAcos(f64 x);
 f64 fn_cvfAtan2(f64 y, f64 x);
 GoString fn_itoa(int i);
+GoString fn_cvfNearbyNewID(void);
+bool fn_cvfNearbyIfaceOK(GoNetInterface ifc);
+Slice_cvfNearbyNet fn_cvfNearbyNets(void);
+bool fn_cvfNearbyIsSelf(Slice_u8 ip);
+Slice_Slice_u8 fn_cvfNearbyTargets(cvfNearbyNet n);
+void cvfNearbyState_hostBegin(cvfNearbyState* s, int port, int udpPort);
+Ret_GoString__GoString fn_cvfNearbyIdentity(void);
+void cvfNearbyState_hostEnd(cvfNearbyState* s);
+GoString cvfNearbyState_hostStatus(cvfNearbyState* s);
+GoString fn_cvfNearbyNoWifiHint(void);
+void cvfNearbyState_scanBegin(cvfNearbyState* s);
+void cvfNearbyState_scanEnd(cvfNearbyState* s);
+Ret_Slice_cvfNearbyHost__GoString cvfNearbyState_list(cvfNearbyState* s);
+bool fn_cvfTouchUI(void);
+GoString fn_cvfStopHostingHint(void);
+GoString fn_cvfDefaultName(void);
+bool fn_cvfNameAskBegin(void);
+void fn_cvfNearbyScriptInit(lua_LState* l);
 void nullTexture_SetData(nullTexture* t, Slice_u8 data);
 void nullTexture_SetSubData(nullTexture* t, Slice_u8 data);
 void nullTexture_SetSubData2(nullTexture* t, Slice_u8 data, i32 x, i32 y, i32 width, i32 height, i32 stride);
@@ -11448,13 +11519,19 @@ void fn_cvfOnlineScriptInit(lua_LState* l);
 cvfRulesT* fn_cvfRulesLoad(void);
 bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
 bool fn_cvfClampInvincibility(Char* c, i32* time_);
-i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v);
-void fn_cvfDebugf(GoString format, Slice_GoIface args);
 void fn_cvfApplyDisplay(Config* cfg);
 bool System_cvfWideView(System* s);
 f32 System_cvfClampWideView(System* s, f32 x, f32 scl);
 void fn_cvfSpecialTick(Char* c);
 bool fn_cvfBlockSpecial(Char* c, i32 no);
+i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v);
+void fn_cvfDebugf(GoString format, Slice_GoIface args);
+void fn_cvfP2PAdvertise(GoString id, GoString name, GoString ver, int tcpPort, int udpPort);
+void fn_cvfP2PAdvertiseStop(void);
+void fn_cvfP2PBrowse(bool on);
+bool fn_cvfP2PJoin(GoString id, int localTcp, int localUdp);
+void fn_cvfP2PClose(void);
+bool fn_cvfNativeAskName(GoString suggestion);
 bool fn_cvfLazySoundsEnabled(void);
 Ret_SoundPtr__GoIface fn_newLazySound(GoIface f, GoString filename, i64 offset, u32 size);
 bool Sound_ensureLoaded(Sound* s);

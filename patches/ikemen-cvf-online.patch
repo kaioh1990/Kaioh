@@ -1,8 +1,16 @@
 diff --git a/external/script/main.lua b/external/script/main.lua
-index b7d76c8..8ddbc04 100644
+index b7d76c83..6d86e496 100644
 --- a/external/script/main.lua
 +++ b/external/script/main.lua
-@@ -2308,14 +2308,10 @@ main.t_itemname = {
+@@ -70,6 +70,7 @@ end
+ 
+ --returns value depending on button pressed (a = 1; a + start = 7 etc.)
+ function main.f_btnPalNo(p)
++	if main.touchConfirm then return 1 end
+ 	local s = 0
+ 	if commandGetState(p, '/s') then s = 6 end
+ 	for i, k in ipairs({'a', 'b', 'c', 'x', 'y', 'z'}) do
+@@ -2308,14 +2309,10 @@ main.t_itemname = {
  		main.pauseMenu = false
  		main.selectMenu[2] = true
  		main.stageMenu = true
@@ -19,7 +27,7 @@ index b7d76c8..8ddbc04 100644
  		textImgSetText(motif.select_info.title.TextSpriteData, motif.select_info.title.text.netplayversus)
  		setGameMode('netplayversus')
  		setHomeTeam(1)
-@@ -2356,12 +2352,22 @@ main.t_itemname = {
+@@ -2356,12 +2353,48 @@ main.t_itemname = {
  		end
  		return nil
  	end,
@@ -28,6 +36,32 @@ index b7d76c8..8ddbc04 100644
 +		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
 +		hook.run("main.t_itemname", t, item)
 +		main.f_lobby()
++		return nil
++	end,
++	--CvF NEARBY (same Wi-Fi or a phone hotspot, no Internet needed)
++	['nearbyhost'] = function(t, item)
++		main.f_waitForPreloads(true)
++		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++		hook.run("main.t_itemname", t, item)
++		main.f_cvfEnsureName()
++		main.cvfNearby = true
++		local ok = main.f_connect("", gameOption('Netplay.ListenPort'))
++		main.cvfNearby = false
++		if ok then
++			if synchronize() then
++				enterSyncedNetplayMenu()
++			end
++			replayStop()
++			exitNetPlay()
++			exitReplay()
++			showSessionWarning()
++		end
++		return nil
++	end,
++	['nearbyjoin'] = function(t, item)
++		sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++		hook.run("main.t_itemname", t, item)
++		main.f_nearbyJoin()
 +		return nil
 +	end,
  	--SERVER HOST
@@ -42,7 +76,7 @@ index b7d76c8..8ddbc04 100644
  		if main.f_connect("", gameOption('Netplay.ListenPort')) then
  			if synchronize() then
  				enterSyncedNetplayMenu()
-@@ -2872,7 +2878,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+@@ -2872,7 +2905,7 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
  							motif.infobox.text.TextSpriteData
  						)
  					end
@@ -51,7 +85,7 @@ index b7d76c8..8ddbc04 100644
  						break
  					end
  				elseif bool_f1 and (getKey(motif.infobox.keycode) or gameOption('Config.FirstRun')) then
-@@ -2907,7 +2913,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
+@@ -2907,7 +2940,9 @@ function main.f_createMenu(tbl, bool_bgreset, bool_main, bool_f1, bool_del)
  						sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
  						break
  					elseif f == 'exit' then
@@ -62,7 +96,7 @@ index b7d76c8..8ddbc04 100644
  					elseif main.t_itemname[f] == nil then
  						if t_storyModeList[f] then
  							f = 'storyarc'
-@@ -3252,11 +3260,93 @@ function main.f_replay()
+@@ -3252,11 +3287,136 @@ function main.f_replay()
  	end
  end
  
@@ -119,9 +153,47 @@ index b7d76c8..8ddbc04 100644
 +	end
 +end
 +
++-- CvF Online: controls line for the lobby and nearby lists
++function main.f_cvfListHelp()
++	if cvfTouchUI() then
++		return 'Swipe: choose   Tap: join   Double-tap: back'
++	end
++	return 'Up/Down: choose   Attack: join   Esc: back'
++end
++
 +-- CvF Online: ask for a lobby display name once
 +function main.f_cvfEnsureName()
 +	if cvfGetPlayerName() ~= '' then
++		return true
++	end
++	-- Phones/tablets have no keyboard here: use the device's own name box (iPhone/iPad),
++	-- and never block on it; an untyped name becomes "Player 1234".
++	if cvfIsMobile() then
++		local typed = ''
++		if cvfAskNameBegin() then
++			local ts = motif.title_info.connecting.TextSpriteData
++			while true do
++				local r = cvfAskNamePoll()
++				if r ~= nil then
++					typed = r
++					break
++				end
++				clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++				bgDraw(motif[main.background].BGDef, 0)
++				rectDraw(motif.title_info.connecting.overlay.RectData)
++				textImgReset(ts)
++				textImgSetPos(ts, nil, 60)
++				textImgSetText(ts, 'Choose the name other players will see.')
++				textImgDraw(ts)
++				bgDraw(motif[main.background].BGDef, 1)
++				refresh()
++			end
++			resetKey()
++		end
++		if typed == '' then
++			typed = cvfDefaultName()
++		end
++		cvfSetPlayerName(typed)
 +		return true
 +	end
 +	local name = main.f_drawInput(
@@ -140,28 +212,33 @@ index b7d76c8..8ddbc04 100644
 +
  function main.f_connect(server, str)
 +	local cvfHosting = (server == '')
-+	if cvfHosting then
++	local cvfNear = main.cvfNearby
++	if cvfHosting and cvfNear then
++		cvfNearbyHostBegin(gameOption('Netplay.ListenPort'))
++	elseif cvfHosting then
 +		cvfOnlineHostBegin(gameOption('Netplay.ListenPort'))
-+	else
++	elseif not cvfNear then
 +		cvfOnlineJoinBegin()
 +	end
  	enterNetPlay(server)
  	while not connected() do
  		if esc() or getInput(-1, motif.title_info.menu.cancel.key) then
  			sndPlay(motif.Snd, motif.title_info.cancel.snd[1], motif.title_info.cancel.snd[2])
-+			if cvfHosting then
++			if cvfHosting and cvfNear then
++				cvfNearbyHostEnd()
++			elseif cvfHosting then
 +				cvfOnlineHostEnd()
 +				cvfOnlineClosePorts()
 +			end
  			exitNetPlay()
  			return false
  		end
-@@ -3272,16 +3362,107 @@ function main.f_connect(server, str)
+@@ -3272,16 +3432,200 @@ function main.f_connect(server, str)
  			txt = string.format(motif.title_info.connecting.text.join, server, str)
  		end
  		textImgReset(motif.title_info.connecting.TextSpriteData)
 +		if cvfHosting then
-+			txt = cvfOnlineHostStatus()
++			txt = cvfNear and cvfNearbyHostStatus() or cvfOnlineHostStatus()
 +			textImgSetPos(motif.title_info.connecting.TextSpriteData, nil, 40)
 +		end
  		textImgSetText(motif.title_info.connecting.TextSpriteData, txt)
@@ -170,13 +247,106 @@ index b7d76c8..8ddbc04 100644
  		bgDraw(motif[main.background].BGDef, 1)
  		refresh()
  	end
-+	if cvfHosting then
++	if cvfHosting and cvfNear then
++		cvfNearbyHostEnd()
++	elseif cvfHosting then
 +		cvfOnlineHostEnd()
 +	end
  	replayRecord('save/replays/' .. os.date("%Y-%m-%d_%Hh%Mm%Ss") .. '.replay')
  	return true
  end
  
++-- CvF Nearby: list players hosting on the same Wi-Fi or hotspot and join one
++function main.f_nearbyJoin()
++	local sel = 1
++	local ts = motif.title_info.connecting.TextSpriteData
++	cvfNearbyScanBegin()
++	resetKey()
++	while true do
++		local hosts, status = cvfNearbyHosts()
++		if sel > #hosts then sel = math.max(1, #hosts) end
++		if esc() or getInput(-1, motif[main.group].menu.cancel.key) then
++			sndPlay(motif.Snd, motif[main.group].cancel.snd[1], motif[main.group].cancel.snd[2])
++			cvfNearbyScanEnd()
++			return
++		elseif #hosts > 0 and getInput(-1, motif[main.group].menu.next.key) then
++			sel = sel % #hosts + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #hosts > 0 and getInput(-1, motif[main.group].menu.previous.key) then
++			sel = (sel - 2) % #hosts + 1
++			sndPlay(motif.Snd, motif[main.group].cursor.move.snd[1], motif[main.group].cursor.move.snd[2])
++		elseif #hosts > 0 and getInput(-1, motif[main.group].menu.done.key) then
++			local h = hosts[sel]
++			sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
++			cvfNearbyScanEnd()
++			main.f_waitForPreloads(true)
++			local oldPort = cvfGetNetplayPort()
++			local oldRollback = cvfGetRollbackPort()
++			local ip, port = h.ip, h.port
++			if h.direct then
++				-- iPhone/iPad direct link: the app relays the match through this device
++				local tcp, udp = cvfNearbyDirectJoin(h.id)
++				if tcp ~= nil then
++					ip, port = '127.0.0.1', tcp
++					cvfSetRollbackPort(udp)
++				else
++					ip = nil
++				end
++			end
++			local ok = false
++			if ip ~= nil then
++				cvfSetNetplayPort(port)
++				main.cvfNearby = true
++				ok = main.f_connect(ip, h.name)
++				main.cvfNearby = false
++			end
++			if ok then
++				if synchronize() then
++					enterSyncedNetplayMenu()
++				end
++				replayStop()
++				exitNetPlay()
++				exitReplay()
++				showSessionWarning()
++			end
++			cvfSetNetplayPort(oldPort)
++			cvfSetRollbackPort(oldRollback)
++			if h.direct then
++				cvfNearbyDirectClose()
++			end
++			cvfNearbyScanBegin()
++			resetKey()
++		end
++		-- draw
++		clearColor(motif[main.background].bgclearcolor[1], motif[main.background].bgclearcolor[2], motif[main.background].bgclearcolor[3])
++		bgDraw(motif[main.background].BGDef, 0)
++		rectDraw(motif.title_info.connecting.overlay.RectData)
++		local lines = {'NEARBY  -  players close to you', ''}
++		if #hosts == 0 then
++			table.insert(lines, status ~= '' and status or 'Searching...')
++			table.insert(lines, '')
++			table.insert(lines, 'The other player picks Online > Host Nearby.')
++			table.insert(lines, '')
++			table.insert(lines, cvfNearbyHint())
++		else
++			local first = math.max(1, math.min(sel - 4, #hosts - 8))
++			for i = first, math.min(#hosts, first + 8) do
++				local h = hosts[i]
++				local tag = h.compatible and '' or '  (different version)'
++				table.insert(lines, (i == sel and '> ' or '   ') .. h.name .. tag)
++			end
++		end
++		table.insert(lines, '')
++		table.insert(lines, main.f_cvfListHelp())
++		textImgReset(ts)
++		textImgSetPos(ts, nil, 40)
++		textImgSetText(ts, table.concat(lines, '\n'))
++		textImgDraw(ts)
++		bgDraw(motif[main.background].BGDef, 1)
++		refresh()
++	end
++end
++
 +-- CvF Online: lobby screen listing players who are hosting
 +function main.f_lobby()
 +	if not cvfLobbyEnabled() then
@@ -251,7 +421,7 @@ index b7d76c8..8ddbc04 100644
 +			end
 +		end
 +		table.insert(lines, '')
-+		table.insert(lines, 'Up/Down: choose   Attack: join   Esc: back')
++		table.insert(lines, main.f_cvfListHelp())
 +		textImgReset(ts)
 +		textImgSetPos(ts, nil, 40)
 +		textImgSetText(ts, table.concat(lines, '\n'))
@@ -264,8 +434,139 @@ index b7d76c8..8ddbc04 100644
  --asserts content unlock conditions
  function main.f_unlock(permanent)
  	local refreshRandom = false
+diff --git a/external/script/options.lua b/external/script/options.lua
+index eda5450c..7a4305d6 100644
+--- a/external/script/options.lua
++++ b/external/script/options.lua
+@@ -863,6 +863,20 @@ options.t_itemname = {
+ 		end
+ 		return true
+ 	end,
++	--Frame Rate (fights outside online play; game speed stays the same)
++	['framerate'] = function(t, item, cursorPosY, moveTxt)
++		if getInput(-1, motif.option_info.menu.add.key, motif.option_info.menu.subtract.key) then
++			sndPlay(motif.Snd, motif.option_info.cursor.move.snd[1], motif.option_info.cursor.move.snd[2])
++			if gameOption('Video.Framerate') == 120 then
++				modifyGameOption('Video.Framerate', 60)
++			else
++				modifyGameOption('Video.Framerate', 120)
++			end
++			t.items[item].vardisplay = options.t_vardisplay['framerate']()
++			options.modified = true
++		end
++		return true
++	end,
+ 	--MSAA
+ 	['msaa'] = function(t, item, cursorPosY, moveTxt)
+ 		if getInput(-1, motif.option_info.menu.add.key) and gameOption('Video.MSAA') < 32 then
+@@ -1623,6 +1637,9 @@ options.t_vardisplay = {
+ 	['vsync'] = function()
+ 		return options.f_definedDisplay(gameOption('Video.VSync'), {[1] = motif.option_info.menu.valuename.enabled}, motif.option_info.menu.valuename.disabled)
+ 	end,
++	['framerate'] = function()
++		return gameOption('Video.Framerate') .. ' FPS'
++	end,
+ 	['windowscalemode'] = function()
+ 		return options.f_boolDisplay(gameOption('Video.WindowScaleMode'), motif.option_info.menu.valuename.bilinear, motif.option_info.menu.valuename.nearest)
+ 	end,
+@@ -1880,6 +1897,16 @@ end
+ --;===========================================================
+ --; KEY SETTINGS
+ --;===========================================================
++-- Readable names for controller inputs; the saved values are unchanged
++local t_keyLabels = {
++	A = 'Pad A', B = 'Pad B', X = 'Pad X', Y = 'Pad Y',
++	LB = 'L Bumper', RB = 'R Bumper', LT = 'L Trigger', RT = 'R Trigger',
++	LS = 'L Stick In', RS = 'R Stick In', START = 'Start', BACK = 'Select',
++	DP_U = 'D-Pad Up', DP_D = 'D-Pad Dn', DP_L = 'D-Pad Lt', DP_R = 'D-Pad Rt',
++	['LS_X-'] = 'LStick Lt', ['LS_X+'] = 'LStick Rt', ['LS_Y-'] = 'LStick Up', ['LS_Y+'] = 'LStick Dn',
++	['RS_X-'] = 'RStick Lt', ['RS_X+'] = 'RStick Rt', ['RS_Y-'] = 'RStick Up', ['RS_Y+'] = 'RStick Dn',
++}
++
+ local t_keyCfg = {}
+ table.insert(t_keyCfg, {itemname = 'spacer', displayname = '-', paramname = 'spacer'})
+ for _, v in ipairs(motif.option_info.keymenu.itemname_order or {}) do
+@@ -2308,7 +2335,7 @@ function options.f_keyCfg(cfgType, controller, bg, skipClear)
+ 				displayname = base.displayname,
+ 				paramname   = base.paramname,
+ 				selected    = base.selected,
+-				vardisplay  = base['vardisplay' .. pn],
++				vardisplay  = t_keyLabels[base['vardisplay' .. pn]] or base['vardisplay' .. pn],
+ 				infodisplay = base.infodisplay,
+ 			}
+ 			-- contextual labels
+diff --git a/external/script/start.lua b/external/script/start.lua
+index e35377a3..8cd1e043 100644
+--- a/external/script/start.lua
++++ b/external/script/start.lua
+@@ -1502,6 +1502,24 @@ function start.f_randomChar(pn)
+ 	return result
+ end
+ 
++--returns the selectable cell under a touch, in screenpack coordinates
++function start.f_touchCell(x, y)
++	local size = motif.select_info.cell.size
++	for row, cols in ipairs(start.t_grid) do
++		for col, c in ipairs(cols) do
++			local cx = motif.select_info.pos[1] + c.x
++			local cy = motif.select_info.pos[2] + c.y
++			if x >= cx and x < cx + size[1] and y >= cy and y < cy + size[2] then
++				if c.char ~= nil and c.skip ~= 1 and c.hidden ~= 2 then
++					return col - 1, row - 1
++				end
++				return nil
++			end
++		end
++	end
++	return nil
++end
++
+ --return true if slot is selected, update start.t_grid
+ function start.f_slotSelected(cell, side, cmd, player, x, y)
+ 	if cmd == nil then
+@@ -3118,9 +3136,11 @@ function start.f_selectScreen()
+ 					main.f_animPosDraw(motif.select_info.stage.portrait.slot.AnimData)
+ 				end
+ 				--draw stage name
+-				local stage_text = motif.select_info.stage.random.text
++				-- CvF: the stage font is a picture font. Each character is a whole stage banner and they
++				-- all draw in the same spot, so print only the stage's own character ('*' is Random).
++				local stage_text = '*'
+ 				if stageListNo ~= 0 then
+-					stage_text = main.f_formatBySpec(motif.select_info.stage.text, {i = stageListNo, s = main.t_selStages[start.f_stageMenuRef()].name})
++					stage_text = main.t_selStages[start.f_stageMenuRef()].name
+ 				end
+ 				textImgReset(stageTextData)
+ 				textImgSetText(stageTextData, stage_text)
+@@ -3692,6 +3712,26 @@ function start.f_selectMenu(side, cmd, player, member, selectState)
+ 			end
+ 			--calculate current position
+ 			start.c[player].selX, start.c[player].selY = start.f_cellMovement(start.c[player].selX, start.c[player].selY, cmd, side, start.f_getCursorData(player).cursor.move.snd)
++			--touch: the first tap on a character moves the cursor, a second tap selects
++			main.touchConfirm = false
++			if cmd ~= nil then
++				local tapX, tapY = cvfTouchTap()
++				if tapX ~= nil then
++					local cellX, cellY = start.f_touchCell(tapX, tapY)
++					do
++						if cellX == nil then
++							--tap away from the grid: the right half selects, like other menus
++							main.touchConfirm = tapX >= 160 and cvfTouchMenus()
++						elseif cellX == start.c[player].selX and cellY == start.c[player].selY then
++							main.touchConfirm = true
++						else
++							start.c[player].selX, start.c[player].selY = cellX, cellY
++							local moveSnd = start.f_getCursorData(player).cursor.move.snd
++							sndPlay(motif.Snd, moveSnd[1], moveSnd[2])
++						end
++					end
++				end
++			end
+ 			start.c[player].cell = start.c[player].selX + motif.select_info.columns * start.c[player].selY
+ 			start.c[player].selRef = start.f_selGrid(start.c[player].cell + 1).char_ref
+ 			main.f_preloadSetCharHighlight(player, start.c[player].selRef)
 diff --git a/src/bgdef.go b/src/bgdef.go
-index 840b4f8..fbda389 100644
+index 840b4f88..fbda3898 100644
 --- a/src/bgdef.go
 +++ b/src/bgdef.go
 @@ -385,7 +385,7 @@ func (s *BGDef) draw(layer int32, x, y, scl float32, transform *bgDrawTransform)
@@ -278,7 +579,7 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..17f4220 100644
+index 276abbf3..2c2dce11 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
 @@ -2032,7 +2032,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
@@ -385,8 +686,18 @@ index 276abbf..17f4220 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
+@@ -5770,6 +5773,9 @@ func (sc changeState) Run(c *Char, _ []int32) bool {
+ 		}
+ 		return true
+ 	})
++	if cvfBlockSpecial(crun, v) {
++		return false
++	}
+ 	crun.changeState(v, a, ctrl, ffx)
+ 	return stop
+ }
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..03005cf 100644
+index 19bf05a4..2e4f7870 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -3228,6 +3228,25 @@ func (p *Projectile) tick() {
@@ -439,15 +750,16 @@ index 19bf05a..03005cf 100644
  	// Set position
  	pos := [2]float32{p.interPos[0] * p.localscl, p.interPos[1] * p.localscl}
  
-@@ -3699,6 +3708,7 @@ type Char struct {
+@@ -3699,6 +3708,8 @@ type Char struct {
  	ghv                 GetHitVar
  	mhv                 MoveHitVar
  	hitby               [8]HitBy
 +	cvfMPRem            int32 // CvF online port: fractional MP gain carry-over
++	cvfSpecialCD        int32 // CvF online port: frames until another special attack can start
  	hover               [8]HitOverride
  	hoverIdx            int
  	hoverKeepState      bool
-@@ -4001,7 +4011,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
+@@ -4001,7 +4012,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
  				distZ *= 4.0
  			}
  			// Use hypotenuse between x and z
@@ -456,7 +768,7 @@ index 19bf05a..03005cf 100644
  		}
  
  		// Save result in sorting slice
-@@ -8370,6 +8380,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+@@ -8370,6 +8381,7 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -464,7 +776,15 @@ index 19bf05a..03005cf 100644
  	if _, ok := c.cnsvar[i]; ok {
  		c.cnsvar[i] += v
  	} else {
-@@ -14420,8 +14431,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+@@ -12217,6 +12229,7 @@ func (c *Char) actionPrepare() {
+ 	}
+ 
+ 	c.pauseBool = false
++	cvfSpecialTick(c)
+ 	// Removing this c.cmd check makes a basic helper init incorrectly during a pause
+ 	// TODO: Confirm why it uses c.cmd specifically
+ 	if c.cmd != nil {
+@@ -14420,8 +14433,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
  				// Check if the character is above the platform's surface
  				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
  					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
@@ -476,7 +796,7 @@ index 19bf05a..03005cf 100644
  					onPlatform := func(protrude bool) {
  						getter.platformPosY = ((p.pos[1]+p.platformHeight[0]+p.velocity[1])*p.localscl - angleSinValue*(oldDistX/angleCosValue)) / getter.localscl
 diff --git a/src/common.go b/src/common.go
-index a741eab..2b1922e 100644
+index a741eab7..2b1922e7 100644
 --- a/src/common.go
 +++ b/src/common.go
 @@ -102,11 +102,11 @@ func Deg(f float32) float32 {
@@ -513,7 +833,7 @@ index a741eab..2b1922e 100644
  
 diff --git a/src/cvf_detmath.go b/src/cvf_detmath.go
 new file mode 100644
-index 0000000..1955427
+index 00000000..19554275
 --- /dev/null
 +++ b/src/cvf_detmath.go
 @@ -0,0 +1,880 @@
@@ -1397,12 +1717,623 @@ index 0000000..1955427
 +	cvfFloatShift = 64 - 11 - 1
 +	cvfFloatBias  = 1023
 +)
+diff --git a/src/cvf_nearby.go b/src/cvf_nearby.go
+new file mode 100644
+index 00000000..6323a306
+--- /dev/null
++++ b/src/cvf_nearby.go
+@@ -0,0 +1,605 @@
++package main
++
++// Castlevania Fighter "Nearby" play: two devices on the same local network play without
++// the Internet, the lobby or typing addresses. The usual case is one device's hotspot
++// (iPhone Personal Hotspot, Android hotspot, Steam Deck / Windows hotspot) with the other
++// device joined to it, but any shared Wi-Fi works too.
++//
++// Discovery is a tiny UDP probe/reply on cvfNearbyPort:
++//   - the host answers probes with its name, netplay port and build tag;
++//   - the joiner sends a probe to every address of each local Wi-Fi/Ethernet subnet
++//     (plus the broadcast address) and lists whoever answers.
++// Probing each address directly avoids broadcast/multicast, which iOS only allows for
++// apps with a special Apple entitlement. A hotspot subnet is small (an iPhone's is 14
++// addresses), so a sweep is cheap.
++//
++// iPhones/iPads also advertise and browse over Apple's peer-to-peer Wi-Fi (cvf_p2p_ios.go),
++// so two Apple devices find each other with no network at all. When a host is reachable
++// both ways, the shared network is used.
++//
++// The match itself is ordinary Ikemen netplay (TCP handshake + rollback over UDP).
++
++import (
++	"crypto/rand"
++	"encoding/hex"
++	"encoding/json"
++	"fmt"
++	"math/big"
++	"net"
++	"runtime"
++	"sort"
++	"strings"
++	"sync"
++	"time"
++
++	lua "github.com/yuin/gopher-lua"
++)
++
++const (
++	cvfNearbyPort    = 7520
++	cvfNearbyProbe   = "CVFNEARBY?1"
++	cvfNearbyMaxScan = 1022 // addresses per interface; bigger networks scan the /24 around us
++	cvfNearbyExpire  = 7 * time.Second
++
++	// Loopback ports the app's relay uses on the joining device for a direct link.
++	cvfP2PJoinTCP = 7510
++	cvfP2PJoinUDP = 7502
++)
++
++type cvfNearbyHost struct {
++	ID      string
++	Via     string // "lan" or "p2p"
++	Name    string
++	IP      string
++	Port    int
++	Version string
++	seen    time.Time
++}
++
++type cvfNearbyReply struct {
++	T       string `json:"t"`
++	Name    string `json:"name"`
++	Port    int    `json:"port"`
++	Version string `json:"ver"`
++	ID      string `json:"id"`
++}
++
++type cvfNearbyState struct {
++	mu sync.Mutex
++
++	// hosting
++	hostConn   net.PacketConn
++	hostErr    string
++	hostPort   int
++	hostProbes int
++	hostID     string
++
++	// joining
++	scanStop  chan struct{}
++	hosts     map[string]*cvfNearbyHost
++	scanErr   string
++	lastSweep time.Time
++	extra     []string // extra probe targets (tests)
++	p2p       []cvfNearbyHost
++}
++
++func cvfNearbyNewID() string {
++	b := make([]byte, 5)
++	rand.Read(b)
++	return hex.EncodeToString(b)
++}
++
++var cvfNearby = &cvfNearbyState{}
++
++// Interfaces worth scanning: up, not loopback, not cellular/VPN/peer-to-peer links.
++func cvfNearbyIfaceOK(ifc net.Interface) bool {
++	if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
++		return false
++	}
++	n := strings.ToLower(ifc.Name)
++	for _, p := range []string{"pdp_ip", "rmnet", "ccmni", "wwan", "utun", "ipsec", "tun", "tap",
++		"ppp", "awdl", "llw", "anpi", "gif", "stf", "tailscale", "zt", "wg", "docker", "veth", "virbr"} {
++		if strings.HasPrefix(n, p) {
++			return false
++		}
++	}
++	return true
++}
++
++type cvfNearbyNet struct {
++	self  net.IP
++	ipnet *net.IPNet
++}
++
++func cvfNearbyNets() []cvfNearbyNet {
++	var out []cvfNearbyNet
++	ifaces, _ := net.Interfaces()
++	for _, ifc := range ifaces {
++		if !cvfNearbyIfaceOK(ifc) {
++			continue
++		}
++		addrs, _ := ifc.Addrs()
++		for _, a := range addrs {
++			ipn, ok := a.(*net.IPNet)
++			if !ok {
++				continue
++			}
++			ip4 := ipn.IP.To4()
++			if ip4 == nil || ip4.IsLinkLocalUnicast() || ip4.IsLoopback() {
++				continue
++			}
++			out = append(out, cvfNearbyNet{ip4, &net.IPNet{IP: ip4.Mask(ipn.Mask), Mask: ipn.Mask}})
++		}
++	}
++	return out
++}
++
++func cvfNearbyIsSelf(ip net.IP) bool {
++	for _, n := range cvfNearbyNets() {
++		if n.self.Equal(ip) {
++			return true
++		}
++	}
++	return false
++}
++
++// Every address to probe on one subnet: all hosts (or the /24 around us on big
++// networks), then the broadcast address. Our own address is skipped.
++func cvfNearbyTargets(n cvfNearbyNet) []net.IP {
++	ones, bits := n.ipnet.Mask.Size()
++	if bits != 32 || ones >= 31 {
++		return nil
++	}
++	base := n.ipnet.IP.To4()
++	size := uint32(1) << uint(32-ones)
++	if size-2 > cvfNearbyMaxScan {
++		base = n.self.Mask(net.CIDRMask(24, 32)).To4()
++		size = 256
++	}
++	start := uint32(base[0])<<24 | uint32(base[1])<<16 | uint32(base[2])<<8 | uint32(base[3])
++	out := make([]net.IP, 0, size)
++	for i := uint32(1); i < size; i++ { // i == size-1 is the broadcast address
++		v := start + i
++		ip := net.IPv4(byte(v>>24), byte(v>>16), byte(v>>8), byte(v)).To4()
++		if !ip.Equal(n.self) {
++			out = append(out, ip)
++		}
++	}
++	return out
++}
++
++// ---------------------------------------------------------------------------
++// Host side
++
++func (s *cvfNearbyState) hostBegin(port, udpPort int) {
++	s.hostEnd()
++	id := cvfNearbyNewID()
++	name, tag := cvfNearbyIdentity()
++	cvfP2PAdvertise(id, name, tag, port, udpPort)
++	conn, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", cvfNearbyPort))
++	s.mu.Lock()
++	s.hostPort, s.hostProbes, s.hostID = port, 0, id
++	if err != nil {
++		s.hostErr = "Nearby discovery unavailable (" + err.Error() + ")"
++		s.mu.Unlock()
++		return
++	}
++	s.hostErr = ""
++	s.hostConn = conn
++	s.mu.Unlock()
++
++	go func() {
++		buf := make([]byte, 256)
++		for {
++			n, from, err := conn.ReadFrom(buf)
++			if err != nil {
++				return // closed by hostEnd
++			}
++			if string(buf[:n]) != cvfNearbyProbe {
++				continue
++			}
++			name, tag := cvfNearbyIdentity()
++			s.mu.Lock()
++			p, id := s.hostPort, s.hostID
++			s.hostProbes++
++			s.mu.Unlock()
++			b, _ := json.Marshal(cvfNearbyReply{T: "cvfnearby", Name: name, Port: p, Version: tag, ID: id})
++			conn.WriteTo(b, from)
++		}
++	}()
++}
++
++func cvfNearbyIdentity() (name, tag string) {
++	cvfOnline.readConfig()
++	cvfOnline.mu.Lock()
++	name, tag = cvfOnline.playerName, cvfOnline.buildTag
++	cvfOnline.mu.Unlock()
++	if name == "" {
++		name = "Player"
++	}
++	return
++}
++
++// Stops looking for opponents. A direct link that is already connected keeps running.
++func (s *cvfNearbyState) hostEnd() {
++	cvfP2PAdvertiseStop()
++	s.mu.Lock()
++	c := s.hostConn
++	s.hostConn = nil
++	s.mu.Unlock()
++	if c != nil {
++		c.Close()
++	}
++}
++
++func (s *cvfNearbyState) hostStatus() string {
++	s.mu.Lock()
++	port, herr := s.hostPort, s.hostErr
++	s.mu.Unlock()
++	var b strings.Builder
++	b.WriteString("NEARBY  -  waiting for an opponent...\n\n")
++	var ips []string
++	for _, n := range cvfNearbyNets() {
++		ips = append(ips, n.self.String())
++	}
++	if len(ips) == 0 && cvfP2PAvailable {
++		b.WriteString("Nearby iPhones and iPads can join you directly.\n\n")
++	} else if len(ips) == 0 {
++		b.WriteString("Not connected to any network yet.\n\n")
++	} else {
++		fmt.Fprintf(&b, "Your address here: %s   Port: %d\n\n", strings.Join(ips, ", "), port)
++	}
++	if herr != "" {
++		b.WriteString(herr + "\nThe other player can still use Join Game with the address above.\n\n")
++	} else {
++		b.WriteString("The other player picks Online > Join Nearby.\n\n")
++	}
++	b.WriteString(cvfNearbyNoWifiHint())
++	b.WriteString("\n" + cvfStopHostingHint())
++	return b.String()
++}
++
++func cvfNearbyNoWifiHint() string {
++	if cvfP2PAvailable {
++		return "iPhone/iPad to iPhone/iPad works anywhere (keep Wi-Fi on).\n" +
++			"Other devices: share Wi-Fi or a hotspot. No Internet is used.\n"
++	}
++	return "No Wi-Fi around? Turn on the hotspot on one device\n" +
++		"(iPhone: Personal Hotspot, Android/Steam Deck: Hotspot)\n" +
++		"and connect the other device to it. No Internet is used.\n"
++}
++
++// ---------------------------------------------------------------------------
++// Join side
++
++func (s *cvfNearbyState) scanBegin() {
++	s.mu.Lock()
++	if s.scanStop != nil {
++		s.mu.Unlock()
++		return
++	}
++	stop := make(chan struct{})
++	s.scanStop = stop
++	if s.hosts == nil {
++		s.hosts = map[string]*cvfNearbyHost{}
++	}
++	s.scanErr = ""
++	s.mu.Unlock()
++	cvfP2PBrowse(true)
++
++	conn, err := net.ListenPacket("udp4", ":0")
++	if err != nil {
++		s.mu.Lock()
++		s.scanErr = "Cannot search (" + err.Error() + ")"
++		s.scanStop = nil
++		s.mu.Unlock()
++		return
++	}
++
++	// Replies
++	go func() {
++		buf := make([]byte, 512)
++		for {
++			n, from, err := conn.ReadFrom(buf)
++			if err != nil {
++				return
++			}
++			var r cvfNearbyReply
++			if json.Unmarshal(buf[:n], &r) != nil || r.T != "cvfnearby" || r.Port <= 0 || r.Port > 65535 {
++				continue
++			}
++			ua, ok := from.(*net.UDPAddr)
++			if !ok || ua.IP.To4() == nil {
++				continue
++			}
++			if cvfNearbyIsSelf(ua.IP) {
++				continue // our own broadcast echo
++			}
++			ip := ua.IP.To4().String()
++			s.mu.Lock()
++			if s.hosts == nil { // search screen already closed
++				s.mu.Unlock()
++				continue
++			}
++			s.hosts[ip+fmt.Sprint(":", r.Port)] = &cvfNearbyHost{
++				ID: r.ID, Via: "lan", Name: cvfCleanName(r.Name), IP: ip, Port: r.Port, Version: r.Version, seen: time.Now(),
++			}
++			s.mu.Unlock()
++		}
++	}()
++
++	// Probes: a full sweep straight away, then every 2.5 seconds.
++	go func() {
++		defer conn.Close()
++		probe := []byte(cvfNearbyProbe)
++		t := time.NewTicker(2500 * time.Millisecond)
++		defer t.Stop()
++		for {
++			nets := cvfNearbyNets()
++			sent := 0
++			for _, n := range nets {
++				for i, ip := range cvfNearbyTargets(n) {
++					select {
++					case <-stop:
++						return
++					default:
++					}
++					if _, err := conn.WriteTo(probe, &net.UDPAddr{IP: ip, Port: cvfNearbyPort}); err == nil {
++						sent++
++					}
++					if i%64 == 63 {
++						time.Sleep(2 * time.Millisecond) // don't overrun small send buffers
++					}
++				}
++			}
++			s.mu.Lock()
++			for _, h := range s.extra {
++				if a, err := net.ResolveUDPAddr("udp4", h); err == nil {
++					conn.WriteTo(probe, a)
++				}
++			}
++			s.lastSweep = time.Now()
++			switch {
++			case len(nets) == 0 && cvfP2PAvailable:
++				s.scanErr = ""
++			case len(nets) == 0:
++				s.scanErr = "Not connected to any network."
++			case sent == 0:
++				s.scanErr = "Cannot reach the local network. On iPhone/iPad allow\nLocal Network for CvF Online in Settings > Privacy & Security."
++			default:
++				s.scanErr = ""
++			}
++			s.mu.Unlock()
++			select {
++			case <-stop:
++				return
++			case <-t.C:
++			}
++		}
++	}()
++}
++
++func (s *cvfNearbyState) scanEnd() {
++	cvfP2PBrowse(false)
++	s.mu.Lock()
++	if s.scanStop != nil {
++		close(s.scanStop)
++		s.scanStop = nil
++	}
++	s.hosts = nil
++	s.p2p = nil
++	s.mu.Unlock()
++}
++
++// Direct-link hosts reported by the app (JSON list).
++func (s *cvfNearbyState) setP2P(js string) {
++	var in []struct {
++		ID   string `json:"id"`
++		Name string `json:"name"`
++		Ver  string `json:"ver"`
++		RP   int    `json:"rp"`
++	}
++	if json.Unmarshal([]byte(js), &in) != nil {
++		return
++	}
++	var out []cvfNearbyHost
++	for _, h := range in {
++		if h.ID == "" {
++			continue
++		}
++		out = append(out, cvfNearbyHost{ID: h.ID, Via: "p2p", Name: cvfCleanName(h.Name), Port: h.RP, Version: h.Ver})
++	}
++	s.mu.Lock()
++	if s.scanStop != nil {
++		s.p2p = out
++	}
++	s.mu.Unlock()
++}
++
++// Hosts heard from recently, sorted by name, and a status line.
++func (s *cvfNearbyState) list() ([]cvfNearbyHost, string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	var out []cvfNearbyHost
++	for k, h := range s.hosts {
++		if time.Since(h.seen) > cvfNearbyExpire {
++			delete(s.hosts, k)
++			continue
++		}
++		out = append(out, *h)
++	}
++	// A host reachable over the shared network is listed once, using that network.
++	for _, h := range s.p2p {
++		dup := false
++		for _, o := range out {
++			if o.ID != "" && o.ID == h.ID {
++				dup = true
++				break
++			}
++		}
++		if !dup {
++			out = append(out, h)
++		}
++	}
++	sort.Slice(out, func(i, j int) bool {
++		if out[i].Name != out[j].Name {
++			return out[i].Name < out[j].Name
++		}
++		return out[i].IP < out[j].IP
++	})
++	return out, s.scanErr
++}
++
++// ---------------------------------------------------------------------------
++// Touch devices: gesture hints and the player name
++
++// True on phones/tablets while menus are driven by touch (no controller connected).
++func cvfTouchUI() bool {
++	return (runtime.GOOS == "ios" || runtime.GOOS == "android") && cvfTouchMenus
++}
++
++func cvfStopHostingHint() string {
++	if cvfTouchUI() {
++		return "Double-tap to stop hosting."
++	}
++	return "Press Esc to stop hosting."
++}
++
++// A name for players who never typed one ("Player 4821").
++func cvfDefaultName() string {
++	n, _ := rand.Int(rand.Reader, big.NewInt(9000))
++	return fmt.Sprintf("Player %d", 1000+n.Int64())
++}
++
++var cvfNameAsk struct {
++	sync.Mutex
++	waiting bool
++	done    bool
++	result  string
++}
++
++func cvfNameAskBegin() bool {
++	cvfNameAsk.Lock()
++	cvfNameAsk.waiting, cvfNameAsk.done, cvfNameAsk.result = true, false, ""
++	cvfNameAsk.Unlock()
++	if !cvfNativeAskName(cvfDefaultName()) {
++		cvfNameAsk.Lock()
++		cvfNameAsk.waiting = false
++		cvfNameAsk.Unlock()
++		return false
++	}
++	return true
++}
++
++// Called (from the app) with what the player typed; "" if they cancelled.
++func cvfNameAskDone(name string) {
++	cvfNameAsk.Lock()
++	if cvfNameAsk.waiting {
++		cvfNameAsk.waiting, cvfNameAsk.done, cvfNameAsk.result = false, true, name
++	}
++	cvfNameAsk.Unlock()
++}
++
++// ---------------------------------------------------------------------------
++// Lua
++
++func cvfNearbyScriptInit(l *lua.LState) {
++	luaRegister(l, "cvfNearbyHostBegin", func(l *lua.LState) int {
++		cvfNearby.hostBegin(int(numArg(l, 1)), sys.cfg.Netplay.Rollback.Port)
++		return 0
++	})
++	luaRegister(l, "cvfNearbyHostEnd", func(l *lua.LState) int {
++		cvfNearby.hostEnd()
++		return 0
++	})
++	luaRegister(l, "cvfNearbyHostStatus", func(l *lua.LState) int {
++		l.Push(lua.LString(cvfNearby.hostStatus()))
++		return 1
++	})
++	luaRegister(l, "cvfNearbyScanBegin", func(l *lua.LState) int {
++		cvfNearby.scanBegin()
++		return 0
++	})
++	luaRegister(l, "cvfNearbyScanEnd", func(l *lua.LState) int {
++		cvfNearby.scanEnd()
++		return 0
++	})
++	// Returns a table of {name, ip, port, compatible} and a status string.
++	luaRegister(l, "cvfNearbyHosts", func(l *lua.LState) int {
++		hosts, status := cvfNearby.list()
++		cvfOnline.readConfig()
++		cvfOnline.mu.Lock()
++		tag := cvfOnline.buildTag
++		cvfOnline.mu.Unlock()
++		t := l.NewTable()
++		for _, h := range hosts {
++			rt := l.NewTable()
++			rt.RawSetString("name", lua.LString(h.Name))
++			rt.RawSetString("ip", lua.LString(h.IP))
++			rt.RawSetString("id", lua.LString(h.ID))
++			rt.RawSetString("direct", lua.LBool(h.Via == "p2p"))
++			rt.RawSetString("port", lua.LNumber(h.Port))
++			rt.RawSetString("compatible", lua.LBool(h.Version == tag))
++			t.Append(rt)
++		}
++		l.Push(t)
++		l.Push(lua.LString(status))
++		return 2
++	})
++	// Opens the app's relay to a direct-link host. Returns the loopback TCP port to
++	// connect to and the rollback UDP port to use, or nothing if the host is gone.
++	luaRegister(l, "cvfNearbyDirectJoin", func(l *lua.LState) int {
++		if !cvfP2PJoin(strArg(l, 1), cvfP2PJoinTCP, cvfP2PJoinUDP) {
++			return 0
++		}
++		l.Push(lua.LNumber(cvfP2PJoinTCP))
++		l.Push(lua.LNumber(cvfP2PJoinUDP))
++		return 2
++	})
++	luaRegister(l, "cvfNearbyDirectClose", func(l *lua.LState) int {
++		cvfP2PClose()
++		return 0
++	})
++	luaRegister(l, "cvfIsMobile", func(l *lua.LState) int {
++		l.Push(lua.LBool(runtime.GOOS == "ios" || runtime.GOOS == "android"))
++		return 1
++	})
++	luaRegister(l, "cvfTouchUI", func(l *lua.LState) int {
++		l.Push(lua.LBool(cvfTouchUI()))
++		return 1
++	})
++	luaRegister(l, "cvfDefaultName", func(l *lua.LState) int {
++		l.Push(lua.LString(cvfDefaultName()))
++		return 1
++	})
++	// Shows the device's own name box (iPhone/iPad). False if there is none.
++	luaRegister(l, "cvfAskNameBegin", func(l *lua.LState) int {
++		l.Push(lua.LBool(cvfNameAskBegin()))
++		return 1
++	})
++	// Nothing while the box is open, then the typed name ("" if cancelled).
++	luaRegister(l, "cvfAskNamePoll", func(l *lua.LState) int {
++		cvfNameAsk.Lock()
++		done, r := cvfNameAsk.done, cvfNameAsk.result
++		cvfNameAsk.Unlock()
++		if !done {
++			return 0
++		}
++		l.Push(lua.LString(r))
++		return 1
++	})
++	luaRegister(l, "cvfNearbyHint", func(l *lua.LState) int {
++		l.Push(lua.LString(strings.TrimRight(cvfNearbyNoWifiHint(), "\n")))
++		return 1
++	})
++	luaRegister(l, "cvfGetRollbackPort", func(l *lua.LState) int {
++		l.Push(lua.LNumber(sys.cfg.Netplay.Rollback.Port))
++		return 1
++	})
++	luaRegister(l, "cvfSetRollbackPort", func(l *lua.LState) int {
++		if p := int(numArg(l, 1)); p > 0 && p < 65536 {
++			sys.cfg.Netplay.Rollback.Port = p
++		}
++		return 0
++	})
++}
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 0000000..585f32e
+index 00000000..10b9d645
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,788 @@
+@@ -0,0 +1,939 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -1938,7 +2869,7 @@ index 0000000..585f32e
 +		fmt.Fprintf(&b, "\nListed in the lobby as \"%s\"\n", s.playerName)
 +		b.WriteString("Other players can now pick you in Online > Lobby.\n")
 +	}
-+	b.WriteString("\nPress Esc to stop hosting.")
++	b.WriteString("\n" + cvfStopHostingHint())
 +	return b.String()
 +}
 +
@@ -1994,6 +2925,24 @@ index 0000000..585f32e
 +// Lua bindings
 +
 +func cvfOnlineScriptInit(l *lua.LState) {
++	cvfNearbyScriptInit(l)
++	luaRegister(l, "cvfTouchMenus", func(l *lua.LState) int {
++		l.Push(lua.LBool(cvfTouchMenus))
++		return 1
++	})
++	luaRegister(l, "cvfTouchTap", func(l *lua.LState) int {
++		cvfTapMu.Lock()
++		cvfTap.used, cvfTap.polled = true, sys.frameCounter
++		pending, x, y := cvfTap.pending, cvfTap.x, cvfTap.y
++		cvfTap.pending = false
++		cvfTapMu.Unlock()
++		if !pending {
++			return 0
++		}
++		l.Push(lua.LNumber(x))
++		l.Push(lua.LNumber(y))
++		return 2
++	})
 +	luaRegister(l, "cvfOnlineHostBegin", func(l *lua.LState) int {
 +		cvfOnline.hostBegin(int(numArg(l, 1)), int(sys.cfg.Netplay.Rollback.Port))
 +		return 0
@@ -2085,6 +3034,10 @@ index 0000000..585f32e
 +//   InvincibilityExemptStates = 1000-1099   states that keep their invincibility
 +//   MPVar = 34                  variable holding MP
 +//   MPGainScale = 0.5           multiply every MP gain (fractions carry over)
++//   SpecialCooldown = N         frames after a special attack before another can start (0 = off)
++//   SpecialStates = 1100-2999   the states that count as special attacks
++//   FightAspect = 16:9          aspect ratio of fights, or "stage" for the stage's own
++//   WideView = 1                display only: fill wider screens with more of the stage
 +//   RulesAuthor = CvF           only characters with this author are affected
 +
 +type cvfRulesT struct {
@@ -2094,10 +3047,15 @@ index 0000000..585f32e
 +	exemptHi     int32
 +	mpVar        int32
 +	mpScaleMilli int32
++	specialCD    int32
++	specialLo    int32
++	specialHi    int32
++	fightAspect  [2]int32
++	wideView     bool
 +	author       string
 +}
 +
-+var cvfRules = cvfRulesT{exemptLo: 1000, exemptHi: 1099, mpVar: -1, mpScaleMilli: 1000}
++var cvfRules = cvfRulesT{exemptLo: 1000, exemptHi: 1099, mpVar: -1, mpScaleMilli: 1000, specialLo: 1100, specialHi: 2999}
 +
 +func cvfRulesLoad() *cvfRulesT {
 +	r := &cvfRules
@@ -2136,6 +3094,21 @@ index 0000000..585f32e
 +			if _, err := fmt.Sscan(v, &s); err == nil && s >= 0 && s <= 10 {
 +				r.mpScaleMilli = int32(s*1000 + 0.5)
 +			}
++		case "specialcooldown":
++			fmt.Sscan(v, &r.specialCD)
++		case "specialstates":
++			var lo, hi int32
++			if n, _ := fmt.Sscanf(strings.ReplaceAll(v, " ", ""), "%d-%d", &lo, &hi); n == 2 {
++				r.specialLo, r.specialHi = lo, hi
++			}
++		case "wideview":
++			r.wideView = v == "1" || strings.EqualFold(v, "true")
++		case "fightaspect":
++			if strings.EqualFold(v, "stage") {
++				r.fightAspect = [2]int32{-1, -1}
++			} else {
++				fmt.Sscanf(strings.ReplaceAll(v, " ", ""), "%d:%d", &r.fightAspect[0], &r.fightAspect[1])
++			}
 +		case "rulesauthor":
 +			r.author = strings.ToLower(v)
 +		}
@@ -2170,6 +3143,115 @@ index 0000000..585f32e
 +	return true
 +}
 +
++// Touch taps for screens that read them directly (character select). The screen polls
++// every frame, so an old poll means nothing is listening and the app sends a confirm instead.
++var cvfTap struct {
++	x, y    float32
++	pending bool
++	polled  int32
++	used    bool
++}
++
++// Android delivers taps on its UI thread while the engine runs on another one.
++var cvfTapMu sync.Mutex
++
++// False while a physical controller is connected: only direct taps on elements count.
++var cvfTouchMenus = true
++
++// x and y are 0-1 across the game view. Returns false if no screen is listening.
++func cvfStoreTap(x, y float32) bool {
++	cvfTapMu.Lock()
++	defer cvfTapMu.Unlock()
++	if !cvfTap.used || sys.frameCounter-cvfTap.polled > 5 {
++		return false
++	}
++	gameWidth := 240 * sys.getMotifAspect()
++	cvfTap.x, cvfTap.y = x*gameWidth-(gameWidth-320)/2, y*240
++	cvfTap.pending = true
++	return true
++}
++
++// Physical screen size, passed in by the iOS app.
++var cvfScreen [2]int32
++
++func cvfParseScreen(s string) {
++	fmt.Sscanf(s, "%dx%d", &cvfScreen[0], &cvfScreen[1])
++}
++
++// Applies the shared fight aspect, which affects gameplay and must match between players,
++// and fits the menus to screens wider than 16:9. Game size outside fights is display only.
++func cvfApplyDisplay(cfg *Config) {
++	if a := cvfRulesLoad().fightAspect; a[0] != 0 && a[1] != 0 {
++		cfg.Video.FightAspectWidth, cfg.Video.FightAspectHeight = a[0], a[1]
++	}
++	// Menus match the screen's shape: wider on long phones, narrower (down to 4:3) on
++	// squarer screens, so neither gets black bars.
++	if w, h := cvfScreen[0], cvfScreen[1]; h > 0 && w*9 != h*16 {
++		gw := cfg.Video.GameHeight * w / h
++		if minW := cfg.Video.GameHeight * 4 / 3; gw < minW {
++			gw = minW
++		}
++		cfg.Video.GameWidth = gw &^ 1
++	}
++}
++
++// Wide view: gameplay keeps the shared fight width (walls, camera, screen triggers), and
++// each device draws the scene at its own screen width, showing more of the stage on the
++// sides. renderFrame already draws at screen size for overlays; this only removes the
++// clip and black bars during fights. Nothing here touches game state, so rollback is
++// unaffected and players can use different screens.
++func (s *System) cvfWideView() bool {
++	return cvfRulesLoad().wideView && s.middleOfMatch() && s.stage != nil &&
++		s.cfg.Video.KeepAspect && s.getFightAspect() < s.getMotifAspect()
++}
++
++// Keeps the wider view inside the stage art. XMin/XMax are the furthest edges visible
++// at the shared fight width, which is what stages are drawn to cover. If the art is
++// narrower than the screen, the view centres on it.
++func (s *System) cvfClampWideView(x, scl float32) float32 {
++	if scl <= 0 || s.cam.BaseScale() <= 0 {
++		return x
++	}
++	half := s.gameWidth / 2 / (scl * s.cam.BaseScale())
++	lo, hi := s.cam.XMin+half, s.cam.XMax-half
++	if lo > hi {
++		return (s.cam.XMin + s.cam.XMax) / 2
++	}
++	return Clamp(x, lo, hi)
++}
++
++// Count down the wait between special attacks. It restarts on every frame spent in a
++// special attack, so it runs from the end of the move. Stored on Char, so it rolls back.
++func cvfSpecialTick(c *Char) {
++	r := cvfRulesLoad()
++	if r.specialCD <= 0 || !r.appliesTo(c) {
++		return
++	}
++	if c.ss.moveType == MT_A && c.ss.no >= r.specialLo && c.ss.no <= r.specialHi {
++		c.cvfSpecialCD = r.specialCD
++	} else if c.cvfSpecialCD > 0 && !c.hitPause() {
++		c.cvfSpecialCD--
++	}
++}
++
++// True when a ChangeState would start a new special attack during the wait.
++// Moving between states of the same move is allowed, and so is anything but an attack.
++func cvfBlockSpecial(c *Char, no int32) bool {
++	r := cvfRulesLoad()
++	if c.cvfSpecialCD <= 0 || no < r.specialLo || no > r.specialHi || !r.appliesTo(c) {
++		return false
++	}
++	if c.ss.no >= r.specialLo && c.ss.no <= r.specialHi {
++		return false
++	}
++	st, ok := sys.cgi[c.ss.sb.playerNo].states[no]
++	if !ok || st.moveType != MT_A {
++		return false
++	}
++	cvfDebugf("special blocked %s state %d, %d frames left", c.name, no, c.cvfSpecialCD)
++	return true
++}
++
 +// Scale positive MP gains; the fractional part is kept in c.cvfMPRem (part of rollback state).
 +func cvfScaleMPGain(c *Char, i, v int32) int32 {
 +	r := cvfRulesLoad()
@@ -2191,9 +3273,145 @@ index 0000000..585f32e
 +		fmt.Fprintf(os.Stderr, "[cvf] "+format+"\n", args...)
 +	}
 +}
+diff --git a/src/cvf_p2p_export_ios.go b/src/cvf_p2p_export_ios.go
+new file mode 100644
+index 00000000..a6904e3a
+--- /dev/null
++++ b/src/cvf_p2p_export_ios.go
+@@ -0,0 +1,34 @@
++//go:build ios
++
++package main
++
++// Functions the iOS app calls for the Nearby direct link (see cvf_p2p_ios.go).
++// Kept apart because a file with //export may only declare C in its preamble.
++
++/*
++#include <stdlib.h>
++*/
++import "C"
++import "unsafe"
++
++// The app hands over its relay functions (a CvfP2PFuncs struct) at startup.
++//
++//export CvfP2PRegister
++func CvfP2PRegister(funcs unsafe.Pointer) {
++	cvfP2PSetFuncs(funcs)
++}
++
++// Called by the app whenever the list of hosts it can reach directly changes.
++// json: [{"id":"...","name":"...","ver":"...","rp":7500}, ...]
++//
++//export CvfP2PPeers
++func CvfP2PPeers(json *C.char) {
++	cvfNearby.setP2P(C.GoString(json))
++}
++
++// The player's answer from the app's name box ("" if cancelled).
++//
++//export CvfNameEntered
++func CvfNameEntered(name *C.char) {
++	cvfNameAskDone(C.GoString(name))
++}
+diff --git a/src/cvf_p2p_ios.go b/src/cvf_p2p_ios.go
+new file mode 100644
+index 00000000..574af3b5
+--- /dev/null
++++ b/src/cvf_p2p_ios.go
+@@ -0,0 +1,69 @@
++//go:build ios
++
++package main
++
++// iPhone/iPad direct link for Nearby play (Apple peer-to-peer Wi-Fi, the link AirDrop uses).
++// The radio side lives in the app (CvfP2P.m, Network.framework); it relays the normal
++// netplay TCP connection and rollback UDP packets through 127.0.0.1, so the engine's
++// netcode is unchanged. The app registers its functions at startup (CvfP2PRegister in
++// cvf_p2p_export_ios.go); until then these calls do nothing.
++
++/*
++#include <stdlib.h>
++typedef struct {
++	void (*advertise)(const char *instance, const char *name, const char *ver, int tcpPort, int udpPort);
++	void (*advertiseStop)(void);
++	void (*browse)(int on);
++	int (*join)(const char *instance, int localTcp, int localUdp);
++	void (*close)(void);
++	void (*askName)(const char *suggestion);
++} CvfP2PFuncs;
++static CvfP2PFuncs cvfP2PFn;
++static void cvfP2PSet(CvfP2PFuncs *f) { cvfP2PFn = *f; }
++static int cvfP2PHave(void) { return cvfP2PFn.join != NULL; }
++static void cvfP2PAdvertiseC(const char *i, const char *n, const char *v, int t, int u) { if (cvfP2PFn.advertise) cvfP2PFn.advertise(i, n, v, t, u); }
++static void cvfP2PAdvertiseStopC(void) { if (cvfP2PFn.advertiseStop) cvfP2PFn.advertiseStop(); }
++static void cvfP2PBrowseC(int on) { if (cvfP2PFn.browse) cvfP2PFn.browse(on); }
++static int cvfP2PJoinC(const char *i, int t, int u) { return cvfP2PFn.join ? cvfP2PFn.join(i, t, u) : 0; }
++static void cvfP2PCloseC(void) { if (cvfP2PFn.close) cvfP2PFn.close(); }
++static int cvfAskNameC(const char *s) { if (!cvfP2PFn.askName) return 0; cvfP2PFn.askName(s); return 1; }
++*/
++import "C"
++import "unsafe"
++
++const cvfP2PAvailable = true
++
++func cvfP2PSetFuncs(f unsafe.Pointer) { C.cvfP2PSet((*C.CvfP2PFuncs)(f)) }
++
++func cvfP2PAdvertise(id, name, ver string, tcpPort, udpPort int) {
++	ci, cn, cv := C.CString(id), C.CString(name), C.CString(ver)
++	defer C.free(unsafe.Pointer(ci))
++	defer C.free(unsafe.Pointer(cn))
++	defer C.free(unsafe.Pointer(cv))
++	C.cvfP2PAdvertiseC(ci, cn, cv, C.int(tcpPort), C.int(udpPort))
++}
++
++func cvfP2PAdvertiseStop() { C.cvfP2PAdvertiseStopC() }
++
++func cvfP2PBrowse(on bool) {
++	v := 0
++	if on {
++		v = 1
++	}
++	C.cvfP2PBrowseC(C.int(v))
++}
++
++func cvfP2PJoin(id string, localTcp, localUdp int) bool {
++	ci := C.CString(id)
++	defer C.free(unsafe.Pointer(ci))
++	return C.cvfP2PJoinC(ci, C.int(localTcp), C.int(localUdp)) != 0
++}
++
++func cvfP2PClose() { C.cvfP2PCloseC() }
++
++// Opens the app's name box. False if the app has none.
++func cvfNativeAskName(suggestion string) bool {
++	cs := C.CString(suggestion)
++	defer C.free(unsafe.Pointer(cs))
++	return C.cvfAskNameC(cs) != 0
++}
+diff --git a/src/cvf_p2p_other.go b/src/cvf_p2p_other.go
+new file mode 100644
+index 00000000..530eeb05
+--- /dev/null
++++ b/src/cvf_p2p_other.go
+@@ -0,0 +1,15 @@
++//go:build !ios
++
++package main
++
++// The direct device-to-device link is only built for iPhone/iPad so far (cvf_p2p_ios.go).
++
++const cvfP2PAvailable = false
++
++func cvfP2PAdvertise(id, name, ver string, tcpPort, udpPort int) {}
++func cvfP2PAdvertiseStop()                                       {}
++func cvfP2PBrowse(on bool)                                       {}
++func cvfP2PJoin(id string, localTcp, localUdp int) bool          { return false }
++func cvfP2PClose()                                               {}
++
++func cvfNativeAskName(suggestion string) bool { return false }
 diff --git a/src/cvf_sound_lazy.go b/src/cvf_sound_lazy.go
 new file mode 100644
-index 0000000..c3ac2b6
+index 00000000..c3ac2b6d
 --- /dev/null
 +++ b/src/cvf_sound_lazy.go
 @@ -0,0 +1,144 @@
@@ -2342,7 +3560,7 @@ index 0000000..c3ac2b6
 +	}
 +}
 diff --git a/src/fightscreen.go b/src/fightscreen.go
-index 51867f3..5b91761 100644
+index 51867f32..5b917612 100644
 --- a/src/fightscreen.go
 +++ b/src/fightscreen.go
 @@ -2894,7 +2894,7 @@ func (cs *ComboShake) update() {
@@ -2385,7 +3603,7 @@ index 51867f3..5b91761 100644
  
  	// Step timer only after computing offset and scale
 diff --git a/src/image.go b/src/image.go
-index ee44670..b2b690b 100644
+index ee44670f..b2b690bc 100644
 --- a/src/image.go
 +++ b/src/image.go
 @@ -215,7 +215,7 @@ func (pf *PalFX) sinAdd(color *[3]int32) {
@@ -2424,8 +3642,20 @@ index ee44670..b2b690b 100644
  
  		(*color) += float32(sin * (float64(pf.sinhue) / 512.0))
  
+diff --git a/src/main.go b/src/main.go
+index 2609c76b..4efec7d0 100644
+--- a/src/main.go
++++ b/src/main.go
+@@ -198,6 +198,7 @@ func realMain() {
+ 		// For Android, let's see exactly what failed
+ 		panic(err)
+ 	}
++	cvfApplyDisplay(cfg)
+ 	// Force to Vulkan 1.3 for iOS
+ 	if runtime.GOOS == "ios" {
+ 		cfg.Video.RenderMode = "Vulkan 1.3"
 diff --git a/src/rect.go b/src/rect.go
-index d63aa49..25c8b51 100644
+index d63aa49d..25c8b512 100644
 --- a/src/rect.go
 +++ b/src/rect.go
 @@ -280,7 +280,7 @@ func (r *Rect) updateAlpha() {
@@ -2437,8 +3667,20 @@ index d63aa49..25c8b51 100644
  	src := Clamp(int32(math.Round(float64(v))), 0, 255)
  	r.alpha = packAlpha(src, 255-src)
  }
+diff --git a/src/resources/defaultMotif.ini b/src/resources/defaultMotif.ini
+index bfa04966..4e23b980 100644
+--- a/src/resources/defaultMotif.ini
++++ b/src/resources/defaultMotif.ini
+@@ -3907,6 +3907,7 @@ Welcome to I.K.E.M.E.N GO engine! (%s - %s)
+ 	menu.itemname.menuvideo.resolution.back = Back
+ 	menu.itemname.menuvideo.fullscreen = Fullscreen
+ 	menu.itemname.menuvideo.vsync = VSync
++	menu.itemname.menuvideo.framerate = Frame Rate
+ 	menu.itemname.menuvideo.aspectratio = Aspect Ratio
+ 	; Aspect ratio is assigned based on values used in itemname suffix (e.g. 4:3)
+ 	menu.itemname.menuvideo.aspectratio.defaultaspect = Default
 diff --git a/src/script.go b/src/script.go
-index 5443f25..fdd510d 100644
+index 5443f257..fdd510d8 100644
 --- a/src/script.go
 +++ b/src/script.go
 @@ -891,6 +891,7 @@ func luaKeyToString(k lua.LValue) string {
@@ -2450,7 +3692,7 @@ index 5443f25..fdd510d 100644
  		/*Add a character definition to the select screen.
  		@function addChar
 diff --git a/src/sound.go b/src/sound.go
-index 6cdd693..7eaa167 100644
+index 6cdd6939..7eaa167e 100644
 --- a/src/sound.go
 +++ b/src/sound.go
 @@ -711,6 +711,10 @@ type Sound struct {
@@ -2510,7 +3752,7 @@ index 6cdd693..7eaa167 100644
  
  func (s *Snd) play(gn [2]int32, volumescale int32, pan float32, loopstart, loopend, startposition int, keepOnMatchEnd ...bool) bool {
 diff --git a/src/stage.go b/src/stage.go
-index 9b29416..4bd85c5 100644
+index 9b294164..4bd85c57 100644
 --- a/src/stage.go
 +++ b/src/stage.go
 @@ -57,7 +57,7 @@ func (bga *bgAction) action(updateTime bool) {
@@ -2532,10 +3774,28 @@ index 9b29416..4bd85c5 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/system.go b/src/system.go
-index 2698d35..5d67d0c 100644
+index 2698d355..ae181668 100644
 --- a/src/system.go
 +++ b/src/system.go
-@@ -990,7 +990,14 @@ func (s *System) renderFrame() {
+@@ -766,7 +766,7 @@ func (s *System) motifOverlayActive() bool {
+ 
+ func (s *System) shouldComposeFullResolution() bool {
+ 	return s.canUseFullResolutionAspect() &&
+-		(!s.middleOfMatch() || s.motifOverlayActive() || s.debugDisplay)
++		(!s.middleOfMatch() || s.motifOverlayActive() || s.debugDisplay || s.cvfWideView())
+ }
+ 
+ func (s *System) fightViewport() [4]int32 {
+@@ -803,7 +803,7 @@ func intersectRect(a, b [4]int32) [4]int32 {
+ }
+ 
+ func (s *System) fightDrawClip() ([4]int32, bool) {
+-	if !s.shouldComposeFullResolution() {
++	if !s.shouldComposeFullResolution() || s.cvfWideView() {
+ 		return s.scrrect, false
+ 	}
+ 	viewport := s.fightViewport()
+@@ -990,7 +990,18 @@ func (s *System) renderFrame() {
  	}
  
  	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
@@ -2548,10 +3808,14 @@ index 2698d35..5d67d0c 100644
 +	} else {
 +		dx, dy, dscl = s.zoom.computeCamera(x, y, scl)
 +	}
++	if s.cvfWideView() {
++		// Display only: a local copy, so zoom.resultPos (read by ScreenPos) is unchanged.
++		dx = s.cvfClampWideView(dx, dscl)
++	}
  	s.draw(dx, dy, dscl)
  
  	// Lua
-@@ -2945,6 +2952,11 @@ func (s *System) action() {
+@@ -2945,6 +2956,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -2563,7 +3827,7 @@ index 2698d35..5d67d0c 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2998,9 +3010,9 @@ func (s *System) action() {
+@@ -2998,9 +3014,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -2576,7 +3840,7 @@ index 2698d35..5d67d0c 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3030,13 @@ func (s *System) action() {
+@@ -3018,6 +3034,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -2590,7 +3854,7 @@ index 2698d35..5d67d0c 100644
  	return
  }
  
-@@ -6820,13 +6839,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +6843,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -2606,7 +3870,7 @@ index 2698d35..5d67d0c 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6854,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6858,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -2619,7 +3883,7 @@ index 2698d35..5d67d0c 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6881,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6885,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -2627,7 +3891,7 @@ index 2698d35..5d67d0c 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6897,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6901,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -2635,3 +3899,97 @@ index 2698d35..5d67d0c 100644
  }
  
  // Step the zoom variables
+diff --git a/src/util_android.go b/src/util_android.go
+index 7f6b5be1..7bdffe60 100644
+--- a/src/util_android.go
++++ b/src/util_android.go
+@@ -190,6 +190,42 @@ func Java_org_libsdl_app_SDLActivity_nativeOnSDLReady(env *C.JNIEnv, clazz C.jcl
+ 	}
+ }
+ 
++// CvF Online: the same touch-menu hooks as util_ios.go, called from SDLActivity.
++
++// True while a fight is on screen, so touches are left alone.
++//
++//export Java_org_libsdl_app_SDLActivity_nativeCvfInMatch
++func Java_org_libsdl_app_SDLActivity_nativeCvfInMatch(env *C.JNIEnv, clazz C.jclass) C.jboolean {
++	if sys.middleOfMatch() && !sys.motif.me.active {
++		return C.JNI_TRUE
++	}
++	return C.JNI_FALSE
++}
++
++// Hands a tap (0-1 across the game view) to the current screen.
++// Returns false if that screen doesn't read taps.
++//
++//export Java_org_libsdl_app_SDLActivity_nativeCvfTouchTap
++func Java_org_libsdl_app_SDLActivity_nativeCvfTouchTap(env *C.JNIEnv, clazz C.jclass, x, y C.jfloat) C.jboolean {
++	if cvfStoreTap(float32(x), float32(y)) {
++		return C.JNI_TRUE
++	}
++	return C.JNI_FALSE
++}
++
++//export Java_org_libsdl_app_SDLActivity_nativeCvfSetTouchMenus
++func Java_org_libsdl_app_SDLActivity_nativeCvfSetTouchMenus(env *C.JNIEnv, clazz C.jclass, on C.jboolean) {
++	cvfTouchMenus = on != C.JNI_FALSE
++}
++
++// Physical screen size in pixels (long side first), so menus fit the screen's shape.
++// Called before nativeOnSDLReady, i.e. before the config is loaded.
++//
++//export Java_org_libsdl_app_SDLActivity_nativeCvfSetScreen
++func Java_org_libsdl_app_SDLActivity_nativeCvfSetScreen(env *C.JNIEnv, clazz C.jclass, w, h C.jint) {
++	cvfScreen[0], cvfScreen[1] = int32(w), int32(h)
++}
++
+ func Logcat(s string) {
+ 	cs := C.CString(s)
+ 	C.__android_log_write(C.ANDROID_LOG_INFO, C.CString("ikemen"), cs)
+diff --git a/src/util_ios.go b/src/util_ios.go
+index aabd7589..0233eaad 100755
+--- a/src/util_ios.go
++++ b/src/util_ios.go
+@@ -101,6 +101,31 @@ func ShowRetryDialog(message string) bool {
+ 	return false
+ }
+ 
++// True while a fight is on screen, so touches stay as game controls.
++//
++//export CvfInMatch
++func CvfInMatch() C.int {
++	if sys.middleOfMatch() && !sys.motif.me.active {
++		return 1
++	}
++	return 0
++}
++
++// Hands a tap to the current screen. Returns 0 if that screen doesn't read taps.
++//
++//export CvfTouchTap
++func CvfTouchTap(x, y C.float) C.int {
++	if cvfStoreTap(float32(x), float32(y)) {
++		return 1
++	}
++	return 0
++}
++
++//export CvfSetTouchMenus
++func CvfSetTouchMenus(on C.int) {
++	cvfTouchMenus = on != 0
++}
++
+ //export SDL_main
+ func SDL_main(argc C.int, argv **C.char) C.int {
+ 	runtime.LockOSThread()
+@@ -123,7 +148,9 @@ func SDL_main(argc C.int, argv **C.char) C.int {
+ 	for i := 0; i+1 < len(args); i++ {
+ 		if args[i] == "--assets" {
+ 			sys.baseDir = args[i+1]
+-			break
++		}
++		if args[i] == "--screen" {
++			cvfParseScreen(args[i+1])
+ 		}
+ 	}
+ 

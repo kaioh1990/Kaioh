@@ -47,6 +47,11 @@ func pkgPrefix(pk *types.Package) string {
 	if n, ok := pkgPfx[pk]; ok {
 		return n
 	}
+	// standard packages sharing a name with another one the game uses
+	switch pk.Path() {
+	case "crypto/rand": // math/rand is rand_
+		return "crand"
+	}
 	return pk.Name()
 }
 

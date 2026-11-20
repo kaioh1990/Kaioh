@@ -305,6 +305,7 @@ var extStructs = map[string]string{
 	"net.IPNet":            "GoNetIPNet",
 	"net.Interface":        "GoNetInterface",
 	"net.Dialer":           "GoNetDialer",
+	"time.Ticker":          "GoTimeTicker",
 	"http.Client":          "GoHttpClient",
 	"http.Request":         "GoHttpRequest",
 	"http.Response":        "GoHttpResponse",

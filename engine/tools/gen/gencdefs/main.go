@@ -672,6 +672,8 @@ var genExtStructs = map[string]string{
 	"reflect.StringHeader": "GoReflectStringHeader",
 	"net.UDPAddr":          "GoNetUDPAddr",
 	"net.TCPAddr":          "GoNetTCPAddr",
+	"net.IPNet":            "GoNetIPNet",
+	"time.Ticker":          "GoTimeTicker",
 	"http.Client":          "GoHttpClient",
 	"http.Request":         "GoHttpRequest",
 	"http.Response":        "GoHttpResponse",
