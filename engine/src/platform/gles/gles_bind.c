@@ -103,14 +103,14 @@ static void (APIENTRY *p_glVertexAttribPointer)(u32, i32, u32, unsigned char, i3
 static void (APIENTRY *p_glViewport)(i32, i32, i32, i32);
 static void* (APIENTRY *p_glMapBufferRange)(u32, ptrdiff_t, ptrdiff_t, u32);
 
-bool gles2_UnmapBuffer(u32 a0) { return p_glUnmapBuffer(a0) != 0; }
-i32 gles2_GetAttribLocation(u32 a0, u8* a1) { return p_glGetAttribLocation(a0, a1); }
-i32 gles2_GetUniformLocation(u32 a0, u8* a1) { return p_glGetUniformLocation(a0, a1); }
-u32 gles2_CheckFramebufferStatus(u32 a0) { return p_glCheckFramebufferStatus(a0); }
-u32 gles2_CreateProgram(void) { return p_glCreateProgram(); }
-u32 gles2_CreateShader(u32 a0) { return p_glCreateShader(a0); }
+bool gles2_UnmapBuffer(u32 a0) { unsigned char r_ = p_glUnmapBuffer(a0); CK("glUnmapBuffer"); return r_ != 0; }
+i32 gles2_GetAttribLocation(u32 a0, u8* a1) { i32 r_ = p_glGetAttribLocation(a0, a1); CK("glGetAttribLocation"); return r_; }
+i32 gles2_GetUniformLocation(u32 a0, u8* a1) { i32 r_ = p_glGetUniformLocation(a0, a1); CK("glGetUniformLocation"); return r_; }
+u32 gles2_CheckFramebufferStatus(u32 a0) { u32 r_ = p_glCheckFramebufferStatus(a0); CK("glCheckFramebufferStatus"); return r_; }
+u32 gles2_CreateProgram(void) { u32 r_ = p_glCreateProgram(); CK("glCreateProgram"); return r_; }
+u32 gles2_CreateShader(u32 a0) { u32 r_ = p_glCreateShader(a0); CK("glCreateShader"); return r_; }
 u32 gles2_GetError(void) { return p_glGetError(); }
-u8* gles2_GetString(u32 a0) { return p_glGetString(a0); }
+u8* gles2_GetString(u32 a0) { u8* r_ = p_glGetString(a0); CK("glGetString"); return r_; }
 void gles2_ActiveTexture(u32 a0) { p_glActiveTexture(a0); CK("glActiveTexture"); }
 void gles2_AttachShader(u32 a0, u32 a1) { p_glAttachShader(a0, a1); CK("glAttachShader"); }
 void gles2_BindBuffer(u32 a0, u32 a1) { p_glBindBuffer(a0, a1); CK("glBindBuffer"); }
@@ -174,7 +174,7 @@ void gles2_UniformMatrix4fv(i32 a0, i32 a1, bool a2, f32* a3) { p_glUniformMatri
 void gles2_UseProgram(u32 a0) { p_glUseProgram(a0); CK("glUseProgram"); }
 void gles2_VertexAttribPointer(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, void* a5) { p_glVertexAttribPointer(a0, a1, a2, a3, a4, a5); CK("glVertexAttribPointer"); }
 void gles2_Viewport(i32 a0, i32 a1, i32 a2, i32 a3) { p_glViewport(a0, a1, a2, a3); CK("glViewport"); }
-void* gles2_MapBufferRange(u32 a0, int a1, int a2, u32 a3) { return p_glMapBufferRange(a0, a1, a2, a3); }
+void* gles2_MapBufferRange(u32 a0, int a1, int a2, u32 a3) { void* r_ = p_glMapBufferRange(a0, a1, a2, a3); CK("glMapBufferRange"); return r_; }
 static void (APIENTRY *p_glFramebufferTexture2D_es)(u32, u32, u32, u32, i32);
 static void (APIENTRY *p_glVertexAttribPointer_es)(u32, i32, u32, unsigned char, i32, void *);
 
