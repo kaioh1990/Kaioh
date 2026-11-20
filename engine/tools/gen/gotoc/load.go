@@ -87,6 +87,7 @@ func (im *srcImporter) ImportFrom(path, dir string, mode types.ImportMode) (*typ
 			af, err := parser.ParseFile(im.p.fset, filepath.Join(bp.Dir, f), nil, 0)
 			if err == nil {
 				files = append(files, af)
+				fileKeys[filepath.Join(bp.Dir, f)] = path + "/" + f
 			}
 		}
 		conf := &types.Config{FakeImportC: true, Importer: im, Error: im.conf.Error}
@@ -118,7 +119,28 @@ func (im *srcImporter) ImportFrom(path, dir string, mode types.ImportMode) (*typ
 	return pk, nil
 }
 
+// fileKeys: source file name -> "<package path>/<base name>". Output order
+// and local type names use it instead of absolute paths and FileSet offsets,
+// so the translation does not depend on where the Ikemen tree, the module
+// cache or GOROOT live, nor on the Go version's standard library sources.
+var fileKeys = map[string]string{}
+
+// progFset: the FileSet of the program being translated (set by load).
+var progFset *token.FileSet
+
+func typePos(pos token.Pos) token.Position { return progFset.Position(pos) }
+
+func fileKey(name string) string {
+	if k, ok := fileKeys[name]; ok {
+		return k
+	}
+	return name
+}
+
 func (p *Prog) addFuncs(f *ast.File, pk *types.Package) {
+	if name := p.fset.Position(f.Pos()).Filename; name != "" {
+		fileKeys[name] = pk.Path() + "/" + filepath.Base(name)
+	}
 	for _, d := range f.Decls {
 		fd, ok := d.(*ast.FuncDecl)
 		if !ok {
@@ -149,7 +171,8 @@ func load(dir string) *Prog {
 	}
 	ctx.CgoEnabled = true // keep cgo files of the main package (FakeImportC)
 	bp, _ := ctx.ImportDir(dir, 0)
-	p := &Prog{fset: token.NewFileSet(), funcs: map[string]*ast.FuncDecl{}, own: map[*types.Package]bool{}, initFuncs: map[*types.Package][]string{}}
+	progFset = token.NewFileSet()
+	p := &Prog{fset: progFset, funcs: map[string]*ast.FuncDecl{}, own: map[*types.Package]bool{}, initFuncs: map[*types.Package][]string{}}
 	for _, f := range append(bp.GoFiles, bp.CgoFiles...) {
 		af, err := parser.ParseFile(p.fset, filepath.Join(dir, f), nil, parser.ParseComments)
 		if err == nil {

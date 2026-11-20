@@ -31,7 +31,10 @@ func isPkgNamed(t types.Type) (string, bool) {
 		}
 		if n.Obj().Parent() != nil && n.Obj().Parent() != pk.Scope() {
 			// function-local type: unique name, body emitted by typePreamble
-			pos := fmt.Sprint(n.Obj().Pos())
+			// named after package-relative file and line:column (not the
+			// FileSet offset, which depends on everything parsed before)
+			ps := typePos(n.Obj().Pos())
+			pos := fmt.Sprintf("%s:%d:%d", fileKey(ps.Filename), ps.Line, ps.Column)
 			h := uint32(2166136261)
 			for i := 0; i < len(pos); i++ {
 				h = (h ^ uint32(pos[i])) * 16777619

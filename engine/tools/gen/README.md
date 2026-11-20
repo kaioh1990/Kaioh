@@ -1,5 +1,9 @@
 # Generators
 
+Setup and the full regeneration procedure: docs/DEVSETUP.md
+(`setup_ikemen.sh` builds the Ikemen GO tree, `gotoc/regen.sh` regenerates
+all generated C; `unsupported_allowed.txt` lists accepted library placeholders).
+
 - `gen_opcodes.py BYTECODE_GO`: opcode numbers (src/core/opcodes.h).
 - `gencdefs/`: C declarations of Ikemen's data model from Go type
   information (src/core/gen_types.h, gen_consts.h). Run from the Ikemen

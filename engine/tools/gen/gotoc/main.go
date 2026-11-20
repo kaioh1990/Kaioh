@@ -78,8 +78,8 @@ func main() {
 	}
 	sort.Slice(keys, func(i, j int) bool { // reproducible output: by file, then position
 		pi, pj := p.fset.Position(p.funcs[keys[i]].Pos()), p.fset.Position(p.funcs[keys[j]].Pos())
-		if pi.Filename != pj.Filename {
-			return pi.Filename < pj.Filename
+		if fi, fj := fileKey(pi.Filename), fileKey(pj.Filename); fi != fj {
+			return fi < fj
 		}
 		return pi.Offset < pj.Offset
 	})

@@ -1,0 +1,36 @@
+# Library functions that may stay placeholders in src/ik/ik_unsupported.c
+# (zero results / "not supported" errors). gen_unsupported.py fails when the
+# translation needs a placeholder that is not listed here: implement it in a
+# runtime file, or add it here deliberately (regen.sh ALLOW_NEW_PLACEHOLDERS=1
+# rewrites this list).
+abi_Kind_String  # func (abi.Kind).String() string
+abi_Type_Len  # func (*abi.Type).Len() int
+bufio_Reader_Buffered  # func (*bufio.Reader).Buffered() int
+bytes_Reader_ReadByte  # func (*bytes.Reader).ReadByte() (byte, error)
+color_ModelFunc  # func color.ModelFunc(f func(color.Color) color.Color) color.Model
+exec_Cmd_Start  # func (*exec.Cmd).Start() error
+exec_Cmd_StdinPipe  # func (*exec.Cmd).StdinPipe() (io.WriteCloser, error)
+exec_Cmd_StdoutPipe  # func (*exec.Cmd).StdoutPipe() (io.ReadCloser, error)
+exec_Cmd_String  # func (*exec.Cmd).String() string
+exec_Cmd_Wait  # func (*exec.Cmd).Wait() error
+exec_Command  # func exec.Command(name string, arg ...string) *exec.Cmd
+exec_ExitError_Error  # func (*exec.ExitError).Error() string
+exec_ExitError_Sys  # promoted func (*os.ProcessState).Sys() any
+fmt_Fscanf  # func fmt.Fscanf(r io.Reader, format string, a ...any) (n int, err error)
+fs_ReadFile  # func fs.ReadFile(fsys fs.FS, name string) ([]byte, error)
+gob_Register  # func gob.Register(value any)
+io_TeeReader  # func io.TeeReader(r io.Reader, w io.Writer) io.Reader
+ioutil_TempFile  # func ioutil.TempFile(dir string, pattern string) (f *os.File, err error)
+os_ProcessState_String  # func (*os.ProcessState).String() string
+os_ProcessState_Success  # func (*os.ProcessState).Success() bool
+os_Process_Wait  # func (*os.Process).Wait() (*os.ProcessState, error)
+os_StartProcess  # func os.StartProcess(name string, argv []string, attr *os.ProcAttr) (*os.Process, error)
+runtime_LockOSThread  # func runtime.LockOSThread()
+runtime_Stack  # func runtime.Stack(buf []byte, all bool) int
+sdl_InitSubSystem  # func sdl.InitSubSystem(flags uint32) error
+syscall_Signal_String  # func (syscall.Signal).String() string
+syscall_WaitStatus_ExitStatus  # func (syscall.WaitStatus).ExitStatus() int
+tabwriter_NewWriter  # func tabwriter.NewWriter(output io.Writer, minwidth int, tabwidth int, padding int, padchar byte, flags uint) *tabwriter.Writer
+tabwriter_Writer_Flush  # func (*tabwriter.Writer).Flush() error
+tabwriter_Writer_Write  # func (*tabwriter.Writer).Write(buf []byte) (n int, err error)
+user_Current  # func user.Current() (*user.User, error)

@@ -976,9 +976,9 @@ typedef struct effects_equalizer effects_equalizer;
 typedef struct effects_mono effects_mono;
 typedef struct effects_section effects_section;
 typedef struct effects_swap effects_swap;
-typedef struct entry_L1de7c7 entry_L1de7c7;
-typedef struct entry_L380e40 entry_L380e40;
-typedef struct entry_Lfb5793 entry_Lfb5793;
+typedef struct entry_L001e46 entry_L001e46;
+typedef struct entry_L53b361 entry_L53b361;
+typedef struct entry_L79108a entry_L79108a;
 typedef struct errors_x_fundamental errors_x_fundamental;
 typedef struct errors_x_withMessage errors_x_withMessage;
 typedef struct errors_x_withStack errors_x_withStack;
@@ -989,8 +989,8 @@ typedef struct fixed_Rectangle26_6 fixed_Rectangle26_6;
 typedef struct flac2_Encoder flac2_Encoder;
 typedef struct flac2_Stream flac2_Stream;
 typedef struct flac_decoder flac_decoder;
-typedef struct fontSpec_Lf2d3a3 fontSpec_Lf2d3a3;
-typedef struct fontSpec_Lf3d9de fontSpec_Lf3d9de;
+typedef struct fontSpec_Lc61303 fontSpec_Lc61303;
+typedef struct fontSpec_Le749ae fontSpec_Le749ae;
 typedef struct frame2_Frame frame2_Frame;
 typedef struct frame2_Header frame2_Header;
 typedef struct frame2_RicePartition frame2_RicePartition;
@@ -1062,7 +1062,7 @@ typedef struct huffman_huffTables huffman_huffTables;
 typedef struct input_GameInput input_GameInput;
 typedef struct input_InputQueue input_InputQueue;
 typedef struct ioutilx_zero ioutilx_zero;
-typedef struct kv_L9db835 kv_L9db835;
+typedef struct kv_Lb22654 kv_Lb22654;
 typedef struct list_Element list_Element;
 typedef struct list_List list_List;
 typedef struct lua_ApiError lua_ApiError;
@@ -1170,15 +1170,15 @@ typedef struct midi_decoder midi_decoder;
 typedef struct mp32_decoder mp32_decoder;
 typedef struct mp3_Decoder mp3_Decoder;
 typedef struct mp3_source mp3_source;
-typedef struct musicHolder_L1a0c39 musicHolder_L1a0c39;
-typedef struct namePos_L844887 namePos_L844887;
+typedef struct musicHolder_L3bb9ac musicHolder_L3bb9ac;
+typedef struct namePos_L8b4b91 namePos_L8b4b91;
 typedef struct oggvorbis_Reader oggvorbis_Reader;
 typedef struct oggvorbis_oggReader oggvorbis_oggReader;
 typedef struct oggvorbis_page oggvorbis_page;
 typedef struct oggvorbis_pageHeader oggvorbis_pageHeader;
-typedef struct ov_L2966a0 ov_L2966a0;
-typedef struct pair_L912ecb pair_L912ecb;
-typedef struct pair_Lb56028 pair_Lb56028;
+typedef struct ov_Lbfe85b ov_Lbfe85b;
+typedef struct pair_L4756dc pair_L4756dc;
+typedef struct pair_La8d612 pair_La8d612;
 typedef struct parse_Error parse_Error;
 typedef struct parse_Lexer parse_Lexer;
 typedef struct parse_Scanner parse_Scanner;
@@ -1214,8 +1214,8 @@ typedef struct protocol_UdpProtocol protocol_UdpProtocol;
 typedef struct protocol_UdpProtocolEvent protocol_UdpProtocolEvent;
 typedef struct protocol_UdpProtocolStateInfo protocol_UdpProtocolStateInfo;
 typedef struct protocol_UdpProtocolStats protocol_UdpProtocolStats;
-typedef struct pv_Lb05621 pv_Lb05621;
-typedef struct qvPlayer_L33fb2d qvPlayer_L33fb2d;
+typedef struct pv_L64466c pv_L64466c;
+typedef struct qvPlayer_Lf239e5 qvPlayer_Lf239e5;
 typedef struct raster_AlphaOverPainter raster_AlphaOverPainter;
 typedef struct raster_AlphaSrcPainter raster_AlphaSrcPainter;
 typedef struct raster_GammaCorrectionPainter raster_GammaCorrectionPainter;
@@ -1245,8 +1245,8 @@ typedef struct sdl_Surface sdl_Surface;
 typedef struct sdl_TextInputEvent sdl_TextInputEvent;
 typedef struct sdl_Window sdl_Window;
 typedef struct sdl_WindowEvent sdl_WindowEvent;
-typedef struct secPair_L027aea secPair_L027aea;
-typedef struct secPair_L3fd79d secPair_L3fd79d;
+typedef struct secPair_L2788a7 secPair_L2788a7;
+typedef struct secPair_L9c39fb secPair_L9c39fb;
 typedef struct sideinfo_SideInfo sideinfo_SideInfo;
 typedef struct sjson_Options sjson_Options;
 typedef struct sjson_dtype sjson_dtype;
@@ -1254,10 +1254,10 @@ typedef struct sjson_errorType sjson_errorType;
 typedef struct sjson_pathResult sjson_pathResult;
 typedef struct sjson_sliceHeader sjson_sliceHeader;
 typedef struct sjson_stringHeader sjson_stringHeader;
-typedef struct sjson_val_L7df47a sjson_val_L7df47a;
-typedef struct slotRef_L64c566 slotRef_L64c566;
-typedef struct spec_L83f120 spec_L83f120;
-typedef struct svc_L9ef632 svc_L9ef632;
+typedef struct sjson_val_L2b57f9 sjson_val_L2b57f9;
+typedef struct slotRef_L4c703c slotRef_L4c703c;
+typedef struct spec_L06db07 spec_L06db07;
+typedef struct svc_L8d97e9 svc_L8d97e9;
 typedef struct sync_x_TimeSync sync_x_TimeSync;
 typedef struct transport_MessageChannelItem transport_MessageChannelItem;
 typedef struct transport_Udp transport_Udp;
@@ -1305,7 +1305,7 @@ typedef struct wav_formatchunk wav_formatchunk;
 typedef struct wav_formatchunkextensible wav_formatchunkextensible;
 typedef struct wav_guid wav_guid;
 typedef struct wav_header wav_header;
-typedef struct wrapToken_L7ae040 wrapToken_L7ae040;
+typedef struct wrapToken_Le4d084 wrapToken_Le4d084;
 typedef struct Anon_194875d7 Anon_194875d7;
 typedef struct Anon_28bd7e47 Anon_28bd7e47;
 typedef struct Anon_3c59f47a Anon_3c59f47a;
@@ -1400,7 +1400,7 @@ typedef GoIface polling_PollSink;
 typedef GoIface polling_Poller;
 typedef int pretty_byKind;
 typedef int pretty_jtype;
-typedef GoFunc protocol_UdpProtocolDispatchFunc_L67de03;
+typedef GoFunc protocol_UdpProtocolDispatchFunc_Le6c36d;
 typedef int protocol_UdpProtocolEventType;
 typedef int protocol_UdpProtocolState;
 typedef GoIface raster_Painter;
@@ -1437,9 +1437,9 @@ typedef u16 truetype_NameID;
 typedef GoString truetype_UnsupportedError;
 typedef i16 truetype_f2dot14;
 typedef u32 truetype_pointType;
-typedef int valueSource_L9a4065;
+typedef int valueSource_L0e6e4f;
 typedef GoIface vorbis2_floor;
-typedef int wrapTokenKind_Leb1bb0;
+typedef int wrapTokenKind_La986db;
 #ifndef CVF_DEF_Slice_AnimFrame
 #define CVF_DEF_Slice_AnimFrame
 typedef struct { AnimFrame *p; int len, cap; } Slice_AnimFrame;
@@ -2056,17 +2056,17 @@ typedef struct { cvfRoom *p; int len, cap; } Slice_cvfRoom;
 #define CVF_DEF_Slice_effects_section
 typedef struct { effects_section *p; int len, cap; } Slice_effects_section;
 #endif
-#ifndef CVF_DEF_Slice_entry_L1de7c7
-#define CVF_DEF_Slice_entry_L1de7c7
-typedef struct { entry_L1de7c7 *p; int len, cap; } Slice_entry_L1de7c7;
+#ifndef CVF_DEF_Slice_entry_L001e46
+#define CVF_DEF_Slice_entry_L001e46
+typedef struct { entry_L001e46 *p; int len, cap; } Slice_entry_L001e46;
 #endif
-#ifndef CVF_DEF_Slice_entry_L380e40
-#define CVF_DEF_Slice_entry_L380e40
-typedef struct { entry_L380e40 *p; int len, cap; } Slice_entry_L380e40;
+#ifndef CVF_DEF_Slice_entry_L53b361
+#define CVF_DEF_Slice_entry_L53b361
+typedef struct { entry_L53b361 *p; int len, cap; } Slice_entry_L53b361;
 #endif
-#ifndef CVF_DEF_Slice_entry_Lfb5793
-#define CVF_DEF_Slice_entry_Lfb5793
-typedef struct { entry_Lfb5793 *p; int len, cap; } Slice_entry_Lfb5793;
+#ifndef CVF_DEF_Slice_entry_L79108a
+#define CVF_DEF_Slice_entry_L79108a
+typedef struct { entry_L79108a *p; int len, cap; } Slice_entry_L79108a;
 #endif
 #ifndef CVF_DEF_Slice_expValueFramePtr
 #define CVF_DEF_Slice_expValueFramePtr
@@ -2208,9 +2208,9 @@ typedef struct { input_GameInput* *p; int len, cap; } Slice_input_GameInputPtr;
 #define CVF_DEF_Slice_input_InputQueue
 typedef struct { input_InputQueue *p; int len, cap; } Slice_input_InputQueue;
 #endif
-#ifndef CVF_DEF_Slice_kv_L9db835
-#define CVF_DEF_Slice_kv_L9db835
-typedef struct { kv_L9db835 *p; int len, cap; } Slice_kv_L9db835;
+#ifndef CVF_DEF_Slice_kv_Lb22654
+#define CVF_DEF_Slice_kv_Lb22654
+typedef struct { kv_Lb22654 *p; int len, cap; } Slice_kv_Lb22654;
 #endif
 #ifndef CVF_DEF_Slice_lua_DbgCall
 #define CVF_DEF_Slice_lua_DbgCall
@@ -2356,21 +2356,21 @@ typedef struct { meta_CueSheetTrackIndex *p; int len, cap; } Slice_meta_CueSheet
 #define CVF_DEF_Slice_meta_SeekPoint
 typedef struct { meta_SeekPoint *p; int len, cap; } Slice_meta_SeekPoint;
 #endif
-#ifndef CVF_DEF_Slice_namePos_L844887
-#define CVF_DEF_Slice_namePos_L844887
-typedef struct { namePos_L844887 *p; int len, cap; } Slice_namePos_L844887;
+#ifndef CVF_DEF_Slice_namePos_L8b4b91
+#define CVF_DEF_Slice_namePos_L8b4b91
+typedef struct { namePos_L8b4b91 *p; int len, cap; } Slice_namePos_L8b4b91;
 #endif
-#ifndef CVF_DEF_Slice_ov_L2966a0
-#define CVF_DEF_Slice_ov_L2966a0
-typedef struct { ov_L2966a0 *p; int len, cap; } Slice_ov_L2966a0;
+#ifndef CVF_DEF_Slice_ov_Lbfe85b
+#define CVF_DEF_Slice_ov_Lbfe85b
+typedef struct { ov_Lbfe85b *p; int len, cap; } Slice_ov_Lbfe85b;
 #endif
-#ifndef CVF_DEF_Slice_pair_L912ecb
-#define CVF_DEF_Slice_pair_L912ecb
-typedef struct { pair_L912ecb *p; int len, cap; } Slice_pair_L912ecb;
+#ifndef CVF_DEF_Slice_pair_L4756dc
+#define CVF_DEF_Slice_pair_L4756dc
+typedef struct { pair_L4756dc *p; int len, cap; } Slice_pair_L4756dc;
 #endif
-#ifndef CVF_DEF_Slice_pair_Lb56028
-#define CVF_DEF_Slice_pair_Lb56028
-typedef struct { pair_Lb56028 *p; int len, cap; } Slice_pair_Lb56028;
+#ifndef CVF_DEF_Slice_pair_La8d612
+#define CVF_DEF_Slice_pair_La8d612
+typedef struct { pair_La8d612 *p; int len, cap; } Slice_pair_La8d612;
 #endif
 #ifndef CVF_DEF_Slice_parse_yySymType
 #define CVF_DEF_Slice_parse_yySymType
@@ -2416,25 +2416,25 @@ typedef struct { protocol_QueueEntry *p; int len, cap; } Slice_protocol_QueueEnt
 #define CVF_DEF_Slice_protocol_UdpProtocol
 typedef struct { protocol_UdpProtocol *p; int len, cap; } Slice_protocol_UdpProtocol;
 #endif
-#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_L67de03
-#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_L67de03
-typedef struct { protocol_UdpProtocolDispatchFunc_L67de03 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_L67de03;
+#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
+#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
+typedef struct { protocol_UdpProtocolDispatchFunc_Le6c36d *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_Le6c36d;
 #endif
 #ifndef CVF_DEF_Slice_protocol_UdpProtocolEvent
 #define CVF_DEF_Slice_protocol_UdpProtocolEvent
 typedef struct { protocol_UdpProtocolEvent *p; int len, cap; } Slice_protocol_UdpProtocolEvent;
 #endif
-#ifndef CVF_DEF_Slice_pv_Lb05621
-#define CVF_DEF_Slice_pv_Lb05621
-typedef struct { pv_Lb05621 *p; int len, cap; } Slice_pv_Lb05621;
+#ifndef CVF_DEF_Slice_pv_L64466c
+#define CVF_DEF_Slice_pv_L64466c
+typedef struct { pv_L64466c *p; int len, cap; } Slice_pv_L64466c;
 #endif
 #ifndef CVF_DEF_Slice_queryPart
 #define CVF_DEF_Slice_queryPart
 typedef struct { queryPart *p; int len, cap; } Slice_queryPart;
 #endif
-#ifndef CVF_DEF_Slice_qvPlayer_L33fb2d
-#define CVF_DEF_Slice_qvPlayer_L33fb2d
-typedef struct { qvPlayer_L33fb2d *p; int len, cap; } Slice_qvPlayer_L33fb2d;
+#ifndef CVF_DEF_Slice_qvPlayer_Lf239e5
+#define CVF_DEF_Slice_qvPlayer_Lf239e5
+typedef struct { qvPlayer_Lf239e5 *p; int len, cap; } Slice_qvPlayer_Lf239e5;
 #endif
 #ifndef CVF_DEF_Slice_rankingEntryPtr
 #define CVF_DEF_Slice_rankingEntryPtr
@@ -2464,29 +2464,29 @@ typedef struct { scRunFn *p; int len, cap; } Slice_scRunFn;
 #define CVF_DEF_Slice_sdl_GameControllerButton
 typedef struct { sdl_GameControllerButton *p; int len, cap; } Slice_sdl_GameControllerButton;
 #endif
-#ifndef CVF_DEF_Slice_secPair_L027aea
-#define CVF_DEF_Slice_secPair_L027aea
-typedef struct { secPair_L027aea *p; int len, cap; } Slice_secPair_L027aea;
+#ifndef CVF_DEF_Slice_secPair_L2788a7
+#define CVF_DEF_Slice_secPair_L2788a7
+typedef struct { secPair_L2788a7 *p; int len, cap; } Slice_secPair_L2788a7;
 #endif
-#ifndef CVF_DEF_Slice_secPair_L3fd79d
-#define CVF_DEF_Slice_secPair_L3fd79d
-typedef struct { secPair_L3fd79d *p; int len, cap; } Slice_secPair_L3fd79d;
+#ifndef CVF_DEF_Slice_secPair_L9c39fb
+#define CVF_DEF_Slice_secPair_L9c39fb
+typedef struct { secPair_L9c39fb *p; int len, cap; } Slice_secPair_L9c39fb;
 #endif
 #ifndef CVF_DEF_Slice_sjson_pathResult
 #define CVF_DEF_Slice_sjson_pathResult
 typedef struct { sjson_pathResult *p; int len, cap; } Slice_sjson_pathResult;
 #endif
-#ifndef CVF_DEF_Slice_sjson_val_L7df47a
-#define CVF_DEF_Slice_sjson_val_L7df47a
-typedef struct { sjson_val_L7df47a *p; int len, cap; } Slice_sjson_val_L7df47a;
+#ifndef CVF_DEF_Slice_sjson_val_L2b57f9
+#define CVF_DEF_Slice_sjson_val_L2b57f9
+typedef struct { sjson_val_L2b57f9 *p; int len, cap; } Slice_sjson_val_L2b57f9;
 #endif
-#ifndef CVF_DEF_Slice_slotRef_L64c566
-#define CVF_DEF_Slice_slotRef_L64c566
-typedef struct { slotRef_L64c566 *p; int len, cap; } Slice_slotRef_L64c566;
+#ifndef CVF_DEF_Slice_slotRef_L4c703c
+#define CVF_DEF_Slice_slotRef_L4c703c
+typedef struct { slotRef_L4c703c *p; int len, cap; } Slice_slotRef_L4c703c;
 #endif
-#ifndef CVF_DEF_Slice_spec_L83f120
-#define CVF_DEF_Slice_spec_L83f120
-typedef struct { spec_L83f120 *p; int len, cap; } Slice_spec_L83f120;
+#ifndef CVF_DEF_Slice_spec_L06db07
+#define CVF_DEF_Slice_spec_L06db07
+typedef struct { spec_L06db07 *p; int len, cap; } Slice_spec_L06db07;
 #endif
 #ifndef CVF_DEF_Slice_stageRollbackBgState
 #define CVF_DEF_Slice_stageRollbackBgState
@@ -2564,9 +2564,9 @@ typedef struct { vorbis2_mode *p; int len, cap; } Slice_vorbis2_mode;
 #define CVF_DEF_Slice_vorbis2_residue
 typedef struct { vorbis2_residue *p; int len, cap; } Slice_vorbis2_residue;
 #endif
-#ifndef CVF_DEF_Slice_wrapToken_L7ae040
-#define CVF_DEF_Slice_wrapToken_L7ae040
-typedef struct { wrapToken_L7ae040 *p; int len, cap; } Slice_wrapToken_L7ae040;
+#ifndef CVF_DEF_Slice_wrapToken_Le4d084
+#define CVF_DEF_Slice_wrapToken_Le4d084
+typedef struct { wrapToken_Le4d084 *p; int len, cap; } Slice_wrapToken_Le4d084;
 #endif
 #ifndef CVF_DEF_Map_Arr2_i32_AnimationPtr
 #define CVF_DEF_Map_Arr2_i32_AnimationPtr
@@ -2756,9 +2756,9 @@ typedef GoMap Map_GoString_Slice_IniSection;
 #define CVF_DEF_Map_GoString_Slice_bgMusicPtr
 typedef GoMap Map_GoString_Slice_bgMusicPtr;
 #endif
-#ifndef CVF_DEF_Map_GoString_Slice_entry_L380e40
-#define CVF_DEF_Map_GoString_Slice_entry_L380e40
-typedef GoMap Map_GoString_Slice_entry_L380e40;
+#ifndef CVF_DEF_Map_GoString_Slice_entry_L79108a
+#define CVF_DEF_Map_GoString_Slice_entry_L79108a
+typedef GoMap Map_GoString_Slice_entry_L79108a;
 #endif
 #ifndef CVF_DEF_Map_GoString_Slice_u8
 #define CVF_DEF_Map_GoString_Slice_u8
@@ -2780,13 +2780,13 @@ typedef GoMap Map_GoString_TypedValue;
 #define CVF_DEF_Map_GoString_bool
 typedef GoMap Map_GoString_bool;
 #endif
-#ifndef CVF_DEF_Map_GoString_entry_L1de7c7
-#define CVF_DEF_Map_GoString_entry_L1de7c7
-typedef GoMap Map_GoString_entry_L1de7c7;
+#ifndef CVF_DEF_Map_GoString_entry_L53b361
+#define CVF_DEF_Map_GoString_entry_L53b361
+typedef GoMap Map_GoString_entry_L53b361;
 #endif
-#ifndef CVF_DEF_Map_GoString_entry_L380e40
-#define CVF_DEF_Map_GoString_entry_L380e40
-typedef GoMap Map_GoString_entry_L380e40;
+#ifndef CVF_DEF_Map_GoString_entry_L79108a
+#define CVF_DEF_Map_GoString_entry_L79108a
+typedef GoMap Map_GoString_entry_L79108a;
 #endif
 #ifndef CVF_DEF_Map_GoString_f32
 #define CVF_DEF_Map_GoString_f32
@@ -2824,9 +2824,9 @@ typedef GoMap Map_GoString_lua_LValue;
 #define CVF_DEF_Map_GoString_lua_gotoLabelDescPtr
 typedef GoMap Map_GoString_lua_gotoLabelDescPtr;
 #endif
-#ifndef CVF_DEF_Map_GoString_musicHolder_L1a0c39Ptr
-#define CVF_DEF_Map_GoString_musicHolder_L1a0c39Ptr
-typedef GoMap Map_GoString_musicHolder_L1a0c39Ptr;
+#ifndef CVF_DEF_Map_GoString_musicHolder_L3bb9acPtr
+#define CVF_DEF_Map_GoString_musicHolder_L3bb9acPtr
+typedef GoMap Map_GoString_musicHolder_L3bb9acPtr;
 #endif
 #ifndef CVF_DEF_Map_GoString_scFunc
 #define CVF_DEF_Map_GoString_scFunc
@@ -3012,13 +3012,13 @@ typedef GoMap Map_int_Slice_int;
 #define CVF_DEF_Map_int_bool
 typedef GoMap Map_int_bool;
 #endif
-#ifndef CVF_DEF_Map_int_fontSpec_Lf2d3a3
-#define CVF_DEF_Map_int_fontSpec_Lf2d3a3
-typedef GoMap Map_int_fontSpec_Lf2d3a3;
+#ifndef CVF_DEF_Map_int_fontSpec_Lc61303
+#define CVF_DEF_Map_int_fontSpec_Lc61303
+typedef GoMap Map_int_fontSpec_Lc61303;
 #endif
-#ifndef CVF_DEF_Map_int_fontSpec_Lf3d9de
-#define CVF_DEF_Map_int_fontSpec_Lf3d9de
-typedef GoMap Map_int_fontSpec_Lf3d9de;
+#ifndef CVF_DEF_Map_int_fontSpec_Le749ae
+#define CVF_DEF_Map_int_fontSpec_Le749ae
+typedef GoMap Map_int_fontSpec_Le749ae;
 #endif
 #ifndef CVF_DEF_Map_int_int
 #define CVF_DEF_Map_int_int
@@ -4140,9 +4140,9 @@ struct effects_equalizer { beep_Streamer streamer; Slice_effects_section section
 struct effects_mono { beep_Streamer Streamer; };
 struct effects_section { Arr2_Slice_f64 a; Arr2_Slice_f64 b; Slice_Arr2_f64 xPast; Slice_Arr2_f64 yPast; };
 struct effects_swap { beep_Streamer Streamer; };
-struct entry_L1de7c7 { GoString flat; GoString base; bool disabled; };
-struct entry_L380e40 { GoString elem; GoString field; bool disabled; };
-struct entry_Lfb5793 { GoString key; LayerProperties* lp; i32 start; int idx; };
+struct entry_L001e46 { GoString key; LayerProperties* lp; i32 start; int idx; };
+struct entry_L53b361 { GoString flat; GoString base; bool disabled; };
+struct entry_L79108a { GoString elem; GoString field; bool disabled; };
 struct errors_x_fundamental { GoString msg; errors_x_stack* embed_stack; };
 struct errors_x_withMessage { GoIface cause; GoString msg; };
 struct errors_x_withStack { GoIface embed_error; errors_x_stack* embed_stack; };
@@ -4151,8 +4151,8 @@ struct errutil_position { GoString file; int line; GoString callee; };
 struct flac2_Encoder { flac2_Stream* embed_Stream; GoIface w; u16 blockSizeMin; u16 blockSizeMax; u32 frameSizeMin; u32 frameSizeMax; GoIface md5sum; u64 nsamples; u64 curNum; };
 struct flac2_Stream { meta_StreamInfo* Info; Slice_meta_BlockPtr Blocks; meta_SeekTable* seekTable; int seekTableSize; i64 dataStart; GoIface r; };
 struct flac_decoder { GoIface r; flac2_Stream* stream; frame2_Frame* frame; int posInFrame; GoIface err; bool seekEnabled; bool hasFixedBlockSize; };
-struct fontSpec_Lf2d3a3 { GoString path; i32 height; };
-struct fontSpec_Lf3d9de { GoString path; i32 height; };
+struct fontSpec_Lc61303 { GoString path; i32 height; };
+struct fontSpec_Le749ae { GoString path; i32 height; };
 struct frame2_Header { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; };
 struct frame2_Frame { union { frame2_Header Header_; struct { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; }; }; Slice_frame2_SubframePtr Subframes; hashutil_Hash16 crc; bits_x2_Reader* br; GoIface hr; GoIface r; };
 struct frame2_RicePartition { uintptr_t Param; uintptr_t EscapedBitsPerSample; };
@@ -4232,7 +4232,7 @@ struct hdrcolor_RGB { f64 R; f64 G; f64 B; };
 struct hdrcolor_XYZ { f64 X; f64 Y; f64 Z; };
 struct input_InputQueue { int id; int head; int tail; int length; bool firstFrame; int lastUserAddedFrame; int lastAddedFrame; int firstIncorrectFrame; int lastFrameRequested; int frameDelay; Slice_input_GameInput inputs; input_GameInput prediction; };
 struct ioutilx_zero { char _empty; };
-struct kv_L9db835 { bcProfKey k; u64 v; };
+struct kv_Lb22654 { bcProfKey k; u64 v; };
 struct lua_ApiError { lua_ApiErrorType Type; lua_LValue Object; GoString StackTrace; GoIface Cause; };
 struct lua_CompileError { lua_funcContext* context; int Line; GoString Message; };
 struct lua_Debug { lua_callFrame* frame; GoString Name; GoString What; GoString Source; int CurrentLine; int NUpvalues; int LineDefined; int LastLineDefined; };
@@ -4325,8 +4325,8 @@ struct midi_decoder { meltysynth_Synthesizer* synth; meltysynth_MidiFile* mf; me
 struct mp32_decoder { GoIface closer; mp3_Decoder* d; beep_Format f; int pos; GoIface err; };
 struct mp3_Decoder { mp3_source* source; int sampleRate; i64 length; Slice_i64 frameStarts; Slice_u8 buf; frame_Frame* frame; i64 pos; i64 bytesPerFrame; };
 struct mp3_source { GoIface reader; Slice_u8 buf; i64 pos; };
-struct musicHolder_L1a0c39 { Slice_GoString Bgm; Slice_i32Ptr Loop; Slice_i32Ptr Volume; Slice_i32Ptr LoopStart; Slice_i32Ptr LoopEnd; Slice_i32Ptr StartPosition; Slice_f32Ptr FreqMul; Slice_i32Ptr LoopCount; };
-struct namePos_L844887 { TextSprite* ts; Arr2_f32 pos; };
+struct musicHolder_L3bb9ac { Slice_GoString Bgm; Slice_i32Ptr Loop; Slice_i32Ptr Volume; Slice_i32Ptr LoopStart; Slice_i32Ptr LoopEnd; Slice_i32Ptr StartPosition; Slice_f32Ptr FreqMul; Slice_i32Ptr LoopCount; };
+struct namePos_L8b4b91 { TextSprite* ts; Arr2_f32 pos; };
 struct oggvorbis_pageHeader { Arr4_u8 CapturePattern; u8 StreamStructureVersion; u8 HeaderTypeFlag; i64 AbsoluteGranulePosition; u32 StreamSerialNumber; u32 PageSequenceNumber; u32 PageChecksum; u8 PageSegments; };
 struct oggvorbis_page { union { oggvorbis_pageHeader pageHeader_; struct { Arr4_u8 CapturePattern; u8 StreamStructureVersion; u8 HeaderTypeFlag; i64 AbsoluteGranulePosition; u32 StreamSerialNumber; u32 PageSequenceNumber; u32 PageChecksum; u8 PageSegments; }; }; u32 headerChecksum; int packetCount; Slice_int packetSizes; int totalSize; bool needsContinue; Slice_Slice_u8 packets; };
 struct oggvorbis_oggReader { GoIface source; GoIface seeker; Slice_u8 buffer; oggvorbis_page currentPage; i64 lastPagePosition; int packetIndex; bool ready; bool lastPacket; };
@@ -4334,9 +4334,9 @@ struct vorbis2_Bitrate { int Nominal; int Minimum; int Maximum; };
 struct vorbis2_CommentHeader { GoString Vendor; Slice_GoString Comments; };
 struct vorbis2_Decoder { bool headerRead; bool setupRead; int sampleRate; int channels; vorbis2_Bitrate Bitrate; Arr2_int blocksize; union { vorbis2_CommentHeader CommentHeader_; struct { GoString Vendor; Slice_GoString Comments; }; }; Slice_vorbis2_codebook codebooks; Slice_vorbis2_floor floors; Slice_vorbis2_residue residues; Slice_vorbis2_mapping mappings; Slice_vorbis2_mode modes; Slice_f32 overlap; bool hasOverlap; bool overlapShort; Arr2_Slice_f32 windows; Arr2_vorbis2_imdctLookup lookup; Slice_Slice_f32 residueBuffer; Slice_vorbis2_floorData floorBuffer; Slice_Slice_f32 rawBuffer; };
 struct oggvorbis_Reader { oggvorbis_oggReader r; vorbis2_Decoder dec; i64 position; Slice_f32 buffer; Slice_f32 originalBuffer; int toSkip; i64 length; };
-struct ov_L2966a0 { OpCode o; u64 v; };
-struct pair_L912ecb { Projectile* pr; f32 dist; };
-struct pair_Lb56028 { Char* ch; f32 dist; };
+struct ov_Lbfe85b { OpCode o; u64 v; };
+struct pair_L4756dc { Projectile* pr; f32 dist; };
+struct pair_La8d612 { Char* ch; f32 dist; };
 struct parse_Error { ast_Position Pos; GoString Message; GoString Token; };
 struct parse_Lexer { parse_Scanner* scanner; Slice_ast_Stmt Stmts; bool PNewLine; ast_Token Token; int PrevTokenType; };
 struct parse_Scanner { ast_Position Pos; GoOpaque /* bufio.Reader */* reader; };
@@ -4366,8 +4366,8 @@ struct pretty_Style { Arr2_GoString Key; Arr2_GoString String; Arr2_GoString Num
 struct pretty_byKeyVal { bool sorted; Slice_u8 json; Slice_u8 buf; Slice_pretty_pair pairs; };
 struct pretty_pair { int kstart; int kend; int vstart; int vend; };
 struct protocol_QueueEntry { i64 queueTime; GoString destIp; messages_UDPMessage msg; int destPort; };
-struct pv_Lb05621 { u16 p; u64 v; };
-struct qvPlayer_L33fb2d { GoString character; int player; int num; int pal; f32 ai; int input; };
+struct pv_L64466c { u16 p; u64 v; };
+struct qvPlayer_Lf239e5 { GoString character; int player; int num; int pal; f32 ai; int input; };
 struct raster_AlphaOverPainter { GoImageAlpha* Image; };
 struct raster_AlphaSrcPainter { GoImageAlpha* Image; };
 struct raster_GammaCorrectionPainter { raster_Painter Painter; Arr256_u16 a; bool gammaIsOne; };
@@ -4393,8 +4393,8 @@ struct sdl_Rect { i32 X; i32 Y; i32 W; i32 H; };
 struct sdl_Surface { u32 flags; sdl_PixelFormat* Format; i32 W; i32 H; i32 Pitch; void* pixels; void* UserData; i32 locked; void* lockData; sdl_Rect ClipRect; void* _; i32 RefCount; };
 struct sdl_TextInputEvent { sdl_EventType Type; u32 Timestamp; u32 WindowID; GoString Text; };
 struct sdl_WindowEvent { sdl_EventType Type; u32 Timestamp; u32 WindowID; sdl_WindowEventID Event; i32 Data1; i32 Data2; };
-struct secPair_L027aea { GoOpaque /* ini.Section */* sec; GoString name; };
-struct secPair_L3fd79d { GoOpaque /* ini.Section */* sec; GoString name; };
+struct secPair_L2788a7 { GoOpaque /* ini.Section */* sec; GoString name; };
+struct secPair_L9c39fb { GoOpaque /* ini.Section */* sec; GoString name; };
 struct sideinfo_SideInfo { int MainDataBegin; int PrivateBits; Arr2_Arr4_int Scfsi; Arr2_Arr2_int Part2_3Length; Arr2_Arr2_int BigValues; Arr2_Arr2_int GlobalGain; Arr2_Arr2_int ScalefacCompress; Arr2_Arr2_int WinSwitchFlag; Arr2_Arr2_int BlockType; Arr2_Arr2_int MixedBlockFlag; Arr2_Arr2_Arr3_int TableSelect; Arr2_Arr2_Arr3_int SubblockGain; Arr2_Arr2_int Region0Count; Arr2_Arr2_int Region1Count; Arr2_Arr2_int Preflag; Arr2_Arr2_int ScalefacScale; Arr2_Arr2_int Count1TableSelect; Arr2_Arr2_int Count1; };
 struct sjson_Options { bool Optimistic; bool ReplaceInPlace; };
 struct sjson_dtype { char _empty; };
@@ -4402,10 +4402,10 @@ struct sjson_errorType { GoString msg; };
 struct sjson_pathResult { GoString part; GoString gpart; GoString path; bool force; bool more; };
 struct sjson_sliceHeader { void* data; int len; int cap; };
 struct sjson_stringHeader { void* data; int len; };
-struct sjson_val_L7df47a { int index; gjson_Result res; };
-struct slotRef_L64c566 { int idx; PlayerVictoryProperties* p; i32 order; };
-struct spec_L83f120 { GoString prefix; i32 varType; };
-struct svc_L9ef632 { GoString ServiceType; GoString ControlURL; };
+struct sjson_val_L2b57f9 { int index; gjson_Result res; };
+struct slotRef_L4c703c { int idx; PlayerVictoryProperties* p; i32 order; };
+struct spec_L06db07 { GoString prefix; i32 varType; };
+struct svc_L8d97e9 { GoString ServiceType; GoString ControlURL; };
 struct transport_peerAddress { GoString Ip; int Port; };
 struct transport_MessageChannelItem { transport_peerAddress Peer; messages_UDPMessage Message; int Length; };
 struct transport_Udp { transport_UdpStats Stats; GoIface socket; transport_MessageHandler messageHandler; GoIface listener; int localPort; GoString ipAddress; GoChan* sendChan; GoChan* done; GoChan* sendDone; GoOpaque /* sync.Once */* closeOnce; };
@@ -4438,7 +4438,7 @@ struct wav_decoder { GoIface r; wav_header h; i32 hsz; i32 pos; GoIface err; };
 struct wav_formatchunk { i16 NumChans; i32 SampleRate; i32 ByteRate; i16 BytesPerFrame; i16 BitsPerSample; };
 struct wav_guid { i32 Data1; i16 Data2; i16 Data3; Arr8_u8 Data4; };
 struct wav_formatchunkextensible { union { wav_formatchunk formatchunk_; struct { i16 NumChans; i32 SampleRate; i32 ByteRate; i16 BytesPerFrame; i16 BitsPerSample; }; }; i16 SubFormatSize; i16 Samples; i32 ChannelMask; wav_guid SubFormat; };
-struct wrapToken_L7ae040 { wrapTokenKind_Leb1bb0 kind; GoString text; int rawRunes; };
+struct wrapToken_Le4d084 { wrapTokenKind_La986db kind; GoString text; int rawRunes; };
 struct Anon_194875d7 { GoString name; GoOpaque /* os.File */* file; bool writable; bool readable; };
 struct Anon_28bd7e47 { GoString sec; Slice_GoString path; };
 struct Anon_3c59f47a { GoString name; Arr4_ResultAnnouncement* data; Arr4_bool* exists; };
@@ -5038,17 +5038,17 @@ GO_SLICE_FUNCS(Slice_cvfRoom, cvfRoom)
 #define CVF_FN_Slice_effects_section
 GO_SLICE_FUNCS(Slice_effects_section, effects_section)
 #endif
-#ifndef CVF_FN_Slice_entry_L1de7c7
-#define CVF_FN_Slice_entry_L1de7c7
-GO_SLICE_FUNCS(Slice_entry_L1de7c7, entry_L1de7c7)
+#ifndef CVF_FN_Slice_entry_L001e46
+#define CVF_FN_Slice_entry_L001e46
+GO_SLICE_FUNCS(Slice_entry_L001e46, entry_L001e46)
 #endif
-#ifndef CVF_FN_Slice_entry_L380e40
-#define CVF_FN_Slice_entry_L380e40
-GO_SLICE_FUNCS(Slice_entry_L380e40, entry_L380e40)
+#ifndef CVF_FN_Slice_entry_L53b361
+#define CVF_FN_Slice_entry_L53b361
+GO_SLICE_FUNCS(Slice_entry_L53b361, entry_L53b361)
 #endif
-#ifndef CVF_FN_Slice_entry_Lfb5793
-#define CVF_FN_Slice_entry_Lfb5793
-GO_SLICE_FUNCS(Slice_entry_Lfb5793, entry_Lfb5793)
+#ifndef CVF_FN_Slice_entry_L79108a
+#define CVF_FN_Slice_entry_L79108a
+GO_SLICE_FUNCS(Slice_entry_L79108a, entry_L79108a)
 #endif
 #ifndef CVF_FN_Slice_expValueFramePtr
 #define CVF_FN_Slice_expValueFramePtr
@@ -5206,9 +5206,9 @@ GO_SLICE_FUNCS(Slice_input_InputQueue, input_InputQueue)
 #define CVF_FN_Slice_int
 GO_SLICE_FUNCS_A(Slice_int, int)
 #endif
-#ifndef CVF_FN_Slice_kv_L9db835
-#define CVF_FN_Slice_kv_L9db835
-GO_SLICE_FUNCS_A(Slice_kv_L9db835, kv_L9db835)
+#ifndef CVF_FN_Slice_kv_Lb22654
+#define CVF_FN_Slice_kv_Lb22654
+GO_SLICE_FUNCS_A(Slice_kv_Lb22654, kv_Lb22654)
 #endif
 #ifndef CVF_FN_Slice_lua_DbgCall
 #define CVF_FN_Slice_lua_DbgCall
@@ -5362,21 +5362,21 @@ GO_SLICE_FUNCS(Slice_meta_SeekPoint, meta_SeekPoint)
 #define CVF_FN_Slice_nameFact
 GO_SLICE_FUNCS(Slice_nameFact, nameFact)
 #endif
-#ifndef CVF_FN_Slice_namePos_L844887
-#define CVF_FN_Slice_namePos_L844887
-GO_SLICE_FUNCS(Slice_namePos_L844887, namePos_L844887)
+#ifndef CVF_FN_Slice_namePos_L8b4b91
+#define CVF_FN_Slice_namePos_L8b4b91
+GO_SLICE_FUNCS(Slice_namePos_L8b4b91, namePos_L8b4b91)
 #endif
-#ifndef CVF_FN_Slice_ov_L2966a0
-#define CVF_FN_Slice_ov_L2966a0
-GO_SLICE_FUNCS_A(Slice_ov_L2966a0, ov_L2966a0)
+#ifndef CVF_FN_Slice_ov_Lbfe85b
+#define CVF_FN_Slice_ov_Lbfe85b
+GO_SLICE_FUNCS_A(Slice_ov_Lbfe85b, ov_Lbfe85b)
 #endif
-#ifndef CVF_FN_Slice_pair_L912ecb
-#define CVF_FN_Slice_pair_L912ecb
-GO_SLICE_FUNCS(Slice_pair_L912ecb, pair_L912ecb)
+#ifndef CVF_FN_Slice_pair_L4756dc
+#define CVF_FN_Slice_pair_L4756dc
+GO_SLICE_FUNCS(Slice_pair_L4756dc, pair_L4756dc)
 #endif
-#ifndef CVF_FN_Slice_pair_Lb56028
-#define CVF_FN_Slice_pair_Lb56028
-GO_SLICE_FUNCS(Slice_pair_Lb56028, pair_Lb56028)
+#ifndef CVF_FN_Slice_pair_La8d612
+#define CVF_FN_Slice_pair_La8d612
+GO_SLICE_FUNCS(Slice_pair_La8d612, pair_La8d612)
 #endif
 #ifndef CVF_FN_Slice_parse_yySymType
 #define CVF_FN_Slice_parse_yySymType
@@ -5422,25 +5422,25 @@ GO_SLICE_FUNCS(Slice_protocol_QueueEntry, protocol_QueueEntry)
 #define CVF_FN_Slice_protocol_UdpProtocol
 GO_SLICE_FUNCS(Slice_protocol_UdpProtocol, protocol_UdpProtocol)
 #endif
-#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_L67de03
-#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_L67de03
-GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_L67de03, protocol_UdpProtocolDispatchFunc_L67de03)
+#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
+#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
+GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_Le6c36d, protocol_UdpProtocolDispatchFunc_Le6c36d)
 #endif
 #ifndef CVF_FN_Slice_protocol_UdpProtocolEvent
 #define CVF_FN_Slice_protocol_UdpProtocolEvent
 GO_SLICE_FUNCS(Slice_protocol_UdpProtocolEvent, protocol_UdpProtocolEvent)
 #endif
-#ifndef CVF_FN_Slice_pv_Lb05621
-#define CVF_FN_Slice_pv_Lb05621
-GO_SLICE_FUNCS_A(Slice_pv_Lb05621, pv_Lb05621)
+#ifndef CVF_FN_Slice_pv_L64466c
+#define CVF_FN_Slice_pv_L64466c
+GO_SLICE_FUNCS_A(Slice_pv_L64466c, pv_L64466c)
 #endif
 #ifndef CVF_FN_Slice_queryPart
 #define CVF_FN_Slice_queryPart
 GO_SLICE_FUNCS(Slice_queryPart, queryPart)
 #endif
-#ifndef CVF_FN_Slice_qvPlayer_L33fb2d
-#define CVF_FN_Slice_qvPlayer_L33fb2d
-GO_SLICE_FUNCS(Slice_qvPlayer_L33fb2d, qvPlayer_L33fb2d)
+#ifndef CVF_FN_Slice_qvPlayer_Lf239e5
+#define CVF_FN_Slice_qvPlayer_Lf239e5
+GO_SLICE_FUNCS(Slice_qvPlayer_Lf239e5, qvPlayer_Lf239e5)
 #endif
 #ifndef CVF_FN_Slice_rankingEntryPtr
 #define CVF_FN_Slice_rankingEntryPtr
@@ -5470,29 +5470,29 @@ GO_SLICE_FUNCS(Slice_scRunFn, scRunFn)
 #define CVF_FN_Slice_sdl_GameControllerButton
 GO_SLICE_FUNCS_A(Slice_sdl_GameControllerButton, sdl_GameControllerButton)
 #endif
-#ifndef CVF_FN_Slice_secPair_L027aea
-#define CVF_FN_Slice_secPair_L027aea
-GO_SLICE_FUNCS(Slice_secPair_L027aea, secPair_L027aea)
+#ifndef CVF_FN_Slice_secPair_L2788a7
+#define CVF_FN_Slice_secPair_L2788a7
+GO_SLICE_FUNCS(Slice_secPair_L2788a7, secPair_L2788a7)
 #endif
-#ifndef CVF_FN_Slice_secPair_L3fd79d
-#define CVF_FN_Slice_secPair_L3fd79d
-GO_SLICE_FUNCS(Slice_secPair_L3fd79d, secPair_L3fd79d)
+#ifndef CVF_FN_Slice_secPair_L9c39fb
+#define CVF_FN_Slice_secPair_L9c39fb
+GO_SLICE_FUNCS(Slice_secPair_L9c39fb, secPair_L9c39fb)
 #endif
 #ifndef CVF_FN_Slice_sjson_pathResult
 #define CVF_FN_Slice_sjson_pathResult
 GO_SLICE_FUNCS(Slice_sjson_pathResult, sjson_pathResult)
 #endif
-#ifndef CVF_FN_Slice_sjson_val_L7df47a
-#define CVF_FN_Slice_sjson_val_L7df47a
-GO_SLICE_FUNCS(Slice_sjson_val_L7df47a, sjson_val_L7df47a)
+#ifndef CVF_FN_Slice_sjson_val_L2b57f9
+#define CVF_FN_Slice_sjson_val_L2b57f9
+GO_SLICE_FUNCS(Slice_sjson_val_L2b57f9, sjson_val_L2b57f9)
 #endif
-#ifndef CVF_FN_Slice_slotRef_L64c566
-#define CVF_FN_Slice_slotRef_L64c566
-GO_SLICE_FUNCS(Slice_slotRef_L64c566, slotRef_L64c566)
+#ifndef CVF_FN_Slice_slotRef_L4c703c
+#define CVF_FN_Slice_slotRef_L4c703c
+GO_SLICE_FUNCS(Slice_slotRef_L4c703c, slotRef_L4c703c)
 #endif
-#ifndef CVF_FN_Slice_spec_L83f120
-#define CVF_FN_Slice_spec_L83f120
-GO_SLICE_FUNCS(Slice_spec_L83f120, spec_L83f120)
+#ifndef CVF_FN_Slice_spec_L06db07
+#define CVF_FN_Slice_spec_L06db07
+GO_SLICE_FUNCS(Slice_spec_L06db07, spec_L06db07)
 #endif
 #ifndef CVF_FN_Slice_stageRollbackBgState
 #define CVF_FN_Slice_stageRollbackBgState
@@ -5578,9 +5578,9 @@ GO_SLICE_FUNCS(Slice_vorbis2_mode, vorbis2_mode)
 #define CVF_FN_Slice_vorbis2_residue
 GO_SLICE_FUNCS(Slice_vorbis2_residue, vorbis2_residue)
 #endif
-#ifndef CVF_FN_Slice_wrapToken_L7ae040
-#define CVF_FN_Slice_wrapToken_L7ae040
-GO_SLICE_FUNCS(Slice_wrapToken_L7ae040, wrapToken_L7ae040)
+#ifndef CVF_FN_Slice_wrapToken_Le4d084
+#define CVF_FN_Slice_wrapToken_Le4d084
+GO_SLICE_FUNCS(Slice_wrapToken_Le4d084, wrapToken_Le4d084)
 #endif
 #ifndef CVF_FN_Map_Arr2_i32_AnimationPtr
 #define CVF_FN_Map_Arr2_i32_AnimationPtr
@@ -5770,9 +5770,9 @@ GO_MAP_FUNCS(Map_GoString_Slice_IniSection, GoString, Slice_IniSection, true)
 #define CVF_FN_Map_GoString_Slice_bgMusicPtr
 GO_MAP_FUNCS(Map_GoString_Slice_bgMusicPtr, GoString, Slice_bgMusicPtr, true)
 #endif
-#ifndef CVF_FN_Map_GoString_Slice_entry_L380e40
-#define CVF_FN_Map_GoString_Slice_entry_L380e40
-GO_MAP_FUNCS(Map_GoString_Slice_entry_L380e40, GoString, Slice_entry_L380e40, true)
+#ifndef CVF_FN_Map_GoString_Slice_entry_L79108a
+#define CVF_FN_Map_GoString_Slice_entry_L79108a
+GO_MAP_FUNCS(Map_GoString_Slice_entry_L79108a, GoString, Slice_entry_L79108a, true)
 #endif
 #ifndef CVF_FN_Map_GoString_Slice_u8
 #define CVF_FN_Map_GoString_Slice_u8
@@ -5794,13 +5794,13 @@ GO_MAP_FUNCS(Map_GoString_TypedValue, GoString, TypedValue, true)
 #define CVF_FN_Map_GoString_bool
 GO_MAP_FUNCS(Map_GoString_bool, GoString, bool, true)
 #endif
-#ifndef CVF_FN_Map_GoString_entry_L1de7c7
-#define CVF_FN_Map_GoString_entry_L1de7c7
-GO_MAP_FUNCS(Map_GoString_entry_L1de7c7, GoString, entry_L1de7c7, true)
+#ifndef CVF_FN_Map_GoString_entry_L53b361
+#define CVF_FN_Map_GoString_entry_L53b361
+GO_MAP_FUNCS(Map_GoString_entry_L53b361, GoString, entry_L53b361, true)
 #endif
-#ifndef CVF_FN_Map_GoString_entry_L380e40
-#define CVF_FN_Map_GoString_entry_L380e40
-GO_MAP_FUNCS(Map_GoString_entry_L380e40, GoString, entry_L380e40, true)
+#ifndef CVF_FN_Map_GoString_entry_L79108a
+#define CVF_FN_Map_GoString_entry_L79108a
+GO_MAP_FUNCS(Map_GoString_entry_L79108a, GoString, entry_L79108a, true)
 #endif
 #ifndef CVF_FN_Map_GoString_f32
 #define CVF_FN_Map_GoString_f32
@@ -5838,9 +5838,9 @@ GO_MAP_FUNCS(Map_GoString_lua_LValue, GoString, lua_LValue, true)
 #define CVF_FN_Map_GoString_lua_gotoLabelDescPtr
 GO_MAP_FUNCS(Map_GoString_lua_gotoLabelDescPtr, GoString, lua_gotoLabelDesc*, true)
 #endif
-#ifndef CVF_FN_Map_GoString_musicHolder_L1a0c39Ptr
-#define CVF_FN_Map_GoString_musicHolder_L1a0c39Ptr
-GO_MAP_FUNCS(Map_GoString_musicHolder_L1a0c39Ptr, GoString, musicHolder_L1a0c39*, true)
+#ifndef CVF_FN_Map_GoString_musicHolder_L3bb9acPtr
+#define CVF_FN_Map_GoString_musicHolder_L3bb9acPtr
+GO_MAP_FUNCS(Map_GoString_musicHolder_L3bb9acPtr, GoString, musicHolder_L3bb9ac*, true)
 #endif
 #ifndef CVF_FN_Map_GoString_scFunc
 #define CVF_FN_Map_GoString_scFunc
@@ -6026,13 +6026,13 @@ GO_MAP_FUNCS(Map_int_Slice_int, int, Slice_int, false)
 #define CVF_FN_Map_int_bool
 GO_MAP_FUNCS(Map_int_bool, int, bool, false)
 #endif
-#ifndef CVF_FN_Map_int_fontSpec_Lf2d3a3
-#define CVF_FN_Map_int_fontSpec_Lf2d3a3
-GO_MAP_FUNCS(Map_int_fontSpec_Lf2d3a3, int, fontSpec_Lf2d3a3, false)
+#ifndef CVF_FN_Map_int_fontSpec_Lc61303
+#define CVF_FN_Map_int_fontSpec_Lc61303
+GO_MAP_FUNCS(Map_int_fontSpec_Lc61303, int, fontSpec_Lc61303, false)
 #endif
-#ifndef CVF_FN_Map_int_fontSpec_Lf3d9de
-#define CVF_FN_Map_int_fontSpec_Lf3d9de
-GO_MAP_FUNCS(Map_int_fontSpec_Lf3d9de, int, fontSpec_Lf3d9de, false)
+#ifndef CVF_FN_Map_int_fontSpec_Le749ae
+#define CVF_FN_Map_int_fontSpec_Le749ae
+GO_MAP_FUNCS(Map_int_fontSpec_Le749ae, int, fontSpec_Le749ae, false)
 #endif
 #ifndef CVF_FN_Map_int_int
 #define CVF_FN_Map_int_int
@@ -7994,17 +7994,17 @@ extern Arr56_GoString g_parse_yyToknames;
 void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
-#define GO_TID_M_string_any 197
+#define GO_TID_M_string_any 237
 #define GO_TID_P_abi_Type 1298
-#define GO_TID_P_bufio_Reader 160
-#define GO_TID_P_bufio_Writer 123
-#define GO_TID_P_bytes_Buffer 101
-#define GO_TID_P_bytes_Reader 155
+#define GO_TID_P_bufio_Reader 198
+#define GO_TID_P_bufio_Writer 155
+#define GO_TID_P_bytes_Buffer 137
+#define GO_TID_P_bytes_Reader 189
 #define GO_TID_P_context_cancelCtx 2037
-#define GO_TID_P_exec_Cmd 1067
-#define GO_TID_P_exec_ExitError 251
+#define GO_TID_P_exec_Cmd 1082
+#define GO_TID_P_exec_ExitError 259
 #define GO_TID_P_fnv_sum32a 2038
-#define GO_TID_P_image_Alpha 105
+#define GO_TID_P_image_Alpha 141
 #define GO_TID_P_image_NRGBA 487
 #define GO_TID_P_image_Paletted 486
 #define GO_TID_P_image_RGBA 481
@@ -8012,68 +8012,68 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_ini_File 1306
 #define GO_TID_P_ini_Key 1316
 #define GO_TID_P_ini_Section 1313
-#define GO_TID_P_io_LimitedReader 190
+#define GO_TID_P_io_LimitedReader 230
 #define GO_TID_P_net_IPNet 467
 #define GO_TID_P_net_OpError 2036
 #define GO_TID_P_net_TCPAddr 504
 #define GO_TID_P_net_TCPConn 505
 #define GO_TID_P_net_TCPListener 503
-#define GO_TID_P_net_UDPAddr 153
+#define GO_TID_P_net_UDPAddr 187
 #define GO_TID_P_net_UDPConn 2035
 #define GO_TID_P_net_netFD 1672
-#define GO_TID_P_os_File 146
-#define GO_TID_P_os_Process 1077
-#define GO_TID_P_os_ProcessState 1085
-#define GO_TID_P_os_dirInfo 797
-#define GO_TID_P_os_file 785
-#define GO_TID_P_os_processHandle 1082
-#define GO_TID_P_reflect_SliceHeader 987
+#define GO_TID_P_os_File 180
+#define GO_TID_P_os_Process 1092
+#define GO_TID_P_os_ProcessState 1100
+#define GO_TID_P_os_dirInfo 851
+#define GO_TID_P_os_file 839
+#define GO_TID_P_os_processHandle 1097
+#define GO_TID_P_reflect_SliceHeader 1047
 #define GO_TID_P_strings_Builder 473
-#define GO_TID_P_strings_Reader 211
+#define GO_TID_P_strings_Reader 251
 #define GO_TID_P_sync_Cond 1889
 #define GO_TID_P_sync_Mutex 580
-#define GO_TID_P_sync_Once 839
-#define GO_TID_P_syscall_Credential 1071
-#define GO_TID_P_syscall_Rusage 1087
-#define GO_TID_P_syscall_SysProcAttr 1069
-#define GO_TID_P_tabwriter_Writer 102
+#define GO_TID_P_sync_Once 893
+#define GO_TID_P_syscall_Credential 1086
+#define GO_TID_P_syscall_Rusage 1102
+#define GO_TID_P_syscall_SysProcAttr 1084
+#define GO_TID_P_tabwriter_Writer 138
 #define GO_TID_P_time_Location 1283
 #define GO_TID_P_time_zone 1289
 #define GO_TID_P_zip_File 1279
 #define GO_TID_P_zip_ReadCloser 1275
 #define GO_TID_P_zip_Reader 1290
-#define GO_TID_S_any 198
-#define GO_TID_S_uint8 114
+#define GO_TID_S_any 238
+#define GO_TID_S_uint8 149
 #define GO_TID_abi_Kind 1301
 #define GO_TID_abi_NameOff 1303
 #define GO_TID_abi_TFlag 1300
 #define GO_TID_abi_Type 1299
 #define GO_TID_abi_TypeOff 1304
-#define GO_TID_atomic_Bool 841
-#define GO_TID_atomic_Int32 1081
-#define GO_TID_atomic_Pointer_os_dirInfo_ 795
-#define GO_TID_atomic_Uint32 1079
+#define GO_TID_atomic_Bool 895
+#define GO_TID_atomic_Int32 1096
+#define GO_TID_atomic_Pointer_os_dirInfo_ 849
+#define GO_TID_atomic_Uint32 1094
 #define GO_TID_atomic_Uint64 1942
 #define GO_TID_atomic_align64 1943
-#define GO_TID_atomic_noCopy 802
-#define GO_TID_binary_bigEndian 117
-#define GO_TID_binary_littleEndian 118
-#define GO_TID_bufio_Reader 849
-#define GO_TID_bufio_Writer 639
-#define GO_TID_bytes_Buffer 592
-#define GO_TID_bytes_Reader 844
-#define GO_TID_bytes_readOp 593
-#define GO_TID_color_NRGBA 158
+#define GO_TID_atomic_noCopy 856
+#define GO_TID_binary_bigEndian 212
+#define GO_TID_binary_littleEndian 163
+#define GO_TID_bufio_Reader 612
+#define GO_TID_bufio_Writer 693
+#define GO_TID_bytes_Buffer 646
+#define GO_TID_bytes_Reader 898
+#define GO_TID_bytes_readOp 647
+#define GO_TID_color_NRGBA 196
 #define GO_TID_color_Palette 1389
-#define GO_TID_exec_Cmd 1068
-#define GO_TID_exec_ExitError 1096
+#define GO_TID_exec_Cmd 1083
+#define GO_TID_exec_ExitError 1111
 #define GO_TID_float64 14
-#define GO_TID_image_Alpha 599
+#define GO_TID_image_Alpha 653
 #define GO_TID_image_NRGBA 1390
 #define GO_TID_image_Paletted 1388
-#define GO_TID_image_Point 601
+#define GO_TID_image_Point 655
 #define GO_TID_image_RGBA 1384
-#define GO_TID_image_Rectangle 600
+#define GO_TID_image_Rectangle 654
 #define GO_TID_image_Uniform 1385
 #define GO_TID_ini_DebugFunc 1309
 #define GO_TID_ini_File 1307
@@ -8082,9 +8082,9 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_ini_NameMapper 1319
 #define GO_TID_ini_Section 1314
 #define GO_TID_ini_ValueMapper 1320
-#define GO_TID_io_LimitedReader 874
+#define GO_TID_io_LimitedReader 934
 #define GO_TID_json_Number 518
-#define GO_TID_net_IP 843
+#define GO_TID_net_IP 897
 #define GO_TID_net_IPMask 1348
 #define GO_TID_net_IPNet 1347
 #define GO_TID_net_KeepAliveConfig 1676
@@ -8092,25 +8092,25 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_net_TCPAddr 1678
 #define GO_TID_net_TCPConn 1679
 #define GO_TID_net_TCPListener 1671
-#define GO_TID_net_UDPAddr 842
+#define GO_TID_net_UDPAddr 896
 #define GO_TID_net_conn 1680
 #define GO_TID_net_mptcpStatusListen 1677
 #define GO_TID_net_netFD 1673
-#define GO_TID_os_File 784
-#define GO_TID_os_Process 1078
-#define GO_TID_os_ProcessState 1086
-#define GO_TID_os_dirInfo 798
-#define GO_TID_os_file 786
-#define GO_TID_os_processHandle 1083
-#define GO_TID_poll_FD 787
-#define GO_TID_poll_SysFile 789
-#define GO_TID_poll_fdMutex 788
-#define GO_TID_poll_pollDesc 793
+#define GO_TID_os_File 838
+#define GO_TID_os_Process 1093
+#define GO_TID_os_ProcessState 1101
+#define GO_TID_os_dirInfo 852
+#define GO_TID_os_file 840
+#define GO_TID_os_processHandle 1098
+#define GO_TID_poll_FD 841
+#define GO_TID_poll_SysFile 843
+#define GO_TID_poll_fdMutex 842
+#define GO_TID_poll_pollDesc 847
 #define GO_TID_reflect_Kind 488
-#define GO_TID_reflect_SliceHeader 988
+#define GO_TID_reflect_SliceHeader 1048
 #define GO_TID_reflect_Value 1297
 #define GO_TID_reflect_flag 1305
-#define GO_TID_runtime_Cleanup 1084
+#define GO_TID_runtime_Cleanup 1099
 #define GO_TID_sdl_AudioDeviceID 1946
 #define GO_TID_sdl_ButtonState 2029
 #define GO_TID_sdl_CommonEvent 581
@@ -8133,25 +8133,25 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_sdl_WindowEventID 2033
 #define GO_TID_sort_StringSlice 501
 #define GO_TID_strings_Builder 1356
-#define GO_TID_strings_Reader 1004
+#define GO_TID_strings_Reader 1064
 #define GO_TID_sync_Cond 1890
-#define GO_TID_sync_Mutex 799
-#define GO_TID_sync_Once 840
-#define GO_TID_sync_RWMutex 1080
+#define GO_TID_sync_Mutex 853
+#define GO_TID_sync_Once 894
+#define GO_TID_sync_RWMutex 1095
 #define GO_TID_sync_WaitGroup 1956
 #define GO_TID_sync_copyChecker 1892
-#define GO_TID_sync_noCopy 800
+#define GO_TID_sync_noCopy 854
 #define GO_TID_sync_notifyList 1891
-#define GO_TID_syscall_Credential 1072
-#define GO_TID_syscall_Iovec 792
-#define GO_TID_syscall_Rusage 1088
-#define GO_TID_syscall_Signal 1073
-#define GO_TID_syscall_SysProcAttr 1070
-#define GO_TID_syscall_SysProcIDMap 1075
-#define GO_TID_syscall_Timeval 1089
-#define GO_TID_syscall_WaitStatus 252
-#define GO_TID_tabwriter_Writer 594
-#define GO_TID_tabwriter_cell 596
+#define GO_TID_syscall_Credential 1087
+#define GO_TID_syscall_Iovec 846
+#define GO_TID_syscall_Rusage 1103
+#define GO_TID_syscall_Signal 1088
+#define GO_TID_syscall_SysProcAttr 1085
+#define GO_TID_syscall_SysProcIDMap 1090
+#define GO_TID_syscall_Timeval 1104
+#define GO_TID_syscall_WaitStatus 260
+#define GO_TID_tabwriter_Writer 648
+#define GO_TID_tabwriter_cell 650
 #define GO_TID_time_Duration 578
 #define GO_TID_time_Location 1284
 #define GO_TID_time_Time 1282
@@ -8167,32 +8167,54 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_zip_Reader 1277
 #define GO_TID_zip_fileListEntry 1294
 static inline bool ik_impl_0(int t) { // interface{Seek(offset int64, whence int) (int64, error)}
-    switch (t) { case 119: case 146: case 155: case 169: case 211: case 304: case 305: case 734: return true; default: return false; }
+    switch (t) { case 150: case 180: case 189: case 207: case 251: case 304: case 305: case 788: return true; default: return false; }
 }
 static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
-    switch (t) { case 101: case 123: case 473: return true; default: return false; }
+    switch (t) { case 137: case 155: case 473: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 108: case 126: case 128: case 130: case 136: case 146: case 151: case 304: case 305: case 503: case 505: case 516: case 645: case 1275: case 1672: case 2035: return true; default: return false; }
+    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 503: case 505: case 516: case 699: case 1275: case 1672: case 2035: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
-    switch (t) { case 146: case 155: case 169: case 211: case 304: case 305: case 734: return true; default: return false; }
+    switch (t) { case 180: case 189: case 207: case 251: case 304: case 305: case 788: return true; default: return false; }
 }
 static inline bool ik_impl_4(int t) { // interface{HDRPixel() (p1 float64, p2 float64, p3 float64, pa float64); HDRRGBA() (r float64, g float64, b float64, a float64); HDRXYZA() (x float64, y float64, z float64, a float64); color.Color}
-    switch (t) { case 167: case 168: return true; default: return false; }
+    switch (t) { case 205: case 206: return true; default: return false; }
 }
 static inline bool ik_impl_5(int t) { // interface{io.Writer; io.Seeker}
-    switch (t) { case 146: return true; default: return false; }
+    switch (t) { case 180: return true; default: return false; }
 }
 static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.LValueType; assertFloat64() (float64, bool); assertFunction() (*lua.LFunction, bool); assertString() (string, bool)}
-    switch (t) { case 204: case 205: case 206: case 207: case 208: case 209: case 212: case 213: case 253: case 273: case 527: return true; default: return false; }
+    switch (t) { case 244: case 245: case 246: case 247: case 248: case 249: case 252: case 253: case 261: case 279: case 527: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 109: case 111: case 120: case 148: case 161: case 166: case 187: case 188: case 189: case 200: case 210: case 215: case 251: case 254: case 260: case 275: case 281: case 873: case 2036: return true; default: return false; }
+    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 933: case 2036: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
     switch (t) { case 2036: return true; default: return false; }
 }
+parse_yyParser parse_yyNewParser(void);
+GoString parse_yyTokname(int c);
+GoString parse_yyStatname(int s);
+GoString parse_yyErrorMessage(int state, int lookAhead);
+Ret_int__int parse_yylex1(parse_yyLexer lex, parse_yySymType* lval);
+int parse_yyParse(parse_yyLexer yylex);
+int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex);
+list_Element* list_Element_Next(list_Element* e);
+list_Element* list_Element_Prev(list_Element* e);
+list_List* list_List_Init(list_List* l);
+list_List* list_New(void);
+int list_List_Len(list_List* l);
+list_Element* list_List_Front(list_List* l);
+list_Element* list_List_Back(list_List* l);
+void list_List_lazyInit(list_List* l);
+list_Element* list_List_insert(list_List* l, list_Element* e, list_Element* at);
+list_Element* list_List_insertValue(list_List* l, GoIface v, list_Element* at);
+void list_List_remove(list_List* l, list_Element* e);
+GoIface list_List_Remove(list_List* l, list_Element* e);
+list_Element* list_List_PushFront(list_List* l, GoIface v);
+list_Element* list_List_PushBack(list_List* l, GoIface v);
+list_Element* list_List_InsertBefore(list_List* l, GoIface v, list_Element* mark);
 Ret_GoString__GoIface findfont_Find(GoString fileName);
 bool findfont_isFontFile(GoString fileName);
 GoString findfont_stripExtension(GoString fileName);
@@ -8360,14 +8382,6 @@ truetype_VMetric truetype_Font_unscaledVMetric(truetype_Font* f, truetype_Index 
 fixed_Int26_6 truetype_Font_Kern(truetype_Font* f, fixed_Int26_6 scale, truetype_Index i0, truetype_Index i1);
 Ret_truetype_FontPtr__GoIface truetype_Parse(Slice_u8 ttf);
 Ret_truetype_FontPtr__GoIface truetype_parse(Slice_u8 ttf, int offset);
-GoString fixed_Int26_6_String(fixed_Int26_6 x);
-GoString fixed_Int52_12_String(fixed_Int52_12 x);
-GoString f322_Affine_String(f322_Affine m);
-Slice_u8 f322_Bytes(GoIface byteOrder, Slice_f32 values);
-GoString f322_Mat3_String(f322_Mat3 m);
-GoString f322_Mat4_String(f322_Mat4 m);
-GoString f322_Vec3_String(f322_Vec3 v);
-GoString f322_Vec4_String(f322_Vec4 v);
 GoIface mp3_Decoder_readFrame(mp3_Decoder* d);
 Ret_int__GoIface mp3_Decoder_Read(mp3_Decoder* d, Slice_u8 buf);
 Ret_i64__GoIface mp3_Decoder_Seek(mp3_Decoder* d, i64 offset, int whence);
@@ -8792,6 +8806,64 @@ Ret_int__GoIface oggvorbis_Reader_Read(oggvorbis_Reader* r, Slice_f32 p);
 GoIface oggvorbis_Reader_fillBuffer(oggvorbis_Reader* r);
 Ret_int__GoIface oggvorbis_Reader_read(oggvorbis_Reader* r, Slice_f32 p);
 GoIface oggvorbis_Reader_skip(oggvorbis_Reader* r);
+vorbis2_bitReader* vorbis2_newBitReader(Slice_u8 data);
+u32 vorbis2_bitReader_Read1(vorbis2_bitReader* r);
+u32 vorbis2_bitReader_read(vorbis2_bitReader* r, uintptr_t n, uintptr_t bits);
+u8 vorbis2_bitReader_Read8(vorbis2_bitReader* r, uintptr_t n);
+u16 vorbis2_bitReader_Read16(vorbis2_bitReader* r, uintptr_t n);
+u32 vorbis2_bitReader_Read32(vorbis2_bitReader* r, uintptr_t n);
+bool vorbis2_bitReader_ReadBool(vorbis2_bitReader* r);
+GoIface vorbis2_codebook_ReadFrom(vorbis2_codebook* c, vorbis2_bitReader* r);
+u32 vorbis2_codebook_DecodeScalar(vorbis2_codebook* c, vorbis2_bitReader* r);
+Slice_f32 vorbis2_codebook_DecodeVector(vorbis2_codebook* c, vorbis2_bitReader* r);
+uintptr_t vorbis2_ilog(int x);
+int vorbis2_lookup1Values(int entries, u32 dim);
+f32 vorbis2_float32Unpack(u32 x);
+Ret_Slice_f32__GoIface vorbis2_Decoder_decodePacket(vorbis2_Decoder* d, vorbis2_bitReader* r, Slice_f32 out);
+void vorbis2_Decoder_decodeFloors(vorbis2_Decoder* d, vorbis2_bitReader* r, Slice_vorbis2_floorData floors, vorbis2_mapping* mapping, u32 n);
+void vorbis2_Decoder_decodeResidue(vorbis2_Decoder* d, vorbis2_bitReader* r, Slice_Slice_f32 out, vorbis2_mapping* mapping, Slice_vorbis2_floorData floors, u32 n);
+void vorbis2_Decoder_inverseCoupling(vorbis2_Decoder* d, vorbis2_mapping* mapping, Slice_Slice_f32 residueVectors);
+void vorbis2_Decoder_applyFloor(vorbis2_Decoder* d, Slice_vorbis2_floorData floors, Slice_Slice_f32 residueVectors);
+GoIface vorbis2_floor0_ReadFrom(vorbis2_floor0* f, vorbis2_bitReader* r);
+GoIface vorbis2_floor0_Decode(vorbis2_floor0* f, vorbis2_bitReader* r, Slice_vorbis2_codebook books, u32 n);
+void vorbis2_floor0_Apply(vorbis2_floor0* f, Slice_f32 out, GoIface data);
+int vorbis2_floor0_mapResult(vorbis2_floor0* f, u32 i, u32 n);
+f64 vorbis2_bark(f64 x);
+GoIface vorbis2_floor1_ReadFrom(vorbis2_floor1* f, vorbis2_bitReader* r);
+GoIface vorbis2_floor1_Decode(vorbis2_floor1* f, vorbis2_bitReader* r, Slice_vorbis2_codebook books, u32 n);
+void vorbis2_floor1_Apply(vorbis2_floor1* f, Slice_f32 out, GoIface data);
+int vorbis2_floor1_Len(vorbis2_floor1* f);
+bool vorbis2_floor1_Less(vorbis2_floor1* f, int i, int j);
+void vorbis2_floor1_Swap(vorbis2_floor1* f, int i, int j);
+int vorbis2_lowNeighbor(Slice_u32 v, int index);
+int vorbis2_highNeighbor(Slice_u32 v, int index);
+u32 vorbis2_renderPoint(u32 x0, u32 y0, u32 x1, u32 y1, u32 x);
+void vorbis2_renderLine(u32 x0, u32 y0, u32 x1, u32 y1, Slice_f32 v);
+GoIface vorbis2_Decoder_readIdentificationHeader(vorbis2_Decoder* d, Slice_u8 h);
+GoIface vorbis2_Decoder_readCommentHeader(vorbis2_Decoder* d, Slice_u8 h);
+u32 vorbis2_huffmanCode_Lookup(vorbis2_huffmanCode h, vorbis2_bitReader* r);
+vorbis2_huffmanBuilder* vorbis2_newHuffmanBuilder(u32 size);
+void vorbis2_huffmanBuilder_Put(vorbis2_huffmanBuilder* t, u32 entry, u8 length);
+bool vorbis2_huffmanBuilder_put(vorbis2_huffmanBuilder* t, u32 index, u32 entry, u8 length);
+u32 vorbis2_huffmanBuilder_findEmpty(vorbis2_huffmanBuilder* t, u32 index);
+void vorbis2_generateIMDCTLookup(int n, vorbis2_imdctLookup* l);
+void vorbis2_imdct(vorbis2_imdctLookup* t, Slice_f32 in, Slice_f32 out);
+GoIface vorbis2_residue_ReadFrom(vorbis2_residue* x, vorbis2_bitReader* r);
+void vorbis2_residue_Decode(vorbis2_residue* x, vorbis2_bitReader* r, Slice_bool doNotDecode, u32 n, Slice_vorbis2_codebook books, Slice_Slice_f32 out);
+GoIface vorbis2_Decoder_readSetupHeader(vorbis2_Decoder* d, Slice_u8 header);
+void vorbis2_Decoder_initLookup(vorbis2_Decoder* d);
+int vorbis2_Decoder_SampleRate(vorbis2_Decoder* d);
+int vorbis2_Decoder_Channels(vorbis2_Decoder* d);
+int vorbis2_Decoder_BufferSize(vorbis2_Decoder* d);
+bool vorbis2_IsHeader(Slice_u8 packet);
+GoIface vorbis2_Decoder_ReadHeader(vorbis2_Decoder* d, Slice_u8 header);
+bool vorbis2_Decoder_HeadersRead(vorbis2_Decoder* d);
+Ret_Slice_f32__GoIface vorbis2_Decoder_Decode(vorbis2_Decoder* d, Slice_u8 in);
+Ret_Slice_f32__GoIface vorbis2_Decoder_DecodeInto(vorbis2_Decoder* d, Slice_u8 in, Slice_f32 buffer);
+void vorbis2_Decoder_Clear(vorbis2_Decoder* d);
+void vorbis2_Decoder_applyWindow(vorbis2_Decoder* d, vorbis2_windowType* t, Slice_Slice_f32 samples);
+Slice_f32 vorbis2_makeWindow(int size);
+f32 vorbis2_windowFunc(f32 x);
 Ret_u32__u32__u32__u32 colorful_Color_RGBA(colorful_Color col);
 bool colorful_Color_IsValid(colorful_Color c);
 Ret_colorful_Color__GoIface colorful_Hex(GoString scol);
@@ -8935,6 +9007,15 @@ Ret_GoString__GoIface meta_readString(GoIface r, int n);
 GoIface meta_Block_parseSeekTable(meta_Block* block);
 GoIface meta_Block_parseStreamInfo(meta_Block* block);
 GoIface meta_Block_parseVorbisComment(meta_Block* block);
+GoString errutil_position_String(errutil_position* pos);
+GoIface errutil_Err(GoIface e);
+GoIface errutil_backendErr(GoIface e);
+GoString errutil_ErrInfo_Error(errutil_ErrInfo* e);
+GoString term_Color(GoString text, Slice_GoString colors);
+GoString term_esc(GoString s);
+GoString term_MagentaBold(GoString text);
+GoString term_RedBold(GoString text);
+GoString term_WhiteBold(GoString text);
 GoIface errors_x_New(GoString message);
 GoString errors_x_fundamental_Error(errors_x_fundamental* f);
 GoIface errors_x_Wrap(GoIface err, GoString message);
@@ -9663,13 +9744,6 @@ void parse_Lexer_Error(parse_Lexer* lx, GoString message);
 void parse_Lexer_TokenError(parse_Lexer* lx, ast_Token tok, GoString message);
 Ret_Slice_ast_Stmt__GoIface parse_Parse(GoIface reader, GoString name);
 GoString parse_TokenName(int c);
-parse_yyParser parse_yyNewParser(void);
-GoString parse_yyTokname(int c);
-GoString parse_yyStatname(int s);
-GoString parse_yyErrorMessage(int state, int lookAhead);
-Ret_int__int parse_yylex1(parse_yyLexer lex, parse_yySymType* lval);
-int parse_yyParse(parse_yyLexer yylex);
-int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex);
 pm_Error* pm_newError(int pos, GoString message, Slice_GoIface args);
 GoString pm_Error_Error(pm_Error* e);
 pm_MatchData* pm_newMatchState(void);
@@ -9951,88 +10025,14 @@ bool lua_lessThan(lua_LState* L, lua_LValue lhs, lua_LValue rhs);
 bool lua_equals(lua_LState* L, lua_LValue lhs, lua_LValue rhs, bool raw);
 bool lua_objectRationalWithError(lua_LState* L, lua_LValue lhs, lua_LValue rhs, GoString event);
 int lua_objectRational(lua_LState* L, lua_LValue lhs, lua_LValue rhs, GoString event);
-list_Element* list_Element_Next(list_Element* e);
-list_Element* list_Element_Prev(list_Element* e);
-list_List* list_List_Init(list_List* l);
-list_List* list_New(void);
-int list_List_Len(list_List* l);
-list_Element* list_List_Front(list_List* l);
-list_Element* list_List_Back(list_List* l);
-void list_List_lazyInit(list_List* l);
-list_Element* list_List_insert(list_List* l, list_Element* e, list_Element* at);
-list_Element* list_List_insertValue(list_List* l, GoIface v, list_Element* at);
-void list_List_remove(list_List* l, list_Element* e);
-GoIface list_List_Remove(list_List* l, list_Element* e);
-list_Element* list_List_PushFront(list_List* l, GoIface v);
-list_Element* list_List_PushBack(list_List* l, GoIface v);
-list_Element* list_List_InsertBefore(list_List* l, GoIface v, list_Element* mark);
-GoString errutil_position_String(errutil_position* pos);
-GoIface errutil_Err(GoIface e);
-GoIface errutil_backendErr(GoIface e);
-GoString errutil_ErrInfo_Error(errutil_ErrInfo* e);
-GoString term_Color(GoString text, Slice_GoString colors);
-GoString term_esc(GoString s);
-GoString term_MagentaBold(GoString text);
-GoString term_RedBold(GoString text);
-GoString term_WhiteBold(GoString text);
-vorbis2_bitReader* vorbis2_newBitReader(Slice_u8 data);
-u32 vorbis2_bitReader_Read1(vorbis2_bitReader* r);
-u32 vorbis2_bitReader_read(vorbis2_bitReader* r, uintptr_t n, uintptr_t bits);
-u8 vorbis2_bitReader_Read8(vorbis2_bitReader* r, uintptr_t n);
-u16 vorbis2_bitReader_Read16(vorbis2_bitReader* r, uintptr_t n);
-u32 vorbis2_bitReader_Read32(vorbis2_bitReader* r, uintptr_t n);
-bool vorbis2_bitReader_ReadBool(vorbis2_bitReader* r);
-GoIface vorbis2_codebook_ReadFrom(vorbis2_codebook* c, vorbis2_bitReader* r);
-u32 vorbis2_codebook_DecodeScalar(vorbis2_codebook* c, vorbis2_bitReader* r);
-Slice_f32 vorbis2_codebook_DecodeVector(vorbis2_codebook* c, vorbis2_bitReader* r);
-uintptr_t vorbis2_ilog(int x);
-int vorbis2_lookup1Values(int entries, u32 dim);
-f32 vorbis2_float32Unpack(u32 x);
-Ret_Slice_f32__GoIface vorbis2_Decoder_decodePacket(vorbis2_Decoder* d, vorbis2_bitReader* r, Slice_f32 out);
-void vorbis2_Decoder_decodeFloors(vorbis2_Decoder* d, vorbis2_bitReader* r, Slice_vorbis2_floorData floors, vorbis2_mapping* mapping, u32 n);
-void vorbis2_Decoder_decodeResidue(vorbis2_Decoder* d, vorbis2_bitReader* r, Slice_Slice_f32 out, vorbis2_mapping* mapping, Slice_vorbis2_floorData floors, u32 n);
-void vorbis2_Decoder_inverseCoupling(vorbis2_Decoder* d, vorbis2_mapping* mapping, Slice_Slice_f32 residueVectors);
-void vorbis2_Decoder_applyFloor(vorbis2_Decoder* d, Slice_vorbis2_floorData floors, Slice_Slice_f32 residueVectors);
-GoIface vorbis2_floor0_ReadFrom(vorbis2_floor0* f, vorbis2_bitReader* r);
-GoIface vorbis2_floor0_Decode(vorbis2_floor0* f, vorbis2_bitReader* r, Slice_vorbis2_codebook books, u32 n);
-void vorbis2_floor0_Apply(vorbis2_floor0* f, Slice_f32 out, GoIface data);
-int vorbis2_floor0_mapResult(vorbis2_floor0* f, u32 i, u32 n);
-f64 vorbis2_bark(f64 x);
-GoIface vorbis2_floor1_ReadFrom(vorbis2_floor1* f, vorbis2_bitReader* r);
-GoIface vorbis2_floor1_Decode(vorbis2_floor1* f, vorbis2_bitReader* r, Slice_vorbis2_codebook books, u32 n);
-void vorbis2_floor1_Apply(vorbis2_floor1* f, Slice_f32 out, GoIface data);
-int vorbis2_floor1_Len(vorbis2_floor1* f);
-bool vorbis2_floor1_Less(vorbis2_floor1* f, int i, int j);
-void vorbis2_floor1_Swap(vorbis2_floor1* f, int i, int j);
-int vorbis2_lowNeighbor(Slice_u32 v, int index);
-int vorbis2_highNeighbor(Slice_u32 v, int index);
-u32 vorbis2_renderPoint(u32 x0, u32 y0, u32 x1, u32 y1, u32 x);
-void vorbis2_renderLine(u32 x0, u32 y0, u32 x1, u32 y1, Slice_f32 v);
-GoIface vorbis2_Decoder_readIdentificationHeader(vorbis2_Decoder* d, Slice_u8 h);
-GoIface vorbis2_Decoder_readCommentHeader(vorbis2_Decoder* d, Slice_u8 h);
-u32 vorbis2_huffmanCode_Lookup(vorbis2_huffmanCode h, vorbis2_bitReader* r);
-vorbis2_huffmanBuilder* vorbis2_newHuffmanBuilder(u32 size);
-void vorbis2_huffmanBuilder_Put(vorbis2_huffmanBuilder* t, u32 entry, u8 length);
-bool vorbis2_huffmanBuilder_put(vorbis2_huffmanBuilder* t, u32 index, u32 entry, u8 length);
-u32 vorbis2_huffmanBuilder_findEmpty(vorbis2_huffmanBuilder* t, u32 index);
-void vorbis2_generateIMDCTLookup(int n, vorbis2_imdctLookup* l);
-void vorbis2_imdct(vorbis2_imdctLookup* t, Slice_f32 in, Slice_f32 out);
-GoIface vorbis2_residue_ReadFrom(vorbis2_residue* x, vorbis2_bitReader* r);
-void vorbis2_residue_Decode(vorbis2_residue* x, vorbis2_bitReader* r, Slice_bool doNotDecode, u32 n, Slice_vorbis2_codebook books, Slice_Slice_f32 out);
-GoIface vorbis2_Decoder_readSetupHeader(vorbis2_Decoder* d, Slice_u8 header);
-void vorbis2_Decoder_initLookup(vorbis2_Decoder* d);
-int vorbis2_Decoder_SampleRate(vorbis2_Decoder* d);
-int vorbis2_Decoder_Channels(vorbis2_Decoder* d);
-int vorbis2_Decoder_BufferSize(vorbis2_Decoder* d);
-bool vorbis2_IsHeader(Slice_u8 packet);
-GoIface vorbis2_Decoder_ReadHeader(vorbis2_Decoder* d, Slice_u8 header);
-bool vorbis2_Decoder_HeadersRead(vorbis2_Decoder* d);
-Ret_Slice_f32__GoIface vorbis2_Decoder_Decode(vorbis2_Decoder* d, Slice_u8 in);
-Ret_Slice_f32__GoIface vorbis2_Decoder_DecodeInto(vorbis2_Decoder* d, Slice_u8 in, Slice_f32 buffer);
-void vorbis2_Decoder_Clear(vorbis2_Decoder* d);
-void vorbis2_Decoder_applyWindow(vorbis2_Decoder* d, vorbis2_windowType* t, Slice_Slice_f32 samples);
-Slice_f32 vorbis2_makeWindow(int size);
-f32 vorbis2_windowFunc(f32 x);
+GoString fixed_Int26_6_String(fixed_Int26_6 x);
+GoString fixed_Int52_12_String(fixed_Int52_12 x);
+GoString f322_Affine_String(f322_Affine m);
+Slice_u8 f322_Bytes(GoIface byteOrder, Slice_f32 values);
+GoString f322_Mat3_String(f322_Mat3 m);
+GoString f322_Mat4_String(f322_Mat4 m);
+GoString f322_Vec3_String(f322_Vec3 v);
+GoString f322_Vec4_String(f322_Vec4 v);
 AnimFrame* fn_newAnimFrame(void);
 Ret_AnimFramePtr__GoIface fn_ReadAnimFrame(GoString line);
 Animation* fn_newAnimation(Sff* sff, PaletteList* pal);

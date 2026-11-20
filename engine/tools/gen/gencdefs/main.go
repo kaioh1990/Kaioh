@@ -234,9 +234,11 @@ func main() {
 	namedSliceDone := map[string]bool{}
 	sliceDone := map[string]bool{}
 	pendingNamed := map[string]string{}
+	var pendingOrder []string // declaration order: deterministic output
 	for _, t := range sliceNamed {
 		f := strings.Fields(strings.TrimSuffix(strings.TrimSpace(t), ";"))
 		pendingNamed[f[len(f)-1]] = t
+		pendingOrder = append(pendingOrder, f[len(f)-1])
 	}
 	for progress := true; progress; {
 		progress = false
@@ -256,7 +258,8 @@ func main() {
 			sliceDone[n] = true
 			progress = true
 		}
-		for name, t := range pendingNamed {
+		for _, name := range pendingOrder {
+			t := pendingNamed[name]
 			if namedSliceDone[name] {
 				continue
 			}
