@@ -67,8 +67,8 @@ cd "$W"
 "$B/cvf" > smoke.log 2>&1 &
 PID=$!
 # a Lua error leaves the engine's error dialog open: give up after 5 minutes
-( sleep 300; kill -9 $PID 2>/dev/null ) &
-DOG=$!
+( i=0; while [ $i -lt 300 ] && kill -0 $PID 2>/dev/null; do sleep 1; i=$((i + 1)); done
+  kill -9 $PID 2>/dev/null ) > /dev/null 2>&1 &
 # while the game hosts Nearby, find it from another process
 i=0
 while [ ! -f smoke-hosting ] && kill -0 $PID 2>/dev/null && [ $i -lt 1200 ]; do sleep 0.1; i=$((i + 1)); done
@@ -79,7 +79,6 @@ if [ -f smoke-hosting ]; then
   touch smoke-scanned
 fi
 wait $PID || true
-kill $DOG 2>/dev/null || true
 grep '^SMOKE' smoke.log || true
 echo "outside Nearby scan: $SCAN"
 grep -q '^SMOKE .*SMOKE OK' smoke.log && [ "$SCAN" = ok ] && echo "smoke: PASS" && exit 0
