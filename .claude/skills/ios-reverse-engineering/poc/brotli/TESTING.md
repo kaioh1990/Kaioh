@@ -2,32 +2,29 @@
 
 ## IMPORTANT UPDATE (Nov 20, 2026)
 
-The original payloads (oob-base, oob-extended, oob-huffman, oob-padding) were
-**detection probes only** — they use MNIBBLES=0 (empty meta-blocks) which CANNOT
-trigger the actual CVE-2026-111497 vulnerability.
-
-**Real PoC payloads are now deployed** on the v4 server (port 8889). These use
-the actual exploit mechanism: NBLTYPESL=2 with block length exhaustion, from
-published PoCs by dimasma0305 and syrex1013.
+The v4 server is now deployed on port 8889 with **real CVE-2026-111497 trigger
+payloads** using the actual vulnerability mechanism: NBLTYPES=2 with block
+length exhaustion. The original MNIBBLES=0 payloads were detection probes only
+and CANNOT trigger the bug.
 
 ## Quick Start
 
-When you wake up, here's what to do:
+On iPad Safari, navigate to: `http://192.168.1.155:8889/`
 
-### Option A: V3 HTTP Test (Best first test — improved payloads, no cert needed)
+### Real Triggers (use these first)
 
-1. On iPad Safari, navigate to: `http://192.168.1.155:8889/`
-2. This is the **v3 server** with both detection probes AND corruption payloads
-3. Tap **detect-base** first (quick vulnerability check)
-4. Then tap **oob-v2-0** through **oob-v2-4** (corruption payloads that may crash)
-5. Try **Fire ALL** to test everything at once
-6. Try **DS: oob-v2-0** to test DecompressionStream API path
+1. Tap **syrex (512KB)** — small, fast, uses NBLTYPESL=2 double exhaustion
+2. Tap **dimas (23MB)** — large, 16M commands exhaust block counter
+3. Try **DS: syrex** and **DS: dimas** for DecompressionStream API path
+4. Try **Fire All Real** to test both triggers
 
-**Note:** Safari may not decompress Brotli over HTTP (Content-Encoding: br).
-The DecompressionStream buttons work over HTTP. If Content-Encoding results
-all show "NETWORK ERROR", try Option B for HTTPS or use the DS buttons.
+**Note:** Safari may not decompress Brotli over plain HTTP (Content-Encoding: br).
+If results show "NETWORK ERROR", use the purple **DS:** buttons instead — these
+use JavaScript's `DecompressionStream('br')` API which works over HTTP.
 
-### Option B: HTTPS Test (Proper Brotli trigger, needs cert trust)
+For guaranteed Content-Encoding: br delivery, use HTTPS (Option B below).
+
+### Option B: HTTPS Test (needs cert trust)
 
 #### Step 1: Install self-signed certificate on iPad
 
@@ -35,24 +32,15 @@ all show "NETWORK ERROR", try Option B for HTTPS or use the DS buttons.
 2. Safari will show "This Connection Is Not Private" — tap **Show Details**
 3. Tap **visit this website**
 4. If prompted, tap **Visit Website**
-5. A profile installation prompt may appear — if so, go to **Settings > General > VPN & Device Management** and install the profile
+5. A profile installation prompt may appear — go to **Settings > General > VPN & Device Management** and install the profile
 6. Go to **Settings > General > About > Certificate Trust Settings**
 7. Toggle ON trust for the "192.168.1.155" certificate
 
 #### Step 2: Test Brotli payloads
 
 1. Navigate to: `https://192.168.1.155:4444/`
-2. You should see the trigger page with payload buttons
-3. Tap **oob-base** first
-4. If no crash, tap **Fire ALL**
-5. Also try the **DecompressionStream** button (uses JS API, different code path)
-
-### Option C: DecompressionStream Test (No cert, no HTTPS, JS API path)
-
-1. Navigate to: `http://192.168.1.155:8889/` (or wherever the DS test page is served)
-2. This page uses JavaScript's `DecompressionStream('br')` API
-3. The raw bytes are embedded in the page — no network decompression needed
-4. This tests whether the same Brotli decoder is used for the JS API
+2. The HTTPS server has the original detection probes (not the real triggers yet)
+3. For real triggers, use the HTTP v4 server with DS buttons
 
 ## What to Watch For
 
@@ -61,9 +49,8 @@ all show "NETWORK ERROR", try Option B for HTTPS or use the DS buttons.
 | **Safari crashes** | OOB write hit unmapped memory — VULNERABILITY CONFIRMED |
 | **Tab dies / "webpage reloaded"** | WebKit.Networking crashed — VULNERABILITY CONFIRMED |
 | **Empty response** | Decoder process crashed — likely VULNERABLE |
-| **Red "OOB HIT" text** | Decoder continued past invalid block switch — VULNERABLE |
-| **Green "PATCHED" text** | Decoder caught error -17 — PATCHED (unlikely on 27.0.1) |
-| **Yellow "NETWORK ERROR"** | Safari blocked decompression — try different method |
+| **Yellow "NETWORK ERROR"** | Safari blocked decompression — use DS buttons instead |
+| **Decoded NNB** | Stream was decoded — check if output is corrupted |
 
 ## After Testing
 
@@ -75,15 +62,16 @@ If a crash is confirmed:
 
 ## Server Status
 
-Servers should be running on the Mac. If they're not:
+Servers running on the Mac (192.168.1.155):
 
 ```bash
-# Check
+# Check all servers
 lsof -iTCP -sTCP:LISTEN -P -n | grep -E ':(4443|4444|8888|8889|8890)'
 
-# Restart v3 HTTP Brotli trigger (port 8889)
+# Restart v4 HTTP Brotli trigger (port 8889) — REAL TRIGGERS
 cd /Users/ttameirao/jailbreak-research/CVE-2026-111497
-python3 brotli_v3_server.py &
+python3 brotli_v4_server.py &
+# Note: dimas payload generation takes ~30-60s at startup
 
 # Restart HTTPS Brotli trigger (port 4444)
 python3 brotli_https_server.py 4444 &
@@ -92,3 +80,20 @@ python3 brotli_https_server.py 4444 &
 cd /Users/ttameirao/jailbreak-research/CVE-2026-86950/trigger
 python3 -m http.server 8888 &
 ```
+
+## Payload Details
+
+### Real Triggers (v4 server)
+
+| Name | Size | Mechanism |
+|------|------|-----------|
+| **syrex** | ~512KB | NBLTYPESL=2, block type 0 len=1 + type 1 len=0. Double exhaustion forces DecodeBlockTypeAndLength on stale Huffman state. |
+| **dimas** | ~23MB | NBLTYPESI=2, initial command block length=0xFFFFFF (16M). After exhaustion, decoder reads attacker-controlled block switch data via memmove16(). |
+
+### Legacy Probes (kept for comparison)
+
+| Name | Size | Note |
+|------|------|------|
+| detect-base | 22B | MNIBBLES=0 — cannot trigger the bug |
+| detect-ext | 23B | MNIBBLES=0 — cannot trigger the bug |
+| oob-v2-0..2 | 238B | Bit-flipped valid streams — unlikely to trigger OOB |
