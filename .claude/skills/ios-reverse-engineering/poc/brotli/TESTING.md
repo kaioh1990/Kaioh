@@ -4,14 +4,18 @@
 
 When you wake up, here's what to do:
 
-### Option A: HTTP Test (No cert needed, but may not trigger Brotli decompression)
+### Option A: V3 HTTP Test (Best first test — improved payloads, no cert needed)
 
 1. On iPad Safari, navigate to: `http://192.168.1.155:8889/`
-2. Tap each payload button
-3. Watch for crashes or error responses
+2. This is the **v3 server** with both detection probes AND corruption payloads
+3. Tap **detect-base** first (quick vulnerability check)
+4. Then tap **oob-v2-0** through **oob-v2-4** (corruption payloads that may crash)
+5. Try **Fire ALL** to test everything at once
+6. Try **DS: oob-v2-0** to test DecompressionStream API path
 
-**Note:** Safari may not decompress Brotli over HTTP. If all results show "NETWORK ERROR",
-try Option B.
+**Note:** Safari may not decompress Brotli over HTTP (Content-Encoding: br).
+The DecompressionStream buttons work over HTTP. If Content-Encoding results
+all show "NETWORK ERROR", try Option B for HTTPS or use the DS buttons.
 
 ### Option B: HTTPS Test (Proper Brotli trigger, needs cert trust)
 
@@ -65,11 +69,11 @@ Servers should be running on the Mac. If they're not:
 
 ```bash
 # Check
-lsof -iTCP -sTCP:LISTEN -P -n | grep -E ':(4443|4444|8888|8889)'
+lsof -iTCP -sTCP:LISTEN -P -n | grep -E ':(4443|4444|8888|8889|8890)'
 
-# Restart HTTP Brotli trigger (port 8889)
+# Restart v3 HTTP Brotli trigger (port 8889)
 cd /Users/ttameirao/jailbreak-research/CVE-2026-111497
-python3 brotli_trigger_server.py 8889 &
+python3 brotli_v3_server.py &
 
 # Restart HTTPS Brotli trigger (port 4444)
 python3 brotli_https_server.py 4444 &
