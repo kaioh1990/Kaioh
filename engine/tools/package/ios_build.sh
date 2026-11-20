@@ -37,9 +37,7 @@ for sdk in iphoneos iphonesimulator; do
   (cd "$B/objs/core" && ar -x "$B/libcvf_core.a")
   (cd "$B/objs/ik" && ar -x "$B/libcvf_ik.a")
   SYSROOT=$(xcrun --sdk $sdk --show-sdk-path)
-  # -d: turn common (tentative) definitions into real ones, so they are
-  # hidden by the export list too
-  xcrun --sdk $sdk clang -target $target -isysroot "$SYSROOT" -r -nostdlib -Wl,-d \
+  xcrun --sdk $sdk clang -target $target -isysroot "$SYSROOT" -r -nostdlib \
     -Wl,-exported_symbols_list,"$E/src/platform/ios/exports.txt" \
     "$B"/objs/core/*.o "$B"/objs/ik/*.o -o "$B/cvf_engine.o"
   rm -f "$B/libcvf_engine.a"

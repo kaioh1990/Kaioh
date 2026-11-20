@@ -62,7 +62,9 @@ if(IOS)
   target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w)
   set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)
   foreach(t cvf_core cvf_ik)
-    target_compile_options(${t} PRIVATE -fvisibility=hidden)
+    # -fno-common: tentative definitions become real (hidden) ones; the
+    # master object's export list cannot hide common symbols
+    target_compile_options(${t} PRIVATE -fvisibility=hidden -fno-common)
   endforeach()
   return()
 endif()
