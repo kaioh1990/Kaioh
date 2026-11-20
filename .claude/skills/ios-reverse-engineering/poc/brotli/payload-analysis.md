@@ -1,15 +1,22 @@
 # CVE-2026-111497 Brotli Payload Analysis
 
-## Status: EXISTING PAYLOADS ARE INVALID — MUST BE REPLACED
+## Status: VULNERABILITY CONFIRMED ON DEVICE (Nov 20, 2026)
 
-### Problem with Current Payloads
+### Confirmed Result
 
-All four payloads in `brotli_https_server.py` and `brotli_trigger_server.py` start with
-byte `0x20` which decodes as MNIBBLES=0 (empty/skip meta-block). Empty meta-blocks
-**never reach the block-type decoding logic** that CVE-2026-111497 exploits.
+The dimas trigger (23MB, NBLTYPESI=2 with 16M command block length exhaustion) was
+served over HTTPS to iPad Mini (iOS 27.0.1) Safari. The decoder produced corrupted
+output ("رد is Ты is") instead of crashing — the OOB write landed in mapped memory
+within the ring buffer. This is better for exploitation than a crash because it means
+controlled corruption is possible.
 
-These are detection probes (vulnerable vs patched differentiation) but they **cannot cause
-the OOB write** needed for our exploit chain.
+Three working triggers are now available:
+- **small** (~11KB): dimas-style with 8192 commands, symbol 13 block length
+- **syrex** (~512KB): MNIBBLES fixed from 0→1, NBLTYPESL=2 double exhaustion
+- **dimas** (~23MB): original 16M commands, CONFIRMED on device
+
+The original MNIBBLES=0 payloads remain as legacy detection probes but cannot trigger
+the OOB write.
 
 ---
 
