@@ -28,6 +28,7 @@ static void gl_check_fail(const char *fn, u32 e) {
     if (gl_check_logged++ < 40) fprintf(stderr, "gles: %s -> error 0x%x\n", fn, e);
 }
 #define CK(fn) do { if (gl_check) { u32 e_ = p_glGetError_ck(); if (e_) gl_check_fail(fn, e_); } } while (0)
+void cvf_gl_check_point(const char *where) { CK(where); }  // e.g. around the SDL swap
 
 static unsigned char (APIENTRY *p_glUnmapBuffer)(u32);
 static i32 (APIENTRY *p_glGetAttribLocation)(u32, u8*);
@@ -188,6 +189,7 @@ static u32 screen_fbo;
 static int screen_binds;
 void gles2_BindFramebuffer(u32 target, u32 fb) {
     p_glBindFramebuffer(target, fb ? fb : screen_fbo);
+    CK("glBindFramebuffer");
     if (!fb && screen_binds < 3) {  // diagnostics: the first screen binds
         screen_binds++;
         fprintf(stderr, "gles: screen framebuffer %u status 0x%x error 0x%x\n", screen_fbo,
@@ -199,9 +201,11 @@ void gles2_BindFramebuffer(u32 target, u32 fb) {
 // Only the model-shadow path uses it, and models are off on iOS.
 void gles2_FramebufferTexture(u32 target, u32 attachment, u32 texture, i32 level) {
     p_glFramebufferTexture2D_es(target, attachment, CVF_GL_TEXTURE_2D, texture, level);
+    CK("glFramebufferTexture");
 }
 void gles2_VertexAttribPointerWithOffset(u32 index, i32 size, u32 type, bool normalized, i32 stride, uintptr_t offset) {
     p_glVertexAttribPointer_es(index, size, type, normalized, stride, (void *)offset);
+    CK("glVertexAttribPointerWithOffset");
 }
 
 #define LOAD(n) (*(void **)&p_##n = SDL_GL_GetProcAddress(#n))
