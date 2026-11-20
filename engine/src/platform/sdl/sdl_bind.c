@@ -39,8 +39,14 @@ GoIface sdl_Window_Destroy(sdl_Window *w) {
     SDL_DestroyWindow((SDL_Window *)w);
     return (GoIface){0};
 }
+#if CVF_IOS
+void cvf_ios_attach_gl_view(void *sdl_window);  // platform/ios/ios_view.m
+#endif
 Ret_sdl_GLContext__GoIface sdl_Window_GLCreateContext(sdl_Window *w) {
     SDL_GLContext c = SDL_GL_CreateContext((SDL_Window *)w);
+#if CVF_IOS
+    if (c) cvf_ios_attach_gl_view(w);  // SDL creates its GL view here
+#endif
     return (Ret_sdl_GLContext__GoIface){(sdl_GLContext)(uintptr_t)c, c ? (GoIface){0} : sdl_err()};
 }
 GoIface sdl_Window_GLMakeCurrent(sdl_Window *w, sdl_GLContext c) {

@@ -11,6 +11,8 @@ void cvf_ios_frame_tick(void);  // once per frame (stack high-water mark)
 // Background/foreground (IOS_PORT.md 3.7): no GL work while backgrounded.
 void cvf_ios_install_app_watch(void);
 void cvf_ios_wait_foreground(void);  // returns at once when in the foreground
+// ios_view.m: SDL's GL view into the app's window, after GL context creation
+void cvf_ios_attach_gl_view(void *sdl_window);
 
 // cvf_host.c
 void cvf_host_set_running(int up);
