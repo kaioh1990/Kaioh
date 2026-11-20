@@ -54,6 +54,10 @@ if(IOS)
   add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
   target_link_libraries(cvf_ik PUBLIC cvf_core)
   target_include_directories(cvf_ik PUBLIC "${CVF_SDL2_INCLUDE_DIR}")
+  # framework headers include each other as <SDL2/...>: search the folder
+  # that holds SDL2.framework too
+  get_filename_component(CVF_SDL2_FW_DIR "${CVF_SDL2_INCLUDE_DIR}/../.." ABSOLUTE)
+  target_compile_options(cvf_ik PUBLIC "-F${CVF_SDL2_FW_DIR}")
   target_compile_definitions(cvf_ik PRIVATE CVF_IOS=1)
   target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w)
   set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)
