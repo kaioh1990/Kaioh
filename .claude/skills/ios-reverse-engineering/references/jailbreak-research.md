@@ -564,17 +564,26 @@ Step 7: Install Sileo ← GOAL
 
 **Bottom line**: CVE-2026-86950 gives us Step 1. Steps 2-5 each require additional vulnerabilities or research that doesn't exist publicly for iOS 27. This is the fundamental gap between a crash PoC and a working jailbreak.
 
-### Exploit Chain Progress
+### Exploit Chain Progress — CVE-2026-86950 (ABANDONED)
 
 | Step | Description | Status |
 |------|-------------|--------|
 | 1 | CVE-2026-86950 OOB write trigger | **BLOCKED** — bare trigger test confirms OOB does NOT fire on iPad Mini iOS 27.0.1 (Build 24A446). Tested 9 font sizes (128-4096pt), zero crashes, zero crash logs. CoreGraphics patch present. macOS 27.0.1 also patched (guard malloc confirmed). |
 | 2 | Heap feng shui → arbitrary R/W | **BLOCKED** — depends on Step 1 |
-| 3 | Sandbox escape | Not started |
-| 4 | Kernel R/W | Not started |
-| 5 | PAC bypass | Not started |
-| 6 | PPL/SPTM bypass | Not started |
-| 7 | Rootless bootstrap + Sileo | Not started |
+
+**CVE-2026-86950 is a DEAD END on iOS 27.0.1. Pivoting to CVE-2026-111497 (Brotli).**
+
+### Exploit Chain Progress — CVE-2026-111497 (ACTIVE)
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 1 | CVE-2026-111497 Brotli OOB → WebKit.Networking code exec | **RESEARCHING** — iOS 27.0.1 confirmed VULNERABLE. Trigger server built (HTTP port 8889). Public PoCs exist (dimasma0305, TimmyTurner51 brotli-lab). Need to test on iPad. |
+| 2 | Sandbox escape (CVE-2026-113897 or CVE-2026-112477) | **RESEARCHING** — CVE-2026-113897 (WebKit Process Model sandbox escape) present on 27.0.1, fixed in 27.2. CVE-2026-112477 (IOSurface race) also present. No public exploits for either. |
+| 3 | Kernel R/W (CVE-2026-65350 or CVE-2026-112507) | **IDENTIFIED** — CVE-2026-65350 (kernel UAF) and CVE-2026-112507 (kernel OOB write) both present on 27.0.1, fixed in 27.2. No public exploits. |
+| 4 | PAC bypass | Not started — very few public techniques exist |
+| 5 | PPL/SPTM bypass | Not started |
+| 6 | Trust cache injection + Procursus bootstrap | Not started |
+| 7 | Sileo installation | Not started |
 
 ## OOB Direction: Negative TX Breakthrough (Nov 20, 2026)
 
@@ -753,6 +762,73 @@ Step 7: Rootless bootstrap + Sileo ← GOAL
 | 5 | PAC bypass | Not started |
 | 6 | PPL/SPTM bypass | Not started |
 | 7 | Rootless bootstrap + Sileo | **RESEARCHING** — post-exploitation infrastructure |
+
+## CVE-2026-111497: Brotli Decoder OOB Write (Nov 20, 2026)
+
+### Pivot from CVE-2026-86950
+
+CVE-2026-86950 (CoreGraphics font rendering) was **definitively ruled out** on iOS 27.0.1:
+- Bare trigger test (no spray) across 9 font sizes (128-4096pt): zero crashes
+- CoreGraphics `aa_double_to_fixed()` clamping fix is present on Build 24A446
+- macOS 27.0.1 also patched (Guard Malloc confirmed no OOB write)
+
+### New Entry Point: CVE-2026-111497
+
+**CVE-2026-111497** is an OOB write in Google's Brotli decoder (`c/dec/decode.c`).
+- CVSS 9.2, CISA KEV (added Oct 27, 2026), actively exploited in wild
+- iOS 27.0.1 is **CONFIRMED VULNERABLE** (fix ships in iOS 27.2.1, Nov 9)
+- Zero-click trigger via Safari: `Content-Encoding: br` HTTPS response
+- Works through Lockdown Mode
+- Stefan Esser (Calif.io): "Brotli gives you code execution in WebKit.Networking"
+- Calif.io demonstrated untethered iOS 27.0.1 jailbreak at Hexacon Oct 2026
+
+### Attack Vector
+
+Safari sends `Accept-Encoding: br` on HTTPS requests. A malicious server responds with
+`Content-Encoding: br` containing a crafted Brotli stream. WebKit.Networking decompresses
+it automatically — the OOB write occurs in the decoder without any user interaction.
+
+Alternative: JavaScript `DecompressionStream` API works over plain HTTP.
+
+### Full Exploit Chain (CVE-2026-111497 → Sileo)
+
+```
+Step 1: CVE-2026-111497 Brotli OOB write
+  → Code execution in WebKit.Networking process (sandboxed)
+  │
+Step 2: Sandbox escape
+  → CVE-2026-113897 WebKit Process Model (fixed 27.2, PRESENT on 27.0.1)
+  → OR: CVE-2026-112477 IOSurface race condition (fixed 27.2, PRESENT on 27.0.1)
+  │
+Step 3: Kernel exploit
+  → CVE-2026-65350 kernel UAF (fixed 27.2, PRESENT on 27.0.1)
+  → OR: CVE-2026-112507 kernel OOB write (fixed 27.2, PRESENT on 27.0.1)
+  → Info leak via CVE-2026-113910 to defeat KASLR
+  │
+Step 4: Post-exploitation
+  → PAC bypass (signing gadgets or key derivation)
+  → PPL/SPTM bypass
+  → Trust cache injection for ad-hoc signed binaries
+  │
+Step 5: Rootless bootstrap
+  → Deploy Procursus to /var/jb/
+  → Install dpkg, apt, OpenSSH, ElleKit
+  │
+Step 6: Install Sileo ← GOAL
+```
+
+### Key References
+- Brotli PoC: dimasma0305/CVE-2026-111497-POC (GitHub, Oct 22, 2026)
+- iOS harness: TimmyTurner51/brotli-lab (GitHub, tested iOS 27.0.1)
+- Datadog writeup: securitylabs.datadoghq.com/articles/node2shell-cve-2026-111497
+- Broccoli2Shell: broccoli2shell.com
+- Sandbox escape ref: references/webkit-sandbox-escape.md
+
+### Infrastructure
+
+- HTTP trigger server: `brotli_trigger_server.py` on Mac port 8889
+- HTTPS trigger server: `crash_server.py` on Mac port 4443 (self-signed cert)
+- iPad Mini test: Navigate to http://<mac-ip>:8889/ in Safari
 
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
