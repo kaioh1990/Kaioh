@@ -17,10 +17,19 @@
 #include <pthread.h>
 #endif
 #if defined(__APPLE__)
+#include <dlfcn.h>
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
+#include <mach-o/loader.h>
 #include <pthread.h>
 #endif
+#endif
+
+// Address space reserved for the heap (MAP_NORESERVE: costs nothing until
+// used). iOS gives an app far less virtual address space than a desktop,
+// so the iOS build sets 1024 (CMakeLists.txt); CVF_GC_ARENA_MB overrides.
+#ifndef CVF_GC_DEFAULT_ARENA_MB
+#define CVF_GC_DEFAULT_ARENA_MB (sizeof(void *) == 8 ? 4096 : 384)
 #endif
 
 #define PAGE_SHIFT 13
@@ -139,13 +148,22 @@ static void add_data_roots(void) {
     extern char __data_start[], _end[];
     gc_add_roots(__data_start, _end);
 #elif defined(__APPLE__)
-    // writable sections of the main image
+    // Every writable segment (__DATA, __DATA_DIRTY, __DATA_CONST...) of the
+    // image that contains the collector: the executable when the engine is
+    // linked statically (desktop, the iOS app), a framework otherwise.
+    // Newer linkers place writable data outside __DATA,__data/__bss/__common.
     const struct mach_header_64 *mh = (const struct mach_header_64 *)_dyld_get_image_header(0);
-    static const char *const sects[] = {"__data", "__bss", "__common"};
-    for (int i = 0; i < 3; i++) {
-        unsigned long sz = 0;
-        uint8_t *p = getsectiondata(mh, "__DATA", sects[i], &sz);
-        if (p && sz) gc_add_roots(p, p + sz);
+    Dl_info info;
+    if (dladdr((const void *)&gc_init, &info) && info.dli_fbase) mh = (const struct mach_header_64 *)info.dli_fbase;
+    intptr_t slide = 0;
+    for (uint32_t i = 0, n = _dyld_image_count(); i < n; i++)
+        if ((const void *)_dyld_get_image_header(i) == (const void *)mh) slide = _dyld_get_image_vmaddr_slide(i);
+    const uint8_t *lc = (const uint8_t *)(mh + 1);
+    for (uint32_t i = 0; i < mh->ncmds; i++, lc += ((const struct load_command *)lc)->cmdsize) {
+        const struct segment_command_64 *seg = (const struct segment_command_64 *)lc;
+        if (seg->cmd != LC_SEGMENT_64 || !(seg->initprot & VM_PROT_WRITE) || !seg->vmsize) continue;
+        uint8_t *lo = (uint8_t *)(uintptr_t)(seg->vmaddr + (uint64_t)slide);
+        gc_add_roots(lo, lo + seg->vmsize);
     }
 #elif defined(_WIN32)
     extern IMAGE_DOS_HEADER __ImageBase;
@@ -186,7 +204,7 @@ void gc_init(void *stack_base) {
     os_commit(S, sizeof(GcState));
     memset(S, 0, sizeof *S);
 
-    size_t mb = sizeof(void *) == 8 ? 4096 : 384;
+    size_t mb = CVF_GC_DEFAULT_ARENA_MB;
     const char *e = getenv("CVF_GC_ARENA_MB");
     if (e && atoi(e) > 0) mb = (size_t)atoi(e);
     S->npages = (mb << 20) >> PAGE_SHIFT;
@@ -605,4 +623,51 @@ char *gc_strdup(const char *s) {
     char *p = (char *)gc_alloc_atomic(n);
     memcpy(p, s, n);
     return p;
+}
+
+// ---------------------------------------------------------------- self-test
+// Each object is reachable only from one global of a different section
+// kind (__data / __bss / common on Mach-O, .data / .bss on ELF).
+#define ST_N 3
+#define ST_SIZE 200
+void *gc_st_tentative;                  // tentative definition (common or bss)
+static void *gc_st_bss;                 // zero-initialised
+static void *gc_st_data = (void *)1;    // initialised
+static void **const gc_st_slot[ST_N] = {&gc_st_data, &gc_st_bss, &gc_st_tentative};
+
+__attribute__((noinline)) static void st_fill(void) {
+    for (int i = 0; i < ST_N; i++) {
+        uint8_t *p = (uint8_t *)gc_alloc(ST_SIZE);
+        memset(p, 0xA5 ^ i, ST_SIZE);
+        *gc_st_slot[i] = p;
+    }
+}
+__attribute__((noinline)) static void st_churn(void) {
+    // garbage of the same size: a freed test object would be handed out again
+    for (int k = 0; k < 20000; k++) {
+        uint8_t *p = (uint8_t *)gc_alloc(ST_SIZE);
+        memset(p, 0x5A, ST_SIZE);
+    }
+}
+int gc_selftest(void) {
+    if (!S) gc_init(NULL);
+    st_fill();
+    volatile uint8_t scrub[512];  // overwrite stale copies left on the stack
+    memset((void *)scrub, 0, sizeof scrub);
+    gc_collect();
+    st_churn();
+    gc_collect();
+    st_churn();
+    int fails = 0;
+    for (int i = 0; i < ST_N; i++) {
+        const uint8_t *p = (const uint8_t *)*gc_st_slot[i];
+        for (int j = 0; j < ST_SIZE; j++)
+            if (p[j] != (uint8_t)(0xA5 ^ i)) {
+                fprintf(stderr, "gc selftest: object %d (root kind %d) was freed\n", i, i);
+                fails++;
+                break;
+            }
+        *gc_st_slot[i] = i == 0 ? (void *)1 : NULL;
+    }
+    return fails;
 }

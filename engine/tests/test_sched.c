@@ -40,6 +40,9 @@ static void sleeper(void *e) {
 }
 
 void test_sched(int *failures, int *checks) {
+    // data/bss/common roots of the image (gc.c add_data_roots)
+    CHECK(gc_selftest() == 0, "gc_selftest: an object referenced only from a global was freed");
+
     // unbuffered pipeline through a goroutine
     PipeEnv *p = (PipeEnv *)gc_alloc(sizeof *p);
     p->in = go_chan_make(sizeof(int), 0);

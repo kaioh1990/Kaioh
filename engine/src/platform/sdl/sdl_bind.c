@@ -46,7 +46,15 @@ Ret_sdl_GLContext__GoIface sdl_Window_GLCreateContext(sdl_Window *w) {
 GoIface sdl_Window_GLMakeCurrent(sdl_Window *w, sdl_GLContext c) {
     return sdl_check(SDL_GL_MakeCurrent((SDL_Window *)w, (SDL_GLContext)(uintptr_t)c));
 }
-void sdl_Window_GLSwap(sdl_Window *w) { SDL_GL_SwapWindow((SDL_Window *)w); }
+#if CVF_IOS
+#include "platform/ios/ios_sys.h"
+#endif
+void sdl_Window_GLSwap(sdl_Window *w) {
+#if CVF_IOS
+    cvf_ios_wait_foreground();  // never touch GL in the background (IOS_PORT.md 3.7)
+#endif
+    SDL_GL_SwapWindow((SDL_Window *)w);
+}
 Ret_i32__i32 sdl_Window_GLGetDrawableSize(sdl_Window *w) {
     int x = 0, y = 0;
     SDL_GL_GetDrawableSize((SDL_Window *)w, &x, &y);
