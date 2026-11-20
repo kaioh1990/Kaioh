@@ -6,7 +6,7 @@
 // the desktop answers of the touch / mobile / name-box / P2P bindings that
 // main.lua and start.lua call (cvf_p2p_other.go).
 //
-//   cvf_nearby_test <dir> [both | host SECONDS | scan PORT NAME]
+//   cvf_nearby_test <dir> [both | host SECONDS | scan PORT NAME [BUILDTAG]]
 //                            (dir gets data/cvf_online.ini and save/cvf_online_profile.json; UDP 7520 must be free)
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,7 +46,9 @@ int main(int argc, char **argv) {
         perror("data/cvf_online.ini");
         return 2;
     }
-    fputs("LobbyURL =\nBuildTag = nearby-test-1\n", f);
+    // scan mode may name the host's build tag (6th argument)
+    const char *tag = argc > 5 && !strcmp(argv[2], "scan") ? argv[5] : "nearby-test-1";
+    fprintf(f, "LobbyURL =\nBuildTag = %s\n", tag);
     fclose(f);
     mkdir("save", 0755);
     f = fopen("save/cvf_online_profile.json", "w");
