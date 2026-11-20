@@ -209,19 +209,32 @@ the actual slab contents are TXM-typed. Need to verify.
 
 ### F. _zalloc_ro_mut Integer Overflow (CVE-2026-28952)
 
-**CVE-2026-28952** | Disclosed by ironPeak | Part of Calif's MIE bypass chain
+**CVE-2026-28952** | Disclosed by Calif.io | Analyzed by ironPeak
 
-**Mechanism:**
+**Mechanism (CONFIRMED by ironPeak "Pardon MIE?" deep dive, May 23, 2026):**
 - `_zalloc_ro_mut()` is the sole gatekeeper for modifying read-only kernel memory
-- Integer overflow in size/offset validation allows OOB write to `__DATA_CONST`
-- On MIE devices (A19+/M5+), this bypasses Memory Integrity Enforcement
-- On non-MIE SPTM devices (our A17 Pro), `__DATA_CONST` holds trust cache pointers
+- Integer overflow in stack-area bounds filter: `add x10, x8, x4` (unchecked target+len)
+- Wrapped value passes `cmp x10, x9; b.lo write` → memcpy runs with real (huge) len
+- Bytes spill from validated slot into adjacent RO-zone slots (ucred, proc_ro, etc.)
+- Setting adjacent ucred's `cr_uid = 0` gives root
+- On MIE devices (A19+/M5+/A20), this BYPASSES MIE because the write goes through
+  the authorized function with correct EMTE tags — every protection works as designed
 
-**Applicability to iOS 27.0.1 / A17 Pro:** ❌ RULED OUT
-- Already patched in macOS 26.5 (May 2026). iOS 27.0 shipped September 2026.
-- Trust caches on SPTM devices live in TXM frames at GL0, not zalloc_ro zones.
-- The ironPeak analysis linking this to `_zalloc_ro_mut` is disputed by researchers.
-- Actual Calif MIE bypass bugs are different and target M5/A19+ only.
+**Applicability:**
+- ✅ **iOS 27.1 (A20 / iPhone Duo): PRESENT** — fixed in iOS 27.2 (Oct 26, 2026)
+- ✅ **iOS 27.0.1 (A17 Pro / iPad Mini): PRESENT** — fixed in iOS 27.2
+- ✅ Works on ALL Apple Silicon (RO zone exists since iOS 17 / macOS Sonoma)
+- ❌ **iOS 27.2+: PATCHED** — overflow check moved first, per-CPU bound added, stack filter removed
+
+**CORRECTION:** Previous analysis said "patched before iOS 27.0" — this was WRONG.
+NVD lists fixes in iOS 18.7.9 and macOS 26.5, which are OLDER OS lines getting
+backports. The iOS 27.x line got the fix in 27.2. The bug was present from iOS 27.0
+through 27.1.
+
+**Entry syscalls:** csops_audittoken (64-bit usersize), mac_set_proc/mac_set_fd (label_size)
+**Info leak companion:** CVE-2026-28897, -28987, -28943 (thread-name pointer chain)
+**PoC:** `poc/mie/zalloc_ro_mut_overflow.c`
+**Full analysis:** `references/a20-exploit-chain-plan.md`
 
 ### G. Firmware PAC Audit Results (November 20, 2026)
 
@@ -253,7 +266,7 @@ t8130pmp (PMP coprocessor) is an even richer ROP surface with 816 gadgets.
 | **1** | **Data-only trust cache injection** | **YES** | Kernel R/W | **PRIMARY — SPTM bypass NOT needed** |
 | 2 | SPTM TLB race (GMMU DART) | YES | Kernel R/W | Optional (deep kernel mods) |
 | 3 | Coprocessor DMA (SmartIO) | YES (template) | Kernel R/W | **CONFIRMED: 0 PAC instructions** |
-| ~~4~~ | ~~_zalloc_ro_mut overflow~~ | ~~No~~ | | **RULED OUT — patched before 27.0** |
+| **4** | **_zalloc_ro_mut overflow (CVE-2026-28952)** | **YES** | Kernel R/W (info leak) | **VIABLE — present on 27.0.1 AND 27.1, MIE-safe** |
 | ~~5~~ | ~~pt_desc refcount overflow~~ | ~~YES~~ | ~~None~~ | **RULED OUT** |
 
 ### CRITICAL UPDATE: pt_desc overflow ruled out on A17 Pro
