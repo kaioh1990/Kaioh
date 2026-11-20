@@ -6,3 +6,4 @@
 eboot.bin
 param.sfo
 *.vpk
+__pycache__/
