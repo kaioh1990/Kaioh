@@ -124585,17 +124585,11 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     Music_AppendParams(g_sys.sel.music, GameParams_MusicEntries(g_sys.sel.gameParams));
     System_loaderReset(&g_sys);
     i32 winp = fn_cvfGame();
-    {
-        bool _t53; GoString _t54 = Map_GoString_GoString_get(&flags, GOSTR("-ip"), &_t53);
-        bool ok = _t53;
-        if (ok) {
-            fn_stateDumpNetFlush();
-        }
-    }
+    fn_stateDumpFinish();
     return winp;
 }
 
-// cvfSetFightScreenElements (cvfheadless.go:252), 0 TODO
+// cvfSetFightScreenElements (cvfheadless.go:250), 0 TODO
 void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) {
     g_sys.fightScreen.guardbar = guardbar;
     g_sys.fightScreen.stunbar = stunbar;
@@ -124648,7 +124642,7 @@ void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) 
     }
 }
 
-// cvfSetTeamMode (cvfheadless.go:277), 0 TODO
+// cvfSetTeamMode (cvfheadless.go:275), 0 TODO
 void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     g_sys.sel.selected.v[side] = (Slice_Arr2_int){0};
     g_sys.SystemStateVars_.tmode.v[side] = tm;
@@ -124663,7 +124657,7 @@ void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     }
 }
 
-// cvfGame (cvfheadless.go:292), 0 TODO
+// cvfGame (cvfheadless.go:290), 0 TODO
 i32 fn_cvfGame(void) {
     volatile bool _df3 = false; volatile GoFunc _df3_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -124777,7 +124771,7 @@ i32 fn_cvfGame(void) {
     if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); }
 }
 
-// cvfRefresh (cvfheadless.go:378), 0 TODO
+// cvfRefresh (cvfheadless.go:376), 0 TODO
 void fn_cvfRefresh(void) {
     System_luaDiscardDrawQueue(&g_sys);
     if (Fade_isActive(g_sys.motif.fadeOut)) {
@@ -124792,7 +124786,7 @@ void fn_cvfRefresh(void) {
     System_update(&g_sys);
 }
 
-// cvfEnterNetPlay (cvfheadless.go:394), 0 TODO
+// cvfEnterNetPlay (cvfheadless.go:392), 0 TODO
 GoIface fn_cvfEnterNetPlay(GoString host) {
     if (g_sys.netConnection != NULL) {
         return ((GoIface){281, go_box(Error, GOSTR("Connection already established."))});
@@ -124820,7 +124814,7 @@ GoIface fn_cvfEnterNetPlay(GoString host) {
     return (GoIface){0};
 }
 
-// cvfNetplayConnect (cvfheadless.go:417), 0 TODO
+// cvfNetplayConnect (cvfheadless.go:415), 0 TODO
 bool fn_cvfNetplayConnect(GoString host) {
     {
         GoIface err = fn_cvfEnterNetPlay(host);
@@ -124861,7 +124855,7 @@ bool fn_cvfNetplayConnect(GoString host) {
     return true;
 }
 
-// cvfNetInputTick (cvfheadless.go:455), 0 TODO
+// cvfNetInputTick (cvfheadless.go:453), 0 TODO
 void fn_cvfNetInputTick(void) {
     if (g_cvfNetInputSeed < 0) {
         g_cvfNetInputSeed = 0;
@@ -124927,7 +124921,6 @@ void fn_cvfNetInputTick(void) {
     }
     {
         for (int _t11 = 0; _t11 < 10; _t11++) {
-            int i = _t11;
             int k = (keys).v[_t11];
             if (k != 0) {
                 Map_sdl_Keycode_bool_set(&g_sys.keyState, ((sdl_Keycode)k), false);
@@ -124947,7 +124940,7 @@ void fn_cvfNetInputTick(void) {
     }
 }
 
-// System.cvfHeadlessAwait (cvfheadless.go:516), 0 TODO
+// System.cvfHeadlessAwait (cvfheadless.go:514), 0 TODO
 bool System_cvfHeadlessAwait(System* s) {
     s->SystemStateVars_.frameSkip = true;
     g_cvfFrames++;
@@ -162887,9 +162880,13 @@ void fn_stateDumpTickFn(void) {
     }
 }
 
-// stateDumpNetFlush (statedump.go:178), 0 TODO
-void fn_stateDumpNetFlush(void) {
+// stateDumpFinish (statedump.go:178), 0 TODO
+void fn_stateDumpFinish(void) {
     if (g_stateDumpOn != 1) {
+        return;
+    }
+    if (g_stateDumpNet.m == 0) {
+        bufio_Writer_Flush(g_stateDumpW);
         return;
     }
     Slice_i32 *keys__h = go_box(Slice_i32, GO_MAKE_A(Slice_i32, i32, 0, Map_i32_Slice_u8_len(&g_stateDumpNet)));
@@ -162915,7 +162912,7 @@ void fn_stateDumpNetFlush(void) {
     bufio_Writer_Flush(g_stateDumpW);
 }
 
-// stateDumpVarsI (statedump.go:195), 0 TODO
+// stateDumpVarsI (statedump.go:199), 0 TODO
 Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {
@@ -162948,7 +162945,7 @@ Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     return b;
 }
 
-// stateDumpVarsF (statedump.go:216), 0 TODO
+// stateDumpVarsF (statedump.go:220), 0 TODO
 Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {

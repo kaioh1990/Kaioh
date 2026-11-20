@@ -239,9 +239,7 @@ func cvfHeadlessMain(args []string) int32 {
 	sys.loaderReset()
 
 	winp := cvfGame()
-	if _, ok := flags["-ip"]; ok {
-		stateDumpNetFlush()
-	}
+	stateDumpFinish()
 	return winp
 }
 
@@ -494,7 +492,7 @@ func cvfNetInputTick() {
 	if (h>>8)%3 == 0 && t&7 < 2 { // tap a button on 1 block in 3
 		on[4+(h>>12)%6] = true
 	}
-	for i, k := range keys {
+	for _, k := range keys {
 		if k != 0 {
 			sys.keyState[Key(k)] = false
 		}

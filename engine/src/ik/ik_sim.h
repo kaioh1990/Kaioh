@@ -12692,7 +12692,7 @@ bool fn_stateDumpEnabled(void);
 Slice_u8 fn_sdF(Slice_u8 b, f32 f);
 Slice_u8 fn_sdI(Slice_u8 b, i64 v);
 void fn_stateDumpTickFn(void);
-void fn_stateDumpNetFlush(void);
+void fn_stateDumpFinish(void);
 Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m);
 Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m);
 statsRollbackState StatsLog_saveRollbackState(StatsLog* s);

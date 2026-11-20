@@ -12019,10 +12019,10 @@ index 0000000..5a9a833
 +const cvfEngine = false
 diff --git a/src/cvf_gohead.go b/src/cvf_gohead.go
 new file mode 100644
-index 0000000..93f4f66
+index 0000000..aa0a00d
 --- /dev/null
 +++ b/src/cvf_gohead.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,48 @@
 +//go:build cvfgohead
 +
 +package main
@@ -12030,6 +12030,9 @@ index 0000000..93f4f66
 +import (
 +	"fmt"
 +	"os"
++	"sync"
++
++	"github.com/ikemen-engine/beep/v2"
 +)
 +
 +// Go build of the headless runner (tests/netplay, reference statedumps):
@@ -12041,6 +12044,7 @@ index 0000000..93f4f66
 +// (src/app/headless_main.c), run from an init function so that main()
 +// (window, renderer, Lua) never starts.
 +func init() {
++	speaker = &cvfNullSpeaker{} // no audio device: mixing state only, as the native headless build
 +	if len(os.Args) < 2 {
 +		fmt.Fprintf(os.Stderr, "usage: %s <gamedir> [ikemen args...]\n", os.Args[0])
 +		os.Exit(2)
@@ -12056,6 +12060,17 @@ index 0000000..93f4f66
 +	}
 +	os.Exit(0)
 +}
++
++// AudioSink without a device (System.init, which opens the SDL one, does
++// not run headless).
++type cvfNullSpeaker struct{ mu sync.Mutex }
++
++func (s *cvfNullSpeaker) Init(sr beep.SampleRate, bufferSize int) error { return nil }
++func (s *cvfNullSpeaker) Play(st beep.Streamer)                         {}
++func (s *cvfNullSpeaker) Lock()                                         { s.mu.Lock() }
++func (s *cvfNullSpeaker) Unlock()                                       { s.mu.Unlock() }
++func (s *cvfNullSpeaker) Close()                                        {}
++func (s *cvfNullSpeaker) FillAudio()                                    {}
 diff --git a/src/cvf_nearby.go b/src/cvf_nearby.go
 new file mode 100644
 index 0000000..6323a30
@@ -14345,10 +14360,10 @@ index 0000000..e9bae25
 +}
 diff --git a/src/cvfheadless.go b/src/cvfheadless.go
 new file mode 100644
-index 0000000..5c24dfa
+index 0000000..1b4f856
 --- /dev/null
 +++ b/src/cvfheadless.go
-@@ -0,0 +1,542 @@
+@@ -0,0 +1,540 @@
 +package main
 +
 +import (
@@ -14590,9 +14605,7 @@ index 0000000..5c24dfa
 +	sys.loaderReset()
 +
 +	winp := cvfGame()
-+	if _, ok := flags["-ip"]; ok {
-+		stateDumpNetFlush()
-+	}
++	stateDumpFinish()
 +	return winp
 +}
 +
@@ -14845,7 +14858,7 @@ index 0000000..5c24dfa
 +	if (h>>8)%3 == 0 && t&7 < 2 { // tap a button on 1 block in 3
 +		on[4+(h>>12)%6] = true
 +	}
-+	for i, k := range keys {
++	for _, k := range keys {
 +		if k != 0 {
 +			sys.keyState[Key(k)] = false
 +		}
@@ -18749,10 +18762,10 @@ index e6a9d4d..7330b70 100644
  	for k, v := range c.cnsvar {
 diff --git a/src/statedump.go b/src/statedump.go
 new file mode 100644
-index 0000000..e62fe0c
+index 0000000..6e366fe
 --- /dev/null
 +++ b/src/statedump.go
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,239 @@
 +package main
 +
 +import (
@@ -18802,7 +18815,7 @@ index 0000000..e62fe0c
 +	stateDumpTick++
 +	// Online (rollback) match: frames are simulated again after a rollback,
 +	// so keep the last simulation of each match frame and write them in
-+	// order when the match ends (stateDumpNetFlush).
++	// order when the match ends (stateDumpFinish).
 +	net := sys.rollback.session != nil && sys.rollback.netConnection != nil
 +	b := stateDumpBuf[:0]
 +	b = append(b, "T "...)
@@ -18928,10 +18941,14 @@ index 0000000..e62fe0c
 +var stateDumpNet map[int32][]byte
 +var stateDumpNetResim int
 +
-+// Writes the frames of an online match in match-time order (the last
-+// simulation of each one) and flushes the dump.
-+func stateDumpNetFlush() {
++// At the end of the run: writes the frames of an online match in
++// match-time order (the last simulation of each one) and flushes the dump.
++func stateDumpFinish() {
 +	if stateDumpOn != 1 {
++		return
++	}
++	if stateDumpNet == nil {
++		stateDumpW.Flush()
 +		return
 +	}
 +	keys := make([]int32, 0, len(stateDumpNet))

@@ -47,7 +47,7 @@ func stateDumpTickFn() {
 	stateDumpTick++
 	// Online (rollback) match: frames are simulated again after a rollback,
 	// so keep the last simulation of each match frame and write them in
-	// order when the match ends (stateDumpNetFlush).
+	// order when the match ends (stateDumpFinish).
 	net := sys.rollback.session != nil && sys.rollback.netConnection != nil
 	b := stateDumpBuf[:0]
 	b = append(b, "T "...)
@@ -173,10 +173,14 @@ var sdKeys []int32
 var stateDumpNet map[int32][]byte
 var stateDumpNetResim int
 
-// Writes the frames of an online match in match-time order (the last
-// simulation of each one) and flushes the dump.
-func stateDumpNetFlush() {
+// At the end of the run: writes the frames of an online match in
+// match-time order (the last simulation of each one) and flushes the dump.
+func stateDumpFinish() {
 	if stateDumpOn != 1 {
+		return
+	}
+	if stateDumpNet == nil {
+		stateDumpW.Flush()
 		return
 	}
 	keys := make([]int32, 0, len(stateDumpNet))
