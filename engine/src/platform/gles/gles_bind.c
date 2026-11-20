@@ -115,7 +115,6 @@ u8* gles2_GetString(u32 a0) { u8* r_ = p_glGetString(a0); CK("glGetString"); ret
 void gles2_ActiveTexture(u32 a0) { p_glActiveTexture(a0); CK("glActiveTexture"); }
 void gles2_AttachShader(u32 a0, u32 a1) { p_glAttachShader(a0, a1); CK("glAttachShader"); }
 void gles2_BindBuffer(u32 a0, u32 a1) { p_glBindBuffer(a0, a1); CK("glBindBuffer"); }
-void gles2_BindRenderbuffer(u32 a0, u32 a1) { p_glBindRenderbuffer(a0, a1); CK("glBindRenderbuffer"); }
 void gles2_BindTexture(u32 a0, u32 a1) { p_glBindTexture(a0, a1); CK("glBindTexture"); }
 void gles2_BindVertexArray(u32 a0) { p_glBindVertexArray(a0); CK("glBindVertexArray"); }
 void gles2_BlendEquation(u32 a0) { p_glBlendEquation(a0); CK("glBlendEquation"); }
@@ -185,7 +184,21 @@ static void (APIENTRY *p_glVertexAttribPointer_es)(u32, i32, u32, unsigned char,
 // gl.Init runs right after GLMakeCurrent, so the binding seen there is the
 // screen (0 on platforms with a real default framebuffer).
 #define CVF_GL_FRAMEBUFFER_BINDING 0x8CA6
-static u32 screen_fbo;
+#define CVF_GL_RENDERBUFFER_BINDING 0x8CA7
+#define CVF_GL_RENDERBUFFER 0x8D41
+static u32 screen_fbo, screen_rbo;
+static int gles_ready;
+// Same for renderbuffer 0: SDL's UIKit swap presents the bound renderbuffer,
+// which must be the view's color renderbuffer.
+void gles2_BindRenderbuffer(u32 target, u32 rb) {
+    p_glBindRenderbuffer(target, rb ? rb : screen_rbo);
+    CK("glBindRenderbuffer");
+}
+// Before every swap (sdl_bind.c): the view's renderbuffer bound, whatever
+// the renderer left bound.
+void cvf_gles_before_swap(void) {
+    if (gles_ready && screen_rbo) p_glBindRenderbuffer(CVF_GL_RENDERBUFFER, screen_rbo);
+}
 static int screen_binds;
 void gles2_BindFramebuffer(u32 target, u32 fb) {
     p_glBindFramebuffer(target, fb ? fb : screen_fbo);
@@ -294,7 +307,11 @@ GoIface gles2_Init(GoFunc getProcAddr) {
     i32 fb = 0;
     p_glGetIntegerv(CVF_GL_FRAMEBUFFER_BINDING, &fb);
     screen_fbo = (u32)fb;
-    fprintf(stderr, "gles: init: framebuffer binding %d, status 0x%x\n", fb, p_glCheckFramebufferStatus(0x8D40));
+    i32 rb = 0;
+    p_glGetIntegerv(CVF_GL_RENDERBUFFER_BINDING, &rb);
+    screen_rbo = (u32)rb;
+    gles_ready = 1;
+    fprintf(stderr, "gles: init: framebuffer %d, renderbuffer %d, status 0x%x\n", fb, rb, p_glCheckFramebufferStatus(0x8D40));
     return (GoIface){0};
 }
 

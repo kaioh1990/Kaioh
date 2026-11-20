@@ -56,11 +56,13 @@ GoIface sdl_Window_GLMakeCurrent(sdl_Window *w, sdl_GLContext c) {
 #include "platform/ios/ios_sys.h"
 #endif
 void cvf_gl_check_point(const char *where);  // gles_bind.c (CVF_GL_CHECK)
+void cvf_gles_before_swap(void);             // gles_bind.c
 void sdl_Window_GLSwap(sdl_Window *w) {
 #if CVF_IOS
     cvf_ios_wait_foreground();  // never touch GL in the background (IOS_PORT.md 3.7)
 #endif
     cvf_gl_check_point("before SDL_GL_SwapWindow");
+    cvf_gles_before_swap();
     SDL_GL_SwapWindow((SDL_Window *)w);
     cvf_gl_check_point("SDL_GL_SwapWindow");
 }
