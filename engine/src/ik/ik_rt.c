@@ -1051,10 +1051,6 @@ GoIface sync_Pool_Get(GoOpaque *p) {
 void sync_Pool_Put(GoOpaque *p, GoIface x) { (void)p, (void)x; }
 void runtime_Gosched(void) { go_yield(); }
 void time_Sleep(i64 d) { go_sleep_ns(d); }  // other goroutines run meanwhile
-GoOpaque *log_New(GoIface w, GoString prefix, int flags) {
-    (void)w, (void)prefix, (void)flags;
-    return (GoOpaque *)gc_calloc(1, sizeof(GoOpaque));
-}
 
 // Fields of opaque platform-library structs read and write a zeroed
 // scratch slot (sound/video state the headless simulation does not model).

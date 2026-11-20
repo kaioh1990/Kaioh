@@ -574,11 +574,10 @@ Ret_int__GoIface fmt_Println(Slice_GoIface a0) {
     out_write((GoString){"\n", 1});
     return (Ret_int__GoIface){s.len + 1, {0}};
 }
-// Fprintf: strings.Builder / bytes.Buffer get the text (status screens,
-// the rollback desync log), files other than stdout/stderr are written;
-// anything else is a diagnostic and goes to the log.
-Ret_int__GoIface fmt_Fprintf(GoIface w, GoString a1, Slice_GoIface a2) {
-    GoString s = go_sprintf(a1, a2.p, a2.len);
+// Fprintf/Fprintln: strings.Builder / bytes.Buffer get the text (status
+// screens, the rollback desync log), files are written (os.Stdout/Stderr
+// to stdout/stderr); anything else is a diagnostic and goes to the log.
+Ret_int__GoIface go_fwrite(GoIface w, GoString s) {
     if (w.data) {
         switch (w.type) {
         case GO_TID_P_strings_Builder: return strings_Builder_WriteString((GoOpaque *)w.data, s);
@@ -586,13 +585,16 @@ Ret_int__GoIface fmt_Fprintf(GoIface w, GoString a1, Slice_GoIface a2) {
         case GO_TID_P_os_File:
             if (w.data != (void *)os_Stderr && w.data != (void *)os_Stdout)
                 return os_File_Write((GoOpaque *)w.data, (Slice_u8){(u8 *)s.p, s.len, s.len});
-            break;
+            fwrite(s.p, 1, (size_t)s.len, w.data == (void *)os_Stdout ? stdout : stderr);
+            fflush(w.data == (void *)os_Stdout ? stdout : stderr);
+            return (Ret_int__GoIface){s.len, {0}};
         default: break;
         }
     }
     cvf_log("%.*s", s.len, s.p);
     return (Ret_int__GoIface){s.len, {0}};
 }
+Ret_int__GoIface fmt_Fprintf(GoIface w, GoString a1, Slice_GoIface a2) { return go_fwrite(w, go_sprintf(a1, a2.p, a2.len)); }
 void log_Printf(GoString a0, Slice_GoIface a1) {
     GoString s = go_sprintf(a0, a1.p, a1.len);
     cvf_log("%.*s", s.len, s.p);

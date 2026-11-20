@@ -50,6 +50,14 @@ typedef struct Arr10_Arr2_GoString Arr10_Arr2_GoString;
 #define CVF_DEF_Arr10_CommandKey
 typedef struct Arr10_CommandKey Arr10_CommandKey;
 #endif
+#ifndef CVF_DEF_Arr10_bool
+#define CVF_DEF_Arr10_bool
+typedef struct Arr10_bool Arr10_bool;
+#endif
+#ifndef CVF_DEF_Arr10_int
+#define CVF_DEF_Arr10_int
+typedef struct Arr10_int Arr10_int;
+#endif
 #ifndef CVF_DEF_Arr11_int
 #define CVF_DEF_Arr11_int
 typedef struct Arr11_int Arr11_int;
@@ -1215,7 +1223,7 @@ typedef struct protocol_UdpProtocolEvent protocol_UdpProtocolEvent;
 typedef struct protocol_UdpProtocolStateInfo protocol_UdpProtocolStateInfo;
 typedef struct protocol_UdpProtocolStats protocol_UdpProtocolStats;
 typedef struct pv_L64466c pv_L64466c;
-typedef struct qvPlayer_Lf239e5 qvPlayer_Lf239e5;
+typedef struct qvPlayer_L861b7b qvPlayer_L861b7b;
 typedef struct raster_AlphaOverPainter raster_AlphaOverPainter;
 typedef struct raster_AlphaSrcPainter raster_AlphaSrcPainter;
 typedef struct raster_GammaCorrectionPainter raster_GammaCorrectionPainter;
@@ -2442,9 +2450,9 @@ typedef struct { pv_L64466c *p; int len, cap; } Slice_pv_L64466c;
 #define CVF_DEF_Slice_queryPart
 typedef struct { queryPart *p; int len, cap; } Slice_queryPart;
 #endif
-#ifndef CVF_DEF_Slice_qvPlayer_Lf239e5
-#define CVF_DEF_Slice_qvPlayer_Lf239e5
-typedef struct { qvPlayer_Lf239e5 *p; int len, cap; } Slice_qvPlayer_Lf239e5;
+#ifndef CVF_DEF_Slice_qvPlayer_L861b7b
+#define CVF_DEF_Slice_qvPlayer_L861b7b
+typedef struct { qvPlayer_L861b7b *p; int len, cap; } Slice_qvPlayer_L861b7b;
 #endif
 #ifndef CVF_DEF_Slice_rankingEntryPtr
 #define CVF_DEF_Slice_rankingEntryPtr
@@ -3227,6 +3235,14 @@ struct Arr10_Arr2_GoString { Arr2_GoString v[10]; };
 #ifndef CVF_BODY_Arr10_CommandKey
 #define CVF_BODY_Arr10_CommandKey
 struct Arr10_CommandKey { CommandKey v[10]; };
+#endif
+#ifndef CVF_BODY_Arr10_bool
+#define CVF_BODY_Arr10_bool
+struct Arr10_bool { bool v[10]; };
+#endif
+#ifndef CVF_BODY_Arr10_int
+#define CVF_BODY_Arr10_int
+struct Arr10_int { int v[10]; };
 #endif
 #ifndef CVF_BODY_Arr11_int
 #define CVF_BODY_Arr11_int
@@ -4381,7 +4397,7 @@ struct pretty_byKeyVal { bool sorted; Slice_u8 json; Slice_u8 buf; Slice_pretty_
 struct pretty_pair { int kstart; int kend; int vstart; int vend; };
 struct protocol_QueueEntry { i64 queueTime; GoString destIp; messages_UDPMessage msg; int destPort; };
 struct pv_L64466c { u16 p; u64 v; };
-struct qvPlayer_Lf239e5 { GoString character; int player; int num; int pal; f32 ai; int input; };
+struct qvPlayer_L861b7b { GoString character; int player; int num; int pal; f32 ai; int input; };
 struct raster_AlphaOverPainter { GoImageAlpha* Image; };
 struct raster_AlphaSrcPainter { GoImageAlpha* Image; };
 struct raster_GammaCorrectionPainter { raster_Painter Painter; Arr256_u16 a; bool gammaIsOne; };
@@ -5462,9 +5478,9 @@ GO_SLICE_FUNCS_A(Slice_pv_L64466c, pv_L64466c)
 #define CVF_FN_Slice_queryPart
 GO_SLICE_FUNCS(Slice_queryPart, queryPart)
 #endif
-#ifndef CVF_FN_Slice_qvPlayer_Lf239e5
-#define CVF_FN_Slice_qvPlayer_Lf239e5
-GO_SLICE_FUNCS(Slice_qvPlayer_Lf239e5, qvPlayer_Lf239e5)
+#ifndef CVF_FN_Slice_qvPlayer_L861b7b
+#define CVF_FN_Slice_qvPlayer_L861b7b
+GO_SLICE_FUNCS(Slice_qvPlayer_L861b7b, qvPlayer_L861b7b)
 #endif
 #ifndef CVF_FN_Slice_rankingEntryPtr
 #define CVF_FN_Slice_rankingEntryPtr
@@ -7901,12 +7917,15 @@ extern int g_cvfDebugCount;
 extern bool g_cvfDebugOn;
 extern int g_cvfFrames;
 extern bool g_cvfHeadless;
+extern int g_cvfHeadlessFps;
+extern GoOpaque /* time.Time */ g_cvfHeadlessNext;
 extern Anon_b2116398 g_cvfLazy;
 extern Arr20_u64 g_cvfMPi4;
 extern int g_cvfMaxFrames;
 extern Anon_47a7d9c0 g_cvfNameAsk;
 extern GoOpaque /* regexp.Regexp */* g_cvfNameRe;
 extern cvfNearbyState* g_cvfNearby;
+extern int g_cvfNetInputSeed;
 extern cvfOnlineState* g_cvfOnline;
 extern cvfRulesT g_cvfRules;
 extern Arr2_i32 g_cvfScreen;
@@ -8005,6 +8024,8 @@ extern GoString g_spriteLibShader;
 extern GoOpaque /* time.Time */ g_lua_startedAt;
 extern Slice_u8 g_stateDumpBuf;
 extern GoOpaque /* os.File */* g_stateDumpF;
+extern Map_i32_Slice_u8 g_stateDumpNet;
+extern int g_stateDumpNetResim;
 extern int g_stateDumpOn;
 extern int g_stateDumpTick;
 extern GoOpaque /* bufio.Writer */* g_stateDumpW;
@@ -11519,7 +11540,6 @@ void fn_cvfOnlineScriptInit(lua_LState* l);
 cvfRulesT* fn_cvfRulesLoad(void);
 bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
 bool fn_cvfClampInvincibility(Char* c, i32* time_);
-void fn_cvfApplyFightAspect(Config* cfg);
 void fn_cvfApplyDisplay(Config* cfg);
 bool System_cvfWideView(System* s);
 f32 System_cvfClampWideView(System* s, f32 x, f32 scl);
@@ -11545,6 +11565,10 @@ void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar);
 void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt);
 i32 fn_cvfGame(void);
 void fn_cvfRefresh(void);
+GoIface fn_cvfEnterNetPlay(GoString host);
+bool fn_cvfNetplayConnect(GoString host);
+void fn_cvfNetInputTick(void);
+bool System_cvfHeadlessAwait(System* s);
 void WinType_SetPerfect(WinType* wt);
 void WinType_SetClutch(WinType* wt);
 FightFx* fn_newFightFx(void);
@@ -12668,6 +12692,7 @@ bool fn_stateDumpEnabled(void);
 Slice_u8 fn_sdF(Slice_u8 b, f32 f);
 Slice_u8 fn_sdI(Slice_u8 b, i64 v);
 void fn_stateDumpTickFn(void);
+void fn_stateDumpNetFlush(void);
 Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m);
 Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m);
 statsRollbackState StatsLog_saveRollbackState(StatsLog* s);

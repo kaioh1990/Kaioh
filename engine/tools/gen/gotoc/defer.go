@@ -170,7 +170,28 @@ func (t *Tx) deferStmt(s *ast.DeferStmt) {
 	}
 	if b, ok := c.Fun.(*ast.Ident); ok {
 		if _, isB := t.p.info.Uses[b].(*types.Builtin); isB {
-			t.w("/* defer %s(...) not supported */", b.Name)
+			// the arguments are evaluated now, the builtin runs at return
+			var call string
+			switch b.Name {
+			case "close":
+				ch := id + "_a0"
+				t.deferDecl = append(t.deferDecl, fmt.Sprintf("GoChan *volatile %s;", ch))
+				t.w("%s = %s;", ch, t.expr(c.Args[0]))
+				call = fmt.Sprintf("go_chan_close(%s)", ch)
+			case "delete":
+				m := t.typeOf(c.Args[0]).Underlying().(*types.Map)
+				mt, kt := t.ctype(t.typeOf(c.Args[0])), t.ctype(m.Key())
+				mv, kv := id+"_a0", id+"_a1"
+				t.deferDecl = append(t.deferDecl, fmt.Sprintf("volatile %s %s;", mt, mv), fmt.Sprintf("volatile %s %s;", kt, kv))
+				t.w("%s = %s;", mv, t.expr(c.Args[0]))
+				t.w("%s = %s;", kv, t.exprConv(c.Args[1], m.Key()))
+				call = fmt.Sprintf("({ %s _dm = %s; %s_delete(&_dm, %s); })", mt, mv, cbase(m), kv)
+			default:
+				t.w("%s;", t.TODO(s, "defer of builtin "+b.Name))
+				return
+			}
+			t.w("%s = true;", id)
+			t.defers = append(t.defers, deferInfo{flag: id, call: call})
 			return
 		}
 	}

@@ -2,8 +2,10 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Headless quick-vs match, the entry point of the native C engine's
@@ -217,6 +219,16 @@ func cvfHeadlessMain(args []string) int32 {
 		sys.inputRemap[v.num-1] = v.input - 1
 	}
 
+	// main.lua main.f_commandLine: -ip <host> joins, -ip "" hosts (netplay)
+	if host, ok := flags["-ip"]; ok {
+		// with vita_statehash.txt the fixed seed is set before the host
+		// draws the match seed, so test matches are reproducible
+		vitaStateHashEnabled()
+		if !cvfNetplayConnect(host) {
+			return -1
+		}
+	}
+
 	// loadStart("pausemenu=false")
 	if sys.sel.gameParams == nil {
 		sys.sel.gameParams = newGameParamsFromMotif(&sys.motif)
@@ -226,7 +238,11 @@ func cvfHeadlessMain(args []string) int32 {
 	sys.sel.music.AppendParams(sys.sel.gameParams.MusicEntries())
 	sys.loaderReset()
 
-	return cvfGame()
+	winp := cvfGame()
+	if _, ok := flags["-ip"]; ok {
+		stateDumpNetFlush()
+	}
+	return winp
 }
 
 
@@ -289,6 +305,12 @@ func cvfGame() int32 {
 	}
 	sys.draws = 0
 	sys.statsLog.startMatch()
+
+	// as the Lua game function: reset net inputs, resynchronize on return
+	if sys.netConnection != nil {
+		sys.netConnection.Stop()
+	}
+	defer sys.synchronize()
 
 	for {
 		if sys.roundNo == 1 {
@@ -363,4 +385,158 @@ func cvfRefresh() {
 	sys.stepCommandLists()
 	sys.uiFrameCounter++
 	sys.update()
+}
+
+// ---- Netplay (tests/netplay): the -ip part of main.lua main.f_commandLine,
+// scripted inputs and frame pacing for a headless online match.
+
+// The Lua enterNetPlay function.
+func cvfEnterNetPlay(host string) error {
+	if sys.netConnection != nil {
+		return Error("Connection already established.")
+	}
+	sys.sessionWarning = ""
+	sys.chars = [len(sys.chars)][]*Char{}
+	sys.netConnection = NewNetConnection()
+	if sys.cfg.Netplay.RollbackNetcode {
+		rs := NewRollbackSession(sys.cfg.Netplay.Rollback)
+		sys.rollback.session = &rs
+	}
+	if host != "" {
+		if sys.cfg.Netplay.RollbackNetcode {
+			sys.rollback.session.host = host
+		}
+		sys.netConnection.Connect(host, sys.cfg.Netplay.ListenPort)
+	} else if err := sys.netConnection.Accept(sys.cfg.Netplay.ListenPort); err != nil {
+		return err
+	}
+	return nil
+}
+
+// enterNetPlay, wait for connected(), synchronize() (main.lua -ip).
+func cvfNetplayConnect(host string) bool {
+	if err := cvfEnterNetPlay(host); err != nil {
+		LogMessage("enterNetPlay: %v", err)
+		return false
+	}
+	for !(sys.netConnection != nil && sys.netConnection.IsConnected()) {
+		if sys.esc || sys.gameEnd {
+			return false
+		}
+		cvfRefresh()
+	}
+	cvfRefresh()
+	if vitaStateHashEnabled() {
+		// reproducible test runs: the frames counted while waiting for the
+		// peer become the synchronized pre-match time (GameTime), so
+		// count from the connection instead
+		sys.frameCounter = 0
+	}
+	if err := sys.synchronize(); err != nil {
+		LogMessage("synchronize: %v (%v)", err, sys.sessionWarning)
+		return false
+	}
+	// Test relay (tests/netplay/udp_relay.py): send rollback UDP to this port
+	// instead of the one the peer advertised.
+	if p, err := strconv.Atoi(os.Getenv("CVF_NET_PEER_UDP")); err == nil && p > 0 && sys.netConnection != nil {
+		sys.netConnection.rollbackRemotePort = p
+	}
+	cvfRefresh()
+	return true
+}
+
+// Scripted local input (CVF_NET_INPUT=seed): directions and button taps from
+// a hash of the seed and the match time, written into the key state of
+// player 1's keyboard config, which the netplay/rollback code reads as the
+// local input. Being a function of the simulated time only, the inputs are
+// the same whatever the network does (stalls, rollbacks).
+var cvfNetInputSeed = -1
+
+func cvfNetInputTick() {
+	if cvfNetInputSeed < 0 {
+		cvfNetInputSeed = 0
+		if n, err := strconv.Atoi(os.Getenv("CVF_NET_INPUT")); err == nil && n > 0 {
+			cvfNetInputSeed = n
+		}
+	}
+	if cvfNetInputSeed == 0 || len(sys.keyConfig) == 0 {
+		return
+	}
+	if sys.keyState == nil {
+		sys.keyState = make(map[Key]bool)
+	}
+	kc := sys.keyConfig[0]
+	keys := [10]int{kc.dU, kc.dD, kc.dL, kc.dR, kc.bA, kc.bB, kc.bC, kc.bX, kc.bY, kc.bZ}
+	t := uint32(sys.matchTime)
+	h := uint32(cvfNetInputSeed)*2654435761 ^ (t>>3)*40503
+	h ^= h >> 15
+	h *= 2246822519
+	h ^= h >> 13
+	var on [10]bool
+	switch h % 9 { // hold a direction for 8 frames
+	case 1:
+		on[3] = true
+	case 2:
+		on[2] = true
+	case 3:
+		on[0] = true
+	case 4:
+		on[1] = true
+	case 5:
+		on[1], on[3] = true, true
+	case 6:
+		on[1], on[2] = true, true
+	case 7:
+		on[0], on[3] = true, true
+	case 8:
+		on[0], on[2] = true, true
+	}
+	if (h>>8)%3 == 0 && t&7 < 2 { // tap a button on 1 block in 3
+		on[4+(h>>12)%6] = true
+	}
+	for i, k := range keys {
+		if k != 0 {
+			sys.keyState[Key(k)] = false
+		}
+	}
+	for i, k := range keys {
+		if k != 0 && on[i] {
+			sys.keyState[Key(k)] = true
+		}
+	}
+}
+
+// CVF_HEADLESS_FPS=n paces the headless loop at n frames per second (as a
+// windowed game would); unset, it runs as fast as it can.
+var cvfHeadlessFps = -1
+var cvfHeadlessNext time.Time
+
+// System.await without window: no rendering. Yields to the other goroutines
+// (the native engine's are cooperative: netplay and GGPO workers run here).
+func (s *System) cvfHeadlessAwait() bool {
+	s.frameSkip = true
+	cvfFrames++
+	if cvfMaxFrames > 0 && cvfFrames >= cvfMaxFrames {
+		s.gameEnd = true
+	}
+	cvfNetInputTick()
+	if cvfHeadlessFps < 0 {
+		cvfHeadlessFps = 0
+		if n, err := strconv.Atoi(os.Getenv("CVF_HEADLESS_FPS")); err == nil && n > 0 {
+			cvfHeadlessFps = n
+		}
+	}
+	if cvfHeadlessFps > 0 {
+		now := time.Now()
+		if cvfHeadlessNext.IsZero() || now.Sub(cvfHeadlessNext) > time.Second {
+			cvfHeadlessNext = now
+		}
+		cvfHeadlessNext = cvfHeadlessNext.Add(time.Second / time.Duration(cvfHeadlessFps))
+		if d := cvfHeadlessNext.Sub(now); d > 0 {
+			time.Sleep(d)
+		}
+	} else {
+		runtime.Gosched()
+	}
+	return !s.gameEnd
 }

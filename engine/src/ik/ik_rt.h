@@ -116,6 +116,7 @@ void go_sort_iface(void *v, int (*len)(void *), bool (*less)(void *, int, int), 
 // precision, flags - + 0 space #).
 GoString go_sprintf(GoString format, const GoIface *args, int nargs);
 GoString go_sprint(const GoIface *args, int nargs, bool spaces_always);
+Ret_int__GoIface go_fwrite(GoIface w, GoString s);  // io.Writer for fmt.Fprint* (ik_fmt.c)
 GoString go_format_float(f64 f, char fmt, int prec, int bits);  // strconv.FormatFloat
 
 // os.FileInfo methods for GO_TID_FILEINFO (used by generated dispatchers)

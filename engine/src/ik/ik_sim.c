@@ -1096,10 +1096,11 @@ static void lambda_9(Env_lambda_9 *_env) {
 
 typedef struct Env_lambda_10 { transport_Udp *u; } Env_lambda_10;
 static void lambda_10(Env_lambda_10 *_env) {
-    volatile bool _df1 = false;
+    volatile bool _df1 = false; GoChan *volatile _df1_a0;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
-    if (setjmp(_pf.jb)) { if (go_panicking) go_panic_continue(); return; }
-    /* defer close(...) not supported */
+    if (setjmp(_pf.jb)) { if (_df1) { _df1 = false; go_chan_close(_df1_a0); } if (go_panicking) go_panic_continue(); return; }
+    _df1_a0 = (*_env->u).sendDone;
+    _df1 = true;
     {
         for (; 1; ) {
             {
@@ -1113,6 +1114,7 @@ static void lambda_10(Env_lambda_10 *_env) {
                     if (_t8 == 0) {
                         {
                             go_panic_top = _pf.prev;
+                            if (_df1) { _df1 = false; go_chan_close(_df1_a0); }
                             return;
                         }
                     } else if (_t8 == 1) {
@@ -1131,6 +1133,7 @@ static void lambda_10(Env_lambda_10 *_env) {
         }
     }
     go_panic_top = _pf.prev;
+    if (_df1) { _df1 = false; go_chan_close(_df1_a0); }
 }
 
 typedef struct GoEnv_2 { GoFunc f; } GoEnv_2;
@@ -32415,14 +32418,14 @@ static Stage* lambda_1777(Env_lambda_1777 *_env, Stage* s) {
     return c;
 }
 
-typedef struct Env_lambda_1778 { char _unused; } Env_lambda_1778;
+typedef struct Env_lambda_1778 { Slice_i32 *keys; } Env_lambda_1778;
 static bool lambda_1778(Env_lambda_1778 *_env, int i, int j) {
-    return (g_sdKeys.p[i] < g_sdKeys.p[j]);
+    return ((*_env->keys).p[i] < (*_env->keys).p[j]);
 }
 
-typedef struct Env_lambda_1779 { char _unused; } Env_lambda_1779;
+typedef struct Env_lambda_1779 { Slice_i32 *keys; } Env_lambda_1779;
 static bool lambda_1779(Env_lambda_1779 *_env, int i, int j) {
-    return (g_sdKeys.p[i] < g_sdKeys.p[j]);
+    return ((*_env->keys).p[i] < (*_env->keys).p[j]);
 }
 
 typedef struct Env_lambda_1780 { char _unused; } Env_lambda_1780;
@@ -32435,8 +32438,18 @@ static bool lambda_1781(Env_lambda_1781 *_env, int i, int j) {
     return (g_sdKeys.p[i] < g_sdKeys.p[j]);
 }
 
-typedef struct Env_lambda_1782 { Map_bgVideoPtr_Anon_fa4d6974 *live; } Env_lambda_1782;
-static void lambda_1782(Env_lambda_1782 *_env, Slice_StoryboardPtr storyboards) {
+typedef struct Env_lambda_1782 { char _unused; } Env_lambda_1782;
+static bool lambda_1782(Env_lambda_1782 *_env, int i, int j) {
+    return (g_sdKeys.p[i] < g_sdKeys.p[j]);
+}
+
+typedef struct Env_lambda_1783 { char _unused; } Env_lambda_1783;
+static bool lambda_1783(Env_lambda_1783 *_env, int i, int j) {
+    return (g_sdKeys.p[i] < g_sdKeys.p[j]);
+}
+
+typedef struct Env_lambda_1784 { Map_bgVideoPtr_Anon_fa4d6974 *live; } Env_lambda_1784;
+static void lambda_1784(Env_lambda_1784 *_env, Slice_StoryboardPtr storyboards) {
     {
         Slice_StoryboardPtr _t2 = storyboards;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -32465,22 +32478,22 @@ static void lambda_1782(Env_lambda_1782 *_env, Slice_StoryboardPtr storyboards) 
     }
 }
 
-typedef struct Env_lambda_1783 { GoFunc *mark; } Env_lambda_1783;
-static void lambda_1783(Env_lambda_1783 *_env, GameState* gs) {
+typedef struct Env_lambda_1785 { GoFunc *mark; } Env_lambda_1785;
+static void lambda_1785(Env_lambda_1785 *_env, GameState* gs) {
     if ((gs != NULL) && gs->saved) {
         ((void (*)(void *, Slice_StoryboardPtr))((*_env->mark)).fn)(((*_env->mark)).env, gs->matchStoryboards);
     }
 }
 
-typedef struct Env_lambda_1784 { GoString *def; Storyboard *s; } Env_lambda_1784;
-typedef struct Env_lambda_1785 { char _unused; } Env_lambda_1785;
-static bool lambda_1785(Env_lambda_1785 *_env, GoString logical) {
+typedef struct Env_lambda_1786 { GoString *def; Storyboard *s; } Env_lambda_1786;
+typedef struct Env_lambda_1787 { char _unused; } Env_lambda_1787;
+static bool lambda_1787(Env_lambda_1787 *_env, GoString logical) {
     GoString l = strings_ToLower(logical);
     return (((go_streq(l, GOSTR("info")) || go_streq(l, GOSTR("scenedef"))) || go_streq(l, GOSTR("scene"))) || strings_HasPrefix(l, GOSTR("scene ")));
 }
 
-typedef struct Env_lambda_1786 { GoString *def; Storyboard *s; } Env_lambda_1786;
-static GoIface lambda_1786(Env_lambda_1786 *_env, Slice_secPair_L9c39fb list) {
+typedef struct Env_lambda_1788 { GoString *def; Storyboard *s; } Env_lambda_1788;
+static GoIface lambda_1788(Env_lambda_1788 *_env, Slice_secPair_L9c39fb list) {
     GoString *clearcolor__h = go_box(GoString, (GoString){0});
     GoString *clearalpha__h = go_box(GoString, (GoString){0});
     GoString *clearlayerno__h = go_box(GoString, (GoString){0});
@@ -32562,14 +32575,14 @@ static GoIface lambda_1786(Env_lambda_1786 *_env, Slice_secPair_L9c39fb list) {
     return (GoIface){0};
 }
 
-static GoIface lambda_1784(Env_lambda_1784 *_env, GoOpaque /* ini.File */* src) {
+static GoIface lambda_1786(Env_lambda_1786 *_env, GoOpaque /* ini.File */* src) {
     if (src == NULL) {
         return (GoIface){0};
     }
     Slice_secPair_L9c39fb baseSecs = {0};
     Slice_secPair_L9c39fb langSecs = {0};
     GoString curLang = fn_SelectedLanguage();
-    GoFunc interesting = ((GoFunc){(void *)lambda_1785, &(Env_lambda_1785){0}});
+    GoFunc interesting = ((GoFunc){(void *)lambda_1787, &(Env_lambda_1787){0}});
     {
         Slice_GoOpaque_ini_SectionPtrPtr _t2 = ini_File_Sections(src);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -32599,7 +32612,7 @@ static GoIface lambda_1784(Env_lambda_1784 *_env, GoOpaque /* ini.File */* src) 
             _cont3:;
         }
     }
-    GoFunc process = ((GoFunc){(void *)lambda_1786, &(Env_lambda_1786){_env->def, _env->s}});
+    GoFunc process = ((GoFunc){(void *)lambda_1788, &(Env_lambda_1788){_env->def, _env->s}});
     {
         GoIface err = ((GoIface (*)(void *, Slice_secPair_L9c39fb))(process).fn)((process).env, baseSecs);
         if (err.type != 0) {
@@ -32615,8 +32628,8 @@ static GoIface lambda_1784(Env_lambda_1784 *_env, GoOpaque /* ini.File */* src) 
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1787 { Storyboard* *s; } Env_lambda_1787;
-static GoIface lambda_1787(Env_lambda_1787 *_env, GoString filename) {
+typedef struct Env_lambda_1789 { Storyboard* *s; } Env_lambda_1789;
+static GoIface lambda_1789(Env_lambda_1789 *_env, GoString filename) {
     if (!go_streq(filename, GOSTR(""))) {
         GoIface err = {0};
         Ret_SffPtr__GoIface _t1 = fn_loadSff(filename, 4, true, false);
@@ -32632,14 +32645,14 @@ static GoIface lambda_1787(Env_lambda_1787 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1788 { Storyboard* *s; } Env_lambda_1788;
-typedef struct Env_lambda_1789 { Storyboard* *s; } Env_lambda_1789;
-static void lambda_1789(Env_lambda_1789 *_env) {
+typedef struct Env_lambda_1790 { Storyboard* *s; } Env_lambda_1790;
+typedef struct Env_lambda_1791 { Storyboard* *s; } Env_lambda_1791;
+static void lambda_1791(Env_lambda_1791 *_env) {
     iface_SetModelVertexData_ed700385(g_gfx, 1U, (*_env->s)->Model->vertexBuffer);
     iface_SetModelIndexData_e06c74a6(g_gfx, 1U, (*_env->s)->Model->elementBuffer);
 }
 
-static GoIface lambda_1788(Env_lambda_1788 *_env, GoString filename) {
+static GoIface lambda_1790(Env_lambda_1790 *_env, GoString filename) {
     if (!go_streq(filename, GOSTR(""))) {
         GoIface err = {0};
         Ret_ModelPtr__GoIface _t1 = fn_loadglTFModel(filename);
@@ -32648,14 +32661,14 @@ static GoIface lambda_1788(Env_lambda_1788 *_env, GoString filename) {
         if (err.type != 0) {
             fn_LogMessage(GOSTR("Failed to load %v: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, filename)}), err));
         }
-        { GoFunc _t2 = ((GoFunc){(void *)lambda_1789, go_box(Env_lambda_1789, ((Env_lambda_1789){_env->s}))}); go_chan_send(g_sys.mainThreadTask, &_t2); }
+        { GoFunc _t2 = ((GoFunc){(void *)lambda_1791, go_box(Env_lambda_1791, ((Env_lambda_1791){_env->s}))}); go_chan_send(g_sys.mainThreadTask, &_t2); }
         System_runMainThreadTask(&g_sys);
     }
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1790 { Storyboard* *s; } Env_lambda_1790;
-static GoIface lambda_1790(Env_lambda_1790 *_env, GoString filename) {
+typedef struct Env_lambda_1792 { Storyboard* *s; } Env_lambda_1792;
+static GoIface lambda_1792(Env_lambda_1792 *_env, GoString filename) {
     if (!go_streq(filename, GOSTR(""))) {
         GoIface err = {0};
         Ret_SndPtr__GoIface _t1 = fn_LoadSnd(filename);
@@ -32671,8 +32684,8 @@ static GoIface lambda_1790(Env_lambda_1790 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1791 { Storyboard* *s; GoString *key; FontProperties* *fnt; } Env_lambda_1791;
-static GoIface lambda_1791(Env_lambda_1791 *_env, GoString filename) {
+typedef struct Env_lambda_1793 { Storyboard* *s; GoString *key; FontProperties* *fnt; } Env_lambda_1793;
+static GoIface lambda_1793(Env_lambda_1793 *_env, GoString filename) {
     GoOpaque /* regexp.Regexp */* re = regexp_MustCompile(GOSTR("\\d+"));
     int i = ((int)fn_Atoi(regexp_Regexp_FindString(re, (*_env->key))));
     if (!go_streq(filename, GOSTR(""))) {
@@ -32695,8 +32708,8 @@ static GoIface lambda_1791(Env_lambda_1791 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1792 { char _unused; } Env_lambda_1792;
-static int lambda_1792(Env_lambda_1792 *_env, GoString key) {
+typedef struct Env_lambda_1794 { char _unused; } Env_lambda_1794;
+static int lambda_1794(Env_lambda_1794 *_env, GoString key) {
     GoOpaque /* regexp.Regexp */* re = regexp_MustCompile(GOSTR("\\d+"));
     GoString num = regexp_Regexp_FindString(re, key);
     if (go_streq(num, GOSTR(""))) {
@@ -32705,8 +32718,8 @@ static int lambda_1792(Env_lambda_1792 *_env, GoString key) {
     return ((int)fn_Atoi(num));
 }
 
-typedef struct Env_lambda_1793 { Slice_entry_L001e46 *items; } Env_lambda_1793;
-static bool lambda_1793(Env_lambda_1793 *_env, int i, int j) {
+typedef struct Env_lambda_1795 { Slice_entry_L001e46 *items; } Env_lambda_1795;
+static bool lambda_1795(Env_lambda_1795 *_env, int i, int j) {
     if ((*_env->items).p[i].start != (*_env->items).p[j].start) {
         return ((*_env->items).p[i].start < (*_env->items).p[j].start);
     }
@@ -32716,8 +32729,8 @@ static bool lambda_1793(Env_lambda_1793 *_env, int i, int j) {
     return (go_strcmp(strings_ToLower((*_env->items).p[i].key), strings_ToLower((*_env->items).p[j].key)) < 0);
 }
 
-typedef struct Env_lambda_1794 { Slice_entry_L001e46 *items; } Env_lambda_1794;
-static bool lambda_1794(Env_lambda_1794 *_env, int i, int j) {
+typedef struct Env_lambda_1796 { Slice_entry_L001e46 *items; } Env_lambda_1796;
+static bool lambda_1796(Env_lambda_1796 *_env, int i, int j) {
     if ((*_env->items).p[i].start != (*_env->items).p[j].start) {
         return ((*_env->items).p[i].start < (*_env->items).p[j].start);
     }
@@ -32727,8 +32740,8 @@ static bool lambda_1794(Env_lambda_1794 *_env, int i, int j) {
     return (go_strcmp(strings_ToLower((*_env->items).p[i].key), strings_ToLower((*_env->items).p[j].key)) < 0);
 }
 
-typedef struct Env_lambda_1795 { System* *s; } Env_lambda_1795;
-static void lambda_1795(Env_lambda_1795 *_env) {
+typedef struct Env_lambda_1797 { System* *s; } Env_lambda_1797;
+static void lambda_1797(Env_lambda_1797 *_env) {
     if (true) {
         return;
     }
@@ -32748,8 +32761,8 @@ static void lambda_1795(Env_lambda_1795 *_env) {
     }
 }
 
-typedef struct Env_lambda_1796 { System* *s; GoFunc *fn; drawAspectState *st; } Env_lambda_1796;
-static void lambda_1796(Env_lambda_1796 *_env) {
+typedef struct Env_lambda_1798 { System* *s; GoFunc *fn; drawAspectState *st; } Env_lambda_1798;
+static void lambda_1798(Env_lambda_1798 *_env) {
     drawAspectState drawState = (*_env->st);
     if (System_shouldComposeFullResolution((*_env->s))) {
         drawState = fn_aspectStateForSize((*_env->s)->SystemStateVars_.scrrect.v[2], (*_env->s)->SystemStateVars_.scrrect.v[3]);
@@ -32757,13 +32770,13 @@ static void lambda_1796(Env_lambda_1796 *_env) {
     System_withAspectState((*_env->s), drawState, (*_env->fn));
 }
 
-typedef struct Env_lambda_1797 { System* *s; } Env_lambda_1797;
-typedef struct Env_lambda_1798 { Arr2_int *size; GoString *file; Slice_u8 *data; } Env_lambda_1798;
-static void lambda_1798(Env_lambda_1798 *_env) {
+typedef struct Env_lambda_1799 { System* *s; } Env_lambda_1799;
+typedef struct Env_lambda_1800 { Arr2_int *size; GoString *file; Slice_u8 *data; } Env_lambda_1800;
+static void lambda_1800(Env_lambda_1800 *_env) {
     fn_saveScreenshot((*_env->data), (*_env->size).v[0], (*_env->size).v[1], (*_env->file));
 }
 
-static void lambda_1797(Env_lambda_1797 *_env) {
+static void lambda_1799(Env_lambda_1799 *_env) {
     if ((*_env->s)->screenshotInFlight) {
         Arr2_int _t1 = (*_env->s)->screenshotSize;
         GoString _t2 = (*_env->s)->screenshotFile;
@@ -32772,7 +32785,7 @@ static void lambda_1797(Env_lambda_1797 *_env) {
         Slice_u8 *data__h = go_box(Slice_u8, GO_MAKE_A(Slice_u8, u8, ((4 * (*size__h).v[0]) * (*size__h).v[1]), 0));
         if (iface_FinishScreenshot_4c49171d(g_gfx, (*data__h), (*size__h).v[0], (*size__h).v[1])) {
             (*_env->s)->screenshotInFlight = false;
-            fn_SafeGo(((GoFunc){(void *)lambda_1798, go_box(Env_lambda_1798, ((Env_lambda_1798){size__h, file__h, data__h}))}));
+            fn_SafeGo(((GoFunc){(void *)lambda_1800, go_box(Env_lambda_1800, ((Env_lambda_1800){size__h, file__h, data__h}))}));
         }
     }
     if ((*_env->s)->isTakingScreenshot && (!(*_env->s)->screenshotInFlight)) {
@@ -32782,17 +32795,17 @@ static void lambda_1797(Env_lambda_1797 *_env) {
     }
 }
 
-typedef struct Env_lambda_1799 { System* *s; Slice_GoString *btns; } Env_lambda_1799;
-typedef struct Env_lambda_1800 { char _unused; } Env_lambda_1800;
-static bool lambda_1800(Env_lambda_1800 *_env, GoString tok) {
+typedef struct Env_lambda_1801 { System* *s; Slice_GoString *btns; } Env_lambda_1801;
+typedef struct Env_lambda_1802 { char _unused; } Env_lambda_1802;
+static bool lambda_1802(Env_lambda_1802 *_env, GoString tok) {
     bool _t1; int _t2 = Map_GoString_int_get(&g_StringToButtonLUT, tok, &_t1);
     int idx = _t2;
     bool ok = _t1;
     return (((ok && (idx != 25)) && (idx >= 15)) && (idx <= 24));
 }
 
-typedef struct Env_lambda_1801 { char _unused; } Env_lambda_1801;
-static bool lambda_1801(Env_lambda_1801 *_env, GoString tok) {
+typedef struct Env_lambda_1803 { char _unused; } Env_lambda_1803;
+static bool lambda_1803(Env_lambda_1803 *_env, GoString tok) {
     {
         GoString _t1 = tok;
         do {
@@ -32805,13 +32818,13 @@ static bool lambda_1801(Env_lambda_1801 *_env, GoString tok) {
     }
 }
 
-static bool lambda_1799(Env_lambda_1799 *_env, int i, CommandList* cl) {
+static bool lambda_1801(Env_lambda_1801 *_env, int i, CommandList* cl) {
     if ((cl == NULL) || (cl->Buffer == NULL)) {
         return false;
     }
     int controllerKey = System_uiControllerKey((*_env->s), i);
-    GoFunc isAxisToken = ((GoFunc){(void *)lambda_1800, &(Env_lambda_1800){0}});
-    GoFunc repeatable = ((GoFunc){(void *)lambda_1801, &(Env_lambda_1801){0}});
+    GoFunc isAxisToken = ((GoFunc){(void *)lambda_1802, &(Env_lambda_1802){0}});
+    GoFunc repeatable = ((GoFunc){(void *)lambda_1803, &(Env_lambda_1803){0}});
     InputBuffer* ib = cl->Buffer;
     {
         Slice_GoString _t2 = (*_env->btns);
@@ -32895,8 +32908,8 @@ static bool lambda_1799(Env_lambda_1799 *_env, int i, CommandList* cl) {
     return false;
 }
 
-typedef struct Env_lambda_1802 { System* *s; GoString *defaultNoKey; GoString *sectionName; } Env_lambda_1802;
-static GoString lambda_1802(Env_lambda_1802 *_env, GoString k) {
+typedef struct Env_lambda_1804 { System* *s; GoString *defaultNoKey; GoString *sectionName; } Env_lambda_1804;
+static GoString lambda_1804(Env_lambda_1804 *_env, GoString k) {
     GoString v = ini_Key_String(ini_Section_Key(ini_File_Section((*_env->s)->cfg.DefaultOnlyIni, (*_env->sectionName)), k));
     if (go_streq(v, (*_env->defaultNoKey))) {
         return Map_GoString_GoString_get(&(*_env->s)->motif.OptionInfo.Menu.Valuename, GOSTR("nokey"), NULL);
@@ -32904,18 +32917,18 @@ static GoString lambda_1802(Env_lambda_1802 *_env, GoString k) {
     return v;
 }
 
-typedef struct Env_lambda_1803 { char _unused; } Env_lambda_1803;
-static int lambda_1803(Env_lambda_1803 *_env, GoString tok) {
+typedef struct Env_lambda_1805 { char _unused; } Env_lambda_1805;
+static int lambda_1805(Env_lambda_1805 *_env, GoString tok) {
     return ((int)Map_GoString_int_get(&g_StringToButtonLUT, tok, NULL));
 }
 
-typedef struct Env_lambda_1804 { char _unused; } Env_lambda_1804;
-static int lambda_1804(Env_lambda_1804 *_env, GoString tok) {
+typedef struct Env_lambda_1806 { char _unused; } Env_lambda_1806;
+static int lambda_1806(Env_lambda_1806 *_env, GoString tok) {
     return ((int)fn_StringToKey(tok));
 }
 
-typedef struct Env_lambda_1805 { char _unused; } Env_lambda_1805;
-static void lambda_1805(Env_lambda_1805 *_env, int i) {
+typedef struct Env_lambda_1807 { char _unused; } Env_lambda_1807;
+static void lambda_1807(Env_lambda_1807 *_env, int i) {
     if ((((i < 0) || (i >= 12)) || (g_sys.chars.v[i].len == 0)) || (g_sys.chars.v[i].p[0] == NULL)) {
         return;
     }
@@ -32928,62 +32941,62 @@ static void lambda_1805(Env_lambda_1805 *_env, int i) {
     }
 }
 
-typedef struct Env_lambda_1806 { System* *s; } Env_lambda_1806;
-static void lambda_1806(Env_lambda_1806 *_env) {
+typedef struct Env_lambda_1808 { System* *s; } Env_lambda_1808;
+static void lambda_1808(Env_lambda_1808 *_env) {
     beep_Mixer_Clear((*_env->s)->soundMixer);
     beep_Mixer_Clear((*_env->s)->videoMixer);
 }
 
-typedef struct Env_lambda_1807 { System* *s; } Env_lambda_1807;
-static void lambda_1807(Env_lambda_1807 *_env) {
+typedef struct Env_lambda_1809 { System* *s; } Env_lambda_1809;
+static void lambda_1809(Env_lambda_1809 *_env) {
     iface_SetModelVertexData_ed700385(g_gfx, 0U, (*_env->s)->stage->model->vertexBuffer);
     iface_SetModelIndexData_e06c74a6(g_gfx, 0U, (*_env->s)->stage->model->elementBuffer);
 }
 
-typedef struct Env_lambda_1808 { System* *s; } Env_lambda_1808;
-static bool lambda_1808(Env_lambda_1808 *_env, int i, int j) {
-    Explod* _t1 = (*_env->s)->explodDrawOrder.p[i];
-    Explod* _t2 = (*_env->s)->explodDrawOrder.p[j];
-    Explod* a = _t1;
-    Explod* b = _t2;
-    if (a->ontop != b->ontop) {
-        return a->ontop;
-    }
-    if (a->ontop && b->ontop) {
-        if (a->timestamp != b->timestamp) {
-            return (a->timestamp >= b->timestamp);
-        }
-        return (a->sortindex >= b->sortindex);
-    }
-    if (a->timestamp != b->timestamp) {
-        return (a->timestamp < b->timestamp);
-    }
-    return (a->sortindex < b->sortindex);
-}
-
-typedef struct Env_lambda_1809 { System* *s; } Env_lambda_1809;
-static bool lambda_1809(Env_lambda_1809 *_env, int i, int j) {
-    Explod* _t1 = (*_env->s)->explodDrawOrder.p[i];
-    Explod* _t2 = (*_env->s)->explodDrawOrder.p[j];
-    Explod* a = _t1;
-    Explod* b = _t2;
-    if (a->ontop != b->ontop) {
-        return a->ontop;
-    }
-    if (a->ontop && b->ontop) {
-        if (a->timestamp != b->timestamp) {
-            return (a->timestamp >= b->timestamp);
-        }
-        return (a->sortindex >= b->sortindex);
-    }
-    if (a->timestamp != b->timestamp) {
-        return (a->timestamp < b->timestamp);
-    }
-    return (a->sortindex < b->sortindex);
-}
-
 typedef struct Env_lambda_1810 { System* *s; } Env_lambda_1810;
-static bool lambda_1810(Env_lambda_1810 *_env, int team) {
+static bool lambda_1810(Env_lambda_1810 *_env, int i, int j) {
+    Explod* _t1 = (*_env->s)->explodDrawOrder.p[i];
+    Explod* _t2 = (*_env->s)->explodDrawOrder.p[j];
+    Explod* a = _t1;
+    Explod* b = _t2;
+    if (a->ontop != b->ontop) {
+        return a->ontop;
+    }
+    if (a->ontop && b->ontop) {
+        if (a->timestamp != b->timestamp) {
+            return (a->timestamp >= b->timestamp);
+        }
+        return (a->sortindex >= b->sortindex);
+    }
+    if (a->timestamp != b->timestamp) {
+        return (a->timestamp < b->timestamp);
+    }
+    return (a->sortindex < b->sortindex);
+}
+
+typedef struct Env_lambda_1811 { System* *s; } Env_lambda_1811;
+static bool lambda_1811(Env_lambda_1811 *_env, int i, int j) {
+    Explod* _t1 = (*_env->s)->explodDrawOrder.p[i];
+    Explod* _t2 = (*_env->s)->explodDrawOrder.p[j];
+    Explod* a = _t1;
+    Explod* b = _t2;
+    if (a->ontop != b->ontop) {
+        return a->ontop;
+    }
+    if (a->ontop && b->ontop) {
+        if (a->timestamp != b->timestamp) {
+            return (a->timestamp >= b->timestamp);
+        }
+        return (a->sortindex >= b->sortindex);
+    }
+    if (a->timestamp != b->timestamp) {
+        return (a->timestamp < b->timestamp);
+    }
+    return (a->sortindex < b->sortindex);
+}
+
+typedef struct Env_lambda_1812 { System* *s; } Env_lambda_1812;
+static bool lambda_1812(Env_lambda_1812 *_env, int team) {
     {
         int i = team;
         for (; i < 8; i += 2) {
@@ -32996,8 +33009,8 @@ static bool lambda_1810(Env_lambda_1810 *_env, int team) {
     return true;
 }
 
-typedef struct Env_lambda_1811 { System* *s; } Env_lambda_1811;
-static bool lambda_1811(Env_lambda_1811 *_env, int team) {
+typedef struct Env_lambda_1813 { System* *s; } Env_lambda_1813;
+static bool lambda_1813(Env_lambda_1813 *_env, int team) {
     f32 clutchRatio = (((f32)(*_env->s)->fightScreen.round->clutch_threshold) / 0x1.9p+06f);
     {
         int i = team;
@@ -33014,13 +33027,13 @@ static bool lambda_1811(Env_lambda_1811 *_env, int team) {
     return true;
 }
 
-typedef struct Env_lambda_1812 { System* *s; drawAspectState *panelState; f32 *debugScaleX; f32 *debugScaleY; } Env_lambda_1812;
-typedef struct Env_lambda_1813 { System* *s; f32 *debugScaleX; f32 *debugScaleY; f32* *x; f32* *y; GoString *drawTxt; } Env_lambda_1813;
-static void lambda_1813(Env_lambda_1813 *_env) {
+typedef struct Env_lambda_1814 { System* *s; drawAspectState *panelState; f32 *debugScaleX; f32 *debugScaleY; } Env_lambda_1814;
+typedef struct Env_lambda_1815 { System* *s; f32 *debugScaleX; f32 *debugScaleY; f32* *x; f32* *y; GoString *drawTxt; } Env_lambda_1815;
+static void lambda_1815(Env_lambda_1815 *_env) {
     Fnt_Print((*_env->s)->debugFont->fnt, (*_env->drawTxt), (*(*_env->x)), (*(*_env->y)), ((*_env->s)->debugFont->xscl / (*_env->debugScaleX)), ((*_env->s)->debugFont->yscl / (*_env->debugScaleY)), 0x0p+00f, (Rotation){0x0p+00f, 0x0p+00f, 0x0p+00f}, 0, 0x0p+00f, 0, 1, (&(*_env->s)->SystemStateVars_.scrrect), (*_env->s)->debugFont->palfx, (*_env->s)->debugFont->frgba);
 }
 
-static void lambda_1812(Env_lambda_1812 *_env, f32* x, f32* y, GoString txt) {
+static void lambda_1814(Env_lambda_1814 *_env, f32* x, f32* y, GoString txt) {
     f32* *x__h = go_box(f32*, x);
     f32* *y__h = go_box(f32*, y);
     {
@@ -33053,14 +33066,14 @@ static void lambda_1812(Env_lambda_1812 *_env, f32* x, f32* y, GoString txt) {
                 txt = _t12;
             }
             (*(*y__h)) += ((((f32)(*_env->s)->debugFont->fnt->Size.v[1]) * (*_env->s)->debugFont->yscl) / (*_env->debugScaleY));
-            System_withAspectState((*_env->s), (*_env->panelState), ((GoFunc){(void *)lambda_1813, go_box(Env_lambda_1813, ((Env_lambda_1813){_env->s, _env->debugScaleX, _env->debugScaleY, x__h, y__h, drawTxt__h}))}));
+            System_withAspectState((*_env->s), (*_env->panelState), ((GoFunc){(void *)lambda_1815, go_box(Env_lambda_1815, ((Env_lambda_1815){_env->s, _env->debugScaleX, _env->debugScaleY, x__h, y__h, drawTxt__h}))}));
             _cont1:;
         }
     }
 }
 
-typedef struct Env_lambda_1814 { System* *s; } Env_lambda_1814;
-static void lambda_1814(Env_lambda_1814 *_env) {
+typedef struct Env_lambda_1816 { System* *s; } Env_lambda_1816;
+static void lambda_1816(Env_lambda_1816 *_env) {
     if (false) {
         fn_vitaGCTrigger(33554432U);
         fn_vitaMatchEnd();
@@ -33082,15 +33095,15 @@ static void lambda_1814(Env_lambda_1814 *_env) {
     }
 }
 
-typedef struct Env_lambda_1815 { System* *s; } Env_lambda_1815;
-static void lambda_1815(Env_lambda_1815 *_env) {
+typedef struct Env_lambda_1817 { System* *s; } Env_lambda_1817;
+static void lambda_1817(Env_lambda_1817 *_env) {
     if ((((System_matchOver((*_env->s)) || (*_env->s)->SystemStateVars_.esc) || (*_env->s)->SystemStateVars_.endMatch) || (*_env->s)->SystemStateVars_.gameEnd) || (*_env->s)->SystemStateVars_.fightLoopEnd) {
         NetConnection_Stop((*_env->s)->netConnection);
     }
 }
 
-typedef struct Env_lambda_1816 { System* *s; } Env_lambda_1816;
-static void lambda_1816(Env_lambda_1816 *_env) {
+typedef struct Env_lambda_1818 { System* *s; } Env_lambda_1818;
+static void lambda_1818(Env_lambda_1818 *_env) {
     {
         GoSelCase _t1[1];
         GoString _t2; bool _t3 = false;
@@ -33111,25 +33124,25 @@ static void lambda_1816(Env_lambda_1816 *_env) {
     }
 }
 
-typedef struct Env_lambda_1817 { Select* *s; } Env_lambda_1817;
-static void lambda_1817(Env_lambda_1817 *_env) {
+typedef struct Env_lambda_1819 { Select* *s; } Env_lambda_1819;
+static void lambda_1819(Env_lambda_1819 *_env) {
     Select_preloadWorkerLoop((*_env->s));
 }
 
-typedef struct Env_lambda_1818 { Select* *s; } Env_lambda_1818;
-static void lambda_1818(Env_lambda_1818 *_env) {
+typedef struct Env_lambda_1820 { Select* *s; } Env_lambda_1820;
+static void lambda_1820(Env_lambda_1820 *_env) {
     sync_Cond_Broadcast((*_env->s)->preloadCond);
     sync_Mutex_Unlock(&(*_env->s)->preloadMu);
 }
 
-typedef struct Env_lambda_1819 { Select* *s; } Env_lambda_1819;
-static void lambda_1819(Env_lambda_1819 *_env) {
+typedef struct Env_lambda_1821 { Select* *s; } Env_lambda_1821;
+static void lambda_1821(Env_lambda_1821 *_env) {
     sync_Cond_Broadcast((*_env->s)->preloadCond);
     sync_Mutex_Unlock(&(*_env->s)->preloadMu);
 }
 
-typedef struct Env_lambda_1820 { Select* *s; SelectChar *sc; PreloadedAnims *localAnims; Map_Arr2_u16_bool *listSpr; Sff* *tempSff; } Env_lambda_1820;
-static GoIface lambda_1820(Env_lambda_1820 *_env, GoString filename) {
+typedef struct Env_lambda_1822 { Select* *s; SelectChar *sc; PreloadedAnims *localAnims; Map_Arr2_u16_bool *listSpr; Sff* *tempSff; } Env_lambda_1822;
+static GoIface lambda_1822(Env_lambda_1822 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -33164,8 +33177,8 @@ static GoIface lambda_1820(Env_lambda_1820 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1821 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; Slice_i32 *selPal; } Env_lambda_1821;
-static GoIface lambda_1821(Env_lambda_1821 *_env, GoString file) {
+typedef struct Env_lambda_1823 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; Slice_i32 *selPal; } Env_lambda_1823;
+static GoIface lambda_1823(Env_lambda_1823 *_env, GoString file) {
     GoIface err = {0};
     Ret_SffPtr__Slice_i32__GoIface _t1 = fn_preloadSff(file, 0, (*_env->listSpr));
     (*_env->localSff) = _t1.r0;
@@ -33177,8 +33190,8 @@ static GoIface lambda_1821(Env_lambda_1821 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1822 { GoString *defText; } Env_lambda_1822;
-static GoIface lambda_1822(Env_lambda_1822 *_env, GoString file) {
+typedef struct Env_lambda_1824 { GoString *defText; } Env_lambda_1824;
+static GoIface lambda_1824(Env_lambda_1824 *_env, GoString file) {
     Ret_GoString__GoIface _t1 = fn_LoadText(file);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -33189,8 +33202,8 @@ static GoIface lambda_1822(Env_lambda_1822 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1823 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; } Env_lambda_1823;
-static GoIface lambda_1823(Env_lambda_1823 *_env, GoString file) {
+typedef struct Env_lambda_1825 { Map_Arr2_u16_bool *listSpr; Sff* *localSff; } Env_lambda_1825;
+static GoIface lambda_1825(Env_lambda_1825 *_env, GoString file) {
     GoIface err = {0};
     Ret_SffPtr__Slice_i32__GoIface _t1 = fn_preloadSff(file, 3, (*_env->listSpr));
     (*_env->localSff) = _t1.r0;
@@ -33201,21 +33214,21 @@ static GoIface lambda_1823(Env_lambda_1823 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1824 { SelectChar* *sc; GoString *defPathFromSelect; } Env_lambda_1824;
-static SelectChar* lambda_1824(Env_lambda_1824 *_env, GoString reason) {
+typedef struct Env_lambda_1826 { SelectChar* *sc; GoString *defPathFromSelect; } Env_lambda_1826;
+static SelectChar* lambda_1826(Env_lambda_1826 *_env, GoString reason) {
     (*_env->sc)->name = GOSTR("dummyslot");
     fn_LogMessage(GOSTR("Failed to add char: %v (%s)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*_env->defPathFromSelect))}), ((GoIface){17, go_box(GoString, reason)})));
     return NULL;
 }
 
-typedef struct Env_lambda_1825 { GoOpaque /* time.Time */ *tnow; GoString *defPathFromSelect; } Env_lambda_1825;
-static void lambda_1825(Env_lambda_1825 *_env) {
+typedef struct Env_lambda_1827 { GoOpaque /* time.Time */ *tnow; GoString *defPathFromSelect; } Env_lambda_1827;
+static void lambda_1827(Env_lambda_1827 *_env) {
     GoString tstr = fmt_Sprintf(GOSTR("Char: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, (*_env->defPathFromSelect))})));
     System_loadTime(&g_sys, (*_env->tnow), tstr, false, false);
 }
 
-typedef struct Env_lambda_1826 { SelectChar* *sc; } Env_lambda_1826;
-static GoIface lambda_1826(Env_lambda_1826 *_env, GoString filename) {
+typedef struct Env_lambda_1828 { SelectChar* *sc; } Env_lambda_1828;
+static GoIface lambda_1828(Env_lambda_1828 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -33257,19 +33270,19 @@ static GoIface lambda_1826(Env_lambda_1826 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1827 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_1827;
-static void lambda_1827(Env_lambda_1827 *_env) {
+typedef struct Env_lambda_1829 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_1829;
+static void lambda_1829(Env_lambda_1829 *_env) {
     System_loadTime(&g_sys, (*_env->tnow), (*_env->tstr), false, false);
 }
 
-typedef struct Env_lambda_1828 { GoString *finalDefPath; } Env_lambda_1828;
-static GoIface lambda_1828(Env_lambda_1828 *_env, GoString file) {
+typedef struct Env_lambda_1830 { GoString *finalDefPath; } Env_lambda_1830;
+static GoIface lambda_1830(Env_lambda_1830 *_env, GoString file) {
     (*_env->finalDefPath) = file;
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1829 { Slice_GoString *lines; GoIface *err; } Env_lambda_1829;
-static GoIface lambda_1829(Env_lambda_1829 *_env, GoString file) {
+typedef struct Env_lambda_1831 { Slice_GoString *lines; GoIface *err; } Env_lambda_1831;
+static GoIface lambda_1831(Env_lambda_1831 *_env, GoString file) {
     GoString str = (GoString){0};
     Ret_GoString__GoIface _t1 = fn_LoadText(file);
     str = _t1.r0;
@@ -33281,8 +33294,8 @@ static GoIface lambda_1829(Env_lambda_1829 *_env, GoString file) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1830 { SelectStage* *ss; int *idx; } Env_lambda_1830;
-static GoIface lambda_1830(Env_lambda_1830 *_env, GoString filename) {
+typedef struct Env_lambda_1832 { SelectStage* *ss; int *idx; } Env_lambda_1832;
+static GoIface lambda_1832(Env_lambda_1832 *_env, GoString filename) {
     {
         for (; (*_env->ss)->attachedchardef.len <= (*_env->idx); ) {
             (*_env->ss)->attachedchardef = GO_APPEND(Slice_GoString, (*_env->ss)->attachedchardef, GOSTR(""));
@@ -33293,13 +33306,13 @@ static GoIface lambda_1830(Env_lambda_1830 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1831 { Loader* *l; } Env_lambda_1831;
-static void lambda_1831(Env_lambda_1831 *_env) {
+typedef struct Env_lambda_1833 { Loader* *l; } Env_lambda_1833;
+static void lambda_1833(Env_lambda_1833 *_env) {
     go_chan_close((*_env->l)->cancelCh);
 }
 
-typedef struct Env_lambda_1832 { CharGlobalInfo* *gi; GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_1832;
-static void lambda_1832(Env_lambda_1832 *_env) {
+typedef struct Env_lambda_1834 { CharGlobalInfo* *gi; GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_1834;
+static void lambda_1834(Env_lambda_1834 *_env) {
     System_loadTime(&g_sys, (*_env->tnow), (*_env->tstr), false, true);
     if (((*_env->gi)->ikemenver.v[0] == 0U) && ((*_env->gi)->ikemenver.v[1] == 0U)) {
         if (((*_env->gi)->mugenver.v[0] == 1U) && ((*_env->gi)->mugenver.v[1] == 1U)) {
@@ -33318,13 +33331,13 @@ static void lambda_1832(Env_lambda_1832 *_env) {
     }
 }
 
-typedef struct Env_lambda_1833 { Char* *p; } Env_lambda_1833;
-static void lambda_1833(Env_lambda_1833 *_env) {
+typedef struct Env_lambda_1835 { Char* *p; } Env_lambda_1835;
+static void lambda_1835(Env_lambda_1835 *_env) {
     (*_env->p)->stillLoading = false;
 }
 
-typedef struct Env_lambda_1834 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_1834;
-static void lambda_1834(Env_lambda_1834 *_env) {
+typedef struct Env_lambda_1836 { GoString *tstr; GoOpaque /* time.Time */ *tnow; } Env_lambda_1836;
+static void lambda_1836(Env_lambda_1836 *_env) {
     if (g_sys.stage != NULL) {
         System_loadTime(&g_sys, (*_env->tnow), (*_env->tstr), false, true);
         if ((g_sys.stage->ikemenver.v[0] == 0U) && (g_sys.stage->ikemenver.v[1] == 0U)) {
@@ -33345,13 +33358,13 @@ static void lambda_1834(Env_lambda_1834 *_env) {
     }
 }
 
-typedef struct Env_lambda_1835 { Loader* *l; } Env_lambda_1835;
-static void lambda_1835(Env_lambda_1835 *_env) {
+typedef struct Env_lambda_1837 { Loader* *l; } Env_lambda_1837;
+static void lambda_1837(Env_lambda_1837 *_env) {
     { LoaderState _t1 = (*_env->l)->state; go_chan_send((*_env->l)->loadExit, &_t1); }
 }
 
-typedef struct Env_lambda_1836 { Slice_bool *charDone; } Env_lambda_1836;
-static bool lambda_1836(Env_lambda_1836 *_env) {
+typedef struct Env_lambda_1838 { Slice_bool *charDone; } Env_lambda_1838;
+static bool lambda_1838(Env_lambda_1838 *_env) {
     {
         Slice_bool _t2 = (*_env->charDone);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -33365,19 +33378,19 @@ static bool lambda_1836(Env_lambda_1836 *_env) {
     return true;
 }
 
-typedef struct Env_lambda_1837 { Loader* *l; } Env_lambda_1837;
-static void lambda_1837(Env_lambda_1837 *_env) {
+typedef struct Env_lambda_1839 { Loader* *l; } Env_lambda_1839;
+static void lambda_1839(Env_lambda_1839 *_env) {
     Loader_load((*_env->l));
 }
 
-typedef struct Env_lambda_1838 { Slice_u8 *data; GoString *key; } Env_lambda_1838;
-static void lambda_1838(Env_lambda_1838 *_env) {
+typedef struct Env_lambda_1840 { Slice_u8 *data; GoString *key; } Env_lambda_1840;
+static void lambda_1840(Env_lambda_1840 *_env) {
     iface_UnloadCustomSpriteShader_b675cad7(g_gfx, (*_env->key));
     iface_LoadCustomSpriteShader_f41f8f35(g_gfx, (*_env->key), (*_env->data));
 }
 
-typedef struct Env_lambda_1839 { System* *s; Map_GoString_GoString *shaders; GoString *name; } Env_lambda_1839;
-static GoIface lambda_1839(Env_lambda_1839 *_env, GoString filename) {
+typedef struct Env_lambda_1841 { System* *s; Map_GoString_GoString *shaders; GoString *name; } Env_lambda_1841;
+static GoIface lambda_1841(Env_lambda_1841 *_env, GoString filename) {
     volatile bool _df3 = false; volatile GoFunc _df3_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
     if (setjmp(_pf.jb)) { if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); } if (go_panicking) go_panic_continue(); { GoIface _z; memset(&_z, 0, sizeof _z); return _z; } }
@@ -33417,8 +33430,8 @@ static GoIface lambda_1839(Env_lambda_1839 *_env, GoString filename) {
     if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); }
 }
 
-typedef struct Env_lambda_1840 { System* *s; Map_GoString_GoString *shaders; } Env_lambda_1840;
-static GoIface lambda_1840(Env_lambda_1840 *_env, GoString filename) {
+typedef struct Env_lambda_1842 { System* *s; Map_GoString_GoString *shaders; } Env_lambda_1842;
+static GoIface lambda_1842(Env_lambda_1842 *_env, GoString filename) {
     Ret_GoString__GoIface _t1 = fn_LoadText(filename);
     GoString str = _t1.r0;
     GoIface err = _t1.r1;
@@ -33458,35 +33471,25 @@ static GoIface lambda_1840(Env_lambda_1840 *_env, GoString filename) {
     return (GoIface){0};
 }
 
-typedef struct Env_lambda_1841 { char _unused; } Env_lambda_1841;
-typedef struct Env_lambda_1842 { GoString *name; } Env_lambda_1842;
-static void lambda_1842(Env_lambda_1842 *_env) {
+typedef struct Env_lambda_1843 { char _unused; } Env_lambda_1843;
+typedef struct Env_lambda_1844 { GoString *name; } Env_lambda_1844;
+static void lambda_1844(Env_lambda_1844 *_env) {
     iface_UnloadCustomSpriteShader_b675cad7(g_gfx, (*_env->name));
 }
 
-static GoFunc lambda_1841(Env_lambda_1841 *_env, GoString name) {
+static GoFunc lambda_1843(Env_lambda_1843 *_env, GoString name) {
     GoString *name__h = go_box(GoString, name);
-    return ((GoFunc){(void *)lambda_1842, go_box(Env_lambda_1842, ((Env_lambda_1842){name__h}))});
+    return ((GoFunc){(void *)lambda_1844, go_box(Env_lambda_1844, ((Env_lambda_1844){name__h}))});
 }
 
-typedef struct Env_lambda_1843 { util2_OrderedMap_int_u32* *om; } Env_lambda_1843;
-static bool lambda_1843(Env_lambda_1843 *_env, int i, int j) {
-    return ((*_env->om)->keys.p[i] > (*_env->om)->keys.p[j]);
-}
-
-typedef struct Env_lambda_1844 { util2_OrderedMap_int_u32* *om; } Env_lambda_1844;
-static bool lambda_1844(Env_lambda_1844 *_env, int i, int j) {
-    return ((*_env->om)->keys.p[i] > (*_env->om)->keys.p[j]);
-}
-
-typedef struct Env_lambda_1845 { Slice_GoString *keys; } Env_lambda_1845;
+typedef struct Env_lambda_1845 { util2_OrderedMap_int_u32* *om; } Env_lambda_1845;
 static bool lambda_1845(Env_lambda_1845 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+    return ((*_env->om)->keys.p[i] > (*_env->om)->keys.p[j]);
 }
 
-typedef struct Env_lambda_1846 { Slice_GoString *keys; } Env_lambda_1846;
+typedef struct Env_lambda_1846 { util2_OrderedMap_int_u32* *om; } Env_lambda_1846;
 static bool lambda_1846(Env_lambda_1846 *_env, int i, int j) {
-    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+    return ((*_env->om)->keys.p[i] > (*_env->om)->keys.p[j]);
 }
 
 typedef struct Env_lambda_1847 { Slice_GoString *keys; } Env_lambda_1847;
@@ -33529,8 +33532,18 @@ static bool lambda_1854(Env_lambda_1854 *_env, int i, int j) {
     return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
 }
 
-typedef struct Env_lambda_1855 { char _unused; } Env_lambda_1855;
-static Arr256_bool lambda_1855(Env_lambda_1855 *_env) {
+typedef struct Env_lambda_1855 { Slice_GoString *keys; } Env_lambda_1855;
+static bool lambda_1855(Env_lambda_1855 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_1856 { Slice_GoString *keys; } Env_lambda_1856;
+static bool lambda_1856(Env_lambda_1856 *_env, int i, int j) {
+    return fn_compareNatural((*_env->keys).p[i], (*_env->keys).p[j]);
+}
+
+typedef struct Env_lambda_1857 { char _unused; } Env_lambda_1857;
+static Arr256_bool lambda_1857(Env_lambda_1857 *_env) {
     Arr256_bool t = {0};
     {
         int i = 0;
@@ -121887,28 +121900,27 @@ Ret_ConfigPtr__GoIface fn_loadConfig(GoString def) {
         (*c__h).Video.EnableModel = false;
         (*c__h).Video.EnableModelShadow = false;
     }
-    fn_vitaTrace(GOSTR("cfg: normalized"));
-    g_vitaTraceOn = false;
-    g_vitaTraceDeep = false;
-    Config_sysSet(&(*c__h));
-    fn_vitaTrace(GOSTR("cfg: sysSet done"));
-    Config_Save(&(*c__h), (*def__h));
     if (true) {
         i32 _t7 = 0;
         i32 _t8 = 0;
         (*c__h).Video.FightAspectWidth = _t7;
         (*c__h).Video.FightAspectHeight = _t8;
     }
-    fn_cvfApplyFightAspect((&(*c__h)));
+    fn_vitaTrace(GOSTR("cfg: normalized"));
+    g_vitaTraceOn = false;
+    g_vitaTraceDeep = false;
+    Config_sysSet(&(*c__h));
+    fn_vitaTrace(GOSTR("cfg: sysSet done"));
+    Config_Save(&(*c__h), (*def__h));
     return (Ret_ConfigPtr__GoIface){(&(*c__h)), (GoIface){0}};
 }
 
-// Config.initStruct (config.go:364), 0 TODO
+// Config.initStruct (config.go:359), 0 TODO
 void Config_initStruct(Config* c) {
     fn_initMaps(reflect_Value_Elem(reflect_ValueOf(((GoIface){463, (void *)(c)}))));
 }
 
-// Config.normalize (config.go:370), 0 TODO
+// Config.normalize (config.go:365), 0 TODO
 void Config_normalize(Config* c) {
     Config_SetValueUpdate(c, GOSTR("Config.Players"), ((GoIface){2, go_box_a(int, ((int)fn_Clamp_i32(((i32)c->Config.Players), 1, 8)))}));
     Config_SetValueUpdate(c, GOSTR("Options.Difficulty"), ((GoIface){2, go_box_a(int, ((int)fn_Clamp_i32(((i32)c->Options.Difficulty), 1, 8)))}));
@@ -121965,7 +121977,7 @@ void Config_normalize(Config* c) {
     }
 }
 
-// Config.sysSet (config.go:430), 0 TODO
+// Config.sysSet (config.go:425), 0 TODO
 void Config_sysSet(Config* c) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&g_sys.cmdFlags, GOSTR("-width"), &_t1);
@@ -122027,12 +122039,12 @@ void Config_sysSet(Config* c) {
     }
 }
 
-// Config.GetValue (config.go:502), 0 TODO
+// Config.GetValue (config.go:497), 0 TODO
 Ret_GoIface__GoIface Config_GetValue(Config* c, GoString query) {
     return fn_GetValue(((GoIface){463, (void *)(c)}), query);
 }
 
-// Config.SetValueUpdate (config.go:507), 0 TODO
+// Config.SetValueUpdate (config.go:502), 0 TODO
 GoIface Config_SetValueUpdate(Config* c, GoString query, GoIface value) {
     if (false && g_vitaTraceDeep) {
         fn_vitaTrace(go_strcat(GOSTR("SVU "), query));
@@ -122040,7 +122052,7 @@ GoIface Config_SetValueUpdate(Config* c, GoString query, GoIface value) {
     return fn_SetValueUpdate(((GoIface){463, (void *)(c)}), c->IniFile, query, value);
 }
 
-// Config.Save (config.go:515), 0 TODO
+// Config.Save (config.go:510), 0 TODO
 GoIface Config_Save(Config* c, GoString file) {
     return fn_SaveINI(c->IniFile, file);
 }
@@ -123925,8 +123937,8 @@ bool fn_cvfClampInvincibility(Char* c, i32* time_) {
     return true;
 }
 
-// cvfApplyFightAspect (cvf_online.go:839), 0 TODO
-void fn_cvfApplyFightAspect(Config* cfg) {
+// cvfApplyDisplay (cvf_online.go:847), 0 TODO
+void fn_cvfApplyDisplay(Config* cfg) {
     {
         Arr2_i32 a = fn_cvfRulesLoad()->fightAspect;
         if ((a.v[0] != 0) && (a.v[1] != 0)) {
@@ -123936,16 +123948,11 @@ void fn_cvfApplyFightAspect(Config* cfg) {
             cfg->Video.FightAspectHeight = _t2;
         }
     }
-}
-
-// cvfApplyDisplay (cvf_online.go:854), 0 TODO
-void fn_cvfApplyDisplay(Config* cfg) {
-    fn_cvfApplyFightAspect(cfg);
     {
-        i32 _t1 = g_cvfScreen.v[0];
-        i32 _t2 = g_cvfScreen.v[1];
-        i32 w = _t1;
-        i32 h = _t2;
+        i32 _t3 = g_cvfScreen.v[0];
+        i32 _t4 = g_cvfScreen.v[1];
+        i32 w = _t3;
+        i32 h = _t4;
         if ((h > 0) && ((w * 9) != (h * 16))) {
             i32 gw = go_div32((cfg->Video.GameHeight * w), h);
             {
@@ -123959,12 +123966,12 @@ void fn_cvfApplyDisplay(Config* cfg) {
     }
 }
 
-// System.cvfWideView (cvf_online.go:872), 0 TODO
+// System.cvfWideView (cvf_online.go:867), 0 TODO
 bool System_cvfWideView(System* s) {
     return ((((fn_cvfRulesLoad()->wideView && System_middleOfMatch(s)) && (s->stage != NULL)) && s->cfg.Video.KeepAspect) && (System_getFightAspect(s) < System_getMotifAspect(s)));
 }
 
-// System.cvfClampWideView (cvf_online.go:880), 0 TODO
+// System.cvfClampWideView (cvf_online.go:875), 0 TODO
 f32 System_cvfClampWideView(System* s, f32 x, f32 scl) {
     if ((scl <= 0x0p+00f) || (Camera_BaseScale(&s->SystemStateVars_.cam) <= 0x0p+00f)) {
         return x;
@@ -123980,7 +123987,7 @@ f32 System_cvfClampWideView(System* s, f32 x, f32 scl) {
     return fn_Clamp_f32(x, lo, hi);
 }
 
-// cvfSpecialTick (cvf_online.go:894), 0 TODO
+// cvfSpecialTick (cvf_online.go:889), 0 TODO
 void fn_cvfSpecialTick(Char* c) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if ((r->specialCD <= 0) || (!cvfRulesT_appliesTo(r, c))) {
@@ -123995,7 +124002,7 @@ void fn_cvfSpecialTick(Char* c) {
     }
 }
 
-// cvfBlockSpecial (cvf_online.go:908), 0 TODO
+// cvfBlockSpecial (cvf_online.go:903), 0 TODO
 bool fn_cvfBlockSpecial(Char* c, i32 no) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if ((((c->cvfSpecialCD <= 0) || (no < r->specialLo)) || (no > r->specialHi)) || (!cvfRulesT_appliesTo(r, c))) {
@@ -124014,7 +124021,7 @@ bool fn_cvfBlockSpecial(Char* c, i32 no) {
     return true;
 }
 
-// cvfScaleMPGain (cvf_online.go:925), 0 TODO
+// cvfScaleMPGain (cvf_online.go:920), 0 TODO
 i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if ((((v <= 0) || (i != r->mpVar)) || (r->mpScaleMilli == 1000)) || (!cvfRulesT_appliesTo(r, c))) {
@@ -124026,7 +124033,7 @@ i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v) {
     return go_div32(total, 1000);
 }
 
-// cvfDebugf (cvf_online.go:939), 0 TODO
+// cvfDebugf (cvf_online.go:934), 0 TODO
 void fn_cvfDebugf(GoString format, Slice_GoIface args) {
     if (g_cvfDebugOn && (g_cvfDebugCount < 200)) {
         g_cvfDebugCount++;
@@ -124253,7 +124260,7 @@ void fn_cvfEvictSounds(void) {
     }
 }
 
-// cvfHeadlessMain (cvfheadless.go:30), 0 TODO
+// cvfHeadlessMain (cvfheadless.go:32), 0 TODO
 i32 fn_cvfHeadlessMain(Slice_GoString args) {
     g_cvfHeadless = true;
     g_gfx = ((GoIface){479, (void *)(go_box_a(nullRenderer, (nullRenderer){0}))});
@@ -124326,7 +124333,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     i32 roundTime = ((i32)g_sys.cfg.Options.Time);
     fn_cvfSetFightScreenElements(g_sys.cfg.Options.GuardBreak, g_sys.cfg.Options.Dizzy, g_sys.cfg.Options.RedLife);
     i32 frames = g_sys.fightScreen.time->framespercount;
-    Slice_qvPlayer_Lf239e5 players = {0};
+    Slice_qvPlayer_L861b7b players = {0};
     Arr2_i32 teamMode = (Arr2_i32){{0, 0}};
     Arr2_i32 numChars = (Arr2_i32){{0, 0}};
     Map_GoString_Map_int_bool assignedPals = Map_GoString_Map_int_bool_make(0);
@@ -124399,7 +124406,7 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
                     input = ((int)fn_Atoi(s));
                 }
             }
-            players = GO_APPEND(Slice_qvPlayer_Lf239e5, players, (qvPlayer_Lf239e5){.character = v, .player = player, .num = num, .pal = pal, .ai = ai, .input = input});
+            players = GO_APPEND(Slice_qvPlayer_L861b7b, players, (qvPlayer_L861b7b){.character = v, .player = player, .num = num, .pal = pal, .ai = ai, .input = input});
             fn_cvfRefresh();
             _cont10:;
         }
@@ -124540,9 +124547,9 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     int ref = 0;
     Map_GoString_int charDef = Map_GoString_int_make(0);
     {
-        Slice_qvPlayer_Lf239e5 _t47 = players;
+        Slice_qvPlayer_L861b7b _t47 = players;
         for (int _t46 = 0; _t46 < _t47.len; _t46++) {
-            qvPlayer_Lf239e5 v = _t47.p[_t46];
+            qvPlayer_L861b7b v = _t47.p[_t46];
             GoString key = strings_ToLower(v.character);
             bool _t49; int _t50 = Map_GoString_int_get(&charDef, key, &_t49);
             int charRef = _t50;
@@ -124559,6 +124566,17 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
             _cont48:;
         }
     }
+    {
+        bool _t51; GoString _t52 = Map_GoString_GoString_get(&flags, GOSTR("-ip"), &_t51);
+        GoString host = _t52;
+        bool ok = _t51;
+        if (ok) {
+            fn_vitaStateHashEnabled();
+            if (!fn_cvfNetplayConnect(host)) {
+                return -1;
+            }
+        }
+    }
     if (g_sys.sel.gameParams == NULL) {
         g_sys.sel.gameParams = fn_newGameParamsFromMotif((&g_sys.motif));
     }
@@ -124566,10 +124584,18 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     GameParams_AppendParams(g_sys.sel.gameParams, fn_SplitAndTrim(fn_StripComment(GOSTR("pausemenu=false")), GOSTR(",")));
     Music_AppendParams(g_sys.sel.music, GameParams_MusicEntries(g_sys.sel.gameParams));
     System_loaderReset(&g_sys);
-    return fn_cvfGame();
+    i32 winp = fn_cvfGame();
+    {
+        bool _t53; GoString _t54 = Map_GoString_GoString_get(&flags, GOSTR("-ip"), &_t53);
+        bool ok = _t53;
+        if (ok) {
+            fn_stateDumpNetFlush();
+        }
+    }
+    return winp;
 }
 
-// cvfSetFightScreenElements (cvfheadless.go:236), 0 TODO
+// cvfSetFightScreenElements (cvfheadless.go:252), 0 TODO
 void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) {
     g_sys.fightScreen.guardbar = guardbar;
     g_sys.fightScreen.stunbar = stunbar;
@@ -124622,7 +124648,7 @@ void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) 
     }
 }
 
-// cvfSetTeamMode (cvfheadless.go:261), 0 TODO
+// cvfSetTeamMode (cvfheadless.go:277), 0 TODO
 void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     g_sys.sel.selected.v[side] = (Slice_Arr2_int){0};
     g_sys.SystemStateVars_.tmode.v[side] = tm;
@@ -124637,8 +124663,11 @@ void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     }
 }
 
-// cvfGame (cvfheadless.go:276), 0 TODO
+// cvfGame (cvfheadless.go:292), 0 TODO
 i32 fn_cvfGame(void) {
+    volatile bool _df3 = false; volatile GoFunc _df3_f;
+    GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
+    if (setjmp(_pf.jb)) { if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); } if (go_panicking) go_panic_continue(); { i32 _z; memset(&_z, 0, sizeof _z); return _z; } }
     g_sys.SystemStateVars_.keyString = GOSTR("");
     g_sys.SystemStateVars_.keyInput = 0x0p+00;
     g_sys.gameRunning = true;
@@ -124657,6 +124686,11 @@ i32 fn_cvfGame(void) {
     }
     g_sys.SystemStateVars_.draws = 0;
     StatsLog_startMatch(&g_sys.statsLog);
+    if (g_sys.netConnection != NULL) {
+        NetConnection_Stop(g_sys.netConnection);
+    }
+    _df3_f = ((GoFunc){(void *)mv_System_synchronize, (void *)(&g_sys)});
+    _df3 = true;
     {
         for (; 1; ) {
             if (g_sys.SystemStateVars_.roundNo == 1) {
@@ -124668,13 +124702,18 @@ i32 fn_cvfGame(void) {
             }
             if (g_sys.loader.state != 2) {
                 fn_LogMessage(GOSTR("load failed: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, g_sys.loader.err));
-                return -1;
+                {
+                    i32 _t5 = -1;
+                    go_panic_top = _pf.prev;
+                    if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); }
+                    return _t5;
+                }
             }
             System_setGameAspect(&g_sys);
             System_initPlayerID(&g_sys);
             {
-                for (int _t4 = 0; _t4 < 12; _t4++) {
-                    int i = _t4;
+                for (int _t6 = 0; _t6 < 12; _t6++) {
+                    int i = _t6;
                     Slice_CharPtr c = g_sys.chars.v[i];
                     if (c.len > 0) {
                         if (g_sys.SystemStateVars_.roundNo == 1) {
@@ -124689,8 +124728,8 @@ i32 fn_cvfGame(void) {
                             Char_loadPalettes(c.p[0]);
                         }
                         {
-                            for (int _t6 = 0; _t6 < 12; _t6++) {
-                                int j = _t6;
+                            for (int _t8 = 0; _t8 < 12; _t8++) {
+                                int j = _t8;
                                 Slice_CharPtr cj = g_sys.chars.v[j];
                                 if ((i != j) && (cj.len > 0)) {
                                     if (cj.p[0]->cmd.len == 0) {
@@ -124698,11 +124737,11 @@ i32 fn_cvfGame(void) {
                                     }
                                     CommandList_CopyList(&cj.p[0]->cmd.p[i], c.p[0]->cmd.p[i]);
                                 }
-                                _cont7:;
+                                _cont9:;
                             }
                         }
                     }
-                    _cont5:;
+                    _cont7:;
                 }
             }
             CharList_audit(&g_sys.charList);
@@ -124724,14 +124763,21 @@ i32 fn_cvfGame(void) {
                 }
             }
             break;
-            _cont3:;
+            _cont4:;
         }
     }
     g_sys.gameRunning = false;
-    return winp;
+    {
+        i32 _t10 = winp;
+        go_panic_top = _pf.prev;
+        if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); }
+        return _t10;
+    }
+    go_panic_top = _pf.prev;
+    if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); }
 }
 
-// cvfRefresh (cvfheadless.go:356), 0 TODO
+// cvfRefresh (cvfheadless.go:378), 0 TODO
 void fn_cvfRefresh(void) {
     System_luaDiscardDrawQueue(&g_sys);
     if (Fade_isActive(g_sys.motif.fadeOut)) {
@@ -124744,6 +124790,198 @@ void fn_cvfRefresh(void) {
     System_stepCommandLists(&g_sys);
     g_sys.SystemStateVars_.uiFrameCounter++;
     System_update(&g_sys);
+}
+
+// cvfEnterNetPlay (cvfheadless.go:394), 0 TODO
+GoIface fn_cvfEnterNetPlay(GoString host) {
+    if (g_sys.netConnection != NULL) {
+        return ((GoIface){281, go_box(Error, GOSTR("Connection already established."))});
+    }
+    g_sys.sessionWarning = GOSTR("");
+    g_sys.chars = (Arr12_Slice_CharPtr){{}};
+    g_sys.netConnection = fn_NewNetConnection();
+    if (g_sys.cfg.Netplay.RollbackNetcode) {
+        RollbackSession *rs__h = go_box(RollbackSession, fn_NewRollbackSession(g_sys.cfg.Netplay.Rollback));
+        g_sys.rollback.session = (&(*rs__h));
+    }
+    if (!go_streq(host, GOSTR(""))) {
+        if (g_sys.cfg.Netplay.RollbackNetcode) {
+            g_sys.rollback.session->host = host;
+        }
+        NetConnection_Connect(g_sys.netConnection, host, g_sys.cfg.Netplay.ListenPort);
+    } else {
+        {
+            GoIface err = NetConnection_Accept(g_sys.netConnection, g_sys.cfg.Netplay.ListenPort);
+            if (err.type != 0) {
+                return err;
+            }
+        }
+    }
+    return (GoIface){0};
+}
+
+// cvfNetplayConnect (cvfheadless.go:417), 0 TODO
+bool fn_cvfNetplayConnect(GoString host) {
+    {
+        GoIface err = fn_cvfEnterNetPlay(host);
+        if (err.type != 0) {
+            fn_LogMessage(GOSTR("enterNetPlay: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, err));
+            return false;
+        }
+    }
+    {
+        for (; !(((g_sys.netConnection != NULL) && NetConnection_IsConnected(g_sys.netConnection))); ) {
+            if (g_sys.SystemStateVars_.esc || g_sys.SystemStateVars_.gameEnd) {
+                return false;
+            }
+            fn_cvfRefresh();
+            _cont1:;
+        }
+    }
+    fn_cvfRefresh();
+    if (fn_vitaStateHashEnabled()) {
+        g_sys.frameCounter = 0;
+    }
+    {
+        GoIface err = System_synchronize(&g_sys);
+        if (err.type != 0) {
+            fn_LogMessage(GOSTR("synchronize: %v (%v)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, err, ((GoIface){17, go_box(GoString, g_sys.sessionWarning)})));
+            return false;
+        }
+    }
+    {
+        Ret_int__GoIface _t2 = strconv_Atoi(os_Getenv(GOSTR("CVF_NET_PEER_UDP")));
+        int p = _t2.r0;
+        GoIface err = _t2.r1;
+        if (((err.type == 0) && (p > 0)) && (g_sys.netConnection != NULL)) {
+            g_sys.netConnection->rollbackRemotePort = p;
+        }
+    }
+    fn_cvfRefresh();
+    return true;
+}
+
+// cvfNetInputTick (cvfheadless.go:455), 0 TODO
+void fn_cvfNetInputTick(void) {
+    if (g_cvfNetInputSeed < 0) {
+        g_cvfNetInputSeed = 0;
+        {
+            Ret_int__GoIface _t1 = strconv_Atoi(os_Getenv(GOSTR("CVF_NET_INPUT")));
+            int n = _t1.r0;
+            GoIface err = _t1.r1;
+            if ((err.type == 0) && (n > 0)) {
+                g_cvfNetInputSeed = n;
+            }
+        }
+    }
+    if ((g_cvfNetInputSeed == 0) || (g_sys.keyConfig.len == 0)) {
+        return;
+    }
+    if (g_sys.keyState.m == 0) {
+        g_sys.keyState = Map_sdl_Keycode_bool_make(0);
+    }
+    KeyConfig kc = g_sys.keyConfig.p[0];
+    Arr10_int keys = (Arr10_int){{kc.dU, kc.dD, kc.dL, kc.dR, kc.bA, kc.bB, kc.bC, kc.bX, kc.bY, kc.bZ}};
+    u32 t = ((u32)g_sys.SystemStateVars_.matchTime);
+    u32 h = ((((u32)g_cvfNetInputSeed) * 2654435761U) ^ (((u32)((t) >> 3)) * 40503U));
+    h ^= (u32)((h) >> 15);
+    h *= 2246822519U;
+    h ^= (u32)((h) >> 13);
+    Arr10_bool on = {0};
+    {
+        u32 _t2 = go_remu32(h, 9U);
+        do {
+            if ((_t2 == 1U)) {
+                on.v[3] = true;
+            } else if ((_t2 == 2U)) {
+                on.v[2] = true;
+            } else if ((_t2 == 3U)) {
+                on.v[0] = true;
+            } else if ((_t2 == 4U)) {
+                on.v[1] = true;
+            } else if ((_t2 == 5U)) {
+                bool _t3 = true;
+                bool _t4 = true;
+                on.v[1] = _t3;
+                on.v[3] = _t4;
+            } else if ((_t2 == 6U)) {
+                bool _t5 = true;
+                bool _t6 = true;
+                on.v[1] = _t5;
+                on.v[2] = _t6;
+            } else if ((_t2 == 7U)) {
+                bool _t7 = true;
+                bool _t8 = true;
+                on.v[0] = _t7;
+                on.v[3] = _t8;
+            } else if ((_t2 == 8U)) {
+                bool _t9 = true;
+                bool _t10 = true;
+                on.v[0] = _t9;
+                on.v[2] = _t10;
+            }
+        } while (0);
+    }
+    if ((go_remu32(((u32)((h) >> 8)), 3U) == 0U) && ((t & 7U) < 2U)) {
+        on.v[(4U + go_remu32(((u32)((h) >> 12)), 6U))] = true;
+    }
+    {
+        for (int _t11 = 0; _t11 < 10; _t11++) {
+            int i = _t11;
+            int k = (keys).v[_t11];
+            if (k != 0) {
+                Map_sdl_Keycode_bool_set(&g_sys.keyState, ((sdl_Keycode)k), false);
+            }
+            _cont12:;
+        }
+    }
+    {
+        for (int _t13 = 0; _t13 < 10; _t13++) {
+            int i = _t13;
+            int k = (keys).v[_t13];
+            if ((k != 0) && on.v[i]) {
+                Map_sdl_Keycode_bool_set(&g_sys.keyState, ((sdl_Keycode)k), true);
+            }
+            _cont14:;
+        }
+    }
+}
+
+// System.cvfHeadlessAwait (cvfheadless.go:516), 0 TODO
+bool System_cvfHeadlessAwait(System* s) {
+    s->SystemStateVars_.frameSkip = true;
+    g_cvfFrames++;
+    if ((g_cvfMaxFrames > 0) && (g_cvfFrames >= g_cvfMaxFrames)) {
+        s->SystemStateVars_.gameEnd = true;
+    }
+    fn_cvfNetInputTick();
+    if (g_cvfHeadlessFps < 0) {
+        g_cvfHeadlessFps = 0;
+        {
+            Ret_int__GoIface _t1 = strconv_Atoi(os_Getenv(GOSTR("CVF_HEADLESS_FPS")));
+            int n = _t1.r0;
+            GoIface err = _t1.r1;
+            if ((err.type == 0) && (n > 0)) {
+                g_cvfHeadlessFps = n;
+            }
+        }
+    }
+    if (g_cvfHeadlessFps > 0) {
+        GoOpaque /* time.Time */ now = time_Now();
+        if (time_Time_IsZero(g_cvfHeadlessNext) || (time_Time_Sub(now, g_cvfHeadlessNext) > 1000000000LL)) {
+            g_cvfHeadlessNext = now;
+        }
+        g_cvfHeadlessNext = time_Time_Add(g_cvfHeadlessNext, go_div64(1000000000LL, ((i64)g_cvfHeadlessFps)));
+        {
+            i64 d = time_Time_Sub(g_cvfHeadlessNext, now);
+            if (d > 0LL) {
+                time_Sleep(d);
+            }
+        }
+    } else {
+        runtime_Gosched();
+    }
+    return (!s->SystemStateVars_.gameEnd);
 }
 
 // WinType.SetPerfect (fightscreen.go:54), 0 TODO
@@ -155103,10 +155341,10 @@ Ret_lua_LValue__GoIface fn_jsonToLuaValue(lua_LState* L, GoIface r) {
 
 // luaToJsonValue (script.go:763), 0 TODO
 Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d6974 seen) {
-    volatile bool _df9 = false;
+    volatile bool _df9 = false; volatile Map_lua_LTablePtr_Anon_fa4d6974 _df9_a0; volatile lua_LTable* _df9_a1;
     Map_lua_LTablePtr_Anon_fa4d6974 *seen__h = go_box(Map_lua_LTablePtr_Anon_fa4d6974, seen);
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
-    if (setjmp(_pf.jb)) { if (go_panicking) go_panic_continue(); { Ret_GoIface__GoIface _z; memset(&_z, 0, sizeof _z); return _z; } }
+    if (setjmp(_pf.jb)) { if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); } if (go_panicking) go_panic_continue(); { Ret_GoIface__GoIface _z; memset(&_z, 0, sizeof _z); return _z; } }
     if (go_iface_eq(v, g_lua_LNil) == true) {
         {
             Ret_GoIface__GoIface _t1 = (Ret_GoIface__GoIface){(GoIface){0}, (GoIface){0}};
@@ -155155,7 +155393,9 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                     (*seen__h) = Map_lua_LTablePtr_Anon_fa4d6974_make(8);
                 }
                 Map_lua_LTablePtr_Anon_fa4d6974_set(&(*seen__h), x, (Anon_fa4d6974){0});
-                /* defer delete(...) not supported */
+                _df9_a0 = (*seen__h);
+                _df9_a1 = x;
+                _df9 = true;
                 int *n__h = go_box_a(int, lua_LTable_Len(x));
                 bool *isArray__h = go_box_a(bool, true);
                 lua_LTable_ForEach(x, ((GoFunc){(void *)lambda_1104, go_box(Env_lambda_1104, ((Env_lambda_1104){n__h, isArray__h}))}));
@@ -155171,6 +155411,7 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                                 {
                                     Ret_GoIface__GoIface _t12 = (Ret_GoIface__GoIface){(GoIface){0}, err};
                                     go_panic_top = _pf.prev;
+                                    if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
                                     return _t12;
                                 }
                             }
@@ -155181,6 +155422,7 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                     {
                         Ret_GoIface__GoIface _t13 = (Ret_GoIface__GoIface){((GoIface){238, go_box(Slice_GoIface, arr)}), (GoIface){0}};
                         go_panic_top = _pf.prev;
+                        if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
                         return _t13;
                     }
                 }
@@ -155194,6 +155436,7 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                         {
                             Ret_GoIface__GoIface _t16 = (Ret_GoIface__GoIface){(GoIface){0}, fmt_Errorf(GOSTR("%v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, errStr))};
                             go_panic_top = _pf.prev;
+                            if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
                             return _t16;
                         }
                     }
@@ -155201,6 +155444,7 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                 {
                     Ret_GoIface__GoIface _t17 = (Ret_GoIface__GoIface){((GoIface){237, go_box(Map_GoString_GoIface, (*obj__h))}), (GoIface){0}};
                     go_panic_top = _pf.prev;
+                    if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
                     return _t17;
                 }
             } else if (_t2.type == 248) {
@@ -155208,6 +155452,7 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                 {
                     Ret_GoIface__GoIface _t18 = (Ret_GoIface__GoIface){(GoIface){0}, fmt_Errorf(GOSTR("jsonEncode: cannot encode userdata (%T)"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, x->Value))};
                     go_panic_top = _pf.prev;
+                    if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
                     return _t18;
                 }
             } else if (_t2.type == 247 || _t2.type == 530) {
@@ -155215,6 +155460,7 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                 {
                     Ret_GoIface__GoIface _t19 = (Ret_GoIface__GoIface){(GoIface){0}, fmt_Errorf(GOSTR("jsonEncode: unsupported Lua type %T"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, x))};
                     go_panic_top = _pf.prev;
+                    if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
                     return _t19;
                 }
             } else {
@@ -155222,12 +155468,14 @@ Ret_GoIface__GoIface fn_luaToJsonValue(lua_LValue v, Map_lua_LTablePtr_Anon_fa4d
                 {
                     Ret_GoIface__GoIface _t20 = (Ret_GoIface__GoIface){(GoIface){0}, fmt_Errorf(GOSTR("jsonEncode: unknown Lua type %T"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, v))};
                     go_panic_top = _pf.prev;
+                    if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
                     return _t20;
                 }
             }
         } while (0);
     }
     go_panic_top = _pf.prev;
+    if (_df9) { _df9 = false; ({ Map_lua_LTablePtr_Anon_fa4d6974 _dm = _df9_a0; Map_lua_LTablePtr_Anon_fa4d6974_delete(&_dm, _df9_a1); }); }
 }
 
 // luaNumberToJson (script.go:853), 0 TODO
@@ -162492,9 +162740,14 @@ void fn_stateDumpTickFn(void) {
         return;
     }
     g_stateDumpTick++;
+    bool net = ((g_sys.rollback.session != NULL) && (g_sys.rollback.netConnection != NULL));
     Slice_u8 b = GO_SLICE(Slice_u8, g_stateDumpBuf, 0, 0);
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(GOSTR("T ")));
-    b = fn_sdI(b, ((i64)g_stateDumpTick));
+    if (net) {
+        b = fn_sdI(b, ((i64)g_sys.SystemStateVars_.matchTime));
+    } else {
+        b = fn_sdI(b, ((i64)g_stateDumpTick));
+    }
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(GOSTR(" rs ")));
     b = fn_sdI(b, ((i64)System_roundState(&g_sys)));
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(GOSTR(" gt ")));
@@ -162618,13 +162871,51 @@ void fn_stateDumpTickFn(void) {
         }
     }
     g_stateDumpBuf = b;
+    if (net) {
+        if (g_stateDumpNet.m == 0) {
+            g_stateDumpNet = Map_i32_Slice_u8_make(0);
+        }
+        if (g_sys.rollback.session->inRollback) {
+            g_stateDumpNetResim++;
+        }
+        Map_i32_Slice_u8_set(&g_stateDumpNet, g_sys.SystemStateVars_.matchTime, GO_APPEND_SLICE(Slice_u8, (Slice_u8){0}, b));
+        return;
+    }
     bufio_Writer_Write(g_stateDumpW, b);
     if (go_rem32(g_stateDumpTick, 60) == 0) {
         bufio_Writer_Flush(g_stateDumpW);
     }
 }
 
-// stateDumpVarsI (statedump.go:155), 0 TODO
+// stateDumpNetFlush (statedump.go:178), 0 TODO
+void fn_stateDumpNetFlush(void) {
+    if (g_stateDumpOn != 1) {
+        return;
+    }
+    Slice_i32 *keys__h = go_box(Slice_i32, GO_MAKE_A(Slice_i32, i32, 0, Map_i32_Slice_u8_len(&g_stateDumpNet)));
+    {
+        GoMapIter _t2 = gomap_iter((GoMap *)&g_stateDumpNet);
+        while (gomap_next(&_t2)) {
+            i32 k = *(i32 *)_t2.key;
+            (*keys__h) = GO_APPEND(Slice_i32, (*keys__h), k);
+            _cont3:;
+        }
+    }
+    go_sort_slice((void *)GO_TMPADDR(Slice_i32, (*keys__h)), sizeof(i32), ((GoFunc){(void *)lambda_1779, go_box(Env_lambda_1779, ((Env_lambda_1779){keys__h}))}));
+    fn_LogMessage(GOSTR("statedump: %d match frames, %d frames simulated again in rollbacks"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){2, go_box_a(int, (*keys__h).len)}), ((GoIface){2, go_box_a(int, g_stateDumpNetResim)})));
+    {
+        Slice_i32 _t5 = (*keys__h);
+        for (int _t4 = 0; _t4 < _t5.len; _t4++) {
+            i32 k = _t5.p[_t4];
+            bufio_Writer_Write(g_stateDumpW, Map_i32_Slice_u8_get(&g_stateDumpNet, k, NULL));
+            _cont6:;
+        }
+    }
+    g_stateDumpNet = (Map_i32_Slice_u8){0};
+    bufio_Writer_Flush(g_stateDumpW);
+}
+
+// stateDumpVarsI (statedump.go:195), 0 TODO
 Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {
@@ -162641,7 +162932,7 @@ Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     if (g_sdKeys.len == 0) {
         return b;
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_1779, go_box(Env_lambda_1779, ((Env_lambda_1779){0}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_1781, go_box(Env_lambda_1781, ((Env_lambda_1781){0}))}));
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(tag));
     {
         Slice_i32 _t5 = g_sdKeys;
@@ -162657,7 +162948,7 @@ Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     return b;
 }
 
-// stateDumpVarsF (statedump.go:176), 0 TODO
+// stateDumpVarsF (statedump.go:216), 0 TODO
 Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {
@@ -162674,7 +162965,7 @@ Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m) {
     if (g_sdKeys.len == 0) {
         return b;
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_1781, go_box(Env_lambda_1781, ((Env_lambda_1781){0}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_i32, g_sdKeys), sizeof(i32), ((GoFunc){(void *)lambda_1783, go_box(Env_lambda_1783, ((Env_lambda_1783){0}))}));
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(tag));
     {
         Slice_i32 _t5 = g_sdKeys;
@@ -163092,9 +163383,9 @@ void StoryboardManager_pruneVideos(StoryboardManager* m) {
         return;
     }
     Map_bgVideoPtr_Anon_fa4d6974 *live__h = go_box(Map_bgVideoPtr_Anon_fa4d6974, Map_bgVideoPtr_Anon_fa4d6974_make(0));
-    GoFunc mark__hv = ((GoFunc){(void *)lambda_1782, go_box(Env_lambda_1782, ((Env_lambda_1782){live__h}))}); __typeof__(mark__hv) *mark__h = &mark__hv;
+    GoFunc mark__hv = ((GoFunc){(void *)lambda_1784, go_box(Env_lambda_1784, ((Env_lambda_1784){live__h}))}); __typeof__(mark__hv) *mark__h = &mark__hv;
     ((void (*)(void *, Slice_StoryboardPtr))((*mark__h)).fn)(((*mark__h)).env, m->instances);
-    GoFunc markSaved = ((GoFunc){(void *)lambda_1783, &(Env_lambda_1783){mark__h}});
+    GoFunc markSaved = ((GoFunc){(void *)lambda_1785, &(Env_lambda_1785){mark__h}});
     ((void (*)(void *, GameState*))(markSaved).fn)((markSaved).env, g_sys.saveState);
     if (g_sys.rollback.session != NULL) {
         {
@@ -163153,7 +163444,7 @@ Ret_StoryboardPtr__GoIface fn_loadStoryboard(GoString def) {
     Storyboard *s__h = go_box(Storyboard, {0});
     (*s__h).Def = (*def__h);
     Storyboard_initStruct(&(*s__h));
-    GoFunc assignFrom = ((GoFunc){(void *)lambda_1784, &(Env_lambda_1784){def__h, s__h}});
+    GoFunc assignFrom = ((GoFunc){(void *)lambda_1786, &(Env_lambda_1786){def__h, s__h}});
     {
         GoIface err = ((GoIface (*)(void *, GoOpaque /* ini.File */*))(assignFrom).fn)((assignFrom).env, defaultOnlyIni);
         if (err.type != 0) {
@@ -163211,8 +163502,8 @@ Ret_StoryboardPtr__GoIface fn_loadStoryboard(GoString def) {
 // Storyboard.loadFiles (storyboard.go:560), 0 TODO
 void Storyboard_loadFiles(Storyboard* s) {
     Storyboard* *s__h = go_box(Storyboard*, s);
-    fn_LoadFile((&(*s__h)->SceneDef.Spr), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1787, go_box(Env_lambda_1787, ((Env_lambda_1787){s__h}))}));
-    fn_LoadFile((&(*s__h)->SceneDef.Model), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1788, go_box(Env_lambda_1788, ((Env_lambda_1788){s__h}))}));
+    fn_LoadFile((&(*s__h)->SceneDef.Spr), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1789, go_box(Env_lambda_1789, ((Env_lambda_1789){s__h}))}));
+    fn_LoadFile((&(*s__h)->SceneDef.Model), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1790, go_box(Env_lambda_1790, ((Env_lambda_1790){s__h}))}));
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&(*s__h)->Scene);
         while (gomap_next(&_t2)) {
@@ -163232,13 +163523,13 @@ void Storyboard_loadFiles(Storyboard* s) {
             _cont3:;
         }
     }
-    fn_LoadFile((&(*s__h)->SceneDef.Snd), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1790, go_box(Env_lambda_1790, ((Env_lambda_1790){s__h}))}));
+    fn_LoadFile((&(*s__h)->SceneDef.Snd), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1792, go_box(Env_lambda_1792, ((Env_lambda_1792){s__h}))}));
     {
         GoMapIter _t6 = gomap_iter((GoMap *)&(*s__h)->SceneDef.Font);
         while (gomap_next(&_t6)) {
             GoString *key__h = go_box(GoString, *(GoString *)_t6.key);
             FontProperties* *fnt__h = go_box(FontProperties*, *(FontProperties* *)_t6.val);
-            fn_LoadFile((&(*fnt__h)->Font), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR("font/"), ((GoFunc){(void *)lambda_1791, go_box(Env_lambda_1791, ((Env_lambda_1791){s__h, key__h, fnt__h}))}));
+            fn_LoadFile((&(*fnt__h)->Font), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*s__h)->Def, GOSTR(""), GOSTR("data/")), GOSTR("font/"), ((GoFunc){(void *)lambda_1793, go_box(Env_lambda_1793, ((Env_lambda_1793){s__h, key__h, fnt__h}))}));
             _cont7:;
         }
     }
@@ -163329,7 +163620,7 @@ void Storyboard_reset(Storyboard* s) {
 
 // Storyboard.buildDialogueQueue (storyboard.go:734), 0 TODO
 void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps) {
-    GoFunc parseLayerIndex = ((GoFunc){(void *)lambda_1792, &(Env_lambda_1792){0}});
+    GoFunc parseLayerIndex = ((GoFunc){(void *)lambda_1794, &(Env_lambda_1794){0}});
     Slice_entry_L001e46 *items__h = go_box(Slice_entry_L001e46, {0});
     {
         Slice_GoString _t2 = fn_SortedKeys_LayerPropertiesPtr(sceneProps->Layer);
@@ -163343,7 +163634,7 @@ void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps) {
             _cont3:;
         }
     }
-    go_sort_slice_stable((void *)GO_TMPADDR(Slice_entry_L001e46, (*items__h)), sizeof(entry_L001e46), ((GoFunc){(void *)lambda_1794, go_box(Env_lambda_1794, ((Env_lambda_1794){items__h}))}));
+    go_sort_slice_stable((void *)GO_TMPADDR(Slice_entry_L001e46, (*items__h)), sizeof(entry_L001e46), ((GoFunc){(void *)lambda_1796, go_box(Env_lambda_1796, ((Env_lambda_1796){items__h}))}));
     s->dialogueLayers = GO_SLICE(Slice_LayerPropertiesPtr, s->dialogueLayers, 0, 0);
     {
         Slice_entry_L001e46 _t5 = (*items__h);
@@ -163924,7 +164215,7 @@ lua_LState* System_init(System* s, i32 w, i32 h) {
             Window_SetIcon((*s__h)->window, (*s__h)->windowMainIcon);
             fn_chk(err);
         }
-        fn_SafeGo(((GoFunc){(void *)lambda_1795, go_box(Env_lambda_1795, ((Env_lambda_1795){s__h}))}));
+        fn_SafeGo(((GoFunc){(void *)lambda_1797, go_box(Env_lambda_1797, ((Env_lambda_1797){s__h}))}));
     }
     return l;
 }
@@ -164108,7 +164399,7 @@ GoFunc System_wrapDrawWithAspectState(System* s, GoFunc fn) {
         return (GoFunc){0};
     }
     drawAspectState *st__h = go_box_a(drawAspectState, System_captureAspectState((*s__h)));
-    return ((GoFunc){(void *)lambda_1796, go_box(Env_lambda_1796, ((Env_lambda_1796){s__h, fn__h, st__h}))});
+    return ((GoFunc){(void *)lambda_1798, go_box(Env_lambda_1798, ((Env_lambda_1798){s__h, fn__h, st__h}))});
 }
 
 // System.canUseFullResolutionAspect (system.go:775), 0 TODO
@@ -164268,13 +164559,8 @@ bool System_await(System* s, int fps) {
     if (setjmp(_pf.jb)) { if (_df3) { _df3 = false; ((void (*)(void *, bool))_df3_f.fn)(_df3_f.env, _df3_a0); } if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); } if (go_panicking) go_panic_continue(); { bool _z; memset(&_z, 0, sizeof _z); return _z; } }
     fn_cvfGcSafepoint((System_middleOfMatch((*s__h)) && (System_roundState((*s__h)) == 2)));
     if (g_cvfHeadless) {
-        (*s__h)->SystemStateVars_.frameSkip = true;
-        g_cvfFrames++;
-        if ((g_cvfMaxFrames > 0) && (g_cvfFrames >= g_cvfMaxFrames)) {
-            (*s__h)->SystemStateVars_.gameEnd = true;
-        }
         {
-            bool _t1 = (!(*s__h)->SystemStateVars_.gameEnd);
+            bool _t1 = System_cvfHeadlessAwait((*s__h));
             go_panic_top = _pf.prev;
             return _t1;
         }
@@ -164288,7 +164574,7 @@ bool System_await(System* s, int fps) {
         }
         Window_UpdateDebugFPS((*s__h)->window);
         if ((*s__h)->screenshotInFlight || (*s__h)->isTakingScreenshot) {
-            _df2_f = ((GoFunc){(void *)lambda_1797, go_box(Env_lambda_1797, ((Env_lambda_1797){s__h}))});
+            _df2_f = ((GoFunc){(void *)lambda_1799, go_box(Env_lambda_1799, ((Env_lambda_1799){s__h}))});
             _df2 = true;
         }
         _df3_a0 = (g_sys.netConnection == NULL);
@@ -164358,7 +164644,7 @@ bool System_await(System* s, int fps) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// System.soundPanView (system.go:1014), 0 TODO
+// System.soundPanView (system.go:1009), 0 TODO
 soundPanView System_soundPanView(System* s) {
     soundPanView view = {0};
     view.width = s->SystemStateVars_.gameWidth;
@@ -164372,7 +164658,7 @@ soundPanView System_soundPanView(System* s) {
     return view;
 }
 
-// System.renderFrame (system.go:1026), 0 TODO
+// System.renderFrame (system.go:1021), 0 TODO
 void System_renderFrame(System* s) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -164435,7 +164721,7 @@ void System_renderFrame(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.update (system.go:1079), 0 TODO
+// System.update (system.go:1074), 0 TODO
 bool System_update(System* s) {
     s->frameCounter++;
     bool rollbackMatchStarting = ((s->rollback.session != NULL) && (s->rollback.netConnection != NULL));
@@ -164487,7 +164773,7 @@ bool System_update(System* s) {
     return System_await(s, System_gameRenderSpeed(s));
 }
 
-// System.tickSound (system.go:1141), 0 TODO
+// System.tickSound (system.go:1136), 0 TODO
 void System_tickSound(System* s) {
     soundPanView view = System_soundPanView(s);
     SoundChannels_Tick(&s->soundChannels, view);
@@ -164516,7 +164802,7 @@ void System_tickSound(System* s) {
     }
 }
 
-// System.applyPauseFocusVolume (system.go:1163), 0 TODO
+// System.applyPauseFocusVolume (system.go:1158), 0 TODO
 void System_applyPauseFocusVolume(System* s) {
     s->focusMuted = (((s->cfg.Sound.FocusLossVolume < 100) && (s->window != NULL)) && (!Window_Focused(s->window)));
     s->pauseSoundVolume = 100;
@@ -164553,7 +164839,7 @@ void System_applyPauseFocusVolume(System* s) {
     }
 }
 
-// System.resetRemapInput (system.go:1206), 0 TODO
+// System.resetRemapInput (system.go:1201), 0 TODO
 void System_resetRemapInput(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -164564,7 +164850,7 @@ void System_resetRemapInput(System* s) {
     }
 }
 
-// System.loaderReset (system.go:1212), 0 TODO
+// System.loaderReset (system.go:1207), 0 TODO
 void System_loaderReset(System* s) {
     i32 _t1 = 1;
     Arr2_i32 _t2 = (Arr2_i32){{}};
@@ -164578,13 +164864,13 @@ void System_loaderReset(System* s) {
     Loader_reset(&s->loader);
 }
 
-// System.loadStart (system.go:1218), 0 TODO
+// System.loadStart (system.go:1213), 0 TODO
 void System_loadStart(System* s) {
     System_loaderReset(s);
     Loader_runTread(&s->loader);
 }
 
-// System.releaseReloadingCharFx (system.go:1224), 0 TODO
+// System.releaseReloadingCharFx (system.go:1219), 0 TODO
 void System_releaseReloadingCharFx(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -164670,7 +164956,7 @@ void System_releaseReloadingCharFx(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.dropCanceledLoadData (system.go:1277), 0 TODO
+// System.dropCanceledLoadData (system.go:1272), 0 TODO
 void System_dropCanceledLoadData(System* s) {
     volatile bool _df6 = false; volatile GoFunc _df6_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -164731,7 +165017,7 @@ void System_dropCanceledLoadData(System* s) {
     if (_df6) { _df6 = false; ((void (*)(void *))_df6_f.fn)(_df6_f.env); }
 }
 
-// System.loadCancel (system.go:1314), 0 TODO
+// System.loadCancel (system.go:1309), 0 TODO
 void System_loadCancel(System* s) {
     Loader_reset(&s->loader);
     System_dropCanceledLoadData(s);
@@ -164740,7 +165026,7 @@ void System_loadCancel(System* s) {
     }
 }
 
-// System.synchronize (system.go:1322), 0 TODO
+// System.synchronize (system.go:1317), 0 TODO
 GoIface System_synchronize(System* s) {
     if (s->replayFile != NULL) {
         ReplayFile_Synchronize(s->replayFile);
@@ -164752,7 +165038,7 @@ GoIface System_synchronize(System* s) {
     return (GoIface){0};
 }
 
-// System.anyHardButton (system.go:1350), 0 TODO
+// System.anyHardButton (system.go:1345), 0 TODO
 bool System_anyHardButton(System* s) {
     Slice_int hardButtonIdx = GO_SLICE_LIT(Slice_int, int, 6, 4, 5, 6, 7, 8, 9);
     {
@@ -164794,7 +165080,7 @@ bool System_anyHardButton(System* s) {
     return false;
 }
 
-// System.anyButton (system.go:1375), 0 TODO
+// System.anyButton (system.go:1370), 0 TODO
 bool System_anyButton(System* s) {
     if (s->replayFile != NULL) {
         return ReplayFile_AnyButton(s->replayFile);
@@ -164808,7 +165094,7 @@ bool System_anyButton(System* s) {
     return System_anyHardButton(s);
 }
 
-// System.buttonController (system.go:1388), 0 TODO
+// System.buttonController (system.go:1383), 0 TODO
 int System_buttonController(System* s, Slice_GoString btns) {
     {
         Slice_GoString _t2 = btns;
@@ -164831,7 +165117,7 @@ int System_buttonController(System* s, Slice_GoString btns) {
     return -1;
 }
 
-// System.stepCommandLists (system.go:1399), 0 TODO
+// System.stepCommandLists (system.go:1394), 0 TODO
 void System_stepCommandLists(System* s) {
     {
         Slice_CommandListPtr _t2 = s->commandLists;
@@ -164849,14 +165135,14 @@ void System_stepCommandLists(System* s) {
     }
 }
 
-// System.uiResetTokenGuard (system.go:1412), 0 TODO
+// System.uiResetTokenGuard (system.go:1407), 0 TODO
 void System_uiResetTokenGuard(System* s) {
     s->SystemStateVars_.uiConsumeInputFrame = (s->frameCounter + 1);
     s->SystemStateVars_.uiLastInputToken = GOSTR("");
     s->SystemStateVars_.lastInputController = -1;
 }
 
-// System.uiRepeatShouldFire (system.go:1418), 0 TODO
+// System.uiRepeatShouldFire (system.go:1413), 0 TODO
 bool System_uiRepeatShouldFire(System* s, i32 held) {
     if (held <= 1) {
         return false;
@@ -164867,7 +165153,7 @@ bool System_uiRepeatShouldFire(System* s, i32 held) {
     return (go_rem32(((held - ((1 + s->cfg.Input.UiRepeatDelay)))), s->cfg.Input.UiRepeatRate) == 0);
 }
 
-// System.uiControllerKey (system.go:1430), 0 TODO
+// System.uiControllerKey (system.go:1425), 0 TODO
 int System_uiControllerKey(System* s, int controllerIdx) {
     if (controllerIdx < 0) {
         return controllerIdx;
@@ -164878,7 +165164,7 @@ int System_uiControllerKey(System* s, int controllerIdx) {
     return controllerIdx;
 }
 
-// System.uiConsumeTokenThisFrame (system.go:1440), 0 TODO
+// System.uiConsumeTokenThisFrame (system.go:1435), 0 TODO
 bool System_uiConsumeTokenThisFrame(System* s, int controller, GoString tok) {
     if (((s->SystemStateVars_.uiRepeatFrame == s->frameCounter) && (s->SystemStateVars_.uiRepeatController == controller)) && go_streq(s->SystemStateVars_.uiRepeatToken, tok)) {
         return true;
@@ -164889,11 +165175,11 @@ bool System_uiConsumeTokenThisFrame(System* s, int controller, GoString tok) {
     return false;
 }
 
-// System.uiRawInput (system.go:1454), 0 TODO
+// System.uiRawInput (system.go:1449), 0 TODO
 bool System_uiRawInput(System* s, Slice_GoString btns, int controllerIdx) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     Slice_GoString btns__hv = btns; __typeof__(btns__hv) *btns__h = &btns__hv;
-    GoFunc checkOne = ((GoFunc){(void *)lambda_1799, &(Env_lambda_1799){s__h, btns__h}});
+    GoFunc checkOne = ((GoFunc){(void *)lambda_1801, &(Env_lambda_1801){s__h, btns__h}});
     if (controllerIdx >= 0) {
         if (controllerIdx < (*s__h)->commandLists.len) {
             return ((bool (*)(void *, int, CommandList*))(checkOne).fn)((checkOne).env, controllerIdx, (*s__h)->commandLists.p[controllerIdx]);
@@ -164912,7 +165198,7 @@ bool System_uiRawInput(System* s, Slice_GoString btns, int controllerIdx) {
     return false;
 }
 
-// System.uiIsKeyAction (system.go:1570), 0 TODO
+// System.uiIsKeyAction (system.go:1565), 0 TODO
 bool System_uiIsKeyAction(System* s, GoString name) {
     {
         GoString _t1 = name;
@@ -164926,7 +165212,7 @@ bool System_uiIsKeyAction(System* s, GoString name) {
     }
 }
 
-// System.uiDefaultTokens (system.go:1581), 0 TODO
+// System.uiDefaultTokens (system.go:1576), 0 TODO
 Slice_GoString System_uiDefaultTokens(System* s, int pn, bool joystick) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
     GoString defaultNoKey__hv = ini_Key_String(ini_Section_Key(ini_File_Section((*s__h)->cfg.DefaultOnlyIni, GOSTR("Keys_P3")), GOSTR("menu"))); __typeof__(defaultNoKey__hv) *defaultNoKey__h = &defaultNoKey__hv;
@@ -164937,11 +165223,11 @@ Slice_GoString System_uiDefaultTokens(System* s, int pn, bool joystick) {
     if (joystick) {
         (*sectionName__h) = GOSTR("Joystick_P1");
     }
-    GoFunc get = ((GoFunc){(void *)lambda_1802, &(Env_lambda_1802){s__h, defaultNoKey__h, sectionName__h}});
+    GoFunc get = ((GoFunc){(void *)lambda_1804, &(Env_lambda_1804){s__h, defaultNoKey__h, sectionName__h}});
     return GO_SLICE_LIT(Slice_GoString, GoString, 14, ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("up")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("down")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("left")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("right")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("a")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("b")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("c")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("x")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("y")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("z")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("start")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("d")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("w")), ((GoString (*)(void *, GoString))(get).fn)((get).env, GOSTR("menu")));
 }
 
-// System.uiSetConfigDefaults (system.go:1605), 0 TODO
+// System.uiSetConfigDefaults (system.go:1600), 0 TODO
 void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_bool enabled) {
     if (pn < 1) {
         return;
@@ -164957,7 +165243,7 @@ void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_b
         joyVal = (pn - 1);
         kc = (&s->joystickConfig.p[(pn - 1)]);
         base = fmt_Sprintf(GOSTR("Joystick_P%d."), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, pn)})));
-        toInt = ((GoFunc){(void *)lambda_1803, go_box(Env_lambda_1803, ((Env_lambda_1803){0}))});
+        toInt = ((GoFunc){(void *)lambda_1805, go_box(Env_lambda_1805, ((Env_lambda_1805){0}))});
     } else {
         if (pn > s->keyConfig.len) {
             return;
@@ -164965,7 +165251,7 @@ void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_b
         joyVal = -1;
         kc = (&s->keyConfig.p[(pn - 1)]);
         base = fmt_Sprintf(GOSTR("Keys_P%d."), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, pn)})));
-        toInt = ((GoFunc){(void *)lambda_1804, go_box(Env_lambda_1804, ((Env_lambda_1804){0}))});
+        toInt = ((GoFunc){(void *)lambda_1806, go_box(Env_lambda_1806, ((Env_lambda_1806){0}))});
     }
     kc->Joy = joyVal;
     kc->GUID = GOSTR("");
@@ -164995,7 +165281,7 @@ void System_uiSetConfigDefaults(System* s, int pn, bool joystick, Map_GoString_b
     System_uiResetTokenGuard(s);
 }
 
-// System.uiRegisterCommand (system.go:1661), 0 TODO
+// System.uiRegisterCommand (system.go:1656), 0 TODO
 GoIface System_uiRegisterCommand(System* s, GoString name, CommandSpec spec) {
     name = strings_TrimSpace(name);
     spec.Cmd = strings_TrimSpace(spec.Cmd);
@@ -165039,7 +165325,7 @@ GoIface System_uiRegisterCommand(System* s, GoString name, CommandSpec spec) {
     return (GoIface){0};
 }
 
-// System.uiApplyCommandRegistry (system.go:1690), 0 TODO
+// System.uiApplyCommandRegistry (system.go:1685), 0 TODO
 GoIface System_uiApplyCommandRegistry(System* s, CommandList* cl) {
     if ((cl == NULL) || (Map_GoString_CommandSpec_len(&s->uiCommandRegistry) == 0)) {
         return (GoIface){0};
@@ -165068,7 +165354,7 @@ GoIface System_uiApplyCommandRegistry(System* s, CommandList* cl) {
     return (GoIface){0};
 }
 
-// System.uiEnsureCommandLists (system.go:1705), 0 TODO
+// System.uiEnsureCommandLists (system.go:1700), 0 TODO
 GoIface System_uiEnsureCommandLists(System* s, int total) {
     Slice_GoString def = GO_SLICE_LIT(Slice_GoString, GoString, 15, GOSTR("D"), GOSTR("U"), GOSTR("L"), GOSTR("R"), GOSTR("a"), GOSTR("b"), GOSTR("c"), GOSTR("x"), GOSTR("y"), GOSTR("z"), GOSTR("s"), GOSTR("d"), GOSTR("w"), GOSTR("m"), GOSTR("/s"));
     CommandList* dcl = fn_NewCommandList(NULL);
@@ -165123,12 +165409,12 @@ GoIface System_uiEnsureCommandLists(System* s, int total) {
     return (GoIface){0};
 }
 
-// System.netplay (system.go:1748), 0 TODO
+// System.netplay (system.go:1743), 0 TODO
 bool System_netplay(System* s) {
     return (((s->rollback.session != NULL) || (s->netConnection != NULL)) || (s->replayFile != NULL));
 }
 
-// System.usesRollbackMatch (system.go:1752), 0 TODO
+// System.usesRollbackMatch (system.go:1747), 0 TODO
 bool System_usesRollbackMatch(System* s) {
     if (s->replayFile != NULL) {
         return false;
@@ -165136,17 +165422,17 @@ bool System_usesRollbackMatch(System* s) {
     return ((s->rollback.session != NULL) || (((s->netConnection == NULL) && (s->cfg.Netplay.Rollback.DesyncTestFrames > 0))));
 }
 
-// System.escExit (system.go:1760), 0 TODO
+// System.escExit (system.go:1755), 0 TODO
 bool System_escExit(System* s) {
     return (s->SystemStateVars_.esc && ((((!s->sel.gameParams->PauseMenu) || (!s->cfg.Config.EscOpensMenu)) || ((s->motif.AttractMode.Enabled && (s->SystemStateVars_.credits == 0))))));
 }
 
-// System.matchOver (system.go:1765), 0 TODO
+// System.matchOver (system.go:1760), 0 TODO
 bool System_matchOver(System* s) {
     return (((s->SystemStateVars_.wins.v[0] > 0) && (s->SystemStateVars_.wins.v[0] >= s->SystemStateVars_.matchWins.v[0])) || ((s->SystemStateVars_.wins.v[1] > 0) && (s->SystemStateVars_.wins.v[1] >= s->SystemStateVars_.matchWins.v[1])));
 }
 
-// System.anyChar (system.go:1771), 0 TODO
+// System.anyChar (system.go:1766), 0 TODO
 Char* System_anyChar(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165167,7 +165453,7 @@ Char* System_anyChar(System* s) {
     return NULL;
 }
 
-// System.playerID (system.go:1782), 0 TODO
+// System.playerID (system.go:1777), 0 TODO
 Char* System_playerID(System* s, i32 id) {
     if (id < 0) {
         return NULL;
@@ -165184,7 +165470,7 @@ Char* System_playerID(System* s, i32 id) {
     return c;
 }
 
-// System.playerIDExist (system.go:1802), 0 TODO
+// System.playerIDExist (system.go:1797), 0 TODO
 BytecodeValue System_playerIDExist(System* s, BytecodeValue id) {
     if (BytecodeValue_IsUndefined(id)) {
         return fn_BytecodeUndefined();
@@ -165193,7 +165479,7 @@ BytecodeValue System_playerIDExist(System* s, BytecodeValue id) {
     return fn_BytecodeBool((c != NULL));
 }
 
-// System.playerIndex (system.go:1810), 0 TODO
+// System.playerIndex (system.go:1805), 0 TODO
 Char* System_playerIndex(System* s, i32 idx) {
     if ((idx < 0) || (((int)idx) >= g_sys.charList.runOrder.len)) {
         return NULL;
@@ -165215,7 +165501,7 @@ Char* System_playerIndex(System* s, i32 idx) {
     return NULL;
 }
 
-// System.playerIndexExist (system.go:1835), 0 TODO
+// System.playerIndexExist (system.go:1830), 0 TODO
 BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx) {
     if (BytecodeValue_IsUndefined(idx)) {
         return fn_BytecodeUndefined();
@@ -165224,7 +165510,7 @@ BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx) {
     return fn_BytecodeBool((char_ != NULL));
 }
 
-// System.getCharRoot (system.go:1844), 0 TODO
+// System.getCharRoot (system.go:1839), 0 TODO
 Char* System_getCharRoot(System* s, int idx) {
     if ((idx < 0) || (idx >= 12)) {
         return NULL;
@@ -165236,7 +165522,7 @@ Char* System_getCharRoot(System* s, int idx) {
     return p.p[0];
 }
 
-// System.playerNoExist (system.go:1855), 0 TODO
+// System.playerNoExist (system.go:1850), 0 TODO
 BytecodeValue System_playerNoExist(System* s, BytecodeValue pn) {
     if (BytecodeValue_IsUndefined(pn)) {
         return fn_BytecodeUndefined();
@@ -165246,7 +165532,7 @@ BytecodeValue System_playerNoExist(System* s, BytecodeValue pn) {
     return fn_BytecodeBool((c != NULL));
 }
 
-// System.palfxvar (system.go:1864), 0 TODO
+// System.palfxvar (system.go:1859), 0 TODO
 i32 System_palfxvar(System* s, i32 x, i32 y) {
     i32 n = 0;
     if (x >= 4) {
@@ -165287,7 +165573,7 @@ i32 System_palfxvar(System* s, i32 x, i32 y) {
     return n;
 }
 
-// System.palfxvar2 (system.go:1900), 0 TODO
+// System.palfxvar2 (system.go:1895), 0 TODO
 f32 System_palfxvar2(System* s, i32 x, i32 y) {
     f32 n = 0x1p+00f;
     if (x > 1) {
@@ -165314,27 +165600,27 @@ f32 System_palfxvar2(System* s, i32 x, i32 y) {
     return (n * 0x1p+08f);
 }
 
-// System.screenHeight (system.go:1923), 0 TODO
+// System.screenHeight (system.go:1918), 0 TODO
 f32 System_screenHeight(System* s) {
     return ((f32)s->SystemStateVars_.gameHeight);
 }
 
-// System.screenWidth (system.go:1928), 0 TODO
+// System.screenWidth (system.go:1923), 0 TODO
 f32 System_screenWidth(System* s) {
     return ((f32)s->SystemStateVars_.gameWidth);
 }
 
-// System.roundEnded (system.go:1932), 0 TODO
+// System.roundEnded (system.go:1927), 0 TODO
 bool System_roundEnded(System* s) {
     return (s->SystemStateVars_.intro < (-s->fightScreen.round->over_hittime));
 }
 
-// System.roundNoDamage (system.go:1937), 0 TODO
+// System.roundNoDamage (system.go:1932), 0 TODO
 bool System_roundNoDamage(System* s) {
     return (((g_sys.SystemStateVars_.intro < 0) && (g_sys.SystemStateVars_.intro <= (-g_sys.fightScreen.round->over_hittime))) && (g_sys.SystemStateVars_.intro >= (-g_sys.fightScreen.round->over_waittime)));
 }
 
-// System.gameTime (system.go:1942), 0 TODO
+// System.gameTime (system.go:1937), 0 TODO
 i32 System_gameTime(System* s) {
     i32 pmTime = 0;
     if (g_sys.netConnection != NULL) {
@@ -165349,7 +165635,7 @@ i32 System_gameTime(System* s) {
     return (g_sys.SystemStateVars_.matchTime + pmTime);
 }
 
-// System.roundState (system.go:1958), 0 TODO
+// System.roundState (system.go:1953), 0 TODO
 i32 System_roundState(System* s) {
     {
         do {
@@ -165368,7 +165654,7 @@ i32 System_roundState(System* s) {
     }
 }
 
-// System.introState (system.go:1975), 0 TODO
+// System.introState (system.go:1970), 0 TODO
 i32 System_introState(System* s) {
     {
         do {
@@ -165390,7 +165676,7 @@ i32 System_introState(System* s) {
     }
 }
 
-// System.outroState (system.go:2001), 0 TODO
+// System.outroState (system.go:1996), 0 TODO
 i32 System_outroState(System* s) {
     {
         do {
@@ -165413,23 +165699,23 @@ i32 System_outroState(System* s) {
     }
 }
 
-// System.roundOver (system.go:2027), 0 TODO
+// System.roundOver (system.go:2022), 0 TODO
 bool System_roundOver(System* s) {
     return (s->SystemStateVars_.intro < (-((s->fightScreen.round->over_waittime + FightScreenRound_overTime(s->fightScreen.round)))));
 }
 
-// System.roundIsSingle (system.go:2036), 0 TODO
+// System.roundIsSingle (system.go:2031), 0 TODO
 bool System_roundIsSingle(System* s) {
     return ((((!s->sel.gameParams->PersistRounds) && (s->SystemStateVars_.roundNo == 1)) && s->SystemStateVars_.decisiveRound.v[0]) && s->SystemStateVars_.decisiveRound.v[1]);
 }
 
-// System.maxDrawsReached (system.go:2040), 0 TODO
+// System.maxDrawsReached (system.go:2035), 0 TODO
 bool System_maxDrawsReached(System* s, int team) {
     i32 limit = s->SystemStateVars_.maxDraws.v[team];
     return ((limit >= 0) && (s->SystemStateVars_.draws >= limit));
 }
 
-// System.roundIsFinal (system.go:2047), 0 TODO
+// System.roundIsFinal (system.go:2042), 0 TODO
 bool System_roundIsFinal(System* s) {
     if (s->sel.gameParams->PersistRounds) {
         return false;
@@ -165443,7 +165729,7 @@ bool System_roundIsFinal(System* s) {
     return (System_maxDrawsReached(s, 0) && System_maxDrawsReached(s, 1));
 }
 
-// System.winnerTeam (system.go:2063), 0 TODO
+// System.winnerTeam (system.go:2058), 0 TODO
 i32 System_winnerTeam(System* s) {
     i32 winp = -1;
     if (!s->SystemStateVars_.endMatch) {
@@ -165464,12 +165750,12 @@ i32 System_winnerTeam(System* s) {
     return winp;
 }
 
-// System.gsf (system.go:2081), 0 TODO
+// System.gsf (system.go:2076), 0 TODO
 bool System_gsf(System* s, GlobalSpecialFlag gsf) {
     return ((s->SystemStateVars_.specialFlag & gsf) != 0U);
 }
 
-// System.setGSF (system.go:2085), 0 TODO
+// System.setGSF (system.go:2080), 0 TODO
 void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on) {
     if (on) {
         s->SystemStateVars_.specialFlag |= gsf;
@@ -165478,7 +165764,7 @@ void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on) {
     }
 }
 
-// System.appendToConsole (system.go:2093), 0 TODO
+// System.appendToConsole (system.go:2088), 0 TODO
 void System_appendToConsole(System* s, GoString str) {
     s->consoleText = GO_APPEND(Slice_GoString, s->consoleText, str);
     if (s->consoleText.len > s->cfg.Debug.ConsoleRows) {
@@ -165486,7 +165772,7 @@ void System_appendToConsole(System* s, GoString str) {
     }
 }
 
-// System.printToConsole (system.go:2100), 0 TODO
+// System.printToConsole (system.go:2095), 0 TODO
 void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     Slice_GoString spl = s->stringPool.v[pn].List;
     if ((sn >= 0) && (sn < spl.len)) {
@@ -165502,7 +165788,7 @@ void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     }
 }
 
-// System.luaQueuePreDraw (system.go:2112), 0 TODO
+// System.luaQueuePreDraw (system.go:2107), 0 TODO
 void System_luaQueuePreDraw(System* s, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -165511,7 +165797,7 @@ void System_luaQueuePreDraw(System* s, GoFunc fn) {
     s->luaDrawPreOps = GO_APPEND(Slice_GoFunc, s->luaDrawPreOps, fn);
 }
 
-// System.luaQueueLayerDraw (system.go:2119), 0 TODO
+// System.luaQueueLayerDraw (system.go:2114), 0 TODO
 void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -165527,7 +165813,7 @@ void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     s->luaDrawLayerOps.v[layer] = GO_APPEND(Slice_GoFunc, s->luaDrawLayerOps.v[layer], fn);
 }
 
-// System.luaFlushDrawQueue (system.go:2136), 0 TODO
+// System.luaFlushDrawQueue (system.go:2131), 0 TODO
 void System_luaFlushDrawQueue(System* s) {
     {
         Slice_GoFunc _t2 = s->luaDrawPreOps;
@@ -165555,7 +165841,7 @@ void System_luaFlushDrawQueue(System* s) {
     }
 }
 
-// System.luaDiscardDrawQueue (system.go:2150), 0 TODO
+// System.luaDiscardDrawQueue (system.go:2145), 0 TODO
 void System_luaDiscardDrawQueue(System* s) {
     s->luaDrawPreOps = GO_SLICE(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
     {
@@ -165567,7 +165853,7 @@ void System_luaDiscardDrawQueue(System* s) {
     }
 }
 
-// System.printBytecodeError (system.go:2160), 0 TODO
+// System.printBytecodeError (system.go:2155), 0 TODO
 void System_printBytecodeError(System* s, GoString str) {
     if ((s->loader.state == 2) && (s->workingChar != NULL)) {
         System_appendToConsole(s, go_strcat(Char_warn(g_sys.workingChar), str));
@@ -165578,7 +165864,7 @@ void System_printBytecodeError(System* s, GoString str) {
     }
 }
 
-// System.loadTime (system.go:2170), 0 TODO
+// System.loadTime (system.go:2165), 0 TODO
 void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bool shell, bool console) {
     i64 elapsed = time_Since(start);
     str = fmt_Sprintf(GOSTR("%v; Load time: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, str)}), ((GoIface){581, go_box_a(i64, elapsed)})));
@@ -165590,7 +165876,7 @@ void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bo
     }
 }
 
-// System.updateZScale (system.go:2183), 0 TODO
+// System.updateZScale (system.go:2178), 0 TODO
 f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     f32 _t1 = (g_sys.stage->stageCamera.topz / localscale);
     f32 topz = _t1;
@@ -165611,12 +165897,12 @@ f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     return scale;
 }
 
-// System.zEnabled (system.go:2198), 0 TODO
+// System.zEnabled (system.go:2193), 0 TODO
 bool System_zEnabled(System* s) {
     return (s->SystemStateVars_.zmin != s->SystemStateVars_.zmax);
 }
 
-// System.drawposXYfromZ (system.go:2203), 0 TODO
+// System.drawposXYfromZ (system.go:2198), 0 TODO
 Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos, f32 zscale) {
     Arr2_f32 outpos = {0};
     outpos.v[0] = ((((inpos.v[0] - s->SystemStateVars_.cam.Pos.v[0])) * zscale) + s->SystemStateVars_.cam.Pos.v[0]);
@@ -165626,12 +165912,12 @@ Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos
     return outpos;
 }
 
-// System.posZtoYoffset (system.go:2212), 0 TODO
+// System.posZtoYoffset (system.go:2207), 0 TODO
 f32 System_posZtoYoffset(System* s, f32 zpos, f32 localscl) {
     return ((zpos * localscl) * s->stage->stageCamera.depthtoscreen);
 }
 
-// System.zAxisOverlap (system.go:2218), 0 TODO
+// System.zAxisOverlap (system.go:2213), 0 TODO
 bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1, f32 posz2, f32 top2, f32 bot2, f32 localscl2) {
     if (!System_zEnabled(s)) {
         return true;
@@ -165643,7 +165929,7 @@ bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1
     return ((max1 >= min2) && (min1 <= max2));
 }
 
-// System.clsnOverlap (system.go:2231), 0 TODO
+// System.clsnOverlap (system.go:2226), 0 TODO
 Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f32 pos1, f32 facing1, Slice_ClsnFinal boxes2, Arr2_f32 pos2, f32 facing2) {
     if ((boxes1.len == 0) || (boxes2.len == 0)) {
         return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
@@ -165702,9 +165988,9 @@ Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f3
     return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
 }
 
-// System.initPlayerID (system.go:2285), 0 TODO
+// System.initPlayerID (system.go:2280), 0 TODO
 void System_initPlayerID(System* s) {
-    GoFunc assignID = ((GoFunc){(void *)lambda_1805, &(Env_lambda_1805){0}});
+    GoFunc assignID = ((GoFunc){(void *)lambda_1807, &(Env_lambda_1807){0}});
     if (g_sys.SystemStateVars_.roundNo > 1) {
         System_pruneCharId(&g_sys);
     }
@@ -165731,7 +166017,7 @@ void System_initPlayerID(System* s) {
     }
 }
 
-// System.pruneCharId (system.go:2326), 0 TODO
+// System.pruneCharId (system.go:2321), 0 TODO
 void System_pruneCharId(System* s) {
     s->SystemStateVars_.lastCharId = go_max_i32(0, (g_sys.cfg.Config.HelperMax - 1));
     {
@@ -165746,7 +166032,7 @@ void System_pruneCharId(System* s) {
     }
 }
 
-// System.newCharId (system.go:2340), 0 TODO
+// System.newCharId (system.go:2335), 0 TODO
 i32 System_newCharId(System* s) {
     i32 newid = (s->SystemStateVars_.lastCharId + 1);
     {
@@ -165766,7 +166052,7 @@ i32 System_newCharId(System* s) {
     return newid;
 }
 
-// System.resetGblEffect (system.go:2381), 0 TODO
+// System.resetGblEffect (system.go:2376), 0 TODO
 void System_resetGblEffect(System* s) {
     PalFX_clear(s->allPalFX);
     PalFX_clear(s->bgPalFX);
@@ -165784,7 +166070,7 @@ void System_resetGblEffect(System* s) {
     s->SystemStateVars_.specialFlag = 0U;
 }
 
-// System.clearAllCharSounds (system.go:2393), 0 TODO
+// System.clearAllCharSounds (system.go:2388), 0 TODO
 void System_clearAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165795,7 +166081,7 @@ void System_clearAllCharSounds(System* s) {
     }
 }
 
-// System.stopAllCharSounds (system.go:2400), 0 TODO
+// System.stopAllCharSounds (system.go:2395), 0 TODO
 void System_stopAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -165806,7 +166092,7 @@ void System_stopAllCharSounds(System* s) {
     }
 }
 
-// System.clearMatchSound (system.go:2406), 0 TODO
+// System.clearMatchSound (system.go:2401), 0 TODO
 void System_clearMatchSound(System* s) {
     StoryboardManager_clearSound(&s->matchStoryboards);
     {
@@ -165838,15 +166124,15 @@ void System_clearMatchSound(System* s) {
     }
 }
 
-// System.clearAllSound (system.go:2430), 0 TODO
+// System.clearAllSound (system.go:2425), 0 TODO
 void System_clearAllSound(System* s) {
     System* *s__h = go_box(System*, s);
     SoundChannels_StopAll(&(*s__h)->soundChannels);
-    fn_WithSpeakerLock(((GoFunc){(void *)lambda_1806, go_box(Env_lambda_1806, ((Env_lambda_1806){s__h}))}));
+    fn_WithSpeakerLock(((GoFunc){(void *)lambda_1808, go_box(Env_lambda_1808, ((Env_lambda_1808){s__h}))}));
     System_clearMatchSound((*s__h));
 }
 
-// System.clearPlayerAssets (system.go:2440), 0 TODO
+// System.clearPlayerAssets (system.go:2435), 0 TODO
 void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     StoryboardManager_clear(&s->matchStoryboards, pn);
     if (s->chars.v[pn].len > 0) {
@@ -165876,7 +166162,7 @@ void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     s->explodDrawOrder = fn_PointerSliceReset_Explod(s->explodDrawOrder);
 }
 
-// System.handleStageSwap (system.go:2470), 0 TODO
+// System.handleStageSwap (system.go:2465), 0 TODO
 bool System_handleStageSwap(System* s) {
     System* *s__h = go_box(System*, s);
     i32 roundRef = 0;
@@ -165912,14 +166198,14 @@ bool System_handleStageSwap(System* s) {
                 swap = true;
             }
             if ((*s__h)->stage->model != NULL) {
-                { GoFunc _t6 = ((GoFunc){(void *)lambda_1807, go_box(Env_lambda_1807, ((Env_lambda_1807){s__h}))}); go_chan_send(g_sys.mainThreadTask, &_t6); }
+                { GoFunc _t6 = ((GoFunc){(void *)lambda_1809, go_box(Env_lambda_1809, ((Env_lambda_1809){s__h}))}); go_chan_send(g_sys.mainThreadTask, &_t6); }
             }
         }
     }
     return swap;
 }
 
-// System.updateMusicMaps (system.go:2507), 0 TODO
+// System.updateMusicMaps (system.go:2502), 0 TODO
 void System_updateMusicMaps(System* s) {
     bool newMatchMusic = ((s->SystemStateVars_.roundNo == 1) && (!s->SystemStateVars_.roundResetFlg));
     if (newMatchMusic) {
@@ -165961,7 +166247,7 @@ void System_updateMusicMaps(System* s) {
     }
 }
 
-// System.resetRound (system.go:2548), 0 TODO
+// System.resetRound (system.go:2543), 0 TODO
 void System_resetRound(System* s) {
     fn_specRound();
     if (false) {
@@ -166082,12 +166368,12 @@ void System_resetRound(System* s) {
     iface_Await_818fc0bc(g_gfx);
 }
 
-// System.debugPaused (system.go:2670), 0 TODO
+// System.debugPaused (system.go:2665), 0 TODO
 bool System_debugPaused(System* s) {
     return ((s->SystemStateVars_.paused && (!s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.motifPauseGame (system.go:2674), 0 TODO
+// System.motifPauseGame (system.go:2669), 0 TODO
 bool System_motifPauseGame(System* s) {
     if (s->motif.me.active) {
         return true;
@@ -166098,12 +166384,12 @@ bool System_motifPauseGame(System* s) {
     return false;
 }
 
-// System.matchPaused (system.go:2687), 0 TODO
+// System.matchPaused (system.go:2682), 0 TODO
 bool System_matchPaused(System* s) {
     return (System_debugPaused(s) || System_motifPauseGame(s));
 }
 
-// System.motifPauseMusic (system.go:2691), 0 TODO
+// System.motifPauseMusic (system.go:2686), 0 TODO
 bool System_motifPauseMusic(System* s) {
     if (s->motif.ch.active && (s->motif.ch.counter >= s->motif.ChallengerInfo.Pause.Time)) {
         return true;
@@ -166111,17 +166397,17 @@ bool System_motifPauseMusic(System* s) {
     return false;
 }
 
-// System.tickFrame (system.go:2700), 0 TODO
+// System.tickFrame (system.go:2695), 0 TODO
 bool System_tickFrame(System* s) {
     return ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.tickNextFrame (system.go:2710), 0 TODO
+// System.tickNextFrame (system.go:2705), 0 TODO
 bool System_tickNextFrame(System* s) {
     return ((go_f2i32((s->SystemStateVars_.tickCountF + s->SystemStateVars_.nextAddTime)) > s->SystemStateVars_.tickCount) && ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag) || (s->SystemStateVars_.oldTickCount >= s->SystemStateVars_.tickCount))));
 }
 
-// System.tickInterpolation (system.go:2717), 0 TODO
+// System.tickInterpolation (system.go:2712), 0 TODO
 f32 System_tickInterpolation(System* s) {
     if (System_tickNextFrame(s)) {
         return 0x1p+00f;
@@ -166133,12 +166419,12 @@ f32 System_tickInterpolation(System* s) {
     return 0x1p+00f;
 }
 
-// System.uiTick (system.go:2731), 0 TODO
+// System.uiTick (system.go:2726), 0 TODO
 bool System_uiTick(System* s) {
     return ((System_tickFrame(s) || System_debugPaused(s)) || s->motif.me.active);
 }
 
-// System.addFrameTime (system.go:2735), 0 TODO
+// System.addFrameTime (system.go:2730), 0 TODO
 bool System_addFrameTime(System* s, f32 t) {
     if (System_debugPaused(s)) {
         s->SystemStateVars_.oldNextAddTime = 0x0p+00f;
@@ -166159,7 +166445,7 @@ bool System_addFrameTime(System* s, f32 t) {
     return true;
 }
 
-// System.resetFrameTime (system.go:2755), 0 TODO
+// System.resetFrameTime (system.go:2750), 0 TODO
 void System_resetFrameTime(System* s) {
     int _t1 = 0;
     int _t2 = -1;
@@ -166177,7 +166463,7 @@ void System_resetFrameTime(System* s) {
     s->redrawWait.lastDraw = time_Now();
 }
 
-// System.resetMatchData (system.go:2764), 0 TODO
+// System.resetMatchData (system.go:2759), 0 TODO
 void System_resetMatchData(System* s, bool forceDestroy) {
     g_sys.allPalFX = fn_newPalFX();
     g_sys.bgPalFX = fn_newPalFX();
@@ -166194,7 +166480,7 @@ void System_resetMatchData(System* s, bool forceDestroy) {
     }
 }
 
-// System.charUpdate (system.go:2776), 0 TODO
+// System.charUpdate (system.go:2771), 0 TODO
 void System_charUpdate(System* s) {
     CharList_update(&s->charList);
     System_projectileUpdate(s);
@@ -166203,7 +166489,7 @@ void System_charUpdate(System* s) {
     }
 }
 
-// System.globalCollision (system.go:2788), 0 TODO
+// System.globalCollision (system.go:2783), 0 TODO
 void System_globalCollision(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -166225,7 +166511,7 @@ void System_globalCollision(System* s) {
     s->projectileTradeSort = fn_PointerSliceReset_Projectile(s->projectileTradeSort);
 }
 
-// System.runIntroSkip (system.go:2815), 0 TODO
+// System.runIntroSkip (system.go:2810), 0 TODO
 void System_runIntroSkip(System* s) {
     if ((!System_gsf(s, 4U)) || System_gsf(s, 16384U)) {
         return;
@@ -166257,7 +166543,7 @@ void System_runIntroSkip(System* s) {
     }
 }
 
-// System.clearSpriteData (system.go:2854), 0 TODO
+// System.clearSpriteData (system.go:2849), 0 TODO
 void System_clearSpriteData(System* s) {
     fn_spriteDataPoolReset();
     s->spriteList = GO_SLICE(DrawList, s->spriteList, 0, 0);
@@ -166285,7 +166571,7 @@ void System_clearSpriteData(System* s) {
     }
 }
 
-// System.cueDraw (system.go:2885), 0 TODO
+// System.cueDraw (system.go:2880), 0 TODO
 void System_cueDraw(System* s) {
     if (s->SystemStateVars_.frameSkip) {
         return;
@@ -166309,17 +166595,17 @@ void System_cueDraw(System* s) {
     System_explodCueDraw(s);
 }
 
-// System.screenleft (system.go:2904), 0 TODO
+// System.screenleft (system.go:2899), 0 TODO
 f32 System_screenleft(System* s) {
     return (((f32)s->stage->screenleft) * s->stage->localscl);
 }
 
-// System.screenright (system.go:2908), 0 TODO
+// System.screenright (system.go:2903), 0 TODO
 f32 System_screenright(System* s) {
     return (((f32)s->stage->screenright) * s->stage->localscl);
 }
 
-// System.action (system.go:2914), 0 TODO
+// System.action (system.go:2909), 0 TODO
 void System_action(System* s) {
     g_bcIdxDepth = 0;
     fn_bcProfFrame();
@@ -166507,7 +166793,7 @@ void System_action(System* s) {
     return;
 }
 
-// System.uiAction (system.go:3133), 0 TODO
+// System.uiAction (system.go:3128), 0 TODO
 void System_uiAction(System* s) {
     if (!System_uiTick(s)) {
         return;
@@ -166542,7 +166828,7 @@ void System_uiAction(System* s) {
     }
 }
 
-// System.projectileUpdate (system.go:3166), 0 TODO
+// System.projectileUpdate (system.go:3161), 0 TODO
 void System_projectileUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -166567,7 +166853,7 @@ void System_projectileUpdate(System* s) {
     }
 }
 
-// System.projectilePrune (system.go:3184), 0 TODO
+// System.projectilePrune (system.go:3179), 0 TODO
 void System_projectilePrune(System* s, int pn) {
     Slice_ProjectilePtr playerProjs = s->projs.v[pn];
     int writeIdx = 0;
@@ -166587,7 +166873,7 @@ void System_projectilePrune(System* s, int pn) {
     s->projs.v[pn] = GO_SLICE(Slice_ProjectilePtr, playerProjs, 0, writeIdx);
 }
 
-// System.explodUpdate (system.go:3202), 0 TODO
+// System.explodUpdate (system.go:3197), 0 TODO
 void System_explodUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -166612,7 +166898,7 @@ void System_explodUpdate(System* s) {
     }
 }
 
-// System.explodCueDraw (system.go:3224), 0 TODO
+// System.explodCueDraw (system.go:3219), 0 TODO
 void System_explodCueDraw(System* s) {
     System* *s__h = go_box(System*, s);
     (*s__h)->explodDrawOrder = GO_SLICE(Slice_ExplodPtr, (*s__h)->explodDrawOrder, 0, 0);
@@ -166634,7 +166920,7 @@ void System_explodCueDraw(System* s) {
             _cont2:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_ExplodPtr, (*s__h)->explodDrawOrder), sizeof(Explod*), ((GoFunc){(void *)lambda_1809, go_box(Env_lambda_1809, ((Env_lambda_1809){s__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_ExplodPtr, (*s__h)->explodDrawOrder), sizeof(Explod*), ((GoFunc){(void *)lambda_1811, go_box(Env_lambda_1811, ((Env_lambda_1811){s__h}))}));
     {
         Slice_ExplodPtr _t7 = (*s__h)->explodDrawOrder;
         for (int _t6 = 0; _t6 < _t7.len; _t6++) {
@@ -166645,7 +166931,7 @@ void System_explodCueDraw(System* s) {
     }
 }
 
-// System.explodPrune (system.go:3277), 0 TODO
+// System.explodPrune (system.go:3272), 0 TODO
 void System_explodPrune(System* s, int pn) {
     Slice_ExplodPtr playerExplods = s->explods.v[pn];
     int writeIdx = 0;
@@ -166665,7 +166951,7 @@ void System_explodPrune(System* s, int pn) {
     s->explods.v[pn] = GO_SLICE(Slice_ExplodPtr, playerExplods, 0, writeIdx);
 }
 
-// System.charTextsUpdate (system.go:3293), 0 TODO
+// System.charTextsUpdate (system.go:3288), 0 TODO
 void System_charTextsUpdate(System* s) {
     if (!System_tickFrame(&g_sys)) {
         return;
@@ -166696,7 +166982,7 @@ void System_charTextsUpdate(System* s) {
     }
 }
 
-// System.charTextsPrune (system.go:3319), 0 TODO
+// System.charTextsPrune (system.go:3314), 0 TODO
 void System_charTextsPrune(System* s, int pn) {
     Slice_TextSpritePtr playerTexts = s->chartexts.v[pn];
     int writeIdx = 0;
@@ -166716,7 +167002,7 @@ void System_charTextsPrune(System* s, int pn) {
     s->chartexts.v[pn] = GO_SLICE(Slice_TextSpritePtr, playerTexts, 0, writeIdx);
 }
 
-// System.globalTick (system.go:3334), 0 TODO
+// System.globalTick (system.go:3329), 0 TODO
 void System_globalTick(System* s) {
     Stage_tick(s->stage);
     CharList_tick(&s->charList);
@@ -166737,7 +167023,7 @@ void System_globalTick(System* s) {
     s->SystemStateVars_.matchTime++;
 }
 
-// System.getSlowtime (system.go:3347), 0 TODO
+// System.getSlowtime (system.go:3342), 0 TODO
 i32 System_getSlowtime(System* s) {
     if (((s->SystemStateVars_.slowtime > 0) && (s->SystemStateVars_.intro < 0)) && (s->SystemStateVars_.curRoundTime != 0)) {
         return s->SystemStateVars_.slowtime;
@@ -166745,7 +167031,7 @@ i32 System_getSlowtime(System* s) {
     return 0;
 }
 
-// System.timeElapsed (system.go:3354), 0 TODO
+// System.timeElapsed (system.go:3349), 0 TODO
 i32 System_timeElapsed(System* s) {
     if (s->SystemStateVars_.maxRoundTime > 0) {
         return (s->SystemStateVars_.maxRoundTime - s->SystemStateVars_.curRoundTime);
@@ -166753,7 +167039,7 @@ i32 System_timeElapsed(System* s) {
     return s->SystemStateVars_.curPlayTime;
 }
 
-// System.timeRemaining (system.go:3363), 0 TODO
+// System.timeRemaining (system.go:3358), 0 TODO
 i32 System_timeRemaining(System* s) {
     if (s->SystemStateVars_.curRoundTime >= 0) {
         return s->SystemStateVars_.curRoundTime;
@@ -166761,7 +167047,7 @@ i32 System_timeRemaining(System* s) {
     return -1;
 }
 
-// System.timeTotal (system.go:3370), 0 TODO
+// System.timeTotal (system.go:3365), 0 TODO
 i32 System_timeTotal(System* s) {
     i32 t = s->SystemStateVars_.timerStart;
     {
@@ -166778,7 +167064,7 @@ i32 System_timeTotal(System* s) {
     return t;
 }
 
-// System.matchEndDialoguePending (system.go:3381), 0 TODO
+// System.matchEndDialoguePending (system.go:3376), 0 TODO
 bool System_matchEndDialoguePending(System* s) {
     if ((s->SystemStateVars_.postMatchFlg || (s->SystemStateVars_.dialogueForce != 0)) || s->motif.di.matchEndDone) {
         return false;
@@ -166798,7 +167084,7 @@ bool System_matchEndDialoguePending(System* s) {
     return (System_maxDrawsReached(s, 0) || System_maxDrawsReached(s, 1));
 }
 
-// System.shouldStartMatchEndDialogue (system.go:3401), 0 TODO
+// System.shouldStartMatchEndDialogue (system.go:3396), 0 TODO
 bool System_shouldStartMatchEndDialogue(System* s) {
     if (((!System_matchEndDialoguePending(s)) || (!System_matchOver(s))) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -166809,7 +167095,7 @@ bool System_shouldStartMatchEndDialogue(System* s) {
     return (((s->SystemStateVars_.intro + s->fightScreen.round->over_waittime) + s->fightScreen.round->over_time) <= 0);
 }
 
-// System.holdPostMatchForDialogue (system.go:3411), 0 TODO
+// System.holdPostMatchForDialogue (system.go:3406), 0 TODO
 bool System_holdPostMatchForDialogue(System* s) {
     if ((s->SystemStateVars_.dialogueForce != 0) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -166826,7 +167112,7 @@ bool System_holdPostMatchForDialogue(System* s) {
     return false;
 }
 
-// System.stepRoundState (system.go:3428), 0 TODO
+// System.stepRoundState (system.go:3423), 0 TODO
 void System_stepRoundState(System* s) {
     if (!FightScreenRound_act(s->fightScreen.round)) {
         return;
@@ -167036,14 +167322,14 @@ void System_stepRoundState(System* s) {
     }
 }
 
-// System.roundEndDecision (system.go:3654), 0 TODO
+// System.roundEndDecision (system.go:3649), 0 TODO
 bool System_roundEndDecision(System* s) {
     System* s__hv = s; __typeof__(s__hv) *s__h = &s__hv;
-    GoFunc checkPerfect = ((GoFunc){(void *)lambda_1810, &(Env_lambda_1810){s__h}});
+    GoFunc checkPerfect = ((GoFunc){(void *)lambda_1812, &(Env_lambda_1812){s__h}});
     if ((*s__h)->SystemStateVars_.intro > 0) {
         return false;
     }
-    GoFunc checkClutch = ((GoFunc){(void *)lambda_1811, &(Env_lambda_1811){s__h}});
+    GoFunc checkClutch = ((GoFunc){(void *)lambda_1813, &(Env_lambda_1813){s__h}});
     Arr2_bool ko = (Arr2_bool){{true, true}};
     {
         for (int _t1 = 0; _t1 < 2; _t1++) {
@@ -167190,7 +167476,7 @@ bool System_roundEndDecision(System* s) {
     return ((ko.v[0] || ko.v[1]) || ((*s__h)->SystemStateVars_.curRoundTime == 0));
 }
 
-// System.draw (system.go:3795), 0 TODO
+// System.draw (system.go:3790), 0 TODO
 void System_draw(System* s, f32 x, f32 y, f32 scl) {
     fn_vitaDiagFrame();
     s->SystemStateVars_.brightnessOld = s->SystemStateVars_.brightness;
@@ -167290,7 +167576,7 @@ void System_draw(System* s, f32 x, f32 y, f32 scl) {
     Motif_draw(&s->motif, 3);
 }
 
-// System.drawCharTexts (system.go:3985), 0 TODO
+// System.drawCharTexts (system.go:3980), 0 TODO
 void System_drawCharTexts(System* s, i16 layerno) {
     Arr4_i32* clip = NULL;
     {
@@ -167317,7 +167603,7 @@ void System_drawCharTexts(System* s, i16 layerno) {
     }
 }
 
-// System.drawTop (system.go:3997), 0 TODO
+// System.drawTop (system.go:3992), 0 TODO
 void System_drawTop(System* s) {
     s->SystemStateVars_.brightness = s->SystemStateVars_.brightnessOld;
     if (s->clsnDisplay) {
@@ -167337,7 +167623,7 @@ void System_drawTop(System* s) {
     }
 }
 
-// System.debugTextScale (system.go:4031), 0 TODO
+// System.debugTextScale (system.go:4026), 0 TODO
 Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     f32 sx = {0};
     f32 sy = {0};
@@ -167359,7 +167645,7 @@ Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     return (Ret_f32__f32){sx, sy};
 }
 
-// System.drawDebugText (system.go:4046), 0 TODO
+// System.drawDebugText (system.go:4041), 0 TODO
 void System_drawDebugText(System* s, drawAspectState logicState) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     System* *s__h = go_box(System*, s);
@@ -167377,7 +167663,7 @@ void System_drawDebugText(System* s, drawAspectState logicState) {
     Ret_f32__f32 _t2 = System_debugTextScale((*s__h), (*panelState__h));
     f32 *debugScaleX__h = go_box_a(f32, _t2.r0);
     f32 *debugScaleY__h = go_box_a(f32, _t2.r1);
-    GoFunc put = ((GoFunc){(void *)lambda_1812, &(Env_lambda_1812){s__h, panelState__h, debugScaleX__h, debugScaleY__h}});
+    GoFunc put = ((GoFunc){(void *)lambda_1814, &(Env_lambda_1814){s__h, panelState__h, debugScaleX__h, debugScaleY__h}});
     if ((*s__h)->debugDisplay) {
         f32 *x__h = go_box_a(f32, ((((0x1.4p+08f - (*panelState__h).gameWidth)) / 0x1p+01f) + 0x1p+00f));
         f32 *y__h = go_box_a(f32, (0x1.ep+07f - (*panelState__h).gameHeight));
@@ -167485,7 +167771,7 @@ void System_drawDebugText(System* s, drawAspectState logicState) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.keepMatchRunning (system.go:4166), 0 TODO
+// System.keepMatchRunning (system.go:4161), 0 TODO
 bool System_keepMatchRunning(System* s) {
     if (!s->SystemStateVars_.endMatch) {
         return true;
@@ -167496,7 +167782,7 @@ bool System_keepMatchRunning(System* s) {
     return false;
 }
 
-// System.runMatch (system.go:4181), 0 TODO
+// System.runMatch (system.go:4176), 0 TODO
 bool System_runMatch(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f; volatile bool _df3 = false; volatile GoFunc _df3_f;
     System* *s__h = go_box(System*, s);
@@ -167516,7 +167802,7 @@ bool System_runMatch(System* s) {
     if (false) {
         fn_vitaGCTrigger(201326592U);
     }
-    _df1_f = ((GoFunc){(void *)lambda_1814, go_box(Env_lambda_1814, ((Env_lambda_1814){s__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_1816, go_box(Env_lambda_1816, ((Env_lambda_1816){s__h}))});
     _df1 = true;
     {
         GoIface err = System_synchronize((*s__h));
@@ -167532,12 +167818,12 @@ bool System_runMatch(System* s) {
         }
     }
     if ((*s__h)->netConnection != NULL) {
-        _df3_f = ((GoFunc){(void *)lambda_1815, go_box(Env_lambda_1815, ((Env_lambda_1815){s__h}))});
+        _df3_f = ((GoFunc){(void *)lambda_1817, go_box(Env_lambda_1817, ((Env_lambda_1817){s__h}))});
         _df3 = true;
     }
     System_SetupCharRoundStart((*s__h));
     (*s__h)->debugWC = System_anyChar((*s__h));
-    GoFunc debugInput = ((GoFunc){(void *)lambda_1816, &(Env_lambda_1816){s__h}});
+    GoFunc debugInput = ((GoFunc){(void *)lambda_1818, &(Env_lambda_1818){s__h}});
     System_resetRound((*s__h));
     RoundStartBackup_Save(&(*s__h)->roundBackup);
     if ((*s__h)->SystemStateVars_.roundNo == 1) {
@@ -167723,7 +168009,7 @@ bool System_runMatch(System* s) {
     return reload;
 }
 
-// System.SetupCharRoundStart (system.go:4431), 0 TODO
+// System.SetupCharRoundStart (system.go:4426), 0 TODO
 void System_SetupCharRoundStart(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -167873,7 +168159,7 @@ void System_SetupCharRoundStart(System* s) {
     }
 }
 
-// System.runNextRound (system.go:4560), 0 TODO
+// System.runNextRound (system.go:4555), 0 TODO
 bool System_runNextRound(System* s) {
     bool _t1 = System_roundOver(s);
     bool roundOver = _t1;
@@ -167963,14 +168249,14 @@ bool System_runNextRound(System* s) {
     return true;
 }
 
-// System.gameLogicSpeed (system.go:4636), 0 TODO
+// System.gameLogicSpeed (system.go:4631), 0 TODO
 i32 System_gameLogicSpeed(System* s) {
     i32 base = ((i32)(60 + (s->cfg.Options.GameSpeed * s->cfg.Options.GameSpeedStep)));
     i32 spd = go_f2i32((((f32)base) * s->debugAccel));
     return go_max_i32(1, spd);
 }
 
-// System.gameRenderSpeed (system.go:4642), 0 TODO
+// System.gameRenderSpeed (system.go:4637), 0 TODO
 int System_gameRenderSpeed(System* s) {
     i32 spd = 0;
     if ((((!s->gameRunning) || s->motif.me.active) || (s->rollback.session != NULL)) || (s->replayFile != NULL)) {
@@ -167981,7 +168267,7 @@ int System_gameRenderSpeed(System* s) {
     return ((int)go_max_i32(1, spd));
 }
 
-// System.debugModeAllowed (system.go:4655), 0 TODO
+// System.debugModeAllowed (system.go:4650), 0 TODO
 bool System_debugModeAllowed(System* s) {
     if ((s->netConnection != NULL) || (s->rollback.session != NULL)) {
         return false;
@@ -167989,7 +168275,7 @@ bool System_debugModeAllowed(System* s) {
     return s->cfg.Debug.AllowDebugMode;
 }
 
-// System.inRollback (system.go:4663), 0 TODO
+// System.inRollback (system.go:4658), 0 TODO
 bool System_inRollback(System* s) {
     if (s->rollback.session != NULL) {
         return s->rollback.session->inRollback;
@@ -167997,7 +168283,7 @@ bool System_inRollback(System* s) {
     return false;
 }
 
-// System.isSpeculativeFrame (system.go:4670), 0 TODO
+// System.isSpeculativeFrame (system.go:4665), 0 TODO
 bool System_isSpeculativeFrame(System* s) {
     if (s->rollback.session != NULL) {
         return (!s->rollback.session->inRollback);
@@ -168005,7 +168291,7 @@ bool System_isSpeculativeFrame(System* s) {
     return false;
 }
 
-// RoundStartBackup.Save (system.go:4688), 0 TODO
+// RoundStartBackup.Save (system.go:4683), 0 TODO
 void RoundStartBackup_Save(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -168097,7 +168383,7 @@ void RoundStartBackup_Save(RoundStartBackup* bk) {
     bk->lastCharId = g_sys.SystemStateVars_.lastCharId;
 }
 
-// RoundStartBackup.Restore (system.go:4756), 0 TODO
+// RoundStartBackup.Restore (system.go:4751), 0 TODO
 void RoundStartBackup_Restore(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -168214,17 +168500,17 @@ void RoundStartBackup_Restore(RoundStartBackup* bk) {
     g_sys.SystemStateVars_.lastCharId = bk->lastCharId;
 }
 
-// newSelectChar (system.go:4878), 0 TODO
+// newSelectChar (system.go:4873), 0 TODO
 SelectChar* fn_newSelectChar(void) {
     return go_box(SelectChar, (SelectChar){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .cns_scale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .scp = fn_newSelectCharParams()});
 }
 
-// newSelectStage (system.go:4902), 0 TODO
+// newSelectStage (system.go:4897), 0 TODO
 SelectStage* fn_newSelectStage(void) {
     return go_box(SelectStage, (SelectStage){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .ssp = fn_newSelectStageParams()});
 }
 
-// PreloadState.String (system.go:4944), 0 TODO
+// PreloadState.String (system.go:4939), 0 TODO
 GoString PreloadState_String(PreloadState ps) {
     {
         PreloadState _t1 = ps;
@@ -168243,12 +168529,12 @@ GoString PreloadState_String(PreloadState ps) {
     return GOSTR("idle");
 }
 
-// newSelect (system.go:4972), 0 TODO
+// newSelect (system.go:4967), 0 TODO
 Select* fn_newSelect(void) {
     return go_box(Select, (Select){.selectedStageNo = -1, .charAnimPreload = Map_i32_bool_make(0), .stageAnimPreload = Map_i32_bool_make(0), .charSpritePreload = ({ Map_Arr2_u16_bool _m = Map_Arr2_u16_bool_make(2); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 0U}}, true); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 1U}}, true); (Map_Arr2_u16_bool)_m; }), .stageSpritePreload = Map_Arr2_u16_bool_make(0), .palOverwrite = Map_int_int_make(0), .cdefOverwrite = Map_int_GoString_make(0), .music = Map_GoString_Slice_bgMusicPtr_make(0), .gameParams = fn_newGameParams()});
 }
 
-// Select.initPreloadSync (system.go:4987), 0 TODO
+// Select.initPreloadSync (system.go:4982), 0 TODO
 void Select_initPreloadSync(Select* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168263,7 +168549,7 @@ void Select_initPreloadSync(Select* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.ensurePreloadWorker (system.go:4995), 0 TODO
+// Select.ensurePreloadWorker (system.go:4990), 0 TODO
 void Select_ensurePreloadWorker(Select* s) {
     Select* *s__h = go_box(Select*, s);
     Select_initPreloadSync((*s__h));
@@ -168274,10 +168560,10 @@ void Select_ensurePreloadWorker(Select* s) {
     }
     (*s__h)->preloadWorkerRun = true;
     sync_Mutex_Unlock(&(*s__h)->preloadMu);
-    fn_SafeGo(((GoFunc){(void *)lambda_1817, go_box(Env_lambda_1817, ((Env_lambda_1817){s__h}))}));
+    fn_SafeGo(((GoFunc){(void *)lambda_1819, go_box(Env_lambda_1819, ((Env_lambda_1819){s__h}))}));
 }
 
-// Select.ensureCharPreloadSlot (system.go:5009), 0 TODO
+// Select.ensureCharPreloadSlot (system.go:5004), 0 TODO
 void Select_ensureCharPreloadSlot(Select* s, int ref) {
     if (ref < 0) {
         return;
@@ -168290,7 +168576,7 @@ void Select_ensureCharPreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.ensureStagePreloadSlot (system.go:5018), 0 TODO
+// Select.ensureStagePreloadSlot (system.go:5013), 0 TODO
 void Select_ensureStagePreloadSlot(Select* s, int ref) {
     if (ref <= 0) {
         return;
@@ -168304,7 +168590,7 @@ void Select_ensureStagePreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.QueueCharPreload (system.go:5028), 0 TODO
+// Select.QueueCharPreload (system.go:5023), 0 TODO
 void Select_QueueCharPreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Select* *s__h = go_box(Select*, s);
@@ -168325,7 +168611,7 @@ void Select_QueueCharPreload(Select* s, int ref, int priority) {
     Select_initPreloadSync((*s__h));
     Select_ensurePreloadWorker((*s__h));
     sync_Mutex_Lock(&(*s__h)->preloadMu);
-    _df1_f = ((GoFunc){(void *)lambda_1818, go_box(Env_lambda_1818, ((Env_lambda_1818){s__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_1820, go_box(Env_lambda_1820, ((Env_lambda_1820){s__h}))});
     _df1 = true;
     Select_ensureCharPreloadSlot((*s__h), ref);
     PreloadEntry* e = (&(*s__h)->charPreload.p[ref]);
@@ -168365,7 +168651,7 @@ void Select_QueueCharPreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.QueueStagePreload (system.go:5066), 0 TODO
+// Select.QueueStagePreload (system.go:5061), 0 TODO
 void Select_QueueStagePreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Select* *s__h = go_box(Select*, s);
@@ -168386,7 +168672,7 @@ void Select_QueueStagePreload(Select* s, int ref, int priority) {
     Select_initPreloadSync((*s__h));
     Select_ensurePreloadWorker((*s__h));
     sync_Mutex_Lock(&(*s__h)->preloadMu);
-    _df1_f = ((GoFunc){(void *)lambda_1819, go_box(Env_lambda_1819, ((Env_lambda_1819){s__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_1821, go_box(Env_lambda_1821, ((Env_lambda_1821){s__h}))});
     _df1 = true;
     Select_ensureStagePreloadSlot((*s__h), ref);
     PreloadEntry* e = (&(*s__h)->stagePreload.p[(ref - 1)]);
@@ -168426,7 +168712,7 @@ void Select_QueueStagePreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.CharPreloadStatus (system.go:5104), 0 TODO
+// Select.CharPreloadStatus (system.go:5099), 0 TODO
 PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168460,7 +168746,7 @@ PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.StagePreloadStatus (system.go:5117), 0 TODO
+// Select.StagePreloadStatus (system.go:5112), 0 TODO
 PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168494,7 +168780,7 @@ PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.AllPreloadsReady (system.go:5130), 0 TODO
+// Select.AllPreloadsReady (system.go:5125), 0 TODO
 bool Select_AllPreloadsReady(Select* s) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168560,7 +168846,7 @@ bool Select_AllPreloadsReady(Select* s) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.preloadWorkerLoop (system.go:5152), 0 TODO
+// Select.preloadWorkerLoop (system.go:5147), 0 TODO
 void Select_preloadWorkerLoop(Select* s) {
     Select_initPreloadSync(s);
     {
@@ -168641,7 +168927,7 @@ void Select_preloadWorkerLoop(Select* s) {
     }
 }
 
-// Select.preloadCharAssets (system.go:5221), 0 TODO
+// Select.preloadCharAssets (system.go:5216), 0 TODO
 GoIface Select_preloadCharAssets(Select* s, int ref) {
     Select* *s__h = go_box(Select*, s);
     if ((ref < 0) || (ref >= (*s__h)->charlist.len)) {
@@ -168665,7 +168951,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
     if (!go_streq((*sc__h).preloadAnim, GOSTR(""))) {
         GoString *animPath__h = go_box(GoString, (*sc__h).preloadAnim);
         {
-            GoIface _t4 = fn_LoadFile((&(*animPath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 1, (*sc__h).def), GOSTR(""), ((GoFunc){(void *)lambda_1820, go_box(Env_lambda_1820, ((Env_lambda_1820){s__h, sc__h, localAnims__h, listSpr__h, tempSff__h}))}));
+            GoIface _t4 = fn_LoadFile((&(*animPath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 1, (*sc__h).def), GOSTR(""), ((GoFunc){(void *)lambda_1822, go_box(Env_lambda_1822, ((Env_lambda_1822){s__h, sc__h, localAnims__h, listSpr__h, tempSff__h}))}));
             GoIface err = _t4;
             if (err.type != 0) {
                 return err;
@@ -168677,7 +168963,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
         GoString *spritePath__h = go_box(GoString, (*sc__h).preloadSprite);
         Slice_i32 *selPal__h = go_box(Slice_i32, {0});
         {
-            GoIface _t5 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h).def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1821, go_box(Env_lambda_1821, ((Env_lambda_1821){listSpr__h, localSff__h, selPal__h}))}));
+            GoIface _t5 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h).def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1823, go_box(Env_lambda_1823, ((Env_lambda_1823){listSpr__h, localSff__h, selPal__h}))}));
             GoIface err = _t5;
             if (err.type != 0) {
                 return err;
@@ -168768,7 +169054,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.preloadStageAssets (system.go:5333), 0 TODO
+// Select.preloadStageAssets (system.go:5328), 0 TODO
 GoIface Select_preloadStageAssets(Select* s, int ref) {
     if ((ref <= 0) || (ref > s->stagelist.len)) {
         return (GoIface){0};
@@ -168777,7 +169063,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     GoString *defText__h = go_box(GoString, GOSTR(""));
     GoString *defPath__h = go_box(GoString, ss.def);
     {
-        GoIface _t1 = fn_LoadFile((&(*defPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_1822, go_box(Env_lambda_1822, ((Env_lambda_1822){defText__h}))}));
+        GoIface _t1 = fn_LoadFile((&(*defPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_1824, go_box(Env_lambda_1824, ((Env_lambda_1824){defText__h}))}));
         GoIface err = _t1;
         if (err.type != 0) {
             return err;
@@ -168822,7 +169108,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     if (!go_streq(ss.preloadSprite, GOSTR(""))) {
         GoString *spritePath__h = go_box(GoString, ss.preloadSprite);
         {
-            GoIface _t11 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, ss.def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1823, go_box(Env_lambda_1823, ((Env_lambda_1823){listSpr__h, localSff__h}))}));
+            GoIface _t11 = fn_LoadFile((&(*spritePath__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, ss.def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1825, go_box(Env_lambda_1825, ((Env_lambda_1825){listSpr__h, localSff__h}))}));
             GoIface err = _t11;
             if (err.type != 0) {
                 return err;
@@ -168849,7 +169135,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.GetCharNo (system.go:5400), 0 TODO
+// Select.GetCharNo (system.go:5395), 0 TODO
 int Select_GetCharNo(Select* s, int i) {
     int n = i;
     if (s->charlist.len > 0) {
@@ -168861,7 +169147,7 @@ int Select_GetCharNo(Select* s, int i) {
     return n;
 }
 
-// Select.GetChar (system.go:5411), 0 TODO
+// Select.GetChar (system.go:5406), 0 TODO
 SelectChar* Select_GetChar(Select* s, int i) {
     if (s->charlist.len == 0) {
         return NULL;
@@ -168870,7 +169156,7 @@ SelectChar* Select_GetChar(Select* s, int i) {
     return (&s->charlist.p[n]);
 }
 
-// Select.ValidatePalette (system.go:5420), 0 TODO
+// Select.ValidatePalette (system.go:5415), 0 TODO
 int Select_ValidatePalette(Select* s, int charRef, int requested) {
     if ((charRef < 0) || (charRef >= s->charlist.len)) {
         return 1;
@@ -168902,14 +169188,14 @@ int Select_ValidatePalette(Select* s, int charRef, int requested) {
     return ((int)sc->pal.p[0]);
 }
 
-// Select.SelectStage (system.go:5444), 0 TODO
+// Select.SelectStage (system.go:5439), 0 TODO
 void Select_SelectStage(Select* s, int n) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selectedStageNo = n;
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// Select.GetStage (system.go:5450), 0 TODO
+// Select.GetStage (system.go:5445), 0 TODO
 SelectStage* Select_GetStage(Select* s, int n) {
     if (s->stagelist.len == 0) {
         return NULL;
@@ -168921,7 +169207,7 @@ SelectStage* Select_GetStage(Select* s, int n) {
     return (&s->stagelist.p[(n - 1)]);
 }
 
-// getDefaultDefPathInZip (system.go:5461), 0 TODO
+// getDefaultDefPathInZip (system.go:5456), 0 TODO
 Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     GoString path1 = {0};
     GoString path2 = {0};
@@ -168932,7 +169218,7 @@ Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     return (Ret_GoString__GoString){path1, path2};
 }
 
-// Select.AddChar (system.go:5468), 0 TODO
+// Select.AddChar (system.go:5463), 0 TODO
 SelectChar* Select_AddChar(Select* s, GoString def) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -168970,7 +169256,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
             return _t5;
         }
     }
-    GoFunc useDummy = ((GoFunc){(void *)lambda_1824, &(Env_lambda_1824){sc__h, defPathFromSelect__h}});
+    GoFunc useDummy = ((GoFunc){(void *)lambda_1826, &(Env_lambda_1826){sc__h, defPathFromSelect__h}});
     if (false && strings_ContainsAny((*defPathFromSelect__h), GOSTR("<>"))) {
         (*sc__h)->name = GOSTR("dummyslot");
         {
@@ -168979,7 +169265,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
             return _t6;
         }
     }
-    _df7_f = ((GoFunc){(void *)lambda_1825, go_box(Env_lambda_1825, ((Env_lambda_1825){tnow__h, defPathFromSelect__h}))});
+    _df7_f = ((GoFunc){(void *)lambda_1827, go_box(Env_lambda_1827, ((Env_lambda_1827){tnow__h, defPathFromSelect__h}))});
     _df7 = true;
     GoString finalDefPath = (GoString){0};
     bool isZipChar = strings_HasSuffix(strings_ToLower((*defPathFromSelect__h)), GOSTR(".zip"));
@@ -169230,7 +169516,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
             _cont29:;
         }
     }
-    fn_LoadFile((&(*cns_orig__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h)->def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1826, go_box(Env_lambda_1826, ((Env_lambda_1826){sc__h}))}));
+    fn_LoadFile((&(*cns_orig__h)), GO_SLICE_LIT(Slice_GoString, GoString, 3, (*sc__h)->def, GOSTR(""), GOSTR("data/")), GOSTR(""), ((GoFunc){(void *)lambda_1828, go_box(Env_lambda_1828, ((Env_lambda_1828){sc__h}))}));
     if (anim_orig.len > 0) {
         (*sc__h)->preloadAnim = anim_orig;
     }
@@ -169266,7 +169552,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// Select.AddStage (system.go:5729), 0 TODO
+// Select.AddStage (system.go:5724), 0 TODO
 Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoString *def__h = go_box(GoString, def);
@@ -169274,7 +169560,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     if (setjmp(_pf.jb)) { if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); } if (go_panicking) go_panic_continue(); { Ret_SelectStagePtr__GoIface _z; memset(&_z, 0, sizeof _z); return _z; } }
     GoString *tstr__h = go_box(GoString, (GoString){0});
     GoOpaque /* time.Time */ *tnow__h = go_box(GoOpaque /* time.Time */, time_Now());
-    _df1_f = ((GoFunc){(void *)lambda_1827, go_box(Env_lambda_1827, ((Env_lambda_1827){tstr__h, tnow__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_1829, go_box(Env_lambda_1829, ((Env_lambda_1829){tstr__h, tnow__h}))});
     _df1 = true;
     GoString defPathFromSelect = filepath_ToSlash((*def__h));
     (*tstr__h) = fmt_Sprintf(GOSTR("Stage added: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, defPathFromSelect)})));
@@ -169343,7 +169629,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
             (*def__h) = go_strcat((*def__h), GOSTR(".def"));
         }
         {
-            GoIface err = fn_LoadFile((&(*def__h)), GO_SLICE_LIT(Slice_GoString, GoString, 2, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_1828, go_box(Env_lambda_1828, ((Env_lambda_1828){finalDefPath__h}))}));
+            GoIface err = fn_LoadFile((&(*def__h)), GO_SLICE_LIT(Slice_GoString, GoString, 2, GOSTR(""), GOSTR("data/")), GOSTR("stages/"), ((GoFunc){(void *)lambda_1830, go_box(Env_lambda_1830, ((Env_lambda_1830){finalDefPath__h}))}));
             if (err.type != 0) {
                 fn_LogMessage(GOSTR("Failed to add stage. File not found: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, (*def__h))})));
                 {
@@ -169358,7 +169644,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     Slice_GoString *lines__h = go_box(Slice_GoString, {0});
     GoIface *err__h = go_box(GoIface, {0});
     {
-        (*err__h) = fn_LoadFile((&(*finalDefPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_1829, go_box(Env_lambda_1829, ((Env_lambda_1829){lines__h, err__h}))}));
+        (*err__h) = fn_LoadFile((&(*finalDefPath__h)), (Slice_GoString){0}, GOSTR(""), ((GoFunc){(void *)lambda_1831, go_box(Env_lambda_1831, ((Env_lambda_1831){lines__h, err__h}))}));
         if ((*err__h).type != 0) {
             fn_LogMessage(GOSTR("Failed to add stage. File read error: %s: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, (*finalDefPath__h))}), (*err__h)));
             {
@@ -169432,7 +169718,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
                                         key = go_strcat(key, fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){2, go_box_a(int, ((*idx__h) + 1))}))));
                                     }
                                     {
-                                        GoIface err = IniSection_LoadFile(isec, key, GO_SLICE_LIT(Slice_GoString, GoString, 3, (*finalDefPath__h), GOSTR(""), GOSTR("data/")), GOSTR("chars/"), ((GoFunc){(void *)lambda_1830, go_box(Env_lambda_1830, ((Env_lambda_1830){ss__h, idx__h}))}));
+                                        GoIface err = IniSection_LoadFile(isec, key, GO_SLICE_LIT(Slice_GoString, GoString, 3, (*finalDefPath__h), GOSTR(""), GOSTR("data/")), GOSTR("chars/"), ((GoFunc){(void *)lambda_1832, go_box(Env_lambda_1832, ((Env_lambda_1832){ss__h, idx__h}))}));
                                         if (err.type != 0) {
                                             continue;
                                         }
@@ -169505,7 +169791,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.AddSelectedChar (system.go:5910), 0 TODO
+// Select.AddSelectedChar (system.go:5905), 0 TODO
 bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     int _t1 = 0;
     int _t2 = Select_GetCharNo(s, cn);
@@ -169536,7 +169822,7 @@ bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     return true;
 }
 
-// Select.ClearSelected (system.go:5935), 0 TODO
+// Select.ClearSelected (system.go:5930), 0 TODO
 void Select_ClearSelected(Select* s) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selected = (Arr2_Slice_Arr2_int){{}};
@@ -169546,21 +169832,21 @@ void Select_ClearSelected(Select* s) {
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// newLoader (system.go:5965), 0 TODO
+// newLoader (system.go:5960), 0 TODO
 Loader* fn_newLoader(void) {
     return go_box(Loader, (Loader){.state = 0, .loadExit = go_chan_make(sizeof(LoaderState), 1)});
 }
 
-// Loader.requestCancel (system.go:5969), 0 TODO
+// Loader.requestCancel (system.go:5964), 0 TODO
 void Loader_requestCancel(Loader* l) {
     Loader* *l__h = go_box(Loader*, l);
     if ((*l__h)->cancelCh == NULL) {
         return;
     }
-    sync_Once_Do(&(*l__h)->cancelOnce, ((GoFunc){(void *)lambda_1831, go_box(Env_lambda_1831, ((Env_lambda_1831){l__h}))}));
+    sync_Once_Do(&(*l__h)->cancelOnce, ((GoFunc){(void *)lambda_1833, go_box(Env_lambda_1833, ((Env_lambda_1833){l__h}))}));
 }
 
-// Loader.cancelRequested (system.go:5976), 0 TODO
+// Loader.cancelRequested (system.go:5971), 0 TODO
 bool Loader_cancelRequested(Loader* l) {
     if (l->cancelCh == NULL) {
         return false;
@@ -169580,12 +169866,12 @@ bool Loader_cancelRequested(Loader* l) {
     }
 }
 
-// System.turnsPreloadActive (system.go:5998), 0 TODO
+// System.turnsPreloadActive (system.go:5993), 0 TODO
 bool System_turnsPreloadActive(System* s) {
     return (s->cfg.Config.TurnsLoading && (((s->turnsPreloadMember.v[0] >= 0) || (s->turnsPreloadMember.v[1] >= 0))));
 }
 
-// System.startNextTurnsPreload (system.go:6002), 0 TODO
+// System.startNextTurnsPreload (system.go:5997), 0 TODO
 void System_startNextTurnsPreload(System* s) {
     if (((!s->cfg.Config.TurnsLoading) || (s->loader.state == 1)) || (s->loader.state == 3)) {
         return;
@@ -169641,7 +169927,7 @@ void System_startNextTurnsPreload(System* s) {
     }
 }
 
-// System.finishTurnsPreloadForRollback (system.go:6046), 0 TODO
+// System.finishTurnsPreloadForRollback (system.go:6041), 0 TODO
 bool System_finishTurnsPreloadForRollback(System* s) {
     if (!System_turnsPreloadActive(s)) {
         return true;
@@ -169674,7 +169960,7 @@ bool System_finishTurnsPreloadForRollback(System* s) {
     return true;
 }
 
-// System.remapCharSlotRefs (system.go:6072), 0 TODO
+// System.remapCharSlotRefs (system.go:6067), 0 TODO
 void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int newSlot) {
     int oldCPU = (oldSlot ^ -1);
     int newCPU = (newSlot ^ -1);
@@ -169715,7 +170001,7 @@ void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int n
     }
 }
 
-// System.rebindCgiStateOwners (system.go:6104), 0 TODO
+// System.rebindCgiStateOwners (system.go:6099), 0 TODO
 void System_rebindCgiStateOwners(System* s, int pn) {
     if (((pn < 0) || (pn >= 12)) || (s->cgi.v[pn].states.m == 0)) {
         return;
@@ -169744,7 +170030,7 @@ void System_rebindCgiStateOwners(System* s, int pn) {
     }
 }
 
-// System.removePlayerFromCharList (system.go:6123), 0 TODO
+// System.removePlayerFromCharList (system.go:6118), 0 TODO
 void System_removePlayerFromCharList(System* s, int pn) {
     {
         for (; 1; ) {
@@ -169769,7 +170055,7 @@ void System_removePlayerFromCharList(System* s, int pn) {
     }
 }
 
-// System.getPreloadedCharAndCgi (system.go:6140), 0 TODO
+// System.getPreloadedCharAndCgi (system.go:6135), 0 TODO
 Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -169787,7 +170073,7 @@ Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.setPreloadedChar (system.go:6146), 0 TODO
+// System.setPreloadedChar (system.go:6141), 0 TODO
 void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -169801,7 +170087,7 @@ void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.clearPreloadedChars (system.go:6153), 0 TODO
+// System.clearPreloadedChars (system.go:6148), 0 TODO
 void System_clearPreloadedChars(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -169815,7 +170101,7 @@ void System_clearPreloadedChars(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.activateTurnsSlot (system.go:6160), 0 TODO
+// System.activateTurnsSlot (system.go:6155), 0 TODO
 void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     int team = (slot & 1);
     {
@@ -169843,7 +170129,7 @@ void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     }
 }
 
-// System.activateNextTurnsFighters (system.go:6185), 0 TODO
+// System.activateNextTurnsFighters (system.go:6180), 0 TODO
 void System_activateNextTurnsFighters(System* s) {
     {
         int team = 0;
@@ -169900,7 +170186,7 @@ void System_activateNextTurnsFighters(System* s) {
     }
 }
 
-// Loader.loadCharacter (system.go:6237), 0 TODO
+// Loader.loadCharacter (system.go:6232), 0 TODO
 int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     volatile bool _df19 = false; volatile GoFunc _df19_f; volatile bool _df26 = false; volatile GoFunc _df26_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -170078,7 +170364,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     }
     GoString *tstr__h = go_box(GoString, (GoString){0});
     GoOpaque /* time.Time */ *tnow__h = go_box(GoOpaque /* time.Time */, time_Now());
-    _df19_f = ((GoFunc){(void *)lambda_1832, go_box(Env_lambda_1832, ((Env_lambda_1832){gi__h, tstr__h, tnow__h}))});
+    _df19_f = ((GoFunc){(void *)lambda_1834, go_box(Env_lambda_1834, ((Env_lambda_1834){gi__h, tstr__h, tnow__h}))});
     _df19 = true;
     GoString cdef = (GoString){0};
     int cdefOWnumber = 0;
@@ -170161,7 +170447,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     }
     if (!sameChar) {
         (*p__h)->stillLoading = true;
-        _df26_f = ((GoFunc){(void *)lambda_1833, go_box(Env_lambda_1833, ((Env_lambda_1833){p__h}))});
+        _df26_f = ((GoFunc){(void *)lambda_1835, go_box(Env_lambda_1835, ((Env_lambda_1835){p__h}))});
         _df26 = true;
         if ((Loader_cancelRequested(l) || (l->state == 4)) || g_sys.SystemStateVars_.gameEnd) {
             {
@@ -170293,7 +170579,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     if (_df19) { _df19 = false; ((void (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// Loader.prepareTurnsFaces (system.go:6578), 0 TODO
+// Loader.prepareTurnsFaces (system.go:6573), 0 TODO
 void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScreenName* nm, Slice_int teamChars, Slice_Arr2_int teamSel) {
     i32 off = 0;
     if (g_sys.sel.gameParams != NULL) {
@@ -170374,7 +170660,7 @@ void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScree
     }
 }
 
-// Loader.loadStage (system.go:6694), 0 TODO
+// Loader.loadStage (system.go:6689), 0 TODO
 bool Loader_loadStage(Loader* l) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -170390,7 +170676,7 @@ bool Loader_loadStage(Loader* l) {
         }
         GoString *tstr__h = go_box(GoString, (GoString){0});
         GoOpaque /* time.Time */ *tnow__h = go_box(GoOpaque /* time.Time */, time_Now());
-        _df2_f = ((GoFunc){(void *)lambda_1834, go_box(Env_lambda_1834, ((Env_lambda_1834){tstr__h, tnow__h}))});
+        _df2_f = ((GoFunc){(void *)lambda_1836, go_box(Env_lambda_1836, ((Env_lambda_1836){tstr__h, tnow__h}))});
         _df2 = true;
         sync_RWMutex_RLock(&g_sys.selMutex);
         int stageNo = g_sys.sel.selectedStageNo;
@@ -170445,13 +170731,13 @@ bool Loader_loadStage(Loader* l) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Loader.load (system.go:6760), 0 TODO
+// Loader.load (system.go:6755), 0 TODO
 void Loader_load(Loader* l) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     Loader* *l__h = go_box(Loader*, l);
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
     if (setjmp(_pf.jb)) { if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); } if (go_panicking) go_panic_continue(); return; }
-    _df1_f = ((GoFunc){(void *)lambda_1835, go_box(Env_lambda_1835, ((Env_lambda_1835){l__h}))});
+    _df1_f = ((GoFunc){(void *)lambda_1837, go_box(Env_lambda_1837, ((Env_lambda_1837){l__h}))});
     _df1 = true;
     bool stagedTurns = System_turnsPreloadActive(&g_sys);
     if (!stagedTurns) {
@@ -170512,7 +170798,7 @@ void Loader_load(Loader* l) {
             }
         }
     }
-    GoFunc allCharDone = ((GoFunc){(void *)lambda_1836, &(Env_lambda_1836){charDone__h}});
+    GoFunc allCharDone = ((GoFunc){(void *)lambda_1838, &(Env_lambda_1838){charDone__h}});
     {
         for (; (!stageDone) || (!((bool (*)(void *))(allCharDone).fn)((allCharDone).env)); ) {
             if ((Loader_cancelRequested((*l__h)) || ((*l__h)->state == 4)) || g_sys.SystemStateVars_.gameEnd) {
@@ -170647,7 +170933,7 @@ void Loader_load(Loader* l) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Loader.reset (system.go:6913), 0 TODO
+// Loader.reset (system.go:6908), 0 TODO
 void Loader_reset(Loader* l) {
     {
         LoaderState _t1 = l->state;
@@ -170690,13 +170976,13 @@ void Loader_reset(Loader* l) {
     }
 }
 
-// Loader.retryAfterError (system.go:6951), 0 TODO
+// Loader.retryAfterError (system.go:6946), 0 TODO
 void Loader_retryAfterError(Loader* l) {
     ({ LoaderState _t1; go_chan_recv(l->loadExit, &_t1); _t1; });
     Loader_reset(l);
 }
 
-// Loader.runTread (system.go:6956), 0 TODO
+// Loader.runTread (system.go:6951), 0 TODO
 bool Loader_runTread(Loader* l) {
     Loader* *l__h = go_box(Loader*, l);
     if ((*l__h)->state != 0) {
@@ -170705,16 +170991,16 @@ bool Loader_runTread(Loader* l) {
     (*l__h)->cancelCh = go_chan_make(sizeof(Anon_fa4d6974), 0);
     (*l__h)->cancelOnce = ((GoOpaque){{0}});
     (*l__h)->state = 1;
-    fn_SafeGo(((GoFunc){(void *)lambda_1837, go_box(Env_lambda_1837, ((Env_lambda_1837){l__h}))}));
+    fn_SafeGo(((GoFunc){(void *)lambda_1839, go_box(Env_lambda_1839, ((Env_lambda_1839){l__h}))}));
     return true;
 }
 
-// EnvShake.clear (system.go:6983), 0 TODO
+// EnvShake.clear (system.go:6978), 0 TODO
 void EnvShake_clear(EnvShake* es) {
     (*es) = (EnvShake){.freq = 0x1.ep+05f, .phase = ((f32)math_NaN()), .ampl = -0x1p+02f, .mul = 0x1p+00f};
 }
 
-// EnvShake.restart (system.go:6992), 0 TODO
+// EnvShake.restart (system.go:6987), 0 TODO
 void EnvShake_restart(EnvShake* es) {
     if (es->time <= 0) {
         EnvShake_clear(es);
@@ -170723,7 +171009,7 @@ void EnvShake_restart(EnvShake* es) {
     es->curTime = es->time;
 }
 
-// EnvShake.setDefaultPhase (system.go:7000), 0 TODO
+// EnvShake.setDefaultPhase (system.go:6995), 0 TODO
 void EnvShake_setDefaultPhase(EnvShake* es) {
     if (math_IsNaN(((f64)es->phase))) {
         if (es->freq >= 0x1.68p+06f) {
@@ -170734,7 +171020,7 @@ void EnvShake_setDefaultPhase(EnvShake* es) {
     }
 }
 
-// EnvShake.update (system.go:7010), 0 TODO
+// EnvShake.update (system.go:7005), 0 TODO
 void EnvShake_update(EnvShake* es) {
     if (es->curTime <= 0) {
         if (es->time > 0) {
@@ -170769,12 +171055,12 @@ void EnvShake_update(EnvShake* es) {
     es->curTime--;
 }
 
-// EnvShake.getOffset (system.go:7054), 0 TODO
+// EnvShake.getOffset (system.go:7049), 0 TODO
 Arr2_f32 EnvShake_getOffset(EnvShake* es) {
     return es->curOffset;
 }
 
-// ZoomEffect.reset (system.go:7074), 0 TODO
+// ZoomEffect.reset (system.go:7069), 0 TODO
 void ZoomEffect_reset(ZoomEffect* z) {
     z->active = false;
     z->time = 0;
@@ -170791,7 +171077,7 @@ void ZoomEffect_reset(ZoomEffect* z) {
     z->resultValid = false;
 }
 
-// ZoomEffect.update (system.go:7091), 0 TODO
+// ZoomEffect.update (system.go:7086), 0 TODO
 void ZoomEffect_update(ZoomEffect* z) {
     if (!z->active) {
         return;
@@ -170838,7 +171124,7 @@ void ZoomEffect_update(ZoomEffect* z) {
     }
 }
 
-// ZoomEffect.computeCamera (system.go:7151), 0 TODO
+// ZoomEffect.computeCamera (system.go:7146), 0 TODO
 Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl) {
     f32 dx = {0};
     f32 dy = {0};
@@ -170894,7 +171180,7 @@ Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl)
     return (Ret_f32__f32__f32){dx, dy, dscl};
 }
 
-// System.saveCharVars (system.go:7222), 0 TODO
+// System.saveCharVars (system.go:7217), 0 TODO
 void System_saveCharVars(System* s, int pn) {
     if (s->chars.v[pn].len == 0) {
         return;
@@ -170931,7 +171217,7 @@ void System_saveCharVars(System* s, int pn) {
     Map_int_CharVarBackup_set(&s->charVarsBackup, pn, bk);
 }
 
-// System.restoreCharVars (system.go:7247), 0 TODO
+// System.restoreCharVars (system.go:7242), 0 TODO
 void System_restoreCharVars(System* s, Char* c) {
     bool _t1; CharVarBackup _t2 = Map_int_CharVarBackup_get(&s->charVarsBackup, c->playerNo, &_t1);
     CharVarBackup bk = _t2;
@@ -170971,7 +171257,7 @@ void System_restoreCharVars(System* s, Char* c) {
     Map_int_CharVarBackup_delete(&s->charVarsBackup, c->playerNo);
 }
 
-// System.loadCustomShader (system.go:7270), 0 TODO
+// System.loadCustomShader (system.go:7265), 0 TODO
 void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString name, GoString filename, Slice_u8 data) {
     Slice_u8 *data__h = go_box(Slice_u8, data);
     GoString *key__h = go_box(GoString, filepath_ToSlash(filepath_Clean(filename)));
@@ -170981,10 +171267,10 @@ void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString 
     if (reuse) {
         return;
     }
-    { GoFunc _t1 = ((GoFunc){(void *)lambda_1838, go_box(Env_lambda_1838, ((Env_lambda_1838){data__h, key__h}))}); go_chan_send(s->mainThreadTask, &_t1); }
+    { GoFunc _t1 = ((GoFunc){(void *)lambda_1840, go_box(Env_lambda_1840, ((Env_lambda_1840){data__h, key__h}))}); go_chan_send(s->mainThreadTask, &_t1); }
 }
 
-// System.loadCustomShaderFile (system.go:7286), 0 TODO
+// System.loadCustomShaderFile (system.go:7281), 0 TODO
 void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoString name, GoString path, Slice_GoString dirs) {
     System* *s__h = go_box(System*, s);
     Map_GoString_GoString *shaders__h = go_box(Map_GoString_GoString, shaders);
@@ -170993,10 +171279,10 @@ void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoStr
     if (strings_HasPrefix(iface_GetName_319077b5(g_gfx), GOSTR("Vulkan")) && (!strings_HasSuffix(strings_ToLower((*path__h)), GOSTR(".spv")))) {
         (*path__h) = go_strcat((*path__h), GOSTR(".spv"));
     }
-    fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1839, go_box(Env_lambda_1839, ((Env_lambda_1839){s__h, shaders__h, name__h}))}));
+    fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1841, go_box(Env_lambda_1841, ((Env_lambda_1841){s__h, shaders__h, name__h}))}));
 }
 
-// System.loadCommonShaders (system.go:7308), 0 TODO
+// System.loadCommonShaders (system.go:7303), 0 TODO
 GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice_GoString dirs) {
     System* *s__h = go_box(System*, s);
     Map_GoString_GoString *shaders__h = go_box(Map_GoString_GoString, shaders);
@@ -171009,7 +171295,7 @@ GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice
                 for (int _t4 = 0; _t4 < _t5.len; _t4++) {
                     GoString *v__h = go_box(GoString, _t5.p[_t4]);
                     {
-                        GoIface _t7 = fn_LoadFile((&(*v__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1840, go_box(Env_lambda_1840, ((Env_lambda_1840){s__h, shaders__h}))}));
+                        GoIface _t7 = fn_LoadFile((&(*v__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1842, go_box(Env_lambda_1842, ((Env_lambda_1842){s__h, shaders__h}))}));
                         GoIface err = _t7;
                         if (err.type != 0) {
                             return err;
@@ -171024,7 +171310,7 @@ GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice
     return (GoIface){0};
 }
 
-// System.isCustomShaderActive (system.go:7338), 0 TODO
+// System.isCustomShaderActive (system.go:7333), 0 TODO
 bool System_isCustomShaderActive(System* s, GoString key) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -171108,7 +171394,7 @@ bool System_isCustomShaderActive(System* s, GoString key) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// System.resolveCharShader (system.go:7372), 0 TODO
+// System.resolveCharShader (system.go:7367), 0 TODO
 Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     if (go_streq(name, GOSTR(""))) {
         return (Ret_GoString__bool){GOSTR(""), true};
@@ -171122,14 +171408,14 @@ Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     return (Ret_GoString__bool){key, ok};
 }
 
-// System.cleanCustomShaders (system.go:7383), 0 TODO
+// System.cleanCustomShaders (system.go:7378), 0 TODO
 void System_cleanCustomShaders(System* s) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&s->loadedCustomShaders);
         while (gomap_next(&_t2)) {
             GoString sName = *(GoString *)_t2.key;
             if (!System_isCustomShaderActive(s, sName)) {
-                { GoFunc _t4 = ((GoFunc (*)(void *, GoString))(((GoFunc){(void *)lambda_1841, &(Env_lambda_1841){0}})).fn)((((GoFunc){(void *)lambda_1841, &(Env_lambda_1841){0}})).env, sName); go_chan_send(s->mainThreadTask, &_t4); }
+                { GoFunc _t4 = ((GoFunc (*)(void *, GoString))(((GoFunc){(void *)lambda_1843, &(Env_lambda_1843){0}})).fn)((((GoFunc){(void *)lambda_1843, &(Env_lambda_1843){0}})).env, sName); go_chan_send(s->mainThreadTask, &_t4); }
                 Map_GoString_bool_delete(&s->loadedCustomShaders, sName);
             }
             _cont3:;
@@ -171137,12 +171423,12 @@ void System_cleanCustomShaders(System* s) {
     }
 }
 
-// System.shouldHideWithBars (system.go:7397), 0 TODO
+// System.shouldHideWithBars (system.go:7392), 0 TODO
 bool System_shouldHideWithBars(System* s) {
     return (((!FightScreen_visible(&s->fightScreen)) || System_gsf(s, 8U)) || (!s->fightScreen.bars));
 }
 
-// pal32ToBytes (system.go:7401), 0 TODO
+// pal32ToBytes (system.go:7396), 0 TODO
 Slice_u8 fn_pal32ToBytes(Slice_u32 pal) {
     return ((Slice_u8){(((u8*)((void*)(&pal.p[0])))), (int)((pal.len * 4)), (int)((pal.len * 4))});
 }
@@ -171942,7 +172228,7 @@ int util2_OrderedMap_Len_int_u32(util2_OrderedMap_int_u32* om) {
 // util2_OrderedMap_Greatest_int_u32 (generic instance), 0 TODO
 util2_KeyValuePair_int_u32 util2_OrderedMap_Greatest_int_u32(util2_OrderedMap_int_u32* om) {
     util2_OrderedMap_int_u32* *om__h = go_box(util2_OrderedMap_int_u32*, om);
-    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*om__h)->keys), sizeof(int), ((GoFunc){(void *)lambda_1844, go_box(Env_lambda_1844, ((Env_lambda_1844){om__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_int, (*om__h)->keys), sizeof(int), ((GoFunc){(void *)lambda_1846, go_box(Env_lambda_1846, ((Env_lambda_1846){om__h}))}));
     return (util2_KeyValuePair_int_u32){.Key = (*om__h)->keys.p[0], .Value = Map_int_u32_get(&(*om__h)->m, (*om__h)->keys.p[0], NULL)};
 }
 
@@ -172226,7 +172512,7 @@ Slice_GoString fn_SortedKeys_Slice_GoString(Map_GoString_Slice_GoString m) {
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1846, go_box(Env_lambda_1846, ((Env_lambda_1846){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1848, go_box(Env_lambda_1848, ((Env_lambda_1848){keys__h}))}));
     return (*keys__h);
 }
 
@@ -172444,7 +172730,7 @@ Slice_GoString fn_SortedKeys_GoString(Map_GoString_GoString m) {
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1848, go_box(Env_lambda_1848, ((Env_lambda_1848){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1850, go_box(Env_lambda_1850, ((Env_lambda_1850){keys__h}))}));
     return (*keys__h);
 }
 
@@ -172546,7 +172832,7 @@ Slice_GoString fn_SortedKeys_ScenePropertiesPtr(Map_GoString_ScenePropertiesPtr 
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1850, go_box(Env_lambda_1850, ((Env_lambda_1850){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1852, go_box(Env_lambda_1852, ((Env_lambda_1852){keys__h}))}));
     return (*keys__h);
 }
 
@@ -172561,7 +172847,7 @@ Slice_GoString fn_SortedKeys_LayerPropertiesPtr(Map_GoString_LayerPropertiesPtr 
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1852, go_box(Env_lambda_1852, ((Env_lambda_1852){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1854, go_box(Env_lambda_1854, ((Env_lambda_1854){keys__h}))}));
     return (*keys__h);
 }
 
@@ -172576,7 +172862,7 @@ Slice_GoString fn_SortedKeys_SoundPropertiesPtr(Map_GoString_SoundPropertiesPtr 
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1854, go_box(Env_lambda_1854, ((Env_lambda_1854){keys__h}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_GoString, (*keys__h)), sizeof(GoString), ((GoFunc){(void *)lambda_1856, go_box(Env_lambda_1856, ((Env_lambda_1856){keys__h}))}));
     return (*keys__h);
 }
 
@@ -172744,12 +173030,15 @@ int g_cvfDebugCount;
 bool g_cvfDebugOn;
 int g_cvfFrames;
 bool g_cvfHeadless;
+int g_cvfHeadlessFps;
+GoOpaque /* time.Time */ g_cvfHeadlessNext;
 Anon_b2116398 g_cvfLazy;
 Arr20_u64 g_cvfMPi4;
 int g_cvfMaxFrames;
 Anon_47a7d9c0 g_cvfNameAsk;
 GoOpaque /* regexp.Regexp */* g_cvfNameRe;
 cvfNearbyState* g_cvfNearby;
+int g_cvfNetInputSeed;
 cvfOnlineState* g_cvfOnline;
 cvfRulesT g_cvfRules;
 Arr2_i32 g_cvfScreen;
@@ -172848,6 +173137,8 @@ GoString g_spriteLibShader;
 GoOpaque /* time.Time */ g_lua_startedAt;
 Slice_u8 g_stateDumpBuf;
 GoOpaque /* os.File */* g_stateDumpF;
+Map_i32_Slice_u8 g_stateDumpNet;
+int g_stateDumpNetResim;
 int g_stateDumpOn;
 int g_stateDumpTick;
 GoOpaque /* bufio.Writer */* g_stateDumpW;
@@ -183929,7 +184220,7 @@ void ik_init_globals(void) {
     g_vitaStateHashOn = -1;
     g_attackTypeStrings = (Arr9_Anon_f8c1b65b){{(Anon_f8c1b65b){64, GOSTR("NA")}, (Anon_f8c1b65b){128, GOSTR("NT")}, (Anon_f8c1b65b){256, GOSTR("NP")}, (Anon_f8c1b65b){512, GOSTR("SA")}, (Anon_f8c1b65b){1024, GOSTR("ST")}, (Anon_f8c1b65b){2048, GOSTR("SP")}, (Anon_f8c1b65b){4096, GOSTR("HA")}, (Anon_f8c1b65b){8192, GOSTR("HT")}, (Anon_f8c1b65b){16384, GOSTR("HP")}}};
     g_triggerMap = ({ Map_GoString_int _m = Map_GoString_int_make(280); Map_GoString_int_set(&_m, GOSTR("player"), 0); Map_GoString_int_set(&_m, GOSTR("parent"), 0); Map_GoString_int_set(&_m, GOSTR("root"), 0); Map_GoString_int_set(&_m, GOSTR("helper"), 0); Map_GoString_int_set(&_m, GOSTR("target"), 0); Map_GoString_int_set(&_m, GOSTR("partner"), 0); Map_GoString_int_set(&_m, GOSTR("enemy"), 0); Map_GoString_int_set(&_m, GOSTR("enemynear"), 0); Map_GoString_int_set(&_m, GOSTR("playerid"), 0); Map_GoString_int_set(&_m, GOSTR("playerindex"), 0); Map_GoString_int_set(&_m, GOSTR("p2"), 0); Map_GoString_int_set(&_m, GOSTR("stateowner"), 0); Map_GoString_int_set(&_m, GOSTR("helperindex"), 0); Map_GoString_int_set(&_m, GOSTR("abs"), 1); Map_GoString_int_set(&_m, GOSTR("acos"), 1); Map_GoString_int_set(&_m, GOSTR("ailevel"), 1); Map_GoString_int_set(&_m, GOSTR("alive"), 1); Map_GoString_int_set(&_m, GOSTR("anim"), 1); Map_GoString_int_set(&_m, GOSTR("animelem"), 1); Map_GoString_int_set(&_m, GOSTR("animelemno"), 1); Map_GoString_int_set(&_m, GOSTR("animelemtime"), 1); Map_GoString_int_set(&_m, GOSTR("animexist"), 1); Map_GoString_int_set(&_m, GOSTR("animtime"), 1); Map_GoString_int_set(&_m, GOSTR("asin"), 1); Map_GoString_int_set(&_m, GOSTR("atan"), 1); Map_GoString_int_set(&_m, GOSTR("authorname"), 1); Map_GoString_int_set(&_m, GOSTR("backedge"), 1); Map_GoString_int_set(&_m, GOSTR("backedgebodydist"), 1); Map_GoString_int_set(&_m, GOSTR("backedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("bottomedge"), 1); Map_GoString_int_set(&_m, GOSTR("botboundbodydist"), 1); Map_GoString_int_set(&_m, GOSTR("botbounddist"), 1); Map_GoString_int_set(&_m, GOSTR("camerapos"), 1); Map_GoString_int_set(&_m, GOSTR("camerazoom"), 1); Map_GoString_int_set(&_m, GOSTR("canrecover"), 1); Map_GoString_int_set(&_m, GOSTR("ceil"), 1); Map_GoString_int_set(&_m, GOSTR("command"), 1); Map_GoString_int_set(&_m, GOSTR("cond"), 1); Map_GoString_int_set(&_m, GOSTR("const"), 1); Map_GoString_int_set(&_m, GOSTR("const240p"), 1); Map_GoString_int_set(&_m, GOSTR("const480p"), 1); Map_GoString_int_set(&_m, GOSTR("const720p"), 1); Map_GoString_int_set(&_m, GOSTR("cos"), 1); Map_GoString_int_set(&_m, GOSTR("ctrl"), 1); Map_GoString_int_set(&_m, GOSTR("drawgame"), 1); Map_GoString_int_set(&_m, GOSTR("e"), 1); Map_GoString_int_set(&_m, GOSTR("exp"), 1); Map_GoString_int_set(&_m, GOSTR("facing"), 1); Map_GoString_int_set(&_m, GOSTR("floor"), 1); Map_GoString_int_set(&_m, GOSTR("frontedge"), 1); Map_GoString_int_set(&_m, GOSTR("frontedgebodydist"), 1); Map_GoString_int_set(&_m, GOSTR("frontedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("fvar"), 1); Map_GoString_int_set(&_m, GOSTR("gameheight"), 1); Map_GoString_int_set(&_m, GOSTR("gametime"), 1); Map_GoString_int_set(&_m, GOSTR("gamewidth"), 1); Map_GoString_int_set(&_m, GOSTR("gethitvar"), 1); Map_GoString_int_set(&_m, GOSTR("hitbyattr"), 1); Map_GoString_int_set(&_m, GOSTR("hitcount"), 1); Map_GoString_int_set(&_m, GOSTR("hitdefattr"), 1); Map_GoString_int_set(&_m, GOSTR("hitdefvar"), 1); Map_GoString_int_set(&_m, GOSTR("hitfall"), 1); Map_GoString_int_set(&_m, GOSTR("hitover"), 1); Map_GoString_int_set(&_m, GOSTR("hitpausetime"), 1); Map_GoString_int_set(&_m, GOSTR("hitshakeover"), 1); Map_GoString_int_set(&_m, GOSTR("hitvel"), 1); Map_GoString_int_set(&_m, GOSTR("id"), 1); Map_GoString_int_set(&_m, GOSTR("ifelse"), 1); Map_GoString_int_set(&_m, GOSTR("inguarddist"), 1); Map_GoString_int_set(&_m, GOSTR("ishelper"), 1); Map_GoString_int_set(&_m, GOSTR("ishometeam"), 1); Map_GoString_int_set(&_m, GOSTR("leftedge"), 1); Map_GoString_int_set(&_m, GOSTR("life"), 1); Map_GoString_int_set(&_m, GOSTR("lifemax"), 1); Map_GoString_int_set(&_m, GOSTR("ln"), 1); Map_GoString_int_set(&_m, GOSTR("log"), 1); Map_GoString_int_set(&_m, GOSTR("lose"), 1); Map_GoString_int_set(&_m, GOSTR("loseko"), 1); Map_GoString_int_set(&_m, GOSTR("losetime"), 1); Map_GoString_int_set(&_m, GOSTR("matchno"), 1); Map_GoString_int_set(&_m, GOSTR("matchover"), 1); Map_GoString_int_set(&_m, GOSTR("movecontact"), 1); Map_GoString_int_set(&_m, GOSTR("moveguarded"), 1); Map_GoString_int_set(&_m, GOSTR("movehit"), 1); Map_GoString_int_set(&_m, GOSTR("movereversed"), 1); Map_GoString_int_set(&_m, GOSTR("movetype"), 1); Map_GoString_int_set(&_m, GOSTR("name"), 1); Map_GoString_int_set(&_m, GOSTR("numenemy"), 1); Map_GoString_int_set(&_m, GOSTR("numexplod"), 1); Map_GoString_int_set(&_m, GOSTR("numhelper"), 1); Map_GoString_int_set(&_m, GOSTR("numpartner"), 1); Map_GoString_int_set(&_m, GOSTR("numproj"), 1); Map_GoString_int_set(&_m, GOSTR("numprojid"), 1); Map_GoString_int_set(&_m, GOSTR("numstagebg"), 1); Map_GoString_int_set(&_m, GOSTR("numtarget"), 1); Map_GoString_int_set(&_m, GOSTR("numtext"), 1); Map_GoString_int_set(&_m, GOSTR("p1name"), 1); Map_GoString_int_set(&_m, GOSTR("p2bodydist"), 1); Map_GoString_int_set(&_m, GOSTR("p2dist"), 1); Map_GoString_int_set(&_m, GOSTR("p2life"), 1); Map_GoString_int_set(&_m, GOSTR("p2movetype"), 1); Map_GoString_int_set(&_m, GOSTR("p2name"), 1); Map_GoString_int_set(&_m, GOSTR("p2stateno"), 1); Map_GoString_int_set(&_m, GOSTR("p2statetype"), 1); Map_GoString_int_set(&_m, GOSTR("p3name"), 1); Map_GoString_int_set(&_m, GOSTR("p4name"), 1); Map_GoString_int_set(&_m, GOSTR("palno"), 1); Map_GoString_int_set(&_m, GOSTR("parentdist"), 1); Map_GoString_int_set(&_m, GOSTR("parentexist"), 1); Map_GoString_int_set(&_m, GOSTR("pi"), 1); Map_GoString_int_set(&_m, GOSTR("playeridexist"), 1); Map_GoString_int_set(&_m, GOSTR("pos"), 1); Map_GoString_int_set(&_m, GOSTR("power"), 1); Map_GoString_int_set(&_m, GOSTR("powermax"), 1); Map_GoString_int_set(&_m, GOSTR("prevstateno"), 1); Map_GoString_int_set(&_m, GOSTR("projcanceltime"), 1); Map_GoString_int_set(&_m, GOSTR("projcontact"), 1); Map_GoString_int_set(&_m, GOSTR("projcontacttime"), 1); Map_GoString_int_set(&_m, GOSTR("projguarded"), 1); Map_GoString_int_set(&_m, GOSTR("projguardedtime"), 1); Map_GoString_int_set(&_m, GOSTR("projhit"), 1); Map_GoString_int_set(&_m, GOSTR("projhittime"), 1); Map_GoString_int_set(&_m, GOSTR("random"), 1); Map_GoString_int_set(&_m, GOSTR("rightedge"), 1); Map_GoString_int_set(&_m, GOSTR("rootdist"), 1); Map_GoString_int_set(&_m, GOSTR("roundno"), 1); Map_GoString_int_set(&_m, GOSTR("roundsexisted"), 1); Map_GoString_int_set(&_m, GOSTR("roundstate"), 1); Map_GoString_int_set(&_m, GOSTR("roundswon"), 1); Map_GoString_int_set(&_m, GOSTR("screenheight"), 1); Map_GoString_int_set(&_m, GOSTR("screenpos"), 1); Map_GoString_int_set(&_m, GOSTR("screenwidth"), 1); Map_GoString_int_set(&_m, GOSTR("selfanimexist"), 1); Map_GoString_int_set(&_m, GOSTR("sin"), 1); Map_GoString_int_set(&_m, GOSTR("stagebgvar"), 1); Map_GoString_int_set(&_m, GOSTR("stagevar"), 1); Map_GoString_int_set(&_m, GOSTR("stateno"), 1); Map_GoString_int_set(&_m, GOSTR("statetype"), 1); Map_GoString_int_set(&_m, GOSTR("sysfvar"), 1); Map_GoString_int_set(&_m, GOSTR("sysvar"), 1); Map_GoString_int_set(&_m, GOSTR("tan"), 1); Map_GoString_int_set(&_m, GOSTR("teammode"), 1); Map_GoString_int_set(&_m, GOSTR("teamside"), 1); Map_GoString_int_set(&_m, GOSTR("tickspersecond"), 1); Map_GoString_int_set(&_m, GOSTR("time"), 1); Map_GoString_int_set(&_m, GOSTR("timemod"), 1); Map_GoString_int_set(&_m, GOSTR("topedge"), 1); Map_GoString_int_set(&_m, GOSTR("topboundbodydist"), 1); Map_GoString_int_set(&_m, GOSTR("topbounddist"), 1); Map_GoString_int_set(&_m, GOSTR("uniqhitcount"), 1); Map_GoString_int_set(&_m, GOSTR("var"), 1); Map_GoString_int_set(&_m, GOSTR("vel"), 1); Map_GoString_int_set(&_m, GOSTR("win"), 1); Map_GoString_int_set(&_m, GOSTR("winko"), 1); Map_GoString_int_set(&_m, GOSTR("winperfect"), 1); Map_GoString_int_set(&_m, GOSTR("wintime"), 1); Map_GoString_int_set(&_m, GOSTR("ailevelf"), 1); Map_GoString_int_set(&_m, GOSTR("airjumpcount"), 1); Map_GoString_int_set(&_m, GOSTR("alpha"), 1); Map_GoString_int_set(&_m, GOSTR("analog"), 1); Map_GoString_int_set(&_m, GOSTR("angle"), 1); Map_GoString_int_set(&_m, GOSTR("animelemvar"), 1); Map_GoString_int_set(&_m, GOSTR("animlength"), 1); Map_GoString_int_set(&_m, GOSTR("animloopcount"), 1); Map_GoString_int_set(&_m, GOSTR("animplayerno"), 1); Map_GoString_int_set(&_m, GOSTR("animprefix"), 1); Map_GoString_int_set(&_m, GOSTR("atan2"), 1); Map_GoString_int_set(&_m, GOSTR("attack"), 1); Map_GoString_int_set(&_m, GOSTR("attackmul"), 1); Map_GoString_int_set(&_m, GOSTR("bgmvar"), 1); Map_GoString_int_set(&_m, GOSTR("clamp"), 1); Map_GoString_int_set(&_m, GOSTR("clsnoverlap"), 1); Map_GoString_int_set(&_m, GOSTR("clsnvar"), 1); Map_GoString_int_set(&_m, GOSTR("combocount"), 1); Map_GoString_int_set(&_m, GOSTR("consecutivewins"), 1); Map_GoString_int_set(&_m, GOSTR("const1080p"), 1); Map_GoString_int_set(&_m, GOSTR("decisiveround"), 1); Map_GoString_int_set(&_m, GOSTR("defence"), 1); Map_GoString_int_set(&_m, GOSTR("defencemul"), 1); Map_GoString_int_set(&_m, GOSTR("deg"), 1); Map_GoString_int_set(&_m, GOSTR("displayname"), 1); Map_GoString_int_set(&_m, GOSTR("dizzy"), 1); Map_GoString_int_set(&_m, GOSTR("dizzypoints"), 1); Map_GoString_int_set(&_m, GOSTR("dizzypointsmax"), 1); Map_GoString_int_set(&_m, GOSTR("envshakevar"), 1); Map_GoString_int_set(&_m, GOSTR("explodvar"), 1); Map_GoString_int_set(&_m, GOSTR("fightscreenstate"), 1); Map_GoString_int_set(&_m, GOSTR("fightscreenvar"), 1); Map_GoString_int_set(&_m, GOSTR("fighttime"), 1); Map_GoString_int_set(&_m, GOSTR("firstattack"), 1); Map_GoString_int_set(&_m, GOSTR("float"), 1); Map_GoString_int_set(&_m, GOSTR("gamemode"), 1); Map_GoString_int_set(&_m, GOSTR("gameoption"), 1); Map_GoString_int_set(&_m, GOSTR("gamevar"), 1); Map_GoString_int_set(&_m, GOSTR("groundangle"), 1); Map_GoString_int_set(&_m, GOSTR("guardbreak"), 1); Map_GoString_int_set(&_m, GOSTR("guardcount"), 1); Map_GoString_int_set(&_m, GOSTR("guardpoints"), 1); Map_GoString_int_set(&_m, GOSTR("guardpointsmax"), 1); Map_GoString_int_set(&_m, GOSTR("helperindexexist"), 1); Map_GoString_int_set(&_m, GOSTR("helpername"), 1); Map_GoString_int_set(&_m, GOSTR("helpervar"), 1); Map_GoString_int_set(&_m, GOSTR("hitoverridden"), 1); Map_GoString_int_set(&_m, GOSTR("ikemenversion"), 1); Map_GoString_int_set(&_m, GOSTR("incustomanim"), 1); Map_GoString_int_set(&_m, GOSTR("incustomstate"), 1); Map_GoString_int_set(&_m, GOSTR("index"), 1); Map_GoString_int_set(&_m, GOSTR("inputtime"), 1); Map_GoString_int_set(&_m, GOSTR("inrunstate"), 1); Map_GoString_int_set(&_m, GOSTR("introstate"), 1); Map_GoString_int_set(&_m, GOSTR("isasserted"), 1); Map_GoString_int_set(&_m, GOSTR("ishost"), 1); Map_GoString_int_set(&_m, GOSTR("lastplayerid"), 1); Map_GoString_int_set(&_m, GOSTR("layerno"), 1); Map_GoString_int_set(&_m, GOSTR("lerp"), 1); Map_GoString_int_set(&_m, GOSTR("localcoord"), 1); Map_GoString_int_set(&_m, GOSTR("map"), 1); Map_GoString_int_set(&_m, GOSTR("max"), 1); Map_GoString_int_set(&_m, GOSTR("memberno"), 1); Map_GoString_int_set(&_m, GOSTR("min"), 1); Map_GoString_int_set(&_m, GOSTR("motifstate"), 1); Map_GoString_int_set(&_m, GOSTR("motifvar"), 1); Map_GoString_int_set(&_m, GOSTR("movecountered"), 1); Map_GoString_int_set(&_m, GOSTR("movehitvar"), 1); Map_GoString_int_set(&_m, GOSTR("mugenversion"), 1); Map_GoString_int_set(&_m, GOSTR("numplayer"), 1); Map_GoString_int_set(&_m, GOSTR("offset"), 1); Map_GoString_int_set(&_m, GOSTR("outrostate"), 1); Map_GoString_int_set(&_m, GOSTR("p5name"), 1); Map_GoString_int_set(&_m, GOSTR("p6name"), 1); Map_GoString_int_set(&_m, GOSTR("p7name"), 1); Map_GoString_int_set(&_m, GOSTR("p8name"), 1); Map_GoString_int_set(&_m, GOSTR("palfxvar"), 1); Map_GoString_int_set(&_m, GOSTR("pausetime"), 1); Map_GoString_int_set(&_m, GOSTR("physics"), 1); Map_GoString_int_set(&_m, GOSTR("playerindexexist"), 1); Map_GoString_int_set(&_m, GOSTR("playerno"), 1); Map_GoString_int_set(&_m, GOSTR("playernoexist"), 1); Map_GoString_int_set(&_m, GOSTR("prevanim"), 1); Map_GoString_int_set(&_m, GOSTR("prevmovetype"), 1); Map_GoString_int_set(&_m, GOSTR("prevstatetype"), 1); Map_GoString_int_set(&_m, GOSTR("projclsnoverlap"), 1); Map_GoString_int_set(&_m, GOSTR("projvar"), 1); Map_GoString_int_set(&_m, GOSTR("rad"), 1); Map_GoString_int_set(&_m, GOSTR("randomrange"), 1); Map_GoString_int_set(&_m, GOSTR("receiveddamage"), 1); Map_GoString_int_set(&_m, GOSTR("receivedhits"), 1); Map_GoString_int_set(&_m, GOSTR("redlife"), 1); Map_GoString_int_set(&_m, GOSTR("reversaldefattr"), 1); Map_GoString_int_set(&_m, GOSTR("round"), 1); Map_GoString_int_set(&_m, GOSTR("roundtime"), 1); Map_GoString_int_set(&_m, GOSTR("runorder"), 1); Map_GoString_int_set(&_m, GOSTR("scale"), 1); Map_GoString_int_set(&_m, GOSTR("score"), 1); Map_GoString_int_set(&_m, GOSTR("scoretotal"), 1); Map_GoString_int_set(&_m, GOSTR("selfcommand"), 1); Map_GoString_int_set(&_m, GOSTR("selfstatenoexist"), 1); Map_GoString_int_set(&_m, GOSTR("shader"), 1); Map_GoString_int_set(&_m, GOSTR("sign"), 1); Map_GoString_int_set(&_m, GOSTR("soundvar"), 1); Map_GoString_int_set(&_m, GOSTR("spriteplayerno"), 1); Map_GoString_int_set(&_m, GOSTR("spritevar"), 1); Map_GoString_int_set(&_m, GOSTR("sprpriority"), 1); Map_GoString_int_set(&_m, GOSTR("stagebackedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("stageconst"), 1); Map_GoString_int_set(&_m, GOSTR("stagefrontedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("stagetime"), 1); Map_GoString_int_set(&_m, GOSTR("standby"), 1); Map_GoString_int_set(&_m, GOSTR("teamleader"), 1); Map_GoString_int_set(&_m, GOSTR("teamsize"), 1); Map_GoString_int_set(&_m, GOSTR("timeelapsed"), 1); Map_GoString_int_set(&_m, GOSTR("timeremaining"), 1); Map_GoString_int_set(&_m, GOSTR("timetotal"), 1); Map_GoString_int_set(&_m, GOSTR("winclutch"), 1); Map_GoString_int_set(&_m, GOSTR("winhyper"), 1); Map_GoString_int_set(&_m, GOSTR("winspecial"), 1); Map_GoString_int_set(&_m, GOSTR("xangle"), 1); Map_GoString_int_set(&_m, GOSTR("xshear"), 1); Map_GoString_int_set(&_m, GOSTR("yangle"), 1); Map_GoString_int_set(&_m, GOSTR("zoomvar"), 1); (Map_GoString_int)_m; });
-    g_specialSymbolTable = ((Arr256_bool (*)(void *))(((GoFunc){(void *)lambda_1855, go_box(Env_lambda_1855, ((Env_lambda_1855){0}))})).fn)((((GoFunc){(void *)lambda_1855, go_box(Env_lambda_1855, ((Env_lambda_1855){0}))})).env);
+    g_specialSymbolTable = ((Arr256_bool (*)(void *))(((GoFunc){(void *)lambda_1857, go_box(Env_lambda_1857, ((Env_lambda_1857){0}))})).fn)((((GoFunc){(void *)lambda_1857, go_box(Env_lambda_1857, ((Env_lambda_1857){0}))})).env);
     g_cvf_sin = (Arr6_f64){{0x1.5d8fd1fd19ccdp-33, -0x1.ae5e5a9291f5dp-26, 0x1.71de3567d48a1p-19, -0x1.a01a019bfdf03p-13, 0x1.111111110f7dp-07, -0x1.5555555555548p-03}};
     g_cvf_cos = (Arr6_f64){{-0x1.8fa49a0861a9bp-37, 0x1.1ee9d7b4e3f05p-29, -0x1.27e4f7eac4bc6p-22, 0x1.a01a019c844f5p-16, -0x1.6c16c16c14f91p-10, 0x1.555555555554bp-05}};
     g_cvf_tanP = (Arr3_f64){{-0x1.992d8d24f3f38p+13, 0x1.199eca5fc9dddp+20, -0x1.11fead3299176p+24}};
@@ -183941,6 +184232,8 @@ void ik_init_globals(void) {
     g_cvfRules = (cvfRulesT){.exemptLo = 1000, .exemptHi = 1099, .mpVar = -1, .mpScaleMilli = 1000, .specialLo = 1100, .specialHi = 2999};
     g_cvfTouchMenus = true;
     g_cvfDebugOn = (!go_streq(os_Getenv(GOSTR("CVF_RULES_DEBUG")), GOSTR("")));
+    g_cvfNetInputSeed = -1;
+    g_cvfHeadlessFps = -1;
     g_jsonFileCache = (Anon_ec483023){.m = Map_GoString_Slice_u8_make(0)};
     g_luaChunkCache = Map_lua_LStatePtr_Map_GoString_lua_LFunctionPtr_make(0);
     g_Version = GOSTR("development");

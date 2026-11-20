@@ -112,6 +112,7 @@ typedef struct GoMapImpl {
     int keykind;  // 0 bytes, 1 string, 2 interface
     int n, cap;      // entries (including deleted)
     int live;
+    int freelist;    // deleted entry to reuse + 1 (0: none); chained through the hash field
     u8 *ents;        // n entries of (u8 used, key, value), stride
     size_t stride;
     i32 *slots;      // hash -> entry index + 1
@@ -201,13 +202,25 @@ void *gomap_put(GoMap *gm, const void *key, size_t ksize, size_t vsize, int keyk
         // emptied map: start the entry array over (live entries keep
         // insertion order; no entry exists to be visited by an iterator)
         m->n = 0;
+        m->freelist = 0;
         memset(m->slots, 0, sizeof(i32) * (size_t)m->nslots);
     }
-    if (m->n == m->cap) {
-        m->cap = m->cap ? m->cap * 2 : 8;
-        m->ents = (u8 *)gc_realloc(m->ents, m->stride * (size_t)m->cap);
+    int e;
+    if (m->freelist) {
+        // reuse a deleted entry (most recently deleted first): the entry
+        // array stays as large as the most entries the map ever held, so a
+        // map with rotating keys (rollback save states) does not grow. Live
+        // entries never move, so an iteration in progress is unaffected; a
+        // new entry may or may not be visited by it, as in Go.
+        e = m->freelist - 1;
+        m->freelist = (int)ENT_HASH(m, e);
+    } else {
+        if (m->n == m->cap) {
+            m->cap = m->cap ? m->cap * 2 : 8;
+            m->ents = (u8 *)gc_realloc(m->ents, m->stride * (size_t)m->cap);
+        }
+        e = m->n++;
     }
-    int e = m->n++;
     memset(ENT(m, e), 0, m->stride);
     ENT(m, e)[0] = 1;
     ENT_HASH(m, e) = h;
@@ -226,7 +239,10 @@ void gomap_del(GoMap *gm, const void *key) {
     GoMapImpl *m = gm->m;
     int i = find_slot(m, key);
     if (i < 0) return;
-    ENT(m, m->slots[i] - 1)[0] = 0;
+    int de = m->slots[i] - 1;
+    // the deleted key and value must not keep their referents alive (the
+    // collector scans the entry array); the entry joins the free list
+    memset(ENT(m, de), 0, m->stride);
     m->live--;
     // backward-shift deletion: keep every probe chain unbroken, no tombstones
     int mask = m->nslots - 1;
@@ -241,6 +257,8 @@ void gomap_del(GoMap *gm, const void *key) {
             i = j;
         }
     }
+    ENT_HASH(m, de) = (u32)m->freelist;
+    m->freelist = de + 1;
 }
 
 void gomap_clear(GoMap *gm) {
@@ -248,6 +266,7 @@ void gomap_clear(GoMap *gm) {
     if (!m) return;
     m->n = 0;
     m->live = 0;
+    m->freelist = 0;
     if (m->slots) memset(m->slots, 0, sizeof(i32) * (size_t)m->nslots);
 }
 

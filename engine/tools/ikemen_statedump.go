@@ -45,9 +45,17 @@ func stateDumpTickFn() {
 		return
 	}
 	stateDumpTick++
+	// Online (rollback) match: frames are simulated again after a rollback,
+	// so keep the last simulation of each match frame and write them in
+	// order when the match ends (stateDumpNetFlush).
+	net := sys.rollback.session != nil && sys.rollback.netConnection != nil
 	b := stateDumpBuf[:0]
 	b = append(b, "T "...)
-	b = sdI(b, int64(stateDumpTick))
+	if net {
+		b = sdI(b, int64(sys.matchTime))
+	} else {
+		b = sdI(b, int64(stateDumpTick))
+	}
 	b = append(b, " rs "...)
 	b = sdI(b, int64(sys.roundState()))
 	b = append(b, " gt "...)
@@ -144,6 +152,16 @@ func stateDumpTickFn() {
 		}
 	}
 	stateDumpBuf = b
+	if net {
+		if stateDumpNet == nil {
+			stateDumpNet = make(map[int32][]byte)
+		}
+		if sys.rollback.session.inRollback {
+			stateDumpNetResim++
+		}
+		stateDumpNet[sys.matchTime] = append([]byte(nil), b...)
+		return
+	}
 	stateDumpW.Write(b)
 	if stateDumpTick%60 == 0 {
 		stateDumpW.Flush()
@@ -151,6 +169,28 @@ func stateDumpTickFn() {
 }
 
 var sdKeys []int32
+
+var stateDumpNet map[int32][]byte
+var stateDumpNetResim int
+
+// Writes the frames of an online match in match-time order (the last
+// simulation of each one) and flushes the dump.
+func stateDumpNetFlush() {
+	if stateDumpOn != 1 {
+		return
+	}
+	keys := make([]int32, 0, len(stateDumpNet))
+	for k := range stateDumpNet {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	LogMessage("statedump: %d match frames, %d frames simulated again in rollbacks", len(keys), stateDumpNetResim)
+	for _, k := range keys {
+		stateDumpW.Write(stateDumpNet[k])
+	}
+	stateDumpNet = nil
+	stateDumpW.Flush()
+}
 
 func stateDumpVarsI(b []byte, tag string, m map[int32]int32) []byte {
 	sdKeys = sdKeys[:0]

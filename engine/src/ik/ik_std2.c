@@ -2,6 +2,7 @@
 // UTF-8/16, math via core/detmath, atomics, time, sync.Cond, runtime...).
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "core/detmath.h"
 #include "ik/ik_sim.h"
@@ -271,23 +272,62 @@ int runtime_Callers(int skip, Slice_uintptr_t pc) { (void)skip, (void)pc; return
 GoOpaque *runtime_FuncForPC(uintptr_t pc) { (void)pc; return NULL; }
 GoString runtime_Func_Name(GoOpaque *f) { (void)f; return (GoString){"", 0}; }
 Slice_u8 debug_Stack(void) { return (Slice_u8){0}; }
-void log_Logger_Printf(GoOpaque *l, GoString f, Slice_GoIface a) {
-    (void)l;
-    GoString s = go_sprintf(f, a.p, a.len);
-    fprintf(stderr, "%.*s\n", s.len, s.p);
+// log.Logger: its writer, prefix and flags (Ldate, Ltime, Lmsgprefix; the
+// file:line flags are not available). io.Discard (the zero interface here)
+// drops the output, a file gets it, anything else goes to stderr. GGPO's
+// default logger is log.New(io.Discard, ...), so its trace stays silent.
+typedef struct LogLogger {
+    GoIface w;
+    GoString prefix;
+    int flags;
+} LogLogger;
+enum { LOG_Ldate = 1, LOG_Ltime = 2, LOG_Lmsgprefix = 64 };
+GoOpaque *log_New(GoIface w, GoString prefix, int flags) {
+    LogLogger *l = (LogLogger *)gc_calloc(1, sizeof(LogLogger) > sizeof(GoOpaque) ? sizeof(LogLogger) : sizeof(GoOpaque));
+    l->w = w, l->prefix = prefix, l->flags = flags;
+    return (GoOpaque *)l;
 }
-void log_Logger_Println(GoOpaque *l, Slice_GoIface a) {
-    (void)l;
-    for (int i = 0; i < a.len; i++) {
-        GoString s = go_sprintf(GOSTR("%v"), &a.p[i], 1);
-        fprintf(stderr, i ? " %.*s" : "%.*s", s.len, s.p);
+static void log_output(GoOpaque *lo, GoString msg) {
+    LogLogger *l = (LogLogger *)lo;
+    if (l && !l->w.type) return;  // io.Discard
+    char hdr[64];
+    int hn = 0;
+    if (l && (l->flags & (LOG_Ldate | LOG_Ltime))) {
+        time_t t = time(NULL);
+        struct tm tm;
+#ifdef _WIN32
+        localtime_s(&tm, &t);
+#else
+        localtime_r(&t, &tm);
+#endif
+        if (l->flags & LOG_Ldate)
+            hn += snprintf(hdr + hn, sizeof hdr - (size_t)hn, "%04d/%02d/%02d ", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+        if (l->flags & LOG_Ltime)
+            hn += snprintf(hdr + hn, sizeof hdr - (size_t)hn, "%02d:%02d:%02d ", tm.tm_hour, tm.tm_min, tm.tm_sec);
     }
-    fputc('\n', stderr);
+    GoString pre = l ? l->prefix : (GoString){0};
+    bool premsg = l && (l->flags & LOG_Lmsgprefix);
+    bool nl = msg.len > 0 && msg.p[msg.len - 1] == '\n';
+    int n = pre.len + hn + msg.len + (nl ? 0 : 1);
+    char *out = (char *)gc_alloc_atomic((size_t)n + 1);
+    int k = 0;
+    if (!premsg) memcpy(out + k, pre.p, (size_t)pre.len), k += pre.len;
+    memcpy(out + k, hdr, (size_t)hn), k += hn;
+    if (premsg) memcpy(out + k, pre.p, (size_t)pre.len), k += pre.len;
+    memcpy(out + k, msg.p, (size_t)msg.len), k += msg.len;
+    if (!nl) out[k++] = '\n';
+    if (l && l->w.type == GO_TID_P_os_File && l->w.data != (void *)os_Stderr && l->w.data != (void *)os_Stdout) {
+        os_File_Write((GoOpaque *)l->w.data, (Slice_u8){(u8 *)out, k, k});
+        return;
+    }
+    fwrite(out, 1, (size_t)k, (l && l->w.data == (void *)os_Stdout) ? stdout : stderr);
 }
-Ret_int__GoIface fmt_Fprintln(GoIface w, Slice_GoIface a) {  // to stdout/stderr only
-    (void)w;
-    log_Logger_Println(NULL, a);
-    return (Ret_int__GoIface){0, {0}};
+void log_Logger_Printf(GoOpaque *l, GoString f, Slice_GoIface a) { log_output(l, go_sprintf(f, a.p, a.len)); }
+void log_Logger_Println(GoOpaque *l, Slice_GoIface a) { log_output(l, go_sprint(a.p, a.len, true)); }
+// as Fprintf: the writer gets the text (Sprintln: operands always spaced)
+Ret_int__GoIface fmt_Fprintln(GoIface w, Slice_GoIface a) {
+    GoString s = go_sprint(a.p, a.len, true);
+    return go_fwrite(w, go_strcat(s, GOSTR("\n")));
 }
 Ret_u32__u32__u32__u32 color_NRGBA_RGBA(GoOpaque c) {  // premultiplied 16-bit, as Go
     u32 r = c._opaque[0], g = c._opaque[1], b = c._opaque[2], a = c._opaque[3];

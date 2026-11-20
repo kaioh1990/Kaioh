@@ -38,6 +38,11 @@ export GOOS=${GOTOC_GOOS:-linux} GOARCH=${GOTOC_GOARCH:-amd64}
 export GOTOOLCHAIN=local GOFLAGS=-mod=mod GOPROXY=off CGO_ENABLED=0
 . "$G/pkgs.sh"
 export GENCDEFS_OVERRIDES="$E/tools/gen/gencdefs/overrides.txt"
+# gencdefs/gotoc ignore type errors (the opaque packages give thousands), so a
+# module that does not load (e.g. GitHub mirrors without go.sum entries and
+# GOSUMDB on) silently changes the output. Check that every package loads.
+(cd "$IKEMEN_DIR" && CGO_ENABLED=1 go list -tags "$GOTOC_TAGS" -deps ./src > /dev/null) ||
+  { echo "regen: packages of the Ikemen tree do not load (see above)" >&2; exit 1; }
 
 mkdir -p "$GEN_BIN"
 (cd "$E/tools/gen/gotoc" && GOOS= GOARCH= go build -o "$GEN_BIN/gotoc" .)
