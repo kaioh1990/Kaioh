@@ -379,22 +379,146 @@ To confirm vulnerability on iPad Mini (iOS 27.0.1):
 - Lockdown Mode implications: does Lockdown Mode affect PDF preview generation? If font rendering is restricted, this class of bug is mitigated
 - The `alloca` vs `malloc` choice gives the attacker control over corruption target (stack vs heap)
 
-## Jailbreak Package Manager: Sileo
+## Jailbreak Package Manager & Rootless Bootstrap Architecture
 
-**Sileo** is the modern Cydia equivalent for rootless jailbreaks (iOS 15+):
-- Used by Dopamine, Taurine, Chimera, and other modern jailbreaks
-- Rootless: packages install under `/var/jb/` instead of modifying root filesystem
+### Sileo — Modern Cydia Equivalent
+
+**Sileo** is the standard package manager for rootless jailbreaks (iOS 15+):
+- Open-source Swift app: `github.com/Sileo/Sileo`
+- APT-based: uses dpkg + apt for package management
+- Used by Dopamine, Taurine, Chimera, palera1n, and other modern jailbreaks
 - Alternative: Zebra (lighter weight, same rootless model)
 - Installing Sileo is the standard proof-of-jailbreak for modern iOS
 
-**Full jailbreak chain required (CVE-2026-86950 is step 1 only):**
-1. OOB write primitive (CVE-2026-86950 provides this)
-2. Arbitrary code execution from OOB write
-3. Sandbox escape
-4. Kernel exploit (separate vulnerability needed)
-5. PAC/PPL bypass
-6. Rootless filesystem modifications
-7. Install Sileo + bootstrap
+### Rootless Filesystem Layout
+
+Modern jailbreaks (iOS 15+) are "rootless" — the system volume stays read-only (SSV/Signed System Volume intact). Instead:
+
+```
+/var/jb/                    ← Jailbreak root (symlink to /private/preboot/<uuid>/...)
+  ├── usr/lib/              ← Tweaked dylibs, injection framework
+  ├── usr/bin/              ← Jailbreak binaries (dpkg, apt, ssh, etc.)
+  ├── Library/
+  │   ├── dpkg/             ← Package database
+  │   ├── Frameworks/       ← Injected frameworks
+  │   └── PreferenceBundles/ ← Tweak settings
+  ├── etc/apt/              ← APT sources configuration
+  └── Applications/         ← Sideloaded jailbreak apps (Sileo, etc.)
+```
+
+Bind mounts make `/usr/lib` serve content from `/var/jb/usr/lib` without modifying the system volume.
+
+### Procursus Bootstrap
+
+The **Procursus** bootstrap provides the base Unix environment for rootless jailbreaks:
+- Includes dpkg, apt, coreutils, bash, OpenSSH
+- Installed by the jailbreak tool (e.g., Dopamine) on first run
+- Placed under `/private/preboot/` with `/var/jb` as a symlink
+- All binaries must carry valid ad-hoc signatures (CodeDirectory with CS_ADHOC) for dynamic trust caches
+
+### Tweak Injection Framework
+
+**ElleKit** is the primary injection framework for rootless jailbreaks:
+- Hooks dyld to inject tweaks into processes at launch
+- Operates within the rootless `/var/jb/` tree
+- Some processes are restricted (SpringBoard injection has limitations)
+- The older **Substitute** library is an alternative
+
+### Dopamine Jailbreak — Reference Architecture
+
+**Dopamine** (by opa334) is the most prominent modern jailbreak:
+- Supports iOS 15.0 through 17.3.1 (A8-A17, M1-M2)
+- Dopamine 3.0 (Aug 2026): Added iOS 26.0-26.0.1 on A12/A13 via Titan PPL/SPTM bypass
+- Semi-untethered: requires re-running after each reboot
+- Uses **kfd** kernel exploit (physical use-after-free primitive)
+- Includes Sileo + Zebra package managers
+
+**Dopamine's exploit chain:**
+1. **Entry**: App-based (sideloaded via TrollStore or similar)
+2. **Kernel R/W**: kfd exploit → physical use-after-free → kernel read/write
+3. **PPL/SPTM bypass**: Titan bypass (by Alfie) for newer devices
+4. **Bootstrap install**: Deploys Procursus to `/var/jb/`
+5. **Tweak injection**: ElleKit loaded via dyld hooks
+6. **Package management**: Sileo/Zebra for installing tweaks
+
+### iOS 27 Jailbreak Status (as of Nov 2026)
+
+| Tool | iOS 27 Support | Method |
+|------|---------------|--------|
+| **Dopamine 3.0** | No (up to 17.3.1 / 26.0.1 on A12-A13) | kfd + Titan |
+| **usbliter8ra1n** | Partial (iPhone 11 Pro only, tethered) | SecureROM exploit (A12/A13 only) |
+| **Coruna** | Unknown | Exploit kit; CVEs are older (2021/2023 vintage) |
+| **CVE-2026-86950 chain** | No public jailbreak | Crash primitive only; no kernel exploit |
+
+**usbliter8**: A SecureROM (bootrom) exploit for A12/A13 chips disclosed mid-2026. It's hardware-level (unpatchable via software updates), but:
+- Tethered — requires USB connection to boot modified firmware
+- Limited to A12/A13 (iPhone XS through iPhone 11 series)
+- Does not bypass data protection
+- Researchers booted a modified iOS 27 beta 2 on iPhone 11 Pro (July 2026)
+- Not a consumer-ready jailbreak
+
+**Key gap for iOS 27**: No public kernel exploit exists for iOS 27. Even with CVE-2026-86950 providing a userspace crash primitive on 27.0.1, a full jailbreak requires:
+1. Turning the OOB write into arbitrary code execution
+2. Sandbox escape
+3. A separate kernel vulnerability
+4. PAC bypass (Apple Wiki notes only 1 public kernel PAC bypass as of June 2026)
+5. PPL/SPTM bypass for newer devices
+
+### Full Chain: CVE-2026-86950 → Sileo (What Would Be Needed)
+
+```
+Step 1: CVE-2026-86950 OOB write (WE HAVE THIS — trigger.pdf)
+  │
+  ├─ Turn OOB write into arbitrary R/W:
+  │   • Heap grooming: control adjacent allocations
+  │   • Corrupt malloc metadata or object vtable/function pointer
+  │   • width_px > 1015 → heap allocation (more stable than stack)
+  │   • Need: precise heap layout knowledge for iOS 27.0.1
+  │
+Step 2: Arbitrary userspace code execution
+  │
+  ├─ Sandbox escape:
+  │   • Exploit IPC/Mach port vulnerability
+  │   • Or: abuse entitled daemon via crafted messages
+  │   • Need: separate sandbox escape vulnerability
+  │
+Step 3: Kernel read/write
+  │
+  ├─ Kernel exploit:
+  │   • kfd-style physical use-after-free, OR
+  │   • IOKit driver bug, OR
+  │   • XNU syscall vulnerability
+  │   • Need: separate kernel vulnerability for iOS 27
+  │
+Step 4: PAC bypass
+  │
+  ├─ Defeat pointer authentication:
+  │   • Signing gadget chains, OR
+  │   • Key derivation leak
+  │   • Very few public bypasses exist
+  │
+Step 5: PPL/SPTM bypass
+  │
+  ├─ Page table manipulation:
+  │   • Titan-style bypass (Alfie), OR
+  │   • New research needed for iOS 27
+  │
+Step 6: Rootless filesystem setup
+  │
+  ├─ Deploy Procursus bootstrap to /var/jb/
+  │   • dpkg, apt, OpenSSH, ElleKit
+  │   • Trust cache entries for ad-hoc signed binaries
+  │   • Bind mounts for /usr/lib → /var/jb/usr/lib
+  │
+Step 7: Install Sileo ← GOAL
+  │
+  └─ Sileo.deb installed via dpkg
+     • APT sources configured
+     • Package repos accessible
+     • Tweak injection working via ElleKit
+```
+
+**Bottom line**: CVE-2026-86950 gives us Step 1. Steps 2-5 each require additional vulnerabilities or research that doesn't exist publicly for iOS 27. This is the fundamental gap between a crash PoC and a working jailbreak.
 
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
