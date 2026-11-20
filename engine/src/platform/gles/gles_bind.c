@@ -102,7 +102,6 @@ u8* gles2_GetString(u32 a0) { return p_glGetString(a0); }
 void gles2_ActiveTexture(u32 a0) { p_glActiveTexture(a0); }
 void gles2_AttachShader(u32 a0, u32 a1) { p_glAttachShader(a0, a1); }
 void gles2_BindBuffer(u32 a0, u32 a1) { p_glBindBuffer(a0, a1); }
-void gles2_BindFramebuffer(u32 a0, u32 a1) { p_glBindFramebuffer(a0, a1); }
 void gles2_BindRenderbuffer(u32 a0, u32 a1) { p_glBindRenderbuffer(a0, a1); }
 void gles2_BindTexture(u32 a0, u32 a1) { p_glBindTexture(a0, a1); }
 void gles2_BindVertexArray(u32 a0) { p_glBindVertexArray(a0); }
@@ -166,6 +165,15 @@ void gles2_Viewport(i32 a0, i32 a1, i32 a2, i32 a3) { p_glViewport(a0, a1, a2, a
 void* gles2_MapBufferRange(u32 a0, int a1, int a2, u32 a3) { return p_glMapBufferRange(a0, a1, a2, a3); }
 static void (APIENTRY *p_glFramebufferTexture2D_es)(u32, u32, u32, u32, i32);
 static void (APIENTRY *p_glVertexAttribPointer_es)(u32, i32, u32, unsigned char, i32, void *);
+
+// Framebuffer 0 is the screen for the renderer. On iOS the screen is an FBO
+// that SDL's UIKit GL view creates and binds when the context is made
+// current; binding 0 there would draw nowhere (GL_INVALID_FRAMEBUFFER_OPERATION).
+// gl.Init runs right after GLMakeCurrent, so the binding seen there is the
+// screen (0 on platforms with a real default framebuffer).
+#define CVF_GL_FRAMEBUFFER_BINDING 0x8CA6
+static u32 screen_fbo;
+void gles2_BindFramebuffer(u32 target, u32 fb) { p_glBindFramebuffer(target, fb ? fb : screen_fbo); }
 
 // ES 3.0 has no glFramebufferTexture (3.2): attach level 0 of a 2D texture.
 // Only the model-shadow path uses it, and models are off on iOS.
@@ -257,6 +265,9 @@ GoIface gles2_Init(GoFunc getProcAddr) {
     *(void **)&p_glVertexAttribPointer_es = SDL_GL_GetProcAddress("glVertexAttribPointer");
     if (!p_glClear || !p_glCreateShader || !p_glDrawArrays || !p_glBindVertexArray)
         return go_errorf("OpenGL ES: entry points not found (%s)", SDL_GetError());
+    i32 fb = 0;
+    p_glGetIntegerv(CVF_GL_FRAMEBUFFER_BINDING, &fb);
+    screen_fbo = (u32)fb;
     return (GoIface){0};
 }
 
