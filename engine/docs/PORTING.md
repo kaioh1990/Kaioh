@@ -223,3 +223,17 @@ stay as verified references and for the optimised paths later.
 - Not yet cross-checked against a Go build with the new rules (the container
   lacks the ffmpeg dev libraries the Go build needs); next check is a
   two-device match against the iOS build.
+
+### Status 2026-11-20 — reproducible regeneration, dev setup
+
+- docs/DEVSETUP.md: clone, Ikemen tree (`tools/gen/setup_ikemen.sh`), regen,
+  build, reference fight. The old regen scripts pointed at a deleted
+  scratchpad; the missing inputs (third/ module replacements: patched vorbis,
+  go-sdl2, gl, mewkiz/pkg, dialog stub) are rebuilt from `vita/`.
+- gotoc/gencdefs output no longer depends on absolute paths, FileSet offsets
+  (Go version) or map order; the committed C was regenerated once (ordering
+  and numbering only). Regen fails on new library placeholders
+  (tools/gen/unsupported_allowed.txt).
+- Verified on macOS arm64 from scratch: old rules 54f8ae06… (287,752 lines),
+  cvf-online-5 rules 4334350c… (224,158 lines) — the same as Linux, so the
+  new rules are deterministic across x86-64 and arm64 too.
