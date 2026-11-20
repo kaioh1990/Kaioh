@@ -219,9 +219,93 @@ Each test reveals:
 - Need separate PoC to trigger read vs write OOB
 - Would give KASLR bypass and heap layout information
 
-## Calif.io Intel
+## NEW: Complete iOS 27.2 AVE CVE Map (from Apple Security Notes)
+
+### OOB Writes (4 CVEs)
+| CVE | Impact | Fix | Credit |
+|-----|--------|-----|--------|
+| CVE-2026-112705 | system termination | bounds checking | Calif.io (Schmitt, Chernykh, Maine) |
+| CVE-2026-114025 | **arbitrary code execution** | input validation | Josh Maine of Calif.io |
+| CVE-2026-112689 | system termination or corrupt kernel memory | input validation | Franco Belman (Blackwing) |
+| CVE-2026-112470/112469/112468 | system termination or corrupt kernel memory | bounds checking | Hcamael/aipy |
+
+### OOB Reads (2 CVEs)
+| CVE | Impact | Fix | Credit |
+|-----|--------|-----|--------|
+| CVE-2026-112466 | system termination or **read kernel memory** | input validation | Hcamael/aipy |
+| CVE-2026-112465 | system termination or **read kernel memory** | bounds checking | Hcamael/aipy |
+
+### Key Observations
+- CVE-2026-114025 is the ONLY one with "arbitrary code execution" — this is the exploit primitive
+- CVE-2026-112705 (our confirmed trigger) only gives "system termination"
+- CVE-2026-112466/112465 give info leaks — "read kernel memory"
+- Both OOB read CVEs added Nov 20, 2026 (same day as 114025)
+- Different fix types suggest different code paths: "bounds checking" vs "input validation"
+
+## NEW: OOB Read Path Analysis (Info Leak)
+
+### CreateExternalInSurfaces — NO NTL usage
+- 4 xrefs: AVE2+0x1576fc, 0x157780, 0x1577c4, 0x15782c
+- Scanned ±0x800 around first xref: **zero loads from struct+0x510**
+- Input surface creation does NOT use iNumOfTemporalLayer
+- OOB read CVEs use a DIFFERENT mechanism than the write CVEs
+
+### GetDARTBuf Region (AVE2+0x14f000-0x14fd00)
+- GetDARTLinearBuf xrefs: AVE2+0x14f330, 0x14f3b4, 0x14f400, 0x14f460
+- GetDARTCompressedBuf xrefs: AVE2+0x14f79c, 0x14f820, 0x14f86c, 0x14fcac
+- Buffer size calculation with MUL at: +0x14f68c, +0x14f69c, +0x14f6ac, +0x14f6c4
+- Multiple `cmp w1, #0x3` and `cmp w22, #0x1` checks — format-dependent branching
+- Calls AVE2+0xff168 and AVE2+0xff1dc — likely buffer arithmetic helpers
+
+### PostProcess Function (Encode Output Path)
+- String "PostProcess" at VA:0xfffffe0007316de9 (in AVE2 range)
+- 8 xrefs clustered at AVE2+0x10aa10..0x10afd8
+- This is the post-encode processing — where encoded data is handled
+- Potential info leak path: if OOB-read data gets encoded into bitstream
+
+### Likely OOB Read Trigger (Hypothesis)
+- The read CVE likely uses stride/offset parameters instead of NTL
+- Large stride values could cause the DMA engine to read beyond the input buffer
+- Or: incorrect buffer size calculation for specific codec configs (e.g., 10-bit color)
+- Encoded pixel data from beyond the buffer → included in bitstream → readable
+
+## Calif.io Intel (Updated)
 - Used two vulnerabilities (CVE-2026-112705 + CVE-2026-114025) for data-only LPE
 - Chain: unprivileged local user → root shell, public syscalls only
 - Full 55-page report still embargoed (as of Nov 20, 2026)
 - CVE-2026-114025 gives "arbitrary code execution" vs just "system termination"
 - Fix was "improved input validation" (different from 112705's "bounds checking")
+- Blog: "data-only kernel local privilege escalation chain targeting macOS 26.4.1 (25E253)"
+- One commenter noted "Deterministic Entropy Reduction" of MTE's 6.25% (1/16) tag collision
+  → But DMA bypasses MTE entirely, so tag collision brute-force is unnecessary for DMA path
+
+## NEW: Kernel R/W Primitive Strategy
+
+### Pipe Buffer Corruption (Primary)
+1. Spray 512 pipe pairs → allocates pipe_buffer structs in kernel heap
+2. Close every 8th pipe → creates holes in zone pages
+3. AVE DMA buffer allocated in one hole (adjacent to surviving pipes)
+4. Trigger NTL=9 or NTL=10 → small DMA OOB write into adjacent pipe_buffer
+5. Corrupted pipe_buffer.buffer pointer → arbitrary kernel R/W via read()/write()
+
+### Pipe Buffer Layout
+```
+struct pipebuf {
+    u_int    cnt;      // +0x00: bytes available
+    u_int    in;       // +0x04: write index
+    u_int    out;      // +0x08: read index
+    u_int    size;     // +0x0c: allocated size
+    caddr_t  buffer;   // +0x10: kernel data pointer (target for corruption)
+};
+```
+
+### Alternative: IOSurface Property Corruption
+1. Spray IOSurface objects with known property values
+2. Trigger DMA OOB to corrupt an IOSurface's backing allocation
+3. Read back property values through IOSurfaceCopyAllValues()
+4. If a property is corrupted, the return value leaks kernel heap data
+
+### PoC Files
+- `ave_kwrite_primitive.c` — Pipe spray + AVE OOB + corruption check
+- `ave_controlled_oob.c` — Multi-mode NTL testing with heap spray
+- `ave_infoleak_probe.c` — Encoded bitstream analysis for kernel data
