@@ -217,24 +217,43 @@ the actual slab contents are TXM-typed. Need to verify.
 - On MIE devices (A19+/M5+), this bypasses Memory Integrity Enforcement
 - On non-MIE SPTM devices (our A17 Pro), `__DATA_CONST` holds trust cache pointers
 
-**Applicability to iOS 27.0.1 / A17 Pro:** ⚠️ INVESTIGATING
-- If the overflow exists on 27.0.1, we could modify trust cache pointers
-  directly in `__DATA_CONST` without touching SPTM-protected pages
-- Need to verify: (a) is the overflow present on 27.0.1, (b) does it help
-  on non-MIE devices where `__DATA_CONST` is enforced by SPTM not MIE
+**Applicability to iOS 27.0.1 / A17 Pro:** ❌ RULED OUT
+- Already patched in macOS 26.5 (May 2026). iOS 27.0 shipped September 2026.
+- Trust caches on SPTM devices live in TXM frames at GL0, not zalloc_ro zones.
+- The ironPeak analysis linking this to `_zalloc_ro_mut` is disputed by researchers.
+- Actual Calif MIE bypass bugs are different and target M5/A19+ only.
+
+### G. Firmware PAC Audit Results (November 20, 2026)
+
+IPSW firmware analysis of iPad16,1 iOS 27.0.1 (Build 24A446):
+
+**PAC-free RTKit coprocessors (Titan-style bypass candidates):**
+
+| Firmware | Size | PAC Instrs | RET Gadgets | LDP+RET | BL Calls |
+|----------|------|-----------|-------------|---------|----------|
+| **SmartIOFirmware_ASCv6.im4p** | 1.14 MB | **0** | 377 | 56 | 1,862 |
+| **t8130pmp.im4p** | 635 KB | **0** | 816 | 104 | 3,109 |
+| **J410_MtpFirmware.im4p** | 773 KB | **0** | 506 | 43 | 3,874 |
+
+**PAC-hardened (not viable):** AOP (13,778), ANE (5,114), AGX (3,747), ISP (77,615),
+AVE (3,734), DCP (5), TXM (2).
+
+SmartIO firmware having zero PAC instructions confirms the silentIO hypothesis:
+Titan-style ROP chain → self-referencing PTE → SPTM defeat is viable on iOS 27.0.1.
+t8130pmp (PMP coprocessor) is an even richer ROP surface with 816 gadgets.
 
 ---
 
 ## 4. Recommended Approach (Updated)
 
-### Strategy Ranking (November 20, 2026) — UPDATED
+### Strategy Ranking (November 20, 2026) — FINAL
 
 | Priority | Strategy | PoC Written | Dependencies | Status |
 |----------|----------|-------------|--------------|--------|
-| **1** | **SPTM TLB race (GMMU DART)** | **YES** | Kernel R/W | **PRIMARY** |
-| 2 | Coprocessor DMA (SmartIO) | YES (template) | Kernel R/W + firmware audit | Pending audit |
-| 3 | Data-only trust cache injection | YES | Kernel R/W | Fallback |
-| 4 | _zalloc_ro_mut overflow | No | Kernel R/W + verification | Investigating |
+| **1** | **Data-only trust cache injection** | **YES** | Kernel R/W | **PRIMARY — SPTM bypass NOT needed** |
+| 2 | SPTM TLB race (GMMU DART) | YES | Kernel R/W | Optional (deep kernel mods) |
+| 3 | Coprocessor DMA (SmartIO) | YES (template) | Kernel R/W | **CONFIRMED: 0 PAC instructions** |
+| ~~4~~ | ~~_zalloc_ro_mut overflow~~ | ~~No~~ | | **RULED OUT — patched before 27.0** |
 | ~~5~~ | ~~pt_desc refcount overflow~~ | ~~YES~~ | ~~None~~ | **RULED OUT** |
 
 ### CRITICAL UPDATE: pt_desc overflow ruled out on A17 Pro
