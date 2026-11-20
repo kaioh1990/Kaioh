@@ -37,7 +37,7 @@ static int run_headless(const char *dir, const char *argstr) {
     for (char *t = strtok(buf, " "); t && n < 64; t = strtok(NULL, " ")) words[n++] = t;
     ik_init_globals();
     Slice_GoString args = go_args(n);
-    for (int i = 0; i < n; i++) args.p[i] = go_cstr(gc_strdup(words[i]));
+    for (int i = 0; i < n; i++) args.p[args.len++] = go_cstr(gc_strdup(words[i]));
     free(buf);
     i32 w = fn_cvfHeadlessMain(args);
     printf("winner: %d\n", w);
@@ -62,7 +62,7 @@ int SDL_main(int argc, char **argv) {
     osargs.p[osargs.len++] = GOSTR("ikemen-go");
     os_Args = osargs;
     Slice_GoString args = go_args(argc);
-    for (int i = 0; i < argc; i++) args.p[i] = go_cstr(gc_strdup(argv[i] ? argv[i] : ""));
+    for (int i = 0; i < argc; i++) args.p[args.len++] = go_cstr(gc_strdup(argv[i] ? argv[i] : ""));
 
     cvf_ios_install_app_watch();
     cvf_safepoint_hook = cvf_host_drain;

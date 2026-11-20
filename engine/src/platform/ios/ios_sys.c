@@ -93,8 +93,10 @@ void cvf_ios_prepare(const char *assets) {
         if (!getenv("CVF_LOG_CONSOLE")) {
             char path[4200];
             snprintf(path, sizeof path, "%s/cvf.log", logs);
-            if (freopen(path, "w", stdout)) setvbuf(stdout, NULL, _IOLBF, 0);
-            if (freopen(path, "a", stderr)) setvbuf(stderr, NULL, _IOLBF, 0);
+            FILE *f = fopen(path, "w");  // a fresh log per run; both streams append to it
+            if (f) fclose(f);
+            if (freopen(path, "a", stdout)) setvbuf(stdout, NULL, _IOLBF, 0);
+            if (freopen(path, "a", stderr)) setvbuf(stderr, NULL, _IONBF, 0);
         }
         read_env_file(assets);
     }
