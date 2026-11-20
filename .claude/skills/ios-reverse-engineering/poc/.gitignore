@@ -1,0 +1,4 @@
+*.pdf
+*.ttf
+render_debug
+*.o
