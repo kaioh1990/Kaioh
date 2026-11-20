@@ -173,7 +173,15 @@ static void (APIENTRY *p_glVertexAttribPointer_es)(u32, i32, u32, unsigned char,
 // screen (0 on platforms with a real default framebuffer).
 #define CVF_GL_FRAMEBUFFER_BINDING 0x8CA6
 static u32 screen_fbo;
-void gles2_BindFramebuffer(u32 target, u32 fb) { p_glBindFramebuffer(target, fb ? fb : screen_fbo); }
+static int screen_binds;
+void gles2_BindFramebuffer(u32 target, u32 fb) {
+    p_glBindFramebuffer(target, fb ? fb : screen_fbo);
+    if (!fb && screen_binds < 3) {  // diagnostics: the first screen binds
+        screen_binds++;
+        fprintf(stderr, "gles: screen framebuffer %u status 0x%x error 0x%x\n", screen_fbo,
+                p_glCheckFramebufferStatus(0x8D40), p_glGetError());
+    }
+}
 
 // ES 3.0 has no glFramebufferTexture (3.2): attach level 0 of a 2D texture.
 // Only the model-shadow path uses it, and models are off on iOS.
@@ -268,6 +276,7 @@ GoIface gles2_Init(GoFunc getProcAddr) {
     i32 fb = 0;
     p_glGetIntegerv(CVF_GL_FRAMEBUFFER_BINDING, &fb);
     screen_fbo = (u32)fb;
+    fprintf(stderr, "gles: init: framebuffer binding %d, status 0x%x\n", fb, p_glCheckFramebufferStatus(0x8D40));
     return (GoIface){0};
 }
 
