@@ -87,11 +87,11 @@ int main(int argc, char **argv) {
     dump_heap_zone_info();
 
     // Make some marker allocations to understand heap layout
-    fprintf(stderr, "\n=== Marker Allocations (4160 bytes = target size class) ===\n");
+    fprintf(stderr, "\n=== Marker Allocations (4412 bytes = coverage buf size) ===\n");
     void *markers[8];
     for (int i = 0; i < 8; i++) {
-        markers[i] = malloc(4160);
-        memset(markers[i], 0x41 + i, 4160);  // fill with identifiable pattern
+        markers[i] = malloc(4412);
+        memset(markers[i], 0x41 + i, 4412);  // fill with identifiable pattern
         dump_allocation_info(markers[i], "marker");
     }
     // Free alternate ones to create holes
@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
         unsigned char *p = (unsigned char *)markers[i];
         unsigned char expected = 0x41 + i;
         int corrupted = 0;
-        for (int j = 0; j < 4160; j++) {
+        for (int j = 0; j < 4412; j++) {
             if (p[j] != expected) {
                 fprintf(stderr, "CORRUPTION in marker %d at offset %d: "
                         "expected 0x%02x, got 0x%02x\n",
