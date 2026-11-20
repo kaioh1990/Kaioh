@@ -121887,27 +121887,28 @@ Ret_ConfigPtr__GoIface fn_loadConfig(GoString def) {
         (*c__h).Video.EnableModel = false;
         (*c__h).Video.EnableModelShadow = false;
     }
-    if (true) {
-        i32 _t7 = 0;
-        i32 _t8 = 0;
-        (*c__h).Video.FightAspectWidth = _t7;
-        (*c__h).Video.FightAspectHeight = _t8;
-    }
     fn_vitaTrace(GOSTR("cfg: normalized"));
     g_vitaTraceOn = false;
     g_vitaTraceDeep = false;
     Config_sysSet(&(*c__h));
     fn_vitaTrace(GOSTR("cfg: sysSet done"));
     Config_Save(&(*c__h), (*def__h));
+    if (true) {
+        i32 _t7 = 0;
+        i32 _t8 = 0;
+        (*c__h).Video.FightAspectWidth = _t7;
+        (*c__h).Video.FightAspectHeight = _t8;
+    }
+    fn_cvfApplyFightAspect((&(*c__h)));
     return (Ret_ConfigPtr__GoIface){(&(*c__h)), (GoIface){0}};
 }
 
-// Config.initStruct (config.go:359), 0 TODO
+// Config.initStruct (config.go:364), 0 TODO
 void Config_initStruct(Config* c) {
     fn_initMaps(reflect_Value_Elem(reflect_ValueOf(((GoIface){463, (void *)(c)}))));
 }
 
-// Config.normalize (config.go:365), 0 TODO
+// Config.normalize (config.go:370), 0 TODO
 void Config_normalize(Config* c) {
     Config_SetValueUpdate(c, GOSTR("Config.Players"), ((GoIface){2, go_box_a(int, ((int)fn_Clamp_i32(((i32)c->Config.Players), 1, 8)))}));
     Config_SetValueUpdate(c, GOSTR("Options.Difficulty"), ((GoIface){2, go_box_a(int, ((int)fn_Clamp_i32(((i32)c->Options.Difficulty), 1, 8)))}));
@@ -121964,7 +121965,7 @@ void Config_normalize(Config* c) {
     }
 }
 
-// Config.sysSet (config.go:425), 0 TODO
+// Config.sysSet (config.go:430), 0 TODO
 void Config_sysSet(Config* c) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&g_sys.cmdFlags, GOSTR("-width"), &_t1);
@@ -122026,12 +122027,12 @@ void Config_sysSet(Config* c) {
     }
 }
 
-// Config.GetValue (config.go:497), 0 TODO
+// Config.GetValue (config.go:502), 0 TODO
 Ret_GoIface__GoIface Config_GetValue(Config* c, GoString query) {
     return fn_GetValue(((GoIface){463, (void *)(c)}), query);
 }
 
-// Config.SetValueUpdate (config.go:502), 0 TODO
+// Config.SetValueUpdate (config.go:507), 0 TODO
 GoIface Config_SetValueUpdate(Config* c, GoString query, GoIface value) {
     if (false && g_vitaTraceDeep) {
         fn_vitaTrace(go_strcat(GOSTR("SVU "), query));
@@ -122039,7 +122040,7 @@ GoIface Config_SetValueUpdate(Config* c, GoString query, GoIface value) {
     return fn_SetValueUpdate(((GoIface){463, (void *)(c)}), c->IniFile, query, value);
 }
 
-// Config.Save (config.go:510), 0 TODO
+// Config.Save (config.go:515), 0 TODO
 GoIface Config_Save(Config* c, GoString file) {
     return fn_SaveINI(c->IniFile, file);
 }
@@ -123924,8 +123925,8 @@ bool fn_cvfClampInvincibility(Char* c, i32* time_) {
     return true;
 }
 
-// cvfApplyDisplay (cvf_online.go:847), 0 TODO
-void fn_cvfApplyDisplay(Config* cfg) {
+// cvfApplyFightAspect (cvf_online.go:839), 0 TODO
+void fn_cvfApplyFightAspect(Config* cfg) {
     {
         Arr2_i32 a = fn_cvfRulesLoad()->fightAspect;
         if ((a.v[0] != 0) && (a.v[1] != 0)) {
@@ -123935,11 +123936,16 @@ void fn_cvfApplyDisplay(Config* cfg) {
             cfg->Video.FightAspectHeight = _t2;
         }
     }
+}
+
+// cvfApplyDisplay (cvf_online.go:854), 0 TODO
+void fn_cvfApplyDisplay(Config* cfg) {
+    fn_cvfApplyFightAspect(cfg);
     {
-        i32 _t3 = g_cvfScreen.v[0];
-        i32 _t4 = g_cvfScreen.v[1];
-        i32 w = _t3;
-        i32 h = _t4;
+        i32 _t1 = g_cvfScreen.v[0];
+        i32 _t2 = g_cvfScreen.v[1];
+        i32 w = _t1;
+        i32 h = _t2;
         if ((h > 0) && ((w * 9) != (h * 16))) {
             i32 gw = go_div32((cfg->Video.GameHeight * w), h);
             {
@@ -123953,12 +123959,12 @@ void fn_cvfApplyDisplay(Config* cfg) {
     }
 }
 
-// System.cvfWideView (cvf_online.go:867), 0 TODO
+// System.cvfWideView (cvf_online.go:872), 0 TODO
 bool System_cvfWideView(System* s) {
     return ((((fn_cvfRulesLoad()->wideView && System_middleOfMatch(s)) && (s->stage != NULL)) && s->cfg.Video.KeepAspect) && (System_getFightAspect(s) < System_getMotifAspect(s)));
 }
 
-// System.cvfClampWideView (cvf_online.go:875), 0 TODO
+// System.cvfClampWideView (cvf_online.go:880), 0 TODO
 f32 System_cvfClampWideView(System* s, f32 x, f32 scl) {
     if ((scl <= 0x0p+00f) || (Camera_BaseScale(&s->SystemStateVars_.cam) <= 0x0p+00f)) {
         return x;
@@ -123974,7 +123980,7 @@ f32 System_cvfClampWideView(System* s, f32 x, f32 scl) {
     return fn_Clamp_f32(x, lo, hi);
 }
 
-// cvfSpecialTick (cvf_online.go:889), 0 TODO
+// cvfSpecialTick (cvf_online.go:894), 0 TODO
 void fn_cvfSpecialTick(Char* c) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if ((r->specialCD <= 0) || (!cvfRulesT_appliesTo(r, c))) {
@@ -123989,7 +123995,7 @@ void fn_cvfSpecialTick(Char* c) {
     }
 }
 
-// cvfBlockSpecial (cvf_online.go:903), 0 TODO
+// cvfBlockSpecial (cvf_online.go:908), 0 TODO
 bool fn_cvfBlockSpecial(Char* c, i32 no) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if ((((c->cvfSpecialCD <= 0) || (no < r->specialLo)) || (no > r->specialHi)) || (!cvfRulesT_appliesTo(r, c))) {
@@ -124008,7 +124014,7 @@ bool fn_cvfBlockSpecial(Char* c, i32 no) {
     return true;
 }
 
-// cvfScaleMPGain (cvf_online.go:920), 0 TODO
+// cvfScaleMPGain (cvf_online.go:925), 0 TODO
 i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v) {
     cvfRulesT* r = fn_cvfRulesLoad();
     if ((((v <= 0) || (i != r->mpVar)) || (r->mpScaleMilli == 1000)) || (!cvfRulesT_appliesTo(r, c))) {
@@ -124020,7 +124026,7 @@ i32 fn_cvfScaleMPGain(Char* c, i32 i, i32 v) {
     return go_div32(total, 1000);
 }
 
-// cvfDebugf (cvf_online.go:934), 0 TODO
+// cvfDebugf (cvf_online.go:939), 0 TODO
 void fn_cvfDebugf(GoString format, Slice_GoIface args) {
     if (g_cvfDebugOn && (g_cvfDebugCount < 200)) {
         g_cvfDebugCount++;

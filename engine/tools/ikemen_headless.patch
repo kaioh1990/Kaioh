@@ -11010,7 +11010,7 @@ index 762ee1f..72f4fae 100644
  			if numStr == "" || strings.Trim(numStr, "0123456789") != "" {
  				continue
 diff --git a/src/config.go b/src/config.go
-index d39783d..ffb50e8 100644
+index d39783d..7fbc98f 100644
 --- a/src/config.go
 +++ b/src/config.go
 @@ -291,7 +291,9 @@ func loadConfig(def string) (*Config, error) {
@@ -11023,7 +11023,7 @@ index d39783d..ffb50e8 100644
  
  	assignFrom := func(src *ini.File) {
  		if src == nil {
-@@ -319,12 +321,36 @@ func loadConfig(def string) (*Config, error) {
+@@ -319,13 +321,42 @@ func loadConfig(def string) (*Config, error) {
  
  	// Apply precedence: struct zero/default tags < defaultConfig.ini < user config
  	assignFrom(defaultOnlyIni)
@@ -11045,22 +11045,28 @@ index d39783d..ffb50e8 100644
 +		c.Video.EnableModel = false
 +		c.Video.EnableModelShadow = false
 +	}
-+	if vitaPerf {
-+		// Full-panel fights (no letterboxed stage-aspect viewport). The fight
-+		// aspect reaches the simulation (screen-relative triggers and camera
-+		// bounds), so every native build uses the same value as the Vita for
-+		// identical game state across devices (rollback netplay).
-+		c.Video.FightAspectWidth, c.Video.FightAspectHeight = 0, 0
-+	}
 +	vitaTrace("cfg: normalized")
 +	vitaTraceOn = false
 +	vitaTraceDeep = false
  	c.sysSet()
 +	vitaTrace("cfg: sysSet done")
  	c.Save(def)
++	// The fight aspect reaches the simulation (screen-relative triggers, camera
++	// bounds), so it is decided here, after saving: config.ini keeps the
++	// player's own value (the Go builds share the file), and every load
++	// (startup, loadGameOption) ends with the same aspect.
++	if vitaPerf {
++		// Full-panel fights (no letterboxed stage-aspect viewport), the same
++		// value as the Vita for identical game state across devices.
++		c.Video.FightAspectWidth, c.Video.FightAspectHeight = 0, 0
++	}
++	// The shared rules (cvf_online.ini FightAspect) win in every build, as
++	// cvfApplyDisplay does in the Go builds' main.
++	cvfApplyFightAspect(&c)
  	return &c, nil
  }
-@@ -474,6 +500,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
+ 
+@@ -474,6 +505,9 @@ func (c *Config) GetValue(query string) (interface{}, error) {
  
  // SetValueUpdate sets the value based on the query string and updates the IniFile.
  func (c *Config) SetValueUpdate(query string, value interface{}) error {
@@ -12752,10 +12758,10 @@ index 0000000..783dcc9
 +var _ Renderer = (*nullRenderer)(nil)
 diff --git a/src/cvf_online.go b/src/cvf_online.go
 new file mode 100644
-index 0000000..10b9d64
+index 0000000..5caa9f7
 --- /dev/null
 +++ b/src/cvf_online.go
-@@ -0,0 +1,939 @@
+@@ -0,0 +1,944 @@
 +package main
 +
 +// Castlevania Fighter online helpers:
@@ -13593,6 +13599,13 @@ index 0000000..10b9d64
 +	return true
 +}
 +
++// The shared rules' fight aspect, if they set one.
++func cvfApplyFightAspect(cfg *Config) {
++	if a := cvfRulesLoad().fightAspect; a[0] != 0 && a[1] != 0 {
++		cfg.Video.FightAspectWidth, cfg.Video.FightAspectHeight = a[0], a[1]
++	}
++}
++
 +// Physical screen size, passed in by the iOS app.
 +var cvfScreen [2]int32
 +
@@ -13603,9 +13616,7 @@ index 0000000..10b9d64
 +// Applies the shared fight aspect, which affects gameplay and must match between players,
 +// and fits the menus to screens wider than 16:9. Game size outside fights is display only.
 +func cvfApplyDisplay(cfg *Config) {
-+	if a := cvfRulesLoad().fightAspect; a[0] != 0 && a[1] != 0 {
-+		cfg.Video.FightAspectWidth, cfg.Video.FightAspectHeight = a[0], a[1]
-+	}
++	cvfApplyFightAspect(cfg)
 +	// Menus match the screen's shape: wider on long phones, narrower (down to 4:3) on
 +	// squarer screens, so neither gets black bars.
 +	if w, h := cvfScreen[0], cvfScreen[1]; h > 0 && w*9 != h*16 {

@@ -11519,6 +11519,7 @@ void fn_cvfOnlineScriptInit(lua_LState* l);
 cvfRulesT* fn_cvfRulesLoad(void);
 bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
 bool fn_cvfClampInvincibility(Char* c, i32* time_);
+void fn_cvfApplyFightAspect(Config* cfg);
 void fn_cvfApplyDisplay(Config* cfg);
 bool System_cvfWideView(System* s);
 f32 System_cvfClampWideView(System* s, f32 x, f32 scl);
