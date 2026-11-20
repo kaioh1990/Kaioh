@@ -1,5 +1,15 @@
 # Brotli PoC Testing Instructions
 
+## IMPORTANT UPDATE (Nov 20, 2026)
+
+The original payloads (oob-base, oob-extended, oob-huffman, oob-padding) were
+**detection probes only** — they use MNIBBLES=0 (empty meta-blocks) which CANNOT
+trigger the actual CVE-2026-111497 vulnerability.
+
+**Real PoC payloads are now deployed** on the v4 server (port 8889). These use
+the actual exploit mechanism: NBLTYPESL=2 with block length exhaustion, from
+published PoCs by dimasma0305 and syrex1013.
+
 ## Quick Start
 
 When you wake up, here's what to do:

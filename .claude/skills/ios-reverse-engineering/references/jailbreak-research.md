@@ -826,9 +826,24 @@ Step 6: Install Sileo ← GOAL
 
 ### Infrastructure
 
-- HTTP trigger server: `brotli_trigger_server.py` on Mac port 8889
-- HTTPS trigger server: `crash_server.py` on Mac port 4443 (self-signed cert)
-- iPad Mini test: Navigate to http://<mac-ip>:8889/ in Safari
+- V4 trigger server: `brotli_v4_server.py` on Mac port 8889 (REAL PoC payloads)
+- HTTPS trigger server: `brotli_https_server.py` on Mac port 4444 (self-signed cert)
+- HTTPS crash server: `crash_server.py` on Mac port 4443
+- Combined DS test: port 8890
+- iPad Mini test: Navigate to http://192.168.1.155:8889/ in Safari
+
+### Critical Payload Finding (Nov 20, 2026)
+
+Original payloads (oob-base etc.) were DETECTION PROBES ONLY using MNIBBLES=0
+(empty meta-blocks) that CANNOT trigger CVE-2026-111497. Real PoCs require
+NBLTYPESL=2 or NBLTYPESI=2 with block length exhaustion:
+
+- **syrex1013** (~512KB): NBLTYPESL=2, block type 0 length=1 → exhausts,
+  type 1 length=0 → immediate exhaustion → OOB on third block switch
+- **dimasma0305** (~23MB): NBLTYPESI=2, 16M commands exhaust initial block
+  length → controlled block switch with attacker-supplied bytes → precise OOB
+
+V4 server deployed with real trigger payloads from both PoC approaches.
 
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
@@ -837,3 +852,5 @@ Step 6: Install Sileo ← GOAL
 - CVE-2026-86950 (CoreGraphics) is PATCHED on iOS 27.0.1 — confirmed by bare trigger test
 - CVE-2026-111497 (Brotli) is the active entry point — VULNERABLE on iOS 27.0.1
 - Calif.io demonstrated untethered iOS 27.0.1 jailbreak but kernel exploit not yet public
+- Calif kernel exploit STILL NOT RELEASED as of Nov 20 — no new ETA
+- Real PoC payloads now deployed: syrex ~512KB, dimasma ~23MB (v4 server)
