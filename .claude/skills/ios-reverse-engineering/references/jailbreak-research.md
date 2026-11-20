@@ -188,6 +188,58 @@ CVE-2024-23222 itself is patched on iOS 27. But it teaches us:
 - **iPad Mini (iOS 27.0.1)**: Primary test device — lower risk
 - **iPhone Duo (iOS 27.1)**: Target device — only after iPad Mini validation
 
+## iOS 27.2 Endpoint Security Analysis (Calif.io Research)
+
+**Source**: Josh Maine, Calif.io, September 18, 2026 — "Apple Internals: Endpoint Security ships in iOS 27.2 beta"
+
+### What Shipped
+
+iOS 27.2 beta introduces the Endpoint Security (ES) framework to iOS via:
+- **KEXT**: `com.apple.iokit.EndpointSecuritySE` — kernel extension with MAC policy hooks
+- **Dylib**: `libEndpointSecurity.dylib` — userspace client library
+
+### Key Findings: Completely Inert on Retail Devices
+
+1. **Research Mode gate**: Both `esk_kext_start()` and `EndpointSecurityDriver::init()` check `research_mode_state()` AND `extended_research_mode_state()` before activating. Only Security Research Devices (SRDs) pass this check.
+
+2. **Notify-only**: The subscription filter allows only NOTIFY events (37 event types). No AUTH events — ES cannot block or deny operations, only observe them.
+
+3. **Single client**: Only `watchdogd` holds the `.embeddedclient` entitlement required for Type-1 connections. No other binary can connect.
+
+4. **watchdogd doesn't subscribe**: Despite importing `es_new_client` and `es_delete_client`, watchdogd has no calls to `es_subscribe` — it creates a client but never subscribes to any events.
+
+### MAC Policy: 42 Hooks
+
+The KEXT registers a MAC policy with 42 populated hooks covering:
+- **Process lifecycle**: `proc_check_fork`, `proc_check_signal`, `proc_check_wait`, `proc_notify_exit`
+- **File operations**: `vnode_check_open`, `vnode_check_rename`, `vnode_check_unlink`, `vnode_check_write`, etc.
+- **Task/thread control**: `proc_check_get_task`, `proc_check_get_movable_control_port`, `proc_check_set_thread_state`, `proc_check_set_cs_info`
+- **New 27.2 events**: exception ports, special ports, `thread_set_state`, `set_cs_info`, `map_anon`, `sigaction`
+- **Credential changes**: `cred_check_label_update`
+
+### Subscription Filter Implementation
+
+The filter uses a 172-bit set checked against three 64-bit forbid masks:
+- Events 0–63: mask `0x9000040000006c08` (forbids AUTH events like ES_EVENT_TYPE_AUTH_EXEC)
+- Events 64–127: mask `0x0000700000000020`
+- Events 128–171: mask `0x0000000000000018`
+
+Any event whose bit is set in the forbid mask is rejected at subscription time.
+
+### Connection Requirements (Type-1)
+
+1. Must be **root** (UID 0)
+2. Must hold **`com.apple.developer.endpoint-security.embeddedclient`** entitlement
+3. Must pass **TCC check** (Transparency, Consent, and Control)
+4. Only then can call `es_new_client` to create a client handle
+
+### Implications for Jailbreak Research
+
+- **Not an attack surface on retail**: The research-mode gate means ES is dead code on consumer devices. No value as an exploitation target.
+- **Signals future direction**: Apple is bringing macOS-style endpoint telemetry to iOS. The spring .3/.4 releases historically ship bigger security changes — ES may become more functional there.
+- **SRD value**: For researchers with SRDs, the notify-only ES provides visibility into kernel-level operations that was previously unavailable on iOS.
+- **Related research**: Calif.io also discovered "Java4Shell" and "Swift-in-the-Kernel" — both pointing to increasing kernel-level instrumentation on iOS.
+
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
 - iPhone Duo likely uses A-series or M-series chip with full PAC/PPL/KTRR
