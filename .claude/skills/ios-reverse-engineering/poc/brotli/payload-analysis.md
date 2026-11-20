@@ -1,155 +1,153 @@
 # CVE-2026-111497 Brotli Payload Analysis
 
-## Summary
+## Status: EXISTING PAYLOADS ARE INVALID — MUST BE REPLACED
 
-The 4 trigger payloads are **vulnerability detection probes**, not OOB write exploits.
-They exploit an invalid Brotli stream condition (ISLAST=1 + MNIBBLES=0) that the
-**vulnerable** decoder mishandles — returning NEEDS_MORE_INPUT instead of FORMAT_ERROR.
-They will NOT cause a Safari crash via memory corruption.
+### Problem with Current Payloads
 
-**To cause an actual OOB write, we need a different, more complex payload** (see "What's
-Needed for OOB Write" at the end).
+All four payloads in `brotli_https_server.py` and `brotli_trigger_server.py` start with
+byte `0x20` which decodes as MNIBBLES=0 (empty/skip meta-block). Empty meta-blocks
+**never reach the block-type decoding logic** that CVE-2026-111497 exploits.
 
----
-
-## Payload Structure
-
-All 4 payloads share the same high-level structure:
-
-```
-Bytes:  20 00 10 41 41 41 fc ff ff 07 00 22 28 f0 0b 60 f7 f4 1f 00 00 00
-        ^     ^  ^                                                        ^
-        |     |  |                                                        |
-        WBITS |  Meta-block #2 starts here                           Trailing
-              |
-              Meta-block #1 metadata byte (skipped)
-```
-
-### Bit-Level Parse
-
-**WBITS (bit 0):**
-- bit[0] = 0 → WBITS = 16, window size = 65520 bytes
-
-**Meta-block #1 (bits 1–23):**
-- ISLAST = 0
-- MNIBBLES = 0 → metadata meta-block (valid)
-- RESERVED = 0
-- MSKIPBYTES = 1
-- MSKIPLEN = 0 → skip 1 byte (byte[2] = 0x10)
-- Byte-align to bit 16, skip 1 byte to bit 24
-
-**Meta-block #2 (bits 24+):**
-- ISLAST = 1
-- ISLASTEMPTY = 0
-- MNIBBLES = 0
-
-**THIS IS INVALID.** RFC 7932 Section 9.2: MNIBBLES = 0 is only valid when ISLAST = 0
-(it signals a metadata meta-block, which is by definition not the last one).
-
-### What Happens on Each Decoder
-
-**FIXED decoder:**
-```
-ISLAST=1 + MNIBBLES=0 → BROTLI_DECODER_ERROR_FORMAT_RESERVED
-  → returns error code -17 (ERR_FORMAT_BLOCK_SWITCH or similar)
-  → clean error, no state corruption
-```
-
-**VULNERABLE decoder (iOS 27.0.1 libcompression):**
-```
-ISLAST=1 + MNIBBLES=0 → is_metadata = !is_last = FALSE
-  → BUT size_nibbles=0, so enters metadata/skip handling anyway
-  → Reads MSKIPBYTES=2, MSKIPLEN=33410
-  → Tries to skip 33411 bytes
-  → Only 16 bytes remain in stream
-  → Returns BROTLI_DECODER_NEEDS_MORE_INPUT
-  → Caller (WebKit.Networking) sees "need more input" for a complete response body
-```
-
-The differential: **NEEDS_MORE_INPUT vs FORMAT_ERROR** is the vulnerability signal.
+These are detection probes (vulnerable vs patched differentiation) but they **cannot cause
+the OOB write** needed for our exploit chain.
 
 ---
 
-## Variant Differences
+## The Actual Vulnerability (from fix commit google/brotli@0ed4268)
 
-| Variant | Diff from base | Purpose |
-|---------|---------------|---------|
-| **oob-base** (22B) | — | Baseline trigger |
-| **oob-extended** (23B) | +1 trailing 0x00 | Tests behavior with slightly more data (17 vs 16 bytes for the skip) |
-| **oob-huffman** (22B) | byte[2]: 0x10→0x18 (bit 19 flipped) | Different metadata byte — tests if decoder uses skipped data as Huffman state |
-| **oob-padding** (22B) | byte[9]: 0x07→0x0f (bit 75 flipped) | Different padding flags in second meta-block — tests state divergence |
-
-### Detailed Diffs
-
-**oob-huffman:** Byte 2 is the 1-byte metadata payload from meta-block #1. It's
-supposed to be skipped over, but if the vulnerable decoder improperly references it
-as Huffman tree data (via stale state), the different bit pattern exercises a
-different corruption path.
-
-**oob-padding:** Byte 9 (0x07 → 0x0f) is part of the second meta-block's data area
-where the decoder is trying to "skip" 33411 bytes. The extra set bit (bit 75) changes
-what the decoder reads if it processes these bytes instead of properly skipping them.
-
-**oob-extended:** One extra 0x00 byte gives the decoder 17 bytes instead of 16 for the
-33411-byte skip. Tests whether the decoder behaves differently with marginally more data.
-
----
-
-## Expected Test Results
-
-When iPad Safari navigates to the trigger server:
-
-| Scenario | What Happens | Meaning |
-|----------|-------------|---------|
-| **fetch() returns error quickly** | Decoder returned FORMAT_ERROR | **PATCHED** |
-| **fetch() hangs / returns partial data** | Decoder returned NEEDS_MORE_INPUT | **VULNERABLE** (detection confirmed) |
-| **Empty response** | WebKit.Networking confused by incomplete decode | **VULNERABLE** (detection confirmed) |
-| **Safari tab crashes** | Unlikely with these payloads | Would indicate severe mishandling |
-| **Network error** | CORS, mixed content, or cert issue | **Inconclusive** — fix server config |
-
-The payloads are **probes**: they distinguish vulnerable from patched without causing crashes.
-This is useful for confirming the vulnerability exists, but doesn't demonstrate the actual
-memory corruption primitive.
-
----
-
-## What's Needed for an Actual OOB Write
-
-The real CVE-2026-111497 OOB write requires a much more complex Brotli stream:
-
-1. **Set up valid Huffman trees** in the first block (literal/distance/insert-copy trees)
-2. **Declare a single block type** (NBLTYPESL=1, NBLTYPESI=1, NBLTYPESD=1)
-3. **Inject a block-type switch command** mid-data that the decoder processes
-4. **DecodeBlockTypeAndLength()** encounters the switch, returns BROTLI_FALSE
-5. On vulnerable builds, the caller **doesn't distinguish** "need input" from "error"
-6. Decoder continues with **stale Huffman state** from a previous (or never-initialized) tree
-7. Stale Huffman codes decode to **arbitrary byte values**
-8. These values are written to the **ring buffer** (~230KB), potentially at an offset
-   beyond the allocated bounds
-
-Building this payload requires:
-- Understanding the Brotli Huffman coding format at the bit level
-- Crafting valid initial block trees
-- Computing the exact point where the block-type switch triggers
-- Controlling the stale state to produce a useful write pattern
-
-This is significantly more complex than the detection probes and would need to be
-adapted from the full public PoC (e.g., dimasma0305's exploit code).
-
----
-
-## Payload Hex Dump
-
+### Before the fix (VULNERABLE):
+```c
+// DecodeBlockTypeAndLength returned BROTLI_BOOL
+static BROTLI_INLINE BROTLI_BOOL DecodeBlockTypeAndLength(
+    int safe, BrotliDecoderState* s, int tree_type) {
+  if (max_block_type <= 1) {
+    return BROTLI_FALSE;  // Same as "need more input"!
+  }
+  if (!safe) {
+    block_type = ReadSymbol(type_tree, br);
+    s->block_length[tree_type] = ReadBlockLength(len_tree, br);
+  } else {
+    if (!SafeReadSymbol(...)) return BROTLI_FALSE;  // Same as error!
+    if (!SafeReadBlockLength(...)) return BROTLI_FALSE;
+  }
+  return BROTLI_TRUE;
+}
 ```
-oob-base (22 bytes):
-  20 00 10 41 41 41 fc ff ff 07 00 22 28 f0 0b 60 f7 f4 1f 00 00 00
 
-oob-extended (23 bytes):
-  20 00 10 41 41 41 fc ff ff 07 00 22 28 f0 0b 60 f7 f4 1f 00 00 00 00
-
-oob-huffman (22 bytes):
-  20 00 18 41 41 41 fc ff ff 07 00 22 28 f0 0b 60 f7 f4 1f 00 00 00
-
-oob-padding (22 bytes):
-  20 00 10 41 41 41 fc ff ff 0f 00 22 28 f0 0b 60 f7 f4 1f 00 00 00
+The `BROTLI_SAFE()` macro on the **fast path** (safe=0) discarded the return:
+```c
+#define BROTLI_SAFE(METHOD)
+  if (safe) { if (!METHOD) return NEEDS_MORE_INPUT; }
+  else { METHOD; }  // *** RETURN VALUE THROWN AWAY ***
 ```
+
+Three call sites used this macro in `ProcessCommandsInternal()`:
+- `DecodeCommandBlockSwitch(s)` at CommandBegin (line ~2018)
+- `DecodeDistanceBlockSwitch(s)` at distance decode (line ~2163)
+- `DecodeLiteralBlockSwitch(s)` at NextLiteralBlock (line ~2357)
+
+### After the fix (PATCHED):
+- Returns `BrotliDecoderErrorCode` with DISTINCT values
+- Error -17 (`BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH`) for format errors
+- `BROTLI_DECODER_NEEDS_MORE_INPUT` for insufficient input
+- New `BROTLI_SAFE_WITH_STATUS` macro checks return in BOTH safe and unsafe modes
+
+---
+
+## Real PoC Repos & Their Trigger Construction
+
+### 1. dimasma0305/CVE-2026-111497-POC (PRIMARY — verified RCE)
+- **Trigger SHA256:** `b7a6508eb39ef57ae5e3fdf9aa85540071a06eff5d5b5a2d359fc8e1768e4df4`
+- **File:** `poc.py` → `generate_stream()` function
+- **Stream structure:**
+  - WBITS=17 (1MB window)
+  - Data meta-block: ISLAST=0, MNIBBLES=2, MLEN=0xFFFFFF (16MB output)
+  - **NBLTYPESL=1** (1 literal block type)
+  - **NBLTYPESI=2** (2 insert/copy block types) ← KEY
+  - Command block type tree: 1-symbol (symbol 0)
+  - Command block length tree: 1-symbol (symbol 25 = max length)
+  - **Initial command block length = 0xFFFFFF** (16,777,215)
+  - NBLTYPESD=1 (1 distance block type)
+  - Literal/IC/Distance trees: single-symbol Huffman codes
+  - **2^24 commands** of 11-bit distance values to exhaust counter
+- **Two-stage attack:**
+  - Stage 1: `generate_stream() + b"\x00" * 3` (~23MB)
+  - Stage 2: 127 bytes with struct packing at offsets 7, 15, 19, 23
+- **For RCE:** `generate_rce_stream()` adds 1KB prefix with gadget addresses
+
+### 2. syrex1013/CVE-2026-111497-node2shell
+- **File:** `poc_ref.py` → `craft_brotli_malformado_block_switch()` function
+- **Simpler approach:**
+  - WBITS=16
+  - NBLTYPESL=2 (two literal block types)
+  - Block type 0 length=1, Block type 1 length=0
+  - After 1 literal → type 0 exhausts → switch to type 1
+  - Type 1 length=0 → immediately exhausts → forces another switch
+  - Second switch reads garbage → OOB
+- Pads to ~512KB for heap pressure
+
+---
+
+## How the dimasma0305 Trigger Works
+
+1. Stream declares **NBLTYPESI=2** with initial block length 0xFFFFFF
+2. **16,777,215 insert/copy commands** processed — each is a copy with distance
+3. **block_length[1] reaches 0** at `ProcessCommandsInternal` CommandBegin check
+4. **`DecodeCommandBlockSwitch(s)` called** via `BROTLI_SAFE` macro
+5. **Fast path (safe=0):** `DecodeBlockTypeAndLength(0, s, 1)` runs:
+   - max_block_type = 2 > 1, passes the guard check
+   - `ReadSymbol(type_tree, br)` reads from streaming input
+   - **Input is now the stage-2 crafted bytes**
+   - Block type/length set to attacker-controlled values
+6. **Return value DISCARDED** by `BROTLI_SAFE` macro on fast path
+7. Processing continues with attacker-controlled block type and length
+8. Controlled values corrupt ring buffer state → **memmove16() writes to controlled address**
+9. For RCE: prefix with ROP/JOP gadget chain → redirect execution
+
+### Why NBLTYPESI=2 (not NBLTYPES=1)
+- NBLTYPES=1 → `DecodeBlockTypeAndLength` returns FALSE immediately (counter never read)
+- Counter doesn't get reset → underflows to UINT32_MAX → DoS/uncontrolled corruption
+- NBLTYPES=2 → function READS new block type from input → attacker controls result
+- Gives precise control over the OOB: controlled address + controlled 16-byte write
+
+---
+
+## Adapting for Safari/WebKit iOS
+
+**Key considerations:**
+1. Safari uses the same C Brotli decoder (linked into WebKit.Networking)
+2. `Content-Encoding: br` causes automatic decompression — zero click
+3. Use `Transfer-Encoding: chunked` for two-stage delivery:
+   - Chunk 1: trigger stream (~23MB, exhausts counter)
+   - 500ms delay
+   - Chunk 2: stage-2 corruption bytes (127 bytes)
+4. The trigger stream is large because it needs 2^24 commands
+
+**For DoS-only testing (confirm vulnerability):**
+- Stage 1 only should crash WebKit.Networking
+- After 16M commands, decoder reads garbage for block switch → crash
+
+**Server needs:**
+1. Run `generate_stream()` from dimasma0305 `poc.py` on the Mac
+2. Save output as the trigger payload
+3. Build chunked-transfer HTTPS server
+4. Serve trigger + stage 2 via chunked encoding
+
+---
+
+## Action Items
+
+1. **On Mac (192.168.1.155):** Clone dimasma0305/CVE-2026-111497-POC
+2. **Generate trigger bytes:** `python3 -c "from poc import generate_stream; open('trigger.br','wb').write(generate_stream())"`
+3. **Build new HTTPS server** using chunked transfer encoding
+4. **Test on iPad:** Navigate Safari to new server URL
+5. **Expected result:** WebKit.Networking crash → confirms OOB write path
+6. **Then:** Add stage 2 for controlled corruption
+
+## References
+
+- Fix commit: google/brotli@0ed4268 (Feb 27, 2026)
+- dimasma0305 PoC: https://github.com/dimasma0305/CVE-2026-111497-POC
+- syrex1013 PoC: https://github.com/syrex1013/CVE-2026-111497-node2shell
+- Datadog writeup: https://securitylabs.datadoghq.com/articles/node2shell-cve-2026-111497-nodejs-brotli-decoder/
+- JFrog Brotli2Shell: https://research.jfrog.com/post/brotli2shell-beyond-node2shell-and-http2shell/
