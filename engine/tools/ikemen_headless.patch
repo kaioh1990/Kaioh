@@ -15918,7 +15918,7 @@ index 1a2540b..3b8944d 100644
  package main
  
 diff --git a/src/render_gles32.go b/src/render_gles32.go
-index 891acab..f4253b2 100644
+index 891acab..f236415 100644
 --- a/src/render_gles32.go
 +++ b/src/render_gles32.go
 @@ -2,7 +2,7 @@
@@ -16233,12 +16233,13 @@ index 891acab..f4253b2 100644
  
  	// Unbind for safety
  	r.bindVertexArray(0)
-@@ -950,10 +1041,14 @@ func (r *Renderer_GLES32) Init() {
+@@ -950,10 +1041,15 @@ func (r *Renderer_GLES32) Init() {
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 +		ppFormat := int32(gl.RGBA8_SNORM)
-+		if isVita {
++		if isVita || runtime.GOOS == "ios" {
++			// RGBA8_SNORM is not color-renderable in OpenGL ES 3.0
 +			ppFormat = gl.RGBA
 +		}
  		gl.TexImage2D(
@@ -16249,7 +16250,7 @@ index 891acab..f4253b2 100644
  			sys.scrrect[2],
  			sys.scrrect[3],
  			0,
-@@ -1003,7 +1098,12 @@ func (r *Renderer_GLES32) Init() {
+@@ -1003,7 +1099,12 @@ func (r *Renderer_GLES32) Init() {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
  	} else {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
@@ -16263,7 +16264,7 @@ index 891acab..f4253b2 100644
  	}
  
  	// create our two FBOs for our post-processing needs
-@@ -1130,8 +1230,28 @@ func (r *Renderer_GLES32) IsShadowEnabled() bool {
+@@ -1130,8 +1231,28 @@ func (r *Renderer_GLES32) IsShadowEnabled() bool {
  	return r.enableShadow
  }
  
@@ -16293,7 +16294,7 @@ index 891acab..f4253b2 100644
  	gl.Viewport(0, 0, sys.scrrect[2], sys.scrrect[3])
  	if clearColor {
  		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-@@ -1140,10 +1260,45 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
+@@ -1140,10 +1261,45 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
  	}
  }
  
@@ -16339,7 +16340,7 @@ index 891acab..f4253b2 100644
  
  	x, y, width, height := int32(0), int32(0), int32(sys.scrrect[2]), int32(sys.scrrect[3])
  	time := sdl.GetPerformanceCounter() // consistent time across all shaders
-@@ -1165,9 +1320,13 @@ func (r *Renderer_GLES32) EndFrame() {
+@@ -1165,9 +1321,13 @@ func (r *Renderer_GLES32) EndFrame() {
  	gl.Viewport(x, y, width, height)
  	// clear both of our post-processing FBOs to make sure
  	// nothing's there. the output is set later
@@ -16356,7 +16357,7 @@ index 891acab..f4253b2 100644
  	}
  	fbo_texture := r.fbo_texture
  	if sys.msaa > 0 {
-@@ -1240,42 +1399,59 @@ func (r *Renderer_GLES32) EndFrame() {
+@@ -1240,42 +1400,59 @@ func (r *Renderer_GLES32) EndFrame() {
  }
  
  func (r *Renderer_GLES32) Await() {
@@ -16438,7 +16439,7 @@ index 891acab..f4253b2 100644
  	if depthTest != r.depthTest {
  		r.depthTest = depthTest
  		if depthTest {
-@@ -1289,6 +1465,7 @@ func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
+@@ -1289,6 +1466,7 @@ func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
  
  // Note: This one defaults to enable so we must sync the cache early
  func (r *Renderer_GLES32) SetDepthMask(depthMask bool) {
@@ -16446,7 +16447,7 @@ index 891acab..f4253b2 100644
  	if depthMask != r.depthMask {
  		r.depthMask = depthMask
  		gl.DepthMask(depthMask)
-@@ -1296,6 +1473,7 @@ func (r *Renderer_GLES32) SetDepthMask(depthMask bool) {
+@@ -1296,6 +1474,7 @@ func (r *Renderer_GLES32) SetDepthMask(depthMask bool) {
  }
  
  func (r *Renderer_GLES32) SetFrontFace(invertFrontFace bool) {
@@ -16454,7 +16455,7 @@ index 891acab..f4253b2 100644
  	if invertFrontFace != r.invertFrontFace {
  		r.invertFrontFace = invertFrontFace
  		if invertFrontFace {
-@@ -1307,6 +1485,7 @@ func (r *Renderer_GLES32) SetFrontFace(invertFrontFace bool) {
+@@ -1307,6 +1486,7 @@ func (r *Renderer_GLES32) SetFrontFace(invertFrontFace bool) {
  }
  
  func (r *Renderer_GLES32) SetCullFace(doubleSided bool) {
@@ -16462,7 +16463,7 @@ index 891acab..f4253b2 100644
  	if doubleSided != r.doubleSided {
  		r.doubleSided = doubleSided
  		if !doubleSided {
-@@ -1337,6 +1516,7 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
+@@ -1337,6 +1517,7 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
  	}
  
  	// Switch program
@@ -16470,7 +16471,7 @@ index 891acab..f4253b2 100644
  	gl.UseProgram(prog)
  	r.program = prog
  
-@@ -1349,6 +1529,9 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
+@@ -1349,6 +1530,9 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
  }
  
  func (r *Renderer_GLES32) EnableBlending(eq BlendEquation, src, dst BlendFunc) {
@@ -16480,7 +16481,7 @@ index 891acab..f4253b2 100644
  	if !r.blendEnabled {
  		gl.Enable(gl.BLEND)
  		r.blendEnabled = true
-@@ -1368,6 +1551,7 @@ func (r *Renderer_GLES32) EnableBlending(eq BlendEquation, src, dst BlendFunc) {
+@@ -1368,6 +1552,7 @@ func (r *Renderer_GLES32) EnableBlending(eq BlendEquation, src, dst BlendFunc) {
  
  func (r *Renderer_GLES32) DisableBlending() {
  	if r.blendEnabled {
@@ -16488,7 +16489,7 @@ index 891acab..f4253b2 100644
  		gl.Disable(gl.BLEND)
  		r.blendEnabled = false
  		// Do not update blend equation cache because the hardware doesn't
-@@ -1793,6 +1977,7 @@ func (r *Renderer_GLES32) ReleaseModelPipeline() {
+@@ -1793,6 +1978,7 @@ func (r *Renderer_GLES32) ReleaseModelPipeline() {
  }
  
  func (r *Renderer_GLES32) ReadPixels(data []uint8, width, height int) {
@@ -16496,7 +16497,7 @@ index 891acab..f4253b2 100644
  	// we defer the EndFrame(), SwapBuffers(), and BeginFrame() calls that were previously below now to
  	// a single spot in order to prevent the blank screenshot bug on single digit FPS
  	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, 0)
-@@ -1800,6 +1985,7 @@ func (r *Renderer_GLES32) ReadPixels(data []uint8, width, height int) {
+@@ -1800,6 +1986,7 @@ func (r *Renderer_GLES32) ReadPixels(data []uint8, width, height int) {
  }
  
  func (r *Renderer_GLES32) BeginScreenshot(width, height int) {
@@ -16504,7 +16505,7 @@ index 891acab..f4253b2 100644
  	if r.capturePBO == 0 {
  		gl.GenBuffers(1, &r.capturePBO)
  	}
-@@ -1817,6 +2003,7 @@ func (r *Renderer_GLES32) BeginScreenshot(width, height int) {
+@@ -1817,6 +2004,7 @@ func (r *Renderer_GLES32) BeginScreenshot(width, height int) {
  }
  
  func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool {
@@ -16512,7 +16513,7 @@ index 891acab..f4253b2 100644
  	if !r.capturePending || len(data) < 4*width*height {
  		return false
  	}
-@@ -1834,11 +2021,53 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
+@@ -1834,11 +2022,53 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
  	return true
  }
  
@@ -16566,7 +16567,7 @@ index 891acab..f4253b2 100644
  		gl.Enable(gl.SCISSOR_TEST)
  		r.scissorEnabled = true
  	}
-@@ -1846,13 +2075,20 @@ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
+@@ -1846,13 +2076,20 @@ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
  	// The rect survives DisableScissor, so only set it when it changes
  	rect := [4]int32{x, realY, width, height}
  	if rect != r.scissorRect {
@@ -16587,7 +16588,7 @@ index 891acab..f4253b2 100644
  		gl.Disable(gl.SCISSOR_TEST)
  		r.scissorEnabled = false
  		// Do not zero r.scissorRect here because the hardware retains the last rect even when the test is off
-@@ -1865,7 +2101,18 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
+@@ -1865,7 +2102,18 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
  	}
  
  	// Cached path for the sprite shader
@@ -16607,7 +16608,7 @@ index 891acab..f4253b2 100644
  		key := (r.program << 16) | uint32(loc)
  		if old, exists := r.uniformICache[key]; exists && old == val {
  			return
-@@ -1873,6 +2120,7 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
+@@ -1873,6 +2121,7 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
  		r.uniformICache[key] = val
  	}
  
@@ -16615,7 +16616,7 @@ index 891acab..f4253b2 100644
  	gl.Uniform1i(loc, val)
  }
  
-@@ -1882,7 +2130,28 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
+@@ -1882,7 +2131,28 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
  	}
  
  	// Cached path for the sprite shader
@@ -16645,7 +16646,7 @@ index 891acab..f4253b2 100644
  		key := (r.program << 16) | uint32(loc)
  
  		switch len(values) {
-@@ -1913,6 +2182,7 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
+@@ -1913,6 +2183,7 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
  	}
  
  	// Uncached path
@@ -16653,7 +16654,7 @@ index 891acab..f4253b2 100644
  	switch len(values) {
  	case 1:
  		gl.Uniform1f(loc, values[0])
-@@ -1934,14 +2204,28 @@ func (r *Renderer_GLES32) SetUniformFvSub(loc int32, values []float32) {
+@@ -1934,14 +2205,28 @@ func (r *Renderer_GLES32) SetUniformFvSub(loc int32, values []float32) {
  	case 1, 2, 3, 4:
  		r.SetUniformFSub(loc, values...)
  	case 8:
@@ -16682,7 +16683,7 @@ index 891acab..f4253b2 100644
  	if !ok {
  		// Would otherwise write to location 0. Only engine code picks these names
  		panic(fmt.Sprintf("Uniform '%s' not registered in %s", name, s.name))
-@@ -1967,9 +2251,25 @@ func (r *Renderer_GLES32) SetUniformFv(name string, values []float32) {
+@@ -1967,9 +2252,25 @@ func (r *Renderer_GLES32) SetUniformFv(name string, values []float32) {
  // Caching matrices is as expensive as direct function calls
  func (r *Renderer_GLES32) SetUniformMatrix(name string, value []float32) {
  	loc := r.uniformLoc(r.currentProgram, name)
@@ -16710,7 +16711,7 @@ index 891acab..f4253b2 100644
  }
  
  func (r *Renderer_GLES32) SetModelUniformI(name string, val int) {
-@@ -2075,21 +2375,30 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
+@@ -2075,21 +2376,30 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
  		// Would otherwise write to location 0. Only engine code picks these names
  		panic(fmt.Sprintf("Texture uniform '%s' not registered", name))
  	}
@@ -16745,7 +16746,7 @@ index 891acab..f4253b2 100644
  			gl.Uniform4f(loc, t.uvst[0], t.uvst[1], t.uvst[2], t.uvst[3])
  		}
  	}
-@@ -2107,6 +2416,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
+@@ -2107,6 +2417,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
  		for i, bound := range r.boundTex {
  			if bound.tex == t.root {
  				r.texCacheLastUsed[i] = r.texCacheTimer
@@ -16756,7 +16757,7 @@ index 891acab..f4253b2 100644
  				r.SetUniformISub(loc, int32(i))
  				return
  			}
-@@ -2123,6 +2436,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
+@@ -2123,6 +2437,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
  		r.texCacheLastUsed[oldestUnit] = r.texCacheTimer
  
  		// Update uniform
@@ -16767,7 +16768,7 @@ index 891acab..f4253b2 100644
  		r.SetUniformISub(loc, oldestUnit)
  		return
  	}
-@@ -2196,6 +2513,30 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -2196,6 +2514,30 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  		}
  	}
  
@@ -16798,7 +16799,7 @@ index 891acab..f4253b2 100644
  	need := len(values) * 4
  
  	// Adjust scratch buffer size if necessary
-@@ -2223,6 +2564,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -2223,6 +2565,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  
  // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
  func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
@@ -16810,7 +16811,7 @@ index 891acab..f4253b2 100644
  	if loc, ok := r.currentProgram.uniforms["quad"]; ok && loc >= 0 {
  		gl.Uniform4fv(loc, 4, &v[0])
  	}
-@@ -2245,14 +2591,23 @@ func (r *Renderer_GLES32) SetModelIndexData(bufferIndex uint32, values ...uint32
+@@ -2245,14 +2592,23 @@ func (r *Renderer_GLES32) SetModelIndexData(bufferIndex uint32, values ...uint32
  }
  
  func (r *Renderer_GLES32) RenderQuad() {
@@ -16834,7 +16835,7 @@ index 891acab..f4253b2 100644
  	gl.DrawElementsWithOffset(r.MapPrimitiveMode(mode), int32(count), gl.UNSIGNED_INT, uintptr(offset))
  }
  
-@@ -2472,6 +2827,7 @@ func (r *Renderer_GLES32) SetSpritePipeline(shaderName string) {
+@@ -2472,6 +2828,7 @@ func (r *Renderer_GLES32) SetSpritePipeline(shaderName string) {
  
  // Uploads current param values to the shader's "uniform float param[16]"
  func (r *Renderer_GLES32) SetCustomUniforms(params [16]float32) {
@@ -16842,7 +16843,7 @@ index 891acab..f4253b2 100644
  	if r.currentProgram == nil {
  		return
  	}
-@@ -2488,14 +2844,17 @@ func (r *Renderer_GLES32) NeedsGrabPass() bool {
+@@ -2488,14 +2845,17 @@ func (r *Renderer_GLES32) NeedsGrabPass() bool {
  }
  
  func (r *Renderer_GLES32) ResolveBackBuffer() Texture {
@@ -16863,7 +16864,7 @@ index 891acab..f4253b2 100644
  	return r.grabTexture
  }
  
-@@ -2505,6 +2864,7 @@ func (r *Renderer_GLES32) bindBuffer(target uint32, buffer uint32) {
+@@ -2505,6 +2865,7 @@ func (r *Renderer_GLES32) bindBuffer(target uint32, buffer uint32) {
  		return
  	}
  	// Bind and update cache
@@ -16871,7 +16872,7 @@ index 891acab..f4253b2 100644
  	gl.BindBuffer(target, buffer)
  	r.boundBuffers[target] = buffer
  }
-@@ -2513,6 +2873,7 @@ func (r *Renderer_GLES32) bindVertexArray(vao uint32) {
+@@ -2513,6 +2874,7 @@ func (r *Renderer_GLES32) bindVertexArray(vao uint32) {
  	if r.currentVAO == vao {
  		return
  	}
@@ -16879,7 +16880,7 @@ index 891acab..f4253b2 100644
  	gl.BindVertexArray(vao)
  	r.currentVAO = vao
  	// Invalidate buffer cache
-@@ -2520,3 +2881,14 @@ func (r *Renderer_GLES32) bindVertexArray(vao uint32) {
+@@ -2520,3 +2882,14 @@ func (r *Renderer_GLES32) bindVertexArray(vao uint32) {
  		delete(r.boundBuffers, gl.ELEMENT_ARRAY_BUFFER)
  	}
  }

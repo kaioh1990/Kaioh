@@ -5,6 +5,8 @@
 // other platforms), so this file needs no GL headers and links nowhere.
 // The wrappers were generated from the prototypes in ik_sim.h; the helpers
 // at the end and the ES 3.0 fallbacks are hand-written.
+#include <stdio.h>
+
 #include "ik/ik_sim.h"
 
 #ifndef APIENTRY

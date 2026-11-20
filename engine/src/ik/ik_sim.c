@@ -153799,7 +153799,7 @@ void Renderer_GLES32_Init(Renderer_GLES32* r) {
             gles2_TexParameteri(3553U, 10242U, 33071);
             gles2_TexParameteri(3553U, 10243U, 33071);
             i32 ppFormat = 36759;
-            if (false) {
+            if (false || go_streq(ik_goos(), GOSTR("ios"))) {
                 ppFormat = 6408;
             }
             gles2_TexImage2D(3553U, 0, ppFormat, g_sys.SystemStateVars_.scrrect.v[2], g_sys.SystemStateVars_.scrrect.v[3], 0, 6408U, 5121U, NULL);
@@ -153875,11 +153875,11 @@ void Renderer_GLES32_Init(Renderer_GLES32* r) {
     gles2_BindFramebuffer(36160U, 0U);
 }
 
-// Renderer_GLES32.Close (render_gles32.go:1174), 0 TODO
+// Renderer_GLES32.Close (render_gles32.go:1175), 0 TODO
 void Renderer_GLES32_Close(Renderer_GLES32* r) {
 }
 
-// Renderer_GLES32.InitStateCache (render_gles32.go:1177), 0 TODO
+// Renderer_GLES32.InitStateCache (render_gles32.go:1178), 0 TODO
 void Renderer_GLES32_InitStateCache(Renderer_GLES32* r) {
     r->GLES32State_.program = 0U;
     r->GLES32State_.depthTest = false;
@@ -153908,7 +153908,7 @@ void Renderer_GLES32_InitStateCache(Renderer_GLES32* r) {
     r->GLES32State_.boundBuffers = Map_u32_u32_make(0);
 }
 
-// Renderer_GLES32.vitaDirect (render_gles32.go:1237), 0 TODO
+// Renderer_GLES32.vitaDirect (render_gles32.go:1238), 0 TODO
 bool Renderer_GLES32_vitaDirect(Renderer_GLES32* r) {
     if (false) {
         fn_vitaFBOCheck();
@@ -153916,7 +153916,7 @@ bool Renderer_GLES32_vitaDirect(Renderer_GLES32* r) {
     return (((false && (!g_vitaFBOForced)) && (r->postShaderSelect.len <= 1)) && (g_sys.msaa == 0));
 }
 
-// Renderer_GLES32.sceneFBO (render_gles32.go:1245), 0 TODO
+// Renderer_GLES32.sceneFBO (render_gles32.go:1246), 0 TODO
 u32 Renderer_GLES32_sceneFBO(Renderer_GLES32* r) {
     if (Renderer_GLES32_vitaDirect(r)) {
         return 0U;
@@ -153924,7 +153924,7 @@ u32 Renderer_GLES32_sceneFBO(Renderer_GLES32* r) {
     return r->fbo;
 }
 
-// Renderer_GLES32.BeginFrame (render_gles32.go:1252), 0 TODO
+// Renderer_GLES32.BeginFrame (render_gles32.go:1253), 0 TODO
 void Renderer_GLES32_BeginFrame(Renderer_GLES32* r, bool clearColor) {
     Renderer_GLES32_vitaFlush(r);
     gles2_BindFramebuffer(36160U, Renderer_GLES32_sceneFBO(r));
@@ -153936,7 +153936,7 @@ void Renderer_GLES32_BeginFrame(Renderer_GLES32* r, bool clearColor) {
     }
 }
 
-// vitaPixelProbe (render_gles32.go:1264), 0 TODO
+// vitaPixelProbe (render_gles32.go:1265), 0 TODO
 void fn_vitaPixelProbe(GoString tag, i32 w, i32 h) {
     Arr4_u8 *px__h = go_box_a(Arr4_u8, {0});
     GoString out = go_strcat(go_strcat(GOSTR("pixels "), tag), GOSTR(":"));
@@ -153958,7 +153958,7 @@ void fn_vitaPixelProbe(GoString tag, i32 w, i32 h) {
     fn_vitaTrace(out);
 }
 
-// Renderer_GLES32.EndFrame (render_gles32.go:1277), 0 TODO
+// Renderer_GLES32.EndFrame (render_gles32.go:1278), 0 TODO
 void Renderer_GLES32_EndFrame(Renderer_GLES32* r) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -154090,13 +154090,13 @@ void Renderer_GLES32_EndFrame(Renderer_GLES32* r) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Renderer_GLES32.Await (render_gles32.go:1401), 0 TODO
+// Renderer_GLES32.Await (render_gles32.go:1402), 0 TODO
 void Renderer_GLES32_Await(Renderer_GLES32* r) {
     Renderer_GLES32_vitaFlush(r);
     gles2_Finish();
 }
 
-// Renderer_GLES32.MapBlendEquation (render_gles32.go:1407), 0 TODO
+// Renderer_GLES32.MapBlendEquation (render_gles32.go:1408), 0 TODO
 u32 Renderer_GLES32_MapBlendEquation(Renderer_GLES32* r, BlendEquation i) {
     {
         BlendEquation _t1 = i;
@@ -154111,7 +154111,7 @@ u32 Renderer_GLES32_MapBlendEquation(Renderer_GLES32* r, BlendEquation i) {
     return 0U;
 }
 
-// Renderer_GLES32.MapBlendFunction (render_gles32.go:1417), 0 TODO
+// Renderer_GLES32.MapBlendFunction (render_gles32.go:1418), 0 TODO
 u32 Renderer_GLES32_MapBlendFunction(Renderer_GLES32* r, BlendFunc i) {
     {
         BlendFunc _t1 = i;
@@ -154134,7 +154134,7 @@ u32 Renderer_GLES32_MapBlendFunction(Renderer_GLES32* r, BlendFunc i) {
     return 0U;
 }
 
-// Renderer_GLES32.SetDepthTest (render_gles32.go:1453), 0 TODO
+// Renderer_GLES32.SetDepthTest (render_gles32.go:1454), 0 TODO
 void Renderer_GLES32_SetDepthTest(Renderer_GLES32* r, bool depthTest) {
     Renderer_GLES32_vitaFlush(r);
     if (depthTest != r->GLES32State_.depthTest) {
@@ -154148,7 +154148,7 @@ void Renderer_GLES32_SetDepthTest(Renderer_GLES32* r, bool depthTest) {
     }
 }
 
-// Renderer_GLES32.SetDepthMask (render_gles32.go:1467), 0 TODO
+// Renderer_GLES32.SetDepthMask (render_gles32.go:1468), 0 TODO
 void Renderer_GLES32_SetDepthMask(Renderer_GLES32* r, bool depthMask) {
     Renderer_GLES32_vitaFlush(r);
     if (depthMask != r->GLES32State_.depthMask) {
@@ -154157,7 +154157,7 @@ void Renderer_GLES32_SetDepthMask(Renderer_GLES32* r, bool depthMask) {
     }
 }
 
-// Renderer_GLES32.ChangeProgram (render_gles32.go:1501), 0 TODO
+// Renderer_GLES32.ChangeProgram (render_gles32.go:1502), 0 TODO
 void Renderer_GLES32_ChangeProgram(Renderer_GLES32* r, u32 prog) {
     if (r->GLES32State_.program == prog) {
         return;
@@ -154183,7 +154183,7 @@ void Renderer_GLES32_ChangeProgram(Renderer_GLES32* r, u32 prog) {
     r->GLES32State_.texCacheTimer = 1U;
 }
 
-// Renderer_GLES32.EnableBlending (render_gles32.go:1531), 0 TODO
+// Renderer_GLES32.EnableBlending (render_gles32.go:1532), 0 TODO
 void Renderer_GLES32_EnableBlending(Renderer_GLES32* r, BlendEquation eq, BlendFunc src, BlendFunc dst) {
     if ((((!r->GLES32State_.blendEnabled) || (eq != r->GLES32State_.blendEquation)) || (src != r->GLES32State_.blendSrc)) || (dst != r->GLES32State_.blendDst)) {
         Renderer_GLES32_vitaFlush(r);
@@ -154203,7 +154203,7 @@ void Renderer_GLES32_EnableBlending(Renderer_GLES32* r, BlendEquation eq, BlendF
     }
 }
 
-// Renderer_GLES32.DisableBlending (render_gles32.go:1552), 0 TODO
+// Renderer_GLES32.DisableBlending (render_gles32.go:1553), 0 TODO
 void Renderer_GLES32_DisableBlending(Renderer_GLES32* r) {
     if (r->GLES32State_.blendEnabled) {
         Renderer_GLES32_vitaFlush(r);
@@ -154212,12 +154212,12 @@ void Renderer_GLES32_DisableBlending(Renderer_GLES32* r) {
     }
 }
 
-// Renderer_GLES32.ReleasePipeline (render_gles32.go:1572), 0 TODO
+// Renderer_GLES32.ReleasePipeline (render_gles32.go:1573), 0 TODO
 void Renderer_GLES32_ReleasePipeline(Renderer_GLES32* r) {
     Renderer_GLES32_bindVertexArray(r, 0U);
 }
 
-// Renderer_GLES32.BeginScreenshot (render_gles32.go:1987), 0 TODO
+// Renderer_GLES32.BeginScreenshot (render_gles32.go:1988), 0 TODO
 void Renderer_GLES32_BeginScreenshot(Renderer_GLES32* r, int width, int height) {
     Renderer_GLES32_vitaFlush(r);
     if (r->capturePBO == 0U) {
@@ -154235,7 +154235,7 @@ void Renderer_GLES32_BeginScreenshot(Renderer_GLES32* r, int width, int height) 
     r->capturePending = true;
 }
 
-// Renderer_GLES32.FinishScreenshot (render_gles32.go:2005), 0 TODO
+// Renderer_GLES32.FinishScreenshot (render_gles32.go:2006), 0 TODO
 bool Renderer_GLES32_FinishScreenshot(Renderer_GLES32* r, Slice_u8 data, int width, int height) {
     Renderer_GLES32_vitaFlush(r);
     if ((!r->capturePending) || (data.len < ((4 * width) * height))) {
@@ -154254,7 +154254,7 @@ bool Renderer_GLES32_FinishScreenshot(Renderer_GLES32* r, Slice_u8 data, int wid
     return true;
 }
 
-// Renderer_GLES32.vitaClipLocs (render_gles32.go:2026), 0 TODO
+// Renderer_GLES32.vitaClipLocs (render_gles32.go:2027), 0 TODO
 Ret_i32__i32__bool Renderer_GLES32_vitaClipLocs(Renderer_GLES32* r) {
     i32 on = {0};
     i32 rect = {0};
@@ -154273,7 +154273,7 @@ Ret_i32__i32__bool Renderer_GLES32_vitaClipLocs(Renderer_GLES32* r) {
     return (Ret_i32__i32__bool){on, rect, ok};
 }
 
-// Renderer_GLES32.EnableScissor (render_gles32.go:2036), 0 TODO
+// Renderer_GLES32.EnableScissor (render_gles32.go:2037), 0 TODO
 void Renderer_GLES32_EnableScissor(Renderer_GLES32* r, i32 x, i32 y, i32 width, i32 height) {
     if (false) {
         {
@@ -154320,7 +154320,7 @@ void Renderer_GLES32_EnableScissor(Renderer_GLES32* r, i32 x, i32 y, i32 width, 
     }
 }
 
-// Renderer_GLES32.DisableScissor (render_gles32.go:2084), 0 TODO
+// Renderer_GLES32.DisableScissor (render_gles32.go:2085), 0 TODO
 void Renderer_GLES32_DisableScissor(Renderer_GLES32* r) {
     if (false) {
         {
@@ -154339,7 +154339,7 @@ void Renderer_GLES32_DisableScissor(Renderer_GLES32* r) {
     }
 }
 
-// Renderer_GLES32.SetUniformISub (render_gles32.go:2098), 0 TODO
+// Renderer_GLES32.SetUniformISub (render_gles32.go:2099), 0 TODO
 void Renderer_GLES32_SetUniformISub(Renderer_GLES32* r, i32 loc, i32 val) {
     if (loc < 0) {
         return;
@@ -154375,7 +154375,7 @@ void Renderer_GLES32_SetUniformISub(Renderer_GLES32* r, i32 loc, i32 val) {
     gles2_Uniform1i(loc, val);
 }
 
-// Renderer_GLES32.SetUniformFSub (render_gles32.go:2127), 0 TODO
+// Renderer_GLES32.SetUniformFSub (render_gles32.go:2128), 0 TODO
 void Renderer_GLES32_SetUniformFSub(Renderer_GLES32* r, i32 loc, Slice_f32 values) {
     if ((loc < 0) || (values.len == 0)) {
         return;
@@ -154478,7 +154478,7 @@ void Renderer_GLES32_SetUniformFSub(Renderer_GLES32* r, i32 loc, Slice_f32 value
     }
 }
 
-// Renderer_GLES32.SetUniformFvSub (render_gles32.go:2198), 0 TODO
+// Renderer_GLES32.SetUniformFvSub (render_gles32.go:2199), 0 TODO
 void Renderer_GLES32_SetUniformFvSub(Renderer_GLES32* r, i32 loc, Slice_f32 values) {
     if ((loc < 0) || (values.len == 0)) {
         return;
@@ -154499,7 +154499,7 @@ void Renderer_GLES32_SetUniformFvSub(Renderer_GLES32* r, i32 loc, Slice_f32 valu
     }
 }
 
-// Renderer_GLES32.uniformLoc (render_gles32.go:2215), 0 TODO
+// Renderer_GLES32.uniformLoc (render_gles32.go:2216), 0 TODO
 i32 Renderer_GLES32_uniformLoc(Renderer_GLES32* r, ShaderProgram_GLES32* s, GoString name) {
     u8* _t1 = ((u8 *)(name).p);
     int _t2 = name.len;
@@ -154530,25 +154530,25 @@ i32 Renderer_GLES32_uniformLoc(Renderer_GLES32* r, ShaderProgram_GLES32* s, GoSt
     return loc;
 }
 
-// Renderer_GLES32.SetUniformI (render_gles32.go:2236), 0 TODO
+// Renderer_GLES32.SetUniformI (render_gles32.go:2237), 0 TODO
 void Renderer_GLES32_SetUniformI(Renderer_GLES32* r, GoString name, int val) {
     i32 loc = Renderer_GLES32_uniformLoc(r, r->currentProgram, name);
     Renderer_GLES32_SetUniformISub(r, loc, ((i32)val));
 }
 
-// Renderer_GLES32.SetUniformF (render_gles32.go:2241), 0 TODO
+// Renderer_GLES32.SetUniformF (render_gles32.go:2242), 0 TODO
 void Renderer_GLES32_SetUniformF(Renderer_GLES32* r, GoString name, Slice_f32 values) {
     i32 loc = Renderer_GLES32_uniformLoc(r, r->currentProgram, name);
     Renderer_GLES32_SetUniformFSub(r, loc, values);
 }
 
-// Renderer_GLES32.SetUniformFv (render_gles32.go:2246), 0 TODO
+// Renderer_GLES32.SetUniformFv (render_gles32.go:2247), 0 TODO
 void Renderer_GLES32_SetUniformFv(Renderer_GLES32* r, GoString name, Slice_f32 values) {
     i32 loc = Renderer_GLES32_uniformLoc(r, r->currentProgram, name);
     Renderer_GLES32_SetUniformFvSub(r, loc, values);
 }
 
-// Renderer_GLES32.SetUniformMatrix (render_gles32.go:2252), 0 TODO
+// Renderer_GLES32.SetUniformMatrix (render_gles32.go:2253), 0 TODO
 void Renderer_GLES32_SetUniformMatrix(Renderer_GLES32* r, GoString name, Slice_f32 value) {
     i32 loc = Renderer_GLES32_uniformLoc(r, r->currentProgram, name);
     if (loc < 0) {
@@ -154570,7 +154570,7 @@ void Renderer_GLES32_SetUniformMatrix(Renderer_GLES32* r, GoString name, Slice_f
     gles2_UniformMatrix4fv(loc, 1, false, (&value.p[0]));
 }
 
-// Renderer_GLES32.SetTextureSub (render_gles32.go:2371), 0 TODO
+// Renderer_GLES32.SetTextureSub (render_gles32.go:2372), 0 TODO
 void Renderer_GLES32_SetTextureSub(Renderer_GLES32* r, Map_GoString_i32 uMap, Map_GoString_int tMap, GoString name, Texture tex) {
     Texture_GLES32* t = ((Texture_GLES32*)(tex).data);
     bool _t1; i32 _t2 = Map_GoString_i32_get(&uMap, name, &_t1);
@@ -154673,12 +154673,12 @@ void Renderer_GLES32_SetTextureSub(Renderer_GLES32* r, Map_GoString_i32 uMap, Ma
     Renderer_GLES32_SetUniformISub(r, loc, ((i32)fixedUnit));
 }
 
-// Renderer_GLES32.SetTexture (render_gles32.go:2454), 0 TODO
+// Renderer_GLES32.SetTexture (render_gles32.go:2455), 0 TODO
 void Renderer_GLES32_SetTexture(Renderer_GLES32* r, GoString name, Texture tex) {
     Renderer_GLES32_SetTextureSub(r, r->currentProgram->uniforms, r->currentProgram->textures, name, tex);
 }
 
-// Renderer_GLES32.SetVertexData (render_gles32.go:2508), 0 TODO
+// Renderer_GLES32.SetVertexData (render_gles32.go:2509), 0 TODO
 void Renderer_GLES32_SetVertexData(Renderer_GLES32* r, Slice_f32 values) {
     if (r->currentProgram != NULL) {
         {
@@ -154730,7 +154730,7 @@ void Renderer_GLES32_SetVertexData(Renderer_GLES32* r, Slice_f32 values) {
     }
 }
 
-// Renderer_GLES32.SetQuadVertices (render_gles32.go:2566), 0 TODO
+// Renderer_GLES32.SetQuadVertices (render_gles32.go:2567), 0 TODO
 void Renderer_GLES32_SetQuadVertices(Renderer_GLES32* r, Arr16_f32* v) {
     if (false) {
         Renderer_GLES32_SetVertexData(r, GO_ARRSLICE(Slice_f32, v->v, 16, 0, -1));
@@ -154754,13 +154754,13 @@ void Renderer_GLES32_SetQuadVertices(Renderer_GLES32* r, Arr16_f32* v) {
     }
 }
 
-// Renderer_GLES32.SetModelVertexData (render_gles32.go:2580), 0 TODO
+// Renderer_GLES32.SetModelVertexData (render_gles32.go:2581), 0 TODO
 void Renderer_GLES32_SetModelVertexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u8 values) {
     Renderer_GLES32_bindBuffer(r, 34962U, r->modelVertexBuffer.v[bufferIndex]);
     gles2_BufferData(34962U, values.len, ((void*)(&values.p[0])), 35044U);
 }
 
-// Renderer_GLES32.SetModelIndexData (render_gles32.go:2585), 0 TODO
+// Renderer_GLES32.SetModelIndexData (render_gles32.go:2586), 0 TODO
 void Renderer_GLES32_SetModelIndexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u32 values) {
     GoOpaque /* bytes.Buffer */* data = go_new(GoOpaque /* bytes.Buffer */);
     binary_Write(((GoIface){137, (void *)(data)}), ((GoIface){163, go_box(GoOpaque /* binary.littleEndian */, binary_LittleEndian)}), ((GoIface){192, go_box(Slice_u32, values)}));
@@ -154768,7 +154768,7 @@ void Renderer_GLES32_SetModelIndexData(Renderer_GLES32* r, u32 bufferIndex, Slic
     gles2_BufferData(34963U, (values.len * 4), ((void*)(&bytes_Buffer_Bytes(data).p[0])), 35044U);
 }
 
-// Renderer_GLES32.RenderQuad (render_gles32.go:2593), 0 TODO
+// Renderer_GLES32.RenderQuad (render_gles32.go:2594), 0 TODO
 void Renderer_GLES32_RenderQuad(Renderer_GLES32* r) {
     if (Renderer_GLES32_vitaBatching(r)) {
         Renderer_GLES32_vitaQueueQuads(r, 4);
@@ -154777,7 +154777,7 @@ void Renderer_GLES32_RenderQuad(Renderer_GLES32* r) {
     gles2_DrawArrays(5U, 0, 4);
 }
 
-// Renderer_GLES32.RenderQuadBatch (render_gles32.go:2601), 0 TODO
+// Renderer_GLES32.RenderQuadBatch (render_gles32.go:2602), 0 TODO
 void Renderer_GLES32_RenderQuadBatch(Renderer_GLES32* r, i32 vertexCount) {
     if (Renderer_GLES32_vitaBatching(r)) {
         Renderer_GLES32_vitaQueueQuads(r, ((int)vertexCount));
@@ -154786,23 +154786,23 @@ void Renderer_GLES32_RenderQuadBatch(Renderer_GLES32* r, i32 vertexCount) {
     gles2_DrawArrays(5U, 0, vertexCount);
 }
 
-// Renderer_GLES32.PerspectiveProjectionMatrix (render_gles32.go:2749), 0 TODO
+// Renderer_GLES32.PerspectiveProjectionMatrix (render_gles32.go:2750), 0 TODO
 mgl32_Mat4 Renderer_GLES32_PerspectiveProjectionMatrix(Renderer_GLES32* r, f32 angle, f32 aspect, f32 near, f32 far) {
     return mgl32_Perspective(angle, aspect, near, far);
 }
 
-// Renderer_GLES32.OrthographicProjectionMatrix (render_gles32.go:2753), 0 TODO
+// Renderer_GLES32.OrthographicProjectionMatrix (render_gles32.go:2754), 0 TODO
 mgl32_Mat4 Renderer_GLES32_OrthographicProjectionMatrix(Renderer_GLES32* r, f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
     mgl32_Mat4 ret = mgl32_Ortho(left, right, bottom, top, near, far);
     return ret;
 }
 
-// Renderer_GLES32.SetVSync (render_gles32.go:2762), 0 TODO
+// Renderer_GLES32.SetVSync (render_gles32.go:2763), 0 TODO
 void Renderer_GLES32_SetVSync(Renderer_GLES32* r, int interval) {
     sdl_GLSetSwapInterval(interval);
 }
 
-// Renderer_GLES32.LoadCustomSpriteShader (render_gles32.go:2766), 0 TODO
+// Renderer_GLES32.LoadCustomSpriteShader (render_gles32.go:2767), 0 TODO
 u32 Renderer_GLES32_LoadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName, Slice_u8 shaderData) {
     {
         bool _t1; u32 _t2 = Map_GoString_u32_get(&r->customShaderMap, shaderName, &_t1);
@@ -154832,7 +154832,7 @@ u32 Renderer_GLES32_LoadCustomSpriteShader(Renderer_GLES32* r, GoString shaderNa
     return id;
 }
 
-// Renderer_GLES32.UnloadCustomSpriteShader (render_gles32.go:2797), 0 TODO
+// Renderer_GLES32.UnloadCustomSpriteShader (render_gles32.go:2798), 0 TODO
 void Renderer_GLES32_UnloadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName) {
     {
         bool _t1; u32 _t2 = Map_GoString_u32_get(&r->customShaderMap, shaderName, &_t1);
@@ -154856,7 +154856,7 @@ void Renderer_GLES32_UnloadCustomSpriteShader(Renderer_GLES32* r, GoString shade
     }
 }
 
-// Renderer_GLES32.SetSpritePipeline (render_gles32.go:2811), 0 TODO
+// Renderer_GLES32.SetSpritePipeline (render_gles32.go:2812), 0 TODO
 void Renderer_GLES32_SetSpritePipeline(Renderer_GLES32* r, GoString shaderName) {
     ShaderProgram_GLES32* targetShader = r->spriteShader;
     if (!go_streq(shaderName, GOSTR(""))) {
@@ -154883,7 +154883,7 @@ void Renderer_GLES32_SetSpritePipeline(Renderer_GLES32* r, GoString shaderName) 
     }
 }
 
-// Renderer_GLES32.SetCustomUniforms (render_gles32.go:2829), 0 TODO
+// Renderer_GLES32.SetCustomUniforms (render_gles32.go:2830), 0 TODO
 void Renderer_GLES32_SetCustomUniforms(Renderer_GLES32* r, Arr16_f32 params) {
     Arr16_f32 *params__h = go_box_a(Arr16_f32, params);
     Renderer_GLES32_vitaFlush(r);
@@ -154900,7 +154900,7 @@ void Renderer_GLES32_SetCustomUniforms(Renderer_GLES32* r, Arr16_f32 params) {
     }
 }
 
-// Renderer_GLES32.NeedsGrabPass (render_gles32.go:2839), 0 TODO
+// Renderer_GLES32.NeedsGrabPass (render_gles32.go:2840), 0 TODO
 bool Renderer_GLES32_NeedsGrabPass(Renderer_GLES32* r) {
     if (r->currentProgram != NULL) {
         return r->currentProgram->needsGrabPass;
@@ -154908,7 +154908,7 @@ bool Renderer_GLES32_NeedsGrabPass(Renderer_GLES32* r) {
     return false;
 }
 
-// Renderer_GLES32.ResolveBackBuffer (render_gles32.go:2846), 0 TODO
+// Renderer_GLES32.ResolveBackBuffer (render_gles32.go:2847), 0 TODO
 Texture Renderer_GLES32_ResolveBackBuffer(Renderer_GLES32* r) {
     Renderer_GLES32_vitaFlush(r);
     Renderer_GLES32_bindTextureToUnitForced(r, 0, 3553U, r->grabTexture, 0U);
@@ -154921,7 +154921,7 @@ Texture Renderer_GLES32_ResolveBackBuffer(Renderer_GLES32* r) {
     return ((GoIface){492, (void *)(r->grabTexture)});
 }
 
-// Renderer_GLES32.bindBuffer (render_gles32.go:2861), 0 TODO
+// Renderer_GLES32.bindBuffer (render_gles32.go:2862), 0 TODO
 void Renderer_GLES32_bindBuffer(Renderer_GLES32* r, u32 target, u32 buffer) {
     if (Map_u32_u32_get(&r->GLES32State_.boundBuffers, target, NULL) == buffer) {
         return;
@@ -154931,7 +154931,7 @@ void Renderer_GLES32_bindBuffer(Renderer_GLES32* r, u32 target, u32 buffer) {
     Map_u32_u32_set(&r->GLES32State_.boundBuffers, target, buffer);
 }
 
-// Renderer_GLES32.bindVertexArray (render_gles32.go:2872), 0 TODO
+// Renderer_GLES32.bindVertexArray (render_gles32.go:2873), 0 TODO
 void Renderer_GLES32_bindVertexArray(Renderer_GLES32* r, u32 vao) {
     if (r->GLES32State_.currentVAO == vao) {
         return;
@@ -154944,7 +154944,7 @@ void Renderer_GLES32_bindVertexArray(Renderer_GLES32* r, u32 vao) {
     }
 }
 
-// eqF32x16 (render_gles32.go:2887), 0 TODO
+// eqF32x16 (render_gles32.go:2888), 0 TODO
 bool fn_eqF32x16(Slice_f32 value, Arr16_f32* v) {
     {
         for (int _t1 = 0; _t1 < 16; _t1++) {
