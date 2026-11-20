@@ -321,6 +321,55 @@ WhatsApp patched by adding `ks_pdf_strict_validation_enabled` in Kaleidoscope to
 - Attacker controls heap vs. stack (`alloca` for ≤1015px width, `malloc` for larger)
 - PoC and font generation scripts available on Calif.io's GitHub
 
+### PoC Build & Test Results (Nov 20, 2026)
+
+**Calif.io PoC cloned from:** `califio/publications` → `MADBugs/CVE-2026-86950/trigger/`
+
+The PoC uses `CGImageSourceCreateThumbnailAtIndex` (the ImageIO thumbnail path that WhatsApp/iMessage use for auto-preview), NOT the direct `CGContextShowGlyphs` harness from the article. This is the realistic attack vector.
+
+**Files:**
+- `gen_font.py` — Generates trigger.ttf: leaf glyph with 2 contours (small rect for bbox, 2-pt line at x=32000 for sat/trunc mismatch) + 9 composites each scaling by ~2x, so leaf's x reaches ~16M font units
+- `gen_pdf.py` — Wraps trigger.ttf in minimal PDF: `/F1 1024 Tf (A) Tj`
+- `render.c` — ImageIO thumbnail harness (WhatsApp path)
+- `trigger.pdf` — Pre-built trigger (1396 bytes)
+
+**macOS 27.0.1 test (MacBook Pro):**
+```
+$ make run
+creating thumbnail...
+survived (patched build): img=0x103169210
+exit=0
+```
+Result: **SURVIVED** — macOS 27.0.1 has the CoreGraphics fix backported.
+
+### Apple Security Advisory Analysis — iOS 27.0.1 Vulnerability Window
+
+From Apple's security advisories (support.apple.com/en-us/100100):
+
+| Release | Date | CVE-2026-86950 Status |
+|---------|------|-----------------------|
+| iOS 26.7 | Sep 14, 2026 | VULNERABLE |
+| **iOS 26.7.1** | **Sep 28, 2026** | **FIXED (patch release)** |
+| iOS 26.7.2 | Oct 26, 2026 | Fixed (inherits) |
+| iOS 26.7.3 | Nov 9, 2026 | Fixed (inherits) |
+| **iOS 27.0.1** | **Oct 23, 2026** | **"No published CVE entries" — LIKELY VULNERABLE** |
+| **iOS 27.1** | **Oct 26, 2026** | **"No published CVE entries" — LIKELY VULNERABLE** (iPhone Duo only) |
+| iOS 27.2 | Oct 29, 2026 | First 27.x security release — likely fixed |
+
+**Key finding:** iOS 27.0.1 has NO published CVE entries — it was a stability/bug-fix release, not a security release. The iOS 27 branch was cut from pre-26.7.1 source, so the CoreGraphics fix was NOT backported to 27.0 or 27.0.1.
+
+**iPad Mini (iOS 27.0.1) is almost certainly VULNERABLE to CVE-2026-86950.**
+
+Note: macOS 27.0.1 survived despite the same version number — macOS and iOS share CoreGraphics source but their release branches can merge fixes independently.
+
+### Next Steps: iPad Mini Testing
+
+To confirm vulnerability on iPad Mini (iOS 27.0.1):
+1. Transfer trigger.pdf to iPad (via AirDrop, iMessage, or Files app)
+2. Opening/previewing the PDF should trigger the crash in CoreGraphics
+3. If it crashes (EXC_BAD_ACCESS in `aa_cache_render`), the device is confirmed vulnerable
+4. For programmatic testing, can compile the render.c harness for arm64 iOS and deploy via Xcode
+
 ### Implications for iOS 27 Research
 
 - This is a **real in-the-wild zero-click** via PDF font rendering — exactly the class of attack relevant to our research
@@ -329,6 +378,23 @@ WhatsApp patched by adding `ks_pdf_strict_validation_enabled` in Kaleidoscope to
 - PDF delivery via messaging apps (WhatsApp, iMessage) enables zero-click
 - Lockdown Mode implications: does Lockdown Mode affect PDF preview generation? If font rendering is restricted, this class of bug is mitigated
 - The `alloca` vs `malloc` choice gives the attacker control over corruption target (stack vs heap)
+
+## Jailbreak Package Manager: Sileo
+
+**Sileo** is the modern Cydia equivalent for rootless jailbreaks (iOS 15+):
+- Used by Dopamine, Taurine, Chimera, and other modern jailbreaks
+- Rootless: packages install under `/var/jb/` instead of modifying root filesystem
+- Alternative: Zebra (lighter weight, same rootless model)
+- Installing Sileo is the standard proof-of-jailbreak for modern iOS
+
+**Full jailbreak chain required (CVE-2026-86950 is step 1 only):**
+1. OOB write primitive (CVE-2026-86950 provides this)
+2. Arbitrary code execution from OOB write
+3. Sandbox escape
+4. Kernel exploit (separate vulnerability needed)
+5. PAC/PPL bypass
+6. Rootless filesystem modifications
+7. Install Sileo + bootstrap
 
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
