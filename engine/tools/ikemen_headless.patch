@@ -18762,10 +18762,10 @@ index e6a9d4d..7330b70 100644
  	for k, v := range c.cnsvar {
 diff --git a/src/statedump.go b/src/statedump.go
 new file mode 100644
-index 0000000..6e366fe
+index 0000000..c42e891
 --- /dev/null
 +++ b/src/statedump.go
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,242 @@
 +package main
 +
 +import (
@@ -18812,6 +18812,9 @@ index 0000000..6e366fe
 +	if !stateDumpEnabled() {
 +		return
 +	}
++	// the fixed seed (vitaStateHashTick sets it under vitaPerf, which a
++	// desktop Go build of the headless runner does not have)
++	vitaStateHashEnabled()
 +	stateDumpTick++
 +	// Online (rollback) match: frames are simulated again after a rollback,
 +	// so keep the last simulation of each match frame and write them in
@@ -19020,7 +19023,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..aca2fe4 100644
+index 2698d35..954717b 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -19278,7 +19281,7 @@ index 2698d35..aca2fe4 100644
 +	bcIdxDepth = 0
 +	bcProfFrame()
 +	vitaStateHashTick()
-+	if vitaPerf && len(s.chars) > 0 && len(s.chars[0]) > 0 {
++	if (vitaPerf || cvfHeadless) && len(s.chars) > 0 && len(s.chars[0]) > 0 {
 +		stateDumpTickFn()
 +	}
  	if s.matchPaused() {

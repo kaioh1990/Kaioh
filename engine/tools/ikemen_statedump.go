@@ -44,6 +44,9 @@ func stateDumpTickFn() {
 	if !stateDumpEnabled() {
 		return
 	}
+	// the fixed seed (vitaStateHashTick sets it under vitaPerf, which a
+	// desktop Go build of the headless runner does not have)
+	vitaStateHashEnabled()
 	stateDumpTick++
 	// Online (rollback) match: frames are simulated again after a rollback,
 	// so keep the last simulation of each match frame and write them in

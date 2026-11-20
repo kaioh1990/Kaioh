@@ -162732,6 +162732,7 @@ void fn_stateDumpTickFn(void) {
     if (!fn_stateDumpEnabled()) {
         return;
     }
+    fn_vitaStateHashEnabled();
     g_stateDumpTick++;
     bool net = ((g_sys.rollback.session != NULL) && (g_sys.rollback.netConnection != NULL));
     Slice_u8 b = GO_SLICE(Slice_u8, g_stateDumpBuf, 0, 0);
@@ -162880,7 +162881,7 @@ void fn_stateDumpTickFn(void) {
     }
 }
 
-// stateDumpFinish (statedump.go:178), 0 TODO
+// stateDumpFinish (statedump.go:181), 0 TODO
 void fn_stateDumpFinish(void) {
     if (g_stateDumpOn != 1) {
         return;
@@ -162912,7 +162913,7 @@ void fn_stateDumpFinish(void) {
     bufio_Writer_Flush(g_stateDumpW);
 }
 
-// stateDumpVarsI (statedump.go:199), 0 TODO
+// stateDumpVarsI (statedump.go:202), 0 TODO
 Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {
@@ -162945,7 +162946,7 @@ Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     return b;
 }
 
-// stateDumpVarsF (statedump.go:220), 0 TODO
+// stateDumpVarsF (statedump.go:223), 0 TODO
 Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {
@@ -166607,7 +166608,7 @@ void System_action(System* s) {
     g_bcIdxDepth = 0;
     fn_bcProfFrame();
     fn_vitaStateHashTick();
-    if (true && (s->chars.v[0].len > 0)) {
+    if ((((true || g_cvfHeadless)) && true) && (s->chars.v[0].len > 0)) {
         fn_stateDumpTickFn();
     }
     if (System_matchPaused(s)) {
