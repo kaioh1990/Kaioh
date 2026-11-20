@@ -626,7 +626,138 @@ The OOB write lands at **byte 0 of the next SMALL-magazine allocation** — perf
 - `poc/gen_feng_shui_font.py` — Original font generator (TX=16409, +60B into next alloc)
 - `poc/gen_exploit_pdf.py` — PDF generator (works with either font)
 
+## CVE-2026-111497: Brotli Decoder OOB Write — New Entry Point (Nov 20, 2026)
+
+### Pivot from CVE-2026-86950
+
+After bare trigger testing confirmed CVE-2026-86950 is **PATCHED** on iOS 27.0.1 (see exploit chain table above), we pivoted to CVE-2026-111497 — a Brotli decoder OOB write that is **CONFIRMED VULNERABLE** on iOS 27.0.1.
+
+### Vulnerability Details
+
+**CVE**: CVE-2026-111497
+**Component**: Google Brotli decoder (`c/dec/decode.c`), bundled in Apple's libcompression
+**CVSS**: 9.2 (Critical)
+**Status**: CISA Known Exploited Vulnerability (KEV) listed
+**Public PoCs**: Yes — multiple researchers have published, including dimasma0305
+
+**Root cause**: `DecodeBlockTypeAndLength()` returns `BROTLI_FALSE` for both "need more input" and "format error" (invalid block switch). On the fast path, the caller doesn't distinguish these — it continues with stale Huffman tree state from the previous block type. The stale pointers drive reads/writes beyond the ~230KB ring buffer.
+
+**iOS Status:**
+
+| Build | Brotli Status |
+|-------|---------------|
+| iOS 27.0.1 (24A446) | **VULNERABLE** — libcompression discards `DecodeBlockTypeAndLength()` return |
+| iOS 27.1 (24A94232) | **VULNERABLE** |
+| iOS 27.2.1 (24B156) | **PATCHED** (Nov 9, 2026) |
+
+### Attack Vector
+
+Safari decompresses `Content-Encoding: br` responses automatically in the **WebKit.Networking** process. Zero-click — just navigate to a URL. Works through Lockdown Mode (Brotli decompression is not disabled).
+
+**Key requirement**: Safari only sends `Accept-Encoding: br` over HTTPS. However, if a server responds with `Content-Encoding: br` over HTTP, Safari's networking stack should still attempt decompression per HTTP spec.
+
+**Alternative vectors:**
+- JavaScript `DecompressionStream('br')` API (different code path, same underlying decoder)
+- Any app using NSURLSession that accepts Brotli (many apps do)
+
+### Stefan Esser (Calif.io) Quote
+
+> "Brotli gives you code execution in WebKit.Networking. From there it is just a bit sandbox escaping and stuff."
+
+Esser demonstrated an **untethered** iOS 27.0.1 jailbreak at Hexacon (Oct 2026) but hasn't released the kernel exploit yet — delayed from mid-November after finding additional 0-days.
+
+### Exploit Primitive
+
+- **~230KB ring buffer OOB write** — attacker controls offset via crafted Huffman tables
+- **Deterministic**: Unlike race conditions, the malformed stream always triggers the stale-pointer path
+- **Large write window**: The ring buffer is a substantial heap allocation, giving room for heap feng shui
+
+### Brotli Trigger Server
+
+**Location on Mac**: `/Users/ttameirao/jailbreak-research/CVE-2026-111497/`
+**Port 8889** (HTTP): Landing page with 4 payload variants:
+- `oob-base` (22B) — baseline crafted Brotli stream
+- `oob-extended` (23B) — extended variant with extra padding
+- `oob-huffman` (22B) — variant targeting Huffman tree corruption
+- `oob-padding` (22B) — variant with different padding flags
+
+**Port 4443** (HTTPS): Self-signed cert server for proper `Accept-Encoding: br` testing
+
+**Files**: `brotli_trigger_server.py`, `crash_server.py`, `server.crt`, `server.key`
+
+### Payload Bytes
+
+```python
+PAYLOADS = {
+    "oob-base":     bytes.fromhex("200010414141fcffff07002228f00b60f7f41f000000"),
+    "oob-extended": bytes.fromhex("200010414141fcffff07002228f00b60f7f41f00000000"),
+    "oob-huffman":  bytes.fromhex("200018414141fcffff07002228f00b60f7f41f000000"),
+    "oob-padding":  bytes.fromhex("200010414141fcffff0f002228f00b60f7f41f000000"),
+}
+```
+
+### iOS 27 Kernel CVEs (Patched in 27.2, Vulnerable on 27.0.1)
+
+For the kernel R/W step of the chain:
+
+| CVE | Type | Component | Notes |
+|-----|------|-----------|-------|
+| CVE-2026-65350 | UAF | Kernel | Use-after-free primitive |
+| CVE-2026-112477 | Race condition | IOSurface | TOCTOU in shared memory ops |
+| CVE-2026-112507 | OOB write | Kernel | Kernel-level OOB write |
+| CVE-2026-113910 | Info disclosure | Kernel | For KASLR defeat |
+
+### Updated Exploit Chain: Brotli → Sileo
+
+```
+Step 1: CVE-2026-111497 Brotli OOB write (WebKit.Networking)
+  │  Zero-click via HTTPS with Content-Encoding: br
+  │  CONFIRMED VULNERABLE on iOS 27.0.1
+  │
+Step 2: RCE in WebKit.Networking process
+  │  Ring buffer OOB → corrupt adjacent heap objects
+  │  Gain code execution within the networking sandbox
+  │
+Step 3: Sandbox escape from WebKit.Networking
+  │  WebKit.Networking has limited Mach port access
+  │  Exploit IPC/XPC to reach a privileged daemon
+  │  Or chain to another WebKit process with broader access
+  │
+Step 4: Kernel R/W via CVE-2026-65350 or CVE-2026-112477
+  │  UAF or IOSurface race → kernel read/write primitive
+  │  Both patched in 27.2, vulnerable on 27.0.1
+  │
+Step 5: PAC bypass (A17 Pro / arm64e)
+  │  Signing gadget chains
+  │  Very few public bypasses known
+  │
+Step 6: PPL/SPTM bypass
+  │  SPTM replaced PPL on iOS 27
+  │  Secure Page Table Monitor
+  │
+Step 7: Rootless bootstrap + Sileo ← GOAL
+  │  Procursus to /var/jb/
+  │  Trust cache injection
+  │  AMFI bypass for ad-hoc signed binaries
+  └─ Sileo.deb installed
+```
+
+### Updated Exploit Chain Progress
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 1 | CVE-2026-111497 Brotli trigger | **READY** — trigger server on Mac, 4 payload variants |
+| 2 | Brotli OOB → RCE in WebKit.Networking | **IN PROGRESS** — need to test crash on iPad |
+| 3 | Sandbox escape | **RESEARCHING** |
+| 4 | Kernel R/W | **RESEARCHING** — CVE-2026-65350, CVE-2026-112477 |
+| 5 | PAC bypass | Not started |
+| 6 | PPL/SPTM bypass | Not started |
+| 7 | Rootless bootstrap + Sileo | **RESEARCHING** — post-exploitation infrastructure |
+
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
 - iPhone Duo likely uses A-series or M-series chip with full PAC/PPL/KTRR
 - iOS 27 builds on years of hardening — any exploit is likely a logic bug, not a memory corruption
+- CVE-2026-86950 (CoreGraphics) is PATCHED on iOS 27.0.1 — confirmed by bare trigger test
+- CVE-2026-111497 (Brotli) is the active entry point — VULNERABLE on iOS 27.0.1
+- Calif.io demonstrated untethered iOS 27.0.1 jailbreak but kernel exploit not yet public
