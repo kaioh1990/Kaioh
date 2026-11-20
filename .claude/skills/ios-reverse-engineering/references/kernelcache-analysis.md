@@ -288,7 +288,48 @@ Each test reveals:
 4. Trigger NTL=9 or NTL=10 → small DMA OOB write into adjacent pipe_buffer
 5. Corrupted pipe_buffer.buffer pointer → arbitrary kernel R/W via read()/write()
 
-### Pipe Buffer Layout
+### CRITICAL INSIGHT: OOB Is Array Read → Wrong DART Mapping
+
+The DMA loop at AVE2+0x13e2e8 does NOT just write linearly past a buffer.
+The actual overflow mechanism is:
+
+```
+for (i = 0; i < NTL; i++) {
+    surface_desc = struct[0x514 + i*4];  // OOB READ for i >= 8!
+    dma_offset = accumulator;
+    map_surface(dma_offset, surface_desc);  // Maps WRONG kernel memory
+    accumulator += mapped_size;
+}
+```
+
+For i >= 8, `struct[0x514 + i*4]` reads BEYOND the 8-entry per-layer array:
+- Layer 0-7: +0x514..+0x530 — valid surface descriptors
+- Layer 8: +0x534 — whatever is at this struct offset (OOB)
+- Layer 9: +0x538, etc.
+- ... through +0x5e7 (struct fields before CalcSurfaceInfo outputs)
+- Layer N: reads arbitrary struct data interpreted as surface descriptor
+
+These garbage/adjacent values are passed to the DART mapping function.
+If interpreted as a surface ID or memory descriptor, they cause the coprocessor
+to write encoded data into WRONG kernel memory — not just adjacent to the
+buffer, but potentially at ARBITRARY locations determined by struct contents.
+
+This makes the exploit MORE powerful but LESS predictable than a linear OOB.
+The write target depends on what garbage data is at struct+0x534..0x5E7.
+
+Per-layer array bounds:
+  +0x514: layer[0] (4 bytes) — valid
+  +0x518: layer[1] — valid
+  ...
+  +0x530: layer[7] — valid (last)
+  +0x534: OOB START — adjacent struct field, read as surface desc for layer 8
+  +0x5e8: CalcSurfaceInfo output 1
+  +0x5ec: CalcSurfaceInfo output 2
+
+The 180 bytes at +0x534..+0x5E7 are unknown struct fields whose values
+become "surface descriptors" for the DART mapping of temporal layers 9+.
+
+### XNU Pipe Buffer Layout (from bsd/sys/pipe.h)
 ```
 struct pipebuf {
     u_int    cnt;      // +0x00: bytes available
@@ -298,6 +339,10 @@ struct pipebuf {
     caddr_t  buffer;   // +0x10: kernel data pointer (target for corruption)
 };
 ```
+
+NOTE: On modern XNU with kalloc_type, pipe structs are in type-specific zones.
+May not be co-located with AVE DMA buffers. IOSurface or mach_port objects
+in general kalloc zones may be better spray targets.
 
 ### Alternative: IOSurface Property Corruption
 1. Spray IOSurface objects with known property values

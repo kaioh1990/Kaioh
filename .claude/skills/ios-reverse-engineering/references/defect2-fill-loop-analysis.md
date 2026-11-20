@@ -11,10 +11,13 @@ add  x10, x19, #0x4678         ; x10 = DPB array base = session_ctx + 0x4678
 mov  x9, #0                    ; x9 = index, starts at 0
 mov  x12, #-1                  ; x12 = counter (pre-incremented)
 
-; w24 setup
-; w24 = ASR(w25, shift_amount)
-; w25 = return value from DPB computation helper
-; shift_amount = return value from another helper
+; w24 setup (CORRECTED — SMIN, not ASR)
+; x25 = return from DPB helper (bl AVE2+0x19AFD4)
+; Switch on [x23+0x10] (codec mode: 1, 2, or 3):
+;   Path 1: smin w24, w25, w0   (0x1ac06b38 — FEAT_CSSC ARMv9.4)
+;   Path 2: smin w24, w25, w8   (0x1ac86b38 — where w8 = csinc-derived)
+; Result: w24 = min(DPB_value, resolution_derived_value)
+; Likely range: 0-16 (small DPB constant)
 
 ; Fill loop
 loop:
@@ -33,7 +36,7 @@ loop:
 | x11 | [session_ctx + 0x3760] | Loop bound, derived from NumberOfTemporalLayers |
 | x9 | 0 (initial) | Array index |
 | x12 | -1 (initial, pre-inc to 0) | Loop counter |
-| w24 | ASR(w25, shift) | DPB-computed value, NOT arbitrary data |
+| w24 | SMIN(w25, w0 or w8) | DPB-computed value via ARMv9 SMIN, range ~0-16 |
 | x19 | AVE session context pointer | The main session structure |
 
 ## Two Fill Loops
@@ -130,12 +133,62 @@ safest approach — only one code path uses it, limiting side effects.
 3. **Heap spray + NTL combo**: Spray IOSurface objects, then encode with
    targeted NTL to corrupt session context pointer to point at spray data
 
+## w24 Value Control (SMIN Discovery)
+
+The two mystery instructions at +0x11A744 and +0x11A78C are **SMIN** (signed minimum)
+from ARMv9.4-A FEAT_CSSC (Common Short Sequence Compression), opcode 0b011010.
+
+```
++0x11A744: smin w24, w25, w0    ; 0x1ac06b38 — Path 1
++0x11A78C: smin w24, w25, w8    ; 0x1ac86b38 — Path 2
+```
+
+**w25** = return value from DPB computation helper (bl AVE2+0x19AFD4)
+**w0/w8** = resolution/codec-derived value from second helper
+
+The switch at [x23, #0x10] selects which path:
+- Path 1 (mode 1): w24 = smin(w25, helper1_result)
+- Path 2 (mode 2+): computes w8 = max(helper2_result, 1) - 1, then w24 = smin(w25, w8)
+
+For HEVC 1280x720, MaxDpbSize at Level 3.1 = 6, so w24 ≈ 5 or 6.
+For different resolutions: 128x128 → potentially up to 16; 8K → 6.
+
+**w24 is NOT arbitrary but IS resolution-controllable in range ~1-16.**
+
+## Pointer Half-Corruption Analysis
+
+The fill loop writes **w24 (32 bits)** at 4-byte aligned offsets.
+Pointers in the session context are **64 bits (8 bytes)**.
+
+Each 4-byte write corrupts HALF of a pointer:
+- **Lower half** (offset % 8 == 0): pointer becomes `0xOrigHigh_0000000V` where V = w24
+  → Still in kernel space (high bits preserved), but bad offset → crash on deref
+- **Upper half** (offset % 8 == 4): pointer becomes `0x0000000V_OrigLow`
+  → **LANDS IN USERSPACE!** Address ~0x500000000 or similar → WE CAN MMAP THIS
+
+### Pointer Field Alignment at Key Offsets
+
+| Offset | From Base | NTL | Corrupts | Effect |
+|--------|-----------|-----|----------|--------|
+| +0x4AC0 | +0x848 | 275 | lower half | 0xOrigHigh_0000000V → kernel crash |
+| +0x4AC4 | +0x84C | 276 | upper half | **0x0000000V_OrigLow → USERSPACE** |
+| +0x51C8 | +0xB50 | 725 | lower half | kernel crash |
+| +0x51CC | +0xB54 | 726 | upper half | **USERSPACE** |
+
+**At NTL=276 or 726, we corrupt the UPPER half of key pointers.**
+The resulting address (e.g. 0x0000000600000000) is in userspace.
+If we can mmap at that address before the encoder dereferences it,
+we get a **fake kernel object primitive** — full control of the structure
+the encoder reads from.
+
 ## Exploitation Implications
 
 1. **Controllable overflow length** via NTL (pick exact bytes to corrupt)
-2. **Predictable but not arbitrary write value** (w24 from DPB math)
-3. **Target: session context fields** — these control what the encoder does next
-4. **Secondary bug potential**: Corrupted pointer in session context → 
-   secondary dereference → controlled read/write
-5. **Two overflow sites**: Both DPB arrays overflow, doubling corruption surface
-6. **Dead zone**: NTL 9-63 safe for testing (no crash), NTL 275+ for exploitation
+2. **w24 is a small DPB value (1-16)** via SMIN, controllable by resolution
+3. **4-byte writes corrupt pointer halves** — upper half → userspace redirect
+4. **Target: session context fields** — these control what the encoder does next
+5. **Fake object primitive**: Map memory at corrupted address → control dereference chains
+6. **Two overflow sites**: Both DPB arrays overflow, doubling corruption surface
+7. **Dead zone**: NTL 9-63 safe for testing (no crash), NTL 275+ for exploitation
+8. **NTL parity matters**: Even NTL corrupts lower halves, odd NTL corrupts upper halves
+   (relative to 8-byte aligned pointers)
