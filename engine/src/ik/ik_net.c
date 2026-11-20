@@ -589,9 +589,16 @@ Ret_int__GoIface net_UDPConn_WriteTo(GoOpaque *c, Slice_u8 b, GoIface addr) {
     else return (Ret_int__GoIface){0, op_error("write", "unsupported address", false)};
     struct sockaddr_storage ss;
     int sl = to_sockaddr(ip, port, &ss);
-    long n = sendto(s->fd, (const char *)b.p, (size_t)b.len, 0, (struct sockaddr *)&ss, sl);
-    if (n < 0) return (Ret_int__GoIface){0, op_error("write", sock_err(), false)};
-    return (Ret_int__GoIface){(int)n, {0}};
+    for (;;) {
+        if (s->closed) return (Ret_int__GoIface){0, op_error("write", "use of closed network connection", false)};
+        long n = sendto(s->fd, (const char *)b.p, (size_t)b.len, 0, (struct sockaddr *)&ss, sl);
+        if (n >= 0) return (Ret_int__GoIface){(int)n, {0}};
+        if (!WOULD_BLOCK()) return (Ret_int__GoIface){0, op_error("write", sock_err(), false)};
+        // send buffer full (e.g. a subnet sweep waiting on ARP): Go blocks the
+        // goroutine until the socket is writable, so wait (cooperatively) too
+        go_sleep_ns(1000000);
+        if (!wait_ready(s, true)) return (Ret_int__GoIface){0, op_error("write", "i/o timeout", true)};
+    }
 }
 
 // ---------------------------------------------------------------- interfaces

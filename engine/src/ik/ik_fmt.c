@@ -574,9 +574,22 @@ Ret_int__GoIface fmt_Println(Slice_GoIface a0) {
     out_write((GoString){"\n", 1});
     return (Ret_int__GoIface){s.len + 1, {0}};
 }
+// Fprintf: strings.Builder / bytes.Buffer get the text (status screens,
+// the rollback desync log), files other than stdout/stderr are written;
+// anything else is a diagnostic and goes to the log.
 Ret_int__GoIface fmt_Fprintf(GoIface w, GoString a1, Slice_GoIface a2) {
-    (void)w;  // diagnostics only (stderr / log files)
     GoString s = go_sprintf(a1, a2.p, a2.len);
+    if (w.data) {
+        switch (w.type) {
+        case GO_TID_P_strings_Builder: return strings_Builder_WriteString((GoOpaque *)w.data, s);
+        case GO_TID_P_bytes_Buffer: return bytes_Buffer_WriteString((GoOpaque *)w.data, s);
+        case GO_TID_P_os_File:
+            if (w.data != (void *)os_Stderr && w.data != (void *)os_Stdout)
+                return os_File_Write((GoOpaque *)w.data, (Slice_u8){(u8 *)s.p, s.len, s.len});
+            break;
+        default: break;
+        }
+    }
     cvf_log("%.*s", s.len, s.p);
     return (Ret_int__GoIface){s.len, {0}};
 }
