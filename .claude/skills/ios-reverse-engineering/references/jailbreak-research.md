@@ -340,7 +340,7 @@ creating thumbnail...
 survived (patched build): img=0x103169210
 exit=0
 ```
-Result: **SURVIVED** — macOS 27.0.1 has the CoreGraphics fix backported.
+Result: **SURVIVED (no crash)** — but this only means the process didn't crash. Visual verification in Preview.app showed **corrupted rendering identical to iOS** (black rectangle, white bar artifact, no "A" glyph). macOS 27.0.1 is also VULNERABLE.
 
 ### Apple Security Advisory Analysis — iOS 27.0.1 Vulnerability Window
 
@@ -360,7 +360,7 @@ From Apple's security advisories (support.apple.com/en-us/100100):
 
 **iPad Mini (iOS 27.0.1) is almost certainly VULNERABLE to CVE-2026-86950.**
 
-Note: macOS 27.0.1 survived despite the same version number — macOS and iOS share CoreGraphics source but their release branches can merge fixes independently.
+**CORRECTION (Nov 20, 2026):** Earlier analysis assumed "survived" = patched. Visual verification in Preview.app confirmed macOS 27.0.1 also shows corrupted rendering. The render.c harness only checks for crash/no-crash, NOT visual correctness. Both macOS and iOS 27.0.x share the vulnerable CoreGraphics code — neither has the fix.
 
 ### iPad Mini Test Results (Nov 20, 2026)
 
@@ -374,8 +374,8 @@ Note: macOS 27.0.1 survived despite the same version number — macOS and iOS sh
 **Result: VULNERABILITY CONFIRMED (corrupted rendering) — NO CRASH**
 
 The corrupted rendering proves the integer overflow in `aa_double_to_fixed()` IS triggering:
-- On patched builds (macOS 27.0.1), `FCVTZS` saturates the value → glyph renders as "A" correctly
-- On iOS 27.0.1, the `XTN` truncation path produces garbage coordinates → undersized coverage buffer → corrupted/missing glyph output
+- On patched builds, `FCVTZS` saturates the value → glyph renders as "A" correctly
+- On vulnerable builds (iOS 27.0.1, iOS 27.1, macOS 27.0.1), the `XTN` truncation path produces garbage coordinates → undersized coverage buffer → corrupted/missing glyph output
 
 The lack of crash is expected for a bare PoC without heap grooming — the OOB write lands in adjacent memory that isn't a guard page. A weaponized exploit would use heap feng shui to place a target object (e.g., NSData length field, ObjC ISA pointer) adjacent to the coverage buffer.
 
@@ -383,10 +383,34 @@ The lack of crash is expected for a bare PoC without heap grooming — the OOB w
 
 | Device | OS | Result | Interpretation |
 |--------|-----|--------|---------------|
-| MacBook Pro | macOS 27.0.1 | "survived" (renders "A") | PATCHED |
-| iPad Mini (iPad16,1) | iOS 27.0.1 | Corrupted render (no "A") | VULNERABLE |
-| iPhone Duo (iPhone19,4) | iOS 27.1 | Not tested | Likely vulnerable (no CVE entries in advisory) |
+| MacBook Pro | macOS 27.0.1 | No crash; corrupted render (no "A") in Preview.app | **VULNERABLE** |
+| iPad Mini (iPad16,1) | iOS 27.0.1 | Corrupted render (no "A") | **VULNERABLE** |
+| iPhone Duo (iPhone19,4) | iOS 27.1 | Corrupted render (no "A") | **VULNERABLE** |
 | iPhone (iPhone16,2) | iOS 27.2.1 | Not tested | Likely patched (first 27.x security release was 27.2) |
+
+### macOS 27.0.1 Visual Verification (Nov 20, 2026)
+
+**Device:** MacBook Pro, macOS 27.0.1
+**Method:** `open -a Preview trigger.pdf` (Apple's Preview.app uses CoreGraphics directly)
+
+**Preview.app test:** Rendered as **black rectangle with thin white bar on left edge** — identical to iPad Mini result. No letter "A" visible. No crash.
+
+**PDFgear (third-party) test:** Also showed black square — but PDFgear uses its own renderer, so this was not conclusive for CoreGraphics.
+
+**Result: macOS 27.0.1 is VULNERABLE — the render.c "survived" message was misleading**
+
+The render.c harness only checks whether the process crashes (`exit=0`). It does NOT verify visual correctness. Both macOS and iOS fail to render the "A" glyph, confirming the `XTN` truncation codepath is active on both platforms at version 27.0.x.
+
+### iPhone Duo Test Results (Nov 20, 2026)
+
+**Device:** iPhone Duo (iPhone19,4), iOS 27.1 (Build 24A94232), connected via network
+**Method:** Opened trigger.pdf (transferred via HTTP server at 192.168.1.155:8888)
+
+**Result:** Rendered as **black rectangle with thin white bar on left edge** — identical corruption pattern to iPad Mini and macOS Preview.app. No crash.
+
+**Result: VULNERABILITY CONFIRMED on iOS 27.1 — NO CRASH**
+
+This confirms that iOS 27.1 (released Oct 26, 2026, advertised as "no published CVE entries") also lacks the CoreGraphics fix. The entire 27.0–27.1 branch is vulnerable.
 
 ### Implications for iOS 27 Research
 
