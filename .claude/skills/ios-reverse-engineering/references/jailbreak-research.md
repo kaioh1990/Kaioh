@@ -564,6 +564,68 @@ Step 7: Install Sileo ← GOAL
 
 **Bottom line**: CVE-2026-86950 gives us Step 1. Steps 2-5 each require additional vulnerabilities or research that doesn't exist publicly for iOS 27. This is the fundamental gap between a crash PoC and a working jailbreak.
 
+### Exploit Chain Progress
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 1 | CVE-2026-86950 OOB write trigger | **DONE** — trigger.pdf confirmed on iPad Mini (iOS 27.0.1) and iPhone Duo (iOS 27.1) |
+| 2 | Heap feng shui → arbitrary R/W | **IN PROGRESS** — OOB direction solved (negative TX), spray + font built |
+| 3 | Sandbox escape | Not started |
+| 4 | Kernel R/W | Not started |
+| 5 | PAC bypass | Not started |
+| 6 | PPL/SPTM bypass | Not started |
+| 7 | Rootless bootstrap + Sileo | Not started |
+
+## OOB Direction: Negative TX Breakthrough (Nov 20, 2026)
+
+### Problem
+
+All positive TRIGGER_X values within int16 range (≤32767) produce **BACKWARD** OOB writes (negative pixel offsets). The XTN truncation wrap boundary is exactly at TX=32768 — 1 past int16 max. With positive TX, the OOB write goes ~99KB backward from the buffer, making heap feng shui impractical.
+
+### Solution
+
+Use **NEGATIVE TRIGGER_X**. XTN truncation of a large negative fixed-point value wraps around to a small POSITIVE 32-bit value, flipping the OOB direction to FORWARD.
+
+TrueType glyph coordinates are signed int16 (-32768 to 32767), so negative values are valid.
+
+### Optimal Parameters: N=10, DX=2, TX=-16367
+
+| Parameter | Value | Effect |
+|-----------|-------|--------|
+| N (composite levels) | 10 | 10 nested 2x scales = ~1024x total |
+| DX (bbox width) | 2 | Small bbox → 572-byte coverage buffer |
+| TX (trigger X) | -16367 | Negative coord → XTN wraps positive |
+| Coverage buffer | 572 bytes | SMALL magazine (5120-byte quantum) |
+| OOB offset | +5120 bytes | Exactly 1 quantum forward |
+| Target byte | 0 | Byte 0 of next allocation (ISA pointer) |
+
+### Math
+
+```
+device_x = -16367 × SCALE^10 × 1024/16384 = -1,047,168
+fixed_raw = 0.5 + 4096 × (-1,047,168) = -4,289,201,667
+XTN(-4,289,201,667) = -4,289,201,667 & 0xFFFFFFFF = 5,765,629 (POSITIVE!)
+trig_px = 5,765,629 / 4096 = 1,407
+OOB = (1407 - 127) × 4 = 5,120 bytes forward
+```
+
+The OOB write lands at **byte 0 of the next SMALL-magazine allocation** — perfect alignment for corrupting a victim object's ISA pointer or CFData length field.
+
+### Comparison: Positive TX vs Negative TX
+
+| Variant | TX | DX | Buffer | OOB Direction | OOB Offset | Target |
+|---------|-----|-----|--------|--------------|------------|--------|
+| Original (backward) | +32000 | 2 | 316 B | BACKWARD | -99,432 B | 19 allocs back |
+| Old positive (forward) | +16409 | 17 | 4412 B | FORWARD | +768 B | +60 B into next alloc |
+| **New negative (optimal)** | **-16367** | **2** | **572 B** | **FORWARD** | **+5120 B** | **Byte 0 of next alloc** |
+
+### Files
+
+- `poc/gen_neg_tx_font.py` — Font generator with TX=-16367 (byte-0 aligned forward OOB)
+- `poc/neg_tx_exploit.pdf` — PDF with inline-image spray + negative-TX trigger
+- `poc/gen_feng_shui_font.py` — Original font generator (TX=16409, +60B into next alloc)
+- `poc/gen_exploit_pdf.py` — PDF generator (works with either font)
+
 ## Notes
 - The reported jailbreak used Lockdown Mode — this narrows the attack surface significantly
 - iPhone Duo likely uses A-series or M-series chip with full PAC/PPL/KTRR

