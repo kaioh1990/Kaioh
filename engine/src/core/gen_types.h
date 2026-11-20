@@ -121,15 +121,18 @@ typedef struct Fnt Fnt;
 typedef struct FntCharImage FntCharImage;
 typedef struct FontProperties FontProperties;
 typedef struct FontRenderer_GL33 FontRenderer_GL33;
+typedef struct FontRenderer_GLES32 FontRenderer_GLES32;
 typedef struct list_Element list_Element;
 typedef struct list_List list_List;
 typedef struct FontRenderer_VK FontRenderer_VK;
 typedef struct color color;
 typedef struct ShaderPalFX ShaderPalFX;
 typedef struct Font_GL33 Font_GL33;
+typedef struct Font_GLES32 Font_GLES32;
 typedef struct Font_VK Font_VK;
 typedef struct ForceFeedbackParams ForceFeedbackParams;
 typedef struct GL33State GL33State;
+typedef struct GLES32State GLES32State;
 typedef struct GLTFAnimatableProperty GLTFAnimatableProperty;
 typedef struct GLTFAnimation GLTFAnimation;
 typedef struct GLTFAnimationChannel GLTFAnimationChannel;
@@ -225,6 +228,8 @@ typedef struct Rect Rect;
 typedef struct ReflectionSprite ReflectionSprite;
 typedef struct RenderParams RenderParams;
 typedef struct Renderer_GL33 Renderer_GL33;
+typedef struct vitaBatch vitaBatch;
+typedef struct Renderer_GLES32 Renderer_GLES32;
 typedef struct VulkanBuffer VulkanBuffer;
 typedef struct VulkanSpriteTexture VulkanSpriteTexture;
 typedef struct VulkanModelTexture VulkanModelTexture;
@@ -271,6 +276,8 @@ typedef struct SffHeader SffHeader;
 typedef struct SpriteTextureAtlas SpriteTextureAtlas;
 typedef struct Sff Sff;
 typedef struct ShaderProgram_GL33 ShaderProgram_GL33;
+typedef struct uniCacheEnt uniCacheEnt;
+typedef struct ShaderProgram_GLES32 ShaderProgram_GLES32;
 typedef struct ShadowSprite ShadowSprite;
 typedef struct ShortcutKey ShortcutKey;
 typedef struct ShortcutScript ShortcutScript;
@@ -301,6 +308,7 @@ typedef struct TeamModesProperties TeamModesProperties;
 typedef struct TextSprite TextSprite;
 typedef struct TextureAtlas TextureAtlas;
 typedef struct Texture_GL33 Texture_GL33;
+typedef struct Texture_GLES32 Texture_GLES32;
 typedef struct Texture_VK Texture_VK;
 typedef struct TypedValue TypedValue;
 typedef struct UndefinedFormatter UndefinedFormatter;
@@ -738,6 +746,10 @@ typedef GoMap Map_u32_GoOpaque_invalidtypePtr; /* map[uint32]invalid type */
 #define CVF_DEF_Map_u32_ShaderProgram_GL33Ptr
 typedef GoMap Map_u32_ShaderProgram_GL33Ptr; /* map[uint32]*ShaderProgram_GL33 */
 #endif
+#ifndef CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
+#define CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
+typedef GoMap Map_u32_ShaderProgram_GLES32Ptr; /* map[uint32]*ShaderProgram_GLES32 */
+#endif
 #ifndef CVF_DEF_Map_u32_Slice_f32
 #define CVF_DEF_Map_u32_Slice_f32
 typedef GoMap Map_u32_Slice_f32; /* map[uint32][]float32 */
@@ -862,6 +874,10 @@ typedef struct Arr16_Anon_bfbab8ed Arr16_Anon_bfbab8ed;
 #define CVF_DEF_Arr16_f32
 typedef struct Arr16_f32 Arr16_f32;
 #endif
+#ifndef CVF_DEF_Arr192_bool
+#define CVF_DEF_Arr192_bool
+typedef struct Arr192_bool Arr192_bool;
+#endif
 #ifndef CVF_DEF_Arr20_FSBgTextSnd
 #define CVF_DEF_Arr20_FSBgTextSnd
 typedef struct Arr20_FSBgTextSnd Arr20_FSBgTextSnd;
@@ -873,6 +889,10 @@ typedef struct Arr24_Arr16_f32 Arr24_Arr16_f32;
 #ifndef CVF_DEF_Arr24_f32
 #define CVF_DEF_Arr24_f32
 typedef struct Arr24_f32 Arr24_f32;
+#endif
+#ifndef CVF_DEF_Arr24_uniCacheEnt
+#define CVF_DEF_Arr24_uniCacheEnt
+typedef struct Arr24_uniCacheEnt Arr24_uniCacheEnt;
 #endif
 #ifndef CVF_DEF_Arr256_u32
 #define CVF_DEF_Arr256_u32
@@ -1022,6 +1042,10 @@ typedef struct Arr2_u16 Arr2_u16;
 #define CVF_DEF_Arr2_u32
 typedef struct Arr2_u32 Arr2_u32;
 #endif
+#ifndef CVF_DEF_Arr2_u64
+#define CVF_DEF_Arr2_u64
+typedef struct Arr2_u64 Arr2_u64;
+#endif
 #ifndef CVF_DEF_Arr32_AnimLayout
 #define CVF_DEF_Arr32_AnimLayout
 typedef struct Arr32_AnimLayout Arr32_AnimLayout;
@@ -1125,6 +1149,18 @@ typedef struct Arr4_u8 Arr4_u8;
 #ifndef CVF_DEF_Arr64_AnimationPtr
 #define CVF_DEF_Arr64_AnimationPtr
 typedef struct Arr64_AnimationPtr Arr64_AnimationPtr;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_5596a083
+#define CVF_DEF_Arr64_Anon_5596a083
+typedef struct Arr64_Anon_5596a083 Arr64_Anon_5596a083;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_7b4debcb
+#define CVF_DEF_Arr64_Anon_7b4debcb
+typedef struct Arr64_Anon_7b4debcb Arr64_Anon_7b4debcb;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_a810cdd4
+#define CVF_DEF_Arr64_Anon_a810cdd4
+typedef struct Arr64_Anon_a810cdd4 Arr64_Anon_a810cdd4;
 #endif
 #ifndef CVF_DEF_Arr6_f32
 #define CVF_DEF_Arr6_f32
@@ -1386,6 +1422,9 @@ typedef struct Anon_ad3827b6 Anon_ad3827b6;
 typedef struct Anon_a61ac1b3 Anon_a61ac1b3;
 typedef struct Anon_4d998b97 Anon_4d998b97;
 typedef struct Anon_52ad6e9d Anon_52ad6e9d;
+typedef struct Anon_5596a083 Anon_5596a083;
+typedef struct Anon_a810cdd4 Anon_a810cdd4;
+typedef struct Anon_7b4debcb Anon_7b4debcb;
 typedef struct Anon_0f1da223 Anon_0f1da223;
 typedef struct Anon_c0ebc6d1 Anon_c0ebc6d1;
 typedef struct Anon_53386e74 Anon_53386e74;
@@ -1691,6 +1730,10 @@ typedef struct { SelectStage *p; int len, cap; } Slice_SelectStage;
 #ifndef CVF_DEF_Slice_ShaderProgram_GL33Ptr
 #define CVF_DEF_Slice_ShaderProgram_GL33Ptr
 typedef struct { ShaderProgram_GL33* *p; int len, cap; } Slice_ShaderProgram_GL33Ptr;
+#endif
+#ifndef CVF_DEF_Slice_ShaderProgram_GLES32Ptr
+#define CVF_DEF_Slice_ShaderProgram_GLES32Ptr
+typedef struct { ShaderProgram_GLES32* *p; int len, cap; } Slice_ShaderProgram_GLES32Ptr;
 #endif
 #ifndef CVF_DEF_Slice_ShadowSpritePtr
 #define CVF_DEF_Slice_ShadowSpritePtr
@@ -2574,6 +2617,10 @@ typedef struct FontProperties FontProperties;
 #define CVF_TD_FontRenderer_GL33
 typedef struct FontRenderer_GL33 FontRenderer_GL33;
 #endif
+#ifndef CVF_TD_FontRenderer_GLES32
+#define CVF_TD_FontRenderer_GLES32
+typedef struct FontRenderer_GLES32 FontRenderer_GLES32;
+#endif
 #ifndef CVF_TD_list_Element
 #define CVF_TD_list_Element
 typedef struct list_Element list_Element;
@@ -2598,6 +2645,10 @@ typedef struct ShaderPalFX ShaderPalFX;
 #define CVF_TD_Font_GL33
 typedef struct Font_GL33 Font_GL33;
 #endif
+#ifndef CVF_TD_Font_GLES32
+#define CVF_TD_Font_GLES32
+typedef struct Font_GLES32 Font_GLES32;
+#endif
 #ifndef CVF_TD_Font_VK
 #define CVF_TD_Font_VK
 typedef struct Font_VK Font_VK;
@@ -2609,6 +2660,10 @@ typedef struct ForceFeedbackParams ForceFeedbackParams;
 #ifndef CVF_TD_GL33State
 #define CVF_TD_GL33State
 typedef struct GL33State GL33State;
+#endif
+#ifndef CVF_TD_GLES32State
+#define CVF_TD_GLES32State
+typedef struct GLES32State GLES32State;
 #endif
 #ifndef CVF_TD_GLTFAnimatableProperty
 #define CVF_TD_GLTFAnimatableProperty
@@ -2990,6 +3045,14 @@ typedef struct RenderParams RenderParams;
 #define CVF_TD_Renderer_GL33
 typedef struct Renderer_GL33 Renderer_GL33;
 #endif
+#ifndef CVF_TD_vitaBatch
+#define CVF_TD_vitaBatch
+typedef struct vitaBatch vitaBatch;
+#endif
+#ifndef CVF_TD_Renderer_GLES32
+#define CVF_TD_Renderer_GLES32
+typedef struct Renderer_GLES32 Renderer_GLES32;
+#endif
 #ifndef CVF_TD_VulkanBuffer
 #define CVF_TD_VulkanBuffer
 typedef struct VulkanBuffer VulkanBuffer;
@@ -3174,6 +3237,14 @@ typedef struct Sff Sff;
 #define CVF_TD_ShaderProgram_GL33
 typedef struct ShaderProgram_GL33 ShaderProgram_GL33;
 #endif
+#ifndef CVF_TD_uniCacheEnt
+#define CVF_TD_uniCacheEnt
+typedef struct uniCacheEnt uniCacheEnt;
+#endif
+#ifndef CVF_TD_ShaderProgram_GLES32
+#define CVF_TD_ShaderProgram_GLES32
+typedef struct ShaderProgram_GLES32 ShaderProgram_GLES32;
+#endif
 #ifndef CVF_TD_ShadowSprite
 #define CVF_TD_ShadowSprite
 typedef struct ShadowSprite ShadowSprite;
@@ -3293,6 +3364,10 @@ typedef struct TextureAtlas TextureAtlas;
 #ifndef CVF_TD_Texture_GL33
 #define CVF_TD_Texture_GL33
 typedef struct Texture_GL33 Texture_GL33;
+#endif
+#ifndef CVF_TD_Texture_GLES32
+#define CVF_TD_Texture_GLES32
+typedef struct Texture_GLES32 Texture_GLES32;
 #endif
 #ifndef CVF_TD_Texture_VK
 #define CVF_TD_Texture_VK
@@ -6823,6 +6898,12 @@ struct FontRenderer_GL33 {
     u32 vbo;
 };
 
+struct FontRenderer_GLES32 {
+    ShaderProgram_GLES32* shaderProgram;
+    u32 vao;
+    u32 vbo;
+};
+
 struct list_Element {
     list_Element* next;
     list_Element* prev;
@@ -6860,6 +6941,18 @@ struct ShaderPalFX {
 };
 
 struct Font_GL33 {
+    Map_i32_characterPtr fontChar;
+    truetype_Font* ttf;
+    i32 scale;
+    int windowWidth;
+    int windowHeight;
+    Slice_TextureAtlasPtr textures;
+    color color;
+    ShaderPalFX shaderPalFX;
+    CustomShaderRenderData customShader;
+};
+
+struct Font_GLES32 {
     Map_i32_characterPtr fontChar;
     truetype_Font* ttf;
     i32 scale;
@@ -6911,6 +7004,64 @@ struct GL33State {
     Slice_u64 texCacheLastUsed;
     u64 texCacheTimer;
     Map_u32_i32 uniformICache;
+    Map_u32_f32 uniformF1Cache;
+    Map_u32_Arr2_f32 uniformF2Cache;
+    Map_u32_Arr3_f32 uniformF3Cache;
+    Map_u32_Arr4_f32 uniformF4Cache;
+    bool useUV;
+    bool useNormal;
+    bool useTangent;
+    bool useVertColor;
+    bool useJoint0;
+    bool useJoint1;
+    bool useOutlineAttribute;
+    Map_u32_u32 boundBuffers;
+    u32 currentVAO;
+};
+
+struct Anon_5596a083 {
+    i32 v;
+    bool ok;
+};
+#ifndef CVF_BODY_Arr64_Anon_5596a083
+#define CVF_BODY_Arr64_Anon_5596a083
+struct Arr64_Anon_5596a083 { Anon_5596a083 v[64]; };
+#endif
+struct Anon_a810cdd4 {
+    Arr4_f32 v;
+    u8 n;
+};
+#ifndef CVF_BODY_Arr64_Anon_a810cdd4
+#define CVF_BODY_Arr64_Anon_a810cdd4
+struct Arr64_Anon_a810cdd4 { Anon_a810cdd4 v[64]; };
+#endif
+struct Anon_7b4debcb {
+    Arr16_f32 v;
+    bool ok;
+};
+#ifndef CVF_BODY_Arr64_Anon_7b4debcb
+#define CVF_BODY_Arr64_Anon_7b4debcb
+struct Arr64_Anon_7b4debcb { Anon_7b4debcb v[64]; };
+#endif
+struct GLES32State {
+    u32 program;
+    bool depthTest;
+    bool depthMask;
+    bool invertFrontFace;
+    bool doubleSided;
+    bool blendEnabled;
+    BlendEquation blendEquation;
+    BlendFunc blendSrc;
+    BlendFunc blendDst;
+    Arr4_i32 scissorRect;
+    bool scissorEnabled;
+    Slice_boundTexture boundTex;
+    Slice_u64 texCacheLastUsed;
+    u64 texCacheTimer;
+    Map_u32_i32 uniformICache;
+    Arr64_Anon_5596a083 uniArrI;
+    Arr64_Anon_a810cdd4 uniArrF;
+    Arr64_Anon_7b4debcb uniArrM;
     Map_u32_f32 uniformF1Cache;
     Map_u32_Arr2_f32 uniformF2Cache;
     Map_u32_Arr3_f32 uniformF3Cache;
@@ -9696,6 +9847,117 @@ struct Renderer_GL33 {
     };
 };
 
+#ifndef CVF_BODY_Arr192_bool
+#define CVF_BODY_Arr192_bool
+struct Arr192_bool { bool v[192]; };
+#endif
+#ifndef CVF_BODY_Arr2_u64
+#define CVF_BODY_Arr2_u64
+struct Arr2_u64 { u64 v[2]; };
+#endif
+struct vitaBatch {
+    bool enabled;
+    Slice_f32 pend;
+    int n;
+    Slice_f32 cur;
+    Arr4_f32 spUV;
+    Arr4_f32 palUV;
+    u32 locSp;
+    u32 locPal;
+    bool ptrOK;
+    int flushes;
+    int quads;
+    bool lazy;
+    Arr64_Anon_5596a083 haveI;
+    Arr64_Anon_a810cdd4 haveF;
+    Arr64_Anon_7b4debcb haveM;
+    Arr192_bool dirty;
+    Slice_i32 dirtyList;
+    Arr2_i32 slotLoc;
+    Arr2_i32 slotUnit;
+    Arr2_u64 slotUse;
+    u64 slotTick;
+    f32 texSel;
+};
+
+struct Renderer_GLES32 {
+    u32 fbo;
+    u32 fbo_texture;
+    u32 rbo_depth;
+    u32 fbo_f;
+    Texture_GLES32* fbo_f_texture;
+    u32 fbo_shadow;
+    u32 fbo_shadow_cube_texture;
+    u32 fbo_env;
+    Slice_u32 fbo_pp;
+    Slice_u32 fbo_pp_texture;
+    u32 postVertBuffer;
+    Slice_ShaderProgram_GLES32Ptr postShaderSelect;
+    Map_u32_ShaderProgram_GLES32Ptr customShaders;
+    Map_GoString_u32 customShaderMap;
+    u32 nextShaderID;
+    ShaderProgram_GLES32* currentProgram;
+    Texture_GLES32* grabTexture;
+    ShaderProgram_GLES32* spriteShader;
+    u32 vertexBuffer;
+    ShaderProgram_GLES32* shadowMapShader;
+    ShaderProgram_GLES32* modelShader;
+    ShaderProgram_GLES32* panoramaToCubeMapShader;
+    ShaderProgram_GLES32* cubemapFilteringShader;
+    Arr2_u32 modelVertexBuffer;
+    Arr2_u32 modelIndexBuffer;
+    u32 spriteVAO;
+    Slice_f32 vitaVerts;
+    u32 vitaLocPos;
+    u32 vitaLocUV;
+    vitaBatch vb;
+    u32 modelVAO;
+    u32 modelEnvVAO;
+    u32 postVAO;
+    Slice_u8 vertexScratch;
+    u32 capturePBO;
+    int capturePBOSize;
+    bool capturePending;
+    bool enableModel;
+    bool enableShadow;
+    union {
+        GLES32State GLES32State_;
+        struct {
+            u32 program;
+            bool depthTest;
+            bool depthMask;
+            bool invertFrontFace;
+            bool doubleSided;
+            bool blendEnabled;
+            BlendEquation blendEquation;
+            BlendFunc blendSrc;
+            BlendFunc blendDst;
+            Arr4_i32 scissorRect;
+            bool scissorEnabled;
+            Slice_boundTexture boundTex;
+            Slice_u64 texCacheLastUsed;
+            u64 texCacheTimer;
+            Map_u32_i32 uniformICache;
+            Arr64_Anon_5596a083 uniArrI;
+            Arr64_Anon_a810cdd4 uniArrF;
+            Arr64_Anon_7b4debcb uniArrM;
+            Map_u32_f32 uniformF1Cache;
+            Map_u32_Arr2_f32 uniformF2Cache;
+            Map_u32_Arr3_f32 uniformF3Cache;
+            Map_u32_Arr4_f32 uniformF4Cache;
+            bool useUV;
+            bool useNormal;
+            bool useTangent;
+            bool useVertColor;
+            bool useJoint0;
+            bool useJoint1;
+            bool useOutlineAttribute;
+            Map_u32_u32 boundBuffers;
+            u32 currentVAO;
+        };
+    };
+};
+
 struct VulkanBuffer {
     GoOpaque /* invalid type */ buffer;
     GoOpaque /* invalid type */ bufferMemory;
@@ -10713,6 +10975,27 @@ struct ShaderProgram_GL33 {
     bool needsGrabPass;
 };
 
+struct uniCacheEnt {
+    u8* p;
+    int n;
+    i32 loc;
+};
+
+#ifndef CVF_BODY_Arr24_uniCacheEnt
+#define CVF_BODY_Arr24_uniCacheEnt
+struct Arr24_uniCacheEnt { uniCacheEnt v[24]; };
+#endif
+struct ShaderProgram_GLES32 {
+    u32 program;
+    Map_GoString_i32 attributes;
+    Map_GoString_i32 uniforms;
+    Map_GoString_int textures;
+    GoString name;
+    bool needsGrabPass;
+    Arr24_uniCacheEnt uniCache;
+    int uniCacheN;
+};
+
 struct ShadowSprite {
     SpriteData* embed_SpriteData;
     f32 groundLevel;
@@ -11386,6 +11669,17 @@ struct Texture_GL33 {
     bool filter;
     u32 handle;
     Texture_GL33* root;
+};
+
+struct Texture_GLES32 {
+    i32 width;
+    i32 height;
+    i32 depth;
+    Arr2_i32 offset;
+    Arr4_f32 uvst;
+    bool filter;
+    u32 handle;
+    Texture_GLES32* root;
 };
 
 struct Texture_VK {
@@ -12512,6 +12806,10 @@ GO_SLICE_FUNCS(Slice_SelectStage, SelectStage)
 #define CVF_FN_Slice_ShaderProgram_GL33Ptr
 GO_SLICE_FUNCS(Slice_ShaderProgram_GL33Ptr, ShaderProgram_GL33*)
 #endif
+#ifndef CVF_FN_Slice_ShaderProgram_GLES32Ptr
+#define CVF_FN_Slice_ShaderProgram_GLES32Ptr
+GO_SLICE_FUNCS(Slice_ShaderProgram_GLES32Ptr, ShaderProgram_GLES32*)
+#endif
 #ifndef CVF_FN_Slice_ShadowSpritePtr
 #define CVF_FN_Slice_ShadowSpritePtr
 GO_SLICE_FUNCS(Slice_ShadowSpritePtr, ShadowSprite*)
@@ -13083,6 +13381,10 @@ GO_MAP_FUNCS(Map_u32_Arr4_f32, u32, Arr4_f32, false)
 #ifndef CVF_FN_Map_u32_ShaderProgram_GL33Ptr
 #define CVF_FN_Map_u32_ShaderProgram_GL33Ptr
 GO_MAP_FUNCS(Map_u32_ShaderProgram_GL33Ptr, u32, ShaderProgram_GL33*, false)
+#endif
+#ifndef CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
+#define CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
+GO_MAP_FUNCS(Map_u32_ShaderProgram_GLES32Ptr, u32, ShaderProgram_GLES32*, false)
 #endif
 #ifndef CVF_FN_Map_u32_Slice_f32
 #define CVF_FN_Map_u32_Slice_f32

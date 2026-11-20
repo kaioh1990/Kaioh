@@ -55,7 +55,7 @@ clang -std=gnu11 -fsyntax-only -ferror-limit=0 -w -Isrc -I"$SDL2_INCLUDE" src/ik
 echo "ik_sim.c syntax errors: $(grep -c error: "$T/err_ik_sim.txt")"
 # placeholders for library functions the runtime does not implement yet
 # (paths relative to engine/, so directories with spaces work)
-for f in src/ik/ik_*.c src/platform/sdl/*.c; do
+for f in src/ik/ik_*.c src/platform/sdl/*.c src/platform/gles/*.c; do
   case $f in *ik_sim.c|*ik_unsupported.c) continue;; esac
   $CC -std=gnu17 -O0 -w -Isrc -I"$SDL2_INCLUDE" -c "$f" -o "$T/$(basename "$f" .c).o"
 done

@@ -47,6 +47,11 @@ GoIface sdl_Window_GLMakeCurrent(sdl_Window *w, sdl_GLContext c) {
     return sdl_check(SDL_GL_MakeCurrent((SDL_Window *)w, (SDL_GLContext)(uintptr_t)c));
 }
 void sdl_Window_GLSwap(sdl_Window *w) { SDL_GL_SwapWindow((SDL_Window *)w); }
+Ret_i32__i32 sdl_Window_GLGetDrawableSize(sdl_Window *w) {
+    int x = 0, y = 0;
+    SDL_GL_GetDrawableSize((SDL_Window *)w, &x, &y);
+    return (Ret_i32__i32){x, y};
+}
 GoIface sdl_GLSetAttribute(sdl_GLattr attr, int value) { return sdl_check(SDL_GL_SetAttribute((SDL_GLattr)attr, value)); }
 GoIface sdl_GLSetSwapInterval(int interval) { return sdl_check(SDL_GL_SetSwapInterval(interval)); }
 

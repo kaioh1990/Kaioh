@@ -1649,6 +1649,8 @@
 #define varSet_varType (3)
 #define victoryQuote_redirectid (1)
 #define victoryQuote_value (0)
+#define vitaBatchFloats (12)
+#define vitaBatchMaxVerts (8192)
 #define vitaScreenH (544)
 #define vitaScreenW (960)
 #define waveform_off (0)

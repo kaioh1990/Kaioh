@@ -69,7 +69,7 @@ if(NOT TARGET SDL2::SDL2)
     INTERFACE_INCLUDE_DIRECTORIES "${CVF_SDL2_INCLUDE_DIR}")
 endif()
 
-file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c)
+file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c src/platform/gles/*.c)
 add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
 target_link_libraries(cvf_ik PUBLIC cvf_core SDL2::SDL2)
 # generated code: warnings are not actionable here
