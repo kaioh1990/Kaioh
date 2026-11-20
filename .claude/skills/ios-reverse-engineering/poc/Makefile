@@ -4,7 +4,7 @@
 CFLAGS = -framework CoreGraphics -framework ImageIO -framework CoreFoundation
 CFLAGS += -Wall -g -O0
 
-.PHONY: all clean font pdf neg-tx run run-guard
+.PHONY: all clean font pdf neg-tx oob-confirm run run-guard
 
 all: font pdf render_debug
 
@@ -19,6 +19,11 @@ pdf: font gen_exploit_pdf.py
 neg-tx: gen_neg_tx_font.py gen_exploit_pdf.py
 	python3 gen_neg_tx_font.py neg_tx_trigger.ttf
 	python3 gen_exploit_pdf.py neg_tx_exploit.pdf neg_tx_trigger.ttf
+
+# Step 2a: Visual OOB confirmation via CMYK image pixel corruption
+oob-confirm: gen_neg_tx_font.py gen_oob_confirm_pdf.py
+	python3 gen_neg_tx_font.py neg_tx_trigger.ttf
+	python3 gen_oob_confirm_pdf.py oob_confirm.pdf neg_tx_trigger.ttf
 
 render_debug: render_debug.c
 	clang $(CFLAGS) -o render_debug render_debug.c
