@@ -78,18 +78,57 @@ instead of 16 (64 bytes), which would double effective overflow at each NTL.
 
 ## What Gets Corrupted
 
-The overflow writes w24 (a DPB-computed value) into session context fields
-AFTER the DPB array. These fields likely include:
+## Session Context Overflow Zone Map (from kernelcache analysis)
 
-- Reference picture list pointers
-- DPB management state flags  
-- Buffer indices for other encoding stages
-- Possibly DART mapping metadata
-- Rate control state
+```
++0x4678: DPB array 1 start (fill loop target)
++0x4698: Overflow starts (if 8-entry array)
++0x46B8: Overflow starts (if 16-entry array)
+   ...  NO CODE REFERENCES in +0x4698..+0x4AC0 (dead zone, ~1KB)
++0x4AC0: FIRST POINTER — ldr x8, [x19, #0x4ac0] (1 ref, NTL>=275)
++0x4AD0: Second pointer (1 ref, NTL>=279)
++0x4B00: Third pointer (1 ref, deref ->0x268, NTL>=291)
++0x4B18: Fourth pointer (1 ref, deref ->0x268, NTL>=297)
++0x5000: ADD base (NTL>=611)
++0x51C8: KEY POINTER — 3 refs, deref ->0x2D0, ->0x20AC, ->0x98 (NTL>=725)
++0x51D8: KEY POINTER — 3 refs, deref ->0x34, ->0x8 (NTL>=729)
++0x51E8..0x5368: 7 more pointer fields (NTL 733-831)
++0x5BA8: Last reachable pointer (NTL>=1357)
++0x6228: DPB array 2 start (fill loop 2 target)
+```
 
-The fact that w24 is NOT arbitrary data (it's ASR of a DPB computation)
-means the corruption value is somewhat predictable but not fully controllable
-from userspace. However, the POSITION of corruption IS controllable via NTL.
+Key finding: NTL 9-63 is "silent" because the overflow lands in the dead zone
+(+0x4698 to +0x4AC0) which has NO code references. No fields are read from
+that region, so corruption goes undetected.
+
+To corrupt actual pointer fields that get dereferenced, NTL must be >= 275.
+
+## Pointer Dereference Chains
+
+**+0x51C8** (most interesting, 3 references):
+1. Load ptr, then `ldr x8, [ptr+0x2D0]` → `ldr w8, [that+0x18]`
+2. Load ptr, then `ldr w8, [ptr+0x20AC]` (deep offset read)
+3. Load ptr, then `ldr x22, [ptr+0x98]` (loads another pointer)
+
+If NTL=726 corrupts this pointer, the encoder will read from a fake address,
+potentially giving us an info leak or controlled crash.
+
+**+0x4AC0** (first reachable, NTL=275):
+Loaded once, then accessed through computed offsets. Corrupting this is the
+safest approach — only one code path uses it, limiting side effects.
+
+## Exploitation Strategy
+
+1. **NTL 275 (surgical)**: Corrupt just the first pointer at +0x4AC0
+   - Encoder reads from corrupted address → crash or info leak
+   - If w24 value happens to point to controlled data → arbitrary read
+
+2. **NTL 726 (aggressive)**: Corrupt the triple-referenced pointer at +0x51C8
+   - Three dereference chains → more chances for useful primitive
+   - Risk: may crash before reaching the useful dereference
+
+3. **Heap spray + NTL combo**: Spray IOSurface objects, then encode with
+   targeted NTL to corrupt session context pointer to point at spray data
 
 ## Exploitation Implications
 
@@ -99,3 +138,4 @@ from userspace. However, the POSITION of corruption IS controllable via NTL.
 4. **Secondary bug potential**: Corrupted pointer in session context → 
    secondary dereference → controlled read/write
 5. **Two overflow sites**: Both DPB arrays overflow, doubling corruption surface
+6. **Dead zone**: NTL 9-63 safe for testing (no crash), NTL 275+ for exploitation
