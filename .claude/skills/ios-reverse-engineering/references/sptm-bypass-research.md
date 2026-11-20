@@ -207,24 +207,78 @@ Dopamine's rootless approach may work if the linked list metadata (the
 head pointer and next pointers) are in XNU_DEFAULT memory even though
 the actual slab contents are TXM-typed. Need to verify.
 
+### F. _zalloc_ro_mut Integer Overflow (CVE-2026-28952)
+
+**CVE-2026-28952** | Disclosed by ironPeak | Part of Calif's MIE bypass chain
+
+**Mechanism:**
+- `_zalloc_ro_mut()` is the sole gatekeeper for modifying read-only kernel memory
+- Integer overflow in size/offset validation allows OOB write to `__DATA_CONST`
+- On MIE devices (A19+/M5+), this bypasses Memory Integrity Enforcement
+- On non-MIE SPTM devices (our A17 Pro), `__DATA_CONST` holds trust cache pointers
+
+**Applicability to iOS 27.0.1 / A17 Pro:** ⚠️ INVESTIGATING
+- If the overflow exists on 27.0.1, we could modify trust cache pointers
+  directly in `__DATA_CONST` without touching SPTM-protected pages
+- Need to verify: (a) is the overflow present on 27.0.1, (b) does it help
+  on non-MIE devices where `__DATA_CONST` is enforced by SPTM not MIE
+
 ---
 
-## 4. Recommended Approach
+## 4. Recommended Approach (Updated)
 
-**Primary: pt_desc refcount overflow (Strategy 1)**
+### Strategy Ranking (November 20, 2026) — UPDATED
 
-This is the strongest candidate because:
-1. It operates below SPTM's awareness (pmap layer)
-2. It's reportedly not fully fixed through iOS 26.6b1
-3. It affects A13-A19 (our A17 Pro is in range)
-4. It doesn't require coprocessor access (pure kernel-side)
-5. The uint16 width is verifiable from Apple's own XNU source
+| Priority | Strategy | PoC Written | Dependencies | Status |
+|----------|----------|-------------|--------------|--------|
+| **1** | **SPTM TLB race (GMMU DART)** | **YES** | Kernel R/W | **PRIMARY** |
+| 2 | Coprocessor DMA (SmartIO) | YES (template) | Kernel R/W + firmware audit | Pending audit |
+| 3 | Data-only trust cache injection | YES | Kernel R/W | Fallback |
+| 4 | _zalloc_ro_mut overflow | No | Kernel R/W + verification | Investigating |
+| ~~5~~ | ~~pt_desc refcount overflow~~ | ~~YES~~ | ~~None~~ | **RULED OUT** |
 
-**Next steps:**
-1. Extract kernelcache from iPad Mini iOS 27.0.1
-2. Verify pt_desc refcount field width (uint16 vs uint32)
-3. Check for overflow mitigations in pmap_enter_options
-4. Build PoC: 65537 MAP_SHARED → trigger overflow → verify freed PTE
+### CRITICAL UPDATE: pt_desc overflow ruled out on A17 Pro
+
+**XNU source code verification (apple-oss-distributions/xnu):**
+- The `unsigned short refcnt` field in `ptd_info_t` exists ONLY in the **non-SPTM** pmap path
+- The **SPTM path** (`osfmk/arm64/sptm/pmap/pmap_data.h`) uses PV linked lists instead
+- `ptd_info_t` on SPTM has ONLY `wiredcnt`, no `refcnt` field at all
+- SPTM devices enforce `SPTM_MAPPING_LIMIT` on PV list length
+- The "A13-A19" claim was wrong — A13 doesn't have SPTM (starts at A15/M2)
+- **ptdesc_overflow.c will NOT work on our iPad Mini (A17 Pro)**
+
+### Primary: SPTM TLB Race (GMMU DART)
+
+Now our **primary and best-characterized** SPTM bypass path:
+1. Exact bug patched in 27.2b3 (SPTM-820.40.23), absent on 27.0.1
+2. 8ms race window is wide (inferred from Dekker gate timeout in fix)
+3. AGX GPU reachable from WebKit sandbox via AGXDeviceUserClient
+4. Well-characterized by IvanIVGrozny fix analysis
+5. Apple internal name: `VIOLATION_T8110_DART_UNGANG_GAPF_RACE`
+6. T8110 in name maps to A17 Pro's DART variant
+
+### Secondary: Coprocessor DMA (SmartIO/Titan)
+
+If TLB race is unreliable:
+1. Scan coprocessor firmware for PAC-free RTKit images
+2. If found: build Titan-style ROP chain → self-referencing PTE
+3. DMA bypasses SPTM page-table protection via DART
+4. Firmware PAC audit running (audit_rtkit_pac.py)
+
+### Fallback: Data-Only Trust Cache
+
+If SPTM bypass isn't achievable:
+1. Manipulate trust cache linked list in XNU_DEFAULT memory
+2. Proven by Dopamine's rootless approach
+3. Only needs kernel R/W (from IOSurface)
+4. Risk: TXM may validate list integrity on lookup
+
+### Next steps:
+1. **Get kernel R/W on iPad** (IOSurface race, needs on-device test)
+2. **Test SPTM TLB race** (needs kernel R/W from step 1)
+3. **Complete firmware PAC audit** (coprocessor DMA fallback)
+4. **Research _zalloc_ro_mut** (potential direct __DATA_CONST write)
+5. **Research data-only trust cache** (is linked list in XNU_DEFAULT?)
 5. If overflow works → reclaim page → inject trust cache
 
 **Fallback: SmartIO DMA (Strategy 2)**
