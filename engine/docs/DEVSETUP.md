@@ -21,6 +21,7 @@ other's work.
 | `claude/native-ios` | iOS port: GLES renderer, engine stack, GC roots and guard pages, NSURLSession HTTP, Nearby bridge | yes |
 | `claude/native-ggpo-sync` | GGPO sync handshake that survives packet loss (`third/ggpo` in the fork patch) | yes (7439707) |
 | `claude/native-android` | Android port | only its collector fix (registers spilled in clear, fe415a0); the Android platform layer and app stay on that branch |
+| `claude/native-vita` | PS Vita port M1 (VITA_PORT.md): armv7 build under qemu-arm, vitasdk build and headless VPK, 32-bit runtime fixes (ARM context switch, arena placement, map hashes, derived pointers, base-10 formatting) | not yet |
 
 Do not merge the input branches into each other; merge them into
 `claude/native-integration` and regenerate the C there (section 4).
