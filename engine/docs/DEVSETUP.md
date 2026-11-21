@@ -5,6 +5,33 @@ regeneration of the translated C, CMake build, reference fight. Verified from
 scratch on macOS 27 arm64 (Apple M-series, Go 1.27.4 and 1.27.3, Apple clang 21,
 CMake 3.31) on 2026-11-20. Linux works the same way (GCC or clang, distro SDL2).
 Windows is a cross build from Linux with mingw-w64 ("Windows" in section 3).
+iOS is in IOS_PORT.md.
+
+## Branches
+
+**Build from `claude/native-integration`.** It is the one branch with all
+the fixes below; the others are its inputs and are not updated with each
+other's work.
+
+| Branch | What it adds | In integration |
+| --- | --- | --- |
+| `claude/native-gaps-impl` | base: the native engine with the gap fixes | yes |
+| `claude/native-netplay` | online play, rollback fixes, netplay test | yes |
+| `claude/native-windows` | mingw-w64 build; collector scans suspended fibers, frees finished ones; `go_cstr_copy` (all platforms); Windows Nearby, crypto/rand | yes |
+| `claude/native-ios` | iOS port: GLES renderer, engine stack, GC roots and guard pages, NSURLSession HTTP, Nearby bridge | yes |
+| `claude/native-ggpo-sync` | GGPO sync handshake that survives packet loss (`third/ggpo` in the fork patch) | yes (7439707) |
+| `claude/native-android` | Android port | only its collector fix (registers spilled in clear, fe415a0); the Android platform layer and app stay on that branch |
+
+Do not merge the input branches into each other; merge them into
+`claude/native-integration` and regenerate the C there (section 4).
+
+Verified on the integration branch (2026-11-21): regen gives 4842
+functions, 0 TODO, 79 stubs, 31 placeholders and is reproducible;
+`cvf_tests` 93/0 and `cvf_nearby_test` on Linux, macOS arm64 and Windows
+(Wine); reference fights `54f8ae06...` / `4334350c...` on Linux, macOS and
+the iOS Simulator; `run_netplay.sh` PASS with dump `a350bc2d...` for Linux
+pairs (defaults plus `20:10:25:sync`, four relay seeds) and Windows (Wine)
+host to Linux guest; signed `CvF-Native.ipa` rebuilt (IOS_PORT.md).
 
 ## 1. Tools
 
@@ -22,7 +49,7 @@ Windows is a cross build from Linux with mingw-w64 ("Windows" in section 3).
 
 ## 2. Repository
 
-    git clone -b claude/native-engine https://github.com/kaioh1990/Kaioh.git dev
+    git clone -b claude/native-integration https://github.com/kaioh1990/Kaioh.git dev
     cd dev/engine
 
 On the project Mac this is `~/Castlevania Fighter Project/CvF Native Engine/dev`.
@@ -34,7 +61,7 @@ On the project Mac this is `~/Castlevania Fighter Project/CvF Native Engine/dev`
       -DCVF_SDL2_INCLUDE_DIR=/usr/local/include/SDL2 \
       -DCVF_SDL2_LIBRARY="$HOME/Castlevania Fighter Project/CvF Online/CvF Native (Apple Silicon).app/Contents/Frameworks/libSDL2-2.0.0.dylib"
     cmake --build build/release -j10      # cvf_headless, cvf, cvf_tests, cvftool
-    ./build/release/cvf_tests             # 92 checks, 0 failures
+    ./build/release/cvf_tests             # 93 checks, 0 failures
 
 (Linux: drop `CMAKE_OSX_ARCHITECTURES`, and the two SDL2 options if
 `find_package(SDL2)` works.) `cvf` (the game) is built too; run it as
@@ -180,7 +207,7 @@ Wine 9.0 aborts at start with `free(): invalid pointer` when
     mkdir -p -m 700 $XDG_RUNTIME_DIR
     W=/usr/lib/wine/wine64
     cd build/win64
-    $W ./cvf_tests.exe                                  # 92 checks, 0 failures
+    $W ./cvf_tests.exe                                  # 93 checks, 0 failures
     $W ./cvf_nearby_test.exe 'Z:\tmp\nt'                # 0 failure(s) (UDP 7520 free)
     $W ./cvf_nearby_test.exe 'Z:\tmp\nt' ifaces         # interfaces as Nearby sees them
 
@@ -202,7 +229,7 @@ Ubuntu 24.04 x86-64; refgame with cvf-online-5):
 
 | Check | Result |
 | --- | --- |
-| `cvf_tests.exe` | 92 checks, 0 failures (before the fiber fix: 1 failure, GC freed data on a suspended goroutine's stack) |
+| `cvf_tests.exe` | 93 checks, 0 failures on the integration branch (92 before gc_selftest; before the fiber fix: 1 failure, GC freed data on a suspended goroutine's stack) |
 | `cvf_nearby_test.exe` (one process, host + scan) | 0 failures |
 | Nearby host Wine ↔ scan Linux native, both directions | host listed |
 | `ifaces` with a /23 added on eth0 and a tun device | /23 → 510 probe targets (was a fixed /24); the tun device (Wine: IF_TYPE_PPP) named `ppp tun97`, skipped |
