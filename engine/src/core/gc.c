@@ -1,6 +1,7 @@
 #define _GNU_SOURCE  // pthread_getattr_np
 // Conservative mark-sweep collector; see gc.h for the model.
 #include "core/gc.h"
+#include "core/sched.h"  // go_mono_ns
 
 #include <setjmp.h>
 #include <stdbool.h>
@@ -129,9 +130,14 @@ static void os_commit(void *p, size_t n) {
 }
 
 static double now_ms(void) {
+#if defined(_WIN32)
+    // mingw-w64 on msvcrt (its default) has no timespec_get/TIME_UTC
+    return (double)go_mono_ns() / 1e6;
+#else
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
     return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6;
+#endif
 }
 
 static void add_data_roots(void) {

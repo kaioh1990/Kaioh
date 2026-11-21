@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #include "ik/ik_sim.h"
 
@@ -29,9 +32,17 @@ static RtTime unpack(GoOpaque o) {
 }
 
 static i64 wall_ns(void) {
+#if defined(_WIN32)
+    // 100 ns ticks since 1601 (mingw-w64 on msvcrt has no timespec_get)
+    FILETIME ft;
+    GetSystemTimePreciseAsFileTime(&ft);
+    i64 t = (i64)(((u64)ft.dwHighDateTime << 32) | ft.dwLowDateTime);
+    return (t - 116444736000000000LL) * 100;
+#else
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
     return (i64)ts.tv_sec * 1000000000 + ts.tv_nsec;
+#endif
 }
 
 GoOpaque time_Now(void) { return pack((RtTime){wall_ns(), go_mono_ns(), 1, 0}); }

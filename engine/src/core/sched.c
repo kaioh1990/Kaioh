@@ -6,6 +6,7 @@
 #endif
 #include "core/sched.h"
 
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#include <timeapi.h>  // timeBeginPeriod (winmm)
 #elif !defined(__x86_64__) && !defined(__aarch64__)
 #include <ucontext.h>
 #endif
@@ -110,6 +112,7 @@ typedef struct Coro {
     struct GoPanicFrame *panic_top;  // innermost recover frame of this goroutine (gort.h)
 #if defined(_WIN32)
     void *fiber;
+    uintptr_t fiber_top;  // its stack's upper end (TEB StackBase), once started
 #elif !defined(__x86_64__) && !defined(__aarch64__)
     ucontext_t uc;
 #endif
@@ -124,6 +127,15 @@ static Coro *zombie;     // finished goroutine whose stack is freed by the next 
 static int ngoroutines = 1;
 
 int64_t go_mono_ns(void) {
+#if defined(_WIN32)
+    static LARGE_INTEGER freq;
+    LARGE_INTEGER c;
+    if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&c);
+    // split to avoid overflowing c * 1e9 (counters run at 10 MHz or more)
+    int64_t s = c.QuadPart / freq.QuadPart, r = c.QuadPart % freq.QuadPart;
+    return s * 1000000000 + r * 1000000000 / freq.QuadPart;
+#else
     struct timespec ts;
 #if defined(CLOCK_MONOTONIC)
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -131,7 +143,38 @@ int64_t go_mono_ns(void) {
     timespec_get(&ts, TIME_UTC);
 #endif
     return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
+#endif
 }
+
+// Block the OS thread for d ns (nothing runnable until the next sleeper).
+#if defined(_WIN32)
+// Sleep() rounds up to the system timer tick (15.6 ms by default), far too
+// coarse for the 1 ms socket polls and frame pacing: use a high-resolution
+// waitable timer (Windows 10 1803+), else raise the timer resolution to 1 ms.
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+static void os_sleep_ns(int64_t d) {
+    static HANDLE timer;
+    static bool inited;
+    if (!inited) {
+        inited = true;
+        timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        if (!timer) timeBeginPeriod(1);
+    }
+    if (timer) {
+        LARGE_INTEGER due;
+        due.QuadPart = -(d / 100 > 0 ? d / 100 : 1);  // relative, 100 ns units
+        if (SetWaitableTimer(timer, &due, 0, NULL, NULL, FALSE) && WaitForSingleObject(timer, INFINITE) == WAIT_OBJECT_0) return;
+    }
+    Sleep((DWORD)((d + 999999) / 1000000));
+}
+#else
+static void os_sleep_ns(int64_t d) {
+    struct timespec ts = {(time_t)(d / 1000000000), (long)(d % 1000000000)};
+    nanosleep(&ts, NULL);
+}
+#endif
 
 static void runq_push(Coro *c) {
     c->next = NULL;
@@ -158,6 +201,11 @@ static void wake(Coro *c) {
 
 static void reap(void) {
     if (zombie && zombie != cur) {
+#if defined(_WIN32)
+        DeleteFiber(zombie->fiber);  // frees its stack (not the running fiber: zombie != cur)
+        zombie->fiber = NULL;
+        zombie->sp = NULL, zombie->fiber_top = 0;
+#endif
         free(zombie->stack);
         zombie->stack = NULL;
         zombie = NULL;
@@ -175,8 +223,19 @@ static void switch_to(Coro *next) {
     cur = next;
     next->state = G_RUNNING;
 #if defined(_WIN32)
-    SwitchToFiber(next->fiber);
-    (void)prev;
+    {
+        // SwitchToFiber keeps the callee-saved registers in the fiber object,
+        // where the collector cannot see them: spill them onto this stack
+        // (setjmp) and scan a suspended goroutine from that buffer up to its
+        // stack top, as ctx_switch's pushed registers are scanned elsewhere.
+        // (Pointers in the frames above live in those frames or in the
+        // registers saved here.)
+        jmp_buf regs;
+        setjmp(regs);
+        prev->sp = (void *)&regs;
+        SwitchToFiber(next->fiber);
+        prev->sp = NULL;  // running again: the collector scans the live stack itself
+    }
 #elif defined(__x86_64__) || defined(__aarch64__)
     ctx_switch(&prev->sp, next->sp);
 #else
@@ -205,10 +264,7 @@ static void schedule(void) {
         Coro *s = *best;
         *best = s->next;
         int64_t d = s->wake - go_mono_ns();
-        if (d > 0) {
-            struct timespec ts = {(time_t)(d / 1000000000), (long)(d % 1000000000)};
-            nanosleep(&ts, NULL);
-        }
+        if (d > 0) os_sleep_ns(d);
         wake(s);
     }
 }
@@ -272,6 +328,7 @@ static void goroutine_exit(void) {
 #if defined(_WIN32)
 static void WINAPI fiber_entry(void *p) {
     (void)p;
+    cur->fiber_top = (uintptr_t)((NT_TIB *)NtCurrentTeb())->StackBase;
     reap();
     cur->fn(cur->env);
     goroutine_exit();
@@ -304,7 +361,12 @@ void go_spawn(void (*fn)(void *), void *env) {
 #if defined(_WIN32)
     if (!main_coro.fiber) main_coro.fiber = ConvertThreadToFiber(NULL);
     c->stack_size = stack_size();
-    c->fiber = CreateFiber(c->stack_size, fiber_entry, NULL);
+    // reserve stack_size, commit on demand (CreateFiber would commit it all)
+    c->fiber = CreateFiberEx(64 * 1024, c->stack_size, 0, fiber_entry, NULL);
+    if (!c->fiber) {
+        fprintf(stderr, "fatal error: cannot allocate a goroutine stack\n");
+        abort();
+    }
 #else
     c->stack_size = stack_size();
     c->stack = (uint8_t *)malloc(c->stack_size);
@@ -340,7 +402,11 @@ int go_num_goroutines(void) { return ngoroutines; }
 
 // ---------------------------------------------------------------- collector hooks
 static uintptr_t stack_top_of(Coro *c) {
+#if defined(_WIN32)
+    return c == &main_coro ? 0 : c->fiber_top;
+#else
     return c->stack ? (((uintptr_t)c->stack + c->stack_size) & ~(uintptr_t)15) : 0;
+#endif
 }
 
 static uintptr_t cur_stack_top(void) { return stack_top_of(cur); }  // 0: the main stack
@@ -348,7 +414,7 @@ static uintptr_t cur_stack_top(void) { return stack_top_of(cur); }  // 0: the ma
 static void scan_suspended(void (*scan)(uintptr_t, uintptr_t)) {
     // suspended goroutines: from their saved stack pointer to the top
     for (Coro *c = all_coros; c; c = c->allnext)
-        if (c != cur && c->stack && c->sp) scan((uintptr_t)c->sp, stack_top_of(c));
+        if (c != cur && c != &main_coro && stack_top_of(c) && c->sp) scan((uintptr_t)c->sp, stack_top_of(c));
     if (cur != &main_coro && main_coro.sp) scan((uintptr_t)main_coro.sp, gc_main_stack_top());
 }
 
