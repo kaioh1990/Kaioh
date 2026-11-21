@@ -104,15 +104,21 @@ case "${1:-all}" in
         build_app "$SCRIPT_DIR/ave_property_scan.c" "AVEPropScan" "com.research.avepropscan"
         deploy_app "AVEPropScan"
         ;;
+    reuse)
+        build_app "$SCRIPT_DIR/ave_session_reuse.c" "AVEReuse" "com.research.avereuse"
+        deploy_app "AVEReuse"
+        ;;
     all)
         build_app "$SCRIPT_DIR/ave_controlled_oob.c" "AVEControlled" "com.research.avecontrolled"
         build_app "$SCRIPT_DIR/ave_kwrite_primitive.c" "AVEKWrite" "com.research.avekwrite"
         build_app "$SCRIPT_DIR/ave_infoleak_probe.c" "AVELeak" "com.research.aveleak"
         build_app "$SCRIPT_DIR/ave_property_scan.c" "AVEPropScan" "com.research.avepropscan"
+        build_app "$SCRIPT_DIR/ave_session_reuse.c" "AVEReuse" "com.research.avereuse"
         deploy_app "AVEControlled"
         deploy_app "AVEKWrite"
         deploy_app "AVELeak"
         deploy_app "AVEPropScan"
+        deploy_app "AVEReuse"
         ;;
     launch)
         BUNDLE="${2:-com.research.avecontrolled}"
