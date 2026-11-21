@@ -244,19 +244,25 @@ static uintptr_t find_stack_base(void *hint) {
 // ---------------------------------------------------------------- owner thread
 // Only the thread that called gc_init may allocate or collect (the
 // collector is single-threaded and scans only that thread's stacks).
-// Checked on every collection; on every allocation too in debug builds.
+// Checked on every collection and every free-list refill / large allocation
+// (all builds), and on every allocation in debug builds.
 #if !defined(_WIN32)
 static pthread_t gc_owner;
 static bool gc_owner_set;
+static void owner_set(void) { gc_owner = pthread_self(), gc_owner_set = true; }
+static bool owner_ok(void) { return !gc_owner_set || pthread_equal(pthread_self(), gc_owner); }
+#else
+static DWORD gc_owner;
+static bool gc_owner_set;
+static void owner_set(void) { gc_owner = GetCurrentThreadId(), gc_owner_set = true; }
+static bool owner_ok(void) { return !gc_owner_set || GetCurrentThreadId() == gc_owner; }
+#endif
 static void owner_check(const char *what) {
-    if (gc_owner_set && !pthread_equal(pthread_self(), gc_owner)) {
+    if (!owner_ok()) {
         fprintf(stderr, "gc: %s from a thread other than the engine thread\n", what);
         abort();
     }
 }
-#else
-static void owner_check(const char *what) { (void)what; }
-#endif
 
 // ---------------------------------------------------------------- init
 void gc_init(void *stack_base) {
@@ -298,9 +304,7 @@ void gc_init(void *stack_base) {
     if ((e = getenv("CVF_GC_FIGHT_BUDGET_MB")) && atoi(e) > 0) S->fight_budget = (size_t)atoi(e) << 20;
 
     S->stack_base = find_stack_base(stack_base);
-#if !defined(_WIN32)
-    gc_owner = pthread_self(), gc_owner_set = true;
-#endif
+    owner_set();
 #ifdef GC_PROFILE
     prof_skip = getenv("CVF_GC_PROF_SKIP_MB") ? (size_t)atoi(getenv("CVF_GC_PROF_SKIP_MB")) << 20 : 0;
 #endif
@@ -446,8 +450,10 @@ GC_NO_SANITIZE static __attribute__((noinline)) void mark_stack(void) {
     } spill;  // callee-saved registers, on the stack
     setjmp(spill.jb);
     // setjmp may store registers XORed with a cookie (bionic: x19-x30 on
-    // arm64; glibc: rbp on x86-64), which hides a pointer held only in a
-    // register: store them in clear too.
+    // arm64, r4-r11 on arm32; glibc: rbp on x86-64, ebp/esp on i686), which
+    // hides a pointer held only in a register: store them in clear too.
+    // (A register this function uses itself is saved by its prologue, above
+    // `spill`, inside the scanned range.)
 #if defined(__aarch64__)
     __asm__ volatile(
         "stp x19, x20, [%0, #0]\n stp x21, x22, [%0, #16]\n stp x23, x24, [%0, #32]\n"
@@ -465,6 +471,13 @@ GC_NO_SANITIZE static __attribute__((noinline)) void mark_stack(void) {
         "movq %%rbx, 0(%0)\n movq %%rbp, 8(%0)\n movq %%rsi, 16(%0)\n movq %%rdi, 24(%0)\n"
         "movq %%r12, 32(%0)\n movq %%r13, 40(%0)\n movq %%r14, 48(%0)\n movq %%r15, 56(%0)\n" ::"r"(spill.regs)
         : "memory");
+#elif defined(__arm__)
+    // AAPCS callee-saved r4-r11 (r7 / r11: the Thumb / ARM frame pointer)
+    __asm__ volatile("stmia %0, {r4-r11}\n" ::"r"(spill.regs) : "memory");
+#elif defined(__i386__)
+    // cdecl callee-saved ebx, esi, edi, ebp
+    __asm__ volatile("movl %%ebx, 0(%0)\n movl %%esi, 4(%0)\n movl %%edi, 8(%0)\n movl %%ebp, 12(%0)\n" ::"r"(spill.regs)
+                     : "memory");
 #endif
     volatile uintptr_t here = (uintptr_t)&spill;
     uintptr_t lo = here < (uintptr_t)__builtin_frame_address(0) ? here : (uintptr_t)__builtin_frame_address(0);
@@ -612,6 +625,7 @@ void gc_safepoint(bool fighting) {
 
 // ---------------------------------------------------------------- alloc
 static void *refill(int atomic, int c) {
+    owner_check("allocation");  // once per page of a size class: cheap enough for Release
     if (should_collect()) {
         gc_collect();
         if (S->freelist[atomic][c]) return S->freelist[atomic][c];
@@ -644,6 +658,7 @@ static void *refill(int atomic, int c) {
 }
 
 static void *alloc_large(size_t n, int atomic) {
+    owner_check("allocation");
     size_t np = (n + PAGE_SIZE - 1) >> PAGE_SHIFT;
     if (should_collect()) gc_collect();
     size_t pg = take_pages(np);

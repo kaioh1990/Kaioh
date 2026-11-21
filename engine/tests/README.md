@@ -4,7 +4,10 @@ The engine must behave exactly like Ikemen GO (the reference engine) on
 CvF's content. Each ported subsystem is checked against Go:
 
 - `cvf_tests`: unit tests with golden values produced by the Go programs in
-  `golden/` (`go run golden/rng.go`, etc.).
+  `golden/` (`go run golden/rng.go`, etc.), plus the scheduler and collector
+  (`test_sched.c`, `test_gc_roots.c`: roots on suspended goroutine stacks).
+  `cvf_tests_ucontext` (Linux) runs them with the ucontext scheduler that
+  32-bit ARM and i686 use (`-DCVF_SCHED_UCONTEXT`; docs/DEVSETUP.md).
 - `cvftool airdigest FILES...` vs `golden/air.go` (built from Ikemen's own
   anim.go functions): digest over every compiled action of every file.
   Status: all 124 CvF AIR sources (75,496 actions) identical.

@@ -1,6 +1,18 @@
 // Cooperative goroutines and channels; see sched.h.
-#if !defined(__x86_64__) && !defined(__aarch64__) && !defined(_WIN32)
+//
+// Context switch, chosen at compile time:
+//   Windows          fibers
+//   x86-64, arm64    ctx_switch (assembly below)
+//   other POSIX      ucontext (32-bit ARM, i686, ...): SCHED_UCONTEXT
+// -DCVF_SCHED_UCONTEXT forces the ucontext fallback on x86-64 / arm64 too, so
+// it can be tested on a development machine (cvf_tests_ucontext).
+#if !defined(_WIN32) && (defined(CVF_SCHED_UCONTEXT) || (!defined(__x86_64__) && !defined(__aarch64__)))
+#define SCHED_UCONTEXT 1
+#endif
+#if defined(SCHED_UCONTEXT)
 #define _XOPEN_SOURCE 700  // ucontext fallback
+#define _DEFAULT_SOURCE    // MAP_ANONYMOUS (glibc before POSIX 2024)
+#define _DARWIN_C_SOURCE   // MAP_ANON (Darwin)
 #elif !defined(_WIN32)
 #define _POSIX_C_SOURCE 200809L  // nanosleep, clock_gettime
 #define _DEFAULT_SOURCE           // MAP_ANONYMOUS (glibc)
@@ -19,32 +31,41 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <timeapi.h>  // timeBeginPeriod (winmm)
-#elif !defined(__x86_64__) && !defined(__aarch64__)
+#elif defined(SCHED_UCONTEXT)
 #include <ucontext.h>
 #endif
 
-// Goroutine stacks: mmap with a PROT_NONE guard page below each one, so an
+// Goroutine stacks: mmap with a PROT_NONE guard below each one, so an
 // overflow faults at the overflowing frame instead of corrupting the heap.
+// The guard is 64 KB (at least one page), not one page: a frame larger than
+// the guard could otherwise step over it into the next mapping when the
+// compiler does not probe large frames (-fstack-clash-protection is not on
+// by default in every toolchain). There is no SIGSEGV handler on an
+// alternate stack: an overflow is a plain crash.
 #if !defined(_WIN32) && (defined(__APPLE__) || defined(__linux__))
 #include <sys/mman.h>
 #include <unistd.h>
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
-static size_t page_size(void) {
-    static size_t pg;
-    if (!pg) pg = (size_t)sysconf(_SC_PAGESIZE);
-    return pg;
+#define STACK_GUARD_MIN ((size_t)64 * 1024)
+static size_t guard_size(void) {
+    static size_t g;
+    if (!g) {
+        size_t pg = (size_t)sysconf(_SC_PAGESIZE);
+        g = (STACK_GUARD_MIN + pg - 1) / pg * pg;
+    }
+    return g;
 }
 static uint8_t *stack_alloc(size_t n) {
-    size_t pg = page_size();
-    uint8_t *p = (uint8_t *)mmap(NULL, n + pg, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    size_t g = guard_size();
+    uint8_t *p = (uint8_t *)mmap(NULL, n + g, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (p == MAP_FAILED) return NULL;
-    mprotect(p, pg, PROT_NONE);
-    return p + pg;
+    mprotect(p, g, PROT_NONE);
+    return p + g;
 }
 static void stack_free(uint8_t *s, size_t n) {
-    if (s) munmap(s - page_size(), n + page_size());
+    if (s) munmap(s - guard_size(), n + guard_size());
 }
 #else
 #if !defined(_WIN32)  // Windows: CreateFiberEx allocates the stack, DeleteFiber frees it
@@ -68,6 +89,8 @@ static void stack_free(uint8_t *s, size_t n) {
 
 #if defined(_WIN32)
 // Windows: fibers.
+#elif defined(SCHED_UCONTEXT)
+// swapcontext (uc_switch below).
 #elif defined(__x86_64__)
 void ctx_switch(void **save, void *to);
 __asm__(".text\n"
@@ -148,7 +171,7 @@ typedef struct Coro {
 #if defined(_WIN32)
     void *fiber;
     uintptr_t fiber_top;  // its stack's upper end (TEB StackBase), once started
-#elif !defined(__x86_64__) && !defined(__aarch64__)
+#elif defined(SCHED_UCONTEXT)
     ucontext_t uc;
 #endif
 } Coro;
@@ -247,6 +270,20 @@ static void reap(void) {
     }
 }
 
+#if defined(SCHED_UCONTEXT)
+// swapcontext saves the registers in prev->uc (collector-visible: main_coro
+// is in the data segment, other Coros in the heap), but the collector also
+// needs the suspended stack: prev->sp records its low end. A separate,
+// never-inlined frame, so `mark` lies below every frame of the callers
+// (switch_to may be inlined into them, with spill slots of its own).
+static __attribute__((noinline)) void uc_switch(Coro *prev, Coro *next) {
+    volatile uintptr_t mark = 0;
+    prev->sp = (void *)&mark;
+    swapcontext(&prev->uc, &next->uc);
+    prev->sp = NULL;  // running again: scanned as the live stack
+}
+#endif
+
 static void switch_to(Coro *next) {
     if (next == cur) {
         cur->state = G_RUNNING;
@@ -282,18 +319,10 @@ static void switch_to(Coro *next) {
         SwitchToFiber(next->fiber);
         prev->sp = NULL;  // running again: the collector scans the live stack itself
     }
-#elif defined(__x86_64__) || defined(__aarch64__)
-    ctx_switch(&prev->sp, next->sp);
+#elif defined(SCHED_UCONTEXT)
+    uc_switch(prev, next);
 #else
-    {
-        // swapcontext saves the registers in prev->uc (collector-visible:
-        // main_coro is in the data segment, other Coros in the heap), but the
-        // collector also needs the suspended stack: record its low end here.
-        volatile uintptr_t mark = 0;
-        prev->sp = (void *)&mark;
-        swapcontext(&prev->uc, &next->uc);
-        prev->sp = NULL;  // running again: scanned as the live stack
-    }
+    ctx_switch(&prev->sp, next->sp);
 #endif
     reap();
 }
@@ -429,7 +458,14 @@ void go_spawn(void (*fn)(void *), void *env) {
         abort();
     }
     uintptr_t top = ((uintptr_t)c->stack + c->stack_size) & ~(uintptr_t)15;
-#if defined(__x86_64__)
+#if defined(SCHED_UCONTEXT)
+    (void)top;
+    getcontext(&c->uc);
+    c->uc.uc_stack.ss_sp = c->stack;
+    c->uc.uc_stack.ss_size = c->stack_size;
+    c->uc.uc_link = NULL;
+    makecontext(&c->uc, coro_entry, 0);
+#elif defined(__x86_64__)
     void **sp = (void **)top;
     *--sp = NULL;                 // fake return address of coro_entry (keeps alignment)
     *--sp = (void *)coro_entry;   // ctx_switch returns here
@@ -440,12 +476,6 @@ void go_spawn(void (*fn)(void *), void *env) {
     memset(frame, 0, 176);
     frame[11] = (uint64_t)(uintptr_t)coro_entry;  // x30 (lr) at [sp, #88]
     c->sp = frame;
-#else
-    getcontext(&c->uc);
-    c->uc.uc_stack.ss_sp = c->stack;
-    c->uc.uc_stack.ss_size = c->stack_size;
-    c->uc.uc_link = NULL;
-    makecontext(&c->uc, coro_entry, 0);
 #endif
 #endif
     c->state = G_RUNNABLE;

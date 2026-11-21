@@ -81,15 +81,17 @@ __asm__(
 void cvf_call_on_stack(void *top, void (*fn)(void *), void *arg);
 
 int cvf_ios_run_on_engine_stack(void (*fn)(void *), void *arg) {
-    size_t pg = (size_t)getpagesize();
-    uint8_t *p = (uint8_t *)mmap(NULL, ENGINE_STACK + pg, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    // 64 KB guard below the stack (at least one page): a large frame cannot
+    // step over it into the next mapping (see core/sched.c stack_alloc)
+    size_t pg = (size_t)getpagesize(), guard = (65536 + pg - 1) / pg * pg;
+    uint8_t *p = (uint8_t *)mmap(NULL, ENGINE_STACK + guard, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (p == MAP_FAILED) {
         fprintf(stderr, "cvf: cannot map the engine stack, using the main thread's\n");
         fn(arg);
         return 0;
     }
-    mprotect(p, pg, PROT_NONE);
-    stk_lo = (uintptr_t)p + pg;
+    mprotect(p, guard, PROT_NONE);
+    stk_lo = (uintptr_t)p + guard;
     stk_hi = stk_lo + ENGINE_STACK;
     cvf_call_on_stack((void *)stk_hi, fn, arg);
     return 1;

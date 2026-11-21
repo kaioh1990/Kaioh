@@ -29,12 +29,31 @@ endif()
 
 set(CVF_WARNINGS -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare)
 
+# Hardening (no effect on the simulation's results): probe large stack
+# frames so one cannot step over a stack guard into the next mapping. GCC on
+# Ubuntu and Apple clang do this already; the Android NDK and others may not.
+# Goroutine and iOS engine stacks also have 64 KB guards (core/sched.c).
+include(CheckCCompilerFlag)
+if(NOT WIN32)  # Windows probes every frame > 4 KB (___chkstk_ms) anyway
+  check_c_compiler_flag(-fstack-clash-protection CVF_HAVE_STACK_CLASH_PROTECTION)
+  if(CVF_HAVE_STACK_CLASH_PROTECTION)
+    add_compile_options(-fstack-clash-protection)
+  endif()
+endif()
+
+# GC stress mode (docs/DEVSETUP.md): CVF_GC_STRESS=N at run time collects on
+# every Nth allocation and poisons freed memory. Off in normal builds.
+option(CVF_GC_STRESS "Build the collector with the CVF_GC_STRESS run-time stress mode" OFF)
+
 file(GLOB CVF_CORE_SOURCES CONFIGURE_DEPENDS
   src/core/*.c
   src/formats/*.c)
 add_library(cvf_core STATIC ${CVF_CORE_SOURCES})
 target_include_directories(cvf_core PUBLIC src)
 target_compile_options(cvf_core PRIVATE ${CVF_DETERMINISM_FLAGS} ${CVF_WARNINGS})
+if(CVF_GC_STRESS)
+  target_compile_definitions(cvf_core PRIVATE CVF_GC_STRESS)
+endif()
 if(NOT MSVC)
   target_link_libraries(cvf_core PUBLIC m)
 endif()
@@ -76,6 +95,24 @@ file(GLOB CVF_TEST_SOURCES CONFIGURE_DEPENDS tests/*.c)
 add_executable(cvf_tests ${CVF_TEST_SOURCES})
 target_link_libraries(cvf_tests PRIVATE cvf_core)
 target_compile_options(cvf_tests PRIVATE ${CVF_DETERMINISM_FLAGS} ${CVF_WARNINGS})
+
+# The same tests against a core whose scheduler uses the ucontext fallback
+# (-DCVF_SCHED_UCONTEXT), the context switch of 32-bit ARM, i686 and other
+# POSIX targets, so that path is tested on x86-64 / arm64 machines too.
+# Linux only (glibc's swapcontext; Darwin's is deprecated, Windows uses fibers).
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_library(cvf_core_ucontext STATIC ${CVF_CORE_SOURCES})
+  target_include_directories(cvf_core_ucontext PUBLIC src)
+  target_compile_definitions(cvf_core_ucontext PRIVATE CVF_SCHED_UCONTEXT)
+  target_compile_options(cvf_core_ucontext PRIVATE ${CVF_DETERMINISM_FLAGS} ${CVF_WARNINGS})
+  if(CVF_GC_STRESS)
+    target_compile_definitions(cvf_core_ucontext PRIVATE CVF_GC_STRESS)
+  endif()
+  target_link_libraries(cvf_core_ucontext PUBLIC m)
+  add_executable(cvf_tests_ucontext ${CVF_TEST_SOURCES})
+  target_link_libraries(cvf_tests_ucontext PRIVATE cvf_core_ucontext)
+  target_compile_options(cvf_tests_ucontext PRIVATE ${CVF_DETERMINISM_FLAGS} ${CVF_WARNINGS})
+endif()
 
 # Command-line tools (inspect/cook content, replay reference fights headless).
 file(GLOB CVF_TOOL_SOURCES CONFIGURE_DEPENDS tools/cvftool.c)

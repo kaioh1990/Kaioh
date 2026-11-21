@@ -72,7 +72,9 @@ static Ret_GoOpaque_os_FilePtrPtr__GoIface open_mode(GoString name, const char *
     }
     RtFile *rf = (RtFile *)gc_calloc(1, sizeof *rf);
     rf->f = f;
-    rf->name = (GoString){gc_strdup(go_strz(name)), name.len};
+    char *nm = (char *)gc_alloc_atomic((size_t)name.len + 1);  // the whole name: .len must match the copy
+    if (name.len) memcpy(nm, name.p, (size_t)name.len);
+    rf->name = (GoString){nm, name.len};
     r.r0 = (GoOpaque *)rf;
     return r;
 }

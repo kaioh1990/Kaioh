@@ -26,7 +26,7 @@ GoString go_strcat(GoString a, GoString b);
 GoString go_substr(GoString s, int lo, int hi);  // hi < 0: to end
 GoString go_rune2str(i32 r);
 GoString go_runes2str(const i32 *r, int n);  // string([]rune)
-const char *go_strz(GoString s);  // NUL-terminated copy (scratch, rotating)
+const char *go_strz(GoString s);  // NUL-terminated copy (scratch, rotating; GC copy from 1024 bytes)
 int go_decode_rune(GoString s, int i, i32 *r);  // utf8.DecodeRuneInString at i: width (>= 1)
 
 // ---------------------------------------------------------------- slices

@@ -81,12 +81,15 @@ int go_decode_rune(GoString s, int i, i32 *r) {
     return len;
 }
 
+// Short strings use 8 rotating static buffers (no allocation); a string of
+// 1024 bytes or more gets its own GC-allocated copy instead of being
+// truncated (long paths opened the wrong file, ik_io.c read past the copy).
 const char *go_strz(GoString s) {
     static char bufs[8][1024];
     static int k;
-    char *b = bufs[k++ & 7];
-    int n = s.len < 1023 ? s.len : 1023;
-    memcpy(b, s.p, (size_t)n);
+    int n = s.len > 0 ? s.len : 0;
+    char *b = n < (int)sizeof bufs[0] ? bufs[k++ & 7] : (char *)gc_alloc_atomic((size_t)n + 1);
+    if (n) memcpy(b, s.p, (size_t)n);
     b[n] = 0;
     return b;
 }
