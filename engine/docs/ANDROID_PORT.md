@@ -1,6 +1,8 @@
 # Android port of the native C engine
 
-Status 2026-11-20, branch `claude/native-android`: the engine builds for
+Status 2026-11-21, branch `claude/native-android`, rebased onto
+`claude/native-integration` (c84d871: native-ios + native-windows +
+native-netplay): the engine builds for
 arm64-v8a with NDK r27d, the APK `cvf-native-android.apk` is built and
 signed by CI, both reference fights give the reference md5s with Android's
 code generation. Nothing has run on an Android device yet (none available).
@@ -207,6 +209,12 @@ from Google.
 | `cvf_tests` (detmath golden values, RNG, Atof, formats, scheduler, GC selftest) | qemu and CI `ubuntu-24.04-arm` (real arm64) | 93 checks, 0 failures |
 | Fused multiply-add instructions in libmain.so | llvm-objdump | 0 |
 
+All rows were rerun after the rebase onto `claude/native-integration`
+(same results; Linux x86-64 desktop: 54f8ae06..., 93/0). CI run 44859670134:
+APK SHA-256 `3a47b404ee1b1397d6f7840b8c63f226c46abe7e8117e60e15a747113d96fc95`,
+versionCode 6, the same file as `dev-android/cvf-native-android.apk` on the
+Mac.
+
 qemu emulates the arm64 FP instructions with IEEE semantics; the binary is
 the same machine code as libmain.so's simulation (same objects, same
 flags), only linked statically. A run on a device stays to do: put
@@ -248,6 +256,6 @@ reference game and two engines; not run for Android.
    Android <-> desktop native; rollback cost on phone CPUs.
 3. The name box (`cvfNativeAskName`) has no Android implementation, as in
    the Go Android build: the Lua prompt is used.
-4. Integration with the all-platform fixes on other branches (netplay leak,
-   defer close, goroutine stack scanning, go_cstr_copy): see the branch
-   notes in the final report.
+4. The netplay test (two engines, needs the reference game) has not been
+   run with Android binaries; qemu could run it (two static
+   `cvf_headless`, loopback).
