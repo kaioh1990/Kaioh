@@ -152,17 +152,14 @@ void gles2_GetProgramiv(u32 a0, u32 a1, i32* a2) { p_glGetProgramiv(a0, a1, a2);
 void gles2_GetShaderInfoLog(u32 a0, i32 a1, i32* a2, u8* a3) { p_glGetShaderInfoLog(a0, a1, a2, a3); CK("glGetShaderInfoLog"); }
 void gles2_GetShaderiv(u32 a0, u32 a1, i32* a2) { p_glGetShaderiv(a0, a1, a2); CK("glGetShaderiv"); }
 void gles2_LinkProgram(u32 a0) { p_glLinkProgram(a0); CK("glLinkProgram"); }
-void gles2_PixelStorei(u32 a0, i32 a1) { p_glPixelStorei(a0, a1); CK("glPixelStorei"); }
 void gles2_ReadBuffer(u32 a0) { p_glReadBuffer(a0); CK("glReadBuffer"); }
 void gles2_ReadPixels(i32 a0, i32 a1, i32 a2, i32 a3, u32 a4, u32 a5, void* a6) { p_glReadPixels(a0, a1, a2, a3, a4, a5, a6); CK("glReadPixels"); }
 void gles2_RenderbufferStorage(u32 a0, u32 a1, i32 a2, i32 a3) { p_glRenderbufferStorage(a0, a1, a2, a3); CK("glRenderbufferStorage"); }
 void gles2_RenderbufferStorageMultisample(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4) { p_glRenderbufferStorageMultisample(a0, a1, a2, a3, a4); CK("glRenderbufferStorageMultisample"); }
 void gles2_Scissor(i32 a0, i32 a1, i32 a2, i32 a3) { p_glScissor(a0, a1, a2, a3); CK("glScissor"); }
 void gles2_ShaderSource(u32 a0, i32 a1, u8** a2, i32* a3) { p_glShaderSource(a0, a1, a2, a3); CK("glShaderSource"); }
-void gles2_TexImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) { p_glTexImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8); CK("glTexImage2D"); }
 void gles2_TexParameteri(u32 a0, u32 a1, i32 a2) { p_glTexParameteri(a0, a1, a2); CK("glTexParameteri"); }
 void gles2_TexStorage3D(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4, i32 a5) { p_glTexStorage3D(a0, a1, a2, a3, a4, a5); CK("glTexStorage3D"); }
-void gles2_TexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) { p_glTexSubImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8); CK("glTexSubImage2D"); }
 void gles2_Uniform1f(i32 a0, f32 a1) { p_glUniform1f(a0, a1); CK("glUniform1f"); }
 void gles2_Uniform1fv(i32 a0, i32 a1, f32* a2) { p_glUniform1fv(a0, a1, a2); CK("glUniform1fv"); }
 void gles2_Uniform1i(i32 a0, i32 a1) { p_glUniform1i(a0, a1); CK("glUniform1i"); }
@@ -175,6 +172,49 @@ void gles2_UseProgram(u32 a0) { p_glUseProgram(a0); CK("glUseProgram"); }
 void gles2_VertexAttribPointer(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, void* a5) { p_glVertexAttribPointer(a0, a1, a2, a3, a4, a5); CK("glVertexAttribPointer"); }
 void gles2_Viewport(i32 a0, i32 a1, i32 a2, i32 a3) { p_glViewport(a0, a1, a2, a3); CK("glViewport"); }
 void* gles2_MapBufferRange(u32 a0, int a1, int a2, u32 a3) { void* r_ = p_glMapBufferRange(a0, a1, a2, a3); CK("glMapBufferRange"); return r_; }
+// GL_UNPACK_ROW_LENGTH below the upload width. Texture.SetSubData (palette
+// rows: 256x1 RGBA into the palette atlas) passes the pixel size (depth/8)
+// as the row stride, so SetSubData2 sets UNPACK_ROW_LENGTH to 1 for a
+// 256-pixel row. For a single row the row length has no effect in GL (only
+// the start of row 0 is used), and Android/desktop drivers ignore it, but
+// Apple's GLES-on-Metal (AGX) checks bytes_per_row >= used_bytes_per_row and
+// logs "AGX: Texture read/write assertion failed". The binding tracks the
+// unpack row length and uploads such single-row images with row length 0,
+// which reads the same bytes.
+#define CVF_GL_UNPACK_ROW_LENGTH 0x0CF2
+static i32 unpack_row_length;
+static int row_fix_logged;
+void gles2_PixelStorei(u32 a0, i32 a1) {
+    p_glPixelStorei(a0, a1);
+    CK("glPixelStorei");
+    if (a0 == CVF_GL_UNPACK_ROW_LENGTH) unpack_row_length = a1;
+}
+// 1 when the bound row length was cleared for this upload (restored after).
+static int row_length_fix(const char *fn, i32 width, i32 height) {
+    if (unpack_row_length <= 0 || unpack_row_length >= width) return 0;
+    if (height != 1) {  // rows would overlap: pass through, but say so once
+        if (row_fix_logged++ < 4)
+            fprintf(stderr, "gles: %s %dx%d with UNPACK_ROW_LENGTH %d (< width)\n", fn, width, height, unpack_row_length);
+        return 0;
+    }
+    if (row_fix_logged++ < 2)  // the first two, as evidence in cvf.log
+        fprintf(stderr, "gles: %s %dx1: UNPACK_ROW_LENGTH %d ignored for a single row\n", fn, width, unpack_row_length);
+    p_glPixelStorei(CVF_GL_UNPACK_ROW_LENGTH, 0);
+    return 1;
+}
+void gles2_TexImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) {
+    int fix = a8 && row_length_fix("glTexImage2D", a3, a4);
+    p_glTexImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8);
+    CK("glTexImage2D");
+    if (fix) p_glPixelStorei(CVF_GL_UNPACK_ROW_LENGTH, unpack_row_length);
+}
+void gles2_TexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8) {
+    int fix = a8 && row_length_fix("glTexSubImage2D", a4, a5);
+    p_glTexSubImage2D(a0, a1, a2, a3, a4, a5, a6, a7, a8);
+    CK("glTexSubImage2D");
+    if (fix) p_glPixelStorei(CVF_GL_UNPACK_ROW_LENGTH, unpack_row_length);
+}
+
 static void (APIENTRY *p_glFramebufferTexture2D_es)(u32, u32, u32, u32, i32);
 static void (APIENTRY *p_glVertexAttribPointer_es)(u32, i32, u32, unsigned char, i32, void *);
 
