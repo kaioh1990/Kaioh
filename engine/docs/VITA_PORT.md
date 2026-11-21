@@ -9,7 +9,7 @@ the Vita's code generation. Nothing has run on a Vita yet.
 | --- | --- |
 | armv7 build (Linux armhf, the Vita's flags: Cortex-A9, NEON/VFPv3, Thumb-2, hard float), under qemu-arm | reference fights **54f8ae06d74648af2182587b82a390d6** (cvf-online-2) and **4334350cdebd48dc0caa04cf78e0d9e3** (cvf-online-5), also in GC stress mode; `cvf_tests` 103/0 (both context switches) |
 | Vita build (vitasdk 2026.08, GCC 15.2) | `cvf_vita_headless` ELF and **`cvf-native-m1.vpk`** (title id CVFN00001): unit tests, then the reference fight, on screen and in log files |
-| Vita image in the Vita user-mode emulator (vita/vemu, Unicorn) | unit tests 103/0; reference fight: see section 9 |
+| Vita image in the Vita user-mode emulator (vita/vemu, Unicorn), as packaged in the VPK | unit tests 103/0; reference fight **54f8ae06...** (cvf-online-2), section 9 |
 | 32-bit runtime bugs fixed | 7 (section 7), plus a GCC derived-pointer case for the collector |
 | x86-64 unchanged | both reference md5s (also with CVF_GC_STRESS), netplay dump a350bc2df11a03519f7d65d278844432, cvf_tests 103/0 |
 | Memory | live set 41-51 MB, heap pages peak 112 MB on armv7: fits the Vita's ~365 MB easily (section 2) |
@@ -347,22 +347,30 @@ imports in Python (fibers, memory blocks, I/O); with `--velf` it also
 applies the image's relocations as the Vita loader does (including the
 conditional-BL rewrite). Local changes for the native image: an 8 MB main
 stack (`VEMU_STACK_MB`), `sceKernelGetThreadInfo` reporting it, and
-`native.bin` assembled from `native.S`. It found fixes 6 above and the
-newlib `printf` redirection problem (vita_main.c defines `printf`/`puts`).
+`native.bin` assembled from `native.S`. It found fix 6 of section 7, the
+newlib `printf` redirection problem (vita_main.c defines `printf`/`puts`) and a
+summary loop in vita_main.c that read back its own log.
 
 ## 9. M1 in vemu
 
 The VPK's image (the `.velf`, relocated as the Vita loader does, plus the
 ELF for symbols) in vemu, with `ux0:` mapped to a folder holding the
-reference game:
+reference game (cvf-online-2 rules):
 
-- unit tests: **103 checks, 0 failures** (goroutines as SceFiber fibers,
-  the collector in a Vita memory block, newlib I/O);
-- the reference fight: in progress at the time of writing; vemu runs about
-  one game tick per second (Unicorn plus Python for every import call), so
-  the full fight takes ~1.5 h. A first run reached tick ~1,050 with the
-  collector, fibers and file I/O working before the container's disk filled
-  up.
+| | Result |
+| --- | --- |
+| Unit tests | **103 checks, 0 failures** |
+| Reference fight | statedump **54f8ae06d74648af2182587b82a390d6**, 287,752 lines, winner 1 ("= REFERENCE" on screen) |
+| Goroutines | ~2,000 SceFiber fibers created, run and finalized (tests and fight) |
+| Collector | 276 collections (most from the unit tests in the same process), arena high-water mark 146 MB of 192 MB |
+
+vemu's times (1,383 s for the run, 320 s to the first fight frame) are
+Unicorn plus Python per import call, not hardware figures. Three Vita
+problems were found and fixed this way (section 7 item 6, and in
+vita_main.c newlib's `printf` ignoring a redirected stdout and a summary
+loop that read back its own log); none of them would have shown under
+qemu-arm. The cvf-online-5 rules were not run in vemu (the armv7 build
+covers them).
 
 ## 10. Milestones
 

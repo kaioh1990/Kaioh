@@ -42,15 +42,27 @@ int cvf_headless_main(int argc, char **argv);
 int cvf_tests_main(int argc, char **argv);
 
 static FILE *result_file;
-static void show(const char *fmt, ...) {
+static void vshow(bool to_log, const char *fmt, va_list ap) {
     char b[512];
+    vsnprintf(b, sizeof b, fmt, ap);
+    psvDebugScreenPuts(b);
+    if (to_log) fputs(b, stderr);
+    if (result_file) fputs(b, result_file), fflush(result_file);
+}
+// screen, result.txt and the current log
+static void show(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(b, sizeof b, fmt, ap);
+    vshow(true, fmt, ap);
     va_end(ap);
-    psvDebugScreenPuts(b);
-    fputs(b, stderr);
-    if (result_file) fputs(b, result_file), fflush(result_file);
+}
+// screen and result.txt only: for lines read back from the current log
+// (writing them to the log while reading it would never end)
+static void show_nolog(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vshow(false, fmt, ap);
+    va_end(ap);
 }
 
 // stdout and stderr into one log file through one FILE: two streams on one
@@ -214,6 +226,10 @@ int main(void) {
         show("\nno game directory %s:\nreference fight skipped (copy cvf-refdata + data/Xsound.snd there)\n", argc > 1 ? argv[1] : "");
     } else {
         show("\nreference fight in %s\n(a minute or two; log: " DIR "/headless.log)...\n", argv[1]);
+        // a dump left by an earlier run must not be reported for this one
+        char dump[512];
+        snprintf(dump, sizeof dump, "%s/statedump.txt", argv[1]);
+        remove(dump);
         int64_t t0 = go_mono_ns();
         r = cvf_headless_main(argc, argv);  // chdirs to the game directory
         double secs = (go_mono_ns() - t0) / 1e9;
@@ -229,7 +245,7 @@ int main(void) {
         else if (md5[0]) show("DIFFERENT from both reference dumps\n");
         lf = fopen(DIR "/headless.log", "r");
         while (lf && fgets(line, sizeof line, lf))
-            if (!strncmp(line, "frames:", 7) || !strncmp(line, "winner:", 7) || !strncmp(line, "gc summary", 10)) show("%s", line);
+            if (!strncmp(line, "frames:", 7) || !strncmp(line, "winner:", 7) || !strncmp(line, "gc summary", 10)) show_nolog("%s", line);
         if (lf) fclose(lf);
     }
     if (result_file) fclose(result_file), result_file = NULL;
