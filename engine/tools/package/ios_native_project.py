@@ -2,13 +2,17 @@
 # Turns a copy of the Go-engine "CvF Online" Xcode project into the native
 # engine app (IOS_PORT.md, implementation status): libikemen.a + ffmpeg/vpx/
 # xmp + MoltenVK out, CvfEngine.xcframework (Frameworks/) + OpenGLES in,
-# version 2.0 (2). Idempotent. Also replace #import "libikemen.h" with
+# version 2.0 (2), and its own identity so it installs next to the Go app:
+# bundle id com.kaioh1990.cvfnative, display name "CvF Native" (same icon).
+# With the app's Info.plist as second argument, also allows plain HTTP on
+# the local network (NSAllowsLocalNetworking: UPnP, local test lobby), which
+# NSURLSession needs and Go's net/http did not. Idempotent. Also replace #import "libikemen.h" with
 # #import "cvf_host.h" in ViewController.m and TouchOverlayView.m, put
 # CvfEngine.xcframework (tools/package/ios_build.sh) and an SDL2.xcframework
 # with a Simulator slice in Frameworks/, and DefaultAssets.zip from
 # tools/package/ios_assets.sh next to the project.
-# Usage: ios_native_project.py PATH/I.K.E.M.E.N-Go.xcodeproj/project.pbxproj
-import sys
+# Usage: ios_native_project.py PATH/I.K.E.M.E.N-Go.xcodeproj/project.pbxproj [PATH/Info.plist]
+import plistlib, sys
 pbx = sys.argv[1]
 s = open(pbx).read()
 if 'CvfEngine.xcframework' not in s:
@@ -26,7 +30,16 @@ if 'CvfEngine.xcframework' not in s:
     s = s.replace('"-lc++",\n', '"-lc++",\n\t\t\t\t\t"-framework",\n\t\t\t\t\tOpenGLES,\n')
     s = s.replace('MARKETING_VERSION = 1.1;', 'MARKETING_VERSION = 2.0;')
     s = s.replace('CURRENT_PROJECT_VERSION = 1;', 'CURRENT_PROJECT_VERSION = 2;')
+s = s.replace('PRODUCT_BUNDLE_IDENTIFIER = com.kaioh1990.cvfonline;', 'PRODUCT_BUNDLE_IDENTIFIER = com.kaioh1990.cvfnative;')
+s = s.replace('INFOPLIST_KEY_CFBundleDisplayName = "CvF Online";', 'INFOPLIST_KEY_CFBundleDisplayName = "CvF Native";')
 open(pbx, 'w').write(s)
+if len(sys.argv) > 2:
+    with open(sys.argv[2], 'rb') as f:
+        pl = plistlib.load(f)
+    pl.setdefault('NSAppTransportSecurity', {})['NSAllowsLocalNetworking'] = True
+    with open(sys.argv[2], 'wb') as f:
+        plistlib.dump(pl, f)
+assert 'com.kaioh1990.cvfnative' in s and 'cvfonline' not in s
 for bad in ['libikemen', 'MoltenVK', 'libavcodec']:
     assert bad not in s, bad
 print('project: CvfEngine.xcframework linked, %d OpenGLES flags' % s.count('OpenGLES'))
