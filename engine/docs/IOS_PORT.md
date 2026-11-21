@@ -536,7 +536,7 @@ Each is verifiable as stated; only M7 needs the device.
 - **Post-processing targets**: `RGBA8_SNORM` is not renderable in ES 3.0;
   plain RGBA on iOS (as on the Vita).
 - **App changes** (copy of the Go Xcode project in `dev-ios/app`, made by
-  `dev-ios/native_project.py`): `libikemen.a`, ffmpeg/vpx/xmp and MoltenVK
+  `tools/package/ios_native_project.py`): `libikemen.a`, ffmpeg/vpx/xmp and MoltenVK
   out; `CvfEngine.xcframework` and `-framework OpenGLES` in; `#import
   "libikemen.h"` -> `"cvf_host.h"` in ViewController.m and
   TouchOverlayView.m; version 2.0 (2). The Metal container code is left in
