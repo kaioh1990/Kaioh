@@ -29,6 +29,7 @@ declare -a PROBES=(
     "AVEOOBReadProbe:com.research.aveoobread:ave_oob_read_probe.c"
     "AVEFullChain:com.research.avefullchain:ave_full_chain.c"
     "KRWHelper:com.research.krwhelper:krw_helper.c"
+    "WQProbe:com.research.wqprobe:worse_query_probe.c"
 )
 
 build_and_deploy() {
@@ -40,15 +41,17 @@ build_and_deploy() {
     echo ""
     echo "=== Building $name ($bundle) ==="
 
-    # Build (add KRW_STANDALONE for krw_helper.c)
+    # Build with per-probe customization
     local extra_flags=""
+    local frameworks="-framework VideoToolbox -framework CoreVideo -framework CoreMedia -framework CoreFoundation -framework IOSurface -framework IOKit"
     if [[ "$src" == *"krw_helper.c"* ]]; then
         extra_flags="-DKRW_STANDALONE"
+    elif [[ "$src" == *"worse_query"* ]]; then
+        frameworks="-framework CoreFoundation -framework MobileCoreServices"
     fi
     xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0 \
-        -framework VideoToolbox -framework CoreVideo -framework CoreMedia \
-        -framework CoreFoundation -framework IOSurface -framework IOKit \
-        $extra_flags -o "$binary" "$src" -Wno-deprecated-declarations 2>&1
+        $frameworks $extra_flags \
+        -o "$binary" "$src" -Wno-deprecated-declarations 2>&1
     if [ $? -ne 0 ]; then echo "BUILD FAILED: $name"; return 1; fi
 
     # Create .app bundle
@@ -77,7 +80,7 @@ build_and_deploy() {
 </plist>
 PLIST
 
-    # Entitlements
+    # Entitlements (worse_query probe gets App Group entitlement)
     cat > "$entfile" << ENT
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -86,6 +89,14 @@ PLIST
     <key>application-identifier</key><string>${TEAM}.${bundle}</string>
     <key>com.apple.developer.team-identifier</key><string>${TEAM}</string>
     <key>get-task-allow</key><true/>
+ENT
+    if [[ "$src" == *"worse_query"* ]]; then
+        cat >> "$entfile" << ENT
+    <key>com.apple.security.application-groups</key>
+    <array><string>group.${bundle}</string></array>
+ENT
+    fi
+    cat >> "$entfile" << ENT
 </dict>
 </plist>
 ENT
