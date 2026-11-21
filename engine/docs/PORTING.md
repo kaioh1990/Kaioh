@@ -262,3 +262,29 @@ stay as verified references and for the optimised paths later.
   Go 1.27.4 from the github.com/golang/go tag, and replace golang.org/x/*
   and gopkg.in/ini.v1 with their GitHub mirrors (same sources) in the
   Ikemen tree's go.mod, locally only; the output is identical to the Mac's.
+  Set `GOSUMDB=off` (and `GOFLAGS=-mod=mod`, `GOPROXY=off` once the modules
+  are in the cache): the mirrors' module paths have no go.sum entries, and
+  with the checksum database on, `go` refuses to load them. gotoc and
+  gencdefs do not stop on type errors, so a package that fails to load used
+  to change the generated C silently; regen.sh now checks first that every
+  package loads (`go list -deps`).
+
+### Status 2026-11-20 — online play (claude/native-netplay)
+
+- First online matches on the native engine: `tests/netplay/run_netplay.sh`
+  (DEVSETUP.md). Native ↔ native (Linux x86-64, macOS arm64) and native ↔ Go
+  1.27.4 (amd64, `cvf` tag) in both directions, direct and through a relay
+  with 40±15 ms delay or 20±10 ms with 8 % loss: every dump identical
+  (a350bc2d…), thousands of frames re-simulated in rollbacks, no GGPO desync.
+- Bugs found and fixed: map delete kept the deleted value alive and never
+  reused entries (rotating save-state keys: ~250 MB/s live growth, OOM in a
+  rollback match); gotoc dropped `defer close(ch)` / `defer delete(m, k)`
+  (GGPO's UDP shutdown hung both peers at match end); log.Logger ignored its
+  writer (GGPO's discarded per-frame trace went to stderr); fmt.Fprintln
+  ignored its writer.
+- First Go statedumps of the reference fight with the current tree: Go
+  (`cvf` tag) gives 54f8ae06… (old rules) and 4334350c… (cvf-online-5), the
+  native md5s. The desktop configuration (no vitaPerf) also gives 4334350c…
+  with cvf-online-5; with the old rules it differs only through config.ini's
+  FightAspect -1,-1 (with 0,0: 54f8ae06…), so the vitaPerf paths are
+  simulation-equivalent on this fight.

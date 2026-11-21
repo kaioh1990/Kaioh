@@ -17,3 +17,9 @@ CvF's content. Each ported subsystem is checked against Go:
   P2P bindings. Interop with Go's encoding/json and net: `ik/nearby_go`
   (`go run . probe` against `cvf_nearby_test DIR host 6`, and
   `go run . host` against `cvf_nearby_test DIR scan 7600 GoHost`).
+- `netplay/run_netplay.sh GAMEDIR`: two headless engines play a full online
+  rollback match over loopback (host/join by IP, handshake, GGPO over UDP,
+  optionally through `netplay/udp_relay.py` with delay, jitter and loss);
+  both sides' per-frame state dumps must be identical, in every network
+  scenario. `HOST_BIN`/`GUEST_BIN` select native or Go builds
+  (docs/DEVSETUP.md).

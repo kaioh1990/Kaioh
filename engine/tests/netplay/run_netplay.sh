@@ -9,9 +9,15 @@
 # GAMEDIR    reference game directory (cvf-refdata.tgz + data/Xsound.snd, see
 #            docs/DEVSETUP.md); used read-only, through symlinks
 # SCENARIO   direct            no relay
-#            NAME:DELAY:JITTER:LOSS
+#            NAME:DELAY:JITTER:LOSS[:sync]
 #                              through tests/netplay/udp_relay.py: delay and
-#                              jitter in ms, loss in percent
+#                              jitter in ms, loss in percent. Loss spares
+#                              GGPO's sync handshake unless ":sync" is given:
+#                              a peer that synchronizes more than
+#                              Rollback.DisconnectTimeout (3 s) before the
+#                              other drops it, and with lost sync replies
+#                              the other needs 2 s per retry (GGPO itself,
+#                              Go and native alike; see GAPS.md)
 #            default: direct lag:40:15:0 loss:20:10:8
 #
 # Environment:
@@ -25,6 +31,8 @@
 #                        ParanoiaBG, 1 round)
 #   TIMEOUT              seconds per match (default 600)
 #   GGPO_LOGS=1          GGPO's trace in each instance's save/logs
+#   RELAY_LOG=1          the relay's packet log (SCENARIO/packets.txt)
+#   RELAY_SEED           the relay's random seed (default 1)
 #
 # Every scenario must end with both dumps identical, and all scenarios must
 # give the same dump (the inputs depend on the simulated time only, so the
@@ -94,9 +102,11 @@ for sc in $SCEN; do
     mkinst "$R/guest" $P $((P + 2))
     hpeer="" gpeer="" relay=""
     if [ "$sc" != direct ]; then
-        IFS=: read -r _ delay jitter loss <<< "$sc"
+        IFS=: read -r _ delay jitter loss dropsync <<< "$sc"
         python3 "$E/tests/netplay/udp_relay.py" $((P + 1)) $((P + 2)) $((P + 3)) $((P + 4)) \
-            --delay "$delay" --jitter "$jitter" --loss "$loss" --time "$TIMEOUT" > "$R/relay.txt" 2>&1 &
+            --delay "$delay" --jitter "$jitter" --loss "$loss" --time "$TIMEOUT" --seed "${RELAY_SEED:-1}" \
+            $([ "$dropsync" = sync ] || echo --keep-sync) \
+            ${RELAY_LOG:+--log "$R/packets.txt"} > "$R/relay.txt" 2>&1 &
         relay=$!
         hpeer="CVF_NET_PEER_UDP=$((P + 3))" gpeer="CVF_NET_PEER_UDP=$((P + 4))"
         sleep 0.5

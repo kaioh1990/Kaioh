@@ -78,6 +78,69 @@ plays title -> Versus character select -> Online > Host Nearby (found by
 `cvf_nearby_test scan` from a second process) -> Join Nearby and prints
 `smoke: PASS` (~75 s). See tests/README.md.
 
+### Online match test (netplay)
+
+    tests/netplay/run_netplay.sh /path/to/refgame          # "netplay: PASS (dump ...)"
+
+Two `cvf_headless` processes play a full online match over loopback through
+the real path: host `-ip ""` / join `-ip 127.0.0.1` (main.lua's command
+line: enterNetPlay, TCP handshake, sync settings, synchronize), then GGPO
+rollback over UDP. Each side's input is scripted (`CVF_NET_INPUT=seed`, a
+function of the match time only), so the match must come out the same
+whatever the network does. Scenarios (default `direct lag:40:15:0
+loss:20:10:8`): `direct`, or `NAME:DELAY:JITTER:LOSS[:sync]` through
+`tests/netplay/udp_relay.py` (delay and jitter in ms, loss in %; the loss
+spares GGPO's sync handshake unless `:sync` is given, see GAPS.md). Each side
+writes the last simulation of every match frame to `statedump.txt`; PASS
+needs both sides identical in every scenario and every scenario identical
+to the first. It prints the frames re-simulated in rollbacks (thousands
+with lag or loss) and the relay's packet counts. ~1.5 min (unpaced; `FPS=60`
+paces both like a windowed game, ~2 min per scenario).
+
+The instances are made in `$WORK` (default a temp dir) from the reference
+game dir through symlinks, with their own `save/` (ports `PORT_BASE`=7650:
+TCP 7650, UDP 7651-7654), `vita_statedump.txt` and `vita_statehash.txt`
+(fixed seed and pre-match time, reproducible runs) and ButtonAssist off (it
+keeps state per input poll, not per frame). `HOST_BIN` / `GUEST_BIN` choose
+the engines, e.g. a Go build (below). Debugging: `GGPO_LOGS=1` (GGPO's trace
+in each instance's `save/logs`), `RELAY_LOG=1` (one line per packet with the
+GGPO header), `RELAY_SEED`, `TIMEOUT`, `PORT_BASE`, `SEED_HOST`/`SEED_GUEST`.
+
+### Go build of the headless runner (cross-checks)
+
+`tools/ikemen/cvf_gohead.go` (build tag `cvfgohead`) runs the same
+`cvfHeadlessMain` from Go, so the Ikemen tree from section 4 builds a Go
+`cvf_headless_go` that takes the same arguments and writes the same dumps:
+
+    cd dev-ikemen
+    go build -tags cvf,cvfgohead -o cvf_headless_go ./src   # native's configuration (vitaPerf)
+    go build -tags cvfgohead -o cvf_headless_go_desktop ./src  # the shipping PC/mobile configuration
+
+It needs cgo with SDL2, FFmpeg (7), libxmp and a `-lMoltenVK` on macOS. On
+the project Mac (amd64 Go with the x86_64 Homebrew libraries, under
+Rosetta), libxmp 4.6.3 was built from source into a local prefix and
+MoltenVK replaced by a one-function stub library (`vkGetInstanceProcAddr`
+returning NULL; nothing headless touches Vulkan):
+
+    export GOARCH=amd64 CGO_ENABLED=1 CC="clang -arch x86_64" \
+      PKG_CONFIG_PATH=/usr/local/opt/ffmpeg@7/lib/pkgconfig \
+      CGO_CFLAGS="-I/usr/local/include/SDL2 -I/usr/local/include -I/usr/local/opt/ffmpeg@7/include -I$XMP/include" \
+      CGO_LDFLAGS="-L/usr/local/lib -L/usr/local/opt/ffmpeg@7/lib -L$XMP/lib -L$NOVK -lSDL2"
+
+(paths without spaces: cgo splits the flags on spaces). Results
+(2026-11-20, Go 1.27.4 amd64 vs native macOS arm64 / Linux x86-64):
+
+| Check | Result |
+| --- | --- |
+| Reference fight, old rules: Go `cvf` tag | `54f8ae06d74648af2182587b82a390d6`, = native |
+| Reference fight, cvf-online-5: Go `cvf` tag | `4334350cdebd48dc0caa04cf78e0d9e3`, = native |
+| Reference fight, cvf-online-5: Go desktop configuration | `4334350c...`, = native |
+| Reference fight, old rules: Go desktop configuration | `6924075c...`: config.ini's FightAspect -1,-1 (native forces 0,0); with 0,0 it is `54f8ae06...` |
+| Netplay native <-> native (Linux; macOS) | PASS, dump `a350bc2df11a03519f7d65d278844432` (cvf-online-5, 6,431 frames) |
+| Netplay native host <-> Go guest, Go host <-> native guest (`cvf` tag) | PASS, same dump |
+| Netplay native <-> Go desktop configuration, both directions | PASS, same dump (lossy scenarios spare GGPO's sync handshake: GAPS.md) |
+| Netplay Go desktop <-> Go desktop, 25 % loss including sync | fails in 3 of 4 relay seeds, as native pairs can: a GGPO limit, GAPS.md |
+
 ### Locations on the project Mac
 
 Under `~/Castlevania Fighter Project/CvF Native Engine/`:
