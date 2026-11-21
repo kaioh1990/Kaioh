@@ -27,6 +27,7 @@ declare -a PROBES=(
     "AVEFirmwareParamProbe:com.research.avefwparam:ave_firmware_param_probe.c"
     "AVEIOSurfSpray:com.research.aveiosurfspray:ave_iosurface_spray.c"
     "AVEOOBReadProbe:com.research.aveoobread:ave_oob_read_probe.c"
+    "AVEFullChain:com.research.avefullchain:ave_full_chain.c"
 )
 
 build_and_deploy() {
