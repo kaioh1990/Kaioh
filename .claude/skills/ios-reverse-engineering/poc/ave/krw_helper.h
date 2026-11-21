@@ -134,10 +134,12 @@ int krw_chmod(krw_state_t *state, const char *path, uint16_t mode);
 
 /*
  * Phase 7: Bootstrap installer
- * Creates /var/jb rootless layout and installs Sileo + dpkg
+ * Creates /var/jb rootless layout. NOTE: Only developer-signed binaries
+ * can execute — TXM blocks unsigned dpkg/apt on SPTM devices.
+ * The bootstrap creates the directory structure and copies signed tools.
  */
-int krw_install_bootstrap(krw_state_t *state, const char *bootstrap_tar_path);
-int krw_install_deb(krw_state_t *state, const char *deb_path);
+int krw_create_rootless_layout(krw_state_t *state);
+int krw_copy_signed_app(krw_state_t *state, const char *app_path, const char *dest);
 
 /*
  * Cleanup
