@@ -13,6 +13,25 @@
 | 8 | `cvf-files/` from claude/android | **Done** (cvf-online-5 rules, Nearby options11.def, Intro door fix). |
 | 7, 9–14 | | Open, unchanged. Item 11/12 (mobile front ends, Apple P2P, touch taps from the UI thread, native name box) stay stubs on desktop by design (cvf_p2p_other.go). |
 
+### Collector: derived pointers on 32-bit ARM (open, 2026-11-21)
+
+Found while verifying the runtime review fixes (ucontext roots, 32-bit
+register spills) with `cvf_tests` cross-built for armhf and run under
+`qemu-arm` (GCC 13, Thumb-2, -O2). With the fixes the suspended stacks and
+registers are scanned (the review's root tests pass), but one existing check
+still fails: `test_sched.c` "data on a suspended goroutine's stack survived
+collection". The goroutine loops over `data[i]` after the call, and GCC's
+pre-indexed loads (`ldr r1, [r4, #4]!`) keep only `r4 = data - 4` live across
+`go_chan_recv`: a pointer just *below* the object, which a conservative
+scanner attributes to the neighbouring block (or to nothing). x86-64 keeps
+`data` itself (in `rbx`). Any GC object whose only reference is such a
+derived pointer, across a call that collects, can be freed: this matters for
+a 32-bit ARM build (armeabi-v7a Android, the Vita) only, and only when the
+base pointer is not also held elsewhere (slices and structs normally are).
+Not fixed: options are recognising pointers up to a small offset below an
+object when scanning stacks and registers only (not the heap), or a GCC
+option that avoids pre-indexed writeback addressing; both need measuring.
+
 ### Online: still open after claude/native-netplay
 
 | Item | State |

@@ -66,7 +66,8 @@ On the project Mac this is `~/Castlevania Fighter Project/CvF Native Engine/dev`
       -DCVF_SDL2_INCLUDE_DIR=/usr/local/include/SDL2 \
       -DCVF_SDL2_LIBRARY="$HOME/Castlevania Fighter Project/CvF Online/CvF Native (Apple Silicon).app/Contents/Frameworks/libSDL2-2.0.0.dylib"
     cmake --build build/release -j10      # cvf_headless, cvf, cvf_tests, cvftool
-    ./build/release/cvf_tests             # 93 checks, 0 failures
+    ./build/release/cvf_tests             # 100 checks, 0 failures
+    ./build/release/cvf_tests_ucontext    # Linux: the same with the ucontext scheduler (below)
 
 (Linux: drop `CMAKE_OSX_ARCHITECTURES`, and the two SDL2 options if
 `find_package(SDL2)` works.) `cvf` (the game) is built too; run it as
@@ -140,6 +141,69 @@ the engines, e.g. a Go build (below). Debugging: `GGPO_LOGS=1` (GGPO's trace
 in each instance's `save/logs`), `RELAY_LOG=1` (one line per packet with the
 GGPO header), `RELAY_SEED`, `TIMEOUT`, `PORT_BASE`, `SEED_HOST`/`SEED_GUEST`.
 
+### Collector checks: stress mode, sanitizers, ucontext scheduler
+
+**GC stress mode.** A build with `-DCVF_GC_STRESS=ON` (CMake option; it
+defines `CVF_GC_STRESS` for `core/gc.c`) reads the environment variable
+`CVF_GC_STRESS=N` at the first allocation and then runs a full collection on
+every Nth allocation, wherever it happens (inside the simulation, a goroutine,
+a Lua call), and fills every freed object, free page and freed large object
+with `0xA5`. A missed root (a pointer the collector did not see) then reads
+garbage at once instead of surviving by luck until the memory is reused.
+Unset or `0`: no extra collections (the poisoning still applies to normal
+collections). Normal builds contain none of this code. The simulation must
+not notice the collections: the dumps stay bit-identical.
+
+    cmake -S . -B build/stress -G Ninja -DCMAKE_BUILD_TYPE=Release -DCVF_GC_STRESS=ON
+    cmake --build build/stress
+    cd refgame
+    CVF_GC_STRESS=5000 CVF_GC_TRACE=1 ../build/stress/cvf_headless . -p1 Alucard -p2 Richter \
+        -p1.ai 8 -p2.ai 8 -s stages/ParanoiaBG.def -rounds 1 2>gc.log
+    md5sum statedump.txt                       # same md5 as the Release build
+    grep -c '^gc [0-9]' gc.log                 # collections (about 2,000 per match at 5000)
+    # netplay, both peers the stress build (absolute paths: each peer runs in its own dir):
+    CVF_GC_STRESS=20000 HOST_BIN=$PWD/build/stress/cvf_headless GUEST_BIN=$PWD/build/stress/cvf_headless \
+        PORT_BASE=14100 tests/netplay/run_netplay.sh refgame5 direct loss:20:10:8
+
+Smaller N is slower (each collection scans the whole heap: at N=5000 a
+reference match took ~2.5x as long on Linux x86-64). `CVF_GC_TRACE=1` prints one line per collection.
+
+**Sanitizers** (gcc; LSan reports the collector's own mark/run arrays, which
+live in mmap'd memory it does not scan, so leak detection is off):
+
+    CC=gcc cmake -S . -B build/asan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+    cmake --build build/asan
+    ASAN_OPTIONS=detect_leaks=0 build/asan/cvf_tests
+    unshare -rn sh -c 'ip link set lo up; ASAN_OPTIONS=detect_leaks=0 build/asan/cvf_nearby_test /tmp/nt'
+
+(`unshare -rn`: a private loopback, so the fixed UDP port 7520 of Nearby is
+free even when other runs share the machine.) The only UBSan report is
+`memset(NULL, 0, 0)` in generated StoryboardManager code (harmless).
+
+**ucontext scheduler.** x86-64 and arm64 switch goroutines with `ctx_switch`
+(assembly), Windows with fibers; every other POSIX target (32-bit ARM, i686)
+uses `swapcontext`. `-DCVF_SCHED_UCONTEXT` forces that fallback on x86-64 /
+arm64 too: on Linux, `cvf_tests_ucontext` is `cvf_tests` linked against a
+core built that way, so the fallback is tested on every Linux build.
+`tests/test_gc_roots.c` collects from goroutines while main and another
+goroutine are suspended (before 2026-11-21 the ucontext path scanned no
+suspended stack at all). A 32-bit ARM check without hardware:
+
+    sudo apt-get install gcc-arm-linux-gnueabihf qemu-user
+    # compile src/core/*.c src/formats/*.c into a static archive, link tests/*.c, then
+    qemu-arm -L /usr/arm-linux-gnueabihf ./cvf_tests
+
+(there, test_sched.c's suspended-goroutine check fails by design of
+conservative scanning: GCC keeps only `data - 4` live across the call for a
+pre-indexed loop, a pointer below the object; see GAPS.md.)
+
+Goroutine stacks and the iOS engine stack have a 64 KB `PROT_NONE` guard
+below them, and the build adds `-fstack-clash-protection` where the compiler
+accepts it (not on Windows, which probes large frames itself). An overflow is
+a plain crash (no handler on an alternate stack).
+
 ### Go build of the headless runner (cross-checks)
 
 `tools/ikemen/cvf_gohead.go` (build tag `cvfgohead`) runs the same
@@ -212,7 +276,7 @@ Wine 9.0 aborts at start with `free(): invalid pointer` when
     mkdir -p -m 700 $XDG_RUNTIME_DIR
     W=/usr/lib/wine/wine64
     cd build/win64
-    $W ./cvf_tests.exe                                  # 93 checks, 0 failures
+    $W ./cvf_tests.exe                                  # 100 checks, 0 failures
     $W ./cvf_nearby_test.exe 'Z:\tmp\nt'                # 0 failure(s) (UDP 7520 free)
     $W ./cvf_nearby_test.exe 'Z:\tmp\nt' ifaces         # interfaces as Nearby sees them
 
