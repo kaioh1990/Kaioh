@@ -12,13 +12,19 @@ typedef struct HttpJob {
     char *body;
     size_t body_len;
     long timeout_ms;
-    // results
+    // results (done: written last with release order, read with acquire;
+    // see http_job_done / http_job_finish)
     volatile int done;
     long status;
     char *resp;
     size_t resp_len, resp_cap;
     char err[256];
 } HttpJob;
+
+// The performer's results must be visible before `done` (arm64 reorders
+// plain stores and loads): publish and read it with release/acquire.
+static inline void http_job_finish(HttpJob *j) { __atomic_store_n(&j->done, 1, __ATOMIC_RELEASE); }
+static inline int http_job_done(HttpJob *j) { return __atomic_load_n(&j->done, __ATOMIC_ACQUIRE); }
 
 #endif
 

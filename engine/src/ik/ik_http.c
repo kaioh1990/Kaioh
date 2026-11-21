@@ -227,7 +227,7 @@ static void *http_worker(void *arg) {
     HttpJob *j = (HttpJob *)arg;
     if (!curl_load()) {
         snprintf(j->err, sizeof j->err, "http: libcurl not available");
-        j->done = 1;
+        http_job_finish(j);
         return NULL;
     }
     CURL *c = curl.easy_init();
@@ -263,7 +263,7 @@ static void *http_worker(void *arg) {
     }
     if (hl) curl.slist_free_all(hl);
     curl.easy_cleanup(c);
-    j->done = 1;
+    http_job_finish(j);
     return NULL;
 }
 static bool start_worker(HttpJob *j) {
@@ -323,7 +323,7 @@ out:
     if (c) WinHttpCloseHandle(c);
     if (s) WinHttpCloseHandle(s);
     free(wurl), free(wmethod), free(wheaders);
-    j->done = 1;
+    http_job_finish(j);
     return 0;
 }
 static bool start_worker(HttpJob *j) {
@@ -386,7 +386,7 @@ static Ret_GoHttpResponsePtr__GoIface perform(GoHttpClient *cl, GoString method,
         // leaks the job's strings deliberately small; report the failure
         return (Ret_GoHttpResponsePtr__GoIface){NULL, go_errorf("http: cannot start request thread")};
     }
-    while (!j->done) go_sleep_ns(2000000);  // the game and other goroutines run meanwhile
+    while (!http_job_done(j)) go_sleep_ns(2000000);  // the game and other goroutines run meanwhile
     Ret_GoHttpResponsePtr__GoIface res = {NULL, {0}};
     if (j->err[0]) {
         res.r1 = go_errorf("%s %.*s: %s", go_strz(method), url.len, url.p, j->err);

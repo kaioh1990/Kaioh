@@ -150,8 +150,9 @@ void cvf_host_drain(bool fighting) {
         low_memory = false;
         GcStats before = gc_stats();
         gc_collect();
-        fprintf(stderr, "cvf: memory warning: collected (heap %zu KB -> %zu KB live)\n", before.heap_bytes / 1024,
-                gc_stats().live_bytes / 1024);
+        size_t rel = gc_release_free_pages();
+        fprintf(stderr, "cvf: memory warning: collected (heap %zu KB -> %zu KB live, %zu KB returned)\n",
+                before.heap_bytes / 1024, gc_stats().live_bytes / 1024, rel / 1024);
     }
     int tm = atomic_exchange(&touch_menus, -1);
     if (tm >= 0) fn_cvfHostSetTouchMenus(tm != 0);

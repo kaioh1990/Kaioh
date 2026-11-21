@@ -285,7 +285,15 @@ static void switch_to(Coro *next) {
 #elif defined(__x86_64__) || defined(__aarch64__)
     ctx_switch(&prev->sp, next->sp);
 #else
-    swapcontext(&prev->uc, &next->uc);
+    {
+        // swapcontext saves the registers in prev->uc (collector-visible:
+        // main_coro is in the data segment, other Coros in the heap), but the
+        // collector also needs the suspended stack: record its low end here.
+        volatile uintptr_t mark = 0;
+        prev->sp = (void *)&mark;
+        swapcontext(&prev->uc, &next->uc);
+        prev->sp = NULL;  // running again: scanned as the live stack
+    }
 #endif
     reap();
 }

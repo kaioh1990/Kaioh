@@ -233,6 +233,8 @@ static uintptr_t find_stack_base(void *hint) {
     }
 #elif defined(__APPLE__)
     b = (uintptr_t)pthread_get_stackaddr_np(pthread_self());
+#elif defined(_WIN32)
+    b = (uintptr_t)((NT_TIB *)NtCurrentTeb())->StackBase;  // the thread's stack top: hint + 4096 may lie above it
 #else
     b += 4096;  // cover main's own frame
 #endif
@@ -429,7 +431,7 @@ void (*gc_extra_roots_hook)(void (*scan)(uintptr_t lo, uintptr_t hi));
 uintptr_t gc_main_stack_top(void) { return S ? S->stack_base : 0; }
 void gc_set_main_stack(void *top) {
     if (!S) gc_init(top);
-    S->stack_base = (uintptr_t)top;
+    if (top) S->stack_base = (uintptr_t)top;  // NULL (no engine stack): keep the thread's own
 }
 
 static void scan_and_drain(uintptr_t lo, uintptr_t hi) {
@@ -486,6 +488,9 @@ static void sweep(void) {
             int nlive = 0;
             for (int w = 0; w < MARK_WORDS; w++) nlive += __builtin_popcountll(m[w]);
             if (!nlive) {
+#ifdef CVF_GC_STRESS
+                memset(page_addr(pg), 0xA5, PAGE_SIZE);
+#endif
                 P->kind = P_FREE;
                 continue;
             }
@@ -494,6 +499,9 @@ static void sweep(void) {
             for (int i = cnt; i-- > 0;)
                 if (!(m[i >> 6] >> (i & 63) & 1)) {
                     void **o = (void **)(base + (size_t)i * sz);
+#ifdef CVF_GC_STRESS
+                    memset(o, 0xA5, (size_t)sz);  // poison: a missed root reads garbage
+#endif
                     *o = *head;
                     *head = o;
                 }
@@ -503,6 +511,9 @@ static void sweep(void) {
             memset(m, 0, sizeof S->marks[pg]);
         } else if (P->kind == P_LARGE) {
             if (!P->lmark) {
+#ifdef CVF_GC_STRESS
+                memset(page_addr(pg), 0xA5, P->n * PAGE_SIZE);
+#endif
                 for (size_t k = 0; k < P->n; k++) S->pages[pg + k].kind = P_FREE;
             } else {
                 P->lmark = 0;
@@ -562,6 +573,29 @@ void gc_collect(void) {
     if (getenv("CVF_GC_TRACE"))
         fprintf(stderr, "gc %llu: total %.1f MB live %.1f MB heap %.1f MB pause %.2f ms\n", (unsigned long long)S->st.collections, S->st.total_alloc / 1048576.0,
                 S->st.live_bytes / 1048576.0, S->st.heap_bytes / 1048576.0, dt);
+}
+
+// Hands the pages of free runs back to the OS (memory warnings): a
+// collection alone leaves freed pages dirty, so the process footprint that
+// iOS's jetsam and Android's low-memory killer measure does not shrink.
+// take_pages re-zeroes a run when it is reused, so the contents may go.
+size_t gc_release_free_pages(void) {
+    if (!S) return 0;
+    size_t released = 0;
+    for (size_t i = 0; i < S->nruns; i++) {
+        uint8_t *p = page_addr(S->runs[i].start);
+        size_t n = S->runs[i].len * PAGE_SIZE;
+#if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+        if (madvise(p, n, MADV_FREE_REUSABLE) == 0) released += n;
+#elif defined(__linux__)
+        if (madvise(p, n, MADV_DONTNEED) == 0) released += n;
+#elif defined(_WIN32)
+        if (VirtualAlloc(p, n, MEM_RESET, PAGE_READWRITE)) released += n;
+#else
+        (void)p, (void)n;
+#endif
+    }
+    return released;
 }
 
 static inline bool should_collect(void) {
@@ -672,11 +706,30 @@ static __attribute__((noinline)) void prof_sample(size_t n) {
 #define PROF(n) ((void)0)
 #endif
 
+#ifdef CVF_GC_STRESS
+// Stress mode (build with -DCVF_GC_STRESS): CVF_GC_STRESS=N collects on
+// every Nth allocation, wherever it happens, to expose missed roots.
+static long stress_every = -1, stress_count;
+static inline void stress_tick(void) {
+    if (stress_every < 0) {
+        const char *e = getenv("CVF_GC_STRESS");
+        stress_every = e && atol(e) > 0 ? atol(e) : 0;
+    }
+    if (stress_every && ++stress_count >= stress_every && !S->disabled && !S->collecting) {
+        stress_count = 0;
+        gc_collect();
+    }
+}
+#else
+#define stress_tick() ((void)0)
+#endif
+
 static inline void *alloc_impl(size_t n, int atomic) {
     if (__builtin_expect(!S, 0)) gc_init(NULL);  // first allocation before main's gc_init
 #ifndef NDEBUG
     owner_check("allocation");
 #endif
+    stress_tick();
     PROF(n);
     if (n > SMALL_MAX) return alloc_large(n, atomic);
     int c = S->size_to_cls[(n + 15) >> 4];

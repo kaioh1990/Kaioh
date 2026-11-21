@@ -27,7 +27,7 @@ static NSURLSession *session(void) {
     return s;
 }
 
-static void finish(HttpJob *j) { atomic_thread_fence(memory_order_release), j->done = 1; }
+static void finish(HttpJob *j) { http_job_finish(j); }
 
 int cvf_nsurl_start(HttpJob *j) {
     @autoreleasepool {

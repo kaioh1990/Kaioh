@@ -29,6 +29,7 @@ static inline void *gc_calloc_atomic(size_t n, size_t sz) { return gc_alloc_atom
 
 void gc_add_roots(void *lo, void *hi);  // extra root range [lo, hi)
 void gc_collect(void);                  // full collection now
+size_t gc_release_free_pages(void);     // return free pages to the OS (after gc_collect); bytes
 // Frame boundary. While `fighting`, allocation never triggers a collection
 // unless the fight budget (CVF_GC_FIGHT_BUDGET_MB, default 256 MB on 64-bit,
 // 48 MB on 32-bit) is exceeded; otherwise a due collection runs here.
