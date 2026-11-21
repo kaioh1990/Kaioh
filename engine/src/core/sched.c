@@ -47,7 +47,9 @@ static void stack_free(uint8_t *s, size_t n) {
     if (s) munmap(s - page_size(), n + page_size());
 }
 #else
+#if !defined(_WIN32)  // Windows: CreateFiberEx allocates the stack, DeleteFiber frees it
 static uint8_t *stack_alloc(size_t n) { return (uint8_t *)malloc(n); }
+#endif
 static void stack_free(uint8_t *s, size_t n) {
     (void)n;
     free(s);
