@@ -550,11 +550,43 @@ Each is verifiable as stated; only M7 needs the device.
 - **Diagnostics**: `CVF_GL_CHECK=1` logs the first GL errors with the call
   name; the log reports the engine stack high-water mark.
 
+### Device run (iPhone 15 Pro Max, iOS 27.2.1, 2026-11-21)
+
+Installed with `xcrun devicectl device install app` next to the Go app
+(game data in `Documents/Game`). Boots to the title and loads the roster;
+engine stack peak 983 KB of 8192 KB.
+
+- **AGX assertion (fixed)**: the first device log had
+  `AGX: Texture read/write assertion failed: bytes_per_row >= used_bytes_per_row`
+  twice (after "Check D", and after the first screen framebuffer bind).
+  Cause: `Texture_GLES32.SetSubData` passes the pixel size (`depth/8`) as
+  the row stride, so `SetSubData2` sets `GL_UNPACK_ROW_LENGTH` to 1 for
+  each 256x1 palette row it uploads into the palette atlas (the white
+  palette in `System.init`, then the motif's palettes). GL ignores the row
+  length for a one-row image and other drivers say nothing, but Apple's
+  GLES-on-Metal validates it. `gles_bind.c` now tracks the unpack row
+  length and uploads single-row images whose row length is below the
+  width with row length 0 (the same bytes), then restores it; multi-row
+  cases are passed through and logged. With the fix the log shows
+  `gles: glTexSubImage2D 256x1: UNPACK_ROW_LENGTH 1 ignored for a single row`
+  at exactly the two places, and no AGX line. The Go iOS app does not hit
+  this: it renders through Vulkan/MoltenVK (`render_vk.go` passes stride
+  0). The Go Android build uses the same GLES code and sets the same row
+  length; Android drivers accept it. The native Android build shares
+  `gles_bind.c`, so it gets the fix too. The headless reference does not
+  use GL: Simulator md5s unchanged (`54f8ae06...`, `4334350c...`).
+- **Expected log lines** (same in Go builds of this Ikemen version):
+  `Warning: Failed to assign key [...]` (12 lines: CvF's `system.def` has
+  keys from a newer Ikemen; Ikemen 6a09392's `motif.go`/`config.go` print
+  them; the Go Vita build's log has the identical 12 lines) and
+  `Failed to add char: <br>` / `<vacant> (DEF not found)` (CvF's select
+  layout tokens; 6a09392's `AddChar` prints them; only the Vita build skips
+  them silently).
+
 ### Open / next
 
-1. Device run (M7): install the IPA next to the Go app, copy the game
-   folder into "CvF Native", check
-   `save/logs/cvf.log` (engine stack peak, GL errors), 120 Hz, vInputKit.
+1. Device run (M7): boot, title, roster and the GL log done on the 15 Pro
+   Max (above); still to do: a match, 120 Hz, vInputKit, touch.
 2. Real touch, gestures, name box and rotation in the Simulator or on device.
 3. M6 on devices: Nearby join + match between two phones (direct link),
    lobby screen against the real lobby, netplay vs desktop native.
