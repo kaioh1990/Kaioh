@@ -488,6 +488,55 @@ GC_NO_SANITIZE static void scan_range(uintptr_t lo, uintptr_t hi) {
     for (uintptr_t *w = (uintptr_t *)lo; (uintptr_t)(w + 1) <= hi; w++) mark_ptr(*w);
 }
 
+// Derived pointers below an object (stacks and registers only). An
+// optimising compiler may keep, across a call that collects, only a pointer
+// *before* an object: GCC's pre-indexed loads on 32-bit ARM (`ldr r1, [r4,
+// #4]!` walking an array leave `r4 = data - 4`). Such a word points into the
+// previous block, or outside the heap, and alone would let the object be
+// freed (test_sched.c's suspended-goroutine check under qemu-arm). So a
+// stack or register word also marks every block that starts within
+// DERIVED_BELOW bytes above it: 256 covers Thumb-2's and ARM's pre-indexed
+// writeback with an 8-bit offset (255; ldr's 12-bit ARM form is not used for
+// induction variables below the base) and every element stride a loop over
+// slices of small structs uses. Heap and data-segment words are not treated
+// this way: only compiler temporaries hold such pointers, and the translated
+// code itself never stores them. The cost is retention of a neighbour now
+// and then by a stack word, nothing on the 64-bit layouts' results.
+#define DERIVED_BELOW 256
+static void mark_derived(uintptr_t p) {
+    uintptr_t lim = p + DERIVED_BELOW;
+    uintptr_t end = S->lo + (S->hwm << PAGE_SHIFT);
+    if (lim <= S->lo || p >= end) return;
+    // first page whose start could hold such a block: p's own (p may lie
+    // just below the arena too)
+    size_t pg = p >= S->lo ? (p - S->lo) >> PAGE_SHIFT : 0;
+    for (; pg < S->hwm; pg++) {
+        uintptr_t base = (uintptr_t)page_addr(pg);
+        if (base > lim) break;
+        Page *P = &S->pages[pg];
+        if (P->kind == P_SMALL) {
+            uintptr_t sz = cls_size[P->cls];
+            // slots starting in (p, lim]
+            uintptr_t first = p < base ? 0 : (p - base) / sz + 1;
+            for (uintptr_t i = first; i < S->cls_count[P->cls]; i++) {
+                uintptr_t o = base + i * sz;
+                if (o > lim) break;
+                mark_ptr(o);  // a free slot is no object: marking it only delays its reuse
+            }
+        } else if (P->kind == P_LARGE && base > p) {
+            mark_ptr(base);
+        }
+    }
+}
+
+GC_NO_SANITIZE static void scan_stack_range(uintptr_t lo, uintptr_t hi) {
+    lo = (lo + sizeof(void *) - 1) & ~(uintptr_t)(sizeof(void *) - 1);
+    for (uintptr_t *w = (uintptr_t *)lo; (uintptr_t)(w + 1) <= hi; w++) {
+        mark_ptr(*w);
+        mark_derived(*w);
+    }
+}
+
 static void drain(void) {
     while (S->msp) {
         Range r = S->mstack[--S->msp];
@@ -503,8 +552,8 @@ void gc_set_main_stack(void *top) {
     if (top) S->stack_base = (uintptr_t)top;  // NULL (no engine stack): keep the thread's own
 }
 
-static void scan_and_drain(uintptr_t lo, uintptr_t hi) {
-    scan_range(lo, hi);
+static void scan_and_drain(uintptr_t lo, uintptr_t hi) {  // suspended goroutine stacks
+    scan_stack_range(lo, hi);
     drain();
 }
 
@@ -547,7 +596,7 @@ GC_NO_SANITIZE static __attribute__((noinline)) void mark_stack(void) {
     volatile uintptr_t here = (uintptr_t)&spill;
     uintptr_t lo = here < (uintptr_t)__builtin_frame_address(0) ? here : (uintptr_t)__builtin_frame_address(0);
     uintptr_t top = gc_stack_top_hook ? gc_stack_top_hook() : 0;
-    scan_range(lo, top ? top : S->stack_base);  // the running goroutine's stack
+    scan_stack_range(lo, top ? top : S->stack_base);  // the running goroutine's stack (and the spilled registers)
     drain();
     if (gc_extra_roots_hook) gc_extra_roots_hook(scan_and_drain);  // suspended goroutines
 }
