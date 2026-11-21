@@ -6,6 +6,8 @@ package main
 // C host API (engine/src/platform/ios/cvf_host.c), always on the engine
 // (main) thread: directly from UIKit touch callbacks during the event pump,
 // or from the per-frame mailbox drain for values coming from other threads.
+// The Android app's JNI calls (engine/src/platform/android) arrive on its UI
+// thread and always go through the mailbox.
 
 import (
 	"fmt"
@@ -29,7 +31,9 @@ func cvfSelectRendererGLES(cfgVal string) (Renderer, FontRenderer, bool) {
 func eglGetProcAddress(name string) unsafe.Pointer { return nil }
 
 // Entry of the iOS app (SDL_main): --assets DIR --screen WxH, as the Go
-// app's SDL_main export.
+// app's SDL_main export. The Android app's SDL_main passes the same
+// arguments (the game folder from nativeOnSDLReady, the screen size from
+// nativeCvfSetScreen).
 func cvfIOSMain(args []string) {
 	for i := 0; i+1 < len(args); i++ {
 		switch args[i] {
@@ -47,6 +51,13 @@ func cvfHostInMatch() bool { return sys.middleOfMatch() && !sys.motif.me.active 
 
 // Hands a tap to the current screen; false if that screen ignores taps.
 func cvfHostTap(x, y float32) bool { return cvfStoreTap(x, y) }
+
+// True if the current screen reads taps (the test cvfStoreTap makes before
+// it stores one). Android answers its UI thread's tap calls from this,
+// published once per frame, and queues the tap itself for the next frame.
+func cvfHostTapListening() bool {
+	return cvfTap.used && sys.frameCounter-cvfTap.polled <= 5
+}
 
 func cvfHostSetTouchMenus(on bool) { cvfTouchMenus = on }
 

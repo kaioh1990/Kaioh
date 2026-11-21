@@ -15330,10 +15330,10 @@ index 0000000..48fef1b
 +}
 diff --git a/src/cvf_mobile.go b/src/cvf_mobile.go
 new file mode 100644
-index 0000000..a644746
+index 0000000..2decbd9
 --- /dev/null
 +++ b/src/cvf_mobile.go
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,98 @@
 +//go:build cvf
 +
 +package main
@@ -15342,6 +15342,8 @@ index 0000000..a644746
 +// C host API (engine/src/platform/ios/cvf_host.c), always on the engine
 +// (main) thread: directly from UIKit touch callbacks during the event pump,
 +// or from the per-frame mailbox drain for values coming from other threads.
++// The Android app's JNI calls (engine/src/platform/android) arrive on its UI
++// thread and always go through the mailbox.
 +
 +import (
 +	"fmt"
@@ -15365,7 +15367,9 @@ index 0000000..a644746
 +func eglGetProcAddress(name string) unsafe.Pointer { return nil }
 +
 +// Entry of the iOS app (SDL_main): --assets DIR --screen WxH, as the Go
-+// app's SDL_main export.
++// app's SDL_main export. The Android app's SDL_main passes the same
++// arguments (the game folder from nativeOnSDLReady, the screen size from
++// nativeCvfSetScreen).
 +func cvfIOSMain(args []string) {
 +	for i := 0; i+1 < len(args); i++ {
 +		switch args[i] {
@@ -15383,6 +15387,13 @@ index 0000000..a644746
 +
 +// Hands a tap to the current screen; false if that screen ignores taps.
 +func cvfHostTap(x, y float32) bool { return cvfStoreTap(x, y) }
++
++// True if the current screen reads taps (the test cvfStoreTap makes before
++// it stores one). Android answers its UI thread's tap calls from this,
++// published once per frame, and queues the tap itself for the next frame.
++func cvfHostTapListening() bool {
++	return cvfTap.used && sys.frameCounter-cvfTap.polled <= 5
++}
 +
 +func cvfHostSetTouchMenus(on bool) { cvfTouchMenus = on }
 +
@@ -18947,7 +18958,7 @@ index 0000000..4442bf8
 +	return l.PCall(0, lua.MultRet, nil)
 +}
 diff --git a/src/main.go b/src/main.go
-index 2609c76..4fed5fb 100644
+index 2609c76..a6cea02 100644
 --- a/src/main.go
 +++ b/src/main.go
 @@ -60,6 +60,7 @@ func main() {
@@ -18999,7 +19010,7 @@ index 2609c76..4fed5fb 100644
  
  	// Config file path
  	configPath := "save/config.ini"
-@@ -198,10 +215,20 @@ func realMain() {
+@@ -198,10 +215,25 @@ func realMain() {
  		// For Android, let's see exactly what failed
  		panic(err)
  	}
@@ -19015,12 +19026,17 @@ index 2609c76..4fed5fb 100644
 +	if cvfVitaGL {
 +		// C engine on the PS Vita: the GLES renderer on vitaGL
 +		cfg.Video.RenderMode = "OpenGL ES 3.2"
++	}
++	if runtime.GOOS == "android" && cvfEngine {
++		// C engine on Android: always OpenGL ES 3.2 (no Vulkan; a config.ini
++		// copied from a PC says "OpenGL 3.3", which phones do not have)
++		cfg.Video.RenderMode = "OpenGL ES 3.2"
  	}
 +	vitaTrace("main: config loaded")
  	sys.cfg = *cfg
  	// Logcat("LOG: Config Loaded. System Script: " + sys.cfg.Config.System)
  
-@@ -219,10 +246,11 @@ func realMain() {
+@@ -219,10 +251,11 @@ func realMain() {
  
  	// Initialize game and create window
  	// This is where the window is born!
