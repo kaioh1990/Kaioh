@@ -56,13 +56,14 @@ mark) on the reference fight (cvf-online-2 rules; cvf-online-5 alike).
 | Longest pause | 22 ms | 170-280 ms qemu time (not a hardware figure) | 0.45-0.77 s mark+sweep at 500 MHz |
 
 - The desktop figure "the native GC peaks at 78 MB" is RSS from November 19;
-  the high-water mark is now 143 MB because heap pages, once handed out,
-  stay resident until reused (`gc_release_free_pages` exists for iOS memory
-  warnings). On the Vita the arena is committed RAM from the start, so its
-  size is the budget: **192 MB** by default (`CVF_GC_ARENA_MB` in
-  `cvf_env.txt` changes it). The armv7 high-water mark is 112 MB; with less
-  room the collector simply collects earlier (an allocation that finds no
-  page collects and retries before failing).
+  the high-water mark was 143 MB because heap pages, once handed out,
+  stayed resident until reused. Since claude/native-memory the collector
+  returns free pages beyond the next cycle's needs to the OS after every
+  collection (GAPS.md), except on the Vita: there the arena is committed
+  RAM from the start, so its size is the budget: **192 MB** by default
+  (`CVF_GC_ARENA_MB` in `cvf_env.txt` changes it). The armv7 high-water
+  mark is 112-120 MB; with less room the collector simply collects earlier
+  (an allocation that finds no page collects and retries before failing).
 - Vita budget of the headless application: GC arena 192 MB, newlib heap
   48 MB (goroutine stacks of 512 KB, stdio, the collector's side tables
   ~2 MB), main thread stack 8 MB, image 6 MB: ~254 MB of ~365 MB. The game
@@ -76,18 +77,25 @@ mark) on the reference fight (cvf-online-2 rules; cvf-online-5 alike).
   stored full 32-bit hashes in scanned memory. Now 41-51 MB, on par with
   x86-64. On the Vita, memory blocks are at 0x81000000 and up, which
   floats and small integers never hit.
-- Collection pauses on hardware: the x86-64 pause (22 ms for a 76 MB heap)
-  times the A9's ~10-15x lower speed gives 200-300 ms, about half of
-  TinyGo's. The policy is the desktop one: while a round is in progress a
-  collection runs only when the usual trigger (live size, at least 32 MB)
-  plus the fight budget (48 MB on 32-bit, `CVF_GC_FIGHT_BUDGET_MB`) has been
-  allocated. The round allocates 11.8 KB per frame (51 MB over the
-  reference round on x86-64; less on 32-bit), so a 99 s round stays under
-  80 MB and collections fall at load checkpoints and round ends, as with
-  TinyGo. With the state dump on, the round allocates 23 KB per frame and
-  armv7 collects once mid-round (a hitch on hardware; harmless for the
-  reference check). PORTING.md's "~5 KB per tick" predates the current fork.
-  Cutting per-tick garbage is part of M4.
+- Collection pauses on hardware: the x86-64 pause (22 ms for a 76 MB heap
+  before claude/native-memory, 9-14 ms now: lazy sweeping, prefetching)
+  times the A9's ~10-15x lower speed gives ~100-200 ms. Marking stays on
+  one thread on the Vita (no helper threads there). The policy is the
+  desktop one: while a round is in progress a collection runs only once
+  the larger of the usual trigger (live size, at least 32 MB) and the
+  fight budget (80 MB on 32-bit, `CVF_GC_FIGHT_BUDGET_MB`; before
+  claude/native-memory: trigger + 48 MB, about the same for this live
+  set) has been allocated. The round allocates 11.8 KB per frame (51 MB
+  over the reference round on x86-64; less on 32-bit), so a 99 s round
+  stays under 80 MB and collections fall at load checkpoints and round
+  ends, as with TinyGo. With the state dump on, the round allocates 23 KB
+  per frame and armv7 collects once mid-round (a hitch on hardware;
+  harmless for the reference check). PORTING.md's "~5 KB per tick"
+  predates the current fork. Cutting per-tick garbage is part of M4.
+  Rollback play allocates ~1 MB per frame (save states, GAPS.md): on the
+  Vita a collection every ~1.5 s at 60 fps, each a hitch of the size
+  above, which online play on the Vita will have to address (memcpy
+  rollback, to-do item 10).
 
 ## 3. CPU
 

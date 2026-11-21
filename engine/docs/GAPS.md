@@ -215,6 +215,76 @@ So neither build grows without bound, but the native high-water mark is
 2.5-3.5 times Go's RSS, too much for phones: the
 fight budget (`CVF_GC_FIGHT_BUDGET_MB`, 256 MB) and the save-state garbage
 of rollback (to-do item 10, memcpy rollback) are what to work on.
+(Done on claude/native-memory, next section.)
+
+### Memory and collector pauses (claude/native-memory, 2026-11-21)
+
+Measured first, on a14596e (Linux x86-64, 2 CPUs, the 10-match `NODUMP`
+session of the previous section, cvf-online-5, direct): the live set *in*
+the rounds rose from ~47 MB (match 1) to 268-508 MB (matches 3-10), RSS to
+1.3 GB on both sides; pauses 80-190 ms median in rounds, up to 430 ms. An
+allocation profile (`GC_PROFILE` build) of one match: 7.2 GB allocated,
+1.1 MB per frame, all of it rollback save states (`SaveGameState`: the
+124 KB `GameState` itself, `FightScreen.Clone`, `Char.Clone`,
+`Explod.Clone`, `GameStatePool.Get`), the same garbage the Go build makes.
+Changes (`core/gc.c`, `core/gort.c`, `ik/ik_rt.c`; no Go change, no regen):
+
+| Change | Why | Effect |
+| --- | --- | --- |
+| `clear(map)` zeroes the entry array (`gomap_clear`) | the collector scans the entries; a cleared map kept its old keys and values alive until the slots were reused. Rollback clears pooled maps (`maps.Clear`) every frame | the 268-508 MB live sets are gone: 45-85 MB in every match |
+| Lazy sweeping | the pause swept every page (free lists written into all dead objects: 5-20 ms at 70-450 MB of pages). Now it only counts each page's marks and frees empty pages; `refill()` builds a page's free list when its size class needs one | sweep phase 0.5-1 ms |
+| Prefetch FIFO in marking (16 entries, as Boehm) | marking is memory latency | ~20 % shorter mark |
+| Fight pacing: in rounds, collect after max(trigger, fight budget) bytes instead of trigger + 256 MB; budget 96 MB (64-bit) / 80 MB (32-bit) | heap ≈ live + allowance; 256 MB on top of the trigger let the heap grow to 400-900 MB | an offline round still allocates less (reference fight on x86-64: no collection in the round, as before; armv7: the same one collection, same high-water mark 112 MB) |
+| Free pages returned to the OS after every collection (`madvise` DONTNEED / FREE_REUSABLE, `MEM_RESET`), keeping what the next cycle may use (the allowance less the free slots of partly used pages, at least what the last cycle took) | RSS stayed at the highest heap ever; the "taken" floor keeps steady state from faulting the same pages in each cycle | RSS follows the current heap; not on the Vita (committed arena) |
+| `sync.Pool` keeps what is Put (dropped at the first use after a collection, as Go drops pools at GC) | it was a no-op: every `Get` called `New` | ~12 % fewer collections in rollback |
+| Parallel marking (helper threads during the pause; atomic mark bits; shared work queue) | memory-latency bound | 2 markers on 2 idle CPUs: ~35 % shorter pause; on 2 *busy* CPUs ~20 % longer (a descheduled marker holds the pause), so the default is half the CPUs (at most 4): sequential on 2-CPU machines (this container), 2 markers on a 4-core phone. `CVF_GC_THREADS=N` |
+
+Results (same session; Go figures from the previous section):
+
+| | a14596e | claude/native-memory | Go desktop build |
+| --- | --- | --- | --- |
+| Peak RSS, host / guest | 1,319 / 1,313 MB | 222 / 219 MB | RSS 165-220 MB |
+| RSS after each match (after a full collection) | 389 → 1,318 / 486 → 1,313 MB | 150-173 / 152-167 MB | |
+| Live set, max over the session | 508 / 500 MB | 84 / 84 MB | heap 52-63 MB |
+| Collections (in rounds) | 451 (371) / 468 (390) | ~1,780 (~1,610) | |
+| In-round pause, median / p90 / max (wall) | 106 / 194 / 342 ms, 94 / 179 / 290 ms | 19.6 / 27 / 44 ms (machine load 2.3-2.6) | |
+| In-round pause, thread CPU time, median / p90 / max | | 13.5 / 16-17.5 / 24.5 ms | |
+| Reference fight (offline, dump on): peak RSS, longest pause | 139-168 MB, 22-46 ms | 124-138 MB, 9-16 ms | |
+| Same, armv7 under qemu-arm (both rule files): peak RSS, high-water mark, longest pause (qemu time) | 148 MB, 112 MB, 60-71 ms | 147-149 MB, 112 MB, 49-52 ms | |
+
+Wall-clock pauses depend on the machine's load (the container is shared
+with other jobs): with both engines alone on the two CPUs an earlier run
+of the same marking code gave median 15.0 / 15.4 ms, p90 19 / 25 ms
+(host / guest); with load 2.5-3.5 median 20-25 ms. The CPU time of the
+collecting thread (13.5 ms median) is the figure without preemption;
+`CVF_GC_TRACE` now prints it beside each pause (`pause X ms (cpu Y)`).
+A pause marks the live set (~30 MB of it scanned in rounds); more
+collections than before (every ~90 frames in rollback play, each one
+dropped frame) because the allowance is smaller and the save-state
+garbage (1 MB per frame) is unchanged.
+
+Open:
+
+- Intermittent extra retention: in some matches the live set in the round
+  is 80-110 MB instead of 45-60 MB (stochastic between runs). A
+  `CVF_GC_WHY` build (below) attributes the extra ~40 MB to `sys.cgi[0].states`
+  / `sys.workingState`: a chain from the current state bytecode into a
+  second states map and its graph, seen also in match 1. Not found in the
+  Go build (precise collector), so probably a conservative false reference;
+  not resolved. It sets the peak RSS (live x ~1.4 + allowance + ~20 MB).
+- The save-state garbage itself: `NewGameState` per frame (Put dropped
+  states back in `SaveGameState`: -11 %), `FightScreen.Clone` (11 %), the
+  clones of chars and explods: Go-side changes (both fork patches + regen),
+  or the planned memcpy rollback (to-do item 10). They would cut the
+  collection rate, not the pause.
+- Pauses on hardware: the x86-64 pause times the A9's 10-15x lower speed
+  is still 150-250 ms on the Vita per collection (sequential there).
+
+`CVF_GC_WHY` (a build with `-DCVF_GC_WHY`, development only): with
+`CVF_GC_WHY=MB` every collection after one whose live set exceeded MB
+reports the roots holding the most live bytes (data roots relative to
+`__data_start`, resolve with `nm`) and a chain from a big object up to its
+root.
 
 **Content fingerprint (done).** `cvf_fingerprint.go` in both fork patches
 fills the handshake's `content_fingerprint` with

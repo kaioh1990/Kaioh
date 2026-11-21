@@ -287,6 +287,9 @@ void gomap_del(GoMap *gm, const void *key) {
 void gomap_clear(GoMap *gm) {
     GoMapImpl *m = gm->m;
     if (!m) return;
+    // the collector scans the entry array: cleared keys and values must not
+    // keep their referents alive until the entries are reused
+    if (m->ents) memset(m->ents, 0, m->stride * (size_t)m->n);
     m->n = 0;
     m->live = 0;
     m->freelist = 0;

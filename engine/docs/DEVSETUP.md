@@ -23,6 +23,7 @@ other's work.
 | `claude/native-android` | Android port | only its collector fix (registers spilled in clear, fe415a0); the Android platform layer and app stay on that branch |
 | `claude/native-netplay2` | netplay: pre-match TCP race fix, content fingerprint, several matches per session, roster sweep scripts (all Go changes in both fork patches) | yes |
 | `claude/native-vita` | PS Vita port M1 (VITA_PORT.md): armv7 build under qemu-arm, vitasdk build and headless VPK, 32-bit runtime fixes (ARM context switch, arena placement, map hashes, derived pointers, base-10 formatting) | yes |
+| `claude/native-memory` | collector memory and pauses (GAPS.md): `clear(map)` releases its entries, lazy sweeping, prefetching and parallel marking, fight pacing max(trigger, 96 MB), free pages returned to the OS, a real `sync.Pool`; `CVF_GC_WHY` retention diagnostics | no (from a14596e) |
 
 Do not merge the input branches into each other; merge them into
 `claude/native-integration` and regenerate the C there (section 4).
@@ -232,7 +233,17 @@ not notice the collections: the dumps stay bit-identical.
         PORT_BASE=14100 tests/netplay/run_netplay.sh refgame5 direct loss:20:10:8
 
 Smaller N is slower (each collection scans the whole heap: at N=5000 a
-reference match took ~2.5x as long on Linux x86-64). `CVF_GC_TRACE=1` prints one line per collection.
+reference match took ~2.5x as long on Linux x86-64). `CVF_GC_TRACE=1` prints one line per collection
+(live set, pages in use, high-water mark, pause with its thread CPU time,
+bytes returned to the OS so far).
+
+Collector settings (environment; claude/native-memory): `CVF_GC_THREADS=N`
+markers during a pause (default half the CPUs, at most 4; 1 = sequential;
+none on the Vita), `CVF_GC_RELEASE=0` keeps free pages resident,
+`CVF_GC_FIGHT_BUDGET_MB` (96 / 80 MB on 64 / 32 bits) and `CVF_GOGC`
+(100) set the pacing (core/gc.h). Stress and sanitizer runs should also
+be made with `CVF_GC_THREADS=2` so the parallel marker is exercised on a
+2-CPU machine.
 
 **Sanitizers** (gcc; LSan reports the collector's own mark/run arrays, which
 live in mmap'd memory it does not scan, so leak detection is off):

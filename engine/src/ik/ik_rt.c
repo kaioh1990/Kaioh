@@ -1035,20 +1035,65 @@ void sync_Once_Do(GoOpaque *o, GoFunc f) {
     o->_opaque[0] = 1;
     ((void (*)(void *))f.fn)(f.env);
 }
-// sync.Pool keeps only its New function (no reuse: allocation reuse is
-// not observable by the simulation).
+// sync.Pool: a stack of the values Put, which Get hands out again before
+// calling New (rollback save states put their maps and slices back every
+// frame: GameStatePool in state.go). As in Go, a collection empties the
+// pools (their contents are dropped at the first Get or Put after it), so
+// a pool does not keep old objects, and what they point to, alive for
+// long. What Get returns is never observable by the simulation: callers
+// reset the value (maps.Clear, [:0]) exactly as they must with Go's pool,
+// which reuses values or not depending on when Go collects.
+typedef struct PoolItems {
+    int len, cap;
+    GoIface v[];
+} PoolItems;
+typedef struct PoolImpl {
+    GoFunc new_fn;
+    PoolItems *items;
+    u32 gen;  // collection count when items was last valid
+} PoolImpl;
+_Static_assert(sizeof(PoolImpl) <= sizeof(GoOpaque), "sync.Pool state must fit in GoOpaque");
+enum { POOL_MAX = 4096 };
 GoOpaque go_sync_pool(GoFunc new_fn) {
     GoOpaque o = {{0}};
-    memcpy(o._opaque, &new_fn, sizeof new_fn);
+    PoolImpl *p = (PoolImpl *)o._opaque;
+    p->new_fn = new_fn;
     return o;
 }
-GoIface sync_Pool_Get(GoOpaque *p) {
-    GoFunc f;
-    memcpy(&f, p->_opaque, sizeof f);
-    if (!f.fn) return (GoIface){0};
-    return ((GoIface(*)(void *))f.fn)(f.env);
+static PoolItems *pool_items(PoolImpl *p) {
+    u32 gen = (u32)gc_collections();
+    if (p->items && p->gen != gen && p->items->len) {
+        memset(p->items->v, 0, sizeof(GoIface) * (size_t)p->items->len);
+        p->items->len = 0;
+    }
+    p->gen = gen;
+    return p->items;
 }
-void sync_Pool_Put(GoOpaque *p, GoIface x) { (void)p, (void)x; }
+GoIface sync_Pool_Get(GoOpaque *o) {
+    PoolImpl *p = (PoolImpl *)o->_opaque;
+    PoolItems *it = pool_items(p);
+    if (it && it->len) {
+        GoIface x = it->v[--it->len];
+        it->v[it->len] = (GoIface){0};
+        return x;
+    }
+    if (!p->new_fn.fn) return (GoIface){0};
+    return ((GoIface(*)(void *))p->new_fn.fn)(p->new_fn.env);
+}
+void sync_Pool_Put(GoOpaque *o, GoIface x) {
+    if (!x.type) return;
+    PoolImpl *p = (PoolImpl *)o->_opaque;
+    PoolItems *it = pool_items(p);
+    if (!it || it->len == it->cap) {
+        int cap = it ? it->cap * 2 : 16;
+        if (cap > POOL_MAX) return;  // full: x is left to the collector
+        PoolItems *n = (PoolItems *)gc_alloc(sizeof(PoolItems) + sizeof(GoIface) * (size_t)cap);
+        n->cap = cap;
+        if (it) memcpy(n->v, it->v, sizeof(GoIface) * (size_t)(n->len = it->len));
+        p->items = it = n;
+    }
+    it->v[it->len++] = x;
+}
 void runtime_Gosched(void) { go_yield(); }
 void runtime_UnlockOSThread(void) {}  // one OS thread runs every goroutine
 void time_Sleep(i64 d) { go_sleep_ns(d); }  // other goroutines run meanwhile

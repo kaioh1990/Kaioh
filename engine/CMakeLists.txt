@@ -69,6 +69,11 @@ endif()
 if(NOT MSVC)
   target_link_libraries(cvf_core PUBLIC m)
 endif()
+if(NOT WIN32 AND NOT VITA)
+  # the collector's marker threads (core/gc.c)
+  find_package(Threads REQUIRED)
+  target_link_libraries(cvf_core PUBLIC Threads::Threads)
+endif()
 
 # iOS / iPadOS (CMAKE_SYSTEM_NAME=iOS): only the engine libraries, linked
 # into CvfEngine.xcframework by tools/package/ios_build.sh (IOS_PORT.md).

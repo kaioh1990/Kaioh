@@ -1,4 +1,5 @@
-// Conservative, non-moving mark-sweep collector for the translated Go code.
+// Conservative, non-moving mark-sweep collector for the translated Go code
+// (lazy sweeping, parallel marking: see gc.c).
 //
 // Every allocation the translated simulation and its runtime make goes
 // through here. The heap is one reserved address range split into 8 KiB
@@ -30,9 +31,15 @@ static inline void *gc_calloc_atomic(size_t n, size_t sz) { return gc_alloc_atom
 void gc_add_roots(void *lo, void *hi);  // extra root range [lo, hi)
 void gc_collect(void);                  // full collection now
 size_t gc_release_free_pages(void);     // return free pages to the OS (after gc_collect); bytes
-// Frame boundary. While `fighting`, allocation never triggers a collection
-// unless the fight budget (CVF_GC_FIGHT_BUDGET_MB, default 256 MB on 64-bit,
-// 48 MB on 32-bit) is exceeded; otherwise a due collection runs here.
+// Frame boundary. Outside fights a collection is due once the bytes
+// allocated since the last one reach the trigger (the live size times
+// CVF_GOGC/100, default 100, at least 32 MB) and runs here. While
+// `fighting`, allocation itself collects, once the larger of the trigger and
+// the fight budget (CVF_GC_FIGHT_BUDGET_MB, default 96 MB on 64-bit, 80 MB on
+// 32-bit) has been allocated: an offline round allocates less than that, a
+// rollback session much more. After each collection the free pages beyond
+// what the next cycle may use are returned to the OS (CVF_GC_RELEASE=0: never;
+// never on the Vita, whose arena is committed memory).
 void gc_safepoint(bool fighting);
 // Called at every safepoint (once per frame) before any collection there:
 // frame timing for the headless runner and the Vita (CVF_FRAME_STATS).
@@ -56,9 +63,11 @@ typedef struct GcStats {
     size_t total_alloc;      // allocated over the program's life
     uint64_t collections;
     double last_pause_ms, total_pause_ms, max_pause_ms;
-    size_t hwm_bytes;        // arena pages ever handed out: the resident footprint
+    size_t hwm_bytes;        // arena pages ever handed out (an upper bound of the footprint)
+    size_t released_bytes;   // free pages returned to the OS so far (counted each time)
 } GcStats;
 GcStats gc_stats(void);
+uint64_t gc_collections(void);  // collections so far (cheap)
 
 // Startup self-check of the data roots: objects referenced only from an
 // initialised global, a zero-initialised one and a tentative definition
