@@ -22,6 +22,7 @@ declare -a PROBES=(
     "AVEPPSValueProbe:com.research.aveppsvalue:ave_pps_value_probe.c"
     "AVESelectiveOOB:com.research.aveselectoob:ave_selective_oob.c"
     "AVESubobjProbe:com.research.avesubobjprobe:ave_subobj_probe.c"
+    "AVECounterOverflow:com.research.avecounteroverflow:ave_counter_overflow.c"
 )
 
 build_and_deploy() {
@@ -129,3 +130,6 @@ echo "  7. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avepp
 echo "  8. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveppsvalue dump'"
 echo "  9. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveselectoob sweep'"
 echo " 10. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveselectoob unsafe_189'"
+echo " 11. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avecounteroverflow safe'"
+echo " 12. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avecounteroverflow boundary'"
+echo " 13. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avecounteroverflow overflow'"
