@@ -122667,7 +122667,7 @@ GoString fn_itoa(int i) {
     return go_bytes2str(b);
 }
 
-// cvfSelectRendererGLES (cvf_mobile.go:20), 0 TODO
+// cvfSelectRendererGLES (cvf_mobile.go:22), 0 TODO
 Ret_Renderer__FontRenderer__bool fn_cvfSelectRendererGLES(GoString cfgVal) {
     if (strings_HasPrefix(cfgVal, GOSTR("OpenGL ES"))) {
         return (Ret_Renderer__FontRenderer__bool){((GoIface){464, (void *)(go_box(Renderer_GLES32, (Renderer_GLES32){0}))}), ((GoIface){465, (void *)(go_box(FontRenderer_GLES32, (FontRenderer_GLES32){0}))}), true};
@@ -122675,12 +122675,12 @@ Ret_Renderer__FontRenderer__bool fn_cvfSelectRendererGLES(GoString cfgVal) {
     return (Ret_Renderer__FontRenderer__bool){(Renderer){0}, (FontRenderer){0}, false};
 }
 
-// eglGetProcAddress (cvf_mobile.go:29), 0 TODO
+// eglGetProcAddress (cvf_mobile.go:31), 0 TODO
 void* fn_eglGetProcAddress(GoString name) {
     return NULL;
 }
 
-// cvfIOSMain (cvf_mobile.go:33), 0 TODO
+// cvfIOSMain (cvf_mobile.go:37), 0 TODO
 void fn_cvfIOSMain(Slice_GoString args) {
     {
         int i = 0;
@@ -122701,32 +122701,37 @@ void fn_cvfIOSMain(Slice_GoString args) {
     fn_realMain();
 }
 
-// cvfHostInMatch (cvf_mobile.go:46), 0 TODO
+// cvfHostInMatch (cvf_mobile.go:50), 0 TODO
 bool fn_cvfHostInMatch(void) {
     return (System_middleOfMatch(&g_sys) && (!g_sys.motif.me.active));
 }
 
-// cvfHostTap (cvf_mobile.go:49), 0 TODO
+// cvfHostTap (cvf_mobile.go:53), 0 TODO
 bool fn_cvfHostTap(f32 x, f32 y) {
     return fn_cvfStoreTap(x, y);
 }
 
-// cvfHostSetTouchMenus (cvf_mobile.go:51), 0 TODO
+// cvfHostTapListening (cvf_mobile.go:58), 0 TODO
+bool fn_cvfHostTapListening(void) {
+    return (g_cvfTap.used && ((g_sys.frameCounter - g_cvfTap.polled) <= 5));
+}
+
+// cvfHostSetTouchMenus (cvf_mobile.go:62), 0 TODO
 void fn_cvfHostSetTouchMenus(bool on) {
     g_cvfTouchMenus = on;
 }
 
-// cvfHostPeers (cvf_mobile.go:54), 0 TODO
+// cvfHostPeers (cvf_mobile.go:65), 0 TODO
 void fn_cvfHostPeers(GoString json) {
     cvfNearbyState_setP2P(g_cvfNearby, json);
 }
 
-// cvfHostNameEntered (cvf_mobile.go:57), 0 TODO
+// cvfHostNameEntered (cvf_mobile.go:68), 0 TODO
 void fn_cvfHostNameEntered(GoString name) {
     fn_cvfNameAskDone(name);
 }
 
-// cvfHTTPSelfTest (cvf_mobile.go:62), 0 TODO
+// cvfHTTPSelfTest (cvf_mobile.go:73), 0 TODO
 GoString fn_cvfHTTPSelfTest(GoString base) {
     GoString base__hv = base; __typeof__(base__hv) *base__h = &base__hv;
     GoHttpClient* c__hv = go_box(GoHttpClient, (GoHttpClient){.Timeout = 15000000000LL}); __typeof__(c__hv) *c__h = &c__hv;
@@ -142660,6 +142665,9 @@ void fn_realMain(void) {
             cfg->Video.RenderMode = GOSTR("OpenGL ES 3.0");
         }
     }
+    if (go_streq(ik_goos(), GOSTR("android")) && true) {
+        cfg->Video.RenderMode = GOSTR("OpenGL ES 3.2");
+    }
     fn_vitaTrace(GOSTR("main: config loaded"));
     g_sys.cfg = (*cfg);
     if (g_sys.cfg.Debug.DumpLuaTables) {
@@ -142695,7 +142703,7 @@ void fn_realMain(void) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// processCommandLine (main.go:264), 0 TODO
+// processCommandLine (main.go:269), 0 TODO
 void fn_processCommandLine(void) {
     if (GO_SLICE(Slice_GoString, os_Args, 1, -1).len > 0) {
         g_sys.cmdFlags = Map_GoString_GoString_make(0);
@@ -142770,13 +142778,13 @@ void fn_processCommandLine(void) {
     }
 }
 
-// handleExit (main.go:385), 0 TODO
+// handleExit (main.go:390), 0 TODO
 void fn_handleExit(void) {
     System_shutdown(&g_sys);
     os_Exit(0);
 }
 
-// handlePanic (main.go:391), 0 TODO
+// handlePanic (main.go:396), 0 TODO
 void fn_handlePanic(GoIface r) {
     GoOpaque /* time.Time */ now = time_Now();
     GoOpaque /* runtime.MemStats */ *mem__h = go_box(GoOpaque /* runtime.MemStats */, {0});

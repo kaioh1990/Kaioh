@@ -16,8 +16,9 @@ export GOTOC_INCLUDE_FUNCS=
 # functions implemented by hand in src/ik (ik_native.c)
 export GOTOC_NATIVE_FUNCS=decodeShiftJIS,cvfGcSafepoint,cvfP2PAdvertise,cvfP2PAdvertiseStop,cvfP2PBrowse,cvfP2PJoin,cvfP2PClose,cvfNativeAskName
 export GOTOC_EXCLUDE_FUNCS=saveScreenshot
-# entry points of the iOS app (src/platform/ios: SDL_main and the host API)
-GOTOC_HOST_ROOTS=cvfHTTPSelfTest,cvfIOSMain,cvfHostInMatch,cvfHostTap,cvfHostSetTouchMenus,cvfHostPeers,cvfHostNameEntered
+# entry points of the mobile apps (src/platform/ios, src/platform/android:
+# SDL_main and the host API)
+GOTOC_HOST_ROOTS=cvfHTTPSelfTest,cvfIOSMain,cvfHostInMatch,cvfHostTap,cvfHostTapListening,cvfHostSetTouchMenus,cvfHostPeers,cvfHostNameEntered
 . "$E/tools/gen/gotoc/pkgs.sh"
 export GOTOC_GEN_TYPES=${GOTOC_GEN_TYPES:-$E/src/core/gen_types.h}
 GOTOC_BIN=${GOTOC_BIN:-$E/build/gen/gotoc}

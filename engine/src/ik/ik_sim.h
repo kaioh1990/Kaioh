@@ -11638,6 +11638,7 @@ void* fn_eglGetProcAddress(GoString name);
 void fn_cvfIOSMain(Slice_GoString args);
 bool fn_cvfHostInMatch(void);
 bool fn_cvfHostTap(f32 x, f32 y);
+bool fn_cvfHostTapListening(void);
 void fn_cvfHostSetTouchMenus(bool on);
 void fn_cvfHostPeers(GoString json);
 void fn_cvfHostNameEntered(GoString name);
