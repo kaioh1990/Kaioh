@@ -265,9 +265,20 @@ static void switch_to(Coro *next) {
         // stack top, as ctx_switch's pushed registers are scanned elsewhere.
         // (Pointers in the frames above live in those frames or in the
         // registers saved here.)
-        jmp_buf regs;
-        setjmp(regs);
-        prev->sp = (void *)&regs;
+        // (Also stored in clear beside the jmp_buf, as mark_stack does, so the
+        // scan does not depend on the CRT's jmp_buf contents.)
+        struct {
+            uintptr_t gpr[8];
+            jmp_buf jb;
+        } regs;
+        setjmp(regs.jb);
+#if defined(__x86_64__)
+        __asm__ volatile(
+            "movq %%rbx, 0(%0)\n movq %%rbp, 8(%0)\n movq %%rsi, 16(%0)\n movq %%rdi, 24(%0)\n"
+            "movq %%r12, 32(%0)\n movq %%r13, 40(%0)\n movq %%r14, 48(%0)\n movq %%r15, 56(%0)\n" ::"r"(regs.gpr)
+            : "memory");
+#endif
+        prev->sp = (void *)&regs;  // lowest address of both
         SwitchToFiber(next->fiber);
         prev->sp = NULL;  // running again: the collector scans the live stack itself
     }

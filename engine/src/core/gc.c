@@ -456,6 +456,13 @@ GC_NO_SANITIZE static __attribute__((noinline)) void mark_stack(void) {
         "movq %%rbx, 0(%0)\n movq %%rbp, 8(%0)\n movq %%r12, 16(%0)\n movq %%r13, 24(%0)\n"
         "movq %%r14, 32(%0)\n movq %%r15, 40(%0)\n" ::"r"(spill.regs)
         : "memory");
+#elif defined(__x86_64__) && defined(_WIN32)
+    // msvcrt's setjmp stores them unmangled, but the layout is the CRT's:
+    // keep the Win64 callee-saved registers (rsi and rdi too) here as well.
+    __asm__ volatile(
+        "movq %%rbx, 0(%0)\n movq %%rbp, 8(%0)\n movq %%rsi, 16(%0)\n movq %%rdi, 24(%0)\n"
+        "movq %%r12, 32(%0)\n movq %%r13, 40(%0)\n movq %%r14, 48(%0)\n movq %%r15, 56(%0)\n" ::"r"(spill.regs)
+        : "memory");
 #endif
     volatile uintptr_t here = (uintptr_t)&spill;
     uintptr_t lo = here < (uintptr_t)__builtin_frame_address(0) ? here : (uintptr_t)__builtin_frame_address(0);
