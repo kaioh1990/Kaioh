@@ -30,6 +30,20 @@ grep -q 'applicationId "com.kaioh1990.cvfnative"' "$GRADLE"
 # failing to load libmain.so.
 sed -i -e 's/minSdkVersion 21$/minSdkVersion 26/' "$GRADLE"
 grep -q 'minSdkVersion 26$' "$GRADLE"
+# With minSdk >= 23 AGP stores native libraries uncompressed and loads them
+# from the APK, which needs 16 KB zip alignment on 16 KB-page devices (AGP
+# 8.1 aligns to 4 KB). Keep the compressed, extracted-at-install packaging
+# the API-21 builds had.
+python3 - "$GRADLE" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "    aaptOptions {\n        noCompress 'txr'\n    }\n"
+assert s.count(old) == 1
+s = s.replace(old, old + "    packagingOptions {\n        jniLibs {\n            useLegacyPackaging true\n        }\n    }\n")
+open(p, 'w').write(s)
+PY
+grep -q 'useLegacyPackaging true' "$GRADLE"
 sed -i -e 's#<string name="app_name" translatable="false">CvF Online</string>#<string name="app_name" translatable="false">CvF Native</string>#' \
   "$APP/src/main/res/values/strings.xml"
 grep -q '>CvF Native<' "$APP/src/main/res/values/strings.xml"
