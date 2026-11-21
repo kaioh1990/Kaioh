@@ -103,9 +103,15 @@ static void it_button(int b, int down) {
 static void input_test_tick(void) {
     it_frames++;
     if (!it_joy && it_frames == 30) {
-        int idx = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 6, 15, 1);
+        // the overlay's virtual gamepad (player 1) when it exists, else a new one
+        int idx = -1;
+        for (int i = 0; i < SDL_NumJoysticks() && idx < 0; i++)
+            if (SDL_JoystickIsVirtual(i)) idx = i;
+        int attached = idx < 0;
+        if (attached) idx = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 6, 15, 1);
         it_joy = idx >= 0 ? SDL_JoystickOpen(idx) : NULL;
-        fprintf(stderr, "cvf: input test: virtual controller %d %s\n", idx, it_joy ? "open" : SDL_GetError());
+        fprintf(stderr, "cvf: input test: virtual controller %d (%s) %s\n", idx, attached ? "attached" : "the overlay's",
+                it_joy ? "open" : SDL_GetError());
     }
     const float tx = 0.5f, ty = 0.45f;  // a cell of the character grid
     switch (it_state) {
