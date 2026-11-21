@@ -603,6 +603,17 @@ Ret_Slice_u8__GoIface os_ReadFile(GoString name) {
     if (n < 0) n = 0;
     r.r0.p = (u8 *)gc_alloc_atomic((size_t)n + 1);
     r.r0.len = r.r0.cap = (int)fread(r.r0.p, 1, (size_t)n, rf->f);
+    if (n == 0) {
+        // as Go: read to EOF when the size is unknown (/proc files report 0)
+        u8 buf[4096];
+        size_t k;
+        while ((k = fread(buf, 1, sizeof buf, rf->f)) > 0) {
+            Slice_u8 more = GO_MAKE_A(Slice_u8, u8, r.r0.len + (int)k, r.r0.len + (int)k);
+            memcpy(more.p, r.r0.p, (size_t)r.r0.len);
+            memcpy(more.p + r.r0.len, buf, k);
+            r.r0 = more;
+        }
+    }
     fclose(rf->f);
     gc_free(rf);
     return r;

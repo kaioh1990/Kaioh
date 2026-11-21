@@ -39,9 +39,10 @@ option that avoids pre-indexed writeback addressing; both need measuring.
 | GGPO synchronization under packet loss | **Fixed on `claude/native-ggpo-sync`** (see below; in the Go fork patch, so phone and PC builds get it with their next build). |
 | Lobby, UPnP, NAT, public IP | Not tested (direct IP only; no external services were used). |
 | Windowed online match through the Lua menus | Not run; the test drives the same Go code headless (main.lua's command-line `-ip` path). The menu smoke test covers the Online menu up to Nearby host/join. |
-| Several matches per session (rematch, `postMatchSetup` → new RollbackSession) | Not run. |
-| Roster-wide desync test (93 characters) native vs Go | Not run; only Alucard vs Richter. |
-| Content fingerprint | Still empty on both sides (`currentContentFingerprint`). |
+| Several matches per session (rematch, `postMatchSetup` → new RollbackSession) | **Done** (claude/native-netplay2): `run_netplay.sh` with `MATCHES`, below. |
+| Roster-wide desync test (114 characters) native vs Go | **Partly**: the sweep is scripted (`run_roster.sh`), but this container has only the two reference characters (cvf-refdata.tgz); every pair of those ran, native - native and native - Go. The full roster must run where the full game is (below). |
+| Content fingerprint | **Done** (claude/native-netplay2, both fork patches): rules, data/, characters and stages, below. |
+| TCP pre-match "Synchronization error" (once in ~270 runs) | **Fixed** (claude/native-netplay2, both fork patches): a race in delay-netplay's `update()`, below. |
 
 ### Windows (claude/native-windows)
 
@@ -134,12 +135,141 @@ configuration, Go 1.27.4; every PASS gives dump a350bc2d…):
 Every failure before the fix was the GGPO one (the synchronized side's
 EventCodeDisconnectedFromPeer). (1) is not GGPO: Ikemen's TCP pre-match
 check ("Synchronization error" in netplay.go after "Network synchronized",
-before any UDP packet); the same seed passed when rerun. It is open (rare,
-seen once in ~270 runs). The default scenarios (`direct lag loss`) pass for
+before any UDP packet); the same seed passed when rerun. It was rare
+(seen once in ~270 runs) and is fixed on claude/native-netplay2 (next
+section). The default scenarios (`direct lag loss`) pass for
 native - native, native - Go and Go - native. Reference fights on Linux:
 54f8ae06… (old rules) and 4334350c… (cvf-online-5), unchanged. At 25 % loss, matches
 with an unfixed side take longer to start (its 2 s sync retries): ~47-55 s
 per run instead of ~33-41 s with both sides fixed.
+
+### Sessions, the TCP race, content fingerprint (claude/native-netplay2)
+
+**TCP pre-match "Synchronization error" (fixed).** Delay-netplay's
+`NetConnection.update()` (upstream Ikemen GO code, so the Go PC and phone
+builds have it too) computed `foo`, the last frame both peers have, then
+waited in `sys.await` and left as soon as the connection was no longer
+`NS_Playing`. When the peer's last input frame and its stop marker both
+arrived during that wait (the peer had advanced and called `Stop()`), `foo`
+was stale: this side left without the frame the peer had counted, its
+`nc.time` stayed one behind, and the next `Synchronize()` failed its time
+check. Reproduced with `run_prematch.sh` (Go host unfixed, native guest,
+`LOAD=3` on two cores): 4/100 and 2/60 runs failed; an instrumented Go
+build logged "update left with stale foo: time=1 foo=1 fresh=2
+st=NS_Stopped" and "time check: local=1 remote=2" in both failures. It
+needs the waiting side to be descheduled for more than the peer's 1 ms
+input-goroutine sleep between its last frame and the marker: a Go build on
+a loaded machine (real threads), or any build whose `await` waits long (a
+paced windowed game). Unpaced and unloaded, 0/80 (FPS=60, TCP lag 30 ± 20
+ms) on native.
+
+Fix (netplay.go, both fork patches): when the peer has stopped, recompute
+`foo` after the wait and consume the frames already received before
+leaving. Timing only, no protocol change. After it: 100/100 under the same
+load (Go host fixed, native guest fixed). With an unfixed peer the race is
+still possible on the unfixed side when it is the one waiting (seen once in
+the content tests below, old Go host - new native guest; 20/20 on rerun).
+
+**Several matches per session (done).** `run_netplay.sh` `MATCHES`
+(cvfheadless.go `CVF_NET_MATCHES`): rematches, back to the character select
+(60 delay-netplay frames), new characters; a new RollbackSession on the
+same UDP ports for each match. Results (native - native, Linux, unpaced):
+
+| Session | Scenarios | Result |
+| --- | --- | --- |
+| 6 matches: A-R, A-R (rematch), R-A, R-R, A-A, A-R | direct | PASS, both sides identical in every match; match 1 = a350bc2d… |
+| 8 matches: A-R, A-R, R-A, R-A, R-R, A-A, A-R pal 3/4, R-A pal 5/6 | direct; 8 % loss incl. sync + TCP 20 ± 10 ms | PASS, every match identical on both sides and in both scenarios (5,013 to 54,041 frames per match, up to 31,000 re-simulated) |
+| 16 matches (2 rounds, varied pairs and palettes) | direct; 8 % loss + TCP lag | direct: 15 of 16 identical, the 16th not comparable (the disk filled while the guest wrote its dump: a truncated prefix, not a desync); loss: the 6 matches played before the run was stopped identical to direct |
+
+Memory (native collector, `GC_TRACE=1`): the live heap at the start of
+each match stays at 60-70 MB over 8 matches (load of the next pair; mirror
+matches included), so the live data does not grow. Inside a match the
+collector runs every few seconds (rollback re-simulation allocates ~3 GB
+per long match; 40-190 ms pauses), and the in-match peaks vary: the test's
+own per-frame dump buffer (up to ~80 MB for a 54,000-frame match) plus
+pointer-rich bursts of 70-140 MB that are freed when the match ends
+(probably save-state graphs kept by conservative roots). The collector
+never returns pages, so RSS follows the highest peak so far: 494 → 663 MB
+(host) and 494 → 878 MB (guest) over the 8-match session, and in the
+16-match session it rose in steps to 1.09-1.22 GB (host) and 1.58 GB
+(guest), flat for the last 9 matches. Without the dump (`NODUMP=1`, 10 matches, 1 round,
+pairs and palettes varied): live at match start 54-65 MB in every match;
+in-match peaks 115-300 MB; RSS host 413 MB after match 1, 502 MB from match
+2 to 10; guest 413, 512 (matches 2-6), 671, then 763 MB (matches 8-10).
+The Go desktop build, same 10-match session (Go - Go, `NODUMP=1`): heap
+after a full collection 52-63 MB per match (54 → 63 MB, the slight rise
+follows the pairs loaded), RSS 165-220 MB; both sides and the native run
+had the same winners in all 10 matches.
+
+So neither build grows without bound, but the native high-water mark is
+2.5-3.5 times Go's RSS, too much for phones: the
+fight budget (`CVF_GC_FIGHT_BUDGET_MB`, 256 MB) and the save-state garbage
+of rollback (to-do item 10, memcpy rollback) are what to work on.
+
+**Content fingerprint (done).** `cvf_fingerprint.go` in both fork patches
+fills the handshake's `content_fingerprint` with
+`cvf1;r=<rules>;d=<data>;c/<char dir>=<hash>;...;s/<stage>=<hash>;...`,
+computed once per run (64-bit FNV-1a of relative paths and bytes, carriage
+returns skipped; links to folders followed on both engines):
+
+| Entry | What | Checked |
+| --- | --- | --- |
+| `r` | gameplay rules of `data/cvf_online.ini` as parsed (not LobbyURL, BuildTag, comments, WideView) | session start |
+| `d` | simulation text files under `data/` (common states, `*.zss`, fight.def, select.def, system.def) | session start |
+| `c/<dir>` | each character folder's `.def .cns .st .cmd .air .zss .const` | match start, loaded characters only |
+| `s/<file>` | each stage `.def` | match start, loaded stage only |
+
+A difference stops both sides with "Game data mismatch: ..." naming the
+rules, `data/`, the character or the stage; characters only one side has,
+or unused ones that differ, do not matter. Sprites, sounds and palettes are
+not hashed (they do not change the simulation). An empty fingerprint
+(builds before this, Ikemen GO, the Vita build) means unknown and is
+allowed; those builds ignore the table. Cost: 2 characters 4.5 MB, 8-44 ms;
+a 114-character folder (70 MB of text, made from copies of the two) 527 ms
+native and 547 ms Go on the loaded container, once, at the first
+connection. `run_content.sh` PASS for native - native, Go - native and
+native - Go (Go desktop configuration), each also with an old build of
+the same engine on either side (old - new and new - old play in every
+case).
+
+**Roster sweep (partly).** Only two characters exist here
+(cvf-refdata.tgz: Alucard and Richter; the uploaded `CvF Online` folder has
+only `font/`), so the 114-character sweep could not run. Covered: every
+pair of the two, both sides, several palettes, 6 input-script seeds, one
+stage (ParanoiaBG):
+
+| Run | Pairs (host side first) | Network | Result |
+| --- | --- | --- | --- |
+| native - native sessions above | A-R, R-A, A-A, R-R, palettes 1-12 | direct, 8 % loss + sync + TCP lag | identical |
+| Go host - native guest (`run_roster.sh`, seeds 33/44) | A-R, R-A, A-A 3/5, R-R 2/4 | 40 ± 15 ms + TCP 30 ± 20 ms | PASS; the same session direct also PASS with the same dumps |
+| native host - Go guest (seeds 55/66) | same | 8 % loss incl. sync | PASS (one earlier run failed, see below) |
+| Go - Go, 10 matches (`NODUMP`) | A-R, R-A, A-A, R-R, palettes | direct | same winners as native - native |
+
+No simulation desync was found: in every run both engines computed the
+same frames. Two things the sweep found, both at the **end of a match**:
+
+- The last frames of a match can be simulated with predicted remote inputs
+  that are never corrected, because the rollback loop ends with the match
+  (`hijackRunMatch` stops at `endMatch`; GGPO has no later frame to roll
+  back from). With lag, a command was recognized in the win pose on one
+  side only, 6 frames before the end (Richter mirror, Go host - native
+  guest); every frame before was identical, and the same session direct
+  had no difference. The next match starts from a fresh load and a new
+  seed, so nothing carries over; the dumps of `run_netplay.sh` now compare
+  the last `TAIL`=8 frames separately (reported, not failed).
+- Once, with 8 % loss, the Go guest ended a match one frame before the
+  native host (56,737 vs 56,736 frames), closed its GGPO session, and the
+  host, still missing the guest's last inputs, timed out with
+  "EventCodeDisconnectedFromPeer" (winner -1). The rerun passed. This is
+  GGPO/Ikemen behaviour (no linger after the match ends), not a native
+  difference; it would show as a disconnect message right after a match.
+  Open: keep the GGPO session (or resend the last inputs) until the peer
+  has confirmed the final frame.
+
+`run_roster.sh` runs the full roster on a machine with the full game, e.g.
+`HOST_BIN=cvf_headless_go GUEST_BIN=build/release/cvf_headless
+MATCH_ARGS="-time 30" tests/netplay/run_roster.sh "/path/to/CvF Online"`
+(each of 114 characters against the next one, both ways: 228 matches).
 
 The analysis below is unchanged from `claude/native-gaps` (a16220d).
 

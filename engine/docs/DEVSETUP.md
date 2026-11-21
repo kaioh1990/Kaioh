@@ -21,9 +21,16 @@ other's work.
 | `claude/native-ios` | iOS port: GLES renderer, engine stack, GC roots and guard pages, NSURLSession HTTP, Nearby bridge | yes |
 | `claude/native-ggpo-sync` | GGPO sync handshake that survives packet loss (`third/ggpo` in the fork patch) | yes (7439707) |
 | `claude/native-android` | Android port | only its collector fix (registers spilled in clear, fe415a0); the Android platform layer and app stay on that branch |
+| `claude/native-netplay2` | netplay: pre-match TCP race fix, content fingerprint, several matches per session, roster sweep scripts (all Go changes in both fork patches) | no (branched from integration at 8abd53a) |
 
 Do not merge the input branches into each other; merge them into
 `claude/native-integration` and regenerate the C there (section 4).
+
+On `claude/native-netplay2` (2026-11-21, Linux x86-64, Go 1.27.4): regen
+4858 functions, 0 TODO, 79 stubs, 31 placeholders, reproducible from a
+fresh `setup_ikemen.sh` tree; `cvf_tests` 93/0; reference fights
+`54f8ae06...` / `4334350c...`; netplay dump `a350bc2d...` (also as match 1
+of every session); the new netplay scripts below.
 
 Verified on the integration branch (2026-11-21): regen gives 4842
 functions, 0 TODO, 79 stubs, 31 placeholders and is reproducible;
@@ -134,12 +141,58 @@ paces both like a windowed game, ~2 min per scenario).
 
 The instances are made in `$WORK` (default a temp dir) from the reference
 game dir through symlinks, with their own `save/` (ports `PORT_BASE`=7650:
-TCP 7650, UDP 7651-7654), `vita_statedump.txt` and `vita_statehash.txt`
+TCP 7650, UDP 7651-7654, TCP relay 7655), `vita_statedump.txt` and `vita_statehash.txt`
 (fixed seed and pre-match time, reproducible runs) and ButtonAssist off (it
 keeps state per input poll, not per frame). `HOST_BIN` / `GUEST_BIN` choose
 the engines, e.g. a Go build (below). Debugging: `GGPO_LOGS=1` (GGPO's trace
 in each instance's `save/logs`), `RELAY_LOG=1` (one line per packet with the
-GGPO header), `RELAY_SEED`, `TIMEOUT`, `PORT_BASE`, `SEED_HOST`/`SEED_GUEST`.
+GGPO header), `RELAY_SEED`, `TIMEOUT`, `PORT_BASE`, `SEED_HOST`/`SEED_GUEST`,
+`GC_TRACE=1` (the native collector's lines in each `out.txt`).
+
+More options (claude/native-netplay2):
+
+- scenario option `tcp=D/J` (e.g. `lag:40:15:0:tcp=30/20`): the netplay TCP
+  connection (sync settings, seed, delay-netplay input, stop markers) also
+  goes through `tests/netplay/tcp_relay.py` with D ± J ms, in order;
+- `MATCHES="P1:P2[:PAL1:PAL2] ..."`: more matches in the same online
+  session after the first (`CVF_NET_MATCHES` of `cvfheadless.go`): as
+  main.lua's netplay loop, the game function returns and resynchronizes,
+  the character select runs `SELECT_FRAMES` (60) delay-netplay frames, the
+  next pair is loaded (a new RollbackSession, the same UDP ports) and
+  played; the same pair again is a rematch. Every match's dump is compared
+  (`statedump.K.txt` for match K > 1), and each side prints its RSS after a
+  full collection at the end of every match (`session: match K done`);
+- `LOAD=N`: N busy loops beside the engines (a loaded machine);
+- `GUEST_GAME`: the guest plays from another game directory;
+- `NODUMP=1` (memory figures without the dump buffer; only winners are
+  compared), `CLEAN=1` (delete dumps once compared: a long session writes
+  tens of MB per match and side).
+
+The last `TAIL` (8) frames of each match are compared separately: they can
+be simulated with predicted inputs that are never rolled back, because the
+rollback loop ends with the match (GAPS.md); a difference there is
+reported, not failed.
+
+Three more scripts use the same instances:
+
+    tests/netplay/run_prematch.sh /path/to/refgame 100   # "prematch: PASS"
+    tests/netplay/run_content.sh /path/to/refgame        # "content: PASS"
+    tests/netplay/run_roster.sh /path/to/game            # "roster: PASS"
+
+`run_prematch.sh` repeats only the TCP part of a match start (connect,
+handshake, delay-netplay frames, loading, the second Synchronize) RUNS
+times and stops each run at "Rollback startup" (~4 s per run); `LOAD=3`
+and `TCP=D/J` make it harsher. Builds without the netplay.go race fix
+(GAPS.md) fail a few percent of runs with `LOAD=3` on two cores.
+`run_content.sh` runs the guest from modified copies of the game directory
+(gameplay rules, lobby-only rules lines, a common file, a character in use,
+the stage, an unused extra character, LF line endings) and checks that the
+content fingerprint stops the session with "Game data mismatch" exactly when
+the change matters; with `OLD_BIN` (a build without the fingerprint) every
+case also runs old host - new guest and new host - old guest and must play.
+`run_roster.sh` runs sessions over character pairs (each character against
+the next one, both ways; `CHARS`, `PAIRS`, `PER_SESSION`, `SEEDS`, `STAGE`,
+`ROUNDS`) so the whole roster can be swept on a machine with the full game.
 
 ### Collector checks: stress mode, sanitizers, ucontext scheduler
 
@@ -239,6 +292,11 @@ returning NULL; nothing headless touches Vulkan):
 | Netplay native <-> Go desktop configuration, both directions | PASS, same dump |
 | Netplay with 8 % / 25 % loss including sync (`:sync`), unfixed GGPO | fails in up to half the runs (Go and native alike): GAPS.md |
 | Same with the GGPO handshake fix (claude/native-ggpo-sync), also against unfixed builds | 20/20 per pair and loss (Linux; one unrelated TCP-phase failure, GAPS.md) |
+| `run_prematch.sh` 100 runs, `LOAD=3`, Go host - native guest (claude/native-netplay2) | unfixed 4/100 and 2/60 "Synchronization error"; with the netplay.go fix 100/100 (GAPS.md) |
+| `run_content.sh` native - native, Go - native, native - Go, each with old builds on either side | PASS: "Game data mismatch" exactly for rules / data / character in use / stage; plays with lobby-only rule lines, an unused extra character, LF endings, and whenever one side is old |
+| Sessions (`MATCHES`, 6-16 matches), native - native, direct and 8 % loss + TCP lag | every match identical on both sides; memory in GAPS.md |
+| 10-match session, Go - Go (`NODUMP=1`) | same winners as native in all 10; heap 52-63 MB, RSS 165-220 MB |
+| Reference fight cvf-online-5, Go desktop configuration, with the fingerprint | `4334350c...` (unchanged) |
 
 ### Windows (cross-build with mingw-w64, checks under Wine)
 

@@ -555,6 +555,8 @@
 #define cvfFloatBias (1023)
 #define cvfFloatMask (2047)
 #define cvfFloatShift (52)
+#define cvfFpOffset ((u64)14695981039346656037ULL)
+#define cvfFpPrime ((i64)1099511628211LL)
 #define cvfNearbyExpire ((i64)7000000000LL)
 #define cvfNearbyMaxScan (1022)
 #define cvfNearbyPort (7520)
