@@ -17,6 +17,9 @@
 #if defined(__linux__)
 #include <pthread.h>
 #endif
+#if defined(__ANDROID__)
+#include <link.h>  // dl_iterate_phdr
+#endif
 #if defined(__APPLE__)
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
@@ -144,13 +147,46 @@ static double now_ms(void) {
     return (double)go_mono_ns() / 1e6;
 #else
     struct timespec ts;
+#if defined(__ANDROID__)
+    clock_gettime(CLOCK_MONOTONIC, &ts);  // timespec_get needs API 29
+#else
     timespec_get(&ts, TIME_UTC);
+#endif
     return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6;
 #endif
 }
 
+#if defined(__ANDROID__)
+// The engine is a shared library (libmain.so) loaded by the app: every
+// writable PT_LOAD segment (.data, .bss, relro data) of the module that
+// contains the collector. Also right for a static test executable.
+static int add_module_roots(struct dl_phdr_info *info, size_t size, void *data) {
+    (void)size;
+    uintptr_t me = (uintptr_t)data;
+    bool mine = false;
+    for (int i = 0; i < info->dlpi_phnum; i++) {
+        const ElfW(Phdr) *ph = &info->dlpi_phdr[i];
+        uintptr_t lo = (uintptr_t)info->dlpi_addr + ph->p_vaddr;
+        if (ph->p_type == PT_LOAD && me >= lo && me < lo + ph->p_memsz) mine = true;
+    }
+    if (!mine) return 0;
+    for (int i = 0; i < info->dlpi_phnum; i++) {
+        const ElfW(Phdr) *ph = &info->dlpi_phdr[i];
+        if (ph->p_type != PT_LOAD || !(ph->p_flags & PF_W) || !ph->p_memsz) continue;
+        uint8_t *lo = (uint8_t *)(uintptr_t)(info->dlpi_addr + ph->p_vaddr);
+        gc_add_roots(lo, lo + ph->p_memsz);
+    }
+    return 1;
+}
+#endif
+
 static void add_data_roots(void) {
-#if defined(__linux__)
+#if defined(__ANDROID__)
+    if (!dl_iterate_phdr(add_module_roots, (void *)(uintptr_t)&gc_init)) {
+        fprintf(stderr, "gc: data segments of the engine not found\n");
+        abort();
+    }
+#elif defined(__linux__)
     extern char __data_start[], _end[];
     gc_add_roots(__data_start, _end);
 #elif defined(__APPLE__)
@@ -186,7 +222,8 @@ static void add_data_roots(void) {
 
 static uintptr_t find_stack_base(void *hint) {
     uintptr_t b = hint ? (uintptr_t)hint : (uintptr_t)__builtin_frame_address(0);
-#if defined(__linux__) && defined(__GLIBC__)
+#if defined(__linux__) && (defined(__GLIBC__) || defined(__BIONIC__))
+    // the calling thread's stack (Android: the engine's own thread)
     pthread_attr_t a;
     if (pthread_getattr_np(pthread_self(), &a) == 0) {
         void *addr;
@@ -401,9 +438,26 @@ static void scan_and_drain(uintptr_t lo, uintptr_t hi) {
 }
 
 GC_NO_SANITIZE static __attribute__((noinline)) void mark_stack(void) {
-    jmp_buf jb;  // spills callee-saved registers onto the stack
-    setjmp(jb);
-    volatile uintptr_t here = (uintptr_t)&jb;
+    struct {
+        jmp_buf jb;
+        uintptr_t regs[12];
+    } spill;  // callee-saved registers, on the stack
+    setjmp(spill.jb);
+    // setjmp may store registers XORed with a cookie (bionic: x19-x30 on
+    // arm64; glibc: rbp on x86-64), which hides a pointer held only in a
+    // register: store them in clear too.
+#if defined(__aarch64__)
+    __asm__ volatile(
+        "stp x19, x20, [%0, #0]\n stp x21, x22, [%0, #16]\n stp x23, x24, [%0, #32]\n"
+        "stp x25, x26, [%0, #48]\n stp x27, x28, [%0, #64]\n stp x29, x30, [%0, #80]\n" ::"r"(spill.regs)
+        : "memory");
+#elif defined(__x86_64__) && !defined(_WIN32)
+    __asm__ volatile(
+        "movq %%rbx, 0(%0)\n movq %%rbp, 8(%0)\n movq %%r12, 16(%0)\n movq %%r13, 24(%0)\n"
+        "movq %%r14, 32(%0)\n movq %%r15, 40(%0)\n" ::"r"(spill.regs)
+        : "memory");
+#endif
+    volatile uintptr_t here = (uintptr_t)&spill;
     uintptr_t lo = here < (uintptr_t)__builtin_frame_address(0) ? here : (uintptr_t)__builtin_frame_address(0);
     uintptr_t top = gc_stack_top_hook ? gc_stack_top_hook() : 0;
     scan_range(lo, top ? top : S->stack_base);  // the running goroutine's stack

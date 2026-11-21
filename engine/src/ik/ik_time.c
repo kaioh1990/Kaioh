@@ -40,7 +40,11 @@ static i64 wall_ns(void) {
     return (t - 116444736000000000LL) * 100;
 #else
     struct timespec ts;
+#if defined(__ANDROID__)
+    clock_gettime(CLOCK_REALTIME, &ts);  // timespec_get needs API 29
+#else
     timespec_get(&ts, TIME_UTC);
+#endif
     return (i64)ts.tv_sec * 1000000000 + ts.tv_nsec;
 #endif
 }

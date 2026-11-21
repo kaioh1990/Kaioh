@@ -160,9 +160,9 @@ void *go_box_atomic_impl(const void *v, size_t n);
 // (setjmp); a panic longjmps to the innermost one, which runs its deferred
 // calls - recover() there stops the panic - and otherwise passes it on.
 #include <setjmp.h>
-#if defined(__APPLE__)
-// Darwin's setjmp/longjmp also save/restore the signal mask (a system call
-// per deferred function); the engine uses no signals.
+#if defined(__APPLE__) || defined(__ANDROID__)
+// Darwin's and bionic's setjmp/longjmp also save/restore the signal mask (a
+// system call per deferred function); the engine uses no signals.
 #undef setjmp
 #undef longjmp
 #define setjmp(b) _setjmp(b)
