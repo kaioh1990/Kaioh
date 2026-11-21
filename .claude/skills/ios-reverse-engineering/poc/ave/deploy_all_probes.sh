@@ -28,6 +28,7 @@ declare -a PROBES=(
     "AVEIOSurfSpray:com.research.aveiosurfspray:ave_iosurface_spray.c"
     "AVEOOBReadProbe:com.research.aveoobread:ave_oob_read_probe.c"
     "AVEFullChain:com.research.avefullchain:ave_full_chain.c"
+    "KRWHelper:com.research.krwhelper:krw_helper.c"
 )
 
 build_and_deploy() {
@@ -39,11 +40,15 @@ build_and_deploy() {
     echo ""
     echo "=== Building $name ($bundle) ==="
 
-    # Build
+    # Build (add KRW_STANDALONE for krw_helper.c)
+    local extra_flags=""
+    if [[ "$src" == *"krw_helper.c"* ]]; then
+        extra_flags="-DKRW_STANDALONE"
+    fi
     xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0 \
         -framework VideoToolbox -framework CoreVideo -framework CoreMedia \
         -framework CoreFoundation -framework IOSurface -framework IOKit \
-        -o "$binary" "$src" -Wno-deprecated-declarations 2>&1
+        $extra_flags -o "$binary" "$src" -Wno-deprecated-declarations 2>&1
     if [ $? -ne 0 ]; then echo "BUILD FAILED: $name"; return 1; fi
 
     # Create .app bundle
