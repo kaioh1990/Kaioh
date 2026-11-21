@@ -294,6 +294,11 @@ int main(int argc, char *argv[]) {
         rlog("\n== BISECT: Finding exact overflow frame ==\n");
         phase_bisect(80, 100, W, H);
 
+    } else if (strcmp(mode, "bisect_wide") == 0) {
+        rlog("\n== BISECT_WIDE: If entries/encode=1, boundary at ~256 encodes ==\n");
+        rlog("VPS/SPS/PPS may use separate tables (1 entry each per encode)\n");
+        phase_bisect(240, 270, W, H);
+
     } else {
         rlog("Usage: AVECounterOverflow <mode>\n");
         rlog("  safe       -- 50 encodes (within 256-entry limit)\n");
@@ -301,9 +306,10 @@ int main(int argc, char *argv[]) {
         rlog("  deep       -- 250 encodes (near cumsum limit)\n");
         rlog("  max        -- 500 encodes (deep overflow)\n");
         rlog("  bisect     -- binary search for exact overflow frame\n");
+        rlog("  bisect_wide -- binary search at 240-270 (if 1 entry/encode)\n");
         rlog("\nKey thresholds:\n");
-        rlog("  256 entries (~86 encodes): sub-object boundary\n");
-        rlog("  683 entries (~228 encodes): cumsum limit (0x801)\n");
+        rlog("  256 entries (~86 or ~256 encodes): sub-object boundary\n");
+        rlog("  683 entries (~228 or ~683 encodes): cumsum limit (0x801)\n");
     }
 
     rlog("\n=== Probe complete ===\n");
