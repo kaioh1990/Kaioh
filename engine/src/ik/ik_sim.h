@@ -1435,7 +1435,7 @@ typedef GoIface polling_PollSink;
 typedef GoIface polling_Poller;
 typedef int pretty_byKind;
 typedef int pretty_jtype;
-typedef GoFunc protocol_UdpProtocolDispatchFunc_Le6c36d;
+typedef GoFunc protocol_UdpProtocolDispatchFunc_Lf43b76;
 typedef int protocol_UdpProtocolEventType;
 typedef int protocol_UdpProtocolState;
 typedef GoIface raster_Painter;
@@ -2467,9 +2467,9 @@ typedef struct { protocol_QueueEntry *p; int len, cap; } Slice_protocol_QueueEnt
 #define CVF_DEF_Slice_protocol_UdpProtocol
 typedef struct { protocol_UdpProtocol *p; int len, cap; } Slice_protocol_UdpProtocol;
 #endif
-#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
-#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
-typedef struct { protocol_UdpProtocolDispatchFunc_Le6c36d *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_Le6c36d;
+#ifndef CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lf43b76
+#define CVF_DEF_Slice_protocol_UdpProtocolDispatchFunc_Lf43b76
+typedef struct { protocol_UdpProtocolDispatchFunc_Lf43b76 *p; int len, cap; } Slice_protocol_UdpProtocolDispatchFunc_Lf43b76;
 #endif
 #ifndef CVF_DEF_Slice_protocol_UdpProtocolEvent
 #define CVF_DEF_Slice_protocol_UdpProtocolEvent
@@ -4267,9 +4267,9 @@ struct protocol_UdpProtocolStats { int ping; int remoteFrameAdvtange; int localF
 struct input_GameInput { int Frame; int Size; Slice_u8 Bits; Slice_Slice_u8 Inputs; u32 Checksum; };
 struct protocol_UdpProtocolEvent { protocol_UdpProtocolEventType eventType; input_GameInput Input; int Total; int Count; int DisconnectTimeout; };
 struct protocol_OoPacket { i64 sendTime; GoString destIp; messages_UDPMessage msg; };
-struct protocol_UdpProtocolStateInfo { u32 roundTripRemaining; u32 random; i64 lastQualityReportTime; i64 lastNetworkStatsInterval; i64 lastInputPacketRecvTime; };
+struct protocol_UdpProtocolStateInfo { u32 roundTripRemaining; u32 random; i64 lastQualityReportTime; i64 lastNetworkStatsInterval; i64 lastInputPacketRecvTime; i64 lastSyncRequestTime; };
 struct sync_x_TimeSync { Slice_f32 local; Slice_f32 remote; Slice_input_GameInputPtr lastInputs; int nextPrediction; int RemoteFrameDelay; int FrameDelay2; int numFrame; f32 avgLocal; f32 avgRemote; bool clearedInitial; };
-struct protocol_UdpProtocol { protocol_UdpProtocolStats stats; protocol_UdpProtocolEvent event; transport_Connection connection; GoString peerAddress; int peerPort; u16 magicNumber; int queue; u16 remoteMagicNumber; bool connected; i64 sendLatency; int ooPercent; protocol_OoPacket ooPacket; buffer_RingBuffer_protocol_QueueEntry sendQueue; i64 roundTripTime; int packetsSent; int bytesSent; int kbpsSent; i64 statsStartTime; Slice_messages_UdpConnectStatus* localConnectStatus; Slice_messages_UdpConnectStatus peerConnectStatus; protocol_UdpProtocolState currentState; protocol_UdpProtocolStateInfo state; f32 localFrameAdvantage; f32 remoteFrameAdvantage; buffer_RingBuffer_input_GameInput pendingOutput; input_GameInput lastRecievedInput; input_GameInput lastSentInput; input_GameInput lastAckedInput; i64 lastSendTime; i64 lastRecvTime; i64 shutdownTimeout; bool disconnectEventSent; i64 disconnectTimeout; i64 disconnectNotifyStart; bool disconnectNotifySent; u16 nextSendSeq; u16 nextRecvSeq; sync_x_TimeSync timesync; buffer_RingBuffer_protocol_UdpProtocolEvent eventQueue; util2_OrderedMap_int_u32 RemoteChecksumsThisFrame; util2_OrderedMap_int_u32 RemoteChecksums; };
+struct protocol_UdpProtocol { protocol_UdpProtocolStats stats; protocol_UdpProtocolEvent event; transport_Connection connection; GoString peerAddress; int peerPort; u16 magicNumber; int queue; u16 remoteMagicNumber; bool connected; i64 sendLatency; int ooPercent; protocol_OoPacket ooPacket; buffer_RingBuffer_protocol_QueueEntry sendQueue; i64 roundTripTime; int packetsSent; int bytesSent; int kbpsSent; i64 statsStartTime; Slice_messages_UdpConnectStatus* localConnectStatus; Slice_messages_UdpConnectStatus peerConnectStatus; protocol_UdpProtocolState currentState; protocol_UdpProtocolStateInfo state; f32 localFrameAdvantage; f32 remoteFrameAdvantage; buffer_RingBuffer_input_GameInput pendingOutput; input_GameInput lastRecievedInput; input_GameInput lastSentInput; input_GameInput lastAckedInput; i64 lastSendTime; i64 lastRecvTime; i64 shutdownTimeout; bool disconnectEventSent; i64 disconnectTimeout; i64 disconnectNotifyStart; bool disconnectNotifySent; bool peerRunning; u16 nextSendSeq; u16 nextRecvSeq; sync_x_TimeSync timesync; buffer_RingBuffer_protocol_UdpProtocolEvent eventQueue; util2_OrderedMap_int_u32 RemoteChecksumsThisFrame; util2_OrderedMap_int_u32 RemoteChecksums; };
 struct ggpo_Spectator { ggpo_Session session; polling_Poller poll; transport_Connection connection; protocol_UdpProtocol host; bool synchonizing; int inputSize; int numPlayers; int nextInputToSend; Slice_input_GameInput inputs; GoString hostIp; int hostPort; int framesBehind; int localPort; int currentFrame; GoChan* messageChannel; };
 struct ggpo_SyncTest { ggpo_Session session; ggpo_Sync sync; int numPlayers; int checkDistance; int lastVerified; bool rollingBack; bool running; GoOpaque /* os.File */ logFp; GoString game; input_GameInput currentInput; input_GameInput lastInput; buffer_RingBuffer_ggpo_savedInfo savedFrames; bool strict; bool leniantRevert; };
 struct ggpo_savedFrame { int frame; int checksum; };
@@ -5532,9 +5532,9 @@ GO_SLICE_FUNCS(Slice_protocol_QueueEntry, protocol_QueueEntry)
 #define CVF_FN_Slice_protocol_UdpProtocol
 GO_SLICE_FUNCS(Slice_protocol_UdpProtocol, protocol_UdpProtocol)
 #endif
-#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
-#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Le6c36d
-GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_Le6c36d, protocol_UdpProtocolDispatchFunc_Le6c36d)
+#ifndef CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lf43b76
+#define CVF_FN_Slice_protocol_UdpProtocolDispatchFunc_Lf43b76
+GO_SLICE_FUNCS(Slice_protocol_UdpProtocolDispatchFunc_Lf43b76, protocol_UdpProtocolDispatchFunc_Lf43b76)
 #endif
 #ifndef CVF_FN_Slice_protocol_UdpProtocolEvent
 #define CVF_FN_Slice_protocol_UdpProtocolEvent
@@ -8919,6 +8919,7 @@ Ret_protocol_UdpProtocolEventPtr__GoIface protocol_UdpProtocol_GetEvent(protocol
 void protocol_UdpProtocol_QueueEvent(protocol_UdpProtocol* u, protocol_UdpProtocolEvent* evt);
 void protocol_UdpProtocol_Disconnect(protocol_UdpProtocol* u);
 void protocol_UdpProtocol_SendSyncRequest(protocol_UdpProtocol* u);
+void protocol_UdpProtocol_resendSyncRequest(protocol_UdpProtocol* u);
 void protocol_UdpProtocol_SendMsg(protocol_UdpProtocol* u, messages_UDPMessage msg);
 Ret_bool__GoIface protocol_UdpProtocol_OnInput(protocol_UdpProtocol* u, messages_UDPMessage msg, int length);
 Ret_bool__GoIface protocol_UdpProtocol_OnInputAck(protocol_UdpProtocol* u, messages_UDPMessage msg, int len);

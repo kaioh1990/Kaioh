@@ -44843,12 +44843,12 @@ bool polling_Poll_Pump(polling_Poll* p, Slice_polling_FuncTimeType timeFunc) {
     return finished;
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocolEvent.Type (protocol.go:126), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocolEvent.Type (protocol.go:138), 0 TODO
 protocol_UdpProtocolEventType protocol_UdpProtocolEvent_Type(protocol_UdpProtocolEvent upe) {
     return upe.eventType;
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocolEvent.String (protocol.go:131), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocolEvent.String (protocol.go:143), 0 TODO
 GoString protocol_UdpProtocolEvent_String(protocol_UdpProtocolEvent upe) {
     GoString str = GOSTR("(event:");
     {
@@ -44885,17 +44885,17 @@ GoString protocol_UdpProtocolEvent_String(protocol_UdpProtocolEvent upe) {
     return str;
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.QueueEntry.String (protocol.go:201), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.QueueEntry.String (protocol.go:215), 0 TODO
 GoString protocol_QueueEntry_String(protocol_QueueEntry q) {
     return fmt_Sprintf(GOSTR("Entry : queueTime %d destIp %s msg %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){6, go_box_a(i64, q.queueTime)}), ((GoIface){17, go_box(GoString, q.destIp)}), q.msg));
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.NewQueEntry (protocol.go:205), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.NewQueEntry (protocol.go:219), 0 TODO
 protocol_QueueEntry protocol_NewQueEntry(i64 time_, GoString destIp, int destPort, messages_UDPMessage m) {
     return (protocol_QueueEntry){.queueTime = time_, .destIp = destIp, .destPort = destPort, .msg = m};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.NewUdpProtocol (protocol.go:220), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.NewUdpProtocol (protocol.go:234), 0 TODO
 protocol_UdpProtocol protocol_NewUdpProtocol(transport_Connection connection, int queue, GoString ip, int port, Slice_messages_UdpConnectStatus* status) {
     u16 magicNumber = 0;
     {
@@ -44925,12 +44925,12 @@ protocol_UdpProtocol protocol_NewUdpProtocol(transport_Connection connection, in
     return protocol;
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.StartPollLoop (protocol.go:258), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.StartPollLoop (protocol.go:272), 0 TODO
 void protocol_UdpProtocol_StartPollLoop(protocol_UdpProtocol* u) {
     util2_OrderedMap_Clear_int_u32(&u->RemoteChecksumsThisFrame);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.EndPollLoop (protocol.go:262), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.EndPollLoop (protocol.go:276), 0 TODO
 void protocol_UdpProtocol_EndPollLoop(protocol_UdpProtocol* u) {
     if (util2_OrderedMap_Len_int_u32(&u->RemoteChecksumsThisFrame) > 0) {
         util2_KeyValuePair_int_u32 highestFrameNum = util2_OrderedMap_Greatest_int_u32(&u->RemoteChecksumsThisFrame);
@@ -44938,22 +44938,22 @@ void protocol_UdpProtocol_EndPollLoop(protocol_UdpProtocol* u) {
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetIncomingRemoteChecksum (protocol.go:269), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetIncomingRemoteChecksum (protocol.go:283), 0 TODO
 void protocol_UdpProtocol_SetIncomingRemoteChecksum(protocol_UdpProtocol* u, int frame, u32 checksum) {
     util2_OrderedMap_Set_int_u32(&u->RemoteChecksumsThisFrame, frame, checksum);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetFrameDelay (protocol.go:273), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetFrameDelay (protocol.go:287), 0 TODO
 void protocol_UdpProtocol_SetFrameDelay(protocol_UdpProtocol* u, int delay) {
     sync_x_TimeSync_SetFrameDelay(&u->timesync, delay);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.RemoteFrameDelay (protocol.go:277), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.RemoteFrameDelay (protocol.go:291), 0 TODO
 int protocol_UdpProtocol_RemoteFrameDelay(protocol_UdpProtocol* u) {
     return u->timesync.RemoteFrameDelay;
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnLoopPoll (protocol.go:281), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnLoopPoll (protocol.go:295), 0 TODO
 bool protocol_UdpProtocol_OnLoopPoll(protocol_UdpProtocol* u, polling_FuncTimeType timeFunc) {
     if (u->connection.type == 0) {
         return true;
@@ -44971,11 +44971,11 @@ bool protocol_UdpProtocol_OnLoopPoll(protocol_UdpProtocol* u, polling_FuncTimeTy
                 if (((int)u->state.roundTripRemaining) == 5) {
                     nextInterval = 500LL;
                 } else {
-                    nextInterval = 2000LL;
+                    nextInterval = 200LL;
                 }
-                if ((u->lastSendTime > 0LL) && ((u->lastSendTime + nextInterval) < now)) {
+                if ((u->state.lastSyncRequestTime > 0LL) && ((u->state.lastSyncRequestTime + nextInterval) < now)) {
                     log_Logger_Printf(g_util2_Log, GOSTR("No luck syncing after %d ms... Re-queueing sync packet.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){6, go_box_a(i64, nextInterval)})));
-                    protocol_UdpProtocol_SendSyncRequest(u);
+                    protocol_UdpProtocol_resendSyncRequest(u);
                 }
                 break;
             } else if ((_t1 == 2)) {
@@ -45004,16 +45004,21 @@ bool protocol_UdpProtocol_OnLoopPoll(protocol_UdpProtocol* u, polling_FuncTimeTy
                     messages_UDPMessage msg = messages_NewUDPMessage(6);
                     protocol_UdpProtocol_SendMsg(u, msg);
                 }
-                if ((((u->disconnectTimeout > 0LL) && (u->disconnectNotifyStart > 0LL)) && (!u->disconnectNotifySent)) && (((u->lastRecvTime + u->disconnectNotifyStart) < now))) {
+                i64 _t2 = u->disconnectTimeout;
+                i64 disconnectTimeout = _t2;
+                if (((!u->peerRunning) && (disconnectTimeout > 0LL)) && (disconnectTimeout < 15000LL)) {
+                    disconnectTimeout = 15000LL;
+                }
+                if ((((u->peerRunning && (u->disconnectTimeout > 0LL)) && (u->disconnectNotifyStart > 0LL)) && (!u->disconnectNotifySent)) && (((u->lastRecvTime + u->disconnectNotifyStart) < now))) {
                     log_Logger_Printf(g_util2_Log, GOSTR("Endpoint has stopped receiving packets for %d ms.  Sending notification.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){6, go_box_a(i64, u->disconnectNotifyStart)})));
                     protocol_UdpProtocolEvent *e__h = go_box(protocol_UdpProtocolEvent, (protocol_UdpProtocolEvent){.eventType = 5});
                     (*e__h).DisconnectTimeout = (((int)u->disconnectTimeout) - ((int)u->disconnectNotifyStart));
                     protocol_UdpProtocol_QueueEvent(u, (&(*e__h)));
                     u->disconnectNotifySent = true;
                 }
-                if ((u->disconnectTimeout > 0LL) && (((u->lastRecvTime + u->disconnectTimeout) < now))) {
+                if ((disconnectTimeout > 0LL) && (((u->lastRecvTime + disconnectTimeout) < now))) {
                     if (!u->disconnectEventSent) {
-                        log_Logger_Printf(g_util2_Log, GOSTR("Endpoint has stopped receiving packets for %d ms.  Disconnecting.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){6, go_box_a(i64, u->disconnectTimeout)})));
+                        log_Logger_Printf(g_util2_Log, GOSTR("Endpoint has stopped receiving packets for %d ms.  Disconnecting.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){6, go_box_a(i64, disconnectTimeout)})));
                         protocol_UdpProtocol_QueueEvent(u, go_box(protocol_UdpProtocolEvent, (protocol_UdpProtocolEvent){.eventType = 4}));
                         u->disconnectEventSent = true;
                     }
@@ -45031,7 +45036,7 @@ bool protocol_UdpProtocol_OnLoopPoll(protocol_UdpProtocol* u, polling_FuncTimeTy
     return true;
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendPendingOutput (protocol.go:374), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendPendingOutput (protocol.go:394), 0 TODO
 GoIface protocol_UdpProtocol_SendPendingOutput(protocol_UdpProtocol* u) {
     messages_UDPMessage msg = messages_NewUDPMessage(3);
     messages_InputPacket* inputMsg = ((messages_InputPacket*)(msg).data);
@@ -45086,7 +45091,7 @@ GoIface protocol_UdpProtocol_SendPendingOutput(protocol_UdpProtocol* u) {
     return (GoIface){0};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendInputAck (protocol.go:432), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendInputAck (protocol.go:452), 0 TODO
 void protocol_UdpProtocol_SendInputAck(protocol_UdpProtocol* u) {
     messages_UDPMessage msg = messages_NewUDPMessage(7);
     messages_InputAckPacket* inputAck = ((messages_InputAckPacket*)(msg).data);
@@ -45094,7 +45099,7 @@ void protocol_UdpProtocol_SendInputAck(protocol_UdpProtocol* u) {
     protocol_UdpProtocol_SendMsg(u, ((GoIface){177, (void *)(inputAck)}));
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.GetEvent (protocol.go:439), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.GetEvent (protocol.go:459), 0 TODO
 Ret_protocol_UdpProtocolEventPtr__GoIface protocol_UdpProtocol_GetEvent(protocol_UdpProtocol* u) {
     if (buffer_RingBuffer_Size_protocol_UdpProtocolEvent(&u->eventQueue) == 0) {
         return (Ret_protocol_UdpProtocolEventPtr__GoIface){NULL, errors_New(GOSTR("ggpo UdpProtocol GetEvent:no events"))};
@@ -45112,7 +45117,7 @@ Ret_protocol_UdpProtocolEventPtr__GoIface protocol_UdpProtocol_GetEvent(protocol
     return (Ret_protocol_UdpProtocolEventPtr__GoIface){(&(*e__h)), (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.QueueEvent (protocol.go:454), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.QueueEvent (protocol.go:474), 0 TODO
 void protocol_UdpProtocol_QueueEvent(protocol_UdpProtocol* u, protocol_UdpProtocolEvent* evt) {
     log_Logger_Printf(g_util2_Log, GOSTR("Queueing event %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){179, go_box(protocol_UdpProtocolEvent, (*evt))})));
     GoIface err = buffer_RingBuffer_Push_protocol_UdpProtocolEvent(&u->eventQueue, (*evt));
@@ -45121,15 +45126,21 @@ void protocol_UdpProtocol_QueueEvent(protocol_UdpProtocol* u, protocol_UdpProtoc
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.Disconnect (protocol.go:465), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.Disconnect (protocol.go:485), 0 TODO
 void protocol_UdpProtocol_Disconnect(protocol_UdpProtocol* u) {
     u->currentState = 3;
     u->shutdownTimeout = (time_Time_UnixMilli(time_Now()) + 5000LL);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendSyncRequest (protocol.go:470), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendSyncRequest (protocol.go:490), 0 TODO
 void protocol_UdpProtocol_SendSyncRequest(protocol_UdpProtocol* u) {
     u->state.random = ((u32)(rand_Int() & 65535));
+    protocol_UdpProtocol_resendSyncRequest(u);
+}
+
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.resendSyncRequest (protocol.go:496), 0 TODO
+void protocol_UdpProtocol_resendSyncRequest(protocol_UdpProtocol* u) {
+    u->state.lastSyncRequestTime = time_Time_UnixMilli(time_Now());
     messages_UDPMessage msg = messages_NewUDPMessage(1);
     messages_SyncRequestPacket* syncRequest = ((messages_SyncRequestPacket*)(msg).data);
     syncRequest->RandomRequest = u->state.random;
@@ -45137,7 +45148,7 @@ void protocol_UdpProtocol_SendSyncRequest(protocol_UdpProtocol* u) {
     protocol_UdpProtocol_SendMsg(u, ((GoIface){172, (void *)(syncRequest)}));
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendMsg (protocol.go:479), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendMsg (protocol.go:505), 0 TODO
 void protocol_UdpProtocol_SendMsg(protocol_UdpProtocol* u, messages_UDPMessage msg) {
     log_Logger_Printf(g_util2_Log, GOSTR("In UdpProtocol send %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, msg));
     u->packetsSent++;
@@ -45159,7 +45170,7 @@ void protocol_UdpProtocol_SendMsg(protocol_UdpProtocol* u, messages_UDPMessage m
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnInput (protocol.go:502), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnInput (protocol.go:528), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnInput(protocol_UdpProtocol* u, messages_UDPMessage msg, int length) {
     messages_InputPacket* inputMessage = ((messages_InputPacket*)(msg).data);
     bool disconnectRequested = inputMessage->DisconectRequested;
@@ -45243,7 +45254,7 @@ Ret_bool__GoIface protocol_UdpProtocol_OnInput(protocol_UdpProtocol* u, messages
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnInputAck (protocol.go:592), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnInputAck (protocol.go:618), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnInputAck(protocol_UdpProtocol* u, messages_UDPMessage msg, int len) {
     messages_InputAckPacket* inputAck = ((messages_InputAckPacket*)(msg).data);
     {
@@ -45270,7 +45281,7 @@ Ret_bool__GoIface protocol_UdpProtocol_OnInputAck(protocol_UdpProtocol* u, messa
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnQualityReport (protocol.go:614), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnQualityReport (protocol.go:640), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnQualityReport(protocol_UdpProtocol* u, messages_UDPMessage msg, int len) {
     messages_QualityReportPacket* qualityReport = ((messages_QualityReportPacket*)(msg).data);
     messages_UDPMessage reply = messages_NewUDPMessage(5);
@@ -45281,40 +45292,40 @@ Ret_bool__GoIface protocol_UdpProtocol_OnQualityReport(protocol_UdpProtocol* u, 
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnQualityReply (protocol.go:625), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnQualityReply (protocol.go:651), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnQualityReply(protocol_UdpProtocol* u, messages_UDPMessage msg, int len) {
     messages_QualityReplyPacket* qualityReply = ((messages_QualityReplyPacket*)(msg).data);
     u->roundTripTime = (time_Time_UnixMilli(time_Now()) - ((i64)qualityReply->Pong));
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnKeepAlive (protocol.go:631), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnKeepAlive (protocol.go:657), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnKeepAlive(protocol_UdpProtocol* u, messages_UDPMessage msg, int len) {
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetLocalFrameNumber (protocol.go:647), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetLocalFrameNumber (protocol.go:673), 0 TODO
 void protocol_UdpProtocol_SetLocalFrameNumber(protocol_UdpProtocol* u, int localFrame) {
     f32 remoteFrame = ((f32)(((i64)u->lastRecievedInput.Frame) + (go_div64((u->roundTripTime * 60LL), 2000LL))));
     u->localFrameAdvantage = ((((remoteFrame - ((f32)localFrame))) - ((f32)u->timesync.FrameDelay2)));
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.RecommendFrameDelay (protocol.go:652), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.RecommendFrameDelay (protocol.go:678), 0 TODO
 f32 protocol_UdpProtocol_RecommendFrameDelay(protocol_UdpProtocol* u) {
     return sync_x_TimeSync_ReccomendFrameWaitDuration(&u->timesync, false);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetDisconnectTimeout (protocol.go:656), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetDisconnectTimeout (protocol.go:682), 0 TODO
 void protocol_UdpProtocol_SetDisconnectTimeout(protocol_UdpProtocol* u, int timeout) {
     u->disconnectTimeout = ((i64)timeout);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetDisconnectNotifyStart (protocol.go:660), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SetDisconnectNotifyStart (protocol.go:686), 0 TODO
 void protocol_UdpProtocol_SetDisconnectNotifyStart(protocol_UdpProtocol* u, int timeout) {
     u->disconnectNotifyStart = ((i64)timeout);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.PumpSendQueue (protocol.go:664), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.PumpSendQueue (protocol.go:690), 0 TODO
 GoIface protocol_UdpProtocol_PumpSendQueue(protocol_UdpProtocol* u) {
     protocol_QueueEntry entry = {0};
     GoIface err = {0};
@@ -45359,7 +45370,7 @@ GoIface protocol_UdpProtocol_PumpSendQueue(protocol_UdpProtocol* u) {
     return (GoIface){0};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.ClearSendQueue (protocol.go:707), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.ClearSendQueue (protocol.go:733), 0 TODO
 void protocol_UdpProtocol_ClearSendQueue(protocol_UdpProtocol* u) {
     {
         for (; !buffer_RingBuffer_Empty_protocol_QueueEntry(&u->sendQueue); ) {
@@ -45372,7 +45383,7 @@ void protocol_UdpProtocol_ClearSendQueue(protocol_UdpProtocol* u) {
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.Close (protocol.go:718), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.Close (protocol.go:744), 0 TODO
 void protocol_UdpProtocol_Close(protocol_UdpProtocol* u) {
     protocol_UdpProtocol_ClearSendQueue(u);
     if (u->connection.type != 0) {
@@ -45380,7 +45391,7 @@ void protocol_UdpProtocol_Close(protocol_UdpProtocol* u) {
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.HandlesMsg (protocol.go:725), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.HandlesMsg (protocol.go:751), 0 TODO
 bool protocol_UdpProtocol_HandlesMsg(protocol_UdpProtocol* u, GoString ipAddress, int port) {
     if (u->connection.type == 0) {
         return false;
@@ -45388,7 +45399,7 @@ bool protocol_UdpProtocol_HandlesMsg(protocol_UdpProtocol* u, GoString ipAddress
     return (go_streq(u->peerAddress, ipAddress) && (u->peerPort == port));
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendInput (protocol.go:732), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.SendInput (protocol.go:758), 0 TODO
 void protocol_UdpProtocol_SendInput(protocol_UdpProtocol* u, input_GameInput* input) {
     if (u->connection.type != 0) {
         if (u->currentState == 2) {
@@ -45405,7 +45416,7 @@ void protocol_UdpProtocol_SendInput(protocol_UdpProtocol* u, input_GameInput* in
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.UpdateNetworkStats (protocol.go:754), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.UpdateNetworkStats (protocol.go:780), 0 TODO
 void protocol_UdpProtocol_UpdateNetworkStats(protocol_UdpProtocol* u) {
     i64 now = time_Time_UnixMilli(time_Now());
     if (u->statsStartTime == 0LL) {
@@ -45419,7 +45430,7 @@ void protocol_UdpProtocol_UpdateNetworkStats(protocol_UdpProtocol* u) {
     log_Logger_Printf(g_util2_Log, GOSTR("Network Stats -- Bandwidth: %.2f KBps Packets Sent: %5d (%.2f pps) KB Sent: %.2f UDP Overhead: %.2f %%.\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 5, ((GoIface){14, go_box_a(f64, ((f64)u->kbpsSent))}), ((GoIface){2, go_box_a(int, u->packetsSent)}), ((GoIface){14, go_box_a(f64, (((f64)(u->packetsSent * 1000)) / ((f64)(now - u->statsStartTime))))}), ((GoIface){14, go_box_a(f64, ((f64)go_div32(totalBytesSent, 1024)))}), ((GoIface){14, go_box_a(f64, udpOverhead)})));
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.Synchronize (protocol.go:774), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.Synchronize (protocol.go:800), 0 TODO
 void protocol_UdpProtocol_Synchronize(protocol_UdpProtocol* u) {
     if (u->connection.type != 0) {
         u->currentState = 0;
@@ -45428,19 +45439,19 @@ void protocol_UdpProtocol_Synchronize(protocol_UdpProtocol* u) {
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.GetPeerConnectStatus (protocol.go:782), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.GetPeerConnectStatus (protocol.go:808), 0 TODO
 bool protocol_UdpProtocol_GetPeerConnectStatus(protocol_UdpProtocol* u, int id, i32* frame) {
     (*frame) = u->peerConnectStatus.p[id].LastFrame;
     return (!u->peerConnectStatus.p[id].Disconnected);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnInvalid (protocol.go:788), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnInvalid (protocol.go:814), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnInvalid(protocol_UdpProtocol* u, messages_UDPMessage msg, int len) {
     log_Logger_Printf(g_util2_Log, GOSTR("Invalid msg in UdpProtocol "), (Slice_GoIface){0});
     return (Ret_bool__GoIface){false, errors_New(GOSTR("ggpo UdpProtocol OnInvalid: invalid msg in UdpProtocol"))};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnSyncRequest (protocol.go:795), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnSyncRequest (protocol.go:821), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnSyncRequest(protocol_UdpProtocol* u, messages_UDPMessage msg, int len) {
     messages_SyncRequestPacket* request = ((messages_SyncRequestPacket*)(msg).data);
     messages_UDPMessage reply = messages_NewUDPMessage(2);
@@ -45451,11 +45462,11 @@ Ret_bool__GoIface protocol_UdpProtocol_OnSyncRequest(protocol_UdpProtocol* u, me
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnMsg (protocol.go:805), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnMsg (protocol.go:831), 0 TODO
 void protocol_UdpProtocol_OnMsg(protocol_UdpProtocol* u, messages_UDPMessage msg, int length) {
     bool handled = false;
     GoIface err = {0};
-    Slice_protocol_UdpProtocolDispatchFunc_Le6c36d table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_Le6c36d, protocol_UdpProtocolDispatchFunc_Le6c36d, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
+    Slice_protocol_UdpProtocolDispatchFunc_Lf43b76 table = GO_SLICE_LIT(Slice_protocol_UdpProtocolDispatchFunc_Lf43b76, protocol_UdpProtocolDispatchFunc_Lf43b76, 8, ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInvalid, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncRequest, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnSyncReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInput, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReport, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnQualityReply, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnKeepAlive, (void *)(u)}), ((GoFunc){(void *)mv_protocol_UdpProtocol_OnInputAck, (void *)(u)}));
     u16 seq = iface_Header_e9556084(msg).SequenceNumber;
     if ((iface_Header_e9556084(msg).HeaderType != 1U) && (iface_Header_e9556084(msg).HeaderType != 2U)) {
         if (iface_Header_e9556084(msg).Magic != u->remoteMagicNumber) {
@@ -45482,6 +45493,9 @@ void protocol_UdpProtocol_OnMsg(protocol_UdpProtocol* u, messages_UDPMessage msg
     }
     if (handled) {
         u->lastRecvTime = time_Time_UnixMilli(time_Now());
+        if ((iface_Header_e9556084(msg).HeaderType != 1U) && (iface_Header_e9556084(msg).HeaderType != 2U)) {
+            u->peerRunning = true;
+        }
         if (u->disconnectNotifySent && (u->currentState == 2)) {
             protocol_UdpProtocol_QueueEvent(u, go_box(protocol_UdpProtocolEvent, (protocol_UdpProtocolEvent){.eventType = 6}));
             u->disconnectNotifySent = false;
@@ -45489,7 +45503,7 @@ void protocol_UdpProtocol_OnMsg(protocol_UdpProtocol* u, messages_UDPMessage msg
     }
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnSyncReply (protocol.go:859), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.OnSyncReply (protocol.go:888), 0 TODO
 Ret_bool__GoIface protocol_UdpProtocol_OnSyncReply(protocol_UdpProtocol* u, messages_UDPMessage msg, int length) {
     messages_SyncReplyPacket* syncReply = ((messages_SyncReplyPacket*)(msg).data);
     if (u->currentState != 0) {
@@ -45522,17 +45536,17 @@ Ret_bool__GoIface protocol_UdpProtocol_OnSyncReply(protocol_UdpProtocol* u, mess
     return (Ret_bool__GoIface){true, (GoIface){0}};
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.IsInitialized (protocol.go:901), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.IsInitialized (protocol.go:930), 0 TODO
 bool protocol_UdpProtocol_IsInitialized(protocol_UdpProtocol* u) {
     return (u->connection.type != 0);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.IsSynchronized (protocol.go:905), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.IsSynchronized (protocol.go:934), 0 TODO
 bool protocol_UdpProtocol_IsSynchronized(protocol_UdpProtocol* u) {
     return (u->currentState == 2);
 }
 
-// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.IsRunning (protocol.go:909), 0 TODO
+// github.com/ikemen-engine/ggpo/internal/protocol.UdpProtocol.IsRunning (protocol.go:938), 0 TODO
 bool protocol_UdpProtocol_IsRunning(protocol_UdpProtocol* u) {
     return (u->currentState == 2);
 }
@@ -187336,13 +187350,13 @@ static const RField ik_rf_376[] = {{"startTime", "github.com/ikemen-engine/ggpo/
 static const RField ik_rf_377[] = {{"elements", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[378], offsetof(buffer_StaticBuffer_polling_PollSinkCb, elements), false}, {"size", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_StaticBuffer_polling_PollSinkCb, size), false}, {"capacity", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_StaticBuffer_polling_PollSinkCb, capacity), false}, };
 static const RField ik_rf_379[] = {{"sink", "github.com/ikemen-engine/ggpo/internal/polling", "", &ik_rt[380], offsetof(polling_PollSinkCb, sink), false}, {"cookie", "github.com/ikemen-engine/ggpo/internal/polling", "", &ik_rt[42], offsetof(polling_PollSinkCb, cookie), false}, };
 static const RField ik_rf_381[] = {{"Code", "", "", &ik_rt[332], offsetof(ggpo_Error, Code), false}, {"Name", "", "", &ik_rt[13], offsetof(ggpo_Error, Name), false}, };
-static const RField ik_rf_383[] = {{"stats", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[384], offsetof(protocol_UdpProtocol, stats), false}, {"event", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[350], offsetof(protocol_UdpProtocol, event), false}, {"connection", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[386], offsetof(protocol_UdpProtocol, connection), false}, {"peerAddress", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[13], offsetof(protocol_UdpProtocol, peerAddress), false}, {"peerPort", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, peerPort), false}, {"magicNumber", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, magicNumber), false}, {"queue", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, queue), false}, {"remoteMagicNumber", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, remoteMagicNumber), false}, {"connected", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[0], offsetof(protocol_UdpProtocol, connected), false}, {"sendLatency", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, sendLatency), false}, {"ooPercent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, ooPercent), false}, {"ooPacket", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[387], offsetof(protocol_UdpProtocol, ooPacket), false}, {"sendQueue", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[389], offsetof(protocol_UdpProtocol, sendQueue), false}, {"roundTripTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, roundTripTime), false}, {"packetsSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, packetsSent), false}, {"bytesSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, bytesSent), false}, {"kbpsSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, kbpsSent), false}, {"statsStartTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, statsStartTime), false}, {"localConnectStatus", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[392], offsetof(protocol_UdpProtocol, localConnectStatus), false}, {"peerConnectStatus", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[344], offsetof(protocol_UdpProtocol, peerConnectStatus), false}, {"currentState", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[393], offsetof(protocol_UdpProtocol, currentState), false}, {"state", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[394], offsetof(protocol_UdpProtocol, state), false}, {"localFrameAdvantage", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[11], offsetof(protocol_UdpProtocol, localFrameAdvantage), false}, {"remoteFrameAdvantage", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[11], offsetof(protocol_UdpProtocol, remoteFrameAdvantage), false}, {"pendingOutput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[395], offsetof(protocol_UdpProtocol, pendingOutput), false}, {"lastRecievedInput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[352], offsetof(protocol_UdpProtocol, lastRecievedInput), false}, {"lastSentInput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[352], offsetof(protocol_UdpProtocol, lastSentInput), false}, {"lastAckedInput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[352], offsetof(protocol_UdpProtocol, lastAckedInput), false}, {"lastSendTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, lastSendTime), false}, {"lastRecvTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, lastRecvTime), false}, {"shutdownTimeout", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, shutdownTimeout), false}, {"disconnectEventSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[0], offsetof(protocol_UdpProtocol, disconnectEventSent), false}, {"disconnectTimeout", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, disconnectTimeout), false}, {"disconnectNotifyStart", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, disconnectNotifyStart), false}, {"disconnectNotifySent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[0], offsetof(protocol_UdpProtocol, disconnectNotifySent), false}, {"nextSendSeq", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, nextSendSeq), false}, {"nextRecvSeq", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, nextRecvSeq), false}, {"timesync", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[397], offsetof(protocol_UdpProtocol, timesync), false}, {"eventQueue", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[400], offsetof(protocol_UdpProtocol, eventQueue), false}, {"RemoteChecksumsThisFrame", "", "", &ik_rt[402], offsetof(protocol_UdpProtocol, RemoteChecksumsThisFrame), false}, {"RemoteChecksums", "", "", &ik_rt[402], offsetof(protocol_UdpProtocol, RemoteChecksums), false}, };
+static const RField ik_rf_383[] = {{"stats", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[384], offsetof(protocol_UdpProtocol, stats), false}, {"event", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[350], offsetof(protocol_UdpProtocol, event), false}, {"connection", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[386], offsetof(protocol_UdpProtocol, connection), false}, {"peerAddress", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[13], offsetof(protocol_UdpProtocol, peerAddress), false}, {"peerPort", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, peerPort), false}, {"magicNumber", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, magicNumber), false}, {"queue", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, queue), false}, {"remoteMagicNumber", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, remoteMagicNumber), false}, {"connected", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[0], offsetof(protocol_UdpProtocol, connected), false}, {"sendLatency", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, sendLatency), false}, {"ooPercent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, ooPercent), false}, {"ooPacket", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[387], offsetof(protocol_UdpProtocol, ooPacket), false}, {"sendQueue", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[389], offsetof(protocol_UdpProtocol, sendQueue), false}, {"roundTripTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, roundTripTime), false}, {"packetsSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, packetsSent), false}, {"bytesSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, bytesSent), false}, {"kbpsSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocol, kbpsSent), false}, {"statsStartTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, statsStartTime), false}, {"localConnectStatus", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[392], offsetof(protocol_UdpProtocol, localConnectStatus), false}, {"peerConnectStatus", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[344], offsetof(protocol_UdpProtocol, peerConnectStatus), false}, {"currentState", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[393], offsetof(protocol_UdpProtocol, currentState), false}, {"state", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[394], offsetof(protocol_UdpProtocol, state), false}, {"localFrameAdvantage", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[11], offsetof(protocol_UdpProtocol, localFrameAdvantage), false}, {"remoteFrameAdvantage", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[11], offsetof(protocol_UdpProtocol, remoteFrameAdvantage), false}, {"pendingOutput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[395], offsetof(protocol_UdpProtocol, pendingOutput), false}, {"lastRecievedInput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[352], offsetof(protocol_UdpProtocol, lastRecievedInput), false}, {"lastSentInput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[352], offsetof(protocol_UdpProtocol, lastSentInput), false}, {"lastAckedInput", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[352], offsetof(protocol_UdpProtocol, lastAckedInput), false}, {"lastSendTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, lastSendTime), false}, {"lastRecvTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, lastRecvTime), false}, {"shutdownTimeout", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, shutdownTimeout), false}, {"disconnectEventSent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[0], offsetof(protocol_UdpProtocol, disconnectEventSent), false}, {"disconnectTimeout", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, disconnectTimeout), false}, {"disconnectNotifyStart", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocol, disconnectNotifyStart), false}, {"disconnectNotifySent", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[0], offsetof(protocol_UdpProtocol, disconnectNotifySent), false}, {"peerRunning", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[0], offsetof(protocol_UdpProtocol, peerRunning), false}, {"nextSendSeq", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, nextSendSeq), false}, {"nextRecvSeq", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[8], offsetof(protocol_UdpProtocol, nextRecvSeq), false}, {"timesync", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[397], offsetof(protocol_UdpProtocol, timesync), false}, {"eventQueue", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[400], offsetof(protocol_UdpProtocol, eventQueue), false}, {"RemoteChecksumsThisFrame", "", "", &ik_rt[402], offsetof(protocol_UdpProtocol, RemoteChecksumsThisFrame), false}, {"RemoteChecksums", "", "", &ik_rt[402], offsetof(protocol_UdpProtocol, RemoteChecksums), false}, };
 static const RField ik_rf_384[] = {{"ping", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocolStats, ping), false}, {"remoteFrameAdvtange", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocolStats, remoteFrameAdvtange), false}, {"localFrameAdvantage", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocolStats, localFrameAdvantage), false}, {"sendQueueLen", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_UdpProtocolStats, sendQueueLen), false}, {"udp", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[385], offsetof(protocol_UdpProtocolStats, udp), false}, };
 static const RField ik_rf_385[] = {{"BytesSent", "", "", &ik_rt[1], offsetof(transport_UdpStats, BytesSent), false}, {"PacketsSent", "", "", &ik_rt[1], offsetof(transport_UdpStats, PacketsSent), false}, {"KbpsSent", "", "", &ik_rt[12], offsetof(transport_UdpStats, KbpsSent), false}, };
 static const RField ik_rf_387[] = {{"sendTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_OoPacket, sendTime), false}, {"destIp", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[13], offsetof(protocol_OoPacket, destIp), false}, {"msg", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[388], offsetof(protocol_OoPacket, msg), false}, };
 static const RField ik_rf_389[] = {{"elements", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[390], offsetof(buffer_RingBuffer_protocol_QueueEntry, elements), false}, {"head", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_QueueEntry, head), false}, {"tail", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_QueueEntry, tail), false}, {"size", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_QueueEntry, size), false}, {"capacity", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_QueueEntry, capacity), false}, };
 static const RField ik_rf_391[] = {{"queueTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_QueueEntry, queueTime), false}, {"destIp", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[13], offsetof(protocol_QueueEntry, destIp), false}, {"msg", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[388], offsetof(protocol_QueueEntry, msg), false}, {"destPort", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[1], offsetof(protocol_QueueEntry, destPort), false}, };
-static const RField ik_rf_394[] = {{"roundTripRemaining", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[9], offsetof(protocol_UdpProtocolStateInfo, roundTripRemaining), false}, {"random", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[9], offsetof(protocol_UdpProtocolStateInfo, random), false}, {"lastQualityReportTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocolStateInfo, lastQualityReportTime), false}, {"lastNetworkStatsInterval", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocolStateInfo, lastNetworkStatsInterval), false}, {"lastInputPacketRecvTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocolStateInfo, lastInputPacketRecvTime), false}, };
+static const RField ik_rf_394[] = {{"roundTripRemaining", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[9], offsetof(protocol_UdpProtocolStateInfo, roundTripRemaining), false}, {"random", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[9], offsetof(protocol_UdpProtocolStateInfo, random), false}, {"lastQualityReportTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocolStateInfo, lastQualityReportTime), false}, {"lastNetworkStatsInterval", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocolStateInfo, lastNetworkStatsInterval), false}, {"lastInputPacketRecvTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocolStateInfo, lastInputPacketRecvTime), false}, {"lastSyncRequestTime", "github.com/ikemen-engine/ggpo/internal/protocol", "", &ik_rt[5], offsetof(protocol_UdpProtocolStateInfo, lastSyncRequestTime), false}, };
 static const RField ik_rf_395[] = {{"elements", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[396], offsetof(buffer_RingBuffer_input_GameInput, elements), false}, {"head", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_input_GameInput, head), false}, {"tail", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_input_GameInput, tail), false}, {"size", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_input_GameInput, size), false}, {"capacity", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_input_GameInput, capacity), false}, };
 static const RField ik_rf_397[] = {{"local", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[261], offsetof(sync_x_TimeSync, local), false}, {"remote", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[261], offsetof(sync_x_TimeSync, remote), false}, {"lastInputs", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[398], offsetof(sync_x_TimeSync, lastInputs), false}, {"nextPrediction", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[1], offsetof(sync_x_TimeSync, nextPrediction), false}, {"RemoteFrameDelay", "", "", &ik_rt[1], offsetof(sync_x_TimeSync, RemoteFrameDelay), false}, {"FrameDelay2", "", "", &ik_rt[1], offsetof(sync_x_TimeSync, FrameDelay2), false}, {"numFrame", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[1], offsetof(sync_x_TimeSync, numFrame), false}, {"avgLocal", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[11], offsetof(sync_x_TimeSync, avgLocal), false}, {"avgRemote", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[11], offsetof(sync_x_TimeSync, avgRemote), false}, {"clearedInitial", "github.com/ikemen-engine/ggpo/internal/sync", "", &ik_rt[0], offsetof(sync_x_TimeSync, clearedInitial), false}, };
 static const RField ik_rf_400[] = {{"elements", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[401], offsetof(buffer_RingBuffer_protocol_UdpProtocolEvent, elements), false}, {"head", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_UdpProtocolEvent, head), false}, {"tail", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_UdpProtocolEvent, tail), false}, {"size", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_UdpProtocolEvent, size), false}, {"capacity", "github.com/ikemen-engine/ggpo/internal/buffer", "", &ik_rt[1], offsetof(buffer_RingBuffer_protocol_UdpProtocolEvent, capacity), false}, };
@@ -188318,7 +188332,7 @@ const RType ik_rt[2007] = {
     {20, sizeof(polling_PollSink), "PollSink", "github.com/ikemen-engine/ggpo/internal/polling", NULL, NULL, 0, 0, NULL, 0, false, "polling.PollSink"},
     {25, sizeof(ggpo_Error), "Error", "github.com/ikemen-engine/ggpo", NULL, NULL, 0, 2, ik_rf_381, 182, false, "ggpo.Error"},
     {22, sizeof(protocol_UdpProtocol*), "", "", &ik_rt[383], NULL, 0, 0, NULL, 184, false, "*protocol.UdpProtocol"},
-    {25, sizeof(protocol_UdpProtocol), "UdpProtocol", "github.com/ikemen-engine/ggpo/internal/protocol", NULL, NULL, 0, 41, ik_rf_383, 872, false, "protocol.UdpProtocol"},
+    {25, sizeof(protocol_UdpProtocol), "UdpProtocol", "github.com/ikemen-engine/ggpo/internal/protocol", NULL, NULL, 0, 42, ik_rf_383, 872, false, "protocol.UdpProtocol"},
     {25, sizeof(protocol_UdpProtocolStats), "UdpProtocolStats", "github.com/ikemen-engine/ggpo/internal/protocol", NULL, NULL, 0, 5, ik_rf_384, 873, false, "protocol.UdpProtocolStats"},
     {25, sizeof(transport_UdpStats), "UdpStats", "github.com/ikemen-engine/ggpo/transport", NULL, NULL, 0, 3, ik_rf_385, 874, false, "transport.UdpStats"},
     {20, sizeof(transport_Connection), "Connection", "github.com/ikemen-engine/ggpo/transport", NULL, NULL, 0, 0, NULL, 0, false, "transport.Connection"},
@@ -188329,7 +188343,7 @@ const RType ik_rt[2007] = {
     {25, sizeof(protocol_QueueEntry), "QueueEntry", "github.com/ikemen-engine/ggpo/internal/protocol", NULL, NULL, 0, 4, ik_rf_391, 878, false, "protocol.QueueEntry"},
     {22, sizeof(Slice_messages_UdpConnectStatus*), "", "", &ik_rt[344], NULL, 0, 0, NULL, 879, false, "*[]messages.UdpConnectStatus"},
     {2, sizeof(protocol_UdpProtocolState), "UdpProtocolState", "github.com/ikemen-engine/ggpo/internal/protocol", NULL, NULL, 0, 0, NULL, 880, false, "protocol.UdpProtocolState"},
-    {25, sizeof(protocol_UdpProtocolStateInfo), "UdpProtocolStateInfo", "github.com/ikemen-engine/ggpo/internal/protocol", NULL, NULL, 0, 5, ik_rf_394, 881, false, "protocol.UdpProtocolStateInfo"},
+    {25, sizeof(protocol_UdpProtocolStateInfo), "UdpProtocolStateInfo", "github.com/ikemen-engine/ggpo/internal/protocol", NULL, NULL, 0, 6, ik_rf_394, 881, false, "protocol.UdpProtocolStateInfo"},
     {25, sizeof(buffer_RingBuffer_input_GameInput), "RingBuffer", "github.com/ikemen-engine/ggpo/internal/buffer", NULL, NULL, 0, 5, ik_rf_395, 882, false, "buffer.RingBuffer[input.GameInput]"},
     {23, sizeof(Slice_input_GameInput), "", "", &ik_rt[352], NULL, 0, 0, NULL, 883, false, "[]input.GameInput"},
     {25, sizeof(sync_x_TimeSync), "TimeSync", "github.com/ikemen-engine/ggpo/internal/sync", NULL, NULL, 0, 10, ik_rf_397, 884, false, "sync.TimeSync"},

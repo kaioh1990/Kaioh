@@ -17,7 +17,7 @@
 
 | Item | State |
 | --- | --- |
-| GGPO synchronization under packet loss | **Open, in GGPO itself (shared Go code, not a translation bug).** A peer that has synchronized drops the other after `Rollback.DisconnectTimeout` (3 s) without inputs, while a peer still synchronizing retries a lost sync round trip only every 2 s (`SyncRetryInterval`). With two or three sync packets lost in a row the slower peer cannot finish in time: the running side times out ("disconnected"), the other fails with the rollback sync timeout. Seen on the Mac with 8 % loss in 2 of 12 runs (native ↔ Go desktop, both directions) and with 25 % loss in 3 of 4 runs of the Go desktop build against itself (Go ↔ Go), traced with `RELAY_LOG=1`. The netplay test therefore spares the sync handshake from loss unless a scenario ends in `:sync`. A fix belongs in the ggpo fork (do not count the disconnect timeout before the peer is synchronized, or keep answering sync requests) and in every build at once. |
+| GGPO synchronization under packet loss | **Fixed on `claude/native-ggpo-sync`** (see below; in the Go fork patch, so phone and PC builds get it with their next build). |
 | Lobby, UPnP, NAT, public IP | Not tested (direct IP only; no external services were used). |
 | Windowed online match through the Lua menus | Not run; the test drives the same Go code headless (main.lua's command-line `-ip` path). The menu smoke test covers the Online menu up to Nearby host/join. |
 | Several matches per session (rematch, `postMatchSetup` → new RollbackSession) | Not run. |
@@ -55,6 +55,72 @@ socket's send buffer until ARP gives up, and WriteTo waits (as Go does).
 With an empty /23 added in the container, a sweep took more than 6 s and
 the test host on 127.0.0.1 (probed after the subnets) was not found within
 cvf_nearby_test's 6 s; with the /24 alone it is found at once.
+
+### GGPO sync handshake under packet loss (claude/native-ggpo-sync)
+
+The problem (GGPO's own code, Go and native alike): a peer that had finished
+synchronizing dropped the other after `Rollback.DisconnectTimeout` (3 s)
+without packets, while a peer still synchronizing retried a lost sync round
+trip only every 2 s (`SyncRetryInterval`). Two lost sync requests in a row
+and the running side disconnected ("EventCodeDisconnectedFromPeer"); the
+other then failed with the rollback sync timeout.
+
+The fix is in GGPO's `internal/protocol/protocol.go`, timing only:
+
+- a lost sync request or reply is resent after 200 ms (was 2 s), with the
+  same random as the copy before it, so a late reply to an earlier copy
+  still counts and round trips longer than 200 ms still synchronize; the
+  retry has its own timer (`lastSendTime` also moves with replies to the
+  peer's requests);
+- a synchronized peer applies a disconnect timeout of at least 15 s, and no
+  "connection interrupted" notice, until the other has sent anything but
+  sync packets (an input, keep-alive or quality report: only a running peer
+  sends those). After that the configured timeouts apply unchanged.
+
+GGPO is a module (`github.com/ikemen-engine/ggpo`), so the fork patch now
+carries a copy of it in `third/ggpo` (sources only, go.mod unchanged; the
+change is marked "CvF Online", see `third/ggpo/CVF_CHANGES.txt`) and a
+`replace` in go.mod. `patches/ikemen-cvf-online.patch` and
+`tools/ikemen_headless.patch` both have it; both still apply to 6a09392 with
+`git apply`, and regenerating from a fresh `setup_ikemen.sh`-style tree gives
+the committed C. ggpo's own tests: the same 12 upstream failures with and
+without the change, no new ones.
+
+**Compatibility with unfixed builds (the phones today): yes.** Packet
+formats, the sync protocol (5 request/reply round trips) and everything
+after synchronization are unchanged; an unfixed peer just sees retransmitted
+sync requests, which it answers as before. In a mixed match the fixed side
+covers both cases: when it is the slower one, its 200 ms retries keep the
+unfixed side's 3 s timer from expiring; when the unfixed side is slower
+(2 s retries), the fixed side waits up to 15 s for it. Game state and
+determinism are untouched (reference fights and the netplay dump unchanged).
+
+Results (Linux x86-64 container, `run_netplay.sh` with one `:sync` scenario
+per run, relay 20 ± 10 ms, `RELAY_SEED` 1-20, unpaced; Go = desktop
+configuration, Go 1.27.4; every PASS gives dump a350bc2d…):
+
+| Pair (host - guest) | 8 % loss incl. sync | 25 % loss incl. sync |
+| --- | --- | --- |
+| **Before:** native - native (unfixed) | 19/20 | 9/20 |
+| **Before:** Go - Go (unfixed) | | 12/20 |
+| native - native (fixed) | 20/20 | 20/20 |
+| native - Go (both fixed) | 20/20 | 20/20 |
+| Go - native (both fixed) | 20/20 | 20/20 |
+| Go - Go (both fixed) | | 20/20 |
+| native fixed - Go **unfixed** | 20/20 | 20/20 |
+| Go **unfixed** - native fixed | 20/20 | 19/20 (1) |
+| Go fixed - Go **unfixed** | | 20/20 |
+| Go **unfixed** - Go fixed | | 20/20 |
+
+Every failure before the fix was the GGPO one (the synchronized side's
+EventCodeDisconnectedFromPeer). (1) is not GGPO: Ikemen's TCP pre-match
+check ("Synchronization error" in netplay.go after "Network synchronized",
+before any UDP packet); the same seed passed when rerun. It is open (rare,
+seen once in ~270 runs). The default scenarios (`direct lag loss`) pass for
+native - native, native - Go and Go - native. Reference fights on Linux:
+54f8ae06… (old rules) and 4334350c… (cvf-online-5), unchanged. At 25 % loss, matches
+with an unfixed side take longer to start (its 2 s sync retries): ~47-55 s
+per run instead of ~33-41 s with both sides fixed.
 
 The analysis below is unchanged from `claude/native-gaps` (a16220d).
 

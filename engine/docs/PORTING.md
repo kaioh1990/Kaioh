@@ -288,3 +288,24 @@ stay as verified references and for the optimised paths later.
   with cvf-online-5; with the old rules it differs only through config.ini's
   FightAspect -1,-1 (with 0,0: 54f8ae06…), so the vitaPerf paths are
   simulation-equivalent on this fight.
+
+### Status 2026-11-20 — GGPO sync handshake under loss (claude/native-ggpo-sync)
+
+- GGPO could abort a match when sync packets were lost: the synchronized
+  peer dropped the other after 3 s, which retried only every 2 s. Fixed in
+  GGPO's `internal/protocol` (200 ms sync retries with the same random; a
+  disconnect timeout of at least 15 s until the peer sends anything but
+  sync packets). Timing only, wire-compatible with unfixed builds; details
+  and pass rates in GAPS.md.
+- GGPO is a Go module, so the fork patch (`patches/ikemen-cvf-online.patch`
+  and `tools/ikemen_headless.patch`) now adds a copy of it in `third/ggpo`
+  plus a `replace` in go.mod; phone and PC builds pick it up through the
+  patch with no build-script change. Regenerated C: only the ggpo protocol
+  functions (and one local type name) changed; regeneration from a fresh
+  tree reproduces it.
+- Reference fights unchanged on Linux x86-64: 54f8ae06… (old rules),
+  4334350c… (cvf-online-5), native and Go desktop build alike; netplay dump
+  a350bc2d… in every passing run.
+- Linux container notes: the Go desktop runner builds with Ubuntu's SDL2 and
+  libxmp, a minimal FFmpeg 7.1 (`--disable-everything`, shared; reisen needs
+  the 7.x API, Ubuntu 24.04 has 6.1) and `CGO_LDFLAGS=-lSDL2`.

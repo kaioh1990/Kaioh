@@ -12,12 +12,13 @@
 #            NAME:DELAY:JITTER:LOSS[:sync]
 #                              through tests/netplay/udp_relay.py: delay and
 #                              jitter in ms, loss in percent. Loss spares
-#                              GGPO's sync handshake unless ":sync" is given:
-#                              a peer that synchronizes more than
-#                              Rollback.DisconnectTimeout (3 s) before the
-#                              other drops it, and with lost sync replies
-#                              the other needs 2 s per retry (GGPO itself,
-#                              Go and native alike; see GAPS.md)
+#                              GGPO's sync handshake unless ":sync" is given.
+#                              Builds without the GGPO handshake fix
+#                              (third/ggpo, GAPS.md) can abort a match when
+#                              sync packets are lost: the synchronized peer
+#                              dropped the other after 3 s, which retried
+#                              only every 2 s. Fixed builds pass ":sync"
+#                              cases, also against unfixed ones
 #            default: direct lag:40:15:0 loss:20:10:8
 #
 # Environment:
