@@ -610,16 +610,39 @@ GoString strconv_Itoa(int a0) {
 
 GoString strconv_FormatFloat(f64 f, u8 fmt, int prec, int bits) { return go_format_float(f, (char)fmt, prec, bits); }
 
-Slice_u8 strconv_AppendInt(Slice_u8 b, i64 v, int base) {
-    char t[72];
+// Digits of m in base, least significant first; returns the count. Base 10
+// with a value that fits 32 bits (nearly every call: the state dump writes
+// ~10 numbers per line) divides in 32 bits by a constant, which compilers
+// turn into a multiplication: 32-bit ARM has no 64-bit division instruction
+// (the Cortex-A9 none at all), and the __aeabi_uldivmod calls were 8 % of
+// all instructions of the armv7 reference fight (VITA_PORT.md).
+static int digits_rev(char *t, u64 m, int base) {
     int n = 0;
-    bool neg = v < 0;
-    u64 m = neg ? (u64)0 - (u64)v : (u64)v;
+    if (base == 10) {
+        while (m > 0xffffffffu) {
+            t[n++] = (char)('0' + (int)(m % 10u));
+            m /= 10u;
+        }
+        u32 w = (u32)m;
+        do {
+            t[n++] = (char)('0' + (int)(w % 10u));
+            w /= 10u;
+        } while (w);
+        return n;
+    }
     do {
         int d = (int)(m % (u64)base);
         t[n++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
         m /= (u64)base;
     } while (m);
+    return n;
+}
+
+Slice_u8 strconv_AppendInt(Slice_u8 b, i64 v, int base) {
+    char t[72];
+    bool neg = v < 0;
+    u64 m = neg ? (u64)0 - (u64)v : (u64)v;
+    int n = digits_rev(t, m, base);
     if (neg) b = go_append_Slice_u8(b, '-');
     while (n) b = go_append_Slice_u8(b, (u8)t[--n]);
     return b;
@@ -627,12 +650,7 @@ Slice_u8 strconv_AppendInt(Slice_u8 b, i64 v, int base) {
 
 Slice_u8 strconv_AppendUint(Slice_u8 b, u64 m, int base) {
     char t[72];
-    int n = 0;
-    do {
-        int d = (int)(m % (u64)base);
-        t[n++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
-        m /= (u64)base;
-    } while (m);
+    int n = digits_rev(t, m, base);
     while (n) b = go_append_Slice_u8(b, (u8)t[--n]);
     return b;
 }

@@ -128,10 +128,22 @@ static GoString fmt_base(u64 u, bool neg, int base) {
     char tmp[72];
     int i = (int)sizeof tmp;
     if (base < 2 || base > 36) base = 10;
-    do {
-        tmp[--i] = "0123456789abcdefghijklmnopqrstuvwxyz"[u % (u64)base];
-        u /= (u64)base;
-    } while (u);
+    if (base == 10) {  // 32-bit division by a constant once it fits (see ik_fmt.c digits_rev)
+        while (u > 0xffffffffu) {
+            tmp[--i] = (char)('0' + (int)(u % 10u));
+            u /= 10u;
+        }
+        u32 w = (u32)u;
+        do {
+            tmp[--i] = (char)('0' + (int)(w % 10u));
+            w /= 10u;
+        } while (w);
+    } else {
+        do {
+            tmp[--i] = "0123456789abcdefghijklmnopqrstuvwxyz"[u % (u64)base];
+            u /= (u64)base;
+        } while (u);
+    }
     if (neg) tmp[--i] = '-';
     return mkgo(tmp + i, (int)sizeof tmp - i);
 }

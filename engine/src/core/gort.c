@@ -13,7 +13,11 @@ GoString go_cstr_copy(const char *s) {
     return (GoString){p, n};
 }
 
-bool go_streq(GoString a, GoString b) { return a.len == b.len && (a.len == 0 || memcmp(a.p, b.p, (size_t)a.len) == 0); }
+bool go_streq(GoString a, GoString b) {
+    // the same storage (string-pool and literal comparisons, map keys
+    // compared with themselves) needs no byte comparison
+    return a.len == b.len && (a.len == 0 || a.p == b.p || memcmp(a.p, b.p, (size_t)a.len) == 0);
+}
 
 int go_strcmp(GoString a, GoString b) {
     int n = a.len < b.len ? a.len : b.len;
@@ -137,13 +141,21 @@ static u64 hash_bytes(const void *p, size_t n) {
     return h;
 }
 
+// Entry hashes live in the entry array, which the collector scans: on a
+// 32-bit target a full 32-bit hash is a random word that falls into the used
+// heap a few percent of the time and keeps a block alive. 28 bits never
+// reach a heap address there (the arena sits above 0x80000000: core/gc.c),
+// and change nothing else: slots use the low bits (never 2^28 of them), the
+// hash is only a prefilter before the key comparison, and iteration follows
+// insertion order. The same on every platform, so maps behave identically.
+#define MAP_HASH_MASK 0x0fffffffu
 static u64 key_hash(GoMapImpl *m, const void *k) {
     if (m->keykind == 1) {
         const GoString *s = (const GoString *)k;
-        return hash_bytes(s->p, (size_t)s->len);
+        return hash_bytes(s->p, (size_t)s->len) & MAP_HASH_MASK;
     }
-    if (m->keykind == 2) return go_iface_hash(*(const GoIface *)k);
-    return hash_bytes(k, m->ksize);
+    if (m->keykind == 2) return go_iface_hash(*(const GoIface *)k) & MAP_HASH_MASK;
+    return hash_bytes(k, m->ksize) & MAP_HASH_MASK;
 }
 
 static bool key_eq(GoMapImpl *m, const void *a, const void *b) {
