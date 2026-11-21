@@ -141,6 +141,46 @@ static u64 hash_bytes(const void *p, size_t n) {
     return h;
 }
 
+// Map key hash: 32-bit arithmetic only (32-bit ARM has no 64-bit multiply;
+// the byte-wise 64-bit FNV above cost ~20 instructions per key byte there),
+// four bytes per step (murmur3's block mix and finaliser). The hash only
+// places entries in the slot table: iteration follows insertion order and
+// lookups compare keys, so the function is not observable (any change keeps
+// every map's behaviour, and the reference dumps, identical).
+static inline u32 rotl32(u32 x, int r) { return (x << r) | (x >> (32 - r)); }
+static inline u32 load32(const u8 *b) {
+    u32 k;
+    memcpy(&k, b, 4);
+    return k;
+}
+static inline u32 fmix32(u32 h) {
+    h ^= h >> 16;
+    h *= 0x85ebca6bu;
+    h ^= h >> 13;
+    h *= 0xc2b2ae35u;
+    h ^= h >> 16;
+    return h;
+}
+static inline u32 mix_block(u32 h, u32 k) {
+    k *= 0xcc9e2d51u;
+    k = rotl32(k, 15);
+    k *= 0x1b873593u;
+    h ^= k;
+    h = rotl32(h, 13);
+    return h * 5 + 0xe6546b64u;
+}
+static u32 hash_key_bytes(const void *p, size_t n) {
+    const u8 *b = (const u8 *)p;
+    u32 h = 0x9747b28cu ^ (u32)n;
+    for (; n >= 4; n -= 4, b += 4) h = mix_block(h, load32(b));
+    if (n) {
+        u32 k = 0;
+        for (size_t i = 0; i < n; i++) k |= (u32)b[i] << (8 * i);
+        h = mix_block(h, k);
+    }
+    return fmix32(h);
+}
+
 // Entry hashes live in the entry array, which the collector scans: on a
 // 32-bit target a full 32-bit hash is a random word that falls into the used
 // heap a few percent of the time and keeps a block alive. 28 bits never
@@ -149,18 +189,20 @@ static u64 hash_bytes(const void *p, size_t n) {
 // hash is only a prefilter before the key comparison, and iteration follows
 // insertion order. The same on every platform, so maps behave identically.
 #define MAP_HASH_MASK 0x0fffffffu
-static u64 key_hash(GoMapImpl *m, const void *k) {
+static inline u32 key_hash(GoMapImpl *m, const void *k) {
     if (m->keykind == 1) {
         const GoString *s = (const GoString *)k;
-        return hash_bytes(s->p, (size_t)s->len) & MAP_HASH_MASK;
+        return hash_key_bytes(s->p, (size_t)s->len) & MAP_HASH_MASK;
     }
-    if (m->keykind == 2) return go_iface_hash(*(const GoIface *)k) & MAP_HASH_MASK;
-    return hash_bytes(k, m->ksize) & MAP_HASH_MASK;
+    if (m->keykind == 2) return (u32)go_iface_hash(*(const GoIface *)k) & MAP_HASH_MASK;
+    if (m->ksize == 4) return fmix32(load32((const u8 *)k) ^ 0x9747b28cu) & MAP_HASH_MASK;
+    return hash_key_bytes(k, m->ksize) & MAP_HASH_MASK;
 }
 
-static bool key_eq(GoMapImpl *m, const void *a, const void *b) {
+static inline bool key_eq(GoMapImpl *m, const void *a, const void *b) {
     if (m->keykind == 1) return go_streq(*(const GoString *)a, *(const GoString *)b);
     if (m->keykind == 2) return go_iface_eq(*(const GoIface *)a, *(const GoIface *)b);
+    if (m->ksize == 4) return load32((const u8 *)a) == load32((const u8 *)b);
     return memcmp(a, b, m->ksize) == 0;
 }
 
@@ -205,7 +247,7 @@ static int find_slot_h(GoMapImpl *m, const void *key, u32 h) {
 
 static int find_slot(GoMapImpl *m, const void *key) {
     if (!m || !m->nslots) return -1;
-    return find_slot_h(m, key, (u32)key_hash(m, key));
+    return find_slot_h(m, key, key_hash(m, key));
 }
 
 void *gomap_find(GoMap *gm, const void *key) {
@@ -216,7 +258,7 @@ void *gomap_find(GoMap *gm, const void *key) {
 void *gomap_put(GoMap *gm, const void *key, size_t ksize, size_t vsize, int keykind) {
     if (!gm->m) *gm = gomap_make(ksize, vsize, keykind);
     GoMapImpl *m = gm->m;
-    u32 h = (u32)key_hash(m, key);
+    u32 h = key_hash(m, key);
     if (m->nslots) {
         int s = find_slot_h(m, key, h);
         if (s >= 0) return ENT_VAL(m, m->slots[s] - 1);

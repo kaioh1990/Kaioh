@@ -18,13 +18,22 @@ func heapVarsOf(p *Prog, region ast.Node) (map[types.Object]bool, map[types.Obje
 	out := map[types.Object]bool{}
 	nonEsc := nonEscapingLits(p, region)
 	// locals whose address is taken (&x, &x.f, &x[i] on arrays) may outlive
-	// the frame (Go moves them to the heap): allocate them on the heap too
+	// the frame (Go moves them to the heap): allocate them on the heap too,
+	// unless the address is only passed to a parameter that does not escape
+	// (paramesc.go)
+	var parent map[ast.Node]ast.Node
 	ast.Inspect(region, func(n ast.Node) bool {
 		if fl, ok := n.(*ast.FuncLit); ok && fl != region {
 			return false // a nested literal's own locals are handled with it
 		}
 		u, ok := n.(*ast.UnaryExpr)
 		if !ok || u.Op != token.AND {
+			return true
+		}
+		if parent == nil {
+			parent = parentMap(region)
+		}
+		if addrArgNoEsc(p, parent, u) {
 			return true
 		}
 		x := u.X

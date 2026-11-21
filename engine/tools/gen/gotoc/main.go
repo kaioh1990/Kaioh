@@ -83,6 +83,7 @@ func main() {
 		}
 		return pi.Offset < pj.Offset
 	})
+	computeParamEscape(p, func(k string) bool { return !isExcluded(p, k) })
 	total := 0
 	var stubs []string
 	var bodies []string
@@ -163,6 +164,12 @@ func main() {
 		protos = append(protos, hdr+";")
 		total += tx.todo
 		pos := p.fset.Position(fd.Pos())
+		if hasDirective(fd.Doc, "//go:inline") {
+			// the fork's hot helpers (BytecodeStack Push/Top/Pop): GCC kept
+			// Push out of line (hundreds of call sites); an inline definition
+			// with a plain prototype in ik_sim.h is still an external one
+			body = "inline __attribute__((always_inline)) " + body
+		}
 		bodies = append(bodies, fmt.Sprintf("// %s (%s:%d), %d TODO\n%s", k, shortFile(pos.Filename), pos.Line, tx.todo, body))
 	}
 	// ---- generic instances (may register more instances)
@@ -326,4 +333,16 @@ func main() {
 		fmt.Println(st)
 	}
 	fmt.Fprintf(os.Stderr, "%d functions, %d TODO, %d stubs\n", len(bodies), total, len(stubs))
+}
+
+func hasDirective(doc *ast.CommentGroup, d string) bool {
+	if doc == nil {
+		return false
+	}
+	for _, c := range doc.List {
+		if strings.TrimSpace(c.Text) == d {
+			return true
+		}
+	}
+	return false
 }

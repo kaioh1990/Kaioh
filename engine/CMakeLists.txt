@@ -45,8 +45,17 @@ set(CVF_WARNINGS -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare)
 # frames so one cannot step over a stack guard into the next mapping. GCC on
 # Ubuntu and Apple clang do this already; the Android NDK and others may not.
 # Goroutine and iOS engine stacks also have 64 KB guards (core/sched.c).
+# Off on the PS Vita: its stacks (main thread, SceFiber goroutines) have no
+# guard pages to step over, so the probes (three instructions in every
+# function with a frame) protect nothing there.
 include(CheckCCompilerFlag)
-if(NOT WIN32)  # Windows probes every frame > 4 KB (___chkstk_ms) anyway
+if(VITA)
+  set(CVF_STACK_CLASH_DEFAULT OFF)
+else()
+  set(CVF_STACK_CLASH_DEFAULT ON)
+endif()
+option(CVF_STACK_CLASH_PROTECTION "-fstack-clash-protection where the compiler accepts it" ${CVF_STACK_CLASH_DEFAULT})
+if(NOT WIN32 AND CVF_STACK_CLASH_PROTECTION)  # Windows probes every frame > 4 KB (___chkstk_ms) anyway
   check_c_compiler_flag(-fstack-clash-protection CVF_HAVE_STACK_CLASH_PROTECTION)
   if(CVF_HAVE_STACK_CLASH_PROTECTION)
     add_compile_options(-fstack-clash-protection)

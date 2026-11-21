@@ -6,8 +6,13 @@
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR armv7-a)
 set(CMAKE_C_COMPILER arm-linux-gnueabihf-gcc)
-set(CMAKE_C_FLAGS_INIT "-march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard -mthumb")
-set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
+# Ubuntu's GCC also defaults to -fstack-protector-strong and PIE, which
+# vitasdk's GCC does not: both are turned off so that instruction counts
+# under qemu-arm match the Vita's code (VITA_PORT.md, CPU), and stack clash
+# probes are off as on the Vita (CVF_STACK_CLASH_PROTECTION in CMakeLists).
+set(CMAKE_C_FLAGS_INIT "-march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard -mthumb -fno-stack-protector -fno-pie")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static -no-pie")
+set(CVF_STACK_CLASH_PROTECTION OFF CACHE BOOL "")
 set(CMAKE_FIND_ROOT_PATH /usr/arm-linux-gnueabihf)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)

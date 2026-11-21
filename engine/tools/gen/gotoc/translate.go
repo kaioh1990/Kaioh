@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
-
+	"go/constant"
 	"go/token"
 	"go/types"
 	"strings"
@@ -821,6 +821,10 @@ func (t *Tx) switchStmt(s *ast.SwitchStmt, label string) {
 		tagType = t.typeOf(s.Tag)
 		t.w("%s %s = %s;", t.ctype(tagType), tag, t.expr(s.Tag))
 	}
+	if labels := t.constCaseLabels(s, tagType); labels != nil {
+		t.cSwitch(s, tag, labels, label)
+		return
+	}
 	// Emit as a do { if-chain } while(0) so that "break" leaves the switch.
 	t.w("do {")
 	t.ind++
@@ -872,6 +876,71 @@ func (t *Tx) switchStmt(s *ast.SwitchStmt, label string) {
 	}
 	t.ind--
 	t.w("} while (0);")
+	if label != "" {
+		t.w("%s_continue:;", label)
+	}
+	t.ind--
+	t.w("}")
+}
+
+// constCaseLabels returns the C case labels of a switch on an integer tag
+// whose cases are all distinct constants (nil otherwise). Such a switch
+// becomes a C switch (a jump table), not an if-chain: the comparisons have
+// no side effects, so their order does not matter, and Go forbids
+// duplicate constant cases (checked anyway).
+func (t *Tx) constCaseLabels(s *ast.SwitchStmt, tagType types.Type) [][]string {
+	if s.Tag == nil || tagType == nil || !isInteger(tagType) {
+		return nil
+	}
+	if _, ok := tagType.Underlying().(*types.Basic); !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	var labels [][]string
+	for _, cc := range s.Body.List {
+		c := cc.(*ast.CaseClause)
+		var ls []string
+		for _, e := range c.List {
+			tv, ok := t.p.info.Types[e]
+			if !ok || tv.Value == nil || tv.Value.Kind() != constant.Int {
+				return nil
+			}
+			v := tv.Value // representable in the tag's type (Go's typing rules)
+			key := v.ExactString()
+			if seen[key] {
+				return nil
+			}
+			seen[key] = true
+			ls = append(ls, constLit(v, tagType))
+		}
+		labels = append(labels, ls)
+	}
+	return labels
+}
+
+func (t *Tx) cSwitch(s *ast.SwitchStmt, tag string, labels [][]string, label string) {
+	t.w("switch (%s) {", tag)
+	t.inSwitch++
+	clauses := s.Body.List
+	for ci, cc := range clauses {
+		c := cc.(*ast.CaseClause)
+		if c.List == nil {
+			t.w("default: {")
+		} else {
+			var ls []string
+			for _, l := range labels[ci] {
+				ls = append(ls, "case "+l+":")
+			}
+			t.w("%s {", strings.Join(ls, " "))
+		}
+		t.ind++
+		t.caseBody(c, clauses, ci)
+		t.w("break;")
+		t.ind--
+		t.w("}")
+	}
+	t.inSwitch--
+	t.w("}")
 	if label != "" {
 		t.w("%s_continue:;", label)
 	}
