@@ -3654,6 +3654,30 @@ index 2609c76b..4efec7d0 100644
  	// Force to Vulkan 1.3 for iOS
  	if runtime.GOOS == "ios" {
  		cfg.Video.RenderMode = "Vulkan 1.3"
+diff --git a/src/netplay.go b/src/netplay.go
+index 7dcaf72c..70e1d3e9 100644
+--- a/src/netplay.go
++++ b/src/netplay.go
+@@ -985,7 +985,18 @@ func (nc *NetConnection) update(recordReplay bool) bool {
+ 
+ 				// Break loop if we have reached the frame that both buffers have sent
+ 				if nc.time >= foo {
+-					if sys.esc || !sys.await(sys.gameRenderSpeed()) || nc.st != NS_Playing {
++					if sys.esc || !sys.await(sys.gameRenderSpeed()) {
++						break
++					}
++					if nc.st != NS_Playing {
++						// CvF Online: the peer's last input frames and its stop marker
++						// can both arrive while await waits, so foo above is stale.
++						// Leaving here would skip a frame the peer has already counted,
++						// and the next Synchronize() would fail its time check
++						// ("Synchronization error"). Consume what was received first.
++						if nc.st == NS_Stopped && nc.time < Min(nc.buf[nc.locIn].senT, nc.buf[nc.remIn].senT) {
++							continue
++						}
+ 						break
+ 					}
+ 					// TCP can remain established while packets stop arriving.
 diff --git a/src/rect.go b/src/rect.go
 index d63aa49d..25c8b512 100644
 --- a/src/rect.go

@@ -149217,7 +149217,13 @@ bool NetConnection_update(NetConnection* nc, bool recordReplay) {
                                 }
                             }
                             if (nc->time >= foo) {
-                                if ((g_sys.SystemStateVars_.esc || (!System_await(&g_sys, System_gameRenderSpeed(&g_sys)))) || (nc->st != 1)) {
+                                if (g_sys.SystemStateVars_.esc || (!System_await(&g_sys, System_gameRenderSpeed(&g_sys)))) {
+                                    break;
+                                }
+                                if (nc->st != 1) {
+                                    if ((nc->st == 3) && (nc->time < go_min_i32(nc->buf.v[nc->locIn].senT, nc->buf.v[nc->remIn].senT))) {
+                                        continue;
+                                    }
                                     break;
                                 }
                                 if (time_Since(waitStarted) >= (((i64)g_sys.cfg.Netplay.SyncTimeout) * 1000000LL)) {
@@ -149270,7 +149276,13 @@ bool NetConnection_update(NetConnection* nc, bool recordReplay) {
                                 }
                             }
                             if (nc->time >= foo) {
-                                if ((g_sys.SystemStateVars_.esc || (!System_await(&g_sys, System_gameRenderSpeed(&g_sys)))) || (nc->st != 1)) {
+                                if (g_sys.SystemStateVars_.esc || (!System_await(&g_sys, System_gameRenderSpeed(&g_sys)))) {
+                                    break;
+                                }
+                                if (nc->st != 1) {
+                                    if ((nc->st == 3) && (nc->time < go_min_i32(nc->buf.v[nc->locIn].senT, nc->buf.v[nc->remIn].senT))) {
+                                        continue;
+                                    }
                                     break;
                                 }
                                 if (time_Since(waitStarted) >= (((i64)g_sys.cfg.Netplay.SyncTimeout) * 1000000LL)) {
@@ -149318,7 +149330,7 @@ bool NetConnection_update(NetConnection* nc, bool recordReplay) {
     return (!g_sys.SystemStateVars_.gameEnd);
 }
 
-// writeReplayHeader (netplay.go:1040), 0 TODO
+// writeReplayHeader (netplay.go:1051), 0 TODO
 GoIface fn_writeReplayHeader(GoIface w, ReplayHeader* header) {
     if (header == NULL) {
         return (GoIface){0};
@@ -149353,7 +149365,7 @@ GoIface fn_writeReplayHeader(GoIface w, ReplayHeader* header) {
     return err;
 }
 
-// readReplayHeader (netplay.go:1061), 0 TODO
+// readReplayHeader (netplay.go:1072), 0 TODO
 Ret_ReplayHeaderPtr__GoIface fn_readReplayHeader(GoOpaque /* os.File */* f) {
     if (f == NULL) {
         return (Ret_ReplayHeaderPtr__GoIface){NULL, (GoIface){0}};
@@ -149415,7 +149427,7 @@ Ret_ReplayHeaderPtr__GoIface fn_readReplayHeader(GoOpaque /* os.File */* f) {
     return (Ret_ReplayHeaderPtr__GoIface){(&(*header__h)), (GoIface){0}};
 }
 
-// writeReplaySync (netplay.go:1104), 0 TODO
+// writeReplaySync (netplay.go:1115), 0 TODO
 GoIface fn_writeReplaySync(GoIface w, i32 seed, i32 pmTime) {
     {
         Ret_int__GoIface _t1 = iface_Write_32c5b18d(w, go_str2bytes(GOSTR("IKRPLSYN")));
@@ -149433,7 +149445,7 @@ GoIface fn_writeReplaySync(GoIface w, i32 seed, i32 pmTime) {
     return binary_Write(w, ((GoIface){163, go_box(GoOpaque /* binary.littleEndian */, binary_LittleEndian)}), ((GoIface){5, go_box_a(i32, pmTime)}));
 }
 
-// OpenReplayFile (netplay.go:1124), 0 TODO
+// OpenReplayFile (netplay.go:1135), 0 TODO
 ReplayFile* fn_OpenReplayFile(GoString filename) {
     Ret_GoOpaque_os_FilePtrPtr__GoIface _t1 = os_Open(filename);
     GoOpaque /* os.File */* rf = _t1.r0;
@@ -149463,7 +149475,7 @@ ReplayFile* fn_OpenReplayFile(GoString filename) {
     return out;
 }
 
-// ReplayFile.Close (netplay.go:1151), 0 TODO
+// ReplayFile.Close (netplay.go:1162), 0 TODO
 void ReplayFile_Close(ReplayFile* rf) {
     if (rf->file != NULL) {
         os_File_Close(rf->file);
@@ -149471,7 +149483,7 @@ void ReplayFile_Close(ReplayFile* rf) {
     }
 }
 
-// ReplayFile.readReplayInput (netplay.go:1159), 0 TODO
+// ReplayFile.readReplayInput (netplay.go:1170), 0 TODO
 Arr14_bool ReplayFile_readReplayInput(ReplayFile* rf, int i) {
     if ((i >= 0) && (i < 8)) {
         return InputBits_BitsToKeys(rf->ibit.v[g_sys.SystemStateVars_.inputRemap.v[i]]);
@@ -149479,7 +149491,7 @@ Arr14_bool ReplayFile_readReplayInput(ReplayFile* rf, int i) {
     return (Arr14_bool){{}};
 }
 
-// ReplayFile.readReplayInputAnalog (netplay.go:1166), 0 TODO
+// ReplayFile.readReplayInputAnalog (netplay.go:1177), 0 TODO
 Arr6_i8 ReplayFile_readReplayInputAnalog(ReplayFile* rf, int i) {
     if ((i >= 0) && (i < 8)) {
         int remap = g_sys.SystemStateVars_.inputRemap.v[i];
@@ -149490,7 +149502,7 @@ Arr6_i8 ReplayFile_readReplayInputAnalog(ReplayFile* rf, int i) {
     return (Arr6_i8){{}};
 }
 
-// ReplayFile.AnyButton (netplay.go:1178), 0 TODO
+// ReplayFile.AnyButton (netplay.go:1189), 0 TODO
 bool ReplayFile_AnyButton(ReplayFile* rf) {
     {
         for (int _t1 = 0; _t1 < 8; _t1++) {
@@ -149504,7 +149516,7 @@ bool ReplayFile_AnyButton(ReplayFile* rf) {
     return false;
 }
 
-// seekReplaySyncMarker (netplay.go:1187), 0 TODO
+// seekReplaySyncMarker (netplay.go:1198), 0 TODO
 Ret_i64__GoIface fn_seekReplaySyncMarker(GoOpaque /* os.File */* f) {
     Ret_i64__GoIface _t1 = os_File_Seek(f, 0LL, 1);
     i64 start = _t1.r0;
@@ -149530,7 +149542,7 @@ Ret_i64__GoIface fn_seekReplaySyncMarker(GoOpaque /* os.File */* f) {
     return (Ret_i64__GoIface){skipped, err};
 }
 
-// ReplayFile.readReplaySync (netplay.go:1207), 0 TODO
+// ReplayFile.readReplaySync (netplay.go:1218), 0 TODO
 Ret_i32__i32__GoIface ReplayFile_readReplaySync(ReplayFile* rf) {
     i32 *seed__h = go_box_a(i32, {0});
     i32 *pmTime__h = go_box_a(i32, {0});
@@ -149573,7 +149585,7 @@ Ret_i32__i32__GoIface ReplayFile_readReplaySync(ReplayFile* rf) {
     return (Ret_i32__i32__GoIface){(*seed__h), (*pmTime__h), err};
 }
 
-// ReplayFile.atReplaySyncMarker (netplay.go:1233), 0 TODO
+// ReplayFile.atReplaySyncMarker (netplay.go:1244), 0 TODO
 bool ReplayFile_atReplaySyncMarker(ReplayFile* rf) {
     if ((rf == NULL) || (rf->file == NULL)) {
         return false;
@@ -149591,7 +149603,7 @@ bool ReplayFile_atReplaySyncMarker(ReplayFile* rf) {
     return ((err.type == 0) && go_streq(go_bytes2str(GO_ARRSLICE(Slice_u8, magic.v, 8, 0, -1)), GOSTR("IKRPLSYN")));
 }
 
-// ReplayFile.Synchronize (netplay.go:1248), 0 TODO
+// ReplayFile.Synchronize (netplay.go:1259), 0 TODO
 void ReplayFile_Synchronize(ReplayFile* rf) {
     if (rf->file != NULL) {
         Ret_i32__i32__GoIface _t1 = ReplayFile_readReplaySync(rf);
@@ -149612,7 +149624,7 @@ void ReplayFile_Synchronize(ReplayFile* rf) {
     }
 }
 
-// ReplayFile.Update (netplay.go:1267), 0 TODO
+// ReplayFile.Update (netplay.go:1278), 0 TODO
 bool ReplayFile_Update(ReplayFile* rf) {
     if (rf->file == NULL) {
         g_sys.SystemStateVars_.esc = true;
@@ -149652,14 +149664,14 @@ bool ReplayFile_Update(ReplayFile* rf) {
     return (!g_sys.SystemStateVars_.gameEnd);
 }
 
-// cloneSyncSettings (netplay.go:1305), 0 TODO
+// cloneSyncSettings (netplay.go:1316), 0 TODO
 Slice_SyncSetting fn_cloneSyncSettings(Slice_SyncSetting in) {
     Slice_SyncSetting out = GO_MAKE(Slice_SyncSetting, SyncSetting, in.len, 0);
     GO_COPY(out, in);
     return out;
 }
 
-// formatSyncValue (netplay.go:1311), 0 TODO
+// formatSyncValue (netplay.go:1322), 0 TODO
 Ret_GoString__GoIface fn_formatSyncValue(GoOpaque /* reflect.Value */ v) {
     {
         for (; reflect_Value_Kind(v) == 22U; ) {
@@ -149709,7 +149721,7 @@ Ret_GoString__GoIface fn_formatSyncValue(GoOpaque /* reflect.Value */ v) {
     }
 }
 
-// collectSyncSettings (netplay.go:1347), 0 TODO
+// collectSyncSettings (netplay.go:1358), 0 TODO
 Ret_Slice_SyncSetting__GoIface fn_collectSyncSettings(Config* cfg, SyncScope scope) {
     SyncScope *scope__h = go_box(SyncScope, scope);
     Slice_SyncSetting *out__h = go_box(Slice_SyncSetting, GO_MAKE(Slice_SyncSetting, SyncSetting, 0, 64));
@@ -149725,7 +149737,7 @@ Ret_Slice_SyncSetting__GoIface fn_collectSyncSettings(Config* cfg, SyncScope sco
     return (Ret_Slice_SyncSetting__GoIface){(*out__h), (GoIface){0}};
 }
 
-// settingsToMap (netplay.go:1437), 0 TODO
+// settingsToMap (netplay.go:1448), 0 TODO
 Map_GoString_GoString fn_settingsToMap(Slice_SyncSetting in) {
     Map_GoString_GoString out = Map_GoString_GoString_make(in.len);
     {
@@ -149739,7 +149751,7 @@ Map_GoString_GoString fn_settingsToMap(Slice_SyncSetting in) {
     return out;
 }
 
-// verifySyncSettings (netplay.go:1445), 0 TODO
+// verifySyncSettings (netplay.go:1456), 0 TODO
 Slice_GoString fn_verifySyncSettings(Slice_SyncSetting expected, Slice_SyncSetting actual) {
     Map_GoString_GoString exp_ = fn_settingsToMap(expected);
     Map_GoString_GoString got = fn_settingsToMap(actual);
@@ -149781,7 +149793,7 @@ Slice_GoString fn_verifySyncSettings(Slice_SyncSetting expected, Slice_SyncSetti
     return out;
 }
 
-// logSyncVerification (netplay.go:1470), 0 TODO
+// logSyncVerification (netplay.go:1481), 0 TODO
 void fn_logSyncVerification(GoString prefix, Slice_SyncSetting expected, Slice_SyncSetting actual) {
     Slice_GoString issues = fn_verifySyncSettings(expected, actual);
     if (issues.len == 0) {
@@ -149799,7 +149811,7 @@ void fn_logSyncVerification(GoString prefix, Slice_SyncSetting expected, Slice_S
     }
 }
 
-// normalizeRatioKey (netplay.go:1482), 0 TODO
+// normalizeRatioKey (netplay.go:1493), 0 TODO
 GoString fn_normalizeRatioKey(i64 w, i64 h) {
     if ((w == 0LL) || (h == 0LL)) {
         return GOSTR("invalid");
@@ -149815,7 +149827,7 @@ GoString fn_normalizeRatioKey(i64 w, i64 h) {
     return fmt_Sprintf(GOSTR("%d:%d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){6, go_box_a(i64, go_div64(w, g))}), ((GoIface){6, go_box_a(i64, go_div64(h, g))})));
 }
 
-// effectiveFightAspectKey (netplay.go:1505), 0 TODO
+// effectiveFightAspectKey (netplay.go:1516), 0 TODO
 Ret_GoString__GoIface fn_effectiveFightAspectKey(Map_GoString_GoString m) {
     Map_GoString_GoString m__hv = m; __typeof__(m__hv) *m__h = &m__hv;
     GoFunc parse = ((GoFunc){(void *)lambda_1080, &(Env_lambda_1080){m__h}});
@@ -149856,7 +149868,7 @@ Ret_GoString__GoIface fn_effectiveFightAspectKey(Map_GoString_GoString m) {
     }
 }
 
-// validateStrictCompatibility (netplay.go:1541), 0 TODO
+// validateStrictCompatibility (netplay.go:1552), 0 TODO
 GoIface fn_validateStrictCompatibility(Slice_SyncSetting local, Slice_SyncSetting remote, bool replayMode) {
     Map_GoString_GoString localMap = fn_settingsToMap(local);
     Map_GoString_GoString remoteMap = fn_settingsToMap(remote);
@@ -149898,7 +149910,7 @@ GoIface fn_validateStrictCompatibility(Slice_SyncSetting local, Slice_SyncSettin
     return (GoIface){0};
 }
 
-// validateHostSignature (netplay.go:1582), 0 TODO
+// validateHostSignature (netplay.go:1593), 0 TODO
 GoIface fn_validateHostSignature(Slice_SyncSetting local, Slice_SyncSetting remote) {
     Map_GoString_GoString localMap = fn_settingsToMap(local);
     Map_GoString_GoString remoteMap = fn_settingsToMap(remote);
@@ -149922,7 +149934,7 @@ GoIface fn_validateHostSignature(Slice_SyncSetting local, Slice_SyncSetting remo
     return (GoIface){0};
 }
 
-// applySyncSettings (netplay.go:1596), 0 TODO
+// applySyncSettings (netplay.go:1607), 0 TODO
 GoIface fn_applySyncSettings(Config* cfg, Slice_SyncSetting settings, bool strict) {
     {
         Slice_SyncSetting _t2 = settings;
@@ -149945,7 +149957,7 @@ GoIface fn_applySyncSettings(Config* cfg, Slice_SyncSetting settings, bool stric
     return (GoIface){0};
 }
 
-// validateContentFingerprint (netplay.go:1610), 0 TODO
+// validateContentFingerprint (netplay.go:1621), 0 TODO
 GoIface fn_validateContentFingerprint(GoString local, GoString remote) {
     if (((!go_streq(local, GOSTR(""))) && (!go_streq(remote, GOSTR("")))) && (!go_streq(local, remote))) {
         return ((GoIface){281, go_box(Error, GOSTR("Content/build mismatch between peers"))});
@@ -149953,7 +149965,7 @@ GoIface fn_validateContentFingerprint(GoString local, GoString remote) {
     return (GoIface){0};
 }
 
-// System.onSyncConfigChanged (netplay.go:1621), 0 TODO
+// System.onSyncConfigChanged (netplay.go:1632), 0 TODO
 void System_onSyncConfigChanged(System* s) {
     s->rollbackConfig = s->cfg.Netplay.Rollback;
     if (s->rollback.session != NULL) {
@@ -149961,12 +149973,12 @@ void System_onSyncConfigChanged(System* s) {
     }
 }
 
-// System.currentContentFingerprint (netplay.go:1628), 0 TODO
+// System.currentContentFingerprint (netplay.go:1639), 0 TODO
 GoString System_currentContentFingerprint(System* s) {
     return GOSTR("");
 }
 
-// System.beginSessionOverride (netplay.go:1633), 0 TODO
+// System.beginSessionOverride (netplay.go:1644), 0 TODO
 GoIface System_beginSessionOverride(System* s, GoString source, Slice_SyncSetting strict, Slice_SyncSetting host, GoString contentFingerprint) {
     if (s->netplayOverride.Active) {
         return (GoIface){0};
@@ -149995,7 +150007,7 @@ GoIface System_beginSessionOverride(System* s, GoString source, Slice_SyncSettin
     return (GoIface){0};
 }
 
-// System.endSyncSessionOverride (netplay.go:1663), 0 TODO
+// System.endSyncSessionOverride (netplay.go:1674), 0 TODO
 GoIface System_endSyncSessionOverride(System* s) {
     if (!s->netplayOverride.Active) {
         return (GoIface){0};
@@ -150019,7 +150031,7 @@ GoIface System_endSyncSessionOverride(System* s) {
     return (GoIface){0};
 }
 
-// System.currentReplayHeader (netplay.go:1681), 0 TODO
+// System.currentReplayHeader (netplay.go:1692), 0 TODO
 ReplayHeader* System_currentReplayHeader(System* s) {
     if (!s->netplayOverride.Active) {
         return NULL;
@@ -150027,14 +150039,14 @@ ReplayHeader* System_currentReplayHeader(System* s) {
     return go_box(ReplayHeader, (ReplayHeader){.FormatVersion = 2U, .SyncVersion = s->netplayOverride.SyncVersion, .Strict = fn_cloneSyncSettings(s->netplayOverride.Strict), .Host = fn_cloneSyncSettings(s->netplayOverride.AppliedHost), .ContentFingerprint = s->netplayOverride.ContentFingerprint});
 }
 
-// System.popSessionWarning (netplay.go:1694), 0 TODO
+// System.popSessionWarning (netplay.go:1705), 0 TODO
 GoString System_popSessionWarning(System* s) {
     GoString text = s->sessionWarning;
     s->sessionWarning = GOSTR("");
     return text;
 }
 
-// System.synchronizeNetplayConfig (netplay.go:1700), 0 TODO
+// System.synchronizeNetplayConfig (netplay.go:1711), 0 TODO
 Ret_ReplayHeaderPtr__GoIface System_synchronizeNetplayConfig(System* s, NetConnection* nc) {
     NetConnection* nc__hv = nc; __typeof__(nc__hv) *nc__h = &nc__hv;
     if (s->netplayOverride.Active) {
@@ -150204,7 +150216,7 @@ Ret_ReplayHeaderPtr__GoIface System_synchronizeNetplayConfig(System* s, NetConne
     return (Ret_ReplayHeaderPtr__GoIface){System_currentReplayHeader(s), (GoIface){0}};
 }
 
-// System.beginReplaySession (netplay.go:1837), 0 TODO
+// System.beginReplaySession (netplay.go:1848), 0 TODO
 GoIface System_beginReplaySession(System* s, ReplayFile* rf) {
     if (rf == NULL) {
         return (GoIface){0};
