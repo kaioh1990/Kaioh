@@ -19,6 +19,7 @@ typedef struct GoString {
 
 #define GOSTR(lit) ((GoString){(lit), (int)(sizeof(lit) - 1)})
 GoString go_cstr(const char *s);
+GoString go_cstr_copy(const char *s);  // copied into the GC heap (go_cstr only wraps s)
 bool go_streq(GoString a, GoString b);
 int go_strcmp(GoString a, GoString b);
 GoString go_strcat(GoString a, GoString b);

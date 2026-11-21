@@ -402,7 +402,7 @@ static Ret_GoHttpResponsePtr__GoIface perform(GoHttpClient *cl, GoString method,
         r->StatusCode = (int)j->status;
         char st[16];
         snprintf(st, sizeof st, "%ld", j->status);
-        r->Status = go_strcat(go_cstr(st), GOSTR(""));
+        r->Status = go_cstr_copy(st);
         u8 *b = (u8 *)gc_alloc_atomic(j->resp_len + 1);
         if (j->resp_len) memcpy(b, j->resp, j->resp_len);
         r->Body = rt_mem_file(b, (int)j->resp_len);

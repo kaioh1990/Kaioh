@@ -5,6 +5,14 @@
 
 GoString go_cstr(const char *s) { return (GoString){s, s ? (int)strlen(s) : 0}; }
 
+GoString go_cstr_copy(const char *s) {
+    int n = s ? (int)strlen(s) : 0;
+    if (!n) return (GoString){0};
+    char *p = (char *)gc_alloc_atomic((size_t)n + 1);
+    memcpy(p, s, (size_t)n + 1);
+    return (GoString){p, n};
+}
+
 bool go_streq(GoString a, GoString b) { return a.len == b.len && (a.len == 0 || memcmp(a.p, b.p, (size_t)a.len) == 0); }
 
 int go_strcmp(GoString a, GoString b) {

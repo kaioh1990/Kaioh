@@ -6,8 +6,12 @@
 // the desktop answers of the touch / mobile / name-box / P2P bindings that
 // main.lua and start.lua call (cvf_p2p_other.go).
 //
-//   cvf_nearby_test <dir> [both | host SECONDS | scan PORT NAME [BUILDTAG]]
+//   cvf_nearby_test <dir> [both | host SECONDS | scan PORT NAME [BUILDTAG] | ifaces]
 //                            (dir gets data/cvf_online.ini and save/cvf_online_profile.json; UDP 7520 must be free)
+//
+// Every mode first checks net.Interfaces / Addrs (a loopback interface with
+// 127.0.0.1/8); "ifaces" then lists them, as the Nearby code sees them
+// (scanned or skipped by cvfNearbyIfaceOK, the subnets and probe counts).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +22,42 @@ int mkdir(const char *path, unsigned mode);
 
 static lua_LState *L;
 static int failures;
+
+// net.Interfaces as cvf_nearby.go sees it; true if a loopback 127.0.0.1/8 is there
+static bool check_interfaces(bool print) {
+    Ret_Slice_GoNetInterface__GoIface r = net_Interfaces();
+    if (r.r1.type) {
+        GoString m = go_sprintf(GOSTR("%v"), &r.r1, 1);
+        fprintf(stderr, "net.Interfaces failed: %.*s\n", m.len, m.p);
+        return false;
+    }
+    bool lo_ok = false;
+    for (int i = 0; i < r.r0.len; i++) {
+        GoNetInterface *it = &r.r0.p[i];
+        if (print)
+            printf("  if %-3d %-40.*s flags 0x%02x mtu %-5d %s\n", it->Index, it->Name.len, it->Name.p,
+                   (unsigned)it->Flags, it->MTU, fn_cvfNearbyIfaceOK(*it) ? "nearby: scan" : "nearby: skip");
+        Ret_Slice_GoIface__GoIface a = net_Interface_Addrs(it);
+        for (int k = 0; k < a.r0.len; k++) {
+            GoNetIPNet *n = (GoNetIPNet *)a.r0.p[k].data;
+            Ret_int__int sz = net_IPMask_Size(n->Mask);
+            GoString ip = net_IP_String(n->IP);
+            if (print) printf("         %.*s/%d (of %d)\n", ip.len, ip.p, sz.r0, sz.r1);
+            if ((it->Flags & 4) && go_streq(ip, GOSTR("127.0.0.1")) && sz.r0 == 8 && sz.r1 == 32) lo_ok = true;
+        }
+    }
+    if (print) {
+        Slice_cvfNearbyNet nets = fn_cvfNearbyNets();
+        for (int i = 0; i < nets.len; i++) {
+            GoString self = net_IP_String(nets.p[i].self);
+            GoString net = net_IPNet_String(nets.p[i].ipnet);
+            printf("  nearby: %.*s on %.*s, %d probe target(s)\n", self.len, self.p, net.len, net.p,
+                   fn_cvfNearbyTargets(nets.p[i]).len);
+        }
+        if (!nets.len) printf("  nearby: no subnet to scan\n");
+    }
+    return lo_ok;
+}
 
 static bool run(const char *what, const char *src, bool quiet) {
     GoIface err = lua_LState_DoString(L, go_cstr(src));
@@ -81,6 +121,14 @@ int main(int argc, char **argv) {
         "cvfSetRollbackPort(0)\n"
         "assert(cvfGetRollbackPort() == 7601, 'rollback port range')\n",
         false);
+
+    if (check_interfaces(false)) printf("ok   interfaces (loopback 127.0.0.1/8)\n");
+    else fprintf(stderr, "FAIL interfaces: no loopback interface with 127.0.0.1/8\n"), failures++;
+    if (argc > 2 && !strcmp(argv[2], "ifaces")) {
+        check_interfaces(true);
+        printf("%d failure(s)\n", failures);
+        return failures ? 1 : 0;
+    }
 
     // modes: both (default), "host SECONDS" (answer probes only), "scan PORT NAME"
     // (find a host someone else runs, e.g. the Go reference in tests/ik/nearby_go)

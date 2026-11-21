@@ -312,14 +312,14 @@ GoString net_IPNet_String(GoNetIPNet *n) {
     char b[80];
     GoString ip = net_IP_String(n->IP);
     snprintf(b, sizeof b, "%.*s/%d", ip.len, ip.p, mask_bits(n->Mask));
-    return go_strcat(go_cstr(b), GOSTR(""));
+    return go_cstr_copy(b);
 }
 static GoString host_port(Slice_u8 ip, int port) {
     char b[96];
     GoString h = ip.len ? net_IP_String(ip) : GOSTR("");
     if (ip.len && !is_v4(ip)) snprintf(b, sizeof b, "[%.*s]:%d", h.len, h.p, port);
     else snprintf(b, sizeof b, "%.*s:%d", h.len, h.p, port);
-    return go_strcat(go_cstr(b), GOSTR(""));
+    return go_cstr_copy(b);
 }
 GoString net_UDPAddr_String(GoNetUDPAddr *a) { return a ? host_port(a->IP, a->Port) : GOSTR("<nil>"); }
 GoString net_TCPAddr_String(GoNetTCPAddr *a) { return a ? host_port(a->IP, a->Port) : GOSTR("<nil>"); }
@@ -605,18 +605,192 @@ Ret_int__GoIface net_UDPConn_WriteTo(GoOpaque *c, Slice_u8 b, GoIface addr) {
 }
 
 // ---------------------------------------------------------------- interfaces
+// Go's net.Flags bits
+#define NETF_UP 1
+#define NETF_BROADCAST 2
+#define NETF_LOOPBACK 4
+#define NETF_POINTTOPOINT 8
+#define NETF_MULTICAST 16
+#define NETF_RUNNING 32
+
+static GoIface ipnet_iface(Slice_u8 ip, Slice_u8 mask) {
+    GoNetIPNet *n = go_new(GoNetIPNet);
+    n->IP = ip, n->Mask = mask;
+    return (GoIface){GO_TID_P_net_IPNet, n};
+}
+
+#if defined(_WIN32)
+// Windows: GetAdaptersAddresses, as Go's interface_windows.go: the adapter's
+// FriendlyName, IfIndex (Ipv6IfIndex when 0), MTU, MAC, flags inferred from
+// OperStatus and IfType, and every unicast address with its on-link prefix
+// length (IPv4 and IPv6).
+//
+// One difference, for Nearby (cvf_nearby.go, cvfNearbyIfaceOK): Go skips
+// cellular/VPN/peer-to-peer/virtual links by the Unix interface name prefix
+// (utun, ppp, wwan, tun, tap, wg, tailscale, docker, veth, virbr, ...).
+// Windows names are friendly, localized and user-editable ("Ethernet",
+// "WLAN", "vEthernet (WSL)"), so Go's own Windows build scans VPN and
+// virtual-machine adapters too. Here a non-LAN adapter's name gets the
+// prefix its Unix counterpart would have, so the same filter skips it:
+//   "ppp "  IF_TYPE_PPP (dial-up, PPPoE, many VPN clients)
+//   "wwan " mobile broadband (IF_TYPE_WWANPP/WWANPP2)
+//   "tun "  IF_TYPE_TUNNEL (Teredo, 6to4, IP-HTTPS, some VPNs) and adapters
+//           whose description names a VPN/overlay driver (TAP-Windows,
+//           Wintun, WireGuard, OpenVPN, ZeroTier, Tailscale, Hamachi, ...)
+//   "veth " host-only/NAT switches of VMs and containers (Hyper-V vEthernet,
+//           WSL, VirtualBox, VMware, Docker, Parallels) - unless the adapter
+//           has an IPv4 default gateway: a Hyper-V *external* switch carries
+//           the PC's real LAN connection and must stay scannable.
+// The Wi-Fi Direct virtual adapter that Windows Mobile Hotspot uses is a
+// real LAN (IF_TYPE_IEEE80211) and keeps its name. The names are read only
+// by the Nearby filter; cvfLocalIPs (the address shown when hosting) uses
+// the flags alone and still lists VPN addresses, as in Go.
+#ifndef IF_TYPE_WWANPP
+#define IF_TYPE_WWANPP 243
+#endif
+#ifndef IF_TYPE_WWANPP2
+#define IF_TYPE_WWANPP2 244
+#endif
+
+static ULONG win_adapters_err;  // the last GetAdaptersAddresses error (for the message)
+
+static GoIface win_adapters_error(void) {
+    char m[96];
+    snprintf(m, sizeof m, "ip+net: GetAdaptersAddresses: error %lu", (unsigned long)win_adapters_err);
+    return op_error("route", m, false);
+}
+
+static IP_ADAPTER_ADDRESSES *win_query(ULONG family, ULONG flags, ULONG *err) {
+    ULONG size = 15000;  // Microsoft's recommended first try
+    for (int tries = 0; tries < 4; tries++) {
+        IP_ADAPTER_ADDRESSES *aa = (IP_ADAPTER_ADDRESSES *)malloc(size);
+        if (!aa) return NULL;
+        ULONG r = GetAdaptersAddresses(family, flags, NULL, aa, &size);
+        if (r == NO_ERROR) return aa;
+        free(aa);
+        *err = r;
+        if (r != ERROR_BUFFER_OVERFLOW) return NULL;
+    }
+    return NULL;
+}
+
+// OnLinkPrefixLength is filled without GAA_FLAG_INCLUDE_PREFIX (Vista+).
+// Wine refuses AF_UNSPEC with GAA_FLAG_INCLUDE_GATEWAYS (ERROR_NOT_SUPPORTED):
+// then IPv4 only (all Nearby scans), then both families without gateways.
+static IP_ADAPTER_ADDRESSES *win_adapters(void) {
+    net_init();
+    ULONG skip = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    IP_ADAPTER_ADDRESSES *aa = win_query(AF_UNSPEC, skip | GAA_FLAG_INCLUDE_GATEWAYS, &win_adapters_err);
+    if (!aa && win_adapters_err == ERROR_NOT_SUPPORTED) aa = win_query(AF_INET, skip | GAA_FLAG_INCLUDE_GATEWAYS, &win_adapters_err);
+    if (!aa && win_adapters_err == ERROR_NOT_SUPPORTED) aa = win_query(AF_UNSPEC, skip, &win_adapters_err);
+    return aa;
+}
+
+static int win_index(const IP_ADAPTER_ADDRESSES *a) { return a->IfIndex ? (int)a->IfIndex : (int)a->Ipv6IfIndex; }
+
+static GoString win_utf8(const wchar_t *w) {
+    char buf[512];
+    int n = w ? WideCharToMultiByte(CP_UTF8, 0, w, -1, buf, (int)sizeof buf, NULL, NULL) : 0;
+    if (n <= 0) buf[0] = 0;
+    return go_cstr_copy(buf);
+}
+
+static bool wcontains(const wchar_t *hay, const char *needle) {  // ASCII, case-insensitive
+    if (!hay) return false;
+    size_t nl = strlen(needle);
+    for (; *hay; hay++) {
+        size_t k = 0;
+        while (k < nl && hay[k] && hay[k] < 128 &&
+               (char)(hay[k] >= 'A' && hay[k] <= 'Z' ? hay[k] + 32 : hay[k]) == needle[k])
+            k++;
+        if (k == nl) return true;
+    }
+    return false;
+}
+
+static bool wany(const IP_ADAPTER_ADDRESSES *a, const char *const *list) {
+    for (; *list; list++)
+        if (wcontains(a->Description, *list) || wcontains(a->FriendlyName, *list)) return true;
+    return false;
+}
+
+static bool win_has_v4_gateway(const IP_ADAPTER_ADDRESSES *a) {
+    for (const IP_ADAPTER_GATEWAY_ADDRESS_LH *g = a->FirstGatewayAddress; g; g = g->Next) {
+        const struct sockaddr *sa = g->Address.lpSockaddr;
+        if (sa && sa->sa_family == AF_INET && ((const struct sockaddr_in *)sa)->sin_addr.s_addr != 0) return true;
+    }
+    return false;
+}
+
+// the Unix-style prefix for a non-LAN adapter (see above), or NULL
+static const char *win_nonlan_prefix(const IP_ADAPTER_ADDRESSES *a) {
+    static const char *const vpn[] = {"tap-windows", "tap-win32", "tap adapter", "wintun", "wireguard", "openvpn",
+                                      "zerotier", "tailscale", "hamachi", "radmin vpn", "nordlynx", "expressvpn",
+                                      "protonvpn", "mullvad", "softether", "globalprotect", "pangp", "anyconnect",
+                                      "fortinet", "fortissl", "juniper", "pulse secure", "sonicwall", "vpn", NULL};
+    static const char *const vm[] = {"hyper-v virtual", "vethernet", "virtualbox", "vmware", "docker", "wsl",
+                                     "parallels", "qemu", "kvm", NULL};
+    switch (a->IfType) {
+    case IF_TYPE_PPP: return "ppp ";
+    case IF_TYPE_WWANPP:
+    case IF_TYPE_WWANPP2: return "wwan ";
+    case IF_TYPE_TUNNEL: return "tun ";
+    case IF_TYPE_SOFTWARE_LOOPBACK: return NULL;  // flagged as loopback
+    }
+    if (wany(a, vpn)) return "tun ";
+    if (wany(a, vm) && !win_has_v4_gateway(a)) return "veth ";
+    return NULL;
+}
+
+static GoNetInterface win_interface(const IP_ADAPTER_ADDRESSES *a) {
+    GoNetInterface g;
+    memset(&g, 0, sizeof g);
+    g.Index = win_index(a);
+    g.MTU = a->Mtu == 0xffffffffu ? -1 : (int)a->Mtu;
+    GoString name = win_utf8(a->FriendlyName);
+    const char *pre = win_nonlan_prefix(a);
+    g.Name = pre ? go_strcat(go_cstr(pre), name) : name;
+    if (a->PhysicalAddressLength > 0) {
+        int n = (int)a->PhysicalAddressLength;
+        g.HardwareAddr = (Slice_u8){(u8 *)gc_alloc_atomic((size_t)n), n, n};
+        memcpy(g.HardwareAddr.p, a->PhysicalAddress, (size_t)n);
+    }
+    uintptr_t f = 0;
+    if (a->OperStatus == IfOperStatusUp) f |= NETF_UP | NETF_RUNNING;
+    switch (a->IfType) {
+    case IF_TYPE_ETHERNET_CSMACD:
+    case IF_TYPE_ISO88025_TOKENRING:
+    case IF_TYPE_IEEE80211:
+    case IF_TYPE_IEEE1394: f |= NETF_BROADCAST | NETF_MULTICAST; break;
+    case IF_TYPE_PPP:
+    case IF_TYPE_TUNNEL: f |= NETF_POINTTOPOINT | NETF_MULTICAST; break;
+    case IF_TYPE_SOFTWARE_LOOPBACK: f |= NETF_LOOPBACK | NETF_MULTICAST; break;
+    case IF_TYPE_ATM: f |= NETF_BROADCAST | NETF_POINTTOPOINT | NETF_MULTICAST; break;
+    }
+    g.Flags = f;
+    return g;
+}
+#endif
+
 Ret_Slice_GoNetInterface__GoIface net_Interfaces(void) {
     Slice_GoNetInterface out = {0};
-#if defined(_WIN32)
-    // one pseudo-interface; its addresses come from Addrs() below
-    out.p = (GoNetInterface *)gc_calloc(1, sizeof(GoNetInterface));
-    out.len = out.cap = 1;
-    out.p[0].Index = 1, out.p[0].Name = GOSTR("default"), out.p[0].Flags = 1 | 8;  // up, multicast-ish
-#else
-    struct ifaddrs *ifa = NULL;
-    if (getifaddrs(&ifa) != 0) return (Ret_Slice_GoNetInterface__GoIface){out, op_error("route", "ip+net: no interfaces", false)};
     int cap = 8;
     out.p = (GoNetInterface *)gc_calloc((size_t)cap, sizeof(GoNetInterface));
+#if defined(_WIN32)
+    IP_ADAPTER_ADDRESSES *aa = win_adapters();
+    if (!aa) return (Ret_Slice_GoNetInterface__GoIface){(Slice_GoNetInterface){0}, win_adapters_error()};
+    for (IP_ADAPTER_ADDRESSES *a = aa; a; a = a->Next) {
+        if (out.len == cap) {
+            GoNetInterface *n = (GoNetInterface *)gc_calloc((size_t)cap * 2, sizeof(GoNetInterface));
+            memcpy(n, out.p, sizeof(GoNetInterface) * (size_t)out.len);
+            out.p = n, cap *= 2;
+        }
+        out.p[out.len++] = win_interface(a);
+    }
+    free(aa);
+#else
+    struct ifaddrs *ifa = NULL;
+    if (getifaddrs(&ifa) != 0) return (Ret_Slice_GoNetInterface__GoIface){(Slice_GoNetInterface){0}, op_error("route", "ip+net: no interfaces", false)};
     for (struct ifaddrs *i = ifa; i; i = i->ifa_next) {
         bool dup = false;
         for (int k = 0; k < out.len; k++)
@@ -629,18 +803,19 @@ Ret_Slice_GoNetInterface__GoIface net_Interfaces(void) {
         }
         GoNetInterface *g = &out.p[out.len++];
         g->Index = (int)if_nametoindex(i->ifa_name);
-        g->Name = go_strcat(go_cstr(i->ifa_name), GOSTR(""));
-        uintptr_t f = 0;  // Go's net.Flags: up, broadcast, loopback, point-to-point, multicast
-        if (i->ifa_flags & IFF_UP) f |= 1;
-        if (i->ifa_flags & IFF_BROADCAST) f |= 2;
-        if (i->ifa_flags & IFF_LOOPBACK) f |= 4;
-        if (i->ifa_flags & IFF_POINTOPOINT) f |= 8;
-        if (i->ifa_flags & IFF_MULTICAST) f |= 16;
+        g->Name = go_cstr_copy(i->ifa_name);
+        uintptr_t f = 0;
+        if (i->ifa_flags & IFF_UP) f |= NETF_UP;
+        if (i->ifa_flags & IFF_BROADCAST) f |= NETF_BROADCAST;
+        if (i->ifa_flags & IFF_LOOPBACK) f |= NETF_LOOPBACK;
+        if (i->ifa_flags & IFF_POINTOPOINT) f |= NETF_POINTTOPOINT;
+        if (i->ifa_flags & IFF_MULTICAST) f |= NETF_MULTICAST;
+        if (i->ifa_flags & IFF_RUNNING) f |= NETF_RUNNING;
         g->Flags = f;
     }
-    out.cap = cap;
     freeifaddrs(ifa);
 #endif
+    out.cap = cap;
     return (Ret_Slice_GoNetInterface__GoIface){out, {0}};
 }
 
@@ -649,23 +824,24 @@ Ret_Slice_GoIface__GoIface net_Interface_Addrs(GoNetInterface *it) {
     int cap = 4;
     out.p = (GoIface *)gc_calloc((size_t)cap, sizeof(GoIface));
 #if defined(_WIN32)
-    // the host's IPv4 addresses (enough for the LAN address shown in menus)
-    (void)it;
-    char host[256];
-    struct addrinfo hints, *res = NULL;
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
-    net_init();
-    if (gethostname(host, sizeof host) == 0 && getaddrinfo(host, NULL, &hints, &res) == 0) {
-        for (struct addrinfo *r = res; r && out.len < cap; r = r->ai_next) {
-            GoNetIPNet *n = go_new(GoNetIPNet);
-            n->IP = ip_bytes(r->ai_addr);
-            n->Mask = (Slice_u8){(u8 *)gc_alloc_atomic(4), 4, 4};
-            memset(n->Mask.p, 0xff, 3), n->Mask.p[3] = 0;
-            out.p[out.len++] = (GoIface){GO_TID_P_net_IPNet, n};
+    IP_ADAPTER_ADDRESSES *aa = win_adapters();
+    if (!aa) return (Ret_Slice_GoIface__GoIface){(Slice_GoIface){0}, win_adapters_error()};
+    for (IP_ADAPTER_ADDRESSES *a = aa; a; a = a->Next) {
+        if (it && win_index(a) != it->Index) continue;
+        for (IP_ADAPTER_UNICAST_ADDRESS *u = a->FirstUnicastAddress; u; u = u->Next) {
+            const struct sockaddr *sa = u->Address.lpSockaddr;
+            if (!sa || (sa->sa_family != AF_INET && sa->sa_family != AF_INET6)) continue;
+            int bits = sa->sa_family == AF_INET ? 32 : 128, ones = (int)u->OnLinkPrefixLength;
+            if (ones > bits) ones = bits;
+            if (out.len == cap) {
+                GoIface *n = (GoIface *)gc_calloc((size_t)cap * 2, sizeof(GoIface));
+                memcpy(n, out.p, sizeof(GoIface) * (size_t)out.len);
+                out.p = n, cap *= 2;
+            }
+            out.p[out.len++] = ipnet_iface(ip_bytes(sa), net_CIDRMask(ones, bits));
         }
-        freeaddrinfo(res);
     }
+    free(aa);
 #else
     struct ifaddrs *ifa = NULL;
     if (getifaddrs(&ifa) != 0) return (Ret_Slice_GoIface__GoIface){out, {0}};
