@@ -1,9 +1,11 @@
 # Android port of the native C engine
 
 Status 2026-11-21, branch `claude/native-android`, rebased onto
-`claude/native-integration` 0eaba5c (native-ios + native-windows +
+`claude/native-integration` a14596e (native-ios + native-windows +
 native-netplay + the GGPO sync fix + the Windows/Android collector fixes +
-the GLES single-row upload fix from the iOS device run): the engine builds for
+the GLES single-row upload fix from the iOS device run + the runtime review
+fixes + native-netplay2: TCP race fix and content fingerprint in the
+handshake + native-vita: 32-bit runtime fixes): the engine builds for
 arm64-v8a with NDK r27d, the APK `cvf-native-android.apk` is built and
 signed by CI, both reference fights give the reference md5s with Android's
 code generation. Nothing has run on an Android device yet (none available).
@@ -26,6 +28,7 @@ regenerated, never edited.
 | Wrapper | Jesuszilla/ikemen-droid dbc5cfb + `android/cvf-online.patch` | the same, then `android/native/customize-native.sh` |
 | Native libs | libmain.so (Go), libSDL2.so, ffmpeg, libxmp | libmain.so (C engine, 5.5 MB), libSDL2.so 2.32.10 |
 | Version | 0.8.5 | 2.0-native, versionCode = CI run number |
+| Minimum Android | 5.0 (API 21, the wrapper's default) | **8.0 (API 26)**, as the native code (`minSdkVersion` set by customize-native.sh); native libraries compressed and extracted at install (`useLegacyPackaging`), as before |
 
 `customize-native.sh` runs `android/customize.sh` (gestures overlay, game
 folder lookup, never overwriting `save/`, signing) and then: own id and
@@ -151,7 +154,8 @@ SDL_GameControllerDB, `save/config.ini` from cvf-files with
 - `main.go`: `RenderMode = "OpenGL ES 3.2"` on Android under `cvfEngine`.
 - `tools/ikemen/cvf_mobile.go`: `cvfHostTapListening`; root in
   `run_reach.sh`. Regenerated: 4838 functions, 0 TODO, 0 syntax errors, 31
-  placeholders (none new). Desktop reference fight unchanged
+  placeholders (none new); on integration a14596e 4859 functions (4858 +
+  `cvfHostTapListening`), 0 TODO, 79 stubs, 31 placeholders. Desktop reference fight unchanged
   (54f8ae06..., Linux x86-64).
 
 ## 4. Online
@@ -193,7 +197,10 @@ CI: `.github/workflows/native-android.yml` (push to this branch or
 27.3.13750724 with sdkmanager, builds, assembles with Gradle (AGP 8.1, JDK
 17), checks package/label/ABI/signature/CvfHttp and uploads the artifacts
 `cvf-native-android` (the APK) and `cvf-native-android-tests`; job
-`arm64-tests` runs the static test binaries on `ubuntu-24.04-arm`.
+`arm64-tests` runs the static test binaries on `ubuntu-24.04-arm`. Run by
+hand with `apk_in_log` (`gh workflow run native-android.yml --ref
+claude/native-android -f apk_in_log=true`), the APK is also printed as
+base64 in the log, for hosts that can fetch logs but not artifacts.
 
 The container used for this port has no access to dl.google.com: the NDK
 came from a GitHub mirror (Lonemachinist/android-ndk, r27d). Its clang-18,
@@ -207,20 +214,34 @@ from Google.
 | Reference fight, cvf-online-2 rules, static bionic `cvf_headless` (NDK r27d, the objects of libmain.so) | qemu-aarch64 7.2 user mode, container | winner 1, 287,752 lines, **54f8ae06d74648af2182587b82a390d6** |
 | Reference fight, cvf-online-5 rules, same binary | qemu-aarch64 | winner 2, 224,158 lines, **4334350cdebd48dc0caa04cf78e0d9e3** |
 | Same, built without `-fsigned-char` | qemu-aarch64 | 54f8ae06... (unchanged) |
-| `cvf_tests` (detmath golden values, RNG, Atof, formats, scheduler, GC selftest) | qemu and CI `ubuntu-24.04-arm` (real arm64) | 93 checks, 0 failures |
+| `cvf_tests` (detmath golden values, RNG, Atof, formats, scheduler, GC selftest) | qemu and CI `ubuntu-24.04-arm` (real arm64) | 103 checks, 0 failures (93 before a14596e) |
 | Fused multiply-add instructions in libmain.so | llvm-objdump | 0 |
 
 All rows were rerun after the rebase onto `claude/native-integration`
-0eaba5c (2026-11-21): regeneration on that base reproduces the committed C
-(4843 functions, 0 TODO, 79 stubs, 31 placeholders, `git status` clean);
-the collector commit fe415a0 was dropped (it is ac3c286 on integration);
-qemu-aarch64 runs of the locally built static `cvf_headless` give
-54f8ae06... (winner 1, 287,752 lines) and 4334350c... (winner 2, 224,158
-lines), `cvf_tests` 93/0, 0 FMA instructions in libmain.so. CI run
-44898464989 (commit b0ea1a3): `apk` and `arm64-tests` pass (93/0, Nearby
-"host listed" and "periodic sweep" ok), versionCode 8, APK SHA-256
-`a9492e4bba0ce8ce76685557733b2db9522f7fcf6d72ef81df7ec77306cf07db`, the
-same file as `dev-android/cvf-native-android.apk` on the Mac. libmain.so
+a14596e (2026-11-21; previous head ff22e9c on 0eaba5c). Conflicts: the
+generated `ik_sim.c` (resolved by regenerating from a fresh
+`setup_ikemen.sh` tree with the merged `ikemen_headless.patch`, Go 1.27.4:
+4859 functions, 0 TODO, 79 stubs, 31 placeholders; the diff to
+integration's C is exactly the Android Go changes), `ik_http.c` (Vita and
+Android `start_worker` branches side by side) and `CMakeLists.txt` (Vita
+and Android blocks side by side). `android_http.c` now publishes `done`
+with `http_job_finish` like the other HTTP back ends. qemu-aarch64 runs of
+the locally built static `cvf_headless` give 54f8ae06... (winner 1,
+287,752 lines) and 4334350c... (winner 2, 224,158 lines), `cvf_tests`
+103/0, `cvf_nearby_test` host listed / periodic sweep ok, 0 FMA
+instructions in libmain.so, 7 exports. CI run 44942448002 (run 11, commit
+e65e1a7): `apk` and `arm64-tests` pass (103/0, Nearby ok), versionCode 11,
+minSdkVersion 26, ABI arm64-v8a only, signer certificate SHA-256
+`4d9a2123...c968c1` (the same key, so it updates versionCode 8), APK
+SHA-256 `f1154a4d64ad607b9ee44c1963fd7dacfc3c4b3d61c6a705c402dcdac3a4b62d`.
+The container's proxy cannot reach the artifact storage, so the APK was
+taken from that run's log (`workflow_dispatch` with `apk_in_log`, base64
+between `CVF-APK-BEGIN <sha256>` and `CVF-APK-END`).
+
+Before that, on 0eaba5c: CI run 44898464989 (commit b0ea1a3), versionCode 8,
+APK SHA-256
+`a9492e4bba0ce8ce76685557733b2db9522f7fcf6d72ef81df7ec77306cf07db`.
+libmain.so
 now contains the GLES binding's row-length fix (`gles_bind.c`): the same
 `UNPACK_ROW_LENGTH` 1 palette uploads happen on Android; Android drivers
 accept them, so it is not a visible change there.
