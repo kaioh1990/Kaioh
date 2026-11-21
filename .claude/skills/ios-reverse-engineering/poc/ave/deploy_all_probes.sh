@@ -24,6 +24,7 @@ declare -a PROBES=(
     "AVESubobjProbe:com.research.avesubobjprobe:ave_subobj_probe.c"
     "AVECounterOverflow:com.research.avecounteroverflow:ave_counter_overflow.c"
     "AVECrossBuffer:com.research.avecrossbuffer:ave_cross_buffer.c"
+    "AVEFirmwareParamProbe:com.research.avefwparam:ave_firmware_param_probe.c"
 )
 
 build_and_deploy() {
