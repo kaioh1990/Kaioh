@@ -5,35 +5,76 @@
 // big.Int only ever holds values that fit an int64 here (big.NewInt), so it
 // is an opaque box around one.
 #include <stdio.h>
+#include <stdlib.h>  // _Exit; arc4random_buf on Apple
 #include <string.h>
 
 #if defined(_WIN32)
 #include <windows.h>
 #include <bcrypt.h>
-#elif defined(__APPLE__)
-#include <stdlib.h>  // arc4random_buf
+#elif defined(__linux__)
+#include <errno.h>
+#include <sys/syscall.h>  // SYS_getrandom (also on Android before API 28, which lacks getrandom())
+long syscall(long number, ...);  // declared by hand: <unistd.h> clashes with generated names
 #endif
 
 #include "ik/ik_sim.h"
 
 GoIface crand_Reader;  // nil; crand_Int reads the OS source whatever reader it is given
 
+// Go 1.24+: crypto/rand.Read never fails; if the OS source does, the program
+// dies with a fatal error (not a recoverable panic) rather than continue with
+// weak bytes. Same here: no clock or other fallback.
+_Noreturn static void rand_fatal(const char *what) {
+    fflush(stdout);
+    fprintf(stderr, "fatal error: crypto/rand: failed to read random data (see https://go.dev/issue/66821): %s\n", what);
+    fflush(stderr);
+    _Exit(2);  // Go's exit status for a fatal error
+}
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+// /dev/urandom: on Linux only where the kernel has no getrandom(2) (< 3.17), as Go
+static void urandom_read(u8 *p, size_t n) {
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (!f) rand_fatal("open /dev/urandom failed");
+    size_t got = fread(p, 1, n, f);
+    fclose(f);
+    if (got != n) rand_fatal("short read from /dev/urandom");
+}
+#endif
+
 static void os_random(u8 *p, size_t n) {
 #if defined(_WIN32)
-    BCryptGenRandom(NULL, p, (ULONG)n, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-#elif defined(__APPLE__)
-    arc4random_buf(p, n);
-#else
-    FILE *f = fopen("/dev/urandom", "rb");
-    size_t got = f ? fread(p, 1, n, f) : 0;
-    if (f) fclose(f);
-    if (got != n) {  // no /dev/urandom: monotonic clock mixing (ids only, never game state)
-        u64 x = (u64)go_mono_ns() ^ 0x9E3779B97F4A7C15ull;
-        for (size_t i = got; i < n; i++) {
-            x ^= x << 13, x ^= x >> 7, x ^= x << 17;
-            p[i] = (u8)(x >> 32);
+    // ULONG is 32-bit: read in chunks (callers ask for a few bytes, but be exact)
+    while (n > 0) {
+        ULONG k = n > 0x40000000u ? 0x40000000u : (ULONG)n;
+        NTSTATUS st = BCryptGenRandom(NULL, p, k, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+        if (st != 0) {  // STATUS_SUCCESS
+            char msg[64];
+            snprintf(msg, sizeof msg, "BCryptGenRandom: NTSTATUS 0x%08lx", (unsigned long)st);
+            rand_fatal(msg);
         }
+        p += k, n -= k;
     }
+#elif defined(__APPLE__)
+    arc4random_buf(p, n);  // cannot fail
+#elif defined(__linux__)
+    while (n > 0) {
+        size_t k = n > 33554431u ? 33554431u : n;  // getrandom's per-call limit (2^25 - 1)
+        long r = syscall(SYS_getrandom, p, k, 0);
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            if (errno == ENOSYS) {
+                urandom_read(p, n);
+                return;
+            }
+            char msg[64];
+            snprintf(msg, sizeof msg, "getrandom: errno %d", errno);
+            rand_fatal(msg);
+        }
+        p += r, n -= (size_t)r;  // a short read (signal) continues where it stopped
+    }
+#else
+    urandom_read(p, n);  // other Unix
 #endif
 }
 
