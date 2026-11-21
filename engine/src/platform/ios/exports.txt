@@ -1,0 +1,7 @@
+_CvfInMatch
+_CvfTouchTap
+_CvfSetTouchMenus
+_CvfP2PRegister
+_CvfP2PPeers
+_CvfNameEntered
+_SDL_main

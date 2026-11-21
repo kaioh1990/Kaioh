@@ -12,4 +12,4 @@
 export GOTOC_PKGS=${GOTOC_PKGS-auto}
 export GOTOC_SKIP_PKGS=${GOTOC_SKIP_PKGS-github.com/sqweek/dialog,golang.org/x/exp/...,golang.org/x/text/...,gopkg.in/ini.v1,github.com/qmuntal/gltf/...}
 export GOTOC_STD_PKGS=${GOTOC_STD_PKGS-container/list}
-export GOTOC_BIND_PKGS=${GOTOC_BIND_PKGS-github.com/veandco/go-sdl2/sdl,github.com/go-gl/gl/v3.3-core/gl}
+export GOTOC_BIND_PKGS=${GOTOC_BIND_PKGS-github.com/veandco/go-sdl2/sdl,github.com/go-gl/gl/v3.3-core/gl,github.com/leonkasovan/gl/v3.2/gles2}

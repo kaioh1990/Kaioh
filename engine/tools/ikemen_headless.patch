@@ -12008,15 +12008,17 @@ index 0000000..3d70745
 +}
 diff --git a/src/cvf_engine_other.go b/src/cvf_engine_other.go
 new file mode 100644
-index 0000000..5a9a833
+index 0000000..f8b7b0f
 --- /dev/null
 +++ b/src/cvf_engine_other.go
-@@ -0,0 +1,5 @@
+@@ -0,0 +1,7 @@
 +//go:build !cvf
 +
 +package main
 +
 +const cvfEngine = false
++
++func cvfSelectRendererGLES(cfgVal string) (Renderer, FontRenderer, bool) { return nil, nil, false }
 diff --git a/src/cvf_gohead.go b/src/cvf_gohead.go
 new file mode 100644
 index 0000000..aa0a00d
@@ -12071,6 +12073,99 @@ index 0000000..aa0a00d
 +func (s *cvfNullSpeaker) Unlock()                                       { s.mu.Unlock() }
 +func (s *cvfNullSpeaker) Close()                                        {}
 +func (s *cvfNullSpeaker) FillAudio()                                    {}
+diff --git a/src/cvf_mobile.go b/src/cvf_mobile.go
+new file mode 100644
+index 0000000..a644746
+--- /dev/null
++++ b/src/cvf_mobile.go
+@@ -0,0 +1,87 @@
++//go:build cvf
++
++package main
++
++// Mobile glue of the native C engine. The iOS app calls these through the
++// C host API (engine/src/platform/ios/cvf_host.c), always on the engine
++// (main) thread: directly from UIKit touch callbacks during the event pump,
++// or from the per-frame mailbox drain for values coming from other threads.
++
++import (
++	"fmt"
++	"io"
++	"net/http"
++	"strings"
++	"time"
++	"unsafe"
++)
++
++// "OpenGL ES 3.x" selects the GLES renderer (iOS forces "OpenGL ES 3.0").
++func cvfSelectRendererGLES(cfgVal string) (Renderer, FontRenderer, bool) {
++	if strings.HasPrefix(cfgVal, "OpenGL ES") {
++		return &Renderer_GLES32{}, &FontRenderer_GLES32{}, true
++	}
++	return nil, nil, false
++}
++
++// The GLES entry points are bound by the platform layer (gles_bind.c);
++// gl.Init ignores this loader.
++func eglGetProcAddress(name string) unsafe.Pointer { return nil }
++
++// Entry of the iOS app (SDL_main): --assets DIR --screen WxH, as the Go
++// app's SDL_main export.
++func cvfIOSMain(args []string) {
++	for i := 0; i+1 < len(args); i++ {
++		switch args[i] {
++		case "--assets":
++			sys.baseDir = args[i+1]
++		case "--screen":
++			cvfParseScreen(args[i+1])
++		}
++	}
++	realMain()
++}
++
++// True while a fight is on screen, so touches stay game controls.
++func cvfHostInMatch() bool { return sys.middleOfMatch() && !sys.motif.me.active }
++
++// Hands a tap to the current screen; false if that screen ignores taps.
++func cvfHostTap(x, y float32) bool { return cvfStoreTap(x, y) }
++
++func cvfHostSetTouchMenus(on bool) { cvfTouchMenus = on }
++
++// Nearby peers reachable over the app's direct link (JSON list).
++func cvfHostPeers(json string) { cvfNearby.setP2P(json) }
++
++// The player's answer from the app's name box ("" if cancelled).
++func cvfHostNameEntered(name string) { cvfNameAskDone(name) }
++
++// Lobby round trip through net/http (NSURLSession on iOS), for a local test
++// lobby (lobby/main.go): GET /api/rooms, POST a room, GET again. Run by the
++// iOS app with CVF_HTTP_TEST=<base URL> (src/platform/ios/ios_main.c).
++func cvfHTTPSelfTest(base string) string {
++	c := &http.Client{Timeout: 15 * time.Second}
++	out := ""
++	get := func() {
++		resp, err := c.Get(base + "/api/rooms")
++		if err != nil {
++			out += "GET error: " + err.Error() + "\n"
++			return
++		}
++		b, _ := io.ReadAll(resp.Body)
++		resp.Body.Close()
++		out += fmt.Sprintf("GET /api/rooms -> %d %s\n", resp.StatusCode, strings.TrimSpace(string(b)))
++	}
++	get()
++	body := `{"name":"iOS Simulator","port":7500,"udp_port":7501,"version":"` + cvfOnline.buildTag + `"}`
++	resp, err := c.Post(base+"/api/rooms", "application/json", strings.NewReader(body))
++	if err != nil {
++		out += "POST error: " + err.Error() + "\n"
++	} else {
++		b, _ := io.ReadAll(resp.Body)
++		resp.Body.Close()
++		out += fmt.Sprintf("POST /api/rooms -> %d %s\n", resp.StatusCode, strings.TrimSpace(string(b)))
++	}
++	get()
++	return out
++}
 diff --git a/src/cvf_nearby.go b/src/cvf_nearby.go
 new file mode 100644
 index 0000000..6323a30
@@ -13749,6 +13844,35 @@ index 0000000..10b9d64
 +		fmt.Fprintf(os.Stderr, "[cvf] "+format+"\n", args...)
 +	}
 +}
+diff --git a/src/cvf_p2p_cvf.go b/src/cvf_p2p_cvf.go
+new file mode 100644
+index 0000000..ba789f0
+--- /dev/null
++++ b/src/cvf_p2p_cvf.go
+@@ -0,0 +1,23 @@
++//go:build cvf
++
++package main
++
++// Nearby direct link in the native C engine. On iPhone/iPad the app's
++// CvfP2P.m (Network.framework peer-to-peer) registers a function table
++// (CvfP2PRegister); the functions below are implemented in C
++// (src/ik/ik_native.c, GOTOC_NATIVE_FUNCS) and call through that table, as
++// cvf_p2p_ios.go does in the Go app. Elsewhere the table stays empty and
++// they do nothing.
++
++import "runtime"
++
++var cvfP2PAvailable = runtime.GOOS == "ios"
++
++func cvfP2PAdvertise(id, name, ver string, tcpPort, udpPort int) {}
++func cvfP2PAdvertiseStop()                                       {}
++func cvfP2PBrowse(on bool)                                       {}
++func cvfP2PJoin(id string, localTcp, localUdp int) bool          { return false }
++func cvfP2PClose()                                               {}
++
++// Opens the app's name box. False if the app has none.
++func cvfNativeAskName(suggestion string) bool { return false }
 diff --git a/src/cvf_p2p_export_ios.go b/src/cvf_p2p_export_ios.go
 new file mode 100644
 index 0000000..a6904e3
@@ -13866,11 +13990,11 @@ index 0000000..574af3b
 +}
 diff --git a/src/cvf_p2p_other.go b/src/cvf_p2p_other.go
 new file mode 100644
-index 0000000..530eeb0
+index 0000000..1582d5b
 --- /dev/null
 +++ b/src/cvf_p2p_other.go
 @@ -0,0 +1,15 @@
-+//go:build !ios
++//go:build !ios && !cvf
 +
 +package main
 +
@@ -14986,12 +15110,12 @@ index fdec276..0b7f3ba 100644
  package main
  
 diff --git a/src/font_gles32.go b/src/font_gles32.go
-index fa6d8f3..a1126ca 100644
+index fa6d8f3..46afb11 100644
 --- a/src/font_gles32.go
 +++ b/src/font_gles32.go
 @@ -1,4 +1,4 @@
 -//go:build android
-+//go:build android || vita
++//go:build android || vita || cvf
  
  package main
  
@@ -15434,7 +15558,7 @@ index 0000000..4442bf8
 +	return l.PCall(0, lua.MultRet, nil)
 +}
 diff --git a/src/main.go b/src/main.go
-index 2609c76..00f69a9 100644
+index 2609c76..5238e0b 100644
 --- a/src/main.go
 +++ b/src/main.go
 @@ -60,6 +60,7 @@ func main() {
@@ -15486,7 +15610,7 @@ index 2609c76..00f69a9 100644
  
  	// Config file path
  	configPath := "save/config.ini"
-@@ -198,10 +215,12 @@ func realMain() {
+@@ -198,10 +215,16 @@ func realMain() {
  		// For Android, let's see exactly what failed
  		panic(err)
  	}
@@ -15494,12 +15618,16 @@ index 2609c76..00f69a9 100644
  	// Force to Vulkan 1.3 for iOS
  	if runtime.GOOS == "ios" {
  		cfg.Video.RenderMode = "Vulkan 1.3"
++		if cvfEngine {
++			// C engine: OpenGL ES 3.0 (no Vulkan/MoltenVK)
++			cfg.Video.RenderMode = "OpenGL ES 3.0"
++		}
  	}
 +	vitaTrace("main: config loaded")
  	sys.cfg = *cfg
  	// Logcat("LOG: Config Loaded. System Script: " + sys.cfg.Config.System)
  
-@@ -219,10 +238,11 @@ func realMain() {
+@@ -219,10 +242,11 @@ func realMain() {
  
  	// Initialize game and create window
  	// This is where the window is born!
@@ -16075,7 +16203,7 @@ index 1a2540b..3b8944d 100644
  package main
  
 diff --git a/src/render_gles32.go b/src/render_gles32.go
-index 891acab..01b308e 100644
+index 891acab..f236415 100644
 --- a/src/render_gles32.go
 +++ b/src/render_gles32.go
 @@ -2,7 +2,7 @@
@@ -16083,7 +16211,7 @@ index 891acab..01b308e 100644
  // Android (ARM). Work adapted from Leon Kasovan
  
 -//go:build android
-+//go:build android || vita
++//go:build android || vita || cvf
  
  package main
  
@@ -16124,7 +16252,7 @@ index 891acab..01b308e 100644
  
  	vertObj, err = r.compileShader(gl.VERTEX_SHADER, vert)
  	if err != nil {
-@@ -126,7 +142,7 @@ func (r *Renderer_GLES32) compileShader(shaderType uint32, src string) (uint32,
+@@ -126,9 +142,13 @@ func (r *Renderer_GLES32) compileShader(shaderType uint32, src string) (uint32,
  	// GLES 3.0+ drivers REQUIRE the version to be the very first line.
  	// If your file doesn't have it, we add it here.
  	fullSrc := src
@@ -16132,8 +16260,14 @@ index 891acab..01b308e 100644
 +	if !isVita && !strings.HasPrefix(strings.TrimSpace(src), "#version") {
  		// Anchor to 320 es for best feature compatibility
  		header := "#version 320 es\n"
++		if runtime.GOOS == "ios" {
++			// Apple OpenGL ES stops at 3.0 (C engine on iPhone/iPad)
++			header = "#version 300 es\n"
++		}
  		fullSrc = header + src
-@@ -237,6 +253,7 @@ func (r *Renderer_GLES32) bindTextureToUnit(unit int32, target uint32, tex *Text
+ 	}
+ 
+@@ -237,6 +257,7 @@ func (r *Renderer_GLES32) bindTextureToUnit(unit int32, target uint32, tex *Text
  		return false
  	}
  
@@ -16141,7 +16275,7 @@ index 891acab..01b308e 100644
  	gl.ActiveTexture(gl.TEXTURE0 + uint32(unit))
  	gl.BindTexture(target, handle)
  
-@@ -254,6 +271,7 @@ func (r *Renderer_GLES32) bindTextureToUnitForced(unit int32, target uint32, tex
+@@ -254,6 +275,7 @@ func (r *Renderer_GLES32) bindTextureToUnitForced(unit int32, target uint32, tex
  		root = tex.root
  	}
  
@@ -16149,7 +16283,7 @@ index 891acab..01b308e 100644
  	gl.ActiveTexture(gl.TEXTURE0 + uint32(unit))
  	gl.BindTexture(target, handle)
  
-@@ -395,8 +413,10 @@ func (t *Texture_GLES32) SetData(data []byte) {
+@@ -395,8 +417,10 @@ func (t *Texture_GLES32) SetData(data []byte) {
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -16162,7 +16296,7 @@ index 891acab..01b308e 100644
  
  	if data != nil {
  		gl.TexImage2D(gl.TEXTURE_2D, 0, int32(internalFormat), t.width, t.height, 0, uploadFormat, uploadType, unsafe.Pointer(&data[0]))
-@@ -422,7 +442,9 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -422,7 +446,9 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -16173,7 +16307,7 @@ index 891acab..01b308e 100644
  
  	bits := Max(t.depth, 8)
  	uploadFormat := t.MapUploadFormat(bits)
-@@ -436,8 +458,20 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -436,8 +462,20 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  	if stride != width*bytesPerPixel {
  		rowLength = stride / bytesPerPixel
  	}
@@ -16195,7 +16329,7 @@ index 891acab..01b308e 100644
  
  	ptr := unsafe.Pointer(nil)
  	if data != nil {
-@@ -454,7 +488,7 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
+@@ -454,7 +492,7 @@ func (t *Texture_GLES32) SetSubData2(data []byte, x, y, width, height, stride in
  		Logcat(fmt.Sprintf("GL ERROR in SetSubData: %v | w:%d h:%d s:%d", err, width, height, stride))
  	}
  
@@ -16204,7 +16338,7 @@ index 891acab..01b308e 100644
  		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
  	}
  
-@@ -472,8 +506,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
+@@ -472,8 +510,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
  
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -16217,7 +16351,7 @@ index 891acab..01b308e 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, int32(internalFormat), t.width, t.height, 0, uploadFormat, uploadType, unsafe.Pointer(&data[0]))
  	gl.GenerateMipmap(gl.TEXTURE_2D)
  	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, int32(mag))
-@@ -485,8 +521,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
+@@ -485,8 +525,10 @@ func (t *Texture_GLES32) SetDataG(data []byte, mag, min, ws, wt TextureSamplingP
  func (t *Texture_GLES32) SetPixelData(data []float32) {
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
@@ -16230,7 +16364,7 @@ index 891acab..01b308e 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, t.width, t.height, 0, gl.RGBA, gl.FLOAT, unsafe.Pointer(&data[0]))
  }
  
-@@ -517,8 +555,10 @@ func (t *Texture_GLES32) SetRGBPixelData(data []float32) {
+@@ -517,8 +559,10 @@ func (t *Texture_GLES32) SetRGBPixelData(data []float32) {
  	r.SetActiveTexture0() //gl.ActiveTexture(gl.TEXTURE0)
  
  	gl.BindTexture(gl.TEXTURE_2D, t.handle)
@@ -16243,7 +16377,7 @@ index 891acab..01b308e 100644
  	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, t.width, t.height, 0, gl.RGB, gl.FLOAT, unsafe.Pointer(&data[0]))
  }
  */
-@@ -556,6 +596,9 @@ func (t *Texture_GLES32) MapUploadType(i int32) uint32 {
+@@ -556,6 +600,9 @@ func (t *Texture_GLES32) MapUploadType(i int32) uint32 {
  func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
  	switch i {
  	case 8:
@@ -16253,7 +16387,7 @@ index 891acab..01b308e 100644
  		return gl.RED
  	case 24:
  		return gl.RGB
-@@ -573,10 +616,19 @@ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
+@@ -573,10 +620,19 @@ func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
  func (t *Texture_GLES32) MapSizedInternalFormat(i int32) uint32 {
  	switch i {
  	case 8:
@@ -16273,7 +16407,7 @@ index 891acab..01b308e 100644
  		return gl.RGBA8
  	case 96:
  		return gl.RGB32F
-@@ -625,6 +677,9 @@ type Renderer_GLES32 struct {
+@@ -625,6 +681,9 @@ type Renderer_GLES32 struct {
  	modelVertexBuffer       [2]uint32
  	modelIndexBuffer        [2]uint32
  	spriteVAO               uint32
@@ -16283,7 +16417,7 @@ index 891acab..01b308e 100644
  	modelVAO                uint32
  	modelEnvVAO             uint32
  	postVAO                 uint32
-@@ -638,21 +693,33 @@ type Renderer_GLES32 struct {
+@@ -638,21 +697,33 @@ type Renderer_GLES32 struct {
  	GLES32State
  }
  type GLES32State struct {
@@ -16332,18 +16466,18 @@ index 891acab..01b308e 100644
  	uniformF1Cache      map[uint32]float32
  	uniformF2Cache      map[uint32][2]float32
  	uniformF3Cache      map[uint32][3]float32
-@@ -790,8 +857,8 @@ func (r *Renderer_GLES32) Init() {
+@@ -790,8 +861,8 @@ func (r *Renderer_GLES32) Init() {
  	// Data buffers for rendering
  	postVertData := f32.Bytes(binary.LittleEndian, -1, -1, 1, -1, -1, 1, 1, 1)
  
 -	r.enableModel = sys.cfg.Video.EnableModel
 -	r.enableShadow = sys.cfg.Video.EnableModelShadow
-+	r.enableModel = sys.cfg.Video.EnableModel && !isVita
-+	r.enableShadow = sys.cfg.Video.EnableModelShadow && !isVita
++	r.enableModel = sys.cfg.Video.EnableModel && !isVita && runtime.GOOS != "ios"
++	r.enableShadow = sys.cfg.Video.EnableModelShadow && !isVita && runtime.GOOS != "ios"
  
  	// Generate VAO's
  	gl.GenVertexArrays(1, &r.spriteVAO)
-@@ -837,12 +904,26 @@ func (r *Renderer_GLES32) Init() {
+@@ -837,12 +908,26 @@ func (r *Renderer_GLES32) Init() {
  	r.bindBuffer(gl.ARRAY_BUFFER, 0)
  
  	// Sprite shader
@@ -16371,7 +16505,7 @@ index 891acab..01b308e 100644
  
  	// Configure spriteVAO
  	r.bindVertexArray(r.spriteVAO)
-@@ -855,6 +936,12 @@ func (r *Renderer_GLES32) Init() {
+@@ -855,6 +940,12 @@ func (r *Renderer_GLES32) Init() {
  	locUV := r.spriteShader.attributes["uv"]
  	gl.EnableVertexAttribArray(uint32(locUV))
  	gl.VertexAttribPointerWithOffset(uint32(locUV), 2, gl.FLOAT, false, 16, 8)
@@ -16384,12 +16518,13 @@ index 891acab..01b308e 100644
  
  	// Unbind for safety
  	r.bindVertexArray(0)
-@@ -950,10 +1037,14 @@ func (r *Renderer_GLES32) Init() {
+@@ -950,10 +1041,15 @@ func (r *Renderer_GLES32) Init() {
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 +		ppFormat := int32(gl.RGBA8_SNORM)
-+		if isVita {
++		if isVita || runtime.GOOS == "ios" {
++			// RGBA8_SNORM is not color-renderable in OpenGL ES 3.0
 +			ppFormat = gl.RGBA
 +		}
  		gl.TexImage2D(
@@ -16400,7 +16535,7 @@ index 891acab..01b308e 100644
  			sys.scrrect[2],
  			sys.scrrect[3],
  			0,
-@@ -1003,7 +1094,12 @@ func (r *Renderer_GLES32) Init() {
+@@ -1003,7 +1099,12 @@ func (r *Renderer_GLES32) Init() {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_f_texture.handle, 0)
  	} else {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
@@ -16414,7 +16549,7 @@ index 891acab..01b308e 100644
  	}
  
  	// create our two FBOs for our post-processing needs
-@@ -1130,8 +1226,28 @@ func (r *Renderer_GLES32) IsShadowEnabled() bool {
+@@ -1130,8 +1231,28 @@ func (r *Renderer_GLES32) IsShadowEnabled() bool {
  	return r.enableShadow
  }
  
@@ -16444,7 +16579,7 @@ index 891acab..01b308e 100644
  	gl.Viewport(0, 0, sys.scrrect[2], sys.scrrect[3])
  	if clearColor {
  		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-@@ -1140,10 +1256,45 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
+@@ -1140,10 +1261,45 @@ func (r *Renderer_GLES32) BeginFrame(clearColor bool) {
  	}
  }
  
@@ -16490,7 +16625,7 @@ index 891acab..01b308e 100644
  
  	x, y, width, height := int32(0), int32(0), int32(sys.scrrect[2]), int32(sys.scrrect[3])
  	time := sdl.GetPerformanceCounter() // consistent time across all shaders
-@@ -1165,9 +1316,13 @@ func (r *Renderer_GLES32) EndFrame() {
+@@ -1165,9 +1321,13 @@ func (r *Renderer_GLES32) EndFrame() {
  	gl.Viewport(x, y, width, height)
  	// clear both of our post-processing FBOs to make sure
  	// nothing's there. the output is set later
@@ -16507,7 +16642,7 @@ index 891acab..01b308e 100644
  	}
  	fbo_texture := r.fbo_texture
  	if sys.msaa > 0 {
-@@ -1240,42 +1395,59 @@ func (r *Renderer_GLES32) EndFrame() {
+@@ -1240,42 +1400,59 @@ func (r *Renderer_GLES32) EndFrame() {
  }
  
  func (r *Renderer_GLES32) Await() {
@@ -16589,7 +16724,7 @@ index 891acab..01b308e 100644
  	if depthTest != r.depthTest {
  		r.depthTest = depthTest
  		if depthTest {
-@@ -1289,6 +1461,7 @@ func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
+@@ -1289,6 +1466,7 @@ func (r *Renderer_GLES32) SetDepthTest(depthTest bool) {
  
  // Note: This one defaults to enable so we must sync the cache early
  func (r *Renderer_GLES32) SetDepthMask(depthMask bool) {
@@ -16597,7 +16732,7 @@ index 891acab..01b308e 100644
  	if depthMask != r.depthMask {
  		r.depthMask = depthMask
  		gl.DepthMask(depthMask)
-@@ -1296,6 +1469,7 @@ func (r *Renderer_GLES32) SetDepthMask(depthMask bool) {
+@@ -1296,6 +1474,7 @@ func (r *Renderer_GLES32) SetDepthMask(depthMask bool) {
  }
  
  func (r *Renderer_GLES32) SetFrontFace(invertFrontFace bool) {
@@ -16605,7 +16740,7 @@ index 891acab..01b308e 100644
  	if invertFrontFace != r.invertFrontFace {
  		r.invertFrontFace = invertFrontFace
  		if invertFrontFace {
-@@ -1307,6 +1481,7 @@ func (r *Renderer_GLES32) SetFrontFace(invertFrontFace bool) {
+@@ -1307,6 +1486,7 @@ func (r *Renderer_GLES32) SetFrontFace(invertFrontFace bool) {
  }
  
  func (r *Renderer_GLES32) SetCullFace(doubleSided bool) {
@@ -16613,7 +16748,7 @@ index 891acab..01b308e 100644
  	if doubleSided != r.doubleSided {
  		r.doubleSided = doubleSided
  		if !doubleSided {
-@@ -1337,6 +1512,7 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
+@@ -1337,6 +1517,7 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
  	}
  
  	// Switch program
@@ -16621,7 +16756,7 @@ index 891acab..01b308e 100644
  	gl.UseProgram(prog)
  	r.program = prog
  
-@@ -1349,6 +1525,9 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
+@@ -1349,6 +1530,9 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
  }
  
  func (r *Renderer_GLES32) EnableBlending(eq BlendEquation, src, dst BlendFunc) {
@@ -16631,7 +16766,7 @@ index 891acab..01b308e 100644
  	if !r.blendEnabled {
  		gl.Enable(gl.BLEND)
  		r.blendEnabled = true
-@@ -1368,6 +1547,7 @@ func (r *Renderer_GLES32) EnableBlending(eq BlendEquation, src, dst BlendFunc) {
+@@ -1368,6 +1552,7 @@ func (r *Renderer_GLES32) EnableBlending(eq BlendEquation, src, dst BlendFunc) {
  
  func (r *Renderer_GLES32) DisableBlending() {
  	if r.blendEnabled {
@@ -16639,7 +16774,7 @@ index 891acab..01b308e 100644
  		gl.Disable(gl.BLEND)
  		r.blendEnabled = false
  		// Do not update blend equation cache because the hardware doesn't
-@@ -1793,6 +1973,7 @@ func (r *Renderer_GLES32) ReleaseModelPipeline() {
+@@ -1793,6 +1978,7 @@ func (r *Renderer_GLES32) ReleaseModelPipeline() {
  }
  
  func (r *Renderer_GLES32) ReadPixels(data []uint8, width, height int) {
@@ -16647,7 +16782,7 @@ index 891acab..01b308e 100644
  	// we defer the EndFrame(), SwapBuffers(), and BeginFrame() calls that were previously below now to
  	// a single spot in order to prevent the blank screenshot bug on single digit FPS
  	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, 0)
-@@ -1800,6 +1981,7 @@ func (r *Renderer_GLES32) ReadPixels(data []uint8, width, height int) {
+@@ -1800,6 +1986,7 @@ func (r *Renderer_GLES32) ReadPixels(data []uint8, width, height int) {
  }
  
  func (r *Renderer_GLES32) BeginScreenshot(width, height int) {
@@ -16655,7 +16790,7 @@ index 891acab..01b308e 100644
  	if r.capturePBO == 0 {
  		gl.GenBuffers(1, &r.capturePBO)
  	}
-@@ -1817,6 +1999,7 @@ func (r *Renderer_GLES32) BeginScreenshot(width, height int) {
+@@ -1817,6 +2004,7 @@ func (r *Renderer_GLES32) BeginScreenshot(width, height int) {
  }
  
  func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool {
@@ -16663,7 +16798,7 @@ index 891acab..01b308e 100644
  	if !r.capturePending || len(data) < 4*width*height {
  		return false
  	}
-@@ -1834,11 +2017,53 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
+@@ -1834,11 +2022,53 @@ func (r *Renderer_GLES32) FinishScreenshot(data []uint8, width, height int) bool
  	return true
  }
  
@@ -16717,7 +16852,7 @@ index 891acab..01b308e 100644
  		gl.Enable(gl.SCISSOR_TEST)
  		r.scissorEnabled = true
  	}
-@@ -1846,13 +2071,20 @@ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
+@@ -1846,13 +2076,20 @@ func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
  	// The rect survives DisableScissor, so only set it when it changes
  	rect := [4]int32{x, realY, width, height}
  	if rect != r.scissorRect {
@@ -16738,7 +16873,7 @@ index 891acab..01b308e 100644
  		gl.Disable(gl.SCISSOR_TEST)
  		r.scissorEnabled = false
  		// Do not zero r.scissorRect here because the hardware retains the last rect even when the test is off
-@@ -1865,7 +2097,18 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
+@@ -1865,7 +2102,18 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
  	}
  
  	// Cached path for the sprite shader
@@ -16758,7 +16893,7 @@ index 891acab..01b308e 100644
  		key := (r.program << 16) | uint32(loc)
  		if old, exists := r.uniformICache[key]; exists && old == val {
  			return
-@@ -1873,6 +2116,7 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
+@@ -1873,6 +2121,7 @@ func (r *Renderer_GLES32) SetUniformISub(loc int32, val int32) {
  		r.uniformICache[key] = val
  	}
  
@@ -16766,7 +16901,7 @@ index 891acab..01b308e 100644
  	gl.Uniform1i(loc, val)
  }
  
-@@ -1882,7 +2126,28 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
+@@ -1882,7 +2131,28 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
  	}
  
  	// Cached path for the sprite shader
@@ -16796,7 +16931,7 @@ index 891acab..01b308e 100644
  		key := (r.program << 16) | uint32(loc)
  
  		switch len(values) {
-@@ -1913,6 +2178,7 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
+@@ -1913,6 +2183,7 @@ func (r *Renderer_GLES32) SetUniformFSub(loc int32, values ...float32) {
  	}
  
  	// Uncached path
@@ -16804,7 +16939,7 @@ index 891acab..01b308e 100644
  	switch len(values) {
  	case 1:
  		gl.Uniform1f(loc, values[0])
-@@ -1934,14 +2200,28 @@ func (r *Renderer_GLES32) SetUniformFvSub(loc int32, values []float32) {
+@@ -1934,14 +2205,28 @@ func (r *Renderer_GLES32) SetUniformFvSub(loc int32, values []float32) {
  	case 1, 2, 3, 4:
  		r.SetUniformFSub(loc, values...)
  	case 8:
@@ -16833,7 +16968,7 @@ index 891acab..01b308e 100644
  	if !ok {
  		// Would otherwise write to location 0. Only engine code picks these names
  		panic(fmt.Sprintf("Uniform '%s' not registered in %s", name, s.name))
-@@ -1967,9 +2247,25 @@ func (r *Renderer_GLES32) SetUniformFv(name string, values []float32) {
+@@ -1967,9 +2252,25 @@ func (r *Renderer_GLES32) SetUniformFv(name string, values []float32) {
  // Caching matrices is as expensive as direct function calls
  func (r *Renderer_GLES32) SetUniformMatrix(name string, value []float32) {
  	loc := r.uniformLoc(r.currentProgram, name)
@@ -16841,12 +16976,12 @@ index 891acab..01b308e 100644
 -		gl.UniformMatrix4fv(loc, 1, false, &value[0])
 +	if loc < 0 {
 +		return
-+	}
+ 	}
 +	// Vita: most sprites share the same modelview/projection, so skip the
 +	// upload when the sprite shader already has this matrix.
 +	if isVita && r.program == r.spriteShader.program && loc < int32(len(r.uniArrM)) && len(value) == 16 {
 +		e := &r.uniArrM[loc]
-+		if e.ok && *(*[16]float32)(value) == e.v {
++		if e.ok && eqF32x16(value, &e.v) {
 +			return
 +		}
 +		e.ok = true
@@ -16855,13 +16990,13 @@ index 891acab..01b308e 100644
 +			r.vitaMarkDirty(2, loc)
 +			return
 +		}
- 	}
++	}
 +	r.vitaFlush()
 +	gl.UniformMatrix4fv(loc, 1, false, &value[0])
  }
  
  func (r *Renderer_GLES32) SetModelUniformI(name string, val int) {
-@@ -2075,21 +2371,30 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
+@@ -2075,21 +2376,30 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
  		// Would otherwise write to location 0. Only engine code picks these names
  		panic(fmt.Sprintf("Texture uniform '%s' not registered", name))
  	}
@@ -16896,7 +17031,7 @@ index 891acab..01b308e 100644
  			gl.Uniform4f(loc, t.uvst[0], t.uvst[1], t.uvst[2], t.uvst[3])
  		}
  	}
-@@ -2107,6 +2412,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
+@@ -2107,6 +2417,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
  		for i, bound := range r.boundTex {
  			if bound.tex == t.root {
  				r.texCacheLastUsed[i] = r.texCacheTimer
@@ -16907,7 +17042,7 @@ index 891acab..01b308e 100644
  				r.SetUniformISub(loc, int32(i))
  				return
  			}
-@@ -2123,6 +2432,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
+@@ -2123,6 +2437,10 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
  		r.texCacheLastUsed[oldestUnit] = r.texCacheTimer
  
  		// Update uniform
@@ -16918,7 +17053,7 @@ index 891acab..01b308e 100644
  		r.SetUniformISub(loc, oldestUnit)
  		return
  	}
-@@ -2196,6 +2509,30 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -2196,6 +2514,30 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  		}
  	}
  
@@ -16949,7 +17084,7 @@ index 891acab..01b308e 100644
  	need := len(values) * 4
  
  	// Adjust scratch buffer size if necessary
-@@ -2223,6 +2560,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
+@@ -2223,6 +2565,11 @@ func (r *Renderer_GLES32) SetVertexData(values ...float32) {
  
  // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
  func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
@@ -16961,7 +17096,7 @@ index 891acab..01b308e 100644
  	if loc, ok := r.currentProgram.uniforms["quad"]; ok && loc >= 0 {
  		gl.Uniform4fv(loc, 4, &v[0])
  	}
-@@ -2245,14 +2587,23 @@ func (r *Renderer_GLES32) SetModelIndexData(bufferIndex uint32, values ...uint32
+@@ -2245,14 +2592,23 @@ func (r *Renderer_GLES32) SetModelIndexData(bufferIndex uint32, values ...uint32
  }
  
  func (r *Renderer_GLES32) RenderQuad() {
@@ -16985,7 +17120,7 @@ index 891acab..01b308e 100644
  	gl.DrawElementsWithOffset(r.MapPrimitiveMode(mode), int32(count), gl.UNSIGNED_INT, uintptr(offset))
  }
  
-@@ -2472,6 +2823,7 @@ func (r *Renderer_GLES32) SetSpritePipeline(shaderName string) {
+@@ -2472,6 +2828,7 @@ func (r *Renderer_GLES32) SetSpritePipeline(shaderName string) {
  
  // Uploads current param values to the shader's "uniform float param[16]"
  func (r *Renderer_GLES32) SetCustomUniforms(params [16]float32) {
@@ -16993,7 +17128,7 @@ index 891acab..01b308e 100644
  	if r.currentProgram == nil {
  		return
  	}
-@@ -2488,14 +2840,17 @@ func (r *Renderer_GLES32) NeedsGrabPass() bool {
+@@ -2488,14 +2845,17 @@ func (r *Renderer_GLES32) NeedsGrabPass() bool {
  }
  
  func (r *Renderer_GLES32) ResolveBackBuffer() Texture {
@@ -17014,7 +17149,7 @@ index 891acab..01b308e 100644
  	return r.grabTexture
  }
  
-@@ -2505,6 +2860,7 @@ func (r *Renderer_GLES32) bindBuffer(target uint32, buffer uint32) {
+@@ -2505,6 +2865,7 @@ func (r *Renderer_GLES32) bindBuffer(target uint32, buffer uint32) {
  		return
  	}
  	// Bind and update cache
@@ -17022,7 +17157,7 @@ index 891acab..01b308e 100644
  	gl.BindBuffer(target, buffer)
  	r.boundBuffers[target] = buffer
  }
-@@ -2513,6 +2869,7 @@ func (r *Renderer_GLES32) bindVertexArray(vao uint32) {
+@@ -2513,6 +2874,7 @@ func (r *Renderer_GLES32) bindVertexArray(vao uint32) {
  	if r.currentVAO == vao {
  		return
  	}
@@ -17030,13 +17165,28 @@ index 891acab..01b308e 100644
  	gl.BindVertexArray(vao)
  	r.currentVAO = vao
  	// Invalidate buffer cache
+@@ -2520,3 +2882,14 @@ func (r *Renderer_GLES32) bindVertexArray(vao uint32) {
+ 		delete(r.boundBuffers, gl.ELEMENT_ARRAY_BUFFER)
+ 	}
+ }
++
++// eqF32x16: value[:16] == *v (a loop instead of a slice-to-array-pointer
++// conversion, which the C translation does not support)
++func eqF32x16(value []float32, v *[16]float32) bool {
++	for i := range v {
++		if value[i] != v[i] {
++			return false
++		}
++	}
++	return true
++}
 diff --git a/src/render_gles32_batch.go b/src/render_gles32_batch.go
 new file mode 100644
-index 0000000..98d230f
+index 0000000..1201391
 --- /dev/null
 +++ b/src/render_gles32_batch.go
 @@ -0,0 +1,276 @@
-+//go:build android || vita
++//go:build android || vita || cvf
 +
 +package main
 +
@@ -18185,15 +18335,23 @@ index 5443f25..9e6bdfe 100644
  					c[0].power = c[0].powerMax
  				}
 diff --git a/src/sdl_other.go b/src/sdl_other.go
-index 399921b..4403e16 100644
+index 399921b..eaa998d 100644
 --- a/src/sdl_other.go
 +++ b/src/sdl_other.go
-@@ -6,6 +6,9 @@ import "C"
+@@ -4,8 +4,17 @@ package main
  
+ import "C"
+ 
++import "runtime"
++
  // Gets the actual device pixel size
  func (w *Window) GetDrawablePixelSize() (int32, int32) {
 +	if isVita {
 +		return vitaScreenW, vitaScreenH
++	}
++	if runtime.GOOS == "ios" {
++		// C engine on iOS: high-DPI GL drawable, in pixels
++		return w.Window.GLGetDrawableSize()
 +	}
  	winWidth, winHeight := w.Window.GetSize()
  	return winWidth, winHeight
@@ -19856,10 +20014,18 @@ index 2698d35..954717b 100644
  		c.cnsvar[k] = v
  	}
 diff --git a/src/system_sdl.go b/src/system_sdl.go
-index 8eea3d3..0057ed5 100644
+index 8eea3d3..52cd71a 100644
 --- a/src/system_sdl.go
 +++ b/src/system_sdl.go
-@@ -27,6 +27,18 @@ func (s *System) newWindow(w, h int) (*Window, error) {
+@@ -6,6 +6,7 @@ import (
+ 	"image/draw"
+ 	"math"
+ 	"runtime"
++	"strings"
+ 
+ 	"github.com/veandco/go-sdl2/sdl"
+ )
+@@ -27,6 +28,18 @@ func (s *System) newWindow(w, h int) (*Window, error) {
  	var w2, h2 int32 = int32(w), int32(h)
  	var fullscreen bool
  
@@ -19878,7 +20044,32 @@ index 8eea3d3..0057ed5 100644
  	if runtime.GOOS == "android" {
  		// Get the proper flag for the window type we need to create
  		renderName := gfx.GetName()
-@@ -168,6 +180,10 @@ func (s *System) newWindow(w, h int) (*Window, error) {
+@@ -53,12 +66,23 @@ func (s *System) newWindow(w, h int) (*Window, error) {
+ 	} else if runtime.GOOS == "ios" {
+ 		// Once again on iOS, flags are the critical part.
+ 		mode, err := sdl.GetDesktopDisplayMode(0)
++		var apiFlag sdl.WindowFlags = sdl.WINDOW_VULKAN
++		if strings.HasPrefix(gfx.GetName(), "OpenGL ES") {
++			// C engine: OpenGL ES 3.0 context through SDL's EAGL view
++			sdl.GLSetAttribute(sdl.GL_CONTEXT_PROFILE_MASK, sdl.GL_CONTEXT_PROFILE_ES)
++			sdl.GLSetAttribute(sdl.GL_CONTEXT_MAJOR_VERSION, 3)
++			sdl.GLSetAttribute(sdl.GL_CONTEXT_MINOR_VERSION, 0)
++			sdl.GLSetAttribute(sdl.GL_ALPHA_SIZE, 0)
++			sdl.GLSetAttribute(sdl.GL_DEPTH_SIZE, 24)
++			sdl.GLSetAttribute(sdl.GL_DOUBLEBUFFER, 1)
++			apiFlag = sdl.WINDOW_OPENGL
++		}
+ 		window, err = sdl.CreateWindow(
+ 			s.cfg.Config.WindowTitle,
+ 			sdl.WINDOWPOS_UNDEFINED,
+ 			sdl.WINDOWPOS_UNDEFINED,
+ 			mode.W, mode.H,
+-			sdl.WINDOW_SHOWN|sdl.WINDOW_VULKAN|sdl.WINDOW_FULLSCREEN|sdl.WINDOW_ALLOW_HIGHDPI|sdl.WINDOW_BORDERLESS,
++			sdl.WINDOW_SHOWN|apiFlag|sdl.WINDOW_FULLSCREEN|sdl.WINDOW_ALLOW_HIGHDPI|sdl.WINDOW_BORDERLESS,
+ 		)
+ 		if err != nil {
+ 			return nil, fmt.Errorf("failed to create window: %w", err)
+@@ -168,6 +192,10 @@ func (s *System) newWindow(w, h int) (*Window, error) {
  }
  
  func (w *Window) SwapBuffers() {
@@ -19889,7 +20080,7 @@ index 8eea3d3..0057ed5 100644
  	w.Window.GLSwap()
  }
  
-@@ -204,6 +220,9 @@ func (w *Window) imageToSurface(img image.Image) (*sdl.Surface, error) {
+@@ -204,6 +232,9 @@ func (w *Window) imageToSurface(img image.Image) (*sdl.Surface, error) {
  }
  
  func (w *Window) SetIcon(icon []image.Image) {
@@ -19899,7 +20090,7 @@ index 8eea3d3..0057ed5 100644
  	if surface, err := w.imageToSurface(icon[0]); err == nil {
  		w.Window.SetIcon(surface)
  	}
-@@ -214,6 +233,9 @@ func (w *Window) SetSwapInterval(interval int) {
+@@ -214,6 +245,9 @@ func (w *Window) SetSwapInterval(interval int) {
  }
  
  func (w *Window) GetSize() (int, int) {
@@ -19909,7 +20100,7 @@ index 8eea3d3..0057ed5 100644
  	w2, h2 := w.Window.GetSize()
  	return int(w2), int(h2)
  }
-@@ -261,6 +283,9 @@ func (w *Window) GetClipboardString() string {
+@@ -261,6 +295,9 @@ func (w *Window) GetClipboardString() string {
  }
  
  func (w *Window) toggleFullscreen() {
@@ -19967,7 +20158,7 @@ index 7f6b5be..7bdffe6 100644
  	cs := C.CString(s)
  	C.__android_log_write(C.ANDROID_LOG_INFO, C.CString("ikemen"), cs)
 diff --git a/src/util_desktop.go b/src/util_desktop.go
-index 1f1547c..f6938d1 100644
+index 1f1547c..82d5c6b 100644
 --- a/src/util_desktop.go
 +++ b/src/util_desktop.go
 @@ -1,4 +1,4 @@
@@ -19976,6 +20167,16 @@ index 1f1547c..f6938d1 100644
  
  package main
  
+@@ -66,6 +66,9 @@ func selectRenderer(cfgVal string) (Renderer, FontRenderer) {
+ 	var gfx Renderer
+ 	var gfxFont FontRenderer
+ 
++	if g, f, ok := cvfSelectRendererGLES(cfgVal); ok {
++		return g, f
++	}
+ 	// Now we proceed to init the render.
+ 	switch cfgVal {
+ 	case "OpenGL 3.3":
 diff --git a/src/util_ios.go b/src/util_ios.go
 index aabd758..0233eaa 100755
 --- a/src/util_ios.go
@@ -20799,10 +21000,10 @@ index 0000000..7ce06e9
 +func vitaMatchEnd() { vitaInMatch = false }
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..c3cfd52
+index 0000000..05f41e7
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,69 @@
 +//go:build !vita
 +
 +package main
@@ -20868,6 +21069,10 @@ index 0000000..c3cfd52
 +func vitaDiagSkip(int) bool                              { return false }
 +func vitaDrawCensusDue() bool                            { return false }
 +func vitaDrawCensus(dl DrawList, sortList []int, l int32) {}
++
++// used by render_gles32.go (GLES renderer of Android and the C engine)
++func vitaDiagProbeDue() bool { return false }
++func vitaClientArrays() bool { return false }
 diff --git a/src/vita_shaders.go b/src/vita_shaders.go
 new file mode 100644
 index 0000000..a55a213

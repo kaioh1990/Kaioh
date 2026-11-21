@@ -1050,6 +1050,7 @@ GoIface sync_Pool_Get(GoOpaque *p) {
 }
 void sync_Pool_Put(GoOpaque *p, GoIface x) { (void)p, (void)x; }
 void runtime_Gosched(void) { go_yield(); }
+void runtime_UnlockOSThread(void) {}  // one OS thread runs every goroutine
 void time_Sleep(i64 d) { go_sleep_ns(d); }  // other goroutines run meanwhile
 
 // Fields of opaque platform-library structs read and write a zeroed

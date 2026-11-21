@@ -39,6 +39,39 @@ if(NOT MSVC)
   target_link_libraries(cvf_core PUBLIC m)
 endif()
 
+# iOS / iPadOS (CMAKE_SYSTEM_NAME=iOS): only the engine libraries, linked
+# into CvfEngine.xcframework by tools/package/ios_build.sh (IOS_PORT.md).
+# The app links SDL2.xcframework itself; CVF_SDL2_INCLUDE_DIR (the
+# framework's Headers directory) is all the build needs.
+if(IOS)
+  if(NOT CVF_SDL2_INCLUDE_DIR)
+    message(FATAL_ERROR "iOS: set CVF_SDL2_INCLUDE_DIR to SDL2.framework/Headers")
+  endif()
+  # 1 GB heap reservation: iOS gives an app far less address space (3.5)
+  target_compile_definitions(cvf_core PRIVATE CVF_GC_DEFAULT_ARENA_MB=1024)
+  enable_language(OBJC)
+  file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c
+    src/platform/gles/*.c src/platform/ios/*.c src/platform/ios/*.m)
+  set_source_files_properties(src/platform/ios/ios_view.m src/platform/ios/http_nsurl.m
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
+  target_link_libraries(cvf_ik PUBLIC cvf_core)
+  target_include_directories(cvf_ik PUBLIC "${CVF_SDL2_INCLUDE_DIR}")
+  # framework headers include each other as <SDL2/...>: search the folder
+  # that holds SDL2.framework too
+  get_filename_component(CVF_SDL2_FW_DIR "${CVF_SDL2_INCLUDE_DIR}/../.." ABSOLUTE)
+  target_compile_options(cvf_ik PUBLIC "-F${CVF_SDL2_FW_DIR}")
+  target_compile_definitions(cvf_ik PRIVATE CVF_IOS=1)
+  target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w)
+  set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)
+  foreach(t cvf_core cvf_ik)
+    # -fno-common: tentative definitions become real (hidden) ones; the
+    # master object's export list cannot hide common symbols
+    target_compile_options(${t} PRIVATE -fvisibility=hidden -fno-common)
+  endforeach()
+  return()
+endif()
+
 file(GLOB CVF_TEST_SOURCES CONFIGURE_DEPENDS tests/*.c)
 add_executable(cvf_tests ${CVF_TEST_SOURCES})
 target_link_libraries(cvf_tests PRIVATE cvf_core)
@@ -69,7 +102,8 @@ if(NOT TARGET SDL2::SDL2)
     INTERFACE_INCLUDE_DIRECTORIES "${CVF_SDL2_INCLUDE_DIR}")
 endif()
 
-file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c)
+file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c src/platform/gles/*.c)
+# (src/platform/ios is the iOS app's glue: built only in the IOS branch above)
 add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
 target_link_libraries(cvf_ik PUBLIC cvf_core SDL2::SDL2)
 # generated code: warnings are not actionable here

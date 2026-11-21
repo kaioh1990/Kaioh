@@ -186,6 +186,10 @@ typedef struct Arr18_Arr36_f32 Arr18_Arr36_f32;
 #define CVF_DEF_Arr18_f32
 typedef struct Arr18_f32 Arr18_f32;
 #endif
+#ifndef CVF_DEF_Arr192_bool
+#define CVF_DEF_Arr192_bool
+typedef struct Arr192_bool Arr192_bool;
+#endif
 #ifndef CVF_DEF_Arr193_i16
 #define CVF_DEF_Arr193_i16
 typedef struct Arr193_i16 Arr193_i16;
@@ -229,6 +233,10 @@ typedef struct Arr24_Arr16_f32 Arr24_Arr16_f32;
 #ifndef CVF_DEF_Arr24_f32
 #define CVF_DEF_Arr24_f32
 typedef struct Arr24_f32 Arr24_f32;
+#endif
+#ifndef CVF_DEF_Arr24_uniCacheEnt
+#define CVF_DEF_Arr24_uniCacheEnt
+typedef struct Arr24_uniCacheEnt Arr24_uniCacheEnt;
 #endif
 #ifndef CVF_DEF_Arr256_bool
 #define CVF_DEF_Arr256_bool
@@ -498,6 +506,10 @@ typedef struct Arr2_u16 Arr2_u16;
 #define CVF_DEF_Arr2_u32
 typedef struct Arr2_u32 Arr2_u32;
 #endif
+#ifndef CVF_DEF_Arr2_u64
+#define CVF_DEF_Arr2_u64
+typedef struct Arr2_u64 Arr2_u64;
+#endif
 #ifndef CVF_DEF_Arr2_u8
 #define CVF_DEF_Arr2_u8
 typedef struct Arr2_u8 Arr2_u8;
@@ -757,6 +769,18 @@ typedef struct Arr616_u8 Arr616_u8;
 #ifndef CVF_DEF_Arr61_i16
 #define CVF_DEF_Arr61_i16
 typedef struct Arr61_i16 Arr61_i16;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_5596a083
+#define CVF_DEF_Arr64_Anon_5596a083
+typedef struct Arr64_Anon_5596a083 Arr64_Anon_5596a083;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_7b4debcb
+#define CVF_DEF_Arr64_Anon_7b4debcb
+typedef struct Arr64_Anon_7b4debcb Arr64_Anon_7b4debcb;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_a810cdd4
+#define CVF_DEF_Arr64_Anon_a810cdd4
+typedef struct Arr64_Anon_a810cdd4 Arr64_Anon_a810cdd4;
 #endif
 #ifndef CVF_DEF_Arr64_Arr32_f32
 #define CVF_DEF_Arr64_Arr32_f32
@@ -1333,6 +1357,7 @@ typedef struct Anon_dcdcacfc Anon_dcdcacfc;
 typedef struct Anon_dea90c61 Anon_dea90c61;
 typedef struct Anon_ec483023 Anon_ec483023;
 typedef struct Anon_ed5d50f3 Anon_ed5d50f3;
+typedef struct Anon_efd3a69b Anon_efd3a69b;
 typedef struct Anon_f8c1b65b Anon_f8c1b65b;
 typedef GoIface ast_Expr;
 typedef GoIface ast_PositionHolder;
@@ -1473,6 +1498,10 @@ typedef struct { Anon_28bd7e47 *p; int len, cap; } Slice_Anon_28bd7e47;
 #ifndef CVF_DEF_Slice_Anon_3c59f47a
 #define CVF_DEF_Slice_Anon_3c59f47a
 typedef struct { Anon_3c59f47a *p; int len, cap; } Slice_Anon_3c59f47a;
+#endif
+#ifndef CVF_DEF_Slice_Anon_efd3a69b
+#define CVF_DEF_Slice_Anon_efd3a69b
+typedef struct { Anon_efd3a69b *p; int len, cap; } Slice_Anon_efd3a69b;
 #endif
 #ifndef CVF_DEF_Slice_Arr256_u32
 #define CVF_DEF_Slice_Arr256_u32
@@ -1821,6 +1850,10 @@ typedef struct { SelectStage *p; int len, cap; } Slice_SelectStage;
 #ifndef CVF_DEF_Slice_ShaderProgram_GL33Ptr
 #define CVF_DEF_Slice_ShaderProgram_GL33Ptr
 typedef struct { ShaderProgram_GL33* *p; int len, cap; } Slice_ShaderProgram_GL33Ptr;
+#endif
+#ifndef CVF_DEF_Slice_ShaderProgram_GLES32Ptr
+#define CVF_DEF_Slice_ShaderProgram_GLES32Ptr
+typedef struct { ShaderProgram_GLES32* *p; int len, cap; } Slice_ShaderProgram_GLES32Ptr;
 #endif
 #ifndef CVF_DEF_Slice_ShadowSpritePtr
 #define CVF_DEF_Slice_ShadowSpritePtr
@@ -3122,6 +3155,10 @@ typedef GoMap Map_u32_GoOpaque_invalidtypePtr;
 #define CVF_DEF_Map_u32_ShaderProgram_GL33Ptr
 typedef GoMap Map_u32_ShaderProgram_GL33Ptr;
 #endif
+#ifndef CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
+#define CVF_DEF_Map_u32_ShaderProgram_GLES32Ptr
+typedef GoMap Map_u32_ShaderProgram_GLES32Ptr;
+#endif
 #ifndef CVF_DEF_Map_u32_Slice_f32
 #define CVF_DEF_Map_u32_Slice_f32
 typedef GoMap Map_u32_Slice_f32;
@@ -3391,6 +3428,10 @@ struct Arr18_Arr36_f32 { Arr36_f32 v[18]; };
 #define CVF_BODY_Arr18_f32
 struct Arr18_f32 { f32 v[18]; };
 #endif
+#ifndef CVF_BODY_Arr192_bool
+#define CVF_BODY_Arr192_bool
+struct Arr192_bool { bool v[192]; };
+#endif
 #ifndef CVF_BODY_Arr193_i16
 #define CVF_BODY_Arr193_i16
 struct Arr193_i16 { i16 v[193]; };
@@ -3434,6 +3475,10 @@ struct Arr24_Arr16_f32 { Arr16_f32 v[24]; };
 #ifndef CVF_BODY_Arr24_f32
 #define CVF_BODY_Arr24_f32
 struct Arr24_f32 { f32 v[24]; };
+#endif
+#ifndef CVF_BODY_Arr24_uniCacheEnt
+#define CVF_BODY_Arr24_uniCacheEnt
+struct Arr24_uniCacheEnt { uniCacheEnt v[24]; };
 #endif
 #ifndef CVF_BODY_Arr256_bool
 #define CVF_BODY_Arr256_bool
@@ -3737,6 +3782,10 @@ struct Arr2_u16 { u16 v[2]; };
 #define CVF_BODY_Arr2_u32
 struct Arr2_u32 { u32 v[2]; };
 #endif
+#ifndef CVF_BODY_Arr2_u64
+#define CVF_BODY_Arr2_u64
+struct Arr2_u64 { u64 v[2]; };
+#endif
 #ifndef CVF_BODY_Arr2_u8
 #define CVF_BODY_Arr2_u8
 struct Arr2_u8 { u8 v[2]; };
@@ -3956,6 +4005,18 @@ struct Arr616_u8 { u8 v[616]; };
 #ifndef CVF_BODY_Arr61_i16
 #define CVF_BODY_Arr61_i16
 struct Arr61_i16 { i16 v[61]; };
+#endif
+#ifndef CVF_BODY_Arr64_Anon_5596a083
+#define CVF_BODY_Arr64_Anon_5596a083
+struct Arr64_Anon_5596a083 { Anon_5596a083 v[64]; };
+#endif
+#ifndef CVF_BODY_Arr64_Anon_7b4debcb
+#define CVF_BODY_Arr64_Anon_7b4debcb
+struct Arr64_Anon_7b4debcb { Anon_7b4debcb v[64]; };
+#endif
+#ifndef CVF_BODY_Arr64_Anon_a810cdd4
+#define CVF_BODY_Arr64_Anon_a810cdd4
+struct Arr64_Anon_a810cdd4 { Anon_a810cdd4 v[64]; };
 #endif
 #ifndef CVF_BODY_Arr64_Arr32_f32
 #define CVF_BODY_Arr64_Arr32_f32
@@ -4486,6 +4547,7 @@ struct Anon_dcdcacfc { int exprs; int fused; };
 struct Anon_dea90c61 { f32 x; f32 y; bool pending; i32 polled; bool used; };
 struct Anon_ec483023 { union { GoOpaque /* sync.Mutex */ Mutex_; struct { GoOpaque /* sync.noCopy */ _; GoOpaque /* sync.Mutex */ mu; }; }; Map_GoString_Slice_u8 m; };
 struct Anon_ed5d50f3 { Slice_Slice_SpriteData chunks; int chunk; int idx; };
+struct Anon_efd3a69b { GoString ID; GoString Name; GoString Ver; int RP; };
 #ifndef CVF_FN_Slice_AnimFrame
 #define CVF_FN_Slice_AnimFrame
 GO_SLICE_FUNCS(Slice_AnimFrame, AnimFrame)
@@ -4509,6 +4571,10 @@ GO_SLICE_FUNCS(Slice_Anon_28bd7e47, Anon_28bd7e47)
 #ifndef CVF_FN_Slice_Anon_3c59f47a
 #define CVF_FN_Slice_Anon_3c59f47a
 GO_SLICE_FUNCS(Slice_Anon_3c59f47a, Anon_3c59f47a)
+#endif
+#ifndef CVF_FN_Slice_Anon_efd3a69b
+#define CVF_FN_Slice_Anon_efd3a69b
+GO_SLICE_FUNCS(Slice_Anon_efd3a69b, Anon_efd3a69b)
 #endif
 #ifndef CVF_FN_Slice_Arr256_u32
 #define CVF_FN_Slice_Arr256_u32
@@ -4857,6 +4923,10 @@ GO_SLICE_FUNCS(Slice_SelectStage, SelectStage)
 #ifndef CVF_FN_Slice_ShaderProgram_GL33Ptr
 #define CVF_FN_Slice_ShaderProgram_GL33Ptr
 GO_SLICE_FUNCS(Slice_ShaderProgram_GL33Ptr, ShaderProgram_GL33*)
+#endif
+#ifndef CVF_FN_Slice_ShaderProgram_GLES32Ptr
+#define CVF_FN_Slice_ShaderProgram_GLES32Ptr
+GO_SLICE_FUNCS(Slice_ShaderProgram_GLES32Ptr, ShaderProgram_GLES32*)
 #endif
 #ifndef CVF_FN_Slice_ShadowSpritePtr
 #define CVF_FN_Slice_ShadowSpritePtr
@@ -6158,6 +6228,10 @@ GO_MAP_FUNCS(Map_u32_GoOpaque_invalidtypePtr, u32, GoOpaque /* invalid type */, 
 #define CVF_FN_Map_u32_ShaderProgram_GL33Ptr
 GO_MAP_FUNCS(Map_u32_ShaderProgram_GL33Ptr, u32, ShaderProgram_GL33*, false)
 #endif
+#ifndef CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
+#define CVF_FN_Map_u32_ShaderProgram_GLES32Ptr
+GO_MAP_FUNCS(Map_u32_ShaderProgram_GLES32Ptr, u32, ShaderProgram_GLES32*, false)
+#endif
 #ifndef CVF_FN_Map_u32_Slice_f32
 #define CVF_FN_Map_u32_Slice_f32
 GO_MAP_FUNCS(Map_u32_Slice_f32, u32, Slice_f32, false)
@@ -6274,6 +6348,10 @@ typedef struct { Fnt* r0; GoIface r1; } Ret_FntPtr__GoIface;
 #ifndef CVF_RET_Ret_Font_GL33Ptr__GoIface
 #define CVF_RET_Ret_Font_GL33Ptr__GoIface
 typedef struct { Font_GL33* r0; GoIface r1; } Ret_Font_GL33Ptr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_Font_GLES32Ptr__GoIface
+#define CVF_RET_Ret_Font_GLES32Ptr__GoIface
+typedef struct { Font_GLES32* r0; GoIface r1; } Ret_Font_GLES32Ptr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_GoHttpRequestPtr__GoIface
 #define CVF_RET_Ret_GoHttpRequestPtr__GoIface
@@ -6451,6 +6529,10 @@ typedef struct { OpCode r0; int r1; } Ret_OpCode__int;
 #define CVF_RET_Ret_Renderer__FontRenderer
 typedef struct { Renderer r0; FontRenderer r1; } Ret_Renderer__FontRenderer;
 #endif
+#ifndef CVF_RET_Ret_Renderer__FontRenderer__bool
+#define CVF_RET_Ret_Renderer__FontRenderer__bool
+typedef struct { Renderer r0; FontRenderer r1; bool r2; } Ret_Renderer__FontRenderer__bool;
+#endif
 #ifndef CVF_RET_Ret_ReplayHeaderPtr__GoIface
 #define CVF_RET_Ret_ReplayHeaderPtr__GoIface
 typedef struct { ReplayHeader* r0; GoIface r1; } Ret_ReplayHeaderPtr__GoIface;
@@ -6470,6 +6552,10 @@ typedef struct { Sff* r0; Slice_i32 r1; GoIface r2; } Ret_SffPtr__Slice_i32__GoI
 #ifndef CVF_RET_Ret_ShaderProgram_GL33Ptr__GoIface
 #define CVF_RET_Ret_ShaderProgram_GL33Ptr__GoIface
 typedef struct { ShaderProgram_GL33* r0; GoIface r1; } Ret_ShaderProgram_GL33Ptr__GoIface;
+#endif
+#ifndef CVF_RET_Ret_ShaderProgram_GLES32Ptr__GoIface
+#define CVF_RET_Ret_ShaderProgram_GLES32Ptr__GoIface
+typedef struct { ShaderProgram_GLES32* r0; GoIface r1; } Ret_ShaderProgram_GLES32Ptr__GoIface;
 #endif
 #ifndef CVF_RET_Ret_Slice_Arr4_f32__GoIface
 #define CVF_RET_Ret_Slice_Arr4_f32__GoIface
@@ -7211,6 +7297,7 @@ GoIface filepath_WalkDir(GoString a0, GoFunc a1); // func filepath.WalkDir(root 
 GoIface fmt_Errorf(GoString a0, Slice_GoIface a1); // func fmt.Errorf(format string, a ...any) (err error)
 GoIface fnv_New32a(void); // func fnv.New32a() hash.Hash32
 GoIface gl_Init(void); // func gl.Init() error
+GoIface gles2_Init(GoFunc a0); // func gles2.Init(getProcAddr func(name string) unsafe.Pointer) error
 GoIface gob_Decoder_Decode(GoOpaque /* gob.Decoder */* recv, GoIface a0); // func (*gob.Decoder).Decode(e any) error
 GoIface gob_Encoder_Encode(GoOpaque /* gob.Encoder */* recv, GoIface a0); // func (*gob.Encoder).Encode(e any) error
 GoIface ini_File_SaveTo(GoOpaque /* ini.File */* recv, GoString a0); // func (*ini.File).SaveTo(filename string) error
@@ -7271,6 +7358,7 @@ GoImageRect image_Rectangle_Add(GoImageRect recv, GoImagePoint a0); // func (ima
 GoImageRect image_Rectangle_Bounds(GoImageRect recv); // func (image.Rectangle).Bounds() image.Rectangle
 GoImageRect image_Rectangle_Intersect(GoImageRect recv, GoImageRect a0); // func (image.Rectangle).Intersect(s image.Rectangle) image.Rectangle
 GoImageRect image_Uniform_Bounds(GoImageUniform* recv); // func (*image.Uniform).Bounds() image.Rectangle
+GoImageUniform* image_NewUniform(GoIface a0); // func image.NewUniform(c color.Color) *image.Uniform
 GoOpaque /* big.Int */* big_NewInt(i64 a0); // func big.NewInt(x int64) *big.Int
 GoOpaque /* bufio.Reader */* bufio_NewReader(GoIface a0); // func bufio.NewReader(rd io.Reader) *bufio.Reader
 GoOpaque /* bufio.Reader */* bufio_NewReaderSize(GoIface a0, int a1); // func bufio.NewReaderSize(rd io.Reader, size int) *bufio.Reader
@@ -7329,6 +7417,7 @@ GoString filepath_ToSlash(GoString a0); // func filepath.ToSlash(path string) st
 GoString fmt_Sprint(Slice_GoIface a0); // func fmt.Sprint(a ...any) string
 GoString fmt_Sprintf(GoString a0, Slice_GoIface a1); // func fmt.Sprintf(format string, a ...any) string
 GoString gl_GoStr(u8* a0); // func gl.GoStr(cstr *uint8) string
+GoString gles2_GoStr(u8* a0); // func gles2.GoStr(cstr *uint8) string
 GoString hex_EncodeToString(Slice_u8 a0); // func hex.EncodeToString(src []byte) string
 GoString image_Point_String(GoImagePoint recv); // func (image.Point).String() string
 GoString image_Rectangle_String(GoImageRect recv); // func (image.Rectangle).String() string
@@ -7448,6 +7537,7 @@ Ret_f64__GoIface json_Number_Float64(GoString recv); // func (json.Number).Float
 Ret_f64__GoIface strconv_ParseFloat(GoString a0, int a1); // func strconv.ParseFloat(s string, bitSize int) (float64, error)
 Ret_f64__f64 math_Modf(f64 a0); // func math.Modf(f float64) (integer float64, fractional float64)
 Ret_f64__int math_Frexp(f64 a0); // func math.Frexp(f float64) (frac float64, exp int)
+Ret_i32__i32 sdl_Window_GLGetDrawableSize(sdl_Window* recv); // func (*sdl.Window).GLGetDrawableSize() (w int32, h int32)
 Ret_i32__i32 sdl_Window_GetPosition(sdl_Window* recv); // func (*sdl.Window).GetPosition() (x int32, y int32)
 Ret_i32__i32 sdl_Window_GetSize(sdl_Window* recv); // func (*sdl.Window).GetSize() (w int32, h int32)
 Ret_i32__int utf8_DecodeLastRuneInString(GoString a0); // func utf8.DecodeLastRuneInString(s string) (r rune, size int)
@@ -7506,11 +7596,13 @@ Ret_sdl_GLContext__GoIface sdl_Window_GLCreateContext(sdl_Window* recv); // func
 Ret_sdl_SurfacePtr__GoIface sdl_CreateRGBSurfaceWithFormat(u32 a0, i32 a1, i32 a2, i32 a3, u32 a4); // func sdl.CreateRGBSurfaceWithFormat(flags uint32, width int32, height int32, depth int32, format uint32) (*sdl.Surface, error)
 Ret_sdl_WindowPtr__GoIface sdl_CreateWindow(GoString a0, i32 a1, i32 a2, i32 a3, i32 a4, sdl_WindowFlags a5); // func sdl.CreateWindow(title string, x int32, y int32, w int32, h int32, flags sdl.WindowFlags) (*sdl.Window, error)
 Ret_u32__u32__u32__u32 color_NRGBA_RGBA(GoOpaque /* color.NRGBA */ recv); // func (color.NRGBA).RGBA() (r uint32, g uint32, b uint32, a uint32)
+Ret_u32__u32__u32__u32 color_RGBA_RGBA(GoOpaque /* color.RGBA */ recv); // func (color.RGBA).RGBA() (r uint32, g uint32, b uint32, a uint32)
 Ret_u32__u32__u32__u32 image_Uniform_RGBA(GoImageUniform* recv); // func (*image.Uniform).RGBA() (r uint32, g uint32, b uint32, a uint32)
 Ret_u64__GoIface strconv_ParseUint(GoString a0, int a1, int a2); // func strconv.ParseUint(s string, base int, bitSize int) (uint64, error)
 Ret_u64__u64 bits_Add64(u64 a0, u64 a1, u64 a2); // func bits.Add64(x uint64, y uint64, carry uint64) (sum uint64, carryOut uint64)
 Ret_u64__u64 bits_Mul64(u64 a0, u64 a1); // func bits.Mul64(x uint64, y uint64) (hi uint64, lo uint64)
 Ret_u8PtrPtr__GoFunc gl_Strs(Slice_GoString a0); // func gl.Strs(strs ...string) (cstrs **uint8, free func())
+Ret_u8PtrPtr__GoFunc gles2_Strs(Slice_GoString a0); // func gles2.Strs(strs ...string) (cstrs **uint8, free func())
 Ret_u8__GoIface bufio_Reader_ReadByte(GoOpaque /* bufio.Reader */* recv); // func (*bufio.Reader).ReadByte() (byte, error)
 Ret_u8__GoIface bytes_Buffer_ReadByte(GoOpaque /* bytes.Buffer */* recv); // func (*bytes.Buffer).ReadByte() (byte, error)
 Ret_u8__GoIface bytes_Reader_ReadByte(GoOpaque /* bytes.Reader */* recv); // func (*bytes.Reader).ReadByte() (byte, error)
@@ -7549,6 +7641,7 @@ bool errors_Is(GoIface a0, GoIface a1); // func errors.Is(err error, target erro
 bool filepath_IsAbs(GoString a0); // func filepath.IsAbs(path string) bool
 bool gl_IsEnabled(u32 a0); // func gl.IsEnabled(cap uint32) bool
 bool gl_UnmapBuffer(u32 a0); // func gl.UnmapBuffer(target uint32) bool
+bool gles2_UnmapBuffer(u32 a0); // func gles2.UnmapBuffer(target uint32) bool
 bool image_Point_In(GoImagePoint recv, GoImageRect a0); // func (image.Point).In(r image.Rectangle) bool
 bool image_Rectangle_Empty(GoImageRect recv); // func (image.Rectangle).Empty() bool
 bool ini_Section_HasKey(GoOpaque /* ini.Section */* recv, GoString a0); // func (*ini.Section).HasKey(name string) bool
@@ -7602,6 +7695,8 @@ f64 time_Duration_Seconds(i64 recv); // func (time.Duration).Seconds() float64
 i32 atomic_AddInt32(i32* a0, i32 a1); // func atomic.AddInt32(addr *int32, delta int32) (new int32)
 i32 gl_GetAttribLocation(u32 a0, u8* a1); // func gl.GetAttribLocation(program uint32, name *uint8) int32
 i32 gl_GetUniformLocation(u32 a0, u8* a1); // func gl.GetUniformLocation(program uint32, name *uint8) int32
+i32 gles2_GetAttribLocation(u32 a0, u8* a1); // func gles2.GetAttribLocation(program uint32, name *uint8) int32
+i32 gles2_GetUniformLocation(u32 a0, u8* a1); // func gles2.GetUniformLocation(program uint32, name *uint8) int32
 i32 unicode_ToLower(i32 a0); // func unicode.ToLower(r rune) rune
 i32 unicode_ToUpper(i32 a0); // func unicode.ToUpper(r rune) rune
 i32 utf16_DecodeRune(i32 a0, i32 a1); // func utf16.DecodeRune(r1 rune, r2 rune) rune
@@ -7666,6 +7761,10 @@ u32 fnv_sum32a_Sum32(u32* recv); // func (*fnv.sum32a).Sum32() uint32
 u32 gl_CheckFramebufferStatus(u32 a0); // func gl.CheckFramebufferStatus(target uint32) uint32
 u32 gl_CreateProgram(void); // func gl.CreateProgram() uint32
 u32 gl_CreateShader(u32 a0); // func gl.CreateShader(xtype uint32) uint32
+u32 gles2_CheckFramebufferStatus(u32 a0); // func gles2.CheckFramebufferStatus(target uint32) uint32
+u32 gles2_CreateProgram(void); // func gles2.CreateProgram() uint32
+u32 gles2_CreateShader(u32 a0); // func gles2.CreateShader(xtype uint32) uint32
+u32 gles2_GetError(void); // func gles2.GetError() uint32
 u32 sdl_GetQueuedAudioSize(sdl_AudioDeviceID a0); // func sdl.GetQueuedAudioSize(dev sdl.AudioDeviceID) uint32
 u64 atomic_Uint64_Load(GoOpaque /* atomic.Uint64 */* recv); // func (*atomic.Uint64).Load() uint64
 u64 binary_bigEndian_Uint64(GoOpaque /* binary.bigEndian */ recv, Slice_u8 a0); // func (binary.bigEndian).Uint64(b []byte) uint64
@@ -7674,6 +7773,8 @@ u64 sdl_GetPerformanceCounter(void); // func sdl.GetPerformanceCounter() uint64
 u64 sdl_GetPerformanceFrequency(void); // func sdl.GetPerformanceFrequency() uint64
 u8* gl_GetString(u32 a0); // func gl.GetString(name uint32) *uint8
 u8* gl_Str(GoString a0); // func gl.Str(str string) *uint8
+u8* gles2_GetString(u32 a0); // func gles2.GetString(name uint32) *uint8
+u8* gles2_Str(GoString a0); // func gles2.Str(str string) *uint8
 uintptr_t reflect_Value_Kind(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Kind() reflect.Kind
 uintptr_t reflect_Value_Pointer(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).Pointer() uintptr
 void atomic_Uint64_Store(GoOpaque /* atomic.Uint64 */* recv, u64 a0); // func (*atomic.Uint64).Store(val uint64)
@@ -7754,6 +7855,72 @@ void gl_UseProgram(u32 a0); // func gl.UseProgram(program uint32)
 void gl_VertexAttribPointer(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, void* a5); // func gl.VertexAttribPointer(index uint32, size int32, xtype uint32, normalized bool, stride int32, pointer unsafe.Pointer)
 void gl_VertexAttribPointerWithOffset(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, uintptr_t a5); // func gl.VertexAttribPointerWithOffset(index uint32, size int32, xtype uint32, normalized bool, stride int32, offset uintptr)
 void gl_Viewport(i32 a0, i32 a1, i32 a2, i32 a3); // func gl.Viewport(x int32, y int32, width int32, height int32)
+void gles2_ActiveTexture(u32 a0); // func gles2.ActiveTexture(texture uint32)
+void gles2_AttachShader(u32 a0, u32 a1); // func gles2.AttachShader(program uint32, shader uint32)
+void gles2_BindBuffer(u32 a0, u32 a1); // func gles2.BindBuffer(target uint32, buffer uint32)
+void gles2_BindFramebuffer(u32 a0, u32 a1); // func gles2.BindFramebuffer(target uint32, framebuffer uint32)
+void gles2_BindRenderbuffer(u32 a0, u32 a1); // func gles2.BindRenderbuffer(target uint32, renderbuffer uint32)
+void gles2_BindTexture(u32 a0, u32 a1); // func gles2.BindTexture(target uint32, texture uint32)
+void gles2_BindVertexArray(u32 a0); // func gles2.BindVertexArray(array uint32)
+void gles2_BlendEquation(u32 a0); // func gles2.BlendEquation(mode uint32)
+void gles2_BlendFunc(u32 a0, u32 a1); // func gles2.BlendFunc(sfactor uint32, dfactor uint32)
+void gles2_BlitFramebuffer(i32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, i32 a6, i32 a7, u32 a8, u32 a9); // func gles2.BlitFramebuffer(srcX0 int32, srcY0 int32, srcX1 int32, srcY1 int32, dstX0 int32, dstY0 int32, dstX1 int32, dstY1 int32, mask uint32, filter uint32)
+void gles2_BufferData(u32 a0, int a1, void* a2, u32 a3); // func gles2.BufferData(target uint32, size int, data unsafe.Pointer, usage uint32)
+void gles2_BufferSubData(u32 a0, int a1, int a2, void* a3); // func gles2.BufferSubData(target uint32, offset int, size int, data unsafe.Pointer)
+void gles2_Clear(u32 a0); // func gles2.Clear(mask uint32)
+void gles2_CompileShader(u32 a0); // func gles2.CompileShader(shader uint32)
+void gles2_CopyTexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, i32 a6, i32 a7); // func gles2.CopyTexSubImage2D(target uint32, level int32, xoffset int32, yoffset int32, x int32, y int32, width int32, height int32)
+void gles2_DeleteFramebuffers(i32 a0, u32* a1); // func gles2.DeleteFramebuffers(n int32, framebuffers *uint32)
+void gles2_DeleteProgram(u32 a0); // func gles2.DeleteProgram(program uint32)
+void gles2_DeleteShader(u32 a0); // func gles2.DeleteShader(shader uint32)
+void gles2_DeleteTextures(i32 a0, u32* a1); // func gles2.DeleteTextures(n int32, textures *uint32)
+void gles2_DepthFunc(u32 a0); // func gles2.DepthFunc(xfunc uint32)
+void gles2_DepthMask(bool a0); // func gles2.DepthMask(flag bool)
+void gles2_DetachShader(u32 a0, u32 a1); // func gles2.DetachShader(program uint32, shader uint32)
+void gles2_Disable(u32 a0); // func gles2.Disable(cap uint32)
+void gles2_DrawArrays(u32 a0, i32 a1, i32 a2); // func gles2.DrawArrays(mode uint32, first int32, count int32)
+void gles2_DrawBuffers(i32 a0, u32* a1); // func gles2.DrawBuffers(n int32, bufs *uint32)
+void gles2_Enable(u32 a0); // func gles2.Enable(cap uint32)
+void gles2_EnableVertexAttribArray(u32 a0); // func gles2.EnableVertexAttribArray(index uint32)
+void gles2_Finish(void); // func gles2.Finish()
+void gles2_FramebufferRenderbuffer(u32 a0, u32 a1, u32 a2, u32 a3); // func gles2.FramebufferRenderbuffer(target uint32, attachment uint32, renderbuffertarget uint32, renderbuffer uint32)
+void gles2_FramebufferTexture(u32 a0, u32 a1, u32 a2, i32 a3); // func gles2.FramebufferTexture(target uint32, attachment uint32, texture uint32, level int32)
+void gles2_FramebufferTexture2D(u32 a0, u32 a1, u32 a2, u32 a3, i32 a4); // func gles2.FramebufferTexture2D(target uint32, attachment uint32, textarget uint32, texture uint32, level int32)
+void gles2_FrontFace(u32 a0); // func gles2.FrontFace(mode uint32)
+void gles2_GenBuffers(i32 a0, u32* a1); // func gles2.GenBuffers(n int32, buffers *uint32)
+void gles2_GenFramebuffers(i32 a0, u32* a1); // func gles2.GenFramebuffers(n int32, framebuffers *uint32)
+void gles2_GenRenderbuffers(i32 a0, u32* a1); // func gles2.GenRenderbuffers(n int32, renderbuffers *uint32)
+void gles2_GenTextures(i32 a0, u32* a1); // func gles2.GenTextures(n int32, textures *uint32)
+void gles2_GenVertexArrays(i32 a0, u32* a1); // func gles2.GenVertexArrays(n int32, arrays *uint32)
+void gles2_GetIntegerv(u32 a0, i32* a1); // func gles2.GetIntegerv(pname uint32, data *int32)
+void gles2_GetProgramInfoLog(u32 a0, i32 a1, i32* a2, u8* a3); // func gles2.GetProgramInfoLog(program uint32, bufSize int32, length *int32, infoLog *uint8)
+void gles2_GetProgramiv(u32 a0, u32 a1, i32* a2); // func gles2.GetProgramiv(program uint32, pname uint32, params *int32)
+void gles2_GetShaderInfoLog(u32 a0, i32 a1, i32* a2, u8* a3); // func gles2.GetShaderInfoLog(shader uint32, bufSize int32, length *int32, infoLog *uint8)
+void gles2_GetShaderiv(u32 a0, u32 a1, i32* a2); // func gles2.GetShaderiv(shader uint32, pname uint32, params *int32)
+void gles2_LinkProgram(u32 a0); // func gles2.LinkProgram(program uint32)
+void gles2_PixelStorei(u32 a0, i32 a1); // func gles2.PixelStorei(pname uint32, param int32)
+void gles2_ReadBuffer(u32 a0); // func gles2.ReadBuffer(src uint32)
+void gles2_ReadPixels(i32 a0, i32 a1, i32 a2, i32 a3, u32 a4, u32 a5, void* a6); // func gles2.ReadPixels(x int32, y int32, width int32, height int32, format uint32, xtype uint32, pixels unsafe.Pointer)
+void gles2_RenderbufferStorage(u32 a0, u32 a1, i32 a2, i32 a3); // func gles2.RenderbufferStorage(target uint32, internalformat uint32, width int32, height int32)
+void gles2_RenderbufferStorageMultisample(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4); // func gles2.RenderbufferStorageMultisample(target uint32, samples int32, internalformat uint32, width int32, height int32)
+void gles2_Scissor(i32 a0, i32 a1, i32 a2, i32 a3); // func gles2.Scissor(x int32, y int32, width int32, height int32)
+void gles2_ShaderSource(u32 a0, i32 a1, u8** a2, i32* a3); // func gles2.ShaderSource(shader uint32, count int32, xstring **uint8, length *int32)
+void gles2_TexImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8); // func gles2.TexImage2D(target uint32, level int32, internalformat int32, width int32, height int32, border int32, format uint32, xtype uint32, pixels unsafe.Pointer)
+void gles2_TexParameteri(u32 a0, u32 a1, i32 a2); // func gles2.TexParameteri(target uint32, pname uint32, param int32)
+void gles2_TexStorage3D(u32 a0, i32 a1, u32 a2, i32 a3, i32 a4, i32 a5); // func gles2.TexStorage3D(target uint32, levels int32, internalformat uint32, width int32, height int32, depth int32)
+void gles2_TexSubImage2D(u32 a0, i32 a1, i32 a2, i32 a3, i32 a4, i32 a5, u32 a6, u32 a7, void* a8); // func gles2.TexSubImage2D(target uint32, level int32, xoffset int32, yoffset int32, width int32, height int32, format uint32, xtype uint32, pixels unsafe.Pointer)
+void gles2_Uniform1f(i32 a0, f32 a1); // func gles2.Uniform1f(location int32, v0 float32)
+void gles2_Uniform1fv(i32 a0, i32 a1, f32* a2); // func gles2.Uniform1fv(location int32, count int32, value *float32)
+void gles2_Uniform1i(i32 a0, i32 a1); // func gles2.Uniform1i(location int32, v0 int32)
+void gles2_Uniform2f(i32 a0, f32 a1, f32 a2); // func gles2.Uniform2f(location int32, v0 float32, v1 float32)
+void gles2_Uniform3f(i32 a0, f32 a1, f32 a2, f32 a3); // func gles2.Uniform3f(location int32, v0 float32, v1 float32, v2 float32)
+void gles2_Uniform4f(i32 a0, f32 a1, f32 a2, f32 a3, f32 a4); // func gles2.Uniform4f(location int32, v0 float32, v1 float32, v2 float32, v3 float32)
+void gles2_Uniform4fv(i32 a0, i32 a1, f32* a2); // func gles2.Uniform4fv(location int32, count int32, value *float32)
+void gles2_UniformMatrix4fv(i32 a0, i32 a1, bool a2, f32* a3); // func gles2.UniformMatrix4fv(location int32, count int32, transpose bool, value *float32)
+void gles2_UseProgram(u32 a0); // func gles2.UseProgram(program uint32)
+void gles2_VertexAttribPointer(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, void* a5); // func gles2.VertexAttribPointer(index uint32, size int32, xtype uint32, normalized bool, stride int32, pointer unsafe.Pointer)
+void gles2_VertexAttribPointerWithOffset(u32 a0, i32 a1, u32 a2, bool a3, i32 a4, uintptr_t a5); // func gles2.VertexAttribPointerWithOffset(index uint32, size int32, xtype uint32, normalized bool, stride int32, offset uintptr)
+void gles2_Viewport(i32 a0, i32 a1, i32 a2, i32 a3); // func gles2.Viewport(x int32, y int32, width int32, height int32)
 void gob_Register(GoIface a0); // func gob.Register(value any)
 void http_Header_Set(Map_GoString_Slice_GoString recv, GoString a0, GoString a1); // func (http.Header).Set(key string, value string)
 void image_RegisterFormat(GoString a0, GoString a1, GoFunc a2, GoFunc a3); // func image.RegisterFormat(name string, magic string, decode func(io.Reader) (image.Image, error), decodeConfig func(io.Reader) (image.Config, error))
@@ -7780,6 +7947,7 @@ void runtime_Gosched(void); // func runtime.Gosched()
 void runtime_LockOSThread(void); // func runtime.LockOSThread()
 void runtime_ReadMemStats(GoOpaque /* runtime.MemStats */* a0); // func runtime.ReadMemStats(m *runtime.MemStats)
 void runtime_SetFinalizer(GoIface a0, GoIface a1); // func runtime.SetFinalizer(obj any, finalizer any)
+void runtime_UnlockOSThread(void); // func runtime.UnlockOSThread()
 void sdl_ClearQueuedAudio(sdl_AudioDeviceID a0); // func sdl.ClearQueuedAudio(dev sdl.AudioDeviceID)
 void sdl_CloseAudioDevice(sdl_AudioDeviceID a0); // func sdl.CloseAudioDevice(dev sdl.AudioDeviceID)
 void sdl_GameController_Close(sdl_GameController* recv); // func (*sdl.GameController).Close()
@@ -7812,6 +7980,9 @@ void time_Ticker_Stop(GoTimeTicker* recv); // func (*time.Ticker).Stop()
 void* gl_MapBuffer(u32 a0, u32 a1); // func gl.MapBuffer(target uint32, access uint32) unsafe.Pointer
 void* gl_Ptr(GoIface a0); // func gl.Ptr(data interface{}) unsafe.Pointer
 void* gl_PtrOffset(int a0); // func gl.PtrOffset(offset int) unsafe.Pointer
+void* gles2_MapBufferRange(u32 a0, int a1, int a2, u32 a3); // func gles2.MapBufferRange(target uint32, offset int, length int, access uint32) unsafe.Pointer
+void* gles2_Ptr(GoIface a0); // func gles2.Ptr(data interface{}) unsafe.Pointer
+void* gles2_PtrOffset(int a0); // func gles2.PtrOffset(offset int) unsafe.Pointer
 void* reflect_Value_UnsafePointer(GoOpaque /* reflect.Value */ recv); // func (reflect.Value).UnsafePointer() unsafe.Pointer
 
 // package variables
@@ -7927,6 +8098,7 @@ extern GoOpaque /* regexp.Regexp */* g_cvfNameRe;
 extern cvfNearbyState* g_cvfNearby;
 extern int g_cvfNetInputSeed;
 extern cvfOnlineState* g_cvfOnline;
+extern bool g_cvfP2PAvailable;
 extern cvfRulesT g_cvfRules;
 extern Arr2_i32 g_cvfScreen;
 extern Anon_dea90c61 g_cvfTap;
@@ -8008,6 +8180,7 @@ extern Arr16_Arr2_int g_maindata_scalefacSizesMpeg1;
 extern Arr3_Arr6_Arr4_int g_maindata_scalefacSizesMpeg2;
 extern Slice_i32 g_sdKeys;
 extern GoOpaque /* sync.Pool */ g_lua_segmentPool;
+extern GoOpaque /* sync.Mutex */ g_shaderCompileMutex;
 extern GoString g_shadowFragShader;
 extern GoString g_shadowGeoShader;
 extern GoString g_shadowVertShader;
@@ -8045,6 +8218,7 @@ extern GoOpaque /* sync.RWMutex */ g_gjson_userModifiersLock;
 extern Arr256_u8 g_gjson_vchars;
 extern GoString g_vertShader;
 extern GoString g_vertexFontShader;
+extern bool g_vitaFBOForced;
 extern int g_vitaHalfTick;
 extern int g_vitaStateHashOn;
 extern bool g_vitaTraceDeep;
@@ -8069,188 +8243,189 @@ void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_M_string_any 237
-#define GO_TID_P_abi_Type 1301
+#define GO_TID_P_abi_Type 1308
 #define GO_TID_P_bufio_Reader 198
 #define GO_TID_P_bufio_Writer 155
 #define GO_TID_P_bytes_Buffer 137
 #define GO_TID_P_bytes_Reader 189
-#define GO_TID_P_context_cancelCtx 2041
-#define GO_TID_P_exec_Cmd 1085
+#define GO_TID_P_context_cancelCtx 2070
+#define GO_TID_P_exec_Cmd 1092
 #define GO_TID_P_exec_ExitError 259
-#define GO_TID_P_fnv_sum32a 2042
+#define GO_TID_P_fnv_sum32a 2071
 #define GO_TID_P_image_Alpha 141
-#define GO_TID_P_image_NRGBA 490
-#define GO_TID_P_image_Paletted 489
-#define GO_TID_P_image_RGBA 484
-#define GO_TID_P_image_Uniform 485
-#define GO_TID_P_ini_File 1309
-#define GO_TID_P_ini_Key 1319
-#define GO_TID_P_ini_Section 1316
+#define GO_TID_P_image_NRGBA 496
+#define GO_TID_P_image_Paletted 495
+#define GO_TID_P_image_RGBA 487
+#define GO_TID_P_image_Uniform 488
+#define GO_TID_P_ini_File 1316
+#define GO_TID_P_ini_Key 1326
+#define GO_TID_P_ini_Section 1323
 #define GO_TID_P_io_LimitedReader 230
-#define GO_TID_P_net_IPNet 464
-#define GO_TID_P_net_OpError 2040
-#define GO_TID_P_net_TCPAddr 507
-#define GO_TID_P_net_TCPConn 508
-#define GO_TID_P_net_TCPListener 506
+#define GO_TID_P_net_IPNet 466
+#define GO_TID_P_net_OpError 2069
+#define GO_TID_P_net_TCPAddr 513
+#define GO_TID_P_net_TCPConn 514
+#define GO_TID_P_net_TCPListener 512
 #define GO_TID_P_net_UDPAddr 187
-#define GO_TID_P_net_UDPConn 2039
-#define GO_TID_P_net_netFD 1676
+#define GO_TID_P_net_UDPConn 2068
+#define GO_TID_P_net_netFD 1705
 #define GO_TID_P_os_File 180
-#define GO_TID_P_os_Process 1095
-#define GO_TID_P_os_ProcessState 1103
-#define GO_TID_P_os_dirInfo 854
-#define GO_TID_P_os_file 842
-#define GO_TID_P_os_processHandle 1100
-#define GO_TID_P_reflect_SliceHeader 1050
-#define GO_TID_P_strings_Builder 466
+#define GO_TID_P_os_Process 1102
+#define GO_TID_P_os_ProcessState 1110
+#define GO_TID_P_os_dirInfo 861
+#define GO_TID_P_os_file 849
+#define GO_TID_P_os_processHandle 1107
+#define GO_TID_P_reflect_SliceHeader 1057
+#define GO_TID_P_strings_Builder 468
 #define GO_TID_P_strings_Reader 251
-#define GO_TID_P_sync_Cond 1893
-#define GO_TID_P_sync_Mutex 583
-#define GO_TID_P_sync_Once 896
-#define GO_TID_P_syscall_Credential 1089
-#define GO_TID_P_syscall_Rusage 1105
-#define GO_TID_P_syscall_SysProcAttr 1087
+#define GO_TID_P_sync_Cond 1922
+#define GO_TID_P_sync_Mutex 590
+#define GO_TID_P_sync_Once 903
+#define GO_TID_P_syscall_Credential 1096
+#define GO_TID_P_syscall_Rusage 1112
+#define GO_TID_P_syscall_SysProcAttr 1094
 #define GO_TID_P_tabwriter_Writer 138
-#define GO_TID_P_time_Location 1286
-#define GO_TID_P_time_zone 1292
-#define GO_TID_P_zip_File 1282
-#define GO_TID_P_zip_ReadCloser 1278
-#define GO_TID_P_zip_Reader 1293
+#define GO_TID_P_time_Location 1293
+#define GO_TID_P_time_zone 1299
+#define GO_TID_P_zip_File 1289
+#define GO_TID_P_zip_ReadCloser 1285
+#define GO_TID_P_zip_Reader 1300
 #define GO_TID_S_any 238
 #define GO_TID_S_uint8 149
-#define GO_TID_abi_Kind 1304
-#define GO_TID_abi_NameOff 1306
-#define GO_TID_abi_TFlag 1303
-#define GO_TID_abi_Type 1302
-#define GO_TID_abi_TypeOff 1307
-#define GO_TID_atomic_Bool 898
-#define GO_TID_atomic_Int32 1099
-#define GO_TID_atomic_Pointer_os_dirInfo_ 852
-#define GO_TID_atomic_Uint32 1097
-#define GO_TID_atomic_Uint64 1946
-#define GO_TID_atomic_align64 1947
-#define GO_TID_atomic_noCopy 859
+#define GO_TID_abi_Kind 1311
+#define GO_TID_abi_NameOff 1313
+#define GO_TID_abi_TFlag 1310
+#define GO_TID_abi_Type 1309
+#define GO_TID_abi_TypeOff 1314
+#define GO_TID_atomic_Bool 905
+#define GO_TID_atomic_Int32 1106
+#define GO_TID_atomic_Pointer_os_dirInfo_ 859
+#define GO_TID_atomic_Uint32 1104
+#define GO_TID_atomic_Uint64 1975
+#define GO_TID_atomic_align64 1976
+#define GO_TID_atomic_noCopy 866
 #define GO_TID_binary_bigEndian 212
 #define GO_TID_binary_littleEndian 163
-#define GO_TID_bufio_Reader 615
-#define GO_TID_bufio_Writer 696
-#define GO_TID_bytes_Buffer 649
-#define GO_TID_bytes_Reader 901
-#define GO_TID_bytes_readOp 650
+#define GO_TID_bufio_Reader 622
+#define GO_TID_bufio_Writer 703
+#define GO_TID_bytes_Buffer 656
+#define GO_TID_bytes_Reader 908
+#define GO_TID_bytes_readOp 657
 #define GO_TID_color_NRGBA 196
-#define GO_TID_color_Palette 1393
-#define GO_TID_exec_Cmd 1086
-#define GO_TID_exec_ExitError 1114
+#define GO_TID_color_Palette 1422
+#define GO_TID_color_RGBA 491
+#define GO_TID_exec_Cmd 1093
+#define GO_TID_exec_ExitError 1121
 #define GO_TID_float64 14
-#define GO_TID_image_Alpha 656
-#define GO_TID_image_NRGBA 1394
-#define GO_TID_image_Paletted 1392
-#define GO_TID_image_Point 658
-#define GO_TID_image_RGBA 1388
-#define GO_TID_image_Rectangle 657
-#define GO_TID_image_Uniform 1389
-#define GO_TID_ini_DebugFunc 1312
-#define GO_TID_ini_File 1310
-#define GO_TID_ini_Key 1320
-#define GO_TID_ini_LoadOptions 1311
-#define GO_TID_ini_NameMapper 1322
-#define GO_TID_ini_Section 1317
-#define GO_TID_ini_ValueMapper 1323
-#define GO_TID_io_LimitedReader 937
-#define GO_TID_json_Number 521
-#define GO_TID_net_IP 900
-#define GO_TID_net_IPMask 1349
-#define GO_TID_net_IPNet 1348
-#define GO_TID_net_KeepAliveConfig 1680
-#define GO_TID_net_ListenConfig 1678
-#define GO_TID_net_TCPAddr 1682
-#define GO_TID_net_TCPConn 1683
-#define GO_TID_net_TCPListener 1675
-#define GO_TID_net_UDPAddr 899
-#define GO_TID_net_conn 1684
-#define GO_TID_net_mptcpStatusListen 1681
-#define GO_TID_net_netFD 1677
-#define GO_TID_os_File 841
-#define GO_TID_os_Process 1096
-#define GO_TID_os_ProcessState 1104
-#define GO_TID_os_dirInfo 855
-#define GO_TID_os_file 843
-#define GO_TID_os_processHandle 1101
-#define GO_TID_poll_FD 844
-#define GO_TID_poll_SysFile 846
-#define GO_TID_poll_fdMutex 845
-#define GO_TID_poll_pollDesc 850
-#define GO_TID_reflect_Kind 491
-#define GO_TID_reflect_SliceHeader 1051
-#define GO_TID_reflect_Value 1300
-#define GO_TID_reflect_flag 1308
-#define GO_TID_runtime_Cleanup 1102
-#define GO_TID_sdl_AudioDeviceID 1950
-#define GO_TID_sdl_ButtonState 2033
-#define GO_TID_sdl_CommonEvent 584
-#define GO_TID_sdl_ControllerAxisEvent 586
-#define GO_TID_sdl_ControllerButtonEvent 587
-#define GO_TID_sdl_EventType 1956
-#define GO_TID_sdl_GameControllerAxis 2031
-#define GO_TID_sdl_GameControllerButton 2032
-#define GO_TID_sdl_JoyDeviceAddedEvent 592
-#define GO_TID_sdl_JoyDeviceRemovedEvent 593
-#define GO_TID_sdl_JoystickID 2030
-#define GO_TID_sdl_KeyboardEvent 589
-#define GO_TID_sdl_Keycode 1707
-#define GO_TID_sdl_Keymod 2036
-#define GO_TID_sdl_Keysym 2034
-#define GO_TID_sdl_QuitEvent 588
-#define GO_TID_sdl_Scancode 2035
-#define GO_TID_sdl_TextInputEvent 591
-#define GO_TID_sdl_WindowEvent 590
-#define GO_TID_sdl_WindowEventID 2037
-#define GO_TID_sort_StringSlice 504
-#define GO_TID_strings_Builder 1350
-#define GO_TID_strings_Reader 1067
-#define GO_TID_sync_Cond 1894
-#define GO_TID_sync_Mutex 856
-#define GO_TID_sync_Once 897
-#define GO_TID_sync_RWMutex 1098
-#define GO_TID_sync_WaitGroup 1960
-#define GO_TID_sync_copyChecker 1896
-#define GO_TID_sync_noCopy 857
-#define GO_TID_sync_notifyList 1895
-#define GO_TID_syscall_Credential 1090
-#define GO_TID_syscall_Iovec 849
-#define GO_TID_syscall_Rusage 1106
-#define GO_TID_syscall_Signal 1091
-#define GO_TID_syscall_SysProcAttr 1088
-#define GO_TID_syscall_SysProcIDMap 1093
-#define GO_TID_syscall_Timeval 1107
+#define GO_TID_image_Alpha 663
+#define GO_TID_image_NRGBA 1423
+#define GO_TID_image_Paletted 1421
+#define GO_TID_image_Point 665
+#define GO_TID_image_RGBA 1416
+#define GO_TID_image_Rectangle 664
+#define GO_TID_image_Uniform 1417
+#define GO_TID_ini_DebugFunc 1319
+#define GO_TID_ini_File 1317
+#define GO_TID_ini_Key 1327
+#define GO_TID_ini_LoadOptions 1318
+#define GO_TID_ini_NameMapper 1329
+#define GO_TID_ini_Section 1324
+#define GO_TID_ini_ValueMapper 1330
+#define GO_TID_io_LimitedReader 944
+#define GO_TID_json_Number 528
+#define GO_TID_net_IP 907
+#define GO_TID_net_IPMask 1387
+#define GO_TID_net_IPNet 1386
+#define GO_TID_net_KeepAliveConfig 1709
+#define GO_TID_net_ListenConfig 1707
+#define GO_TID_net_TCPAddr 1711
+#define GO_TID_net_TCPConn 1712
+#define GO_TID_net_TCPListener 1704
+#define GO_TID_net_UDPAddr 906
+#define GO_TID_net_conn 1713
+#define GO_TID_net_mptcpStatusListen 1710
+#define GO_TID_net_netFD 1706
+#define GO_TID_os_File 848
+#define GO_TID_os_Process 1103
+#define GO_TID_os_ProcessState 1111
+#define GO_TID_os_dirInfo 862
+#define GO_TID_os_file 850
+#define GO_TID_os_processHandle 1108
+#define GO_TID_poll_FD 851
+#define GO_TID_poll_SysFile 853
+#define GO_TID_poll_fdMutex 852
+#define GO_TID_poll_pollDesc 857
+#define GO_TID_reflect_Kind 497
+#define GO_TID_reflect_SliceHeader 1058
+#define GO_TID_reflect_Value 1307
+#define GO_TID_reflect_flag 1315
+#define GO_TID_runtime_Cleanup 1109
+#define GO_TID_sdl_AudioDeviceID 1979
+#define GO_TID_sdl_ButtonState 2062
+#define GO_TID_sdl_CommonEvent 591
+#define GO_TID_sdl_ControllerAxisEvent 593
+#define GO_TID_sdl_ControllerButtonEvent 594
+#define GO_TID_sdl_EventType 1985
+#define GO_TID_sdl_GameControllerAxis 2060
+#define GO_TID_sdl_GameControllerButton 2061
+#define GO_TID_sdl_JoyDeviceAddedEvent 599
+#define GO_TID_sdl_JoyDeviceRemovedEvent 600
+#define GO_TID_sdl_JoystickID 2059
+#define GO_TID_sdl_KeyboardEvent 596
+#define GO_TID_sdl_Keycode 1736
+#define GO_TID_sdl_Keymod 2065
+#define GO_TID_sdl_Keysym 2063
+#define GO_TID_sdl_QuitEvent 595
+#define GO_TID_sdl_Scancode 2064
+#define GO_TID_sdl_TextInputEvent 598
+#define GO_TID_sdl_WindowEvent 597
+#define GO_TID_sdl_WindowEventID 2066
+#define GO_TID_sort_StringSlice 510
+#define GO_TID_strings_Builder 1388
+#define GO_TID_strings_Reader 1074
+#define GO_TID_sync_Cond 1923
+#define GO_TID_sync_Mutex 863
+#define GO_TID_sync_Once 904
+#define GO_TID_sync_RWMutex 1105
+#define GO_TID_sync_WaitGroup 1989
+#define GO_TID_sync_copyChecker 1925
+#define GO_TID_sync_noCopy 864
+#define GO_TID_sync_notifyList 1924
+#define GO_TID_syscall_Credential 1097
+#define GO_TID_syscall_Iovec 856
+#define GO_TID_syscall_Rusage 1113
+#define GO_TID_syscall_Signal 1098
+#define GO_TID_syscall_SysProcAttr 1095
+#define GO_TID_syscall_SysProcIDMap 1100
+#define GO_TID_syscall_Timeval 1114
 #define GO_TID_syscall_WaitStatus 260
-#define GO_TID_tabwriter_Writer 651
-#define GO_TID_tabwriter_cell 653
-#define GO_TID_time_Duration 581
-#define GO_TID_time_Location 1287
-#define GO_TID_time_Time 1285
-#define GO_TID_time_zone 1289
-#define GO_TID_time_zoneTrans 1291
-#define GO_TID_xml_Attr 1357
-#define GO_TID_xml_Name 1355
-#define GO_TID_xml_StartElement 473
-#define GO_TID_zip_Decompressor 1295
-#define GO_TID_zip_File 1283
-#define GO_TID_zip_FileHeader 1284
-#define GO_TID_zip_ReadCloser 1279
-#define GO_TID_zip_Reader 1280
-#define GO_TID_zip_fileListEntry 1297
+#define GO_TID_tabwriter_Writer 658
+#define GO_TID_tabwriter_cell 660
+#define GO_TID_time_Duration 588
+#define GO_TID_time_Location 1294
+#define GO_TID_time_Time 1292
+#define GO_TID_time_zone 1296
+#define GO_TID_time_zoneTrans 1298
+#define GO_TID_xml_Attr 1397
+#define GO_TID_xml_Name 1395
+#define GO_TID_xml_StartElement 476
+#define GO_TID_zip_Decompressor 1302
+#define GO_TID_zip_File 1290
+#define GO_TID_zip_FileHeader 1291
+#define GO_TID_zip_ReadCloser 1286
+#define GO_TID_zip_Reader 1287
+#define GO_TID_zip_fileListEntry 1304
 static inline bool ik_impl_0(int t) { // interface{Seek(offset int64, whence int) (int64, error)}
-    switch (t) { case 150: case 180: case 189: case 207: case 251: case 304: case 305: case 791: return true; default: return false; }
+    switch (t) { case 150: case 180: case 189: case 207: case 251: case 304: case 305: case 798: return true; default: return false; }
 }
 static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
-    switch (t) { case 137: case 155: case 466: return true; default: return false; }
+    switch (t) { case 137: case 155: case 468: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 506: case 508: case 519: case 702: case 1278: case 1676: case 2039: return true; default: return false; }
+    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 512: case 514: case 526: case 709: case 1285: case 1705: case 2068: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
-    switch (t) { case 180: case 189: case 207: case 251: case 304: case 305: case 791: return true; default: return false; }
+    switch (t) { case 180: case 189: case 207: case 251: case 304: case 305: case 798: return true; default: return false; }
 }
 static inline bool ik_impl_4(int t) { // interface{HDRPixel() (p1 float64, p2 float64, p3 float64, pa float64); HDRRGBA() (r float64, g float64, b float64, a float64); HDRXYZA() (x float64, y float64, z float64, a float64); color.Color}
     switch (t) { case 205: case 206: return true; default: return false; }
@@ -8259,13 +8434,13 @@ static inline bool ik_impl_5(int t) { // interface{io.Writer; io.Seeker}
     switch (t) { case 180: return true; default: return false; }
 }
 static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.LValueType; assertFloat64() (float64, bool); assertFunction() (*lua.LFunction, bool); assertString() (string, bool)}
-    switch (t) { case 244: case 245: case 246: case 247: case 248: case 249: case 252: case 253: case 261: case 279: case 530: return true; default: return false; }
+    switch (t) { case 244: case 245: case 246: case 247: case 248: case 249: case 252: case 253: case 261: case 279: case 537: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 936: case 2040: return true; default: return false; }
+    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 943: case 2069: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
-    switch (t) { case 2040: return true; default: return false; }
+    switch (t) { case 2069: return true; default: return false; }
 }
 parse_yyParser parse_yyNewParser(void);
 GoString parse_yyTokname(int c);
@@ -11457,6 +11632,15 @@ f64 fn_cvfAsin(f64 x);
 f64 fn_cvfAcos(f64 x);
 f64 fn_cvfAtan2(f64 y, f64 x);
 GoString fn_itoa(int i);
+Ret_Renderer__FontRenderer__bool fn_cvfSelectRendererGLES(GoString cfgVal);
+void* fn_eglGetProcAddress(GoString name);
+void fn_cvfIOSMain(Slice_GoString args);
+bool fn_cvfHostInMatch(void);
+bool fn_cvfHostTap(f32 x, f32 y);
+void fn_cvfHostSetTouchMenus(bool on);
+void fn_cvfHostPeers(GoString json);
+void fn_cvfHostNameEntered(GoString name);
+GoString fn_cvfHTTPSelfTest(GoString base);
 GoString fn_cvfNearbyNewID(void);
 bool fn_cvfNearbyIfaceOK(GoNetInterface ifc);
 Slice_cvfNearbyNet fn_cvfNearbyNets(void);
@@ -11469,11 +11653,13 @@ GoString cvfNearbyState_hostStatus(cvfNearbyState* s);
 GoString fn_cvfNearbyNoWifiHint(void);
 void cvfNearbyState_scanBegin(cvfNearbyState* s);
 void cvfNearbyState_scanEnd(cvfNearbyState* s);
+void cvfNearbyState_setP2P(cvfNearbyState* s, GoString js);
 Ret_Slice_cvfNearbyHost__GoString cvfNearbyState_list(cvfNearbyState* s);
 bool fn_cvfTouchUI(void);
 GoString fn_cvfStopHostingHint(void);
 GoString fn_cvfDefaultName(void);
 bool fn_cvfNameAskBegin(void);
+void fn_cvfNameAskDone(GoString name);
 void fn_cvfNearbyScriptInit(lua_LState* l);
 void nullTexture_SetData(nullTexture* t, Slice_u8 data);
 void nullTexture_SetSubData(nullTexture* t, Slice_u8 data);
@@ -11540,6 +11726,8 @@ void fn_cvfOnlineScriptInit(lua_LState* l);
 cvfRulesT* fn_cvfRulesLoad(void);
 bool cvfRulesT_appliesTo(cvfRulesT* r, Char* c);
 bool fn_cvfClampInvincibility(Char* c, i32* time_);
+bool fn_cvfStoreTap(f32 x, f32 y);
+void fn_cvfParseScreen(GoString s);
 void fn_cvfApplyDisplay(Config* cfg);
 bool System_cvfWideView(System* s);
 f32 System_cvfClampWideView(System* s, f32 x, f32 scl);
@@ -11777,6 +11965,21 @@ f32 Font_GL33_Width(Font_GL33* f, f32 scale, f32 spacingXAdd, GoString fs, Slice
 GoIface Font_GL33_GenerateGlyphs(Font_GL33* f, i32 low, i32 high);
 Ret_Font_GL33Ptr__GoIface FontRenderer_GL33_LoadTrueTypeFont(FontRenderer_GL33* r, GoIface reader, i32 scale, i32 low, i32 high, Direction dir);
 void FontRenderer_GL33_newProgram(FontRenderer_GL33* r, uintptr_t GLSLVersion, GoString vertexShaderSource, GoString fragmentShaderSource);
+void FontRenderer_GLES32_Init(FontRenderer_GLES32* r, GoIface renderer);
+Ret_GoIface__GoIface FontRenderer_GLES32_LoadFont(FontRenderer_GLES32* r, GoString file, i32 scale, int windowWidth, int windowHeight);
+void Font_GLES32_SetColor(Font_GLES32* f, f32 red, f32 green, f32 blue, f32 alpha);
+void Font_GLES32_SetPalFX(Font_GLES32* f, ShaderPalFX state);
+void Font_GLES32_SetCustomShader(Font_GLES32* f, CustomShaderRenderData shader);
+void Font_GLES32_UpdateResolution(Font_GLES32* f, int windowWidth, int windowHeight);
+void FontRenderer_GLES32_SetFontPipeline(FontRenderer_GLES32* r);
+GoIface Font_GLES32_Printf(Font_GLES32* f, f32 x, f32 y, f32 xscl, f32 yscl, f32 spacingXAdd, i32 align, bool blend, Arr4_i32 window, f32 rxadd, Rotation rot, i32 projectionMode, f32 fLength, f32 rcx, f32 rcy, GoString fs, Slice_GoIface argv);
+f32 Font_GLES32_widthRunes(Font_GLES32* f, Slice_i32 indices, f32 scale, f32 spacingXAdd);
+void Font_GLES32_renderGlyphBatch(Font_GLES32* f, Slice_f32 vertices, u32 textureID);
+void FontRenderer_GLES32_ReleaseFontPipeline(FontRenderer_GLES32* r);
+f32 Font_GLES32_Width(Font_GLES32* f, f32 scale, f32 spacingXAdd, GoString fs, Slice_GoIface argv);
+GoIface Font_GLES32_GenerateGlyphs(Font_GLES32* f, i32 low, i32 high);
+Ret_Font_GLES32Ptr__GoIface FontRenderer_GLES32_LoadTrueTypeFont(FontRenderer_GLES32* r, GoIface reader, i32 scale, i32 low, i32 high, Direction dir);
+void FontRenderer_GLES32_newProgram(FontRenderer_GLES32* r, uintptr_t version, GoString vertexSrc, GoString fragmentSrc);
 void FontRenderer_VK_Init(FontRenderer_VK* r, GoIface rendererVk);
 Ret_GoIface__GoIface FontRenderer_VK_LoadFont(FontRenderer_VK* r, GoString file, i32 scale, int windowWidth, int windowHeight);
 void Font_VK_SetColor(Font_VK* f, f32 red, f32 green, f32 blue, f32 alpha);
@@ -12353,6 +12556,90 @@ bool Renderer_GL33_NeedsGrabPass(Renderer_GL33* r);
 Texture Renderer_GL33_ResolveBackBuffer(Renderer_GL33* r);
 void Renderer_GL33_bindBuffer(Renderer_GL33* r, u32 target, u32 buffer);
 void Renderer_GL33_bindVertexArray(Renderer_GL33* r, u32 vao);
+Ret_ShaderProgram_GLES32Ptr__GoIface Renderer_GLES32_newShaderProgram(Renderer_GLES32* r, GoString vert, GoString frag, GoString geo, GoString name, bool crashWhenFail);
+void ShaderProgram_GLES32_RegisterAttributes(ShaderProgram_GLES32* s, Slice_GoString names);
+void ShaderProgram_GLES32_RegisterUniforms(ShaderProgram_GLES32* s, Slice_GoString names);
+void ShaderProgram_GLES32_RegisterTextures(ShaderProgram_GLES32* s, Slice_GoString names);
+Ret_u32__GoIface Renderer_GLES32_compileShader(Renderer_GLES32* r, u32 shaderType, GoString src);
+Ret_u32__GoIface Renderer_GLES32_linkProgram(Renderer_GLES32* r, Slice_u32 params);
+bool Renderer_GLES32_bindTextureToUnit(Renderer_GLES32* r, i32 unit, u32 target, Texture_GLES32* tex, u32 handle);
+void Renderer_GLES32_bindTextureToUnitForced(Renderer_GLES32* r, i32 unit, u32 target, Texture_GLES32* tex, u32 handle);
+Texture_GLES32* Renderer_GLES32_generateTexture(Renderer_GLES32* r, i32 width, i32 height, i32 depth, bool filter);
+Ret_Texture__GoIface Renderer_GLES32_newTexture(Renderer_GLES32* r, i32 width, i32 height, i32 depth, bool filter);
+Texture Renderer_GLES32_newPaletteTexture(Renderer_GLES32* r, Arr2_u32 slot, Arr2_i32 offset, Arr4_f32 uvst);
+Texture Renderer_GLES32_newSubTexture(Renderer_GLES32* r, Texture tex, i32 width, i32 height, Arr4_f32 uvst);
+void Texture_GLES32_SetData(Texture_GLES32* t, Slice_u8 data);
+void Texture_GLES32_SetSubData(Texture_GLES32* t, Slice_u8 data);
+void Texture_GLES32_SetSubData2(Texture_GLES32* t, Slice_u8 data, i32 x, i32 y, i32 width, i32 height, i32 stride);
+void Texture_GLES32_CopyData(Texture_GLES32 t, Texture* src);
+bool Texture_GLES32_IsValid(Texture_GLES32* t);
+i32 Texture_GLES32_GetWidth(Texture_GLES32* t);
+i32 Texture_GLES32_GetHeight(Texture_GLES32* t);
+Arr4_f32 Texture_GLES32_GetUV(Texture_GLES32* t);
+u32 Texture_GLES32_MapUploadType(Texture_GLES32* t, i32 i);
+u32 Texture_GLES32_MapUploadFormat(Texture_GLES32* t, i32 i);
+u32 Texture_GLES32_MapSizedInternalFormat(Texture_GLES32* t, i32 i);
+GoString Renderer_GLES32_GetName(Renderer_GLES32* r);
+GoString Renderer_GLES32_DebugInfo(Renderer_GLES32* r);
+GoIface Renderer_GLES32_InitModelShader(Renderer_GLES32* r);
+void Renderer_GLES32_Init(Renderer_GLES32* r);
+void Renderer_GLES32_Close(Renderer_GLES32* r);
+void Renderer_GLES32_InitStateCache(Renderer_GLES32* r);
+bool Renderer_GLES32_vitaDirect(Renderer_GLES32* r);
+u32 Renderer_GLES32_sceneFBO(Renderer_GLES32* r);
+void Renderer_GLES32_BeginFrame(Renderer_GLES32* r, bool clearColor);
+void fn_vitaPixelProbe(GoString tag, i32 w, i32 h);
+void Renderer_GLES32_EndFrame(Renderer_GLES32* r);
+void Renderer_GLES32_Await(Renderer_GLES32* r);
+u32 Renderer_GLES32_MapBlendEquation(Renderer_GLES32* r, BlendEquation i);
+u32 Renderer_GLES32_MapBlendFunction(Renderer_GLES32* r, BlendFunc i);
+void Renderer_GLES32_SetDepthTest(Renderer_GLES32* r, bool depthTest);
+void Renderer_GLES32_SetDepthMask(Renderer_GLES32* r, bool depthMask);
+void Renderer_GLES32_ChangeProgram(Renderer_GLES32* r, u32 prog);
+void Renderer_GLES32_EnableBlending(Renderer_GLES32* r, BlendEquation eq, BlendFunc src, BlendFunc dst);
+void Renderer_GLES32_DisableBlending(Renderer_GLES32* r);
+void Renderer_GLES32_ReleasePipeline(Renderer_GLES32* r);
+void Renderer_GLES32_BeginScreenshot(Renderer_GLES32* r, int width, int height);
+bool Renderer_GLES32_FinishScreenshot(Renderer_GLES32* r, Slice_u8 data, int width, int height);
+Ret_i32__i32__bool Renderer_GLES32_vitaClipLocs(Renderer_GLES32* r);
+void Renderer_GLES32_EnableScissor(Renderer_GLES32* r, i32 x, i32 y, i32 width, i32 height);
+void Renderer_GLES32_DisableScissor(Renderer_GLES32* r);
+void Renderer_GLES32_SetUniformISub(Renderer_GLES32* r, i32 loc, i32 val);
+void Renderer_GLES32_SetUniformFSub(Renderer_GLES32* r, i32 loc, Slice_f32 values);
+void Renderer_GLES32_SetUniformFvSub(Renderer_GLES32* r, i32 loc, Slice_f32 values);
+i32 Renderer_GLES32_uniformLoc(Renderer_GLES32* r, ShaderProgram_GLES32* s, GoString name);
+void Renderer_GLES32_SetUniformI(Renderer_GLES32* r, GoString name, int val);
+void Renderer_GLES32_SetUniformF(Renderer_GLES32* r, GoString name, Slice_f32 values);
+void Renderer_GLES32_SetUniformFv(Renderer_GLES32* r, GoString name, Slice_f32 values);
+void Renderer_GLES32_SetUniformMatrix(Renderer_GLES32* r, GoString name, Slice_f32 value);
+void Renderer_GLES32_SetTextureSub(Renderer_GLES32* r, Map_GoString_i32 uMap, Map_GoString_int tMap, GoString name, Texture tex);
+void Renderer_GLES32_SetTexture(Renderer_GLES32* r, GoString name, Texture tex);
+void Renderer_GLES32_SetVertexData(Renderer_GLES32* r, Slice_f32 values);
+void Renderer_GLES32_SetQuadVertices(Renderer_GLES32* r, Arr16_f32* v);
+void Renderer_GLES32_SetModelVertexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u8 values);
+void Renderer_GLES32_SetModelIndexData(Renderer_GLES32* r, u32 bufferIndex, Slice_u32 values);
+void Renderer_GLES32_RenderQuad(Renderer_GLES32* r);
+void Renderer_GLES32_RenderQuadBatch(Renderer_GLES32* r, i32 vertexCount);
+mgl32_Mat4 Renderer_GLES32_PerspectiveProjectionMatrix(Renderer_GLES32* r, f32 angle, f32 aspect, f32 near, f32 far);
+mgl32_Mat4 Renderer_GLES32_OrthographicProjectionMatrix(Renderer_GLES32* r, f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far);
+void Renderer_GLES32_SetVSync(Renderer_GLES32* r, int interval);
+u32 Renderer_GLES32_LoadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName, Slice_u8 shaderData);
+void Renderer_GLES32_UnloadCustomSpriteShader(Renderer_GLES32* r, GoString shaderName);
+void Renderer_GLES32_SetSpritePipeline(Renderer_GLES32* r, GoString shaderName);
+void Renderer_GLES32_SetCustomUniforms(Renderer_GLES32* r, Arr16_f32 params);
+bool Renderer_GLES32_NeedsGrabPass(Renderer_GLES32* r);
+Texture Renderer_GLES32_ResolveBackBuffer(Renderer_GLES32* r);
+void Renderer_GLES32_bindBuffer(Renderer_GLES32* r, u32 target, u32 buffer);
+void Renderer_GLES32_bindVertexArray(Renderer_GLES32* r, u32 vao);
+bool fn_eqF32x16(Slice_f32 value, Arr16_f32* v);
+void Renderer_GLES32_vitaSelectTexSlot(Renderer_GLES32* r, i32 unit);
+void Renderer_GLES32_vitaMarkDirty(Renderer_GLES32* r, i32 kind, i32 loc);
+void Renderer_GLES32_vitaSyncUniforms(Renderer_GLES32* r);
+void Renderer_GLES32_vitaBatchInit(Renderer_GLES32* r);
+bool Renderer_GLES32_vitaBatching(Renderer_GLES32* r);
+void Renderer_GLES32_vitaFlush(Renderer_GLES32* r);
+void Renderer_GLES32_vitaQueueQuads(Renderer_GLES32* r, int vertexCount);
+void Renderer_GLES32_vitaSetVertexData(Renderer_GLES32* r, Slice_f32 values);
 Ret_Texture__GoIface Renderer_VK_newTexture(Renderer_VK* r, i32 width, i32 height, i32 depth, bool filter);
 Texture Renderer_VK_newPaletteTexture(Renderer_VK* r, Arr2_u32 slot, Arr2_i32 offset, Arr4_f32 uvst);
 Texture Renderer_VK_newSubTexture(Renderer_VK* r, Texture tex, i32 width, i32 height, Arr4_f32 uvst);
@@ -12996,6 +13283,7 @@ void bgVideo_Close(bgVideo* bgv);
 void fn_vitaPlatformInit(void);
 void fn_vitaGLInit(void);
 void fn_vitaGLSwap(void);
+Ret_GoString__GoString__bool fn_vitaShaderSources(GoString name);
 GoString fn_fmtHex(u32 v);
 void fn_vitaTrace(GoString _p0);
 void fn_vitaMem(GoString _p0);
@@ -13005,6 +13293,7 @@ void fn_vitaRoundGC(void);
 void fn_vitaPerfBegin(void);
 u32 fn_vitaNowUs(void);
 void fn_vitaPerfEnd(int _p0);
+void fn_vitaFBOCheck(void);
 void fn_vitaPhase(int _p0);
 bool fn_vitaHalfRate(void);
 void fn_vitaMatchEnd(void);
@@ -13012,6 +13301,8 @@ void fn_vitaDiagFrame(void);
 bool fn_vitaDiagSkip(int _p0);
 bool fn_vitaDrawCensusDue(void);
 void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 l);
+bool fn_vitaDiagProbeDue(void);
+bool fn_vitaClientArrays(void);
 f64 util_Clamp_f64(f64 x, f64 minV, f64 maxV);
 int util2_Min_int(int a, int b);
 buffer_StaticBuffer_polling_PollSinkCb buffer_NewStaticBuffer_polling_PollSinkCb(int capacity);

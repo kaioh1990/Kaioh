@@ -3,6 +3,8 @@
 #define _XOPEN_SOURCE 700  // ucontext fallback
 #elif !defined(_WIN32)
 #define _POSIX_C_SOURCE 200809L  // nanosleep, clock_gettime
+#define _DEFAULT_SOURCE           // MAP_ANONYMOUS (glibc)
+#define _DARWIN_C_SOURCE          // MAP_ANON (Darwin)
 #endif
 #include "core/sched.h"
 
@@ -19,6 +21,37 @@
 #include <timeapi.h>  // timeBeginPeriod (winmm)
 #elif !defined(__x86_64__) && !defined(__aarch64__)
 #include <ucontext.h>
+#endif
+
+// Goroutine stacks: mmap with a PROT_NONE guard page below each one, so an
+// overflow faults at the overflowing frame instead of corrupting the heap.
+#if !defined(_WIN32) && (defined(__APPLE__) || defined(__linux__))
+#include <sys/mman.h>
+#include <unistd.h>
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+static size_t page_size(void) {
+    static size_t pg;
+    if (!pg) pg = (size_t)sysconf(_SC_PAGESIZE);
+    return pg;
+}
+static uint8_t *stack_alloc(size_t n) {
+    size_t pg = page_size();
+    uint8_t *p = (uint8_t *)mmap(NULL, n + pg, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED) return NULL;
+    mprotect(p, pg, PROT_NONE);
+    return p + pg;
+}
+static void stack_free(uint8_t *s, size_t n) {
+    if (s) munmap(s - page_size(), n + page_size());
+}
+#else
+static uint8_t *stack_alloc(size_t n) { return (uint8_t *)malloc(n); }
+static void stack_free(uint8_t *s, size_t n) {
+    (void)n;
+    free(s);
+}
 #endif
 
 // ---------------------------------------------------------------- context switch
@@ -206,7 +239,7 @@ static void reap(void) {
         zombie->fiber = NULL;
         zombie->sp = NULL, zombie->fiber_top = 0;
 #endif
-        free(zombie->stack);
+        stack_free(zombie->stack, zombie->stack_size);  // NULL on Windows (the fiber owned it)
         zombie->stack = NULL;
         zombie = NULL;
     }
@@ -369,7 +402,7 @@ void go_spawn(void (*fn)(void *), void *env) {
     }
 #else
     c->stack_size = stack_size();
-    c->stack = (uint8_t *)malloc(c->stack_size);
+    c->stack = stack_alloc(c->stack_size);
     if (!c->stack) {
         fprintf(stderr, "fatal error: cannot allocate a goroutine stack\n");
         abort();

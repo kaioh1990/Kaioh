@@ -39,14 +39,38 @@ GoIface sdl_Window_Destroy(sdl_Window *w) {
     SDL_DestroyWindow((SDL_Window *)w);
     return (GoIface){0};
 }
+#if CVF_IOS
+void cvf_ios_attach_gl_view(void *sdl_window);  // platform/ios/ios_view.m
+#endif
 Ret_sdl_GLContext__GoIface sdl_Window_GLCreateContext(sdl_Window *w) {
     SDL_GLContext c = SDL_GL_CreateContext((SDL_Window *)w);
+#if CVF_IOS
+    if (c) cvf_ios_attach_gl_view(w);  // SDL creates its GL view here
+#endif
     return (Ret_sdl_GLContext__GoIface){(sdl_GLContext)(uintptr_t)c, c ? (GoIface){0} : sdl_err()};
 }
 GoIface sdl_Window_GLMakeCurrent(sdl_Window *w, sdl_GLContext c) {
     return sdl_check(SDL_GL_MakeCurrent((SDL_Window *)w, (SDL_GLContext)(uintptr_t)c));
 }
-void sdl_Window_GLSwap(sdl_Window *w) { SDL_GL_SwapWindow((SDL_Window *)w); }
+#if CVF_IOS
+#include "platform/ios/ios_sys.h"
+#endif
+void cvf_gl_check_point(const char *where);  // gles_bind.c (CVF_GL_CHECK)
+void cvf_gles_before_swap(void);             // gles_bind.c
+void sdl_Window_GLSwap(sdl_Window *w) {
+#if CVF_IOS
+    cvf_ios_wait_foreground();  // never touch GL in the background (IOS_PORT.md 3.7)
+#endif
+    cvf_gl_check_point("before SDL_GL_SwapWindow");
+    cvf_gles_before_swap();
+    SDL_GL_SwapWindow((SDL_Window *)w);
+    cvf_gl_check_point("SDL_GL_SwapWindow");
+}
+Ret_i32__i32 sdl_Window_GLGetDrawableSize(sdl_Window *w) {
+    int x = 0, y = 0;
+    SDL_GL_GetDrawableSize((SDL_Window *)w, &x, &y);
+    return (Ret_i32__i32){x, y};
+}
 GoIface sdl_GLSetAttribute(sdl_GLattr attr, int value) { return sdl_check(SDL_GL_SetAttribute((SDL_GLattr)attr, value)); }
 GoIface sdl_GLSetSwapInterval(int interval) { return sdl_check(SDL_GL_SetSwapInterval(interval)); }
 

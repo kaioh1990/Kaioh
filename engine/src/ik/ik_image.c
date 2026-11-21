@@ -153,6 +153,16 @@ GoImageRect image_NRGBA_Bounds(GoImageNRGBA *m) { return m->Rect; }
 GoImageRect image_RGBA_Bounds(GoImageRGBA *m) { return m->Rect; }
 GoImageRect image_Alpha_Bounds(GoImageAlpha *m) { return m->Rect; }
 GoImageRect image_Paletted_Bounds(GoImagePaletted *m) { return m->Rect; }
+// color.RGBA.RGBA: 16-bit premultiplied channels (8-bit value * 0x101)
+Ret_u32__u32__u32__u32 color_RGBA_RGBA(GoOpaque c) {
+    const u8 *v = (const u8 *)c._opaque;
+    return (Ret_u32__u32__u32__u32){v[0] * 0x101u, v[1] * 0x101u, v[2] * 0x101u, v[3] * 0x101u};
+}
+GoImageUniform *image_NewUniform(GoIface c) {
+    GoImageUniform *u = (GoImageUniform *)gc_alloc(sizeof *u);
+    u->C = c;
+    return u;
+}
 GoImageRect image_Uniform_Bounds(GoImageUniform *u) {
     (void)u;
     return (GoImageRect){{-1000000000, -1000000000}, {1000000000, 1000000000}};
