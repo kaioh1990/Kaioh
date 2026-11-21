@@ -53,6 +53,32 @@ static void show(const char *fmt, ...) {
     if (result_file) fputs(b, result_file), fflush(result_file);
 }
 
+// stdout and stderr into one log file through one FILE: two streams on one
+// file overwrite each other on the Vita (no O_APPEND semantics); newlib's
+// stdout is _REENT->_stdout, so it can be pointed at stderr
+static void log_to(const char *path) {
+    fflush(stdout), fflush(stderr);
+    freopen(path, "w", stderr);
+    setvbuf(stderr, NULL, _IOLBF, 0);
+    stdout = stderr;
+}
+
+// printf / puts / putchar of vitasdk's newlib write somewhere other than
+// the FILE that `stdout` names (seen in vemu: neither stdout = stderr nor
+// freopen of stdout catch them; fprintf(stdout) works). The engine's
+// printf output (cvf_tests' results, "winner: N") goes to the log through
+// these definitions, which take precedence over the C library's.
+int vprintf(const char *fmt, va_list ap) { return vfprintf(stdout, fmt, ap); }
+int printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int r = vfprintf(stdout, fmt, ap);
+    va_end(ap);
+    return r;
+}
+int puts(const char *s) { return fputs(s, stdout) < 0 || fputc('\n', stdout) < 0 ? EOF : 1; }
+int putchar(int c) { return fputc(c, stdout); }
+
 static void load_env(void) {
     FILE *f = fopen(DIR "/cvf_env.txt", "r");
     if (!f) return;
@@ -144,6 +170,9 @@ int main(void) {
     psvDebugScreenInit();
     mkdir(DIR, 0777);
     load_env();
+    // the sound cache counts against the collector's arena: the TinyGo Vita
+    // build's 24 MB (cvf_sound_lazy.go's isVita value, translated out here)
+    if (!getenv("CVF_SOUND_CACHE_MB")) setenv("CVF_SOUND_CACHE_MB", "24", 1);
     int mhz = getenv("CVF_ARM_MHZ") ? atoi(getenv("CVF_ARM_MHZ")) : 444;
     scePowerSetArmClockFrequency(mhz);
     result_file = fopen(DIR "/result.txt", "w");
@@ -151,10 +180,7 @@ int main(void) {
 
     // 1. unit tests (detmath golden values, RNG, Atof, formats, scheduler,
     //    collector self-test): output in tests.log
-    freopen(DIR "/tests.log", "w", stdout);
-    setvbuf(stdout, NULL, _IOLBF, 0);
-    freopen(DIR "/tests.log", "a", stderr);
-    setvbuf(stderr, NULL, _IOLBF, 0);
+    log_to(DIR "/tests.log");
     char *targv[] = {"cvf_tests", NULL};
     int tr = cvf_tests_main(1, targv);
     fflush(stdout), fflush(stderr);
@@ -166,10 +192,7 @@ int main(void) {
     show("unit tests: %s%s\n", last[0] ? last : "no result\n", tr ? "  FAILED, see " DIR "/tests.log\n" : "");
 
     // 2. the reference fight: output in headless.log
-    freopen(DIR "/headless.log", "w", stdout);
-    setvbuf(stdout, NULL, _IOLBF, 0);
-    freopen(DIR "/headless.log", "a", stderr);
-    setvbuf(stderr, NULL, _IOLBF, 0);
+    log_to(DIR "/headless.log");
     if (!getenv("CVF_FRAME_STATS")) setenv("CVF_FRAME_STATS", "1", 1);
     if (!getenv("CVF_GC_TRACE")) setenv("CVF_GC_TRACE", "1", 1);
     snprintf(line, sizeof line, "%s", DIR "/refgame -p1 Alucard -p2 Richter -p1.ai 8 -p2.ai 8 -s stages/ParanoiaBG.def -rounds 1");

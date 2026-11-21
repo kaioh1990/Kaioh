@@ -13,6 +13,7 @@ int chdir(const char *path);  // <unistd.h> clashes with generated names
 
 static struct {
     i64 last, total, max, load_end;
+    size_t alloc0, alloc1;  // collector's total allocation at the first / last fight frame
     i64 hist[8];  // < 1, 2, 4, 8, 16, 33, 66 ms, more
     int n;
 } fs;
@@ -28,7 +29,8 @@ static void frame_hook(bool fighting) {
         while (b < 7 && d >= lim[b]) b++;
         fs.hist[b]++;
     }
-    if (fighting && !fs.load_end) fs.load_end = now;
+    if (fighting && !fs.load_end) fs.load_end = now, fs.alloc0 = gc_stats().total_alloc;
+    if (fighting) fs.alloc1 = gc_stats().total_alloc;
     fs.last = fighting ? now : 0;
 }
 
@@ -54,6 +56,8 @@ int main(int argc, char **argv) {
         i64 t1 = go_mono_ns();
         fprintf(stderr, "frames: %d fight frames, avg %.0f us, max %.0f us; to first fight frame %.2f s, total %.2f s\n", fs.n,
                 fs.n ? fs.total / 1e3 / fs.n : 0.0, fs.max / 1e3, fs.load_end ? (fs.load_end - t0) / 1e9 : 0.0, (t1 - t0) / 1e9);
+        fprintf(stderr, "frames: %.1f MB allocated from the first to the last fight frame (%.1f KB per frame)\n",
+                (fs.alloc1 - fs.alloc0) / 1048576.0, fs.n ? (fs.alloc1 - fs.alloc0) / 1024.0 / fs.n : 0.0);
         fprintf(stderr, "frames: <1ms %lld, <2 %lld, <4 %lld, <8 %lld, <16.7 %lld, <33.3 %lld, <66.7 %lld, more %lld\n",
                 (long long)fs.hist[0], (long long)fs.hist[1], (long long)fs.hist[2], (long long)fs.hist[3], (long long)fs.hist[4],
                 (long long)fs.hist[5], (long long)fs.hist[6], (long long)fs.hist[7]);

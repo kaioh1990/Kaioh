@@ -224,11 +224,20 @@ static int add_module_roots(struct dl_phdr_info *info, size_t size, void *data) 
 }
 #endif
 
+#if defined(__vita__)
+__attribute__((section(".noinit"), used)) static char gc_vita_data_end[4];
+#endif
+
 static void add_data_roots(void) {
 #if defined(__vita__)
-    // vitasdk's linker script (armvita.x): .data, .data1, .persistent, .bss
-    extern char __data_start[], __bss_end__[];
-    gc_add_roots(__data_start, __bss_end__);
+    // vitasdk's linker script (armvita.x): .data, .data1, .persistent, .bss,
+    // then .noinit. The end is a real object in .noinit, not __bss_end__: a
+    // symbol at the very end of the segment is not relocated in the Vita
+    // image (vita-elf-create; seen in vemu: __data_start moved with the
+    // segment, __bss_end__ kept its link address, and objects referenced
+    // only from .bss were freed - gc_selftest)
+    extern char __data_start[];
+    gc_add_roots(__data_start, gc_vita_data_end + sizeof gc_vita_data_end);
 #elif defined(__ANDROID__)
     if (!dl_iterate_phdr(add_module_roots, (void *)(uintptr_t)&gc_init)) {
         fprintf(stderr, "gc: data segments of the engine not found\n");
@@ -337,11 +346,11 @@ void gc_init(void *stack_base) {
     S->npages = (mb << 20) >> PAGE_SHIFT;
     void *arena = os_reserve_heap(S->npages * PAGE_SIZE + PAGE_SIZE);
     if (!arena) {
-        fprintf(stderr, "gc: cannot reserve %zu MB\n", mb);
+        fprintf(stderr, "gc: cannot reserve %lu MB\n", (unsigned long)mb);
         abort();
     }
     S->lo = ((uintptr_t)arena + PAGE_SIZE - 1) & ~(uintptr_t)(PAGE_SIZE - 1);
-    if (getenv("CVF_GC_TRACE")) fprintf(stderr, "gc arena: %zu MB at %p\n", mb, (void *)S->lo);
+    if (getenv("CVF_GC_TRACE")) fprintf(stderr, "gc arena: %lu MB at %p\n", (unsigned long)mb, (void *)S->lo);
     S->pages = (Page *)os_reserve(S->npages * sizeof(Page));
     S->marks = (uint64_t(*)[MARK_WORDS])os_reserve(S->npages * sizeof *S->marks);
     if (!S->pages || !S->marks) abort();
@@ -369,6 +378,9 @@ void gc_init(void *stack_base) {
     prof_skip = getenv("CVF_GC_PROF_SKIP_MB") ? (size_t)atoi(getenv("CVF_GC_PROF_SKIP_MB")) << 20 : 0;
 #endif
     add_data_roots();
+    if (getenv("CVF_GC_TRACE"))
+        for (int i = 0; i < S->nroots; i++)
+            fprintf(stderr, "gc roots: %p-%p\n", (void *)S->roots[i].lo, (void *)S->roots[i].hi);
 }
 
 void gc_add_roots(void *lo, void *hi) {
@@ -687,8 +699,8 @@ void gc_collect(void) {
     sweep();
     double dt = now_ms() - t0;
     if (getenv("CVF_GC_TRACE"))
-        fprintf(stderr, "gc phases: roots %.2f ms (%zu KB) mark-from-roots %.2f ms stack %.2f ms sweep %.2f ms\n", t1 - t0,
-                rootbytes >> 10, t2 - t1, t3 - t2, now_ms() - t3);
+        fprintf(stderr, "gc phases: roots %.2f ms (%lu KB) mark-from-roots %.2f ms stack %.2f ms sweep %.2f ms\n", t1 - t0,
+                (unsigned long)(rootbytes >> 10), t2 - t1, t3 - t2, now_ms() - t3);
     S->st.collections++;
     S->st.last_pause_ms = dt;
     S->st.total_pause_ms += dt;
@@ -698,8 +710,9 @@ void gc_collect(void) {
     S->trigger = t > ((size_t)32 << 20) ? t : ((size_t)32 << 20);
     S->collecting = false;
     if (getenv("CVF_GC_TRACE"))
-        fprintf(stderr, "gc %llu: total %.1f MB live %.1f MB heap %.1f MB hwm %.1f MB pause %.2f ms\n", (unsigned long long)S->st.collections, S->st.total_alloc / 1048576.0,
-                S->st.live_bytes / 1048576.0, S->st.heap_bytes / 1048576.0, (double)(S->hwm << PAGE_SHIFT) / 1048576.0, dt);
+        fprintf(stderr, "gc %llu: total %.1f MB live %.1f MB heap %.1f MB hwm %.1f MB pause %.2f ms%s\n", (unsigned long long)S->st.collections, S->st.total_alloc / 1048576.0,
+                S->st.live_bytes / 1048576.0, S->st.heap_bytes / 1048576.0, (double)(S->hwm << PAGE_SHIFT) / 1048576.0, dt,
+                S->fighting ? " (during a round)" : "");
 }
 
 // Hands the pages of free runs back to the OS (memory warnings): a
@@ -783,7 +796,7 @@ static void *alloc_large(size_t n, int atomic) {
         gc_collect();
         pg = take_pages(np);
         if (pg == SIZE_MAX) {
-            fprintf(stderr, "gc: out of memory (%zu bytes)\n", n);
+            fprintf(stderr, "gc: out of memory (%lu bytes)\n", (unsigned long)n);
             abort();
         }
     }

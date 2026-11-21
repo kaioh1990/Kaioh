@@ -19,7 +19,7 @@ char *getcwd(char *buf, size_t size);
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #include <mach-o/dyld.h>
-#elif !defined(_WIN32)
+#elif !defined(_WIN32) && !defined(__vita__)
 long readlink(const char *path, char *buf, size_t n);
 #endif
 
@@ -36,6 +36,9 @@ Ret_GoString__GoIface os_Executable(void) {
     unsigned long n = GetModuleFileNameA(NULL, buf, sizeof buf);
     if (n == 0 || n >= sizeof buf) return (Ret_GoString__GoIface){{"", 0}, go_errorf("os.Executable: failed")};
     const char *p = buf;
+#elif defined(__vita__)
+    const char *p = "app0:eboot.bin";  // the application's own mount (no readlink, no /proc)
+    (void)buf;
 #else
     long n = readlink("/proc/self/exe", buf, sizeof buf - 1);
     if (n <= 0) return (Ret_GoString__GoIface){{"", 0}, go_errorf("os.Executable: failed")};

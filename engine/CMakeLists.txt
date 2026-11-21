@@ -124,9 +124,13 @@ if(VITA)
     src/app/headless_main.c tests/stub/sdl_stub.c ${CVF_TEST_SOURCES})
   set_source_files_properties(src/app/headless_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_headless_main)
   set_source_files_properties(tests/test_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_tests_main)
+  # the runtime's own Vita imports (core/sched.c: fibers; core/gc.c: memory
+  # blocks, threads), on cvf_core so they follow it on the link line
+  target_link_libraries(cvf_core PUBLIC SceFiber_stub SceSysmodule_stub SceLibKernel_stub
+    SceKernelThreadMgr_stub SceSysmem_stub)
   target_link_libraries(cvf_vita_headless PRIVATE cvf_ik
-    SceFiber_stub SceSysmodule_stub SceCtrl_stub ScePower_stub SceDisplay_stub SceNetCtl_stub SceNet_stub
-    SceLibKernel_stub SceKernelThreadMgr_stub SceSysmem_stub SceAppMgr_stub SceRtc_stub pthread m)
+    SceCtrl_stub ScePower_stub SceDisplay_stub SceNetCtl_stub SceNet_stub SceAppMgr_stub SceRtc_stub pthread m
+    SceFiber_stub SceSysmodule_stub SceLibKernel_stub SceKernelThreadMgr_stub SceSysmem_stub)
   target_compile_options(cvf_vita_headless PRIVATE ${CVF_DETERMINISM_FLAGS})
   set_target_properties(cvf_vita_headless PROPERTIES C_EXTENSIONS ON)
   return()
