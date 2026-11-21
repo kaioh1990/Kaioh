@@ -154,11 +154,32 @@ TIER 3 (DoS):
   - Counter overflow DoS (cumsum > 2049)
 ```
 
+## SESSION 20 CORRECTION: Sub-branch B Functions Do NOT Use Our Data
+
+**Function 0x90b4f40 (Call 1 in Sub-branch B):**
+- Immediately overwrites X0 (our data pointer!) with format string address
+- Calls os_log/panic with string args (W2=0x11 log level)
+- After logging: authenticates X19's vtable, calls through it
+- **Our buffer+0x5F98 is DISCARDED — never read**
+
+**Function 0x9087cbc (Call 2 in Sub-branch B):**
+- Tiny function (17 instructions)
+- Only uses X0 (enc_sub pointer): loads [enc_sub+0x28]+0xb8
+- Returns 0 after optional nested call
+- **X6 (buf+0x5F98) is NEVER READ**
+
+**Conclusion: Sub-branch B is NOT exploitable for type confusion.**
+Our data passes through the call site arguments but is ignored by both callees.
+
+**Sub-branch A remains the ONLY viable type confusion path.**
+vtable[0x1F0](self, X19, buf+0x5F98, ?, 1, 1, 15) — X2 carries our data.
+On-device test determines which sub-branch fires via crash log analysis.
+
 ## Next Steps (On-Device Required)
 
 1. **MV-HEVC verify** on iPhone Duo (prerequisite)
 2. **214 encodes with layer_id=2** → trigger value==2 dispatch
-3. **Crash log analysis** → reveals which sub-branch fired (A or B) and what happened
-4. **If no crash**: the type confusion was processed silently → need readback probe
-5. **If crash at vtable[0x1F0]**: chain walk succeeded, need to analyze target method
-6. **If crash at 0x90b4f40 or 0x9087cbc**: chain walk zero path, analyze the crash
+3. **Crash log analysis** → reveals which sub-branch fired (A or B)
+4. **If crash in Sub-branch A code**: vtable[0x1F0] used our data → analyze target
+5. **If crash at 0x90b4f40**: Sub-branch B panic path → data ignored → try other approaches
+6. **If no crash**: either both paths are benign, or crash was delayed → check panic logs
