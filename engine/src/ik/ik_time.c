@@ -40,8 +40,8 @@ static i64 wall_ns(void) {
     return (t - 116444736000000000LL) * 100;
 #else
     struct timespec ts;
-#if defined(__ANDROID__)
-    clock_gettime(CLOCK_REALTIME, &ts);  // timespec_get needs API 29
+#if defined(__ANDROID__) || defined(__vita__)
+    clock_gettime(CLOCK_REALTIME, &ts);  // timespec_get: Android API 29; not in vitasdk's newlib
 #else
     timespec_get(&ts, TIME_UTC);
 #endif
@@ -78,6 +78,20 @@ i64 time_Time_Unix(GoOpaque t) {
 i64 time_Time_UnixMilli(GoOpaque t) { return unpack(t).unix_ns / 1000000; }
 i64 time_Time_UnixNano(GoOpaque t) { return unpack(t).unix_ns; }
 
+#if defined(__vita__)
+// timegm (not in vitasdk's newlib): days from the civil date (H. Hinnant)
+static time_t cvf_timegm(const struct tm *t) {
+    long long y = (long long)t->tm_year + 1900, m = t->tm_mon + 1;
+    y -= m <= 2;
+    long long era = (y >= 0 ? y : y - 399) / 400, yoe = y - era * 400;
+    long long doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + t->tm_mday - 1;
+    long long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    long long days = era * 146097 + doe - 719468;
+    return (time_t)(days * 86400 + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec);
+}
+#define timegm cvf_timegm
+#endif
+
 // broken-down fields (local time unless UTC)
 static struct tm fields(RtTime r, long *gmtoff) {
     time_t s = (time_t)(r.unix_ns >= 0 ? r.unix_ns / 1000000000 : -((-r.unix_ns + 999999999) / 1000000000));
@@ -99,7 +113,11 @@ static struct tm fields(RtTime r, long *gmtoff) {
 #else
     if (r.utc) gmtime_r(&s, &tm);
     else localtime_r(&s, &tm);
+#if defined(__vita__)
+    if (gmtoff) *gmtoff = r.utc ? 0 : (long)(cvf_timegm(&tm) - s);  // newlib's struct tm has no tm_gmtoff
+#else
     if (gmtoff) *gmtoff = r.utc ? 0 : tm.tm_gmtoff;
+#endif
 #endif
     return tm;
 }

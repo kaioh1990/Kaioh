@@ -26,6 +26,18 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "i[3-6]86")
   # x87 excess precision would break determinism; force SSE2 on 32-bit x86.
   list(APPEND CVF_DETERMINISM_FLAGS -msse2 -mfpmath=sse)
 endif()
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|arm)" AND NOT APPLE)
+  # plain char is unsigned in the Linux/Android ARM ABIs, signed on x86-64
+  # and Apple arm64, where the reference dumps were verified (ANDROID_PORT.md)
+  list(APPEND CVF_DETERMINISM_FLAGS -fsigned-char)
+endif()
+
+# Headless-only build without an SDL library (CVF_SDL_STUB=ON): SDL's
+# headers only (CVF_SDL2_INCLUDE_DIR), the SDL functions stubbed
+# (tests/stub/sdl_stub.c); cvf_headless, cvf_tests, cvf_nearby_test, no
+# game. Used for the armv7 Linux build that runs under qemu-arm
+# (tools/package/armv7-linux.cmake, VITA_PORT.md).
+option(CVF_SDL_STUB "headless executables only, SDL stubbed" OFF)
 
 set(CVF_WARNINGS -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare)
 
@@ -91,6 +103,35 @@ if(IOS)
   return()
 endif()
 
+# PS Vita (vitasdk: -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake):
+# milestone M1 of VITA_PORT.md, the headless application - unit tests, then
+# the reference fight - as one ELF (cvf_vita_headless) that
+# tools/package/vita_vpk.sh turns into a VPK. SDL is not linked (headless:
+# stubbed); the game with vitaGL comes later (M2).
+if(VITA)
+  if(NOT CVF_SDL2_INCLUDE_DIR)
+    set(CVF_SDL2_INCLUDE_DIR "${VITASDK}/arm-vita-eabi/include/SDL2")  # headers only (vitasdk sdl2 package)
+  endif()
+  file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c src/platform/gles/*.c)
+  add_library(cvf_ik STATIC ${CVF_IK_SOURCES} src/platform/vita/vita_ifaddrs.c)
+  target_link_libraries(cvf_ik PUBLIC cvf_core)
+  target_include_directories(cvf_ik PUBLIC "${CVF_SDL2_INCLUDE_DIR}")
+  target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w
+    -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration)
+  set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)
+  file(GLOB CVF_TEST_SOURCES CONFIGURE_DEPENDS tests/*.c)
+  add_executable(cvf_vita_headless src/platform/vita/vita_main.c src/platform/vita/debugScreen.c
+    src/app/headless_main.c tests/stub/sdl_stub.c ${CVF_TEST_SOURCES})
+  set_source_files_properties(src/app/headless_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_headless_main)
+  set_source_files_properties(tests/test_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_tests_main)
+  target_link_libraries(cvf_vita_headless PRIVATE cvf_ik
+    SceFiber_stub SceSysmodule_stub SceCtrl_stub ScePower_stub SceDisplay_stub SceNetCtl_stub SceNet_stub
+    SceLibKernel_stub SceKernelThreadMgr_stub SceSysmem_stub SceAppMgr_stub SceRtc_stub pthread m)
+  target_compile_options(cvf_vita_headless PRIVATE ${CVF_DETERMINISM_FLAGS})
+  set_target_properties(cvf_vita_headless PROPERTIES C_EXTENSIONS ON)
+  return()
+endif()
+
 file(GLOB CVF_TEST_SOURCES CONFIGURE_DEPENDS tests/*.c)
 add_executable(cvf_tests ${CVF_TEST_SOURCES})
 target_link_libraries(cvf_tests PRIVATE cvf_core)
@@ -127,7 +168,14 @@ endif()
 # SDL2: a CMake package (SDL2::SDL2) or explicit CVF_SDL2_INCLUDE_DIR /
 # CVF_SDL2_LIBRARY (headers directory containing SDL.h); the explicit paths
 # win (e.g. an arm64 SDL next to an x86_64 Homebrew one).
-if(NOT (CVF_SDL2_INCLUDE_DIR AND CVF_SDL2_LIBRARY))
+if(CVF_SDL_STUB)
+  if(NOT CVF_SDL2_INCLUDE_DIR)
+    message(FATAL_ERROR "CVF_SDL_STUB: set CVF_SDL2_INCLUDE_DIR (SDL2 headers)")
+  endif()
+  add_library(cvf_sdl_stub STATIC tests/stub/sdl_stub.c)
+  add_library(SDL2::SDL2 ALIAS cvf_sdl_stub)
+  target_include_directories(cvf_sdl_stub PUBLIC "${CVF_SDL2_INCLUDE_DIR}")
+elseif(NOT (CVF_SDL2_INCLUDE_DIR AND CVF_SDL2_LIBRARY))
   find_package(SDL2 CONFIG QUIET)
 endif()
 if(NOT TARGET SDL2::SDL2)
@@ -158,6 +206,17 @@ target_compile_options(cvf_nearby_test PRIVATE ${CVF_DETERMINISM_FLAGS})
 add_executable(cvf_headless src/app/headless_main.c)
 target_link_libraries(cvf_headless PRIVATE cvf_ik)
 target_compile_options(cvf_headless PRIVATE ${CVF_DETERMINISM_FLAGS})
+
+if(CVF_SDL_STUB)
+  # the stub library refers back to nothing, but cvf_ik's SDL references
+  # come after it on the link line: repeat it last
+  foreach(t cvf_headless cvf_nearby_test)
+    target_link_libraries(${t} PRIVATE cvf_sdl_stub)
+  endforeach()
+  find_package(Threads REQUIRED)
+  target_link_libraries(cvf_ik PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
+  return()
+endif()
 
 # The game (SDL2 window, OpenGL renderer, Lua menus)
 add_executable(cvf src/app/game_main.c)

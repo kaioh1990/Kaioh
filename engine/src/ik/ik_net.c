@@ -21,8 +21,12 @@ typedef SOCKET sock_t;
 #else
 #include <arpa/inet.h>
 #include <errno.h>
+#if defined(__vita__)
+#include "platform/vita/vita_ifaddrs.h"
+#else
 #include <ifaddrs.h>
 #include <net/if.h>
+#endif
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
