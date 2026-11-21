@@ -43,10 +43,7 @@ void cvf_android_http_init(JavaVM *vm, JNIEnv *env) {
     (*env)->DeleteLocalRef(env, c);
 }
 
-static void finish(HttpJob *j) {
-    atomic_thread_fence(memory_order_release);
-    j->done = 1;
-}
+static void finish(HttpJob *j) { http_job_finish(j); }
 
 static void perform(JNIEnv *env, HttpJob *j) {
     jstring method = (*env)->NewStringUTF(env, j->method ? j->method : "GET");
