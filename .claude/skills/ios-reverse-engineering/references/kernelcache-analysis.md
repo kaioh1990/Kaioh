@@ -296,10 +296,70 @@ The actual overflow mechanism is:
 ```
 for (i = 0; i < NTL; i++) {
     surface_desc = struct[0x514 + i*4];  // OOB READ for i >= 8!
-    dma_offset = accumulator;
-    map_surface(dma_offset, surface_desc);  // Maps WRONG kernel memory
+    remaining = 32 - accumulator;
+    dest = buffer_base + accumulator;
+    mapped_size = per_layer_process(dest, remaining, surface_desc);
     accumulator += mapped_size;
 }
+```
+
+#### Full Disassembly of DMA Loop (AVE2+0x13e2e8..+0x13e338)
+```
++0x13e2e8: ldr w8, [x19, #0x510]       // Load NTL from struct
++0x13e2ec: cmp w8, #1                   // If NTL < 1, skip loop
++0x13e2f0: b.lt +0x13e438
+
++0x13e2f4: movz x20, #0                 // i = 0 (loop counter)
++0x13e2f8: movz w25, #0                 // accumulator = 0
++0x13e2fc: add x23, x19, #0x514         // array_base = &struct[0x514]
++0x13e300: sub x24, x29, #0x80          // buffer_base = frame - 0x80 (local)
++0x13e304: movz w26, #0x20              // max_size = 32 (buffer limit!)
++0x13e308: adrp x22, ...                // format string page
++0x13e30c: add x22, x22, #0xe25         // format string addr
+
+// LOOP BODY:
++0x13e310: sub w1, w26, w25             // remaining = 32 - accumulator
++0x13e314: ldr w8, [x23, x20, lsl #2]  // value = array[i] ← OOB for i>=8!
++0x13e318: add x0, x24, w25, sxtw       // dest = buffer_base + accumulator
++0x13e31c: str x8, [sp]                 // push value as stack arg
++0x13e320: mov x2, x22                  // format string
++0x13e324: bl +0x149560                 // per_layer_process(dest, remaining, fmt, value)
++0x13e328: add w25, w0, w25             // accumulator += return_value
++0x13e32c: add x20, x20, #1             // i++
++0x13e330: ldr w8, [x19, #0x510]        // reload NTL (loop limit)
++0x13e334: cmp x20, x8                  // compare i with NTL
++0x13e338: b.lt +0x13e310               // loop if i < NTL
+```
+
+#### Key Observations from Disassembly:
+1. **buffer_base is a STACK LOCAL** (frame - 0x80), not a heap buffer
+   - The 32-byte limit (w26 = 0x20) is for this stack buffer
+   - The actual DMA surface mapping happens inside the called function
+2. **The called function at +0x149560** receives the OOB value as a stack arg
+   - For valid layers (0-7): passes real surface descriptors
+   - For OOB layers (8+): passes garbage struct values as surface descriptors
+3. **The accumulator tracks bytes written to the stack buffer** (max 32)
+   - But the DMA writes to kernel memory happen inside the called function
+4. **No bounds check on i** — loop runs NTL times unconditionally
+
+#### Per-Layer Array Store Analysis
+Only 2 explicit stores to the per-layer array found in entire kext:
+```
++0xce1a0:  str w0, [x19, #0x528]    // layer[5]
++0xce1ec:  str w0, [x19, #0x52c]    // layer[6]
++0x18eb34: str w0, [x19, #0x528]    // layer[5] (alt path)
++0x18eb7c: str w0, [x19, #0x52c]    // layer[6] (alt path)
+```
+Layers 0-4 and 7 are set via indexed stores (register offset).
+**struct+0x534 (first OOB slot) has ZERO stores** — its value is whatever
+residual data exists from struct initialization or prior operations.
+
+#### 4 locations compute the array base address:
+```
++0x27d48:  add x20, x21, #0x514     // encode setup path
++0x41228:  add x3, x3, #0x514       // config path
++0x99724:  add x3, x3, #0x514       // another config path
++0x13e2fc: add x23, x19, #0x514     // THE DMA LOOP
 ```
 
 For i >= 8, `struct[0x514 + i*4]` reads BEYOND the 8-entry per-layer array:
@@ -309,7 +369,7 @@ For i >= 8, `struct[0x514 + i*4]` reads BEYOND the 8-entry per-layer array:
 - ... through +0x5e7 (struct fields before CalcSurfaceInfo outputs)
 - Layer N: reads arbitrary struct data interpreted as surface descriptor
 
-These garbage/adjacent values are passed to the DART mapping function.
+These garbage/adjacent values are passed to the per-layer processing function.
 If interpreted as a surface ID or memory descriptor, they cause the coprocessor
 to write encoded data into WRONG kernel memory — not just adjacent to the
 buffer, but potentially at ARBITRARY locations determined by struct contents.
@@ -327,7 +387,36 @@ Per-layer array bounds:
   +0x5ec: CalcSurfaceInfo output 2
 
 The 180 bytes at +0x534..+0x5E7 are unknown struct fields whose values
-become "surface descriptors" for the DART mapping of temporal layers 9+.
+become "surface descriptors" for the DMA mapping of temporal layers 9+.
+
+### OOB Region Struct Field Map (+0x534..+0x5E8)
+Heavily-accessed fields (access count in parentheses):
+```
++0x534: (5)  loads in DMA loop region — FIRST OOB FIELD
++0x538: (3)  
++0x540: (8)  pointer field (ldr x) — 64-bit value read OOB
++0x548: (8)  
++0x550: (5)  
++0x558: (14) heavily used
++0x560: (10) 
++0x568: (12) 
++0x570: (10) 
++0x578: (32) MOST ACCESSED — likely surface ptr or config
++0x580: (27) heavily used pointer field
++0x588: (13) 
++0x590: (16) 
++0x598: (29) heavily used
++0x5a0: (12) 
++0x5a8: (11) 
++0x5b0: (16) 
++0x5b8: (16) includes nulling stores (str x31)
++0x5c0: (11) 
++0x5c8: (10) 
++0x5d0: (23) includes both loads and nulling stores
++0x5d8: (8)  
++0x5e0: (3)  
++0x5e8: (57) CalcSurfaceInfo output — MOST TOTAL ACCESSES
+```
 
 ### XNU Pipe Buffer Layout (from bsd/sys/pipe.h)
 ```
@@ -349,6 +438,48 @@ in general kalloc zones may be better spray targets.
 2. Trigger DMA OOB to corrupt an IOSurface's backing allocation
 3. Read back property values through IOSurfaceCopyAllValues()
 4. If a property is corrupted, the return value leaks kernel heap data
+
+### AVE Hardware Register Write Function (+0x11c574)
+Tiny function (5 instructions), called ~400+ times throughout kext:
+```
++0x11c574: HINT (BTI/PAC)
++0x11c578: REV w8, w1          // byte-reverse value for HW endianness
++0x11c57c: CMP w0, #5          // validate register index
++0x11c580: B.CS +0x11c58c      // if index >= 5, extended path
++0x11c584: MOVZ w0, #1         // return success
++0x11c588: RET
+```
+This is `ave_write_reg(uint32_t reg_index, uint32_t value)`.
+
+### Encode Pipeline (4-Register-Write Sequence)
+Found at 3 call sites: +0xD994, +0x1220A4, +0x13e348
+```
+bl +0x11c574   // ave_write_reg — write HW register
+bl +0x11c5b8   // another HW reg operation (likely read-back/check)
+bl +0x192340   // mailbox/status operation
+bl +0x11c5f0   // another HW operation
+```
+
+Crash site (+0xD994): `ave_write_reg(3, 4)` — reg 3, value 4
+Panic LR site (+0x1220A4): `ave_write_reg(0x66, 4)` — reg 0x66, value 4
+Register 0x66 likely triggers the encode DMA engine.
+
+The crash sequence:
+1. Register writes configure AVE coprocessor DMA descriptors
+2. Per-layer array values (+0x514[i]) set DMA source/destination addresses
+3. Final register write triggers the DMA engine
+4. DMA engine reads per-layer descriptors including OOB values from +0x534+
+5. OOB value at +0x534 ≈ 0x59 (near-NULL) → DMA tries to access 0x59
+6. DART/IOMMU translation fault → kernel panic
+   FAR=0x59, ESR=0x96000046 (translation fault level 2)
+
+### Loop at +0x13e2e8 Is Likely Logging
+The called function at +0x149560 is a thin wrapper around +0x1487d4.
+Signature: (dest=buffer_base+accum, remaining=32-accum, fmt=string, value=OOB_read)
+This matches vsnprintf(char *buf, size_t n, const char *fmt, ...).
+The loop formats layer descriptors into a 32-byte stack buffer as debug output.
+The actual DMA configuration happens through direct HW register writes
+using the per-layer array values, elsewhere in the encode setup path.
 
 ### PoC Files
 - `ave_kwrite_primitive.c` — Pipe spray + AVE OOB + corruption check
