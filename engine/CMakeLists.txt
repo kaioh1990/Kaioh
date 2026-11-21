@@ -26,6 +26,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "i[3-6]86")
   # x87 excess precision would break determinism; force SSE2 on 32-bit x86.
   list(APPEND CVF_DETERMINISM_FLAGS -msse2 -mfpmath=sse)
 endif()
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|arm)" AND NOT APPLE)
+  # plain char is unsigned in the Linux/Android ARM ABIs, signed on x86-64
+  # and Apple arm64, where the reference dumps were verified (ANDROID_PORT.md)
+  list(APPEND CVF_DETERMINISM_FLAGS -fsigned-char)
+endif()
 
 set(CVF_WARNINGS -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare)
 
@@ -69,6 +74,55 @@ if(IOS)
     # master object's export list cannot hide common symbols
     target_compile_options(${t} PRIVATE -fvisibility=hidden -fno-common)
   endforeach()
+  return()
+endif()
+
+# Android (NDK toolchain file, ANDROID_ABI=arm64-v8a): libmain.so, the
+# engine library the app's SDLActivity loads (ANDROID_PORT.md), plus static
+# test executables (headless reference fight, unit tests) that run on any
+# arm64 Linux kernel or under qemu-aarch64. Built by
+# tools/package/android_build.sh. CVF_SDL2_INCLUDE_DIR / CVF_SDL2_LIBRARY:
+# SDL2's headers and the libSDL2.so built for the app.
+if(ANDROID)
+  if(NOT CVF_SDL2_INCLUDE_DIR OR NOT CVF_SDL2_LIBRARY)
+    message(FATAL_ERROR "Android: set CVF_SDL2_INCLUDE_DIR and CVF_SDL2_LIBRARY (libSDL2.so)")
+  endif()
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  # 1 GB heap reservation (as on iOS): the live set is ~30 MB, and phones
+  # with little RAM can refuse a 4 GB reservation under heuristic overcommit
+  target_compile_definitions(cvf_core PRIVATE CVF_GC_DEFAULT_ARENA_MB=1024)
+  file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c src/platform/gles/*.c)
+  add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
+  target_link_libraries(cvf_ik PUBLIC cvf_core)
+  target_include_directories(cvf_ik PUBLIC "${CVF_SDL2_INCLUDE_DIR}")
+  target_compile_definitions(cvf_ik PUBLIC CVF_ANDROID=1)
+  target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w)
+  set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)
+  file(GLOB CVF_ANDROID_SOURCES CONFIGURE_DEPENDS src/platform/android/*.c)
+  add_library(main SHARED ${CVF_ANDROID_SOURCES})
+  target_link_libraries(main PRIVATE cvf_ik "${CVF_SDL2_LIBRARY}" log android ${CMAKE_DL_LIBS} m)
+  target_compile_options(main PRIVATE ${CVF_DETERMINISM_FLAGS} ${CVF_WARNINGS})
+  set_target_properties(main PROPERTIES C_EXTENSIONS ON)
+  foreach(t cvf_core cvf_ik main)
+    target_compile_options(${t} PRIVATE -fvisibility=hidden)
+  endforeach()
+  # only the JNI entry points and SDL_main are exported; 16 KB pages
+  # (Android 15 devices) need 16 KB segment alignment
+  target_link_options(main PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/platform/android/exports.map"
+    -Wl,--no-undefined -Wl,-z,max-page-size=16384 -Wl,--exclude-libs,ALL)
+  # static test executables: the same objects as libmain.so (cvf_core,
+  # cvf_ik), SDL stubbed out (headless runs never call it)
+  add_executable(cvf_headless src/app/headless_main.c tests/android/sdl_stub.c tests/android/tls_align.c)
+  target_link_libraries(cvf_headless PRIVATE cvf_ik)
+  file(GLOB CVF_TEST_SOURCES CONFIGURE_DEPENDS tests/*.c)
+  add_executable(cvf_tests ${CVF_TEST_SOURCES} tests/android/tls_align.c)
+  target_link_libraries(cvf_tests PRIVATE cvf_core)
+  foreach(t cvf_headless cvf_tests)
+    target_compile_options(${t} PRIVATE ${CVF_DETERMINISM_FLAGS})
+    set_target_properties(${t} PROPERTIES C_EXTENSIONS ON)
+    target_link_options(${t} PRIVATE -static)
+  endforeach()
+  set_source_files_properties(tests/android/tls_align.c PROPERTIES COMPILE_OPTIONS "-fno-emulated-tls")
   return()
 endif()
 
