@@ -22,4 +22,14 @@ CvF's content. Each ported subsystem is checked against Go:
   optionally through `netplay/udp_relay.py` with delay, jitter and loss);
   both sides' per-frame state dumps must be identical, in every network
   scenario. `HOST_BIN`/`GUEST_BIN` select native or Go builds
-  (docs/DEVSETUP.md).
+  (docs/DEVSETUP.md). `MATCHES` plays several matches in one session
+  (rematch, character select, new characters), scenario option `tcp=D/J`
+  delays the netplay TCP connection too (`netplay/tcp_relay.py`), `LOAD=N`
+  adds busy loops.
+- `netplay/run_prematch.sh GAMEDIR RUNS`: the TCP part of a match start
+  RUNS times (the pre-match "Synchronization error" race, GAPS.md).
+- `netplay/run_content.sh GAMEDIR`: the content fingerprint: the guest
+  plays from modified copies of the game; "Game data mismatch" exactly
+  when the change matters, old builds always allowed.
+- `netplay/run_roster.sh GAMEDIR`: sessions over character pairs, every
+  character at least once on each side (needs the full game).

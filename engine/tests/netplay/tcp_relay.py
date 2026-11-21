@@ -82,7 +82,16 @@ while running and time.monotonic() - t0 < o.time:
     for s in r:
         if s is ls:
             g, _ = ls.accept()
-            h = socket.create_connection((lo, o.host_port))
+            h = None
+            for _ in range(600):  # the host may not listen yet (still loading): wait up to 60 s
+                try:
+                    h = socket.create_connection((lo, o.host_port))
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            if h is None:
+                g.close()
+                continue
             for x in (g, h):
                 x.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             pairs[g] = (h, "g2h")

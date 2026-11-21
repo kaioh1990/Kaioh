@@ -49,6 +49,8 @@
 #   RELAY_SEED           the relays' random seed (default 1)
 #   GC_TRACE=1           CVF_GC_TRACE for native engines (collector lines in
 #                        out.txt)
+#   CLEAN=1              delete the dumps once compared (long sessions write
+#                        tens of MB per match and side)
 #   NODUMP=1             no state dumps (memory figures without the dump
 #                        buffer, which holds a whole match): only the exit
 #                        status and the winners are compared
@@ -74,6 +76,21 @@ WORK=${WORK:-$(mktemp -d "${TMPDIR:-/tmp}/cvf_netplay.XXXXXX")}
 mkdir -p "$WORK"
 md5() { if command -v md5sum >/dev/null; then md5sum < "$1" | cut -d' ' -f1; else md5 -q "$1"; fi; }
 dumpname() { [ "$1" = 1 ] && echo statedump.txt || echo "statedump.$1.txt"; }
+# The last frames of a match can be simulated with predicted remote inputs
+# that are never corrected: the rollback loop ends with the match, so GGPO
+# does not roll back for inputs that arrive later (up to its 8 prediction
+# frames). Those frames may differ between the sides (seen with lag: a
+# command recognized in the win pose on one side only). TAIL (default 8)
+# frames at the end are compared separately: a difference there is reported
+# but does not fail the run; everything before must be identical.
+TAIL=${TAIL:-8}
+frames() { grep -c '^T ' "$1"; }
+core() {  # dump [frames] -> md5 of its first FRAMES-TAIL frames (FRAMES: its own count)
+    local n=${2:-$(frames "$1")}
+    awk -v n=$((n - TAIL)) '/^T /{if (++k > n) exit} {print}' "$1" > "$1.core"
+    md5 "$1.core"
+    rm -f "$1.core"
+}
 
 hogs=""
 if [ "${LOAD:-0}" -gt 0 ]; then
@@ -124,6 +141,8 @@ wait_pid_timeout() {  # pid seconds
 
 fail=0
 ref=""
+cref=""
+NSCEN=$(echo $SCEN | wc -w)
 for sc in $SCEN; do
     name=${sc%%:*}
     R="$WORK/$name"
@@ -176,7 +195,7 @@ for sc in $SCEN; do
     echo "== $name ($sc, $((t1 - t0)) s)"
     ok=1
     [ "$hs" = 0 ] && [ "$gs" = 0 ] || ok=0
-    sums=""
+    sums="" csums=""
     for k in $(seq 1 $NM); do
         f=$(dumpname $k)
         hm=$(md5 "$R/host/$f" 2>/dev/null)
@@ -194,10 +213,24 @@ for sc in $SCEN; do
             done
         fi
         if [ "${NODUMP:-0}" = 1 ]; then
-            hm=$(grep "session: match $k done\|^winner:" "$R/host/out.txt" | sed -n "${k}p" | grep -o 'winner:* [-0-9]*')
-            gm=$(grep "session: match $k done\|^winner:" "$R/guest/out.txt" | sed -n "${k}p" | grep -o 'winner:* [-0-9]*')
-            hm=${hm// /} gm=${gm// /}
+            pat="session: match $k done"
+            [ $NM = 1 ] && pat="^winner:"
+            hm=$(grep "$pat" "$R/host/out.txt" | tail -1 | grep -o 'winner:* [-0-9]*')
+            gm=$(grep "$pat" "$R/guest/out.txt" | tail -1 | grep -o 'winner:* [-0-9]*')
+            hm=${hm//[: ]/} gm=${gm//[: ]/}
         fi
+        cm=$hm
+        if [ "${NODUMP:-0}" != 1 ] && [ -n "$hm" ] && { [ "$hm" != "$gm" ] || [ $NSCEN -gt 1 ]; }; then
+            nf=$(frames "$R/host/$f")
+            ng=$(frames "$R/guest/$f")
+            [ "$ng" -lt "$nf" ] && nf=$ng   # one side may have simulated a frame more at the end
+            cm=$(core "$R/host/$f" "$nf")
+            if [ -n "$gm" ] && [ "$hm" != "$gm" ] && [ "$cm" = "$(core "$R/guest/$f" "$nf")" ]; then
+                echo "  match $k: differs only in its last $TAIL frames (predicted inputs at match end, never rolled back); identical before"
+                hm="tail" gm="tail"
+            fi
+        fi
+        csums="$csums $cm"
         [ -n "$hm" ] && [ "$hm" = "$gm" ] || ok=0
         [ "${NODUMP:-0}" = 1 ] || [ -s "$R/host/$f" ] || ok=0
         sums="$sums $hm"
@@ -209,11 +242,14 @@ for sc in $SCEN; do
     [ -n "$trelay" ] && echo "  $(cat "$R/tcp_relay.txt")"
     grep -h "EventCodeDesync\|desync\|deadlock\|panic\|Synchronization error\|mismatch" "$R/host/out.txt" "$R/guest/out.txt" | sort | uniq -c | sed 's/^/  /'
     if [ $ok = 1 ] && [ -z "$ref" ]; then ref=$sums; fi
-    if [ $ok = 1 ] && [ "$sums" != "$ref" ]; then
+    # across scenarios: the dumps without their tails must agree
+    [ -z "$cref" ] && [ $ok = 1 ] && cref=$csums
+    if [ $ok = 1 ] && [ "$csums" != "$cref" ]; then
         echo "  differs from the first scenario's dumps ($ref)"
         ok=0
     fi
     [ $ok = 0 ] && fail=1
+    [ "${CLEAN:-0}" = 1 ] && rm -f "$R"/host/statedump*.txt "$R"/guest/statedump*.txt
 done
 echo "work: $WORK"
 if [ $fail = 0 ]; then echo "netplay: PASS (dump$ref)"; else echo "netplay: FAIL"; exit 1; fi
