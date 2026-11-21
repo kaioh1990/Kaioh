@@ -1,8 +1,10 @@
 # iOS / iPadOS port of the native C engine (design)
 
-Status: design, 2026-11-20. Nothing here has run on a device yet. Each
-milestone (section 8) says how to verify it, without a device where that is
-possible.
+Status: implemented up to a signed device build, 2026-11-20 (branch
+`claude/native-ios`). M0, M1, M3 and M4 are done, M2 and M5 in part; nothing
+has run on a device yet. See "Implementation status" at the end; the design
+sections below are kept as written, with notes where the implementation
+differs.
 
 Goal: replace the Go engine (`libikemen.a` + MoltenVK) inside the current
 "CvF Online" iOS app with the native C engine. The app must keep the
@@ -506,3 +508,53 @@ Each is verifiable as stated; only M7 needs the device.
 3. **Cross-play with the Go builds during the switch:** assume yes (friends will run mixed builds). Native must match the Go builds' simulation and handshake; see GAPS.md item 2 (fight width reset) and item 9.
 4. **vInputKit Simulator build:** yes, the xcframework has an arm64 Simulator slice (vInputKit README/INTEGRATION.md). Controllers themselves are only testable on device.
 5. **All-in-one IPA:** not needed. The small IPA + Documents/Game layout is what the user uses.
+
+## Implementation status (2026-11-20, branch claude/native-ios)
+
+| # | Status | Evidence |
+| --- | --- | --- |
+| M0 | done | Regenerated with the GLES renderer and the iOS entry points: 4842 functions, 0 TODO, 0 syntax errors, 31 placeholders (none new). Linux headless md5 unchanged: `54f8ae06d74648af2182587b82a390d6` (cvf-online-2), `4334350cdebd48dc0caa04cf78e0d9e3` (cvf-online-5); `cvf_tests` 93/0; `cvf` links. `Renderer_GLES32_*`, `fn_cvfStoreTap`, `fn_cvfIOSMain`, `fn_cvfHost*` in `ik_sim.o`. glslangValidator check not done (not available in the container); the shaders compile and link on Apple's ES 3.0 in the Simulator. |
+| M1 | done | `tools/package/ios_build.sh` builds `CvfEngine.xcframework` (ios-arm64, ios-arm64-simulator, 14 MB) with Xcode 27.2's clang; `nm -gU` on each master object lists exactly the 7 exports (the script fails otherwise). The real app links it (no separate test app). |
+| M2 | part | Done: segment-walk roots (`dladdr` + every writable segment), `gc_selftest()` (in `cvf_tests` on Linux, and on every Simulator headless run: "gc selftest ok"), guard-page goroutine stacks, `_setjmp` on Apple, 1 GB arena on iOS. Stack measurement done in the Simulator instead of a 1 MB macOS build: the main goroutine peaks at **~1 MB** (998 KB on the main thread, 985 KB on the engine stack) loading the title screen, so **plan B is implemented**: `SDL_main` runs the engine on an mmap'd 8 MB stack with a guard page (`cvf_call_on_stack`, `gc_set_main_stack`). Not done: owner-thread assert, macOS rerun of the reference with these changes. |
+| M3 | done | Simulator (iPhone 15 Pro Max, iOS 27.2) runs the reference fight inside the app (`CVF_HEADLESS_DIR`/`CVF_HEADLESS_ARGS` via `SIMCTL_CHILD_`, ~10 s): cvf-online-5 winner 2, 224,158 lines, md5 `4334350cdebd48dc0caa04cf78e0d9e3`; cvf-online-2 winner 1, 287,752 lines, md5 `54f8ae06d74648af2182587b82a390d6`. Both before and after the plan B stack switch. |
+| M4 | done (Simulator) | Intro, title and an Arcade fight render (`docs/ios_sim_intro.png`, `docs/ios_sim_title.png`, `docs/ios_sim_match.png`); `save/logs/cvf.log` written. Rotation and background/foreground not exercised (no UI automation for the Simulator here). The Simulator GL is Apple's software renderer: slow (~2 min from launch to title), not a performance measure. |
+| M5 | part | `cvf_host.c` with the Go names; mailbox drained at `cvfGcSafepoint`. `CVF_INPUT_TEST=1` (save/cvf_env.txt) drives the host API as the overlay does: buttons on the overlay's virtual gamepad (SDL virtual joystick 0) pick Arcade, `CvfTouchTap` is accepted in character select, `CvfInMatch()` turns 1, and presses in the fight act (the hearts counter drops from 100 to 089). Not tested: real UIKit touches/gestures, name box round trip, `cvfTouchUI` with a controller. |
+| M6 | not started | HTTP still loads libcurl with `dlopen` (absent on iOS): lobby/online HTTP will fail until `http_nsurl.m`. Nearby: `CvfP2PRegister` stores the table, `CvfP2PPeers`/`CvfNameEntered` reach the engine, but the engine's `cvfP2P*` calls are still the non-iOS stubs (`cvfP2PAvailable = false`). |
+| M7 | IPA only | Signed Release build: `CvF Native Engine/dev-ios/CvF-Native.ipa` (bundle id `com.kaioh1990.cvfonline`, team 9QP5427NJJ, "Apple Development" identity, wildcard team profile, version 2.0 (2), iOS 17.0+, vInputKit compiled in). Not installed. |
+
+### Differences from the design
+
+- **GL view placement**: SDL's UIKit back end creates its own UIWindow; the
+  app's window (overlay) stays in front. `src/platform/ios/ios_view.m` moves
+  SDL's GL view into the app's root view (below the overlay) right after GL
+  context creation, as the Go engine's `IkemenAttachMetalLayer` did. The app
+  needs no change for this.
+- **Screen framebuffer**: on iOS framebuffer and renderbuffer 0 are not the
+  screen. `gles_bind.c` maps 0 to SDL's view FBO/renderbuffer (read at
+  `gl.Init`) and rebinds the view renderbuffer before each swap (SDL's swap
+  presents the bound renderbuffer).
+- **Post-processing targets**: `RGBA8_SNORM` is not renderable in ES 3.0;
+  plain RGBA on iOS (as on the Vita).
+- **App changes** (copy of the Go Xcode project in `dev-ios/app`, made by
+  `dev-ios/native_project.py`): `libikemen.a`, ffmpeg/vpx/xmp and MoltenVK
+  out; `CvfEngine.xcframework` and `-framework OpenGLES` in; `#import
+  "libikemen.h"` -> `"cvf_host.h"` in ViewController.m and
+  TouchOverlayView.m; version 2.0 (2). The Metal container code is left in
+  place (unused). SDL2.xcframework gained an arm64 Simulator slice built from
+  SDL 2.32.10 sources (device slice unchanged).
+- **DefaultAssets.zip**: `tools/package/ios_assets.sh` (6a09392 scripts +
+  `patches/ikemen-cvf-online.patch`, gamecontrollerdb/config from the Go
+  app's zip, `external/.cvf-engine`).
+- **Diagnostics**: `CVF_GL_CHECK=1` logs the first GL errors with the call
+  name; the log reports the engine stack high-water mark.
+
+### Open / next
+
+1. Device run (M7): install the IPA (Sideloadly, same settings), check
+   `save/logs/cvf.log` (engine stack peak, GL errors), 120 Hz, vInputKit.
+2. Real touch, gestures, name box and rotation in the Simulator or on device.
+3. M6: NSURLSession HTTP back end, native `cvfP2P*` through the registered
+   table, Simulator vs desktop netplay.
+4. Remaining M2 items: owner-thread assert; macOS reference rerun with the
+   runtime changes (Linux and the iOS Simulator are verified).
+5. Memory-warning hook; trim the Metal-only code from the app.
