@@ -804,7 +804,7 @@ int krw_detect_offsets(krw_state_t *state) {
     state->offsets.ucred_cr_svuid = 0x20;
 
     /* mount */
-    state->offsets.mount_mnt_flag = 0x70;
+    state->offsets.mount_mnt_flag = 0x98;  /* CONFIRMED: cross-bit correlation analysis of iOS 27.1 kernelcache */
 
     /* vnode */
     state->offsets.vnode_v_mount = 0xD8;

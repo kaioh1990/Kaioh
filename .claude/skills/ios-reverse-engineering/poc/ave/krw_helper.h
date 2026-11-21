@@ -57,8 +57,8 @@ typedef struct {
     uint32_t ucred_cr_svuid;     /* offsetof(ucred, cr_svuid) */
     uint32_t ucred_cr_label;     /* MAC label (sandbox) */
 
-    /* mount structure offsets */
-    uint32_t mount_mnt_flag;     /* offsetof(mount, mnt_flag) */
+    /* mount structure offsets — CONFIRMED from kernelcache cross-bit analysis */
+    uint32_t mount_mnt_flag;     /* offsetof(mount, mnt_flag) = 0x98 on iOS 27.1 */
     uint32_t mount_mnt_data;     /* offsetof(mount, mnt_data) */
 
     /* vnode offsets for file operations */
