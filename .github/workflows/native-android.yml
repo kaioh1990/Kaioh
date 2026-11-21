@@ -1,0 +1,112 @@
+name: CvF Native Android
+
+# The native C engine as an Android app ("CvF Native", com.kaioh1990.cvfnative):
+# engine/docs/ANDROID_PORT.md. Separate from build.yml so engine changes do not
+# rebuild the Go apps.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/native-android', 'claude/native-integration']
+    paths:
+      - 'engine/**'
+      - 'android/**'
+      - 'patches/**'
+      - 'cvf-files/**'
+      - '.github/workflows/native-android.yml'
+
+env:
+  # Jesuszilla/ikemen-droid, the app wrapper of the Go Android build
+  ANDROID_APP_COMMIT: dbc5cfb
+  # NDK r27d, as the Go Android build
+  ANDROID_NDK_VERSION: 27.3.13750724
+  IKEMEN_REPO: https://github.com/ikemen-engine/Ikemen-GO.git
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android NDK
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ninja-build
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" --install "ndk;$ANDROID_NDK_VERSION" > /dev/null
+          ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          cat "$ndk/source.properties"
+          # compared with the NDK used for the local qemu checks (ANDROID_PORT.md)
+          (cd "$ndk/toolchains/llvm/prebuilt/linux-x86_64" && sha256sum bin/clang-18 \
+            sysroot/usr/lib/aarch64-linux-android/libc.a sysroot/usr/lib/aarch64-linux-android/26/libc.so)
+          echo "NDK=$ndk" >> "$GITHUB_ENV"
+
+      - name: Engine (libmain.so, libSDL2.so, test binaries)
+        run: engine/tools/package/android_build.sh "$NDK" out
+
+      - name: Assets
+        run: |
+          git clone -q --filter=blob:none "$IKEMEN_REPO" ikemen
+          curl -fsSL -o gamecontrollerdb.txt \
+            https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/master/gamecontrollerdb.txt
+          engine/tools/package/android_assets.sh ikemen gamecontrollerdb.txt out/assets
+
+      - name: App
+        env:
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          git clone -q https://github.com/Jesuszilla/ikemen-droid.git app
+          git -C app checkout -q "$ANDROID_APP_COMMIT"
+          android/native/customize-native.sh app out/jniLibs out/assets
+          cd app
+          chmod +x gradlew
+          ./gradlew --no-daemon -q assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../cvf-native-android.apk
+
+      - name: Check the APK
+        run: |
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$bt/aapt2" dump badging cvf-native-android.apk | grep -E "^package:|^application-label:|^native-code:|sdkVersion"
+          "$bt/aapt2" dump badging cvf-native-android.apk | grep -q "name='com.kaioh1990.cvfnative'"
+          "$bt/aapt2" dump badging cvf-native-android.apk | grep -q "application-label:'CvF Native'"
+          "$bt/apksigner" verify --print-certs cvf-native-android.apk | grep -i "SHA-256"
+          unzip -l cvf-native-android.apk | grep -E "lib/arm64-v8a/libmain.so|lib/arm64-v8a/libSDL2.so|assets/save/config.ini|assets/external/script/main.lua|classes.dex"
+          # the JNI class the engine's HTTP back end calls
+          unzip -p cvf-native-android.apk classes.dex | grep -a -q "Lorg/libsdl/app/CvfHttp;"
+          ls -la cvf-native-android.apk
+          sha256sum cvf-native-android.apk out/jniLibs/arm64-v8a/*.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cvf-native-android
+          path: cvf-native-android.apk
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cvf-native-android-tests
+          path: out/test/
+          retention-days: 7
+
+  # The static test binaries (the same objects as libmain.so) on a real arm64
+  # CPU. The reference game data is not public, so only the unit tests run
+  # here (detmath, RNG, Atof, formats, scheduler, collector).
+  arm64-tests:
+    needs: apk
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cvf-native-android-tests
+      - name: Unit tests (bionic, static)
+        run: |
+          chmod +x cvf_tests cvf_headless
+          uname -m
+          ./cvf_tests | tail -3
+          ./cvf_tests | grep -q " 0 failures"
+          # no game data: the headless runner must start and fail cleanly
+          ./cvf_headless /nonexistent 2>&1 | tail -2 || true
