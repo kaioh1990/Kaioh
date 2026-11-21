@@ -78,13 +78,16 @@ static IOSurfaceRef create_sentinel_surface(int idx) {
     CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nalloc);
     CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nfmt);
 
-    uint64_t sentinel = 0xDEAD000000000000ULL | ((uint64_t)idx << 16) | (idx & 0xFFFF);
-    CFNumberRef nsen = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &sentinel);
-    CFDictionarySetValue(props, CFSTR("Sentinel"), nsen);
-
     IOSurfaceRef surf = IOSurfaceCreate(props);
     CFRelease(nw); CFRelease(nh); CFRelease(nbpr); CFRelease(nalloc);
-    CFRelease(nfmt); CFRelease(nsen); CFRelease(props);
+    CFRelease(nfmt); CFRelease(props);
+
+    if (surf) {
+        uint64_t sentinel = 0xDEAD000000000000ULL | ((uint64_t)idx << 16) | (idx & 0xFFFF);
+        CFNumberRef nsen = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &sentinel);
+        IOSurfaceSetValue(surf, CFSTR("Sentinel"), nsen);
+        CFRelease(nsen);
+    }
     return surf;
 }
 

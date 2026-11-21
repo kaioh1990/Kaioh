@@ -64,17 +64,21 @@ static IOSurfaceRef create_spray_surface(int idx) {
     CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nalloc);
     CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nfmt);
 
-    uint32_t sentinel = 0xDEAD0000 | (idx & 0xFFFF);
-    CFNumberRef nsen = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sentinel);
-    CFDictionarySetValue(props, CFSTR("ResearchSentinel"), nsen);
-
-    uint8_t pad[256]; memset(pad, 0x42 + (idx & 0xFF), sizeof(pad));
-    CFDataRef padData = CFDataCreate(kCFAllocatorDefault, pad, sizeof(pad));
-    CFDictionarySetValue(props, CFSTR("ResearchPad"), padData);
-
     IOSurfaceRef surf = IOSurfaceCreate(props);
     CFRelease(nw); CFRelease(nh); CFRelease(nbpr); CFRelease(nalloc);
-    CFRelease(nfmt); CFRelease(nsen); CFRelease(padData); CFRelease(props);
+    CFRelease(nfmt); CFRelease(props);
+
+    if (surf) {
+        uint32_t sentinel = 0xDEAD0000 | (idx & 0xFFFF);
+        CFNumberRef nsen = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sentinel);
+        IOSurfaceSetValue(surf, CFSTR("ResearchSentinel"), nsen);
+        CFRelease(nsen);
+
+        uint8_t pad[256]; memset(pad, 0x42 + (idx & 0xFF), sizeof(pad));
+        CFDataRef padData = CFDataCreate(kCFAllocatorDefault, pad, sizeof(pad));
+        IOSurfaceSetValue(surf, CFSTR("ResearchPad"), padData);
+        CFRelease(padData);
+    }
     return surf;
 }
 

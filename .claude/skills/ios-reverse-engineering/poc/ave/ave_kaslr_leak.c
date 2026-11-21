@@ -76,16 +76,18 @@ static IOSurfaceRef create_tagged_surface(int idx) {
     CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
     CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nalloc);
     CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nfmt);
-    for (int j = 0; j < NUM_PROPS; j++) {
-        uint64_t val = expected_val(j, idx);
-        CFNumberRef nv = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &val);
-        CFStringRef key = CFStringCreateWithCString(kCFAllocatorDefault, prop_names[j], kCFStringEncodingUTF8);
-        CFDictionarySetValue(props, key, nv);
-        CFRelease(nv); CFRelease(key);
-    }
     IOSurfaceRef surf = IOSurfaceCreate(props);
     CFRelease(nw); CFRelease(nh); CFRelease(nbpr); CFRelease(nalloc); CFRelease(nfmt);
     CFRelease(props);
+    if (surf) {
+        for (int j = 0; j < NUM_PROPS; j++) {
+            uint64_t val = expected_val(j, idx);
+            CFNumberRef nv = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &val);
+            CFStringRef key = CFStringCreateWithCString(kCFAllocatorDefault, prop_names[j], kCFStringEncodingUTF8);
+            IOSurfaceSetValue(surf, key, nv);
+            CFRelease(nv); CFRelease(key);
+        }
+    }
     return surf;
 }
 
