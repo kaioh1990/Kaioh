@@ -42,6 +42,7 @@ static void rlog(const char *fmt, ...) {
     va_end(ap);
     va_start(ap, fmt);
     vprintf(fmt, ap);
+    fflush(stdout);
     va_end(ap);
 }
 

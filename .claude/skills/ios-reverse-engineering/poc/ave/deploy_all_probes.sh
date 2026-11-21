@@ -23,6 +23,7 @@ declare -a PROBES=(
     "AVESelectiveOOB:com.research.aveselectoob:ave_selective_oob.c"
     "AVESubobjProbe:com.research.avesubobjprobe:ave_subobj_probe.c"
     "AVECounterOverflow:com.research.avecounteroverflow:ave_counter_overflow.c"
+    "AVECrossBuffer:com.research.avecrossbuffer:ave_cross_buffer.c"
 )
 
 build_and_deploy() {
