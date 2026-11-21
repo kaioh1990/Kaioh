@@ -21083,3 +21083,4716 @@ index 0000000..678c514
 +
 +func (r *Renderer_VK) Await()                       {}
 +func (r *Renderer_VK) RecreateSurfaceAndSwapchain() {}
+diff --git a/go.mod b/go.mod
+index d7ac2bc..e684a2d 100644
+--- a/go.mod
++++ b/go.mod
+@@ -42,3 +42,6 @@ require (
+ 	github.com/tidwall/match v1.1.1 // indirect
+ 	github.com/tidwall/pretty v1.2.0 // indirect
+ )
++
++// CvF Online: GGPO with a sturdier sync handshake (third/ggpo/CVF_CHANGES.txt)
++replace github.com/ikemen-engine/ggpo => ./third/ggpo
+diff --git a/third/ggpo/CVF_CHANGES.txt b/third/ggpo/CVF_CHANGES.txt
+new file mode 100644
+index 0000000..e75abd5
+--- /dev/null
++++ b/third/ggpo/CVF_CHANGES.txt
+@@ -0,0 +1,20 @@
++github.com/ikemen-engine/ggpo v0.0.0-20260914163559-279d7303151f (the version
++Ikemen GO 6a09392 requires), used through a replace in go.mod. Copied without
++its tests, example/, internal/mocks/, README, logo and go.sum; go.mod is
++unchanged, so the module graph is the same.
++
++CvF Online change (internal/protocol/protocol.go, marked "CvF Online"):
++the sync handshake survives packet loss. Timing only: packet formats and
++everything after synchronization are unchanged, and it plays against builds
++without the change.
++
++- A lost sync request or reply is retransmitted after 200 ms (was 2 s), with
++  the same random as before, so a late reply to an earlier copy still counts
++  even when the round trip is longer than 200 ms. The retry timer is its own
++  (lastSendTime also moves with replies to the peer's requests).
++- A peer that has synchronized waits at least 15 s (was DisconnectTimeout,
++  3 s in Ikemen) without packets before it drops the other, as long as the
++  other has sent nothing but sync requests/replies (it may still be
++  synchronizing, e.g. an older build that retries every 2 s), and it reports
++  no interruption meanwhile. Once the other sends anything else (inputs,
++  keep-alives, quality reports) the configured timeouts apply as before.
+diff --git a/third/ggpo/LICENSE b/third/ggpo/LICENSE
+new file mode 100644
+index 0000000..c9ccacc
+--- /dev/null
++++ b/third/ggpo/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2026 Ikemen GO Engine Repositories
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/third/ggpo/backend.go b/third/ggpo/backend.go
+new file mode 100644
+index 0000000..bd619b1
+--- /dev/null
++++ b/third/ggpo/backend.go
+@@ -0,0 +1,26 @@
++package ggpo
++
++import (
++	"github.com/ikemen-engine/ggpo/internal/polling"
++	"github.com/ikemen-engine/ggpo/internal/protocol"
++	"github.com/ikemen-engine/ggpo/transport"
++)
++
++/*
++Remember to
++*/
++type Backend interface {
++	Idle(timeout int, timeFunc ...polling.FuncTimeType) error
++	AddPlayer(player *Player, handle *PlayerHandle) error
++	AddLocalInput(player PlayerHandle, values []byte, size int) error
++	SyncInput(disconnectFlags *int) ([][]byte, error)
++	AdvanceFrame(checksum uint32) error
++	DisconnectPlayer(handle PlayerHandle) error
++	GetNetworkStats(handle PlayerHandle) (protocol.NetworkStats, error)
++	SetFrameDelay(player PlayerHandle, delay int) error
++	SetDisconnectTimeout(timeout int) error
++	SetDisconnectNotifyStart(timeout int) error
++	Close() error
++	Start()
++	InitializeConnection(c ...transport.Connection) error
++}
+diff --git a/third/ggpo/constants.go b/third/ggpo/constants.go
+new file mode 100644
+index 0000000..1de3ca2
+--- /dev/null
++++ b/third/ggpo/constants.go
+@@ -0,0 +1,8 @@
++package ggpo
++
++const (
++	MaxPlayers             = 4
++	MaxPredictionFrames    = 8
++	MaxSpectators          = 32
++	SpectatorInputInterval = 4
++)
+diff --git a/third/ggpo/errors.go b/third/ggpo/errors.go
+new file mode 100644
+index 0000000..c75c40e
+--- /dev/null
++++ b/third/ggpo/errors.go
+@@ -0,0 +1,35 @@
++package ggpo
++
++import "fmt"
++
++type Error struct {
++	Code ErrorCode
++	Name string
++}
++
++func (e Error) Error() string {
++	return fmt.Sprintf("ggpo: %s:%d", e.Name, e.Code)
++}
++
++type ErrorCode int
++
++const (
++	Ok                           ErrorCode = 0
++	ErrorCodeSuccess             ErrorCode = 0
++	ErrorCodeGeneralFailure      ErrorCode = -1
++	ErrorCodeInvalidSession      ErrorCode = 1
++	ErrorCodeInvalidPlayerHandle ErrorCode = 2
++	ErrorCodePlayerOutOfRange    ErrorCode = 3
++	ErrorCodePredictionThreshod  ErrorCode = 4
++	ErrorCodeUnsupported         ErrorCode = 5
++	ErrorCodeNotSynchronized     ErrorCode = 6
++	ErrorCodeInRollback          ErrorCode = 7
++	ErrorCodeInputDropped        ErrorCode = 8
++	ErrorCodePlayerDisconnected  ErrorCode = 9
++	ErrorCodeTooManySpectators   ErrorCode = 10
++	ErrorCodeInvalidRequest      ErrorCode = 11
++)
++
++func Success(result ErrorCode) bool {
++	return result == ErrorCodeSuccess
++}
+diff --git a/third/ggpo/events.go b/third/ggpo/events.go
+new file mode 100644
+index 0000000..427934d
+--- /dev/null
++++ b/third/ggpo/events.go
+@@ -0,0 +1,35 @@
++package ggpo
++
++type EventCode int
++
++const (
++	EventCodeConnectedToPeer       EventCode = 1000
++	EventCodeSynchronizingWithPeer EventCode = 1001
++	EventCodeSynchronizedWithPeer  EventCode = 1002
++	EventCodeRunning               EventCode = 1003
++	EventCodeDisconnectedFromPeer  EventCode = 1004
++	EventCodeTimeSync              EventCode = 1005
++	EventCodeConnectionInterrupted EventCode = 1006
++	EventCodeConnectionResumed     EventCode = 1007
++	EventCodeSyncTestDesync        EventCode = 1008
++	EventCodeDesync                EventCode = 1009
++)
++
++// the original had a union a named struct for each event type,
++// but mostly each just had the PlayerHandle, so instead i'm
++// including the extra specific fields in every event object
++// Hopefully I remember I did this like this
++type Event struct {
++	Code                   EventCode
++	Player                 PlayerHandle
++	Count                  int     // synchronizing
++	Total                  int     // synchronizing
++	FramesAhead            float32 // timesync
++	TimeSyncPeriodInFrames int     // timesync
++	DisconnectTimeout      int     // connection interrupted
++	CurrentState           int     // SyncTestDesync
++	LastVerified           int     // SyncTestDesync
++	NumFrameOfDesync       int     // Desync
++	LocalChecksum          int     // Desync
++	RemoteChecksum         int     // Desync
++}
+diff --git a/third/ggpo/go.mod b/third/ggpo/go.mod
+new file mode 100644
+index 0000000..201bb59
+--- /dev/null
++++ b/third/ggpo/go.mod
+@@ -0,0 +1,19 @@
++module github.com/ikemen-engine/ggpo
++
++go 1.18
++
++require (
++	github.com/hajimehoshi/ebiten/v2 v2.3.4
++	golang.org/x/exp v0.0.0-20220609121020-a51bd0440498
++)
++
++require (
++	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20220320163800-277f93cfa958 // indirect
++	github.com/gofrs/flock v0.8.1 // indirect
++	github.com/jezek/xgb v1.0.0 // indirect
++	golang.org/x/exp/shiny v0.0.0-20220613132600-b0d781184e0d // indirect
++	golang.org/x/image v0.0.0-20220321031419-a8550c1d254a // indirect
++	golang.org/x/mobile v0.0.0-20220518205345-8578da9835fd // indirect
++	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
++	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f // indirect
++)
+diff --git a/third/ggpo/internal/buffer/ringbuffer.go b/third/ggpo/internal/buffer/ringbuffer.go
+new file mode 100644
+index 0000000..4927644
+--- /dev/null
++++ b/third/ggpo/internal/buffer/ringbuffer.go
+@@ -0,0 +1,68 @@
++package buffer
++
++import "errors"
++
++type RingBuffer[T any] struct {
++	elements []T
++	head     int
++	tail     int
++	size     int
++	capacity int
++}
++
++func NewRingBuffer[T any](capacity int) RingBuffer[T] {
++	return RingBuffer[T]{
++		elements: make([]T, capacity),
++		capacity: capacity,
++	}
++}
++
++func (r *RingBuffer[T]) Front() (T, error) {
++	var element T
++	if r.size == r.capacity {
++		return element, errors.New("ggpo RingBuffer Front : r.size == capacity")
++	}
++	element = r.elements[r.tail]
++	return element, nil
++}
++
++func (r *RingBuffer[T]) Item(i int) (T, error) {
++	var element T
++	if i >= r.size {
++		return element, errors.New("ggpo RingBuffer Item: i >= r.size")
++	}
++	element = r.elements[(r.tail+i)%r.capacity]
++	return element, nil
++}
++
++// hmm this fails if its at its max size
++// seems to not make sense
++func (r *RingBuffer[T]) Pop() error {
++	if r.size == r.capacity {
++		return errors.New("ggpo RingBuffer Pop : r.size == r.capacity")
++	}
++	r.tail = (r.tail + 1) % r.capacity
++	r.size--
++	return nil
++}
++
++func (r *RingBuffer[T]) Push(element T) error {
++	if r.size == r.capacity-1 {
++		return errors.New("ggpo RingBuffer Push : r.size == r.capacity -1 ")
++	}
++	r.elements[r.head] = element
++	r.head = (r.head + 1) % r.capacity
++	r.size++
++	return nil
++}
++
++func (r *RingBuffer[T]) Size() int {
++	return r.size
++}
++
++// It's supposed to be size == 0,  I have no idea why it's been making it to <1 but it's been
++// breaking me code
++// - me considering checking for r <= 0
++func (r *RingBuffer[T]) Empty() bool {
++	return r.size <= 0
++}
+diff --git a/third/ggpo/internal/buffer/staticbuffer.go b/third/ggpo/internal/buffer/staticbuffer.go
+new file mode 100644
+index 0000000..8e275f9
+--- /dev/null
++++ b/third/ggpo/internal/buffer/staticbuffer.go
+@@ -0,0 +1,37 @@
++package buffer
++
++import "errors"
++
++type StaticBuffer[T any] struct {
++	elements []T
++	size     int
++	capacity int
++}
++
++func NewStaticBuffer[T any](capacity int) StaticBuffer[T] {
++	return StaticBuffer[T]{
++		elements: make([]T, capacity),
++		capacity: capacity,
++	}
++}
++
++func (s *StaticBuffer[T]) Get(i int) (T, error) {
++	var element T
++	if i < 0 || i >= s.size {
++		return element, errors.New("ggpo StaticBuffer Get: i < 0 || i >= s.size")
++	}
++	return s.elements[i], nil
++}
++
++func (s *StaticBuffer[T]) PushBack(t T) error {
++	if s.size == s.capacity-1 {
++		return errors.New("ggpo StaticBuffer PushBack :s.size == s.capacity-1")
++	}
++	s.elements[s.size] = t
++	s.size++
++	return nil
++}
++
++func (s *StaticBuffer[T]) Size() int {
++	return s.size
++}
+diff --git a/third/ggpo/internal/input/game_input.go b/third/ggpo/internal/input/game_input.go
+new file mode 100644
+index 0000000..5c18fc9
+--- /dev/null
++++ b/third/ggpo/internal/input/game_input.go
+@@ -0,0 +1,105 @@
++package input
++
++import (
++	"bytes"
++	"errors"
++	"fmt"
++	"strings"
++
++	"github.com/ikemen-engine/ggpo/internal/util"
++)
++
++const (
++	GameInputMaxBytes   = 9
++	GameInputMaxPlayers = 2
++	NullFrame           = -1
++)
++
++type GameInput struct {
++	Frame    int
++	Size     int
++	Bits     []byte
++	Inputs   [][]byte
++	Checksum uint32
++}
++
++// Will come back to this if the needing the offset becomes a thing
++func NewGameInput(frame int, bits []byte, size int, offset ...int) (GameInput, error) {
++	if size <= 0 {
++		return GameInput{}, errors.New("ggpo: newGameInput: size must be greater than 0")
++	}
++	/* Not useful for our purposes
++	if len(offset) == 0 {
++		Assert(size <= GAMEINPUT_MAX_BYTES*GAMEINPUT_MAX_PLAYERS)
++	} else {
++		Assert(size <= GAMEINPUT_MAX_BYTES)
++	}*/
++	return GameInput{
++		Frame: frame,
++		Size:  size,
++		Bits:  bits,
++	}, nil
++
++}
++
++func (g *GameInput) IsNull() bool {
++	return g.Frame == NullFrame
++}
++
++func (g *GameInput) Value(i int) bool {
++	return (g.Bits[i/8] & (1 << (i % 8))) != 0
++}
++
++func (g *GameInput) Set(i int) {
++	g.Bits[i/8] |= (1 << (i % 8))
++}
++
++func (g *GameInput) Clear(i int) {
++	g.Bits[i/8] &= ^(1 << (i % 8))
++}
++
++func (g *GameInput) Erase() {
++	for i := 0; i < len(g.Bits); i++ {
++		g.Bits[i] = 0
++	}
++}
++
++func (g *GameInput) Clone() *GameInput {
++	gi := GameInput{}
++	gi = *g
++	gi.Bits = make([]byte, len(g.Bits))
++	copy(gi.Bits, g.Bits)
++	return &gi
++}
++
++func (g *GameInput) Log(prefix string, showFrame bool) {
++	util.Log.Printf("%s%s", prefix, g)
++}
++
++func (g GameInput) String() string {
++	retval := fmt.Sprintf("(frame:%d size:%d", g.Frame, g.Size)
++	builder := strings.Builder{}
++	for i := 0; i < len(g.Bits); i++ {
++		builder.WriteByte(g.Bits[i])
++	}
++	builder.WriteString(")")
++	return retval + builder.String()
++}
++
++func (g *GameInput) Equal(other *GameInput, bitsonly bool) (bool, error) {
++	if !bitsonly && g.Frame != other.Frame {
++		util.Log.Printf("frames don't match: %d, %d\n", g.Frame, other.Frame)
++	}
++	if g.Size != other.Size {
++		util.Log.Printf("sizes don't match: %d, %d\n", g.Size, other.Size)
++	}
++	if !bytes.Equal(g.Bits, other.Bits) {
++		util.Log.Printf("bits don't match\n")
++	}
++	if !(g.Size > 0 && other.Size > 0) {
++		return false, errors.New("ggpo: GameInput Equal : !(g.Size > 0 && other.Size > 0)")
++	}
++	return (bitsonly || g.Frame == other.Frame) &&
++		g.Size == other.Size &&
++		bytes.Equal(g.Bits, other.Bits), nil
++}
+diff --git a/third/ggpo/internal/input/input_queue.go b/third/ggpo/internal/input/input_queue.go
+new file mode 100644
+index 0000000..8eaa005
+--- /dev/null
++++ b/third/ggpo/internal/input/input_queue.go
+@@ -0,0 +1,292 @@
++package input
++
++import (
++	"errors"
++
++	"github.com/ikemen-engine/ggpo/internal/util"
++)
++
++const (
++	InputQueueLength = 128
++	DefaultInputSize = 4
++)
++
++type InputQueue struct {
++	id         int
++	head       int
++	tail       int
++	length     int
++	firstFrame bool
++
++	lastUserAddedFrame  int
++	lastAddedFrame      int
++	firstIncorrectFrame int
++	lastFrameRequested  int
++
++	frameDelay int
++
++	inputs     []GameInput
++	prediction GameInput
++}
++
++func NewInputQueue(id int, inputSize int) InputQueue {
++	var err error
++	inputs := make([]GameInput, InputQueueLength)
++	for i, _ := range inputs {
++		defaultInput := make([]byte, inputSize)
++		inputs[i], err = NewGameInput(-1, defaultInput, inputSize)
++		if err != nil {
++			panic(err)
++		}
++	}
++	defaultInput := make([]byte, inputSize)
++	prediction, err := NewGameInput(NullFrame, defaultInput, inputSize)
++	if err != nil {
++		panic(err)
++	}
++	return InputQueue{
++		id:                  id,
++		firstFrame:          true,
++		lastUserAddedFrame:  NullFrame,
++		firstIncorrectFrame: NullFrame,
++		lastFrameRequested:  NullFrame,
++		lastAddedFrame:      NullFrame,
++		prediction:          prediction,
++		inputs:              inputs,
++	}
++
++}
++
++func (i *InputQueue) LastConfirmedFrame() int {
++	util.Log.Printf("returning last confirmed frame %d.\n", i.lastUserAddedFrame)
++	return i.lastAddedFrame
++}
++
++func (i *InputQueue) FirstIncorrectFrame() int {
++	return i.firstIncorrectFrame
++}
++
++func (i *InputQueue) DiscardConfirmedFrames(frame int) error {
++	if frame < 0 {
++		return errors.New("ggpo: InputQueue discardConfirmedFrames: frames <= 0")
++	}
++
++	if i.lastFrameRequested != NullFrame {
++		frame = util.Min(frame, i.lastFrameRequested)
++	}
++	util.Log.Printf("discarding confirmed frames up to %d (last_added:%d length:%d [head:%d tail:%d]).\n",
++		frame, i.lastAddedFrame, i.length, i.head, i.tail)
++	if frame >= i.lastAddedFrame {
++		i.tail = i.head
++	} else {
++		offset := frame - i.inputs[i.tail].Frame + 1
++
++		util.Log.Printf("difference of %d frames.\n", offset)
++		if offset < 0 {
++			return errors.New("ggpo: InputQueue discardConfirmedFrames: offet < 0")
++		}
++
++		i.tail = (i.tail + offset) % InputQueueLength
++		i.length -= offset
++	}
++
++	util.Log.Printf("after discarding, new tail is %d (frame:%d).\n", i.tail, i.inputs[i.tail].Frame)
++	if i.length < 0 {
++		return errors.New("ggpo: InputQueue discardConfirmedFrames: i.length < 0 ")
++	}
++
++	return nil
++}
++
++func (i *InputQueue) ResetPrediction(frame int) error {
++	if !(i.firstIncorrectFrame == NullFrame || frame <= i.firstIncorrectFrame) {
++		return errors.New("ggpo: InputQueue ResetPrediction: i.firstIncorrentFrame != NullFrame && frame > i.firstIncorrectFrame")
++	}
++	util.Log.Printf("resetting all prediction errors back to frame %d.\n", frame)
++
++	i.prediction.Frame = NullFrame
++	i.firstIncorrectFrame = NullFrame
++	i.lastFrameRequested = NullFrame
++	return nil
++}
++
++func (i *InputQueue) GetConfirmedInput(requestedFrame int, input *GameInput) (bool, error) {
++	if !(i.firstIncorrectFrame == NullFrame || requestedFrame < i.firstIncorrectFrame) {
++		return false, errors.New("ggpo: InputQueue GetConfirmedInput : i.firstIncorrectFrame != NullFrame && requestedFrame >")
++	}
++
++	offset := requestedFrame % InputQueueLength
++	if i.inputs[offset].Frame != requestedFrame {
++		return false, nil
++	}
++	*input = i.inputs[offset]
++	return true, nil
++}
++
++func (i *InputQueue) GetInput(requestedFrame int, input *GameInput) (bool, error) {
++	util.Log.Printf("requesting input frame %d.\n", requestedFrame)
++	if i.firstIncorrectFrame != NullFrame {
++		return false, errors.New("ggpo: InputQueue GetInput : i.firstIncorrectFrame != NullFrame")
++	}
++
++	i.lastFrameRequested = requestedFrame
++
++	if requestedFrame < i.inputs[i.tail].Frame {
++		return false, errors.New("ggpo: InputQueue GetInput : requestedFrame < i.inputs[i.tail].Frame")
++	}
++	if i.prediction.Frame == NullFrame {
++		offset := requestedFrame - i.inputs[i.tail].Frame
++
++		if offset < i.length {
++			offset = (offset + i.tail) % InputQueueLength
++			if i.inputs[offset].Frame != requestedFrame {
++				return false, errors.New("ggpo: InputQueue GetInput : i.inputs[offset].Frame != requestedFrame")
++			}
++			*input = i.inputs[offset]
++			util.Log.Printf("returning confirmed frame number %d.\n", input.Frame)
++			return true, nil
++		}
++
++		if requestedFrame == 0 {
++			util.Log.Printf("basing new prediction frame from nothing, you're client wants frame 0.\n")
++			i.prediction.Erase()
++		} else if i.lastAddedFrame == NullFrame {
++			util.Log.Printf("basing new prediction frame from nothing, since we have no frames yet.\n")
++			i.prediction.Erase()
++		} else {
++			util.Log.Printf("basing new prediction frame from previously added frame (queue entry:%d, frame:%d).\n",
++				previousFrame(i.head), i.inputs[previousFrame(i.head)].Frame)
++			i.prediction = i.inputs[previousFrame(i.head)]
++		}
++		i.prediction.Frame++
++	}
++
++	if i.prediction.Frame < 0 {
++		return false, errors.New("ggpo: InputQueue GetInput : i.prediction.Frame < 0")
++	}
++	*input = i.prediction
++	input.Frame = requestedFrame
++	util.Log.Printf("returning prediction frame number %d (%d).\n", input.Frame, i.prediction.Frame)
++
++	return false, nil
++}
++
++func (i *InputQueue) AddInput(input *GameInput) error {
++	var newFrame int
++	var err error
++	util.Log.Printf("adding input frame number %d to queue.\n", input.Frame)
++
++	if !(i.lastUserAddedFrame == NullFrame || input.Frame == i.lastUserAddedFrame+1) {
++		return errors.New("ggpo : InputQueue AddInput : !(i.lastUserAddedFrame == NullFrame || input.Frame == i.lastUserAddedFrame+1)")
++	}
++	i.lastUserAddedFrame = input.Frame
++
++	newFrame, err = i.AdvanceQueueHead(input.Frame)
++	if err != nil {
++		panic(err)
++	}
++
++	if newFrame != NullFrame {
++		i.AddDelayedInputToQueue(input, newFrame)
++	}
++
++	input.Frame = newFrame
++	return nil
++}
++
++func (i *InputQueue) AddDelayedInputToQueue(input *GameInput, frameNumber int) error {
++	util.Log.Printf("adding delayed input frame number %d to queue.\n", frameNumber)
++
++	// Assert(input.Size == i.prediction.Size) No
++	if !(i.lastAddedFrame == NullFrame || frameNumber == i.lastAddedFrame+1) {
++		return errors.New("ggpo: InputQueue AddDelayedInputToQueue : i.lastAddedFrame != NullFrame && frameNumber != i.lastAddedFrame+1")
++	}
++	if !(frameNumber == 0 || i.inputs[previousFrame(i.head)].Frame == frameNumber-1) {
++		return errors.New("ggpo: InputQueue AddDelayedInputToQueue : frameNumber != 0 && i.inputs[previousFrame(i.head)].Frame == frameNumber-1")
++	}
++	/*
++	 *	Add the frame to the back of the queue
++	 */
++	i.inputs[i.head] = *input
++	i.inputs[i.head].Frame = frameNumber
++	i.head = (i.head + 1) % InputQueueLength
++	i.length++
++	i.firstFrame = false
++
++	i.lastAddedFrame = frameNumber
++	if i.prediction.Frame != NullFrame {
++		if frameNumber != i.prediction.Frame {
++			return errors.New("ggpo: InputQueue AddDelayedInputToQueue : frameNumber != i.prediction.Frame")
++		}
++		equal, err := i.prediction.Equal(input, true)
++		if err != nil {
++			panic(err)
++		}
++		if i.firstIncorrectFrame == NullFrame && !equal {
++			util.Log.Printf("frame %d does not match prediction.  marking error.\n", frameNumber)
++			i.firstIncorrectFrame = frameNumber
++		}
++
++		if i.prediction.Frame == i.lastFrameRequested && i.firstIncorrectFrame == NullFrame {
++			util.Log.Printf("prediction is correct!  dumping out of prediction mode.\n")
++			i.prediction.Frame = NullFrame
++		} else {
++			i.prediction.Frame++
++		}
++	}
++
++	if i.length > InputQueueLength {
++		return errors.New("ggpo: InputQueue AddDelayedInputToQueue : i.length > InputQueueLength")
++	}
++	return nil
++}
++
++func (i *InputQueue) AdvanceQueueHead(frame int) (int, error) {
++	util.Log.Printf("advancing queue head to frame %d.\n", frame)
++
++	var expectedFrame int
++	if i.firstFrame {
++		expectedFrame = 0
++	} else {
++		expectedFrame = i.inputs[previousFrame(i.head)].Frame + 1
++	}
++
++	frame += i.frameDelay
++	if expectedFrame > frame {
++		util.Log.Printf("Dropping input frame %d (expected next frame to be %d).\n",
++			frame, expectedFrame)
++		return NullFrame, nil
++	}
++
++	for expectedFrame < frame {
++		util.Log.Printf("Adding padding frame %d to account for change in frame delay.\n",
++			expectedFrame)
++		lastFrame := i.inputs[previousFrame(i.head)]
++		err := i.AddDelayedInputToQueue(&lastFrame, expectedFrame)
++		if err != nil {
++			panic(err)
++		}
++		expectedFrame++
++	}
++
++	if !(frame == 0 || frame == i.inputs[previousFrame(i.head)].Frame+1) {
++		return 0, errors.New("ggpo: InputQueue AdvanceQueueHead : frame != 0 && frame != i.inputs[previousFrame(i.head)].Frame+")
++	}
++	return frame, nil
++}
++
++func previousFrame(offset int) int {
++	if offset == 0 {
++		return InputQueueLength - 1
++	} else {
++		return offset - 1
++	}
++}
++
++func (i *InputQueue) SetFrameDelay(delay int) {
++	i.frameDelay = delay
++}
++
++func (i *InputQueue) Length() int {
++	return i.length
++}
+diff --git a/third/ggpo/internal/messages/message.go b/third/ggpo/internal/messages/message.go
+new file mode 100644
+index 0000000..33deee8
+--- /dev/null
++++ b/third/ggpo/internal/messages/message.go
+@@ -0,0 +1,582 @@
++package messages
++
++import (
++	"bytes"
++	"encoding/binary"
++	"encoding/gob"
++	"errors"
++	"fmt"
++	"unsafe"
++)
++
++const (
++	MaxCompressedBits = 4096
++	UDPMsgMaxPlayers  = 4
++)
++
++const (
++	Int64size = 8
++	Int32size = 4
++	Int16size = 2
++	Int8size  = 1
++)
++
++func init() {
++	gob.Register(&SyncRequestPacket{})
++	gob.Register(&SyncReplyPacket{})
++	gob.Register(&QualityReportPacket{})
++	gob.Register(&QualityReplyPacket{})
++	gob.Register(&InputPacket{})
++	gob.Register(&InputAckPacket{})
++	gob.Register(&KeepAlivePacket{})
++}
++
++type UDPMessage interface {
++	Type() UDPMessageType
++	Header() UDPHeader
++	SetHeader(magicNumber uint16, sequenceNumber uint16)
++	PacketSize() int
++	ToBytes() []byte
++	FromBytes([]byte) error
++}
++
++type UDPMessageType int
++
++const (
++	InvalidMsg UDPMessageType = iota
++	SyncRequestMsg
++	SyncReplyMsg
++	InputMsg
++	QualityReportMsg
++	QualityReplyMsg
++	KeepAliveMsg
++	InputAckMsg
++)
++
++type UdpConnectStatus struct {
++	Disconnected bool
++	LastFrame    int32
++}
++
++func (u *UdpConnectStatus) Size() int {
++	sum := int(unsafe.Sizeof(u.Disconnected))
++	sum += int(unsafe.Sizeof(u.LastFrame))
++	return sum
++}
++
++func (u *UdpConnectStatus) ToBytes() []byte {
++	buf := make([]byte, u.Size())
++	if u.Disconnected {
++		buf[0] = 1
++	} else {
++		buf[0] = 0
++	}
++	binary.BigEndian.PutUint32(buf[1:], uint32(u.LastFrame))
++	return buf
++}
++func (u *UdpConnectStatus) FromBytes(buffer []byte) {
++	if buffer[0] == 1 {
++		u.Disconnected = true
++	} else {
++		u.Disconnected = false
++	}
++	u.LastFrame = int32(binary.BigEndian.Uint32(buffer[1:]))
++}
++
++type UDPHeader struct {
++	Magic          uint16
++	SequenceNumber uint16
++	HeaderType     uint8
++}
++
++func (u UDPHeader) Size() int {
++	sum := int(unsafe.Sizeof(u.Magic))
++	sum += int(unsafe.Sizeof(u.SequenceNumber))
++	sum += int(unsafe.Sizeof(u.HeaderType))
++	return sum
++}
++
++func (u UDPHeader) ToBytes() []byte {
++	buf := make([]byte, 5)
++	binary.BigEndian.PutUint16(buf[:2], u.Magic)
++	binary.BigEndian.PutUint16(buf[2:4], u.SequenceNumber)
++	buf[4] = u.HeaderType
++	return buf
++}
++
++func (u *UDPHeader) FromBytes(buffer []byte) {
++	u.Magic = binary.BigEndian.Uint16(buffer[:2])
++	u.SequenceNumber = binary.BigEndian.Uint16(buffer[2:4])
++	u.HeaderType = buffer[4]
++}
++
++type SyncRequestPacket struct {
++	MessageHeader    UDPHeader
++	RandomRequest    uint32
++	RemoteMagic      uint16
++	RemoteEndpoint   uint8
++	RemoteInputDelay uint8
++}
++
++func (s *SyncRequestPacket) Type() UDPMessageType { return SyncRequestMsg }
++func (s *SyncRequestPacket) Header() UDPHeader    { return s.MessageHeader }
++func (s *SyncRequestPacket) SetHeader(magicNumber uint16, sequenceNumber uint16) {
++	s.MessageHeader.Magic = magicNumber
++	s.MessageHeader.SequenceNumber = sequenceNumber
++}
++func (s *SyncRequestPacket) PacketSize() int {
++	sum := s.MessageHeader.Size()
++	sum += int(unsafe.Sizeof(s.RandomRequest))
++	sum += int(unsafe.Sizeof(s.RemoteMagic))
++	sum += int(unsafe.Sizeof(s.RemoteEndpoint))
++	sum += int(unsafe.Sizeof(s.RemoteInputDelay))
++	return sum
++}
++func (s *SyncRequestPacket) String() string {
++	return fmt.Sprintf("sync-request (%d).\n", s.RandomRequest)
++}
++func (s *SyncRequestPacket) ToBytes() []byte {
++	buf := make([]byte, s.PacketSize())
++	copy(buf, s.MessageHeader.ToBytes())
++	binary.BigEndian.PutUint32(buf[5:9], s.RandomRequest)
++	binary.BigEndian.PutUint16(buf[9:11], s.RemoteMagic)
++	buf[11] = s.RemoteEndpoint
++	buf[12] = s.RemoteInputDelay
++	return buf
++}
++
++func (s *SyncRequestPacket) FromBytes(buffer []byte) error {
++	if len(buffer) < s.PacketSize() {
++		return errors.New("invalid packet")
++	}
++	s.MessageHeader.FromBytes(buffer)
++	s.RandomRequest = binary.BigEndian.Uint32(buffer[5:9])
++	s.RemoteMagic = binary.BigEndian.Uint16(buffer[9:11])
++	s.RemoteEndpoint = buffer[11]
++	s.RemoteInputDelay = buffer[12]
++	return nil
++}
++
++type SyncReplyPacket struct {
++	MessageHeader UDPHeader
++	RandomReply   uint32
++}
++
++func (s *SyncReplyPacket) Type() UDPMessageType { return SyncReplyMsg }
++func (s *SyncReplyPacket) Header() UDPHeader    { return s.MessageHeader }
++func (s *SyncReplyPacket) SetHeader(magicNumber uint16, sequenceNumber uint16) {
++	s.MessageHeader.Magic = magicNumber
++	s.MessageHeader.SequenceNumber = sequenceNumber
++}
++func (s *SyncReplyPacket) PacketSize() int {
++	sum := s.MessageHeader.Size()
++	sum += int(unsafe.Sizeof(s.RandomReply))
++	return sum
++}
++func (s *SyncReplyPacket) String() string { return fmt.Sprintf("sync-reply (%d).\n", s.RandomReply) }
++
++func (s *SyncReplyPacket) ToBytes() []byte {
++	buf := make([]byte, s.PacketSize())
++	copy(buf, s.MessageHeader.ToBytes())
++	binary.BigEndian.PutUint32(buf[5:9], s.RandomReply)
++	return buf
++}
++
++func (s *SyncReplyPacket) FromBytes(buffer []byte) error {
++	if len(buffer) < s.PacketSize() {
++		return errors.New("invalid packet")
++	}
++	s.MessageHeader.FromBytes(buffer)
++	s.RandomReply = binary.BigEndian.Uint32(buffer[5:9])
++	return nil
++}
++
++type QualityReportPacket struct {
++	MessageHeader  UDPHeader
++	FrameAdvantage int8
++	Ping           uint64
++}
++
++func (q *QualityReportPacket) Type() UDPMessageType { return QualityReportMsg }
++func (q *QualityReportPacket) Header() UDPHeader    { return q.MessageHeader }
++func (q *QualityReportPacket) SetHeader(magicNumber uint16, sequenceNumber uint16) {
++	q.MessageHeader.Magic = magicNumber
++	q.MessageHeader.SequenceNumber = sequenceNumber
++}
++func (q *QualityReportPacket) PacketSize() int {
++	sum := q.MessageHeader.Size()
++	sum += int(unsafe.Sizeof(q.FrameAdvantage))
++	sum += int(unsafe.Sizeof(q.Ping))
++	return sum
++}
++
++func (q *QualityReportPacket) String() string { return "quality report.\n" }
++
++func (q *QualityReportPacket) ToBytes() []byte {
++	buf := make([]byte, q.PacketSize())
++	copy(buf, q.MessageHeader.ToBytes())
++	buf[5] = uint8(q.FrameAdvantage)
++	binary.BigEndian.PutUint64(buf[6:14], q.Ping)
++	return buf
++}
++
++func (q *QualityReportPacket) FromBytes(buffer []byte) error {
++	if len(buffer) < q.PacketSize() {
++		return errors.New("invalid packet")
++	}
++	q.MessageHeader.FromBytes(buffer)
++	q.FrameAdvantage = int8(buffer[5])
++	q.Ping = binary.BigEndian.Uint64(buffer[6:14])
++	return nil
++}
++
++type QualityReplyPacket struct {
++	MessageHeader UDPHeader
++	Pong          uint64
++}
++
++func (q *QualityReplyPacket) Type() UDPMessageType { return QualityReplyMsg }
++func (q *QualityReplyPacket) Header() UDPHeader    { return q.MessageHeader }
++func (q *QualityReplyPacket) SetHeader(magicNumber uint16, sequenceNumber uint16) {
++	q.MessageHeader.Magic = magicNumber
++	q.MessageHeader.SequenceNumber = sequenceNumber
++}
++func (q *QualityReplyPacket) PacketSize() int {
++	sum := q.MessageHeader.Size()
++	sum += int(unsafe.Sizeof(q.Pong))
++	return sum
++}
++
++func (q *QualityReplyPacket) String() string { return "quality reply.\n" }
++
++func (q *QualityReplyPacket) ToBytes() []byte {
++	buf := make([]byte, q.PacketSize())
++	copy(buf, q.MessageHeader.ToBytes())
++	binary.BigEndian.PutUint64(buf[5:13], q.Pong)
++	return buf
++}
++
++func (q *QualityReplyPacket) FromBytes(buffer []byte) error {
++	if len(buffer) < q.PacketSize() {
++		return errors.New("invalid packet")
++	}
++	q.MessageHeader.FromBytes(buffer)
++	q.Pong = binary.BigEndian.Uint64(buffer[5:13])
++	return nil
++}
++
++type InputPacket struct {
++	MessageHeader     UDPHeader
++	PeerConnectStatus []UdpConnectStatus
++	StartFrame        uint32
++
++	DisconectRequested bool
++	AckFrame           int32
++	Checksum           uint32
++	NumBits            uint16
++	InputSize          uint8
++	Bits               []byte
++}
++
++func (i *InputPacket) Type() UDPMessageType { return InputMsg }
++func (i *InputPacket) Header() UDPHeader    { return i.MessageHeader }
++func (i *InputPacket) SetHeader(magicNumber uint16, sequenceNumber uint16) {
++	i.MessageHeader.Magic = magicNumber
++	i.MessageHeader.SequenceNumber = sequenceNumber
++}
++
++// may go back and make this calculate the Bits, Sizes and IsSpectator better
++func (i *InputPacket) PacketSize() int {
++	size := 0
++	size += int(unsafe.Sizeof(i.MessageHeader))
++	size += 1 // will store total
++	for _, s := range i.PeerConnectStatus {
++		size += s.Size()
++	}
++	size += int(unsafe.Sizeof(i.StartFrame))
++	size += int(unsafe.Sizeof(i.DisconectRequested))
++	size += int(unsafe.Sizeof(i.AckFrame))
++	size += int(unsafe.Sizeof(i.Checksum))
++	size += int(unsafe.Sizeof(i.NumBits))
++	size += int(unsafe.Sizeof(i.InputSize))
++	size += 1 // will store total
++	size += len(i.Bits)
++	//size += 1 // will store total
++	return size
++}
++func (i *InputPacket) ToBytes() []byte {
++	buf := make([]byte, i.PacketSize())
++	copy(buf, i.MessageHeader.ToBytes())
++	buf[5] = byte(len(i.PeerConnectStatus))
++	offset := 6
++	for _, p := range i.PeerConnectStatus {
++		pcBuf := p.ToBytes()
++		copy(buf[offset:offset+len(pcBuf)], pcBuf)
++		offset += len(pcBuf)
++	}
++	binary.BigEndian.PutUint32(buf[offset:], i.StartFrame)
++	offset += 4
++	if i.DisconectRequested {
++		buf[offset] = 1
++	} else {
++		buf[offset] = 0
++	}
++	offset++
++	binary.BigEndian.PutUint32(buf[offset:], uint32(i.AckFrame))
++	offset += Int32size
++	binary.BigEndian.PutUint32(buf[offset:], i.Checksum)
++	offset += Int32size
++	binary.BigEndian.PutUint16(buf[offset:], i.NumBits)
++	offset += 2
++	buf[offset] = i.InputSize
++	offset++
++	buf[offset] = byte(len(i.Bits))
++	offset++
++	copy(buf[offset:offset+len(i.Bits)], i.Bits)
++	offset += len(i.Bits)
++	/*
++		for _, input := range i.Bits {
++			buf[offset] = byte(len(input))
++			offset++
++			copy(buf[offset:offset+len(input)], input)
++			offset += len(input)
++		}*/
++	return buf
++}
++
++func (i *InputPacket) FromBytes(buffer []byte) error {
++	if len(buffer) < i.PacketSize() {
++		return errors.New("invalid packet")
++	}
++
++	i.MessageHeader.FromBytes(buffer)
++	totalConnectionStatus := buffer[5]
++	i.PeerConnectStatus = make([]UdpConnectStatus, totalConnectionStatus)
++	pcsSize := i.PeerConnectStatus[0].Size()
++	offset := 6
++	for p := 0; p < int(totalConnectionStatus); p++ {
++		i.PeerConnectStatus[p].FromBytes(buffer[offset : offset+pcsSize])
++		offset += pcsSize
++	}
++	i.StartFrame = binary.BigEndian.Uint32(buffer[offset : offset+4])
++	offset += 4
++	if buffer[offset] == 1 {
++		i.DisconectRequested = true
++	} else if buffer[offset] == 0 {
++		i.DisconectRequested = false
++	}
++	offset++
++	i.AckFrame = int32(binary.BigEndian.Uint32(buffer[offset : offset+Int32size]))
++	offset += Int32size
++	i.Checksum = binary.BigEndian.Uint32(buffer[offset : offset+Int32size])
++	offset += Int32size
++	i.NumBits = binary.BigEndian.Uint16(buffer[offset : offset+2])
++	offset += 2
++	i.InputSize = buffer[offset]
++	offset++
++	totalBits := buffer[offset]
++	offset++
++	i.Bits = make([]byte, totalBits)
++	copy(i.Bits, buffer[offset:offset+int(totalBits)])
++	offset += int(totalBits)
++	/*
++		i.Bits = make([][]byte, totalBitsSlices)
++		for b, _ := range i.Bits {
++			curBitsSize := int(buffer[offset])
++			offset++
++			i.Bits[b] = buffer[offset : offset+curBitsSize]
++			offset += curBitsSize
++		}*/
++
++	return nil
++}
++
++func (i InputPacket) String() string {
++	return fmt.Sprintf("game-compressed-input %d (+ %d bits).\n",
++		i.StartFrame, i.NumBits)
++}
++
++type InputAckPacket struct {
++	MessageHeader UDPHeader
++	AckFrame      int32
++}
++
++func (i *InputAckPacket) Type() UDPMessageType { return InputAckMsg }
++func (i *InputAckPacket) Header() UDPHeader    { return i.MessageHeader }
++func (i *InputAckPacket) SetHeader(magicNumber uint16, sequenceNumber uint16) {
++	i.MessageHeader.Magic = magicNumber
++	i.MessageHeader.SequenceNumber = sequenceNumber
++}
++func (i *InputAckPacket) PacketSize() int {
++	sum := i.MessageHeader.Size()
++	sum += int(unsafe.Sizeof(i.AckFrame))
++	return sum
++}
++
++func (i *InputAckPacket) ToBytes() []byte {
++	buf := make([]byte, i.PacketSize())
++	copy(buf, i.MessageHeader.ToBytes())
++	binary.BigEndian.PutUint32(buf[5:], uint32(i.AckFrame))
++	return buf
++}
++
++func (i *InputAckPacket) FromBytes(buffer []byte) error {
++	if len(buffer) < i.PacketSize() {
++		return errors.New("invalid packet")
++	}
++	i.MessageHeader.FromBytes(buffer)
++	i.AckFrame = int32(binary.BigEndian.Uint32(buffer[5:]))
++	return nil
++}
++
++func (i *InputAckPacket) String() string { return "input ack.\n" }
++
++type KeepAlivePacket struct {
++	MessageHeader UDPHeader
++}
++
++func (k *KeepAlivePacket) Type() UDPMessageType { return KeepAliveMsg }
++func (k *KeepAlivePacket) Header() UDPHeader    { return k.MessageHeader }
++func (k *KeepAlivePacket) SetHeader(magicNumber uint16, sequenceNumber uint16) {
++	k.MessageHeader.Magic = magicNumber
++	k.MessageHeader.SequenceNumber = sequenceNumber
++}
++func (k *KeepAlivePacket) PacketSize() int {
++	return k.MessageHeader.Size()
++}
++func (k *KeepAlivePacket) String() string { return "keep alive.\n" }
++
++func (k *KeepAlivePacket) ToBytes() []byte {
++	return k.MessageHeader.ToBytes()
++}
++func (k *KeepAlivePacket) FromBytes(buffer []byte) error {
++	if len(buffer) < k.PacketSize() {
++		return errors.New("invalid packet")
++	}
++	k.MessageHeader.FromBytes(buffer)
++	return nil
++}
++
++func NewUDPMessage(t UDPMessageType) UDPMessage {
++	header := UDPHeader{HeaderType: uint8(t)}
++	var msg UDPMessage
++	switch t {
++	case SyncRequestMsg:
++		msg = &SyncRequestPacket{
++			MessageHeader: header}
++	case SyncReplyMsg:
++		msg = &SyncReplyPacket{
++			MessageHeader: header}
++	case QualityReportMsg:
++		msg = &QualityReportPacket{
++			MessageHeader: header}
++	case QualityReplyMsg:
++		msg = &QualityReplyPacket{
++			MessageHeader: header}
++	case InputAckMsg:
++		msg = &InputAckPacket{
++			MessageHeader: header}
++	case InputMsg:
++		msg = &InputPacket{
++			MessageHeader: header}
++	case KeepAliveMsg:
++		fallthrough
++	default:
++		msg = &KeepAlivePacket{
++			MessageHeader: header}
++	}
++	return msg
++}
++
++func EncodeMessage(packet UDPMessage) ([]byte, error) {
++	var buf bytes.Buffer
++	enc := gob.NewEncoder(&buf)
++	encErr := enc.Encode(&packet)
++	if encErr != nil {
++		return nil, encErr
++	}
++	return buf.Bytes(), nil
++}
++
++func DecodeMessage(buffer []byte) (UDPMessage, error) {
++	buf := bytes.NewBuffer(buffer)
++	dec := gob.NewDecoder(buf)
++	var msg UDPMessage
++	var err error
++
++	if err = dec.Decode(&msg); err != nil {
++		return nil, err
++	}
++	return msg, nil
++}
++
++func DecodeMessageBinary(buffer []byte) (UDPMessage, error) {
++	msgType, err := GetPacketTypeFromBuffer(buffer)
++	if err != nil {
++		return nil, err
++	}
++
++	switch msgType {
++	case SyncRequestMsg:
++		var syncRequestPacket SyncRequestPacket
++		err = syncRequestPacket.FromBytes(buffer)
++		if err != nil {
++			return nil, err
++		}
++		return &syncRequestPacket, nil
++	case SyncReplyMsg:
++		var syncReplyPacket SyncReplyPacket
++		err = syncReplyPacket.FromBytes(buffer)
++		if err != nil {
++			return nil, err
++		}
++		return &syncReplyPacket, nil
++	case QualityReportMsg:
++		var qualityReportPacket QualityReportPacket
++		err := qualityReportPacket.FromBytes(buffer)
++		if err != nil {
++			return nil, err
++		}
++		return &qualityReportPacket, nil
++	case QualityReplyMsg:
++		var qualityReplyPacket QualityReplyPacket
++		err := qualityReplyPacket.FromBytes(buffer)
++		if err != nil {
++			return nil, err
++		}
++		return &qualityReplyPacket, nil
++	case InputAckMsg:
++		var inputAckPacket InputAckPacket
++		err = inputAckPacket.FromBytes(buffer)
++		if err != nil {
++			return nil, err
++		}
++		return &inputAckPacket, nil
++	case InputMsg:
++		var inputPacket InputPacket
++		err = inputPacket.FromBytes(buffer)
++		if err != nil {
++			return nil, err
++		}
++		return &inputPacket, nil
++	case KeepAliveMsg:
++		var keepAlivePacket KeepAlivePacket
++		err = keepAlivePacket.FromBytes(buffer)
++		if err != nil {
++			return nil, err
++		}
++		return &keepAlivePacket, nil
++	default:
++		return nil, errors.New("message not recognized")
++	}
++}
++
++func GetPacketTypeFromBuffer(buffer []byte) (UDPMessageType, error) {
++	if buffer == nil {
++		return 0, errors.New("nil buffer")
++	}
++	if len(buffer) < 5 {
++		return 0, errors.New("invalid header")
++	}
++	return UDPMessageType(buffer[4]), nil
++}
+diff --git a/third/ggpo/internal/polling/poll.go b/third/ggpo/internal/polling/poll.go
+new file mode 100644
+index 0000000..e2f94be
+--- /dev/null
++++ b/third/ggpo/internal/polling/poll.go
+@@ -0,0 +1,71 @@
++package polling
++
++import (
++	"time"
++
++	"github.com/ikemen-engine/ggpo/internal/buffer"
++)
++
++type FuncTimeType func() int64
++
++func DefaultTime() int64 {
++	return time.Now().UnixMilli()
++}
++
++type Poll struct {
++	startTime   int64
++	handleCount int
++	loopSinks   buffer.StaticBuffer[PollSinkCb]
++}
++
++type Poller interface {
++	RegisterLoop(sink PollSink, cookie []byte)
++	Pump(timeFunc ...FuncTimeType) bool
++}
++
++type PollSinkCb struct {
++	sink   PollSink
++	cookie []byte
++}
++
++type PollSink interface {
++	OnLoopPoll(timeFunc FuncTimeType) bool
++}
++
++func NewPoll() Poll {
++	return Poll{
++		startTime:   0,
++		handleCount: 0,
++		loopSinks:   buffer.NewStaticBuffer[PollSinkCb](16),
++	}
++}
++
++func (p *Poll) RegisterLoop(sink PollSink, cookie []byte) {
++	err := p.loopSinks.PushBack(
++		PollSinkCb{
++			sink:   sink,
++			cookie: cookie})
++	if err != nil {
++		panic(err)
++	}
++}
++
++func (p *Poll) Pump(timeFunc ...FuncTimeType) bool {
++	finished := false
++	if p.startTime == 0 {
++		p.startTime = time.Now().UnixMilli()
++	}
++	for i := 0; i < p.loopSinks.Size(); i++ {
++		cb, err := p.loopSinks.Get(i)
++		if err != nil {
++			panic(err)
++		}
++		if len(timeFunc) != 0 {
++			finished = !(cb.sink.OnLoopPoll(timeFunc[0]) || finished)
++		} else {
++			finished = !(cb.sink.OnLoopPoll(DefaultTime) || finished)
++		}
++	}
++	return finished
++
++}
+diff --git a/third/ggpo/internal/protocol/protocol.go b/third/ggpo/internal/protocol/protocol.go
+new file mode 100644
+index 0000000..ab36aae
+--- /dev/null
++++ b/third/ggpo/internal/protocol/protocol.go
+@@ -0,0 +1,940 @@
++package protocol
++
++import (
++	"errors"
++	"fmt"
++	"math/rand"
++	"time"
++
++	"github.com/ikemen-engine/ggpo/internal/buffer"
++	"github.com/ikemen-engine/ggpo/internal/input"
++	"github.com/ikemen-engine/ggpo/internal/messages"
++	"github.com/ikemen-engine/ggpo/internal/polling"
++	"github.com/ikemen-engine/ggpo/internal/sync"
++	"github.com/ikemen-engine/ggpo/internal/util"
++	"github.com/ikemen-engine/ggpo/transport"
++)
++
++const (
++	// UDPHeaderSize is the size of the IP + UDP headers.
++	UDPHeaderSize          = 28
++	NumSyncPackets         = 5
++	// CvF Online: was 2000. A lost sync request or reply cost 2 s, and a peer
++	// that has finished synchronizing drops the other after DisconnectTimeout
++	// (3 s in Ikemen) without packets, so two losses in a row aborted the
++	// match. Retransmissions now resend the same random (see
++	// resendSyncRequest), so a reply to an earlier copy still counts and the
++	// interval may be shorter than the round trip time.
++	SyncRetryInterval      = 200
++	SyncFirstRetryInterval = 500
++	// CvF Online: until the peer is known to be running (a packet other than
++	// a sync request/reply arrived from it), it may still be synchronizing
++	// with an older build that retries only every 2 s; the disconnect timeout
++	// is at least this long meanwhile, and no interruption is notified.
++	PeerSyncingDisconnectTimeout = 15000
++	RunningRetryInterval   = 200
++	KeepAliveInterval      = 200
++	QualityReportInterval  = 1000
++	NetworkStatsInterval   = 1000
++	UDPShutdownTimer       = 5000
++	MaxSeqDistance         = 1 << 15
++)
++
++type UdpProtocol struct {
++	stats UdpProtocolStats // may not need these
++	event UdpProtocolEvent //
++
++	// Network transmission information
++	connection        transport.Connection
++	peerAddress       string
++	peerPort          int
++	magicNumber       uint16
++	queue             int
++	remoteMagicNumber uint16
++	connected         bool
++	sendLatency       int64
++	ooPercent         int
++	ooPacket          OoPacket
++	sendQueue         buffer.RingBuffer[QueueEntry]
++
++	// Stats
++	roundTripTime  int64
++	packetsSent    int
++	bytesSent      int
++	kbpsSent       int
++	statsStartTime int64
++
++	// The State Machine
++	localConnectStatus *[]messages.UdpConnectStatus
++	peerConnectStatus  []messages.UdpConnectStatus
++	currentState       UdpProtocolState
++	state              UdpProtocolStateInfo
++
++	// Fairness
++	localFrameAdvantage  float32
++	remoteFrameAdvantage float32
++
++	// Packet Loss
++	pendingOutput         buffer.RingBuffer[input.GameInput]
++	lastRecievedInput     input.GameInput
++	lastSentInput         input.GameInput
++	lastAckedInput        input.GameInput
++	lastSendTime          int64
++	lastRecvTime          int64
++	shutdownTimeout       int64
++	disconnectEventSent   bool
++	disconnectTimeout     int64
++	disconnectNotifyStart int64
++	disconnectNotifySent  bool
++	peerRunning           bool // CvF Online: see PeerSyncingDisconnectTimeout
++
++	nextSendSeq uint16
++	nextRecvSeq uint16
++
++	// Rift synchronization
++	timesync sync.TimeSync
++
++	// Event Queue
++	eventQueue buffer.RingBuffer[UdpProtocolEvent]
++
++	RemoteChecksumsThisFrame util.OrderedMap[int, uint32]
++	RemoteChecksums          util.OrderedMap[int, uint32]
++}
++
++type NetworkStats struct {
++	Network  NetworkNetworkStats
++	Timesync NetworkTimeSyncStats
++}
++
++type NetworkNetworkStats struct {
++	SendQueueLen int
++	RecvQueueLen int
++	Ping         int64
++	KbpsSent     int
++}
++type NetworkTimeSyncStats struct {
++	LocalFramesBehind     float32
++	RemoteFramesBehind    float32
++	AvgLocalFramesBehind  float32
++	AvgRemoteFramesBehind float32
++}
++
++type UdpProtocolStats struct {
++	ping                int
++	remoteFrameAdvtange int
++	localFrameAdvantage int
++	sendQueueLen        int
++	udp                 transport.UdpStats
++}
++
++type UdpProtocolEvent struct {
++	eventType         UdpProtocolEventType
++	Input             input.GameInput // for Input message
++	Total             int             // for synchronizing
++	Count             int             //
++	DisconnectTimeout int             // network interrupted
++}
++
++func (upe UdpProtocolEvent) Type() UdpProtocolEventType {
++	return upe.eventType
++}
++
++// for logging purposes only
++func (upe UdpProtocolEvent) String() string {
++	str := "(event:"
++	switch upe.eventType {
++	case UnknownEvent:
++		str += "Unknown"
++		break
++	case ConnectedEvent:
++		str += "Connected"
++		break
++	case SynchronizingEvent:
++		str += "Synchronizing"
++		break
++	case SynchronziedEvent:
++		str += "Synchronized"
++		break
++	case InputEvent:
++		str += "Input"
++		break
++	case DisconnectedEvent:
++		str += "Disconnected"
++		break
++	case NetworkInterruptedEvent:
++		str += "NetworkInterrupted"
++		break
++	case NetworkResumedEvent:
++		str += "NetworkResumed"
++		break
++	}
++	str += ").\n"
++	return str
++}
++
++type UdpProtocolEventType int
++
++const (
++	UnknownEvent UdpProtocolEventType = iota - 1
++	ConnectedEvent
++	SynchronizingEvent
++	SynchronziedEvent
++	InputEvent
++	DisconnectedEvent
++	NetworkInterruptedEvent
++	NetworkResumedEvent
++)
++
++type UdpProtocolState int
++
++const (
++	SyncingState UdpProtocolState = iota
++	SynchronziedState
++	RunningState
++	DisconnectedState
++)
++
++type UdpProtocolStateInfo struct {
++	roundTripRemaining uint32 // sync
++	random             uint32
++
++	lastQualityReportTime    int64 // running
++	lastNetworkStatsInterval int64
++	lastInputPacketRecvTime  int64
++
++	lastSyncRequestTime int64 // CvF Online: sync retry timer
++}
++
++type QueueEntry struct {
++	queueTime int64
++	destIp    string
++	msg       messages.UDPMessage
++	destPort  int
++}
++
++func (q QueueEntry) String() string {
++	return fmt.Sprintf("Entry : queueTime %d destIp %s msg %s", q.queueTime, q.destIp, q.msg)
++}
++
++func NewQueEntry(time int64, destIp string, destPort int, m messages.UDPMessage) QueueEntry {
++	return QueueEntry{
++		queueTime: time,
++		destIp:    destIp,
++		destPort:  destPort,
++		msg:       m,
++	}
++}
++
++type OoPacket struct {
++	sendTime int64
++	destIp   string
++	msg      messages.UDPMessage
++}
++
++func NewUdpProtocol(connection transport.Connection, queue int, ip string, port int, status *[]messages.UdpConnectStatus) UdpProtocol {
++	var magicNumber uint16
++	for {
++		magicNumber = uint16(rand.Int())
++		if magicNumber != 0 {
++			break
++		}
++	}
++	peerConnectStatus := make([]messages.UdpConnectStatus, messages.UDPMsgMaxPlayers)
++	for i := 0; i < len(peerConnectStatus); i++ {
++		peerConnectStatus[i].LastFrame = -1
++	}
++	lastSentInput, _ := input.NewGameInput(-1, nil, 1)
++	lastRecievedInput, _ := input.NewGameInput(-1, nil, 1)
++	lastAckedInput, _ := input.NewGameInput(-1, nil, 1)
++
++	protocol := UdpProtocol{
++		connection:               connection,
++		queue:                    queue,
++		localConnectStatus:       status,
++		peerConnectStatus:        peerConnectStatus,
++		peerAddress:              ip,
++		peerPort:                 port,
++		magicNumber:              magicNumber,
++		pendingOutput:            buffer.NewRingBuffer[input.GameInput](64),
++		sendQueue:                buffer.NewRingBuffer[QueueEntry](64),
++		eventQueue:               buffer.NewRingBuffer[UdpProtocolEvent](64),
++		timesync:                 sync.NewTimeSync(),
++		lastSentInput:            lastSentInput,
++		lastRecievedInput:        lastRecievedInput,
++		lastAckedInput:           lastAckedInput,
++		RemoteChecksums:          util.NewOrderedMap[int, uint32](16),
++		RemoteChecksumsThisFrame: util.NewOrderedMap[int, uint32](16),
++	}
++	//poll.RegisterLoop(&protocol, nil)
++	return protocol
++}
++
++func (u *UdpProtocol) StartPollLoop() {
++	u.RemoteChecksumsThisFrame.Clear()
++}
++
++func (u *UdpProtocol) EndPollLoop() {
++	if u.RemoteChecksumsThisFrame.Len() > 0 {
++		highestFrameNum := u.RemoteChecksumsThisFrame.Greatest()
++		u.RemoteChecksums.Set(highestFrameNum.Key, highestFrameNum.Value)
++	}
++}
++
++func (u *UdpProtocol) SetIncomingRemoteChecksum(frame int, checksum uint32) {
++	u.RemoteChecksumsThisFrame.Set(frame, checksum)
++}
++
++func (u *UdpProtocol) SetFrameDelay(delay int) {
++	u.timesync.SetFrameDelay(delay)
++}
++
++func (u *UdpProtocol) RemoteFrameDelay() int {
++	return u.timesync.RemoteFrameDelay
++}
++
++func (u *UdpProtocol) OnLoopPoll(timeFunc polling.FuncTimeType) bool {
++
++	// originally was if !udp
++	if u.connection == nil {
++		return true
++	}
++	now := timeFunc()
++
++	var nextInterval int64
++
++	err := u.PumpSendQueue()
++	if err != nil {
++		panic(err)
++	}
++
++	switch u.currentState {
++	case SyncingState:
++		if int(u.state.roundTripRemaining) == NumSyncPackets {
++			nextInterval = SyncFirstRetryInterval
++		} else {
++			nextInterval = SyncRetryInterval
++		}
++		// CvF Online: own timer (lastSendTime also moves with our replies to
++		// the peer's requests) and the same random for the retransmission
++		if u.state.lastSyncRequestTime > 0 && u.state.lastSyncRequestTime+nextInterval < now {
++			util.Log.Printf("No luck syncing after %d ms... Re-queueing sync packet.\n", nextInterval)
++			u.resendSyncRequest()
++		}
++		break
++	case RunningState:
++		if u.state.lastInputPacketRecvTime == 0 || u.state.lastInputPacketRecvTime+RunningRetryInterval <= now {
++			util.Log.Printf("Haven't exchanged packets in a while (last received:%d  last sent:%d).  Resending.\n",
++				u.lastRecievedInput.Frame, u.lastSentInput.Frame)
++			err := u.SendPendingOutput()
++			if err != nil {
++				panic(err)
++			}
++			u.state.lastInputPacketRecvTime = now
++		}
++
++		//if (!u.State.running.last_quality_report_time || _state.running.last_quality_report_time + QUALITY_REPORT_INTERVAL < now) {
++		if u.state.lastQualityReportTime == 0 || uint32(u.state.lastQualityReportTime)+uint32(QualityReportInterval) < uint32(now) {
++			msg := messages.NewUDPMessage(messages.QualityReportMsg)
++			qualityReport := msg.(*messages.QualityReportPacket)
++			qualityReport.Ping = uint64(time.Now().UnixMilli())
++			qualityReport.FrameAdvantage = int8(util.Min(255.0, u.timesync.LocalAdvantage()*10))
++			u.SendMsg(qualityReport)
++			u.state.lastQualityReportTime = now
++		}
++
++		if u.state.lastNetworkStatsInterval == 0 || u.state.lastNetworkStatsInterval+NetworkStatsInterval < now {
++			u.UpdateNetworkStats()
++			u.state.lastNetworkStatsInterval = now
++		}
++
++		if u.lastSendTime > 0 && u.lastSendTime+KeepAliveInterval < now {
++			util.Log.Println("Sending keep alive packet")
++			msg := messages.NewUDPMessage(messages.KeepAliveMsg)
++			u.SendMsg(msg)
++		}
++
++		disconnectTimeout := u.disconnectTimeout
++		if !u.peerRunning && disconnectTimeout > 0 && disconnectTimeout < PeerSyncingDisconnectTimeout {
++			disconnectTimeout = PeerSyncingDisconnectTimeout
++		}
++		if u.peerRunning && u.disconnectTimeout > 0 && u.disconnectNotifyStart > 0 &&
++			!u.disconnectNotifySent && (u.lastRecvTime+u.disconnectNotifyStart < now) {
++			util.Log.Printf("Endpoint has stopped receiving packets for %d ms.  Sending notification.\n", u.disconnectNotifyStart)
++			e := UdpProtocolEvent{
++				eventType: NetworkInterruptedEvent}
++			e.DisconnectTimeout = int(u.disconnectTimeout) - int(u.disconnectNotifyStart)
++			u.QueueEvent(&e)
++			u.disconnectNotifySent = true
++		}
++
++		if disconnectTimeout > 0 && (u.lastRecvTime+disconnectTimeout < now) {
++			if !u.disconnectEventSent {
++				util.Log.Printf("Endpoint has stopped receiving packets for %d ms.  Disconnecting.\n",
++					disconnectTimeout)
++				u.QueueEvent(&UdpProtocolEvent{
++					eventType: DisconnectedEvent})
++				u.disconnectEventSent = true
++			}
++		}
++		break
++	case DisconnectedState:
++		if u.shutdownTimeout < now {
++			util.Log.Printf("Shutting down udp connection.\n")
++			u.connection = nil
++			u.shutdownTimeout = 0
++		}
++	}
++	return true
++}
++
++// all this method did, and all bitvector did, in the original
++// was incode input as bits, etc
++// go globs can do a lot of that for us, so i've forgone much of that logic
++// https://github.com/pond3r/ggpo/blob/7ddadef8546a7d99ff0b3530c6056bc8ee4b9c0a/src/lib/ggpo/network/udp_proto.cpp#L111
++func (u *UdpProtocol) SendPendingOutput() error {
++	msg := messages.NewUDPMessage(messages.InputMsg)
++	inputMsg := msg.(*messages.InputPacket)
++
++	var j, offset int
++
++	if u.pendingOutput.Size() > 0 {
++		last := u.lastAckedInput
++		// bits = msg.Input.Bits
++		input, err := u.pendingOutput.Front()
++		if err != nil {
++			panic(err)
++		}
++		inputMsg.StartFrame = uint32(input.Frame)
++		inputMsg.InputSize = uint8(input.Size)
++
++		if !(last.Frame == -1 || last.Frame+1 == int(inputMsg.StartFrame)) {
++			return errors.New("ggpo UdpProtocol SendPendingOutput: !((last.Frame == -1 || last.Frame+1 == int(msg.Input.StartFrame))) ")
++		}
++
++		for j = 0; j < u.pendingOutput.Size(); j++ {
++			current, err := u.pendingOutput.Item(j)
++			inputMsg.Checksum = current.Checksum
++			if err != nil {
++				panic(err)
++			}
++			inputMsg.Bits = append(inputMsg.Bits, current.Bits...)
++			last = current // might get rid of this
++			u.lastSentInput = current
++		}
++	} else {
++		inputMsg.StartFrame = 0
++		inputMsg.InputSize = 0
++	}
++
++	inputMsg.AckFrame = int32(u.lastRecievedInput.Frame)
++	// msg.Input.NumBits = uint16(offset) caused major bug, numbits would always be 0
++	// causing input events to never be recieved
++	inputMsg.NumBits = uint16(inputMsg.InputSize)
++
++	inputMsg.DisconectRequested = u.currentState == DisconnectedState
++
++	if u.localConnectStatus != nil {
++		inputMsg.PeerConnectStatus = make([]messages.UdpConnectStatus, len(*u.localConnectStatus))
++		copy(inputMsg.PeerConnectStatus, *u.localConnectStatus)
++	} else {
++		inputMsg.PeerConnectStatus = make([]messages.UdpConnectStatus, messages.UDPMsgMaxPlayers)
++	}
++
++	// may not even need this.
++	if offset >= messages.MaxCompressedBits {
++		return errors.New("ggpo UdpProtocol SendPendingOutput: offset >= MaxCompressedBits")
++	}
++
++	u.SendMsg(inputMsg)
++	return nil
++}
++
++func (u *UdpProtocol) SendInputAck() {
++	msg := messages.NewUDPMessage(messages.InputAckMsg)
++	inputAck := msg.(*messages.InputAckPacket)
++	inputAck.AckFrame = int32(u.lastRecievedInput.Frame)
++	u.SendMsg(inputAck)
++}
++
++func (u *UdpProtocol) GetEvent() (*UdpProtocolEvent, error) {
++	if u.eventQueue.Size() == 0 {
++		return nil, errors.New("ggpo UdpProtocol GetEvent:no events")
++	}
++	e, err := u.eventQueue.Front()
++	if err != nil {
++		panic(err)
++	}
++	err = u.eventQueue.Pop()
++	if err != nil {
++		panic(err)
++	}
++	return &e, nil
++}
++
++func (u *UdpProtocol) QueueEvent(evt *UdpProtocolEvent) {
++	util.Log.Printf("Queueing event %s", *evt)
++	err := u.eventQueue.Push(*evt)
++	// if there's no more room left in the queue, make room.
++	if err != nil {
++		//u.eventQueue.Pop()
++		//u.eventQueue.Push(*evt)
++		panic(err)
++	}
++}
++
++func (u *UdpProtocol) Disconnect() {
++	u.currentState = DisconnectedState
++	u.shutdownTimeout = time.Now().UnixMilli() + UDPShutdownTimer
++}
++
++func (u *UdpProtocol) SendSyncRequest() {
++	u.state.random = uint32(rand.Int() & 0xFFFF)
++	u.resendSyncRequest()
++}
++
++// CvF Online: the request of the current round trip again, same random
++func (u *UdpProtocol) resendSyncRequest() {
++	u.state.lastSyncRequestTime = time.Now().UnixMilli()
++	msg := messages.NewUDPMessage(messages.SyncRequestMsg)
++	syncRequest := msg.(*messages.SyncRequestPacket)
++	syncRequest.RandomRequest = u.state.random
++	syncRequest.RemoteInputDelay = uint8(u.timesync.FrameDelay2)
++	u.SendMsg(syncRequest)
++}
++
++func (u *UdpProtocol) SendMsg(msg messages.UDPMessage) {
++	util.Log.Printf("In UdpProtocol send %s", msg)
++	u.packetsSent++
++	u.lastSendTime = time.Now().UnixMilli()
++	u.bytesSent += msg.PacketSize()
++	msg.SetHeader(u.magicNumber, u.nextSendSeq)
++	u.nextSendSeq++
++	if u.peerAddress == "" {
++		panic("peerAdress empty, why?")
++	}
++	var err error
++	err = u.sendQueue.Push(NewQueEntry(
++		time.Now().UnixMilli(), u.peerAddress, u.peerPort, msg))
++	if err != nil {
++		panic(err)
++	}
++
++	err = u.PumpSendQueue()
++	if err != nil {
++		panic(err)
++	}
++}
++
++func (u *UdpProtocol) OnInput(msg messages.UDPMessage, length int) (bool, error) {
++	inputMessage := msg.(*messages.InputPacket)
++
++	// If a disconnect is requested, go ahead and disconnect now.
++	disconnectRequested := inputMessage.DisconectRequested
++	if disconnectRequested {
++		if u.currentState != DisconnectedState && !u.disconnectEventSent {
++			util.Log.Printf("Disconnecting endpoint on remote request.\n")
++			u.QueueEvent(&UdpProtocolEvent{
++				eventType: DisconnectedEvent,
++			})
++			u.disconnectEventSent = true
++		}
++	} else {
++		// update the peer connection status if this peer is still considered to be part
++		// of the network
++		remoteStatus := inputMessage.PeerConnectStatus
++		for i := 0; i < len(u.peerConnectStatus); i++ {
++			if remoteStatus[i].LastFrame < u.peerConnectStatus[i].LastFrame {
++				return false, errors.New("ggpo UdpProtocol OnInput: remoteStatus[i].LastFrame < u.peerConnectStatus[i].LastFrame")
++			}
++			u.peerConnectStatus[i].Disconnected = u.peerConnectStatus[i].Disconnected || remoteStatus[i].Disconnected
++			u.peerConnectStatus[i].LastFrame = util.Max(u.peerConnectStatus[i].LastFrame, remoteStatus[i].LastFrame)
++		}
++	}
++
++	// Decompress the input (gob should already have done this)
++	lastRecievedFrameNumber := u.lastRecievedInput.Frame
++
++	currentFrame := inputMessage.StartFrame
++
++	u.lastRecievedInput.Size = int(inputMessage.InputSize)
++	if u.lastRecievedInput.Frame < 0 {
++		u.lastRecievedInput.Frame = int(inputMessage.StartFrame) - 1
++	}
++
++	offset := 0
++
++	for offset < len(inputMessage.Bits) {
++		if currentFrame > uint32(u.lastRecievedInput.Frame+1) {
++			return false, errors.New("ggpo UdpProtocol OnInput: currentFrame > uint32(u.lastRecievedInput.Frame + 1)")
++		}
++		useInputs := currentFrame == uint32(u.lastRecievedInput.Frame+1)
++		if useInputs {
++			if currentFrame != uint32(u.lastRecievedInput.Frame)+1 {
++				return false, errors.New("ggpo UdpProtocol OnInput: currentFrame != uint32(u.lastRecievedInput.Frame) +1")
++			}
++			u.lastRecievedInput.Bits = inputMessage.Bits[offset : offset+int(inputMessage.InputSize)]
++			u.lastRecievedInput.Frame = int(currentFrame)
++			u.lastRecievedInput.Checksum = inputMessage.Checksum
++			evt := UdpProtocolEvent{
++				eventType: InputEvent,
++				Input:     u.lastRecievedInput,
++			}
++			u.state.lastInputPacketRecvTime = time.Now().UnixMilli()
++			util.Log.Printf("Sending frame %d to emu queue %d.\n", u.lastRecievedInput.Frame, u.queue)
++			u.QueueEvent(&evt)
++			u.SendInputAck()
++		} else {
++			util.Log.Printf("Skipping past frame:(%d) current is %d.\n", currentFrame, u.lastRecievedInput.Frame)
++
++		}
++		offset += int(inputMessage.InputSize)
++		currentFrame++
++	}
++
++	if u.lastRecievedInput.Frame < lastRecievedFrameNumber {
++		return false, errors.New("ggpo UdpProtocol OnInput: u.lastRecievedInput.Frame < lastRecievedFrameNumber")
++	}
++
++	// Get rid of our buffered input
++	for u.pendingOutput.Size() > 0 {
++		input, err := u.pendingOutput.Front()
++		if err != nil {
++			panic(err)
++		}
++		if int32(input.Frame) < inputMessage.AckFrame {
++			util.Log.Printf("Throwing away pending output frame %d\n", input.Frame)
++			u.lastAckedInput = input
++			err := u.pendingOutput.Pop()
++			if err != nil {
++				panic(err)
++			}
++		} else {
++			break
++		}
++	}
++	return true, nil
++}
++
++func (u *UdpProtocol) OnInputAck(msg messages.UDPMessage, len int) (bool, error) {
++	inputAck := msg.(*messages.InputAckPacket)
++	// Get rid of our buffered input
++	for u.pendingOutput.Size() > 0 {
++		input, err := u.pendingOutput.Front()
++		if err != nil {
++			panic(err)
++		}
++		if int32(input.Frame) < inputAck.AckFrame {
++			util.Log.Printf("Throwing away pending output frame %d\n", input.Frame)
++			u.lastAckedInput = input
++			err = u.pendingOutput.Pop()
++			if err != nil {
++				panic(err)
++			}
++		} else {
++			break
++		}
++	}
++	return true, nil
++}
++
++func (u *UdpProtocol) OnQualityReport(msg messages.UDPMessage, len int) (bool, error) {
++	qualityReport := msg.(*messages.QualityReportPacket)
++	reply := messages.NewUDPMessage(messages.QualityReplyMsg)
++	replyPacket := reply.(*messages.QualityReplyPacket)
++	replyPacket.Pong = qualityReport.Ping
++	u.SendMsg(replyPacket)
++
++	u.remoteFrameAdvantage = float32(qualityReport.FrameAdvantage) / 10.0
++	return true, nil
++}
++
++func (u *UdpProtocol) OnQualityReply(msg messages.UDPMessage, len int) (bool, error) {
++	qualityReply := msg.(*messages.QualityReplyPacket)
++	u.roundTripTime = time.Now().UnixMilli() - int64(qualityReply.Pong)
++	return true, nil
++}
++
++func (u *UdpProtocol) OnKeepAlive(msg messages.UDPMessage, len int) (bool, error) {
++	return true, nil
++}
++
++func (u *UdpProtocol) GetNetworkStats() NetworkStats {
++	s := NetworkStats{}
++	s.Network.Ping = u.roundTripTime
++	s.Network.SendQueueLen = u.pendingOutput.Size()
++	s.Network.KbpsSent = u.kbpsSent
++	s.Timesync.RemoteFramesBehind = u.timesync.RemoteAdvantage()
++	s.Timesync.LocalFramesBehind = u.timesync.LocalAdvantage()
++	s.Timesync.AvgLocalFramesBehind = u.timesync.AvgLocalAdvantageSinceStart()
++	s.Timesync.AvgRemoteFramesBehind = u.timesync.AvgRemoteAdvantageSinceStart()
++	return s
++}
++
++func (u *UdpProtocol) SetLocalFrameNumber(localFrame int) {
++	remoteFrame := float32(int64(u.lastRecievedInput.Frame) + (u.roundTripTime * 60.0 / 2000.0))
++	u.localFrameAdvantage = ((remoteFrame - float32(localFrame)) - float32(u.timesync.FrameDelay2))
++}
++
++func (u *UdpProtocol) RecommendFrameDelay() float32 {
++	return u.timesync.ReccomendFrameWaitDuration(false)
++}
++
++func (u *UdpProtocol) SetDisconnectTimeout(timeout int) {
++	u.disconnectTimeout = int64(timeout)
++}
++
++func (u *UdpProtocol) SetDisconnectNotifyStart(timeout int) {
++	u.disconnectNotifyStart = int64(timeout)
++}
++
++func (u *UdpProtocol) PumpSendQueue() error {
++	var entry QueueEntry
++	var err error
++
++	for !u.sendQueue.Empty() {
++		entry, err = u.sendQueue.Front()
++		if err != nil {
++			panic(err)
++		}
++
++		if u.sendLatency > 0 {
++			jitter := (u.sendLatency * 2 / 3) + ((rand.Int63() % u.sendLatency) / 3)
++			if time.Now().UnixMilli() < entry.queueTime+jitter {
++				break
++			}
++		}
++		if u.ooPercent > 0 && u.ooPacket.msg == nil && ((rand.Int() % 100) < u.ooPercent) {
++			delay := rand.Int63() % (u.sendLatency*10 + 1000)
++			util.Log.Printf("creating rogue oop (seq: %d  delay: %d)\n",
++				entry.msg.Header().SequenceNumber, delay)
++			u.ooPacket.sendTime = time.Now().UnixMilli() + delay
++			u.ooPacket.msg = entry.msg
++			u.ooPacket.destIp = entry.destIp
++		} else {
++			if entry.destIp == "" {
++				return errors.New("ggpo UdpProtocol PumpSendQueue: entry.destIp == \"\"")
++			}
++			u.connection.SendTo(entry.msg, entry.destIp, entry.destPort)
++			// would delete the udpmsg here
++		}
++		err := u.sendQueue.Pop()
++		if err != nil {
++			panic(err)
++		}
++	}
++	if u.ooPacket.msg != nil && u.ooPacket.sendTime < time.Now().UnixMilli() {
++		util.Log.Printf("sending rogue oop!")
++		u.connection.SendTo(u.ooPacket.msg, u.peerAddress, u.peerPort)
++		u.ooPacket.msg = nil
++	}
++	return nil
++}
++
++func (u *UdpProtocol) ClearSendQueue() {
++	for !u.sendQueue.Empty() {
++		// i'd manually delete the QueueEntry in a language where I could
++		err := u.sendQueue.Pop()
++		if err != nil {
++			panic(err)
++		}
++	}
++}
++
++// going to call deletes close
++func (u *UdpProtocol) Close() {
++	u.ClearSendQueue()
++	if u.connection != nil {
++		u.connection.Close()
++	}
++}
++
++func (u *UdpProtocol) HandlesMsg(ipAddress string, port int) bool {
++	if u.connection == nil {
++		return false
++	}
++	return u.peerAddress == ipAddress && u.peerPort == port
++}
++
++func (u *UdpProtocol) SendInput(input *input.GameInput) {
++	if u.connection != nil {
++		if u.currentState == RunningState {
++			// check to see if this is a good time to adjust for the rift
++			u.timesync.AdvanceFrames(input, u.localFrameAdvantage, u.remoteFrameAdvantage)
++
++			// Save this input packet.
++			err := u.pendingOutput.Push(*input)
++			// if for whatever reason the capacity is full, pop off the end of the buffer and try again
++			if err != nil {
++				//u.pendingOutput.Pop()
++				//u.pendingOutput.Push(*input)
++				panic(err)
++			}
++		}
++		err := u.SendPendingOutput()
++		if err != nil {
++			panic(err)
++		}
++	}
++}
++
++func (u *UdpProtocol) UpdateNetworkStats() {
++	now := time.Now().UnixMilli()
++	if u.statsStartTime == 0 {
++		u.statsStartTime = now
++	}
++
++	totalBytesSent := u.bytesSent + (UDPHeaderSize * u.packetsSent)
++	seconds := float64(now-u.statsStartTime) / 1000.0
++	bps := float64(totalBytesSent) / seconds
++	udpOverhead := float64(100.0 * (float64(UDPHeaderSize * u.packetsSent)) / float64(u.bytesSent))
++	u.kbpsSent = int(bps / 1024)
++
++	util.Log.Printf("Network Stats -- Bandwidth: %.2f KBps Packets Sent: %5d (%.2f pps) KB Sent: %.2f UDP Overhead: %.2f %%.\n",
++		float64(u.kbpsSent),
++		u.packetsSent,
++		float64(u.packetsSent*1000)/float64(now-u.statsStartTime),
++		float64(totalBytesSent/1024.0),
++		udpOverhead)
++}
++
++func (u *UdpProtocol) Synchronize() {
++	if u.connection != nil {
++		u.currentState = SyncingState
++		u.state.roundTripRemaining = uint32(NumSyncPackets)
++		u.SendSyncRequest()
++	}
++}
++
++func (u *UdpProtocol) GetPeerConnectStatus(id int, frame *int32) bool {
++	*frame = u.peerConnectStatus[id].LastFrame
++	// !u.peerConnectStatus[id].Disconnected from the C/++ world
++	return !u.peerConnectStatus[id].Disconnected
++}
++
++func (u *UdpProtocol) OnInvalid(msg messages.UDPMessage, len int) (bool, error) {
++	//  Assert(false) // ? ASSERT(FALSE && "Invalid msg in UdpProtocol");
++	// ah
++	util.Log.Printf("Invalid msg in UdpProtocol ")
++	return false, errors.New("ggpo UdpProtocol OnInvalid: invalid msg in UdpProtocol")
++}
++
++func (u *UdpProtocol) OnSyncRequest(msg messages.UDPMessage, len int) (bool, error) {
++	request := msg.(*messages.SyncRequestPacket)
++	reply := messages.NewUDPMessage(messages.SyncReplyMsg)
++	syncReply := reply.(*messages.SyncReplyPacket)
++	syncReply.RandomReply = request.RandomRequest
++	u.timesync.RemoteFrameDelay = int(request.RemoteInputDelay)
++	u.SendMsg(syncReply)
++	return true, nil
++}
++
++func (u *UdpProtocol) OnMsg(msg messages.UDPMessage, length int) {
++	handled := false
++	var err error
++	type UdpProtocolDispatchFunc func(msg messages.UDPMessage, length int) (bool, error)
++
++	table := []UdpProtocolDispatchFunc{
++		u.OnInvalid,
++		u.OnSyncRequest,
++		u.OnSyncReply,
++		u.OnInput,
++		u.OnQualityReport,
++		u.OnQualityReply,
++		u.OnKeepAlive,
++		u.OnInputAck}
++
++	// filter out messages that don't match what we expect
++	seq := msg.Header().SequenceNumber
++	if msg.Header().HeaderType != uint8(messages.SyncRequestMsg) && msg.Header().HeaderType != uint8(messages.SyncReplyMsg) {
++		if msg.Header().Magic != u.remoteMagicNumber {
++			util.Log.Printf("recv rejecting %s", msg)
++			return
++		}
++
++		// filer out out-of-order packets
++		skipped := seq - u.nextRecvSeq
++		if skipped > uint16(MaxSeqDistance) {
++			util.Log.Printf("dropping out of order packet (seq: %d, last seq:%d)\n", seq, u.nextRecvSeq)
++			return
++		}
++	}
++
++	u.nextRecvSeq = seq
++	util.Log.Printf("recv %s on queue %d\n", msg, u.queue)
++	if int(msg.Header().HeaderType) >= len(table) {
++		u.OnInvalid(msg, length)
++	} else {
++		handled, err = table[int(msg.Header().HeaderType)](msg, length)
++	}
++	if err != nil {
++		panic(err)
++	}
++
++	if handled {
++		u.lastRecvTime = time.Now().UnixMilli()
++		if msg.Header().HeaderType != uint8(messages.SyncRequestMsg) && msg.Header().HeaderType != uint8(messages.SyncReplyMsg) {
++			u.peerRunning = true // only a running peer sends anything else
++		}
++		if u.disconnectNotifySent && u.currentState == RunningState {
++			u.QueueEvent(
++				&UdpProtocolEvent{
++					eventType: NetworkResumedEvent,
++				})
++			u.disconnectNotifySent = false
++		}
++	}
++}
++
++func (u *UdpProtocol) OnSyncReply(msg messages.UDPMessage, length int) (bool, error) {
++	syncReply := msg.(*messages.SyncReplyPacket)
++	if u.currentState != SyncingState {
++		util.Log.Println("Ignoring SyncReply while not synching.")
++		return msg.Header().Magic == u.remoteMagicNumber, nil
++	}
++
++	if syncReply.RandomReply != u.state.random {
++		util.Log.Printf("sync reply %d != %d.  Keep looking...\n",
++			syncReply.RandomReply, u.state.random)
++		return false, nil
++	}
++
++	if !u.connected {
++		u.QueueEvent(&UdpProtocolEvent{
++			eventType: ConnectedEvent})
++		u.connected = true
++	}
++
++	util.Log.Printf("Checking sync state (%d round trips remaining).\n", u.state.roundTripRemaining)
++	u.state.roundTripRemaining--
++	if u.state.roundTripRemaining == 0 {
++		util.Log.Printf("Synchronized!\n")
++		u.QueueEvent(&UdpProtocolEvent{
++			eventType: SynchronziedEvent,
++		})
++		u.currentState = RunningState
++		u.lastRecievedInput.Frame = -1
++		u.remoteMagicNumber = msg.Header().Magic
++	} else {
++		evt := UdpProtocolEvent{
++			eventType: SynchronizingEvent,
++		}
++		evt.Total = NumSyncPackets
++		evt.Count = NumSyncPackets - int(u.state.roundTripRemaining)
++		u.QueueEvent(&evt)
++		u.SendSyncRequest()
++	}
++
++	return true, nil
++}
++
++func (u *UdpProtocol) IsInitialized() bool {
++	return u.connection != nil
++}
++
++func (u *UdpProtocol) IsSynchronized() bool {
++	return u.currentState == RunningState
++}
++
++func (u *UdpProtocol) IsRunning() bool {
++	return u.currentState == RunningState
++}
+diff --git a/third/ggpo/internal/sync/timesync.go b/third/ggpo/internal/sync/timesync.go
+new file mode 100644
+index 0000000..6c889e0
+--- /dev/null
++++ b/third/ggpo/internal/sync/timesync.go
+@@ -0,0 +1,142 @@
++package sync
++
++import (
++	"github.com/ikemen-engine/ggpo/internal/input"
++	"github.com/ikemen-engine/ggpo/internal/util"
++)
++
++const (
++	FrameWindowSize   = 120
++	MinUniqueFrames   = 10
++	MinFrameAdvantage = 3
++	MaxFrameAdvantage = 9
++)
++
++type TimeSync struct {
++	local            []float32
++	remote           []float32
++	lastInputs       []*input.GameInput
++	nextPrediction   int
++	RemoteFrameDelay int
++	FrameDelay2      int
++	numFrame         int
++	avgLocal         float32
++	avgRemote        float32
++	clearedInitial   bool
++}
++
++func NewTimeSync() TimeSync {
++	return TimeSync{
++		local:          make([]float32, FrameWindowSize),
++		remote:         make([]float32, FrameWindowSize),
++		lastInputs:     make([]*input.GameInput, MinUniqueFrames),
++		nextPrediction: FrameWindowSize * 3,
++	}
++}
++
++func (t *TimeSync) SetFrameDelay(frame int) {
++	t.FrameDelay2 = frame
++}
++
++func (t *TimeSync) AdvanceFrames(input *input.GameInput, advantage float32, radvantage float32) {
++	// Remember the last frame and frame advantage
++	t.lastInputs[input.Frame%len(t.lastInputs)] = input
++	t.local[input.Frame%len(t.local)] = advantage
++	t.remote[input.Frame%len(t.remote)] = radvantage
++
++	t.avgLocal = ((float32(t.numFrame) * t.avgLocal) + advantage) / (float32(t.numFrame) + 1)
++	t.avgRemote = ((float32(t.numFrame) * t.avgRemote) + radvantage) / (float32(t.numFrame) + 1)
++
++	t.numFrame++
++	// Clear after first 3 seconds, as this is a bit crazy
++	if !t.clearedInitial && t.numFrame == 240 {
++		t.clearedInitial = true
++		t.numFrame = 0
++	}
++}
++
++func (t *TimeSync) LocalAdvantage() float32 {
++	var i int
++	var sum float32
++	var advantage float32
++	for i = 0; i < len(t.local); i++ {
++		sum += t.local[i]
++	}
++	advantage = float32(sum) / float32(len(t.local))
++	return advantage
++}
++
++func (t *TimeSync) RemoteAdvantage() float32 {
++	var i int
++	var sum float32
++	var radvantage float32
++	for i = 0; i < len(t.remote); i++ {
++		sum += t.remote[i]
++	}
++	radvantage = float32(sum) / float32(len(t.remote))
++	return radvantage
++}
++
++func (t *TimeSync) AvgLocalAdvantageSinceStart() float32 {
++	return t.avgLocal
++}
++
++func (t *TimeSync) AvgRemoteAdvantageSinceStart() float32 {
++	return t.avgRemote
++}
++
++func (t *TimeSync) ReccomendFrameWaitDuration(requireIdleInput bool) float32 {
++	// Average our local and remote frame advantages
++
++	advantage := t.LocalAdvantage()
++
++	radvantage := t.RemoteAdvantage()
++
++	// var count int = 0
++	// count++
++
++	// See if someone should take action.  The person furthest ahead
++	// needs to slow down so the other user can catch up.
++	// Only do this if both clients agree on who's ahead!!
++	// if advantage >= radvantage {
++	// 	return 0
++	// }
++
++	// Both clients agree that we're the one ahead.  Split
++	// the difference between the two to figure out how long to
++	// sleep for.
++	sleepFrames := ((radvantage - advantage) / 2.0)
++
++	//util.Log.Printf("iteration %d:  sleep frames is %d\n", count, sleepFrames)
++	util.Log.Printf("In TimeSync: sleep frames is %f\n", sleepFrames)
++
++	// Some things just aren't worth correcting for.  Make sure
++	// the difference is relevant before proceeding.
++	// if sleepFrames < MinFrameAdvantage {
++	// 	return 0
++	// }
++
++	// Make sure our input had been "idle enough" before recommending
++	// a sleep.  This tries to make the emulator sleep while the
++	// user's input isn't sweeping in arcs (e.g. fireball motions in
++	// Street Fighter), which could cause the player to miss moves.
++	// if requireIdleInput {
++	// 	for i = 1; i < len(t.lastInputs); i++ {
++	// 		equal, err := t.lastInputs[i].Equal(t.lastInputs[0], true)
++	// 		if err != nil {
++	// 			panic(err)
++	// 		}
++	// 		if !equal {
++	// 			util.Log.Printf("iteration %d:  rejecting due to input stuff at position %d...!!!\n", count, i)
++	// 			return 0
++	// 		}
++	// 	}
++	// }
++
++	// Success!!! Recommend the number of frames to sleep and adjust
++	if sleepFrames > 0 {
++		return float32(util.Min(sleepFrames, MaxFrameAdvantage))
++	} else {
++		return float32(util.Max(sleepFrames, -MaxFrameAdvantage))
++	}
++}
+diff --git a/third/ggpo/internal/util/ordered_map.go b/third/ggpo/internal/util/ordered_map.go
+new file mode 100644
+index 0000000..dc0be42
+--- /dev/null
++++ b/third/ggpo/internal/util/ordered_map.go
+@@ -0,0 +1,74 @@
++package util
++
++import (
++	"sort"
++
++	"golang.org/x/exp/constraints"
++)
++
++type OrderedMap[K constraints.Ordered, V any] struct {
++	keys []K
++	m    map[K]V
++}
++
++type KeyValuePair[K constraints.Ordered, V any] struct {
++	Key   K
++	Value V
++}
++
++func NewOrderedMap[K constraints.Ordered, V any](capacity int) OrderedMap[K, V] {
++	return OrderedMap[K, V]{
++		keys: make([]K, 0, capacity),
++		m:    make(map[K]V),
++	}
++}
++
++func (om *OrderedMap[K, V]) Set(key K, value V) {
++	// Add the key to the slice if it doesn't already exist
++	if _, ok := om.m[key]; !ok {
++		om.keys = append(om.keys, key)
++	}
++	om.m[key] = value
++}
++
++func (om *OrderedMap[K, V]) Get(key K) (V, bool) {
++	v, ok := om.m[key]
++	return v, ok
++}
++
++func (om *OrderedMap[K, V]) Delete(key K) {
++	delete(om.m, key)
++	// Find the index of the key in the slice and remove it
++	for i, k := range om.keys {
++		if k == key {
++			om.keys = append(om.keys[:i], om.keys[i+1:]...)
++			break
++		}
++	}
++}
++
++func (om *OrderedMap[K, V]) Len() int {
++	return len(om.m)
++}
++
++func (om *OrderedMap[K, V]) Keys() []K {
++	return om.keys
++}
++
++func (om *OrderedMap[K, V]) Greatest() KeyValuePair[K, V] {
++	sort.Slice(om.keys, func(i, j int) bool {
++		return om.keys[i] > om.keys[j]
++	})
++
++	return KeyValuePair[K, V]{
++		Key:   om.keys[0],
++		Value: om.m[om.keys[0]],
++	}
++}
++
++func (om *OrderedMap[K, V]) Clear() {
++	om.keys = om.keys[:0]
++	for k := range om.m {
++		delete(om.m, k)
++	}
++}
+diff --git a/third/ggpo/internal/util/utils.go b/third/ggpo/internal/util/utils.go
+new file mode 100644
+index 0000000..d3b69e8
+--- /dev/null
++++ b/third/ggpo/internal/util/utils.go
+@@ -0,0 +1,39 @@
++package util
++
++import (
++	"io"
++	"log"
++	"math"
++
++	"golang.org/x/exp/constraints"
++)
++
++// Log is the util.Log.Logger used when printing log messages.
++var Log = DiscardLogger()
++
++// DiscardLogger returns a util.Log.Logger which does not print anything.
++func DiscardLogger() *log.Logger {
++	return log.New(io.Discard, "", 0)
++}
++
++func Min[T constraints.Ordered](a, b T) T {
++	if a < b {
++		return a
++	}
++	return b
++}
++
++func Max[T constraints.Ordered](a, b T) T {
++	if a > b {
++		return a
++	}
++	return b
++}
++
++func MaxAbsFloat32(a, b float32) float32 {
++	if math.Abs(float64(a)) > math.Abs(float64(b)) {
++		return a
++	} else {
++		return b
++	}
++}
+diff --git a/third/ggpo/logger.go b/third/ggpo/logger.go
+new file mode 100644
+index 0000000..0afb58a
+--- /dev/null
++++ b/third/ggpo/logger.go
+@@ -0,0 +1,28 @@
++package ggpo
++
++import (
++	"log"
++	"os"
++
++	"github.com/ikemen-engine/ggpo/internal/util"
++)
++
++// SetLogger sets the log.Logger used when printing log messages. Use this
++// method for more precise control over the logging output and format. Use
++// EnableLogs and DisableLogs for simple logging to os.Stdout. Log messages
++// are not printed by default.
++func SetLogger(l *log.Logger) {
++	util.Log = l
++}
++
++// EnableLogs enables printing log messages to os.Stdout. Use SetLogger for
++// more precise control over the logging output and format. Log messages are
++// not printed by default.
++func EnableLogs() {
++	SetLogger(log.New(os.Stdout, "GGPO ", log.Ldate|log.Ltime|log.Lmsgprefix))
++}
++
++// DisableLogs disables printing log messages.
++func DisableLogs() {
++	SetLogger(util.DiscardLogger())
++}
+diff --git a/third/ggpo/peer.go b/third/ggpo/peer.go
+new file mode 100644
+index 0000000..2ed72e4
+--- /dev/null
++++ b/third/ggpo/peer.go
+@@ -0,0 +1,878 @@
++package ggpo
++
++import (
++	"errors"
++	"math"
++	"time"
++
++	"github.com/ikemen-engine/ggpo/internal/input"
++	"github.com/ikemen-engine/ggpo/internal/messages"
++	"github.com/ikemen-engine/ggpo/internal/polling"
++	"github.com/ikemen-engine/ggpo/internal/protocol"
++	"github.com/ikemen-engine/ggpo/internal/util"
++	"github.com/ikemen-engine/ggpo/transport"
++)
++
++const (
++	RecommendationInterval       = 240
++	DefaultDisconnectTimeout     = 5000
++	DefaultDisconnectNotifyStart = 750
++	ChecksumDistance             = 16
++)
++
++type Peer struct {
++	session       Session
++	poll          polling.Poller
++	sync          Sync
++	connection    transport.Connection
++	endpoints     []protocol.UdpProtocol
++	spectators    []protocol.UdpProtocol
++	numSpectators int
++	inputSize     int
++
++	synchronizing        bool
++	numPlayers           int
++	nextRecommendedSleep int
++
++	nextSpectatorFrame    int
++	disconnectTimeout     int
++	disconnectNotifyStart int
++
++	localConnectStatus []messages.UdpConnectStatus
++
++	localPort              int
++	pendingChecksums       util.OrderedMap[int, uint32]
++	confirmedChecksums     util.OrderedMap[int, uint32]
++	confirmedChecksumFrame int
++
++	messageChannel chan transport.MessageChannelItem
++}
++
++func NewPeer(cb Session,
++	localPort int, numPlayers int, inputSize int) Peer {
++	p := Peer{}
++	p.numPlayers = numPlayers
++	p.inputSize = inputSize
++	p.session = cb
++	p.synchronizing = true
++	p.disconnectTimeout = DefaultDisconnectTimeout
++	p.disconnectNotifyStart = DefaultDisconnectNotifyStart
++	var poll polling.Poll = polling.NewPoll()
++	p.poll = &poll
++
++	//p.udp = NewUdp(&p, localPort)
++	p.localPort = localPort
++
++	p.localConnectStatus = make([]messages.UdpConnectStatus, messages.UDPMsgMaxPlayers)
++	for i := 0; i < len(p.localConnectStatus); i++ {
++		p.localConnectStatus[i].LastFrame = -1
++	}
++	var config SyncConfig = NewSyncConfig(
++		p.session, MaxPredictionFrames, p.numPlayers, p.inputSize)
++	config.numPlayers = numPlayers
++	config.inputSize = inputSize
++	config.session = p.session
++	config.numPredictionFrames = MaxPredictionFrames
++	p.sync = NewSync(p.localConnectStatus, &config)
++	p.endpoints = make([]protocol.UdpProtocol, numPlayers)
++	p.spectators = make([]protocol.UdpProtocol, MaxSpectators)
++	p.pendingChecksums = util.NewOrderedMap[int, uint32](16)
++	p.confirmedChecksums = util.NewOrderedMap[int, uint32](16)
++	p.messageChannel = make(chan transport.MessageChannelItem, 256)
++	//messages := make(chan UdpPacket)
++	//p.poll.RegisterLoop(&p.udp, nil )
++	//go p.udp.Read()
++	//go p.udp.ReadMsg(messages)
++	//go p.OnMsg(messages)
++	return p
++}
++
++func (p *Peer) Close() error {
++	for _, e := range p.endpoints {
++		if e.IsInitialized() {
++			e.Close()
++		}
++	}
++	for _, s := range p.spectators {
++		if s.IsInitialized() {
++			s.Close()
++		}
++	}
++	// InitializeConnection may succeed before any remote endpoint is added.
++	if p.connection != nil {
++		p.connection.Close()
++	}
++	return nil
++}
++func (p *Peer) Idle(timeout int, timeFunc ...polling.FuncTimeType) error {
++	if !p.sync.InRollback() {
++		p.HandleMessages()
++		if len(timeFunc) == 0 {
++			p.poll.Pump()
++		} else {
++			p.poll.Pump(timeFunc[0])
++		}
++
++		p.PollUdpProtocolEvents()
++		p.CheckDesync()
++
++		if !p.synchronizing {
++			p.sync.CheckSimulation(timeout)
++
++			// notify all of our endpoints of their local frame number for their
++			// next connection quality report
++			currentFrame := p.sync.FrameCount()
++			for i := 0; i < p.numPlayers; i++ {
++				if p.endpoints[i].IsInitialized() {
++					p.endpoints[i].SetLocalFrameNumber(currentFrame)
++				}
++			}
++
++			var totalMinConfirmed int
++			if p.numPlayers <= 2 {
++				totalMinConfirmed = p.Poll2Players(currentFrame)
++			} else {
++				totalMinConfirmed = p.PollNPlayers(currentFrame)
++			}
++
++			util.Log.Printf("last confirmed frame in p2p backend is %d.\n", totalMinConfirmed)
++			if totalMinConfirmed >= 0 {
++				if totalMinConfirmed == math.MaxInt {
++					return Error{Code: ErrorCodeGeneralFailure, Name: "ErrorCodeGeneralFailure"}
++				}
++				if p.numSpectators > 0 {
++					for p.nextSpectatorFrame <= totalMinConfirmed {
++						util.Log.Printf("pushing frame %d to spectators.\n", p.nextSpectatorFrame)
++
++						var input input.GameInput
++						var inputs [][]byte
++						input.Frame = p.nextSpectatorFrame
++						input.Size = p.inputSize * p.numPlayers
++						inputs, _ = p.sync.GetConfirmedInputs(p.nextSpectatorFrame)
++						for i, _ := range inputs {
++							input.Bits = append(input.Bits, inputs[i]...)
++						}
++						for i := 0; i < p.numSpectators; i++ {
++							p.spectators[i].SendInput(&input)
++						}
++						p.nextSpectatorFrame++
++					}
++				}
++				util.Log.Printf("setting confirmed frame in sync to %d.\n", totalMinConfirmed)
++				p.sync.SetLastConfirmedFrame(totalMinConfirmed)
++			}
++
++			// send timesync notifications if now is the proper time
++			if currentFrame > p.nextRecommendedSleep {
++				var interval float32 = 0.0
++				for i := 0; i < p.numPlayers; i++ {
++					if p.endpoints[i].IsInitialized() {
++						interval = util.MaxAbsFloat32(interval, p.endpoints[i].RecommendFrameDelay())
++					}
++				}
++
++				//if interval > 0 {
++				var info Event
++				info.Code = EventCodeTimeSync
++				info.FramesAhead = interval
++				info.TimeSyncPeriodInFrames = RecommendationInterval
++				p.session.OnEvent(&info)
++				p.nextRecommendedSleep = currentFrame + RecommendationInterval
++				//}
++			}
++			// because GGPO had this
++			if timeout > 0 {
++				time.Sleep(time.Millisecond)
++			}
++		}
++	}
++	return nil
++}
++
++// Checks each endpoint to see if it's running (i.e we haven't called Synchronize or Disconnect
++// on it lately )
++// Again check if it's disconnected (GetPeerConnectionStatus which would check if the user has
++// sent a disconnect message.
++// Try to get the minimum last confirmed frame across all the inputs
++// If by chance the user sent a disconnect request and we haven't disconnected them yet,
++// We disconnect them.
++// The value returned by this function (the total minimum confirmed frame across all the inputs)
++// is used in Idle to set the last confirmed frame in the sync backend, which tells
++// the input queue to discard the frame before that.
++func (p *Peer) Poll2Players(currentFrame int) int {
++	totalMinConfirmed := int32(math.MaxInt32)
++	for i := 0; i < p.numPlayers; i++ {
++		queueConnected := true
++		if p.endpoints[i].IsRunning() {
++			var ignore int32
++			queueConnected = p.endpoints[i].GetPeerConnectStatus(i, &ignore)
++		}
++		if !p.localConnectStatus[i].Disconnected {
++			totalMinConfirmed = util.Min(p.localConnectStatus[i].LastFrame, totalMinConfirmed)
++		}
++		util.Log.Printf("  local endp: connected = %t, last_received = %d, total_min_confirmed = %d.\n",
++			!p.localConnectStatus[i].Disconnected, p.localConnectStatus[i].LastFrame, totalMinConfirmed)
++		if !queueConnected && !p.localConnectStatus[i].Disconnected {
++			util.Log.Printf("disconnecting i %d by remote request.\n", i)
++			p.DisconnectPlayerQueue(i, int(totalMinConfirmed))
++		}
++		util.Log.Printf("  total_min_confirmed = %d.\n", totalMinConfirmed)
++	}
++	return int(totalMinConfirmed)
++}
++
++// Just for parity with GGPO. Don't care to actually use this.
++func (p *Peer) PollNPlayers(currentFrame int) int {
++	var i, queue int
++	var lastRecieved int32
++
++	totalMinConfirmed := int32(math.MaxInt32)
++	for queue = 0; queue < p.numPlayers; queue++ {
++		queueConnected := true
++		queueMinConfirmed := int32(math.MaxInt32)
++		util.Log.Printf("considering queue %d.\n", queue)
++		for i = 0; i < p.numPlayers; i++ {
++			// we're going to do a lot of logic here in consideration of endpoint i.
++			// keep accumulating the minimum confirmed point for all n*n packets and
++			// throw away the rest. -pond3r
++			if p.endpoints[i].IsRunning() {
++				connected := p.endpoints[i].GetPeerConnectStatus(queue, &lastRecieved)
++
++				queueConnected = queueConnected && connected
++				queueMinConfirmed = util.Min(lastRecieved, queueMinConfirmed)
++				util.Log.Printf("  endpoint %d: connected = %t, last_received = %d, queue_min_confirmed = %d.\n",
++					i, connected, lastRecieved, queueMinConfirmed)
++			} else {
++				util.Log.Printf("  endpoint %d: ignoring... not running.\n", i)
++			}
++		}
++		// merge in our local status only if we're still connected!
++		if !p.localConnectStatus[queue].Disconnected {
++			queueMinConfirmed = util.Min(p.localConnectStatus[queue].LastFrame, queueMinConfirmed)
++		}
++		util.Log.Printf("  local endp: connected = %t, last_received = %d, queue_min_confirmed = %d.\n",
++			!p.localConnectStatus[queue].Disconnected, p.localConnectStatus[queue].LastFrame, queueMinConfirmed)
++
++		if queueConnected {
++			totalMinConfirmed = util.Min(queueMinConfirmed, totalMinConfirmed)
++		} else {
++			// check to see if this disconnect notification is further back than we've been before.  If
++			// so, we need to re-adjust.  This can happen when we detect our own disconnect at frame n
++			// and later receive a disconnect notification for frame n-1.
++			if !p.localConnectStatus[queue].Disconnected || p.localConnectStatus[queue].LastFrame > queueMinConfirmed {
++				util.Log.Printf("disconnecting queue %d by remote request.\n", queue)
++				p.DisconnectPlayerQueue(queue, int(queueMinConfirmed))
++			}
++		}
++		util.Log.Printf("  total_min_confirmed = %d.\n", totalMinConfirmed)
++	}
++	return int(totalMinConfirmed)
++}
++
++/*
++Giving each spectator and remote player their own UDP object (which GGPO didn't do)
++a copy of the poll, a copy of our localConnectStatus (might want to send a pointer?)
++Setting the default disconnect timeout and disconnect notify
++And calling the synchronize method, which sends a sync request to that endpoint.
++*/
++func (p *Peer) AddRemotePlayer(ip string, port int, queue int) {
++	p.synchronizing = true
++	p.endpoints[queue] = protocol.NewUdpProtocol(p.connection, queue, ip, port, &p.localConnectStatus)
++	// have to reqgister the loop from here or else the Poll won't see changed state
++	// that we've initiated.
++	p.poll.RegisterLoop(&(p.endpoints[queue]), nil)
++
++	// actually this Idle wouldn't run at all if it wasn't called from here.
++	//p.poll.RegisterLoop(&udp, nil)
++	p.endpoints[queue].SetDisconnectTimeout(p.disconnectTimeout)
++	p.endpoints[queue].SetDisconnectNotifyStart(p.disconnectNotifyStart)
++	p.endpoints[queue].Synchronize()
++}
++
++func (p *Peer) AddSpectator(ip string, port int) error {
++	if p.numSpectators == MaxSpectators {
++		return Error{Code: ErrorCodeTooManySpectators, Name: "ErrorCodeTooManySpectators"}
++	}
++	// Currently, we can only add spectators before the game starts.
++	if !p.synchronizing {
++		return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++	}
++	queue := p.numSpectators
++	p.numSpectators++
++	p.spectators[queue] = protocol.NewUdpProtocol(p.connection, queue+1000, ip, port, &p.localConnectStatus)
++	p.poll.RegisterLoop(&(p.spectators[queue]), nil)
++	p.spectators[queue].SetDisconnectTimeout(p.disconnectTimeout)
++	p.spectators[queue].SetDisconnectNotifyStart(p.disconnectNotifyStart)
++	p.spectators[queue].Synchronize()
++
++	return nil
++}
++
++// Adds player or spectator
++// Maps to top level API function
++func (p *Peer) AddPlayer(player *Player, handle *PlayerHandle) error {
++	if player.PlayerType == PlayerTypeSpectator {
++		return p.AddSpectator(player.Remote.IpAdress, player.Remote.Port)
++	}
++
++	queue := player.PlayerNum - 1
++	if player.PlayerNum < 1 || player.PlayerNum > p.numPlayers {
++		return Error{Code: ErrorCodePlayerOutOfRange, Name: "ErrorCodePlayerOutOfRange"}
++	}
++	*handle = p.QueueToPlayerHandle(queue)
++
++	if player.PlayerType == PlayerTypeRemote {
++		p.AddRemotePlayer(player.Remote.IpAdress, player.Remote.Port, queue)
++	}
++
++	return nil
++}
++
++// Sends input to the synchronization layer and to all the endpoints.
++// Which adds it to those respective queues (inputQueue for synchronization layer, pendingOutput
++// for endpoint)
++// Maps to top level API function.
++func (p *Peer) AddLocalInput(player PlayerHandle, values []byte, size int) error {
++	var queue int
++	var localInput input.GameInput
++	var err error
++
++	if p.sync.InRollback() {
++		return Error{Code: ErrorCodeInRollback, Name: "ErrorCodeInRollback"}
++	}
++	if p.synchronizing {
++		return Error{Code: ErrorCodeNotSynchronized, Name: "ErrorCodeNotSynchronized"}
++	}
++
++	result := p.PlayerHandleToQueue(player, &queue)
++	if result != nil {
++		return result
++	}
++
++	localInput, err = input.NewGameInput(-1, values, size)
++	if err != nil {
++		panic(err)
++	}
++
++	// Feed the input for the current frame into the synchronization layer.
++	if !p.sync.AddLocalInput(queue, &localInput) {
++		return Error{Code: ErrorCodePredictionThreshod, Name: "ErrorCodePredictionThreshod"}
++	}
++
++	if localInput.Frame != input.NullFrame {
++		// Update the local connect status state to indicate that we've got a
++		// confirmed local frame for this player.  this must come first so it
++		// gets incorporated into the next packet we send.
++		// - pond3r
++
++		p.confirmedChecksumFrame = localInput.Frame - ChecksumDistance
++
++		localInput.Checksum = 0
++		if p.confirmedChecksumFrame >= 0 {
++			cs, ok := p.pendingChecksums.Get(p.confirmedChecksumFrame)
++			if ok {
++				localInput.Checksum = cs
++			}
++			p.confirmedChecksums.Set(p.confirmedChecksumFrame, localInput.Checksum)
++			p.pendingChecksums.Delete(p.confirmedChecksumFrame)
++			util.Log.Printf("Frame %d: Send checksum for frame %d, val %d\n", localInput.Frame, p.confirmedChecksumFrame, localInput.Checksum)
++		}
++
++		util.Log.Printf("setting local connect status for local queue %d to %d", queue, localInput.Frame)
++		p.localConnectStatus[queue].LastFrame = int32(localInput.Frame)
++
++		// Send the input to all the remote players.
++		for i := 0; i < p.numPlayers; i++ {
++			if p.endpoints[i].IsInitialized() {
++				p.endpoints[i].SendInput(&localInput)
++			}
++		}
++	}
++
++	return nil
++}
++
++// Maps to top level API function
++// Returns input from all players (both local and remote) from the input queue
++// Which can be a prediction (i.e the last frame) or the latest input recieved
++// Also used to fetch inputs from GGPO  to update the game states during the advance
++// frame callback
++func (p *Peer) SyncInput(disconnectFlags *int) ([][]byte, error) {
++	// Wait until we've started to return inputs.
++	if p.synchronizing {
++		return nil, Error{Code: ErrorCodeNotSynchronized, Name: "ErrorCodeNotSynchronized"}
++	}
++	values, flags := p.sync.SynchronizeInputs()
++
++	if disconnectFlags != nil {
++		*disconnectFlags = flags
++	}
++	return values, nil
++}
++
++// Maps to top level API AdvanceFrame function
++// sync.IncremenetFrame increments the frame count and saves the
++// current state via user provided callback
++// Do Poll Not only runs everything in the system that's registered to poll
++// it... well does everything. I'll get ti it when I get to it.
++func (p *Peer) AdvanceFrame(checksum uint32) error {
++	util.Log.Printf("End of frame (%d)...\n", p.sync.FrameCount())
++
++	var maxDiff int = 0
++	currentFrame := p.sync.FrameCount()
++	oldChecksum, ok := p.pendingChecksums.Get(currentFrame)
++	if ok {
++		max := p.pendingChecksums.Greatest().Key
++		diff := max - currentFrame
++		maxDiff = util.Max(maxDiff, diff)
++		util.Log.Printf("Replace local checksum for frame %d: %d with %d, newest frame is %d, max diff %d\n", currentFrame, oldChecksum, checksum, max, maxDiff)
++	} else {
++		util.Log.Printf("Added local checksum for frame %d: %d\n", currentFrame, checksum)
++	}
++	p.pendingChecksums.Set(currentFrame, checksum)
++
++	p.sync.AdvanceFrame()
++	err := p.Idle(0)
++	if err != nil {
++		panic(err)
++	}
++
++	return nil
++}
++
++// Handles all the events  for all spactors and players. Done OnPoll
++func (p *Peer) PollUdpProtocolEvents() {
++	for i := 0; i < p.numPlayers; i++ {
++		p.endpoints[i].StartPollLoop()
++		for {
++			evt, err := p.endpoints[i].GetEvent()
++			if err != nil {
++				break
++			} else {
++				err := p.OnUdpProtocolPeerEvent(evt, i)
++				if err != nil {
++					panic(err)
++				}
++			}
++		}
++		p.endpoints[i].EndPollLoop()
++	}
++	for i := 0; i < p.numSpectators; i++ {
++		for {
++			evt, err := p.spectators[i].GetEvent()
++			if err != nil {
++				break
++			} else {
++				p.OnUdpProtocolSpectatorEvent(evt, i)
++			}
++		}
++	}
++}
++
++// Takes events that come from UdpProtocol and if they are input,
++// Sends remote input to Sync which adds it to its InputQueue
++// Also updates that lastFrame for this endpoint as the most
++// recently recived frame.
++// Disconnects if necesary
++func (p *Peer) OnUdpProtocolPeerEvent(evt *protocol.UdpProtocolEvent, queue int) error {
++	handle := p.QueueToPlayerHandle(queue)
++	p.OnUdpProtocolEvent(evt, handle)
++	switch evt.Type() {
++	case protocol.InputEvent:
++		if !p.localConnectStatus[queue].Disconnected {
++			currentRemoteFrame := p.localConnectStatus[queue].LastFrame
++			newRemoteFrame := evt.Input.Frame
++			if !(currentRemoteFrame == -1 || int32(newRemoteFrame) == (currentRemoteFrame+1)) {
++				return errors.New("ggpo Peer OnUdpProtocolPeerEvent : !(currentRemoteFrame == -1 || newRemoteFrame == (currentRemoteFrame+1)) ")
++			}
++
++			p.sync.AddRemoteInput(queue, &evt.Input)
++			// Notify the other endpoints which frame we received from a peer
++			util.Log.Printf("setting remote connect status for queue %d to %d\n", queue,
++				evt.Input.Frame)
++			p.localConnectStatus[queue].LastFrame = int32(evt.Input.Frame)
++
++			remoteChecksum := evt.Input.Checksum
++			checksumFrame := newRemoteFrame - ChecksumDistance
++			if checksumFrame >= p.endpoints[queue].RemoteFrameDelay()-1 {
++				p.endpoints[queue].SetIncomingRemoteChecksum(checksumFrame, remoteChecksum)
++			}
++
++			if checksumFrame%120 == 0 {
++				util.Log.Printf("Received checksum for frame %d, remote checksum is %d\n", checksumFrame, remoteChecksum)
++			}
++
++		}
++	case protocol.DisconnectedEvent:
++		err := p.DisconnectPlayer(handle)
++		if err != nil {
++			panic(err)
++		}
++	}
++	return nil
++}
++
++// Every Idle, every endpoint and spectator goes through its event queue
++// handles each event and pops it from the queue.  Though most of the logic
++// for handling these events is the same (see: OnUdpProtocolEvent ), spectators
++// and peers handle certain events differently
++func (p *Peer) OnUdpProtocolSpectatorEvent(evt *protocol.UdpProtocolEvent, queue int) {
++	handle := p.QueueToSpectatorHandle(queue)
++	p.OnUdpProtocolEvent(evt, handle)
++
++	var info Event
++	switch evt.Type() {
++	case protocol.DisconnectedEvent:
++		p.spectators[queue].Disconnect()
++
++		info.Code = EventCodeDisconnectedFromPeer
++		info.Player = handle
++		p.session.OnEvent(&info)
++	}
++}
++
++// Logic for parsing UdpProtocol events and sending them up to the user via callbacks.
++// In P2P Backend, called by OnUdpProtocolSpectatorEvent and OnUdpProtocolPeerEvent,
++// which themselves are called by PollUdpProtocolEvents, which happens every Idle
++func (p *Peer) OnUdpProtocolEvent(evt *protocol.UdpProtocolEvent, handle PlayerHandle) {
++	var info Event
++
++	switch evt.Type() {
++	case protocol.ConnectedEvent:
++		info.Code = EventCodeConnectedToPeer
++		info.Player = handle
++		p.session.OnEvent(&info)
++
++	case protocol.SynchronizingEvent:
++		info.Code = EventCodeSynchronizingWithPeer
++		info.Player = handle
++		info.Count = evt.Count
++		info.Total = evt.Total
++		p.session.OnEvent(&info)
++
++	case protocol.SynchronziedEvent:
++		info.Code = EventCodeSynchronizedWithPeer
++		info.Player = handle
++		p.session.OnEvent(&info)
++
++		p.CheckInitialSync()
++
++	case protocol.NetworkInterruptedEvent:
++		info.Code = EventCodeConnectionInterrupted
++		info.Player = handle
++		info.DisconnectTimeout = evt.DisconnectTimeout
++		p.session.OnEvent(&info)
++
++	case protocol.NetworkResumedEvent:
++		info.Code = EventCodeConnectionResumed
++		info.Player = handle
++		p.session.OnEvent(&info)
++	}
++}
++
++/*
++  - Called only as the result of a local decision to disconnect.  The remote
++  - decisions to disconnect are a result of us parsing the peer_connect_settings
++  - blob in every endpoint periodically.
++  - - pond3r
++    This is the function that's called when the UdpProtocol endpoint recogniizes
++    a disconnect (that lastRecvTime + disconnectTimeout < now) and sends that event
++    up to the backend.
++    Also maps to API function
++*/
++func (p *Peer) DisconnectPlayer(player PlayerHandle) error {
++	var queue int
++
++	result := p.PlayerHandleToQueue(player, &queue)
++	if result != nil {
++		return result
++	}
++
++	if p.localConnectStatus[queue].Disconnected {
++		return Error{Code: ErrorCodePlayerDisconnected, Name: "ErrorCodePlayerDisconnected"}
++	}
++
++	if !p.endpoints[queue].IsInitialized() {
++		currentFrame := p.sync.FrameCount()
++		// xxx: we should be tracking who the local player is, but for now assume
++		// that if the endpoint is not initalized, this must be the local player. - pond3r
++
++		// 100% sure this assumption won't be applicable for me, but we'll see.
++		// Not that it matters lol
++		util.Log.Printf("Disconnecting local player %d at frame %d by user request.\n",
++			queue, p.localConnectStatus[queue].LastFrame)
++		// Disconnecting all the other players too
++		for i := 0; i < p.numPlayers; i++ {
++			if p.endpoints[i].IsInitialized() {
++				p.DisconnectPlayerQueue(i, currentFrame)
++			}
++		}
++	} else {
++		util.Log.Printf("Disconnecting queue %d at frame %d by user request.\n",
++			queue, p.localConnectStatus[queue].LastFrame)
++		p.DisconnectPlayerQueue(queue, int(p.localConnectStatus[queue].LastFrame))
++	}
++	return nil
++}
++
++/*
++Sets the enpoints' state to disconnected.
++Also sets localConnectStatus to disconnected which is used all over the p2p backend to
++verify if an endpoint is connected
++And adjusts the simulation to get to syncto frames
++Then sends the Disconnect Event up to te user.
++*/
++func (p *Peer) DisconnectPlayerQueue(queue int, syncto int) {
++	var info Event
++	frameCount := p.sync.FrameCount()
++
++	p.endpoints[queue].Disconnect()
++
++	util.Log.Printf("Changing queue %d local connect status for last frame from %d to %d on disconnect request (current: %d).\n",
++		queue, p.localConnectStatus[queue].LastFrame, syncto, frameCount)
++
++	p.localConnectStatus[queue].Disconnected = true
++	p.localConnectStatus[queue].LastFrame = int32(syncto)
++
++	// LastFrame may be -1 before the first remote input.
++	// Keep that sentinel out of the saved-state lookup.
++	rollbackFrame := util.Max(syncto, 0)
++	if rollbackFrame < frameCount {
++		util.Log.Printf("adjusting simulation to account for the fact that %d disconnected @ %d.\n", queue, syncto)
++		p.sync.AdjustSimulation(rollbackFrame)
++		util.Log.Printf("Finished adjusting simulation.\n")
++	}
++
++	info.Code = EventCodeDisconnectedFromPeer
++	info.Player = p.QueueToPlayerHandle(queue)
++	p.session.OnEvent(&info)
++
++	p.CheckInitialSync()
++}
++
++/*
++Gets network stats for that specific play from their UdpProtocol Endpoint
++Includes ping, sendQueLen, kbpsSent, remoteFramesBehind and remoteFrameAdvantage
++All coming from the UdpProtocol Endpoint
++Maps to top level API function.
++*/
++func (p *Peer) GetNetworkStats(player PlayerHandle) (protocol.NetworkStats, error) {
++	var queue int
++
++	result := p.PlayerHandleToQueue(player, &queue)
++	if result != nil {
++		return protocol.NetworkStats{}, result
++	}
++
++	return p.endpoints[queue].GetNetworkStats(), nil
++}
++
++/*
++Sets frame delay for that specific player's input queue in Sync.
++Frame delay is used in the input queue, when remote inputs are recieved from
++the UdpProtocol and sent to Sync, sync then adds those inputs to the input queue
++for that specific player, and sort of artificially corrects the frame that player
++should be on by increasing it frameDelay amount
++Maps to top level API function
++*/
++func (p *Peer) SetFrameDelay(player PlayerHandle, delay int) error {
++	var queue int
++
++	result := p.PlayerHandleToQueue(player, &queue)
++	if result != nil {
++		return result
++	}
++
++	p.sync.SetFrameDelay(queue, delay)
++	for i := 0; i < p.numPlayers; i++ {
++		if p.endpoints[i].IsInitialized() {
++			p.endpoints[i].SetFrameDelay(delay)
++		}
++	}
++
++	return nil
++}
++
++/*
++		Propagates the disconnect timeout to all of the endpoints.
++	    lastRecvTime + disconnectTimeout < now means the endpoint has stopped
++		recieving packets and we are now disconnecting, effectively timing out.
++		The Udp endpoint propogates the Disconnect Event up to the backend.
++		Which, in the P2P Backend, Disconnects the Player from the backend,
++		then sends the event upward.
++		Mapped to top level API function
++*/
++func (p *Peer) SetDisconnectTimeout(timeout int) error {
++	p.disconnectTimeout = timeout
++	for i := 0; i < p.numPlayers; i++ {
++		if p.endpoints[i].IsInitialized() {
++			p.endpoints[i].SetDisconnectTimeout(p.disconnectTimeout)
++		}
++	}
++	return nil
++}
++
++/*
++Propagates the disconnect notify start to all of the endpoints
++lastRecTime + disconnectNotifyStart < now  means the endpoint has
++stopped recieving packets. The udp endpoint starts sending a NetworkInterrupted event
++up to the backend, check sends it up to the user via the API's callbacks.
++Mapped to top level Api function
++*/
++func (p *Peer) SetDisconnectNotifyStart(timeout int) error {
++	p.disconnectNotifyStart = timeout
++	for i := 0; i < p.numPlayers; i++ {
++		if p.endpoints[i].IsInitialized() {
++			p.endpoints[i].SetDisconnectNotifyStart(p.disconnectNotifyStart)
++		}
++	}
++	return nil
++}
++
++/*
++Used for getting the index for PlayerHandle mapped arrays such as
++endpoints, localConnectStatus, andinputQueues in Sync
++*/
++func (p *Peer) PlayerHandleToQueue(player PlayerHandle, queue *int) error {
++	offset := int(player) - 1
++	if offset < 0 || offset >= p.numPlayers {
++		return Error{Code: ErrorCodeInvalidPlayerHandle, Name: "ErrorCodeInvalidPlayerHandle"}
++	}
++	*queue = offset
++	return nil
++}
++
++/*
++Does the inverse of the above. Turns index index into human readible number
++*/
++func (p *Peer) QueueToPlayerHandle(queue int) PlayerHandle {
++	return PlayerHandle(queue + 1)
++}
++
++func (p *Peer) QueueToSpectatorHandle(queue int) PlayerHandle {
++	return PlayerHandle(queue + 1000) /* out of range of the player array, basically  - pond3r*/
++}
++
++/*
++Propogates messages to all endpoints and spectators (?)
++As of right now it hands the message off to the first endpoint that
++handles it then returns?
++*/
++func (p *Peer) HandleMessage(ipAddress string, port int, msg messages.UDPMessage, length int) {
++	for i := 0; i < p.numPlayers; i++ {
++		if p.endpoints[i].HandlesMsg(ipAddress, port) {
++			p.endpoints[i].OnMsg(msg, length)
++			return
++		}
++	}
++	for i := 0; i < p.numSpectators; i++ {
++		if p.spectators[i].HandlesMsg(ipAddress, port) {
++			p.spectators[i].OnMsg(msg, length)
++			return
++		}
++	}
++}
++
++func (p *Peer) HandleMessages() {
++	for {
++		select {
++		case mi, ok := <-p.messageChannel:
++			if ok {
++				p.HandleMessage(mi.Peer.Ip, mi.Peer.Port, mi.Message, mi.Length)
++			} else {
++				// The channel was closed, exit the function
++				return
++			}
++		default:
++			// There was no message to read, exit the function
++			return
++		}
++	}
++}
++
++/*
++Checks if all endpoints and spectators are initialized and synchronized
++and sends an event when they are.
++*/
++func (p *Peer) CheckInitialSync() {
++	var i int
++
++	if p.synchronizing {
++		// Check to see if everyone is now synchronized. If so,
++		// go and tell the client that we're ok to accept in.
++		for i = 0; i < p.numPlayers; i++ {
++			// xxx: IsInitialized() must go... we're actually using it as a proxy for "represents the local player" -pond3r
++			if p.endpoints[i].IsInitialized() && !p.endpoints[i].IsSynchronized() && !p.localConnectStatus[i].Disconnected {
++				return
++			}
++		}
++
++		for i = 0; i < p.numSpectators; i++ {
++			if p.spectators[i].IsInitialized() && !p.spectators[i].IsSynchronized() {
++				return
++			}
++		}
++
++		var info Event
++		info.Code = EventCodeRunning
++		p.session.OnEvent(&info)
++		p.synchronizing = false
++	}
++}
++
++func (p *Peer) CheckDesync() {
++	keysToRemove := make([]int, 0, 16)
++	for i := 0; i < len(p.endpoints); i++ {
++		for _, k := range p.endpoints[i].RemoteChecksums.Keys() {
++			checksumFrame := k
++			remoteChecksum, _ := p.endpoints[i].RemoteChecksums.Get(k)
++			localChecksum, ok := p.confirmedChecksums.Get(checksumFrame)
++			if ok {
++				keysToRemove = append(keysToRemove, k)
++				if remoteChecksum != localChecksum {
++					var info Event
++					info.Code = EventCodeDesync
++					info.NumFrameOfDesync = checksumFrame
++					info.LocalChecksum = int(localChecksum)
++					info.RemoteChecksum = int(remoteChecksum)
++					p.session.OnEvent(&info)
++					util.Log.Printf("DESYNC Checksum frame %d, local: %d, remote %d, size of checksum maps: %d,%d\n",
++						checksumFrame, localChecksum, remoteChecksum, p.confirmedChecksums.Len(), p.endpoints[i].RemoteChecksums.Len())
++				}
++
++				if checksumFrame%100 == 0 {
++					util.Log.Printf("Checksum frame %d, local: %d, remote %d, size of checksum maps: %d,%d\n", checksumFrame, localChecksum, remoteChecksum, p.confirmedChecksums.Len(), p.endpoints[i].RemoteChecksums.Len())
++				}
++			}
++		}
++		for _, key := range keysToRemove {
++			p.endpoints[i].RemoteChecksums.Delete(key)
++		}
++	}
++
++	for _, key := range keysToRemove {
++		confirmedFrames := p.confirmedChecksums.Keys()
++		for _, frame := range confirmedFrames {
++			if frame <= key {
++				p.confirmedChecksums.Delete(frame)
++			}
++		}
++	}
++}
++
++func (p *Peer) InitializeConnection(t ...transport.Connection) error {
++	if len(t) == 0 {
++		connection, err := transport.NewUdp(p, p.localPort)
++		if err != nil {
++			return err
++		}
++		p.connection = connection
++		return nil
++	}
++	p.connection = t[0]
++	return nil
++}
++
++func (p *Peer) Start() {
++	go p.connection.Read(p.messageChannel)
++}
+diff --git a/third/ggpo/player.go b/third/ggpo/player.go
+new file mode 100644
+index 0000000..9b00de9
+--- /dev/null
++++ b/third/ggpo/player.go
+@@ -0,0 +1,56 @@
++package ggpo
++
++type PlayerHandle int
++
++type PlayerType int
++
++const (
++	PlayerTypeLocal PlayerType = iota
++	PlayerTypeRemote
++	PlayerTypeSpectator
++)
++
++const InvalidHandle int = -1
++
++type Player struct {
++	Size       int
++	PlayerType PlayerType
++	PlayerNum  int
++	Remote     RemotePlayer
++}
++
++func NewLocalPlayer(size int, playerNum int) Player {
++	return Player{
++		Size:       size,
++		PlayerNum:  playerNum,
++		PlayerType: PlayerTypeLocal}
++}
++
++func NewRemotePlayer(size int, playerNum int, ipAdress string, port int) Player {
++	return Player{
++		Size:       size,
++		PlayerNum:  playerNum,
++		PlayerType: PlayerTypeRemote,
++		Remote: RemotePlayer{
++			IpAdress: ipAdress,
++			Port:     port},
++	}
++}
++func NewSpectatorPlayer(size int, ipAdress string, port int) Player {
++	return Player{
++		Size:       size,
++		PlayerType: PlayerTypeSpectator,
++		Remote: RemotePlayer{
++			IpAdress: ipAdress,
++			Port:     port},
++	}
++}
++
++type RemotePlayer struct {
++	IpAdress string
++	Port     int
++}
++
++type LocalEndpoint struct {
++	playerNum int
++}
+diff --git a/third/ggpo/session.go b/third/ggpo/session.go
+new file mode 100644
+index 0000000..87004da
+--- /dev/null
++++ b/third/ggpo/session.go
+@@ -0,0 +1,35 @@
++package ggpo
++
++type Session interface {
++	SaveGameState(stateID int) int
++	LoadGameState(stateID int)
++	AdvanceFrame(flags int)
++	OnEvent(info *Event)
++	//SetBackend(backend Backend)
++}
++
++const DefaultChecksum = 0
++
++type SessionCallbacks struct {
++	BeginGame     beginGame
++	SaveGameState saveGameState
++	LoadGameState loadGameState
++	LogGameState  logGameState
++	FreeBuffer    freeBuffer
++	AdvanceFrame  advanceFrame
++	OnEvent       onEvent
++}
++
++type beginGame func(game string) bool
++
++/*
++type saveGameState func(len *int, checksum *int, frame int) ([]byte, bool)
++type loadGameState func(buffer []byte, len int) bool
++*/
++type saveGameState func(stateID int) ([]byte, bool)
++type loadGameState func(stateID int) bool
++
++type logGameState func(fileName string, buffer []byte, len int) bool
++type freeBuffer func(buffer []byte)
++type advanceFrame func(flags int) bool
++type onEvent func(info *Event) bool
+diff --git a/third/ggpo/spectator.go b/third/ggpo/spectator.go
+new file mode 100644
+index 0000000..338e0c5
+--- /dev/null
++++ b/third/ggpo/spectator.go
+@@ -0,0 +1,252 @@
++package ggpo
++
++import (
++	"github.com/ikemen-engine/ggpo/internal/input"
++	"github.com/ikemen-engine/ggpo/internal/messages"
++	"github.com/ikemen-engine/ggpo/internal/polling"
++	"github.com/ikemen-engine/ggpo/internal/protocol"
++	"github.com/ikemen-engine/ggpo/internal/util"
++	"github.com/ikemen-engine/ggpo/transport"
++)
++
++const SpectatorFrameBufferSize int = 32
++const DefaultMaxFramesBehind int = 10
++const DefaultCatchupSpeed int = 1
++
++type Spectator struct {
++	session         Session
++	poll            polling.Poller
++	connection      transport.Connection
++	host            protocol.UdpProtocol
++	synchonizing    bool
++	inputSize       int
++	numPlayers      int
++	nextInputToSend int
++	inputs          []input.GameInput
++	hostIp          string
++	hostPort        int
++	framesBehind    int
++	localPort       int
++	currentFrame    int
++	messageChannel  chan transport.MessageChannelItem
++}
++
++func NewSpectator(cb Session, localPort int, numPlayers int, inputSize int, hostIp string, hostPort int) Spectator {
++	s := Spectator{}
++	s.numPlayers = numPlayers
++	s.inputSize = inputSize
++	s.nextInputToSend = 0
++
++	s.session = cb
++	s.synchonizing = true
++
++	inputs := make([]input.GameInput, SpectatorFrameBufferSize)
++	for _, i := range inputs {
++		i.Frame = -1
++	}
++	s.inputs = inputs
++	//port := strconv.Itoa(hostPort)
++	//s.udp = NewUdp(&s, localPort)
++	s.hostIp = hostIp
++	s.hostPort = hostPort
++	s.localPort = localPort
++	var poll polling.Poll = polling.NewPoll()
++	s.poll = &poll
++	s.messageChannel = make(chan transport.MessageChannelItem, 200)
++	//go s.udp.Read()
++	return s
++}
++
++func (s *Spectator) Idle(timeout int, timeFunc ...polling.FuncTimeType) error {
++	s.HandleMessages()
++	if len(timeFunc) == 0 {
++		s.poll.Pump()
++	} else {
++		s.poll.Pump(timeFunc[0])
++	}
++	s.PollUdpProtocolEvents()
++
++	if s.framesBehind > 0 {
++		for s.nextInputToSend < s.currentFrame {
++			s.session.AdvanceFrame(0)
++			util.Log.Printf("In Spectator: skipping frame %d\n", s.nextInputToSend)
++			s.nextInputToSend++
++		}
++		s.framesBehind = 0
++	}
++
++	return nil
++}
++
++func (s *Spectator) SyncInput(disconnectFlags *int) ([][]byte, error) {
++	// Wait until we've started to return inputs
++	if s.synchonizing {
++		return nil, Error{Code: ErrorCodeNotSynchronized, Name: "ErrorCodeNotSynchronized"}
++	}
++
++	input := s.inputs[s.nextInputToSend%SpectatorFrameBufferSize]
++	s.currentFrame = input.Frame
++	if input.Frame < s.nextInputToSend {
++		// Haved recieved input from the host yet. Wait
++		return nil, Error{Code: ErrorCodePredictionThreshod, Name: "ErrorCodePredictionThreshod"}
++
++	}
++	if input.Frame > s.nextInputToSend {
++		s.framesBehind = input.Frame - s.nextInputToSend
++		// The host is way way way far ahead of the spetator. How'd this
++		// happen? Any, the input we need is gone forever.
++		return nil, Error{Code: ErrorCodeGeneralFailure, Name: "ErrorCodeGeneralFailure"}
++	}
++	//s.framesBehind = 0
++
++	//Assert(size >= s.inputSize*s.numPlayers)
++	values := make([][]byte, s.numPlayers)
++	offset := 0
++	counter := 0
++	for offset < len(input.Bits) {
++		values[counter] = input.Bits[offset : s.inputSize+offset]
++		offset += s.inputSize
++		counter++
++	}
++
++	if disconnectFlags != nil {
++		*disconnectFlags = 0 // xxx: we should get them from the host! -pond3r
++	}
++	s.nextInputToSend++
++	return values, nil
++}
++
++func (s *Spectator) AdvanceFrame(checksum uint32) error {
++	util.Log.Printf("End of frame (%d)...\n", s.nextInputToSend-1)
++	s.Idle(0)
++	s.PollUdpProtocolEvents()
++
++	return nil
++}
++
++func (s *Spectator) PollUdpProtocolEvents() {
++	for {
++		evt, ok := s.host.GetEvent()
++		if ok != nil {
++			break
++		} else {
++			s.OnUdpProtocolEvent(evt)
++		}
++	}
++}
++
++func (s *Spectator) OnUdpProtocolEvent(evt *protocol.UdpProtocolEvent) {
++	var info Event
++	switch evt.Type() {
++	case protocol.ConnectedEvent:
++		info.Code = EventCodeConnectedToPeer
++		info.Player = 0
++		s.session.OnEvent(&info)
++
++	case protocol.SynchronizingEvent:
++		info.Code = EventCodeSynchronizingWithPeer
++		info.Player = 0
++		info.Count = evt.Count
++		info.Total = evt.Total
++		s.session.OnEvent(&info)
++
++	case protocol.SynchronziedEvent:
++		if s.synchonizing {
++			info.Code = EventCodeSynchronizedWithPeer
++			info.Player = 0
++			s.session.OnEvent(&info)
++
++			info.Code = EventCodeRunning
++			s.session.OnEvent(&info)
++			s.synchonizing = false
++		}
++
++	case protocol.NetworkInterruptedEvent:
++		info.Code = EventCodeConnectionInterrupted
++		info.Player = 0
++		info.DisconnectTimeout = evt.DisconnectTimeout
++		s.session.OnEvent(&info)
++
++	case protocol.NetworkResumedEvent:
++		info.Code = EventCodeConnectionResumed
++		info.Player = 0
++		s.session.OnEvent(&info)
++
++	case protocol.DisconnectedEvent:
++		info.Code = EventCodeDisconnectedFromPeer
++		info.Player = 0
++		s.session.OnEvent(&info)
++
++	case protocol.InputEvent:
++		input := evt.Input
++
++		s.host.SetLocalFrameNumber(input.Frame)
++		s.host.SendInputAck()
++		s.inputs[input.Frame%SpectatorFrameBufferSize] = input
++	}
++}
++
++func (s *Spectator) HandleMessage(ipAddress string, port int, msg messages.UDPMessage, len int) {
++	if s.host.HandlesMsg(ipAddress, port) {
++		s.host.OnMsg(msg, len)
++	}
++}
++
++func (p *Spectator) AddLocalInput(player PlayerHandle, values []byte, size int) error {
++	return nil
++}
++
++func (s *Spectator) AddPlayer(player *Player, handle *PlayerHandle) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++
++// We must 'impliment' these for this to be a true Session
++func (s *Spectator) DisconnectPlayer(handle PlayerHandle) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *Spectator) GetNetworkStats(handle PlayerHandle) (protocol.NetworkStats, error) {
++	return protocol.NetworkStats{}, Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *Spectator) SetFrameDelay(player PlayerHandle, delay int) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *Spectator) SetDisconnectTimeout(timeout int) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *Spectator) SetDisconnectNotifyStart(timeout int) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *Spectator) Close() error {
++	if s.connection != nil {
++		s.connection.Close()
++	}
++	return nil
++}
++func (s *Spectator) InitializeConnection(c ...transport.Connection) error {
++	if len(c) == 0 {
++		connection, err := transport.NewUdp(s, s.localPort)
++		if err != nil {
++			return err
++		}
++		s.connection = connection
++		return nil
++	}
++	s.connection = c[0]
++	return nil
++}
++
++func (s *Spectator) HandleMessages() {
++	for i := 0; i < len(s.messageChannel); i++ {
++		mi := <-s.messageChannel
++		s.HandleMessage(mi.Peer.Ip, mi.Peer.Port, mi.Message, mi.Length)
++	}
++}
++
++func (s *Spectator) Start() {
++	go s.connection.Read(s.messageChannel)
++
++	s.host = protocol.NewUdpProtocol(s.connection, 0, s.hostIp, s.hostPort, nil)
++	s.poll.RegisterLoop(&s.host, nil)
++	s.host.Synchronize()
++
++}
+diff --git a/third/ggpo/sync.go b/third/ggpo/sync.go
+new file mode 100644
+index 0000000..2660bd5
+--- /dev/null
++++ b/third/ggpo/sync.go
+@@ -0,0 +1,339 @@
++package ggpo
++
++import (
++	"errors"
++
++	"github.com/ikemen-engine/ggpo/internal/util"
++
++	"github.com/ikemen-engine/ggpo/internal/input"
++	"github.com/ikemen-engine/ggpo/internal/messages"
++)
++
++type Sync struct {
++	session    Session
++	savedState savedState
++	config     SyncConfig
++
++	rollingBack         bool
++	lastConfirmedFrame  int
++	frameCount          int
++	maxPredictionFrames int
++
++	inputQueues []input.InputQueue
++
++	localConnectStatus []messages.UdpConnectStatus
++}
++
++//const MaxPredictionFrames int = 8
++
++type SyncConfig struct {
++	session             Session
++	numPredictionFrames int
++	numPlayers          int
++	inputSize           int
++}
++
++type SyncEvntType int
++
++const SyncConfirmedInput SyncEvntType = 0
++
++type savedFrame struct {
++	frame    int
++	checksum int
++}
++
++type savedState struct {
++	frames []savedFrame
++	head   int
++}
++
++func NewSync(status []messages.UdpConnectStatus, config *SyncConfig) Sync {
++	s := Sync{
++		config:              *config,
++		session:             config.session,
++		maxPredictionFrames: config.numPredictionFrames,
++		localConnectStatus:  status,
++		frameCount:          0,
++		lastConfirmedFrame:  -1,
++		rollingBack:         false,
++		savedState: savedState{
++			frames: make([]savedFrame, MaxPredictionFrames+2)},
++	}
++	s.CreateQueues(*config)
++	return s
++}
++func NewSyncConfig(session Session, numPredictionFrames int,
++	numPlayers int, inputSize int) SyncConfig {
++	return SyncConfig{
++		session:             session,
++		numPredictionFrames: numPredictionFrames,
++		numPlayers:          numPlayers,
++		inputSize:           inputSize,
++	}
++}
++func (s *SyncConfig) InputSize() int {
++	return s.inputSize
++}
++
++// using close to mean delete
++func (s *Sync) Close() {
++	// delete frames manually here rather than in a destructor of the sendFrame
++	// structure so we cna efficiently copy frames via weak references
++	// - pond3r
++	s.inputQueues = nil
++}
++
++func (s *Sync) SetLastConfirmedFrame(frame int) {
++	s.lastConfirmedFrame = frame
++	if s.lastConfirmedFrame > 0 {
++		for i := 0; i < s.config.numPlayers; i++ {
++			err := s.inputQueues[i].DiscardConfirmedFrames(frame - 1)
++			if err != nil {
++				panic(err)
++			}
++		}
++	}
++}
++
++func (s *Sync) AddLocalInput(queue int, input *input.GameInput) bool {
++	framesBehind := s.frameCount - s.lastConfirmedFrame
++	if s.frameCount >= s.maxPredictionFrames && framesBehind >= s.maxPredictionFrames {
++		util.Log.Printf("Rejecting input from emulator: reached prediction barrier.\n")
++		return false
++	}
++
++	if s.frameCount == 0 {
++		s.SaveCurrentFrame()
++	}
++
++	util.Log.Printf("Sending undelayed local frame %d to queue %d.\n", s.frameCount, queue)
++	input.Frame = s.frameCount
++	err := s.inputQueues[queue].AddInput(input)
++	if err != nil {
++		panic(err)
++	}
++
++	return true
++}
++
++func (s *Sync) AddRemoteInput(queue int, input *input.GameInput) {
++
++	err := s.inputQueues[queue].AddInput(input)
++	if err != nil {
++		panic(err)
++	}
++}
++
++// originally took in a void ptr buffer and filled it with input
++// maybe i should return that the filled buffer instead idk
++// used by p2pbackend
++func (s *Sync) GetConfirmedInputs(frame int) ([][]byte, int) {
++	disconnectFlags := 0
++	//Assert(size >= s.config.numPlayers*s.config.inputSize)
++
++	//values := make([]byte, size)
++	var values [][]byte
++	for i := 0; i < s.config.numPlayers; i++ {
++		var input input.GameInput
++		if (s.localConnectStatus[i].Disconnected) && (int32(frame) > s.localConnectStatus[i].LastFrame) {
++			disconnectFlags |= (1 << i)
++			input.Erase()
++		} else {
++			_, err := s.inputQueues[i].GetConfirmedInput(frame, &input)
++			if err != nil {
++				panic(err)
++			}
++		}
++		// this was originally a memcpy
++		values = append(values, input.Bits)
++	}
++	return values, disconnectFlags
++}
++
++// used by p2pbackend
++func (s *Sync) SynchronizeInputs() ([][]byte, int) {
++	disconnectFlags := 0
++	//Assert(size >= s.config.numPlayers*s.config.inputSize)
++
++	//values := make([]byte, size)
++	var values [][]byte
++	for i := 0; i < s.config.numPlayers; i++ {
++		var input input.GameInput
++		if s.localConnectStatus[i].Disconnected && int32(s.frameCount) > s.localConnectStatus[i].LastFrame {
++			disconnectFlags |= (1 << i)
++			input.Erase()
++		} else {
++			_, err := s.inputQueues[i].GetInput(s.frameCount, &input)
++			if err != nil {
++				panic(err)
++			}
++		}
++		values = append(values, input.Bits)
++	}
++	return values, disconnectFlags
++}
++
++func (s *Sync) CheckSimulation(timeout int) {
++
++	var seekTo int
++	if !s.CheckSimulationConsistency(&seekTo) {
++		err := s.AdjustSimulation(seekTo)
++		if err != nil {
++			panic(err)
++		}
++	}
++}
++
++func (s *Sync) AdvanceFrame() {
++	s.frameCount++
++
++	s.SaveCurrentFrame()
++}
++
++func (s *Sync) AdjustSimulation(seekTo int) error {
++	frameCount := s.frameCount
++	count := s.frameCount - seekTo
++
++	util.Log.Printf("Catching up\n")
++	s.rollingBack = true
++
++	// flush our input queue and load the last frame
++	err := s.LoadFrame(seekTo)
++	if err != nil {
++		panic(err)
++	}
++
++	if s.frameCount != seekTo {
++		return errors.New("ggpo Sync AdjustSimulation: s.frameCount != seekTo")
++	}
++
++	// Advance frame by frame (stuffing notifications back to
++	// the master).
++	s.ResetPrediction(s.frameCount)
++	for i := 0; i < count; i++ {
++		s.session.AdvanceFrame(0)
++	}
++
++	if s.frameCount != frameCount {
++		return errors.New("ggpo Sync AdjustSimulation: s.frameCount != frameCount")
++	}
++	s.rollingBack = false
++
++	util.Log.Printf("---\n")
++	return nil
++}
++
++func (s *Sync) LoadFrame(frame int) error {
++	if frame == s.frameCount {
++		util.Log.Printf("Skipping NOP.\n")
++		return nil
++	}
++	// Move the head pointer back and load it up
++	var err error
++	s.savedState.head, err = s.FindSavedFrameIndex(frame)
++	if err != nil {
++		panic(err)
++	}
++	state := s.savedState.frames[s.savedState.head]
++
++	util.Log.Printf("=== Loading frame info %d (checksum: %08x).\n",
++		state.frame, state.checksum)
++	//s.callbacks.LoadGameState(state.buf, state.cbuf)
++	s.session.LoadGameState(s.savedState.head)
++
++	// Reset framecount and the head of the state ring-buffer to point in
++	// advance of the current frame (as if we had just finished executing it).
++	s.frameCount = state.frame
++
++	s.savedState.head = (s.savedState.head + 1) % len(s.savedState.frames)
++	return nil
++}
++
++func (s *Sync) SaveCurrentFrame() {
++
++	// originally was
++	// SavedFrame *state = _savedstate.frames + _savedstate.head;
++	state := s.savedState.frames[s.savedState.head]
++	state.frame = s.frameCount
++	checksum := s.session.SaveGameState(s.savedState.head)
++	state.checksum = checksum
++
++	s.savedState.frames[s.savedState.head] = state
++	util.Log.Printf("=== Saved frame info %d (checksum: %08x).\n", state.frame, state.checksum)
++	s.savedState.head = (s.savedState.head + 1) % len(s.savedState.frames)
++}
++
++func (s *Sync) GetLastSavedFrame() savedFrame {
++	i := s.savedState.head - 1
++	for i < 0 {
++		i = len(s.savedState.frames) - 1
++	}
++	return s.savedState.frames[i]
++}
++
++// Trying to load a frame when it hasn't been saved causes an error
++// that will panic up the chair.
++func (s *Sync) FindSavedFrameIndex(frame int) (int, error) {
++
++	count := len(s.savedState.frames)
++	var i int
++	for i = 0; i < count; i++ {
++		if s.savedState.frames[i].frame == frame {
++			break
++		}
++	}
++	if i == count {
++		return 0, errors.New("ggpo Sync FindSavedFrameIndex: i == count")
++	}
++	return i, nil
++}
++
++func (s *Sync) CreateQueues(config SyncConfig) bool {
++
++	s.inputQueues = make([]input.InputQueue, s.config.numPlayers)
++	for i := 0; i < s.config.numPlayers; i++ {
++		s.inputQueues[i] = input.NewInputQueue(i, s.config.inputSize)
++	}
++	return true
++}
++
++func (s *Sync) CheckSimulationConsistency(seekTo *int) bool {
++
++	firstInorrect := input.NullFrame
++	for i := 0; i < s.config.numPlayers; i++ {
++		incorrect := s.inputQueues[i].FirstIncorrectFrame()
++		util.Log.Printf("considering incorrect frame %d reported by queue %d.\n", incorrect, i)
++
++		if incorrect != input.NullFrame && (firstInorrect == input.NullFrame || incorrect < firstInorrect) {
++			firstInorrect = incorrect
++		}
++	}
++
++	if firstInorrect == input.NullFrame {
++		util.Log.Printf("prediction ok.  proceeding.\n")
++		return true
++	}
++	*seekTo = firstInorrect
++	return false
++}
++
++func (s *Sync) SetFrameDelay(queue int, delay int) {
++	s.inputQueues[queue].SetFrameDelay(delay)
++}
++
++func (s *Sync) ResetPrediction(frameNumber int) {
++	for i := 0; i < s.config.numPlayers; i++ {
++		err := s.inputQueues[i].ResetPrediction(frameNumber)
++		if err != nil {
++			panic(err)
++		}
++	}
++}
++
++func (s *Sync) FrameCount() int {
++	return s.frameCount
++}
++
++func (s *Sync) InRollback() bool {
++	return s.rollingBack
++}
+diff --git a/third/ggpo/synctest.go b/third/ggpo/synctest.go
+new file mode 100644
+index 0000000..47f1718
+--- /dev/null
++++ b/third/ggpo/synctest.go
+@@ -0,0 +1,252 @@
++package ggpo
++
++import (
++	"github.com/ikemen-engine/ggpo/internal/util"
++	"os"
++
++	"github.com/ikemen-engine/ggpo/internal/buffer"
++	"github.com/ikemen-engine/ggpo/internal/input"
++	"github.com/ikemen-engine/ggpo/internal/polling"
++	"github.com/ikemen-engine/ggpo/internal/protocol"
++	"github.com/ikemen-engine/ggpo/transport"
++)
++
++type SyncTest struct {
++	session       Session
++	sync          Sync
++	numPlayers    int
++	checkDistance int
++	lastVerified  int
++	rollingBack   bool
++	running       bool
++	logFp         os.File
++	game          string
++
++	currentInput  input.GameInput
++	lastInput     input.GameInput
++	savedFrames   buffer.RingBuffer[savedInfo]
++	strict        bool
++	leniantRevert bool
++}
++
++type savedInfo struct {
++	frame    int
++	checksum int
++	buf      []byte
++	cbuf     int
++	input    input.GameInput
++}
++
++func NewSyncTest(cb Session,
++	numPlayers int,
++	frames int, inputSize int, strict bool) SyncTest {
++	s := SyncTest{
++		session:       cb,
++		numPlayers:    numPlayers,
++		checkDistance: frames,
++		savedFrames:   buffer.NewRingBuffer[savedInfo](32)}
++	s.currentInput.Erase()
++	s.currentInput.Bits = make([]byte, input.GameInputMaxBytes*input.GameInputMaxPlayers)
++	s.currentInput.Size = inputSize
++	var config SyncConfig
++	config.session = s.session
++	config.numPredictionFrames = MaxPredictionFrames
++	config.inputSize = inputSize
++	s.sync = NewSync(nil, &config)
++	s.strict = strict
++	return s
++}
++
++func (s *SyncTest) Idle(timeout int, timeFunc ...polling.FuncTimeType) error {
++	if !s.running {
++		var info Event
++		info.Code = EventCodeRunning
++		s.session.OnEvent(&info)
++		s.running = true
++	}
++	return nil
++}
++
++func (s *SyncTest) AddPlayer(player *Player, handle *PlayerHandle) error {
++	if player.PlayerNum < 1 || player.PlayerNum > s.numPlayers {
++		return Error{Code: ErrorCodePlayerOutOfRange, Name: "ErrorCodePlayerOutOfRange"}
++	}
++	*handle = (PlayerHandle(player.PlayerNum - 1))
++	return nil
++}
++
++func (s *SyncTest) AddLocalInput(player PlayerHandle, values []byte, size int) error {
++	if !s.running {
++		return Error{Code: ErrorCodeNotSynchronized, Name: "ErrorCodeNotSynchronized"}
++	}
++	//index := int(player)
++	//for i := 0; i < size; i++ {
++	//	s.currentInput.Bits[index*size+i] |= values[i]
++	//}
++	//copy(s.currentInput.Bits, values)
++	index := int(player)
++	start := index * size
++	end := start + size
++	copy(s.currentInput.Bits[start:end], values)
++	return nil
++}
++
++func (s *SyncTest) SyncInput(discconectFlags *int) ([][]byte, error) {
++	if s.rollingBack {
++		var info savedInfo
++		var err error
++		info, err = s.savedFrames.Front()
++		if err != nil {
++			panic(err)
++		}
++		s.lastInput = *info.input.Clone()
++	} else {
++		if s.sync.FrameCount() == 0 {
++			s.sync.SaveCurrentFrame()
++		}
++		s.lastInput = *s.currentInput.Clone()
++	}
++	//var values = make([]byte, len(s.lastInput.Bits))
++	//copy(values, s.lastInput.Bits)
++
++	values := make([][]byte, s.numPlayers)
++	offset := 0
++	counter := 0
++	for offset < len(s.lastInput.Bits) && counter < s.numPlayers {
++		values[counter] = s.lastInput.Bits[offset : s.lastInput.Size+offset]
++		offset += s.lastInput.Size
++		counter++
++	}
++	if *discconectFlags > 0 {
++		*discconectFlags = 0
++	}
++	return values, nil
++}
++
++func (s *SyncTest) AdvanceFrame(checksum uint32) error {
++	s.sync.AdvanceFrame()
++	s.currentInput.Erase()
++
++	util.Log.Printf("End of frame(%d)...\n", s.sync.FrameCount())
++
++	if s.rollingBack {
++		return nil
++	}
++
++	frame := s.sync.FrameCount()
++	// Hold onto the current frame in our queue of saved states. We'll need
++	// the checksum later to verify that our replay of the same frame got the
++	// same results
++	var err error
++	var info savedInfo
++	info.frame = frame
++	info.input = s.lastInput
++	info.checksum = s.sync.GetLastSavedFrame().checksum
++
++	err = s.savedFrames.Push(info)
++	if err != nil {
++		panic(err)
++	}
++
++	if frame-s.lastVerified == s.checkDistance {
++		// We've gone far enough ahead and should now now start replaying frames
++		// Load the last verified frame and set the rollback flag to true.
++		err = s.sync.LoadFrame(s.lastVerified)
++		if err != nil {
++			panic(err)
++		}
++
++		s.rollingBack = true
++		for !s.savedFrames.Empty() {
++			s.session.AdvanceFrame(0)
++
++			// Verify that the checksum of this frame is the same as the one in our
++			// list
++			info, err = s.savedFrames.Front()
++			if err != nil {
++				panic(err)
++			}
++			err = s.savedFrames.Pop()
++			if err != nil {
++				panic(err)
++			}
++			if info.frame != s.sync.FrameCount() {
++				util.Log.Printf("Frame number %d does not match saved frame number %d", info.frame, frame)
++				if s.strict {
++					panic("RaiseSyncError")
++				} else {
++					util.Log.Println("RaiseSyncError: Continuing as normal.")
++					//s.revert()
++					//break
++				}
++			}
++			checksum := s.sync.GetLastSavedFrame().checksum
++			if info.checksum != checksum {
++				s.LogGameStates(info)
++				util.Log.Printf("Checksum for frame %d does not match saved (%d != %d)", frame, checksum, info.checksum)
++				if s.strict {
++					panic("RaiseSyncError")
++				} else {
++					util.Log.Println("RaiseSyncError: Continuing as normal..")
++					//s.revert()
++					//break
++				}
++				lastVerifiedStateID, _ := s.sync.FindSavedFrameIndex(s.lastVerified)
++				s.session.OnEvent(&Event{
++					Code:         EventCodeSyncTestDesync,
++					CurrentState: s.sync.savedState.head,
++					LastVerified: lastVerifiedStateID,
++				})
++			}
++			util.Log.Printf("Checksum %08d for frame %d matches.\n", checksum, info.frame)
++		}
++		s.lastVerified = frame
++		s.rollingBack = false
++	}
++	return nil
++}
++
++func (s *SyncTest) revert() {
++	err := s.sync.LoadFrame(s.lastVerified)
++	if err != nil {
++		panic(err)
++	}
++	s.leniantRevert = true
++	for !s.savedFrames.Empty() {
++		err = s.savedFrames.Pop()
++		if err != nil {
++			panic(err)
++		}
++	}
++}
++
++func (s *SyncTest) LogGameStates(info savedInfo) {
++	//s.session.LogGameState("saved:", info.buf, len(info.buf))
++	//s.session.LogGameState("loaded:", s.sync.GetLastSavedFrame().buf, s.sync.GetLastSavedFrame().cbuf)
++}
++
++// We must 'impliment' these for this to be a true Session
++func (s *SyncTest) DisconnectPlayer(handle PlayerHandle) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *SyncTest) GetNetworkStats(handle PlayerHandle) (protocol.NetworkStats, error) {
++	return protocol.NetworkStats{}, Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *SyncTest) SetFrameDelay(player PlayerHandle, delay int) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *SyncTest) SetDisconnectTimeout(timeout int) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *SyncTest) SetDisconnectNotifyStart(timeout int) error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++func (s *SyncTest) Close() error {
++	return Error{Code: ErrorCodeInvalidRequest, Name: "ErrorCodeInvalidRequest"}
++}
++
++func (s *SyncTest) Start() {}
++
++func (s *SyncTest) InitializeConnection(c ...transport.Connection) error {
++	return nil
++}
+diff --git a/third/ggpo/transport/connection.go b/third/ggpo/transport/connection.go
+new file mode 100644
+index 0000000..665267c
+--- /dev/null
++++ b/third/ggpo/transport/connection.go
+@@ -0,0 +1,22 @@
++package transport
++
++import (
++	"github.com/ikemen-engine/ggpo/internal/messages"
++)
++
++type Connection interface {
++	SendTo(msg messages.UDPMessage, remoteIp string, remotePort int)
++	Close()
++	Read(messageChan chan MessageChannelItem)
++}
++
++type peerAddress struct {
++	Ip   string
++	Port int
++}
++
++type MessageChannelItem struct {
++	Peer    peerAddress
++	Message messages.UDPMessage
++	Length  int
++}
+diff --git a/third/ggpo/transport/message_handler.go b/third/ggpo/transport/message_handler.go
+new file mode 100644
+index 0000000..ac49afc
+--- /dev/null
++++ b/third/ggpo/transport/message_handler.go
+@@ -0,0 +1,7 @@
++package transport
++
++import "github.com/ikemen-engine/ggpo/internal/messages"
++
++type MessageHandler interface {
++	HandleMessage(ipAddress string, port int, msg messages.UDPMessage, len int)
++}
+diff --git a/third/ggpo/transport/udp.go b/third/ggpo/transport/udp.go
+new file mode 100644
+index 0000000..7fa8a90
+--- /dev/null
++++ b/third/ggpo/transport/udp.go
+@@ -0,0 +1,157 @@
++package transport
++
++import (
++	"net"
++	"strconv"
++	"sync"
++
++	"github.com/ikemen-engine/ggpo/internal/messages"
++	"github.com/ikemen-engine/ggpo/internal/util"
++)
++
++const (
++	MaxUDPEndpoints  = 16
++	MaxUDPPacketSize = 4096
++)
++
++type Udp struct {
++	Stats UdpStats // may not need this, may just be a service used by others
++
++	socket         net.Conn
++	messageHandler MessageHandler
++	listener       net.PacketConn
++	localPort      int
++	ipAddress      string
++	sendChan       chan sendRequest
++	done           chan struct{}
++	sendDone       chan struct{}
++	closeOnce      *sync.Once // Shared by the value copies stored in endpoints.
++}
++
++type UdpStats struct {
++	BytesSent   int
++	PacketsSent int
++	KbpsSent    float64
++}
++
++func getPeerAddress(address net.Addr) peerAddress {
++	switch addr := address.(type) {
++	case *net.UDPAddr:
++		return peerAddress{
++			Ip:   addr.IP.String(),
++			Port: addr.Port,
++		}
++	}
++	return peerAddress{}
++}
++
++func (u Udp) Close() {
++	if u.closeOnce != nil {
++		u.closeOnce.Do(func() {
++			close(u.done)
++			u.listener.Close()
++			<-u.sendDone
++		})
++	}
++}
++
++type sendRequest struct {
++	msg        messages.UDPMessage
++	remoteIp   string
++	remotePort int
++}
++
++func NewUdp(messageHandler MessageHandler, localPort int) (Udp, error) {
++	u := Udp{}
++	u.messageHandler = messageHandler
++	u.localPort = localPort
++	util.Log.Printf("binding udp socket to port %d.\n", localPort)
++	var err error
++	u.listener, err = net.ListenPacket("udp", "0.0.0.0:"+strconv.Itoa(localPort))
++	if err != nil {
++		return u, err
++	}
++
++	u.sendChan = make(chan sendRequest, 256) // Create a buffered channel
++	u.done = make(chan struct{})
++	u.sendDone = make(chan struct{})
++	u.closeOnce = &sync.Once{}
++
++	go func() { // Start a goroutine to handle sending of messages
++		defer close(u.sendDone)
++		for {
++			select {
++			case <-u.done:
++				return
++			case req := <-u.sendChan:
++				RemoteEP := net.UDPAddr{IP: net.ParseIP(req.remoteIp), Port: req.remotePort}
++				buf := req.msg.ToBytes()
++				_, err := u.listener.WriteTo(buf, &RemoteEP)
++				if err != nil {
++					util.Log.Printf("WriteTo error: %s", err)
++				}
++			}
++		}
++	}()
++
++	return u, nil
++}
++
++// dst should be sockaddr
++// maybe create Gob encoder and decoder members
++// instead of creating them on each message send
++func (u Udp) SendTo(msg messages.UDPMessage, remoteIp string, remotePort int) {
++	if msg == nil || remoteIp == "" || u.sendChan == nil {
++		return
++	}
++
++	// RemoteEP := net.UDPAddr{IP: net.ParseIP(remoteIp), Port: remotePort}
++	// buf := msg.ToBytes()
++	// u.listener.WriteTo(buf, &RemoteEP)
++	select {
++	case <-u.done:
++		return
++	default:
++	}
++	select {
++	case <-u.done:
++	case u.sendChan <- sendRequest{msg: msg, remoteIp: remoteIp, remotePort: remotePort}:
++	}
++}
++
++func (u Udp) Read(messageChan chan MessageChannelItem) {
++	if u.listener == nil {
++		return
++	}
++	defer u.Close()
++	recvBuf := make([]byte, MaxUDPPacketSize*2)
++	for {
++		len, addr, err := u.listener.ReadFrom(recvBuf)
++		if err != nil {
++			util.Log.Printf("conn.Read error returned: %s\n", err)
++			break
++		} else if len <= 0 {
++			util.Log.Printf("no data recieved\n")
++		} else if len > 0 {
++			util.Log.Printf("recvfrom returned (len:%d  from:%s).\n", len, addr.String())
++			peer := getPeerAddress(addr)
++
++			msg, err := messages.DecodeMessageBinary(recvBuf)
++			if err != nil {
++				util.Log.Printf("Error decoding message: %s", err)
++				continue
++			}
++			// The game may have stopped pumping GGPO before closing this session.
++			select {
++			case <-u.done:
++				return
++			case messageChan <- MessageChannelItem{Peer: peer, Message: msg, Length: len}:
++			}
++		}
++
++	}
++}
++
++func (u Udp) IsInitialized() bool {
++	return u.listener != nil
++}
