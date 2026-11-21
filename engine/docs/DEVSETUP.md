@@ -33,7 +33,19 @@ fresh `setup_ikemen.sh` tree; `cvf_tests` 93/0; reference fights
 `54f8ae06...` / `4334350c...`; netplay dump `a350bc2d...` (also as match 1
 of every session); the new netplay scripts below.
 
-Verified on the integration branch (2026-11-21): regen gives 4842
+Integration of netplay2 and vita (2026-11-21, Linux x86-64, Go 1.27.4):
+regen from a fresh `setup_ikemen.sh` tree reproduces the committed C (4858
+functions, 0 TODO, 79 stubs, 31 placeholders); `cvf_tests` and
+`cvf_tests_ucontext` 103/0 on x86-64, Windows (Wine), armv7 and aarch64
+(qemu); reference fights `54f8ae06...` / `4334350c...` on x86-64 (also
+GC stress and ASan/UBSan), Windows (Wine), armv7 and aarch64 (qemu);
+`run_netplay.sh` PASS with dump `a350bc2d...` (defaults, `:sync`, `tcp=`,
+a three-match session, Wine host to Linux guest); `run_content.sh` and
+`run_prematch.sh` (20 runs, LOAD=2) PASS; Vita ELF and VPK build with
+vitasdk 2026.08. macOS/iOS were not rebuilt (no Apple toolchain in the
+container).
+
+Earlier, on the integration branch (2026-11-21): regen gives 4842
 functions, 0 TODO, 79 stubs, 31 placeholders and is reproducible;
 `cvf_tests` 93/0 and `cvf_nearby_test` on Linux, macOS arm64 and Windows
 (Wine); reference fights `54f8ae06...` / `4334350c...` on Linux, macOS and
