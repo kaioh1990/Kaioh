@@ -338,6 +338,7 @@ typedef struct boundTexture boundTexture;
 typedef struct character character;
 typedef struct cookW cookW;
 typedef struct cparser cparser;
+typedef struct cvfFpFile cvfFpFile;
 typedef struct cvfNearbyHost cvfNearbyHost;
 typedef struct cvfNearbyNet cvfNearbyNet;
 typedef struct cvfNearbyReply cvfNearbyReply;
@@ -3484,6 +3485,10 @@ typedef struct cookW cookW;
 #ifndef CVF_TD_cparser
 #define CVF_TD_cparser
 typedef struct cparser cparser;
+#endif
+#ifndef CVF_TD_cvfFpFile
+#define CVF_TD_cvfFpFile
+typedef struct cvfFpFile cvfFpFile;
 #endif
 #ifndef CVF_TD_cvfNearbyHost
 #define CVF_TD_cvfNearbyHost
@@ -9367,6 +9372,7 @@ struct NetConnection {
     LoadingPhase loadingPhase;
     GoOpaque /* time.Time */ loadingStarted;
     int rollbackRemotePort;
+    GoString remoteContent;
 };
 
 struct Node {
@@ -12011,6 +12017,11 @@ struct cparser {
     BytecodeExp be;
     bool fail;
     int depth;
+};
+
+struct cvfFpFile {
+    GoString rel;
+    u64 hash;
 };
 
 struct cvfNearbyHost {

@@ -209,6 +209,7 @@ void sync_Cond_Wait(GoOpaque *c) {  // the Locker is a no-op on one thread
 
 // ---------------------------------------------------------------- time
 f64 time_Duration_Seconds(i64 d) { return (f64)(d / 1000000000) + (f64)(d % 1000000000) / 1e9; }
+i64 time_Duration_Milliseconds(i64 d) { return d / 1000000; }  // truncates toward zero, as Go
 typedef struct AfterEnv {
     GoChan *c;
     i64 d;

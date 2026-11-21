@@ -1717,6 +1717,344 @@ index 00000000..19554275
 +	cvfFloatShift = 64 - 11 - 1
 +	cvfFloatBias  = 1023
 +)
+diff --git a/src/cvf_fingerprint.go b/src/cvf_fingerprint.go
+new file mode 100644
+index 00000000..3d3fbced
+--- /dev/null
++++ b/src/cvf_fingerprint.go
+@@ -0,0 +1,332 @@
++package main
++
++// CvF Online: game content fingerprint for the netplay handshake.
++//
++// Two peers whose game data differ (another cvf_online.ini, an edited common
++// state file, another version of a character or stage) used to connect and
++// then desync silently. The handshake's content_fingerprint field (empty in
++// Ikemen GO) now carries a table of content hashes, computed once per run:
++//
++//   cvf1;r=<rules>;d=<data>;c/<char dir>=<hash>;...;s/<stage def>=<hash>;...
++//
++//   r  the gameplay rules of data/cvf_online.ini as parsed (cvfRules), so the
++//      lobby URL, BuildTag, comments and the display-only WideView do not count
++//   d  every simulation text file under data/ (common states, commands,
++//      animations and constants, *.zss, fight.def, select.def, system.def)
++//      except cvf_online.ini
++//   c  one entry per directory under chars/ that holds a .def file: its text
++//      files (*.def, *.cns, *.st, *.cmd, *.air, *.zss, *.const), recursively
++//   s  one entry per stage .def under stages/
++//
++// Hashes are 64-bit FNV-1a over the relative path and the bytes of each file,
++// with carriage returns skipped (a CRLF checkout plays the same). Sprites,
++// sounds, palettes and music are not hashed: they do not change the
++// simulation and are big (hashing the text of a full roster is a few tens of
++// MB, read once).
++//
++// The rules and data entries must match when the session starts (the
++// handshake fails with a message naming the difference). Character and stage
++// entries are checked at the start of every match, for the characters and the
++// stage actually loaded, so peers whose unused characters differ still play.
++// An empty fingerprint (an older build, or Ikemen GO itself) means "unknown":
++// the session is allowed, as before. Older builds receiving this table ignore
++// it (they only compare non-empty fingerprints of their own, and theirs is
++// empty).
++
++import (
++	"fmt"
++	"os"
++	"path/filepath"
++	"sort"
++	"strings"
++	"time"
++)
++
++const cvfFpVersion = "cvf1"
++
++const (
++	cvfFpOffset uint64 = 14695981039346656037
++	cvfFpPrime  uint64 = 1099511628211
++)
++
++var cvfFpCache string
++var cvfFpDone bool
++
++func cvfFpBytes(h uint64, b []byte) uint64 {
++	for _, c := range b {
++		if c == '\r' {
++			continue
++		}
++		h ^= uint64(c)
++		h *= cvfFpPrime
++	}
++	return h
++}
++
++func cvfFpString(h uint64, s string) uint64 {
++	return cvfFpBytes(h, []byte(s))
++}
++
++func cvfFpHex(h uint64) string {
++	const digits = "0123456789abcdef"
++	var b [16]byte
++	for i := 15; i >= 0; i-- {
++		b[i] = digits[h&15]
++		h >>= 4
++	}
++	return string(b[:])
++}
++
++func cvfFpIsText(name string) bool {
++	switch strings.ToLower(filepath.Ext(name)) {
++	case ".def", ".cns", ".st", ".cmd", ".air", ".zss", ".const":
++		return true
++	}
++	return false
++}
++
++type cvfFpFile struct {
++	rel  string // slash path relative to the content root, lower case
++	hash uint64
++}
++
++// The simulation text files under root (a directory of the game folder), in
++// path order. Symbolic links to directories are followed, root included
++// ("root/." is walked): the native engine's filepath.Walk follows them and
++// Go's does not, and both must see the same files.
++func cvfFpWalk(root string, nfiles, nbytes *int) []cvfFpFile {
++	var files []cvfFpFile
++	cvfFpWalkDir(root, "", 0, &files, nfiles, nbytes)
++	sort.Slice(files, func(i, j int) bool { return files[i].rel < files[j].rel })
++	return files
++}
++
++func cvfFpWalkDir(dir, rel string, depth int, files *[]cvfFpFile, nfiles, nbytes *int) {
++	base := filepath.ToSlash(filepath.Clean(dir)) + "/"
++	filepath.Walk(dir+"/.", func(path string, info os.FileInfo, err error) error {
++		if err != nil || info == nil {
++			return nil
++		}
++		p := filepath.ToSlash(filepath.Clean(path))
++		if !strings.HasPrefix(p, base) {
++			return nil // dir itself
++		}
++		r := rel + p[len(base):]
++		name := filepath.Base(p)
++		if info.IsDir() {
++			return nil
++		}
++		if !cvfFpIsText(name) {
++			// a link to a directory (Go's Walk reports the link, not a directory)
++			if st, serr := os.Stat(path); serr == nil && st.IsDir() && depth < 8 {
++				cvfFpWalkDir(path, r+"/", depth+1, files, nfiles, nbytes)
++			}
++			return nil
++		}
++		data, rerr := os.ReadFile(path)
++		if rerr != nil {
++			return nil
++		}
++		*nfiles++
++		*nbytes += len(data)
++		*files = append(*files, cvfFpFile{rel: strings.ToLower(r), hash: cvfFpBytes(cvfFpOffset, data)})
++		return nil
++	})
++}
++
++// Hash of a set of files: their relative paths (from prefix on) and hashes.
++func cvfFpCombine(files []cvfFpFile, prefix string) uint64 {
++	h := cvfFpOffset
++	for _, f := range files {
++		h = cvfFpString(h, f.rel[len(prefix):])
++		h = cvfFpString(h, "\x00"+cvfFpHex(f.hash)+"\x00")
++	}
++	return h
++}
++
++func cvfFpRules() uint64 {
++	r := cvfRulesLoad()
++	s := fmt.Sprintf("iframe=%d exempt=%d-%d mpvar=%d mpscale=%d cooldown=%d special=%d-%d aspect=%d:%d author=%s",
++		r.iframeCap, r.exemptLo, r.exemptHi, r.mpVar, r.mpScaleMilli, r.specialCD, r.specialLo, r.specialHi,
++		r.fightAspect[0], r.fightAspect[1], r.author)
++	return cvfFpString(cvfFpOffset, s)
++}
++
++// The content fingerprint of this game folder (computed on first use).
++func cvfContentFingerprint() string {
++	if cvfFpDone {
++		return cvfFpCache
++	}
++	cvfFpDone = true
++	t0 := time.Now()
++	nfiles, nbytes := 0, 0
++	var sb strings.Builder
++	sb.WriteString(cvfFpVersion)
++	sb.WriteString(";r=" + cvfFpHex(cvfFpRules()))
++
++	var data []cvfFpFile
++	for _, f := range cvfFpWalk("data", &nfiles, &nbytes) {
++		if f.rel != "cvf_online.ini" {
++			data = append(data, f)
++		}
++	}
++	sb.WriteString(";d=" + cvfFpHex(cvfFpCombine(data, "")))
++
++	// characters: every directory that holds a .def file
++	chars := cvfFpWalk("chars", &nfiles, &nbytes)
++	dirs := map[string]bool{}
++	for _, f := range chars {
++		if strings.HasSuffix(f.rel, ".def") {
++			if i := strings.LastIndex(f.rel, "/"); i > 0 {
++				dirs[f.rel[:i]] = true
++			}
++		}
++	}
++	var dirList []string
++	for d := range dirs {
++		dirList = append(dirList, d)
++	}
++	sort.Strings(dirList)
++	for _, d := range dirList {
++		var in []cvfFpFile
++		for _, f := range chars {
++			if strings.HasPrefix(f.rel, d+"/") {
++				in = append(in, f)
++			}
++		}
++		sb.WriteString(";c/" + d + "=" + cvfFpHex(cvfFpCombine(in, d+"/")))
++	}
++	nc := len(dirList)
++
++	ns := 0
++	for _, f := range cvfFpWalk("stages", &nfiles, &nbytes) {
++		if strings.HasSuffix(f.rel, ".def") {
++			sb.WriteString(";s/" + f.rel + "=" + cvfFpHex(f.hash))
++			ns++
++		}
++	}
++	cvfFpCache = sb.String()
++	LogMessage("Content fingerprint: %s (%d characters, %d stages, %d files, %d KB, %d ms)",
++		cvfFingerprintSummary(cvfFpCache), nc, ns, nfiles, nbytes/1024, time.Since(t0).Milliseconds())
++	return cvfFpCache
++}
++
++// The entries of a fingerprint table, or nil if fp is not one.
++func cvfFpParse(fp string) map[string]string {
++	if !strings.HasPrefix(fp, cvfFpVersion+";") {
++		return nil
++	}
++	m := map[string]string{}
++	for _, e := range strings.Split(fp[len(cvfFpVersion)+1:], ";") {
++		if i := strings.LastIndex(e, "="); i > 0 {
++			m[e[:i]] = e[i+1:]
++		}
++	}
++	return m
++}
++
++// Short form for the log: version, rules, data and entry counts.
++func cvfFingerprintSummary(fp string) string {
++	m := cvfFpParse(fp)
++	if m == nil {
++		if len(fp) > 40 {
++			return fp[:40] + "..."
++		}
++		return fp
++	}
++	nc, ns := 0, 0
++	for k := range m {
++		if strings.HasPrefix(k, "c/") {
++			nc++
++		} else if strings.HasPrefix(k, "s/") {
++			ns++
++		}
++	}
++	return fmt.Sprintf("%s r=%s d=%s chars=%d stages=%d", cvfFpVersion, m["r"], m["d"], nc, ns)
++}
++
++// Session start: rules and common data must match. Empty = unknown, allowed.
++func cvfValidateFingerprint(local, remote string) error {
++	if local == "" || remote == "" {
++		return nil
++	}
++	lm, rm := cvfFpParse(local), cvfFpParse(remote)
++	if lm == nil || rm == nil {
++		if local != remote {
++			return Error("Content/build mismatch between peers")
++		}
++		return nil
++	}
++	if lm["r"] != rm["r"] {
++		return Error("Game data mismatch: the gameplay rules (data/cvf_online.ini) differ from the other player's. Both players need the same CvF Online version.")
++	}
++	if lm["d"] != rm["d"] {
++		return Error("Game data mismatch: the files in data/ (common states, fight.def, select.def or system.def) differ from the other player's. Both players need the same CvF Online version.")
++	}
++	return nil
++}
++
++// The fingerprint key of a loaded character or stage definition file.
++func cvfFpKey(def string, stage bool) string {
++	p := strings.ToLower(filepath.ToSlash(filepath.Clean(def)))
++	p = strings.TrimPrefix(p, "./")
++	if stage {
++		if strings.HasPrefix(p, "stages/") {
++			return "s/" + p[len("stages/"):]
++		}
++		return ""
++	}
++	if !strings.HasPrefix(p, "chars/") {
++		return ""
++	}
++	p = p[len("chars/"):]
++	if i := strings.LastIndex(p, "/"); i > 0 {
++		return "c/" + p[:i]
++	}
++	return ""
++}
++
++// Match start: the loaded characters and stage must be the same on both
++// sides. Entries one side does not know (zipped characters, files outside
++// chars/ and stages/, an older peer) are allowed.
++func (s *System) cvfCheckMatchContent(remote string) error {
++	rm := cvfFpParse(remote)
++	if rm == nil {
++		return nil
++	}
++	lm := cvfFpParse(cvfContentFingerprint())
++	if lm == nil {
++		return nil
++	}
++	check := func(def, name string, stage bool) error {
++		k := cvfFpKey(def, stage)
++		if k == "" {
++			return nil
++		}
++		lv, lok := lm[k]
++		rv, rok := rm[k]
++		if !lok || !rok || lv == rv {
++			return nil
++		}
++		what := fmt.Sprintf("character %s (%s)", name, def)
++		if stage {
++			what = "stage " + def
++		}
++		return Error(fmt.Sprintf("Game data mismatch: %s differs from the other player's copy. Both players need the same version.", what))
++	}
++	for i := range s.chars {
++		if len(s.chars[i]) == 0 || s.chars[i][0] == nil {
++			continue
++		}
++		c := s.chars[i][0]
++		if err := check(c.gi().def, c.name, false); err != nil {
++			return err
++		}
++	}
++	if s.stage != nil {
++		if err := check(s.stage.def, "", true); err != nil {
++			return err
++		}
++	}
++	return nil
++}
 diff --git a/src/cvf_nearby.go b/src/cvf_nearby.go
 new file mode 100644
 index 00000000..6323a306
@@ -3655,10 +3993,18 @@ index 2609c76b..4efec7d0 100644
  	if runtime.GOOS == "ios" {
  		cfg.Video.RenderMode = "Vulkan 1.3"
 diff --git a/src/netplay.go b/src/netplay.go
-index 7dcaf72c..70e1d3e9 100644
+index 7dcaf72c..c950812a 100644
 --- a/src/netplay.go
 +++ b/src/netplay.go
-@@ -985,7 +985,18 @@ func (nc *NetConnection) update(recordReplay bool) bool {
+@@ -194,6 +194,7 @@ type NetConnection struct {
+ 	loadingPhase       LoadingPhase
+ 	loadingStarted     time.Time
+ 	rollbackRemotePort int
++	remoteContent      string // CvF Online: the peer's content fingerprint (cvf_fingerprint.go)
+ }
+ 
+ func NewNetConnection() *NetConnection {
+@@ -985,7 +986,18 @@ func (nc *NetConnection) update(recordReplay bool) bool {
  
  				// Break loop if we have reached the frame that both buffers have sent
  				if nc.time >= foo {
@@ -3678,6 +4024,87 @@ index 7dcaf72c..70e1d3e9 100644
  						break
  					}
  					// TCP can remain established while packets stop arriving.
+@@ -1608,10 +1620,9 @@ func applySyncSettings(cfg *Config, settings []SyncSetting, strict bool) error {
+ }
+ 
+ func validateContentFingerprint(local, remote string) error {
+-	if local != "" && remote != "" && local != remote {
+-		return Error("Content/build mismatch between peers")
+-	}
+-	return nil
++	// CvF Online: rules and common data must match; characters and stages are
++	// checked per match (cvf_fingerprint.go). Empty = unknown, allowed.
++	return cvfValidateFingerprint(local, remote)
+ }
+ 
+ // -----------------------------------------------------------------------------
+@@ -1626,8 +1637,8 @@ func (s *System) onSyncConfigChanged() {
+ }
+ 
+ func (s *System) currentContentFingerprint() string {
+-	// TODO: replace with real content/build fingerprint handshake.
+-	return ""
++	// CvF Online: hashes of the rules, data/, characters and stages (cvf_fingerprint.go).
++	return cvfContentFingerprint()
+ }
+ 
+ func (s *System) beginSessionOverride(source string, strict, host []SyncSetting, contentFingerprint string) error {
+@@ -1655,7 +1666,7 @@ func (s *System) beginSessionOverride(source string, strict, host []SyncSetting,
+ 		ContentFingerprint: contentFingerprint,
+ 	}
+ 	log.Printf("%s sync config override started: strict=%d host=%d fingerprint=%q",
+-		strings.Title(source), len(strict), len(host), contentFingerprint)
++		strings.Title(source), len(strict), len(host), cvfFingerprintSummary(contentFingerprint))
+ 	logSyncVerification(strings.Title(source)+" host override verification", host, appliedHost)
+ 	return nil
+ }
+@@ -1722,7 +1733,7 @@ func (s *System) synchronizeNetplayConfig(nc *NetConnection) (*ReplayHeader, err
+ 			ContentFingerprint: localFingerprint,
+ 		}
+ 		log.Printf("Netplay sync config host->peer: sending strict=%d host=%d fingerprint=%q",
+-			len(localStrict), len(localHost), localFingerprint)
++			len(localStrict), len(localHost), cvfFingerprintSummary(localFingerprint))
+ 		if err := nc.writeJSON(hostPayload); err != nil {
+ 			return nil, err
+ 		}
+@@ -1732,7 +1743,8 @@ func (s *System) synchronizeNetplayConfig(nc *NetConnection) (*ReplayHeader, err
+ 			return nil, err
+ 		}
+ 		log.Printf("Netplay sync config peer->host ack: strict=%d host=%d fingerprint=%q",
+-			len(guestPayload.Strict), len(guestPayload.Host), guestPayload.ContentFingerprint)
++			len(guestPayload.Strict), len(guestPayload.Host), cvfFingerprintSummary(guestPayload.ContentFingerprint))
++		nc.remoteContent = guestPayload.ContentFingerprint
+ 		if guestPayload.SyncVersion != syncConfigVersion {
+ 			return nil, Error("Sync config version mismatch")
+ 		}
+@@ -1767,7 +1779,8 @@ func (s *System) synchronizeNetplayConfig(nc *NetConnection) (*ReplayHeader, err
+ 		return nil, err
+ 	}
+ 	log.Printf("Netplay sync config host->peer received: strict=%d host=%d fingerprint=%q",
+-		len(hostPayload.Strict), len(hostPayload.Host), hostPayload.ContentFingerprint)
++		len(hostPayload.Strict), len(hostPayload.Host), cvfFingerprintSummary(hostPayload.ContentFingerprint))
++	nc.remoteContent = hostPayload.ContentFingerprint
+ 
+ 	guestPayload := SyncHandshake{
+ 		SyncVersion:        syncConfigVersion,
+@@ -1778,7 +1791,7 @@ func (s *System) synchronizeNetplayConfig(nc *NetConnection) (*ReplayHeader, err
+ 	}
+ 	sendGuestPayload := func() error {
+ 		log.Printf("Netplay sync config peer->host ack: sending strict=%d host=%d fingerprint=%q",
+-			len(guestPayload.Strict), len(guestPayload.Host), localFingerprint)
++			len(guestPayload.Strict), len(guestPayload.Host), cvfFingerprintSummary(localFingerprint))
+ 		return nc.writeJSON(guestPayload)
+ 	}
+ 
+@@ -1839,7 +1852,7 @@ func (s *System) beginReplaySession(rf *ReplayFile) error {
+ 		return nil
+ 	}
+ 	log.Printf("Replay sync header loaded: strict=%d host=%d fingerprint=%q",
+-		len(rf.strictSettings), len(rf.hostSettings), rf.contentFingerprint)
++		len(rf.strictSettings), len(rf.hostSettings), cvfFingerprintSummary(rf.contentFingerprint))
+ 	if len(rf.hostSettings) == 0 && len(rf.strictSettings) == 0 {
+ 		log.Printf("Replay sync config: no header settings to apply")
+ 		return nil
 diff --git a/src/rect.go b/src/rect.go
 index d63aa49d..25c8b512 100644
 --- a/src/rect.go
@@ -3798,7 +4225,7 @@ index 9b294164..4bd85c57 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/system.go b/src/system.go
-index 2698d355..ae181668 100644
+index 2698d355..89161469 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -766,7 +766,7 @@ func (s *System) motifOverlayActive() bool {
@@ -3878,7 +4305,24 @@ index 2698d355..ae181668 100644
  	return
  }
  
-@@ -6820,13 +6843,13 @@ func (es *EnvShake) update() {
+@@ -4063,6 +4086,16 @@ func (s *System) runMatch() (reload bool) {
+ 		}
+ 	}()
+ 
++	// CvF Online: the loaded characters and stage must be the same version on
++	// both sides (cvf_fingerprint.go; both peers decide the same from the two
++	// fingerprints, before synchronizing).
++	if s.netConnection != nil {
++		if err := s.cvfCheckMatchContent(s.netConnection.remoteContent); err != nil {
++			LogMessage(err.Error())
++			s.netConnection.fail(err)
++			return false
++		}
++	}
+ 	// Synchronize with external inputs (netplay, replays, etc)
+ 	if err := s.synchronize(); err != nil {
+ 		LogMessage(err.Error())
+@@ -6820,13 +6853,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -3894,7 +4338,7 @@ index 2698d355..ae181668 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +6858,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +6868,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -3907,7 +4351,7 @@ index 2698d355..ae181668 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +6885,7 @@ type ZoomEffect struct {
+@@ -6862,6 +6895,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -3915,7 +4359,7 @@ index 2698d355..ae181668 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +6901,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +6911,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
