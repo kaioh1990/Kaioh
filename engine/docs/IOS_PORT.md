@@ -7,7 +7,9 @@ sections below are kept as written, with notes where the implementation
 differs.
 
 Goal: replace the Go engine (`libikemen.a` + MoltenVK) inside the current
-"CvF Online" iOS app with the native C engine. The app must keep the
+"CvF Online" iOS app with the native C engine. (PM, round 2: for now the
+native app installs *next to* the Go app, as "CvF Native",
+`com.kaioh1990.cvfnative`; see Implementation status, M7.) The app must keep the
 current bundle id (`com.kaioh1990.cvfonline`) so that a Sideloadly install
 updates the installed app in place, and the player's `Documents/Game`,
 `Documents/save` and settings survive.
@@ -515,12 +517,12 @@ Each is verifiable as stated; only M7 needs the device.
 | --- | --- | --- |
 | M0 | done | Regenerated with the GLES renderer and the iOS entry points: 4842 functions, 0 TODO, 0 syntax errors, 31 placeholders (none new). Linux headless md5 unchanged: `54f8ae06d74648af2182587b82a390d6` (cvf-online-2), `4334350cdebd48dc0caa04cf78e0d9e3` (cvf-online-5); `cvf_tests` 93/0; `cvf` links. `Renderer_GLES32_*`, `fn_cvfStoreTap`, `fn_cvfIOSMain`, `fn_cvfHost*` in `ik_sim.o`. glslangValidator check not done (not available in the container); the shaders compile and link on Apple's ES 3.0 in the Simulator. |
 | M1 | done | `tools/package/ios_build.sh` builds `CvfEngine.xcframework` (ios-arm64, ios-arm64-simulator, 14 MB) with Xcode 27.2's clang; `nm -gU` on each master object lists exactly the 7 exports (the script fails otherwise). The real app links it (no separate test app). |
-| M2 | part | Done: segment-walk roots (`dladdr` + every writable segment), `gc_selftest()` (in `cvf_tests` on Linux, and on every Simulator headless run: "gc selftest ok"), guard-page goroutine stacks, `_setjmp` on Apple, 1 GB arena on iOS. Stack measurement done in the Simulator instead of a 1 MB macOS build: the main goroutine peaks at **~1 MB** (998 KB on the main thread, 985 KB on the engine stack) loading the title screen, so **plan B is implemented**: `SDL_main` runs the engine on an mmap'd 8 MB stack with a guard page (`cvf_call_on_stack`, `gc_set_main_stack`). Not done: owner-thread assert, macOS rerun of the reference with these changes. |
+| M2 | done except macOS rerun | Segment-walk roots (`dladdr` + every writable segment), `gc_selftest()` (in `cvf_tests` on Linux, and on every Simulator headless run: "gc selftest ok"), guard-page goroutine stacks, `_setjmp` on Apple, 1 GB arena on iOS. Owner-thread check: collections abort off the engine thread (allocations too in debug builds). Memory warning: `SDL_APP_LOWMEMORY` -> collection at the next frame outside a fight. Stack measurement done in the Simulator instead of a 1 MB macOS build: the main goroutine peaks at **~1 MB** (998 KB on the main thread, 983-985 KB on the engine stack) loading the title screen, so **plan B is implemented**: `SDL_main` runs the engine on an mmap'd 8 MB stack with a guard page (`cvf_call_on_stack`, `gc_set_main_stack`). Not done: macOS rerun of the reference with these changes (Linux and the Simulator are verified). |
 | M3 | done | Simulator (iPhone 15 Pro Max, iOS 27.2) runs the reference fight inside the app (`CVF_HEADLESS_DIR`/`CVF_HEADLESS_ARGS` via `SIMCTL_CHILD_`, ~10 s): cvf-online-5 winner 2, 224,158 lines, md5 `4334350cdebd48dc0caa04cf78e0d9e3`; cvf-online-2 winner 1, 287,752 lines, md5 `54f8ae06d74648af2182587b82a390d6`. Both before and after the plan B stack switch. |
 | M4 | done (Simulator) | Intro, title and an Arcade fight render (`docs/ios_sim_intro.png`, `docs/ios_sim_title.png`, `docs/ios_sim_match.png`); `save/logs/cvf.log` written. Rotation and background/foreground not exercised (no UI automation for the Simulator here). The Simulator GL is Apple's software renderer: slow (~2 min from launch to title), not a performance measure. |
 | M5 | part | `cvf_host.c` with the Go names; mailbox drained at `cvfGcSafepoint`. `CVF_INPUT_TEST=1` (save/cvf_env.txt) drives the host API as the overlay does: buttons on the overlay's virtual gamepad (SDL virtual joystick 0) pick Arcade, `CvfTouchTap` is accepted in character select, `CvfInMatch()` turns 1, and presses in the fight act (the hearts counter drops from 100 to 089). Not tested: real UIKit touches/gestures, name box round trip, `cvfTouchUI` with a controller. |
-| M6 | not started | HTTP still loads libcurl with `dlopen` (absent on iOS): lobby/online HTTP will fail until `http_nsurl.m`. Nearby: `CvfP2PRegister` stores the table, `CvfP2PPeers`/`CvfNameEntered` reach the engine, but the engine's `cvfP2P*` calls are still the non-iOS stubs (`cvfP2PAvailable = false`). |
-| M7 | IPA only | Signed Release build: `CvF Native Engine/dev-ios/CvF-Native.ipa` (bundle id `com.kaioh1990.cvfonline`, team 9QP5427NJJ, "Apple Development" identity, wildcard team profile, version 2.0 (2), iOS 17.0+, vInputKit compiled in). Not installed. |
+| M6 | part | **HTTP**: `src/platform/ios/http_nsurl.m` (NSURLSession) replaces libcurl on iOS. `CVF_HTTP_TEST=<url>` runs `cvfHTTPSelfTest` (translated net/http: GET, POST JSON, GET `/api/rooms`) against a local `lobby/main.go` on the Mac: `200 []`, POST `200 {"id":...}`, `200 [{"name":"iOS Simulator",...}]`; the lobby logged the room. The lobby *screen* was not driven. Info.plist gets `NSAllowsLocalNetworking` (ATS) for UPnP and local servers; the real lobby is HTTPS. **Nearby**: `cvfP2PAvailable` is true on iOS; `cvfP2PAdvertise/AdvertiseStop/Browse/Join/Close` and `cvfNativeAskName` are C (`ik_native.c`) and call the table from `CvfP2PRegister`, as `cvf_p2p_ios.go` did. Simulator run of `tests/smoke/smoke.lua` (title -> Versus select -> Online > Host Nearby -> Join Nearby): `SMOKE OK`; while it hosts, the Mac's `cvf_nearby_test scan` lists it over the LAN, and `dns-sd -B _cvfnearby._tcp` on the Mac shows the app's Network.framework advertisement (engine -> table -> CvfP2P.m). Not tested: a Nearby join and match between two iOS instances (one Simulator only, for disk space; needs two devices), the name box, netplay. |
+| M7 | IPA only | Signed Release build: `CvF Native Engine/dev-ios/CvF-Native.ipa`. **Own identity, installs next to the Go app**: bundle id `com.kaioh1990.cvfnative`, display name "CvF Native", same AppIcon; team 9QP5427NJJ, "Apple Development" identity, wildcard team profile (no new App ID or profile was needed); version 2.0 (2), iOS 17.0+, vInputKit compiled in. Its Documents folder is its own: the game folder must be copied into "CvF Native" (`Documents/Game`). Not installed. |
 
 ### Differences from the design
 
@@ -550,11 +552,11 @@ Each is verifiable as stated; only M7 needs the device.
 
 ### Open / next
 
-1. Device run (M7): install the IPA (Sideloadly, same settings), check
+1. Device run (M7): install the IPA next to the Go app, copy the game
+   folder into "CvF Native", check
    `save/logs/cvf.log` (engine stack peak, GL errors), 120 Hz, vInputKit.
 2. Real touch, gestures, name box and rotation in the Simulator or on device.
-3. M6: NSURLSession HTTP back end, native `cvfP2P*` through the registered
-   table, Simulator vs desktop netplay.
-4. Remaining M2 items: owner-thread assert; macOS reference rerun with the
-   runtime changes (Linux and the iOS Simulator are verified).
-5. Memory-warning hook; trim the Metal-only code from the app.
+3. M6 on devices: Nearby join + match between two phones (direct link),
+   lobby screen against the real lobby, netplay vs desktop native.
+4. macOS reference rerun with the runtime changes.
+5. Trim the Metal-only code from the app.
