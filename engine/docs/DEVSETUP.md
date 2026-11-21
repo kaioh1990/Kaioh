@@ -90,7 +90,8 @@ function of the match time only), so the match must come out the same
 whatever the network does. Scenarios (default `direct lag:40:15:0
 loss:20:10:8`): `direct`, or `NAME:DELAY:JITTER:LOSS[:sync]` through
 `tests/netplay/udp_relay.py` (delay and jitter in ms, loss in %; the loss
-spares GGPO's sync handshake unless `:sync` is given, see GAPS.md). Each side
+spares GGPO's sync handshake unless `:sync` is given; builds with the GGPO
+handshake fix pass `:sync` cases too, see GAPS.md). Each side
 writes the last simulation of every match frame to `statedump.txt`; PASS
 needs both sides identical in every scenario and every scenario identical
 to the first. It prints the frames re-simulated in rollbacks (thousands
@@ -138,8 +139,9 @@ returning NULL; nothing headless touches Vulkan):
 | Reference fight, old rules: Go desktop configuration | `6924075c...`: config.ini's FightAspect -1,-1 (native forces 0,0); with 0,0 it is `54f8ae06...` |
 | Netplay native <-> native (Linux; macOS) | PASS, dump `a350bc2df11a03519f7d65d278844432` (cvf-online-5, 6,431 frames) |
 | Netplay native host <-> Go guest, Go host <-> native guest (`cvf` tag) | PASS, same dump |
-| Netplay native <-> Go desktop configuration, both directions | PASS, same dump (lossy scenarios spare GGPO's sync handshake: GAPS.md) |
-| Netplay Go desktop <-> Go desktop, 25 % loss including sync | fails in 3 of 4 relay seeds, as native pairs can: a GGPO limit, GAPS.md |
+| Netplay native <-> Go desktop configuration, both directions | PASS, same dump |
+| Netplay with 8 % / 25 % loss including sync (`:sync`), unfixed GGPO | fails in up to half the runs (Go and native alike): GAPS.md |
+| Same with the GGPO handshake fix (claude/native-ggpo-sync), also against unfixed builds | 20/20 per pair and loss (Linux; one unrelated TCP-phase failure, GAPS.md) |
 
 ### Locations on the project Mac
 
@@ -173,6 +175,7 @@ with:
 
 | Replacement | Source | Effect on the C |
 | --- | --- | --- |
+| `github.com/ikemen-engine/ggpo` => `third/ggpo` | in the fork patch itself (also `patches/ikemen-cvf-online.patch`, so every Go build has it); see `third/ggpo/CVF_CHANGES.txt` | **real**: sync handshake timing (retries, disconnect timeout before the peer runs), GAPS.md |
 | `github.com/jfreymuth/vorbis` => `third/vorbis` | module + `vita/vorbis-lookup1-fix.patch` | **real**: `lookup1Values` in integer math (OGG music decodes) |
 | `github.com/veandco/go-sdl2` => `third/sdl2` | module + `vita/go-sdl2-tinygo.patch` | binding types (syswm/hidapi/AudioCVT removed) |
 | `github.com/leonkasovan/gl` => `third/gl` | module + `vita/gl-tinygo.patch` | none (GLES bindings, not translated) |

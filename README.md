@@ -24,6 +24,10 @@ patched [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO) with rollback ne
    (Go's assembly versions differ between amd64 and arm64), and Apple builds disable FMA fusion,
    so PCs, Macs and iPads can play each other without desyncs.
 5. **CvF rules** (`data/cvf_online.ini`): attack invincibility cap and slower MP gain.
+6. **GGPO sync handshake under packet loss** (`third/ggpo`, a copy of the GGPO module with the
+   change, used through `go.mod`): lost sync packets are resent after 200 ms instead of 2 s, and a
+   peer that is ready waits up to 15 s for one that may still be synchronizing instead of dropping
+   it after 3 s. Timing only; it plays against builds without the change.
 
 ## Deploying the lobby (free)
 
