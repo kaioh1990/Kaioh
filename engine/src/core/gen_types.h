@@ -11156,21 +11156,21 @@ struct varAssign {
 struct Arr3_BytecodeExp { BytecodeExp v[3]; };
 #endif
 struct StateBlock {
-    i32 persistent;
     i32 persistentIndex;
     bool ignorehitpause;
     bool ctrlsIgnorehitpause;
+    bool loopBlock;
+    bool nestedInLoop;
     BytecodeExp trigger;
+    BytecodeExp trigRaw;
+    cnode ctrig;
     StateBlock* elseBlock;
     Slice_StateController ctrls;
     Slice_scRunFn runs;
     Slice_bool isBlock;
+    i32 persistent;
     specGuard* specGuard;
-    cnode ctrig;
-    BytecodeExp trigRaw;
     specList* spec;
-    bool loopBlock;
-    bool nestedInLoop;
     bool forLoop;
     bool forAssign;
     varAssign forCtrlVar;

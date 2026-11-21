@@ -10389,6 +10389,8 @@ GoString fn_cjitStatsLine(void);
 bool StateBlock_evalTrigger(StateBlock* b, Char* c);
 bool fn_fuseEnabled(void);
 void fn_fuseBytecode(StateBytecode* sb);
+void fn_packTriggers(StateBytecode* sb);
+void fn_walkTriggers(StateBlock* b, GoFunc f);
 void fn_fuseBlock(StateBlock* b);
 void fn_fuseController(StateController sc);
 int fn_opLen(OpCode op);
