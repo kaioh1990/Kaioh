@@ -5,6 +5,11 @@ name: CvF Native Android
 # rebuild the Go apps.
 on:
   workflow_dispatch:
+    inputs:
+      apk_in_log:
+        description: 'Also print the APK as base64 in the log (for hosts that cannot reach the artifact storage)'
+        type: boolean
+        default: false
   push:
     branches: ['claude/native-android', 'claude/native-integration']
     paths:
@@ -70,9 +75,10 @@ jobs:
       - name: Check the APK
         run: |
           bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$bt/aapt2" dump badging cvf-native-android.apk | grep -E "^package:|^application-label:|^native-code:|sdkVersion"
+          "$bt/aapt2" dump badging cvf-native-android.apk | grep -E "^package:|^application-label:|^native-code:|[sS]dkVersion:"
           "$bt/aapt2" dump badging cvf-native-android.apk | grep -q "name='com.kaioh1990.cvfnative'"
           "$bt/aapt2" dump badging cvf-native-android.apk | grep -q "application-label:'CvF Native'"
+          "$bt/aapt2" dump badging cvf-native-android.apk | grep -q "^minSdkVersion:'26'"
           "$bt/apksigner" verify --print-certs cvf-native-android.apk | grep -i "SHA-256"
           unzip -l cvf-native-android.apk | grep -E "lib/arm64-v8a/libmain.so|lib/arm64-v8a/libSDL2.so|assets/save/config.ini|assets/external/script/main.lua"
           # the JNI class the engine's HTTP back end calls
@@ -80,6 +86,16 @@ jobs:
           unzip -p cvf-native-android.apk 'classes*.dex' | grep -a -q "Lorg/libsdl/app/CvfHttp;"
           ls -la cvf-native-android.apk
           sha256sum cvf-native-android.apk out/jniLibs/arm64-v8a/*.so
+
+      # The APK between BEGIN/END markers, base64 in 4000-character lines:
+      # strip the log's timestamps, join, decode, compare with the SHA-256
+      # printed above.
+      - name: APK in the log
+        if: ${{ inputs.apk_in_log }}
+        run: |
+          echo "CVF-APK-BEGIN $(sha256sum < cvf-native-android.apk | cut -d' ' -f1)"
+          base64 -w 4000 cvf-native-android.apk
+          echo "CVF-APK-END"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -25,6 +25,11 @@ ANDROID_VERSION_NAME="${ANDROID_VERSION_NAME:-2.0-native}" "$HERE/../customize.s
 # 2. Own identity, so it installs next to the Go app (com.kaioh1990.cvfonline).
 sed -i -e 's/applicationId "com.kaioh1990.cvfonline"/applicationId "com.kaioh1990.cvfnative"/' "$GRADLE"
 grep -q 'applicationId "com.kaioh1990.cvfnative"' "$GRADLE"
+# The engine library is built for API 26 (android_build.sh, Android 8.0):
+# say so in the manifest, so older devices refuse the install instead of
+# failing to load libmain.so.
+sed -i -e 's/minSdkVersion 21$/minSdkVersion 26/' "$GRADLE"
+grep -q 'minSdkVersion 26$' "$GRADLE"
 sed -i -e 's#<string name="app_name" translatable="false">CvF Online</string>#<string name="app_name" translatable="false">CvF Native</string>#' \
   "$APP/src/main/res/values/strings.xml"
 grep -q '>CvF Native<' "$APP/src/main/res/values/strings.xml"
