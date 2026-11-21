@@ -132,7 +132,7 @@ If NTL change is rejected mid-session:
 
 ## Updated Understanding (Nov 21, 2026)
 
-### OOB Value Interpretation (from kernelcache RE)
+### OOB Value Interpretation (from kernelcache RE, updated Nov 21)
 The DMA config function at AVE2+0x13d308 interprets the OOB region as:
 - **struct+0x534** = Surface type A COUNT (loop count for DMA register writes)
 - **struct+0x538[i]** = Surface type A array (indexed by count at +0x534)
@@ -141,10 +141,17 @@ The DMA config function at AVE2+0x13d308 interprets the OOB region as:
 - **struct+0x57c** = Surface type C COUNT (cascading)
 - **struct+0x5a0[i]** = Surface type C array
 
-The residual value at +0x534 (0x59=89 in original panic) is used as a loop count.
-Each loop iteration triggers 4 HW register writes that configure coprocessor DMA.
-The array values are read AFTER the DMA config (for logging), not used as addresses.
-The actual DMA destination comes from the HW register configuration.
+**CRITICAL NEW FINDING**: +0x534 has ZERO direct STR instructions in all of AVE2.
+It is NOT heap residual — it's the VALUE COMPUTED FOR LAYER INDEX 8 during
+per-layer array overflow. When NTL>8, the array at +0x514 (8 entries * 4 bytes)
+overflows, and the per-layer calculation writes its layer[8] result to +0x534.
+
+The 0x59 (89) in the original panic = per-layer value for layer 8 with NTL=16463.
+**Different encoder properties will produce different layer[8] values.**
+This makes Phase 1b (property scanning) the MOST IMPORTANT immediate test.
+
+For comparison, +0x558 (Type B count) IS explicitly initialized from a config
+struct (x20+0xb70 → x19+0x558), while +0x534 is only written via OOB overflow.
 
 ### Key Exploitation Insight
 To get a CONTROLLED kernel write instead of a crash:

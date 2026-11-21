@@ -288,11 +288,17 @@ Each test reveals:
 - Even Lockdown Mode's MTE protection is bypassed by data-only DMA approach
 - Apple credited fix to Calif.io in macOS Tahoe 26.5 (CVE-2026-28952)
 
-### Calif.io iOS 27.0.1 Jailbreak (Separate from macOS chain)
-- Untethered jailbreak for iOS 27.0.1 published by Calif.io
-- Bypasses MIE even with Lockdown Mode active
-- Unclear if same CVEs as macOS chain or different bugs
-- Our target (iOS 27.1) is one version newer — the AVE CVEs are unpatched until 27.2
+### Calif.io iOS 27.0.1 Jailbreak (Hexacon Oct 16, 2026)
+- Demonstrated at Hexacon conference in Paris, October 16, 2026
+- Untethered jailbreak on iPhone 18 Pro running iOS 27.0.1
+- First jailbreak since iOS 9 to survive a full reboot
+- Delivery: malicious PDF via Safari or AirDrop
+- In Lockdown Mode, PDF displayed in Preview → still exploitable
+- MTE (MIE) is only active when Lockdown Mode is enabled — bypassed anyway
+- Stefan Esser confirmed iOS 27.2 (Oct 26) fixed "most of the flaws involved"
+- MIE bypass technical details still unpublished (community tracker: github.com/iMaxTomas/ios27-jb-tracker)
+- Chain: PDF parsing vuln → initial code execution → AVE DMA OOB → kernel LPE → persistence
+- Our target (iOS 27.1) is between 27.0.1 (vulnerable) and 27.2 (patched)
 
 ### Implications for Our Exploit
 1. Data-only approach is PROVEN to work against MIE on A-series chips
@@ -373,8 +379,27 @@ Only 2 explicit stores to the per-layer array found in entire kext:
 +0x18eb7c: str w0, [x19, #0x52c]    // layer[6] (alt path)
 ```
 Layers 0-4 and 7 are set via indexed stores (register offset).
-**struct+0x534 (first OOB slot) has ZERO stores** — its value is whatever
-residual data exists from struct initialization or prior operations.
+**struct+0x534 (first OOB slot) has ZERO direct stores in all of AVE2** — confirmed
+by exhaustive search of all STR w_r, [x_base, #0x534] instructions (0 found).
+STP cannot reach this offset (imm7 max +-252 bytes).
+
+**CRITICAL EXPLOITATION INSIGHT (Nov 21, 2026)**:
+When NTL > 8, the per-layer array population OVERFLOWS past the 8-entry boundary.
+The value written to +0x534 is whatever the per-layer calculation produces for
+temporal layer INDEX 8 (the 9th layer). This means:
+- With NTL=9: layer[8] is computed and written to +0x534
+- The 0x59 (89) in the original panic = per-layer value for layer 8 with NTL=16463
+- **Different encoder properties will produce different per-layer values**
+- **Property scanning (Phase 1b) empirically finds which properties affect +0x534**
+- If we find properties that make layer[8] = 1, we get a single controlled DMA write
+
+For comparison, +0x558 (Type B surface count) IS explicitly initialized:
+  +0x0a1b0: LDR w8, [x20, #0xb70]    // from config struct
+  +0x0a1b4: STR w8, [x19, #0x558]    // to encoder struct
+  +0x0a1a8: LDR w8, [x20, #0xb60]    // config struct
+  +0x0a1ac: STR w8, [x19, #0x55c]    // encoder struct
+Type B surfaces come from config struct at x20+0xb70/+0xb60.
+Type A count (+0x534) has NO corresponding initialization — only written via OOB.
 
 #### 4 locations compute the array base address:
 ```
