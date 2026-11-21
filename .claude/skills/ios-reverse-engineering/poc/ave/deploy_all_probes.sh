@@ -28,6 +28,7 @@ declare -a PROBES=(
     "AVEIOSurfSpray:com.research.aveiosurfspray:ave_iosurface_spray.c"
     "AVEOOBReadProbe:com.research.aveoobread:ave_oob_read_probe.c"
     "AVEFullChain:com.research.avefullchain:ave_full_chain.c"
+    "AVETypeConfusion:com.research.avetypeconfusion:ave_type_confusion.c"
     "KRWHelper:com.research.krwhelper:krw_helper.c"
     "WQProbe:com.research.wqprobe:worse_query_probe.c"
 )

