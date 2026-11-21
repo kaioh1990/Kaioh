@@ -89,50 +89,50 @@ void CvfNameEntered(char *name) {
 
 // ---------------------------------------------------------------- input self-test
 // CVF_INPUT_TEST=1 (save/cvf_env.txt): drives the host API the way the app's
-// overlay does, for the Simulator where nobody touches the screen. Taps
-// ARCADE on the title menu through CvfTouchTap until a screen accepts the
-// tap, then presses buttons on a virtual SDL game controller created like
-// the overlay's (SDL_JoystickAttachVirtual, 6 axes, 15 buttons, 1 hat) to
-// pick a character and fight, holding right; logs CvfInMatch changes.
+// overlay does, for the Simulator where nobody touches the screen. A virtual
+// SDL game controller, created like the overlay's (SDL_JoystickAttachVirtual,
+// 6 axes, 15 buttons, 1 hat), presses A on the title menu (Arcade) until
+// character select accepts a tap through CvfTouchTap (the call the overlay
+// makes); a second tap on the same cell selects the character; then A until
+// the fight starts, walking right and punching. CvfInMatch changes are logged.
 static int it_state, it_frames, it_inmatch = -1;
 static SDL_Joystick *it_joy;
+static void it_button(int b, int down) {
+    if (it_joy) SDL_JoystickSetVirtualButton(it_joy, b, down ? SDL_PRESSED : SDL_RELEASED);
+}
 static void input_test_tick(void) {
     it_frames++;
+    if (!it_joy && it_frames == 30) {
+        int idx = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 6, 15, 1);
+        it_joy = idx >= 0 ? SDL_JoystickOpen(idx) : NULL;
+        fprintf(stderr, "cvf: input test: virtual controller %d %s\n", idx, it_joy ? "open" : SDL_GetError());
+    }
+    const float tx = 0.5f, ty = 0.45f;  // a cell of the character grid
     switch (it_state) {
-    case 0:  // title menu: tap ARCADE (centre, 72% down) until accepted
-        if (it_frames > 60 && CvfTouchTap(0.5f, 0.72f)) {
-            fprintf(stderr, "cvf: input test: tap accepted at frame %d\n", it_frames);
+    case 0:  // title: A pulses until a screen takes taps (character select)
+        it_button(SDL_CONTROLLER_BUTTON_A, it_frames > 60 && it_frames % 90 < 6);
+        if (it_frames > 60 && CvfTouchTap(tx, ty)) {
+            it_button(SDL_CONTROLLER_BUTTON_A, 0);
+            fprintf(stderr, "cvf: input test: tap accepted (character select) at frame %d\n", it_frames);
             it_state = 1, it_frames = 0;
         }
         break;
-    case 1:  // a second tap confirms the highlighted item
-        if (it_frames == 30) {
-            fprintf(stderr, "cvf: input test: second tap -> %d\n", CvfTouchTap(0.5f, 0.72f));
+    case 1:  // second tap on the same cell selects it
+        if (it_frames == 40) {
+            fprintf(stderr, "cvf: input test: second tap -> %d\n", CvfTouchTap(tx, ty));
             it_state = 2, it_frames = 0;
         }
         break;
-    case 2: {  // virtual controller: A pulses (character, then whatever asks)
-        if (!it_joy) {
-            int idx = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 6, 15, 1);
-            it_joy = idx >= 0 ? SDL_JoystickOpen(idx) : NULL;
-            fprintf(stderr, "cvf: input test: virtual controller %d %s\n", idx, it_joy ? "open" : SDL_GetError());
-        }
-        if (it_joy && it_frames > 120) {
-            int t = (it_frames - 120) % 60;
-            SDL_JoystickSetVirtualButton(it_joy, SDL_CONTROLLER_BUTTON_A, t < 6 ? SDL_PRESSED : SDL_RELEASED);
-        }
-        int m = CvfInMatch();
-        if (m == 1) {
-            SDL_JoystickSetVirtualButton(it_joy, SDL_CONTROLLER_BUTTON_A, SDL_RELEASED);
+    case 2:  // A for whatever else asks, until the fight is on
+        it_button(SDL_CONTROLLER_BUTTON_A, it_frames > 120 && it_frames % 90 < 6);
+        if (CvfInMatch() == 1) {
+            it_button(SDL_CONTROLLER_BUTTON_A, 0);
             it_state = 3, it_frames = 0;
         }
         break;
-    }
-    case 3:  // in the fight: walk right, punch now and then
-        if (it_joy) {
-            SDL_JoystickSetVirtualButton(it_joy, SDL_CONTROLLER_BUTTON_DPAD_RIGHT, (it_frames / 90) % 2 ? SDL_RELEASED : SDL_PRESSED);
-            SDL_JoystickSetVirtualButton(it_joy, SDL_CONTROLLER_BUTTON_X, it_frames % 40 < 4 ? SDL_PRESSED : SDL_RELEASED);
-        }
+    case 3:  // fight: walk right, punch now and then
+        it_button(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, (it_frames / 90) % 2 == 0);
+        it_button(SDL_CONTROLLER_BUTTON_X, it_frames % 40 < 4);
         break;
     }
     int m = CvfInMatch();
