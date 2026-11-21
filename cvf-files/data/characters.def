@@ -115,7 +115,7 @@ Victor,,order=0
 <br> ; LOCKED
 zx-bonus/zx-bonus.def,stages/Town1.def,includestage=0,order=0
 zx-bonus/zx-bonus2.def,stages/Entrance1.def,includestage=0,order=0
-zx-bonus/zx-bonus3.def,stages/Entrance2.def,includestage=0,order=0
+zx-bonus/zx-bonus3.def,stages/GBatBG.def,includestage=0,order=0 ; online port: was stages/Entrance2.def, which never shipped (v0.8.5b). GBatBG is the DoS entrance hall (stage id 35, intros.st 49071)
 zx-bonus/zx-bonus4.def,stages/Marble1.def,includestage=0,order=0
 zx-bonus/zx-bonus5.def,stages/AguniBG.def,includestage=0,order=0
 zx-bonus/zx-bonus6.def,stages/RichterBG.def,includestage=0,order=0
@@ -136,7 +136,7 @@ zx-bonus/zx-bonus6.def,stages/RichterBG.def,includestage=0,order=0
 <br> ; LOCKED
 <br> ; LOCKED
 <br> ; LOCKED
-Intro,stages/intro.def,includestage=0,order=1
+Intro,stages/Intro.def,includestage=0,order=1
 Abaddon,stages/AbaddonBG.def,includestage=0,order=2
 Cerberus,stages/CerberusBG.def,includestage=0,order=2
 Lesserd,stages/LesserdBG.def,includestage=0,order=2
@@ -297,10 +297,10 @@ Remilia,stages/RemiliaBG.def,includestage=0,order=0
 <br> ; LOCKED
 <br> ; LOCKED
 <br> ; LOCKED
-NSuccubus,stages/SuccubusBG.def,includestage=0,order=0
-DChick,stages/DimitriBG.def,includestage=0,order=0
+Nsuccubus,stages/SuccubusBG.def,includestage=0,order=0
+DChick,stages/DmitriBG.def,includestage=0,order=0 ; online port: typo in v0.8.5b (DimitriBG); the stage file is DmitriBG.def
 Necro,stages/NecroBG.def,includestage=0,order=5
-Galamoth,stages/GalamothBG.def,includestage=0,order=0;6
+Galamoth,,includestage=0,order=0 ; 6 ; online port: GalamothBG.def never shipped (v0.8.5b), so he gets a normal stage. Restore when it exists: Galamoth,stages/GalamothBG.def,includestage=0,order=0
 Karasuman,stages/KarasumanBG.def,includestage=0,order=0;4
 Adramelech,stages/AdramelechBG.def,includestage=0,order=0;6
 
@@ -403,7 +403,7 @@ stages/FrankBG.def
 stages/GBatBG.def
 stages/GergothBG.def
 stages/JuliusBG.def
-stages/kfm01.def
+stages/Kfm01.def
 stages/LegionBG.def
 stages/LesserdBG.def
 stages/Marble1.def

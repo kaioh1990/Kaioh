@@ -13,11 +13,11 @@ logo.storyboard=logo.def
 intro.storyboard=introgame.def
 select=characters.def
 fight=bars.def;barsdemo.def
-font1=font/cvfont.fnt
-font2=font/name.fnt
-font3=font/jg.fnt
+font1=font/Cvfont.fnt
+font2=font/NAME.FNT
+font3=font/JG.FNT
 font4=font/st10.fnt;def
-font5=font/cvfont.fnt
+font5=font/Cvfont.fnt
 [Music]
 title.bgm=sound/Title.ogg
 title.bgm.volume=100

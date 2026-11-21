@@ -46,5 +46,5 @@ x2=10
 y2=11
 z2=12
 [arcade]
-intro.storyboard=start.def
+;intro.storyboard=start.def ; online port: start.def never shipped for Maxim (v0.8.5b), commented out like the other characters
 ending.storyboard=../../data/victory.def
