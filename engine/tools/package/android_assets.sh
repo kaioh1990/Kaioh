@@ -16,6 +16,8 @@ R=$(cd "$E/.." && pwd)
 IK=${1:?usage: android_assets.sh IKEMEN_GIT_TREE GAMECONTROLLERDB OUTDIR}
 DB=${2:?usage: android_assets.sh IKEMEN_GIT_TREE GAMECONTROLLERDB OUTDIR}
 OUT=${3:?usage: android_assets.sh IKEMEN_GIT_TREE GAMECONTROLLERDB OUTDIR}
+IK=$(cd "$IK" && pwd)
+DB=$(cd "$(dirname "$DB")" && pwd)/$(basename "$DB")
 rm -rf "$OUT"
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
