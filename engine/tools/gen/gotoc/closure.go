@@ -44,6 +44,10 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 	envType := "Env_" + name
 	var fields []string
 	for _, o := range capList {
+		if byValue(o) { // never modified: the environment holds a copy
+			fields = append(fields, fmt.Sprintf("%s %s;", cbase(o.Type()), cVarName(o.Name())))
+			continue
+		}
 		fields = append(fields, fmt.Sprintf("%s *%s;", cbase(o.Type()), cVarName(o.Name())))
 	}
 	if len(fields) == 0 {
@@ -107,7 +111,9 @@ func (t *Tx) funcLit(e *ast.FuncLit) string {
 	// variables (valid while the enclosing function runs).
 	var inits []string
 	for _, o := range capList {
-		if t.captured[o] {
+		if byValue(o) {
+			inits = append(inits, t.varRefCtx(o))
+		} else if t.captured[o] {
 			inits = append(inits, "_env->"+cVarName(o.Name()))
 		} else if t.heap[o] {
 			inits = append(inits, cVarName(o.Name())+"__h")

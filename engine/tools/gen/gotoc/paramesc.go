@@ -359,3 +359,103 @@ func addrArgNoEsc(p *Prog, parent map[ast.Node]ast.Node, u *ast.UnaryExpr) bool 
 	}
 	return false
 }
+
+// ---------------------------------------------------------------- capture by value
+// A local that is never modified after its declaration (no assignment,
+// ++/--, range assignment, &v, and no pointer-receiver method call or
+// assignment through a value path v.f / v[i] on an array) can be captured
+// by value: the closure's environment holds a copy instead of a pointer, and
+// the variable needs no heap box. The copy is taken when the literal is
+// evaluated; the variable already holds its final value then, because a
+// variable is only captured after its declaration and is never written
+// afterwards.
+var mutatedVars map[*types.Var]bool
+
+func computeMutated(p *Prog) {
+	mutatedVars = map[*types.Var]bool{}
+	mark := func(e ast.Expr) {
+		if v := rootVar(p, e); v != nil {
+			mutatedVars[v] = true
+		}
+	}
+	for _, f := range p.files {
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch s := n.(type) {
+			case *ast.AssignStmt:
+				for _, l := range s.Lhs {
+					if id, ok := l.(*ast.Ident); ok && s.Tok == token.DEFINE && p.info.Defs[id] != nil {
+						continue // a definition, not an assignment
+					}
+					mark(l)
+				}
+			case *ast.IncDecStmt:
+				mark(s.X)
+			case *ast.RangeStmt:
+				if s.Tok == token.ASSIGN {
+					if s.Key != nil {
+						mark(s.Key)
+					}
+					if s.Value != nil {
+						mark(s.Value)
+					}
+				}
+			case *ast.UnaryExpr:
+				if s.Op == token.AND {
+					mark(s.X)
+				}
+			case *ast.SelectorExpr:
+				// v.M / v.M() with a pointer receiver takes &v implicitly
+				if sel := p.info.Selections[s]; sel != nil && sel.Kind() == types.MethodVal {
+					if fn, ok := sel.Obj().(*types.Func); ok {
+						if r := fn.Type().(*types.Signature).Recv(); r != nil && isPtrType(r.Type()) && !isPtrType(p.info.TypeOf(s.X)) {
+							mark(s.X)
+						}
+					}
+					if _, isIface := sel.Recv().Underlying().(*types.Interface); !isIface && len(sel.Index()) > 1 {
+						mark(s.X) // promoted method: conservatively a mutation
+					}
+				}
+			}
+			return true
+		})
+	}
+}
+
+// rootVar: the local variable whose own storage e denotes (v, v.f, v[i] on
+// arrays, through parentheses), or nil.
+func rootVar(p *Prog, e ast.Expr) *types.Var {
+	for {
+		switch x := e.(type) {
+		case *ast.ParenExpr:
+			e = x.X
+			continue
+		case *ast.Ident:
+			if v, ok := p.info.Uses[x].(*types.Var); ok {
+				return v
+			}
+			if v, ok := p.info.Defs[x].(*types.Var); ok {
+				return v
+			}
+			return nil
+		case *ast.SelectorExpr:
+			if sel := p.info.Selections[x]; sel != nil && sel.Kind() == types.FieldVal && !isPtrType(p.info.TypeOf(x.X)) {
+				e = x.X
+				continue
+			}
+			return nil
+		case *ast.IndexExpr:
+			if _, isArr := p.info.TypeOf(x.X).Underlying().(*types.Array); isArr {
+				e = x.X
+				continue
+			}
+			return nil
+		}
+		return nil
+	}
+}
+
+// byValue: captured variables of this kind are copied into the closure.
+func byValue(o types.Object) bool {
+	v, ok := o.(*types.Var)
+	return ok && mutatedVars != nil && !mutatedVars[v]
+}

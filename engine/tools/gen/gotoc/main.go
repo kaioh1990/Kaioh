@@ -84,6 +84,7 @@ func main() {
 		return pi.Offset < pj.Offset
 	})
 	computeParamEscape(p, func(k string) bool { return !isExcluded(p, k) })
+	computeMutated(p)
 	total := 0
 	var stubs []string
 	var bodies []string

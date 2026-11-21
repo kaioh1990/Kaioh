@@ -92,8 +92,9 @@ func heapVarsOf(p *Prog, region ast.Node) (map[types.Object]bool, map[types.Obje
 				return true
 			}
 			for _, fl := range lits {
-				// declared inside region but outside this literal: captured by it
-				if v.Pos() < fl.Pos() || v.Pos() > fl.End() {
+				// declared inside region but outside this literal: captured by
+				// it (by reference unless never modified: paramesc.go)
+				if (v.Pos() < fl.Pos() || v.Pos() > fl.End()) && !byValue(v) {
 					out[v] = true
 					if !nonEsc[fl] {
 						escapes[v] = true
@@ -132,6 +133,17 @@ func (t *Tx) declObj(o types.Object, ctype, val string) string {
 		return t.boxDecl(o, ctype, val)
 	}
 	return fmt.Sprintf("%s %s = %s;", ctype, name, val)
+}
+
+// varRefCtx: the value of o in the current function or closure body.
+func (t *Tx) varRefCtx(o types.Object) string {
+	if t.captured[o] {
+		if byValue(o) {
+			return "_env->" + cVarName(o.Name())
+		}
+		return "(*_env->" + cVarName(o.Name()) + ")"
+	}
+	return t.varRef(o)
 }
 
 func (t *Tx) varRef(o types.Object) string {

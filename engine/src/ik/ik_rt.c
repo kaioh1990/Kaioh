@@ -543,16 +543,20 @@ i32 unicode_ToUpper(i32 r) {
 }
 
 static GoString map_case(GoString s, bool upper) {
-    bool ascii = true;
-    for (int i = 0; i < s.len; i++)
-        if ((u8)s.p[i] >= 0x80) ascii = false;
-    if (ascii) {
-        int i = 0;
-        for (; i < s.len; i++) {
-            char c = s.p[i];
-            if (upper ? (c >= 'a' && c <= 'z') : (c >= 'A' && c <= 'Z')) break;
+    // one pass: non-ASCII bytes or letters to change (most map and
+    // controller names are already lower case: Go returns s unchanged)
+    bool ascii = true, change = false;
+    const u8 lo = upper ? 'a' : 'A';
+    for (int i = 0; i < s.len; i++) {
+        u8 c = (u8)s.p[i];
+        if (c >= 0x80) {
+            ascii = false;
+            break;
         }
-        if (i == s.len) return s;  // Go returns the input unchanged
+        if ((u8)(c - lo) < 26) change = true;
+    }
+    if (ascii) {
+        if (!change) return s;  // Go returns the input unchanged
         char *p = (char *)gc_alloc_atomic((size_t)s.len + 1);
         for (int k = 0; k < s.len; k++) {
             char c = s.p[k];

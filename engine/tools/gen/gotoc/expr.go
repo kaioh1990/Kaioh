@@ -200,6 +200,9 @@ func (t *Tx) ident(e *ast.Ident) string {
 			return gName(o) // package-level variable
 		}
 		if t.captured[o] {
+			if byValue(o) {
+				return "_env->" + cVarName(e.Name)
+			}
 			return "(*_env->" + cVarName(e.Name) + ")"
 		}
 		if t.heap[o] {
