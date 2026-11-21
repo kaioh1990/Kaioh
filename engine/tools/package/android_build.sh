@@ -53,14 +53,14 @@ B="$OUT/build/engine"
 cmake -S "$E" -B "$B" "${GEN[@]}" -DCMAKE_TOOLCHAIN_FILE="$TC" -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-$API -DCMAKE_BUILD_TYPE=$BT \
   -DCVF_SDL2_INCLUDE_DIR="$SDLINC" -DCVF_SDL2_LIBRARY="$SDLSO" > "$B.cmake.log"
-cmake --build "$B" -j "$JOBS" --target main cvf_headless cvf_tests
+cmake --build "$B" -j "$JOBS" --target main cvf_headless cvf_nearby_test cvf_tests
 
 LIB="$OUT/jniLibs/arm64-v8a"
 mkdir -p "$LIB" "$OUT/test"
 STRIP="$NDK/toolchains/llvm/prebuilt/$(ls "$NDK/toolchains/llvm/prebuilt" | head -1)/bin/llvm-strip"
 "$STRIP" --strip-unneeded -o "$LIB/libmain.so" "$B/libmain.so"
 "$STRIP" --strip-unneeded -o "$LIB/libSDL2.so" "$SDLSO"
-cp "$B/cvf_headless" "$B/cvf_tests" "$OUT/test/"
+cp "$B/cvf_headless" "$B/cvf_nearby_test" "$B/cvf_tests" "$OUT/test/"
 
 # exports: only the JNI entry points, JNI_OnLoad and SDL_main
 NM="$(dirname "$STRIP")/llvm-nm"
