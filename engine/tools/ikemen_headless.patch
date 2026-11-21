@@ -12027,10 +12027,10 @@ index 0000000..f8b7b0f
 +func cvfSelectRendererGLES(cfgVal string) (Renderer, FontRenderer, bool) { return nil, nil, false }
 diff --git a/src/cvf_mobile.go b/src/cvf_mobile.go
 new file mode 100644
-index 0000000..08c5237
+index 0000000..a644746
 --- /dev/null
 +++ b/src/cvf_mobile.go
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,87 @@
 +//go:build cvf
 +
 +package main
@@ -12041,7 +12041,11 @@ index 0000000..08c5237
 +// or from the per-frame mailbox drain for values coming from other threads.
 +
 +import (
++	"fmt"
++	"io"
++	"net/http"
 +	"strings"
++	"time"
 +	"unsafe"
 +)
 +
@@ -12084,6 +12088,36 @@ index 0000000..08c5237
 +
 +// The player's answer from the app's name box ("" if cancelled).
 +func cvfHostNameEntered(name string) { cvfNameAskDone(name) }
++
++// Lobby round trip through net/http (NSURLSession on iOS), for a local test
++// lobby (lobby/main.go): GET /api/rooms, POST a room, GET again. Run by the
++// iOS app with CVF_HTTP_TEST=<base URL> (src/platform/ios/ios_main.c).
++func cvfHTTPSelfTest(base string) string {
++	c := &http.Client{Timeout: 15 * time.Second}
++	out := ""
++	get := func() {
++		resp, err := c.Get(base + "/api/rooms")
++		if err != nil {
++			out += "GET error: " + err.Error() + "\n"
++			return
++		}
++		b, _ := io.ReadAll(resp.Body)
++		resp.Body.Close()
++		out += fmt.Sprintf("GET /api/rooms -> %d %s\n", resp.StatusCode, strings.TrimSpace(string(b)))
++	}
++	get()
++	body := `{"name":"iOS Simulator","port":7500,"udp_port":7501,"version":"` + cvfOnline.buildTag + `"}`
++	resp, err := c.Post(base+"/api/rooms", "application/json", strings.NewReader(body))
++	if err != nil {
++		out += "POST error: " + err.Error() + "\n"
++	} else {
++		b, _ := io.ReadAll(resp.Body)
++		resp.Body.Close()
++		out += fmt.Sprintf("POST /api/rooms -> %d %s\n", resp.StatusCode, strings.TrimSpace(string(b)))
++	}
++	get()
++	return out
++}
 diff --git a/src/cvf_nearby.go b/src/cvf_nearby.go
 new file mode 100644
 index 0000000..6323a30
@@ -13767,6 +13801,35 @@ index 0000000..5caa9f7
 +		fmt.Fprintf(os.Stderr, "[cvf] "+format+"\n", args...)
 +	}
 +}
+diff --git a/src/cvf_p2p_cvf.go b/src/cvf_p2p_cvf.go
+new file mode 100644
+index 0000000..ba789f0
+--- /dev/null
++++ b/src/cvf_p2p_cvf.go
+@@ -0,0 +1,23 @@
++//go:build cvf
++
++package main
++
++// Nearby direct link in the native C engine. On iPhone/iPad the app's
++// CvfP2P.m (Network.framework peer-to-peer) registers a function table
++// (CvfP2PRegister); the functions below are implemented in C
++// (src/ik/ik_native.c, GOTOC_NATIVE_FUNCS) and call through that table, as
++// cvf_p2p_ios.go does in the Go app. Elsewhere the table stays empty and
++// they do nothing.
++
++import "runtime"
++
++var cvfP2PAvailable = runtime.GOOS == "ios"
++
++func cvfP2PAdvertise(id, name, ver string, tcpPort, udpPort int) {}
++func cvfP2PAdvertiseStop()                                       {}
++func cvfP2PBrowse(on bool)                                       {}
++func cvfP2PJoin(id string, localTcp, localUdp int) bool          { return false }
++func cvfP2PClose()                                               {}
++
++// Opens the app's name box. False if the app has none.
++func cvfNativeAskName(suggestion string) bool { return false }
 diff --git a/src/cvf_p2p_export_ios.go b/src/cvf_p2p_export_ios.go
 new file mode 100644
 index 0000000..a6904e3
@@ -13884,11 +13947,11 @@ index 0000000..574af3b
 +}
 diff --git a/src/cvf_p2p_other.go b/src/cvf_p2p_other.go
 new file mode 100644
-index 0000000..530eeb0
+index 0000000..1582d5b
 --- /dev/null
 +++ b/src/cvf_p2p_other.go
 @@ -0,0 +1,15 @@
-+//go:build !ios
++//go:build !ios && !cvf
 +
 +package main
 +

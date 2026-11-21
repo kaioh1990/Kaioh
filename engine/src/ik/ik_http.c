@@ -143,18 +143,7 @@ void http_Header_Set(Map_GoString_Slice_GoString h, GoString k, GoString v) {
 }
 
 // ---------------------------------------------------------------- requests
-typedef struct HttpJob {  // malloc memory only (shared with the worker thread)
-    char *method, *url, *headers;  // headers: "K: V\n" lines
-    char *body;
-    size_t body_len;
-    long timeout_ms;
-    // results
-    volatile int done;
-    long status;
-    char *resp;
-    size_t resp_len, resp_cap;
-    char err[256];
-} HttpJob;
+#include "platform/http_job.h"
 
 static char *dupn(const char *p, size_t n) {
     char *c = (char *)malloc(n + 1);
@@ -173,7 +162,11 @@ static void job_append(HttpJob *j, const void *p, size_t n) {
     j->resp_len += n;
 }
 
-#if !defined(_WIN32)
+#if CVF_IOS
+// iOS has no libcurl: NSURLSession (src/platform/ios/http_nsurl.m)
+int cvf_nsurl_start(HttpJob *j);
+static bool start_worker(HttpJob *j) { return cvf_nsurl_start(j) != 0; }
+#elif !defined(_WIN32)
 // libcurl, loaded at run time (no build dependency)
 typedef void CURL;
 struct curl_slist;

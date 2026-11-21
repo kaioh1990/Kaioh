@@ -196,6 +196,23 @@ static uintptr_t find_stack_base(void *hint) {
     return b;
 }
 
+// ---------------------------------------------------------------- owner thread
+// Only the thread that called gc_init may allocate or collect (the
+// collector is single-threaded and scans only that thread's stacks).
+// Checked on every collection; on every allocation too in debug builds.
+#if !defined(_WIN32)
+static pthread_t gc_owner;
+static bool gc_owner_set;
+static void owner_check(const char *what) {
+    if (gc_owner_set && !pthread_equal(pthread_self(), gc_owner)) {
+        fprintf(stderr, "gc: %s from a thread other than the engine thread\n", what);
+        abort();
+    }
+}
+#else
+static void owner_check(const char *what) { (void)what; }
+#endif
+
 // ---------------------------------------------------------------- init
 void gc_init(void *stack_base) {
     if (S) return;
@@ -236,6 +253,9 @@ void gc_init(void *stack_base) {
     if ((e = getenv("CVF_GC_FIGHT_BUDGET_MB")) && atoi(e) > 0) S->fight_budget = (size_t)atoi(e) << 20;
 
     S->stack_base = find_stack_base(stack_base);
+#if !defined(_WIN32)
+    gc_owner = pthread_self(), gc_owner_set = true;
+#endif
 #ifdef GC_PROFILE
     prof_skip = getenv("CVF_GC_PROF_SKIP_MB") ? (size_t)atoi(getenv("CVF_GC_PROF_SKIP_MB")) << 20 : 0;
 #endif
@@ -446,6 +466,7 @@ static void sweep(void) {
 
 void gc_collect(void) {
     if (!S || S->collecting) return;
+    owner_check("collection");
     S->collecting = true;
     double t0 = now_ms();
     size_t rootbytes = 0;
@@ -586,6 +607,9 @@ static __attribute__((noinline)) void prof_sample(size_t n) {
 
 static inline void *alloc_impl(size_t n, int atomic) {
     if (__builtin_expect(!S, 0)) gc_init(NULL);  // first allocation before main's gc_init
+#ifndef NDEBUG
+    owner_check("allocation");
+#endif
     PROF(n);
     if (n > SMALL_MAX) return alloc_large(n, atomic);
     int c = S->size_to_cls[(n + 15) >> 4];

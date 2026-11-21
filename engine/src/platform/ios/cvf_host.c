@@ -24,19 +24,9 @@ static bool mbox_name_set;
 static _Atomic int touch_menus = -1;  // -1: unchanged
 static _Atomic int engine_up;          // translated code may be called
 
-// Function table the app hands over for the Nearby direct link
-// (layout of CvfP2PFuncs in cvf_p2p_ios.go). Kept for the native P2P
-// functions; the engine does not call it yet (IOS_PORT.md M6).
-typedef struct CvfP2PFuncs {
-    void (*advertise)(const char *id, const char *name, const char *ver, int tcpPort, int udpPort);
-    void (*advertiseStop)(void);
-    void (*browse)(int on);
-    int (*join)(const char *id, int localTcp, int localUdp);
-    void (*close)(void);
-    int (*askName)(const char *suggestion);
-} CvfP2PFuncs;
-static CvfP2PFuncs p2p_funcs;
-static _Atomic int p2p_registered;
+// The Nearby direct link's function table goes to src/ik/ik_native.c,
+// which the engine's cvfP2P* functions call through.
+void cvf_p2p_set_funcs(const void *funcs);
 
 static char *dup_or_empty(const char *s) {
     size_t n = s ? strlen(s) : 0;
@@ -62,12 +52,12 @@ int CvfTouchTap(float x, float y) {
 // ---------------------------------------------------------------- any thread
 void CvfSetTouchMenus(int on) { atomic_store(&touch_menus, on ? 1 : 0); }
 
+// Called by CvfP2PInstall at startup (viewDidLayoutSubviews), before or
+// while the engine runs; the table is copied once and only read afterwards.
 void CvfP2PRegister(void *funcs) {
     if (!funcs) return;
-    pthread_mutex_lock(&mbox_mu);
-    memcpy(&p2p_funcs, funcs, sizeof p2p_funcs);
-    pthread_mutex_unlock(&mbox_mu);
-    atomic_store(&p2p_registered, 1);
+    cvf_p2p_set_funcs(funcs);
+    fprintf(stderr, "cvf: Nearby direct link registered by the app\n");
 }
 
 void CvfP2PPeers(char *json) {
@@ -152,7 +142,17 @@ static void input_test_tick(void) {
 void cvf_host_set_running(int up) { atomic_store(&engine_up, up); }
 
 // Once per frame on the engine thread (cvfGcSafepoint hook).
-void cvf_host_drain(void) {
+void cvf_host_drain(bool fighting) {
+    // iOS memory warning: collect at the next frame outside a fight
+    static bool low_memory;
+    if (cvf_ios_take_low_memory()) low_memory = true;
+    if (low_memory && !fighting) {
+        low_memory = false;
+        GcStats before = gc_stats();
+        gc_collect();
+        fprintf(stderr, "cvf: memory warning: collected (heap %zu KB -> %zu KB live)\n", before.heap_bytes / 1024,
+                gc_stats().live_bytes / 1024);
+    }
     int tm = atomic_exchange(&touch_menus, -1);
     if (tm >= 0) fn_cvfHostSetTouchMenus(tm != 0);
     pthread_mutex_lock(&mbox_mu);

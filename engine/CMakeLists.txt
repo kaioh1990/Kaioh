@@ -52,7 +52,8 @@ if(IOS)
   enable_language(OBJC)
   file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c
     src/platform/gles/*.c src/platform/ios/*.c src/platform/ios/*.m)
-  set_source_files_properties(src/platform/ios/ios_view.m PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  set_source_files_properties(src/platform/ios/ios_view.m src/platform/ios/http_nsurl.m
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   add_library(cvf_ik STATIC ${CVF_IK_SOURCES})
   target_link_libraries(cvf_ik PUBLIC cvf_core)
   target_include_directories(cvf_ik PUBLIC "${CVF_SDL2_INCLUDE_DIR}")

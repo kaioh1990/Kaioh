@@ -137,7 +137,8 @@ void cvf_ios_prepare(const char *assets) {
 }
 
 // ---------------------------------------------------------------- background
-static _Atomic int in_background;
+static _Atomic int in_background, low_memory;
+int cvf_ios_take_low_memory(void) { return atomic_exchange(&low_memory, 0); }
 
 static int SDLCALL app_watch(void *user, SDL_Event *e) {
     (void)user;
@@ -145,6 +146,9 @@ static int SDLCALL app_watch(void *user, SDL_Event *e) {
     case SDL_APP_WILLENTERBACKGROUND:
     case SDL_APP_DIDENTERBACKGROUND:
         atomic_store(&in_background, 1);
+        break;
+    case SDL_APP_LOWMEMORY:  // applicationDidReceiveMemoryWarning
+        atomic_store(&low_memory, 1);
         break;
     case SDL_APP_WILLENTERFOREGROUND:
     case SDL_APP_DIDENTERFOREGROUND:

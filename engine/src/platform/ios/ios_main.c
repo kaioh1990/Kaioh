@@ -16,7 +16,7 @@
 #include "platform/ios/include/cvf_host.h"
 #include "platform/ios/ios_sys.h"
 
-extern void (*cvf_safepoint_hook)(void);  // ik_native.c
+extern void (*cvf_safepoint_hook)(bool fighting);  // ik_native.c
 
 static Slice_GoString go_args(int n) {
     return (Slice_GoString){(GoString *)gc_alloc(sizeof(GoString) * (size_t)(n > 0 ? n : 1)), 0, n};
@@ -59,6 +59,15 @@ static void engine_main(void *p) {
     gc_set_main_stack(cvf_ios_engine_stack_top());  // scan this stack, not the main thread's
     const char *hdir = getenv("CVF_HEADLESS_DIR");
     if (hdir && *hdir) run_headless(hdir, getenv("CVF_HEADLESS_ARGS"));
+    // CVF_HTTP_TEST=<lobby base URL>: lobby round trip over NSURLSession, then exit
+    const char *http = getenv("CVF_HTTP_TEST");
+    if (http && *http) {
+        ik_init_globals();
+        GoString r = fn_cvfHTTPSelfTest(go_cstr(gc_strdup(http)));
+        printf("cvf: http test %s\n%.*s", http, r.len, r.p);
+        fflush(stdout);
+        exit(0);
+    }
 
     const char *assets = NULL;
     for (int i = 1; i + 1 < argc; i++)
