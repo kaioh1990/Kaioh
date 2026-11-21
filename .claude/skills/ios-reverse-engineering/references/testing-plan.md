@@ -60,6 +60,46 @@ Once root + code signing bypass achieved:
 2. Install Procursus bootstrap
 3. Install Sileo package manager
 
+### Phase 1b: Property Scan (Determine Controllable OOB Fields)
+Deploy AVEPropScan.app, vary one property at a time with NTL=9.
+Compare FAR values in panic logs to find which property controls struct+0x534.
+
+```
+# Reference: original panic had FAR=0x59
+AVEPropScan safe          # NTL=2, verify no crash
+AVEPropScan baseline      # NTL=9, default props → reference FAR
+# After each reboot:
+AVEPropScan bitrate_500000
+AVEPropScan bitrate_5000000
+AVEPropScan gop_1
+AVEPropScan gop_30
+AVEPropScan profile_1     # Main profile
+AVEPropScan profile_2     # Main10 profile  
+AVEPropScan bframes_0
+AVEPropScan bframes_2
+AVEPropScan qp_10
+AVEPropScan qp_40
+AVEPropScan res_640x480
+AVEPropScan res_320x240
+AVEPropScan pixel_1       # NV12 instead of BGRA
+AVEPropScan pixel_2       # P010 (10-bit)
+```
+
+Compare all FAR values:
+- If FAR changes when a property changes → that property maps to struct+0x534
+- If FAR is always the same → +0x534 is unrelated to these properties
+  (may be a fixed offset like surface count or encoder state)
+
+Then test deeper OOB:
+```
+AVEPropScan multi_10      # NTL=10, reads struct+0x538
+AVEPropScan multi_11      # NTL=11, reads struct+0x53c
+AVEPropScan multi_16      # NTL=16, reads deeper fields
+```
+
+Each additional layer reads 4 bytes deeper. Map the full OOB region by
+comparing FAR values for increasing NTL, creating a struct field map.
+
 ## Key Parameters
 - Device: iPhone Duo, UDID 00008160-000A4C840E400036
 - Signing: "Apple Development: Travis Tameirao (7TJQC38PMP)"
