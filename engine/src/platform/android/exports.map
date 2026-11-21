@@ -1,0 +1,15 @@
+/* libmain.so exports (Android): the JNI entry points SDLActivity calls,
+   JNI_OnLoad and SDL_main. Everything else, the generated names included,
+   stays local, so nothing clashes with libSDL2.so. */
+{
+  global:
+    JNI_OnLoad;
+    SDL_main;
+    Java_org_libsdl_app_SDLActivity_nativeOnSDLReady;
+    Java_org_libsdl_app_SDLActivity_nativeCvfInMatch;
+    Java_org_libsdl_app_SDLActivity_nativeCvfTouchTap;
+    Java_org_libsdl_app_SDLActivity_nativeCvfSetTouchMenus;
+    Java_org_libsdl_app_SDLActivity_nativeCvfSetScreen;
+  local:
+    *;
+};

@@ -176,6 +176,11 @@ static bool start_worker(HttpJob *j) {
     j->done = 1;
     return true;
 }
+#elif CVF_ANDROID
+// Android has no libcurl: java.net.HttpURLConnection through JNI
+// (src/platform/android/android_http.c, the app's CvfHttp class)
+int cvf_android_http_start(HttpJob *j);
+static bool start_worker(HttpJob *j) { return cvf_android_http_start(j) != 0; }
 #elif !defined(_WIN32)
 // libcurl, loaded at run time (no build dependency)
 typedef void CURL;
