@@ -46,6 +46,11 @@ host to Linux guest; signed `CvF-Native.ipa` rebuilt (IOS_PORT.md).
     `CvF Online/CvF Native (Apple Silicon).app/Contents/Frameworks/`.
     CMake from that Homebrew is also x86_64: pass
     `-DCMAKE_OSX_ARCHITECTURES=arm64` or it builds x86_64 objects.
+    If you copy those dylibs elsewhere for `CVF_SDL2_LIBRARY`, copy
+    `libSDL3.0.dylib` also as `libSDL3.dylib` beside them: sdl2-compat
+    dlopens the unversioned name, and without it every SDL-linked tool
+    (`cvf_headless` too) stops at start in a modal "SDL3 not found" dialog
+    (0 % CPU, no output). `cvf_tests` does not link SDL and still runs.
 
 ## 2. Repository
 
@@ -238,6 +243,53 @@ Ubuntu 24.04 x86-64; refgame with cvf-online-5):
 
 `cvf.exe` (window, OpenGL, menus) was built but not run: the container has
 no display or GL, and the full game is not there.
+
+Windows Firewall: the first time a program listens, Windows asks whether to
+allow it; if the player declines, inbound connections are dropped silently
+and a host just waits. When a TCP listener (Host online / Host Nearby) has
+had no guest for 30 s, `ik_net.c` (Windows only) prints a one-time hint per
+listener to the console (`cvf.exe` is a console program) with the steps to
+allow the game in Windows Security and the exe's path. It changes nothing
+else: no firewall rules (they need admin), no game state (cvf_tests 93/0 and
+the netplay dump `a350bc2d...` unchanged, Wine host <-> Linux guest PASS).
+
+### Desktop packages in the CvF Online folder
+
+The double-clickable builds live in `CvF Online/` next to the game data:
+`CvF Native (Apple Silicon).app` and `CvF Native (Windows x64).exe`.
+Last refreshed 2026-11-21 from `claude/native-integration`.
+
+macOS: build Release as above, then
+
+    tools/package/macos_app.sh build/release SDL_DIR "CvF Native (Apple Silicon).app" icon.icns
+
+with `SDL_DIR` holding the arm64 `libSDL2-2.0.0.dylib` (sdl2-compat) and
+`libSDL3.0.dylib`, and `icon.icns`, all taken from the previous app before
+replacing it. The script writes the Info.plist (`net.cvf.native`) and signs
+ad hoc. The app finds the game data by changing to the folder that holds
+the .app, twice: in `game_main.c` (only without a gamedir argument) and in
+Ikemen's own `System.init` (`isRunningInsideAppBundle`, always, after
+`save/config.ini` is read). So the bundled binary always plays from the
+folder of its .app, even when given a gamedir or started through a symlink
+(the executable path is resolved). To run it on another folder (smoke
+test), put a copy of the .app in that folder; for `run_smoke.sh`, create
+WORKDIR with the .app copy inside and give a BUILDDIR whose `cvf` is a
+wrapper `exec "$PWD/CvF Native (Apple Silicon).app/Contents/MacOS/cvf"`
+(the script starts it in WORKDIR; its `*.app` exclusion leaves the copy
+alone). The reference fight needs `cvf_headless` (the game binary loads
+the full menus); run it from the same build: the bundled `cvf` has the
+same text section as `build/release/cvf` (`otool -t`), only its load
+commands and signature differ.
+
+Windows: `build/win64/cvf.exe` renamed to `CvF Native (Windows x64).exe`.
+It imports only system DLLs plus `SDL2.dll`. The `SDL2.dll` already in
+`CvF Online/` is SDL 2.32.10 (shipped for the Go `Ikemen_GO.exe`); it
+exports all 52 SDL functions the exe imports, and the exe loads with it
+under Wine, so it stays (newer SDL2 2.x is ABI-compatible with the 2.30.9
+headers used to build). The other DLLs there (FFmpeg, libxmp) belong to
+the Go build; the native exe does not use them.
+
+Replaced builds go to `CvF Online/_to_delete/` (moved, not deleted).
 
 ### Locations on the project Mac
 

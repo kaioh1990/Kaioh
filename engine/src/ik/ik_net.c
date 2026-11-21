@@ -75,6 +75,8 @@ typedef struct NetSock {
     sock_t fd;
     bool udp, closed;
     i64 rdeadline, wdeadline;  // unix ns, 0 = none
+    i64 since;                 // TCP listener: when it started listening (Windows Firewall hint)
+    bool hinted;
 } NetSock;
 
 typedef struct NetOpError {  // *net.OpError as the runtime makes it
@@ -453,10 +455,42 @@ static Ret_GoIface__GoIface listen_on(GoString network, GoString address, bool u
     set_nonblock(fd);
     NetSock *s = go_new(NetSock);
     s->fd = fd, s->udp = udp;
+    s->since = now_unix_ns();
     return (Ret_GoIface__GoIface){{udp ? GO_TID_P_net_UDPConn : GO_TID_P_net_TCPListener, s}, {0}};
 }
 Ret_GoIface__GoIface net_Listen(GoString network, GoString address) { return listen_on(network, address, false); }
 Ret_GoIface__GoIface net_ListenPacket(GoString network, GoString address) { return listen_on(network, address, true); }
+
+#if defined(_WIN32)
+// Windows Firewall hint. The first time a program listens, Windows asks
+// whether to allow it; if the player declined (or never saw the prompt
+// behind the game window), inbound connections are dropped silently and the
+// host just waits. After FW_HINT_SECS without a guest the host's console
+// (cvf.exe is a console program) gets a one-time note per listener on how to
+// allow the game. Only stderr: no firewall changes (they need admin), no
+// effect on the game.
+#define FW_HINT_SECS 30
+static void win_firewall_hint(NetSock *ls) {
+    struct sockaddr_storage ss;
+    int sl = sizeof ss;
+    int port = getsockname(ls->fd, (struct sockaddr *)&ss, &sl) == 0 ? sa_port((struct sockaddr *)&ss) : 0;
+    char exe[MAX_PATH];
+    DWORD n = GetModuleFileNameA(NULL, exe, sizeof exe);
+    if (n == 0 || n >= sizeof exe) snprintf(exe, sizeof exe, "the game's .exe");
+    fprintf(stderr,
+            "netplay: hosting on TCP port %d, no guest has connected for %d s.\n"
+            "  If the other player cannot connect, Windows Firewall may be blocking \"CvF Native\"\n"
+            "  (for example if \"Allow access\" was declined when Windows asked). To allow it:\n"
+            "  Windows Security > Firewall & network protection > Allow an app through firewall >\n"
+            "  Change settings, then tick Private (and Public if needed) for this program, or use\n"
+            "  \"Allow another app...\" and choose:\n"
+            "    %s\n"
+            "  If it is listed with a red \"blocked\" rule under Windows Defender Firewall >\n"
+            "  Advanced settings > Inbound Rules, remove that rule and host again.\n",
+            port, FW_HINT_SECS, exe);
+    fflush(stderr);
+}
+#endif
 
 Ret_GoOpaque_net_TCPConnPtrPtr__GoIface net_TCPListener_AcceptTCP(GoOpaque *l) {
     NetSock *ls = (NetSock *)l;
@@ -476,6 +510,12 @@ Ret_GoOpaque_net_TCPConnPtrPtr__GoIface net_TCPListener_AcceptTCP(GoOpaque *l) {
         if (!WOULD_BLOCK()) return (Ret_GoOpaque_net_TCPConnPtrPtr__GoIface){NULL, op_error("accept", sock_err(), false)};
         if (ls->rdeadline && now_unix_ns() >= ls->rdeadline)
             return (Ret_GoOpaque_net_TCPConnPtrPtr__GoIface){NULL, op_error("accept", "i/o timeout", true)};
+#if defined(_WIN32)
+        if (!ls->hinted && now_unix_ns() - ls->since >= (i64)FW_HINT_SECS * 1000000000LL) {
+            ls->hinted = true;
+            win_firewall_hint(ls);
+        }
+#endif
         go_sleep_ns(2000000);
     }
 }
