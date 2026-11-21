@@ -4,6 +4,7 @@ How to get from nothing to a verified build: clone, Ikemen GO source tree,
 regeneration of the translated C, CMake build, reference fight. Verified from
 scratch on macOS 27 arm64 (Apple M-series, Go 1.27.4 and 1.27.3, Apple clang 21,
 CMake 3.31) on 2026-11-20. Linux works the same way (GCC or clang, distro SDL2).
+Windows is a cross build from Linux with mingw-w64 ("Windows" in section 3).
 
 ## 1. Tools
 
@@ -140,6 +141,74 @@ returning NULL; nothing headless touches Vulkan):
 | Netplay native host <-> Go guest, Go host <-> native guest (`cvf` tag) | PASS, same dump |
 | Netplay native <-> Go desktop configuration, both directions | PASS, same dump (lossy scenarios spare GGPO's sync handshake: GAPS.md) |
 | Netplay Go desktop <-> Go desktop, 25 % loss including sync | fails in 3 of 4 relay seeds, as native pairs can: a GGPO limit, GAPS.md |
+
+### Windows (cross-build with mingw-w64, checks under Wine)
+
+The Windows build is a cross build from Linux with mingw-w64 and the
+toolchain file `tools/package/mingw64.cmake`; there is no MSVC build (the
+translated C uses GNU statement expressions and `typeof`). Verified on
+Ubuntu 24.04 x86-64 on 2026-11-20 with Ubuntu's mingw-w64 (GCC 13, win32
+threads, msvcrt) and the SDL2 2.30.9 MinGW development package. **Only
+under Wine 9.0**: no build has run on real Windows yet (GAPS.md).
+
+    sudo apt-get install gcc-mingw-w64-x86-64 wine64     # wine64 only for the checks
+    curl -LO https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-devel-2.30.9-mingw.tar.gz
+    tar xzf SDL2-devel-2.30.9-mingw.tar.gz
+    S=$PWD/SDL2-2.30.9/x86_64-w64-mingw32
+    cmake -S . -B build/win64 -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=tools/package/mingw64.cmake \
+      -DCVF_SDL2_INCLUDE_DIR=$S/include/SDL2 -DCVF_SDL2_LIBRARY=$S/lib/libSDL2.dll.a
+    cmake --build build/win64 -j8    # cvf.exe, cvf_headless.exe, cvf_tests.exe, cvf_nearby_test.exe, cvftool.exe
+    cp $S/bin/SDL2.dll build/win64/
+
+(In a container whose apt sources are `http://` and whose network only
+allows HTTPS through a proxy: switch the sources to `https://archive.ubuntu.com`
+and set `Acquire::https::Proxy`.) The executables need only system DLLs
+plus `SDL2.dll`, which ships next to `cvf.exe`; `cvf` and `cvf_headless`
+link libgcc statically. They link ws2_32, iphlpapi (Nearby interfaces),
+winhttp (lobby), bcrypt (crypto/rand) and winmm. The same determinism flags
+apply (`-ffp-contract=off`, detmath, 32-bit `int`). A UCRT toolchain
+(llvm-mingw) should work too but was not tried.
+
+Checks under Wine (64-bit only; the "wine32 is missing" notice is harmless).
+Wine 9.0 aborts at start with `free(): invalid pointer` when
+`$XDG_RUNTIME_DIR` (or `/run/user/<uid>`) does not exist:
+
+    export WINEPREFIX=/tmp/wineprefix WINEDEBUG=-all XDG_RUNTIME_DIR=/run/user/$(id -u)
+    mkdir -p -m 700 $XDG_RUNTIME_DIR
+    W=/usr/lib/wine/wine64
+    cd build/win64
+    $W ./cvf_tests.exe                                  # 92 checks, 0 failures
+    $W ./cvf_nearby_test.exe 'Z:\tmp\nt'                # 0 failure(s) (UDP 7520 free)
+    $W ./cvf_nearby_test.exe 'Z:\tmp\nt' ifaces         # interfaces as Nearby sees them
+
+Nearby across platforms: `cvf_nearby_test DIR host 15` in one engine and
+`cvf_nearby_test DIR scan 7555 Tester` in the other (Wine and Linux native,
+both directions). Netplay with a Windows side: a wrapper for
+`run_netplay.sh`'s `HOST_BIN`/`GUEST_BIN`,
+
+    #!/bin/bash
+    export WINEPREFIX=/tmp/wineprefix WINEDEBUG=-all XDG_RUNTIME_DIR=/run/user/0
+    exec /usr/lib/wine/wine64 /path/to/engine/build/win64/cvf_headless.exe "$@"
+
+    HOST_BIN=./wine_headless.sh GUEST_BIN=build/release/cvf_headless \
+      PORT_BASE=9670 TIMEOUT=900 tests/netplay/run_netplay.sh /path/to/refgame
+
+(`PORT_BASE`: pick free ports when other runs share the machine; two runs on
+the same ports cross their packets.) Results (2026-11-20, Wine 9.0 on
+Ubuntu 24.04 x86-64; refgame with cvf-online-5):
+
+| Check | Result |
+| --- | --- |
+| `cvf_tests.exe` | 92 checks, 0 failures (before the fiber fix: 1 failure, GC freed data on a suspended goroutine's stack) |
+| `cvf_nearby_test.exe` (one process, host + scan) | 0 failures |
+| Nearby host Wine ↔ scan Linux native, both directions | host listed |
+| `ifaces` with a /23 added on eth0 and a tun device | /23 → 510 probe targets (was a fixed /24); the tun device (Wine: IF_TYPE_PPP) named `ppp tun97`, skipped |
+| Netplay Windows host (Wine) ↔ Linux guest, direct / lag / loss | PASS, dump `a350bc2df11a03519f7d65d278844432` (= Linux ↔ Linux) |
+| Netplay Linux host ↔ Windows guest (Wine), direct / lag / loss | PASS, same dump |
+
+`cvf.exe` (window, OpenGL, menus) was built but not run: the container has
+no display or GL, and the full game is not there.
 
 ### Locations on the project Mac
 

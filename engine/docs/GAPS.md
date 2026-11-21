@@ -24,6 +24,38 @@
 | Roster-wide desync test (93 characters) native vs Go | Not run; only Alucard vs Richter. |
 | Content fingerprint | Still empty on both sides (`currentContentFingerprint`). |
 
+### Windows (claude/native-windows)
+
+Cross build with mingw-w64 (DEVSETUP.md, "Windows"). Before this branch it
+had never been built: it failed to compile (msvcrt has no `timespec_get`,
+no `nanosleep`). **Everything below ran under Wine 9.0 on Linux, not on
+real Windows.**
+
+| Item | State |
+| --- | --- |
+| Build: cvf.exe, cvf_headless.exe, cvf_tests.exe, cvf_nearby_test.exe, cvftool.exe | **Done** (Ubuntu mingw-w64 GCC 13, msvcrt; SDL2 2.30.9 MinGW package). Needs only system DLLs + SDL2.dll. No MSVC build, no Windows on ARM build. |
+| Collector on Windows | **Fixed, was a real bug.** Goroutines are fibers there, and suspended fibers' stacks were never scanned (a collection on a fiber also scanned the wrong range): data held only by a waiting goroutine (netplay, GGPO, lobby workers) could be freed. cvf_tests caught it under Wine. Now registers are spilled with setjmp before SwitchToFiber and each fiber's stack range is scanned; finished fibers are deleted. |
+| Timers | QueryPerformanceCounter (monotonic), GetSystemTimePreciseAsFileTime (wall); idle sleeps use a high-resolution waitable timer, else timeBeginPeriod(1) (Sleep alone rounds the 1 ms socket polls up to 15.6 ms). Frame pacing and input latency on real Windows not measured. |
+| Nearby interfaces | **Fixed.** GetAdaptersAddresses as Go: real names, flags, MTU, MAC, every IPv4/IPv6 address with its prefix length (was one pseudo-interface, ≤ 4 host-name addresses, fixed /24). Non-LAN adapters (PPP, mobile broadband, tunnel, VPN/overlay drivers, VM/container host-only switches without a gateway) get the Unix name prefix cvf_nearby.go filters on, so Nearby skips them where Go's Windows build does not; the Mobile Hotspot adapter stays. Under Wine: a /23 gives 510 probe targets, a tun device is skipped. The VPN/VM classification by adapter description and the gateway rule are untested on real adapters (Wine shows Linux interfaces and does not support AF_UNSPEC with gateways, so it also ran IPv4 only). |
+| crypto/rand | BCryptGenRandom checked; failure is a fatal error as in Go 1.24+ (also: Linux uses getrandom, no clock fallback). |
+| Unit tests (Wine) | 92 checks, 0 failures. |
+| Nearby (Wine) | cvf_nearby_test passes; host Wine ↔ scan Linux native and the reverse find each other over loopback. |
+| Netplay (Wine) | **PASS** with `run_netplay.sh`: Windows host (Wine) ↔ Linux native guest and Linux host ↔ Windows guest, scenarios direct, lag:40:15:0, loss:20:10:8; every side and scenario gives dump `a350bc2df11a03519f7d65d278844432` (6,431 frames, up to ~4,100 frames re-simulated), the same as Linux ↔ Linux. The Windows side re-simulates more (Wine is slower and the run is unpaced). |
+| Windows Firewall | Not handled. Hosting (TCP listen, UDP 7520 Nearby, GGPO UDP) makes Windows ask the first time; if the player declines, a LAN guest cannot reach the host. Nothing tells the player. |
+| Windowed game, menus, WinHTTP lobby, gamepads, real Windows 10/11 | Not run (no display or GL in the container, no full game there). Next: the menu smoke test (`tests/smoke`) on a real Windows PC, then a Windows ↔ Mac/Linux match over a real LAN. |
+
+Found on the way, all platforms: `go_strcat(go_cstr(buf), "")` does not
+copy (go_strcat returns an argument unchanged when the other is empty), so
+Linux interface names pointed into freed `getifaddrs` memory and
+`IPNet.String`, `UDPAddr.String`/`TCPAddr.String` and the HTTP status
+returned stack buffers; now `go_cstr_copy`. Not fixed (shared Go
+behaviour): the first Nearby sweep of a big, mostly empty subnet is slow
+on Linux, because probes to addresses without an ARP answer fill the
+socket's send buffer until ARP gives up, and WriteTo waits (as Go does).
+With an empty /23 added in the container, a sweep took more than 6 s and
+the test host on 127.0.0.1 (probed after the subnets) was not found within
+cvf_nearby_test's 6 s; with the /24 alone it is found at once.
+
 The analysis below is unchanged from `claude/native-gaps` (a16220d).
 
 This analysis compares `claude/native-engine` at a631d7a with the shipping CvF Online
