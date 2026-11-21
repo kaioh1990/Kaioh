@@ -21,6 +21,7 @@ declare -a PROBES=(
     "AVETwoSession:com.research.avetwosession:ave_two_session.c"
     "AVEPPSValueProbe:com.research.aveppsvalue:ave_pps_value_probe.c"
     "AVESelectiveOOB:com.research.aveselectoob:ave_selective_oob.c"
+    "AVESubobjProbe:com.research.avesubobjprobe:ave_subobj_probe.c"
 )
 
 build_and_deploy() {
