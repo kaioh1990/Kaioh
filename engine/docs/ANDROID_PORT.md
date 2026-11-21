@@ -1,8 +1,9 @@
 # Android port of the native C engine
 
 Status 2026-11-21, branch `claude/native-android`, rebased onto
-`claude/native-integration` (c84d871: native-ios + native-windows +
-native-netplay): the engine builds for
+`claude/native-integration` 0eaba5c (native-ios + native-windows +
+native-netplay + the GGPO sync fix + the Windows/Android collector fixes +
+the GLES single-row upload fix from the iOS device run): the engine builds for
 arm64-v8a with NDK r27d, the APK `cvf-native-android.apk` is built and
 signed by CI, both reference fights give the reference md5s with Android's
 code generation. Nothing has run on an Android device yet (none available).
@@ -210,10 +211,19 @@ from Google.
 | Fused multiply-add instructions in libmain.so | llvm-objdump | 0 |
 
 All rows were rerun after the rebase onto `claude/native-integration`
-(same results; Linux x86-64 desktop: 54f8ae06..., 93/0). CI run 44859670134:
-APK SHA-256 `3a47b404ee1b1397d6f7840b8c63f226c46abe7e8117e60e15a747113d96fc95`,
-versionCode 6, the same file as `dev-android/cvf-native-android.apk` on the
-Mac.
+0eaba5c (2026-11-21): regeneration on that base reproduces the committed C
+(4843 functions, 0 TODO, 79 stubs, 31 placeholders, `git status` clean);
+the collector commit fe415a0 was dropped (it is ac3c286 on integration);
+qemu-aarch64 runs of the locally built static `cvf_headless` give
+54f8ae06... (winner 1, 287,752 lines) and 4334350c... (winner 2, 224,158
+lines), `cvf_tests` 93/0, 0 FMA instructions in libmain.so. CI run
+44898464989 (commit b0ea1a3): `apk` and `arm64-tests` pass (93/0, Nearby
+"host listed" and "periodic sweep" ok), versionCode 8, APK SHA-256
+`a9492e4bba0ce8ce76685557733b2db9522f7fcf6d72ef81df7ec77306cf07db`, the
+same file as `dev-android/cvf-native-android.apk` on the Mac. libmain.so
+now contains the GLES binding's row-length fix (`gles_bind.c`): the same
+`UNPACK_ROW_LENGTH` 1 palette uploads happen on Android; Android drivers
+accept them, so it is not a visible change there.
 
 qemu emulates the arm64 FP instructions with IEEE semantics; the binary is
 the same machine code as libmain.so's simulation (same objects, same
