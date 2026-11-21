@@ -36,4 +36,12 @@ void go_sleep_ns(int64_t ns);                      // time.Sleep
 int go_num_goroutines(void);
 int64_t go_mono_ns(void);                          // monotonic clock
 
+#if defined(__vita__)
+// The Vita starts threads (and fibers) in flush-to-zero / default-NaN mode
+// (FPSCR 0x03000000), unlike every other platform: denormals would differ
+// from the PC. Call at the start of each thread that runs game code; every
+// goroutine fiber does it itself.
+void go_vita_fp_ieee(void);
+#endif
+
 #endif

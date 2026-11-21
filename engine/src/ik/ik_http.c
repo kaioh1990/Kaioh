@@ -11,6 +11,8 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <winhttp.h>
+#elif defined(__vita__)
+#include <pthread.h>
 #else
 #include <dlfcn.h>
 #include <pthread.h>
@@ -166,6 +168,14 @@ static void job_append(HttpJob *j, const void *p, size_t n) {
 // iOS has no libcurl: NSURLSession (src/platform/ios/http_nsurl.m)
 int cvf_nsurl_start(HttpJob *j);
 static bool start_worker(HttpJob *j) { return cvf_nsurl_start(j) != 0; }
+#elif defined(__vita__)
+// PS Vita: no HTTP client yet (SceHttp or vitasdk's curl package, VITA_PORT.md
+// milestone M3): requests fail with an error, as without libcurl elsewhere
+static bool start_worker(HttpJob *j) {
+    snprintf(j->err, sizeof j->err, "http: not available on the PS Vita yet");
+    j->done = 1;
+    return true;
+}
 #elif !defined(_WIN32)
 // libcurl, loaded at run time (no build dependency)
 typedef void CURL;

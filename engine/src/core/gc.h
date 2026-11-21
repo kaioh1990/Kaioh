@@ -34,6 +34,9 @@ size_t gc_release_free_pages(void);     // return free pages to the OS (after gc
 // unless the fight budget (CVF_GC_FIGHT_BUDGET_MB, default 256 MB on 64-bit,
 // 48 MB on 32-bit) is exceeded; otherwise a due collection runs here.
 void gc_safepoint(bool fighting);
+// Called at every safepoint (once per frame) before any collection there:
+// frame timing for the headless runner and the Vita (CVF_FRAME_STATS).
+extern void (*gc_frame_hook)(bool fighting);
 void gc_disable(void);                  // nestable: no automatic collections
 void gc_enable(void);
 
@@ -53,6 +56,7 @@ typedef struct GcStats {
     size_t total_alloc;      // allocated over the program's life
     uint64_t collections;
     double last_pause_ms, total_pause_ms, max_pause_ms;
+    size_t hwm_bytes;        // arena pages ever handed out: the resident footprint
 } GcStats;
 GcStats gc_stats(void);
 

@@ -5,6 +5,7 @@
 //  1. main's stack while a goroutine collects (main is suspended)
 //  2. a parked goroutine's stack while another goroutine collects
 //  3. many short goroutines (reap of finished ones) with collections between
+//  4. objects held only by a pointer below their start (32-bit ARM GCC)
 //
 // cvf_tests runs them with the platform's context switch (x86-64 / arm64:
 // ctx_switch; Windows: fibers); cvf_tests_ucontext (Linux) runs the same
@@ -100,10 +101,30 @@ static __attribute__((noinline)) int case_reap(int base) {
     return go_num_goroutines() == base;
 }
 
+// 4. derived pointers below an object (GAPS.md, "derived pointers on 32-bit
+// ARM"): the object's only reference is a stack word a few bytes *before*
+// it, as GCC's pre-indexed loads leave on 32-bit ARM. The word lives in a
+// volatile stack slot, so the test does not depend on register allocation.
+static __attribute__((noinline)) uintptr_t make_below(size_t n, int seed, uintptr_t below) {
+    int *p = (int *)gc_alloc(n);
+    fill(p, seed);
+    return (uintptr_t)p - below;
+}
+static __attribute__((noinline)) int case_derived(size_t n, uintptr_t below) {
+    volatile uintptr_t d = make_below(n, 41, below);
+    volatile uint8_t scrub[512];  // overwrite stale copies of p below this frame
+    memset((void *)scrub, 0, sizeof scrub);
+    churn();
+    return check((const int *)(d + below), 41);
+}
+
 void test_gc_roots(int *failures, int *checks) {
     int base = go_num_goroutines();
     CHECK(case_main_stack(), "main stack scanned while a goroutine collects");
     CHECK(case_parked(), "parked goroutine scanned while another goroutine collects");
     CHECK(case_reap(base), "2000 goroutines spawned/reaped with collections between");
     CHECK(go_num_goroutines() == base, "goroutines left: %d (expected %d)", go_num_goroutines(), base);
+    CHECK(case_derived(N * sizeof(int), 4), "small object held only by a pointer 4 bytes below it");
+    CHECK(case_derived(N * sizeof(int), 200), "small object held only by a pointer 200 bytes below it");
+    CHECK(case_derived(64 * 1024, 8), "large object held only by a pointer 8 bytes below it");
 }

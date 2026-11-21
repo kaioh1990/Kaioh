@@ -13,24 +13,34 @@
 | 8 | `cvf-files/` from claude/android | **Done** (cvf-online-5 rules, Nearby options11.def, Intro door fix). |
 | 7, 9–14 | | Open, unchanged. Item 11/12 (mobile front ends, Apple P2P, touch taps from the UI thread, native name box) stay stubs on desktop by design (cvf_p2p_other.go). |
 
-### Collector: derived pointers on 32-bit ARM (open, 2026-11-21)
+### Collector: derived pointers on 32-bit ARM (fixed on claude/native-vita, 2026-11-21)
 
 Found while verifying the runtime review fixes (ucontext roots, 32-bit
 register spills) with `cvf_tests` cross-built for armhf and run under
-`qemu-arm` (GCC 13, Thumb-2, -O2). With the fixes the suspended stacks and
-registers are scanned (the review's root tests pass), but one existing check
-still fails: `test_sched.c` "data on a suspended goroutine's stack survived
-collection". The goroutine loops over `data[i]` after the call, and GCC's
-pre-indexed loads (`ldr r1, [r4, #4]!`) keep only `r4 = data - 4` live across
-`go_chan_recv`: a pointer just *below* the object, which a conservative
-scanner attributes to the neighbouring block (or to nothing). x86-64 keeps
-`data` itself (in `rbx`). Any GC object whose only reference is such a
-derived pointer, across a call that collects, can be freed: this matters for
-a 32-bit ARM build (armeabi-v7a Android, the Vita) only, and only when the
-base pointer is not also held elsewhere (slices and structs normally are).
-Not fixed: options are recognising pointers up to a small offset below an
-object when scanning stacks and registers only (not the heap), or a GCC
-option that avoids pre-indexed writeback addressing; both need measuring.
+`qemu-arm` (GCC 13, Thumb-2, -O2): `test_sched.c` "data on a suspended
+goroutine's stack survived collection" failed. The goroutine loops over
+`data[i]` after the call, and GCC's pre-indexed loads (`ldr r1, [r4, #4]!`)
+keep only `r4 = data - 4` live across `go_chan_recv`: a pointer just *below*
+the object, which a conservative scanner attributes to the neighbouring
+block (or to nothing). x86-64 keeps `data` itself (in `rbx`).
+
+**Fix (core/gc.c, `mark_derived`):** a word on a stack (the running one,
+suspended goroutines, the spilled registers) also marks every block that
+starts within 256 bytes above it. 256 covers the reach of pre-indexed
+writeback with an 8-bit offset (Thumb-2, and ARM's ldrd/ldrh forms), the only
+way a compiler makes a pointer below its object. Heap and data-segment words
+are unchanged: only compiler temporaries hold such pointers. Rejected: a
+header or red zone per allocation (memory on every block, changes the size
+classes and large-page layout, and needs up to 255 bytes to be complete);
+`-fno-auto-inc-dec` (discourages the pattern but guarantees nothing, GCC
+only). Cost: a stack word occasionally keeps a neighbour alive one more
+cycle. Tests: `test_gc_roots.c` case 4 holds objects only through a volatile
+stack word 4 / 200 bytes below a small block and 8 bytes below a large one;
+without the fix all three fail on x86-64 and armv7, with it cvf_tests and
+cvf_tests_ucontext pass 103/0 on both (armv7 under qemu-arm, also with
+CVF_GC_STRESS=1/7/100). Reference fights unchanged on x86-64 (also with
+CVF_GC_STRESS=3000) and armv7 (also with CVF_GC_STRESS=10000: 1,103 / 1,030
+collections, 54f8ae06... / 4334350c...); netplay a350bc2d... (VITA_PORT.md).
 
 ### Online: still open after claude/native-netplay
 

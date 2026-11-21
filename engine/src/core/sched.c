@@ -2,12 +2,22 @@
 //
 // Context switch, chosen at compile time:
 //   Windows          fibers
+//   PS Vita          SceFiber fibers (CVF_VITA_FIBERS): the Vita kernel
+//                    rejects system calls made on a stack it does not know
+//                    (found by the TinyGo port, vita/README.md)
 //   x86-64, arm64    ctx_switch (assembly below)
-//   other POSIX      ucontext (32-bit ARM, i686, ...): SCHED_UCONTEXT
-// -DCVF_SCHED_UCONTEXT forces the ucontext fallback on x86-64 / arm64 too, so
-// it can be tested on a development machine (cvf_tests_ucontext).
-#if !defined(_WIN32) && (defined(CVF_SCHED_UCONTEXT) || (!defined(__x86_64__) && !defined(__aarch64__)))
+//   32-bit ARM with VFP (armv7 hard-float: Linux armhf, Android
+//                    armeabi-v7a)  ctx_switch (assembly below, CVF_CTX_ARM32)
+//   other POSIX      ucontext (i686, ...): SCHED_UCONTEXT
+// -DCVF_SCHED_UCONTEXT forces the ucontext fallback on x86-64 / arm64 / armv7
+// too, so it can be tested on a development machine (cvf_tests_ucontext).
+#if defined(__vita__)
+#define CVF_VITA_FIBERS 1
+#elif !defined(_WIN32) && (defined(CVF_SCHED_UCONTEXT) || (!defined(__x86_64__) && !defined(__aarch64__) && \
+                           !(defined(__arm__) && defined(__ARM_FP) && !defined(__SOFTFP__))))
 #define SCHED_UCONTEXT 1
+#elif defined(__arm__) && !defined(_WIN32)
+#define CVF_CTX_ARM32 1
 #endif
 #if defined(SCHED_UCONTEXT)
 #define _XOPEN_SOURCE 700  // ucontext fallback
@@ -31,6 +41,11 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <timeapi.h>  // timeBeginPeriod (winmm)
+#elif defined(CVF_VITA_FIBERS)
+#include <psp2/fiber.h>
+#include <psp2/kernel/processmgr.h>
+#include <psp2/kernel/threadmgr.h>
+#include <psp2/sysmodule.h>
 #elif defined(SCHED_UCONTEXT)
 #include <ucontext.h>
 #endif
@@ -89,6 +104,8 @@ static void stack_free(uint8_t *s, size_t n) {
 
 #if defined(_WIN32)
 // Windows: fibers.
+#elif defined(CVF_VITA_FIBERS)
+// SceFiber (vita_switch below).
 #elif defined(SCHED_UCONTEXT)
 // swapcontext (uc_switch below).
 #elif defined(__x86_64__)
@@ -147,6 +164,30 @@ __asm__(".text\n"
         "  ldp d14, d15, [sp, #144]\n"
         "  add sp, sp, #176\n"
         "  ret\n");
+#elif defined(CVF_CTX_ARM32)
+// AAPCS: r4-r11 and d8-d15 are callee-saved. r3 is pushed only to keep the
+// frame a multiple of 8 bytes (104 bytes: d8-d15, then r3-r11, lr). ARM
+// state; `pop {pc}` interworks, so callers and coro_entry may be Thumb.
+void ctx_switch(void **save, void *to);
+__asm__(".text\n"
+        ".syntax unified\n"
+        ".arm\n"
+        ".globl " CSYM(ctx_switch) "\n"
+        ".type ctx_switch,%function\n"
+        ".p2align 2\n"
+        CSYM(ctx_switch) ":\n"
+        "  push {r3-r11, lr}\n"
+        "  vpush {d8-d15}\n"
+        "  str sp, [r0]\n"
+        "  mov sp, r1\n"
+        "  vpop {d8-d15}\n"
+        "  pop {r3-r11, pc}\n"
+        ".size ctx_switch, .-ctx_switch\n"
+#if defined(__thumb__)
+        ".thumb\n"  // back to the mode the compiler emits this file in
+#endif
+        );
+#define CTX_ARM32_FRAME_WORDS 26  // 16 (d8-d15) + 9 (r3-r11) + lr
 #endif
 
 // ---------------------------------------------------------------- goroutines
@@ -171,6 +212,8 @@ typedef struct Coro {
 #if defined(_WIN32)
     void *fiber;
     uintptr_t fiber_top;  // its stack's upper end (TEB StackBase), once started
+#elif defined(CVF_VITA_FIBERS)
+    SceFiber *fiber;  // malloc'd (8-byte aligned); its context memory is `stack`
 #elif defined(SCHED_UCONTEXT)
     ucontext_t uc;
 #endif
@@ -185,7 +228,9 @@ static Coro *zombie;     // finished goroutine whose stack is freed by the next 
 static int ngoroutines = 1;
 
 int64_t go_mono_ns(void) {
-#if defined(_WIN32)
+#if defined(__vita__)
+    return (int64_t)sceKernelGetProcessTimeWide() * 1000;  // microseconds
+#elif defined(_WIN32)
     static LARGE_INTEGER freq;
     LARGE_INTEGER c;
     if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
@@ -227,6 +272,8 @@ static void os_sleep_ns(int64_t d) {
     }
     Sleep((DWORD)((d + 999999) / 1000000));
 }
+#elif defined(__vita__)
+static void os_sleep_ns(int64_t d) { sceKernelDelayThread((SceUInt)((d + 999) / 1000)); }
 #else
 static void os_sleep_ns(int64_t d) {
     struct timespec ts = {(time_t)(d / 1000000000), (long)(d % 1000000000)};
@@ -264,6 +311,14 @@ static void reap(void) {
         zombie->fiber = NULL;
         zombie->sp = NULL, zombie->fiber_top = 0;
 #endif
+#if defined(CVF_VITA_FIBERS)
+        if (zombie->fiber) {
+            sceFiberFinalize(zombie->fiber);  // it never runs again (it may report the state)
+            free(zombie->fiber);
+            zombie->fiber = NULL;
+        }
+        zombie->sp = NULL;
+#endif
         stack_free(zombie->stack, zombie->stack_size);  // NULL on Windows (the fiber owned it)
         zombie->stack = NULL;
         zombie = NULL;
@@ -281,6 +336,49 @@ static __attribute__((noinline)) void uc_switch(Coro *prev, Coro *next) {
     prev->sp = (void *)&mark;
     swapcontext(&prev->uc, &next->uc);
     prev->sp = NULL;  // running again: scanned as the live stack
+}
+#endif
+
+#if defined(CVF_VITA_FIBERS)
+// SceFiber switches only between the thread and a fiber (sceFiberRun /
+// sceFiberReturnToThread; both proven on hardware by the TinyGo port), so
+// the thread - the main goroutine - is the hub: a goroutine that switches to
+// another returns to the thread with the target in vita_target, and the
+// thread runs it. `cur` is already the target when the switch happens.
+// As with Windows fibers, the fiber library keeps the callee-saved registers
+// where the collector cannot see them: they are spilled onto the stack
+// first, and the suspended goroutine is scanned from there to its top.
+static Coro *vita_target;
+
+static __attribute__((noinline)) void vita_switch(Coro *prev, Coro *next) {
+    struct {
+        uintptr_t gpr[8];
+        jmp_buf jb;
+    } regs;
+    setjmp(regs.jb);
+    __asm__ volatile("stmia %0, {r4-r11}\n" ::"r"(regs.gpr) : "memory");
+    prev->sp = (void *)&regs;  // lowest address of both
+    if (prev == &main_coro) {
+        Coro *t = next;
+        for (;;) {
+            vita_target = NULL;
+            int r = sceFiberRun(t->fiber, 0, NULL);
+            if (r < 0) {
+                fprintf(stderr, "fatal error: sceFiberRun failed 0x%08x\n", (unsigned)r);
+                abort();
+            }
+            t = vita_target;  // set by the goroutine that returned to the thread
+            if (!t) {
+                fprintf(stderr, "fatal error: a goroutine fiber returned without a successor\n");
+                abort();
+            }
+            if (t == &main_coro) break;
+        }
+    } else {
+        vita_target = next;
+        sceFiberReturnToThread(0, NULL);  // resumes here when the thread runs this fiber again
+    }
+    prev->sp = NULL;  // running again: the collector scans the live stack itself
 }
 #endif
 
@@ -319,6 +417,8 @@ static void switch_to(Coro *next) {
         SwitchToFiber(next->fiber);
         prev->sp = NULL;  // running again: the collector scans the live stack itself
     }
+#elif defined(CVF_VITA_FIBERS)
+    vita_switch(prev, next);
 #elif defined(SCHED_UCONTEXT)
     uc_switch(prev, next);
 #else
@@ -408,7 +508,15 @@ static void goroutine_exit(void) {
     abort();  // unreachable
 }
 
-#if defined(_WIN32)
+#if defined(CVF_VITA_FIBERS)
+static void vita_fiber_entry(SceUInt32 arg_init, SceUInt32 arg_run) {
+    (void)arg_init, (void)arg_run;
+    go_vita_fp_ieee();  // fibers start with the thread default FPSCR
+    reap();
+    cur->fn(cur->env);
+    goroutine_exit();
+}
+#elif defined(_WIN32)
 static void WINAPI fiber_entry(void *p) {
     (void)p;
     cur->fiber_top = (uintptr_t)((NT_TIB *)NtCurrentTeb())->StackBase;
@@ -458,7 +566,15 @@ void go_spawn(void (*fn)(void *), void *env) {
         abort();
     }
     uintptr_t top = ((uintptr_t)c->stack + c->stack_size) & ~(uintptr_t)15;
-#if defined(SCHED_UCONTEXT)
+#if defined(CVF_VITA_FIBERS)
+    (void)top;
+    c->fiber = (SceFiber *)aligned_alloc(8, sizeof(SceFiber));
+    int r = c->fiber ? _sceFiberInitializeImpl(c->fiber, (char *)"goroutine", vita_fiber_entry, 0, c->stack, (SceSize)c->stack_size, NULL) : -1;
+    if (r < 0) {
+        fprintf(stderr, "fatal error: cannot create a goroutine fiber (0x%08x)\n", (unsigned)r);
+        abort();
+    }
+#elif defined(SCHED_UCONTEXT)
     (void)top;
     getcontext(&c->uc);
     c->uc.uc_stack.ss_sp = c->stack;
@@ -475,6 +591,11 @@ void go_spawn(void (*fn)(void *), void *env) {
     uint64_t *frame = (uint64_t *)(top - 176);
     memset(frame, 0, 176);
     frame[11] = (uint64_t)(uintptr_t)coro_entry;  // x30 (lr) at [sp, #88]
+    c->sp = frame;
+#elif defined(CVF_CTX_ARM32)
+    uint32_t *frame = (uint32_t *)(top - CTX_ARM32_FRAME_WORDS * 4);
+    memset(frame, 0, CTX_ARM32_FRAME_WORDS * 4);
+    frame[CTX_ARM32_FRAME_WORDS - 1] = (uint32_t)(uintptr_t)coro_entry;  // popped into pc
     c->sp = frame;
 #endif
 #endif
@@ -501,6 +622,16 @@ static void scan_suspended(void (*scan)(uintptr_t, uintptr_t)) {
         if (c != cur && c != &main_coro && stack_top_of(c) && c->sp) scan((uintptr_t)c->sp, stack_top_of(c));
     if (cur != &main_coro && main_coro.sp) scan((uintptr_t)main_coro.sp, gc_main_stack_top());
 }
+
+#if defined(__vita__)
+void go_vita_fp_ieee(void) {
+    uint32_t f;
+    __asm__ volatile("vmrs %0, fpscr" : "=r"(f));
+    f &= ~(uint32_t)0x03c00000;  // FZ, DN off; round to nearest
+    __asm__ volatile("vmsr fpscr, %0" ::"r"(f));
+}
+__attribute__((constructor)) static void sched_vita_fiber_module(void) { sceSysmoduleLoadModule(SCE_SYSMODULE_FIBER); }
+#endif
 
 __attribute__((constructor)) static void sched_install(void) {
     gc_stack_top_hook = cur_stack_top;

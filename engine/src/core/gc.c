@@ -12,6 +12,11 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#elif defined(__vita__)
+// PS Vita (vitasdk newlib): no mmap; the arena is a memory block of its own
+// (physical memory, committed at once), threads are Sce threads
+#include <psp2/kernel/sysmem.h>
+#include <psp2/kernel/threadmgr.h>
 #else
 #include <sys/mman.h>
 #if defined(__linux__)
@@ -33,7 +38,14 @@
 // used). iOS gives an app far less virtual address space than a desktop,
 // so the iOS build sets 1024 (CMakeLists.txt); CVF_GC_ARENA_MB overrides.
 #ifndef CVF_GC_DEFAULT_ARENA_MB
+#if defined(__vita__)
+// the Vita commits the whole arena in RAM: the reference match peaks at
+// ~95 MB of heap pages (hwm, VITA_PORT.md); about 365 MB of main memory is
+// the application's
+#define CVF_GC_DEFAULT_ARENA_MB 192
+#else
 #define CVF_GC_DEFAULT_ARENA_MB (sizeof(void *) == 8 ? 4096 : 384)
+#endif
 #endif
 
 #define PAGE_SHIFT 13
@@ -132,6 +144,38 @@ static void *os_reserve(size_t n) {
 #endif
 }
 
+// 32-bit targets: the collector is conservative, so any scanned word whose
+// value falls inside the used part of the heap keeps a block alive. A 32-bit
+// float is such a word when the heap sits where floats live: Linux armhf
+// under qemu maps the arena at 0x40800000, which is every float from ~4.0
+// to ~1e15 (positions, velocities), and false hits kept whole sprite and
+// sound buffers alive (live set 86 MB instead of 48 MB, VITA_PORT.md).
+// Addresses with the top bit set read as negative integers below -2^31+2^28
+// and as tiny negative floats, values game state rarely holds: ask for the
+// arena there first. (The Vita's user memory blocks are at 0x81000000 up.)
+static void *os_reserve_heap(size_t n) {
+#if defined(__vita__)
+    // user memory blocks are mapped from 0x81000000 up (the program image
+    // first): negative as integers, tiny negative floats, as wanted above
+    n = (n + 0xfffff) & ~(size_t)0xfffff;  // whole MBs (4 KB is the minimum)
+    SceUID b = sceKernelAllocMemBlock("cvf_gc_arena", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, n, NULL);
+    void *p = NULL;
+    if (b < 0 || sceKernelGetMemBlockBase(b, &p) < 0) return NULL;
+    memset(p, 0, n);  // take_pages assumes fresh pages are zero
+    return p;
+#endif
+#if UINTPTR_MAX == 0xffffffffu && !defined(_WIN32) && (defined(MAP_ANONYMOUS) || defined(MAP_ANON))
+    static const uintptr_t hints[] = {0x90000000u, 0xa0000000u, 0x80000000u};
+    for (size_t i = 0; i < sizeof hints / sizeof hints[0]; i++) {
+        void *p = mmap((void *)hints[i], n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        if (p == MAP_FAILED) continue;
+        if ((uintptr_t)p >= 0x80000000u) return p;
+        munmap(p, n);  // placed elsewhere: try the next hint
+    }
+#endif
+    return os_reserve(n);
+}
+
 static void os_commit(void *p, size_t n) {
 #if defined(_WIN32)
     VirtualAlloc(p, n, MEM_COMMIT, PAGE_READWRITE);
@@ -142,7 +186,7 @@ static void os_commit(void *p, size_t n) {
 }
 
 static double now_ms(void) {
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__vita__)
     // mingw-w64 on msvcrt (its default) has no timespec_get/TIME_UTC
     return (double)go_mono_ns() / 1e6;
 #else
@@ -180,8 +224,21 @@ static int add_module_roots(struct dl_phdr_info *info, size_t size, void *data) 
 }
 #endif
 
+#if defined(__vita__)
+__attribute__((section(".noinit"), used)) static char gc_vita_data_end[4];
+#endif
+
 static void add_data_roots(void) {
-#if defined(__ANDROID__)
+#if defined(__vita__)
+    // vitasdk's linker script (armvita.x): .data, .data1, .persistent, .bss,
+    // then .noinit. The end is a real object in .noinit, not __bss_end__: a
+    // symbol at the very end of the segment is not relocated in the Vita
+    // image (vita-elf-create; seen in vemu: __data_start moved with the
+    // segment, __bss_end__ kept its link address, and objects referenced
+    // only from .bss were freed - gc_selftest)
+    extern char __data_start[];
+    gc_add_roots(__data_start, gc_vita_data_end + sizeof gc_vita_data_end);
+#elif defined(__ANDROID__)
     if (!dl_iterate_phdr(add_module_roots, (void *)(uintptr_t)&gc_init)) {
         fprintf(stderr, "gc: data segments of the engine not found\n");
         abort();
@@ -235,6 +292,12 @@ static uintptr_t find_stack_base(void *hint) {
     b = (uintptr_t)pthread_get_stackaddr_np(pthread_self());
 #elif defined(_WIN32)
     b = (uintptr_t)((NT_TIB *)NtCurrentTeb())->StackBase;  // the thread's stack top: hint + 4096 may lie above it
+#elif defined(__vita__)
+    SceKernelThreadInfo ti;
+    memset(&ti, 0, sizeof ti);
+    ti.size = sizeof ti;
+    if (sceKernelGetThreadInfo(sceKernelGetThreadId(), &ti) >= 0 && ti.stack)
+        b = (uintptr_t)ti.stack + (uintptr_t)ti.stackSize;
 #else
     b += 4096;  // cover main's own frame
 #endif
@@ -246,7 +309,12 @@ static uintptr_t find_stack_base(void *hint) {
 // collector is single-threaded and scans only that thread's stacks).
 // Checked on every collection and every free-list refill / large allocation
 // (all builds), and on every allocation in debug builds.
-#if !defined(_WIN32)
+#if defined(__vita__)
+static SceUID gc_owner;
+static bool gc_owner_set;
+static void owner_set(void) { gc_owner = sceKernelGetThreadId(), gc_owner_set = true; }
+static bool owner_ok(void) { return !gc_owner_set || sceKernelGetThreadId() == gc_owner; }
+#elif !defined(_WIN32)
 static pthread_t gc_owner;
 static bool gc_owner_set;
 static void owner_set(void) { gc_owner = pthread_self(), gc_owner_set = true; }
@@ -276,12 +344,13 @@ void gc_init(void *stack_base) {
     const char *e = getenv("CVF_GC_ARENA_MB");
     if (e && atoi(e) > 0) mb = (size_t)atoi(e);
     S->npages = (mb << 20) >> PAGE_SHIFT;
-    void *arena = os_reserve(S->npages * PAGE_SIZE + PAGE_SIZE);
+    void *arena = os_reserve_heap(S->npages * PAGE_SIZE + PAGE_SIZE);
     if (!arena) {
-        fprintf(stderr, "gc: cannot reserve %zu MB\n", mb);
+        fprintf(stderr, "gc: cannot reserve %lu MB\n", (unsigned long)mb);
         abort();
     }
     S->lo = ((uintptr_t)arena + PAGE_SIZE - 1) & ~(uintptr_t)(PAGE_SIZE - 1);
+    if (getenv("CVF_GC_TRACE")) fprintf(stderr, "gc arena: %lu MB at %p\n", (unsigned long)mb, (void *)S->lo);
     S->pages = (Page *)os_reserve(S->npages * sizeof(Page));
     S->marks = (uint64_t(*)[MARK_WORDS])os_reserve(S->npages * sizeof *S->marks);
     if (!S->pages || !S->marks) abort();
@@ -309,6 +378,9 @@ void gc_init(void *stack_base) {
     prof_skip = getenv("CVF_GC_PROF_SKIP_MB") ? (size_t)atoi(getenv("CVF_GC_PROF_SKIP_MB")) << 20 : 0;
 #endif
     add_data_roots();
+    if (getenv("CVF_GC_TRACE"))
+        for (int i = 0; i < S->nroots; i++)
+            fprintf(stderr, "gc roots: %p-%p\n", (void *)S->roots[i].lo, (void *)S->roots[i].hi);
 }
 
 void gc_add_roots(void *lo, void *hi) {
@@ -322,7 +394,12 @@ void gc_disable(void) {
     S->disabled++;
 }
 void gc_enable(void) { S->disabled--; }
-GcStats gc_stats(void) { return S ? S->st : (GcStats){0}; }
+GcStats gc_stats(void) {
+    if (!S) return (GcStats){0};
+    GcStats st = S->st;
+    st.hwm_bytes = S->hwm << PAGE_SHIFT;
+    return st;
+}
 
 // ---------------------------------------------------------------- pages
 static inline uint8_t *page_addr(size_t pg) { return (uint8_t *)(S->lo + (pg << PAGE_SHIFT)); }
@@ -423,6 +500,55 @@ GC_NO_SANITIZE static void scan_range(uintptr_t lo, uintptr_t hi) {
     for (uintptr_t *w = (uintptr_t *)lo; (uintptr_t)(w + 1) <= hi; w++) mark_ptr(*w);
 }
 
+// Derived pointers below an object (stacks and registers only). An
+// optimising compiler may keep, across a call that collects, only a pointer
+// *before* an object: GCC's pre-indexed loads on 32-bit ARM (`ldr r1, [r4,
+// #4]!` walking an array leave `r4 = data - 4`). Such a word points into the
+// previous block, or outside the heap, and alone would let the object be
+// freed (test_sched.c's suspended-goroutine check under qemu-arm). So a
+// stack or register word also marks every block that starts within
+// DERIVED_BELOW bytes above it: 256 covers Thumb-2's and ARM's pre-indexed
+// writeback with an 8-bit offset (255; ldr's 12-bit ARM form is not used for
+// induction variables below the base) and every element stride a loop over
+// slices of small structs uses. Heap and data-segment words are not treated
+// this way: only compiler temporaries hold such pointers, and the translated
+// code itself never stores them. The cost is retention of a neighbour now
+// and then by a stack word, nothing on the 64-bit layouts' results.
+#define DERIVED_BELOW 256
+static void mark_derived(uintptr_t p) {
+    uintptr_t lim = p + DERIVED_BELOW;
+    uintptr_t end = S->lo + (S->hwm << PAGE_SHIFT);
+    if (lim <= S->lo || p >= end) return;
+    // first page whose start could hold such a block: p's own (p may lie
+    // just below the arena too)
+    size_t pg = p >= S->lo ? (p - S->lo) >> PAGE_SHIFT : 0;
+    for (; pg < S->hwm; pg++) {
+        uintptr_t base = (uintptr_t)page_addr(pg);
+        if (base > lim) break;
+        Page *P = &S->pages[pg];
+        if (P->kind == P_SMALL) {
+            uintptr_t sz = cls_size[P->cls];
+            // slots starting in (p, lim]
+            uintptr_t first = p < base ? 0 : (p - base) / sz + 1;
+            for (uintptr_t i = first; i < S->cls_count[P->cls]; i++) {
+                uintptr_t o = base + i * sz;
+                if (o > lim) break;
+                mark_ptr(o);  // a free slot is no object: marking it only delays its reuse
+            }
+        } else if (P->kind == P_LARGE && base > p) {
+            mark_ptr(base);
+        }
+    }
+}
+
+GC_NO_SANITIZE static void scan_stack_range(uintptr_t lo, uintptr_t hi) {
+    lo = (lo + sizeof(void *) - 1) & ~(uintptr_t)(sizeof(void *) - 1);
+    for (uintptr_t *w = (uintptr_t *)lo; (uintptr_t)(w + 1) <= hi; w++) {
+        mark_ptr(*w);
+        mark_derived(*w);
+    }
+}
+
 static void drain(void) {
     while (S->msp) {
         Range r = S->mstack[--S->msp];
@@ -438,8 +564,8 @@ void gc_set_main_stack(void *top) {
     if (top) S->stack_base = (uintptr_t)top;  // NULL (no engine stack): keep the thread's own
 }
 
-static void scan_and_drain(uintptr_t lo, uintptr_t hi) {
-    scan_range(lo, hi);
+static void scan_and_drain(uintptr_t lo, uintptr_t hi) {  // suspended goroutine stacks
+    scan_stack_range(lo, hi);
     drain();
 }
 
@@ -482,7 +608,7 @@ GC_NO_SANITIZE static __attribute__((noinline)) void mark_stack(void) {
     volatile uintptr_t here = (uintptr_t)&spill;
     uintptr_t lo = here < (uintptr_t)__builtin_frame_address(0) ? here : (uintptr_t)__builtin_frame_address(0);
     uintptr_t top = gc_stack_top_hook ? gc_stack_top_hook() : 0;
-    scan_range(lo, top ? top : S->stack_base);  // the running goroutine's stack
+    scan_stack_range(lo, top ? top : S->stack_base);  // the running goroutine's stack (and the spilled registers)
     drain();
     if (gc_extra_roots_hook) gc_extra_roots_hook(scan_and_drain);  // suspended goroutines
 }
@@ -573,8 +699,8 @@ void gc_collect(void) {
     sweep();
     double dt = now_ms() - t0;
     if (getenv("CVF_GC_TRACE"))
-        fprintf(stderr, "gc phases: roots %.2f ms (%zu KB) mark-from-roots %.2f ms stack %.2f ms sweep %.2f ms\n", t1 - t0,
-                rootbytes >> 10, t2 - t1, t3 - t2, now_ms() - t3);
+        fprintf(stderr, "gc phases: roots %.2f ms (%lu KB) mark-from-roots %.2f ms stack %.2f ms sweep %.2f ms\n", t1 - t0,
+                (unsigned long)(rootbytes >> 10), t2 - t1, t3 - t2, now_ms() - t3);
     S->st.collections++;
     S->st.last_pause_ms = dt;
     S->st.total_pause_ms += dt;
@@ -584,8 +710,9 @@ void gc_collect(void) {
     S->trigger = t > ((size_t)32 << 20) ? t : ((size_t)32 << 20);
     S->collecting = false;
     if (getenv("CVF_GC_TRACE"))
-        fprintf(stderr, "gc %llu: total %.1f MB live %.1f MB heap %.1f MB pause %.2f ms\n", (unsigned long long)S->st.collections, S->st.total_alloc / 1048576.0,
-                S->st.live_bytes / 1048576.0, S->st.heap_bytes / 1048576.0, dt);
+        fprintf(stderr, "gc %llu: total %.1f MB live %.1f MB heap %.1f MB hwm %.1f MB pause %.2f ms%s\n", (unsigned long long)S->st.collections, S->st.total_alloc / 1048576.0,
+                S->st.live_bytes / 1048576.0, S->st.heap_bytes / 1048576.0, (double)(S->hwm << PAGE_SHIFT) / 1048576.0, dt,
+                S->fighting ? " (during a round)" : "");
 }
 
 // Hands the pages of free runs back to the OS (memory warnings): a
@@ -617,7 +744,10 @@ static inline bool should_collect(void) {
     return S->st.alloc_bytes >= S->trigger;
 }
 
+void (*gc_frame_hook)(bool fighting);
+
 void gc_safepoint(bool fighting) {
+    if (gc_frame_hook) gc_frame_hook(fighting);
     if (!S) return;
     S->fighting = fighting;
     if (!fighting && !S->disabled && S->gogc >= 0 && S->st.alloc_bytes >= S->trigger) gc_collect();
@@ -666,7 +796,7 @@ static void *alloc_large(size_t n, int atomic) {
         gc_collect();
         pg = take_pages(np);
         if (pg == SIZE_MAX) {
-            fprintf(stderr, "gc: out of memory (%zu bytes)\n", n);
+            fprintf(stderr, "gc: out of memory (%lu bytes)\n", (unsigned long)n);
             abort();
         }
     }
