@@ -105,9 +105,14 @@ jobs:
           name: cvf-native-android-tests
       - name: Unit tests (bionic, static)
         run: |
-          chmod +x cvf_tests cvf_headless
+          chmod +x cvf_tests cvf_headless cvf_nearby_test
           uname -m
           ./cvf_tests | tail -3
           ./cvf_tests | grep -q " 0 failures"
+          # Nearby over UDP 7520 (loopback). The two "desktop" checks fail by
+          # design on Android: touch UI and the touch wording of the host hint.
+          mkdir -p nt && ./cvf_nearby_test nt | tee nt.txt || true
+          grep -q "^ok   host listed" nt.txt
+          grep -q "^ok   periodic sweep" nt.txt
           # no game data: the headless runner must start and fail cleanly
           ./cvf_headless /nonexistent 2>&1 | tail -2 || true
