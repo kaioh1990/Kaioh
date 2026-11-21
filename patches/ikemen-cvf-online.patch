@@ -1719,7 +1719,7 @@ index 00000000..19554275
 +)
 diff --git a/src/cvf_fingerprint.go b/src/cvf_fingerprint.go
 new file mode 100644
-index 00000000..3d3fbced
+index 00000000..ae8e26c1
 --- /dev/null
 +++ b/src/cvf_fingerprint.go
 @@ -0,0 +1,332 @@
@@ -1983,10 +1983,10 @@ index 00000000..3d3fbced
 +		return nil
 +	}
 +	if lm["r"] != rm["r"] {
-+		return Error("Game data mismatch: the gameplay rules (data/cvf_online.ini) differ from the other player's. Both players need the same CvF Online version.")
++		return Error("Game data mismatch:\nthe gameplay rules (data/cvf_online.ini)\ndiffer from the other player's.\nBoth players need the same CvF Online version.")
 +	}
 +	if lm["d"] != rm["d"] {
-+		return Error("Game data mismatch: the files in data/ (common states, fight.def, select.def or system.def) differ from the other player's. Both players need the same CvF Online version.")
++		return Error("Game data mismatch:\nthe files in data/ (common states, fight.def,\nselect.def or system.def) differ from the other player's.\nBoth players need the same CvF Online version.")
 +	}
 +	return nil
 +}
@@ -2037,7 +2037,7 @@ index 00000000..3d3fbced
 +		if stage {
 +			what = "stage " + def
 +		}
-+		return Error(fmt.Sprintf("Game data mismatch: %s differs from the other player's copy. Both players need the same version.", what))
++		return Error(fmt.Sprintf("Game data mismatch:\n%s\ndiffers from the other player's copy.\nBoth players need the same version.", what))
 +	}
 +	for i := range s.chars {
 +		if len(s.chars[i]) == 0 || s.chars[i][0] == nil {

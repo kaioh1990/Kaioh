@@ -173,6 +173,25 @@ func stateDumpTickFn() {
 
 var sdKeys []int32
 
+// Several matches in one run (cvfheadless CVF_NET_MATCHES): the next match is
+// written to its own file.
+func stateDumpRotate(name string) {
+	if stateDumpOn != 1 {
+		return
+	}
+	stateDumpFinish()
+	stateDumpW.Flush()
+	stateDumpF.Close()
+	if f, err := os.Create(name); err == nil {
+		stateDumpF = f
+		stateDumpW = bufio.NewWriterSize(f, 1<<16)
+	} else {
+		stateDumpOn = 0
+	}
+	stateDumpTick = 0
+	stateDumpNetResim = 0
+}
+
 var stateDumpNet map[int32][]byte
 var stateDumpNetResim int
 

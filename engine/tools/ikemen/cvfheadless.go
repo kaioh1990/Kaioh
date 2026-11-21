@@ -240,7 +240,88 @@ func cvfHeadlessMain(args []string) int32 {
 
 	winp := cvfGame()
 	stateDumpFinish()
+	cvfSessionReport(1, winp)
+
+	// CVF_NET_MATCHES="P1:P2[:pal1:pal2] ...": more matches in the same
+	// online session (tests/netplay "session" scenario), as main.lua's netplay
+	// versus loop plays them: the Lua game function returns (it stops the
+	// delay-netplay input and resynchronizes), the character select runs for
+	// CVF_NET_SELECT_FRAMES delay-netplay frames (default 60), then the next
+	// pair is loaded and played. A pair equal to the previous one is a
+	// rematch. Match k > 1 writes statedump.k.txt.
+	for k, m := range strings.Fields(os.Getenv("CVF_NET_MATCHES")) {
+		if _, online := flags["-ip"]; sys.esc || sys.gameEnd || (online && sys.netConnection == nil) {
+			break
+		}
+		f := strings.Split(m, ":")
+		if len(f) < 2 {
+			LogMessage("CVF_NET_MATCHES: bad entry %q", m)
+			return -1
+		}
+		selectFrames := 60
+		if n, err := strconv.Atoi(os.Getenv("CVF_NET_SELECT_FRAMES")); err == nil && n >= 0 {
+			selectFrames = n
+		}
+		for i := 0; i < selectFrames && !sys.esc && !sys.gameEnd; i++ {
+			cvfRefresh()
+		}
+		if sys.esc || sys.gameEnd {
+			break
+		}
+		sys.sel.ClearSelected()
+		sys.sel.SelectStage(1)
+		pals := [2]int{1, 1}
+		if strings.EqualFold(f[0], f[1]) {
+			pals[1] = 2
+		}
+		for side := 0; side < 2; side++ {
+			if len(f) >= 4 {
+				pals[side] = int(Atoi(f[2+side]))
+			}
+			cvfSetTeamMode(side, TM_Single, 1)
+			key := strings.ToLower(f[side])
+			charRef, ok := charDef[key]
+			if !ok {
+				sys.sel.AddChar(f[side])
+				charRef = ref
+				charDef[key] = charRef
+				ref++
+			}
+			sys.sel.AddSelectedChar(side, charRef, pals[side])
+		}
+		stateDumpRotate("statedump." + strconv.Itoa(k+2) + ".txt")
+		sys.sel.gameParams = newGameParamsFromMotif(&sys.motif)
+		sys.sel.music = make(Music)
+		sys.sel.gameParams.AppendParams(SplitAndTrim(StripComment("pausemenu=false"), ","))
+		sys.sel.music.AppendParams(sys.sel.gameParams.MusicEntries())
+		sys.loaderReset()
+		LogMessage("session: match %d: %s vs %s", k+2, f[0], f[1])
+		winp = cvfGame()
+		stateDumpFinish()
+		cvfSessionReport(k+2, winp)
+	}
 	return winp
+}
+
+// After each match of a session: the winner and memory after a full
+// collection (RSS from /proc/self/statm where there is one; the Go heap from
+// runtime.MemStats, which the native engine leaves at zero: its collector
+// reports with CVF_GC_TRACE=1).
+func cvfSessionReport(match int, winp int32) {
+	if os.Getenv("CVF_NET_MATCHES") == "" {
+		return
+	}
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	rss := int64(-1)
+	if b, err := os.ReadFile("/proc/self/statm"); err == nil {
+		if f := strings.Fields(string(b)); len(f) > 1 {
+			rss = int64(Atoi(f[1])) * 4096 / 1024
+		}
+	}
+	LogMessage("session: match %d done: winner %d, rss %d KB, go heap %d KB, gc %d",
+		match, winp, rss, ms.HeapAlloc/1024, ms.NumGC)
 }
 
 

@@ -85,8 +85,8 @@ for i in $(seq 1 "$N"); do
     h=$WORK/host/out.txt g=$WORK/guest/out.txt
     if grep -q "Game data mismatch\|Content/build mismatch" "$h" && grep -q "Game data mismatch\|Content/build mismatch" "$g"; then
         mism=$((mism + 1))
-        [ $i = 1 ] && echo "  host : $(grep -m1 -o 'Game data mismatch.*\|Content/build mismatch.*' "$h")" &&
-            echo "  guest: $(grep -m1 -o 'Game data mismatch.*\|Content/build mismatch.*' "$g")"
+        msg() { grep -m1 -A3 'Game data mismatch\|Content/build mismatch' "$1" | tr '\n' ' ' | sed 's/ *([^)]*$//'; }
+        [ $i = 1 ] && echo "  host : $(msg "$h")" && echo "  guest: $(msg "$g")"
         r=mismatch
     elif grep -q "Synchronization error" "$h" "$g"; then
         bad=$((bad + 1)); r="SYNC ERROR"

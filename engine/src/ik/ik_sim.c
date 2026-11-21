@@ -16711,7 +16711,7 @@ static GoIface lambda_896(Env_lambda_896 *_env, GoString def, GoString name, boo
     if (stage) {
         what = go_strcat(GOSTR("stage "), def);
     }
-    return ((GoIface){281, go_box(Error, fmt_Sprintf(GOSTR("Game data mismatch: %s differs from the other player's copy. Both players need the same version."), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, what)}))))});
+    return ((GoIface){281, go_box(Error, fmt_Sprintf(GOSTR("Game data mismatch:\n%s\ndiffers from the other player's copy.\nBoth players need the same version."), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, what)}))))});
 }
 
 typedef struct Env_lambda_897 { GoString *base; GoHttpClient* *c; GoString *out; } Env_lambda_897;
@@ -122984,10 +122984,10 @@ GoIface fn_cvfValidateFingerprint(GoString local, GoString remote) {
         return (GoIface){0};
     }
     if (!go_streq(Map_GoString_GoString_get(&lm, GOSTR("r"), NULL), Map_GoString_GoString_get(&rm, GOSTR("r"), NULL))) {
-        return ((GoIface){281, go_box(Error, GOSTR("Game data mismatch: the gameplay rules (data/cvf_online.ini) differ from the other player's. Both players need the same CvF Online version."))});
+        return ((GoIface){281, go_box(Error, GOSTR("Game data mismatch:\nthe gameplay rules (data/cvf_online.ini)\ndiffer from the other player's.\nBoth players need the same CvF Online version."))});
     }
     if (!go_streq(Map_GoString_GoString_get(&lm, GOSTR("d"), NULL), Map_GoString_GoString_get(&rm, GOSTR("d"), NULL))) {
-        return ((GoIface){281, go_box(Error, GOSTR("Game data mismatch: the files in data/ (common states, fight.def, select.def or system.def) differ from the other player's. Both players need the same CvF Online version."))});
+        return ((GoIface){281, go_box(Error, GOSTR("Game data mismatch:\nthe files in data/ (common states, fight.def,\nselect.def or system.def) differ from the other player's.\nBoth players need the same CvF Online version."))});
     }
     return (GoIface){0};
 }
@@ -125167,10 +125167,112 @@ i32 fn_cvfHeadlessMain(Slice_GoString args) {
     System_loaderReset(&g_sys);
     i32 winp = fn_cvfGame();
     fn_stateDumpFinish();
+    fn_cvfSessionReport(1, winp);
+    {
+        Slice_GoString _t54 = strings_Fields(os_Getenv(GOSTR("CVF_NET_MATCHES")));
+        for (int _t53 = 0; _t53 < _t54.len; _t53++) {
+            int k = _t53;
+            GoString m = _t54.p[_t53];
+            {
+                bool _t56; GoString _t57 = Map_GoString_GoString_get(&flags, GOSTR("-ip"), &_t56);
+                bool online = _t56;
+                if ((g_sys.SystemStateVars_.esc || g_sys.SystemStateVars_.gameEnd) || ((online && (g_sys.netConnection == NULL)))) {
+                    break;
+                }
+            }
+            Slice_GoString f = strings_Split(m, GOSTR(":"));
+            if (f.len < 2) {
+                fn_LogMessage(GOSTR("CVF_NET_MATCHES: bad entry %q"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, m)})));
+                return -1;
+            }
+            int selectFrames = 60;
+            {
+                Ret_int__GoIface _t58 = strconv_Atoi(os_Getenv(GOSTR("CVF_NET_SELECT_FRAMES")));
+                int n = _t58.r0;
+                GoIface err = _t58.r1;
+                if ((err.type == 0) && (n >= 0)) {
+                    selectFrames = n;
+                }
+            }
+            {
+                int i = 0;
+                for (; ((i < selectFrames) && (!g_sys.SystemStateVars_.esc)) && (!g_sys.SystemStateVars_.gameEnd); i++) {
+                    fn_cvfRefresh();
+                    _cont59:;
+                }
+            }
+            if (g_sys.SystemStateVars_.esc || g_sys.SystemStateVars_.gameEnd) {
+                break;
+            }
+            Select_ClearSelected(&g_sys.sel);
+            Select_SelectStage(&g_sys.sel, 1);
+            Arr2_int pals = (Arr2_int){{1, 1}};
+            if (strings_EqualFold(f.p[0], f.p[1])) {
+                pals.v[1] = 2;
+            }
+            {
+                int side = 0;
+                for (; side < 2; side++) {
+                    if (f.len >= 4) {
+                        pals.v[side] = ((int)fn_Atoi(f.p[(2 + side)]));
+                    }
+                    fn_cvfSetTeamMode(side, 0, 1);
+                    GoString key = strings_ToLower(f.p[side]);
+                    bool _t61; int _t62 = Map_GoString_int_get(&charDef, key, &_t61);
+                    int charRef = _t62;
+                    bool ok = _t61;
+                    if (!ok) {
+                        Select_AddChar(&g_sys.sel, f.p[side]);
+                        charRef = ref;
+                        Map_GoString_int_set(&charDef, key, charRef);
+                        ref++;
+                    }
+                    Select_AddSelectedChar(&g_sys.sel, side, charRef, pals.v[side]);
+                    _cont60:;
+                }
+            }
+            fn_stateDumpRotate(go_strcat(go_strcat(GOSTR("statedump."), strconv_Itoa((k + 2))), GOSTR(".txt")));
+            g_sys.sel.gameParams = fn_newGameParamsFromMotif((&g_sys.motif));
+            g_sys.sel.music = Map_GoString_Slice_bgMusicPtr_make(0);
+            GameParams_AppendParams(g_sys.sel.gameParams, fn_SplitAndTrim(fn_StripComment(GOSTR("pausemenu=false")), GOSTR(",")));
+            Music_AppendParams(g_sys.sel.music, GameParams_MusicEntries(g_sys.sel.gameParams));
+            System_loaderReset(&g_sys);
+            fn_LogMessage(GOSTR("session: match %d: %s vs %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){2, go_box_a(int, (k + 2))}), ((GoIface){17, go_box(GoString, f.p[0])}), ((GoIface){17, go_box(GoString, f.p[1])})));
+            winp = fn_cvfGame();
+            fn_stateDumpFinish();
+            fn_cvfSessionReport((k + 2), winp);
+            _cont55:;
+        }
+    }
     return winp;
 }
 
-// cvfSetFightScreenElements (cvfheadless.go:250), 0 TODO
+// cvfSessionReport (cvfheadless.go:310), 0 TODO
+void fn_cvfSessionReport(int match, i32 winp) {
+    if (go_streq(os_Getenv(GOSTR("CVF_NET_MATCHES")), GOSTR(""))) {
+        return;
+    }
+    runtime_GC();
+    GoOpaque /* runtime.MemStats */ *ms__h = go_box(GoOpaque /* runtime.MemStats */, {0});
+    runtime_ReadMemStats((&(*ms__h)));
+    i64 rss = -1LL;
+    {
+        Ret_Slice_u8__GoIface _t1 = os_ReadFile(GOSTR("/proc/self/statm"));
+        Slice_u8 b = _t1.r0;
+        GoIface err = _t1.r1;
+        if (err.type == 0) {
+            {
+                Slice_GoString f = strings_Fields(go_bytes2str(b));
+                if (f.len > 1) {
+                    rss = go_div64((((i64)fn_Atoi(f.p[1])) * 4096LL), 1024LL);
+                }
+            }
+        }
+    }
+    fn_LogMessage(GOSTR("session: match %d done: winner %d, rss %d KB, go heap %d KB, gc %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 5, ((GoIface){2, go_box_a(int, match)}), ((GoIface){5, go_box_a(i32, winp)}), ((GoIface){6, go_box_a(i64, rss)}), ((GoIface){11, go_box_a(u64, go_divu64((*(u64 *)go_scratch(sizeof(u64)) /* opaque runtime.MemStats.HeapAlloc */), 1024U))}), ((GoIface){10, go_box_a(u32, (*(u32 *)go_scratch(sizeof(u32)) /* opaque runtime.MemStats.NumGC */))})));
+}
+
+// cvfSetFightScreenElements (cvfheadless.go:331), 0 TODO
 void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) {
     g_sys.fightScreen.guardbar = guardbar;
     g_sys.fightScreen.stunbar = stunbar;
@@ -125223,7 +125325,7 @@ void fn_cvfSetFightScreenElements(bool guardbar, bool stunbar, bool redlifebar) 
     }
 }
 
-// cvfSetTeamMode (cvfheadless.go:275), 0 TODO
+// cvfSetTeamMode (cvfheadless.go:356), 0 TODO
 void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     g_sys.sel.selected.v[side] = (Slice_Arr2_int){0};
     g_sys.SystemStateVars_.tmode.v[side] = tm;
@@ -125238,7 +125340,7 @@ void fn_cvfSetTeamMode(int side, TeamMode tm, i32 nt) {
     }
 }
 
-// cvfGame (cvfheadless.go:290), 0 TODO
+// cvfGame (cvfheadless.go:371), 0 TODO
 i32 fn_cvfGame(void) {
     volatile bool _df3 = false; volatile GoFunc _df3_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -125352,7 +125454,7 @@ i32 fn_cvfGame(void) {
     if (_df3) { _df3 = false; ((GoIface (*)(void *))_df3_f.fn)(_df3_f.env); }
 }
 
-// cvfRefresh (cvfheadless.go:376), 0 TODO
+// cvfRefresh (cvfheadless.go:457), 0 TODO
 void fn_cvfRefresh(void) {
     System_luaDiscardDrawQueue(&g_sys);
     if (Fade_isActive(g_sys.motif.fadeOut)) {
@@ -125367,7 +125469,7 @@ void fn_cvfRefresh(void) {
     System_update(&g_sys);
 }
 
-// cvfEnterNetPlay (cvfheadless.go:392), 0 TODO
+// cvfEnterNetPlay (cvfheadless.go:473), 0 TODO
 GoIface fn_cvfEnterNetPlay(GoString host) {
     if (g_sys.netConnection != NULL) {
         return ((GoIface){281, go_box(Error, GOSTR("Connection already established."))});
@@ -125395,7 +125497,7 @@ GoIface fn_cvfEnterNetPlay(GoString host) {
     return (GoIface){0};
 }
 
-// cvfNetplayConnect (cvfheadless.go:415), 0 TODO
+// cvfNetplayConnect (cvfheadless.go:496), 0 TODO
 bool fn_cvfNetplayConnect(GoString host) {
     {
         GoIface err = fn_cvfEnterNetPlay(host);
@@ -125436,7 +125538,7 @@ bool fn_cvfNetplayConnect(GoString host) {
     return true;
 }
 
-// cvfNetInputTick (cvfheadless.go:453), 0 TODO
+// cvfNetInputTick (cvfheadless.go:534), 0 TODO
 void fn_cvfNetInputTick(void) {
     if (g_cvfNetInputSeed < 0) {
         g_cvfNetInputSeed = 0;
@@ -125521,7 +125623,7 @@ void fn_cvfNetInputTick(void) {
     }
 }
 
-// System.cvfHeadlessAwait (cvfheadless.go:514), 0 TODO
+// System.cvfHeadlessAwait (cvfheadless.go:595), 0 TODO
 bool System_cvfHeadlessAwait(System* s) {
     s->SystemStateVars_.frameSkip = true;
     g_cvfFrames++;
@@ -166192,7 +166294,30 @@ void fn_stateDumpTickFn(void) {
     }
 }
 
-// stateDumpFinish (statedump.go:181), 0 TODO
+// stateDumpRotate (statedump.go:178), 0 TODO
+void fn_stateDumpRotate(GoString name) {
+    if (g_stateDumpOn != 1) {
+        return;
+    }
+    fn_stateDumpFinish();
+    bufio_Writer_Flush(g_stateDumpW);
+    os_File_Close(g_stateDumpF);
+    {
+        Ret_GoOpaque_os_FilePtrPtr__GoIface _t1 = os_Create(name);
+        GoOpaque /* os.File */* f = _t1.r0;
+        GoIface err = _t1.r1;
+        if (err.type == 0) {
+            g_stateDumpF = f;
+            g_stateDumpW = bufio_NewWriterSize(((GoIface){180, (void *)(f)}), 65536);
+        } else {
+            g_stateDumpOn = 0;
+        }
+    }
+    g_stateDumpTick = 0;
+    g_stateDumpNetResim = 0;
+}
+
+// stateDumpFinish (statedump.go:200), 0 TODO
 void fn_stateDumpFinish(void) {
     if (g_stateDumpOn != 1) {
         return;
@@ -166224,7 +166349,7 @@ void fn_stateDumpFinish(void) {
     bufio_Writer_Flush(g_stateDumpW);
 }
 
-// stateDumpVarsI (statedump.go:202), 0 TODO
+// stateDumpVarsI (statedump.go:221), 0 TODO
 Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {
@@ -166257,7 +166382,7 @@ Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
     return b;
 }
 
-// stateDumpVarsF (statedump.go:223), 0 TODO
+// stateDumpVarsF (statedump.go:242), 0 TODO
 Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m) {
     g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
     {
