@@ -2,6 +2,7 @@
 // which clash with generated names, so ios_sys.c does not include ik_sim.h.
 #ifndef CVF_IOS_SYS_H
 #define CVF_IOS_SYS_H
+#include <stdbool.h>
 
 int cvf_ios_on_main_thread(void);
 // Log file (<assets>/save/logs/cvf.log), save/cvf_env.txt, stack report.
