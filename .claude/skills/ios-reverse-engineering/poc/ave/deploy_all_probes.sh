@@ -31,6 +31,7 @@ declare -a PROBES=(
     "AVETypeConfusion:com.research.avetypeconfusion:ave_type_confusion.c"
     "KRWHelper:com.research.krwhelper:krw_helper.c"
     "WQProbe:com.research.wqprobe:worse_query_probe.c"
+    "MountRWProbe:com.research.mountrw:mount_rw_probe.c"
 )
 
 build_and_deploy() {
@@ -49,6 +50,8 @@ build_and_deploy() {
         extra_flags="-DKRW_STANDALONE"
     elif [[ "$src" == *"worse_query"* ]]; then
         frameworks="-framework CoreFoundation -framework MobileCoreServices"
+    elif [[ "$src" == *"mount_rw"* ]]; then
+        frameworks="-framework CoreFoundation"
     fi
     xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0 \
         $frameworks $extra_flags \
