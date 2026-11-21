@@ -19,7 +19,7 @@ declare -a PROBES=(
     "AVEProbe114:com.research.aveprobe114:ave_114025_probe.c"
     "AVEHeapExploit:com.research.aveheap:ave_heap_exploit.c"
     "AVETwoSession:com.research.avetwosession:ave_two_session.c"
-    "AVEPixel:com.research.avepixel:ave_pixeldata_probe.c"
+    "AVEPPSValueProbe:com.research.aveppsvalue:ave_pps_value_probe.c"
 )
 
 build_and_deploy() {
@@ -121,5 +121,7 @@ echo "  1. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avepr
 echo "  2. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveheap safe'"
 echo "  3. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveheap boundary'"
 echo "  4. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avetwosession max'"
-echo "  5. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avetwosession test'"
+echo "  5. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avetwosession shotgun'"
 echo "  6. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.avetwosession sweep'"
+echo "  7. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveppsvalue safe'"
+echo "  8. pymobiledevice3 developer dvt launch --udid $UDID 'com.research.aveppsvalue dump'"
