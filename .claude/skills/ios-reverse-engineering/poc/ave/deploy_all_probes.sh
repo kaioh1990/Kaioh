@@ -25,6 +25,7 @@ declare -a PROBES=(
     "AVECounterOverflow:com.research.avecounteroverflow:ave_counter_overflow.c"
     "AVECrossBuffer:com.research.avecrossbuffer:ave_cross_buffer.c"
     "AVEFirmwareParamProbe:com.research.avefwparam:ave_firmware_param_probe.c"
+    "AVEIOSurfSpray:com.research.aveiosurfspray:ave_iosurface_spray.c"
 )
 
 build_and_deploy() {
