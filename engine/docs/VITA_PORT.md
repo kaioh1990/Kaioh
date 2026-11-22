@@ -13,7 +13,7 @@ the Vita's code generation. Nothing has run on a Vita yet.
 | 32-bit runtime bugs fixed | 7 (section 7), plus a GCC derived-pointer case for the collector |
 | x86-64 unchanged | both reference md5s (also with CVF_GC_STRESS), netplay dump a350bc2df11a03519f7d65d278844432, cvf_tests 103/0 |
 | Memory | live set 41-51 MB, heap pages peak 112 MB on armv7: fits the Vita's ~365 MB easily (section 2) |
-| CPU | 6.5 M ARM instructions per game tick; estimated 9-18 ms per tick at 444 MHz, about the TinyGo build's cost: 60 Hz logic with 30 fps drawing is reachable, rollback needs the AOT milestone (section 3) |
+| CPU | 4.8 M ARM instructions per game tick with the Vita's code generation (claude/native-cpu; 6.5 M before, measured with Ubuntu's stack protector and PIE); estimated 6.5-13.5 ms per tick at 444 MHz: 60 Hz logic with 30 fps drawing is reachable, 60 fps and rollback need the tick 2x cheaper again (section 3, "Native CPU work") |
 
 The TinyGo/Go Vita build (`claude/vita-port`, vita/README.md, the
 compatibility report) stays the fallback until the native build reaches
@@ -155,6 +155,59 @@ emulator does not show it), so:
 - Only one core is used. The renderer (vitaGL command building) can move
   to a second core (M3); the simulation stays single-threaded (the
   collector is).
+
+### Native CPU work (claude/native-cpu, 2026-11-21)
+
+Reference fight, gameplay ticks 10-4400, `armprof` = qemu 8.2.2 with a
+plugin counting instructions between `gc_safepoint` calls plus a
+translation-block profile of that window (rebuilt in the scratchpad from the
+Vita agent's plugins).
+
+| Build | Median / mean per tick | Loading |
+| --- | --- | --- |
+| 1845746, armv7 toolchain as before (Ubuntu GCC: `-fstack-protector-strong`, PIE, stack clash probes) | 6.49 M / 6.70 M | 6.91 G |
+| claude/native-cpu, same flags | 5.50 M / 5.70 M | 6.60 G |
+| claude/native-cpu, Vita's code generation (`armv7-linux.cmake` now: no stack protector, no PIE, no probes) | **4.79 M / 4.96 M** | 5.82 G |
+
+The toolchain change is a measurement correction: vitasdk's GCC has none of
+the three (checked with `arm-vita-eabi-gcc -Q --help=common`), and the Vita
+build now drops `-fstack-clash-protection` too (no guard pages there,
+`CVF_STACK_CLASH_PROTECTION`). x86-64 (container): 0.88 -> 0.79 ms per tick.
+
+What changed, by gain: Vita code generation in the measurement (~17 %);
+`//go:inline` on the bytecode value helpers and `BytecodeStack` pushes
+(fork, comments only; gotoc emits `always_inline`) ~5 %; 32-bit map
+hashing and direct 4-byte keys ~3 %; C `switch` for constant Go switches,
+parameter escape analysis and capture by value in gotoc (fewer GC boxes:
+7412 -> 6153); trigger packing and `StateBlock` field order (fork, vitaPerf:
+last-level data misses of the controller walk -26 %, of `evalTrigger` -63 %
+in a 32 KB / 512 KB cache simulation).
+
+Cache misses matter as much as instructions. callgrind's cache simulation
+(32 KB L1, 512 KB L2, gameplay only) gives ~48 K last-level misses per tick
+against ~5.5 M instructions (x86-64): at Vita memory latency that is a large
+share of the measured 1.2-2.5 ns per instruction. Two experiments that cut
+instructions were slower in wall time for this reason and are not merged:
+
+- the closure compiler (`bc_compile.go`, `vita_jit.txt`), enabled in native
+  builds and without its per-node heap boxes: 4.69 M instructions, but
+  1.4 ms per tick on x86-64 against 0.9 ms (indirect calls);
+- ahead-of-time C for every trigger evaluated in the reference fight
+  (2328 functions, 8 MB of C, compiled into the `ik_sim.c` unit; exact:
+  both reference dumps unchanged): -27 % instructions on x86-64, but L2
+  instruction misses 21 M -> 146 M and 1.13 ms per tick against 0.87 ms.
+  Hot triggers are distinct code each, so the code does not fit any cache.
+
+Where the tick goes now (armv7, per tick): `BytecodeExp_runOC` 2.47 M
+(43 K operations, ~57 instructions each: the global value stack's loads and
+stores, float64 values, entry/exit of ~5 K calls), `Char.numHelper`
+0.24 M (and 29 % of all L1 data misses: it walks every helper's large
+`Char`), `StateBlock.Run` 0.24 M, map lookups 0.33 M (`map(x)`/`const(x)`
+by name, `CallFunction` by name, the string pool), `Command.Step` 0.07 M.
+Next steps, in order: a compact per-player helper id/destroyed index for
+NumHelper/NumExplod; a register-based trigger evaluator compiled at load
+(the closure compiler's exact parse, values in a local array, one dispatch
+loop: no code growth); caching name lookups per bytecode site.
 
 ## 4. Determinism on 32-bit ARM
 
