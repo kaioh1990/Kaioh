@@ -335,7 +335,9 @@ typedef struct bgDrawTransform bgDrawTransform;
 typedef struct bgMusic bgMusic;
 typedef struct bgVideo bgVideo;
 typedef struct boundTexture boundTexture;
+typedef struct callFuncCache callFuncCache;
 typedef struct character character;
+typedef struct constCacheEnt constCacheEnt;
 typedef struct cookW cookW;
 typedef struct cparser cparser;
 typedef struct cvfFpFile cvfFpFile;
@@ -870,10 +872,6 @@ typedef struct Arr12_sdl_GameControllerPtr Arr12_sdl_GameControllerPtr;
 #define CVF_DEF_Arr12_stagePlayer
 typedef struct Arr12_stagePlayer Arr12_stagePlayer;
 #endif
-#ifndef CVF_DEF_Arr16_Anon_bfbab8ed
-#define CVF_DEF_Arr16_Anon_bfbab8ed
-typedef struct Arr16_Anon_bfbab8ed Arr16_Anon_bfbab8ed;
-#endif
 #ifndef CVF_DEF_Arr16_f32
 #define CVF_DEF_Arr16_f32
 typedef struct Arr16_f32 Arr16_f32;
@@ -1070,10 +1068,6 @@ typedef struct Arr32_cmdNameCacheEnt Arr32_cmdNameCacheEnt;
 #define CVF_DEF_Arr32_u8
 typedef struct Arr32_u8 Arr32_u8;
 #endif
-#ifndef CVF_DEF_Arr32_varCacheEnt
-#define CVF_DEF_Arr32_varCacheEnt
-typedef struct Arr32_varCacheEnt Arr32_varCacheEnt;
-#endif
 #ifndef CVF_DEF_Arr3_BytecodeExp
 #define CVF_DEF_Arr3_BytecodeExp
 typedef struct Arr3_BytecodeExp Arr3_BytecodeExp;
@@ -1165,6 +1159,14 @@ typedef struct Arr64_Anon_7b4debcb Arr64_Anon_7b4debcb;
 #ifndef CVF_DEF_Arr64_Anon_a810cdd4
 #define CVF_DEF_Arr64_Anon_a810cdd4
 typedef struct Arr64_Anon_a810cdd4 Arr64_Anon_a810cdd4;
+#endif
+#ifndef CVF_DEF_Arr64_Anon_bfbab8ed
+#define CVF_DEF_Arr64_Anon_bfbab8ed
+typedef struct Arr64_Anon_bfbab8ed Arr64_Anon_bfbab8ed;
+#endif
+#ifndef CVF_DEF_Arr64_varCacheEnt
+#define CVF_DEF_Arr64_varCacheEnt
+typedef struct Arr64_varCacheEnt Arr64_varCacheEnt;
 #endif
 #ifndef CVF_DEF_Arr6_f32
 #define CVF_DEF_Arr6_f32
@@ -1858,6 +1860,10 @@ typedef struct { bool *p; int len, cap; } Slice_bool;
 #ifndef CVF_DEF_Slice_boundTexture
 #define CVF_DEF_Slice_boundTexture
 typedef struct { boundTexture *p; int len, cap; } Slice_boundTexture;
+#endif
+#ifndef CVF_DEF_Slice_constCacheEnt
+#define CVF_DEF_Slice_constCacheEnt
+typedef struct { constCacheEnt *p; int len, cap; } Slice_constCacheEnt;
 #endif
 #ifndef CVF_DEF_Slice_cvfNearbyHost
 #define CVF_DEF_Slice_cvfNearbyHost
@@ -3481,9 +3487,17 @@ typedef struct bgVideo bgVideo;
 #define CVF_TD_boundTexture
 typedef struct boundTexture boundTexture;
 #endif
+#ifndef CVF_TD_callFuncCache
+#define CVF_TD_callFuncCache
+typedef struct callFuncCache callFuncCache;
+#endif
 #ifndef CVF_TD_character
 #define CVF_TD_character
 typedef struct character character;
+#endif
+#ifndef CVF_TD_constCacheEnt
+#define CVF_TD_constCacheEnt
+typedef struct constCacheEnt constCacheEnt;
 #endif
 #ifndef CVF_TD_cookW
 #define CVF_TD_cookW
@@ -4541,6 +4555,7 @@ struct CallFunction {
     BytecodeExp arg;
     Slice_u8 ret;
     i32 numArgs;
+    callFuncCache* fc;
 };
 
 struct stageCamera {
@@ -5216,9 +5231,9 @@ struct Arr8_HitBy { HitBy v[8]; };
 #define CVF_BODY_Arr8_HitOverride
 struct Arr8_HitOverride { HitOverride v[8]; };
 #endif
-#ifndef CVF_BODY_Arr32_varCacheEnt
-#define CVF_BODY_Arr32_varCacheEnt
-struct Arr32_varCacheEnt { varCacheEnt v[32]; };
+#ifndef CVF_BODY_Arr64_varCacheEnt
+#define CVF_BODY_Arr64_varCacheEnt
+struct Arr64_varCacheEnt { varCacheEnt v[64]; };
 #endif
 #ifndef CVF_BODY_Arr6_f32
 #define CVF_BODY_Arr6_f32
@@ -5295,7 +5310,7 @@ struct Char {
     bool fbFlip;
     Map_i32_i32 cnsvar;
     u32 varGen;
-    Arr32_varCacheEnt varCache;
+    Arr64_varCacheEnt varCache;
     Map_i32_f32 cnsfvar;
     Map_i32_i32 cnssysvar;
     Map_i32_f32 cnssysfvar;
@@ -11276,15 +11291,16 @@ struct Anon_bfbab8ed {
     int n;
     int idx;
 };
-#ifndef CVF_BODY_Arr16_Anon_bfbab8ed
-#define CVF_BODY_Arr16_Anon_bfbab8ed
-struct Arr16_Anon_bfbab8ed { Anon_bfbab8ed v[16]; };
+#ifndef CVF_BODY_Arr64_Anon_bfbab8ed
+#define CVF_BODY_Arr64_Anon_bfbab8ed
+struct Arr64_Anon_bfbab8ed { Anon_bfbab8ed v[64]; };
 #endif
 struct StringPool {
     Slice_GoString List;
     Slice_GoString ListLow;
     Map_GoString_int Map;
-    Arr16_Anon_bfbab8ed pcache;
+    Arr64_Anon_bfbab8ed pcache;
+    Slice_constCacheEnt cc;
 };
 
 struct StunBar {
@@ -12017,6 +12033,14 @@ struct boundTexture {
     u32 target;
 };
 
+struct callFuncCache {
+    int pn;
+    u32 gen;
+    uintptr_t mp;
+    bool ok;
+    BytecodeFunction bf;
+};
+
 struct character {
     u32 textureID;
     Texture texture;
@@ -12026,6 +12050,12 @@ struct character {
     int advance;
     int bearingH;
     int bearingV;
+};
+
+struct constCacheEnt {
+    u32 gen;
+    uintptr_t mp;
+    TypedValue val;
 };
 
 struct cookW {
@@ -12995,6 +13025,10 @@ GO_SLICE_FUNCS_A(Slice_bool, bool)
 #ifndef CVF_FN_Slice_boundTexture
 #define CVF_FN_Slice_boundTexture
 GO_SLICE_FUNCS(Slice_boundTexture, boundTexture)
+#endif
+#ifndef CVF_FN_Slice_constCacheEnt
+#define CVF_FN_Slice_constCacheEnt
+GO_SLICE_FUNCS(Slice_constCacheEnt, constCacheEnt)
 #endif
 #ifndef CVF_FN_Slice_cvfNearbyHost
 #define CVF_FN_Slice_cvfNearbyHost
