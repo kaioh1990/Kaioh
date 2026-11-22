@@ -1851,6 +1851,320 @@ cleanup_dummies:
             }
         }
 
+    } else if (strcmp(mode, "diag4") == 0) {
+        rlog("DIAG4: Fix MV-HEVC encode error -19034\n");
+        rlog("Tests YUV420 pixel format + correct encoder spec\n\n");
+
+        /* Helper: create YUV420 biplanar pixel buffer */
+        CVPixelBufferRef (^create_yuv_pb)(int, int, uint8_t) = ^(int w, int h, uint8_t fill) {
+            CVPixelBufferRef pb = NULL;
+            CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iosurf = CFDictionaryCreate(NULL, NULL, NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(attrs, kCVPixelBufferIOSurfacePropertiesKey, iosurf);
+            CVReturn ret = CVPixelBufferCreate(NULL, w, h,
+                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, attrs, &pb);
+            CFRelease(iosurf); CFRelease(attrs);
+            if (ret != kCVReturnSuccess) { rlog("YUV PB create failed: %d\n", ret); return (CVPixelBufferRef)NULL; }
+            CVPixelBufferLockBaseAddress(pb, 0);
+            void *y_base = CVPixelBufferGetBaseAddressOfPlane(pb, 0);
+            void *uv_base = CVPixelBufferGetBaseAddressOfPlane(pb, 1);
+            if (y_base) memset(y_base, fill, CVPixelBufferGetBytesPerRowOfPlane(pb, 0) * h);
+            if (uv_base) memset(uv_base, 128, CVPixelBufferGetBytesPerRowOfPlane(pb, 1) * (h/2));
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+            return pb;
+        };
+
+        extern OSStatus VTCompressionSessionEncodeMultiImageFrame(
+            VTCompressionSessionRef session,
+            CMTaggedBufferGroupRef taggedBufferGroup,
+            CMTime presentationTimeStamp,
+            CMTime duration,
+            CFDictionaryRef frameProperties,
+            void *sourceFrameRefCon,
+            VTEncodeInfoFlags *infoFlagsOut)
+            __attribute__((weak_import));
+
+        if (!VTCompressionSessionEncodeMultiImageFrame) {
+            rlog("EncodeMultiImageFrame not available\n");
+            goto done;
+        }
+
+        /* Test A: YUV420 pixel buffers with MVHEVCVideoLayerIDs+ViewIDs */
+        rlog("--- Test A: YUV420 biplanar + EncodeMultiImageFrame ---\n");
+        {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+            /* Pixel buffer attributes specifying YUV420 */
+            CFMutableDictionaryRef src_attrs = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int pf = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
+            CFNumberRef pf_num = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(src_attrs, kCVPixelBufferPixelFormatTypeKey, pf_num);
+            int pw = 128, ph = 128;
+            CFNumberRef pw_num = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+            CFNumberRef ph_num = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+            CFDictionarySetValue(src_attrs, kCVPixelBufferWidthKey, pw_num);
+            CFDictionarySetValue(src_attrs, kCVPixelBufferHeightKey, ph_num);
+
+            VTCompressionSessionRef s = NULL;
+            OSStatus r = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, es, src_attrs, NULL, encode_cb, NULL, &s);
+            CFRelease(es); CFRelease(src_attrs); CFRelease(pf_num); CFRelease(pw_num); CFRelease(ph_num);
+            rlog("Create (YUV420 src attrs): %d\n", (int)r);
+
+            if (r == 0 && s) {
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                int kf = 1;
+                CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+                CFRelease(kfn);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+                int v0 = 0, v1 = 1;
+                CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &v0);
+                CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+                CFArrayRef ids = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
+                OSStatus sp1 = VTSessionSetProperty(s, CFSTR("MVHEVCVideoLayerIDs"), ids);
+                OSStatus sp2 = VTSessionSetProperty(s, CFSTR("MVHEVCViewIDs"), ids);
+                rlog("LayerIDs: %d, ViewIDs: %d\n", (int)sp1, (int)sp2);
+                CFRelease(ids); CFRelease(n0); CFRelease(n1);
+
+                /* Try setting HasLeftStereoEyeView + HasRightStereoEyeView */
+                VTSessionSetProperty(s, CFSTR("HasLeftStereoEyeView"), kCFBooleanTrue);
+                VTSessionSetProperty(s, CFSTR("HasRightStereoEyeView"), kCFBooleanTrue);
+
+                OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("Prepare: %d\n", (int)pr);
+
+                if (pr == 0) {
+                    CVPixelBufferRef left = create_yuv_pb(128, 128, 0x40);
+                    CVPixelBufferRef right = create_yuv_pb(128, 128, 0x80);
+                    rlog("Left PB: %p, Right PB: %p\n", (void*)left, (void*)right);
+
+                    if (left && right) {
+                        CMTag tl0 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 0);
+                        CMTag left_tags[2] = { kCMTagStereoLeftEye, tl0 };
+                        CMTagCollectionRef ltc = NULL;
+                        CMTagCollectionCreate(NULL, left_tags, 2, &ltc);
+
+                        CMTag tl1 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 1);
+                        CMTag right_tags[2] = { kCMTagStereoRightEye, tl1 };
+                        CMTagCollectionRef rtc = NULL;
+                        CMTagCollectionCreate(NULL, right_tags, 2, &rtc);
+
+                        CMTagCollectionRef tcs[2] = { ltc, rtc };
+                        CVPixelBufferRef pbs[2] = { left, right };
+                        CFArrayRef tc_arr = CFArrayCreate(NULL, (const void **)tcs, 2, &kCFTypeArrayCallBacks);
+                        CFArrayRef pb_arr = CFArrayCreate(NULL, (const void **)pbs, 2, &kCFTypeArrayCallBacks);
+                        CMTaggedBufferGroupRef tbg = NULL;
+                        OSStatus tbg_st = CMTaggedBufferGroupCreate(NULL, tc_arr, pb_arr, &tbg);
+                        rlog("TBG create: %d\n", (int)tbg_st);
+                        CFRelease(tc_arr); CFRelease(pb_arr);
+
+                        if (tbg_st == 0 && tbg) {
+                            g_encode_done = 0; g_cb_status = -999; g_cb_count = 0;
+                            VTEncodeInfoFlags fi = 0;
+                            CMTime pts = CMTimeMake(0, 30);
+                            CMTime dur = CMTimeMake(1, 30);
+                            OSStatus enc = VTCompressionSessionEncodeMultiImageFrame(
+                                s, tbg, pts, dur, NULL, NULL, &fi);
+                            rlog("EncodeMultiImage: %d, flags=%u\n", (int)enc, (unsigned)fi);
+
+                            if (enc == 0) {
+                                for (int i = 0; i < 500 && !g_encode_done; i++) usleep(10000);
+                                rlog("Poll: done=%d, status=%d, cb=%d, pset=%zu, bytes=%zu\n",
+                                     g_encode_done, (int)g_cb_status, g_cb_count,
+                                     g_last_pset_count, g_last_pset_total_bytes);
+                                if (!g_encode_done) {
+                                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                                    for (int i = 0; i < 200 && !g_encode_done; i++) usleep(10000);
+                                    rlog("After flush: done=%d, status=%d, cb=%d, pset=%zu\n",
+                                         g_encode_done, (int)g_cb_status, g_cb_count, g_last_pset_count);
+                                }
+                                if (g_encode_done && g_cb_status == 0) {
+                                    rlog("\n*** MV-HEVC ENCODE SUCCESS with YUV420! ***\n");
+                                    rlog("pset=%zu bytes=%zu\n", g_last_pset_count, g_last_pset_total_bytes);
+                                }
+                            }
+                            CFRelease(tbg);
+                        }
+                        CFRelease(ltc); CFRelease(rtc);
+                    }
+                    if (left) CVPixelBufferRelease(left);
+                    if (right) CVPixelBufferRelease(right);
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+        }
+
+        /* Test B: Try without HasLeft/RightStereoEyeView (maybe they conflict) */
+        rlog("\n--- Test B: YUV420 without HasLeft/RightStereoEyeView ---\n");
+        {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            VTCompressionSessionRef s = NULL;
+            OSStatus r = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            rlog("Create: %d\n", (int)r);
+            if (r == 0 && s) {
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                int kf = 1;
+                CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+                CFRelease(kfn);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+                int v0 = 0, v1 = 1;
+                CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &v0);
+                CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+                CFArrayRef ids = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
+                VTSessionSetProperty(s, CFSTR("MVHEVCVideoLayerIDs"), ids);
+                VTSessionSetProperty(s, CFSTR("MVHEVCViewIDs"), ids);
+                CFRelease(ids); CFRelease(n0); CFRelease(n1);
+
+                OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("Prepare: %d\n", (int)pr);
+                if (pr == 0) {
+                    CVPixelBufferRef left = create_yuv_pb(128, 128, 0x40);
+                    CVPixelBufferRef right = create_yuv_pb(128, 128, 0x80);
+                    if (left && right) {
+                        CMTag tl0 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 0);
+                        CMTag left_tags[2] = { kCMTagStereoLeftEye, tl0 };
+                        CMTagCollectionRef ltc = NULL;
+                        CMTagCollectionCreate(NULL, left_tags, 2, &ltc);
+                        CMTag tl1 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 1);
+                        CMTag right_tags[2] = { kCMTagStereoRightEye, tl1 };
+                        CMTagCollectionRef rtc = NULL;
+                        CMTagCollectionCreate(NULL, right_tags, 2, &rtc);
+                        CMTagCollectionRef tcs[2] = { ltc, rtc };
+                        CVPixelBufferRef pbs[2] = { left, right };
+                        CFArrayRef tc_arr = CFArrayCreate(NULL, (const void **)tcs, 2, &kCFTypeArrayCallBacks);
+                        CFArrayRef pb_arr = CFArrayCreate(NULL, (const void **)pbs, 2, &kCFTypeArrayCallBacks);
+                        CMTaggedBufferGroupRef tbg = NULL;
+                        CMTaggedBufferGroupCreate(NULL, tc_arr, pb_arr, &tbg);
+                        CFRelease(tc_arr); CFRelease(pb_arr);
+                        if (tbg) {
+                            g_encode_done = 0; g_cb_status = -999; g_cb_count = 0;
+                            VTEncodeInfoFlags fi = 0;
+                            CMTime pts = CMTimeMake(0, 30);
+                            CMTime dur = CMTimeMake(1, 30);
+                            OSStatus enc = VTCompressionSessionEncodeMultiImageFrame(
+                                s, tbg, pts, dur, NULL, NULL, &fi);
+                            rlog("EncodeMultiImage: %d\n", (int)enc);
+                            if (enc == 0) {
+                                for (int i = 0; i < 500 && !g_encode_done; i++) usleep(10000);
+                                rlog("Poll: done=%d, status=%d, cb=%d, pset=%zu\n",
+                                     g_encode_done, (int)g_cb_status, g_cb_count, g_last_pset_count);
+                                if (!g_encode_done) {
+                                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                                    for (int i = 0; i < 200 && !g_encode_done; i++) usleep(10000);
+                                    rlog("After flush: done=%d, status=%d, pset=%zu\n",
+                                         g_encode_done, (int)g_cb_status, g_last_pset_count);
+                                }
+                                if (g_encode_done && g_cb_status == 0)
+                                    rlog("\n*** SUCCESS B: MV-HEVC without HasStereo props! ***\n");
+                            }
+                            CFRelease(tbg);
+                        }
+                        CFRelease(ltc); CFRelease(rtc);
+                    }
+                    if (left) CVPixelBufferRelease(left);
+                    if (right) CVPixelBufferRelease(right);
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+        }
+
+        /* Test C: Larger resolution (1920x1080) - maybe 128x128 is too small */
+        rlog("\n--- Test C: 1920x1080 YUV420 ---\n");
+        {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            VTCompressionSessionRef s = NULL;
+            OSStatus r = VTCompressionSessionCreate(NULL, 1920, 1080,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            rlog("Create 1920x1080: %d\n", (int)r);
+            if (r == 0 && s) {
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                int kf = 1;
+                CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+                CFRelease(kfn);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+                int v0 = 0, v1 = 1;
+                CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &v0);
+                CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+                CFArrayRef ids = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
+                VTSessionSetProperty(s, CFSTR("MVHEVCVideoLayerIDs"), ids);
+                VTSessionSetProperty(s, CFSTR("MVHEVCViewIDs"), ids);
+                CFRelease(ids); CFRelease(n0); CFRelease(n1);
+
+                OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("Prepare: %d\n", (int)pr);
+                if (pr == 0) {
+                    CVPixelBufferRef left = create_yuv_pb(1920, 1080, 0x40);
+                    CVPixelBufferRef right = create_yuv_pb(1920, 1080, 0x80);
+                    if (left && right) {
+                        CMTag tl0 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 0);
+                        CMTag left_tags[2] = { kCMTagStereoLeftEye, tl0 };
+                        CMTagCollectionRef ltc = NULL;
+                        CMTagCollectionCreate(NULL, left_tags, 2, &ltc);
+                        CMTag tl1 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 1);
+                        CMTag right_tags[2] = { kCMTagStereoRightEye, tl1 };
+                        CMTagCollectionRef rtc = NULL;
+                        CMTagCollectionCreate(NULL, right_tags, 2, &rtc);
+                        CMTagCollectionRef tcs[2] = { ltc, rtc };
+                        CVPixelBufferRef pbs[2] = { left, right };
+                        CFArrayRef tc_arr = CFArrayCreate(NULL, (const void **)tcs, 2, &kCFTypeArrayCallBacks);
+                        CFArrayRef pb_arr = CFArrayCreate(NULL, (const void **)pbs, 2, &kCFTypeArrayCallBacks);
+                        CMTaggedBufferGroupRef tbg = NULL;
+                        CMTaggedBufferGroupCreate(NULL, tc_arr, pb_arr, &tbg);
+                        CFRelease(tc_arr); CFRelease(pb_arr);
+                        if (tbg) {
+                            g_encode_done = 0; g_cb_status = -999; g_cb_count = 0;
+                            VTEncodeInfoFlags fi = 0;
+                            CMTime pts = CMTimeMake(0, 30);
+                            CMTime dur = CMTimeMake(1, 30);
+                            OSStatus enc = VTCompressionSessionEncodeMultiImageFrame(
+                                s, tbg, pts, dur, NULL, NULL, &fi);
+                            rlog("EncodeMultiImage: %d\n", (int)enc);
+                            if (enc == 0) {
+                                for (int i = 0; i < 500 && !g_encode_done; i++) usleep(10000);
+                                rlog("Poll: done=%d, status=%d, cb=%d, pset=%zu, bytes=%zu\n",
+                                     g_encode_done, (int)g_cb_status, g_cb_count,
+                                     g_last_pset_count, g_last_pset_total_bytes);
+                                if (!g_encode_done) {
+                                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                                    for (int i = 0; i < 200 && !g_encode_done; i++) usleep(10000);
+                                    rlog("After flush: done=%d, status=%d, pset=%zu\n",
+                                         g_encode_done, (int)g_cb_status, g_last_pset_count);
+                                }
+                                if (g_encode_done && g_cb_status == 0)
+                                    rlog("\n*** SUCCESS C: MV-HEVC at 1920x1080! ***\n");
+                            }
+                            CFRelease(tbg);
+                        }
+                        CFRelease(ltc); CFRelease(rtc);
+                    }
+                    if (left) CVPixelBufferRelease(left);
+                    if (right) CVPixelBufferRelease(right);
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+        }
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
