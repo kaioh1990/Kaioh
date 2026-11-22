@@ -19526,6 +19526,7 @@ new_modes:
                     mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &cwp);
                     mach_port_insert_right(mach_task_self(), cwp, cwp, MACH_MSG_TYPE_MAKE_SEND);
                     uint64_t cref = 0x1122334455667788ULL;
+                    uint64_t cgref = 0xA1B2C3D4E5F60708ULL;
 
                     /* Test A: groom with marker=0xAABBCCDD */
                     uint8_t fa[24]; memset(fa, 0, sizeof(fa));
@@ -19541,7 +19542,7 @@ new_modes:
                         mach_port_t gwp = MACH_PORT_NULL;
                         mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
                         mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
-                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
+                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &cgref, 1,
                             NULL, 0, fa, 24, NULL, NULL, NULL, NULL);
                         kern_return_t rd = IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
                             NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
@@ -19561,7 +19562,7 @@ new_modes:
                         mach_port_t gwp = MACH_PORT_NULL;
                         mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
                         mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
-                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
+                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &cgref, 1,
                             NULL, 0, fb, 24, NULL, NULL, NULL, NULL);
                         kern_return_t rd = IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
                             NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
