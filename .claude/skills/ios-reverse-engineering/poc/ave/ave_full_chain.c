@@ -45,6 +45,7 @@
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
 #include <IOKit/IOKitLib.h>
+#include <dlfcn.h>
 #include <os/log.h>
 
 #ifndef kIOMasterPortDefault
@@ -9766,7 +9767,7 @@ vps_cd_done:
          *     io_struct_inband_t inband_output, mach_msg_type_number_t *inband_outputCnt,
          *     io_buf_ptr_t ool_output, mach_msg_type_number_t *ool_output_size);
          */
-        extern kern_return_t io_connect_method(
+        typedef kern_return_t (*io_connect_method_t)(
             mach_port_t connection,
             uint32_t selector,
             uint64_t *input, uint32_t inputCnt,
@@ -9776,8 +9777,11 @@ vps_cd_done:
             void *inband_output, uint32_t *inband_outputCnt,
             void *ool_output, uint32_t *ool_output_size);
 
+        io_connect_method_t mig_fn = (io_connect_method_t)dlsym(RTLD_DEFAULT, "io_connect_method");
+        rlog("dlsym(io_connect_method) = %p\n", (void*)mig_fn);
+
         io_connect_t conn0 = type_conns[0];
-        if (conn0) {
+        if (conn0 && mig_fn) {
             uint32_t test_sels[] = {0, 1, 6, 9, 10, 11, 17, 18, 19, 1000};
             for (int i = 0; i < 10; i++) {
                 uint32_t sel = test_sels[i];
@@ -9792,11 +9796,11 @@ vps_cd_done:
                 uint32_t scl_out_cnt = 4;
                 uint32_t ool_out_sz = 0;
 
-                kern_return_t kr = io_connect_method(
+                kern_return_t kr = mig_fn(
                     conn0, sel,
-                    NULL, 0,                /* no scalar input */
-                    str_in, 24,             /* struct input: 24 bytes */
-                    0,                      /* no OOL input */
+                    NULL, 0,
+                    str_in, 24,
+                    0,
                     scl_out, &scl_out_cnt,
                     str_out, &str_out_sz,
                     NULL, &ool_out_sz);
@@ -9810,7 +9814,7 @@ vps_cd_done:
                 str_out_sz = sizeof(str_out);
                 ool_out_sz = 0;
 
-                kr = io_connect_method(
+                kr = mig_fn(
                     conn0, sel,
                     scl_in, 1,
                     NULL, 0,
