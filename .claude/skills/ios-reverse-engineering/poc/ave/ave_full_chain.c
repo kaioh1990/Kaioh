@@ -45,7 +45,6 @@
 #include <CoreMedia/CoreMedia.h>
 #include <IOKit/IOKitLib.h>
 #include <xpc/xpc.h>
-#import <Foundation/Foundation.h>
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
@@ -4921,14 +4920,16 @@ cleanup_dummies:
 
             /* Create pixel buffer and tag it with our crafted format */
             CVPixelBufferRef pb = NULL;
-            NSDictionary *pba = @{
-                (id)kCVPixelBufferIOSurfacePropertiesKey: @{},
-                (id)kCVPixelBufferWidthKey: @128,
-                (id)kCVPixelBufferHeightKey: @128,
-            };
+            CFMutableDictionaryRef pba = CFDictionaryCreateMutable(NULL, 3,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef empty = CFDictionaryCreate(NULL, NULL, NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(pba, kCVPixelBufferIOSurfacePropertiesKey, empty);
+            CFRelease(empty);
             CVReturn cvr = CVPixelBufferCreate(NULL, 128, 128,
                 kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                (__bridge CFDictionaryRef)pba, &pb);
+                pba, &pb);
+            CFRelease(pba);
 
             if (cvr != 0 || !pb) {
                 rlog("PixelBuffer create: %d\n", (int)cvr);
@@ -4949,9 +4950,11 @@ cleanup_dummies:
 
                 /* Encode the tagged pixel buffer */
                 CMTime pts = CMTimeMake(0, 30);
-                CFDictionaryRef frame_props = (__bridge CFDictionaryRef)@{
-                    (__bridge NSString *)kVTEncodeFrameOptionKey_ForceKeyFrame: @YES
-                };
+                const void *fp_keys[] = { kVTEncodeFrameOptionKey_ForceKeyFrame };
+                const void *fp_vals[] = { kCFBooleanTrue };
+                CFDictionaryRef frame_props = CFDictionaryCreate(NULL,
+                    fp_keys, fp_vals, 1,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
                 st = VTCompressionSessionEncodeFrame(session, pb,
                     pts, kCMTimeInvalid, frame_props, NULL, NULL);
                 rlog("EncodeFrame with crafted attachments: %d\n", (int)st);
