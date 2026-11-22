@@ -34,6 +34,19 @@ fresh `setup_ikemen.sh` tree; `cvf_tests` 93/0; reference fights
 `54f8ae06...` / `4334350c...`; netplay dump `a350bc2d...` (also as match 1
 of every session); the new netplay scripts below.
 
+`claude/native-cpu2` (2026-11-21, Linux x86-64, Go 1.27.4; CPU round 2,
+VITA_PORT.md section 3): regen from a fresh `setup_ikemen.sh` tree
+reproduces the committed C (4872 functions, 0 TODO, 79 stubs, 31
+placeholders); `cvf_tests` and `cvf_tests_ucontext` 103/0 on x86-64,
+armv7 and aarch64 (qemu), `cvf_tests` 103/0 under Wine (no ucontext build
+on Windows); reference fights `54f8ae06...` / `4334350c...` on x86-64,
+Windows (Wine), armv7, aarch64, GC stress (`CVF_GC_STRESS=5000`, ~1000
+collections) and ASan/UBSan (only the known `memset(NULL, 0, 0)` of
+`StoryboardManager.clear`); `run_netplay.sh` PASS with `a350bc2d...` (the
+three default scenarios; a three-match session, same three dumps as
+0b04ded's build; a Go `cvf_headless_go` host from 0b04ded's tree against
+a native guest).
+
 Integration of netplay2 and vita (2026-11-21, Linux x86-64, Go 1.27.4):
 regen from a fresh `setup_ikemen.sh` tree reproduces the committed C (4858
 functions, 0 TODO, 79 stubs, 31 placeholders); `cvf_tests` and

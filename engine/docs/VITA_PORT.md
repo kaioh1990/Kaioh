@@ -209,6 +209,91 @@ NumHelper/NumExplod; a register-based trigger evaluator compiled at load
 (the closure compiler's exact parse, values in a local array, one dispatch
 loop: no code growth); caching name lookups per bytecode site.
 
+### Native CPU work, round 2 (claude/native-cpu2, 2026-11-21)
+
+Same fight and window. The cache figures are now callgrind with
+Cortex-A9-like caches (`--I1=32768,4,32 --D1=32768,4,32
+--LL=524288,8,32`), collected inside `System_action` only (the tick), on
+the x86-64 build, divided by the 4438 fight frames; round 1's ~48 K was a
+different setup, so the baseline is re-measured here.
+
+| Build | armv7 median / mean per tick | Last-level misses per tick | L1 data read misses | x86-64 ms per tick |
+| --- | --- | --- | --- | --- |
+| 0b04ded (round 1) | 4.79 M / 4.96 M | 51.3 K | 112.6 K | 0.79 |
+| + NumHelper/NumExplod indexes | 4.62 M / 4.80 M | 38.9 K | 60.3 K | 0.80 |
+| + lookup caches (const, CallFunction, var, string pool) = branch head | **4.38 M / 4.54 M** | **38.7 K** | 58.6 K | **0.73** |
+| register trigger VM on top (not merged) | 4.16 M / 4.34 M | 54.8 K | 76.1 K | 0.73 (0.71 without, same runs) |
+
+(x86-64: median of 9 alternating `CVF_FRAME_STATS` runs against the
+previous build; the container's timings vary by ~5 %. The rollback change
+below does not run in an offline fight.) Estimated Vita tick with the round-1 rule
+(1.35-2.8 ns per instruction at 444 MHz): 5.9-12.3 ms, the upper end
+lower in practice since a quarter of the last-level misses are gone.
+Loading is unchanged (5.83 G).
+
+Merged:
+
+- `src/cvf_index.go` (fork): per player, the live helpers counted by
+  helper ID, and the (ID, owner) pairs of the explods in two contiguous
+  arrays. NumHelper was ~980 calls per tick over ~27 helper slots (8 live)
+  and 29 % of the last-level misses: every helper's `helperId` and flags
+  sit at the same offset of a large `Char`, so they fall into a few cache
+  sets. The indexes are rebuilt on the next query after any change: every
+  writer of `Char.helperId`, `Char.specialFlag` (also through
+  `CharSystemVar`), `Explod.id`, `Explod.ownerId` and of whole Char /
+  Explod / CharSystemVar values bumps a generation (found with a go/types
+  scan of all assignments; the state loads too), and the index remembers
+  the slice it was built from. Writes whose right-hand side is a trigger
+  expression bump after the write (a Helper's `id = ...` can itself call
+  NumHelper). `CVF_IDX_CHECK=1` compares every answer with the walk.
+- `src/cvf_lookup.go` (fork): `const(name)` cached per string pool entry
+  (the site's operand) and `CallFunction` per call site, both keyed on the
+  map's identity and a generation bumped by every write to such maps (they
+  change only while loading). `map(x) := v` from bytecode takes the key from
+  the pool's lowercase list instead of `strings.ToLower` each time. The
+  var()/fvar() read cache has 64 entries (with 32, var(n) and var(n+32)
+  shared a slot: misses 1.81 M -> 0.35 M over the fight), and the string
+  pool's pointer cache 64 hashed slots (aligned string data used only a few
+  of the 16 `p>>2&15` slots).
+- Rollback save states (both fork patches): `SaveGameState` returns the
+  GameStates it drops to the pool, and a pooled state reuses its `[]Char`
+  arrays. Netplay (direct scenario, host): 6.68 -> 4.06 GB allocated over
+  the 6431-frame match, 79 -> 49 collections, collector pauses 863 ->
+  537 ms; at the Vita's estimated 100-200 ms per collection pause that is
+  30 fewer pauses per match.
+
+Not merged (archived in the scratchpad, `cpu/rvm_attempt`): a register
+trigger evaluator, `bc_regvm.go`. It reuses the closure compiler's parse
+(redirect scoping, jump shapes, `bc_gen.go` stack effects plus a reviewed
+supplement for the opcodes that table lacks: statetype/movetype/teammode,
+assignments, map keys, 32-bit jumps), builds a tree and emits 8-byte
+instructions over a register file (register d = interpreter stack slot d)
+with constants folded into the instruction, one dispatch loop, no heap
+allocation while evaluating; programs live in shared arenas in first-use
+order. `CVF_RVM_CHECK` (every trigger also interpreted and compared, plus
+the stack effect of every operation left to the interpreter) passes both
+reference fights, and both dumps are unchanged. But the programs are
+2-3x the size of the fused bytecode they replace, and the ~3500 trigger
+evaluations per tick then no longer fit the 512 KB cache: -5 %
+instructions, +42 % last-level misses, x86-64 time slightly worse. Its
+first version (24-byte instructions, separately allocated programs) had
+doubled the misses. A register VM pays off only with an encoding as dense
+as the bytecode.
+
+Where the tick goes now (armv7, per tick): `BytecodeExp_runOC` 2.43 M
+(53 %; triggers are 70 % of the tick: ~3500 evaluations, ~12 operations
+each), `StateBlock.Run` 0.24 M, `evalTrigger` 0.13 M, `rangeCheck`
+0.11 M, NumExplod 0.10 M (explods change ~50 times per tick, so its index
+is rebuilt often), `varGet` 0.09 M, NumHelper 0.08 M, `Command.Step`
+0.07 M, string-keyed map lookups ~0.19 M (map(x) reads ~275 per tick,
+`getAnim`, `enemyNear`, sprite lookups). Next steps: fewer trigger
+evaluations rather than cheaper ones (most come from the shared negative
+states; e.g. skipping controllers whose first `&&` term is a false
+`stateno = K`, which must keep the persistence counters and hitpause rules
+of `StateBlock.Run`); a map(x) read cache with write-through; netplay
+still allocates ~640 KB per frame (Char.Clone's animation and slice copies,
+FightScreen/motif clones).
+
 ## 4. Determinism on 32-bit ARM
 
 - **Verified**: the armv7 build produces both reference dumps bit for bit
