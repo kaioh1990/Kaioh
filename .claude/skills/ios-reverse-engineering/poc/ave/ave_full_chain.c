@@ -14658,18 +14658,19 @@ new_modes:
                 }
 
                 /* Capture baseline output */
-                __block uint8_t base_nal[2048];
+                __block uint8_t *base_nal = calloc(1, 2048);
                 __block size_t base_nal_len = 0;
                 __block int base_got = 0;
                 CMTime pts0 = CMTimeMake(0, 600);
+                VTEncodeInfoFlags base_info = 0;
                 VTCompressionSessionEncodeFrameWithOutputHandler(base_session, base_px,
-                    pts0, kCMTimeInvalid, NULL,
+                    pts0, kCMTimeInvalid, NULL, &base_info,
                     ^(OSStatus s2, VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
                         if (s2 == 0 && sb) {
                             CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
                             if (bb) {
                                 size_t tlen = CMBlockBufferGetDataLength(bb);
-                                if (tlen > sizeof(base_nal)) tlen = sizeof(base_nal);
+                                if (tlen > 2048) tlen = 2048;
                                 CMBlockBufferCopyDataBytes(bb, 0, tlen, base_nal);
                                 base_nal_len = tlen;
                                 base_got = 1;
@@ -14701,17 +14702,18 @@ new_modes:
                     VTSessionSetProperty(test_session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
                     VTCompressionSessionPrepareToEncodeFrames(test_session);
 
-                    __block uint8_t test_nal[2048];
+                    __block uint8_t *test_nal = calloc(1, 2048);
                     __block size_t test_nal_len = 0;
                     __block int test_got = 0;
+                    VTEncodeInfoFlags test_info = 0;
                     VTCompressionSessionEncodeFrameWithOutputHandler(test_session, base_px,
-                        pts0, kCMTimeInvalid, NULL,
+                        pts0, kCMTimeInvalid, NULL, &test_info,
                         ^(OSStatus s2, VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
                             if (s2 == 0 && sb) {
                                 CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
                                 if (bb) {
                                     size_t tlen = CMBlockBufferGetDataLength(bb);
-                                    if (tlen > sizeof(test_nal)) tlen = sizeof(test_nal);
+                                    if (tlen > 2048) tlen = 2048;
                                     CMBlockBufferCopyDataBytes(bb, 0, tlen, test_nal);
                                     test_nal_len = tlen;
                                     test_got = 1;
@@ -14804,8 +14806,9 @@ new_modes:
                 __block int got = 0;
                 __block int kptrs = 0;
                 CMTime pts = CMTimeMake(0, 600);
+                VTEncodeInfoFlags drl_info = 0;
                 VTCompressionSessionEncodeFrameWithOutputHandler(s, px,
-                    pts, kCMTimeInvalid, NULL,
+                    pts, kCMTimeInvalid, NULL, &drl_info,
                     ^(OSStatus s2, VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
                         if (s2 == 0 && sb) {
                             CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
