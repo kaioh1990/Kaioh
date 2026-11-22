@@ -215,7 +215,8 @@ static int encode_one(VTCompressionSessionRef session, int frame_idx, int w, int
     CMTime dur = CMTimeMake(1, 30);
     OSStatus st = VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
     if (st != noErr) { CVPixelBufferRelease(pb); return (int)st; }
-    for (int i = 0; i < 100 && !g_encode_done; i++) usleep(10000);
+    VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+    for (int i = 0; i < 200 && !g_encode_done; i++) usleep(10000);
     CVPixelBufferRelease(pb);
     return (int)g_cb_status;
 }
