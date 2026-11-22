@@ -5693,61 +5693,66 @@ cleanup_dummies:
 
         if (phase == 0 || phase == 5) {
             rlog("\n--- Phase 5: HEVC-with-alpha codec type ---\n");
+            rlog("Testing AlphaLayerID values on muxa codec (generates multi-layer VPS)\n");
+            rlog("27.2 bound: vps_max_layer_id < 63\n\n");
 
-            VTCompressionSessionRef s = NULL;
-            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
-                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-            CFDictionarySetValue(enc_spec,
-                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            /* Test range of AlphaLayerID values on the actual alpha codec */
+            int test_aids[] = {1, 2, 32, 62, 63, 64, 127, 255};
+            int n_aids = unsafe ? 8 : 5; /* unsafe includes 64, 127, 255 */
 
-            /* Use HEVC-with-alpha codec type (muxa) */
-            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
-                (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
-                encode_cb, NULL, &s);
-            CFRelease(enc_spec);
-            rlog("HEVC-with-Alpha session: %d\n", (int)st);
+            for (int ta = 0; ta < n_aids; ta++) {
+                int aid = test_aids[ta];
+                rlog("  AlphaLayerID=%d on muxa: ", aid);
 
-            if (st == noErr && s) {
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+                OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                    (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+                    encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (st != noErr || !s) {
+                    rlog("session fail (%d)\n", (int)st);
+                    continue;
+                }
+
                 VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
 
-                /* Set alpha quality */
                 float aq = 0.75f;
                 CFNumberRef aqn = CFNumberCreate(NULL, kCFNumberFloat32Type, &aq);
-                OSStatus sp = VTSessionSetProperty(s,
-                    CFSTR("TargetQualityForAlpha"), aqn);
+                VTSessionSetProperty(s, CFSTR("TargetQualityForAlpha"), aqn);
                 CFRelease(aqn);
-                rlog("TargetQualityForAlpha: %d\n", (int)sp);
 
-                /* AlphaChannelMode */
-                sp = VTSessionSetProperty(s,
+                VTSessionSetProperty(s,
                     CFSTR("AlphaChannelMode"), CFSTR("PremultipliedAlpha"));
-                rlog("AlphaChannelMode: %d\n", (int)sp);
 
-                /* High AlphaLayerID */
-                int aid = unsafe ? 64 : 1;
                 CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
-                sp = VTSessionSetProperty(s,
+                OSStatus sp = VTSessionSetProperty(s,
                     CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
                 CFRelease(aidn);
-                rlog("AlphaLayerID=%d: %d\n", aid, (int)sp);
+                rlog("set=%d, ", (int)sp);
 
                 st = VTCompressionSessionPrepareToEncodeFrames(s);
-                rlog("PrepareToEncodeFrames: %d\n", (int)st);
+                rlog("prepare=%d, ", (int)st);
 
                 if (st == noErr) {
                     g_encode_done = 0;
-                    /* Need BGRA pixel buffer for alpha */
+                    g_cb_status = -999;
+                    g_last_pset_count = 0;
+                    g_last_pset_total_bytes = 0;
+
                     CVPixelBufferRef pb = NULL;
                     CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
                         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
                     CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
                         CFDictionaryCreate(NULL, NULL, NULL, 0,
                             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
-
                     CVReturn cvr = CVPixelBufferCreate(NULL, w, h,
                         kCVPixelFormatType_32BGRA, pbdict, &pb);
                     CFRelease(pbdict);
-                    rlog("BGRA PixelBuffer: %d\n", (int)cvr);
 
                     if (cvr == 0 && pb) {
                         CVPixelBufferLockBaseAddress(pb, 0);
@@ -5759,15 +5764,17 @@ cleanup_dummies:
                         CMTime dur = CMTimeMake(1, 30);
                         st = VTCompressionSessionEncodeFrame(s, pb, pts, dur,
                             NULL, NULL, NULL);
-                        rlog("EncodeFrame (BGRA alpha): %d\n", (int)st);
-
                         for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
-                        rlog("Callback: status=%d, psets=%zu, bytes=%zu\n",
+                        rlog("encode=%d, psets=%zu, bytes=%zu\n",
                             (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
 
                         VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
                         CVPixelBufferRelease(pb);
+                    } else {
+                        rlog("pb fail\n");
                     }
+                } else {
+                    rlog("\n");
                 }
 
                 VTCompressionSessionInvalidate(s);
