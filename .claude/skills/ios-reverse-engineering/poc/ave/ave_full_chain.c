@@ -7330,10 +7330,10 @@ vps_cd_done:
          *   [A0][V1][A1][V3][A2][V5]...
          * A0's OOB write extends forward, potentially into V1's allocation.
          */
-        int spray_count = (argc > 2) ? atoi(argv[2]) : 32;
-        int oob_aid = (argc > 3) ? atoi(argv[3]) : 255;
-        if (spray_count < 8) spray_count = 8;
-        if (spray_count > 64) spray_count = 64;
+        int spray_count = (argc > 2) ? atoi(argv[2]) : 12;
+        int oob_aid = (argc > 3) ? atoi(argv[3]) : 128;
+        if (spray_count < 4) spray_count = 4;
+        if (spray_count > 32) spray_count = 32;
         if (oob_aid < 64) oob_aid = 64;
         if (oob_aid > 255) oob_aid = 255;
 
@@ -7403,7 +7403,8 @@ vps_cd_done:
             if (pb) {
                 CMTime pts = CMTimeMake(i, 30);
                 VTCompressionSessionEncodeFrame(sessions[i], pb, pts, kCMTimeInvalid, NULL, NULL, NULL);
-                for (int ww = 0; ww < 200 && !g_encode_done; ww++) usleep(10000);
+                VTCompressionSessionCompleteFrames(sessions[i], kCMTimeInvalid);
+                for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
                 CVPixelBufferRelease(pb);
             }
             if (g_saved_fmt) {
@@ -7418,6 +7419,7 @@ vps_cd_done:
                 CFRelease(g_saved_fmt); g_saved_fmt = NULL;
             }
             rlog("enc=%d vps=%zu bytes\n", (int)g_cb_status, baseline_lens[i]);
+            usleep(30000);
         }
         rlog("Created: %d / %d\n\n", created, spray_count);
 
@@ -7466,7 +7468,8 @@ vps_cd_done:
             if (pb) {
                 CMTime pts = CMTimeMake(1000 + i, 30);
                 VTCompressionSessionEncodeFrame(sessions[i], pb, pts, kCMTimeInvalid, NULL, NULL, NULL);
-                for (int ww = 0; ww < 200 && !g_encode_done; ww++) usleep(10000);
+                VTCompressionSessionCompleteFrames(sessions[i], kCMTimeInvalid);
+                for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
                 CVPixelBufferRelease(pb);
             }
 
