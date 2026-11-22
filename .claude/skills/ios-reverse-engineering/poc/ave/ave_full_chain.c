@@ -285,7 +285,7 @@ static CVPixelBufferRef create_yuv_pb_stereo(int w, int h, uint8_t y_fill) {
     return pb;
 }
 
-static int encode_one_stereo_lid(VTCompressionSessionRef session, int frame_idx, int w, int h, int layer_id) {
+static int encode_one_stereo_kf(VTCompressionSessionRef session, int frame_idx, int w, int h, int layer_id, int force_kf) {
     if (!VTCompressionSessionEncodeMultiImageFrame) return -99;
     CVPixelBufferRef pb_left = create_yuv_pb_stereo(w, h, 0x40);
     CVPixelBufferRef pb_right = create_yuv_pb_stereo(w, h, 0x80);
@@ -319,8 +319,16 @@ static int encode_one_stereo_lid(VTCompressionSessionRef session, int frame_idx,
     VTEncodeInfoFlags fi = 0;
     CMTime pts = CMTimeMake(frame_idx, 30);
     CMTime dur = CMTimeMake(1, 30);
+    CFDictionaryRef props = NULL;
+    if (force_kf) {
+        CFMutableDictionaryRef mp = CFDictionaryCreateMutable(NULL, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(mp, kVTEncodeFrameOptionKey_ForceKeyFrame, kCFBooleanTrue);
+        props = mp;
+    }
     OSStatus st = VTCompressionSessionEncodeMultiImageFrame(
-        session, tbg, pts, dur, NULL, NULL, &fi);
+        session, tbg, pts, dur, props, NULL, &fi);
+    if (props) CFRelease(props);
     if (st != noErr) {
         CFRelease(tbg); CFRelease(ltc); CFRelease(rtc);
         CVPixelBufferRelease(pb_left); CVPixelBufferRelease(pb_right);
@@ -335,8 +343,12 @@ static int encode_one_stereo_lid(VTCompressionSessionRef session, int frame_idx,
     return (int)g_cb_status;
 }
 
+static int encode_one_stereo_lid(VTCompressionSessionRef session, int frame_idx, int w, int h, int layer_id) {
+    return encode_one_stereo_kf(session, frame_idx, w, h, layer_id, 0);
+}
+
 static int encode_one_stereo(VTCompressionSessionRef session, int frame_idx, int w, int h) {
-    return encode_one_stereo_lid(session, frame_idx, w, h, 1);
+    return encode_one_stereo_kf(session, frame_idx, w, h, 1, 0);
 }
 
 /* Phase 1: Verify MV-HEVC */
@@ -1280,6 +1292,61 @@ tc_done:
 
         VTCompressionSessionInvalidate(s); CFRelease(s);
         if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
+
+    } else if (strcmp(mode, "stereo_keyframe") == 0) {
+        rlog("STEREO_KEYFRAME: Force-keyframe counter accumulation test\n");
+        rlog("Every frame forced to IDR keyframe via kVTEncodeFrameOptionKey_ForceKeyFrame.\n");
+        rlog("This ensures VPS/SPS/PPS NAL units are emitted on EVERY encode,\n");
+        rlog("not just periodic GOP keyframes. If the kernel VPS table counter\n");
+        rlog("accumulates, we should see a crash at ~64 encodes (entry 256).\n\n");
+        int encodes = (argc > 2) ? atoi(argv[2]) : 70;
+        if (phase1_verify() != 0) goto done;
+
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+        if (!s) goto done;
+
+        size_t baseline_bytes = 0;
+        int errors = 0;
+        int bytes_changed = 0;
+        for (int i = 0; i < encodes; i++) {
+            int st = encode_one_stereo_kf(s, i, 1920, 1080, 1, 1);
+            if (i == 0) {
+                baseline_bytes = g_last_pset_total_bytes;
+                rlog("Baseline: pset_count=%zu, bytes=%zu (all frames forced keyframe)\n",
+                     g_last_pset_count, baseline_bytes);
+            }
+            if (st != 0) {
+                errors++;
+                rlog("[%d] ENCODE ERROR: %d\n", i, st);
+                if (errors >= 5) { rlog("Too many errors, stopping\n"); break; }
+            }
+            if (g_last_pset_total_bytes != baseline_bytes && !bytes_changed) {
+                bytes_changed = 1;
+                rlog("[%d] *** PSET BYTES CHANGED: %zu -> %zu ***\n",
+                     i, baseline_bytes, g_last_pset_total_bytes);
+                rlog("This indicates intra-buffer corruption from counter overflow!\n");
+            }
+            if ((i+1) % 10 == 0 || i == encodes-1) {
+                size_t est = (size_t)(i+1) * g_last_pset_count;
+                rlog("[%d/%d] psets=%zu bytes=%zu est_entries=%zu%s err=%d\n",
+                     i+1, encodes, g_last_pset_count, g_last_pset_total_bytes,
+                     est, est >= 256 ? " ***OOB***" : "", errors);
+            }
+        }
+
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        usleep(500000);
+        VTCompressionSessionInvalidate(s); CFRelease(s);
+
+        if (bytes_changed)
+            rlog("\n*** PSET BYTES CHANGED during encoding — counter IS accumulating ***\n");
+        else if (errors == 0 && encodes >= 64)
+            rlog("\n%d keyframe encodes completed with no crash and stable pset bytes.\n"
+                 "If est_entries > 256 but no crash, counter may reset per keyframe,\n"
+                 "or VPS table entries only accumulate on NON-keyframe encodes.\n", encodes);
+        else
+            rlog("\nTest completed: %d encodes, %d errors, bytes_changed=%d\n",
+                 encodes, errors, bytes_changed);
 
     } else if (strcmp(mode, "session_reuse") == 0) {
         rlog("SESSION_REUSE: Test kalloc_data memory reuse (stale counter attack)\n");
