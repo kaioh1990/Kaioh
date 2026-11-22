@@ -13007,14 +13007,16 @@ vps_cd_done:
 
             /* Create pixel buffer */
             CVPixelBufferRef pb = NULL;
-            NSDictionary *pba = @{
-                (id)kCVPixelBufferWidthKey: @(w),
-                (id)kCVPixelBufferHeightKey: @(h),
-                (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
-            };
+            CFMutableDictionaryRef pba = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iosurf_props = CFDictionaryCreate(NULL, NULL, NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(pba, kCVPixelBufferIOSurfacePropertiesKey, iosurf_props);
+            CFRelease(iosurf_props);
             CVReturn cvr = CVPixelBufferCreate(NULL, w, h,
                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-                (__bridge CFDictionaryRef)pba, &pb);
+                pba, &pb);
+            CFRelease(pba);
             if (cvr != 0 || !pb) {
                 rlog("CVPixelBufferCreate failed: %d\n", cvr);
                 break;
@@ -13090,8 +13092,8 @@ vps_cd_done:
             CVPixelBufferRelease(pb);
 
             if (st == 0) {
-                st = VTCompressionSessionCompleteEncoding(s);
-                rlog("CompleteEncoding: %d\n", (int)st);
+                st = VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                rlog("CompleteFrames: %d\n", (int)st);
 
                 /* Wait for callback */
                 for (int w8 = 0; w8 < 100 && !g_encode_done; w8++)
