@@ -13372,6 +13372,12 @@ vps_cd_done:
             "/System/Library/Frameworks",
             "/usr/lib",
             "/System/Library/PrivateFrameworks",
+            "/System/Library/CoreServices",
+            "/System/Library/PreferenceBundles",
+            "/usr/share/langid",
+            "/usr/share/mecabra",
+            "/System/Library/LinguisticData",
+            "/usr/standalone/firmware",
             NULL
         };
 
@@ -13449,7 +13455,10 @@ vps_cd_done:
         /* Phase 2: Create our own compressed file via xattr */
         rlog("--- Phase 2: Crafted decmpfs xattr probe ---\n");
         char tmppath[256];
-        snprintf(tmppath, sizeof(tmppath), "/tmp/decmpfs_probe_%d", getpid());
+        /* Use NSTemporaryDirectory equivalent — app sandbox temp dir */
+        const char *tmpdir = getenv("TMPDIR");
+        if (!tmpdir) tmpdir = "/private/var/tmp";
+        snprintf(tmppath, sizeof(tmppath), "%s/decmpfs_probe_%d", tmpdir, getpid());
 
         int total_hits = 0;
         for (int r = 0; r < rounds; r++) {
