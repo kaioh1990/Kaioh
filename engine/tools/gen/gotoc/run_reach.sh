@@ -14,7 +14,7 @@ E=$(cd "$(dirname "$0")/../../.." && pwd)   # engine/
 export GOTOC_EXCLUDE=render_vk.go,render_vk_swap.go,font_vk.go,video_ffmpeg.go,sound_xm.go,cvfcook.go,model.go
 export GOTOC_INCLUDE_FUNCS=
 # functions implemented by hand in src/ik (ik_native.c)
-export GOTOC_NATIVE_FUNCS=decodeShiftJIS,cvfGcSafepoint,cvfP2PAdvertise,cvfP2PAdvertiseStop,cvfP2PBrowse,cvfP2PJoin,cvfP2PClose,cvfNativeAskName
+export GOTOC_NATIVE_FUNCS=decodeShiftJIS,cvfGcSafepoint,cvfVitaWindow,cvfVitaSwap,cvfVitaPerf,cvfP2PAdvertise,cvfP2PAdvertiseStop,cvfP2PBrowse,cvfP2PJoin,cvfP2PClose,cvfNativeAskName
 export GOTOC_EXCLUDE_FUNCS=saveScreenshot
 # entry points of the iOS app (src/platform/ios: SDL_main and the host API)
 GOTOC_HOST_ROOTS=cvfHTTPSelfTest,cvfIOSMain,cvfHostInMatch,cvfHostTap,cvfHostSetTouchMenus,cvfHostPeers,cvfHostNameEntered

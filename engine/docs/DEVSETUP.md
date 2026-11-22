@@ -23,6 +23,7 @@ other's work.
 | `claude/native-android` | Android port | only its collector fix (registers spilled in clear, fe415a0); the Android platform layer and app stay on that branch |
 | `claude/native-netplay2` | netplay: pre-match TCP race fix, content fingerprint, several matches per session, roster sweep scripts (all Go changes in both fork patches) | yes |
 | `claude/native-vita` | PS Vita port M1 (VITA_PORT.md): armv7 build under qemu-arm, vitasdk build and headless VPK, 32-bit runtime fixes (ARM context switch, arena placement, map hashes, derived pointers, base-10 formatting) | yes |
+| `claude/native-vita2` | PS Vita port M2 (VITA_PORT.md sections 5, 11): `cvfVitaGL` run-time switch in the fork (Vita shaders and vitaGL workarounds), the game on the Vita (`cvf_vita`, `cvf-native-m2.vpk`), frame-time logs, GLES render thread, `cvf_vitasim`/`gles_thread_test`, the `boundTexture` fix | no (from d290761) |
 | `claude/native-memory` | collector memory and pauses (GAPS.md): `clear(map)` releases its entries, lazy sweeping, prefetching and parallel marking, fight pacing max(trigger, 96 MB), free pages returned to the OS, a real `sync.Pool`; `CVF_GC_WHY` retention diagnostics | no (from a14596e) |
 
 Do not merge the input branches into each other; merge them into
@@ -83,6 +84,21 @@ against a native guest, both 0b04ded's `cvf_headless_go` and one built
 from this branch's fork tree with `-tags cvfgohead`, since `-tags
 cvf,cvfgohead` no longer builds: "Go build of the headless runner" in section 3). The online fork with this
 branch's change compiles with `go build ./src`.
+
+`claude/native-vita2` (2026-11-22, Linux x86-64, Go 1.27.4; Vita M2,
+VITA_PORT.md section 11): regen from a fresh `setup_ikemen.sh` tree
+reproduces the committed C (4902 functions, 0 TODO, 79 stubs, 31
+placeholders; three new native functions in `GOTOC_NATIVE_FUNCS`);
+`cvf_tests` and `cvf_tests_ucontext` 103/0 on x86-64, armv7 and aarch64
+(qemu), `cvf_tests` 103/0 under Wine; reference fights `54f8ae06...` /
+`4334350c...` on x86-64, Wine, armv7 and aarch64; `run_netplay.sh` PASS with
+`a350bc2d...`; `go build -tags cvf,cvfgohead` builds again and plays
+`54f8ae06...`; Vita `cvf_vita` and `cvf-native-m2.vpk` build; in vemu, the
+VPK image's headless mode gives 103/0 and `54f8ae06...`. When a container
+reaches only GitHub, `setup_ikemen.sh` needs `go mod edit -replace` lines
+that point golang.org/x/* and gopkg.in/ini.v1 at their GitHub mirrors
+(github.com/golang/*, github.com/go-ini/ini), at the same versions, after
+the patch is applied. The output is unchanged.
 
 Integration of netplay2 and vita (2026-11-21, Linux x86-64, Go 1.27.4):
 regen from a fresh `setup_ikemen.sh` tree reproduces the committed C (4858
@@ -341,11 +357,13 @@ a plain crash (no handler on an alternate stack).
     go build -tags cvf,cvfgohead -o cvf_headless_go ./src   # native's configuration (vitaPerf)
     go build -tags cvfgohead -o cvf_headless_go_desktop ./src  # the shipping PC/mobile configuration
 
-(As of `claude/native-cpu4` the first one fails: the `cvf` tag selects both
-render_gl33.go and render_gles32.go, which both declare `boundTexture`,
-and cvf_mobile.go needs the GLES32 renderer. gotoc ignores type errors, so
-regen does not show it. The desktop configuration builds, and with the
-cvf-online-5 rules it plays the same netplay match as a native peer.)
+(From `claude/native-cpu4` until `claude/native-vita2` the first one failed:
+the `cvf` tag selects both render_gl33.go and render_gles32.go, which both
+declared `boundTexture`. gotoc ignores type errors, so regen did not show
+it. The GLES32 type is now `boundTextureGLES32`, so both configurations
+build. With `-tags cvf,cvfgohead` the reference fight gives `54f8ae06...`.
+On Linux: `CGO_CFLAGS=-I/usr/include/SDL2 CGO_LDFLAGS=-lSDL2`, and
+PKG_CONFIG_PATH pointing at an FFmpeg 7.)
 
 It needs cgo with SDL2, FFmpeg (7), libxmp and a `-lMoltenVK` on macOS. On
 the project Mac (amd64 Go with the x86_64 Homebrew libraries, under

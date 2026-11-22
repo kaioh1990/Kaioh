@@ -17,6 +17,23 @@ void fn_cvfGcSafepoint(bool fighting) {
     gc_safepoint(fighting);
 }
 
+// ---------------------------------------------------------------- PS Vita display
+// cvfVitaWindow / cvfVitaSwap / cvfVitaPerf (src/cvf_vitagl.go in the fork patch):
+// called only when the Vita platform layer has set cvfVitaGL, which also
+// registers these hooks (src/platform/vita/vita_game.c). Elsewhere no-ops.
+void (*cvf_vita_window_hook)(void);
+void (*cvf_vita_swap_hook)(void);
+void (*cvf_vita_perf_hook)(int ev, int arg);
+void fn_cvfVitaWindow(void) {
+    if (cvf_vita_window_hook) cvf_vita_window_hook();
+}
+void fn_cvfVitaSwap(void) {
+    if (cvf_vita_swap_hook) cvf_vita_swap_hook();
+}
+void fn_cvfVitaPerf(int ev, int arg) {
+    if (cvf_vita_perf_hook) cvf_vita_perf_hook(ev, arg);
+}
+
 // ---------------------------------------------------------------- Nearby direct link
 // cvfP2P* and cvfNativeAskName (tools/ikemen/cvf_p2p_cvf.go): call the
 // iOS app's function table (CvfP2P.m, layout of CvfP2PFuncs in

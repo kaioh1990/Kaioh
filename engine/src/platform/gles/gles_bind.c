@@ -2,7 +2,8 @@
 // (render_gles32.go, font_gles32.go) calls: OpenGL ES 3.0 on iOS (Apple's
 // OpenGLES.framework through SDL's UIKit back end), ES 3.x elsewhere.
 // Entry points come from SDL_GL_GetProcAddress (dlsym on UIKit, EGL/GLX on
-// other platforms), so this file needs no GL headers and links nowhere.
+// other platforms; vitaGL's vglGetProcAddress on the PS Vita), so this file
+// needs no GL headers and links nowhere.
 // The wrappers were generated from the prototypes in ik_sim.h; the helpers
 // at the end and the ES 3.0 fallbacks are hand-written.
 #include <stdio.h>
@@ -261,7 +262,29 @@ void gles2_VertexAttribPointerWithOffset(u32 index, i32 size, u32 type, bool nor
     CK("glVertexAttribPointerWithOffset");
 }
 
-#define LOAD(n) (*(void **)&p_##n = SDL_GL_GetProcAddress(#n))
+#if defined(CVF_GL_THREAD)
+#include "platform/gles/gles_thread_impl.h"  // render thread (gles_thread.h)
+#endif
+
+#if defined(__vita__)
+// PS Vita: vitaGL's table (VITA_PORT.md section 5). A name vitaGL does not
+// export gets a stub returning 0, as the TinyGo build did (the model, MSAA
+// and multi-target paths are off there); the names are logged once.
+void *vglGetProcAddress(const char *name);
+static unsigned long long gl_missing_stub(void) { return 0; }
+static int gl_missing_n;
+static void *gl_proc(const char *name) {
+    void *p = vglGetProcAddress(name);
+    if (p) return p;
+    if (gl_missing_n++ < 32) fprintf(stderr, "gles: vitaGL has no %s (stubbed)\n", name);
+    return (void *)gl_missing_stub;
+}
+static const char *gl_error_text(void) { return "vitaGL"; }
+#else
+#define gl_proc(n) SDL_GL_GetProcAddress(n)
+#define gl_error_text() SDL_GetError()
+#endif
+#define LOAD(n) (*(void **)&p_##n = gl_proc(#n))
 // gl.Init: the Go loader argument (eglGetProcAddress) is ignored.
 GoIface gles2_Init(GoFunc getProcAddr) {
     (void)getProcAddr;
@@ -338,12 +361,15 @@ GoIface gles2_Init(GoFunc getProcAddr) {
     LOAD(glVertexAttribPointer);
     LOAD(glViewport);
     LOAD(glMapBufferRange);
-    *(void **)&p_glFramebufferTexture2D_es = SDL_GL_GetProcAddress("glFramebufferTexture2D");
-    *(void **)&p_glVertexAttribPointer_es = SDL_GL_GetProcAddress("glVertexAttribPointer");
+    *(void **)&p_glFramebufferTexture2D_es = gl_proc("glFramebufferTexture2D");
+    *(void **)&p_glVertexAttribPointer_es = gl_proc("glVertexAttribPointer");
     if (!p_glClear || !p_glCreateShader || !p_glDrawArrays || !p_glBindVertexArray)
-        return go_errorf("OpenGL ES: entry points not found (%s)", SDL_GetError());
-    *(void **)&p_glGetError_ck = SDL_GL_GetProcAddress("glGetError");
+        return go_errorf("OpenGL ES: entry points not found (%s)", gl_error_text());
+    *(void **)&p_glGetError_ck = gl_proc("glGetError");
     gl_check = getenv("CVF_GL_CHECK") && atoi(getenv("CVF_GL_CHECK")) > 0;
+#if defined(CVF_GL_THREAD)
+    if (gt.on) gt_install();  // from here on every GL call is recorded
+#endif
     i32 fb = 0;
     p_glGetIntegerv(CVF_GL_FRAMEBUFFER_BINDING, &fb);
     screen_fbo = (u32)fb;

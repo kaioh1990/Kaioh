@@ -89,7 +89,7 @@ index f4c200f..dc67a93 100644
  	for _, idx := range sortList {
  		s := dl[idx]
 diff --git a/src/audio_sdl.go b/src/audio_sdl.go
-index ac9143a..5b51042 100644
+index ac9143a..65c8525 100644
 --- a/src/audio_sdl.go
 +++ b/src/audio_sdl.go
 @@ -28,6 +28,7 @@ type SDLSpeaker struct {
@@ -104,7 +104,7 @@ index ac9143a..5b51042 100644
  	if sdl.GetQueuedAudioSize(s.dev) > uint32(s.bufferSize*4) {
  		return
  	}
-+	if isVita {
++	if onVita() {
 +		// Goroutines are cooperative on the Vita: this pump only runs between
 +		// frames, which can be 100+ ms apart while the game is busy. Keep a
 +		// deeper queue (about 4 buffers, ~185 ms) so playback does not run dry.
@@ -9667,7 +9667,7 @@ index 19bf05a..7441840 100644
 +	c.varCache[uint32(i)&63] = varCacheEnt{key: i, gen: c.varGen, mp: mp, fval: c.cnsfvar[i], isF: true}
 +}
 diff --git a/src/common.go b/src/common.go
-index a741eab..5271eff 100644
+index a741eab..606a025 100644
 --- a/src/common.go
 +++ b/src/common.go
 @@ -102,11 +102,11 @@ func Deg(f float32) float32 {
@@ -9706,7 +9706,7 @@ index a741eab..5271eff 100644
  		}
  		return filepath.ToSlash(filename)
  	}
-+	if isVita {
++	if onVita() {
 +		// The Vita's file systems are case-insensitive, so a failed Stat means
 +		// the file doesn't exist. The glob fallback below lists directories on
 +		// the memory card for every missing file (thousands of reads at boot).
@@ -9747,7 +9747,7 @@ index a741eab..5271eff 100644
  	if err != nil {
  		return nil, err
  	}
-+	if isVita {
++	if onVita() {
 +		// Every read is a system call on the Vita; SFF/SND loaders do many
 +		// tiny reads, so buffer them.
 +		return &vitaBufFile{f: f, buf: make([]byte, 0, 32*1024)}, nil
@@ -13616,7 +13616,7 @@ index 762ee1f..72f4fae 100644
  			if numStr == "" || strings.Trim(numStr, "0123456789") != "" {
  				continue
 diff --git a/src/config.go b/src/config.go
-index d39783d..ffb50e8 100644
+index d39783d..b3ce78f 100644
 --- a/src/config.go
 +++ b/src/config.go
 @@ -291,7 +291,9 @@ func loadConfig(def string) (*Config, error) {
@@ -13641,7 +13641,7 @@ index d39783d..ffb50e8 100644
 +	vitaTrace("cfg: user assigned")
 +	vitaTraceDeep = vitaTraceOn
  	c.normalize()
-+	if isVita {
++	if onVita() {
 +		// Vita GPU budget: render at the panel's resolution instead of
 +		// upscaling 1280x720 and downscaling again, and drop features the
 +		// Vita cannot afford.
@@ -17417,6 +17417,59 @@ index 0000000..897ab9c
 +		cvfLazy.loaded = append(cvfLazy.loaded[:oldest], cvfLazy.loaded[oldest+1:]...)
 +	}
 +}
+diff --git a/src/cvf_vitagl.go b/src/cvf_vitagl.go
+new file mode 100644
+index 0000000..7caaf5d
+--- /dev/null
++++ b/src/cvf_vitagl.go
+@@ -0,0 +1,47 @@
++package main
++
++// Run-time switch of the native C engine on the PS Vita (VITA_PORT.md, M2).
++//
++// The TinyGo Vita build selects its display, file-system and audio paths with
++// isVita, a compile-time constant that is false in the C engine, so gotoc
++// translates those paths away. cvfVitaGL turns the ones the native Vita
++// application needs back on at run time. The Vita platform layer
++// (engine/src/platform/vita) sets it before main; every other build leaves it
++// false, where onVita() is the old isVita.
++//
++// What it selects: the GLES renderer's GLSL 1.x shaders (vita_shaders.go)
++// and vitaGL workarounds (clipping in the sprite shader instead of scissor,
++// client-side vertex arrays and sprite batching, atlases up to 1024, a 256²
++// palette texture, drawing straight to the display buffer, no models or
++// external shaders), vitaGL's display instead of an SDL window, 960x540,
++// the 30 fps fight drawing mode, no case-insensitive glob fallback for
++// missing files, buffered file reads, streamed music, the deeper audio
++// queue, touch taps for the menus. None of it is simulation state: the
++// isVita branches that are (bytecode profiling, the TinyGo collector's
++// triggers) stay compile-time only.
++var cvfVitaGL bool
++
++// cvfVitaFPS: drawing rate in fights on the Vita, 30 (every second tick is
++// drawn, as the TinyGo build) or 60. Set by the platform layer from
++// cvf_env.txt (CVF_VITA_FPS). Logic always runs at 60 Hz.
++var cvfVitaFPS = 30
++
++// cvfVitaInMatch: between the first drawn fight frame and the end of the match.
++var cvfVitaInMatch bool
++
++//go:inline
++func onVita() bool { return isVita || cvfVitaGL }
++
++// Native hooks (GOTOC_NATIVE_FUNCS: the C engine implements them in
++// src/ik/ik_native.c, which calls the platform layer; empty in Go builds).
++
++// cvfVitaWindow: SDL (audio, events, controllers, touch) and vitaGL's display.
++func cvfVitaWindow() {}
++
++// cvfVitaSwap: vglSwapBuffers (or hand the frame to the render thread).
++func cvfVitaSwap() {}
++
++// cvfVitaPerf: frame timing marks. ev 1: begin; ev 2: end of section arg
++// (0 logic, 1 drawing, 2 flush and swap); ev 3: frame boundary, arg 1 when
++// the frame was not drawn.
++func cvfVitaPerf(ev, arg int) {}
 diff --git a/src/cvfcook.go b/src/cvfcook.go
 new file mode 100644
 index 0000000..e9bae25
@@ -18894,7 +18947,7 @@ index 0000000..4442bf8
 +	return l.PCall(0, lua.MultRet, nil)
 +}
 diff --git a/src/main.go b/src/main.go
-index 2609c76..5238e0b 100644
+index 2609c76..4fed5fb 100644
 --- a/src/main.go
 +++ b/src/main.go
 @@ -60,6 +60,7 @@ func main() {
@@ -18946,7 +18999,7 @@ index 2609c76..5238e0b 100644
  
  	// Config file path
  	configPath := "save/config.ini"
-@@ -198,10 +215,16 @@ func realMain() {
+@@ -198,10 +215,20 @@ func realMain() {
  		// For Android, let's see exactly what failed
  		panic(err)
  	}
@@ -18958,12 +19011,16 @@ index 2609c76..5238e0b 100644
 +			// C engine: OpenGL ES 3.0 (no Vulkan/MoltenVK)
 +			cfg.Video.RenderMode = "OpenGL ES 3.0"
 +		}
++	}
++	if cvfVitaGL {
++		// C engine on the PS Vita: the GLES renderer on vitaGL
++		cfg.Video.RenderMode = "OpenGL ES 3.2"
  	}
 +	vitaTrace("main: config loaded")
  	sys.cfg = *cfg
  	// Logcat("LOG: Config Loaded. System Script: " + sys.cfg.Config.System)
  
-@@ -219,10 +242,11 @@ func realMain() {
+@@ -219,10 +246,11 @@ func realMain() {
  
  	// Initialize game and create window
  	// This is where the window is born!
@@ -18977,14 +19034,14 @@ index 2609c76..5238e0b 100644
  		if strings.Contains(err.Error(), "<game end>") {
  			handleExit()
 diff --git a/src/motif.go b/src/motif.go
-index ce7ed68..92bbe39 100644
+index ce7ed68..69695ae 100644
 --- a/src/motif.go
 +++ b/src/motif.go
 @@ -1574,6 +1574,9 @@ func loadMotif(def string) (*Motif, error) {
  			return fmt.Errorf("Failed to load text from %s: %w", filename, err)
  		}
  		motifText = NormalizeNewlines(inputText)
-+		if isVita {
++		if onVita() {
 +			motifText = vitaMotifFixes(motifText)
 +		}
  
@@ -19304,7 +19361,7 @@ index d63aa49..25c8b51 100644
  	r.alpha = packAlpha(src, 255-src)
  }
 diff --git a/src/render.go b/src/render.go
-index 6ccd7bc..ad422ab 100644
+index 6ccd7bc..9d772b9 100644
 --- a/src/render.go
 +++ b/src/render.go
 @@ -377,13 +377,20 @@ func (rp *RenderParams) IsValid() bool {
@@ -19359,7 +19416,7 @@ index 6ccd7bc..ad422ab 100644
 +	gfx.SetUniformFv("add", rsCur.spfx.add[:])
 +	gfx.SetUniformFv("mult", rsCur.spfx.mult[:])
 +	setUniform1("alpha", a)
-+	if isVita && rsCur.rp.customShader.name == "" {
++	if onVita() && rsCur.rp.customShader.name == "" {
 +		// Tell the Vita sprite shader whether any colour effect is active;
 +		// without one it takes a two-texture-read fast path.
 +		spfx, rp := &rsCur.spfx, &rsCur.rp
@@ -19570,7 +19627,7 @@ index 6ccd7bc..ad422ab 100644
  	gfx.SetUniformI("isRgba", 1)
 -	gfx.SetUniformF("gray", spfx.gray)
 -	gfx.SetUniformF("hue", spfx.hue)
-+	if isVita {
++	if onVita() {
 +		gfx.SetUniformI("fxOn", 1)
 +	}
 +	setUniform1("gray", spfx.gray)
@@ -19587,7 +19644,7 @@ index 6ccd7bc..ad422ab 100644
  
  func (ta *TextureAtlas) clearTexture(tex Texture, width, height int32) {
  	bpp := ta.bytesPerPixel()
-+	if isVita {
++	if onVita() {
 +		// Clear in bands with one small buffer instead of a full-size slice
 +		// (a 2048x2048 RGBA atlas would need 16 MB of Go heap at once).
 +		band := int32(32)
@@ -19613,7 +19670,7 @@ index 6ccd7bc..ad422ab 100644
  func (ta *TextureAtlas) AddImage(width, height, stride int32, data []byte) ([4]float32, bool) {
 -	const maxWidth = 4096
 +	maxWidth := int32(4096)
-+	if isVita {
++	if onVita() {
 +		// Smaller atlases keep vitaGL's copy-on-update cheap (1 MB at most).
 +		maxWidth = 1024
 +	}
@@ -19634,7 +19691,7 @@ index 6ccd7bc..ad422ab 100644
 +// setUniform1 sets a single-float uniform. On the Vita it avoids the variadic
 +// SetUniformF, whose argument slice TinyGo heap-allocates on every call.
 +func setUniform1(name string, v float32) {
-+	if isVita {
++	if onVita() {
 +		uniF1Scratch[0] = v
 +		gfx.SetUniformFv(name, uniF1Scratch[:])
 +		return
@@ -19652,7 +19709,7 @@ index 1a2540b..3b8944d 100644
  package main
  
 diff --git a/src/render_gles32.go b/src/render_gles32.go
-index 891acab..f236415 100644
+index 891acab..9d7f0b6 100644
 --- a/src/render_gles32.go
 +++ b/src/render_gles32.go
 @@ -2,7 +2,7 @@
@@ -19691,7 +19748,7 @@ index 891acab..f236415 100644
  
  	Logcat("GLES: [LOCKED] Starting: " + name)
  	var vertObj, fragObj, prog uint32
-+	if isVita {
++	if onVita() {
 +		// vitaGL's GLSL translator wants GLSL 1.x style sources.
 +		if v, f, ok := vitaShaderSources(name); ok {
 +			vert, frag = v, f
@@ -19706,7 +19763,7 @@ index 891acab..f236415 100644
  	// If your file doesn't have it, we add it here.
  	fullSrc := src
 -	if !strings.HasPrefix(strings.TrimSpace(src), "#version") {
-+	if !isVita && !strings.HasPrefix(strings.TrimSpace(src), "#version") {
++	if !onVita() && !strings.HasPrefix(strings.TrimSpace(src), "#version") {
  		// Anchor to 320 es for best feature compatibility
  		header := "#version 320 es\n"
 +		if runtime.GOOS == "ios" {
@@ -19716,6 +19773,15 @@ index 891acab..f236415 100644
  		fullSrc = header + src
  	}
  
+@@ -217,7 +237,7 @@ func (r *Renderer_GLES32) linkProgram(params ...uint32) (program uint32, err err
+ 
+ // Tracks what's actually bound to a unit right now
+ // tex is used for wrapped textures (compared by identity); handle/target alone for raw GL handles
+-type boundTexture struct {
++type boundTextureGLES32 struct {
+ 	tex    *Texture_GLES32
+ 	handle uint32
+ 	target uint32
 @@ -237,6 +257,7 @@ func (r *Renderer_GLES32) bindTextureToUnit(unit int32, target uint32, tex *Text
  		return false
  	}
@@ -19738,7 +19804,7 @@ index 891acab..f236415 100644
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
 -	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 -	gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
-+	if !isVita { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
++	if !onVita() { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
 +		gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 +		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
 +	}
@@ -19750,7 +19816,7 @@ index 891acab..f236415 100644
  	r := gfx.(*Renderer_GLES32)
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
 -	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
-+	if !isVita {
++	if !onVita() {
 +		gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 +	}
  
@@ -19760,7 +19826,7 @@ index 891acab..f236415 100644
  	if stride != width*bytesPerPixel {
  		rowLength = stride / bytesPerPixel
  	}
-+	if isVita && rowLength != 0 && data != nil {
++	if onVita() && rowLength != 0 && data != nil {
 +		// GLES2 (vitaGL) has no UNPACK_ROW_LENGTH: repack rows tightly.
 +		rb := int(width * bytesPerPixel)
 +		packed := make([]byte, rb*int(height))
@@ -19772,7 +19838,7 @@ index 891acab..f236415 100644
 +	}
  
 -	gl.PixelStorei(gl.UNPACK_ROW_LENGTH, rowLength)
-+	if !isVita {
++	if !onVita() {
 +		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, rowLength)
 +	}
  
@@ -19783,7 +19849,7 @@ index 891acab..f236415 100644
  	}
  
 -	if rowLength != 0 {
-+	if rowLength != 0 && !isVita {
++	if rowLength != 0 && !onVita() {
  		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
  	}
  
@@ -19793,7 +19859,7 @@ index 891acab..f236415 100644
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
 -	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 -	gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
-+	if !isVita { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
++	if !onVita() { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
 +		gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 +		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
 +	}
@@ -19806,7 +19872,7 @@ index 891acab..f236415 100644
  	r.bindTextureToUnitForced(0, gl.TEXTURE_2D, t, 0)
 -	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 -	gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
-+	if !isVita { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
++	if !onVita() { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
 +		gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 +		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
 +	}
@@ -19819,7 +19885,7 @@ index 891acab..f236415 100644
  	gl.BindTexture(gl.TEXTURE_2D, t.handle)
 -	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 -	gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
-+	if !isVita { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
++	if !onVita() { // vitaGL: UNPACK_ALIGNMENT is GL_INVALID_ENUM
 +		gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 +		gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
 +	}
@@ -19830,7 +19896,7 @@ index 891acab..f236415 100644
  func (t *Texture_GLES32) MapUploadFormat(i int32) uint32 {
  	switch i {
  	case 8:
-+		if isVita {
++		if onVita() {
 +			return gl.LUMINANCE
 +		}
  		return gl.RED
@@ -19840,17 +19906,17 @@ index 891acab..f236415 100644
  func (t *Texture_GLES32) MapSizedInternalFormat(i int32) uint32 {
  	switch i {
  	case 8:
-+		if isVita {
++		if onVita() {
 +			return gl.LUMINANCE
 +		}
  		return gl.R8
  	case 24:
-+		if isVita {
++		if onVita() {
 +			return gl.RGB
 +		}
  		return gl.RGB8
  	case 32:
-+		if isVita {
++		if onVita() {
 +			return gl.RGBA
 +		}
  		return gl.RGBA8
@@ -19896,7 +19962,7 @@ index 891acab..f236415 100644
 +	blendDst         BlendFunc
 +	scissorRect      [4]int32
 +	scissorEnabled   bool
-+	boundTex         []boundTexture // Caches texture units to what's actually bound there. Sized per GPU
++	boundTex         []boundTextureGLES32 // Caches texture units to what's actually bound there. Sized per GPU
 +	texCacheLastUsed []uint64       // Sprite-only recency, for LRU eviction. Sized per GPU
 +	texCacheTimer    uint64         // Increments on every sprite texture access
 +	uniformICache    map[uint32]int32
@@ -19921,8 +19987,8 @@ index 891acab..f236415 100644
  
 -	r.enableModel = sys.cfg.Video.EnableModel
 -	r.enableShadow = sys.cfg.Video.EnableModelShadow
-+	r.enableModel = sys.cfg.Video.EnableModel && !isVita && runtime.GOOS != "ios"
-+	r.enableShadow = sys.cfg.Video.EnableModelShadow && !isVita && runtime.GOOS != "ios"
++	r.enableModel = sys.cfg.Video.EnableModel && !onVita() && runtime.GOOS != "ios"
++	r.enableShadow = sys.cfg.Video.EnableModelShadow && !onVita() && runtime.GOOS != "ios"
  
  	// Generate VAO's
  	gl.GenVertexArrays(1, &r.spriteVAO)
@@ -19933,22 +19999,22 @@ index 891acab..f236415 100644
 -	r.spriteShader, _ = r.newShaderProgram(vertShader, fragShader, "", "Main Shader", true)
 +	var spriteErr error
 +	r.spriteShader, spriteErr = r.newShaderProgram(vertShader, fragShader, "", "Main Shader", true)
-+	if isVita && (spriteErr != nil || r.spriteShader == nil) {
++	if onVita() && (spriteErr != nil || r.spriteShader == nil) {
 +		Logcat("vita: sprite shader with clipping failed, using scissor fallback")
 +		r.spriteShader, _ = r.newShaderProgram(vertShader, fragShader, "", "Main Shader (no clip)", true)
 +	}
  	r.spriteShader.RegisterAttributes("position", "uv")
-+	if isVita {
++	if onVita() {
 +		r.spriteShader.RegisterAttributes("spriteUV", "palUV")
 +	}
  	r.spriteShader.RegisterUniforms("modelview", "projection", "x1x2x4x3",
  		"alpha", "tint", "mask", "neg", "gray", "add", "mult", "isFlat", "isRgba", "isTrapez", "hue",
  		"spriteUV", "palUV", "quad", "useQuad")
-+	if isVita {
++	if onVita() {
 +		r.spriteShader.RegisterUniforms("clipOn", "clipRect", "fxOn")
 +	}
  	r.spriteShader.RegisterTextures("pal", "tex")
-+	if isVita {
++	if onVita() {
 +		r.spriteShader.RegisterTextures("texB")
 +	}
  
@@ -19972,7 +20038,7 @@ index 891acab..f236415 100644
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
  		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 +		ppFormat := int32(gl.RGBA8_SNORM)
-+		if isVita || runtime.GOOS == "ios" {
++		if onVita() || runtime.GOOS == "ios" {
 +			// RGBA8_SNORM is not color-renderable in OpenGL ES 3.0
 +			ppFormat = gl.RGBA
 +		}
@@ -19989,15 +20055,24 @@ index 891acab..f236415 100644
  	} else {
  		gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, r.fbo_texture, 0)
 -		gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, r.rbo_depth)
-+		if !isVita { // 2D only on the Vita: no depth buffer needed
++		if !onVita() { // 2D only on the Vita: no depth buffer needed
 +			gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, r.rbo_depth)
 +		}
 +	}
-+	if isVita {
++	if onVita() {
 +		Logcat("vita: framebuffer status 0x" + fmtHex(uint32(gl.CheckFramebufferStatus(gl.FRAMEBUFFER))))
  	}
  
  	// create our two FBOs for our post-processing needs
+@@ -1104,7 +1205,7 @@ func (r *Renderer_GLES32) InitStateCache() {
+ 	//}
+ 
+ 	// Initialize texture cache
+-	r.boundTex = make([]boundTexture, maxTex)
++	r.boundTex = make([]boundTextureGLES32, maxTex)
+ 	r.texCacheLastUsed = make([]uint64, maxTex)
+ 
+ 	// Initialize uniform cache
 @@ -1130,8 +1231,28 @@ func (r *Renderer_GLES32) IsShadowEnabled() bool {
  	return r.enableShadow
  }
@@ -20007,10 +20082,10 @@ index 891acab..f236415 100644
 +// 960x540 target, a scene switch and a full-screen copy every frame) is what
 +// the post-processing chain needs, and nothing else does.
 +func (r *Renderer_GLES32) vitaDirect() bool {
-+	if isVita {
++	if onVita() {
 +		vitaFBOCheck()
 +	}
-+	return isVita && !vitaFBOForced && len(r.postShaderSelect) <= 1 && sys.msaa == 0
++	return onVita() && !vitaFBOForced && len(r.postShaderSelect) <= 1 && sys.msaa == 0
 +}
 +
 +// sceneFBO is the framebuffer the scene is rendered into.
@@ -20057,12 +20132,12 @@ index 891acab..f236415 100644
 +		r.DisableBlending()
 +		r.SetDepthTest(false)
 +		r.SetDepthMask(false)
-+		if isVita && vitaDiagProbeDue() {
++		if onVita() && vitaDiagProbeDue() {
 +			vitaPixelProbe("screen", vitaScreenW, vitaScreenH)
 +		}
 +		return
 +	}
-+	probe := isVita && vitaDiagProbeDue()
++	probe := onVita() && vitaDiagProbeDue()
 +	if probe {
 +		vitaPixelProbe("scene fbo", sys.scrrect[2], sys.scrrect[3])
 +	}
@@ -20083,7 +20158,7 @@ index 891acab..f236415 100644
 -		gl.Clear(gl.COLOR_BUFFER_BIT)
 +	// With a single post shader the result goes straight to the screen, so
 +	// the ping-pong FBOs are never read; vitaGL clears with full-screen draws.
-+	if !(isVita && len(r.postShaderSelect) <= 1) {
++	if !(onVita() && len(r.postShaderSelect) <= 1) {
 +		for i := 0; i < 2; i++ {
 +			gl.BindFramebuffer(gl.FRAMEBUFFER, r.fbo_pp[i])
 +			gl.Clear(gl.COLOR_BUFFER_BIT)
@@ -20197,7 +20272,7 @@ index 891acab..f236415 100644
  	if doubleSided != r.doubleSided {
  		r.doubleSided = doubleSided
  		if !doubleSided {
-@@ -1337,6 +1517,7 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
+@@ -1337,18 +1517,22 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
  	}
  
  	// Switch program
@@ -20205,7 +20280,13 @@ index 891acab..f236415 100644
  	gl.UseProgram(prog)
  	r.program = prog
  
-@@ -1349,6 +1530,9 @@ func (r *Renderer_GLES32) ChangeProgram(prog uint32) {
+ 	// Reset the texture cache
+ 	for i := range r.boundTex {
+-		r.boundTex[i] = boundTexture{}
++		r.boundTex[i] = boundTextureGLES32{}
+ 		r.texCacheLastUsed[i] = 0
+ 	}
+ 	r.texCacheTimer = 1
  }
  
  func (r *Renderer_GLES32) EnableBlending(eq BlendEquation, src, dst BlendFunc) {
@@ -20264,7 +20345,7 @@ index 891acab..f236415 100644
 +}
 +
  func (r *Renderer_GLES32) EnableScissor(x, y, width, height int32) {
-+	if isVita {
++	if onVita() {
 +		// vitaGL implements glScissor with stencil passes over the whole
 +		// screen each time the test is switched or moved. Clip in the sprite
 +		// shader instead (discard outside an NDC rectangle).
@@ -20286,7 +20367,7 @@ index 891acab..f236415 100644
 +			return
 +		}
 +	}
-+	if isVita && x <= 0 && y <= 0 && x+width >= sys.scrrect[2] && y+height >= sys.scrrect[3] {
++	if onVita() && x <= 0 && y <= 0 && x+width >= sys.scrrect[2] && y+height >= sys.scrrect[3] {
 +		// vitaGL implements the scissor test with stencil passes over the
 +		// whole screen every time it is switched on, off or moved. A scissor
 +		// covering the whole target clips nothing, so leave the test off.
@@ -20312,7 +20393,7 @@ index 891acab..f236415 100644
  }
  
  func (r *Renderer_GLES32) DisableScissor() {
-+	if isVita {
++	if onVita() {
 +		if on, _, ok := r.vitaClipLocs(); ok {
 +			r.SetUniformISub(on, 0)
 +		}
@@ -20428,7 +20509,7 @@ index 891acab..f236415 100644
  	}
 +	// Vita: most sprites share the same modelview/projection, so skip the
 +	// upload when the sprite shader already has this matrix.
-+	if isVita && r.program == r.spriteShader.program && loc < int32(len(r.uniArrM)) && len(value) == 16 {
++	if onVita() && r.program == r.spriteShader.program && loc < int32(len(r.uniArrM)) && len(value) == 16 {
 +		e := &r.uniArrM[loc]
 +		if e.ok && eqF32x16(value, &e.v) {
 +			return
@@ -20445,6 +20526,15 @@ index 891acab..f236415 100644
  }
  
  func (r *Renderer_GLES32) SetModelUniformI(name string, val int) {
+@@ -2060,7 +2361,7 @@ func (r *Renderer_GLES32) SetActiveTexture0() {
+ 	gl.ActiveTexture(gl.TEXTURE0)
+ 
+ 	if len(r.boundTex) > 0 {
+-		r.boundTex[0] = boundTexture{}
++		r.boundTex[0] = boundTextureGLES32{}
+ 		r.texCacheLastUsed[0] = 0
+ 	}
+ }
 @@ -2075,21 +2376,30 @@ func (r *Renderer_GLES32) SetTextureSub(uMap map[string]int32, tMap map[string]i
  		// Would otherwise write to location 0. Only engine code picks these names
  		panic(fmt.Sprintf("Texture uniform '%s' not registered", name))
@@ -20512,7 +20602,7 @@ index 891acab..f236415 100644
 +		return
 +	}
 +
-+	if isVita && len(values) > 0 && vitaClientArrays() {
++	if onVita() && len(values) > 0 && vitaClientArrays() {
 +		// vitaGL: glBufferData allocates fresh GPU-mapped memory (and queues
 +		// the old block for deletion) on every sprite. Client-side arrays are
 +		// copied into vitaGL's per-frame ring buffer at draw time instead,
@@ -20537,7 +20627,7 @@ index 891acab..f236415 100644
  
  // Sends a single quad through uniforms to skip a vertex buffer upload per sprite
  func (r *Renderer_GLES32) SetQuadVertices(v *[16]float32) {
-+	if isVita {
++	if onVita() {
 +		// No gl_VertexID in vitaGL's shaders: send the quad as vertex data.
 +		r.SetVertexData(v[:]...)
 +		return
@@ -20631,7 +20721,7 @@ index 891acab..f236415 100644
 +}
 diff --git a/src/render_gles32_batch.go b/src/render_gles32_batch.go
 new file mode 100644
-index 0000000..1201391
+index 0000000..0ebcfd2
 --- /dev/null
 +++ b/src/render_gles32_batch.go
 @@ -0,0 +1,276 @@
@@ -20791,7 +20881,7 @@ index 0000000..1201391
 +}
 +
 +func (r *Renderer_GLES32) vitaBatchInit() {
-+	if !isVita || !vitaClientArrays() || r.spriteShader == nil {
++	if !onVita() || !vitaClientArrays() || r.spriteShader == nil {
 +		return
 +	}
 +	if _, err := os.Stat("vita_nobatch.txt"); err == nil {
@@ -21806,7 +21896,7 @@ index 5443f25..9e6bdfe 100644
  					c[0].power = c[0].powerMax
  				}
 diff --git a/src/sdl_other.go b/src/sdl_other.go
-index 399921b..eaa998d 100644
+index 399921b..1a3934b 100644
 --- a/src/sdl_other.go
 +++ b/src/sdl_other.go
 @@ -4,8 +4,17 @@ package main
@@ -21817,7 +21907,7 @@ index 399921b..eaa998d 100644
 +
  // Gets the actual device pixel size
  func (w *Window) GetDrawablePixelSize() (int32, int32) {
-+	if isVita {
++	if onVita() {
 +		return vitaScreenW, vitaScreenH
 +	}
 +	if runtime.GOOS == "ios" {
@@ -21828,7 +21918,7 @@ index 399921b..eaa998d 100644
  	return winWidth, winHeight
  }
 diff --git a/src/sound.go b/src/sound.go
-index 6cdd693..b98d672 100644
+index 6cdd693..2518a8c 100644
 --- a/src/sound.go
 +++ b/src/sound.go
 @@ -441,14 +441,15 @@ func (bgm *Bgm) Open(filename string, loop, bgmVolume, bgmLoopStart, bgmLoopEnd,
@@ -21845,7 +21935,7 @@ index 6cdd693..b98d672 100644
  	// Handle the RAM swap in the background (only for looped BGM and only if the user enabled it)
 -	if lc != 0 && sys.cfg.Sound.BGMRAMBuffer && bgm.format != "xmp" {
 +	// Vita: decoding a whole track into RAM costs tens of MB and seconds of CPU.
-+	if lc != 0 && sys.cfg.Sound.BGMRAMBuffer && bgm.format != "xmp" && !isVita {
++	if lc != 0 && sys.cfg.Sound.BGMRAMBuffer && bgm.format != "xmp" && !onVita() {
  		// go func(ctx context.Context) {
  		// Changing this to SafeGo should be safe because ctx has already been captured above
  		SafeGo(func() {
@@ -21941,7 +22031,7 @@ index 6cdd693..b98d672 100644
 +// audioResampleQuality is the resampler quality; the Vita uses the cheapest
 +// setting because every playing sound is resampled on the CPU.
 +func audioResampleQuality() int {
-+	if isVita {
++	if onVita() {
 +		return 1
 +	}
 +	return Clamp(sys.cfg.Sound.AudioResampleQuality, 1, 16)
@@ -22878,7 +22968,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..8659ce0 100644
+index 2698d35..8ad57d5 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -22886,7 +22976,7 @@ index 2698d35..8659ce0 100644
  	s.window.fullscreen = s.cfg.Video.Fullscreen && !forceWindowed
  
 -	if strings.HasPrefix(renderName, "OpenGL") {
-+	if strings.HasPrefix(renderName, "OpenGL") && !isVita {
++	if strings.HasPrefix(renderName, "OpenGL") && !onVita() {
  		if ctx, err := s.window.GLCreateContext(); err != nil {
  			panic(fmt.Sprintf("Could not initialize context :( Reason? %s", err))
  		} else {
@@ -22895,7 +22985,7 @@ index 2698d35..8659ce0 100644
  		whitepal[i] = 0xffffffff // White (and full alpha)
  	}
 -	CreatePalTexture(2048)
-+	if isVita {
++	if onVita() {
 +		// vitaGL copies a whole texture when it is updated while still in use
 +		// by the GPU; a 2048x2048 RGBA palette atlas (16 MB) exhausts its pool.
 +		// 256x256 holds 256 palettes per texture; more are added on demand.
@@ -22963,7 +23053,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 {
  			// Raw scale adjusted to the new game width
  			p[0].baselocalscl = p[0].gi().rawlocalscl * (sys.gameWidth / 320)
-@@ -879,6 +897,13 @@ func (s *System) keepAlive() {
+@@ -879,14 +897,27 @@ func (s *System) keepAlive() {
  }
  
  func (s *System) await(fps int) bool {
@@ -22976,8 +23066,22 @@ index 2698d35..8659ce0 100644
 +	}
  	if !s.frameSkip && !s.window.renderingPaused {
  		// Render the finished frame
++		if cvfVitaGL {
++			cvfVitaPerf(1, 2) // frame timing on the Vita: flush and swap
++		}
  		gfx.EndFrame()
-@@ -955,6 +980,29 @@ func (s *System) await(fps int) bool {
+ 		if gfx.GetName()[:6] == "OpenGL" {
+ 			s.window.SwapBuffers()
+ 		} else {
+ 			gfx.Await()
+ 		}
++		if cvfVitaGL {
++			cvfVitaPerf(2, 2)
++		}
+ 		s.window.UpdateDebugFPS()
+ 
+ 		if s.screenshotInFlight || s.isTakingScreenshot {
+@@ -955,6 +986,29 @@ func (s *System) await(fps int) bool {
  
  	s.eventUpdate()
  
@@ -22985,7 +23089,7 @@ index 2698d35..8659ce0 100644
 +		runtime.Gosched() // let background loaders run (coopGoroutines)
 +	}
 +
-+	if isVita {
++	if onVita() {
 +		// Locked 30 fps in fights: logic runs every tick at 60 Hz, every
 +		// second tick is drawn. Deterministic alternation replaces the
 +		// catch-up skipping above, whose variable frame times read as
@@ -23007,7 +23111,7 @@ index 2698d35..8659ce0 100644
  	return !s.gameEnd
  }
  
-@@ -990,7 +1038,18 @@ func (s *System) renderFrame() {
+@@ -990,7 +1044,18 @@ func (s *System) renderFrame() {
  	}
  
  	x, y, scl := s.cam.Pos[0], s.cam.Pos[1], s.cam.Scale/s.cam.BaseScale()
@@ -23027,7 +23131,7 @@ index 2698d35..8659ce0 100644
  	s.draw(dx, dy, dscl)
  
  	// Lua
-@@ -1721,7 +1780,13 @@ func (s *System) playerID(id int32) *Char {
+@@ -1721,7 +1786,13 @@ func (s *System) playerID(id int32) *Char {
  	}
  
  	// Invalid ID
@@ -23042,7 +23146,7 @@ index 2698d35..8659ce0 100644
  	if !ok {
  		return nil
  	}
-@@ -1735,6 +1800,33 @@ func (s *System) playerID(id int32) *Char {
+@@ -1735,6 +1806,33 @@ func (s *System) playerID(id int32) *Char {
  	return c
  }
  
@@ -23076,7 +23180,7 @@ index 2698d35..8659ce0 100644
  func (s *System) playerIDExist(id BytecodeValue) BytecodeValue {
  	if id.IsUndefined() {
  		return BytecodeUndefined()
-@@ -2027,6 +2119,7 @@ func (s *System) setGSF(gsf GlobalSpecialFlag, on bool) {
+@@ -2027,6 +2125,7 @@ func (s *System) setGSF(gsf GlobalSpecialFlag, on bool) {
  }
  
  func (s *System) appendToConsole(str string) {
@@ -23084,7 +23188,7 @@ index 2698d35..8659ce0 100644
  	s.consoleText = append(s.consoleText, str)
  	if len(s.consoleText) > s.cfg.Debug.ConsoleRows {
  		s.consoleText = s.consoleText[len(s.consoleText)-s.cfg.Debug.ConsoleRows:]
-@@ -2264,7 +2357,8 @@ func (s *System) pruneCharId() {
+@@ -2264,7 +2363,8 @@ func (s *System) pruneCharId() {
  
  	// At this point we're still checking the previous round's player ID's
  	// However that works out well for Turns mode because it means a joining player won't reuse the ID of a defeated player
@@ -23094,7 +23198,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 && p[0] != nil && p[0].id > s.lastCharId {
  			s.lastCharId = p[0].id
  		}
-@@ -2289,7 +2383,8 @@ func (s *System) newCharId() int32 {
+@@ -2289,7 +2389,8 @@ func (s *System) newCharId() int32 {
  		// This method scanned sys.chars instead but that's worse
  		for {
  			conflict := false
@@ -23104,7 +23208,7 @@ index 2698d35..8659ce0 100644
  				for _, c := range p {
  					if c != nil && c.id == newid && !c.csf(CSF_destroy) {
  						// Note: We only recycle destroyed helper ID's because the ID's refresh each round, unlike Mugen
-@@ -2393,6 +2488,7 @@ func (s *System) clearPlayerAssets(pn int, forceDestroy bool) {
+@@ -2393,6 +2494,7 @@ func (s *System) clearPlayerAssets(pn int, forceDestroy bool) {
  
  	// Clear projectiles, explods and text sprites
  	s.projs[pn] = PointerSliceReset(s.projs[pn])
@@ -23112,7 +23216,7 @@ index 2698d35..8659ce0 100644
  	s.explods[pn] = PointerSliceReset(s.explods[pn])
  	s.chartexts[pn] = PointerSliceReset(s.chartexts[pn])
  
-@@ -2445,7 +2541,9 @@ func (s *System) updateMusicMaps() {
+@@ -2445,7 +2547,9 @@ func (s *System) updateMusicMaps() {
  		s.matchMusicSel = s.matchMusicSel[:0]
  	}
  
@@ -23123,7 +23227,7 @@ index 2698d35..8659ce0 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2478,6 +2576,10 @@ func (s *System) updateMusicMaps() {
+@@ -2478,6 +2582,10 @@ func (s *System) updateMusicMaps() {
  
  // TODO: This function is still a bit overloaded because it's handling some selections instead of doing a pure reset
  func (s *System) resetRound() {
@@ -23134,7 +23238,7 @@ index 2698d35..8659ce0 100644
  	if s.sel.gameParams.PersistRounds && !s.roundResetFlg && !s.reloadFlg {
  		s.persistRoundCount++
  	}
-@@ -2533,7 +2635,8 @@ func (s *System) resetRound() {
+@@ -2533,7 +2641,8 @@ func (s *System) resetRound() {
  	}
  
  	// Reset characters
@@ -23144,7 +23248,7 @@ index 2698d35..8659ce0 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2562,7 +2665,8 @@ func (s *System) resetRound() {
+@@ -2562,7 +2671,8 @@ func (s *System) resetRound() {
  	}
  
  	// Place characters in state 5900
@@ -23154,7 +23258,7 @@ index 2698d35..8659ce0 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2691,7 +2795,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
+@@ -2691,7 +2801,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
  	sys.allPalFX = newPalFX()
  	sys.bgPalFX = newPalFX()
  	sys.resetGblEffect()
@@ -23164,7 +23268,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 {
  			sys.clearPlayerAssets(i, forceDestroy)
  		}
-@@ -2727,7 +2832,8 @@ func (s *System) globalCollision() {
+@@ -2727,7 +2838,8 @@ func (s *System) globalCollision() {
  /*
  // This is never called
  func (s *System) posReset() {
@@ -23174,7 +23278,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 {
  			p[0].posReset()
  		}
-@@ -2763,7 +2869,8 @@ func (s *System) runIntroSkip() {
+@@ -2763,7 +2875,8 @@ func (s *System) runIntroSkip() {
  		s.specialFlag = kept
  
  		// Reset all characters
@@ -23184,7 +23288,7 @@ index 2698d35..8659ce0 100644
  			if len(p) > 0 {
  				s.clearPlayerAssets(i, false)
  				p[0].posReset()
-@@ -2775,6 +2882,7 @@ func (s *System) runIntroSkip() {
+@@ -2775,6 +2888,7 @@ func (s *System) runIntroSkip() {
  
  // TODO: Maybe these could get a more thorough clear between matches, to prevent holding onto previous character sprites
  func (s *System) clearSpriteData() {
@@ -23192,7 +23296,7 @@ index 2698d35..8659ce0 100644
  	// Main sprites
  	s.spriteList = s.spriteList[:0]
  
-@@ -2834,6 +2942,14 @@ func (s *System) screenright() float32 {
+@@ -2834,6 +2948,14 @@ func (s *System) screenright() float32 {
  // Core game logic. Chars, stage, projectiles, etc
  // The part that can rewind and fast forward during rollbacks
  func (s *System) action() {
@@ -23207,7 +23311,7 @@ index 2698d35..8659ce0 100644
  	if s.matchPaused() {
  		return
  	}
-@@ -2849,7 +2965,9 @@ func (s *System) action() {
+@@ -2849,7 +2971,9 @@ func (s *System) action() {
  
  	// In version 0.99 this was moved to before sys.action() for undocumented reasons
  	// Moving it here preserves whatever behavior that implemented while not keeping the stage oddly outside the main loop
@@ -23217,7 +23321,7 @@ index 2698d35..8659ce0 100644
  
  	// Run "tick frame"
  	if s.tickFrame() {
-@@ -2907,6 +3025,7 @@ func (s *System) action() {
+@@ -2907,6 +3031,7 @@ func (s *System) action() {
  
  		// Run the main character logic
  		s.charList.action()
@@ -23225,7 +23329,7 @@ index 2698d35..8659ce0 100644
  
  		// The following must be placed after char action or they will lag behind 1 frame
  		s.allPalFX.step()
-@@ -2918,18 +3037,24 @@ func (s *System) action() {
+@@ -2918,18 +3043,24 @@ func (s *System) action() {
  
  	// This function runs every tick
  	// It should be placed between "tick frame" and "tick next frame"
@@ -23250,7 +23354,7 @@ index 2698d35..8659ce0 100644
  	}
  
  	// Run camera
-@@ -2945,6 +3070,11 @@ func (s *System) action() {
+@@ -2945,6 +3076,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -23262,7 +23366,7 @@ index 2698d35..8659ce0 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2960,7 +3090,9 @@ func (s *System) action() {
+@@ -2960,7 +3096,9 @@ func (s *System) action() {
  	s.charList.xScreenBound()
  
  	// Note: Explod update must happen after hit detection. Because hit sparks are also explods
@@ -23272,7 +23376,7 @@ index 2698d35..8659ce0 100644
  	s.charTextsUpdate()
  	s.matchStoryboards.update()
  
-@@ -2998,9 +3130,9 @@ func (s *System) action() {
+@@ -2998,9 +3136,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -23285,7 +23389,7 @@ index 2698d35..8659ce0 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3150,13 @@ func (s *System) action() {
+@@ -3018,6 +3156,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -23299,7 +23403,7 @@ index 2698d35..8659ce0 100644
  	return
  }
  
-@@ -3046,7 +3185,7 @@ func (s *System) uiAction() {
+@@ -3046,7 +3191,7 @@ func (s *System) uiAction() {
  	// Needs to happen after motif update or motif inputs will lag 1 frame
  	for _, key := range SortedKeys(sys.cfg.Common.Lua) {
  		for _, v := range sys.cfg.Common.Lua[key] {
@@ -23308,7 +23412,7 @@ index 2698d35..8659ce0 100644
  				sys.luaLState.RaiseError("Error executing Lua code: %s\n%v", v, err.Error())
  			}
  		}
-@@ -3166,6 +3305,8 @@ func (s *System) explodCueDraw() {
+@@ -3166,6 +3311,8 @@ func (s *System) explodCueDraw() {
  
  // Remove a player's inactive explods
  func (s *System) explodPrune(pn int) {
@@ -23317,7 +23421,7 @@ index 2698d35..8659ce0 100644
  	playerExplods := s.explods[pn]
  	writeIdx := 0
  
-@@ -3330,7 +3471,8 @@ func (s *System) stepRoundState() {
+@@ -3330,7 +3477,8 @@ func (s *System) stepRoundState() {
  		}
  	} else if s.intro > 0 {
  		if s.intro == s.fightScreen.round.ctrl_time {
@@ -23327,7 +23431,7 @@ index 2698d35..8659ce0 100644
  				if len(p) > 0 {
  					if p[0].activelyFighting() && !p[0].asf(ASF_nointroreset) {
  						p[0].posReset() // Technically we don't really need this step
-@@ -3340,7 +3482,8 @@ func (s *System) stepRoundState() {
+@@ -3340,7 +3488,8 @@ func (s *System) stepRoundState() {
  		}
  		s.intro--
  		if s.intro == 0 {
@@ -23337,7 +23441,7 @@ index 2698d35..8659ce0 100644
  				if len(p) > 0 {
  					if p[0].alive() {
  						p[0].setSCF(SCF_over_alive, false)
-@@ -3429,7 +3572,8 @@ func (s *System) stepRoundState() {
+@@ -3429,7 +3578,8 @@ func (s *System) stepRoundState() {
  			// Check if game can proceed into roundstate 4
  			if s.winwaittime > 0 {
  				if s.intro == rs4t-1 {
@@ -23347,7 +23451,7 @@ index 2698d35..8659ce0 100644
  						if len(p) == 0 {
  							continue
  						}
-@@ -3455,7 +3599,8 @@ func (s *System) stepRoundState() {
+@@ -3455,7 +3605,8 @@ func (s *System) stepRoundState() {
  
  			// Disable ctrl (once) at the first frame of roundstate 4
  			if s.intro == rs4t-1 {
@@ -23357,7 +23461,7 @@ index 2698d35..8659ce0 100644
  					if len(p) > 0 {
  						p[0].setSCF(SCF_ctrl, false)
  					}
-@@ -3502,7 +3647,8 @@ func (s *System) stepRoundState() {
+@@ -3502,7 +3653,8 @@ func (s *System) stepRoundState() {
  		// Send characters to win/lose poses
  		// In Mugen this loop can run at any point after the win poses have started, hence "<="
  		if s.winposetime <= 0 {
@@ -23367,7 +23471,7 @@ index 2698d35..8659ce0 100644
  				if len(p) == 0 {
  					continue
  				}
-@@ -3657,7 +3803,8 @@ func (s *System) roundEndDecision() bool {
+@@ -3657,7 +3809,8 @@ func (s *System) roundEndDecision() bool {
  
  	// Update win triggers if finish type was changed
  	if ft != s.finishType {
@@ -23377,7 +23481,7 @@ index 2698d35..8659ce0 100644
  			if len(p) > 0 && p[0].teamside != -1 && ko[^i&1] {
  				for _, h := range p {
  					for _, tid := range h.targets {
-@@ -3678,6 +3825,7 @@ func (s *System) roundEndDecision() bool {
+@@ -3678,6 +3831,7 @@ func (s *System) roundEndDecision() bool {
  }
  
  func (s *System) draw(x, y, scl float32) {
@@ -23385,7 +23489,7 @@ index 2698d35..8659ce0 100644
  	s.brightnessOld = s.brightness
  	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
  	s.brightness = 1.0
-@@ -3714,30 +3862,42 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3714,30 +3868,42 @@ func (s *System) draw(x, y, scl float32) {
  		// Draw stage elements with layerNo == -1
  		if !s.gsf(GSF_nobg) {
  			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
@@ -23434,7 +23538,7 @@ index 2698d35..8659ce0 100644
  
  		// Draw char texts layer -1
  		s.drawCharTexts(-1)
-@@ -3750,9 +3910,13 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3750,9 +3916,13 @@ func (s *System) draw(x, y, scl float32) {
  		// TODO: Make shadows render in same layers as their sources?
  		if !s.gsf(GSF_globalnoshadow) {
  			if s.stage.reflection.layerno >= 0 {
@@ -23450,7 +23554,7 @@ index 2698d35..8659ce0 100644
  		}
  
  		//off := s.envShake.getOffset()
-@@ -3790,7 +3954,9 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3790,7 +3960,9 @@ func (s *System) draw(x, y, scl float32) {
  		//}
  
  		// Draw fight screen layer 0
@@ -23461,7 +23565,7 @@ index 2698d35..8659ce0 100644
  
  		// Draw char texts layer 0
  		s.drawCharTexts(0)
-@@ -3807,14 +3973,20 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3807,14 +3979,20 @@ func (s *System) draw(x, y, scl float32) {
  
  	// Draw character sprites in layer 0
  	if s.envcol_time == 0 || s.envcol_under {
@@ -23485,7 +23589,7 @@ index 2698d35..8659ce0 100644
  
  	// Draw char texts layer 1
  	s.drawCharTexts(1)
-@@ -3823,10 +3995,14 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3823,10 +4001,14 @@ func (s *System) draw(x, y, scl float32) {
  	s.motif.draw(1)
  
  	// Draw character sprites in layer 1 (old "ontop")
@@ -23502,7 +23606,7 @@ index 2698d35..8659ce0 100644
  
  	// Draw char texts layer 2
  	s.drawCharTexts(2)
-@@ -3939,7 +4115,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
+@@ -3939,7 +4121,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
  		y := 240 - panelState.gameHeight
  		if s.statusLFunc != nil {
  			s.debugFont.SetColor(255, 255, 255, 255)
@@ -23512,18 +23616,18 @@ index 2698d35..8659ce0 100644
  				if len(p) > 0 {
  					top := s.luaLState.GetTop()
  					if s.luaLState.CallByParam(lua.P{Fn: s.statusLFunc, NRet: 1,
-@@ -4048,13 +4225,23 @@ func (s *System) runMatch() (reload bool) {
+@@ -4048,13 +4231,23 @@ func (s *System) runMatch() (reload bool) {
  		s.debugAccel = 1
  	}
  
 +	// Vita: big allocation budget for the whole match (all modes, including
 +	// training), so collections fall on round transitions.
-+	if isVita {
++	if onVita() {
 +		vitaGCTrigger(192 << 20)
 +	}
  	// Defer resetting variables on return
  	defer func() {
-+		if isVita {
++		if onVita() {
 +			vitaGCTrigger(32 << 20)
 +			vitaMatchEnd()
 +		}
@@ -23537,7 +23641,7 @@ index 2698d35..8659ce0 100644
  			if len(p) > 0 {
  				forceDestroy := s.matchOver() ||
  					(s.tmode[i&1] == TM_Turns && p[0].teamside != -1 && s.effectiveLoss[i&1])
-@@ -4063,6 +4250,16 @@ func (s *System) runMatch() (reload bool) {
+@@ -4063,6 +4256,16 @@ func (s *System) runMatch() (reload bool) {
  		}
  	}()
  
@@ -23554,7 +23658,7 @@ index 2698d35..8659ce0 100644
  	// Synchronize with external inputs (netplay, replays, etc)
  	if err := s.synchronize(); err != nil {
  		LogMessage(err.Error())
-@@ -4128,7 +4325,7 @@ func (s *System) runMatch() (reload bool) {
+@@ -4128,7 +4331,7 @@ func (s *System) runMatch() (reload bool) {
  
  		for _, v := range s.shortcutScripts {
  			if v.Activate {
@@ -23563,7 +23667,7 @@ index 2698d35..8659ce0 100644
  					s.luaLState.RaiseError("Error executing Lua code: %s\n%v", v.Script, err.Error())
  				}
  			}
-@@ -4150,10 +4347,14 @@ func (s *System) runMatch() (reload bool) {
+@@ -4150,10 +4353,14 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Update game state
@@ -23578,7 +23682,7 @@ index 2698d35..8659ce0 100644
  
  		// Patch: Pause stage videos while game is paused
  		// This is necessary for the time being because videos are paused in the stage's action() and pauses now just skip that entirely
-@@ -4242,8 +4443,13 @@ func (s *System) runMatch() (reload bool) {
+@@ -4242,8 +4449,13 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Cue sprites, then render
@@ -23592,7 +23696,7 @@ index 2698d35..8659ce0 100644
  
  		// Update system. Break if update returns false (engine shutdown).
  		if !s.update() {
-@@ -4266,7 +4472,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4266,7 +4478,8 @@ func (s *System) runMatch() (reload bool) {
  
  func (s *System) SetupCharRoundStart() {
  	// Prepare next round for all players
@@ -23602,7 +23706,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 {
  			p[0].prepareNextRound()
  		}
-@@ -4274,7 +4481,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4274,7 +4487,8 @@ func (s *System) SetupCharRoundStart() {
  
  	// For power sharing, set maximum power to the highest one in the team
  	if s.cfg.Options.Team.PowerShare {
@@ -23612,7 +23716,7 @@ index 2698d35..8659ce0 100644
  			if len(p) > 0 && p[0].teamside != -1 {
  				pmax := Max(s.cgi[i&1].data.power, s.cgi[i].data.power)
  				for j := i & 1; j < MaxSimul*2; j += 2 {
-@@ -4287,7 +4495,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4287,7 +4501,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Calculate maximum life for all characters
@@ -23622,7 +23726,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 {
  			// Get max life, and adjust based on team mode
  			var lmax float32
-@@ -4344,7 +4553,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4344,7 +4559,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's dizzy and guard points
@@ -23632,7 +23736,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 {
  			if p[0].ocd().dizzyPoints > 0 {
  				p[0].dizzyPoints = p[0].ocd().dizzyPoints
-@@ -4360,7 +4570,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4360,7 +4576,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's state
@@ -23642,7 +23746,7 @@ index 2698d35..8659ce0 100644
  		if len(p) > 0 {
  			if p[0].roundsExisted() == 0 && (s.roundNo == 1 || s.tmode[i&1] == TM_Turns) {
  				// If round 1 or a new character in Turns mode, initialize values
-@@ -4413,7 +4624,8 @@ func (s *System) runNextRound() bool {
+@@ -4413,7 +4630,8 @@ func (s *System) runNextRound() bool {
  			for i := range s.roundsExisted {
  				s.roundsExisted[i]++
  			}
@@ -23652,7 +23756,7 @@ index 2698d35..8659ce0 100644
  				if len(p) > 0 {
  					if s.tmode[i&1] != TM_Turns || !s.effectiveLoss[i&1] {
  						p[0].life = p[0].lifeMax
-@@ -4518,7 +4730,8 @@ type RoundStartBackup struct {
+@@ -4518,7 +4736,8 @@ type RoundStartBackup struct {
  func (bk *RoundStartBackup) Save() {
  	// Save characters
  	// We save helpers as well because of "preserve" parameter
@@ -23662,7 +23766,7 @@ index 2698d35..8659ce0 100644
  		if len(chars) == 0 {
  			// Backups are reused, so discard characters saved for this slot in a previous round
  			bk.charBackup[i] = nil
-@@ -4584,7 +4797,8 @@ func (bk *RoundStartBackup) Save() {
+@@ -4584,7 +4803,8 @@ func (bk *RoundStartBackup) Save() {
  
  func (bk *RoundStartBackup) Restore() {
  	// Restore characters
@@ -23672,7 +23776,7 @@ index 2698d35..8659ce0 100644
  		if len(chars) == 0 {
  			continue
  		}
-@@ -4620,6 +4834,7 @@ func (bk *RoundStartBackup) Restore() {
+@@ -4620,6 +4840,7 @@ func (bk *RoundStartBackup) Restore() {
  			//liveSounds := c.soundChannels
  
  			// Restore shallow copy from backup
@@ -23680,7 +23784,7 @@ index 2698d35..8659ce0 100644
  			*c = *bkup
  
  			// Restore live sounds
-@@ -4628,6 +4843,7 @@ func (bk *RoundStartBackup) Restore() {
+@@ -4628,6 +4849,7 @@ func (bk *RoundStartBackup) Restore() {
  			// Remake the CNS variable maps
  			// Then restore only var and fvar (losing sysvar and sysfvar)
  			c.initCnsVar()
@@ -23688,7 +23792,7 @@ index 2698d35..8659ce0 100644
  			for k, v := range bkup.cnsvar {
  				c.cnsvar[k] = v
  			}
-@@ -4668,6 +4884,7 @@ func (bk *RoundStartBackup) Restore() {
+@@ -4668,6 +4890,7 @@ func (bk *RoundStartBackup) Restore() {
  	for k, v := range bk.stageBackup.constants {
  		sys.stage.constants[k] = v
  	}
@@ -23696,7 +23800,7 @@ index 2698d35..8659ce0 100644
  	sys.stage.attachedchardef = append([]string{}, bk.stageBackup.attachedchardef...)
  
  	// Restore match info
-@@ -5050,6 +5267,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -5050,6 +5273,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -23706,21 +23810,21 @@ index 2698d35..8659ce0 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -5318,6 +5538,13 @@ func (s *Select) AddChar(def string) *SelectChar {
+@@ -5318,6 +5544,13 @@ func (s *Select) AddChar(def string) *SelectChar {
  		LogMessage("Failed to add char: %v (%s)", defPathFromSelect, reason)
  		return nil
  	}
 +	// Placeholder tokens such as <br> and <vacant> (CvF's select layout) can
 +	// never be files. Skip the file-system search: on the Vita each failed
 +	// lookup scans directories on the memory card, ~200 times per boot.
-+	if isVita && strings.ContainsAny(defPathFromSelect, "<>") {
++	if onVita() && strings.ContainsAny(defPathFromSelect, "<>") {
 +		sc.name = "dummyslot"
 +		return nil
 +	}
  
  	// Print a message for every loaded character. Just muted at the moment
  	defer func() {
-@@ -6304,6 +6531,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6304,6 +6537,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		if l.cancelRequested() || l.state == LS_Cancel || sys.gameEnd {
  			return 0
  		}
@@ -23728,7 +23832,7 @@ index 2698d35..8659ce0 100644
  		if l.err = p.load(cdef, gi); l.err != nil {
  			if errors.Is(l.err, ErrLoadingCanceled) {
  				l.state = LS_Cancel
-@@ -6322,7 +6550,29 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6322,7 +6556,29 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		}
  
  		// Compile character states
@@ -23759,7 +23863,7 @@ index 2698d35..8659ce0 100644
  			if attached {
  				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
  			} else {
-@@ -6820,13 +7070,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +7076,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -23775,7 +23879,7 @@ index 2698d35..8659ce0 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +7085,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +7091,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -23788,7 +23892,7 @@ index 2698d35..8659ce0 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +7112,7 @@ type ZoomEffect struct {
+@@ -6862,6 +7118,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -23796,7 +23900,7 @@ index 2698d35..8659ce0 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +7128,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +7134,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -23804,7 +23908,7 @@ index 2698d35..8659ce0 100644
  }
  
  // Step the zoom variables
-@@ -7042,6 +7294,7 @@ func (s *System) restoreCharVars(c *Char) {
+@@ -7042,6 +7300,7 @@ func (s *System) restoreCharVars(c *Char) {
  		return
  	}
  
@@ -23813,7 +23917,7 @@ index 2698d35..8659ce0 100644
  		c.cnsvar[k] = v
  	}
 diff --git a/src/system_sdl.go b/src/system_sdl.go
-index 8eea3d3..52cd71a 100644
+index 8eea3d3..0084b9f 100644
 --- a/src/system_sdl.go
 +++ b/src/system_sdl.go
 @@ -6,6 +6,7 @@ import (
@@ -23828,7 +23932,7 @@ index 8eea3d3..52cd71a 100644
  	var w2, h2 int32 = int32(w), int32(h)
  	var fullscreen bool
  
-+	if isVita {
++	if onVita() {
 +		// PS Vita: no SDL window. vitaGL owns the 960x544 display; SDL only
 +		// provides audio, events and controllers.
 +		chk(sdl.Init(sdl.INIT_AUDIO | sdl.INIT_JOYSTICK | sdl.INIT_EVENTS | sdl.INIT_GAMECONTROLLER | sdl.INIT_TIMER))
@@ -23872,7 +23976,7 @@ index 8eea3d3..52cd71a 100644
  }
  
  func (w *Window) SwapBuffers() {
-+	if isVita {
++	if onVita() {
 +		vitaGLSwap()
 +		return
 +	}
@@ -23883,7 +23987,7 @@ index 8eea3d3..52cd71a 100644
  }
  
  func (w *Window) SetIcon(icon []image.Image) {
-+	if isVita {
++	if onVita() {
 +		return
 +	}
  	if surface, err := w.imageToSurface(icon[0]); err == nil {
@@ -23893,7 +23997,7 @@ index 8eea3d3..52cd71a 100644
  }
  
  func (w *Window) GetSize() (int, int) {
-+	if isVita {
++	if onVita() {
 +		return vitaScreenW, vitaScreenH
 +	}
  	w2, h2 := w.Window.GetSize()
@@ -23903,7 +24007,7 @@ index 8eea3d3..52cd71a 100644
  }
  
  func (w *Window) toggleFullscreen() {
-+	if isVita {
++	if onVita() {
 +		return
 +	}
  	if w.fullscreen {
@@ -24799,10 +24903,10 @@ index 0000000..7ce06e9
 +func vitaMatchEnd() { vitaInMatch = false }
 diff --git a/src/vita_platform_other.go b/src/vita_platform_other.go
 new file mode 100644
-index 0000000..05f41e7
+index 0000000..08634bb
 --- /dev/null
 +++ b/src/vita_platform_other.go
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,105 @@
 +//go:build !vita
 +
 +package main
@@ -24817,26 +24921,57 @@ index 0000000..05f41e7
 +)
 +
 +func vitaPlatformInit()                             {}
-+func vitaGLInit()                                   {}
-+func vitaGLSwap()                                   {}
 +func vitaGetProcAddress(name string) unsafe.Pointer { return nil }
 +
-+func vitaShaderSources(name string) (string, string, bool) { return "", "", false }
-+func fmtHex(v uint32) string                               { return "" }
++// The native engine on the Vita (cvfVitaGL, cvf_vitagl.go): the display and
++// the frame timing are the platform layer's.
++func vitaGLInit() {
++	if cvfVitaGL {
++		cvfVitaWindow()
++	}
++}
++func vitaGLSwap() {
++	if cvfVitaGL {
++		cvfVitaSwap()
++	}
++}
++func vitaPerfBegin() {
++	if cvfVitaGL {
++		cvfVitaPerf(1, 0)
++	}
++}
++func vitaPerfEnd(i int) {
++	if cvfVitaGL {
++		cvfVitaPerf(2, i)
++	}
++}
++func vitaPerfTick(skipped bool) {
++	if cvfVitaGL {
++		cvfVitaPerf(3, int(Btoi(skipped)))
++	}
++}
++
++func fmtHex(v uint32) string {
++	const d = "0123456789abcdef"
++	b := make([]byte, 8)
++	for i := 7; i >= 0; i-- {
++		b[i] = d[v&15]
++		v >>= 4
++	}
++	return string(b)
++}
 +func vitaTrace(string)                                     {}
 +var vitaHalfTick int
 +func vitaCRC(string)                                       {}
 +func vitaMem(string)                                       {}
-+func vitaPerfTick(bool)                                    {}
 +func vitaGCTrigger(uintptr)                                {}
 +func vitaRoundGC()                                         {}
-+func vitaPerfBegin()                                       {}
 +func vitaNowUs() uint32                                    { return 0 }
-+func vitaPerfEnd(int)                                      {}
 +
 +var vitaTraceOn = false
 +var vitaTraceDeep = false
 +
++// vitaFBOForced keeps the offscreen scene pass on the Vita (CVF_VITA_FBO=1).
 +var vitaFBOForced = false
 +
 +func vitaFBOCheck() {}
@@ -24859,26 +24994,31 @@ index 0000000..05f41e7
 +
 +func vitaPhase(int) {}
 +
-+func vitaHalfRate() bool { return false }
++// vitaHalfRate: in fights on the Vita with CVF_VITA_FPS=30 (the default),
++// every second tick is drawn (System.await), as in the TinyGo build.
++func vitaHalfRate() bool {
++	return cvfVitaGL && cvfVitaFPS != 60 && cvfVitaInMatch && !sys.motif.me.active &&
++		sys.rollback.session == nil && !sys.paused
++}
 +
-+func vitaMatchEnd() {}
++func vitaMatchEnd() { cvfVitaInMatch = false }
 +
 +// Vita frame diagnostics (vita_platform.go)
-+func vitaDiagFrame()                                     {}
++func vitaDiagFrame()                                     { cvfVitaInMatch = cvfVitaGL }
 +func vitaDiagSkip(int) bool                              { return false }
 +func vitaDrawCensusDue() bool                            { return false }
 +func vitaDrawCensus(dl DrawList, sortList []int, l int32) {}
 +
 +// used by render_gles32.go (GLES renderer of Android and the C engine)
 +func vitaDiagProbeDue() bool { return false }
-+func vitaClientArrays() bool { return false }
++func vitaClientArrays() bool { return cvfVitaGL }
 diff --git a/src/vita_shaders.go b/src/vita_shaders.go
 new file mode 100644
-index 0000000..a55a213
+index 0000000..a02430c
 --- /dev/null
 +++ b/src/vita_shaders.go
 @@ -0,0 +1,192 @@
-+//go:build vita
++//go:build vita || cvf
 +
 +package main
 +
@@ -25070,6 +25210,17 @@ index 0000000..a55a213
 +		if (cp.x < clipRect.x || cp.y < clipRect.y || cp.x > clipRect.z || cp.y > clipRect.w) discard;
 +	}
 +`
+diff --git a/src/vita_shaders_other.go b/src/vita_shaders_other.go
+new file mode 100644
+index 0000000..398a454
+--- /dev/null
++++ b/src/vita_shaders_other.go
+@@ -0,0 +1,5 @@
++//go:build !vita && !cvf
++
++package main
++
++func vitaShaderSources(name string) (string, string, bool) { return "", "", false }
 diff --git a/src/vk_stub_vita.go b/src/vk_stub_vita.go
 new file mode 100644
 index 0000000..678c514

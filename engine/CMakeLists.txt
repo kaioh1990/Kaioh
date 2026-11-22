@@ -118,35 +118,46 @@ if(IOS)
 endif()
 
 # PS Vita (vitasdk: -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake):
-# milestone M1 of VITA_PORT.md, the headless application - unit tests, then
-# the reference fight - as one ELF (cvf_vita_headless) that
-# tools/package/vita_vpk.sh turns into a VPK. SDL is not linked (headless:
-# stubbed); the game with vitaGL comes later (M2).
+# VITA_PORT.md milestones M1 and M2 as one ELF (cvf_vita) that
+# tools/package/vita_vpk.sh turns into a VPK: the game (vitaGL renderer, SDL2
+# input and audio, Lua menus) and, with CVF_VITA_MODE=headless in
+# cvf_env.txt, M1's unit tests and reference fight. Needs the vitasdk
+# packages sdl2, vitaGL, vitaShaRK, SceShaccCgExt, libmathneon, taihen
+# (VITA_PORT.md section 8).
 if(VITA)
   if(NOT CVF_SDL2_INCLUDE_DIR)
-    set(CVF_SDL2_INCLUDE_DIR "${VITASDK}/arm-vita-eabi/include/SDL2")  # headers only (vitasdk sdl2 package)
+    set(CVF_SDL2_INCLUDE_DIR "${VITASDK}/arm-vita-eabi/include/SDL2")
   endif()
   file(GLOB CVF_IK_SOURCES CONFIGURE_DEPENDS src/ik/*.c src/platform/sdl/*.c src/platform/gles/*.c)
   add_library(cvf_ik STATIC ${CVF_IK_SOURCES} src/platform/vita/vita_ifaddrs.c)
   target_link_libraries(cvf_ik PUBLIC cvf_core)
   target_include_directories(cvf_ik PUBLIC "${CVF_SDL2_INCLUDE_DIR}")
+  # the GLES binding with its render thread (gles_thread.h, CVF_VITA_RENDER_THREAD)
+  target_compile_definitions(cvf_ik PRIVATE CVF_GL_THREAD=1)
   target_compile_options(cvf_ik PRIVATE ${CVF_DETERMINISM_FLAGS} -w
     -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration)
   set_target_properties(cvf_ik PROPERTIES C_EXTENSIONS ON)
   file(GLOB CVF_TEST_SOURCES CONFIGURE_DEPENDS tests/*.c)
-  add_executable(cvf_vita_headless src/platform/vita/vita_main.c src/platform/vita/debugScreen.c
-    src/app/headless_main.c tests/stub/sdl_stub.c ${CVF_TEST_SOURCES})
-  set_source_files_properties(src/app/headless_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_headless_main)
-  set_source_files_properties(tests/test_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_tests_main)
   # the runtime's own Vita imports (core/sched.c: fibers; core/gc.c: memory
   # blocks, threads), on cvf_core so they follow it on the link line
   target_link_libraries(cvf_core PUBLIC SceFiber_stub SceSysmodule_stub SceLibKernel_stub
     SceKernelThreadMgr_stub SceSysmem_stub)
-  target_link_libraries(cvf_vita_headless PRIVATE cvf_ik
-    SceCtrl_stub ScePower_stub SceDisplay_stub SceNetCtl_stub SceNet_stub SceAppMgr_stub SceRtc_stub pthread m
-    SceFiber_stub SceSysmodule_stub SceLibKernel_stub SceKernelThreadMgr_stub SceSysmem_stub)
-  target_compile_options(cvf_vita_headless PRIVATE ${CVF_DETERMINISM_FLAGS})
-  set_target_properties(cvf_vita_headless PROPERTIES C_EXTENSIONS ON)
+  set(CVF_VITA_SYS_LIBS SceCtrl_stub ScePower_stub SceDisplay_stub SceNetCtl_stub SceNet_stub SceAppMgr_stub
+    SceRtc_stub pthread m SceFiber_stub SceSysmodule_stub SceLibKernel_stub SceKernelThreadMgr_stub SceSysmem_stub)
+  add_executable(cvf_vita src/platform/vita/vita_main.c src/platform/vita/vita_game.c src/platform/vita/debugScreen.c
+    src/app/headless_main.c ${CVF_TEST_SOURCES})
+  target_compile_options(cvf_vita PRIVATE ${CVF_DETERMINISM_FLAGS})
+  set_target_properties(cvf_vita PROPERTIES C_EXTENSIONS ON)
+  set_source_files_properties(src/app/headless_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_headless_main)
+  set_source_files_properties(tests/test_main.c PROPERTIES COMPILE_DEFINITIONS main=cvf_tests_main)
+  # the game: SDL2 (audio, controllers, touch), vitaGL with the runtime shader
+  # compiler (vitaShaRK + SceShaccCg: libshacccg.suprx must be on the device)
+  target_link_libraries(cvf_vita PRIVATE cvf_ik
+    SDL2 vitaGL vitashark SceShaccCgExt SceShaccCg_stub mathneon taihen_stub
+    SceGxm_stub SceDisplay_stub SceCtrl_stub SceAppMgr_stub SceAppUtil_stub SceAudio_stub SceAudioIn_stub
+    SceSysmodule_stub SceIofilemgr_stub SceCommonDialog_stub SceTouch_stub SceHid_stub SceMotion_stub
+    ScePower_stub SceProcessmgr_stub SceKernelDmacMgr_stub SceIme_stub SceRazorCapture_stub_weak
+    stdc++ ${CVF_VITA_SYS_LIBS})
   return()
 endif()
 
@@ -254,3 +265,18 @@ if(MINGW)
 endif()
 target_compile_options(cvf PRIVATE ${CVF_DETERMINISM_FLAGS})
 set_target_properties(cvf PROPERTIES C_EXTENSIONS ON)
+
+# Linux: test programs for the PS Vita renderer paths (VITA_PORT.md M2) on a
+# desktop GL context: cvf_vitasim (the game with cvfVitaGL set) and
+# gles_thread_test (the GLES render thread against direct calls). The GLES
+# binding gets its render thread (inert unless a program starts it).
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_compile_definitions(cvf_ik PRIVATE CVF_GL_THREAD=1)
+  add_executable(cvf_vitasim tests/vita_sim/vita_sim_main.c)
+  add_executable(gles_thread_test tests/gles/gles_thread_test.c)
+  foreach(t cvf_vitasim gles_thread_test)
+    target_link_libraries(${t} PRIVATE cvf_ik)
+    target_compile_options(${t} PRIVATE ${CVF_DETERMINISM_FLAGS})
+    set_target_properties(${t} PROPERTIES C_EXTENSIONS ON)
+  endforeach()
+endif()

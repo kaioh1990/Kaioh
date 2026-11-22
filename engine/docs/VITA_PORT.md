@@ -1,9 +1,23 @@
 # PS Vita port of the native C engine
 
-Status 2026-11-21, branch `claude/native-vita` (on `claude/native-integration`
-4444062). Feasibility study and milestone M1: the engine builds with vitasdk
-for the Vita, and the 32-bit runtime has been checked and fixed on armv7 with
-the Vita's code generation. Nothing has run on a Vita yet.
+Status 2026-11-22, branch `claude/native-vita2` (on `claude/native-integration`
+d290761): milestone **M2 built, not yet run on hardware**. The game runs on the
+Vita path: the `cvfVitaGL` switch, the vitaGL renderer, SDL2 input and audio,
+Lua menus, and per-tick frame and memory logs, packaged as `cvf-native-m2.vpk`.
+Section 11 lists what was verified and what is still untested. Earlier status
+(M1, `claude/native-vita`, 2026-11-21): the engine builds with vitasdk, and
+the 32-bit runtime was checked and fixed on armv7 with the Vita's code
+generation.
+
+| M2 (this branch) | Result |
+| --- | --- |
+| Vita build | `cvf_vita` ELF and **`cvf-native-m2.vpk`** (title ID CVFN00001, installs over M1): the game by default, M1's tests and reference fight with `CVF_VITA_MODE=headless` |
+| VPK image in vemu, headless mode | unit tests 103/0; reference fight **54f8ae06...** |
+| Vita renderer paths on a desktop GL context (`cvf_vitasim`, Mesa) | title screen, character select and a fight drawn correctly at 960x540 in 30 and 60 fps mode; render thread: 121 of 121 frames pixel-identical to direct drawing (lockstep run) |
+| Desktop, armv7, aarch64, Wine | `cvf_tests` 103/0; both reference dumps; `run_netplay.sh` PASS a350bc2d...; no function of the GL 3.3 renderer changed in the generated C |
+| Hardware | **not run**: frame times, memory, picture, sound and controls need the user's Vita (section 11) |
+
+The M1 results below are unchanged:
 
 | | Result |
 | --- | --- |
@@ -640,32 +654,131 @@ and a 256² palette texture (vitaGL copies a whole in-use texture on
 
 The native engine's renderer is the translation of `render_gles32.go`
 (`#version 320 es` shaders), reached through `gles_bind.c` (GL entry points
-looked up by name). The Vita shader set and workarounds are behind
-`isVita`, a compile-time `false` in the native configuration, so they were
-translated away. Plan (M2):
+looked up by name). The Vita shader set and workarounds sit behind `isVita`,
+which is a compile-time `false` in the native configuration, so gotoc
+translated them away until M2.
 
-- In the fork patch: a run-time switch (`cvfVitaGL`, set by the Vita
-  platform layer) that selects the GLSL 1.x shaders and the workarounds
-  above; regenerate (`regen.sh`; no hand edits of generated C).
-- `src/platform/vita`: `vglInit` at 960x544, GL entry points through
-  `vglGetProcAddress` instead of SDL's, swap with `vglSwapBuffers`.
-- vitaGL (2.x) and SDL2 (2.32.8) are vitasdk packages; both download from
-  `github.com/vitasdk/packages/releases/download/master/<name>.tar.xz` (the
-  container can reach it; vitasdk.org cannot be reached from here).
-- Raw GXM (no vitaGL) is a later optimisation if vitaGL's 6-17 ms of CPU per
-  drawn frame stays the limit; the renderer only draws textured quads.
+### M2: the `cvfVitaGL` switch (fork patch, regenerated)
+
+`src/cvf_vitagl.go` in the fork (`tools/ikemen_headless.patch`) adds
+`var cvfVitaGL bool`, set by the Vita platform layer before `main`, and
+`onVita()`, which returns `isVita || cvfVitaGL` and is inlined. In the C
+engine, every site in this list now tests `g_cvfVitaGL` at run time.
+Everywhere else `cvfVitaGL` stays false, and the generated C of the GL 3.3
+renderer is unchanged (no function of `render_gl33.go`/`font_gl33.go`
+differs; section 11).
+
+- GLES renderer, all of `render_gles32.go`, `render_gles32_batch.go` and the
+  Vita sites of `render.go`: the GLSL 1.x shaders (`vita_shaders.go`, now
+  built with the `cvf` tag), clipping in the sprite shader instead of
+  scissor (`clipOn`/`clipRect`), client-side vertex arrays and sprite
+  batching (`vitaClientArrays()` returns `cvfVitaGL`), atlases up to 1024,
+  LUMINANCE/RGB/RGBA formats, no UNPACK_ALIGNMENT/ROW_LENGTH (rows are
+  repacked), drawing straight to the display buffer (`vitaDirect`;
+  `CVF_VITA_FBO=1` keeps the offscreen pass), no models or external shaders,
+  cached matrix uniforms, the `fxOn` fast path.
+- `system.go`: the 256² palette texture, no SDL GL context, the 30 fps fight
+  mode (`vitaHalfRate()`: `cvfVitaFPS != 60` and in a fight), the
+  `vitaMatchEnd` bookkeeping, no file search for `<...>` select
+  placeholders. `config.go`: 960x540, MSAA 0, no external shaders or
+  models. `main.go`: RenderMode "OpenGL ES 3.2". `system_sdl.go` and
+  `sdl_other.go`: no SDL window, 960x544, vitaGL's swap.
+- Files and audio (`common.go`, `sound.go`, `audio_sdl.go`): no
+  case-insensitive glob fallback for missing files (on the Vita a failed
+  stat means the file is not there; the glob read 110k directory entries
+  per boot in the TinyGo build), buffered file reads, music streamed instead
+  of decoded into RAM (no BGMRAMBuffer), resampling quality 1, and the
+  deeper SDL audio queue that cooperative goroutines need.
+- `motif.go`: the TinyGo build's motif fixes (`vitaMotifFixes`).
+- Hooks (`GOTOC_NATIVE_FUNCS`, implemented in `ik_native.c` through function
+  pointers that the platform layer sets): `cvfVitaWindow`, `cvfVitaSwap`
+  (called by `vitaGLInit`/`vitaGLSwap`) and `cvfVitaPerf` (the existing
+  `vitaPerfBegin/End/Tick` marks, plus one around EndFrame and the swap in
+  `System.await`).
+
+Not switched, because they are simulation state or TinyGo matters: the
+bytecode profiler and hash dumps, the TinyGo collector triggers, string
+cloning, trace output. On the Vita, `GameWidth`/`GameHeight` are 960x540, as
+in the TinyGo build. That does not matter offline, but netplay with a PC
+needs matching values (M3).
+
+In the same patch: render_gles32.go's `boundTexture` is now
+`boundTextureGLES32`. With `-tags cvf`, both GL renderers compile, and the
+duplicate type had kept `go build -tags cvf,cvfgohead` from building since
+round 4. That build works again and plays the reference fight
+(`54f8ae06...`). In the generated C, the GLES renderer's texture-unit cache
+now has its own struct type instead of borrowing the GL 3.3 one. The two
+have the same layout, so this changes no behaviour.
+
+### Platform side (`src/platform/vita/vita_game.c`, `gles_bind.c`)
+
+- `vglInitExtended(0, 960, 544, CVF_VGL_RAM_THRESHOLD_MB=16 MB, no MSAA)`,
+  `vglWaitVblankStart(CVF_VITA_VSYNC=1)`, `vglSwapBuffers` at the swap. vitaGL
+  takes the main RAM left after the collector's arena and newlib's heap,
+  minus the threshold, so it is initialised after both.
+- GL entry points come from `vglGetProcAddress`. A name that vitaGL lacks
+  gets a stub returning 0 and is logged once (`gles: vitaGL has no ...`), as
+  in the TinyGo build: the paths that need those calls are off on the Vita.
+- vitaGL's runtime shader compiler (vitaShaRK + SceShaccCg) needs
+  `ur0:data/libshacccg.suprx` on the device, as the TinyGo build does.
+- Clocks: ARM `CVF_ARM_MHZ` (444), bus 222, GPU 222, crossbar 166 (the
+  TinyGo values).
+
+### Drawing on a second core (`CVF_VITA_RENDER_THREAD=1`)
+
+Implemented behind the setting (default off), in `src/platform/gles/`
+(`gles_thread.h`, `gles_thread_impl.h`, compiled into `gles_bind.c` with
+`CVF_GL_THREAD`):
+
+- One render thread owns the GL context: vitaGL is initialised on it and
+  every GL call runs on it. It is pinned to core 1 and the engine thread to
+  core 0.
+- After `gl.Init` has loaded the entry points, each `p_glX` pointer of the
+  binding is redirected to a recorder. The translated renderer is unchanged.
+  Each GL call appends a command (thunk, 64-bit argument slots, copied data)
+  to the current buffer. Data passed by pointer is copied at record time:
+  uploads, uniform arrays, id lists, and, for client-side vertex arrays, the
+  vertices that each `glDrawArrays` will read (taken from a shadow of the
+  bound VAO's attribute pointers, with overlapping ranges merged). Uploads
+  over 1 MB run synchronously instead.
+- Synchronisation: two command buffers and two SDL semaphores. At the swap,
+  the engine waits until the render thread has finished the previous frame
+  (at most one frame in flight), hands over the current buffer and goes on
+  with the next game tick in the other buffer. Calls that return something
+  (`glGen*`, `glGet*`, `glCreate*`, `glReadPixels`, `glFinish`, shader
+  source, buffer mapping) hand over the buffer plus a call command and wait
+  for the result. They happen while loading. `glGetError` returns 0 without
+  waiting (the renderer only logs it), so `CVF_GL_CHECK` is not available
+  with the thread.
+- Determinism: GL results reach the engine only through those synchronous
+  calls, which return what a direct call returns, in the same order. The
+  simulation reads nothing else from the render thread. Checked on the
+  desktop: the statedump is identical with and without the thread, and in
+  lockstep runs (the same ticks drawn in both) all 121 compared frames are
+  pixel-identical (section 11). `tests/gles/gles_thread_test.c` compares
+  frames drawn through the thread with direct calls (client arrays with
+  first > 0, uploads, a large synchronous upload, an FBO, mid-frame reads).
+- Expected effect on the Vita: vitaGL's CPU work (6-17 ms per drawn frame in
+  the TinyGo build) leaves the engine thread, which then pays only for
+  recording (0.2-0.5 ms per frame in the desktop runs). A drawn frame then
+  costs max(logic + draw-list building + recording, vitaGL), not the sum.
+  This is unmeasured: the hardware run decides whether 60 fps drawing is
+  reachable (`perf` lines, section 11).
+
+Raw GXM (no vitaGL) remains a later optimisation if vitaGL's CPU time is
+still the limit. The renderer only draws textured quads.
 
 ## 6. Platform layer
 
 | Area | Plan / state |
 | --- | --- |
-| Entry | `src/platform/vita/vita_main.c`: `sceUserMainThreadStackSize` 8 MB (the character compiler recurses deeply), newlib heap 48 MB, IEEE FP mode, `cvf_env.txt` -> environment, logs in `ux0:data/CvFNative/`. M1 runs `cvf_tests_main` and `cvf_headless_main` (the desktop mains, renamed by a compile definition). |
+| Entry | `src/platform/vita/vita_main.c`: `sceUserMainThreadStackSize` 8 MB (the character compiler recurses deeply), newlib heap 48 MB, IEEE FP mode, `cvf_env.txt` -> environment, logs in `ux0:data/CvFNative/`. `CVF_VITA_MODE` chooses: `game` (default, M2: `vita_game.c` runs the translated `main` with `cvfVitaGL` set, in `CVF_GAME_DIR`, default `ux0:data/CvFNative/game`; extra arguments from `cvf_args.txt`) or `headless` (M1: `cvf_tests_main`, then `cvf_headless_main`). |
 | Goroutines | SceFiber fibers (core/sched.c `CVF_VITA_FIBERS`); the main thread is the hub (fibers switch only thread <-> fiber), registers are spilled for the collector, IEEE mode per fiber. |
 | Collector | arena = one memory block (`sceKernelAllocMemBlock`, zeroed), data roots from `__data_start` to a marker in `.noinit` (not `__bss_end__`: section 7), stack bounds from `sceKernelGetThreadInfo`, owner check by thread id. |
 | Clock, sleep | `sceKernelGetProcessTimeWide` (monotonic, µs), `sceKernelDelayThread`. |
-| Files | newlib's file API on `ux0:`; `chdir` works (newlib emulates a working directory). Game folder `ux0:data/CvFNative/<game>` (the TinyGo build uses `ux0:data/CvF`; separate folders, as with the Android apps). `os.Executable` is `app0:eboot.bin`. The file systems are case-insensitive, so Ikemen's case-insensitive lookup fallback (a directory glob per miss) should be skipped on the Vita as the TinyGo build does (110k directory reads per boot). |
-| Input (M2) | SDL2's Vita backend as a game controller (the engine's SDL GameController code and `gamecontrollerdb.txt`), or `sceCtrl` directly; front touch through SDL touch events (the mobile touch-menu code). |
-| Audio (M2) | SDL2 audio (Vita backend over `sceAudioOut`), queue-based like the desktop. Music streamed (the TinyGo build decoded fight music whole: 26 MB). |
+| Files | newlib's file API on `ux0:`; `chdir` works (newlib emulates a working directory). Game folder `ux0:data/CvFNative/<game>` (the TinyGo build uses `ux0:data/CvF`; separate folders, as with the Android apps). `os.Executable` is `app0:eboot.bin`. The file systems are case-insensitive, so Ikemen's case-insensitive lookup fallback (a directory glob per miss) is skipped on the Vita (M2: `common.go` under `cvfVitaGL`), as the TinyGo build does (110k directory reads per boot). |
+| Input (M2, done) | SDL2's Vita joystick backend as a game controller (SDL's built-in "PSVita Controller" mapping; the game's `[Joystick_P1]` config applies). Front touch: SDL polls the panels only while an SDL window exists, so the window hook creates a plain 960x544 SDL window (no GL, no GXM state) and an event watch passes front-panel taps (touch device 1) to `cvfHostTap`, the iOS host entry point that feeds the menus' `cvfTouchTap`. Touch-to-mouse events are off. |
+| Audio (M2, done) | SDL2 audio (the Vita backend over `sceAudioOut`), queue-based as on the desktop, with the deeper queue for cooperative goroutines; music streamed (no BGMRAMBuffer decode); resampling quality 1; sound cache 24 MB. |
 | Networking (M3) | BSD sockets from vitasdk's newlib (SceNet; `_vita_net_init` brings up sceNet/sceNetCtl). `ik_net.c` builds unchanged except interfaces: `vita_ifaddrs.c` lists loopback and the Wi-Fi interface from SceNetCtl (address, netmask) for Nearby's subnet sweep. TCP + GGPO UDP as on desktop; cross-play with PC needs matching GameWidth/Height. Ad hoc (SceNetAdhoc) only reaches other Vitas: not useful for PC cross-play, so not planned. |
 | HTTP (M3) | lobby, public IP, UPnP: SceHttp/SceSsl or vitasdk's curl package; until then requests fail with an error (`ik_http.c`). |
 | Packaging | `tools/package/vita_vpk.sh` (section 8). |
@@ -751,14 +864,24 @@ but release assets are; each release lists them in `SHA256SUMS`:
     curl -LO https://github.com/vitasdk/autobuilds/releases/download/$T/$F
     grep " $F" SHA256SUMS | sha256sum -c && tar xjf $F     # -> vitasdk/
     export VITASDK=$PWD/vitasdk
-    # SDL2 headers (headless: headers only) from the packages release
-    curl -L -o sdl2.tar.xz https://github.com/vitasdk/packages/releases/download/master/sdl2.tar.xz
-    mkdir pk && tar xJf sdl2.tar.xz -C pk && cp -r pk/include/* $VITASDK/arm-vita-eabi/include/
+    # packages for the game (M2): SDL2, vitaGL and its runtime shader compiler
+    for n in sdl2 vitaGL vitaShaRK SceShaccCgExt libmathneon taihen kubridge; do
+      curl -L -o $n.tar.xz https://github.com/vitasdk/packages/releases/download/master/$n.tar.xz
+      tar xJf $n.tar.xz -C $VITASDK/arm-vita-eabi
+    done
 
-    cmake -S . -B build/vita -DCMAKE_BUILD_TYPE=Release \
+    cmake -S . -B build/vita -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake
-    cmake --build build/vita -j2                  # cvf_vita_headless (ELF, ~4 min)
-    tools/package/vita_vpk.sh build/vita cvf-native-m1.vpk
+    cmake --build build/vita -j2                  # cvf_vita (ELF, ~8 min)
+    tools/package/vita_vpk.sh build/vita cvf-native-m2.vpk
+
+(The packages release has no SHA256SUMS. `math-neon`/`mathneon` are 404:
+the package is `libmathneon`.) Since M2 there is one ELF, `cvf_vita`, which
+runs the game, or M1's tests and reference fight with `CVF_VITA_MODE=headless`.
+M1's `cvf_vita_headless` target is gone. The VPK's icon and LiveArea are
+text-only images (`vita/cvfnative-sys`). The art in `vita/cvfsys` (used by
+M1 and the TinyGo `pack.sh`) is made from the game's title picture and is no
+longer packaged.
 
 `vita_vpk.sh` follows the TinyGo port's packaging: `vita-elf-create`,
 `vita_velf_fixrel.py` (drops same-segment branch relocations: the Vita's
@@ -767,7 +890,14 @@ loader rewrites conditional BL into B, which crashed TinyGo builds 2-8),
 from `vita/cvfsys`. It also writes the `.velf` next to the VPK (for vemu
 and for symbolising core dumps).
 
+### Running M2 on the Vita
+
+`docs/VITA_M2_README.md` is the user's guide (installation, game folder,
+`cvf_env.txt` settings, what to send back). It ships next to the VPK.
+
 ### Running M1 on the Vita
+
+(M2's VPK runs this with `CVF_VITA_MODE=headless` in `cvf_env.txt`.)
 
 1. Install `cvf-native-m1.vpk` with VitaShell (it installs next to the
    TinyGo "CvF Online", title id CVFN00001).
@@ -820,12 +950,106 @@ covers them).
 
 | | Content | Exit criterion |
 | --- | --- | --- |
-| **M1** (this branch) | headless VPK: unit tests + reference fight; 32-bit runtime fixes | on hardware: 103/0, statedump md5 = reference for both rules files; per-tick time recorded (the `frames:` line) |
-| **M2** | the game on the Vita: `cvfVitaGL` switch in the fork + regen, vitaGL renderer (Vita shaders and workarounds), SDL2 input and audio, Lua menus, 960x544, 30 fps drawing / 60 Hz logic, cooked characters to cut loading | title -> select -> offline match at full speed; memory and frame times logged |
+| **M1** (`claude/native-vita`) | headless VPK: unit tests + reference fight; 32-bit runtime fixes | on hardware: 103/0, statedump md5 = reference for both rules files; per-tick time recorded (the `frames:` line) |
+| **M2** (`claude/native-vita2`: built, awaiting hardware) | the game on the Vita: `cvfVitaGL` switch in the fork + regen, vitaGL renderer (Vita shaders and workarounds), SDL2 input (controller, front touch) and audio (streamed music), Lua menus, 960x544, 60 Hz logic with 30 or 60 fps drawing (`CVF_VITA_FPS`), optional render thread, per-tick logic/draw/memory logs. Cooked characters (faster loading) are not part of this build. | title -> select -> offline match at full speed; memory and frame times logged (section 11) |
 | **M3** | online: sceNet start-up, Nearby (vita_ifaddrs), netplay against PC/Android/iOS (run_netplay.sh with a Vita side), HTTP lobby (SceHttp or curl) | netplay dump a350bc2d... with a Vita peer |
-| **M4** | CPU: AOT compilation of cooked bytecode to C, string interning in the interpreter, renderer on a second core | game tick <= 5 ms at 444 MHz (rollback headroom), 60 fps drawing if vitaGL allows; reference md5s unchanged |
+| **M4** | CPU: AOT compilation of cooked bytecode to C, string interning in the interpreter, renderer on a second core (M2 has it behind `CVF_VITA_RENDER_THREAD`; M4 makes it the default if the hardware numbers say so) | game tick <= 5 ms at 444 MHz (rollback headroom), 60 fps drawing if vitaGL allows; reference md5s unchanged |
 | **M5** | replace the TinyGo build: packaging, LiveArea, docs; TinyGo build retired | user-tested parity with the TinyGo build |
 
 The order matters: M2 before M4 because the renderer's CPU share on
 hardware (TinyGo: 6-17 ms per drawn frame) decides how much of M4 is
 needed; M1's hardware run decides the 444 vs 500 MHz question.
+
+## 11. M2: verification and frame-time logs
+
+### Verified (2026-11-22, Linux x86-64 container, no Vita)
+
+| Check | Result |
+| --- | --- |
+| Regeneration | from a fresh `setup_ikemen.sh` tree (golang.org/x and gopkg.in modules from their GitHub mirrors, `GOSUMDB=off`): identical to the committed C; 4902 functions, 0 TODO, 79 stubs, 31 placeholders |
+| Generated C against d290761 | 52 functions changed, 2 added, 1 moved. None in `render_gl33.go`/`font_gl33.go`. The changed functions outside the GLES renderer and the Vita stubs only gained `cvfVitaGL` branches (false off the Vita) |
+| x86-64 | `cvf_tests` and `cvf_tests_ucontext` 103/0; reference dumps `54f8ae06...` (winner 1, 287,752 lines) / `4334350c...` (winner 2, 224,158 lines) |
+| armv7 (qemu-arm, the Vita's code generation), aarch64 (qemu) | `cvf_tests` and `cvf_tests_ucontext` 103/0; both reference dumps |
+| Windows (Wine 9) | `cvf_tests.exe` 103/0; both reference dumps |
+| Netplay | `run_netplay.sh` PASS, dump `a350bc2df11a03519f7d65d278844432` (direct, lag, loss) |
+| Go cross-check | `go build -tags cvf,cvfgohead` builds again (boundTexture); its reference fight gives `54f8ae06...` |
+| Vita ELF/VPK | `cvf_vita` links with SDL2 2.32.8, vitaGL, vitaShaRK, SceShaccCgExt, libmathneon; `cvf-native-m2.vpk` |
+| VPK image in vemu (headless mode) | unit tests 103/0; reference fight `54f8ae06...`, winner 1 (753 s of emulation) |
+| VPK image in vemu, game mode, host GL (`VEMU_GL=1`) | see "vemu, game mode" below |
+| Vita renderer paths on the desktop (`cvf_vitasim`, Mesa llvmpipe, Xvfb) | quick match Alucard vs Richter drawn correctly at 960x540 (stage, characters, effects, lifebars, fonts) in 30 fps mode (150 of 300 ticks drawn) and 60 fps mode; title -> ARCADE -> character select -> fight through Ikemen's own scripts and screenpack (with the reference data, that arcade fight stays at the round start, and the GL 3.3 desktop game does exactly the same with that data) |
+| Render thread | `gles_thread_test`: 8 frames pixel-identical to direct calls; `cvf_vitasim`: statedump identical with and without the thread; lockstep run (the same 60 fps ticks drawn in both runs): **121 of 121 frames pixel-identical**; engine-thread drawing time 0.2-0.5 ms per frame with the thread against 18-23 ms without (llvmpipe rasterises on the render thread) |
+
+`cvf_vitasim` (Linux build, `tests/vita_sim/`) runs the game with
+`cvfVitaGL` set on an OpenGL 2.1 compatibility context, through the same
+hooks as the Vita: the Vita shaders, batching, client arrays, shader
+clipping, the 30/60 fps modes and the render thread. Two differences come
+from the desktop. vitaGL reads texture rows tightly packed, so the simulator
+sets `GL_UNPACK_ALIGNMENT` 1 once; otherwise desktop GL shears one-byte rows.
+And Linux file systems are case-sensitive while the Vita's are not: with the
+glob fallback skipped, as on the Vita, the game opens `pixel.sff` for
+`Pixel.sff`, so the test game directory needs lower-case aliases.
+
+    cmake --build build/release --target cvf_vitasim gles_thread_test
+    xvfb-run -a build/release/gles_thread_test direct; xvfb-run -a build/release/gles_thread_test thread
+    cd testgame && CVF_SHOT_DIR=shots CVF_SHOT_EVERY=150 xvfb-run -a ../build/release/cvf_vitasim . \
+        -p1 Alucard -p2 Richter -p1.ai 8 -p2.ai 8 -s stages/ParanoiaBG.def -rounds 1
+    # also: CVF_VITA_FPS=60, CVF_VITA_RENDER_THREAD=1, CVF_SHOT_TICKS=n, CVF_SIM_LOCKSTEP=1, CVF_SIM_FRAMES=n
+    # menus: Modules = tests/vita_sim/menu_drive.lua in save/config.ini (title -> ARCADE -> select -> fight)
+
+The test game was the reference data plus Ikemen GO's screenpack
+(`github.com/ikemen-engine/Ikemen-GO-Screenpack`), its `external/script` and
+fonts, and a `select.def` with Alucard and Richter. It stayed in the scratch
+directory and is not in the repository.
+
+### Not verified (needs the Vita)
+
+- Everything vitaGL does on the device: shader compilation by
+  libshacccg, the picture, texture memory, and whether the TinyGo workarounds
+  still suffice with the native engine's draw order.
+- Frame times and memory: the point of the M2 logs below.
+- SDL2 audio on `sceAudioOut` and streamed music; the controller mapping;
+  front touch (SDL's window-gated polling); the render thread on vitaGL
+  (pinning to core 1, vitaGL used from a thread other than the main one);
+  `CVF_VITA_VSYNC`.
+- Loading time with the full game (compiled characters: 15-30 s each
+  estimated, section 3; cooked characters are not in M2).
+- The full CvF game's own menus (`options11.def`, CvF's Lua scripts) on the
+  native engine with `cvfVitaGL`. They ran on the desktop native build
+  (smoke test), but not on the Vita path.
+
+### Frame-time and memory logs (`ux0:data/CvFNative/`)
+
+`perf.log` (also copied into `cvf.log`):
+
+    CvF native M2: ARM 444 MHz, bus 222, GPU 222; draw mode 30 fps in fights; game ux0:data/CvFNative/game
+    mem before vitaGL: ... / mem after vitaGL: ...
+    perf t=95s ticks 300 (fight 300) drawn 150 = 30.0 fps, mode 30 | logic avg 6.10 p95 8.00 max 9.80 ms/tick | draw avg 7.20 max 12.00 ms, swap avg 0.90 max 3.10 ms, draw+swap p95 9.90 ms/drawn frame | frame avg 16.70 max 34.20 ms, 3 over 17.5 ms
+    perf render thread: vitaGL avg 8.10 max 14.00 ms/drawn frame        (with CVF_VITA_RENDER_THREAD=1)
+    mem 5s: gc live 48.1 heap 70.2 hwm 120.0 MB, 12 collections, max pause 150 ms; newlib in use 9.8 MB; kernel free user 20.1 cdram 40.2 phycont 10.0 MB; vitaGL free ram 30.5 vram 60.1 MB
+
+(the numbers are made up, to show the format). There is one `perf` line
+every 300 game ticks (5 s at 60 Hz):
+
+- **logic**: `action` + `uiAction`, CPU time per game tick, on the engine
+  thread (`vitaPerfBegin/End(0)`).
+- **draw**: `cueDraw` + `renderFrame` per drawn frame: the engine building
+  the frame and, without the render thread, vitaGL's calls.
+- **swap**: `EndFrame` (the last batch) + `vglSwapBuffers`, or with the
+  render thread the hand-over, including the wait for the previous frame.
+- **render thread**: the render thread's time in vitaGL per drawn frame,
+  swap excluded.
+- **frame**: wall time between ticks; ticks over 17.5 ms are late.
+- `mem`: the collector (`gc_stats`), newlib's `mallinfo`,
+  `sceKernelGetFreeMemorySize` and `vglMemFree`.
+
+`frames.csv` has one line per game tick (header
+`tick,t_ms,logic_us,draw_us,swap_us,render_us,frame_us,drawn,fight`; stops at
+32 MB; `CVF_FRAME_LOG=0` turns it off). Menus have logic/draw 0: only the
+fight loop sets those marks.
+
+How to read it: 60 fps drawing is reachable when, in fights, logic +
+draw + swap stays under 16.7 ms per tick (60 fps mode, `late` near 0). With
+the render thread, the condition is logic + draw + swap < 16.7 ms and
+render-thread time < 16.7 ms. 30 fps mode needs 2 x logic + draw + swap <
+33.3 ms.
+

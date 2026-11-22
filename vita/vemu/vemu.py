@@ -153,7 +153,7 @@ def vmap(size, align=PAGE, garbage=False):
     return a
 
 # ---------------------------------------------------------------- CPU setup
-STACK_SIZE = 1 << 20
+STACK_SIZE = int(os.environ.get('VEMU_STACK_MB', '8')) << 20
 stack = vmap(STACK_SIZE, garbage=True)
 mu.reg_write(UC_ARM_REG_SP, stack + STACK_SIZE - 16)
 try:
@@ -350,7 +350,10 @@ def _(uid, pstat, *_):
 @H('sceKernelDeleteThread', 'sceKernelChangeThreadPriority', 'sceKernelExitThread', 'sceKernelExitDeleteThread')
 def _(*a): return 0
 @H('sceKernelGetThreadInfo')
-def _(uid, info, *_): return 0
+def _(uid, info, *_):
+    if cur_fiber[0] is None:  # the main thread: its stack (SceKernelThreadInfo.stack / stackSize)
+        w32(info + 52, stack); w32(info + 56, STACK_SIZE)
+    return 0
 @H('sceKernelCreateLwMutex', 'sceKernelDeleteLwMutex', 'sceKernelLockLwMutex', 'sceKernelUnlockLwMutex', 'sceKernelTryLockLwMutex')
 def _(*a): return 0
 @H('sceKernelCreateMutex', 'sceKernelCreateSema', 'sceKernelCreateMsgPipe')

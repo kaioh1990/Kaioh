@@ -335,6 +335,7 @@ typedef struct bgDrawTransform bgDrawTransform;
 typedef struct bgMusic bgMusic;
 typedef struct bgVideo bgVideo;
 typedef struct boundTexture boundTexture;
+typedef struct boundTextureGLES32 boundTextureGLES32;
 typedef struct callFuncCache callFuncCache;
 typedef struct character character;
 typedef struct constCacheEnt constCacheEnt;
@@ -1866,6 +1867,10 @@ typedef struct { bool *p; int len, cap; } Slice_bool;
 #ifndef CVF_DEF_Slice_boundTexture
 #define CVF_DEF_Slice_boundTexture
 typedef struct { boundTexture *p; int len, cap; } Slice_boundTexture;
+#endif
+#ifndef CVF_DEF_Slice_boundTextureGLES32
+#define CVF_DEF_Slice_boundTextureGLES32
+typedef struct { boundTextureGLES32 *p; int len, cap; } Slice_boundTextureGLES32;
 #endif
 #ifndef CVF_DEF_Slice_constCacheEnt
 #define CVF_DEF_Slice_constCacheEnt
@@ -3496,6 +3501,10 @@ typedef struct bgVideo bgVideo;
 #ifndef CVF_TD_boundTexture
 #define CVF_TD_boundTexture
 typedef struct boundTexture boundTexture;
+#endif
+#ifndef CVF_TD_boundTextureGLES32
+#define CVF_TD_boundTextureGLES32
+typedef struct boundTextureGLES32 boundTextureGLES32;
 #endif
 #ifndef CVF_TD_callFuncCache
 #define CVF_TD_callFuncCache
@@ -7117,7 +7126,7 @@ struct GLES32State {
     BlendFunc blendDst;
     Arr4_i32 scissorRect;
     bool scissorEnabled;
-    Slice_boundTexture boundTex;
+    Slice_boundTextureGLES32 boundTex;
     Slice_u64 texCacheLastUsed;
     u64 texCacheTimer;
     Map_u32_i32 uniformICache;
@@ -9997,7 +10006,7 @@ struct Renderer_GLES32 {
             BlendFunc blendDst;
             Arr4_i32 scissorRect;
             bool scissorEnabled;
-            Slice_boundTexture boundTex;
+            Slice_boundTextureGLES32 boundTex;
             Slice_u64 texCacheLastUsed;
             u64 texCacheTimer;
             Map_u32_i32 uniformICache;
@@ -12058,6 +12067,12 @@ struct boundTexture {
     u32 target;
 };
 
+struct boundTextureGLES32 {
+    Texture_GLES32* tex;
+    u32 handle;
+    u32 target;
+};
+
 struct callFuncCache {
     int pn;
     u32 gen;
@@ -13064,6 +13079,10 @@ GO_SLICE_FUNCS_A(Slice_bool, bool)
 #ifndef CVF_FN_Slice_boundTexture
 #define CVF_FN_Slice_boundTexture
 GO_SLICE_FUNCS(Slice_boundTexture, boundTexture)
+#endif
+#ifndef CVF_FN_Slice_boundTextureGLES32
+#define CVF_FN_Slice_boundTextureGLES32
+GO_SLICE_FUNCS(Slice_boundTextureGLES32, boundTextureGLES32)
 #endif
 #ifndef CVF_FN_Slice_constCacheEnt
 #define CVF_FN_Slice_constCacheEnt

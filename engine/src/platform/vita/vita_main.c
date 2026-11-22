@@ -1,18 +1,24 @@
-// PS Vita entry point of the native engine's headless application
-// (VITA_PORT.md milestone M1): runs the unit tests (cvf_tests), then the
-// reference fight (cvf_headless), and shows the results on screen. The real
-// mains are compiled as cvf_tests_main (tests/test_main.c) and
-// cvf_headless_main (src/app/headless_main.c); this file sets up what Linux
-// gives them for free.
+// PS Vita entry point of the native engine (VITA_PORT.md milestones M1, M2).
+//
+// CVF_VITA_MODE (cvf_env.txt) chooses what runs:
+//   game (default)  the game (vita_game.c): Lua menus, select, fights, in
+//                   the game folder CVF_GAME_DIR (default
+//                   ux0:data/CvFNative/game); log in cvf.log, frame times
+//                   in perf.log and frames.csv
+//   headless        M1: the unit tests (cvf_tests), then the reference fight
+//                   (cvf_headless), results on screen. The real mains are
+//                   compiled as cvf_tests_main (tests/test_main.c) and
+//                   cvf_headless_main (src/app/headless_main.c).
 //
 // Files (ux0:data/CvFNative/, created if missing):
 //   cvf_env.txt     optional KEY=VALUE lines -> environment (CVF_GC_TRACE=1, ...)
-//   headless_args.txt  optional, one line: <gamedir> <ikemen args...>
+//   cvf_args.txt    game: optional extra Ikemen arguments, one line
+//   headless_args.txt  headless: optional, one line: <gamedir> <ikemen args...>
 //                   (default: the reference fight in ux0:data/CvFNative/refgame)
-//   tests.log, headless.log    stdout and stderr of the two runs
-//   result.txt      what the screen shows
-// The game directory holds the reference data (cvf-refdata.tgz plus
-// data/Xsound.snd) and gets statedump.txt, as on the PC.
+//   cvf.log, perf.log, frames.csv     game
+//   tests.log, headless.log, result.txt   headless
+// The reference game directory holds the reference data (cvf-refdata.tgz
+// plus data/Xsound.snd) and gets statedump.txt, as on the PC.
 #include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -28,6 +34,7 @@
 
 #include "core/sched.h"  // go_vita_fp_ieee, go_mono_ns
 #include "platform/vita/debugScreen.h"
+#include "platform/vita/vita_game.h"
 
 #define DIR "ux0:data/CvFNative"
 
@@ -177,9 +184,11 @@ static void wait_start(int seconds) {
     }
 }
 
+static int run_headless(void);
+static int run_game(void);
+
 int main(void) {
     go_vita_fp_ieee();  // threads start in flush-to-zero mode on the Vita
-    psvDebugScreenInit();
     mkdir(DIR, 0777);
     load_env();
     // the sound cache counts against the collector's arena: the TinyGo Vita
@@ -187,6 +196,41 @@ int main(void) {
     if (!getenv("CVF_SOUND_CACHE_MB")) setenv("CVF_SOUND_CACHE_MB", "24", 1);
     int mhz = getenv("CVF_ARM_MHZ") ? atoi(getenv("CVF_ARM_MHZ")) : 444;
     scePowerSetArmClockFrequency(mhz);
+    const char *mode = getenv("CVF_VITA_MODE");
+    int r = mode && !strcmp(mode, "headless") ? run_headless() : run_game();
+    sceKernelExitProcess(r);
+    return r;
+}
+
+// the game; a message on screen when the game folder is missing
+static int run_game(void) {
+    // the TinyGo build's clocks for the game (GPU 222 MHz: the scene is
+    // fill-rate bound at 960x540)
+    scePowerSetBusClockFrequency(222);
+    scePowerSetGpuClockFrequency(222);
+    scePowerSetGpuXbarClockFrequency(166);
+    const char *gd = getenv("CVF_GAME_DIR");
+    if (!gd || !*gd) gd = DIR "/game";
+    char probe[512];
+    struct stat st;
+    snprintf(probe, sizeof probe, "%s/data", gd);
+    if (stat(probe, &st) != 0) {
+        psvDebugScreenInit();
+        show("CvF native engine (M2)\n\nNo game in %s\n\n", gd);
+        show("Copy your Castlevania Fighter / CvF Online game folder there\n"
+             "(the folder that holds data/, chars/, stages/, font/, external/),\n"
+             "or set CVF_GAME_DIR in " DIR "/cvf_env.txt.\n\n"
+             "CVF_VITA_MODE=headless in cvf_env.txt runs the M1 tests instead.\n");
+        wait_start(120);
+        return 1;
+    }
+    log_to(DIR "/cvf.log");
+    return vita_game_run(gd);
+}
+
+// M1: unit tests, then the reference fight
+static int run_headless(void) {
+    psvDebugScreenInit();
     result_file = fopen(DIR "/result.txt", "w");
     show("CvF native engine (M1 headless), ARM %d MHz\n\n", scePowerGetArmClockFrequency());
 
@@ -250,6 +294,5 @@ int main(void) {
     }
     if (result_file) fclose(result_file), result_file = NULL;
     wait_start(60);
-    sceKernelExitProcess(r);
     return r;
 }

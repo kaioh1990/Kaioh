@@ -2108,6 +2108,10 @@ typedef struct { bool* *p; int len, cap; } Slice_boolPtr;
 #define CVF_DEF_Slice_boundTexture
 typedef struct { boundTexture *p; int len, cap; } Slice_boundTexture;
 #endif
+#ifndef CVF_DEF_Slice_boundTextureGLES32
+#define CVF_DEF_Slice_boundTextureGLES32
+typedef struct { boundTextureGLES32 *p; int len, cap; } Slice_boundTextureGLES32;
+#endif
 #ifndef CVF_DEF_Slice_cnode
 #define CVF_DEF_Slice_cnode
 typedef struct { cnode *p; int len, cap; } Slice_cnode;
@@ -5186,6 +5190,10 @@ GO_SLICE_FUNCS(Slice_boolPtr, bool*)
 #define CVF_FN_Slice_boundTexture
 GO_SLICE_FUNCS(Slice_boundTexture, boundTexture)
 #endif
+#ifndef CVF_FN_Slice_boundTextureGLES32
+#define CVF_FN_Slice_boundTextureGLES32
+GO_SLICE_FUNCS(Slice_boundTextureGLES32, boundTextureGLES32)
+#endif
 #ifndef CVF_FN_Slice_cnode
 #define CVF_FN_Slice_cnode
 GO_SLICE_FUNCS(Slice_cnode, cnode)
@@ -8194,6 +8202,9 @@ extern Arr2_i32 g_cvfScreen;
 extern Anon_dea90c61 g_cvfTap;
 extern GoOpaque /* sync.Mutex */ g_cvfTapMu;
 extern bool g_cvfTouchMenus;
+extern int g_cvfVitaFPS;
+extern bool g_cvfVitaGL;
+extern bool g_cvfVitaInMatch;
 extern Arr6_f64 g_cvf_cos;
 extern Arr6_f64 g_cvf_sin;
 extern Arr3_f64 g_cvf_tanP;
@@ -8353,10 +8364,10 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_bufio_Writer 155
 #define GO_TID_P_bytes_Buffer 137
 #define GO_TID_P_bytes_Reader 189
-#define GO_TID_P_context_cancelCtx 2075
+#define GO_TID_P_context_cancelCtx 2077
 #define GO_TID_P_exec_Cmd 1093
 #define GO_TID_P_exec_ExitError 259
-#define GO_TID_P_fnv_sum32a 2076
+#define GO_TID_P_fnv_sum32a 2078
 #define GO_TID_P_image_Alpha 141
 #define GO_TID_P_image_NRGBA 497
 #define GO_TID_P_image_Paletted 496
@@ -8367,13 +8378,13 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_ini_Section 1327
 #define GO_TID_P_io_LimitedReader 230
 #define GO_TID_P_net_IPNet 467
-#define GO_TID_P_net_OpError 2074
+#define GO_TID_P_net_OpError 2076
 #define GO_TID_P_net_TCPAddr 514
 #define GO_TID_P_net_TCPConn 515
 #define GO_TID_P_net_TCPListener 513
 #define GO_TID_P_net_UDPAddr 187
-#define GO_TID_P_net_UDPConn 2073
-#define GO_TID_P_net_netFD 1710
+#define GO_TID_P_net_UDPConn 2075
+#define GO_TID_P_net_netFD 1712
 #define GO_TID_P_os_File 180
 #define GO_TID_P_os_Process 1103
 #define GO_TID_P_os_ProcessState 1111
@@ -8383,7 +8394,7 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_reflect_SliceHeader 1058
 #define GO_TID_P_strings_Builder 469
 #define GO_TID_P_strings_Reader 251
-#define GO_TID_P_sync_Cond 1927
+#define GO_TID_P_sync_Cond 1929
 #define GO_TID_P_sync_Mutex 591
 #define GO_TID_P_sync_Once 904
 #define GO_TID_P_syscall_Credential 1097
@@ -8406,8 +8417,8 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_atomic_Int32 1107
 #define GO_TID_atomic_Pointer_os_dirInfo_ 860
 #define GO_TID_atomic_Uint32 1105
-#define GO_TID_atomic_Uint64 1980
-#define GO_TID_atomic_align64 1981
+#define GO_TID_atomic_Uint64 1982
+#define GO_TID_atomic_align64 1983
 #define GO_TID_atomic_noCopy 867
 #define GO_TID_binary_bigEndian 212
 #define GO_TID_binary_littleEndian 163
@@ -8417,18 +8428,18 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_bytes_Reader 909
 #define GO_TID_bytes_readOp 658
 #define GO_TID_color_NRGBA 196
-#define GO_TID_color_Palette 1427
+#define GO_TID_color_Palette 1429
 #define GO_TID_color_RGBA 492
 #define GO_TID_exec_Cmd 1094
 #define GO_TID_exec_ExitError 1122
 #define GO_TID_float64 14
 #define GO_TID_image_Alpha 664
-#define GO_TID_image_NRGBA 1428
-#define GO_TID_image_Paletted 1426
+#define GO_TID_image_NRGBA 1430
+#define GO_TID_image_Paletted 1428
 #define GO_TID_image_Point 666
-#define GO_TID_image_RGBA 1421
+#define GO_TID_image_RGBA 1423
 #define GO_TID_image_Rectangle 665
-#define GO_TID_image_Uniform 1422
+#define GO_TID_image_Uniform 1424
 #define GO_TID_ini_DebugFunc 1323
 #define GO_TID_ini_File 1321
 #define GO_TID_ini_Key 1331
@@ -8439,17 +8450,17 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_io_LimitedReader 945
 #define GO_TID_json_Number 529
 #define GO_TID_net_IP 908
-#define GO_TID_net_IPMask 1392
-#define GO_TID_net_IPNet 1391
-#define GO_TID_net_KeepAliveConfig 1714
-#define GO_TID_net_ListenConfig 1712
-#define GO_TID_net_TCPAddr 1716
-#define GO_TID_net_TCPConn 1717
-#define GO_TID_net_TCPListener 1709
+#define GO_TID_net_IPMask 1391
+#define GO_TID_net_IPNet 1390
+#define GO_TID_net_KeepAliveConfig 1716
+#define GO_TID_net_ListenConfig 1714
+#define GO_TID_net_TCPAddr 1718
+#define GO_TID_net_TCPConn 1719
+#define GO_TID_net_TCPListener 1711
 #define GO_TID_net_UDPAddr 907
-#define GO_TID_net_conn 1718
-#define GO_TID_net_mptcpStatusListen 1715
-#define GO_TID_net_netFD 1711
+#define GO_TID_net_conn 1720
+#define GO_TID_net_mptcpStatusListen 1717
+#define GO_TID_net_netFD 1713
 #define GO_TID_os_File 849
 #define GO_TID_os_Process 1104
 #define GO_TID_os_ProcessState 1112
@@ -8465,37 +8476,37 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_reflect_Value 1311
 #define GO_TID_reflect_flag 1319
 #define GO_TID_runtime_Cleanup 1110
-#define GO_TID_sdl_AudioDeviceID 1984
-#define GO_TID_sdl_ButtonState 2067
+#define GO_TID_sdl_AudioDeviceID 1986
+#define GO_TID_sdl_ButtonState 2069
 #define GO_TID_sdl_CommonEvent 592
 #define GO_TID_sdl_ControllerAxisEvent 594
 #define GO_TID_sdl_ControllerButtonEvent 595
-#define GO_TID_sdl_EventType 1990
-#define GO_TID_sdl_GameControllerAxis 2065
-#define GO_TID_sdl_GameControllerButton 2066
+#define GO_TID_sdl_EventType 1992
+#define GO_TID_sdl_GameControllerAxis 2067
+#define GO_TID_sdl_GameControllerButton 2068
 #define GO_TID_sdl_JoyDeviceAddedEvent 600
 #define GO_TID_sdl_JoyDeviceRemovedEvent 601
-#define GO_TID_sdl_JoystickID 2064
+#define GO_TID_sdl_JoystickID 2066
 #define GO_TID_sdl_KeyboardEvent 597
-#define GO_TID_sdl_Keycode 1741
-#define GO_TID_sdl_Keymod 2070
-#define GO_TID_sdl_Keysym 2068
+#define GO_TID_sdl_Keycode 1743
+#define GO_TID_sdl_Keymod 2072
+#define GO_TID_sdl_Keysym 2070
 #define GO_TID_sdl_QuitEvent 596
-#define GO_TID_sdl_Scancode 2069
+#define GO_TID_sdl_Scancode 2071
 #define GO_TID_sdl_TextInputEvent 599
 #define GO_TID_sdl_WindowEvent 598
-#define GO_TID_sdl_WindowEventID 2071
+#define GO_TID_sdl_WindowEventID 2073
 #define GO_TID_sort_StringSlice 511
-#define GO_TID_strings_Builder 1393
+#define GO_TID_strings_Builder 1392
 #define GO_TID_strings_Reader 1075
-#define GO_TID_sync_Cond 1928
+#define GO_TID_sync_Cond 1930
 #define GO_TID_sync_Mutex 864
 #define GO_TID_sync_Once 905
 #define GO_TID_sync_RWMutex 1106
-#define GO_TID_sync_WaitGroup 1994
-#define GO_TID_sync_copyChecker 1930
+#define GO_TID_sync_WaitGroup 1996
+#define GO_TID_sync_copyChecker 1932
 #define GO_TID_sync_noCopy 865
-#define GO_TID_sync_notifyList 1929
+#define GO_TID_sync_notifyList 1931
 #define GO_TID_syscall_Credential 1098
 #define GO_TID_syscall_Iovec 857
 #define GO_TID_syscall_Rusage 1114
@@ -8511,8 +8522,8 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_time_Time 1294
 #define GO_TID_time_zone 1298
 #define GO_TID_time_zoneTrans 1300
-#define GO_TID_xml_Attr 1402
-#define GO_TID_xml_Name 1400
+#define GO_TID_xml_Attr 1401
+#define GO_TID_xml_Name 1399
 #define GO_TID_xml_StartElement 477
 #define GO_TID_zip_Decompressor 1304
 #define GO_TID_zip_File 1292
@@ -8527,7 +8538,7 @@ static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
     switch (t) { case 137: case 155: case 469: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 513: case 515: case 527: case 710: case 1287: case 1710: case 2073: return true; default: return false; }
+    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 513: case 515: case 527: case 710: case 1287: case 1712: case 2075: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
     switch (t) { case 180: case 189: case 207: case 251: case 304: case 305: case 799: return true; default: return false; }
@@ -8542,10 +8553,10 @@ static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.L
     switch (t) { case 244: case 245: case 246: case 247: case 248: case 249: case 252: case 253: case 261: case 279: case 538: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 944: case 2074: return true; default: return false; }
+    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 944: case 2076: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
-    switch (t) { case 2074: return true; default: return false; }
+    switch (t) { case 2076: return true; default: return false; }
 }
 parse_yyParser parse_yyNewParser(void);
 GoString parse_yyTokname(int c);
@@ -11905,6 +11916,10 @@ Ret_SoundPtr__GoIface fn_newLazySound(GoIface f, GoString filename, i64 offset, 
 bool Sound_ensureLoaded(Sound* s);
 void Sound_lazyTouch(Sound* s);
 void fn_cvfEvictSounds(void);
+bool fn_onVita(void);
+void fn_cvfVitaWindow(void);
+void fn_cvfVitaSwap(void);
+void fn_cvfVitaPerf(int ev, int arg);
 void fn_cookChar(GoString cdef, int pn, CharGlobalInfo* gi);
 void fn_cvfGcSafepoint(bool fighting);
 i32 fn_cvfHeadlessMain(Slice_GoString args);
@@ -13448,16 +13463,15 @@ void bgVideo_Close(bgVideo* bgv);
 void fn_vitaPlatformInit(void);
 void fn_vitaGLInit(void);
 void fn_vitaGLSwap(void);
-Ret_GoString__GoString__bool fn_vitaShaderSources(GoString name);
+void fn_vitaPerfBegin(void);
+void fn_vitaPerfEnd(int i);
+void fn_vitaPerfTick(bool skipped);
 GoString fn_fmtHex(u32 v);
 void fn_vitaTrace(GoString _p0);
 void fn_vitaMem(GoString _p0);
-void fn_vitaPerfTick(bool _p0);
 void fn_vitaGCTrigger(uintptr_t _p0);
 void fn_vitaRoundGC(void);
-void fn_vitaPerfBegin(void);
 u32 fn_vitaNowUs(void);
-void fn_vitaPerfEnd(int _p0);
 void fn_vitaFBOCheck(void);
 void fn_vitaPhase(int _p0);
 bool fn_vitaHalfRate(void);
@@ -13468,6 +13482,7 @@ bool fn_vitaDrawCensusDue(void);
 void fn_vitaDrawCensus(DrawList dl, Slice_int sortList, i32 l);
 bool fn_vitaDiagProbeDue(void);
 bool fn_vitaClientArrays(void);
+Ret_GoString__GoString__bool fn_vitaShaderSources(GoString name);
 f64 util_Clamp_f64(f64 x, f64 minV, f64 maxV);
 int util2_Min_int(int a, int b);
 buffer_StaticBuffer_polling_PollSinkCb buffer_NewStaticBuffer_polling_PollSinkCb(int capacity);
