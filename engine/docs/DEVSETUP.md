@@ -67,6 +67,23 @@ builds force `FightAspect` 0,0 (`config.go`, `vitaPerf`) while the Go build
 keeps the ini's -1,-1; the cvf-online-5 rules set 4:3 on both. Same with
 cb9a781's build, so not a change of this branch.
 
+`claude/native-cpu4` (2026-11-22, Linux x86-64, Go 1.27.4; CPU round 4,
+VITA_PORT.md section 3): regen from a fresh `setup_ikemen.sh` tree
+reproduces the committed C (4901 functions, 0 TODO, 79 stubs, 31
+placeholders; `src/core/opcodes.h` from `gen_opcodes.py`, now with opcodes
+203-208); `cvf_tests` and `cvf_tests_ucontext` 103/0 on x86-64, armv7 and
+aarch64 (qemu), `cvf_tests` 103/0 under Wine; reference fights
+`54f8ae06...` / `4334350c...` on x86-64, Wine, armv7, aarch64, GC stress
+(`CVF_GC_STRESS=5000`) and ASan/UBSan (only the known `memset(NULL, 0, 0)`
+of `StoryboardManager.clear` and `.step`), and with `CVF_SC_CHECK=1
+CVF_IDX_CHECK=1`; `run_netplay.sh` PASS with `a350bc2d...` (the three
+default scenarios; a three-match session with the same three dumps as
+rounds 2 and 3, `a350bc2d...`, `f9e74b10...`, `c088c178...`; a Go host
+against a native guest, both 0b04ded's `cvf_headless_go` and one built
+from this branch's fork tree with `-tags cvfgohead`, since `-tags
+cvf,cvfgohead` no longer builds: "Go build of the headless runner" in section 3). The online fork with this
+branch's change compiles with `go build ./src`.
+
 Integration of netplay2 and vita (2026-11-21, Linux x86-64, Go 1.27.4):
 regen from a fresh `setup_ikemen.sh` tree reproduces the committed C (4858
 functions, 0 TODO, 79 stubs, 31 placeholders); `cvf_tests` and
@@ -323,6 +340,12 @@ a plain crash (no handler on an alternate stack).
     cd dev-ikemen
     go build -tags cvf,cvfgohead -o cvf_headless_go ./src   # native's configuration (vitaPerf)
     go build -tags cvfgohead -o cvf_headless_go_desktop ./src  # the shipping PC/mobile configuration
+
+(As of `claude/native-cpu4` the first one fails: the `cvf` tag selects both
+render_gl33.go and render_gles32.go, which both declare `boundTexture`,
+and cvf_mobile.go needs the GLES32 renderer. gotoc ignores type errors, so
+regen does not show it. The desktop configuration builds, and with the
+cvf-online-5 rules it plays the same netplay match as a native peer.)
 
 It needs cgo with SDL2, FFmpeg (7), libxmp and a `-lMoltenVK` on macOS. On
 the project Mac (amd64 Go with the x86_64 Homebrew libraries, under

@@ -441,6 +441,157 @@ FightScreenRound, explods and PalFX of the dropped state that
 `SaveGameState` already recycles (round 2), as for the `[]Char` arrays;
 that would remove about half of it. Not done in this round.
 
+### Native CPU work, round 4 (claude/native-cpu4, 2026-11-22)
+
+Same fight, window and tools as rounds 2 and 3 (armv7 guest instructions
+between `gc_safepoint` calls, frames 10-4400; callgrind with Cortex-A9-like
+caches inside `System_action`, x86-64 build, per fight frame).
+
+| Build | armv7 median / mean per tick | Last-level misses per tick | L1 data read misses | x86-64 ms per tick |
+| --- | --- | --- | --- | --- |
+| 989dbeb (round 3) | 3.737 M / 3.908 M | 39.0 K | 59.0 K | 0.675 |
+| + interpreter per-operation cost (8fde2f8) | 3.515 M / 3.684 M | 39.1 K | 59.8 K | 0.670 |
+| + explod index without spawn rebuilds | 3.482 M / 3.643 M | | | |
+| + sysvar() cache | 3.476 M / 3.636 M | | | |
+| + playerID cache | 3.454 M / 3.615 M | | | |
+| + name / authorname compare memo | 3.385 M / 3.544 M | | | |
+| + head fusions (13b5269) | 3.356 M / 3.516 M | 39.0 K | 48.4 K | 0.643 |
+| + rollback saves reuse their copies (b4924b5) = branch head | **3.357 M / 3.518 M** | **39.1 K** | 48.4 K | **0.678** |
+
+(x86-64: median of 7 alternating `CVF_FRAME_STATS` runs against the
+previous commit; the last row is the median of 11 alternating runs against
+989dbeb, which gave 0.679 in the same runs: on this busy container, with
+single runs spread over 0.60-0.80 ms, the head is not measurably faster
+on x86-64 than round 3, although it executes 6 % fewer instructions and
+has 18 % fewer L1 data misses there. The rollback
+change does not run in an offline fight; its row differs from the one
+above only by code placement.) x86-64 instructions (callgrind): 4.40 M ->
+4.13 M. Estimated Vita tick with the round-1 rule (1.35-2.8 ns per
+instruction at 444 MHz): **4.5-9.4 ms** (round 3: 5.0-10.5 ms). Loading
+5.92 G -> 5.93 G. The goal of 3 M per tick is not reached: -10 % this
+round, see "what is left" below.
+
+Interpreter (8fde2f8, -6 %). runOC keeps the value stack in locals: the
+backing array of `sys.bcStack` and the length, for the opcodes that call
+nothing which uses the stack (constants, jumps, comparisons and
+arithmetic, var/fvar/sysvar reads, the simple triggers, the k-redirects,
+the head fusions). Opcodes whose helpers work on `sys.bcStack` itself
+(tcmp/tvcmp, cstrcmp, assign_/const_/ex*_) store the length back and run
+in `runOCx`; every other opcode runs in `runOp`, which is the original
+switch, moved as it was (its `continue`s return "keep the redirect"). The
+exit returns the top value without a second slice copy, and a pushed value
+is computed after the growth check, so no FP register lives across the
+call. That alone was worth little (3.737 -> 3.710 M): the cost per
+operation is mostly the value representation, and per call. Two more
+changes carry the rest:
+
+- gotoc: `s[lo:hi]` with an explicit `hi` is emitted as `GO_SLICE_HI` /
+  `GO_ARRSLICE_HI`, without the "hi < 0: omitted" sentinel test that the C
+  compiler cannot fold for a run-time `hi` (every slicing in the engine;
+  -4 % on armv7 with the runOC exit change).
+- `go_f2i32` / `go_f2i64` (gort.h, hand-written) test the range with one
+  comparison on `fabs` instead of two: the values in range that `|f| <
+  2^31` leaves out, (-2^31-1, -2^31], truncate to INT32_MIN, the
+  out-of-range result, anyway, and `fabs(NaN) < x` is false. The fork's
+  `ToB` likewise tests `|value| > 0` (false for 0 and NaN) instead of
+  IsUndefined plus `value != 0`. Each comparison is a `vcmp` + `vmrs` on
+  the Cortex-A9, which also stalls the pipeline on hardware.
+
+runOC now executes ~42 instructions per operation (55 before), of which
+~9 are the dispatch (bounds check, `tbh`, loop) and ~10 the entry and exit
+of ~4,400 calls per tick spread over the operations.
+
+Smaller items (13b5269, -4.5 %):
+
+- NumExplod index (`cvf_index.go`): the explod a controller fills in right
+  after `spawnExplod` (Explod, GameMakeAnim: `id = 0`, then the id
+  parameter) is counted from its own fields by `numExplodIdx` and skipped
+  by a rebuild, until the next spawn folds it into its player's index
+  (controllers do not nest, so there is one at a time). Spawning no longer
+  invalidates the index: Alucard spawns ~49 explods per tick and queries
+  NumExplod ~120 times, and every spawn had cost a rebuild (~47 per tick);
+  `flagForRemoval` now invalidates only for an explod the index holds (id
+  >= 0). numExplodIdx 97 K -> 49 K per tick. Per-player generations
+  instead would have saved little: player 1 spawns 98 % of the explods
+  and makes 81 % of the queries.
+- `sysvar()` reads: a 16-entry cache beside the var cache, same keys (the
+  map's identity, `varGen`); `sysVarSet`/`sysVarAdd` write through,
+  `sysVarRangeSet` bumps `varGen`.
+- `playerID` (enemyNear's cached list, parent, root, ...): a 16-entry
+  direct-mapped cache in front of the `idMap` lookup, keyed on the map's
+  identity and `idMapGen`, which every write to an idMap bumps
+  (`CharList.clear`/`add`/`delete`, the state clone; both save and load
+  clone). The destroyed/disabled checks still run on every call.
+- `name = "X"` / `authorname = "X"` (the cstrcmp head, ~850 per tick):
+  the plain sequence adds the name to the working string pool and compares
+  the lowercase texts. The pool only grows until it is cleared or replaced
+  (both now give it a new generation, `StringPool.gen`), its entries never
+  change and it holds each text once, so after the first compare the add
+  changes nothing and the result is fixed. It is kept per pool string x
+  for the last two name strings compared with it (matched by identity; the
+  entry keeps the string, so its memory is not reused while cached).
+  Tried first: one 32-entry hashed cache for all sites (thrashed: 875 K
+  misses per fight against 2.2 M hits), content comparison instead of
+  identity (the memcmp ate the gain).
+- Head fusions (`bc_head.go`, opcodes 203-208): `eq8; jz8p`, `eq8; jzb8`,
+  `stateno; range_xx32`, `var8; eq8`, `var8; abs`, `bland; jzb8`. The
+  jzb8 heads run only their first opcode under `CVF_SC_CHECK`, so the
+  jzb8 still checks its skip.
+
+Not merged: a `case 255` in runOC's switch so that GCC would index the
+jump table without a range check (it keeps the check: no gain).
+
+Rollback garbage (b4924b5, both fork patches). A GameState that
+`SaveGameState` dropped (round 2 returns them to the pool) still holds its
+copies of the FightScreenRound (~100 KB per save) and of every explod and
+its PalFX, and nothing else holds them (LoadState clones them again).
+SaveState copies into them now (`cloneInto` for FightScreenRound,
+FightScreen, Explod and PalFX; `Clone` is `cloneInto(nil)`) and keeps the
+explod arrays, as `saveCharData` does with the `[]Char` arrays. Netplay,
+direct scenario, refgame5, native host and guest, `CVF_GC_TRACE`, one
+6,431-frame match (dump a350bc2d... unchanged):
+
+| | Allocated | Collections | Pauses, total |
+| --- | --- | --- | --- |
+| host, 13b5269 | 4118.5 MB | 49 | 590 ms |
+| host, b4924b5 | 2939.2 MB (-29 %) | 38 | 500 ms |
+| guest, 13b5269 | 4381.7 MB | 55 | 643 ms |
+| guest, b4924b5 | 2876.4 MB (-34 %) | 37 | 490 ms |
+
+That is ~430 KB per frame (re-simulated frames included) instead of ~600
+KB; at the Vita's estimated 100-200 ms per pause, 11-18 fewer pauses per
+match. What remains is mostly `Char.Clone` (its animation and slice
+copies, ~150 KB per frame in round 3's profile), SaveState's own slices,
+the explods' Animation copies and the fades.
+
+Go cross-check: the fork does not build with `go build -tags cvf,cvfgohead`
+any more (`boundTexture` is declared in both render_gl33.go and
+render_gles32.go, which the `cvf` tag both selects, and cvf_mobile.go needs
+the GLES32 renderer; gotoc ignores type errors, so regen never showed it).
+The netplay checks therefore ran with two Go hosts: `cvf_headless_go` from
+0b04ded's tree (as in rounds 2 and 3), and one built from this branch's
+fork tree with `-tags cvfgohead` only, the shipping PC/mobile
+configuration (vitaPerf off, so the interpreter changes are not in it,
+but the rollback change and `ToB` are). Both play the same match as a
+native guest (a350bc2d...). The online fork with b4924b5's change
+compiles (`go build ./src`).
+
+What is left, armv7 per tick: `BytecodeExp_runOC` 1.32 M (37 %; ~31 K
+operations at ~42 instructions), `StateBlock.Run` 0.24 M and
+`evalGuarded` 0.14 M (3,288 controller visits), `runOCx` 0.10 M
+(tcmp/tvcmp through the global stack: they could move to the locals too),
+`rangeCheck` 0.08 M (not inlined; an int-only fast path), `varGet` 0.08 M,
+`Command.Step` 0.07 M, string-keyed maps ~0.15 M (`hash_key_bytes`: map(x)
+reads, ~275 per tick, and the remaining PushS), `cstrcmpName` 0.06 M,
+NumHelper 0.06 M, `cmpConst` 0.05 M, NumExplod 0.05 M. The interpreter's
+remaining per-operation cost is the value representation: every value is
+a float64 with a type tag, and each conversion or test is a VFP compare
+with a `vmrs`. 3 M per tick needs either typed operations chosen at
+compile time (an int-only fast path for the comparisons and arithmetic
+whose operands are known ints: most `var(n) = k`, `stateno = k`,
+`time > k`) or fewer runOC calls (~4,400 per tick at ~40 instructions of
+entry and exit: one call per controller instead of per trigger).
+
 ## 4. Determinism on 32-bit ARM
 
 - **Verified**: the armv7 build produces both reference dumps bit for bit
