@@ -340,6 +340,7 @@ typedef struct character character;
 typedef struct constCacheEnt constCacheEnt;
 typedef struct cookW cookW;
 typedef struct cparser cparser;
+typedef struct cstrEnt cstrEnt;
 typedef struct cvfFpFile cvfFpFile;
 typedef struct cvfNearbyHost cvfNearbyHost;
 typedef struct cvfNearbyNet cvfNearbyNet;
@@ -379,6 +380,7 @@ typedef struct nameFact nameFact;
 typedef struct nullRenderer nullRenderer;
 typedef struct nullTexture nullTexture;
 typedef struct paletteCopyKey paletteCopyKey;
+typedef struct playerIDEnt playerIDEnt;
 typedef struct queryPart queryPart;
 typedef struct rankingEntry rankingEntry;
 typedef struct rankingRow rankingRow;
@@ -875,6 +877,10 @@ typedef struct Arr12_stagePlayer Arr12_stagePlayer;
 #ifndef CVF_DEF_Arr16_f32
 #define CVF_DEF_Arr16_f32
 typedef struct Arr16_f32 Arr16_f32;
+#endif
+#ifndef CVF_DEF_Arr16_varCacheEnt
+#define CVF_DEF_Arr16_varCacheEnt
+typedef struct Arr16_varCacheEnt Arr16_varCacheEnt;
 #endif
 #ifndef CVF_DEF_Arr192_bool
 #define CVF_DEF_Arr192_bool
@@ -1864,6 +1870,10 @@ typedef struct { boundTexture *p; int len, cap; } Slice_boundTexture;
 #ifndef CVF_DEF_Slice_constCacheEnt
 #define CVF_DEF_Slice_constCacheEnt
 typedef struct { constCacheEnt *p; int len, cap; } Slice_constCacheEnt;
+#endif
+#ifndef CVF_DEF_Slice_cstrEnt
+#define CVF_DEF_Slice_cstrEnt
+typedef struct { cstrEnt *p; int len, cap; } Slice_cstrEnt;
 #endif
 #ifndef CVF_DEF_Slice_cvfNearbyHost
 #define CVF_DEF_Slice_cvfNearbyHost
@@ -3507,6 +3517,10 @@ typedef struct cookW cookW;
 #define CVF_TD_cparser
 typedef struct cparser cparser;
 #endif
+#ifndef CVF_TD_cstrEnt
+#define CVF_TD_cstrEnt
+typedef struct cstrEnt cstrEnt;
+#endif
 #ifndef CVF_TD_cvfFpFile
 #define CVF_TD_cvfFpFile
 typedef struct cvfFpFile cvfFpFile;
@@ -3662,6 +3676,10 @@ typedef struct nullTexture nullTexture;
 #ifndef CVF_TD_paletteCopyKey
 #define CVF_TD_paletteCopyKey
 typedef struct paletteCopyKey paletteCopyKey;
+#endif
+#ifndef CVF_TD_playerIDEnt
+#define CVF_TD_playerIDEnt
+typedef struct playerIDEnt playerIDEnt;
 #endif
 #ifndef CVF_TD_queryPart
 #define CVF_TD_queryPart
@@ -5235,6 +5253,10 @@ struct Arr8_HitOverride { HitOverride v[8]; };
 #define CVF_BODY_Arr64_varCacheEnt
 struct Arr64_varCacheEnt { varCacheEnt v[64]; };
 #endif
+#ifndef CVF_BODY_Arr16_varCacheEnt
+#define CVF_BODY_Arr16_varCacheEnt
+struct Arr16_varCacheEnt { varCacheEnt v[16]; };
+#endif
 #ifndef CVF_BODY_Arr6_f32
 #define CVF_BODY_Arr6_f32
 struct Arr6_f32 { f32 v[6]; };
@@ -5311,6 +5333,7 @@ struct Char {
     Map_i32_i32 cnsvar;
     u32 varGen;
     Arr64_varCacheEnt varCache;
+    Arr16_varCacheEnt sysVarCache;
     Map_i32_f32 cnsfvar;
     Map_i32_i32 cnssysvar;
     Map_i32_f32 cnssysfvar;
@@ -11301,6 +11324,8 @@ struct StringPool {
     Map_GoString_int Map;
     Arr64_Anon_bfbab8ed pcache;
     Slice_constCacheEnt cc;
+    u32 gen;
+    Slice_cstrEnt nameMemo;
 };
 
 struct StunBar {
@@ -12068,6 +12093,12 @@ struct cparser {
     int depth;
 };
 
+struct cstrEnt {
+    Arr2_GoString s;
+    Arr2_bool eq;
+    u32 gen;
+};
+
 struct cvfFpFile {
     GoString rel;
     u64 hash;
@@ -12413,6 +12444,14 @@ struct nullTexture {
 struct paletteCopyKey {
     u32* first;
     int count;
+};
+
+struct playerIDEnt {
+    i32 id;
+    u32 gen;
+    uintptr_t mp;
+    Char* c;
+    bool ok;
 };
 
 struct queryPart {
@@ -13029,6 +13068,10 @@ GO_SLICE_FUNCS(Slice_boundTexture, boundTexture)
 #ifndef CVF_FN_Slice_constCacheEnt
 #define CVF_FN_Slice_constCacheEnt
 GO_SLICE_FUNCS(Slice_constCacheEnt, constCacheEnt)
+#endif
+#ifndef CVF_FN_Slice_cstrEnt
+#define CVF_FN_Slice_cstrEnt
+GO_SLICE_FUNCS(Slice_cstrEnt, cstrEnt)
 #endif
 #ifndef CVF_FN_Slice_cvfNearbyHost
 #define CVF_FN_Slice_cvfNearbyHost

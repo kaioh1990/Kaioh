@@ -174,9 +174,17 @@ typedef struct Arr16_int Arr16_int;
 #define CVF_DEF_Arr16_parse_yySymType
 typedef struct Arr16_parse_yySymType Arr16_parse_yySymType;
 #endif
+#ifndef CVF_DEF_Arr16_playerIDEnt
+#define CVF_DEF_Arr16_playerIDEnt
+typedef struct Arr16_playerIDEnt Arr16_playerIDEnt;
+#endif
 #ifndef CVF_DEF_Arr16_u8
 #define CVF_DEF_Arr16_u8
 typedef struct Arr16_u8 Arr16_u8;
+#endif
+#ifndef CVF_DEF_Arr16_varCacheEnt
+#define CVF_DEF_Arr16_varCacheEnt
+typedef struct Arr16_varCacheEnt Arr16_varCacheEnt;
 #endif
 #ifndef CVF_DEF_Arr17_int
 #define CVF_DEF_Arr17_int
@@ -1033,7 +1041,7 @@ typedef struct fixed_Rectangle26_6 fixed_Rectangle26_6;
 typedef struct flac2_Encoder flac2_Encoder;
 typedef struct flac2_Stream flac2_Stream;
 typedef struct flac_decoder flac_decoder;
-typedef struct fontSpec_L738ac5 fontSpec_L738ac5;
+typedef struct fontSpec_L689694 fontSpec_L689694;
 typedef struct fontSpec_Le749ae fontSpec_Le749ae;
 typedef struct frame2_Frame frame2_Frame;
 typedef struct frame2_Header frame2_Header;
@@ -1221,8 +1229,8 @@ typedef struct oggvorbis_oggReader oggvorbis_oggReader;
 typedef struct oggvorbis_page oggvorbis_page;
 typedef struct oggvorbis_pageHeader oggvorbis_pageHeader;
 typedef struct ov_Lbfe85b ov_Lbfe85b;
-typedef struct pair_L7a4b45 pair_L7a4b45;
-typedef struct pair_Ldeb9e1 pair_Ldeb9e1;
+typedef struct pair_L0597e3 pair_L0597e3;
+typedef struct pair_L0a75fe pair_L0a75fe;
 typedef struct parse_Error parse_Error;
 typedef struct parse_Lexer parse_Lexer;
 typedef struct parse_Scanner parse_Scanner;
@@ -2108,6 +2116,10 @@ typedef struct { cnode *p; int len, cap; } Slice_cnode;
 #define CVF_DEF_Slice_constCacheEnt
 typedef struct { constCacheEnt *p; int len, cap; } Slice_constCacheEnt;
 #endif
+#ifndef CVF_DEF_Slice_cstrEnt
+#define CVF_DEF_Slice_cstrEnt
+typedef struct { cstrEnt *p; int len, cap; } Slice_cstrEnt;
+#endif
 #ifndef CVF_DEF_Slice_cvfFpFile
 #define CVF_DEF_Slice_cvfFpFile
 typedef struct { cvfFpFile *p; int len, cap; } Slice_cvfFpFile;
@@ -2440,13 +2452,13 @@ typedef struct { namePos_L8b4b91 *p; int len, cap; } Slice_namePos_L8b4b91;
 #define CVF_DEF_Slice_ov_Lbfe85b
 typedef struct { ov_Lbfe85b *p; int len, cap; } Slice_ov_Lbfe85b;
 #endif
-#ifndef CVF_DEF_Slice_pair_L7a4b45
-#define CVF_DEF_Slice_pair_L7a4b45
-typedef struct { pair_L7a4b45 *p; int len, cap; } Slice_pair_L7a4b45;
+#ifndef CVF_DEF_Slice_pair_L0597e3
+#define CVF_DEF_Slice_pair_L0597e3
+typedef struct { pair_L0597e3 *p; int len, cap; } Slice_pair_L0597e3;
 #endif
-#ifndef CVF_DEF_Slice_pair_Ldeb9e1
-#define CVF_DEF_Slice_pair_Ldeb9e1
-typedef struct { pair_Ldeb9e1 *p; int len, cap; } Slice_pair_Ldeb9e1;
+#ifndef CVF_DEF_Slice_pair_L0a75fe
+#define CVF_DEF_Slice_pair_L0a75fe
+typedef struct { pair_L0a75fe *p; int len, cap; } Slice_pair_L0a75fe;
 #endif
 #ifndef CVF_DEF_Slice_parse_yySymType
 #define CVF_DEF_Slice_parse_yySymType
@@ -3092,9 +3104,9 @@ typedef GoMap Map_int_Slice_int;
 #define CVF_DEF_Map_int_bool
 typedef GoMap Map_int_bool;
 #endif
-#ifndef CVF_DEF_Map_int_fontSpec_L738ac5
-#define CVF_DEF_Map_int_fontSpec_L738ac5
-typedef GoMap Map_int_fontSpec_L738ac5;
+#ifndef CVF_DEF_Map_int_fontSpec_L689694
+#define CVF_DEF_Map_int_fontSpec_L689694
+typedef GoMap Map_int_fontSpec_L689694;
 #endif
 #ifndef CVF_DEF_Map_int_fontSpec_Le749ae
 #define CVF_DEF_Map_int_fontSpec_Le749ae
@@ -3437,9 +3449,17 @@ struct parse_yySymType { int yys; ast_Token token; Slice_ast_Stmt stmts; ast_Stm
 #define CVF_BODY_Arr16_parse_yySymType
 struct Arr16_parse_yySymType { parse_yySymType v[16]; };
 #endif
+#ifndef CVF_BODY_Arr16_playerIDEnt
+#define CVF_BODY_Arr16_playerIDEnt
+struct Arr16_playerIDEnt { playerIDEnt v[16]; };
+#endif
 #ifndef CVF_BODY_Arr16_u8
 #define CVF_BODY_Arr16_u8
 struct Arr16_u8 { u8 v[16]; };
+#endif
+#ifndef CVF_BODY_Arr16_varCacheEnt
+#define CVF_BODY_Arr16_varCacheEnt
+struct Arr16_varCacheEnt { varCacheEnt v[16]; };
 #endif
 #ifndef CVF_BODY_Arr17_int
 #define CVF_BODY_Arr17_int
@@ -4279,7 +4299,7 @@ struct errutil_position { GoString file; int line; GoString callee; };
 struct flac2_Encoder { flac2_Stream* embed_Stream; GoIface w; u16 blockSizeMin; u16 blockSizeMax; u32 frameSizeMin; u32 frameSizeMax; GoIface md5sum; u64 nsamples; u64 curNum; };
 struct flac2_Stream { meta_StreamInfo* Info; Slice_meta_BlockPtr Blocks; meta_SeekTable* seekTable; int seekTableSize; i64 dataStart; GoIface r; };
 struct flac_decoder { GoIface r; flac2_Stream* stream; frame2_Frame* frame; int posInFrame; GoIface err; bool seekEnabled; bool hasFixedBlockSize; };
-struct fontSpec_L738ac5 { GoString path; i32 height; };
+struct fontSpec_L689694 { GoString path; i32 height; };
 struct fontSpec_Le749ae { GoString path; i32 height; };
 struct frame2_Header { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; };
 struct frame2_Frame { union { frame2_Header Header_; struct { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; }; }; Slice_frame2_SubframePtr Subframes; hashutil_Hash16 crc; bits_x2_Reader* br; GoIface hr; GoIface r; };
@@ -4463,8 +4483,8 @@ struct vorbis2_CommentHeader { GoString Vendor; Slice_GoString Comments; };
 struct vorbis2_Decoder { bool headerRead; bool setupRead; int sampleRate; int channels; vorbis2_Bitrate Bitrate; Arr2_int blocksize; union { vorbis2_CommentHeader CommentHeader_; struct { GoString Vendor; Slice_GoString Comments; }; }; Slice_vorbis2_codebook codebooks; Slice_vorbis2_floor floors; Slice_vorbis2_residue residues; Slice_vorbis2_mapping mappings; Slice_vorbis2_mode modes; Slice_f32 overlap; bool hasOverlap; bool overlapShort; Arr2_Slice_f32 windows; Arr2_vorbis2_imdctLookup lookup; Slice_Slice_f32 residueBuffer; Slice_vorbis2_floorData floorBuffer; Slice_Slice_f32 rawBuffer; };
 struct oggvorbis_Reader { oggvorbis_oggReader r; vorbis2_Decoder dec; i64 position; Slice_f32 buffer; Slice_f32 originalBuffer; int toSkip; i64 length; };
 struct ov_Lbfe85b { OpCode o; u64 v; };
-struct pair_L7a4b45 { Char* ch; f32 dist; };
-struct pair_Ldeb9e1 { Projectile* pr; f32 dist; };
+struct pair_L0597e3 { Projectile* pr; f32 dist; };
+struct pair_L0a75fe { Char* ch; f32 dist; };
 struct parse_Error { ast_Position Pos; GoString Message; GoString Token; };
 struct parse_Lexer { parse_Scanner* scanner; Slice_ast_Stmt Stmts; bool PNewLine; ast_Token Token; int PrevTokenType; };
 struct parse_Scanner { ast_Position Pos; GoOpaque /* bufio.Reader */* reader; };
@@ -5174,6 +5194,10 @@ GO_SLICE_FUNCS(Slice_cnode, cnode)
 #define CVF_FN_Slice_constCacheEnt
 GO_SLICE_FUNCS(Slice_constCacheEnt, constCacheEnt)
 #endif
+#ifndef CVF_FN_Slice_cstrEnt
+#define CVF_FN_Slice_cstrEnt
+GO_SLICE_FUNCS(Slice_cstrEnt, cstrEnt)
+#endif
 #ifndef CVF_FN_Slice_cvfFpFile
 #define CVF_FN_Slice_cvfFpFile
 GO_SLICE_FUNCS(Slice_cvfFpFile, cvfFpFile)
@@ -5530,13 +5554,13 @@ GO_SLICE_FUNCS(Slice_namePos_L8b4b91, namePos_L8b4b91)
 #define CVF_FN_Slice_ov_Lbfe85b
 GO_SLICE_FUNCS_A(Slice_ov_Lbfe85b, ov_Lbfe85b)
 #endif
-#ifndef CVF_FN_Slice_pair_L7a4b45
-#define CVF_FN_Slice_pair_L7a4b45
-GO_SLICE_FUNCS(Slice_pair_L7a4b45, pair_L7a4b45)
+#ifndef CVF_FN_Slice_pair_L0597e3
+#define CVF_FN_Slice_pair_L0597e3
+GO_SLICE_FUNCS(Slice_pair_L0597e3, pair_L0597e3)
 #endif
-#ifndef CVF_FN_Slice_pair_Ldeb9e1
-#define CVF_FN_Slice_pair_Ldeb9e1
-GO_SLICE_FUNCS(Slice_pair_Ldeb9e1, pair_Ldeb9e1)
+#ifndef CVF_FN_Slice_pair_L0a75fe
+#define CVF_FN_Slice_pair_L0a75fe
+GO_SLICE_FUNCS(Slice_pair_L0a75fe, pair_L0a75fe)
 #endif
 #ifndef CVF_FN_Slice_parse_yySymType
 #define CVF_FN_Slice_parse_yySymType
@@ -6190,9 +6214,9 @@ GO_MAP_FUNCS(Map_int_Slice_int, int, Slice_int, false)
 #define CVF_FN_Map_int_bool
 GO_MAP_FUNCS(Map_int_bool, int, bool, false)
 #endif
-#ifndef CVF_FN_Map_int_fontSpec_L738ac5
-#define CVF_FN_Map_int_fontSpec_L738ac5
-GO_MAP_FUNCS(Map_int_fontSpec_L738ac5, int, fontSpec_L738ac5, false)
+#ifndef CVF_FN_Map_int_fontSpec_L689694
+#define CVF_FN_Map_int_fontSpec_L689694
+GO_MAP_FUNCS(Map_int_fontSpec_L689694, int, fontSpec_L689694, false)
 #endif
 #ifndef CVF_FN_Map_int_fontSpec_Le749ae
 #define CVF_FN_Map_int_fontSpec_Le749ae
@@ -6374,6 +6398,10 @@ typedef struct { BytecodeValue r0; bool r1; GoIface r2; } Ret_BytecodeValue__boo
 #ifndef CVF_RET_Ret_CharPtr__CharGlobalInfo
 #define CVF_RET_Ret_CharPtr__CharGlobalInfo
 typedef struct { Char* r0; CharGlobalInfo r1; } Ret_CharPtr__CharGlobalInfo;
+#endif
+#ifndef CVF_RET_Ret_CharPtr__bool
+#define CVF_RET_Ret_CharPtr__bool
+typedef struct { Char* r0; bool r1; } Ret_CharPtr__bool;
 #endif
 #ifndef CVF_RET_Ret_ConfigPtr__GoIface
 #define CVF_RET_Ret_ConfigPtr__GoIface
@@ -8180,6 +8208,8 @@ extern lua_expcontext* g_lua_ecfuncdef;
 extern Arr12_CharPtr g_enemyNearScratch;
 extern GoIface g_bufseekio_errNegativeRead;
 extern sjson_errorType* g_sjson_errNoChange;
+extern Explod* g_explodConstr;
+extern int g_explodConstrPN;
 extern u32 g_explodIdxGen;
 extern Arr12_explodIdx g_explodIdxs;
 extern Map_GoString_lua_LGFunction g_lua_fileMethods;
@@ -8202,6 +8232,7 @@ extern Slice_u16 g_huffman_huffmanTable;
 extern bool g_hwProf;
 extern bool g_hwProfDone;
 extern Slice_u8 g_flac2_id3Signature;
+extern u32 g_idMapGen;
 extern GoString g_identFragShader;
 extern GoString g_identVertShader;
 extern bool g_idxCheck;
@@ -8233,6 +8264,7 @@ extern NullStateController g_nullStateController;
 extern Slice_lua_opProp g_lua_opProps;
 extern Map_GoString_lua_LGFunction g_lua_osFuncs;
 extern GoString g_panoramaToCubeMapFragShader;
+extern Arr16_playerIDEnt g_playerIDCache;
 extern Arr256_u8 g_truetype_popCount;
 extern Slice_f64 g_frame_powtab34;
 extern Arr128_lua_LValue g_lua_preloads;
@@ -8278,6 +8310,7 @@ extern int g_stateHashTick;
 extern Slice_Anon_194875d7 g_lua_stdFiles;
 extern Map_GoString_GoFunc g_gjson_stockModifiers;
 extern Map_GoString_lua_LGFunction g_lua_strFuncs;
+extern u32 g_stringPoolGen;
 extern Arr512_f32 g_frame_synthDtbl;
 extern Arr64_Arr32_f32 g_frame_synthNWin;
 extern System g_sys;
@@ -8315,32 +8348,32 @@ void ik_init_globals(void);
 
 GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_M_string_any 237
-#define GO_TID_P_abi_Type 1311
+#define GO_TID_P_abi_Type 1312
 #define GO_TID_P_bufio_Reader 198
 #define GO_TID_P_bufio_Writer 155
 #define GO_TID_P_bytes_Buffer 137
 #define GO_TID_P_bytes_Reader 189
-#define GO_TID_P_context_cancelCtx 2074
+#define GO_TID_P_context_cancelCtx 2075
 #define GO_TID_P_exec_Cmd 1093
 #define GO_TID_P_exec_ExitError 259
-#define GO_TID_P_fnv_sum32a 2075
+#define GO_TID_P_fnv_sum32a 2076
 #define GO_TID_P_image_Alpha 141
 #define GO_TID_P_image_NRGBA 497
 #define GO_TID_P_image_Paletted 496
 #define GO_TID_P_image_RGBA 488
 #define GO_TID_P_image_Uniform 489
-#define GO_TID_P_ini_File 1319
-#define GO_TID_P_ini_Key 1329
-#define GO_TID_P_ini_Section 1326
+#define GO_TID_P_ini_File 1320
+#define GO_TID_P_ini_Key 1330
+#define GO_TID_P_ini_Section 1327
 #define GO_TID_P_io_LimitedReader 230
 #define GO_TID_P_net_IPNet 467
-#define GO_TID_P_net_OpError 2073
+#define GO_TID_P_net_OpError 2074
 #define GO_TID_P_net_TCPAddr 514
 #define GO_TID_P_net_TCPConn 515
 #define GO_TID_P_net_TCPListener 513
 #define GO_TID_P_net_UDPAddr 187
-#define GO_TID_P_net_UDPConn 2072
-#define GO_TID_P_net_netFD 1709
+#define GO_TID_P_net_UDPConn 2073
+#define GO_TID_P_net_netFD 1710
 #define GO_TID_P_os_File 180
 #define GO_TID_P_os_Process 1103
 #define GO_TID_P_os_ProcessState 1111
@@ -8350,31 +8383,31 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_P_reflect_SliceHeader 1058
 #define GO_TID_P_strings_Builder 469
 #define GO_TID_P_strings_Reader 251
-#define GO_TID_P_sync_Cond 1926
+#define GO_TID_P_sync_Cond 1927
 #define GO_TID_P_sync_Mutex 591
 #define GO_TID_P_sync_Once 904
 #define GO_TID_P_syscall_Credential 1097
 #define GO_TID_P_syscall_Rusage 1113
 #define GO_TID_P_syscall_SysProcAttr 1095
 #define GO_TID_P_tabwriter_Writer 138
-#define GO_TID_P_time_Location 1294
-#define GO_TID_P_time_zone 1300
-#define GO_TID_P_zip_File 1290
-#define GO_TID_P_zip_ReadCloser 1286
-#define GO_TID_P_zip_Reader 1301
+#define GO_TID_P_time_Location 1295
+#define GO_TID_P_time_zone 1301
+#define GO_TID_P_zip_File 1291
+#define GO_TID_P_zip_ReadCloser 1287
+#define GO_TID_P_zip_Reader 1302
 #define GO_TID_S_any 238
 #define GO_TID_S_uint8 149
-#define GO_TID_abi_Kind 1314
-#define GO_TID_abi_NameOff 1316
-#define GO_TID_abi_TFlag 1313
-#define GO_TID_abi_Type 1312
-#define GO_TID_abi_TypeOff 1317
+#define GO_TID_abi_Kind 1315
+#define GO_TID_abi_NameOff 1317
+#define GO_TID_abi_TFlag 1314
+#define GO_TID_abi_Type 1313
+#define GO_TID_abi_TypeOff 1318
 #define GO_TID_atomic_Bool 906
 #define GO_TID_atomic_Int32 1107
 #define GO_TID_atomic_Pointer_os_dirInfo_ 860
 #define GO_TID_atomic_Uint32 1105
-#define GO_TID_atomic_Uint64 1979
-#define GO_TID_atomic_align64 1980
+#define GO_TID_atomic_Uint64 1980
+#define GO_TID_atomic_align64 1981
 #define GO_TID_atomic_noCopy 867
 #define GO_TID_binary_bigEndian 212
 #define GO_TID_binary_littleEndian 163
@@ -8384,39 +8417,39 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_bytes_Reader 909
 #define GO_TID_bytes_readOp 658
 #define GO_TID_color_NRGBA 196
-#define GO_TID_color_Palette 1426
+#define GO_TID_color_Palette 1427
 #define GO_TID_color_RGBA 492
 #define GO_TID_exec_Cmd 1094
 #define GO_TID_exec_ExitError 1122
 #define GO_TID_float64 14
 #define GO_TID_image_Alpha 664
-#define GO_TID_image_NRGBA 1427
-#define GO_TID_image_Paletted 1425
+#define GO_TID_image_NRGBA 1428
+#define GO_TID_image_Paletted 1426
 #define GO_TID_image_Point 666
-#define GO_TID_image_RGBA 1420
+#define GO_TID_image_RGBA 1421
 #define GO_TID_image_Rectangle 665
-#define GO_TID_image_Uniform 1421
-#define GO_TID_ini_DebugFunc 1322
-#define GO_TID_ini_File 1320
-#define GO_TID_ini_Key 1330
-#define GO_TID_ini_LoadOptions 1321
-#define GO_TID_ini_NameMapper 1332
-#define GO_TID_ini_Section 1327
-#define GO_TID_ini_ValueMapper 1333
+#define GO_TID_image_Uniform 1422
+#define GO_TID_ini_DebugFunc 1323
+#define GO_TID_ini_File 1321
+#define GO_TID_ini_Key 1331
+#define GO_TID_ini_LoadOptions 1322
+#define GO_TID_ini_NameMapper 1333
+#define GO_TID_ini_Section 1328
+#define GO_TID_ini_ValueMapper 1334
 #define GO_TID_io_LimitedReader 945
 #define GO_TID_json_Number 529
 #define GO_TID_net_IP 908
-#define GO_TID_net_IPMask 1391
-#define GO_TID_net_IPNet 1390
-#define GO_TID_net_KeepAliveConfig 1713
-#define GO_TID_net_ListenConfig 1711
-#define GO_TID_net_TCPAddr 1715
-#define GO_TID_net_TCPConn 1716
-#define GO_TID_net_TCPListener 1708
+#define GO_TID_net_IPMask 1392
+#define GO_TID_net_IPNet 1391
+#define GO_TID_net_KeepAliveConfig 1714
+#define GO_TID_net_ListenConfig 1712
+#define GO_TID_net_TCPAddr 1716
+#define GO_TID_net_TCPConn 1717
+#define GO_TID_net_TCPListener 1709
 #define GO_TID_net_UDPAddr 907
-#define GO_TID_net_conn 1717
-#define GO_TID_net_mptcpStatusListen 1714
-#define GO_TID_net_netFD 1710
+#define GO_TID_net_conn 1718
+#define GO_TID_net_mptcpStatusListen 1715
+#define GO_TID_net_netFD 1711
 #define GO_TID_os_File 849
 #define GO_TID_os_Process 1104
 #define GO_TID_os_ProcessState 1112
@@ -8429,40 +8462,40 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_poll_pollDesc 858
 #define GO_TID_reflect_Kind 498
 #define GO_TID_reflect_SliceHeader 1059
-#define GO_TID_reflect_Value 1310
-#define GO_TID_reflect_flag 1318
+#define GO_TID_reflect_Value 1311
+#define GO_TID_reflect_flag 1319
 #define GO_TID_runtime_Cleanup 1110
-#define GO_TID_sdl_AudioDeviceID 1983
-#define GO_TID_sdl_ButtonState 2066
+#define GO_TID_sdl_AudioDeviceID 1984
+#define GO_TID_sdl_ButtonState 2067
 #define GO_TID_sdl_CommonEvent 592
 #define GO_TID_sdl_ControllerAxisEvent 594
 #define GO_TID_sdl_ControllerButtonEvent 595
-#define GO_TID_sdl_EventType 1989
-#define GO_TID_sdl_GameControllerAxis 2064
-#define GO_TID_sdl_GameControllerButton 2065
+#define GO_TID_sdl_EventType 1990
+#define GO_TID_sdl_GameControllerAxis 2065
+#define GO_TID_sdl_GameControllerButton 2066
 #define GO_TID_sdl_JoyDeviceAddedEvent 600
 #define GO_TID_sdl_JoyDeviceRemovedEvent 601
-#define GO_TID_sdl_JoystickID 2063
+#define GO_TID_sdl_JoystickID 2064
 #define GO_TID_sdl_KeyboardEvent 597
-#define GO_TID_sdl_Keycode 1740
-#define GO_TID_sdl_Keymod 2069
-#define GO_TID_sdl_Keysym 2067
+#define GO_TID_sdl_Keycode 1741
+#define GO_TID_sdl_Keymod 2070
+#define GO_TID_sdl_Keysym 2068
 #define GO_TID_sdl_QuitEvent 596
-#define GO_TID_sdl_Scancode 2068
+#define GO_TID_sdl_Scancode 2069
 #define GO_TID_sdl_TextInputEvent 599
 #define GO_TID_sdl_WindowEvent 598
-#define GO_TID_sdl_WindowEventID 2070
+#define GO_TID_sdl_WindowEventID 2071
 #define GO_TID_sort_StringSlice 511
-#define GO_TID_strings_Builder 1392
+#define GO_TID_strings_Builder 1393
 #define GO_TID_strings_Reader 1075
-#define GO_TID_sync_Cond 1927
+#define GO_TID_sync_Cond 1928
 #define GO_TID_sync_Mutex 864
 #define GO_TID_sync_Once 905
 #define GO_TID_sync_RWMutex 1106
-#define GO_TID_sync_WaitGroup 1993
-#define GO_TID_sync_copyChecker 1929
+#define GO_TID_sync_WaitGroup 1994
+#define GO_TID_sync_copyChecker 1930
 #define GO_TID_sync_noCopy 865
-#define GO_TID_sync_notifyList 1928
+#define GO_TID_sync_notifyList 1929
 #define GO_TID_syscall_Credential 1098
 #define GO_TID_syscall_Iovec 857
 #define GO_TID_syscall_Rusage 1114
@@ -8474,19 +8507,19 @@ GoIface ik_binread_any(GoIface r, GoIface x, int big);
 #define GO_TID_tabwriter_Writer 659
 #define GO_TID_tabwriter_cell 661
 #define GO_TID_time_Duration 589
-#define GO_TID_time_Location 1295
-#define GO_TID_time_Time 1293
-#define GO_TID_time_zone 1297
-#define GO_TID_time_zoneTrans 1299
-#define GO_TID_xml_Attr 1401
-#define GO_TID_xml_Name 1399
+#define GO_TID_time_Location 1296
+#define GO_TID_time_Time 1294
+#define GO_TID_time_zone 1298
+#define GO_TID_time_zoneTrans 1300
+#define GO_TID_xml_Attr 1402
+#define GO_TID_xml_Name 1400
 #define GO_TID_xml_StartElement 477
-#define GO_TID_zip_Decompressor 1303
-#define GO_TID_zip_File 1291
-#define GO_TID_zip_FileHeader 1292
-#define GO_TID_zip_ReadCloser 1287
-#define GO_TID_zip_Reader 1288
-#define GO_TID_zip_fileListEntry 1305
+#define GO_TID_zip_Decompressor 1304
+#define GO_TID_zip_File 1292
+#define GO_TID_zip_FileHeader 1293
+#define GO_TID_zip_ReadCloser 1288
+#define GO_TID_zip_Reader 1289
+#define GO_TID_zip_fileListEntry 1306
 static inline bool ik_impl_0(int t) { // interface{Seek(offset int64, whence int) (int64, error)}
     switch (t) { case 150: case 180: case 189: case 207: case 251: case 304: case 305: case 799: return true; default: return false; }
 }
@@ -8494,7 +8527,7 @@ static inline bool ik_impl_1(int t) { // interface{io.Writer; io.ByteWriter}
     switch (t) { case 137: case 155: case 469: return true; default: return false; }
 }
 static inline bool ik_impl_2(int t) { // interface{Close() error}
-    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 513: case 515: case 527: case 710: case 1286: case 1709: case 2072: return true; default: return false; }
+    switch (t) { case 144: case 158: case 160: case 162: case 170: case 180: case 185: case 304: case 305: case 513: case 515: case 527: case 710: case 1287: case 1710: case 2073: return true; default: return false; }
 }
 static inline bool ik_impl_3(int t) { // interface{io.Reader; io.Seeker}
     switch (t) { case 180: case 189: case 207: case 251: case 304: case 305: case 799: return true; default: return false; }
@@ -8509,10 +8542,10 @@ static inline bool ik_impl_6(int t) { // interface{String() string; Type() lua.L
     switch (t) { case 244: case 245: case 246: case 247: case 248: case 249: case 252: case 253: case 261: case 279: case 538: return true; default: return false; }
 }
 static inline bool ik_impl_7(int t) { // interface{Error() string}
-    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 944: case 2073: return true; default: return false; }
+    switch (t) { case 145: case 147: case 151: case 182: case 199: case 204: case 225: case 227: case 228: case 229: case 240: case 250: case 255: case 259: case 262: case 266: case 281: case 944: case 2074: return true; default: return false; }
 }
 static inline bool ik_impl_8(int t) { // interface{Temporary() bool; Timeout() bool; error}
-    switch (t) { case 2073: return true; default: return false; }
+    switch (t) { case 2074: return true; default: return false; }
 }
 parse_yyParser parse_yyNewParser(void);
 GoString parse_yyTokname(int c);
@@ -10605,6 +10638,8 @@ Slice_BytecodeValue fn_bcLRoom(Slice_BytecodeValue st, int n);
 Slice_BytecodeValue fn_bcLGrow(Slice_BytecodeValue st, int n);
 int* fn_bcIP(int d);
 int BytecodeExp_runOCx(BytecodeExp be, Char* c, Char* oc, int d, int i, OpCode opc);
+int BytecodeExp_cstrcmpName(BytecodeExp be, Char* c, int i);
+cstrEnt* StringPool_nameMemoAt(StringPool* sp, int x);
 Ret_int__bool__CharPtr BytecodeExp_runOp(BytecodeExp be, Char* c, Char* oc, int d, int i, OpCode opc);
 void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i);
 void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc);
@@ -11278,6 +11313,7 @@ void CharList_tick(CharList* cl);
 void CharList_cueDraw(CharList* cl);
 Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list);
 void Char_varCachePut(Char* c, i32 i);
+void Char_sysVarCachePut(Char* c, i32 i);
 void Char_fvarCachePut(Char* c, i32 i);
 i32 fn_Random(void);
 void fn_Srand(i32 s);
@@ -11743,6 +11779,11 @@ GoString fn_cvfFpKey(GoString def, bool stage);
 GoIface System_cvfCheckMatchContent(System* s, GoString remote);
 void fn_helperIdxChanged(void);
 void fn_explodIdxChanged(void);
+bool fn_explodIdxValid(int pn);
+void fn_explodIdxSpawned(int pn, Explod* e);
+void fn_explodIdxSettle(void);
+void fn_explodIdxWrite(Explod* e);
+void fn_explodIdxReset(void);
 i32 fn_numHelperWalk(int pn, i32 id);
 i32 fn_numHelperIdx(int pn, i32 id);
 i32 fn_numExplodWalk(int pn, i32 id, i32 pid);
@@ -13199,6 +13240,7 @@ bool System_escExit(System* s);
 bool System_matchOver(System* s);
 Char* System_anyChar(System* s);
 Char* System_playerID(System* s, i32 id);
+Ret_CharPtr__bool System_playerIDLookup(System* s, i32 id);
 BytecodeValue System_playerIDExist(System* s, BytecodeValue id);
 Char* System_playerIndex(System* s, i32 idx);
 BytecodeValue System_playerIndexExist(System* s, BytecodeValue idx);

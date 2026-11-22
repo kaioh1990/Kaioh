@@ -206,6 +206,12 @@ enum {
     OC_cstrcmp = 200,
     OC_notjz8p = 201,
     OC_andjz8p = 202,
+    OC_eq8jz8p = 203,
+    OC_eq8jzb8 = 204,
+    OC_stnorng32 = 205,
+    OC_var8eq8 = 206,
+    OC_var8abs = 207,
+    OC_andjzb8 = 208,
 };
 
 enum {

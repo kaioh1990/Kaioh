@@ -828,10 +828,10 @@ index 0000000..f45b46d
 +}
 diff --git a/src/bc_fuse.go b/src/bc_fuse.go
 new file mode 100644
-index 0000000..2517559
+index 0000000..62a7a1a
 --- /dev/null
 +++ b/src/bc_fuse.go
-@@ -0,0 +1,478 @@
+@@ -0,0 +1,480 @@
 +package main
 +
 +// Peephole fusion for the Vita bytecode interpreter.
@@ -966,8 +966,10 @@ index 0000000..2517559
 +		return 1
 +	case OC_cstrcmp:
 +		return 1
-+	case OC_notjz8p, OC_andjz8p:
++	case OC_notjz8p, OC_andjz8p, OC_stnorng32, OC_andjzb8:
 +		return 0
++	case OC_eq8jz8p, OC_eq8jzb8, OC_var8eq8, OC_var8abs:
++		return 2
 +	case OC_rcint32:
 +		return 9
 +	case OC_var8, OC_fvar8, OC_sysvar8, OC_eq8, OC_ne8, OC_lt8, OC_gt8, OC_le8, OC_ge8, OC_jz8p, OC_jnz8p:
@@ -2168,10 +2170,10 @@ index 0000000..a3ac37a
 +}
 diff --git a/src/bc_head.go b/src/bc_head.go
 new file mode 100644
-index 0000000..07cd2dc
+index 0000000..2933cf8
 --- /dev/null
 +++ b/src/bc_head.go
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,111 @@
 +package main
 +
 +// Head fusions (vitaPerf, after fuseExp1 and fuseLines).
@@ -2187,6 +2189,15 @@ index 0000000..07cd2dc
 +//	const_ s; string x; eq|ne              -> cstrcmp s; string x; eq|ne (s without operand bytes)
 +//	blnot; jz8p k nop                      -> notjz8p; jz8p k nop
 +//	bland; jz8p k nop                      -> andjz8p; jz8p k nop
++//	eq8 n nop; jz8p k nop                  -> eq8jz8p n nop; jz8p k nop
++//	eq8 n nop; jzb8 k                      -> eq8jzb8 n nop; jzb8 k
++//	stateno; range_xx32 a b nop nop        -> stnorng32; range_xx32 a b nop nop
++//	var8 v nop; eq8 n nop                  -> var8eq8 v nop; eq8 n nop
++//	var8 v nop; abs                        -> var8abs v nop; abs
++//	bland; jzb8 k                          -> andjzb8; jzb8 k
++//
++// The jzb8 heads run only the first opcode under CVF_SC_CHECK (the jzb8
++// then checks its skip as usual).
 +
 +func fuseHeads(be BytecodeExp) {
 +	i := 0
@@ -2217,6 +2228,24 @@ index 0000000..07cd2dc
 +				} else {
 +					be[i] = OC_andjz8p
 +				}
++			} else if op == OC_bland && i+2 < len(be) && be[i+1] == OC_jzb8 {
++				be[i] = OC_andjzb8
++			}
++		case OC_eq8:
++			if i+5 < len(be) && be[i+3] == OC_jz8p {
++				be[i] = OC_eq8jz8p
++			} else if i+4 < len(be) && be[i+3] == OC_jzb8 {
++				be[i] = OC_eq8jzb8
++			}
++		case OC_stateno:
++			if i+11 < len(be) && be[i+1] >= OC_range_ii32 && be[i+1] <= OC_range_ee32 {
++				be[i] = OC_stnorng32
++			}
++		case OC_var8:
++			if i+5 < len(be) && be[i+3] == OC_eq8 {
++				be[i] = OC_var8eq8
++			} else if i+3 < len(be) && be[i+3] == OC_abs {
++				be[i] = OC_var8abs
 +			}
 +		}
 +		n := opLenAt(be, i)
@@ -2799,10 +2828,10 @@ index 840b4f8..fbda389 100644
  		view := mgl.Translate3D(s.modelOffset[0], s.modelOffset[1], s.modelOffset[2])
  		view = view.Mul4(mgl.HomogRotate3DX(s.modelRotate[0]))
 diff --git a/src/bytecode.go b/src/bytecode.go
-index 276abbf..e9dbaf4 100644
+index 276abbf..1252606 100644
 --- a/src/bytecode.go
 +++ b/src/bytecode.go
-@@ -445,6 +445,54 @@ const (
+@@ -445,6 +445,60 @@ const (
  	OC_ex_
  	OC_ex2_
  	OC_ex3_
@@ -2854,10 +2883,16 @@ index 276abbf..e9dbaf4 100644
 +	OC_cstrcmp  // cstrcmp s; string x; eq|ne == const_ s; string x; eq|ne
 +	OC_notjz8p  // notjz8p; jz8p k nop    == blnot; jz8p k nop
 +	OC_andjz8p  // andjz8p; jz8p k nop    == bland; jz8p k nop
++	OC_eq8jz8p   // eq8jz8p n nop; jz8p k nop  == eq8 n nop; jz8p k nop
++	OC_eq8jzb8   // eq8jzb8 n nop; jzb8 k      == eq8 n nop; jzb8 k
++	OC_stnorng32 // stnorng32; range_xx32 a b  == stateno; range_xx32 a b
++	OC_var8eq8   // var8eq8 v nop; eq8 n nop   == var8 v nop; eq8 n nop
++	OC_var8abs   // var8abs v nop; abs         == var8 v nop; abs
++	OC_andjzb8   // andjzb8; jzb8 k            == bland; jzb8 k
  )
  const (
  	OC_const_data_life OpCode = iota
-@@ -1282,6 +1330,14 @@ type StringPool struct {
+@@ -1282,17 +1336,56 @@ type StringPool struct {
  	List    []string
  	ListLow []string // Lowercase list to avoid doing that work during runtime
  	Map     map[string]int
@@ -2868,15 +2903,26 @@ index 276abbf..e9dbaf4 100644
 +		n   int
 +		idx int
 +	}
-+	cc []constCacheEnt // vitaPerf: constLookup, by string index
++	cc  []constCacheEnt // vitaPerf: constLookup, by string index
++	gen uint32          // vitaPerf: unique per pool contents (NewStringPool, Clear); see cstrcmpName
++
++	nameMemo []cstrEnt // vitaPerf: cstrcmpName results, by string index
  }
  
++var stringPoolGen uint32
++
  func NewStringPool() *StringPool {
-@@ -1290,9 +1346,31 @@ func NewStringPool() *StringPool {
+-	return &StringPool{Map: make(map[string]int)}
++	stringPoolGen++
++	return &StringPool{Map: make(map[string]int), gen: stringPoolGen}
+ }
  
  func (sp *StringPool) Clear() {
  	sp.List, sp.ListLow, sp.Map = nil, nil, make(map[string]int)
 +	sp.cc = nil
++	sp.nameMemo = nil
++	stringPoolGen++
++	sp.gen = stringPoolGen
 +	sp.pcache = [64]struct {
 +		p   *byte
 +		n   int
@@ -2904,7 +2950,7 @@ index 276abbf..e9dbaf4 100644
  	i, ok := sp.Map[s]
  	if !ok {
  		i = len(sp.List)
-@@ -1312,10 +1390,12 @@ func (bv BytecodeValue) IsNone() bool {
+@@ -1312,10 +1405,12 @@ func (bv BytecodeValue) IsNone() bool {
  	return bv.vtype == VT_None
  }
  
@@ -2917,7 +2963,7 @@ index 276abbf..e9dbaf4 100644
  func (bv BytecodeValue) ToF() float32 {
  	if bv.IsUndefined() || bv.vtype == VT_String {
  		// Returning NaN here for Undefined would destroy any math expression around it
-@@ -1325,6 +1405,7 @@ func (bv BytecodeValue) ToF() float32 {
+@@ -1325,6 +1420,7 @@ func (bv BytecodeValue) ToF() float32 {
  	return float32(bv.value)
  }
  
@@ -2925,7 +2971,7 @@ index 276abbf..e9dbaf4 100644
  func (bv BytecodeValue) ToI() int32 {
  	if bv.IsUndefined() || bv.vtype == VT_String {
  		return 0
-@@ -1339,18 +1420,12 @@ func (bv BytecodeValue) ToI64() int64 {
+@@ -1339,18 +1435,12 @@ func (bv BytecodeValue) ToI64() int64 {
  	return int64(bv.value)
  }
  
@@ -2949,7 +2995,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  func (bv BytecodeValue) ToAny() interface{} {
-@@ -1393,6 +1468,7 @@ func (bv BytecodeValue) toLowS() string {
+@@ -1393,6 +1483,7 @@ func (bv BytecodeValue) toLowS() string {
  	return pool[idx]
  }
  
@@ -2957,7 +3003,7 @@ index 276abbf..e9dbaf4 100644
  func (bv *BytecodeValue) SetF(f float32) {
  	if math.IsNaN(float64(f)) {
  		*bv = BytecodeUndefined()
-@@ -1401,6 +1477,7 @@ func (bv *BytecodeValue) SetF(f float32) {
+@@ -1401,6 +1492,7 @@ func (bv *BytecodeValue) SetF(f float32) {
  	}
  }
  
@@ -2965,7 +3011,7 @@ index 276abbf..e9dbaf4 100644
  func (bv *BytecodeValue) SetI(i int32) {
  	*bv = BytecodeValue{VT_Int, float64(i)}
  }
-@@ -1409,6 +1486,7 @@ func (bv *BytecodeValue) SetI64(i int64) {
+@@ -1409,6 +1501,7 @@ func (bv *BytecodeValue) SetI64(i int64) {
  	*bv = BytecodeValue{VT_Int, float64(i)}
  }
  
@@ -2973,7 +3019,7 @@ index 276abbf..e9dbaf4 100644
  func (bv *BytecodeValue) SetB(b bool) {
  	bv.vtype = VT_Bool
  	bv.value = float64(Btoi(b))
-@@ -1418,10 +1496,12 @@ func bvNone() BytecodeValue {
+@@ -1418,10 +1511,12 @@ func bvNone() BytecodeValue {
  	return BytecodeValue{VT_None, 0}
  }
  
@@ -2986,7 +3032,7 @@ index 276abbf..e9dbaf4 100644
  func BytecodeFloat(f float32) BytecodeValue {
  	if math.IsNaN(float64(f)) {
  		return BytecodeUndefined() // Intercept NaN as invalid
-@@ -1429,6 +1509,7 @@ func BytecodeFloat(f float32) BytecodeValue {
+@@ -1429,6 +1524,7 @@ func BytecodeFloat(f float32) BytecodeValue {
  	return BytecodeValue{VT_Float, float64(f)}
  }
  
@@ -2994,7 +3040,7 @@ index 276abbf..e9dbaf4 100644
  func BytecodeInt(i int32) BytecodeValue {
  	return BytecodeValue{VT_Int, float64(i)}
  }
-@@ -1437,6 +1518,7 @@ func BytecodeInt64(i int64) BytecodeValue {
+@@ -1437,6 +1533,7 @@ func BytecodeInt64(i int64) BytecodeValue {
  	return BytecodeValue{VT_Int, float64(i)}
  }
  
@@ -3002,7 +3048,7 @@ index 276abbf..e9dbaf4 100644
  func BytecodeBool(b bool) BytecodeValue {
  	return BytecodeValue{VT_Bool, float64(Btoi(b))}
  }
-@@ -1487,10 +1569,27 @@ func (bs *BytecodeStack) Clear() {
+@@ -1487,10 +1584,27 @@ func (bs *BytecodeStack) Clear() {
  	*bs = (*bs)[:0]
  }
  
@@ -3030,7 +3076,7 @@ index 276abbf..e9dbaf4 100644
  func (bs *BytecodeStack) PushI(i int32) {
  	bs.Push(BytecodeInt(i))
  }
-@@ -1499,10 +1598,12 @@ func (bs *BytecodeStack) PushI64(i int64) {
+@@ -1499,10 +1613,12 @@ func (bs *BytecodeStack) PushI64(i int64) {
  	bs.Push(BytecodeInt64(i))
  }
  
@@ -3043,7 +3089,7 @@ index 276abbf..e9dbaf4 100644
  func (bs *BytecodeStack) PushB(b bool) {
  	bs.Push(BytecodeBool(b))
  }
-@@ -1511,25 +1612,20 @@ func (bs *BytecodeStack) PushS(s string) {
+@@ -1511,25 +1627,20 @@ func (bs *BytecodeStack) PushS(s string) {
  	bs.Push(BytecodeString(s))
  }
  
@@ -3079,7 +3125,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  func (bs *BytecodeStack) Dup() {
-@@ -1574,7 +1670,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
+@@ -1574,7 +1685,8 @@ func (be *BytecodeExp) appendValue(bv BytecodeValue) (ok bool) {
  		be.append((*(*[4]OpCode)(unsafe.Pointer(&f)))[:]...)
  	case VT_Int:
  		if bv.value >= -128 && bv.value <= 127 {
@@ -3089,7 +3135,7 @@ index 276abbf..e9dbaf4 100644
  		} else if bv.value >= math.MinInt32 && bv.value <= math.MaxInt32 {
  			be.append(OC_int)
  			i := int32(bv.value)
-@@ -1627,9 +1724,9 @@ func (be *BytecodeExp) appendI64Op(op OpCode, addr int64) {
+@@ -1627,9 +1739,9 @@ func (be *BytecodeExp) appendI64Op(op OpCode, addr int64) {
  	be.append((*(*[8]OpCode)(unsafe.Pointer(&addr)))[:]...)
  }
  
@@ -3101,7 +3147,7 @@ index 276abbf..e9dbaf4 100644
  	*i += 4 // Advance the cursor past the 4 bytes we just read
  	return v
  }
-@@ -1657,13 +1754,46 @@ func (be BytecodeExp) readMapKey(i *int) string {
+@@ -1657,13 +1769,46 @@ func (be BytecodeExp) readMapKey(i *int) string {
  	return sys.stringPool[sys.workingState.playerNo].List[idx]
  }
  
@@ -3149,7 +3195,7 @@ index 276abbf..e9dbaf4 100644
  func (be BytecodeExp) JumpToNext(i *int) {
  	*i += be.PeekLength(*i) + 4
  }
-@@ -1811,6 +1941,7 @@ func (BytecodeExp) sub(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -1811,6 +1956,7 @@ func (BytecodeExp) sub(v1 *BytecodeValue, v2 BytecodeValue) {
  	}
  }
  
@@ -3157,7 +3203,7 @@ index 276abbf..e9dbaf4 100644
  func (BytecodeExp) gt(v1 *BytecodeValue, v2 BytecodeValue) {
  	//if v1.IsUndefined() || v2.IsUndefined() {
  	//	*v1 = BytecodeUndefined()
-@@ -1823,6 +1954,7 @@ func (BytecodeExp) gt(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -1823,6 +1969,7 @@ func (BytecodeExp) gt(v1 *BytecodeValue, v2 BytecodeValue) {
  	}
  }
  
@@ -3165,7 +3211,7 @@ index 276abbf..e9dbaf4 100644
  func (BytecodeExp) ge(v1 *BytecodeValue, v2 BytecodeValue) {
  	//if v1.IsUndefined() || v2.IsUndefined() {
  	//	*v1 = BytecodeUndefined()
-@@ -1835,6 +1967,7 @@ func (BytecodeExp) ge(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -1835,6 +1982,7 @@ func (BytecodeExp) ge(v1 *BytecodeValue, v2 BytecodeValue) {
  	}
  }
  
@@ -3173,7 +3219,7 @@ index 276abbf..e9dbaf4 100644
  func (BytecodeExp) lt(v1 *BytecodeValue, v2 BytecodeValue) {
  	//if v1.IsUndefined() || v2.IsUndefined() {
  	//	*v1 = BytecodeUndefined()
-@@ -1847,6 +1980,7 @@ func (BytecodeExp) lt(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -1847,6 +1995,7 @@ func (BytecodeExp) lt(v1 *BytecodeValue, v2 BytecodeValue) {
  	}
  }
  
@@ -3181,7 +3227,7 @@ index 276abbf..e9dbaf4 100644
  func (BytecodeExp) le(v1 *BytecodeValue, v2 BytecodeValue) {
  	//if v1.IsUndefined() || v2.IsUndefined() {
  	//	*v1 = BytecodeUndefined()
-@@ -1906,6 +2040,7 @@ func (BytecodeExp) rangeCheck(v1 *BytecodeValue, min BytecodeValue, max Bytecode
+@@ -1906,6 +2055,7 @@ func (BytecodeExp) rangeCheck(v1 *BytecodeValue, min BytecodeValue, max Bytecode
  	v1.SetB(minPass && maxPass)
  }
  
@@ -3189,7 +3235,7 @@ index 276abbf..e9dbaf4 100644
  func (BytecodeExp) eq(v1 *BytecodeValue, v2 BytecodeValue) {
  	//if v1.IsUndefined() || v2.IsUndefined() {
  	//	*v1 = BytecodeUndefined()
-@@ -1928,6 +2063,7 @@ func (BytecodeExp) eq(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -1928,6 +2078,7 @@ func (BytecodeExp) eq(v1 *BytecodeValue, v2 BytecodeValue) {
  	}
  }
  
@@ -3197,7 +3243,7 @@ index 276abbf..e9dbaf4 100644
  func (BytecodeExp) ne(v1 *BytecodeValue, v2 BytecodeValue) {
  	//if v1.IsUndefined() || v2.IsUndefined() {
  	//	*v1 = BytecodeUndefined()
-@@ -2032,7 +2168,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
+@@ -2032,7 +2183,7 @@ func (BytecodeExp) exp(v1 *BytecodeValue) {
  	//if v1.IsUndefined() {
  	//	return
  	//}
@@ -3206,7 +3252,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  func (BytecodeExp) ln(v1 *BytecodeValue) {
-@@ -2043,7 +2179,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
+@@ -2043,7 +2194,7 @@ func (BytecodeExp) ln(v1 *BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -3215,7 +3261,7 @@ index 276abbf..e9dbaf4 100644
  	}
  }
  
-@@ -2056,7 +2192,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2056,7 +2207,7 @@ func (BytecodeExp) log(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		sys.printBytecodeError("Invalid logarithm")
  	} else {
@@ -3224,7 +3270,7 @@ index 276abbf..e9dbaf4 100644
  	}
  }
  
-@@ -2064,42 +2200,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
+@@ -2064,42 +2215,42 @@ func (BytecodeExp) cos(v1 *BytecodeValue) {
  	if v1.IsUndefined() {
  		return
  	}
@@ -3273,7 +3319,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  func (BytecodeExp) floor(v1 *BytecodeValue) {
-@@ -2167,7 +2303,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2167,7 +2318,7 @@ func (BytecodeExp) round(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -3282,7 +3328,7 @@ index 276abbf..e9dbaf4 100644
  	v1.SetF(float32(math.Floor((v1.value*shift)+0.5) / shift))
  }
  
-@@ -2190,7 +2326,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
+@@ -2190,7 +2341,7 @@ func (BytecodeExp) atan2(v1 *BytecodeValue, v2 BytecodeValue) {
  		*v1 = BytecodeUndefined()
  		return
  	}
@@ -3291,7 +3337,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  func (BytecodeExp) sign(v1 *BytecodeValue) {
-@@ -2235,542 +2371,1196 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
+@@ -2235,542 +2386,1338 @@ func (BytecodeExp) lerp(v1 *BytecodeValue, v2 BytecodeValue, v3 BytecodeValue) {
  }
  
  func (be BytecodeExp) run(c *Char) BytecodeValue {
@@ -3409,41 +3455,6 @@ index 276abbf..e9dbaf4 100644
 -			if c = c.targetTrigger(v1, int(v2)); c != nil {
 -				i += 4
 -				continue
--			}
--			sys.bcStack.Push(BytecodeUndefined())
--			be.JumpToNext(&i)
--		case OC_partner:
--			if c = c.partner(sys.bcStack.Pop().ToI(), true); c != nil {
--				i += 4
--				continue
--			}
--			sys.bcStack.Push(BytecodeUndefined())
--			be.JumpToNext(&i)
--		case OC_enemy:
--			if c = c.enemy(sys.bcStack.Pop().ToI()); c != nil {
--				i += 4
--				continue
--			}
--			sys.bcStack.Push(BytecodeUndefined())
--			be.JumpToNext(&i)
--		case OC_enemynear:
--			if c = c.enemyNearTrigger(sys.bcStack.Pop().ToI()); c != nil {
--				i += 4
--				continue
--			}
--			sys.bcStack.Push(BytecodeUndefined())
--			be.JumpToNext(&i)
--		case OC_playerid:
--			if c = c.playerIDTrigger(sys.bcStack.Pop().ToI(), true); c != nil {
--				i += 4
--				continue
--			}
--			sys.bcStack.Push(BytecodeUndefined())
--			be.JumpToNext(&i)
--		case OC_playerindex:
--			if c = c.playerIndexTrigger(sys.bcStack.Pop().ToI()); c != nil {
--				i += 4
--				continue
 +			if be[i] == 0 {
 +				i = len(be)
 +			} else {
@@ -3451,8 +3462,8 @@ index 276abbf..e9dbaf4 100644
  			}
 -			sys.bcStack.Push(BytecodeUndefined())
 -			be.JumpToNext(&i)
--		case OC_p2:
--			if c = c.p2(); c != nil {
+-		case OC_partner:
+-			if c = c.partner(sys.bcStack.Pop().ToI(), true); c != nil {
 -				i += 4
 -				continue
 +		case OC_jzb8, OC_jnzb8:
@@ -3472,8 +3483,8 @@ index 276abbf..e9dbaf4 100644
  			}
 -			sys.bcStack.Push(BytecodeUndefined())
 -			be.JumpToNext(&i)
--		case OC_stateowner:
--			if c = c.stateOwner(); c != nil {
+-		case OC_enemy:
+-			if c = c.enemy(sys.bcStack.Pop().ToI()); c != nil {
 -				i += 4
 -				continue
 +			i++
@@ -3490,8 +3501,8 @@ index 276abbf..e9dbaf4 100644
  			}
 -			sys.bcStack.Push(BytecodeUndefined())
 -			be.JumpToNext(&i)
--		case OC_helperindex:
--			if c = c.helperIndexTrigger(sys.bcStack.Pop().ToI()); c != nil {
+-		case OC_enemynear:
+-			if c = c.enemyNearTrigger(sys.bcStack.Pop().ToI()); c != nil {
 -				i += 4
 -				continue
 +		case OC_andjz8p:
@@ -3505,6 +3516,83 @@ index 276abbf..e9dbaf4 100644
 +				i = len(be)
 +			} else {
 +				i += int(uint8(be[i])) + 1
+ 			}
+-			sys.bcStack.Push(BytecodeUndefined())
+-			be.JumpToNext(&i)
+-		case OC_playerid:
+-			if c = c.playerIDTrigger(sys.bcStack.Pop().ToI(), true); c != nil {
+-				i += 4
+-				continue
++		case OC_eq8jz8p:
++			// eq8 n nop, then the jz8p (its operand at i+3)
++			be.eq(&st[n-1], BytecodeInt(int32(int8(be[i]))))
++			i += 3
++			if st[n-1].ToB() {
++				n--
++				i += 2
++			} else if be[i] == 0 {
++				i = len(be)
++			} else {
++				i += int(uint8(be[i])) + 1
+ 			}
+-			sys.bcStack.Push(BytecodeUndefined())
+-			be.JumpToNext(&i)
+-		case OC_playerindex:
+-			if c = c.playerIndexTrigger(sys.bcStack.Pop().ToI()); c != nil {
+-				i += 4
+-				continue
++		case OC_eq8jzb8:
++			// eq8 n nop, then the jzb8 (its operand at i+3)
++			be.eq(&st[n-1], BytecodeInt(int32(int8(be[i]))))
++			if scCheck {
++				i += 2
++				break
+ 			}
+-			sys.bcStack.Push(BytecodeUndefined())
+-			be.JumpToNext(&i)
+-		case OC_p2:
+-			if c = c.p2(); c != nil {
+-				i += 4
+-				continue
++			i += 3
++			if !st[n-1].ToB() {
++				st[n-1].SetB(false)
++				if be[i] == 0 {
++					i = len(be)
++				} else {
++					i += int(uint8(be[i])) + 1
++				}
++				break
+ 			}
+-			sys.bcStack.Push(BytecodeUndefined())
+-			be.JumpToNext(&i)
+-		case OC_stateowner:
+-			if c = c.stateOwner(); c != nil {
+-				i += 4
+-				continue
++			i++
++		case OC_andjzb8:
++			// bland, then the jzb8 (its operand at i+1)
++			n--
++			be.bland(&st[n-1], st[n])
++			if scCheck {
++				break
+ 			}
+-			sys.bcStack.Push(BytecodeUndefined())
+-			be.JumpToNext(&i)
+-		case OC_helperindex:
+-			if c = c.helperIndexTrigger(sys.bcStack.Pop().ToI()); c != nil {
+-				i += 4
+-				continue
++			i++
++			if !st[n-1].ToB() {
++				st[n-1].SetB(false)
++				if be[i] == 0 {
++					i = len(be)
++				} else {
++					i += int(uint8(be[i])) + 1
++				}
++				break
  			}
 -			sys.bcStack.Push(BytecodeUndefined())
 -			be.JumpToNext(&i)
@@ -3523,6 +3611,28 @@ index 276abbf..e9dbaf4 100644
 -			// Ex: "parent, command = map(cmd)" reads map(cmd) from the caller, then checks parent's command
 -			sys.bcStack.Push(be[i+4 : i+4+l].run(oc))
 -			be.JumpToNext(&i)
++			i++
++		case OC_stnorng32:
++			// stateno, then the range_xx32 at i (its operands at i+1)
++			st = bcLRoom(st, n)
++			st[n] = BytecodeInt(c.ss.no)
++			n++
++			be.rangeCheck(&st[n-1], BytecodeInt(bcI32(be, i+1)), BytecodeInt(bcI32(be, i+5)), be[i]-OC_range_ii32+OC_range_ii)
++			i += 11
++		case OC_var8eq8:
++			// var8 v nop, then the eq8 (its operand at i+3)
++			st = bcLRoom(st, n)
++			st[n] = c.varGet(int32(int8(be[i])))
++			n++
++			be.eq(&st[n-1], BytecodeInt(int32(int8(be[i+3]))))
++			i += 5
++		case OC_var8abs:
++			// var8 v nop, then the abs
++			st = bcLRoom(st, n)
++			st[n] = c.varGet(int32(int8(be[i])))
++			n++
++			be.abs(&st[n-1])
++			i += 3
 +		case OC_rcint8:
 +			// as run_caller: the redirect stays active for the next opcode
 +			st = bcLRoom(st, n)
@@ -4085,6 +4195,9 @@ index 276abbf..e9dbaf4 100644
 +		return len(be)
 +	case OC_cstrcmp:
 +		// const_ s; string x (at be[i+1], x at be[i+2:]); eq|ne at be[i+6]
++		if vitaPerf && (be[i] == OC_const_name || be[i] == OC_const_authorname) {
++			return be.cstrcmpName(c, i)
++		}
 +		*ip = i
 +		be.run_const(c, ip, oc)
 +		v2 := BytecodeValue{VT_String, float64(be.readInt32At(i + 2))}
@@ -4114,6 +4227,76 @@ index 276abbf..e9dbaf4 100644
 +		scCheckSub(be, i, *ip)
 +	}
 +	return *ip
++}
++
++// cstrcmpName: cstrcmp for name / authorname (~850 per tick in the
++// reference fight: "name = ..." lines of the shared states). The plain
++// sequence adds the name to the working string pool (PushS) and compares
++// it, lowercased, with the pool string x. The pool only grows (until it is
++// cleared or replaced, which gives it a new generation), its entries never
++// change and it holds each text once, so once that has been done for a
++// name the pool holds that text: a new add returns the same index without
++// changing anything, and the result, which depends on the text only, is
++// the same while the generation is. Kept per pool string x
++// (StringPool.nameMemo), for the last two name strings compared with it
++// (a player's own name and, through redirects, the opponent's), matched by
++// identity (the entry keeps the string, so its data is not freed and
++// reused while it is cached).
++type cstrEnt struct {
++	s   [2]string
++	eq  [2]bool
++	gen uint32
++}
++
++func (be BytecodeExp) cstrcmpName(c *Char, i int) int {
++	var s string
++	if be[i] == OC_const_name {
++		s = c.gi().name
++	} else {
++		s = c.gi().author
++	}
++	x := int(be.readInt32At(i + 2))
++	sp := &sys.stringPool[sys.workingState.playerNo]
++	var r bool
++	p, n := unsafe.StringData(s), len(s)
++	e := sp.nameMemoAt(x)
++	switch {
++	case e != nil && e.gen == sp.gen && unsafe.StringData(e.s[0]) == p && len(e.s[0]) == n:
++		r = e.eq[0]
++	case e != nil && e.gen == sp.gen && unsafe.StringData(e.s[1]) == p && len(e.s[1]) == n:
++		r = e.eq[1]
++	default:
++		// as PushS(s) (BytecodeString: add s to the pool); eq
++		v1 := BytecodeString(s)
++		be.eq(&v1, BytecodeValue{VT_String, float64(x)})
++		r = v1.ToB()
++		if x >= 0 && x < len(sp.List) {
++			if x >= len(sp.nameMemo) {
++				m := make([]cstrEnt, len(sp.List))
++				copy(m, sp.nameMemo)
++				sp.nameMemo = m
++			}
++			e = &sp.nameMemo[x]
++			if e.gen != sp.gen {
++				*e = cstrEnt{gen: sp.gen}
++			}
++			e.s[1], e.eq[1] = e.s[0], e.eq[0]
++			e.s[0], e.eq[0] = s, r
++		}
++	}
++	if be[i+6] != OC_eq {
++		r = !r
++	}
++	sys.bcStack.PushB(r)
++	return i + 7
++}
++
++//go:inline
++func (sp *StringPool) nameMemoAt(x int) *cstrEnt {
++	if x >= 0 && x < len(sp.nameMemo) {
++		return &sp.nameMemo[x]
++	}
++	return nil
 +}
 +
 +// runOp runs one opcode of the interpreter (the opcode at be[i-1], its
@@ -4962,7 +5145,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  func (be BytecodeExp) run_assign(c *Char, i *int) {
-@@ -2811,11 +3601,21 @@ func (be BytecodeExp) run_assign(c *Char, i *int) {
+@@ -2811,11 +3758,21 @@ func (be BytecodeExp) run_assign(c *Char, i *int) {
  		*sys.bcStack.Top() = c.sysFvarAdd(vno, val)
  	case OC_assign_map:
  		val := sys.bcStack.Pop()
@@ -4984,7 +5167,7 @@ index 276abbf..e9dbaf4 100644
  		mapName := c.mapIndexedKey(be.readMapKey(i), index)
  		sys.bcStack.Push(c.mapSet(mapName, val, 0))
  	}
-@@ -3356,6 +4156,10 @@ func (be BytecodeExp) run_const(c *Char, i *int, oc *Char) {
+@@ -3356,6 +4313,10 @@ func (be BytecodeExp) run_const(c *Char, i *int, oc *Char) {
  			sys.bcStack.PushB(false)
  		}
  	case OC_const_constants:
@@ -4995,7 +5178,7 @@ index 276abbf..e9dbaf4 100644
  		constName := be.ReadPoolStringAt(i)
  		sys.bcStack.Push(c.gi().constants[constName].ToBV())
  	case OC_const_stage_constants:
-@@ -3812,7 +4616,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
+@@ -3812,7 +4773,7 @@ func (be BytecodeExp) run_ex(c *Char, i *int, oc *Char) {
  			sys.bcStack.Push(BytecodeUndefined())
  		}
  	case OC_ex_isassertedchar:
@@ -5004,7 +5187,7 @@ index 276abbf..e9dbaf4 100644
  		*i += 8
  	case OC_ex_isassertedglobal:
  		flag := be.ReadIntAt(i)
-@@ -5017,7 +5821,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
+@@ -5017,7 +5978,15 @@ func (bf BytecodeFunction) run(c *Char, ret []uint8) (changeState bool) {
  		//		continue
  		//	}
  		//}
@@ -5021,7 +5204,7 @@ index 276abbf..e9dbaf4 100644
  			changeState = true
  			break
  		}
-@@ -5042,12 +5854,19 @@ type CallFunction struct {
+@@ -5042,12 +6011,19 @@ type CallFunction struct {
  	arg     BytecodeExp
  	ret     []uint8
  	numArgs int32
@@ -5042,7 +5225,7 @@ index 276abbf..e9dbaf4 100644
  
  	// If undefined, treat as no-op and log error
  	if !ok {
-@@ -5081,17 +5900,25 @@ func (cf CallFunction) Run(c *Char, _ []int32) (changeState bool) {
+@@ -5081,17 +6057,25 @@ func (cf CallFunction) Run(c *Char, _ []int32) (changeState bool) {
  // In CNS, one StateBlock has at most one StateController
  // In ZSS, one StateBlock's trigger can have many
  type StateBlock struct {
@@ -5072,7 +5255,7 @@ index 276abbf..e9dbaf4 100644
  	forLoop          bool
  	forAssign        bool
  	forCtrlVar       varAssign
-@@ -5104,6 +5931,18 @@ func newStateBlock() *StateBlock {
+@@ -5104,6 +6088,18 @@ func newStateBlock() *StateBlock {
  	return &StateBlock{persistent: 1, persistentIndex: -1, ignorehitpause: false}
  }
  
@@ -5091,7 +5274,7 @@ index 276abbf..e9dbaf4 100644
  func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  	c.currentSctrlIndex = b.persistentIndex
  	// For Mugen compatibility, if in hitpause and this SCTRL has the same index
-@@ -5189,15 +6028,13 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5189,15 +6185,13 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  			// Run state controllers
  			if !interrupt {
@@ -5113,7 +5296,7 @@ index 276abbf..e9dbaf4 100644
  						if sys.loopBreak {
  							sys.loopBreak = false
  							interrupt = true
-@@ -5238,21 +6075,32 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
+@@ -5238,21 +6232,32 @@ func (b *StateBlock) Run(c *Char, ps []int32) (changeState bool) {
  			}
  		}
  	} else {
@@ -5154,7 +5337,7 @@ index 276abbf..e9dbaf4 100644
  				return true
  			}
  		}
-@@ -5375,7 +6223,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
+@@ -5375,7 +6380,7 @@ func (scb StateControllerBase) run(c *Char, visit func(paramID byte, exp []Bytec
  				sys.workBe = sys.workBe[:n]
  			}
  			for m := 0; m < int(n); m++ {
@@ -5163,7 +5346,7 @@ index 276abbf..e9dbaf4 100644
  				i += 4
  				sys.workBe[m] = (*(*BytecodeExp)(unsafe.Pointer(&scb)))[i : i+int(l)]
  				i += int(l)
-@@ -5402,7 +6250,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5402,7 +6407,7 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  			n := scb[i]
  			i++
  			for m := 0; m < int(n); m++ {
@@ -5172,7 +5355,7 @@ index 276abbf..e9dbaf4 100644
  				i += 4 + int(l)
  			}
  			if id == paramID {
-@@ -5414,21 +6262,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
+@@ -5414,21 +6419,19 @@ func (scb StateControllerBase) hasParam(paramID byte) bool {
  }
  
  func getRedirectedChar(c *Char, sc StateControllerBase, redirectID byte, scname string) *Char {
@@ -5204,7 +5387,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  type stateDef StateControllerBase
-@@ -5447,7 +6293,9 @@ const (
+@@ -5447,7 +6450,9 @@ const (
  )
  
  func (sc stateDef) Run(c *Char) {
@@ -5215,7 +5398,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case stateDef_hitcountpersist:
  			if !exp[0].evalB(c) {
-@@ -5496,8 +6344,7 @@ func (sc stateDef) Run(c *Char) {
+@@ -5496,8 +6501,7 @@ func (sc stateDef) Run(c *Char) {
  		case stateDef_poweradd:
  			c.powerAdd(exp[0].evalI(c))
  		}
@@ -5225,7 +5408,7 @@ index 276abbf..e9dbaf4 100644
  }
  
  type hitBy StateControllerBase
-@@ -5530,6 +6377,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5530,6 +6534,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		} else if slot >= len(crun.hitby) {
  			slot = 0
  		}
@@ -5235,7 +5418,7 @@ index 276abbf..e9dbaf4 100644
  		crun.hitby[slot].not = not
  		crun.hitby[slot].time = time
  		crun.hitby[slot].flag = attr
-@@ -5540,7 +6390,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5540,7 +6547,9 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		crun.hitby[slot].clsn_index = cidx
  	}
  
@@ -5246,7 +5429,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case hitBy_time:
  			time = exp[0].evalI(c)
-@@ -5559,8 +6411,7 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
+@@ -5559,8 +6568,7 @@ func (sc hitBy) runSub(c *Char, crun *Char, not bool) {
  		case hitBy_clsn_index:
  			cidx = exp[0].evalI(c)
  		}
@@ -5256,7 +5439,7 @@ index 276abbf..e9dbaf4 100644
  
  	set(slot, attr, time, pno, pid, stk, cgrp, cidx)
  }
-@@ -5608,7 +6459,9 @@ func (sc assertSpecial) Run(c *Char, _ []int32) bool {
+@@ -5608,7 +6616,9 @@ func (sc assertSpecial) Run(c *Char, _ []int32) bool {
  	}
  
  	enable := true
@@ -5267,7 +5450,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case assertSpecial_enabled:
  			enable = exp[0].evalB(c)
-@@ -5626,8 +6479,7 @@ func (sc assertSpecial) Run(c *Char, _ []int32) bool {
+@@ -5626,8 +6636,7 @@ func (sc assertSpecial) Run(c *Char, _ []int32) bool {
  				crun.setASF(AssertSpecialFlag(ASF_noko), enable)
  			}
  		}
@@ -5277,7 +5460,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -5668,7 +6520,9 @@ func (sc playSnd) Run(c *Char, _ []int32) bool {
+@@ -5668,7 +6677,9 @@ func (sc playSnd) Run(c *Char, _ []int32) bool {
  	var lp bool
  	var lc int32
  
@@ -5288,7 +5471,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case playSnd_value:
  			params.ffx = exp[0].evalSLower(c)
-@@ -5713,8 +6567,7 @@ func (sc playSnd) Run(c *Char, _ []int32) bool {
+@@ -5713,8 +6724,7 @@ func (sc playSnd) Run(c *Char, _ []int32) bool {
  		case playSnd_stoponchangestate:
  			params.stopOnChangeState = exp[0].evalB(c)
  		}
@@ -5298,7 +5481,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Determine loopCount
  	if lc == 0 {
-@@ -5756,7 +6609,9 @@ func (sc changeState) Run(c *Char, _ []int32) bool {
+@@ -5756,7 +6766,9 @@ func (sc changeState) Run(c *Char, _ []int32) bool {
  	var v, a, ctrl int32 = -1, -1, -1
  	ffx := ""
  
@@ -5309,7 +5492,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case changeState_value:
  			v = exp[0].evalI(c)
-@@ -5768,8 +6623,10 @@ func (sc changeState) Run(c *Char, _ []int32) bool {
+@@ -5768,8 +6780,10 @@ func (sc changeState) Run(c *Char, _ []int32) bool {
  		case changeState_continue:
  			stop = !exp[0].evalB(c)
  		}
@@ -5322,7 +5505,7 @@ index 276abbf..e9dbaf4 100644
  	crun.changeState(v, a, ctrl, ffx)
  	return stop
  }
-@@ -5786,7 +6643,10 @@ func (sc selfState) Run(c *Char, _ []int32) bool {
+@@ -5786,7 +6800,10 @@ func (sc selfState) Run(c *Char, _ []int32) bool {
  	var v, a, r, ctrl int32 = -1, -1, -1, -1
  	ffx := ""
  
@@ -5334,7 +5517,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case changeState_value:
  			v = exp[0].evalI(c)
-@@ -5799,13 +6659,12 @@ func (sc selfState) Run(c *Char, _ []int32) bool {
+@@ -5799,13 +6816,12 @@ func (sc selfState) Run(c *Char, _ []int32) bool {
  			if rpid := sys.playerID(exp[0].evalI(c)); rpid != nil {
  				r = int32(rpid.playerNo)
  			} else {
@@ -5350,7 +5533,7 @@ index 276abbf..e9dbaf4 100644
  	crun.selfState(v, a, r, ctrl, ffx)
  	return stop
  }
-@@ -5835,7 +6694,10 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
+@@ -5835,7 +6851,10 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
  	var partnerStateNo int32 = -1
  	var partnerCtrlSetting int32 = -1
  
@@ -5362,7 +5545,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case tagIn_stateno:
  			sn := exp[0].evalI(c)
-@@ -5845,13 +6707,13 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
+@@ -5845,13 +6864,13 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
  					tagSCF = 1
  				}
  			} else {
@@ -5378,7 +5561,7 @@ index 276abbf..e9dbaf4 100644
  			}
  		case tagIn_memberno:
  			mn := int(exp[0].evalI(c)) - 1
-@@ -5863,7 +6725,7 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
+@@ -5863,7 +6882,7 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
  			if pti >= 0 {
  				partnerNo = pti
  			} else {
@@ -5387,7 +5570,7 @@ index 276abbf..e9dbaf4 100644
  			}
  		case tagIn_ctrl:
  			ctrls := exp[0].evalB(c)
-@@ -5877,8 +6739,7 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
+@@ -5877,8 +6896,7 @@ func (sc tagIn) Run(c *Char, _ []int32) bool {
  			ld := int(exp[0].evalI(c)) - 1
  			crun.changeTagLeader(ld)
  		}
@@ -5397,7 +5580,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Data adjustments
  	if tagSCF == -1 && partnerNo == -1 {
-@@ -5924,7 +6785,10 @@ func (sc tagOut) Run(c *Char, _ []int32) bool {
+@@ -5924,7 +6942,10 @@ func (sc tagOut) Run(c *Char, _ []int32) bool {
  	var partnerNo int32 = -1
  	var partnerStateNo int32 = -1
  
@@ -5409,7 +5592,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case tagOut_self:
  			tagSCF = Btoi(exp[0].evalB(c))
-@@ -5936,7 +6800,7 @@ func (sc tagOut) Run(c *Char, _ []int32) bool {
+@@ -5936,7 +6957,7 @@ func (sc tagOut) Run(c *Char, _ []int32) bool {
  					tagSCF = 1
  				}
  			} else {
@@ -5418,7 +5601,7 @@ index 276abbf..e9dbaf4 100644
  			}
  		case tagOut_memberno:
  			mn := int(exp[0].evalI(c)) - 1
-@@ -5946,17 +6810,16 @@ func (sc tagOut) Run(c *Char, _ []int32) bool {
+@@ -5946,17 +6967,16 @@ func (sc tagOut) Run(c *Char, _ []int32) bool {
  			if pti >= 0 {
  				partnerNo = pti
  			} else {
@@ -5439,7 +5622,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Data adjustments
  	if tagSCF == -1 && partnerNo == -1 && partnerStateNo == -1 {
-@@ -5998,7 +6861,9 @@ func (sc destroySelf) Run(c *Char, _ []int32) bool {
+@@ -5998,7 +7018,9 @@ func (sc destroySelf) Run(c *Char, _ []int32) bool {
  	self := (crun.id == c.id)
  	rec, rem, rtx := false, false, false
  
@@ -5450,7 +5633,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case destroySelf_recursive:
  			rec = exp[0].evalB(c)
-@@ -6007,8 +6872,7 @@ func (sc destroySelf) Run(c *Char, _ []int32) bool {
+@@ -6007,8 +7029,7 @@ func (sc destroySelf) Run(c *Char, _ []int32) bool {
  		case destroySelf_removetexts:
  			rtx = exp[0].evalB(c)
  		}
@@ -5460,7 +5643,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Destroyself stops execution of current state, like ChangeState
  	return crun.destroySelf(rec, rem, rtx) && self
-@@ -6038,7 +6902,10 @@ func (sc changeAnim) Run(c *Char, _ []int32) bool {
+@@ -6038,7 +7059,10 @@ func (sc changeAnim) Run(c *Char, _ []int32) bool {
  	spritePN := -1
  	setelem := false
  
@@ -5472,7 +5655,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case changeAnim_elem:
  			elem = exp[0].evalI(c)
-@@ -6064,11 +6931,10 @@ func (sc changeAnim) Run(c *Char, _ []int32) bool {
+@@ -6064,11 +7088,10 @@ func (sc changeAnim) Run(c *Char, _ []int32) bool {
  			if read := sys.playerID(exp[0].evalI(c)); read != nil {
  				rpid = read.playerNo
  			} else {
@@ -5486,7 +5669,7 @@ index 276abbf..e9dbaf4 100644
  
  	return false
  }
-@@ -6085,7 +6951,10 @@ func (sc changeAnim2) Run(c *Char, _ []int32) bool {
+@@ -6085,7 +7108,10 @@ func (sc changeAnim2) Run(c *Char, _ []int32) bool {
  	var rpid int = -1
  	setelem := false
  
@@ -5498,7 +5681,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case changeAnim_elem:
  			elem = exp[0].evalI(c)
-@@ -6106,11 +6975,10 @@ func (sc changeAnim2) Run(c *Char, _ []int32) bool {
+@@ -6106,11 +7132,10 @@ func (sc changeAnim2) Run(c *Char, _ []int32) bool {
  			if read := sys.playerID(exp[0].evalI(c)); read != nil {
  				rpid = read.playerNo
  			} else {
@@ -5512,7 +5695,7 @@ index 276abbf..e9dbaf4 100644
  
  	return false
  }
-@@ -6176,7 +7044,9 @@ func (sc helper) Run(c *Char, _ []int32) bool {
+@@ -6176,7 +7201,9 @@ func (sc helper) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -5523,7 +5706,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case helper_helpertype:
  			h.helperType = exp[0].evalI(c)
-@@ -6236,6 +7106,7 @@ func (sc helper) Run(c *Char, _ []int32) bool {
+@@ -6236,6 +7263,7 @@ func (sc helper) Run(c *Char, _ []int32) bool {
  			}
  		case helper_id:
  			h.helperId = exp[0].evalI(c)
@@ -5531,7 +5714,7 @@ index 276abbf..e9dbaf4 100644
  		case helper_pos:
  			pos[0] = exp[0].evalF(c) * redirscale
  			if len(exp) > 1 {
-@@ -6283,8 +7154,7 @@ func (sc helper) Run(c *Char, _ []int32) bool {
+@@ -6283,8 +7311,7 @@ func (sc helper) Run(c *Char, _ []int32) bool {
  			mapKey := exp[0].evalS(c)
  			h.mapArray[mapKey] = TypedValueOf(exp[1].run(c))
  		}
@@ -5541,7 +5724,7 @@ index 276abbf..e9dbaf4 100644
  
  	if crun.minus == -2 || crun.minus == -4 {
  		h.localscl = crun.baselocalscl
-@@ -6310,14 +7180,15 @@ func (sc ctrlSet) Run(c *Char, _ []int32) bool {
+@@ -6310,14 +7337,15 @@ func (sc ctrlSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -5560,7 +5743,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -6338,15 +7209,16 @@ func (sc runState) Run(c *Char, _ []int32) bool {
+@@ -6338,15 +7366,16 @@ func (sc runState) Run(c *Char, _ []int32) bool {
  	var v int32 = math.MinInt32
  	pn := crun.playerNo
  
@@ -5580,7 +5763,7 @@ index 276abbf..e9dbaf4 100644
  
  	if v != math.MinInt32 {
  		crun.runState(v, pn)
-@@ -6371,7 +7243,9 @@ func (sc posSet) Run(c *Char, _ []int32) bool {
+@@ -6371,7 +7400,9 @@ func (sc posSet) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -5591,7 +5774,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case posSet_x:
  			x := sys.cam.Pos[0]/crun.localscl + exp[0].evalF(c)*redirscale
-@@ -6392,8 +7266,7 @@ func (sc posSet) Run(c *Char, _ []int32) bool {
+@@ -6392,8 +7423,7 @@ func (sc posSet) Run(c *Char, _ []int32) bool {
  				crun.bindPosAdd[2] = z
  			}
  		}
@@ -5601,7 +5784,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -6407,7 +7280,9 @@ func (sc posAdd) Run(c *Char, _ []int32) bool {
+@@ -6407,7 +7437,9 @@ func (sc posAdd) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -5612,7 +5795,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case posSet_x:
  			x := exp[0].evalF(c) * redirscale
-@@ -6428,8 +7303,7 @@ func (sc posAdd) Run(c *Char, _ []int32) bool {
+@@ -6428,8 +7460,7 @@ func (sc posAdd) Run(c *Char, _ []int32) bool {
  				crun.bindPosAdd[0] = z
  			}
  		}
@@ -5622,7 +5805,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -6443,7 +7317,9 @@ func (sc velSet) Run(c *Char, _ []int32) bool {
+@@ -6443,7 +7474,9 @@ func (sc velSet) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -5633,7 +5816,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case posSet_x:
  			crun.vel[0] = exp[0].evalF(c) * redirscale
-@@ -6452,8 +7328,7 @@ func (sc velSet) Run(c *Char, _ []int32) bool {
+@@ -6452,8 +7485,7 @@ func (sc velSet) Run(c *Char, _ []int32) bool {
  		case posSet_z:
  			crun.vel[2] = exp[0].evalF(c) * redirscale
  		}
@@ -5643,7 +5826,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -6467,7 +7342,9 @@ func (sc velAdd) Run(c *Char, _ []int32) bool {
+@@ -6467,7 +7499,9 @@ func (sc velAdd) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -5654,7 +5837,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case posSet_x:
  			crun.vel[0] += exp[0].evalF(c) * redirscale
-@@ -6476,8 +7353,7 @@ func (sc velAdd) Run(c *Char, _ []int32) bool {
+@@ -6476,8 +7510,7 @@ func (sc velAdd) Run(c *Char, _ []int32) bool {
  		case posSet_z:
  			crun.vel[2] += exp[0].evalF(c) * redirscale
  		}
@@ -5664,7 +5847,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -6489,7 +7365,9 @@ func (sc velMul) Run(c *Char, _ []int32) bool {
+@@ -6489,7 +7522,9 @@ func (sc velMul) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -5675,7 +5858,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case posSet_x:
  			crun.vel[0] *= exp[0].evalF(c)
-@@ -6498,8 +7376,7 @@ func (sc velMul) Run(c *Char, _ []int32) bool {
+@@ -6498,8 +7533,7 @@ func (sc velMul) Run(c *Char, _ []int32) bool {
  		case posSet_z:
  			crun.vel[2] *= exp[0].evalF(c)
  		}
@@ -5685,7 +5868,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -6618,13 +7495,15 @@ func (sc palFX) Run(c *Char, _ []int32) bool {
+@@ -6618,13 +7652,15 @@ func (sc palFX) Run(c *Char, _ []int32) bool {
  		pf.invertblend = -2
  	}
  
@@ -5705,7 +5888,7 @@ index 276abbf..e9dbaf4 100644
  
  	return false
  }
-@@ -6633,12 +7512,13 @@ type allPalFX palFX
+@@ -6633,12 +7669,13 @@ type allPalFX palFX
  
  func (sc allPalFX) Run(c *Char, _ []int32) bool {
  	sys.allPalFX.clear()
@@ -5722,7 +5905,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -6653,10 +7533,12 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6653,10 +7690,12 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -5737,7 +5920,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case bgPalFX_id: // Deprecated
  			bgid = exp[0].evalI(c)
-@@ -6668,8 +7550,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
+@@ -6668,8 +7707,7 @@ func (sc bgPalFX) Run(c *Char, _ []int32) bool {
  				palFX(sc).runSub(c, &pfx, paramID, exp)
  			}
  		}
@@ -5747,15 +5930,15 @@ index 276abbf..e9dbaf4 100644
  
  	// Apply BGPalFX
  	if bgid < 0 && bgidx < 0 {
-@@ -6784,6 +7665,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
+@@ -6784,6 +7822,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
-+	explodIdxChanged()
++	explodIdxWrite(e)
  	e.id = 0
  	var shaderTime int32 = -1
  
-@@ -6797,7 +7679,10 @@ func (sc explod) Run(c *Char, _ []int32) bool {
+@@ -6797,7 +7836,10 @@ func (sc explod) Run(c *Char, _ []int32) bool {
  		e.palfx.invertblend = -2
  	}
  
@@ -5767,15 +5950,15 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case explod_anim:
  			ffx := exp[0].evalSLower(c)
-@@ -6819,6 +7704,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
+@@ -6819,6 +7861,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
  			}
  		case explod_id:
  			e.id = Max(0, exp[0].evalI(c))
-+			explodIdxChanged() // after the write: the expression may query the index
++			explodIdxWrite(e) // after the write: the expression may query the index
  		case explod_facing:
  			if exp[0].evalI(c) < 0 {
  				e.relativef = -1
-@@ -7037,7 +7923,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
+@@ -7037,7 +8080,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
  		case explod_shader_afterimage:
  			e.customShader.afterimage = exp[0].evalB(c)
  		case explod_redirectid:
@@ -5784,7 +5967,7 @@ index 276abbf..e9dbaf4 100644
  		default:
  			switch {
  			case isAfterImageParam(paramID):
-@@ -7050,8 +7936,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
+@@ -7050,8 +8093,7 @@ func (sc explod) Run(c *Char, _ []int32) bool {
  			}
  			explod(sc).parseInterpolation(c, e, paramID, exp, &e.palfxdef)
  		}
@@ -5794,7 +5977,7 @@ index 276abbf..e9dbaf4 100644
  
  	// In this scenario the explod scale is constant in Mugen
  	//if c.minus == -2 || c.minus == -4 {
-@@ -7177,15 +8062,16 @@ func (sc modifyExplod) Run(c *Char, _ []int32) bool {
+@@ -7177,15 +8219,16 @@ func (sc modifyExplod) Run(c *Char, _ []int32) bool {
  	paramLock := !hasIkemenVer && !postypeSet
  
  	// First parameter pass just reads ID and index so we can check for matching explods
@@ -5814,11 +5997,11 @@ index 276abbf..e9dbaf4 100644
  
  	// Fetch the explods we are going to modify
  	expls := crun.getMultipleExplods(eid, idx, hasIkemenVer)
-@@ -7814,12 +8700,15 @@ func (sc gameMakeAnim) Run(c *Char, _ []int32) bool {
+@@ -7814,12 +8857,15 @@ func (sc gameMakeAnim) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
-+	explodIdxChanged()
++	explodIdxWrite(e)
  	e.id = 0
  	e.layerno = 1
  	e.sprpriority = math.MinInt32
@@ -5831,7 +6014,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case gameMakeAnim_pos:
  			e.relativePos[0] = exp[0].evalF(c) * redirscale
-@@ -7849,8 +8738,7 @@ func (sc gameMakeAnim) Run(c *Char, _ []int32) bool {
+@@ -7849,8 +8895,7 @@ func (sc gameMakeAnim) Run(c *Char, _ []int32) bool {
  			e.animNo = exp[1].evalI(c)
  			e.anim = crun.getSelfAnimSprite(e.animNo, e.anim_ffx, e.ownpal)
  		}
@@ -5841,7 +6024,7 @@ index 276abbf..e9dbaf4 100644
  
  	e.relativePos[0] -= float32(crun.size.draw.offset[0])
  	e.relativePos[1] -= float32(crun.size.draw.offset[1])
-@@ -8059,13 +8947,15 @@ func (sc afterImage) Run(c *Char, _ []int32) bool {
+@@ -8059,13 +9104,15 @@ func (sc afterImage) Run(c *Char, _ []int32) bool {
  	}
  	crun.aimg.time = 1
  
@@ -5861,7 +6044,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.aimg.setup(crun)
  
-@@ -8089,7 +8979,9 @@ func (sc afterImageTime) Run(c *Char, _ []int32) bool {
+@@ -8089,7 +9136,9 @@ func (sc afterImageTime) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -5872,7 +6055,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case afterImageTime_time:
  			time := exp[0].evalI(c)
-@@ -8098,9 +8990,8 @@ func (sc afterImageTime) Run(c *Char, _ []int32) bool {
+@@ -8098,9 +9147,8 @@ func (sc afterImageTime) Run(c *Char, _ []int32) bool {
  			}
  			crun.aimg.time = time
  			crun.aimg.timecount = 0
@@ -5884,7 +6067,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -8641,13 +9532,15 @@ func (sc hitDef) Run(c *Char, _ []int32) bool {
+@@ -8641,13 +9689,15 @@ func (sc hitDef) Run(c *Char, _ []int32) bool {
  		crun.hitdef.palfx.invertblend = -2
  	}
  
@@ -5904,7 +6087,7 @@ index 276abbf..e9dbaf4 100644
  
  	// The fix below seems to be a misunderstanding of some property interactions
  	// What happens is throws have hitonce = 1 and unhittabletime > 0 by default
-@@ -8681,7 +9574,10 @@ func (sc reversalDef) Run(c *Char, _ []int32) bool {
+@@ -8681,7 +9731,10 @@ func (sc reversalDef) Run(c *Char, _ []int32) bool {
  
  	crun.hitdef.reset(crun, nil)
  
@@ -5916,7 +6099,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case reversalDef_reversal_attr:
  			crun.hitdef.reversal_attr = evalAttr(exp, c, false)
-@@ -8690,12 +9586,11 @@ func (sc reversalDef) Run(c *Char, _ []int32) bool {
+@@ -8690,12 +9743,11 @@ func (sc reversalDef) Run(c *Char, _ []int32) bool {
  		case reversalDef_reversal_guardflag_not:
  			crun.hitdef.reversal_guardflag_not = evalHitFlag(exp, c)
  		case reversalDef_redirectid:
@@ -5931,7 +6114,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.hitdef.finalizeParams(crun, nil)
  
-@@ -8785,7 +9680,10 @@ func (sc projectile) Run(c *Char, _ []int32) bool {
+@@ -8785,7 +9837,10 @@ func (sc projectile) Run(c *Char, _ []int32) bool {
  	}
  	var shaderTime int32 = -1
  
@@ -5943,7 +6126,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case projectile_postype:
  			pt = PosType(exp[0].evalI(c))
-@@ -8998,7 +9896,7 @@ func (sc projectile) Run(c *Char, _ []int32) bool {
+@@ -8998,7 +10053,7 @@ func (sc projectile) Run(c *Char, _ []int32) bool {
  		// case projectile_platformfence:
  		// 	p.platformFence = exp[0].evalB(c)
  		case projectile_redirectid:
@@ -5952,7 +6135,7 @@ index 276abbf..e9dbaf4 100644
  		default:
  			switch {
  			case isHitDefParam(paramID):
-@@ -9010,8 +9908,7 @@ func (sc projectile) Run(c *Char, _ []int32) bool {
+@@ -9010,8 +10065,7 @@ func (sc projectile) Run(c *Char, _ []int32) bool {
  				afterImage(sc).runSub(c, crun, p.aimg, paramID, exp)
  			}
  		}
@@ -5962,7 +6145,7 @@ index 276abbf..e9dbaf4 100644
  
  	p.hitdef.finalizeParams(crun, p)
  
-@@ -9057,13 +9954,15 @@ func (sc modifyHitDef) Run(c *Char, _ []int32) bool {
+@@ -9057,13 +10111,15 @@ func (sc modifyHitDef) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -5982,7 +6165,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -9087,7 +9986,10 @@ func (sc modifyReversalDef) Run(c *Char, _ []int32) bool {
+@@ -9087,7 +10143,10 @@ func (sc modifyReversalDef) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -5994,7 +6177,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifyReversalDef_reversal_attr:
  			crun.hitdef.reversal_attr = evalAttr(exp, c, false)
-@@ -9096,12 +9998,11 @@ func (sc modifyReversalDef) Run(c *Char, _ []int32) bool {
+@@ -9096,12 +10155,11 @@ func (sc modifyReversalDef) Run(c *Char, _ []int32) bool {
  		case modifyReversalDef_reversal_guardflag_not:
  			crun.hitdef.reversal_guardflag_not = evalHitFlag(exp, c)
  		case modifyReversalDef_redirectid:
@@ -6009,7 +6192,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -9124,15 +10025,16 @@ func (sc modifyProjectile) Run(c *Char, _ []int32) bool {
+@@ -9124,15 +10182,16 @@ func (sc modifyProjectile) Run(c *Char, _ []int32) bool {
  	mpid := int32(-1)
  	mpidx := int(-1)
  
@@ -6029,7 +6212,7 @@ index 276abbf..e9dbaf4 100644
  
  	if crun.helperIndex != 0 {
  		return false
-@@ -10262,7 +11164,9 @@ func (sc width) Run(c *Char, _ []int32) bool {
+@@ -10262,7 +11321,9 @@ func (sc width) Run(c *Char, _ []int32) bool {
  	// TODO: Confirm if this should be baselocalscl or localscl
  	redirscale := c.baselocalscl / crun.baselocalscl
  
@@ -6040,7 +6223,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case width_player:
  			var v1, v2 float32
-@@ -10287,8 +11191,7 @@ func (sc width) Run(c *Char, _ []int32) bool {
+@@ -10287,8 +11348,7 @@ func (sc width) Run(c *Char, _ []int32) bool {
  			crun.widthPlayer = [2]float32{v1 * redirscale, v2 * redirscale}
  			crun.widthEdge = [2]float32{v1 * redirscale, v2 * redirscale}
  		}
@@ -6050,7 +6233,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10308,15 +11211,16 @@ func (sc sprPriority) Run(c *Char, _ []int32) bool {
+@@ -10308,15 +11368,16 @@ func (sc sprPriority) Run(c *Char, _ []int32) bool {
  
  	v := int32(0) // Mugen uses 0 even if no value is set at all
  	l := int32(0) // Defaults to 0 so that chars are less likely to be left forgotten in a different layer
@@ -6070,7 +6253,7 @@ index 276abbf..e9dbaf4 100644
  	crun.sprPriority = v
  	crun.layerNo = l
  	return false
-@@ -10342,7 +11246,9 @@ func (sc varSet) Run(c *Char, _ []int32) bool {
+@@ -10342,7 +11403,9 @@ func (sc varSet) Run(c *Char, _ []int32) bool {
  	var value BytecodeValue
  	var scType int32
  	var varType int32
@@ -6081,7 +6264,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case varSet_index:
  			index = exp[0].evalI(c)
-@@ -10358,8 +11264,7 @@ func (sc varSet) Run(c *Char, _ []int32) bool {
+@@ -10358,8 +11421,7 @@ func (sc varSet) Run(c *Char, _ []int32) bool {
  		case varSet_varType:
  			varType = exp[0].evalI(c)
  		}
@@ -6091,7 +6274,7 @@ index 276abbf..e9dbaf4 100644
  	crun.cnsVarSet(index, value, scType, varType)
  	return false
  }
-@@ -10377,13 +11282,14 @@ func (sc turn) Run(c *Char, _ []int32) bool {
+@@ -10377,13 +11439,14 @@ func (sc turn) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6109,7 +6292,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10404,7 +11310,9 @@ func (sc targetFacing) Run(c *Char, _ []int32) bool {
+@@ -10404,7 +11467,9 @@ func (sc targetFacing) Run(c *Char, _ []int32) bool {
  
  	tid, tidx := int32(-1), int(-1)
  	var value int32
@@ -6120,7 +6303,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetFacing_id:
  			tid = exp[0].evalI(c)
-@@ -10413,8 +11321,7 @@ func (sc targetFacing) Run(c *Char, _ []int32) bool {
+@@ -10413,8 +11478,7 @@ func (sc targetFacing) Run(c *Char, _ []int32) bool {
  		case targetFacing_value:
  			value = exp[0].evalI(c)
  		}
@@ -6130,7 +6313,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 && value != 0 {
  		crun.targetFacing(tar, value)
-@@ -10443,7 +11350,9 @@ func (sc targetBind) Run(c *Char, _ []int32) bool {
+@@ -10443,7 +11507,9 @@ func (sc targetBind) Run(c *Char, _ []int32) bool {
  	tid, tidx := int32(-1), int(-1)
  	time := int32(1)
  	var x, y, z float32 = 0, 0, 0
@@ -6141,7 +6324,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetBind_id:
  			tid = exp[0].evalI(c)
-@@ -10460,8 +11369,7 @@ func (sc targetBind) Run(c *Char, _ []int32) bool {
+@@ -10460,8 +11526,7 @@ func (sc targetBind) Run(c *Char, _ []int32) bool {
  				}
  			}
  		}
@@ -6151,7 +6334,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		crun.targetBind(tar, time, x, y, z)
-@@ -10491,7 +11399,9 @@ func (sc bindToTarget) Run(c *Char, _ []int32) bool {
+@@ -10491,7 +11556,9 @@ func (sc bindToTarget) Run(c *Char, _ []int32) bool {
  	tid, tidx := int32(-1), int(0)
  	time, x, y, z, hmf := int32(1), float32(0), float32(math.NaN()), float32(math.NaN()), HMF_F
  
@@ -6162,7 +6345,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case bindToTarget_id:
  			tid = exp[0].evalI(c)
-@@ -10510,8 +11420,7 @@ func (sc bindToTarget) Run(c *Char, _ []int32) bool {
+@@ -10510,8 +11577,7 @@ func (sc bindToTarget) Run(c *Char, _ []int32) bool {
  		case bindToTarget_posz:
  			z = exp[0].evalF(c) * redirscale
  		}
@@ -6172,7 +6355,7 @@ index 276abbf..e9dbaf4 100644
  
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
-@@ -10542,7 +11451,9 @@ func (sc targetLifeAdd) Run(c *Char, _ []int32) bool {
+@@ -10542,7 +11608,9 @@ func (sc targetLifeAdd) Run(c *Char, _ []int32) bool {
  	abs, kill, d, r := false, true, true, true
  	var value int32
  	tid, tidx := int32(-1), int(-1)
@@ -6183,7 +6366,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetLifeAdd_id:
  			tid = exp[0].evalI(c)
-@@ -10559,8 +11470,7 @@ func (sc targetLifeAdd) Run(c *Char, _ []int32) bool {
+@@ -10559,8 +11627,7 @@ func (sc targetLifeAdd) Run(c *Char, _ []int32) bool {
  		case targetLifeAdd_value:
  			value = exp[0].evalI(c)
  		}
@@ -6193,7 +6376,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		crun.targetLifeAdd(tar, value, kill, abs, d, r)
-@@ -10585,7 +11495,9 @@ func (sc targetState) Run(c *Char, _ []int32) bool {
+@@ -10585,7 +11652,9 @@ func (sc targetState) Run(c *Char, _ []int32) bool {
  
  	tid, tidx := int32(-1), int(-1)
  	vl := int32(-1)
@@ -6204,7 +6387,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetState_id:
  			tid = exp[0].evalI(c)
-@@ -10594,8 +11506,7 @@ func (sc targetState) Run(c *Char, _ []int32) bool {
+@@ -10594,8 +11663,7 @@ func (sc targetState) Run(c *Char, _ []int32) bool {
  		case targetState_value:
  			vl = exp[0].evalI(c)
  		}
@@ -6214,7 +6397,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		crun.targetState(tar, vl)
-@@ -10625,7 +11536,9 @@ func (sc targetVelSet) Run(c *Char, _ []int32) bool {
+@@ -10625,7 +11693,9 @@ func (sc targetVelSet) Run(c *Char, _ []int32) bool {
  	tid, tidx := int32(-1), int(-1)
  	var setx, sety, setz bool
  	var velx, vely, velz float32
@@ -6225,7 +6408,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetVelSet_id:
  			tid = exp[0].evalI(c)
-@@ -10641,8 +11554,7 @@ func (sc targetVelSet) Run(c *Char, _ []int32) bool {
+@@ -10641,8 +11711,7 @@ func (sc targetVelSet) Run(c *Char, _ []int32) bool {
  			velz = exp[0].evalF(c) * redirscale
  			setz = true
  		}
@@ -6235,7 +6418,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		if setx {
-@@ -10680,7 +11592,9 @@ func (sc targetVelAdd) Run(c *Char, _ []int32) bool {
+@@ -10680,7 +11749,9 @@ func (sc targetVelAdd) Run(c *Char, _ []int32) bool {
  	tid, tidx := int32(-1), int(-1)
  	var setx, sety, setz bool
  	var velx, vely, velz float32
@@ -6246,7 +6429,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetVelAdd_id:
  			tid = exp[0].evalI(c)
-@@ -10696,8 +11610,7 @@ func (sc targetVelAdd) Run(c *Char, _ []int32) bool {
+@@ -10696,8 +11767,7 @@ func (sc targetVelAdd) Run(c *Char, _ []int32) bool {
  			velz = exp[0].evalF(c) * redirscale
  			setz = true
  		}
@@ -6256,7 +6439,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		if setx {
-@@ -10730,7 +11643,9 @@ func (sc targetPowerAdd) Run(c *Char, _ []int32) bool {
+@@ -10730,7 +11800,9 @@ func (sc targetPowerAdd) Run(c *Char, _ []int32) bool {
  
  	tid, tidx := int32(-1), int(-1)
  	vl := int32(0)
@@ -6267,7 +6450,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetPowerAdd_id:
  			tid = exp[0].evalI(c)
-@@ -10739,8 +11654,7 @@ func (sc targetPowerAdd) Run(c *Char, _ []int32) bool {
+@@ -10739,8 +11811,7 @@ func (sc targetPowerAdd) Run(c *Char, _ []int32) bool {
  		case targetPowerAdd_value:
  			vl = exp[0].evalI(c)
  		}
@@ -6277,7 +6460,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		crun.targetPowerAdd(tar, vl)
-@@ -10763,15 +11677,16 @@ func (sc targetDrop) Run(c *Char, _ []int32) bool {
+@@ -10763,15 +11834,16 @@ func (sc targetDrop) Run(c *Char, _ []int32) bool {
  	}
  
  	eid, keep := int32(-1), true
@@ -6297,7 +6480,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(-1, -1)
  	if len(tar) > 0 {
  		crun.targetDrop(eid, -1, keep)
-@@ -10795,7 +11710,9 @@ func (sc lifeAdd) Run(c *Char, _ []int32) bool {
+@@ -10795,7 +11867,9 @@ func (sc lifeAdd) Run(c *Char, _ []int32) bool {
  	}
  
  	abs, kill := false, true
@@ -6308,7 +6491,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case lifeAdd_absolute:
  			abs = exp[0].evalB(c)
-@@ -10810,8 +11727,7 @@ func (sc lifeAdd) Run(c *Char, _ []int32) bool {
+@@ -10810,8 +11884,7 @@ func (sc lifeAdd) Run(c *Char, _ []int32) bool {
  			crun.lifeAdd(float64(v), kill, abs)
  			crun.ghv.kill = kill // The kill GetHitVar must currently be set here because c.lifeAdd is also used internally
  		}
@@ -6318,7 +6501,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10828,13 +11744,14 @@ func (sc lifeSet) Run(c *Char, _ []int32) bool {
+@@ -10828,13 +11901,14 @@ func (sc lifeSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6336,7 +6519,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10851,13 +11768,14 @@ func (sc powerAdd) Run(c *Char, _ []int32) bool {
+@@ -10851,13 +11925,14 @@ func (sc powerAdd) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6354,7 +6537,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10874,13 +11792,14 @@ func (sc powerSet) Run(c *Char, _ []int32) bool {
+@@ -10874,13 +11949,14 @@ func (sc powerSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6372,7 +6555,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10900,7 +11819,9 @@ func (sc hitVelSet) Run(c *Char, _ []int32) bool {
+@@ -10900,7 +11976,9 @@ func (sc hitVelSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6383,7 +6566,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case hitVelSet_x:
  			if exp[0].evalB(c) {
-@@ -10915,8 +11836,7 @@ func (sc hitVelSet) Run(c *Char, _ []int32) bool {
+@@ -10915,8 +11993,7 @@ func (sc hitVelSet) Run(c *Char, _ []int32) bool {
  				crun.vel[2] = crun.ghv.zvel
  			}
  		}
@@ -6393,7 +6576,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10938,7 +11858,9 @@ func (sc screenBound) Run(c *Char, _ []int32) bool {
+@@ -10938,7 +12015,9 @@ func (sc screenBound) Run(c *Char, _ []int32) bool {
  	value := false
  	movex, movey := false, false
  
@@ -6404,7 +6587,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case screenBound_value:
  			value = exp[0].evalB(c)
-@@ -10948,8 +11870,7 @@ func (sc screenBound) Run(c *Char, _ []int32) bool {
+@@ -10948,8 +12027,7 @@ func (sc screenBound) Run(c *Char, _ []int32) bool {
  				movey = exp[1].evalB(c)
  			}
  		}
@@ -6414,7 +6597,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.setCSF(CSF_screenbound, value)
  	crun.setCSF(CSF_movecamera_x, movex)
-@@ -10971,15 +11892,16 @@ func (sc posFreeze) Run(c *Char, _ []int32) bool {
+@@ -10971,15 +12049,16 @@ func (sc posFreeze) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6434,7 +6617,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -10999,7 +11921,9 @@ const (
+@@ -10999,7 +12078,9 @@ const (
  func (sc envShake) Run(c *Char, _ []int32) bool {
  	sys.envShake.clear()
  
@@ -6445,7 +6628,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case envShake_time:
  			sys.envShake.time = exp[0].evalI(c)
-@@ -11020,8 +11944,7 @@ func (sc envShake) Run(c *Char, _ []int32) bool {
+@@ -11020,8 +12101,7 @@ func (sc envShake) Run(c *Char, _ []int32) bool {
  		case envShake_decay:
  			sys.envShake.decay = exp[0].evalF(c)
  		}
@@ -6455,7 +6638,7 @@ index 276abbf..e9dbaf4 100644
  
  	sys.envShake.setDefaultPhase()
  	sys.envShake.restart()
-@@ -11055,7 +11978,9 @@ func (sc hitOverride) Run(c *Char, _ []int32) bool {
+@@ -11055,7 +12135,9 @@ func (sc hitOverride) Run(c *Char, _ []int32) bool {
  	gf := IErr
  	gfn := IErr
  
@@ -6466,7 +6649,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case hitOverride_attr:
  			at = evalAttr(exp, c, false)
-@@ -11082,8 +12007,7 @@ func (sc hitOverride) Run(c *Char, _ []int32) bool {
+@@ -11082,8 +12164,7 @@ func (sc hitOverride) Run(c *Char, _ []int32) bool {
  		case hitOverride_guardflag_not:
  			gfn = evalHitFlag(exp, c)
  		}
@@ -6476,7 +6659,7 @@ index 276abbf..e9dbaf4 100644
  
  	// In Mugen, using an undefined state number is still a valid HitOverride
  	//if st < 0 && !ks && !f {
-@@ -11122,7 +12046,9 @@ func (sc pause) Run(c *Char, _ []int32) bool {
+@@ -11122,7 +12203,9 @@ func (sc pause) Run(c *Char, _ []int32) bool {
  
  	var t, mt int32 = 0, 0
  	sys.pausebg, sys.pauseendcmdbuftime = true, 0
@@ -6487,7 +6670,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case pause_time:
  			t = exp[0].evalI(c)
-@@ -11133,8 +12059,7 @@ func (sc pause) Run(c *Char, _ []int32) bool {
+@@ -11133,8 +12216,7 @@ func (sc pause) Run(c *Char, _ []int32) bool {
  		case pause_endcmdbuftime:
  			sys.pauseendcmdbuftime = exp[0].evalI(c)
  		}
@@ -6497,7 +6680,7 @@ index 276abbf..e9dbaf4 100644
  	crun.setPauseTime(t, mt)
  	return false
  }
-@@ -11177,7 +12102,9 @@ func (sc superPause) Run(c *Char, _ []int32) bool {
+@@ -11177,7 +12259,9 @@ func (sc superPause) Run(c *Char, _ []int32) bool {
  	fx_ffx := "f"
  	fx_pos := [3]float32{0, 0, 0}
  
@@ -6508,7 +6691,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case superPause_time:
  			t = exp[0].evalI(c)
-@@ -11225,8 +12152,7 @@ func (sc superPause) Run(c *Char, _ []int32) bool {
+@@ -11225,8 +12309,7 @@ func (sc superPause) Run(c *Char, _ []int32) bool {
  			}
  			crun.playSound(params)
  		}
@@ -6518,7 +6701,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Add super FX
  	if fx_anim >= 0 {
-@@ -11266,9 +12192,12 @@ func (sc trans) Run(c *Char, _ []int32) bool {
+@@ -11266,9 +12349,12 @@ func (sc trans) Run(c *Char, _ []int32) bool {
  	// Mugen 1.1 doesn't seem to do this. Leftover code?
  	//crun.alpha[1] = 255
  
@@ -6533,7 +6716,7 @@ index 276abbf..e9dbaf4 100644
  		}
  		switch paramID {
  		case trans_trans:
-@@ -11291,8 +12220,7 @@ func (sc trans) Run(c *Char, _ []int32) bool {
+@@ -11291,8 +12377,7 @@ func (sc trans) Run(c *Char, _ []int32) bool {
  				}
  			}*/
  		}
@@ -6543,7 +6726,7 @@ index 276abbf..e9dbaf4 100644
  
  	return false
  }
-@@ -11312,7 +12240,9 @@ func (sc playerPush) Run(c *Char, _ []int32) bool {
+@@ -11312,7 +12397,9 @@ func (sc playerPush) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6554,7 +6737,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case playerPush_value:
  			b := exp[0].evalB(c)
-@@ -11322,8 +12252,7 @@ func (sc playerPush) Run(c *Char, _ []int32) bool {
+@@ -11322,8 +12409,7 @@ func (sc playerPush) Run(c *Char, _ []int32) bool {
  		case playerPush_affectteam:
  			crun.pushAffectTeam = exp[0].evalI(c)
  		}
@@ -6564,7 +6747,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11420,7 +12349,9 @@ func (sc stateTypeSet) Run(c *Char, _ []int32) bool {
+@@ -11420,7 +12506,9 @@ func (sc stateTypeSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6575,7 +6758,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case stateTypeSet_statetype:
  			if v, ok := evalTypeExp(exp, c, "statetype", stateTypeValue); ok {
-@@ -11443,8 +12374,7 @@ func (sc stateTypeSet) Run(c *Char, _ []int32) bool {
+@@ -11443,8 +12531,7 @@ func (sc stateTypeSet) Run(c *Char, _ []int32) bool {
  				}
  			}
  		}
@@ -6585,7 +6768,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11465,7 +12395,9 @@ func (sc angleDraw) Run(c *Char, _ []int32) bool {
+@@ -11465,7 +12552,9 @@ func (sc angleDraw) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6596,7 +6779,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case angleDraw_value:
  			crun.angleSet(exp[0].evalF(c))
-@@ -11484,8 +12416,7 @@ func (sc angleDraw) Run(c *Char, _ []int32) bool {
+@@ -11484,8 +12573,7 @@ func (sc angleDraw) Run(c *Char, _ []int32) bool {
  				crun.angleDrawPivot[1] = exp[1].evalF(c)
  			}
  		}
@@ -6606,7 +6789,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.setCSF(CSF_angledraw, true)
  	return false
-@@ -11509,7 +12440,9 @@ func (sc angleSet) Run(c *Char, _ []int32) bool {
+@@ -11509,7 +12597,9 @@ func (sc angleSet) Run(c *Char, _ []int32) bool {
  	v1 := float32(0) // Mugen uses 0 if no value is set at all
  	v2 := float32(0)
  	v3 := float32(0)
@@ -6617,7 +6800,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case angleSet_value:
  			v1 = exp[0].evalF(c)
-@@ -11518,8 +12451,7 @@ func (sc angleSet) Run(c *Char, _ []int32) bool {
+@@ -11518,8 +12608,7 @@ func (sc angleSet) Run(c *Char, _ []int32) bool {
  		case angleSet_y:
  			v3 = exp[0].evalF(c)
  		}
@@ -6627,7 +6810,7 @@ index 276abbf..e9dbaf4 100644
  	crun.angleSet(v1)
  	crun.XangleSet(v2)
  	crun.YangleSet(v3)
-@@ -11541,7 +12473,9 @@ func (sc angleAdd) Run(c *Char, _ []int32) bool {
+@@ -11541,7 +12630,9 @@ func (sc angleAdd) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6638,7 +6821,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case angleAdd_value:
  			crun.angleSet(crun.rot.angle + exp[0].evalF(c))
-@@ -11550,8 +12484,7 @@ func (sc angleAdd) Run(c *Char, _ []int32) bool {
+@@ -11550,8 +12641,7 @@ func (sc angleAdd) Run(c *Char, _ []int32) bool {
  		case angleAdd_y:
  			crun.YangleSet(crun.rot.yangle + exp[0].evalF(c))
  		}
@@ -6648,7 +6831,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11573,7 +12506,9 @@ func (sc angleMul) Run(c *Char, _ []int32) bool {
+@@ -11573,7 +12663,9 @@ func (sc angleMul) Run(c *Char, _ []int32) bool {
  	v1 := float32(0) // Mugen uses 0 if no value is set at all
  	v2 := float32(0)
  	v3 := float32(0)
@@ -6659,7 +6842,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case angleMul_value:
  			v1 = exp[0].evalF(c)
-@@ -11582,8 +12517,7 @@ func (sc angleMul) Run(c *Char, _ []int32) bool {
+@@ -11582,8 +12674,7 @@ func (sc angleMul) Run(c *Char, _ []int32) bool {
  		case angleMul_y:
  			v3 = exp[0].evalF(c)
  		}
@@ -6669,7 +6852,7 @@ index 276abbf..e9dbaf4 100644
  	crun.angleSet(crun.rot.angle * v1)
  	crun.XangleSet(crun.rot.xangle * v2)
  	crun.YangleSet(crun.rot.yangle * v3)
-@@ -11602,7 +12536,9 @@ func (sc envColor) Run(c *Char, _ []int32) bool {
+@@ -11602,7 +12693,9 @@ func (sc envColor) Run(c *Char, _ []int32) bool {
  	sys.envcol = [...]int32{255, 255, 255}
  	sys.envcol_time = 1
  	sys.envcol_under = false
@@ -6680,7 +6863,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case envColor_value:
  			sys.envcol[0] = exp[0].evalI(c)
-@@ -11613,8 +12549,7 @@ func (sc envColor) Run(c *Char, _ []int32) bool {
+@@ -11613,8 +12706,7 @@ func (sc envColor) Run(c *Char, _ []int32) bool {
  		case envColor_under:
  			sys.envcol_under = exp[0].evalB(c)
  		}
@@ -6690,7 +6873,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11632,20 +12567,26 @@ func (sc displayToClipboard) Run(c *Char, _ []int32) bool {
+@@ -11632,20 +12724,26 @@ func (sc displayToClipboard) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6724,7 +6907,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11657,19 +12598,25 @@ func (sc appendToClipboard) Run(c *Char, _ []int32) bool {
+@@ -11657,19 +12755,25 @@ func (sc appendToClipboard) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6757,7 +6940,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11686,13 +12633,14 @@ func (sc clearClipboard) Run(c *Char, _ []int32) bool {
+@@ -11686,13 +12790,14 @@ func (sc clearClipboard) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6775,7 +6958,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11718,7 +12666,9 @@ func (sc makeDust) Run(c *Char, _ []int32) bool {
+@@ -11718,7 +12823,9 @@ func (sc makeDust) Run(c *Char, _ []int32) bool {
  	var p2x, p2y, p2z float32
  	p2Set := false
  
@@ -6786,7 +6969,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case makeDust_spacing:
  			spacing = int(exp[0].evalI(c))
-@@ -11740,8 +12690,7 @@ func (sc makeDust) Run(c *Char, _ []int32) bool {
+@@ -11740,8 +12847,7 @@ func (sc makeDust) Run(c *Char, _ []int32) bool {
  				p2z = exp[2].evalF(c)
  			}
  		}
@@ -6796,7 +6979,7 @@ index 276abbf..e9dbaf4 100644
  
  	offX := float32(crun.size.draw.offset[0])
  	offY := float32(crun.size.draw.offset[1])
-@@ -11774,7 +12723,9 @@ func (sc attackDist) Run(c *Char, _ []int32) bool {
+@@ -11774,7 +12880,9 @@ func (sc attackDist) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -6807,7 +6990,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case attackDist_x:
  			crun.hitdef.guard_dist_x[0] = Max(0, exp[0].evalF(c)*redirscale)
-@@ -11795,8 +12746,7 @@ func (sc attackDist) Run(c *Char, _ []int32) bool {
+@@ -11795,8 +12903,7 @@ func (sc attackDist) Run(c *Char, _ []int32) bool {
  				crun.hitdef.guard_dist_z[1] = Max(0, exp[1].evalF(c)*redirscale)
  			}
  		}
@@ -6817,7 +7000,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11817,7 +12767,9 @@ func (sc attackMulSet) Run(c *Char, _ []int32) bool {
+@@ -11817,7 +12924,9 @@ func (sc attackMulSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6828,7 +7011,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case attackMulSet_value:
  			v := exp[0].evalF(c)
-@@ -11834,8 +12786,7 @@ func (sc attackMulSet) Run(c *Char, _ []int32) bool {
+@@ -11834,8 +12943,7 @@ func (sc attackMulSet) Run(c *Char, _ []int32) bool {
  		case attackMulSet_guardpoints:
  			crun.attackMul[3] = exp[0].evalF(c)
  		}
@@ -6838,7 +7021,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11864,7 +12815,9 @@ func (sc defenceMulSet) Run(c *Char, _ []int32) bool {
+@@ -11864,7 +12972,9 @@ func (sc defenceMulSet) Run(c *Char, _ []int32) bool {
  		mulType = 0
  	}
  
@@ -6849,7 +7032,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case defenceMulSet_value:
  			val = exp[0].evalF(c)
-@@ -11873,8 +12826,7 @@ func (sc defenceMulSet) Run(c *Char, _ []int32) bool {
+@@ -11873,8 +12983,7 @@ func (sc defenceMulSet) Run(c *Char, _ []int32) bool {
  		case defenceMulSet_mulType:
  			mulType = exp[0].evalI(c)
  		}
@@ -6859,7 +7042,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Apply "value" according to "mulType"
  	if mulType != 0 {
-@@ -11902,7 +12854,9 @@ func (sc fallEnvShake) Run(c *Char, _ []int32) bool {
+@@ -11902,7 +13011,9 @@ func (sc fallEnvShake) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6870,7 +7053,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case fallEnvShake_:
  			if crun.ghv.fall_envshake_time > 0 {
-@@ -11923,8 +12877,7 @@ func (sc fallEnvShake) Run(c *Char, _ []int32) bool {
+@@ -11923,8 +13034,7 @@ func (sc fallEnvShake) Run(c *Char, _ []int32) bool {
  				crun.ghv.fall_envshake_time = 0
  			}
  		}
@@ -6880,7 +7063,7 @@ index 276abbf..e9dbaf4 100644
  
  	return false
  }
-@@ -11942,13 +12895,14 @@ func (sc hitFallDamage) Run(c *Char, _ []int32) bool {
+@@ -11942,13 +13052,14 @@ func (sc hitFallDamage) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6898,7 +7081,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11965,13 +12919,14 @@ func (sc hitFallVel) Run(c *Char, _ []int32) bool {
+@@ -11965,13 +13076,14 @@ func (sc hitFallVel) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6916,7 +7099,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -11992,12 +12947,15 @@ func (sc hitFallSet) Run(c *Char, _ []int32) bool {
+@@ -11992,12 +13104,15 @@ func (sc hitFallSet) Run(c *Char, _ []int32) bool {
  	}
  
  	f, xv, yv, zv := int32(-1), float32(math.NaN()), float32(math.NaN()), float32(math.NaN())
@@ -6934,7 +7117,7 @@ index 276abbf..e9dbaf4 100644
  			}
  		case hitFallSet_xvel:
  			xv = exp[0].evalF(c)
-@@ -12006,8 +12964,7 @@ func (sc hitFallSet) Run(c *Char, _ []int32) bool {
+@@ -12006,8 +13121,7 @@ func (sc hitFallSet) Run(c *Char, _ []int32) bool {
  		case hitFallSet_zvel:
  			zv = exp[0].evalF(c)
  		}
@@ -6944,7 +7127,7 @@ index 276abbf..e9dbaf4 100644
  	crun.hitFallSet(f, xv, yv, zv)
  	return false
  }
-@@ -12031,7 +12988,9 @@ func (sc varRangeSet) Run(c *Char, _ []int32) bool {
+@@ -12031,7 +13145,9 @@ func (sc varRangeSet) Run(c *Char, _ []int32) bool {
  	first := int32(0)
  	last := int32(59) // Legacy default because MaxInt32 would stall the game
  
@@ -6955,7 +7138,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case varRangeSet_first:
  			first = exp[0].evalI(c)
-@@ -12044,8 +13003,7 @@ func (sc varRangeSet) Run(c *Char, _ []int32) bool {
+@@ -12044,8 +13160,7 @@ func (sc varRangeSet) Run(c *Char, _ []int32) bool {
  			fval := exp[0].evalF(c)
  			crun.fvarRangeSet(first, last, fval)
  		}
@@ -6965,7 +7148,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12065,7 +13023,9 @@ func (sc remapPal) Run(c *Char, _ []int32) bool {
+@@ -12065,7 +13180,9 @@ func (sc remapPal) Run(c *Char, _ []int32) bool {
  
  	src := [...]int32{-1, 0}
  	dst := [...]int32{-1, 0} // This is the default but technically the compiler crashes if dest is not specified
@@ -6976,7 +7159,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case remapPal_source:
  			src[0] = exp[0].evalI(c)
-@@ -12078,8 +13038,7 @@ func (sc remapPal) Run(c *Char, _ []int32) bool {
+@@ -12078,8 +13195,7 @@ func (sc remapPal) Run(c *Char, _ []int32) bool {
  				dst[1] = exp[1].evalI(c) // If only first parameter is defined, the second one stays at default. As usual in CNS
  			}
  		}
@@ -6986,7 +7169,7 @@ index 276abbf..e9dbaf4 100644
  	crun.remapPal(crun.getPalfx(), src, dst)
  	return false
  }
-@@ -12097,7 +13056,9 @@ func (sc stopSnd) Run(c *Char, _ []int32) bool {
+@@ -12097,7 +13213,9 @@ func (sc stopSnd) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -6997,7 +7180,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case stopSnd_channel:
  			val := exp[0].evalI(c)
-@@ -12110,8 +13071,7 @@ func (sc stopSnd) Run(c *Char, _ []int32) bool {
+@@ -12110,8 +13228,7 @@ func (sc stopSnd) Run(c *Char, _ []int32) bool {
  				}
  			}
  		}
@@ -7007,7 +7190,7 @@ index 276abbf..e9dbaf4 100644
  
  	return false
  }
-@@ -12133,7 +13093,9 @@ func (sc sndPan) Run(c *Char, _ []int32) bool {
+@@ -12133,7 +13250,9 @@ func (sc sndPan) Run(c *Char, _ []int32) bool {
  
  	sourceID, ls := crun.id, crun.localscl
  	ch, pan := int32(-1), float32(0)
@@ -7018,7 +7201,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case sndPan_channel:
  			ch = exp[0].evalI(c)
-@@ -12143,8 +13105,7 @@ func (sc sndPan) Run(c *Char, _ []int32) bool {
+@@ -12143,8 +13262,7 @@ func (sc sndPan) Run(c *Char, _ []int32) bool {
  			pan = exp[0].evalF(c)
  			sourceID, ls = -1, 1
  		}
@@ -7028,7 +7211,7 @@ index 276abbf..e9dbaf4 100644
  
  	// TODO: Check if Mugen allowed negative (all) channels here. Ikemen didn't
  	for _, s := range crun.getOwnChannels(ch) {
-@@ -12170,7 +13131,9 @@ func (sc varRandom) Run(c *Char, _ []int32) bool {
+@@ -12170,7 +13288,9 @@ func (sc varRandom) Run(c *Char, _ []int32) bool {
  
  	var v int32
  	var min, max int32 = 0, 1000
@@ -7039,7 +7222,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case varRandom_v:
  			v = exp[0].evalI(c)
-@@ -12180,8 +13143,7 @@ func (sc varRandom) Run(c *Char, _ []int32) bool {
+@@ -12180,8 +13300,7 @@ func (sc varRandom) Run(c *Char, _ []int32) bool {
  				min, max = max, exp[1].evalI(c)
  			}
  		}
@@ -7049,7 +7232,7 @@ index 276abbf..e9dbaf4 100644
  	crun.varSet(v, RandI(min, max))
  	return false
  }
-@@ -12199,13 +13161,14 @@ func (sc gravity) Run(c *Char, _ []int32) bool {
+@@ -12199,13 +13318,14 @@ func (sc gravity) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7067,7 +7250,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12228,7 +13191,9 @@ func (sc bindToParent) Run(c *Char, _ []int32) bool {
+@@ -12228,7 +13348,9 @@ func (sc bindToParent) Run(c *Char, _ []int32) bool {
  	var x, y, z float32 = 0, 0, 0
  	var time int32 = 1
  
@@ -7078,7 +7261,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case bindToParent_time:
  			time = exp[0].evalI(c)
-@@ -12247,8 +13212,7 @@ func (sc bindToParent) Run(c *Char, _ []int32) bool {
+@@ -12247,8 +13369,7 @@ func (sc bindToParent) Run(c *Char, _ []int32) bool {
  				}
  			}
  		}
@@ -7088,7 +7271,7 @@ index 276abbf..e9dbaf4 100644
  
  	p := crun.parent(true)
  	if p == nil {
-@@ -12275,7 +13239,9 @@ func (sc bindToRoot) Run(c *Char, _ []int32) bool {
+@@ -12275,7 +13396,9 @@ func (sc bindToRoot) Run(c *Char, _ []int32) bool {
  	var x, y, z float32 = 0, 0, 0
  	var time int32 = 1
  
@@ -7099,7 +7282,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case bindToParent_time:
  			time = exp[0].evalI(c)
-@@ -12294,8 +13260,7 @@ func (sc bindToRoot) Run(c *Char, _ []int32) bool {
+@@ -12294,8 +13417,7 @@ func (sc bindToRoot) Run(c *Char, _ []int32) bool {
  				}
  			}
  		}
@@ -7109,7 +7292,7 @@ index 276abbf..e9dbaf4 100644
  
  	r := crun.root(true)
  	if r == nil {
-@@ -12326,15 +13291,16 @@ func (sc removeExplod) Run(c *Char, _ []int32) bool {
+@@ -12326,15 +13448,16 @@ func (sc removeExplod) Run(c *Char, _ []int32) bool {
  
  	eid := int32(-1)
  	idx := int32(-1)
@@ -7129,7 +7312,7 @@ index 276abbf..e9dbaf4 100644
  	crun.removeExplod(eid, idx)
  	return false
  }
-@@ -12354,15 +13320,16 @@ func (sc explodBindTime) Run(c *Char, _ []int32) bool {
+@@ -12354,15 +13477,16 @@ func (sc explodBindTime) Run(c *Char, _ []int32) bool {
  	}
  
  	var eid, time int32 = -1, 0
@@ -7149,7 +7332,7 @@ index 276abbf..e9dbaf4 100644
  	crun.explodBindTime(eid, time)
  	return false
  }
-@@ -12380,13 +13347,14 @@ func (sc moveHitReset) Run(c *Char, _ []int32) bool {
+@@ -12380,13 +13504,14 @@ func (sc moveHitReset) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7167,7 +7350,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12403,13 +13371,14 @@ func (sc hitAdd) Run(c *Char, _ []int32) bool {
+@@ -12403,13 +13528,14 @@ func (sc hitAdd) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7185,7 +7368,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12427,15 +13396,16 @@ func (sc offset) Run(c *Char, _ []int32) bool {
+@@ -12427,15 +13553,16 @@ func (sc offset) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7205,7 +7388,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12453,13 +13423,14 @@ func (sc victoryQuote) Run(c *Char, _ []int32) bool {
+@@ -12453,13 +13580,14 @@ func (sc victoryQuote) Run(c *Char, _ []int32) bool {
  	}
  
  	var v int32 = -1
@@ -7223,7 +7406,7 @@ index 276abbf..e9dbaf4 100644
  	crun.winquote = v
  	return false
  }
-@@ -12484,7 +13455,9 @@ func (sc zoom) Run(c *Char, _ []int32) bool {
+@@ -12484,7 +13612,9 @@ func (sc zoom) Run(c *Char, _ []int32) bool {
  	lag := float32(0)
  	endlag := float32(0)
  
@@ -7234,7 +7417,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case zoom_pos:
  			pos[0] = exp[0].evalF(c) * c.localscl
-@@ -12519,8 +13492,7 @@ func (sc zoom) Run(c *Char, _ []int32) bool {
+@@ -12519,8 +13649,7 @@ func (sc zoom) Run(c *Char, _ []int32) bool {
  		case zoom_stagebound:
  			sys.zoom.stageBound = exp[0].evalB(c)
  		}
@@ -7244,7 +7427,7 @@ index 276abbf..e9dbaf4 100644
  
  	// This old calculation is both less accurate to Mugen and less intuitive to work with
  	// sys.zoom.pos[0] = sys.zoom.scale * pos[0]
-@@ -12565,7 +13537,9 @@ func (sc forceFeedback) Run(c *Char, _ []int32) bool {
+@@ -12565,7 +13694,9 @@ func (sc forceFeedback) Run(c *Char, _ []int32) bool {
  	lo := uint16(0)
  	hi := uint16(0)
  	self := true
@@ -7255,7 +7438,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case forceFeedback_waveform:
  			// We're just gonna use this to hack the parameters in
-@@ -12618,8 +13592,7 @@ func (sc forceFeedback) Run(c *Char, _ []int32) bool {
+@@ -12618,8 +13749,7 @@ func (sc forceFeedback) Run(c *Char, _ []int32) bool {
  			newAPI = true
  			hi = uint16(exp[0].evalI(c))
  		}
@@ -7265,7 +7448,7 @@ index 276abbf..e9dbaf4 100644
  	if crun.controller >= 0 && sys.inputRemap[crun.controller] < len(sys.ffbparams) {
  		joy := sys.inputRemap[crun.controller]
  		if newAPI { // New API: just rumble straight away on the ultimately redirected character
-@@ -12664,15 +13637,16 @@ func (sc assertCommand) Run(c *Char, _ []int32) bool {
+@@ -12664,15 +13794,16 @@ func (sc assertCommand) Run(c *Char, _ []int32) bool {
  
  	n := ""
  	bt := int32(1)
@@ -7285,7 +7468,7 @@ index 276abbf..e9dbaf4 100644
  	crun.assertCommand(n, bt)
  	return false
  }
-@@ -12697,7 +13671,9 @@ func (sc assertAnalogVector) Run(c *Char, _ []int32) bool {
+@@ -12697,7 +13828,9 @@ func (sc assertAnalogVector) Run(c *Char, _ []int32) bool {
  
  	var axes [6]float32 = [6]float32{0, 0, 0, 0, 0, 0}
  
@@ -7296,7 +7479,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case assertAnalogVector_leftx:
  			axes[0] = Clamp(exp[0].evalF(c), -1.0, 1.0)
-@@ -12712,8 +13688,7 @@ func (sc assertAnalogVector) Run(c *Char, _ []int32) bool {
+@@ -12712,8 +13845,7 @@ func (sc assertAnalogVector) Run(c *Char, _ []int32) bool {
  		case assertAnalogVector_righttrigger:
  			axes[5] = Clamp(exp[0].evalF(c), 0, 1.0)
  		}
@@ -7306,7 +7489,7 @@ index 276abbf..e9dbaf4 100644
  
  	for i := 0; i < len(axes); i++ {
  		crun.analogAxes[i] = axes[i]
-@@ -12737,7 +13712,9 @@ func (sc assertInput) Run(c *Char, _ []int32) bool {
+@@ -12737,7 +13869,9 @@ func (sc assertInput) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7317,7 +7500,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case assertInput_flag:
  			crun.inputFlag |= InputBits(exp[0].evalI(c))
-@@ -12754,8 +13731,7 @@ func (sc assertInput) Run(c *Char, _ []int32) bool {
+@@ -12754,8 +13888,7 @@ func (sc assertInput) Run(c *Char, _ []int32) bool {
  				crun.inputFlag |= IB_PL
  			}
  		}
@@ -7327,7 +7510,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12773,13 +13749,14 @@ func (sc changeMovelist) Run(c *Char, _ []int32) bool {
+@@ -12773,13 +13906,14 @@ func (sc changeMovelist) Run(c *Char, _ []int32) bool {
  	}
  
  	var v int32
@@ -7345,7 +7528,7 @@ index 276abbf..e9dbaf4 100644
  	if _, ok := crun.gi().movelists[int(v)]; !ok {
  		sys.appendToConsole(crun.warn() + fmt.Sprintf("changed to invalid movelist: %d", v))
  		return false
-@@ -12808,7 +13785,9 @@ func (sc dialogue) Run(c *Char, _ []int32) bool {
+@@ -12808,7 +13942,9 @@ func (sc dialogue) Run(c *Char, _ []int32) bool {
  
  	reset := true
  	force := false
@@ -7356,7 +7539,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case dialogue_hidebars:
  			sys.dialogueHideBars = sys.motif.DialogueInfo.Enabled && exp[0].evalB(c)
-@@ -12818,8 +13797,7 @@ func (sc dialogue) Run(c *Char, _ []int32) bool {
+@@ -12818,8 +13954,7 @@ func (sc dialogue) Run(c *Char, _ []int32) bool {
  			sys.chars[crun.playerNo][0].appendDialogue(exp[0].evalS(c), reset)
  			reset = false
  		}
@@ -7366,7 +7549,7 @@ index 276abbf..e9dbaf4 100644
  	if force {
  		sys.dialogueForce = crun.playerNo + 1
  	}
-@@ -12841,15 +13819,16 @@ func (sc dizzyPointsAdd) Run(c *Char, _ []int32) bool {
+@@ -12841,15 +13976,16 @@ func (sc dizzyPointsAdd) Run(c *Char, _ []int32) bool {
  	}
  
  	abs := false
@@ -7386,7 +7569,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12866,13 +13845,14 @@ func (sc dizzyPointsSet) Run(c *Char, _ []int32) bool {
+@@ -12866,13 +14002,14 @@ func (sc dizzyPointsSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7404,7 +7587,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12889,14 +13869,15 @@ func (sc dizzySet) Run(c *Char, _ []int32) bool {
+@@ -12889,14 +14026,15 @@ func (sc dizzySet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7423,7 +7606,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12913,14 +13894,15 @@ func (sc guardBreakSet) Run(c *Char, _ []int32) bool {
+@@ -12913,14 +14051,15 @@ func (sc guardBreakSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7442,7 +7625,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12939,15 +13921,16 @@ func (sc guardPointsAdd) Run(c *Char, _ []int32) bool {
+@@ -12939,15 +14078,16 @@ func (sc guardPointsAdd) Run(c *Char, _ []int32) bool {
  	}
  
  	abs := false
@@ -7462,7 +7645,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -12964,13 +13947,14 @@ func (sc guardPointsSet) Run(c *Char, _ []int32) bool {
+@@ -12964,13 +14104,14 @@ func (sc guardPointsSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7480,7 +7663,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13005,7 +13989,9 @@ func (sc lifebarAction) Run(c *Char, _ []int32) bool {
+@@ -13005,7 +14146,9 @@ func (sc lifebarAction) Run(c *Char, _ []int32) bool {
  	// Default to no duplicates and making an identical message reappear
  	refresh := int32(2)
  
@@ -7491,7 +7674,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case lifebarAction_top:
  			msg.top = exp[0].evalB(c)
-@@ -13057,8 +14043,7 @@ func (sc lifebarAction) Run(c *Char, _ []int32) bool {
+@@ -13057,8 +14200,7 @@ func (sc lifebarAction) Run(c *Char, _ []int32) bool {
  				palFX(sc).runSub(c, &msg.palfx.PalFXDef, paramID, exp)
  			}
  		}
@@ -7501,7 +7684,7 @@ index 276abbf..e9dbaf4 100644
  
  	if msg.resttime < 0 {
  		msg.resttime = sys.fightScreen.actions[crun.teamside].displaytime
-@@ -13077,13 +14062,14 @@ const (
+@@ -13077,13 +14219,14 @@ const (
  
  func (sc loadState) Run(c *Char, _ []int32) bool {
  	//crun := c
@@ -7519,7 +7702,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13107,7 +14093,9 @@ func (sc mapSet) Run(c *Char, _ []int32) bool {
+@@ -13107,7 +14250,9 @@ func (sc mapSet) Run(c *Char, _ []int32) bool {
  	var value BytecodeValue
  	var scType, index int32
  	hasIndex := false
@@ -7530,7 +7713,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case mapSet_mapArray:
  			s = exp[0].evalS(c)
-@@ -13119,8 +14107,7 @@ func (sc mapSet) Run(c *Char, _ []int32) bool {
+@@ -13119,8 +14264,7 @@ func (sc mapSet) Run(c *Char, _ []int32) bool {
  		case mapSet_sctrltype:
  			scType = exp[0].evalI(c)
  		}
@@ -7540,7 +7723,7 @@ index 276abbf..e9dbaf4 100644
  	if hasIndex {
  		s = c.mapIndexedKey(s, index)
  	}
-@@ -13160,7 +14147,9 @@ func (sc matchRestart) Run(c *Char, _ []int32) bool {
+@@ -13160,7 +14304,9 @@ func (sc matchRestart) Run(c *Char, _ []int32) bool {
  	for i := range sys.reloadPreserveVars {
  		sys.reloadPreserveVars[i] = false
  	}
@@ -7551,7 +7734,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case matchRestart_reload:
  			for i, p := range exp {
-@@ -13225,8 +14214,7 @@ func (sc matchRestart) Run(c *Char, _ []int32) bool {
+@@ -13225,8 +14371,7 @@ func (sc matchRestart) Run(c *Char, _ []int32) bool {
  				sys.matchResetFlg = true
  			}
  		}
@@ -7561,7 +7744,7 @@ index 276abbf..e9dbaf4 100644
  	if sys.netConnection == nil && sys.replayFile == nil {
  		if reloadFlag {
  			sys.reloadFlg = true
-@@ -13252,7 +14240,9 @@ const (
+@@ -13252,7 +14397,9 @@ const (
  
  func (sc printToConsole) Run(c *Char, _ []int32) bool {
  	params := []interface{}{}
@@ -7572,7 +7755,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case printToConsole_params:
  			for _, e := range exp {
-@@ -13262,8 +14252,7 @@ func (sc printToConsole) Run(c *Char, _ []int32) bool {
+@@ -13262,8 +14409,7 @@ func (sc printToConsole) Run(c *Char, _ []int32) bool {
  			sys.printToConsole(sys.workingState.playerNo,
  				int(exp[0].evalI(c)), params...)
  		}
@@ -7582,7 +7765,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13282,15 +14271,16 @@ func (sc redLifeAdd) Run(c *Char, _ []int32) bool {
+@@ -13282,15 +14428,16 @@ func (sc redLifeAdd) Run(c *Char, _ []int32) bool {
  	}
  
  	abs := false
@@ -7602,7 +7785,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13307,13 +14297,14 @@ func (sc redLifeSet) Run(c *Char, _ []int32) bool {
+@@ -13307,13 +14454,14 @@ func (sc redLifeSet) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7620,7 +7803,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13334,7 +14325,9 @@ func (sc remapSprite) Run(c *Char, _ []int32) bool {
+@@ -13334,7 +14482,9 @@ func (sc remapSprite) Run(c *Char, _ []int32) bool {
  	}
  	src := [...]int32{-1, -1}
  
@@ -7631,7 +7814,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case remapSprite_reset:
  			if exp[0].evalB(c) {
-@@ -13354,8 +14347,7 @@ func (sc remapSprite) Run(c *Char, _ []int32) bool {
+@@ -13354,8 +14504,7 @@ func (sc remapSprite) Run(c *Char, _ []int32) bool {
  			}
  			crun.remapSprite(src, dst)
  		}
@@ -7641,7 +7824,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.anim.remap = crun.remapSpr
  
-@@ -13377,15 +14369,16 @@ const (
+@@ -13377,15 +14526,16 @@ const (
  )
  
  func (sc roundTimeAdd) Run(c *Char, _ []int32) bool {
@@ -7661,7 +7844,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13397,15 +14390,16 @@ const (
+@@ -13397,15 +14547,16 @@ const (
  )
  
  func (sc roundTimeSet) Run(c *Char, _ []int32) bool {
@@ -7681,7 +7864,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13429,7 +14423,9 @@ func (sc saveFile) Run(c *Char, _ []int32) bool {
+@@ -13429,7 +14580,9 @@ func (sc saveFile) Run(c *Char, _ []int32) bool {
  	var savedata int32 = -1
  	var mapsList, mapsIncludeList []BytecodeExp
  
@@ -7692,7 +7875,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case saveFile_path:
  			path = exp[0].evalS(c)
-@@ -13440,8 +14436,7 @@ func (sc saveFile) Run(c *Char, _ []int32) bool {
+@@ -13440,8 +14593,7 @@ func (sc saveFile) Run(c *Char, _ []int32) bool {
  		case saveFile_maps_include:
  			mapsIncludeList = exp
  		}
@@ -7702,7 +7885,7 @@ index 276abbf..e9dbaf4 100644
  
  	if path == "" || savedata < 0 {
  		return false
-@@ -13515,7 +14510,9 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13515,7 +14667,9 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  	var sctrlSavedata int32 = -1
  	var mapsList, mapsIncludeList []BytecodeExp
  
@@ -7713,7 +7896,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case saveFile_path:
  			path = exp[0].evalS(c)
-@@ -13526,8 +14523,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13526,8 +14680,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  		case saveFile_maps_include:
  			mapsIncludeList = exp
  		}
@@ -7723,7 +7906,7 @@ index 276abbf..e9dbaf4 100644
  
  	if path == "" || sctrlSavedata < 0 {
  		return false
-@@ -13610,6 +14606,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13610,6 +14763,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  			sys.appendToConsole(crun.warn() + "LoadFile: cannot read var data")
  			return false
  		}
@@ -7731,7 +7914,7 @@ index 276abbf..e9dbaf4 100644
  		crun.cnsvar = loaded
  	case 2: // Fvar
  		var loaded map[int32]float32
-@@ -13617,6 +14614,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
+@@ -13617,6 +14771,7 @@ func (sc loadFile) Run(c *Char, _ []int32) bool {
  			sys.appendToConsole(crun.warn() + "LoadFile: cannot read fvar data")
  			return false
  		}
@@ -7739,7 +7922,7 @@ index 276abbf..e9dbaf4 100644
  		crun.cnsfvar = loaded
  	}
  	return false
-@@ -13630,13 +14628,14 @@ const (
+@@ -13630,13 +14785,14 @@ const (
  
  func (sc saveState) Run(c *Char, _ []int32) bool {
  	//crun := c
@@ -7757,7 +7940,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13653,13 +14652,14 @@ func (sc scoreAdd) Run(c *Char, _ []int32) bool {
+@@ -13653,13 +14809,14 @@ func (sc scoreAdd) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -7775,7 +7958,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -13689,7 +14689,9 @@ func (sc shaderSet) Run(c *Char, _ []int32) bool {
+@@ -13689,7 +14846,9 @@ func (sc shaderSet) Run(c *Char, _ []int32) bool {
  	st := int32(1)
  	shaderPN := crun.ss.sb.playerNo
  
@@ -7786,7 +7969,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case shaderSet_time:
  			st = exp[0].evalI(c)
-@@ -13741,8 +14743,7 @@ func (sc shaderSet) Run(c *Char, _ []int32) bool {
+@@ -13741,8 +14900,7 @@ func (sc shaderSet) Run(c *Char, _ []int32) bool {
  		case shaderSet_afterimage:
  			crun.customShader.afterimage = exp[0].evalB(c)
  		}
@@ -7796,7 +7979,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.customShader.time = st
  	if crun.customShader.time == 0 {
-@@ -13780,7 +14781,9 @@ func (sc storyboard) Run(c *Char, _ []int32) bool {
+@@ -13780,7 +14938,9 @@ func (sc storyboard) Run(c *Char, _ []int32) bool {
  		bindID:   -2,
  		bindtime: 1,
  	}
@@ -7807,7 +7990,7 @@ index 276abbf..e9dbaf4 100644
  		switch id {
  		case storyboard_path:
  			path := SearchFile(exp[0].evalS(c), []string{crun.gi().def, ""})
-@@ -13816,8 +14819,7 @@ func (sc storyboard) Run(c *Char, _ []int32) bool {
+@@ -13816,8 +14976,7 @@ func (sc storyboard) Run(c *Char, _ []int32) bool {
  		case storyboard_bindtime:
  			p.bindtime = Max(-1, exp[0].evalI(c))
  		}
@@ -7817,7 +8000,7 @@ index 276abbf..e9dbaf4 100644
  	if s != nil {
  		s.inMatch, s.id, s.ownerID, s.playerNo = true, sid, crun.id, crun.playerNo
  		s.fadeIn, s.fadeOut = newFade(), newFade()
-@@ -13936,12 +14938,13 @@ func (sc removeStoryboard) Run(c *Char, _ []int32) bool {
+@@ -13936,12 +15095,13 @@ func (sc removeStoryboard) Run(c *Char, _ []int32) bool {
  		return false
  	}
  	sid := int32(-1)
@@ -7834,7 +8017,7 @@ index 276abbf..e9dbaf4 100644
  	sys.matchStoryboards.remove(crun.id, sid)
  	return false
  }
-@@ -13986,7 +14989,9 @@ func (sc modifyBGCtrl) Run(c *Char, _ []int32) bool {
+@@ -13986,7 +15146,9 @@ func (sc modifyBGCtrl) Run(c *Char, _ []int32) bool {
  	invall, invblend, color, hue := IErr, IErr, float32(math.NaN()), float32(math.NaN())
  	shader := sys.stage.newModifyBGCtrlShader()
  
@@ -7845,7 +8028,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifyBGCtrl_id:
  			cid = exp[0].evalI(c)
-@@ -14098,8 +15103,7 @@ func (sc modifyBGCtrl) Run(c *Char, _ []int32) bool {
+@@ -14098,8 +15260,7 @@ func (sc modifyBGCtrl) Run(c *Char, _ []int32) bool {
  			shader.tex[1].sprNo[0] = exp[0].evalI(c)
  			shader.tex[1].sprNo[1] = exp[1].evalI(c)
  		}
@@ -7855,7 +8038,7 @@ index 276abbf..e9dbaf4 100644
  	sys.stage.modifyBGCtrl(cid, t, v, x, y, src, dst, add, mul, sinadd, sinmul, sincolor, sinhue, invall, invblend, color, hue, shader)
  	return false
  }
-@@ -14117,7 +15121,9 @@ func (sc modifyBGCtrl3d) Run(c *Char, _ []int32) bool {
+@@ -14117,7 +15278,9 @@ func (sc modifyBGCtrl3d) Run(c *Char, _ []int32) bool {
  	var cid int32
  	t, v := [3]int32{IErr, IErr, IErr}, [3]int32{IErr, IErr, IErr}
  
@@ -7866,7 +8049,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifyBGCtrl3d_ctrlid:
  			cid = exp[0].evalI(c)
-@@ -14138,8 +15144,7 @@ func (sc modifyBGCtrl3d) Run(c *Char, _ []int32) bool {
+@@ -14138,8 +15301,7 @@ func (sc modifyBGCtrl3d) Run(c *Char, _ []int32) bool {
  				}
  			}
  		}
@@ -7876,7 +8059,7 @@ index 276abbf..e9dbaf4 100644
  	sys.stage.modifyBGCtrl3d(uint32(cid), t, v)
  	return false
  }
-@@ -14172,7 +15177,9 @@ func (sc modifyBgm) Run(c *Char, _ []int32) bool {
+@@ -14172,7 +15334,9 @@ func (sc modifyBgm) Run(c *Char, _ []int32) bool {
  		loopend = sl.loopend
  	}
  
@@ -7887,7 +8070,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifyBgm_volume:
  			v := int(exp[0].evalI(c))
-@@ -14207,8 +15214,7 @@ func (sc modifyBgm) Run(c *Char, _ []int32) bool {
+@@ -14207,8 +15371,7 @@ func (sc modifyBgm) Run(c *Char, _ []int32) bool {
  			}
  			loopCountSet = true
  		}
@@ -7897,7 +8080,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Set values that are different only
  	if volumeSet {
-@@ -14270,7 +15276,9 @@ func (sc modifySnd) Run(c *Char, _ []int32) bool {
+@@ -14270,7 +15433,9 @@ func (sc modifySnd) Run(c *Char, _ []int32) bool {
  	var loopstart, loopend, position, lc int = 0, 0, 0, 0
  	var p float32 = 0
  
@@ -7908,7 +8091,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifySnd_channel:
  			ch = exp[0].evalI(c)
-@@ -14327,8 +15335,7 @@ func (sc modifySnd) Run(c *Char, _ []int32) bool {
+@@ -14327,8 +15492,7 @@ func (sc modifySnd) Run(c *Char, _ []int32) bool {
  		case modifySnd_stoponchangestate:
  			stopcs = Btoi(exp[0].evalB(c))
  		}
@@ -7918,7 +8101,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Iterate the requested channel(s)
  	for _, snd := range crun.getOwnChannels(ch) {
-@@ -14408,7 +15415,9 @@ func (sc playBgm) Run(c *Char, _ []int32) bool {
+@@ -14408,7 +15572,9 @@ func (sc playBgm) Run(c *Char, _ []int32) bool {
  	var bgm string
  	var loop, loopcount, volume, loopstart, loopend, startposition int = 1, -1, 100, 0, 0, 0
  	var freqmul float32 = 1.0
@@ -7929,7 +8112,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case playBgm_source:
  			src := exp[1].evalS(c)
-@@ -14464,8 +15473,7 @@ func (sc playBgm) Run(c *Char, _ []int32) bool {
+@@ -14464,8 +15630,7 @@ func (sc playBgm) Run(c *Char, _ []int32) bool {
  		case playBgm_loopcount:
  			loopcount = int(exp[0].evalI(c))
  		}
@@ -7939,7 +8122,7 @@ index 276abbf..e9dbaf4 100644
  	if play {
  		sys.bgm.Open(bgm, loop, volume, loopstart, loopend, startposition, freqmul, loopcount)
  		sys.playBgmFlg = true
-@@ -14495,7 +15503,9 @@ func (sc targetDizzyPointsAdd) Run(c *Char, _ []int32) bool {
+@@ -14495,7 +15660,9 @@ func (sc targetDizzyPointsAdd) Run(c *Char, _ []int32) bool {
  	abs := false
  	tid, tidx := int32(-1), int(-1)
  	vl := int32(0)
@@ -7950,7 +8133,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetDizzyPointsAdd_id:
  			tid = exp[0].evalI(c)
-@@ -14506,8 +15516,7 @@ func (sc targetDizzyPointsAdd) Run(c *Char, _ []int32) bool {
+@@ -14506,8 +15673,7 @@ func (sc targetDizzyPointsAdd) Run(c *Char, _ []int32) bool {
  		case targetDizzyPointsAdd_value:
  			vl = exp[0].evalI(c)
  		}
@@ -7960,7 +8143,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		crun.targetDizzyPointsAdd(tar, vl, abs)
-@@ -14534,7 +15543,9 @@ func (sc targetGuardPointsAdd) Run(c *Char, _ []int32) bool {
+@@ -14534,7 +15700,9 @@ func (sc targetGuardPointsAdd) Run(c *Char, _ []int32) bool {
  	abs := false
  	tid, tidx := int32(-1), int(-1)
  	vl := int32(0)
@@ -7971,7 +8154,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetGuardPointsAdd_id:
  			tid = exp[0].evalI(c)
-@@ -14545,8 +15556,7 @@ func (sc targetGuardPointsAdd) Run(c *Char, _ []int32) bool {
+@@ -14545,8 +15713,7 @@ func (sc targetGuardPointsAdd) Run(c *Char, _ []int32) bool {
  		case targetGuardPointsAdd_value:
  			vl = exp[0].evalI(c)
  		}
@@ -7981,7 +8164,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		crun.targetGuardPointsAdd(tar, vl, abs)
-@@ -14573,7 +15583,9 @@ func (sc targetRedLifeAdd) Run(c *Char, _ []int32) bool {
+@@ -14573,7 +15740,9 @@ func (sc targetRedLifeAdd) Run(c *Char, _ []int32) bool {
  	abs := false
  	tid, tidx := int32(-1), int(-1)
  	vl := int32(0)
@@ -7992,7 +8175,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetRedLifeAdd_id:
  			tid = exp[0].evalI(c)
-@@ -14584,8 +15596,7 @@ func (sc targetRedLifeAdd) Run(c *Char, _ []int32) bool {
+@@ -14584,8 +15753,7 @@ func (sc targetRedLifeAdd) Run(c *Char, _ []int32) bool {
  		case targetRedLifeAdd_value:
  			vl = exp[0].evalI(c)
  		}
@@ -8002,7 +8185,7 @@ index 276abbf..e9dbaf4 100644
  	// Mugen forces absolute parameter when healing characters
  	if vl > 0 && c.stWgi().ikemenver[0] == 0 && c.stWgi().ikemenver[1] == 0 {
  		abs = true
-@@ -14614,7 +15625,9 @@ func (sc targetScoreAdd) Run(c *Char, _ []int32) bool {
+@@ -14614,7 +15782,9 @@ func (sc targetScoreAdd) Run(c *Char, _ []int32) bool {
  
  	tid, tidx := int32(-1), int(-1)
  	vl := float32(0)
@@ -8013,7 +8196,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case targetScoreAdd_id:
  			tid = exp[0].evalI(c)
-@@ -14623,8 +15636,7 @@ func (sc targetScoreAdd) Run(c *Char, _ []int32) bool {
+@@ -14623,8 +15793,7 @@ func (sc targetScoreAdd) Run(c *Char, _ []int32) bool {
  		case targetScoreAdd_value:
  			vl = exp[0].evalF(c)
  		}
@@ -8023,7 +8206,7 @@ index 276abbf..e9dbaf4 100644
  	tar := crun.getTarget(tid, tidx)
  	if len(tar) > 0 {
  		crun.targetScoreAdd(tar, vl)
-@@ -14698,7 +15710,10 @@ func (sc text) Run(c *Char, _ []int32) bool {
+@@ -14698,7 +15867,10 @@ func (sc text) Run(c *Char, _ []int32) bool {
  	targetLcx := c.gi().localcoord[0]
  	sourceLcx := targetLcx
  
@@ -8035,7 +8218,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case text_removetime:
  			ts.removetime = exp[0].evalI(c)
-@@ -14862,14 +15877,13 @@ func (sc text) Run(c *Char, _ []int32) bool {
+@@ -14862,14 +16034,13 @@ func (sc text) Run(c *Char, _ []int32) bool {
  		case text_shadertime:
  			shaderTime = exp[0].evalI(c)
  		case text_redirectid:
@@ -8052,7 +8235,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Apply localcoord scale correction
  	// Must be placed before SetScale()
-@@ -14918,15 +15932,16 @@ func (sc modifyText) Run(c *Char, _ []int32) bool {
+@@ -14918,15 +16089,16 @@ func (sc modifyText) Run(c *Char, _ []int32) bool {
  	idx := int(-1)
  	shaderPN := crun.ss.sb.playerNo
  
@@ -8072,7 +8255,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Fetch the texts we are going to modify
  	texts := crun.getMultipleTexts(tid, idx, true)
-@@ -15248,15 +16263,16 @@ func (sc removeText) Run(c *Char, _ []int32) bool {
+@@ -15248,15 +16420,16 @@ func (sc removeText) Run(c *Char, _ []int32) bool {
  	tid := int32(-1)
  	idx := int32(-1)
  
@@ -8092,7 +8275,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.removeText(tid, idx)
  	return false
-@@ -15292,7 +16308,9 @@ func (sc createPlatform) Run(c *Char, _ []int32) bool {
+@@ -15292,7 +16465,9 @@ func (sc createPlatform) Run(c *Char, _ []int32) bool {
  		activeTime: -1,
  	}
  
@@ -8103,7 +8286,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case createPlatform_id:
  			plat.id = exp[0].evalI(c)
-@@ -15311,8 +16329,7 @@ func (sc createPlatform) Run(c *Char, _ []int32) bool {
+@@ -15311,8 +16486,7 @@ func (sc createPlatform) Run(c *Char, _ []int32) bool {
  		case createPlatform_activeTime:
  			plat.activeTime = exp[0].evalI(c)
  		}
@@ -8113,7 +8296,7 @@ index 276abbf..e9dbaf4 100644
  
  	if !customOffset {
  		if plat.size[0] != 0 {
-@@ -15436,7 +16453,9 @@ func (sc modifyStageVar) Run(c *Char, _ []int32) bool {
+@@ -15436,7 +16610,9 @@ func (sc modifyStageVar) Run(c *Char, _ []int32) bool {
  	reflectionShaderChanged := false
  	scaleratio := c.localscl / s.localscl
  
@@ -8124,7 +8307,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		// Camera group
  		case modifyStageVar_camera_autocenter:
-@@ -15719,8 +16738,7 @@ func (sc modifyStageVar) Run(c *Char, _ []int32) bool {
+@@ -15719,8 +16895,7 @@ func (sc modifyStageVar) Run(c *Char, _ []int32) bool {
  			s.reflection.shaderTex[1].animNo = -1
  			reflectionShaderChanged = true
  		}
@@ -8134,7 +8317,7 @@ index 276abbf..e9dbaf4 100644
  	if shadowShaderChanged {
  		s.applyShaderDef(&s.sdw.stageShaderDef, &s.sdw.shader)
  	}
-@@ -15745,7 +16763,9 @@ const (
+@@ -15745,7 +16920,9 @@ const (
  
  func (sc cameraCtrl) Run(c *Char, _ []int32) bool {
  	//crun := c
@@ -8145,7 +8328,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case cameraCtrl_view:
  			sys.cam.View = CameraView(exp[0].evalI(c))
-@@ -15762,8 +16782,7 @@ func (sc cameraCtrl) Run(c *Char, _ []int32) bool {
+@@ -15762,8 +16939,7 @@ func (sc cameraCtrl) Run(c *Char, _ []int32) bool {
  				sys.cam.FollowChar = cid
  			}
  		}
@@ -8155,7 +8338,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -15783,7 +16802,9 @@ func (sc height) Run(c *Char, _ []int32) bool {
+@@ -15783,7 +16959,9 @@ func (sc height) Run(c *Char, _ []int32) bool {
  	// TODO: Confirm if this should be baselocalscl or localscl
  	redirscale := c.baselocalscl / crun.baselocalscl
  
@@ -8166,7 +8349,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case height_value:
  			var v1, v2 float32
-@@ -15793,8 +16814,7 @@ func (sc height) Run(c *Char, _ []int32) bool {
+@@ -15793,8 +16971,7 @@ func (sc height) Run(c *Char, _ []int32) bool {
  			}
  			crun.heightPlayer = [2]float32{v1 * redirscale, v2 * redirscale}
  		}
@@ -8176,7 +8359,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -15816,7 +16836,9 @@ func (sc depth) Run(c *Char, _ []int32) bool {
+@@ -15816,7 +16993,9 @@ func (sc depth) Run(c *Char, _ []int32) bool {
  	// TODO: Confirm if this should be baselocalscl or localscl
  	redirscale := c.baselocalscl / crun.baselocalscl
  
@@ -8187,7 +8370,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case depth_player:
  			var v1, v2 float32
-@@ -15841,8 +16863,7 @@ func (sc depth) Run(c *Char, _ []int32) bool {
+@@ -15841,8 +17020,7 @@ func (sc depth) Run(c *Char, _ []int32) bool {
  			crun.depthPlayer = [2]float32{v1 * redirscale, v2 * redirscale}
  			crun.depthEdge = [2]float32{v1 * redirscale, v2 * redirscale}
  		}
@@ -8197,7 +8380,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -15864,15 +16885,16 @@ func (sc depthBound) Run(c *Char, _ []int32) bool {
+@@ -15864,15 +17042,16 @@ func (sc depthBound) Run(c *Char, _ []int32) bool {
  	value := false
  	movez := false
  
@@ -8217,7 +8400,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.setCSF(CSF_depthbound, value)
  	crun.setCSF(CSF_movecamera_z, movez)
-@@ -15914,7 +16936,9 @@ func (sc modifyPlayer) Run(c *Char, _ []int32) bool {
+@@ -15914,7 +17093,9 @@ func (sc modifyPlayer) Run(c *Char, _ []int32) bool {
  		return false
  	}
  
@@ -8228,7 +8411,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifyPlayer_lifemax:
  			lm := exp[0].evalI(c)
-@@ -15969,6 +16993,7 @@ func (sc modifyPlayer) Run(c *Char, _ []int32) bool {
+@@ -15969,6 +17150,7 @@ func (sc modifyPlayer) Run(c *Char, _ []int32) bool {
  		case modifyPlayer_helpervar_id:
  			if crun.helperIndex != 0 {
  				id := exp[0].evalI(c)
@@ -8236,7 +8419,7 @@ index 276abbf..e9dbaf4 100644
  				if id >= 0 {
  					crun.helperId = id
  				} else {
-@@ -16010,8 +17035,7 @@ func (sc modifyPlayer) Run(c *Char, _ []int32) bool {
+@@ -16010,8 +17192,7 @@ func (sc modifyPlayer) Run(c *Char, _ []int32) bool {
  		case modifyPlayer_ailevel:
  			crun.setAILevel(exp[0].evalF(c))
  		}
@@ -8246,7 +8429,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -16077,7 +17101,9 @@ func (sc getHitVarSet) Run(c *Char, _ []int32) bool {
+@@ -16077,7 +17258,9 @@ func (sc getHitVarSet) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -8257,7 +8440,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case getHitVarSet_airtype:
  			crun.ghv.airtype = HitType(exp[0].evalI(c))
-@@ -16174,8 +17200,7 @@ func (sc getHitVarSet) Run(c *Char, _ []int32) bool {
+@@ -16174,8 +17357,7 @@ func (sc getHitVarSet) Run(c *Char, _ []int32) bool {
  		case getHitVarSet_zaccel:
  			crun.ghv.zaccel = exp[0].evalF(c) * redirscale
  		}
@@ -8267,7 +8450,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -16194,13 +17219,14 @@ func (sc groundLevelOffset) Run(c *Char, _ []int32) bool {
+@@ -16194,13 +17376,14 @@ func (sc groundLevelOffset) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -8285,7 +8468,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -16218,13 +17244,14 @@ func (sc targetAdd) Run(c *Char, _ []int32) bool {
+@@ -16218,13 +17401,14 @@ func (sc targetAdd) Run(c *Char, _ []int32) bool {
  	}
  
  	var pid int32
@@ -8303,7 +8486,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.targetAddSctrl(pid)
  
-@@ -16256,7 +17283,9 @@ func (sc transformClsn) Run(c *Char, _ []int32) bool {
+@@ -16256,7 +17440,9 @@ func (sc transformClsn) Run(c *Char, _ []int32) bool {
  	index := int(-1)   // all
  	pivot := [2]float32{0, 0}
  
@@ -8314,7 +8497,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case transformClsn_group:
  			group = exp[0].evalI(c)
-@@ -16275,8 +17304,7 @@ func (sc transformClsn) Run(c *Char, _ []int32) bool {
+@@ -16275,8 +17461,7 @@ func (sc transformClsn) Run(c *Char, _ []int32) bool {
  				pivot[1] = exp[1].evalF(c) * redirscale
  			}
  		}
@@ -8324,7 +8507,7 @@ index 276abbf..e9dbaf4 100644
  
  	transform := ClsnTransform{index, scale, angle, pivot}
  
-@@ -16320,7 +17348,9 @@ func (sc transformSprite) Run(c *Char, _ []int32) bool {
+@@ -16320,7 +17505,9 @@ func (sc transformSprite) Run(c *Char, _ []int32) bool {
  
  	redirscale := c.localscl / crun.localscl
  
@@ -8335,7 +8518,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case transformSprite_window:
  			if len(exp) >= 4 {
-@@ -16338,8 +17368,7 @@ func (sc transformSprite) Run(c *Char, _ []int32) bool {
+@@ -16338,8 +17525,7 @@ func (sc transformSprite) Run(c *Char, _ []int32) bool {
  		case transformSprite_projection:
  			c.projection = Projection(exp[0].evalI(c))
  		}
@@ -8345,7 +8528,7 @@ index 276abbf..e9dbaf4 100644
  	return false
  }
  
-@@ -16379,15 +17408,16 @@ func (sc modifyStageBG) Run(c *Char, _ []int32) bool {
+@@ -16379,15 +17565,16 @@ func (sc modifyStageBG) Run(c *Char, _ []int32) bool {
  	bgid := int32(-1)
  	bgidx := int(-1)
  
@@ -8365,7 +8548,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Fetch the BGs we are going to modify
  	backgrounds := c.getMultipleStageBg(bgid, bgidx, true)
-@@ -16621,7 +17651,9 @@ func (sc modifyShadow) Run(c *Char, _ []int32) bool {
+@@ -16621,7 +17808,9 @@ func (sc modifyShadow) Run(c *Char, _ []int32) bool {
  	st := int32(1)
  	shaderPN := crun.ss.sb.playerNo
  
@@ -8376,7 +8559,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifyShadow_animelem:
  			crun.shadowAnimelem = exp[0].evalI(c)
-@@ -16727,8 +17759,7 @@ func (sc modifyShadow) Run(c *Char, _ []int32) bool {
+@@ -16727,8 +17916,7 @@ func (sc modifyShadow) Run(c *Char, _ []int32) bool {
  			crun.shadowShader.tex2.SprNo = [2]int32{g, n}
  			crun.shadowShader.tex2.Spr = crun.gi().sff.GetSprite(uint16(g), uint16(n))
  		}
@@ -8386,7 +8569,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.shadowShader.time = st
  	if crun.shadowShader.time == 0 {
-@@ -16781,7 +17812,9 @@ func (sc modifyReflection) Run(c *Char, _ []int32) bool {
+@@ -16781,7 +17969,9 @@ func (sc modifyReflection) Run(c *Char, _ []int32) bool {
  	st := int32(1)
  	shaderPN := crun.ss.sb.playerNo
  
@@ -8397,7 +8580,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case modifyReflection_animelem:
  			crun.reflectAnimelem = exp[0].evalI(c)
-@@ -16887,8 +17920,7 @@ func (sc modifyReflection) Run(c *Char, _ []int32) bool {
+@@ -16887,8 +18077,7 @@ func (sc modifyReflection) Run(c *Char, _ []int32) bool {
  			crun.reflectShader.tex2.SprNo = [2]int32{g, n}
  			crun.reflectShader.tex2.Spr = crun.gi().sff.GetSprite(uint16(g), uint16(n))
  		}
@@ -8407,7 +8590,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.reflectShader.time = st
  	if crun.reflectShader.time == 0 {
-@@ -16913,15 +17945,16 @@ func (sc shiftInput) Run(c *Char, _ []int32) bool {
+@@ -16913,15 +18102,16 @@ func (sc shiftInput) Run(c *Char, _ []int32) bool {
  
  	var src, dst int = -1, -1
  
@@ -8427,7 +8610,7 @@ index 276abbf..e9dbaf4 100644
  
  	// Reset all mappings if both are none. Or do nothing if only source is none
  	if src < 0 {
-@@ -16967,7 +18000,9 @@ func (sc overrideClsn) Run(c *Char, _ []int32) bool {
+@@ -16967,7 +18157,9 @@ func (sc overrideClsn) Run(c *Char, _ []int32) bool {
  	index := int(0)
  	var rect [4]float32
  
@@ -8438,7 +8621,7 @@ index 276abbf..e9dbaf4 100644
  		switch paramID {
  		case overrideClsn_group:
  			group = exp[0].evalI(c)
-@@ -16987,8 +18022,7 @@ func (sc overrideClsn) Run(c *Char, _ []int32) bool {
+@@ -16987,8 +18179,7 @@ func (sc overrideClsn) Run(c *Char, _ []int32) bool {
  			// Normalize rectangle
  			rect = NormalizeRect(rect)
  		}
@@ -8448,7 +8631,7 @@ index 276abbf..e9dbaf4 100644
  
  	switch {
  	case group == 0:
-@@ -17031,14 +18065,15 @@ func (sc mapReset) Run(c *Char, _ []int32) bool {
+@@ -17031,14 +18222,15 @@ func (sc mapReset) Run(c *Char, _ []int32) bool {
  
  	exclude := make([]string, 0, 8)
  
@@ -8467,7 +8650,7 @@ index 276abbf..e9dbaf4 100644
  
  	crun.mapReset(exclude)
  	return false
-@@ -17134,6 +18169,9 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
+@@ -17134,6 +18326,9 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
  	if sb == c.ss.sb {
  		ctrlsps = c.ss.ps
  	}
@@ -8477,7 +8660,7 @@ index 276abbf..e9dbaf4 100644
  	sys.bcVar = sys.bcVarStack.Alloc(int(sb.numVars))
  	sys.workingState = sb
  	changeState = sb.block.Run(c, ctrlsps)
-@@ -17147,3 +18185,68 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
+@@ -17147,3 +18342,68 @@ func (sb *StateBytecode) run(c *Char) (changeState bool) {
  	sys.bcVarStack.Clear()
  	return
  }
@@ -8566,7 +8749,7 @@ index 0000000..0cee43a
 +// #cgo LDFLAGS: -lSceIme_stub -lSceNet_stub -lSceNetCtl_stub -lSceRazorCapture_stub_weak -lkubridge_stub_weak -lstdc++ -lsupc++ -lm
 +import "C"
 diff --git a/src/char.go b/src/char.go
-index 19bf05a..d0971ae 100644
+index 19bf05a..7441840 100644
 --- a/src/char.go
 +++ b/src/char.go
 @@ -6,6 +6,7 @@ import (
@@ -8594,13 +8777,13 @@ index 19bf05a..d0971ae 100644
  }
  
  func (e *Explod) clear() {
-+	explodIdxChanged()
++	// (only spawnExplod clears an explod: see explodIdxSpawned)
  	*e = Explod{}
  }
  
  // Set default values according to char who creates the explod
  func (e *Explod) initFromChar(c *Char) *Explod {
-+	explodIdxChanged()
++	// (only spawnExplod initialises an explod: see explodIdxSpawned)
  	*e = Explod{
  		id:                -1,
  		playerno:          c.playerNo,
@@ -8633,11 +8816,14 @@ index 19bf05a..d0971ae 100644
  	if a == nil {
  		if e.id < 0 {
  			sys.appendToConsole(c.warn() + fmt.Sprintf("system explod called invalid action %v%v", strings.ToUpper(e.anim_ffx), e.animNo))
-@@ -2119,7 +2134,12 @@ func (e *Explod) pauseStatus() bool {
+@@ -2119,7 +2134,15 @@ func (e *Explod) pauseStatus() bool {
  }
  
  func (e *Explod) flagForRemoval() {
-+	explodIdxChanged()
++	// the NumExplod index holds only explods with id >= 0
++	if e.id >= 0 {
++		explodIdxChanged()
++	}
  	e.id = IErr
 +	// keep the Animation object for the explod that recycles this slot
 +	if reuseExplodObjects && e.anim != nil && e.spareAnim == nil {
@@ -8646,7 +8832,7 @@ index 19bf05a..d0971ae 100644
  	e.anim = nil
  }
  
-@@ -3228,6 +3248,25 @@ func (p *Projectile) tick() {
+@@ -3228,6 +3251,25 @@ func (p *Projectile) tick() {
  	}
  }
  
@@ -8672,7 +8858,7 @@ index 19bf05a..d0971ae 100644
  func (p *Projectile) cueDraw() {
  	// Nothing to draw here. Not even debug
  	if p.anim == nil {
-@@ -3239,12 +3278,6 @@ func (p *Projectile) cueDraw() {
+@@ -3239,12 +3281,6 @@ func (p *Projectile) cueDraw() {
  
  	isPaused := p.hitpause > 0 || p.pauseBool
  
@@ -8685,7 +8871,7 @@ index 19bf05a..d0971ae 100644
  	// Projectile Clsn display
  	if sys.clsnDisplay {
  		if frm := p.anim.drawFrame(); frm != nil {
-@@ -3261,10 +3294,6 @@ func (p *Projectile) cueDraw() {
+@@ -3261,10 +3297,6 @@ func (p *Projectile) cueDraw() {
  		}
  	}
  
@@ -8696,7 +8882,7 @@ index 19bf05a..d0971ae 100644
  	// Set position
  	pos := [2]float32{p.interPos[0] * p.localscl, p.interPos[1] * p.localscl}
  
-@@ -3495,6 +3524,7 @@ type CharGlobalInfo struct {
+@@ -3495,6 +3527,7 @@ type CharGlobalInfo struct {
  }
  
  func newCharGlobalInfo() CharGlobalInfo {
@@ -8704,7 +8890,7 @@ index 19bf05a..d0971ae 100644
  	gi := CharGlobalInfo{
  		localcoord:    [2]int32{320, 240},
  		rawlocalscl:   1,
-@@ -3656,6 +3686,7 @@ type ForceFeedbackParams struct {
+@@ -3656,6 +3689,7 @@ type ForceFeedbackParams struct {
  }
  
  type Char struct {
@@ -8712,7 +8898,7 @@ index 19bf05a..d0971ae 100644
  	name                string
  	palfx               *PalFX
  	anim                *Animation
-@@ -3699,6 +3730,8 @@ type Char struct {
+@@ -3699,6 +3733,8 @@ type Char struct {
  	ghv                 GetHitVar
  	mhv                 MoveHitVar
  	hitby               [8]HitBy
@@ -8721,16 +8907,17 @@ index 19bf05a..d0971ae 100644
  	hover               [8]HitOverride
  	hoverIdx            int
  	hoverKeepState      bool
-@@ -3718,6 +3751,8 @@ type Char struct {
+@@ -3718,6 +3754,9 @@ type Char struct {
  	facing              float32
  	fbFlip              bool
  	cnsvar              map[int32]int32
-+	varGen              uint32 // bumped on every write to cnsvar/cnsfvar (see varGet)
++	varGen              uint32 // bumped on every write to cnsvar/cnsfvar/cnssysvar (see varGet)
 +	varCache            [64]varCacheEnt
++	sysVarCache         [16]varCacheEnt // sysvar() reads, as varCache (see sysVarGet)
  	cnsfvar             map[int32]float32
  	cnssysvar           map[int32]int32
  	cnssysfvar          map[int32]float32
-@@ -3830,6 +3865,7 @@ func (c *Char) panic(msg string) {
+@@ -3830,6 +3869,7 @@ func (c *Char) panic(msg string) {
  }
  
  func (c *Char) init(n int, idx int) {
@@ -8738,7 +8925,7 @@ index 19bf05a..d0971ae 100644
  	// Reset struct with defaults
  	*c = Char{
  		playerNo:    n,
-@@ -4001,7 +4037,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
+@@ -4001,7 +4041,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
  				distZ *= 4.0
  			}
  			// Use hypotenuse between x and z
@@ -8747,7 +8934,7 @@ index 19bf05a..d0971ae 100644
  		}
  
  		// Save result in sorting slice
-@@ -4027,6 +4063,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
+@@ -4027,6 +4067,7 @@ func (c *Char) sortOthersByDistance(enemies []*Char, p2list bool) []*Char {
  
  // Clear character variables upon a new round or creation of a new helper
  func (c *Char) prepareNextRound() {
@@ -8755,7 +8942,7 @@ index 19bf05a..d0971ae 100644
  	c.sysVarRangeSet(0, math.MaxInt32, 0)
  	c.sysFvarRangeSet(0, math.MaxInt32, 0)
  	c.CharSystemVar = CharSystemVar{
-@@ -5154,6 +5191,9 @@ func (c *Char) csf(csf CharSpecialFlag) bool {
+@@ -5154,6 +5195,9 @@ func (c *Char) csf(csf CharSpecialFlag) bool {
  }
  
  func (c *Char) setCSF(csf CharSpecialFlag, on bool) {
@@ -8765,7 +8952,7 @@ index 19bf05a..d0971ae 100644
  	if on {
  		c.specialFlag |= csf
  	} else {
-@@ -5428,7 +5468,8 @@ func (c *Char) enemy(n int32) *Char {
+@@ -5428,7 +5472,8 @@ func (c *Char) enemy(n int32) *Char {
  
  	// Iterate until nth enemy
  	var count int32
@@ -8775,7 +8962,7 @@ index 19bf05a..d0971ae 100644
  		if len(e) > 0 && e[0] != nil && c.isEnemyOf(e[0]) {
  			if count == n {
  				return e[0]
-@@ -5586,14 +5627,14 @@ func (c *Char) animExist(anim BytecodeValue) BytecodeValue {
+@@ -5586,14 +5631,14 @@ func (c *Char) animExist(anim BytecodeValue) BytecodeValue {
  	if pn < 0 || pn >= len(sys.chars) || len(sys.chars[pn]) == 0 {
  		pn = c.playerNo
  	}
@@ -8792,7 +8979,7 @@ index 19bf05a..d0971ae 100644
  }
  
  func (c *Char) animTime() int32 {
-@@ -5998,7 +6039,8 @@ func (c *Char) numEnemy() int32 {
+@@ -5998,7 +6043,8 @@ func (c *Char) numEnemy() int32 {
  	var n int32
  
  	// Same as enemy() loop
@@ -8802,7 +8989,7 @@ index 19bf05a..d0971ae 100644
  		if len(e) > 0 && e[0] != nil && c.isEnemyOf(e[0]) {
  			n += 1
  		}
-@@ -6012,9 +6054,17 @@ func (c *Char) numExplod(eid BytecodeValue) BytecodeValue {
+@@ -6012,9 +6058,17 @@ func (c *Char) numExplod(eid BytecodeValue) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -8822,7 +9009,7 @@ index 19bf05a..d0971ae 100644
  
  	return BytecodeInt(total)
  }
-@@ -6159,6 +6209,9 @@ func (c *Char) numHelper(hid BytecodeValue) BytecodeValue {
+@@ -6159,6 +6213,9 @@ func (c *Char) numHelper(hid BytecodeValue) BytecodeValue {
  		return BytecodeUndefined()
  	}
  	var id, count int32 = hid.ToI(), 0
@@ -8832,7 +9019,7 @@ index 19bf05a..d0971ae 100644
  
  	// Mugen confirmed to skip helpers under DestroySelf in the same frame
  	for _, h := range sys.chars[c.playerNo][1:] {
-@@ -7180,6 +7233,7 @@ func (c *Char) newHelper() (h *Char) {
+@@ -7180,6 +7237,7 @@ func (c *Char) newHelper() (h *Char) {
  	// Init default helper parameters
  	h.name = c.name + "'s helper"
  	h.id = sys.newCharId()
@@ -8840,7 +9027,7 @@ index 19bf05a..d0971ae 100644
  	h.helperId = 0
  	h.ownpal = false
  	h.preserve = false
-@@ -7236,6 +7290,7 @@ func (c *Char) helperInit(h *Char, st int32, pt PosType, pos [3]float32, facing
+@@ -7236,6 +7294,7 @@ func (c *Char) helperInit(h *Char, st int32, pt PosType, pos [3]float32, facing
  	// Helper ID must be positive
  	if h.helperId < 0 {
  		sys.appendToConsole(h.warn() + fmt.Sprintf("has negative Helper ID"))
@@ -8848,7 +9035,7 @@ index 19bf05a..d0971ae 100644
  		h.helperId = 0
  	}
  
-@@ -7302,6 +7357,10 @@ func (c *Char) helperPos(pt PosType, pos [3]float32, facing int32,
+@@ -7302,6 +7361,10 @@ func (c *Char) helperPos(pt PosType, pos [3]float32, facing int32,
  	return
  }
  
@@ -8859,7 +9046,7 @@ index 19bf05a..d0971ae 100644
  // Always appends to preserve insertion order
  func (c *Char) spawnExplod() (*Explod, int) {
  	playerExplods := &sys.explods[c.playerNo]
-@@ -7311,12 +7370,36 @@ func (c *Char) spawnExplod() (*Explod, int) {
+@@ -7311,12 +7374,37 @@ func (c *Char) spawnExplod() (*Explod, int) {
  		return nil, -1
  	}
  
@@ -8895,10 +9082,11 @@ index 19bf05a..d0971ae 100644
  
  	e.initFromChar(c)
 +	e.spareAnim, e.sparePal = spareAnim, sparePal
++	explodIdxSpawned(c.playerNo, e)
  	return e, idx
  }
  
-@@ -7363,11 +7446,19 @@ func (c *Char) getSingleExplod(id int32, idx int, log bool) *Explod {
+@@ -7363,11 +7451,19 @@ func (c *Char) getSingleExplod(id int32, idx int, log bool) *Explod {
  		return nil
  	}
  
@@ -8922,7 +9110,7 @@ index 19bf05a..d0971ae 100644
  	return nil
  }
  
-@@ -7389,6 +7480,7 @@ func (c *Char) commitExplod(i int) {
+@@ -7389,6 +7485,7 @@ func (c *Char) commitExplod(i int) {
  	// If invalid animation, whole explod becomes invalid
  	// Note: If animation is not specified, it defaults to 0. If it is specified but invalid, explod is invalid
  	if e.anim == nil {
@@ -8930,7 +9118,7 @@ index 19bf05a..d0971ae 100644
  		e.id = IErr
  		return
  	}
-@@ -7428,8 +7520,16 @@ func (c *Char) commitExplod(i int) {
+@@ -7428,8 +7525,16 @@ func (c *Char) commitExplod(i int) {
  	// Init "ownpal" PalFX and RemapPal
  	// Note: Must be placed after setting up interpolation
  	if e.ownpal {
@@ -8949,7 +9137,7 @@ index 19bf05a..d0971ae 100644
  
  		// Load the sctrl parameters into it
  		e.palfx.PalFXDef = e.palfxdef
-@@ -7473,6 +7573,7 @@ func (c *Char) removeExplod(id, idx int32) {
+@@ -7473,6 +7578,7 @@ func (c *Char) removeExplod(id, idx int32) {
  	for _, e := range *playerExplods {
  		if e.matchId(id, c.id) {
  			if idx < 0 || idx == n {
@@ -8957,7 +9145,7 @@ index 19bf05a..d0971ae 100644
  				e.id = IErr
  
  				removedAny = true
-@@ -7832,7 +7933,8 @@ func (c *Char) hitAdd(h int32) {
+@@ -7832,7 +7938,8 @@ func (c *Char) hitAdd(h int32) {
  		}
  	} else if c.teamside != -1 {
  		// In Mugen, HitAdd can increase combo count even without targets
@@ -8967,7 +9155,7 @@ index 19bf05a..d0971ae 100644
  			if len(p) > 0 && c.teamside == ^i&1 {
  				// This is a bit of a workaround for backward compatibility only
  				if p[0].receivedHits != 0 || p[0].ss.moveType == MT_H {
-@@ -8118,6 +8220,8 @@ func (c *Char) isTargetBound() bool {
+@@ -8118,6 +8225,8 @@ func (c *Char) isTargetBound() bool {
  }
  
  func (c *Char) initConstants(gi *CharGlobalInfo) {
@@ -8976,7 +9164,7 @@ index 19bf05a..d0971ae 100644
  	gi.data.init()
  	gi.attackBase = 100
  	gi.defenceBase = 100
-@@ -8224,6 +8328,7 @@ func (c *Char) initConstants(gi *CharGlobalInfo) {
+@@ -8224,6 +8333,7 @@ func (c *Char) initConstants(gi *CharGlobalInfo) {
  }
  
  func (c *Char) initCnsVar() {
@@ -8984,7 +9172,7 @@ index 19bf05a..d0971ae 100644
  	c.cnsvar = make(map[int32]int32)
  	c.cnsfvar = make(map[int32]float32)
  	c.cnssysvar = make(map[int32]int32)
-@@ -8235,6 +8340,21 @@ func (c *Char) varGet(i int32) BytecodeValue {
+@@ -8235,6 +8345,21 @@ func (c *Char) varGet(i int32) BytecodeValue {
  		sys.appendToConsole(c.warn() + fmt.Sprintf("var index %v must be positive", i))
  		return BytecodeUndefined()
  	}
@@ -9006,7 +9194,7 @@ index 19bf05a..d0971ae 100644
  	// Check var (map)
  	val, ok := c.cnsvar[i]
  	// If key found
-@@ -8251,6 +8371,16 @@ func (c *Char) fvarGet(i int32) BytecodeValue {
+@@ -8251,6 +8376,16 @@ func (c *Char) fvarGet(i int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -9023,7 +9211,27 @@ index 19bf05a..d0971ae 100644
  	val, ok := c.cnsfvar[i]
  	if ok {
  		return BytecodeFloat(val)
-@@ -8331,6 +8461,9 @@ func (c *Char) varSet(i, v int32) BytecodeValue {
+@@ -8264,6 +8399,19 @@ func (c *Char) sysVarGet(i int32) BytecodeValue {
+ 		return BytecodeUndefined()
+ 	}
+ 
++	if vitaPerf {
++		// as varGet's cache, keyed on the cnssysvar map and the same write
++		// generation; sysVarSet/sysVarAdd write through, other writes bump
++		// varGen (~125 reads per tick in the reference fight)
++		e := &c.sysVarCache[uint32(i)&15]
++		mp := *(*uintptr)(unsafe.Pointer(&c.cnssysvar))
++		if e.key == i && e.gen == c.varGen && e.mp == mp {
++			return BytecodeInt(e.ival)
++		}
++		val := c.cnssysvar[i]
++		*e = varCacheEnt{key: i, gen: c.varGen, mp: mp, ival: val}
++		return BytecodeInt(val)
++	}
+ 	val, ok := c.cnssysvar[i]
+ 	if ok {
+ 		return BytecodeInt(val)
+@@ -8331,6 +8479,9 @@ func (c *Char) varSet(i, v int32) BytecodeValue {
  	}
  
  	c.cnsvar[i] = v       // Create or update the key
@@ -9033,7 +9241,7 @@ index 19bf05a..d0971ae 100644
  	return BytecodeInt(v) // We also return the value because var assignment can be used in expressions
  }
  
-@@ -8341,6 +8474,9 @@ func (c *Char) fvarSet(i int32, v float32) BytecodeValue {
+@@ -8341,6 +8492,9 @@ func (c *Char) fvarSet(i int32, v float32) BytecodeValue {
  	}
  
  	c.cnsfvar[i] = v
@@ -9043,7 +9251,17 @@ index 19bf05a..d0971ae 100644
  	return BytecodeFloat(v)
  }
  
-@@ -8370,11 +8506,15 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
+@@ -8351,6 +8505,9 @@ func (c *Char) sysVarSet(i, v int32) BytecodeValue {
+ 	}
+ 
+ 	c.cnssysvar[i] = v
++	if vitaPerf {
++		c.sysVarCachePut(i)
++	}
+ 	return BytecodeInt(v)
+ }
+ 
+@@ -8370,11 +8527,15 @@ func (c *Char) varAdd(i, v int32) BytecodeValue {
  		return BytecodeUndefined()
  	}
  
@@ -9059,7 +9277,7 @@ index 19bf05a..d0971ae 100644
  	return BytecodeInt(c.cnsvar[i])
  }
  
-@@ -8389,6 +8529,9 @@ func (c *Char) fvarAdd(i int32, v float32) BytecodeValue {
+@@ -8389,6 +8550,9 @@ func (c *Char) fvarAdd(i int32, v float32) BytecodeValue {
  	} else {
  		c.cnsfvar[i] = v
  	}
@@ -9069,7 +9287,17 @@ index 19bf05a..d0971ae 100644
  	return BytecodeFloat(c.cnsfvar[i])
  }
  
-@@ -8468,10 +8611,12 @@ func varRangeSetSub[T int32 | float32](c *Char, m *map[int32]T, first, last int3
+@@ -8403,6 +8567,9 @@ func (c *Char) sysVarAdd(i, v int32) BytecodeValue {
+ 	} else {
+ 		c.cnssysvar[i] = v
+ 	}
++	if vitaPerf {
++		c.sysVarCachePut(i)
++	}
+ 	return BytecodeInt(c.cnssysvar[i])
+ }
+ 
+@@ -8468,14 +8635,17 @@ func varRangeSetSub[T int32 | float32](c *Char, m *map[int32]T, first, last int3
  }
  
  func (c *Char) varRangeSet(first, last, val int32) {
@@ -9082,7 +9310,12 @@ index 19bf05a..d0971ae 100644
  	varRangeSetSub(c, &c.cnsfvar, first, last, val)
  }
  
-@@ -9008,7 +9153,8 @@ func (c *Char) lifeSet(life int32) {
+ func (c *Char) sysVarRangeSet(first, last, val int32) {
++	c.varGen++
+ 	varRangeSetSub(c, &c.cnssysvar, first, last, val)
+ }
+ 
+@@ -9008,7 +9178,8 @@ func (c *Char) lifeSet(life int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -9092,7 +9325,7 @@ index 19bf05a..d0971ae 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].life = c.life
  			}
-@@ -9100,7 +9246,8 @@ func (c *Char) redLifeSet(set int32) {
+@@ -9100,7 +9271,8 @@ func (c *Char) redLifeSet(set int32) {
  
  	// Update life sharing
  	if c.helperIndex == 0 && sys.cfg.Options.Team.LifeShare {
@@ -9102,7 +9335,7 @@ index 19bf05a..d0971ae 100644
  			if len(p) > 0 && p[0].teamside == c.teamside {
  				p[0].redLife = c.redLife
  			}
-@@ -9793,6 +9940,16 @@ func (c *Char) mapIndexedKey(name string, index int32) string {
+@@ -9793,6 +9965,16 @@ func (c *Char) mapIndexedKey(name string, index int32) string {
  	return name + "[" + strconv.Itoa(int(index)) + "]"
  }
  
@@ -9119,7 +9352,7 @@ index 19bf05a..d0971ae 100644
  // MapSet() sets a map to a specific value. Used for both sctrl and assignment forms
  func (c *Char) mapSet(s string, value BytecodeValue, scType int32) BytecodeValue {
  	if s == "" {
-@@ -9809,67 +9966,58 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
+@@ -9809,67 +9991,58 @@ func (c *Char) mapSetValue(s string, mv TypedValue, scType int32) {
  	if s == "" {
  		return
  	}
@@ -9209,13 +9442,13 @@ index 19bf05a..d0971ae 100644
 +	if !isAdd {
 +		m[key] = mv
 +		return
- 	}
++	}
 +	// String operations don't exist yet, so any add touching one is a no-op
 +	old := m[key]
 +	if mv.Type == VT_String || old.Type == VT_String {
 +		sys.appendToConsole(c.warn() + "MapAdd: cannot add string values")
 +		return
-+	}
+ 	}
 +	// Defer to the engine's own add so int/float promotion matches expressions
 +	sum := old.ToBV()
 +	BytecodeExp{}.add(&sum, mv.ToBV())
@@ -9223,7 +9456,7 @@ index 19bf05a..d0971ae 100644
  }
  
  // Used to init, fully reset or partially reset the map array
-@@ -12217,6 +12365,7 @@ func (c *Char) actionPrepare() {
+@@ -12217,6 +12390,7 @@ func (c *Char) actionPrepare() {
  	}
  
  	c.pauseBool = false
@@ -9231,7 +9464,7 @@ index 19bf05a..d0971ae 100644
  	// Removing this c.cmd check makes a basic helper init incorrectly during a pause
  	// TODO: Confirm why it uses c.cmd specifically
  	if c.cmd != nil {
-@@ -12282,6 +12431,9 @@ func (c *Char) actionPrepare() {
+@@ -12282,6 +12456,9 @@ func (c *Char) actionPrepare() {
  			c.airJumpCount = 0
  		}
  		if !c.hitPause() {
@@ -9241,7 +9474,7 @@ index 19bf05a..d0971ae 100644
  			c.specialFlag = 0
  			// Set default screenbound and playerpush
  			if c.isPlayerType() {
-@@ -12436,35 +12588,35 @@ func (c *Char) actionRun() {
+@@ -12436,35 +12613,35 @@ func (c *Char) actionRun() {
  	// Run state -4
  	c.minus = -4
  	if sb, ok := c.gi().states[-4]; ok {
@@ -9282,7 +9515,7 @@ index 19bf05a..d0971ae 100644
  	}
  
  	// Guarding instructions
-@@ -12495,14 +12647,14 @@ func (c *Char) actionRun() {
+@@ -12495,14 +12672,14 @@ func (c *Char) actionRun() {
  	// Uses minus -4 because its properties are similar
  	c.minus = -4
  	if sb, ok := c.gi().states[-10]; ok {
@@ -9299,7 +9532,15 @@ index 19bf05a..d0971ae 100644
  	}
  	if !c.pauseBool {
  		if !c.hitPause() {
-@@ -13710,7 +13862,8 @@ func (cl *CharList) clear() {
+@@ -13702,6 +13879,7 @@ type CharList struct {
+ func (cl *CharList) clear() {
+ 	// Reset CharList
+ 	*cl = CharList{idMap: make(map[int32]*Char)}
++	idMapGen++
+ 
+ 	// Reset player ID tracker to baseline
+ 	// ID's start from HelperMax in Mugen. We don't strictly need to do the same but it might improve backward compatibility
+@@ -13710,7 +13888,8 @@ func (cl *CharList) clear() {
  
  	// Clear all player ID's to avoid false conflicts with stale players
  	// TODO: Maybe stale players should be cleared better
@@ -9309,7 +9550,23 @@ index 19bf05a..d0971ae 100644
  		for _, c := range p {
  			if c != nil {
  				c.id = -1
-@@ -13858,7 +14011,8 @@ func (cl *CharList) audit() {
+@@ -13732,6 +13911,7 @@ func (cl *CharList) add(c *Char) {
+ 
+ 	// Update char ID map for fast lookup
+ 	cl.idMap[c.id] = c
++	idMapGen++
+ }
+ 
+ func (cl *CharList) delete(dc *Char) {
+@@ -13741,6 +13921,7 @@ func (cl *CharList) delete(dc *Char) {
+ 	for k, v := range cl.idMap {
+ 		if v == dc {
+ 			delete(cl.idMap, k)
++			idMapGen++
+ 			// Just in case, don't break so we also remove eventual duplicates
+ 			break
+ 		}
+@@ -13858,7 +14039,8 @@ func (cl *CharList) audit() {
  
  func (cl *CharList) commandUpdate() {
  	// Iterate players
@@ -9319,7 +9576,7 @@ index 19bf05a..d0971ae 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -14007,9 +14161,11 @@ func (cl *CharList) action() {
+@@ -14007,9 +14189,11 @@ func (cl *CharList) action() {
  	cl.commandUpdate()
  
  	// Prepare characters before performing their actions
@@ -9331,7 +9588,7 @@ index 19bf05a..d0971ae 100644
  
  	// Run actions for each character in the sorted list
  	// We use an index-based loop instead of a range so that appended helpers are also processed
-@@ -14019,6 +14175,7 @@ func (cl *CharList) action() {
+@@ -14019,6 +14203,7 @@ func (cl *CharList) action() {
  	}
  
  	// Finish performing character actions
@@ -9339,7 +9596,7 @@ index 19bf05a..d0971ae 100644
  	for _, c := range cl.runOrder {
  		c.actionFinish()
  	}
-@@ -14420,8 +14577,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
+@@ -14420,8 +14605,8 @@ func (cl *CharList) hitDetectionProjectile(getter *Char) {
  				// Check if the character is above the platform's surface
  				if getter.pos[1]*getter.localscl-getter.vel[1]*getter.localscl <= (p.pos[1]+p.platformHeight[1])*p.localscl &&
  					getter.platformPosY*getter.localscl >= (p.pos[1]+p.platformHeight[0])*p.localscl {
@@ -9350,7 +9607,7 @@ index 19bf05a..d0971ae 100644
  					oldDistX := (getter.oldPos[0]*getter.localscl - (p.pos[0])*p.localscl) * p.facing
  					onPlatform := func(protrude bool) {
  						getter.platformPosY = ((p.pos[1]+p.platformHeight[0]+p.velocity[1])*p.localscl - angleSinValue*(oldDistX/angleCosValue)) / getter.localscl
-@@ -14980,6 +15137,8 @@ func (cl *CharList) cueDraw() {
+@@ -14980,6 +15165,8 @@ func (cl *CharList) cueDraw() {
  // Update enemy near or "P2" lists and return specified index
  // The current approach makes the distance calculation loops only be done when necessary, using cached enemies the rest of the time
  // In Mugen the P2 enemy reference seems to only refresh at the start of each frame instead
@@ -9359,7 +9616,7 @@ index 19bf05a..d0971ae 100644
  func (cl *CharList) enemyNear(c *Char, n int32, p2list bool) *Char {
  	// Invalid index
  	if n < 0 {
-@@ -15007,8 +15166,9 @@ func (cl *CharList) enemyNear(c *Char, n int32, p2list bool) *Char {
+@@ -15007,8 +15194,9 @@ func (cl *CharList) enemyNear(c *Char, n int32, p2list bool) *Char {
  		return sys.playerID((*cache)[n])
  	}
  
@@ -9371,7 +9628,7 @@ index 19bf05a..d0971ae 100644
  	for _, e := range cl.runOrder {
  		// Must be enemy and player type
  		if !e.isPlayerType() || !c.isEnemyOf(e) {
-@@ -15065,3 +15225,32 @@ type Platform struct {
+@@ -15065,3 +15253,37 @@ type Platform struct {
  	localScale float32
  	ownerID    int32
  }
@@ -9395,6 +9652,11 @@ index 19bf05a..d0971ae 100644
 +	}
 +	mp := *(*uintptr)(unsafe.Pointer(&c.cnsvar))
 +	c.varCache[uint32(i)&63] = varCacheEnt{key: i, gen: c.varGen, mp: mp, ival: c.cnsvar[i]}
++}
++
++func (c *Char) sysVarCachePut(i int32) {
++	mp := *(*uintptr)(unsafe.Pointer(&c.cnssysvar))
++	c.sysVarCache[uint32(i)&15] = varCacheEnt{key: i, gen: c.varGen, mp: mp, ival: c.cnssysvar[i]}
 +}
 +
 +func (c *Char) fvarCachePut(i int32) {
@@ -14757,10 +15019,10 @@ index 0000000..aa0a00d
 +func (s *cvfNullSpeaker) FillAudio()                                    {}
 diff --git a/src/cvf_index.go b/src/cvf_index.go
 new file mode 100644
-index 0000000..35adcb4
+index 0000000..0937639
 --- /dev/null
 +++ b/src/cvf_index.go
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,239 @@
 +package main
 +
 +import "os"
@@ -14786,6 +15048,68 @@ index 0000000..35adcb4
 +
 +func helperIdxChanged() { helperIdxGen++ }
 +func explodIdxChanged() { explodIdxGen++ }
++
++// The explod a controller is filling in right after spawnExplod (explod,
++// gameMakeAnim: id = 0, then the id parameter) is counted from its own
++// fields by numExplodIdx instead of from the index, so that neither its
++// spawn nor its id writes invalidate the index: the reference fight spawns
++// ~50 explods per tick, most of them followed by NumExplod queries, and
++// each spawn used to cost a rebuild. One explod at a time (controllers do
++// not nest); the next spawn folds it into its player's index. The index
++// never holds it: a rebuild skips it.
++var explodConstr *Explod
++var explodConstrPN int
++
++func explodIdxValid(pn int) bool {
++	x := &explodIdxs[pn]
++	es := sys.explods[pn]
++	var p **Explod
++	if len(es) > 0 {
++		p = &es[0]
++	}
++	return x.gen == explodIdxGen && x.ptr == p
++}
++
++// explodIdxSpawned: spawnExplod added e to sys.explods[pn] (as a new
++// explod or a recovered ghost), its fields just initialised.
++func explodIdxSpawned(pn int, e *Explod) {
++	explodIdxSettle()
++	if explodIdxValid(pn) {
++		explodConstr, explodConstrPN = e, pn
++	} else {
++		explodIdxChanged()
++	}
++}
++
++// explodIdxSettle folds the explod under construction into its player's
++// index (when that index is still valid; otherwise the rebuild includes it).
++// An explod removed since then has id IErr (and its removal invalidated
++// the index); a valid index with e.id >= 0 means e is in the list.
++func explodIdxSettle() {
++	e := explodConstr
++	if e == nil {
++		return
++	}
++	explodConstr = nil
++	if explodIdxValid(explodConstrPN) && e.id >= 0 {
++		x := &explodIdxs[explodConstrPN]
++		x.ids = append(x.ids, e.id)
++		x.owner = append(x.owner, e.ownerId)
++	}
++}
++
++// explodIdxWrite: a write of e.id or e.ownerId by a spawning controller
++func explodIdxWrite(e *Explod) {
++	if e != explodConstr {
++		explodIdxGen++
++	}
++}
++
++// explodIdxReset: the explod lists were replaced or emptied
++func explodIdxReset() {
++	explodConstr = nil
++	explodIdxGen++
++}
 +
 +type helperIdCount struct{ id, n int32 }
 +
@@ -14902,8 +15226,12 @@ index 0000000..35adcb4
 +		}
 +		ids, owner := x.ids[:len(es)], x.owner[:len(es)]
 +		n := 0
++		var constr *Explod
++		if explodConstrPN == pn {
++			constr = explodConstr
++		}
 +		for _, e := range es {
-+			if e.id >= 0 {
++			if e.id >= 0 && e != constr {
 +				ids[n], owner[n] = e.id, e.ownerId
 +				n++
 +			}
@@ -14925,6 +15253,9 @@ index 0000000..35adcb4
 +				total++
 +			}
 +		}
++	}
++	if c := explodConstr; c != nil && explodConstrPN == pn && c.matchId(id, pid) {
++		total++
 +	}
 +	if idxCheck && total != numExplodWalk(pn, id, pid) {
 +		panic("CVF_IDX_CHECK: NumExplod index differs")
@@ -22044,7 +22375,7 @@ index 9b29416..7160fa1 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/state.go b/src/state.go
-index 7a82e2f..cfb25ac 100644
+index 7a82e2f..4383e8a 100644
 --- a/src/state.go
 +++ b/src/state.go
 @@ -308,8 +308,18 @@ func (gs *GameState) savePalFX() {
@@ -22080,12 +22411,12 @@ index 7a82e2f..cfb25ac 100644
  }
  
  func (gs *GameState) loadExplodData(gsp *GameStatePool) {
-+	explodIdxChanged()
++	explodIdxReset()
  	for i := range gs.explods {
  		sys.explods[i] = make([]*Explod, len(gs.explods[i]), len(gs.explods[i]))
  		for j := 0; j < len(gs.explods[i]); j++ {
 diff --git a/src/state_clone.go b/src/state_clone.go
-index e6a9d4d..2f18585 100644
+index e6a9d4d..81baf8e 100644
 --- a/src/state_clone.go
 +++ b/src/state_clone.go
 @@ -281,6 +281,15 @@ func (e *Explod) Clone(gsp *GameStatePool) *Explod {
@@ -22112,7 +22443,15 @@ index e6a9d4d..2f18585 100644
  	result.cnsvar = *gsp.Get(c.cnsvar).(*map[int32]int32)
  	maps.Clear(result.cnsvar)
  	for k, v := range c.cnsvar {
-@@ -883,6 +893,7 @@ func (s *Stage) Clone(gsp *GameStatePool) *Stage {
+@@ -500,6 +510,7 @@ func (cl *CharList) Clone(gsp *GameStatePool) (result CharList) {
+ 	copy(result.runOrder, cl.runOrder)
+ 
+ 	result.idMap = *gsp.Get(cl.idMap).(*map[int32]*Char)
++	idMapGen++ // (a pooled map can be one that was live before)
+ 	maps.Clear(result.idMap)
+ 	for k, v := range cl.idMap {
+ 		result.idMap[k] = v
+@@ -883,6 +894,7 @@ func (s *Stage) Clone(gsp *GameStatePool) *Stage {
  	for k, v := range s.constants {
  		result.constants[k] = v
  	}
@@ -22402,7 +22741,7 @@ index fa2364d..f106cf9 100644
  			side := int(p[0].teamside) // 0 or 1
  			fs := StatsFighterState{
 diff --git a/src/system.go b/src/system.go
-index 2698d35..d20083a 100644
+index 2698d35..8659ce0 100644
 --- a/src/system.go
 +++ b/src/system.go
 @@ -426,7 +426,7 @@ func (s *System) init(w, h int32) *lua.LState {
@@ -22551,7 +22890,56 @@ index 2698d35..d20083a 100644
  	s.draw(dx, dy, dscl)
  
  	// Lua
-@@ -2027,6 +2086,7 @@ func (s *System) setGSF(gsf GlobalSpecialFlag, on bool) {
+@@ -1721,7 +1780,13 @@ func (s *System) playerID(id int32) *Char {
+ 	}
+ 
+ 	// Invalid ID
+-	c, ok := s.charList.idMap[id]
++	var c *Char
++	var ok bool
++	if vitaPerf {
++		c, ok = s.playerIDLookup(id)
++	} else {
++		c, ok = s.charList.idMap[id]
++	}
+ 	if !ok {
+ 		return nil
+ 	}
+@@ -1735,6 +1800,33 @@ func (s *System) playerID(id int32) *Char {
+ 	return c
+ }
+ 
++// playerIDCache: a direct-mapped cache in front of the idMap lookups of
++// playerID (enemyNear's cached list, parent, root, ... ~350 per tick in the
++// reference fight). Entries are keyed on the map's identity and idMapGen,
++// which every write to an idMap bumps (CharList.clear/add/delete and the
++// state clone, whose pooled maps may have been live before).
++type playerIDEnt struct {
++	id  int32
++	gen uint32
++	mp  uintptr
++	c   *Char
++	ok  bool
++}
++
++var playerIDCache [16]playerIDEnt
++var idMapGen uint32 = 1
++
++func (s *System) playerIDLookup(id int32) (*Char, bool) {
++	e := &playerIDCache[uint32(id)&15]
++	mp := *(*uintptr)(unsafe.Pointer(&s.charList.idMap))
++	if e.id == id && e.gen == idMapGen && e.mp == mp {
++		return e.c, e.ok
++	}
++	c, ok := s.charList.idMap[id]
++	*e = playerIDEnt{id, idMapGen, mp, c, ok}
++	return c, ok
++}
++
+ func (s *System) playerIDExist(id BytecodeValue) BytecodeValue {
+ 	if id.IsUndefined() {
+ 		return BytecodeUndefined()
+@@ -2027,6 +2119,7 @@ func (s *System) setGSF(gsf GlobalSpecialFlag, on bool) {
  }
  
  func (s *System) appendToConsole(str string) {
@@ -22559,7 +22947,7 @@ index 2698d35..d20083a 100644
  	s.consoleText = append(s.consoleText, str)
  	if len(s.consoleText) > s.cfg.Debug.ConsoleRows {
  		s.consoleText = s.consoleText[len(s.consoleText)-s.cfg.Debug.ConsoleRows:]
-@@ -2264,7 +2324,8 @@ func (s *System) pruneCharId() {
+@@ -2264,7 +2357,8 @@ func (s *System) pruneCharId() {
  
  	// At this point we're still checking the previous round's player ID's
  	// However that works out well for Turns mode because it means a joining player won't reuse the ID of a defeated player
@@ -22569,7 +22957,7 @@ index 2698d35..d20083a 100644
  		if len(p) > 0 && p[0] != nil && p[0].id > s.lastCharId {
  			s.lastCharId = p[0].id
  		}
-@@ -2289,7 +2350,8 @@ func (s *System) newCharId() int32 {
+@@ -2289,7 +2383,8 @@ func (s *System) newCharId() int32 {
  		// This method scanned sys.chars instead but that's worse
  		for {
  			conflict := false
@@ -22579,15 +22967,15 @@ index 2698d35..d20083a 100644
  				for _, c := range p {
  					if c != nil && c.id == newid && !c.csf(CSF_destroy) {
  						// Note: We only recycle destroyed helper ID's because the ID's refresh each round, unlike Mugen
-@@ -2393,6 +2455,7 @@ func (s *System) clearPlayerAssets(pn int, forceDestroy bool) {
+@@ -2393,6 +2488,7 @@ func (s *System) clearPlayerAssets(pn int, forceDestroy bool) {
  
  	// Clear projectiles, explods and text sprites
  	s.projs[pn] = PointerSliceReset(s.projs[pn])
-+	explodIdxChanged()
++	explodIdxReset()
  	s.explods[pn] = PointerSliceReset(s.explods[pn])
  	s.chartexts[pn] = PointerSliceReset(s.chartexts[pn])
  
-@@ -2445,7 +2508,9 @@ func (s *System) updateMusicMaps() {
+@@ -2445,7 +2541,9 @@ func (s *System) updateMusicMaps() {
  		s.matchMusicSel = s.matchMusicSel[:0]
  	}
  
@@ -22598,7 +22986,7 @@ index 2698d35..d20083a 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2478,6 +2543,10 @@ func (s *System) updateMusicMaps() {
+@@ -2478,6 +2576,10 @@ func (s *System) updateMusicMaps() {
  
  // TODO: This function is still a bit overloaded because it's handling some selections instead of doing a pure reset
  func (s *System) resetRound() {
@@ -22609,7 +22997,7 @@ index 2698d35..d20083a 100644
  	if s.sel.gameParams.PersistRounds && !s.roundResetFlg && !s.reloadFlg {
  		s.persistRoundCount++
  	}
-@@ -2533,7 +2602,8 @@ func (s *System) resetRound() {
+@@ -2533,7 +2635,8 @@ func (s *System) resetRound() {
  	}
  
  	// Reset characters
@@ -22619,7 +23007,7 @@ index 2698d35..d20083a 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2562,7 +2632,8 @@ func (s *System) resetRound() {
+@@ -2562,7 +2665,8 @@ func (s *System) resetRound() {
  	}
  
  	// Place characters in state 5900
@@ -22629,7 +23017,7 @@ index 2698d35..d20083a 100644
  		if len(p) == 0 {
  			continue
  		}
-@@ -2691,7 +2762,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
+@@ -2691,7 +2795,8 @@ func (s *System) resetMatchData(forceDestroy bool) {
  	sys.allPalFX = newPalFX()
  	sys.bgPalFX = newPalFX()
  	sys.resetGblEffect()
@@ -22639,7 +23027,7 @@ index 2698d35..d20083a 100644
  		if len(p) > 0 {
  			sys.clearPlayerAssets(i, forceDestroy)
  		}
-@@ -2727,7 +2799,8 @@ func (s *System) globalCollision() {
+@@ -2727,7 +2832,8 @@ func (s *System) globalCollision() {
  /*
  // This is never called
  func (s *System) posReset() {
@@ -22649,7 +23037,7 @@ index 2698d35..d20083a 100644
  		if len(p) > 0 {
  			p[0].posReset()
  		}
-@@ -2763,7 +2836,8 @@ func (s *System) runIntroSkip() {
+@@ -2763,7 +2869,8 @@ func (s *System) runIntroSkip() {
  		s.specialFlag = kept
  
  		// Reset all characters
@@ -22659,7 +23047,7 @@ index 2698d35..d20083a 100644
  			if len(p) > 0 {
  				s.clearPlayerAssets(i, false)
  				p[0].posReset()
-@@ -2775,6 +2849,7 @@ func (s *System) runIntroSkip() {
+@@ -2775,6 +2882,7 @@ func (s *System) runIntroSkip() {
  
  // TODO: Maybe these could get a more thorough clear between matches, to prevent holding onto previous character sprites
  func (s *System) clearSpriteData() {
@@ -22667,7 +23055,7 @@ index 2698d35..d20083a 100644
  	// Main sprites
  	s.spriteList = s.spriteList[:0]
  
-@@ -2834,6 +2909,14 @@ func (s *System) screenright() float32 {
+@@ -2834,6 +2942,14 @@ func (s *System) screenright() float32 {
  // Core game logic. Chars, stage, projectiles, etc
  // The part that can rewind and fast forward during rollbacks
  func (s *System) action() {
@@ -22682,7 +23070,7 @@ index 2698d35..d20083a 100644
  	if s.matchPaused() {
  		return
  	}
-@@ -2849,7 +2932,9 @@ func (s *System) action() {
+@@ -2849,7 +2965,9 @@ func (s *System) action() {
  
  	// In version 0.99 this was moved to before sys.action() for undocumented reasons
  	// Moving it here preserves whatever behavior that implemented while not keeping the stage oddly outside the main loop
@@ -22692,7 +23080,7 @@ index 2698d35..d20083a 100644
  
  	// Run "tick frame"
  	if s.tickFrame() {
-@@ -2907,6 +2992,7 @@ func (s *System) action() {
+@@ -2907,6 +3025,7 @@ func (s *System) action() {
  
  		// Run the main character logic
  		s.charList.action()
@@ -22700,7 +23088,7 @@ index 2698d35..d20083a 100644
  
  		// The following must be placed after char action or they will lag behind 1 frame
  		s.allPalFX.step()
-@@ -2918,18 +3004,24 @@ func (s *System) action() {
+@@ -2918,18 +3037,24 @@ func (s *System) action() {
  
  	// This function runs every tick
  	// It should be placed between "tick frame" and "tick next frame"
@@ -22725,7 +23113,7 @@ index 2698d35..d20083a 100644
  	}
  
  	// Run camera
-@@ -2945,6 +3037,11 @@ func (s *System) action() {
+@@ -2945,6 +3070,11 @@ func (s *System) action() {
  		x = float32(math.Ceil(float64(x)*4-0.5) / 4)
  	}
  	s.cam.Update(scl, x, y)
@@ -22737,7 +23125,7 @@ index 2698d35..d20083a 100644
  	s.xmin = s.cam.ScreenPos[0] + s.cam.Offset[0] + s.screenleft()
  	s.xmax = s.cam.ScreenPos[0] + s.cam.Offset[0] + float32(s.gameWidth)/s.cam.Scale - s.screenright()
  	if s.xmin > s.xmax {
-@@ -2960,7 +3057,9 @@ func (s *System) action() {
+@@ -2960,7 +3090,9 @@ func (s *System) action() {
  	s.charList.xScreenBound()
  
  	// Note: Explod update must happen after hit detection. Because hit sparks are also explods
@@ -22747,7 +23135,7 @@ index 2698d35..d20083a 100644
  	s.charTextsUpdate()
  	s.matchStoryboards.update()
  
-@@ -2998,9 +3097,9 @@ func (s *System) action() {
+@@ -2998,9 +3130,9 @@ func (s *System) action() {
  				start := s.ffbparams[i].start
  				t := s.ffbparams[i].timer
  				d1, d2, d3 := s.ffbparams[i].d1, s.ffbparams[i].d2, s.ffbparams[i].d3
@@ -22760,7 +23148,7 @@ index 2698d35..d20083a 100644
  				ampl := (start + d1 + d2 + d3) / 255.0
  				intensity := uint16(ampl * 0xFFFF)
  				switch s.ffbparams[i].waveform {
-@@ -3018,6 +3117,13 @@ func (s *System) action() {
+@@ -3018,6 +3150,13 @@ func (s *System) action() {
  		}
  	}
  
@@ -22774,7 +23162,7 @@ index 2698d35..d20083a 100644
  	return
  }
  
-@@ -3046,7 +3152,7 @@ func (s *System) uiAction() {
+@@ -3046,7 +3185,7 @@ func (s *System) uiAction() {
  	// Needs to happen after motif update or motif inputs will lag 1 frame
  	for _, key := range SortedKeys(sys.cfg.Common.Lua) {
  		for _, v := range sys.cfg.Common.Lua[key] {
@@ -22783,7 +23171,7 @@ index 2698d35..d20083a 100644
  				sys.luaLState.RaiseError("Error executing Lua code: %s\n%v", v, err.Error())
  			}
  		}
-@@ -3166,6 +3272,8 @@ func (s *System) explodCueDraw() {
+@@ -3166,6 +3305,8 @@ func (s *System) explodCueDraw() {
  
  // Remove a player's inactive explods
  func (s *System) explodPrune(pn int) {
@@ -22792,7 +23180,7 @@ index 2698d35..d20083a 100644
  	playerExplods := s.explods[pn]
  	writeIdx := 0
  
-@@ -3330,7 +3438,8 @@ func (s *System) stepRoundState() {
+@@ -3330,7 +3471,8 @@ func (s *System) stepRoundState() {
  		}
  	} else if s.intro > 0 {
  		if s.intro == s.fightScreen.round.ctrl_time {
@@ -22802,7 +23190,7 @@ index 2698d35..d20083a 100644
  				if len(p) > 0 {
  					if p[0].activelyFighting() && !p[0].asf(ASF_nointroreset) {
  						p[0].posReset() // Technically we don't really need this step
-@@ -3340,7 +3449,8 @@ func (s *System) stepRoundState() {
+@@ -3340,7 +3482,8 @@ func (s *System) stepRoundState() {
  		}
  		s.intro--
  		if s.intro == 0 {
@@ -22812,7 +23200,7 @@ index 2698d35..d20083a 100644
  				if len(p) > 0 {
  					if p[0].alive() {
  						p[0].setSCF(SCF_over_alive, false)
-@@ -3429,7 +3539,8 @@ func (s *System) stepRoundState() {
+@@ -3429,7 +3572,8 @@ func (s *System) stepRoundState() {
  			// Check if game can proceed into roundstate 4
  			if s.winwaittime > 0 {
  				if s.intro == rs4t-1 {
@@ -22822,7 +23210,7 @@ index 2698d35..d20083a 100644
  						if len(p) == 0 {
  							continue
  						}
-@@ -3455,7 +3566,8 @@ func (s *System) stepRoundState() {
+@@ -3455,7 +3599,8 @@ func (s *System) stepRoundState() {
  
  			// Disable ctrl (once) at the first frame of roundstate 4
  			if s.intro == rs4t-1 {
@@ -22832,7 +23220,7 @@ index 2698d35..d20083a 100644
  					if len(p) > 0 {
  						p[0].setSCF(SCF_ctrl, false)
  					}
-@@ -3502,7 +3614,8 @@ func (s *System) stepRoundState() {
+@@ -3502,7 +3647,8 @@ func (s *System) stepRoundState() {
  		// Send characters to win/lose poses
  		// In Mugen this loop can run at any point after the win poses have started, hence "<="
  		if s.winposetime <= 0 {
@@ -22842,7 +23230,7 @@ index 2698d35..d20083a 100644
  				if len(p) == 0 {
  					continue
  				}
-@@ -3657,7 +3770,8 @@ func (s *System) roundEndDecision() bool {
+@@ -3657,7 +3803,8 @@ func (s *System) roundEndDecision() bool {
  
  	// Update win triggers if finish type was changed
  	if ft != s.finishType {
@@ -22852,7 +23240,7 @@ index 2698d35..d20083a 100644
  			if len(p) > 0 && p[0].teamside != -1 && ko[^i&1] {
  				for _, h := range p {
  					for _, tid := range h.targets {
-@@ -3678,6 +3792,7 @@ func (s *System) roundEndDecision() bool {
+@@ -3678,6 +3825,7 @@ func (s *System) roundEndDecision() bool {
  }
  
  func (s *System) draw(x, y, scl float32) {
@@ -22860,7 +23248,7 @@ index 2698d35..d20083a 100644
  	s.brightnessOld = s.brightness
  	//s.brightness = 0x100 >> uint(Btoi(s.supertime > 0 && s.superdarken))
  	s.brightness = 1.0
-@@ -3714,30 +3829,42 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3714,30 +3862,42 @@ func (s *System) draw(x, y, scl float32) {
  		// Draw stage elements with layerNo == -1
  		if !s.gsf(GSF_nobg) {
  			if s.stage.ikemenver[0] != 0 || s.stage.ikemenver[1] != 0 { // This layer did not render in Mugen
@@ -22909,7 +23297,7 @@ index 2698d35..d20083a 100644
  
  		// Draw char texts layer -1
  		s.drawCharTexts(-1)
-@@ -3750,9 +3877,13 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3750,9 +3910,13 @@ func (s *System) draw(x, y, scl float32) {
  		// TODO: Make shadows render in same layers as their sources?
  		if !s.gsf(GSF_globalnoshadow) {
  			if s.stage.reflection.layerno >= 0 {
@@ -22925,7 +23313,7 @@ index 2698d35..d20083a 100644
  		}
  
  		//off := s.envShake.getOffset()
-@@ -3790,7 +3921,9 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3790,7 +3954,9 @@ func (s *System) draw(x, y, scl float32) {
  		//}
  
  		// Draw fight screen layer 0
@@ -22936,7 +23324,7 @@ index 2698d35..d20083a 100644
  
  		// Draw char texts layer 0
  		s.drawCharTexts(0)
-@@ -3807,14 +3940,20 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3807,14 +3973,20 @@ func (s *System) draw(x, y, scl float32) {
  
  	// Draw character sprites in layer 0
  	if s.envcol_time == 0 || s.envcol_under {
@@ -22960,7 +23348,7 @@ index 2698d35..d20083a 100644
  
  	// Draw char texts layer 1
  	s.drawCharTexts(1)
-@@ -3823,10 +3962,14 @@ func (s *System) draw(x, y, scl float32) {
+@@ -3823,10 +3995,14 @@ func (s *System) draw(x, y, scl float32) {
  	s.motif.draw(1)
  
  	// Draw character sprites in layer 1 (old "ontop")
@@ -22977,7 +23365,7 @@ index 2698d35..d20083a 100644
  
  	// Draw char texts layer 2
  	s.drawCharTexts(2)
-@@ -3939,7 +4082,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
+@@ -3939,7 +4115,8 @@ func (s *System) drawDebugText(logicState drawAspectState) {
  		y := 240 - panelState.gameHeight
  		if s.statusLFunc != nil {
  			s.debugFont.SetColor(255, 255, 255, 255)
@@ -22987,7 +23375,7 @@ index 2698d35..d20083a 100644
  				if len(p) > 0 {
  					top := s.luaLState.GetTop()
  					if s.luaLState.CallByParam(lua.P{Fn: s.statusLFunc, NRet: 1,
-@@ -4048,13 +4192,23 @@ func (s *System) runMatch() (reload bool) {
+@@ -4048,13 +4225,23 @@ func (s *System) runMatch() (reload bool) {
  		s.debugAccel = 1
  	}
  
@@ -23012,7 +23400,7 @@ index 2698d35..d20083a 100644
  			if len(p) > 0 {
  				forceDestroy := s.matchOver() ||
  					(s.tmode[i&1] == TM_Turns && p[0].teamside != -1 && s.effectiveLoss[i&1])
-@@ -4063,6 +4217,16 @@ func (s *System) runMatch() (reload bool) {
+@@ -4063,6 +4250,16 @@ func (s *System) runMatch() (reload bool) {
  		}
  	}()
  
@@ -23029,7 +23417,7 @@ index 2698d35..d20083a 100644
  	// Synchronize with external inputs (netplay, replays, etc)
  	if err := s.synchronize(); err != nil {
  		LogMessage(err.Error())
-@@ -4128,7 +4292,7 @@ func (s *System) runMatch() (reload bool) {
+@@ -4128,7 +4325,7 @@ func (s *System) runMatch() (reload bool) {
  
  		for _, v := range s.shortcutScripts {
  			if v.Activate {
@@ -23038,7 +23426,7 @@ index 2698d35..d20083a 100644
  					s.luaLState.RaiseError("Error executing Lua code: %s\n%v", v.Script, err.Error())
  				}
  			}
-@@ -4150,10 +4314,14 @@ func (s *System) runMatch() (reload bool) {
+@@ -4150,10 +4347,14 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Update game state
@@ -23053,7 +23441,7 @@ index 2698d35..d20083a 100644
  
  		// Patch: Pause stage videos while game is paused
  		// This is necessary for the time being because videos are paused in the stage's action() and pauses now just skip that entirely
-@@ -4242,8 +4410,13 @@ func (s *System) runMatch() (reload bool) {
+@@ -4242,8 +4443,13 @@ func (s *System) runMatch() (reload bool) {
  		}
  
  		// Cue sprites, then render
@@ -23067,7 +23455,7 @@ index 2698d35..d20083a 100644
  
  		// Update system. Break if update returns false (engine shutdown).
  		if !s.update() {
-@@ -4266,7 +4439,8 @@ func (s *System) runMatch() (reload bool) {
+@@ -4266,7 +4472,8 @@ func (s *System) runMatch() (reload bool) {
  
  func (s *System) SetupCharRoundStart() {
  	// Prepare next round for all players
@@ -23077,7 +23465,7 @@ index 2698d35..d20083a 100644
  		if len(p) > 0 {
  			p[0].prepareNextRound()
  		}
-@@ -4274,7 +4448,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4274,7 +4481,8 @@ func (s *System) SetupCharRoundStart() {
  
  	// For power sharing, set maximum power to the highest one in the team
  	if s.cfg.Options.Team.PowerShare {
@@ -23087,7 +23475,7 @@ index 2698d35..d20083a 100644
  			if len(p) > 0 && p[0].teamside != -1 {
  				pmax := Max(s.cgi[i&1].data.power, s.cgi[i].data.power)
  				for j := i & 1; j < MaxSimul*2; j += 2 {
-@@ -4287,7 +4462,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4287,7 +4495,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Calculate maximum life for all characters
@@ -23097,7 +23485,7 @@ index 2698d35..d20083a 100644
  		if len(p) > 0 {
  			// Get max life, and adjust based on team mode
  			var lmax float32
-@@ -4344,7 +4520,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4344,7 +4553,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's dizzy and guard points
@@ -23107,7 +23495,7 @@ index 2698d35..d20083a 100644
  		if len(p) > 0 {
  			if p[0].ocd().dizzyPoints > 0 {
  				p[0].dizzyPoints = p[0].ocd().dizzyPoints
-@@ -4360,7 +4537,8 @@ func (s *System) SetupCharRoundStart() {
+@@ -4360,7 +4570,8 @@ func (s *System) SetupCharRoundStart() {
  	}
  
  	// Initialize each character's state
@@ -23117,7 +23505,7 @@ index 2698d35..d20083a 100644
  		if len(p) > 0 {
  			if p[0].roundsExisted() == 0 && (s.roundNo == 1 || s.tmode[i&1] == TM_Turns) {
  				// If round 1 or a new character in Turns mode, initialize values
-@@ -4413,7 +4591,8 @@ func (s *System) runNextRound() bool {
+@@ -4413,7 +4624,8 @@ func (s *System) runNextRound() bool {
  			for i := range s.roundsExisted {
  				s.roundsExisted[i]++
  			}
@@ -23127,7 +23515,7 @@ index 2698d35..d20083a 100644
  				if len(p) > 0 {
  					if s.tmode[i&1] != TM_Turns || !s.effectiveLoss[i&1] {
  						p[0].life = p[0].lifeMax
-@@ -4518,7 +4697,8 @@ type RoundStartBackup struct {
+@@ -4518,7 +4730,8 @@ type RoundStartBackup struct {
  func (bk *RoundStartBackup) Save() {
  	// Save characters
  	// We save helpers as well because of "preserve" parameter
@@ -23137,7 +23525,7 @@ index 2698d35..d20083a 100644
  		if len(chars) == 0 {
  			// Backups are reused, so discard characters saved for this slot in a previous round
  			bk.charBackup[i] = nil
-@@ -4584,7 +4764,8 @@ func (bk *RoundStartBackup) Save() {
+@@ -4584,7 +4797,8 @@ func (bk *RoundStartBackup) Save() {
  
  func (bk *RoundStartBackup) Restore() {
  	// Restore characters
@@ -23147,7 +23535,7 @@ index 2698d35..d20083a 100644
  		if len(chars) == 0 {
  			continue
  		}
-@@ -4620,6 +4801,7 @@ func (bk *RoundStartBackup) Restore() {
+@@ -4620,6 +4834,7 @@ func (bk *RoundStartBackup) Restore() {
  			//liveSounds := c.soundChannels
  
  			// Restore shallow copy from backup
@@ -23155,7 +23543,7 @@ index 2698d35..d20083a 100644
  			*c = *bkup
  
  			// Restore live sounds
-@@ -4628,6 +4810,7 @@ func (bk *RoundStartBackup) Restore() {
+@@ -4628,6 +4843,7 @@ func (bk *RoundStartBackup) Restore() {
  			// Remake the CNS variable maps
  			// Then restore only var and fvar (losing sysvar and sysfvar)
  			c.initCnsVar()
@@ -23163,7 +23551,7 @@ index 2698d35..d20083a 100644
  			for k, v := range bkup.cnsvar {
  				c.cnsvar[k] = v
  			}
-@@ -4668,6 +4851,7 @@ func (bk *RoundStartBackup) Restore() {
+@@ -4668,6 +4884,7 @@ func (bk *RoundStartBackup) Restore() {
  	for k, v := range bk.stageBackup.constants {
  		sys.stage.constants[k] = v
  	}
@@ -23171,7 +23559,7 @@ index 2698d35..d20083a 100644
  	sys.stage.attachedchardef = append([]string{}, bk.stageBackup.attachedchardef...)
  
  	// Restore match info
-@@ -5050,6 +5234,9 @@ func (s *Select) preloadCharAssets(ref int) error {
+@@ -5050,6 +5267,9 @@ func (s *Select) preloadCharAssets(ref int) error {
  		return nil
  	}
  	sc := s.charlist[ref]
@@ -23181,7 +23569,7 @@ index 2698d35..d20083a 100644
  	localAnims := NewPreloadedAnims()
  	listSpr := make(map[[2]uint16]bool)
  	for k := range s.charSpritePreload {
-@@ -5318,6 +5505,13 @@ func (s *Select) AddChar(def string) *SelectChar {
+@@ -5318,6 +5538,13 @@ func (s *Select) AddChar(def string) *SelectChar {
  		LogMessage("Failed to add char: %v (%s)", defPathFromSelect, reason)
  		return nil
  	}
@@ -23195,7 +23583,7 @@ index 2698d35..d20083a 100644
  
  	// Print a message for every loaded character. Just muted at the moment
  	defer func() {
-@@ -6304,6 +6498,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6304,6 +6531,7 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		if l.cancelRequested() || l.state == LS_Cancel || sys.gameEnd {
  			return 0
  		}
@@ -23203,7 +23591,7 @@ index 2698d35..d20083a 100644
  		if l.err = p.load(cdef, gi); l.err != nil {
  			if errors.Is(l.err, ErrLoadingCanceled) {
  				l.state = LS_Cancel
-@@ -6322,7 +6517,29 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
+@@ -6322,7 +6550,29 @@ func (l *Loader) loadCharacter(pn int, attached bool) int {
  		}
  
  		// Compile character states
@@ -23234,7 +23622,7 @@ index 2698d35..d20083a 100644
  			if attached {
  				tstr = fmt.Sprintf("WARNING: Failed to compile new attached char states: %v", cdef)
  			} else {
-@@ -6820,13 +7037,13 @@ func (es *EnvShake) update() {
+@@ -6820,13 +7070,13 @@ func (es *EnvShake) update() {
  	// Mul is applied once per cycle
  	if es.mul != 0 && es.mul != 1 {
  		cycles := math.Floor(float64(es.freq*elapsed) / 360.0)
@@ -23250,7 +23638,7 @@ index 2698d35..d20083a 100644
  	}
  
  	ampl := float64(es.ampl) * factor
-@@ -6835,9 +7052,9 @@ func (es *EnvShake) update() {
+@@ -6835,9 +7085,9 @@ func (es *EnvShake) update() {
  	} else {
  		phaseRad := float64(currentPhase) * math.Pi / 180.0
  		dirRad := float64(currentDir) * math.Pi / 180.0
@@ -23263,7 +23651,7 @@ index 2698d35..d20083a 100644
  		es.curOffset = [2]float32{x, y}
  	}
  
-@@ -6862,6 +7079,7 @@ type ZoomEffect struct {
+@@ -6862,6 +7112,7 @@ type ZoomEffect struct {
  	stageBound  bool
  	resultPos   [2]float32 // Results from the last camera computation, so screenPos doesn't need to redo it
  	resultScale float32
@@ -23271,7 +23659,7 @@ index 2698d35..d20083a 100644
  }
  
  func (z *ZoomEffect) reset() {
-@@ -6877,6 +7095,7 @@ func (z *ZoomEffect) reset() {
+@@ -6877,6 +7128,7 @@ func (z *ZoomEffect) reset() {
  	z.stageBound = true
  	z.resultPos = [2]float32{0, 0}
  	z.resultScale = 1
@@ -23279,7 +23667,7 @@ index 2698d35..d20083a 100644
  }
  
  // Step the zoom variables
-@@ -7042,6 +7261,7 @@ func (s *System) restoreCharVars(c *Char) {
+@@ -7042,6 +7294,7 @@ func (s *System) restoreCharVars(c *Char) {
  		return
  	}
  
