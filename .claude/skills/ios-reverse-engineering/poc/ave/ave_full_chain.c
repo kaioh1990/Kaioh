@@ -21448,7 +21448,7 @@ new_modes:
                         p13_render_frames = 0;
                         pthread_t orc_render;
                         pthread_create(&orc_render, NULL, p13_render_loop, NULL);
-                        usleep(300000); /* 300ms — enough for many compositor walks */
+                        usleep(10000000); /* 10s — slot 2 deref is infrequent (~5-10s) */
                         p13_render_run = 0;
                         pthread_join(orc_render, NULL);
 
