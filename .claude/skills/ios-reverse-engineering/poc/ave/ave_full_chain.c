@@ -38,6 +38,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <dispatch/dispatch.h>
 #include <mach/mach.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <VideoToolbox/VideoToolbox.h>
@@ -910,7 +911,14 @@ static void *race_thread_fn(void *arg) {
     return NULL;
 }
 
-int main(int argc, char *argv[]) {
+static int g_main_argc;
+static char **g_main_argv;
+
+static void *worker_thread(void *arg) {
+    (void)arg;
+    int argc = g_main_argc;
+    char **argv = g_main_argv;
+
     char logpath[512];
     snprintf(logpath, sizeof(logpath), "%s/Documents/ave_%d.txt",
              getenv("HOME") ? getenv("HOME") : "/tmp", getpid());
@@ -7082,6 +7090,38 @@ vps_cd_done:
 
 done:
     rlog("\n=== Full chain probe complete ===\n");
-    if (g_log) fclose(g_log);
+    if (g_log) { fclose(g_log); g_log = NULL; }
+    /* Copy log to fixed-name path for retrieval */
+    {
+        char src[512], dst[512];
+        snprintf(src, sizeof(src), "%s/Documents/ave_%d.txt",
+                 getenv("HOME") ? getenv("HOME") : "/tmp", getpid());
+        snprintf(dst, sizeof(dst), "%s/Documents/ave_full_chain.txt",
+                 getenv("HOME") ? getenv("HOME") : "/tmp");
+        FILE *sf = fopen(src, "r");
+        FILE *df = fopen(dst, "w");
+        if (sf && df) {
+            char buf[4096];
+            size_t n;
+            while ((n = fread(buf, 1, sizeof(buf), sf)) > 0)
+                fwrite(buf, 1, n, df);
+        }
+        if (sf) fclose(sf);
+        if (df) fclose(df);
+    }
+    exit(0);
+    return NULL;
+}
+
+int main(int argc, char *argv[]) {
+    g_main_argc = argc;
+    g_main_argv = argv;
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    pthread_create(&tid, &attr, worker_thread, NULL);
+    pthread_attr_destroy(&attr);
+    dispatch_main();
     return 0;
 }
