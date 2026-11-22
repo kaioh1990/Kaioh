@@ -76,6 +76,8 @@ static volatile size_t g_last_pset_total_bytes = 0;
 static volatile int g_cb_had_buf = 0;
 static volatile int g_cb_had_fmt = 0;
 static CMFormatDescriptionRef g_saved_fmt = NULL; /* retained fmt desc from last callback */
+static uint8_t g_saved_nal[4096]; /* raw encoded NAL bytes from last callback */
+static size_t g_saved_nal_len = 0;
 
 static void rlog(const char *fmt, ...) {
     va_list ap;
@@ -96,6 +98,7 @@ static void encode_cb(void *ctx, void *src, OSStatus status,
     g_cb_had_buf = (buf != NULL) ? 1 : 0;
     g_cb_had_fmt = 0;
 
+    g_saved_nal_len = 0;
     if (buf && status == 0) {
         CMFormatDescriptionRef fmt = CMSampleBufferGetFormatDescription(buf);
         g_cb_had_fmt = (fmt != NULL) ? 1 : 0;
@@ -116,6 +119,14 @@ static void encode_cb(void *ctx, void *src, OSStatus status,
 
             if (g_saved_fmt) CFRelease(g_saved_fmt);
             g_saved_fmt = (CMFormatDescriptionRef)CFRetain(fmt);
+        }
+        /* Save raw encoded NAL data from CMSampleBuffer */
+        CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(buf);
+        if (bb) {
+            size_t bb_len = CMBlockBufferGetDataLength(bb);
+            size_t copy_len = (bb_len > sizeof(g_saved_nal)) ? sizeof(g_saved_nal) : bb_len;
+            CMBlockBufferCopyDataBytes(bb, 0, copy_len, g_saved_nal);
+            g_saved_nal_len = copy_len;
         }
     }
 }
@@ -7399,7 +7410,29 @@ vps_cd_done:
                     }
                 }
             } else {
-                rlog(" (no format description)");
+                rlog(" (no fmt)");
+            }
+            /* Always dump raw NAL bytes from CMSampleBuffer */
+            if (g_saved_nal_len > 0) {
+                rlog("\n  RAW NAL (%zu bytes): ", g_saved_nal_len);
+                size_t dlen = (g_saved_nal_len > 128) ? 128 : g_saved_nal_len;
+                for (size_t j = 0; j < dlen; j++) {
+                    rlog("%02x", g_saved_nal[j]);
+                    if ((j+1) % 32 == 0) rlog("\n    ");
+                    else if ((j+1) % 4 == 0) rlog(" ");
+                }
+                if (dlen < g_saved_nal_len) rlog("... +%zu", g_saved_nal_len - dlen);
+                /* Scan raw NAL for kernel pointer patterns */
+                if (g_saved_nal_len >= 8) {
+                    for (size_t j = 0; j <= g_saved_nal_len - 8; j += 4) {
+                        uint64_t qw;
+                        memcpy(&qw, g_saved_nal + j, 8);
+                        if ((qw >> 40) == 0xfffffe)
+                            rlog("\n  *** KPTR@%zu: 0x%016llx ***", j, (unsigned long long)qw);
+                        if ((qw >> 40) == 0xffff80)
+                            rlog("\n  *** XPTR@%zu: 0x%016llx ***", j, (unsigned long long)qw);
+                    }
+                }
             }
             rlog("\n\n");
 
