@@ -975,9 +975,29 @@ needed; M1's hardware run decides the 444 vs 500 MHz question.
 | Go cross-check | `go build -tags cvf,cvfgohead` builds again (boundTexture); its reference fight gives `54f8ae06...` |
 | Vita ELF/VPK | `cvf_vita` links with SDL2 2.32.8, vitaGL, vitaShaRK, SceShaccCgExt, libmathneon; `cvf-native-m2.vpk` |
 | VPK image in vemu (headless mode) | unit tests 103/0; reference fight `54f8ae06...`, winner 1 (753 s of emulation) |
-| VPK image in vemu, game mode, host GL (`VEMU_GL=1`) | see "vemu, game mode" below |
+| VPK image in vemu, game mode, host GL (`VEMU_GL=1`) | **the eboot boots and plays**: vglInitExtended, the Vita shaders compiled by the host, sprite batching on, a quick match (`cvf_args.txt`) drawn correctly in vemu's screenshots (stage, both characters, effects, lifebars, fonts); `perf.log`, `frames.csv` and `cvf.log` written in the documented format (see below) |
 | Vita renderer paths on the desktop (`cvf_vitasim`, Mesa llvmpipe, Xvfb) | quick match Alucard vs Richter drawn correctly at 960x540 (stage, characters, effects, lifebars, fonts) in 30 fps mode (150 of 300 ticks drawn) and 60 fps mode; title -> ARCADE -> character select -> fight through Ikemen's own scripts and screenpack (with the reference data, that arcade fight stays at the round start, and the GL 3.3 desktop game does exactly the same with that data) |
 | Render thread | `gles_thread_test`: 8 frames pixel-identical to direct calls; `cvf_vitasim`: statedump identical with and without the thread; lockstep run (the same 60 fps ticks drawn in both runs): **121 of 121 frames pixel-identical**; engine-thread drawing time 0.2-0.5 ms per frame with the thread against 18-23 ms without (llvmpipe rasterises on the render thread) |
+
+vemu, game mode (the VPK's eboot; `ux0:data/CvFNative/game` = the test game,
+`cvf_args.txt` = the quick match; ~17 min for 330 frames). vemu stands in for
+vitaGL with host Mesa and models vitaGL's copy of a texture that is updated
+while in use. It reported:
+
+- 4 entry points vitaGL does not export, stubbed: `glDetachShader`,
+  `glDrawBuffers`, `glRenderbufferStorageMultisample`, `glTexStorage3D`.
+  Only the last three's paths (MSAA, models) are off on the Vita, and the
+  detach after linking is harmless.
+- In-use texture copies: 416-485 over the run (104-121 MB copied in total),
+  at most 1.5-3.3 MB in one frame, none of 2 MB or more. On hardware these
+  are vitaGL CPU time (atlas and palette updates during the fight). If draw
+  times are high, check this first.
+- vemu does not run threads (SDL's audio and timer threads are created and
+  never scheduled), so the render thread cannot be tested in vemu, and vemu's
+  times are emulation times, not hardware figures.
+- A fiber's "deepest use 524032 of 524288 bytes" appears exactly as in M1's
+  vemu run (section 9). It looks like a measurement artifact, but it is
+  worth watching if a crash shows up in a goroutine.
 
 `cvf_vitasim` (Linux build, `tests/vita_sim/`) runs the game with
 `cvfVitaGL` set on an OpenGL 2.1 compatibility context, through the same
@@ -1003,8 +1023,8 @@ directory and is not in the repository.
 
 ### Not verified (needs the Vita)
 
-- Everything vitaGL does on the device: shader compilation by
-  libshacccg, the picture, texture memory, and whether the TinyGo workarounds
+- Everything vitaGL does on the device (vemu replays the calls on Mesa):
+  shader compilation by libshacccg, the picture, texture memory, and whether the TinyGo workarounds
   still suffice with the native engine's draw order.
 - Frame times and memory: the point of the M2 logs below.
 - SDL2 audio on `sceAudioOut` and streamed music; the controller mapping;
