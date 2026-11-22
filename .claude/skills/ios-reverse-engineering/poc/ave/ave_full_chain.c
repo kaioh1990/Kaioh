@@ -214,10 +214,18 @@ static int encode_one(VTCompressionSessionRef session, int frame_idx, int w, int
     CMTime pts = CMTimeMake(frame_idx, 30);
     CMTime dur = CMTimeMake(1, 30);
     OSStatus st = VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
-    if (st != noErr) { CVPixelBufferRelease(pb); return (int)st; }
-    VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
-    for (int i = 0; i < 200 && !g_encode_done; i++) usleep(10000);
+    if (st != noErr) {
+        rlog("  EncodeFrame error: %d\n", (int)st);
+        CVPixelBufferRelease(pb);
+        return (int)st;
+    }
+    /* Poll for callback — do NOT use CompleteFrames here as it blocks if
+       the encoder never produces output (observed on iPhone Duo A20 Pro). */
+    for (int i = 0; i < 300 && !g_encode_done; i++) usleep(10000); /* 3s */
     CVPixelBufferRelease(pb);
+    if (!g_encode_done) {
+        rlog("  WARNING: callback not received after 3s (status=%d)\n", (int)g_cb_status);
+    }
     return (int)g_cb_status;
 }
 
@@ -1297,6 +1305,125 @@ cleanup_dummies:
             if (dummies[i]) {
                 VTCompressionSessionInvalidate(dummies[i]);
                 CFRelease(dummies[i]);
+            }
+        }
+
+    } else if (strcmp(mode, "diag") == 0) {
+        rlog("DIAG: Hardware encoder diagnostics\n\n");
+
+        /* Test 1: Standard HEVC (no MV-HEVC) */
+        rlog("--- Test 1: Standard HEVC hardware encode ---\n");
+        {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            VTCompressionSessionRef s1 = NULL;
+            OSStatus r1 = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s1);
+            CFRelease(es);
+            rlog("Create: %d, session=%p\n", (int)r1, (void*)s1);
+            if (r1 == 0 && s1) {
+                VTSessionSetProperty(s1, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                int kf = 1;
+                CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+                VTSessionSetProperty(s1, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+                CFRelease(kfn);
+                OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s1);
+                rlog("Prepare: %d\n", (int)pr);
+                if (pr == 0) {
+                    int r = encode_one(s1, 0, 128, 128);
+                    rlog("Encode result: %d, cb_count=%d, pset=%zu\n", r, g_cb_count, g_last_pset_count);
+                }
+                VTCompressionSessionInvalidate(s1); CFRelease(s1);
+            }
+        }
+
+        /* Test 2: MV-HEVC with layer_id=1 */
+        rlog("\n--- Test 2: MV-HEVC hardware encode (layer_id=1) ---\n");
+        {
+            VTCompressionSessionRef s2 = create_mvhevc_encoder(128, 128, 1);
+            rlog("Create MV-HEVC: session=%p\n", (void*)s2);
+            if (s2) {
+                g_cb_count = 0;
+                int r = encode_one(s2, 0, 128, 128);
+                rlog("Encode result: %d, cb_count=%d, pset=%zu\n", r, g_cb_count, g_last_pset_count);
+                VTCompressionSessionInvalidate(s2); CFRelease(s2);
+            }
+        }
+
+        /* Test 3: MV-HEVC with MVHEVCViewIDs (newer API) */
+        rlog("\n--- Test 3: MV-HEVC with MVHEVCViewIDs property ---\n");
+        {
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            VTCompressionSessionRef s3 = NULL;
+            OSStatus r3 = VTCompressionSessionCreate(NULL, 128, 128,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s3);
+            CFRelease(es);
+            rlog("Create: %d, session=%p\n", (int)r3, (void*)s3);
+            if (r3 == 0 && s3) {
+                VTSessionSetProperty(s3, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                int kf = 1;
+                CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+                VTSessionSetProperty(s3, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+                CFRelease(kfn);
+                /* Try MVHEVCViewIDs instead of MVHEVCVideoLayerIDs */
+                int v0 = 0, v1 = 1;
+                CFNumberRef vids[2];
+                vids[0] = CFNumberCreate(NULL, kCFNumberIntType, &v0);
+                vids[1] = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+                CFArrayRef varr = CFArrayCreate(NULL, (const void **)vids, 2, &kCFTypeArrayCallBacks);
+                OSStatus sp1 = VTSessionSetProperty(s3, CFSTR("MVHEVCViewIDs"), varr);
+                rlog("MVHEVCViewIDs: %d\n", (int)sp1);
+                CFRelease(varr); CFRelease(vids[0]); CFRelease(vids[1]);
+                /* Also set left/right eye */
+                CFNumberRef l = CFNumberCreate(NULL, kCFNumberIntType, &v0);
+                CFNumberRef r = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+                OSStatus sp2 = VTSessionSetProperty(s3, CFSTR("MVHEVCLeftAndRightViewIDs"), varr);
+                rlog("MVHEVCLeftAndRightViewIDs: %d (may not exist)\n", (int)sp2);
+                CFRelease(l); CFRelease(r);
+
+                OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s3);
+                rlog("Prepare: %d\n", (int)pr);
+                if (pr == 0) {
+                    g_cb_count = 0;
+                    int enc = encode_one(s3, 0, 128, 128);
+                    rlog("Encode result: %d, cb_count=%d, pset=%zu\n",
+                         enc, g_cb_count, g_last_pset_count);
+                }
+                VTCompressionSessionInvalidate(s3); CFRelease(s3);
+            }
+        }
+
+        /* Test 4: Check supported properties */
+        rlog("\n--- Test 4: Property support check ---\n");
+        {
+            VTCompressionSessionRef s4 = create_mvhevc_encoder(128, 128, 1);
+            if (s4) {
+                CFDictionaryRef props = NULL;
+                OSStatus ps = VTSessionCopySupportedPropertyDictionary(s4, &props);
+                rlog("CopySupportedPropertyDictionary: %d\n", (int)ps);
+                if (ps == 0 && props) {
+                    CFIndex cnt = CFDictionaryGetCount(props);
+                    rlog("Total supported properties: %ld\n", (long)cnt);
+                    /* Check for MV-HEVC specific keys */
+                    const char *mv_keys[] = {
+                        "MVHEVCVideoLayerIDs", "MVHEVCLeftEyeID", "MVHEVCRightEyeID",
+                        "MVHEVCViewIDs", "HasLeftStereoEyeView", "HasRightStereoEyeView",
+                        "HeroEye", "StereoCameraBaseline", NULL
+                    };
+                    for (int i = 0; mv_keys[i]; i++) {
+                        CFStringRef k = CFStringCreateWithCString(NULL, mv_keys[i], kCFStringEncodingUTF8);
+                        Boolean has = CFDictionaryContainsKey(props, k);
+                        rlog("  %s: %s\n", mv_keys[i], has ? "YES" : "no");
+                        CFRelease(k);
+                    }
+                    CFRelease(props);
+                }
+                VTCompressionSessionInvalidate(s4); CFRelease(s4);
             }
         }
 
