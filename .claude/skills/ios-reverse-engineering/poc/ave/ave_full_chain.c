@@ -5731,7 +5731,6 @@ cleanup_dummies:
                     g_encode_done = 0;
                     /* Need BGRA pixel buffer for alpha */
                     CVPixelBufferRef pb = NULL;
-                    NSDictionary *pbattrs = NULL;
                     CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
                         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
                     CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
