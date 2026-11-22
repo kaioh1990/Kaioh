@@ -7922,6 +7922,11 @@ vps_cd_done:
                     CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
                     VTSessionSetProperty(sessions[i], CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
                     CFRelease(aidn);
+                } else {
+                    int kfi = 1;
+                    CFNumberRef kfin = CFNumberCreate(NULL, kCFNumberIntType, &kfi);
+                    VTSessionSetProperty(sessions[i], kVTCompressionPropertyKey_MaxKeyFrameInterval, kfin);
+                    CFRelease(kfin);
                 }
                 s = VTCompressionSessionPrepareToEncodeFrames(sessions[i]);
                 if (s == noErr) sess_ok++;
@@ -8130,6 +8135,10 @@ vps_cd_done:
             CFRelease(es);
             if (s != noErr || !target) { rlog("FAIL: target create %d\n", (int)s); goto done; }
             VTSessionSetProperty(target, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            int kfi = 1;
+            CFNumberRef kfin = CFNumberCreate(NULL, kCFNumberIntType, &kfi);
+            VTSessionSetProperty(target, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfin);
+            CFRelease(kfin);
             s = VTCompressionSessionPrepareToEncodeFrames(target);
             if (s != noErr) { rlog("FAIL: target prepare %d\n", (int)s); goto done; }
         }
