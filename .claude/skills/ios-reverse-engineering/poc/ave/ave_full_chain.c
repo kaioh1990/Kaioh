@@ -1438,6 +1438,44 @@ cleanup_dummies:
             }
         }
 
+    } else if (strcmp(mode, "hevc_overflow") == 0) {
+        rlog("HEVC_OVERFLOW: Standard HEVC encoder with 100 encodes\n");
+        rlog("Tests if standard HEVC hits the same VPS table counter overflow\n\n");
+        CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+            NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        VTCompressionSessionRef s = NULL;
+        OSStatus r = VTCompressionSessionCreate(NULL, 128, 128,
+            kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+        CFRelease(es);
+        rlog("Create: %d\n", (int)r);
+        if (r == 0 && s) {
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            int kf = 1;
+            CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+            CFRelease(kfn);
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+            OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog("Prepare: %d\n", (int)pr);
+            int errors = 0;
+            for (int i = 0; i < 100 && pr == 0; i++) {
+                int st = encode_one(s, i, 128, 128);
+                if (st != 0) {
+                    rlog("[%d] ERROR: %d\n", i, st);
+                    errors++;
+                    if (errors > 3) break;
+                } else if (i % 10 == 0 || i >= 85) {
+                    rlog("[%d] ok, pset=%zu, bytes=%zu, cb_count=%d\n",
+                         i, g_last_pset_count, g_last_pset_total_bytes, g_cb_count);
+                }
+            }
+            VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+            rlog("Done: %d encodes, %d errors, cb_count=%d\n", 100, errors, g_cb_count);
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+        }
+
     } else if (strcmp(mode, "diag2") == 0) {
         rlog("DIAG2: MV-HEVC with only MVHEVCVideoLayerIDs (no eye IDs)\n\n");
         CFMutableDictionaryRef es = CFDictionaryCreateMutable(
