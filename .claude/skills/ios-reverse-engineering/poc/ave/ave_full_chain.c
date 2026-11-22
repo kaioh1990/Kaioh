@@ -15837,6 +15837,7 @@ new_modes:
 
                     /* Encode frames and inspect CMSampleBuffer deeply */
                     __block int frames_done = 0;
+                    __block int kptr_in_block = 0;
                     for (int fi = 0; fi < 5; fi++) {
                         CVPixelBufferLockBaseAddress(pb, 0);
                         void *y = CVPixelBufferGetBaseAddressOfPlane(pb, 0);
@@ -15886,7 +15887,7 @@ new_modes:
                                                                 (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
                                                                 if (v != 0xFFFFFFFFFFFFFFFFULL) {
                                                                     rlog("      KPTR @%ld: 0x%016llx\n", (long)di, v);
-                                                                    kptr_found++;
+                                                                    kptr_in_block++;
                                                                 }
                                                             }
                                                         }
@@ -15901,7 +15902,7 @@ new_modes:
                                                         (uv & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
                                                         if (uv != 0xFFFFFFFFFFFFFFFFULL) {
                                                             rlog("      <<<KPTR?>>>\n");
-                                                            kptr_found++;
+                                                            kptr_in_block++;
                                                         }
                                                     }
                                                 }
@@ -15945,7 +15946,7 @@ new_modes:
                                                         v != 0xFFFFFFFF00000000ULL) {
                                                         rlog("    NAL KPTR @%zu/%zu: 0x%016llx\n",
                                                              si, total, v);
-                                                        kptr_found++;
+                                                        kptr_in_block++;
                                                     }
                                                 }
                                             }
@@ -15956,8 +15957,9 @@ new_modes:
                             });
                     }
 
-                    VTCompressionSessionCompleteEncoding(session);
-                    rlog("  encoded %d frames\n", frames_done);
+                    VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+                    kptr_found += kptr_in_block;
+                    rlog("  encoded %d frames, kptr_in_block=%d\n", frames_done, kptr_in_block);
                     VTCompressionSessionInvalidate(session);
                     CFRelease(session);
                 }
