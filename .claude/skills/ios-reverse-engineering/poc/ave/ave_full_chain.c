@@ -44,7 +44,6 @@
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
 #include <IOKit/IOKitLib.h>
-#include <xpc/xpc.h>
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
@@ -4682,67 +4681,11 @@ cleanup_dummies:
         }
 
         if (phase == 2) {
-            rlog("--- Phase 2: Direct XPC connection to mediaserverd ---\n");
-
-            /* Try to connect to the compression session XPC service */
-            xpc_connection_t conn = xpc_connection_create_mach_service(
-                "com.apple.coremedia.videocodecd.compressionsession",
-                NULL, 0);
-
-            if (!conn) {
-                rlog("FAIL: xpc_connection_create returned NULL\n");
-
-                /* Try alternative service names */
-                const char *alt_services[] = {
-                    "com.apple.coremedia.videocodecd",
-                    "com.apple.videocodecd",
-                    "com.apple.mediaserverd",
-                    "com.apple.coremedia.compressionsession",
-                    "com.apple.avfoundation.compressionsession",
-                    NULL
-                };
-                for (int i = 0; alt_services[i]; i++) {
-                    conn = xpc_connection_create_mach_service(
-                        alt_services[i], NULL, 0);
-                    rlog("  Try %s: %s\n", alt_services[i],
-                        conn ? "connected" : "NULL");
-                    if (conn) {
-                        rlog("  Found alternative service!\n");
-                        break;
-                    }
-                }
-            } else {
-                rlog("XPC connection created to compressionsession service\n");
-            }
-
-            if (conn) {
-                xpc_connection_set_event_handler(conn, ^(xpc_object_t event) {
-                    xpc_type_t t = xpc_get_type(event);
-                    if (t == XPC_TYPE_ERROR) {
-                        const char *desc = xpc_copy_description(event);
-                        rlog("XPC event: %s\n", desc);
-                    }
-                });
-                xpc_connection_resume(conn);
-
-                /* Send a probe message to discover the protocol */
-                xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
-                xpc_dictionary_set_string(msg, "operation", "createSession");
-                xpc_dictionary_set_int64(msg, "codecType", 'hvc1');
-                xpc_dictionary_set_int64(msg, "width", 128);
-                xpc_dictionary_set_int64(msg, "height", 128);
-
-                rlog("Sending probe message...\n");
-                xpc_object_t reply = xpc_connection_send_message_with_reply_sync(
-                    conn, msg);
-                if (reply) {
-                    const char *desc = xpc_copy_description(reply);
-                    rlog("Reply: %.500s\n", desc ? desc : "(null)");
-                }
-
-                xpc_release(msg);
-                xpc_connection_cancel(conn);
-            }
+            rlog("--- Phase 2: Direct XPC (not available on iOS) ---\n");
+            rlog("xpc_connection_create_mach_service is unavailable on iOS.\n");
+            rlog("The sHEVC_VPS struct is populated by mediaserverd internally.\n");
+            rlog("Attack surface: VTCompressionSession properties or\n");
+            rlog("CMFormatDescription injection (see phases 3-4).\n");
         }
 
         if (phase == 3) {
