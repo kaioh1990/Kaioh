@@ -294,6 +294,153 @@ of `StateBlock.Run`); a map(x) read cache with write-through; netplay
 still allocates ~640 KB per frame (Char.Clone's animation and slice copies,
 FightScreen/motif clones).
 
+### Native CPU work, round 3 (claude/native-cpu3, 2026-11-22)
+
+Same fight, window and tools as round 2 (armv7 guest instructions between
+`gc_safepoint` calls, frames 10-4400; callgrind with Cortex-A9-like
+caches inside `System_action`, x86-64 build, per fight frame).
+
+| Build | armv7 median / mean per tick | Last-level misses per tick | L1 data read misses | x86-64 ms per tick |
+| --- | --- | --- | --- | --- |
+| cb9a781 (round 2, re-measured) | 4.38 M / 4.54 M | 38.7 K | 58.8 K | 0.72 |
+| + short-circuit `&&` / `\|\|` | 3.98 M / 4.15 M | 38.7 K | 58.6 K | |
+| + jump threading, fusion past sub-opcodes, `rcint` | 3.83 M / 4.00 M | | | |
+| + trigger guards, direct `var8` | 3.81 M / 3.98 M | | | |
+| + head fusions = branch head | **3.74 M / 3.91 M** | **39.0 K** | 59.0 K | **0.62** |
+
+(x86-64: median of 7 alternating `CVF_FRAME_STATS` runs; a second set on
+a busier machine gave 0.78 -> 0.69 ms. Builds that
+differ only in data layout vary by about +-0.03 M on armv7 and +-0.2 K in
+last-level misses: the same code measured 3.68-3.74 M depending on where
+the linker put things, through string compares and map probes; the
+deterministic part of the change is in `runOC`, 2.43 M -> 1.73 M.) The
+interpreter now executes 31.6 K operations per tick instead of 44.6 K
+(counted with a temporary profiler); the number of trigger evaluations is
+unchanged (3,130 per tick; 3,288 controller visits). Estimated Vita tick
+with the round-1 rule (1.35-2.8 ns per instruction at 444 MHz): 5.0-10.5
+ms (round 2: 5.9-12.3 ms). Loading 5.83 G -> 5.92 G (the compile-time
+analysis). Instruction count, x86-64 (callgrind): 5.13 M -> 4.40 M.
+
+What the data said first: of the ~44.6 K operations per tick, 41.5 K are
+trigger evaluation, but only 298 evaluations per tick end at their first
+operation and 595 at a triggerall line; 2,136 fail inside the
+`triggerN` groups, after ~11 operations each, and the cost is spread over
+~2,300 controllers (the 10 most expensive are 6 %, the top 100 29 %).
+Skipping controllers on a leading `stateno = K` would save little; what
+the triggers do is evaluate long `&&` chains in full, because inside state
+controllers `&&` and `||` do not short-circuit (Mugen compatibility:
+`a && b` is `a; b; bland`, `bland` being SetB(a.ToB() && b.ToB())), and
+the shared states are full of `!(name = "X" && ...)` and `var(56) = 21 &&
+fvar(18) > 0 && ...` lines. Memoizing triggers whose inputs did not
+change is not possible: nearly every trigger reads something that changes
+every tick (time, commands, redirects, helpers, life). All changes are in
+the fork (tools/ikemen_headless.patch, `vitaPerf` only; the Go build is
+untouched, and the online fork has none of this code):
+
+- Short-circuit (`src/bc_shortcircuit.go`). When the right operand of a
+  CNS `&&` / `||` is pure and silent, the compiler emits `a; jzb8 k; b;
+  bland` (`jnzb8` for `||`): if `a` is false (true), `jzb8` sets the top
+  of the stack to the boolean `bland` (`blor`) would give and jumps over
+  `b` and the operator, so the value is the one the original produces.
+  "Pure and silent" is a whitelist (`scSkippable`), checked opcode by
+  opcode against runOC and the Char methods it calls: constants,
+  comparisons, logic and arithmetic, `div`/`mod` only by a non-zero
+  constant, `var`/`fvar`/`sysvar` only with a constant index >= 0 (a
+  negative one prints a warning), simple triggers (stateno, time, anim,
+  ctrl, life, power, command, numhelper/numexplod/numproj, movecontact,
+  pos, vel, ...), jumps that stay inside `b` (a 0 target, "end of
+  expression", would end the whole evaluation in the original). Never:
+  assignments, `random` (the seed), redirects (`enemy`/`root`/`parent`/...
+  print a warning when they fail, `enemynear` and `p2` fill an
+  order-dependent cache), `name` / `authorname` (`PushS` adds the string
+  to the pool), ex_/const_ sub-opcodes. `scThread` then retargets every
+  `jzb8` past the jumps its value is certain to take next (a following
+  `jzb8`, `jz8p` or `jz8`; a following `jnzb8` falls through), a target
+  at the end being encoded as 0 like `jz8`. -9 % on armv7 alone.
+- Fusion everywhere (`src/bc_fuse.go`). The fusion walkers stopped at the
+  first `const_`/`ex_`/`ex2_`/`ex3_`/`assign_` instruction (their operand
+  length depends on the sub-opcode), so everything after, e.g., the
+  `0 && var(10) := ...` lines of the script controllers, stayed unfused
+  (`int8; var`, `jz8; pop`, ...). `opLenAt` steps over them with the
+  sub-opcode tables of `bc_gen.go` (generated from the `run_*` functions;
+  an independent extraction from the source agrees on every entry) and a
+  small table for `assign_`; unknown sub-opcodes still stop the walk.
+  `run_caller` of a constant (`enemy, numhelper(1000)`: the argument is
+  evaluated as the caller) becomes `rcint8`/`rcint32`, which push the
+  constant and keep the redirect instead of entering the interpreter
+  recursively (~750 nested calls per tick).
+- Head fusions (`src/bc_head.go`): `int8 n; enemy|enemynear|partner`,
+  `const_ s; string x; eq|ne` (s without operand bytes), `blnot; jz8p`,
+  `bland; jz8p`. Only the first opcode is replaced by one that executes
+  the whole sequence; the tail stays, so a jump into the middle (the end of
+  a `cond()` branch can be the second opcode) still runs the original
+  opcodes, and every walker steps over the head and sees the original
+  tail. No jump analysis needed.
+- Trigger guards (`src/bc_guard.go`): a trigger that starts with a fused
+  triggerall line (`tcmp8/32`, `trange8/32`, `tvcmp8`) or consists of one
+  simple trigger opcode (the blocks `hoistTriggers` makes) has that
+  instruction evaluated by `evalTrigger` with the same helper calls runOC
+  makes, and the interpreter runs only the rest (as the slice after the
+  guard: jumps are relative and 0 is the same end). This is the "skip on a
+  leading guard" idea; it gains little (298 + ~600 evaluations end there)
+  and is kept for the runOC entry it saves.
+- `var8`/`fvar8`/`sysvar8`/`tvcmp8` call `varGet(n)` directly instead of
+  pushing `n`, converting it to float64 and back.
+
+`CVF_SC_CHECK=1` checks all of it at run time: every skip still evaluates
+the skipped operand (as an expression of its own) and panics if that
+changed the random seed, wrote to the console (`appendToConsole` now
+counts calls) or left the value stack unbalanced; every guard that is
+false also runs the whole trigger, which must be false; every
+`const_`/`ex_`/`ex2_`/`ex3_`/`assign_` instruction the interpreter runs
+must have consumed exactly the operand length `opLenAt` assumes. Jump
+threading is not done in check mode (the check needs the original operand
+length). Both reference fights pass with `CVF_SC_CHECK=1
+CVF_IDX_CHECK=1` and give the same dumps. The cooked format
+(`cvfcook.go`, Vita only) can now contain `jzb8`/`jnzb8` (193/194) in
+trigger bytecode; the other new opcodes only appear after fusion.
+
+Not merged:
+
+- A per-StateBlock field caching the guard length: a few instructions
+  cheaper per evaluation, but as a new field it grew the hot first line of
+  StateBlock (last-level misses 38.8 K -> 40.1 K); in a free byte of that
+  line (`nestedInLoop` moved out, it is compile-time only) 39.0 K and no
+  measurable armv7 gain. The guard length is looked up in a 256-byte table
+  instead.
+- Memoizing triggers by an input fingerprint (var generation, stateno,
+  prevstateno, state and move type, roundstate): 95 % of the evaluations
+  would hit, but 95 % of the evaluations read other inputs too (time,
+  commands, redirects, helpers, life), so only ~150 per tick qualify.
+
+Where the tick goes now (armv7, per tick): `BytecodeExp_runOC` 1.73 M
+(44 %; ~31.6 K operations at ~55 instructions each including entry and
+exit: the 16-byte stack values, float64 conversions and the global stack
+slice reloaded around every call), `StateBlock.Run` 0.24 M,
+`evalGuarded` + `evalTrigger` 0.20 M, string-keyed maps ~0.21 M (map(x)
+reads ~275 per tick, `getAnim` ~230, `enemyNear`'s `playerID` lookups
+~240, `sysVarGet` ~125 without a cache), NumExplod 0.10 M, `rangeCheck`
+0.09 M, `varGet` 0.08 M, `Command.Step` 0.07 M. Next steps, by expected
+gain: a cache for `sysVarGet` and the `enemyNear` pointers; incremental
+explod index updates (per player instead of one global generation); more
+head fusions for the remaining pairs (`var8; abs; eq8` ~490 per tick,
+`stateno; range_ii32` ~510, `eq8; jz8p` / `eq8; jzb8` ~860, `jz8p;
+jnz8p` ~275); then the interpreter's per-operation cost itself (a stack
+pointer kept in a local between calls) — 3 M per tick needs that, since
+the remaining operations are spread thinly over thousands of controllers.
+
+Rollback garbage (netplay, direct, `GC_PROFILE` build as host, one 6,159-
+frame match): 590 KB allocated per frame (~30 KB of it is loading), 49
+collections, pauses 1.5 s in total (37 ms each on this busy machine). By
+allocation site: `Char.Clone` 149 KB per frame (2,069 allocations),
+`Explod.Clone` 118 KB (180 explods), `FightScreen.Clone` 113 KB (one
+`new(FightScreenRound)` per save, a ~100 KB struct, plus 9 KB in its
+fades), `SaveGameState` 58 KB, `PalFX.Clone` 42 KB (the explods' PalFX),
+`GameStatePool.Get` 14 KB, `Animation.Clone` 9 KB. Next: reuse the
+FightScreenRound, explods and PalFX of the dropped state that
+`SaveGameState` already recycles (round 2), as for the `[]Char` arrays;
+that would remove about half of it. Not done in this round.
+
 ## 4. Determinism on 32-bit ARM
 
 - **Verified**: the armv7 build produces both reference dumps bit for bit

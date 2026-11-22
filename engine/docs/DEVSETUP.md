@@ -47,6 +47,26 @@ three default scenarios; a three-match session, same three dumps as
 0b04ded's build; a Go `cvf_headless_go` host from 0b04ded's tree against
 a native guest).
 
+`claude/native-cpu3` (2026-11-22, Linux x86-64, Go 1.27.4; CPU round 3,
+VITA_PORT.md section 3): regen from a fresh `setup_ikemen.sh` tree
+reproduces the committed C (4884 functions, 0 TODO, 79 stubs, 31
+placeholders; `src/core/opcodes.h` from `gen_opcodes.py`); `cvf_tests` and
+`cvf_tests_ucontext` 103/0 on x86-64, armv7 and aarch64 (qemu), `cvf_tests`
+103/0 under Wine; reference fights `54f8ae06...` / `4334350c...` on x86-64,
+Wine, armv7, aarch64, GC stress (`CVF_GC_STRESS=5000`) and ASan/UBSan (only
+the known `memset(NULL, 0, 0)` of `StoryboardManager.clear` and `.step`),
+and with `CVF_SC_CHECK=1 CVF_IDX_CHECK=1`; `run_netplay.sh` PASS with
+`a350bc2d...` (the three default scenarios, a Go `cvf_headless_go` host
+against a native guest, and a three-match session with the same three
+dumps as before). The netplay dumps need a game directory with the
+`cvf-online-5` rules file (`refgame5`): with `cvf-online-2` (the plain
+cvf-refdata.tgz) native pairs play a different match (`7ecbd3bd...`,
+6,159 frames) and a Go host refuses a native guest ("effective fight
+aspect differs (local=stage remote=resolution:16:9)"), because native
+builds force `FightAspect` 0,0 (`config.go`, `vitaPerf`) while the Go build
+keeps the ini's -1,-1; the cvf-online-5 rules set 4:3 on both. Same with
+cb9a781's build, so not a change of this branch.
+
 Integration of netplay2 and vita (2026-11-21, Linux x86-64, Go 1.27.4):
 regen from a fresh `setup_ikemen.sh` tree reproduces the committed C (4858
 functions, 0 TODO, 79 stubs, 31 placeholders); `cvf_tests` and
