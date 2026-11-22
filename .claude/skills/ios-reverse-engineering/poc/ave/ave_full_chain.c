@@ -5964,8 +5964,8 @@ vps_props_done:
         }
 
         if (phase == 0 || phase == 2) {
-            rlog("\n--- Phase 2: Encode with OOB property values ---\n");
-            rlog("Testing values 1 through %d\n\n", max_val);
+            rlog("\n--- Phase 2: Encode with OOB temporal layers (MCTF enabled) ---\n");
+            rlog("Testing NumberOfTemporalLayers 1 through %d with EnableMCTF=true\n\n", max_val);
 
             for (int val = 1; val <= max_val; val++) {
                 VTCompressionSessionRef s = NULL;
@@ -5979,20 +5979,32 @@ vps_props_done:
                 CFRelease(enc_spec);
                 if (st != noErr || !s) { rlog("val=%d: FAIL\n", val); continue; }
 
+                /* Enable MCTF first */
+                VTSessionSetProperty(s, CFSTR("EnableMCTF"), kCFBooleanTrue);
+
+                /* Set MCTFLatencyMode (the only other MCTF property that accepts values) */
+                int lat_val = val;
+                CFNumberRef lat = CFNumberCreate(NULL, kCFNumberIntType, &lat_val);
+                OSStatus lat_st = VTSessionSetProperty(s, CFSTR("MCTFLatencyMode"), lat);
+                CFRelease(lat);
+
+                /* Set NumberOfTemporalLayers to OOB value */
                 CFNumberRef nlayers = CFNumberCreate(NULL, kCFNumberIntType, &val);
                 OSStatus tl = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), nlayers);
                 CFRelease(nlayers);
 
-                int one = 1;
-                CFNumberRef en = CFNumberCreate(NULL, kCFNumberIntType, &one);
-                OSStatus me = VTSessionSetProperty(s, CFSTR("EnableMCTF"), en);
-                CFRelease(en);
+                rlog("val=%d: TL=%d Lat=%d", val, (int)tl, (int)lat_st);
 
-                CFNumberRef sl = CFNumberCreate(NULL, kCFNumberIntType, &val);
-                OSStatus ss = VTSessionSetProperty(s, CFSTR("MCTFStrengthLevelNum"), sl);
-                CFRelease(sl);
-
-                rlog("val=%d: TL=%d MCTF=%d SLN=%d", val, (int)tl, (int)me, (int)ss);
+                /* Read back to check if clamped */
+                CFTypeRef rv = NULL;
+                VTSessionCopyProperty(s, CFSTR("NumberOfTemporalLayers"), NULL, &rv);
+                if (rv) {
+                    int iv = 0;
+                    if (CFGetTypeID(rv) == CFNumberGetTypeID())
+                        CFNumberGetValue(rv, kCFNumberIntType, &iv);
+                    rlog(" readback=%d", iv);
+                    CFRelease(rv);
+                }
 
                 OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
                 rlog(" Prep=%d", (int)pr);
@@ -6008,7 +6020,9 @@ vps_props_done:
                 VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
                 VTCompressionSessionInvalidate(s); CFRelease(s);
             }
-            rlog("\nPhase 2 complete. Panic = OOB reached kernel.\n");
+            rlog("\nPhase 2 complete.\n");
+            rlog("If value > 7 reached kernel: OOB in iNumberOfTemporalLayers.\n");
+            rlog("If MCTF enabled + encode: check if iMCTFStrengthLevelNum set internally.\n");
         }
 
         if (phase == 0 || phase == 3) {
