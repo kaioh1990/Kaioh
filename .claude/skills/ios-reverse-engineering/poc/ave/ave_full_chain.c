@@ -916,7 +916,12 @@ int main(int argc, char *argv[]) {
     rlog("Time: %s\n", __TIMESTAMP__);
     rlog("PID: %d\n\n", getpid());
 
+    rlog("argc=%d\n", argc);
+    for (int ai = 0; ai < argc && ai < 20; ai++)
+        rlog("  argv[%d]='%s'\n", ai, argv[ai]);
+
     const char *mode = (argc > 1) ? argv[1] : "help";
+    rlog("mode='%s'\n\n", mode);
 
     if (strcmp(mode, "quick") == 0) {
         rlog("QUICK: Phases 1-3 (verify + measure + 100 encodes)\n\n");
