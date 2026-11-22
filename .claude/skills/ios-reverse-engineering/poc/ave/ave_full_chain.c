@@ -58,11 +58,11 @@
 #include <compression.h>
 #include <stdatomic.h>
 #include <arpa/inet.h>
-#include <libproc.h>
 #include <mach/mach_vm.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
+extern int proc_regionfilename(int pid, uint64_t address, void *buffer, uint32_t buffersize);
 #ifndef PROC_PIDTASKINFO
 #define PROC_PIDTASKINFO 4
 struct proc_taskinfo {
