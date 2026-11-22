@@ -922,25 +922,35 @@ int main(int argc, char *argv[]) {
 
     /* Check for mode override file (workaround for cached launch args) */
     char mode_buf[256] = {0};
+    static char *file_argv[16] = {0};
+    int file_argc = 0;
     char mode_file[512];
     snprintf(mode_file, sizeof(mode_file), "%s/Documents/mode.txt",
              getenv("HOME") ? getenv("HOME") : "/tmp");
     FILE *mf = fopen(mode_file, "r");
     if (mf) {
         if (fgets(mode_buf, sizeof(mode_buf), mf)) {
-            /* Trim newline */
             char *nl = strchr(mode_buf, '\n');
             if (nl) *nl = '\0';
             nl = strchr(mode_buf, '\r');
             if (nl) *nl = '\0';
+            /* Split mode_buf into tokens, override argc/argv */
+            file_argv[0] = argv[0];
+            file_argc = 1;
+            char *tok = strtok(mode_buf, " ");
+            while (tok && file_argc < 15) {
+                file_argv[file_argc++] = tok;
+                tok = strtok(NULL, " ");
+            }
+            argc = file_argc;
+            argv = file_argv;
         }
         fclose(mf);
         remove(mode_file);
     }
-    const char *mode = (mode_buf[0] != '\0') ? mode_buf :
-                        ((argc > 1) ? argv[1] : "help");
-    rlog("mode='%s' (source=%s)\n\n", mode,
-         mode_buf[0] != '\0' ? "mode.txt" : "argv");
+    const char *mode = (argc > 1) ? argv[1] : "help";
+    rlog("mode='%s' argc=%d (source=%s)\n\n", mode, argc,
+         file_argc > 0 ? "mode.txt" : "argv");
 
     if (strcmp(mode, "quick") == 0) {
         rlog("QUICK: Phases 1-3 (verify + measure + 100 encodes)\n\n");
