@@ -5349,6 +5349,7 @@ cleanup_dummies:
         rlog("  transcode_vps      -- KEY: Decode crafted VPS then re-encode (transcode path)\n");
         rlog("  vps_verify         -- Verify if crafted VPS reaches kernel (compare output)\n");
         rlog("  xpc_vps [phase]    -- XPC VPS field manipulation + crafted format injection\n");
+        rlog("  mctf_oob [max]     -- KEY: CVE-112468/112469 MCTF OOB via encode properties\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
