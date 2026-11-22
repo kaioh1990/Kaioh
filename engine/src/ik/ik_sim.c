@@ -164082,8 +164082,21 @@ int RollbackSession_SaveGameState(RollbackSession* r, int stateIdx) {
     g_sys.savePool.curStateID = stateIdx;
     g_sys.rollbackStateID = stateIdx;
     int oldest = go_rem32(((stateIdx + 1)), 10);
-    Map_int_GameStatePtr_delete(&r->saveStates, oldest);
-    Map_int_GameStatePtr_delete(&r->saveStates, stateIdx);
+    {
+        for (int _t1 = 0; _t1 < 2; _t1++) {
+            int idx = ((Arr2_int){{oldest, stateIdx}}).v[_t1];
+            {
+                bool _t3; GameState* _t4 = Map_int_GameStatePtr_get(&r->saveStates, idx, &_t3);
+                GameState* gs = _t4;
+                bool ok = _t3;
+                if (ok && (gs != NULL)) {
+                    Map_int_GameStatePtr_delete(&r->saveStates, idx);
+                    sync_Pool_Put(&g_sys.statePool.gameStatePool, ((GoIface){525, (void *)(gs)}));
+                }
+            }
+            _cont2:;
+        }
+    }
     GameStatePool_Free(&g_sys.savePool, oldest);
     GameStatePool_Free(&g_sys.savePool, stateIdx);
     Map_int_GameStatePtr_set(&r->saveStates, stateIdx, ((GameState*)(sync_Pool_Get(&g_sys.statePool.gameStatePool)).data));
@@ -164103,7 +164116,7 @@ int RollbackSession_SaveGameState(RollbackSession* r, int stateIdx) {
     }
 }
 
-// RollbackSession.LoadGameState (rollback.go:740), 0 TODO
+// RollbackSession.LoadGameState (rollback.go:747), 0 TODO
 void RollbackSession_LoadGameState(RollbackSession* r, int stateIdx) {
     g_sys.loadPool.curStateID = stateIdx;
     GameStatePool_Free(&g_sys.loadPool, stateIdx);
@@ -164115,7 +164128,7 @@ void RollbackSession_LoadGameState(RollbackSession* r, int stateIdx) {
     Map_int_GameStatePtr_delete(&r->saveStates, stateIdx);
 }
 
-// RollbackSession.AdvanceFrame (rollback.go:757), 0 TODO
+// RollbackSession.AdvanceFrame (rollback.go:764), 0 TODO
 void RollbackSession_AdvanceFrame(RollbackSession* r, int flags) {
     volatile bool _df1 = false; volatile GoFunc _df1_f; volatile bool _df4 = false; volatile GoFunc _df4_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -164148,7 +164161,7 @@ void RollbackSession_AdvanceFrame(RollbackSession* r, int flags) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// RollbackSession.OnEvent (rollback.go:798), 0 TODO
+// RollbackSession.OnEvent (rollback.go:805), 0 TODO
 void RollbackSession_OnEvent(RollbackSession* r, ggpo_Event* info) {
     {
         ggpo_EventCode _t1 = info->Code;
@@ -164213,7 +164226,7 @@ void RollbackSession_OnEvent(RollbackSession* r, ggpo_Event* info) {
     }
 }
 
-// NewRollbackSession (rollback.go:841), 0 TODO
+// NewRollbackSession (rollback.go:848), 0 TODO
 RollbackSession fn_NewRollbackSession(RollbackProperties config) {
     RollbackSession r = (RollbackSession){0};
     r.saveStates = Map_int_GameStatePtr_make(0);
@@ -164230,12 +164243,12 @@ RollbackSession fn_NewRollbackSession(RollbackProperties config) {
     return r;
 }
 
-// encodeInputs (rollback.go:858), 0 TODO
+// encodeInputs (rollback.go:865), 0 TODO
 Slice_u8 fn_encodeInputs(InputBits inputs) {
     return fn_writeI16(((i16)inputs));
 }
 
-// RollbackSession.LiveChecksum (rollback.go:862), 0 TODO
+// RollbackSession.LiveChecksum (rollback.go:869), 0 TODO
 u32 RollbackSession_LiveChecksum(RollbackSession* rs) {
     Slice_u8 buf = fn_writeI32(g_sys.SystemStateVars_.randseed);
     buf = GO_APPEND_SLICE(Slice_u8, buf, fn_writeI32(g_sys.SystemStateVars_.matchTime));
@@ -164285,7 +164298,7 @@ u32 RollbackSession_LiveChecksum(RollbackSession* rs) {
     return crc32_ChecksumIEEE(buf);
 }
 
-// RollbackSession.InitP1 (rollback.go:934), 0 TODO
+// RollbackSession.InitP1 (rollback.go:941), 0 TODO
 GoIface RollbackSession_InitP1(RollbackSession* rs, int numPlayers, int localPort, int remotePort, GoString remoteIp) {
     if (rs->config.GgpoLogsEnabled) {
         GoString logFileName = fmt_Sprintf(GOSTR("save/logs/Rollback-%s.log"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, rs->timestamp)})));
@@ -164336,7 +164349,7 @@ GoIface RollbackSession_InitP1(RollbackSession* rs, int numPlayers, int localPor
     return (GoIface){0};
 }
 
-// RollbackSession.InitP2 (rollback.go:986), 0 TODO
+// RollbackSession.InitP2 (rollback.go:993), 0 TODO
 GoIface RollbackSession_InitP2(RollbackSession* rs, int numPlayers, int localPort, int remotePort, GoString remoteIp) {
     if (rs->config.GgpoLogsEnabled) {
         GoString logFileName = fmt_Sprintf(GOSTR("save/logs/Rollback-%s.log"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, rs->timestamp)})));
@@ -164387,7 +164400,7 @@ GoIface RollbackSession_InitP2(RollbackSession* rs, int numPlayers, int localPor
     return (GoIface){0};
 }
 
-// RollbackSession.InitSyncTest (rollback.go:1038), 0 TODO
+// RollbackSession.InitSyncTest (rollback.go:1045), 0 TODO
 void RollbackSession_InitSyncTest(RollbackSession* rs, int numPlayers) {
     rs->syncTest = true;
     if (rs->config.GgpoLogsEnabled) {
@@ -172180,8 +172193,17 @@ void GameState_saveCharData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
             int i = _t1;
-            gs->charData.v[i] = GO_MAKE(Slice_Char, Char, g_sys.chars.v[i].len, g_sys.chars.v[i].len);
-            gs->chars.v[i] = GO_MAKE(Slice_CharPtr, Char*, g_sys.chars.v[i].len, g_sys.chars.v[i].len);
+            int n = g_sys.chars.v[i].len;
+            if (gs->charData.v[i].cap >= n) {
+                gs->charData.v[i] = GO_SLICE(Slice_Char, gs->charData.v[i], 0, n);
+            } else {
+                gs->charData.v[i] = GO_MAKE(Slice_Char, Char, n, n);
+            }
+            if (gs->chars.v[i].cap >= n) {
+                gs->chars.v[i] = GO_SLICE(Slice_CharPtr, gs->chars.v[i], 0, n);
+            } else {
+                gs->chars.v[i] = GO_MAKE(Slice_CharPtr, Char*, n, n);
+            }
             {
                 Slice_CharPtr _t4 = g_sys.chars.v[i];
                 for (int _t3 = 0; _t3 < _t4.len; _t3++) {
@@ -172214,7 +172236,7 @@ void GameState_saveCharData(GameState* gs, GameStatePool* gsp) {
     gs->charList = CharList_Clone(&g_sys.charList, gsp);
 }
 
-// GameState.saveProjectileData (state.go:333), 0 TODO
+// GameState.saveProjectileData (state.go:343), 0 TODO
 void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172232,7 +172254,7 @@ void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.saveExplodData (state.go:342), 0 TODO
+// GameState.saveExplodData (state.go:352), 0 TODO
 void GameState_saveExplodData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172250,7 +172272,7 @@ void GameState_saveExplodData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.saveCharTextData (state.go:351), 0 TODO
+// GameState.saveCharTextData (state.go:361), 0 TODO
 void GameState_saveCharTextData(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172269,13 +172291,13 @@ void GameState_saveCharTextData(GameState* gs) {
     }
 }
 
-// GameState.loadPalFX (state.go:360), 0 TODO
+// GameState.loadPalFX (state.go:370), 0 TODO
 void GameState_loadPalFX(GameState* gs) {
     g_sys.allPalFX = PalFX_Clone(gs->allPalFX);
     g_sys.bgPalFX = PalFX_Clone(gs->bgPalFX);
 }
 
-// GameState.loadCharData (state.go:365), 0 TODO
+// GameState.loadCharData (state.go:375), 0 TODO
 void GameState_loadCharData(GameState* gs, GameStatePool* gsp) {
     fn_helperIdxChanged();
     {
@@ -172326,7 +172348,7 @@ void GameState_loadCharData(GameState* gs, GameStatePool* gsp) {
     g_sys.charList = CharList_Clone(&gs->charList, gsp);
 }
 
-// GameState.loadProjectileData (state.go:396), 0 TODO
+// GameState.loadProjectileData (state.go:406), 0 TODO
 void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172345,7 +172367,7 @@ void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.loadExplodData (state.go:405), 0 TODO
+// GameState.loadExplodData (state.go:415), 0 TODO
 void GameState_loadExplodData(GameState* gs, GameStatePool* gsp) {
     fn_explodIdxChanged();
     {
@@ -172364,7 +172386,7 @@ void GameState_loadExplodData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.loadCharTextData (state.go:415), 0 TODO
+// GameState.loadCharTextData (state.go:425), 0 TODO
 void GameState_loadCharTextData(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172383,7 +172405,7 @@ void GameState_loadCharTextData(GameState* gs) {
     }
 }
 
-// GameState.stageCanMutate (state.go:424), 0 TODO
+// GameState.stageCanMutate (state.go:434), 0 TODO
 bool GameState_stageCanMutate(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172397,7 +172419,7 @@ bool GameState_stageCanMutate(GameState* gs) {
     return false;
 }
 
-// GameState.Checksum (state.go:438), 0 TODO
+// GameState.Checksum (state.go:448), 0 TODO
 int GameState_Checksum(GameState* gs) {
     gs->bytes = go_str2bytes(GameState_String(gs));
     GoIface h = fnv_New32a();
@@ -172405,7 +172427,7 @@ int GameState_Checksum(GameState* gs) {
     return ((int)iface_Sum32_52c8429d(h));
 }
 
-// GameState.String (state.go:453), 0 TODO
+// GameState.String (state.go:463), 0 TODO
 GoString GameState_String(GameState* gs) {
     GoString str = {0};
     str = fmt_Sprintf(GOSTR("MatchTime %d CurRoundTime: %d RandSeed: %d\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.matchTime)}), ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.curRoundTime)}), ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.randseed)})));
@@ -172444,7 +172466,7 @@ GoString GameState_String(GameState* gs) {
     return str;
 }
 
-// Char.String (state.go:498), 0 TODO
+// Char.String (state.go:508), 0 TODO
 GoString Char_String(Char cs) {
     GoString inputBufStr = GOSTR("none");
     if ((cs.keyctrl.v[0] && (cs.cmd.len > 0)) && (cs.cmd.p[0].Buffer != NULL)) {
@@ -172455,12 +172477,12 @@ GoString Char_String(Char cs) {
     return str;
 }
 
-// NewGameStatePool (state.go:568), 0 TODO
+// NewGameStatePool (state.go:578), 0 TODO
 GameStatePool fn_NewGameStatePool(void) {
     return (GameStatePool){.gameStatePool = go_sync_pool(((GoFunc){(void *)lambda_1779, go_box(Env_lambda_1779, ((Env_lambda_1779){0}))})), .stringIntMapPool = go_sync_pool(((GoFunc){(void *)lambda_1780, go_box(Env_lambda_1780, ((Env_lambda_1780){0}))})), .stringTypedValueMapPool = go_sync_pool(((GoFunc){(void *)lambda_1781, go_box(Env_lambda_1781, ((Env_lambda_1781){0}))})), .animationTablePool = go_sync_pool(((GoFunc){(void *)lambda_1782, go_box(Env_lambda_1782, ((Env_lambda_1782){0}))})), .int32CharPointerMapPool = go_sync_pool(((GoFunc){(void *)lambda_1783, go_box(Env_lambda_1783, ((Env_lambda_1783){0}))})), .animFrameSlicePool = go_sync_pool(((GoFunc){(void *)lambda_1784, go_box(Env_lambda_1784, ((Env_lambda_1784){0}))})), .int32int32MapPool = go_sync_pool(((GoFunc){(void *)lambda_1785, go_box(Env_lambda_1785, ((Env_lambda_1785){0}))})), .int32float32MapPool = go_sync_pool(((GoFunc){(void *)lambda_1786, go_box(Env_lambda_1786, ((Env_lambda_1786){0}))})), .remapPresetPool = go_sync_pool(((GoFunc){(void *)lambda_1787, go_box(Env_lambda_1787, ((Env_lambda_1787){0}))})), .remapTablePool = go_sync_pool(((GoFunc){(void *)lambda_1788, go_box(Env_lambda_1788, ((Env_lambda_1788){0}))})), .poolObjs = Map_int_Slice_GoIface_make(0)};
 }
 
-// GameStatePool.Get (state.go:635), 0 TODO
+// GameStatePool.Get (state.go:645), 0 TODO
 GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item) {
     volatile bool _df3 = false; volatile GoFunc _df3_f;
     volatile GoIface result = {0};
@@ -172566,7 +172588,7 @@ GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item) {
     return result;
 }
 
-// GameStatePool.Put (state.go:681), 0 TODO
+// GameStatePool.Put (state.go:691), 0 TODO
 void GameStatePool_Put(GameStatePool* gsp, GoIface item) {
     {
         GoIface _t1 = item;
@@ -172595,7 +172617,7 @@ void GameStatePool_Put(GameStatePool* gsp, GoIface item) {
     }
 }
 
-// GameStatePool.Free (state.go:705), 0 TODO
+// GameStatePool.Free (state.go:715), 0 TODO
 void GameStatePool_Free(GameStatePool* gsp, int stateID) {
     bool _t1; Slice_GoIface _t2 = Map_int_Slice_GoIface_get(&gsp->poolObjs, stateID, &_t1);
     Slice_GoIface objs = _t2;

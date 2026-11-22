@@ -4130,6 +4130,28 @@ index bfa04966..4e23b980 100644
  	menu.itemname.menuvideo.aspectratio = Aspect Ratio
  	; Aspect ratio is assigned based on values used in itemname suffix (e.g. 4:3)
  	menu.itemname.menuvideo.aspectratio.defaultaspect = Default
+diff --git a/src/rollback.go b/src/rollback.go
+index 3218660c..c43ccd94 100644
+--- a/src/rollback.go
++++ b/src/rollback.go
+@@ -714,8 +714,15 @@ func (r *RollbackSession) SaveGameState(stateIdx int) int {
+ 	sys.rollbackStateID = stateIdx
+ 	oldest := (stateIdx + 1) % (MaxSaveStates + 2)
+ 	// These slots are no longer restorable; drop their snapshots before freeing pooled data.
+-	delete(r.saveStates, oldest)
+-	delete(r.saveStates, stateIdx)
++	// The dropped GameStates go back to the pool (SaveState overwrites a
++	// pooled one, as LoadGameState's Put already relies on): ~1 MB of
++	// garbage per frame otherwise.
++	for _, idx := range [2]int{oldest, stateIdx} {
++		if gs, ok := r.saveStates[idx]; ok && gs != nil {
++			delete(r.saveStates, idx)
++			sys.statePool.gameStatePool.Put(gs)
++		}
++	}
+ 	sys.savePool.Free(oldest)
+ 	sys.savePool.Free(stateIdx)
+ 
 diff --git a/src/script.go b/src/script.go
 index 5443f257..fdd510d8 100644
 --- a/src/script.go
@@ -4224,6 +4246,31 @@ index 9b294164..4bd85c57 100644
  		s.stageCamera.zoffset = int32(float32(s.stageCamera.localcoord[1])/2 - s.model.offset[1]/posMul - s.stageCamera.yshift*float32(sys.scrrect[3]/2)/float32(sys.gameHeight)*float32(s.stageCamera.localcoord[1])/sys.heightScale)
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
+diff --git a/src/state.go b/src/state.go
+index 7a82e2fc..e8f5fdf2 100644
+--- a/src/state.go
++++ b/src/state.go
+@@ -308,8 +308,18 @@ func (gs *GameState) savePalFX() {
+ 
+ func (gs *GameState) saveCharData(gsp *GameStatePool) {
+ 	for i := range sys.chars {
+-		gs.charData[i] = make([]Char, len(sys.chars[i]), len(sys.chars[i]))
+-		gs.chars[i] = make([]*Char, len(sys.chars[i]), len(sys.chars[i]))
++		// a pooled GameState keeps its arrays: reuse them when they fit
++		n := len(sys.chars[i])
++		if cap(gs.charData[i]) >= n {
++			gs.charData[i] = gs.charData[i][:n]
++		} else {
++			gs.charData[i] = make([]Char, n, n)
++		}
++		if cap(gs.chars[i]) >= n {
++			gs.chars[i] = gs.chars[i][:n]
++		} else {
++			gs.chars[i] = make([]*Char, n, n)
++		}
+ 
+ 		for j, c := range sys.chars[i] {
+ 			gs.charData[i][j] = c.Clone(gsp)
 diff --git a/src/system.go b/src/system.go
 index 2698d355..89161469 100644
 --- a/src/system.go

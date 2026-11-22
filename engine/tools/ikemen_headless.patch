@@ -18747,6 +18747,28 @@ index bfa0496..4e23b98 100644
  	menu.itemname.menuvideo.aspectratio = Aspect Ratio
  	; Aspect ratio is assigned based on values used in itemname suffix (e.g. 4:3)
  	menu.itemname.menuvideo.aspectratio.defaultaspect = Default
+diff --git a/src/rollback.go b/src/rollback.go
+index 3218660..c43ccd9 100644
+--- a/src/rollback.go
++++ b/src/rollback.go
+@@ -714,8 +714,15 @@ func (r *RollbackSession) SaveGameState(stateIdx int) int {
+ 	sys.rollbackStateID = stateIdx
+ 	oldest := (stateIdx + 1) % (MaxSaveStates + 2)
+ 	// These slots are no longer restorable; drop their snapshots before freeing pooled data.
+-	delete(r.saveStates, oldest)
+-	delete(r.saveStates, stateIdx)
++	// The dropped GameStates go back to the pool (SaveState overwrites a
++	// pooled one, as LoadGameState's Put already relies on): ~1 MB of
++	// garbage per frame otherwise.
++	for _, idx := range [2]int{oldest, stateIdx} {
++		if gs, ok := r.saveStates[idx]; ok && gs != nil {
++			delete(r.saveStates, idx)
++			sys.statePool.gameStatePool.Put(gs)
++		}
++	}
+ 	sys.savePool.Free(oldest)
+ 	sys.savePool.Free(stateIdx)
+ 
 diff --git a/src/sb_hoist.go b/src/sb_hoist.go
 new file mode 100644
 index 0000000..10025b6
@@ -20157,10 +20179,31 @@ index 9b29416..7160fa1 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/state.go b/src/state.go
-index 7a82e2f..48aab63 100644
+index 7a82e2f..cfb25ac 100644
 --- a/src/state.go
 +++ b/src/state.go
-@@ -363,6 +363,7 @@ func (gs *GameState) loadPalFX() {
+@@ -308,8 +308,18 @@ func (gs *GameState) savePalFX() {
+ 
+ func (gs *GameState) saveCharData(gsp *GameStatePool) {
+ 	for i := range sys.chars {
+-		gs.charData[i] = make([]Char, len(sys.chars[i]), len(sys.chars[i]))
+-		gs.chars[i] = make([]*Char, len(sys.chars[i]), len(sys.chars[i]))
++		// a pooled GameState keeps its arrays: reuse them when they fit
++		n := len(sys.chars[i])
++		if cap(gs.charData[i]) >= n {
++			gs.charData[i] = gs.charData[i][:n]
++		} else {
++			gs.charData[i] = make([]Char, n, n)
++		}
++		if cap(gs.chars[i]) >= n {
++			gs.chars[i] = gs.chars[i][:n]
++		} else {
++			gs.chars[i] = make([]*Char, n, n)
++		}
+ 
+ 		for j, c := range sys.chars[i] {
+ 			gs.charData[i][j] = c.Clone(gsp)
+@@ -363,6 +373,7 @@ func (gs *GameState) loadPalFX() {
  }
  
  func (gs *GameState) loadCharData(gsp *GameStatePool) {
@@ -20168,7 +20211,7 @@ index 7a82e2f..48aab63 100644
  	for i := 0; i < len(sys.chars); i++ {
  		sys.chars[i] = make([]*Char, len(gs.chars[i]), len(gs.chars[i]))
  		copy(sys.chars[i], gs.chars[i])
-@@ -402,6 +403,7 @@ func (gs *GameState) loadProjectileData(gsp *GameStatePool) {
+@@ -402,6 +413,7 @@ func (gs *GameState) loadProjectileData(gsp *GameStatePool) {
  }
  
  func (gs *GameState) loadExplodData(gsp *GameStatePool) {
