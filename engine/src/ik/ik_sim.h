@@ -122,9 +122,17 @@ typedef struct Arr12_Slice_TextSpritePtr Arr12_Slice_TextSpritePtr;
 #define CVF_DEF_Arr12_bool
 typedef struct Arr12_bool Arr12_bool;
 #endif
+#ifndef CVF_DEF_Arr12_explodIdx
+#define CVF_DEF_Arr12_explodIdx
+typedef struct Arr12_explodIdx Arr12_explodIdx;
+#endif
 #ifndef CVF_DEF_Arr12_f32
 #define CVF_DEF_Arr12_f32
 typedef struct Arr12_f32 Arr12_f32;
+#endif
+#ifndef CVF_DEF_Arr12_helperIdx
+#define CVF_DEF_Arr12_helperIdx
+typedef struct Arr12_helperIdx Arr12_helperIdx;
 #endif
 #ifndef CVF_DEF_Arr12_int
 #define CVF_DEF_Arr12_int
@@ -1021,7 +1029,7 @@ typedef struct fixed_Rectangle26_6 fixed_Rectangle26_6;
 typedef struct flac2_Encoder flac2_Encoder;
 typedef struct flac2_Stream flac2_Stream;
 typedef struct flac_decoder flac_decoder;
-typedef struct fontSpec_Lc61303 fontSpec_Lc61303;
+typedef struct fontSpec_L0419e0 fontSpec_L0419e0;
 typedef struct fontSpec_Le749ae fontSpec_Le749ae;
 typedef struct frame2_Frame frame2_Frame;
 typedef struct frame2_Header frame2_Header;
@@ -1209,8 +1217,8 @@ typedef struct oggvorbis_oggReader oggvorbis_oggReader;
 typedef struct oggvorbis_page oggvorbis_page;
 typedef struct oggvorbis_pageHeader oggvorbis_pageHeader;
 typedef struct ov_Lbfe85b ov_Lbfe85b;
-typedef struct pair_L4756dc pair_L4756dc;
-typedef struct pair_La8d612 pair_La8d612;
+typedef struct pair_L1c2276 pair_L1c2276;
+typedef struct pair_Ldeb9e1 pair_Ldeb9e1;
 typedef struct parse_Error parse_Error;
 typedef struct parse_Lexer parse_Lexer;
 typedef struct parse_Scanner parse_Scanner;
@@ -2235,6 +2243,10 @@ typedef struct { gltf_Skin* *p; int len, cap; } Slice_gltf_SkinPtr;
 #define CVF_DEF_Slice_gltf_TexturePtr
 typedef struct { gltf_Texture* *p; int len, cap; } Slice_gltf_TexturePtr;
 #endif
+#ifndef CVF_DEF_Slice_helperIdCount
+#define CVF_DEF_Slice_helperIdCount
+typedef struct { helperIdCount *p; int len, cap; } Slice_helperIdCount;
+#endif
 #ifndef CVF_DEF_Slice_i16
 #define CVF_DEF_Slice_i16
 typedef struct { i16 *p; int len, cap; } Slice_i16;
@@ -2419,13 +2431,13 @@ typedef struct { namePos_L8b4b91 *p; int len, cap; } Slice_namePos_L8b4b91;
 #define CVF_DEF_Slice_ov_Lbfe85b
 typedef struct { ov_Lbfe85b *p; int len, cap; } Slice_ov_Lbfe85b;
 #endif
-#ifndef CVF_DEF_Slice_pair_L4756dc
-#define CVF_DEF_Slice_pair_L4756dc
-typedef struct { pair_L4756dc *p; int len, cap; } Slice_pair_L4756dc;
+#ifndef CVF_DEF_Slice_pair_L1c2276
+#define CVF_DEF_Slice_pair_L1c2276
+typedef struct { pair_L1c2276 *p; int len, cap; } Slice_pair_L1c2276;
 #endif
-#ifndef CVF_DEF_Slice_pair_La8d612
-#define CVF_DEF_Slice_pair_La8d612
-typedef struct { pair_La8d612 *p; int len, cap; } Slice_pair_La8d612;
+#ifndef CVF_DEF_Slice_pair_Ldeb9e1
+#define CVF_DEF_Slice_pair_Ldeb9e1
+typedef struct { pair_Ldeb9e1 *p; int len, cap; } Slice_pair_Ldeb9e1;
 #endif
 #ifndef CVF_DEF_Slice_parse_yySymType
 #define CVF_DEF_Slice_parse_yySymType
@@ -3071,9 +3083,9 @@ typedef GoMap Map_int_Slice_int;
 #define CVF_DEF_Map_int_bool
 typedef GoMap Map_int_bool;
 #endif
-#ifndef CVF_DEF_Map_int_fontSpec_Lc61303
-#define CVF_DEF_Map_int_fontSpec_Lc61303
-typedef GoMap Map_int_fontSpec_Lc61303;
+#ifndef CVF_DEF_Map_int_fontSpec_L0419e0
+#define CVF_DEF_Map_int_fontSpec_L0419e0
+typedef GoMap Map_int_fontSpec_L0419e0;
 #endif
 #ifndef CVF_DEF_Map_int_fontSpec_Le749ae
 #define CVF_DEF_Map_int_fontSpec_Le749ae
@@ -3353,9 +3365,17 @@ struct Arr12_Slice_TextSpritePtr { Slice_TextSpritePtr v[12]; };
 #define CVF_BODY_Arr12_bool
 struct Arr12_bool { bool v[12]; };
 #endif
+#ifndef CVF_BODY_Arr12_explodIdx
+#define CVF_BODY_Arr12_explodIdx
+struct Arr12_explodIdx { explodIdx v[12]; };
+#endif
 #ifndef CVF_BODY_Arr12_f32
 #define CVF_BODY_Arr12_f32
 struct Arr12_f32 { f32 v[12]; };
+#endif
+#ifndef CVF_BODY_Arr12_helperIdx
+#define CVF_BODY_Arr12_helperIdx
+struct Arr12_helperIdx { helperIdx v[12]; };
 #endif
 #ifndef CVF_BODY_Arr12_int
 #define CVF_BODY_Arr12_int
@@ -4246,7 +4266,7 @@ struct errutil_position { GoString file; int line; GoString callee; };
 struct flac2_Encoder { flac2_Stream* embed_Stream; GoIface w; u16 blockSizeMin; u16 blockSizeMax; u32 frameSizeMin; u32 frameSizeMax; GoIface md5sum; u64 nsamples; u64 curNum; };
 struct flac2_Stream { meta_StreamInfo* Info; Slice_meta_BlockPtr Blocks; meta_SeekTable* seekTable; int seekTableSize; i64 dataStart; GoIface r; };
 struct flac_decoder { GoIface r; flac2_Stream* stream; frame2_Frame* frame; int posInFrame; GoIface err; bool seekEnabled; bool hasFixedBlockSize; };
-struct fontSpec_Lc61303 { GoString path; i32 height; };
+struct fontSpec_L0419e0 { GoString path; i32 height; };
 struct fontSpec_Le749ae { GoString path; i32 height; };
 struct frame2_Header { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; };
 struct frame2_Frame { union { frame2_Header Header_; struct { bool HasFixedBlockSize; u16 BlockSize; u32 SampleRate; frame2_Channels Channels; u8 BitsPerSample; u64 Num; }; }; Slice_frame2_SubframePtr Subframes; hashutil_Hash16 crc; bits_x2_Reader* br; GoIface hr; GoIface r; };
@@ -4430,8 +4450,8 @@ struct vorbis2_CommentHeader { GoString Vendor; Slice_GoString Comments; };
 struct vorbis2_Decoder { bool headerRead; bool setupRead; int sampleRate; int channels; vorbis2_Bitrate Bitrate; Arr2_int blocksize; union { vorbis2_CommentHeader CommentHeader_; struct { GoString Vendor; Slice_GoString Comments; }; }; Slice_vorbis2_codebook codebooks; Slice_vorbis2_floor floors; Slice_vorbis2_residue residues; Slice_vorbis2_mapping mappings; Slice_vorbis2_mode modes; Slice_f32 overlap; bool hasOverlap; bool overlapShort; Arr2_Slice_f32 windows; Arr2_vorbis2_imdctLookup lookup; Slice_Slice_f32 residueBuffer; Slice_vorbis2_floorData floorBuffer; Slice_Slice_f32 rawBuffer; };
 struct oggvorbis_Reader { oggvorbis_oggReader r; vorbis2_Decoder dec; i64 position; Slice_f32 buffer; Slice_f32 originalBuffer; int toSkip; i64 length; };
 struct ov_Lbfe85b { OpCode o; u64 v; };
-struct pair_L4756dc { Projectile* pr; f32 dist; };
-struct pair_La8d612 { Char* ch; f32 dist; };
+struct pair_L1c2276 { Char* ch; f32 dist; };
+struct pair_Ldeb9e1 { Projectile* pr; f32 dist; };
 struct parse_Error { ast_Position Pos; GoString Message; GoString Token; };
 struct parse_Lexer { parse_Scanner* scanner; Slice_ast_Stmt Stmts; bool PNewLine; ast_Token Token; int PrevTokenType; };
 struct parse_Scanner { ast_Position Pos; GoOpaque /* bufio.Reader */* reader; };
@@ -5288,6 +5308,10 @@ GO_SLICE_FUNCS(Slice_gltf_SkinPtr, gltf_Skin*)
 #define CVF_FN_Slice_gltf_TexturePtr
 GO_SLICE_FUNCS(Slice_gltf_TexturePtr, gltf_Texture*)
 #endif
+#ifndef CVF_FN_Slice_helperIdCount
+#define CVF_FN_Slice_helperIdCount
+GO_SLICE_FUNCS_A(Slice_helperIdCount, helperIdCount)
+#endif
 #ifndef CVF_FN_Slice_i16
 #define CVF_FN_Slice_i16
 GO_SLICE_FUNCS_A(Slice_i16, i16)
@@ -5488,13 +5512,13 @@ GO_SLICE_FUNCS(Slice_namePos_L8b4b91, namePos_L8b4b91)
 #define CVF_FN_Slice_ov_Lbfe85b
 GO_SLICE_FUNCS_A(Slice_ov_Lbfe85b, ov_Lbfe85b)
 #endif
-#ifndef CVF_FN_Slice_pair_L4756dc
-#define CVF_FN_Slice_pair_L4756dc
-GO_SLICE_FUNCS(Slice_pair_L4756dc, pair_L4756dc)
+#ifndef CVF_FN_Slice_pair_L1c2276
+#define CVF_FN_Slice_pair_L1c2276
+GO_SLICE_FUNCS(Slice_pair_L1c2276, pair_L1c2276)
 #endif
-#ifndef CVF_FN_Slice_pair_La8d612
-#define CVF_FN_Slice_pair_La8d612
-GO_SLICE_FUNCS(Slice_pair_La8d612, pair_La8d612)
+#ifndef CVF_FN_Slice_pair_Ldeb9e1
+#define CVF_FN_Slice_pair_Ldeb9e1
+GO_SLICE_FUNCS(Slice_pair_Ldeb9e1, pair_Ldeb9e1)
 #endif
 #ifndef CVF_FN_Slice_parse_yySymType
 #define CVF_FN_Slice_parse_yySymType
@@ -6148,9 +6172,9 @@ GO_MAP_FUNCS(Map_int_Slice_int, int, Slice_int, false)
 #define CVF_FN_Map_int_bool
 GO_MAP_FUNCS(Map_int_bool, int, bool, false)
 #endif
-#ifndef CVF_FN_Map_int_fontSpec_Lc61303
-#define CVF_FN_Map_int_fontSpec_Lc61303
-GO_MAP_FUNCS(Map_int_fontSpec_Lc61303, int, fontSpec_Lc61303, false)
+#ifndef CVF_FN_Map_int_fontSpec_L0419e0
+#define CVF_FN_Map_int_fontSpec_L0419e0
+GO_MAP_FUNCS(Map_int_fontSpec_L0419e0, int, fontSpec_L0419e0, false)
 #endif
 #ifndef CVF_FN_Map_int_fontSpec_Le749ae
 #define CVF_FN_Map_int_fontSpec_Le749ae
@@ -8129,6 +8153,8 @@ extern lua_expcontext* g_lua_ecfuncdef;
 extern Arr12_CharPtr g_enemyNearScratch;
 extern GoIface g_bufseekio_errNegativeRead;
 extern sjson_errorType* g_sjson_errNoChange;
+extern u32 g_explodIdxGen;
+extern Arr12_explodIdx g_explodIdxs;
 extern Map_GoString_lua_LGFunction g_lua_fileMethods;
 extern Slice_GoString g_lua_fileSeekOptions;
 extern Slice_GoString g_lua_filebufOptions;
@@ -8140,6 +8166,8 @@ extern Anon_dcdcacfc g_fuseStats;
 extern Renderer g_gfx;
 extern FontRenderer g_gfxFont;
 extern truetype_graphicsState g_truetype_globalDefaultGS;
+extern u32 g_helperIdxGen;
+extern Arr12_helperIdx g_helperIdxs;
 extern Arr16_u8 g_gjson_hexchars;
 extern Arr34_huffman_huffTables g_huffman_huffmanMain;
 extern Slice_u16 g_huffman_huffmanTable;
@@ -8148,6 +8176,7 @@ extern bool g_hwProfDone;
 extern Slice_u8 g_flac2_id3Signature;
 extern GoString g_identFragShader;
 extern GoString g_identVertShader;
+extern bool g_idxCheck;
 extern Arr4_Arr36_f32 g_imdct_imdctWinData;
 extern Input g_input;
 extern Arr256_f32 g_vorbis2_inverseDBTable;
@@ -11660,6 +11689,12 @@ GoString fn_cvfFingerprintSummary(GoString fp);
 GoIface fn_cvfValidateFingerprint(GoString local, GoString remote);
 GoString fn_cvfFpKey(GoString def, bool stage);
 GoIface System_cvfCheckMatchContent(System* s, GoString remote);
+void fn_helperIdxChanged(void);
+void fn_explodIdxChanged(void);
+i32 fn_numHelperWalk(int pn, i32 id);
+i32 fn_numHelperIdx(int pn, i32 id);
+i32 fn_numExplodWalk(int pn, i32 id, i32 pid);
+i32 fn_numExplodIdx(int pn, i32 id, i32 pid);
 Ret_Renderer__FontRenderer__bool fn_cvfSelectRendererGLES(GoString cfgVal);
 void* fn_eglGetProcAddress(GoString name);
 void fn_cvfIOSMain(Slice_GoString args);

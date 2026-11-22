@@ -349,11 +349,14 @@ typedef struct cvfRulesT cvfRulesT;
 typedef struct drawAspectState drawAspectState;
 typedef struct effects_Volume effects_Volume;
 typedef struct expValueFrame expValueFrame;
+typedef struct explodIdx explodIdx;
 typedef struct fightScreenAnimationStateCloner fightScreenAnimationStateCloner;
 typedef struct fixed_Point26_6 fixed_Point26_6;
 typedef struct fixed_Rectangle26_6 fixed_Rectangle26_6;
 typedef struct ggpo_RemotePlayer ggpo_RemotePlayer;
 typedef struct ggpo_Player ggpo_Player;
+typedef struct helperIdCount helperIdCount;
+typedef struct helperIdx helperIdx;
 typedef struct lazySound lazySound;
 typedef struct lowerCacheEntry lowerCacheEntry;
 typedef struct lua_DbgCall lua_DbgCall;
@@ -1883,6 +1886,10 @@ typedef struct { ggpo_Player *p; int len, cap; } Slice_ggpo_Player;
 #ifndef CVF_DEF_Slice_ggpo_PlayerHandle
 #define CVF_DEF_Slice_ggpo_PlayerHandle
 typedef struct { ggpo_PlayerHandle *p; int len, cap; } Slice_ggpo_PlayerHandle;
+#endif
+#ifndef CVF_DEF_Slice_helperIdCount
+#define CVF_DEF_Slice_helperIdCount
+typedef struct { helperIdCount *p; int len, cap; } Slice_helperIdCount;
 #endif
 #ifndef CVF_DEF_Slice_i16
 #define CVF_DEF_Slice_i16
@@ -3530,6 +3537,10 @@ typedef struct effects_Volume effects_Volume;
 #define CVF_TD_expValueFrame
 typedef struct expValueFrame expValueFrame;
 #endif
+#ifndef CVF_TD_explodIdx
+#define CVF_TD_explodIdx
+typedef struct explodIdx explodIdx;
+#endif
 #ifndef CVF_TD_fightScreenAnimationStateCloner
 #define CVF_TD_fightScreenAnimationStateCloner
 typedef struct fightScreenAnimationStateCloner fightScreenAnimationStateCloner;
@@ -3549,6 +3560,14 @@ typedef struct ggpo_RemotePlayer ggpo_RemotePlayer;
 #ifndef CVF_TD_ggpo_Player
 #define CVF_TD_ggpo_Player
 typedef struct ggpo_Player ggpo_Player;
+#endif
+#ifndef CVF_TD_helperIdCount
+#define CVF_TD_helperIdCount
+typedef struct helperIdCount helperIdCount;
+#endif
+#ifndef CVF_TD_helperIdx
+#define CVF_TD_helperIdx
+typedef struct helperIdx helperIdx;
 #endif
 #ifndef CVF_TD_lazySound
 #define CVF_TD_lazySound
@@ -12137,6 +12156,13 @@ struct expValueFrame {
     BytecodeValue bv1;
 };
 
+struct explodIdx {
+    u32 gen;
+    Explod** ptr;
+    Slice_i32 ids;
+    Slice_i32 owner;
+};
+
 #ifndef CVF_BODY_Arr64_AnimationPtr
 #define CVF_BODY_Arr64_AnimationPtr
 struct Arr64_AnimationPtr { Animation* v[64]; };
@@ -12167,6 +12193,19 @@ struct ggpo_Player {
     ggpo_PlayerType PlayerType;
     int PlayerNum;
     ggpo_RemotePlayer Remote;
+};
+
+struct helperIdCount {
+    i32 id;
+    i32 n;
+};
+
+struct helperIdx {
+    u32 gen;
+    Char** ptr;
+    int n;
+    i32 total;
+    Slice_helperIdCount ids;
 };
 
 struct lazySound {
@@ -12984,6 +13023,10 @@ GO_SLICE_FUNCS(Slice_ggpo_Player, ggpo_Player)
 #ifndef CVF_FN_Slice_ggpo_PlayerHandle
 #define CVF_FN_Slice_ggpo_PlayerHandle
 GO_SLICE_FUNCS_A(Slice_ggpo_PlayerHandle, ggpo_PlayerHandle)
+#endif
+#ifndef CVF_FN_Slice_helperIdCount
+#define CVF_FN_Slice_helperIdCount
+GO_SLICE_FUNCS_A(Slice_helperIdCount, helperIdCount)
 #endif
 #ifndef CVF_FN_Slice_i16
 #define CVF_FN_Slice_i16

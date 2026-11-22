@@ -7634,7 +7634,7 @@ static void lambda_487(Env_lambda_487 *_env) {
     }
 }
 
-typedef struct Env_lambda_488 { Slice_pair_L4756dc pairs; } Env_lambda_488;
+typedef struct Env_lambda_488 { Slice_pair_Ldeb9e1 pairs; } Env_lambda_488;
 static bool lambda_488(Env_lambda_488 *_env, int i, int j) {
     if (_env->pairs.p[i].dist != _env->pairs.p[j].dist) {
         return (_env->pairs.p[i].dist < _env->pairs.p[j].dist);
@@ -7642,7 +7642,7 @@ static bool lambda_488(Env_lambda_488 *_env, int i, int j) {
     return (_env->pairs.p[i].pr->id < _env->pairs.p[j].pr->id);
 }
 
-typedef struct Env_lambda_489 { Slice_pair_L4756dc pairs; } Env_lambda_489;
+typedef struct Env_lambda_489 { Slice_pair_Ldeb9e1 pairs; } Env_lambda_489;
 static bool lambda_489(Env_lambda_489 *_env, int i, int j) {
     if (_env->pairs.p[i].dist != _env->pairs.p[j].dist) {
         return (_env->pairs.p[i].dist < _env->pairs.p[j].dist);
@@ -7688,7 +7688,7 @@ static Ret_f32__f32 lambda_492(Env_lambda_492 *_env, Char* char_, i32 box) {
     return (Ret_f32__f32){char_->CharSystemVar_.depthPlayer.v[0], char_->CharSystemVar_.depthPlayer.v[1]};
 }
 
-typedef struct Env_lambda_493 { Slice_pair_La8d612 pairs; } Env_lambda_493;
+typedef struct Env_lambda_493 { Slice_pair_L1c2276 pairs; } Env_lambda_493;
 static bool lambda_493(Env_lambda_493 *_env, int i, int j) {
     if (fn_Abs_f32(_env->pairs.p[i].dist) != fn_Abs_f32(_env->pairs.p[j].dist)) {
         return (fn_Abs_f32(_env->pairs.p[i].dist) < fn_Abs_f32(_env->pairs.p[j].dist));
@@ -7696,7 +7696,7 @@ static bool lambda_493(Env_lambda_493 *_env, int i, int j) {
     return (_env->pairs.p[i].ch->id < _env->pairs.p[j].ch->id);
 }
 
-typedef struct Env_lambda_494 { Slice_pair_La8d612 pairs; } Env_lambda_494;
+typedef struct Env_lambda_494 { Slice_pair_L1c2276 pairs; } Env_lambda_494;
 static bool lambda_494(Env_lambda_494 *_env, int i, int j) {
     if (fn_Abs_f32(_env->pairs.p[i].dist) != fn_Abs_f32(_env->pairs.p[j].dist)) {
         return (fn_Abs_f32(_env->pairs.p[i].dist) < fn_Abs_f32(_env->pairs.p[j].dist));
@@ -7704,7 +7704,7 @@ static bool lambda_494(Env_lambda_494 *_env, int i, int j) {
     return (_env->pairs.p[i].ch->id < _env->pairs.p[j].ch->id);
 }
 
-typedef struct Env_lambda_495 { Map_int_fontSpec_Lc61303 fntSpecs; } Env_lambda_495;
+typedef struct Env_lambda_495 { Map_int_fontSpec_L0419e0 fntSpecs; } Env_lambda_495;
 static void lambda_495(Env_lambda_495 *_env, IniSection is) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&is);
@@ -7728,7 +7728,7 @@ static void lambda_495(Env_lambda_495 *_env, IniSection is) {
                 }
                 int idx = ((int)fn_Atoi(go_substr(rest, 0, j)));
                 GoString tail = go_substr(rest, j, -1);
-                fontSpec_Lc61303 fs = Map_int_fontSpec_Lc61303_get(&_env->fntSpecs, idx, NULL);
+                fontSpec_L0419e0 fs = Map_int_fontSpec_L0419e0_get(&_env->fntSpecs, idx, NULL);
                 if (go_streq(tail, GOSTR(""))) {
                     fs.path = v;
                 } else {
@@ -7736,7 +7736,7 @@ static void lambda_495(Env_lambda_495 *_env, IniSection is) {
                         fs.height = ((i32)fn_Atoi(v));
                     }
                 }
-                Map_int_fontSpec_Lc61303_set(&_env->fntSpecs, idx, fs);
+                Map_int_fontSpec_L0419e0_set(&_env->fntSpecs, idx, fs);
             }
             _cont3:;
         }
@@ -8062,8 +8062,8 @@ static GoIface lambda_501(Env_lambda_501 *_env, GoString filename) {
     return err;
 }
 
-typedef struct Env_lambda_502 { CharGlobalInfo* gi; fontSpec_Lc61303 spec; int i; } Env_lambda_502;
-typedef struct Env_lambda_503 { CharGlobalInfo* gi; fontSpec_Lc61303 spec; int i; GoString filename; } Env_lambda_503;
+typedef struct Env_lambda_502 { CharGlobalInfo* gi; fontSpec_L0419e0 spec; int i; } Env_lambda_502;
+typedef struct Env_lambda_503 { CharGlobalInfo* gi; fontSpec_L0419e0 spec; int i; GoString filename; } Env_lambda_503;
 static void lambda_503(Env_lambda_503 *_env) {
     i32 h = -1;
     if (_env->spec.height != 0) {
@@ -87920,6 +87920,7 @@ bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
                 }
                 case 21U: {
                     h->helperId = BytecodeExp_evalI(exp_.p[0], c);
+                    fn_helperIdxChanged();
                     break;
                 }
                 case 22U: {
@@ -88020,7 +88021,7 @@ bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// ctrlSet.Run (bytecode.go:6626), 0 TODO
+// ctrlSet.Run (bytecode.go:6627), 0 TODO
 bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("CtrlSet"));
     if (crun == NULL) {
@@ -88052,7 +88053,7 @@ bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// runState.Run (bytecode.go:6652), 0 TODO
+// runState.Run (bytecode.go:6653), 0 TODO
 bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RunState"));
     if (crun == NULL) {
@@ -88092,7 +88093,7 @@ bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posSet.Run (bytecode.go:6687), 0 TODO
+// posSet.Run (bytecode.go:6688), 0 TODO
 bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosSet"));
     if (crun == NULL) {
@@ -88144,7 +88145,7 @@ bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posAdd.Run (bytecode.go:6724), 0 TODO
+// posAdd.Run (bytecode.go:6725), 0 TODO
 bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosAdd"));
     if (crun == NULL) {
@@ -88196,7 +88197,7 @@ bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velSet.Run (bytecode.go:6761), 0 TODO
+// velSet.Run (bytecode.go:6762), 0 TODO
 bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelSet"));
     if (crun == NULL) {
@@ -88236,7 +88237,7 @@ bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velAdd.Run (bytecode.go:6786), 0 TODO
+// velAdd.Run (bytecode.go:6787), 0 TODO
 bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelAdd"));
     if (crun == NULL) {
@@ -88276,7 +88277,7 @@ bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velMul.Run (bytecode.go:6811), 0 TODO
+// velMul.Run (bytecode.go:6812), 0 TODO
 bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelMul"));
     if (crun == NULL) {
@@ -88315,12 +88316,12 @@ bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isPalFXParam (bytecode.go:6832), 0 TODO
+// isPalFXParam (bytecode.go:6833), 0 TODO
 bool fn_isPalFXParam(u8 paramID) {
     return ((paramID >= 0U) && (paramID <= 10U));
 }
 
-// palFX.runSub (bytecode.go:6854), 0 TODO
+// palFX.runSub (bytecode.go:6855), 0 TODO
 void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -88417,7 +88418,7 @@ void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeEx
     }
 }
 
-// palFX.Run (bytecode.go:6925), 0 TODO
+// palFX.Run (bytecode.go:6926), 0 TODO
 bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("PalFX"));
     if (crun == NULL) {
@@ -88457,7 +88458,7 @@ bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// allPalFX.Run (bytecode.go:6962), 0 TODO
+// allPalFX.Run (bytecode.go:6963), 0 TODO
 bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     PalFX_clear(g_sys.allPalFX);
     {
@@ -88478,7 +88479,7 @@ bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bgPalFX.Run (bytecode.go:6981), 0 TODO
+// bgPalFX.Run (bytecode.go:6982), 0 TODO
 bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     i32 bgid = -1;
     int bgidx = -1;
@@ -88536,7 +88537,7 @@ bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.Run (bytecode.go:7103), 0 TODO
+// explod.Run (bytecode.go:7104), 0 TODO
 bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 115U, GOSTR("Explod"));
     if (crun == NULL) {
@@ -88550,6 +88551,7 @@ bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     if (e == NULL) {
         return false;
     }
+    fn_explodIdxChanged();
     e->id = 0;
     i32 shaderTime = -1;
     if ((Char_stWgi(c)->mugenver.v[0] == 1U) && (Char_stWgi(c)->mugenver.v[1] == 1U)) {
@@ -88602,6 +88604,7 @@ bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
                 }
                 case 46U: {
                     e->id = go_max_i32(0, BytecodeExp_evalI(exp_.p[0], c));
+                    fn_explodIdxChanged();
                     break;
                 }
                 case 47U: {
@@ -88973,7 +88976,7 @@ bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.parseInterpolation (bytecode.go:7410), 0 TODO
+// explod.parseInterpolation (bytecode.go:7413), 0 TODO
 bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_BytecodeExp exp_, PalFXDef* pfd) {
     {
         u8 _t1 = paramID;
@@ -89080,7 +89083,7 @@ bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_
     return true;
 }
 
-// modifyExplod.Run (bytecode.go:7490), 0 TODO
+// modifyExplod.Run (bytecode.go:7493), 0 TODO
 bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 115U, GOSTR("ModifyExplod"));
     if (crun == NULL) {
@@ -89205,7 +89208,7 @@ bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gameMakeAnim.Run (bytecode.go:8137), 0 TODO
+// gameMakeAnim.Run (bytecode.go:8140), 0 TODO
 bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("GameMakeAnim"));
     if (crun == NULL) {
@@ -89218,6 +89221,7 @@ bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     if (e == NULL) {
         return false;
     }
+    fn_explodIdxChanged();
     e->id = 0;
     e->layerno = 1;
     e->sprpriority = INT32_MIN;
@@ -89282,12 +89286,12 @@ bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isAfterImageParam (bytecode.go:8197), 0 TODO
+// isAfterImageParam (bytecode.go:8201), 0 TODO
 bool fn_isAfterImageParam(u8 paramID) {
     return ((paramID >= 11U) && (paramID <= 32U));
 }
 
-// afterImage.runSub (bytecode.go:8230), 0 TODO
+// afterImage.runSub (bytecode.go:8234), 0 TODO
 void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 paramID, Slice_BytecodeExp exp_) {
     if ((paramID < 26U) || (paramID > 32U)) {
         ai->needsetup = true;
@@ -89478,7 +89482,7 @@ void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 pa
     }
 }
 
-// afterImage.Run (bytecode.go:8379), 0 TODO
+// afterImage.Run (bytecode.go:8383), 0 TODO
 bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 33U, GOSTR("AfterImage"));
     if (crun == NULL) {
@@ -89513,7 +89517,7 @@ bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// afterImageTime.Run (bytecode.go:8418), 0 TODO
+// afterImageTime.Run (bytecode.go:8422), 0 TODO
 bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("AfterImageTime"));
     if (crun == NULL) {
@@ -89552,12 +89556,12 @@ bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isHitDefParam (bytecode.go:8444), 0 TODO
+// isHitDefParam (bytecode.go:8448), 0 TODO
 bool fn_isHitDefParam(u8 paramID) {
     return (((paramID >= 33U) && (paramID <= 153U)) || fn_isPalFXParam(paramID));
 }
 
-// hitDef.runSub (bytecode.go:8579), 0 TODO
+// hitDef.runSub (bytecode.go:8583), 0 TODO
 void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -90195,7 +90199,7 @@ void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp
     }
 }
 
-// hitDef.Run (bytecode.go:8968), 0 TODO
+// hitDef.Run (bytecode.go:8972), 0 TODO
 bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("HitDef"));
     if (crun == NULL) {
@@ -90229,7 +90233,7 @@ bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// reversalDef.Run (bytecode.go:9015), 0 TODO
+// reversalDef.Run (bytecode.go:9019), 0 TODO
 bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ReversalDef"));
     if (crun == NULL) {
@@ -90281,7 +90285,7 @@ bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// projectile.Run (bytecode.go:9108), 0 TODO
+// projectile.Run (bytecode.go:9112), 0 TODO
 bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 203U, GOSTR("Projectile"));
     if (crun == NULL) {
@@ -90669,7 +90673,7 @@ bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyHitDef.Run (bytecode.go:9392), 0 TODO
+// modifyHitDef.Run (bytecode.go:9396), 0 TODO
 bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("ModifyHitDef"));
     if (crun == NULL) {
@@ -90701,7 +90705,7 @@ bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReversalDef.Run (bytecode.go:9424), 0 TODO
+// modifyReversalDef.Run (bytecode.go:9428), 0 TODO
 bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ModifyReversalDef"));
     if (crun == NULL) {
@@ -90754,7 +90758,7 @@ bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyProjectile.Run (bytecode.go:9463), 0 TODO
+// modifyProjectile.Run (bytecode.go:9467), 0 TODO
 bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 203U, GOSTR("ModifyProjectile"));
     if (crun == NULL) {
@@ -90827,7 +90831,7 @@ bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// width.Run (bytecode.go:10604), 0 TODO
+// width.Run (bytecode.go:10608), 0 TODO
 bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Width"));
     if (crun == NULL) {
@@ -90886,7 +90890,7 @@ bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sprPriority.Run (bytecode.go:10652), 0 TODO
+// sprPriority.Run (bytecode.go:10656), 0 TODO
 bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("SprPriority"));
     if (crun == NULL) {
@@ -90925,7 +90929,7 @@ bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varSet.Run (bytecode.go:10685), 0 TODO
+// varSet.Run (bytecode.go:10689), 0 TODO
 bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarSet"));
     if (crun == NULL) {
@@ -90985,7 +90989,7 @@ bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// turn.Run (bytecode.go:10725), 0 TODO
+// turn.Run (bytecode.go:10729), 0 TODO
 bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Turn"));
     if (crun == NULL) {
@@ -91016,7 +91020,7 @@ bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetFacing.Run (bytecode.go:10751), 0 TODO
+// targetFacing.Run (bytecode.go:10755), 0 TODO
 bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetFacing"));
     if (crun == NULL) {
@@ -91064,7 +91068,7 @@ bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetBind.Run (bytecode.go:10788), 0 TODO
+// targetBind.Run (bytecode.go:10792), 0 TODO
 bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetBind"));
     if (crun == NULL) {
@@ -91126,7 +91130,7 @@ bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToTarget.Run (bytecode.go:10837), 0 TODO
+// bindToTarget.Run (bytecode.go:10841), 0 TODO
 bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("BindToTarget"));
     if (crun == NULL) {
@@ -91198,7 +91202,7 @@ bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetLifeAdd.Run (bytecode.go:10891), 0 TODO
+// targetLifeAdd.Run (bytecode.go:10895), 0 TODO
 bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("TargetLifeAdd"));
     if (crun == NULL) {
@@ -91270,7 +91274,7 @@ bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetState.Run (bytecode.go:10936), 0 TODO
+// targetState.Run (bytecode.go:10940), 0 TODO
 bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetState"));
     if (crun == NULL) {
@@ -91318,7 +91322,7 @@ bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelSet.Run (bytecode.go:10974), 0 TODO
+// targetVelSet.Run (bytecode.go:10978), 0 TODO
 bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelSet"));
     if (crun == NULL) {
@@ -91391,7 +91395,7 @@ bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelAdd.Run (bytecode.go:11030), 0 TODO
+// targetVelAdd.Run (bytecode.go:11034), 0 TODO
 bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelAdd"));
     if (crun == NULL) {
@@ -91464,7 +91468,7 @@ bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetPowerAdd.Run (bytecode.go:11084), 0 TODO
+// targetPowerAdd.Run (bytecode.go:11088), 0 TODO
 bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetPowerAdd"));
     if (crun == NULL) {
@@ -91512,7 +91516,7 @@ bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDrop.Run (bytecode.go:11119), 0 TODO
+// targetDrop.Run (bytecode.go:11123), 0 TODO
 bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("TargetDrop"));
     if (crun == NULL) {
@@ -91555,7 +91559,7 @@ bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeAdd.Run (bytecode.go:11152), 0 TODO
+// lifeAdd.Run (bytecode.go:11156), 0 TODO
 bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("LifeAdd"));
     if (crun == NULL) {
@@ -91603,7 +91607,7 @@ bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeSet.Run (bytecode.go:11187), 0 TODO
+// lifeSet.Run (bytecode.go:11191), 0 TODO
 bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("LifeSet"));
     if (crun == NULL) {
@@ -91634,7 +91638,7 @@ bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerAdd.Run (bytecode.go:11211), 0 TODO
+// powerAdd.Run (bytecode.go:11215), 0 TODO
 bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerAdd"));
     if (crun == NULL) {
@@ -91665,7 +91669,7 @@ bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerSet.Run (bytecode.go:11235), 0 TODO
+// powerSet.Run (bytecode.go:11239), 0 TODO
 bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerSet"));
     if (crun == NULL) {
@@ -91696,7 +91700,7 @@ bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitVelSet.Run (bytecode.go:11262), 0 TODO
+// hitVelSet.Run (bytecode.go:11266), 0 TODO
 bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("HitVelSet"));
     if (crun == NULL) {
@@ -91741,7 +91745,7 @@ bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// screenBound.Run (bytecode.go:11297), 0 TODO
+// screenBound.Run (bytecode.go:11301), 0 TODO
 bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ScreenBound"));
     if (crun == NULL) {
@@ -91787,7 +91791,7 @@ bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posFreeze.Run (bytecode.go:11335), 0 TODO
+// posFreeze.Run (bytecode.go:11339), 0 TODO
 bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PosFreeze"));
     if (crun == NULL) {
@@ -91820,7 +91824,7 @@ bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envShake.Run (bytecode.go:11367), 0 TODO
+// envShake.Run (bytecode.go:11371), 0 TODO
 bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     EnvShake_clear(&g_sys.SystemStateVars_.envShake);
     {
@@ -91878,7 +91882,7 @@ bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitOverride.Run (bytecode.go:11416), 0 TODO
+// hitOverride.Run (bytecode.go:11420), 0 TODO
 bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("HitOverride"));
     if (crun == NULL) {
@@ -91958,7 +91962,7 @@ bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// pause.Run (bytecode.go:11487), 0 TODO
+// pause.Run (bytecode.go:11491), 0 TODO
 bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("Pause"));
     if (crun == NULL) {
@@ -92008,7 +92012,7 @@ bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// superPause.Run (bytecode.go:11531), 0 TODO
+// superPause.Run (bytecode.go:11535), 0 TODO
 bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 12U, GOSTR("SuperPause"));
     if (crun == NULL) {
@@ -92135,7 +92139,7 @@ bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// trans.Run (bytecode.go:11632), 0 TODO
+// trans.Run (bytecode.go:11636), 0 TODO
 bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Trans"));
     if (crun == NULL) {
@@ -92176,7 +92180,7 @@ bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playerPush.Run (bytecode.go:11683), 0 TODO
+// playerPush.Run (bytecode.go:11687), 0 TODO
 bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PlayerPush"));
     if (crun == NULL) {
@@ -92216,7 +92220,7 @@ bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stateTypeValue (bytecode.go:11715), 0 TODO
+// stateTypeValue (bytecode.go:11719), 0 TODO
 Ret_i32__bool fn_stateTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92252,7 +92256,7 @@ Ret_i32__bool fn_stateTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// moveTypeValue (bytecode.go:11734), 0 TODO
+// moveTypeValue (bytecode.go:11738), 0 TODO
 Ret_i32__bool fn_moveTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92284,7 +92288,7 @@ Ret_i32__bool fn_moveTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// physicsTypeValue (bytecode.go:11751), 0 TODO
+// physicsTypeValue (bytecode.go:11755), 0 TODO
 Ret_i32__bool fn_physicsTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92320,7 +92324,7 @@ Ret_i32__bool fn_physicsTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// evalTypeExp (bytecode.go:11772), 0 TODO
+// evalTypeExp (bytecode.go:11776), 0 TODO
 Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoFunc conv) {
     if (exp_.len < 2) {
         return (Ret_i32__bool){BytecodeExp_evalI(exp_.p[0], c), true};
@@ -92328,7 +92332,7 @@ Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoF
     return fn_evalTypeString(exp_.p[0], c, name, conv);
 }
 
-// evalTypeString (bytecode.go:11779), 0 TODO
+// evalTypeString (bytecode.go:11783), 0 TODO
 Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc conv) {
     BytecodeValue v = BytecodeExp_run(be, c);
     if (v.vtype != 4) {
@@ -92344,7 +92348,7 @@ Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc c
     return (Ret_i32__bool){t, ok};
 }
 
-// stateTypeSet.Run (bytecode.go:11792), 0 TODO
+// stateTypeSet.Run (bytecode.go:11796), 0 TODO
 bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("StateTypeSet"));
     if (crun == NULL) {
@@ -92410,7 +92414,7 @@ bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleDraw.Run (bytecode.go:11838), 0 TODO
+// angleDraw.Run (bytecode.go:11842), 0 TODO
 bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AngleDraw"));
     if (crun == NULL) {
@@ -92464,7 +92468,7 @@ bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleSet.Run (bytecode.go:11880), 0 TODO
+// angleSet.Run (bytecode.go:11884), 0 TODO
 bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleSet"));
     if (crun == NULL) {
@@ -92509,7 +92513,7 @@ bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleAdd.Run (bytecode.go:11916), 0 TODO
+// angleAdd.Run (bytecode.go:11920), 0 TODO
 bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleAdd"));
     if (crun == NULL) {
@@ -92548,7 +92552,7 @@ bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleMul.Run (bytecode.go:11946), 0 TODO
+// angleMul.Run (bytecode.go:11950), 0 TODO
 bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleMul"));
     if (crun == NULL) {
@@ -92593,7 +92597,7 @@ bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envColor.Run (bytecode.go:11981), 0 TODO
+// envColor.Run (bytecode.go:11985), 0 TODO
 bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     g_sys.SystemStateVars_.envcol = (Arr3_i32){{255, 255, 255}};
     g_sys.SystemStateVars_.envcol_time = 1;
@@ -92633,7 +92637,7 @@ bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// displayToClipboard.Run (bytecode.go:12010), 0 TODO
+// displayToClipboard.Run (bytecode.go:12014), 0 TODO
 bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DisplayToClipboard"));
     if (crun == NULL) {
@@ -92683,7 +92687,7 @@ bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// appendToClipboard.Run (bytecode.go:12041), 0 TODO
+// appendToClipboard.Run (bytecode.go:12045), 0 TODO
 bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AppendToClipBoard"));
     if (crun == NULL) {
@@ -92732,7 +92736,7 @@ bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// clearClipboard.Run (bytecode.go:12076), 0 TODO
+// clearClipboard.Run (bytecode.go:12080), 0 TODO
 bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ClearClipboard"));
     if (crun == NULL) {
@@ -92763,7 +92767,7 @@ bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// makeDust.Run (bytecode.go:12102), 0 TODO
+// makeDust.Run (bytecode.go:12106), 0 TODO
 bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MakeDust"));
     if (crun == NULL) {
@@ -92829,7 +92833,7 @@ bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackDist.Run (bytecode.go:12164), 0 TODO
+// attackDist.Run (bytecode.go:12168), 0 TODO
 bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AttackDist"));
     if (crun == NULL) {
@@ -92878,7 +92882,7 @@ bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackMulSet.Run (bytecode.go:12210), 0 TODO
+// attackMulSet.Run (bytecode.go:12214), 0 TODO
 bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AttackMulSet"));
     if (crun == NULL) {
@@ -92929,7 +92933,7 @@ bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// defenceMulSet.Run (bytecode.go:12248), 0 TODO
+// defenceMulSet.Run (bytecode.go:12252), 0 TODO
 bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("DefenceMulSet"));
     if (crun == NULL) {
@@ -92981,7 +92985,7 @@ bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// fallEnvShake.Run (bytecode.go:12297), 0 TODO
+// fallEnvShake.Run (bytecode.go:12301), 0 TODO
 bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("FallEnvShake"));
     if (crun == NULL) {
@@ -93017,7 +93021,7 @@ bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallDamage.Run (bytecode.go:12338), 0 TODO
+// hitFallDamage.Run (bytecode.go:12342), 0 TODO
 bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallDamage"));
     if (crun == NULL) {
@@ -93048,7 +93052,7 @@ bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallVel.Run (bytecode.go:12362), 0 TODO
+// hitFallVel.Run (bytecode.go:12366), 0 TODO
 bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallVel"));
     if (crun == NULL) {
@@ -93079,7 +93083,7 @@ bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallSet.Run (bytecode.go:12389), 0 TODO
+// hitFallSet.Run (bytecode.go:12393), 0 TODO
 bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("HitFallSet"));
     if (crun == NULL) {
@@ -93137,7 +93141,7 @@ bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRangeSet.Run (bytecode.go:12428), 0 TODO
+// varRangeSet.Run (bytecode.go:12432), 0 TODO
 bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarRangeSet"));
     if (crun == NULL) {
@@ -93184,7 +93188,7 @@ bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapPal.Run (bytecode.go:12464), 0 TODO
+// remapPal.Run (bytecode.go:12468), 0 TODO
 bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemapPal"));
     if (crun == NULL) {
@@ -93228,7 +93232,7 @@ bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stopSnd.Run (bytecode.go:12499), 0 TODO
+// stopSnd.Run (bytecode.go:12503), 0 TODO
 bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("StopSnd"));
     if (crun == NULL) {
@@ -93271,7 +93275,7 @@ bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sndPan.Run (bytecode.go:12534), 0 TODO
+// sndPan.Run (bytecode.go:12538), 0 TODO
 bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("SndPan"));
     if (crun == NULL) {
@@ -93330,7 +93334,7 @@ bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRandom.Run (bytecode.go:12572), 0 TODO
+// varRandom.Run (bytecode.go:12576), 0 TODO
 bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("VarRandom"));
     if (crun == NULL) {
@@ -93378,7 +93382,7 @@ bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gravity.Run (bytecode.go:12604), 0 TODO
+// gravity.Run (bytecode.go:12608), 0 TODO
 bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Gravity"));
     if (crun == NULL) {
@@ -93409,7 +93413,7 @@ bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToParent.Run (bytecode.go:12630), 0 TODO
+// bindToParent.Run (bytecode.go:12634), 0 TODO
 bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToParent"));
     if (crun == NULL) {
@@ -93477,7 +93481,7 @@ bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToRoot.Run (bytecode.go:12678), 0 TODO
+// bindToRoot.Run (bytecode.go:12682), 0 TODO
 bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToRoot"));
     if (crun == NULL) {
@@ -93545,7 +93549,7 @@ bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeExplod.Run (bytecode.go:12732), 0 TODO
+// removeExplod.Run (bytecode.go:12736), 0 TODO
 bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveExplod"));
     if (crun == NULL) {
@@ -93583,7 +93587,7 @@ bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explodBindTime.Run (bytecode.go:12762), 0 TODO
+// explodBindTime.Run (bytecode.go:12766), 0 TODO
 bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ExplodBindTime"));
     if (crun == NULL) {
@@ -93621,7 +93625,7 @@ bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// moveHitReset.Run (bytecode.go:12790), 0 TODO
+// moveHitReset.Run (bytecode.go:12794), 0 TODO
 bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MoveHitReset"));
     if (crun == NULL) {
@@ -93652,7 +93656,7 @@ bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitAdd.Run (bytecode.go:12814), 0 TODO
+// hitAdd.Run (bytecode.go:12818), 0 TODO
 bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitAdd"));
     if (crun == NULL) {
@@ -93683,7 +93687,7 @@ bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// offset.Run (bytecode.go:12839), 0 TODO
+// offset.Run (bytecode.go:12843), 0 TODO
 bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("Offset"));
     if (crun == NULL) {
@@ -93718,7 +93722,7 @@ bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// victoryQuote.Run (bytecode.go:12865), 0 TODO
+// victoryQuote.Run (bytecode.go:12869), 0 TODO
 bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("VictoryQuote"));
     if (crun == NULL) {
@@ -93751,7 +93755,7 @@ bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// zoom.Run (bytecode.go:12896), 0 TODO
+// zoom.Run (bytecode.go:12900), 0 TODO
 bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     Arr2_f32 pos = (Arr2_f32){{0x0p+00f, 0x0p+00f}};
     i32 t = 1;
@@ -93831,7 +93835,7 @@ bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// forceFeedback.Run (bytecode.go:12971), 0 TODO
+// forceFeedback.Run (bytecode.go:12975), 0 TODO
 bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("ForceFeedback"));
     if (crun == NULL) {
@@ -93951,7 +93955,7 @@ bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertCommand.Run (bytecode.go:13078), 0 TODO
+// assertCommand.Run (bytecode.go:13082), 0 TODO
 bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AssertCommand"));
     if (crun == NULL) {
@@ -93989,7 +93993,7 @@ bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertAnalogVector.Run (bytecode.go:13112), 0 TODO
+// assertAnalogVector.Run (bytecode.go:13116), 0 TODO
 bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("AssertAnalogVector"));
     if (crun == NULL) {
@@ -94048,7 +94052,7 @@ bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertInput.Run (bytecode.go:13155), 0 TODO
+// assertInput.Run (bytecode.go:13159), 0 TODO
 bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AssertInput"));
     if (crun == NULL) {
@@ -94095,7 +94099,7 @@ bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeMovelist.Run (bytecode.go:13191), 0 TODO
+// changeMovelist.Run (bytecode.go:13195), 0 TODO
 bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ChangeMovelist"));
     if (crun == NULL) {
@@ -94136,7 +94140,7 @@ bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dialogue.Run (bytecode.go:13223), 0 TODO
+// dialogue.Run (bytecode.go:13227), 0 TODO
 bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     if (!g_sys.motif.di.enabled) {
         return false;
@@ -94184,7 +94188,7 @@ bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsAdd.Run (bytecode.go:13261), 0 TODO
+// dizzyPointsAdd.Run (bytecode.go:13265), 0 TODO
 bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DizzyPointsAdd"));
     if (crun == NULL) {
@@ -94220,7 +94224,7 @@ bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsSet.Run (bytecode.go:13288), 0 TODO
+// dizzyPointsSet.Run (bytecode.go:13292), 0 TODO
 bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzyPointsSet"));
     if (crun == NULL) {
@@ -94251,7 +94255,7 @@ bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzySet.Run (bytecode.go:13312), 0 TODO
+// dizzySet.Run (bytecode.go:13316), 0 TODO
 bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzySet"));
     if (crun == NULL) {
@@ -94283,7 +94287,7 @@ bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardBreakSet.Run (bytecode.go:13337), 0 TODO
+// guardBreakSet.Run (bytecode.go:13341), 0 TODO
 bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardBreakSet"));
     if (crun == NULL) {
@@ -94315,7 +94319,7 @@ bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsAdd.Run (bytecode.go:13363), 0 TODO
+// guardPointsAdd.Run (bytecode.go:13367), 0 TODO
 bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("GuardPointsAdd"));
     if (crun == NULL) {
@@ -94351,7 +94355,7 @@ bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsSet.Run (bytecode.go:13390), 0 TODO
+// guardPointsSet.Run (bytecode.go:13394), 0 TODO
 bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardPointsSet"));
     if (crun == NULL) {
@@ -94382,7 +94386,7 @@ bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifebarAction.Run (bytecode.go:13425), 0 TODO
+// lifebarAction.Run (bytecode.go:13429), 0 TODO
 bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 23U, GOSTR("LifebarAction"));
     if (crun == NULL) {
@@ -94496,7 +94500,7 @@ bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// loadState.Run (bytecode.go:13509), 0 TODO
+// loadState.Run (bytecode.go:13513), 0 TODO
 bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -94523,7 +94527,7 @@ bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapSet.Run (bytecode.go:13532), 0 TODO
+// mapSet.Run (bytecode.go:13536), 0 TODO
 bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MapSet"));
     if (crun == NULL) {
@@ -94576,7 +94580,7 @@ bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// matchRestart.Run (bytecode.go:13589), 0 TODO
+// matchRestart.Run (bytecode.go:13593), 0 TODO
 bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     GoString s = (GoString){0};
     bool reloadFlag = false;
@@ -94737,7 +94741,7 @@ bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// printToConsole.Run (bytecode.go:13687), 0 TODO
+// printToConsole.Run (bytecode.go:13691), 0 TODO
 bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     Slice_GoIface params = (Slice_GoIface){0};
     {
@@ -94776,7 +94780,7 @@ bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeAdd.Run (bytecode.go:13713), 0 TODO
+// redLifeAdd.Run (bytecode.go:13717), 0 TODO
 bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RedLifeAdd"));
     if (crun == NULL) {
@@ -94812,7 +94816,7 @@ bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeSet.Run (bytecode.go:13740), 0 TODO
+// redLifeSet.Run (bytecode.go:13744), 0 TODO
 bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RedLifeSet"));
     if (crun == NULL) {
@@ -94843,7 +94847,7 @@ bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapSprite.Run (bytecode.go:13767), 0 TODO
+// remapSprite.Run (bytecode.go:13771), 0 TODO
 bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("RemapSprite"));
     if (crun == NULL) {
@@ -94901,7 +94905,7 @@ bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeAdd.Run (bytecode.go:13817), 0 TODO
+// roundTimeAdd.Run (bytecode.go:13821), 0 TODO
 bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -94930,7 +94934,7 @@ bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeSet.Run (bytecode.go:13838), 0 TODO
+// roundTimeSet.Run (bytecode.go:13842), 0 TODO
 bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -94959,7 +94963,7 @@ bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// saveFile.Run (bytecode.go:13862), 0 TODO
+// saveFile.Run (bytecode.go:13866), 0 TODO
 bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -95114,7 +95118,7 @@ bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// loadFile.Run (bytecode.go:13949), 0 TODO
+// loadFile.Run (bytecode.go:13953), 0 TODO
 bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -95317,7 +95321,7 @@ bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// saveState.Run (bytecode.go:14075), 0 TODO
+// saveState.Run (bytecode.go:14079), 0 TODO
 bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -95344,7 +95348,7 @@ bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// scoreAdd.Run (bytecode.go:14095), 0 TODO
+// scoreAdd.Run (bytecode.go:14099), 0 TODO
 bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ScoreAdd"));
     if (crun == NULL) {
@@ -95375,7 +95379,7 @@ bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shaderSet.Run (bytecode.go:14129), 0 TODO
+// shaderSet.Run (bytecode.go:14133), 0 TODO
 bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("ShaderSet"));
     if (crun == NULL) {
@@ -95487,7 +95491,7 @@ bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// storyboard.Run (bytecode.go:14216), 0 TODO
+// storyboard.Run (bytecode.go:14220), 0 TODO
 bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("Storyboard"));
     if (crun == NULL) {
@@ -95597,7 +95601,7 @@ bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStoryboard.Run (bytecode.go:14288), 0 TODO
+// modifyStoryboard.Run (bytecode.go:14292), 0 TODO
 bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("ModifyStoryboard"));
     if (crun == NULL) {
@@ -95612,7 +95616,7 @@ bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeStoryboard.Run (bytecode.go:14381), 0 TODO
+// removeStoryboard.Run (bytecode.go:14385), 0 TODO
 bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RemoveStoryboard"));
     if (crun == NULL) {
@@ -95639,7 +95643,7 @@ bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl.Run (bytecode.go:14426), 0 TODO
+// modifyBGCtrl.Run (bytecode.go:14430), 0 TODO
 bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -95856,7 +95860,7 @@ bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl3d.Run (bytecode.go:14565), 0 TODO
+// modifyBGCtrl3d.Run (bytecode.go:14569), 0 TODO
 bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -95909,7 +95913,7 @@ bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBgm.Run (bytecode.go:14609), 0 TODO
+// modifyBgm.Run (bytecode.go:14613), 0 TODO
 bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     if (g_sys.bgm.ctrl == NULL) {
         return false;
@@ -96027,7 +96031,7 @@ bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifySnd.Run (bytecode.go:14710), 0 TODO
+// modifySnd.Run (bytecode.go:14714), 0 TODO
 bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 14U, GOSTR("ModifySnd"));
     if (crun == NULL) {
@@ -96229,7 +96233,7 @@ bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playBgm.Run (bytecode.go:14855), 0 TODO
+// playBgm.Run (bytecode.go:14859), 0 TODO
 bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("PlayBGM"));
     if (crun == NULL) {
@@ -96409,7 +96413,7 @@ bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDizzyPointsAdd.Run (bytecode.go:14943), 0 TODO
+// targetDizzyPointsAdd.Run (bytecode.go:14947), 0 TODO
 bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetDizzyPointsAdd"));
     if (crun == NULL) {
@@ -96462,7 +96466,7 @@ bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetGuardPointsAdd.Run (bytecode.go:14983), 0 TODO
+// targetGuardPointsAdd.Run (bytecode.go:14987), 0 TODO
 bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetGuardPointsAdd"));
     if (crun == NULL) {
@@ -96515,7 +96519,7 @@ bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetRedLifeAdd.Run (bytecode.go:15023), 0 TODO
+// targetRedLifeAdd.Run (bytecode.go:15027), 0 TODO
 bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetRedLifeAdd"));
     if (crun == NULL) {
@@ -96571,7 +96575,7 @@ bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetScoreAdd.Run (bytecode.go:15066), 0 TODO
+// targetScoreAdd.Run (bytecode.go:15070), 0 TODO
 bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetScoreAdd"));
     if (crun == NULL) {
@@ -96619,7 +96623,7 @@ bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// text.Run (bytecode.go:15133), 0 TODO
+// text.Run (bytecode.go:15137), 0 TODO
 bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 44U, GOSTR("Text"));
     if (crun == NULL) {
@@ -96957,7 +96961,7 @@ bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyText.Run (bytecode.go:15371), 0 TODO
+// modifyText.Run (bytecode.go:15375), 0 TODO
 bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 44U, GOSTR("ModifyText"));
     if (crun == NULL) {
@@ -97016,7 +97020,7 @@ bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeText.Run (bytecode.go:15703), 0 TODO
+// removeText.Run (bytecode.go:15707), 0 TODO
 bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveText"));
     if (crun == NULL) {
@@ -97054,7 +97058,7 @@ bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// createPlatform.Run (bytecode.go:15742), 0 TODO
+// createPlatform.Run (bytecode.go:15746), 0 TODO
 bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("CreatePlatform"));
     if (crun == NULL) {
@@ -97120,7 +97124,7 @@ bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageVar.Run (bytecode.go:15894), 0 TODO
+// modifyStageVar.Run (bytecode.go:15898), 0 TODO
 bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     Stage* s = g_sys.stage;
     bool shouldResetCamera = false;
@@ -97620,7 +97624,7 @@ bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// cameraCtrl.Run (bytecode.go:16210), 0 TODO
+// cameraCtrl.Run (bytecode.go:16214), 0 TODO
 bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -97666,7 +97670,7 @@ bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// height.Run (bytecode.go:16242), 0 TODO
+// height.Run (bytecode.go:16246), 0 TODO
 bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Height"));
     if (crun == NULL) {
@@ -97704,7 +97708,7 @@ bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depth.Run (bytecode.go:16276), 0 TODO
+// depth.Run (bytecode.go:16280), 0 TODO
 bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Depth"));
     if (crun == NULL) {
@@ -97763,7 +97767,7 @@ bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depthBound.Run (bytecode.go:16324), 0 TODO
+// depthBound.Run (bytecode.go:16328), 0 TODO
 bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DepthBound"));
     if (crun == NULL) {
@@ -97802,7 +97806,7 @@ bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyPlayer.Run (bytecode.go:16379), 0 TODO
+// modifyPlayer.Run (bytecode.go:16383), 0 TODO
 bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 21U, GOSTR("ModifyPlayer"));
     if (crun == NULL) {
@@ -97889,6 +97893,7 @@ bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
                 case 8U: {
                     if (crun->helperIndex != 0) {
                         i32 id = BytecodeExp_evalI(exp_.p[0], c);
+                        fn_helperIdxChanged();
                         if (id >= 0) {
                             crun->helperId = id;
                         } else {
@@ -97963,7 +97968,7 @@ bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// getHitVarSet.Run (bytecode.go:16541), 0 TODO
+// getHitVarSet.Run (bytecode.go:16546), 0 TODO
 bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 48U, GOSTR("GetHitVarSet"));
     if (crun == NULL) {
@@ -98179,7 +98184,7 @@ bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// groundLevelOffset.Run (bytecode.go:16659), 0 TODO
+// groundLevelOffset.Run (bytecode.go:16664), 0 TODO
 bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GroundLevelOffset"));
     if (crun == NULL) {
@@ -98211,7 +98216,7 @@ bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetAdd.Run (bytecode.go:16685), 0 TODO
+// targetAdd.Run (bytecode.go:16690), 0 TODO
 bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("TargetAdd"));
     if (crun == NULL) {
@@ -98244,7 +98249,7 @@ bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformClsn.Run (bytecode.go:16717), 0 TODO
+// transformClsn.Run (bytecode.go:16722), 0 TODO
 bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TransformClsn"));
     if (crun == NULL) {
@@ -98330,7 +98335,7 @@ bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformSprite.Run (bytecode.go:16788), 0 TODO
+// transformSprite.Run (bytecode.go:16793), 0 TODO
 bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TransformSprite"));
     if (crun == NULL) {
@@ -98381,7 +98386,7 @@ bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageBG.Run (bytecode.go:16852), 0 TODO
+// modifyStageBG.Run (bytecode.go:16857), 0 TODO
 bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     i32 bgid = -1;
     int bgidx = -1;
@@ -98435,7 +98440,7 @@ bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyShadow.Run (bytecode.go:17087), 0 TODO
+// modifyShadow.Run (bytecode.go:17092), 0 TODO
 bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyShadow"));
     if (crun == NULL) {
@@ -98634,7 +98639,7 @@ bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReflection.Run (bytecode.go:17248), 0 TODO
+// modifyReflection.Run (bytecode.go:17253), 0 TODO
 bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyReflection"));
     if (crun == NULL) {
@@ -98833,7 +98838,7 @@ bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shiftInput.Run (bytecode.go:17385), 0 TODO
+// shiftInput.Run (bytecode.go:17390), 0 TODO
 bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ShiftInput"));
     if (crun == NULL) {
@@ -98888,7 +98893,7 @@ bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// overrideClsn.Run (bytecode.go:17435), 0 TODO
+// overrideClsn.Run (bytecode.go:17440), 0 TODO
 bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("OverrideClsn"));
     if (crun == NULL) {
@@ -98968,7 +98973,7 @@ bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapReset.Run (bytecode.go:17505), 0 TODO
+// mapReset.Run (bytecode.go:17510), 0 TODO
 bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MapReset"));
     if (crun == NULL) {
@@ -99002,13 +99007,13 @@ bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// newStateBytecode (bytecode.go:17543), 0 TODO
+// newStateBytecode (bytecode.go:17548), 0 TODO
 StateBytecode* fn_newStateBytecode(int pn) {
     StateBytecode* sb = go_box(StateBytecode, (StateBytecode){.stateType = 1, .moveType = 32768, .physics = 16, .playerNo = pn, .block = (*fn_newStateBlock())});
     return sb;
 }
 
-// StateBytecode.init (bytecode.go:17554), 0 TODO
+// StateBytecode.init (bytecode.go:17559), 0 TODO
 void StateBytecode_init(StateBytecode* sb, Char* c) {
     g_sys.workingState = sb;
     StateType _t1 = sb->stateType;
@@ -99069,7 +99074,7 @@ void StateBytecode_init(StateBytecode* sb, Char* c) {
     stateDef_Run(sb->stateDef, c);
 }
 
-// StateBytecode.run (bytecode.go:17610), 0 TODO
+// StateBytecode.run (bytecode.go:17615), 0 TODO
 bool StateBytecode_run(StateBytecode* sb, Char* c) {
     bool changeState = {0};
     Slice_i32 _t1 = sb->ctrlsps;
@@ -99100,7 +99105,7 @@ bool StateBytecode_run(StateBytecode* sb, Char* c) {
     return changeState;
 }
 
-// BytecodeExp.pushTrigger (bytecode.go:17636), 0 TODO
+// BytecodeExp.pushTrigger (bytecode.go:17641), 0 TODO
 void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     {
         OpCode _t1 = t;
@@ -99189,7 +99194,7 @@ void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     }
 }
 
-// BytecodeExp.cmpConst (bytecode.go:17682), 0 TODO
+// BytecodeExp.cmpConst (bytecode.go:17687), 0 TODO
 void BytecodeExp_cmpConst(BytecodeExp be, OpCode cmp, BytecodeValue k) {
     {
         OpCode _t1 = cmp;
@@ -100675,11 +100680,13 @@ Explod* fn_newExplod(void) {
 
 // Explod.clear (char.go:1878), 0 TODO
 void Explod_clear(Explod* e) {
+    fn_explodIdxChanged();
     (*e) = (Explod){0};
 }
 
-// Explod.initFromChar (char.go:1883), 0 TODO
+// Explod.initFromChar (char.go:1884), 0 TODO
 Explod* Explod_initFromChar(Explod* e, Char* c) {
+    fn_explodIdxChanged();
     (*e) = (Explod){.id = -1, .playerno = c->playerNo, .ownerId = c->id, .animPN = c->playerNo, .spritePN = c->playerNo, .layerno = c->CharSystemVar_.layerNo, .palfx = Char_getPalfx(c), .palfxdef = fn_palFXDefDefault(), .bindtime = 1, .scale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .removetime = -2, .postype = 0, .space = 0, .relativef = 0x1p+00f, .facing = 0x1p+00f, .vfacing = 0x1p+00f, .localscl = c->localscl, .baselocalscl = c->baselocalscl, .projection = 0, .window = (Arr4_f32){{0x0p+00f, 0x0p+00f, 0x0p+00f, 0x0p+00f}}, .animelem = 1, .animelemtime = 0, .trans = 4, .alpha = (Arr2_i32){{-1, 0}}, .bindId = -2, .syncId = -1, .syncParams = true, .syncLayer = 0, .ignorehitpause = true, .interpolate_scale = (Arr4_f32){{0x1p+00f, 0x1p+00f, 0x0p+00f, 0x0p+00f}}, .friction = (Arr3_f32){{0x1p+00f, 0x1p+00f, 0x1p+00f}}, .remappal = (Arr2_i32){{-1, 0}}, .timestamp = g_sys.SystemStateVars_.matchTime, .reflection = -1};
     if ((((Char_stWgi(c)->ikemenver.v[0] == 0U) && (Char_stWgi(c)->ikemenver.v[1] == 0U)) && (Char_stWgi(c)->mugenver.v[0] == 1U)) && (Char_stWgi(c)->mugenver.v[1] == 1U)) {
         e->projection = 1;
@@ -100687,17 +100694,17 @@ Explod* Explod_initFromChar(Explod* e, Char* c) {
     return e;
 }
 
-// Explod.root (char.go:1931), 0 TODO
+// Explod.root (char.go:1933), 0 TODO
 Char* Explod_root(Explod* e) {
     return g_sys.chars.v[e->playerno].p[0];
 }
 
-// Explod.parent (char.go:1935), 0 TODO
+// Explod.parent (char.go:1937), 0 TODO
 Char* Explod_parent(Explod* e) {
     return System_playerID(&g_sys, e->ownerId);
 }
 
-// Explod.setAllPosX (char.go:1939), 0 TODO
+// Explod.setAllPosX (char.go:1941), 0 TODO
 void Explod_setAllPosX(Explod* e, f32 x) {
     f32 _t1 = x;
     f32 _t2 = x;
@@ -100707,7 +100714,7 @@ void Explod_setAllPosX(Explod* e, f32 x) {
     e->newPos.v[0] = _t3;
 }
 
-// Explod.setAllPosY (char.go:1943), 0 TODO
+// Explod.setAllPosY (char.go:1945), 0 TODO
 void Explod_setAllPosY(Explod* e, f32 y) {
     f32 _t1 = y;
     f32 _t2 = y;
@@ -100717,7 +100724,7 @@ void Explod_setAllPosY(Explod* e, f32 y) {
     e->newPos.v[1] = _t3;
 }
 
-// Explod.setAllPosZ (char.go:1947), 0 TODO
+// Explod.setAllPosZ (char.go:1949), 0 TODO
 void Explod_setAllPosZ(Explod* e, f32 z) {
     f32 _t1 = z;
     f32 _t2 = z;
@@ -100727,7 +100734,7 @@ void Explod_setAllPosZ(Explod* e, f32 z) {
     e->newPos.v[2] = _t3;
 }
 
-// Explod.setBind (char.go:1951), 0 TODO
+// Explod.setBind (char.go:1953), 0 TODO
 void Explod_setBind(Explod* e, i32 bId) {
     if ((e->space == 2) && (((e->postype == 0) || (e->postype == 1)))) {
         return;
@@ -100735,7 +100742,7 @@ void Explod_setBind(Explod* e, i32 bId) {
     e->bindId = bId;
 }
 
-// Explod.setPos (char.go:1959), 0 TODO
+// Explod.setPos (char.go:1961), 0 TODO
 void Explod_setPos(Explod* e, Char* c) {
     GoFunc pPos = ((GoFunc){(void *)lambda_485, &(Env_lambda_485){e}});
     GoFunc lPos = ((GoFunc){(void *)lambda_486, &(Env_lambda_486){e}});
@@ -100806,12 +100813,12 @@ void Explod_setPos(Explod* e, Char* c) {
     }
 }
 
-// Explod.matchId (char.go:2041), 0 TODO
+// Explod.matchId (char.go:2043), 0 TODO
 bool Explod_matchId(Explod* e, i32 eid, i32 pid) {
     return (((e->id >= 0) && (e->ownerId == pid)) && (((eid < 0) || (e->id == eid))));
 }
 
-// Explod.setAnim (char.go:2045), 0 TODO
+// Explod.setAnim (char.go:2047), 0 TODO
 void Explod_setAnim(Explod* e) {
     Char* c = Explod_parent(e);
     if (c == NULL) {
@@ -100853,7 +100860,7 @@ void Explod_setAnim(Explod* e) {
     }
 }
 
-// Explod.setAnimElem (char.go:2091), 0 TODO
+// Explod.setAnimElem (char.go:2093), 0 TODO
 void Explod_setAnimElem(Explod* e) {
     if (e->anim != NULL) {
         if ((e->animelem < 1) || (((int)e->animelem) > e->anim->frames.len)) {
@@ -100869,7 +100876,7 @@ void Explod_setAnimElem(Explod* e) {
     }
 }
 
-// Explod.pauseStatus (char.go:2109), 0 TODO
+// Explod.pauseStatus (char.go:2111), 0 TODO
 bool Explod_pauseStatus(Explod* e) {
     bool paused = false;
     if (g_sys.SystemStateVars_.supertime > 0) {
@@ -100892,8 +100899,9 @@ bool Explod_pauseStatus(Explod* e) {
     return (!act);
 }
 
-// Explod.flagForRemoval (char.go:2134), 0 TODO
+// Explod.flagForRemoval (char.go:2136), 0 TODO
 void Explod_flagForRemoval(Explod* e) {
+    fn_explodIdxChanged();
     e->id = INT32_MIN;
     if ((true && (e->anim != NULL)) && (e->spareAnim == NULL)) {
         e->spareAnim = e->anim;
@@ -100901,7 +100909,7 @@ void Explod_flagForRemoval(Explod* e) {
     e->anim = NULL;
 }
 
-// Explod.update (char.go:2143), 0 TODO
+// Explod.update (char.go:2146), 0 TODO
 void Explod_update(Explod* e) {
     if ((e->id == INT32_MIN) || (e->anim == NULL)) {
         Explod_flagForRemoval(e);
@@ -101071,7 +101079,7 @@ void Explod_update(Explod* e) {
     }
 }
 
-// Explod.cueDraw (char.go:2370), 0 TODO
+// Explod.cueDraw (char.go:2373), 0 TODO
 void Explod_cueDraw(Explod* e) {
     if (e->anim == NULL) {
         return;
@@ -101196,7 +101204,7 @@ void Explod_cueDraw(Explod* e) {
     }
 }
 
-// Explod.stepInterpolation (char.go:2544), 0 TODO
+// Explod.stepInterpolation (char.go:2547), 0 TODO
 void Explod_stepInterpolation(Explod* e) {
     if (e->interpolate_time.v[0] <= 0) {
         return;
@@ -101235,7 +101243,7 @@ void Explod_stepInterpolation(Explod* e) {
     }
 }
 
-// Explod.resetInterpolation (char.go:2586), 0 TODO
+// Explod.resetInterpolation (char.go:2589), 0 TODO
 void Explod_resetInterpolation(Explod* e, PalFXDef* pfd) {
     if (e->ownpal) {
         {
@@ -101286,7 +101294,7 @@ void Explod_resetInterpolation(Explod* e, PalFXDef* pfd) {
     }
 }
 
-// Explod.trueFacing (char.go:2621), 0 TODO
+// Explod.trueFacing (char.go:2624), 0 TODO
 f32 Explod_trueFacing(Explod* e) {
     if (((e->facing < 0x0p+00f)) != ((e->relativef < 0x0p+00f))) {
         return -0x1p+00f;
@@ -101294,17 +101302,17 @@ f32 Explod_trueFacing(Explod* e) {
     return 0x1p+00f;
 }
 
-// newProjectile (char.go:2717), 0 TODO
+// newProjectile (char.go:2720), 0 TODO
 Projectile* fn_newProjectile(void) {
     return go_box(Projectile, (Projectile){0});
 }
 
-// Projectile.clear (char.go:2721), 0 TODO
+// Projectile.clear (char.go:2724), 0 TODO
 void Projectile_clear(Projectile* p) {
     (*p) = (Projectile){0};
 }
 
-// Projectile.initFromChar (char.go:2727), 0 TODO
+// Projectile.initFromChar (char.go:2730), 0 TODO
 Projectile* Projectile_initFromChar(Projectile* p, Char* c) {
     f32 _t1 = c->localscl;
     f32 localscl = _t1;
@@ -101324,7 +101332,7 @@ Projectile* Projectile_initFromChar(Projectile* p, Char* c) {
     return p;
 }
 
-// Projectile.setAllPos (char.go:2788), 0 TODO
+// Projectile.setAllPos (char.go:2791), 0 TODO
 void Projectile_setAllPos(Projectile* p, Arr3_f32 pos) {
     p->pos = pos;
     p->oldPos = pos;
@@ -101332,12 +101340,12 @@ void Projectile_setAllPos(Projectile* p, Arr3_f32 pos) {
     p->interPos = pos;
 }
 
-// Projectile.isActive (char.go:2795), 0 TODO
+// Projectile.isActive (char.go:2798), 0 TODO
 bool Projectile_isActive(Projectile* p) {
     return (p->status == 0);
 }
 
-// Projectile.pauseStatus (char.go:2799), 0 TODO
+// Projectile.pauseStatus (char.go:2802), 0 TODO
 bool Projectile_pauseStatus(Projectile* p) {
     if (g_sys.SystemStateVars_.supertime > 0) {
         if ((p->supermovetime == 0) || (p->supermovetime < -1)) {
@@ -101353,7 +101361,7 @@ bool Projectile_pauseStatus(Projectile* p) {
     return false;
 }
 
-// Projectile.update (char.go:2812), 0 TODO
+// Projectile.update (char.go:2815), 0 TODO
 void Projectile_update(Projectile* p) {
     if (Char_scf(Projectile_root(p), 2U)) {
         return;
@@ -101486,7 +101494,7 @@ void Projectile_update(Projectile* p) {
     p->zScale = System_updateZScale(&g_sys, p->pos.v[2], p->localscl);
 }
 
-// Projectile.flagProjCancel (char.go:2945), 0 TODO
+// Projectile.flagProjCancel (char.go:2948), 0 TODO
 void Projectile_flagProjCancel(Projectile* p) {
     p->status = 2;
     Char* _t1 = Projectile_owner(p);
@@ -101498,7 +101506,7 @@ void Projectile_flagProjCancel(Projectile* p) {
     }
 }
 
-// Projectile.cancelHits (char.go:2957), 0 TODO
+// Projectile.cancelHits (char.go:2960), 0 TODO
 void Projectile_cancelHits(Projectile* p, Projectile* opp) {
     if (p->priorityPoints > opp->priorityPoints) {
         p->priorityPoints--;
@@ -101515,7 +101523,7 @@ void Projectile_cancelHits(Projectile* p, Projectile* opp) {
     }
 }
 
-// Projectile.getClsn (char.go:2979), 0 TODO
+// Projectile.getClsn (char.go:2982), 0 TODO
 Slice_ClsnFinal Projectile_getClsn(Projectile* p, i32 group) {
     if ((group < 1) || (group > 2)) {
         return (Slice_ClsnFinal){0};
@@ -101552,12 +101560,12 @@ Slice_ClsnFinal Projectile_getClsn(Projectile* p, i32 group) {
     return (*buf);
 }
 
-// Projectile.sortOthersByDistance (char.go:3027), 0 TODO
+// Projectile.sortOthersByDistance (char.go:3030), 0 TODO
 Slice_ProjectilePtr Projectile_sortOthersByDistance(Projectile* p, Slice_ProjectilePtr projectiles) {
     if (projectiles.len < 2) {
         return projectiles;
     }
-    Slice_pair_L4756dc pairs = GO_MAKE(Slice_pair_L4756dc, pair_L4756dc, projectiles.len, 0);
+    Slice_pair_Ldeb9e1 pairs = GO_MAKE(Slice_pair_Ldeb9e1, pair_Ldeb9e1, projectiles.len, 0);
     {
         Slice_ProjectilePtr _t2 = projectiles;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -101567,16 +101575,16 @@ Slice_ProjectilePtr Projectile_sortOthersByDistance(Projectile* p, Slice_Project
             f32 dy = ((p->pos.v[1] * p->localscl) - (pr->pos.v[1] * pr->localscl));
             f32 dz = ((p->pos.v[2] * p->localscl) - (pr->pos.v[2] * pr->localscl));
             f32 dist = (((dx * dx) + (dy * dy)) + (dz * dz));
-            pairs.p[idx] = (pair_L4756dc){.pr = pr, .dist = dist};
+            pairs.p[idx] = (pair_Ldeb9e1){.pr = pr, .dist = dist};
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_pair_L4756dc, pairs), sizeof(pair_L4756dc), ((GoFunc){(void *)lambda_489, go_box(Env_lambda_489, ((Env_lambda_489){pairs}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_pair_Ldeb9e1, pairs), sizeof(pair_Ldeb9e1), ((GoFunc){(void *)lambda_489, go_box(Env_lambda_489, ((Env_lambda_489){pairs}))}));
     {
-        Slice_pair_L4756dc _t5 = pairs;
+        Slice_pair_Ldeb9e1 _t5 = pairs;
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
             int i = _t4;
-            pair_L4756dc pair = _t5.p[_t4];
+            pair_Ldeb9e1 pair = _t5.p[_t4];
             projectiles.p[i] = pair.pr;
             _cont6:;
         }
@@ -101584,7 +101592,7 @@ Slice_ProjectilePtr Projectile_sortOthersByDistance(Projectile* p, Slice_Project
     return projectiles;
 }
 
-// Projectile.tradeDetection (char.go:3071), 0 TODO
+// Projectile.tradeDetection (char.go:3074), 0 TODO
 void Projectile_tradeDetection(Projectile* p, int playerNo, int index) {
     if ((p->hits < 0) || (!Projectile_isActive(p))) {
         return;
@@ -101663,7 +101671,7 @@ void Projectile_tradeDetection(Projectile* p, int playerNo, int index) {
     }
 }
 
-// Projectile.tick (char.go:3190), 0 TODO
+// Projectile.tick (char.go:3193), 0 TODO
 void Projectile_tick(Projectile* p) {
     if (Char_scf(Projectile_root(p), 2U)) {
         return;
@@ -101714,7 +101722,7 @@ void Projectile_tick(Projectile* p) {
     }
 }
 
-// Projectile.animStep (char.go:3252), 0 TODO
+// Projectile.animStep (char.go:3255), 0 TODO
 void Projectile_animStep(Projectile* p) {
     if ((p->anim == NULL) || Char_scf(Projectile_root(p), 2U)) {
         return;
@@ -101728,7 +101736,7 @@ void Projectile_animStep(Projectile* p) {
     }
 }
 
-// Projectile.cueDraw (char.go:3267), 0 TODO
+// Projectile.cueDraw (char.go:3270), 0 TODO
 void Projectile_cueDraw(Projectile* p) {
     if (p->anim == NULL) {
         return;
@@ -101821,17 +101829,17 @@ void Projectile_cueDraw(Projectile* p) {
     }
 }
 
-// Projectile.root (char.go:3402), 0 TODO
+// Projectile.root (char.go:3405), 0 TODO
 Char* Projectile_root(Projectile* p) {
     return g_sys.chars.v[p->playerno].p[0];
 }
 
-// Projectile.owner (char.go:3407), 0 TODO
+// Projectile.owner (char.go:3410), 0 TODO
 Char* Projectile_owner(Projectile* p) {
     return System_playerID(&g_sys, p->ownerId);
 }
 
-// Projectile.warnChar (char.go:3412), 0 TODO
+// Projectile.warnChar (char.go:3415), 0 TODO
 Char* Projectile_warnChar(Projectile* p) {
     {
         Char* c = Projectile_owner(p);
@@ -101842,7 +101850,7 @@ Char* Projectile_warnChar(Projectile* p) {
     return Projectile_root(p);
 }
 
-// loadMovelists (char.go:3442), 0 TODO
+// loadMovelists (char.go:3445), 0 TODO
 Map_int_GoString fn_loadMovelists(GoString def, IniSection is) {
     Map_int_GoString ret = Map_int_GoString_make(0);
     GoFunc load = ((GoFunc){(void *)lambda_490, &(Env_lambda_490){def, ret}});
@@ -101870,7 +101878,7 @@ Map_int_GoString fn_loadMovelists(GoString def, IniSection is) {
     return ret;
 }
 
-// newCharGlobalInfo (char.go:3523), 0 TODO
+// newCharGlobalInfo (char.go:3526), 0 TODO
 CharGlobalInfo fn_newCharGlobalInfo(void) {
     CharGlobalInfo gi = (CharGlobalInfo){.localcoord = (Arr2_i32){{320, 240}}, .rawlocalscl = 0x1p+00f, .constants = Map_GoString_TypedValue_make(0), .states = Map_i32_StateBytecodePtr_make(0), .callFuncs = Map_GoString_BytecodeFunction_make(0), .animTable = fn_NewAnimationTable(), .palInfo = Map_int_PalInfo_make(g_sys.cfg.Config.PaletteMax), .fnt = Map_int_FntPtr_make(0), .quotes = (Arr100_GoString){{}}, .movelists = Map_int_GoString_make(0), .remapPreset = Map_GoString_RemapPreset_make(0), .customShaders = Map_GoString_GoString_make(0), .portraitscale = 0x1p+00f};
     {
@@ -101883,19 +101891,19 @@ CharGlobalInfo fn_newCharGlobalInfo(void) {
     return gi;
 }
 
-// StateState.changeStateType (char.go:3562), 0 TODO
+// StateState.changeStateType (char.go:3565), 0 TODO
 void StateState_changeStateType(StateState* ss, StateType t) {
     ss->prevStateType = ss->stateType;
     ss->stateType = t;
 }
 
-// StateState.changeMoveType (char.go:3567), 0 TODO
+// StateState.changeMoveType (char.go:3570), 0 TODO
 void StateState_changeMoveType(StateState* ss, MoveType t) {
     ss->prevMoveType = ss->moveType;
     ss->moveType = t;
 }
 
-// StateState.clear (char.go:3572), 0 TODO
+// StateState.clear (char.go:3575), 0 TODO
 void StateState_clear(StateState* ss) {
     StateState_changeStateType(ss, 1);
     StateState_changeMoveType(ss, 32768);
@@ -101909,7 +101917,7 @@ void StateState_clear(StateState* ss) {
     ss->sb = go_box(StateBytecode, (StateBytecode){0});
 }
 
-// newChar (char.go:3844), 0 TODO
+// newChar (char.go:3847), 0 TODO
 Char* fn_newChar(int n, int idx) {
     Char* c = {0};
     c = go_box(Char, (Char){0});
@@ -101918,12 +101926,12 @@ Char* fn_newChar(int n, int idx) {
     return c;
 }
 
-// Char.warn (char.go:3850), 0 TODO
+// Char.warn (char.go:3853), 0 TODO
 GoString Char_warn(Char* c) {
     return fmt_Sprintf(GOSTR("%v: WARNING: %v (%v) in state %v: "), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){2, go_box_a(int, g_sys.SystemStateVars_.tickCount)}), ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){5, go_box_a(i32, c->id)}), ((GoIface){5, go_box_a(i32, c->ss.no)})));
 }
 
-// Char.panic (char.go:3854), 0 TODO
+// Char.panic (char.go:3857), 0 TODO
 void Char_panic(Char* c, GoString msg) {
     StateBytecode* st = c->ss.sb;
     if (g_sys.workingState != st) {
@@ -101932,8 +101940,9 @@ void Char_panic(Char* c, GoString msg) {
     go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("%s\nChar name: %v\nState source: %v\nState dump: %+v\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){17, go_box(GoString, msg)}), ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){17, go_box(GoString, g_sys.cgi.v[st->playerNo].def)}), ((GoIface){302, (void *)(st)}))))}));
 }
 
-// Char.init (char.go:3863), 0 TODO
+// Char.init (char.go:3866), 0 TODO
 void Char_init(Char* c, int n, int idx) {
+    fn_helperIdxChanged();
     (*c) = (Char){.playerNo = n, .helperIndex = idx, .controller = n, .analogAxes = (Arr6_f32){{}}, .animPN = n, .id = -1, .parentId = -1, .hoverIdx = -1, .mctype = 0, .ownpal = true, .facing = 0x1p+00f, .minus = 3, .winquote = -1, .movelist = 0, .zScale = 0x1p+00f, .CharSystemVar_ = (CharSystemVar){.superDefenseMul = 0x1p+00f, .fallDefenseMul = 0x1p+00f, .customDefense = 0x1p+00f, .finalDefense = 0x1p+00, .projection = 0}};
     if (idx == 0) {
         c->helperType = 0;
@@ -101954,7 +101963,7 @@ void Char_init(Char* c, int n, int idx) {
     Char_clearState(c);
 }
 
-// Char.clearState (char.go:3922), 0 TODO
+// Char.clearState (char.go:3926), 0 TODO
 void Char_clearState(Char* c) {
     StateState_clear(&c->ss);
     HitDef_reset(&c->hitdef, c, NULL);
@@ -101988,7 +101997,7 @@ void Char_clearState(Char* c) {
     CustomShader_clear(&c->customShader);
 }
 
-// Char.clsnOverlapTrigger (char.go:3947), 0 TODO
+// Char.clsnOverlapTrigger (char.go:3951), 0 TODO
 bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2) {
     Char* getter = System_playerID(&g_sys, pid);
     if (getter == NULL) {
@@ -102009,18 +102018,18 @@ bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2) {
     return Char_clsnCheck(c, getter, box1, box2, false);
 }
 
-// Char.enemyNearP2Clear (char.go:3989), 0 TODO
+// Char.enemyNearP2Clear (char.go:3993), 0 TODO
 void Char_enemyNearP2Clear(Char* c) {
     c->enemyNearList = GO_SLICE(Slice_i32, c->enemyNearList, 0, 0);
     c->p2EnemyList = GO_SLICE(Slice_i32, c->p2EnemyList, 0, 0);
 }
 
-// Char.sortOthersByDistance (char.go:3995), 0 TODO
+// Char.sortOthersByDistance (char.go:3999), 0 TODO
 Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2list) {
     if (enemies.len < 2) {
         return enemies;
     }
-    Slice_pair_La8d612 pairs = GO_MAKE(Slice_pair_La8d612, pair_La8d612, enemies.len, 0);
+    Slice_pair_L1c2276 pairs = GO_MAKE(Slice_pair_L1c2276, pair_L1c2276, enemies.len, 0);
     {
         Slice_CharPtr _t2 = enemies;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -102041,16 +102050,16 @@ Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2l
                 }
                 sortDist = ((f32)fn_cvfHypot(((f64)effectiveX), ((f64)distZ)));
             }
-            pairs.p[idx] = (pair_La8d612){.ch = e, .dist = sortDist};
+            pairs.p[idx] = (pair_L1c2276){.ch = e, .dist = sortDist};
             _cont3:;
         }
     }
-    go_sort_slice((void *)GO_TMPADDR(Slice_pair_La8d612, pairs), sizeof(pair_La8d612), ((GoFunc){(void *)lambda_494, go_box(Env_lambda_494, ((Env_lambda_494){pairs}))}));
+    go_sort_slice((void *)GO_TMPADDR(Slice_pair_L1c2276, pairs), sizeof(pair_L1c2276), ((GoFunc){(void *)lambda_494, go_box(Env_lambda_494, ((Env_lambda_494){pairs}))}));
     {
-        Slice_pair_La8d612 _t7 = pairs;
+        Slice_pair_L1c2276 _t7 = pairs;
         for (int _t6 = 0; _t6 < _t7.len; _t6++) {
             int i = _t6;
-            pair_La8d612 p = _t7.p[_t6];
+            pair_L1c2276 p = _t7.p[_t6];
             enemies.p[i] = p.ch;
             _cont8:;
         }
@@ -102058,8 +102067,9 @@ Slice_CharPtr Char_sortOthersByDistance(Char* c, Slice_CharPtr enemies, bool p2l
     return enemies;
 }
 
-// Char.prepareNextRound (char.go:4060), 0 TODO
+// Char.prepareNextRound (char.go:4064), 0 TODO
 void Char_prepareNextRound(Char* c) {
+    fn_helperIdxChanged();
     Char_sysVarRangeSet(c, 0, 2147483647, 0);
     Char_sysFvarRangeSet(c, 0, 2147483647, 0x0p+00f);
     c->CharSystemVar_ = (CharSystemVar){.bindToId = -1, .angleDrawScale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .trans = 4, .alpha = (Arr2_i32){{255, 0}}, .attackMul = (Arr4_f32){{0x1p+00f, 0x1p+00f, 0x1p+00f, 0x1p+00f}}, .fallDefenseMul = 0x1p+00f, .superDefenseMul = 0x1p+00f, .superDefenseMulBuffer = 0x1p+00f, .customDefense = 0x1p+00f, .finalDefense = (((f64)Char_gi(c)->data.defence) / 0x1.9p+06)};
@@ -102088,7 +102098,7 @@ void Char_prepareNextRound(Char* c) {
     CustomShader_clear(&c->customShader);
 }
 
-// Char.gi (char.go:4102), 0 TODO
+// Char.gi (char.go:4107), 0 TODO
 CharGlobalInfo* Char_gi(Char* c) {
     if (c->stillLoading) {
         go_panic_iface(0, ((GoIface){17, go_box(GoString, fmt_Sprintf(GOSTR("gi() called on char %v (pn %v) while it's still loading"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, c->name)}), ((GoIface){2, go_box_a(int, c->playerNo)}))))}));
@@ -102096,12 +102106,12 @@ CharGlobalInfo* Char_gi(Char* c) {
     return (&g_sys.cgi.v[c->playerNo]);
 }
 
-// Char.stOgi (char.go:4111), 0 TODO
+// Char.stOgi (char.go:4116), 0 TODO
 CharGlobalInfo* Char_stOgi(Char* c) {
     return Char_gi(Char_stateOwner(c));
 }
 
-// Char.stWgi (char.go:4121), 0 TODO
+// Char.stWgi (char.go:4126), 0 TODO
 CharGlobalInfo* Char_stWgi(Char* c) {
     if (c->minus == 0) {
         return Char_stOgi(c);
@@ -102110,12 +102120,12 @@ CharGlobalInfo* Char_stWgi(Char* c) {
     }
 }
 
-// Char.si (char.go:4130), 0 TODO
+// Char.si (char.go:4135), 0 TODO
 SelectChar* Char_si(Char* c) {
     return (&g_sys.sel.charlist.p[c->selectNo]);
 }
 
-// Char.ocd (char.go:4134), 0 TODO
+// Char.ocd (char.go:4139), 0 TODO
 OverrideCharData* Char_ocd(Char* c) {
     int team = c->teamside;
     if (team == -1) {
@@ -102130,7 +102140,7 @@ OverrideCharData* Char_ocd(Char* c) {
     return GameParams_ensureOverride(g_sys.sel.gameParams, team, c->memberNo);
 }
 
-// Char.applyMapOverrides (char.go:4148), 0 TODO
+// Char.applyMapOverrides (char.go:4153), 0 TODO
 void Char_applyMapOverrides(Char* c) {
     OverrideCharData* _t1 = Char_ocd(c);
     OverrideCharData* ocd = _t1;
@@ -102151,7 +102161,7 @@ void Char_applyMapOverrides(Char* c) {
     }
 }
 
-// Char.resetModifyPlayer (char.go:4163), 0 TODO
+// Char.resetModifyPlayer (char.go:4168), 0 TODO
 void Char_resetModifyPlayer(Char* c) {
     CharGlobalInfo* _t1 = Char_gi(c);
     CharGlobalInfo* gi = _t1;
@@ -102166,7 +102176,7 @@ void Char_resetModifyPlayer(Char* c) {
     c->movelist = 0;
 }
 
-// Char.load (char.go:4177), 0 TODO
+// Char.load (char.go:4182), 0 TODO
 GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
     Sff* oldSff = gi->sff;
     (*gi) = fn_newCharGlobalInfo();
@@ -102215,7 +102225,7 @@ GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
     bool lanMapArray = _t15;
     bool shaders = true;
     bool lanShaders = true;
-    Map_int_fontSpec_Lc61303 fntSpecs = Map_int_fontSpec_Lc61303_make(0);
+    Map_int_fontSpec_L0419e0 fntSpecs = Map_int_fontSpec_L0419e0_make(0);
     GoFunc parseFonts = ((GoFunc){(void *)lambda_495, &(Env_lambda_495){fntSpecs}});
     GoString langPrefix = go_strcat(g_sys.cfg.Config.Language, GOSTR("."));
     {
@@ -102483,7 +102493,7 @@ GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
         GoMapIter _t59 = gomap_iter((GoMap *)&fntSpecs);
         while (gomap_next(&_t59)) {
             int idx = *(int *)_t59.key;
-            fontSpec_Lc61303 spec = *(fontSpec_Lc61303 *)_t59.val;
+            fontSpec_L0419e0 spec = *(fontSpec_L0419e0 *)_t59.val;
             if (spec.path.len == 0) {
                 continue;
             }
@@ -102496,7 +102506,7 @@ GoIface Char_load(Char* c, GoString def, CharGlobalInfo* gi) {
     return (GoIface){0};
 }
 
-// Char.loadPalettes (char.go:4770), 0 TODO
+// Char.loadPalettes (char.go:4775), 0 TODO
 void Char_loadPalettes(Char* c) {
     CharGlobalInfo* _t1 = Char_gi(c);
     CharGlobalInfo* gi = _t1;
@@ -102688,7 +102698,7 @@ void Char_loadPalettes(Char* c) {
     gi->remappedpal = (Arr2_i32){{1, gi->palno}};
 }
 
-// Char.loadFx (char.go:4942), 0 TODO
+// Char.loadFx (char.go:4947), 0 TODO
 GoIface Char_loadFx(Char* c, GoString def, CharGlobalInfo* gi) {
     gi->fxPath = (Slice_GoString){0};
     Ret_GoString__GoIface _t1 = fn_LoadText(def);
@@ -102794,20 +102804,20 @@ GoIface Char_loadFx(Char* c, GoString def, CharGlobalInfo* gi) {
     return (GoIface){0};
 }
 
-// Char.clearHitCount (char.go:5013), 0 TODO
+// Char.clearHitCount (char.go:5018), 0 TODO
 void Char_clearHitCount(Char* c) {
     c->CharSystemVar_.hitCount = 0;
     c->CharSystemVar_.uniqHitCount = 0;
     c->CharSystemVar_.guardCount = 0;
 }
 
-// Char.clearMoveHit (char.go:5019), 0 TODO
+// Char.clearMoveHit (char.go:5024), 0 TODO
 void Char_clearMoveHit(Char* c) {
     c->mctime = 0;
     c->CharSystemVar_.counterHit = false;
 }
 
-// Char.changeAnimEx (char.go:5031), 0 TODO
+// Char.changeAnimEx (char.go:5036), 0 TODO
 void Char_changeAnimEx(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx) {
     Animation* a = Char_getAnimSprite(c, animNo, animPlayerNo, spritePlayerNo, ffx, c->ownpal);
     if (a == NULL) {
@@ -102834,7 +102844,7 @@ void Char_changeAnimEx(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo
     Char_updateCurFrame(c);
 }
 
-// Char.changeAnim (char.go:5072), 0 TODO
+// Char.changeAnim (char.go:5077), 0 TODO
 void Char_changeAnim(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx) {
     if ((animNo < 0) && (animNo != -2)) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("attempted change to negative anim (different from -2)"), (Slice_GoIface){0})));
@@ -102859,7 +102869,7 @@ void Char_changeAnim(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, 
     Char_changeAnimEx(c, animNo, animPlayerNo, spritePlayerNo, ffx);
 }
 
-// Char.changeAnim2 (char.go:5100), 0 TODO
+// Char.changeAnim2 (char.go:5105), 0 TODO
 void Char_changeAnim2(Char* c, i32 animNo, int animPlayerNo, GoString ffx) {
     if ((animNo < 0) && (animNo != -2)) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("attempted change to negative anim (different from -2)"), (Slice_GoIface){0})));
@@ -102868,7 +102878,7 @@ void Char_changeAnim2(Char* c, i32 animNo, int animPlayerNo, GoString ffx) {
     Char_changeAnimEx(c, animNo, animPlayerNo, c->playerNo, ffx);
 }
 
-// Char.setAnimElem (char.go:5109), 0 TODO
+// Char.setAnimElem (char.go:5114), 0 TODO
 void Char_setAnimElem(Char* c, i32 elem, i32 elemtime) {
     if (c->anim == NULL) {
         return;
@@ -102890,7 +102900,7 @@ void Char_setAnimElem(Char* c, i32 elem, i32 elemtime) {
     Char_updateCurFrame(c);
 }
 
-// Char.setAnimElemTo (char.go:5137), 0 TODO
+// Char.setAnimElemTo (char.go:5142), 0 TODO
 void Char_setAnimElemTo(Char* c, Animation* anim, i32* animelem) {
     if (anim != NULL) {
         if (((*animelem) < 1) || (((int)(*animelem)) > anim->frames.len)) {
@@ -102900,12 +102910,12 @@ void Char_setAnimElemTo(Char* c, Animation* anim, i32* animelem) {
     }
 }
 
-// Char.scf (char.go:5167), 0 TODO
+// Char.scf (char.go:5172), 0 TODO
 bool Char_scf(Char* c, SystemCharFlag scf) {
     return ((c->CharSystemVar_.systemFlag & scf) != 0U);
 }
 
-// Char.setSCF (char.go:5171), 0 TODO
+// Char.setSCF (char.go:5176), 0 TODO
 void Char_setSCF(Char* c, SystemCharFlag scf, bool on) {
     if (on) {
         c->CharSystemVar_.systemFlag |= scf;
@@ -102917,13 +102927,16 @@ void Char_setSCF(Char* c, SystemCharFlag scf, bool on) {
     }
 }
 
-// Char.csf (char.go:5183), 0 TODO
+// Char.csf (char.go:5188), 0 TODO
 bool Char_csf(Char* c, CharSpecialFlag csf) {
     return ((c->CharSystemVar_.specialFlag & csf) != 0U);
 }
 
-// Char.setCSF (char.go:5187), 0 TODO
+// Char.setCSF (char.go:5192), 0 TODO
 void Char_setCSF(Char* c, CharSpecialFlag csf, bool on) {
+    if ((csf & 2U) != 0U) {
+        fn_helperIdxChanged();
+    }
     if (on) {
         c->CharSystemVar_.specialFlag |= csf;
     } else {
@@ -102931,12 +102944,12 @@ void Char_setCSF(Char* c, CharSpecialFlag csf, bool on) {
     }
 }
 
-// Char.asf (char.go:5195), 0 TODO
+// Char.asf (char.go:5203), 0 TODO
 bool Char_asf(Char* c, AssertSpecialFlag asf) {
     return ((c->CharSystemVar_.assertFlag & asf) != 0U);
 }
 
-// Char.setASF (char.go:5199), 0 TODO
+// Char.setASF (char.go:5207), 0 TODO
 void Char_setASF(Char* c, AssertSpecialFlag asf, bool on) {
     if (on) {
         c->CharSystemVar_.assertFlag |= asf;
@@ -102945,7 +102958,7 @@ void Char_setASF(Char* c, AssertSpecialFlag asf, bool on) {
     }
 }
 
-// Char.parent (char.go:5207), 0 TODO
+// Char.parent (char.go:5215), 0 TODO
 Char* Char_parent(Char* c, bool log_) {
     if (c->helperIndex == 0) {
         if (log_) {
@@ -102968,12 +102981,12 @@ Char* Char_parent(Char* c, bool log_) {
     return p;
 }
 
-// Char.parentExist (char.go:5231), 0 TODO
+// Char.parentExist (char.go:5239), 0 TODO
 bool Char_parentExist(Char* c) {
     return (Char_parent(c, false) != NULL);
 }
 
-// Char.root (char.go:5235), 0 TODO
+// Char.root (char.go:5243), 0 TODO
 Char* Char_root(Char* c, bool log_) {
     if (c->helperIndex == 0) {
         if (log_) {
@@ -102984,13 +102997,13 @@ Char* Char_root(Char* c, bool log_) {
     return g_sys.chars.v[c->playerNo].p[0];
 }
 
-// Char.stateOwner (char.go:5248), 0 TODO
+// Char.stateOwner (char.go:5256), 0 TODO
 Char* Char_stateOwner(Char* c) {
     int pn = c->ss.sb->playerNo;
     return g_sys.chars.v[pn].p[0];
 }
 
-// Char.helperTrigger (char.go:5253), 0 TODO
+// Char.helperTrigger (char.go:5261), 0 TODO
 Char* Char_helperTrigger(Char* c, i32 id, int idx) {
     if (idx < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), GOSTR("helper redirection index cannot be negative")));
@@ -103018,7 +103031,7 @@ Char* Char_helperTrigger(Char* c, i32 id, int idx) {
     return NULL;
 }
 
-// Char.getHelperChainIndex (char.go:5286), 0 TODO
+// Char.getHelperChainIndex (char.go:5294), 0 TODO
 Char* Char_getHelperChainIndex(Char* c, i32 idx) {
     if (idx <= 0) {
         return c;
@@ -103067,7 +103080,7 @@ Char* Char_getHelperChainIndex(Char* c, i32 idx) {
     return NULL;
 }
 
-// Char.helperIndexTrigger (char.go:5346), 0 TODO
+// Char.helperIndexTrigger (char.go:5354), 0 TODO
 Char* Char_helperIndexTrigger(Char* c, i32 idx) {
     Char* ch = Char_getHelperChainIndex(c, idx);
     if (ch == NULL) {
@@ -103076,7 +103089,7 @@ Char* Char_helperIndexTrigger(Char* c, i32 idx) {
     return ch;
 }
 
-// Char.helperIndexExist (char.go:5356), 0 TODO
+// Char.helperIndexExist (char.go:5364), 0 TODO
 BytecodeValue Char_helperIndexExist(Char* c, BytecodeValue id) {
     if (BytecodeValue_IsUndefined(id)) {
         return fn_BytecodeUndefined();
@@ -103084,7 +103097,7 @@ BytecodeValue Char_helperIndexExist(Char* c, BytecodeValue id) {
     return fn_BytecodeBool((Char_getHelperChainIndex(c, BytecodeValue_ToI(id)) != NULL));
 }
 
-// Char.indexTrigger (char.go:5363), 0 TODO
+// Char.indexTrigger (char.go:5371), 0 TODO
 i32 Char_indexTrigger(Char* c) {
     i32 searchIdx = 0;
     {
@@ -103103,7 +103116,7 @@ i32 Char_indexTrigger(Char* c) {
     return -1;
 }
 
-// Char.targetTrigger (char.go:5385), 0 TODO
+// Char.targetTrigger (char.go:5393), 0 TODO
 Char* Char_targetTrigger(Char* c, i32 id, int idx) {
     if (idx < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), GOSTR("target redirection index cannot be negative")));
@@ -103128,7 +103141,7 @@ Char* Char_targetTrigger(Char* c, i32 id, int idx) {
     return NULL;
 }
 
-// Char.partner (char.go:5410), 0 TODO
+// Char.partner (char.go:5418), 0 TODO
 Char* Char_partner(Char* c, i32 n, bool log_) {
     n = go_max_i32(0, n);
     if (((int)n) > 4) {
@@ -103155,7 +103168,7 @@ Char* Char_partner(Char* c, i32 n, bool log_) {
     return NULL;
 }
 
-// Char.partnerTag (char.go:5439), 0 TODO
+// Char.partnerTag (char.go:5447), 0 TODO
 Char* Char_partnerTag(Char* c, i32 n) {
     n = go_max_i32(0, n);
     if (((int)n) > 4) {
@@ -103171,7 +103184,7 @@ Char* Char_partnerTag(Char* c, i32 n) {
     return NULL;
 }
 
-// Char.enemy (char.go:5454), 0 TODO
+// Char.enemy (char.go:5462), 0 TODO
 Char* Char_enemy(Char* c, i32 n) {
     if (n < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("has no enemy with index %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, n)})))));
@@ -103195,7 +103208,7 @@ Char* Char_enemy(Char* c, i32 n) {
     return NULL;
 }
 
-// Char.enemyNearTrigger (char.go:5478), 0 TODO
+// Char.enemyNearTrigger (char.go:5486), 0 TODO
 Char* Char_enemyNearTrigger(Char* c, i32 n) {
     Char* e = CharList_enemyNear(&g_sys.charList, c, n, false);
     if (e == NULL) {
@@ -103204,7 +103217,7 @@ Char* Char_enemyNearTrigger(Char* c, i32 n) {
     return e;
 }
 
-// Char.p2 (char.go:5491), 0 TODO
+// Char.p2 (char.go:5499), 0 TODO
 Char* Char_p2(Char* c) {
     Char* p = CharList_enemyNear(&g_sys.charList, c, 0, true);
     if (p != NULL) {
@@ -103213,7 +103226,7 @@ Char* Char_p2(Char* c) {
     return p;
 }
 
-// Char.playerIDTrigger (char.go:5503), 0 TODO
+// Char.playerIDTrigger (char.go:5511), 0 TODO
 Char* Char_playerIDTrigger(Char* c, i32 id, bool log_) {
     Char* ch = System_playerID(&g_sys, id);
     if (log_ && (ch == NULL)) {
@@ -103222,7 +103235,7 @@ Char* Char_playerIDTrigger(Char* c, i32 id, bool log_) {
     return ch;
 }
 
-// Char.playerIndexTrigger (char.go:5513), 0 TODO
+// Char.playerIndexTrigger (char.go:5521), 0 TODO
 Char* Char_playerIndexTrigger(Char* c, i32 idx) {
     Char* ch = System_playerIndex(&g_sys, idx);
     if (ch == NULL) {
@@ -103231,7 +103244,7 @@ Char* Char_playerIndexTrigger(Char* c, i32 idx) {
     return ch;
 }
 
-// Char.playerTrigger (char.go:5523), 0 TODO
+// Char.playerTrigger (char.go:5531), 0 TODO
 Char* Char_playerTrigger(Char* c, int pn, bool log_) {
     int idx = (pn - 1);
     Char* root = System_getCharRoot(&g_sys, idx);
@@ -103241,7 +103254,7 @@ Char* Char_playerTrigger(Char* c, int pn, bool log_) {
     return root;
 }
 
-// Char.isEnemyOf (char.go:5533), 0 TODO
+// Char.isEnemyOf (char.go:5541), 0 TODO
 bool Char_isEnemyOf(Char* c, Char* e) {
     if (Char_scf(e, 2U)) {
         return false;
@@ -103255,7 +103268,7 @@ bool Char_isEnemyOf(Char* c, Char* e) {
     return true;
 }
 
-// Char.getAILevel (char.go:5556), 0 TODO
+// Char.getAILevel (char.go:5564), 0 TODO
 f32 Char_getAILevel(Char* c) {
     if ((c->helperIndex != 0) && (Char_gi(c)->mugenver.v[0] == 1U)) {
         return 0x0p+00f;
@@ -103266,7 +103279,7 @@ f32 Char_getAILevel(Char* c) {
     return 0x0p+00f;
 }
 
-// Char.setAILevel (char.go:5566), 0 TODO
+// Char.setAILevel (char.go:5574), 0 TODO
 void Char_setAILevel(Char* c, f32 level) {
     if ((c->playerNo < 0) || (c->playerNo >= 12)) {
         return;
@@ -103286,12 +103299,12 @@ void Char_setAILevel(Char* c, f32 level) {
     }
 }
 
-// Char.alive (char.go:5580), 0 TODO
+// Char.alive (char.go:5588), 0 TODO
 bool Char_alive(Char* c) {
     return (!Char_scf(c, 32U));
 }
 
-// Char.activelyFighting (char.go:5586), 0 TODO
+// Char.activelyFighting (char.go:5594), 0 TODO
 bool Char_activelyFighting(Char* c) {
     if (((c->teamside < 0) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return false;
@@ -103299,7 +103312,7 @@ bool Char_activelyFighting(Char* c) {
     return true;
 }
 
-// Char.animElemNo (char.go:5593), 0 TODO
+// Char.animElemNo (char.go:5601), 0 TODO
 BytecodeValue Char_animElemNo(Char* c, i32 time_) {
     if ((c->anim != NULL) && (time_ >= (-c->anim->curtime))) {
         return fn_BytecodeInt(Animation_AnimElemNo(c->anim, time_));
@@ -103307,7 +103320,7 @@ BytecodeValue Char_animElemNo(Char* c, i32 time_) {
     return fn_BytecodeUndefined();
 }
 
-// Char.animElemTime (char.go:5600), 0 TODO
+// Char.animElemTime (char.go:5608), 0 TODO
 BytecodeValue Char_animElemTime(Char* c, i32 elem) {
     if (((elem >= 1) && (c->anim != NULL)) && (((int)elem) <= c->anim->frames.len)) {
         return fn_BytecodeInt(Animation_AnimElemTime(c->anim, elem));
@@ -103315,7 +103328,7 @@ BytecodeValue Char_animElemTime(Char* c, i32 elem) {
     return fn_BytecodeUndefined();
 }
 
-// Char.animExist (char.go:5610), 0 TODO
+// Char.animExist (char.go:5618), 0 TODO
 BytecodeValue Char_animExist(Char* c, BytecodeValue anim) {
     if (BytecodeValue_IsUndefined(anim)) {
         return fn_BytecodeUndefined();
@@ -103327,7 +103340,7 @@ BytecodeValue Char_animExist(Char* c, BytecodeValue anim) {
     return fn_BytecodeBool((Map_i32_AnimationPtr_get(&g_sys.cgi.v[pn].animTable.anims, BytecodeValue_ToI(anim), NULL) != NULL));
 }
 
-// Char.selfAnimExist (char.go:5624), 0 TODO
+// Char.selfAnimExist (char.go:5632), 0 TODO
 BytecodeValue Char_selfAnimExist(Char* c, BytecodeValue anim) {
     if (BytecodeValue_IsUndefined(anim)) {
         return fn_BytecodeUndefined();
@@ -103335,7 +103348,7 @@ BytecodeValue Char_selfAnimExist(Char* c, BytecodeValue anim) {
     return fn_BytecodeBool((Map_i32_AnimationPtr_get(&Char_gi(c)->animTable.anims, BytecodeValue_ToI(anim), NULL) != NULL));
 }
 
-// Char.animTime (char.go:5631), 0 TODO
+// Char.animTime (char.go:5639), 0 TODO
 i32 Char_animTime(Char* c) {
     if (c->anim != NULL) {
         return Animation_AnimTime(c->anim);
@@ -103343,7 +103356,7 @@ i32 Char_animTime(Char* c) {
     return 0;
 }
 
-// Char.updateCurFrame (char.go:5639), 0 TODO
+// Char.updateCurFrame (char.go:5647), 0 TODO
 void Char_updateCurFrame(Char* c) {
     if (c->anim != NULL) {
         c->curFrame = Animation_CurrentFrame(c->anim);
@@ -103352,7 +103365,7 @@ void Char_updateCurFrame(Char* c) {
     }
 }
 
-// Char.backEdge (char.go:5647), 0 TODO
+// Char.backEdge (char.go:5655), 0 TODO
 f32 Char_backEdge(Char* c) {
     if (c->facing < 0x0p+00f) {
         return Char_rightEdge(c);
@@ -103360,7 +103373,7 @@ f32 Char_backEdge(Char* c) {
     return Char_leftEdge(c);
 }
 
-// Char.backEdgeBodyDist (char.go:5654), 0 TODO
+// Char.backEdgeBodyDist (char.go:5662), 0 TODO
 f32 Char_backEdgeBodyDist(Char* c) {
     f32 offset = 0x0p+00f;
     if ((Char_stWgi(c)->ikemenver.v[0] == 0U) && (Char_stWgi(c)->ikemenver.v[1] == 0U)) {
@@ -103375,7 +103388,7 @@ f32 Char_backEdgeBodyDist(Char* c) {
     return ((Char_backEdgeDist(c) - c->CharSystemVar_.widthEdge.v[1]) - offset);
 }
 
-// Char.backEdgeDist (char.go:5668), 0 TODO
+// Char.backEdgeDist (char.go:5676), 0 TODO
 f32 Char_backEdgeDist(Char* c) {
     if (c->facing < 0x0p+00f) {
         return ((g_sys.SystemStateVars_.xmax / c->localscl) - c->pos.v[0]);
@@ -103383,27 +103396,27 @@ f32 Char_backEdgeDist(Char* c) {
     return (c->pos.v[0] - (g_sys.SystemStateVars_.xmin / c->localscl));
 }
 
-// Char.bottomEdge (char.go:5675), 0 TODO
+// Char.bottomEdge (char.go:5683), 0 TODO
 f32 Char_bottomEdge(Char* c) {
     return ((g_sys.SystemStateVars_.cam.ScreenPos.v[1] / c->localscl) + Char_gameHeight(c));
 }
 
-// Char.botBoundBodyDist (char.go:5679), 0 TODO
+// Char.botBoundBodyDist (char.go:5687), 0 TODO
 f32 Char_botBoundBodyDist(Char* c) {
     return (Char_botBoundDist(c) - c->CharSystemVar_.depthEdge.v[1]);
 }
 
-// Char.botBoundDist (char.go:5683), 0 TODO
+// Char.botBoundDist (char.go:5691), 0 TODO
 f32 Char_botBoundDist(Char* c) {
     return ((g_sys.SystemStateVars_.zmax / c->localscl) - c->pos.v[2]);
 }
 
-// Char.canRecover (char.go:5687), 0 TODO
+// Char.canRecover (char.go:5695), 0 TODO
 bool Char_canRecover(Char* c) {
     return (c->ghv.fall_recover && (c->ghv.fall_time >= c->ghv.fall_recovertime));
 }
 
-// Char.comboCount (char.go:5691), 0 TODO
+// Char.comboCount (char.go:5699), 0 TODO
 i32 Char_comboCount(Char* c) {
     if (c->teamside == -1) {
         return 0;
@@ -103411,7 +103424,7 @@ i32 Char_comboCount(Char* c) {
     return g_sys.SystemStateVars_.comboCount.v[c->teamside];
 }
 
-// Char.command (char.go:5698), 0 TODO
+// Char.command (char.go:5706), 0 TODO
 bool Char_command(Char* c, int pn, int i) {
     if ((!c->keyctrl.v[0]) || (c->cmd.p == 0)) {
         return false;
@@ -103441,7 +103454,7 @@ bool Char_command(Char* c, int pn, int i) {
     return false;
 }
 
-// Char.commandByName (char.go:5733), 0 TODO
+// Char.commandByName (char.go:5741), 0 TODO
 bool Char_commandByName(Char* c, GoString name) {
     if (c->cmd.p == 0) {
         return false;
@@ -103452,7 +103465,7 @@ bool Char_commandByName(Char* c, GoString name) {
     return (ok && Char_command(c, c->playerNo, i));
 }
 
-// Char.assertCommand (char.go:5741), 0 TODO
+// Char.assertCommand (char.go:5749), 0 TODO
 void Char_assertCommand(Char* c, GoString name, i32 time_) {
     if (go_streq(name, GOSTR(""))) {
         CommandList* cmdList = (&c->cmd.p[c->playerNo]);
@@ -103486,22 +103499,22 @@ void Char_assertCommand(Char* c, GoString name, i32 time_) {
     }
 }
 
-// Char.constp (char.go:5773), 0 TODO
+// Char.constp (char.go:5781), 0 TODO
 BytecodeValue Char_constp(Char* c, f32 coordinate, f32 value) {
     return fn_BytecodeFloat(((((f32)Char_stOgi(c)->localcoord.v[0]) / coordinate) * value));
 }
 
-// Char.ctrl (char.go:5777), 0 TODO
+// Char.ctrl (char.go:5785), 0 TODO
 bool Char_ctrl(Char* c) {
     return (((Char_scf(c, 1U) && (!Char_scf(c, 256U))) && (!Char_scf(c, 4U))) && (!Char_scf(c, 16U)));
 }
 
-// Char.drawgame (char.go:5782), 0 TODO
+// Char.drawgame (char.go:5790), 0 TODO
 bool Char_drawgame(Char* c) {
     return ((System_roundState(&g_sys) >= 3) && (g_sys.SystemStateVars_.winTeam < 0));
 }
 
-// Char.frontEdge (char.go:5786), 0 TODO
+// Char.frontEdge (char.go:5794), 0 TODO
 f32 Char_frontEdge(Char* c) {
     if (c->facing > 0x0p+00f) {
         return Char_rightEdge(c);
@@ -103509,7 +103522,7 @@ f32 Char_frontEdge(Char* c) {
     return Char_leftEdge(c);
 }
 
-// Char.frontEdgeBodyDist (char.go:5793), 0 TODO
+// Char.frontEdgeBodyDist (char.go:5801), 0 TODO
 f32 Char_frontEdgeBodyDist(Char* c) {
     f32 offset = 0x0p+00f;
     if ((Char_stWgi(c)->ikemenver.v[0] == 0U) && (Char_stWgi(c)->ikemenver.v[1] == 0U)) {
@@ -103524,7 +103537,7 @@ f32 Char_frontEdgeBodyDist(Char* c) {
     return ((Char_frontEdgeDist(c) - c->CharSystemVar_.widthEdge.v[0]) - offset);
 }
 
-// Char.frontEdgeDist (char.go:5806), 0 TODO
+// Char.frontEdgeDist (char.go:5814), 0 TODO
 f32 Char_frontEdgeDist(Char* c) {
     if (c->facing > 0x0p+00f) {
         return ((g_sys.SystemStateVars_.xmax / c->localscl) - c->pos.v[0]);
@@ -103532,17 +103545,17 @@ f32 Char_frontEdgeDist(Char* c) {
     return (c->pos.v[0] - (g_sys.SystemStateVars_.xmin / c->localscl));
 }
 
-// Char.gameHeight (char.go:5813), 0 TODO
+// Char.gameHeight (char.go:5821), 0 TODO
 f32 Char_gameHeight(Char* c) {
     return (Char_screenHeight(c) / g_sys.SystemStateVars_.cam.Scale);
 }
 
-// Char.gameWidth (char.go:5817), 0 TODO
+// Char.gameWidth (char.go:5825), 0 TODO
 f32 Char_gameWidth(Char* c) {
     return (Char_screenWidth(c) / g_sys.SystemStateVars_.cam.Scale);
 }
 
-// Char.runOrderTrigger (char.go:5830), 0 TODO
+// Char.runOrderTrigger (char.go:5838), 0 TODO
 i32 Char_runOrderTrigger(Char* c) {
     {
         Slice_CharPtr _t2 = g_sys.charList.runOrder;
@@ -103558,7 +103571,7 @@ i32 Char_runOrderTrigger(Char* c) {
     return -1;
 }
 
-// Char.powerOwner (char.go:5841), 0 TODO
+// Char.powerOwner (char.go:5849), 0 TODO
 Char* Char_powerOwner(Char* c) {
     if (g_sys.cfg.Options.Team.PowerShare && (((c->teamside == 0) || (c->teamside == 1)))) {
         return g_sys.chars.v[c->teamside].p[0];
@@ -103566,27 +103579,27 @@ Char* Char_powerOwner(Char* c) {
     return g_sys.chars.v[c->playerNo].p[0];
 }
 
-// Char.getPower (char.go:5852), 0 TODO
+// Char.getPower (char.go:5860), 0 TODO
 i32 Char_getPower(Char* c) {
     return Char_powerOwner(c)->power;
 }
 
-// Char.hitDefAttr (char.go:5856), 0 TODO
+// Char.hitDefAttr (char.go:5864), 0 TODO
 bool Char_hitDefAttr(Char* c, i32 attr) {
     return ((c->ss.moveType == 131072) && HitDef_testAttr(&c->hitdef, attr));
 }
 
-// Char.hitOver (char.go:5860), 0 TODO
+// Char.hitOver (char.go:5868), 0 TODO
 bool Char_hitOver(Char* c) {
     return (c->ghv.hittime < 0);
 }
 
-// Char.hitShakeOver (char.go:5864), 0 TODO
+// Char.hitShakeOver (char.go:5872), 0 TODO
 bool Char_hitShakeOver(Char* c) {
     return (c->ghv.hitshaketime <= 0);
 }
 
-// Char.isHelper (char.go:5868), 0 TODO
+// Char.isHelper (char.go:5876), 0 TODO
 bool Char_isHelper(Char* c, i32 id, int idx) {
     if (c->helperIndex == 0) {
         return false;
@@ -103630,12 +103643,12 @@ bool Char_isHelper(Char* c, i32 id, int idx) {
     return false;
 }
 
-// Char.isPlayerType (char.go:5928), 0 TODO
+// Char.isPlayerType (char.go:5936), 0 TODO
 bool Char_isPlayerType(Char* c) {
     return ((c->helperIndex == 0) || (c->helperType == 2));
 }
 
-// Char.isHost (char.go:5932), 0 TODO
+// Char.isHost (char.go:5940), 0 TODO
 bool Char_isHost(Char* c) {
     if (((g_sys.netConnection == NULL) && (g_sys.replayFile == NULL)) && (g_sys.rollback.session == NULL)) {
         return false;
@@ -103655,7 +103668,7 @@ bool Char_isHost(Char* c) {
     return (c->playerNo == host);
 }
 
-// Char.jugglePoints (char.go:5960), 0 TODO
+// Char.jugglePoints (char.go:5968), 0 TODO
 i32 Char_jugglePoints(Char* c, i32 id) {
     i32 max_ = Char_gi(c)->data.airjuggle;
     {
@@ -103672,12 +103685,12 @@ i32 Char_jugglePoints(Char* c, i32 id) {
     return max_;
 }
 
-// Char.leftEdge (char.go:5975), 0 TODO
+// Char.leftEdge (char.go:5983), 0 TODO
 f32 Char_leftEdge(Char* c) {
     return (g_sys.SystemStateVars_.cam.ScreenPos.v[0] / c->localscl);
 }
 
-// Char.lose (char.go:5979), 0 TODO
+// Char.lose (char.go:5987), 0 TODO
 bool Char_lose(Char* c) {
     if (c->teamside == -1) {
         return false;
@@ -103685,17 +103698,17 @@ bool Char_lose(Char* c) {
     return (g_sys.SystemStateVars_.winTeam == ((~c->playerNo) & 1));
 }
 
-// Char.loseKO (char.go:5986), 0 TODO
+// Char.loseKO (char.go:5994), 0 TODO
 bool Char_loseKO(Char* c) {
     return (Char_lose(c) && (g_sys.SystemStateVars_.finishType == 1));
 }
 
-// Char.loseTime (char.go:5990), 0 TODO
+// Char.loseTime (char.go:5998), 0 TODO
 bool Char_loseTime(Char* c) {
     return (Char_lose(c) && (g_sys.SystemStateVars_.finishType == 3));
 }
 
-// Char.moveContact (char.go:5994), 0 TODO
+// Char.moveContact (char.go:6002), 0 TODO
 i32 Char_moveContact(Char* c) {
     if (c->mctype != 2) {
         return fn_Abs_i32(c->mctime);
@@ -103703,7 +103716,7 @@ i32 Char_moveContact(Char* c) {
     return 0;
 }
 
-// Char.moveCountered (char.go:6001), 0 TODO
+// Char.moveCountered (char.go:6009), 0 TODO
 i32 Char_moveCountered(Char* c) {
     if (c->CharSystemVar_.counterHit) {
         return fn_Abs_i32(c->mctime);
@@ -103711,7 +103724,7 @@ i32 Char_moveCountered(Char* c) {
     return 0;
 }
 
-// Char.moveGuarded (char.go:6008), 0 TODO
+// Char.moveGuarded (char.go:6016), 0 TODO
 i32 Char_moveGuarded(Char* c) {
     if (c->mctype == 1) {
         return fn_Abs_i32(c->mctime);
@@ -103719,7 +103732,7 @@ i32 Char_moveGuarded(Char* c) {
     return 0;
 }
 
-// Char.moveHit (char.go:6015), 0 TODO
+// Char.moveHit (char.go:6023), 0 TODO
 i32 Char_moveHit(Char* c) {
     if (c->mctype == 0) {
         return fn_Abs_i32(c->mctime);
@@ -103727,7 +103740,7 @@ i32 Char_moveHit(Char* c) {
     return 0;
 }
 
-// Char.moveReversed (char.go:6022), 0 TODO
+// Char.moveReversed (char.go:6030), 0 TODO
 i32 Char_moveReversed(Char* c) {
     if (c->mctype == 2) {
         return fn_Abs_i32(c->mctime);
@@ -103735,7 +103748,7 @@ i32 Char_moveReversed(Char* c) {
     return 0;
 }
 
-// Char.numEnemy (char.go:6029), 0 TODO
+// Char.numEnemy (char.go:6037), 0 TODO
 i32 Char_numEnemy(Char* c) {
     i32 n = 0;
     {
@@ -103751,12 +103764,15 @@ i32 Char_numEnemy(Char* c) {
     return n;
 }
 
-// Char.numExplod (char.go:6043), 0 TODO
+// Char.numExplod (char.go:6051), 0 TODO
 BytecodeValue Char_numExplod(Char* c, BytecodeValue eid) {
     if (BytecodeValue_IsUndefined(eid)) {
         return fn_BytecodeUndefined();
     }
     i32 id = BytecodeValue_ToI(eid);
+    if (true) {
+        return fn_BytecodeInt(fn_numExplodIdx(c->playerNo, id, c->id));
+    }
     i32 total = 0;
     {
         Slice_ExplodPtr _t2 = g_sys.explods.v[c->playerNo];
@@ -103771,7 +103787,7 @@ BytecodeValue Char_numExplod(Char* c, BytecodeValue eid) {
     return fn_BytecodeInt(total);
 }
 
-// Char.numPlayer (char.go:6060), 0 TODO
+// Char.numPlayer (char.go:6071), 0 TODO
 i32 Char_numPlayer(Char* c) {
     i32 count = 0;
     {
@@ -103787,7 +103803,7 @@ i32 Char_numPlayer(Char* c) {
     return count;
 }
 
-// Char.numText (char.go:6076), 0 TODO
+// Char.numText (char.go:6087), 0 TODO
 BytecodeValue Char_numText(Char* c, BytecodeValue textid) {
     if (BytecodeValue_IsUndefined(textid)) {
         return fn_BytecodeUndefined();
@@ -103798,7 +103814,7 @@ BytecodeValue Char_numText(Char* c, BytecodeValue textid) {
     return fn_BytecodeInt(total);
 }
 
-// Char.soundVar (char.go:6088), 0 TODO
+// Char.soundVar (char.go:6099), 0 TODO
 BytecodeValue Char_soundVar(Char* c, BytecodeValue chid, OpCode vtype) {
     if (BytecodeValue_IsUndefined(chid)) {
         return fn_BytecodeUndefined();
@@ -103963,13 +103979,16 @@ BytecodeValue Char_soundVar(Char* c, BytecodeValue chid, OpCode vtype) {
     return fn_BytecodeUndefined();
 }
 
-// Char.numHelper (char.go:6195), 0 TODO
+// Char.numHelper (char.go:6206), 0 TODO
 BytecodeValue Char_numHelper(Char* c, BytecodeValue hid) {
     if (BytecodeValue_IsUndefined(hid)) {
         return fn_BytecodeUndefined();
     }
     i32 id = BytecodeValue_ToI(hid);
     i32 count = 0;
+    if (true) {
+        return fn_BytecodeInt(fn_numHelperIdx(c->playerNo, id));
+    }
     {
         Slice_CharPtr _t2 = GO_SLICE(Slice_CharPtr, g_sys.chars.v[c->playerNo], 1, -1);
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -103983,7 +104002,7 @@ BytecodeValue Char_numHelper(Char* c, BytecodeValue hid) {
     return fn_BytecodeInt(count);
 }
 
-// Char.numPartner (char.go:6212), 0 TODO
+// Char.numPartner (char.go:6226), 0 TODO
 i32 Char_numPartner(Char* c) {
     if ((((g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] != 1) && (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] != 3))) || (c->teamside == -1)) {
         return 0;
@@ -103991,14 +104010,14 @@ i32 Char_numPartner(Char* c) {
     return (g_sys.SystemStateVars_.numSimul.v[(c->playerNo & 1)] - 1);
 }
 
-// Char.numProj (char.go:6219), 0 TODO
+// Char.numProj (char.go:6233), 0 TODO
 i32 Char_numProj(Char* c) {
     Slice_ProjectilePtr projs = Char_getMultipleProjs(c, -1, -1, false);
     i32 total = ((i32)projs.len);
     return total;
 }
 
-// Char.numProjID (char.go:6226), 0 TODO
+// Char.numProjID (char.go:6240), 0 TODO
 BytecodeValue Char_numProjID(Char* c, BytecodeValue pid) {
     if (BytecodeValue_IsUndefined(pid)) {
         return fn_BytecodeUndefined();
@@ -104013,7 +104032,7 @@ BytecodeValue Char_numProjID(Char* c, BytecodeValue pid) {
     return fn_BytecodeInt(total);
 }
 
-// Char.numTarget (char.go:6244), 0 TODO
+// Char.numTarget (char.go:6258), 0 TODO
 BytecodeValue Char_numTarget(Char* c, BytecodeValue hid) {
     if (BytecodeValue_IsUndefined(hid)) {
         return fn_BytecodeUndefined();
@@ -104042,7 +104061,7 @@ BytecodeValue Char_numTarget(Char* c, BytecodeValue hid) {
     return fn_BytecodeInt(n);
 }
 
-// Char.palfxvar (char.go:6261), 0 TODO
+// Char.palfxvar (char.go:6275), 0 TODO
 i32 Char_palfxvar(Char* c, i32 x) {
     i32 n = 0;
     if (x >= 4) {
@@ -104098,7 +104117,7 @@ i32 Char_palfxvar(Char* c, i32 x) {
     return n;
 }
 
-// Char.palfxvar2 (char.go:6293), 0 TODO
+// Char.palfxvar2 (char.go:6307), 0 TODO
 f32 Char_palfxvar2(Char* c, i32 x) {
     f32 n = 0x1p+00f;
     if (x > 1) {
@@ -104126,7 +104145,7 @@ f32 Char_palfxvar2(Char* c, i32 x) {
     return (n * 0x1p+08f);
 }
 
-// Char.pauseTimeTrigger (char.go:6311), 0 TODO
+// Char.pauseTimeTrigger (char.go:6325), 0 TODO
 i32 Char_pauseTimeTrigger(Char* c) {
     i32 p = 0;
     if ((g_sys.SystemStateVars_.supertime > 0) && (c->CharSystemVar_.prevSuperMovetime == 0)) {
@@ -104138,12 +104157,12 @@ i32 Char_pauseTimeTrigger(Char* c) {
     return p;
 }
 
-// Char.canOwnProjectiles (char.go:6322), 0 TODO
+// Char.canOwnProjectiles (char.go:6336), 0 TODO
 bool Char_canOwnProjectiles(Char* c) {
     return ((c->helperIndex == 0) || c->ownProjectile);
 }
 
-// Char.projTimeTrigger (char.go:6326), 0 TODO
+// Char.projTimeTrigger (char.go:6340), 0 TODO
 BytecodeValue Char_projTimeTrigger(Char* c, BytecodeValue pid, GoFunc match) {
     if (BytecodeValue_IsUndefined(pid)) {
         return fn_BytecodeUndefined();
@@ -104155,37 +104174,37 @@ BytecodeValue Char_projTimeTrigger(Char* c, BytecodeValue pid, GoFunc match) {
     return fn_BytecodeInt(c->pctime);
 }
 
-// Char.projCancelTime (char.go:6339), 0 TODO
+// Char.projCancelTime (char.go:6353), 0 TODO
 BytecodeValue Char_projCancelTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_506, go_box(Env_lambda_506, ((Env_lambda_506){0}))}));
 }
 
-// Char.projContactTime (char.go:6345), 0 TODO
+// Char.projContactTime (char.go:6359), 0 TODO
 BytecodeValue Char_projContactTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_507, go_box(Env_lambda_507, ((Env_lambda_507){0}))}));
 }
 
-// Char.projGuardedTime (char.go:6351), 0 TODO
+// Char.projGuardedTime (char.go:6365), 0 TODO
 BytecodeValue Char_projGuardedTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_508, go_box(Env_lambda_508, ((Env_lambda_508){0}))}));
 }
 
-// Char.projHitTime (char.go:6357), 0 TODO
+// Char.projHitTime (char.go:6371), 0 TODO
 BytecodeValue Char_projHitTime(Char* c, BytecodeValue pid) {
     return Char_projTimeTrigger(c, pid, ((GoFunc){(void *)lambda_509, go_box(Env_lambda_509, ((Env_lambda_509){0}))}));
 }
 
-// Char.reversalDefAttr (char.go:6363), 0 TODO
+// Char.reversalDefAttr (char.go:6377), 0 TODO
 bool Char_reversalDefAttr(Char* c, i32 attr) {
     return HitDef_testReversalAttr(&c->hitdef, attr);
 }
 
-// Char.rightEdge (char.go:6367), 0 TODO
+// Char.rightEdge (char.go:6381), 0 TODO
 f32 Char_rightEdge(Char* c) {
     return ((g_sys.SystemStateVars_.cam.ScreenPos.v[0] / c->localscl) + Char_gameWidth(c));
 }
 
-// Char.roundsExisted (char.go:6371), 0 TODO
+// Char.roundsExisted (char.go:6385), 0 TODO
 i32 Char_roundsExisted(Char* c) {
     if (c->teamside == -1) {
         return (g_sys.SystemStateVars_.roundNo - 1);
@@ -104193,7 +104212,7 @@ i32 Char_roundsExisted(Char* c) {
     return g_sys.SystemStateVars_.roundsExisted.v[(c->playerNo & 1)];
 }
 
-// Char.roundsWon (char.go:6378), 0 TODO
+// Char.roundsWon (char.go:6392), 0 TODO
 i32 Char_roundsWon(Char* c) {
     if (c->teamside == -1) {
         return 0;
@@ -104201,21 +104220,21 @@ i32 Char_roundsWon(Char* c) {
     return g_sys.SystemStateVars_.wins.v[(c->playerNo & 1)];
 }
 
-// Char.screenPosX (char.go:6388), 0 TODO
+// Char.screenPosX (char.go:6402), 0 TODO
 f32 Char_screenPosX(Char* c) {
     f32 scaledOffset = (g_sys.SystemStateVars_.cam.Offset.v[0] / g_sys.SystemStateVars_.zoom.resultScale);
     f32 camLeft = ((g_sys.SystemStateVars_.zoom.resultPos.v[0] - scaledOffset) - (g_sys.SystemStateVars_.cam.halfWidth / g_sys.SystemStateVars_.zoom.resultScale));
     return (c->pos.v[0] - (camLeft / c->localscl));
 }
 
-// Char.screenPosY (char.go:6394), 0 TODO
+// Char.screenPosY (char.go:6408), 0 TODO
 f32 Char_screenPosY(Char* c) {
     f32 groundRef = (Camera_GroundLevel(&g_sys.SystemStateVars_.cam) + g_sys.SystemStateVars_.cam.Offset.v[1]);
     f32 camTop = (((g_sys.SystemStateVars_.zoom.resultPos.v[1] - groundRef)) / g_sys.SystemStateVars_.zoom.resultScale);
     return (c->pos.v[1] - (camTop / c->localscl));
 }
 
-// Char.screenHeight (char.go:6400), 0 TODO
+// Char.screenHeight (char.go:6414), 0 TODO
 f32 Char_screenHeight(Char* c) {
     f32 aspect = System_getFightAspect(&g_sys);
     if (!System_middleOfMatch(&g_sys)) {
@@ -104225,12 +104244,12 @@ f32 Char_screenHeight(Char* c) {
     return ((f32)go_f2i32((height + 0x1p-01f)));
 }
 
-// Char.screenWidth (char.go:6414), 0 TODO
+// Char.screenWidth (char.go:6428), 0 TODO
 f32 Char_screenWidth(Char* c) {
     return ((f32)Char_stOgi(c)->localcoord.v[0]);
 }
 
-// Char.selfStatenoExist (char.go:6418), 0 TODO
+// Char.selfStatenoExist (char.go:6432), 0 TODO
 BytecodeValue Char_selfStatenoExist(Char* c, BytecodeValue stateno) {
     if (BytecodeValue_IsUndefined(stateno)) {
         return fn_BytecodeUndefined();
@@ -104240,7 +104259,7 @@ BytecodeValue Char_selfStatenoExist(Char* c, BytecodeValue stateno) {
     return fn_BytecodeBool(ok);
 }
 
-// Char.stageFrontEdgeDist (char.go:6428), 0 TODO
+// Char.stageFrontEdgeDist (char.go:6442), 0 TODO
 f32 Char_stageFrontEdgeDist(Char* c) {
     f32 corner = 0x0p+00f;
     f32 camStart = (((f32)g_sys.SystemStateVars_.cam.stageCamera_.startx) * g_sys.SystemStateVars_.cam.stageCamera_.localscl);
@@ -104253,7 +104272,7 @@ f32 Char_stageFrontEdgeDist(Char* c) {
     }
 }
 
-// Char.stageBackEdgeDist (char.go:6442), 0 TODO
+// Char.stageBackEdgeDist (char.go:6456), 0 TODO
 f32 Char_stageBackEdgeDist(Char* c) {
     f32 corner = 0x0p+00f;
     f32 camStart = (((f32)g_sys.SystemStateVars_.cam.stageCamera_.startx) * g_sys.SystemStateVars_.cam.stageCamera_.localscl);
@@ -104266,7 +104285,7 @@ f32 Char_stageBackEdgeDist(Char* c) {
     }
 }
 
-// Char.teamLeader (char.go:6456), 0 TODO
+// Char.teamLeader (char.go:6470), 0 TODO
 int Char_teamLeader(Char* c) {
     if (((c->teamside == -1) || (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] == 0)) || (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] == 2)) {
         return (c->playerNo + 1);
@@ -104274,7 +104293,7 @@ int Char_teamLeader(Char* c) {
     return (g_sys.SystemStateVars_.teamLeader.v[(c->playerNo & 1)] + 1);
 }
 
-// Char.teamSize (char.go:6463), 0 TODO
+// Char.teamSize (char.go:6477), 0 TODO
 i32 Char_teamSize(Char* c) {
     if (c->teamside == -1) {
         i32 n = 0;
@@ -104295,7 +104314,7 @@ i32 Char_teamSize(Char* c) {
     return g_sys.SystemStateVars_.numSimul.v[(c->playerNo & 1)];
 }
 
-// Char.getTeamOrder (char.go:6480), 0 TODO
+// Char.getTeamOrder (char.go:6494), 0 TODO
 Slice_int Char_getTeamOrder(Char* c) {
     int count = ((int)g_sys.SystemStateVars_.numSimul.v[c->teamside]);
     Slice_int *team__h = go_box(Slice_int, GO_MAKE_A(Slice_int, int, 0, count));
@@ -104314,7 +104333,7 @@ Slice_int Char_getTeamOrder(Char* c) {
     return (*team__h);
 }
 
-// Char.updateTeamOrder (char.go:6505), 0 TODO
+// Char.updateTeamOrder (char.go:6519), 0 TODO
 void Char_updateTeamOrder(Char* c, Slice_int team) {
     if (team.len == 0) {
         return;
@@ -104332,7 +104351,7 @@ void Char_updateTeamOrder(Char* c, Slice_int team) {
     FightScreen_syncTeamOrder(&g_sys.fightScreen, side);
 }
 
-// Char.changeTagOrder (char.go:6522), 0 TODO
+// Char.changeTagOrder (char.go:6536), 0 TODO
 void Char_changeTagOrder(Char* c, int targetMN) {
     if (g_sys.SystemStateVars_.tmode.v[c->teamside] != 3) {
         return;
@@ -104353,7 +104372,7 @@ void Char_changeTagOrder(Char* c, int targetMN) {
     Char_updateTeamOrder(c, team);
 }
 
-// Char.changeTagLeader (char.go:6550), 0 TODO
+// Char.changeTagLeader (char.go:6564), 0 TODO
 void Char_changeTagLeader(Char* c, int nextLeaderPN) {
     if (g_sys.SystemStateVars_.tmode.v[c->teamside] != 3) {
         return;
@@ -104407,22 +104426,22 @@ void Char_changeTagLeader(Char* c, int nextLeaderPN) {
     Char_updateTeamOrder(c, team);
 }
 
-// Char.topEdge (char.go:6618), 0 TODO
+// Char.topEdge (char.go:6632), 0 TODO
 f32 Char_topEdge(Char* c) {
     return (g_sys.SystemStateVars_.cam.ScreenPos.v[1] / c->localscl);
 }
 
-// Char.topBoundBodyDist (char.go:6622), 0 TODO
+// Char.topBoundBodyDist (char.go:6636), 0 TODO
 f32 Char_topBoundBodyDist(Char* c) {
     return (Char_topBoundDist(c) - c->CharSystemVar_.depthEdge.v[0]);
 }
 
-// Char.topBoundDist (char.go:6626), 0 TODO
+// Char.topBoundDist (char.go:6640), 0 TODO
 f32 Char_topBoundDist(Char* c) {
     return (c->pos.v[2] - (g_sys.SystemStateVars_.zmin / c->localscl));
 }
 
-// Char.win (char.go:6630), 0 TODO
+// Char.win (char.go:6644), 0 TODO
 bool Char_win(Char* c) {
     if (c->teamside == -1) {
         return false;
@@ -104430,32 +104449,32 @@ bool Char_win(Char* c) {
     return (g_sys.SystemStateVars_.winTeam == (c->playerNo & 1));
 }
 
-// Char.winKO (char.go:6637), 0 TODO
+// Char.winKO (char.go:6651), 0 TODO
 bool Char_winKO(Char* c) {
     return (Char_win(c) && (g_sys.SystemStateVars_.finishType == 1));
 }
 
-// Char.winTime (char.go:6641), 0 TODO
+// Char.winTime (char.go:6655), 0 TODO
 bool Char_winTime(Char* c) {
     return (Char_win(c) && (g_sys.SystemStateVars_.finishType == 3));
 }
 
-// Char.winPerfect (char.go:6645), 0 TODO
+// Char.winPerfect (char.go:6659), 0 TODO
 bool Char_winPerfect(Char* c) {
     return ((Char_win(c) && (g_sys.SystemStateVars_.winType.v[(c->playerNo & 1)] >= 11)) && (g_sys.SystemStateVars_.winType.v[(c->playerNo & 1)] < 19));
 }
 
-// Char.winClutch (char.go:6649), 0 TODO
+// Char.winClutch (char.go:6663), 0 TODO
 bool Char_winClutch(Char* c) {
     return (Char_win(c) && (g_sys.SystemStateVars_.winType.v[(c->playerNo & 1)] >= 19));
 }
 
-// Char.winType (char.go:6653), 0 TODO
+// Char.winType (char.go:6667), 0 TODO
 bool Char_winType(Char* c, WinType wt) {
     return (Char_win(c) && (g_sys.SystemStateVars_.winTrigger.v[(c->playerNo & 1)] == wt));
 }
 
-// Char.getOwnChannels (char.go:6659), 0 TODO
+// Char.getOwnChannels (char.go:6673), 0 TODO
 Slice_SoundChannelPtr Char_getOwnChannels(Char* c, i32 chNo) {
     Slice_SoundChannelPtr found = {0};
     {
@@ -104473,7 +104492,7 @@ Slice_SoundChannelPtr Char_getOwnChannels(Char* c, i32 chNo) {
     return found;
 }
 
-// Char.playSound (char.go:6671), 0 TODO
+// Char.playSound (char.go:6685), 0 TODO
 void Char_playSound(Char* c, PlaySndParams* params) {
     if ((params->group < 0) || g_sys.SystemStateVars_.noCharSoundFlg) {
         return;
@@ -104549,7 +104568,7 @@ void Char_playSound(Char* c, PlaySndParams* params) {
     }
 }
 
-// Char.autoTurn (char.go:6764), 0 TODO
+// Char.autoTurn (char.go:6778), 0 TODO
 void Char_autoTurn(Char* c) {
     if ((((c->helperIndex == 0) && (!Char_asf(c, 4U))) && g_sys.stage->autoturn) && Char_shouldFaceP2(c)) {
         {
@@ -104573,7 +104592,7 @@ void Char_autoTurn(Char* c) {
     }
 }
 
-// Char.updateFBFlip (char.go:6782), 0 TODO
+// Char.updateFBFlip (char.go:6796), 0 TODO
 void Char_updateFBFlip(Char* c) {
     f32 setting = TypedValue_ToF(Map_GoString_TypedValue_get(&Char_gi(c)->constants, GOSTR("input.fbflipenemydistance"), NULL));
     c->fbFlip = (c->facing < 0x0p+00f);
@@ -104592,7 +104611,7 @@ void Char_updateFBFlip(Char* c) {
     }
 }
 
-// Char.shouldFaceP2 (char.go:6808), 0 TODO
+// Char.shouldFaceP2 (char.go:6822), 0 TODO
 bool Char_shouldFaceP2(Char* c) {
     Char* e = Char_p2(c);
     if (e == NULL) {
@@ -104613,7 +104632,7 @@ bool Char_shouldFaceP2(Char* c) {
     return false;
 }
 
-// Char.stateChange1 (char.go:6835), 0 TODO
+// Char.stateChange1 (char.go:6849), 0 TODO
 bool Char_stateChange1(Char* c, i32 no, int pn) {
     if (g_sys.SystemStateVars_.changeStateNest >= 2500) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("state machine stuck in loop (stopped after %v loops): %v -> %v -> %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 4, ((GoIface){5, go_box_a(i32, g_sys.SystemStateVars_.changeStateNest)}), ((GoIface){5, go_box_a(i32, c->ss.prevno)}), ((GoIface){5, go_box_a(i32, c->ss.no)}), ((GoIface){5, go_box_a(i32, no)})))));
@@ -104712,7 +104731,7 @@ bool Char_stateChange1(Char* c, i32 no, int pn) {
     return true;
 }
 
-// Char.stateChange2 (char.go:6976), 0 TODO
+// Char.stateChange2 (char.go:6990), 0 TODO
 bool Char_stateChange2(Char* c) {
     if (c->stchtmp && (!Char_hitPause(c))) {
         StateBytecode_init(c->ss.sb, c);
@@ -104744,7 +104763,7 @@ bool Char_stateChange2(Char* c) {
     return false;
 }
 
-// Char.changeStateEx (char.go:6999), 0 TODO
+// Char.changeStateEx (char.go:7013), 0 TODO
 void Char_changeStateEx(Char* c, i32 no, int pn, i32 anim, i32 ctrl, GoString ffx) {
     if (((((((c->minus <= 0) && Char_scf(c, 1U)) && (System_roundState(&g_sys) <= 2)) && (Char_stWgi(c)->ikemenver.v[0] == 0U)) && (Char_stWgi(c)->ikemenver.v[1] == 0U)) && (((c->ss.stateType == 1) || (c->ss.stateType == 2)))) && (!Char_asf(c, 16777216U))) {
         Char_autoTurn(c);
@@ -104770,12 +104789,12 @@ void Char_changeStateEx(Char* c, i32 no, int pn, i32 anim, i32 ctrl, GoString ff
     }
 }
 
-// Char.changeState (char.go:7030), 0 TODO
+// Char.changeState (char.go:7044), 0 TODO
 void Char_changeState(Char* c, i32 no, i32 anim, i32 ctrl, GoString ffx) {
     Char_changeStateEx(c, no, c->ss.sb->playerNo, anim, ctrl, ffx);
 }
 
-// Char.runState (char.go:7036), 0 TODO
+// Char.runState (char.go:7050), 0 TODO
 void Char_runState(Char* c, i32 no, int pn) {
     if (c->runStateNest >= 2500) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("state machine stuck in loop (stopped after %v loops): ran state %v from state %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){5, go_box_a(i32, c->runStateNest)}), ((GoIface){5, go_box_a(i32, no)}), ((GoIface){5, go_box_a(i32, c->ss.no)})))));
@@ -104830,7 +104849,7 @@ void Char_runState(Char* c, i32 no, int pn) {
     c->runStateNest--;
 }
 
-// Char.selfState (char.go:7094), 0 TODO
+// Char.selfState (char.go:7108), 0 TODO
 void Char_selfState(Char* c, i32 no, i32 anim, i32 readplayerid, i32 ctrl, GoString ffx) {
     int playerno = 0;
     if (readplayerid >= 0) {
@@ -104841,7 +104860,7 @@ void Char_selfState(Char* c, i32 no, i32 anim, i32 readplayerid, i32 ctrl, GoStr
     Char_changeStateEx(c, no, playerno, anim, ctrl, ffx);
 }
 
-// Char.destroy (char.go:7104), 0 TODO
+// Char.destroy (char.go:7118), 0 TODO
 void Char_destroy(Char* c) {
     if (c->helperIndex == 0) {
         return;
@@ -104906,7 +104925,7 @@ void Char_destroy(Char* c) {
     Char_setCSF(c, 2U, true);
 }
 
-// Char.destroySelf (char.go:7158), 0 TODO
+// Char.destroySelf (char.go:7172), 0 TODO
 bool Char_destroySelf(Char* c, bool recursive, bool removeexplods, bool removetexts) {
     if ((c->helperIndex <= 0) || Char_asf(c, 144115188075855872U)) {
         return false;
@@ -104939,7 +104958,7 @@ bool Char_destroySelf(Char* c, bool recursive, bool removeexplods, bool removete
     return true;
 }
 
-// Char.newHelper (char.go:7189), 0 TODO
+// Char.newHelper (char.go:7203), 0 TODO
 Char* Char_newHelper(Char* c) {
     Char* h = {0};
     int hidx = 1;
@@ -104964,6 +104983,7 @@ Char* Char_newHelper(Char* c) {
     }
     h->name = go_strcat(c->name, GOSTR("'s helper"));
     h->id = System_newCharId(&g_sys);
+    fn_helperIdxChanged();
     h->helperId = 0;
     h->ownpal = false;
     h->preserve = false;
@@ -104995,7 +105015,7 @@ Char* Char_newHelper(Char* c) {
     return h;
 }
 
-// Char.helperInit (char.go:7247), 0 TODO
+// Char.helperInit (char.go:7262), 0 TODO
 void Char_helperInit(Char* c, Char* h, i32 st, PosType pt, Arr3_f32 pos, i32 facing, Arr2_i32 rp) {
     Arr3_f32 p = Char_helperPos(c, pt, pos, facing, (&h->facing), h->localscl, false);
     Char_setPosX(h, p.v[0], true);
@@ -105021,12 +105041,13 @@ void Char_helperInit(Char* c, Char* h, i32 st, PosType pt, Arr3_f32 pos, i32 fac
     Char_changeStateEx(h, st, c->playerNo, 0, 1, GOSTR(""));
     if (h->helperId < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(h), fmt_Sprintf(GOSTR("has negative Helper ID"), (Slice_GoIface){0})));
+        fn_helperIdxChanged();
         h->helperId = 0;
     }
     Char_actionPrepare(h);
 }
 
-// Char.helperPos (char.go:7284), 0 TODO
+// Char.helperPos (char.go:7300), 0 TODO
 Arr3_f32 Char_helperPos(Char* c, PosType pt, Arr3_f32 pos, i32 facing, f32* dstFacing, f32 localscl, bool isProj) {
     Arr3_f32 p = {0};
     if (facing < 0) {
@@ -105106,7 +105127,7 @@ Arr3_f32 Char_helperPos(Char* c, PosType pt, Arr3_f32 pos, i32 facing, f32* dstF
     return p;
 }
 
-// Char.spawnExplod (char.go:7348), 0 TODO
+// Char.spawnExplod (char.go:7364), 0 TODO
 Ret_ExplodPtr__int Char_spawnExplod(Char* c) {
     Slice_ExplodPtr* playerExplods = (&g_sys.explods.v[c->playerNo]);
     if ((*playerExplods).len >= g_sys.cfg.Config.ExplodMax) {
@@ -105145,7 +105166,7 @@ Ret_ExplodPtr__int Char_spawnExplod(Char* c) {
     return (Ret_ExplodPtr__int){e, idx};
 }
 
-// Char.getMultipleExplods (char.go:7390), 0 TODO
+// Char.getMultipleExplods (char.go:7406), 0 TODO
 Slice_ExplodPtr Char_getMultipleExplods(Char* c, i32 id, int idx, bool log_) {
     Slice_ExplodPtr expls = {0};
     if ((g_sys.explods.v[c->playerNo].len > 0) && (idx < g_sys.explods.v[c->playerNo].len)) {
@@ -105178,7 +105199,7 @@ Slice_ExplodPtr Char_getMultipleExplods(Char* c, i32 id, int idx, bool log_) {
     return expls;
 }
 
-// Char.getSingleExplod (char.go:7423), 0 TODO
+// Char.getSingleExplod (char.go:7439), 0 TODO
 Explod* Char_getSingleExplod(Char* c, i32 id, int idx, bool log_) {
     if (idx < 0) {
         if (log_) {
@@ -105206,7 +105227,7 @@ Explod* Char_getSingleExplod(Char* c, i32 id, int idx, bool log_) {
     return NULL;
 }
 
-// Char.explodDrawPal (char.go:7448), 0 TODO
+// Char.explodDrawPal (char.go:7464), 0 TODO
 Arr2_i32 Char_explodDrawPal(Char* c, Explod* e) {
     if (e->palfx->remap.len == 0) {
         return (Arr2_i32){{0, 0}};
@@ -105214,12 +105235,13 @@ Arr2_i32 Char_explodDrawPal(Char* c, Explod* e) {
     return Char_getDrawPal(c, e->palfx->remap.p[0]);
 }
 
-// Char.commitExplod (char.go:7456), 0 TODO
+// Char.commitExplod (char.go:7472), 0 TODO
 void Char_commitExplod(Char* c, int i) {
     Explod* e = g_sys.explods.v[c->playerNo].p[i];
     Explod_setAnim(e);
     Explod_setAnimElem(e);
     if (e->anim == NULL) {
+        fn_explodIdxChanged();
         e->id = INT32_MIN;
         return;
     }
@@ -105282,7 +105304,7 @@ void Char_commitExplod(Char* c, int i) {
     Animation_UpdateSprite(e->anim);
 }
 
-// Char.explodBindTime (char.go:7539), 0 TODO
+// Char.explodBindTime (char.go:7556), 0 TODO
 void Char_explodBindTime(Char* c, i32 id, i32 time_) {
     {
         Slice_ExplodPtr _t2 = g_sys.explods.v[c->playerNo];
@@ -105297,7 +105319,7 @@ void Char_explodBindTime(Char* c, i32 id, i32 time_) {
     }
 }
 
-// Char.removeExplod (char.go:7549), 0 TODO
+// Char.removeExplod (char.go:7566), 0 TODO
 void Char_removeExplod(Char* c, i32 id, i32 idx) {
     Slice_ExplodPtr* playerExplods = (&g_sys.explods.v[c->playerNo]);
     bool removedAny = false;
@@ -105308,6 +105330,7 @@ void Char_removeExplod(Char* c, i32 id, i32 idx) {
             Explod* e = _t2.p[_t1];
             if (Explod_matchId(e, id, c->id)) {
                 if ((idx < 0) || (idx == n)) {
+                    fn_explodIdxChanged();
                     e->id = INT32_MIN;
                     removedAny = true;
                     if (idx == n) {
@@ -105324,7 +105347,7 @@ void Char_removeExplod(Char* c, i32 id, i32 idx) {
     }
 }
 
-// Char.spawnText (char.go:7576), 0 TODO
+// Char.spawnText (char.go:7594), 0 TODO
 TextSprite* Char_spawnText(Char* c) {
     Slice_TextSpritePtr* playerTexts = (&g_sys.chartexts.v[c->playerNo]);
     if ((*playerTexts).len >= g_sys.cfg.Config.TextMax) {
@@ -105336,7 +105359,7 @@ TextSprite* Char_spawnText(Char* c) {
     return ts;
 }
 
-// Char.getMultipleTexts (char.go:7594), 0 TODO
+// Char.getMultipleTexts (char.go:7612), 0 TODO
 Slice_TextSpritePtr Char_getMultipleTexts(Char* c, i32 id, int idx, bool log_) {
     Slice_TextSpritePtr texts = {0};
     if ((g_sys.chartexts.v[c->playerNo].len > 0) && (idx < g_sys.chartexts.v[c->playerNo].len)) {
@@ -105369,7 +105392,7 @@ Slice_TextSpritePtr Char_getMultipleTexts(Char* c, i32 id, int idx, bool log_) {
     return texts;
 }
 
-// Char.removeText (char.go:7627), 0 TODO
+// Char.removeText (char.go:7645), 0 TODO
 void Char_removeText(Char* c, i32 id, i32 index) {
     Slice_TextSpritePtr* playerTexts = (&g_sys.chartexts.v[c->playerNo]);
     bool removedAny = false;
@@ -105400,7 +105423,7 @@ void Char_removeText(Char* c, i32 id, i32 index) {
     }
 }
 
-// Char.getAnimSprite (char.go:7658), 0 TODO
+// Char.getAnimSprite (char.go:7676), 0 TODO
 Animation* Char_getAnimSprite(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx, bool ownpal) {
     Animation* a = Char_getAnim(g_sys.chars.v[animPlayerNo].p[0], animNo, ffx);
     if (a == NULL) {
@@ -105410,13 +105433,13 @@ Animation* Char_getAnimSprite(Char* c, i32 animNo, int animPlayerNo, int spriteP
     return a;
 }
 
-// Char.getSelfAnimSprite (char.go:7673), 0 TODO
+// Char.getSelfAnimSprite (char.go:7691), 0 TODO
 Animation* Char_getSelfAnimSprite(Char* c, i32 animNo, GoString ffx, bool ownpal) {
     Animation* a = Char_getAnimSprite(c, animNo, c->playerNo, c->playerNo, ffx, ownpal);
     return a;
 }
 
-// Char.getShadowReflectionSprite (char.go:7680), 0 TODO
+// Char.getShadowReflectionSprite (char.go:7698), 0 TODO
 Animation* Char_getShadowReflectionSprite(Char* c, i32 animNo, int animPlayerNo, int spritePlayerNo, GoString ffx, bool ownpal, GoString scname) {
     if (animPlayerNo < 0) {
         animPlayerNo = c->playerNo;
@@ -105437,7 +105460,7 @@ Animation* Char_getShadowReflectionSprite(Char* c, i32 animNo, int animPlayerNo,
     return Char_getAnimSprite(c, animNo, animPlayerNo, spritePlayerNo, ffx, ownpal);
 }
 
-// Char.getAnim (char.go:7700), 0 TODO
+// Char.getAnim (char.go:7718), 0 TODO
 Animation* Char_getAnim(Char* c, i32 n, GoString ffx) {
     Animation* a = {0};
     if (n == -2) {
@@ -105463,7 +105486,7 @@ Animation* Char_getAnim(Char* c, i32 n, GoString ffx) {
     return a;
 }
 
-// Char.animSpriteSetup (char.go:7759), 0 TODO
+// Char.animSpriteSetup (char.go:7777), 0 TODO
 void Char_animSpriteSetup(Char* c, Animation* a, int spritePN, GoString ffx, bool ownpal) {
     if (((a == NULL) || (spritePN < 0)) || (spritePN >= 12)) {
         return;
@@ -105527,7 +105550,7 @@ void Char_animSpriteSetup(Char* c, Animation* a, int spritePN, GoString ffx, boo
     }
 }
 
-// Char.posReset (char.go:7824), 0 TODO
+// Char.posReset (char.go:7842), 0 TODO
 void Char_posReset(Char* c) {
     if (((c->teamside == -1) || (c->playerNo < 0)) || (c->playerNo >= 12)) {
         c->facing = 0x1p+00f;
@@ -105545,7 +105568,7 @@ void Char_posReset(Char* c) {
     c->vel.v[2] = 0x0p+00f;
 }
 
-// Char.setPosX (char.go:7841), 0 TODO
+// Char.setPosX (char.go:7859), 0 TODO
 void Char_setPosX(Char* c, f32 x, bool all) {
     if (c->pos.v[0] != x) {
         if (Char_isPlayerType(c)) {
@@ -105563,7 +105586,7 @@ void Char_setPosX(Char* c, f32 x, bool all) {
     }
 }
 
-// Char.setPosY (char.go:7859), 0 TODO
+// Char.setPosY (char.go:7877), 0 TODO
 void Char_setPosY(Char* c, f32 y, bool all) {
     c->pos.v[1] = y;
     if (all) {
@@ -105574,7 +105597,7 @@ void Char_setPosY(Char* c, f32 y, bool all) {
     }
 }
 
-// Char.setPosZ (char.go:7867), 0 TODO
+// Char.setPosZ (char.go:7885), 0 TODO
 void Char_setPosZ(Char* c, f32 z, bool all) {
     if (c->pos.v[2] != z) {
         if (Char_isPlayerType(c)) {
@@ -105592,22 +105615,22 @@ void Char_setPosZ(Char* c, f32 z, bool all) {
     }
 }
 
-// Char.addX (char.go:7883), 0 TODO
+// Char.addX (char.go:7901), 0 TODO
 void Char_addX(Char* c, f32 x) {
     Char_setPosX(c, (c->pos.v[0] + (x * c->facing)), true);
 }
 
-// Char.addY (char.go:7887), 0 TODO
+// Char.addY (char.go:7905), 0 TODO
 void Char_addY(Char* c, f32 y) {
     Char_setPosY(c, (c->pos.v[1] + y), true);
 }
 
-// Char.addZ (char.go:7891), 0 TODO
+// Char.addZ (char.go:7909), 0 TODO
 void Char_addZ(Char* c, f32 z) {
     Char_setPosZ(c, (c->pos.v[2] + z), false);
 }
 
-// Char.hitAdd (char.go:7895), 0 TODO
+// Char.hitAdd (char.go:7913), 0 TODO
 void Char_hitAdd(Char* c, i32 h) {
     if (h == 0) {
         return;
@@ -105649,7 +105672,7 @@ void Char_hitAdd(Char* c, i32 h) {
     }
 }
 
-// Char.spawnProjectile (char.go:7931), 0 TODO
+// Char.spawnProjectile (char.go:7949), 0 TODO
 Projectile* Char_spawnProjectile(Char* c) {
     Slice_ProjectilePtr* playerProjs = (&g_sys.projs.v[c->playerNo]);
     if ((*playerProjs).len >= g_sys.cfg.Config.ProjectileMax) {
@@ -105663,7 +105686,7 @@ Projectile* Char_spawnProjectile(Char* c) {
     return p;
 }
 
-// Char.commitProjectile (char.go:7950), 0 TODO
+// Char.commitProjectile (char.go:7968), 0 TODO
 void Char_commitProjectile(Char* c, Projectile* p, PosType pt, f32 offx, f32 offy, f32 offz, bool op, i32 rpg, i32 rpn, bool clsnscale) {
     if (p->id < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("negative projID %v clamped to 0"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, p->id)})))));
@@ -105724,7 +105747,7 @@ void Char_commitProjectile(Char* c, Projectile* p, PosType pt, f32 offx, f32 off
     }
 }
 
-// Char.projDrawPal (char.go:8033), 0 TODO
+// Char.projDrawPal (char.go:8051), 0 TODO
 Arr2_i32 Char_projDrawPal(Char* c, Projectile* p) {
     if (p->palfx->remap.len == 0) {
         return (Arr2_i32){{0, 0}};
@@ -105732,7 +105755,7 @@ Arr2_i32 Char_projDrawPal(Char* c, Projectile* p) {
     return Char_getDrawPal(c, p->palfx->remap.p[0]);
 }
 
-// Char.getMultipleProjs (char.go:8041), 0 TODO
+// Char.getMultipleProjs (char.go:8059), 0 TODO
 Slice_ProjectilePtr Char_getMultipleProjs(Char* c, i32 id, int idx, bool log_) {
     Slice_ProjectilePtr projs = {0};
     if (!Char_canOwnProjectiles(c)) {
@@ -105771,7 +105794,7 @@ Slice_ProjectilePtr Char_getMultipleProjs(Char* c, i32 id, int idx, bool log_) {
     return projs;
 }
 
-// Char.getSingleProj (char.go:8084), 0 TODO
+// Char.getSingleProj (char.go:8102), 0 TODO
 Projectile* Char_getSingleProj(Char* c, i32 id, int idx, bool log_) {
     if (idx < 0) {
         if (log_) {
@@ -105786,7 +105809,7 @@ Projectile* Char_getSingleProj(Char* c, i32 id, int idx, bool log_) {
     return NULL;
 }
 
-// Char.clsnScaleLocal (char.go:8153), 0 TODO
+// Char.clsnScaleLocal (char.go:8171), 0 TODO
 Arr2_f32 Char_clsnScaleLocal(Char* c) {
     if (((c->helperIndex != 0) && c->ownclsnscale) && (c->animPN == c->playerNo)) {
         return (Arr2_f32){{c->size.xscale, c->size.yscale}};
@@ -105798,12 +105821,12 @@ Arr2_f32 Char_clsnScaleLocal(Char* c) {
     return (Arr2_f32){{0x1p+00f, 0x1p+00f}};
 }
 
-// Char.sizeBoxScaleWorld (char.go:8181), 0 TODO
+// Char.sizeBoxScaleWorld (char.go:8199), 0 TODO
 Arr2_f32 Char_sizeBoxScaleWorld(Char* c) {
     return (Arr2_f32){{c->baselocalscl, c->baselocalscl}};
 }
 
-// Char.gethitAnimtype (char.go:8185), 0 TODO
+// Char.gethitAnimtype (char.go:8203), 0 TODO
 Reaction Char_gethitAnimtype(Char* c) {
     if (c->ghv.fallflag) {
         return c->ghv.fall_animtype;
@@ -105820,12 +105843,12 @@ Reaction Char_gethitAnimtype(Char* c) {
     }
 }
 
-// Char.isTargetBound (char.go:8199), 0 TODO
+// Char.isTargetBound (char.go:8217), 0 TODO
 bool Char_isTargetBound(Char* c) {
     return GetHitVar_idMatch(c->ghv, c->CharSystemVar_.bindToId);
 }
 
-// Char.initConstants (char.go:8203), 0 TODO
+// Char.initConstants (char.go:8221), 0 TODO
 void Char_initConstants(Char* c, CharGlobalInfo* gi) {
     CharData_init(&gi->data);
     gi->attackBase = 100;
@@ -105922,7 +105945,7 @@ void Char_initConstants(Char* c, CharGlobalInfo* gi) {
     Map_GoString_TypedValue_set(&gi->constants, GOSTR("input.fbflipenemydistance"), (TypedValue){.Type = 1, .Num = -0x1p+00});
 }
 
-// Char.initCnsVar (char.go:8309), 0 TODO
+// Char.initCnsVar (char.go:8327), 0 TODO
 void Char_initCnsVar(Char* c) {
     c->varGen++;
     c->cnsvar = Map_i32_i32_make(0);
@@ -105931,7 +105954,7 @@ void Char_initCnsVar(Char* c) {
     c->cnssysfvar = Map_i32_f32_make(0);
 }
 
-// Char.varGet (char.go:8317), 0 TODO
+// Char.varGet (char.go:8335), 0 TODO
 BytecodeValue Char_varGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("var index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -105956,7 +105979,7 @@ BytecodeValue Char_varGet(Char* c, i32 i) {
     return fn_BytecodeInt(0);
 }
 
-// Char.fvarGet (char.go:8345), 0 TODO
+// Char.fvarGet (char.go:8363), 0 TODO
 BytecodeValue Char_fvarGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("fvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -105981,7 +106004,7 @@ BytecodeValue Char_fvarGet(Char* c, i32 i) {
     return fn_BytecodeFloat(0x0p+00f);
 }
 
-// Char.sysVarGet (char.go:8368), 0 TODO
+// Char.sysVarGet (char.go:8386), 0 TODO
 BytecodeValue Char_sysVarGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -105996,7 +106019,7 @@ BytecodeValue Char_sysVarGet(Char* c, i32 i) {
     return fn_BytecodeInt(0);
 }
 
-// Char.sysFvarGet (char.go:8381), 0 TODO
+// Char.sysFvarGet (char.go:8399), 0 TODO
 BytecodeValue Char_sysFvarGet(Char* c, i32 i) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysfvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106011,7 +106034,7 @@ BytecodeValue Char_sysFvarGet(Char* c, i32 i) {
     return fn_BytecodeFloat(0x0p+00f);
 }
 
-// Char.cnsVarSet (char.go:8394), 0 TODO
+// Char.cnsVarSet (char.go:8412), 0 TODO
 BytecodeValue Char_cnsVarSet(Char* c, i32 i, BytecodeValue value, i32 scType, i32 varType) {
     Char* target = c;
     {
@@ -106067,7 +106090,7 @@ BytecodeValue Char_cnsVarSet(Char* c, i32 i, BytecodeValue value, i32 scType, i3
     return fn_BytecodeUndefined();
 }
 
-// Char.varSet (char.go:8434), 0 TODO
+// Char.varSet (char.go:8452), 0 TODO
 BytecodeValue Char_varSet(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("var index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106080,7 +106103,7 @@ BytecodeValue Char_varSet(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(v);
 }
 
-// Char.fvarSet (char.go:8447), 0 TODO
+// Char.fvarSet (char.go:8465), 0 TODO
 BytecodeValue Char_fvarSet(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("fvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106093,7 +106116,7 @@ BytecodeValue Char_fvarSet(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(v);
 }
 
-// Char.sysVarSet (char.go:8460), 0 TODO
+// Char.sysVarSet (char.go:8478), 0 TODO
 BytecodeValue Char_sysVarSet(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106103,7 +106126,7 @@ BytecodeValue Char_sysVarSet(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(v);
 }
 
-// Char.sysFvarSet (char.go:8470), 0 TODO
+// Char.sysFvarSet (char.go:8488), 0 TODO
 BytecodeValue Char_sysFvarSet(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysfvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106113,7 +106136,7 @@ BytecodeValue Char_sysFvarSet(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(v);
 }
 
-// Char.varAdd (char.go:8480), 0 TODO
+// Char.varAdd (char.go:8498), 0 TODO
 BytecodeValue Char_varAdd(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("var index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106135,7 +106158,7 @@ BytecodeValue Char_varAdd(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(Map_i32_i32_get(&c->cnsvar, i, NULL));
 }
 
-// Char.fvarAdd (char.go:8498), 0 TODO
+// Char.fvarAdd (char.go:8516), 0 TODO
 BytecodeValue Char_fvarAdd(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("fvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106156,7 +106179,7 @@ BytecodeValue Char_fvarAdd(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(Map_i32_f32_get(&c->cnsfvar, i, NULL));
 }
 
-// Char.sysVarAdd (char.go:8515), 0 TODO
+// Char.sysVarAdd (char.go:8533), 0 TODO
 BytecodeValue Char_sysVarAdd(Char* c, i32 i, i32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106174,7 +106197,7 @@ BytecodeValue Char_sysVarAdd(Char* c, i32 i, i32 v) {
     return fn_BytecodeInt(Map_i32_i32_get(&c->cnssysvar, i, NULL));
 }
 
-// Char.sysFvarAdd (char.go:8529), 0 TODO
+// Char.sysFvarAdd (char.go:8547), 0 TODO
 BytecodeValue Char_sysFvarAdd(Char* c, i32 i, f32 v) {
     if (i < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("sysfvar index %v must be positive"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, i)})))));
@@ -106192,29 +106215,29 @@ BytecodeValue Char_sysFvarAdd(Char* c, i32 i, f32 v) {
     return fn_BytecodeFloat(Map_i32_f32_get(&c->cnssysfvar, i, NULL));
 }
 
-// Char.varRangeSet (char.go:8590), 0 TODO
+// Char.varRangeSet (char.go:8608), 0 TODO
 void Char_varRangeSet(Char* c, i32 first, i32 last, i32 val) {
     c->varGen++;
     fn_varRangeSetSub_i32(c, (&c->cnsvar), first, last, val);
 }
 
-// Char.fvarRangeSet (char.go:8595), 0 TODO
+// Char.fvarRangeSet (char.go:8613), 0 TODO
 void Char_fvarRangeSet(Char* c, i32 first, i32 last, f32 val) {
     c->varGen++;
     fn_varRangeSetSub_f32(c, (&c->cnsfvar), first, last, val);
 }
 
-// Char.sysVarRangeSet (char.go:8600), 0 TODO
+// Char.sysVarRangeSet (char.go:8618), 0 TODO
 void Char_sysVarRangeSet(Char* c, i32 first, i32 last, i32 val) {
     fn_varRangeSetSub_i32(c, (&c->cnssysvar), first, last, val);
 }
 
-// Char.sysFvarRangeSet (char.go:8604), 0 TODO
+// Char.sysFvarRangeSet (char.go:8622), 0 TODO
 void Char_sysFvarRangeSet(Char* c, i32 first, i32 last, f32 val) {
     fn_varRangeSetSub_f32(c, (&c->cnssysfvar), first, last, val);
 }
 
-// Char.setFacing (char.go:8608), 0 TODO
+// Char.setFacing (char.go:8626), 0 TODO
 void Char_setFacing(Char* c, f32 f) {
     if (f != 0x0p+00f) {
         if (((c->facing < 0x0p+00f)) != ((f < 0x0p+00f))) {
@@ -106224,7 +106247,7 @@ void Char_setFacing(Char* c, f32 f) {
     }
 }
 
-// Char.getMultipleStageBg (char.go:8618), 0 TODO
+// Char.getMultipleStageBg (char.go:8636), 0 TODO
 Slice_backGroundPtr Char_getMultipleStageBg(Char* c, i32 id, int idx, bool log_) {
     Slice_backGroundPtr filteredBg = {0};
     if ((g_sys.stage->bg.len > 0) && (idx < g_sys.stage->bg.len)) {
@@ -106257,7 +106280,7 @@ Slice_backGroundPtr Char_getMultipleStageBg(Char* c, i32 id, int idx, bool log_)
     return filteredBg;
 }
 
-// Char.getSingleStageBg (char.go:8652), 0 TODO
+// Char.getSingleStageBg (char.go:8670), 0 TODO
 backGround* Char_getSingleStageBg(Char* c, i32 id, int idx, bool log_) {
     if (idx < 0) {
         if (log_) {
@@ -106272,7 +106295,7 @@ backGround* Char_getSingleStageBg(Char* c, i32 id, int idx, bool log_) {
     return NULL;
 }
 
-// Char.numStageBG (char.go:8670), 0 TODO
+// Char.numStageBG (char.go:8688), 0 TODO
 BytecodeValue Char_numStageBG(Char* c, BytecodeValue id) {
     if (BytecodeValue_IsUndefined(id)) {
         return fn_BytecodeUndefined();
@@ -106283,7 +106306,7 @@ BytecodeValue Char_numStageBG(Char* c, BytecodeValue id) {
     return fn_BytecodeInt(total);
 }
 
-// Char.getTarget (char.go:8683), 0 TODO
+// Char.getTarget (char.go:8701), 0 TODO
 Slice_i32 Char_getTarget(Char* c, i32 id, int idx) {
     if ((id < 0) && (idx < 0)) {
         return c->targets;
@@ -106311,7 +106334,7 @@ Slice_i32 Char_getTarget(Char* c, i32 id, int idx) {
     return (Slice_i32){0};
 }
 
-// Char.targetFacing (char.go:8711), 0 TODO
+// Char.targetFacing (char.go:8729), 0 TODO
 void Char_targetFacing(Char* c, Slice_i32 tar, i32 f) {
     if (f == 0) {
         return;
@@ -106335,7 +106358,7 @@ void Char_targetFacing(Char* c, Slice_i32 tar, i32 f) {
     }
 }
 
-// Char.targetBind (char.go:8726), 0 TODO
+// Char.targetBind (char.go:8744), 0 TODO
 void Char_targetBind(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z) {
     {
         Slice_i32 _t2 = tar;
@@ -106358,7 +106381,7 @@ void Char_targetBind(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z) {
     }
 }
 
-// Char.bindToTarget (char.go:8740), 0 TODO
+// Char.bindToTarget (char.go:8758), 0 TODO
 void Char_bindToTarget(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z, HMF hmf) {
     if (tar.len > 0) {
         {
@@ -106397,7 +106420,7 @@ void Char_bindToTarget(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z, H
     }
 }
 
-// Char.targetLifeAdd (char.go:8774), 0 TODO
+// Char.targetLifeAdd (char.go:8792), 0 TODO
 void Char_targetLifeAdd(Char* c, Slice_i32 tar, i32 add, bool kill, bool absolute, bool dizzy, bool redlife) {
     if (add == 0) {
         return;
@@ -106433,7 +106456,7 @@ void Char_targetLifeAdd(Char* c, Slice_i32 tar, i32 add, bool kill, bool absolut
     }
 }
 
-// Char.targetPowerAdd (char.go:8806), 0 TODO
+// Char.targetPowerAdd (char.go:8824), 0 TODO
 void Char_targetPowerAdd(Char* c, Slice_i32 tar, i32 power) {
     if (power == 0) {
         return;
@@ -106453,7 +106476,7 @@ void Char_targetPowerAdd(Char* c, Slice_i32 tar, i32 power) {
     }
 }
 
-// Char.targetDizzyPointsAdd (char.go:8817), 0 TODO
+// Char.targetDizzyPointsAdd (char.go:8835), 0 TODO
 void Char_targetDizzyPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     if (add == 0) {
         return;
@@ -106473,7 +106496,7 @@ void Char_targetDizzyPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     }
 }
 
-// Char.targetGuardPointsAdd (char.go:8828), 0 TODO
+// Char.targetGuardPointsAdd (char.go:8846), 0 TODO
 void Char_targetGuardPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     if (add == 0) {
         return;
@@ -106493,7 +106516,7 @@ void Char_targetGuardPointsAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     }
 }
 
-// Char.targetRedLifeAdd (char.go:8839), 0 TODO
+// Char.targetRedLifeAdd (char.go:8857), 0 TODO
 void Char_targetRedLifeAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     if (add == 0) {
         return;
@@ -106513,7 +106536,7 @@ void Char_targetRedLifeAdd(Char* c, Slice_i32 tar, i32 add, bool absolute) {
     }
 }
 
-// Char.targetScoreAdd (char.go:8850), 0 TODO
+// Char.targetScoreAdd (char.go:8868), 0 TODO
 void Char_targetScoreAdd(Char* c, Slice_i32 tar, f32 s) {
     if (s == 0x0p+00f) {
         return;
@@ -106533,7 +106556,7 @@ void Char_targetScoreAdd(Char* c, Slice_i32 tar, f32 s) {
     }
 }
 
-// Char.targetState (char.go:8861), 0 TODO
+// Char.targetState (char.go:8879), 0 TODO
 void Char_targetState(Char* c, Slice_i32 tar, i32 state) {
     if ((tar.len > 0) && (state >= 0)) {
         int pn = c->ss.sb->playerNo;
@@ -106557,7 +106580,7 @@ void Char_targetState(Char* c, Slice_i32 tar, i32 state) {
     }
 }
 
-// Char.targetVelSetX (char.go:8876), 0 TODO
+// Char.targetVelSetX (char.go:8894), 0 TODO
 void Char_targetVelSetX(Char* c, Slice_i32 tar, f32 x) {
     {
         Slice_i32 _t2 = tar;
@@ -106575,7 +106598,7 @@ void Char_targetVelSetX(Char* c, Slice_i32 tar, f32 x) {
     }
 }
 
-// Char.targetVelSetY (char.go:8885), 0 TODO
+// Char.targetVelSetY (char.go:8903), 0 TODO
 void Char_targetVelSetY(Char* c, Slice_i32 tar, f32 y) {
     {
         Slice_i32 _t2 = tar;
@@ -106593,7 +106616,7 @@ void Char_targetVelSetY(Char* c, Slice_i32 tar, f32 y) {
     }
 }
 
-// Char.targetVelSetZ (char.go:8894), 0 TODO
+// Char.targetVelSetZ (char.go:8912), 0 TODO
 void Char_targetVelSetZ(Char* c, Slice_i32 tar, f32 z) {
     {
         Slice_i32 _t2 = tar;
@@ -106611,7 +106634,7 @@ void Char_targetVelSetZ(Char* c, Slice_i32 tar, f32 z) {
     }
 }
 
-// Char.targetVelAddX (char.go:8903), 0 TODO
+// Char.targetVelAddX (char.go:8921), 0 TODO
 void Char_targetVelAddX(Char* c, Slice_i32 tar, f32 x) {
     {
         Slice_i32 _t2 = tar;
@@ -106629,7 +106652,7 @@ void Char_targetVelAddX(Char* c, Slice_i32 tar, f32 x) {
     }
 }
 
-// Char.targetVelAddY (char.go:8912), 0 TODO
+// Char.targetVelAddY (char.go:8930), 0 TODO
 void Char_targetVelAddY(Char* c, Slice_i32 tar, f32 y) {
     {
         Slice_i32 _t2 = tar;
@@ -106647,7 +106670,7 @@ void Char_targetVelAddY(Char* c, Slice_i32 tar, f32 y) {
     }
 }
 
-// Char.targetVelAddZ (char.go:8921), 0 TODO
+// Char.targetVelAddZ (char.go:8939), 0 TODO
 void Char_targetVelAddZ(Char* c, Slice_i32 tar, f32 z) {
     {
         Slice_i32 _t2 = tar;
@@ -106665,7 +106688,7 @@ void Char_targetVelAddZ(Char* c, Slice_i32 tar, f32 z) {
     }
 }
 
-// Char.targetDrop (char.go:8930), 0 TODO
+// Char.targetDrop (char.go:8948), 0 TODO
 void Char_targetDrop(Char* c, i32 excludeid, i32 excludechar, bool keepone) {
     Slice_i32 tg = {0};
     if (keepone && (excludechar > 0)) {
@@ -106747,7 +106770,7 @@ void Char_targetDrop(Char* c, i32 excludeid, i32 excludechar, bool keepone) {
     }
 }
 
-// Char.attackTrigger (char.go:8989), 0 TODO
+// Char.attackTrigger (char.go:9007), 0 TODO
 f32 Char_attackTrigger(Char* c) {
     f64 base = ((f64)Char_gi(c)->attackBase);
     f64 mul = ((f64)c->CharSystemVar_.attackMul.v[0]);
@@ -106756,7 +106779,7 @@ f32 Char_attackTrigger(Char* c) {
     return ((f32)cleaned);
 }
 
-// Char.defenceTrigger (char.go:9003), 0 TODO
+// Char.defenceTrigger (char.go:9021), 0 TODO
 f32 Char_defenceTrigger(Char* c) {
     f64 def = ((f64)c->CharSystemVar_.finalDefense);
     f64 result = (def * 0x1.9p+06);
@@ -106764,7 +106787,7 @@ f32 Char_defenceTrigger(Char* c) {
     return ((f32)clean);
 }
 
-// Char.computeDamage (char.go:9012), 0 TODO
+// Char.computeDamage (char.go:9030), 0 TODO
 i32 Char_computeDamage(Char* c, f64 damage, bool kill, bool absolute, f32 atkmul, Char* attacker, bool bounds) {
     if ((damage == 0x0p+00) || ((!absolute) && (atkmul == 0x0p+00f))) {
         return 0;
@@ -106787,7 +106810,7 @@ i32 Char_computeDamage(Char* c, f64 damage, bool kill, bool absolute, f32 atkmul
     return int_;
 }
 
-// Char.lifeAdd (char.go:9043), 0 TODO
+// Char.lifeAdd (char.go:9061), 0 TODO
 void Char_lifeAdd(Char* c, f64 add, bool kill, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -106818,7 +106841,7 @@ void Char_lifeAdd(Char* c, f64 add, bool kill, bool absolute) {
     Char_lifeSet(c, new_life_i32);
 }
 
-// Char.lifeSet (char.go:9083), 0 TODO
+// Char.lifeSet (char.go:9101), 0 TODO
 void Char_lifeSet(Char* c, i32 life) {
     if (Char_alive(c) && System_roundNoDamage(&g_sys)) {
         return;
@@ -106890,7 +106913,7 @@ void Char_lifeSet(Char* c, i32 life) {
     }
 }
 
-// Char.setPower (char.go:9142), 0 TODO
+// Char.setPower (char.go:9160), 0 TODO
 void Char_setPower(Char* c, i32 pow_) {
     if (g_sys.SystemStateVars_.intro < 0) {
         return;
@@ -106902,7 +106925,7 @@ void Char_setPower(Char* c, i32 pow_) {
     }
 }
 
-// Char.powerAdd (char.go:9155), 0 TODO
+// Char.powerAdd (char.go:9173), 0 TODO
 void Char_powerAdd(Char* c, i32 add) {
     if (add == 0) {
         return;
@@ -106911,12 +106934,12 @@ void Char_powerAdd(Char* c, i32 add) {
     Char_setPower(Char_powerOwner(c), int_);
 }
 
-// Char.powerSet (char.go:9165), 0 TODO
+// Char.powerSet (char.go:9183), 0 TODO
 void Char_powerSet(Char* c, i32 pow_) {
     Char_setPower(Char_powerOwner(c), pow_);
 }
 
-// Char.dizzyPointsAdd (char.go:9169), 0 TODO
+// Char.dizzyPointsAdd (char.go:9187), 0 TODO
 void Char_dizzyPointsAdd(Char* c, f64 add, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -106928,14 +106951,14 @@ void Char_dizzyPointsAdd(Char* c, f64 add, bool absolute) {
     Char_dizzyPointsSet(c, int_);
 }
 
-// Char.dizzyPointsSet (char.go:9181), 0 TODO
+// Char.dizzyPointsSet (char.go:9199), 0 TODO
 void Char_dizzyPointsSet(Char* c, i32 set) {
     if (Char_dizzyEnabled(c) && (!System_roundNoDamage(&g_sys))) {
         c->dizzyPoints = fn_Clamp_i32(set, 0, c->dizzyPointsMax);
     }
 }
 
-// Char.guardPointsAdd (char.go:9187), 0 TODO
+// Char.guardPointsAdd (char.go:9205), 0 TODO
 void Char_guardPointsAdd(Char* c, f64 add, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -106947,14 +106970,14 @@ void Char_guardPointsAdd(Char* c, f64 add, bool absolute) {
     Char_guardPointsSet(c, int_);
 }
 
-// Char.guardPointsSet (char.go:9199), 0 TODO
+// Char.guardPointsSet (char.go:9217), 0 TODO
 void Char_guardPointsSet(Char* c, i32 set) {
     if (Char_guardBreakEnabled(c) && (!System_roundNoDamage(&g_sys))) {
         c->guardPoints = fn_Clamp_i32(set, 0, c->guardPointsMax);
     }
 }
 
-// Char.redLifeAdd (char.go:9205), 0 TODO
+// Char.redLifeAdd (char.go:9223), 0 TODO
 void Char_redLifeAdd(Char* c, f64 add, bool absolute) {
     if (add == 0x0p+00) {
         return;
@@ -106966,7 +106989,7 @@ void Char_redLifeAdd(Char* c, f64 add, bool absolute) {
     Char_redLifeSet(c, int_);
 }
 
-// Char.redLifeSet (char.go:9217), 0 TODO
+// Char.redLifeSet (char.go:9235), 0 TODO
 void Char_redLifeSet(Char* c, i32 set) {
     if (!Char_alive(c)) {
         c->redLife = 0;
@@ -106989,7 +107012,7 @@ void Char_redLifeSet(Char* c, i32 set) {
     }
 }
 
-// Char.score (char.go:9235), 0 TODO
+// Char.score (char.go:9253), 0 TODO
 f32 Char_score(Char* c) {
     if (c->teamside == -1) {
         return 0x0p+00f;
@@ -106997,7 +107020,7 @@ f32 Char_score(Char* c) {
     return g_sys.SystemStateVars_.scorePoints.v[c->teamside];
 }
 
-// Char.scoreAdd (char.go:9242), 0 TODO
+// Char.scoreAdd (char.go:9260), 0 TODO
 void Char_scoreAdd(Char* c, f32 val) {
     if (((val == 0x0p+00f) || (c->teamside == -1)) || Char_asf(c, 140737488355328U)) {
         return;
@@ -107005,7 +107028,7 @@ void Char_scoreAdd(Char* c, f32 val) {
     g_sys.SystemStateVars_.scorePoints.v[c->teamside] += val;
 }
 
-// Char.scoreTotal (char.go:9249), 0 TODO
+// Char.scoreTotal (char.go:9267), 0 TODO
 f32 Char_scoreTotal(Char* c) {
     if (c->teamside == -1) {
         return 0x0p+00f;
@@ -107025,7 +107048,7 @@ f32 Char_scoreTotal(Char* c) {
     return s;
 }
 
-// Char.consecutiveWins (char.go:9263), 0 TODO
+// Char.consecutiveWins (char.go:9281), 0 TODO
 i32 Char_consecutiveWins(Char* c) {
     if (c->teamside == -1) {
         return 0;
@@ -107033,22 +107056,22 @@ i32 Char_consecutiveWins(Char* c) {
     return g_sys.SystemStateVars_.consecutiveWins.v[c->teamside];
 }
 
-// Char.dizzyEnabled (char.go:9270), 0 TODO
+// Char.dizzyEnabled (char.go:9288), 0 TODO
 bool Char_dizzyEnabled(Char* c) {
     return g_sys.fightScreen.stunbar;
 }
 
-// Char.guardBreakEnabled (char.go:9288), 0 TODO
+// Char.guardBreakEnabled (char.go:9306), 0 TODO
 bool Char_guardBreakEnabled(Char* c) {
     return g_sys.fightScreen.guardbar;
 }
 
-// Char.redLifeEnabled (char.go:9306), 0 TODO
+// Char.redLifeEnabled (char.go:9324), 0 TODO
 bool Char_redLifeEnabled(Char* c) {
     return g_sys.fightScreen.redlifebar;
 }
 
-// Char.distX (char.go:9324), 0 TODO
+// Char.distX (char.go:9342), 0 TODO
 f32 Char_distX(Char* c, Char* opp, Char* oc) {
     f32 cpos = (c->pos.v[0] * c->localscl);
     f32 opos = (opp->pos.v[0] * opp->localscl);
@@ -107073,7 +107096,7 @@ f32 Char_distX(Char* c, Char* opp, Char* oc) {
     return dist;
 }
 
-// Char.distY (char.go:9347), 0 TODO
+// Char.distY (char.go:9365), 0 TODO
 f32 Char_distY(Char* c, Char* opp, Char* oc) {
     f32 cpos = (c->pos.v[1] * c->localscl);
     f32 opos = (opp->pos.v[1] * opp->localscl);
@@ -107090,14 +107113,14 @@ f32 Char_distY(Char* c, Char* opp, Char* oc) {
     return (((opos - cpos)) / oc->localscl);
 }
 
-// Char.distZ (char.go:9361), 0 TODO
+// Char.distZ (char.go:9379), 0 TODO
 f32 Char_distZ(Char* c, Char* opp, Char* oc) {
     f32 cpos = (c->pos.v[2] * c->localscl);
     f32 opos = (opp->pos.v[2] * opp->localscl);
     return (((opos - cpos)) / oc->localscl);
 }
 
-// Char.bodyDistX (char.go:9368), 0 TODO
+// Char.bodyDistX (char.go:9386), 0 TODO
 f32 Char_bodyDistX(Char* c, Char* opp, Char* oc) {
     f32 dist = Char_distX(c, opp, oc);
     Slice_ClsnFinal cboxes = Char_getClsnLocal(c, 3);
@@ -107117,7 +107140,7 @@ f32 Char_bodyDistX(Char* c, Char* opp, Char* oc) {
     return ((dist - cw) + oppw);
 }
 
-// Char.bodyDistY (char.go:9402), 0 TODO
+// Char.bodyDistY (char.go:9420), 0 TODO
 f32 Char_bodyDistY(Char* c, Char* opp, Char* oc) {
     Slice_ClsnFinal cboxes = Char_getClsnLocal(c, 3);
     Slice_ClsnFinal oppboxes = Char_getClsnLocal(opp, 3);
@@ -107140,7 +107163,7 @@ f32 Char_bodyDistY(Char* c, Char* opp, Char* oc) {
     return 0x0p+00f;
 }
 
-// Char.bodyDistZ (char.go:9427), 0 TODO
+// Char.bodyDistZ (char.go:9445), 0 TODO
 f32 Char_bodyDistZ(Char* c, Char* opp, Char* oc) {
     f32 ctop = (((c->pos.v[2] - c->CharSystemVar_.depthPlayer.v[0])) * c->localscl);
     f32 cbot = (((c->pos.v[2] + c->CharSystemVar_.depthPlayer.v[1])) * c->localscl);
@@ -107157,7 +107180,7 @@ f32 Char_bodyDistZ(Char* c, Char* opp, Char* oc) {
     }
 }
 
-// Char.rdDistX (char.go:9442), 0 TODO
+// Char.rdDistX (char.go:9460), 0 TODO
 BytecodeValue Char_rdDistX(Char* c, Char* rd, Char* oc) {
     if (rd == NULL) {
         return fn_BytecodeUndefined();
@@ -107169,7 +107192,7 @@ BytecodeValue Char_rdDistX(Char* c, Char* rd, Char* oc) {
     return fn_BytecodeFloat(dist);
 }
 
-// Char.rdDistY (char.go:9456), 0 TODO
+// Char.rdDistY (char.go:9474), 0 TODO
 BytecodeValue Char_rdDistY(Char* c, Char* rd, Char* oc) {
     if (rd == NULL) {
         return fn_BytecodeUndefined();
@@ -107181,7 +107204,7 @@ BytecodeValue Char_rdDistY(Char* c, Char* rd, Char* oc) {
     return fn_BytecodeFloat(dist);
 }
 
-// Char.rdDistZ (char.go:9470), 0 TODO
+// Char.rdDistZ (char.go:9488), 0 TODO
 BytecodeValue Char_rdDistZ(Char* c, Char* rd, Char* oc) {
     if (rd == NULL) {
         return fn_BytecodeUndefined();
@@ -107190,7 +107213,7 @@ BytecodeValue Char_rdDistZ(Char* c, Char* rd, Char* oc) {
     return fn_BytecodeFloat(dist);
 }
 
-// Char.p2BodyDistX (char.go:9478), 0 TODO
+// Char.p2BodyDistX (char.go:9496), 0 TODO
 BytecodeValue Char_p2BodyDistX(Char* c, Char* oc) {
     {
         Char* _t1 = Char_p2(c);
@@ -107207,7 +107230,7 @@ BytecodeValue Char_p2BodyDistX(Char* c, Char* oc) {
     }
 }
 
-// Char.p2BodyDistY (char.go:9490), 0 TODO
+// Char.p2BodyDistY (char.go:9508), 0 TODO
 BytecodeValue Char_p2BodyDistY(Char* c, Char* oc) {
     {
         Char* _t1 = Char_p2(c);
@@ -107224,7 +107247,7 @@ BytecodeValue Char_p2BodyDistY(Char* c, Char* oc) {
     }
 }
 
-// Char.p2BodyDistZ (char.go:9500), 0 TODO
+// Char.p2BodyDistZ (char.go:9518), 0 TODO
 BytecodeValue Char_p2BodyDistZ(Char* c, Char* oc) {
     {
         Char* _t1 = Char_p2(c);
@@ -107237,7 +107260,7 @@ BytecodeValue Char_p2BodyDistZ(Char* c, Char* oc) {
     }
 }
 
-// Char.setPauseTime (char.go:9508), 0 TODO
+// Char.setPauseTime (char.go:9526), 0 TODO
 void Char_setPauseTime(Char* c, i32 pausetime, i32 movetime) {
     if ((((~pausetime) < g_sys.SystemStateVars_.pausetimebuffer) || (g_sys.SystemStateVars_.pauseplayerno == c->playerNo)) || (c->playerNo != c->ss.sb->playerNo)) {
         g_sys.SystemStateVars_.pausetimebuffer = (~pausetime);
@@ -107256,7 +107279,7 @@ void Char_setPauseTime(Char* c, i32 pausetime, i32 movetime) {
     }
 }
 
-// Char.setSuperPauseTime (char.go:9526), 0 TODO
+// Char.setSuperPauseTime (char.go:9544), 0 TODO
 void Char_setSuperPauseTime(Char* c, i32 pausetime, i32 movetime, bool unhittable, f32 p2defmul) {
     if ((((~pausetime) < g_sys.SystemStateVars_.supertimebuffer) || (g_sys.SystemStateVars_.superplayerno == c->playerNo)) || (c->playerNo != c->ss.sb->playerNo)) {
         g_sys.SystemStateVars_.supertimebuffer = (~pausetime);
@@ -107299,7 +107322,7 @@ void Char_setSuperPauseTime(Char* c, i32 pausetime, i32 movetime, bool unhittabl
     }
 }
 
-// Char.propagateIgnoreDarkenTime (char.go:9570), 0 TODO
+// Char.propagateIgnoreDarkenTime (char.go:9588), 0 TODO
 void Char_propagateIgnoreDarkenTime(Char* c) {
     i32 value = c->CharSystemVar_.ignoreDarkenTime;
     Char* top = c;
@@ -107343,7 +107366,7 @@ void Char_propagateIgnoreDarkenTime(Char* c) {
     }
 }
 
-// Char.getPalfx (char.go:9608), 0 TODO
+// Char.getPalfx (char.go:9626), 0 TODO
 PalFX* Char_getPalfx(Char* c) {
     if (c->palfx != NULL) {
         return c->palfx;
@@ -107361,37 +107384,37 @@ PalFX* Char_getPalfx(Char* c) {
     return c->palfx;
 }
 
-// Char.getPalMap (char.go:9626), 0 TODO
+// Char.getPalMap (char.go:9644), 0 TODO
 Slice_int Char_getPalMap(Char* c) {
     return Char_getPalfx(c)->remap;
 }
 
-// Char.pause (char.go:9630), 0 TODO
+// Char.pause (char.go:9648), 0 TODO
 bool Char_pause(Char* c) {
     return (c->acttmp <= -2);
 }
 
-// Char.hitPause (char.go:9634), 0 TODO
+// Char.hitPause (char.go:9652), 0 TODO
 bool Char_hitPause(Char* c) {
     return (c->CharSystemVar_.hitPauseTime > 0);
 }
 
-// Char.angleSet (char.go:9638), 0 TODO
+// Char.angleSet (char.go:9656), 0 TODO
 void Char_angleSet(Char* c, f32 a) {
     c->CharSystemVar_.rot.angle = a;
 }
 
-// Char.XangleSet (char.go:9642), 0 TODO
+// Char.XangleSet (char.go:9660), 0 TODO
 void Char_XangleSet(Char* c, f32 xa) {
     c->CharSystemVar_.rot.xangle = xa;
 }
 
-// Char.YangleSet (char.go:9646), 0 TODO
+// Char.YangleSet (char.go:9664), 0 TODO
 void Char_YangleSet(Char* c, f32 ya) {
     c->CharSystemVar_.rot.yangle = ya;
 }
 
-// Char.inputWait (char.go:9650), 0 TODO
+// Char.inputWait (char.go:9668), 0 TODO
 bool Char_inputWait(Char* c) {
     if (Char_asf(c, 4503599627370496U)) {
         return false;
@@ -107405,7 +107428,7 @@ bool Char_inputWait(Char* c) {
     return false;
 }
 
-// Char.makeDust (char.go:9667), 0 TODO
+// Char.makeDust (char.go:9685), 0 TODO
 void Char_makeDust(Char* c, f32 x, f32 y, f32 z, int spacing) {
     if (Char_asf(c, 8796093022208U)) {
         return;
@@ -107437,7 +107460,7 @@ void Char_makeDust(Char* c, f32 x, f32 y, f32 z, int spacing) {
     }
 }
 
-// Char.hitFallDamage (char.go:9696), 0 TODO
+// Char.hitFallDamage (char.go:9714), 0 TODO
 void Char_hitFallDamage(Char* c) {
     if (c->ss.moveType == 65536) {
         Char_lifeAdd(c, (-((f64)c->ghv.fall_damage)), c->ghv.fall_kill, false);
@@ -107445,7 +107468,7 @@ void Char_hitFallDamage(Char* c) {
     }
 }
 
-// Char.hitFallVel (char.go:9703), 0 TODO
+// Char.hitFallVel (char.go:9721), 0 TODO
 void Char_hitFallVel(Char* c) {
     if (c->ss.moveType == 65536) {
         if (!math_IsNaN(((f64)c->ghv.fall_xvelocity))) {
@@ -107458,7 +107481,7 @@ void Char_hitFallVel(Char* c) {
     }
 }
 
-// Char.hitFallSet (char.go:9715), 0 TODO
+// Char.hitFallSet (char.go:9733), 0 TODO
 void Char_hitFallSet(Char* c, i32 f, f32 xv, f32 yv, f32 zv) {
     if (f >= 0) {
         c->ghv.fallflag = (f != 0);
@@ -107474,7 +107497,7 @@ void Char_hitFallSet(Char* c, i32 f, f32 xv, f32 yv, f32 zv) {
     }
 }
 
-// Char.remapPal (char.go:9730), 0 TODO
+// Char.remapPal (char.go:9748), 0 TODO
 void Char_remapPal(Char* c, PalFX* pfx, Arr2_i32 src, Arr2_i32 dst) {
     if ((src.v[0] == -1) && (dst.v[0] == -1)) {
         pfx->remap = (Slice_int){0};
@@ -107548,7 +107571,7 @@ void Char_remapPal(Char* c, PalFX* pfx, Arr2_i32 src, Arr2_i32 dst) {
     Char_gi(c)->remappedpal = (Arr2_i32){{dst.v[0], dst.v[1]}};
 }
 
-// Char.forceRemapPal (char.go:9822), 0 TODO
+// Char.forceRemapPal (char.go:9840), 0 TODO
 void Char_forceRemapPal(Char* c, PalFX* pfx, Arr2_i32 dst) {
     if ((dst.v[0] < 0) || (dst.v[1] < 0)) {
         return;
@@ -107584,7 +107607,7 @@ void Char_forceRemapPal(Char* c, PalFX* pfx, Arr2_i32 dst) {
     }
 }
 
-// Char.getDrawPal (char.go:9859), 0 TODO
+// Char.getDrawPal (char.go:9877), 0 TODO
 Arr2_i32 Char_getDrawPal(Char* c, int palIndex) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&Char_gi(c)->palettedata->palList.PalTable);
@@ -107600,7 +107623,7 @@ Arr2_i32 Char_getDrawPal(Char* c, int palIndex) {
     return (Arr2_i32){{0, 0}};
 }
 
-// Char.drawPal (char.go:9868), 0 TODO
+// Char.drawPal (char.go:9886), 0 TODO
 Arr2_i32 Char_drawPal(Char* c) {
     if ((c->anim == NULL) || (c->anim->spr == NULL)) {
         return (Arr2_i32){{0, 0}};
@@ -107613,7 +107636,7 @@ Arr2_i32 Char_drawPal(Char* c) {
     return Char_getDrawPal(c, source);
 }
 
-// Char.remapSprite (char.go:9883), 0 TODO
+// Char.remapSprite (char.go:9901), 0 TODO
 void Char_remapSprite(Char* c, Arr2_i32 src, Arr2_i32 dst) {
     if ((((src.v[0] == -1) || (src.v[1] == -1)) || (dst.v[0] == -1)) || (dst.v[1] == -1)) {
         return;
@@ -107628,7 +107651,7 @@ void Char_remapSprite(Char* c, Arr2_i32 src, Arr2_i32 dst) {
     Map_i32_Arr2_i32_set(GO_TMPADDR(Map_i32_Arr2_i32, Map_i32_RemapTable_get(&c->remapSpr, src.v[0], NULL)), src.v[1], (Arr2_i32){{dst.v[0], dst.v[1]}});
 }
 
-// Char.remapSpritePreset (char.go:9893), 0 TODO
+// Char.remapSpritePreset (char.go:9911), 0 TODO
 void Char_remapSpritePreset(Char* c, GoString preset) {
     {
         bool _t1; RemapPreset _t2 = Map_GoString_RemapPreset_get(&Char_gi(c)->remapPreset, preset, &_t1);
@@ -107657,7 +107680,7 @@ void Char_remapSpritePreset(Char* c, GoString preset) {
     }
 }
 
-// Char.mapIndexedKey (char.go:9907), 0 TODO
+// Char.mapIndexedKey (char.go:9925), 0 TODO
 GoString Char_mapIndexedKey(Char* c, GoString name, i32 index) {
     if (index < 0) {
         System_appendToConsole(&g_sys, go_strcat(Char_warn(c), fmt_Sprintf(GOSTR("map index cannot be negative: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){5, go_box_a(i32, index)})))));
@@ -107669,7 +107692,7 @@ GoString Char_mapIndexedKey(Char* c, GoString name, i32 index) {
     return go_strcat(go_strcat(go_strcat(name, GOSTR("[")), strconv_Itoa(((int)index))), GOSTR("]"));
 }
 
-// Char.mapSet (char.go:9921), 0 TODO
+// Char.mapSet (char.go:9939), 0 TODO
 BytecodeValue Char_mapSet(Char* c, GoString s, BytecodeValue value, i32 scType) {
     if (go_streq(s, GOSTR(""))) {
         return fn_BytecodeUndefined();
@@ -107679,7 +107702,7 @@ BytecodeValue Char_mapSet(Char* c, GoString s, BytecodeValue value, i32 scType) 
     return TypedValue_ToBV(mv);
 }
 
-// Char.mapSetValue (char.go:9932), 0 TODO
+// Char.mapSetValue (char.go:9950), 0 TODO
 void Char_mapSetValue(Char* c, GoString s, TypedValue mv, i32 scType) {
     if (go_streq(s, GOSTR(""))) {
         return;
@@ -107739,7 +107762,7 @@ void Char_mapSetValue(Char* c, GoString s, TypedValue mv, i32 scType) {
     }
 }
 
-// Char.mapApply (char.go:9970), 0 TODO
+// Char.mapApply (char.go:9988), 0 TODO
 void Char_mapApply(Char* c, Map_GoString_TypedValue m, GoString key, TypedValue mv, bool isAdd) {
     if (!isAdd) {
         Map_GoString_TypedValue_set(&m, key, mv);
@@ -107755,7 +107778,7 @@ void Char_mapApply(Char* c, Map_GoString_TypedValue m, GoString key, TypedValue 
     Map_GoString_TypedValue_set(&m, key, fn_TypedValueOf(sum));
 }
 
-// Char.mapReset (char.go:9988), 0 TODO
+// Char.mapReset (char.go:10006), 0 TODO
 void Char_mapReset(Char* c, Slice_GoString exclude) {
     if (c->mapArray.m == 0) {
         c->mapArray = Map_GoString_TypedValue_make(0);
@@ -107824,7 +107847,7 @@ void Char_mapReset(Char* c, Slice_GoString exclude) {
     }
 }
 
-// Char.appendDialogue (char.go:10047), 0 TODO
+// Char.appendDialogue (char.go:10065), 0 TODO
 void Char_appendDialogue(Char* c, GoString s, bool reset) {
     if (reset) {
         c->dialogue = (Slice_GoString){0};
@@ -107832,7 +107855,7 @@ void Char_appendDialogue(Char* c, GoString s, bool reset) {
     c->dialogue = GO_APPEND(Slice_GoString, c->dialogue, s);
 }
 
-// Char.appendToClipboard (char.go:10054), 0 TODO
+// Char.appendToClipboard (char.go:10072), 0 TODO
 void Char_appendToClipboard(Char* c, int pn, int sn, Slice_GoIface a) {
     Slice_GoString spl = g_sys.stringPool.v[pn].List;
     if ((sn >= 0) && (sn < spl.len)) {
@@ -107855,17 +107878,17 @@ void Char_appendToClipboard(Char* c, int pn, int sn, Slice_GoIface a) {
     }
 }
 
-// Char.inGuardState (char.go:10070), 0 TODO
+// Char.inGuardState (char.go:10088), 0 TODO
 bool Char_inGuardState(Char* c) {
     return ((((c->ss.no == 120) || (((c->ss.no >= 130) && (c->ss.no <= 132)))) || (c->ss.no == 140)) || (((c->ss.no >= 150) && (c->ss.no <= 155))));
 }
 
-// Char.gravity (char.go:10075), 0 TODO
+// Char.gravity (char.go:10093), 0 TODO
 void Char_gravity(Char* c) {
     c->vel.v[1] += (Char_gi(c)->movement.yaccel * ((c->baselocalscl / c->localscl)));
 }
 
-// Char.getStandFriction (char.go:10079), 0 TODO
+// Char.getStandFriction (char.go:10097), 0 TODO
 f32 Char_getStandFriction(Char* c) {
     if ((c->ss.moveType == 65536) && (!math_IsNaN(((f64)c->ghv.stand_friction)))) {
         return c->ghv.stand_friction;
@@ -107873,7 +107896,7 @@ f32 Char_getStandFriction(Char* c) {
     return Char_gi(c)->movement.stand.friction;
 }
 
-// Char.getCrouchFriction (char.go:10086), 0 TODO
+// Char.getCrouchFriction (char.go:10104), 0 TODO
 f32 Char_getCrouchFriction(Char* c) {
     if ((c->ss.moveType == 65536) && (!math_IsNaN(((f64)c->ghv.crouch_friction)))) {
         return c->ghv.crouch_friction;
@@ -107881,7 +107904,7 @@ f32 Char_getCrouchFriction(Char* c) {
     return Char_gi(c)->movement.crouch.friction;
 }
 
-// Char.checkCornerPush (char.go:10094), 0 TODO
+// Char.checkCornerPush (char.go:10112), 0 TODO
 Ret_f32__f32 Char_checkCornerPush(Char* c) {
     f32 pushDist = {0};
     f32 pushMul = {0};
@@ -107945,7 +107968,7 @@ Ret_f32__f32 Char_checkCornerPush(Char* c) {
     return (Ret_f32__f32){pushDist, pushMul};
 }
 
-// Char.posUpdate (char.go:10188), 0 TODO
+// Char.posUpdate (char.go:10206), 0 TODO
 void Char_posUpdate(Char* c) {
     Ret_f32__f32 _t1 = Char_checkCornerPush(c);
     f32 pushDist = _t1.r0;
@@ -108024,14 +108047,14 @@ void Char_posUpdate(Char* c) {
     c->CharSystemVar_.bindPosAdd = (Arr3_f32){{0x0p+00f, 0x0p+00f, 0x0p+00f}};
 }
 
-// Char.addTarget (char.go:10264), 0 TODO
+// Char.addTarget (char.go:10282), 0 TODO
 void Char_addTarget(Char* c, i32 id) {
     if (!Char_hasTarget(c, id)) {
         c->targets = GO_APPEND(Slice_i32, c->targets, id);
     }
 }
 
-// Char.hasTarget (char.go:10270), 0 TODO
+// Char.hasTarget (char.go:10288), 0 TODO
 bool Char_hasTarget(Char* c, i32 id) {
     {
         Slice_i32 _t2 = c->targets;
@@ -108046,7 +108069,7 @@ bool Char_hasTarget(Char* c, i32 id) {
     return false;
 }
 
-// Char.hasTargetOfHitdef (char.go:10279), 0 TODO
+// Char.hasTargetOfHitdef (char.go:10297), 0 TODO
 bool Char_hasTargetOfHitdef(Char* c, i32 id) {
     {
         Slice_i32 _t2 = c->hitdefTargets;
@@ -108061,7 +108084,7 @@ bool Char_hasTargetOfHitdef(Char* c, i32 id) {
     return false;
 }
 
-// Char.targetAddSctrl (char.go:10288), 0 TODO
+// Char.targetAddSctrl (char.go:10306), 0 TODO
 void Char_targetAddSctrl(Char* c, i32 id) {
     Char* t = System_playerID(&g_sys, id);
     if (t == NULL) {
@@ -108072,7 +108095,7 @@ void Char_targetAddSctrl(Char* c, i32 id) {
     GetHitVar_addId(&t->ghv, c->id, Char_gi(c)->data.airjuggle);
 }
 
-// Char.setBindTime (char.go:10304), 0 TODO
+// Char.setBindTime (char.go:10322), 0 TODO
 void Char_setBindTime(Char* c, i32 time_) {
     if (time_ == 0) {
         Char_resetBind(c);
@@ -108081,14 +108104,14 @@ void Char_setBindTime(Char* c, i32 time_) {
     c->CharSystemVar_.bindTime = time_;
 }
 
-// Char.resetBind (char.go:10312), 0 TODO
+// Char.resetBind (char.go:10330), 0 TODO
 void Char_resetBind(Char* c) {
     c->CharSystemVar_.bindTime = 0;
     c->CharSystemVar_.bindToId = -1;
     c->CharSystemVar_.bindFacing = 0x0p+00f;
 }
 
-// Char.setBindToId (char.go:10318), 0 TODO
+// Char.setBindToId (char.go:10336), 0 TODO
 void Char_setBindToId(Char* c, Char* to, bool isTargetBind) {
     c->CharSystemVar_.bindToId = to->id;
     if ((c->CharSystemVar_.bindFacing == 0x0p+00f) && isTargetBind) {
@@ -108099,7 +108122,7 @@ void Char_setBindToId(Char* c, Char* to, bool isTargetBind) {
     }
 }
 
-// Char.updateBinding (char.go:10337), 0 TODO
+// Char.updateBinding (char.go:10355), 0 TODO
 void Char_updateBinding(Char* c) {
     if ((c->CharSystemVar_.bindTime == 0) && (c->CharSystemVar_.bindToId > 0)) {
         Char_resetBind(c);
@@ -108126,7 +108149,7 @@ void Char_updateBinding(Char* c) {
     Char_bindToPlayer(c, bt);
 }
 
-// Char.bindToPlayer (char.go:10376), 0 TODO
+// Char.bindToPlayer (char.go:10394), 0 TODO
 void Char_bindToPlayer(Char* c, Char* bt) {
     if (!math_IsNaN(((f64)c->CharSystemVar_.bindPos.v[0]))) {
         f32 f = bt->facing;
@@ -108164,7 +108187,7 @@ void Char_bindToPlayer(Char* c, Char* bt) {
     }
 }
 
-// Char.trackableByCamera (char.go:10422), 0 TODO
+// Char.trackableByCamera (char.go:10440), 0 TODO
 bool Char_trackableByCamera(Char* c) {
     if (Char_scf(c, 256U)) {
         return false;
@@ -108178,7 +108201,7 @@ bool Char_trackableByCamera(Char* c) {
     return false;
 }
 
-// Char.xScreenBound (char.go:10435), 0 TODO
+// Char.xScreenBound (char.go:10453), 0 TODO
 void Char_xScreenBound(Char* c) {
     f32 x = c->pos.v[0];
     f32 before = x;
@@ -108204,7 +108227,7 @@ void Char_xScreenBound(Char* c) {
     }
 }
 
-// Char.zDepthBound (char.go:10463), 0 TODO
+// Char.zDepthBound (char.go:10481), 0 TODO
 void Char_zDepthBound(Char* c) {
     if (!Char_csf(c, 512U)) {
         return;
@@ -108219,7 +108242,7 @@ void Char_zDepthBound(Char* c) {
     }
 }
 
-// Char.xPlatformBound (char.go:10479), 0 TODO
+// Char.xPlatformBound (char.go:10497), 0 TODO
 void Char_xPlatformBound(Char* c, f32 pxmin, f32 pxmax) {
     f32 x = c->pos.v[0];
     if (c->ss.stateType != 4) {
@@ -108239,14 +108262,14 @@ void Char_xPlatformBound(Char* c, f32 pxmin, f32 pxmax) {
     Char_xScreenBound(c);
 }
 
-// Char.gethitBindClear (char.go:10492), 0 TODO
+// Char.gethitBindClear (char.go:10510), 0 TODO
 void Char_gethitBindClear(Char* c) {
     if (Char_isTargetBound(c)) {
         Char_resetBind(c);
     }
 }
 
-// Char.dropTargets (char.go:10499), 0 TODO
+// Char.dropTargets (char.go:10517), 0 TODO
 void Char_dropTargets(Char* c) {
     if ((c->hitdef.reversal_attr == 0) || (c->hitdef.reversal_attr == INT32_MIN)) {
         int i = 0;
@@ -108277,7 +108300,7 @@ void Char_dropTargets(Char* c) {
     }
 }
 
-// Char.removeTarget (char.go:10524), 0 TODO
+// Char.removeTarget (char.go:10542), 0 TODO
 void Char_removeTarget(Char* c, i32 pid) {
     {
         Slice_i32 _t2 = c->targets;
@@ -108293,7 +108316,7 @@ void Char_removeTarget(Char* c, i32 pid) {
     }
 }
 
-// Char.exitTarget (char.go:10534), 0 TODO
+// Char.exitTarget (char.go:10552), 0 TODO
 void Char_exitTarget(Char* c) {
     if (c->hittmp >= 0) {
         {
@@ -108318,17 +108341,17 @@ void Char_exitTarget(Char* c) {
     }
 }
 
-// Char.offsetX (char.go:10552), 0 TODO
+// Char.offsetX (char.go:10570), 0 TODO
 f32 Char_offsetX(Char* c) {
     return ((((f32)c->size.draw.offset.v[0]) * c->facing) + (c->offset.v[0] / c->localscl));
 }
 
-// Char.offsetY (char.go:10556), 0 TODO
+// Char.offsetY (char.go:10574), 0 TODO
 f32 Char_offsetY(Char* c) {
     return (((f32)c->size.draw.offset.v[1]) + (c->offset.v[1] / c->localscl));
 }
 
-// Char.flattenClsnProxies (char.go:10561), 0 TODO
+// Char.flattenClsnProxies (char.go:10579), 0 TODO
 Slice_CharPtr Char_flattenClsnProxies(Char* c) {
     bool hasProxy = false;
     {
@@ -108373,7 +108396,7 @@ Slice_CharPtr Char_flattenClsnProxies(Char* c) {
     return list;
 }
 
-// Char.baseSizeBox (char.go:10596), 0 TODO
+// Char.baseSizeBox (char.go:10614), 0 TODO
 Arr4_f32 Char_baseSizeBox(Char* c) {
     {
         StateType _t1 = c->ss.stateType;
@@ -108398,7 +108421,7 @@ Arr4_f32 Char_baseSizeBox(Char* c) {
     }
 }
 
-// Char.sizeToBox (char.go:10610), 0 TODO
+// Char.sizeToBox (char.go:10628), 0 TODO
 Arr4_f32 Char_sizeToBox(Char* c) {
     Arr4_f32 base = Char_baseSizeBox(c);
     f32 front = base.v[2];
@@ -108424,18 +108447,18 @@ Arr4_f32 Char_sizeToBox(Char* c) {
     return (Arr4_f32){{back, top, front, bottom}};
 }
 
-// Char.baseDepth (char.go:10638), 0 TODO
+// Char.baseDepth (char.go:10656), 0 TODO
 Arr2_f32 Char_baseDepth(Char* c) {
     return (Arr2_f32){{(-c->size.depth.v[0]), c->size.depth.v[1]}};
 }
 
-// Char.depthToBox (char.go:10644), 0 TODO
+// Char.depthToBox (char.go:10662), 0 TODO
 Arr2_f32 Char_depthToBox(Char* c) {
     Arr2_f32 base = Char_baseDepth(c);
     return (Arr2_f32){{(base.v[0] - c->CharSystemVar_.depthPlayer.v[0]), (base.v[1] + c->CharSystemVar_.depthPlayer.v[1])}};
 }
 
-// Char.getClsnUnscaled (char.go:10650), 0 TODO
+// Char.getClsnUnscaled (char.go:10668), 0 TODO
 Slice_ClsnFinal Char_getClsnUnscaled(Char* c, i32 group) {
     if ((group < 1) || (group > 4)) {
         return (Slice_ClsnFinal){0};
@@ -108488,7 +108511,7 @@ Slice_ClsnFinal Char_getClsnUnscaled(Char* c, i32 group) {
     return (*buffer);
 }
 
-// Char.getClsnLocal (char.go:10707), 0 TODO
+// Char.getClsnLocal (char.go:10725), 0 TODO
 Slice_ClsnFinal Char_getClsnLocal(Char* c, i32 group) {
     Slice_ClsnFinal boxes__hv = Char_getClsnUnscaled(c, group); __typeof__(boxes__hv) *boxes__h = &boxes__hv;
     Slice_ClsnOverride overrides = c->clsnOverrides.v[(group - 1)];
@@ -108580,7 +108603,7 @@ Slice_ClsnFinal Char_getClsnLocal(Char* c, i32 group) {
     return (*boxes__h);
 }
 
-// Char.getClsnWorld (char.go:10796), 0 TODO
+// Char.getClsnWorld (char.go:10814), 0 TODO
 Slice_ClsnFinal Char_getClsnWorld(Char* c, i32 group) {
     Slice_ClsnFinal boxes = Char_getClsnLocal(c, group);
     if (boxes.len == 0) {
@@ -108607,7 +108630,7 @@ Slice_ClsnFinal Char_getClsnWorld(Char* c, i32 group) {
     return boxes;
 }
 
-// Char.resetClsnModifiers (char.go:10821), 0 TODO
+// Char.resetClsnModifiers (char.go:10839), 0 TODO
 void Char_resetClsnModifiers(Char* c) {
     {
         for (int _t1 = 0; _t1 < 4; _t1++) {
@@ -108625,7 +108648,7 @@ void Char_resetClsnModifiers(Char* c) {
     }
 }
 
-// Char.projClsnCheck (char.go:10831), 0 TODO
+// Char.projClsnCheck (char.go:10849), 0 TODO
 bool Char_projClsnCheck(Char* c, Projectile* p, i32 cbox, i32 pbox, bool fromHitdef) {
     if ((((p->anim == NULL) || (c->curFrame == NULL)) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return false;
@@ -108652,7 +108675,7 @@ bool Char_projClsnCheck(Char* c, Projectile* p, i32 cbox, i32 pbox, bool fromHit
     return false;
 }
 
-// Char.projClsnCheckSingle (char.go:10860), 0 TODO
+// Char.projClsnCheckSingle (char.go:10878), 0 TODO
 bool Char_projClsnCheckSingle(Char* c, Projectile* p, i32 cbox, i32 pbox, bool fromHitdef) {
     if (((p->anim == NULL) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return false;
@@ -108713,7 +108736,7 @@ bool Char_projClsnCheckSingle(Char* c, Projectile* p, i32 cbox, i32 pbox, bool f
     return overlap;
 }
 
-// Char.projClsnOverlapTrigger (char.go:10929), 0 TODO
+// Char.projClsnOverlapTrigger (char.go:10947), 0 TODO
 bool Char_projClsnOverlapTrigger(Char* c, int index, i32 targetID, i32 boxType) {
     Projectile* proj = Char_getSingleProj(c, -1, index, true);
     if (proj == NULL) {
@@ -108735,7 +108758,7 @@ bool Char_projClsnOverlapTrigger(Char* c, int index, i32 targetID, i32 boxType) 
     return (Char_projClsnCheck(target, proj, boxType, 1, false) || Char_projClsnCheck(target, proj, boxType, 2, false));
 }
 
-// Char.clsnCheck (char.go:10960), 0 TODO
+// Char.clsnCheck (char.go:10978), 0 TODO
 bool Char_clsnCheck(Char* c, Char* getter, i32 charbox, i32 getterbox, bool fromHitdef) {
     if ((((c == NULL) || (getter == NULL)) || (c->anim == NULL)) || (getter->anim == NULL)) {
         return false;
@@ -108775,7 +108798,7 @@ bool Char_clsnCheck(Char* c, Char* getter, i32 charbox, i32 getterbox, bool from
     return false;
 }
 
-// Char.clsnCheckSingle (char.go:11000), 0 TODO
+// Char.clsnCheckSingle (char.go:11018), 0 TODO
 bool Char_clsnCheckSingle(Char* c, Char* getter, i32 charbox, i32 getterbox, bool fromHitdef) {
     if ((((c == NULL) || (getter == NULL)) || (c->anim == NULL)) || (getter->anim == NULL)) {
         return false;
@@ -108827,7 +108850,7 @@ bool Char_clsnCheckSingle(Char* c, Char* getter, i32 charbox, i32 getterbox, boo
     return overlap;
 }
 
-// Char.hitByAttrTrigger (char.go:11067), 0 TODO
+// Char.hitByAttrTrigger (char.go:11085), 0 TODO
 bool Char_hitByAttrTrigger(Char* c, i32 attr) {
     if (c->CharSystemVar_.unhittableTime > 0) {
         return false;
@@ -108836,7 +108859,7 @@ bool Char_hitByAttrTrigger(Char* c, i32 attr) {
     return Char_checkHitByAllSlots(c, -1, -1, attr, attrsca, -1, -1);
 }
 
-// Char.checkHitBySlot (char.go:11081), 0 TODO
+// Char.checkHitBySlot (char.go:11099), 0 TODO
 bool Char_checkHitBySlot(Char* c, HitBy hb, int getterno, i32 getterid, i32 ghdattr, i32 attrsca) {
     bool attrCheck = (hb.flag >= 0);
     bool scaMatch = ((hb.flag & attrsca) != 0);
@@ -108853,7 +108876,7 @@ bool Char_checkHitBySlot(Char* c, HitBy hb, int getterno, i32 getterid, i32 ghda
     return allMatch;
 }
 
-// Char.checkHitByAllSlots (char.go:11109), 0 TODO
+// Char.checkHitByAllSlots (char.go:11127), 0 TODO
 bool Char_checkHitByAllSlots(Char* c, int getterno, i32 getterid, i32 ghdattr, i32 attrsca, i32 boxgroup, i32 boxindex) {
     bool stackHit = false;
     bool hasStackSlot = false;
@@ -108886,7 +108909,7 @@ bool Char_checkHitByAllSlots(Char* c, int getterno, i32 getterid, i32 ghdattr, i
     return nonStackHit;
 }
 
-// Char.attrCheck (char.go:11149), 0 TODO
+// Char.attrCheck (char.go:11167), 0 TODO
 bool Char_attrCheck(Char* c, Char* getter, HitDef* ghd, StateType gstyp) {
     if (c->CharSystemVar_.unhittableTime > 0) {
         return false;
@@ -108952,7 +108975,7 @@ bool Char_attrCheck(Char* c, Char* getter, HitDef* ghd, StateType gstyp) {
     return true;
 }
 
-// Char.attrCheckBox (char.go:11257), 0 TODO
+// Char.attrCheckBox (char.go:11275), 0 TODO
 bool Char_attrCheckBox(Char* c, Char* getter, HitDef* ghd, StateType gstyp, i32 boxgroup, i32 boxindex) {
     i32 attrsca = (ghd->attr & 63);
     if (((Char_stWgi(getter)->ikemenver.v[0] == 0U) && (Char_stWgi(getter)->ikemenver.v[1] == 0U)) && (gstyp != 16)) {
@@ -108961,7 +108984,7 @@ bool Char_attrCheckBox(Char* c, Char* getter, HitDef* ghd, StateType gstyp, i32 
     return Char_checkHitByAllSlots(c, getter->playerNo, getter->id, ghd->attr, attrsca, boxgroup, boxindex);
 }
 
-// Char.hasBoxHitBy (char.go:11269), 0 TODO
+// Char.hasBoxHitBy (char.go:11287), 0 TODO
 bool Char_hasBoxHitBy(Char* c) {
     {
         for (int _t1 = 0; _t1 < 8; _t1++) {
@@ -108975,7 +108998,7 @@ bool Char_hasBoxHitBy(Char* c) {
     return false;
 }
 
-// Char.hittableByChar (char.go:11279), 0 TODO
+// Char.hittableByChar (char.go:11297), 0 TODO
 bool Char_hittableByChar(Char* c, Char* getter, HitDef* ghd, StateType gst, bool proj) {
     if (!Char_attrCheck(c, getter, ghd, gst)) {
         return false;
@@ -109030,7 +109053,7 @@ bool Char_hittableByChar(Char* c, Char* getter, HitDef* ghd, StateType gst, bool
     return true;
 }
 
-// Char.hitspark (char.go:11368), 0 TODO
+// Char.hitspark (char.go:11386), 0 TODO
 void Char_hitspark(Char* c, Char* getter, Projectile* proj, i32 animNo, GoString ffx, f32 sparkangle, Arr2_f32 sparkscale) {
     Arr4_f32 getterBase = Char_baseSizeBox(getter);
     f32 getterScale = Char_sizeBoxScaleWorld(getter).v[0];
@@ -109098,7 +109121,7 @@ void Char_hitspark(Char* c, Char* getter, Projectile* proj, i32 animNo, GoString
     }
 }
 
-// Char.hitResultCheck (char.go:11469), 0 TODO
+// Char.hitResultCheck (char.go:11487), 0 TODO
 i32 Char_hitResultCheck(Char* c, Char* getter, Projectile* proj) {
     i32 hitResult = {0};
     HitDef* hd = (&c->hitdef);
@@ -109820,7 +109843,7 @@ i32 Char_hitResultCheck(Char* c, Char* getter, Projectile* proj) {
     return hitResult;
 }
 
-// Char.actionPrepare (char.go:12326), 0 TODO
+// Char.actionPrepare (char.go:12344), 0 TODO
 void Char_actionPrepare(Char* c) {
     if (((c->minus != 3) || Char_csf(c, 2U)) || Char_scf(c, 2U)) {
         return;
@@ -109890,6 +109913,9 @@ void Char_actionPrepare(Char* c) {
             c->CharSystemVar_.airJumpCount = 0;
         }
         if (!Char_hitPause(c)) {
+            if ((c->CharSystemVar_.specialFlag & 2U) != 0U) {
+                fn_helperIdxChanged();
+            }
             c->CharSystemVar_.specialFlag = 0U;
             if (Char_isPlayerType(c)) {
                 if ((Char_alive(c) || (c->ss.no != 5150)) || (Char_numPartner(c) == 0)) {
@@ -110004,7 +110030,7 @@ void Char_actionPrepare(Char* c) {
     }
 }
 
-// Char.actionRun (char.go:12545), 0 TODO
+// Char.actionRun (char.go:12566), 0 TODO
 void Char_actionRun(Char* c) {
     if (((c->minus != 3) || Char_csf(c, 2U)) || Char_scf(c, 2U)) {
         return;
@@ -110220,7 +110246,7 @@ void Char_actionRun(Char* c) {
     c->minus = 1;
 }
 
-// Char.actionFinish (char.go:12800), 0 TODO
+// Char.actionFinish (char.go:12821), 0 TODO
 void Char_actionFinish(Char* c) {
     if (((c->minus < 1) || Char_csf(c, 2U)) || Char_scf(c, 2U)) {
         return;
@@ -110265,7 +110291,7 @@ void Char_actionFinish(Char* c) {
     c->minus = 2;
 }
 
-// Char.track (char.go:12863), 0 TODO
+// Char.track (char.go:12884), 0 TODO
 void Char_track(Char* c) {
     if (!Char_trackableByCamera(c)) {
         return;
@@ -110320,7 +110346,7 @@ void Char_track(Char* c) {
     }
 }
 
-// Char.update (char.go:12926), 0 TODO
+// Char.update (char.go:12947), 0 TODO
 void Char_update(Char* c) {
     if (Char_scf(c, 2U)) {
         return;
@@ -110459,7 +110485,7 @@ void Char_update(Char* c) {
     }
 }
 
-// Char.tick (char.go:13098), 0 TODO
+// Char.tick (char.go:13119), 0 TODO
 void Char_tick(Char* c) {
     if (Char_scf(c, 2U)) {
         return;
@@ -110652,7 +110678,7 @@ void Char_tick(Char* c) {
     }
 }
 
-// Char.debugHitByState (char.go:13296), 0 TODO
+// Char.debugHitByState (char.go:13317), 0 TODO
 Ret_bool__bool__GoString__i32 Char_debugHitByState(Char* c, i32 boxgroup, i32 boxindex) {
     bool hb = {0};
     bool mtk = {0};
@@ -110695,7 +110721,7 @@ Ret_bool__bool__GoString__i32 Char_debugHitByState(Char* c, i32 boxgroup, i32 bo
     return (Ret_bool__bool__GoString__i32){hb, mtk, txt, flags};
 }
 
-// Char.cueDebugDraw (char.go:13345), 0 TODO
+// Char.cueDebugDraw (char.go:13366), 0 TODO
 void Char_cueDebugDraw(Char* c) {
     f32 x = (c->pos.v[0] * c->localscl);
     f32 y = (c->pos.v[1] * c->localscl);
@@ -110857,7 +110883,7 @@ void Char_cueDebugDraw(Char* c) {
     }
 }
 
-// Char.cueDraw (char.go:13540), 0 TODO
+// Char.cueDraw (char.go:13561), 0 TODO
 void Char_cueDraw(Char* c) {
     if ((c->helperIndex < 0) || Char_scf(c, 2U)) {
         return;
@@ -111024,7 +111050,7 @@ void Char_cueDraw(Char* c) {
     }
 }
 
-// CharList.clear (char.go:13815), 0 TODO
+// CharList.clear (char.go:13836), 0 TODO
 void CharList_clear(CharList* cl) {
     (*cl) = (CharList){.idMap = Map_i32_CharPtr_make(0)};
     g_sys.SystemStateVars_.lastCharId = go_max_i32(0, (g_sys.cfg.Config.HelperMax - 1));
@@ -111047,7 +111073,7 @@ void CharList_clear(CharList* cl) {
     }
 }
 
-// CharList.add (char.go:13836), 0 TODO
+// CharList.add (char.go:13857), 0 TODO
 void CharList_add(CharList* cl, Char* c) {
     {
         bool _t1; Char* _t2 = Map_i32_CharPtr_get(&cl->idMap, c->id, &_t1);
@@ -111061,7 +111087,7 @@ void CharList_add(CharList* cl, Char* c) {
     Map_i32_CharPtr_set(&cl->idMap, c->id, c);
 }
 
-// CharList.delete (char.go:13851), 0 TODO
+// CharList.delete (char.go:13872), 0 TODO
 void CharList_delete(CharList* cl, Char* dc) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&cl->idMap);
@@ -111101,7 +111127,7 @@ void CharList_delete(CharList* cl, Char* dc) {
     }
 }
 
-// CharList.audit (char.go:13905), 0 TODO
+// CharList.audit (char.go:13926), 0 TODO
 void CharList_audit(CharList* cl) {
     Map_CharPtr_bool inCreation = Map_CharPtr_bool_make(cl->creationOrder.len);
     {
@@ -111201,7 +111227,7 @@ void CharList_audit(CharList* cl) {
     }
 }
 
-// CharList.commandUpdate (char.go:13973), 0 TODO
+// CharList.commandUpdate (char.go:13994), 0 TODO
 void CharList_commandUpdate(CharList* cl) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -111291,7 +111317,7 @@ void CharList_commandUpdate(CharList* cl) {
     }
 }
 
-// CharList.updateRunOrder (char.go:14062), 0 TODO
+// CharList.updateRunOrder (char.go:14083), 0 TODO
 void CharList_updateRunOrder(CharList* cl) {
     GoFunc getPriority = ((GoFunc){(void *)lambda_522, go_box(Env_lambda_522, ((Env_lambda_522){0}))});
     go_sort_slice((void *)GO_TMPADDR(Slice_CharPtr, cl->runOrder), sizeof(Char*), ((GoFunc){(void *)lambda_524, go_box(Env_lambda_524, ((Env_lambda_524){cl, getPriority}))}));
@@ -111305,7 +111331,7 @@ void CharList_updateRunOrder(CharList* cl) {
     }
 }
 
-// CharList.action (char.go:14116), 0 TODO
+// CharList.action (char.go:14137), 0 TODO
 void CharList_action(CharList* cl) {
     CharList_updateRunOrder(cl);
     CharList_commandUpdate(cl);
@@ -111338,7 +111364,7 @@ void CharList_action(CharList* cl) {
     }
 }
 
-// CharList.xScreenBound (char.go:14145), 0 TODO
+// CharList.xScreenBound (char.go:14166), 0 TODO
 void CharList_xScreenBound(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -111350,7 +111376,7 @@ void CharList_xScreenBound(CharList* cl) {
     }
 }
 
-// CharList.update (char.go:14152), 0 TODO
+// CharList.update (char.go:14173), 0 TODO
 void CharList_update(CharList* cl) {
     if (System_tickFrame(&g_sys)) {
         {
@@ -111377,7 +111403,7 @@ void CharList_update(CharList* cl) {
     }
 }
 
-// CharList.hitDetectionPlayer (char.go:14175), 0 TODO
+// CharList.hitDetectionPlayer (char.go:14196), 0 TODO
 void CharList_hitDetectionPlayer(CharList* cl, Char* c) {
     if (Char_scf(c, 256U) || Char_scf(c, 2U)) {
         return;
@@ -111610,7 +111636,7 @@ void CharList_hitDetectionPlayer(CharList* cl, Char* c) {
     }
 }
 
-// CharList.hitDetectionProjectile (char.go:14455), 0 TODO
+// CharList.hitDetectionProjectile (char.go:14476), 0 TODO
 void CharList_hitDetectionProjectile(CharList* cl, Char* getter) {
     if (Char_scf(getter, 256U) || Char_scf(getter, 2U)) {
         return;
@@ -111714,7 +111740,7 @@ void CharList_hitDetectionProjectile(CharList* cl, Char* getter) {
     }
 }
 
-// CharList.pushDetection (char.go:14640), 0 TODO
+// CharList.pushDetection (char.go:14661), 0 TODO
 void CharList_pushDetection(CharList* cl, Char* c) {
     if (((!Char_csf(c, 64U)) || Char_scf(c, 256U)) || Char_scf(c, 2U)) {
         return;
@@ -112029,7 +112055,7 @@ void CharList_pushDetection(CharList* cl, Char* c) {
     }
 }
 
-// CharList.rebindIfPushed (char.go:14994), 0 TODO
+// CharList.rebindIfPushed (char.go:15015), 0 TODO
 void CharList_rebindIfPushed(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -112046,7 +112072,7 @@ void CharList_rebindIfPushed(CharList* cl) {
     }
 }
 
-// CharList.collisionDetection (char.go:15006), 0 TODO
+// CharList.collisionDetection (char.go:15027), 0 TODO
 void CharList_collisionDetection(CharList* cl) {
     Slice_int sortedOrder = GO_MAKE_A(Slice_int, int, cl->runOrder.len, 0);
     {
@@ -112094,7 +112120,7 @@ void CharList_collisionDetection(CharList* cl) {
     }
 }
 
-// CharList.tick (char.go:15070), 0 TODO
+// CharList.tick (char.go:15091), 0 TODO
 void CharList_tick(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -112106,7 +112132,7 @@ void CharList_tick(CharList* cl) {
     }
 }
 
-// CharList.cueDraw (char.go:15078), 0 TODO
+// CharList.cueDraw (char.go:15099), 0 TODO
 void CharList_cueDraw(CharList* cl) {
     {
         Slice_CharPtr _t2 = cl->runOrder;
@@ -112118,7 +112144,7 @@ void CharList_cueDraw(CharList* cl) {
     }
 }
 
-// CharList.enemyNear (char.go:15103), 0 TODO
+// CharList.enemyNear (char.go:15124), 0 TODO
 Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list) {
     if (n < 0) {
         return NULL;
@@ -112180,7 +112206,7 @@ Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list) {
     return NULL;
 }
 
-// Char.varCachePut (char.go:15203), 0 TODO
+// Char.varCachePut (char.go:15224), 0 TODO
 void Char_varCachePut(Char* c, i32 i) {
     if (i < 0) {
         return;
@@ -112189,7 +112215,7 @@ void Char_varCachePut(Char* c, i32 i) {
     c->varCache.v[(((u32)i) & 31U)] = (varCacheEnt){.key = i, .gen = c->varGen, .mp = mp, .ival = Map_i32_i32_get(&c->cnsvar, i, NULL)};
 }
 
-// Char.fvarCachePut (char.go:15211), 0 TODO
+// Char.fvarCachePut (char.go:15232), 0 TODO
 void Char_fvarCachePut(Char* c, i32 i) {
     if (i < 0) {
         return;
@@ -129513,6 +129539,209 @@ GoIface System_cvfCheckMatchContent(System* s, GoString remote) {
         }
     }
     return (GoIface){0};
+}
+
+// helperIdxChanged (cvf_index.go:24), 0 TODO
+void fn_helperIdxChanged(void) {
+    g_helperIdxGen++;
+}
+
+// explodIdxChanged (cvf_index.go:25), 0 TODO
+void fn_explodIdxChanged(void) {
+    g_explodIdxGen++;
+}
+
+// numHelperWalk (cvf_index.go:40), 0 TODO
+i32 fn_numHelperWalk(int pn, i32 id) {
+    i32 count = 0;
+    {
+        Slice_CharPtr _t2 = GO_SLICE(Slice_CharPtr, g_sys.chars.v[pn], 1, -1);
+        for (int _t1 = 0; _t1 < _t2.len; _t1++) {
+            Char* h = _t2.p[_t1];
+            if ((!Char_csf(h, 2U)) && (((id <= 0) || (h->helperId == id)))) {
+                count++;
+            }
+            _cont3:;
+        }
+    }
+    return count;
+}
+
+// numHelperIdx (cvf_index.go:50), 0 TODO
+i32 fn_numHelperIdx(int pn, i32 id) {
+    helperIdx* x = (&g_helperIdxs.v[pn]);
+    Slice_CharPtr cs = g_sys.chars.v[pn];
+    Char** p = NULL;
+    if (cs.len > 0) {
+        p = (&cs.p[0]);
+    }
+    if (((x->gen != g_helperIdxGen) || (x->ptr != p)) || (x->n != cs.len)) {
+        u32 _t1 = g_helperIdxGen;
+        Char** _t2 = p;
+        int _t3 = cs.len;
+        i32 _t4 = 0;
+        x->gen = _t1;
+        x->ptr = _t2;
+        x->n = _t3;
+        x->total = _t4;
+        x->ids = GO_SLICE(Slice_helperIdCount, x->ids, 0, 0);
+        {
+            Slice_CharPtr _t6 = GO_SLICE(Slice_CharPtr, cs, 1, -1);
+            for (int _t5 = 0; _t5 < _t6.len; _t5++) {
+                Char* h = _t6.p[_t5];
+                if (Char_csf(h, 2U)) {
+                    continue;
+                }
+                x->total++;
+                bool found = false;
+                {
+                    Slice_helperIdCount _t9 = x->ids;
+                    for (int _t8 = 0; _t8 < _t9.len; _t8++) {
+                        int k = _t8;
+                        if (x->ids.p[k].id == h->helperId) {
+                            x->ids.p[k].n++;
+                            found = true;
+                            break;
+                        }
+                        _cont10:;
+                    }
+                }
+                if (!found) {
+                    x->ids = GO_APPEND(Slice_helperIdCount, x->ids, (helperIdCount){h->helperId, 1});
+                }
+                _cont7:;
+            }
+        }
+    }
+    i32 r = 0;
+    if (id <= 0) {
+        r = x->total;
+    } else {
+        {
+            Slice_helperIdCount _t12 = x->ids;
+            for (int _t11 = 0; _t11 < _t12.len; _t11++) {
+                helperIdCount e = _t12.p[_t11];
+                if (e.id == id) {
+                    r = e.n;
+                    break;
+                }
+                _cont13:;
+            }
+        }
+    }
+    if (g_idxCheck && (r != fn_numHelperWalk(pn, id))) {
+        GoString msg = GOSTR("");
+        {
+            Slice_CharPtr _t15 = GO_SLICE(Slice_CharPtr, g_sys.chars.v[pn], 1, -1);
+            for (int _t14 = 0; _t14 < _t15.len; _t14++) {
+                Char* h = _t15.p[_t14];
+                msg = go_strcat(msg, go_strcat(go_strcat(go_strcat(fn_itoa(((int)h->helperId)), GOSTR("/")), fn_itoa(((int)(h->CharSystemVar_.specialFlag & 2U)))), GOSTR(" ")));
+                _cont16:;
+            }
+        }
+        {
+            Slice_helperIdCount _t18 = x->ids;
+            for (int _t17 = 0; _t17 < _t18.len; _t17++) {
+                helperIdCount e = _t18.p[_t17];
+                msg = go_strcat(msg, go_strcat(go_strcat(go_strcat(go_strcat(GOSTR("["), fn_itoa(((int)e.id))), GOSTR(":")), fn_itoa(((int)e.n))), GOSTR("]")));
+                _cont19:;
+            }
+        }
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(GOSTR("CVF_IDX_CHECK: NumHelper index differs: pn "), fn_itoa(pn)), GOSTR(" id ")), fn_itoa(((int)id))), GOSTR(" idx ")), fn_itoa(((int)r))), GOSTR(" walk ")), fn_itoa(((int)fn_numHelperWalk(pn, id)))), GOSTR(" tick ")), fn_itoa(((int)g_sys.SystemStateVars_.tickCount))), GOSTR(" ")), msg))}));
+    }
+    return r;
+}
+
+// numExplodWalk (cvf_index.go:114), 0 TODO
+i32 fn_numExplodWalk(int pn, i32 id, i32 pid) {
+    i32 total = 0;
+    {
+        Slice_ExplodPtr _t2 = g_sys.explods.v[pn];
+        for (int _t1 = 0; _t1 < _t2.len; _t1++) {
+            Explod* e = _t2.p[_t1];
+            if (Explod_matchId(e, id, pid)) {
+                total++;
+            }
+            _cont3:;
+        }
+    }
+    return total;
+}
+
+// numExplodIdx (cvf_index.go:124), 0 TODO
+i32 fn_numExplodIdx(int pn, i32 id, i32 pid) {
+    explodIdx* x = (&g_explodIdxs.v[pn]);
+    Slice_ExplodPtr es = g_sys.explods.v[pn];
+    Explod** p = NULL;
+    if (es.len > 0) {
+        p = (&es.p[0]);
+    }
+    if ((x->gen != g_explodIdxGen) || (x->ptr != p)) {
+        u32 _t1 = g_explodIdxGen;
+        Explod** _t2 = p;
+        x->gen = _t1;
+        x->ptr = _t2;
+        if (x->ids.cap < es.len) {
+            x->ids = GO_MAKE_A(Slice_i32, i32, es.len, (es.len * 2));
+            x->owner = GO_MAKE_A(Slice_i32, i32, es.len, (es.len * 2));
+        }
+        Slice_i32 _t3 = GO_SLICE(Slice_i32, x->ids, 0, es.len);
+        Slice_i32 _t4 = GO_SLICE(Slice_i32, x->owner, 0, es.len);
+        Slice_i32 ids = _t3;
+        Slice_i32 owner = _t4;
+        int n = 0;
+        {
+            Slice_ExplodPtr _t6 = es;
+            for (int _t5 = 0; _t5 < _t6.len; _t5++) {
+                Explod* e = _t6.p[_t5];
+                if (e->id >= 0) {
+                    i32 _t8 = e->id;
+                    i32 _t9 = e->ownerId;
+                    ids.p[n] = _t8;
+                    owner.p[n] = _t9;
+                    n++;
+                }
+                _cont7:;
+            }
+        }
+        Slice_i32 _t10 = GO_SLICE(Slice_i32, ids, 0, n);
+        Slice_i32 _t11 = GO_SLICE(Slice_i32, owner, 0, n);
+        x->ids = _t10;
+        x->owner = _t11;
+    }
+    i32 total = 0;
+    Slice_i32 _t12 = x->ids;
+    Slice_i32 _t13 = GO_SLICE(Slice_i32, x->owner, 0, x->ids.len);
+    Slice_i32 ids = _t12;
+    Slice_i32 owner = _t13;
+    if (id < 0) {
+        {
+            Slice_i32 _t15 = owner;
+            for (int _t14 = 0; _t14 < _t15.len; _t14++) {
+                i32 o = _t15.p[_t14];
+                if (o == pid) {
+                    total++;
+                }
+                _cont16:;
+            }
+        }
+    } else {
+        {
+            Slice_i32 _t18 = owner;
+            for (int _t17 = 0; _t17 < _t18.len; _t17++) {
+                int k = _t17;
+                i32 o = _t18.p[_t17];
+                if ((((o ^ pid)) | ((ids.p[k] ^ id))) == 0) {
+                    total++;
+                }
+                _cont19:;
+            }
+        }
+    }
+    if (g_idxCheck && (total != fn_numExplodWalk(pn, id, pid))) {
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, GOSTR("CVF_IDX_CHECK: NumExplod index differs"))}));
+    }
+    return total;
 }
 
 // cvfSelectRendererGLES (cvf_mobile.go:20), 0 TODO
@@ -171920,6 +172149,7 @@ void GameState_loadPalFX(GameState* gs) {
 
 // GameState.loadCharData (state.go:365), 0 TODO
 void GameState_loadCharData(GameState* gs, GameStatePool* gsp) {
+    fn_helperIdxChanged();
     {
         int i = 0;
         for (; i < 12; i++) {
@@ -171968,7 +172198,7 @@ void GameState_loadCharData(GameState* gs, GameStatePool* gsp) {
     g_sys.charList = CharList_Clone(&gs->charList, gsp);
 }
 
-// GameState.loadProjectileData (state.go:395), 0 TODO
+// GameState.loadProjectileData (state.go:396), 0 TODO
 void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -171987,8 +172217,9 @@ void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.loadExplodData (state.go:404), 0 TODO
+// GameState.loadExplodData (state.go:405), 0 TODO
 void GameState_loadExplodData(GameState* gs, GameStatePool* gsp) {
+    fn_explodIdxChanged();
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
             int i = _t1;
@@ -172005,7 +172236,7 @@ void GameState_loadExplodData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.loadCharTextData (state.go:413), 0 TODO
+// GameState.loadCharTextData (state.go:415), 0 TODO
 void GameState_loadCharTextData(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172024,7 +172255,7 @@ void GameState_loadCharTextData(GameState* gs) {
     }
 }
 
-// GameState.stageCanMutate (state.go:422), 0 TODO
+// GameState.stageCanMutate (state.go:424), 0 TODO
 bool GameState_stageCanMutate(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -172038,7 +172269,7 @@ bool GameState_stageCanMutate(GameState* gs) {
     return false;
 }
 
-// GameState.Checksum (state.go:436), 0 TODO
+// GameState.Checksum (state.go:438), 0 TODO
 int GameState_Checksum(GameState* gs) {
     gs->bytes = go_str2bytes(GameState_String(gs));
     GoIface h = fnv_New32a();
@@ -172046,7 +172277,7 @@ int GameState_Checksum(GameState* gs) {
     return ((int)iface_Sum32_52c8429d(h));
 }
 
-// GameState.String (state.go:451), 0 TODO
+// GameState.String (state.go:453), 0 TODO
 GoString GameState_String(GameState* gs) {
     GoString str = {0};
     str = fmt_Sprintf(GOSTR("MatchTime %d CurRoundTime: %d RandSeed: %d\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.matchTime)}), ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.curRoundTime)}), ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.randseed)})));
@@ -172085,7 +172316,7 @@ GoString GameState_String(GameState* gs) {
     return str;
 }
 
-// Char.String (state.go:496), 0 TODO
+// Char.String (state.go:498), 0 TODO
 GoString Char_String(Char cs) {
     GoString inputBufStr = GOSTR("none");
     if ((cs.keyctrl.v[0] && (cs.cmd.len > 0)) && (cs.cmd.p[0].Buffer != NULL)) {
@@ -172096,12 +172327,12 @@ GoString Char_String(Char cs) {
     return str;
 }
 
-// NewGameStatePool (state.go:566), 0 TODO
+// NewGameStatePool (state.go:568), 0 TODO
 GameStatePool fn_NewGameStatePool(void) {
     return (GameStatePool){.gameStatePool = go_sync_pool(((GoFunc){(void *)lambda_1779, go_box(Env_lambda_1779, ((Env_lambda_1779){0}))})), .stringIntMapPool = go_sync_pool(((GoFunc){(void *)lambda_1780, go_box(Env_lambda_1780, ((Env_lambda_1780){0}))})), .stringTypedValueMapPool = go_sync_pool(((GoFunc){(void *)lambda_1781, go_box(Env_lambda_1781, ((Env_lambda_1781){0}))})), .animationTablePool = go_sync_pool(((GoFunc){(void *)lambda_1782, go_box(Env_lambda_1782, ((Env_lambda_1782){0}))})), .int32CharPointerMapPool = go_sync_pool(((GoFunc){(void *)lambda_1783, go_box(Env_lambda_1783, ((Env_lambda_1783){0}))})), .animFrameSlicePool = go_sync_pool(((GoFunc){(void *)lambda_1784, go_box(Env_lambda_1784, ((Env_lambda_1784){0}))})), .int32int32MapPool = go_sync_pool(((GoFunc){(void *)lambda_1785, go_box(Env_lambda_1785, ((Env_lambda_1785){0}))})), .int32float32MapPool = go_sync_pool(((GoFunc){(void *)lambda_1786, go_box(Env_lambda_1786, ((Env_lambda_1786){0}))})), .remapPresetPool = go_sync_pool(((GoFunc){(void *)lambda_1787, go_box(Env_lambda_1787, ((Env_lambda_1787){0}))})), .remapTablePool = go_sync_pool(((GoFunc){(void *)lambda_1788, go_box(Env_lambda_1788, ((Env_lambda_1788){0}))})), .poolObjs = Map_int_Slice_GoIface_make(0)};
 }
 
-// GameStatePool.Get (state.go:633), 0 TODO
+// GameStatePool.Get (state.go:635), 0 TODO
 GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item) {
     volatile bool _df3 = false; volatile GoFunc _df3_f;
     volatile GoIface result = {0};
@@ -172207,7 +172438,7 @@ GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item) {
     return result;
 }
 
-// GameStatePool.Put (state.go:679), 0 TODO
+// GameStatePool.Put (state.go:681), 0 TODO
 void GameStatePool_Put(GameStatePool* gsp, GoIface item) {
     {
         GoIface _t1 = item;
@@ -172236,7 +172467,7 @@ void GameStatePool_Put(GameStatePool* gsp, GoIface item) {
     }
 }
 
-// GameStatePool.Free (state.go:703), 0 TODO
+// GameStatePool.Free (state.go:705), 0 TODO
 void GameStatePool_Free(GameStatePool* gsp, int stateID) {
     bool _t1; Slice_GoIface _t2 = Map_int_Slice_GoIface_get(&gsp->poolObjs, stateID, &_t1);
     Slice_GoIface objs = _t2;
@@ -176842,12 +177073,13 @@ void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     }
     SoundChannels_SetSize(&s->charSoundChannels.v[pn], 0);
     s->projs.v[pn] = fn_PointerSliceReset_Projectile(s->projs.v[pn]);
+    fn_explodIdxChanged();
     s->explods.v[pn] = fn_PointerSliceReset_Explod(s->explods.v[pn]);
     s->chartexts.v[pn] = fn_PointerSliceReset_TextSprite(s->chartexts.v[pn]);
     s->explodDrawOrder = fn_PointerSliceReset_Explod(s->explodDrawOrder);
 }
 
-// System.handleStageSwap (system.go:2465), 0 TODO
+// System.handleStageSwap (system.go:2466), 0 TODO
 bool System_handleStageSwap(System* s) {
     i32 roundRef = 0;
     if (s->SystemStateVars_.roundNo == 1) {
@@ -176889,7 +177121,7 @@ bool System_handleStageSwap(System* s) {
     return swap;
 }
 
-// System.updateMusicMaps (system.go:2502), 0 TODO
+// System.updateMusicMaps (system.go:2503), 0 TODO
 void System_updateMusicMaps(System* s) {
     bool newMatchMusic = ((s->SystemStateVars_.roundNo == 1) && (!s->SystemStateVars_.roundResetFlg));
     if (newMatchMusic) {
@@ -176931,7 +177163,7 @@ void System_updateMusicMaps(System* s) {
     }
 }
 
-// System.resetRound (system.go:2543), 0 TODO
+// System.resetRound (system.go:2544), 0 TODO
 void System_resetRound(System* s) {
     fn_specRound();
     if (false) {
@@ -177052,12 +177284,12 @@ void System_resetRound(System* s) {
     iface_Await_818fc0bc(g_gfx);
 }
 
-// System.debugPaused (system.go:2665), 0 TODO
+// System.debugPaused (system.go:2666), 0 TODO
 bool System_debugPaused(System* s) {
     return ((s->SystemStateVars_.paused && (!s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.motifPauseGame (system.go:2669), 0 TODO
+// System.motifPauseGame (system.go:2670), 0 TODO
 bool System_motifPauseGame(System* s) {
     if (s->motif.me.active) {
         return true;
@@ -177068,12 +177300,12 @@ bool System_motifPauseGame(System* s) {
     return false;
 }
 
-// System.matchPaused (system.go:2682), 0 TODO
+// System.matchPaused (system.go:2683), 0 TODO
 bool System_matchPaused(System* s) {
     return (System_debugPaused(s) || System_motifPauseGame(s));
 }
 
-// System.motifPauseMusic (system.go:2686), 0 TODO
+// System.motifPauseMusic (system.go:2687), 0 TODO
 bool System_motifPauseMusic(System* s) {
     if (s->motif.ch.active && (s->motif.ch.counter >= s->motif.ChallengerInfo.Pause.Time)) {
         return true;
@@ -177081,17 +177313,17 @@ bool System_motifPauseMusic(System* s) {
     return false;
 }
 
-// System.tickFrame (system.go:2695), 0 TODO
+// System.tickFrame (system.go:2696), 0 TODO
 bool System_tickFrame(System* s) {
     return ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.tickNextFrame (system.go:2705), 0 TODO
+// System.tickNextFrame (system.go:2706), 0 TODO
 bool System_tickNextFrame(System* s) {
     return ((go_f2i32((s->SystemStateVars_.tickCountF + s->SystemStateVars_.nextAddTime)) > s->SystemStateVars_.tickCount) && ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag) || (s->SystemStateVars_.oldTickCount >= s->SystemStateVars_.tickCount))));
 }
 
-// System.tickInterpolation (system.go:2712), 0 TODO
+// System.tickInterpolation (system.go:2713), 0 TODO
 f32 System_tickInterpolation(System* s) {
     if (System_tickNextFrame(s)) {
         return 0x1p+00f;
@@ -177103,12 +177335,12 @@ f32 System_tickInterpolation(System* s) {
     return 0x1p+00f;
 }
 
-// System.uiTick (system.go:2726), 0 TODO
+// System.uiTick (system.go:2727), 0 TODO
 bool System_uiTick(System* s) {
     return ((System_tickFrame(s) || System_debugPaused(s)) || s->motif.me.active);
 }
 
-// System.addFrameTime (system.go:2730), 0 TODO
+// System.addFrameTime (system.go:2731), 0 TODO
 bool System_addFrameTime(System* s, f32 t) {
     if (System_debugPaused(s)) {
         s->SystemStateVars_.oldNextAddTime = 0x0p+00f;
@@ -177129,7 +177361,7 @@ bool System_addFrameTime(System* s, f32 t) {
     return true;
 }
 
-// System.resetFrameTime (system.go:2750), 0 TODO
+// System.resetFrameTime (system.go:2751), 0 TODO
 void System_resetFrameTime(System* s) {
     int _t1 = 0;
     int _t2 = -1;
@@ -177147,7 +177379,7 @@ void System_resetFrameTime(System* s) {
     s->redrawWait.lastDraw = time_Now();
 }
 
-// System.resetMatchData (system.go:2759), 0 TODO
+// System.resetMatchData (system.go:2760), 0 TODO
 void System_resetMatchData(System* s, bool forceDestroy) {
     g_sys.allPalFX = fn_newPalFX();
     g_sys.bgPalFX = fn_newPalFX();
@@ -177164,7 +177396,7 @@ void System_resetMatchData(System* s, bool forceDestroy) {
     }
 }
 
-// System.charUpdate (system.go:2771), 0 TODO
+// System.charUpdate (system.go:2772), 0 TODO
 void System_charUpdate(System* s) {
     CharList_update(&s->charList);
     System_projectileUpdate(s);
@@ -177173,7 +177405,7 @@ void System_charUpdate(System* s) {
     }
 }
 
-// System.globalCollision (system.go:2783), 0 TODO
+// System.globalCollision (system.go:2784), 0 TODO
 void System_globalCollision(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177195,7 +177427,7 @@ void System_globalCollision(System* s) {
     s->projectileTradeSort = fn_PointerSliceReset_Projectile(s->projectileTradeSort);
 }
 
-// System.runIntroSkip (system.go:2810), 0 TODO
+// System.runIntroSkip (system.go:2811), 0 TODO
 void System_runIntroSkip(System* s) {
     if ((!System_gsf(s, 4U)) || System_gsf(s, 16384U)) {
         return;
@@ -177227,7 +177459,7 @@ void System_runIntroSkip(System* s) {
     }
 }
 
-// System.clearSpriteData (system.go:2849), 0 TODO
+// System.clearSpriteData (system.go:2850), 0 TODO
 void System_clearSpriteData(System* s) {
     fn_spriteDataPoolReset();
     s->spriteList = GO_SLICE(DrawList, s->spriteList, 0, 0);
@@ -177255,7 +177487,7 @@ void System_clearSpriteData(System* s) {
     }
 }
 
-// System.cueDraw (system.go:2880), 0 TODO
+// System.cueDraw (system.go:2881), 0 TODO
 void System_cueDraw(System* s) {
     if (s->SystemStateVars_.frameSkip) {
         return;
@@ -177279,17 +177511,17 @@ void System_cueDraw(System* s) {
     System_explodCueDraw(s);
 }
 
-// System.screenleft (system.go:2899), 0 TODO
+// System.screenleft (system.go:2900), 0 TODO
 f32 System_screenleft(System* s) {
     return (((f32)s->stage->screenleft) * s->stage->localscl);
 }
 
-// System.screenright (system.go:2903), 0 TODO
+// System.screenright (system.go:2904), 0 TODO
 f32 System_screenright(System* s) {
     return (((f32)s->stage->screenright) * s->stage->localscl);
 }
 
-// System.action (system.go:2909), 0 TODO
+// System.action (system.go:2910), 0 TODO
 void System_action(System* s) {
     g_bcIdxDepth = 0;
     fn_bcProfFrame();
@@ -177484,7 +177716,7 @@ void System_action(System* s) {
     return;
 }
 
-// System.uiAction (system.go:3128), 0 TODO
+// System.uiAction (system.go:3129), 0 TODO
 void System_uiAction(System* s) {
     if (!System_uiTick(s)) {
         return;
@@ -177519,7 +177751,7 @@ void System_uiAction(System* s) {
     }
 }
 
-// System.projectileUpdate (system.go:3161), 0 TODO
+// System.projectileUpdate (system.go:3162), 0 TODO
 void System_projectileUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177544,7 +177776,7 @@ void System_projectileUpdate(System* s) {
     }
 }
 
-// System.projectilePrune (system.go:3179), 0 TODO
+// System.projectilePrune (system.go:3180), 0 TODO
 void System_projectilePrune(System* s, int pn) {
     Slice_ProjectilePtr playerProjs = s->projs.v[pn];
     int writeIdx = 0;
@@ -177564,7 +177796,7 @@ void System_projectilePrune(System* s, int pn) {
     s->projs.v[pn] = GO_SLICE(Slice_ProjectilePtr, playerProjs, 0, writeIdx);
 }
 
-// System.explodUpdate (system.go:3197), 0 TODO
+// System.explodUpdate (system.go:3198), 0 TODO
 void System_explodUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177589,7 +177821,7 @@ void System_explodUpdate(System* s) {
     }
 }
 
-// System.explodCueDraw (system.go:3219), 0 TODO
+// System.explodCueDraw (system.go:3220), 0 TODO
 void System_explodCueDraw(System* s) {
     s->explodDrawOrder = GO_SLICE(Slice_ExplodPtr, s->explodDrawOrder, 0, 0);
     int count = 0;
@@ -177621,7 +177853,7 @@ void System_explodCueDraw(System* s) {
     }
 }
 
-// System.explodPrune (system.go:3272), 0 TODO
+// System.explodPrune (system.go:3273), 0 TODO
 void System_explodPrune(System* s, int pn) {
     Slice_ExplodPtr playerExplods = s->explods.v[pn];
     int writeIdx = 0;
@@ -177641,7 +177873,7 @@ void System_explodPrune(System* s, int pn) {
     s->explods.v[pn] = GO_SLICE(Slice_ExplodPtr, playerExplods, 0, writeIdx);
 }
 
-// System.charTextsUpdate (system.go:3288), 0 TODO
+// System.charTextsUpdate (system.go:3291), 0 TODO
 void System_charTextsUpdate(System* s) {
     if (!System_tickFrame(&g_sys)) {
         return;
@@ -177672,7 +177904,7 @@ void System_charTextsUpdate(System* s) {
     }
 }
 
-// System.charTextsPrune (system.go:3314), 0 TODO
+// System.charTextsPrune (system.go:3317), 0 TODO
 void System_charTextsPrune(System* s, int pn) {
     Slice_TextSpritePtr playerTexts = s->chartexts.v[pn];
     int writeIdx = 0;
@@ -177692,7 +177924,7 @@ void System_charTextsPrune(System* s, int pn) {
     s->chartexts.v[pn] = GO_SLICE(Slice_TextSpritePtr, playerTexts, 0, writeIdx);
 }
 
-// System.globalTick (system.go:3329), 0 TODO
+// System.globalTick (system.go:3332), 0 TODO
 void System_globalTick(System* s) {
     Stage_tick(s->stage);
     CharList_tick(&s->charList);
@@ -177713,7 +177945,7 @@ void System_globalTick(System* s) {
     s->SystemStateVars_.matchTime++;
 }
 
-// System.getSlowtime (system.go:3342), 0 TODO
+// System.getSlowtime (system.go:3345), 0 TODO
 i32 System_getSlowtime(System* s) {
     if (((s->SystemStateVars_.slowtime > 0) && (s->SystemStateVars_.intro < 0)) && (s->SystemStateVars_.curRoundTime != 0)) {
         return s->SystemStateVars_.slowtime;
@@ -177721,7 +177953,7 @@ i32 System_getSlowtime(System* s) {
     return 0;
 }
 
-// System.timeElapsed (system.go:3349), 0 TODO
+// System.timeElapsed (system.go:3352), 0 TODO
 i32 System_timeElapsed(System* s) {
     if (s->SystemStateVars_.maxRoundTime > 0) {
         return (s->SystemStateVars_.maxRoundTime - s->SystemStateVars_.curRoundTime);
@@ -177729,7 +177961,7 @@ i32 System_timeElapsed(System* s) {
     return s->SystemStateVars_.curPlayTime;
 }
 
-// System.timeRemaining (system.go:3358), 0 TODO
+// System.timeRemaining (system.go:3361), 0 TODO
 i32 System_timeRemaining(System* s) {
     if (s->SystemStateVars_.curRoundTime >= 0) {
         return s->SystemStateVars_.curRoundTime;
@@ -177737,7 +177969,7 @@ i32 System_timeRemaining(System* s) {
     return -1;
 }
 
-// System.timeTotal (system.go:3365), 0 TODO
+// System.timeTotal (system.go:3368), 0 TODO
 i32 System_timeTotal(System* s) {
     i32 t = s->SystemStateVars_.timerStart;
     {
@@ -177754,7 +177986,7 @@ i32 System_timeTotal(System* s) {
     return t;
 }
 
-// System.matchEndDialoguePending (system.go:3376), 0 TODO
+// System.matchEndDialoguePending (system.go:3379), 0 TODO
 bool System_matchEndDialoguePending(System* s) {
     if ((s->SystemStateVars_.postMatchFlg || (s->SystemStateVars_.dialogueForce != 0)) || s->motif.di.matchEndDone) {
         return false;
@@ -177774,7 +178006,7 @@ bool System_matchEndDialoguePending(System* s) {
     return (System_maxDrawsReached(s, 0) || System_maxDrawsReached(s, 1));
 }
 
-// System.shouldStartMatchEndDialogue (system.go:3396), 0 TODO
+// System.shouldStartMatchEndDialogue (system.go:3399), 0 TODO
 bool System_shouldStartMatchEndDialogue(System* s) {
     if (((!System_matchEndDialoguePending(s)) || (!System_matchOver(s))) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -177785,7 +178017,7 @@ bool System_shouldStartMatchEndDialogue(System* s) {
     return (((s->SystemStateVars_.intro + s->fightScreen.round->over_waittime) + s->fightScreen.round->over_time) <= 0);
 }
 
-// System.holdPostMatchForDialogue (system.go:3406), 0 TODO
+// System.holdPostMatchForDialogue (system.go:3409), 0 TODO
 bool System_holdPostMatchForDialogue(System* s) {
     if ((s->SystemStateVars_.dialogueForce != 0) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -177802,7 +178034,7 @@ bool System_holdPostMatchForDialogue(System* s) {
     return false;
 }
 
-// System.stepRoundState (system.go:3423), 0 TODO
+// System.stepRoundState (system.go:3426), 0 TODO
 void System_stepRoundState(System* s) {
     if (!FightScreenRound_act(s->fightScreen.round)) {
         return;
@@ -178012,7 +178244,7 @@ void System_stepRoundState(System* s) {
     }
 }
 
-// System.roundEndDecision (system.go:3649), 0 TODO
+// System.roundEndDecision (system.go:3652), 0 TODO
 bool System_roundEndDecision(System* s) {
     GoFunc checkPerfect = ((GoFunc){(void *)lambda_1825, &(Env_lambda_1825){s}});
     if (s->SystemStateVars_.intro > 0) {
@@ -178165,7 +178397,7 @@ bool System_roundEndDecision(System* s) {
     return ((ko.v[0] || ko.v[1]) || (s->SystemStateVars_.curRoundTime == 0));
 }
 
-// System.draw (system.go:3790), 0 TODO
+// System.draw (system.go:3793), 0 TODO
 void System_draw(System* s, f32 x, f32 y, f32 scl) {
     fn_vitaDiagFrame();
     s->SystemStateVars_.brightnessOld = s->SystemStateVars_.brightness;
@@ -178265,7 +178497,7 @@ void System_draw(System* s, f32 x, f32 y, f32 scl) {
     Motif_draw(&s->motif, 3);
 }
 
-// System.drawCharTexts (system.go:3980), 0 TODO
+// System.drawCharTexts (system.go:3983), 0 TODO
 void System_drawCharTexts(System* s, i16 layerno) {
     Arr4_i32* clip = NULL;
     {
@@ -178292,7 +178524,7 @@ void System_drawCharTexts(System* s, i16 layerno) {
     }
 }
 
-// System.drawTop (system.go:3992), 0 TODO
+// System.drawTop (system.go:3995), 0 TODO
 void System_drawTop(System* s) {
     s->SystemStateVars_.brightness = s->SystemStateVars_.brightnessOld;
     if (s->clsnDisplay) {
@@ -178312,7 +178544,7 @@ void System_drawTop(System* s) {
     }
 }
 
-// System.debugTextScale (system.go:4026), 0 TODO
+// System.debugTextScale (system.go:4029), 0 TODO
 Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     f32 sx = {0};
     f32 sy = {0};
@@ -178334,7 +178566,7 @@ Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     return (Ret_f32__f32){sx, sy};
 }
 
-// System.drawDebugText (system.go:4041), 0 TODO
+// System.drawDebugText (system.go:4044), 0 TODO
 void System_drawDebugText(System* s, drawAspectState logicState) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -178459,7 +178691,7 @@ void System_drawDebugText(System* s, drawAspectState logicState) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.keepMatchRunning (system.go:4161), 0 TODO
+// System.keepMatchRunning (system.go:4164), 0 TODO
 bool System_keepMatchRunning(System* s) {
     if (!s->SystemStateVars_.endMatch) {
         return true;
@@ -178470,7 +178702,7 @@ bool System_keepMatchRunning(System* s) {
     return false;
 }
 
-// System.runMatch (system.go:4176), 0 TODO
+// System.runMatch (system.go:4179), 0 TODO
 bool System_runMatch(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f; volatile bool _df4 = false; volatile GoFunc _df4_f;
     volatile bool reload = {0};
@@ -178711,7 +178943,7 @@ bool System_runMatch(System* s) {
     return reload;
 }
 
-// System.SetupCharRoundStart (system.go:4436), 0 TODO
+// System.SetupCharRoundStart (system.go:4439), 0 TODO
 void System_SetupCharRoundStart(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -178867,7 +179099,7 @@ void System_SetupCharRoundStart(System* s) {
     }
 }
 
-// System.runNextRound (system.go:4565), 0 TODO
+// System.runNextRound (system.go:4568), 0 TODO
 bool System_runNextRound(System* s) {
     bool _t1 = System_roundOver(s);
     bool roundOver = _t1;
@@ -178957,14 +179189,14 @@ bool System_runNextRound(System* s) {
     return true;
 }
 
-// System.gameLogicSpeed (system.go:4641), 0 TODO
+// System.gameLogicSpeed (system.go:4644), 0 TODO
 i32 System_gameLogicSpeed(System* s) {
     i32 base = ((i32)(60 + (s->cfg.Options.GameSpeed * s->cfg.Options.GameSpeedStep)));
     i32 spd = go_f2i32((((f32)base) * s->debugAccel));
     return go_max_i32(1, spd);
 }
 
-// System.gameRenderSpeed (system.go:4647), 0 TODO
+// System.gameRenderSpeed (system.go:4650), 0 TODO
 int System_gameRenderSpeed(System* s) {
     i32 spd = 0;
     if ((((!s->gameRunning) || s->motif.me.active) || (s->rollback.session != NULL)) || (s->replayFile != NULL)) {
@@ -178975,7 +179207,7 @@ int System_gameRenderSpeed(System* s) {
     return ((int)go_max_i32(1, spd));
 }
 
-// System.debugModeAllowed (system.go:4660), 0 TODO
+// System.debugModeAllowed (system.go:4663), 0 TODO
 bool System_debugModeAllowed(System* s) {
     if ((s->netConnection != NULL) || (s->rollback.session != NULL)) {
         return false;
@@ -178983,7 +179215,7 @@ bool System_debugModeAllowed(System* s) {
     return s->cfg.Debug.AllowDebugMode;
 }
 
-// System.inRollback (system.go:4668), 0 TODO
+// System.inRollback (system.go:4671), 0 TODO
 bool System_inRollback(System* s) {
     if (s->rollback.session != NULL) {
         return s->rollback.session->inRollback;
@@ -178991,7 +179223,7 @@ bool System_inRollback(System* s) {
     return false;
 }
 
-// System.isSpeculativeFrame (system.go:4675), 0 TODO
+// System.isSpeculativeFrame (system.go:4678), 0 TODO
 bool System_isSpeculativeFrame(System* s) {
     if (s->rollback.session != NULL) {
         return (!s->rollback.session->inRollback);
@@ -178999,7 +179231,7 @@ bool System_isSpeculativeFrame(System* s) {
     return false;
 }
 
-// RoundStartBackup.Save (system.go:4693), 0 TODO
+// RoundStartBackup.Save (system.go:4696), 0 TODO
 void RoundStartBackup_Save(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -179091,7 +179323,7 @@ void RoundStartBackup_Save(RoundStartBackup* bk) {
     bk->lastCharId = g_sys.SystemStateVars_.lastCharId;
 }
 
-// RoundStartBackup.Restore (system.go:4761), 0 TODO
+// RoundStartBackup.Restore (system.go:4764), 0 TODO
 void RoundStartBackup_Restore(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -179130,6 +179362,7 @@ void RoundStartBackup_Restore(RoundStartBackup* bk) {
                         }
                         continue;
                     }
+                    fn_helperIdxChanged();
                     (*c) = (*bkup);
                     Char_initCnsVar(c);
                     c->varGen++;
@@ -179208,17 +179441,17 @@ void RoundStartBackup_Restore(RoundStartBackup* bk) {
     g_sys.SystemStateVars_.lastCharId = bk->lastCharId;
 }
 
-// newSelectChar (system.go:4883), 0 TODO
+// newSelectChar (system.go:4887), 0 TODO
 SelectChar* fn_newSelectChar(void) {
     return go_box(SelectChar, (SelectChar){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .cns_scale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .scp = fn_newSelectCharParams()});
 }
 
-// newSelectStage (system.go:4907), 0 TODO
+// newSelectStage (system.go:4911), 0 TODO
 SelectStage* fn_newSelectStage(void) {
     return go_box(SelectStage, (SelectStage){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .ssp = fn_newSelectStageParams()});
 }
 
-// PreloadState.String (system.go:4949), 0 TODO
+// PreloadState.String (system.go:4953), 0 TODO
 GoString PreloadState_String(PreloadState ps) {
     {
         PreloadState _t1 = ps;
@@ -179244,12 +179477,12 @@ GoString PreloadState_String(PreloadState ps) {
     return GOSTR("idle");
 }
 
-// newSelect (system.go:4977), 0 TODO
+// newSelect (system.go:4981), 0 TODO
 Select* fn_newSelect(void) {
     return go_box(Select, (Select){.selectedStageNo = -1, .charAnimPreload = Map_i32_bool_make(0), .stageAnimPreload = Map_i32_bool_make(0), .charSpritePreload = ({ Map_Arr2_u16_bool _m = Map_Arr2_u16_bool_make(2); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 0U}}, true); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 1U}}, true); (Map_Arr2_u16_bool)_m; }), .stageSpritePreload = Map_Arr2_u16_bool_make(0), .palOverwrite = Map_int_int_make(0), .cdefOverwrite = Map_int_GoString_make(0), .music = Map_GoString_Slice_bgMusicPtr_make(0), .gameParams = fn_newGameParams()});
 }
 
-// Select.initPreloadSync (system.go:4992), 0 TODO
+// Select.initPreloadSync (system.go:4996), 0 TODO
 void Select_initPreloadSync(Select* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179264,7 +179497,7 @@ void Select_initPreloadSync(Select* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.ensurePreloadWorker (system.go:5000), 0 TODO
+// Select.ensurePreloadWorker (system.go:5004), 0 TODO
 void Select_ensurePreloadWorker(Select* s) {
     Select_initPreloadSync(s);
     sync_Mutex_Lock(&s->preloadMu);
@@ -179277,7 +179510,7 @@ void Select_ensurePreloadWorker(Select* s) {
     fn_SafeGo(((GoFunc){(void *)lambda_1832, go_box(Env_lambda_1832, ((Env_lambda_1832){s}))}));
 }
 
-// Select.ensureCharPreloadSlot (system.go:5014), 0 TODO
+// Select.ensureCharPreloadSlot (system.go:5018), 0 TODO
 void Select_ensureCharPreloadSlot(Select* s, int ref) {
     if (ref < 0) {
         return;
@@ -179290,7 +179523,7 @@ void Select_ensureCharPreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.ensureStagePreloadSlot (system.go:5023), 0 TODO
+// Select.ensureStagePreloadSlot (system.go:5027), 0 TODO
 void Select_ensureStagePreloadSlot(Select* s, int ref) {
     if (ref <= 0) {
         return;
@@ -179304,7 +179537,7 @@ void Select_ensureStagePreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.QueueCharPreload (system.go:5033), 0 TODO
+// Select.QueueCharPreload (system.go:5037), 0 TODO
 void Select_QueueCharPreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179364,7 +179597,7 @@ void Select_QueueCharPreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.QueueStagePreload (system.go:5071), 0 TODO
+// Select.QueueStagePreload (system.go:5075), 0 TODO
 void Select_QueueStagePreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179424,7 +179657,7 @@ void Select_QueueStagePreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.CharPreloadStatus (system.go:5109), 0 TODO
+// Select.CharPreloadStatus (system.go:5113), 0 TODO
 PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179458,7 +179691,7 @@ PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.StagePreloadStatus (system.go:5122), 0 TODO
+// Select.StagePreloadStatus (system.go:5126), 0 TODO
 PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179492,7 +179725,7 @@ PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.AllPreloadsReady (system.go:5135), 0 TODO
+// Select.AllPreloadsReady (system.go:5139), 0 TODO
 bool Select_AllPreloadsReady(Select* s) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179560,7 +179793,7 @@ bool Select_AllPreloadsReady(Select* s) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.preloadWorkerLoop (system.go:5157), 0 TODO
+// Select.preloadWorkerLoop (system.go:5161), 0 TODO
 void Select_preloadWorkerLoop(Select* s) {
     Select_initPreloadSync(s);
     {
@@ -179641,7 +179874,7 @@ void Select_preloadWorkerLoop(Select* s) {
     }
 }
 
-// Select.preloadCharAssets (system.go:5226), 0 TODO
+// Select.preloadCharAssets (system.go:5230), 0 TODO
 GoIface Select_preloadCharAssets(Select* s, int ref) {
     if ((ref < 0) || (ref >= s->charlist.len)) {
         return (GoIface){0};
@@ -179767,7 +180000,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.preloadStageAssets (system.go:5338), 0 TODO
+// Select.preloadStageAssets (system.go:5342), 0 TODO
 GoIface Select_preloadStageAssets(Select* s, int ref) {
     if ((ref <= 0) || (ref > s->stagelist.len)) {
         return (GoIface){0};
@@ -179848,7 +180081,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.GetCharNo (system.go:5405), 0 TODO
+// Select.GetCharNo (system.go:5409), 0 TODO
 int Select_GetCharNo(Select* s, int i) {
     int n = i;
     if (s->charlist.len > 0) {
@@ -179860,7 +180093,7 @@ int Select_GetCharNo(Select* s, int i) {
     return n;
 }
 
-// Select.GetChar (system.go:5416), 0 TODO
+// Select.GetChar (system.go:5420), 0 TODO
 SelectChar* Select_GetChar(Select* s, int i) {
     if (s->charlist.len == 0) {
         return NULL;
@@ -179869,7 +180102,7 @@ SelectChar* Select_GetChar(Select* s, int i) {
     return (&s->charlist.p[n]);
 }
 
-// Select.ValidatePalette (system.go:5425), 0 TODO
+// Select.ValidatePalette (system.go:5429), 0 TODO
 int Select_ValidatePalette(Select* s, int charRef, int requested) {
     if ((charRef < 0) || (charRef >= s->charlist.len)) {
         return 1;
@@ -179901,14 +180134,14 @@ int Select_ValidatePalette(Select* s, int charRef, int requested) {
     return ((int)sc->pal.p[0]);
 }
 
-// Select.SelectStage (system.go:5449), 0 TODO
+// Select.SelectStage (system.go:5453), 0 TODO
 void Select_SelectStage(Select* s, int n) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selectedStageNo = n;
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// Select.GetStage (system.go:5455), 0 TODO
+// Select.GetStage (system.go:5459), 0 TODO
 SelectStage* Select_GetStage(Select* s, int n) {
     if (s->stagelist.len == 0) {
         return NULL;
@@ -179920,7 +180153,7 @@ SelectStage* Select_GetStage(Select* s, int n) {
     return (&s->stagelist.p[(n - 1)]);
 }
 
-// getDefaultDefPathInZip (system.go:5466), 0 TODO
+// getDefaultDefPathInZip (system.go:5470), 0 TODO
 Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     GoString path1 = {0};
     GoString path2 = {0};
@@ -179931,7 +180164,7 @@ Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     return (Ret_GoString__GoString){path1, path2};
 }
 
-// Select.AddChar (system.go:5473), 0 TODO
+// Select.AddChar (system.go:5477), 0 TODO
 SelectChar* Select_AddChar(Select* s, GoString def) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -180265,7 +180498,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// Select.AddStage (system.go:5734), 0 TODO
+// Select.AddStage (system.go:5738), 0 TODO
 Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoString *def__h = go_box(GoString, def);
@@ -180504,7 +180737,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.AddSelectedChar (system.go:5915), 0 TODO
+// Select.AddSelectedChar (system.go:5919), 0 TODO
 bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     int _t1 = 0;
     int _t2 = Select_GetCharNo(s, cn);
@@ -180535,7 +180768,7 @@ bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     return true;
 }
 
-// Select.ClearSelected (system.go:5940), 0 TODO
+// Select.ClearSelected (system.go:5944), 0 TODO
 void Select_ClearSelected(Select* s) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selected = (Arr2_Slice_Arr2_int){{}};
@@ -180545,12 +180778,12 @@ void Select_ClearSelected(Select* s) {
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// newLoader (system.go:5970), 0 TODO
+// newLoader (system.go:5974), 0 TODO
 Loader* fn_newLoader(void) {
     return go_box(Loader, (Loader){.state = 0, .loadExit = go_chan_make(sizeof(LoaderState), 1)});
 }
 
-// Loader.requestCancel (system.go:5974), 0 TODO
+// Loader.requestCancel (system.go:5978), 0 TODO
 void Loader_requestCancel(Loader* l) {
     if (l->cancelCh == NULL) {
         return;
@@ -180558,7 +180791,7 @@ void Loader_requestCancel(Loader* l) {
     sync_Once_Do(&l->cancelOnce, ((GoFunc){(void *)lambda_1846, go_box(Env_lambda_1846, ((Env_lambda_1846){l}))}));
 }
 
-// Loader.cancelRequested (system.go:5981), 0 TODO
+// Loader.cancelRequested (system.go:5985), 0 TODO
 bool Loader_cancelRequested(Loader* l) {
     if (l->cancelCh == NULL) {
         return false;
@@ -180578,12 +180811,12 @@ bool Loader_cancelRequested(Loader* l) {
     }
 }
 
-// System.turnsPreloadActive (system.go:6003), 0 TODO
+// System.turnsPreloadActive (system.go:6007), 0 TODO
 bool System_turnsPreloadActive(System* s) {
     return (s->cfg.Config.TurnsLoading && (((s->turnsPreloadMember.v[0] >= 0) || (s->turnsPreloadMember.v[1] >= 0))));
 }
 
-// System.startNextTurnsPreload (system.go:6007), 0 TODO
+// System.startNextTurnsPreload (system.go:6011), 0 TODO
 void System_startNextTurnsPreload(System* s) {
     if (((!s->cfg.Config.TurnsLoading) || (s->loader.state == 1)) || (s->loader.state == 3)) {
         return;
@@ -180639,7 +180872,7 @@ void System_startNextTurnsPreload(System* s) {
     }
 }
 
-// System.finishTurnsPreloadForRollback (system.go:6051), 0 TODO
+// System.finishTurnsPreloadForRollback (system.go:6055), 0 TODO
 bool System_finishTurnsPreloadForRollback(System* s) {
     if (!System_turnsPreloadActive(s)) {
         return true;
@@ -180677,7 +180910,7 @@ bool System_finishTurnsPreloadForRollback(System* s) {
     return true;
 }
 
-// System.remapCharSlotRefs (system.go:6077), 0 TODO
+// System.remapCharSlotRefs (system.go:6081), 0 TODO
 void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int newSlot) {
     int oldCPU = (oldSlot ^ -1);
     int newCPU = (newSlot ^ -1);
@@ -180718,7 +180951,7 @@ void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int n
     }
 }
 
-// System.rebindCgiStateOwners (system.go:6109), 0 TODO
+// System.rebindCgiStateOwners (system.go:6113), 0 TODO
 void System_rebindCgiStateOwners(System* s, int pn) {
     if (((pn < 0) || (pn >= 12)) || (s->cgi.v[pn].states.m == 0)) {
         return;
@@ -180747,7 +180980,7 @@ void System_rebindCgiStateOwners(System* s, int pn) {
     }
 }
 
-// System.removePlayerFromCharList (system.go:6128), 0 TODO
+// System.removePlayerFromCharList (system.go:6132), 0 TODO
 void System_removePlayerFromCharList(System* s, int pn) {
     {
         for (; 1; ) {
@@ -180772,7 +181005,7 @@ void System_removePlayerFromCharList(System* s, int pn) {
     }
 }
 
-// System.getPreloadedCharAndCgi (system.go:6145), 0 TODO
+// System.getPreloadedCharAndCgi (system.go:6149), 0 TODO
 Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -180790,7 +181023,7 @@ Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.setPreloadedChar (system.go:6151), 0 TODO
+// System.setPreloadedChar (system.go:6155), 0 TODO
 void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -180804,7 +181037,7 @@ void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.clearPreloadedChars (system.go:6158), 0 TODO
+// System.clearPreloadedChars (system.go:6162), 0 TODO
 void System_clearPreloadedChars(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -180818,7 +181051,7 @@ void System_clearPreloadedChars(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.activateTurnsSlot (system.go:6165), 0 TODO
+// System.activateTurnsSlot (system.go:6169), 0 TODO
 void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     int team = (slot & 1);
     {
@@ -180846,7 +181079,7 @@ void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     }
 }
 
-// System.activateNextTurnsFighters (system.go:6190), 0 TODO
+// System.activateNextTurnsFighters (system.go:6194), 0 TODO
 void System_activateNextTurnsFighters(System* s) {
     {
         int team = 0;
@@ -180903,7 +181136,7 @@ void System_activateNextTurnsFighters(System* s) {
     }
 }
 
-// Loader.loadCharacter (system.go:6242), 0 TODO
+// Loader.loadCharacter (system.go:6246), 0 TODO
 int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     volatile bool _df19 = false; volatile GoFunc _df19_f; volatile bool _df26 = false; volatile GoFunc _df26_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181296,7 +181529,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     if (_df19) { _df19 = false; ((void (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// Loader.prepareTurnsFaces (system.go:6583), 0 TODO
+// Loader.prepareTurnsFaces (system.go:6587), 0 TODO
 void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScreenName* nm, Slice_int teamChars, Slice_Arr2_int teamSel) {
     i32 off = 0;
     if (g_sys.sel.gameParams != NULL) {
@@ -181377,7 +181610,7 @@ void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScree
     }
 }
 
-// Loader.loadStage (system.go:6699), 0 TODO
+// Loader.loadStage (system.go:6703), 0 TODO
 bool Loader_loadStage(Loader* l) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181448,7 +181681,7 @@ bool Loader_loadStage(Loader* l) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Loader.load (system.go:6765), 0 TODO
+// Loader.load (system.go:6769), 0 TODO
 void Loader_load(Loader* l) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181649,7 +181882,7 @@ void Loader_load(Loader* l) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Loader.reset (system.go:6918), 0 TODO
+// Loader.reset (system.go:6922), 0 TODO
 void Loader_reset(Loader* l) {
     {
         LoaderState _t1 = l->state;
@@ -181697,13 +181930,13 @@ void Loader_reset(Loader* l) {
     }
 }
 
-// Loader.retryAfterError (system.go:6956), 0 TODO
+// Loader.retryAfterError (system.go:6960), 0 TODO
 void Loader_retryAfterError(Loader* l) {
     ({ LoaderState _t1; go_chan_recv(l->loadExit, &_t1); _t1; });
     Loader_reset(l);
 }
 
-// Loader.runTread (system.go:6961), 0 TODO
+// Loader.runTread (system.go:6965), 0 TODO
 bool Loader_runTread(Loader* l) {
     if (l->state != 0) {
         return false;
@@ -181715,12 +181948,12 @@ bool Loader_runTread(Loader* l) {
     return true;
 }
 
-// EnvShake.clear (system.go:6988), 0 TODO
+// EnvShake.clear (system.go:6992), 0 TODO
 void EnvShake_clear(EnvShake* es) {
     (*es) = (EnvShake){.freq = 0x1.ep+05f, .phase = ((f32)math_NaN()), .ampl = -0x1p+02f, .mul = 0x1p+00f};
 }
 
-// EnvShake.restart (system.go:6997), 0 TODO
+// EnvShake.restart (system.go:7001), 0 TODO
 void EnvShake_restart(EnvShake* es) {
     if (es->time <= 0) {
         EnvShake_clear(es);
@@ -181729,7 +181962,7 @@ void EnvShake_restart(EnvShake* es) {
     es->curTime = es->time;
 }
 
-// EnvShake.setDefaultPhase (system.go:7005), 0 TODO
+// EnvShake.setDefaultPhase (system.go:7009), 0 TODO
 void EnvShake_setDefaultPhase(EnvShake* es) {
     if (math_IsNaN(((f64)es->phase))) {
         if (es->freq >= 0x1.68p+06f) {
@@ -181740,7 +181973,7 @@ void EnvShake_setDefaultPhase(EnvShake* es) {
     }
 }
 
-// EnvShake.update (system.go:7015), 0 TODO
+// EnvShake.update (system.go:7019), 0 TODO
 void EnvShake_update(EnvShake* es) {
     if (es->curTime <= 0) {
         if (es->time > 0) {
@@ -181775,12 +182008,12 @@ void EnvShake_update(EnvShake* es) {
     es->curTime--;
 }
 
-// EnvShake.getOffset (system.go:7059), 0 TODO
+// EnvShake.getOffset (system.go:7063), 0 TODO
 Arr2_f32 EnvShake_getOffset(EnvShake* es) {
     return es->curOffset;
 }
 
-// ZoomEffect.reset (system.go:7079), 0 TODO
+// ZoomEffect.reset (system.go:7083), 0 TODO
 void ZoomEffect_reset(ZoomEffect* z) {
     z->active = false;
     z->time = 0;
@@ -181797,7 +182030,7 @@ void ZoomEffect_reset(ZoomEffect* z) {
     z->resultValid = false;
 }
 
-// ZoomEffect.update (system.go:7096), 0 TODO
+// ZoomEffect.update (system.go:7100), 0 TODO
 void ZoomEffect_update(ZoomEffect* z) {
     if (!z->active) {
         return;
@@ -181844,7 +182077,7 @@ void ZoomEffect_update(ZoomEffect* z) {
     }
 }
 
-// ZoomEffect.computeCamera (system.go:7156), 0 TODO
+// ZoomEffect.computeCamera (system.go:7160), 0 TODO
 Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl) {
     f32 dx = {0};
     f32 dy = {0};
@@ -181900,7 +182133,7 @@ Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl)
     return (Ret_f32__f32__f32){dx, dy, dscl};
 }
 
-// System.saveCharVars (system.go:7227), 0 TODO
+// System.saveCharVars (system.go:7231), 0 TODO
 void System_saveCharVars(System* s, int pn) {
     if (s->chars.v[pn].len == 0) {
         return;
@@ -181937,7 +182170,7 @@ void System_saveCharVars(System* s, int pn) {
     Map_int_CharVarBackup_set(&s->charVarsBackup, pn, bk);
 }
 
-// System.restoreCharVars (system.go:7252), 0 TODO
+// System.restoreCharVars (system.go:7256), 0 TODO
 void System_restoreCharVars(System* s, Char* c) {
     bool _t1; CharVarBackup _t2 = Map_int_CharVarBackup_get(&s->charVarsBackup, c->playerNo, &_t1);
     CharVarBackup bk = _t2;
@@ -181977,7 +182210,7 @@ void System_restoreCharVars(System* s, Char* c) {
     Map_int_CharVarBackup_delete(&s->charVarsBackup, c->playerNo);
 }
 
-// System.loadCustomShader (system.go:7275), 0 TODO
+// System.loadCustomShader (system.go:7279), 0 TODO
 void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString name, GoString filename, Slice_u8 data) {
     GoString key = filepath_ToSlash(filepath_Clean(filename));
     bool reuse = System_isCustomShaderActive(s, key);
@@ -181989,7 +182222,7 @@ void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString 
     { GoFunc _t1 = ((GoFunc){(void *)lambda_1853, go_box(Env_lambda_1853, ((Env_lambda_1853){data, key}))}); go_chan_send(s->mainThreadTask, &_t1); }
 }
 
-// System.loadCustomShaderFile (system.go:7291), 0 TODO
+// System.loadCustomShaderFile (system.go:7295), 0 TODO
 void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoString name, GoString path, Slice_GoString dirs) {
     GoString *path__h = go_box(GoString, path);
     if (strings_HasPrefix(iface_GetName_319077b5(g_gfx), GOSTR("Vulkan")) && (!strings_HasSuffix(strings_ToLower((*path__h)), GOSTR(".spv")))) {
@@ -181998,7 +182231,7 @@ void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoStr
     fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1854, go_box(Env_lambda_1854, ((Env_lambda_1854){s, shaders, name}))}));
 }
 
-// System.loadCommonShaders (system.go:7313), 0 TODO
+// System.loadCommonShaders (system.go:7317), 0 TODO
 GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice_GoString dirs) {
     {
         Slice_GoString _t2 = fn_SortedKeys_Slice_GoString(s->cfg.Common.Shaders);
@@ -182024,7 +182257,7 @@ GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice
     return (GoIface){0};
 }
 
-// System.isCustomShaderActive (system.go:7343), 0 TODO
+// System.isCustomShaderActive (system.go:7347), 0 TODO
 bool System_isCustomShaderActive(System* s, GoString key) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -182108,7 +182341,7 @@ bool System_isCustomShaderActive(System* s, GoString key) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// System.resolveCharShader (system.go:7377), 0 TODO
+// System.resolveCharShader (system.go:7381), 0 TODO
 Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     if (go_streq(name, GOSTR(""))) {
         return (Ret_GoString__bool){GOSTR(""), true};
@@ -182122,7 +182355,7 @@ Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     return (Ret_GoString__bool){key, ok};
 }
 
-// System.cleanCustomShaders (system.go:7388), 0 TODO
+// System.cleanCustomShaders (system.go:7392), 0 TODO
 void System_cleanCustomShaders(System* s) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&s->loadedCustomShaders);
@@ -182137,12 +182370,12 @@ void System_cleanCustomShaders(System* s) {
     }
 }
 
-// System.shouldHideWithBars (system.go:7402), 0 TODO
+// System.shouldHideWithBars (system.go:7406), 0 TODO
 bool System_shouldHideWithBars(System* s) {
     return (((!FightScreen_visible(&s->fightScreen)) || System_gsf(s, 8U)) || (!s->fightScreen.bars));
 }
 
-// pal32ToBytes (system.go:7406), 0 TODO
+// pal32ToBytes (system.go:7410), 0 TODO
 Slice_u8 fn_pal32ToBytes(Slice_u32 pal) {
     return ((Slice_u8){(((u8*)((void*)(&pal.p[0])))), (int)((pal.len * 4)), (int)((pal.len * 4))});
 }
@@ -183813,6 +184046,8 @@ lua_expcontext* g_lua_ecfuncdef;
 Arr12_CharPtr g_enemyNearScratch;
 GoIface g_bufseekio_errNegativeRead;
 sjson_errorType* g_sjson_errNoChange;
+u32 g_explodIdxGen;
+Arr12_explodIdx g_explodIdxs;
 Map_GoString_lua_LGFunction g_lua_fileMethods;
 Slice_GoString g_lua_fileSeekOptions;
 Slice_GoString g_lua_filebufOptions;
@@ -183824,6 +184059,8 @@ Anon_dcdcacfc g_fuseStats;
 Renderer g_gfx;
 FontRenderer g_gfxFont;
 truetype_graphicsState g_truetype_globalDefaultGS;
+u32 g_helperIdxGen;
+Arr12_helperIdx g_helperIdxs;
 Arr16_u8 g_gjson_hexchars;
 Arr34_huffman_huffTables g_huffman_huffmanMain;
 Slice_u16 g_huffman_huffmanTable;
@@ -183832,6 +184069,7 @@ bool g_hwProfDone;
 Slice_u8 g_flac2_id3Signature;
 GoString g_identFragShader;
 GoString g_identVertShader;
+bool g_idxCheck;
 Arr4_Arr36_f32 g_imdct_imdctWinData;
 Input g_input;
 Arr256_f32 g_vorbis2_inverseDBTable;
@@ -194982,6 +195220,9 @@ void ik_init_globals(void) {
     g_cvf_tanP = (Arr3_f64){{-0x1.992d8d24f3f38p+13, 0x1.199eca5fc9dddp+20, -0x1.11fead3299176p+24}};
     g_cvf_tanQ = (Arr5_f64){{0x1p+00, 0x1.ab8a5eeb36572p+13, -0x1.427bc582abc96p+20, 0x1.7d98fc2ead8efp+24, -0x1.9afe03cbe5a31p+25}};
     g_cvfMPi4 = (Arr20_u64){{1U, 5040379952546458195U, 17892431488136887169ULL, 13169980181085364355ULL, 18204331823439776451ULL, 7946843935494350272U, 905889640498799673U, 18175356263134875261ULL, 15061281708168349961ULL, 15220161563773041794ULL, 8296664548579374057U, 4109744767560208502U, 4607516669194743839U, 16023283104648321598ULL, 15739233654134936430ULL, 11424645774684705882ULL, 16883842788696515318ULL, 8795094592981902804U, 15561835991111744016ULL, 12395701187267450711ULL}};
+    g_idxCheck = (!go_streq(os_Getenv(GOSTR("CVF_IDX_CHECK")), GOSTR("")));
+    g_helperIdxGen = 1U;
+    g_explodIdxGen = 1U;
     g_cvfNearby = go_box(cvfNearbyState, (cvfNearbyState){0});
     g_cvfOnline = go_box(cvfOnlineState, (cvfOnlineState){.httpClient = go_box(GoHttpClient, (GoHttpClient){.Timeout = 70000000000LL}), .buildTag = GOSTR("cvf-online-1")});
     g_cvfNameRe = regexp_MustCompile(GOSTR("[^\\p{L}\\p{N} _.\\-!?']"));
@@ -195332,7 +195573,7 @@ static const RField ik_rf_920[] = {{"o", "main", "", &ik_rt[819], offsetof(ov_Lb
 static const RField ik_rf_922[] = {{"p", "main", "", &ik_rt[8], offsetof(pv_L64466c, p), false}, {"v", "main", "", &ik_rt[10], offsetof(pv_L64466c, v), false}, };
 static const RField ik_rf_925[] = {{"s", "main", "", &ik_rt[926], offsetof(StreamLooper, s), false}, {"loopcount", "main", "", &ik_rt[1], offsetof(StreamLooper, loopcount), false}, {"loopstart", "main", "", &ik_rt[1], offsetof(StreamLooper, loopstart), false}, {"loopend", "main", "", &ik_rt[1], offsetof(StreamLooper, loopend), false}, {"err", "main", "", &ik_rt[44], offsetof(StreamLooper, err), false}, };
 static const RField ik_rf_930[] = {{"vtype", "main", "", &ik_rt[905], offsetof(BytecodeValue, vtype), false}, {"value", "main", "", &ik_rt[12], offsetof(BytecodeValue, value), false}, };
-static const RField ik_rf_932[] = {{"pr", "main", "", &ik_rt[933], offsetof(pair_L4756dc, pr), false}, {"dist", "main", "", &ik_rt[11], offsetof(pair_L4756dc, dist), false}, };
+static const RField ik_rf_932[] = {{"pr", "main", "", &ik_rt[933], offsetof(pair_Ldeb9e1, pr), false}, {"dist", "main", "", &ik_rt[11], offsetof(pair_Ldeb9e1, dist), false}, };
 static const RField ik_rf_934[] = {{"playerno", "main", "", &ik_rt[1], offsetof(Projectile, playerno), false}, {"ownerId", "main", "", &ik_rt[4], offsetof(Projectile, ownerId), false}, {"id", "main", "", &ik_rt[4], offsetof(Projectile, id), false}, {"status", "main", "", &ik_rt[935], offsetof(Projectile, status), false}, {"hitdef", "main", "", &ik_rt[875], offsetof(Projectile, hitdef), false}, {"animNo", "main", "", &ik_rt[4], offsetof(Projectile, animNo), false}, {"anim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, anim_ffx), false}, {"hitanim", "main", "", &ik_rt[4], offsetof(Projectile, hitanim), false}, {"hitanim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, hitanim_ffx), false}, {"remanim", "main", "", &ik_rt[4], offsetof(Projectile, remanim), false}, {"remanim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, remanim_ffx), false}, {"cancelanim", "main", "", &ik_rt[4], offsetof(Projectile, cancelanim), false}, {"cancelanim_ffx", "main", "", &ik_rt[13], offsetof(Projectile, cancelanim_ffx), false}, {"scale", "main", "", &ik_rt[806], offsetof(Projectile, scale), false}, {"rot", "main", "", &ik_rt[802], offsetof(Projectile, rot), false}, {"projection", "main", "", &ik_rt[894], offsetof(Projectile, projection), false}, {"fLength", "main", "", &ik_rt[11], offsetof(Projectile, fLength), false}, {"clsnScale", "main", "", &ik_rt[806], offsetof(Projectile, clsnScale), false}, {"clsnAngle", "main", "", &ik_rt[11], offsetof(Projectile, clsnAngle), false}, {"zScale", "main", "", &ik_rt[11], offsetof(Projectile, zScale), false}, {"remove", "main", "", &ik_rt[0], offsetof(Projectile, remove), false}, {"removetime", "main", "", &ik_rt[4], offsetof(Projectile, removetime), false}, {"velocity", "main", "", &ik_rt[559], offsetof(Projectile, velocity), false}, {"remvelocity", "main", "", &ik_rt[559], offsetof(Projectile, remvelocity), false}, {"accel", "main", "", &ik_rt[559], offsetof(Projectile, accel), false}, {"velmul", "main", "", &ik_rt[559], offsetof(Projectile, velmul), false}, {"hits", "main", "", &ik_rt[4], offsetof(Projectile, hits), false}, {"totalhits", "main", "", &ik_rt[4], offsetof(Projectile, totalhits), false}, {"misstime", "main", "", &ik_rt[4], offsetof(Projectile, misstime), false}, {"priority", "main", "", &ik_rt[4], offsetof(Projectile, priority), false}, {"priorityPoints", "main", "", &ik_rt[4], offsetof(Projectile, priorityPoints), false}, {"sprpriority", "main", "", &ik_rt[4], offsetof(Projectile, sprpriority), false}, {"layerno", "main", "", &ik_rt[4], offsetof(Projectile, layerno), false}, {"edgebound", "main", "", &ik_rt[4], offsetof(Projectile, edgebound), false}, {"stagebound", "main", "", &ik_rt[4], offsetof(Projectile, stagebound), false}, {"heightbound", "main", "", &ik_rt[805], offsetof(Projectile, heightbound), false}, {"depthbound", "main", "", &ik_rt[4], offsetof(Projectile, depthbound), false}, {"pos", "main", "", &ik_rt[559], offsetof(Projectile, pos), false}, {"interPos", "main", "", &ik_rt[559], offsetof(Projectile, interPos), false}, {"facing", "main", "", &ik_rt[11], offsetof(Projectile, facing), false}, {"removefacing", "main", "", &ik_rt[11], offsetof(Projectile, removefacing), false}, {"shadow", "main", "", &ik_rt[159], offsetof(Projectile, shadow), false}, {"reflection", "main", "", &ik_rt[4], offsetof(Projectile, reflection), false}, {"supermovetime", "main", "", &ik_rt[4], offsetof(Projectile, supermovetime), false}, {"pausemovetime", "main", "", &ik_rt[4], offsetof(Projectile, pausemovetime), false}, {"anim", "main", "", &ik_rt[770], offsetof(Projectile, anim), false}, {"curmisstime", "main", "", &ik_rt[4], offsetof(Projectile, curmisstime), false}, {"hitpause", "main", "", &ik_rt[4], offsetof(Projectile, hitpause), false}, {"oldPos", "main", "", &ik_rt[559], offsetof(Projectile, oldPos), false}, {"newPos", "main", "", &ik_rt[559], offsetof(Projectile, newPos), false}, {"aimg", "main", "", &ik_rt[897], offsetof(Projectile, aimg), false}, {"palfx", "main", "", &ik_rt[807], offsetof(Projectile, palfx), false}, {"window", "main", "", &ik_rt[552], offsetof(Projectile, window), false}, {"xshear", "main", "", &ik_rt[11], offsetof(Projectile, xshear), false}, {"localscl", "main", "", &ik_rt[11], offsetof(Projectile, localscl), false}, {"baselocalscl", "main", "", &ik_rt[11], offsetof(Projectile, baselocalscl), false}, {"parentAttackMul", "main", "", &ik_rt[552], offsetof(Projectile, parentAttackMul), false}, {"platform", "main", "", &ik_rt[0], offsetof(Projectile, platform), false}, {"platformWidth", "main", "", &ik_rt[806], offsetof(Projectile, platformWidth), false}, {"platformHeight", "main", "", &ik_rt[806], offsetof(Projectile, platformHeight), false}, {"platformAngle", "main", "", &ik_rt[11], offsetof(Projectile, platformAngle), false}, {"platformFence", "main", "", &ik_rt[0], offsetof(Projectile, platformFence), false}, {"freezeflag", "main", "", &ik_rt[0], offsetof(Projectile, freezeflag), false}, {"contactflag", "main", "", &ik_rt[0], offsetof(Projectile, contactflag), false}, {"time", "main", "", &ik_rt[4], offsetof(Projectile, time), false}, {"removeDone", "main", "", &ik_rt[0], offsetof(Projectile, removeDone), false}, {"customShader", "main", "", &ik_rt[901], offsetof(Projectile, customShader), false}, {"pauseBool", "main", "", &ik_rt[0], offsetof(Projectile, pauseBool), false}, {"clsnBuffers", "main", "", &ik_rt[910], offsetof(Projectile, clsnBuffers), false}, };
 static const RField ik_rf_938[] = {{"reader", "main", "", &ik_rt[430], offsetof(zipMemFileReader, reader), false}, {"zipArchive", "main", "", &ik_rt[939], offsetof(zipMemFileReader, zipArchive), false}, };
 static const RField ik_rf_961[] = {{"f", "main", "", &ik_rt[353], offsetof(vitaBufFile, f), false}, {"buf", "main", "", &ik_rt[42], offsetof(vitaBufFile, buf), false}, {"bufStart", "main", "", &ik_rt[5], offsetof(vitaBufFile, bufStart), false}, {"pos", "main", "", &ik_rt[5], offsetof(vitaBufFile, pos), false}, };
@@ -196684,8 +196925,8 @@ const RType ik_rt[2009] = {
     {22, sizeof(Map_i32_i32*), "", "", &ik_rt[888], NULL, 0, 0, NULL, 298, false, "*map[int32]int32"},
     {22, sizeof(Map_i32_f32*), "", "", &ik_rt[891], NULL, 0, 0, NULL, 299, false, "*map[int32]float32"},
     {25, sizeof(BytecodeValue), "BytecodeValue", "main", NULL, NULL, 0, 2, ik_rf_930, 300, false, "main.BytecodeValue"},
-    {23, sizeof(Slice_pair_L4756dc), "", "", &ik_rt[932], NULL, 0, 0, NULL, 301, false, "[]main.pair"},
-    {25, sizeof(pair_L4756dc), "pair", "main", NULL, NULL, 0, 2, ik_rf_932, 1281, false, "main.pair"},
+    {23, sizeof(Slice_pair_Ldeb9e1), "", "", &ik_rt[932], NULL, 0, 0, NULL, 301, false, "[]main.pair"},
+    {25, sizeof(pair_Ldeb9e1), "pair", "main", NULL, NULL, 0, 2, ik_rf_932, 1281, false, "main.pair"},
     {22, sizeof(Projectile*), "", "", &ik_rt[934], NULL, 0, 0, NULL, 1282, false, "*main.Projectile"},
     {25, sizeof(Projectile), "Projectile", "main", NULL, NULL, 0, 69, ik_rf_934, 1283, false, "main.Projectile"},
     {5, sizeof(ProjStatus), "ProjStatus", "main", NULL, NULL, 0, 0, NULL, 1284, false, "main.ProjStatus"},
@@ -197768,7 +198009,7 @@ const RType *const ik_rt_by_tid[2070] = {NULL, &ik_rt[0], &ik_rt[1], &ik_rt[2], 
 const int ik_rt_by_tid_count = 2070;
 
 const unsigned char ik_tid_kind[2074] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0,0,17,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,0,0,101,100,0,101,17,0,17,0,100,101,101,2,10,0,101,101,101,101,101,101,0,101,0,101,101,101,0,0,101,101,2,101,101,101,101,101,101,101,0,101,101,0,0,101,101,0,101,101,101,101,0,100,101,101,101,0,101,101,17,101,101,101,101,17,0,0,101,101,0,101,0,0,101,0,101,101,101,101,101,101,0,101,101,101,101,101,101,101,101,101,101,0,101,101,101,100,0,100,101,101,100,0,0,14,17,101,101,101,101,101,101,0,1,0,101,101,101,101,101,10,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,101,17,100,100,100,101,100,0,100,100,100,0,8,101,0,0,0,101,101,101,0,100,101,100,101,101,0,0,0,0,0,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,101,100,101,101,101,0,101,101,101,100,101,101,0,101,0,101,101,101,101,100,101,101,101,101,100,101,101,101,101,0,101,100,100,101,101,7,101,0,101,101,101,101,101,0,101,101,101,101,100,100,101,101,101,101,100,0,101,0,0,0,0,0,101,101,101,100,17,101,101,101,101,101,100,100,101,101,0,2,0,101,0,101,101,0,101,101,0,0,101,0,0,101,0,101,5,0,101,101,101,101,101,101,101,101,0,5,0,100,100,0,100,101,101,101,101,101,101,0,0,100,0,0,100,101,101,101,6,100,101,0,101,0,0,0,0,0,0,0,0,101,0,0,0,0,100,101,0,0,0,0,101,0,100,100,101,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,100,100,0,0,0,5,0,101,0,100,0,0,0,2,100,0,0,9,0,0,100,0,0,0,0,0,0,100,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,2,0,0,101,0,0,0,100,101,0,0,8,0,100,0,101,0,0,8,100,101,0,0,8,8,101,0,100,0,101,0,0,101,0,101,0,101,0,0,100,101,0,100,101,0,100,101,0,101,0,100,101,0,0,100,0,100,101,0,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,101,0,100,101,0,100,101,0,101,0,101,0,100,0,100,101,0,0,101,0,0,101,0,0,0,0,100,0,0,0,0,100,0,100,100,100,0,100,0,100,0,100,0,100,0,0,0,0,100,100,0,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,2,0,0,101,0,0,0,0,101,100,0,0,0,0,0,101,0,0,0,101,0,0,0,0,100,0,0,0,0,0,0,100,0,101,2,0,0,100,0,100,101,0,100,0,0,0,0,0,100,0,0,100,0,100,0,0,0,101,0,0,0,100,0,0,0,100,0,100,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,100,0,100,0,0,0,100,0,0,0,0,101,100,0,0,0,0,0,100,101,0,9,8,101,0,0,0,100,101,0,100,101,0,0,8,100,101,0,8,0,100,101,0,100,101,0,9,100,101,0,101,0,101,0,101,100,101,0,100,101,0,101,0,101,0,101,0,101,0,101,0,8,100,101,0,100,101,0,0,8,100,100,101,0,0,100,101,0,9,9,9,100,101,0,100,101,0,100,101,0,0,0,0,0,2,0,100,0,0,0,0,101,0,100,100,101,0,100,0,0,100,101,0,101,0,101,0,100,101,0,101,0,0,0,101,0,0,100,0,0,101,0,0,0,2,0,0,101,0,101,0,101,0,101,0,0,101,0,100,0,0,0,0,101,0,101,0,101,0,2,100,0,100,101,0,0,0,0,101,0,0,101,0,101,0,0,0,100,100,0,0,0,0,0,0,0,0,0,0,0,100,0,0,0,0,0,100,0,0,0,100,0,0,0,100,9,0,0,100,101,0,101,0,101,0,0,0,0,0,101,0,0,101,0,100,101,0,101,0,0,101,0,100,0,100,0,0,101,0,5,100,0,0,0,0,0,0,101,0,0,100,0,100,100,0,101,0,100,100,0,101,0,101,0,101,100,0,101,0,0,0,0,0,100,100,0,100,0,100,0,8,0,5,5,0,100,0,0,0,0,0,0,0,0,0,100,0,0,100,0,0,5,5,5,0,0,100,0,0,0,0,0,5,0,0,0,11,5,10,10,101,0,100,100,0,0,0,2,4,100,0,5,0,100,0,0,0,0,0,0,0,0,101,0,5,0,101,0,0,100,101,0,0,0,101,0,100,0,100,0,101,101,0,0,100,0,0,0,0,101,0,8,8,0,5,5,12,101,0,0,0,100,0,100,101,0,0,101,0,100,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,100,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,100,0,0,0,0,0,0,0,0,0,0,100,0,100,0,0,0,0,0,0,100,0,0,0,0,0,0,0,100,101,0,0,0,0,0,101,0,0,0,0,0,0,0,101,0,0,100,0,0,0,0,0,101,0,100,100,0,0,0,0,0,0,101,0,0,0,100,101,0,100,101,0,0,0,8,100,101,0,100,101,0,8,100,101,0,101,0,0,0,100,100,101,0,8,0,0,100,101,0,100,101,0,101,8,100,101,0,8,100,101,0,100,0,8,101,0,0,100,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100,5,0,101,0,0,0,0,5,5,0,0,0,0,0,100,0,5,0,0,0,0,0,0,101,0,0,0,0,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,0,0,0,0,100,0,0,100,0,0,0,0,0,100,0,100,0,5,2,0,101,0,101,0,0,0,0,8,0,0,0,0,0,0,0,0,0,0,0,8,0,0,0,0,2,0,10,0,5,0,0,0,0,5,0,0,100,0,100,0,101,0,5,5,0,0,100,0,100,100,0,0,0,0,0,100,101,0,0,101,0,0,0,0,101,0,0,100,101,0,0,0,100,101,0,0,100,101,0,0,100,101,0,100,0,100,101,0,0,101,0,0,100,101,0,0,101,0,0,0,101,0,100,101,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,101,0,101,0,0,101,0,0,101,0,0,101,0,0,0,0,0,101,0,0,0,101,0,0,0,101,0,0,0,100,0,100,0,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,101,0,0,0,0,8,0,0,100,0,0,100,0,100,0,0,0,100,0,0,0,0,0,0,100,0,0,101,0,0,12,100,0,5,100,0,0,100,0,2,0,100,2,0,0,0,0,0,0,0,0,100,0,100,0,100,0,0,100,0,100,0,100,0,0,100,0,0,0,100,0,100,0,100,0,101,0,0,101,0,0,0,0,0,10,0,100,0,101,0,10,0,0,0,0,100,100,101,0,0,101,0,0,0,2,100,0,0,0,0,101,0,0,0,101,0,101,0,101,0,2,0,100,0,101,0,0,100,101,0,101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,5,8,0,10,5,10,0,101,101,101,101};
-const unsigned ik_tid_size[2074] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,sizeof(Slice_u8),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,sizeof(GoOpaque),0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,sizeof(GoOpaque),0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_L2b57f9),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_Lb22654),sizeof(Slice_ov_Lbfe85b),sizeof(Slice_pv_L64466c),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_L4756dc),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,sizeof(Slice_cvfFpFile),0,0,0,sizeof(cvfNearbyReply),0,0,0,sizeof(Slice_cvfNearbyHost),0,0,0,0,sizeof(GoXmlStartElement),0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,0,sizeof(GoOpaque),0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L4c703c),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_L001e46),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(ast_Token),sizeof(ast_Position),sizeof(Slice_ast_Stmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),sizeof(ast_ExprBase),sizeof(ast_Node),0,sizeof(ast_ParList),sizeof(Slice_ast_Expr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(Arr16_parse_yySymType),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(GoOpaque),sizeof(ast_AssignStmt),sizeof(ast_StmtBase),sizeof(ast_FuncCallExpr),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_IfStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_FuncDefStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_LabelStmt),sizeof(ast_GotoStmt),sizeof(ast_ReturnStmt),sizeof(ast_BreakStmt),sizeof(ast_IdentExpr),sizeof(ast_StringExpr),sizeof(ast_ConstExprBase),sizeof(ast_AttrGetExpr),sizeof(ast_NilExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_NumberExpr),sizeof(ast_Comma3Expr),sizeof(ast_LogicalOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_ArithmeticOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(ast_TableExpr),sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoNetUDPAddr),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoIoLimitedReader),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_L2b57f9),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoReflectSliceHeader),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(lua_constLValueExpr),sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_Error),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),0,sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_Lb22654),sizeof(bcProfKey),sizeof(ov_Lbfe85b),sizeof(pv_L64466c),sizeof(StreamLooper),sizeof(pair_L4756dc),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(cvfFpFile),sizeof(Renderer_GLES32),sizeof(Texture_GLES32),sizeof(Slice_ShaderProgram_GLES32Ptr),0,sizeof(ShaderProgram_GLES32),0,sizeof(Arr24_uniCacheEnt),sizeof(uniCacheEnt),0,sizeof(vitaBatch),sizeof(Arr64_Anon_5596a083),sizeof(Anon_5596a083),sizeof(Arr64_Anon_a810cdd4),sizeof(Anon_a810cdd4),sizeof(Arr64_Anon_7b4debcb),sizeof(Anon_7b4debcb),sizeof(Arr192_bool),sizeof(Arr2_u64),sizeof(GLES32State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),sizeof(Texture_GL33),0,0,0,0,0,0,sizeof(FontRenderer_GLES32),sizeof(GoNetIPNet),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(Slice_Anon_efd3a69b),sizeof(Anon_efd3a69b),sizeof(cvfNearbyHost),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(Anon_a3823e0d),sizeof(GoXmlName),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_L8d97e9),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,sizeof(GL33State),sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),sizeof(Font_GLES32),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L4c703c),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoNetTCPAddr),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_L001e46),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK),0,0,0,0};
+const unsigned ik_tid_size[2074] = {0,sizeof(bool),sizeof(int),sizeof(i8),sizeof(i16),sizeof(i32),sizeof(i64),sizeof(uintptr_t),sizeof(u8),sizeof(u16),sizeof(u32),sizeof(u64),sizeof(uintptr_t),sizeof(f32),sizeof(f64),0,0,sizeof(GoString),sizeof(void*),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(raster_AlphaSrcPainter),0,sizeof(Slice_fixed_Int26_6),sizeof(truetype_facePainter),0,sizeof(truetype_UnsupportedError),0,sizeof(truetype_FormatError),0,sizeof(Slice_u8),0,0,sizeof(consts_Layer),sizeof(frameheader_FrameHeader),0,0,0,0,0,0,0,0,0,sizeof(GoOpaque),0,0,0,0,0,0,0,sizeof(ggpo_ErrorCode),0,0,0,0,0,0,0,sizeof(protocol_UdpProtocolEvent),0,0,sizeof(ggpo_Error),0,0,0,sizeof(transport_Udp),0,0,0,0,sizeof(vorbis2_floor0Data),sizeof(Slice_u32),0,0,0,sizeof(GoOpaque),0,0,sizeof(rgbe_FormatError),0,0,0,0,sizeof(rgbe_UnsupportedError),sizeof(hdrcolor_RGB),sizeof(hdrcolor_XYZ),0,0,sizeof(Arr4_u8),0,0,sizeof(GoOpaque),0,0,0,0,0,0,0,0,sizeof(meta_zeros),0,0,0,0,0,0,0,0,0,0,sizeof(gltf_glbHeader),0,0,0,sizeof(Slice_i16),0,sizeof(Slice_GoIface),0,0,sizeof(Slice_sjson_val_L2b57f9),sizeof(sjson_dtype),0,sizeof(lua_LNumber),sizeof(lua_LString),0,0,0,0,0,0,0,sizeof(lua_LBool),0,0,0,0,0,0,sizeof(u32),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,sizeof(Error),sizeof(Slice_int),sizeof(ShadowList),sizeof(ReflectionList),0,sizeof(StateExpr),sizeof(varAssign),sizeof(Slice_kv_Lb22654),sizeof(Slice_ov_Lbfe85b),sizeof(Slice_pv_L64466c),sizeof(UndefinedFormatter),sizeof(OpCode),0,0,0,0,0,0,0,sizeof(BytecodeValue),sizeof(Slice_pair_Ldeb9e1),0,sizeof(Slice_CharPtr),0,0,sizeof(NullStateController),sizeof(CallFunction),sizeof(LoopBreak),sizeof(LoopContinue),0,sizeof(Slice_GoString),sizeof(Slice_GoOpaque_reflect_ValuePtr),sizeof(hitBy),sizeof(notHitBy),sizeof(assertSpecial),sizeof(playSnd),sizeof(changeState),sizeof(selfState),sizeof(tagIn),sizeof(tagOut),sizeof(destroySelf),sizeof(changeAnim),sizeof(changeAnim2),sizeof(helper),sizeof(ctrlSet),sizeof(runState),sizeof(explod),sizeof(modifyExplod),sizeof(gameMakeAnim),sizeof(posSet),sizeof(posAdd),sizeof(velSet),sizeof(velAdd),sizeof(velMul),sizeof(modifyShadow),sizeof(modifyReflection),sizeof(palFX),sizeof(allPalFX),sizeof(bgPalFX),sizeof(afterImage),sizeof(afterImageTime),sizeof(hitDef),sizeof(modifyHitDef),sizeof(reversalDef),sizeof(modifyReversalDef),sizeof(projectile),sizeof(modifyProjectile),sizeof(width),sizeof(sprPriority),sizeof(varSet),sizeof(turn),sizeof(targetFacing),sizeof(targetBind),sizeof(bindToTarget),sizeof(targetLifeAdd),sizeof(targetState),sizeof(targetVelSet),sizeof(targetVelAdd),sizeof(targetPowerAdd),sizeof(targetDrop),sizeof(lifeAdd),sizeof(lifeSet),sizeof(powerAdd),sizeof(powerSet),sizeof(hitVelSet),sizeof(screenBound),sizeof(posFreeze),sizeof(envShake),sizeof(hitOverride),sizeof(pause),sizeof(superPause),sizeof(trans),sizeof(playerPush),sizeof(stateTypeSet),sizeof(angleDraw),sizeof(angleSet),sizeof(angleAdd),sizeof(angleMul),sizeof(envColor),sizeof(displayToClipboard),sizeof(appendToClipboard),sizeof(clearClipboard),sizeof(makeDust),sizeof(attackDist),sizeof(attackMulSet),sizeof(defenceMulSet),sizeof(fallEnvShake),sizeof(hitFallDamage),sizeof(hitFallVel),sizeof(hitFallSet),sizeof(varRangeSet),sizeof(remapPal),sizeof(stopSnd),sizeof(sndPan),sizeof(varRandom),sizeof(gravity),sizeof(bindToParent),sizeof(bindToRoot),sizeof(removeExplod),sizeof(explodBindTime),sizeof(moveHitReset),sizeof(hitAdd),sizeof(offset),sizeof(victoryQuote),sizeof(zoom),sizeof(forceFeedback),sizeof(assertAnalogVector),sizeof(assertInput),sizeof(changeMovelist),sizeof(dialogue),sizeof(dizzyPointsAdd),sizeof(dizzyPointsSet),sizeof(dizzySet),sizeof(guardBreakSet),sizeof(guardPointsAdd),sizeof(guardPointsSet),sizeof(lifebarAction),sizeof(loadState),sizeof(mapSet),sizeof(mapReset),sizeof(matchRestart),sizeof(playBgm),sizeof(modifyBGCtrl),sizeof(modifyBGCtrl3d),sizeof(modifySnd),sizeof(modifyBgm),sizeof(printToConsole),sizeof(redLifeAdd),sizeof(redLifeSet),sizeof(remapSprite),sizeof(roundTimeAdd),sizeof(roundTimeSet),sizeof(saveFile),sizeof(loadFile),sizeof(saveState),sizeof(scoreAdd),sizeof(shaderSet),sizeof(storyboard),sizeof(modifyStoryboard),sizeof(removeStoryboard),sizeof(targetDizzyPointsAdd),sizeof(targetGuardPointsAdd),sizeof(targetRedLifeAdd),sizeof(targetScoreAdd),sizeof(text),sizeof(modifyText),sizeof(removeText),sizeof(modifyStageVar),sizeof(cameraCtrl),sizeof(height),sizeof(depth),sizeof(depthBound),sizeof(modifyPlayer),sizeof(assertCommand),sizeof(getHitVarSet),sizeof(groundLevelOffset),sizeof(targetAdd),sizeof(transformClsn),sizeof(transformSprite),sizeof(modifyStageBG),sizeof(shiftInput),sizeof(overrideClsn),0,sizeof(Slice_cvfFpFile),0,0,0,sizeof(cvfNearbyReply),0,0,0,sizeof(Slice_cvfNearbyHost),0,0,0,0,sizeof(GoXmlStartElement),0,0,0,0,sizeof(Slice_cvfRoom),0,0,0,0,sizeof(Slice_f32),0,0,0,0,sizeof(GoOpaque),0,sizeof(Slice_rankingEntryPtr),sizeof(Slice_u16),0,0,sizeof(uintptr_t),0,sizeof(AnimationTable),0,0,0,0,0,sizeof(Anim),0,0,0,0,sizeof(Slice_GoString),sizeof(Slice_slotRef_L4c703c),0,0,0,0,sizeof(Slice_SyncSetting),sizeof(SyncHandshake),0,sizeof(Arr2_i32),sizeof(Arr2_u32),0,sizeof(Arr4_i32),0,0,0,0,sizeof(createPlatform),sizeof(GoString),0,0,0,0,0,sizeof(Slice_i64),sizeof(Slice_u64),0,0,sizeof(Animation),sizeof(lua_LValueType),sizeof(BGDef),0,sizeof(backGround),0,0,sizeof(InputBuffer),0,0,sizeof(StatsLog),sizeof(GameStatsSnapshot),0,sizeof(Config),sizeof(Motif),0,sizeof(Rect),0,sizeof(TeamMode),sizeof(TextSprite),0,0,0,0,0,0,0,0,sizeof(Arr2_f32),sizeof(FinishType),sizeof(Arr2_bool),sizeof(Slice_BytecodeValue),sizeof(Slice_BytecodeExp),sizeof(Arr3_f32),sizeof(Slice_i32),0,0,0,0,0,0,0,0,sizeof(Slice_AnimFrame),0,0,sizeof(Slice_entry_L001e46),0,0,0,sizeof(i64),sizeof(Slice_ExplodPtr),0,sizeof(sdl_CommonEvent),0,sizeof(sdl_ControllerAxisEvent),sizeof(sdl_ControllerButtonEvent),sizeof(sdl_QuitEvent),sizeof(sdl_KeyboardEvent),sizeof(sdl_WindowEvent),sizeof(sdl_TextInputEvent),sizeof(sdl_JoyDeviceAddedEvent),sizeof(sdl_JoyDeviceRemovedEvent),0,sizeof(parse_yyParserImpl),sizeof(parse_yySymType),sizeof(ast_Token),sizeof(ast_Position),sizeof(Slice_ast_Stmt),0,sizeof(ast_FuncName),sizeof(ast_FunctionExpr),sizeof(ast_ExprBase),sizeof(ast_Node),0,sizeof(ast_ParList),sizeof(Slice_ast_Expr),sizeof(Slice_ast_FieldPtr),0,sizeof(ast_Field),sizeof(Arr16_parse_yySymType),sizeof(parse_Lexer),0,sizeof(parse_Scanner),sizeof(GoOpaque),sizeof(ast_AssignStmt),sizeof(ast_StmtBase),sizeof(ast_FuncCallExpr),sizeof(ast_FuncCallStmt),sizeof(ast_DoBlockStmt),sizeof(ast_WhileStmt),sizeof(ast_RepeatStmt),sizeof(ast_IfStmt),sizeof(ast_NumberForStmt),sizeof(ast_GenericForStmt),sizeof(ast_FuncDefStmt),sizeof(ast_LocalAssignStmt),sizeof(ast_LabelStmt),sizeof(ast_GotoStmt),sizeof(ast_ReturnStmt),sizeof(ast_BreakStmt),sizeof(ast_IdentExpr),sizeof(ast_StringExpr),sizeof(ast_ConstExprBase),sizeof(ast_AttrGetExpr),sizeof(ast_NilExpr),sizeof(ast_FalseExpr),sizeof(ast_TrueExpr),sizeof(ast_NumberExpr),sizeof(ast_Comma3Expr),sizeof(ast_LogicalOpExpr),sizeof(ast_RelationalOpExpr),sizeof(ast_StringConcatOpExpr),sizeof(ast_ArithmeticOpExpr),sizeof(ast_UnaryMinusOpExpr),sizeof(ast_UnaryNotOpExpr),sizeof(ast_UnaryLenOpExpr),sizeof(ast_TableExpr),sizeof(GoOpaque),sizeof(i8),sizeof(GoOpaque),sizeof(Arr8_u8),sizeof(GoOpaque),sizeof(Slice_Slice_GoOpaque_tabwriter_cellPtr),sizeof(Slice_GoOpaque_tabwriter_cellPtr),sizeof(GoImageAlpha),sizeof(GoImageRect),sizeof(GoImagePoint),sizeof(fixed_Int26_6),sizeof(truetype_face),0,sizeof(truetype_Font),sizeof(Slice_truetype_cm),sizeof(truetype_cm),sizeof(fixed_Rectangle26_6),sizeof(fixed_Point26_6),sizeof(font_Hinting),sizeof(Slice_truetype_glyphCacheEntry),sizeof(truetype_glyphCacheEntry),sizeof(truetype_glyphCacheKey),sizeof(truetype_Index),sizeof(truetype_glyphCacheVal),sizeof(raster_Rasterizer),sizeof(Slice_raster_cell),sizeof(raster_cell),sizeof(Arr256_raster_cell),sizeof(Arr64_int),sizeof(Arr64_raster_Span),sizeof(raster_Span),sizeof(truetype_GlyphBuf),sizeof(Slice_truetype_Point),sizeof(truetype_Point),sizeof(truetype_hinter),0,sizeof(truetype_graphicsState),sizeof(Arr2_truetype_f2dot14),sizeof(truetype_f2dot14),sizeof(Arr3_i32),sizeof(Arr2_Arr3_Slice_truetype_Point),sizeof(Arr3_Slice_truetype_Point),sizeof(Arr4_truetype_Point),sizeof(Arr256_truetype_indexCacheEntry),sizeof(truetype_indexCacheEntry),sizeof(mp3_source),sizeof(consts_UnexpectedEOF),sizeof(GoOpaque),sizeof(beep_bufferStreamer),sizeof(beep_Format),sizeof(beep_SampleRate),sizeof(beep_take),sizeof(flac_decoder),0,sizeof(flac2_Stream),sizeof(meta_StreamInfo),sizeof(Arr16_u8),sizeof(Slice_meta_BlockPtr),0,sizeof(meta_Block),sizeof(meta_Header),sizeof(meta_Type),sizeof(meta_SeekTable),sizeof(Slice_meta_SeekPoint),sizeof(meta_SeekPoint),0,sizeof(frame2_Frame),sizeof(frame2_Header),sizeof(frame2_Channels),sizeof(Slice_frame2_SubframePtr),0,sizeof(frame2_Subframe),sizeof(frame2_SubHeader),sizeof(frame2_Pred),sizeof(frame2_ResidualCodingMethod),0,sizeof(frame2_RiceSubframe),sizeof(Slice_frame2_RicePartition),sizeof(frame2_RicePartition),0,sizeof(bits_x2_Reader),sizeof(midi_decoder),0,sizeof(meltysynth_Synthesizer),0,sizeof(meltysynth_SoundFont),0,sizeof(meltysynth_SoundFontInfo),sizeof(meltysynth_SoundFontVersion),sizeof(Slice_meltysynth_SampleHeaderPtr),0,sizeof(meltysynth_SampleHeader),sizeof(Slice_meltysynth_PresetPtr),0,sizeof(meltysynth_Preset),sizeof(Slice_meltysynth_PresetRegionPtr),0,sizeof(meltysynth_PresetRegion),0,sizeof(meltysynth_Instrument),sizeof(Slice_meltysynth_InstrumentRegionPtr),0,sizeof(meltysynth_InstrumentRegion),sizeof(Arr61_i16),sizeof(Slice_meltysynth_InstrumentPtr),0,sizeof(Slice_meltysynth_channelPtr),0,sizeof(meltysynth_channel),0,sizeof(meltysynth_voiceCollection),sizeof(Slice_meltysynth_voicePtr),0,sizeof(meltysynth_voice),0,sizeof(meltysynth_volumeEnvelope),0,sizeof(meltysynth_modulationEnvelope),0,sizeof(meltysynth_lfo),0,sizeof(meltysynth_oscillator),0,sizeof(meltysynth_biQuadFilter),0,sizeof(meltysynth_reverb),sizeof(Slice_meltysynth_combFilterPtr),0,sizeof(meltysynth_combFilter),sizeof(Slice_meltysynth_allPassFilterPtr),0,sizeof(meltysynth_allPassFilter),0,sizeof(meltysynth_chorus),0,sizeof(meltysynth_MidiFile),sizeof(Slice_meltysynth_message),sizeof(meltysynth_message),sizeof(Slice_i64),0,sizeof(meltysynth_MidiFileSequencer),sizeof(mp32_decoder),0,sizeof(mp3_Decoder),sizeof(vorbis_decoder),0,sizeof(oggvorbis_Reader),sizeof(oggvorbis_oggReader),sizeof(oggvorbis_page),sizeof(oggvorbis_pageHeader),sizeof(Slice_Slice_u8),sizeof(vorbis2_Decoder),sizeof(vorbis2_Bitrate),sizeof(Arr2_int),sizeof(vorbis2_CommentHeader),sizeof(Slice_vorbis2_codebook),sizeof(vorbis2_codebook),sizeof(vorbis2_huffmanCode),sizeof(Slice_vorbis2_floor),sizeof(Slice_vorbis2_residue),sizeof(vorbis2_residue),sizeof(Slice_Arr8_i16),sizeof(Arr8_i16),sizeof(Slice_vorbis2_mapping),sizeof(vorbis2_mapping),sizeof(Slice_vorbis2_mappingSubmap),sizeof(vorbis2_mappingSubmap),sizeof(Slice_vorbis2_mode),sizeof(vorbis2_mode),sizeof(Arr2_Slice_f32),sizeof(Arr2_vorbis2_imdctLookup),sizeof(vorbis2_imdctLookup),sizeof(Slice_Slice_f32),sizeof(Slice_vorbis2_floorData),sizeof(vorbis2_floorData),sizeof(wav_formatchunkextensible),sizeof(wav_formatchunk),sizeof(wav_guid),sizeof(wav_decoder),sizeof(wav_header),sizeof(messages_SyncRequestPacket),sizeof(messages_UDPHeader),sizeof(messages_SyncReplyPacket),sizeof(messages_QualityReportPacket),sizeof(messages_QualityReplyPacket),sizeof(messages_InputPacket),sizeof(Slice_messages_UdpConnectStatus),sizeof(messages_UdpConnectStatus),sizeof(messages_InputAckPacket),sizeof(messages_KeepAlivePacket),sizeof(protocol_UdpProtocolEventType),sizeof(input_GameInput),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoOpaque_syscall_IovecPtr),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Arr0_GoOpaque_os_dirInfoPtrPtr),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(polling_Poll),sizeof(buffer_StaticBuffer_polling_PollSinkCb),sizeof(Slice_polling_PollSinkCb),sizeof(polling_PollSinkCb),sizeof(protocol_UdpProtocol),sizeof(protocol_UdpProtocolStats),sizeof(transport_UdpStats),sizeof(protocol_OoPacket),sizeof(buffer_RingBuffer_protocol_QueueEntry),sizeof(Slice_protocol_QueueEntry),sizeof(protocol_QueueEntry),0,sizeof(protocol_UdpProtocolState),sizeof(protocol_UdpProtocolStateInfo),sizeof(buffer_RingBuffer_input_GameInput),sizeof(Slice_input_GameInput),sizeof(sync_x_TimeSync),sizeof(Slice_input_GameInputPtr),0,sizeof(buffer_RingBuffer_protocol_UdpProtocolEvent),sizeof(Slice_protocol_UdpProtocolEvent),sizeof(util2_OrderedMap_int_u32),0,sizeof(ggpo_Peer),sizeof(ggpo_Sync),sizeof(ggpo_savedState),sizeof(Slice_ggpo_savedFrame),sizeof(ggpo_savedFrame),sizeof(ggpo_SyncConfig),sizeof(Slice_input_InputQueue),sizeof(input_InputQueue),sizeof(Slice_protocol_UdpProtocol),0,0,0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoNetUDPAddr),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(vorbis2_floor0),sizeof(vorbis2_floor1),sizeof(Slice_vorbis2_floor1Class),sizeof(vorbis2_floor1Class),sizeof(Slice_bool),sizeof(dds_img),sizeof(dds_header),sizeof(dds_pixelFormat),sizeof(Arr4_u32),sizeof(hdr_RGB),sizeof(hdr_XYZ),sizeof(bufseekio_ReadSeeker),sizeof(crc16_digest),0,sizeof(crc16_Table),sizeof(crc8_digest),0,sizeof(crc8_Table),sizeof(meta_Application),sizeof(meta_CueSheet),sizeof(Slice_meta_CueSheetTrack),sizeof(meta_CueSheetTrack),sizeof(Slice_meta_CueSheetTrackIndex),sizeof(meta_CueSheetTrackIndex),sizeof(meta_Picture),sizeof(meta_VorbisComment),sizeof(Slice_Arr2_GoString),sizeof(Arr2_GoString),sizeof(errutil_ErrInfo),sizeof(errutil_position),sizeof(errors_x_fundamental),0,sizeof(errors_x_stack),sizeof(errors_x_withMessage),sizeof(errors_x_withStack),sizeof(GoIoLimitedReader),sizeof(gltf_Document),0,sizeof(Slice_gltf_AccessorPtr),0,sizeof(gltf_Accessor),sizeof(gltf_ComponentType),sizeof(gltf_AccessorType),0,sizeof(gltf_Sparse),sizeof(gltf_SparseIndices),sizeof(gltf_SparseValues),sizeof(Slice_gltf_AnimationPtr),0,sizeof(gltf_Animation),sizeof(Slice_gltf_ChannelPtr),0,sizeof(gltf_Channel),sizeof(gltf_ChannelTarget),sizeof(gltf_TRSProperty),sizeof(Slice_gltf_AnimationSamplerPtr),0,sizeof(gltf_AnimationSampler),sizeof(gltf_Interpolation),sizeof(gltf_Asset),sizeof(Slice_gltf_BufferPtr),0,sizeof(gltf_Buffer),sizeof(Slice_gltf_BufferViewPtr),0,sizeof(gltf_BufferView),sizeof(gltf_Target),sizeof(Slice_gltf_CameraPtr),0,sizeof(gltf_Camera),0,sizeof(gltf_Orthographic),0,sizeof(gltf_Perspective),0,sizeof(Slice_gltf_ImagePtr),0,sizeof(gltf_Image),sizeof(Slice_gltf_MaterialPtr),0,sizeof(gltf_Material),0,sizeof(gltf_PBRMetallicRoughness),0,sizeof(Arr4_f32),0,sizeof(gltf_TextureInfo),0,sizeof(gltf_NormalTexture),0,sizeof(gltf_OcclusionTexture),sizeof(gltf_AlphaMode),sizeof(Slice_gltf_MeshPtr),0,sizeof(gltf_Mesh),sizeof(Slice_gltf_PrimitivePtr),0,sizeof(gltf_Primitive),0,sizeof(gltf_PrimitiveMode),sizeof(Slice_Map_GoString_u32),sizeof(Slice_gltf_NodePtr),0,sizeof(gltf_Node),sizeof(Arr16_f32),sizeof(Slice_gltf_SamplerPtr),0,sizeof(gltf_Sampler),sizeof(gltf_MagFilter),sizeof(gltf_MinFilter),sizeof(gltf_WrappingMode),sizeof(Slice_gltf_ScenePtr),0,sizeof(gltf_Scene),sizeof(Slice_gltf_SkinPtr),0,sizeof(gltf_Skin),sizeof(Slice_gltf_TexturePtr),0,sizeof(gltf_Texture),sizeof(gltf_chunkHeader),sizeof(sjson_errorType),sizeof(sjson_val_L2b57f9),sizeof(gjson_Result),sizeof(gjson_Type),sizeof(lua_LTable),sizeof(Slice_lua_LValue),0,0,0,sizeof(lua_LFunction),0,sizeof(lua_FunctionProto),sizeof(Slice_lua_FunctionProtoPtr),sizeof(Slice_lua_DbgLocalInfoPtr),0,sizeof(lua_DbgLocalInfo),sizeof(Slice_lua_DbgCall),sizeof(lua_DbgCall),0,sizeof(Slice_lua_UpvaluePtr),0,sizeof(lua_Upvalue),0,sizeof(lua_registry),0,sizeof(lua_allocator),sizeof(Slice_f64),0,sizeof(GoReflectSliceHeader),0,sizeof(lua_iface),sizeof(lua_LUserData),sizeof(lua_LState),0,sizeof(lua_Global),0,sizeof(Slice_GoOpaque_os_FilePtrPtr),0,sizeof(lua_Options),0,sizeof(lua_callFrame),0,sizeof(lua_ApiError),sizeof(lua_ApiErrorType),sizeof(GoOpaque),sizeof(lua_CompileError),0,sizeof(lua_funcContext),0,sizeof(lua_codeStore),0,sizeof(lua_varNamePool),0,sizeof(lua_codeBlock),0,0,sizeof(lua_gotoLabelDesc),sizeof(Slice_lua_codeBlockPtr),0,0,sizeof(lua_constLValueExpr),sizeof(lua_lFile),0,sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(int),sizeof(Slice_GoOpaque_syscall_SysProcIDMapPtr),sizeof(GoOpaque),sizeof(Slice_uintptr_t),0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(Slice_GoIface),sizeof(Slice_GoFunc),0,0,sizeof(Anon_6c40a18c),sizeof(GoOpaque),sizeof(parse_Error),sizeof(pm_charClass),sizeof(pm_singleClass),sizeof(pm_dotClass),sizeof(pm_Error),sizeof(pm_rangeClass),sizeof(pm_setClass),sizeof(Slice_pm_class),sizeof(pm_numberPattern),sizeof(pm_bracePattern),sizeof(pm_singlePattern),sizeof(pm_posCapPattern),sizeof(pm_seqPattern),sizeof(Slice_pm_pattern),sizeof(pm_capPattern),sizeof(pm_repeatPattern),sizeof(lua_fixedCallFrameStack),sizeof(Slice_lua_callFrame),sizeof(lua_callFrameStackSegment),sizeof(Arr8_lua_callFrame),sizeof(lua_autoGrowingCallFrameStack),sizeof(Slice_lua_callFrameStackSegmentPtr),sizeof(lua_segIdx),sizeof(lua_LNilType),sizeof(lua_strMatchData),sizeof(Slice_pm_MatchDataPtr),0,sizeof(pm_MatchData),0,sizeof(ShadowSprite),0,sizeof(SpriteData),sizeof(Sff),sizeof(SffHeader),0,sizeof(Arr2_u16),0,sizeof(Sprite),sizeof(Arr2_i16),0,sizeof(SpriteTextureAtlas),sizeof(Slice_TextureAtlasPtr),0,sizeof(TextureAtlas),0,sizeof(list_List),sizeof(list_Element),0,sizeof(PaletteList),sizeof(Slice_Slice_u32),0,sizeof(Slice_Texture),0,0,0,sizeof(AnimFrame),sizeof(TransType),sizeof(Slice_Arr4_f32),sizeof(Tiling),sizeof(Rotation),sizeof(PalFX),sizeof(PalFXDef),sizeof(Arr6_i32),sizeof(CustomShaderRenderData),0,sizeof(ReflectionSprite),sizeof(StateBlock),sizeof(BytecodeExp),0,sizeof(Slice_StateController),sizeof(Slice_scRunFn),0,0,sizeof(specGuard),sizeof(Slice_Slice_nameFact),sizeof(Slice_nameFact),sizeof(nameFact),0,sizeof(specList),0,sizeof(Char),0,sizeof(Slice_CommandList),sizeof(CommandList),0,sizeof(InputReader),sizeof(Arr4_bool),sizeof(Arr9_bool),sizeof(Arr32_cmdNameCacheEnt),sizeof(cmdNameCacheEnt),sizeof(Slice_Slice_Command),sizeof(Slice_Command),sizeof(Command),sizeof(Slice_CommandStep),sizeof(CommandStep),sizeof(Slice_CommandStepKey),sizeof(CommandStepKey),sizeof(CommandKey),sizeof(StateState),sizeof(StateType),sizeof(MoveType),sizeof(StateBytecode),sizeof(stateDef),sizeof(scParam),sizeof(CharSize),sizeof(Anon_040fa437),sizeof(Anon_811d7c45),sizeof(Anon_caf3f353),sizeof(Anon_3d0fed52),sizeof(Anon_22d84747),sizeof(Anon_7d4762ec),sizeof(Arr4_Slice_ClsnOverride),sizeof(Slice_ClsnOverride),sizeof(ClsnOverride),sizeof(Arr4_Slice_ClsnTransform),sizeof(Slice_ClsnTransform),sizeof(ClsnTransform),sizeof(HitDef),sizeof(Reaction),sizeof(TradeType),sizeof(HitType),sizeof(Arr8_i32),sizeof(GetHitVar),sizeof(Slice_Arr2_i32),sizeof(MoveHitVar),sizeof(Arr8_HitBy),sizeof(HitBy),sizeof(Arr8_HitOverride),sizeof(HitOverride),sizeof(MoveContact),sizeof(Arr32_varCacheEnt),sizeof(varCacheEnt),sizeof(CharSystemVar),sizeof(AssertSpecialFlag),sizeof(Projection),sizeof(SystemCharFlag),sizeof(CharSpecialFlag),0,sizeof(AfterImage),sizeof(Slice_PalFXPtr),sizeof(Slice_SpriteData),sizeof(CustomShader),sizeof(ShaderTexture),sizeof(TypedValue),sizeof(ValueType),sizeof(InputBits),sizeof(Slice_Arr2_int),sizeof(Arr6_f32),sizeof(ProjContact),sizeof(Arr4_Slice_ClsnFinal),sizeof(Slice_ClsnFinal),sizeof(ClsnFinal),sizeof(Arr3_BytecodeExp),sizeof(kv_Lb22654),sizeof(bcProfKey),sizeof(ov_Lbfe85b),sizeof(pv_L64466c),sizeof(StreamLooper),sizeof(pair_Ldeb9e1),0,sizeof(Projectile),sizeof(ProjStatus),sizeof(zipMemFileReader),0,sizeof(GoZipReadCloser),sizeof(GoOpaque),sizeof(Slice_GoZipFilePtr),0,sizeof(GoZipFile),sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zonePtr),sizeof(GoOpaque),sizeof(Slice_GoOpaque_time_zoneTransPtr),sizeof(GoOpaque),0,0,0,0,sizeof(Slice_GoOpaque_zip_fileListEntryPtr),sizeof(GoOpaque),sizeof(vitaBufFile),sizeof(BytecodeFunction),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(u8),0,sizeof(i32),sizeof(i32),sizeof(uintptr_t),0,sizeof(GoOpaque),sizeof(GoIniLoadOptions),0,sizeof(Slice_GoIface),0,sizeof(Slice_GoOpaque_ini_SectionPtrPtr),0,sizeof(GoOpaque),0,0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_ini_KeyPtrPtr),0,0,sizeof(Anon_b0b30749),0,sizeof(Anon_4dfef77c),sizeof(Anon_902873b9),sizeof(Anon_e71bdd7c),sizeof(Anon_f91950c2),sizeof(Anon_3d522be3),sizeof(Anon_5b4e0f1b),sizeof(Anon_7671e252),sizeof(Anon_99a01e83),sizeof(Anon_18609da4),sizeof(Anon_e861adfc),sizeof(Anon_6fca328f),sizeof(Anon_15785e54),sizeof(Anon_558f4cc9),sizeof(Anon_c5e8a111),sizeof(Anon_b511f76b),sizeof(AIrampProperties),sizeof(Anon_784a3f6d),sizeof(RollbackProperties),sizeof(Anon_eceff868),0,0,sizeof(KeysProperties),sizeof(cvfFpFile),sizeof(Renderer_GLES32),sizeof(Texture_GLES32),sizeof(Slice_ShaderProgram_GLES32Ptr),0,sizeof(ShaderProgram_GLES32),0,sizeof(Arr24_uniCacheEnt),sizeof(uniCacheEnt),0,sizeof(vitaBatch),sizeof(Arr64_Anon_5596a083),sizeof(Anon_5596a083),sizeof(Arr64_Anon_a810cdd4),sizeof(Anon_a810cdd4),sizeof(Arr64_Anon_7b4debcb),sizeof(Anon_7b4debcb),sizeof(Arr192_bool),sizeof(Arr2_u64),sizeof(GLES32State),sizeof(BlendEquation),sizeof(BlendFunc),sizeof(Slice_boundTexture),sizeof(boundTexture),sizeof(Texture_GL33),0,0,0,0,0,0,sizeof(FontRenderer_GLES32),sizeof(GoNetIPNet),sizeof(Slice_u8),sizeof(GoOpaque),sizeof(Slice_Anon_efd3a69b),sizeof(Anon_efd3a69b),sizeof(cvfNearbyHost),sizeof(nullTexture),sizeof(Anon_906f4fd5),sizeof(Anon_a3823e0d),sizeof(GoXmlName),sizeof(Slice_GoOpaque_xml_AttrPtr),sizeof(GoOpaque),sizeof(svc_L8d97e9),sizeof(Anon_78e9d625),sizeof(Anon_be668d3d),sizeof(cvfRoom),sizeof(nullRenderer),sizeof(Renderer_GL33),sizeof(Slice_ShaderProgram_GL33Ptr),0,sizeof(ShaderProgram_GL33),0,sizeof(GL33State),sizeof(Font_GL33),0,0,sizeof(character),sizeof(color),sizeof(ShaderPalFX),sizeof(FontRenderer_GL33),sizeof(GoImageRGBA),sizeof(GoImageUniform),sizeof(Font_GLES32),0,sizeof(rankingEntry),sizeof(GoImagePaletted),sizeof(Slice_GoIface),sizeof(GoImageNRGBA),0,sizeof(Fnt),0,0,0,sizeof(FntCharImage),sizeof(Slice_Sprite),sizeof(Slice_Arr256_u32),sizeof(Arr256_u32),0,sizeof(Fade),sizeof(Snd),0,sizeof(Sound),0,sizeof(lazySound),0,sizeof(Model),sizeof(Slice_ScenePtr),0,sizeof(Scene),sizeof(Slice_NodePtr),0,sizeof(Node),sizeof(GLTFAnimatableProperty),sizeof(mgl32_Mat4),sizeof(Trans),sizeof(Slice_MeshPtr),0,sizeof(Mesh),sizeof(Slice_PrimitivePtr),0,sizeof(Primitive),sizeof(PrimitiveMode),sizeof(Slice_MorphTargetPtr),0,sizeof(MorphTarget),0,sizeof(GLTFTexture),sizeof(Arr8_f32),sizeof(BoundingBox),sizeof(Slice_GLTFTexturePtr),sizeof(Slice_MaterialPtr),0,sizeof(Material),sizeof(AlphaMode),sizeof(Arr9_f32),0,sizeof(Slice_GLTFAnimationPtr),0,sizeof(GLTFAnimation),sizeof(Slice_GLTFAnimationChannelPtr),0,sizeof(GLTFAnimationChannel),0,sizeof(GLTFAnimationType),sizeof(Slice_GLTFAnimationSamplerPtr),0,sizeof(GLTFAnimationSampler),sizeof(GLTFAnimationInterpolation),sizeof(Slice_SkinPtr),0,sizeof(Skin),sizeof(Slice_GLTFLight),sizeof(GLTFLight),sizeof(LightType),0,sizeof(Environment),0,sizeof(Slice_bgMusicPtr),sizeof(bgMusic),sizeof(InfoProperties),sizeof(FilesProperties),sizeof(Anon_bf560d5f),0,0,sizeof(FontProperties),sizeof(TitleInfoProperties),sizeof(FadeProperties),sizeof(TextProperties),sizeof(MenuProperties),sizeof(TweenProperties),sizeof(Anon_7cc92e70),sizeof(Anon_53468e2e),0,0,sizeof(BgAnimationProperties),sizeof(AnimationProperties),sizeof(Anon_4c4ed5ec),sizeof(Anon_a632ad85),sizeof(Anon_af4c965e),sizeof(Anon_39b99353),sizeof(Anon_f665a959),sizeof(Anon_9f553815),sizeof(BoxCursorProperties),sizeof(BoxBgProperties),sizeof(Anon_a316b3f5),sizeof(Anon_2dddc38c),sizeof(Anon_0a015777),sizeof(Anon_0f1da223),sizeof(Anon_161374c1),sizeof(Anon_73c55e1f),0,sizeof(Anon_c0ebc6d1),sizeof(AnimationTextProperties),sizeof(Anon_53386e74),sizeof(OverlayProperties),sizeof(Anon_35963cd2),sizeof(TextMapProperties),sizeof(TextInputProperties),sizeof(BgDefProperties),sizeof(Slice_backGroundPtr),sizeof(BgType),sizeof(bgAction),0,sizeof(bgVideo),0,0,0,sizeof(BgVideoScaleMode),sizeof(BgVideoScaleFilter),sizeof(beep_Ctrl),sizeof(effects_Volume),sizeof(stageShaderDef),sizeof(Arr2_bgShaderTex),sizeof(bgShaderTex),sizeof(Slice_bgCtrl),sizeof(bgCtrl),sizeof(BgcType),sizeof(StageProps),sizeof(InfoBoxProperties),sizeof(SelectInfoProperties),sizeof(Anon_ad883348),sizeof(Anon_4a620174),0,0,sizeof(CellOverrideProperties),sizeof(PlayerSelectProperties),sizeof(PlayerCursorProperties),0,0,0,0,sizeof(PlayerCursorStateProperties),sizeof(Anon_9b54a510),sizeof(FaceProperties),sizeof(AnimationCharPreloadProperties),sizeof(Anon_52ad6e9d),sizeof(Anon_e3e96c5e),sizeof(Anon_cf68abeb),sizeof(Anon_24a77732),sizeof(Anon_d18cf56f),sizeof(Anon_0c2b6cfe),sizeof(Anon_03d1af3e),sizeof(Anon_14dc7311),sizeof(Anon_828756c7),sizeof(ItemProperties),sizeof(Anon_7b12115d),sizeof(Anon_c49cb36c),sizeof(Anon_29e67731),sizeof(Anon_5b6e6123),sizeof(Anon_769242ee),sizeof(Anon_92897767),sizeof(Anon_5d3c67a8),sizeof(Anon_5977501b),sizeof(Anon_a257727c),sizeof(Anon_f634dd61),sizeof(Anon_ba1e3273),sizeof(Anon_4b8a3264),sizeof(Anon_8a2bb521),sizeof(AnimationStagePreloadProperties),sizeof(Anon_85848459),sizeof(Anon_c9a00f79),sizeof(Anon_cdcd6158),0,0,sizeof(TeamModesProperties),sizeof(TimerProperties),sizeof(VsScreenProperties),sizeof(Anon_c29ce860),sizeof(PlayerVsProperties),sizeof(Anon_de509dfb),sizeof(Anon_1f7505bf),sizeof(Anon_2f3f233c),sizeof(ValueIconVsProperties),sizeof(Anon_c466bc00),sizeof(Anon_50c501fc),sizeof(Anon_b4e107d9),sizeof(Anon_b1cc637d),sizeof(Anon_8517cd1e),sizeof(DemoModeProperties),sizeof(Anon_75b723d6),sizeof(Anon_7feba13e),sizeof(Anon_f8e10808),sizeof(Anon_ad3827b6),sizeof(ContinueScreenProperties),sizeof(Anon_b525c883),sizeof(PlayerContinueProperties),sizeof(Anon_31b1f748),sizeof(Anon_3b80bc6b),0,0,sizeof(ContinueCounterProperties),sizeof(StoryboardProperties),sizeof(VictoryScreenProperties),sizeof(Anon_ce6aad93),sizeof(Anon_a9c08002),sizeof(PlayerVictoryProperties),sizeof(PlayerLoseProperties),sizeof(Anon_b4ab5e02),sizeof(WinScreenProperties),sizeof(Anon_1f176b16),sizeof(Anon_194d600d),sizeof(PlayerResultsProperties),0,0,sizeof(ResultsScreenProperties),0,0,sizeof(OptionInfoProperties),sizeof(Anon_863d0e0f),sizeof(Anon_e71eca9f),sizeof(Anon_c6d21910),sizeof(ReplayInfoProperties),0,0,sizeof(MenuInfoProperties),sizeof(Anon_0107677c),sizeof(Anon_e6c808e7),sizeof(Anon_800e850a),sizeof(MovelistGlyphsProperties),sizeof(Anon_858938ca),sizeof(AttractModeProperties),sizeof(Anon_b4b8c731),sizeof(Anon_4ad773ee),sizeof(Anon_a5a80400),sizeof(Anon_fc37ce89),sizeof(Anon_dfb9041b),sizeof(ChallengerInfoProperties),sizeof(Anon_7bb06b75),sizeof(Anon_5591596d),sizeof(Anon_5f13cb02),sizeof(DialogueInfoProperties),sizeof(PlayerDialogueProperties),sizeof(Anon_a61ac1b3),sizeof(Anon_4d998b97),sizeof(HiscoreInfoProperties),sizeof(Anon_1412bee7),sizeof(Anon_52e3ca2e),sizeof(Anon_90dcfa72),sizeof(Anon_465a578c),sizeof(WarningInfoProperties),sizeof(Anon_87407db8),0,0,sizeof(GlyphProperties),0,sizeof(MotifChallenger),sizeof(MotifContinue),sizeof(MotifDemo),sizeof(MotifDialogue),sizeof(Arr2_FaceParams),sizeof(FaceParams),sizeof(Slice_DialogueParsedLine),sizeof(DialogueParsedLine),0,sizeof(Slice_DialogueToken),sizeof(DialogueToken),sizeof(MotifVictory),sizeof(MotifWin),sizeof(Arr4_Slice_i32),sizeof(MotifHiscore),sizeof(Slice_rankingRow),sizeof(rankingRow),sizeof(Slice_AnimPtr),sizeof(MotifMenu),sizeof(MenuState),sizeof(FadeStartPolicy),sizeof(slotRef_L4c703c),0,sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(GoOpaque),0,sizeof(GoOpaque),sizeof(u8),sizeof(GoNetTCPAddr),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(ReplayHeader),sizeof(SyncSetting),sizeof(GameState),sizeof(SystemStateVars),sizeof(Arr12_AiInput),sizeof(AiInput),sizeof(Arr12_ForceFeedbackParams),sizeof(ForceFeedbackParams),sizeof(FFBWaveform),sizeof(Arr12_int),sizeof(Arr12_f32),sizeof(Camera),sizeof(stageCamera),sizeof(CameraView),sizeof(EnvShake),sizeof(GlobalSpecialFlag),sizeof(Arr2_WinType),sizeof(WinType),sizeof(Arr2_TeamMode),sizeof(Arr12_bool),sizeof(ZoomEffect),sizeof(Arr3_int),sizeof(sdl_Keycode),sizeof(Arr12_Slice_CharPtr),sizeof(Arr12_Slice_Char),sizeof(Slice_Char),sizeof(Arr12_Slice_ProjectilePtr),sizeof(Slice_ProjectilePtr),sizeof(Arr12_Slice_ExplodPtr),0,sizeof(Explod),sizeof(PosType),sizeof(Space),sizeof(Arr2_Rotation),sizeof(Arr12_Slice_TextSpritePtr),sizeof(Slice_TextSpritePtr),sizeof(CharList),sizeof(BytecodeStack),sizeof(Slice_KeyConfig),sizeof(KeyConfig),sizeof(FightScreen),sizeof(Arr3_u16),sizeof(Arr2_Slice_int),sizeof(Arr8_Slice_LifeBarPtr),sizeof(Slice_LifeBarPtr),0,sizeof(LifeBar),0,0,sizeof(AnimLayout),sizeof(Layout),0,0,0,sizeof(FSText),sizeof(Arr8_Slice_PowerBarPtr),sizeof(Slice_PowerBarPtr),0,sizeof(PowerBar),sizeof(Arr9_Arr2_i32),sizeof(Arr8_Slice_GuardBarPtr),sizeof(Slice_GuardBarPtr),0,sizeof(GuardBar),sizeof(Arr8_Slice_StunBarPtr),sizeof(Slice_StunBarPtr),0,sizeof(StunBar),sizeof(Arr8_Slice_FightScreenFacePtr),sizeof(Slice_FightScreenFacePtr),0,sizeof(FightScreenFace),sizeof(Slice_SpritePtr),sizeof(Arr8_Slice_FightScreenNamePtr),sizeof(Slice_FightScreenNamePtr),0,sizeof(FightScreenName),sizeof(Arr2_FightScreenWinIconPtr),0,sizeof(FightScreenWinIcon),sizeof(Arr10_AnimLayout),sizeof(Slice_WinType),0,sizeof(FightScreenTime),sizeof(Arr2_FightScreenComboPtr),0,sizeof(FightScreenCombo),sizeof(ComboShake),sizeof(Arr2_FightScreenActionPtr),0,sizeof(FightScreenAction),sizeof(Slice_FSMsgPtr),0,sizeof(FSMsg),0,0,sizeof(FightScreenRound),sizeof(Arr9_AnimTextSnd),sizeof(AnimTextSnd),sizeof(Arr32_AnimLayout),sizeof(Arr4_ResultAnnouncement),sizeof(ResultAnnouncement),sizeof(Arr2_AnimTextSnd),sizeof(Arr2_AnimLayout),sizeof(Arr2_Arr32_AnimLayout),sizeof(Arr2_Arr4_bool),sizeof(Arr20_FSBgTextSnd),sizeof(FSBgTextSnd),0,sizeof(FightScreenTimer),sizeof(Arr2_FightScreenScorePtr),0,sizeof(FightScreenScore),0,sizeof(FightScreenMatch),sizeof(Arr2_FightScreenAiLevelPtr),0,sizeof(FightScreenAiLevel),sizeof(Arr2_FightScreenWinCountPtr),0,sizeof(FightScreenWinCount),0,0,sizeof(FightScreenMode),sizeof(Storyboard),sizeof(Anon_2b2cdbcc),sizeof(Anon_7c0f0eeb),0,0,sizeof(SceneProperties),sizeof(Anon_ed9bef7d),0,0,sizeof(LayerProperties),sizeof(PalFxProperties),0,0,sizeof(SoundProperties),sizeof(Anon_fc15f840),sizeof(BgmProperties),sizeof(Slice_LayerPropertiesPtr),sizeof(storyboardPlacement),sizeof(Slice_StoryboardPtr),sizeof(Arr12_CharGlobalInfo),sizeof(CharGlobalInfo),0,sizeof(Palette),0,sizeof(PalInfo),sizeof(CharData),sizeof(Anon_3e054d73),sizeof(Anon_6d248a4b),sizeof(Anon_b995bd4c),sizeof(Anon_3d4c64d3),sizeof(CharVelocity),sizeof(Anon_df3b96d4),sizeof(Anon_b508c0f6),sizeof(Anon_8b0a23b6),sizeof(Anon_fd62af00),sizeof(Anon_688ad72e),sizeof(Anon_f88a21f4),sizeof(Anon_16644dc7),sizeof(Anon_c4dc6fdd),sizeof(Anon_14b37acc),sizeof(Anon_54db43aa),sizeof(Anon_c6dbd0bf),sizeof(CharMovement),sizeof(Anon_7293d90f),sizeof(Anon_e464c8fd),sizeof(Anon_8f8dfbf8),sizeof(Anon_dbc08b28),sizeof(Anon_0f20e66b),sizeof(Anon_1df292c6),sizeof(Anon_57e999ad),sizeof(Anon_c18ae172),sizeof(Anon_18c0a914),sizeof(Anon_ab19bc50),0,sizeof(Arr100_GoString),0,0,0,sizeof(Stage),sizeof(stageShadow),sizeof(Arr12_stagePlayer),sizeof(stagePlayer),sizeof(BGMState),0,sizeof(stageRollbackState),sizeof(Slice_stageRollbackBgState),sizeof(stageRollbackBgState),sizeof(statsRollbackState),sizeof(Slice_Arr2_f32),sizeof(Select),sizeof(Slice_SelectChar),sizeof(SelectChar),0,sizeof(SelectCharParams),sizeof(Slice_SelectStage),sizeof(SelectStage),sizeof(SelectStageParams),sizeof(Arr2_Slice_Arr2_int),0,sizeof(GameParams),sizeof(Arr3_Slice_OverrideCharData),sizeof(Slice_OverrideCharData),sizeof(OverrideCharData),0,0,sizeof(GoOpaque),sizeof(GoOpaque),sizeof(uintptr_t),sizeof(Slice_PreloadEntry),sizeof(PreloadEntry),sizeof(PreloadState),sizeof(Slice_CommandListPtr),sizeof(RollbackSession),0,sizeof(Slice_ggpo_Player),sizeof(ggpo_Player),sizeof(ggpo_PlayerType),sizeof(ggpo_RemotePlayer),sizeof(Slice_ggpo_PlayerHandle),sizeof(ggpo_PlayerHandle),sizeof(LoopTimer),0,sizeof(Arr12_InputBits),0,sizeof(Arr12_Arr6_i8),sizeof(Arr6_i8),sizeof(RollbackLogger),sizeof(Arr90_GoString),sizeof(Slice_Arr8_InputBits),sizeof(Arr8_InputBits),sizeof(Slice_Arr8_Arr6_i8),sizeof(Arr8_Arr6_i8),sizeof(Slice_InputBits),sizeof(ggpo_SyncTest),sizeof(buffer_RingBuffer_ggpo_savedInfo),sizeof(Slice_ggpo_savedInfo),sizeof(ggpo_savedInfo),sizeof(Slice_StatsMatch),sizeof(StatsMatch),sizeof(Slice_StatsRound),sizeof(StatsRound),sizeof(Arr2_Slice_StatsFighterState),sizeof(Slice_StatsFighterState),sizeof(StatsFighterState),sizeof(SwapSeeker),sizeof(beep_Resampler),sizeof(Slice_Arr2_f64),sizeof(Arr2_f64),sizeof(Slice_beep_point),sizeof(beep_point),sizeof(Slice_Slice_f64),sizeof(BufferSeeker),0,sizeof(beep_Buffer),sizeof(SoundEffect),0,sizeof(soundPanner),sizeof(GoOpaque),sizeof(GoOpaque),sizeof(entry_L001e46),sizeof(SDLSpeaker),sizeof(sdl_AudioDeviceID),sizeof(beep_Mixer),sizeof(Slice_beep_Streamer),sizeof(Normalizer),0,sizeof(NormalizerLR),sizeof(sdl_EventType),sizeof(Renderer_VK),sizeof(Arr2_GoChanPtr),0,sizeof(GoOpaque),sizeof(Slice_GoOpaque_invalidtypePtr),sizeof(Slice_VulkanSwapchainInfoPtr),0,sizeof(VulkanSwapchainInfo),sizeof(Arr2_VulkanRenderInfoPtr),0,sizeof(VulkanRenderInfo),0,sizeof(VulkanSamplerInfo),sizeof(TextureSamplingParam),sizeof(Slice_VulkanBuffer),sizeof(VulkanBuffer),sizeof(Arr2_VulkanBuffer),sizeof(Arr2_Slice_GoOpaque_invalidtypePtr),0,0,sizeof(VulkanProgramInfo),0,0,0,sizeof(VulkanRenderTargetInfo),0,sizeof(Texture_VK),0,sizeof(VulkanAllocation),sizeof(TextureResidency),sizeof(Arr2_VulkanRenderTargetInfoPtr),sizeof(Slice_Texture_VKPtr),0,0,sizeof(VulkanAllocator),0,sizeof(Slice_VulkanMemoryBlockPtr),0,sizeof(VulkanMemoryBlock),0,sizeof(VulkanFreeRegion),0,sizeof(VulkanOOMRecord),0,0,0,0,sizeof(VKState),sizeof(VulkanSpriteTexture),sizeof(VulkanModelTexture),sizeof(VulkanShadowMapTexture),sizeof(VulkanPipelineState),sizeof(VulkanModelPipelineState),sizeof(VulkanModelSpecializationConstants0),sizeof(Arr3_bool),sizeof(VulkanModelSpecializationConstants1),sizeof(VulkanBlendState),sizeof(VulkanShadowMapPipelineState),sizeof(VulkanSpriteProgramVertUniformBufferObject),sizeof(VulkanSpriteProgramFragUniformBufferObject),sizeof(VulkanModelProgramUniformBufferObject0),sizeof(Arr4_Arr16_f32),sizeof(Arr4_VulkanLightUniform),sizeof(VulkanLightUniform),sizeof(VulkanModelProgramUniformBufferObject1),sizeof(VulkanModelProgramUniformBufferObject2),sizeof(Arr2_Arr4_f32),sizeof(VulkanShadowMapProgramUniformBufferObject0),sizeof(Arr24_Arr16_f32),sizeof(Arr24_f32),sizeof(VulkanShadowMapProgramUniformBufferObject1),sizeof(VulkanShadowMapProgramUniformBufferObject2),sizeof(VulkanShadowMapProgramPushConstant),sizeof(sdl_JoystickID),sizeof(sdl_GameControllerAxis),sizeof(sdl_GameControllerButton),sizeof(sdl_ButtonState),sizeof(sdl_Keysym),sizeof(sdl_Scancode),sizeof(sdl_Keymod),sizeof(sdl_WindowEventID),sizeof(FontRenderer_VK),0,0,0,0};
 const int ik_tid_count = 2074;
 GoIface ik_binread_any(GoIface r, GoIface x, int big) {
     switch (x.type) {
