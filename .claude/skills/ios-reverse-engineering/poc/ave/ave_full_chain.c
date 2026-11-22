@@ -14240,7 +14240,6 @@ vps_cd_done:
         rlog("  256 (~86 enc):  First OOB write (intra-buffer, 53 driver fields)\n");
         rlog("  466 (~155 enc): Past buffer content (into alloc padding)\n");
         rlog("  1057 (~352 enc): Past allocation end (UNREACHABLE, crash at 197)\n");
-    }
 
     } else if (strcmp(mode, "sysctl_leak") == 0) {
         int rounds = (argc > 2) ? atoi(argv[2]) : 1;
