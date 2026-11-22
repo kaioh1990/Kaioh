@@ -3257,7 +3257,6 @@ cleanup_dummies:
 
             /* Try to create pixel buffer at this size */
             CVPixelBufferRef pb = NULL;
-            NSDictionary *pbattrs = NULL;
             CVReturn cvr = CVPixelBufferCreate(NULL, tw, th,
                 kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, NULL, &pb);
 
@@ -3577,11 +3576,16 @@ cleanup_dummies:
                 CMTagCollectionCreate(NULL, first_tags, 2, &tc0);
 
                 CMTaggedBufferGroupRef grp = NULL;
-                OSStatus gs = CMTaggedBufferGroupCreateCombined(NULL,
-                    (CMTagCollectionRef[]){ tc0 },
-                    (CMBufferRef[]){ (CMBufferRef)pbs[0] },
-                    1, &grp);
-                CMTagCollectionRelease(tc0);
+                {
+                    CFMutableArrayRef tcArr = CFArrayCreateMutable(NULL, 1, &kCFTypeArrayCallBacks);
+                    CFMutableArrayRef bArr = CFArrayCreateMutable(NULL, 1, &kCFTypeArrayCallBacks);
+                    CFArrayAppendValue(tcArr, tc0);
+                    CFArrayAppendValue(bArr, pbs[0]);
+                    OSStatus gs0 = CMTaggedBufferGroupCreate(NULL, tcArr, bArr, &grp);
+                    CFRelease(tcArr); CFRelease(bArr); CFRelease(tc0);
+                    (void)gs0;
+                }
+                OSStatus gs = grp ? noErr : -1;
 
                 if (gs != noErr || !grp) {
                     rlog("  CMTaggedBufferGroupCreateCombined FAILED: %d\n", (int)gs);
@@ -3618,8 +3622,17 @@ cleanup_dummies:
                     bufs[i] = (CMBufferRef)pbs[i];
                 }
 
-                gs = CMTaggedBufferGroupCreateCombined(NULL, tcs, bufs, nlayers, &grp);
-                for (int i = 0; i < nlayers; i++) CMTagCollectionRelease(tcs[i]);
+                {
+                    CFMutableArrayRef tcArr = CFArrayCreateMutable(NULL, nlayers, &kCFTypeArrayCallBacks);
+                    CFMutableArrayRef bArr = CFArrayCreateMutable(NULL, nlayers, &kCFTypeArrayCallBacks);
+                    for (int i = 0; i < nlayers; i++) {
+                        CFArrayAppendValue(tcArr, tcs[i]);
+                        CFArrayAppendValue(bArr, bufs[i]);
+                    }
+                    gs = CMTaggedBufferGroupCreate(NULL, tcArr, bArr, &grp);
+                    CFRelease(tcArr); CFRelease(bArr);
+                    for (int i = 0; i < nlayers; i++) CFRelease(tcs[i]);
+                }
 
                 if (gs != noErr || !grp) {
                     rlog("  CMTaggedBufferGroupCreateCombined(%d) FAILED: %d\n", nlayers, (int)gs);
@@ -3756,7 +3769,7 @@ cleanup_dummies:
 
             int st;
             if (use_stereo) {
-                st = encode_one_stereo_kf();
+                st = encode_one_stereo_kf(s, i, 128, 128, 1, 1);
             } else {
                 st = encode_one(s, i, 128, 128);
             }
