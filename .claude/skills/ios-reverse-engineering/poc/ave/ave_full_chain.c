@@ -7655,19 +7655,17 @@ vps_cd_done:
                         CMTime pts = CMTimeMake(e, 30);
                         st = VTCompressionSessionEncodeFrame(ave_sess, pb, pts,
                             kCMTimeInvalid, NULL, NULL, NULL);
-                        if (st == noErr) {
-                            for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
-                            if (g_cb_status == noErr) enc_ok++;
-                            else enc_fail++;
-                        } else {
-                            enc_fail++;
-                        }
+                        if (st == noErr) enc_ok++;
+                        else enc_fail++;
                         CVPixelBufferRelease(pb);
                     }
                     if ((e + 1) % 50 == 0)
-                        rlog("  encoded %d/%d (ok=%d fail=%d)\n", e+1, encode_count, enc_ok, enc_fail);
+                        rlog("  submitted %d/%d (ok=%d fail=%d)\n", e+1, encode_count, enc_ok, enc_fail);
                 }
-                rlog("Encoding complete: ok=%d fail=%d\n", enc_ok, enc_fail);
+                rlog("All frames submitted: ok=%d fail=%d\n", enc_ok, enc_fail);
+                rlog("Flushing...\n");
+                VTCompressionSessionCompleteFrames(ave_sess, kCMTimePositiveInfinity);
+                rlog("Flush complete.\n");
             }
 
             VTCompressionSessionInvalidate(ave_sess);
