@@ -11753,6 +11753,121 @@ vps_cd_done:
              last_ok_offset_l3, first_hang_offset_l3);
         rlog("\n=== NTL_HANG_SEARCH complete ===\n");
 
+    } else if (strcmp(mode, "ntl_detail") == 0) {
+        /*
+         * ntl_detail — Detailed byte comparison at NTL transition point
+         *
+         * Encodes frames and dumps parameter set bytes + NAL hex.
+         * Default: tests NTL=2 (baseline), 7 (last working), 8 (first broken).
+         * At NTL=7, encodes 10 frames to check temporal prediction behavior.
+         *
+         * Usage: ntl_detail [ntl_value]
+         */
+        int test_vals[] = {2, 7, 8};
+        int num_vals = 3;
+        int single_ntl = 0;
+        if (argc > 2) {
+            test_vals[0] = atoi(argv[2]);
+            num_vals = 1;
+            single_ntl = 1;
+        }
+
+        int vw = 192, vh = 192;
+        rlog("=== NTL_DETAIL: Byte-level output comparison ===\n");
+        rlog("res=%dx%d\n\n", vw, vh);
+
+        for (int t = 0; t < num_vals; t++) {
+            int ntl = test_vals[t];
+            rlog("--- NTL=%d ---\n", ntl);
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) { rlog("create FAIL\n"); continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+            OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+            rlog("SetProp: %d\n", (int)sp);
+
+            OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog("Prepare: %d\n", (int)prep);
+            if (prep != noErr) {
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                continue;
+            }
+
+            int nframes = (ntl == 7 && !single_ntl) ? 10 : 1;
+            for (int f = 0; f < nframes; f++) {
+                g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+                g_cb_had_buf = 0; g_cb_had_fmt = 0;
+                g_saved_nal_len = 0;
+                if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
+
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (!pb) { rlog("F%d: pixbuf FAIL\n", f); continue; }
+                CVPixelBufferLockBaseAddress(pb, 0);
+                void *base = CVPixelBufferGetBaseAddress(pb);
+                if (base) memset(base, (uint8_t)(0x20 + f), CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                OSStatus enc = VTCompressionSessionEncodeFrame(s, pb,
+                    CMTimeMake(f, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                if (enc == noErr) {
+                    VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                    for (int w = 0; w < 200 && !g_encode_done; w++) usleep(10000);
+                }
+                CVPixelBufferRelease(pb);
+
+                rlog("F%d: cb=%d buf=%d fmt=%d nal=%zu\n",
+                     f, (int)g_cb_status, g_cb_had_buf, g_cb_had_fmt, g_last_nal_size);
+
+                if (g_saved_fmt && (f == 0 || nframes == 1)) {
+                    size_t pcount = 0;
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                        g_saved_fmt, 0, NULL, NULL, &pcount, NULL);
+                    rlog("PSet count: %zu\n", pcount);
+                    for (size_t p = 0; p < pcount && p < 10; p++) {
+                        const uint8_t *ptr = NULL;
+                        size_t sz = 0;
+                        CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                            g_saved_fmt, p, &ptr, &sz, NULL, NULL);
+                        rlog("PSet[%zu] (%zu bytes):", p, sz);
+                        for (size_t b = 0; b < sz && b < 128; b++)
+                            rlog(" %02x", ptr[b]);
+                        rlog("\n");
+                    }
+                }
+
+                if (g_saved_nal_len > 0) {
+                    size_t dump = g_saved_nal_len > 256 ? 256 : g_saved_nal_len;
+                    rlog("NAL (%zu/%zu bytes):", dump, g_saved_nal_len);
+                    for (size_t b = 0; b < dump; b++) {
+                        if (b % 32 == 0) rlog("\n  ");
+                        rlog("%02x", g_saved_nal[b]);
+                    }
+                    rlog("\n");
+                }
+
+                if (g_last_nal_size == 0 && g_cb_had_buf == 0)
+                    rlog("NOTE: No CMSampleBuffer — encoder produced nothing\n");
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            rlog("Teardown OK\n\n");
+            usleep(50000);
+        }
+
+        rlog("=== NTL_DETAIL complete ===\n");
+
     } else if (strcmp(mode, "dpb_trigger") == 0) {
         /*
          * dpb_trigger — Probe DPB initialization OOB write path (SKVLENT finding).
