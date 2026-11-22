@@ -20564,11 +20564,12 @@ new_modes:
                          kr, namesCnt, infoCnt);
                     if (kr == KERN_SUCCESS && namesCnt > 0) {
                         for (unsigned z = 0; z < namesCnt && z < 10; z++) {
-                            rlog("    zone[%u]: '%s' cur=%llu peak=%llu cur_sz=%llu\n",
+                            rlog("    zone[%u]: '%s' count=%llu cur_sz=%llu max_sz=%llu elem_sz=%llu\n",
                                  z, names[z].mzn_name,
                                  (unsigned long long)info[z].mzi_count,
-                                 (unsigned long long)info[z].mzi_peak,
-                                 (unsigned long long)info[z].mzi_cur_size);
+                                 (unsigned long long)info[z].mzi_cur_size,
+                                 (unsigned long long)info[z].mzi_max_size,
+                                 (unsigned long long)info[z].mzi_elem_size);
                         }
                     }
                     if (names) vm_deallocate(mach_task_self(), (vm_address_t)names,
@@ -20607,13 +20608,18 @@ new_modes:
                 }
                 /* 7. IOSurface properties after compositor use */
                 {
-                    NSDictionary *sprops = @{
-                        @"IOSurfaceWidth": @(64),
-                        @"IOSurfaceHeight": @(64),
-                        @"IOSurfaceBytesPerElement": @(4),
-                        @"IOSurfacePixelFormat": @(0x42475241) /* BGRA */
-                    };
-                    IOSurfaceRef leak_surf = IOSurfaceCreate((__bridge CFDictionaryRef)sprops);
+                    const void *skeys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+                    int sv[] = {64, 64, 4, 0x42475241};
+                    CFNumberRef snums[4];
+                    for (int si = 0; si < 4; si++)
+                        snums[si] = CFNumberCreate(NULL, kCFNumberIntType, &sv[si]);
+                    CFDictionaryRef sprops = CFDictionaryCreate(NULL, skeys, (const void **)snums, 4,
+                                                                &kCFTypeDictionaryKeyCallBacks,
+                                                                &kCFTypeDictionaryValueCallBacks);
+                    for (int si = 0; si < 4; si++) CFRelease(snums[si]);
+                    IOSurfaceRef leak_surf = sprops ? IOSurfaceCreate(sprops) : NULL;
+                    if (sprops) CFRelease(sprops);
                     if (leak_surf) {
                         CFDictionaryRef all_vals = IOSurfaceCopyAllValues(leak_surf);
                         if (all_vals) {
