@@ -188,14 +188,16 @@ static VTCompressionSessionRef create_mvhevc_encoder(int w, int h, int layer_id)
     ids[0] = CFNumberCreate(NULL, kCFNumberIntType, &base);
     ids[1] = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
     CFArrayRef arr = CFArrayCreate(NULL, (const void **)ids, 2, &kCFTypeArrayCallBacks);
-    VTSessionSetProperty(session, CFSTR("MVHEVCVideoLayerIDs"), arr);
+    OSStatus sp1 = VTSessionSetProperty(session, CFSTR("MVHEVCVideoLayerIDs"), arr);
     CFRelease(arr); CFRelease(ids[0]); CFRelease(ids[1]);
+    rlog("  MVHEVCVideoLayerIDs(%d,%d): %d\n", base, layer_id, (int)sp1);
 
     CFNumberRef left = CFNumberCreate(NULL, kCFNumberIntType, &base);
     CFNumberRef right = CFNumberCreate(NULL, kCFNumberIntType, &layer_id);
-    VTSessionSetProperty(session, CFSTR("MVHEVCLeftEyeID"), left);
-    VTSessionSetProperty(session, CFSTR("MVHEVCRightEyeID"), right);
+    OSStatus sp2 = VTSessionSetProperty(session, CFSTR("MVHEVCLeftEyeID"), left);
+    OSStatus sp3 = VTSessionSetProperty(session, CFSTR("MVHEVCRightEyeID"), right);
     CFRelease(left); CFRelease(right);
+    rlog("  MVHEVCLeftEyeID: %d, MVHEVCRightEyeID: %d\n", (int)sp2, (int)sp3);
 
     st = VTCompressionSessionPrepareToEncodeFrames(session);
     if (st != noErr) {
