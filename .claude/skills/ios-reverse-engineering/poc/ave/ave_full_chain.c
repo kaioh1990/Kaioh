@@ -11479,9 +11479,9 @@ vps_cd_done:
         if (start < 1) start = 1;
         if (end < start) end = start + 100;
         if (step < 1) step = 1;
-        if (nframes < 1) nframes = 1;
+        if (nframes < 0) nframes = 0;
         if (nframes > 30) nframes = 30;
-        if (end > 60000) end = 60000;
+        if (end > 500000) end = 500000;
 
         int vw = 192, vh = 192;
         rlog("=== NTL_DEEP_SCAN: Multi-frame crash boundary search ===\n");
