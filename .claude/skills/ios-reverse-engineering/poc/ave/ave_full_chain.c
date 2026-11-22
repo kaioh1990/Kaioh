@@ -920,8 +920,27 @@ int main(int argc, char *argv[]) {
     for (int ai = 0; ai < argc && ai < 20; ai++)
         rlog("  argv[%d]='%s'\n", ai, argv[ai]);
 
-    const char *mode = (argc > 1) ? argv[1] : "help";
-    rlog("mode='%s'\n\n", mode);
+    /* Check for mode override file (workaround for cached launch args) */
+    char mode_buf[256] = {0};
+    char mode_file[512];
+    snprintf(mode_file, sizeof(mode_file), "%s/Documents/mode.txt",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    FILE *mf = fopen(mode_file, "r");
+    if (mf) {
+        if (fgets(mode_buf, sizeof(mode_buf), mf)) {
+            /* Trim newline */
+            char *nl = strchr(mode_buf, '\n');
+            if (nl) *nl = '\0';
+            nl = strchr(mode_buf, '\r');
+            if (nl) *nl = '\0';
+        }
+        fclose(mf);
+        remove(mode_file);
+    }
+    const char *mode = (mode_buf[0] != '\0') ? mode_buf :
+                        ((argc > 1) ? argv[1] : "help");
+    rlog("mode='%s' (source=%s)\n\n", mode,
+         mode_buf[0] != '\0' ? "mode.txt" : "argv");
 
     if (strcmp(mode, "quick") == 0) {
         rlog("QUICK: Phases 1-3 (verify + measure + 100 encodes)\n\n");
