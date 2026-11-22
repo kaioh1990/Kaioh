@@ -20105,12 +20105,12 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds <= 179) {
+        if (rounds >= 170 && rounds <= 189) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC),
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
-                    rlog("  WATCHDOG: 30s — terminating\n");
+                    rlog("  WATCHDOG: 60s — terminating\n");
                     if (g_log) { fclose(g_log); g_log = NULL; }
                     _exit(42);
                 });
