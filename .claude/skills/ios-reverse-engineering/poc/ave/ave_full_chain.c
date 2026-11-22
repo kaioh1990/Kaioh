@@ -1444,6 +1444,16 @@ static void p13_groom_fake(uint64_t addr, uint64_t val, int inSz) {
 }
 
 /* Phase 16 concurrent groom spray thread */
+/* r=195 VT encode callback */
+static CMSampleBufferRef r195_enc_out = NULL;
+static OSStatus r195_enc_st = -999;
+static void r195_encode_cb(void *ref, void *src, OSStatus status,
+    VTEncodeInfoFlags flags, CMSampleBufferRef sb) {
+    (void)ref; (void)src;
+    r195_enc_st = status;
+    if (sb && status == 0) r195_enc_out = (CMSampleBufferRef)CFRetain(sb);
+}
+
 static volatile int p16_groom_run = 0;
 static io_connect_t *p16_groom_conns = NULL;
 static mach_port_t *p16_groom_wps = NULL;
@@ -22802,16 +22812,13 @@ new_modes:
                     CVPixelBufferUnlockBaseAddress(enc_pb, 0);
 
                     /* Encode */
-                    __block CMSampleBufferRef enc_out = NULL;
-                    __block OSStatus enc_st = -999;
+                    r195_enc_out = NULL;
+                    r195_enc_st = -999;
 
                     VTCompressionSessionRef comp = NULL;
                     OSStatus cst = VTCompressionSessionCreate(NULL, ew, eh,
                         kCMVideoCodecType_H264, NULL, NULL, NULL,
-                        ^(OSStatus s, VTEncodeInfoFlags f, CMSampleBufferRef sb) {
-                        enc_st = s;
-                        if (sb && s == 0) enc_out = (CMSampleBufferRef)CFRetain(sb);
-                    }, NULL, &comp);
+                        r195_encode_cb, NULL, &comp);
 
                     if (cst != 0 || !comp) {
                         rlog("  Encoder create failed: %d\n", (int)cst);
@@ -22829,12 +22836,12 @@ new_modes:
                         CMTimeMake(0, 30), CMTimeMake(1, 30), NULL, NULL, NULL);
                     VTCompressionSessionCompleteFrames(comp, kCMTimeInvalid);
                     rlog("  Encode: submit=%d callback=%d out=%p\n",
-                         (int)cst, (int)enc_st, (void*)enc_out);
+                         (int)cst, (int)r195_enc_st, (void*)r195_enc_out);
 
-                    if (enc_out) {
+                    if (r195_enc_out) {
                         /* Extract SPS/PPS from format description */
                         CMFormatDescriptionRef efmt =
-                            CMSampleBufferGetFormatDescription(enc_out);
+                            CMSampleBufferGetFormatDescription(r195_enc_out);
                         if (efmt) {
                             size_t sparamCount = 0;
                             CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
@@ -22843,7 +22850,7 @@ new_modes:
 
                             /* Get encoded NAL data */
                             CMBlockBufferRef ebb =
-                                CMSampleBufferGetDataBuffer(enc_out);
+                                CMSampleBufferGetDataBuffer(r195_enc_out);
                             size_t edata_len = 0;
                             char *edata = NULL;
                             if (ebb) {
@@ -22875,7 +22882,7 @@ new_modes:
                                     __block OSStatus dost = -999;
 
                                     VTDecompressionSessionDecodeFrameWithOutputHandler(
-                                        dec195, enc_out, 0, NULL,
+                                        dec195, r195_enc_out, 0, NULL,
                                         ^(OSStatus s, VTDecodeInfoFlags f,
                                           CVImageBufferRef ib, CMTime p, CMTime d) {
                                         dost = s;
@@ -23058,7 +23065,8 @@ new_modes:
                                 CFRelease(ds195);
                             }
                         }
-                        CFRelease(enc_out);
+                        CFRelease(r195_enc_out);
+                        r195_enc_out = NULL;
                     }
 
                     VTCompressionSessionInvalidate(comp);
