@@ -7904,15 +7904,14 @@ vps_cd_done:
            rest use standard HEVC (targets with real output for comparison).
            Both codec paths allocate sHEVC_VPS in the same kalloc typed zone. */
         rlog("--- Phase 1: Create %d AVE encoder sessions ---\n", sess_count);
-        rlog("  sess[0]: muxa+alpha (trigger), sess[1..%d]: HEVC (targets)\n", sess_count-1);
+        rlog("  sess[0]: HEVC+alpha (trigger), sess[1..%d]: HEVC (targets)\n", sess_count-1);
         int sess_ok = 0;
         for (int i = 0; i < sess_count; i++) {
             CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
                 &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
             CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-            CMVideoCodecType codec = (i == 0) ? (CMVideoCodecType)0x6D757861 : kCMVideoCodecType_HEVC;
             OSStatus s = VTCompressionSessionCreate(NULL, 192, 192,
-                codec, es, NULL, NULL, encode_cb, NULL, &sessions[i]);
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &sessions[i]);
             CFRelease(es);
             if (s == noErr && sessions[i]) {
                 VTSessionSetProperty(sessions[i], kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
@@ -7938,8 +7937,8 @@ vps_cd_done:
         }
         rlog("Active sessions: %d / %d\n", sess_ok, sess_count);
 
-        /* Phase 2: Encode a "baseline" frame on each target session */
-        rlog("\n--- Phase 2: Baseline encode on all sessions ---\n");
+        /* Phase 2: Warmup + baseline encode on each target session */
+        rlog("\n--- Phase 2: Warmup + baseline (3 encodes each) ---\n");
         typedef struct {
             int nal_count;
             size_t total_size;
@@ -7950,27 +7949,30 @@ vps_cd_done:
         nal_fingerprint_t *baselines = calloc(sess_count, sizeof(nal_fingerprint_t));
         for (int i = 0; i < sess_count; i++) {
             if (!sessions[i]) continue;
-            g_encode_done = 0; g_cb_status = -999;
-            g_last_nal_size = 0;
-            CVPixelBufferRef pb = NULL;
-            CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
-            if (pb) {
-                CVPixelBufferLockBaseAddress(pb, 0);
-                void *b = CVPixelBufferGetBaseAddress(pb);
-                if (b) memset(b, 0x80, CVPixelBufferGetDataSize(pb));
-                CVPixelBufferUnlockBaseAddress(pb, 0);
-                VTCompressionSessionEncodeFrame(sessions[i], pb, CMTimeMake(0, 30),
-                    kCMTimeInvalid, NULL, NULL, NULL);
-                VTCompressionSessionCompleteFrames(sessions[i], kCMTimePositiveInfinity);
-                for (int w = 0; w < 50 && !g_encode_done; w++) usleep(10000);
-                baselines[i].total_size = g_last_nal_size;
-                baselines[i].nal_count = (g_cb_status == noErr) ? 1 : 0;
-                baselines[i].pset_count = g_last_pset_count;
-                baselines[i].pset_bytes = g_last_pset_total_bytes;
-                size_t cplen = g_saved_nal_len < 32 ? g_saved_nal_len : 32;
-                memcpy(baselines[i].first_bytes, (const void *)g_saved_nal, cplen);
-                CVPixelBufferRelease(pb);
+            for (int warmup = 0; warmup < 3; warmup++) {
+                g_encode_done = 0; g_cb_status = -999;
+                g_last_nal_size = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *b = CVPixelBufferGetBaseAddress(pb);
+                    if (b) memset(b, 0x80, CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(sessions[i], pb, CMTimeMake(warmup, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(sessions[i], kCMTimePositiveInfinity);
+                    for (int w = 0; w < 50 && !g_encode_done; w++) usleep(10000);
+                    CVPixelBufferRelease(pb);
+                }
             }
+            /* capture baseline from last warmup encode (stabilized) */
+            baselines[i].total_size = g_last_nal_size;
+            baselines[i].nal_count = (g_cb_status == noErr) ? 1 : 0;
+            baselines[i].pset_count = g_last_pset_count;
+            baselines[i].pset_bytes = g_last_pset_total_bytes;
+            size_t cplen = g_saved_nal_len < 32 ? g_saved_nal_len : 32;
+            memcpy(baselines[i].first_bytes, (const void *)g_saved_nal, cplen);
             if (i < 4 || i == sess_count - 1)
                 rlog("  sess[%d]: status=%d nal_size=%zu psets=%zu/%zu\n",
                     i, (int)g_cb_status, baselines[i].total_size,
@@ -8151,7 +8153,7 @@ vps_cd_done:
                 &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
             CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
             OSStatus s = VTCompressionSessionCreate(NULL, 192, 192,
-                (CMVideoCodecType)0x6D757861, es, NULL, NULL, encode_cb, NULL, &trigger);
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &trigger);
             CFRelease(es);
             if (s != noErr || !trigger) { rlog("FAIL: trigger create %d\n", (int)s); goto done; }
             VTSessionSetProperty(trigger, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
@@ -8162,13 +8164,15 @@ vps_cd_done:
             s = VTCompressionSessionPrepareToEncodeFrames(trigger);
             if (s != noErr) { rlog("FAIL: trigger prepare %d\n", (int)s); goto done; }
         }
-        rlog("Trigger session (muxa, AID=%d) created\n\n", alpha_id);
+        rlog("Trigger session (HEVC+alpha, AID=%d) created\n\n", alpha_id);
 
-        /* Baseline encode on target */
-        rlog("--- Baseline encode on target ---\n");
+        /* Warmup + Baseline encodes on target (3 encodes: warmup + 2 baselines for stability) */
+        rlog("--- Warmup + Baseline encodes on target ---\n");
         uint8_t baseline_nal[4096]; size_t baseline_nal_len = 0;
         size_t baseline_total = 0, baseline_psets = 0, baseline_pset_bytes = 0;
-        {
+        uint8_t baseline2_nal[4096]; size_t baseline2_nal_len = 0;
+        size_t baseline2_total = 0;
+        for (int bx = 0; bx < 3; bx++) {
             g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
             CVPixelBufferRef pb = NULL;
             CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
@@ -8177,12 +8181,16 @@ vps_cd_done:
                 void *b = CVPixelBufferGetBaseAddress(pb);
                 if (b) memset(b, 0x80, CVPixelBufferGetDataSize(pb));
                 CVPixelBufferUnlockBaseAddress(pb, 0);
-                VTCompressionSessionEncodeFrame(target, pb, CMTimeMake(0, 30),
+                VTCompressionSessionEncodeFrame(target, pb, CMTimeMake(bx, 30),
                     kCMTimeInvalid, NULL, NULL, NULL);
                 VTCompressionSessionCompleteFrames(target, kCMTimePositiveInfinity);
                 for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
                 CVPixelBufferRelease(pb);
             }
+            rlog("  encode[%d]: status=%d nal=%zu psets=%zu/%zu\n",
+                bx, (int)g_cb_status, g_last_nal_size, g_last_pset_count, g_last_pset_total_bytes);
+        }
+        {
             baseline_total = g_last_nal_size;
             baseline_psets = g_last_pset_count;
             baseline_pset_bytes = g_last_pset_total_bytes;
