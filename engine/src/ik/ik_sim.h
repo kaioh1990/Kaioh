@@ -250,6 +250,10 @@ typedef struct Arr256_bool Arr256_bool;
 #define CVF_DEF_Arr256_f32
 typedef struct Arr256_f32 Arr256_f32;
 #endif
+#ifndef CVF_DEF_Arr256_i8
+#define CVF_DEF_Arr256_i8
+typedef struct Arr256_i8 Arr256_i8;
+#endif
 #ifndef CVF_DEF_Arr256_int
 #define CVF_DEF_Arr256_int
 typedef struct Arr256_int Arr256_int;
@@ -1350,6 +1354,7 @@ typedef struct Anon_194875d7 Anon_194875d7;
 typedef struct Anon_28bd7e47 Anon_28bd7e47;
 typedef struct Anon_3c59f47a Anon_3c59f47a;
 typedef struct Anon_47a7d9c0 Anon_47a7d9c0;
+typedef struct Anon_6b4af2c5 Anon_6b4af2c5;
 typedef struct Anon_6c40a18c Anon_6c40a18c;
 typedef struct Anon_712b22f8 Anon_712b22f8;
 typedef struct Anon_78e9d625 Anon_78e9d625;
@@ -3512,6 +3517,10 @@ struct Arr256_bool { bool v[256]; };
 #define CVF_BODY_Arr256_f32
 struct Arr256_f32 { f32 v[256]; };
 #endif
+#ifndef CVF_BODY_Arr256_i8
+#define CVF_BODY_Arr256_i8
+struct Arr256_i8 { i8 v[256]; };
+#endif
 #ifndef CVF_BODY_Arr256_int
 #define CVF_BODY_Arr256_int
 struct Arr256_int { int v[256]; };
@@ -4562,6 +4571,7 @@ struct Anon_194875d7 { GoString name; GoOpaque /* os.File */* file; bool writabl
 struct Anon_28bd7e47 { GoString sec; Slice_GoString path; };
 struct Anon_3c59f47a { GoString name; Arr4_ResultAnnouncement* data; Arr4_bool* exists; };
 struct Anon_47a7d9c0 { union { GoOpaque /* sync.Mutex */ Mutex_; struct { GoOpaque /* sync.noCopy */ _; GoOpaque /* sync.Mutex */ mu; }; }; bool waiting; bool done; GoString result; };
+struct Anon_6b4af2c5 { int and; int or; int impure; };
 struct Anon_6c40a18c { GoString in; GoString out; };
 struct Anon_78e9d625 { GoString ID; GoString Token; GoString IP; };
 struct Anon_8aabe1e9 { int ok; int fail; int native; int generic; };
@@ -8123,6 +8133,7 @@ extern int g_cjitMismatch;
 extern int g_cjitOn;
 extern Slice_GoString g_cmdCompletedScratch;
 extern Map_GoString_lua_LGFunction g_lua_coFuncs;
+extern u32 g_consoleSeq;
 extern Arr6_Arr12_f32 g_imdct_cosN12;
 extern Arr18_Arr36_f32 g_imdct_cosN36;
 extern Arr256_u32 g_oggvorbis_crcTable;
@@ -8178,6 +8189,7 @@ extern Anon_dcdcacfc g_fuseStats;
 extern Renderer g_gfx;
 extern FontRenderer g_gfxFont;
 extern truetype_graphicsState g_truetype_globalDefaultGS;
+extern Arr256_i8 g_guardTab;
 extern u32 g_helperIdxGen;
 extern Arr12_helperIdx g_helperIdxs;
 extern Arr16_u8 g_gjson_hexchars;
@@ -8229,6 +8241,9 @@ extern Arr16_f32 g_rectDrawScratch;
 extern Map_GoString_int g_parse_reservedWords;
 extern f32 g_meltysynth_resonancePeakOffset;
 extern Anon_d4e097a6 g_rsCur;
+extern bool g_scCheck;
+extern Arr256_bool g_scPure0;
+extern Anon_6b4af2c5 g_scStats;
 extern Arr16_Arr2_int g_maindata_scalefacSizesMpeg1;
 extern Arr3_Arr6_Arr4_int g_maindata_scalefacSizesMpeg2;
 extern Slice_i32 g_sdKeys;
@@ -10436,7 +10451,9 @@ void fn_walkTriggers(StateBlock* b, GoFunc f);
 void fn_fuseBlock(StateBlock* b);
 void fn_fuseController(StateController sc);
 int fn_opLen(OpCode op);
+int fn_opLenAt(BytecodeExp be, int i);
 void fn_fuseExp(BytecodeExp be);
+void fn_fuseExpInner(BytecodeExp be);
 void fn_fuseExp1(BytecodeExp be);
 bool fn_isSimpleTrigger(OpCode t);
 bool fn_isCmp8(OpCode op);
@@ -10444,6 +10461,16 @@ bool fn_isCmp32(OpCode op);
 OpCode fn_cmpOf8(OpCode op);
 OpCode fn_cmpOf32(OpCode op);
 void fn_fuseLines(BytecodeExp be);
+bool BytecodeExp_runGuard(BytecodeExp be, Char* c);
+bool StateBlock_evalGuarded(StateBlock* b, Char* c);
+void fn_fuseHeads(BytecodeExp be);
+int fn_jz8pTail(BytecodeExp be, int j);
+bool fn_scSkippable(BytecodeExp b);
+void fn_scEmit(BytecodeExp* out, BytecodeExp rhs, OpCode opc);
+void fn_scCheckSkip(BytecodeExp be, int i, Char* c, Char* oc);
+int fn_scTarget(BytecodeExp be, int i);
+void fn_scThread(BytecodeExp be);
+void fn_scCheckSub(BytecodeExp be, int i, int end);
 u64 fn_bcProfNow(void);
 bool fn_bcProfRun(Char* c, StateBytecode* sb, i32 st);
 void fn_bcProfFrame(void);

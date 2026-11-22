@@ -196,6 +196,16 @@ enum {
     OC_trange8 = 190,
     OC_trange32 = 191,
     OC_tvcmp8 = 192,
+    OC_jzb8 = 193,
+    OC_jnzb8 = 194,
+    OC_rcint8 = 195,
+    OC_rcint32 = 196,
+    OC_enemyk = 197,
+    OC_enemynk = 198,
+    OC_partnerk = 199,
+    OC_cstrcmp = 200,
+    OC_notjz8p = 201,
+    OC_andjz8p = 202,
 };
 
 enum {

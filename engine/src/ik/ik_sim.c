@@ -34448,7 +34448,33 @@ static bool lambda_1869(Env_lambda_1869 *_env, int i, int j) {
 }
 
 typedef struct Env_lambda_1870 { char _unused; } Env_lambda_1870;
-static Arr256_bool lambda_1870(Env_lambda_1870 *_env) {
+static Arr256_i8 lambda_1870(Env_lambda_1870 *_env) {
+    Arr256_i8 t = {0};
+    i8 _t1 = 7;
+    i8 _t2 = 10;
+    i8 _t3 = 9;
+    i8 _t4 = 15;
+    i8 _t5 = 9;
+    t.v[188U] = _t1;
+    t.v[189U] = _t2;
+    t.v[190U] = _t3;
+    t.v[191U] = _t4;
+    t.v[192U] = _t5;
+    {
+        int op = 0;
+        for (; op < 256; op++) {
+            if (fn_isSimpleTrigger(((OpCode)op))) {
+                t.v[op] = 1;
+            }
+            _cont6:;
+        }
+    }
+    return t;
+    return t;
+}
+
+typedef struct Env_lambda_1871 { char _unused; } Env_lambda_1871;
+static Arr256_bool lambda_1871(Env_lambda_1871 *_env) {
     Arr256_bool t = {0};
     {
         int i = 0;
@@ -78825,6 +78851,9 @@ bool StateBlock_evalTrigger(StateBlock* b, Char* c) {
         b->trigRaw = (BytecodeExp){0};
     }
     if (b->ctrig.fn == 0) {
+        if (true) {
+            return StateBlock_evalGuarded(b, c);
+        }
         return BytecodeExp_evalB(b->trigger, c);
     }
     if (!g_cjitCheck) {
@@ -78976,7 +79005,7 @@ int fn_opLen(OpCode op) {
     {
         OpCode _t1 = op;
         switch (_t1) {
-        case 15U: case 17U: case 18U: case 16U: case 5U: case 4U: case 64U: case 65U: case 95U: {
+        case 15U: case 17U: case 18U: case 16U: case 5U: case 4U: case 64U: case 65U: case 95U: case 193U: case 194U: {
             return 1;
             break;
         }
@@ -78986,6 +79015,26 @@ int fn_opLen(OpCode op) {
         }
         case 7U: {
             return 8;
+            break;
+        }
+        case 195U: {
+            return 6;
+            break;
+        }
+        case 197U: case 198U: case 199U: {
+            return 1;
+            break;
+        }
+        case 200U: {
+            return 1;
+            break;
+        }
+        case 201U: case 202U: {
+            return 0;
+            break;
+        }
+        case 196U: {
+            return 9;
             break;
         }
         case 163U: case 164U: case 165U: case 166U: case 167U: case 168U: case 169U: case 170U: case 171U: case 172U: case 173U: {
@@ -79040,7 +79089,68 @@ int fn_opLen(OpCode op) {
     return -1;
 }
 
-// fuseExp (bc_fuse.go:160), 0 TODO
+// opLenAt (bc_fuse.go:175), 0 TODO
+int fn_opLenAt(BytecodeExp be, int i) {
+    OpCode op = be.p[i];
+    Map_OpCode_Arr2_i8 tab = {0};
+    {
+        OpCode _t1 = op;
+        switch (_t1) {
+        case 157U: {
+            tab = g_bcGenSubConst;
+            break;
+        }
+        case 159U: {
+            tab = g_bcGenSubEx;
+            break;
+        }
+        case 160U: {
+            tab = g_bcGenSubEx2;
+            break;
+        }
+        case 161U: {
+            tab = g_bcGenSubEx3;
+            break;
+        }
+        case 158U: {
+            if ((i + 1) >= be.len) {
+                return -1;
+            }
+            {
+                OpCode _t2 = be.p[(i + 1)];
+                switch (_t2) {
+                case 0U: case 1U: case 2U: case 3U: case 4U: case 5U: case 6U: case 7U: {
+                    return 1;
+                    break;
+                }
+                case 8U: case 9U: {
+                    return 5;
+                    break;
+                }
+                }
+            }
+            return -1;
+            break;
+        }
+        default: {
+            return fn_opLen(op);
+            break;
+        }
+        }
+    }
+    if ((i + 1) >= be.len) {
+        return -1;
+    }
+    bool _t3; Arr2_i8 _t4 = Map_OpCode_Arr2_i8_get(&tab, be.p[(i + 1)], &_t3);
+    Arr2_i8 r = _t4;
+    bool ok = _t3;
+    if ((!ok) || (r.v[1] < 0)) {
+        return -1;
+    }
+    return (1 + ((int)r.v[1]));
+}
+
+// fuseExp (bc_fuse.go:213), 0 TODO
 void fn_fuseExp(BytecodeExp be) {
     if (be.len == 0) {
         return;
@@ -79048,9 +79158,20 @@ void fn_fuseExp(BytecodeExp be) {
     g_fuseStats.exprs++;
     fn_fuseExp1(be);
     fn_fuseLines(be);
+    fn_fuseHeads(be);
+    fn_scThread(be);
 }
 
-// fuseExp1 (bc_fuse.go:169), 0 TODO
+// fuseExpInner (bc_fuse.go:225), 0 TODO
+void fn_fuseExpInner(BytecodeExp be) {
+    if (be.len == 0) {
+        return;
+    }
+    fn_fuseExp1(be);
+    fn_fuseLines(be);
+}
+
+// fuseExp1 (bc_fuse.go:233), 0 TODO
 void fn_fuseExp1(BytecodeExp be) {
     int i = 0;
     {
@@ -79183,7 +79304,43 @@ void fn_fuseExp1(BytecodeExp be) {
                 i += 3;
                 continue;
             }
-            int n = fn_opLen(op);
+            if ((op == 14U) && ((i + 5) < be.len)) {
+                int l = ((int)fn_bcI32(be, (i + 1)));
+                if (((l == 2) && ((i + 7) <= be.len)) && (be.p[(i + 5)] == 5U)) {
+                    OpCode k = be.p[(i + 6)];
+                    OpCode _t12 = 195U;
+                    OpCode _t13 = k;
+                    be.p[i] = _t12;
+                    be.p[(i + 1)] = _t13;
+                    {
+                        int j = (i + 2);
+                        for (; j < (i + 7); j++) {
+                            be.p[j] = 162U;
+                            _cont14:;
+                        }
+                    }
+                    g_fuseStats.fused++;
+                    i += 7;
+                    continue;
+                }
+                if (((l == 5) && ((i + 10) <= be.len)) && (be.p[(i + 5)] == 6U)) {
+                    Arr4_OpCode k = {0};
+                    GO_COPY(GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1), GO_SLICE(BytecodeExp, be, (i + 6), (i + 10)));
+                    be.p[i] = 196U;
+                    GO_COPY(GO_SLICE(BytecodeExp, be, (i + 1), (i + 5)), GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1));
+                    {
+                        int j = (i + 5);
+                        for (; j < (i + 10); j++) {
+                            be.p[j] = 162U;
+                            _cont15:;
+                        }
+                    }
+                    g_fuseStats.fused++;
+                    i += 10;
+                    continue;
+                }
+            }
+            int n = fn_opLenAt(be, i);
             {
                 do {
                     if ((n >= 0)) {
@@ -79196,7 +79353,7 @@ void fn_fuseExp1(BytecodeExp be) {
                         if ((l < 0) || (((i + 5) + l) > be.len)) {
                             return;
                         }
-                        fn_fuseExp(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
+                        fn_fuseExpInner(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
                         i += (5 + l);
                     } else {
                         return;
@@ -79208,7 +79365,7 @@ void fn_fuseExp1(BytecodeExp be) {
     }
 }
 
-// isSimpleTrigger (bc_fuse.go:279), 0 TODO
+// isSimpleTrigger (bc_fuse.go:371), 0 TODO
 bool fn_isSimpleTrigger(OpCode t) {
     {
         OpCode _t1 = t;
@@ -79222,17 +79379,17 @@ bool fn_isSimpleTrigger(OpCode t) {
     return false;
 }
 
-// isCmp8 (bc_fuse.go:289), 0 TODO
+// isCmp8 (bc_fuse.go:381), 0 TODO
 bool fn_isCmp8(OpCode op) {
     return ((op >= 166U) && (op <= 171U));
 }
 
-// isCmp32 (bc_fuse.go:290), 0 TODO
+// isCmp32 (bc_fuse.go:382), 0 TODO
 bool fn_isCmp32(OpCode op) {
     return ((op >= 174U) && (op <= 179U));
 }
 
-// cmpOf8 (bc_fuse.go:291), 0 TODO
+// cmpOf8 (bc_fuse.go:383), 0 TODO
 OpCode fn_cmpOf8(OpCode op) {
     {
         OpCode _t1 = op;
@@ -79262,12 +79419,12 @@ OpCode fn_cmpOf8(OpCode op) {
     return 25U;
 }
 
-// cmpOf32 (bc_fuse.go:306), 0 TODO
+// cmpOf32 (bc_fuse.go:398), 0 TODO
 OpCode fn_cmpOf32(OpCode op) {
     return fn_cmpOf8(((op - 174U) + 166U));
 }
 
-// fuseLines (bc_fuse.go:309), 0 TODO
+// fuseLines (bc_fuse.go:401), 0 TODO
 void fn_fuseLines(BytecodeExp be) {
     int i = 0;
     {
@@ -79412,7 +79569,7 @@ void fn_fuseLines(BytecodeExp be) {
                     continue;
                 }
             }
-            int n = fn_opLen(op);
+            int n = fn_opLenAt(be, i);
             {
                 do {
                     if ((n >= 0)) {
@@ -79433,6 +79590,410 @@ void fn_fuseLines(BytecodeExp be) {
                 } while (0);
             }
             _cont1:;
+        }
+    }
+}
+
+// BytecodeExp.runGuard (bc_guard.go:40), 0 TODO
+bool BytecodeExp_runGuard(BytecodeExp be, Char* c) {
+    {
+        OpCode _t1 = be.p[0];
+        switch (_t1) {
+        case 188U: {
+            BytecodeExp_pushTrigger(be, c, be.p[1]);
+            BytecodeExp_cmpConst(be, be.p[2], fn_BytecodeInt(((i32)((i8)be.p[3]))));
+            break;
+        }
+        case 189U: {
+            BytecodeExp_pushTrigger(be, c, be.p[1]);
+            BytecodeExp_cmpConst(be, be.p[2], fn_BytecodeInt(fn_bcI32(be, 3)));
+            break;
+        }
+        case 190U: {
+            BytecodeExp_pushTrigger(be, c, be.p[1]);
+            BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[3]))), fn_BytecodeInt(((i32)((i8)be.p[4]))), be.p[2]);
+            break;
+        }
+        case 191U: {
+            BytecodeExp_pushTrigger(be, c, be.p[1]);
+            BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, 3)), fn_BytecodeInt(fn_bcI32(be, 7)), be.p[2]);
+            break;
+        }
+        case 192U: {
+            i32 v = ((i32)((i8)be.p[2]));
+            {
+                OpCode _t2 = be.p[1];
+                switch (_t2) {
+                case 163U: {
+                    BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, v));
+                    break;
+                }
+                case 164U: {
+                    BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, v));
+                    break;
+                }
+                default: {
+                    BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, v));
+                    break;
+                }
+                }
+            }
+            BytecodeExp_cmpConst(be, be.p[3], fn_BytecodeInt(((i32)((i8)be.p[4]))));
+            break;
+        }
+        default: {
+            BytecodeExp_pushTrigger(be, c, be.p[0]);
+            break;
+        }
+        }
+    }
+    return BytecodeValue_ToB(BytecodeStack_Pop(&g_sys.bcStack));
+}
+
+// StateBlock.evalGuarded (bc_guard.go:72), 0 TODO
+bool StateBlock_evalGuarded(StateBlock* b, Char* c) {
+    BytecodeExp be = b->trigger;
+    if (be.len == 0) {
+        return BytecodeValue_ToB(BytecodeExp_runOC(be, c, c));
+    }
+    int g = ((int)g_guardTab.v[be.p[0]]);
+    if (((g == 0) || (((g == 1) && (be.len != 1)))) || (((g > 1) && (be.len <= g)))) {
+        return BytecodeValue_ToB(BytecodeExp_runOC(be, c, c));
+    }
+    if (!BytecodeExp_runGuard(be, c)) {
+        if (g_scCheck && BytecodeValue_ToB(BytecodeExp_runOC(be, c, c))) {
+            go_panic_iface(0, ((GoIface){17, go_box(GoString, go_strcat(go_strcat(go_strcat(GOSTR("CVF_SC_CHECK: guard false, trigger true: p"), fn_itoa(c->playerNo)), GOSTR(" st ")), fn_itoa(((int)c->ss.no))))}));
+        }
+        return false;
+    }
+    if (g == 1) {
+        return true;
+    }
+    return BytecodeValue_ToB(BytecodeExp_runOC(GO_SLICE(BytecodeExp, be, g, -1), c, c));
+}
+
+// fuseHeads (bc_head.go:17), 0 TODO
+void fn_fuseHeads(BytecodeExp be) {
+    int i = 0;
+    {
+        for (; i < be.len; ) {
+            OpCode op = be.p[i];
+            {
+                OpCode _t2 = op;
+                switch (_t2) {
+                case 5U: {
+                    if ((i + 2) < be.len) {
+                        {
+                            OpCode _t3 = be.p[(i + 2)];
+                            switch (_t3) {
+                            case 149U: {
+                                be.p[i] = 197U;
+                                break;
+                            }
+                            case 150U: {
+                                be.p[i] = 198U;
+                                break;
+                            }
+                            case 148U: {
+                                be.p[i] = 199U;
+                                break;
+                            }
+                            }
+                        }
+                    }
+                    break;
+                }
+                case 157U: {
+                    if ((((i + 7) < be.len) && (be.p[(i + 2)] == 9U)) && (((be.p[(i + 7)] == 22U) || (be.p[(i + 7)] == 23U)))) {
+                        {
+                            bool _t4; Arr2_i8 _t5 = Map_OpCode_Arr2_i8_get(&g_bcGenSubConst, be.p[(i + 1)], &_t4);
+                            Arr2_i8 r = _t5;
+                            bool ok = _t4;
+                            if (ok && (r.v[1] == 0)) {
+                                be.p[i] = 200U;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case 33U: case 34U: {
+                    if (((i + 3) < be.len) && (be.p[(i + 1)] == 172U)) {
+                        if (op == 33U) {
+                            be.p[i] = 201U;
+                        } else {
+                            be.p[i] = 202U;
+                        }
+                    }
+                    break;
+                }
+                }
+            }
+            int n = fn_opLenAt(be, i);
+            {
+                do {
+                    if ((n >= 0)) {
+                        i += (1 + n);
+                    } else if ((n == -2)) {
+                        if ((i + 5) > be.len) {
+                            return;
+                        }
+                        int l = ((int)fn_bcI32(be, (i + 1)));
+                        if ((l < 0) || (((i + 5) + l) > be.len)) {
+                            return;
+                        }
+                        if ((op == 13U) || (op == 14U)) {
+                            fn_fuseHeads(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
+                            i += (5 + l);
+                        } else {
+                            i += 5;
+                        }
+                    } else {
+                        return;
+                    }
+                } while (0);
+            }
+            _cont1:;
+        }
+    }
+}
+
+// jz8pTail (bc_head.go:75), 0 TODO
+inline __attribute__((always_inline)) int fn_jz8pTail(BytecodeExp be, int j) {
+    if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack))) {
+        BytecodeStack_Pop(&g_sys.bcStack);
+        return (j + 2);
+    }
+    if (be.p[j] == 0U) {
+        return be.len;
+    }
+    return ((j + ((int)((u8)be.p[j]))) + 1);
+}
+
+// scSkippable (bc_shortcircuit.go:65), 0 TODO
+bool fn_scSkippable(BytecodeExp b) {
+    bool _t1 = false;
+    i32 _t2 = 0;
+    bool prevConst = _t1;
+    i32 prevVal = _t2;
+    {
+        int i = 0;
+        for (; i < b.len; ) {
+            OpCode op = b.p[i];
+            int _t4 = 0;
+            bool _t5 = false;
+            i32 _t6 = 0;
+            int n = _t4;
+            bool isConst = _t5;
+            i32 val = _t6;
+            {
+                OpCode _t7 = op;
+                switch (_t7) {
+                case 5U: {
+                    int _t8 = 1;
+                    bool _t9 = true;
+                    n = _t8;
+                    isConst = _t9;
+                    if ((i + 1) < b.len) {
+                        val = ((i32)((i8)b.p[(i + 1)]));
+                    }
+                    break;
+                }
+                case 6U: {
+                    int _t10 = 4;
+                    bool _t11 = true;
+                    n = _t10;
+                    isConst = _t11;
+                    if ((i + 4) < b.len) {
+                        val = fn_bcI32(b, (i + 1));
+                    }
+                    break;
+                }
+                case 8U: case 9U: {
+                    n = 4;
+                    break;
+                }
+                case 7U: {
+                    n = 8;
+                    break;
+                }
+                case 64U: case 65U: case 4U: {
+                    n = 1;
+                    break;
+                }
+                case 0U: case 2U: case 1U: {
+                    if ((!prevConst) || (prevVal < 0)) {
+                        return false;
+                    }
+                    break;
+                }
+                case 44U: case 45U: {
+                    if ((!prevConst) || (prevVal == 0)) {
+                        return false;
+                    }
+                    break;
+                }
+                case 17U: case 18U: case 16U: case 15U: case 193U: case 194U: {
+                    if ((((i + 1) >= b.len) || (b.p[(i + 1)] == 0U)) || (((i + 2) + ((int)((u8)b.p[(i + 1)]))) > b.len)) {
+                        return false;
+                    }
+                    n = 1;
+                    break;
+                }
+                case 20U: case 21U: case 19U: {
+                    if ((i + 4) >= b.len) {
+                        return false;
+                    }
+                    int k = ((int)fn_bcI32(b, (i + 1)));
+                    if ((k < 0) || (((i + 5) + k) > b.len)) {
+                        return false;
+                    }
+                    n = 4;
+                    break;
+                }
+                default: {
+                    if (!g_scPure0.v[op]) {
+                        return false;
+                    }
+                    break;
+                }
+                }
+            }
+            bool _t12 = isConst;
+            i32 _t13 = val;
+            prevConst = _t12;
+            prevVal = _t13;
+            i += (1 + n);
+            if (i > b.len) {
+                return false;
+            }
+            _cont3:;
+        }
+    }
+    return true;
+}
+
+// scEmit (bc_shortcircuit.go:128), 0 TODO
+void fn_scEmit(BytecodeExp* out, BytecodeExp rhs, OpCode opc) {
+    if ((((rhs.len > 0) && ((rhs.len + 1) <= 255)) && fn_fuseEnabled()) && fn_scSkippable(rhs)) {
+        OpCode jop = 193U;
+        if (opc == 36U) {
+            jop = 194U;
+            g_scStats.or++;
+        } else {
+            g_scStats.and++;
+        }
+        BytecodeExp_append(out, GO_SLICE_LIT(Slice_OpCode, OpCode, 2, jop, ((OpCode)(rhs.len + 1))));
+    } else {
+        g_scStats.impure++;
+    }
+    BytecodeExp_append(out, rhs);
+    BytecodeExp_append(out, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, opc));
+}
+
+// scCheckSkip (bc_shortcircuit.go:147), 0 TODO
+void fn_scCheckSkip(BytecodeExp be, int i, Char* c, Char* oc) {
+    int k = ((int)((u8)be.p[i]));
+    BytecodeExp rhs = GO_SLICE(BytecodeExp, be, (i + 1), (i + k));
+    i32 _t1 = g_sys.SystemStateVars_.randseed;
+    u32 _t2 = g_consoleSeq;
+    int _t3 = g_sys.bcStack.len;
+    i32 seed = _t1;
+    u32 cs = _t2;
+    int sl = _t3;
+    BytecodeExp_runOC(rhs, c, oc);
+    if (((seed != g_sys.SystemStateVars_.randseed) || (cs != g_consoleSeq)) || (sl != g_sys.bcStack.len)) {
+        go_panic_iface(0, ((GoIface){17, go_box(GoString, go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(GOSTR("CVF_SC_CHECK: skipped operand had an effect: p"), fn_itoa(c->playerNo)), GOSTR(" st ")), fn_itoa(((int)c->ss.no))), GOSTR(" tick ")), fn_itoa(((int)g_sys.SystemStateVars_.tickCount))))}));
+    }
+}
+
+// scTarget (bc_shortcircuit.go:160), 0 TODO
+int fn_scTarget(BytecodeExp be, int i) {
+    if (be.p[(i + 1)] == 0U) {
+        return be.len;
+    }
+    return ((i + 2) + ((int)((u8)be.p[(i + 1)])));
+}
+
+// scThread (bc_shortcircuit.go:173), 0 TODO
+void fn_scThread(BytecodeExp be) {
+    if (g_scCheck) {
+        return;
+    }
+    int i = 0;
+    {
+        for (; i < be.len; ) {
+            OpCode op = be.p[i];
+            if ((((op == 193U) || (op == 194U))) && ((i + 1) < be.len)) {
+                int t = fn_scTarget(be, i);
+                {
+                    int n = 0;
+                    for (; (n < 64) && (t < be.len); n++) {
+                        OpCode x = be.p[t];
+                        if (x == 162U) {
+                            t++;
+                            continue;
+                        }
+                        if ((t + 1) >= be.len) {
+                            break;
+                        }
+                        if (((x == op) || (((op == 193U) && (((x == 172U) || (x == 17U)))))) || (((op == 194U) && (((x == 173U) || (x == 18U)))))) {
+                            t = fn_scTarget(be, t);
+                            continue;
+                        }
+                        if ((((op == 193U) && (x == 194U))) || (((op == 194U) && (x == 193U)))) {
+                            t += 2;
+                            continue;
+                        }
+                        break;
+                        _cont2:;
+                    }
+                }
+                if (t >= be.len) {
+                    be.p[(i + 1)] = 0U;
+                } else {
+                    {
+                        int k = (t - ((i + 2)));
+                        if ((k >= 1) && (k <= 255)) {
+                            be.p[(i + 1)] = ((OpCode)k);
+                        }
+                    }
+                }
+            }
+            int n = fn_opLenAt(be, i);
+            {
+                do {
+                    if ((n >= 0)) {
+                        i += (1 + n);
+                    } else if ((n == -2)) {
+                        if ((i + 5) > be.len) {
+                            return;
+                        }
+                        int l = ((int)fn_bcI32(be, (i + 1)));
+                        if ((l < 0) || (((i + 5) + l) > be.len)) {
+                            return;
+                        }
+                        if ((op == 13U) || (op == 14U)) {
+                            fn_scThread(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
+                            i += (5 + l);
+                        } else {
+                            i += 5;
+                        }
+                    } else {
+                        return;
+                    }
+                } while (0);
+            }
+            _cont1:;
+        }
+    }
+}
+
+// scCheckSub (bc_shortcircuit.go:236), 0 TODO
+void fn_scCheckSub(BytecodeExp be, int i, int end) {
+    {
+        int n = fn_opLenAt(be, (i - 1));
+        if ((n >= 0) && ((end - i) != n)) {
+            go_panic_iface(0, ((GoIface){17, go_box(GoString, go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(go_strcat(GOSTR("CVF_SC_CHECK: operand length of op "), fn_itoa(((int)be.p[(i - 1)]))), GOSTR("/")), fn_itoa(((int)be.p[i]))), GOSTR(" is ")), fn_itoa((end - i))), GOSTR(", table says ")), fn_itoa(n)))}));
         }
     }
 }
@@ -80527,12 +81088,12 @@ GoString MoveType_TriggerValue(MoveType mt) {
     return GOSTR("");
 }
 
-// NewStringPool (bytecode.go:1331), 0 TODO
+// NewStringPool (bytecode.go:1343), 0 TODO
 StringPool* fn_NewStringPool(void) {
     return go_box(StringPool, (StringPool){.Map = Map_GoString_int_make(0)});
 }
 
-// StringPool.Clear (bytecode.go:1335), 0 TODO
+// StringPool.Clear (bytecode.go:1347), 0 TODO
 void StringPool_Clear(StringPool* sp) {
     Slice_GoString _t1 = (Slice_GoString){0};
     Slice_GoString _t2 = (Slice_GoString){0};
@@ -80544,7 +81105,7 @@ void StringPool_Clear(StringPool* sp) {
     sp->pcache = (Arr64_Anon_bfbab8ed){{}};
 }
 
-// StringPool.Add (bytecode.go:1345), 0 TODO
+// StringPool.Add (bytecode.go:1357), 0 TODO
 int StringPool_Add(StringPool* sp, GoString s) {
     u8* _t1 = ((u8 *)(s).p);
     int _t2 = s.len;
@@ -80567,7 +81128,7 @@ int StringPool_Add(StringPool* sp, GoString s) {
     return i;
 }
 
-// StringPool.add (bytecode.go:1361), 0 TODO
+// StringPool.add (bytecode.go:1373), 0 TODO
 int StringPool_add(StringPool* sp, GoString s) {
     bool _t1; int _t2 = Map_GoString_int_get(&sp->Map, s, &_t1);
     int i = _t2;
@@ -80581,17 +81142,17 @@ int StringPool_add(StringPool* sp, GoString s) {
     return i;
 }
 
-// BytecodeValue.IsNone (bytecode.go:1377), 0 TODO
+// BytecodeValue.IsNone (bytecode.go:1389), 0 TODO
 bool BytecodeValue_IsNone(BytecodeValue bv) {
     return (bv.vtype == 0);
 }
 
-// BytecodeValue.IsUndefined (bytecode.go:1382), 0 TODO
+// BytecodeValue.IsUndefined (bytecode.go:1394), 0 TODO
 inline __attribute__((always_inline)) bool BytecodeValue_IsUndefined(BytecodeValue bv) {
     return ((bv.vtype == 5) || math_IsNaN(bv.value));
 }
 
-// BytecodeValue.ToF (bytecode.go:1387), 0 TODO
+// BytecodeValue.ToF (bytecode.go:1399), 0 TODO
 inline __attribute__((always_inline)) f32 BytecodeValue_ToF(BytecodeValue bv) {
     if (BytecodeValue_IsUndefined(bv) || (bv.vtype == 4)) {
         return 0x0p+00f;
@@ -80599,7 +81160,7 @@ inline __attribute__((always_inline)) f32 BytecodeValue_ToF(BytecodeValue bv) {
     return ((f32)bv.value);
 }
 
-// BytecodeValue.ToI (bytecode.go:1397), 0 TODO
+// BytecodeValue.ToI (bytecode.go:1409), 0 TODO
 inline __attribute__((always_inline)) i32 BytecodeValue_ToI(BytecodeValue bv) {
     if (BytecodeValue_IsUndefined(bv) || (bv.vtype == 4)) {
         return 0;
@@ -80607,7 +81168,7 @@ inline __attribute__((always_inline)) i32 BytecodeValue_ToI(BytecodeValue bv) {
     return go_f2i32(bv.value);
 }
 
-// BytecodeValue.ToI64 (bytecode.go:1404), 0 TODO
+// BytecodeValue.ToI64 (bytecode.go:1416), 0 TODO
 i64 BytecodeValue_ToI64(BytecodeValue bv) {
     if (BytecodeValue_IsUndefined(bv) || (bv.vtype == 4)) {
         return 0LL;
@@ -80615,7 +81176,7 @@ i64 BytecodeValue_ToI64(BytecodeValue bv) {
     return go_f2i64(bv.value);
 }
 
-// BytecodeValue.ToB (bytecode.go:1412), 0 TODO
+// BytecodeValue.ToB (bytecode.go:1424), 0 TODO
 inline __attribute__((always_inline)) bool BytecodeValue_ToB(BytecodeValue bv) {
     if (BytecodeValue_IsUndefined(bv)) {
         return false;
@@ -80629,7 +81190,7 @@ inline __attribute__((always_inline)) bool BytecodeValue_ToB(BytecodeValue bv) {
     return true;
 }
 
-// BytecodeValue.ToAny (bytecode.go:1426), 0 TODO
+// BytecodeValue.ToAny (bytecode.go:1438), 0 TODO
 GoIface BytecodeValue_ToAny(BytecodeValue bv) {
     if (BytecodeValue_IsUndefined(bv)) {
         return ((GoIface){291, go_box_a(UndefinedFormatter, (UndefinedFormatter){0})});
@@ -80643,7 +81204,7 @@ GoIface BytecodeValue_ToAny(BytecodeValue bv) {
     return ((GoIface){5, go_box_a(i32, BytecodeValue_ToI(bv))});
 }
 
-// BytecodeValue.ToS (bytecode.go:1440), 0 TODO
+// BytecodeValue.ToS (bytecode.go:1452), 0 TODO
 GoString BytecodeValue_ToS(BytecodeValue bv) {
     if (bv.vtype != 4) {
         return GOSTR("");
@@ -80656,7 +81217,7 @@ GoString BytecodeValue_ToS(BytecodeValue bv) {
     return pool.p[idx];
 }
 
-// BytecodeValue.toLowS (bytecode.go:1454), 0 TODO
+// BytecodeValue.toLowS (bytecode.go:1466), 0 TODO
 GoString BytecodeValue_toLowS(BytecodeValue bv) {
     if (bv.vtype != 4) {
         return GOSTR("");
@@ -80669,7 +81230,7 @@ GoString BytecodeValue_toLowS(BytecodeValue bv) {
     return pool.p[idx];
 }
 
-// BytecodeValue.SetF (bytecode.go:1467), 0 TODO
+// BytecodeValue.SetF (bytecode.go:1479), 0 TODO
 inline __attribute__((always_inline)) void BytecodeValue_SetF(BytecodeValue* bv, f32 f) {
     if (math_IsNaN(((f64)f))) {
         (*bv) = fn_BytecodeUndefined();
@@ -80678,28 +81239,28 @@ inline __attribute__((always_inline)) void BytecodeValue_SetF(BytecodeValue* bv,
     }
 }
 
-// BytecodeValue.SetI (bytecode.go:1476), 0 TODO
+// BytecodeValue.SetI (bytecode.go:1488), 0 TODO
 inline __attribute__((always_inline)) void BytecodeValue_SetI(BytecodeValue* bv, i32 i) {
     (*bv) = (BytecodeValue){2, ((f64)i)};
 }
 
-// BytecodeValue.SetB (bytecode.go:1485), 0 TODO
+// BytecodeValue.SetB (bytecode.go:1497), 0 TODO
 inline __attribute__((always_inline)) void BytecodeValue_SetB(BytecodeValue* bv, bool b) {
     bv->vtype = 3;
     bv->value = ((f64)fn_Btoi(b));
 }
 
-// bvNone (bytecode.go:1490), 0 TODO
+// bvNone (bytecode.go:1502), 0 TODO
 BytecodeValue fn_bvNone(void) {
     return (BytecodeValue){0, 0x0p+00};
 }
 
-// BytecodeUndefined (bytecode.go:1495), 0 TODO
+// BytecodeUndefined (bytecode.go:1507), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeUndefined(void) {
     return (BytecodeValue){5, math_NaN()};
 }
 
-// BytecodeFloat (bytecode.go:1500), 0 TODO
+// BytecodeFloat (bytecode.go:1512), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeFloat(f32 f) {
     if (math_IsNaN(((f64)f))) {
         return fn_BytecodeUndefined();
@@ -80707,28 +81268,28 @@ inline __attribute__((always_inline)) BytecodeValue fn_BytecodeFloat(f32 f) {
     return (BytecodeValue){1, ((f64)f)};
 }
 
-// BytecodeInt (bytecode.go:1508), 0 TODO
+// BytecodeInt (bytecode.go:1520), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeInt(i32 i) {
     return (BytecodeValue){2, ((f64)i)};
 }
 
-// BytecodeInt64 (bytecode.go:1512), 0 TODO
+// BytecodeInt64 (bytecode.go:1524), 0 TODO
 BytecodeValue fn_BytecodeInt64(i64 i) {
     return (BytecodeValue){2, ((f64)i)};
 }
 
-// BytecodeBool (bytecode.go:1517), 0 TODO
+// BytecodeBool (bytecode.go:1529), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeBool(bool b) {
     return (BytecodeValue){3, ((f64)fn_Btoi(b))};
 }
 
-// BytecodeString (bytecode.go:1522), 0 TODO
+// BytecodeString (bytecode.go:1534), 0 TODO
 BytecodeValue fn_BytecodeString(GoString s) {
     int idx = StringPool_Add(&g_sys.stringPool.v[g_sys.workingState->playerNo], s);
     return (BytecodeValue){4, ((f64)idx)};
 }
 
-// TypedValueOf (bytecode.go:1539), 0 TODO
+// TypedValueOf (bytecode.go:1551), 0 TODO
 TypedValue fn_TypedValueOf(BytecodeValue bv) {
     if (bv.vtype == 4) {
         return (TypedValue){.Type = 4, .Str = BytecodeValue_ToS(bv)};
@@ -80736,7 +81297,7 @@ TypedValue fn_TypedValueOf(BytecodeValue bv) {
     return (TypedValue){.Type = bv.vtype, .Num = bv.value};
 }
 
-// TypedValue.ToBV (bytecode.go:1546), 0 TODO
+// TypedValue.ToBV (bytecode.go:1558), 0 TODO
 BytecodeValue TypedValue_ToBV(TypedValue mv) {
     {
         ValueType _t1 = mv.Type;
@@ -80754,17 +81315,17 @@ BytecodeValue TypedValue_ToBV(TypedValue mv) {
     return (BytecodeValue){mv.Type, mv.Num};
 }
 
-// TypedValue.ToF (bytecode.go:1557), 0 TODO
+// TypedValue.ToF (bytecode.go:1569), 0 TODO
 f32 TypedValue_ToF(TypedValue mv) {
     return ((f32)mv.Num);
 }
 
-// BytecodeStack.Clear (bytecode.go:1563), 0 TODO
+// BytecodeStack.Clear (bytecode.go:1575), 0 TODO
 void BytecodeStack_Clear(BytecodeStack* bs) {
     (*bs) = GO_SLICE(BytecodeStack, ((*bs)), 0, 0);
 }
 
-// BytecodeStack.Push (bytecode.go:1568), 0 TODO
+// BytecodeStack.Push (bytecode.go:1580), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_Push(BytecodeStack* bs, BytecodeValue bv) {
     BytecodeStack s = (*bs);
     {
@@ -80779,42 +81340,42 @@ inline __attribute__((always_inline)) void BytecodeStack_Push(BytecodeStack* bs,
     fn_bcStackGrow(bs, bv);
 }
 
-// bcStackGrow (bytecode.go:1583), 0 TODO
+// bcStackGrow (bytecode.go:1595), 0 TODO
 void fn_bcStackGrow(BytecodeStack* bs, BytecodeValue bv) {
     (*bs) = GO_APPEND(Slice_BytecodeValue, (*bs), bv);
 }
 
-// BytecodeStack.PushI (bytecode.go:1588), 0 TODO
+// BytecodeStack.PushI (bytecode.go:1600), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_PushI(BytecodeStack* bs, i32 i) {
     BytecodeStack_Push(bs, fn_BytecodeInt(i));
 }
 
-// BytecodeStack.PushI64 (bytecode.go:1592), 0 TODO
+// BytecodeStack.PushI64 (bytecode.go:1604), 0 TODO
 void BytecodeStack_PushI64(BytecodeStack* bs, i64 i) {
     BytecodeStack_Push(bs, fn_BytecodeInt64(i));
 }
 
-// BytecodeStack.PushF (bytecode.go:1597), 0 TODO
+// BytecodeStack.PushF (bytecode.go:1609), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_PushF(BytecodeStack* bs, f32 f) {
     BytecodeStack_Push(bs, fn_BytecodeFloat(f));
 }
 
-// BytecodeStack.PushB (bytecode.go:1602), 0 TODO
+// BytecodeStack.PushB (bytecode.go:1614), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_PushB(BytecodeStack* bs, bool b) {
     BytecodeStack_Push(bs, fn_BytecodeBool(b));
 }
 
-// BytecodeStack.PushS (bytecode.go:1606), 0 TODO
+// BytecodeStack.PushS (bytecode.go:1618), 0 TODO
 void BytecodeStack_PushS(BytecodeStack* bs, GoString s) {
     BytecodeStack_Push(bs, fn_BytecodeString(s));
 }
 
-// BytecodeStack.Top (bytecode.go:1613), 0 TODO
+// BytecodeStack.Top (bytecode.go:1625), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue* BytecodeStack_Top(BytecodeStack bs) {
     return (&bs.p[(bs.len - 1)]);
 }
 
-// BytecodeStack.Pop (bytecode.go:1618), 0 TODO
+// BytecodeStack.Pop (bytecode.go:1630), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue BytecodeStack_Pop(BytecodeStack* bs) {
     BytecodeStack s = (*bs);
     int n = (s.len - 1);
@@ -80823,12 +81384,12 @@ inline __attribute__((always_inline)) BytecodeValue BytecodeStack_Pop(BytecodeSt
     return bv;
 }
 
-// BytecodeStack.Dup (bytecode.go:1626), 0 TODO
+// BytecodeStack.Dup (bytecode.go:1638), 0 TODO
 void BytecodeStack_Dup(BytecodeStack* bs) {
     BytecodeStack_Push(bs, (*BytecodeStack_Top(*bs)));
 }
 
-// BytecodeStack.Swap (bytecode.go:1630), 0 TODO
+// BytecodeStack.Swap (bytecode.go:1642), 0 TODO
 void BytecodeStack_Swap(BytecodeStack* bs) {
     BytecodeValue _t1 = ((*bs)).p[((*bs).len - 2)];
     BytecodeValue _t2 = (*BytecodeStack_Top(*bs));
@@ -80836,7 +81397,7 @@ void BytecodeStack_Swap(BytecodeStack* bs) {
     ((*bs)).p[((*bs).len - 2)] = _t2;
 }
 
-// BytecodeStack.Alloc (bytecode.go:1634), 0 TODO
+// BytecodeStack.Alloc (bytecode.go:1646), 0 TODO
 Slice_BytecodeValue BytecodeStack_Alloc(BytecodeStack* bs, int size) {
     if (((*bs).len + size) > (*bs).cap) {
         BytecodeStack tmp = (*bs);
@@ -80855,19 +81416,19 @@ Slice_BytecodeValue BytecodeStack_Alloc(BytecodeStack* bs, int size) {
     return GO_SLICE(BytecodeStack, ((*bs)), ((*bs).len - size), -1);
 }
 
-// Float32frombytes (bytecode.go:1650), 0 TODO
+// Float32frombytes (bytecode.go:1662), 0 TODO
 f32 fn_Float32frombytes(Slice_u8 bytes) {
     u32 bits = binary_littleEndian_Uint32(binary_LittleEndian, bytes);
     f32 float_ = math_Float32frombits(bits);
     return float_;
 }
 
-// BytecodeExp.append (bytecode.go:1656), 0 TODO
+// BytecodeExp.append (bytecode.go:1668), 0 TODO
 void BytecodeExp_append(BytecodeExp* be, Slice_OpCode op) {
     (*be) = GO_APPEND_SLICE(Slice_OpCode, (*be), op);
 }
 
-// BytecodeExp.appendValue (bytecode.go:1660), 0 TODO
+// BytecodeExp.appendValue (bytecode.go:1672), 0 TODO
 bool BytecodeExp_appendValue(BytecodeExp* be, BytecodeValue bv) {
     bool ok = {0};
     {
@@ -80925,35 +81486,35 @@ bool BytecodeExp_appendValue(BytecodeExp* be, BytecodeValue bv) {
     return ok;
 }
 
-// BytecodeExp.appendI32Op (bytecode.go:1711), 0 TODO
+// BytecodeExp.appendI32Op (bytecode.go:1723), 0 TODO
 void BytecodeExp_appendI32Op(BytecodeExp* be, OpCode op, i32 addr) {
     i32 *addr__h = go_box_a(i32, addr);
     BytecodeExp_append(be, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, op));
     BytecodeExp_append(be, GO_ARRSLICE(Slice_OpCode, ((*((Arr4_OpCode*)((void*)(&(*addr__h)))))).v, 4, 0, -1));
 }
 
-// BytecodeExp.appendI64Op (bytecode.go:1717), 0 TODO
+// BytecodeExp.appendI64Op (bytecode.go:1729), 0 TODO
 void BytecodeExp_appendI64Op(BytecodeExp* be, OpCode op, i64 addr) {
     i64 *addr__h = go_box_a(i64, addr);
     BytecodeExp_append(be, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, op));
     BytecodeExp_append(be, GO_ARRSLICE(Slice_OpCode, ((*((Arr8_OpCode*)((void*)(&(*addr__h)))))).v, 8, 0, -1));
 }
 
-// BytecodeExp.ReadIntAt (bytecode.go:1723), 0 TODO
+// BytecodeExp.ReadIntAt (bytecode.go:1735), 0 TODO
 i32 BytecodeExp_ReadIntAt(BytecodeExp be, int* i) {
     i32 v = fn_bcI32(be, (*i));
     (*i) += 4;
     return v;
 }
 
-// BytecodeExp.ReadPoolStringAt (bytecode.go:1730), 0 TODO
+// BytecodeExp.ReadPoolStringAt (bytecode.go:1742), 0 TODO
 GoString BytecodeExp_ReadPoolStringAt(BytecodeExp be, int* i) {
     i32 idx = BytecodeExp_ReadIntAt(be, i);
     Slice_GoString pool = g_sys.stringPool.v[g_sys.workingState->playerNo].List;
     return pool.p[idx];
 }
 
-// BytecodeExp.readMapKey (bytecode.go:1743), 0 TODO
+// BytecodeExp.readMapKey (bytecode.go:1755), 0 TODO
 GoString BytecodeExp_readMapKey(BytecodeExp be, int* i) {
     i32 idx = BytecodeExp_ReadIntAt(be, i);
     if (idx == -1) {
@@ -80962,7 +81523,7 @@ GoString BytecodeExp_readMapKey(BytecodeExp be, int* i) {
     return g_sys.stringPool.v[g_sys.workingState->playerNo].List.p[idx];
 }
 
-// BytecodeExp.readMapKeyLow (bytecode.go:1754), 0 TODO
+// BytecodeExp.readMapKeyLow (bytecode.go:1766), 0 TODO
 GoString BytecodeExp_readMapKeyLow(BytecodeExp be, int* i) {
     i32 idx = BytecodeExp_ReadIntAt(be, i);
     if (idx == -1) {
@@ -80971,28 +81532,28 @@ GoString BytecodeExp_readMapKeyLow(BytecodeExp be, int* i) {
     return g_sys.stringPool.v[g_sys.workingState->playerNo].ListLow.p[idx];
 }
 
-// BytecodeExp.PeekLength (bytecode.go:1763), 0 TODO
+// BytecodeExp.PeekLength (bytecode.go:1775), 0 TODO
 int BytecodeExp_PeekLength(BytecodeExp be, int i) {
     return ((int)fn_bcI32(be, i));
 }
 
-// bcI32 (bytecode.go:1773), 0 TODO
+// bcI32 (bytecode.go:1785), 0 TODO
 i32 fn_bcI32(Slice_OpCode b, int i) {
     (void)(b.p[(i + 3)]);
     return ((i32)(((((u32)b.p[i]) | (u32)((((u32)b.p[(i + 1)])) << 8)) | (u32)((((u32)b.p[(i + 2)])) << 16)) | (u32)((((u32)b.p[(i + 3)])) << 24)));
 }
 
-// bcI64 (bytecode.go:1778), 0 TODO
+// bcI64 (bytecode.go:1790), 0 TODO
 i64 fn_bcI64(Slice_OpCode b, int i) {
     return ((i64)(((u64)((u32)fn_bcI32(b, i))) | (u64)((((u64)((u32)fn_bcI32(b, (i + 4))))) << 32)));
 }
 
-// BytecodeExp.readInt32At (bytecode.go:1784), 0 TODO
+// BytecodeExp.readInt32At (bytecode.go:1796), 0 TODO
 i32 BytecodeExp_readInt32At(BytecodeExp be, int i) {
     return fn_bcI32(be, i);
 }
 
-// BytecodeExp.neg (bytecode.go:1796), 0 TODO
+// BytecodeExp.neg (bytecode.go:1808), 0 TODO
 void BytecodeExp_neg(BytecodeExp _recv, BytecodeValue* v) {
     if (v->vtype == 1) {
         v->value *= -0x1p+00;
@@ -81001,12 +81562,12 @@ void BytecodeExp_neg(BytecodeExp _recv, BytecodeValue* v) {
     }
 }
 
-// BytecodeExp.bwnot (bytecode.go:1809), 0 TODO
+// BytecodeExp.bwnot (bytecode.go:1821), 0 TODO
 void BytecodeExp_bwnot(BytecodeExp _recv, BytecodeValue* v) {
     BytecodeValue_SetI(v, (~BytecodeValue_ToI(*v)));
 }
 
-// BytecodeExp.blnot (bytecode.go:1818), 0 TODO
+// BytecodeExp.blnot (bytecode.go:1830), 0 TODO
 void BytecodeExp_blnot(BytecodeExp _recv, BytecodeValue* v) {
     if (BytecodeValue_IsUndefined(*v)) {
         return;
@@ -81014,7 +81575,7 @@ void BytecodeExp_blnot(BytecodeExp _recv, BytecodeValue* v) {
     BytecodeValue_SetB(v, (!BytecodeValue_ToB(*v)));
 }
 
-// BytecodeExp.pow (bytecode.go:1834), 0 TODO
+// BytecodeExp.pow (bytecode.go:1846), 0 TODO
 void BytecodeExp_pow(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, int pn) {
     if ((((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) || (BytecodeValue_ToF(v2) < 0x0p+00f)) {
         BytecodeValue_SetF(v1, fn_Pow(BytecodeValue_ToF(*v1), BytecodeValue_ToF(v2)));
@@ -81056,7 +81617,7 @@ void BytecodeExp_pow(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, int
     }
 }
 
-// BytecodeExp.mul (bytecode.go:1872), 0 TODO
+// BytecodeExp.mul (bytecode.go:1884), 0 TODO
 void BytecodeExp_mul(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetF(v1, (BytecodeValue_ToF(*v1) * BytecodeValue_ToF(v2)));
@@ -81065,7 +81626,7 @@ void BytecodeExp_mul(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.div (bytecode.go:1884), 0 TODO
+// BytecodeExp.div (bytecode.go:1896), 0 TODO
 void BytecodeExp_div(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_ToF(v2) == 0x0p+00f) {
         (*v1) = fn_BytecodeUndefined();
@@ -81079,7 +81640,7 @@ void BytecodeExp_div(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.mod (bytecode.go:1902), 0 TODO
+// BytecodeExp.mod (bytecode.go:1914), 0 TODO
 void BytecodeExp_mod(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_ToI(v2) == 0) {
         (*v1) = fn_BytecodeUndefined();
@@ -81089,7 +81650,7 @@ void BytecodeExp_mod(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.add (bytecode.go:1915), 0 TODO
+// BytecodeExp.add (bytecode.go:1927), 0 TODO
 void BytecodeExp_add(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetF(v1, (BytecodeValue_ToF(*v1) + BytecodeValue_ToF(v2)));
@@ -81098,7 +81659,7 @@ void BytecodeExp_add(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.sub (bytecode.go:1927), 0 TODO
+// BytecodeExp.sub (bytecode.go:1939), 0 TODO
 void BytecodeExp_sub(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetF(v1, (BytecodeValue_ToF(*v1) - BytecodeValue_ToF(v2)));
@@ -81107,7 +81668,7 @@ void BytecodeExp_sub(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.gt (bytecode.go:1940), 0 TODO
+// BytecodeExp.gt (bytecode.go:1952), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_gt(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) > BytecodeValue_ToF(v2)));
@@ -81116,7 +81677,7 @@ inline __attribute__((always_inline)) void BytecodeExp_gt(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.ge (bytecode.go:1953), 0 TODO
+// BytecodeExp.ge (bytecode.go:1965), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_ge(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) >= BytecodeValue_ToF(v2)));
@@ -81125,7 +81686,7 @@ inline __attribute__((always_inline)) void BytecodeExp_ge(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.lt (bytecode.go:1966), 0 TODO
+// BytecodeExp.lt (bytecode.go:1978), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_lt(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) < BytecodeValue_ToF(v2)));
@@ -81134,7 +81695,7 @@ inline __attribute__((always_inline)) void BytecodeExp_lt(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.le (bytecode.go:1979), 0 TODO
+// BytecodeExp.le (bytecode.go:1991), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_le(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) <= BytecodeValue_ToF(v2)));
@@ -81143,7 +81704,7 @@ inline __attribute__((always_inline)) void BytecodeExp_le(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.rangeCheck (bytecode.go:1992), 0 TODO
+// BytecodeExp.rangeCheck (bytecode.go:2004), 0 TODO
 void BytecodeExp_rangeCheck(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue min_, BytecodeValue max_, OpCode op) {
     if ((BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(min_)) || BytecodeValue_IsUndefined(max_)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81183,7 +81744,7 @@ void BytecodeExp_rangeCheck(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue 
     BytecodeValue_SetB(v1, (minPass && maxPass));
 }
 
-// BytecodeExp.eq (bytecode.go:2039), 0 TODO
+// BytecodeExp.eq (bytecode.go:2051), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_eq(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if ((v1->vtype == 4) || (v2.vtype == 4)) {
         if ((v1->vtype != 4) || (v2.vtype != 4)) {
@@ -81200,7 +81761,7 @@ inline __attribute__((always_inline)) void BytecodeExp_eq(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.ne (bytecode.go:2062), 0 TODO
+// BytecodeExp.ne (bytecode.go:2074), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_ne(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if ((v1->vtype == 4) || (v2.vtype == 4)) {
         if ((v1->vtype != 4) || (v2.vtype != 4)) {
@@ -81217,37 +81778,37 @@ inline __attribute__((always_inline)) void BytecodeExp_ne(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.bwand (bytecode.go:2082), 0 TODO
+// BytecodeExp.bwand (bytecode.go:2094), 0 TODO
 void BytecodeExp_bwand(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetI(v1, (BytecodeValue_ToI(*v1) & BytecodeValue_ToI(v2)));
 }
 
-// BytecodeExp.bwxor (bytecode.go:2091), 0 TODO
+// BytecodeExp.bwxor (bytecode.go:2103), 0 TODO
 void BytecodeExp_bwxor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetI(v1, (BytecodeValue_ToI(*v1) ^ BytecodeValue_ToI(v2)));
 }
 
-// BytecodeExp.bwor (bytecode.go:2100), 0 TODO
+// BytecodeExp.bwor (bytecode.go:2112), 0 TODO
 void BytecodeExp_bwor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetI(v1, (BytecodeValue_ToI(*v1) | BytecodeValue_ToI(v2)));
 }
 
-// BytecodeExp.bland (bytecode.go:2118), 0 TODO
+// BytecodeExp.bland (bytecode.go:2130), 0 TODO
 void BytecodeExp_bland(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetB(v1, (BytecodeValue_ToB(*v1) && BytecodeValue_ToB(v2)));
 }
 
-// BytecodeExp.blxor (bytecode.go:2126), 0 TODO
+// BytecodeExp.blxor (bytecode.go:2138), 0 TODO
 void BytecodeExp_blxor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetB(v1, (BytecodeValue_ToB(*v1) != BytecodeValue_ToB(v2)));
 }
 
-// BytecodeExp.blor (bytecode.go:2134), 0 TODO
+// BytecodeExp.blor (bytecode.go:2146), 0 TODO
 void BytecodeExp_blor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetB(v1, (BytecodeValue_ToB(*v1) || BytecodeValue_ToB(v2)));
 }
 
-// BytecodeExp.abs (bytecode.go:2151), 0 TODO
+// BytecodeExp.abs (bytecode.go:2163), 0 TODO
 void BytecodeExp_abs(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81259,12 +81820,12 @@ void BytecodeExp_abs(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.exp (bytecode.go:2162), 0 TODO
+// BytecodeExp.exp (bytecode.go:2174), 0 TODO
 void BytecodeExp_exp(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfExp(v1->value)));
 }
 
-// BytecodeExp.ln (bytecode.go:2169), 0 TODO
+// BytecodeExp.ln (bytecode.go:2181), 0 TODO
 void BytecodeExp_ln(BytecodeExp _recv, BytecodeValue* v1) {
     if (v1->value <= 0x0p+00) {
         (*v1) = fn_BytecodeUndefined();
@@ -81274,7 +81835,7 @@ void BytecodeExp_ln(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.log (bytecode.go:2181), 0 TODO
+// BytecodeExp.log (bytecode.go:2193), 0 TODO
 void BytecodeExp_log(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if ((v1->value <= 0x0p+00) || (v2.value <= 0x0p+00)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81284,7 +81845,7 @@ void BytecodeExp_log(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.cos (bytecode.go:2194), 0 TODO
+// BytecodeExp.cos (bytecode.go:2206), 0 TODO
 void BytecodeExp_cos(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81292,7 +81853,7 @@ void BytecodeExp_cos(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfCos(v1->value)));
 }
 
-// BytecodeExp.sin (bytecode.go:2201), 0 TODO
+// BytecodeExp.sin (bytecode.go:2213), 0 TODO
 void BytecodeExp_sin(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81300,7 +81861,7 @@ void BytecodeExp_sin(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfSin(v1->value)));
 }
 
-// BytecodeExp.tan (bytecode.go:2208), 0 TODO
+// BytecodeExp.tan (bytecode.go:2220), 0 TODO
 void BytecodeExp_tan(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81308,7 +81869,7 @@ void BytecodeExp_tan(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfTan(v1->value)));
 }
 
-// BytecodeExp.acos (bytecode.go:2215), 0 TODO
+// BytecodeExp.acos (bytecode.go:2227), 0 TODO
 void BytecodeExp_acos(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81316,7 +81877,7 @@ void BytecodeExp_acos(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAcos(v1->value)));
 }
 
-// BytecodeExp.asin (bytecode.go:2222), 0 TODO
+// BytecodeExp.asin (bytecode.go:2234), 0 TODO
 void BytecodeExp_asin(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81324,7 +81885,7 @@ void BytecodeExp_asin(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAsin(v1->value)));
 }
 
-// BytecodeExp.atan (bytecode.go:2229), 0 TODO
+// BytecodeExp.atan (bytecode.go:2241), 0 TODO
 void BytecodeExp_atan(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81332,7 +81893,7 @@ void BytecodeExp_atan(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAtan(v1->value)));
 }
 
-// BytecodeExp.floor (bytecode.go:2236), 0 TODO
+// BytecodeExp.floor (bytecode.go:2248), 0 TODO
 void BytecodeExp_floor(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81347,7 +81908,7 @@ void BytecodeExp_floor(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.ceil (bytecode.go:2250), 0 TODO
+// BytecodeExp.ceil (bytecode.go:2262), 0 TODO
 void BytecodeExp_ceil(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81362,7 +81923,7 @@ void BytecodeExp_ceil(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.max (bytecode.go:2264), 0 TODO
+// BytecodeExp.max (bytecode.go:2276), 0 TODO
 void BytecodeExp_max(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81375,7 +81936,7 @@ void BytecodeExp_max(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.min (bytecode.go:2276), 0 TODO
+// BytecodeExp.min (bytecode.go:2288), 0 TODO
 void BytecodeExp_min(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81388,7 +81949,7 @@ void BytecodeExp_min(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.random (bytecode.go:2288), 0 TODO
+// BytecodeExp.random (bytecode.go:2300), 0 TODO
 void BytecodeExp_random(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81397,7 +81958,7 @@ void BytecodeExp_random(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) 
     BytecodeValue_SetI(v1, fn_RandI(go_f2i32(v1->value), go_f2i32(v2.value)));
 }
 
-// BytecodeExp.round (bytecode.go:2296), 0 TODO
+// BytecodeExp.round (bytecode.go:2308), 0 TODO
 void BytecodeExp_round(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81407,7 +81968,7 @@ void BytecodeExp_round(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetF(v1, ((f32)(math_Floor((((v1->value * shift)) + 0x1p-01)) / shift)));
 }
 
-// BytecodeExp.clamp (bytecode.go:2305), 0 TODO
+// BytecodeExp.clamp (bytecode.go:2317), 0 TODO
 void BytecodeExp_clamp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3) {
     if ((BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) || BytecodeValue_IsUndefined(v3)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81424,7 +81985,7 @@ void BytecodeExp_clamp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, B
     }
 }
 
-// BytecodeExp.atan2 (bytecode.go:2319), 0 TODO
+// BytecodeExp.atan2 (bytecode.go:2331), 0 TODO
 void BytecodeExp_atan2(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81433,7 +81994,7 @@ void BytecodeExp_atan2(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAtan2(v1->value, v2.value)));
 }
 
-// BytecodeExp.sign (bytecode.go:2327), 0 TODO
+// BytecodeExp.sign (bytecode.go:2339), 0 TODO
 void BytecodeExp_sign(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81449,7 +82010,7 @@ void BytecodeExp_sign(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.rad (bytecode.go:2340), 0 TODO
+// BytecodeExp.rad (bytecode.go:2352), 0 TODO
 void BytecodeExp_rad(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81457,7 +82018,7 @@ void BytecodeExp_rad(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)((v1->value * 0x1.921fb54442d18p+01) / 0x1.68p+07)));
 }
 
-// BytecodeExp.deg (bytecode.go:2347), 0 TODO
+// BytecodeExp.deg (bytecode.go:2359), 0 TODO
 void BytecodeExp_deg(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81465,7 +82026,7 @@ void BytecodeExp_deg(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)((v1->value * 0x1.68p+07) / 0x1.921fb54442d18p+01)));
 }
 
-// BytecodeExp.lerp (bytecode.go:2354), 0 TODO
+// BytecodeExp.lerp (bytecode.go:2366), 0 TODO
 void BytecodeExp_lerp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3) {
     if ((BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) || BytecodeValue_IsUndefined(v3)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81482,12 +82043,12 @@ void BytecodeExp_lerp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, By
     BytecodeValue_SetF(v1, ((f32)(v1->value + (((v2.value - v1->value)) * amount))));
 }
 
-// BytecodeExp.run (bytecode.go:2368), 0 TODO
+// BytecodeExp.run (bytecode.go:2380), 0 TODO
 BytecodeValue BytecodeExp_run(BytecodeExp be, Char* c) {
     return BytecodeExp_runOC(be, c, c);
 }
 
-// BytecodeExp.runOC (bytecode.go:2374), 0 TODO
+// BytecodeExp.runOC (bytecode.go:2386), 0 TODO
 BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
     int* ip = NULL;
     if (g_bcIdxDepth < 256) {
@@ -81743,6 +82304,68 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                     goto _cont1;
                     break;
                 }
+                case 197U: case 198U: case 199U: {
+                    i32 n = ((i32)((i8)be.p[i]));
+                    {
+                        OpCode _t4 = opc;
+                        switch (_t4) {
+                        case 197U: {
+                            c = Char_enemy(c, n);
+                            break;
+                        }
+                        case 198U: {
+                            c = Char_enemyNearTrigger(c, n);
+                            break;
+                        }
+                        default: {
+                            c = Char_partner(c, n, true);
+                            break;
+                        }
+                        }
+                    }
+                    if (c != NULL) {
+                        i += 6;
+                        goto _cont1;
+                    }
+                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+                    i += (6 + BytecodeExp_PeekLength(be, (i + 2)));
+                    break;
+                }
+                case 200U: {
+                    (*ip) = i;
+                    BytecodeExp_run_const(be, c, ip, oc);
+                    BytecodeValue v2 = (BytecodeValue){4, ((f64)BytecodeExp_readInt32At(be, (i + 2)))};
+                    if (be.p[(i + 6)] == 22U) {
+                        BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                    } else {
+                        BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                    }
+                    i += 7;
+                    break;
+                }
+                case 201U: {
+                    BytecodeExp_blnot(be, BytecodeStack_Top(g_sys.bcStack));
+                    i = fn_jz8pTail(be, (i + 1));
+                    break;
+                }
+                case 202U: {
+                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+                    BytecodeExp_bland(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                    i = fn_jz8pTail(be, (i + 1));
+                    break;
+                }
+                case 195U: {
+                    BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
+                    i += 6;
+                    goto _cont1;
+                    break;
+                }
+                case 196U: {
+                    BytecodeStack_PushI(&g_sys.bcStack, fn_bcI32(be, i));
+                    i += 9;
+                    goto _cont1;
+                    break;
+                }
                 case 5U: {
                     BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
                     i++;
@@ -81752,20 +82375,17 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                     break;
                 }
                 case 163U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_varGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                    BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, ((i32)((i8)be.p[i]))));
                     i += 2;
                     break;
                 }
                 case 164U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_fvarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                    BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, ((i32)((i8)be.p[i]))));
                     i += 2;
                     break;
                 }
                 case 165U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_sysVarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                    BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, ((i32)((i8)be.p[i]))));
                     i += 2;
                     break;
                 }
@@ -81842,8 +82462,8 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                 case 188U: case 189U: case 190U: case 191U: case 192U: {
                     int n = 0;
                     {
-                        OpCode _t4 = opc;
-                        switch (_t4) {
+                        OpCode _t5 = opc;
+                        switch (_t5) {
                         case 188U: {
                             BytecodeExp_pushTrigger(be, c, be.p[i]);
                             BytecodeExp_cmpConst(be, be.p[(i + 1)], fn_BytecodeInt(((i32)((i8)be.p[(i + 2)]))));
@@ -81869,20 +82489,20 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                             break;
                         }
                         case 192U: {
-                            BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[(i + 1)])));
+                            i32 v = ((i32)((i8)be.p[(i + 1)]));
                             {
-                                OpCode _t5 = be.p[i];
-                                switch (_t5) {
+                                OpCode _t6 = be.p[i];
+                                switch (_t6) {
                                 case 163U: {
-                                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_varGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                                    BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, v));
                                     break;
                                 }
                                 case 164U: {
-                                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_fvarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                                    BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, v));
                                     break;
                                 }
                                 default: {
-                                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_sysVarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                                    BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, v));
                                     break;
                                 }
                                 }
@@ -81899,6 +82519,25 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                         break;
                     }
                     i = be.len;
+                    break;
+                }
+                case 193U: case 194U: {
+                    {
+                        BytecodeValue* t = BytecodeStack_Top(g_sys.bcStack);
+                        if (BytecodeValue_ToB(*t) == ((opc == 194U))) {
+                            if (g_scCheck) {
+                                fn_scCheckSkip(be, i, c, oc);
+                            }
+                            BytecodeValue_SetB(t, (opc == 194U));
+                            if (be.p[i] == 0U) {
+                                i = be.len;
+                            } else {
+                                i += (((int)((u8)be.p[i])) + 1);
+                            }
+                            break;
+                        }
+                    }
+                    i++;
                     break;
                 }
                 case 172U: case 173U: {
@@ -82189,9 +82828,9 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                             redir = oc->ss.sb->playerNo;
                             pno = c->ss.sb->playerNo;
                         }
-                        Ret_int__bool _t6 = CommandList_lookupName(&c->cmd.p[redir], BytecodeValue_ToS(cmdName));
-                        int cmdPos = _t6.r0;
-                        bool found = _t6.r1;
+                        Ret_int__bool _t7 = CommandList_lookupName(&c->cmd.p[redir], BytecodeValue_ToS(cmdName));
+                        int cmdPos = _t7.r0;
+                        bool found = _t7.r1;
                         ok = (found && Char_command(c, pno, cmdPos));
                     }
                     BytecodeStack_PushB(&g_sys.bcStack, ok);
@@ -82201,9 +82840,9 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                     BytecodeValue cmdName = BytecodeStack_Pop(&g_sys.bcStack);
                     bool ok = false;
                     if ((c->cmd.p != 0) && (cmdName.vtype == 4)) {
-                        Ret_int__bool _t7 = CommandList_lookupName(&c->cmd.p[g_sys.workingState->playerNo], BytecodeValue_ToS(cmdName));
-                        int cmdPos = _t7.r0;
-                        bool found = _t7.r1;
+                        Ret_int__bool _t8 = CommandList_lookupName(&c->cmd.p[g_sys.workingState->playerNo], BytecodeValue_ToS(cmdName));
+                        int cmdPos = _t8.r0;
+                        bool found = _t8.r1;
                         ok = (found && Char_command(c, g_sys.workingState->playerNo, cmdPos));
                     }
                     BytecodeStack_PushB(&g_sys.bcStack, ok);
@@ -82518,30 +83157,45 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                 case 158U: {
                     (*ip) = i;
                     BytecodeExp_run_assign(be, c, ip);
+                    if (g_scCheck) {
+                        fn_scCheckSub(be, i, (*ip));
+                    }
                     i = (*ip);
                     break;
                 }
                 case 157U: {
                     (*ip) = i;
                     BytecodeExp_run_const(be, c, ip, oc);
+                    if (g_scCheck) {
+                        fn_scCheckSub(be, i, (*ip));
+                    }
                     i = (*ip);
                     break;
                 }
                 case 159U: {
                     (*ip) = i;
                     BytecodeExp_run_ex(be, c, ip, oc);
+                    if (g_scCheck) {
+                        fn_scCheckSub(be, i, (*ip));
+                    }
                     i = (*ip);
                     break;
                 }
                 case 160U: {
                     (*ip) = i;
                     BytecodeExp_run_ex2(be, c, ip, oc);
+                    if (g_scCheck) {
+                        fn_scCheckSub(be, i, (*ip));
+                    }
                     i = (*ip);
                     break;
                 }
                 case 161U: {
                     (*ip) = i;
                     BytecodeExp_run_ex3(be, c, ip, oc);
+                    if (g_scCheck) {
+                        fn_scCheckSub(be, i, (*ip));
+                    }
                     i = (*ip);
                     break;
                 }
@@ -82576,7 +83230,7 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
     return BytecodeStack_Pop(&g_sys.bcStack);
 }
 
-// BytecodeExp.run_assign (bytecode.go:3052), 0 TODO
+// BytecodeExp.run_assign (bytecode.go:3137), 0 TODO
 void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -82656,7 +83310,7 @@ void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i) {
     }
 }
 
-// BytecodeExp.run_const (bytecode.go:3110), 0 TODO
+// BytecodeExp.run_const (bytecode.go:3195), 0 TODO
 void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -83716,7 +84370,7 @@ void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.run_ex (bytecode.go:3660), 0 TODO
+// BytecodeExp.run_ex (bytecode.go:3745), 0 TODO
 void BytecodeExp_run_ex(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -84857,7 +85511,7 @@ void BytecodeExp_run_ex(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.run_ex2 (bytecode.go:4302), 0 TODO
+// BytecodeExp.run_ex2 (bytecode.go:4387), 0 TODO
 void BytecodeExp_run_ex2(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -86152,7 +86806,7 @@ void BytecodeExp_run_ex2(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.run_ex3 (bytecode.go:5012), 0 TODO
+// BytecodeExp.run_ex3 (bytecode.go:5097), 0 TODO
 void BytecodeExp_run_ex3(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -86522,27 +87176,27 @@ void BytecodeExp_run_ex3(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.evalF (bytecode.go:5235), 0 TODO
+// BytecodeExp.evalF (bytecode.go:5320), 0 TODO
 f32 BytecodeExp_evalF(BytecodeExp be, Char* c) {
     return BytecodeValue_ToF(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalI (bytecode.go:5239), 0 TODO
+// BytecodeExp.evalI (bytecode.go:5324), 0 TODO
 i32 BytecodeExp_evalI(BytecodeExp be, Char* c) {
     return BytecodeValue_ToI(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalI64 (bytecode.go:5243), 0 TODO
+// BytecodeExp.evalI64 (bytecode.go:5328), 0 TODO
 i64 BytecodeExp_evalI64(BytecodeExp be, Char* c) {
     return BytecodeValue_ToI64(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalB (bytecode.go:5247), 0 TODO
+// BytecodeExp.evalB (bytecode.go:5332), 0 TODO
 bool BytecodeExp_evalB(BytecodeExp be, Char* c) {
     return BytecodeValue_ToB(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalS (bytecode.go:5252), 0 TODO
+// BytecodeExp.evalS (bytecode.go:5337), 0 TODO
 GoString BytecodeExp_evalS(BytecodeExp be, Char* c) {
     if (be.len == 0) {
         return GOSTR("");
@@ -86550,7 +87204,7 @@ GoString BytecodeExp_evalS(BytecodeExp be, Char* c) {
     return BytecodeValue_ToS(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalSLower (bytecode.go:5260), 0 TODO
+// BytecodeExp.evalSLower (bytecode.go:5345), 0 TODO
 GoString BytecodeExp_evalSLower(BytecodeExp be, Char* c) {
     if (be.len == 0) {
         return GOSTR("");
@@ -86562,12 +87216,12 @@ GoString BytecodeExp_evalSLower(BytecodeExp be, Char* c) {
     return strings_ToLower(BytecodeValue_ToS(v));
 }
 
-// NullStateController.Run (bytecode.go:5277), 0 TODO
+// NullStateController.Run (bytecode.go:5362), 0 TODO
 bool NullStateController_Run(NullStateController _recv, Char* _p0, Slice_i32 _p1) {
     return false;
 }
 
-// BytecodeFunction.run (bytecode.go:5290), 0 TODO
+// BytecodeFunction.run (bytecode.go:5375), 0 TODO
 bool BytecodeFunction_run(BytecodeFunction bf, Char* c, Slice_u8 ret) {
     bool changeState = {0};
     Slice_BytecodeValue _t1 = g_sys.bcVar;
@@ -86628,7 +87282,7 @@ bool BytecodeFunction_run(BytecodeFunction bf, Char* c, Slice_u8 ret) {
     return changeState;
 }
 
-// CallFunction.Run (bytecode.go:5346), 0 TODO
+// CallFunction.Run (bytecode.go:5431), 0 TODO
 bool CallFunction_Run(CallFunction cf, Char* c, Slice_i32 _p1) {
     bool changeState = {0};
     BytecodeFunction bf = {0};
@@ -86661,12 +87315,12 @@ bool CallFunction_Run(CallFunction cf, Char* c, Slice_i32 _p1) {
     return changeState;
 }
 
-// newStateBlock (bytecode.go:5416), 0 TODO
+// newStateBlock (bytecode.go:5501), 0 TODO
 StateBlock* fn_newStateBlock(void) {
     return go_box(StateBlock, (StateBlock){.persistent = 1, .persistentIndex = -1, .ignorehitpause = false});
 }
 
-// StateBlock.runFns (bytecode.go:5420), 0 TODO
+// StateBlock.runFns (bytecode.go:5505), 0 TODO
 Slice_scRunFn StateBlock_runFns(StateBlock* b) {
     if (b->runs.len != b->ctrls.len) {
         b->runs = GO_MAKE(Slice_scRunFn, scRunFn, b->ctrls.len, 0);
@@ -86688,7 +87342,7 @@ Slice_scRunFn StateBlock_runFns(StateBlock* b) {
     return b->runs;
 }
 
-// StateBlock.Run (bytecode.go:5432), 0 TODO
+// StateBlock.Run (bytecode.go:5517), 0 TODO
 bool StateBlock_Run(StateBlock* b, Char* c, Slice_i32 ps) {
     bool changeState = {0};
     c->currentSctrlIndex = b->persistentIndex;
@@ -86838,7 +87492,7 @@ bool StateBlock_Run(StateBlock* b, Char* c, Slice_i32 ps) {
     return changeState;
 }
 
-// StateExpr.Run (bytecode.go:5602), 0 TODO
+// StateExpr.Run (bytecode.go:5687), 0 TODO
 bool StateExpr_Run(StateExpr se, Char* c, Slice_i32 _p1) {
     bool changeState = {0};
     BytecodeExp_run(se, c);
@@ -86846,7 +87500,7 @@ bool StateExpr_Run(StateExpr se, Char* c, Slice_i32 _p1) {
     return changeState;
 }
 
-// varAssign.Run (bytecode.go:5612), 0 TODO
+// varAssign.Run (bytecode.go:5697), 0 TODO
 bool varAssign_Run(varAssign va, Char* c, Slice_i32 _p1) {
     bool changeState = {0};
     g_sys.bcVar.p[va.vari] = BytecodeExp_run(va.be, c);
@@ -86854,7 +87508,7 @@ bool varAssign_Run(varAssign va, Char* c, Slice_i32 _p1) {
     return changeState;
 }
 
-// LoopBreak.Run (bytecode.go:5619), 0 TODO
+// LoopBreak.Run (bytecode.go:5704), 0 TODO
 bool LoopBreak_Run(LoopBreak lb, Char* c, Slice_i32 _p1) {
     bool stop = {0};
     g_sys.SystemStateVars_.loopBreak = true;
@@ -86862,7 +87516,7 @@ bool LoopBreak_Run(LoopBreak lb, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// LoopContinue.Run (bytecode.go:5626), 0 TODO
+// LoopContinue.Run (bytecode.go:5711), 0 TODO
 bool LoopContinue_Run(LoopContinue lc, Char* c, Slice_i32 _p1) {
     bool stop = {0};
     g_sys.SystemStateVars_.loopContinue = true;
@@ -86870,17 +87524,17 @@ bool LoopContinue_Run(LoopContinue lc, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// newStateControllerBase (bytecode.go:5638), 0 TODO
+// newStateControllerBase (bytecode.go:5723), 0 TODO
 StateControllerBase* fn_newStateControllerBase(void) {
     return go_box(StateControllerBase, (StateControllerBase){0});
 }
 
-// StateControllerBase.beToExp (bytecode.go:5642), 0 TODO
+// StateControllerBase.beToExp (bytecode.go:5727), 0 TODO
 Slice_BytecodeExp StateControllerBase_beToExp(StateControllerBase _recv, Slice_BytecodeExp be) {
     return be;
 }
 
-// StateControllerBase.iToExp (bytecode.go:5655), 0 TODO
+// StateControllerBase.iToExp (bytecode.go:5740), 0 TODO
 Slice_BytecodeExp StateControllerBase_iToExp(StateControllerBase _recv, Slice_i32 i) {
     Slice_BytecodeExp exp_ = {0};
     {
@@ -86897,7 +87551,7 @@ Slice_BytecodeExp StateControllerBase_iToExp(StateControllerBase _recv, Slice_i3
     return exp_;
 }
 
-// StateControllerBase.i64ToExp (bytecode.go:5664), 0 TODO
+// StateControllerBase.i64ToExp (bytecode.go:5749), 0 TODO
 Slice_BytecodeExp StateControllerBase_i64ToExp(StateControllerBase _recv, Slice_i64 i) {
     Slice_BytecodeExp exp_ = {0};
     {
@@ -86914,12 +87568,12 @@ Slice_BytecodeExp StateControllerBase_i64ToExp(StateControllerBase _recv, Slice_
     return exp_;
 }
 
-// StateControllerBase.add (bytecode.go:5680), 0 TODO
+// StateControllerBase.add (bytecode.go:5765), 0 TODO
 void StateControllerBase_add(StateControllerBase* scb, u8 paramID, Slice_BytecodeExp exp_) {
     (*scb) = GO_APPEND(Slice_scParam, (*scb), (scParam){.id = paramID, .exp = exp_});
 }
 
-// StateControllerBase.run (bytecode.go:5693), 0 TODO
+// StateControllerBase.run (bytecode.go:5778), 0 TODO
 void StateControllerBase_run(StateControllerBase scb, Char* c, GoFunc visit) {
     {
         StateControllerBase _t2 = scb;
@@ -86933,7 +87587,7 @@ void StateControllerBase_run(StateControllerBase scb, Char* c, GoFunc visit) {
     }
 }
 
-// StateControllerBase.hasParam (bytecode.go:5724), 0 TODO
+// StateControllerBase.hasParam (bytecode.go:5809), 0 TODO
 bool StateControllerBase_hasParam(StateControllerBase scb, u8 paramID) {
     {
         StateControllerBase _t2 = scb;
@@ -86948,7 +87602,7 @@ bool StateControllerBase_hasParam(StateControllerBase scb, u8 paramID) {
     return false;
 }
 
-// getRedirectedChar (bytecode.go:5750), 0 TODO
+// getRedirectedChar (bytecode.go:5835), 0 TODO
 Char* fn_getRedirectedChar(Char* c, StateControllerBase sc, u8 redirectID, GoString scname) {
     {
         StateControllerBase _t2 = sc;
@@ -86971,7 +87625,7 @@ Char* fn_getRedirectedChar(Char* c, StateControllerBase sc, u8 redirectID, GoStr
     return c;
 }
 
-// stateDef.Run (bytecode.go:5781), 0 TODO
+// stateDef.Run (bytecode.go:5866), 0 TODO
 void stateDef_Run(stateDef sc, Char* c) {
     {
         StateControllerBase _t2 = sc;
@@ -87056,7 +87710,7 @@ void stateDef_Run(stateDef sc, Char* c) {
     }
 }
 
-// hitBy.runSub (bytecode.go:5850), 0 TODO
+// hitBy.runSub (bytecode.go:5935), 0 TODO
 void hitBy_runSub(hitBy sc, Char* c, Char* crun, bool not) {
     int slot = -1;
     i32 attr = -1;
@@ -87120,7 +87774,7 @@ void hitBy_runSub(hitBy sc, Char* c, Char* crun, bool not) {
     ((void (*)(void *, int, i32, i32, int, i32, bool, i32, i32))(set).fn)((set).env, slot, attr, time_, pno, pid, stk, cgrp, cidx);
 }
 
-// hitBy.Run (bytecode.go:5905), 0 TODO
+// hitBy.Run (bytecode.go:5990), 0 TODO
 bool hitBy_Run(hitBy sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("HitBy"));
     if (crun == NULL) {
@@ -87130,7 +87784,7 @@ bool hitBy_Run(hitBy sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// notHitBy.Run (bytecode.go:5919), 0 TODO
+// notHitBy.Run (bytecode.go:6004), 0 TODO
 bool notHitBy_Run(notHitBy sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("NotHitBy"));
     if (crun == NULL) {
@@ -87140,7 +87794,7 @@ bool notHitBy_Run(notHitBy sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertSpecial.Run (bytecode.go:5941), 0 TODO
+// assertSpecial.Run (bytecode.go:6026), 0 TODO
 bool assertSpecial_Run(assertSpecial sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("AssertSpecial"));
     if (crun == NULL) {
@@ -87190,7 +87844,7 @@ bool assertSpecial_Run(assertSpecial sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playSnd.Run (bytecode.go:5994), 0 TODO
+// playSnd.Run (bytecode.go:6079), 0 TODO
 bool playSnd_Run(playSnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 16U, GOSTR("PlaySnd"));
     if (crun == NULL) {
@@ -87311,7 +87965,7 @@ bool playSnd_Run(playSnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeState.Run (bytecode.go:6088), 0 TODO
+// changeState.Run (bytecode.go:6173), 0 TODO
 bool changeState_Run(changeState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("ChangeState"));
     if (crun == NULL) {
@@ -87364,7 +88018,7 @@ bool changeState_Run(changeState sc, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// selfState.Run (bytecode.go:6122), 0 TODO
+// selfState.Run (bytecode.go:6207), 0 TODO
 bool selfState_Run(selfState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("SelfState"));
     if (crun == NULL) {
@@ -87429,7 +88083,7 @@ bool selfState_Run(selfState sc, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// tagIn.Run (bytecode.go:6172), 0 TODO
+// tagIn.Run (bytecode.go:6257), 0 TODO
 bool tagIn_Run(tagIn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("TagIn"));
     if (crun == NULL) {
@@ -87537,7 +88191,7 @@ bool tagIn_Run(tagIn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// tagOut.Run (bytecode.go:6264), 0 TODO
+// tagOut.Run (bytecode.go:6349), 0 TODO
 bool tagOut_Run(tagOut sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TagOut"));
     if (crun == NULL) {
@@ -87624,7 +88278,7 @@ bool tagOut_Run(tagOut sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// destroySelf.Run (bytecode.go:6341), 0 TODO
+// destroySelf.Run (bytecode.go:6426), 0 TODO
 bool destroySelf_Run(destroySelf sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("DestroySelf"));
     if (crun == NULL) {
@@ -87670,7 +88324,7 @@ bool destroySelf_Run(destroySelf sc, Char* c, Slice_i32 _p1) {
     return (Char_destroySelf(crun, rec, rem, rtx) && self);
 }
 
-// changeAnim.Run (bytecode.go:6379), 0 TODO
+// changeAnim.Run (bytecode.go:6464), 0 TODO
 bool changeAnim_Run(changeAnim sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("ChangeAnim"));
     if (crun == NULL) {
@@ -87750,7 +88404,7 @@ bool changeAnim_Run(changeAnim sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeAnim2.Run (bytecode.go:6430), 0 TODO
+// changeAnim2.Run (bytecode.go:6515), 0 TODO
 bool changeAnim2_Run(changeAnim2 sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("ChangeAnim2"));
     if (crun == NULL) {
@@ -87816,7 +88470,7 @@ bool changeAnim2_Run(changeAnim2 sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// helper.Run (bytecode.go:6515), 0 TODO
+// helper.Run (bytecode.go:6600), 0 TODO
 bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 37U, GOSTR("Helper"));
     if (crun == NULL) {
@@ -88052,7 +88706,7 @@ bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// ctrlSet.Run (bytecode.go:6663), 0 TODO
+// ctrlSet.Run (bytecode.go:6748), 0 TODO
 bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("CtrlSet"));
     if (crun == NULL) {
@@ -88084,7 +88738,7 @@ bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// runState.Run (bytecode.go:6689), 0 TODO
+// runState.Run (bytecode.go:6774), 0 TODO
 bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RunState"));
     if (crun == NULL) {
@@ -88124,7 +88778,7 @@ bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posSet.Run (bytecode.go:6724), 0 TODO
+// posSet.Run (bytecode.go:6809), 0 TODO
 bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosSet"));
     if (crun == NULL) {
@@ -88176,7 +88830,7 @@ bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posAdd.Run (bytecode.go:6761), 0 TODO
+// posAdd.Run (bytecode.go:6846), 0 TODO
 bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosAdd"));
     if (crun == NULL) {
@@ -88228,7 +88882,7 @@ bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velSet.Run (bytecode.go:6798), 0 TODO
+// velSet.Run (bytecode.go:6883), 0 TODO
 bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelSet"));
     if (crun == NULL) {
@@ -88268,7 +88922,7 @@ bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velAdd.Run (bytecode.go:6823), 0 TODO
+// velAdd.Run (bytecode.go:6908), 0 TODO
 bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelAdd"));
     if (crun == NULL) {
@@ -88308,7 +88962,7 @@ bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velMul.Run (bytecode.go:6848), 0 TODO
+// velMul.Run (bytecode.go:6933), 0 TODO
 bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelMul"));
     if (crun == NULL) {
@@ -88347,12 +89001,12 @@ bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isPalFXParam (bytecode.go:6869), 0 TODO
+// isPalFXParam (bytecode.go:6954), 0 TODO
 bool fn_isPalFXParam(u8 paramID) {
     return ((paramID >= 0U) && (paramID <= 10U));
 }
 
-// palFX.runSub (bytecode.go:6891), 0 TODO
+// palFX.runSub (bytecode.go:6976), 0 TODO
 void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -88449,7 +89103,7 @@ void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeEx
     }
 }
 
-// palFX.Run (bytecode.go:6962), 0 TODO
+// palFX.Run (bytecode.go:7047), 0 TODO
 bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("PalFX"));
     if (crun == NULL) {
@@ -88489,7 +89143,7 @@ bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// allPalFX.Run (bytecode.go:6999), 0 TODO
+// allPalFX.Run (bytecode.go:7084), 0 TODO
 bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     PalFX_clear(g_sys.allPalFX);
     {
@@ -88510,7 +89164,7 @@ bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bgPalFX.Run (bytecode.go:7018), 0 TODO
+// bgPalFX.Run (bytecode.go:7103), 0 TODO
 bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     i32 bgid = -1;
     int bgidx = -1;
@@ -88568,7 +89222,7 @@ bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.Run (bytecode.go:7140), 0 TODO
+// explod.Run (bytecode.go:7225), 0 TODO
 bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 115U, GOSTR("Explod"));
     if (crun == NULL) {
@@ -89007,7 +89661,7 @@ bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.parseInterpolation (bytecode.go:7449), 0 TODO
+// explod.parseInterpolation (bytecode.go:7534), 0 TODO
 bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_BytecodeExp exp_, PalFXDef* pfd) {
     {
         u8 _t1 = paramID;
@@ -89114,7 +89768,7 @@ bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_
     return true;
 }
 
-// modifyExplod.Run (bytecode.go:7529), 0 TODO
+// modifyExplod.Run (bytecode.go:7614), 0 TODO
 bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 115U, GOSTR("ModifyExplod"));
     if (crun == NULL) {
@@ -89239,7 +89893,7 @@ bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gameMakeAnim.Run (bytecode.go:8176), 0 TODO
+// gameMakeAnim.Run (bytecode.go:8261), 0 TODO
 bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("GameMakeAnim"));
     if (crun == NULL) {
@@ -89317,12 +89971,12 @@ bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isAfterImageParam (bytecode.go:8237), 0 TODO
+// isAfterImageParam (bytecode.go:8322), 0 TODO
 bool fn_isAfterImageParam(u8 paramID) {
     return ((paramID >= 11U) && (paramID <= 32U));
 }
 
-// afterImage.runSub (bytecode.go:8270), 0 TODO
+// afterImage.runSub (bytecode.go:8355), 0 TODO
 void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 paramID, Slice_BytecodeExp exp_) {
     if ((paramID < 26U) || (paramID > 32U)) {
         ai->needsetup = true;
@@ -89513,7 +90167,7 @@ void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 pa
     }
 }
 
-// afterImage.Run (bytecode.go:8419), 0 TODO
+// afterImage.Run (bytecode.go:8504), 0 TODO
 bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 33U, GOSTR("AfterImage"));
     if (crun == NULL) {
@@ -89548,7 +90202,7 @@ bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// afterImageTime.Run (bytecode.go:8458), 0 TODO
+// afterImageTime.Run (bytecode.go:8543), 0 TODO
 bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("AfterImageTime"));
     if (crun == NULL) {
@@ -89587,12 +90241,12 @@ bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isHitDefParam (bytecode.go:8484), 0 TODO
+// isHitDefParam (bytecode.go:8569), 0 TODO
 bool fn_isHitDefParam(u8 paramID) {
     return (((paramID >= 33U) && (paramID <= 153U)) || fn_isPalFXParam(paramID));
 }
 
-// hitDef.runSub (bytecode.go:8619), 0 TODO
+// hitDef.runSub (bytecode.go:8704), 0 TODO
 void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -90230,7 +90884,7 @@ void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp
     }
 }
 
-// hitDef.Run (bytecode.go:9008), 0 TODO
+// hitDef.Run (bytecode.go:9093), 0 TODO
 bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("HitDef"));
     if (crun == NULL) {
@@ -90264,7 +90918,7 @@ bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// reversalDef.Run (bytecode.go:9055), 0 TODO
+// reversalDef.Run (bytecode.go:9140), 0 TODO
 bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ReversalDef"));
     if (crun == NULL) {
@@ -90316,7 +90970,7 @@ bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// projectile.Run (bytecode.go:9148), 0 TODO
+// projectile.Run (bytecode.go:9233), 0 TODO
 bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 203U, GOSTR("Projectile"));
     if (crun == NULL) {
@@ -90704,7 +91358,7 @@ bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyHitDef.Run (bytecode.go:9432), 0 TODO
+// modifyHitDef.Run (bytecode.go:9517), 0 TODO
 bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("ModifyHitDef"));
     if (crun == NULL) {
@@ -90736,7 +91390,7 @@ bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReversalDef.Run (bytecode.go:9464), 0 TODO
+// modifyReversalDef.Run (bytecode.go:9549), 0 TODO
 bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ModifyReversalDef"));
     if (crun == NULL) {
@@ -90789,7 +91443,7 @@ bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyProjectile.Run (bytecode.go:9503), 0 TODO
+// modifyProjectile.Run (bytecode.go:9588), 0 TODO
 bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 203U, GOSTR("ModifyProjectile"));
     if (crun == NULL) {
@@ -90862,7 +91516,7 @@ bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// width.Run (bytecode.go:10644), 0 TODO
+// width.Run (bytecode.go:10729), 0 TODO
 bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Width"));
     if (crun == NULL) {
@@ -90921,7 +91575,7 @@ bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sprPriority.Run (bytecode.go:10692), 0 TODO
+// sprPriority.Run (bytecode.go:10777), 0 TODO
 bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("SprPriority"));
     if (crun == NULL) {
@@ -90960,7 +91614,7 @@ bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varSet.Run (bytecode.go:10725), 0 TODO
+// varSet.Run (bytecode.go:10810), 0 TODO
 bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarSet"));
     if (crun == NULL) {
@@ -91020,7 +91674,7 @@ bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// turn.Run (bytecode.go:10765), 0 TODO
+// turn.Run (bytecode.go:10850), 0 TODO
 bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Turn"));
     if (crun == NULL) {
@@ -91051,7 +91705,7 @@ bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetFacing.Run (bytecode.go:10791), 0 TODO
+// targetFacing.Run (bytecode.go:10876), 0 TODO
 bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetFacing"));
     if (crun == NULL) {
@@ -91099,7 +91753,7 @@ bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetBind.Run (bytecode.go:10828), 0 TODO
+// targetBind.Run (bytecode.go:10913), 0 TODO
 bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetBind"));
     if (crun == NULL) {
@@ -91161,7 +91815,7 @@ bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToTarget.Run (bytecode.go:10877), 0 TODO
+// bindToTarget.Run (bytecode.go:10962), 0 TODO
 bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("BindToTarget"));
     if (crun == NULL) {
@@ -91233,7 +91887,7 @@ bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetLifeAdd.Run (bytecode.go:10931), 0 TODO
+// targetLifeAdd.Run (bytecode.go:11016), 0 TODO
 bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("TargetLifeAdd"));
     if (crun == NULL) {
@@ -91305,7 +91959,7 @@ bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetState.Run (bytecode.go:10976), 0 TODO
+// targetState.Run (bytecode.go:11061), 0 TODO
 bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetState"));
     if (crun == NULL) {
@@ -91353,7 +92007,7 @@ bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelSet.Run (bytecode.go:11014), 0 TODO
+// targetVelSet.Run (bytecode.go:11099), 0 TODO
 bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelSet"));
     if (crun == NULL) {
@@ -91426,7 +92080,7 @@ bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelAdd.Run (bytecode.go:11070), 0 TODO
+// targetVelAdd.Run (bytecode.go:11155), 0 TODO
 bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelAdd"));
     if (crun == NULL) {
@@ -91499,7 +92153,7 @@ bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetPowerAdd.Run (bytecode.go:11124), 0 TODO
+// targetPowerAdd.Run (bytecode.go:11209), 0 TODO
 bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetPowerAdd"));
     if (crun == NULL) {
@@ -91547,7 +92201,7 @@ bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDrop.Run (bytecode.go:11159), 0 TODO
+// targetDrop.Run (bytecode.go:11244), 0 TODO
 bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("TargetDrop"));
     if (crun == NULL) {
@@ -91590,7 +92244,7 @@ bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeAdd.Run (bytecode.go:11192), 0 TODO
+// lifeAdd.Run (bytecode.go:11277), 0 TODO
 bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("LifeAdd"));
     if (crun == NULL) {
@@ -91638,7 +92292,7 @@ bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeSet.Run (bytecode.go:11227), 0 TODO
+// lifeSet.Run (bytecode.go:11312), 0 TODO
 bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("LifeSet"));
     if (crun == NULL) {
@@ -91669,7 +92323,7 @@ bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerAdd.Run (bytecode.go:11251), 0 TODO
+// powerAdd.Run (bytecode.go:11336), 0 TODO
 bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerAdd"));
     if (crun == NULL) {
@@ -91700,7 +92354,7 @@ bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerSet.Run (bytecode.go:11275), 0 TODO
+// powerSet.Run (bytecode.go:11360), 0 TODO
 bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerSet"));
     if (crun == NULL) {
@@ -91731,7 +92385,7 @@ bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitVelSet.Run (bytecode.go:11302), 0 TODO
+// hitVelSet.Run (bytecode.go:11387), 0 TODO
 bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("HitVelSet"));
     if (crun == NULL) {
@@ -91776,7 +92430,7 @@ bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// screenBound.Run (bytecode.go:11337), 0 TODO
+// screenBound.Run (bytecode.go:11422), 0 TODO
 bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ScreenBound"));
     if (crun == NULL) {
@@ -91822,7 +92476,7 @@ bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posFreeze.Run (bytecode.go:11375), 0 TODO
+// posFreeze.Run (bytecode.go:11460), 0 TODO
 bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PosFreeze"));
     if (crun == NULL) {
@@ -91855,7 +92509,7 @@ bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envShake.Run (bytecode.go:11407), 0 TODO
+// envShake.Run (bytecode.go:11492), 0 TODO
 bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     EnvShake_clear(&g_sys.SystemStateVars_.envShake);
     {
@@ -91913,7 +92567,7 @@ bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitOverride.Run (bytecode.go:11456), 0 TODO
+// hitOverride.Run (bytecode.go:11541), 0 TODO
 bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("HitOverride"));
     if (crun == NULL) {
@@ -91993,7 +92647,7 @@ bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// pause.Run (bytecode.go:11527), 0 TODO
+// pause.Run (bytecode.go:11612), 0 TODO
 bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("Pause"));
     if (crun == NULL) {
@@ -92043,7 +92697,7 @@ bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// superPause.Run (bytecode.go:11571), 0 TODO
+// superPause.Run (bytecode.go:11656), 0 TODO
 bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 12U, GOSTR("SuperPause"));
     if (crun == NULL) {
@@ -92170,7 +92824,7 @@ bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// trans.Run (bytecode.go:11672), 0 TODO
+// trans.Run (bytecode.go:11757), 0 TODO
 bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Trans"));
     if (crun == NULL) {
@@ -92211,7 +92865,7 @@ bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playerPush.Run (bytecode.go:11723), 0 TODO
+// playerPush.Run (bytecode.go:11808), 0 TODO
 bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PlayerPush"));
     if (crun == NULL) {
@@ -92251,7 +92905,7 @@ bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stateTypeValue (bytecode.go:11755), 0 TODO
+// stateTypeValue (bytecode.go:11840), 0 TODO
 Ret_i32__bool fn_stateTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92287,7 +92941,7 @@ Ret_i32__bool fn_stateTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// moveTypeValue (bytecode.go:11774), 0 TODO
+// moveTypeValue (bytecode.go:11859), 0 TODO
 Ret_i32__bool fn_moveTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92319,7 +92973,7 @@ Ret_i32__bool fn_moveTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// physicsTypeValue (bytecode.go:11791), 0 TODO
+// physicsTypeValue (bytecode.go:11876), 0 TODO
 Ret_i32__bool fn_physicsTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92355,7 +93009,7 @@ Ret_i32__bool fn_physicsTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// evalTypeExp (bytecode.go:11812), 0 TODO
+// evalTypeExp (bytecode.go:11897), 0 TODO
 Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoFunc conv) {
     if (exp_.len < 2) {
         return (Ret_i32__bool){BytecodeExp_evalI(exp_.p[0], c), true};
@@ -92363,7 +93017,7 @@ Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoF
     return fn_evalTypeString(exp_.p[0], c, name, conv);
 }
 
-// evalTypeString (bytecode.go:11819), 0 TODO
+// evalTypeString (bytecode.go:11904), 0 TODO
 Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc conv) {
     BytecodeValue v = BytecodeExp_run(be, c);
     if (v.vtype != 4) {
@@ -92379,7 +93033,7 @@ Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc c
     return (Ret_i32__bool){t, ok};
 }
 
-// stateTypeSet.Run (bytecode.go:11832), 0 TODO
+// stateTypeSet.Run (bytecode.go:11917), 0 TODO
 bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("StateTypeSet"));
     if (crun == NULL) {
@@ -92445,7 +93099,7 @@ bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleDraw.Run (bytecode.go:11878), 0 TODO
+// angleDraw.Run (bytecode.go:11963), 0 TODO
 bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AngleDraw"));
     if (crun == NULL) {
@@ -92499,7 +93153,7 @@ bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleSet.Run (bytecode.go:11920), 0 TODO
+// angleSet.Run (bytecode.go:12005), 0 TODO
 bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleSet"));
     if (crun == NULL) {
@@ -92544,7 +93198,7 @@ bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleAdd.Run (bytecode.go:11956), 0 TODO
+// angleAdd.Run (bytecode.go:12041), 0 TODO
 bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleAdd"));
     if (crun == NULL) {
@@ -92583,7 +93237,7 @@ bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleMul.Run (bytecode.go:11986), 0 TODO
+// angleMul.Run (bytecode.go:12071), 0 TODO
 bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleMul"));
     if (crun == NULL) {
@@ -92628,7 +93282,7 @@ bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envColor.Run (bytecode.go:12021), 0 TODO
+// envColor.Run (bytecode.go:12106), 0 TODO
 bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     g_sys.SystemStateVars_.envcol = (Arr3_i32){{255, 255, 255}};
     g_sys.SystemStateVars_.envcol_time = 1;
@@ -92668,7 +93322,7 @@ bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// displayToClipboard.Run (bytecode.go:12050), 0 TODO
+// displayToClipboard.Run (bytecode.go:12135), 0 TODO
 bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DisplayToClipboard"));
     if (crun == NULL) {
@@ -92718,7 +93372,7 @@ bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// appendToClipboard.Run (bytecode.go:12081), 0 TODO
+// appendToClipboard.Run (bytecode.go:12166), 0 TODO
 bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AppendToClipBoard"));
     if (crun == NULL) {
@@ -92767,7 +93421,7 @@ bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// clearClipboard.Run (bytecode.go:12116), 0 TODO
+// clearClipboard.Run (bytecode.go:12201), 0 TODO
 bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ClearClipboard"));
     if (crun == NULL) {
@@ -92798,7 +93452,7 @@ bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// makeDust.Run (bytecode.go:12142), 0 TODO
+// makeDust.Run (bytecode.go:12227), 0 TODO
 bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MakeDust"));
     if (crun == NULL) {
@@ -92864,7 +93518,7 @@ bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackDist.Run (bytecode.go:12204), 0 TODO
+// attackDist.Run (bytecode.go:12289), 0 TODO
 bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AttackDist"));
     if (crun == NULL) {
@@ -92913,7 +93567,7 @@ bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackMulSet.Run (bytecode.go:12250), 0 TODO
+// attackMulSet.Run (bytecode.go:12335), 0 TODO
 bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AttackMulSet"));
     if (crun == NULL) {
@@ -92964,7 +93618,7 @@ bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// defenceMulSet.Run (bytecode.go:12288), 0 TODO
+// defenceMulSet.Run (bytecode.go:12373), 0 TODO
 bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("DefenceMulSet"));
     if (crun == NULL) {
@@ -93016,7 +93670,7 @@ bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// fallEnvShake.Run (bytecode.go:12337), 0 TODO
+// fallEnvShake.Run (bytecode.go:12422), 0 TODO
 bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("FallEnvShake"));
     if (crun == NULL) {
@@ -93052,7 +93706,7 @@ bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallDamage.Run (bytecode.go:12378), 0 TODO
+// hitFallDamage.Run (bytecode.go:12463), 0 TODO
 bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallDamage"));
     if (crun == NULL) {
@@ -93083,7 +93737,7 @@ bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallVel.Run (bytecode.go:12402), 0 TODO
+// hitFallVel.Run (bytecode.go:12487), 0 TODO
 bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallVel"));
     if (crun == NULL) {
@@ -93114,7 +93768,7 @@ bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallSet.Run (bytecode.go:12429), 0 TODO
+// hitFallSet.Run (bytecode.go:12514), 0 TODO
 bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("HitFallSet"));
     if (crun == NULL) {
@@ -93172,7 +93826,7 @@ bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRangeSet.Run (bytecode.go:12468), 0 TODO
+// varRangeSet.Run (bytecode.go:12553), 0 TODO
 bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarRangeSet"));
     if (crun == NULL) {
@@ -93219,7 +93873,7 @@ bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapPal.Run (bytecode.go:12504), 0 TODO
+// remapPal.Run (bytecode.go:12589), 0 TODO
 bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemapPal"));
     if (crun == NULL) {
@@ -93263,7 +93917,7 @@ bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stopSnd.Run (bytecode.go:12539), 0 TODO
+// stopSnd.Run (bytecode.go:12624), 0 TODO
 bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("StopSnd"));
     if (crun == NULL) {
@@ -93306,7 +93960,7 @@ bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sndPan.Run (bytecode.go:12574), 0 TODO
+// sndPan.Run (bytecode.go:12659), 0 TODO
 bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("SndPan"));
     if (crun == NULL) {
@@ -93365,7 +94019,7 @@ bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRandom.Run (bytecode.go:12612), 0 TODO
+// varRandom.Run (bytecode.go:12697), 0 TODO
 bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("VarRandom"));
     if (crun == NULL) {
@@ -93413,7 +94067,7 @@ bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gravity.Run (bytecode.go:12644), 0 TODO
+// gravity.Run (bytecode.go:12729), 0 TODO
 bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Gravity"));
     if (crun == NULL) {
@@ -93444,7 +94098,7 @@ bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToParent.Run (bytecode.go:12670), 0 TODO
+// bindToParent.Run (bytecode.go:12755), 0 TODO
 bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToParent"));
     if (crun == NULL) {
@@ -93512,7 +94166,7 @@ bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToRoot.Run (bytecode.go:12718), 0 TODO
+// bindToRoot.Run (bytecode.go:12803), 0 TODO
 bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToRoot"));
     if (crun == NULL) {
@@ -93580,7 +94234,7 @@ bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeExplod.Run (bytecode.go:12772), 0 TODO
+// removeExplod.Run (bytecode.go:12857), 0 TODO
 bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveExplod"));
     if (crun == NULL) {
@@ -93618,7 +94272,7 @@ bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explodBindTime.Run (bytecode.go:12802), 0 TODO
+// explodBindTime.Run (bytecode.go:12887), 0 TODO
 bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ExplodBindTime"));
     if (crun == NULL) {
@@ -93656,7 +94310,7 @@ bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// moveHitReset.Run (bytecode.go:12830), 0 TODO
+// moveHitReset.Run (bytecode.go:12915), 0 TODO
 bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MoveHitReset"));
     if (crun == NULL) {
@@ -93687,7 +94341,7 @@ bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitAdd.Run (bytecode.go:12854), 0 TODO
+// hitAdd.Run (bytecode.go:12939), 0 TODO
 bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitAdd"));
     if (crun == NULL) {
@@ -93718,7 +94372,7 @@ bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// offset.Run (bytecode.go:12879), 0 TODO
+// offset.Run (bytecode.go:12964), 0 TODO
 bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("Offset"));
     if (crun == NULL) {
@@ -93753,7 +94407,7 @@ bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// victoryQuote.Run (bytecode.go:12905), 0 TODO
+// victoryQuote.Run (bytecode.go:12990), 0 TODO
 bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("VictoryQuote"));
     if (crun == NULL) {
@@ -93786,7 +94440,7 @@ bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// zoom.Run (bytecode.go:12936), 0 TODO
+// zoom.Run (bytecode.go:13021), 0 TODO
 bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     Arr2_f32 pos = (Arr2_f32){{0x0p+00f, 0x0p+00f}};
     i32 t = 1;
@@ -93866,7 +94520,7 @@ bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// forceFeedback.Run (bytecode.go:13011), 0 TODO
+// forceFeedback.Run (bytecode.go:13096), 0 TODO
 bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("ForceFeedback"));
     if (crun == NULL) {
@@ -93986,7 +94640,7 @@ bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertCommand.Run (bytecode.go:13118), 0 TODO
+// assertCommand.Run (bytecode.go:13203), 0 TODO
 bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AssertCommand"));
     if (crun == NULL) {
@@ -94024,7 +94678,7 @@ bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertAnalogVector.Run (bytecode.go:13152), 0 TODO
+// assertAnalogVector.Run (bytecode.go:13237), 0 TODO
 bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("AssertAnalogVector"));
     if (crun == NULL) {
@@ -94083,7 +94737,7 @@ bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertInput.Run (bytecode.go:13195), 0 TODO
+// assertInput.Run (bytecode.go:13280), 0 TODO
 bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AssertInput"));
     if (crun == NULL) {
@@ -94130,7 +94784,7 @@ bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeMovelist.Run (bytecode.go:13231), 0 TODO
+// changeMovelist.Run (bytecode.go:13316), 0 TODO
 bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ChangeMovelist"));
     if (crun == NULL) {
@@ -94171,7 +94825,7 @@ bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dialogue.Run (bytecode.go:13263), 0 TODO
+// dialogue.Run (bytecode.go:13348), 0 TODO
 bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     if (!g_sys.motif.di.enabled) {
         return false;
@@ -94219,7 +94873,7 @@ bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsAdd.Run (bytecode.go:13301), 0 TODO
+// dizzyPointsAdd.Run (bytecode.go:13386), 0 TODO
 bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DizzyPointsAdd"));
     if (crun == NULL) {
@@ -94255,7 +94909,7 @@ bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsSet.Run (bytecode.go:13328), 0 TODO
+// dizzyPointsSet.Run (bytecode.go:13413), 0 TODO
 bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzyPointsSet"));
     if (crun == NULL) {
@@ -94286,7 +94940,7 @@ bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzySet.Run (bytecode.go:13352), 0 TODO
+// dizzySet.Run (bytecode.go:13437), 0 TODO
 bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzySet"));
     if (crun == NULL) {
@@ -94318,7 +94972,7 @@ bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardBreakSet.Run (bytecode.go:13377), 0 TODO
+// guardBreakSet.Run (bytecode.go:13462), 0 TODO
 bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardBreakSet"));
     if (crun == NULL) {
@@ -94350,7 +95004,7 @@ bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsAdd.Run (bytecode.go:13403), 0 TODO
+// guardPointsAdd.Run (bytecode.go:13488), 0 TODO
 bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("GuardPointsAdd"));
     if (crun == NULL) {
@@ -94386,7 +95040,7 @@ bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsSet.Run (bytecode.go:13430), 0 TODO
+// guardPointsSet.Run (bytecode.go:13515), 0 TODO
 bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardPointsSet"));
     if (crun == NULL) {
@@ -94417,7 +95071,7 @@ bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifebarAction.Run (bytecode.go:13465), 0 TODO
+// lifebarAction.Run (bytecode.go:13550), 0 TODO
 bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 23U, GOSTR("LifebarAction"));
     if (crun == NULL) {
@@ -94531,7 +95185,7 @@ bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// loadState.Run (bytecode.go:13549), 0 TODO
+// loadState.Run (bytecode.go:13634), 0 TODO
 bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -94558,7 +95212,7 @@ bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapSet.Run (bytecode.go:13572), 0 TODO
+// mapSet.Run (bytecode.go:13657), 0 TODO
 bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MapSet"));
     if (crun == NULL) {
@@ -94611,7 +95265,7 @@ bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// matchRestart.Run (bytecode.go:13629), 0 TODO
+// matchRestart.Run (bytecode.go:13714), 0 TODO
 bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     GoString s = (GoString){0};
     bool reloadFlag = false;
@@ -94772,7 +95426,7 @@ bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// printToConsole.Run (bytecode.go:13727), 0 TODO
+// printToConsole.Run (bytecode.go:13812), 0 TODO
 bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     Slice_GoIface params = (Slice_GoIface){0};
     {
@@ -94811,7 +95465,7 @@ bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeAdd.Run (bytecode.go:13753), 0 TODO
+// redLifeAdd.Run (bytecode.go:13838), 0 TODO
 bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RedLifeAdd"));
     if (crun == NULL) {
@@ -94847,7 +95501,7 @@ bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeSet.Run (bytecode.go:13780), 0 TODO
+// redLifeSet.Run (bytecode.go:13865), 0 TODO
 bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RedLifeSet"));
     if (crun == NULL) {
@@ -94878,7 +95532,7 @@ bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapSprite.Run (bytecode.go:13807), 0 TODO
+// remapSprite.Run (bytecode.go:13892), 0 TODO
 bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("RemapSprite"));
     if (crun == NULL) {
@@ -94936,7 +95590,7 @@ bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeAdd.Run (bytecode.go:13857), 0 TODO
+// roundTimeAdd.Run (bytecode.go:13942), 0 TODO
 bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -94965,7 +95619,7 @@ bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeSet.Run (bytecode.go:13878), 0 TODO
+// roundTimeSet.Run (bytecode.go:13963), 0 TODO
 bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -94994,7 +95648,7 @@ bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// saveFile.Run (bytecode.go:13902), 0 TODO
+// saveFile.Run (bytecode.go:13987), 0 TODO
 bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -95149,7 +95803,7 @@ bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// loadFile.Run (bytecode.go:13989), 0 TODO
+// loadFile.Run (bytecode.go:14074), 0 TODO
 bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -95352,7 +96006,7 @@ bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// saveState.Run (bytecode.go:14115), 0 TODO
+// saveState.Run (bytecode.go:14200), 0 TODO
 bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -95379,7 +96033,7 @@ bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// scoreAdd.Run (bytecode.go:14135), 0 TODO
+// scoreAdd.Run (bytecode.go:14220), 0 TODO
 bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ScoreAdd"));
     if (crun == NULL) {
@@ -95410,7 +96064,7 @@ bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shaderSet.Run (bytecode.go:14169), 0 TODO
+// shaderSet.Run (bytecode.go:14254), 0 TODO
 bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("ShaderSet"));
     if (crun == NULL) {
@@ -95522,7 +96176,7 @@ bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// storyboard.Run (bytecode.go:14256), 0 TODO
+// storyboard.Run (bytecode.go:14341), 0 TODO
 bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("Storyboard"));
     if (crun == NULL) {
@@ -95632,7 +96286,7 @@ bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStoryboard.Run (bytecode.go:14328), 0 TODO
+// modifyStoryboard.Run (bytecode.go:14413), 0 TODO
 bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("ModifyStoryboard"));
     if (crun == NULL) {
@@ -95647,7 +96301,7 @@ bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeStoryboard.Run (bytecode.go:14421), 0 TODO
+// removeStoryboard.Run (bytecode.go:14506), 0 TODO
 bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RemoveStoryboard"));
     if (crun == NULL) {
@@ -95674,7 +96328,7 @@ bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl.Run (bytecode.go:14466), 0 TODO
+// modifyBGCtrl.Run (bytecode.go:14551), 0 TODO
 bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -95891,7 +96545,7 @@ bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl3d.Run (bytecode.go:14605), 0 TODO
+// modifyBGCtrl3d.Run (bytecode.go:14690), 0 TODO
 bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -95944,7 +96598,7 @@ bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBgm.Run (bytecode.go:14649), 0 TODO
+// modifyBgm.Run (bytecode.go:14734), 0 TODO
 bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     if (g_sys.bgm.ctrl == NULL) {
         return false;
@@ -96062,7 +96716,7 @@ bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifySnd.Run (bytecode.go:14750), 0 TODO
+// modifySnd.Run (bytecode.go:14835), 0 TODO
 bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 14U, GOSTR("ModifySnd"));
     if (crun == NULL) {
@@ -96264,7 +96918,7 @@ bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playBgm.Run (bytecode.go:14895), 0 TODO
+// playBgm.Run (bytecode.go:14980), 0 TODO
 bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("PlayBGM"));
     if (crun == NULL) {
@@ -96444,7 +97098,7 @@ bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDizzyPointsAdd.Run (bytecode.go:14983), 0 TODO
+// targetDizzyPointsAdd.Run (bytecode.go:15068), 0 TODO
 bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetDizzyPointsAdd"));
     if (crun == NULL) {
@@ -96497,7 +97151,7 @@ bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetGuardPointsAdd.Run (bytecode.go:15023), 0 TODO
+// targetGuardPointsAdd.Run (bytecode.go:15108), 0 TODO
 bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetGuardPointsAdd"));
     if (crun == NULL) {
@@ -96550,7 +97204,7 @@ bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetRedLifeAdd.Run (bytecode.go:15063), 0 TODO
+// targetRedLifeAdd.Run (bytecode.go:15148), 0 TODO
 bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetRedLifeAdd"));
     if (crun == NULL) {
@@ -96606,7 +97260,7 @@ bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetScoreAdd.Run (bytecode.go:15106), 0 TODO
+// targetScoreAdd.Run (bytecode.go:15191), 0 TODO
 bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetScoreAdd"));
     if (crun == NULL) {
@@ -96654,7 +97308,7 @@ bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// text.Run (bytecode.go:15173), 0 TODO
+// text.Run (bytecode.go:15258), 0 TODO
 bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 44U, GOSTR("Text"));
     if (crun == NULL) {
@@ -96992,7 +97646,7 @@ bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyText.Run (bytecode.go:15411), 0 TODO
+// modifyText.Run (bytecode.go:15496), 0 TODO
 bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 44U, GOSTR("ModifyText"));
     if (crun == NULL) {
@@ -97051,7 +97705,7 @@ bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeText.Run (bytecode.go:15743), 0 TODO
+// removeText.Run (bytecode.go:15828), 0 TODO
 bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveText"));
     if (crun == NULL) {
@@ -97089,7 +97743,7 @@ bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// createPlatform.Run (bytecode.go:15782), 0 TODO
+// createPlatform.Run (bytecode.go:15867), 0 TODO
 bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("CreatePlatform"));
     if (crun == NULL) {
@@ -97155,7 +97809,7 @@ bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageVar.Run (bytecode.go:15934), 0 TODO
+// modifyStageVar.Run (bytecode.go:16019), 0 TODO
 bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     Stage* s = g_sys.stage;
     bool shouldResetCamera = false;
@@ -97655,7 +98309,7 @@ bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// cameraCtrl.Run (bytecode.go:16250), 0 TODO
+// cameraCtrl.Run (bytecode.go:16335), 0 TODO
 bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -97701,7 +98355,7 @@ bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// height.Run (bytecode.go:16282), 0 TODO
+// height.Run (bytecode.go:16367), 0 TODO
 bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Height"));
     if (crun == NULL) {
@@ -97739,7 +98393,7 @@ bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depth.Run (bytecode.go:16316), 0 TODO
+// depth.Run (bytecode.go:16401), 0 TODO
 bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Depth"));
     if (crun == NULL) {
@@ -97798,7 +98452,7 @@ bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depthBound.Run (bytecode.go:16364), 0 TODO
+// depthBound.Run (bytecode.go:16449), 0 TODO
 bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DepthBound"));
     if (crun == NULL) {
@@ -97837,7 +98491,7 @@ bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyPlayer.Run (bytecode.go:16419), 0 TODO
+// modifyPlayer.Run (bytecode.go:16504), 0 TODO
 bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 21U, GOSTR("ModifyPlayer"));
     if (crun == NULL) {
@@ -97999,7 +98653,7 @@ bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// getHitVarSet.Run (bytecode.go:16582), 0 TODO
+// getHitVarSet.Run (bytecode.go:16667), 0 TODO
 bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 48U, GOSTR("GetHitVarSet"));
     if (crun == NULL) {
@@ -98215,7 +98869,7 @@ bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// groundLevelOffset.Run (bytecode.go:16700), 0 TODO
+// groundLevelOffset.Run (bytecode.go:16785), 0 TODO
 bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GroundLevelOffset"));
     if (crun == NULL) {
@@ -98247,7 +98901,7 @@ bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetAdd.Run (bytecode.go:16726), 0 TODO
+// targetAdd.Run (bytecode.go:16811), 0 TODO
 bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("TargetAdd"));
     if (crun == NULL) {
@@ -98280,7 +98934,7 @@ bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformClsn.Run (bytecode.go:16758), 0 TODO
+// transformClsn.Run (bytecode.go:16843), 0 TODO
 bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TransformClsn"));
     if (crun == NULL) {
@@ -98366,7 +99020,7 @@ bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformSprite.Run (bytecode.go:16829), 0 TODO
+// transformSprite.Run (bytecode.go:16914), 0 TODO
 bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TransformSprite"));
     if (crun == NULL) {
@@ -98417,7 +99071,7 @@ bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageBG.Run (bytecode.go:16893), 0 TODO
+// modifyStageBG.Run (bytecode.go:16978), 0 TODO
 bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     i32 bgid = -1;
     int bgidx = -1;
@@ -98471,7 +99125,7 @@ bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyShadow.Run (bytecode.go:17128), 0 TODO
+// modifyShadow.Run (bytecode.go:17213), 0 TODO
 bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyShadow"));
     if (crun == NULL) {
@@ -98670,7 +99324,7 @@ bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReflection.Run (bytecode.go:17289), 0 TODO
+// modifyReflection.Run (bytecode.go:17374), 0 TODO
 bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyReflection"));
     if (crun == NULL) {
@@ -98869,7 +99523,7 @@ bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shiftInput.Run (bytecode.go:17426), 0 TODO
+// shiftInput.Run (bytecode.go:17511), 0 TODO
 bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ShiftInput"));
     if (crun == NULL) {
@@ -98924,7 +99578,7 @@ bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// overrideClsn.Run (bytecode.go:17476), 0 TODO
+// overrideClsn.Run (bytecode.go:17561), 0 TODO
 bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("OverrideClsn"));
     if (crun == NULL) {
@@ -99004,7 +99658,7 @@ bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapReset.Run (bytecode.go:17546), 0 TODO
+// mapReset.Run (bytecode.go:17631), 0 TODO
 bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MapReset"));
     if (crun == NULL) {
@@ -99038,13 +99692,13 @@ bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// newStateBytecode (bytecode.go:17584), 0 TODO
+// newStateBytecode (bytecode.go:17669), 0 TODO
 StateBytecode* fn_newStateBytecode(int pn) {
     StateBytecode* sb = go_box(StateBytecode, (StateBytecode){.stateType = 1, .moveType = 32768, .physics = 16, .playerNo = pn, .block = (*fn_newStateBlock())});
     return sb;
 }
 
-// StateBytecode.init (bytecode.go:17595), 0 TODO
+// StateBytecode.init (bytecode.go:17680), 0 TODO
 void StateBytecode_init(StateBytecode* sb, Char* c) {
     g_sys.workingState = sb;
     StateType _t1 = sb->stateType;
@@ -99105,7 +99759,7 @@ void StateBytecode_init(StateBytecode* sb, Char* c) {
     stateDef_Run(sb->stateDef, c);
 }
 
-// StateBytecode.run (bytecode.go:17651), 0 TODO
+// StateBytecode.run (bytecode.go:17736), 0 TODO
 bool StateBytecode_run(StateBytecode* sb, Char* c) {
     bool changeState = {0};
     Slice_i32 _t1 = sb->ctrlsps;
@@ -99136,7 +99790,7 @@ bool StateBytecode_run(StateBytecode* sb, Char* c) {
     return changeState;
 }
 
-// BytecodeExp.pushTrigger (bytecode.go:17677), 0 TODO
+// BytecodeExp.pushTrigger (bytecode.go:17762), 0 TODO
 void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     {
         OpCode _t1 = t;
@@ -99225,7 +99879,7 @@ void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     }
 }
 
-// BytecodeExp.cmpConst (bytecode.go:17723), 0 TODO
+// BytecodeExp.cmpConst (bytecode.go:17808), 0 TODO
 void BytecodeExp_cmpConst(BytecodeExp be, OpCode cmp, BytecodeValue k) {
     {
         OpCode _t1 = cmp;
@@ -121369,10 +122023,15 @@ Ret_BytecodeValue__GoIface CharCompiler_expOneOpSub(CharCompiler* c, BytecodeExp
         return (Ret_BytecodeValue__GoIface){bv, err};
     }
     if (BytecodeValue_IsNone(bv) || BytecodeValue_IsNone(bv2)) {
-        BytecodeExp_appendValue(out, bv);
-        BytecodeExp_append(out, (*be));
-        BytecodeExp_appendValue(out, bv2);
-        BytecodeExp_append(out, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, opc));
+        if ((true && BytecodeValue_IsNone(bv)) && (((opc == 34U) || (opc == 36U)))) {
+            BytecodeExp_appendValue(be, bv2);
+            fn_scEmit(out, (*be), opc);
+        } else {
+            BytecodeExp_appendValue(out, bv);
+            BytecodeExp_append(out, (*be));
+            BytecodeExp_appendValue(out, bv2);
+            BytecodeExp_append(out, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, opc));
+        }
         bv = fn_bvNone();
     } else {
         fn_constBinaryOp((&bv), bv2, opc);
@@ -121381,7 +122040,7 @@ Ret_BytecodeValue__GoIface CharCompiler_expOneOpSub(CharCompiler* c, BytecodeExp
     return (Ret_BytecodeValue__GoIface){bv, (GoIface){0}};
 }
 
-// CharCompiler.expOneOp (compiler.go:6251), 0 TODO
+// CharCompiler.expOneOp (compiler.go:6257), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expOneOp(CharCompiler* c, BytecodeExp* out, GoString* in, expLevel lv, GoString opt, OpCode opc) {
     Ret_BytecodeValue__GoIface _t1 = CharCompiler_expLevel(c, lv, out, in);
     BytecodeValue bv = _t1.r0;
@@ -121415,22 +122074,22 @@ Ret_BytecodeValue__GoIface CharCompiler_expOneOp(CharCompiler* c, BytecodeExp* o
     }
 }
 
-// CharCompiler.expAnd (compiler.go:6272), 0 TODO
+// CharCompiler.expAnd (compiler.go:6278), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expAnd(CharCompiler* c, BytecodeExp* out, GoString* in) {
     return CharCompiler_expOneOp(c, out, in, 4U, GOSTR("&"), 38U);
 }
 
-// CharCompiler.expXor (compiler.go:6276), 0 TODO
+// CharCompiler.expXor (compiler.go:6282), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expXor(CharCompiler* c, BytecodeExp* out, GoString* in) {
     return CharCompiler_expOneOp(c, out, in, 5U, GOSTR("^"), 39U);
 }
 
-// CharCompiler.expOr (compiler.go:6280), 0 TODO
+// CharCompiler.expOr (compiler.go:6286), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expOr(CharCompiler* c, BytecodeExp* out, GoString* in) {
     return CharCompiler_expOneOp(c, out, in, 6U, GOSTR("|"), 40U);
 }
 
-// CharCompiler.expBoolAnd (compiler.go:6284), 0 TODO
+// CharCompiler.expBoolAnd (compiler.go:6290), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expBoolAnd(CharCompiler* c, BytecodeExp* out, GoString* in) {
     if (c->block != NULL) {
         return CharCompiler_expOneOp(c, out, in, 7U, GOSTR("&&"), 34U);
@@ -121483,12 +122142,12 @@ Ret_BytecodeValue__GoIface CharCompiler_expBoolAnd(CharCompiler* c, BytecodeExp*
     return (Ret_BytecodeValue__GoIface){bv, (GoIface){0}};
 }
 
-// CharCompiler.expBoolXor (compiler.go:6326), 0 TODO
+// CharCompiler.expBoolXor (compiler.go:6332), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expBoolXor(CharCompiler* c, BytecodeExp* out, GoString* in) {
     return CharCompiler_expOneOp(c, out, in, 8U, GOSTR("^^"), 35U);
 }
 
-// CharCompiler.expBoolOr (compiler.go:6330), 0 TODO
+// CharCompiler.expBoolOr (compiler.go:6336), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expBoolOr(CharCompiler* c, BytecodeExp* out, GoString* in) {
     GoString omp = c->previousOperator;
     Ret_BytecodeValue__GoIface _t1 = CharCompiler_expBoolOrSub(c, out, in);
@@ -121498,7 +122157,7 @@ Ret_BytecodeValue__GoIface CharCompiler_expBoolOr(CharCompiler* c, BytecodeExp* 
     return (Ret_BytecodeValue__GoIface){bv, err};
 }
 
-// CharCompiler.expBoolOrSub (compiler.go:6339), 0 TODO
+// CharCompiler.expBoolOrSub (compiler.go:6345), 0 TODO
 Ret_BytecodeValue__GoIface CharCompiler_expBoolOrSub(CharCompiler* c, BytecodeExp* out, GoString* in) {
     if (c->block != NULL) {
         return CharCompiler_expOneOp(c, out, in, 9U, GOSTR("||"), 36U);
@@ -121551,7 +122210,7 @@ Ret_BytecodeValue__GoIface CharCompiler_expBoolOrSub(CharCompiler* c, BytecodeEx
     return (Ret_BytecodeValue__GoIface){bv, (GoIface){0}};
 }
 
-// CharCompiler.typedExp (compiler.go:6384), 0 TODO
+// CharCompiler.typedExp (compiler.go:6390), 0 TODO
 Ret_BytecodeExp__GoIface CharCompiler_typedExp(CharCompiler* c, GoString* in, ValueType vt) {
     c->token = CharCompiler_tokenizer(c, in);
     BytecodeExp* be = CharCompiler_getScratch(c);
@@ -121591,7 +122250,7 @@ Ret_BytecodeExp__GoIface CharCompiler_typedExp(CharCompiler* c, GoString* in, Va
     return (Ret_BytecodeExp__GoIface){res, (GoIface){0}};
 }
 
-// cloneExp (compiler.go:6415), 0 TODO
+// cloneExp (compiler.go:6421), 0 TODO
 BytecodeExp fn_cloneExp(BytecodeExp be) {
     if (be.len == 0) {
         return (BytecodeExp){0};
@@ -121601,7 +122260,7 @@ BytecodeExp fn_cloneExp(BytecodeExp be) {
     return res;
 }
 
-// CharCompiler.getScratch (compiler.go:6431), 0 TODO
+// CharCompiler.getScratch (compiler.go:6437), 0 TODO
 BytecodeExp* CharCompiler_getScratch(CharCompiler* c) {
     if (c->scratchDepth == c->scratch.len) {
         c->scratch = GO_APPEND(Slice_BytecodeExpPtr, c->scratch, go_new(BytecodeExp));
@@ -121612,12 +122271,12 @@ BytecodeExp* CharCompiler_getScratch(CharCompiler* c) {
     return be;
 }
 
-// CharCompiler.putScratch (compiler.go:6441), 0 TODO
+// CharCompiler.putScratch (compiler.go:6447), 0 TODO
 void CharCompiler_putScratch(CharCompiler* c, int n) {
     c->scratchDepth -= n;
 }
 
-// CharCompiler.argExpression (compiler.go:6445), 0 TODO
+// CharCompiler.argExpression (compiler.go:6451), 0 TODO
 Ret_BytecodeExp__GoIface CharCompiler_argExpression(CharCompiler* c, GoString* in, ValueType vt) {
     Ret_BytecodeExp__GoIface _t1 = CharCompiler_typedExp(c, in, vt);
     BytecodeExp be = _t1.r0;
@@ -121639,7 +122298,7 @@ Ret_BytecodeExp__GoIface CharCompiler_argExpression(CharCompiler* c, GoString* i
     return (Ret_BytecodeExp__GoIface){be, (GoIface){0}};
 }
 
-// CharCompiler.fullExpression (compiler.go:6464), 0 TODO
+// CharCompiler.fullExpression (compiler.go:6470), 0 TODO
 Ret_BytecodeExp__GoIface CharCompiler_fullExpression(CharCompiler* c, GoString* in, ValueType vt) {
     Ret_BytecodeExp__GoIface _t1 = CharCompiler_typedExp(c, in, vt);
     BytecodeExp be = _t1.r0;
@@ -121653,7 +122312,7 @@ Ret_BytecodeExp__GoIface CharCompiler_fullExpression(CharCompiler* c, GoString* 
     return (Ret_BytecodeExp__GoIface){be, (GoIface){0}};
 }
 
-// parseTriggerNumber (compiler.go:6475), 0 TODO
+// parseTriggerNumber (compiler.go:6481), 0 TODO
 Ret_i32__bool__bool fn_parseTriggerNumber(GoString name) {
     i32 tn = {0};
     bool isAll = {0};
@@ -121675,7 +122334,7 @@ Ret_i32__bool__bool fn_parseTriggerNumber(GoString name) {
     return (Ret_i32__bool__bool){tn, isAll, ok};
 }
 
-// CharCompiler.parseSection (compiler.go:6493), 0 TODO
+// CharCompiler.parseSection (compiler.go:6499), 0 TODO
 Ret_IniSection__GoIface CharCompiler_parseSection(CharCompiler* c, GoFunc sctrl) {
     IniSection is = fn_NewIniSection();
     GoFunc findTopLevelEqual = ((GoFunc){(void *)lambda_556, &(Env_lambda_556){0}});
@@ -121781,7 +122440,7 @@ Ret_IniSection__GoIface CharCompiler_parseSection(CharCompiler* c, GoFunc sctrl)
     return (Ret_IniSection__GoIface){is, (GoIface){0}};
 }
 
-// indexSpaceTab (compiler.go:6675), 0 TODO
+// indexSpaceTab (compiler.go:6681), 0 TODO
 int fn_indexSpaceTab(GoString s) {
     {
         int i = 0;
@@ -121795,7 +122454,7 @@ int fn_indexSpaceTab(GoString s) {
     return -1;
 }
 
-// CharCompiler.hasKeyPrefix (compiler.go:6687), 0 TODO
+// CharCompiler.hasKeyPrefix (compiler.go:6693), 0 TODO
 bool CharCompiler_hasKeyPrefix(CharCompiler* c, IniSection is, GoString prefix) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&is);
@@ -121810,7 +122469,7 @@ bool CharCompiler_hasKeyPrefix(CharCompiler* c, IniSection is, GoString prefix) 
     return false;
 }
 
-// cutComment (compiler.go:6697), 0 TODO
+// cutComment (compiler.go:6703), 0 TODO
 GoString fn_cutComment(GoString line) {
     {
         int i = strings_IndexByte(line, 59U);
@@ -121821,7 +122480,7 @@ GoString fn_cutComment(GoString line) {
     return line;
 }
 
-// CharCompiler.stateSec (compiler.go:6704), 0 TODO
+// CharCompiler.stateSec (compiler.go:6710), 0 TODO
 GoIface CharCompiler_stateSec(CharCompiler* c, IniSection is, GoFunc f) {
     {
         GoIface err = ((GoIface (*)(void *))(f).fn)((f).env);
@@ -121857,7 +122516,7 @@ GoIface CharCompiler_stateSec(CharCompiler* c, IniSection is, GoFunc f) {
     return (GoIface){0};
 }
 
-// CharCompiler.stateParam (compiler.go:6733), 0 TODO
+// CharCompiler.stateParam (compiler.go:6739), 0 TODO
 GoIface CharCompiler_stateParam(CharCompiler* c, IniSection is, GoString name, bool mandatory, GoFunc f) {
     bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, name, &_t1);
     GoString data = _t2;
@@ -121878,7 +122537,7 @@ GoIface CharCompiler_stateParam(CharCompiler* c, IniSection is, GoString name, b
     return (GoIface){0};
 }
 
-// CharCompiler.getDataPrefix (compiler.go:6747), 0 TODO
+// CharCompiler.getDataPrefix (compiler.go:6753), 0 TODO
 GoString CharCompiler_getDataPrefix(CharCompiler* c, GoString* data, bool ffxDefault) {
     GoString prefix = {0};
     if ((*data).len > 1) {
@@ -121929,14 +122588,14 @@ GoString CharCompiler_getDataPrefix(CharCompiler* c, GoString* data, bool ffxDef
     return prefix;
 }
 
-// CharCompiler.stringToExp (compiler.go:6801), 0 TODO
+// CharCompiler.stringToExp (compiler.go:6807), 0 TODO
 Slice_BytecodeExp CharCompiler_stringToExp(CharCompiler* c, GoString s) {
     BytecodeExp be = (BytecodeExp){0};
     BytecodeExp_appendI32Op(&be, 9U, ((i32)StringPool_Add(&g_sys.stringPool.v[c->playerNo], s)));
     return GO_SLICE_LIT(Slice_BytecodeExp, BytecodeExp, 1, be);
 }
 
-// CharCompiler.paramPrefixValue (compiler.go:6808), 0 TODO
+// CharCompiler.paramPrefixValue (compiler.go:6814), 0 TODO
 GoIface CharCompiler_paramPrefixValue(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString name, u8 id, int numArg, bool mandatory, bool ffxDefault) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, name, &_t1);
@@ -121948,12 +122607,12 @@ GoIface CharCompiler_paramPrefixValue(CharCompiler* c, IniSection is, StateContr
     return CharCompiler_paramPrefixValueSub(c, is, sc, name, id, numArg, mandatory, ffxDefault);
 }
 
-// CharCompiler.paramPrefixValueSub (compiler.go:6817), 0 TODO
+// CharCompiler.paramPrefixValueSub (compiler.go:6823), 0 TODO
 GoIface CharCompiler_paramPrefixValueSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString name, u8 id, int numArg, bool mandatory, bool ffxDefault) {
     return CharCompiler_stateParam(c, is, name, mandatory, ((GoFunc){(void *)lambda_558, go_box(Env_lambda_558, ((Env_lambda_558){c, sc, id, numArg, ffxDefault}))}));
 }
 
-// CharCompiler.exprs (compiler.go:6859), 0 TODO
+// CharCompiler.exprs (compiler.go:6865), 0 TODO
 Ret_Slice_BytecodeExp__GoIface CharCompiler_exprs(CharCompiler* c, GoString data, ValueType vt, int numArg) {
     GoString *data__h = go_box(GoString, data);
     int n = numArg;
@@ -121992,7 +122651,7 @@ Ret_Slice_BytecodeExp__GoIface CharCompiler_exprs(CharCompiler* c, GoString data
     return (Ret_Slice_BytecodeExp__GoIface){bes, (GoIface){0}};
 }
 
-// CharCompiler.scAdd (compiler.go:6888), 0 TODO
+// CharCompiler.scAdd (compiler.go:6894), 0 TODO
 GoIface CharCompiler_scAdd(CharCompiler* c, StateControllerBase* sc, u8 id, GoString data, ValueType vt, int numArg, Slice_BytecodeExp topbe) {
     Ret_Slice_BytecodeExp__GoIface _t1 = CharCompiler_exprs(c, data, vt, numArg);
     Slice_BytecodeExp bes = _t1.r0;
@@ -122008,7 +122667,7 @@ GoIface CharCompiler_scAdd(CharCompiler* c, StateControllerBase* sc, u8 id, GoSt
     return (GoIface){0};
 }
 
-// CharCompiler.paramValue (compiler.go:6904), 0 TODO
+// CharCompiler.paramValue (compiler.go:6910), 0 TODO
 GoIface CharCompiler_paramValue(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramname, u8 id, ValueType vt, int numArg, bool mandatory) {
     bool found = false;
     {
@@ -122035,7 +122694,7 @@ GoIface CharCompiler_paramValue(CharCompiler* c, IniSection is, StateControllerB
     return (GoIface){0};
 }
 
-// CharCompiler.paramValueLoose (compiler.go:6932), 0 TODO
+// CharCompiler.paramValueLoose (compiler.go:6938), 0 TODO
 GoIface CharCompiler_paramValueLoose(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramname, u8 id, ValueType vt, int numArg, bool mandatory) {
     GoIface err = CharCompiler_paramValue(c, is, sc, paramname, id, vt, numArg, mandatory);
     if (((err.type == 0) || c->zssMode) || (!g_sys.ignoreMostErrors)) {
@@ -122063,7 +122722,7 @@ GoIface CharCompiler_paramValueLoose(CharCompiler* c, IniSection is, StateContro
     return (GoIface){0};
 }
 
-// CharCompiler.paramAnimtype (compiler.go:6971), 0 TODO
+// CharCompiler.paramAnimtype (compiler.go:6977), 0 TODO
 GoIface CharCompiler_paramAnimtype(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, paramName, &_t1);
@@ -122075,12 +122734,12 @@ GoIface CharCompiler_paramAnimtype(CharCompiler* c, IniSection is, StateControll
     return CharCompiler_paramAnimtypeSub(c, is, sc, paramName, id);
 }
 
-// CharCompiler.paramAnimtypeSub (compiler.go:6979), 0 TODO
+// CharCompiler.paramAnimtypeSub (compiler.go:6985), 0 TODO
 GoIface CharCompiler_paramAnimtypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id) {
     return CharCompiler_stateParam(c, is, paramName, false, ((GoFunc){(void *)lambda_559, go_box(Env_lambda_559, ((Env_lambda_559){c, sc, paramName, id}))}));
 }
 
-// CharCompiler.paramHittype (compiler.go:7031), 0 TODO
+// CharCompiler.paramHittype (compiler.go:7037), 0 TODO
 GoIface CharCompiler_paramHittype(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, paramName, &_t1);
@@ -122092,12 +122751,12 @@ GoIface CharCompiler_paramHittype(CharCompiler* c, IniSection is, StateControlle
     return CharCompiler_paramHittypeSub(c, is, sc, paramName, id);
 }
 
-// CharCompiler.paramHittypeSub (compiler.go:7039), 0 TODO
+// CharCompiler.paramHittypeSub (compiler.go:7045), 0 TODO
 GoIface CharCompiler_paramHittypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id) {
     return CharCompiler_stateParam(c, is, paramName, false, ((GoFunc){(void *)lambda_560, go_box(Env_lambda_560, ((Env_lambda_560){c, sc, paramName, id}))}));
 }
 
-// CharCompiler.paramPostype (compiler.go:7081), 0 TODO
+// CharCompiler.paramPostype (compiler.go:7087), 0 TODO
 GoIface CharCompiler_paramPostype(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, GOSTR("postype"), &_t1);
@@ -122109,12 +122768,12 @@ GoIface CharCompiler_paramPostype(CharCompiler* c, IniSection is, StateControlle
     return CharCompiler_paramPostypeSub(c, is, sc, id);
 }
 
-// CharCompiler.paramPostypeSub (compiler.go:7089), 0 TODO
+// CharCompiler.paramPostypeSub (compiler.go:7095), 0 TODO
 GoIface CharCompiler_paramPostypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id) {
     return CharCompiler_stateParam(c, is, GOSTR("postype"), false, ((GoFunc){(void *)lambda_561, go_box(Env_lambda_561, ((Env_lambda_561){c, sc, id}))}));
 }
 
-// CharCompiler.paramSpace (compiler.go:7145), 0 TODO
+// CharCompiler.paramSpace (compiler.go:7151), 0 TODO
 GoIface CharCompiler_paramSpace(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id, bool allowNone) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, GOSTR("space"), &_t1);
@@ -122126,12 +122785,12 @@ GoIface CharCompiler_paramSpace(CharCompiler* c, IniSection is, StateControllerB
     return CharCompiler_paramSpaceSub(c, is, sc, id, allowNone);
 }
 
-// CharCompiler.paramSpaceSub (compiler.go:7153), 0 TODO
+// CharCompiler.paramSpaceSub (compiler.go:7159), 0 TODO
 GoIface CharCompiler_paramSpaceSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id, bool allowNone) {
     return CharCompiler_stateParam(c, is, GOSTR("space"), false, ((GoFunc){(void *)lambda_562, go_box(Env_lambda_562, ((Env_lambda_562){c, sc, id, allowNone}))}));
 }
 
-// CharCompiler.paramProjection (compiler.go:7184), 0 TODO
+// CharCompiler.paramProjection (compiler.go:7190), 0 TODO
 GoIface CharCompiler_paramProjection(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString key, u8 id) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, key, &_t1);
@@ -122143,12 +122802,12 @@ GoIface CharCompiler_paramProjection(CharCompiler* c, IniSection is, StateContro
     return CharCompiler_paramProjectionSub(c, is, sc, key, id);
 }
 
-// CharCompiler.paramProjectionSub (compiler.go:7192), 0 TODO
+// CharCompiler.paramProjectionSub (compiler.go:7198), 0 TODO
 GoIface CharCompiler_paramProjectionSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString key, u8 id) {
     return CharCompiler_stateParam(c, is, key, false, ((GoFunc){(void *)lambda_563, go_box(Env_lambda_563, ((Env_lambda_563){sc, id}))}));
 }
 
-// CharCompiler.paramSaveData (compiler.go:7212), 0 TODO
+// CharCompiler.paramSaveData (compiler.go:7218), 0 TODO
 GoIface CharCompiler_paramSaveData(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, GOSTR("savedata"), &_t1);
@@ -122160,12 +122819,12 @@ GoIface CharCompiler_paramSaveData(CharCompiler* c, IniSection is, StateControll
     return CharCompiler_paramSaveDataSub(c, is, sc, id);
 }
 
-// CharCompiler.paramSaveDataSub (compiler.go:7220), 0 TODO
+// CharCompiler.paramSaveDataSub (compiler.go:7226), 0 TODO
 GoIface CharCompiler_paramSaveDataSub(CharCompiler* c, IniSection is, StateControllerBase* sc, u8 id) {
     return CharCompiler_stateParam(c, is, GOSTR("savedata"), false, ((GoFunc){(void *)lambda_564, go_box(Env_lambda_564, ((Env_lambda_564){sc, id}))}));
 }
 
-// CharCompiler.paramTrans (compiler.go:7242), 0 TODO
+// CharCompiler.paramTrans (compiler.go:7248), 0 TODO
 GoIface CharCompiler_paramTrans(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString prefix, u8 id) {
     bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, go_strcat(prefix, GOSTR("alpha")), &_t1);
     bool alphaExists = _t1;
@@ -122185,7 +122844,7 @@ GoIface CharCompiler_paramTrans(CharCompiler* c, IniSection is, StateControllerB
     return CharCompiler_stateParam(c, is, go_strcat(prefix, GOSTR("trans")), false, ((GoFunc){(void *)lambda_565, go_box(Env_lambda_565, ((Env_lambda_565){c, is, sc, prefix, id}))}));
 }
 
-// CharCompiler.paramClsnType (compiler.go:7369), 0 TODO
+// CharCompiler.paramClsnType (compiler.go:7375), 0 TODO
 GoIface CharCompiler_paramClsnType(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, paramName, &_t1);
@@ -122197,12 +122856,12 @@ GoIface CharCompiler_paramClsnType(CharCompiler* c, IniSection is, StateControll
     return CharCompiler_paramClsnTypeSub(c, is, sc, paramName, id);
 }
 
-// CharCompiler.paramClsnTypeSub (compiler.go:7377), 0 TODO
+// CharCompiler.paramClsnTypeSub (compiler.go:7383), 0 TODO
 GoIface CharCompiler_paramClsnTypeSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 id) {
     return CharCompiler_stateParam(c, is, paramName, false, ((GoFunc){(void *)lambda_567, go_box(Env_lambda_567, ((Env_lambda_567){sc, paramName, id}))}));
 }
 
-// CharCompiler.paramStringList (compiler.go:7404), 0 TODO
+// CharCompiler.paramStringList (compiler.go:7410), 0 TODO
 GoIface CharCompiler_paramStringList(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 opcode) {
     {
         bool _t1; GoString _t2 = Map_GoString_GoString_get(&is, paramName, &_t1);
@@ -122214,12 +122873,12 @@ GoIface CharCompiler_paramStringList(CharCompiler* c, IniSection is, StateContro
     return CharCompiler_paramStringListSub(c, is, sc, paramName, opcode);
 }
 
-// CharCompiler.paramStringListSub (compiler.go:7412), 0 TODO
+// CharCompiler.paramStringListSub (compiler.go:7418), 0 TODO
 GoIface CharCompiler_paramStringListSub(CharCompiler* c, IniSection is, StateControllerBase* sc, GoString paramName, u8 opcode) {
     return CharCompiler_stateParam(c, is, paramName, false, ((GoFunc){(void *)lambda_568, go_box(Env_lambda_568, ((Env_lambda_568){c, sc, opcode}))}));
 }
 
-// CharCompiler.stateDef (compiler.go:7438), 0 TODO
+// CharCompiler.stateDef (compiler.go:7444), 0 TODO
 GoIface CharCompiler_stateDef(CharCompiler* c, IniSection is, StateBytecode* sbc) {
     if (c->stateNo < 0) {
         if (c->zssMode && (Map_GoString_GoString_len(&is) > 0)) {
@@ -122230,7 +122889,7 @@ GoIface CharCompiler_stateDef(CharCompiler* c, IniSection is, StateBytecode* sbc
     return CharCompiler_stateSec(c, is, ((GoFunc){(void *)lambda_569, go_box(Env_lambda_569, ((Env_lambda_569){c, is, sbc}))}));
 }
 
-// CharCompiler.stateCompile (compiler.go:7584), 0 TODO
+// CharCompiler.stateCompile (compiler.go:7590), 0 TODO
 GoIface CharCompiler_stateCompile(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, Slice_GoString dirs, bool negoverride, Map_GoString_TypedValue constants) {
     GoString *filename__h = go_box(GoString, filename);
     bool isZss = fn_HasExtension((*filename__h), GOSTR(".zss"));
@@ -122258,7 +122917,7 @@ GoIface CharCompiler_stateCompile(CharCompiler* c, Map_i32_StateBytecodePtr stat
     return CharCompiler_stateCompileCNS(c, states, (*filename__h), (*filetext__h), negoverride, constants);
 }
 
-// CharCompiler.stateCompileCNS (compiler.go:7630), 0 TODO
+// CharCompiler.stateCompileCNS (compiler.go:7636), 0 TODO
 GoIface CharCompiler_stateCompileCNS(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, GoString filetext, bool negoverride, Map_GoString_TypedValue constants) {
     c->zssMode = false;
     c->currentFile = filename;
@@ -122506,7 +123165,7 @@ GoIface CharCompiler_stateCompileCNS(CharCompiler* c, Map_i32_StateBytecodePtr s
     return (GoIface){0};
 }
 
-// CharCompiler.wrongClosureToken (compiler.go:7993), 0 TODO
+// CharCompiler.wrongClosureToken (compiler.go:7999), 0 TODO
 GoIface CharCompiler_wrongClosureToken(CharCompiler* c) {
     if (go_streq(c->token, GOSTR(""))) {
         return ((GoIface){281, go_box(Error, GOSTR("Missing closure token"))});
@@ -122514,7 +123173,7 @@ GoIface CharCompiler_wrongClosureToken(CharCompiler* c) {
     return ((GoIface){281, go_box(Error, go_strcat(GOSTR("Unexpected closure token: "), c->token))});
 }
 
-// CharCompiler.nextLine (compiler.go:8000), 0 TODO
+// CharCompiler.nextLine (compiler.go:8006), 0 TODO
 Ret_GoString__bool CharCompiler_nextLine(CharCompiler* c) {
     if (c->i >= c->lines.len) {
         return (Ret_GoString__bool){GOSTR(""), false};
@@ -122524,7 +123183,7 @@ Ret_GoString__bool CharCompiler_nextLine(CharCompiler* c) {
     return (Ret_GoString__bool){line, true};
 }
 
-// CharCompiler.scan (compiler.go:8009), 0 TODO
+// CharCompiler.scan (compiler.go:8015), 0 TODO
 GoString CharCompiler_scan(CharCompiler* c, GoString* line) {
     {
         for (; 1; ) {
@@ -122547,7 +123206,7 @@ GoString CharCompiler_scan(CharCompiler* c, GoString* line) {
     return c->token;
 }
 
-// CharCompiler.needToken (compiler.go:8026), 0 TODO
+// CharCompiler.needToken (compiler.go:8032), 0 TODO
 GoIface CharCompiler_needToken(CharCompiler* c, GoString t) {
     if (!go_streq(c->token, t)) {
         if (go_streq(c->token, GOSTR(""))) {
@@ -122558,7 +123217,7 @@ GoIface CharCompiler_needToken(CharCompiler* c, GoString t) {
     return (GoIface){0};
 }
 
-// CharCompiler.readString (compiler.go:8036), 0 TODO
+// CharCompiler.readString (compiler.go:8042), 0 TODO
 Ret_GoString__GoIface CharCompiler_readString(CharCompiler* c, GoString* line) {
     int i = strings_Index((*line), GOSTR("\""));
     if (i < 0) {
@@ -122569,7 +123228,7 @@ Ret_GoString__GoIface CharCompiler_readString(CharCompiler* c, GoString* line) {
     return (Ret_GoString__GoIface){s, (GoIface){0}};
 }
 
-// CharCompiler.readSentenceLine (compiler.go:8046), 0 TODO
+// CharCompiler.readSentenceLine (compiler.go:8052), 0 TODO
 Ret_GoString__bool__GoIface CharCompiler_readSentenceLine(CharCompiler* c, GoString* line) {
     GoString s = {0};
     bool assign = {0};
@@ -122633,7 +123292,7 @@ Ret_GoString__bool__GoIface CharCompiler_readSentenceLine(CharCompiler* c, GoStr
     return (Ret_GoString__bool__GoIface){s, assign, err};
 }
 
-// CharCompiler.readSentence (compiler.go:8081), 0 TODO
+// CharCompiler.readSentence (compiler.go:8087), 0 TODO
 Ret_GoString__bool__GoIface CharCompiler_readSentence(CharCompiler* c, GoString* line) {
     GoString s = {0};
     bool a = {0};
@@ -122675,7 +123334,7 @@ Ret_GoString__bool__GoIface CharCompiler_readSentence(CharCompiler* c, GoString*
     return (Ret_GoString__bool__GoIface){s, a, err};
 }
 
-// CharCompiler.statementEnd (compiler.go:8101), 0 TODO
+// CharCompiler.statementEnd (compiler.go:8107), 0 TODO
 GoIface CharCompiler_statementEnd(CharCompiler* c, GoString* line) {
     c->token = CharCompiler_tokenizer(c, line);
     if ((c->token.len > 0) && (((u8)c->token.p[0]) != 35U)) {
@@ -122688,7 +123347,7 @@ GoIface CharCompiler_statementEnd(CharCompiler* c, GoString* line) {
     return (GoIface){0};
 }
 
-// CharCompiler.readKeyValue (compiler.go:8110), 0 TODO
+// CharCompiler.readKeyValue (compiler.go:8116), 0 TODO
 GoIface CharCompiler_readKeyValue(CharCompiler* c, IniSection is, GoString end, GoString* line) {
     GoString name = CharCompiler_scan(c, line);
     if (go_streq(name, GOSTR("")) || go_streq(name, GOSTR(":"))) {
@@ -122721,7 +123380,7 @@ GoIface CharCompiler_readKeyValue(CharCompiler* c, IniSection is, GoString end, 
     return (GoIface){0};
 }
 
-// CharCompiler.varNameCheck (compiler.go:8143), 0 TODO
+// CharCompiler.varNameCheck (compiler.go:8149), 0 TODO
 GoIface CharCompiler_varNameCheck(CharCompiler* c, GoString nm) {
     GoIface err = {0};
     if ((((((u8)nm.p[0]) < 97U) || (((u8)nm.p[0]) > 122U))) && (((u8)nm.p[0]) != 95U)) {
@@ -122742,7 +123401,7 @@ GoIface CharCompiler_varNameCheck(CharCompiler* c, GoString nm) {
     return err;
 }
 
-// CharCompiler.varNames (compiler.go:8155), 0 TODO
+// CharCompiler.varNames (compiler.go:8161), 0 TODO
 Ret_Slice_GoString__GoIface CharCompiler_varNames(CharCompiler* c, GoString end, GoString* line) {
     Slice_GoString _t1 = (Slice_GoString){0};
     GoString _t2 = CharCompiler_scan(c, line);
@@ -122792,7 +123451,7 @@ Ret_Slice_GoString__GoIface CharCompiler_varNames(CharCompiler* c, GoString end,
     return (Ret_Slice_GoString__GoIface){names, (GoIface){0}};
 }
 
-// CharCompiler.inclNumVars (compiler.go:8187), 0 TODO
+// CharCompiler.inclNumVars (compiler.go:8193), 0 TODO
 GoIface CharCompiler_inclNumVars(CharCompiler* c, i32* numVars) {
     (*numVars)++;
     if ((*numVars) > 256) {
@@ -122801,7 +123460,7 @@ GoIface CharCompiler_inclNumVars(CharCompiler* c, i32* numVars) {
     return (GoIface){0};
 }
 
-// CharCompiler.scanI32 (compiler.go:8195), 0 TODO
+// CharCompiler.scanI32 (compiler.go:8201), 0 TODO
 Ret_i32__GoIface CharCompiler_scanI32(CharCompiler* c, GoString* line) {
     GoString t = CharCompiler_scan(c, line);
     if (go_streq(t, GOSTR(""))) {
@@ -122816,7 +123475,7 @@ Ret_i32__GoIface CharCompiler_scanI32(CharCompiler* c, GoString* line) {
     return (Ret_i32__GoIface){((i32)v), err};
 }
 
-// CharCompiler.scanStateDef (compiler.go:8207), 0 TODO
+// CharCompiler.scanStateDef (compiler.go:8213), 0 TODO
 Ret_i32__GoIface CharCompiler_scanStateDef(CharCompiler* c, GoString* line, Map_GoString_TypedValue constants) {
     GoString t = CharCompiler_scan(c, line);
     if (go_streq(t, GOSTR(""))) {
@@ -122853,7 +123512,7 @@ Ret_i32__GoIface CharCompiler_scanStateDef(CharCompiler* c, GoString* line, Map_
     return (Ret_i32__GoIface){v, err};
 }
 
-// CharCompiler.blockAttribSet (compiler.go:8243), 0 TODO
+// CharCompiler.blockAttribSet (compiler.go:8249), 0 TODO
 GoIface CharCompiler_blockAttribSet(CharCompiler* c, GoString* line, StateBlock* bl, StateBytecode* sbc, bool inheritIhp, bool nestedInLoop) {
     if (inheritIhp) {
         bool _t1 = true;
@@ -122930,7 +123589,7 @@ GoIface CharCompiler_blockAttribSet(CharCompiler* c, GoString* line, StateBlock*
     return (GoIface){0};
 }
 
-// CharCompiler.subBlock (compiler.go:8298), 0 TODO
+// CharCompiler.subBlock (compiler.go:8304), 0 TODO
 Ret_StateBlockPtr__GoIface CharCompiler_subBlock(CharCompiler* c, GoString* line, bool root, StateBytecode* sbc, i32* numVars, bool inheritIhp, bool nestedInLoop) {
     if (sbc == NULL) {
         inheritIhp = true;
@@ -123048,7 +123707,7 @@ Ret_StateBlockPtr__GoIface CharCompiler_subBlock(CharCompiler* c, GoString* line
     return (Ret_StateBlockPtr__GoIface){bl, (GoIface){0}};
 }
 
-// CharCompiler.switchBlock (compiler.go:8377), 0 TODO
+// CharCompiler.switchBlock (compiler.go:8383), 0 TODO
 GoIface CharCompiler_switchBlock(CharCompiler* c, GoString* line, StateBlock* bl, StateBytecode* sbc, i32* numVars) {
     Ret_GoString__bool__GoIface _t1 = CharCompiler_readSentence(c, line);
     GoString header = _t1.r0;
@@ -123082,7 +123741,7 @@ GoIface CharCompiler_switchBlock(CharCompiler* c, GoString* line, StateBlock* bl
     return (GoIface){0};
 }
 
-// CharCompiler.loopBlock (compiler.go:8478), 0 TODO
+// CharCompiler.loopBlock (compiler.go:8484), 0 TODO
 GoIface CharCompiler_loopBlock(CharCompiler* c, GoString* line, bool root, StateBlock* bl, StateBytecode* sbc, i32* numVars) {
     bl->loopBlock = true;
     bl->nestedInLoop = true;
@@ -123185,7 +123844,7 @@ GoIface CharCompiler_loopBlock(CharCompiler* c, GoString* line, bool root, State
     return (GoIface){0};
 }
 
-// CharCompiler.callFunc (compiler.go:8553), 0 TODO
+// CharCompiler.callFunc (compiler.go:8559), 0 TODO
 GoIface CharCompiler_callFunc(CharCompiler* c, GoString* line, bool root, Slice_StateController* ctrls, Slice_u8 ret) {
     CallFunction cf = {0};
     if (true) {
@@ -123260,7 +123919,7 @@ GoIface CharCompiler_callFunc(CharCompiler* c, GoString* line, bool root, Slice_
     return (GoIface){0};
 }
 
-// CharCompiler.letAssign (compiler.go:8630), 0 TODO
+// CharCompiler.letAssign (compiler.go:8636), 0 TODO
 GoIface CharCompiler_letAssign(CharCompiler* c, GoString* line, bool root, Slice_StateController* ctrls, i32* numVars, Slice_GoString names, bool endLine) {
     Slice_u8 varis = GO_MAKE_A(Slice_u8, u8, names.len, 0);
     {
@@ -123368,7 +124027,7 @@ GoIface CharCompiler_letAssign(CharCompiler* c, GoString* line, bool root, Slice
     return (GoIface){0};
 }
 
-// CharCompiler.stateBlock (compiler.go:8697), 0 TODO
+// CharCompiler.stateBlock (compiler.go:8703), 0 TODO
 GoIface CharCompiler_stateBlock(CharCompiler* c, GoString* line, StateBlock* bl, bool root, StateBytecode* sbc, Slice_StateController* ctrls, i32* numVars) {
     CharCompiler_scan(c, line);
     {
@@ -123581,7 +124240,7 @@ GoIface CharCompiler_stateBlock(CharCompiler* c, GoString* line, StateBlock* bl,
     return CharCompiler_wrongClosureToken(c);
 }
 
-// CharCompiler.stateCompileZSS (compiler.go:8846), 0 TODO
+// CharCompiler.stateCompileZSS (compiler.go:8852), 0 TODO
 GoIface CharCompiler_stateCompileZSS(CharCompiler* c, Map_i32_StateBytecodePtr states, GoString filename, GoString filetext, Map_GoString_TypedValue constants) {
     volatile bool _df1 = false; volatile bool _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -123917,7 +124576,7 @@ GoIface CharCompiler_stateCompileZSS(CharCompiler* c, Map_i32_StateBytecodePtr s
     if (_df1) { _df1 = false; ((void (*)(void *, bool))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// CharCompiler.Compile (compiler.go:9010), 0 TODO
+// CharCompiler.Compile (compiler.go:9016), 0 TODO
 Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char* p, GoString def, CharGlobalInfo* gi) {
     int pn = p->playerNo;
     Map_GoString_TypedValue _t1 = gi->constants;
@@ -124191,7 +124850,7 @@ Ret_Map_i32_StateBytecodePtr__GoIface CharCompiler_Compile(CharCompiler* c, Char
     return (Ret_Map_i32_StateBytecodePtr__GoIface){states, (GoIface){0}};
 }
 
-// CharCompiler.charWarn (compiler.go:9265), 0 TODO
+// CharCompiler.charWarn (compiler.go:9271), 0 TODO
 GoString CharCompiler_charWarn(CharCompiler* c) {
     Ret_GoString__GoString _t1 = fn_SplitPath(c->currentFile);
     GoString file = _t1.r1;
@@ -176834,13 +177493,14 @@ void System_setGSF(System* s, GlobalSpecialFlag gsf, bool on) {
 
 // System.appendToConsole (system.go:2088), 0 TODO
 void System_appendToConsole(System* s, GoString str) {
+    g_consoleSeq++;
     s->consoleText = GO_APPEND(Slice_GoString, s->consoleText, str);
     if (s->consoleText.len > s->cfg.Debug.ConsoleRows) {
         s->consoleText = GO_SLICE(Slice_GoString, s->consoleText, (s->consoleText.len - s->cfg.Debug.ConsoleRows), -1);
     }
 }
 
-// System.printToConsole (system.go:2095), 0 TODO
+// System.printToConsole (system.go:2096), 0 TODO
 void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     Slice_GoString spl = s->stringPool.v[pn].List;
     if ((sn >= 0) && (sn < spl.len)) {
@@ -176856,7 +177516,7 @@ void System_printToConsole(System* s, int pn, int sn, Slice_GoIface a) {
     }
 }
 
-// System.luaQueuePreDraw (system.go:2107), 0 TODO
+// System.luaQueuePreDraw (system.go:2108), 0 TODO
 void System_luaQueuePreDraw(System* s, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -176865,7 +177525,7 @@ void System_luaQueuePreDraw(System* s, GoFunc fn) {
     s->luaDrawPreOps = GO_APPEND(Slice_GoFunc, s->luaDrawPreOps, fn);
 }
 
-// System.luaQueueLayerDraw (system.go:2114), 0 TODO
+// System.luaQueueLayerDraw (system.go:2115), 0 TODO
 void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     if (fn.fn == 0) {
         return;
@@ -176881,7 +177541,7 @@ void System_luaQueueLayerDraw(System* s, int layer, GoFunc fn) {
     s->luaDrawLayerOps.v[layer] = GO_APPEND(Slice_GoFunc, s->luaDrawLayerOps.v[layer], fn);
 }
 
-// System.luaFlushDrawQueue (system.go:2131), 0 TODO
+// System.luaFlushDrawQueue (system.go:2132), 0 TODO
 void System_luaFlushDrawQueue(System* s) {
     {
         Slice_GoFunc _t2 = s->luaDrawPreOps;
@@ -176909,7 +177569,7 @@ void System_luaFlushDrawQueue(System* s) {
     }
 }
 
-// System.luaDiscardDrawQueue (system.go:2145), 0 TODO
+// System.luaDiscardDrawQueue (system.go:2146), 0 TODO
 void System_luaDiscardDrawQueue(System* s) {
     s->luaDrawPreOps = GO_SLICE(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
     {
@@ -176921,7 +177581,7 @@ void System_luaDiscardDrawQueue(System* s) {
     }
 }
 
-// System.printBytecodeError (system.go:2155), 0 TODO
+// System.printBytecodeError (system.go:2156), 0 TODO
 void System_printBytecodeError(System* s, GoString str) {
     if ((s->loader.state == 2) && (s->workingChar != NULL)) {
         System_appendToConsole(s, go_strcat(Char_warn(g_sys.workingChar), str));
@@ -176932,7 +177592,7 @@ void System_printBytecodeError(System* s, GoString str) {
     }
 }
 
-// System.loadTime (system.go:2165), 0 TODO
+// System.loadTime (system.go:2166), 0 TODO
 void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bool shell, bool console) {
     i64 elapsed = time_Since(start);
     str = fmt_Sprintf(GOSTR("%v; Load time: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, str)}), ((GoIface){589, go_box_a(i64, elapsed)})));
@@ -176944,7 +177604,7 @@ void System_loadTime(System* s, GoOpaque /* time.Time */ start, GoString str, bo
     }
 }
 
-// System.updateZScale (system.go:2178), 0 TODO
+// System.updateZScale (system.go:2179), 0 TODO
 f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     f32 _t1 = (g_sys.stage->stageCamera.topz / localscale);
     f32 topz = _t1;
@@ -176965,12 +177625,12 @@ f32 System_updateZScale(System* s, f32 pos, f32 localscale) {
     return scale;
 }
 
-// System.zEnabled (system.go:2193), 0 TODO
+// System.zEnabled (system.go:2194), 0 TODO
 bool System_zEnabled(System* s) {
     return (s->SystemStateVars_.zmin != s->SystemStateVars_.zmax);
 }
 
-// System.drawposXYfromZ (system.go:2198), 0 TODO
+// System.drawposXYfromZ (system.go:2199), 0 TODO
 Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos, f32 zscale) {
     Arr2_f32 outpos = {0};
     outpos.v[0] = ((((inpos.v[0] - s->SystemStateVars_.cam.Pos.v[0])) * zscale) + s->SystemStateVars_.cam.Pos.v[0]);
@@ -176980,12 +177640,12 @@ Arr2_f32 System_drawposXYfromZ(System* s, Arr2_f32 inpos, f32 localscl, f32 zpos
     return outpos;
 }
 
-// System.posZtoYoffset (system.go:2207), 0 TODO
+// System.posZtoYoffset (system.go:2208), 0 TODO
 f32 System_posZtoYoffset(System* s, f32 zpos, f32 localscl) {
     return ((zpos * localscl) * s->stage->stageCamera.depthtoscreen);
 }
 
-// System.zAxisOverlap (system.go:2213), 0 TODO
+// System.zAxisOverlap (system.go:2214), 0 TODO
 bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1, f32 posz2, f32 top2, f32 bot2, f32 localscl2) {
     if (!System_zEnabled(s)) {
         return true;
@@ -176997,7 +177657,7 @@ bool System_zAxisOverlap(System* s, f32 posz1, f32 top1, f32 bot1, f32 localscl1
     return ((max1 >= min2) && (min1 <= max2));
 }
 
-// System.clsnOverlap (system.go:2226), 0 TODO
+// System.clsnOverlap (system.go:2227), 0 TODO
 Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f32 pos1, f32 facing1, Slice_ClsnFinal boxes2, Arr2_f32 pos2, f32 facing2) {
     if ((boxes1.len == 0) || (boxes2.len == 0)) {
         return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
@@ -177056,7 +177716,7 @@ Ret_bool__f32__f32 System_clsnOverlap(System* s, Slice_ClsnFinal boxes1, Arr2_f3
     return (Ret_bool__f32__f32){false, 0x0p+00f, 0x0p+00f};
 }
 
-// System.initPlayerID (system.go:2280), 0 TODO
+// System.initPlayerID (system.go:2281), 0 TODO
 void System_initPlayerID(System* s) {
     GoFunc assignID = ((GoFunc){(void *)lambda_1820, &(Env_lambda_1820){0}});
     if (g_sys.SystemStateVars_.roundNo > 1) {
@@ -177085,7 +177745,7 @@ void System_initPlayerID(System* s) {
     }
 }
 
-// System.pruneCharId (system.go:2321), 0 TODO
+// System.pruneCharId (system.go:2322), 0 TODO
 void System_pruneCharId(System* s) {
     s->SystemStateVars_.lastCharId = go_max_i32(0, (g_sys.cfg.Config.HelperMax - 1));
     {
@@ -177100,7 +177760,7 @@ void System_pruneCharId(System* s) {
     }
 }
 
-// System.newCharId (system.go:2335), 0 TODO
+// System.newCharId (system.go:2336), 0 TODO
 i32 System_newCharId(System* s) {
     i32 newid = (s->SystemStateVars_.lastCharId + 1);
     {
@@ -177120,7 +177780,7 @@ i32 System_newCharId(System* s) {
     return newid;
 }
 
-// System.resetGblEffect (system.go:2376), 0 TODO
+// System.resetGblEffect (system.go:2377), 0 TODO
 void System_resetGblEffect(System* s) {
     PalFX_clear(s->allPalFX);
     PalFX_clear(s->bgPalFX);
@@ -177138,7 +177798,7 @@ void System_resetGblEffect(System* s) {
     s->SystemStateVars_.specialFlag = 0U;
 }
 
-// System.clearAllCharSounds (system.go:2388), 0 TODO
+// System.clearAllCharSounds (system.go:2389), 0 TODO
 void System_clearAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177149,7 +177809,7 @@ void System_clearAllCharSounds(System* s) {
     }
 }
 
-// System.stopAllCharSounds (system.go:2395), 0 TODO
+// System.stopAllCharSounds (system.go:2396), 0 TODO
 void System_stopAllCharSounds(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177160,7 +177820,7 @@ void System_stopAllCharSounds(System* s) {
     }
 }
 
-// System.clearMatchSound (system.go:2401), 0 TODO
+// System.clearMatchSound (system.go:2402), 0 TODO
 void System_clearMatchSound(System* s) {
     StoryboardManager_clearSound(&s->matchStoryboards);
     {
@@ -177192,14 +177852,14 @@ void System_clearMatchSound(System* s) {
     }
 }
 
-// System.clearAllSound (system.go:2425), 0 TODO
+// System.clearAllSound (system.go:2426), 0 TODO
 void System_clearAllSound(System* s) {
     SoundChannels_StopAll(&s->soundChannels);
     fn_WithSpeakerLock(((GoFunc){(void *)lambda_1821, go_box(Env_lambda_1821, ((Env_lambda_1821){s}))}));
     System_clearMatchSound(s);
 }
 
-// System.clearPlayerAssets (system.go:2435), 0 TODO
+// System.clearPlayerAssets (system.go:2436), 0 TODO
 void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     StoryboardManager_clear(&s->matchStoryboards, pn);
     if (s->chars.v[pn].len > 0) {
@@ -177230,7 +177890,7 @@ void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
     s->explodDrawOrder = fn_PointerSliceReset_Explod(s->explodDrawOrder);
 }
 
-// System.handleStageSwap (system.go:2466), 0 TODO
+// System.handleStageSwap (system.go:2467), 0 TODO
 bool System_handleStageSwap(System* s) {
     i32 roundRef = 0;
     if (s->SystemStateVars_.roundNo == 1) {
@@ -177272,7 +177932,7 @@ bool System_handleStageSwap(System* s) {
     return swap;
 }
 
-// System.updateMusicMaps (system.go:2503), 0 TODO
+// System.updateMusicMaps (system.go:2504), 0 TODO
 void System_updateMusicMaps(System* s) {
     bool newMatchMusic = ((s->SystemStateVars_.roundNo == 1) && (!s->SystemStateVars_.roundResetFlg));
     if (newMatchMusic) {
@@ -177314,7 +177974,7 @@ void System_updateMusicMaps(System* s) {
     }
 }
 
-// System.resetRound (system.go:2544), 0 TODO
+// System.resetRound (system.go:2545), 0 TODO
 void System_resetRound(System* s) {
     fn_specRound();
     if (false) {
@@ -177435,12 +178095,12 @@ void System_resetRound(System* s) {
     iface_Await_818fc0bc(g_gfx);
 }
 
-// System.debugPaused (system.go:2666), 0 TODO
+// System.debugPaused (system.go:2667), 0 TODO
 bool System_debugPaused(System* s) {
     return ((s->SystemStateVars_.paused && (!s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.motifPauseGame (system.go:2670), 0 TODO
+// System.motifPauseGame (system.go:2671), 0 TODO
 bool System_motifPauseGame(System* s) {
     if (s->motif.me.active) {
         return true;
@@ -177451,12 +178111,12 @@ bool System_motifPauseGame(System* s) {
     return false;
 }
 
-// System.matchPaused (system.go:2683), 0 TODO
+// System.matchPaused (system.go:2684), 0 TODO
 bool System_matchPaused(System* s) {
     return (System_debugPaused(s) || System_motifPauseGame(s));
 }
 
-// System.motifPauseMusic (system.go:2687), 0 TODO
+// System.motifPauseMusic (system.go:2688), 0 TODO
 bool System_motifPauseMusic(System* s) {
     if (s->motif.ch.active && (s->motif.ch.counter >= s->motif.ChallengerInfo.Pause.Time)) {
         return true;
@@ -177464,17 +178124,17 @@ bool System_motifPauseMusic(System* s) {
     return false;
 }
 
-// System.tickFrame (system.go:2696), 0 TODO
+// System.tickFrame (system.go:2697), 0 TODO
 bool System_tickFrame(System* s) {
     return ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag)) && (s->SystemStateVars_.oldTickCount < s->SystemStateVars_.tickCount));
 }
 
-// System.tickNextFrame (system.go:2706), 0 TODO
+// System.tickNextFrame (system.go:2707), 0 TODO
 bool System_tickNextFrame(System* s) {
     return ((go_f2i32((s->SystemStateVars_.tickCountF + s->SystemStateVars_.nextAddTime)) > s->SystemStateVars_.tickCount) && ((((!s->SystemStateVars_.paused) || s->SystemStateVars_.frameStepFlag) || (s->SystemStateVars_.oldTickCount >= s->SystemStateVars_.tickCount))));
 }
 
-// System.tickInterpolation (system.go:2713), 0 TODO
+// System.tickInterpolation (system.go:2714), 0 TODO
 f32 System_tickInterpolation(System* s) {
     if (System_tickNextFrame(s)) {
         return 0x1p+00f;
@@ -177486,12 +178146,12 @@ f32 System_tickInterpolation(System* s) {
     return 0x1p+00f;
 }
 
-// System.uiTick (system.go:2727), 0 TODO
+// System.uiTick (system.go:2728), 0 TODO
 bool System_uiTick(System* s) {
     return ((System_tickFrame(s) || System_debugPaused(s)) || s->motif.me.active);
 }
 
-// System.addFrameTime (system.go:2731), 0 TODO
+// System.addFrameTime (system.go:2732), 0 TODO
 bool System_addFrameTime(System* s, f32 t) {
     if (System_debugPaused(s)) {
         s->SystemStateVars_.oldNextAddTime = 0x0p+00f;
@@ -177512,7 +178172,7 @@ bool System_addFrameTime(System* s, f32 t) {
     return true;
 }
 
-// System.resetFrameTime (system.go:2751), 0 TODO
+// System.resetFrameTime (system.go:2752), 0 TODO
 void System_resetFrameTime(System* s) {
     int _t1 = 0;
     int _t2 = -1;
@@ -177530,7 +178190,7 @@ void System_resetFrameTime(System* s) {
     s->redrawWait.lastDraw = time_Now();
 }
 
-// System.resetMatchData (system.go:2760), 0 TODO
+// System.resetMatchData (system.go:2761), 0 TODO
 void System_resetMatchData(System* s, bool forceDestroy) {
     g_sys.allPalFX = fn_newPalFX();
     g_sys.bgPalFX = fn_newPalFX();
@@ -177547,7 +178207,7 @@ void System_resetMatchData(System* s, bool forceDestroy) {
     }
 }
 
-// System.charUpdate (system.go:2772), 0 TODO
+// System.charUpdate (system.go:2773), 0 TODO
 void System_charUpdate(System* s) {
     CharList_update(&s->charList);
     System_projectileUpdate(s);
@@ -177556,7 +178216,7 @@ void System_charUpdate(System* s) {
     }
 }
 
-// System.globalCollision (system.go:2784), 0 TODO
+// System.globalCollision (system.go:2785), 0 TODO
 void System_globalCollision(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177578,7 +178238,7 @@ void System_globalCollision(System* s) {
     s->projectileTradeSort = fn_PointerSliceReset_Projectile(s->projectileTradeSort);
 }
 
-// System.runIntroSkip (system.go:2811), 0 TODO
+// System.runIntroSkip (system.go:2812), 0 TODO
 void System_runIntroSkip(System* s) {
     if ((!System_gsf(s, 4U)) || System_gsf(s, 16384U)) {
         return;
@@ -177610,7 +178270,7 @@ void System_runIntroSkip(System* s) {
     }
 }
 
-// System.clearSpriteData (system.go:2850), 0 TODO
+// System.clearSpriteData (system.go:2851), 0 TODO
 void System_clearSpriteData(System* s) {
     fn_spriteDataPoolReset();
     s->spriteList = GO_SLICE(DrawList, s->spriteList, 0, 0);
@@ -177638,7 +178298,7 @@ void System_clearSpriteData(System* s) {
     }
 }
 
-// System.cueDraw (system.go:2881), 0 TODO
+// System.cueDraw (system.go:2882), 0 TODO
 void System_cueDraw(System* s) {
     if (s->SystemStateVars_.frameSkip) {
         return;
@@ -177662,17 +178322,17 @@ void System_cueDraw(System* s) {
     System_explodCueDraw(s);
 }
 
-// System.screenleft (system.go:2900), 0 TODO
+// System.screenleft (system.go:2901), 0 TODO
 f32 System_screenleft(System* s) {
     return (((f32)s->stage->screenleft) * s->stage->localscl);
 }
 
-// System.screenright (system.go:2904), 0 TODO
+// System.screenright (system.go:2905), 0 TODO
 f32 System_screenright(System* s) {
     return (((f32)s->stage->screenright) * s->stage->localscl);
 }
 
-// System.action (system.go:2910), 0 TODO
+// System.action (system.go:2911), 0 TODO
 void System_action(System* s) {
     g_bcIdxDepth = 0;
     fn_bcProfFrame();
@@ -177867,7 +178527,7 @@ void System_action(System* s) {
     return;
 }
 
-// System.uiAction (system.go:3129), 0 TODO
+// System.uiAction (system.go:3130), 0 TODO
 void System_uiAction(System* s) {
     if (!System_uiTick(s)) {
         return;
@@ -177902,7 +178562,7 @@ void System_uiAction(System* s) {
     }
 }
 
-// System.projectileUpdate (system.go:3162), 0 TODO
+// System.projectileUpdate (system.go:3163), 0 TODO
 void System_projectileUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177927,7 +178587,7 @@ void System_projectileUpdate(System* s) {
     }
 }
 
-// System.projectilePrune (system.go:3180), 0 TODO
+// System.projectilePrune (system.go:3181), 0 TODO
 void System_projectilePrune(System* s, int pn) {
     Slice_ProjectilePtr playerProjs = s->projs.v[pn];
     int writeIdx = 0;
@@ -177947,7 +178607,7 @@ void System_projectilePrune(System* s, int pn) {
     s->projs.v[pn] = GO_SLICE(Slice_ProjectilePtr, playerProjs, 0, writeIdx);
 }
 
-// System.explodUpdate (system.go:3198), 0 TODO
+// System.explodUpdate (system.go:3199), 0 TODO
 void System_explodUpdate(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -177972,7 +178632,7 @@ void System_explodUpdate(System* s) {
     }
 }
 
-// System.explodCueDraw (system.go:3220), 0 TODO
+// System.explodCueDraw (system.go:3221), 0 TODO
 void System_explodCueDraw(System* s) {
     s->explodDrawOrder = GO_SLICE(Slice_ExplodPtr, s->explodDrawOrder, 0, 0);
     int count = 0;
@@ -178004,7 +178664,7 @@ void System_explodCueDraw(System* s) {
     }
 }
 
-// System.explodPrune (system.go:3273), 0 TODO
+// System.explodPrune (system.go:3274), 0 TODO
 void System_explodPrune(System* s, int pn) {
     Slice_ExplodPtr playerExplods = s->explods.v[pn];
     int writeIdx = 0;
@@ -178024,7 +178684,7 @@ void System_explodPrune(System* s, int pn) {
     s->explods.v[pn] = GO_SLICE(Slice_ExplodPtr, playerExplods, 0, writeIdx);
 }
 
-// System.charTextsUpdate (system.go:3291), 0 TODO
+// System.charTextsUpdate (system.go:3292), 0 TODO
 void System_charTextsUpdate(System* s) {
     if (!System_tickFrame(&g_sys)) {
         return;
@@ -178055,7 +178715,7 @@ void System_charTextsUpdate(System* s) {
     }
 }
 
-// System.charTextsPrune (system.go:3317), 0 TODO
+// System.charTextsPrune (system.go:3318), 0 TODO
 void System_charTextsPrune(System* s, int pn) {
     Slice_TextSpritePtr playerTexts = s->chartexts.v[pn];
     int writeIdx = 0;
@@ -178075,7 +178735,7 @@ void System_charTextsPrune(System* s, int pn) {
     s->chartexts.v[pn] = GO_SLICE(Slice_TextSpritePtr, playerTexts, 0, writeIdx);
 }
 
-// System.globalTick (system.go:3332), 0 TODO
+// System.globalTick (system.go:3333), 0 TODO
 void System_globalTick(System* s) {
     Stage_tick(s->stage);
     CharList_tick(&s->charList);
@@ -178096,7 +178756,7 @@ void System_globalTick(System* s) {
     s->SystemStateVars_.matchTime++;
 }
 
-// System.getSlowtime (system.go:3345), 0 TODO
+// System.getSlowtime (system.go:3346), 0 TODO
 i32 System_getSlowtime(System* s) {
     if (((s->SystemStateVars_.slowtime > 0) && (s->SystemStateVars_.intro < 0)) && (s->SystemStateVars_.curRoundTime != 0)) {
         return s->SystemStateVars_.slowtime;
@@ -178104,7 +178764,7 @@ i32 System_getSlowtime(System* s) {
     return 0;
 }
 
-// System.timeElapsed (system.go:3352), 0 TODO
+// System.timeElapsed (system.go:3353), 0 TODO
 i32 System_timeElapsed(System* s) {
     if (s->SystemStateVars_.maxRoundTime > 0) {
         return (s->SystemStateVars_.maxRoundTime - s->SystemStateVars_.curRoundTime);
@@ -178112,7 +178772,7 @@ i32 System_timeElapsed(System* s) {
     return s->SystemStateVars_.curPlayTime;
 }
 
-// System.timeRemaining (system.go:3361), 0 TODO
+// System.timeRemaining (system.go:3362), 0 TODO
 i32 System_timeRemaining(System* s) {
     if (s->SystemStateVars_.curRoundTime >= 0) {
         return s->SystemStateVars_.curRoundTime;
@@ -178120,7 +178780,7 @@ i32 System_timeRemaining(System* s) {
     return -1;
 }
 
-// System.timeTotal (system.go:3368), 0 TODO
+// System.timeTotal (system.go:3369), 0 TODO
 i32 System_timeTotal(System* s) {
     i32 t = s->SystemStateVars_.timerStart;
     {
@@ -178137,7 +178797,7 @@ i32 System_timeTotal(System* s) {
     return t;
 }
 
-// System.matchEndDialoguePending (system.go:3379), 0 TODO
+// System.matchEndDialoguePending (system.go:3380), 0 TODO
 bool System_matchEndDialoguePending(System* s) {
     if ((s->SystemStateVars_.postMatchFlg || (s->SystemStateVars_.dialogueForce != 0)) || s->motif.di.matchEndDone) {
         return false;
@@ -178157,7 +178817,7 @@ bool System_matchEndDialoguePending(System* s) {
     return (System_maxDrawsReached(s, 0) || System_maxDrawsReached(s, 1));
 }
 
-// System.shouldStartMatchEndDialogue (system.go:3399), 0 TODO
+// System.shouldStartMatchEndDialogue (system.go:3400), 0 TODO
 bool System_shouldStartMatchEndDialogue(System* s) {
     if (((!System_matchEndDialoguePending(s)) || (!System_matchOver(s))) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -178168,7 +178828,7 @@ bool System_shouldStartMatchEndDialogue(System* s) {
     return (((s->SystemStateVars_.intro + s->fightScreen.round->over_waittime) + s->fightScreen.round->over_time) <= 0);
 }
 
-// System.holdPostMatchForDialogue (system.go:3409), 0 TODO
+// System.holdPostMatchForDialogue (system.go:3410), 0 TODO
 bool System_holdPostMatchForDialogue(System* s) {
     if ((s->SystemStateVars_.dialogueForce != 0) || s->SystemStateVars_.postMatchFlg) {
         return false;
@@ -178185,7 +178845,7 @@ bool System_holdPostMatchForDialogue(System* s) {
     return false;
 }
 
-// System.stepRoundState (system.go:3426), 0 TODO
+// System.stepRoundState (system.go:3427), 0 TODO
 void System_stepRoundState(System* s) {
     if (!FightScreenRound_act(s->fightScreen.round)) {
         return;
@@ -178395,7 +179055,7 @@ void System_stepRoundState(System* s) {
     }
 }
 
-// System.roundEndDecision (system.go:3652), 0 TODO
+// System.roundEndDecision (system.go:3653), 0 TODO
 bool System_roundEndDecision(System* s) {
     GoFunc checkPerfect = ((GoFunc){(void *)lambda_1825, &(Env_lambda_1825){s}});
     if (s->SystemStateVars_.intro > 0) {
@@ -178548,7 +179208,7 @@ bool System_roundEndDecision(System* s) {
     return ((ko.v[0] || ko.v[1]) || (s->SystemStateVars_.curRoundTime == 0));
 }
 
-// System.draw (system.go:3793), 0 TODO
+// System.draw (system.go:3794), 0 TODO
 void System_draw(System* s, f32 x, f32 y, f32 scl) {
     fn_vitaDiagFrame();
     s->SystemStateVars_.brightnessOld = s->SystemStateVars_.brightness;
@@ -178648,7 +179308,7 @@ void System_draw(System* s, f32 x, f32 y, f32 scl) {
     Motif_draw(&s->motif, 3);
 }
 
-// System.drawCharTexts (system.go:3983), 0 TODO
+// System.drawCharTexts (system.go:3984), 0 TODO
 void System_drawCharTexts(System* s, i16 layerno) {
     Arr4_i32* clip = NULL;
     {
@@ -178675,7 +179335,7 @@ void System_drawCharTexts(System* s, i16 layerno) {
     }
 }
 
-// System.drawTop (system.go:3995), 0 TODO
+// System.drawTop (system.go:3996), 0 TODO
 void System_drawTop(System* s) {
     s->SystemStateVars_.brightness = s->SystemStateVars_.brightnessOld;
     if (s->clsnDisplay) {
@@ -178695,7 +179355,7 @@ void System_drawTop(System* s) {
     }
 }
 
-// System.debugTextScale (system.go:4029), 0 TODO
+// System.debugTextScale (system.go:4030), 0 TODO
 Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     f32 sx = {0};
     f32 sy = {0};
@@ -178717,7 +179377,7 @@ Ret_f32__f32 System_debugTextScale(System* s, drawAspectState st) {
     return (Ret_f32__f32){sx, sy};
 }
 
-// System.drawDebugText (system.go:4044), 0 TODO
+// System.drawDebugText (system.go:4045), 0 TODO
 void System_drawDebugText(System* s, drawAspectState logicState) {
     volatile bool _df1 = false; volatile drawAspectState _df1_a0; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -178842,7 +179502,7 @@ void System_drawDebugText(System* s, drawAspectState logicState) {
     if (_df1) { _df1 = false; ((void (*)(void *, drawAspectState))_df1_f.fn)(_df1_f.env, _df1_a0); }
 }
 
-// System.keepMatchRunning (system.go:4164), 0 TODO
+// System.keepMatchRunning (system.go:4165), 0 TODO
 bool System_keepMatchRunning(System* s) {
     if (!s->SystemStateVars_.endMatch) {
         return true;
@@ -178853,7 +179513,7 @@ bool System_keepMatchRunning(System* s) {
     return false;
 }
 
-// System.runMatch (system.go:4179), 0 TODO
+// System.runMatch (system.go:4180), 0 TODO
 bool System_runMatch(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f; volatile bool _df4 = false; volatile GoFunc _df4_f;
     volatile bool reload = {0};
@@ -179094,7 +179754,7 @@ bool System_runMatch(System* s) {
     return reload;
 }
 
-// System.SetupCharRoundStart (system.go:4439), 0 TODO
+// System.SetupCharRoundStart (system.go:4440), 0 TODO
 void System_SetupCharRoundStart(System* s) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -179250,7 +179910,7 @@ void System_SetupCharRoundStart(System* s) {
     }
 }
 
-// System.runNextRound (system.go:4568), 0 TODO
+// System.runNextRound (system.go:4569), 0 TODO
 bool System_runNextRound(System* s) {
     bool _t1 = System_roundOver(s);
     bool roundOver = _t1;
@@ -179340,14 +180000,14 @@ bool System_runNextRound(System* s) {
     return true;
 }
 
-// System.gameLogicSpeed (system.go:4644), 0 TODO
+// System.gameLogicSpeed (system.go:4645), 0 TODO
 i32 System_gameLogicSpeed(System* s) {
     i32 base = ((i32)(60 + (s->cfg.Options.GameSpeed * s->cfg.Options.GameSpeedStep)));
     i32 spd = go_f2i32((((f32)base) * s->debugAccel));
     return go_max_i32(1, spd);
 }
 
-// System.gameRenderSpeed (system.go:4650), 0 TODO
+// System.gameRenderSpeed (system.go:4651), 0 TODO
 int System_gameRenderSpeed(System* s) {
     i32 spd = 0;
     if ((((!s->gameRunning) || s->motif.me.active) || (s->rollback.session != NULL)) || (s->replayFile != NULL)) {
@@ -179358,7 +180018,7 @@ int System_gameRenderSpeed(System* s) {
     return ((int)go_max_i32(1, spd));
 }
 
-// System.debugModeAllowed (system.go:4663), 0 TODO
+// System.debugModeAllowed (system.go:4664), 0 TODO
 bool System_debugModeAllowed(System* s) {
     if ((s->netConnection != NULL) || (s->rollback.session != NULL)) {
         return false;
@@ -179366,7 +180026,7 @@ bool System_debugModeAllowed(System* s) {
     return s->cfg.Debug.AllowDebugMode;
 }
 
-// System.inRollback (system.go:4671), 0 TODO
+// System.inRollback (system.go:4672), 0 TODO
 bool System_inRollback(System* s) {
     if (s->rollback.session != NULL) {
         return s->rollback.session->inRollback;
@@ -179374,7 +180034,7 @@ bool System_inRollback(System* s) {
     return false;
 }
 
-// System.isSpeculativeFrame (system.go:4678), 0 TODO
+// System.isSpeculativeFrame (system.go:4679), 0 TODO
 bool System_isSpeculativeFrame(System* s) {
     if (s->rollback.session != NULL) {
         return (!s->rollback.session->inRollback);
@@ -179382,7 +180042,7 @@ bool System_isSpeculativeFrame(System* s) {
     return false;
 }
 
-// RoundStartBackup.Save (system.go:4696), 0 TODO
+// RoundStartBackup.Save (system.go:4697), 0 TODO
 void RoundStartBackup_Save(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -179474,7 +180134,7 @@ void RoundStartBackup_Save(RoundStartBackup* bk) {
     bk->lastCharId = g_sys.SystemStateVars_.lastCharId;
 }
 
-// RoundStartBackup.Restore (system.go:4764), 0 TODO
+// RoundStartBackup.Restore (system.go:4765), 0 TODO
 void RoundStartBackup_Restore(RoundStartBackup* bk) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -179593,17 +180253,17 @@ void RoundStartBackup_Restore(RoundStartBackup* bk) {
     g_sys.SystemStateVars_.lastCharId = bk->lastCharId;
 }
 
-// newSelectChar (system.go:4888), 0 TODO
+// newSelectChar (system.go:4889), 0 TODO
 SelectChar* fn_newSelectChar(void) {
     return go_box(SelectChar, (SelectChar){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .cns_scale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .scp = fn_newSelectCharParams()});
 }
 
-// newSelectStage (system.go:4912), 0 TODO
+// newSelectStage (system.go:4913), 0 TODO
 SelectStage* fn_newSelectStage(void) {
     return go_box(SelectStage, (SelectStage){.localcoord = (Arr2_i32){{320, 240}}, .portraitscale = 0x1p+00f, .anims = fn_NewPreloadedAnims(), .music = Map_GoString_Slice_bgMusicPtr_make(0), .ssp = fn_newSelectStageParams()});
 }
 
-// PreloadState.String (system.go:4954), 0 TODO
+// PreloadState.String (system.go:4955), 0 TODO
 GoString PreloadState_String(PreloadState ps) {
     {
         PreloadState _t1 = ps;
@@ -179629,12 +180289,12 @@ GoString PreloadState_String(PreloadState ps) {
     return GOSTR("idle");
 }
 
-// newSelect (system.go:4982), 0 TODO
+// newSelect (system.go:4983), 0 TODO
 Select* fn_newSelect(void) {
     return go_box(Select, (Select){.selectedStageNo = -1, .charAnimPreload = Map_i32_bool_make(0), .stageAnimPreload = Map_i32_bool_make(0), .charSpritePreload = ({ Map_Arr2_u16_bool _m = Map_Arr2_u16_bool_make(2); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 0U}}, true); Map_Arr2_u16_bool_set(&_m, (Arr2_u16){{9000U, 1U}}, true); (Map_Arr2_u16_bool)_m; }), .stageSpritePreload = Map_Arr2_u16_bool_make(0), .palOverwrite = Map_int_int_make(0), .cdefOverwrite = Map_int_GoString_make(0), .music = Map_GoString_Slice_bgMusicPtr_make(0), .gameParams = fn_newGameParams()});
 }
 
-// Select.initPreloadSync (system.go:4997), 0 TODO
+// Select.initPreloadSync (system.go:4998), 0 TODO
 void Select_initPreloadSync(Select* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179649,7 +180309,7 @@ void Select_initPreloadSync(Select* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.ensurePreloadWorker (system.go:5005), 0 TODO
+// Select.ensurePreloadWorker (system.go:5006), 0 TODO
 void Select_ensurePreloadWorker(Select* s) {
     Select_initPreloadSync(s);
     sync_Mutex_Lock(&s->preloadMu);
@@ -179662,7 +180322,7 @@ void Select_ensurePreloadWorker(Select* s) {
     fn_SafeGo(((GoFunc){(void *)lambda_1832, go_box(Env_lambda_1832, ((Env_lambda_1832){s}))}));
 }
 
-// Select.ensureCharPreloadSlot (system.go:5019), 0 TODO
+// Select.ensureCharPreloadSlot (system.go:5020), 0 TODO
 void Select_ensureCharPreloadSlot(Select* s, int ref) {
     if (ref < 0) {
         return;
@@ -179675,7 +180335,7 @@ void Select_ensureCharPreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.ensureStagePreloadSlot (system.go:5028), 0 TODO
+// Select.ensureStagePreloadSlot (system.go:5029), 0 TODO
 void Select_ensureStagePreloadSlot(Select* s, int ref) {
     if (ref <= 0) {
         return;
@@ -179689,7 +180349,7 @@ void Select_ensureStagePreloadSlot(Select* s, int ref) {
     }
 }
 
-// Select.QueueCharPreload (system.go:5038), 0 TODO
+// Select.QueueCharPreload (system.go:5039), 0 TODO
 void Select_QueueCharPreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179749,7 +180409,7 @@ void Select_QueueCharPreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.QueueStagePreload (system.go:5076), 0 TODO
+// Select.QueueStagePreload (system.go:5077), 0 TODO
 void Select_QueueStagePreload(Select* s, int ref, int priority) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179809,7 +180469,7 @@ void Select_QueueStagePreload(Select* s, int ref, int priority) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.CharPreloadStatus (system.go:5114), 0 TODO
+// Select.CharPreloadStatus (system.go:5115), 0 TODO
 PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179843,7 +180503,7 @@ PreloadState Select_CharPreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.StagePreloadStatus (system.go:5127), 0 TODO
+// Select.StagePreloadStatus (system.go:5128), 0 TODO
 PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179877,7 +180537,7 @@ PreloadState Select_StagePreloadStatus(Select* s, int ref) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.AllPreloadsReady (system.go:5140), 0 TODO
+// Select.AllPreloadsReady (system.go:5141), 0 TODO
 bool Select_AllPreloadsReady(Select* s) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -179945,7 +180605,7 @@ bool Select_AllPreloadsReady(Select* s) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Select.preloadWorkerLoop (system.go:5162), 0 TODO
+// Select.preloadWorkerLoop (system.go:5163), 0 TODO
 void Select_preloadWorkerLoop(Select* s) {
     Select_initPreloadSync(s);
     {
@@ -180026,7 +180686,7 @@ void Select_preloadWorkerLoop(Select* s) {
     }
 }
 
-// Select.preloadCharAssets (system.go:5231), 0 TODO
+// Select.preloadCharAssets (system.go:5232), 0 TODO
 GoIface Select_preloadCharAssets(Select* s, int ref) {
     if ((ref < 0) || (ref >= s->charlist.len)) {
         return (GoIface){0};
@@ -180152,7 +180812,7 @@ GoIface Select_preloadCharAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.preloadStageAssets (system.go:5343), 0 TODO
+// Select.preloadStageAssets (system.go:5344), 0 TODO
 GoIface Select_preloadStageAssets(Select* s, int ref) {
     if ((ref <= 0) || (ref > s->stagelist.len)) {
         return (GoIface){0};
@@ -180233,7 +180893,7 @@ GoIface Select_preloadStageAssets(Select* s, int ref) {
     return (GoIface){0};
 }
 
-// Select.GetCharNo (system.go:5410), 0 TODO
+// Select.GetCharNo (system.go:5411), 0 TODO
 int Select_GetCharNo(Select* s, int i) {
     int n = i;
     if (s->charlist.len > 0) {
@@ -180245,7 +180905,7 @@ int Select_GetCharNo(Select* s, int i) {
     return n;
 }
 
-// Select.GetChar (system.go:5421), 0 TODO
+// Select.GetChar (system.go:5422), 0 TODO
 SelectChar* Select_GetChar(Select* s, int i) {
     if (s->charlist.len == 0) {
         return NULL;
@@ -180254,7 +180914,7 @@ SelectChar* Select_GetChar(Select* s, int i) {
     return (&s->charlist.p[n]);
 }
 
-// Select.ValidatePalette (system.go:5430), 0 TODO
+// Select.ValidatePalette (system.go:5431), 0 TODO
 int Select_ValidatePalette(Select* s, int charRef, int requested) {
     if ((charRef < 0) || (charRef >= s->charlist.len)) {
         return 1;
@@ -180286,14 +180946,14 @@ int Select_ValidatePalette(Select* s, int charRef, int requested) {
     return ((int)sc->pal.p[0]);
 }
 
-// Select.SelectStage (system.go:5454), 0 TODO
+// Select.SelectStage (system.go:5455), 0 TODO
 void Select_SelectStage(Select* s, int n) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selectedStageNo = n;
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// Select.GetStage (system.go:5460), 0 TODO
+// Select.GetStage (system.go:5461), 0 TODO
 SelectStage* Select_GetStage(Select* s, int n) {
     if (s->stagelist.len == 0) {
         return NULL;
@@ -180305,7 +180965,7 @@ SelectStage* Select_GetStage(Select* s, int n) {
     return (&s->stagelist.p[(n - 1)]);
 }
 
-// getDefaultDefPathInZip (system.go:5471), 0 TODO
+// getDefaultDefPathInZip (system.go:5472), 0 TODO
 Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     GoString path1 = {0};
     GoString path2 = {0};
@@ -180316,7 +180976,7 @@ Ret_GoString__GoString fn_getDefaultDefPathInZip(GoString zipFilePathOnDisk) {
     return (Ret_GoString__GoString){path1, path2};
 }
 
-// Select.AddChar (system.go:5478), 0 TODO
+// Select.AddChar (system.go:5479), 0 TODO
 SelectChar* Select_AddChar(Select* s, GoString def) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -180650,7 +181310,7 @@ SelectChar* Select_AddChar(Select* s, GoString def) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// Select.AddStage (system.go:5739), 0 TODO
+// Select.AddStage (system.go:5740), 0 TODO
 Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoString *def__h = go_box(GoString, def);
@@ -180889,7 +181549,7 @@ Ret_SelectStagePtr__GoIface Select_AddStage(Select* s, GoString def) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Select.AddSelectedChar (system.go:5920), 0 TODO
+// Select.AddSelectedChar (system.go:5921), 0 TODO
 bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     int _t1 = 0;
     int _t2 = Select_GetCharNo(s, cn);
@@ -180920,7 +181580,7 @@ bool Select_AddSelectedChar(Select* s, int tn, int cn, int pl) {
     return true;
 }
 
-// Select.ClearSelected (system.go:5945), 0 TODO
+// Select.ClearSelected (system.go:5946), 0 TODO
 void Select_ClearSelected(Select* s) {
     sync_RWMutex_Lock(&g_sys.selMutex);
     s->selected = (Arr2_Slice_Arr2_int){{}};
@@ -180930,12 +181590,12 @@ void Select_ClearSelected(Select* s) {
     sync_RWMutex_Unlock(&g_sys.selMutex);
 }
 
-// newLoader (system.go:5975), 0 TODO
+// newLoader (system.go:5976), 0 TODO
 Loader* fn_newLoader(void) {
     return go_box(Loader, (Loader){.state = 0, .loadExit = go_chan_make(sizeof(LoaderState), 1)});
 }
 
-// Loader.requestCancel (system.go:5979), 0 TODO
+// Loader.requestCancel (system.go:5980), 0 TODO
 void Loader_requestCancel(Loader* l) {
     if (l->cancelCh == NULL) {
         return;
@@ -180943,7 +181603,7 @@ void Loader_requestCancel(Loader* l) {
     sync_Once_Do(&l->cancelOnce, ((GoFunc){(void *)lambda_1846, go_box(Env_lambda_1846, ((Env_lambda_1846){l}))}));
 }
 
-// Loader.cancelRequested (system.go:5986), 0 TODO
+// Loader.cancelRequested (system.go:5987), 0 TODO
 bool Loader_cancelRequested(Loader* l) {
     if (l->cancelCh == NULL) {
         return false;
@@ -180963,12 +181623,12 @@ bool Loader_cancelRequested(Loader* l) {
     }
 }
 
-// System.turnsPreloadActive (system.go:6008), 0 TODO
+// System.turnsPreloadActive (system.go:6009), 0 TODO
 bool System_turnsPreloadActive(System* s) {
     return (s->cfg.Config.TurnsLoading && (((s->turnsPreloadMember.v[0] >= 0) || (s->turnsPreloadMember.v[1] >= 0))));
 }
 
-// System.startNextTurnsPreload (system.go:6012), 0 TODO
+// System.startNextTurnsPreload (system.go:6013), 0 TODO
 void System_startNextTurnsPreload(System* s) {
     if (((!s->cfg.Config.TurnsLoading) || (s->loader.state == 1)) || (s->loader.state == 3)) {
         return;
@@ -181024,7 +181684,7 @@ void System_startNextTurnsPreload(System* s) {
     }
 }
 
-// System.finishTurnsPreloadForRollback (system.go:6056), 0 TODO
+// System.finishTurnsPreloadForRollback (system.go:6057), 0 TODO
 bool System_finishTurnsPreloadForRollback(System* s) {
     if (!System_turnsPreloadActive(s)) {
         return true;
@@ -181062,7 +181722,7 @@ bool System_finishTurnsPreloadForRollback(System* s) {
     return true;
 }
 
-// System.remapCharSlotRefs (system.go:6082), 0 TODO
+// System.remapCharSlotRefs (system.go:6083), 0 TODO
 void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int newSlot) {
     int oldCPU = (oldSlot ^ -1);
     int newCPU = (newSlot ^ -1);
@@ -181103,7 +181763,7 @@ void System_remapCharSlotRefs(System* s, Slice_CharPtr chars, int oldSlot, int n
     }
 }
 
-// System.rebindCgiStateOwners (system.go:6114), 0 TODO
+// System.rebindCgiStateOwners (system.go:6115), 0 TODO
 void System_rebindCgiStateOwners(System* s, int pn) {
     if (((pn < 0) || (pn >= 12)) || (s->cgi.v[pn].states.m == 0)) {
         return;
@@ -181132,7 +181792,7 @@ void System_rebindCgiStateOwners(System* s, int pn) {
     }
 }
 
-// System.removePlayerFromCharList (system.go:6133), 0 TODO
+// System.removePlayerFromCharList (system.go:6134), 0 TODO
 void System_removePlayerFromCharList(System* s, int pn) {
     {
         for (; 1; ) {
@@ -181157,7 +181817,7 @@ void System_removePlayerFromCharList(System* s, int pn) {
     }
 }
 
-// System.getPreloadedCharAndCgi (system.go:6150), 0 TODO
+// System.getPreloadedCharAndCgi (system.go:6151), 0 TODO
 Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181175,7 +181835,7 @@ Ret_CharPtr__CharGlobalInfo System_getPreloadedCharAndCgi(System* s, int team) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.setPreloadedChar (system.go:6156), 0 TODO
+// System.setPreloadedChar (system.go:6157), 0 TODO
 void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181189,7 +181849,7 @@ void System_setPreloadedChar(System* s, int team, Char* c, CharGlobalInfo gi) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.clearPreloadedChars (system.go:6163), 0 TODO
+// System.clearPreloadedChars (system.go:6164), 0 TODO
 void System_clearPreloadedChars(System* s) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181203,7 +181863,7 @@ void System_clearPreloadedChars(System* s) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// System.activateTurnsSlot (system.go:6170), 0 TODO
+// System.activateTurnsSlot (system.go:6171), 0 TODO
 void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     int team = (slot & 1);
     {
@@ -181231,7 +181891,7 @@ void System_activateTurnsSlot(System* s, Slice_CharPtr chars, int slot) {
     }
 }
 
-// System.activateNextTurnsFighters (system.go:6195), 0 TODO
+// System.activateNextTurnsFighters (system.go:6196), 0 TODO
 void System_activateNextTurnsFighters(System* s) {
     {
         int team = 0;
@@ -181288,7 +181948,7 @@ void System_activateNextTurnsFighters(System* s) {
     }
 }
 
-// Loader.loadCharacter (system.go:6247), 0 TODO
+// Loader.loadCharacter (system.go:6248), 0 TODO
 int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     volatile bool _df19 = false; volatile GoFunc _df19_f; volatile bool _df26 = false; volatile GoFunc _df26_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181681,7 +182341,7 @@ int Loader_loadCharacter(Loader* l, int pn, bool attached) {
     if (_df19) { _df19 = false; ((void (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// Loader.prepareTurnsFaces (system.go:6588), 0 TODO
+// Loader.prepareTurnsFaces (system.go:6589), 0 TODO
 void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScreenName* nm, Slice_int teamChars, Slice_Arr2_int teamSel) {
     i32 off = 0;
     if (g_sys.sel.gameParams != NULL) {
@@ -181762,7 +182422,7 @@ void Loader_prepareTurnsFaces(Loader* l, int pn, FightScreenFace* fa, FightScree
     }
 }
 
-// Loader.loadStage (system.go:6704), 0 TODO
+// Loader.loadStage (system.go:6705), 0 TODO
 bool Loader_loadStage(Loader* l) {
     volatile bool _df2 = false; volatile GoFunc _df2_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -181833,7 +182493,7 @@ bool Loader_loadStage(Loader* l) {
     if (_df2) { _df2 = false; ((void (*)(void *))_df2_f.fn)(_df2_f.env); }
 }
 
-// Loader.load (system.go:6770), 0 TODO
+// Loader.load (system.go:6771), 0 TODO
 void Loader_load(Loader* l) {
     volatile bool _df1 = false; volatile GoFunc _df1_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -182034,7 +182694,7 @@ void Loader_load(Loader* l) {
     if (_df1) { _df1 = false; ((void (*)(void *))_df1_f.fn)(_df1_f.env); }
 }
 
-// Loader.reset (system.go:6923), 0 TODO
+// Loader.reset (system.go:6924), 0 TODO
 void Loader_reset(Loader* l) {
     {
         LoaderState _t1 = l->state;
@@ -182082,13 +182742,13 @@ void Loader_reset(Loader* l) {
     }
 }
 
-// Loader.retryAfterError (system.go:6961), 0 TODO
+// Loader.retryAfterError (system.go:6962), 0 TODO
 void Loader_retryAfterError(Loader* l) {
     ({ LoaderState _t1; go_chan_recv(l->loadExit, &_t1); _t1; });
     Loader_reset(l);
 }
 
-// Loader.runTread (system.go:6966), 0 TODO
+// Loader.runTread (system.go:6967), 0 TODO
 bool Loader_runTread(Loader* l) {
     if (l->state != 0) {
         return false;
@@ -182100,12 +182760,12 @@ bool Loader_runTread(Loader* l) {
     return true;
 }
 
-// EnvShake.clear (system.go:6993), 0 TODO
+// EnvShake.clear (system.go:6994), 0 TODO
 void EnvShake_clear(EnvShake* es) {
     (*es) = (EnvShake){.freq = 0x1.ep+05f, .phase = ((f32)math_NaN()), .ampl = -0x1p+02f, .mul = 0x1p+00f};
 }
 
-// EnvShake.restart (system.go:7002), 0 TODO
+// EnvShake.restart (system.go:7003), 0 TODO
 void EnvShake_restart(EnvShake* es) {
     if (es->time <= 0) {
         EnvShake_clear(es);
@@ -182114,7 +182774,7 @@ void EnvShake_restart(EnvShake* es) {
     es->curTime = es->time;
 }
 
-// EnvShake.setDefaultPhase (system.go:7010), 0 TODO
+// EnvShake.setDefaultPhase (system.go:7011), 0 TODO
 void EnvShake_setDefaultPhase(EnvShake* es) {
     if (math_IsNaN(((f64)es->phase))) {
         if (es->freq >= 0x1.68p+06f) {
@@ -182125,7 +182785,7 @@ void EnvShake_setDefaultPhase(EnvShake* es) {
     }
 }
 
-// EnvShake.update (system.go:7020), 0 TODO
+// EnvShake.update (system.go:7021), 0 TODO
 void EnvShake_update(EnvShake* es) {
     if (es->curTime <= 0) {
         if (es->time > 0) {
@@ -182160,12 +182820,12 @@ void EnvShake_update(EnvShake* es) {
     es->curTime--;
 }
 
-// EnvShake.getOffset (system.go:7064), 0 TODO
+// EnvShake.getOffset (system.go:7065), 0 TODO
 Arr2_f32 EnvShake_getOffset(EnvShake* es) {
     return es->curOffset;
 }
 
-// ZoomEffect.reset (system.go:7084), 0 TODO
+// ZoomEffect.reset (system.go:7085), 0 TODO
 void ZoomEffect_reset(ZoomEffect* z) {
     z->active = false;
     z->time = 0;
@@ -182182,7 +182842,7 @@ void ZoomEffect_reset(ZoomEffect* z) {
     z->resultValid = false;
 }
 
-// ZoomEffect.update (system.go:7101), 0 TODO
+// ZoomEffect.update (system.go:7102), 0 TODO
 void ZoomEffect_update(ZoomEffect* z) {
     if (!z->active) {
         return;
@@ -182229,7 +182889,7 @@ void ZoomEffect_update(ZoomEffect* z) {
     }
 }
 
-// ZoomEffect.computeCamera (system.go:7161), 0 TODO
+// ZoomEffect.computeCamera (system.go:7162), 0 TODO
 Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl) {
     f32 dx = {0};
     f32 dy = {0};
@@ -182285,7 +182945,7 @@ Ret_f32__f32__f32 ZoomEffect_computeCamera(ZoomEffect* z, f32 x, f32 y, f32 scl)
     return (Ret_f32__f32__f32){dx, dy, dscl};
 }
 
-// System.saveCharVars (system.go:7232), 0 TODO
+// System.saveCharVars (system.go:7233), 0 TODO
 void System_saveCharVars(System* s, int pn) {
     if (s->chars.v[pn].len == 0) {
         return;
@@ -182322,7 +182982,7 @@ void System_saveCharVars(System* s, int pn) {
     Map_int_CharVarBackup_set(&s->charVarsBackup, pn, bk);
 }
 
-// System.restoreCharVars (system.go:7257), 0 TODO
+// System.restoreCharVars (system.go:7258), 0 TODO
 void System_restoreCharVars(System* s, Char* c) {
     bool _t1; CharVarBackup _t2 = Map_int_CharVarBackup_get(&s->charVarsBackup, c->playerNo, &_t1);
     CharVarBackup bk = _t2;
@@ -182362,7 +183022,7 @@ void System_restoreCharVars(System* s, Char* c) {
     Map_int_CharVarBackup_delete(&s->charVarsBackup, c->playerNo);
 }
 
-// System.loadCustomShader (system.go:7280), 0 TODO
+// System.loadCustomShader (system.go:7281), 0 TODO
 void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString name, GoString filename, Slice_u8 data) {
     GoString key = filepath_ToSlash(filepath_Clean(filename));
     bool reuse = System_isCustomShaderActive(s, key);
@@ -182374,7 +183034,7 @@ void System_loadCustomShader(System* s, Map_GoString_GoString shaders, GoString 
     { GoFunc _t1 = ((GoFunc){(void *)lambda_1853, go_box(Env_lambda_1853, ((Env_lambda_1853){data, key}))}); go_chan_send(s->mainThreadTask, &_t1); }
 }
 
-// System.loadCustomShaderFile (system.go:7296), 0 TODO
+// System.loadCustomShaderFile (system.go:7297), 0 TODO
 void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoString name, GoString path, Slice_GoString dirs) {
     GoString *path__h = go_box(GoString, path);
     if (strings_HasPrefix(iface_GetName_319077b5(g_gfx), GOSTR("Vulkan")) && (!strings_HasSuffix(strings_ToLower((*path__h)), GOSTR(".spv")))) {
@@ -182383,7 +183043,7 @@ void System_loadCustomShaderFile(System* s, Map_GoString_GoString shaders, GoStr
     fn_LoadFile((&(*path__h)), dirs, GOSTR(""), ((GoFunc){(void *)lambda_1854, go_box(Env_lambda_1854, ((Env_lambda_1854){s, shaders, name}))}));
 }
 
-// System.loadCommonShaders (system.go:7318), 0 TODO
+// System.loadCommonShaders (system.go:7319), 0 TODO
 GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice_GoString dirs) {
     {
         Slice_GoString _t2 = fn_SortedKeys_Slice_GoString(s->cfg.Common.Shaders);
@@ -182409,7 +183069,7 @@ GoIface System_loadCommonShaders(System* s, Map_GoString_GoString shaders, Slice
     return (GoIface){0};
 }
 
-// System.isCustomShaderActive (system.go:7348), 0 TODO
+// System.isCustomShaderActive (system.go:7349), 0 TODO
 bool System_isCustomShaderActive(System* s, GoString key) {
     volatile bool _df7 = false; volatile GoFunc _df7_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -182493,7 +183153,7 @@ bool System_isCustomShaderActive(System* s, GoString key) {
     if (_df7) { _df7 = false; ((void (*)(void *))_df7_f.fn)(_df7_f.env); }
 }
 
-// System.resolveCharShader (system.go:7382), 0 TODO
+// System.resolveCharShader (system.go:7383), 0 TODO
 Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     if (go_streq(name, GOSTR(""))) {
         return (Ret_GoString__bool){GOSTR(""), true};
@@ -182507,7 +183167,7 @@ Ret_GoString__bool System_resolveCharShader(System* s, int pn, GoString name) {
     return (Ret_GoString__bool){key, ok};
 }
 
-// System.cleanCustomShaders (system.go:7393), 0 TODO
+// System.cleanCustomShaders (system.go:7394), 0 TODO
 void System_cleanCustomShaders(System* s) {
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&s->loadedCustomShaders);
@@ -182522,12 +183182,12 @@ void System_cleanCustomShaders(System* s) {
     }
 }
 
-// System.shouldHideWithBars (system.go:7407), 0 TODO
+// System.shouldHideWithBars (system.go:7408), 0 TODO
 bool System_shouldHideWithBars(System* s) {
     return (((!FightScreen_visible(&s->fightScreen)) || System_gsf(s, 8U)) || (!s->fightScreen.bars));
 }
 
-// pal32ToBytes (system.go:7411), 0 TODO
+// pal32ToBytes (system.go:7412), 0 TODO
 Slice_u8 fn_pal32ToBytes(Slice_u32 pal) {
     return ((Slice_u8){(((u8*)((void*)(&pal.p[0])))), (int)((pal.len * 4)), (int)((pal.len * 4))});
 }
@@ -184156,6 +184816,7 @@ int g_cjitMismatch;
 int g_cjitOn;
 Slice_GoString g_cmdCompletedScratch;
 Map_GoString_lua_LGFunction g_lua_coFuncs;
+u32 g_consoleSeq;
 Arr6_Arr12_f32 g_imdct_cosN12;
 Arr18_Arr36_f32 g_imdct_cosN36;
 Arr256_u32 g_oggvorbis_crcTable;
@@ -184211,6 +184872,7 @@ Anon_dcdcacfc g_fuseStats;
 Renderer g_gfx;
 FontRenderer g_gfxFont;
 truetype_graphicsState g_truetype_globalDefaultGS;
+Arr256_i8 g_guardTab;
 u32 g_helperIdxGen;
 Arr12_helperIdx g_helperIdxs;
 Arr16_u8 g_gjson_hexchars;
@@ -184262,6 +184924,9 @@ Arr16_f32 g_rectDrawScratch;
 Map_GoString_int g_parse_reservedWords;
 f32 g_meltysynth_resonancePeakOffset;
 Anon_d4e097a6 g_rsCur;
+bool g_scCheck;
+Arr256_bool g_scPure0;
+Anon_6b4af2c5 g_scStats;
 Arr16_Arr2_int g_maindata_scalefacSizesMpeg1;
 Arr3_Arr6_Arr4_int g_maindata_scalefacSizesMpeg2;
 Slice_i32 g_sdKeys;
@@ -195360,6 +196025,9 @@ void ik_init_globals(void) {
     g_bcGenSubEx = ({ Map_OpCode_Arr2_i8 _m = Map_OpCode_Arr2_i8_make(202); Map_OpCode_Arr2_i8_set(&_m, 0U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 1U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 2U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 3U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 4U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 5U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 6U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 7U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 8U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 9U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 10U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 11U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 12U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 13U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 14U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 15U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 16U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 17U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 18U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 19U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 20U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 21U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 22U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 23U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 24U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 25U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 26U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 27U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 28U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 29U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 30U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 31U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 32U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 33U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 34U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 35U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 36U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 37U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 38U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 39U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 40U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 94U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 41U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 42U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 43U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 44U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 115U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 116U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 45U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 46U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 113U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 47U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 48U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 49U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 50U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 51U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 52U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 53U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 54U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 55U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 56U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 57U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 58U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 59U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 60U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 61U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 62U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 64U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 66U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 67U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 68U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 69U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 70U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 71U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 73U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 74U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 75U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 76U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 77U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 79U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 80U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 81U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 82U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 83U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 85U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 86U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 87U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 88U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 89U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 90U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 91U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 92U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 93U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 95U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 96U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 97U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 98U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 99U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 100U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 101U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 102U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 103U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 104U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 105U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 106U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 107U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 108U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 109U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 110U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 111U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 112U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 117U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 118U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 119U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 120U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 84U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 136U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 137U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 138U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 139U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 140U, (Arr2_i8){{3, 0}}); Map_OpCode_Arr2_i8_set(&_m, 141U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 142U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 143U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 144U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 145U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 146U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 147U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 148U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 149U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 150U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 151U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 152U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 153U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 154U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 155U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 156U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 158U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 186U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 187U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 188U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 189U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 191U, (Arr2_i8){{0, 8}}); Map_OpCode_Arr2_i8_set(&_m, 192U, (Arr2_i8){{0, 4}}); Map_OpCode_Arr2_i8_set(&_m, 193U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 194U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 195U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 196U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 199U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 200U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 177U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 178U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 176U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 180U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 182U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 179U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 181U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 183U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 184U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 185U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 201U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 202U, (Arr2_i8){{3, 0}}); Map_OpCode_Arr2_i8_set(&_m, 203U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 205U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 206U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 207U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 208U, (Arr2_i8){{3, 0}}); Map_OpCode_Arr2_i8_set(&_m, 209U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 210U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 211U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 212U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 213U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 215U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 216U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 217U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 218U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 219U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 220U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 221U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 222U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 223U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 224U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 225U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 226U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 227U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 228U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 229U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 230U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 231U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 232U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 233U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 234U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 235U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 236U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 237U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 238U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 239U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 246U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 247U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 248U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 249U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 250U, (Arr2_i8){{0, 0}}); (Map_OpCode_Arr2_i8)_m; });
     g_bcGenSubEx2 = ({ Map_OpCode_Arr2_i8 _m = Map_OpCode_Arr2_i8_make(113); Map_OpCode_Arr2_i8_set(&_m, 0U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 1U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 2U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 3U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 4U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 5U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 6U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 7U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 8U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 9U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 10U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 11U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 12U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 13U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 14U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 15U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 16U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 17U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 18U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 19U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 20U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 21U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 22U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 23U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 24U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 25U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 26U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 27U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 28U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 29U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 30U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 31U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 32U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 33U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 34U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 35U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 36U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 37U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 38U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 39U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 40U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 41U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 42U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 43U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 44U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 45U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 46U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 47U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 48U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 49U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 50U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 51U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 52U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 53U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 54U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 55U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 56U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 57U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 60U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 61U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 63U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 69U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 70U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 71U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 72U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 73U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 74U, (Arr2_i8){{2, 0}}); Map_OpCode_Arr2_i8_set(&_m, 75U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 76U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 77U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 78U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 79U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 80U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 81U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 191U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 192U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 193U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 194U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 195U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 196U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 199U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 200U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 201U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 202U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 203U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 204U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 207U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 208U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 209U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 211U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 212U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 210U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 213U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 176U, (Arr2_i8){{0, 4}}); Map_OpCode_Arr2_i8_set(&_m, 190U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 217U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 216U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 215U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 235U, (Arr2_i8){{1, 0}}); Map_OpCode_Arr2_i8_set(&_m, 236U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 237U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 238U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 239U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 240U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 241U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 242U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 243U, (Arr2_i8){{3, 0}}); Map_OpCode_Arr2_i8_set(&_m, 244U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 245U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 246U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 247U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 248U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 249U, (Arr2_i8){{0, 0}}); (Map_OpCode_Arr2_i8)_m; });
     g_bcGenSubEx3 = ({ Map_OpCode_Arr2_i8 _m = Map_OpCode_Arr2_i8_make(56); Map_OpCode_Arr2_i8_set(&_m, 0U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 1U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 2U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 3U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 4U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 5U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 24U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 25U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 22U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 23U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 20U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 21U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 26U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 27U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 28U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 29U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 31U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 32U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 33U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 35U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 36U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 37U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 38U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 39U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 40U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 41U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 42U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 43U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 44U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 45U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 46U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 47U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 48U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 49U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 50U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 51U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 52U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 53U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 54U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 55U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 56U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 57U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 58U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 59U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 60U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 61U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 62U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 63U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 64U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 65U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 66U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 67U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 68U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 69U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 70U, (Arr2_i8){{0, 0}}); Map_OpCode_Arr2_i8_set(&_m, 74U, (Arr2_i8){{0, 0}}); (Map_OpCode_Arr2_i8)_m; });
+    g_guardTab = ((Arr256_i8 (*)(void *))(((GoFunc){(void *)lambda_1870, go_box(Env_lambda_1870, ((Env_lambda_1870){0}))})).fn)((((GoFunc){(void *)lambda_1870, go_box(Env_lambda_1870, ((Env_lambda_1870){0}))})).env);
+    g_scCheck = (!go_streq(os_Getenv(GOSTR("CVF_SC_CHECK")), GOSTR("")));
+    g_scPure0 = (Arr256_bool){{[10U] = true, [11U] = true, [12U] = true, [22U] = true, [23U] = true, [24U] = true, [25U] = true, [26U] = true, [27U] = true, [28U] = true, [29U] = true, [30U] = true, [31U] = true, [32U] = true, [33U] = true, [34U] = true, [35U] = true, [36U] = true, [37U] = true, [38U] = true, [39U] = true, [40U] = true, [41U] = true, [42U] = true, [43U] = true, [47U] = true, [57U] = true, [58U] = true, [59U] = true, [60U] = true, [61U] = true, [63U] = true, [62U] = true, [66U] = true, [67U] = true, [77U] = true, [78U] = true, [81U] = true, [82U] = true, [83U] = true, [84U] = true, [85U] = true, [86U] = true, [87U] = true, [88U] = true, [90U] = true, [91U] = true, [93U] = true, [96U] = true, [99U] = true, [100U] = true, [101U] = true, [102U] = true, [124U] = true, [125U] = true, [126U] = true, [128U] = true, [129U] = true, [130U] = true, [131U] = true, [133U] = true, [134U] = true, [135U] = true, [136U] = true, [137U] = true, [138U] = true, [139U] = true, [70U] = true, [71U] = true, [72U] = true, [73U] = true, [74U] = true}};
     g_bcPairHist = Map_u16_u64_make(0);
     g_bcExHist = Map_u16_u64_make(0);
     g_bcProfMap = Map_bcProfKey_u64_make(0);
@@ -195367,7 +196035,7 @@ void ik_init_globals(void) {
     g_vitaStateHashOn = -1;
     g_attackTypeStrings = (Arr9_Anon_f8c1b65b){{(Anon_f8c1b65b){64, GOSTR("NA")}, (Anon_f8c1b65b){128, GOSTR("NT")}, (Anon_f8c1b65b){256, GOSTR("NP")}, (Anon_f8c1b65b){512, GOSTR("SA")}, (Anon_f8c1b65b){1024, GOSTR("ST")}, (Anon_f8c1b65b){2048, GOSTR("SP")}, (Anon_f8c1b65b){4096, GOSTR("HA")}, (Anon_f8c1b65b){8192, GOSTR("HT")}, (Anon_f8c1b65b){16384, GOSTR("HP")}}};
     g_triggerMap = ({ Map_GoString_int _m = Map_GoString_int_make(280); Map_GoString_int_set(&_m, GOSTR("player"), 0); Map_GoString_int_set(&_m, GOSTR("parent"), 0); Map_GoString_int_set(&_m, GOSTR("root"), 0); Map_GoString_int_set(&_m, GOSTR("helper"), 0); Map_GoString_int_set(&_m, GOSTR("target"), 0); Map_GoString_int_set(&_m, GOSTR("partner"), 0); Map_GoString_int_set(&_m, GOSTR("enemy"), 0); Map_GoString_int_set(&_m, GOSTR("enemynear"), 0); Map_GoString_int_set(&_m, GOSTR("playerid"), 0); Map_GoString_int_set(&_m, GOSTR("playerindex"), 0); Map_GoString_int_set(&_m, GOSTR("p2"), 0); Map_GoString_int_set(&_m, GOSTR("stateowner"), 0); Map_GoString_int_set(&_m, GOSTR("helperindex"), 0); Map_GoString_int_set(&_m, GOSTR("abs"), 1); Map_GoString_int_set(&_m, GOSTR("acos"), 1); Map_GoString_int_set(&_m, GOSTR("ailevel"), 1); Map_GoString_int_set(&_m, GOSTR("alive"), 1); Map_GoString_int_set(&_m, GOSTR("anim"), 1); Map_GoString_int_set(&_m, GOSTR("animelem"), 1); Map_GoString_int_set(&_m, GOSTR("animelemno"), 1); Map_GoString_int_set(&_m, GOSTR("animelemtime"), 1); Map_GoString_int_set(&_m, GOSTR("animexist"), 1); Map_GoString_int_set(&_m, GOSTR("animtime"), 1); Map_GoString_int_set(&_m, GOSTR("asin"), 1); Map_GoString_int_set(&_m, GOSTR("atan"), 1); Map_GoString_int_set(&_m, GOSTR("authorname"), 1); Map_GoString_int_set(&_m, GOSTR("backedge"), 1); Map_GoString_int_set(&_m, GOSTR("backedgebodydist"), 1); Map_GoString_int_set(&_m, GOSTR("backedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("bottomedge"), 1); Map_GoString_int_set(&_m, GOSTR("botboundbodydist"), 1); Map_GoString_int_set(&_m, GOSTR("botbounddist"), 1); Map_GoString_int_set(&_m, GOSTR("camerapos"), 1); Map_GoString_int_set(&_m, GOSTR("camerazoom"), 1); Map_GoString_int_set(&_m, GOSTR("canrecover"), 1); Map_GoString_int_set(&_m, GOSTR("ceil"), 1); Map_GoString_int_set(&_m, GOSTR("command"), 1); Map_GoString_int_set(&_m, GOSTR("cond"), 1); Map_GoString_int_set(&_m, GOSTR("const"), 1); Map_GoString_int_set(&_m, GOSTR("const240p"), 1); Map_GoString_int_set(&_m, GOSTR("const480p"), 1); Map_GoString_int_set(&_m, GOSTR("const720p"), 1); Map_GoString_int_set(&_m, GOSTR("cos"), 1); Map_GoString_int_set(&_m, GOSTR("ctrl"), 1); Map_GoString_int_set(&_m, GOSTR("drawgame"), 1); Map_GoString_int_set(&_m, GOSTR("e"), 1); Map_GoString_int_set(&_m, GOSTR("exp"), 1); Map_GoString_int_set(&_m, GOSTR("facing"), 1); Map_GoString_int_set(&_m, GOSTR("floor"), 1); Map_GoString_int_set(&_m, GOSTR("frontedge"), 1); Map_GoString_int_set(&_m, GOSTR("frontedgebodydist"), 1); Map_GoString_int_set(&_m, GOSTR("frontedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("fvar"), 1); Map_GoString_int_set(&_m, GOSTR("gameheight"), 1); Map_GoString_int_set(&_m, GOSTR("gametime"), 1); Map_GoString_int_set(&_m, GOSTR("gamewidth"), 1); Map_GoString_int_set(&_m, GOSTR("gethitvar"), 1); Map_GoString_int_set(&_m, GOSTR("hitbyattr"), 1); Map_GoString_int_set(&_m, GOSTR("hitcount"), 1); Map_GoString_int_set(&_m, GOSTR("hitdefattr"), 1); Map_GoString_int_set(&_m, GOSTR("hitdefvar"), 1); Map_GoString_int_set(&_m, GOSTR("hitfall"), 1); Map_GoString_int_set(&_m, GOSTR("hitover"), 1); Map_GoString_int_set(&_m, GOSTR("hitpausetime"), 1); Map_GoString_int_set(&_m, GOSTR("hitshakeover"), 1); Map_GoString_int_set(&_m, GOSTR("hitvel"), 1); Map_GoString_int_set(&_m, GOSTR("id"), 1); Map_GoString_int_set(&_m, GOSTR("ifelse"), 1); Map_GoString_int_set(&_m, GOSTR("inguarddist"), 1); Map_GoString_int_set(&_m, GOSTR("ishelper"), 1); Map_GoString_int_set(&_m, GOSTR("ishometeam"), 1); Map_GoString_int_set(&_m, GOSTR("leftedge"), 1); Map_GoString_int_set(&_m, GOSTR("life"), 1); Map_GoString_int_set(&_m, GOSTR("lifemax"), 1); Map_GoString_int_set(&_m, GOSTR("ln"), 1); Map_GoString_int_set(&_m, GOSTR("log"), 1); Map_GoString_int_set(&_m, GOSTR("lose"), 1); Map_GoString_int_set(&_m, GOSTR("loseko"), 1); Map_GoString_int_set(&_m, GOSTR("losetime"), 1); Map_GoString_int_set(&_m, GOSTR("matchno"), 1); Map_GoString_int_set(&_m, GOSTR("matchover"), 1); Map_GoString_int_set(&_m, GOSTR("movecontact"), 1); Map_GoString_int_set(&_m, GOSTR("moveguarded"), 1); Map_GoString_int_set(&_m, GOSTR("movehit"), 1); Map_GoString_int_set(&_m, GOSTR("movereversed"), 1); Map_GoString_int_set(&_m, GOSTR("movetype"), 1); Map_GoString_int_set(&_m, GOSTR("name"), 1); Map_GoString_int_set(&_m, GOSTR("numenemy"), 1); Map_GoString_int_set(&_m, GOSTR("numexplod"), 1); Map_GoString_int_set(&_m, GOSTR("numhelper"), 1); Map_GoString_int_set(&_m, GOSTR("numpartner"), 1); Map_GoString_int_set(&_m, GOSTR("numproj"), 1); Map_GoString_int_set(&_m, GOSTR("numprojid"), 1); Map_GoString_int_set(&_m, GOSTR("numstagebg"), 1); Map_GoString_int_set(&_m, GOSTR("numtarget"), 1); Map_GoString_int_set(&_m, GOSTR("numtext"), 1); Map_GoString_int_set(&_m, GOSTR("p1name"), 1); Map_GoString_int_set(&_m, GOSTR("p2bodydist"), 1); Map_GoString_int_set(&_m, GOSTR("p2dist"), 1); Map_GoString_int_set(&_m, GOSTR("p2life"), 1); Map_GoString_int_set(&_m, GOSTR("p2movetype"), 1); Map_GoString_int_set(&_m, GOSTR("p2name"), 1); Map_GoString_int_set(&_m, GOSTR("p2stateno"), 1); Map_GoString_int_set(&_m, GOSTR("p2statetype"), 1); Map_GoString_int_set(&_m, GOSTR("p3name"), 1); Map_GoString_int_set(&_m, GOSTR("p4name"), 1); Map_GoString_int_set(&_m, GOSTR("palno"), 1); Map_GoString_int_set(&_m, GOSTR("parentdist"), 1); Map_GoString_int_set(&_m, GOSTR("parentexist"), 1); Map_GoString_int_set(&_m, GOSTR("pi"), 1); Map_GoString_int_set(&_m, GOSTR("playeridexist"), 1); Map_GoString_int_set(&_m, GOSTR("pos"), 1); Map_GoString_int_set(&_m, GOSTR("power"), 1); Map_GoString_int_set(&_m, GOSTR("powermax"), 1); Map_GoString_int_set(&_m, GOSTR("prevstateno"), 1); Map_GoString_int_set(&_m, GOSTR("projcanceltime"), 1); Map_GoString_int_set(&_m, GOSTR("projcontact"), 1); Map_GoString_int_set(&_m, GOSTR("projcontacttime"), 1); Map_GoString_int_set(&_m, GOSTR("projguarded"), 1); Map_GoString_int_set(&_m, GOSTR("projguardedtime"), 1); Map_GoString_int_set(&_m, GOSTR("projhit"), 1); Map_GoString_int_set(&_m, GOSTR("projhittime"), 1); Map_GoString_int_set(&_m, GOSTR("random"), 1); Map_GoString_int_set(&_m, GOSTR("rightedge"), 1); Map_GoString_int_set(&_m, GOSTR("rootdist"), 1); Map_GoString_int_set(&_m, GOSTR("roundno"), 1); Map_GoString_int_set(&_m, GOSTR("roundsexisted"), 1); Map_GoString_int_set(&_m, GOSTR("roundstate"), 1); Map_GoString_int_set(&_m, GOSTR("roundswon"), 1); Map_GoString_int_set(&_m, GOSTR("screenheight"), 1); Map_GoString_int_set(&_m, GOSTR("screenpos"), 1); Map_GoString_int_set(&_m, GOSTR("screenwidth"), 1); Map_GoString_int_set(&_m, GOSTR("selfanimexist"), 1); Map_GoString_int_set(&_m, GOSTR("sin"), 1); Map_GoString_int_set(&_m, GOSTR("stagebgvar"), 1); Map_GoString_int_set(&_m, GOSTR("stagevar"), 1); Map_GoString_int_set(&_m, GOSTR("stateno"), 1); Map_GoString_int_set(&_m, GOSTR("statetype"), 1); Map_GoString_int_set(&_m, GOSTR("sysfvar"), 1); Map_GoString_int_set(&_m, GOSTR("sysvar"), 1); Map_GoString_int_set(&_m, GOSTR("tan"), 1); Map_GoString_int_set(&_m, GOSTR("teammode"), 1); Map_GoString_int_set(&_m, GOSTR("teamside"), 1); Map_GoString_int_set(&_m, GOSTR("tickspersecond"), 1); Map_GoString_int_set(&_m, GOSTR("time"), 1); Map_GoString_int_set(&_m, GOSTR("timemod"), 1); Map_GoString_int_set(&_m, GOSTR("topedge"), 1); Map_GoString_int_set(&_m, GOSTR("topboundbodydist"), 1); Map_GoString_int_set(&_m, GOSTR("topbounddist"), 1); Map_GoString_int_set(&_m, GOSTR("uniqhitcount"), 1); Map_GoString_int_set(&_m, GOSTR("var"), 1); Map_GoString_int_set(&_m, GOSTR("vel"), 1); Map_GoString_int_set(&_m, GOSTR("win"), 1); Map_GoString_int_set(&_m, GOSTR("winko"), 1); Map_GoString_int_set(&_m, GOSTR("winperfect"), 1); Map_GoString_int_set(&_m, GOSTR("wintime"), 1); Map_GoString_int_set(&_m, GOSTR("ailevelf"), 1); Map_GoString_int_set(&_m, GOSTR("airjumpcount"), 1); Map_GoString_int_set(&_m, GOSTR("alpha"), 1); Map_GoString_int_set(&_m, GOSTR("analog"), 1); Map_GoString_int_set(&_m, GOSTR("angle"), 1); Map_GoString_int_set(&_m, GOSTR("animelemvar"), 1); Map_GoString_int_set(&_m, GOSTR("animlength"), 1); Map_GoString_int_set(&_m, GOSTR("animloopcount"), 1); Map_GoString_int_set(&_m, GOSTR("animplayerno"), 1); Map_GoString_int_set(&_m, GOSTR("animprefix"), 1); Map_GoString_int_set(&_m, GOSTR("atan2"), 1); Map_GoString_int_set(&_m, GOSTR("attack"), 1); Map_GoString_int_set(&_m, GOSTR("attackmul"), 1); Map_GoString_int_set(&_m, GOSTR("bgmvar"), 1); Map_GoString_int_set(&_m, GOSTR("clamp"), 1); Map_GoString_int_set(&_m, GOSTR("clsnoverlap"), 1); Map_GoString_int_set(&_m, GOSTR("clsnvar"), 1); Map_GoString_int_set(&_m, GOSTR("combocount"), 1); Map_GoString_int_set(&_m, GOSTR("consecutivewins"), 1); Map_GoString_int_set(&_m, GOSTR("const1080p"), 1); Map_GoString_int_set(&_m, GOSTR("decisiveround"), 1); Map_GoString_int_set(&_m, GOSTR("defence"), 1); Map_GoString_int_set(&_m, GOSTR("defencemul"), 1); Map_GoString_int_set(&_m, GOSTR("deg"), 1); Map_GoString_int_set(&_m, GOSTR("displayname"), 1); Map_GoString_int_set(&_m, GOSTR("dizzy"), 1); Map_GoString_int_set(&_m, GOSTR("dizzypoints"), 1); Map_GoString_int_set(&_m, GOSTR("dizzypointsmax"), 1); Map_GoString_int_set(&_m, GOSTR("envshakevar"), 1); Map_GoString_int_set(&_m, GOSTR("explodvar"), 1); Map_GoString_int_set(&_m, GOSTR("fightscreenstate"), 1); Map_GoString_int_set(&_m, GOSTR("fightscreenvar"), 1); Map_GoString_int_set(&_m, GOSTR("fighttime"), 1); Map_GoString_int_set(&_m, GOSTR("firstattack"), 1); Map_GoString_int_set(&_m, GOSTR("float"), 1); Map_GoString_int_set(&_m, GOSTR("gamemode"), 1); Map_GoString_int_set(&_m, GOSTR("gameoption"), 1); Map_GoString_int_set(&_m, GOSTR("gamevar"), 1); Map_GoString_int_set(&_m, GOSTR("groundangle"), 1); Map_GoString_int_set(&_m, GOSTR("guardbreak"), 1); Map_GoString_int_set(&_m, GOSTR("guardcount"), 1); Map_GoString_int_set(&_m, GOSTR("guardpoints"), 1); Map_GoString_int_set(&_m, GOSTR("guardpointsmax"), 1); Map_GoString_int_set(&_m, GOSTR("helperindexexist"), 1); Map_GoString_int_set(&_m, GOSTR("helpername"), 1); Map_GoString_int_set(&_m, GOSTR("helpervar"), 1); Map_GoString_int_set(&_m, GOSTR("hitoverridden"), 1); Map_GoString_int_set(&_m, GOSTR("ikemenversion"), 1); Map_GoString_int_set(&_m, GOSTR("incustomanim"), 1); Map_GoString_int_set(&_m, GOSTR("incustomstate"), 1); Map_GoString_int_set(&_m, GOSTR("index"), 1); Map_GoString_int_set(&_m, GOSTR("inputtime"), 1); Map_GoString_int_set(&_m, GOSTR("inrunstate"), 1); Map_GoString_int_set(&_m, GOSTR("introstate"), 1); Map_GoString_int_set(&_m, GOSTR("isasserted"), 1); Map_GoString_int_set(&_m, GOSTR("ishost"), 1); Map_GoString_int_set(&_m, GOSTR("lastplayerid"), 1); Map_GoString_int_set(&_m, GOSTR("layerno"), 1); Map_GoString_int_set(&_m, GOSTR("lerp"), 1); Map_GoString_int_set(&_m, GOSTR("localcoord"), 1); Map_GoString_int_set(&_m, GOSTR("map"), 1); Map_GoString_int_set(&_m, GOSTR("max"), 1); Map_GoString_int_set(&_m, GOSTR("memberno"), 1); Map_GoString_int_set(&_m, GOSTR("min"), 1); Map_GoString_int_set(&_m, GOSTR("motifstate"), 1); Map_GoString_int_set(&_m, GOSTR("motifvar"), 1); Map_GoString_int_set(&_m, GOSTR("movecountered"), 1); Map_GoString_int_set(&_m, GOSTR("movehitvar"), 1); Map_GoString_int_set(&_m, GOSTR("mugenversion"), 1); Map_GoString_int_set(&_m, GOSTR("numplayer"), 1); Map_GoString_int_set(&_m, GOSTR("offset"), 1); Map_GoString_int_set(&_m, GOSTR("outrostate"), 1); Map_GoString_int_set(&_m, GOSTR("p5name"), 1); Map_GoString_int_set(&_m, GOSTR("p6name"), 1); Map_GoString_int_set(&_m, GOSTR("p7name"), 1); Map_GoString_int_set(&_m, GOSTR("p8name"), 1); Map_GoString_int_set(&_m, GOSTR("palfxvar"), 1); Map_GoString_int_set(&_m, GOSTR("pausetime"), 1); Map_GoString_int_set(&_m, GOSTR("physics"), 1); Map_GoString_int_set(&_m, GOSTR("playerindexexist"), 1); Map_GoString_int_set(&_m, GOSTR("playerno"), 1); Map_GoString_int_set(&_m, GOSTR("playernoexist"), 1); Map_GoString_int_set(&_m, GOSTR("prevanim"), 1); Map_GoString_int_set(&_m, GOSTR("prevmovetype"), 1); Map_GoString_int_set(&_m, GOSTR("prevstatetype"), 1); Map_GoString_int_set(&_m, GOSTR("projclsnoverlap"), 1); Map_GoString_int_set(&_m, GOSTR("projvar"), 1); Map_GoString_int_set(&_m, GOSTR("rad"), 1); Map_GoString_int_set(&_m, GOSTR("randomrange"), 1); Map_GoString_int_set(&_m, GOSTR("receiveddamage"), 1); Map_GoString_int_set(&_m, GOSTR("receivedhits"), 1); Map_GoString_int_set(&_m, GOSTR("redlife"), 1); Map_GoString_int_set(&_m, GOSTR("reversaldefattr"), 1); Map_GoString_int_set(&_m, GOSTR("round"), 1); Map_GoString_int_set(&_m, GOSTR("roundtime"), 1); Map_GoString_int_set(&_m, GOSTR("runorder"), 1); Map_GoString_int_set(&_m, GOSTR("scale"), 1); Map_GoString_int_set(&_m, GOSTR("score"), 1); Map_GoString_int_set(&_m, GOSTR("scoretotal"), 1); Map_GoString_int_set(&_m, GOSTR("selfcommand"), 1); Map_GoString_int_set(&_m, GOSTR("selfstatenoexist"), 1); Map_GoString_int_set(&_m, GOSTR("shader"), 1); Map_GoString_int_set(&_m, GOSTR("sign"), 1); Map_GoString_int_set(&_m, GOSTR("soundvar"), 1); Map_GoString_int_set(&_m, GOSTR("spriteplayerno"), 1); Map_GoString_int_set(&_m, GOSTR("spritevar"), 1); Map_GoString_int_set(&_m, GOSTR("sprpriority"), 1); Map_GoString_int_set(&_m, GOSTR("stagebackedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("stageconst"), 1); Map_GoString_int_set(&_m, GOSTR("stagefrontedgedist"), 1); Map_GoString_int_set(&_m, GOSTR("stagetime"), 1); Map_GoString_int_set(&_m, GOSTR("standby"), 1); Map_GoString_int_set(&_m, GOSTR("teamleader"), 1); Map_GoString_int_set(&_m, GOSTR("teamsize"), 1); Map_GoString_int_set(&_m, GOSTR("timeelapsed"), 1); Map_GoString_int_set(&_m, GOSTR("timeremaining"), 1); Map_GoString_int_set(&_m, GOSTR("timetotal"), 1); Map_GoString_int_set(&_m, GOSTR("winclutch"), 1); Map_GoString_int_set(&_m, GOSTR("winhyper"), 1); Map_GoString_int_set(&_m, GOSTR("winspecial"), 1); Map_GoString_int_set(&_m, GOSTR("xangle"), 1); Map_GoString_int_set(&_m, GOSTR("xshear"), 1); Map_GoString_int_set(&_m, GOSTR("yangle"), 1); Map_GoString_int_set(&_m, GOSTR("zoomvar"), 1); (Map_GoString_int)_m; });
-    g_specialSymbolTable = ((Arr256_bool (*)(void *))(((GoFunc){(void *)lambda_1870, go_box(Env_lambda_1870, ((Env_lambda_1870){0}))})).fn)((((GoFunc){(void *)lambda_1870, go_box(Env_lambda_1870, ((Env_lambda_1870){0}))})).env);
+    g_specialSymbolTable = ((Arr256_bool (*)(void *))(((GoFunc){(void *)lambda_1871, go_box(Env_lambda_1871, ((Env_lambda_1871){0}))})).fn)((((GoFunc){(void *)lambda_1871, go_box(Env_lambda_1871, ((Env_lambda_1871){0}))})).env);
     g_cvf_sin = (Arr6_f64){{0x1.5d8fd1fd19ccdp-33, -0x1.ae5e5a9291f5dp-26, 0x1.71de3567d48a1p-19, -0x1.a01a019bfdf03p-13, 0x1.111111110f7dp-07, -0x1.5555555555548p-03}};
     g_cvf_cos = (Arr6_f64){{-0x1.8fa49a0861a9bp-37, 0x1.1ee9d7b4e3f05p-29, -0x1.27e4f7eac4bc6p-22, 0x1.a01a019c844f5p-16, -0x1.6c16c16c14f91p-10, 0x1.555555555554bp-05}};
     g_cvf_tanP = (Arr3_f64){{-0x1.992d8d24f3f38p+13, 0x1.199eca5fc9dddp+20, -0x1.11fead3299176p+24}};
