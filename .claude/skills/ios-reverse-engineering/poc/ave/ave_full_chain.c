@@ -92,9 +92,12 @@ static void encode_cb(void *ctx, void *src, OSStatus status,
     g_cb_status = status;
     g_cb_count++;
     g_encode_done = 1;
+    g_cb_had_buf = (buf != NULL) ? 1 : 0;
+    g_cb_had_fmt = 0;
 
     if (buf && status == 0) {
         CMFormatDescriptionRef fmt = CMSampleBufferGetFormatDescription(buf);
+        g_cb_had_fmt = (fmt != NULL) ? 1 : 0;
         if (fmt) {
             size_t pset_count = 0;
             CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
@@ -6755,10 +6758,14 @@ vps_cd_done:
 
                 VTCompressionSessionPrepareToEncodeFrames(s);
                 g_encode_done = 0; g_cb_status = -999;
+                g_last_pset_count = 0; g_last_pset_total_bytes = 0;
+                g_cb_had_buf = 0; g_cb_had_fmt = 0;
                 if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
                 int es = encode_one(s, 0, w, h);
 
-                rlog("TL=%d: enc=%d cb=%d psets=%zu\n", val, es, (int)g_cb_status, g_last_pset_count);
+                rlog("TL=%d: enc=%d cb=%d psets=%zu buf=%d fmt=%d\n",
+                    val, es, (int)g_cb_status, g_last_pset_count,
+                    g_cb_had_buf, g_cb_had_fmt);
 
                 if (g_saved_fmt) {
                     size_t pset_count = 0;
