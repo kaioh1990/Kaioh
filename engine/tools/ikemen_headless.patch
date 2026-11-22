@@ -22375,10 +22375,20 @@ index 9b29416..7160fa1 100644
  		if str, ok := sec["scale"]; ok {
  			for k, v := range SplitAndTrim(str, ",") {
 diff --git a/src/state.go b/src/state.go
-index 7a82e2f..4383e8a 100644
+index 7a82e2f..ede2d97 100644
 --- a/src/state.go
 +++ b/src/state.go
-@@ -308,8 +308,18 @@ func (gs *GameState) savePalFX() {
+@@ -256,7 +256,8 @@ func (gs *GameState) SaveState(stateID int) {
+ 	gs.workpal = make([]uint32, len(sys.workpal))
+ 	copy(gs.workpal, sys.workpal)
+ 
+-	gs.fightScreen = sys.fightScreen.Clone()
++	// (a pooled GameState's FightScreenRound copy is reused: only it holds it)
++	gs.fightScreen = sys.fightScreen.cloneInto(gs.fightScreen.round)
+ 	gs.motif = sys.motif.Clone(sys.postMatchFlg)
+ 
+ 	// Storyboard: only rollback-save while active.
+@@ -308,8 +309,18 @@ func (gs *GameState) savePalFX() {
  
  func (gs *GameState) saveCharData(gsp *GameStatePool) {
  	for i := range sys.chars {
@@ -22399,7 +22409,30 @@ index 7a82e2f..4383e8a 100644
  
  		for j, c := range sys.chars[i] {
  			gs.charData[i][j] = c.Clone(gsp)
-@@ -363,6 +373,7 @@ func (gs *GameState) loadPalFX() {
+@@ -341,9 +352,19 @@ func (gs *GameState) saveProjectileData(gsp *GameStatePool) {
+ 
+ func (gs *GameState) saveExplodData(gsp *GameStatePool) {
+ 	for i := range sys.explods {
+-		gs.explods[i] = make([]*Explod, len(sys.explods[i]), len(sys.explods[i]))
+-		for j := 0; j < len(sys.explods[i]); j++ {
+-			gs.explods[i][j] = sys.explods[i][j].Clone(gsp)
++		// A pooled GameState keeps its explod copies (and their PalFX
++		// copies), which nothing else holds: LoadState clones them again.
++		// Reuse them, and the array, as saveCharData does.
++		n := len(sys.explods[i])
++		old := gs.explods[i]
++		if cap(old) >= n {
++			gs.explods[i] = old[:n]
++		} else {
++			gs.explods[i] = make([]*Explod, n, n)
++			copy(gs.explods[i], old[:cap(old)])
++		}
++		for j := 0; j < n; j++ {
++			gs.explods[i][j] = sys.explods[i][j].cloneInto(gsp, gs.explods[i][j])
+ 		}
+ 	}
+ }
+@@ -363,6 +384,7 @@ func (gs *GameState) loadPalFX() {
  }
  
  func (gs *GameState) loadCharData(gsp *GameStatePool) {
@@ -22407,7 +22440,7 @@ index 7a82e2f..4383e8a 100644
  	for i := 0; i < len(sys.chars); i++ {
  		sys.chars[i] = make([]*Char, len(gs.chars[i]), len(gs.chars[i]))
  		copy(sys.chars[i], gs.chars[i])
-@@ -402,6 +413,7 @@ func (gs *GameState) loadProjectileData(gsp *GameStatePool) {
+@@ -402,6 +424,7 @@ func (gs *GameState) loadProjectileData(gsp *GameStatePool) {
  }
  
  func (gs *GameState) loadExplodData(gsp *GameStatePool) {
@@ -22416,10 +22449,43 @@ index 7a82e2f..4383e8a 100644
  		sys.explods[i] = make([]*Explod, len(gs.explods[i]), len(gs.explods[i]))
  		for j := 0; j < len(gs.explods[i]); j++ {
 diff --git a/src/state_clone.go b/src/state_clone.go
-index e6a9d4d..81baf8e 100644
+index e6a9d4d..7ce54bb 100644
 --- a/src/state_clone.go
 +++ b/src/state_clone.go
-@@ -281,6 +281,15 @@ func (e *Explod) Clone(gsp *GameStatePool) *Explod {
+@@ -258,11 +258,23 @@ func (ai *AfterImage) Clone(gsp *GameStatePool) *AfterImage {
+ }
+ 
+ func (e *Explod) Clone(gsp *GameStatePool) *Explod {
++	return e.cloneInto(gsp, nil)
++}
++
++// cloneInto is Clone into dst when dst is not nil: an Explod copy that only
++// a dropped saved state holds (saveExplodData), with its PalFX copy.
++func (e *Explod) cloneInto(gsp *GameStatePool, dst *Explod) *Explod {
+ 	if e == nil {
+ 		return nil
+ 	}
+ 
+-	result := &Explod{}
++	result := dst
++	var oldPal *PalFX
++	if result == nil {
++		result = &Explod{}
++	} else {
++		oldPal = result.palfx
++	}
+ 	*result = *e
+ 
+ 	if e.anim != nil {
+@@ -274,13 +286,22 @@ func (e *Explod) Clone(gsp *GameStatePool) *Explod {
+ 	}
+ 
+ 	if e.palfx != nil {
+-		result.palfx = e.palfx.Clone()
++		result.palfx = e.palfx.cloneInto(oldPal)
+ 	}
+ 
+ 	if e.aimg != nil {
  		result.aimg = e.aimg.Clone(gsp)
  	}
  
@@ -22435,7 +22501,7 @@ index e6a9d4d..81baf8e 100644
  	return result
  }
  
-@@ -459,6 +468,7 @@ func (c *Char) Clone(gsp *GameStatePool) (result Char) {
+@@ -459,6 +480,7 @@ func (c *Char) Clone(gsp *GameStatePool) (result Char) {
  
  	result.ss = c.ss.Clone()
  
@@ -22443,7 +22509,7 @@ index e6a9d4d..81baf8e 100644
  	result.cnsvar = *gsp.Get(c.cnsvar).(*map[int32]int32)
  	maps.Clear(result.cnsvar)
  	for k, v := range c.cnsvar {
-@@ -500,6 +510,7 @@ func (cl *CharList) Clone(gsp *GameStatePool) (result CharList) {
+@@ -500,6 +522,7 @@ func (cl *CharList) Clone(gsp *GameStatePool) (result CharList) {
  	copy(result.runOrder, cl.runOrder)
  
  	result.idMap = *gsp.Get(cl.idMap).(*map[int32]*Char)
@@ -22451,7 +22517,78 @@ index e6a9d4d..81baf8e 100644
  	maps.Clear(result.idMap)
  	for k, v := range cl.idMap {
  		result.idMap[k] = v
-@@ -883,6 +894,7 @@ func (s *Stage) Clone(gsp *GameStatePool) *Stage {
+@@ -509,17 +532,27 @@ func (cl *CharList) Clone(gsp *GameStatePool) (result CharList) {
+ }
+ 
+ func (pf *PalFX) Clone() *PalFX {
++	return pf.cloneInto(nil)
++}
++
++// cloneInto is Clone into dst when dst is not nil (a PalFX copy that only a
++// dropped saved state holds: Explod.cloneInto).
++func (pf *PalFX) cloneInto(dst *PalFX) *PalFX {
+ 	if pf == nil {
+ 		return nil
+ 	}
+-	result := *pf
++	result := dst
++	if result == nil {
++		result = new(PalFX)
++	}
++	*result = *pf
+ 
+ 	if pf.remap != nil {
+ 		result.remap = make([]int, len(pf.remap), len(pf.remap))
+ 		copy(result.remap, pf.remap)
+ 	}
+ 
+-	return &result
++	return result
+ }
+ 
+ func (ce *CommandStep) Clone() (result CommandStep) {
+@@ -619,11 +652,21 @@ func (cl *fightScreenAnimationStateCloner) cloneAnimTextSnd(src AnimTextSnd) (re
+ }
+ 
+ func (ro *FightScreenRound) Clone() *FightScreenRound {
++	return ro.cloneInto(nil)
++}
++
++// cloneInto is Clone into dst when dst is not nil: a FightScreenRound that
++// only a dropped saved state holds (SaveState), so that each save does not
++// allocate a new ~100 KB struct.
++func (ro *FightScreenRound) cloneInto(dst *FightScreenRound) *FightScreenRound {
+ 	if ro == nil {
+ 		return nil
+ 	}
+ 
+-	result := new(FightScreenRound)
++	result := dst
++	if result == nil {
++		result = new(FightScreenRound)
++	}
+ 	*result = *ro
+ 	result.fadeIn = ro.fadeIn.Clone()
+ 	result.fadeOut = ro.fadeOut.Clone()
+@@ -654,11 +697,16 @@ func (ro *FightScreenRound) Clone() *FightScreenRound {
+ }
+ 
+ func (fs *FightScreen) Clone() (result FightScreen) {
++	return fs.cloneInto(nil)
++}
++
++// cloneInto: Clone, reusing round (see FightScreenRound.cloneInto)
++func (fs *FightScreen) cloneInto(round *FightScreenRound) (result FightScreen) {
+ 	result = *fs
+ 
+ 	// FightScreenRound timers/phases, timerActive, shutter, fades and selected announcement playback
+ 	// state affect when control starts, when the round timer runs and when a round/match can finish.
+-	result.round = fs.round.Clone()
++	result.round = fs.round.cloneInto(round)
+ 
+ 	// Presentation-only state is intentionally shared across rollback snapshots.
+ 	/*
+@@ -883,6 +931,7 @@ func (s *Stage) Clone(gsp *GameStatePool) *Stage {
  	for k, v := range s.constants {
  		result.constants[k] = v
  	}

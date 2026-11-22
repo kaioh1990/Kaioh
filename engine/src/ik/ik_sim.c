@@ -173688,7 +173688,7 @@ void GameState_SaveState(GameState* gs, int stateID) {
     }
     gs->workpal = GO_MAKE_A(Slice_u32, u32, g_sys.workpal.len, 0);
     GO_COPY(gs->workpal, g_sys.workpal);
-    gs->fightScreen = FightScreen_Clone(&g_sys.fightScreen);
+    gs->fightScreen = FightScreen_cloneInto(&g_sys.fightScreen, gs->fightScreen.round);
     gs->motif = Motif_Clone(&g_sys.motif, g_sys.SystemStateVars_.postMatchFlg);
     if (g_sys.storyboard.active) {
         gs->storyboard = Storyboard_Clone(&g_sys.storyboard);
@@ -173719,19 +173719,19 @@ void GameState_SaveState(GameState* gs, int stateID) {
     }
 }
 
-// CommandList.CopyTo (state.go:299), 0 TODO
+// CommandList.CopyTo (state.go:300), 0 TODO
 void CommandList_CopyTo(CommandList* src, CommandList* dst) {
     CommandList clone = CommandList_Clone(src);
     (*dst) = clone;
 }
 
-// GameState.savePalFX (state.go:304), 0 TODO
+// GameState.savePalFX (state.go:305), 0 TODO
 void GameState_savePalFX(GameState* gs) {
     gs->allPalFX = PalFX_Clone(g_sys.allPalFX);
     gs->bgPalFX = PalFX_Clone(g_sys.bgPalFX);
 }
 
-// GameState.saveCharData (state.go:309), 0 TODO
+// GameState.saveCharData (state.go:310), 0 TODO
 void GameState_saveCharData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -173779,7 +173779,7 @@ void GameState_saveCharData(GameState* gs, GameStatePool* gsp) {
     gs->charList = CharList_Clone(&g_sys.charList, gsp);
 }
 
-// GameState.saveProjectileData (state.go:343), 0 TODO
+// GameState.saveProjectileData (state.go:344), 0 TODO
 void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -173797,16 +173797,23 @@ void GameState_saveProjectileData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.saveExplodData (state.go:352), 0 TODO
+// GameState.saveExplodData (state.go:353), 0 TODO
 void GameState_saveExplodData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
             int i = _t1;
-            gs->explods.v[i] = GO_MAKE(Slice_ExplodPtr, Explod*, g_sys.explods.v[i].len, g_sys.explods.v[i].len);
+            int n = g_sys.explods.v[i].len;
+            Slice_ExplodPtr old = gs->explods.v[i];
+            if (old.cap >= n) {
+                gs->explods.v[i] = GO_SLICE_HI(Slice_ExplodPtr, old, 0, n);
+            } else {
+                gs->explods.v[i] = GO_MAKE(Slice_ExplodPtr, Explod*, n, n);
+                GO_COPY(gs->explods.v[i], GO_SLICE_HI(Slice_ExplodPtr, old, 0, old.cap));
+            }
             {
                 int j = 0;
-                for (; j < g_sys.explods.v[i].len; j++) {
-                    gs->explods.v[i].p[j] = Explod_Clone(g_sys.explods.v[i].p[j], gsp);
+                for (; j < n; j++) {
+                    gs->explods.v[i].p[j] = Explod_cloneInto(g_sys.explods.v[i].p[j], gsp, gs->explods.v[i].p[j]);
                     _cont3:;
                 }
             }
@@ -173815,7 +173822,7 @@ void GameState_saveExplodData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.saveCharTextData (state.go:361), 0 TODO
+// GameState.saveCharTextData (state.go:372), 0 TODO
 void GameState_saveCharTextData(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -173834,13 +173841,13 @@ void GameState_saveCharTextData(GameState* gs) {
     }
 }
 
-// GameState.loadPalFX (state.go:370), 0 TODO
+// GameState.loadPalFX (state.go:381), 0 TODO
 void GameState_loadPalFX(GameState* gs) {
     g_sys.allPalFX = PalFX_Clone(gs->allPalFX);
     g_sys.bgPalFX = PalFX_Clone(gs->bgPalFX);
 }
 
-// GameState.loadCharData (state.go:375), 0 TODO
+// GameState.loadCharData (state.go:386), 0 TODO
 void GameState_loadCharData(GameState* gs, GameStatePool* gsp) {
     fn_helperIdxChanged();
     {
@@ -173891,7 +173898,7 @@ void GameState_loadCharData(GameState* gs, GameStatePool* gsp) {
     g_sys.charList = CharList_Clone(&gs->charList, gsp);
 }
 
-// GameState.loadProjectileData (state.go:406), 0 TODO
+// GameState.loadProjectileData (state.go:417), 0 TODO
 void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -173910,7 +173917,7 @@ void GameState_loadProjectileData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.loadExplodData (state.go:415), 0 TODO
+// GameState.loadExplodData (state.go:426), 0 TODO
 void GameState_loadExplodData(GameState* gs, GameStatePool* gsp) {
     fn_explodIdxReset();
     {
@@ -173929,7 +173936,7 @@ void GameState_loadExplodData(GameState* gs, GameStatePool* gsp) {
     }
 }
 
-// GameState.loadCharTextData (state.go:425), 0 TODO
+// GameState.loadCharTextData (state.go:436), 0 TODO
 void GameState_loadCharTextData(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -173948,7 +173955,7 @@ void GameState_loadCharTextData(GameState* gs) {
     }
 }
 
-// GameState.stageCanMutate (state.go:434), 0 TODO
+// GameState.stageCanMutate (state.go:445), 0 TODO
 bool GameState_stageCanMutate(GameState* gs) {
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -173962,7 +173969,7 @@ bool GameState_stageCanMutate(GameState* gs) {
     return false;
 }
 
-// GameState.Checksum (state.go:448), 0 TODO
+// GameState.Checksum (state.go:459), 0 TODO
 int GameState_Checksum(GameState* gs) {
     gs->bytes = go_str2bytes(GameState_String(gs));
     GoIface h = fnv_New32a();
@@ -173970,7 +173977,7 @@ int GameState_Checksum(GameState* gs) {
     return ((int)iface_Sum32_52c8429d(h));
 }
 
-// GameState.String (state.go:463), 0 TODO
+// GameState.String (state.go:474), 0 TODO
 GoString GameState_String(GameState* gs) {
     GoString str = {0};
     str = fmt_Sprintf(GOSTR("MatchTime %d CurRoundTime: %d RandSeed: %d\n"), GO_SLICE_LIT(Slice_GoIface, GoIface, 3, ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.matchTime)}), ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.curRoundTime)}), ((GoIface){5, go_box_a(i32, gs->SystemStateVars_.randseed)})));
@@ -174009,7 +174016,7 @@ GoString GameState_String(GameState* gs) {
     return str;
 }
 
-// Char.String (state.go:508), 0 TODO
+// Char.String (state.go:519), 0 TODO
 GoString Char_String(Char cs) {
     GoString inputBufStr = GOSTR("none");
     if ((cs.keyctrl.v[0] && (cs.cmd.len > 0)) && (cs.cmd.p[0].Buffer != NULL)) {
@@ -174020,12 +174027,12 @@ GoString Char_String(Char cs) {
     return str;
 }
 
-// NewGameStatePool (state.go:578), 0 TODO
+// NewGameStatePool (state.go:589), 0 TODO
 GameStatePool fn_NewGameStatePool(void) {
     return (GameStatePool){.gameStatePool = go_sync_pool(((GoFunc){(void *)lambda_1779, go_box(Env_lambda_1779, ((Env_lambda_1779){0}))})), .stringIntMapPool = go_sync_pool(((GoFunc){(void *)lambda_1780, go_box(Env_lambda_1780, ((Env_lambda_1780){0}))})), .stringTypedValueMapPool = go_sync_pool(((GoFunc){(void *)lambda_1781, go_box(Env_lambda_1781, ((Env_lambda_1781){0}))})), .animationTablePool = go_sync_pool(((GoFunc){(void *)lambda_1782, go_box(Env_lambda_1782, ((Env_lambda_1782){0}))})), .int32CharPointerMapPool = go_sync_pool(((GoFunc){(void *)lambda_1783, go_box(Env_lambda_1783, ((Env_lambda_1783){0}))})), .animFrameSlicePool = go_sync_pool(((GoFunc){(void *)lambda_1784, go_box(Env_lambda_1784, ((Env_lambda_1784){0}))})), .int32int32MapPool = go_sync_pool(((GoFunc){(void *)lambda_1785, go_box(Env_lambda_1785, ((Env_lambda_1785){0}))})), .int32float32MapPool = go_sync_pool(((GoFunc){(void *)lambda_1786, go_box(Env_lambda_1786, ((Env_lambda_1786){0}))})), .remapPresetPool = go_sync_pool(((GoFunc){(void *)lambda_1787, go_box(Env_lambda_1787, ((Env_lambda_1787){0}))})), .remapTablePool = go_sync_pool(((GoFunc){(void *)lambda_1788, go_box(Env_lambda_1788, ((Env_lambda_1788){0}))})), .poolObjs = Map_int_Slice_GoIface_make(0)};
 }
 
-// GameStatePool.Get (state.go:645), 0 TODO
+// GameStatePool.Get (state.go:656), 0 TODO
 GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item) {
     volatile bool _df3 = false; volatile GoFunc _df3_f;
     volatile GoIface result = {0};
@@ -174131,7 +174138,7 @@ GoIface GameStatePool_Get(GameStatePool* gsp, GoIface item) {
     return result;
 }
 
-// GameStatePool.Put (state.go:691), 0 TODO
+// GameStatePool.Put (state.go:702), 0 TODO
 void GameStatePool_Put(GameStatePool* gsp, GoIface item) {
     {
         GoIface _t1 = item;
@@ -174160,7 +174167,7 @@ void GameStatePool_Put(GameStatePool* gsp, GoIface item) {
     }
 }
 
-// GameStatePool.Free (state.go:715), 0 TODO
+// GameStatePool.Free (state.go:726), 0 TODO
 void GameStatePool_Free(GameStatePool* gsp, int stateID) {
     bool _t1; Slice_GoIface _t2 = Map_int_Slice_GoIface_get(&gsp->poolObjs, stateID, &_t1);
     Slice_GoIface objs = _t2;
@@ -174303,10 +174310,21 @@ AfterImage* AfterImage_Clone(AfterImage* ai, GameStatePool* gsp) {
 
 // Explod.Clone (state_clone.go:260), 0 TODO
 Explod* Explod_Clone(Explod* e, GameStatePool* gsp) {
+    return Explod_cloneInto(e, gsp, NULL);
+}
+
+// Explod.cloneInto (state_clone.go:266), 0 TODO
+Explod* Explod_cloneInto(Explod* e, GameStatePool* gsp, Explod* dst) {
     if (e == NULL) {
         return NULL;
     }
-    Explod* result = go_box(Explod, (Explod){0});
+    Explod* result = dst;
+    PalFX* oldPal = NULL;
+    if (result == NULL) {
+        result = go_box(Explod, (Explod){0});
+    } else {
+        oldPal = result->palfx;
+    }
     (*result) = (*e);
     if (e->anim != NULL) {
         result->anim = Animation_Clone(e->anim, gsp);
@@ -174315,7 +174333,7 @@ Explod* Explod_Clone(Explod* e, GameStatePool* gsp) {
         result->customShader = CustomShader_Clone(&e->customShader, gsp);
     }
     if (e->palfx != NULL) {
-        result->palfx = PalFX_Clone(e->palfx);
+        result->palfx = PalFX_cloneInto(e->palfx, oldPal);
     }
     if (e->aimg != NULL) {
         result->aimg = AfterImage_Clone(e->aimg, gsp);
@@ -174332,7 +174350,7 @@ Explod* Explod_Clone(Explod* e, GameStatePool* gsp) {
     return result;
 }
 
-// Projectile.clone (state_clone.go:296), 0 TODO
+// Projectile.clone (state_clone.go:308), 0 TODO
 Projectile* Projectile_clone(Projectile* p, GameStatePool* gsp) {
     if (p == NULL) {
         return NULL;
@@ -174354,7 +174372,7 @@ Projectile* Projectile_clone(Projectile* p, GameStatePool* gsp) {
     return result;
 }
 
-// StateState.Clone (state_clone.go:323), 0 TODO
+// StateState.Clone (state_clone.go:335), 0 TODO
 StateState StateState_Clone(StateState* ss) {
     StateState result = {0};
     result = (*ss);
@@ -174365,7 +174383,7 @@ StateState StateState_Clone(StateState* ss) {
     return result;
 }
 
-// cloneRemapPreset (state_clone.go:339), 0 TODO
+// cloneRemapPreset (state_clone.go:351), 0 TODO
 RemapPreset fn_cloneRemapPreset(RemapPreset src, GameStatePool* gsp) {
     if (src.m == 0) {
         return (RemapPreset){0};
@@ -174399,7 +174417,7 @@ RemapPreset fn_cloneRemapPreset(RemapPreset src, GameStatePool* gsp) {
     return result;
 }
 
-// Char.Clone (state_clone.go:360), 0 TODO
+// Char.Clone (state_clone.go:372), 0 TODO
 Char Char_Clone(Char* c, GameStatePool* gsp) {
     Char result = {0};
     result = (Char){0};
@@ -174554,7 +174572,7 @@ Char Char_Clone(Char* c, GameStatePool* gsp) {
     return result;
 }
 
-// CharList.Clone (state_clone.go:503), 0 TODO
+// CharList.Clone (state_clone.go:515), 0 TODO
 CharList CharList_Clone(CharList* cl, GameStatePool* gsp) {
     CharList result = {0};
     result = (*cl);
@@ -174578,20 +174596,29 @@ CharList CharList_Clone(CharList* cl, GameStatePool* gsp) {
     return result;
 }
 
-// PalFX.Clone (state_clone.go:522), 0 TODO
+// PalFX.Clone (state_clone.go:534), 0 TODO
 PalFX* PalFX_Clone(PalFX* pf) {
+    return PalFX_cloneInto(pf, NULL);
+}
+
+// PalFX.cloneInto (state_clone.go:540), 0 TODO
+PalFX* PalFX_cloneInto(PalFX* pf, PalFX* dst) {
     if (pf == NULL) {
         return NULL;
     }
-    PalFX *result__h = go_box(PalFX, (*pf));
-    if (pf->remap.p != 0) {
-        (*result__h).remap = GO_MAKE_A(Slice_int, int, pf->remap.len, pf->remap.len);
-        GO_COPY((*result__h).remap, pf->remap);
+    PalFX* result = dst;
+    if (result == NULL) {
+        result = go_new(PalFX);
     }
-    return (&(*result__h));
+    (*result) = (*pf);
+    if (pf->remap.p != 0) {
+        result->remap = GO_MAKE_A(Slice_int, int, pf->remap.len, pf->remap.len);
+        GO_COPY(result->remap, pf->remap);
+    }
+    return result;
 }
 
-// Command.clone (state_clone.go:543), 0 TODO
+// Command.clone (state_clone.go:565), 0 TODO
 Command Command_clone(Command* c) {
     Command result = {0};
     result = (*c);
@@ -174603,7 +174630,7 @@ Command Command_clone(Command* c) {
     return result;
 }
 
-// CommandList.Clone (state_clone.go:577), 0 TODO
+// CommandList.Clone (state_clone.go:599), 0 TODO
 CommandList CommandList_Clone(CommandList* cl) {
     CommandList result = {0};
     result = (*cl);
@@ -174632,7 +174659,7 @@ CommandList CommandList_Clone(CommandList* cl) {
     return result;
 }
 
-// fightScreenAnimationStateCloner.clone (state_clone.go:606), 0 TODO
+// fightScreenAnimationStateCloner.clone (state_clone.go:628), 0 TODO
 Animation* fightScreenAnimationStateCloner_clone(fightScreenAnimationStateCloner* cl, Animation* anim) {
     if (anim == NULL) {
         return NULL;
@@ -174656,7 +174683,7 @@ Animation* fightScreenAnimationStateCloner_clone(fightScreenAnimationStateCloner
     return result;
 }
 
-// fightScreenAnimationStateCloner.cloneAnimTextSnd (state_clone.go:626), 0 TODO
+// fightScreenAnimationStateCloner.cloneAnimTextSnd (state_clone.go:648), 0 TODO
 AnimTextSnd fightScreenAnimationStateCloner_cloneAnimTextSnd(fightScreenAnimationStateCloner* cl, AnimTextSnd src) {
     AnimTextSnd result = {0};
     result = src;
@@ -174665,12 +174692,15 @@ AnimTextSnd fightScreenAnimationStateCloner_cloneAnimTextSnd(fightScreenAnimatio
     return result;
 }
 
-// FightScreenRound.Clone (state_clone.go:632), 0 TODO
-FightScreenRound* FightScreenRound_Clone(FightScreenRound* ro) {
+// FightScreenRound.cloneInto (state_clone.go:661), 0 TODO
+FightScreenRound* FightScreenRound_cloneInto(FightScreenRound* ro, FightScreenRound* dst) {
     if (ro == NULL) {
         return NULL;
     }
-    FightScreenRound* result = go_new(FightScreenRound);
+    FightScreenRound* result = dst;
+    if (result == NULL) {
+        result = go_new(FightScreenRound);
+    }
     (*result) = (*ro);
     result->fadeIn = Fade_Clone(ro->fadeIn);
     result->fadeOut = Fade_Clone(ro->fadeOut);
@@ -174708,16 +174738,23 @@ FightScreenRound* FightScreenRound_Clone(FightScreenRound* ro) {
     return result;
 }
 
-// FightScreen.Clone (state_clone.go:667), 0 TODO
+// FightScreen.Clone (state_clone.go:699), 0 TODO
 FightScreen FightScreen_Clone(FightScreen* fs) {
     FightScreen result = {0};
+    return FightScreen_cloneInto(fs, NULL);
+    return result;
+}
+
+// FightScreen.cloneInto (state_clone.go:704), 0 TODO
+FightScreen FightScreen_cloneInto(FightScreen* fs, FightScreenRound* round_) {
+    FightScreen result = {0};
     result = (*fs);
-    result.round = FightScreenRound_Clone(fs->round);
+    result.round = FightScreenRound_cloneInto(fs->round, round_);
     return result;
     return result;
 }
 
-// Stage.CloneRollbackState (state_clone.go:819), 0 TODO
+// Stage.CloneRollbackState (state_clone.go:856), 0 TODO
 stageRollbackState Stage_CloneRollbackState(Stage* s) {
     stageRollbackState result = {0};
     if (s == NULL) {
@@ -174743,7 +174780,7 @@ stageRollbackState Stage_CloneRollbackState(Stage* s) {
     return result;
 }
 
-// stageRollbackState.Load (state_clone.go:841), 0 TODO
+// stageRollbackState.Load (state_clone.go:878), 0 TODO
 void stageRollbackState_Load(stageRollbackState* ss, Stage* s) {
     if ((ss == NULL) || (s == NULL)) {
         return;
@@ -174769,7 +174806,7 @@ void stageRollbackState_Load(stageRollbackState* ss, Stage* s) {
     }
 }
 
-// cloneStageList (state_clone.go:864), 0 TODO
+// cloneStageList (state_clone.go:901), 0 TODO
 Ret_Map_i32_StagePtr__StagePtr fn_cloneStageList(GameStatePool* gsp, Map_i32_StagePtr src, Stage* active) {
     Map_i32_StagePtr result = Map_i32_StagePtr_make(Map_i32_StagePtr_len(&src));
     Map_StagePtr_StagePtr cloned = Map_StagePtr_StagePtr_make((Map_i32_StagePtr_len(&src) + 1));
@@ -174786,7 +174823,7 @@ Ret_Map_i32_StagePtr__StagePtr fn_cloneStageList(GameStatePool* gsp, Map_i32_Sta
     return (Ret_Map_i32_StagePtr__StagePtr){result, ((Stage* (*)(void *, Stage*))(cloneOne).fn)((cloneOne).env, active)};
 }
 
-// Stage.Clone (state_clone.go:884), 0 TODO
+// Stage.Clone (state_clone.go:921), 0 TODO
 Stage* Stage_Clone(Stage* s, GameStatePool* gsp) {
     Stage* result = go_box(Stage, (Stage){0});
     (*result) = (*s);
@@ -174846,7 +174883,7 @@ Stage* Stage_Clone(Stage* s, GameStatePool* gsp) {
     return result;
 }
 
-// cloneTextSprite (state_clone.go:985), 0 TODO
+// cloneTextSprite (state_clone.go:1022), 0 TODO
 TextSprite* fn_cloneTextSprite(TextSprite* ts) {
     if (ts == NULL) {
         return NULL;
@@ -174863,7 +174900,7 @@ TextSprite* fn_cloneTextSprite(TextSprite* ts) {
     return dst;
 }
 
-// Anim.CloneState (state_clone.go:1004), 0 TODO
+// Anim.CloneState (state_clone.go:1041), 0 TODO
 Anim* Anim_CloneState(Anim* anim) {
     if (anim == NULL) {
         return NULL;
@@ -174875,7 +174912,7 @@ Anim* Anim_CloneState(Anim* anim) {
     return result;
 }
 
-// Fade.Clone (state_clone.go:1015), 0 TODO
+// Fade.Clone (state_clone.go:1052), 0 TODO
 Fade* Fade_Clone(Fade* fa) {
     if (fa == NULL) {
         return NULL;
@@ -174886,7 +174923,7 @@ Fade* Fade_Clone(Fade* fa) {
     return result;
 }
 
-// MotifContinue.Clone (state_clone.go:1035), 0 TODO
+// MotifContinue.Clone (state_clone.go:1072), 0 TODO
 MotifContinue MotifContinue_Clone(MotifContinue* co) {
     MotifContinue result = {0};
     result = (*co);
@@ -174898,7 +174935,7 @@ MotifContinue MotifContinue_Clone(MotifContinue* co) {
     return result;
 }
 
-// cloneDialogueToken (state_clone.go:1044), 0 TODO
+// cloneDialogueToken (state_clone.go:1081), 0 TODO
 DialogueToken fn_cloneDialogueToken(DialogueToken t) {
     DialogueToken result = t;
     if (t.value.p != 0) {
@@ -174908,7 +174945,7 @@ DialogueToken fn_cloneDialogueToken(DialogueToken t) {
     return result;
 }
 
-// cloneDialogueParsedLine (state_clone.go:1053), 0 TODO
+// cloneDialogueParsedLine (state_clone.go:1090), 0 TODO
 DialogueParsedLine fn_cloneDialogueParsedLine(DialogueParsedLine src) {
     DialogueParsedLine result = {0};
     result = src;
@@ -174939,7 +174976,7 @@ DialogueParsedLine fn_cloneDialogueParsedLine(DialogueParsedLine src) {
     return result;
 }
 
-// MotifDialogue.Clone (state_clone.go:1076), 0 TODO
+// MotifDialogue.Clone (state_clone.go:1113), 0 TODO
 MotifDialogue MotifDialogue_Clone(MotifDialogue* di) {
     MotifDialogue result = {0};
     result = (*di);
@@ -174957,7 +174994,7 @@ MotifDialogue MotifDialogue_Clone(MotifDialogue* di) {
     return result;
 }
 
-// rankingRow.Clone (state_clone.go:1092), 0 TODO
+// rankingRow.Clone (state_clone.go:1129), 0 TODO
 rankingRow rankingRow_Clone(rankingRow* rr) {
     rankingRow result = {0};
     result = (*rr);
@@ -175006,7 +175043,7 @@ rankingRow rankingRow_Clone(rankingRow* rr) {
     return result;
 }
 
-// MotifHiscore.Clone (state_clone.go:1132), 0 TODO
+// MotifHiscore.Clone (state_clone.go:1169), 0 TODO
 MotifHiscore MotifHiscore_Clone(MotifHiscore* hi) {
     MotifHiscore result = {0};
     result = (*hi);
@@ -175028,7 +175065,7 @@ MotifHiscore MotifHiscore_Clone(MotifHiscore* hi) {
     return result;
 }
 
-// MotifWin.Clone (state_clone.go:1147), 0 TODO
+// MotifWin.Clone (state_clone.go:1184), 0 TODO
 MotifWin MotifWin_Clone(MotifWin* wi) {
     MotifWin result = {0};
     result = (*wi);
@@ -175054,7 +175091,7 @@ MotifWin MotifWin_Clone(MotifWin* wi) {
     return result;
 }
 
-// Motif.Clone (state_clone.go:1167), 0 TODO
+// Motif.Clone (state_clone.go:1204), 0 TODO
 Motif Motif_Clone(Motif* m, bool postMatch) {
     Motif result = {0};
     result = (*m);
@@ -175075,7 +175112,7 @@ Motif Motif_Clone(Motif* m, bool postMatch) {
     return result;
 }
 
-// cloneMusicMapShallow (state_clone.go:1202), 0 TODO
+// cloneMusicMapShallow (state_clone.go:1239), 0 TODO
 Music fn_cloneMusicMapShallow(Music src) {
     if (src.m == 0) {
         return (Music){0};
@@ -175099,7 +175136,7 @@ Music fn_cloneMusicMapShallow(Music src) {
     return dst;
 }
 
-// cloneStoryboards (state_clone.go:1219), 0 TODO
+// cloneStoryboards (state_clone.go:1256), 0 TODO
 Slice_StoryboardPtr fn_cloneStoryboards(Slice_StoryboardPtr src) {
     Slice_StoryboardPtr result = GO_MAKE(Slice_StoryboardPtr, Storyboard*, src.len, 0);
     {
@@ -175115,7 +175152,7 @@ Slice_StoryboardPtr fn_cloneStoryboards(Slice_StoryboardPtr src) {
     return result;
 }
 
-// Storyboard.Clone (state_clone.go:1233), 0 TODO
+// Storyboard.Clone (state_clone.go:1270), 0 TODO
 Storyboard Storyboard_Clone(Storyboard* s) {
     Storyboard result = {0};
     if (s == NULL) {
@@ -175212,7 +175249,7 @@ Storyboard Storyboard_Clone(Storyboard* s) {
     return result;
 }
 
-// BGDef.Clone (state_clone.go:1333), 0 TODO
+// BGDef.Clone (state_clone.go:1370), 0 TODO
 BGDef* BGDef_Clone(BGDef* s) {
     BGDef* result = go_box(BGDef, (BGDef){0});
     (*result) = (*s);
@@ -175254,7 +175291,7 @@ BGDef* BGDef_Clone(BGDef* s) {
     return result;
 }
 
-// CustomShader.Clone (state_clone.go:1356), 0 TODO
+// CustomShader.Clone (state_clone.go:1393), 0 TODO
 CustomShader CustomShader_Clone(CustomShader* cs, GameStatePool* gsp) {
     CustomShader result = (*cs);
     if (cs->tex1.Anim != NULL) {
