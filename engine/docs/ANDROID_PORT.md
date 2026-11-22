@@ -1,7 +1,8 @@
 # Android port of the native C engine
 
-Status 2026-11-21, branch `claude/native-android`, rebased onto
-`claude/native-integration` a14596e (native-ios + native-windows +
+Status 2026-11-22, branch `claude/native-android`, rebased onto
+`claude/native-integration` 6cd4086 (memory/GC work, CPU rounds, rollback
+garbage reduction, the Vita M2 switch; before that a14596e: native-ios + native-windows +
 native-netplay + the GGPO sync fix + the Windows/Android collector fixes +
 the GLES single-row upload fix from the iOS device run + the runtime review
 fixes + native-netplay2: TCP race fix and content fingerprint in the
@@ -218,7 +219,21 @@ from Google.
 | Fused multiply-add instructions in libmain.so | llvm-objdump | 0 |
 
 All rows were rerun after the rebase onto `claude/native-integration`
-a14596e (2026-11-21; previous head ff22e9c on 0eaba5c). Conflicts: the
+6cd4086 (2026-11-22; previous head f88005e on a14596e). Conflict: only
+`tools/ikemen_headless.patch` (the Vita and Android RenderMode blocks in
+`realMain`, kept side by side) and the generated `ik_sim.c`, resolved by
+regenerating from a fresh `setup_ikemen.sh` tree with the merged patch (Go
+1.27.4: 4903 functions, 0 TODO, 79 stubs, 31 placeholders; the diff to
+integration's C is exactly the Android Go changes). qemu-aarch64: static
+`cvf_headless` 54f8ae06... (287,752 lines) and 4334350c... (224,158
+lines), `cvf_tests` 103/0, `cvf_nearby_test` 0 failures, 0 FMA
+instructions in libmain.so, 7 exports. CI run 45029836749 (run 12, commit
+e9c801a): `apk` and `arm64-tests` pass (103/0, Nearby ok), versionCode 12,
+signer certificate SHA-256 `4d9a2123...c968c1`, APK SHA-256
+`9d665944b64ca9e102aa868c8465a37896ae00afb8eb65f9946d1bae1c829851`
+(from the log with `apk_in_log`).
+
+Previous rebase onto a14596e (2026-11-21; previous head ff22e9c on 0eaba5c). Conflicts: the
 generated `ik_sim.c` (resolved by regenerating from a fresh
 `setup_ikemen.sh` tree with the merged `ikemen_headless.patch`, Go 1.27.4:
 4859 functions, 0 TODO, 79 stubs, 31 placeholders; the diff to
