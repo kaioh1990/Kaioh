@@ -45,6 +45,10 @@
 #include <CoreMedia/CoreMedia.h>
 #include <IOKit/IOKitLib.h>
 
+#ifndef kIOMasterPortDefault
+#define kIOMasterPortDefault ((mach_port_t)0)
+#endif
+
 typedef struct __IOSurface *IOSurfaceRef;
 typedef uint32_t IOSurfaceID;
 extern IOSurfaceRef IOSurfaceCreate(CFDictionaryRef properties);
