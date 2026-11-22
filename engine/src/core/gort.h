@@ -47,6 +47,19 @@ void *go_slice_grow_atomic(void *p, int len, int *cap, int need, size_t elem);  
         int _sl = (int)(lo), _sh = (int)(hi);                                          \
         (T){_sa + _sl, (_sh < 0 ? (n) : _sh) - _sl, (n) - _sl};                        \
     })
+// s[lo:hi] with hi given (never negative in a valid program)
+#define GO_SLICE_HI(T, s, lo, hi)                                                      \
+    __extension__({                                                                    \
+        __typeof__(s) _ss = (s);                                                       \
+        int _sl = (int)(lo), _sh = (int)(hi);                                          \
+        (T){_ss.p + _sl, _sh - _sl, _ss.cap - _sl};                                    \
+    })
+#define GO_ARRSLICE_HI(T, arr, n, lo, hi)                                              \
+    __extension__({                                                                    \
+        __typeof__(&*(arr)) _sa = (arr);                                               \
+        int _sl = (int)(lo), _sh = (int)(hi);                                          \
+        (T){_sa + _sl, _sh - _sl, (n) - _sl};                                          \
+    })
 // (n and c are evaluated once: they may have side effects, e.g. make([]T, r.Read8(6)+1))
 #define GO_MAKE_(T, E, n, c, ALLOC)                                                    \
     __extension__({                                                                    \
@@ -208,11 +221,12 @@ static inline f32 math_Float32frombits(u32 u) { f32 f; memcpy(&f, &u, 4); return
 static inline u64 math_Float64bits(f64 f) { u64 u; memcpy(&u, &f, 8); return u; }
 static inline f64 math_Float64frombits(u64 u) { f64 f; memcpy(&f, &u, 8); return f; }
 
-// float -> integer conversions as compiled by Go for amd64.
-static inline i32 go_f2i32(f64 f) { return (f > -2147483649.0 && f < 2147483648.0) ? (i32)f : INT32_MIN; }
-static inline i64 go_f2i64(f64 f) {
-    return (f >= -9223372036854775808.0 && f < 9223372036854775808.0) ? (i64)f : INT64_MIN;
-}
+// float -> integer conversions as compiled by Go for amd64: out of range
+// and NaN give INT32_MIN / INT64_MIN. One comparison: the values in range
+// that |f| < 2^31 leaves out, (-2^31-1, -2^31], truncate to INT32_MIN too
+// (likewise f == -2^63 for int64), and fabs(NaN) < x is false.
+static inline i32 go_f2i32(f64 f) { return fabs(f) < 2147483648.0 ? (i32)f : INT32_MIN; }
+static inline i64 go_f2i64(f64 f) { return fabs(f) < 9223372036854775808.0 ? (i64)f : INT64_MIN; }
 static inline i8 go_f2i8(f64 f) { return (i8)go_f2i32(f); }
 static inline i16 go_f2i16(f64 f) { return (i16)go_f2i32(f); }
 static inline u8 go_f2u8(f64 f) { return (u8)go_f2i32(f); }

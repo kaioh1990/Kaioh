@@ -2436,7 +2436,7 @@ static int lambda_66(Env_lambda_66 *_env, lua_LState* L, u32 inst, lua_callFrame
             int oldtop = rg->top;
             rg->top = (regv + n);
             if (rg->top < oldtop) {
-                Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+                Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
                 {
                     Slice_lua_LValue _t11 = nilRange;
                     for (int _t10 = 0; _t10 < _t11.len; _t10++) {
@@ -2518,7 +2518,7 @@ static int lambda_67(Env_lambda_67 *_env, lua_LState* L, u32 inst, lua_callFrame
                     int oldtop = rg->top;
                     rg->top = (regm + n);
                     if (rg->top < oldtop) {
-                        Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+                        Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
                         {
                             Slice_lua_LValue _t5 = nilRange;
                             for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -2558,7 +2558,7 @@ static int lambda_67(Env_lambda_67 *_env, lua_LState* L, u32 inst, lua_callFrame
                     int oldtop = rg->top;
                     rg->top = (regv + n);
                     if (rg->top < oldtop) {
-                        Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+                        Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
                         {
                             Slice_lua_LValue _t9 = nilRange;
                             for (int _t8 = 0; _t8 < _t9.len; _t8++) {
@@ -2592,7 +2592,7 @@ static int lambda_67(Env_lambda_67 *_env, lua_LState* L, u32 inst, lua_callFrame
                         int oldtop = rg->top;
                         rg->top = (regm + n);
                         if (rg->top < oldtop) {
-                            Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+                            Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
                             {
                                 Slice_lua_LValue _t14 = nilRange;
                                 for (int _t13 = 0; _t13 < _t14.len; _t13++) {
@@ -2635,7 +2635,7 @@ static int lambda_67(Env_lambda_67 *_env, lua_LState* L, u32 inst, lua_callFrame
                 int oldtop = rg->top;
                 rg->top = (regm + n);
                 if (rg->top < oldtop) {
-                    Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+                    Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
                     {
                         Slice_lua_LValue _t18 = nilRange;
                         for (int _t17 = 0; _t17 < _t18.len; _t17++) {
@@ -2675,7 +2675,7 @@ static int lambda_67(Env_lambda_67 *_env, lua_LState* L, u32 inst, lua_callFrame
                 int oldtop = rg->top;
                 rg->top = (regv + n);
                 if (rg->top < oldtop) {
-                    Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+                    Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
                     {
                         Slice_lua_LValue _t22 = nilRange;
                         for (int _t21 = 0; _t21 < _t22.len; _t21++) {
@@ -2709,7 +2709,7 @@ static int lambda_67(Env_lambda_67 *_env, lua_LState* L, u32 inst, lua_callFrame
                     int oldtop = rg->top;
                     rg->top = (regm + n);
                     if (rg->top < oldtop) {
-                        Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+                        Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
                         {
                             Slice_lua_LValue _t27 = nilRange;
                             for (int _t26 = 0; _t26 < _t27.len; _t26++) {
@@ -2983,7 +2983,7 @@ static int lambda_74(Env_lambda_74 *_env, lua_LState* L, u32 inst, lua_callFrame
         int oldtop = rg->top;
         rg->top = (regv + n);
         if (rg->top < oldtop) {
-            Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+            Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
             {
                 Slice_lua_LValue _t4 = nilRange;
                 for (int _t3 = 0; _t3 < _t4.len; _t3++) {
@@ -17405,7 +17405,7 @@ static void lambda_900(Env_lambda_900 *_env) {
             if (err.type != 0) {
                 return;
             }
-            if (!go_streq(go_bytes2str(GO_SLICE(Slice_u8, buf, 0, n)), GOSTR("CVFNEARBY?1"))) {
+            if (!go_streq(go_bytes2str(GO_SLICE_HI(Slice_u8, buf, 0, n)), GOSTR("CVFNEARBY?1"))) {
                 continue;
             }
             Ret_GoString__GoString _t3 = fn_cvfNearbyIdentity();
@@ -17441,7 +17441,7 @@ static void lambda_901(Env_lambda_901 *_env) {
                 return;
             }
             cvfNearbyReply *r__h = go_box(cvfNearbyReply, {0});
-            if ((((json_Unmarshal(GO_SLICE(Slice_u8, buf, 0, n), ((GoIface){470, (void *)((&(*r__h)))})).type != 0) || (!go_streq((*r__h).T, GOSTR("cvfnearby")))) || ((*r__h).Port <= 0)) || ((*r__h).Port > 65535)) {
+            if ((((json_Unmarshal(GO_SLICE_HI(Slice_u8, buf, 0, n), ((GoIface){470, (void *)((&(*r__h)))})).type != 0) || (!go_streq((*r__h).T, GOSTR("cvfnearby")))) || ((*r__h).Port <= 0)) || ((*r__h).Port > 65535)) {
                 continue;
             }
             GoIface _t3 = from;
@@ -18654,7 +18654,7 @@ static void lambda_976(Env_lambda_976 *_env, Slice_u8 dst, int dw, Slice_u8 src,
         {
             int i = 0;
             for (; i < h; i++) {
-                GO_COPY(GO_SLICE(Slice_u8, dst, (dw * i), ((dw * i) + dw2)), GO_SLICE(Slice_u8, src, ((w * i) + x), (((w * i) + x) + dw2)));
+                GO_COPY(GO_SLICE_HI(Slice_u8, dst, (dw * i), ((dw * i) + dw2)), GO_SLICE_HI(Slice_u8, src, ((w * i) + x), (((w * i) + x) + dw2)));
                 _cont1:;
             }
         }
@@ -27739,7 +27739,7 @@ static int lambda_1414(Env_lambda_1414 *_env, lua_LState* l) {
         }
     }
     if (g_sys.keyConfig.len > total) {
-        g_sys.keyConfig = GO_SLICE(Slice_KeyConfig, g_sys.keyConfig, 0, total);
+        g_sys.keyConfig = GO_SLICE_HI(Slice_KeyConfig, g_sys.keyConfig, 0, total);
     } else {
         {
             int i = g_sys.keyConfig.len;
@@ -27766,7 +27766,7 @@ static int lambda_1414(Env_lambda_1414 *_env, lua_LState* l) {
         }
     }
     if (g_sys.joystickConfig.len > total) {
-        g_sys.joystickConfig = GO_SLICE(Slice_KeyConfig, g_sys.joystickConfig, 0, total);
+        g_sys.joystickConfig = GO_SLICE_HI(Slice_KeyConfig, g_sys.joystickConfig, 0, total);
     } else {
         {
             int i = g_sys.joystickConfig.len;
@@ -34834,7 +34834,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
         int _t11 = yynt;
         switch (_t11) {
         case 1: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.stmts = yyDollar.p[1].stmts;
                 {
@@ -34851,7 +34851,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 2: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.stmts = GO_APPEND(Slice_ast_Stmt, yyDollar.p[1].stmts, yyDollar.p[2].stmt);
                 {
@@ -34868,7 +34868,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 3: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.stmts = GO_APPEND(Slice_ast_Stmt, yyDollar.p[1].stmts, yyDollar.p[2].stmt);
                 {
@@ -34885,35 +34885,35 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 4: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 0), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 0), (yypt + 1));
             {
                 yyVAL.stmts = (Slice_ast_Stmt){0};
             }
             break;
         }
         case 5: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.stmts = GO_APPEND(Slice_ast_Stmt, yyDollar.p[1].stmts, yyDollar.p[2].stmt);
             }
             break;
         }
         case 6: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.stmts = yyDollar.p[1].stmts;
             }
             break;
         }
         case 7: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.stmts = yyDollar.p[1].stmts;
             }
             break;
         }
         case 8: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){105, (void *)(go_box(ast_AssignStmt, (ast_AssignStmt){.Lhs = yyDollar.p[1].exprlist, .Rhs = yyDollar.p[3].exprlist}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, iface_Line_a218166d(yyDollar.p[1].exprlist.p[0]));
@@ -34921,7 +34921,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 9: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 {
                     GoIface _t21 = yyDollar.p[1].expr;
@@ -34939,7 +34939,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 10: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){108, (void *)(go_box(ast_DoBlockStmt, (ast_DoBlockStmt){.Stmts = yyDollar.p[2].stmts}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -34948,7 +34948,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 11: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){109, (void *)(go_box(ast_WhileStmt, (ast_WhileStmt){.Condition = yyDollar.p[2].expr, .Stmts = yyDollar.p[4].stmts}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -34957,7 +34957,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 12: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){110, (void *)(go_box(ast_RepeatStmt, (ast_RepeatStmt){.Condition = yyDollar.p[4].expr, .Stmts = yyDollar.p[2].stmts}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -34966,7 +34966,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 13: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 6), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 6), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){111, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[2].expr, .Then = yyDollar.p[4].stmts}))});
                 ast_Stmt cur = yyVAL.stmt;
@@ -34985,7 +34985,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 14: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 8), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 8), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){111, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[2].expr, .Then = yyDollar.p[4].stmts}))});
                 ast_Stmt cur = yyVAL.stmt;
@@ -35005,7 +35005,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 15: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 9), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 9), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){112, (void *)(go_box(ast_NumberForStmt, (ast_NumberForStmt){.Name = yyDollar.p[2].token.Str, .Init = yyDollar.p[4].expr, .Limit = yyDollar.p[6].expr, .Stmts = yyDollar.p[8].stmts}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35014,7 +35014,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 16: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 11), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 11), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){112, (void *)(go_box(ast_NumberForStmt, (ast_NumberForStmt){.Name = yyDollar.p[2].token.Str, .Init = yyDollar.p[4].expr, .Limit = yyDollar.p[6].expr, .Step = yyDollar.p[8].expr, .Stmts = yyDollar.p[10].stmts}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35023,7 +35023,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 17: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 7), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 7), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){113, (void *)(go_box(ast_GenericForStmt, (ast_GenericForStmt){.Names = yyDollar.p[2].namelist, .Exprs = yyDollar.p[4].exprlist, .Stmts = yyDollar.p[6].stmts}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35032,7 +35032,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 18: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){114, (void *)(go_box(ast_FuncDefStmt, (ast_FuncDefStmt){.Name = yyDollar.p[2].funcname, .Func = yyDollar.p[3].funcexpr}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35041,7 +35041,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 19: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){116, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = GO_SLICE_LIT(Slice_GoString, GoString, 1, yyDollar.p[3].token.Str), .Exprs = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, ((GoIface){115, (void *)(yyDollar.p[4].funcexpr)}))}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35050,7 +35050,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 20: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){116, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = yyDollar.p[2].namelist, .Exprs = yyDollar.p[4].exprlist}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35058,7 +35058,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 21: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){116, (void *)(go_box(ast_LocalAssignStmt, (ast_LocalAssignStmt){.Names = yyDollar.p[2].namelist, .Exprs = (Slice_ast_Expr){0}}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35066,7 +35066,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 22: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){117, (void *)(go_box(ast_LabelStmt, (ast_LabelStmt){.Name = yyDollar.p[2].token.Str}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35074,7 +35074,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 23: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){118, (void *)(go_box(ast_GotoStmt, (ast_GotoStmt){.Label = yyDollar.p[2].token.Str}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35082,14 +35082,14 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 24: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 0), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 0), (yypt + 1));
             {
                 yyVAL.stmts = (Slice_ast_Stmt){0};
             }
             break;
         }
         case 25: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
             {
                 yyVAL.stmts = GO_APPEND(Slice_ast_Stmt, yyDollar.p[1].stmts, ((GoIface){111, (void *)(go_box(ast_IfStmt, (ast_IfStmt){.Condition = yyDollar.p[3].expr, .Then = yyDollar.p[5].stmts}))}));
                 iface_SetLine_83b24cfd(yyVAL.stmts.p[(yyVAL.stmts.len - 1)], yyDollar.p[2].token.Pos.Line);
@@ -35097,7 +35097,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 26: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){119, (void *)(go_box(ast_ReturnStmt, (ast_ReturnStmt){.Exprs = (Slice_ast_Expr){0}}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35105,7 +35105,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 27: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){119, (void *)(go_box(ast_ReturnStmt, (ast_ReturnStmt){.Exprs = yyDollar.p[2].exprlist}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35113,7 +35113,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 28: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.stmt = ((GoIface){120, (void *)(go_box(ast_BreakStmt, (ast_BreakStmt){0}))});
                 iface_SetLine_83b24cfd(yyVAL.stmt, yyDollar.p[1].token.Pos.Line);
@@ -35121,21 +35121,21 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 29: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.funcname = yyDollar.p[1].funcname;
             }
             break;
         }
         case 30: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.funcname = go_box(ast_FuncName, (ast_FuncName){.Func = (ast_Expr){0}, .Receiver = yyDollar.p[1].funcname->Func, .Method = yyDollar.p[3].token.Str});
             }
             break;
         }
         case 31: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.funcname = go_box(ast_FuncName, (ast_FuncName){.Func = ((GoIface){121, (void *)(go_box(ast_IdentExpr, (ast_IdentExpr){.Value = yyDollar.p[1].token.Str}))})});
                 iface_SetLine_83b24cfd(yyVAL.funcname->Func, yyDollar.p[1].token.Pos.Line);
@@ -35143,7 +35143,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 32: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 ast_StringExpr* key = go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[3].token.Str});
                 ast_Node_SetLine(&key->ConstExprBase_.ExprBase_.Node_, yyDollar.p[3].token.Pos.Line);
@@ -35154,21 +35154,21 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 33: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.exprlist = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, yyDollar.p[1].expr);
             }
             break;
         }
         case 34: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.exprlist = GO_APPEND(Slice_ast_Expr, yyDollar.p[1].exprlist, yyDollar.p[3].expr);
             }
             break;
         }
         case 35: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){121, (void *)(go_box(ast_IdentExpr, (ast_IdentExpr){.Value = yyDollar.p[1].token.Str}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35176,7 +35176,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 36: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){123, (void *)(go_box(ast_AttrGetExpr, (ast_AttrGetExpr){.Object = yyDollar.p[1].expr, .Key = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35184,7 +35184,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 37: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 ast_StringExpr* key = go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[3].token.Str});
                 ast_Node_SetLine(&key->ConstExprBase_.ExprBase_.Node_, yyDollar.p[3].token.Pos.Line);
@@ -35194,35 +35194,35 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 38: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.namelist = GO_SLICE_LIT(Slice_GoString, GoString, 1, yyDollar.p[1].token.Str);
             }
             break;
         }
         case 39: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.namelist = GO_APPEND(Slice_GoString, yyDollar.p[1].namelist, yyDollar.p[3].token.Str);
             }
             break;
         }
         case 40: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.exprlist = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, yyDollar.p[1].expr);
             }
             break;
         }
         case 41: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.exprlist = GO_APPEND(Slice_ast_Expr, yyDollar.p[1].exprlist, yyDollar.p[3].expr);
             }
             break;
         }
         case 42: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){124, (void *)(go_box(ast_NilExpr, (ast_NilExpr){0}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35230,7 +35230,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 43: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){125, (void *)(go_box(ast_FalseExpr, (ast_FalseExpr){0}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35238,7 +35238,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 44: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){126, (void *)(go_box(ast_TrueExpr, (ast_TrueExpr){0}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35246,7 +35246,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 45: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){127, (void *)(go_box(ast_NumberExpr, (ast_NumberExpr){.Value = yyDollar.p[1].token.Str}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35254,7 +35254,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 46: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){128, (void *)(go_box(ast_Comma3Expr, (ast_Comma3Expr){0}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35262,35 +35262,35 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 47: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = yyDollar.p[1].expr;
             }
             break;
         }
         case 48: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = yyDollar.p[1].expr;
             }
             break;
         }
         case 49: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = yyDollar.p[1].expr;
             }
             break;
         }
         case 50: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = yyDollar.p[1].expr;
             }
             break;
         }
         case 51: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){129, (void *)(go_box(ast_LogicalOpExpr, (ast_LogicalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("or"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35298,7 +35298,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 52: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){129, (void *)(go_box(ast_LogicalOpExpr, (ast_LogicalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("and"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35306,7 +35306,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 53: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){130, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR(">"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35314,7 +35314,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 54: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){130, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("<"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35322,7 +35322,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 55: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){130, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR(">="), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35330,7 +35330,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 56: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){130, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("<="), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35338,7 +35338,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 57: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){130, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("=="), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35346,7 +35346,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 58: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){130, (void *)(go_box(ast_RelationalOpExpr, (ast_RelationalOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("~="), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35354,7 +35354,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 59: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){131, (void *)(go_box(ast_StringConcatOpExpr, (ast_StringConcatOpExpr){.Lhs = yyDollar.p[1].expr, .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35362,7 +35362,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 60: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){132, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("+"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35370,7 +35370,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 61: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){132, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("-"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35378,7 +35378,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 62: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){132, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("*"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35386,7 +35386,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 63: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){132, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("/"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35394,7 +35394,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 64: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){132, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("%"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35402,7 +35402,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 65: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){132, (void *)(go_box(ast_ArithmeticOpExpr, (ast_ArithmeticOpExpr){.Lhs = yyDollar.p[1].expr, .Operator = GOSTR("^"), .Rhs = yyDollar.p[3].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35410,7 +35410,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 66: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){133, (void *)(go_box(ast_UnaryMinusOpExpr, (ast_UnaryMinusOpExpr){.Expr = yyDollar.p[2].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[2].expr));
@@ -35418,7 +35418,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 67: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){134, (void *)(go_box(ast_UnaryNotOpExpr, (ast_UnaryNotOpExpr){.Expr = yyDollar.p[2].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[2].expr));
@@ -35426,7 +35426,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 68: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){135, (void *)(go_box(ast_UnaryLenOpExpr, (ast_UnaryLenOpExpr){.Expr = yyDollar.p[2].expr}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[2].expr));
@@ -35434,7 +35434,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 69: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){122, (void *)(go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[1].token.Str}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35442,28 +35442,28 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 70: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = yyDollar.p[1].expr;
             }
             break;
         }
         case 71: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = yyDollar.p[1].expr;
             }
             break;
         }
         case 72: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.expr = yyDollar.p[1].expr;
             }
             break;
         }
         case 73: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 {
                     GoIface _t30 = yyDollar.p[2].expr;
@@ -35481,7 +35481,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 74: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 ((ast_FuncCallExpr*)(yyDollar.p[2].expr).data)->AdjustRet = true;
                 yyVAL.expr = yyDollar.p[2].expr;
@@ -35489,7 +35489,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 75: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){106, (void *)(go_box(ast_FuncCallExpr, (ast_FuncCallExpr){.Func = yyDollar.p[1].expr, .Args = yyDollar.p[2].exprlist}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35497,7 +35497,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 76: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){106, (void *)(go_box(ast_FuncCallExpr, (ast_FuncCallExpr){.Method = yyDollar.p[3].token.Str, .Receiver = yyDollar.p[1].expr, .Args = yyDollar.p[4].exprlist}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, iface_Line_a218166d(yyDollar.p[1].expr));
@@ -35505,7 +35505,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 77: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 if (((parse_Lexer*)(yylex).data)->PNewLine) {
                     parse_Lexer_TokenError(((parse_Lexer*)(yylex).data), yyDollar.p[1].token, GOSTR("ambiguous syntax (function call x new statement)"));
@@ -35515,7 +35515,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 78: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 if (((parse_Lexer*)(yylex).data)->PNewLine) {
                     parse_Lexer_TokenError(((parse_Lexer*)(yylex).data), yyDollar.p[1].token, GOSTR("ambiguous syntax (function call x new statement)"));
@@ -35525,21 +35525,21 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 79: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.exprlist = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, yyDollar.p[1].expr);
             }
             break;
         }
         case 80: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.exprlist = GO_SLICE_LIT(Slice_ast_Expr, ast_Expr, 1, yyDollar.p[1].expr);
             }
             break;
         }
         case 81: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){115, (void *)(go_box(ast_FunctionExpr, (ast_FunctionExpr){.ParList = yyDollar.p[2].funcexpr->ParList, .Stmts = yyDollar.p[2].funcexpr->Stmts}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35548,7 +35548,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 82: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
             {
                 yyVAL.funcexpr = go_box(ast_FunctionExpr, (ast_FunctionExpr){.ParList = yyDollar.p[2].parlist, .Stmts = yyDollar.p[4].stmts});
                 ast_Node_SetLine(&yyVAL.funcexpr->ExprBase_.Node_, yyDollar.p[1].token.Pos.Line);
@@ -35557,7 +35557,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 83: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 4), (yypt + 1));
             {
                 yyVAL.funcexpr = go_box(ast_FunctionExpr, (ast_FunctionExpr){.ParList = go_box(ast_ParList, (ast_ParList){.HasVargs = false, .Names = (Slice_GoString){0}}), .Stmts = yyDollar.p[3].stmts});
                 ast_Node_SetLine(&yyVAL.funcexpr->ExprBase_.Node_, yyDollar.p[1].token.Pos.Line);
@@ -35566,14 +35566,14 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 84: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.parlist = go_box(ast_ParList, (ast_ParList){.HasVargs = true, .Names = (Slice_GoString){0}});
             }
             break;
         }
         case 85: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.parlist = go_box(ast_ParList, (ast_ParList){.HasVargs = false, .Names = (Slice_GoString){0}});
                 yyVAL.parlist->Names = GO_APPEND_SLICE(Slice_GoString, yyVAL.parlist->Names, yyDollar.p[1].namelist);
@@ -35581,7 +35581,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 86: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.parlist = go_box(ast_ParList, (ast_ParList){.HasVargs = true, .Names = (Slice_GoString){0}});
                 yyVAL.parlist->Names = GO_APPEND_SLICE(Slice_GoString, yyVAL.parlist->Names, yyDollar.p[1].namelist);
@@ -35589,7 +35589,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 87: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){136, (void *)(go_box(ast_TableExpr, (ast_TableExpr){.Fields = (Slice_ast_FieldPtr){0}}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35597,7 +35597,7 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 88: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.expr = ((GoIface){136, (void *)(go_box(ast_TableExpr, (ast_TableExpr){.Fields = yyDollar.p[2].fieldlist}))});
                 iface_SetLine_83b24cfd(yyVAL.expr, yyDollar.p[1].token.Pos.Line);
@@ -35605,28 +35605,28 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 89: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.fieldlist = GO_SLICE_LIT(Slice_ast_FieldPtr, ast_Field*, 1, yyDollar.p[1].field);
             }
             break;
         }
         case 90: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.fieldlist = GO_APPEND(Slice_ast_FieldPtr, yyDollar.p[1].fieldlist, yyDollar.p[3].field);
             }
             break;
         }
         case 91: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 2), (yypt + 1));
             {
                 yyVAL.fieldlist = yyDollar.p[1].fieldlist;
             }
             break;
         }
         case 92: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 3), (yypt + 1));
             {
                 yyVAL.field = go_box(ast_Field, (ast_Field){.Key = ((GoIface){122, (void *)(go_box(ast_StringExpr, (ast_StringExpr){.Value = yyDollar.p[1].token.Str}))}), .Value = yyDollar.p[3].expr});
                 iface_SetLine_83b24cfd(yyVAL.field->Key, yyDollar.p[1].token.Pos.Line);
@@ -35634,28 +35634,28 @@ int parse_yyParserImpl_Parse(parse_yyParserImpl* yyrcvr, parse_yyLexer yylex) {
             break;
         }
         case 93: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 5), (yypt + 1));
             {
                 yyVAL.field = go_box(ast_Field, (ast_Field){.Key = yyDollar.p[2].expr, .Value = yyDollar.p[5].expr});
             }
             break;
         }
         case 94: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.field = go_box(ast_Field, (ast_Field){.Value = yyDollar.p[1].expr});
             }
             break;
         }
         case 95: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.fieldsep = GOSTR(",");
             }
             break;
         }
         case 96: {
-            yyDollar = GO_SLICE(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
+            yyDollar = GO_SLICE_HI(Slice_parse_yySymType, yyS, (yypt - 1), (yypt + 1));
             {
                 yyVAL.fieldsep = GOSTR(";");
             }
@@ -36472,7 +36472,7 @@ void freetype_Context_drawContour(freetype_Context* c, Slice_truetype_Point ps, 
         fixed_Point26_6 last = (fixed_Point26_6){.X = (dx + ps.p[(ps.len - 1)].X), .Y = (dy - ps.p[(ps.len - 1)].Y)};
         if ((ps.p[(ps.len - 1)].Flags & 1U) != 0U) {
             start = last;
-            others = GO_SLICE(Slice_truetype_Point, ps, 0, (ps.len - 1));
+            others = GO_SLICE_HI(Slice_truetype_Point, ps, 0, (ps.len - 1));
         } else {
             start = (fixed_Point26_6){.X = go_div32(((start.X + last.X)), 2), .Y = go_div32(((start.Y + last.Y)), 2)};
             others = ps;
@@ -36539,7 +36539,7 @@ Ret_fixed_Int26_6__GoImageAlphaPtr__GoImagePoint__GoIface freetype_Context_raste
         Slice_int _t2 = c->glyphBuf.Ends;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
             int e1 = _t2.p[_t1];
-            freetype_Context_drawContour(c, GO_SLICE(Slice_truetype_Point, c->glyphBuf.Points, e0, e1), fx, fy);
+            freetype_Context_drawContour(c, GO_SLICE_HI(Slice_truetype_Point, c->glyphBuf.Points, e0, e1), fx, fy);
             e0 = e1;
             _cont3:;
         }
@@ -36736,22 +36736,22 @@ GoString raster_Path_String(raster_Path p) {
                 fixed_Int26_6 _t2 = p.p[i];
                 switch (_t2) {
                 case 0: {
-                    s = go_strcat(s, go_strcat(GOSTR("S0"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE(raster_Path, p, (i + 1), (i + 3)))})))));
+                    s = go_strcat(s, go_strcat(GOSTR("S0"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE_HI(raster_Path, p, (i + 1), (i + 3)))})))));
                     i += 4;
                     break;
                 }
                 case 1: {
-                    s = go_strcat(s, go_strcat(GOSTR("A1"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE(raster_Path, p, (i + 1), (i + 3)))})))));
+                    s = go_strcat(s, go_strcat(GOSTR("A1"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE_HI(raster_Path, p, (i + 1), (i + 3)))})))));
                     i += 4;
                     break;
                 }
                 case 2: {
-                    s = go_strcat(s, go_strcat(GOSTR("A2"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE(raster_Path, p, (i + 1), (i + 5)))})))));
+                    s = go_strcat(s, go_strcat(GOSTR("A2"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE_HI(raster_Path, p, (i + 1), (i + 5)))})))));
                     i += 6;
                     break;
                 }
                 case 3: {
-                    s = go_strcat(s, go_strcat(GOSTR("A3"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE(raster_Path, p, (i + 1), (i + 7)))})))));
+                    s = go_strcat(s, go_strcat(GOSTR("A3"), fmt_Sprint(GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){142, go_box(Slice_fixed_Int26_6, GO_SLICE_HI(raster_Path, p, (i + 1), (i + 7)))})))));
                     i += 8;
                     break;
                 }
@@ -36795,7 +36795,7 @@ void raster_AlphaOverPainter_Paint(raster_AlphaOverPainter r, Slice_raster_Span 
                 continue;
             }
             int base = ((((s.Y - r.Image->Rect.Min.Y)) * r.Image->Stride) - r.Image->Rect.Min.X);
-            Slice_u8 p = GO_SLICE(Slice_u8, r.Image->Pix, (base + s.X0), (base + s.X1));
+            Slice_u8 p = GO_SLICE_HI(Slice_u8, r.Image->Pix, (base + s.X0), (base + s.X1));
             int a = ((int)(u32)((s.Alpha) >> 8));
             {
                 Slice_u8 _t5 = p;
@@ -36835,7 +36835,7 @@ void raster_AlphaSrcPainter_Paint(raster_AlphaSrcPainter r, Slice_raster_Span ss
                 continue;
             }
             int base = ((((s.Y - r.Image->Rect.Min.Y)) * r.Image->Stride) - r.Image->Rect.Min.X);
-            Slice_u8 p = GO_SLICE(Slice_u8, r.Image->Pix, (base + s.X0), (base + s.X1));
+            Slice_u8 p = GO_SLICE_HI(Slice_u8, r.Image->Pix, (base + s.X0), (base + s.X1));
             u8 color = ((u8)(u32)((s.Alpha) >> 8));
             {
                 Slice_u8 _t5 = p;
@@ -36951,12 +36951,12 @@ void raster_MonochromePainter_Paint(raster_MonochromePainter* m, Slice_raster_Sp
         if (j < ss.len) {
             ss.p[j] = finalSpan;
             j++;
-            iface_Paint_61a99391(m->Painter, GO_SLICE(Slice_raster_Span, ss, 0, j), true);
+            iface_Paint_61a99391(m->Painter, GO_SLICE_HI(Slice_raster_Span, ss, 0, j), true);
         } else {
             if (j == ss.len) {
                 iface_Paint_61a99391(m->Painter, ss, false);
                 if (ss.cap > 0) {
-                    ss = GO_SLICE(Slice_raster_Span, ss, 0, 1);
+                    ss = GO_SLICE_HI(Slice_raster_Span, ss, 0, 1);
                 } else {
                     ss = GO_MAKE(Slice_raster_Span, raster_Span, 1, 0);
                 }
@@ -36973,7 +36973,7 @@ void raster_MonochromePainter_Paint(raster_MonochromePainter* m, Slice_raster_Sp
         m->x0 = _t8;
         m->x1 = _t9;
     } else {
-        iface_Paint_61a99391(m->Painter, GO_SLICE(Slice_raster_Span, ss, 0, j), false);
+        iface_Paint_61a99391(m->Painter, GO_SLICE_HI(Slice_raster_Span, ss, 0, j), false);
     }
 }
 
@@ -37036,9 +37036,9 @@ int raster_Rasterizer_findCell(raster_Rasterizer* r) {
     if (c == r->cell.cap) {
         Slice_raster_cell buf = GO_MAKE(Slice_raster_cell, raster_cell, c, (4 * c));
         GO_COPY(buf, r->cell);
-        r->cell = GO_SLICE(Slice_raster_cell, buf, 0, (c + 1));
+        r->cell = GO_SLICE_HI(Slice_raster_cell, buf, 0, (c + 1));
     } else {
-        r->cell = GO_SLICE(Slice_raster_cell, r->cell, 0, (c + 1));
+        r->cell = GO_SLICE_HI(Slice_raster_cell, r->cell, 0, (c + 1));
     }
     r->cell.p[c] = (raster_cell){xi, 0, 0, i};
     if (prev == -1) {
@@ -37456,7 +37456,7 @@ void raster_Rasterizer_Rasterize(raster_Rasterizer* r, raster_Painter p) {
                         }
                     }
                     if (s > 62) {
-                        iface_Paint_61a99391(p, GO_ARRSLICE(Slice_raster_Span, r->spanBuf.v, 64, 0, s), false);
+                        iface_Paint_61a99391(p, GO_ARRSLICE_HI(Slice_raster_Span, r->spanBuf.v, 64, 0, s), false);
                         s = 0;
                     }
                     _cont4:;
@@ -37465,7 +37465,7 @@ void raster_Rasterizer_Rasterize(raster_Rasterizer* r, raster_Painter p) {
             _cont1:;
         }
     }
-    iface_Paint_61a99391(p, GO_ARRSLICE(Slice_raster_Span, r->spanBuf.v, 64, 0, s), true);
+    iface_Paint_61a99391(p, GO_ARRSLICE_HI(Slice_raster_Span, r->spanBuf.v, 64, 0, s), true);
 }
 
 // github.com/golang/freetype/raster.Rasterizer.Clear (raster.go:554), 0 TODO
@@ -37475,7 +37475,7 @@ void raster_Rasterizer_Clear(raster_Rasterizer* r) {
     r->yi = 0;
     r->area = 0;
     r->cover = 0;
-    r->cell = GO_SLICE(Slice_raster_cell, r->cell, 0, 0);
+    r->cell = GO_SLICE_HI(Slice_raster_cell, r->cell, 0, 0);
     {
         int i = 0;
         for (; i < r->cellIndex.len; i++) {
@@ -37512,11 +37512,11 @@ void raster_Rasterizer_SetBounds(raster_Rasterizer* r, int width, int height) {
     r->width = width;
     r->splitScale2 = ss2;
     r->splitScale3 = ss3;
-    r->cell = GO_ARRSLICE(Slice_raster_cell, r->cellBuf.v, 256, 0, 0);
+    r->cell = GO_ARRSLICE_HI(Slice_raster_cell, r->cellBuf.v, 256, 0, 0);
     if (height > 64) {
         r->cellIndex = GO_MAKE_A(Slice_int, int, height, 0);
     } else {
-        r->cellIndex = GO_ARRSLICE(Slice_int, r->cellIndexBuf.v, 64, 0, height);
+        r->cellIndex = GO_ARRSLICE_HI(Slice_int, r->cellIndexBuf.v, 64, 0, height);
     }
     raster_Rasterizer_Clear(r);
 }
@@ -37741,7 +37741,7 @@ void truetype_facePainter_Paint(truetype_facePainter p, Slice_raster_Span ss, bo
                 continue;
             }
             int base = ((((s.Y - m->Rect.Min.Y)) * m->Stride) - m->Rect.Min.X);
-            Slice_u8 p = GO_SLICE(Slice_u8, m->Pix, (base + s.X0), (base + s.X1));
+            Slice_u8 p = GO_SLICE_HI(Slice_u8, m->Pix, (base + s.X0), (base + s.X1));
             u8 color = ((u8)(u32)((s.Alpha) >> 8));
             {
                 Slice_u8 _t5 = p;
@@ -37758,10 +37758,10 @@ void truetype_facePainter_Paint(truetype_facePainter p, Slice_raster_Span ss, bo
 
 // github.com/golang/freetype/truetype.GlyphBuf.Load (glyph.go:85), 0 TODO
 GoIface truetype_GlyphBuf_Load(truetype_GlyphBuf* g, truetype_Font* f, fixed_Int26_6 scale, truetype_Index i, font_Hinting h) {
-    g->Points = GO_SLICE(Slice_truetype_Point, g->Points, 0, 0);
-    g->Unhinted = GO_SLICE(Slice_truetype_Point, g->Unhinted, 0, 0);
-    g->InFontUnits = GO_SLICE(Slice_truetype_Point, g->InFontUnits, 0, 0);
-    g->Ends = GO_SLICE(Slice_int, g->Ends, 0, 0);
+    g->Points = GO_SLICE_HI(Slice_truetype_Point, g->Points, 0, 0);
+    g->Unhinted = GO_SLICE_HI(Slice_truetype_Point, g->Unhinted, 0, 0);
+    g->InFontUnits = GO_SLICE_HI(Slice_truetype_Point, g->InFontUnits, 0, 0);
+    g->Ends = GO_SLICE_HI(Slice_int, g->Ends, 0, 0);
     g->font = f;
     g->hinting = h;
     g->scale = scale;
@@ -37885,7 +37885,7 @@ GoIface truetype_GlyphBuf_load(truetype_GlyphBuf* g, u32 recursion, truetype_Ind
     fixed_Int26_6 boundsXMin = _t3;
     fixed_Int26_6 boundsYMax = _t4;
     if ((g0 + 10U) <= g1) {
-        glyf = GO_SLICE(Slice_u8, g->font->glyf, g0, g1);
+        glyf = GO_SLICE_HI(Slice_u8, g->font->glyf, g0, g1);
         ne = ((int)((i16)truetype_u16(glyf, 0)));
         boundsXMin = ((fixed_Int26_6)((i16)truetype_u16(glyf, 2)));
         boundsYMax = ((fixed_Int26_6)((i16)truetype_u16(glyf, 8)));
@@ -37899,7 +37899,7 @@ GoIface truetype_GlyphBuf_load(truetype_GlyphBuf* g, u32 recursion, truetype_Ind
     if (glyf.len == 0) {
         truetype_GlyphBuf_addPhantomsAndScale(g, g->Points.len, g->Points.len, true, true);
         GO_COPY(GO_ARRSLICE(Slice_truetype_Point, g->phantomPoints.v, 4, 0, -1), GO_SLICE(Slice_truetype_Point, g->Points, (g->Points.len - 4), -1));
-        g->Points = GO_SLICE(Slice_truetype_Point, g->Points, 0, (g->Points.len - 4));
+        g->Points = GO_SLICE_HI(Slice_truetype_Point, g->Points, 0, (g->Points.len - 4));
         return (GoIface){0};
     }
     if (ne < 0) {
@@ -37928,13 +37928,13 @@ GoIface truetype_GlyphBuf_load(truetype_GlyphBuf* g, u32 recursion, truetype_Ind
                     return err;
                 }
             }
-            g->InFontUnits = GO_SLICE(Slice_truetype_Point, g->InFontUnits, 0, (g->InFontUnits.len - 4));
-            g->Unhinted = GO_SLICE(Slice_truetype_Point, g->Unhinted, 0, (g->Unhinted.len - 4));
+            g->InFontUnits = GO_SLICE_HI(Slice_truetype_Point, g->InFontUnits, 0, (g->InFontUnits.len - 4));
+            g->Unhinted = GO_SLICE_HI(Slice_truetype_Point, g->Unhinted, 0, (g->Unhinted.len - 4));
         }
         if (useMyMetrics) {
             GO_COPY(GO_ARRSLICE(Slice_truetype_Point, g->phantomPoints.v, 4, 0, -1), GO_SLICE(Slice_truetype_Point, g->Points, (g->Points.len - 4), -1));
         }
-        g->Points = GO_SLICE(Slice_truetype_Point, g->Points, 0, (g->Points.len - 4));
+        g->Points = GO_SLICE_HI(Slice_truetype_Point, g->Points, 0, (g->Points.len - 4));
         if (np0 != 0) {
             {
                 int i = ne0;
@@ -37967,7 +37967,7 @@ Slice_u8 truetype_GlyphBuf_loadSimple(truetype_GlyphBuf* g, Slice_u8 glyf, int n
     }
     int instrLen = ((int)truetype_u16(glyf, offset));
     offset += 2;
-    program = GO_SLICE(Slice_u8, glyf, offset, (offset + instrLen));
+    program = GO_SLICE_HI(Slice_u8, glyf, offset, (offset + instrLen));
     offset += instrLen;
     if (ne == 0) {
         return program;
@@ -38156,7 +38156,7 @@ GoIface truetype_GlyphBuf_loadCompound(truetype_GlyphBuf* g, u32 recursion, true
     Slice_int _t13 = GO_SLICE(Slice_int, g->Ends, ne0, -1);
     Slice_truetype_Point points = _t12;
     Slice_int ends = _t13;
-    g->Points = GO_SLICE(Slice_truetype_Point, g->Points, 0, (g->Points.len - 4));
+    g->Points = GO_SLICE_HI(Slice_truetype_Point, g->Points, 0, (g->Points.len - 4));
     {
         Slice_truetype_Point _t15 = points;
         for (int _t14 = 0; _t14 < _t15.len; _t14++) {
@@ -38171,7 +38171,7 @@ GoIface truetype_GlyphBuf_loadCompound(truetype_GlyphBuf* g, u32 recursion, true
         }
         return (GoIface){0};
     }
-    Slice_u8 program = GO_SLICE(Slice_u8, glyf, offset, (offset + instrLen));
+    Slice_u8 program = GO_SLICE_HI(Slice_u8, glyf, offset, (offset + instrLen));
     if (np0 != 0) {
         {
             Slice_int _t18 = ends;
@@ -38182,7 +38182,7 @@ GoIface truetype_GlyphBuf_loadCompound(truetype_GlyphBuf* g, u32 recursion, true
             }
         }
     }
-    g->tmp = GO_APPEND_SLICE(Slice_truetype_Point, GO_SLICE(Slice_truetype_Point, g->tmp, 0, 0), points);
+    g->tmp = GO_APPEND_SLICE(Slice_truetype_Point, GO_SLICE_HI(Slice_truetype_Point, g->tmp, 0, 0), points);
     {
         GoIface err = truetype_hinter_run(&g->hinter, program, points, g->tmp, g->tmp, ends);
         if (err.type != 0) {
@@ -38252,7 +38252,7 @@ Slice_truetype_Point truetype_resetTwilightPoints(truetype_Font* f, Slice_truety
     {
         int n = (((int)f->maxTwilightPoints) + 4);
         if (n <= p.cap) {
-            p = GO_SLICE(Slice_truetype_Point, p, 0, n);
+            p = GO_SLICE_HI(Slice_truetype_Point, p, 0, n);
             {
                 Slice_truetype_Point _t2 = p;
                 for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -38608,7 +38608,7 @@ GoIface truetype_hinter_run(truetype_hinter* h, Slice_u8 program, Slice_truetype
                     }
                     h->stack.p[(top - 1)] = h->stack.p[((top - 1) - x)];
                     if (opcode == 38U) {
-                        GO_COPY(GO_SLICE(Slice_i32, h->stack, ((top - 1) - x), (top - 1)), GO_SLICE(Slice_i32, h->stack, (top - x), top));
+                        GO_COPY(GO_SLICE_HI(Slice_i32, h->stack, ((top - 1) - x), (top - 1)), GO_SLICE_HI(Slice_i32, h->stack, (top - x), top));
                         top--;
                     }
                     break;
@@ -38679,7 +38679,7 @@ GoIface truetype_hinter_run(truetype_hinter* h, Slice_u8 program, Slice_truetype
                                 }
                                 case 45U: {
                                     top--;
-                                    Map_i32_Slice_u8_set(&h->functions, h->stack.p[top], GO_SLICE(Slice_u8, program, startPC, (pc + 1)));
+                                    Map_i32_Slice_u8_set(&h->functions, h->stack.p[top], GO_SLICE_HI(Slice_u8, program, startPC, (pc + 1)));
                                     goto fdefloop_break;
                                     break;
                                 }
@@ -39737,7 +39737,7 @@ void truetype_hinter_initializeScaledCVT(truetype_hinter* h) {
     {
         int n = go_div32(h->font->cvt.len, 2);
         if (n <= h->scaledCVT.cap) {
-            h->scaledCVT = GO_SLICE(Slice_fixed_Int26_6, h->scaledCVT, 0, n);
+            h->scaledCVT = GO_SLICE_HI(Slice_fixed_Int26_6, h->scaledCVT, 0, n);
         } else {
             if (n < 32) {
                 n = 32;
@@ -40175,7 +40175,7 @@ Ret_Slice_u8__GoIface truetype_readTable(Slice_u8 ttf, Slice_u8 offsetLength) {
     if ((end < 0) || (end > ttf.len)) {
         return (Ret_Slice_u8__GoIface){(Slice_u8){0}, ((GoIface){147, go_box(truetype_FormatError, fmt_Sprintf(GOSTR("offset + length too large: %d"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){10, go_box_a(u32, (((u32)offset) + ((u32)length)))}))))})};
     }
-    return (Ret_Slice_u8__GoIface){GO_SLICE(Slice_u8, ttf, offset, end), (GoIface){0}};
+    return (Ret_Slice_u8__GoIface){GO_SLICE_HI(Slice_u8, ttf, offset, end), (GoIface){0}};
 }
 
 // github.com/golang/freetype/truetype.parseSubtables (truetype.go:126), 0 TODO
@@ -40293,7 +40293,7 @@ GoIface truetype_Font_parseCmap(truetype_Font* f) {
         }
         case 12U: {
             if (truetype_u16(f->cmap, (offset + 2)) != 0U) {
-                return ((GoIface){147, go_box(truetype_FormatError, fmt_Sprintf(GOSTR("cmap format: % x"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){149, go_box(Slice_u8, GO_SLICE(Slice_u8, f->cmap, offset, (offset + 4)))}))))});
+                return ((GoIface){147, go_box(truetype_FormatError, fmt_Sprintf(GOSTR("cmap format: % x"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){149, go_box(Slice_u8, GO_SLICE_HI(Slice_u8, f->cmap, offset, (offset + 4)))}))))});
             }
             u32 length = truetype_u32(f->cmap, (offset + 4));
             u32 language = truetype_u32(f->cmap, (offset + 8));
@@ -40495,7 +40495,7 @@ GoString truetype_Font_Name(truetype_Font* f, truetype_NameID id) {
     u16 _t3 = truetype_u16(f->name, (x + 8));
     u16 offset = _t2;
     u16 length = _t3;
-    Slice_u8 src = GO_SLICE(Slice_u8, f->name, offset, (offset + length));
+    Slice_u8 src = GO_SLICE_HI(Slice_u8, f->name, offset, (offset + length));
     Slice_u8 dst = {0};
     if (platformID != 1U) {
         if ((src.len & 1) != 0) {
@@ -40678,66 +40678,66 @@ Ret_truetype_FontPtr__GoIface truetype_parse(Slice_u8 ttf, int offset) {
         for (; i < n; i++) {
             int x = ((16 * i) + offset);
             {
-                GoString _t11 = go_bytes2str(GO_SLICE(Slice_u8, ttf, x, (x + 4)));
+                GoString _t11 = go_bytes2str(GO_SLICE_HI(Slice_u8, ttf, x, (x + 4)));
                 do {
                     if (go_streq(_t11, GOSTR("cmap"))) {
-                        Ret_Slice_u8__GoIface _t12 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t12 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->cmap = _t12.r0;
                         err = _t12.r1;
                     } else if (go_streq(_t11, GOSTR("cvt "))) {
-                        Ret_Slice_u8__GoIface _t13 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t13 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->cvt = _t13.r0;
                         err = _t13.r1;
                     } else if (go_streq(_t11, GOSTR("fpgm"))) {
-                        Ret_Slice_u8__GoIface _t14 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t14 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->fpgm = _t14.r0;
                         err = _t14.r1;
                     } else if (go_streq(_t11, GOSTR("glyf"))) {
-                        Ret_Slice_u8__GoIface _t15 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t15 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->glyf = _t15.r0;
                         err = _t15.r1;
                     } else if (go_streq(_t11, GOSTR("hdmx"))) {
-                        Ret_Slice_u8__GoIface _t16 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t16 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->hdmx = _t16.r0;
                         err = _t16.r1;
                     } else if (go_streq(_t11, GOSTR("head"))) {
-                        Ret_Slice_u8__GoIface _t17 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t17 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->head = _t17.r0;
                         err = _t17.r1;
                     } else if (go_streq(_t11, GOSTR("hhea"))) {
-                        Ret_Slice_u8__GoIface _t18 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t18 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->hhea = _t18.r0;
                         err = _t18.r1;
                     } else if (go_streq(_t11, GOSTR("hmtx"))) {
-                        Ret_Slice_u8__GoIface _t19 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t19 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->hmtx = _t19.r0;
                         err = _t19.r1;
                     } else if (go_streq(_t11, GOSTR("kern"))) {
-                        Ret_Slice_u8__GoIface _t20 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t20 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->kern = _t20.r0;
                         err = _t20.r1;
                     } else if (go_streq(_t11, GOSTR("loca"))) {
-                        Ret_Slice_u8__GoIface _t21 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t21 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->loca = _t21.r0;
                         err = _t21.r1;
                     } else if (go_streq(_t11, GOSTR("maxp"))) {
-                        Ret_Slice_u8__GoIface _t22 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t22 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->maxp = _t22.r0;
                         err = _t22.r1;
                     } else if (go_streq(_t11, GOSTR("name"))) {
-                        Ret_Slice_u8__GoIface _t23 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t23 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->name = _t23.r0;
                         err = _t23.r1;
                     } else if (go_streq(_t11, GOSTR("OS/2"))) {
-                        Ret_Slice_u8__GoIface _t24 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t24 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->os2 = _t24.r0;
                         err = _t24.r1;
                     } else if (go_streq(_t11, GOSTR("prep"))) {
-                        Ret_Slice_u8__GoIface _t25 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t25 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->prep = _t25.r0;
                         err = _t25.r1;
                     } else if (go_streq(_t11, GOSTR("vmtx"))) {
-                        Ret_Slice_u8__GoIface _t26 = truetype_readTable(ttf, GO_SLICE(Slice_u8, ttf, (x + 8), (x + 16)));
+                        Ret_Slice_u8__GoIface _t26 = truetype_readTable(ttf, GO_SLICE_HI(Slice_u8, ttf, (x + 8), (x + 16)));
                         f->vmtx = _t26.r0;
                         err = _t26.r1;
                     }
@@ -41372,7 +41372,7 @@ void frame_Frame_reorder(frame_Frame* f, int gr, int ch) {
             for (; i < 576; ) {
                 if (i == next_sfb) {
                     int j = (3 * sfBandIndicesShort.p[sfb]);
-                    GO_COPY(GO_ARRSLICE(Slice_f32, f->mainData->Is.v[gr].v[ch].v, 576, j, (j + (3 * win_len))), GO_SLICE(Slice_f32, re, 0, (3 * win_len)));
+                    GO_COPY(GO_ARRSLICE_HI(Slice_f32, f->mainData->Is.v[gr].v[ch].v, 576, j, (j + (3 * win_len))), GO_SLICE_HI(Slice_f32, re, 0, (3 * win_len)));
                     if (i >= f->sideInfo->Count1.v[gr].v[ch]) {
                         return;
                     }
@@ -41398,7 +41398,7 @@ void frame_Frame_reorder(frame_Frame* f, int gr, int ch) {
             }
         }
         int j = (3 * sfBandIndicesShort.p[12]);
-        GO_COPY(GO_ARRSLICE(Slice_f32, f->mainData->Is.v[gr].v[ch].v, 576, j, (j + (3 * win_len))), GO_SLICE(Slice_f32, re, 0, (3 * win_len)));
+        GO_COPY(GO_ARRSLICE_HI(Slice_f32, f->mainData->Is.v[gr].v[ch].v, 576, j, (j + (3 * win_len))), GO_SLICE_HI(Slice_f32, re, 0, (3 * win_len)));
     }
 }
 
@@ -41638,7 +41638,7 @@ void frame_Frame_subbandSynthesis(frame_Frame* f, int gr, int ch, Slice_u8 out) 
     {
         int ss = 0;
         for (; ss < 18; ss++) {
-            GO_COPY(GO_ARRSLICE(Slice_f32, f->v_vec.v[ch].v, 1024, 64, 1024), GO_ARRSLICE(Slice_f32, f->v_vec.v[ch].v, 1024, 0, 960));
+            GO_COPY(GO_ARRSLICE_HI(Slice_f32, f->v_vec.v[ch].v, 1024, 64, 1024), GO_ARRSLICE_HI(Slice_f32, f->v_vec.v[ch].v, 1024, 0, 960));
             Arr576_f32 d = f->mainData->Is.v[gr].v[ch];
             {
                 int i = 0;
@@ -41666,8 +41666,8 @@ void frame_Frame_subbandSynthesis(frame_Frame* f, int gr, int ch, Slice_u8 out) 
             {
                 int i = 0;
                 for (; i < 512; i += 64) {
-                    GO_COPY(GO_SLICE(Slice_f32, u_vec, i, (i + 32)), GO_ARRSLICE(Slice_f32, v.v, 1024, ((int)((i) << 1)), (((int)((i) << 1)) + 32)));
-                    GO_COPY(GO_SLICE(Slice_f32, u_vec, (i + 32), (i + 64)), GO_ARRSLICE(Slice_f32, v.v, 1024, (((int)((i) << 1)) + 96), (((int)((i) << 1)) + 128)));
+                    GO_COPY(GO_SLICE_HI(Slice_f32, u_vec, i, (i + 32)), GO_ARRSLICE_HI(Slice_f32, v.v, 1024, ((int)((i) << 1)), (((int)((i) << 1)) + 32)));
+                    GO_COPY(GO_SLICE_HI(Slice_f32, u_vec, (i + 32), (i + 64)), GO_ARRSLICE_HI(Slice_f32, v.v, 1024, (((int)((i) << 1)) + 96), (((int)((i) << 1)) + 128)));
                     _cont5:;
                 }
             }
@@ -43433,7 +43433,7 @@ void beep_Buffer_Append(beep_Buffer* b, beep_Streamer s) {
                 break;
             }
             {
-                Slice_Arr2_f64 _t4 = GO_ARRSLICE(Slice_Arr2_f64, samples.v, 512, 0, n);
+                Slice_Arr2_f64 _t4 = GO_ARRSLICE_HI(Slice_Arr2_f64, samples.v, 512, 0, n);
                 for (int _t3 = 0; _t3 < _t4.len; _t3++) {
                     Arr2_f64 sample = _t4.p[_t3];
                     beep_Format_EncodeSigned(b->f, b->tmp, sample);
@@ -43448,7 +43448,7 @@ void beep_Buffer_Append(beep_Buffer* b, beep_Streamer s) {
 
 // github.com/ikemen-engine/beep/v2.Buffer.Streamer (buffer.go:206), 0 TODO
 beep_StreamSeeker beep_Buffer_Streamer(beep_Buffer* b, int from, int to) {
-    return ((GoIface){156, (void *)(go_box(beep_bufferStreamer, (beep_bufferStreamer){.f = b->f, .data = GO_SLICE(Slice_u8, b->data, (from * beep_Format_Width(b->f)), (to * beep_Format_Width(b->f))), .pos = 0}))});
+    return ((GoIface){156, (void *)(go_box(beep_bufferStreamer, (beep_bufferStreamer){.f = b->f, .data = GO_SLICE_HI(Slice_u8, b->data, (from * beep_Format_Width(b->f)), (to * beep_Format_Width(b->f))), .pos = 0}))});
 }
 
 // github.com/ikemen-engine/beep/v2.bufferStreamer.Stream (buffer.go:220), 0 TODO
@@ -43515,7 +43515,7 @@ Ret_int__bool beep_take_Stream(beep_take* t, Slice_Arr2_f64 samples) {
         return (Ret_int__bool){0, false};
     }
     int toStream = go_min_int(t->remains, samples.len);
-    Ret_int__bool _t1 = iface_Stream_7d2c466b(t->s, GO_SLICE(Slice_Arr2_f64, samples, 0, toStream));
+    Ret_int__bool _t1 = iface_Stream_7d2c466b(t->s, GO_SLICE_HI(Slice_Arr2_f64, samples, 0, toStream));
     n = _t1.r0;
     ok = _t1.r1;
     t->remains -= n;
@@ -43594,7 +43594,7 @@ Ret_int__bool beep_loop2_Stream(beep_loop2* l, Slice_Arr2_f64 samples) {
                 }
                 toStream = go_min_int(samplesUntilEnd, toStream);
             }
-            Ret_int__bool _t2 = iface_Stream_7d2c466b(l->s, GO_SLICE(Slice_Arr2_f64, samples, 0, toStream));
+            Ret_int__bool _t2 = iface_Stream_7d2c466b(l->s, GO_SLICE_HI(Slice_Arr2_f64, samples, 0, toStream));
             int sn = _t2.r0;
             bool sok = _t2.r1;
             n += sn;
@@ -43631,7 +43631,7 @@ Ret_int__bool beep_dup_Stream(beep_dup* d, Slice_Arr2_f64 samples) {
         bool sok = _t1.r1;
         n += sn;
         ok = (ok || sok);
-        (*d->itsBuf) = GO_APPEND_SLICE(Slice_Arr2_f64, (*d->itsBuf), GO_SLICE(Slice_Arr2_f64, samples, 0, sn));
+        (*d->itsBuf) = GO_APPEND_SLICE(Slice_Arr2_f64, (*d->itsBuf), GO_SLICE_HI(Slice_Arr2_f64, samples, 0, sn));
     }
     return (Ret_int__bool){n, ok};
     return (Ret_int__bool){n, ok};
@@ -43677,7 +43677,7 @@ Ret_int__bool effects_doppler_Stream(effects_doppler* d, Slice_Arr2_f64 samples)
     d->space = GO_APPEND_SLICE(Slice_Arr2_f64, d->space, GO_MAKE_A(Slice_Arr2_f64, Arr2_f64, (samples.len + difference), 0));
     Ret_int__bool _t2 = beep_Resampler_Stream(d->r, GO_SLICE(Slice_Arr2_f64, d->space, ((d->space.len - samples.len) - difference), -1));
     int rn = _t2.r0;
-    d->space = GO_SLICE(Slice_Arr2_f64, d->space, 0, (((d->space.len - samples.len) - difference) + rn));
+    d->space = GO_SLICE_HI(Slice_Arr2_f64, d->space, 0, (((d->space.len - samples.len) - difference) + rn));
     {
         int i = (d->space.len - rn);
         for (; i < d->space.len; i++) {
@@ -43786,7 +43786,7 @@ Ret_int__bool effects_Gain_Stream(effects_Gain* g, Slice_Arr2_f64 samples) {
     n = _t1.r0;
     ok = _t1.r1;
     {
-        Slice_Arr2_f64 _t3 = GO_SLICE(Slice_Arr2_f64, samples, 0, n);
+        Slice_Arr2_f64 _t3 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, n);
         for (int _t2 = 0; _t2 < _t3.len; _t2++) {
             int i = _t2;
             samples.p[i].v[0] *= (0x1p+00 + g->Gain);
@@ -43811,7 +43811,7 @@ Ret_int__bool effects_mono_Stream(effects_mono* m, Slice_Arr2_f64 samples) {
     n = _t1.r0;
     ok = _t1.r1;
     {
-        Slice_Arr2_f64 _t3 = GO_SLICE(Slice_Arr2_f64, samples, 0, n);
+        Slice_Arr2_f64 _t3 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, n);
         for (int _t2 = 0; _t2 < _t3.len; _t2++) {
             int i = _t2;
             f64 mix = (((samples.p[i].v[0] + samples.p[i].v[1])) / 0x1p+01);
@@ -43842,7 +43842,7 @@ Ret_int__bool effects_Pan_Stream(effects_Pan* p, Slice_Arr2_f64 samples) {
         do {
             if ((p->Pan < 0x0p+00)) {
                 {
-                    Slice_Arr2_f64 _t3 = GO_SLICE(Slice_Arr2_f64, samples, 0, n);
+                    Slice_Arr2_f64 _t3 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, n);
                     for (int _t2 = 0; _t2 < _t3.len; _t2++) {
                         int i = _t2;
                         f64 r = samples.p[i].v[1];
@@ -43853,7 +43853,7 @@ Ret_int__bool effects_Pan_Stream(effects_Pan* p, Slice_Arr2_f64 samples) {
                 }
             } else if ((p->Pan > 0x0p+00)) {
                 {
-                    Slice_Arr2_f64 _t6 = GO_SLICE(Slice_Arr2_f64, samples, 0, n);
+                    Slice_Arr2_f64 _t6 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, n);
                     for (int _t5 = 0; _t5 < _t6.len; _t5++) {
                         int i = _t5;
                         f64 l = samples.p[i].v[0];
@@ -43882,7 +43882,7 @@ Ret_int__bool effects_swap_Stream(effects_swap* s, Slice_Arr2_f64 samples) {
     n = _t1.r0;
     ok = _t1.r1;
     {
-        Slice_Arr2_f64 _t3 = GO_SLICE(Slice_Arr2_f64, samples, 0, n);
+        Slice_Arr2_f64 _t3 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, n);
         for (int _t2 = 0; _t2 < _t3.len; _t2++) {
             int i = _t2;
             f64 _t5 = samples.p[i].v[1];
@@ -43944,7 +43944,7 @@ Ret_int__bool effects_Volume_Stream(effects_Volume* v, Slice_Arr2_f64 samples) {
         gain = math_Pow(v->Base, v->Volume);
     }
     {
-        Slice_Arr2_f64 _t3 = GO_SLICE(Slice_Arr2_f64, samples, 0, n);
+        Slice_Arr2_f64 _t3 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, n);
         for (int _t2 = 0; _t2 < _t3.len; _t2++) {
             int i = _t2;
             samples.p[i].v[0] *= gain;
@@ -44265,12 +44265,12 @@ Ret_int__bool midi_decoder_Stream(midi_decoder* d, Slice_Arr2_f64 samples) {
     }
     int samplesLeft = (midi_decoder_Len(d) - midi_decoder_Position(d));
     if (samples.len > samplesLeft) {
-        samples = GO_SLICE(Slice_Arr2_f64, samples, 0, samplesLeft);
+        samples = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, samplesLeft);
     }
     {
         for (; samples.len > 0; ) {
             int cn = go_min_int(d->bufLeft.len, samples.len);
-            meltysynth_MidiFileSequencer_Render(d->seq, GO_SLICE(Slice_f32, d->bufLeft, 0, cn), GO_SLICE(Slice_f32, d->bufRight, 0, cn));
+            meltysynth_MidiFileSequencer_Render(d->seq, GO_SLICE_HI(Slice_f32, d->bufLeft, 0, cn), GO_SLICE_HI(Slice_f32, d->bufRight, 0, cn));
             {
                 int i = 0;
                 for (; i < cn; i++) {
@@ -44332,7 +44332,7 @@ void beep_Mixer_Clear(beep_Mixer* m) {
             _cont3:;
         }
     }
-    m->streamers = GO_SLICE(Slice_beep_Streamer, m->streamers, 0, 0);
+    m->streamers = GO_SLICE_HI(Slice_beep_Streamer, m->streamers, 0, 0);
 }
 
 // github.com/ikemen-engine/beep/v2.Mixer.Stream (mixer.go:38), 0 TODO
@@ -44346,16 +44346,16 @@ Ret_int__bool beep_Mixer_Stream(beep_Mixer* m, Slice_Arr2_f64 samples) {
     {
         for (; samples.len > 0; ) {
             int toStream = go_min_int(512, samples.len);
-            ({ __typeof__(GO_SLICE(Slice_Arr2_f64, samples, 0, toStream)) _c = (GO_SLICE(Slice_Arr2_f64, samples, 0, toStream)); memset(_c.p, 0, sizeof(*_c.p) * (size_t)_c.len); (void)0; });
+            ({ __typeof__(GO_SLICE_HI(Slice_Arr2_f64, samples, 0, toStream)) _c = (GO_SLICE_HI(Slice_Arr2_f64, samples, 0, toStream)); memset(_c.p, 0, sizeof(*_c.p) * (size_t)_c.len); (void)0; });
             int snMax = 0;
             {
                 int si = 0;
                 for (; si < m->streamers.len; si++) {
-                    Ret_int__bool _t3 = iface_Stream_7d2c466b(m->streamers.p[si], GO_ARRSLICE(Slice_Arr2_f64, tmp.v, 512, 0, toStream));
+                    Ret_int__bool _t3 = iface_Stream_7d2c466b(m->streamers.p[si], GO_ARRSLICE_HI(Slice_Arr2_f64, tmp.v, 512, 0, toStream));
                     int sn = _t3.r0;
                     bool sok = _t3.r1;
                     {
-                        Slice_Arr2_f64 _t5 = GO_ARRSLICE(Slice_Arr2_f64, tmp.v, 512, 0, sn);
+                        Slice_Arr2_f64 _t5 = GO_ARRSLICE_HI(Slice_Arr2_f64, tmp.v, 512, 0, sn);
                         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
                             int i = _t4;
                             samples.p[i].v[0] += tmp.v[i].v[0];
@@ -44371,7 +44371,7 @@ Ret_int__bool beep_Mixer_Stream(beep_Mixer* m, Slice_Arr2_f64 samples) {
                             int last = (m->streamers.len - 1);
                             m->streamers.p[si] = m->streamers.p[last];
                             m->streamers.p[last] = (beep_Streamer){0};
-                            m->streamers = GO_SLICE(Slice_beep_Streamer, m->streamers, 0, last);
+                            m->streamers = GO_SLICE_HI(Slice_beep_Streamer, m->streamers, 0, last);
                             si--;
                         }
                         if (m->stopWhenEmpty && (m->streamers.len == 0)) {
@@ -44551,7 +44551,7 @@ Ret_int__bool beep_Resampler_Stream(beep_Resampler* r, Slice_Arr2_f64 samples) {
                 for (int _t6 = 0; _t6 < 2; _t6++) {
                     int c = _t6;
                     int numPts = (windowEnd - windowStart);
-                    Slice_beep_point _t8 = GO_SLICE(Slice_beep_point, r->pts, 0, numPts);
+                    Slice_beep_point _t8 = GO_SLICE_HI(Slice_beep_point, r->pts, 0, numPts);
                     Slice_beep_point pts = _t8;
                     {
                         Slice_beep_point _t10 = pts;
@@ -45197,7 +45197,7 @@ Ret_int__bool wav_decoder_Stream(wav_decoder* d, Slice_Arr2_f64 samples) {
                     int i = _t20;
                     int j = _t21;
                     for (; i <= (n - bytesPerFrame); i = (i + bytesPerFrame), j = (j + 1)) {
-                        f32 val = math_Float32frombits(binary_littleEndian_Uint32(binary_LittleEndian, GO_SLICE(Slice_u8, p, i, (i + 4))));
+                        f32 val = math_Float32frombits(binary_littleEndian_Uint32(binary_LittleEndian, GO_SLICE_HI(Slice_u8, p, i, (i + 4))));
                         samples.p[j].v[0] = ((f64)val);
                         samples.p[j].v[1] = ((f64)val);
                         _cont22:;
@@ -45210,8 +45210,8 @@ Ret_int__bool wav_decoder_Stream(wav_decoder* d, Slice_Arr2_f64 samples) {
                     int i = _t23;
                     int j = _t24;
                     for (; i <= (n - bytesPerFrame); i = (i + bytesPerFrame), j = (j + 1)) {
-                        f32 left = math_Float32frombits(binary_littleEndian_Uint32(binary_LittleEndian, GO_SLICE(Slice_u8, p, i, (i + 4))));
-                        f32 right = math_Float32frombits(binary_littleEndian_Uint32(binary_LittleEndian, GO_SLICE(Slice_u8, p, (i + 4), (i + 8))));
+                        f32 left = math_Float32frombits(binary_littleEndian_Uint32(binary_LittleEndian, GO_SLICE_HI(Slice_u8, p, i, (i + 4))));
+                        f32 right = math_Float32frombits(binary_littleEndian_Uint32(binary_LittleEndian, GO_SLICE_HI(Slice_u8, p, (i + 4), (i + 8))));
                         samples.p[j].v[0] = ((f64)left);
                         samples.p[j].v[1] = ((f64)right);
                         _cont25:;
@@ -45636,16 +45636,16 @@ int messages_UDPHeader_Size(messages_UDPHeader u) {
 // github.com/ikemen-engine/ggpo/internal/messages.UDPHeader.ToBytes (message.go:99), 0 TODO
 Slice_u8 messages_UDPHeader_ToBytes(messages_UDPHeader u) {
     Slice_u8 buf = GO_MAKE_A(Slice_u8, u8, 5, 0);
-    binary_bigEndian_PutUint16(binary_BigEndian, GO_SLICE(Slice_u8, buf, 0, 2), u.Magic);
-    binary_bigEndian_PutUint16(binary_BigEndian, GO_SLICE(Slice_u8, buf, 2, 4), u.SequenceNumber);
+    binary_bigEndian_PutUint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, buf, 0, 2), u.Magic);
+    binary_bigEndian_PutUint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, buf, 2, 4), u.SequenceNumber);
     buf.p[4] = u.HeaderType;
     return buf;
 }
 
 // github.com/ikemen-engine/ggpo/internal/messages.UDPHeader.FromBytes (message.go:107), 0 TODO
 void messages_UDPHeader_FromBytes(messages_UDPHeader* u, Slice_u8 buffer) {
-    u->Magic = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE(Slice_u8, buffer, 0, 2));
-    u->SequenceNumber = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE(Slice_u8, buffer, 2, 4));
+    u->Magic = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, 0, 2));
+    u->SequenceNumber = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, 2, 4));
     u->HeaderType = buffer.p[4];
 }
 
@@ -45684,8 +45684,8 @@ GoString messages_SyncRequestPacket_String(messages_SyncRequestPacket* s) {
 Slice_u8 messages_SyncRequestPacket_ToBytes(messages_SyncRequestPacket* s) {
     Slice_u8 buf = GO_MAKE_A(Slice_u8, u8, messages_SyncRequestPacket_PacketSize(s), 0);
     GO_COPY(buf, messages_UDPHeader_ToBytes(s->MessageHeader));
-    binary_bigEndian_PutUint32(binary_BigEndian, GO_SLICE(Slice_u8, buf, 5, 9), s->RandomRequest);
-    binary_bigEndian_PutUint16(binary_BigEndian, GO_SLICE(Slice_u8, buf, 9, 11), s->RemoteMagic);
+    binary_bigEndian_PutUint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, buf, 5, 9), s->RandomRequest);
+    binary_bigEndian_PutUint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, buf, 9, 11), s->RemoteMagic);
     buf.p[11] = s->RemoteEndpoint;
     buf.p[12] = s->RemoteInputDelay;
     return buf;
@@ -45697,8 +45697,8 @@ GoIface messages_SyncRequestPacket_FromBytes(messages_SyncRequestPacket* s, Slic
         return errors_New(GOSTR("invalid packet"));
     }
     messages_UDPHeader_FromBytes(&s->MessageHeader, buffer);
-    s->RandomRequest = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE(Slice_u8, buffer, 5, 9));
-    s->RemoteMagic = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE(Slice_u8, buffer, 9, 11));
+    s->RandomRequest = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, 5, 9));
+    s->RemoteMagic = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, 9, 11));
     s->RemoteEndpoint = buffer.p[11];
     s->RemoteInputDelay = buffer.p[12];
     return (GoIface){0};
@@ -45736,7 +45736,7 @@ GoString messages_SyncReplyPacket_String(messages_SyncReplyPacket* s) {
 Slice_u8 messages_SyncReplyPacket_ToBytes(messages_SyncReplyPacket* s) {
     Slice_u8 buf = GO_MAKE_A(Slice_u8, u8, messages_SyncReplyPacket_PacketSize(s), 0);
     GO_COPY(buf, messages_UDPHeader_ToBytes(s->MessageHeader));
-    binary_bigEndian_PutUint32(binary_BigEndian, GO_SLICE(Slice_u8, buf, 5, 9), s->RandomReply);
+    binary_bigEndian_PutUint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, buf, 5, 9), s->RandomReply);
     return buf;
 }
 
@@ -45746,7 +45746,7 @@ GoIface messages_SyncReplyPacket_FromBytes(messages_SyncReplyPacket* s, Slice_u8
         return errors_New(GOSTR("invalid packet"));
     }
     messages_UDPHeader_FromBytes(&s->MessageHeader, buffer);
-    s->RandomReply = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE(Slice_u8, buffer, 5, 9));
+    s->RandomReply = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, 5, 9));
     return (GoIface){0};
 }
 
@@ -45784,7 +45784,7 @@ Slice_u8 messages_QualityReportPacket_ToBytes(messages_QualityReportPacket* q) {
     Slice_u8 buf = GO_MAKE_A(Slice_u8, u8, messages_QualityReportPacket_PacketSize(q), 0);
     GO_COPY(buf, messages_UDPHeader_ToBytes(q->MessageHeader));
     buf.p[5] = ((u8)q->FrameAdvantage);
-    binary_bigEndian_PutUint64(binary_BigEndian, GO_SLICE(Slice_u8, buf, 6, 14), q->Ping);
+    binary_bigEndian_PutUint64(binary_BigEndian, GO_SLICE_HI(Slice_u8, buf, 6, 14), q->Ping);
     return buf;
 }
 
@@ -45795,7 +45795,7 @@ GoIface messages_QualityReportPacket_FromBytes(messages_QualityReportPacket* q, 
     }
     messages_UDPHeader_FromBytes(&q->MessageHeader, buffer);
     q->FrameAdvantage = ((i8)buffer.p[5]);
-    q->Ping = binary_bigEndian_Uint64(binary_BigEndian, GO_SLICE(Slice_u8, buffer, 6, 14));
+    q->Ping = binary_bigEndian_Uint64(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, 6, 14));
     return (GoIface){0};
 }
 
@@ -45831,7 +45831,7 @@ GoString messages_QualityReplyPacket_String(messages_QualityReplyPacket* q) {
 Slice_u8 messages_QualityReplyPacket_ToBytes(messages_QualityReplyPacket* q) {
     Slice_u8 buf = GO_MAKE_A(Slice_u8, u8, messages_QualityReplyPacket_PacketSize(q), 0);
     GO_COPY(buf, messages_UDPHeader_ToBytes(q->MessageHeader));
-    binary_bigEndian_PutUint64(binary_BigEndian, GO_SLICE(Slice_u8, buf, 5, 13), q->Pong);
+    binary_bigEndian_PutUint64(binary_BigEndian, GO_SLICE_HI(Slice_u8, buf, 5, 13), q->Pong);
     return buf;
 }
 
@@ -45841,7 +45841,7 @@ GoIface messages_QualityReplyPacket_FromBytes(messages_QualityReplyPacket* q, Sl
         return errors_New(GOSTR("invalid packet"));
     }
     messages_UDPHeader_FromBytes(&q->MessageHeader, buffer);
-    q->Pong = binary_bigEndian_Uint64(binary_BigEndian, GO_SLICE(Slice_u8, buffer, 5, 13));
+    q->Pong = binary_bigEndian_Uint64(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, 5, 13));
     return (GoIface){0};
 }
 
@@ -45896,7 +45896,7 @@ Slice_u8 messages_InputPacket_ToBytes(messages_InputPacket* i) {
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
             messages_UdpConnectStatus p = _t2.p[_t1];
             Slice_u8 pcBuf = messages_UdpConnectStatus_ToBytes(&p);
-            GO_COPY(GO_SLICE(Slice_u8, buf, offset, (offset + pcBuf.len)), pcBuf);
+            GO_COPY(GO_SLICE_HI(Slice_u8, buf, offset, (offset + pcBuf.len)), pcBuf);
             offset += pcBuf.len;
             _cont3:;
         }
@@ -45919,7 +45919,7 @@ Slice_u8 messages_InputPacket_ToBytes(messages_InputPacket* i) {
     offset++;
     buf.p[offset] = ((u8)i->Bits.len);
     offset++;
-    GO_COPY(GO_SLICE(Slice_u8, buf, offset, (offset + i->Bits.len)), i->Bits);
+    GO_COPY(GO_SLICE_HI(Slice_u8, buf, offset, (offset + i->Bits.len)), i->Bits);
     offset += i->Bits.len;
     return buf;
 }
@@ -45937,12 +45937,12 @@ GoIface messages_InputPacket_FromBytes(messages_InputPacket* i, Slice_u8 buffer)
     {
         int p = 0;
         for (; p < ((int)totalConnectionStatus); p++) {
-            messages_UdpConnectStatus_FromBytes(&i->PeerConnectStatus.p[p], GO_SLICE(Slice_u8, buffer, offset, (offset + pcsSize)));
+            messages_UdpConnectStatus_FromBytes(&i->PeerConnectStatus.p[p], GO_SLICE_HI(Slice_u8, buffer, offset, (offset + pcsSize)));
             offset += pcsSize;
             _cont1:;
         }
     }
-    i->StartFrame = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE(Slice_u8, buffer, offset, (offset + 4)));
+    i->StartFrame = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, offset, (offset + 4)));
     offset += 4;
     if (buffer.p[offset] == 1U) {
         i->DisconectRequested = true;
@@ -45952,18 +45952,18 @@ GoIface messages_InputPacket_FromBytes(messages_InputPacket* i, Slice_u8 buffer)
         }
     }
     offset++;
-    i->AckFrame = ((i32)binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE(Slice_u8, buffer, offset, (offset + 4))));
+    i->AckFrame = ((i32)binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, offset, (offset + 4))));
     offset += 4;
-    i->Checksum = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE(Slice_u8, buffer, offset, (offset + 4)));
+    i->Checksum = binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, offset, (offset + 4)));
     offset += 4;
-    i->NumBits = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE(Slice_u8, buffer, offset, (offset + 2)));
+    i->NumBits = binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, buffer, offset, (offset + 2)));
     offset += 2;
     i->InputSize = buffer.p[offset];
     offset++;
     u8 totalBits = buffer.p[offset];
     offset++;
     i->Bits = GO_MAKE_A(Slice_u8, u8, totalBits, 0);
-    GO_COPY(i->Bits, GO_SLICE(Slice_u8, buffer, offset, (offset + ((int)totalBits))));
+    GO_COPY(i->Bits, GO_SLICE_HI(Slice_u8, buffer, offset, (offset + ((int)totalBits))));
     offset += ((int)totalBits);
     return (GoIface){0};
 }
@@ -46629,7 +46629,7 @@ Ret_bool__GoIface protocol_UdpProtocol_OnInput(protocol_UdpProtocol* u, messages
                 if (currentFrame != (((u32)u->lastRecievedInput.Frame) + 1U)) {
                     return (Ret_bool__GoIface){false, errors_New(GOSTR("ggpo UdpProtocol OnInput: currentFrame != uint32(u.lastRecievedInput.Frame) +1"))};
                 }
-                u->lastRecievedInput.Bits = GO_SLICE(Slice_u8, inputMessage->Bits, offset, (offset + ((int)inputMessage->InputSize)));
+                u->lastRecievedInput.Bits = GO_SLICE_HI(Slice_u8, inputMessage->Bits, offset, (offset + ((int)inputMessage->InputSize)));
                 u->lastRecievedInput.Frame = ((int)currentFrame);
                 u->lastRecievedInput.Checksum = inputMessage->Checksum;
                 protocol_UdpProtocolEvent evt = (protocol_UdpProtocolEvent){.eventType = 3, .Input = u->lastRecievedInput};
@@ -47917,7 +47917,7 @@ Ret_Slice_Slice_u8__GoIface ggpo_Spectator_SyncInput(ggpo_Spectator* s, int* dis
     int counter = 0;
     {
         for (; offset < input.Bits.len; ) {
-            values.p[counter] = GO_SLICE(Slice_u8, input.Bits, offset, (s->inputSize + offset));
+            values.p[counter] = GO_SLICE_HI(Slice_u8, input.Bits, offset, (s->inputSize + offset));
             offset += s->inputSize;
             counter++;
             _cont1:;
@@ -48376,7 +48376,7 @@ GoIface ggpo_SyncTest_AddLocalInput(ggpo_SyncTest* s, ggpo_PlayerHandle player, 
     int index = ((int)player);
     int start = (index * size);
     int end = (start + size);
-    GO_COPY(GO_SLICE(Slice_u8, s->currentInput.Bits, start, end), values);
+    GO_COPY(GO_SLICE_HI(Slice_u8, s->currentInput.Bits, start, end), values);
     return (GoIface){0};
 }
 
@@ -48403,7 +48403,7 @@ Ret_Slice_Slice_u8__GoIface ggpo_SyncTest_SyncInput(ggpo_SyncTest* s, int* discc
     int counter = 0;
     {
         for (; (offset < s->lastInput.Bits.len) && (counter < s->numPlayers); ) {
-            values.p[counter] = GO_SLICE(Slice_u8, s->lastInput.Bits, offset, (s->lastInput.Size + offset));
+            values.p[counter] = GO_SLICE_HI(Slice_u8, s->lastInput.Bits, offset, (s->lastInput.Size + offset));
             offset += s->lastInput.Size;
             counter++;
             _cont2:;
@@ -48739,12 +48739,12 @@ GoIface oggvorbis_oggReader_Restore(oggvorbis_oggReader* r) {
             if (err.type != 0) {
                 return err;
             }
-            int i = bytes_Index(GO_SLICE(Slice_u8, b, 0, n), GO_ARRSLICE(Slice_u8, g_oggvorbis_capturePattern.v, 4, 0, -1));
+            int i = bytes_Index(GO_SLICE_HI(Slice_u8, b, 0, n), GO_ARRSLICE(Slice_u8, g_oggvorbis_capturePattern.v, 4, 0, -1));
             if (i == -1) {
-                r->buffer = GO_SLICE(Slice_u8, b, (n - 3), n);
+                r->buffer = GO_SLICE_HI(Slice_u8, b, (n - 3), n);
                 continue;
             }
-            r->buffer = GO_SLICE(Slice_u8, b, i, n);
+            r->buffer = GO_SLICE_HI(Slice_u8, b, i, n);
             r->ready = false;
             return (GoIface){0};
             _cont1:;
@@ -48927,7 +48927,7 @@ GoIface oggvorbis_page_readContent(oggvorbis_page* p, GoIface r) {
         for (int _t2 = 0; _t2 < _t3.len; _t2++) {
             int i = _t2;
             int size = _t3.p[_t2];
-            p->packets.p[i] = GO_SLICE(Slice_u8, content, offset, (offset + size));
+            p->packets.p[i] = GO_SLICE_HI(Slice_u8, content, offset, (offset + size));
             offset += size;
             _cont4:;
         }
@@ -49059,7 +49059,7 @@ Ret_int__GoIface oggvorbis_Reader_Read(oggvorbis_Reader* r, Slice_f32 p) {
         return (Ret_int__GoIface){0, (GoIface){0}};
     }
     if (go_rem32(p.len, oggvorbis_Reader_Channels(r)) != 0) {
-        p = GO_SLICE(Slice_f32, p, 0, (go_div32(p.len, oggvorbis_Reader_Channels(r)) * oggvorbis_Reader_Channels(r)));
+        p = GO_SLICE_HI(Slice_f32, p, 0, (go_div32(p.len, oggvorbis_Reader_Channels(r)) * oggvorbis_Reader_Channels(r)));
     }
     Slice_f32 out = p;
     int total = 0;
@@ -49102,7 +49102,7 @@ Ret_int__GoIface oggvorbis_Reader_Read(oggvorbis_Reader* r, Slice_f32 p) {
     }
     end:;
     {
-        Slice_f32 _t4 = GO_SLICE(Slice_f32, out, 0, total);
+        Slice_f32 _t4 = GO_SLICE_HI(Slice_f32, out, 0, total);
         for (int _t3 = 0; _t3 < _t4.len; _t3++) {
             int i = _t3;
             if (out.p[i] > 0x1p+00f) {
@@ -49125,7 +49125,7 @@ GoIface oggvorbis_Reader_fillBuffer(oggvorbis_Reader* r) {
     Ret_int__GoIface _t1 = oggvorbis_Reader_read(r, r->originalBuffer);
     int n = _t1.r0;
     GoIface err = _t1.r1;
-    r->buffer = GO_SLICE(Slice_f32, r->originalBuffer, 0, n);
+    r->buffer = GO_SLICE_HI(Slice_f32, r->originalBuffer, 0, n);
     if (err.type != 0) {
         return err;
     }
@@ -49368,7 +49368,7 @@ u32 vorbis2_codebook_DecodeScalar(vorbis2_codebook* c, vorbis2_bitReader* r) {
 // github.com/jfreymuth/vorbis.codebook.DecodeVector (codebook.go:96), 0 TODO
 Slice_f32 vorbis2_codebook_DecodeVector(vorbis2_codebook* c, vorbis2_bitReader* r) {
     u32 index = (vorbis2_huffmanCode_Lookup(c->entries, r) * c->dimensions);
-    return GO_SLICE(Slice_f32, c->values, index, (index + c->dimensions));
+    return GO_SLICE_HI(Slice_f32, c->values, index, (index + c->dimensions));
 }
 
 // github.com/jfreymuth/vorbis.ilog (codebook.go:101), 0 TODO
@@ -49449,7 +49449,7 @@ Ret_Slice_f32__GoIface vorbis2_Decoder_decodePacket(vorbis2_Decoder* d, vorbis2_
         Slice_Slice_f32 _t6 = d->residueBuffer;
         for (int _t5 = 0; _t5 < _t6.len; _t5++) {
             int ch = _t5;
-            d->residueBuffer.p[ch] = GO_SLICE(Slice_f32, d->residueBuffer.p[ch], 0, spectrumSize);
+            d->residueBuffer.p[ch] = GO_SLICE_HI(Slice_f32, d->residueBuffer.p[ch], 0, spectrumSize);
             {
                 Slice_f32 _t9 = d->residueBuffer.p[ch];
                 for (int _t8 = 0; _t8 < _t9.len; _t8++) {
@@ -49469,7 +49469,7 @@ Ret_Slice_f32__GoIface vorbis2_Decoder_decodePacket(vorbis2_Decoder* d, vorbis2_
         Slice_Slice_f32 _t12 = d->rawBuffer;
         for (int _t11 = 0; _t11 < _t12.len; _t11++) {
             int ch = _t11;
-            d->rawBuffer.p[ch] = GO_SLICE(Slice_f32, d->rawBuffer.p[ch], 0, blocksize);
+            d->rawBuffer.p[ch] = GO_SLICE_HI(Slice_f32, d->rawBuffer.p[ch], 0, blocksize);
             vorbis2_imdct((&d->lookup.v[blocktype]), d->residueBuffer.p[ch], d->rawBuffer.p[ch]);
             _cont13:;
         }
@@ -49590,7 +49590,7 @@ Ret_Slice_f32__GoIface vorbis2_Decoder_decodePacket(vorbis2_Decoder* d, vorbis2_
         }
     }
     d->hasOverlap = true;
-    return (Ret_Slice_f32__GoIface){GO_SLICE(Slice_f32, out, 0, (n * d->channels)), (GoIface){0}};
+    return (Ret_Slice_f32__GoIface){GO_SLICE_HI(Slice_f32, out, 0, (n * d->channels)), (GoIface){0}};
 }
 
 // github.com/jfreymuth/vorbis.Decoder.decodeFloors (decode.go:131), 0 TODO
@@ -50186,7 +50186,7 @@ GoIface vorbis2_Decoder_readCommentHeader(vorbis2_Decoder* d, Slice_u8 h) {
     GoOpaque /* binary.littleEndian */ le = binary_LittleEndian;
     u32 vendorLen = binary_littleEndian_Uint32(le, h);
     h = GO_SLICE(Slice_u8, h, 4, -1);
-    d->CommentHeader_.Vendor = go_bytes2str(GO_SLICE(Slice_u8, h, 0, vendorLen));
+    d->CommentHeader_.Vendor = go_bytes2str(GO_SLICE_HI(Slice_u8, h, 0, vendorLen));
     h = GO_SLICE(Slice_u8, h, vendorLen, -1);
     int numComments = ((int)binary_littleEndian_Uint32(le, h));
     d->CommentHeader_.Comments = GO_MAKE(Slice_GoString, GoString, numComments, 0);
@@ -50196,7 +50196,7 @@ GoIface vorbis2_Decoder_readCommentHeader(vorbis2_Decoder* d, Slice_u8 h) {
         for (; i < numComments; i++) {
             u32 commentLen = binary_littleEndian_Uint32(le, h);
             h = GO_SLICE(Slice_u8, h, 4, -1);
-            d->CommentHeader_.Comments.p[i] = go_bytes2str(GO_SLICE(Slice_u8, h, 0, commentLen));
+            d->CommentHeader_.Comments.p[i] = go_bytes2str(GO_SLICE_HI(Slice_u8, h, 0, commentLen));
             h = GO_SLICE(Slice_u8, h, commentLen, -1);
             _cont2:;
         }
@@ -50964,7 +50964,7 @@ void vorbis2_Decoder_applyWindow(vorbis2_Decoder* d, vorbis2_windowType* t, Slic
         Slice_Slice_f32 _t2 = samples;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
             int ch = _t1;
-            Slice_f32 s = GO_SLICE(Slice_f32, samples.p[ch], 0, prevOffset);
+            Slice_f32 s = GO_SLICE_HI(Slice_f32, samples.p[ch], 0, prevOffset);
             {
                 Slice_f32 _t5 = s;
                 for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -50973,8 +50973,8 @@ void vorbis2_Decoder_applyWindow(vorbis2_Decoder* d, vorbis2_windowType* t, Slic
                     _cont6:;
                 }
             }
-            s = GO_SLICE(Slice_f32, samples.p[ch], prevOffset, (prevOffset + go_div32(t->prev, 2)));
-            Slice_f32 w = GO_SLICE(Slice_f32, d->windows.v[prevType], 0, s.len);
+            s = GO_SLICE_HI(Slice_f32, samples.p[ch], prevOffset, (prevOffset + go_div32(t->prev, 2)));
+            Slice_f32 w = GO_SLICE_HI(Slice_f32, d->windows.v[prevType], 0, s.len);
             {
                 Slice_f32 _t8 = s;
                 for (int _t7 = 0; _t7 < _t8.len; _t7++) {
@@ -50983,9 +50983,9 @@ void vorbis2_Decoder_applyWindow(vorbis2_Decoder* d, vorbis2_windowType* t, Slic
                     _cont9:;
                 }
             }
-            s = GO_SLICE(Slice_f32, samples.p[ch], (center + nextOffset), ((center + nextOffset) + go_div32(t->next, 2)));
+            s = GO_SLICE_HI(Slice_f32, samples.p[ch], (center + nextOffset), ((center + nextOffset) + go_div32(t->next, 2)));
             w = GO_SLICE(Slice_f32, d->windows.v[nextType], go_div32(t->next, 2), -1);
-            w = GO_SLICE(Slice_f32, w, 0, s.len);
+            w = GO_SLICE_HI(Slice_f32, w, 0, s.len);
             {
                 Slice_f32 _t11 = s;
                 for (int _t10 = 0; _t10 < _t11.len; _t10++) {
@@ -51520,7 +51520,7 @@ GoIface rgbe_decoder_readRLE(rgbe_decoder* d, Slice_u8 scanline) {
                         int nonrunLength = (((int)buf.p[0]) - 1);
                         if (nonrunLength > 0) {
                             {
-                                Ret_int__GoIface _t5 = io_ReadFull(d->r, GO_SLICE(Slice_u8, scanline, (index + peek), ((index + peek) + nonrunLength)));
+                                Ret_int__GoIface _t5 = io_ReadFull(d->r, GO_SLICE_HI(Slice_u8, scanline, (index + peek), ((index + peek) + nonrunLength)));
                                 err = _t5.r1;
                                 if (err.type != 0) {
                                     if (go_iface_eq(err, io_EOF) == true) {
@@ -52243,7 +52243,7 @@ Ret_meta_BlockPtr__GoIface flac2_Stream_parseStreamInfo(flac2_Stream* stream) {
             return (Ret_meta_BlockPtr__GoIface){block, err};
         }
     }
-    if (bytes_Equal(GO_ARRSLICE(Slice_u8, buf.v, 4, 0, 3), g_flac2_id3Signature)) {
+    if (bytes_Equal(GO_ARRSLICE_HI(Slice_u8, buf.v, 4, 0, 3), g_flac2_id3Signature)) {
         {
             GoIface err = flac2_Stream_skipID3v2(stream);
             if (err.type != 0) {
@@ -53323,13 +53323,13 @@ Ret_u64__GoIface bits_x2_Reader_Read(bits_x2_Reader* br, uintptr_t n) {
     if (bits > 0U) {
         bytes++;
     }
-    Ret_int__GoIface _t1 = io_ReadFull(br->r, GO_ARRSLICE(Slice_u8, br->buf.v, 8, 0, bytes));
+    Ret_int__GoIface _t1 = io_ReadFull(br->r, GO_ARRSLICE_HI(Slice_u8, br->buf.v, 8, 0, bytes));
     err = _t1.r1;
     if (err.type != 0) {
         return (Ret_u64__GoIface){0U, err};
     }
     {
-        Slice_u8 _t3 = GO_ARRSLICE(Slice_u8, br->buf.v, 8, 0, (bytes - 1U));
+        Slice_u8 _t3 = GO_ARRSLICE_HI(Slice_u8, br->buf.v, 8, 0, (bytes - 1U));
         for (int _t2 = 0; _t2 < _t3.len; _t2++) {
             u8 b = _t3.p[_t2];
             x = (u64)((x) << 8);
@@ -53466,7 +53466,7 @@ Ret_int__GoIface bufseekio_ReadSeeker_Read(bufseekio_ReadSeeker* b, Slice_u8 p) 
         }
         b->w += n;
     }
-    n = GO_COPY(p, GO_SLICE(Slice_u8, b->buf, b->r, b->w));
+    n = GO_COPY(p, GO_SLICE_HI(Slice_u8, b->buf, b->r, b->w));
     b->r += n;
     return (Ret_int__GoIface){n, (GoIface){0}};
     return (Ret_int__GoIface){n, err};
@@ -54281,12 +54281,12 @@ Ret_GoString__GoIface meta_readString(GoIface r, int n) {
     if (n > readBuf.len) {
         readBuf = GO_MAKE_A(Slice_u8, u8, n, 0);
     }
-    Ret_int__GoIface _t1 = io_ReadFull(r, GO_SLICE(Slice_u8, readBuf, 0, n));
+    Ret_int__GoIface _t1 = io_ReadFull(r, GO_SLICE_HI(Slice_u8, readBuf, 0, n));
     GoIface err = _t1.r1;
     if (err.type != 0) {
         return (Ret_GoString__GoIface){GOSTR(""), err};
     }
-    return (Ret_GoString__GoIface){go_bytes2str(GO_SLICE(Slice_u8, readBuf, 0, n)), (GoIface){0}};
+    return (Ret_GoString__GoIface){go_bytes2str(GO_SLICE_HI(Slice_u8, readBuf, 0, n)), (GoIface){0}};
 }
 
 // github.com/mewkiz/flac/meta.Block.parseSeekTable (seektable.go:18), 0 TODO
@@ -54586,7 +54586,7 @@ GoString errors_x_withMessage_Error(errors_x_withMessage* w) {
 errors_x_stack* errors_x_callers(void) {
     Arr32_uintptr_t pcs = {0};
     int n = runtime_Callers(3, GO_ARRSLICE(Slice_uintptr_t, pcs.v, 32, 0, -1));
-    errors_x_stack *st__h = go_box(errors_x_stack, GO_ARRSLICE(Slice_uintptr_t, pcs.v, 32, 0, n));
+    errors_x_stack *st__h = go_box(errors_x_stack, GO_ARRSLICE_HI(Slice_uintptr_t, pcs.v, 32, 0, n));
     return (&(*st__h));
 }
 
@@ -55000,7 +55000,7 @@ Ret_GoString__GoIface meltysynth_readFixedLengthString(GoIface r, i32 length) {
             _cont2:;
         }
     }
-    return (Ret_GoString__GoIface){go_bytes2str(GO_SLICE(Slice_u8, data, 0, actualLength)), (GoIface){0}};
+    return (Ret_GoString__GoIface){go_bytes2str(GO_SLICE_HI(Slice_u8, data, 0, actualLength)), (GoIface){0}};
 }
 
 // github.com/samhocevar/go-meltysynth/meltysynth.readIntVariableLength (binaryreader_ex.go:49), 0 TODO
@@ -55457,7 +55457,7 @@ Ret_meltysynth_InstrumentPtr__GoIface meltysynth_createInstrument(meltysynth_ins
     if (zoneCount <= 0) {
         return (Ret_meltysynth_InstrumentPtr__GoIface){NULL, fmt_Errorf(GOSTR("the instrument %q has no zone"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, info->name)})))};
     }
-    Slice_meltysynth_zonePtr zoneSpan = GO_SLICE(Slice_meltysynth_zonePtr, zones, info->zoneStartIndex, (info->zoneStartIndex + zoneCount));
+    Slice_meltysynth_zonePtr zoneSpan = GO_SLICE_HI(Slice_meltysynth_zonePtr, zones, info->zoneStartIndex, (info->zoneStartIndex + zoneCount));
     Ret_Slice_meltysynth_InstrumentRegionPtr__GoIface _t1 = meltysynth_createInstrumentRegions(result, zoneSpan, samples);
     result->Regions = _t1.r0;
     err = _t1.r1;
@@ -56184,7 +56184,7 @@ void meltysynth_MidiFileSequencer_Render(meltysynth_MidiFileSequencer* seq, Slic
             i32 srcRem = (seq->synthesizer->BlockSize - seq->blockWrote);
             i32 dstRem = (length - wrote);
             i32 rem = go_f2i32(math_Min(((f64)srcRem), ((f64)dstRem)));
-            meltysynth_Synthesizer_Render(seq->synthesizer, GO_SLICE(Slice_f32, left, wrote, (wrote + rem)), GO_SLICE(Slice_f32, right, wrote, (wrote + rem)));
+            meltysynth_Synthesizer_Render(seq->synthesizer, GO_SLICE_HI(Slice_f32, left, wrote, (wrote + rem)), GO_SLICE_HI(Slice_f32, right, wrote, (wrote + rem)));
             seq->blockWrote += rem;
             wrote += rem;
             _cont1:;
@@ -56465,7 +56465,7 @@ Ret_meltysynth_PresetPtr__GoIface meltysynth_createPreset(meltysynth_presetInfo*
     if (zoneCount <= 0) {
         return (Ret_meltysynth_PresetPtr__GoIface){NULL, fmt_Errorf(GOSTR("the preset %q has no zone"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, info->name)})))};
     }
-    Slice_meltysynth_zonePtr zoneSpan = GO_SLICE(Slice_meltysynth_zonePtr, zones, info->zoneStartIndex, (info->zoneStartIndex + zoneCount));
+    Slice_meltysynth_zonePtr zoneSpan = GO_SLICE_HI(Slice_meltysynth_zonePtr, zones, info->zoneStartIndex, (info->zoneStartIndex + zoneCount));
     Ret_Slice_meltysynth_PresetRegionPtr__GoIface _t1 = meltysynth_createPresetRegions(result, zoneSpan, instruments);
     result->Regions = _t1.r0;
     err = _t1.r1;
@@ -61168,7 +61168,7 @@ bool gjson_escapeHTML(void) {
 // github.com/tidwall/gjson.AppendJSONString (gjson.go:2081), 0 TODO
 Slice_u8 gjson_AppendJSONString(Slice_u8 dst, GoString s) {
     dst = GO_APPEND_SLICE(Slice_u8, dst, GO_MAKE_A(Slice_u8, u8, (s.len + 2), 0));
-    dst = GO_APPEND(Slice_u8, GO_SLICE(Slice_u8, dst, 0, ((dst.len - s.len) - 2)), 34U);
+    dst = GO_APPEND(Slice_u8, GO_SLICE_HI(Slice_u8, dst, 0, ((dst.len - s.len) - 2)), 34U);
     {
         int i = 0;
         for (; i < s.len; i++) {
@@ -61459,7 +61459,7 @@ GoString gjson_unescape(GoString json) {
                                 }
                                 str = GO_APPEND(Slice_u8, GO_APPEND(Slice_u8, GO_APPEND(Slice_u8, GO_APPEND(Slice_u8, GO_APPEND(Slice_u8, GO_APPEND(Slice_u8, GO_APPEND(Slice_u8, GO_APPEND(Slice_u8, str, 0U), 0U), 0U), 0U), 0U), 0U), 0U), 0U);
                                 int n = utf8_EncodeRune(GO_SLICE(Slice_u8, str, (str.len - 8), -1), r);
-                                str = GO_SLICE(Slice_u8, str, 0, ((str.len - 8) + n));
+                                str = GO_SLICE_HI(Slice_u8, str, 0, ((str.len - 8) + n));
                                 i--;
                                 break;
                             }
@@ -62923,7 +62923,7 @@ Slice_u8 pretty_Ugly(Slice_u8 json) {
 
 // github.com/tidwall/pretty.ugly (pretty.go:64), 0 TODO
 Slice_u8 pretty_ugly(Slice_u8 dst, Slice_u8 src) {
-    dst = GO_SLICE(Slice_u8, dst, 0, 0);
+    dst = GO_SLICE_HI(Slice_u8, dst, 0, 0);
     {
         int i = 0;
         for (; i < src.len; i++) {
@@ -63069,16 +63069,16 @@ pretty_jtype pretty_getjtype(Slice_u8 v) {
 
 // github.com/tidwall/pretty.byKeyVal.isLess (pretty.go:195), 0 TODO
 bool pretty_byKeyVal_isLess(pretty_byKeyVal* arr, int i, int j, pretty_byKind kind) {
-    Slice_u8 k1 = GO_SLICE(Slice_u8, arr->json, arr->pairs.p[i].kstart, arr->pairs.p[i].kend);
-    Slice_u8 k2 = GO_SLICE(Slice_u8, arr->json, arr->pairs.p[j].kstart, arr->pairs.p[j].kend);
+    Slice_u8 k1 = GO_SLICE_HI(Slice_u8, arr->json, arr->pairs.p[i].kstart, arr->pairs.p[i].kend);
+    Slice_u8 k2 = GO_SLICE_HI(Slice_u8, arr->json, arr->pairs.p[j].kstart, arr->pairs.p[j].kend);
     Slice_u8 v1 = {0};
     Slice_u8 v2 = {0};
     if (kind == 0) {
         v1 = k1;
         v2 = k2;
     } else {
-        v1 = bytes_TrimSpace(GO_SLICE(Slice_u8, arr->buf, arr->pairs.p[i].vstart, arr->pairs.p[i].vend));
-        v2 = bytes_TrimSpace(GO_SLICE(Slice_u8, arr->buf, arr->pairs.p[j].vstart, arr->pairs.p[j].vend));
+        v1 = bytes_TrimSpace(GO_SLICE_HI(Slice_u8, arr->buf, arr->pairs.p[i].vstart, arr->pairs.p[i].vend));
+        v2 = bytes_TrimSpace(GO_SLICE_HI(Slice_u8, arr->buf, arr->pairs.p[j].vstart, arr->pairs.p[j].vend));
         if (v1.len >= (k1.len + 1)) {
             v1 = bytes_TrimSpace(GO_SLICE(Slice_u8, v1, (k1.len + 1), -1));
         }
@@ -63120,7 +63120,7 @@ Slice_u8 pretty_parsestr(Slice_u8 s) {
                 return go_str2bytes((*str__h));
             }
             if (s.p[i] == 34U) {
-                return GO_SLICE(Slice_u8, s, 1, i);
+                return GO_SLICE_HI(Slice_u8, s, 1, i);
             }
             _cont1:;
         }
@@ -63146,7 +63146,7 @@ Ret_Slice_u8__int__int__bool pretty_appendPrettyObject(Slice_u8 buf, Slice_u8 js
                 if (ok && ((buf.len - s1) <= max_)) {
                     return (Ret_Slice_u8__int__int__bool){buf, i, nl, true};
                 }
-                buf = GO_SLICE(Slice_u8, buf, 0, s1);
+                buf = GO_SLICE_HI(Slice_u8, buf, 0, s1);
                 i = s2;
             }
         } else {
@@ -63266,7 +63266,7 @@ Slice_u8 pretty_sortPairs(Slice_u8 json, Slice_u8 buf, Slice_pretty_pair pairs) 
         for (int _t3 = 0; _t3 < _t4.len; _t3++) {
             int i = _t3;
             pretty_pair p = _t4.p[_t3];
-            nbuf = GO_APPEND_SLICE(Slice_u8, nbuf, GO_SLICE(Slice_u8, buf, p.vstart, p.vend));
+            nbuf = GO_APPEND_SLICE(Slice_u8, nbuf, GO_SLICE_HI(Slice_u8, buf, p.vstart, p.vend));
             if (i < (pairs.len - 1)) {
                 nbuf = GO_APPEND(Slice_u8, nbuf, 44U);
                 nbuf = GO_APPEND(Slice_u8, nbuf, 10U);
@@ -63274,7 +63274,7 @@ Slice_u8 pretty_sortPairs(Slice_u8 json, Slice_u8 buf, Slice_pretty_pair pairs) 
             _cont5:;
         }
     }
-    return GO_APPEND_SLICE(Slice_u8, GO_SLICE(Slice_u8, buf, 0, vstart), nbuf);
+    return GO_APPEND_SLICE(Slice_u8, GO_SLICE_HI(Slice_u8, buf, 0, vstart), nbuf);
 }
 
 // github.com/tidwall/pretty.appendPrettyString (pretty.go:370), 0 TODO
@@ -63305,7 +63305,7 @@ Ret_Slice_u8__int__int__bool pretty_appendPrettyString(Slice_u8 buf, Slice_u8 js
             _cont1:;
         }
     }
-    return (Ret_Slice_u8__int__int__bool){GO_APPEND_SLICE(Slice_u8, buf, GO_SLICE(Slice_u8, json, s, i)), i, nl, true};
+    return (Ret_Slice_u8__int__int__bool){GO_APPEND_SLICE(Slice_u8, buf, GO_SLICE_HI(Slice_u8, json, s, i)), i, nl, true};
 }
 
 // github.com/tidwall/pretty.appendPrettyNumber (pretty.go:393), 0 TODO
@@ -63320,7 +63320,7 @@ Ret_Slice_u8__int__int__bool pretty_appendPrettyNumber(Slice_u8 buf, Slice_u8 js
             _cont1:;
         }
     }
-    return (Ret_Slice_u8__int__int__bool){GO_APPEND_SLICE(Slice_u8, buf, GO_SLICE(Slice_u8, json, s, i)), i, nl, true};
+    return (Ret_Slice_u8__int__int__bool){GO_APPEND_SLICE(Slice_u8, buf, GO_SLICE_HI(Slice_u8, json, s, i)), i, nl, true};
 }
 
 // github.com/tidwall/pretty.appendTabs (pretty.go:404), 0 TODO
@@ -63589,7 +63589,7 @@ Ret_Slice_u8__bool sjson_deleteTailItem(Slice_u8 buf) {
                     break;
                 }
                 case 44U: {
-                    return (Ret_Slice_u8__bool){GO_SLICE(Slice_u8, buf, 0, i), false};
+                    return (Ret_Slice_u8__bool){GO_SLICE_HI(Slice_u8, buf, 0, i), false};
                     break;
                 }
                 case 58U: {
@@ -63612,11 +63612,11 @@ Ret_Slice_u8__bool sjson_deleteTailItem(Slice_u8 buf) {
                                                         u8 _t6 = buf.p[i];
                                                         switch (_t6) {
                                                         case 123U: {
-                                                            return (Ret_Slice_u8__bool){GO_SLICE(Slice_u8, buf, 0, (i + 1)), true};
+                                                            return (Ret_Slice_u8__bool){GO_SLICE_HI(Slice_u8, buf, 0, (i + 1)), true};
                                                             break;
                                                         }
                                                         case 44U: {
-                                                            return (Ret_Slice_u8__bool){GO_SLICE(Slice_u8, buf, 0, i), false};
+                                                            return (Ret_Slice_u8__bool){GO_SLICE_HI(Slice_u8, buf, 0, i), false};
                                                             break;
                                                         }
                                                         }
@@ -63892,7 +63892,7 @@ Ret_Slice_u8__GoIface sjson_set(GoString jstr, GoString path, GoString raw, bool
                         GO_COPY(GO_SLICE(Slice_u8, jbytes, res.Index, -1), go_str2bytes(raw));
                         GO_COPY(GO_SLICE(Slice_u8, jbytes, (res.Index + raw.len), -1), GO_SLICE(Slice_u8, jbytes, (res.Index + res.Raw.len), -1));
                     }
-                    return (Ret_Slice_u8__GoIface){GO_SLICE(Slice_u8, jbytes, 0, sz), (GoIface){0}};
+                    return (Ret_Slice_u8__GoIface){GO_SLICE_HI(Slice_u8, jbytes, 0, sz), (GoIface){0}};
                 }
                 return (Ret_Slice_u8__GoIface){go_str2bytes((*jstr__h)), (GoIface){0}};
             }
@@ -65289,7 +65289,7 @@ int lua_loModule(lua_LState* L) {
         Slice_GoString names = strings_Split(name, GOSTR("."));
         GoString pname = GOSTR("");
         if (names.len > 1) {
-            pname = go_strcat(strings_Join(GO_SLICE(Slice_GoString, names, 0, (names.len - 1)), GOSTR(".")), GOSTR("."));
+            pname = go_strcat(strings_Join(GO_SLICE_HI(Slice_GoString, names, 0, (names.len - 1)), GOSTR(".")), GOSTR("."));
         }
         lua_LState_SetField(L, tb, GOSTR("_PACKAGE"), ((GoIface){245, go_box(lua_LString, pname)}));
     }
@@ -65846,12 +65846,12 @@ u32 lua_codeStore_At(lua_codeStore* cd, int pc) {
 
 // github.com/yuin/gopher-lua.codeStore.List (compile.go:275), 0 TODO
 Slice_u32 lua_codeStore_List(lua_codeStore* cd) {
-    return GO_SLICE(Slice_u32, cd->codes, 0, cd->pc);
+    return GO_SLICE_HI(Slice_u32, cd->codes, 0, cd->pc);
 }
 
 // github.com/yuin/gopher-lua.codeStore.PosList (compile.go:279), 0 TODO
 Slice_int lua_codeStore_PosList(lua_codeStore* cd) {
-    return GO_SLICE(Slice_int, cd->lines, 0, cd->pc);
+    return GO_SLICE_HI(Slice_int, cd->lines, 0, cd->pc);
 }
 
 // github.com/yuin/gopher-lua.codeStore.LastPC (compile.go:283), 0 TODO
@@ -71125,7 +71125,7 @@ pm_class pm_parseClassSet(pm_scanner* sc) {
             if (isrange) {
                 pm_class begin = set->Classes.p[(set->Classes.len - 2)];
                 pm_class end = set->Classes.p[(set->Classes.len - 1)];
-                set->Classes = GO_SLICE(Slice_pm_class, set->Classes, 0, (set->Classes.len - 2));
+                set->Classes = GO_SLICE_HI(Slice_pm_class, set->Classes, 0, (set->Classes.len - 2));
                 set->Classes = GO_APPEND(Slice_pm_class, set->Classes, ((GoIface){267, (void *)(go_box(pm_rangeClass, (pm_rangeClass){begin, end}))}));
                 isrange = false;
             }
@@ -71217,7 +71217,7 @@ pm_seqPattern* pm_parsePattern(pm_scanner* sc, bool toplevel) {
                         pm_singlePattern* spat = _t5;
                         bool ok = _t6;
                         if (ok) {
-                            pat->Patterns = GO_SLICE(Slice_pm_pattern, pat->Patterns, 0, (pat->Patterns.len - 1));
+                            pat->Patterns = GO_SLICE_HI(Slice_pm_pattern, pat->Patterns, 0, (pat->Patterns.len - 1));
                             pat->Patterns = GO_APPEND(Slice_pm_pattern, pat->Patterns, ((GoIface){275, (void *)(go_box(pm_repeatPattern, (pm_repeatPattern){ch, spat->Class}))}));
                             goto _cont1;
                         }
@@ -71433,7 +71433,7 @@ Ret_bool__int__pm_MatchDataPtr pm_recursiveVM(Slice_u8 src, Slice_pm_inst insts,
             if (idx >= (pm_MatchData_CaptureLength(m) - 1)) {
                 go_panic_iface(0, ((GoIface){266, (void *)(pm_newError(-2, GOSTR("invalid capture index"), (Slice_GoIface){0}))}));
             }
-            Slice_u8 capture = GO_SLICE(Slice_u8, src, pm_MatchData_Capture(m, idx), pm_MatchData_Capture(m, (idx + 1)));
+            Slice_u8 capture = GO_SLICE_HI(Slice_u8, src, pm_MatchData_Capture(m, idx), pm_MatchData_Capture(m, (idx + 1)));
             {
                 int i = 0;
                 for (; i < capture.len; i++) {
@@ -71718,7 +71718,7 @@ void lua_registry_resize(lua_registry* rg, int requiredSize) {
 // github.com/yuin/gopher-lua.registry.forceResize (state.go:400), 0 TODO
 void lua_registry_forceResize(lua_registry* rg, int newSize) {
     Slice_lua_LValue newSlice = GO_MAKE(Slice_lua_LValue, lua_LValue, newSize, 0);
-    GO_COPY(newSlice, GO_SLICE(Slice_lua_LValue, rg->array, 0, rg->top));
+    GO_COPY(newSlice, GO_SLICE_HI(Slice_lua_LValue, rg->array, 0, rg->top));
     rg->array = newSlice;
 }
 
@@ -71740,7 +71740,7 @@ void lua_registry_SetTop(lua_registry* rg, int top) {
         }
     }
     if (rg->top < oldtop) {
-        Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+        Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
         {
             Slice_lua_LValue _t3 = nilRange;
             for (int _t2 = 0; _t2 < _t3.len; _t2++) {
@@ -72007,12 +72007,12 @@ GoString lua_LState_stackTrace(lua_LState* ls, int level) {
         }
     }
     buf = GO_APPEND(Slice_GoString, buf, fmt_Sprintf(GOSTR("\t%v: %v"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, GOSTR("[G]"))}), ((GoIface){17, go_box(GoString, GOSTR("?"))}))));
-    buf = GO_SLICE(Slice_GoString, buf, lua_intMax(0, lua_intMin(level, buf.len)), buf.len);
+    buf = GO_SLICE_HI(Slice_GoString, buf, lua_intMax(0, lua_intMin(level, buf.len)), buf.len);
     if (buf.len > 20) {
         Slice_GoString newbuf = GO_MAKE(Slice_GoString, GoString, 0, 20);
-        newbuf = GO_APPEND_SLICE(Slice_GoString, newbuf, GO_SLICE(Slice_GoString, buf, 0, 7));
+        newbuf = GO_APPEND_SLICE(Slice_GoString, newbuf, GO_SLICE_HI(Slice_GoString, buf, 0, 7));
         newbuf = GO_APPEND(Slice_GoString, newbuf, GOSTR("\t..."));
-        newbuf = GO_APPEND_SLICE(Slice_GoString, newbuf, GO_SLICE(Slice_GoString, buf, (buf.len - 7), buf.len));
+        newbuf = GO_APPEND_SLICE(Slice_GoString, newbuf, GO_SLICE_HI(Slice_GoString, buf, (buf.len - 7), buf.len));
         buf = newbuf;
     }
     return fmt_Sprintf(GOSTR("%s\n%s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 2, ((GoIface){17, go_box(GoString, header)}), ((GoIface){17, go_box(GoString, strings_Join(buf, GOSTR("\n")))})));
@@ -73525,7 +73525,7 @@ int lua_strFormat(lua_LState* L) {
         }
     }
     int npat = (strings_Count(str, GOSTR("%")) - strings_Count(str, GOSTR("%%")));
-    lua_LState_Push(L, ((GoIface){245, go_box(lua_LString, fmt_Sprintf(str, GO_SLICE(Slice_GoIface, args, 0, lua_intMin(npat, args.len))))}));
+    lua_LState_Push(L, ((GoIface){245, go_box(lua_LString, fmt_Sprintf(str, GO_SLICE_HI(Slice_GoIface, args, 0, lua_intMin(npat, args.len))))}));
     return 1;
 }
 
@@ -73598,11 +73598,11 @@ GoString lua_strGsubDoReplace(GoString str, Slice_lua_replaceInfo info) {
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
             lua_replaceInfo replace = _t2.p[_t1];
             int oldlen = buf.len;
-            Slice_u8 b1 = GO_APPEND_SLICE(Slice_u8, go_str2bytes(GOSTR("")), GO_SLICE(Slice_u8, buf, 0, (offset + replace.Indicies.p[0])));
+            Slice_u8 b1 = GO_APPEND_SLICE(Slice_u8, go_str2bytes(GOSTR("")), GO_SLICE_HI(Slice_u8, buf, 0, (offset + replace.Indicies.p[0])));
             Slice_u8 b2 = go_str2bytes(GOSTR(""));
             int index2 = (offset + replace.Indicies.p[1]);
             if (index2 <= buf.len) {
-                b2 = GO_APPEND_SLICE(Slice_u8, b2, GO_SLICE(Slice_u8, buf, index2, buf.len));
+                b2 = GO_APPEND_SLICE(Slice_u8, b2, GO_SLICE_HI(Slice_u8, buf, index2, buf.len));
             }
             buf = GO_APPEND_SLICE(Slice_u8, b1, go_str2bytes(replace.String));
             buf = GO_APPEND_SLICE(Slice_u8, buf, b2);
@@ -74046,12 +74046,12 @@ lua_LValue lua_LTable_Remove(lua_LTable* tb, int pos) {
             if ((i >= larray)) {
             } else if (((i == (larray - 1)) || (i < 0))) {
                 oldval = tb->array.p[(larray - 1)];
-                tb->array = GO_SLICE(Slice_lua_LValue, tb->array, 0, (larray - 1));
+                tb->array = GO_SLICE_HI(Slice_lua_LValue, tb->array, 0, (larray - 1));
             } else {
                 oldval = tb->array.p[i];
                 GO_COPY(GO_SLICE(Slice_lua_LValue, tb->array, i, -1), GO_SLICE(Slice_lua_LValue, tb->array, (i + 1), -1));
                 tb->array.p[(larray - 1)] = (lua_LValue){0};
-                tb->array = GO_SLICE(Slice_lua_LValue, tb->array, 0, (larray - 1));
+                tb->array = GO_SLICE_HI(Slice_lua_LValue, tb->array, 0, (larray - 1));
             }
         } while (0);
     }
@@ -74701,7 +74701,7 @@ Ret_Slice_u8__GoIface__bool lua_readBufioSize(GoOpaque /* bufio.Reader */* reade
                 break;
             }
             read += ((i64)n);
-            result = GO_APPEND_SLICE(Slice_u8, result, GO_SLICE(Slice_u8, buf, 0, n));
+            result = GO_APPEND_SLICE(Slice_u8, result, GO_SLICE_HI(Slice_u8, buf, 0, n));
             _cont1:;
         }
     }
@@ -75237,7 +75237,7 @@ bool lua_callGFunction(lua_LState* L, bool tailcall) {
         int oldtop = rg->top;
         rg->top = (regv + n);
         if (rg->top < oldtop) {
-            Slice_lua_LValue nilRange = GO_SLICE(Slice_lua_LValue, rg->array, rg->top, oldtop);
+            Slice_lua_LValue nilRange = GO_SLICE_HI(Slice_lua_LValue, rg->array, rg->top, oldtop);
             {
                 Slice_lua_LValue _t3 = nilRange;
                 for (int _t2 = 0; _t2 < _t3.len; _t2++) {
@@ -78003,9 +78003,9 @@ bool SDLSpeaker_fillOnce(SDLSpeaker* s) {
     if (s->out.cap < (frames * 4)) {
         s->out = GO_MAKE_A(Slice_u8, u8, (frames * 4), 0);
     }
-    Slice_u8 buf = GO_SLICE(Slice_u8, s->out, 0, (frames * 4));
+    Slice_u8 buf = GO_SLICE_HI(Slice_u8, s->out, 0, (frames * 4));
     sync_Mutex_Lock(&s->mu);
-    Ret_int__bool _t1 = beep_Mixer_Stream(s->mixer, GO_SLICE(Slice_Arr2_f64, s->buf, 0, frames));
+    Ret_int__bool _t1 = beep_Mixer_Stream(s->mixer, GO_SLICE_HI(Slice_Arr2_f64, s->buf, 0, frames));
     int n = _t1.r0;
     sync_Mutex_Unlock(&s->mu);
     if (n == 0) {
@@ -78023,7 +78023,7 @@ bool SDLSpeaker_fillOnce(SDLSpeaker* s) {
             _cont2:;
         }
     }
-    sdl_QueueAudio(s->dev, GO_SLICE(Slice_u8, buf, 0, (n * 4)));
+    sdl_QueueAudio(s->dev, GO_SLICE_HI(Slice_u8, buf, 0, (n * 4)));
     return true;
 }
 
@@ -78076,7 +78076,7 @@ cnode cparser_popFrom(cparser* p, Slice_cnode* st) {
         return (cnode){0};
     }
     cnode n = s.p[(s.len - 1)];
-    (*st) = GO_SLICE(Slice_cnode, s, 0, (s.len - 1));
+    (*st) = GO_SLICE_HI(Slice_cnode, s, 0, (s.len - 1));
     return n;
 }
 
@@ -78181,7 +78181,7 @@ Ret_Slice_cnode__int cparser_parse(cparser* p, int s, int e, Slice_cnode init, b
                         p->fail = true;
                         break;
                     }
-                    st = GO_SLICE(Slice_cnode, st, 0, (st.len - 1));
+                    st = GO_SLICE_HI(Slice_cnode, st, 0, (st.len - 1));
                     break;
                 }
                 case 5U: {
@@ -78211,7 +78211,7 @@ Ret_Slice_cnode__int cparser_parse(cparser* p, int s, int e, Slice_cnode init, b
                 }
                 case 14U: {
                     int l = BytecodeExp_PeekLength(be, i);
-                    cnode sub = fn_compileExp(GO_SLICE(BytecodeExp, be, (i + 4), ((i + 4) + l)));
+                    cnode sub = fn_compileExp(GO_SLICE_HI(BytecodeExp, be, (i + 4), ((i + 4) + l)));
                     if (sub.fn == 0) {
                         p->fail = true;
                         break;
@@ -78223,7 +78223,7 @@ Ret_Slice_cnode__int cparser_parse(cparser* p, int s, int e, Slice_cnode init, b
                 }
                 case 13U: {
                     int l = BytecodeExp_PeekLength(be, i);
-                    cnode sub = fn_compileExp(GO_SLICE(BytecodeExp, be, (i + 4), ((i + 4) + l)));
+                    cnode sub = fn_compileExp(GO_SLICE_HI(BytecodeExp, be, (i + 4), ((i + 4) + l)));
                     if (sub.fn == 0) {
                         p->fail = true;
                         break;
@@ -78477,7 +78477,7 @@ cnode cparser_simple(cparser* p, OpCode op, int* ip, int e, bool useT, Slice_cno
         }
     }
     g_bcCompileStats.generic++;
-    BytecodeExp seg = GO_APPEND_SLICE(Slice_OpCode, (BytecodeExp){0}, GO_SLICE(BytecodeExp, be, start, end));
+    BytecodeExp seg = GO_APPEND_SLICE(Slice_OpCode, (BytecodeExp){0}, GO_SLICE_HI(BytecodeExp, be, start, end));
     bool ut = useT;
     {
         int _t13 = arity;
@@ -79283,7 +79283,7 @@ void fn_fuseExp1(BytecodeExp be) {
                 }
                 if (((((i + 10) < be.len) && (be.p[(i + 5)] == 6U)) && (be.p[(i + 10)] >= 28U)) && (be.p[(i + 10)] <= 31U)) {
                     be.p[i] = ((be.p[(i + 10)] - 28U) + 184U);
-                    GO_COPY(GO_SLICE(BytecodeExp, be, (i + 5), (i + 9)), GO_SLICE(BytecodeExp, be, (i + 6), (i + 10)));
+                    GO_COPY(GO_SLICE_HI(BytecodeExp, be, (i + 5), (i + 9)), GO_SLICE_HI(BytecodeExp, be, (i + 6), (i + 10)));
                     OpCode _t10 = 162U;
                     OpCode _t11 = 162U;
                     be.p[(i + 9)] = _t10;
@@ -79325,9 +79325,9 @@ void fn_fuseExp1(BytecodeExp be) {
                 }
                 if (((l == 5) && ((i + 10) <= be.len)) && (be.p[(i + 5)] == 6U)) {
                     Arr4_OpCode k = {0};
-                    GO_COPY(GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1), GO_SLICE(BytecodeExp, be, (i + 6), (i + 10)));
+                    GO_COPY(GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1), GO_SLICE_HI(BytecodeExp, be, (i + 6), (i + 10)));
                     be.p[i] = 196U;
-                    GO_COPY(GO_SLICE(BytecodeExp, be, (i + 1), (i + 5)), GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1));
+                    GO_COPY(GO_SLICE_HI(BytecodeExp, be, (i + 1), (i + 5)), GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1));
                     {
                         int j = (i + 5);
                         for (; j < (i + 10); j++) {
@@ -79353,7 +79353,7 @@ void fn_fuseExp1(BytecodeExp be) {
                         if ((l < 0) || (((i + 5) + l) > be.len)) {
                             return;
                         }
-                        fn_fuseExpInner(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
+                        fn_fuseExpInner(GO_SLICE_HI(BytecodeExp, be, (i + 5), ((i + 5) + l)));
                         i += (5 + l);
                     } else {
                         return;
@@ -79462,14 +79462,14 @@ void fn_fuseLines(BytecodeExp be) {
                     OpCode t = _t12;
                     OpCode cmp = _t13;
                     Arr4_OpCode k = {0};
-                    GO_COPY(GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1), GO_SLICE(BytecodeExp, be, (i + 2), (i + 6)));
+                    GO_COPY(GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1), GO_SLICE_HI(BytecodeExp, be, (i + 2), (i + 6)));
                     OpCode _t14 = 189U;
                     OpCode _t15 = t;
                     OpCode _t16 = cmp;
                     be.p[i] = _t14;
                     be.p[(i + 1)] = _t15;
                     be.p[(i + 2)] = _t16;
-                    GO_COPY(GO_SLICE(BytecodeExp, be, (i + 3), (i + 7)), GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1));
+                    GO_COPY(GO_SLICE_HI(BytecodeExp, be, (i + 3), (i + 7)), GO_ARRSLICE(Slice_OpCode, k.v, 4, 0, -1));
                     OpCode _t17 = 162U;
                     OpCode _t18 = 162U;
                     OpCode _t19 = 162U;
@@ -79517,14 +79517,14 @@ void fn_fuseLines(BytecodeExp be) {
                     OpCode t = _t33;
                     OpCode r = _t34;
                     Arr8_OpCode ab = {0};
-                    GO_COPY(GO_ARRSLICE(Slice_OpCode, ab.v, 8, 0, -1), GO_SLICE(BytecodeExp, be, (i + 2), (i + 10)));
+                    GO_COPY(GO_ARRSLICE(Slice_OpCode, ab.v, 8, 0, -1), GO_SLICE_HI(BytecodeExp, be, (i + 2), (i + 10)));
                     OpCode _t35 = 191U;
                     OpCode _t36 = t;
                     OpCode _t37 = r;
                     be.p[i] = _t35;
                     be.p[(i + 1)] = _t36;
                     be.p[(i + 2)] = _t37;
-                    GO_COPY(GO_SLICE(BytecodeExp, be, (i + 3), (i + 11)), GO_ARRSLICE(Slice_OpCode, ab.v, 8, 0, -1));
+                    GO_COPY(GO_SLICE_HI(BytecodeExp, be, (i + 3), (i + 11)), GO_ARRSLICE(Slice_OpCode, ab.v, 8, 0, -1));
                     OpCode _t38 = 162U;
                     OpCode _t39 = 162U;
                     OpCode _t40 = 162U;
@@ -79582,7 +79582,7 @@ void fn_fuseLines(BytecodeExp be) {
                         if ((l < 0) || (((i + 5) + l) > be.len)) {
                             return;
                         }
-                        fn_fuseLines(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
+                        fn_fuseLines(GO_SLICE_HI(BytecodeExp, be, (i + 5), ((i + 5) + l)));
                         i += (5 + l);
                     } else {
                         return;
@@ -79742,7 +79742,7 @@ void fn_fuseHeads(BytecodeExp be) {
                             return;
                         }
                         if ((op == 13U) || (op == 14U)) {
-                            fn_fuseHeads(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
+                            fn_fuseHeads(GO_SLICE_HI(BytecodeExp, be, (i + 5), ((i + 5) + l)));
                             i += (5 + l);
                         } else {
                             i += 5;
@@ -79893,7 +79893,7 @@ void fn_scEmit(BytecodeExp* out, BytecodeExp rhs, OpCode opc) {
 // scCheckSkip (bc_shortcircuit.go:147), 0 TODO
 void fn_scCheckSkip(BytecodeExp be, int i, Char* c, Char* oc) {
     int k = ((int)((u8)be.p[i]));
-    BytecodeExp rhs = GO_SLICE(BytecodeExp, be, (i + 1), (i + k));
+    BytecodeExp rhs = GO_SLICE_HI(BytecodeExp, be, (i + 1), (i + k));
     i32 _t1 = g_sys.SystemStateVars_.randseed;
     u32 _t2 = g_consoleSeq;
     int _t3 = g_sys.bcStack.len;
@@ -79973,7 +79973,7 @@ void fn_scThread(BytecodeExp be) {
                             return;
                         }
                         if ((op == 13U) || (op == 14U)) {
-                            fn_scThread(GO_SLICE(BytecodeExp, be, (i + 5), ((i + 5) + l)));
+                            fn_scThread(GO_SLICE_HI(BytecodeExp, be, (i + 5), ((i + 5) + l)));
                             i += (5 + l);
                         } else {
                             i += 5;
@@ -81178,19 +81178,10 @@ i64 BytecodeValue_ToI64(BytecodeValue bv) {
 
 // BytecodeValue.ToB (bytecode.go:1424), 0 TODO
 inline __attribute__((always_inline)) bool BytecodeValue_ToB(BytecodeValue bv) {
-    if (BytecodeValue_IsUndefined(bv)) {
-        return false;
-    }
-    if (bv.vtype == 4) {
-        return false;
-    }
-    if (bv.value == 0x0p+00) {
-        return false;
-    }
-    return true;
+    return (((bv.vtype != 5) && (bv.vtype != 4)) && (math_Abs(bv.value) > 0x0p+00));
 }
 
-// BytecodeValue.ToAny (bytecode.go:1438), 0 TODO
+// BytecodeValue.ToAny (bytecode.go:1431), 0 TODO
 GoIface BytecodeValue_ToAny(BytecodeValue bv) {
     if (BytecodeValue_IsUndefined(bv)) {
         return ((GoIface){291, go_box_a(UndefinedFormatter, (UndefinedFormatter){0})});
@@ -81204,7 +81195,7 @@ GoIface BytecodeValue_ToAny(BytecodeValue bv) {
     return ((GoIface){5, go_box_a(i32, BytecodeValue_ToI(bv))});
 }
 
-// BytecodeValue.ToS (bytecode.go:1452), 0 TODO
+// BytecodeValue.ToS (bytecode.go:1445), 0 TODO
 GoString BytecodeValue_ToS(BytecodeValue bv) {
     if (bv.vtype != 4) {
         return GOSTR("");
@@ -81217,7 +81208,7 @@ GoString BytecodeValue_ToS(BytecodeValue bv) {
     return pool.p[idx];
 }
 
-// BytecodeValue.toLowS (bytecode.go:1466), 0 TODO
+// BytecodeValue.toLowS (bytecode.go:1459), 0 TODO
 GoString BytecodeValue_toLowS(BytecodeValue bv) {
     if (bv.vtype != 4) {
         return GOSTR("");
@@ -81230,7 +81221,7 @@ GoString BytecodeValue_toLowS(BytecodeValue bv) {
     return pool.p[idx];
 }
 
-// BytecodeValue.SetF (bytecode.go:1479), 0 TODO
+// BytecodeValue.SetF (bytecode.go:1472), 0 TODO
 inline __attribute__((always_inline)) void BytecodeValue_SetF(BytecodeValue* bv, f32 f) {
     if (math_IsNaN(((f64)f))) {
         (*bv) = fn_BytecodeUndefined();
@@ -81239,28 +81230,28 @@ inline __attribute__((always_inline)) void BytecodeValue_SetF(BytecodeValue* bv,
     }
 }
 
-// BytecodeValue.SetI (bytecode.go:1488), 0 TODO
+// BytecodeValue.SetI (bytecode.go:1481), 0 TODO
 inline __attribute__((always_inline)) void BytecodeValue_SetI(BytecodeValue* bv, i32 i) {
     (*bv) = (BytecodeValue){2, ((f64)i)};
 }
 
-// BytecodeValue.SetB (bytecode.go:1497), 0 TODO
+// BytecodeValue.SetB (bytecode.go:1490), 0 TODO
 inline __attribute__((always_inline)) void BytecodeValue_SetB(BytecodeValue* bv, bool b) {
     bv->vtype = 3;
     bv->value = ((f64)fn_Btoi(b));
 }
 
-// bvNone (bytecode.go:1502), 0 TODO
+// bvNone (bytecode.go:1495), 0 TODO
 BytecodeValue fn_bvNone(void) {
     return (BytecodeValue){0, 0x0p+00};
 }
 
-// BytecodeUndefined (bytecode.go:1507), 0 TODO
+// BytecodeUndefined (bytecode.go:1500), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeUndefined(void) {
     return (BytecodeValue){5, math_NaN()};
 }
 
-// BytecodeFloat (bytecode.go:1512), 0 TODO
+// BytecodeFloat (bytecode.go:1505), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeFloat(f32 f) {
     if (math_IsNaN(((f64)f))) {
         return fn_BytecodeUndefined();
@@ -81268,28 +81259,28 @@ inline __attribute__((always_inline)) BytecodeValue fn_BytecodeFloat(f32 f) {
     return (BytecodeValue){1, ((f64)f)};
 }
 
-// BytecodeInt (bytecode.go:1520), 0 TODO
+// BytecodeInt (bytecode.go:1513), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeInt(i32 i) {
     return (BytecodeValue){2, ((f64)i)};
 }
 
-// BytecodeInt64 (bytecode.go:1524), 0 TODO
+// BytecodeInt64 (bytecode.go:1517), 0 TODO
 BytecodeValue fn_BytecodeInt64(i64 i) {
     return (BytecodeValue){2, ((f64)i)};
 }
 
-// BytecodeBool (bytecode.go:1529), 0 TODO
+// BytecodeBool (bytecode.go:1522), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue fn_BytecodeBool(bool b) {
     return (BytecodeValue){3, ((f64)fn_Btoi(b))};
 }
 
-// BytecodeString (bytecode.go:1534), 0 TODO
+// BytecodeString (bytecode.go:1527), 0 TODO
 BytecodeValue fn_BytecodeString(GoString s) {
     int idx = StringPool_Add(&g_sys.stringPool.v[g_sys.workingState->playerNo], s);
     return (BytecodeValue){4, ((f64)idx)};
 }
 
-// TypedValueOf (bytecode.go:1551), 0 TODO
+// TypedValueOf (bytecode.go:1544), 0 TODO
 TypedValue fn_TypedValueOf(BytecodeValue bv) {
     if (bv.vtype == 4) {
         return (TypedValue){.Type = 4, .Str = BytecodeValue_ToS(bv)};
@@ -81297,7 +81288,7 @@ TypedValue fn_TypedValueOf(BytecodeValue bv) {
     return (TypedValue){.Type = bv.vtype, .Num = bv.value};
 }
 
-// TypedValue.ToBV (bytecode.go:1558), 0 TODO
+// TypedValue.ToBV (bytecode.go:1551), 0 TODO
 BytecodeValue TypedValue_ToBV(TypedValue mv) {
     {
         ValueType _t1 = mv.Type;
@@ -81315,23 +81306,23 @@ BytecodeValue TypedValue_ToBV(TypedValue mv) {
     return (BytecodeValue){mv.Type, mv.Num};
 }
 
-// TypedValue.ToF (bytecode.go:1569), 0 TODO
+// TypedValue.ToF (bytecode.go:1562), 0 TODO
 f32 TypedValue_ToF(TypedValue mv) {
     return ((f32)mv.Num);
 }
 
-// BytecodeStack.Clear (bytecode.go:1575), 0 TODO
+// BytecodeStack.Clear (bytecode.go:1568), 0 TODO
 void BytecodeStack_Clear(BytecodeStack* bs) {
-    (*bs) = GO_SLICE(BytecodeStack, ((*bs)), 0, 0);
+    (*bs) = GO_SLICE_HI(BytecodeStack, ((*bs)), 0, 0);
 }
 
-// BytecodeStack.Push (bytecode.go:1580), 0 TODO
+// BytecodeStack.Push (bytecode.go:1573), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_Push(BytecodeStack* bs, BytecodeValue bv) {
     BytecodeStack s = (*bs);
     {
         int n = s.len;
         if (n < s.cap) {
-            s = GO_SLICE(BytecodeStack, s, 0, (n + 1));
+            s = GO_SLICE_HI(BytecodeStack, s, 0, (n + 1));
             s.p[n] = bv;
             (*bs) = s;
             return;
@@ -81340,56 +81331,56 @@ inline __attribute__((always_inline)) void BytecodeStack_Push(BytecodeStack* bs,
     fn_bcStackGrow(bs, bv);
 }
 
-// bcStackGrow (bytecode.go:1595), 0 TODO
+// bcStackGrow (bytecode.go:1588), 0 TODO
 void fn_bcStackGrow(BytecodeStack* bs, BytecodeValue bv) {
     (*bs) = GO_APPEND(Slice_BytecodeValue, (*bs), bv);
 }
 
-// BytecodeStack.PushI (bytecode.go:1600), 0 TODO
+// BytecodeStack.PushI (bytecode.go:1593), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_PushI(BytecodeStack* bs, i32 i) {
     BytecodeStack_Push(bs, fn_BytecodeInt(i));
 }
 
-// BytecodeStack.PushI64 (bytecode.go:1604), 0 TODO
+// BytecodeStack.PushI64 (bytecode.go:1597), 0 TODO
 void BytecodeStack_PushI64(BytecodeStack* bs, i64 i) {
     BytecodeStack_Push(bs, fn_BytecodeInt64(i));
 }
 
-// BytecodeStack.PushF (bytecode.go:1609), 0 TODO
+// BytecodeStack.PushF (bytecode.go:1602), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_PushF(BytecodeStack* bs, f32 f) {
     BytecodeStack_Push(bs, fn_BytecodeFloat(f));
 }
 
-// BytecodeStack.PushB (bytecode.go:1614), 0 TODO
+// BytecodeStack.PushB (bytecode.go:1607), 0 TODO
 inline __attribute__((always_inline)) void BytecodeStack_PushB(BytecodeStack* bs, bool b) {
     BytecodeStack_Push(bs, fn_BytecodeBool(b));
 }
 
-// BytecodeStack.PushS (bytecode.go:1618), 0 TODO
+// BytecodeStack.PushS (bytecode.go:1611), 0 TODO
 void BytecodeStack_PushS(BytecodeStack* bs, GoString s) {
     BytecodeStack_Push(bs, fn_BytecodeString(s));
 }
 
-// BytecodeStack.Top (bytecode.go:1625), 0 TODO
+// BytecodeStack.Top (bytecode.go:1618), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue* BytecodeStack_Top(BytecodeStack bs) {
     return (&bs.p[(bs.len - 1)]);
 }
 
-// BytecodeStack.Pop (bytecode.go:1630), 0 TODO
+// BytecodeStack.Pop (bytecode.go:1623), 0 TODO
 inline __attribute__((always_inline)) BytecodeValue BytecodeStack_Pop(BytecodeStack* bs) {
     BytecodeStack s = (*bs);
     int n = (s.len - 1);
     BytecodeValue bv = s.p[n];
-    (*bs) = GO_SLICE(BytecodeStack, s, 0, n);
+    (*bs) = GO_SLICE_HI(BytecodeStack, s, 0, n);
     return bv;
 }
 
-// BytecodeStack.Dup (bytecode.go:1638), 0 TODO
+// BytecodeStack.Dup (bytecode.go:1631), 0 TODO
 void BytecodeStack_Dup(BytecodeStack* bs) {
     BytecodeStack_Push(bs, (*BytecodeStack_Top(*bs)));
 }
 
-// BytecodeStack.Swap (bytecode.go:1642), 0 TODO
+// BytecodeStack.Swap (bytecode.go:1635), 0 TODO
 void BytecodeStack_Swap(BytecodeStack* bs) {
     BytecodeValue _t1 = ((*bs)).p[((*bs).len - 2)];
     BytecodeValue _t2 = (*BytecodeStack_Top(*bs));
@@ -81397,14 +81388,14 @@ void BytecodeStack_Swap(BytecodeStack* bs) {
     ((*bs)).p[((*bs).len - 2)] = _t2;
 }
 
-// BytecodeStack.Alloc (bytecode.go:1646), 0 TODO
+// BytecodeStack.Alloc (bytecode.go:1639), 0 TODO
 Slice_BytecodeValue BytecodeStack_Alloc(BytecodeStack* bs, int size) {
     if (((*bs).len + size) > (*bs).cap) {
         BytecodeStack tmp = (*bs);
         (*bs) = GO_MAKE_A(BytecodeStack, BytecodeValue, ((*bs).len + size), 0);
         GO_COPY((*bs), tmp);
     } else {
-        (*bs) = GO_SLICE(BytecodeStack, ((*bs)), 0, ((*bs).len + size));
+        (*bs) = GO_SLICE_HI(BytecodeStack, ((*bs)), 0, ((*bs).len + size));
         {
             int i = ((*bs).len - size);
             for (; i < (*bs).len; i++) {
@@ -81416,19 +81407,19 @@ Slice_BytecodeValue BytecodeStack_Alloc(BytecodeStack* bs, int size) {
     return GO_SLICE(BytecodeStack, ((*bs)), ((*bs).len - size), -1);
 }
 
-// Float32frombytes (bytecode.go:1662), 0 TODO
+// Float32frombytes (bytecode.go:1655), 0 TODO
 f32 fn_Float32frombytes(Slice_u8 bytes) {
     u32 bits = binary_littleEndian_Uint32(binary_LittleEndian, bytes);
     f32 float_ = math_Float32frombits(bits);
     return float_;
 }
 
-// BytecodeExp.append (bytecode.go:1668), 0 TODO
+// BytecodeExp.append (bytecode.go:1661), 0 TODO
 void BytecodeExp_append(BytecodeExp* be, Slice_OpCode op) {
     (*be) = GO_APPEND_SLICE(Slice_OpCode, (*be), op);
 }
 
-// BytecodeExp.appendValue (bytecode.go:1672), 0 TODO
+// BytecodeExp.appendValue (bytecode.go:1665), 0 TODO
 bool BytecodeExp_appendValue(BytecodeExp* be, BytecodeValue bv) {
     bool ok = {0};
     {
@@ -81486,35 +81477,35 @@ bool BytecodeExp_appendValue(BytecodeExp* be, BytecodeValue bv) {
     return ok;
 }
 
-// BytecodeExp.appendI32Op (bytecode.go:1723), 0 TODO
+// BytecodeExp.appendI32Op (bytecode.go:1716), 0 TODO
 void BytecodeExp_appendI32Op(BytecodeExp* be, OpCode op, i32 addr) {
     i32 *addr__h = go_box_a(i32, addr);
     BytecodeExp_append(be, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, op));
     BytecodeExp_append(be, GO_ARRSLICE(Slice_OpCode, ((*((Arr4_OpCode*)((void*)(&(*addr__h)))))).v, 4, 0, -1));
 }
 
-// BytecodeExp.appendI64Op (bytecode.go:1729), 0 TODO
+// BytecodeExp.appendI64Op (bytecode.go:1722), 0 TODO
 void BytecodeExp_appendI64Op(BytecodeExp* be, OpCode op, i64 addr) {
     i64 *addr__h = go_box_a(i64, addr);
     BytecodeExp_append(be, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, op));
     BytecodeExp_append(be, GO_ARRSLICE(Slice_OpCode, ((*((Arr8_OpCode*)((void*)(&(*addr__h)))))).v, 8, 0, -1));
 }
 
-// BytecodeExp.ReadIntAt (bytecode.go:1735), 0 TODO
+// BytecodeExp.ReadIntAt (bytecode.go:1728), 0 TODO
 i32 BytecodeExp_ReadIntAt(BytecodeExp be, int* i) {
     i32 v = fn_bcI32(be, (*i));
     (*i) += 4;
     return v;
 }
 
-// BytecodeExp.ReadPoolStringAt (bytecode.go:1742), 0 TODO
+// BytecodeExp.ReadPoolStringAt (bytecode.go:1735), 0 TODO
 GoString BytecodeExp_ReadPoolStringAt(BytecodeExp be, int* i) {
     i32 idx = BytecodeExp_ReadIntAt(be, i);
     Slice_GoString pool = g_sys.stringPool.v[g_sys.workingState->playerNo].List;
     return pool.p[idx];
 }
 
-// BytecodeExp.readMapKey (bytecode.go:1755), 0 TODO
+// BytecodeExp.readMapKey (bytecode.go:1748), 0 TODO
 GoString BytecodeExp_readMapKey(BytecodeExp be, int* i) {
     i32 idx = BytecodeExp_ReadIntAt(be, i);
     if (idx == -1) {
@@ -81523,7 +81514,7 @@ GoString BytecodeExp_readMapKey(BytecodeExp be, int* i) {
     return g_sys.stringPool.v[g_sys.workingState->playerNo].List.p[idx];
 }
 
-// BytecodeExp.readMapKeyLow (bytecode.go:1766), 0 TODO
+// BytecodeExp.readMapKeyLow (bytecode.go:1759), 0 TODO
 GoString BytecodeExp_readMapKeyLow(BytecodeExp be, int* i) {
     i32 idx = BytecodeExp_ReadIntAt(be, i);
     if (idx == -1) {
@@ -81532,28 +81523,28 @@ GoString BytecodeExp_readMapKeyLow(BytecodeExp be, int* i) {
     return g_sys.stringPool.v[g_sys.workingState->playerNo].ListLow.p[idx];
 }
 
-// BytecodeExp.PeekLength (bytecode.go:1775), 0 TODO
+// BytecodeExp.PeekLength (bytecode.go:1768), 0 TODO
 int BytecodeExp_PeekLength(BytecodeExp be, int i) {
     return ((int)fn_bcI32(be, i));
 }
 
-// bcI32 (bytecode.go:1785), 0 TODO
+// bcI32 (bytecode.go:1778), 0 TODO
 i32 fn_bcI32(Slice_OpCode b, int i) {
     (void)(b.p[(i + 3)]);
     return ((i32)(((((u32)b.p[i]) | (u32)((((u32)b.p[(i + 1)])) << 8)) | (u32)((((u32)b.p[(i + 2)])) << 16)) | (u32)((((u32)b.p[(i + 3)])) << 24)));
 }
 
-// bcI64 (bytecode.go:1790), 0 TODO
+// bcI64 (bytecode.go:1783), 0 TODO
 i64 fn_bcI64(Slice_OpCode b, int i) {
     return ((i64)(((u64)((u32)fn_bcI32(b, i))) | (u64)((((u64)((u32)fn_bcI32(b, (i + 4))))) << 32)));
 }
 
-// BytecodeExp.readInt32At (bytecode.go:1796), 0 TODO
+// BytecodeExp.readInt32At (bytecode.go:1789), 0 TODO
 i32 BytecodeExp_readInt32At(BytecodeExp be, int i) {
     return fn_bcI32(be, i);
 }
 
-// BytecodeExp.neg (bytecode.go:1808), 0 TODO
+// BytecodeExp.neg (bytecode.go:1801), 0 TODO
 void BytecodeExp_neg(BytecodeExp _recv, BytecodeValue* v) {
     if (v->vtype == 1) {
         v->value *= -0x1p+00;
@@ -81562,12 +81553,12 @@ void BytecodeExp_neg(BytecodeExp _recv, BytecodeValue* v) {
     }
 }
 
-// BytecodeExp.bwnot (bytecode.go:1821), 0 TODO
+// BytecodeExp.bwnot (bytecode.go:1814), 0 TODO
 void BytecodeExp_bwnot(BytecodeExp _recv, BytecodeValue* v) {
     BytecodeValue_SetI(v, (~BytecodeValue_ToI(*v)));
 }
 
-// BytecodeExp.blnot (bytecode.go:1830), 0 TODO
+// BytecodeExp.blnot (bytecode.go:1823), 0 TODO
 void BytecodeExp_blnot(BytecodeExp _recv, BytecodeValue* v) {
     if (BytecodeValue_IsUndefined(*v)) {
         return;
@@ -81575,7 +81566,7 @@ void BytecodeExp_blnot(BytecodeExp _recv, BytecodeValue* v) {
     BytecodeValue_SetB(v, (!BytecodeValue_ToB(*v)));
 }
 
-// BytecodeExp.pow (bytecode.go:1846), 0 TODO
+// BytecodeExp.pow (bytecode.go:1839), 0 TODO
 void BytecodeExp_pow(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, int pn) {
     if ((((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) || (BytecodeValue_ToF(v2) < 0x0p+00f)) {
         BytecodeValue_SetF(v1, fn_Pow(BytecodeValue_ToF(*v1), BytecodeValue_ToF(v2)));
@@ -81617,7 +81608,7 @@ void BytecodeExp_pow(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, int
     }
 }
 
-// BytecodeExp.mul (bytecode.go:1884), 0 TODO
+// BytecodeExp.mul (bytecode.go:1877), 0 TODO
 void BytecodeExp_mul(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetF(v1, (BytecodeValue_ToF(*v1) * BytecodeValue_ToF(v2)));
@@ -81626,7 +81617,7 @@ void BytecodeExp_mul(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.div (bytecode.go:1896), 0 TODO
+// BytecodeExp.div (bytecode.go:1889), 0 TODO
 void BytecodeExp_div(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_ToF(v2) == 0x0p+00f) {
         (*v1) = fn_BytecodeUndefined();
@@ -81640,7 +81631,7 @@ void BytecodeExp_div(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.mod (bytecode.go:1914), 0 TODO
+// BytecodeExp.mod (bytecode.go:1907), 0 TODO
 void BytecodeExp_mod(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_ToI(v2) == 0) {
         (*v1) = fn_BytecodeUndefined();
@@ -81650,7 +81641,7 @@ void BytecodeExp_mod(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.add (bytecode.go:1927), 0 TODO
+// BytecodeExp.add (bytecode.go:1920), 0 TODO
 void BytecodeExp_add(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetF(v1, (BytecodeValue_ToF(*v1) + BytecodeValue_ToF(v2)));
@@ -81659,7 +81650,7 @@ void BytecodeExp_add(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.sub (bytecode.go:1939), 0 TODO
+// BytecodeExp.sub (bytecode.go:1932), 0 TODO
 void BytecodeExp_sub(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetF(v1, (BytecodeValue_ToF(*v1) - BytecodeValue_ToF(v2)));
@@ -81668,7 +81659,7 @@ void BytecodeExp_sub(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.gt (bytecode.go:1952), 0 TODO
+// BytecodeExp.gt (bytecode.go:1945), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_gt(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) > BytecodeValue_ToF(v2)));
@@ -81677,7 +81668,7 @@ inline __attribute__((always_inline)) void BytecodeExp_gt(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.ge (bytecode.go:1965), 0 TODO
+// BytecodeExp.ge (bytecode.go:1958), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_ge(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) >= BytecodeValue_ToF(v2)));
@@ -81686,7 +81677,7 @@ inline __attribute__((always_inline)) void BytecodeExp_ge(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.lt (bytecode.go:1978), 0 TODO
+// BytecodeExp.lt (bytecode.go:1971), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_lt(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) < BytecodeValue_ToF(v2)));
@@ -81695,7 +81686,7 @@ inline __attribute__((always_inline)) void BytecodeExp_lt(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.le (bytecode.go:1991), 0 TODO
+// BytecodeExp.le (bytecode.go:1984), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_le(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (((ValueType)go_min_i32(((i32)v1->vtype), ((i32)v2.vtype))) == 1) {
         BytecodeValue_SetB(v1, (BytecodeValue_ToF(*v1) <= BytecodeValue_ToF(v2)));
@@ -81704,7 +81695,7 @@ inline __attribute__((always_inline)) void BytecodeExp_le(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.rangeCheck (bytecode.go:2004), 0 TODO
+// BytecodeExp.rangeCheck (bytecode.go:1997), 0 TODO
 void BytecodeExp_rangeCheck(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue min_, BytecodeValue max_, OpCode op) {
     if ((BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(min_)) || BytecodeValue_IsUndefined(max_)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81744,7 +81735,7 @@ void BytecodeExp_rangeCheck(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue 
     BytecodeValue_SetB(v1, (minPass && maxPass));
 }
 
-// BytecodeExp.eq (bytecode.go:2051), 0 TODO
+// BytecodeExp.eq (bytecode.go:2044), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_eq(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if ((v1->vtype == 4) || (v2.vtype == 4)) {
         if ((v1->vtype != 4) || (v2.vtype != 4)) {
@@ -81761,7 +81752,7 @@ inline __attribute__((always_inline)) void BytecodeExp_eq(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.ne (bytecode.go:2074), 0 TODO
+// BytecodeExp.ne (bytecode.go:2067), 0 TODO
 inline __attribute__((always_inline)) void BytecodeExp_ne(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if ((v1->vtype == 4) || (v2.vtype == 4)) {
         if ((v1->vtype != 4) || (v2.vtype != 4)) {
@@ -81778,37 +81769,37 @@ inline __attribute__((always_inline)) void BytecodeExp_ne(BytecodeExp _recv, Byt
     }
 }
 
-// BytecodeExp.bwand (bytecode.go:2094), 0 TODO
+// BytecodeExp.bwand (bytecode.go:2087), 0 TODO
 void BytecodeExp_bwand(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetI(v1, (BytecodeValue_ToI(*v1) & BytecodeValue_ToI(v2)));
 }
 
-// BytecodeExp.bwxor (bytecode.go:2103), 0 TODO
+// BytecodeExp.bwxor (bytecode.go:2096), 0 TODO
 void BytecodeExp_bwxor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetI(v1, (BytecodeValue_ToI(*v1) ^ BytecodeValue_ToI(v2)));
 }
 
-// BytecodeExp.bwor (bytecode.go:2112), 0 TODO
+// BytecodeExp.bwor (bytecode.go:2105), 0 TODO
 void BytecodeExp_bwor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetI(v1, (BytecodeValue_ToI(*v1) | BytecodeValue_ToI(v2)));
 }
 
-// BytecodeExp.bland (bytecode.go:2130), 0 TODO
+// BytecodeExp.bland (bytecode.go:2123), 0 TODO
 void BytecodeExp_bland(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetB(v1, (BytecodeValue_ToB(*v1) && BytecodeValue_ToB(v2)));
 }
 
-// BytecodeExp.blxor (bytecode.go:2138), 0 TODO
+// BytecodeExp.blxor (bytecode.go:2131), 0 TODO
 void BytecodeExp_blxor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetB(v1, (BytecodeValue_ToB(*v1) != BytecodeValue_ToB(v2)));
 }
 
-// BytecodeExp.blor (bytecode.go:2146), 0 TODO
+// BytecodeExp.blor (bytecode.go:2139), 0 TODO
 void BytecodeExp_blor(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetB(v1, (BytecodeValue_ToB(*v1) || BytecodeValue_ToB(v2)));
 }
 
-// BytecodeExp.abs (bytecode.go:2163), 0 TODO
+// BytecodeExp.abs (bytecode.go:2156), 0 TODO
 void BytecodeExp_abs(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81820,12 +81811,12 @@ void BytecodeExp_abs(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.exp (bytecode.go:2174), 0 TODO
+// BytecodeExp.exp (bytecode.go:2167), 0 TODO
 void BytecodeExp_exp(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfExp(v1->value)));
 }
 
-// BytecodeExp.ln (bytecode.go:2181), 0 TODO
+// BytecodeExp.ln (bytecode.go:2174), 0 TODO
 void BytecodeExp_ln(BytecodeExp _recv, BytecodeValue* v1) {
     if (v1->value <= 0x0p+00) {
         (*v1) = fn_BytecodeUndefined();
@@ -81835,7 +81826,7 @@ void BytecodeExp_ln(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.log (bytecode.go:2193), 0 TODO
+// BytecodeExp.log (bytecode.go:2186), 0 TODO
 void BytecodeExp_log(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if ((v1->value <= 0x0p+00) || (v2.value <= 0x0p+00)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81845,7 +81836,7 @@ void BytecodeExp_log(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.cos (bytecode.go:2206), 0 TODO
+// BytecodeExp.cos (bytecode.go:2199), 0 TODO
 void BytecodeExp_cos(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81853,7 +81844,7 @@ void BytecodeExp_cos(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfCos(v1->value)));
 }
 
-// BytecodeExp.sin (bytecode.go:2213), 0 TODO
+// BytecodeExp.sin (bytecode.go:2206), 0 TODO
 void BytecodeExp_sin(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81861,7 +81852,7 @@ void BytecodeExp_sin(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfSin(v1->value)));
 }
 
-// BytecodeExp.tan (bytecode.go:2220), 0 TODO
+// BytecodeExp.tan (bytecode.go:2213), 0 TODO
 void BytecodeExp_tan(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81869,7 +81860,7 @@ void BytecodeExp_tan(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfTan(v1->value)));
 }
 
-// BytecodeExp.acos (bytecode.go:2227), 0 TODO
+// BytecodeExp.acos (bytecode.go:2220), 0 TODO
 void BytecodeExp_acos(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81877,7 +81868,7 @@ void BytecodeExp_acos(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAcos(v1->value)));
 }
 
-// BytecodeExp.asin (bytecode.go:2234), 0 TODO
+// BytecodeExp.asin (bytecode.go:2227), 0 TODO
 void BytecodeExp_asin(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81885,7 +81876,7 @@ void BytecodeExp_asin(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAsin(v1->value)));
 }
 
-// BytecodeExp.atan (bytecode.go:2241), 0 TODO
+// BytecodeExp.atan (bytecode.go:2234), 0 TODO
 void BytecodeExp_atan(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81893,7 +81884,7 @@ void BytecodeExp_atan(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAtan(v1->value)));
 }
 
-// BytecodeExp.floor (bytecode.go:2248), 0 TODO
+// BytecodeExp.floor (bytecode.go:2241), 0 TODO
 void BytecodeExp_floor(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81908,7 +81899,7 @@ void BytecodeExp_floor(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.ceil (bytecode.go:2262), 0 TODO
+// BytecodeExp.ceil (bytecode.go:2255), 0 TODO
 void BytecodeExp_ceil(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -81923,7 +81914,7 @@ void BytecodeExp_ceil(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.max (bytecode.go:2276), 0 TODO
+// BytecodeExp.max (bytecode.go:2269), 0 TODO
 void BytecodeExp_max(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81936,7 +81927,7 @@ void BytecodeExp_max(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.min (bytecode.go:2288), 0 TODO
+// BytecodeExp.min (bytecode.go:2281), 0 TODO
 void BytecodeExp_min(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81949,7 +81940,7 @@ void BytecodeExp_min(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     }
 }
 
-// BytecodeExp.random (bytecode.go:2300), 0 TODO
+// BytecodeExp.random (bytecode.go:2293), 0 TODO
 void BytecodeExp_random(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81958,7 +81949,7 @@ void BytecodeExp_random(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) 
     BytecodeValue_SetI(v1, fn_RandI(go_f2i32(v1->value), go_f2i32(v2.value)));
 }
 
-// BytecodeExp.round (bytecode.go:2308), 0 TODO
+// BytecodeExp.round (bytecode.go:2301), 0 TODO
 void BytecodeExp_round(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81968,7 +81959,7 @@ void BytecodeExp_round(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetF(v1, ((f32)(math_Floor((((v1->value * shift)) + 0x1p-01)) / shift)));
 }
 
-// BytecodeExp.clamp (bytecode.go:2317), 0 TODO
+// BytecodeExp.clamp (bytecode.go:2310), 0 TODO
 void BytecodeExp_clamp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3) {
     if ((BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) || BytecodeValue_IsUndefined(v3)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81985,7 +81976,7 @@ void BytecodeExp_clamp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, B
     }
 }
 
-// BytecodeExp.atan2 (bytecode.go:2331), 0 TODO
+// BytecodeExp.atan2 (bytecode.go:2324), 0 TODO
 void BytecodeExp_atan2(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     if (BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) {
         (*v1) = fn_BytecodeUndefined();
@@ -81994,7 +81985,7 @@ void BytecodeExp_atan2(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2) {
     BytecodeValue_SetF(v1, ((f32)fn_cvfAtan2(v1->value, v2.value)));
 }
 
-// BytecodeExp.sign (bytecode.go:2339), 0 TODO
+// BytecodeExp.sign (bytecode.go:2332), 0 TODO
 void BytecodeExp_sign(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -82010,7 +82001,7 @@ void BytecodeExp_sign(BytecodeExp _recv, BytecodeValue* v1) {
     }
 }
 
-// BytecodeExp.rad (bytecode.go:2352), 0 TODO
+// BytecodeExp.rad (bytecode.go:2345), 0 TODO
 void BytecodeExp_rad(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -82018,7 +82009,7 @@ void BytecodeExp_rad(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)((v1->value * 0x1.921fb54442d18p+01) / 0x1.68p+07)));
 }
 
-// BytecodeExp.deg (bytecode.go:2359), 0 TODO
+// BytecodeExp.deg (bytecode.go:2352), 0 TODO
 void BytecodeExp_deg(BytecodeExp _recv, BytecodeValue* v1) {
     if (BytecodeValue_IsUndefined(*v1)) {
         return;
@@ -82026,7 +82017,7 @@ void BytecodeExp_deg(BytecodeExp _recv, BytecodeValue* v1) {
     BytecodeValue_SetF(v1, ((f32)((v1->value * 0x1.68p+07) / 0x1.921fb54442d18p+01)));
 }
 
-// BytecodeExp.lerp (bytecode.go:2366), 0 TODO
+// BytecodeExp.lerp (bytecode.go:2359), 0 TODO
 void BytecodeExp_lerp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3) {
     if ((BytecodeValue_IsUndefined(*v1) || BytecodeValue_IsUndefined(v2)) || BytecodeValue_IsUndefined(v3)) {
         (*v1) = fn_BytecodeUndefined();
@@ -82043,20 +82034,17 @@ void BytecodeExp_lerp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, By
     BytecodeValue_SetF(v1, ((f32)(v1->value + (((v2.value - v1->value)) * amount))));
 }
 
-// BytecodeExp.run (bytecode.go:2380), 0 TODO
+// BytecodeExp.run (bytecode.go:2373), 0 TODO
 BytecodeValue BytecodeExp_run(BytecodeExp be, Char* c) {
     return BytecodeExp_runOC(be, c, c);
 }
 
-// BytecodeExp.runOC (bytecode.go:2386), 0 TODO
+// BytecodeExp.runOC (bytecode.go:2389), 0 TODO
 BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
-    int* ip = NULL;
-    if (g_bcIdxDepth < 256) {
-        ip = (&g_bcIdxStack.v[g_bcIdxDepth]);
-    } else {
-        ip = go_new_atomic(int);
-    }
+    int d = g_bcIdxDepth;
     g_bcIdxDepth++;
+    BytecodeStack st = GO_SLICE_HI(BytecodeStack, g_sys.bcStack, 0, g_sys.bcStack.cap);
+    int n = g_sys.bcStack.len;
     {
         int i = 1;
         for (; i <= be.len; i++) {
@@ -82081,24 +82069,11 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
             {
                 OpCode _t3 = opc;
                 switch (_t3) {
-                case 15U: {
-                    if (BytecodeValue_IsUndefined(*BytecodeStack_Top(g_sys.bcStack))) {
-                        if (be.p[i] == 0U) {
-                            i = be.len;
-                        } else {
-                            i += (((int)((u8)be.p[i])) + 1);
-                        }
-                    } else {
-                        i++;
-                    }
-                    break;
-                }
                 case 17U: case 18U: {
-                    if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack)) == ((opc == 17U))) {
+                    if (BytecodeValue_ToB(st.p[(n - 1)]) == ((opc == 17U))) {
                         i++;
                         break;
                     }
-                    /* fallthrough */
                     if (be.p[i] == 0U) {
                         i = be.len;
                     } else {
@@ -82114,435 +82089,9 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                     }
                     break;
                 }
-                case 20U: case 21U: {
-                    if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack)) == ((opc == 20U))) {
-                        i += 4;
-                        break;
-                    }
-                    /* fallthrough */
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 19U: {
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 143U: {
-                    int pn = ((int)BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
-                    {
-                        c = Char_playerTrigger(c, pn, true);
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 144U: {
-                    {
-                        c = Char_parent(c, true);
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 145U: {
-                    {
-                        c = Char_root(c, true);
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 146U: {
-                    i32 v2 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
-                    i32 v1 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
-                    {
-                        c = Char_helperTrigger(c, v1, ((int)v2));
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 147U: {
-                    i32 v2 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
-                    i32 v1 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
-                    {
-                        c = Char_targetTrigger(c, v1, ((int)v2));
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 148U: {
-                    {
-                        c = Char_partner(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)), true);
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 149U: {
-                    {
-                        c = Char_enemy(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 150U: {
-                    {
-                        c = Char_enemyNearTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 151U: {
-                    {
-                        c = Char_playerIDTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)), true);
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 152U: {
-                    {
-                        c = Char_playerIndexTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 154U: {
-                    {
-                        c = Char_p2(c);
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 155U: {
-                    {
-                        c = Char_stateOwner(c);
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 153U: {
-                    {
-                        c = Char_helperIndexTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
-                        if (c != NULL) {
-                            i += 4;
-                            goto _cont1;
-                        }
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 156U: {
-                    break;
-                }
-                case 13U: {
-                    int l = BytecodeExp_PeekLength(be, i);
-                    BytecodeStack_Push(&g_sys.bcStack, BytecodeExp_run(GO_SLICE(BytecodeExp, be, (i + 4), ((i + 4) + l)), c));
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    break;
-                }
-                case 14U: {
-                    int l = BytecodeExp_PeekLength(be, i);
-                    BytecodeStack_Push(&g_sys.bcStack, BytecodeExp_run(GO_SLICE(BytecodeExp, be, (i + 4), ((i + 4) + l)), oc));
-                    i += (BytecodeExp_PeekLength(be, i) + 4);
-                    goto _cont1;
-                    break;
-                }
-                case 197U: case 198U: case 199U: {
-                    i32 n = ((i32)((i8)be.p[i]));
-                    {
-                        OpCode _t4 = opc;
-                        switch (_t4) {
-                        case 197U: {
-                            c = Char_enemy(c, n);
-                            break;
-                        }
-                        case 198U: {
-                            c = Char_enemyNearTrigger(c, n);
-                            break;
-                        }
-                        default: {
-                            c = Char_partner(c, n, true);
-                            break;
-                        }
-                        }
-                    }
-                    if (c != NULL) {
-                        i += 6;
-                        goto _cont1;
-                    }
-                    BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
-                    i += (6 + BytecodeExp_PeekLength(be, (i + 2)));
-                    break;
-                }
-                case 200U: {
-                    (*ip) = i;
-                    BytecodeExp_run_const(be, c, ip, oc);
-                    BytecodeValue v2 = (BytecodeValue){4, ((f64)BytecodeExp_readInt32At(be, (i + 2)))};
-                    if (be.p[(i + 6)] == 22U) {
-                        BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    } else {
-                        BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    }
-                    i += 7;
-                    break;
-                }
-                case 201U: {
-                    BytecodeExp_blnot(be, BytecodeStack_Top(g_sys.bcStack));
-                    i = fn_jz8pTail(be, (i + 1));
-                    break;
-                }
-                case 202U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_bland(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    i = fn_jz8pTail(be, (i + 1));
-                    break;
-                }
-                case 195U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
-                    i += 6;
-                    goto _cont1;
-                    break;
-                }
-                case 196U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, fn_bcI32(be, i));
-                    i += 9;
-                    goto _cont1;
-                    break;
-                }
-                case 5U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
-                    i++;
-                    break;
-                }
-                case 162U: {
-                    break;
-                }
-                case 163U: {
-                    BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, ((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 164U: {
-                    BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, ((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 165U: {
-                    BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, ((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 166U: {
-                    BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 167U: {
-                    BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 168U: {
-                    BytecodeExp_lt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 169U: {
-                    BytecodeExp_gt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 170U: {
-                    BytecodeExp_le(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 171U: {
-                    BytecodeExp_ge(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
-                    i += 2;
-                    break;
-                }
-                case 174U: {
-                    BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
-                    i += 5;
-                    break;
-                }
-                case 175U: {
-                    BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
-                    i += 5;
-                    break;
-                }
-                case 176U: {
-                    BytecodeExp_lt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
-                    i += 5;
-                    break;
-                }
-                case 177U: {
-                    BytecodeExp_gt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
-                    i += 5;
-                    break;
-                }
-                case 178U: {
-                    BytecodeExp_le(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
-                    i += 5;
-                    break;
-                }
-                case 179U: {
-                    BytecodeExp_ge(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
-                    i += 5;
-                    break;
-                }
-                case 180U: case 181U: case 182U: case 183U: {
-                    BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))), fn_BytecodeInt(((i32)((i8)be.p[(i + 1)]))), ((opc - 180U) + 28U));
-                    i += 4;
-                    break;
-                }
-                case 184U: case 185U: case 186U: case 187U: {
-                    BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)), fn_BytecodeInt(fn_bcI32(be, (i + 4))), ((opc - 184U) + 28U));
-                    i += 10;
-                    break;
-                }
-                case 188U: case 189U: case 190U: case 191U: case 192U: {
-                    int n = 0;
-                    {
-                        OpCode _t5 = opc;
-                        switch (_t5) {
-                        case 188U: {
-                            BytecodeExp_pushTrigger(be, c, be.p[i]);
-                            BytecodeExp_cmpConst(be, be.p[(i + 1)], fn_BytecodeInt(((i32)((i8)be.p[(i + 2)]))));
-                            n = 6;
-                            break;
-                        }
-                        case 189U: {
-                            BytecodeExp_pushTrigger(be, c, be.p[i]);
-                            BytecodeExp_cmpConst(be, be.p[(i + 1)], fn_BytecodeInt(fn_bcI32(be, (i + 2))));
-                            n = 9;
-                            break;
-                        }
-                        case 190U: {
-                            BytecodeExp_pushTrigger(be, c, be.p[i]);
-                            BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[(i + 2)]))), fn_BytecodeInt(((i32)((i8)be.p[(i + 3)]))), be.p[(i + 1)]);
-                            n = 8;
-                            break;
-                        }
-                        case 191U: {
-                            BytecodeExp_pushTrigger(be, c, be.p[i]);
-                            BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, (i + 2))), fn_BytecodeInt(fn_bcI32(be, (i + 6))), be.p[(i + 1)]);
-                            n = 14;
-                            break;
-                        }
-                        case 192U: {
-                            i32 v = ((i32)((i8)be.p[(i + 1)]));
-                            {
-                                OpCode _t6 = be.p[i];
-                                switch (_t6) {
-                                case 163U: {
-                                    BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, v));
-                                    break;
-                                }
-                                case 164U: {
-                                    BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, v));
-                                    break;
-                                }
-                                default: {
-                                    BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, v));
-                                    break;
-                                }
-                                }
-                            }
-                            BytecodeExp_cmpConst(be, be.p[(i + 2)], fn_BytecodeInt(((i32)((i8)be.p[(i + 3)]))));
-                            n = 8;
-                            break;
-                        }
-                        }
-                    }
-                    if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack))) {
-                        BytecodeStack_Pop(&g_sys.bcStack);
-                        i += n;
-                        break;
-                    }
-                    i = be.len;
-                    break;
-                }
-                case 193U: case 194U: {
-                    {
-                        BytecodeValue* t = BytecodeStack_Top(g_sys.bcStack);
-                        if (BytecodeValue_ToB(*t) == ((opc == 194U))) {
-                            if (g_scCheck) {
-                                fn_scCheckSkip(be, i, c, oc);
-                            }
-                            BytecodeValue_SetB(t, (opc == 194U));
-                            if (be.p[i] == 0U) {
-                                i = be.len;
-                            } else {
-                                i += (((int)((u8)be.p[i])) + 1);
-                            }
-                            break;
-                        }
-                    }
-                    i++;
-                    break;
-                }
                 case 172U: case 173U: {
-                    if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack)) == ((opc == 172U))) {
-                        BytecodeStack_Pop(&g_sys.bcStack);
+                    if (BytecodeValue_ToB(st.p[(n - 1)]) == ((opc == 172U))) {
+                        n--;
                         i += 2;
                         break;
                     }
@@ -82553,671 +82102,450 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
                     }
                     break;
                 }
-                case 6U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, fn_bcI32(be, i));
-                    i += 4;
+                case 193U: case 194U: {
+                    if (BytecodeValue_ToB(st.p[(n - 1)]) == ((opc == 194U))) {
+                        if (g_scCheck) {
+                            g_sys.bcStack = GO_SLICE_HI(BytecodeStack, st, 0, n);
+                            fn_scCheckSkip(be, i, c, oc);
+                            BytecodeStack _t4 = GO_SLICE_HI(BytecodeStack, g_sys.bcStack, 0, g_sys.bcStack.cap);
+                            int _t5 = g_sys.bcStack.len;
+                            st = _t4;
+                            n = _t5;
+                        }
+                        BytecodeValue_SetB(&st.p[(n - 1)], (opc == 194U));
+                        if (be.p[i] == 0U) {
+                            i = be.len;
+                        } else {
+                            i += (((int)((u8)be.p[i])) + 1);
+                        }
+                        break;
+                    }
+                    i++;
                     break;
                 }
-                case 7U: {
-                    BytecodeStack_PushI64(&g_sys.bcStack, fn_bcI64(be, i));
-                    i += 8;
+                case 201U: {
+                    BytecodeExp_blnot(be, (&st.p[(n - 1)]));
+                    i++;
+                    if (BytecodeValue_ToB(st.p[(n - 1)])) {
+                        n--;
+                        i += 2;
+                    } else {
+                        if (be.p[i] == 0U) {
+                            i = be.len;
+                        } else {
+                            i += (((int)((u8)be.p[i])) + 1);
+                        }
+                    }
+                    break;
+                }
+                case 202U: {
+                    n--;
+                    BytecodeExp_bland(be, (&st.p[(n - 1)]), st.p[n]);
+                    i++;
+                    if (BytecodeValue_ToB(st.p[(n - 1)])) {
+                        n--;
+                        i += 2;
+                    } else {
+                        if (be.p[i] == 0U) {
+                            i = be.len;
+                        } else {
+                            i += (((int)((u8)be.p[i])) + 1);
+                        }
+                    }
+                    break;
+                }
+                case 195U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(((i32)((i8)be.p[i])));
+                    n++;
+                    i += 6;
+                    goto _cont1;
+                    break;
+                }
+                case 196U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(fn_bcI32(be, i));
+                    n++;
+                    i += 9;
+                    goto _cont1;
+                    break;
+                }
+                case 5U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(((i32)((i8)be.p[i])));
+                    n++;
+                    i++;
+                    break;
+                }
+                case 6U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(fn_bcI32(be, i));
+                    n++;
+                    i += 4;
                     break;
                 }
                 case 8U: {
                     f32 flo = math_Float32frombits((((((u32)be.p[i]) | (u32)((((u32)be.p[(i + 1)])) << 8)) | (u32)((((u32)be.p[(i + 2)])) << 16)) | (u32)((((u32)be.p[(i + 3)])) << 24)));
-                    BytecodeStack_PushF(&g_sys.bcStack, flo);
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeFloat(flo);
+                    n++;
                     i += 4;
                     break;
                 }
                 case 9U: {
-                    BytecodeStack_Push(&g_sys.bcStack, (BytecodeValue){4, ((f64)BytecodeExp_readInt32At(be, i))});
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = (BytecodeValue){4, ((f64)BytecodeExp_readInt32At(be, i))};
+                    n++;
                     i += 4;
                     break;
                 }
-                case 32U: {
-                    BytecodeExp_neg(be, BytecodeStack_Top(g_sys.bcStack));
+                case 162U: case 156U: {
                     break;
                 }
-                case 37U: {
-                    BytecodeExp_bwnot(be, BytecodeStack_Top(g_sys.bcStack));
+                case 163U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = Char_varGet(c, ((i32)((i8)be.p[i])));
+                    n++;
+                    i += 2;
                     break;
                 }
-                case 33U: {
-                    BytecodeExp_blnot(be, BytecodeStack_Top(g_sys.bcStack));
+                case 164U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = Char_fvarGet(c, ((i32)((i8)be.p[i])));
+                    n++;
+                    i += 2;
                     break;
                 }
-                case 46U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_pow(be, BytecodeStack_Top(g_sys.bcStack), v2, g_sys.workingState->playerNo);
+                case 165U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = Char_sysVarGet(c, ((i32)((i8)be.p[i])));
+                    n++;
+                    i += 2;
                     break;
                 }
-                case 43U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_mul(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 166U: {
+                    BytecodeExp_eq(be, (&st.p[(n - 1)]), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+                    i += 2;
                     break;
                 }
-                case 44U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_div(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 167U: {
+                    BytecodeExp_ne(be, (&st.p[(n - 1)]), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+                    i += 2;
                     break;
                 }
-                case 45U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_mod(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 168U: {
+                    BytecodeExp_lt(be, (&st.p[(n - 1)]), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+                    i += 2;
                     break;
                 }
-                case 41U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_add(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 169U: {
+                    BytecodeExp_gt(be, (&st.p[(n - 1)]), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+                    i += 2;
                     break;
                 }
-                case 42U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_sub(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 170U: {
+                    BytecodeExp_le(be, (&st.p[(n - 1)]), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+                    i += 2;
                     break;
                 }
-                case 24U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_gt(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 171U: {
+                    BytecodeExp_ge(be, (&st.p[(n - 1)]), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+                    i += 2;
                     break;
                 }
-                case 25U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_ge(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 174U: {
+                    BytecodeExp_eq(be, (&st.p[(n - 1)]), fn_BytecodeInt(fn_bcI32(be, i)));
+                    i += 5;
                     break;
                 }
-                case 26U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_lt(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 175U: {
+                    BytecodeExp_ne(be, (&st.p[(n - 1)]), fn_BytecodeInt(fn_bcI32(be, i)));
+                    i += 5;
                     break;
                 }
-                case 27U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_le(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 176U: {
+                    BytecodeExp_lt(be, (&st.p[(n - 1)]), fn_BytecodeInt(fn_bcI32(be, i)));
+                    i += 5;
+                    break;
+                }
+                case 177U: {
+                    BytecodeExp_gt(be, (&st.p[(n - 1)]), fn_BytecodeInt(fn_bcI32(be, i)));
+                    i += 5;
+                    break;
+                }
+                case 178U: {
+                    BytecodeExp_le(be, (&st.p[(n - 1)]), fn_BytecodeInt(fn_bcI32(be, i)));
+                    i += 5;
+                    break;
+                }
+                case 179U: {
+                    BytecodeExp_ge(be, (&st.p[(n - 1)]), fn_BytecodeInt(fn_bcI32(be, i)));
+                    i += 5;
+                    break;
+                }
+                case 180U: case 181U: case 182U: case 183U: {
+                    BytecodeExp_rangeCheck(be, (&st.p[(n - 1)]), fn_BytecodeInt(((i32)((i8)be.p[i]))), fn_BytecodeInt(((i32)((i8)be.p[(i + 1)]))), ((opc - 180U) + 28U));
+                    i += 4;
+                    break;
+                }
+                case 184U: case 185U: case 186U: case 187U: {
+                    BytecodeExp_rangeCheck(be, (&st.p[(n - 1)]), fn_BytecodeInt(fn_bcI32(be, i)), fn_BytecodeInt(fn_bcI32(be, (i + 4))), ((opc - 184U) + 28U));
+                    i += 10;
                     break;
                 }
                 case 28U: case 29U: case 30U: case 31U: {
-                    BytecodeValue v3 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), v2, v3, opc);
+                    n -= 2;
+                    BytecodeExp_rangeCheck(be, (&st.p[(n - 1)]), st.p[n], st.p[(n + 1)], opc);
                     break;
                 }
-                case 22U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 32U: {
+                    BytecodeExp_neg(be, (&st.p[(n - 1)]));
                     break;
                 }
-                case 23U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    break;
-                }
-                case 38U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_bwand(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    break;
-                }
-                case 39U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_bwxor(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    break;
-                }
-                case 40U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_bwor(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    break;
-                }
-                case 34U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_bland(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    break;
-                }
-                case 35U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_blxor(be, BytecodeStack_Top(g_sys.bcStack), v2);
-                    break;
-                }
-                case 36U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_blor(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 33U: {
+                    BytecodeExp_blnot(be, (&st.p[(n - 1)]));
                     break;
                 }
                 case 47U: {
-                    BytecodeExp_abs(be, BytecodeStack_Top(g_sys.bcStack));
+                    BytecodeExp_abs(be, (&st.p[(n - 1)]));
                     break;
                 }
-                case 48U: {
-                    BytecodeExp_exp(be, BytecodeStack_Top(g_sys.bcStack));
+                case 43U: {
+                    n--;
+                    BytecodeExp_mul(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 49U: {
-                    BytecodeExp_ln(be, BytecodeStack_Top(g_sys.bcStack));
+                case 44U: {
+                    n--;
+                    BytecodeExp_div(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 50U: {
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeExp_log(be, BytecodeStack_Top(g_sys.bcStack), v2);
+                case 45U: {
+                    n--;
+                    BytecodeExp_mod(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 51U: {
-                    BytecodeExp_cos(be, BytecodeStack_Top(g_sys.bcStack));
+                case 41U: {
+                    n--;
+                    BytecodeExp_add(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 52U: {
-                    BytecodeExp_sin(be, BytecodeStack_Top(g_sys.bcStack));
+                case 42U: {
+                    n--;
+                    BytecodeExp_sub(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 53U: {
-                    BytecodeExp_tan(be, BytecodeStack_Top(g_sys.bcStack));
+                case 24U: {
+                    n--;
+                    BytecodeExp_gt(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 54U: {
-                    BytecodeExp_acos(be, BytecodeStack_Top(g_sys.bcStack));
+                case 25U: {
+                    n--;
+                    BytecodeExp_ge(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 55U: {
-                    BytecodeExp_asin(be, BytecodeStack_Top(g_sys.bcStack));
+                case 26U: {
+                    n--;
+                    BytecodeExp_lt(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 56U: {
-                    BytecodeExp_atan(be, BytecodeStack_Top(g_sys.bcStack));
+                case 27U: {
+                    n--;
+                    BytecodeExp_le(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 57U: {
-                    BytecodeExp_floor(be, BytecodeStack_Top(g_sys.bcStack));
+                case 22U: {
+                    n--;
+                    BytecodeExp_eq(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
-                case 58U: {
-                    BytecodeExp_ceil(be, BytecodeStack_Top(g_sys.bcStack));
+                case 23U: {
+                    n--;
+                    BytecodeExp_ne(be, (&st.p[(n - 1)]), st.p[n]);
+                    break;
+                }
+                case 38U: {
+                    n--;
+                    BytecodeExp_bwand(be, (&st.p[(n - 1)]), st.p[n]);
+                    break;
+                }
+                case 40U: {
+                    n--;
+                    BytecodeExp_bwor(be, (&st.p[(n - 1)]), st.p[n]);
+                    break;
+                }
+                case 34U: {
+                    n--;
+                    BytecodeExp_bland(be, (&st.p[(n - 1)]), st.p[n]);
+                    break;
+                }
+                case 36U: {
+                    n--;
+                    BytecodeExp_blor(be, (&st.p[(n - 1)]), st.p[n]);
                     break;
                 }
                 case 59U: {
-                    BytecodeValue v3 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
-                    BytecodeValue* cond = BytecodeStack_Top(g_sys.bcStack);
-                    if (BytecodeValue_ToB(*cond)) {
-                        (*cond) = v2;
+                    n -= 2;
+                    if (BytecodeValue_ToB(st.p[(n - 1)])) {
+                        st.p[(n - 1)] = st.p[n];
                     } else {
-                        (*cond) = v3;
+                        st.p[(n - 1)] = st.p[(n + 1)];
                     }
                     break;
                 }
                 case 10U: {
-                    BytecodeStack_Pop(&g_sys.bcStack);
-                    break;
-                }
-                case 11U: {
-                    BytecodeStack_Dup(&g_sys.bcStack);
-                    break;
-                }
-                case 12U: {
-                    BytecodeStack_Swap(&g_sys.bcStack);
-                    break;
-                }
-                case 132U: {
-                    if (Char_asf(c, 65536U)) {
-                        BytecodeStack_PushI(&g_sys.bcStack, 0);
-                    } else {
-                        BytecodeStack_PushI(&g_sys.bcStack, go_f2i32(Char_getAILevel(c)));
-                    }
-                    break;
-                }
-                case 81U: {
-                    BytecodeStack_PushB(&g_sys.bcStack, Char_alive(c));
-                    break;
-                }
-                case 78U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->animNo);
-                    break;
-                }
-                case 63U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_animElemNo(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 62U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_animElemTime(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 79U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_animExist(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 61U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_animTime(c));
-                    break;
-                }
-                case 107U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_backEdge(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 109U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_backEdgeBodyDist(c) * ((c->localscl / oc->localscl)))));
-                    break;
-                }
-                case 108U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_backEdgeDist(c) * ((c->localscl / oc->localscl)))));
-                    break;
-                }
-                case 116U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_bottomEdge(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 117U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (g_sys.SystemStateVars_.cam.Pos.v[0] / oc->localscl));
-                    break;
-                }
-                case 118U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, ((((g_sys.SystemStateVars_.cam.Pos.v[1] + g_sys.SystemStateVars_.cam.stageCamera_.aspectcorrection) + g_sys.SystemStateVars_.cam.stageCamera_.zoomanchorcorrection)) / oc->localscl));
-                    break;
-                }
-                case 119U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, g_sys.SystemStateVars_.cam.Scale);
-                    break;
-                }
-                case 86U: {
-                    BytecodeStack_PushB(&g_sys.bcStack, Char_canRecover(c));
-                    break;
-                }
-                case 67U: {
-                    BytecodeValue cmdName = BytecodeStack_Pop(&g_sys.bcStack);
-                    bool ok = false;
-                    if ((c->cmd.p != 0) && (cmdName.vtype == 4)) {
-                        int redir = c->playerNo;
-                        int pno = c->playerNo;
-                        if (((!go_streq(BytecodeValue_ToS(cmdName), GOSTR("recovery"))) && (Char_stWgi(oc)->ikemenver.v[0] == 0U)) && (Char_stWgi(oc)->ikemenver.v[1] == 0U)) {
-                            redir = oc->ss.sb->playerNo;
-                            pno = c->ss.sb->playerNo;
-                        }
-                        Ret_int__bool _t7 = CommandList_lookupName(&c->cmd.p[redir], BytecodeValue_ToS(cmdName));
-                        int cmdPos = _t7.r0;
-                        bool found = _t7.r1;
-                        ok = (found && Char_command(c, pno, cmdPos));
-                    }
-                    BytecodeStack_PushB(&g_sys.bcStack, ok);
-                    break;
-                }
-                case 68U: {
-                    BytecodeValue cmdName = BytecodeStack_Pop(&g_sys.bcStack);
-                    bool ok = false;
-                    if ((c->cmd.p != 0) && (cmdName.vtype == 4)) {
-                        Ret_int__bool _t8 = CommandList_lookupName(&c->cmd.p[g_sys.workingState->playerNo], BytecodeValue_ToS(cmdName));
-                        int cmdPos = _t8.r0;
-                        bool found = _t8.r1;
-                        ok = (found && Char_command(c, g_sys.workingState->playerNo, cmdPos));
-                    }
-                    BytecodeStack_PushB(&g_sys.bcStack, ok);
-                    break;
-                }
-                case 66U: {
-                    BytecodeStack_PushB(&g_sys.bcStack, Char_ctrl(c));
-                    break;
-                }
-                case 77U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, go_f2i32(c->facing));
-                    break;
-                }
-                case 110U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_frontEdge(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 112U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_frontEdgeBodyDist(c) * ((c->localscl / oc->localscl)))));
-                    break;
-                }
-                case 111U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_frontEdgeDist(c) * ((c->localscl / oc->localscl)))));
-                    break;
-                }
-                case 121U: {
-                    if (((Char_stWgi(c)->mugenver.v[0] == 1U) && (Char_stWgi(c)->mugenver.v[1] == 0U)) && (TypedValue_ToF(Map_GoString_TypedValue_get(&Char_gi(c)->constants, GOSTR("legacy.gamedistancespec"), NULL)) == 0x1p+00f)) {
-                        BytecodeStack_PushF(&g_sys.bcStack, Char_screenHeight(c));
-                    } else {
-                        BytecodeStack_PushF(&g_sys.bcStack, Char_gameHeight(c));
-                    }
-                    break;
-                }
-                case 128U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, System_gameTime(&g_sys));
-                    break;
-                }
-                case 120U: {
-                    if (((Char_stWgi(c)->mugenver.v[0] == 1U) && (Char_stWgi(c)->mugenver.v[1] == 0U)) && (TypedValue_ToF(Map_GoString_TypedValue_get(&Char_gi(c)->constants, GOSTR("legacy.gamedistancespec"), NULL)) == 0x1p+00f)) {
-                        BytecodeStack_PushF(&g_sys.bcStack, Char_screenWidth(c));
-                    } else {
-                        BytecodeStack_PushF(&g_sys.bcStack, Char_gameWidth(c));
-                    }
-                    break;
-                }
-                case 134U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->CharSystemVar_.hitCount);
-                    break;
-                }
-                case 97U: {
-                    i32 attr = BytecodeExp_readInt32At(be, i);
-                    i += 4;
-                    if (attr == -2) {
-                        attr = fn_evalTriggerAttr(c, BytecodeStack_Pop(&g_sys.bcStack));
-                    }
-                    if (attr == -1) {
-                        BytecodeStack_PushS(&g_sys.bcStack, fn_attrString(c->hitdef.attr));
-                    } else {
-                        BytecodeStack_PushB(&g_sys.bcStack, Char_hitDefAttr(c, attr));
-                    }
-                    break;
-                }
-                case 139U: {
-                    BytecodeStack_PushB(&g_sys.bcStack, c->ghv.fallflag);
-                    break;
-                }
-                case 137U: {
-                    BytecodeStack_PushB(&g_sys.bcStack, Char_hitOver(c));
-                    break;
-                }
-                case 136U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->CharSystemVar_.hitPauseTime);
-                    break;
-                }
-                case 138U: {
-                    BytecodeStack_PushB(&g_sys.bcStack, Char_hitShakeOver(c));
-                    break;
-                }
-                case 140U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, ((c->ghv.xvel * c->facing) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 141U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (c->ghv.yvel * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 142U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (c->ghv.zvel * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 126U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->id);
-                    break;
-                }
-                case 98U: {
-                    BytecodeStack_PushB(&g_sys.bcStack, c->inguarddist);
-                    break;
-                }
-                case 89U: {
-                    i32 index = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
-                    i32 id = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
-                    BytecodeStack_PushB(&g_sys.bcStack, Char_isHelper(c, id, ((int)index)));
-                    break;
-                }
-                case 113U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_leftEdge(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 82U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->life);
-                    break;
-                }
-                case 83U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->lifeMax);
-                    break;
-                }
-                case 99U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_moveContact(c));
-                    break;
-                }
-                case 101U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_moveGuarded(c));
-                    break;
-                }
-                case 100U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_moveHit(c));
-                    break;
-                }
-                case 102U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_moveReversed(c));
-                    break;
-                }
-                case 65U: {
-                    if (be.p[i] == 0U) {
-                        BytecodeStack_PushS(&g_sys.bcStack, MoveType_TriggerValue(c->ss.moveType));
-                    } else {
-                        BytecodeStack_PushB(&g_sys.bcStack, (c->ss.moveType == (MoveType)((((MoveType)be.p[i])) << 15)));
-                    }
-                    i++;
-                    break;
-                }
-                case 130U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_numEnemy(c));
-                    break;
-                }
-                case 91U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_numExplod(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 90U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_numHelper(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 131U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_numPartner(c));
-                    break;
-                }
-                case 93U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_numProj(c));
-                    break;
-                }
-                case 92U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_numProjID(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 129U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_numTarget(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 94U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_numText(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 133U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_gi(c)->palno);
-                    break;
-                }
-                case 70U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (((c->pos.v[0] * ((c->localscl / oc->localscl))) - (g_sys.SystemStateVars_.cam.Pos.v[0] / oc->localscl))));
-                    break;
-                }
-                case 71U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, ((((c->pos.v[1] - c->groundLevel) - c->platformPosY)) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 84U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_getPower(c));
-                    break;
-                }
-                case 85U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->powerMax);
-                    break;
-                }
-                case 127U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = System_playerIDExist(&g_sys, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 125U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->ss.prevno);
-                    break;
-                }
-                case 106U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_projCancelTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 103U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_projContactTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 105U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_projGuardedTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 104U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_projHitTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 69U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, fn_Rand(0, 999));
-                    break;
-                }
-                case 114U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_rightEdge(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 87U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, System_roundState(&g_sys));
-                    break;
-                }
-                case 88U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, Char_roundsWon(c));
-                    break;
-                }
-                case 123U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, Char_screenHeight(c));
-                    break;
-                }
-                case 75U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_screenPosX(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 76U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_screenPosY(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 122U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, Char_screenWidth(c));
-                    break;
-                }
-                case 80U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_selfAnimExist(c, (*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 124U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->ss.no);
-                    break;
-                }
-                case 64U: {
-                    if (be.p[i] == 0U) {
-                        BytecodeStack_PushS(&g_sys.bcStack, StateType_TriggerValue(c->ss.stateType));
-                    } else {
-                        BytecodeStack_PushB(&g_sys.bcStack, (c->ss.stateType == ((StateType)be.p[i])));
-                    }
-                    i++;
-                    break;
-                }
-                case 95U: {
-                    if (be.p[i] == 255U) {
-                        if (c->teamside == -1) {
-                            BytecodeStack_PushS(&g_sys.bcStack, TeamMode_TriggerValue(0));
-                        } else {
-                            BytecodeStack_PushS(&g_sys.bcStack, TeamMode_TriggerValue(g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)]));
-                        }
-                    } else {
-                        if (c->teamside == -1) {
-                            BytecodeStack_PushB(&g_sys.bcStack, (0 == ((TeamMode)be.p[i])));
-                        } else {
-                            BytecodeStack_PushB(&g_sys.bcStack, (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] == ((TeamMode)be.p[i])));
-                        }
-                    }
-                    i++;
-                    break;
-                }
-                case 96U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, (((i32)c->teamside) + 1));
-                    break;
-                }
-                case 60U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->ss.time);
-                    break;
-                }
-                case 115U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (Char_topEdge(c) * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 135U: {
-                    BytecodeStack_PushI(&g_sys.bcStack, c->CharSystemVar_.uniqHitCount);
-                    break;
-                }
-                case 72U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (c->vel.v[0] * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 73U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (c->vel.v[1] * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 74U: {
-                    BytecodeStack_PushF(&g_sys.bcStack, (c->vel.v[2] * ((c->localscl / oc->localscl))));
-                    break;
-                }
-                case 158U: {
-                    (*ip) = i;
-                    BytecodeExp_run_assign(be, c, ip);
-                    if (g_scCheck) {
-                        fn_scCheckSub(be, i, (*ip));
-                    }
-                    i = (*ip);
-                    break;
-                }
-                case 157U: {
-                    (*ip) = i;
-                    BytecodeExp_run_const(be, c, ip, oc);
-                    if (g_scCheck) {
-                        fn_scCheckSub(be, i, (*ip));
-                    }
-                    i = (*ip);
-                    break;
-                }
-                case 159U: {
-                    (*ip) = i;
-                    BytecodeExp_run_ex(be, c, ip, oc);
-                    if (g_scCheck) {
-                        fn_scCheckSub(be, i, (*ip));
-                    }
-                    i = (*ip);
-                    break;
-                }
-                case 160U: {
-                    (*ip) = i;
-                    BytecodeExp_run_ex2(be, c, ip, oc);
-                    if (g_scCheck) {
-                        fn_scCheckSub(be, i, (*ip));
-                    }
-                    i = (*ip);
-                    break;
-                }
-                case 161U: {
-                    (*ip) = i;
-                    BytecodeExp_run_ex3(be, c, ip, oc);
-                    if (g_scCheck) {
-                        fn_scCheckSub(be, i, (*ip));
-                    }
-                    i = (*ip);
+                    n--;
                     break;
                 }
                 case 0U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_varGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
-                    break;
-                }
-                case 1U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_sysVarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                    st.p[(n - 1)] = Char_varGet(c, BytecodeValue_ToI(st.p[(n - 1)]));
                     break;
                 }
                 case 2U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_fvarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                    st.p[(n - 1)] = Char_fvarGet(c, BytecodeValue_ToI(st.p[(n - 1)]));
                     break;
                 }
-                case 3U: {
-                    (*BytecodeStack_Top(g_sys.bcStack)) = Char_sysFvarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+                case 124U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(c->ss.no);
+                    n++;
                     break;
                 }
-                case 4U: {
-                    BytecodeStack_Push(&g_sys.bcStack, g_sys.bcVar.p[((u8)be.p[i])]);
-                    i++;
+                case 125U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(c->ss.prevno);
+                    n++;
+                    break;
+                }
+                case 60U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(c->ss.time);
+                    n++;
+                    break;
+                }
+                case 78U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(c->animNo);
+                    n++;
+                    break;
+                }
+                case 82U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(c->life);
+                    n++;
+                    break;
+                }
+                case 136U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(c->CharSystemVar_.hitPauseTime);
+                    n++;
+                    break;
+                }
+                case 87U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(System_roundState(&g_sys));
+                    n++;
+                    break;
+                }
+                case 130U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(Char_numEnemy(c));
+                    n++;
+                    break;
+                }
+                case 131U: {
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeInt(Char_numPartner(c));
+                    n++;
+                    break;
+                }
+                case 90U: {
+                    st.p[(n - 1)] = Char_numHelper(c, st.p[(n - 1)]);
+                    break;
+                }
+                case 91U: {
+                    st.p[(n - 1)] = Char_numExplod(c, st.p[(n - 1)]);
+                    break;
+                }
+                case 92U: {
+                    st.p[(n - 1)] = Char_numProjID(c, st.p[(n - 1)]);
+                    break;
+                }
+                case 89U: {
+                    n -= 2;
+                    i32 index = BytecodeValue_ToI(st.p[(n + 1)]);
+                    i32 id = BytecodeValue_ToI(st.p[n]);
+                    st.p[n] = fn_BytecodeBool(Char_isHelper(c, id, ((int)index)));
+                    n++;
+                    break;
+                }
+                case 145U: {
+                    {
+                        c = Char_root(c, true);
+                        if (c != NULL) {
+                            i += 4;
+                            goto _cont1;
+                        }
+                    }
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeUndefined();
+                    n++;
+                    i += (BytecodeExp_PeekLength(be, i) + 4);
+                    break;
+                }
+                case 197U: case 198U: case 199U: {
+                    i32 k = ((i32)((i8)be.p[i]));
+                    {
+                        OpCode _t6 = opc;
+                        switch (_t6) {
+                        case 197U: {
+                            c = Char_enemy(c, k);
+                            break;
+                        }
+                        case 198U: {
+                            c = Char_enemyNearTrigger(c, k);
+                            break;
+                        }
+                        default: {
+                            c = Char_partner(c, k, true);
+                            break;
+                        }
+                        }
+                    }
+                    if (c != NULL) {
+                        i += 6;
+                        goto _cont1;
+                    }
+                    st = fn_bcLRoom(st, n);
+                    st.p[n] = fn_BytecodeUndefined();
+                    n++;
+                    i += (6 + BytecodeExp_PeekLength(be, (i + 2)));
+                    break;
+                }
+                case 188U: case 189U: case 190U: case 191U: case 192U: case 200U: case 158U: case 157U: case 159U: case 160U: case 161U: {
+                    g_sys.bcStack = GO_SLICE_HI(BytecodeStack, st, 0, n);
+                    i = BytecodeExp_runOCx(be, c, oc, d, i, opc);
+                    BytecodeStack _t7 = GO_SLICE_HI(BytecodeStack, g_sys.bcStack, 0, g_sys.bcStack.cap);
+                    int _t8 = g_sys.bcStack.len;
+                    st = _t7;
+                    n = _t8;
+                    break;
+                }
+                default: {
+                    g_sys.bcStack = GO_SLICE_HI(BytecodeStack, st, 0, n);
+                    bool keep = false;
+                    Ret_int__bool__CharPtr _t9 = BytecodeExp_runOp(be, c, oc, d, i, opc);
+                    i = _t9.r0;
+                    keep = _t9.r1;
+                    c = _t9.r2;
+                    BytecodeStack _t10 = GO_SLICE_HI(BytecodeStack, g_sys.bcStack, 0, g_sys.bcStack.cap);
+                    int _t11 = g_sys.bcStack.len;
+                    st = _t10;
+                    n = _t11;
+                    if (keep) {
+                        goto _cont1;
+                    }
                     break;
                 }
                 }
@@ -83226,11 +82554,1298 @@ BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc) {
             _cont1:;
         }
     }
+    n--;
+    BytecodeValue v = st.p[n];
+    g_sys.bcStack = GO_SLICE_HI(BytecodeStack, st, 0, n);
     g_bcIdxDepth--;
-    return BytecodeStack_Pop(&g_sys.bcStack);
+    return v;
 }
 
-// BytecodeExp.run_assign (bytecode.go:3137), 0 TODO
+// bcLRoom (bytecode.go:2736), 0 TODO
+inline __attribute__((always_inline)) Slice_BytecodeValue fn_bcLRoom(Slice_BytecodeValue st, int n) {
+    if (n == st.len) {
+        return fn_bcLGrow(st, n);
+    }
+    return st;
+}
+
+// bcLGrow (bytecode.go:2744), 0 TODO
+Slice_BytecodeValue fn_bcLGrow(Slice_BytecodeValue st, int n) {
+    Slice_BytecodeValue s = GO_APPEND(Slice_BytecodeValue, GO_SLICE_HI(Slice_BytecodeValue, st, 0, n), (BytecodeValue){0});
+    return GO_SLICE_HI(Slice_BytecodeValue, s, 0, s.cap);
+}
+
+// bcIP (bytecode.go:2753), 0 TODO
+inline __attribute__((always_inline)) int* fn_bcIP(int d) {
+    if (d < 256) {
+        return (&g_bcIdxStack.v[d]);
+    }
+    return go_new_atomic(int);
+}
+
+// BytecodeExp.runOCx (bytecode.go:2762), 0 TODO
+int BytecodeExp_runOCx(BytecodeExp be, Char* c, Char* oc, int d, int i, OpCode opc) {
+    int* ip = fn_bcIP(d);
+    {
+        OpCode _t1 = opc;
+        switch (_t1) {
+        case 188U: case 189U: case 190U: case 191U: case 192U: {
+            int n = 0;
+            {
+                OpCode _t2 = opc;
+                switch (_t2) {
+                case 188U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_cmpConst(be, be.p[(i + 1)], fn_BytecodeInt(((i32)((i8)be.p[(i + 2)]))));
+                    n = 6;
+                    break;
+                }
+                case 189U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_cmpConst(be, be.p[(i + 1)], fn_BytecodeInt(fn_bcI32(be, (i + 2))));
+                    n = 9;
+                    break;
+                }
+                case 190U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[(i + 2)]))), fn_BytecodeInt(((i32)((i8)be.p[(i + 3)]))), be.p[(i + 1)]);
+                    n = 8;
+                    break;
+                }
+                case 191U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, (i + 2))), fn_BytecodeInt(fn_bcI32(be, (i + 6))), be.p[(i + 1)]);
+                    n = 14;
+                    break;
+                }
+                case 192U: {
+                    i32 v = ((i32)((i8)be.p[(i + 1)]));
+                    {
+                        OpCode _t3 = be.p[i];
+                        switch (_t3) {
+                        case 163U: {
+                            BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, v));
+                            break;
+                        }
+                        case 164U: {
+                            BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, v));
+                            break;
+                        }
+                        default: {
+                            BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, v));
+                            break;
+                        }
+                        }
+                    }
+                    BytecodeExp_cmpConst(be, be.p[(i + 2)], fn_BytecodeInt(((i32)((i8)be.p[(i + 3)]))));
+                    n = 8;
+                    break;
+                }
+                }
+            }
+            if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack))) {
+                BytecodeStack_Pop(&g_sys.bcStack);
+                return (i + n);
+            }
+            return be.len;
+            break;
+        }
+        case 200U: {
+            (*ip) = i;
+            BytecodeExp_run_const(be, c, ip, oc);
+            BytecodeValue v2 = (BytecodeValue){4, ((f64)BytecodeExp_readInt32At(be, (i + 2)))};
+            if (be.p[(i + 6)] == 22U) {
+                BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            } else {
+                BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            }
+            return (i + 7);
+            break;
+        }
+        case 158U: {
+            (*ip) = i;
+            BytecodeExp_run_assign(be, c, ip);
+            break;
+        }
+        case 157U: {
+            (*ip) = i;
+            BytecodeExp_run_const(be, c, ip, oc);
+            break;
+        }
+        case 159U: {
+            (*ip) = i;
+            BytecodeExp_run_ex(be, c, ip, oc);
+            break;
+        }
+        case 160U: {
+            (*ip) = i;
+            BytecodeExp_run_ex2(be, c, ip, oc);
+            break;
+        }
+        default: {
+            (*ip) = i;
+            BytecodeExp_run_ex3(be, c, ip, oc);
+            break;
+        }
+        }
+    }
+    if (g_scCheck) {
+        fn_scCheckSub(be, i, (*ip));
+    }
+    return (*ip);
+}
+
+// BytecodeExp.runOp (bytecode.go:2841), 0 TODO
+Ret_int__bool__CharPtr BytecodeExp_runOp(BytecodeExp be, Char* c, Char* oc, int d, int i, OpCode opc) {
+    int* ip = fn_bcIP(d);
+    {
+        OpCode _t1 = opc;
+        switch (_t1) {
+        case 15U: {
+            if (BytecodeValue_IsUndefined(*BytecodeStack_Top(g_sys.bcStack))) {
+                if (be.p[i] == 0U) {
+                    i = be.len;
+                } else {
+                    i += (((int)((u8)be.p[i])) + 1);
+                }
+            } else {
+                i++;
+            }
+            break;
+        }
+        case 17U: case 18U: {
+            if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack)) == ((opc == 17U))) {
+                i++;
+                break;
+            }
+            /* fallthrough */
+            if (be.p[i] == 0U) {
+                i = be.len;
+            } else {
+                i += (((int)((u8)be.p[i])) + 1);
+            }
+            break;
+        }
+        case 16U: {
+            if (be.p[i] == 0U) {
+                i = be.len;
+            } else {
+                i += (((int)((u8)be.p[i])) + 1);
+            }
+            break;
+        }
+        case 20U: case 21U: {
+            if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack)) == ((opc == 20U))) {
+                i += 4;
+                break;
+            }
+            /* fallthrough */
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 19U: {
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 143U: {
+            int pn = ((int)BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
+            {
+                c = Char_playerTrigger(c, pn, true);
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 144U: {
+            {
+                c = Char_parent(c, true);
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 145U: {
+            {
+                c = Char_root(c, true);
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 146U: {
+            i32 v2 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
+            i32 v1 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
+            {
+                c = Char_helperTrigger(c, v1, ((int)v2));
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 147U: {
+            i32 v2 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
+            i32 v1 = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
+            {
+                c = Char_targetTrigger(c, v1, ((int)v2));
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 148U: {
+            {
+                c = Char_partner(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)), true);
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 149U: {
+            {
+                c = Char_enemy(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 150U: {
+            {
+                c = Char_enemyNearTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 151U: {
+            {
+                c = Char_playerIDTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)), true);
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 152U: {
+            {
+                c = Char_playerIndexTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 154U: {
+            {
+                c = Char_p2(c);
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 155U: {
+            {
+                c = Char_stateOwner(c);
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 153U: {
+            {
+                c = Char_helperIndexTrigger(c, BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack)));
+                if (c != NULL) {
+                    i += 4;
+                    return (Ret_int__bool__CharPtr){i, true, c};
+                }
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 156U: {
+            break;
+        }
+        case 13U: {
+            int l = BytecodeExp_PeekLength(be, i);
+            BytecodeStack_Push(&g_sys.bcStack, BytecodeExp_run(GO_SLICE_HI(BytecodeExp, be, (i + 4), ((i + 4) + l)), c));
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            break;
+        }
+        case 14U: {
+            int l = BytecodeExp_PeekLength(be, i);
+            BytecodeStack_Push(&g_sys.bcStack, BytecodeExp_run(GO_SLICE_HI(BytecodeExp, be, (i + 4), ((i + 4) + l)), oc));
+            i += (BytecodeExp_PeekLength(be, i) + 4);
+            return (Ret_int__bool__CharPtr){i, true, c};
+            break;
+        }
+        case 197U: case 198U: case 199U: {
+            i32 n = ((i32)((i8)be.p[i]));
+            {
+                OpCode _t2 = opc;
+                switch (_t2) {
+                case 197U: {
+                    c = Char_enemy(c, n);
+                    break;
+                }
+                case 198U: {
+                    c = Char_enemyNearTrigger(c, n);
+                    break;
+                }
+                default: {
+                    c = Char_partner(c, n, true);
+                    break;
+                }
+                }
+            }
+            if (c != NULL) {
+                i += 6;
+                return (Ret_int__bool__CharPtr){i, true, c};
+            }
+            BytecodeStack_Push(&g_sys.bcStack, fn_BytecodeUndefined());
+            i += (6 + BytecodeExp_PeekLength(be, (i + 2)));
+            break;
+        }
+        case 200U: {
+            (*ip) = i;
+            BytecodeExp_run_const(be, c, ip, oc);
+            BytecodeValue v2 = (BytecodeValue){4, ((f64)BytecodeExp_readInt32At(be, (i + 2)))};
+            if (be.p[(i + 6)] == 22U) {
+                BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            } else {
+                BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            }
+            i += 7;
+            break;
+        }
+        case 201U: {
+            BytecodeExp_blnot(be, BytecodeStack_Top(g_sys.bcStack));
+            i = fn_jz8pTail(be, (i + 1));
+            break;
+        }
+        case 202U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_bland(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            i = fn_jz8pTail(be, (i + 1));
+            break;
+        }
+        case 195U: {
+            BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
+            i += 6;
+            return (Ret_int__bool__CharPtr){i, true, c};
+            break;
+        }
+        case 196U: {
+            BytecodeStack_PushI(&g_sys.bcStack, fn_bcI32(be, i));
+            i += 9;
+            return (Ret_int__bool__CharPtr){i, true, c};
+            break;
+        }
+        case 5U: {
+            BytecodeStack_PushI(&g_sys.bcStack, ((i32)((i8)be.p[i])));
+            i++;
+            break;
+        }
+        case 162U: {
+            break;
+        }
+        case 163U: {
+            BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, ((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 164U: {
+            BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, ((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 165U: {
+            BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, ((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 166U: {
+            BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 167U: {
+            BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 168U: {
+            BytecodeExp_lt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 169U: {
+            BytecodeExp_gt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 170U: {
+            BytecodeExp_le(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 171U: {
+            BytecodeExp_ge(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))));
+            i += 2;
+            break;
+        }
+        case 174U: {
+            BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
+            i += 5;
+            break;
+        }
+        case 175U: {
+            BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
+            i += 5;
+            break;
+        }
+        case 176U: {
+            BytecodeExp_lt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
+            i += 5;
+            break;
+        }
+        case 177U: {
+            BytecodeExp_gt(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
+            i += 5;
+            break;
+        }
+        case 178U: {
+            BytecodeExp_le(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
+            i += 5;
+            break;
+        }
+        case 179U: {
+            BytecodeExp_ge(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)));
+            i += 5;
+            break;
+        }
+        case 180U: case 181U: case 182U: case 183U: {
+            BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[i]))), fn_BytecodeInt(((i32)((i8)be.p[(i + 1)]))), ((opc - 180U) + 28U));
+            i += 4;
+            break;
+        }
+        case 184U: case 185U: case 186U: case 187U: {
+            BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, i)), fn_BytecodeInt(fn_bcI32(be, (i + 4))), ((opc - 184U) + 28U));
+            i += 10;
+            break;
+        }
+        case 188U: case 189U: case 190U: case 191U: case 192U: {
+            int n = 0;
+            {
+                OpCode _t3 = opc;
+                switch (_t3) {
+                case 188U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_cmpConst(be, be.p[(i + 1)], fn_BytecodeInt(((i32)((i8)be.p[(i + 2)]))));
+                    n = 6;
+                    break;
+                }
+                case 189U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_cmpConst(be, be.p[(i + 1)], fn_BytecodeInt(fn_bcI32(be, (i + 2))));
+                    n = 9;
+                    break;
+                }
+                case 190U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(((i32)((i8)be.p[(i + 2)]))), fn_BytecodeInt(((i32)((i8)be.p[(i + 3)]))), be.p[(i + 1)]);
+                    n = 8;
+                    break;
+                }
+                case 191U: {
+                    BytecodeExp_pushTrigger(be, c, be.p[i]);
+                    BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), fn_BytecodeInt(fn_bcI32(be, (i + 2))), fn_BytecodeInt(fn_bcI32(be, (i + 6))), be.p[(i + 1)]);
+                    n = 14;
+                    break;
+                }
+                case 192U: {
+                    i32 v = ((i32)((i8)be.p[(i + 1)]));
+                    {
+                        OpCode _t4 = be.p[i];
+                        switch (_t4) {
+                        case 163U: {
+                            BytecodeStack_Push(&g_sys.bcStack, Char_varGet(c, v));
+                            break;
+                        }
+                        case 164U: {
+                            BytecodeStack_Push(&g_sys.bcStack, Char_fvarGet(c, v));
+                            break;
+                        }
+                        default: {
+                            BytecodeStack_Push(&g_sys.bcStack, Char_sysVarGet(c, v));
+                            break;
+                        }
+                        }
+                    }
+                    BytecodeExp_cmpConst(be, be.p[(i + 2)], fn_BytecodeInt(((i32)((i8)be.p[(i + 3)]))));
+                    n = 8;
+                    break;
+                }
+                }
+            }
+            if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack))) {
+                BytecodeStack_Pop(&g_sys.bcStack);
+                i += n;
+                break;
+            }
+            i = be.len;
+            break;
+        }
+        case 193U: case 194U: {
+            {
+                BytecodeValue* t = BytecodeStack_Top(g_sys.bcStack);
+                if (BytecodeValue_ToB(*t) == ((opc == 194U))) {
+                    if (g_scCheck) {
+                        fn_scCheckSkip(be, i, c, oc);
+                    }
+                    BytecodeValue_SetB(t, (opc == 194U));
+                    if (be.p[i] == 0U) {
+                        i = be.len;
+                    } else {
+                        i += (((int)((u8)be.p[i])) + 1);
+                    }
+                    break;
+                }
+            }
+            i++;
+            break;
+        }
+        case 172U: case 173U: {
+            if (BytecodeValue_ToB(*BytecodeStack_Top(g_sys.bcStack)) == ((opc == 172U))) {
+                BytecodeStack_Pop(&g_sys.bcStack);
+                i += 2;
+                break;
+            }
+            if (be.p[i] == 0U) {
+                i = be.len;
+            } else {
+                i += (((int)((u8)be.p[i])) + 1);
+            }
+            break;
+        }
+        case 6U: {
+            BytecodeStack_PushI(&g_sys.bcStack, fn_bcI32(be, i));
+            i += 4;
+            break;
+        }
+        case 7U: {
+            BytecodeStack_PushI64(&g_sys.bcStack, fn_bcI64(be, i));
+            i += 8;
+            break;
+        }
+        case 8U: {
+            f32 flo = math_Float32frombits((((((u32)be.p[i]) | (u32)((((u32)be.p[(i + 1)])) << 8)) | (u32)((((u32)be.p[(i + 2)])) << 16)) | (u32)((((u32)be.p[(i + 3)])) << 24)));
+            BytecodeStack_PushF(&g_sys.bcStack, flo);
+            i += 4;
+            break;
+        }
+        case 9U: {
+            BytecodeStack_Push(&g_sys.bcStack, (BytecodeValue){4, ((f64)BytecodeExp_readInt32At(be, i))});
+            i += 4;
+            break;
+        }
+        case 32U: {
+            BytecodeExp_neg(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 37U: {
+            BytecodeExp_bwnot(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 33U: {
+            BytecodeExp_blnot(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 46U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_pow(be, BytecodeStack_Top(g_sys.bcStack), v2, g_sys.workingState->playerNo);
+            break;
+        }
+        case 43U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_mul(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 44U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_div(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 45U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_mod(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 41U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_add(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 42U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_sub(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 24U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_gt(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 25U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_ge(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 26U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_lt(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 27U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_le(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 28U: case 29U: case 30U: case 31U: {
+            BytecodeValue v3 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_rangeCheck(be, BytecodeStack_Top(g_sys.bcStack), v2, v3, opc);
+            break;
+        }
+        case 22U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_eq(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 23U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_ne(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 38U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_bwand(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 39U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_bwxor(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 40U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_bwor(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 34U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_bland(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 35U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_blxor(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 36U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_blor(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 47U: {
+            BytecodeExp_abs(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 48U: {
+            BytecodeExp_exp(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 49U: {
+            BytecodeExp_ln(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 50U: {
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeExp_log(be, BytecodeStack_Top(g_sys.bcStack), v2);
+            break;
+        }
+        case 51U: {
+            BytecodeExp_cos(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 52U: {
+            BytecodeExp_sin(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 53U: {
+            BytecodeExp_tan(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 54U: {
+            BytecodeExp_acos(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 55U: {
+            BytecodeExp_asin(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 56U: {
+            BytecodeExp_atan(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 57U: {
+            BytecodeExp_floor(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 58U: {
+            BytecodeExp_ceil(be, BytecodeStack_Top(g_sys.bcStack));
+            break;
+        }
+        case 59U: {
+            BytecodeValue v3 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeValue v2 = BytecodeStack_Pop(&g_sys.bcStack);
+            BytecodeValue* cond = BytecodeStack_Top(g_sys.bcStack);
+            if (BytecodeValue_ToB(*cond)) {
+                (*cond) = v2;
+            } else {
+                (*cond) = v3;
+            }
+            break;
+        }
+        case 10U: {
+            BytecodeStack_Pop(&g_sys.bcStack);
+            break;
+        }
+        case 11U: {
+            BytecodeStack_Dup(&g_sys.bcStack);
+            break;
+        }
+        case 12U: {
+            BytecodeStack_Swap(&g_sys.bcStack);
+            break;
+        }
+        case 132U: {
+            if (Char_asf(c, 65536U)) {
+                BytecodeStack_PushI(&g_sys.bcStack, 0);
+            } else {
+                BytecodeStack_PushI(&g_sys.bcStack, go_f2i32(Char_getAILevel(c)));
+            }
+            break;
+        }
+        case 81U: {
+            BytecodeStack_PushB(&g_sys.bcStack, Char_alive(c));
+            break;
+        }
+        case 78U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->animNo);
+            break;
+        }
+        case 63U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_animElemNo(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 62U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_animElemTime(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 79U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_animExist(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 61U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_animTime(c));
+            break;
+        }
+        case 107U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_backEdge(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 109U: {
+            BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_backEdgeBodyDist(c) * ((c->localscl / oc->localscl)))));
+            break;
+        }
+        case 108U: {
+            BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_backEdgeDist(c) * ((c->localscl / oc->localscl)))));
+            break;
+        }
+        case 116U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_bottomEdge(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 117U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (g_sys.SystemStateVars_.cam.Pos.v[0] / oc->localscl));
+            break;
+        }
+        case 118U: {
+            BytecodeStack_PushF(&g_sys.bcStack, ((((g_sys.SystemStateVars_.cam.Pos.v[1] + g_sys.SystemStateVars_.cam.stageCamera_.aspectcorrection) + g_sys.SystemStateVars_.cam.stageCamera_.zoomanchorcorrection)) / oc->localscl));
+            break;
+        }
+        case 119U: {
+            BytecodeStack_PushF(&g_sys.bcStack, g_sys.SystemStateVars_.cam.Scale);
+            break;
+        }
+        case 86U: {
+            BytecodeStack_PushB(&g_sys.bcStack, Char_canRecover(c));
+            break;
+        }
+        case 67U: {
+            BytecodeValue cmdName = BytecodeStack_Pop(&g_sys.bcStack);
+            bool ok = false;
+            if ((c->cmd.p != 0) && (cmdName.vtype == 4)) {
+                int redir = c->playerNo;
+                int pno = c->playerNo;
+                if (((!go_streq(BytecodeValue_ToS(cmdName), GOSTR("recovery"))) && (Char_stWgi(oc)->ikemenver.v[0] == 0U)) && (Char_stWgi(oc)->ikemenver.v[1] == 0U)) {
+                    redir = oc->ss.sb->playerNo;
+                    pno = c->ss.sb->playerNo;
+                }
+                Ret_int__bool _t5 = CommandList_lookupName(&c->cmd.p[redir], BytecodeValue_ToS(cmdName));
+                int cmdPos = _t5.r0;
+                bool found = _t5.r1;
+                ok = (found && Char_command(c, pno, cmdPos));
+            }
+            BytecodeStack_PushB(&g_sys.bcStack, ok);
+            break;
+        }
+        case 68U: {
+            BytecodeValue cmdName = BytecodeStack_Pop(&g_sys.bcStack);
+            bool ok = false;
+            if ((c->cmd.p != 0) && (cmdName.vtype == 4)) {
+                Ret_int__bool _t6 = CommandList_lookupName(&c->cmd.p[g_sys.workingState->playerNo], BytecodeValue_ToS(cmdName));
+                int cmdPos = _t6.r0;
+                bool found = _t6.r1;
+                ok = (found && Char_command(c, g_sys.workingState->playerNo, cmdPos));
+            }
+            BytecodeStack_PushB(&g_sys.bcStack, ok);
+            break;
+        }
+        case 66U: {
+            BytecodeStack_PushB(&g_sys.bcStack, Char_ctrl(c));
+            break;
+        }
+        case 77U: {
+            BytecodeStack_PushI(&g_sys.bcStack, go_f2i32(c->facing));
+            break;
+        }
+        case 110U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_frontEdge(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 112U: {
+            BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_frontEdgeBodyDist(c) * ((c->localscl / oc->localscl)))));
+            break;
+        }
+        case 111U: {
+            BytecodeStack_PushI(&g_sys.bcStack, go_f2i32((Char_frontEdgeDist(c) * ((c->localscl / oc->localscl)))));
+            break;
+        }
+        case 121U: {
+            if (((Char_stWgi(c)->mugenver.v[0] == 1U) && (Char_stWgi(c)->mugenver.v[1] == 0U)) && (TypedValue_ToF(Map_GoString_TypedValue_get(&Char_gi(c)->constants, GOSTR("legacy.gamedistancespec"), NULL)) == 0x1p+00f)) {
+                BytecodeStack_PushF(&g_sys.bcStack, Char_screenHeight(c));
+            } else {
+                BytecodeStack_PushF(&g_sys.bcStack, Char_gameHeight(c));
+            }
+            break;
+        }
+        case 128U: {
+            BytecodeStack_PushI(&g_sys.bcStack, System_gameTime(&g_sys));
+            break;
+        }
+        case 120U: {
+            if (((Char_stWgi(c)->mugenver.v[0] == 1U) && (Char_stWgi(c)->mugenver.v[1] == 0U)) && (TypedValue_ToF(Map_GoString_TypedValue_get(&Char_gi(c)->constants, GOSTR("legacy.gamedistancespec"), NULL)) == 0x1p+00f)) {
+                BytecodeStack_PushF(&g_sys.bcStack, Char_screenWidth(c));
+            } else {
+                BytecodeStack_PushF(&g_sys.bcStack, Char_gameWidth(c));
+            }
+            break;
+        }
+        case 134U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->CharSystemVar_.hitCount);
+            break;
+        }
+        case 97U: {
+            i32 attr = BytecodeExp_readInt32At(be, i);
+            i += 4;
+            if (attr == -2) {
+                attr = fn_evalTriggerAttr(c, BytecodeStack_Pop(&g_sys.bcStack));
+            }
+            if (attr == -1) {
+                BytecodeStack_PushS(&g_sys.bcStack, fn_attrString(c->hitdef.attr));
+            } else {
+                BytecodeStack_PushB(&g_sys.bcStack, Char_hitDefAttr(c, attr));
+            }
+            break;
+        }
+        case 139U: {
+            BytecodeStack_PushB(&g_sys.bcStack, c->ghv.fallflag);
+            break;
+        }
+        case 137U: {
+            BytecodeStack_PushB(&g_sys.bcStack, Char_hitOver(c));
+            break;
+        }
+        case 136U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->CharSystemVar_.hitPauseTime);
+            break;
+        }
+        case 138U: {
+            BytecodeStack_PushB(&g_sys.bcStack, Char_hitShakeOver(c));
+            break;
+        }
+        case 140U: {
+            BytecodeStack_PushF(&g_sys.bcStack, ((c->ghv.xvel * c->facing) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 141U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (c->ghv.yvel * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 142U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (c->ghv.zvel * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 126U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->id);
+            break;
+        }
+        case 98U: {
+            BytecodeStack_PushB(&g_sys.bcStack, c->inguarddist);
+            break;
+        }
+        case 89U: {
+            i32 index = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
+            i32 id = BytecodeValue_ToI(BytecodeStack_Pop(&g_sys.bcStack));
+            BytecodeStack_PushB(&g_sys.bcStack, Char_isHelper(c, id, ((int)index)));
+            break;
+        }
+        case 113U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_leftEdge(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 82U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->life);
+            break;
+        }
+        case 83U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->lifeMax);
+            break;
+        }
+        case 99U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_moveContact(c));
+            break;
+        }
+        case 101U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_moveGuarded(c));
+            break;
+        }
+        case 100U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_moveHit(c));
+            break;
+        }
+        case 102U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_moveReversed(c));
+            break;
+        }
+        case 65U: {
+            if (be.p[i] == 0U) {
+                BytecodeStack_PushS(&g_sys.bcStack, MoveType_TriggerValue(c->ss.moveType));
+            } else {
+                BytecodeStack_PushB(&g_sys.bcStack, (c->ss.moveType == (MoveType)((((MoveType)be.p[i])) << 15)));
+            }
+            i++;
+            break;
+        }
+        case 130U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_numEnemy(c));
+            break;
+        }
+        case 91U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_numExplod(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 90U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_numHelper(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 131U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_numPartner(c));
+            break;
+        }
+        case 93U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_numProj(c));
+            break;
+        }
+        case 92U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_numProjID(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 129U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_numTarget(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 94U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_numText(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 133U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_gi(c)->palno);
+            break;
+        }
+        case 70U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (((c->pos.v[0] * ((c->localscl / oc->localscl))) - (g_sys.SystemStateVars_.cam.Pos.v[0] / oc->localscl))));
+            break;
+        }
+        case 71U: {
+            BytecodeStack_PushF(&g_sys.bcStack, ((((c->pos.v[1] - c->groundLevel) - c->platformPosY)) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 84U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_getPower(c));
+            break;
+        }
+        case 85U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->powerMax);
+            break;
+        }
+        case 127U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = System_playerIDExist(&g_sys, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 125U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->ss.prevno);
+            break;
+        }
+        case 106U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_projCancelTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 103U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_projContactTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 105U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_projGuardedTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 104U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_projHitTime(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 69U: {
+            BytecodeStack_PushI(&g_sys.bcStack, fn_Rand(0, 999));
+            break;
+        }
+        case 114U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_rightEdge(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 87U: {
+            BytecodeStack_PushI(&g_sys.bcStack, System_roundState(&g_sys));
+            break;
+        }
+        case 88U: {
+            BytecodeStack_PushI(&g_sys.bcStack, Char_roundsWon(c));
+            break;
+        }
+        case 123U: {
+            BytecodeStack_PushF(&g_sys.bcStack, Char_screenHeight(c));
+            break;
+        }
+        case 75U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_screenPosX(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 76U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_screenPosY(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 122U: {
+            BytecodeStack_PushF(&g_sys.bcStack, Char_screenWidth(c));
+            break;
+        }
+        case 80U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_selfAnimExist(c, (*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 124U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->ss.no);
+            break;
+        }
+        case 64U: {
+            if (be.p[i] == 0U) {
+                BytecodeStack_PushS(&g_sys.bcStack, StateType_TriggerValue(c->ss.stateType));
+            } else {
+                BytecodeStack_PushB(&g_sys.bcStack, (c->ss.stateType == ((StateType)be.p[i])));
+            }
+            i++;
+            break;
+        }
+        case 95U: {
+            if (be.p[i] == 255U) {
+                if (c->teamside == -1) {
+                    BytecodeStack_PushS(&g_sys.bcStack, TeamMode_TriggerValue(0));
+                } else {
+                    BytecodeStack_PushS(&g_sys.bcStack, TeamMode_TriggerValue(g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)]));
+                }
+            } else {
+                if (c->teamside == -1) {
+                    BytecodeStack_PushB(&g_sys.bcStack, (0 == ((TeamMode)be.p[i])));
+                } else {
+                    BytecodeStack_PushB(&g_sys.bcStack, (g_sys.SystemStateVars_.tmode.v[(c->playerNo & 1)] == ((TeamMode)be.p[i])));
+                }
+            }
+            i++;
+            break;
+        }
+        case 96U: {
+            BytecodeStack_PushI(&g_sys.bcStack, (((i32)c->teamside) + 1));
+            break;
+        }
+        case 60U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->ss.time);
+            break;
+        }
+        case 115U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (Char_topEdge(c) * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 135U: {
+            BytecodeStack_PushI(&g_sys.bcStack, c->CharSystemVar_.uniqHitCount);
+            break;
+        }
+        case 72U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (c->vel.v[0] * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 73U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (c->vel.v[1] * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 74U: {
+            BytecodeStack_PushF(&g_sys.bcStack, (c->vel.v[2] * ((c->localscl / oc->localscl))));
+            break;
+        }
+        case 158U: {
+            (*ip) = i;
+            BytecodeExp_run_assign(be, c, ip);
+            if (g_scCheck) {
+                fn_scCheckSub(be, i, (*ip));
+            }
+            i = (*ip);
+            break;
+        }
+        case 157U: {
+            (*ip) = i;
+            BytecodeExp_run_const(be, c, ip, oc);
+            if (g_scCheck) {
+                fn_scCheckSub(be, i, (*ip));
+            }
+            i = (*ip);
+            break;
+        }
+        case 159U: {
+            (*ip) = i;
+            BytecodeExp_run_ex(be, c, ip, oc);
+            if (g_scCheck) {
+                fn_scCheckSub(be, i, (*ip));
+            }
+            i = (*ip);
+            break;
+        }
+        case 160U: {
+            (*ip) = i;
+            BytecodeExp_run_ex2(be, c, ip, oc);
+            if (g_scCheck) {
+                fn_scCheckSub(be, i, (*ip));
+            }
+            i = (*ip);
+            break;
+        }
+        case 161U: {
+            (*ip) = i;
+            BytecodeExp_run_ex3(be, c, ip, oc);
+            if (g_scCheck) {
+                fn_scCheckSub(be, i, (*ip));
+            }
+            i = (*ip);
+            break;
+        }
+        case 0U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_varGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 1U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_sysVarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 2U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_fvarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 3U: {
+            (*BytecodeStack_Top(g_sys.bcStack)) = Char_sysFvarGet(c, BytecodeValue_ToI(*BytecodeStack_Top(g_sys.bcStack)));
+            break;
+        }
+        case 4U: {
+            BytecodeStack_Push(&g_sys.bcStack, g_sys.bcVar.p[((u8)be.p[i])]);
+            i++;
+            break;
+        }
+        }
+    }
+    return (Ret_int__bool__CharPtr){i, false, oc};
+}
+
+// BytecodeExp.run_assign (bytecode.go:3566), 0 TODO
 void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -83310,7 +83925,7 @@ void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i) {
     }
 }
 
-// BytecodeExp.run_const (bytecode.go:3195), 0 TODO
+// BytecodeExp.run_const (bytecode.go:3624), 0 TODO
 void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -84370,7 +84985,7 @@ void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.run_ex (bytecode.go:3745), 0 TODO
+// BytecodeExp.run_ex (bytecode.go:4174), 0 TODO
 void BytecodeExp_run_ex(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -85511,7 +86126,7 @@ void BytecodeExp_run_ex(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.run_ex2 (bytecode.go:4387), 0 TODO
+// BytecodeExp.run_ex2 (bytecode.go:4816), 0 TODO
 void BytecodeExp_run_ex2(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -86806,7 +87421,7 @@ void BytecodeExp_run_ex2(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.run_ex3 (bytecode.go:5097), 0 TODO
+// BytecodeExp.run_ex3 (bytecode.go:5526), 0 TODO
 void BytecodeExp_run_ex3(BytecodeExp be, Char* c, int* i, Char* oc) {
     ((*i))++;
     OpCode opc = be.p[((*i) - 1)];
@@ -87176,27 +87791,27 @@ void BytecodeExp_run_ex3(BytecodeExp be, Char* c, int* i, Char* oc) {
     }
 }
 
-// BytecodeExp.evalF (bytecode.go:5320), 0 TODO
+// BytecodeExp.evalF (bytecode.go:5749), 0 TODO
 f32 BytecodeExp_evalF(BytecodeExp be, Char* c) {
     return BytecodeValue_ToF(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalI (bytecode.go:5324), 0 TODO
+// BytecodeExp.evalI (bytecode.go:5753), 0 TODO
 i32 BytecodeExp_evalI(BytecodeExp be, Char* c) {
     return BytecodeValue_ToI(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalI64 (bytecode.go:5328), 0 TODO
+// BytecodeExp.evalI64 (bytecode.go:5757), 0 TODO
 i64 BytecodeExp_evalI64(BytecodeExp be, Char* c) {
     return BytecodeValue_ToI64(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalB (bytecode.go:5332), 0 TODO
+// BytecodeExp.evalB (bytecode.go:5761), 0 TODO
 bool BytecodeExp_evalB(BytecodeExp be, Char* c) {
     return BytecodeValue_ToB(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalS (bytecode.go:5337), 0 TODO
+// BytecodeExp.evalS (bytecode.go:5766), 0 TODO
 GoString BytecodeExp_evalS(BytecodeExp be, Char* c) {
     if (be.len == 0) {
         return GOSTR("");
@@ -87204,7 +87819,7 @@ GoString BytecodeExp_evalS(BytecodeExp be, Char* c) {
     return BytecodeValue_ToS(BytecodeExp_run(be, c));
 }
 
-// BytecodeExp.evalSLower (bytecode.go:5345), 0 TODO
+// BytecodeExp.evalSLower (bytecode.go:5774), 0 TODO
 GoString BytecodeExp_evalSLower(BytecodeExp be, Char* c) {
     if (be.len == 0) {
         return GOSTR("");
@@ -87216,12 +87831,12 @@ GoString BytecodeExp_evalSLower(BytecodeExp be, Char* c) {
     return strings_ToLower(BytecodeValue_ToS(v));
 }
 
-// NullStateController.Run (bytecode.go:5362), 0 TODO
+// NullStateController.Run (bytecode.go:5791), 0 TODO
 bool NullStateController_Run(NullStateController _recv, Char* _p0, Slice_i32 _p1) {
     return false;
 }
 
-// BytecodeFunction.run (bytecode.go:5375), 0 TODO
+// BytecodeFunction.run (bytecode.go:5804), 0 TODO
 bool BytecodeFunction_run(BytecodeFunction bf, Char* c, Slice_u8 ret) {
     bool changeState = {0};
     Slice_BytecodeValue _t1 = g_sys.bcVar;
@@ -87275,14 +87890,14 @@ bool BytecodeFunction_run(BytecodeFunction bf, Char* c, Slice_u8 ret) {
         }
     }
     Slice_BytecodeValue _t12 = oldv;
-    BytecodeStack _t13 = GO_SLICE(BytecodeStack, g_sys.bcVarStack, 0, oldvslen);
+    BytecodeStack _t13 = GO_SLICE_HI(BytecodeStack, g_sys.bcVarStack, 0, oldvslen);
     g_sys.bcVar = _t12;
     g_sys.bcVarStack = _t13;
     return changeState;
     return changeState;
 }
 
-// CallFunction.Run (bytecode.go:5431), 0 TODO
+// CallFunction.Run (bytecode.go:5860), 0 TODO
 bool CallFunction_Run(CallFunction cf, Char* c, Slice_i32 _p1) {
     bool changeState = {0};
     BytecodeFunction bf = {0};
@@ -87315,12 +87930,12 @@ bool CallFunction_Run(CallFunction cf, Char* c, Slice_i32 _p1) {
     return changeState;
 }
 
-// newStateBlock (bytecode.go:5501), 0 TODO
+// newStateBlock (bytecode.go:5930), 0 TODO
 StateBlock* fn_newStateBlock(void) {
     return go_box(StateBlock, (StateBlock){.persistent = 1, .persistentIndex = -1, .ignorehitpause = false});
 }
 
-// StateBlock.runFns (bytecode.go:5505), 0 TODO
+// StateBlock.runFns (bytecode.go:5934), 0 TODO
 Slice_scRunFn StateBlock_runFns(StateBlock* b) {
     if (b->runs.len != b->ctrls.len) {
         b->runs = GO_MAKE(Slice_scRunFn, scRunFn, b->ctrls.len, 0);
@@ -87342,7 +87957,7 @@ Slice_scRunFn StateBlock_runFns(StateBlock* b) {
     return b->runs;
 }
 
-// StateBlock.Run (bytecode.go:5517), 0 TODO
+// StateBlock.Run (bytecode.go:5946), 0 TODO
 bool StateBlock_Run(StateBlock* b, Char* c, Slice_i32 ps) {
     bool changeState = {0};
     c->currentSctrlIndex = b->persistentIndex;
@@ -87492,7 +88107,7 @@ bool StateBlock_Run(StateBlock* b, Char* c, Slice_i32 ps) {
     return changeState;
 }
 
-// StateExpr.Run (bytecode.go:5687), 0 TODO
+// StateExpr.Run (bytecode.go:6116), 0 TODO
 bool StateExpr_Run(StateExpr se, Char* c, Slice_i32 _p1) {
     bool changeState = {0};
     BytecodeExp_run(se, c);
@@ -87500,7 +88115,7 @@ bool StateExpr_Run(StateExpr se, Char* c, Slice_i32 _p1) {
     return changeState;
 }
 
-// varAssign.Run (bytecode.go:5697), 0 TODO
+// varAssign.Run (bytecode.go:6126), 0 TODO
 bool varAssign_Run(varAssign va, Char* c, Slice_i32 _p1) {
     bool changeState = {0};
     g_sys.bcVar.p[va.vari] = BytecodeExp_run(va.be, c);
@@ -87508,7 +88123,7 @@ bool varAssign_Run(varAssign va, Char* c, Slice_i32 _p1) {
     return changeState;
 }
 
-// LoopBreak.Run (bytecode.go:5704), 0 TODO
+// LoopBreak.Run (bytecode.go:6133), 0 TODO
 bool LoopBreak_Run(LoopBreak lb, Char* c, Slice_i32 _p1) {
     bool stop = {0};
     g_sys.SystemStateVars_.loopBreak = true;
@@ -87516,7 +88131,7 @@ bool LoopBreak_Run(LoopBreak lb, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// LoopContinue.Run (bytecode.go:5711), 0 TODO
+// LoopContinue.Run (bytecode.go:6140), 0 TODO
 bool LoopContinue_Run(LoopContinue lc, Char* c, Slice_i32 _p1) {
     bool stop = {0};
     g_sys.SystemStateVars_.loopContinue = true;
@@ -87524,17 +88139,17 @@ bool LoopContinue_Run(LoopContinue lc, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// newStateControllerBase (bytecode.go:5723), 0 TODO
+// newStateControllerBase (bytecode.go:6152), 0 TODO
 StateControllerBase* fn_newStateControllerBase(void) {
     return go_box(StateControllerBase, (StateControllerBase){0});
 }
 
-// StateControllerBase.beToExp (bytecode.go:5727), 0 TODO
+// StateControllerBase.beToExp (bytecode.go:6156), 0 TODO
 Slice_BytecodeExp StateControllerBase_beToExp(StateControllerBase _recv, Slice_BytecodeExp be) {
     return be;
 }
 
-// StateControllerBase.iToExp (bytecode.go:5740), 0 TODO
+// StateControllerBase.iToExp (bytecode.go:6169), 0 TODO
 Slice_BytecodeExp StateControllerBase_iToExp(StateControllerBase _recv, Slice_i32 i) {
     Slice_BytecodeExp exp_ = {0};
     {
@@ -87551,7 +88166,7 @@ Slice_BytecodeExp StateControllerBase_iToExp(StateControllerBase _recv, Slice_i3
     return exp_;
 }
 
-// StateControllerBase.i64ToExp (bytecode.go:5749), 0 TODO
+// StateControllerBase.i64ToExp (bytecode.go:6178), 0 TODO
 Slice_BytecodeExp StateControllerBase_i64ToExp(StateControllerBase _recv, Slice_i64 i) {
     Slice_BytecodeExp exp_ = {0};
     {
@@ -87568,12 +88183,12 @@ Slice_BytecodeExp StateControllerBase_i64ToExp(StateControllerBase _recv, Slice_
     return exp_;
 }
 
-// StateControllerBase.add (bytecode.go:5765), 0 TODO
+// StateControllerBase.add (bytecode.go:6194), 0 TODO
 void StateControllerBase_add(StateControllerBase* scb, u8 paramID, Slice_BytecodeExp exp_) {
     (*scb) = GO_APPEND(Slice_scParam, (*scb), (scParam){.id = paramID, .exp = exp_});
 }
 
-// StateControllerBase.run (bytecode.go:5778), 0 TODO
+// StateControllerBase.run (bytecode.go:6207), 0 TODO
 void StateControllerBase_run(StateControllerBase scb, Char* c, GoFunc visit) {
     {
         StateControllerBase _t2 = scb;
@@ -87587,7 +88202,7 @@ void StateControllerBase_run(StateControllerBase scb, Char* c, GoFunc visit) {
     }
 }
 
-// StateControllerBase.hasParam (bytecode.go:5809), 0 TODO
+// StateControllerBase.hasParam (bytecode.go:6238), 0 TODO
 bool StateControllerBase_hasParam(StateControllerBase scb, u8 paramID) {
     {
         StateControllerBase _t2 = scb;
@@ -87602,7 +88217,7 @@ bool StateControllerBase_hasParam(StateControllerBase scb, u8 paramID) {
     return false;
 }
 
-// getRedirectedChar (bytecode.go:5835), 0 TODO
+// getRedirectedChar (bytecode.go:6264), 0 TODO
 Char* fn_getRedirectedChar(Char* c, StateControllerBase sc, u8 redirectID, GoString scname) {
     {
         StateControllerBase _t2 = sc;
@@ -87625,7 +88240,7 @@ Char* fn_getRedirectedChar(Char* c, StateControllerBase sc, u8 redirectID, GoStr
     return c;
 }
 
-// stateDef.Run (bytecode.go:5866), 0 TODO
+// stateDef.Run (bytecode.go:6295), 0 TODO
 void stateDef_Run(stateDef sc, Char* c) {
     {
         StateControllerBase _t2 = sc;
@@ -87710,7 +88325,7 @@ void stateDef_Run(stateDef sc, Char* c) {
     }
 }
 
-// hitBy.runSub (bytecode.go:5935), 0 TODO
+// hitBy.runSub (bytecode.go:6364), 0 TODO
 void hitBy_runSub(hitBy sc, Char* c, Char* crun, bool not) {
     int slot = -1;
     i32 attr = -1;
@@ -87774,7 +88389,7 @@ void hitBy_runSub(hitBy sc, Char* c, Char* crun, bool not) {
     ((void (*)(void *, int, i32, i32, int, i32, bool, i32, i32))(set).fn)((set).env, slot, attr, time_, pno, pid, stk, cgrp, cidx);
 }
 
-// hitBy.Run (bytecode.go:5990), 0 TODO
+// hitBy.Run (bytecode.go:6419), 0 TODO
 bool hitBy_Run(hitBy sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("HitBy"));
     if (crun == NULL) {
@@ -87784,7 +88399,7 @@ bool hitBy_Run(hitBy sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// notHitBy.Run (bytecode.go:6004), 0 TODO
+// notHitBy.Run (bytecode.go:6433), 0 TODO
 bool notHitBy_Run(notHitBy sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("NotHitBy"));
     if (crun == NULL) {
@@ -87794,7 +88409,7 @@ bool notHitBy_Run(notHitBy sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertSpecial.Run (bytecode.go:6026), 0 TODO
+// assertSpecial.Run (bytecode.go:6455), 0 TODO
 bool assertSpecial_Run(assertSpecial sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("AssertSpecial"));
     if (crun == NULL) {
@@ -87844,7 +88459,7 @@ bool assertSpecial_Run(assertSpecial sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playSnd.Run (bytecode.go:6079), 0 TODO
+// playSnd.Run (bytecode.go:6508), 0 TODO
 bool playSnd_Run(playSnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 16U, GOSTR("PlaySnd"));
     if (crun == NULL) {
@@ -87965,7 +88580,7 @@ bool playSnd_Run(playSnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeState.Run (bytecode.go:6173), 0 TODO
+// changeState.Run (bytecode.go:6602), 0 TODO
 bool changeState_Run(changeState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("ChangeState"));
     if (crun == NULL) {
@@ -88018,7 +88633,7 @@ bool changeState_Run(changeState sc, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// selfState.Run (bytecode.go:6207), 0 TODO
+// selfState.Run (bytecode.go:6636), 0 TODO
 bool selfState_Run(selfState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("SelfState"));
     if (crun == NULL) {
@@ -88083,7 +88698,7 @@ bool selfState_Run(selfState sc, Char* c, Slice_i32 _p1) {
     return stop;
 }
 
-// tagIn.Run (bytecode.go:6257), 0 TODO
+// tagIn.Run (bytecode.go:6686), 0 TODO
 bool tagIn_Run(tagIn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("TagIn"));
     if (crun == NULL) {
@@ -88191,7 +88806,7 @@ bool tagIn_Run(tagIn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// tagOut.Run (bytecode.go:6349), 0 TODO
+// tagOut.Run (bytecode.go:6778), 0 TODO
 bool tagOut_Run(tagOut sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TagOut"));
     if (crun == NULL) {
@@ -88278,7 +88893,7 @@ bool tagOut_Run(tagOut sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// destroySelf.Run (bytecode.go:6426), 0 TODO
+// destroySelf.Run (bytecode.go:6855), 0 TODO
 bool destroySelf_Run(destroySelf sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("DestroySelf"));
     if (crun == NULL) {
@@ -88324,7 +88939,7 @@ bool destroySelf_Run(destroySelf sc, Char* c, Slice_i32 _p1) {
     return (Char_destroySelf(crun, rec, rem, rtx) && self);
 }
 
-// changeAnim.Run (bytecode.go:6464), 0 TODO
+// changeAnim.Run (bytecode.go:6893), 0 TODO
 bool changeAnim_Run(changeAnim sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("ChangeAnim"));
     if (crun == NULL) {
@@ -88404,7 +89019,7 @@ bool changeAnim_Run(changeAnim sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeAnim2.Run (bytecode.go:6515), 0 TODO
+// changeAnim2.Run (bytecode.go:6944), 0 TODO
 bool changeAnim2_Run(changeAnim2 sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("ChangeAnim2"));
     if (crun == NULL) {
@@ -88470,7 +89085,7 @@ bool changeAnim2_Run(changeAnim2 sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// helper.Run (bytecode.go:6600), 0 TODO
+// helper.Run (bytecode.go:7029), 0 TODO
 bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 37U, GOSTR("Helper"));
     if (crun == NULL) {
@@ -88706,7 +89321,7 @@ bool helper_Run(helper sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// ctrlSet.Run (bytecode.go:6748), 0 TODO
+// ctrlSet.Run (bytecode.go:7177), 0 TODO
 bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("CtrlSet"));
     if (crun == NULL) {
@@ -88738,7 +89353,7 @@ bool ctrlSet_Run(ctrlSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// runState.Run (bytecode.go:6774), 0 TODO
+// runState.Run (bytecode.go:7203), 0 TODO
 bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RunState"));
     if (crun == NULL) {
@@ -88778,7 +89393,7 @@ bool runState_Run(runState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posSet.Run (bytecode.go:6809), 0 TODO
+// posSet.Run (bytecode.go:7238), 0 TODO
 bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosSet"));
     if (crun == NULL) {
@@ -88830,7 +89445,7 @@ bool posSet_Run(posSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posAdd.Run (bytecode.go:6846), 0 TODO
+// posAdd.Run (bytecode.go:7275), 0 TODO
 bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PosAdd"));
     if (crun == NULL) {
@@ -88882,7 +89497,7 @@ bool posAdd_Run(posAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velSet.Run (bytecode.go:6883), 0 TODO
+// velSet.Run (bytecode.go:7312), 0 TODO
 bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelSet"));
     if (crun == NULL) {
@@ -88922,7 +89537,7 @@ bool velSet_Run(velSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velAdd.Run (bytecode.go:6908), 0 TODO
+// velAdd.Run (bytecode.go:7337), 0 TODO
 bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelAdd"));
     if (crun == NULL) {
@@ -88962,7 +89577,7 @@ bool velAdd_Run(velAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// velMul.Run (bytecode.go:6933), 0 TODO
+// velMul.Run (bytecode.go:7362), 0 TODO
 bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("VelMul"));
     if (crun == NULL) {
@@ -89001,12 +89616,12 @@ bool velMul_Run(velMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isPalFXParam (bytecode.go:6954), 0 TODO
+// isPalFXParam (bytecode.go:7383), 0 TODO
 bool fn_isPalFXParam(u8 paramID) {
     return ((paramID >= 0U) && (paramID <= 10U));
 }
 
-// palFX.runSub (bytecode.go:6976), 0 TODO
+// palFX.runSub (bytecode.go:7405), 0 TODO
 void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -89103,7 +89718,7 @@ void palFX_runSub(palFX sc, Char* c, PalFXDef* pfd, u8 paramID, Slice_BytecodeEx
     }
 }
 
-// palFX.Run (bytecode.go:7047), 0 TODO
+// palFX.Run (bytecode.go:7476), 0 TODO
 bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("PalFX"));
     if (crun == NULL) {
@@ -89143,7 +89758,7 @@ bool palFX_Run(palFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// allPalFX.Run (bytecode.go:7084), 0 TODO
+// allPalFX.Run (bytecode.go:7513), 0 TODO
 bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     PalFX_clear(g_sys.allPalFX);
     {
@@ -89164,7 +89779,7 @@ bool allPalFX_Run(allPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bgPalFX.Run (bytecode.go:7103), 0 TODO
+// bgPalFX.Run (bytecode.go:7532), 0 TODO
 bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     i32 bgid = -1;
     int bgidx = -1;
@@ -89222,7 +89837,7 @@ bool bgPalFX_Run(bgPalFX sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.Run (bytecode.go:7225), 0 TODO
+// explod.Run (bytecode.go:7654), 0 TODO
 bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 115U, GOSTR("Explod"));
     if (crun == NULL) {
@@ -89661,7 +90276,7 @@ bool explod_Run(explod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explod.parseInterpolation (bytecode.go:7534), 0 TODO
+// explod.parseInterpolation (bytecode.go:7963), 0 TODO
 bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_BytecodeExp exp_, PalFXDef* pfd) {
     {
         u8 _t1 = paramID;
@@ -89768,7 +90383,7 @@ bool explod_parseInterpolation(explod sc, Char* c, Explod* e, u8 paramID, Slice_
     return true;
 }
 
-// modifyExplod.Run (bytecode.go:7614), 0 TODO
+// modifyExplod.Run (bytecode.go:8043), 0 TODO
 bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 115U, GOSTR("ModifyExplod"));
     if (crun == NULL) {
@@ -89893,7 +90508,7 @@ bool modifyExplod_Run(modifyExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gameMakeAnim.Run (bytecode.go:8261), 0 TODO
+// gameMakeAnim.Run (bytecode.go:8690), 0 TODO
 bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("GameMakeAnim"));
     if (crun == NULL) {
@@ -89971,12 +90586,12 @@ bool gameMakeAnim_Run(gameMakeAnim sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isAfterImageParam (bytecode.go:8322), 0 TODO
+// isAfterImageParam (bytecode.go:8751), 0 TODO
 bool fn_isAfterImageParam(u8 paramID) {
     return ((paramID >= 11U) && (paramID <= 32U));
 }
 
-// afterImage.runSub (bytecode.go:8355), 0 TODO
+// afterImage.runSub (bytecode.go:8784), 0 TODO
 void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 paramID, Slice_BytecodeExp exp_) {
     if ((paramID < 26U) || (paramID > 32U)) {
         ai->needsetup = true;
@@ -90167,7 +90782,7 @@ void afterImage_runSub(afterImage sc, Char* c, Char* crun, AfterImage* ai, u8 pa
     }
 }
 
-// afterImage.Run (bytecode.go:8504), 0 TODO
+// afterImage.Run (bytecode.go:8933), 0 TODO
 bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 33U, GOSTR("AfterImage"));
     if (crun == NULL) {
@@ -90202,7 +90817,7 @@ bool afterImage_Run(afterImage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// afterImageTime.Run (bytecode.go:8543), 0 TODO
+// afterImageTime.Run (bytecode.go:8972), 0 TODO
 bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("AfterImageTime"));
     if (crun == NULL) {
@@ -90241,12 +90856,12 @@ bool afterImageTime_Run(afterImageTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// isHitDefParam (bytecode.go:8569), 0 TODO
+// isHitDefParam (bytecode.go:8998), 0 TODO
 bool fn_isHitDefParam(u8 paramID) {
     return (((paramID >= 33U) && (paramID <= 153U)) || fn_isPalFXParam(paramID));
 }
 
-// hitDef.runSub (bytecode.go:8704), 0 TODO
+// hitDef.runSub (bytecode.go:9133), 0 TODO
 void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp exp_) {
     {
         u8 _t1 = paramID;
@@ -90884,7 +91499,7 @@ void hitDef_runSub(hitDef sc, Char* c, HitDef* hd, u8 paramID, Slice_BytecodeExp
     }
 }
 
-// hitDef.Run (bytecode.go:9093), 0 TODO
+// hitDef.Run (bytecode.go:9522), 0 TODO
 bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("HitDef"));
     if (crun == NULL) {
@@ -90918,7 +91533,7 @@ bool hitDef_Run(hitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// reversalDef.Run (bytecode.go:9140), 0 TODO
+// reversalDef.Run (bytecode.go:9569), 0 TODO
 bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ReversalDef"));
     if (crun == NULL) {
@@ -90970,7 +91585,7 @@ bool reversalDef_Run(reversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// projectile.Run (bytecode.go:9233), 0 TODO
+// projectile.Run (bytecode.go:9662), 0 TODO
 bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 203U, GOSTR("Projectile"));
     if (crun == NULL) {
@@ -91358,7 +91973,7 @@ bool projectile_Run(projectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyHitDef.Run (bytecode.go:9517), 0 TODO
+// modifyHitDef.Run (bytecode.go:9946), 0 TODO
 bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 154U, GOSTR("ModifyHitDef"));
     if (crun == NULL) {
@@ -91390,7 +92005,7 @@ bool modifyHitDef_Run(modifyHitDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReversalDef.Run (bytecode.go:9549), 0 TODO
+// modifyReversalDef.Run (bytecode.go:9978), 0 TODO
 bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 157U, GOSTR("ModifyReversalDef"));
     if (crun == NULL) {
@@ -91443,7 +92058,7 @@ bool modifyReversalDef_Run(modifyReversalDef sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyProjectile.Run (bytecode.go:9588), 0 TODO
+// modifyProjectile.Run (bytecode.go:10017), 0 TODO
 bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 203U, GOSTR("ModifyProjectile"));
     if (crun == NULL) {
@@ -91516,7 +92131,7 @@ bool modifyProjectile_Run(modifyProjectile sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// width.Run (bytecode.go:10729), 0 TODO
+// width.Run (bytecode.go:11158), 0 TODO
 bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Width"));
     if (crun == NULL) {
@@ -91575,7 +92190,7 @@ bool width_Run(width sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sprPriority.Run (bytecode.go:10777), 0 TODO
+// sprPriority.Run (bytecode.go:11206), 0 TODO
 bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("SprPriority"));
     if (crun == NULL) {
@@ -91614,7 +92229,7 @@ bool sprPriority_Run(sprPriority sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varSet.Run (bytecode.go:10810), 0 TODO
+// varSet.Run (bytecode.go:11239), 0 TODO
 bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarSet"));
     if (crun == NULL) {
@@ -91674,7 +92289,7 @@ bool varSet_Run(varSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// turn.Run (bytecode.go:10850), 0 TODO
+// turn.Run (bytecode.go:11279), 0 TODO
 bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Turn"));
     if (crun == NULL) {
@@ -91705,7 +92320,7 @@ bool turn_Run(turn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetFacing.Run (bytecode.go:10876), 0 TODO
+// targetFacing.Run (bytecode.go:11305), 0 TODO
 bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetFacing"));
     if (crun == NULL) {
@@ -91753,7 +92368,7 @@ bool targetFacing_Run(targetFacing sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetBind.Run (bytecode.go:10913), 0 TODO
+// targetBind.Run (bytecode.go:11342), 0 TODO
 bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetBind"));
     if (crun == NULL) {
@@ -91815,7 +92430,7 @@ bool targetBind_Run(targetBind sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToTarget.Run (bytecode.go:10962), 0 TODO
+// bindToTarget.Run (bytecode.go:11391), 0 TODO
 bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("BindToTarget"));
     if (crun == NULL) {
@@ -91887,7 +92502,7 @@ bool bindToTarget_Run(bindToTarget sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetLifeAdd.Run (bytecode.go:11016), 0 TODO
+// targetLifeAdd.Run (bytecode.go:11445), 0 TODO
 bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("TargetLifeAdd"));
     if (crun == NULL) {
@@ -91959,7 +92574,7 @@ bool targetLifeAdd_Run(targetLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetState.Run (bytecode.go:11061), 0 TODO
+// targetState.Run (bytecode.go:11490), 0 TODO
 bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetState"));
     if (crun == NULL) {
@@ -92007,7 +92622,7 @@ bool targetState_Run(targetState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelSet.Run (bytecode.go:11099), 0 TODO
+// targetVelSet.Run (bytecode.go:11528), 0 TODO
 bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelSet"));
     if (crun == NULL) {
@@ -92080,7 +92695,7 @@ bool targetVelSet_Run(targetVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetVelAdd.Run (bytecode.go:11155), 0 TODO
+// targetVelAdd.Run (bytecode.go:11584), 0 TODO
 bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TargetVelAdd"));
     if (crun == NULL) {
@@ -92153,7 +92768,7 @@ bool targetVelAdd_Run(targetVelAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetPowerAdd.Run (bytecode.go:11209), 0 TODO
+// targetPowerAdd.Run (bytecode.go:11638), 0 TODO
 bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetPowerAdd"));
     if (crun == NULL) {
@@ -92201,7 +92816,7 @@ bool targetPowerAdd_Run(targetPowerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDrop.Run (bytecode.go:11244), 0 TODO
+// targetDrop.Run (bytecode.go:11673), 0 TODO
 bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("TargetDrop"));
     if (crun == NULL) {
@@ -92244,7 +92859,7 @@ bool targetDrop_Run(targetDrop sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeAdd.Run (bytecode.go:11277), 0 TODO
+// lifeAdd.Run (bytecode.go:11706), 0 TODO
 bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("LifeAdd"));
     if (crun == NULL) {
@@ -92292,7 +92907,7 @@ bool lifeAdd_Run(lifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifeSet.Run (bytecode.go:11312), 0 TODO
+// lifeSet.Run (bytecode.go:11741), 0 TODO
 bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("LifeSet"));
     if (crun == NULL) {
@@ -92323,7 +92938,7 @@ bool lifeSet_Run(lifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerAdd.Run (bytecode.go:11336), 0 TODO
+// powerAdd.Run (bytecode.go:11765), 0 TODO
 bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerAdd"));
     if (crun == NULL) {
@@ -92354,7 +92969,7 @@ bool powerAdd_Run(powerAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// powerSet.Run (bytecode.go:11360), 0 TODO
+// powerSet.Run (bytecode.go:11789), 0 TODO
 bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PowerSet"));
     if (crun == NULL) {
@@ -92385,7 +93000,7 @@ bool powerSet_Run(powerSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitVelSet.Run (bytecode.go:11387), 0 TODO
+// hitVelSet.Run (bytecode.go:11816), 0 TODO
 bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("HitVelSet"));
     if (crun == NULL) {
@@ -92430,7 +93045,7 @@ bool hitVelSet_Run(hitVelSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// screenBound.Run (bytecode.go:11422), 0 TODO
+// screenBound.Run (bytecode.go:11851), 0 TODO
 bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ScreenBound"));
     if (crun == NULL) {
@@ -92476,7 +93091,7 @@ bool screenBound_Run(screenBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// posFreeze.Run (bytecode.go:11460), 0 TODO
+// posFreeze.Run (bytecode.go:11889), 0 TODO
 bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("PosFreeze"));
     if (crun == NULL) {
@@ -92509,7 +93124,7 @@ bool posFreeze_Run(posFreeze sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envShake.Run (bytecode.go:11492), 0 TODO
+// envShake.Run (bytecode.go:11921), 0 TODO
 bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     EnvShake_clear(&g_sys.SystemStateVars_.envShake);
     {
@@ -92567,7 +93182,7 @@ bool envShake_Run(envShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitOverride.Run (bytecode.go:11541), 0 TODO
+// hitOverride.Run (bytecode.go:11970), 0 TODO
 bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("HitOverride"));
     if (crun == NULL) {
@@ -92647,7 +93262,7 @@ bool hitOverride_Run(hitOverride sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// pause.Run (bytecode.go:11612), 0 TODO
+// pause.Run (bytecode.go:12041), 0 TODO
 bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("Pause"));
     if (crun == NULL) {
@@ -92697,7 +93312,7 @@ bool pause_Run(pause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// superPause.Run (bytecode.go:11656), 0 TODO
+// superPause.Run (bytecode.go:12085), 0 TODO
 bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 12U, GOSTR("SuperPause"));
     if (crun == NULL) {
@@ -92824,7 +93439,7 @@ bool superPause_Run(superPause sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// trans.Run (bytecode.go:11757), 0 TODO
+// trans.Run (bytecode.go:12186), 0 TODO
 bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Trans"));
     if (crun == NULL) {
@@ -92865,7 +93480,7 @@ bool trans_Run(trans sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playerPush.Run (bytecode.go:11808), 0 TODO
+// playerPush.Run (bytecode.go:12237), 0 TODO
 bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("PlayerPush"));
     if (crun == NULL) {
@@ -92905,7 +93520,7 @@ bool playerPush_Run(playerPush sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stateTypeValue (bytecode.go:11840), 0 TODO
+// stateTypeValue (bytecode.go:12269), 0 TODO
 Ret_i32__bool fn_stateTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92941,7 +93556,7 @@ Ret_i32__bool fn_stateTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// moveTypeValue (bytecode.go:11859), 0 TODO
+// moveTypeValue (bytecode.go:12288), 0 TODO
 Ret_i32__bool fn_moveTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -92973,7 +93588,7 @@ Ret_i32__bool fn_moveTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// physicsTypeValue (bytecode.go:11876), 0 TODO
+// physicsTypeValue (bytecode.go:12305), 0 TODO
 Ret_i32__bool fn_physicsTypeValue(GoString s) {
     {
         s = strings_TrimSpace(s);
@@ -93009,7 +93624,7 @@ Ret_i32__bool fn_physicsTypeValue(GoString s) {
     return (Ret_i32__bool){0, false};
 }
 
-// evalTypeExp (bytecode.go:11897), 0 TODO
+// evalTypeExp (bytecode.go:12326), 0 TODO
 Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoFunc conv) {
     if (exp_.len < 2) {
         return (Ret_i32__bool){BytecodeExp_evalI(exp_.p[0], c), true};
@@ -93017,7 +93632,7 @@ Ret_i32__bool fn_evalTypeExp(Slice_BytecodeExp exp_, Char* c, GoString name, GoF
     return fn_evalTypeString(exp_.p[0], c, name, conv);
 }
 
-// evalTypeString (bytecode.go:11904), 0 TODO
+// evalTypeString (bytecode.go:12333), 0 TODO
 Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc conv) {
     BytecodeValue v = BytecodeExp_run(be, c);
     if (v.vtype != 4) {
@@ -93033,7 +93648,7 @@ Ret_i32__bool fn_evalTypeString(BytecodeExp be, Char* c, GoString name, GoFunc c
     return (Ret_i32__bool){t, ok};
 }
 
-// stateTypeSet.Run (bytecode.go:11917), 0 TODO
+// stateTypeSet.Run (bytecode.go:12346), 0 TODO
 bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("StateTypeSet"));
     if (crun == NULL) {
@@ -93099,7 +93714,7 @@ bool stateTypeSet_Run(stateTypeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleDraw.Run (bytecode.go:11963), 0 TODO
+// angleDraw.Run (bytecode.go:12392), 0 TODO
 bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AngleDraw"));
     if (crun == NULL) {
@@ -93153,7 +93768,7 @@ bool angleDraw_Run(angleDraw sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleSet.Run (bytecode.go:12005), 0 TODO
+// angleSet.Run (bytecode.go:12434), 0 TODO
 bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleSet"));
     if (crun == NULL) {
@@ -93198,7 +93813,7 @@ bool angleSet_Run(angleSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleAdd.Run (bytecode.go:12041), 0 TODO
+// angleAdd.Run (bytecode.go:12470), 0 TODO
 bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleAdd"));
     if (crun == NULL) {
@@ -93237,7 +93852,7 @@ bool angleAdd_Run(angleAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// angleMul.Run (bytecode.go:12071), 0 TODO
+// angleMul.Run (bytecode.go:12500), 0 TODO
 bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AngleMul"));
     if (crun == NULL) {
@@ -93282,7 +93897,7 @@ bool angleMul_Run(angleMul sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// envColor.Run (bytecode.go:12106), 0 TODO
+// envColor.Run (bytecode.go:12535), 0 TODO
 bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     g_sys.SystemStateVars_.envcol = (Arr3_i32){{255, 255, 255}};
     g_sys.SystemStateVars_.envcol_time = 1;
@@ -93322,7 +93937,7 @@ bool envColor_Run(envColor sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// displayToClipboard.Run (bytecode.go:12135), 0 TODO
+// displayToClipboard.Run (bytecode.go:12564), 0 TODO
 bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DisplayToClipboard"));
     if (crun == NULL) {
@@ -93372,7 +93987,7 @@ bool displayToClipboard_Run(displayToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// appendToClipboard.Run (bytecode.go:12166), 0 TODO
+// appendToClipboard.Run (bytecode.go:12595), 0 TODO
 bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AppendToClipBoard"));
     if (crun == NULL) {
@@ -93421,7 +94036,7 @@ bool appendToClipboard_Run(appendToClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// clearClipboard.Run (bytecode.go:12201), 0 TODO
+// clearClipboard.Run (bytecode.go:12630), 0 TODO
 bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ClearClipboard"));
     if (crun == NULL) {
@@ -93452,7 +94067,7 @@ bool clearClipboard_Run(clearClipboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// makeDust.Run (bytecode.go:12227), 0 TODO
+// makeDust.Run (bytecode.go:12656), 0 TODO
 bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MakeDust"));
     if (crun == NULL) {
@@ -93518,7 +94133,7 @@ bool makeDust_Run(makeDust sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackDist.Run (bytecode.go:12289), 0 TODO
+// attackDist.Run (bytecode.go:12718), 0 TODO
 bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AttackDist"));
     if (crun == NULL) {
@@ -93567,7 +94182,7 @@ bool attackDist_Run(attackDist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// attackMulSet.Run (bytecode.go:12335), 0 TODO
+// attackMulSet.Run (bytecode.go:12764), 0 TODO
 bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("AttackMulSet"));
     if (crun == NULL) {
@@ -93618,7 +94233,7 @@ bool attackMulSet_Run(attackMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// defenceMulSet.Run (bytecode.go:12373), 0 TODO
+// defenceMulSet.Run (bytecode.go:12802), 0 TODO
 bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("DefenceMulSet"));
     if (crun == NULL) {
@@ -93670,7 +94285,7 @@ bool defenceMulSet_Run(defenceMulSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// fallEnvShake.Run (bytecode.go:12422), 0 TODO
+// fallEnvShake.Run (bytecode.go:12851), 0 TODO
 bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("FallEnvShake"));
     if (crun == NULL) {
@@ -93706,7 +94321,7 @@ bool fallEnvShake_Run(fallEnvShake sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallDamage.Run (bytecode.go:12463), 0 TODO
+// hitFallDamage.Run (bytecode.go:12892), 0 TODO
 bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallDamage"));
     if (crun == NULL) {
@@ -93737,7 +94352,7 @@ bool hitFallDamage_Run(hitFallDamage sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallVel.Run (bytecode.go:12487), 0 TODO
+// hitFallVel.Run (bytecode.go:12916), 0 TODO
 bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitFallVel"));
     if (crun == NULL) {
@@ -93768,7 +94383,7 @@ bool hitFallVel_Run(hitFallVel sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitFallSet.Run (bytecode.go:12514), 0 TODO
+// hitFallSet.Run (bytecode.go:12943), 0 TODO
 bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("HitFallSet"));
     if (crun == NULL) {
@@ -93826,7 +94441,7 @@ bool hitFallSet_Run(hitFallSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRangeSet.Run (bytecode.go:12553), 0 TODO
+// varRangeSet.Run (bytecode.go:12982), 0 TODO
 bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("VarRangeSet"));
     if (crun == NULL) {
@@ -93873,7 +94488,7 @@ bool varRangeSet_Run(varRangeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapPal.Run (bytecode.go:12589), 0 TODO
+// remapPal.Run (bytecode.go:13018), 0 TODO
 bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemapPal"));
     if (crun == NULL) {
@@ -93917,7 +94532,7 @@ bool remapPal_Run(remapPal sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// stopSnd.Run (bytecode.go:12624), 0 TODO
+// stopSnd.Run (bytecode.go:13053), 0 TODO
 bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("StopSnd"));
     if (crun == NULL) {
@@ -93960,7 +94575,7 @@ bool stopSnd_Run(stopSnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// sndPan.Run (bytecode.go:12659), 0 TODO
+// sndPan.Run (bytecode.go:13088), 0 TODO
 bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("SndPan"));
     if (crun == NULL) {
@@ -94019,7 +94634,7 @@ bool sndPan_Run(sndPan sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// varRandom.Run (bytecode.go:12697), 0 TODO
+// varRandom.Run (bytecode.go:13126), 0 TODO
 bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("VarRandom"));
     if (crun == NULL) {
@@ -94067,7 +94682,7 @@ bool varRandom_Run(varRandom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// gravity.Run (bytecode.go:12729), 0 TODO
+// gravity.Run (bytecode.go:13158), 0 TODO
 bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Gravity"));
     if (crun == NULL) {
@@ -94098,7 +94713,7 @@ bool gravity_Run(gravity sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToParent.Run (bytecode.go:12755), 0 TODO
+// bindToParent.Run (bytecode.go:13184), 0 TODO
 bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToParent"));
     if (crun == NULL) {
@@ -94166,7 +94781,7 @@ bool bindToParent_Run(bindToParent sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// bindToRoot.Run (bytecode.go:12803), 0 TODO
+// bindToRoot.Run (bytecode.go:13232), 0 TODO
 bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("BindToRoot"));
     if (crun == NULL) {
@@ -94234,7 +94849,7 @@ bool bindToRoot_Run(bindToRoot sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeExplod.Run (bytecode.go:12857), 0 TODO
+// removeExplod.Run (bytecode.go:13286), 0 TODO
 bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveExplod"));
     if (crun == NULL) {
@@ -94272,7 +94887,7 @@ bool removeExplod_Run(removeExplod sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// explodBindTime.Run (bytecode.go:12887), 0 TODO
+// explodBindTime.Run (bytecode.go:13316), 0 TODO
 bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ExplodBindTime"));
     if (crun == NULL) {
@@ -94310,7 +94925,7 @@ bool explodBindTime_Run(explodBindTime sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// moveHitReset.Run (bytecode.go:12915), 0 TODO
+// moveHitReset.Run (bytecode.go:13344), 0 TODO
 bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MoveHitReset"));
     if (crun == NULL) {
@@ -94341,7 +94956,7 @@ bool moveHitReset_Run(moveHitReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// hitAdd.Run (bytecode.go:12939), 0 TODO
+// hitAdd.Run (bytecode.go:13368), 0 TODO
 bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("HitAdd"));
     if (crun == NULL) {
@@ -94372,7 +94987,7 @@ bool hitAdd_Run(hitAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// offset.Run (bytecode.go:12964), 0 TODO
+// offset.Run (bytecode.go:13393), 0 TODO
 bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("Offset"));
     if (crun == NULL) {
@@ -94407,7 +95022,7 @@ bool offset_Run(offset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// victoryQuote.Run (bytecode.go:12990), 0 TODO
+// victoryQuote.Run (bytecode.go:13419), 0 TODO
 bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("VictoryQuote"));
     if (crun == NULL) {
@@ -94440,7 +95055,7 @@ bool victoryQuote_Run(victoryQuote sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// zoom.Run (bytecode.go:13021), 0 TODO
+// zoom.Run (bytecode.go:13450), 0 TODO
 bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     Arr2_f32 pos = (Arr2_f32){{0x0p+00f, 0x0p+00f}};
     i32 t = 1;
@@ -94520,7 +95135,7 @@ bool zoom_Run(zoom sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// forceFeedback.Run (bytecode.go:13096), 0 TODO
+// forceFeedback.Run (bytecode.go:13525), 0 TODO
 bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 7U, GOSTR("ForceFeedback"));
     if (crun == NULL) {
@@ -94640,7 +95255,7 @@ bool forceFeedback_Run(forceFeedback sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertCommand.Run (bytecode.go:13203), 0 TODO
+// assertCommand.Run (bytecode.go:13632), 0 TODO
 bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("AssertCommand"));
     if (crun == NULL) {
@@ -94678,7 +95293,7 @@ bool assertCommand_Run(assertCommand sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertAnalogVector.Run (bytecode.go:13237), 0 TODO
+// assertAnalogVector.Run (bytecode.go:13666), 0 TODO
 bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 6U, GOSTR("AssertAnalogVector"));
     if (crun == NULL) {
@@ -94737,7 +95352,7 @@ bool assertAnalogVector_Run(assertAnalogVector sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// assertInput.Run (bytecode.go:13280), 0 TODO
+// assertInput.Run (bytecode.go:13709), 0 TODO
 bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("AssertInput"));
     if (crun == NULL) {
@@ -94784,7 +95399,7 @@ bool assertInput_Run(assertInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// changeMovelist.Run (bytecode.go:13316), 0 TODO
+// changeMovelist.Run (bytecode.go:13745), 0 TODO
 bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ChangeMovelist"));
     if (crun == NULL) {
@@ -94825,7 +95440,7 @@ bool changeMovelist_Run(changeMovelist sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dialogue.Run (bytecode.go:13348), 0 TODO
+// dialogue.Run (bytecode.go:13777), 0 TODO
 bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     if (!g_sys.motif.di.enabled) {
         return false;
@@ -94873,7 +95488,7 @@ bool dialogue_Run(dialogue sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsAdd.Run (bytecode.go:13386), 0 TODO
+// dizzyPointsAdd.Run (bytecode.go:13815), 0 TODO
 bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DizzyPointsAdd"));
     if (crun == NULL) {
@@ -94909,7 +95524,7 @@ bool dizzyPointsAdd_Run(dizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzyPointsSet.Run (bytecode.go:13413), 0 TODO
+// dizzyPointsSet.Run (bytecode.go:13842), 0 TODO
 bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzyPointsSet"));
     if (crun == NULL) {
@@ -94940,7 +95555,7 @@ bool dizzyPointsSet_Run(dizzyPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// dizzySet.Run (bytecode.go:13437), 0 TODO
+// dizzySet.Run (bytecode.go:13866), 0 TODO
 bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("DizzySet"));
     if (crun == NULL) {
@@ -94972,7 +95587,7 @@ bool dizzySet_Run(dizzySet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardBreakSet.Run (bytecode.go:13462), 0 TODO
+// guardBreakSet.Run (bytecode.go:13891), 0 TODO
 bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardBreakSet"));
     if (crun == NULL) {
@@ -95004,7 +95619,7 @@ bool guardBreakSet_Run(guardBreakSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsAdd.Run (bytecode.go:13488), 0 TODO
+// guardPointsAdd.Run (bytecode.go:13917), 0 TODO
 bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("GuardPointsAdd"));
     if (crun == NULL) {
@@ -95040,7 +95655,7 @@ bool guardPointsAdd_Run(guardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// guardPointsSet.Run (bytecode.go:13515), 0 TODO
+// guardPointsSet.Run (bytecode.go:13944), 0 TODO
 bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GuardPointsSet"));
     if (crun == NULL) {
@@ -95071,7 +95686,7 @@ bool guardPointsSet_Run(guardPointsSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// lifebarAction.Run (bytecode.go:13550), 0 TODO
+// lifebarAction.Run (bytecode.go:13979), 0 TODO
 bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 23U, GOSTR("LifebarAction"));
     if (crun == NULL) {
@@ -95185,7 +95800,7 @@ bool lifebarAction_Run(lifebarAction sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// loadState.Run (bytecode.go:13634), 0 TODO
+// loadState.Run (bytecode.go:14063), 0 TODO
 bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -95212,7 +95827,7 @@ bool loadState_Run(loadState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapSet.Run (bytecode.go:13657), 0 TODO
+// mapSet.Run (bytecode.go:14086), 0 TODO
 bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("MapSet"));
     if (crun == NULL) {
@@ -95265,7 +95880,7 @@ bool mapSet_Run(mapSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// matchRestart.Run (bytecode.go:13714), 0 TODO
+// matchRestart.Run (bytecode.go:14143), 0 TODO
 bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     GoString s = (GoString){0};
     bool reloadFlag = false;
@@ -95426,7 +96041,7 @@ bool matchRestart_Run(matchRestart sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// printToConsole.Run (bytecode.go:13812), 0 TODO
+// printToConsole.Run (bytecode.go:14241), 0 TODO
 bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     Slice_GoIface params = (Slice_GoIface){0};
     {
@@ -95465,7 +96080,7 @@ bool printToConsole_Run(printToConsole sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeAdd.Run (bytecode.go:13838), 0 TODO
+// redLifeAdd.Run (bytecode.go:14267), 0 TODO
 bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RedLifeAdd"));
     if (crun == NULL) {
@@ -95501,7 +96116,7 @@ bool redLifeAdd_Run(redLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// redLifeSet.Run (bytecode.go:13865), 0 TODO
+// redLifeSet.Run (bytecode.go:14294), 0 TODO
 bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RedLifeSet"));
     if (crun == NULL) {
@@ -95532,7 +96147,7 @@ bool redLifeSet_Run(redLifeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// remapSprite.Run (bytecode.go:13892), 0 TODO
+// remapSprite.Run (bytecode.go:14321), 0 TODO
 bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("RemapSprite"));
     if (crun == NULL) {
@@ -95590,7 +96205,7 @@ bool remapSprite_Run(remapSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeAdd.Run (bytecode.go:13942), 0 TODO
+// roundTimeAdd.Run (bytecode.go:14371), 0 TODO
 bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -95619,7 +96234,7 @@ bool roundTimeAdd_Run(roundTimeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// roundTimeSet.Run (bytecode.go:13963), 0 TODO
+// roundTimeSet.Run (bytecode.go:14392), 0 TODO
 bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -95648,7 +96263,7 @@ bool roundTimeSet_Run(roundTimeSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// saveFile.Run (bytecode.go:13987), 0 TODO
+// saveFile.Run (bytecode.go:14416), 0 TODO
 bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -95803,7 +96418,7 @@ bool saveFile_Run(saveFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// loadFile.Run (bytecode.go:14074), 0 TODO
+// loadFile.Run (bytecode.go:14503), 0 TODO
 bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     volatile bool _df19 = false; volatile GoFunc _df19_f;
     GoPanicFrame _pf; _pf.prev = go_panic_top; go_panic_top = &_pf;
@@ -96006,7 +96621,7 @@ bool loadFile_Run(loadFile sc, Char* c, Slice_i32 _p1) {
     if (_df19) { _df19 = false; ((GoIface (*)(void *))_df19_f.fn)(_df19_f.env); }
 }
 
-// saveState.Run (bytecode.go:14200), 0 TODO
+// saveState.Run (bytecode.go:14629), 0 TODO
 bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -96033,7 +96648,7 @@ bool saveState_Run(saveState sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// scoreAdd.Run (bytecode.go:14220), 0 TODO
+// scoreAdd.Run (bytecode.go:14649), 0 TODO
 bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("ScoreAdd"));
     if (crun == NULL) {
@@ -96064,7 +96679,7 @@ bool scoreAdd_Run(scoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shaderSet.Run (bytecode.go:14254), 0 TODO
+// shaderSet.Run (bytecode.go:14683), 0 TODO
 bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 11U, GOSTR("ShaderSet"));
     if (crun == NULL) {
@@ -96176,7 +96791,7 @@ bool shaderSet_Run(shaderSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// storyboard.Run (bytecode.go:14341), 0 TODO
+// storyboard.Run (bytecode.go:14770), 0 TODO
 bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 8U, GOSTR("Storyboard"));
     if (crun == NULL) {
@@ -96286,7 +96901,7 @@ bool storyboard_Run(storyboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStoryboard.Run (bytecode.go:14413), 0 TODO
+// modifyStoryboard.Run (bytecode.go:14842), 0 TODO
 bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("ModifyStoryboard"));
     if (crun == NULL) {
@@ -96301,7 +96916,7 @@ bool modifyStoryboard_Run(modifyStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeStoryboard.Run (bytecode.go:14506), 0 TODO
+// removeStoryboard.Run (bytecode.go:14935), 0 TODO
 bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("RemoveStoryboard"));
     if (crun == NULL) {
@@ -96328,7 +96943,7 @@ bool removeStoryboard_Run(removeStoryboard sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl.Run (bytecode.go:14551), 0 TODO
+// modifyBGCtrl.Run (bytecode.go:14980), 0 TODO
 bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -96545,7 +97160,7 @@ bool modifyBGCtrl_Run(modifyBGCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBGCtrl3d.Run (bytecode.go:14690), 0 TODO
+// modifyBGCtrl3d.Run (bytecode.go:15119), 0 TODO
 bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     i32 cid = 0;
     Arr3_i32 _t1 = (Arr3_i32){{INT32_MIN, INT32_MIN, INT32_MIN}};
@@ -96598,7 +97213,7 @@ bool modifyBGCtrl3d_Run(modifyBGCtrl3d sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyBgm.Run (bytecode.go:14734), 0 TODO
+// modifyBgm.Run (bytecode.go:15163), 0 TODO
 bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     if (g_sys.bgm.ctrl == NULL) {
         return false;
@@ -96716,7 +97331,7 @@ bool modifyBgm_Run(modifyBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifySnd.Run (bytecode.go:14835), 0 TODO
+// modifySnd.Run (bytecode.go:15264), 0 TODO
 bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 14U, GOSTR("ModifySnd"));
     if (crun == NULL) {
@@ -96918,7 +97533,7 @@ bool modifySnd_Run(modifySnd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// playBgm.Run (bytecode.go:14980), 0 TODO
+// playBgm.Run (bytecode.go:15409), 0 TODO
 bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 9U, GOSTR("PlayBGM"));
     if (crun == NULL) {
@@ -97098,7 +97713,7 @@ bool playBgm_Run(playBgm sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetDizzyPointsAdd.Run (bytecode.go:15068), 0 TODO
+// targetDizzyPointsAdd.Run (bytecode.go:15497), 0 TODO
 bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetDizzyPointsAdd"));
     if (crun == NULL) {
@@ -97151,7 +97766,7 @@ bool targetDizzyPointsAdd_Run(targetDizzyPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetGuardPointsAdd.Run (bytecode.go:15108), 0 TODO
+// targetGuardPointsAdd.Run (bytecode.go:15537), 0 TODO
 bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetGuardPointsAdd"));
     if (crun == NULL) {
@@ -97204,7 +97819,7 @@ bool targetGuardPointsAdd_Run(targetGuardPointsAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetRedLifeAdd.Run (bytecode.go:15148), 0 TODO
+// targetRedLifeAdd.Run (bytecode.go:15577), 0 TODO
 bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TargetRedLifeAdd"));
     if (crun == NULL) {
@@ -97260,7 +97875,7 @@ bool targetRedLifeAdd_Run(targetRedLifeAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetScoreAdd.Run (bytecode.go:15191), 0 TODO
+// targetScoreAdd.Run (bytecode.go:15620), 0 TODO
 bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("TargetScoreAdd"));
     if (crun == NULL) {
@@ -97308,7 +97923,7 @@ bool targetScoreAdd_Run(targetScoreAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// text.Run (bytecode.go:15258), 0 TODO
+// text.Run (bytecode.go:15687), 0 TODO
 bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 44U, GOSTR("Text"));
     if (crun == NULL) {
@@ -97646,7 +98261,7 @@ bool text_Run(text sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyText.Run (bytecode.go:15496), 0 TODO
+// modifyText.Run (bytecode.go:15925), 0 TODO
 bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 44U, GOSTR("ModifyText"));
     if (crun == NULL) {
@@ -97705,7 +98320,7 @@ bool modifyText_Run(modifyText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// removeText.Run (bytecode.go:15828), 0 TODO
+// removeText.Run (bytecode.go:16257), 0 TODO
 bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("RemoveText"));
     if (crun == NULL) {
@@ -97743,7 +98358,7 @@ bool removeText_Run(removeText sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// createPlatform.Run (bytecode.go:15867), 0 TODO
+// createPlatform.Run (bytecode.go:16296), 0 TODO
 bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("CreatePlatform"));
     if (crun == NULL) {
@@ -97809,7 +98424,7 @@ bool createPlatform_Run(createPlatform sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageVar.Run (bytecode.go:16019), 0 TODO
+// modifyStageVar.Run (bytecode.go:16448), 0 TODO
 bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     Stage* s = g_sys.stage;
     bool shouldResetCamera = false;
@@ -98309,7 +98924,7 @@ bool modifyStageVar_Run(modifyStageVar sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// cameraCtrl.Run (bytecode.go:16335), 0 TODO
+// cameraCtrl.Run (bytecode.go:16764), 0 TODO
 bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     {
         StateControllerBase _t2 = sc;
@@ -98355,7 +98970,7 @@ bool cameraCtrl_Run(cameraCtrl sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// height.Run (bytecode.go:16367), 0 TODO
+// height.Run (bytecode.go:16796), 0 TODO
 bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("Height"));
     if (crun == NULL) {
@@ -98393,7 +99008,7 @@ bool height_Run(height sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depth.Run (bytecode.go:16401), 0 TODO
+// depth.Run (bytecode.go:16830), 0 TODO
 bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("Depth"));
     if (crun == NULL) {
@@ -98452,7 +99067,7 @@ bool depth_Run(depth sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// depthBound.Run (bytecode.go:16449), 0 TODO
+// depthBound.Run (bytecode.go:16878), 0 TODO
 bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("DepthBound"));
     if (crun == NULL) {
@@ -98491,7 +99106,7 @@ bool depthBound_Run(depthBound sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyPlayer.Run (bytecode.go:16504), 0 TODO
+// modifyPlayer.Run (bytecode.go:16933), 0 TODO
 bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 21U, GOSTR("ModifyPlayer"));
     if (crun == NULL) {
@@ -98653,7 +99268,7 @@ bool modifyPlayer_Run(modifyPlayer sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// getHitVarSet.Run (bytecode.go:16667), 0 TODO
+// getHitVarSet.Run (bytecode.go:17096), 0 TODO
 bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 48U, GOSTR("GetHitVarSet"));
     if (crun == NULL) {
@@ -98869,7 +99484,7 @@ bool getHitVarSet_Run(getHitVarSet sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// groundLevelOffset.Run (bytecode.go:16785), 0 TODO
+// groundLevelOffset.Run (bytecode.go:17214), 0 TODO
 bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("GroundLevelOffset"));
     if (crun == NULL) {
@@ -98901,7 +99516,7 @@ bool groundLevelOffset_Run(groundLevelOffset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// targetAdd.Run (bytecode.go:16811), 0 TODO
+// targetAdd.Run (bytecode.go:17240), 0 TODO
 bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("TargetAdd"));
     if (crun == NULL) {
@@ -98934,7 +99549,7 @@ bool targetAdd_Run(targetAdd sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformClsn.Run (bytecode.go:16843), 0 TODO
+// transformClsn.Run (bytecode.go:17272), 0 TODO
 bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 5U, GOSTR("TransformClsn"));
     if (crun == NULL) {
@@ -98997,7 +99612,7 @@ bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
                 {
                     for (int _t9 = 0; _t9 < 4; _t9++) {
                         int i = _t9;
-                        crun->clsnTransforms.v[i] = GO_SLICE(Slice_ClsnTransform, crun->clsnTransforms.v[i], 0, 0);
+                        crun->clsnTransforms.v[i] = GO_SLICE_HI(Slice_ClsnTransform, crun->clsnTransforms.v[i], 0, 0);
                         _cont10:;
                     }
                 }
@@ -99020,7 +99635,7 @@ bool transformClsn_Run(transformClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// transformSprite.Run (bytecode.go:16914), 0 TODO
+// transformSprite.Run (bytecode.go:17343), 0 TODO
 bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 4U, GOSTR("TransformSprite"));
     if (crun == NULL) {
@@ -99071,7 +99686,7 @@ bool transformSprite_Run(transformSprite sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyStageBG.Run (bytecode.go:16978), 0 TODO
+// modifyStageBG.Run (bytecode.go:17407), 0 TODO
 bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     i32 bgid = -1;
     int bgidx = -1;
@@ -99125,7 +99740,7 @@ bool modifyStageBG_Run(modifyStageBG sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyShadow.Run (bytecode.go:17213), 0 TODO
+// modifyShadow.Run (bytecode.go:17642), 0 TODO
 bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyShadow"));
     if (crun == NULL) {
@@ -99324,7 +99939,7 @@ bool modifyShadow_Run(modifyShadow sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// modifyReflection.Run (bytecode.go:17374), 0 TODO
+// modifyReflection.Run (bytecode.go:17803), 0 TODO
 bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 25U, GOSTR("ModifyReflection"));
     if (crun == NULL) {
@@ -99523,7 +100138,7 @@ bool modifyReflection_Run(modifyReflection sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// shiftInput.Run (bytecode.go:17511), 0 TODO
+// shiftInput.Run (bytecode.go:17940), 0 TODO
 bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 2U, GOSTR("ShiftInput"));
     if (crun == NULL) {
@@ -99578,7 +100193,7 @@ bool shiftInput_Run(shiftInput sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// overrideClsn.Run (bytecode.go:17561), 0 TODO
+// overrideClsn.Run (bytecode.go:17990), 0 TODO
 bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 3U, GOSTR("OverrideClsn"));
     if (crun == NULL) {
@@ -99634,7 +100249,7 @@ bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
                 {
                     for (int _t9 = 0; _t9 < 4; _t9++) {
                         int i = _t9;
-                        crun->clsnOverrides.v[i] = GO_SLICE(Slice_ClsnOverride, crun->clsnOverrides.v[i], 0, 0);
+                        crun->clsnOverrides.v[i] = GO_SLICE_HI(Slice_ClsnOverride, crun->clsnOverrides.v[i], 0, 0);
                         _cont10:;
                     }
                 }
@@ -99658,7 +100273,7 @@ bool overrideClsn_Run(overrideClsn sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// mapReset.Run (bytecode.go:17631), 0 TODO
+// mapReset.Run (bytecode.go:18060), 0 TODO
 bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     Char* crun = fn_getRedirectedChar(c, sc, 1U, GOSTR("MapReset"));
     if (crun == NULL) {
@@ -99692,13 +100307,13 @@ bool mapReset_Run(mapReset sc, Char* c, Slice_i32 _p1) {
     return false;
 }
 
-// newStateBytecode (bytecode.go:17669), 0 TODO
+// newStateBytecode (bytecode.go:18098), 0 TODO
 StateBytecode* fn_newStateBytecode(int pn) {
     StateBytecode* sb = go_box(StateBytecode, (StateBytecode){.stateType = 1, .moveType = 32768, .physics = 16, .playerNo = pn, .block = (*fn_newStateBlock())});
     return sb;
 }
 
-// StateBytecode.init (bytecode.go:17680), 0 TODO
+// StateBytecode.init (bytecode.go:18109), 0 TODO
 void StateBytecode_init(StateBytecode* sb, Char* c) {
     g_sys.workingState = sb;
     StateType _t1 = sb->stateType;
@@ -99759,7 +100374,7 @@ void StateBytecode_init(StateBytecode* sb, Char* c) {
     stateDef_Run(sb->stateDef, c);
 }
 
-// StateBytecode.run (bytecode.go:17736), 0 TODO
+// StateBytecode.run (bytecode.go:18165), 0 TODO
 bool StateBytecode_run(StateBytecode* sb, Char* c) {
     bool changeState = {0};
     Slice_i32 _t1 = sb->ctrlsps;
@@ -99790,7 +100405,7 @@ bool StateBytecode_run(StateBytecode* sb, Char* c) {
     return changeState;
 }
 
-// BytecodeExp.pushTrigger (bytecode.go:17762), 0 TODO
+// BytecodeExp.pushTrigger (bytecode.go:18191), 0 TODO
 void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     {
         OpCode _t1 = t;
@@ -99879,7 +100494,7 @@ void BytecodeExp_pushTrigger(BytecodeExp be, Char* c, OpCode t) {
     }
 }
 
-// BytecodeExp.cmpConst (bytecode.go:17808), 0 TODO
+// BytecodeExp.cmpConst (bytecode.go:18237), 0 TODO
 void BytecodeExp_cmpConst(BytecodeExp be, OpCode cmp, BytecodeValue k) {
     {
         OpCode _t1 = cmp;
@@ -100689,8 +101304,8 @@ void HitDef_reset(HitDef* hd, Char* c, Projectile* proj) {
     }
     (*hd) = (HitDef){.isprojectile = (proj != NULL), .statePN = -1, .playerno = -1, .playerid = -1, .projid = -1, .hitflag = 23, .guardflag = 0, .affectteam = 1, .teamside = c->teamside, .animtype = 0, .air_animtype = -1, .priority = 4, .prioritytype = 0, .sparkno = Char_gi(c)->data.sparkno, .sparkno_ffx = GOSTR("f"), .sparkangle = 0x0p+00f, .sparkscale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .guard_sparkno = Char_gi(c)->data.guard.sparkno, .guard_sparkno_ffx = GOSTR("f"), .guard_sparkangle = 0x0p+00f, .guard_sparkscale = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .hitsound = (Arr2_i32){{-1, 0}}, .hitsound_channel = Char_gi(c)->data.hitsound_channel, .hitsound_ffx = GOSTR("f"), .guardsound = (Arr2_i32){{-1, 0}}, .guardsound_channel = Char_gi(c)->data.guardsound_channel, .guardsound_ffx = GOSTR("f"), .ground_type = 1, .air_type = -1, .air_hittime = 20, .down_hittime = 20, .guard_pausetime = (Arr2_i32){{INT32_MIN, INT32_MIN}}, .guard_hittime = INT32_MIN, .guard_slidetime = INT32_MIN, .guard_ctrltime = INT32_MIN, .airguard_ctrltime = INT32_MIN, .ground_velocity = (Arr3_f32){{0x0p+00f, 0x0p+00f, 0x0p+00f}}, .air_velocity = (Arr3_f32){{0x0p+00f, 0x0p+00f, 0x0p+00f}}, .down_velocity = (Arr3_f32){{((f32)math_NaN()), ((f32)math_NaN()), ((f32)math_NaN())}}, .guard_velocity = (Arr3_f32){{((f32)math_NaN()), 0x0p+00f, ((f32)math_NaN())}}, .airguard_velocity = (Arr3_f32){{((f32)math_NaN()), ((f32)math_NaN()), ((f32)math_NaN())}}, .ground_cornerpush_veloff = ((f32)math_NaN()), .air_cornerpush_veloff = ((f32)math_NaN()), .down_cornerpush_veloff = ((f32)math_NaN()), .guard_cornerpush_veloff = ((f32)math_NaN()), .airguard_cornerpush_veloff = ((f32)math_NaN()), .ground_cornerpush_velmul = ((f32)math_NaN()), .air_cornerpush_velmul = ((f32)math_NaN()), .down_cornerpush_velmul = ((f32)math_NaN()), .guard_cornerpush_velmul = ((f32)math_NaN()), .airguard_cornerpush_velmul = ((f32)math_NaN()), .xaccel = 0x0p+00f, .yaccel = (0x1.666666p-02f / originLs), .zaccel = 0x0p+00f, .p1sprpriority = INT32_MIN, .p2sprpriority = 0, .p1stateno = -1, .p2stateno = -1, .missonoverride = -1, .forcestand = INT32_MIN, .forcecrouch = INT32_MIN, .air_fall = INT32_MIN, .guard_dist_x = hd->guard_dist_x, .guard_dist_y = hd->guard_dist_y, .guard_dist_z = hd->guard_dist_z, .chainid = -1, .nochainid = (Arr8_i32){{-1, -1, -1, -1, -1, -1, -1, -1}}, .numhits = 1, .hitgetpower = INT32_MIN, .guardgetpower = INT32_MIN, .hitgivepower = INT32_MIN, .guardgivepower = INT32_MIN, .envshake_freq = 0x1.ep+05f, .envshake_ampl = -4, .envshake_phase = ((f32)math_NaN()), .envshake_mul = 0x1p+00f, .mindist = (Arr3_f32){{((f32)math_NaN()), ((f32)math_NaN()), ((f32)math_NaN())}}, .maxdist = (Arr3_f32){{((f32)math_NaN()), ((f32)math_NaN()), ((f32)math_NaN())}}, .snap = (Arr3_f32){{((f32)math_NaN()), ((f32)math_NaN()), ((f32)math_NaN())}}, .hitonce = -1, .kill = true, .guard_kill = true, .dizzypoints = INT32_MIN, .guardpoints = INT32_MIN, .hitredlife = INT32_MIN, .guardredlife = INT32_MIN, .score = (Arr2_f32){{((f32)math_NaN()), ((f32)math_NaN())}}, .p2clsncheck = -1, .p2clsnrequire = -1, .down_recover = true, .down_recovertime = -1, .air_juggle = INT32_MIN, .fall_animtype = -1, .fall_xvelocity = ((f32)math_NaN()), .fall_yvelocity = (-0x1.2p+02f / originLs), .fall_zvelocity = 0x0p+00f, .fall_recover = true, .fall_recovertime = 4, .fall_kill = true, .fall_envshake_freq = 0x1.ep+05f, .fall_envshake_ampl = INT32_MIN, .fall_envshake_phase = ((f32)math_NaN()), .fall_envshake_mul = 0x1p+00f, .attack_depth = (Arr2_f32){{c->size.attack.depth.v[0], c->size.attack.depth.v[1]}}, .unhittabletime = (Arr2_i32){{INT32_MIN, INT32_MIN}}, .stand_friction = ((f32)math_NaN()), .crouch_friction = ((f32)math_NaN()), .KeepState = false, .IgnoreReversalDef = 0, .reversal_guardflag = INT32_MIN, .reversal_guardflag_not = INT32_MIN};
     if (proj == NULL) {
-        c->hitdefTargets = GO_SLICE(Slice_i32, c->hitdefTargets, 0, 0);
-        c->hitdefTargetsBuffer = GO_SLICE(Slice_i32, c->hitdefTargetsBuffer, 0, 0);
+        c->hitdefTargets = GO_SLICE_HI(Slice_i32, c->hitdefTargets, 0, 0);
+        c->hitdefTargetsBuffer = GO_SLICE_HI(Slice_i32, c->hitdefTargetsBuffer, 0, 0);
     }
     if (proj != NULL) {
         hd->guard_dist_x = (Arr2_f32){{c->size.proj.attack.dist.width.v[0], c->size.proj.attack.dist.width.v[1]}};
@@ -101163,7 +101778,7 @@ void AfterImage_setup(AfterImage* ai, Char* c) {
     if (ai->imgs.len < ringSize) {
         ai->imgs = GO_APPEND_SLICE(Slice_SpriteData, ai->imgs, GO_MAKE(Slice_SpriteData, SpriteData, (ringSize - ai->imgs.len), 0));
     } else {
-        ai->imgs = GO_SLICE(Slice_SpriteData, ai->imgs, 0, ringSize);
+        ai->imgs = GO_SLICE_HI(Slice_SpriteData, ai->imgs, 0, ringSize);
     }
     ai->imgidx = fn_Clamp_i32(ai->imgidx, 0, (((i32)ai->imgs.len) - 1));
     int pfxsize = go_div32(((int)ai->length), ((int)ai->framegap));
@@ -101180,7 +101795,7 @@ void AfterImage_setup(AfterImage* ai, Char* c) {
             }
         }
     } else {
-        ai->palfx = GO_SLICE(Slice_PalFXPtr, ai->palfx, 0, pfxsize);
+        ai->palfx = GO_SLICE_HI(Slice_PalFXPtr, ai->palfx, 0, pfxsize);
     }
     Arr3_i32 pb = ai->postbright;
     if ((ai->palfx.p[0]->PalFXDef_.invertblend <= -2) && ai->palfx.p[0]->eInvertall) {
@@ -101262,7 +101877,7 @@ void AfterImage_recAfterImg(AfterImage* ai, SpriteData* sd, bool hitpause) {
             }
             int di = ((int)sd->anim->drawidx);
             if ((di >= 0) && (di < sd->anim->frames.len)) {
-                img->anim->frames = GO_APPEND(Slice_AnimFrame, GO_SLICE(Slice_AnimFrame, oldFrames, 0, 0), sd->anim->frames.p[di]);
+                img->anim->frames = GO_APPEND(Slice_AnimFrame, GO_SLICE_HI(Slice_AnimFrame, oldFrames, 0, 0), sd->anim->frames.p[di]);
                 img->anim->frames.p[0].Clsn1 = (Slice_Arr4_f32){0};
                 img->anim->frames.p[0].Clsn2 = (Slice_Arr4_f32){0};
             } else {
@@ -102227,7 +102842,7 @@ Slice_ClsnFinal Projectile_getClsn(Projectile* p, i32 group) {
         return (Slice_ClsnFinal){0};
     }
     Slice_ClsnFinal* buf = (&p->clsnBuffers.v[(group - 1)]);
-    (*buf) = GO_SLICE(Slice_ClsnFinal, ((*buf)), 0, 0);
+    (*buf) = GO_SLICE_HI(Slice_ClsnFinal, ((*buf)), 0, 0);
     Arr2_f32 scale = (Arr2_f32){{((p->clsnScale.v[0] * p->localscl) * p->zScale), ((p->clsnScale.v[1] * p->localscl) * p->zScale)}};
     {
         Slice_Arr4_f32 _t2 = rects;
@@ -102285,7 +102900,7 @@ void Projectile_tradeDetection(Projectile* p, int playerNo, int index) {
     if (((p->anim == NULL) || (p->anim->frames.len == 0)) || (Animation_CurrentFrame(p->anim)->Clsn2.p == 0)) {
         return;
     }
-    Slice_ProjectilePtr candidates = GO_SLICE(Slice_ProjectilePtr, g_sys.projectileTradeSort, 0, 0);
+    Slice_ProjectilePtr candidates = GO_SLICE_HI(Slice_ProjectilePtr, g_sys.projectileTradeSort, 0, 0);
     {
         int i = playerNo;
         for (; (i < 12) && (p->hits >= 0); i++) {
@@ -102594,7 +103209,7 @@ void StateState_clear(StateState* ss) {
     StateState_changeStateType(ss, 1);
     StateState_changeMoveType(ss, 32768);
     ss->physics = 16;
-    ss->ps = GO_SLICE(Slice_i32, ss->ps, 0, 0);
+    ss->ps = GO_SLICE_HI(Slice_i32, ss->ps, 0, 0);
     i32 _t1 = 0;
     i32 _t2 = 0;
     ss->no = _t1;
@@ -102706,8 +103321,8 @@ bool Char_clsnOverlapTrigger(Char* c, i32 box1, i32 pid, i32 box2) {
 
 // Char.enemyNearP2Clear (char.go:3994), 0 TODO
 void Char_enemyNearP2Clear(Char* c) {
-    c->enemyNearList = GO_SLICE(Slice_i32, c->enemyNearList, 0, 0);
-    c->p2EnemyList = GO_SLICE(Slice_i32, c->p2EnemyList, 0, 0);
+    c->enemyNearList = GO_SLICE_HI(Slice_i32, c->enemyNearList, 0, 0);
+    c->p2EnemyList = GO_SLICE_HI(Slice_i32, c->p2EnemyList, 0, 0);
 }
 
 // Char.sortOthersByDistance (char.go:4000), 0 TODO
@@ -102779,7 +103394,7 @@ void Char_prepareNextRound(Char* c) {
         c->aimg = NULL;
     }
     Char_enemyNearP2Clear(c);
-    c->targets = GO_SLICE(Slice_i32, c->targets, 0, 0);
+    c->targets = GO_SLICE_HI(Slice_i32, c->targets, 0, 0);
     c->cpucmd = -1;
     CustomShader_clear(&c->customShader);
 }
@@ -105101,7 +105716,7 @@ void Char_changeTagLeader(Char* c, int nextLeaderPN) {
             processed++;
             if (!Char_alive(g_sys.chars.v[team.p[i]].p[0])) {
                 int pIdx = team.p[i];
-                team = GO_APPEND_SLICE(Slice_int, GO_SLICE(Slice_int, team, 0, i), GO_SLICE(Slice_int, team, (i + 1), -1));
+                team = GO_APPEND_SLICE(Slice_int, GO_SLICE_HI(Slice_int, team, 0, i), GO_SLICE(Slice_int, team, (i + 1), -1));
                 team = GO_APPEND(Slice_int, team, pIdx);
                 i--;
             }
@@ -105399,7 +106014,7 @@ bool Char_stateChange1(Char* c, i32 no, int pn) {
     if (c->ss.ps.cap < n) {
         c->ss.ps = fn_SliceGrow_i32(c->ss.ps, (n - c->ss.ps.len));
     }
-    c->ss.ps = GO_SLICE(Slice_i32, c->ss.ps, 0, n);
+    c->ss.ps = GO_SLICE_HI(Slice_i32, c->ss.ps, 0, n);
     if (((Char_stWgi(c)->ikemenver.v[0] != 0U) || (Char_stWgi(c)->ikemenver.v[1] != 0U)) || (!Char_hitPause(c))) {
         {
             Slice_i32 _t7 = c->ss.ps;
@@ -105522,7 +106137,7 @@ void Char_runState(Char* c, i32 no, int pn) {
     StateBytecode_run(sb, c);
     c->inRunState = oldInRun;
     Slice_BytecodeValue _t7 = oldv;
-    BytecodeStack _t8 = GO_SLICE(BytecodeStack, g_sys.bcVarStack, 0, oldvslen);
+    BytecodeStack _t8 = GO_SLICE_HI(BytecodeStack, g_sys.bcVarStack, 0, oldvslen);
     g_sys.bcVar = _t7;
     g_sys.bcVarStack = _t8;
     StateBytecode* _t9 = oldWs;
@@ -105602,7 +106217,7 @@ void Char_destroy(Char* c) {
             _cont9:;
         }
     }
-    c->children = GO_SLICE(Slice_i32, c->children, 0, 0);
+    c->children = GO_SLICE_HI(Slice_i32, c->children, 0, 0);
     if (Char_isPlayerType(c)) {
         g_sys.charList.enemyNearChanged = true;
     }
@@ -105823,9 +106438,9 @@ Ret_ExplodPtr__int Char_spawnExplod(Char* c) {
     PalFX* sparePal = NULL;
     Explod* e = NULL;
     Slice_ExplodPtr slice = (*playerExplods);
-    if ((slice.len < slice.cap) && (GO_SLICE(Slice_ExplodPtr, slice, 0, (slice.len + 1)).p[slice.len] != NULL)) {
-        e = GO_SLICE(Slice_ExplodPtr, slice, 0, (slice.len + 1)).p[slice.len];
-        (*playerExplods) = GO_SLICE(Slice_ExplodPtr, slice, 0, (slice.len + 1));
+    if ((slice.len < slice.cap) && (GO_SLICE_HI(Slice_ExplodPtr, slice, 0, (slice.len + 1)).p[slice.len] != NULL)) {
+        e = GO_SLICE_HI(Slice_ExplodPtr, slice, 0, (slice.len + 1)).p[slice.len];
+        (*playerExplods) = GO_SLICE_HI(Slice_ExplodPtr, slice, 0, (slice.len + 1));
         if (true) {
             Animation* _t1 = e->anim;
             PalFX* _t2 = e->ownPalfx;
@@ -107107,7 +107722,7 @@ void Char_bindToTarget(Char* c, Slice_i32 tar, i32 time_, f32 x, f32 y, f32 z, H
                 if (!math_IsNaN(((f64)z))) {
                     Char_setPosZ(c, ((t->pos.v[2] * ((t->localscl / c->localscl))) + z), true);
                 }
-                Char_targetBind(c, GO_SLICE(Slice_i32, tar, 0, 1), time_, (c->facing * Char_distX(c, t, c)), (((t->pos.v[1] * ((t->localscl / c->localscl)))) - ((c->pos.v[1] * ((c->localscl / t->localscl))))), (((t->pos.v[2] * ((t->localscl / c->localscl)))) - ((c->pos.v[2] * ((c->localscl / t->localscl))))));
+                Char_targetBind(c, GO_SLICE_HI(Slice_i32, tar, 0, 1), time_, (c->facing * Char_distX(c, t, c)), (((t->pos.v[1] * ((t->localscl / c->localscl)))) - ((c->pos.v[1] * ((c->localscl / t->localscl))))), (((t->pos.v[2] * ((t->localscl / c->localscl)))) - ((c->pos.v[2] * ((c->localscl / t->localscl))))));
             }
         }
     }
@@ -108040,7 +108655,7 @@ void Char_propagateIgnoreDarkenTime(Char* c) {
     {
         for (; stack.len > 0; ) {
             Char* node = stack.p[(stack.len - 1)];
-            stack = GO_SLICE(Slice_CharPtr, stack, 0, (stack.len - 1));
+            stack = GO_SLICE_HI(Slice_CharPtr, stack, 0, (stack.len - 1));
             {
                 Slice_i32 _t5 = node->children;
                 for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -108990,7 +109605,7 @@ void Char_dropTargets(Char* c) {
                     if (t != NULL) {
                         if ((t->ss.moveType != 65536) && (!t->stchtmp)) {
                             c->targets.p[i] = c->targets.p[(c->targets.len - 1)];
-                            c->targets = GO_SLICE(Slice_i32, c->targets, 0, (c->targets.len - 1));
+                            c->targets = GO_SLICE_HI(Slice_i32, c->targets, 0, (c->targets.len - 1));
                             if (t->ghv._type != 0) {
                                 t->ghv.hitid = -1;
                             }
@@ -109044,7 +109659,7 @@ void Char_exitTarget(Char* c) {
             }
         }
         Char_gethitBindClear(c);
-        c->ghv.targetedBy = GO_SLICE(Slice_Arr2_i32, c->ghv.targetedBy, 0, 0);
+        c->ghv.targetedBy = GO_SLICE_HI(Slice_Arr2_i32, c->ghv.targetedBy, 0, 0);
     }
 }
 
@@ -109178,7 +109793,7 @@ Slice_ClsnFinal Char_getClsnUnscaled(Char* c, i32 group) {
         }
     }
     Slice_ClsnFinal* buffer = (&c->clsnBuffers.v[(group - 1)]);
-    (*buffer) = GO_SLICE(Slice_ClsnFinal, ((*buffer)), 0, 0);
+    (*buffer) = GO_SLICE_HI(Slice_ClsnFinal, ((*buffer)), 0, 0);
     {
         i32 _t1 = group;
         switch (_t1) {
@@ -109249,7 +109864,7 @@ Slice_ClsnFinal Char_getClsnLocal(Char* c, i32 group) {
                 do {
                     if ((go_eq_Arr4_f32(mod.rect, (Arr4_f32){{}}))) {
                         if (mod.index < 0) {
-                            (*boxes__h) = GO_SLICE(Slice_ClsnFinal, (*boxes__h), 0, 0);
+                            (*boxes__h) = GO_SLICE_HI(Slice_ClsnFinal, (*boxes__h), 0, 0);
                         } else {
                             if (mod.index < (*boxes__h).len) {
                                 (*boxes__h) = fn_SliceDelete_ClsnFinal((*boxes__h), mod.index);
@@ -109342,14 +109957,14 @@ void Char_resetClsnModifiers(Char* c) {
     {
         for (int _t1 = 0; _t1 < 4; _t1++) {
             int i = _t1;
-            c->clsnOverrides.v[i] = GO_SLICE(Slice_ClsnOverride, c->clsnOverrides.v[i], 0, 0);
+            c->clsnOverrides.v[i] = GO_SLICE_HI(Slice_ClsnOverride, c->clsnOverrides.v[i], 0, 0);
             _cont2:;
         }
     }
     {
         for (int _t3 = 0; _t3 < 4; _t3++) {
             int i = _t3;
-            c->clsnTransforms.v[i] = GO_SLICE(Slice_ClsnTransform, c->clsnTransforms.v[i], 0, 0);
+            c->clsnTransforms.v[i] = GO_SLICE_HI(Slice_ClsnTransform, c->clsnTransforms.v[i], 0, 0);
             _cont4:;
         }
     }
@@ -109416,7 +110031,7 @@ bool Char_projClsnCheckSingle(Char* c, Projectile* p, i32 cbox, i32 pbox, bool f
             Char* _t3 = Projectile_owner(p);
             Char* owner = _t3;
             if (owner != NULL) {
-                Slice_ClsnFinal buf = GO_SLICE(Slice_ClsnFinal, c->clsnFilterBuf, 0, 0);
+                Slice_ClsnFinal buf = GO_SLICE_HI(Slice_ClsnFinal, c->clsnFilterBuf, 0, 0);
                 {
                     Slice_ClsnFinal _t5 = boxes2;
                     for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -109532,7 +110147,7 @@ bool Char_clsnCheckSingle(Char* c, Char* getter, i32 charbox, i32 getterbox, boo
         return false;
     }
     if (((fromHitdef && (c->hitdef.reversal_attr <= 0)) && (getterbox > 0)) && Char_hasBoxHitBy(getter)) {
-        Slice_ClsnFinal buf = GO_SLICE(Slice_ClsnFinal, getter->clsnFilterBuf, 0, 0);
+        Slice_ClsnFinal buf = GO_SLICE_HI(Slice_ClsnFinal, getter->clsnFilterBuf, 0, 0);
         {
             Slice_ClsnFinal _t2 = boxes2;
             for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -110680,7 +111295,7 @@ void Char_actionPrepare(Char* c) {
             c->CharSystemVar_.depthEdge = (Arr2_f32){{0x0p+00f, 0x0p+00f}};
         }
         c->inputFlag = 0;
-        c->inputShift = GO_SLICE(Slice_Arr2_int, c->inputShift, 0, 0);
+        c->inputShift = GO_SLICE_HI(Slice_Arr2_int, c->inputShift, 0, 0);
         Char_setASF(c, 1024U, false);
         c->CharSystemVar_.prevNoStandGuard = Char_asf(c, 128U);
         if ((((Char_stWgi(c)->ikemenver.v[0] != 0U) || (Char_stWgi(c)->ikemenver.v[1] != 0U)) || (Char_stWgi(c)->mugenver.v[0] == 1U)) || (!Char_hitPause(c))) {
@@ -111255,7 +111870,7 @@ void Char_tick(Char* c) {
     }
     if (c->hitdefTargetsBuffer.len > 0) {
         c->hitdefTargets = GO_APPEND_SLICE(Slice_i32, c->hitdefTargets, c->hitdefTargetsBuffer);
-        c->hitdefTargetsBuffer = GO_SLICE(Slice_i32, c->hitdefTargetsBuffer, 0, 0);
+        c->hitdefTargetsBuffer = GO_SLICE_HI(Slice_i32, c->hitdefTargetsBuffer, 0, 0);
     }
     if (c->mctime < 0) {
         c->mctime = 1;
@@ -111472,7 +112087,7 @@ void Char_cueDebugDraw(Char* c) {
                     Ret_bool__bool__GoString__i32 _t5 = Char_debugHitByState(c, 2, ((i32)i));
                     bool bhb = _t5.r0;
                     bool bmtk = _t5.r1;
-                    DebugClsn_Add(((DebugClsn* (*)(void *, bool, bool))(pick).fn)((pick).env, bhb, bmtk), GO_SLICE(Slice_ClsnFinal, boxes2, i, (i + 1)), (x + xoff), (y + yoff), c->facing);
+                    DebugClsn_Add(((DebugClsn* (*)(void *, bool, bool))(pick).fn)((pick).env, bhb, bmtk), GO_SLICE_HI(Slice_ClsnFinal, boxes2, i, (i + 1)), (x + xoff), (y + yoff), c->facing);
                     _cont4:;
                 }
             }
@@ -112118,7 +112733,7 @@ void CharList_hitDetectionPlayer(CharList* cl, Char* c) {
     if (c->atktmp == 0) {
         return;
     }
-    Slice_CharPtr candidates = GO_SLICE(Slice_CharPtr, g_sys.hitDetectionSort, 0, 0);
+    Slice_CharPtr candidates = GO_SLICE_HI(Slice_CharPtr, g_sys.hitDetectionSort, 0, 0);
     {
         Slice_CharPtr _t2 = cl->runOrder;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -112876,7 +113491,7 @@ Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list) {
     if (((int)n) < (*cache).len) {
         return System_playerID(&g_sys, ((*cache)).p[n]);
     }
-    Slice_CharPtr enemies = GO_ARRSLICE(Slice_CharPtr, g_enemyNearScratch.v, 12, 0, 0);
+    Slice_CharPtr enemies = GO_ARRSLICE_HI(Slice_CharPtr, g_enemyNearScratch.v, 12, 0, 0);
     {
         Slice_CharPtr _t5 = cl->runOrder;
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -112898,7 +113513,7 @@ Char* CharList_enemyNear(CharList* cl, Char* c, i32 n, bool p2list) {
         }
     }
     enemies = Char_sortOthersByDistance(c, enemies, p2list);
-    (*cache) = GO_SLICE(Slice_i32, ((*cache)), 0, 0);
+    (*cache) = GO_SLICE_HI(Slice_i32, ((*cache)), 0, 0);
     {
         Slice_CharPtr _t8 = enemies;
         for (int _t7 = 0; _t7 < _t8.len; _t7++) {
@@ -113888,7 +114503,7 @@ GoString fn_OldSprintf(GoString f, Slice_GoIface a) {
         f = go_bytes2str(b);
     }
     if (a.len > numVerbs) {
-        a = GO_SLICE(Slice_GoIface, a, 0, numVerbs);
+        a = GO_SLICE_HI(Slice_GoIface, a, 0, numVerbs);
     }
     return fmt_Sprintf(f, a);
     return s;
@@ -115014,7 +115629,7 @@ Ret_int__GoIface vitaBufFile_Read(vitaBufFile* b, Slice_u8 p) {
             int n = _t2.r0;
             GoIface err = _t2.r1;
             b->pos += ((i64)n);
-            b->buf = GO_SLICE(Slice_u8, b->buf, 0, 0);
+            b->buf = GO_SLICE_HI(Slice_u8, b->buf, 0, 0);
             return (Ret_int__GoIface){n, err};
         }
         {
@@ -115024,10 +115639,10 @@ Ret_int__GoIface vitaBufFile_Read(vitaBufFile* b, Slice_u8 p) {
                 return (Ret_int__GoIface){0, err};
             }
         }
-        Ret_int__GoIface _t4 = os_File_Read(b->f, GO_SLICE(Slice_u8, b->buf, 0, b->buf.cap));
+        Ret_int__GoIface _t4 = os_File_Read(b->f, GO_SLICE_HI(Slice_u8, b->buf, 0, b->buf.cap));
         int n = _t4.r0;
         GoIface err = _t4.r1;
-        b->buf = GO_SLICE(Slice_u8, b->buf, 0, n);
+        b->buf = GO_SLICE_HI(Slice_u8, b->buf, 0, n);
         b->bufStart = b->pos;
         if (n == 0) {
             if (err.type == 0) {
@@ -116219,10 +116834,10 @@ expValueFrame* CharCompiler_getFrame(CharCompiler* c) {
     }
     expValueFrame* f = c->frames.p[c->frameDepth];
     c->frameDepth++;
-    BytecodeExp _t1 = GO_SLICE(BytecodeExp, f->be1, 0, 0);
-    BytecodeExp _t2 = GO_SLICE(BytecodeExp, f->be2, 0, 0);
-    BytecodeExp _t3 = GO_SLICE(BytecodeExp, f->be3, 0, 0);
-    BytecodeExp _t4 = GO_SLICE(BytecodeExp, f->be, 0, 0);
+    BytecodeExp _t1 = GO_SLICE_HI(BytecodeExp, f->be1, 0, 0);
+    BytecodeExp _t2 = GO_SLICE_HI(BytecodeExp, f->be2, 0, 0);
+    BytecodeExp _t3 = GO_SLICE_HI(BytecodeExp, f->be3, 0, 0);
+    BytecodeExp _t4 = GO_SLICE_HI(BytecodeExp, f->be, 0, 0);
     f->be1 = _t1;
     f->be2 = _t2;
     f->be3 = _t3;
@@ -116543,7 +117158,7 @@ void CharCompiler_emitAttrOrHitFlagTest(CharCompiler* c, BytecodeExp* out, bool 
         BytecodeExp_append(out, stringExp);
         value = -2;
     }
-    BytecodeExp_append(out, GO_SLICE(Slice_OpCode, ops, 0, (ops.len - 1)));
+    BytecodeExp_append(out, GO_SLICE_HI(Slice_OpCode, ops, 0, (ops.len - 1)));
     BytecodeExp_appendI32Op(out, ops.p[(ops.len - 1)], value);
     if (not) {
         BytecodeExp_append(out, GO_SLICE_LIT(Slice_OpCode, OpCode, 1, 33U));
@@ -122267,7 +122882,7 @@ BytecodeExp* CharCompiler_getScratch(CharCompiler* c) {
     }
     BytecodeExp* be = c->scratch.p[c->scratchDepth];
     c->scratchDepth++;
-    (*be) = GO_SLICE(BytecodeExp, ((*be)), 0, 0);
+    (*be) = GO_SLICE_HI(BytecodeExp, ((*be)), 0, 0);
     return be;
 }
 
@@ -130323,7 +130938,7 @@ i32 fn_numHelperIdx(int pn, i32 id) {
         x->ptr = _t2;
         x->n = _t3;
         x->total = _t4;
-        x->ids = GO_SLICE(Slice_helperIdCount, x->ids, 0, 0);
+        x->ids = GO_SLICE_HI(Slice_helperIdCount, x->ids, 0, 0);
         {
             Slice_CharPtr _t6 = GO_SLICE(Slice_CharPtr, cs, 1, -1);
             for (int _t5 = 0; _t5 < _t6.len; _t5++) {
@@ -130424,8 +131039,8 @@ i32 fn_numExplodIdx(int pn, i32 id, i32 pid) {
             x->ids = GO_MAKE_A(Slice_i32, i32, es.len, (es.len * 2));
             x->owner = GO_MAKE_A(Slice_i32, i32, es.len, (es.len * 2));
         }
-        Slice_i32 _t3 = GO_SLICE(Slice_i32, x->ids, 0, es.len);
-        Slice_i32 _t4 = GO_SLICE(Slice_i32, x->owner, 0, es.len);
+        Slice_i32 _t3 = GO_SLICE_HI(Slice_i32, x->ids, 0, es.len);
+        Slice_i32 _t4 = GO_SLICE_HI(Slice_i32, x->owner, 0, es.len);
         Slice_i32 ids = _t3;
         Slice_i32 owner = _t4;
         int n = 0;
@@ -130443,14 +131058,14 @@ i32 fn_numExplodIdx(int pn, i32 id, i32 pid) {
                 _cont7:;
             }
         }
-        Slice_i32 _t10 = GO_SLICE(Slice_i32, ids, 0, n);
-        Slice_i32 _t11 = GO_SLICE(Slice_i32, owner, 0, n);
+        Slice_i32 _t10 = GO_SLICE_HI(Slice_i32, ids, 0, n);
+        Slice_i32 _t11 = GO_SLICE_HI(Slice_i32, owner, 0, n);
         x->ids = _t10;
         x->owner = _t11;
     }
     i32 total = 0;
     Slice_i32 _t12 = x->ids;
-    Slice_i32 _t13 = GO_SLICE(Slice_i32, x->owner, 0, x->ids.len);
+    Slice_i32 _t13 = GO_SLICE_HI(Slice_i32, x->owner, 0, x->ids.len);
     Slice_i32 ids = _t12;
     Slice_i32 owner = _t13;
     if (id < 0) {
@@ -131444,7 +132059,7 @@ Ret_upnpDevicePtr__GoIface fn_upnpDiscover(void) {
             }
             GoString loc = GOSTR("");
             {
-                Slice_GoString _t11 = strings_Split(go_bytes2str(GO_SLICE(Slice_u8, buf, 0, n)), GOSTR("\r\n"));
+                Slice_GoString _t11 = strings_Split(go_bytes2str(GO_SLICE_HI(Slice_u8, buf, 0, n)), GOSTR("\r\n"));
                 for (int _t10 = 0; _t10 < _t11.len; _t10++) {
                     GoString line = _t11.p[_t10];
                     {
@@ -131803,7 +132418,7 @@ GoString fn_cvfCleanName(GoString n) {
     {
         Slice_i32 r = go_str2runes(n);
         if (r.len > 20) {
-            n = go_runes2str(GO_SLICE(Slice_i32, r, 0, 20).p, GO_SLICE(Slice_i32, r, 0, 20).len);
+            n = go_runes2str(GO_SLICE_HI(Slice_i32, r, 0, 20).p, GO_SLICE_HI(Slice_i32, r, 0, 20).len);
         }
     }
     return n;
@@ -132304,7 +132919,7 @@ void fn_cvfEvictSounds(void) {
             g_cvfLazy.bytes -= ((i64)s->wavData.len);
             s->wavData = (Slice_u8){0};
             s->lazy->state = 0;
-            g_cvfLazy.loaded = GO_APPEND_SLICE(Slice_SoundPtr, GO_SLICE(Slice_SoundPtr, g_cvfLazy.loaded, 0, oldest), GO_SLICE(Slice_SoundPtr, g_cvfLazy.loaded, (oldest + 1), -1));
+            g_cvfLazy.loaded = GO_APPEND_SLICE(Slice_SoundPtr, GO_SLICE_HI(Slice_SoundPtr, g_cvfLazy.loaded, 0, oldest), GO_SLICE(Slice_SoundPtr, g_cvfLazy.loaded, (oldest + 1), -1));
             _cont1:;
         }
     }
@@ -135140,7 +135755,7 @@ void FightScreenWinIcon_step(FightScreenWinIcon* wi, i32 numwin) {
     AnimLayout_Action(&wi->bg0);
     AnimLayout_Action(&wi->top);
     if (((int)numwin) < wi->wins.len) {
-        wi->wins = GO_SLICE(Slice_WinType, wi->wins, 0, numwin);
+        wi->wins = GO_SLICE_HI(Slice_WinType, wi->wins, 0, numwin);
         FightScreenWinIcon_reset(wi);
     }
     {
@@ -135748,7 +136363,7 @@ Slice_FSMsgPtr fn_insertFSMsg(Slice_FSMsgPtr array, FSMsg* value, int index) {
             for (; i < array.len; i++) {
                 if (array.p[i]->del) {
                     GO_COPY(GO_SLICE(Slice_FSMsgPtr, array, i, -1), GO_SLICE(Slice_FSMsgPtr, array, (i + 1), -1));
-                    array = GO_SLICE(Slice_FSMsgPtr, array, 0, (array.len - 1));
+                    array = GO_SLICE_HI(Slice_FSMsgPtr, array, 0, (array.len - 1));
                     break;
                 }
                 _cont1:;
@@ -135760,7 +136375,7 @@ Slice_FSMsgPtr fn_insertFSMsg(Slice_FSMsgPtr array, FSMsg* value, int index) {
             for (; i >= index; i--) {
                 if (array.p[i]->del) {
                     GO_COPY(GO_SLICE(Slice_FSMsgPtr, array, i, -1), GO_SLICE(Slice_FSMsgPtr, array, (i + 1), -1));
-                    array = GO_SLICE(Slice_FSMsgPtr, array, 0, (array.len - 1));
+                    array = GO_SLICE_HI(Slice_FSMsgPtr, array, 0, (array.len - 1));
                     break;
                 }
                 _cont2:;
@@ -135770,7 +136385,7 @@ Slice_FSMsgPtr fn_insertFSMsg(Slice_FSMsgPtr array, FSMsg* value, int index) {
     if (index == array.len) {
         array = GO_APPEND(Slice_FSMsgPtr, array, value);
     } else {
-        array = GO_APPEND_SLICE(Slice_FSMsgPtr, GO_SLICE(Slice_FSMsgPtr, array, 0, index), GO_APPEND_SLICE(Slice_FSMsgPtr, GO_SLICE_LIT(Slice_FSMsgPtr, FSMsg*, 1, value), GO_SLICE(Slice_FSMsgPtr, array, index, -1)));
+        array = GO_APPEND_SLICE(Slice_FSMsgPtr, GO_SLICE_HI(Slice_FSMsgPtr, array, 0, index), GO_APPEND_SLICE(Slice_FSMsgPtr, GO_SLICE_LIT(Slice_FSMsgPtr, FSMsg*, 1, value), GO_SLICE(Slice_FSMsgPtr, array, index, -1)));
     }
     return array;
 }
@@ -138919,16 +139534,16 @@ Slice_u8 fn_stripKernTable(Slice_u8 ttf) {
         return ttf;
     }
     int offset = 0;
-    if (go_streq(go_bytes2str(GO_SLICE(Slice_u8, ttf, 0, 4)), GOSTR("ttcf"))) {
+    if (go_streq(go_bytes2str(GO_SLICE_HI(Slice_u8, ttf, 0, 4)), GOSTR("ttcf"))) {
         if (ttf.len < 16) {
             return ttf;
         }
-        offset = ((int)binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE(Slice_u8, ttf, 12, 16)));
+        offset = ((int)binary_bigEndian_Uint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, ttf, 12, 16)));
         if ((offset < 0) || ((ttf.len - offset) < 12)) {
             return ttf;
         }
     }
-    int numTables = ((int)binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE(Slice_u8, ttf, (offset + 4), (offset + 6))));
+    int numTables = ((int)binary_bigEndian_Uint16(binary_BigEndian, GO_SLICE_HI(Slice_u8, ttf, (offset + 4), (offset + 6))));
     int tableDir = (offset + 12);
     if (ttf.len < (tableDir + (16 * numTables))) {
         return ttf;
@@ -138938,8 +139553,8 @@ Slice_u8 fn_stripKernTable(Slice_u8 ttf) {
         int i = 0;
         for (; i < numTables; i++) {
             int p = (tableDir + (16 * i));
-            if (go_streq(go_bytes2str(GO_SLICE(Slice_u8, out, p, (p + 4))), GOSTR("kern"))) {
-                binary_bigEndian_PutUint32(binary_BigEndian, GO_SLICE(Slice_u8, out, (p + 12), (p + 16)), 0U);
+            if (go_streq(go_bytes2str(GO_SLICE_HI(Slice_u8, out, p, (p + 4))), GOSTR("kern"))) {
+                binary_bigEndian_PutUint32(binary_BigEndian, GO_SLICE_HI(Slice_u8, out, (p + 12), (p + 16)), 0U);
                 break;
             }
             _cont1:;
@@ -138987,9 +139602,9 @@ Ret_FntPtr__GoIface fn_loadFntV1(GoString filename) {
             return _t5;
         }
     }
-    if (!go_streq(go_bytes2str(GO_SLICE(Slice_u8, buf, 0, n)), GOSTR("ElecbyteFnt\x00"))) {
+    if (!go_streq(go_bytes2str(GO_SLICE_HI(Slice_u8, buf, 0, n)), GOSTR("ElecbyteFnt\x00"))) {
         {
-            Ret_FntPtr__GoIface _t6 = (Ret_FntPtr__GoIface){NULL, ((GoIface){281, go_box(Error, go_strcat(GOSTR("Unrecognized FNT file: "), go_bytes2str(GO_SLICE(Slice_u8, buf, 0, n))))})};
+            Ret_FntPtr__GoIface _t6 = (Ret_FntPtr__GoIface){NULL, ((GoIface){281, go_box(Error, go_strcat(GOSTR("Unrecognized FNT file: "), go_bytes2str(GO_SLICE_HI(Slice_u8, buf, 0, n))))})};
             go_panic_top = _pf.prev;
             if (_df3) { _df3 = false; ((void (*)(void *))_df3_f.fn)(_df3_f.env); }
             return _t6;
@@ -139232,8 +139847,8 @@ Ret_FntPtr__GoIface fn_loadFntV1(GoString filename) {
     {
         i32 i = 0;
         for (; ((int)i) < f->palettes.len; i++) {
-            GO_COPY(GO_ARRSLICE(Slice_u32, f->palettes.p[i].v, 256, 0, (256 - c)), GO_SLICE(Slice_u32, spr->Pal, 0, (256 - c)));
-            GO_COPY(GO_ARRSLICE(Slice_u32, f->palettes.p[i].v, 256, (256 - c), -1), GO_SLICE(Slice_u32, spr->Pal, (256 - (c * ((i + 1)))), (256 - (c * i))));
+            GO_COPY(GO_ARRSLICE_HI(Slice_u32, f->palettes.p[i].v, 256, 0, (256 - c)), GO_SLICE_HI(Slice_u32, spr->Pal, 0, (256 - c)));
+            GO_COPY(GO_ARRSLICE(Slice_u32, f->palettes.p[i].v, 256, (256 - c), -1), GO_SLICE_HI(Slice_u32, spr->Pal, (256 - (c * ((i + 1)))), (256 - (c * i))));
             _cont32:;
         }
     }
@@ -139689,7 +140304,7 @@ void TextSprite_Clear(TextSprite* ts) {
 // TextSprite.loadDefaults (font.go:814), 0 TODO
 void TextSprite_loadDefaults(TextSprite* ts) {
     PalFX* pfx = ts->palfx;
-    Slice_GoIface prm = GO_SLICE(Slice_GoIface, ts->params, 0, 0);
+    Slice_GoIface prm = GO_SLICE_HI(Slice_GoIface, ts->params, 0, 0);
     (*ts) = (TextSprite){.id = -1, .align = 1, .xscl = 0x1p+00f, .yscl = 0x1p+00f, .window = g_sys.SystemStateVars_.scrrect, .frgba = (Arr4_f32){{0x1p+00f, 0x1p+00f, 0x1p+00f, 0x1p+00f}}, .removetime = 1, .localScale = 0x1p+00f, .scaleRatio = 0x1p+00f, .friction = (Arr2_f32){{0x1p+00f, 0x1p+00f}}, .scaleInit = (Arr2_f32){{0x1p+00f, 0x1p+00f}}};
     ts->params = prm;
     if (pfx == NULL) {
@@ -140393,7 +141008,7 @@ GoIface Font_GL33_Printf(Font_GL33* f, f32 x, f32 y, f32 xscl, f32 yscl, f32 spa
             }
             if ((((((i32)go_div32(batchVertices.len, 24)) >= batchSize) || (((textureID != -1) && (textureID != ((i32)ch->textureID)))))) && (!custom)) {
                 Font_GL33_renderGlyphBatch(f, batchVertices, ((u32)textureID));
-                batchVertices = GO_SLICE(Slice_f32, batchVertices, 0, 0);
+                batchVertices = GO_SLICE_HI(Slice_f32, batchVertices, 0, 0);
             }
             textureID = ((i32)ch->textureID);
             if (renderedAny) {
@@ -140435,7 +141050,7 @@ GoIface Font_GL33_Printf(Font_GL33* f, f32 x, f32 y, f32 xscl, f32 yscl, f32 spa
             renderedAny = true;
             if (custom) {
                 Font_GL33_renderGlyph(f, batchVertices, ch->texture);
-                batchVertices = GO_SLICE(Slice_f32, batchVertices, 0, 0);
+                batchVertices = GO_SLICE_HI(Slice_f32, batchVertices, 0, 0);
             }
             _cont10:;
         }
@@ -140891,7 +141506,7 @@ GoIface Font_GLES32_Printf(Font_GLES32* f, f32 x, f32 y, f32 xscl, f32 yscl, f32
             }
             if ((((i32)go_div32(batchVertices.len, 24)) >= batchSize) || (((textureID != -1) && (textureID != ((i32)ch->textureID))))) {
                 Font_GLES32_renderGlyphBatch(f, batchVertices, ((u32)textureID));
-                batchVertices = GO_SLICE(Slice_f32, batchVertices, 0, 0);
+                batchVertices = GO_SLICE_HI(Slice_f32, batchVertices, 0, 0);
             }
             textureID = ((i32)ch->textureID);
             if (renderedAny) {
@@ -141379,7 +141994,7 @@ bool fn_rankingWouldPlace(GoString mode) {
     (*entries__h) = GO_APPEND(Slice_rankingEntryPtr, (*entries__h), newE);
     go_sort_slice_stable((void *)GO_TMPADDR(Slice_rankingEntryPtr, (*entries__h)), sizeof(rankingEntry*), ((GoFunc){(void *)lambda_986, go_box(Env_lambda_986, ((Env_lambda_986){rType__h, entries__h}))}));
     if ((*entries__h).len > visible) {
-        (*entries__h) = GO_SLICE(Slice_rankingEntryPtr, (*entries__h), 0, visible);
+        (*entries__h) = GO_SLICE_HI(Slice_rankingEntryPtr, (*entries__h), 0, visible);
     }
     {
         Slice_rankingEntryPtr _t4 = (*entries__h);
@@ -141494,7 +142109,7 @@ Ret_bool__i32 fn_computeAndSaveRanking(GoString mode) {
         visible = (*entries__h).len;
     }
     if ((*entries__h).len > visible) {
-        (*entries__h) = GO_SLICE(Slice_rankingEntryPtr, (*entries__h), 0, visible);
+        (*entries__h) = GO_SLICE_HI(Slice_rankingEntryPtr, (*entries__h), 0, visible);
         bool found = false;
         {
             Slice_rankingEntryPtr _t12 = (*entries__h);
@@ -142941,7 +143556,7 @@ GoIface SffHeader_Read(SffHeader* sh, GoIface r, u32* lofs, u32* tofs) {
     if (err.type != 0) {
         return err;
     }
-    if (!go_streq(go_bytes2str(GO_SLICE(Slice_u8, buf, 0, n)), GOSTR("ElecbyteSpr\x00"))) {
+    if (!go_streq(go_bytes2str(GO_SLICE_HI(Slice_u8, buf, 0, n)), GOSTR("ElecbyteSpr\x00"))) {
         return ((GoIface){281, go_box(Error, GOSTR("Unrecognized SFF file, invalid header"))});
     }
     GoFunc read = ((GoFunc){(void *)lambda_999, &(Env_lambda_999){r}});
@@ -149793,7 +150408,7 @@ GoIface Command_ReadCommandSymbols(Command* c, GoString cmdstr, CommandKeyRemap*
     Command_AutoGreaterExpand(c);
     c->completed = GO_MAKE_A(Slice_bool, bool, c->steps.len, 0);
     c->stepTimers = GO_MAKE_A(Slice_i32, i32, c->steps.len, 0);
-    c->loopOrder = GO_SLICE(Slice_int, c->loopOrder, 0, 0);
+    c->loopOrder = GO_SLICE_HI(Slice_int, c->loopOrder, 0, 0);
     {
         int i = (c->steps.len - 1);
         for (; i >= 0; ) {
@@ -150432,7 +151047,7 @@ void CommandList_Step(CommandList* cl, bool ai, bool isHelper, bool hpbuf, bool 
     if (cl->Buffer == NULL) {
         return;
     }
-    Slice_GoString completed = GO_SLICE(Slice_GoString, g_cmdCompletedScratch, 0, 0);
+    Slice_GoString completed = GO_SLICE_HI(Slice_GoString, g_cmdCompletedScratch, 0, 0);
     {
         Slice_Slice_Command _t2 = cl->Commands;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -150477,7 +151092,7 @@ void CommandList_Step(CommandList* cl, bool ai, bool isHelper, bool hpbuf, bool 
             _cont13:;
         }
     }
-    g_cmdCompletedScratch = GO_SLICE(Slice_GoString, completed, 0, 0);
+    g_cmdCompletedScratch = GO_SLICE_HI(Slice_GoString, completed, 0, 0);
 }
 
 // CommandList.BufReset (input.go:3036), 0 TODO
@@ -150811,9 +151426,9 @@ GoString Input_GetJoystickGUID(Input* input, int joy) {
     u16 vid = ((u16)sdl_GameController_Vendor(input->controllers.v[joy]));
     Slice_u8 guid = GO_MAKE_A(Slice_u8, u8, 16, 0);
     guid.p[0] = 3U;
-    binary_littleEndian_PutUint16(binary_LittleEndian, GO_SLICE(Slice_u8, guid, 4, 6), vid);
-    binary_littleEndian_PutUint16(binary_LittleEndian, GO_SLICE(Slice_u8, guid, 8, 10), pid);
-    binary_littleEndian_PutUint16(binary_LittleEndian, GO_SLICE(Slice_u8, guid, 12, 14), pv);
+    binary_littleEndian_PutUint16(binary_LittleEndian, GO_SLICE_HI(Slice_u8, guid, 4, 6), vid);
+    binary_littleEndian_PutUint16(binary_LittleEndian, GO_SLICE_HI(Slice_u8, guid, 8, 10), pid);
+    binary_littleEndian_PutUint16(binary_LittleEndian, GO_SLICE_HI(Slice_u8, guid, 12, 14), pv);
     GoString s = hex_EncodeToString(GO_SLICE(Slice_u8, guid, 0, -1));
     return s;
 }
@@ -151155,7 +151770,7 @@ void fn_realMain(void) {
                 if (os_Args.len == 0) {
                     os_Args = GO_SLICE_LIT(Slice_GoString, GoString, 1, GOSTR("ikemen-go"));
                 }
-                os_Args = GO_APPEND_SLICE(Slice_GoString, GO_SLICE(Slice_GoString, os_Args, 0, 1), strings_Fields(go_bytes2str(b)));
+                os_Args = GO_APPEND_SLICE(Slice_GoString, GO_SLICE_HI(Slice_GoString, os_Args, 0, 1), strings_Fields(go_bytes2str(b)));
                 fn_vitaTrace(go_strcat(GOSTR("main: vita_args.txt: "), strings_Join(GO_SLICE(Slice_GoString, os_Args, 1, -1), GOSTR(" "))));
             }
         }
@@ -152888,7 +153503,7 @@ GoString Motif_sprintf(Motif* mo, GoString format, Slice_GoIface args) {
     {
         int n = fn_countFmtVerbs(fs);
         if ((n >= 0) && (args.len > n)) {
-            args = GO_SLICE(Slice_GoIface, args, 0, n);
+            args = GO_SLICE_HI(Slice_GoIface, args, 0, n);
         }
     }
     return fmt_Sprintf(fs, args);
@@ -154710,7 +155325,7 @@ void MotifHiscore_init(MotifHiscore* hi, Motif* m, GoString mode, i32 place, i32
     hi->rows = fn_parseRankingRows(Map_GoString_GoString_get(&g_sys.cmdFlags, GOSTR("-stats"), NULL), mode);
     int capVisible = ((int)m->HiscoreInfo.Window.VisibleItems);
     if ((capVisible > 0) && (capVisible < hi->rows.len)) {
-        hi->rows = GO_SLICE(Slice_rankingRow, hi->rows, 0, capVisible);
+        hi->rows = GO_SLICE_HI(Slice_rankingRow, hi->rows, 0, capVisible);
     }
     int visible = hi->rows.len;
     Anim_Reset(m->HiscoreInfo.Item.Face.AnimationCharPreloadProperties_.AnimData);
@@ -155022,7 +155637,7 @@ void MotifHiscore_step(MotifHiscore* hi, Motif* m) {
                             if (go_streq(curGlyph, GOSTR("<"))) {
                                 Snd_play(m->Snd, m->HiscoreInfo.Cancel.Snd, 100, 0x0p+00f, 0, 0, 0, (Slice_bool){0});
                                 if (hi->letters.len > 1) {
-                                    hi->letters = GO_SLICE(Slice_int, hi->letters, 0, (hi->letters.len - 1));
+                                    hi->letters = GO_SLICE_HI(Slice_int, hi->letters, 0, (hi->letters.len - 1));
                                 } else {
                                     hi->letters = GO_SLICE_LIT(Slice_int, int, 1, 1);
                                 }
@@ -155500,7 +156115,7 @@ Slice_victoryEntry MotifVictory_buildSideOrder(MotifVictory* vi, int side, bool 
         }
     }
     if ((*out__h).len > maxNum) {
-        (*out__h) = GO_SLICE(Slice_victoryEntry, (*out__h), 0, maxNum);
+        (*out__h) = GO_SLICE_HI(Slice_victoryEntry, (*out__h), 0, maxNum);
     }
     return (*out__h);
 }
@@ -156362,7 +156977,7 @@ bgMusic* Music_matchSelection(Music m, GoString key) {
         return NULL;
     }
     Slice_bgMusicPtr previous = g_sys.matchMusicSel;
-    g_sys.matchMusicSel = GO_SLICE(Slice_bgMusicPtr, g_sys.matchMusicSel, 0, 0);
+    g_sys.matchMusicSel = GO_SLICE_HI(Slice_bgMusicPtr, g_sys.matchMusicSel, 0, 0);
     {
         Slice_bgMusicPtr _t8 = previous;
         for (int _t7 = 0; _t7 < _t8.len; _t7++) {
@@ -156655,7 +157270,7 @@ void Music_act(Music m) {
 // writeReplayInput (netplay.go:101), 0 TODO
 GoIface fn_writeReplayInput(GoIface w, InputBits ibit, Arr6_i8 axes) {
     Arr8_u8 buf = {0};
-    binary_littleEndian_PutUint16(binary_LittleEndian, GO_ARRSLICE(Slice_u8, buf.v, 8, 0, 2), ((u16)ibit));
+    binary_littleEndian_PutUint16(binary_LittleEndian, GO_ARRSLICE_HI(Slice_u8, buf.v, 8, 0, 2), ((u16)ibit));
     {
         int i = 0;
         for (; i < 6; i++) {
@@ -156678,7 +157293,7 @@ GoIface fn_readReplayInput(GoIface r, InputBits* ibit, Arr6_i8* axes) {
             return err;
         }
     }
-    (*ibit) = ((InputBits)((i16)binary_littleEndian_Uint16(binary_LittleEndian, GO_ARRSLICE(Slice_u8, buf.v, 8, 0, 2))));
+    (*ibit) = ((InputBits)((i16)binary_littleEndian_Uint16(binary_LittleEndian, GO_ARRSLICE_HI(Slice_u8, buf.v, 8, 0, 2))));
     {
         int i = 0;
         for (; i < 6; i++) {
@@ -159553,7 +160168,7 @@ void fn_emitTiles(Slice_f32* batch, mgl32_Mat4 modelview, RenderParams rp, f32 x
         f32 x4d = _t7;
         f32 y4d = _t8;
         int n = 0;
-        Slice_f32 xy = GO_SLICE(Slice_f32, g_tileScratch, 0, 0);
+        Slice_f32 xy = GO_SLICE_HI(Slice_f32, g_tileScratch, 0, 0);
         {
             for (; 1; ) {
                 f32 _t10 = x4d;
@@ -159598,7 +160213,7 @@ void fn_emitTiles(Slice_f32* batch, mgl32_Mat4 modelview, RenderParams rp, f32 x
                 f32 _t20 = xy.p[(xy.len - 3)];
                 f32 _t21 = xy.p[(xy.len - 2)];
                 f32 _t22 = xy.p[(xy.len - 1)];
-                Slice_f32 _t23 = GO_SLICE(Slice_f32, xy, 0, (xy.len - 8));
+                Slice_f32 _t23 = GO_SLICE_HI(Slice_f32, xy, 0, (xy.len - 8));
                 x1d = _t15;
                 x2d = _t16;
                 x3d = _t17;
@@ -159709,7 +160324,7 @@ void fn_renderSpriteQuad(mgl32_Mat4 modelview, RenderParams rp) {
             if ((tiled && trapez)) {
                 fn_emitTiles(NULL, modelview, rp, x1, y1, x2, y2, x3, y3, x4, y4);
             } else if ((tiled)) {
-                Slice_f32 batch = GO_SLICE(Slice_f32, g_quadVertexScratch, 0, 0);
+                Slice_f32 batch = GO_SLICE_HI(Slice_f32, g_quadVertexScratch, 0, 0);
                 fn_emitTiles((&batch), modelview, rp, x1, y1, x2, y2, x3, y3, x4, y4);
                 if (batch.len > 0) {
                     mgl32_Mat4 identity = mgl32_Ident4();
@@ -160058,7 +160673,7 @@ void TextureAtlas_clearTexture(TextureAtlas* ta, Texture tex, i32 width, i32 hei
                 if ((y + h) > height) {
                     h = (height - y);
                 }
-                iface_SetSubData2_dff1a4cb(tex, GO_SLICE(Slice_u8, clearData, 0, ((int)((width * h) * bpp))), 0, y, width, h, (width * bpp));
+                iface_SetSubData2_dff1a4cb(tex, GO_SLICE_HI(Slice_u8, clearData, 0, ((int)((width * h) * bpp))), 0, y, width, h, (width * bpp));
                 _cont1:;
             }
         }
@@ -160086,20 +160701,20 @@ Ret_Slice_u8__i32__bool fn_extrudeAtlasImage(Slice_u8 data, i32 width, i32 heigh
     {
         i32 y = 0;
         for (; y < height; y++) {
-            Slice_u8 srcRow = GO_SLICE(Slice_u8, data, (y * stride), ((y * stride) + (width * bpp)));
-            Slice_u8 dstRow = GO_SLICE(Slice_u8, out, ((((y + 1)) * outStride) + (1 * bpp)), (((((y + 1)) * outStride) + (1 * bpp)) + (width * bpp)));
+            Slice_u8 srcRow = GO_SLICE_HI(Slice_u8, data, (y * stride), ((y * stride) + (width * bpp)));
+            Slice_u8 dstRow = GO_SLICE_HI(Slice_u8, out, ((((y + 1)) * outStride) + (1 * bpp)), (((((y + 1)) * outStride) + (1 * bpp)) + (width * bpp)));
             GO_COPY(dstRow, srcRow);
-            Slice_u8 leftPx = GO_SLICE(Slice_u8, srcRow, 0, bpp);
-            Slice_u8 rightPx = GO_SLICE(Slice_u8, srcRow, (((width - 1)) * bpp), (width * bpp));
-            GO_COPY(GO_SLICE(Slice_u8, out, (((y + 1)) * outStride), ((((y + 1)) * outStride) + bpp)), leftPx);
-            GO_COPY(GO_SLICE(Slice_u8, out, ((((y + 1)) * outStride) + (((outWidth - 1)) * bpp)), ((((y + 1)) * outStride) + (outWidth * bpp))), rightPx);
+            Slice_u8 leftPx = GO_SLICE_HI(Slice_u8, srcRow, 0, bpp);
+            Slice_u8 rightPx = GO_SLICE_HI(Slice_u8, srcRow, (((width - 1)) * bpp), (width * bpp));
+            GO_COPY(GO_SLICE_HI(Slice_u8, out, (((y + 1)) * outStride), ((((y + 1)) * outStride) + bpp)), leftPx);
+            GO_COPY(GO_SLICE_HI(Slice_u8, out, ((((y + 1)) * outStride) + (((outWidth - 1)) * bpp)), ((((y + 1)) * outStride) + (outWidth * bpp))), rightPx);
             _cont1:;
         }
     }
-    Slice_u8 firstRow = GO_SLICE(Slice_u8, out, outStride, (outStride + outStride));
-    Slice_u8 lastRow = GO_SLICE(Slice_u8, out, (((outHeight - 2)) * outStride), ((((outHeight - 2)) * outStride) + outStride));
-    GO_COPY(GO_SLICE(Slice_u8, out, 0, outStride), firstRow);
-    GO_COPY(GO_SLICE(Slice_u8, out, (((outHeight - 1)) * outStride), ((((outHeight - 1)) * outStride) + outStride)), lastRow);
+    Slice_u8 firstRow = GO_SLICE_HI(Slice_u8, out, outStride, (outStride + outStride));
+    Slice_u8 lastRow = GO_SLICE_HI(Slice_u8, out, (((outHeight - 2)) * outStride), ((((outHeight - 2)) * outStride) + outStride));
+    GO_COPY(GO_SLICE_HI(Slice_u8, out, 0, outStride), firstRow);
+    GO_COPY(GO_SLICE_HI(Slice_u8, out, (((outHeight - 1)) * outStride), ((((outHeight - 1)) * outStride) + outStride)), lastRow);
     return (Ret_Slice_u8__i32__bool){out, outStride, true};
 }
 
@@ -160473,7 +161088,7 @@ Ret_u32__GoIface Renderer_GL33_compileShader(Renderer_GL33* r, u32 shaderType, G
         if ((*size__h) > 0) {
             Slice_u8 str = GO_MAKE_A(Slice_u8, u8, ((*size__h) + 1), 0);
             gl_GetShaderInfoLog(shader, (*size__h), (&(*l__h)), (&str.p[0]));
-            err = ((GoIface){281, go_box(Error, go_bytes2str(GO_SLICE(Slice_u8, str, 0, (*l__h))))});
+            err = ((GoIface){281, go_box(Error, go_bytes2str(GO_SLICE_HI(Slice_u8, str, 0, (*l__h))))});
         } else {
             err = ((GoIface){281, go_box(Error, GOSTR("Unknown shader compile error"))});
         }
@@ -160527,7 +161142,7 @@ Ret_u32__GoIface Renderer_GL33_linkProgram(Renderer_GL33* r, Slice_u32 params) {
         if ((*size__h) > 0) {
             Slice_u8 str = GO_MAKE_A(Slice_u8, u8, ((*size__h) + 1), 0);
             gl_GetProgramInfoLog(program, (*size__h), (&(*l__h)), (&str.p[0]));
-            err = ((GoIface){281, go_box(Error, go_bytes2str(GO_SLICE(Slice_u8, str, 0, (*l__h))))});
+            err = ((GoIface){281, go_box(Error, go_bytes2str(GO_SLICE_HI(Slice_u8, str, 0, (*l__h))))});
         } else {
             err = ((GoIface){281, go_box(Error, GOSTR("Unknown link error"))});
         }
@@ -161374,7 +161989,7 @@ bool Renderer_GL33_FinishScreenshot(Renderer_GL33* r, Slice_u8 data, int width, 
     {
         void* p = gl_MapBuffer(35051U, 35000U);
         if (p != NULL) {
-            GO_COPY(data, GO_ARRSLICE(Slice_u8, ((Arr1073741824_u8*)p)->v, 1073741824, 0, ((4 * width) * height)));
+            GO_COPY(data, GO_ARRSLICE_HI(Slice_u8, ((Arr1073741824_u8*)p)->v, 1073741824, 0, ((4 * width) * height)));
             gl_UnmapBuffer(35051U);
         }
     }
@@ -161676,7 +162291,7 @@ void Renderer_GL33_SetVertexData(Renderer_GL33* r, Slice_f32 values) {
     if (r->vertexScratch.cap < need) {
         r->vertexScratch = GO_MAKE_A(Slice_u8, u8, need, 0);
     } else {
-        r->vertexScratch = GO_SLICE(Slice_u8, r->vertexScratch, 0, need);
+        r->vertexScratch = GO_SLICE_HI(Slice_u8, r->vertexScratch, 0, need);
     }
     {
         Slice_f32 _t4 = values;
@@ -162161,7 +162776,7 @@ Ret_u32__GoIface Renderer_GLES32_linkProgram(Renderer_GLES32* r, Slice_u32 param
         if ((*size__h) > 0) {
             Slice_u8 str = GO_MAKE_A(Slice_u8, u8, ((*size__h) + 1), 0);
             gles2_GetProgramInfoLog(program, (*size__h), (&(*l__h)), (&str.p[0]));
-            err = fmt_Errorf(GOSTR("Link error: %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, go_bytes2str(GO_SLICE(Slice_u8, str, 0, (*l__h))))})));
+            err = fmt_Errorf(GOSTR("Link error: %s"), GO_SLICE_LIT(Slice_GoIface, GoIface, 1, ((GoIface){17, go_box(GoString, go_bytes2str(GO_SLICE_HI(Slice_u8, str, 0, (*l__h))))})));
         } else {
             err = fmt_Errorf(GOSTR("Unknown link error"), (Slice_GoIface){0});
         }
@@ -162310,7 +162925,7 @@ void Texture_GLES32_SetSubData2(Texture_GLES32* t, Slice_u8 data, i32 x, i32 y, 
         {
             int row = 0;
             for (; row < ((int)height); row++) {
-                GO_COPY(GO_SLICE(Slice_u8, packed, (row * rb), (((row + 1)) * rb)), GO_SLICE(Slice_u8, data, (row * ((int)stride)), ((row * ((int)stride)) + rb)));
+                GO_COPY(GO_SLICE_HI(Slice_u8, packed, (row * rb), (((row + 1)) * rb)), GO_SLICE_HI(Slice_u8, data, (row * ((int)stride)), ((row * ((int)stride)) + rb)));
                 _cont1:;
             }
         }
@@ -163166,7 +163781,7 @@ bool Renderer_GLES32_FinishScreenshot(Renderer_GLES32* r, Slice_u8 data, int wid
     {
         void* p = gles2_MapBufferRange(35051U, 0, ((4 * width) * height), 1U);
         if (p != NULL) {
-            GO_COPY(data, GO_ARRSLICE(Slice_u8, ((Arr1073741824_u8*)p)->v, 1073741824, 0, ((4 * width) * height)));
+            GO_COPY(data, GO_ARRSLICE_HI(Slice_u8, ((Arr1073741824_u8*)p)->v, 1073741824, 0, ((4 * width) * height)));
             gles2_UnmapBuffer(35051U);
         }
     }
@@ -163639,7 +164254,7 @@ void Renderer_GLES32_SetVertexData(Renderer_GLES32* r, Slice_f32 values) {
         if (r->vitaVerts.cap < values.len) {
             r->vitaVerts = GO_MAKE_A(Slice_f32, f32, (values.len * 2), 0);
         }
-        Slice_f32 v = GO_SLICE(Slice_f32, r->vitaVerts, 0, values.len);
+        Slice_f32 v = GO_SLICE_HI(Slice_f32, r->vitaVerts, 0, values.len);
         GO_COPY(v, values);
         Renderer_GLES32_bindVertexArray(r, r->spriteVAO);
         Renderer_GLES32_bindBuffer(r, 34962U, 0U);
@@ -163651,7 +164266,7 @@ void Renderer_GLES32_SetVertexData(Renderer_GLES32* r, Slice_f32 values) {
     if (r->vertexScratch.cap < need) {
         r->vertexScratch = GO_MAKE_A(Slice_u8, u8, need, 0);
     } else {
-        r->vertexScratch = GO_SLICE(Slice_u8, r->vertexScratch, 0, need);
+        r->vertexScratch = GO_SLICE_HI(Slice_u8, r->vertexScratch, 0, need);
     }
     {
         Slice_f32 _t4 = values;
@@ -164026,7 +164641,7 @@ void Renderer_GLES32_vitaSyncUniforms(Renderer_GLES32* r) {
             _cont3:;
         }
     }
-    b->dirtyList = GO_SLICE(Slice_i32, b->dirtyList, 0, 0);
+    b->dirtyList = GO_SLICE_HI(Slice_i32, b->dirtyList, 0, 0);
 }
 
 // Renderer_GLES32.vitaBatchInit (render_gles32_batch.go:156), 0 TODO
@@ -164140,7 +164755,7 @@ void Renderer_GLES32_vitaQueueQuads(Renderer_GLES32* r, int vertexCount) {
     Arr4_f32* sp = _t1;
     Arr4_f32* pal = _t2;
     if (b->n > 0) {
-        GO_COPY(GO_SLICE(Slice_f32, p, o, (o + 12)), GO_SLICE(Slice_f32, p, (o - 12), o));
+        GO_COPY(GO_SLICE_HI(Slice_f32, p, o, (o + 12)), GO_SLICE_HI(Slice_f32, p, (o - 12), o));
         o += 12;
         f32 _t3 = b->cur.p[0];
         f32 _t4 = b->cur.p[1];
@@ -164150,14 +164765,14 @@ void Renderer_GLES32_vitaQueueQuads(Renderer_GLES32* r, int vertexCount) {
         p.p[(o + 1)] = _t4;
         p.p[(o + 2)] = _t5;
         p.p[(o + 3)] = _t6;
-        GO_COPY(GO_SLICE(Slice_f32, p, (o + 4), (o + 8)), GO_ARRSLICE(Slice_f32, sp->v, 4, 0, -1));
-        GO_COPY(GO_SLICE(Slice_f32, p, (o + 8), (o + 12)), GO_ARRSLICE(Slice_f32, pal->v, 4, 0, -1));
+        GO_COPY(GO_SLICE_HI(Slice_f32, p, (o + 4), (o + 8)), GO_ARRSLICE(Slice_f32, sp->v, 4, 0, -1));
+        GO_COPY(GO_SLICE_HI(Slice_f32, p, (o + 8), (o + 12)), GO_ARRSLICE(Slice_f32, pal->v, 4, 0, -1));
         o += 12;
     }
     {
         int i = 0;
         for (; i < vertexCount; i++) {
-            Slice_f32 c = GO_SLICE(Slice_f32, b->cur, (i * 4), ((i * 4) + 4));
+            Slice_f32 c = GO_SLICE_HI(Slice_f32, b->cur, (i * 4), ((i * 4) + 4));
             f32 _t8 = c.p[0];
             f32 _t9 = c.p[1];
             f32 _t10 = c.p[2];
@@ -164166,8 +164781,8 @@ void Renderer_GLES32_vitaQueueQuads(Renderer_GLES32* r, int vertexCount) {
             p.p[(o + 1)] = _t9;
             p.p[(o + 2)] = _t10;
             p.p[(o + 3)] = _t11;
-            GO_COPY(GO_SLICE(Slice_f32, p, (o + 4), (o + 8)), GO_ARRSLICE(Slice_f32, sp->v, 4, 0, -1));
-            GO_COPY(GO_SLICE(Slice_f32, p, (o + 8), (o + 12)), GO_ARRSLICE(Slice_f32, pal->v, 4, 0, -1));
+            GO_COPY(GO_SLICE_HI(Slice_f32, p, (o + 4), (o + 8)), GO_ARRSLICE(Slice_f32, sp->v, 4, 0, -1));
+            GO_COPY(GO_SLICE_HI(Slice_f32, p, (o + 8), (o + 12)), GO_ARRSLICE(Slice_f32, pal->v, 4, 0, -1));
             o += 12;
             _cont7:;
         }
@@ -164181,7 +164796,7 @@ void Renderer_GLES32_vitaSetVertexData(Renderer_GLES32* r, Slice_f32 values) {
     if (b->cur.cap < values.len) {
         b->cur = GO_MAKE_A(Slice_f32, f32, values.len, (values.len * 2));
     }
-    b->cur = GO_SLICE(Slice_f32, b->cur, 0, values.len);
+    b->cur = GO_SLICE_HI(Slice_f32, b->cur, 0, values.len);
     GO_COPY(b->cur, values);
 }
 
@@ -164652,10 +165267,10 @@ void RollbackSession_TruncateReplayFrom(RollbackSession* rs, i32 time_) {
         frame = 0;
     }
     if (frame < rs->replayInputs.len) {
-        rs->replayInputs = GO_SLICE(Slice_Arr8_InputBits, rs->replayInputs, 0, frame);
+        rs->replayInputs = GO_SLICE_HI(Slice_Arr8_InputBits, rs->replayInputs, 0, frame);
     }
     if (frame < rs->replayAnalogInputs.len) {
-        rs->replayAnalogInputs = GO_SLICE(Slice_Arr8_Arr6_i8, rs->replayAnalogInputs, 0, frame);
+        rs->replayAnalogInputs = GO_SLICE_HI(Slice_Arr8_Arr6_i8, rs->replayAnalogInputs, 0, frame);
     }
 }
 
@@ -168428,7 +169043,7 @@ Ret_int__bool Normalizer_Stream(Normalizer* n, Slice_Arr2_f64 samples) {
     ok = _t1.r1;
     f64 wavVolumeMul = (0x1p-01 * (((((f64)g_sys.cfg.Sound.WavVolume) * ((f64)g_sys.cfg.Sound.MasterVolume)) * 0x1.a36e2eb1c432dp-14)));
     {
-        Slice_Arr2_f64 _t3 = GO_SLICE(Slice_Arr2_f64, samples, 0, s);
+        Slice_Arr2_f64 _t3 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, s);
         for (int _t2 = 0; _t2 < _t3.len; _t2++) {
             int i = _t2;
             if (g_sys.cfg.Sound.AudioDucking) {
@@ -168649,7 +169264,7 @@ Ret_int__bool StreamLooper_Stream(StreamLooper* l, Slice_Arr2_f64 samples) {
                 continue;
             }
             toStream = go_min_int(samplesUntilEnd, toStream);
-            Ret_int__bool _t2 = iface_Stream_7d2c466b(l->s, GO_SLICE(Slice_Arr2_f64, samples, 0, toStream));
+            Ret_int__bool _t2 = iface_Stream_7d2c466b(l->s, GO_SLICE_HI(Slice_Arr2_f64, samples, 0, toStream));
             int sn = _t2.r0;
             bool sok = _t2.r1;
             n += sn;
@@ -169060,7 +169675,7 @@ Ret_SndPtr__GoIface fn_LoadSndFiltered(GoString filename, GoFunc keepItem, u32 m
             }
         }
     }
-    if (!go_streq(go_bytes2str(GO_SLICE(Slice_u8, buf, 0, n)), GOSTR("ElecbyteSnd\x00"))) {
+    if (!go_streq(go_bytes2str(GO_SLICE_HI(Slice_u8, buf, 0, n)), GOSTR("ElecbyteSnd\x00"))) {
         {
             Ret_SndPtr__GoIface _t7 = (Ret_SndPtr__GoIface){NULL, ((GoIface){281, go_box(Error, GOSTR("Unrecognized SND file, invalid header"))})};
             go_panic_top = _pf.prev;
@@ -169297,7 +169912,7 @@ Ret_int__bool soundPanner_Stream(soundPanner* p, Slice_Arr2_f64 samples) {
     f32 lv = _t3;
     f32 rv = _t4;
     {
-        Slice_Arr2_f64 _t6 = GO_SLICE(Slice_Arr2_f64, samples, 0, n);
+        Slice_Arr2_f64 _t6 = GO_SLICE_HI(Slice_Arr2_f64, samples, 0, n);
         for (int _t5 = 0; _t5 < _t6.len; _t5++) {
             int i = _t5;
             samples.p[i].v[0] *= ((f64)lv);
@@ -169522,7 +170137,7 @@ void SoundChannels_SetSize(SoundChannels* s, i32 size) {
                         _cont4:;
                     }
                 }
-                (*s) = GO_SLICE(SoundChannels, ((*s)), 0, size);
+                (*s) = GO_SLICE_HI(SoundChannels, ((*s)), 0, size);
             }
         } while (0);
     }
@@ -172854,12 +173469,12 @@ void GameState_saveCharData(GameState* gs, GameStatePool* gsp) {
             int i = _t1;
             int n = g_sys.chars.v[i].len;
             if (gs->charData.v[i].cap >= n) {
-                gs->charData.v[i] = GO_SLICE(Slice_Char, gs->charData.v[i], 0, n);
+                gs->charData.v[i] = GO_SLICE_HI(Slice_Char, gs->charData.v[i], 0, n);
             } else {
                 gs->charData.v[i] = GO_MAKE(Slice_Char, Char, n, n);
             }
             if (gs->chars.v[i].cap >= n) {
-                gs->chars.v[i] = GO_SLICE(Slice_CharPtr, gs->chars.v[i], 0, n);
+                gs->chars.v[i] = GO_SLICE_HI(Slice_CharPtr, gs->chars.v[i], 0, n);
             } else {
                 gs->chars.v[i] = GO_MAKE(Slice_CharPtr, Char*, n, n);
             }
@@ -173299,7 +173914,7 @@ Animation* Animation_Clone(Animation* a, GameStatePool* gsp) {
     result = go_new(Animation);
     (*result) = (*a);
     result->frames = (*((Slice_AnimFrame*)(GameStatePool_Get(gsp, ((GoIface){582, go_box(Slice_AnimFrame, a->frames)}))).data));
-    result->frames = GO_SLICE(Slice_AnimFrame, result->frames, 0, 0);
+    result->frames = GO_SLICE_HI(Slice_AnimFrame, result->frames, 0, 0);
     {
         int i = 0;
         for (; i < a->frames.len; i++) {
@@ -174419,7 +175034,7 @@ void fn_stateDumpTickFn(void) {
     fn_vitaStateHashEnabled();
     g_stateDumpTick++;
     bool net = ((g_sys.rollback.session != NULL) && (g_sys.rollback.netConnection != NULL));
-    Slice_u8 b = GO_SLICE(Slice_u8, g_stateDumpBuf, 0, 0);
+    Slice_u8 b = GO_SLICE_HI(Slice_u8, g_stateDumpBuf, 0, 0);
     b = GO_APPEND_SLICE(Slice_u8, b, go_str2bytes(GOSTR("T ")));
     if (net) {
         b = fn_sdI(b, ((i64)g_sys.SystemStateVars_.matchTime));
@@ -174622,7 +175237,7 @@ void fn_stateDumpFinish(void) {
 
 // stateDumpVarsI (statedump.go:221), 0 TODO
 Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
-    g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
+    g_sdKeys = GO_SLICE_HI(Slice_i32, g_sdKeys, 0, 0);
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&m);
         while (gomap_next(&_t2)) {
@@ -174655,7 +175270,7 @@ Slice_u8 fn_stateDumpVarsI(Slice_u8 b, GoString tag, Map_i32_i32 m) {
 
 // stateDumpVarsF (statedump.go:242), 0 TODO
 Slice_u8 fn_stateDumpVarsF(Slice_u8 b, GoString tag, Map_i32_f32 m) {
-    g_sdKeys = GO_SLICE(Slice_i32, g_sdKeys, 0, 0);
+    g_sdKeys = GO_SLICE_HI(Slice_i32, g_sdKeys, 0, 0);
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&m);
         while (gomap_next(&_t2)) {
@@ -174703,14 +175318,14 @@ void statsRollbackState_load(statsRollbackState state, StatsLog* s) {
         return;
     }
     if (s->Matches.len > state.matches) {
-        s->Matches = GO_SLICE(Slice_StatsMatch, s->Matches, 0, state.matches);
+        s->Matches = GO_SLICE_HI(Slice_StatsMatch, s->Matches, 0, state.matches);
     }
     if ((state.matches == 0) || (s->Matches.len < state.matches)) {
         return;
     }
     Slice_StatsRound* rounds = (&s->Matches.p[(state.matches - 1)].Rounds);
     if ((*rounds).len > state.rounds) {
-        (*rounds) = GO_SLICE(Slice_StatsRound, ((*rounds)), 0, state.rounds);
+        (*rounds) = GO_SLICE_HI(Slice_StatsRound, ((*rounds)), 0, state.rounds);
     }
 }
 
@@ -174796,7 +175411,7 @@ void StatsLog_discardCurrentMatch(StatsLog* s) {
     if (s->Matches.len == 0) {
         return;
     }
-    s->Matches = GO_SLICE(Slice_StatsMatch, s->Matches, 0, (s->Matches.len - 1));
+    s->Matches = GO_SLICE_HI(Slice_StatsMatch, s->Matches, 0, (s->Matches.len - 1));
 }
 
 // StatsLog.nextRound (stats.go:201), 0 TODO
@@ -174958,7 +175573,7 @@ void StoryboardManager_step(StoryboardManager* m) {
             return;
         }
     }
-    Slice_StoryboardPtr active = GO_SLICE(Slice_StoryboardPtr, m->instances, 0, 0);
+    Slice_StoryboardPtr active = GO_SLICE_HI(Slice_StoryboardPtr, m->instances, 0, 0);
     {
         Slice_StoryboardPtr _t6 = m->instances;
         for (int _t5 = 0; _t5 < _t6.len; _t5++) {
@@ -175017,7 +175632,7 @@ void StoryboardManager_drawFade(StoryboardManager* m) {
 
 // StoryboardManager.remove (storyboard.go:279), 0 TODO
 void StoryboardManager_remove(StoryboardManager* m, i32 ownerID, i32 id) {
-    Slice_StoryboardPtr active = GO_SLICE(Slice_StoryboardPtr, m->instances, 0, 0);
+    Slice_StoryboardPtr active = GO_SLICE_HI(Slice_StoryboardPtr, m->instances, 0, 0);
     {
         Slice_StoryboardPtr _t2 = m->instances;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -175037,7 +175652,7 @@ void StoryboardManager_remove(StoryboardManager* m, i32 ownerID, i32 id) {
 
 // StoryboardManager.clear (storyboard.go:293), 0 TODO
 void StoryboardManager_clear(StoryboardManager* m, int playerNo) {
-    Slice_StoryboardPtr active = GO_SLICE(Slice_StoryboardPtr, m->instances, 0, 0);
+    Slice_StoryboardPtr active = GO_SLICE_HI(Slice_StoryboardPtr, m->instances, 0, 0);
     {
         Slice_StoryboardPtr _t2 = m->instances;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -175338,7 +175953,7 @@ void Storyboard_buildDialogueQueue(Storyboard* s, SceneProperties* sceneProps) {
         }
     }
     go_sort_slice_stable((void *)GO_TMPADDR(Slice_entry_L001e46, (*items__h)), sizeof(entry_L001e46), ((GoFunc){(void *)lambda_1809, go_box(Env_lambda_1809, ((Env_lambda_1809){items__h}))}));
-    s->dialogueLayers = GO_SLICE(Slice_LayerPropertiesPtr, s->dialogueLayers, 0, 0);
+    s->dialogueLayers = GO_SLICE_HI(Slice_LayerPropertiesPtr, s->dialogueLayers, 0, 0);
     {
         Slice_entry_L001e46 _t5 = (*items__h);
         for (int _t4 = 0; _t4 < _t5.len; _t4++) {
@@ -177078,7 +177693,7 @@ GoIface System_uiEnsureCommandLists(System* s, int total) {
         }
     }
     if (total < s->commandLists.len) {
-        s->commandLists = GO_SLICE(Slice_CommandListPtr, s->commandLists, 0, total);
+        s->commandLists = GO_SLICE_HI(Slice_CommandListPtr, s->commandLists, 0, total);
     }
     {
         for (; s->commandLists.len < total; ) {
@@ -177551,7 +178166,7 @@ void System_luaFlushDrawQueue(System* s) {
             _cont3:;
         }
     }
-    s->luaDrawPreOps = GO_SLICE(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
+    s->luaDrawPreOps = GO_SLICE_HI(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
     {
         for (int _t4 = 0; _t4 < 3; _t4++) {
             int i = _t4;
@@ -177563,7 +178178,7 @@ void System_luaFlushDrawQueue(System* s) {
                     _cont8:;
                 }
             }
-            s->luaDrawLayerOps.v[i] = GO_SLICE(Slice_GoFunc, s->luaDrawLayerOps.v[i], 0, 0);
+            s->luaDrawLayerOps.v[i] = GO_SLICE_HI(Slice_GoFunc, s->luaDrawLayerOps.v[i], 0, 0);
             _cont5:;
         }
     }
@@ -177571,11 +178186,11 @@ void System_luaFlushDrawQueue(System* s) {
 
 // System.luaDiscardDrawQueue (system.go:2146), 0 TODO
 void System_luaDiscardDrawQueue(System* s) {
-    s->luaDrawPreOps = GO_SLICE(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
+    s->luaDrawPreOps = GO_SLICE_HI(Slice_GoFunc, s->luaDrawPreOps, 0, 0);
     {
         for (int _t1 = 0; _t1 < 3; _t1++) {
             int i = _t1;
-            s->luaDrawLayerOps.v[i] = GO_SLICE(Slice_GoFunc, s->luaDrawLayerOps.v[i], 0, 0);
+            s->luaDrawLayerOps.v[i] = GO_SLICE_HI(Slice_GoFunc, s->luaDrawLayerOps.v[i], 0, 0);
             _cont2:;
         }
     }
@@ -177867,7 +178482,7 @@ void System_clearPlayerAssets(System* s, int pn, bool forceDestroy) {
             Slice_CharPtr _t2 = s->chars.v[pn];
             for (int _t1 = 0; _t1 < _t2.len; _t1++) {
                 Char* c = _t2.p[_t1];
-                c->targets = GO_SLICE(Slice_i32, c->targets, 0, 0);
+                c->targets = GO_SLICE_HI(Slice_i32, c->targets, 0, 0);
                 _cont3:;
             }
         }
@@ -177936,7 +178551,7 @@ bool System_handleStageSwap(System* s) {
 void System_updateMusicMaps(System* s) {
     bool newMatchMusic = ((s->SystemStateVars_.roundNo == 1) && (!s->SystemStateVars_.roundResetFlg));
     if (newMatchMusic) {
-        s->matchMusicSel = GO_SLICE(Slice_bgMusicPtr, s->matchMusicSel, 0, 0);
+        s->matchMusicSel = GO_SLICE_HI(Slice_bgMusicPtr, s->matchMusicSel, 0, 0);
     }
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -178273,21 +178888,21 @@ void System_runIntroSkip(System* s) {
 // System.clearSpriteData (system.go:2851), 0 TODO
 void System_clearSpriteData(System* s) {
     fn_spriteDataPoolReset();
-    s->spriteList = GO_SLICE(DrawList, s->spriteList, 0, 0);
-    s->shadowList = GO_SLICE(ShadowList, s->shadowList, 0, 0);
-    s->reflectionList = GO_SLICE(ReflectionList, s->reflectionList, 0, 0);
-    s->debugc1hit.rects = GO_SLICE(Slice_Arr7_f32, s->debugc1hit.rects, 0, 0);
-    s->debugc1rev.rects = GO_SLICE(Slice_Arr7_f32, s->debugc1rev.rects, 0, 0);
-    s->debugc1not.rects = GO_SLICE(Slice_Arr7_f32, s->debugc1not.rects, 0, 0);
-    s->debugc1stb.rects = GO_SLICE(Slice_Arr7_f32, s->debugc1stb.rects, 0, 0);
-    s->debugc2.rects = GO_SLICE(Slice_Arr7_f32, s->debugc2.rects, 0, 0);
-    s->debugc2hb.rects = GO_SLICE(Slice_Arr7_f32, s->debugc2hb.rects, 0, 0);
-    s->debugc2mtk.rects = GO_SLICE(Slice_Arr7_f32, s->debugc2mtk.rects, 0, 0);
-    s->debugc2grd.rects = GO_SLICE(Slice_Arr7_f32, s->debugc2grd.rects, 0, 0);
-    s->debugc2stb.rects = GO_SLICE(Slice_Arr7_f32, s->debugc2stb.rects, 0, 0);
-    s->debugcsize.rects = GO_SLICE(Slice_Arr7_f32, s->debugcsize.rects, 0, 0);
-    s->debugcdummy.rects = GO_SLICE(Slice_Arr7_f32, s->debugcdummy.rects, 0, 0);
-    s->debugcross.rects = GO_SLICE(Slice_Arr7_f32, s->debugcross.rects, 0, 0);
+    s->spriteList = GO_SLICE_HI(DrawList, s->spriteList, 0, 0);
+    s->shadowList = GO_SLICE_HI(ShadowList, s->shadowList, 0, 0);
+    s->reflectionList = GO_SLICE_HI(ReflectionList, s->reflectionList, 0, 0);
+    s->debugc1hit.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc1hit.rects, 0, 0);
+    s->debugc1rev.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc1rev.rects, 0, 0);
+    s->debugc1not.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc1not.rects, 0, 0);
+    s->debugc1stb.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc1stb.rects, 0, 0);
+    s->debugc2.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc2.rects, 0, 0);
+    s->debugc2hb.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc2hb.rects, 0, 0);
+    s->debugc2mtk.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc2mtk.rects, 0, 0);
+    s->debugc2grd.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc2grd.rects, 0, 0);
+    s->debugc2stb.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugc2stb.rects, 0, 0);
+    s->debugcsize.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugcsize.rects, 0, 0);
+    s->debugcdummy.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugcdummy.rects, 0, 0);
+    s->debugcross.rects = GO_SLICE_HI(Slice_Arr7_f32, s->debugcross.rects, 0, 0);
     s->debugClsnText = (Slice_DebugClsnText){0};
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -178604,7 +179219,7 @@ void System_projectilePrune(System* s, int pn) {
             _cont1:;
         }
     }
-    s->projs.v[pn] = GO_SLICE(Slice_ProjectilePtr, playerProjs, 0, writeIdx);
+    s->projs.v[pn] = GO_SLICE_HI(Slice_ProjectilePtr, playerProjs, 0, writeIdx);
 }
 
 // System.explodUpdate (system.go:3199), 0 TODO
@@ -178634,7 +179249,7 @@ void System_explodUpdate(System* s) {
 
 // System.explodCueDraw (system.go:3221), 0 TODO
 void System_explodCueDraw(System* s) {
-    s->explodDrawOrder = GO_SLICE(Slice_ExplodPtr, s->explodDrawOrder, 0, 0);
+    s->explodDrawOrder = GO_SLICE_HI(Slice_ExplodPtr, s->explodDrawOrder, 0, 0);
     int count = 0;
     {
         for (int _t1 = 0; _t1 < 12; _t1++) {
@@ -178681,7 +179296,7 @@ void System_explodPrune(System* s, int pn) {
             _cont1:;
         }
     }
-    s->explods.v[pn] = GO_SLICE(Slice_ExplodPtr, playerExplods, 0, writeIdx);
+    s->explods.v[pn] = GO_SLICE_HI(Slice_ExplodPtr, playerExplods, 0, writeIdx);
 }
 
 // System.charTextsUpdate (system.go:3292), 0 TODO
@@ -178732,7 +179347,7 @@ void System_charTextsPrune(System* s, int pn) {
             _cont1:;
         }
     }
-    s->chartexts.v[pn] = GO_SLICE(Slice_TextSpritePtr, playerTexts, 0, writeIdx);
+    s->chartexts.v[pn] = GO_SLICE_HI(Slice_TextSpritePtr, playerTexts, 0, writeIdx);
 }
 
 // System.globalTick (system.go:3333), 0 TODO
@@ -184006,7 +184621,7 @@ util2_OrderedMap_int_u32 util2_NewOrderedMap_int_u32(int capacity) {
 
 // util2_OrderedMap_Clear_int_u32 (generic instance), 0 TODO
 void util2_OrderedMap_Clear_int_u32(util2_OrderedMap_int_u32* om) {
-    om->keys = GO_SLICE(Slice_int, om->keys, 0, 0);
+    om->keys = GO_SLICE_HI(Slice_int, om->keys, 0, 0);
     {
         GoMapIter _t2 = gomap_iter((GoMap *)&om->m);
         while (gomap_next(&_t2)) {
@@ -184207,7 +184822,7 @@ void util2_OrderedMap_Delete_int_u32(util2_OrderedMap_int_u32* om, int key) {
             int i = _t1;
             int k = _t2.p[_t1];
             if (k == key) {
-                om->keys = GO_APPEND_SLICE(Slice_int, GO_SLICE(Slice_int, om->keys, 0, i), GO_SLICE(Slice_int, om->keys, (i + 1), -1));
+                om->keys = GO_APPEND_SLICE(Slice_int, GO_SLICE_HI(Slice_int, om->keys, 0, i), GO_SLICE(Slice_int, om->keys, (i + 1), -1));
                 break;
             }
             _cont3:;
@@ -184294,7 +184909,7 @@ Slice_Arr2_i32 fn_SliceDelete_Arr2_i32(Slice_Arr2_i32 slice, int i) {
     GO_COPY(GO_SLICE(Slice_Arr2_i32, slice, i, -1), GO_SLICE(Slice_Arr2_i32, slice, (i + 1), -1));
     Arr2_i32 zero = {0};
     slice.p[(slice.len - 1)] = zero;
-    return GO_SLICE(Slice_Arr2_i32, slice, 0, (slice.len - 1));
+    return GO_SLICE_HI(Slice_Arr2_i32, slice, 0, (slice.len - 1));
 }
 
 // fn_SortedKeys_Slice_GoString (generic instance), 0 TODO
@@ -184318,8 +184933,8 @@ Slice_int fn_sliceMove_int(Slice_int array, int srcIndex, int dstIndex) {
         return array;
     }
     int value = array.p[srcIndex];
-    array = GO_APPEND_SLICE(Slice_int, GO_SLICE(Slice_int, array, 0, srcIndex), GO_SLICE(Slice_int, array, (srcIndex + 1), -1));
-    return GO_APPEND_SLICE(Slice_int, GO_SLICE(Slice_int, array, 0, dstIndex), GO_APPEND_SLICE(Slice_int, GO_SLICE_LIT(Slice_int, int, 1, value), GO_SLICE(Slice_int, array, dstIndex, -1)));
+    array = GO_APPEND_SLICE(Slice_int, GO_SLICE_HI(Slice_int, array, 0, srcIndex), GO_SLICE(Slice_int, array, (srcIndex + 1), -1));
+    return GO_APPEND_SLICE(Slice_int, GO_SLICE_HI(Slice_int, array, 0, dstIndex), GO_APPEND_SLICE(Slice_int, GO_SLICE_LIT(Slice_int, int, 1, value), GO_SLICE(Slice_int, array, dstIndex, -1)));
 }
 
 // fn_SliceGrow_i32 (generic instance), 0 TODO
@@ -184327,7 +184942,7 @@ Slice_i32 fn_SliceGrow_i32(Slice_i32 slice, int n) {
     {
         n -= (slice.cap - slice.len);
         if (n > 0) {
-            slice = GO_SLICE(Slice_i32, GO_APPEND_SLICE(Slice_i32, GO_SLICE(Slice_i32, slice, 0, slice.cap), GO_MAKE_A(Slice_i32, i32, n, 0)), 0, slice.len);
+            slice = GO_SLICE_HI(Slice_i32, GO_APPEND_SLICE(Slice_i32, GO_SLICE_HI(Slice_i32, slice, 0, slice.cap), GO_MAKE_A(Slice_i32, i32, n, 0)), 0, slice.len);
         }
     }
     return slice;
@@ -184341,16 +184956,16 @@ Slice_i32 fn_SliceDelete_i32(Slice_i32 slice, int i) {
     GO_COPY(GO_SLICE(Slice_i32, slice, i, -1), GO_SLICE(Slice_i32, slice, (i + 1), -1));
     i32 zero = {0};
     slice.p[(slice.len - 1)] = zero;
-    return GO_SLICE(Slice_i32, slice, 0, (slice.len - 1));
+    return GO_SLICE_HI(Slice_i32, slice, 0, (slice.len - 1));
 }
 
 // fn_RecoverOrAppend_TextSprite (generic instance), 0 TODO
 TextSprite* fn_RecoverOrAppend_TextSprite(Slice_TextSpritePtr* slicePtr, GoFunc clearFunc, GoFunc newFunc) {
     Slice_TextSpritePtr slice = (*slicePtr);
     if (slice.len < slice.cap) {
-        TextSprite* ghost = GO_SLICE(Slice_TextSpritePtr, slice, 0, (slice.len + 1)).p[slice.len];
+        TextSprite* ghost = GO_SLICE_HI(Slice_TextSpritePtr, slice, 0, (slice.len + 1)).p[slice.len];
         if (ghost != NULL) {
-            (*slicePtr) = GO_SLICE(Slice_TextSpritePtr, slice, 0, (slice.len + 1));
+            (*slicePtr) = GO_SLICE_HI(Slice_TextSpritePtr, slice, 0, (slice.len + 1));
             ((void (*)(void *, TextSprite*))(clearFunc).fn)((clearFunc).env, ghost);
             return ghost;
         }
@@ -184364,9 +184979,9 @@ TextSprite* fn_RecoverOrAppend_TextSprite(Slice_TextSpritePtr* slicePtr, GoFunc 
 Projectile* fn_RecoverOrAppend_Projectile(Slice_ProjectilePtr* slicePtr, GoFunc clearFunc, GoFunc newFunc) {
     Slice_ProjectilePtr slice = (*slicePtr);
     if (slice.len < slice.cap) {
-        Projectile* ghost = GO_SLICE(Slice_ProjectilePtr, slice, 0, (slice.len + 1)).p[slice.len];
+        Projectile* ghost = GO_SLICE_HI(Slice_ProjectilePtr, slice, 0, (slice.len + 1)).p[slice.len];
         if (ghost != NULL) {
-            (*slicePtr) = GO_SLICE(Slice_ProjectilePtr, slice, 0, (slice.len + 1));
+            (*slicePtr) = GO_SLICE_HI(Slice_ProjectilePtr, slice, 0, (slice.len + 1));
             ((void (*)(void *, Projectile*))(clearFunc).fn)((clearFunc).env, ghost);
             return ghost;
         }
@@ -184490,7 +185105,7 @@ Slice_ClsnFinal fn_SliceDelete_ClsnFinal(Slice_ClsnFinal slice, int i) {
     GO_COPY(GO_SLICE(Slice_ClsnFinal, slice, i, -1), GO_SLICE(Slice_ClsnFinal, slice, (i + 1), -1));
     ClsnFinal zero = {0};
     slice.p[(slice.len - 1)] = zero;
-    return GO_SLICE(Slice_ClsnFinal, slice, 0, (slice.len - 1));
+    return GO_SLICE_HI(Slice_ClsnFinal, slice, 0, (slice.len - 1));
 }
 
 // fn_SliceDelete_CharPtr (generic instance), 0 TODO
@@ -184501,7 +185116,7 @@ Slice_CharPtr fn_SliceDelete_CharPtr(Slice_CharPtr slice, int i) {
     GO_COPY(GO_SLICE(Slice_CharPtr, slice, i, -1), GO_SLICE(Slice_CharPtr, slice, (i + 1), -1));
     Char* zero = {0};
     slice.p[(slice.len - 1)] = zero;
-    return GO_SLICE(Slice_CharPtr, slice, 0, (slice.len - 1));
+    return GO_SLICE_HI(Slice_CharPtr, slice, 0, (slice.len - 1));
 }
 
 // fn_SliceDelete_u8 (generic instance), 0 TODO
@@ -184512,7 +185127,7 @@ Slice_u8 fn_SliceDelete_u8(Slice_u8 slice, int i) {
     GO_COPY(GO_SLICE(Slice_u8, slice, i, -1), GO_SLICE(Slice_u8, slice, (i + 1), -1));
     u8 zero = {0};
     slice.p[(slice.len - 1)] = zero;
-    return GO_SLICE(Slice_u8, slice, 0, (slice.len - 1));
+    return GO_SLICE_HI(Slice_u8, slice, 0, (slice.len - 1));
 }
 
 // fn_SortedKeys_GoString (generic instance), 0 TODO
@@ -184586,7 +185201,7 @@ Slice_FSMsgPtr fn_SliceDelete_FSMsgPtr(Slice_FSMsgPtr slice, int i) {
     GO_COPY(GO_SLICE(Slice_FSMsgPtr, slice, i, -1), GO_SLICE(Slice_FSMsgPtr, slice, (i + 1), -1));
     FSMsg* zero = {0};
     slice.p[(slice.len - 1)] = zero;
-    return GO_SLICE(Slice_FSMsgPtr, slice, 0, (slice.len - 1));
+    return GO_SLICE_HI(Slice_FSMsgPtr, slice, 0, (slice.len - 1));
 }
 
 // fn_SliceDelete_DialogueToken (generic instance), 0 TODO
@@ -184597,7 +185212,7 @@ Slice_DialogueToken fn_SliceDelete_DialogueToken(Slice_DialogueToken slice, int 
     GO_COPY(GO_SLICE(Slice_DialogueToken, slice, i, -1), GO_SLICE(Slice_DialogueToken, slice, (i + 1), -1));
     DialogueToken zero = {0};
     slice.p[(slice.len - 1)] = zero;
-    return GO_SLICE(Slice_DialogueToken, slice, 0, (slice.len - 1));
+    return GO_SLICE_HI(Slice_DialogueToken, slice, 0, (slice.len - 1));
 }
 
 // fn_NormalizeRect_i32 (generic instance), 0 TODO
@@ -184669,7 +185284,7 @@ f32 fn_CalculateAspect_i32(i32 w, i32 h) {
 
 // fn_PointerSliceReset_Projectile (generic instance), 0 TODO
 Slice_ProjectilePtr fn_PointerSliceReset_Projectile(Slice_ProjectilePtr slice) {
-    slice = GO_SLICE(Slice_ProjectilePtr, slice, 0, slice.cap);
+    slice = GO_SLICE_HI(Slice_ProjectilePtr, slice, 0, slice.cap);
     {
         Slice_ProjectilePtr _t2 = slice;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -184678,12 +185293,12 @@ Slice_ProjectilePtr fn_PointerSliceReset_Projectile(Slice_ProjectilePtr slice) {
             _cont3:;
         }
     }
-    return GO_SLICE(Slice_ProjectilePtr, slice, 0, 0);
+    return GO_SLICE_HI(Slice_ProjectilePtr, slice, 0, 0);
 }
 
 // fn_PointerSliceReset_Explod (generic instance), 0 TODO
 Slice_ExplodPtr fn_PointerSliceReset_Explod(Slice_ExplodPtr slice) {
-    slice = GO_SLICE(Slice_ExplodPtr, slice, 0, slice.cap);
+    slice = GO_SLICE_HI(Slice_ExplodPtr, slice, 0, slice.cap);
     {
         Slice_ExplodPtr _t2 = slice;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -184692,12 +185307,12 @@ Slice_ExplodPtr fn_PointerSliceReset_Explod(Slice_ExplodPtr slice) {
             _cont3:;
         }
     }
-    return GO_SLICE(Slice_ExplodPtr, slice, 0, 0);
+    return GO_SLICE_HI(Slice_ExplodPtr, slice, 0, 0);
 }
 
 // fn_PointerSliceReset_TextSprite (generic instance), 0 TODO
 Slice_TextSpritePtr fn_PointerSliceReset_TextSprite(Slice_TextSpritePtr slice) {
-    slice = GO_SLICE(Slice_TextSpritePtr, slice, 0, slice.cap);
+    slice = GO_SLICE_HI(Slice_TextSpritePtr, slice, 0, slice.cap);
     {
         Slice_TextSpritePtr _t2 = slice;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -184706,12 +185321,12 @@ Slice_TextSpritePtr fn_PointerSliceReset_TextSprite(Slice_TextSpritePtr slice) {
             _cont3:;
         }
     }
-    return GO_SLICE(Slice_TextSpritePtr, slice, 0, 0);
+    return GO_SLICE_HI(Slice_TextSpritePtr, slice, 0, 0);
 }
 
 // fn_PointerSliceReset_Char (generic instance), 0 TODO
 Slice_CharPtr fn_PointerSliceReset_Char(Slice_CharPtr slice) {
-    slice = GO_SLICE(Slice_CharPtr, slice, 0, slice.cap);
+    slice = GO_SLICE_HI(Slice_CharPtr, slice, 0, slice.cap);
     {
         Slice_CharPtr _t2 = slice;
         for (int _t1 = 0; _t1 < _t2.len; _t1++) {
@@ -184720,7 +185335,7 @@ Slice_CharPtr fn_PointerSliceReset_Char(Slice_CharPtr slice) {
             _cont3:;
         }
     }
-    return GO_SLICE(Slice_CharPtr, slice, 0, 0);
+    return GO_SLICE_HI(Slice_CharPtr, slice, 0, 0);
 }
 
 // ---- package variables

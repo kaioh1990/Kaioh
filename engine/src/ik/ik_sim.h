@@ -7055,6 +7055,10 @@ typedef struct { int r0; Slice_u32 r1; } Ret_int__Slice_u32;
 #define CVF_RET_Ret_int__bool
 typedef struct { int r0; bool r1; } Ret_int__bool;
 #endif
+#ifndef CVF_RET_Ret_int__bool__CharPtr
+#define CVF_RET_Ret_int__bool__CharPtr
+typedef struct { int r0; bool r1; Char* r2; } Ret_int__bool__CharPtr;
+#endif
 #ifndef CVF_RET_Ret_int__gjson_Result__bool
 #define CVF_RET_Ret_int__gjson_Result__bool
 typedef struct { int r0; gjson_Result r1; bool r2; } Ret_int__gjson_Result__bool;
@@ -10597,6 +10601,11 @@ void BytecodeExp_deg(BytecodeExp _recv, BytecodeValue* v1);
 void BytecodeExp_lerp(BytecodeExp _recv, BytecodeValue* v1, BytecodeValue v2, BytecodeValue v3);
 BytecodeValue BytecodeExp_run(BytecodeExp be, Char* c);
 BytecodeValue BytecodeExp_runOC(BytecodeExp be, Char* c, Char* oc);
+Slice_BytecodeValue fn_bcLRoom(Slice_BytecodeValue st, int n);
+Slice_BytecodeValue fn_bcLGrow(Slice_BytecodeValue st, int n);
+int* fn_bcIP(int d);
+int BytecodeExp_runOCx(BytecodeExp be, Char* c, Char* oc, int d, int i, OpCode opc);
+Ret_int__bool__CharPtr BytecodeExp_runOp(BytecodeExp be, Char* c, Char* oc, int d, int i, OpCode opc);
 void BytecodeExp_run_assign(BytecodeExp be, Char* c, int* i);
 void BytecodeExp_run_const(BytecodeExp be, Char* c, int* i, Char* oc);
 void BytecodeExp_run_ex(BytecodeExp be, Char* c, int* i, Char* oc);

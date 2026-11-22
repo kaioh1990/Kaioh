@@ -524,18 +524,25 @@ func (t *Tx) sliceExpr(e *ast.SliceExpr) string {
 		}
 		return fmt.Sprintf("({ %s _s3 = %s; int _l3 = %s, _m3 = %s; (%s){_s3.p + _l3, (%s) - _l3, _m3 - _l3}; })", st, x, lo, mx, st, hi)
 	}
+	// An explicit hi is never negative in a valid program: the _HI forms
+	// skip the "hi < 0: omitted" test, which the C compiler cannot fold
+	// for a run-time hi.
+	hiMacro := ""
+	if e.High != nil {
+		hiMacro = "_HI"
+	}
 	switch u := xt.Underlying().(type) {
 	case *types.Slice:
-		return fmt.Sprintf("GO_SLICE(%s, %s, %s, %s)", cbase(xt), t.expr(e.X), lo, hi)
+		return fmt.Sprintf("GO_SLICE%s(%s, %s, %s, %s)", hiMacro, cbase(xt), t.expr(e.X), lo, hi)
 	case *types.Basic:
 		return fmt.Sprintf("go_substr(%s, %s, %s)", t.expr(e.X), lo, hi)
 	case *types.Array:
 		st := types.NewSlice(u.Elem())
-		return fmt.Sprintf("GO_ARRSLICE(%s, %s.v, %d, %s, %s)", cbase(st), t.expr(e.X), u.Len(), lo, hi)
+		return fmt.Sprintf("GO_ARRSLICE%s(%s, %s.v, %d, %s, %s)", hiMacro, cbase(st), t.expr(e.X), u.Len(), lo, hi)
 	case *types.Pointer:
 		if a, ok := u.Elem().Underlying().(*types.Array); ok {
 			st := types.NewSlice(a.Elem())
-			return fmt.Sprintf("GO_ARRSLICE(%s, %s->v, %d, %s, %s)", cbase(st), t.expr(e.X), a.Len(), lo, hi)
+			return fmt.Sprintf("GO_ARRSLICE%s(%s, %s->v, %d, %s, %s)", hiMacro, cbase(st), t.expr(e.X), a.Len(), lo, hi)
 		}
 	}
 	return t.TODO(e, "slice expr")
