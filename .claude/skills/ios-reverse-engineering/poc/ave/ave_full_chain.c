@@ -9828,6 +9828,90 @@ vps_cd_done:
             }
         }
 
+        /* Phase 3b: Raw mach_msg to IOKit — construct the MIG message manually.
+         * io_connect_method is MIG routine 2862 in IOKit subsystem.
+         * The message ID = subsystem_base + routine_number.
+         * IOKit subsystem base = 2800, so io_connect_method = 2800 + 62 = 2862.
+         *
+         * This bypasses IOConnectCallMethod AND the MIG stub entirely.
+         * If the kernel still returns 0xE00002C2, the check is in
+         * is_io_connect_method() itself, not any wrapper. */
+        rlog("\n--- Phase 3b: Raw mach_msg to IOKit (MIG 2862) ---\n");
+        if (conn0) {
+            /* Build a simplified io_connect_method request for selector 0 (create_surface)
+             * with struct input containing a minimal surface description */
+            typedef struct {
+                mach_msg_header_t hdr;
+                NDR_record_t NDR;
+                uint32_t selector;
+                /* scalar input */
+                uint32_t scalar_inputCnt;
+                /* inband input */
+                uint32_t inband_inputCnt;
+                uint8_t inband_input[24];
+                /* ool input size */
+                uint32_t ool_input_size;
+                /* scalar output count */
+                uint32_t scalar_outputCnt;
+                /* inband output size */
+                uint32_t inband_outputCnt;
+                /* ool output size */
+                uint32_t ool_output_size;
+            } mig_request_t;
+
+            typedef struct {
+                mach_msg_header_t hdr;
+                NDR_record_t NDR;
+                kern_return_t retcode;
+                uint32_t scalar_outputCnt;
+                uint64_t scalar_output[16];
+                uint32_t inband_outputCnt;
+                uint8_t inband_output[4096];
+                uint32_t ool_output_size;
+            } mig_reply_t;
+
+            uint32_t test_sels_mig[] = {0, 1, 6, 9, 17, 18};
+            for (int i = 0; i < 6; i++) {
+                mig_request_t req;
+                memset(&req, 0, sizeof(req));
+                req.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+                req.hdr.msgh_size = sizeof(req);
+                req.hdr.msgh_remote_port = conn0;
+                req.hdr.msgh_local_port = mig_get_reply_port();
+                req.hdr.msgh_id = 2862;
+                req.NDR = NDR_record;
+                req.selector = test_sels_mig[i];
+                req.scalar_inputCnt = 0;
+                req.inband_inputCnt = 24;
+                uint64_t dummy[3] = {1, 2, 3};
+                memcpy(req.inband_input, dummy, 24);
+                req.ool_input_size = 0;
+                req.scalar_outputCnt = 4;
+                req.inband_outputCnt = 256;
+                req.ool_output_size = 0;
+
+                mig_reply_t rep;
+                memset(&rep, 0, sizeof(rep));
+
+                kern_return_t mr = mach_msg(
+                    &req.hdr,
+                    MACH_SEND_MSG | MACH_RCV_MSG,
+                    sizeof(req),
+                    sizeof(rep),
+                    req.hdr.msgh_local_port,
+                    1000,
+                    MACH_PORT_NULL);
+
+                if (mr == KERN_SUCCESS) {
+                    rlog("  mach_msg sel %2u: retcode=0x%08x (reply id=%u)\n",
+                        test_sels_mig[i], rep.retcode, rep.hdr.msgh_id);
+                } else {
+                    rlog("  mach_msg sel %2u: mach_msg failed 0x%08x\n",
+                        test_sels_mig[i], mr);
+                }
+            }
+        }
+
         /* Phase 4: Check what the framework does by calling IOSurfaceCreate
          * and observing the connection/port it uses */
         rlog("\n--- Phase 4: Framework introspection ---\n");
