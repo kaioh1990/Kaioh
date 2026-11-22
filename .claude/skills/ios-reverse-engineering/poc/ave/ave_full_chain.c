@@ -14168,6 +14168,9 @@ vps_cd_done:
 
         rlog("\n=== MACH_PORT_LEAK complete ===\n");
 
+    } else if (strcmp(mode, "sysctl_leak") == 0 || strcmp(mode, "ave_prop_scan") == 0) {
+        goto new_modes;
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -14241,7 +14244,10 @@ vps_cd_done:
         rlog("  466 (~155 enc): Past buffer content (into alloc padding)\n");
         rlog("  1057 (~352 enc): Past allocation end (UNREACHABLE, crash at 197)\n");
 
-    } else if (strcmp(mode, "sysctl_leak") == 0) {
+    }
+
+new_modes:
+    if (strcmp(mode, "sysctl_leak") == 0) {
         int rounds = (argc > 2) ? atoi(argv[2]) : 1;
         if (rounds < 1) rounds = 1;
         if (rounds > 100) rounds = 100;
@@ -14866,6 +14872,7 @@ vps_cd_done:
         }
 
         rlog("\n=== AVE_PROP_SCAN complete ===\n");
+    }
 
 done:
     rlog("\n=== Full chain probe complete ===\n");
