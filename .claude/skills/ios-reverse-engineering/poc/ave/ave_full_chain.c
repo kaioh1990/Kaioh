@@ -53,6 +53,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <compression.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
@@ -16226,7 +16227,8 @@ new_modes:
             for (int i = 0; i < 4096; i += 64) src[i] = (uint8_t)(i & 0xFF);
 
             /* Compress with each algorithm */
-            int algos[] = {0x102, 0x302, 0x702, 0xB02}; /* LZ4, ZLIB, LZMA, LZ4RAW */
+            compression_algorithm algos[] = {
+                COMPRESSION_LZ4, COMPRESSION_ZLIB, COMPRESSION_LZMA, COMPRESSION_LZ4_RAW};
             const char *anames[] = {"LZ4", "ZLIB", "LZMA", "LZ4RAW"};
 
             for (int ai = 0; ai < 4; ai++) {
