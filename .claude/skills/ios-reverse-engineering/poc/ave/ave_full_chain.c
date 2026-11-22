@@ -6616,6 +6616,113 @@ vps_cd_done:
             rlog("\nPhase 6 complete.\n");
         }
 
+        if (phase == 0 || phase == 7) {
+            rlog("\n--- Phase 7: VPS/SPS bitstream comparison for temporal layers ---\n");
+            rlog("Comparing encoded VPS bytes between TL=1 and TL=8 to detect kernel reach\n");
+            rlog("HEVC VPS byte 1 bits 4-6 = vps_max_sub_layers_minus1\n\n");
+
+            int test_tl7[] = {1, 2, 3, 4, 7, 8, 16, 32};
+            uint8_t vps_bytes[8][32];
+            size_t  vps_sizes[8];
+            uint8_t sps_bytes[8][32];
+            size_t  sps_sizes[8];
+            memset(vps_bytes, 0, sizeof(vps_bytes));
+            memset(sps_bytes, 0, sizeof(sps_bytes));
+            memset(vps_sizes, 0, sizeof(vps_sizes));
+            memset(sps_sizes, 0, sizeof(sps_sizes));
+
+            for (int t = 0; t < 8; t++) {
+                int val = test_tl7[t];
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+                    kCFBooleanTrue);
+                VTCompressionSessionCreate(NULL, w, h,
+                    kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (!s) continue;
+
+                CFNumberRef nlayers = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), nlayers);
+                CFRelease(nlayers);
+
+                VTCompressionSessionPrepareToEncodeFrames(s);
+                g_encode_done = 0; g_cb_status = -999;
+                if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
+                encode_one(s, 0, w, h);
+
+                if (g_saved_fmt && g_last_pset_count >= 1) {
+                    const uint8_t *p = NULL; size_t sz = 0;
+                    /* Index 0 = VPS */
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                        g_saved_fmt, 0, &p, &sz, NULL, NULL);
+                    if (p && sz > 0) {
+                        vps_sizes[t] = sz < 32 ? sz : 32;
+                        memcpy(vps_bytes[t], p, vps_sizes[t]);
+                    }
+                    /* Index 1 = SPS */
+                    if (g_last_pset_count >= 2) {
+                        CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                            g_saved_fmt, 1, &p, &sz, NULL, NULL);
+                        if (p && sz > 0) {
+                            sps_sizes[t] = sz < 32 ? sz : 32;
+                            memcpy(sps_bytes[t], p, sps_sizes[t]);
+                        }
+                    }
+                }
+
+                rlog("TL=%d: cb=%d psets=%zu", val, (int)g_cb_status, g_last_pset_count);
+                rlog(" VPS[%zu]:", vps_sizes[t]);
+                for (size_t b = 0; b < vps_sizes[t] && b < 8; b++)
+                    rlog(" %02x", vps_bytes[t][b]);
+                rlog(" SPS[%zu]:", sps_sizes[t]);
+                for (size_t b = 0; b < sps_sizes[t] && b < 8; b++)
+                    rlog(" %02x", sps_bytes[t][b]);
+                rlog("\n");
+
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+
+            rlog("\n--- VPS byte comparison ---\n");
+            int vps_differ = 0;
+            for (int t = 1; t < 8; t++) {
+                if (vps_sizes[t] != vps_sizes[0] ||
+                    memcmp(vps_bytes[t], vps_bytes[0], vps_sizes[0]) != 0) {
+                    rlog("TL=%d VPS DIFFERS from TL=1 *** KERNEL USES THE VALUE ***\n", test_tl7[t]);
+                    vps_differ = 1;
+                }
+            }
+            if (!vps_differ) rlog("All VPS identical — value may be clamped before kernel\n");
+
+            rlog("\n--- SPS byte comparison ---\n");
+            int sps_differ = 0;
+            for (int t = 1; t < 8; t++) {
+                if (sps_sizes[t] != sps_sizes[0] ||
+                    memcmp(sps_bytes[t], sps_bytes[0], sps_sizes[0]) != 0) {
+                    rlog("TL=%d SPS DIFFERS from TL=1 *** KERNEL USES THE VALUE ***\n", test_tl7[t]);
+                    sps_differ = 1;
+                }
+            }
+            if (!sps_differ) rlog("All SPS identical — value may be clamped before kernel\n");
+
+            /* Parse VPS max_sub_layers_minus1 from byte 1 */
+            rlog("\n--- VPS max_sub_layers_minus1 extraction ---\n");
+            for (int t = 0; t < 8; t++) {
+                if (vps_sizes[t] >= 2) {
+                    uint8_t b1 = vps_bytes[t][1];
+                    int max_sub = (b1 >> 1) & 0x07;
+                    int nesting = b1 & 0x01;
+                    rlog("TL=%d: VPS byte[1]=0x%02x max_sub_layers_minus1=%d nesting=%d\n",
+                        test_tl7[t], b1, max_sub, nesting);
+                }
+            }
+
+            rlog("\nPhase 7 complete.\n");
+        }
+
         rlog("\n=== MCTF_OOB complete ===\n");
 
     } else if (strcmp(mode, "iosurface_probe") == 0) {
