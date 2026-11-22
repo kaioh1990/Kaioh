@@ -2805,6 +2805,70 @@ cleanup_dummies:
         else
             rlog("No stale state detected. Buffer appears fully reinitialized each time.\n");
 
+    } else if (strcmp(mode, "multi_session_spray") == 0) {
+        rlog("MULTI_SESSION_SPRAY: Create many encoder sessions simultaneously\n");
+        rlog("Theory: If mediaserverd shares a kernel AVE buffer pool, multiple\n");
+        rlog("sessions might share the same underlying HEVC buffer. VPS entries\n");
+        rlog("from session A's encode would persist when session B encodes.\n\n");
+
+        int num_sessions = (argc > 2) ? atoi(argv[2]) : 16;
+        int enc_per = (argc > 3) ? atoi(argv[3]) : 5;
+        if (num_sessions > 64) num_sessions = 64;
+
+        if (phase1_verify() != 0) goto done;
+
+        rlog("Sessions: %d, encodes/session: %d\n\n", num_sessions, enc_per);
+
+        VTCompressionSessionRef sessions[64] = {0};
+        int created = 0;
+        for (int i = 0; i < num_sessions; i++) {
+            sessions[i] = create_mvhevc_encoder(1920, 1080, 1);
+            if (sessions[i]) {
+                created++;
+            } else {
+                rlog("[%d] create FAILED (total created: %d)\n", i, created);
+                break;
+            }
+        }
+        rlog("Created %d/%d sessions\n\n", created, num_sessions);
+
+        int any_anomaly = 0;
+        size_t baseline_bytes = 0;
+        for (int round = 0; round < enc_per; round++) {
+            rlog("--- Round %d ---\n", round);
+            for (int i = 0; i < created; i++) {
+                int st = encode_one_stereo_kf(sessions[i], round, 1920, 1080, 1, 1);
+                if (round == 0 && i == 0) {
+                    baseline_bytes = g_last_pset_total_bytes;
+                    rlog("[S%d] baseline: pset=%zu, bytes=%zu\n",
+                         i, g_last_pset_count, baseline_bytes);
+                }
+                if (st != 0) {
+                    rlog("[S%d] encode error: %d\n", i, st);
+                } else if (g_last_pset_total_bytes != baseline_bytes) {
+                    any_anomaly = 1;
+                    rlog("[S%d] *** BYTES ANOMALY: %zu (baseline %zu) ***\n",
+                         i, g_last_pset_total_bytes, baseline_bytes);
+                } else if ((int)g_last_pset_count > 4) {
+                    any_anomaly = 1;
+                    rlog("[S%d] *** PSET COUNT ANOMALY: %zu ***\n",
+                         i, g_last_pset_count);
+                }
+            }
+            rlog("Round %d: %d sessions encoded, anomalies=%d\n\n",
+                 round, created, any_anomaly);
+        }
+
+        for (int i = 0; i < created; i++) {
+            VTCompressionSessionInvalidate(sessions[i]);
+            CFRelease(sessions[i]);
+        }
+
+        if (any_anomaly)
+            rlog("*** CROSS-SESSION STATE DETECTED ***\n");
+        else
+            rlog("No cross-session state detected. Sessions appear fully isolated.\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -2832,6 +2896,7 @@ cleanup_dummies:
         rlog("  stereo_keyframe [enc]      -- Force-keyframe counter accumulation test\n");
         rlog("  concurrent_race [threads] [enc] -- Race concurrent encoder sessions (2-8 threads)\n");
         rlog("  rapid_reuse [rounds]       -- Rapid create/encode/destroy for stale state\n");
+        rlog("  multi_session_spray [n] [enc] -- Create N sessions, encode round-robin\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
