@@ -16695,6 +16695,18 @@ new_modes:
         }
         rlog("  Connection: 0x%x\n", conn);
 
+        #define SEL17_SCAN_KPTRS(buf, len, label) do { \
+            const uint8_t *_p = (const uint8_t *)(buf); \
+            for (int _i = 0; _i + 7 < (int)(len); _i += 4) { \
+                uint64_t _v = 0; memcpy(&_v, _p + _i, 8); \
+                if ((_v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL || \
+                    (_v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) { \
+                    if (_v != 0xFFFFFFFFFFFFFFFFULL) \
+                        rlog("  ** KPTR[%s] off=%d val=0x%llx\n", (label), _i, _v); \
+                } \
+            } \
+        } while(0)
+
         /* Create a test IOSurface to get a valid surface ID */
         int w_val = 64, h_val = 64, bpe_val = 4, pf_val = 0x42475241;
         CFNumberRef w_n = CFNumberCreate(NULL, kCFNumberIntType, &w_val);
@@ -16979,7 +16991,7 @@ new_modes:
                             for (int bi = 0; bi < bsz; bi++)
                                 rlog("%02x", msg.body[bi]);
                         }
-                        SCAN_KPTRS(msg.body, bsz, "notify");
+                        SEL17_SCAN_KPTRS(msg.body, bsz, "notify");
                     }
 
                     /* Deregister */
@@ -17298,7 +17310,7 @@ new_modes:
 
                         int bsz = msg.hdr.msgh_size > sizeof(mach_msg_header_t) ?
                             msg.hdr.msgh_size - sizeof(mach_msg_header_t) : 0;
-                        SCAN_KPTRS(msg.body, bsz, "notify");
+                        SEL17_SCAN_KPTRS(msg.body, bsz, "notify");
                     }
                     rlog("    wake_%d: drained %d messages\n", wp_idx, msg_count);
                 }
