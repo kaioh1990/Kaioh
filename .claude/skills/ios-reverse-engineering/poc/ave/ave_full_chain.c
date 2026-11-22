@@ -50,12 +50,12 @@
 #include <sys/xattr.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
-#include <libproc.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
+extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
