@@ -20321,7 +20321,6 @@ new_modes:
                     CFRelease(destAttrs);
                     CFRelease(fmt17);
                 }
-            }
 
             } else if (rounds == 174) {
                 /*
