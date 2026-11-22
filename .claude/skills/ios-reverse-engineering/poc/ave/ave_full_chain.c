@@ -58,11 +58,17 @@
 #include <compression.h>
 #include <stdatomic.h>
 #include <arpa/inet.h>
-#include <mach/mach_vm.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
 extern int proc_regionfilename(int pid, uint64_t address, void *buffer, uint32_t buffersize);
+extern kern_return_t mach_vm_region_recurse(vm_map_t target_task,
+    uint64_t *address, uint64_t *size, uint32_t *nesting_depth,
+    vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
+extern kern_return_t mach_vm_region(vm_map_t target_task,
+    uint64_t *address, uint64_t *size, vm_region_flavor_t flavor,
+    vm_region_info_t info, mach_msg_type_number_t *infoCnt,
+    mach_port_t *object_name);
 #ifndef PROC_PIDTASKINFO
 #define PROC_PIDTASKINFO 4
 struct proc_taskinfo {
@@ -22626,8 +22632,8 @@ new_modes:
                          base194, alloc194);
 
                     /* vm_region_recurse on the mapping */
-                    mach_vm_address_t addr194 = (mach_vm_address_t)base194;
-                    mach_vm_size_t size194 = 0;
+                    uint64_t addr194 = (uint64_t)base194;
+                    uint64_t size194 = 0;
                     uint32_t depth194 = 0;
                     vm_region_submap_info_data_64_t vinfo194;
                     mach_msg_type_number_t vcnt194 = VM_REGION_SUBMAP_INFO_COUNT_64;
@@ -22655,8 +22661,8 @@ new_modes:
                     }
 
                     /* Also check mach_vm_region (non-recurse) */
-                    mach_vm_address_t addr194b = (mach_vm_address_t)base194;
-                    mach_vm_size_t size194b = 0;
+                    uint64_t addr194b = (uint64_t)base194;
+                    uint64_t size194b = 0;
                     vm_region_basic_info_data_64_t binfo194;
                     mach_msg_type_number_t bcnt194 = VM_REGION_BASIC_INFO_COUNT_64;
                     mach_port_t objname194 = MACH_PORT_NULL;
@@ -22675,8 +22681,8 @@ new_modes:
                     }
 
                     /* Extended info */
-                    mach_vm_address_t addr194c = (mach_vm_address_t)base194;
-                    mach_vm_size_t size194c = 0;
+                    uint64_t addr194c = (uint64_t)base194;
+                    uint64_t size194c = 0;
                     vm_region_extended_info_data_t einfo194;
                     mach_msg_type_number_t ecnt194 = VM_REGION_EXTENDED_INFO_COUNT;
                     mach_port_t eobj194 = MACH_PORT_NULL;
