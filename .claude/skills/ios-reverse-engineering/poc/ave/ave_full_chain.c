@@ -45,6 +45,7 @@
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
 #include <IOKit/IOKitLib.h>
+#include <os/log.h>
 
 #ifndef kIOMasterPortDefault
 #define kIOMasterPortDefault ((mach_port_t)0)
@@ -88,6 +89,11 @@ static void rlog(const char *fmt, ...) {
     vprintf(fmt, ap);
     fflush(stdout);
     va_end(ap);
+    va_start(ap, fmt);
+    char oslogbuf[1024];
+    vsnprintf(oslogbuf, sizeof(oslogbuf), fmt, ap);
+    va_end(ap);
+    os_log(OS_LOG_DEFAULT, "AVE_PROBE: %{public}s", oslogbuf);
 }
 
 static void encode_cb(void *ctx, void *src, OSStatus status,
