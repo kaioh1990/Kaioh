@@ -4298,6 +4298,290 @@ static void r297_probe(void) {
  *   3. Try sel 0,1,16 with crafted input payloads
  *   4. Try trustd/securityd XPC to query entitlements and keybag state
  */
+static void r310_probe(void) {
+    rlog("\n=== r310: Metal GPU Work + IOSurface Struct Methods + Timing ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: Metal framework GPU work + AGX notification ---- */
+    rlog("--- Part 1: Metal GPU work + AGX notification capture ---\n");
+    {
+        /* Set up AGX notification port first */
+        io_service_t agx = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("AGXAccelerator"));
+        io_connect_t agx_conn = 0;
+        mach_port_t notif_port = MACH_PORT_NULL;
+        if (agx) {
+            IOServiceOpen(agx, mach_task_self(), 1, &agx_conn);
+            if (agx_conn) {
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notif_port);
+                mach_port_insert_right(mach_task_self(), notif_port, notif_port,
+                    MACH_MSG_TYPE_MAKE_SEND);
+                kr = IOConnectSetNotificationPort(agx_conn, 1, notif_port, 0);
+                rlog("  AGX notif port: kr=0x%x\n", kr);
+            }
+        }
+
+        /* Create MTLDevice via ObjC runtime */
+        Class mtlDevClass = objc_getClass("MTLCreateSystemDefaultDevice");
+        /* MTLCreateSystemDefaultDevice is a function, not a class */
+        typedef id (*mtl_create_fn)(void);
+        mtl_create_fn mtl_create = (mtl_create_fn)dlsym(RTLD_DEFAULT,
+            "MTLCreateSystemDefaultDevice");
+        rlog("  MTLCreateSystemDefaultDevice: %p\n", (void*)mtl_create);
+
+        id device = NULL;
+        if (mtl_create) {
+            device = mtl_create();
+            rlog("  MTLDevice: %p\n", (void*)device);
+            if (device) {
+                /* Get device name */
+                id name = ((id(*)(id,SEL))objc_msgSend)(device,
+                    sel_registerName("name"));
+                if (name) {
+                    const char *ns = ((const char*(*)(id,SEL))objc_msgSend)(name,
+                        sel_registerName("UTF8String"));
+                    rlog("  GPU: %s\n", ns ?: "?");
+                }
+
+                /* Create a command queue */
+                id cmdQueue = ((id(*)(id,SEL))objc_msgSend)(device,
+                    sel_registerName("newCommandQueue"));
+                rlog("  CommandQueue: %p\n", (void*)cmdQueue);
+
+                if (cmdQueue) {
+                    /* Create a command buffer */
+                    id cmdBuf = ((id(*)(id,SEL))objc_msgSend)(cmdQueue,
+                        sel_registerName("commandBuffer"));
+                    rlog("  CommandBuffer: %p\n", (void*)cmdBuf);
+
+                    if (cmdBuf) {
+                        /* Create a simple blit encoder (no shader needed) */
+                        id blitEnc = ((id(*)(id,SEL))objc_msgSend)(cmdBuf,
+                            sel_registerName("blitCommandEncoder"));
+                        rlog("  BlitEncoder: %p\n", (void*)blitEnc);
+
+                        if (blitEnc) {
+                            /* End encoding and commit */
+                            ((void(*)(id,SEL))objc_msgSend)(blitEnc,
+                                sel_registerName("endEncoding"));
+                            ((void(*)(id,SEL))objc_msgSend)(cmdBuf,
+                                sel_registerName("commit"));
+                            /* Wait for completion */
+                            ((void(*)(id,SEL))objc_msgSend)(cmdBuf,
+                                sel_registerName("waitUntilCompleted"));
+                            rlog("  GPU work committed and completed!\n");
+                        }
+                    }
+                }
+            }
+        }
+
+        /* Now try to receive AGX notifications */
+        if (notif_port) {
+            usleep(100000);
+            struct {
+                mach_msg_header_t hdr;
+                uint8_t body[4096];
+            } msg;
+            for (int attempt = 0; attempt < 3; attempt++) {
+                memset(&msg, 0, sizeof(msg));
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_local_port = notif_port;
+                kr = mach_msg(&msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                    0, sizeof(msg), notif_port, 50, MACH_PORT_NULL);
+                if (kr == KERN_SUCCESS) {
+                    rlog("  ** AGX NOTIFICATION RECEIVED! **\n");
+                    rlog("    msg_id=0x%x size=%u bits=0x%x\n",
+                         msg.hdr.msgh_id, msg.hdr.msgh_size, msg.hdr.msgh_bits);
+                    uint32_t blen = msg.hdr.msgh_size - sizeof(mach_msg_header_t);
+                    if (blen > 0) {
+                        rlog("    body(%u): ", blen);
+                        for (uint32_t i = 0; i < blen && i < 128; i++)
+                            rlog("%02x", msg.body[i]);
+                        rlog("\n");
+                        for (uint32_t off = 0; off + 8 <= blen; off += 8) {
+                            uint64_t v;
+                            memcpy(&v, msg.body + off, 8);
+                            if ((v >> 36) == 0xfffffff)
+                                rlog("    ** KPTR body+%u: 0x%llx **\n", off, v);
+                        }
+                    }
+                } else {
+                    rlog("  Recv %d: kr=0x%x\n", attempt, kr);
+                }
+            }
+            mach_port_deallocate(mach_task_self(), notif_port);
+        }
+        if (agx_conn) IOServiceClose(agx_conn);
+        if (agx) IOObjectRelease(agx);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IOSurface via struct methods ---- */
+    rlog("\n--- Part 2: IOSurface via IOConnectCallStructMethod ---\n");
+    {
+        io_service_t root = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t conn = 0;
+        if (root) IOServiceOpen(root, mach_task_self(), 0, &conn);
+        if (conn) {
+            /* Create surface through framework first to get a valid ID */
+            CFMutableDictionaryRef sd = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=32, h=32, bpp=4, bpr=w*bpp;
+            CFDictionarySetValue(sd, CFSTR("IOSurfaceWidth"),
+                CFNumberCreate(NULL, kCFNumberIntType, &w));
+            CFDictionarySetValue(sd, CFSTR("IOSurfaceHeight"),
+                CFNumberCreate(NULL, kCFNumberIntType, &h));
+            CFDictionarySetValue(sd, CFSTR("IOSurfaceBytesPerRow"),
+                CFNumberCreate(NULL, kCFNumberIntType, &bpr));
+            CFDictionarySetValue(sd, CFSTR("IOSurfaceBytesPerElement"),
+                CFNumberCreate(NULL, kCFNumberIntType, &bpp));
+            int fmt = 0x42475241;
+            CFDictionarySetValue(sd, CFSTR("IOSurfacePixelFormat"),
+                CFNumberCreate(NULL, kCFNumberIntType, &fmt));
+            IOSurfaceRef surf = IOSurfaceCreate(sd);
+            CFRelease(sd);
+
+            if (surf) {
+                uint32_t sid = IOSurfaceGetID(surf);
+                rlog("  Surface id=%u\n", sid);
+
+                /* Try IOSurface lookup by ID using scalar+struct */
+                uint64_t sin[4] = {sid, 0, 0, 0};
+                uint8_t sout_buf[8192] = {0};
+                size_t sout_sz = sizeof(sout_buf);
+
+                /* sel 6 is typically s_lookup_surface */
+                kr = IOConnectCallMethod(conn, 6,
+                    sin, 1, NULL, 0,
+                    NULL, NULL, sout_buf, &sout_sz);
+                rlog("  sel=6(lookup) sid=%u: kr=0x%x outSz=%zu\n",
+                     sid, kr, sout_sz);
+                if (kr == KERN_SUCCESS && sout_sz > 0) {
+                    rlog("    output: ");
+                    for (size_t i = 0; i < sout_sz && i < 64; i++)
+                        rlog("%02x", sout_buf[i]);
+                    rlog("\n");
+                }
+
+                /* Try sel 2 (get_property) with surface ID */
+                sout_sz = sizeof(sout_buf);
+                kr = IOConnectCallMethod(conn, 2,
+                    sin, 1, NULL, 0,
+                    NULL, NULL, sout_buf, &sout_sz);
+                rlog("  sel=2(get_prop) sid=%u: kr=0x%x outSz=%zu\n",
+                     sid, kr, sout_sz);
+
+                /* Try sel 30 (might be s_get_surface_use_count) */
+                sout_sz = sizeof(sout_buf);
+                kr = IOConnectCallMethod(conn, 30,
+                    sin, 1, NULL, 0,
+                    NULL, NULL, sout_buf, &sout_sz);
+                rlog("  sel=30 sid=%u: kr=0x%x outSz=%zu\n",
+                     sid, kr, sout_sz);
+
+                /* Try IOSurface mach port for sharing */
+                typedef mach_port_t (*create_mp_fn)(IOSurfaceRef);
+                create_mp_fn cmp = (create_mp_fn)dlsym(RTLD_DEFAULT,
+                    "IOSurfaceCreateMachPort");
+                rlog("  IOSurfaceCreateMachPort: %p\n", (void*)cmp);
+                if (cmp) {
+                    mach_port_t sp = cmp(surf);
+                    rlog("  Surface mach port: 0x%x\n", sp);
+                    if (sp != MACH_PORT_NULL) {
+                        /* Get kobject info for this port */
+                        typedef kern_return_t (*mpk_fn)(task_t, mach_port_name_t,
+                            natural_t*, mach_vm_address_t*);
+                        mpk_fn mpk = (mpk_fn)dlsym(RTLD_DEFAULT,
+                            "mach_port_kobject");
+                        if (mpk) {
+                            natural_t kotype = 0;
+                            mach_vm_address_t kaddr = 0;
+                            kr = mpk(mach_task_self(), sp, &kotype, &kaddr);
+                            rlog("  Surface port kobject: kr=0x%x type=%u addr=0x%llx\n",
+                                 kr, kotype, (uint64_t)kaddr);
+                        }
+                    }
+                }
+
+                CFRelease(surf);
+            }
+            IOServiceClose(conn);
+        }
+        if (root) IOObjectRelease(root);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Timing-based KASLR measurement ---- */
+    rlog("\n--- Part 3: Syscall timing measurement ---\n");
+    {
+        /* Measure timing of kernel calls for potential side channel */
+        uint64_t times[10];
+        for (int i = 0; i < 10; i++) {
+            uint64_t start = mach_absolute_time();
+            /* Do a simple kernel call */
+            mach_port_t p = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p);
+            mach_port_deallocate(mach_task_self(), p);
+            uint64_t end = mach_absolute_time();
+            times[i] = end - start;
+        }
+        rlog("  Port alloc/dealloc timing (abs ticks):\n    ");
+        for (int i = 0; i < 10; i++) rlog("%llu ", times[i]);
+        rlog("\n");
+
+        /* mach_absolute_time values for reference */
+        rlog("  mach_absolute_time: 0x%llx\n", mach_absolute_time());
+
+        /* Try processor_info to get CPU state */
+        natural_t cpuCount = 0;
+        processor_info_array_t cpuInfo = NULL;
+        mach_msg_type_number_t cpuInfoCnt = 0;
+        kr = host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO,
+            &cpuCount, &cpuInfo, &cpuInfoCnt);
+        rlog("  host_processor_info(CPU_LOAD): kr=0x%x cpus=%u infoCnt=%u\n",
+             kr, cpuCount, cpuInfoCnt);
+        if (kr == KERN_SUCCESS && cpuInfo) {
+            rlog("    CPU load data:\n");
+            for (natural_t c = 0; c < cpuCount && c < 6; c++) {
+                integer_t *load = ((integer_t*)cpuInfo) + c * 4;
+                rlog("    cpu%u: user=%d sys=%d idle=%d nice=%d\n",
+                     c, load[0], load[1], load[2], load[3]);
+            }
+            /* Scan for kernel pointers in the info array */
+            for (mach_msg_type_number_t off = 0; off + 2 <= cpuInfoCnt; off += 2) {
+                uint64_t v = ((uint64_t)cpuInfo[off+1] << 32) | (uint32_t)cpuInfo[off];
+                if ((v >> 36) == 0xfffffff)
+                    rlog("    ** KPTR at info[%u]: 0x%llx **\n", off, v);
+            }
+            vm_deallocate(mach_task_self(), (vm_address_t)cpuInfo,
+                cpuInfoCnt * sizeof(integer_t));
+        }
+
+        /* Try PROCESSOR_BASIC_INFO */
+        kr = host_processor_info(mach_host_self(), PROCESSOR_BASIC_INFO,
+            &cpuCount, &cpuInfo, &cpuInfoCnt);
+        rlog("  host_processor_info(BASIC): kr=0x%x cpus=%u infoCnt=%u\n",
+             kr, cpuCount, cpuInfoCnt);
+        if (kr == KERN_SUCCESS && cpuInfo) {
+            for (mach_msg_type_number_t off = 0; off + 2 <= cpuInfoCnt; off += 2) {
+                uint64_t v = ((uint64_t)cpuInfo[off+1] << 32) | (uint32_t)cpuInfo[off];
+                if ((v >> 36) == 0xfffffff)
+                    rlog("    ** KPTR at info[%u]: 0x%llx **\n", off, v);
+            }
+            vm_deallocate(mach_task_self(), (vm_address_t)cpuInfo,
+                cpuInfoCnt * sizeof(integer_t));
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r310 complete ===\n");
+    fflush(stdout);
+}
+
 static void r309_probe(void) {
     rlog("\n=== r309: AGX Notification Capture + IOSurface Deep + Task Info ===\n\n");
     fflush(stdout);
@@ -32809,6 +33093,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 310) {
+            rlog("*** rounds=310: Metal GPU Work + IOSurface Struct + Timing ***\n");
+            rlog("  r309: AGX notifs timeout, task_info clean, IOSurface needs struct.\n");
+            rlog("  Probe: Metal GPU submit, IOSurface struct methods, timing analysis.\n\n");
+            r310_probe();
             goto done;
         }
         if (rounds == 309) {
