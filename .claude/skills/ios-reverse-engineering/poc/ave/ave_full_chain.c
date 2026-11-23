@@ -1804,9 +1804,7 @@ static void *r276_registry_racer_fn(void *arg) {
     return NULL;
 }
 
-static void r276_probe(IOSurfaceRef surf) {
-    uint32_t sid = IOSurfaceGetID(surf);
-
+static void r276_probe(void) {
     rlog("\n=== r276: Controlled sel17/18 Race with Registry Operations ===\n");
     fflush(stdout);
 
@@ -24359,7 +24357,7 @@ new_modes:
             rlog("  r275: ID reuse immediate, 73K lookups 0 stale. Race at userspace level fails.\n");
             rlog("  Testing: registry read timing, concurrent create/destroy+registry, OOL spray.\n\n");
             fflush(stdout);
-            r276_probe(surf);
+            r276_probe();
             goto done;
         }
         if (rounds == 275) {
