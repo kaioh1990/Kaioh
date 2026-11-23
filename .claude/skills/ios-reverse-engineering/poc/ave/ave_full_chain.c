@@ -24920,7 +24920,10 @@ new_modes:
                     p13_render_frames = 0;
                     pthread_t r205_pr;
                     pthread_create(&r205_pr, NULL, p13_render_loop, NULL);
-                    usleep(200000);
+                    for (int s = 0; s < 5; s++) {
+                        usleep(1000000);
+                        rlog("+%ds ", s + 1);
+                    }
                     p13_render_run = 0;
                     pthread_join(r205_pr, NULL);
 
