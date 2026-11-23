@@ -1832,12 +1832,12 @@ static void r271_probe(IOSurfaceRef surf) {
         }
 
         if (getBulk) {
-            CFDictionaryRef existing = getBulk(surf);
-            rlog("  GetBulkAttachments=%p", existing);
-            if (existing) {
-                rlog(" count=%ld\n", CFDictionaryGetCount(existing));
+            uintptr_t raw = (uintptr_t)getBulk(surf);
+            rlog("  GetBulkAttachments raw=0x%lx", (unsigned long)raw);
+            if (raw > 0x100000000UL) {
+                rlog(" count=%ld\n", CFDictionaryGetCount((CFDictionaryRef)raw));
             } else {
-                rlog(" (NULL)\n");
+                rlog(" (kern_return_t=0x%x)\n", (uint32_t)raw);
             }
         } else {
             rlog("  IOSurfaceGetBulkAttachments not found\n");
@@ -1852,10 +1852,13 @@ static void r271_probe(IOSurfaceRef surf) {
             CFRelease(bd);
 
             if (getBulk) {
-                CFDictionaryRef after = getBulk(surf);
-                rlog("  GetBulkAttachments after set=%p", after);
-                if (after) rlog(" count=%ld\n", CFDictionaryGetCount(after));
-                else rlog(" (NULL)\n");
+                uintptr_t raw2 = (uintptr_t)getBulk(surf);
+                rlog("  GetBulkAttachments after set raw=0x%lx", (unsigned long)raw2);
+                if (raw2 > 0x100000000UL) {
+                    rlog(" count=%ld\n", CFDictionaryGetCount((CFDictionaryRef)raw2));
+                } else {
+                    rlog(" (kern_return_t=0x%x)\n", (uint32_t)raw2);
+                }
             }
         } else {
             rlog("  IOSurfaceSetBulkAttachments not found\n");
