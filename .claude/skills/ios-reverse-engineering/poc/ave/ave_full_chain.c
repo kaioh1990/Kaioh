@@ -19878,10 +19878,16 @@ new_modes:
                                     r229_spray[si] = NULL;
                                 }
                             }
+                            r229_saved_wp_n = 0;
                             for (int wi = 0; wi < r229_wp_n; wi++) {
-                                if (r229_wps[wi]) mach_port_deallocate(mach_task_self(), r229_wps[wi]);
+                                if (r229_wps[wi] && r229_saved_wp_n < R229_SAVED_WPS_MAX) {
+                                    r229_saved_wps[r229_saved_wp_n++] = r229_wps[wi];
+                                } else if (r229_wps[wi]) {
+                                    mach_port_deallocate(mach_task_self(), r229_wps[wi]);
+                                }
                             }
                             r229_wp_n = 0;
+                            rlog("  Saved %d wake ports for Phase 14 (notifier path)\n", r229_saved_wp_n);
 
                             /* Reset state file */
                             {
