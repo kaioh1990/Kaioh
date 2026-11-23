@@ -1745,6 +1745,382 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r282: Surface lifecycle + ownership probing.
+ * r281 CONFIRMED: sel17/18 race fully serialized per-connection, no orphaned entries.
+ * Cross-connection deregister fails (entries are per-connection).
+ * Connection churn cleans up properly. Notification path is dead.
+ * r274 CONFIRMED: purgeable memory fully sanitized.
+ * NEW STRATEGY: probe surface reference counting and ownership.
+ * Can we get a dangling kernel reference by manipulating lifecycle?
+ * IOSurfaceSetOwnership returns 0x0 — what does it actually change?
+ * Can IOSurfaceClient outlive its surface? */
+static void r282_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("\n=== r282: Surface Lifecycle + Ownership Probing ===\n");
+    fflush(stdout);
+
+    /* Part 1: IOSurfaceSetOwnership deep probe */
+    rlog("\n--- Part 1: IOSurfaceSetOwnership ---\n");
+    {
+        typedef kern_return_t (*setOwn_t)(IOSurfaceRef, task_t, int);
+        void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+        setOwn_t setOwnership = (setOwn_t)dlsym(iosurfH, "IOSurfaceSetOwnership");
+        if (!setOwnership) {
+            rlog("  IOSurfaceSetOwnership not found!\n");
+        } else {
+            rlog("  IOSurfaceSetOwnership found at %p\n", (void*)setOwnership);
+
+            /* Arg exploration: (surf, task, flags?) */
+            kern_return_t kr;
+            kr = setOwnership(surf, mach_task_self(), 0);
+            rlog("  SetOwnership(surf, self, 0) = 0x%x\n", kr);
+            kr = setOwnership(surf, mach_task_self(), 1);
+            rlog("  SetOwnership(surf, self, 1) = 0x%x\n", kr);
+            kr = setOwnership(surf, mach_task_self(), 2);
+            rlog("  SetOwnership(surf, self, 2) = 0x%x\n", kr);
+            kr = setOwnership(surf, MACH_PORT_NULL, 0);
+            rlog("  SetOwnership(surf, NULL, 0) = 0x%x\n", kr);
+            kr = setOwnership(surf, MACH_PORT_NULL, 1);
+            rlog("  SetOwnership(surf, NULL, 1) = 0x%x\n", kr);
+
+            /* Create a second surface, set ownership to our task */
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=32,h=32,bpe=4,bpr=32*4,pf=0x42475241,as=32*32*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s2 = IOSurfaceCreate(p);
+            CFRelease(p);
+            uint32_t s2id = IOSurfaceGetID(s2);
+            rlog("  created s2 id=%u\n", s2id);
+
+            /* Set ownership to NULL task — does this orphan it? */
+            kr = setOwnership(s2, MACH_PORT_NULL, 0);
+            rlog("  SetOwnership(s2, NULL, 0) = 0x%x\n", kr);
+
+            /* Can we still access it? */
+            IOSurfaceLock(s2, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(s2);
+            rlog("  s2 base after NULL ownership: %p\n", base);
+            if (base) memset(base, 0x42, 32*32*4);
+            IOSurfaceUnlock(s2, 0, NULL);
+
+            /* Can someone else look it up? */
+            IOSurfaceRef s2b = IOSurfaceLookup(s2id);
+            rlog("  IOSurfaceLookup(%u) after NULL ownership: %p\n", s2id, (void*)s2b);
+            if (s2b) CFRelease(s2b);
+            CFRelease(s2);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 2: Surface lifecycle — CFRelease + IOSurfaceLookup race */
+    rlog("\n--- Part 2: Surface lifecycle (create, lookup, release, re-lookup) ---\n");
+    {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=32,h=32,bpe=4,bpr=32*4,pf=0x42475241,as=32*32*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        for (int trial = 0; trial < 5; trial++) {
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            uint32_t id = IOSurfaceGetID(s);
+            mach_port_t mp = IOSurfaceCreateMachPort(s);
+
+            /* Get a second reference via lookup */
+            IOSurfaceRef s2 = IOSurfaceLookup(id);
+            rlog("  trial %d: id=%u mp=%u s=%p s2=%p\n", trial, id, mp, (void*)s, (void*)s2);
+
+            /* Release original */
+            CFRelease(s);
+            rlog("    after CFRelease(s): ");
+
+            /* Is s2 still valid? */
+            int uc = IOSurfaceGetUseCount(s2);
+            rlog("useCount=%d ", uc);
+
+            /* Can we still look up by ID? */
+            IOSurfaceRef s3 = IOSurfaceLookup(id);
+            rlog("lookup(%u)=%p ", id, (void*)s3);
+
+            /* Can we look up from mach port? */
+            IOSurfaceRef s4 = IOSurfaceLookupFromMachPort(mp);
+            rlog("fromPort=%p\n", (void*)s4);
+
+            /* Release s2 — now only mach port holds reference */
+            if (s3) CFRelease(s3);
+            CFRelease(s2);
+            rlog("    after release s2+s3: ");
+
+            /* Mach port should still hold kernel reference */
+            IOSurfaceRef s5 = IOSurfaceLookupFromMachPort(mp);
+            rlog("fromPort=%p ", (void*)s5);
+            if (s5) {
+                rlog("id=%u", IOSurfaceGetID(s5));
+                CFRelease(s5);
+            }
+            rlog("\n");
+
+            /* Now deallocate the mach port — this should be the last reference */
+            mach_port_deallocate(mach_task_self(), mp);
+            rlog("    after port dealloc: ");
+
+            /* Can we still look up by ID? This is the key question */
+            IOSurfaceRef s6 = IOSurfaceLookup(id);
+            rlog("lookup(%u)=%p\n", id, (void*)s6);
+            if (s6) {
+                rlog("    *** SURFACE SURVIVED ALL RELEASES! ***\n");
+                CFRelease(s6);
+            }
+            fflush(stdout);
+        }
+        CFRelease(p);
+    }
+
+    /* Part 3: IOSurfaceClient after surface release */
+    rlog("\n--- Part 3: IOSurfaceClient after surface release ---\n");
+    {
+        typedef void* IOSurfaceClientRef;
+        typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+        typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+        typedef void (*clientRelease_t)(IOSurfaceClientRef);
+        void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+        clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+        clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+        clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+
+        if (!clLookup || !clLock) {
+            rlog("  client APIs not found\n");
+        } else {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=32,h=32,bpe=4,bpr=32*4,pf=0x42475241,as=32*32*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            uint32_t id = IOSurfaceGetID(s);
+            rlog("  created surface id=%u\n", id);
+
+            /* Get client reference */
+            IOSurfaceClientRef cl = clLookup(id);
+            rlog("  ClientLookup(%u) = %p\n", id, cl);
+
+            /* Client lock works while surface exists */
+            uint32_t seed = 0;
+            kern_return_t kr = clLock(cl, 0, &seed);
+            rlog("  ClientLock while alive: 0x%x seed=%u\n", kr, seed);
+
+            /* Release all userspace surface references */
+            CFRelease(s);
+            rlog("  released surface\n");
+
+            /* KEY TEST: Does client still work after surface release? */
+            seed = 0;
+            kr = clLock(cl, 0, &seed);
+            rlog("  ClientLock after release: 0x%x seed=%u\n", kr, seed);
+
+            /* Does the surface still exist via global lookup? */
+            IOSurfaceRef s2 = IOSurfaceLookup(id);
+            rlog("  IOSurfaceLookup(%u) after release: %p\n", id, (void*)s2);
+            if (s2) CFRelease(s2);
+
+            /* Release client */
+            if (clRelease) {
+                clRelease(cl);
+                rlog("  ClientRelease done\n");
+            }
+
+            /* Now try lookup again — surface should be fully gone */
+            IOSurfaceRef s3 = IOSurfaceLookup(id);
+            rlog("  IOSurfaceLookup(%u) after ClientRelease: %p\n", id, (void*)s3);
+            if (s3) CFRelease(s3);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 4: Notification on surface destruction */
+    rlog("\n--- Part 4: Register notification then destroy surface ---\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=32,h=32,bpe=4,bpr=32*4,pf=0x42475241,as=32*32*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef ds = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t did = IOSurfaceGetID(ds);
+        rlog("  created destruction-test surface id=%u\n", did);
+
+        /* Register notifications for both types */
+        mach_port_t wp0 = MACH_PORT_NULL, wp1 = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp0);
+        mach_port_insert_right(mach_task_self(), wp0, wp0, MACH_MSG_TYPE_MAKE_SEND);
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp1);
+        mach_port_insert_right(mach_task_self(), wp1, wp1, MACH_MSG_TYPE_MAKE_SEND);
+
+        uint64_t ref0 = 0xAAAA, ref1 = 0xBBBB;
+        uint64_t inp0[3] = {did, 0, 0};
+        uint64_t inp1[3] = {did, 1, 0};
+
+        /* Need separate connections since only 1 reg per conn */
+        io_connect_t conn2 = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn2);
+
+        kern_return_t kr0 = IOConnectCallAsyncMethod(conn, 17, wp0, &ref0, 1,
+            NULL, 0, inp0, 24, NULL, NULL, NULL, NULL);
+        kern_return_t kr1 = IOConnectCallAsyncMethod(conn2, 17, wp1, &ref1, 1,
+            NULL, 0, inp1, 24, NULL, NULL, NULL, NULL);
+        rlog("  registered type0: 0x%x, type1: 0x%x\n", kr0, kr1);
+
+        /* Destroy the surface */
+        CFRelease(ds);
+        rlog("  surface released\n");
+        usleep(50000);
+
+        /* Check for notifications */
+        struct { mach_msg_header_t hdr; uint8_t body[256]; } msg;
+        kern_return_t r0 = mach_msg(&msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(msg), wp0, 100, MACH_PORT_NULL);
+        rlog("  type0 notification: 0x%x", r0);
+        if (r0 == 0) rlog(" id=0x%x size=%u *** GOT NOTIFICATION! ***", msg.hdr.msgh_id, msg.hdr.msgh_size);
+        rlog("\n");
+
+        kern_return_t r1 = mach_msg(&msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(msg), wp1, 100, MACH_PORT_NULL);
+        rlog("  type1 notification: 0x%x", r1);
+        if (r1 == 0) rlog(" id=0x%x size=%u *** GOT NOTIFICATION! ***", msg.hdr.msgh_id, msg.hdr.msgh_size);
+        rlog("\n");
+
+        mach_port_destroy(mach_task_self(), wp0);
+        mach_port_destroy(mach_task_self(), wp1);
+        IOServiceClose(conn);
+        IOServiceClose(conn2);
+        IOObjectRelease(svc);
+        fflush(stdout);
+    }
+
+    /* Part 5: SetBulkAttachments deep probe */
+    rlog("\n--- Part 5: IOSurfaceSetBulkAttachments formats ---\n");
+    {
+        typedef kern_return_t (*setBulk_t)(IOSurfaceRef, CFDictionaryRef);
+        typedef kern_return_t (*getBulk_t)(IOSurfaceRef, CFDictionaryRef*);
+        void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+        setBulk_t setBulk = (setBulk_t)dlsym(iosurfH, "IOSurfaceSetBulkAttachments");
+        getBulk_t getBulk = (getBulk_t)dlsym(iosurfH, "IOSurfaceGetBulkAttachments");
+
+        if (!setBulk) {
+            rlog("  SetBulkAttachments not found\n");
+        } else {
+            /* Try different attachment sizes */
+            for (int sz = 1; sz <= 5; sz++) {
+                CFMutableDictionaryRef d = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                for (int i = 0; i < sz; i++) {
+                    char key[32];
+                    snprintf(key, sizeof(key), "attach_%d", i);
+                    CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+                    uint8_t data[4096];
+                    memset(data, 0x41 + i, sizeof(data));
+                    CFDataRef dv = CFDataCreate(NULL, data, sizeof(data));
+                    CFDictionarySetValue(d, ks, dv);
+                    CFRelease(ks);
+                    CFRelease(dv);
+                }
+                kern_return_t kr = setBulk(surf, d);
+                rlog("  SetBulkAttachments(%d entries, 4KB each) = 0x%x\n", sz, kr);
+                CFRelease(d);
+            }
+
+            /* Try large attachment */
+            {
+                CFMutableDictionaryRef d = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                uint8_t *big = malloc(1024*1024);
+                if (big) {
+                    memset(big, 0xCC, 1024*1024);
+                    CFDataRef bd = CFDataCreate(NULL, big, 1024*1024);
+                    CFDictionarySetValue(d, CFSTR("big"), bd);
+                    CFRelease(bd);
+                    kern_return_t kr = setBulk(surf, d);
+                    rlog("  SetBulkAttachments(1MB entry) = 0x%x\n", kr);
+                    free(big);
+                }
+                CFRelease(d);
+            }
+
+            /* Try getBulk with correct output pattern */
+            if (getBulk) {
+                CFDictionaryRef out = NULL;
+                kern_return_t kr = getBulk(surf, &out);
+                rlog("  GetBulkAttachments(out) = 0x%x out=%p\n", kr, (void*)out);
+                if (kr == 0 && out) {
+                    int cnt = (int)CFDictionaryGetCount(out);
+                    rlog("  bulk attachment count: %d\n", cnt);
+                    CFRelease(out);
+                }
+            }
+        }
+        fflush(stdout);
+    }
+
+    rlog("\n*** r282 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r281: Fixed sel17/18 race — r280 crashed app TWICE at multi-threaded Part 3.
  * Crash was from deallocating wake ports during race.
  * r280 CONFIRMED: sel17({surfID,0,0}) and sel17({surfID,1,0}) register OK.
@@ -25639,6 +26015,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 282) {
+            rlog("*** rounds=282: Surface Lifecycle + Ownership Probing ***\n");
+            rlog("  r281: sel17/18 fully serialized, no race. Cross-conn deregister fails.\n");
+            rlog("  Testing: SetOwnership, lifecycle/refcount, client-after-release,\n");
+            rlog("           destruction notifications, BulkAttachments formats.\n\n");
+            fflush(stdout);
+            r282_probe(surf);
             goto done;
         }
         if (rounds == 281) {
