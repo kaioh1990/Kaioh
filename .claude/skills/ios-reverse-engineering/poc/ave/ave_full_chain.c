@@ -17095,7 +17095,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170) {
+        if (rounds >= 170 && rounds != 219) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
