@@ -19101,7 +19101,7 @@ new_modes:
             /* Actually, let's use sysctl kern.msgbuf */
             {
                 size_t buflen = 0;
-                int mib[2] = {CTL_KERN, KERN_MSGBUF};
+                int mib[2] = {CTL_KERN, 5}; /* KERN_MSGBUF=5 */
                 kern_return_t kr = sysctl(mib, 2, NULL, &buflen, NULL, 0);
                 rlog("  kern.msgbuf size query: ret=%d len=%zu\n", kr, buflen);
                 if (kr == 0 && buflen > 0 && buflen < 1048576) {
