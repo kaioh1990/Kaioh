@@ -21772,7 +21772,7 @@ new_modes:
                     p17_nconns[i] = nc;
                     p17_nreg++;
                 } else {
-                    close_port(wp);
+                    mach_port_deallocate(mach_task_self(), wp);
                     IOServiceClose(nc);
                 }
             }
