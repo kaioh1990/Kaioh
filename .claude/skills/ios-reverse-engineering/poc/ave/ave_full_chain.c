@@ -80,6 +80,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <setjmp.h>
 #include <sched.h>
 #include <sys/mman.h>
+#include <servers/bootstrap.h>
 /* objc/message.h not needed — pure C */
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
@@ -4260,6 +4261,440 @@ static void r297_probe(void) {
  * holds OLD pointers (from before free) that may point to freed/reused
  * memory — potential for confusion attacks.
  */
+/*
+ * r299: Lockdown Mode reconnaissance
+ * Probe device for Lockdown Mode state, MTE config, SPTM indicators,
+ * boot args, and any kernel state that changes with the toggle.
+ */
+static void r299_probe(void) {
+    rlog("\n=== r299: Lockdown Mode Reconnaissance ===\n\n");
+    fflush(stdout);
+
+    /* ---- Phase 1: Lockdown Mode state detection ---- */
+    rlog("--- Phase 1: Lockdown Mode state detection ---\n");
+
+    /* Check via sysctlbyname for any lockdown-related knobs */
+    const char *sysctl_names[] = {
+        "kern.lockdown_mode",
+        "kern.lockdown_mode_state",
+        "kern.lockdownmode",
+        "security.lockdown",
+        "security.lockdown_mode",
+        "kern.secure_kernel",
+        "kern.bootargs",
+        "kern.osversion",
+        "kern.version",
+        "hw.target",
+        "hw.product",
+        "hw.machine",
+        "kern.osproductversion",
+        "kern.bootsessionuuid",
+        NULL
+    };
+    for (int i = 0; sysctl_names[i]; i++) {
+        char buf[512] = {0};
+        size_t len = sizeof(buf) - 1;
+        int ret = sysctlbyname(sysctl_names[i], buf, &len, NULL, 0);
+        if (ret == 0) {
+            /* Try as string first */
+            int printable = 1;
+            for (size_t j = 0; j < len && j < 128; j++) {
+                if (buf[j] != 0 && (buf[j] < 0x20 || buf[j] > 0x7e)) {
+                    printable = 0;
+                    break;
+                }
+            }
+            if (printable && len > 0 && len < 256) {
+                rlog("  sysctl %-32s = \"%s\" (len=%zu)\n", sysctl_names[i], buf, len);
+            } else if (len == 4) {
+                uint32_t v; memcpy(&v, buf, 4);
+                rlog("  sysctl %-32s = 0x%08x (%u) (len=4)\n", sysctl_names[i], v, v);
+            } else if (len == 8) {
+                uint64_t v; memcpy(&v, buf, 8);
+                rlog("  sysctl %-32s = 0x%016llx (len=8)\n", sysctl_names[i], (unsigned long long)v);
+            } else {
+                rlog("  sysctl %-32s = <data len=%zu>\n", sysctl_names[i], len);
+            }
+        } else {
+            rlog("  sysctl %-32s = <not found, errno=%d>\n", sysctl_names[i], errno);
+        }
+    }
+    fflush(stdout);
+
+    /* Check NVRAM for lockdown-mode-related keys */
+    rlog("\n--- Phase 1b: IORegistry / NVRAM lockdown keys ---\n");
+    io_registry_entry_t nvram = IORegistryEntryFromPath(kIOMasterPortDefault,
+        "IODeviceTree:/options");
+    if (nvram) {
+        const char *nvram_keys[] = {
+            "LockdownMode",
+            "lockdown-mode",
+            "obliteration-lockdown",
+            "boot-args",
+            "auto-boot",
+            "StartupMute",
+            NULL
+        };
+        for (int i = 0; nvram_keys[i]; i++) {
+            CFStringRef key = CFStringCreateWithCString(NULL, nvram_keys[i], kCFStringEncodingUTF8);
+            CFTypeRef val = IORegistryEntryCreateCFProperty(nvram, key, kCFAllocatorDefault, 0);
+            if (val) {
+                CFTypeID tid = CFGetTypeID(val);
+                if (tid == CFDataGetTypeID()) {
+                    CFDataRef d = (CFDataRef)val;
+                    CFIndex dlen = CFDataGetLength(d);
+                    const uint8_t *dp = CFDataGetBytePtr(d);
+                    char hex[256] = {0};
+                    for (CFIndex j = 0; j < dlen && j < 64; j++) {
+                        sprintf(hex + j*3, "%02x ", dp[j]);
+                    }
+                    rlog("  NVRAM %-24s = data[%ld]: %s\n", nvram_keys[i], (long)dlen, hex);
+                } else if (tid == CFStringGetTypeID()) {
+                    char sbuf[256] = {0};
+                    CFStringGetCString((CFStringRef)val, sbuf, sizeof(sbuf), kCFStringEncodingUTF8);
+                    rlog("  NVRAM %-24s = \"%s\"\n", nvram_keys[i], sbuf);
+                } else if (tid == CFNumberGetTypeID()) {
+                    int64_t nv = 0;
+                    CFNumberGetValue((CFNumberRef)val, kCFNumberSInt64Type, &nv);
+                    rlog("  NVRAM %-24s = %lld\n", nvram_keys[i], (long long)nv);
+                } else if (tid == CFBooleanGetTypeID()) {
+                    rlog("  NVRAM %-24s = %s\n", nvram_keys[i],
+                         CFBooleanGetValue((CFBooleanRef)val) ? "true" : "false");
+                } else {
+                    rlog("  NVRAM %-24s = <type=%lu>\n", nvram_keys[i], (unsigned long)tid);
+                }
+                CFRelease(val);
+            } else {
+                rlog("  NVRAM %-24s = <not found>\n", nvram_keys[i]);
+            }
+            CFRelease(key);
+        }
+        IOObjectRelease(nvram);
+    } else {
+        rlog("  NVRAM: could not open IODeviceTree:/options\n");
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: MTE / Memory tagging state ---- */
+    rlog("\n--- Phase 2: MTE / Memory tagging state ---\n");
+
+    /* Check if our process has MTE enabled by examining tag bits */
+    void *heap1 = malloc(64);
+    void *heap2 = malloc(64);
+    void *heap3 = malloc(64);
+    uintptr_t h1 = (uintptr_t)heap1;
+    uintptr_t h2 = (uintptr_t)heap2;
+    uintptr_t h3 = (uintptr_t)heap3;
+    uint8_t tag1 = (h1 >> 56) & 0xF;
+    uint8_t tag2 = (h2 >> 56) & 0xF;
+    uint8_t tag3 = (h3 >> 56) & 0xF;
+    uint8_t top1 = (h1 >> 56) & 0xFF;
+    uint8_t top2 = (h2 >> 56) & 0xFF;
+    uint8_t top3 = (h3 >> 56) & 0xFF;
+    rlog("  Heap alloc 1: %p  top_byte=0x%02x  tag_bits=0x%x\n", heap1, top1, tag1);
+    rlog("  Heap alloc 2: %p  top_byte=0x%02x  tag_bits=0x%x\n", heap2, top2, tag2);
+    rlog("  Heap alloc 3: %p  top_byte=0x%02x  tag_bits=0x%x\n", heap3, top3, tag3);
+    int has_mte_userspace = (top1 != 0 || top2 != 0 || top3 != 0);
+    rlog("  MTE in userspace: %s\n", has_mte_userspace ? "YES (tags present)" : "NO (all zero top bytes)");
+    free(heap1); free(heap2); free(heap3);
+
+    /* Check stack pointer tag bits */
+    uintptr_t sp;
+    __asm__ volatile("mov %0, sp" : "=r"(sp));
+    rlog("  Stack pointer: 0x%016llx  top_byte=0x%02x\n",
+         (unsigned long long)sp, (uint8_t)((sp >> 56) & 0xFF));
+
+    /* Check mmap'd memory tags */
+    void *mm = mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, 0);
+    if (mm != MAP_FAILED) {
+        uintptr_t mma = (uintptr_t)mm;
+        rlog("  mmap anon:    0x%016llx  top_byte=0x%02x\n",
+             (unsigned long long)mma, (uint8_t)((mma >> 56) & 0xFF));
+        munmap(mm, 4096);
+    }
+
+    /* Check global/static memory tags */
+    static int static_var = 42;
+    uintptr_t sv = (uintptr_t)&static_var;
+    rlog("  Static var:   0x%016llx  top_byte=0x%02x\n",
+         (unsigned long long)sv, (uint8_t)((sv >> 56) & 0xFF));
+
+    /* Function pointer tag (PAC) */
+    uintptr_t fp = (uintptr_t)&r299_probe;
+    rlog("  Func ptr:     0x%016llx  top_byte=0x%02x\n",
+         (unsigned long long)fp, (uint8_t)((fp >> 56) & 0xFF));
+    fflush(stdout);
+
+    /* ---- Phase 3: Process security flags ---- */
+    rlog("\n--- Phase 3: Process security flags ---\n");
+
+    /* csops to get CS flags */
+    uint32_t csflags = 0;
+    int csret = csops(getpid(), 0 /* CS_OPS_STATUS */, &csflags, sizeof(csflags));
+    rlog("  csops(CS_OPS_STATUS): ret=%d flags=0x%08x\n", csret, csflags);
+    if (csflags & 0x00000001) rlog("    CS_VALID\n");
+    if (csflags & 0x00000002) rlog("    CS_ADHOC\n");
+    if (csflags & 0x00000004) rlog("    CS_GET_TASK_ALLOW\n");
+    if (csflags & 0x00000008) rlog("    CS_INSTALLER\n");
+    if (csflags & 0x00000100) rlog("    CS_HARD\n");
+    if (csflags & 0x00000200) rlog("    CS_KILL\n");
+    if (csflags & 0x00000400) rlog("    CS_CHECK_EXPIRATION\n");
+    if (csflags & 0x00000800) rlog("    CS_RESTRICT\n");
+    if (csflags & 0x00001000) rlog("    CS_ENFORCEMENT\n");
+    if (csflags & 0x00002000) rlog("    CS_REQUIRE_LV\n");
+    if (csflags & 0x00004000) rlog("    CS_ENTITLEMENTS_VALIDATED\n");
+    if (csflags & 0x00010000) rlog("    CS_PLATFORM_BINARY\n");
+    if (csflags & 0x00020000) rlog("    CS_PLATFORM_PATH\n");
+    if (csflags & 0x00100000) rlog("    CS_RUNTIME\n");
+    if (csflags & 0x00200000) rlog("    CS_LINKER_SIGNED\n");
+    fflush(stdout);
+
+    /* ---- Phase 4: IOKit security-related properties ---- */
+    rlog("\n--- Phase 4: IOKit security properties ---\n");
+
+    /* Check AppleSEPManager for security state */
+    io_service_t sep = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleSEPManager"));
+    if (sep) {
+        rlog("  AppleSEPManager: found\n");
+        const char *sep_keys[] = {
+            "LockdownMode", "lockdown-mode", "security-domain",
+            "security-epoch", "sep-state", NULL
+        };
+        for (int i = 0; sep_keys[i]; i++) {
+            CFStringRef k = CFStringCreateWithCString(NULL, sep_keys[i], kCFStringEncodingUTF8);
+            CFTypeRef v = IORegistryEntryCreateCFProperty(sep, k, kCFAllocatorDefault, 0);
+            if (v) {
+                rlog("    %s = <present, type=%lu>\n", sep_keys[i], (unsigned long)CFGetTypeID(v));
+                CFRelease(v);
+            }
+            CFRelease(k);
+        }
+        IOObjectRelease(sep);
+    } else {
+        rlog("  AppleSEPManager: not found\n");
+    }
+
+    /* Check AppleKeyStore */
+    io_service_t aks = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleKeyStore"));
+    if (aks) {
+        rlog("  AppleKeyStore: found\n");
+        const char *aks_keys[] = {
+            "LockdownMode", "lockdown-mode", "security-level",
+            "hardware-encryption-type", NULL
+        };
+        for (int i = 0; aks_keys[i]; i++) {
+            CFStringRef k = CFStringCreateWithCString(NULL, aks_keys[i], kCFStringEncodingUTF8);
+            CFTypeRef v = IORegistryEntryCreateCFProperty(aks, k, kCFAllocatorDefault, 0);
+            if (v) {
+                rlog("    %s = <present, type=%lu>\n", aks_keys[i], (unsigned long)CFGetTypeID(v));
+                CFRelease(v);
+            }
+            CFRelease(k);
+        }
+        IOObjectRelease(aks);
+    } else {
+        rlog("  AppleKeyStore: not found\n");
+    }
+
+    /* Check IOMFB (display) for lockdown indicators */
+    io_service_t mfb = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOMobileFramebuffer"));
+    if (mfb) {
+        rlog("  IOMobileFramebuffer: found\n");
+        IOObjectRelease(mfb);
+    }
+
+    /* Enumerate services with "lockdown" in name */
+    rlog("\n  Searching for 'lockdown' services...\n");
+    io_iterator_t iter = 0;
+    kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault,
+        IOServiceMatching("IOService"), &iter);
+    if (kr == 0 && iter) {
+        io_service_t svc;
+        int count = 0, lockdown_count = 0;
+        while ((svc = IOIteratorNext(iter))) {
+            count++;
+            io_name_t name;
+            IORegistryEntryGetName(svc, name);
+            /* Check if name contains "lockdown" or "Lockdown" */
+            char lower[128];
+            for (int j = 0; j < 127 && name[j]; j++) {
+                lower[j] = (name[j] >= 'A' && name[j] <= 'Z') ? name[j] + 32 : name[j];
+                lower[j+1] = 0;
+            }
+            if (strstr(lower, "lockdown") || strstr(lower, "security") || strstr(lower, "sptm")) {
+                rlog("    Service: %s\n", name);
+                lockdown_count++;
+            }
+            IOObjectRelease(svc);
+        }
+        rlog("  Scanned %d services, found %d matching lockdown/security/sptm\n",
+             count, lockdown_count);
+        IOObjectRelease(iter);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 5: Check NSUserDefaults / preferences for lockdown state ---- */
+    rlog("\n--- Phase 5: Preference-based lockdown detection ---\n");
+
+    /* LockdownMode is stored in a managed configuration profile
+       accessible via ManagedConfiguration.framework, but we can try
+       reading the preference domain directly */
+    CFStringRef domains[] = {
+        CFSTR("com.apple.lockdownmode"),
+        CFSTR("com.apple.security"),
+        CFSTR("com.apple.ManagedConfiguration"),
+        CFSTR("com.apple.springboard"),
+        CFSTR(".GlobalPreferences"),
+        NULL
+    };
+    for (int i = 0; domains[i]; i++) {
+        char dname[256];
+        CFStringGetCString(domains[i], dname, sizeof(dname), kCFStringEncodingUTF8);
+        CFArrayRef keys = CFPreferencesCopyKeyList(domains[i],
+            kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keys) {
+            CFIndex kcount = CFArrayGetCount(keys);
+            rlog("  Domain %-40s: %ld keys\n", dname, (long)kcount);
+            for (CFIndex j = 0; j < kcount && j < 20; j++) {
+                CFStringRef kk = (CFStringRef)CFArrayGetValueAtIndex(keys, j);
+                char kname[256];
+                CFStringGetCString(kk, kname, sizeof(kname), kCFStringEncodingUTF8);
+                /* Look for lockdown-related keys */
+                char klower[256];
+                for (int m = 0; m < 255 && kname[m]; m++) {
+                    klower[m] = (kname[m] >= 'A' && kname[m] <= 'Z') ? kname[m]+32 : kname[m];
+                    klower[m+1] = 0;
+                }
+                if (strstr(klower, "lockdown") || strstr(klower, "mte") ||
+                    strstr(klower, "security") || strstr(klower, "restrict")) {
+                    CFTypeRef pv = CFPreferencesCopyValue(kk, domains[i],
+                        kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+                    if (pv) {
+                        CFTypeID pvt = CFGetTypeID(pv);
+                        if (pvt == CFBooleanGetTypeID()) {
+                            rlog("    [%s] %s = %s\n", dname, kname,
+                                 CFBooleanGetValue((CFBooleanRef)pv) ? "true" : "false");
+                        } else if (pvt == CFNumberGetTypeID()) {
+                            int64_t nv = 0;
+                            CFNumberGetValue((CFNumberRef)pv, kCFNumberSInt64Type, &nv);
+                            rlog("    [%s] %s = %lld\n", dname, kname, (long long)nv);
+                        } else if (pvt == CFStringGetTypeID()) {
+                            char sv2[256];
+                            CFStringGetCString((CFStringRef)pv, sv2, sizeof(sv2), kCFStringEncodingUTF8);
+                            rlog("    [%s] %s = \"%s\"\n", dname, kname, sv2);
+                        } else {
+                            rlog("    [%s] %s = <type=%lu>\n", dname, kname, (unsigned long)pvt);
+                        }
+                        CFRelease(pv);
+                    }
+                }
+            }
+            CFRelease(keys);
+        } else {
+            rlog("  Domain %-40s: <no access>\n", dname);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 6: Probe SPTM/TXM indicators ---- */
+    rlog("\n--- Phase 6: SPTM/TXM indicators ---\n");
+
+    /* Try to read sysctl for SPTM */
+    const char *sptm_sysctls[] = {
+        "kern.sptm_enabled",
+        "kern.txm_enabled",
+        "kern.ppl_enabled",
+        "kern.mte_enabled",
+        "security.mac.sandbox.sentinel",
+        "kern.monotonicclock_usecs",
+        "kern.hv_vmm_present",
+        "kern.secure_kernel",
+        "machdep.cpu.features",
+        NULL
+    };
+    for (int i = 0; sptm_sysctls[i]; i++) {
+        char buf[512] = {0};
+        size_t len = sizeof(buf) - 1;
+        int ret = sysctlbyname(sptm_sysctls[i], buf, &len, NULL, 0);
+        if (ret == 0) {
+            if (len == 4) {
+                uint32_t v; memcpy(&v, buf, 4);
+                rlog("  sysctl %-32s = 0x%08x (%u)\n", sptm_sysctls[i], v, v);
+            } else if (len == 8) {
+                uint64_t v; memcpy(&v, buf, 8);
+                rlog("  sysctl %-32s = 0x%016llx\n", sptm_sysctls[i], (unsigned long long)v);
+            } else {
+                int printable = 1;
+                for (size_t j = 0; j < len && j < 128; j++) {
+                    if (buf[j] != 0 && (buf[j] < 0x20 || buf[j] > 0x7e)) { printable = 0; break; }
+                }
+                if (printable && len > 0 && len < 256)
+                    rlog("  sysctl %-32s = \"%s\" (len=%zu)\n", sptm_sysctls[i], buf, len);
+                else
+                    rlog("  sysctl %-32s = <data len=%zu>\n", sptm_sysctls[i], len);
+            }
+        } else {
+            rlog("  sysctl %-32s = <not found>\n", sptm_sysctls[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 7: Try ManagedConfiguration lockdown APIs ---- */
+    rlog("\n--- Phase 7: ManagedConfiguration framework ---\n");
+    void *mcfg = dlopen("/System/Library/PrivateFrameworks/ManagedConfiguration.framework/ManagedConfiguration", RTLD_NOW);
+    if (mcfg) {
+        rlog("  ManagedConfiguration loaded\n");
+        /* Try MCProfileConnection */
+        void *cls = objc_getClass("MCProfileConnection");
+        if (cls) {
+            rlog("  MCProfileConnection class found\n");
+            /* Try sharedConnection */
+            SEL sharedSel = sel_registerName("sharedConnection");
+            id conn = ((id(*)(id, SEL))objc_msgSend)((id)cls, sharedSel);
+            if (conn) {
+                rlog("  sharedConnection: %p\n", conn);
+                /* Try isLockdownModeEnabled or similar */
+                SEL lockSel = sel_registerName("isLockdownModeEnabled");
+                SEL lockSel2 = sel_registerName("lockdownModeEnabled");
+                SEL lockSel3 = sel_registerName("effectiveLockdownModeEnabled");
+                /* Use respondsToSelector to check safely */
+                SEL respSel = sel_registerName("respondsToSelector:");
+                BOOL r1 = ((BOOL(*)(id, SEL, SEL))objc_msgSend)(conn, respSel, lockSel);
+                BOOL r2 = ((BOOL(*)(id, SEL, SEL))objc_msgSend)(conn, respSel, lockSel2);
+                BOOL r3 = ((BOOL(*)(id, SEL, SEL))objc_msgSend)(conn, respSel, lockSel3);
+                rlog("  respondsTo isLockdownModeEnabled: %d\n", r1);
+                rlog("  respondsTo lockdownModeEnabled: %d\n", r2);
+                rlog("  respondsTo effectiveLockdownModeEnabled: %d\n", r3);
+                if (r1) {
+                    BOOL val = ((BOOL(*)(id, SEL))objc_msgSend)(conn, lockSel);
+                    rlog("  ** isLockdownModeEnabled = %d **\n", val);
+                }
+                if (r2) {
+                    BOOL val = ((BOOL(*)(id, SEL))objc_msgSend)(conn, lockSel2);
+                    rlog("  ** lockdownModeEnabled = %d **\n", val);
+                }
+                if (r3) {
+                    BOOL val = ((BOOL(*)(id, SEL))objc_msgSend)(conn, lockSel3);
+                    rlog("  ** effectiveLockdownModeEnabled = %d **\n", val);
+                }
+            } else {
+                rlog("  sharedConnection: nil\n");
+            }
+        } else {
+            rlog("  MCProfileConnection class not found\n");
+        }
+        dlclose(mcfg);
+    } else {
+        rlog("  ManagedConfiguration: failed to load\n");
+    }
+    fflush(stdout);
+
+    rlog("\n=== r299 complete ===\n");
+}
+
 static void r298_probe(void) {
     rlog("\n=== r298: Controlled heap spray + dual-handle primitive ===\n\n");
     fflush(stdout);
@@ -4468,6 +4903,633 @@ static void r298_probe(void) {
     }
 
     rlog("\n*** r298 probe complete ***\n");
+    fflush(stdout);
+}
+
+/* r299: Lockdown Mode kernel state enumeration.
+ * Pivot from IOSurface cross-reference (r293-298 dead end: no kernel corruption).
+ * User direction: explore Lockdown Mode transitions as attack vector.
+ * This probe enumerates all accessible kernel state related to Lockdown Mode:
+ *   1. Security-related sysctls (kern.secure_kernel, security.*, etc.)
+ *   2. Enumerate all sysctls under security.* and kern.* namespaces
+ *   3. IOKit registry search for LockdownMode properties
+ *   4. MobileGestalt keys for lockdown status
+ *   5. Marker files (/var/db/.LockdownMode etc.)
+ *   6. Sandbox profile info
+ */
+static void r299_probe(void) {
+    rlog("=== r299 Part 1: Security-related sysctls ===\n");
+    fflush(stdout);
+
+    /* Check specific known security sysctls */
+    struct { const char *name; } sec_sysctls[] = {
+        {"kern.secure_kernel"},
+        {"kern.securelevel"},
+        {"security.mac.lockdown"},
+        {"kern.lockdown"},
+        {"hw.optional.arm.FEAT_MTE"},
+        {"hw.optional.arm.FEAT_MTE2"},
+        {"hw.optional.arm.FEAT_MTE3"},
+        {"kern.hv_vmm_present"},
+        {"kern.bootargs"},
+        {"kern.osversion"},
+        {"kern.osproductversion"},
+        {"kern.iossupportversion"},
+        {"kern.bootsessionuuid"},
+        {"security.mac.sandbox.sentinel"},
+        {"security.mac.amfi.trust_cache_status"},
+        {"security.mac.proc_enforce"},
+        {"security.mac.vnode_enforce"},
+        {"kern.secure_boot"},
+        {"kern.sptm_present"},
+        {"kern.txm_present"},
+        {"kern.coredump"},
+        {"kern.sugid_coredump"},
+        {"kern.nx"},
+        {"kern.tcsm_available"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(sec_sysctls)/sizeof(sec_sysctls[0])); i++) {
+        char buf[256] = {0};
+        size_t len = sizeof(buf);
+        int ret = sysctlbyname(sec_sysctls[i].name, buf, &len, NULL, 0);
+        if (ret == 0) {
+            if (len <= 8) {
+                uint64_t val = 0;
+                memcpy(&val, buf, len < 8 ? len : 8);
+                rlog("  sysctl %-45s = 0x%llx (len=%zu)\n",
+                     sec_sysctls[i].name, (unsigned long long)val, len);
+            } else {
+                /* String value */
+                buf[sizeof(buf)-1] = '\0';
+                rlog("  sysctl %-45s = \"%s\" (len=%zu)\n",
+                     sec_sysctls[i].name, buf, len);
+            }
+        } else {
+            rlog("  sysctl %-45s = ENOENT/EPERM (errno=%d)\n",
+                 sec_sysctls[i].name, errno);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r299 Part 2: Enumerate security.* and kern.secure* sysctls ===\n");
+    fflush(stdout);
+
+    /* Use sysctlnametomib to find the security node, then iterate children */
+    {
+        int mib_sec[2];
+        size_t mib_len;
+
+        /* Try to enumerate via CTL_KERN and known sub-OIDs */
+        /* First: list all top-level sysctl names by walking the tree */
+        int name[12];
+        size_t name_len;
+        int oid[2] = {0, 2}; /* sysctl.name2oid debug interface */
+
+        /* Approach: iterate sysctl tree looking for "security" and "lockdown" */
+        /* Use undocumented sysctl debug OIDs to walk the tree */
+        int next_oid[12];
+        size_t next_len;
+        char sname[256];
+        size_t sname_len;
+
+        /* Start from {1} (kern) */
+        name[0] = 1; /* CTL_KERN */
+        name_len = 1;
+
+        int found_security = 0;
+        int found_lockdown = 0;
+
+        /* Walk kern.* looking for lockdown/secure related */
+        rlog("  Scanning kern.* for lockdown/secure keywords...\n");
+        {
+            /* Use sysctl_next to iterate: {0,2} with name gives next OID */
+            int qoid[CTL_MAXNAME + 2];
+            qoid[0] = 0; /* undocumented: sysctl internal */
+            qoid[1] = 1; /* undocumented: get next */
+
+            int cur[CTL_MAXNAME];
+            size_t cur_len = 1;
+            cur[0] = 1; /* Start at kern */
+
+            int count = 0;
+            while (count < 2000) {
+                /* Get next OID */
+                qoid[0] = 0;
+                qoid[1] = 2; /* name */
+                size_t nlen = sizeof(next_oid);
+                memcpy(qoid + 2, cur, cur_len * sizeof(int));
+
+                /* Get name of current OID */
+                int qname[CTL_MAXNAME + 2];
+                qname[0] = 0;
+                qname[1] = 1; /* name lookup */
+                memcpy(qname + 2, cur, cur_len * sizeof(int));
+                sname_len = sizeof(sname);
+                if (sysctl(qname, (u_int)(cur_len + 2), sname, &sname_len, 0, 0) == 0) {
+                    sname[sname_len < sizeof(sname) ? sname_len : sizeof(sname)-1] = '\0';
+                    /* Check for lockdown/secure/sptm/txm/mte keywords */
+                    if (strcasestr(sname, "lockdown") || strcasestr(sname, "secure") ||
+                        strcasestr(sname, "sptm") || strcasestr(sname, "txm") ||
+                        strcasestr(sname, "sandbox") || strcasestr(sname, "amfi") ||
+                        strcasestr(sname, "mte") || strcasestr(sname, "ppl") ||
+                        strcasestr(sname, "trust") || strcasestr(sname, "csr")) {
+                        char val[256] = {0};
+                        size_t vlen = sizeof(val);
+                        int ret = sysctl(cur, (u_int)cur_len, val, &vlen, NULL, 0);
+                        if (ret == 0 && vlen <= 8) {
+                            uint64_t v = 0;
+                            memcpy(&v, val, vlen < 8 ? vlen : 8);
+                            rlog("  MATCH: %-45s = 0x%llx\n", sname, (unsigned long long)v);
+                            if (strcasestr(sname, "lockdown")) found_lockdown++;
+                        } else if (ret == 0) {
+                            val[vlen < sizeof(val) ? vlen : sizeof(val)-1] = '\0';
+                            rlog("  MATCH: %-45s = \"%s\"\n", sname, val);
+                            if (strcasestr(sname, "lockdown")) found_lockdown++;
+                        } else {
+                            rlog("  MATCH: %-45s = (read failed, errno=%d)\n", sname, errno);
+                        }
+                    }
+                }
+
+                /* Get next OID in tree */
+                int qnext[CTL_MAXNAME + 2];
+                qnext[0] = 0;
+                qnext[1] = 2; /* next */
+                memcpy(qnext + 2, cur, cur_len * sizeof(int));
+                size_t out_len = sizeof(next_oid);
+                if (sysctl(qnext, (u_int)(cur_len + 2), next_oid, &out_len, 0, 0) != 0)
+                    break;
+                cur_len = out_len / sizeof(int);
+                if (cur_len == 0) break;
+                memcpy(cur, next_oid, cur_len * sizeof(int));
+                /* Stop if we left kern.* namespace (top OID > 1) and security.* (6) */
+                if (cur[0] > 14) break;
+                count++;
+            }
+            rlog("  Scanned %d sysctl nodes total.\n", count);
+        }
+        rlog("  Found %d lockdown-related sysctls.\n", found_lockdown);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r299 Part 3: IOKit registry scan for LockdownMode ===\n");
+    fflush(stdout);
+    {
+        /* Search IOService plane for lockdown-related properties */
+        io_iterator_t iter = 0;
+        kern_return_t kr;
+
+        /* Try matching by property */
+        CFMutableDictionaryRef match;
+
+        /* Search for any service with "Lockdown" in class name */
+        const char *search_classes[] = {
+            "AppleSEPManager",
+            "AppleSPTM",
+            "AppleTXM",
+            "AppleKeyStore",
+            "AppleMobileFileIntegrity",
+            "AppleCredentialManager",
+            "AppleSEP",
+        };
+
+        for (int i = 0; i < (int)(sizeof(search_classes)/sizeof(search_classes[0])); i++) {
+            match = IOServiceMatching(search_classes[i]);
+            if (!match) continue;
+            iter = 0;
+            kr = IOServiceGetMatchingServices(kIOMasterPortDefault, match, &iter);
+            if (kr == KERN_SUCCESS && iter) {
+                io_service_t svc;
+                while ((svc = IOIteratorNext(iter)) != 0) {
+                    io_name_t name;
+                    IORegistryEntryGetName(svc, name);
+                    rlog("  Found service: %s (class=%s)\n", name, search_classes[i]);
+
+                    /* Try to get lockdown-related properties */
+                    const char *prop_names[] = {
+                        "LockdownMode", "LockdownModeEnabled",
+                        "lockdown-mode", "lockdown_mode",
+                        "SecurityMode", "security-mode",
+                        "SPTMEnabled", "TXMEnabled",
+                        "SecureBoot", "secure-boot",
+                    };
+                    for (int j = 0; j < (int)(sizeof(prop_names)/sizeof(prop_names[0])); j++) {
+                        CFStringRef key = CFStringCreateWithCString(NULL, prop_names[j],
+                                                                     kCFStringEncodingUTF8);
+                        CFTypeRef val = IORegistryEntryCreateCFProperty(svc, key,
+                                                                        kCFAllocatorDefault, 0);
+                        if (val) {
+                            CFTypeID tid = CFGetTypeID(val);
+                            if (tid == CFBooleanGetTypeID()) {
+                                rlog("    %s.%s = %s\n", name, prop_names[j],
+                                     CFBooleanGetValue(val) ? "true" : "false");
+                            } else if (tid == CFNumberGetTypeID()) {
+                                long long nval = 0;
+                                CFNumberGetValue(val, kCFNumberLongLongType, &nval);
+                                rlog("    %s.%s = %lld\n", name, prop_names[j], nval);
+                            } else if (tid == CFStringGetTypeID()) {
+                                char sbuf[256];
+                                CFStringGetCString(val, sbuf, sizeof(sbuf), kCFStringEncodingUTF8);
+                                rlog("    %s.%s = \"%s\"\n", name, prop_names[j], sbuf);
+                            } else if (tid == CFDataGetTypeID()) {
+                                CFIndex dlen = CFDataGetLength(val);
+                                rlog("    %s.%s = <data, %ld bytes>\n", name, prop_names[j],
+                                     (long)dlen);
+                            } else {
+                                rlog("    %s.%s = <CFType %lu>\n", name, prop_names[j],
+                                     (unsigned long)tid);
+                            }
+                            CFRelease(val);
+                        }
+                        CFRelease(key);
+                    }
+
+                    /* Dump all properties of this service */
+                    CFMutableDictionaryRef props = NULL;
+                    kr = IORegistryEntryCreateCFProperties(svc, &props, kCFAllocatorDefault, 0);
+                    if (kr == KERN_SUCCESS && props) {
+                        CFIndex cnt = CFDictionaryGetCount(props);
+                        rlog("    Total properties: %ld\n", (long)cnt);
+                        /* List all keys */
+                        CFStringRef *keys = (CFStringRef *)malloc(sizeof(CFStringRef) * cnt);
+                        if (keys) {
+                            CFDictionaryGetKeysAndValues(props, (const void **)keys, NULL);
+                            for (CFIndex k = 0; k < cnt && k < 50; k++) {
+                                char kbuf[128];
+                                CFStringGetCString(keys[k], kbuf, sizeof(kbuf),
+                                                   kCFStringEncodingUTF8);
+                                rlog("    key[%ld]: %s\n", (long)k, kbuf);
+                            }
+                            free(keys);
+                        }
+                        CFRelease(props);
+                    }
+
+                    IOObjectRelease(svc);
+                }
+                IOObjectRelease(iter);
+            }
+        }
+
+        /* Also search root of IODeviceTree for lockdown property */
+        io_registry_entry_t root = IORegistryEntryFromPath(kIOMasterPortDefault,
+                                                            kIODeviceTreePlane ":/");
+        if (root) {
+            CFStringRef lk = CFSTR("lockdown-mode");
+            CFTypeRef val = IORegistryEntryCreateCFProperty(root, lk, kCFAllocatorDefault, 0);
+            if (val) {
+                rlog("  DeviceTree root has 'lockdown-mode' property!\n");
+                CFRelease(val);
+            } else {
+                rlog("  DeviceTree root: no 'lockdown-mode' property.\n");
+            }
+            IOObjectRelease(root);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r299 Part 4: MobileGestalt lockdown keys ===\n");
+    fflush(stdout);
+    {
+        /* MobileGestalt: MGCopyAnswer */
+        void *mg_handle = dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_LAZY);
+        if (!mg_handle) {
+            rlog("  Failed to load libMobileGestalt: %s\n", dlerror());
+        } else {
+            typedef CFPropertyListRef (*MGCopyAnswer_t)(CFStringRef);
+            MGCopyAnswer_t MGCopyAnswer = (MGCopyAnswer_t)dlsym(mg_handle, "MGCopyAnswer");
+            if (!MGCopyAnswer) {
+                rlog("  MGCopyAnswer not found.\n");
+            } else {
+                const char *mg_keys[] = {
+                    "DeviceSupportsLockdownMode",
+                    "IsLockdownModeEnabled",
+                    "LockdownModeEnabled",
+                    "DeviceSupportsAlwaysOnDisplay",
+                    "DeviceClass",
+                    "HWModelStr",
+                    "ProductType",
+                    "BuildVersion",
+                    "UniqueChipID",
+                    "HasSEP",
+                    "SEPVersion",
+                    "HasSPTM",
+                    "HasTXM",
+                    "DeviceSupportsUSBRestrictedMode",
+                    "wi-fi",
+                    "BluetoothAddress",
+                    "CertificateSecurityMode",
+                    "EffectiveSecurityModeEnabled",
+                    "IsSecurityResearchDevice",
+                    "PearlIDAvailable",
+                    "SecureElement",
+                    "SupportsForceReboot",
+                    "PlatformStandard",
+                };
+
+                for (int i = 0; i < (int)(sizeof(mg_keys)/sizeof(mg_keys[0])); i++) {
+                    CFStringRef key = CFStringCreateWithCString(NULL, mg_keys[i],
+                                                                 kCFStringEncodingUTF8);
+                    CFPropertyListRef val = MGCopyAnswer(key);
+                    if (val) {
+                        CFTypeID tid = CFGetTypeID(val);
+                        if (tid == CFBooleanGetTypeID()) {
+                            rlog("  MG %-40s = %s\n", mg_keys[i],
+                                 CFBooleanGetValue(val) ? "true" : "false");
+                        } else if (tid == CFNumberGetTypeID()) {
+                            long long nv = 0;
+                            CFNumberGetValue(val, kCFNumberLongLongType, &nv);
+                            rlog("  MG %-40s = %lld (0x%llx)\n", mg_keys[i], nv,
+                                 (unsigned long long)nv);
+                        } else if (tid == CFStringGetTypeID()) {
+                            char sb[256];
+                            CFStringGetCString(val, sb, sizeof(sb), kCFStringEncodingUTF8);
+                            rlog("  MG %-40s = \"%s\"\n", mg_keys[i], sb);
+                        } else if (tid == CFDataGetTypeID()) {
+                            rlog("  MG %-40s = <data, %ld bytes>\n", mg_keys[i],
+                                 (long)CFDataGetLength(val));
+                        } else {
+                            rlog("  MG %-40s = <CFType %lu>\n", mg_keys[i],
+                                 (unsigned long)tid);
+                        }
+                        CFRelease(val);
+                    } else {
+                        rlog("  MG %-40s = NULL\n", mg_keys[i]);
+                    }
+                    CFRelease(key);
+                }
+            }
+            dlclose(mg_handle);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r299 Part 5: Lockdown Mode marker files ===\n");
+    fflush(stdout);
+    {
+        const char *marker_paths[] = {
+            "/var/db/.LockdownMode",
+            "/var/db/lockdown-mode",
+            "/var/db/.MDMLockdownMode",
+            "/private/var/db/.LockdownMode",
+            "/private/var/db/lockdown-mode",
+            "/var/mobile/Library/Preferences/com.apple.lockdownmode.plist",
+            "/var/mobile/Library/Preferences/.com.apple.lockdownmode",
+            "/var/containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/ConfigurationProfiles/lockdownmode",
+            "/var/root/Library/Lockdown",
+            "/var/db/MobileIdentityData/Lockdown",
+            "/usr/libexec/lockdownd",
+            "/usr/lib/lockdown",
+        };
+
+        for (int i = 0; i < (int)(sizeof(marker_paths)/sizeof(marker_paths[0])); i++) {
+            struct stat st;
+            if (stat(marker_paths[i], &st) == 0) {
+                rlog("  EXISTS: %-60s (mode=0%o, size=%lld)\n",
+                     marker_paths[i], st.st_mode & 0777, (long long)st.st_size);
+                /* Try to read small files */
+                if (S_ISREG(st.st_mode) && st.st_size > 0 && st.st_size < 1024) {
+                    int fd = open(marker_paths[i], O_RDONLY);
+                    if (fd >= 0) {
+                        char fbuf[1024] = {0};
+                        ssize_t nr = read(fd, fbuf, sizeof(fbuf)-1);
+                        close(fd);
+                        if (nr > 0) {
+                            rlog("    Contents (%zd bytes): %s\n", nr, fbuf);
+                        }
+                    } else {
+                        rlog("    Open failed: errno=%d\n", errno);
+                    }
+                }
+            } else {
+                rlog("  MISSING: %-60s (errno=%d %s)\n",
+                     marker_paths[i], errno,
+                     errno == ENOENT ? "ENOENT" :
+                     errno == EACCES ? "EACCES" :
+                     errno == EPERM ? "EPERM" : "other");
+            }
+        }
+
+        /* Also check NSUserDefaults for lockdown mode */
+        rlog("\n  Checking NSUserDefaults via CFPreferences...\n");
+        CFStringRef ld_app = CFSTR("com.apple.lockdownmode");
+        CFStringRef ld_key = CFSTR("LDMGlobalEnabled");
+        CFPropertyListRef ld_val = CFPreferencesCopyAppValue(ld_key, ld_app);
+        if (ld_val) {
+            if (CFGetTypeID(ld_val) == CFBooleanGetTypeID()) {
+                rlog("  com.apple.lockdownmode/LDMGlobalEnabled = %s\n",
+                     CFBooleanGetValue(ld_val) ? "ENABLED" : "DISABLED");
+            } else {
+                rlog("  com.apple.lockdownmode/LDMGlobalEnabled = <type %lu>\n",
+                     (unsigned long)CFGetTypeID(ld_val));
+            }
+            CFRelease(ld_val);
+        } else {
+            rlog("  com.apple.lockdownmode/LDMGlobalEnabled = not set.\n");
+        }
+
+        /* Try other known preference keys */
+        const char *pref_domains[] = {
+            "com.apple.security",
+            "com.apple.Security",
+            "com.apple.MobileAsset",
+            "com.apple.managedconfiguration",
+        };
+        const char *pref_keys[] = {
+            "LockdownModeEnabled",
+            "LockdownMode",
+            "IsLockdownModeEnabled",
+        };
+        for (int d = 0; d < (int)(sizeof(pref_domains)/sizeof(pref_domains[0])); d++) {
+            CFStringRef dom = CFStringCreateWithCString(NULL, pref_domains[d],
+                                                         kCFStringEncodingUTF8);
+            for (int k = 0; k < (int)(sizeof(pref_keys)/sizeof(pref_keys[0])); k++) {
+                CFStringRef pk = CFStringCreateWithCString(NULL, pref_keys[k],
+                                                            kCFStringEncodingUTF8);
+                CFPropertyListRef pv = CFPreferencesCopyAppValue(pk, dom);
+                if (pv) {
+                    rlog("  %s/%s = present (type %lu)\n",
+                         pref_domains[d], pref_keys[k], (unsigned long)CFGetTypeID(pv));
+                    CFRelease(pv);
+                }
+                CFRelease(pk);
+            }
+            CFRelease(dom);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r299 Part 6: Sandbox profile info ===\n");
+    fflush(stdout);
+    {
+        /* Check if sandbox_check works for various operations */
+        /* sandbox_check(pid, operation, type, ...) */
+        typedef int (*sandbox_check_t)(pid_t, const char *, int, ...);
+        void *sb_handle = dlopen("/usr/lib/system/libsystem_sandbox.dylib", RTLD_LAZY);
+        if (!sb_handle) sb_handle = dlopen("/usr/lib/libsandbox.dylib", RTLD_LAZY);
+        if (!sb_handle) {
+            rlog("  Could not load sandbox library.\n");
+        } else {
+            sandbox_check_t sb_check = (sandbox_check_t)dlsym(sb_handle, "sandbox_check");
+            if (sb_check) {
+                pid_t mypid = getpid();
+                /* Check various sandbox operations */
+                struct { const char *op; int type; } sb_ops[] = {
+                    {"file-read-data", 1},
+                    {"file-write-data", 1},
+                    {"process-exec", 1},
+                    {"mach-lookup", 1},
+                    {"network-outbound", 1},
+                    {"system-socket", 0},
+                    {"iokit-open", 1},
+                    {"nvram-get", 1},
+                    {"nvram-set", 1},
+                    {"sysctl-read", 1},
+                    {"sysctl-write", 1},
+                    {"process-fork", 0},
+                    {"device-camera", 0},
+                    {"device-microphone", 0},
+                    {"user-preference-read", 1},
+                    {"user-preference-write", 1},
+                };
+                rlog("  PID %d sandbox checks:\n", mypid);
+                for (int i = 0; i < (int)(sizeof(sb_ops)/sizeof(sb_ops[0])); i++) {
+                    int r = sb_check(mypid, sb_ops[i].op, sb_ops[i].type);
+                    rlog("    %-30s = %d (%s)\n", sb_ops[i].op, r,
+                         r == 0 ? "ALLOWED" : "DENIED");
+                }
+            } else {
+                rlog("  sandbox_check not found.\n");
+            }
+
+            /* Also try sandbox_extension_consume */
+            typedef int64_t (*sb_ext_issue_t)(const char *, uint32_t, const char *, uint32_t);
+            sb_ext_issue_t sb_issue = (sb_ext_issue_t)dlsym(sb_handle,
+                                                             "sandbox_extension_issue_file");
+            rlog("  sandbox_extension_issue_file: %s\n",
+                 sb_issue ? "found" : "not found");
+
+            typedef const char* (*sb_container_path_t)(void);
+            sb_container_path_t sb_cpath = (sb_container_path_t)dlsym(sb_handle,
+                                                                       "sandbox_container_path_for_pid");
+            if (sb_cpath) {
+                rlog("  sandbox_container_path_for_pid: found.\n");
+            }
+
+            dlclose(sb_handle);
+        }
+
+        /* Also dump csops flags */
+        rlog("\n  Process code signing flags:\n");
+        uint32_t csflags = 0;
+        if (csops(getpid(), 0 /* CS_OPS_STATUS */, &csflags, sizeof(csflags)) == 0) {
+            rlog("    CS flags: 0x%08x\n", csflags);
+            rlog("    CS_VALID:              %d\n", (csflags & 0x00000001) != 0);
+            rlog("    CS_HARD:               %d\n", (csflags & 0x00000100) != 0);
+            rlog("    CS_KILL:               %d\n", (csflags & 0x00000200) != 0);
+            rlog("    CS_RESTRICT:           %d\n", (csflags & 0x00000800) != 0);
+            rlog("    CS_PLATFORM_BINARY:    %d\n", (csflags & 0x04000000) != 0);
+            rlog("    CS_RUNTIME:            %d\n", (csflags & 0x00010000) != 0);
+            rlog("    CS_GET_TASK_ALLOW:     %d\n", (csflags & 0x00000004) != 0);
+            rlog("    CS_DEBUGGED:           %d\n", (csflags & 0x10000000) != 0);
+        } else {
+            rlog("    csops failed: errno=%d\n", errno);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r299 Part 7: Lockdown Mode toggle APIs ===\n");
+    fflush(stdout);
+    {
+        /* Check if we can find the LockdownMode framework/daemon */
+        void *ldm = dlopen("/System/Library/PrivateFrameworks/LockdownMode.framework/LockdownMode",
+                           RTLD_LAZY);
+        if (ldm) {
+            rlog("  LockdownMode.framework LOADED!\n");
+            /* Try to find key functions */
+            const char *syms[] = {
+                "LDMIsLockdownModeEnabled",
+                "LDMSetLockdownModeEnabled",
+                "LDMGlobalEnabled",
+                "LDMToggleLockdownMode",
+                "LDMLockdownModeStatus",
+                "LDMApplyLockdownMode",
+                "LDMRevertLockdownMode",
+            };
+            for (int i = 0; i < (int)(sizeof(syms)/sizeof(syms[0])); i++) {
+                void *fn = dlsym(ldm, syms[i]);
+                rlog("    %-40s = %p\n", syms[i], fn);
+            }
+            dlclose(ldm);
+        } else {
+            rlog("  LockdownMode.framework: %s\n", dlerror());
+        }
+
+        /* Try ManagedConfiguration */
+        void *mc = dlopen("/System/Library/PrivateFrameworks/ManagedConfiguration.framework/ManagedConfiguration",
+                          RTLD_LAZY);
+        if (mc) {
+            rlog("  ManagedConfiguration.framework loaded.\n");
+            void *fn = dlsym(mc, "MCIsLockdownModeEnabled");
+            rlog("    MCIsLockdownModeEnabled = %p\n", fn);
+            fn = dlsym(mc, "MCSetLockdownModeEnabled");
+            rlog("    MCSetLockdownModeEnabled = %p\n", fn);
+            dlclose(mc);
+        } else {
+            rlog("  ManagedConfiguration.framework: %s\n", dlerror());
+        }
+
+        /* Try ConfigurationProfiles */
+        void *cp = dlopen("/System/Library/PrivateFrameworks/ConfigurationProfiles.framework/ConfigurationProfiles",
+                          RTLD_LAZY);
+        if (cp) {
+            rlog("  ConfigurationProfiles.framework loaded.\n");
+            void *fn = dlsym(cp, "CPIsLockdownModeEnabled");
+            rlog("    CPIsLockdownModeEnabled = %p\n", fn);
+            dlclose(cp);
+        } else {
+            rlog("  ConfigurationProfiles: %s\n", dlerror());
+        }
+
+        /* Try SpringBoardServices for lockdown mode notifications */
+        void *sbs = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
+                           RTLD_LAZY);
+        if (sbs) {
+            rlog("  SpringBoardServices loaded.\n");
+            void *fn = dlsym(sbs, "SBSGetLockdownMode");
+            rlog("    SBSGetLockdownMode = %p\n", fn);
+            dlclose(sbs);
+        }
+
+        /* Check for lockdownd Mach service */
+        rlog("\n  Mach service lookups:\n");
+        mach_port_t bp = MACH_PORT_NULL;
+        task_get_special_port(mach_task_self(), 4 /* TASK_BOOTSTRAP_PORT */, &bp);
+        if (bp != MACH_PORT_NULL) {
+            const char *mach_services[] = {
+                "com.apple.lockdownd",
+                "com.apple.lockdown.mode",
+                "com.apple.lockdownmode",
+                "com.apple.security.lockdown",
+                "com.apple.MobileFileIntegrity",
+                "com.apple.security.amfi",
+                "com.apple.keystore.device",
+            };
+            for (int i = 0; i < (int)(sizeof(mach_services)/sizeof(mach_services[0])); i++) {
+                mach_port_t port = MACH_PORT_NULL;
+                kern_return_t kr = bootstrap_look_up(bp,
+                                                      (char *)mach_services[i], &port);
+                rlog("    %-45s = %s (port=0x%x)\n", mach_services[i],
+                     kr == KERN_SUCCESS ? "FOUND" : "NOT_FOUND",
+                     port);
+                if (port != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), port);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n*** r299 probe complete ***\n");
     fflush(stdout);
 }
 
@@ -29719,6 +30781,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 299) {
+            rlog("*** rounds=299: Lockdown Mode kernel state enumeration ***\n");
+            rlog("  Pivot: r293-298 cross-ref = no kernel corruption.\n");
+            rlog("  New direction: Lockdown Mode transitions as attack vector.\n");
+            rlog("  Enumerate: sysctls, IOKit, MobileGestalt, files, sandbox.\n\n");
+            fflush(stdout);
+            r299_probe();
             goto done;
         }
         if (rounds == 298) {
