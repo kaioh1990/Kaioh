@@ -34,7 +34,17 @@
 #include <IOKit/IOKitLib.h>
 #include <CoreFoundation/CoreFoundation.h>
 
-#include <sys/proc_info.h>
+/* proc_info constants and structs — not in iOS SDK headers */
+#ifndef PROC_PIDLISTFDS
+#define PROC_PIDLISTFDS 1
+#endif
+#ifndef PROC_PIDFDVNODEPATHINFO
+#define PROC_PIDFDVNODEPATHINFO 2
+#endif
+struct proc_fdinfo {
+    int32_t proc_fd;
+    uint32_t proc_fdtype;
+};
 
 /* IOSurface extern declarations (linked via -framework IOSurface) */
 typedef struct __IOSurface *IOSurfaceRef;
