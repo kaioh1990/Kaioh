@@ -2822,17 +2822,7 @@ static void r291_probe(void) {
         uint8_t setbuf[256];
         memset(setbuf, 0x42, sizeof(setbuf));
         kern_return_t sr = bulkSet ? bulkSet(s, setbuf, sizeof(setbuf)) : -1;
-        rlog("  BulkSet(256 bytes 0x42): 0x%x\n", sr);
-
-        if (bulkGet) {
-            uint8_t getbuf[256];
-            memset(getbuf, 0, sizeof(getbuf));
-            kern_return_t gr = bulkGet(s, getbuf, sizeof(getbuf));
-            int nonzero = 0;
-            for (int i = 0; i < 256; i++) if (getbuf[i] != 0) nonzero++;
-            rlog("  BulkGet(256): 0x%x nonzero=%d first4: 0x%02x 0x%02x 0x%02x 0x%02x\n",
-                gr, nonzero, getbuf[0], getbuf[1], getbuf[2], getbuf[3]);
-        }
+        rlog("  BulkSet(256 bytes 0x42): 0x%x (BadArgument=raw bytes not accepted)\n", sr);
 
         /* Test FlushProcessorCaches baseline */
         typedef kern_return_t (*flushCaches_t)(IOSurfaceRef);
