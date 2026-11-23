@@ -24304,90 +24304,190 @@ new_modes:
                 }
             }
 
-            /* ---- 22d: Additional HEVC property brute-force ---- */
-            rlog("\n--- 22d: HEVC undocumented property brute-force ---\n");
+            /* ---- 22d: MCTF-enabled encode with varied temporal layers ---- */
+            rlog("\n--- 22d: MCTF+temporal layer combinations ---\n");
             {
-                /* Try additional undocumented property names that may map
-                 * to the MCTF counter at session+0x8a8 */
-                VTCompressionSessionRef bf_enc = NULL;
-                CFMutableDictionaryRef bf_spec = CFDictionaryCreateMutable(
-                    kCFAllocatorDefault, 0,
-                    &kCFTypeDictionaryKeyCallBacks,
-                    &kCFTypeDictionaryValueCallBacks);
-                CFDictionarySetValue(bf_spec,
-                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
-                    kCFBooleanTrue);
+                /* Test combinations: EnableMCTF=true + NumberOfTemporalLayers
+                 * + MCTFLatencyMode. The counter at session+0x8a8 may be
+                 * set from temporal layer count or latency mode. */
+                int tl_vals[] = {1, 2, 3, 4, 5, 8};
+                int lm_vals[] = {0, 1, 2, 3, 4, 5};
+                int ntl = sizeof(tl_vals)/sizeof(tl_vals[0]);
+                int nlm = sizeof(lm_vals)/sizeof(lm_vals[0]);
 
-                OSStatus bfst = VTCompressionSessionCreate(
-                    kCFAllocatorDefault, 1920, 1080,
-                    kCMVideoCodecType_HEVC,
-                    bf_spec, NULL, NULL, NULL, NULL, &bf_enc);
+                for (int ti = 0; ti < ntl; ti++) {
+                    for (int li = 0; li < nlm; li++) {
+                        VTCompressionSessionRef te = NULL;
+                        CFMutableDictionaryRef ts = CFDictionaryCreateMutable(
+                            kCFAllocatorDefault, 0,
+                            &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                        CFDictionarySetValue(ts,
+                            CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                            kCFBooleanTrue);
 
-                if (bfst == 0 && bf_enc) {
-                    const char *extra_props[] = {
-                        "TemporalNoiseFilter",
-                        "EnableTemporalNoiseFilter",
-                        "TemporalNoiseFilterLevel",
-                        "TemporalNoiseFilterCount",
-                        "MCTFCount",
-                        "MCTFLevel",
-                        "MCTFMode",
-                        "EnableMCTFFilter",
-                        "ReferenceFrameCount",
-                        "NumReferenceFrames",
-                        "MultiPassMCTF",
-                        "TemporalFilterLevel",
-                        "TemporalFilterCount",
-                        "TemporalFilterMode",
-                        "NoiseReductionLevel",
-                        "NoiseReductionCount",
-                        "AVEMCTFStrength",
-                        "AVEMCTFEnable",
-                        "AVETemporalFilter",
-                        "HWMCTFEnable",
-                        "HWMCTFStrength",
-                        "HWTemporalFilter",
-                        "FrameProcessorTemporalFilter",
-                        "PreviousFrameCount",
-                        "NextFrameCount",
-                        NULL
-                    };
+                        OSStatus tst = VTCompressionSessionCreate(
+                            kCFAllocatorDefault, 1920, 1080,
+                            kCMVideoCodecType_HEVC,
+                            ts, NULL, NULL, NULL, NULL, &te);
 
-                    for (int pi = 0; extra_props[pi]; pi++) {
-                        CFStringRef key = CFStringCreateWithCString(
-                            kCFAllocatorDefault, extra_props[pi],
-                            kCFStringEncodingUTF8);
-                        int val = 5;
-                        CFNumberRef num = CFNumberCreate(
-                            kCFAllocatorDefault, kCFNumberIntType, &val);
-                        OSStatus sst = VTSessionSetProperty(bf_enc, key, num);
-                        if (sst == 0) {
-                            rlog("  ** ACCEPTED: %s=5 (st=0)\n",
-                                extra_props[pi]);
-                            /* Read it back */
-                            CFTypeRef rb = NULL;
-                            OSStatus rst = VTSessionCopyProperty(
-                                bf_enc, key, kCFAllocatorDefault, &rb);
-                            if (rst == 0 && rb) {
-                                if (CFGetTypeID(rb) == CFNumberGetTypeID()) {
-                                    int rv = 0;
-                                    CFNumberGetValue(rb, kCFNumberIntType, &rv);
-                                    rlog("  ** Readback: %s=%d\n",
-                                        extra_props[pi], rv);
-                                }
-                                CFRelease(rb);
+                        if (tst == 0 && te) {
+                            /* Enable MCTF */
+                            VTSessionSetProperty(te,
+                                CFSTR("EnableMCTF"), kCFBooleanTrue);
+
+                            /* Set temporal layers */
+                            CFNumberRef tlnum = CFNumberCreate(
+                                kCFAllocatorDefault, kCFNumberIntType,
+                                &tl_vals[ti]);
+                            OSStatus tls = VTSessionSetProperty(te,
+                                CFSTR("NumberOfTemporalLayers"), tlnum);
+
+                            /* Set MCTFLatencyMode */
+                            CFNumberRef lmnum = CFNumberCreate(
+                                kCFAllocatorDefault, kCFNumberIntType,
+                                &lm_vals[li]);
+                            OSStatus lms = VTSessionSetProperty(te,
+                                CFSTR("MCTFLatencyMode"), lmnum);
+
+                            /* Only log interesting combos */
+                            if (tls == 0 || lms == 0) {
+                                rlog("  TL=%d(st=%d) LM=%d(st=%d) MCTF=on\n",
+                                    tl_vals[ti], (int)tls,
+                                    lm_vals[li], (int)lms);
                             }
-                        } else if (sst != -12900 && sst != -12902) {
-                            rlog("  %s: st=%d\n", extra_props[pi], (int)sst);
-                        }
-                        CFRelease(num);
-                        CFRelease(key);
-                    }
 
-                    VTCompressionSessionInvalidate(bf_enc);
-                    CFRelease(bf_enc);
+                            /* Prepare and encode a few frames */
+                            VTCompressionSessionPrepareToEncodeFrames(te);
+
+                            CVPixelBufferRef pb = NULL;
+                            CFMutableDictionaryRef pa = CFDictionaryCreateMutable(
+                                kCFAllocatorDefault, 0,
+                                &kCFTypeDictionaryKeyCallBacks,
+                                &kCFTypeDictionaryValueCallBacks);
+                            CFDictionaryRef ip = CFDictionaryCreateMutable(
+                                kCFAllocatorDefault, 0,
+                                &kCFTypeDictionaryKeyCallBacks,
+                                &kCFTypeDictionaryValueCallBacks);
+                            CFDictionarySetValue(pa,
+                                kCVPixelBufferIOSurfacePropertiesKey, ip);
+                            CFRelease(ip);
+                            CVPixelBufferCreate(kCFAllocatorDefault,
+                                1920, 1080, kCVPixelFormatType_32BGRA,
+                                pa, &pb);
+                            CFRelease(pa);
+
+                            if (pb) {
+                                CVPixelBufferLockBaseAddress(pb, 0);
+                                void *b = CVPixelBufferGetBaseAddress(pb);
+                                size_t bsz = CVPixelBufferGetDataSize(pb);
+                                memset(b, 0x42, bsz);
+                                CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                                /* Encode 5 frames */
+                                __block int kptr_found = 0;
+                                for (int f = 0; f < 5; f++) {
+                                    CMTime pt = CMTimeMake(f, 30);
+                                    CMTime du = CMTimeMake(1, 30);
+                                    VTCompressionSessionEncodeFrameWithOutputHandler(
+                                        te, pb, pt, du, NULL, NULL,
+                                        ^(OSStatus os, VTEncodeInfoFlags fl,
+                                          CMSampleBufferRef sb) {
+                                            if (sb) {
+                                                CMBlockBufferRef bb =
+                                                    CMSampleBufferGetDataBuffer(sb);
+                                                if (bb) {
+                                                    char *dp = NULL;
+                                                    size_t dl = 0;
+                                                    if (CMBlockBufferGetDataPointer(
+                                                            bb, 0, &dl, NULL,
+                                                            &dp) == 0
+                                                        && dp && dl >= 8) {
+                                                        uint64_t *qw =
+                                                            (uint64_t *)dp;
+                                                        size_t nqw = dl / 8;
+                                                        for (size_t q = 0;
+                                                             q < nqw; q++) {
+                                                            if ((qw[q] >> 40)
+                                                                == 0xFFFFFE) {
+                                                                kptr_found++;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    usleep(30000);
+                                }
+
+                                VTCompressionSessionCompleteFrames(te,
+                                    kCMTimeInvalid);
+
+                                /* Read back ALL properties after encoding */
+                                CFDictionaryRef allp = NULL;
+                                VTSessionCopySupportedPropertyDictionary(
+                                    te, &allp);
+                                if (allp) {
+                                    CFIndex nk = CFDictionaryGetCount(allp);
+                                    const void **ks = (const void **)malloc(
+                                        sizeof(void*) * (size_t)nk);
+                                    CFDictionaryGetKeysAndValues(allp, ks, NULL);
+
+                                    int leak_count = 0;
+                                    for (CFIndex k = 0; k < nk; k++) {
+                                        CFTypeRef rv = NULL;
+                                        if (VTSessionCopyProperty(te,
+                                                (CFStringRef)ks[k],
+                                                kCFAllocatorDefault,
+                                                &rv) == 0 && rv) {
+                                            if (CFGetTypeID(rv) ==
+                                                CFNumberGetTypeID()) {
+                                                int64_t v64 = 0;
+                                                CFNumberGetValue(rv,
+                                                    kCFNumberSInt64Type, &v64);
+                                                if ((v64 >> 40) == 0xFFFFFE ||
+                                                    (v64 >> 40) == 0xFFFFFF) {
+                                                    char nb[256];
+                                                    CFStringGetCString(
+                                                        (CFStringRef)ks[k],
+                                                        nb, sizeof(nb),
+                                                        kCFStringEncodingUTF8);
+                                                    rlog("  ** KPTR prop %s: "
+                                                         "0x%llx (TL=%d LM=%d)"
+                                                         "\n",
+                                                        nb,
+                                                        (unsigned long long)v64,
+                                                        tl_vals[ti],
+                                                        lm_vals[li]);
+                                                    leak_count++;
+                                                }
+                                            }
+                                            CFRelease(rv);
+                                        }
+                                    }
+                                    free(ks);
+                                    CFRelease(allp);
+
+                                    if (leak_count > 0 || kptr_found > 0) {
+                                        rlog("  ** LEAK DETECTED: "
+                                             "props=%d output=%d "
+                                             "TL=%d LM=%d\n",
+                                            leak_count, kptr_found,
+                                            tl_vals[ti], lm_vals[li]);
+                                    }
+                                }
+
+                                CVPixelBufferRelease(pb);
+                            }
+
+                            CFRelease(tlnum);
+                            CFRelease(lmnum);
+                            VTCompressionSessionInvalidate(te);
+                            CFRelease(te);
+                        }
+                        CFRelease(ts);
+                    }
                 }
-                if (bf_spec) CFRelease(bf_spec);
             }
 
             rlog("\n=== Phase 22 Summary ===\n");
