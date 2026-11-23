@@ -86,6 +86,9 @@ extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name,
 #include <mach-o/dyld.h>
 #include <notify.h>
 
+extern kern_return_t host_zone_info(host_priv_t host,
+    mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
+    mach_zone_info_t **info, mach_msg_type_number_t *infoCnt);
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
 extern int proc_regionfilename(int pid, uint64_t address, void *buffer, uint32_t buffersize);
