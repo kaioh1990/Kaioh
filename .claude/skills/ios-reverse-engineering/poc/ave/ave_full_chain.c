@@ -1742,6 +1742,290 @@ static volatile int r264_probed = 0;
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
 
+/* r269: IOConnectCallMethod with port descriptors + io_connect_method raw MIG.
+ * r268 confirmed: ALL trap indices return BadArgument with surfMachPort as arg.
+ * mach_msg to IOSurface port = EXC_GUARD (guarded port, app killed).
+ * New approach: use IOConnectCallMethod selectors 6/7 with structured input
+ * containing the surface Mach port, and try raw io_connect_method MIG calls
+ * with OOL port descriptors to pass the port properly. */
+static volatile int r269_probed = 0;
+
+static void r269_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r269: IOConnectCallMethod + io_connect_method with port descriptors ===\n");
+    fflush(stdout);
+
+    mach_port_t sp = IOSurfaceCreateMachPort(surf);
+    rlog("  surfMachPort=%u surfID=%u\n", sp, sid);
+    fflush(stdout);
+
+    mach_port_t np = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &np);
+    mach_port_insert_right(mach_task_self(), np, np, MACH_MSG_TYPE_MAKE_SEND);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = IO_OBJECT_NULL;
+    IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    rlog("  conn=%u\n", conn);
+    fflush(stdout);
+
+    /* Part 1: IOConnectCallMethod with scalar inputs containing port name */
+    rlog("\n  --- Part 1: IOConnectCallMethod sel 6/7 with port as scalar ---\n"); fflush(stdout);
+    {
+        uint64_t input[6];
+        uint32_t outCnt = 0;
+
+        /* sel 6 with just the port */
+        input[0] = sp;
+        kr = IOConnectCallMethod(conn, 6, input, 1, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, [sp]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = 0;
+        kr = IOConnectCallMethod(conn, 6, input, 2, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, [sp,0]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = sid;
+        kr = IOConnectCallMethod(conn, 6, input, 2, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, [sp,sID]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = np;
+        kr = IOConnectCallMethod(conn, 6, input, 2, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, [sp,np]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = 0; input[2] = 0;
+        kr = IOConnectCallMethod(conn, 6, input, 3, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, [sp,0,0]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = sid; input[2] = np;
+        kr = IOConnectCallMethod(conn, 6, input, 3, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, [sp,sID,np]): 0x%x\n", kr); fflush(stdout);
+
+        /* Try with struct input: pack port name as bytes */
+        uint32_t struct_in[4];
+        struct_in[0] = sp;
+        struct_in[1] = 0;
+        kr = IOConnectCallMethod(conn, 6, NULL, 0, struct_in, sizeof(uint32_t)*1, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, struct=[sp]): 0x%x\n", kr); fflush(stdout);
+
+        kr = IOConnectCallMethod(conn, 6, NULL, 0, struct_in, sizeof(uint32_t)*2, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, struct=[sp,0]): 0x%x\n", kr); fflush(stdout);
+
+        struct_in[0] = sp; struct_in[1] = sid;
+        kr = IOConnectCallMethod(conn, 6, NULL, 0, struct_in, sizeof(uint32_t)*2, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, struct=[sp,sID]): 0x%x\n", kr); fflush(stdout);
+
+        /* Mixed: scalars + struct */
+        input[0] = sp;
+        struct_in[0] = sid;
+        kr = IOConnectCallMethod(conn, 6, input, 1, struct_in, sizeof(uint32_t), NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, scalar=[sp], struct=[sID]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sid;
+        struct_in[0] = sp;
+        kr = IOConnectCallMethod(conn, 6, input, 1, struct_in, sizeof(uint32_t), NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, scalar=[sID], struct=[sp]): 0x%x\n", kr); fflush(stdout);
+
+        /* sel 7 same patterns */
+        input[0] = sp;
+        kr = IOConnectCallMethod(conn, 7, input, 1, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(7, [sp]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = 0;
+        kr = IOConnectCallMethod(conn, 7, input, 2, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(7, [sp,0]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = sid;
+        kr = IOConnectCallMethod(conn, 7, input, 2, NULL, 0, NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(7, [sp,sID]): 0x%x\n", kr); fflush(stdout);
+
+        kr = IOConnectCallMethod(conn, 7, NULL, 0, struct_in, sizeof(uint32_t), NULL, &outCnt, NULL, NULL);
+        rlog("    CallMethod(7, struct=[sp]): 0x%x\n", kr); fflush(stdout);
+    }
+
+    /* Part 2: IOConnectCallScalarMethod with output */
+    rlog("\n  --- Part 2: IOConnectCallMethod sel 6/7 with outputs ---\n"); fflush(stdout);
+    {
+        uint64_t input[2], output[16];
+        uint32_t outCnt;
+        char struct_out[256];
+        size_t struct_out_sz;
+
+        /* Try getting scalar output */
+        input[0] = sp;
+        outCnt = 16;
+        kr = IOConnectCallMethod(conn, 6, input, 1, NULL, 0, output, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, [sp], out_cnt=%u): 0x%x\n", outCnt, kr); fflush(stdout);
+
+        /* Try getting struct output */
+        input[0] = sp;
+        struct_out_sz = 256;
+        kr = IOConnectCallMethod(conn, 6, input, 1, NULL, 0, NULL, NULL, struct_out, &struct_out_sz);
+        rlog("    CallMethod(6, [sp], struct_out_sz=%zu): 0x%x\n", struct_out_sz, kr); fflush(stdout);
+
+        /* Try with no inputs at all, just selector 6/7 */
+        outCnt = 16;
+        kr = IOConnectCallMethod(conn, 6, NULL, 0, NULL, 0, output, &outCnt, NULL, NULL);
+        rlog("    CallMethod(6, no_input, out_cnt=%u): 0x%x\n", outCnt, kr); fflush(stdout);
+
+        outCnt = 16;
+        kr = IOConnectCallMethod(conn, 7, NULL, 0, NULL, 0, output, &outCnt, NULL, NULL);
+        rlog("    CallMethod(7, no_input, out_cnt=%u): 0x%x\n", outCnt, kr); fflush(stdout);
+
+        /* Try selectors we haven't tried with CallMethod */
+        for (int sel = 0; sel <= 30; sel++) {
+            input[0] = sp;
+            outCnt = 16;
+            struct_out_sz = 256;
+            kr = IOConnectCallMethod(conn, sel, input, 1, NULL, 0, output, &outCnt, struct_out, &struct_out_sz);
+            if (kr != 0xe00002c2) {
+                rlog("    CallMethod(%d, [sp]): 0x%x outCnt=%u structSz=%zu\n", sel, kr, outCnt, struct_out_sz);
+                fflush(stdout);
+            }
+        }
+        rlog("    (all BadArgument sels omitted)\n"); fflush(stdout);
+    }
+
+    /* Part 3: IOConnectCallAsyncMethod — passes a wake port for async notification */
+    rlog("\n  --- Part 3: IOConnectCallAsyncMethod sel 6/7 ---\n"); fflush(stdout);
+    {
+        uint64_t input[2];
+        uint64_t ref[8];
+        ref[0] = 0x41414141;
+
+        /* Create a wake port for async */
+        mach_port_t wake = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wake);
+        mach_port_insert_right(mach_task_self(), wake, wake, MACH_MSG_TYPE_MAKE_SEND);
+
+        input[0] = sp;
+        kr = IOConnectCallAsyncMethod(conn, 6, wake, ref, 1, input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    AsyncMethod(6, wake, [sp]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp; input[1] = sid;
+        kr = IOConnectCallAsyncMethod(conn, 6, wake, ref, 1, input, 2, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    AsyncMethod(6, wake, [sp,sID]): 0x%x\n", kr); fflush(stdout);
+
+        input[0] = sp;
+        kr = IOConnectCallAsyncMethod(conn, 7, wake, ref, 1, input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    AsyncMethod(7, wake, [sp]): 0x%x\n", kr); fflush(stdout);
+
+        /* Try all selectors with async */
+        for (int sel = 0; sel <= 30; sel++) {
+            input[0] = sp;
+            kr = IOConnectCallAsyncMethod(conn, sel, wake, ref, 1, input, 1, NULL, 0, NULL, NULL, NULL, NULL);
+            if (kr != 0xe00002c2) {
+                rlog("    AsyncMethod(%d, wake, [sp]): 0x%x\n", sel, kr);
+                fflush(stdout);
+            }
+        }
+        rlog("    (all BadArgument async sels omitted)\n"); fflush(stdout);
+
+        mach_port_deallocate(mach_task_self(), wake);
+    }
+
+    /* Part 4: Try a SECOND IOSurface connection — maybe selector behaviors differ */
+    rlog("\n  --- Part 4: Second IOSurfaceRoot connection ---\n"); fflush(stdout);
+    {
+        io_connect_t conn2 = IO_OBJECT_NULL;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn2);
+        rlog("    conn2=%u\n", conn2);
+
+        /* IOConnectAddClient: connect conn2 to conn */
+        void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+        typedef kern_return_t (*addclient_t)(io_connect_t, io_connect_t);
+        addclient_t addClient = (addclient_t)dlsym(iokit, "IOConnectAddClient");
+        if (addClient) {
+            kr = addClient(conn, conn2);
+            rlog("    IOConnectAddClient(conn, conn2): 0x%x\n", kr); fflush(stdout);
+            kr = addClient(conn2, conn);
+            rlog("    IOConnectAddClient(conn2, conn): 0x%x\n", kr); fflush(stdout);
+        }
+        if (iokit) dlclose(iokit);
+
+        if (conn2) IOServiceClose(conn2);
+    }
+
+    /* Part 5: Private symbol probe (from r268 — never ran due to crash) */
+    rlog("\n  --- Part 5: Private IOSurface/IOKit symbols ---\n"); fflush(stdout);
+    {
+        void *iosfc = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+        if (iosfc) {
+            const char *syms[] = {
+                "IOSurfaceCopyAllValues", "IOSurfaceRemoveAllValues",
+                "IOSurfaceClientCreate", "IOSurfaceClientRelease",
+                "IOSurfaceClientLookup", "IOSurfaceClientLock",
+                "IOSurfaceSendRight", "IOSurfacePortForID",
+                "_IOSurfaceNotifyValues", "_IOSurfaceSetNotify",
+                "_IOSurfaceRemoveNotify", "_IOSurfaceSendMessage",
+                "_IOSurfaceGetMachPort", "_IOSurfaceXPCSetValue",
+                "IOSurfacePropertyModify", "IOSurfacePropertyListModify",
+                "IOSurfaceBindAccelerator", "IOSurfaceFlushProcessorCaches",
+                "IOSurfaceCopyDataValueBytes", "IOSurfaceSetDataValueBytes",
+                "_IOSurfaceRootUserClient_create_surface",
+                "_IOSurfaceRootUserClient_release_surface",
+                "_IOSurfaceRootUserClient_lookup_surface",
+                NULL
+            };
+            for (int i = 0; syms[i]; i++) {
+                void *p = dlsym(iosfc, syms[i]);
+                if (p) rlog("    FOUND: %s = %p\n", syms[i], p);
+            }
+            fflush(stdout);
+            dlclose(iosfc);
+        }
+        void *iokitfw = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+        if (iokitfw) {
+            const char *iokit_syms[] = {
+                "IOConnectTrap3", "IOConnectTrap4", "IOConnectTrap5",
+                "IOConnectAddClient", "io_connect_method",
+                "IOConnectCallStructMethod", "IOConnectCallScalarMethod",
+                "IOConnectSetCFProperties", "IOConnectSetCFProperty",
+                "IORegistryEntryGetProperty",
+                NULL
+            };
+            for (int i = 0; iokit_syms[i]; i++) {
+                void *p = dlsym(iokitfw, iokit_syms[i]);
+                if (p) rlog("    IOKit: %s = %p\n", iokit_syms[i], p);
+            }
+            fflush(stdout);
+            dlclose(iokitfw);
+        }
+    }
+
+    /* Part 6: IOConnectSetCFProperties — send a dict with surface info */
+    rlog("\n  --- Part 6: IOConnectSetCFProperties ---\n"); fflush(stdout);
+    {
+        CFMutableDictionaryRef dict = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef sidNum = CFNumberCreate(NULL, kCFNumberIntType, &sid);
+        CFDictionarySetValue(dict, CFSTR("IOSurfaceID"), sidNum);
+        kr = IOConnectSetCFProperties(conn, dict);
+        rlog("    SetCFProperties(conn, {IOSurfaceID: %u}): 0x%x\n", sid, kr); fflush(stdout);
+        CFRelease(sidNum);
+        CFRelease(dict);
+
+        dict = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef spNum = CFNumberCreate(NULL, kCFNumberIntType, &sp);
+        CFDictionarySetValue(dict, CFSTR("IOSurfacePort"), spNum);
+        kr = IOConnectSetCFProperties(conn, dict);
+        rlog("    SetCFProperties(conn, {IOSurfacePort: %u}): 0x%x\n", sp, kr); fflush(stdout);
+        CFRelease(spNum);
+        CFRelease(dict);
+    }
+
+    IOServiceClose(conn);
+    IOObjectRelease(svc);
+    mach_port_deallocate(mach_task_self(), sp);
+    mach_port_deallocate(mach_task_self(), np);
+    __sync_fetch_and_add(&r269_probed, 1);
+    rlog("\n*** r269 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r268: Targeted trap 6/7 with surfMachPort as first arg + safe mach_msg probe.
  * r266 showed trap returns BadArgument when surfMachPort is first arg (proving
  * the trap validates it as an IOSurface port), IPCError for all other ports.
@@ -22169,6 +22453,42 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 269) {
+            rlog("*** rounds=269: IOConnectCallMethod + io_connect_method with port descriptors ***\n");
+            rlog("  r268: ALL traps return BadArgument with surfMachPort. mach_msg = EXC_GUARD.\n");
+            rlog("  Trying IOConnectCallMethod, AsyncMethod, SetCFProperties, AddClient.\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r269_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r269 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 268) {
