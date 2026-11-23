@@ -1893,36 +1893,62 @@ static void *r262_gpu_fn(void *arg) {
             rlog("  [t%d] respondsTo '%s' = %d\n", tid, sel_names[i], (int)r);
         }
 
-        /* Get the class name and list methods containing "texture" or "Texture" */
+        /* Walk entire class hierarchy dumping texture/surface methods */
         Class devClass = object_getClass(device);
-        const char *className = class_getName(devClass);
-        rlog("  [t%d] device class: %s\n", tid, className);
-
-        unsigned int methodCount = 0;
-        Method *methods = class_copyMethodList(devClass, &methodCount);
-        rlog("  [t%d] %u methods on %s, scanning for texture/surface methods...\n",
-             tid, methodCount, className);
-        int found = 0;
-        for (unsigned int m = 0; m < methodCount && found < 30; m++) {
-            const char *name = sel_getName(method_getName(methods[m]));
-            if (strstr(name, "exture") || strstr(name, "urface") || strstr(name, "IOSurface")) {
-                rlog("  [t%d]   method: %s\n", tid, name);
-                found++;
+        Class cls = devClass;
+        int depth = 0;
+        while (cls && depth < 10) {
+            const char *className = class_getName(cls);
+            unsigned int methodCount = 0;
+            Method *methods = class_copyMethodList(cls, &methodCount);
+            int found = 0;
+            for (unsigned int m = 0; m < methodCount; m++) {
+                const char *name = sel_getName(method_getName(methods[m]));
+                if (strstr(name, "exture") || strstr(name, "urface") ||
+                    strstr(name, "Surface") || strstr(name, "esource")) {
+                    rlog("  [t%d] [%s] %s\n", tid, className, name);
+                    found++;
+                }
             }
-        }
-        if (methods) free(methods);
+            if (found == 0 && methodCount > 0)
+                rlog("  [t%d] [%s] %u methods, 0 texture/surface\n", tid, className, methodCount);
 
-        /* Also check protocols */
-        unsigned int protoCount = 0;
-        Protocol **protos = class_copyProtocolList(devClass, &protoCount);
-        rlog("  [t%d] %u protocols on %s\n", tid, protoCount, className);
-        for (unsigned int p = 0; p < protoCount; p++) {
-            const char *pname = protocol_getName(protos[p]);
-            if (strstr(pname, "etal") || strstr(pname, "evice") || strstr(pname, "exture")) {
-                rlog("  [t%d]   proto: %s\n", tid, pname);
+            /* Check protocols at each level */
+            unsigned int protoCount = 0;
+            Protocol **protos = class_copyProtocolList(cls, &protoCount);
+            for (unsigned int p = 0; p < protoCount; p++) {
+                const char *pname = protocol_getName(protos[p]);
+                rlog("  [t%d] [%s] proto: %s\n", tid, className, pname);
+
+                /* Dump protocol methods containing texture/surface */
+                unsigned int pmCount = 0;
+                struct objc_method_description *pms = protocol_copyMethodDescriptionList(
+                    protos[p], YES, YES, &pmCount);
+                for (unsigned int pm = 0; pm < pmCount; pm++) {
+                    const char *pmname = sel_getName(pms[pm].name);
+                    if (strstr(pmname, "exture") || strstr(pmname, "urface") ||
+                        strstr(pmname, "Surface") || strstr(pmname, "esource")) {
+                        rlog("  [t%d]   proto-method: %s\n", tid, pmname);
+                    }
+                }
+                if (pms) free(pms);
+                /* Also optional methods */
+                pms = protocol_copyMethodDescriptionList(protos[p], NO, YES, &pmCount);
+                for (unsigned int pm = 0; pm < pmCount; pm++) {
+                    const char *pmname = sel_getName(pms[pm].name);
+                    if (strstr(pmname, "exture") || strstr(pmname, "urface") ||
+                        strstr(pmname, "Surface") || strstr(pmname, "esource")) {
+                        rlog("  [t%d]   proto-opt: %s\n", tid, pmname);
+                    }
+                }
+                if (pms) free(pms);
             }
+            if (protos) free(protos);
+            if (methods) free(methods);
+
+            cls = class_getSuperclass(cls);
+            depth++;
         }
-        if (protos) free(protos);
         fflush(stdout);
     }
 
