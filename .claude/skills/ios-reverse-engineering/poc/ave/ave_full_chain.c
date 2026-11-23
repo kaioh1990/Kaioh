@@ -83,6 +83,7 @@ extern kern_return_t mach_make_memory_entry_64(
 extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name, mach_port_t *sp);
 #include <objc/runtime.h>
 #include <objc/message.h>
+#include <mach-o/dyld.h>
 #include <notify.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
