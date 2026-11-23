@@ -1002,38 +1002,46 @@ static void *race_thread_fn(void *arg) {
     return NULL;
 }
 
-/* rounds=250 multi-threaded race globals */
+/* rounds=250 multi-threaded race globals — each thread gets its own connection */
 static volatile int g_race250_run = 0;
-static io_connect_t g_race250_conn = IO_OBJECT_NULL;
+static io_service_t g_race250_svc = IO_OBJECT_NULL;
 static volatile int g_race250_reg_ok = 0, g_race250_reg_fail = 0;
 static volatile int g_race250_dereg_ok = 0, g_race250_dereg_fail = 0;
 
 static void *g_race250_sel17_fn(void *arg) {
     (void)arg;
+    io_connect_t my_conn = IO_OBJECT_NULL;
+    IOServiceOpen(g_race250_svc, mach_task_self(), 0, &my_conn);
+    if (!my_conn) return NULL;
     uint64_t inp[3] = {1, 2, 3};
     while (g_race250_run) {
         mach_port_t wp = MACH_PORT_NULL;
         mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
         mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
         uint64_t ref = 0xD250;
-        kern_return_t kr = IOConnectCallAsyncMethod(g_race250_conn, 17, wp, &ref, 1,
+        kern_return_t kr = IOConnectCallAsyncMethod(my_conn, 17, wp, &ref, 1,
             NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
         if (kr == 0) __sync_fetch_and_add(&g_race250_reg_ok, 1);
         else __sync_fetch_and_add(&g_race250_reg_fail, 1);
         mach_port_deallocate(mach_task_self(), wp);
     }
+    IOServiceClose(my_conn);
     return NULL;
 }
 
 static void *g_race250_sel18_fn(void *arg) {
     (void)arg;
+    io_connect_t my_conn = IO_OBJECT_NULL;
+    IOServiceOpen(g_race250_svc, mach_task_self(), 0, &my_conn);
+    if (!my_conn) return NULL;
     uint64_t inp[3] = {1, 2, 3};
     while (g_race250_run) {
-        kern_return_t kr = IOConnectCallMethod(g_race250_conn, 18, NULL, 0,
+        kern_return_t kr = IOConnectCallMethod(my_conn, 18, NULL, 0,
             inp, 24, NULL, NULL, NULL, NULL);
         if (kr == 0) __sync_fetch_and_add(&g_race250_dereg_ok, 1);
         else __sync_fetch_and_add(&g_race250_dereg_fail, 1);
     }
+    IOServiceClose(my_conn);
     return NULL;
 }
 
@@ -19546,12 +19554,8 @@ new_modes:
                 IOServiceMatching("IOSurfaceRoot"));
             if (!r250_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r250_done; }
 
-            io_connect_t r250_rc = IO_OBJECT_NULL;
-            IOServiceOpen(r250_svc, mach_task_self(), 0, &r250_rc);
-            if (!r250_rc) { rlog("  open failed\n"); goto r250_done; }
-
-            /* Use global race state vars (declared at file scope) */
-            g_race250_conn = r250_rc;
+            /* Each thread opens its own connection via the global service handle */
+            g_race250_svc = r250_svc;
             g_race250_run = 0;
             g_race250_reg_ok = 0; g_race250_reg_fail = 0;
             g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
@@ -19597,7 +19601,6 @@ new_modes:
                  g_race250_dereg_ok, g_race250_dereg_fail,
                  p13_render_frames);
 
-            IOServiceClose(r250_rc);
             IOObjectRelease(r250_svc);
             r250_done:
             rlog("*** r=250 complete ***\n");
