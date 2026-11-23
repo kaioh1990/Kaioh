@@ -1828,25 +1828,50 @@ static void r270_probe(IOSurfaceRef surf) {
         }
     }
 
-    /* Part 2: IOSurfaceCopyDataValueBytes */
+    /* Part 2: IOSurfaceCopyDataValueBytes — might take (surf, key, buf, len) */
     rlog("\n  --- Part 2: IOSurfaceCopyDataValueBytes ---\n"); fflush(stdout);
     {
-        typedef CFDataRef (*copydatabytes_t)(IOSurfaceRef, CFStringRef);
-        copydatabytes_t copyDataBytes = (copydatabytes_t)dlsym(iosfc, "IOSurfaceCopyDataValueBytes");
-        if (copyDataBytes) {
-            CFDataRef data = copyDataBytes(surf, CFSTR("IOSurfaceAllocSize"));
-            rlog("    CopyDataValueBytes(IOSurfaceAllocSize) = %p", data);
-            if (data) {
-                rlog(" len=%ld", CFDataGetLength(data));
-                CFRelease(data);
+        /* Try alternative signature: kern_return_t (IOSurfaceRef, CFStringRef, void*, size_t*) */
+        typedef kern_return_t (*copydatabytes2_t)(IOSurfaceRef, CFStringRef, void*, size_t*);
+        copydatabytes2_t copyDB2 = (copydatabytes2_t)dlsym(iosfc, "IOSurfaceCopyDataValueBytes");
+        if (copyDB2) {
+            char buf[256];
+            size_t len = sizeof(buf);
+            memset(buf, 0, sizeof(buf));
+            kr = copyDB2(surf, CFSTR("IOSurfaceAllocSize"), buf, &len);
+            rlog("    CopyDataValueBytes(IOSurfaceAllocSize, buf, 256): kr=0x%x len=%zu\n", kr, len);
+            if (kr == 0 && len > 0 && len <= 16) {
+                rlog("      bytes:");
+                for (size_t i = 0; i < len; i++) rlog(" %02x", (unsigned char)buf[i]);
+                rlog("\n");
             }
-            rlog("\n"); fflush(stdout);
+            fflush(stdout);
+
+            /* Try with a custom key we set via IOSurfaceSetValue */
+            int testval = 0xDEADBEEF;
+            CFNumberRef tv = CFNumberCreate(NULL, kCFNumberIntType, &testval);
+            IOSurfaceSetValue(surf, CFSTR("test_key"), tv);
+            CFRelease(tv);
+
+            len = sizeof(buf);
+            kr = copyDB2(surf, CFSTR("test_key"), buf, &len);
+            rlog("    CopyDataValueBytes(test_key): kr=0x%x len=%zu\n", kr, len);
+            if (kr == 0 && len > 0 && len <= 16) {
+                rlog("      bytes:");
+                for (size_t i = 0; i < len; i++) rlog(" %02x", (unsigned char)buf[i]);
+                rlog("\n");
+            }
+            fflush(stdout);
         }
 
-        typedef void (*setdatabytes_t)(IOSurfaceRef, CFStringRef, const void*, size_t);
-        setdatabytes_t setDataBytes = (setdatabytes_t)dlsym(iosfc, "IOSurfaceSetDataValueBytes");
-        if (setDataBytes) {
-            rlog("    FOUND: IOSurfaceSetDataValueBytes = %p\n", setDataBytes);
+        /* SetDataValueBytes */
+        typedef kern_return_t (*setdatabytes_t)(IOSurfaceRef, CFStringRef, const void*, size_t);
+        setdatabytes_t setDB = (setdatabytes_t)dlsym(iosfc, "IOSurfaceSetDataValueBytes");
+        if (setDB) {
+            rlog("    FOUND: IOSurfaceSetDataValueBytes = %p\n", setDB);
+            uint32_t testdata = 0x41414141;
+            kr = setDB(surf, CFSTR("raw_test"), &testdata, sizeof(testdata));
+            rlog("    SetDataValueBytes(raw_test, 4 bytes): kr=0x%x\n", kr);
             fflush(stdout);
         }
     }
