@@ -24862,7 +24862,8 @@ new_modes:
                 p16_groom_n = r205_gn;
 
                 for (int tag = r205_tag; tag < r205_tag_end; tag++) {
-                    uint64_t r205_probe = (r205_base & 0x00FFFFFFFFFFFFFFULL) |
+                    /* Keep bits[63:60]=0xF (kernel space), set bits[59:56]=tag */
+                    uint64_t r205_probe = (r205_base & 0xF0FFFFFFFFFFFFFFULL) |
                                           ((uint64_t)tag << 56);
                     rlog("  TAG_PROBE tag=0x%X probe=0x%016llx\n", tag,
                          (unsigned long long)r205_probe);
