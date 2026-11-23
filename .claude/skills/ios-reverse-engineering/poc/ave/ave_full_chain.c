@@ -1802,12 +1802,29 @@ static void r270_probe(IOSurfaceRef surf) {
             }
         }
 
-        /* Try ClientCreate with different arg patterns */
-        if (clientCreate) {
-            rlog("    Trying ClientCreate(0)...\n"); fflush(stdout);
-            void *client = clientCreate(0);
-            rlog("    ClientCreate(0) = %p\n", client); fflush(stdout);
-            if (client && clientRelease) clientRelease(client);
+        /* ClientCreate crashes — skip it. Focus on what client from Lookup can do. */
+        if (clientLookup && clientLock) {
+            void *client3 = clientLookup(sid);
+            if (client3) {
+                rlog("    ClientLookup(%u) for lock test = %p\n", sid, client3);
+                fflush(stdout);
+
+                /* Try different lock types */
+                uint32_t seed = 0;
+                kr = clientLock(client3, 0, &seed);
+                rlog("    ClientLock(client, 0, &seed): kr=0x%x seed=%u\n", kr, seed);
+                fflush(stdout);
+
+                kr = clientLock(client3, 1, &seed);
+                rlog("    ClientLock(client, 1, &seed): kr=0x%x seed=%u\n", kr, seed);
+                fflush(stdout);
+
+                kr = clientLock(client3, 2, &seed);
+                rlog("    ClientLock(client, 2, &seed): kr=0x%x seed=%u\n", kr, seed);
+                fflush(stdout);
+
+                if (clientRelease) clientRelease(client3);
+            }
         }
     }
 
