@@ -38,6 +38,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <xpc/xpc.h>
 #include <dispatch/dispatch.h>
 #include <mach/mach.h>
 #include <mach_debug/mach_debug.h>
@@ -1741,6 +1742,283 @@ static volatile int r264_probed = 0;
  * IOSurfaceRoot external methods all return BadArgument on iOS 27.1.
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
+
+/* r272: Deep probe of Client UseCount race, ProtectionOptions, CacheMode,
+ * Purgeable, YCbCrMatrix, XPC round-trip, RemoveAllValues, double-unlock.
+ * r271 found: ExclusiveAccess is absolute (all keys/connections blocked).
+ * Seed only changes on lock, not SetValue. AlignProperty returns pointer-sized values.
+ * Key target: ClientDecrementUseCount race for integer underflow. */
+static volatile int r272_probed = 0;
+static volatile int r272_race_stop = 0;
+
+typedef void* IOSurfaceClientRef;
+typedef IOSurfaceClientRef (*ClientLookup_t)(uint32_t);
+typedef kern_return_t (*ClientDecUC_t)(IOSurfaceClientRef);
+typedef kern_return_t (*ClientIncUC_t)(IOSurfaceClientRef);
+typedef void (*ClientRelease_t)(IOSurfaceClientRef);
+
+struct r272_race_ctx {
+    ClientDecUC_t decFn;
+    IOSurfaceClientRef client;
+    int count;
+};
+
+static void *r272_race_thread(void *arg) {
+    struct r272_race_ctx *ctx = (struct r272_race_ctx *)arg;
+    for (int i = 0; i < ctx->count && !r272_race_stop; i++) {
+        ctx->decFn(ctx->client);
+    }
+    return NULL;
+}
+
+static void r272_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r272: Client UseCount Race + Protection/Cache/Purgeable/XPC ===\n");
+    fflush(stdout);
+
+    void *iosfc = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+
+    ClientLookup_t clientLookup = NULL;
+    ClientDecUC_t clientDec = NULL;
+    ClientIncUC_t clientInc = NULL;
+    ClientRelease_t clientRelease = NULL;
+    if (iosfc) {
+        clientLookup = (ClientLookup_t)dlsym(iosfc, "IOSurfaceClientLookup");
+        clientDec = (ClientDecUC_t)dlsym(iosfc, "IOSurfaceClientDecrementUseCount");
+        clientInc = (ClientIncUC_t)dlsym(iosfc, "IOSurfaceClientIncrementUseCount");
+        clientRelease = (ClientRelease_t)dlsym(iosfc, "IOSurfaceClientRelease");
+    }
+
+    /* Part 1: Client UseCount — test underflow */
+    rlog("\n--- Part 1: Client UseCount underflow test ---\n");
+    {
+        IOSurfaceClientRef client = clientLookup ? clientLookup(sid) : NULL;
+        rlog("  client=%p\n", client);
+
+        if (client && clientDec && clientInc) {
+            int uc0 = (int)IOSurfaceGetUseCount(surf);
+            rlog("  initial useCount=%d\n", uc0);
+
+            kr = clientInc(client);
+            int uc1 = (int)IOSurfaceGetUseCount(surf);
+            rlog("  after ClientInc: kr=0x%x useCount=%d\n", kr, uc1);
+
+            kr = clientDec(client);
+            int uc2 = (int)IOSurfaceGetUseCount(surf);
+            rlog("  after ClientDec: kr=0x%x useCount=%d\n", kr, uc2);
+
+            kr = clientDec(client);
+            int uc3 = (int)IOSurfaceGetUseCount(surf);
+            rlog("  after ClientDec(below 0?): kr=0x%x useCount=%d\n", kr, uc3);
+
+            kr = clientDec(client);
+            int uc4 = (int)IOSurfaceGetUseCount(surf);
+            rlog("  after ClientDec(again): kr=0x%x useCount=%d\n", kr, uc4);
+
+            for (int i = 0; i < 5; i++) {
+                clientDec(client);
+            }
+            int uc5 = (int)IOSurfaceGetUseCount(surf);
+            rlog("  after 5 more ClientDec: useCount=%d\n", uc5);
+        }
+        if (client && clientRelease) clientRelease(client);
+        fflush(stdout);
+    }
+
+    /* Part 2: GetProtectionOptions / GetCacheMode */
+    rlog("\n--- Part 2: ProtectionOptions + CacheMode ---\n");
+    {
+        typedef uint32_t (*GetProtOpt_t)(IOSurfaceRef);
+        typedef uint32_t (*GetCacheMode_t)(IOSurfaceRef);
+        GetProtOpt_t getProt = NULL;
+        GetCacheMode_t getCache = NULL;
+        if (iosfc) {
+            getProt = (GetProtOpt_t)dlsym(iosfc, "IOSurfaceGetProtectionOptions");
+            getCache = (GetCacheMode_t)dlsym(iosfc, "IOSurfaceGetCacheMode");
+        }
+        if (getProt) {
+            uint32_t prot = getProt(surf);
+            rlog("  GetProtectionOptions=0x%x (%u)\n", prot, prot);
+        } else rlog("  GetProtectionOptions not found\n");
+
+        if (getCache) {
+            uint32_t cache = getCache(surf);
+            rlog("  GetCacheMode=0x%x (%u)\n", cache, cache);
+        } else rlog("  GetCacheMode not found\n");
+        fflush(stdout);
+    }
+
+    /* Part 3: ClientSetPurgeable */
+    rlog("\n--- Part 3: ClientSetPurgeable ---\n");
+    {
+        typedef kern_return_t (*ClientSetPurge_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+        ClientSetPurge_t setPurge = NULL;
+        if (iosfc) setPurge = (ClientSetPurge_t)dlsym(iosfc, "IOSurfaceClientSetPurgeable");
+
+        IOSurfaceClientRef client = clientLookup ? clientLookup(sid) : NULL;
+        if (setPurge && client) {
+            for (uint32_t state = 0; state <= 3; state++) {
+                uint32_t oldState = 0;
+                kr = setPurge(client, state, &oldState);
+                rlog("  ClientSetPurgeable(%u)=0x%x oldState=%u\n", state, kr, oldState);
+            }
+        } else rlog("  ClientSetPurgeable not found or no client\n");
+        if (client && clientRelease) clientRelease(client);
+        fflush(stdout);
+    }
+
+    /* Part 4: ClientSetYCbCrMatrix */
+    rlog("\n--- Part 4: ClientSetYCbCrMatrix ---\n");
+    {
+        typedef kern_return_t (*SetMatrix_t)(IOSurfaceClientRef, CFStringRef);
+        typedef CFStringRef (*GetMatrix_t)(IOSurfaceRef);
+        SetMatrix_t setMatrix = NULL;
+        GetMatrix_t getMatrix = NULL;
+        if (iosfc) {
+            setMatrix = (SetMatrix_t)dlsym(iosfc, "IOSurfaceClientSetYCbCrMatrix");
+            getMatrix = (GetMatrix_t)dlsym(iosfc, "IOSurfaceGetYCbCrMatrix");
+        }
+
+        IOSurfaceClientRef client = clientLookup ? clientLookup(sid) : NULL;
+        if (setMatrix && client) {
+            CFStringRef matrices[] = {
+                CFSTR("ITU_R_601_4"), CFSTR("ITU_R_709_2"),
+                CFSTR("ITU_R_2020"), CFSTR("SMPTE_240M_1995")
+            };
+            for (int i = 0; i < 4; i++) {
+                char buf[32]; CFStringGetCString(matrices[i], buf, 32, kCFStringEncodingUTF8);
+                kr = setMatrix(client, matrices[i]);
+                rlog("  SetYCbCrMatrix('%s')=0x%x", buf, kr);
+                if (getMatrix) {
+                    CFStringRef m = getMatrix(surf);
+                    if (m) {
+                        char mbuf[64]; CFStringGetCString(m, mbuf, 64, kCFStringEncodingUTF8);
+                        rlog(" get='%s'\n", mbuf);
+                    } else rlog(" get=NULL\n");
+                } else rlog("\n");
+            }
+        } else rlog("  not found or no client\n");
+        if (client && clientRelease) clientRelease(client);
+        fflush(stdout);
+    }
+
+    /* Part 5: XPC round-trip */
+    rlog("\n--- Part 5: IOSurfaceCreateXPCObject / LookupFromXPCObject ---\n");
+    {
+        typedef xpc_object_t (*CreateXPC_t)(IOSurfaceRef);
+        typedef IOSurfaceRef (*LookupXPC_t)(xpc_object_t);
+        CreateXPC_t createXPC = NULL;
+        LookupXPC_t lookupXPC = NULL;
+        if (iosfc) {
+            createXPC = (CreateXPC_t)dlsym(iosfc, "IOSurfaceCreateXPCObject");
+            lookupXPC = (LookupXPC_t)dlsym(iosfc, "IOSurfaceLookupFromXPCObject");
+        }
+        if (createXPC) {
+            xpc_object_t xobj = createXPC(surf);
+            rlog("  CreateXPCObject=%p\n", xobj);
+            if (xobj && lookupXPC) {
+                IOSurfaceRef surf2 = lookupXPC(xobj);
+                rlog("  LookupFromXPCObject=%p id=%u (orig id=%u)\n",
+                     surf2, surf2 ? IOSurfaceGetID(surf2) : 0, sid);
+                if (surf2) CFRelease(surf2);
+            }
+        } else rlog("  CreateXPCObject not found\n");
+        fflush(stdout);
+    }
+
+    /* Part 6: RemoveAllValues */
+    rlog("\n--- Part 6: IOSurfaceRemoveAllValues ---\n");
+    {
+        typedef void (*RemoveAll_t)(IOSurfaceRef);
+        RemoveAll_t removeAll = NULL;
+        if (iosfc) removeAll = (RemoveAll_t)dlsym(iosfc, "IOSurfaceRemoveAllValues");
+
+        IOSurfaceSetValue(surf, CFSTR("test1"), CFSTR("v1"));
+        IOSurfaceSetValue(surf, CFSTR("test2"), CFSTR("v2"));
+        IOSurfaceSetValue(surf, CFSTR("test3"), CFSTR("v3"));
+
+        typedef CFDictionaryRef (*CopyAll_t)(IOSurfaceRef);
+        CopyAll_t copyAll = (CopyAll_t)dlsym(iosfc, "IOSurfaceCopyAllValues");
+        if (copyAll) {
+            CFDictionaryRef d = copyAll(surf);
+            rlog("  before RemoveAll: count=%ld\n", d ? CFDictionaryGetCount(d) : -1);
+            if (d) CFRelease(d);
+        }
+
+        if (removeAll) {
+            removeAll(surf);
+            rlog("  RemoveAllValues called\n");
+        }
+
+        if (copyAll) {
+            CFDictionaryRef d = copyAll(surf);
+            rlog("  after RemoveAll: count=%ld\n", d ? CFDictionaryGetCount(d) : -1);
+            if (d) CFRelease(d);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 7: ClientUnlock without prior lock (double-unlock) */
+    rlog("\n--- Part 7: ClientUnlock without lock ---\n");
+    {
+        typedef kern_return_t (*ClientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+        ClientUnlock_t clientUnlock = NULL;
+        if (iosfc) clientUnlock = (ClientUnlock_t)dlsym(iosfc, "IOSurfaceClientUnlock");
+
+        IOSurfaceClientRef client = clientLookup ? clientLookup(sid) : NULL;
+        if (clientUnlock && client) {
+            uint32_t seed = 0;
+            kr = clientUnlock(client, 0, &seed);
+            rlog("  ClientUnlock(no prior lock, type 0)=0x%x seed=%u\n", kr, seed);
+            kr = clientUnlock(client, 1, &seed);
+            rlog("  ClientUnlock(no prior lock, type 1)=0x%x seed=%u\n", kr, seed);
+            kr = clientUnlock(client, 2, &seed);
+            rlog("  ClientUnlock(no prior lock, type 2)=0x%x seed=%u\n", kr, seed);
+        } else rlog("  ClientUnlock not found or no client\n");
+        if (client && clientRelease) clientRelease(client);
+        fflush(stdout);
+    }
+
+    /* Part 8: ClientDecrementUseCount race */
+    rlog("\n--- Part 8: ClientDecrementUseCount race (2 threads x 100) ---\n");
+    {
+        IOSurfaceClientRef client = clientLookup ? clientLookup(sid) : NULL;
+        if (client && clientDec && clientInc) {
+            for (int i = 0; i < 10; i++) clientInc(client);
+            int ucBefore = (int)IOSurfaceGetUseCount(surf);
+            rlog("  pre-race useCount=%d (after 10 increments)\n", ucBefore);
+
+            r272_race_stop = 0;
+            struct r272_race_ctx ctx1 = { clientDec, client, 100 };
+            struct r272_race_ctx ctx2 = { clientDec, client, 100 };
+            pthread_t t1, t2;
+            pthread_create(&t1, NULL, r272_race_thread, &ctx1);
+            pthread_create(&t2, NULL, r272_race_thread, &ctx2);
+            pthread_join(t1, NULL);
+            pthread_join(t2, NULL);
+
+            int ucAfter = (int)IOSurfaceGetUseCount(surf);
+            rlog("  post-race useCount=%d (expected ~-190 if no clamp, 0 if clamped)\n", ucAfter);
+
+            if (ucAfter < 0) {
+                rlog("  *** UNDERFLOW DETECTED: useCount=%d ***\n", ucAfter);
+            } else if (ucAfter == 0) {
+                rlog("  clamped at 0 — no underflow\n");
+            } else {
+                rlog("  race result: %d remaining\n", ucAfter);
+            }
+        } else rlog("  race setup failed\n");
+        if (client && clientRelease) clientRelease(client);
+        fflush(stdout);
+    }
+
+    if (iosfc) dlclose(iosfc);
+    __sync_fetch_and_add(&r272_probed, 1);
+    rlog("\n*** r272 probe complete ***\n");
+    fflush(stdout);
+}
 
 /* r271: Explore newly discovered private APIs from r270 Part 7 symbol scan.
  * r270 found: IOSurfaceGetSeed, IOSurfaceSetOwnership, Get/SetBulkAttachments,
@@ -23133,6 +23411,41 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 272) {
+            rlog("*** rounds=272: Client UseCount Race + Protection/Cache/Purgeable/XPC ***\n");
+            rlog("  r271: ExclusiveAccess absolute. Seed=lock-only. New Client APIs found.\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r272_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r272 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 271) {
