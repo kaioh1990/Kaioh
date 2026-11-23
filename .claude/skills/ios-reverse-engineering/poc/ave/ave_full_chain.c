@@ -1995,26 +1995,36 @@ static void r269_probe(IOSurfaceRef surf) {
         }
     }
 
-    /* Part 6: IOConnectSetCFProperties — send a dict with surface info */
-    rlog("\n  --- Part 6: IOConnectSetCFProperties ---\n"); fflush(stdout);
+    /* Part 6: IOConnectSetCFProperties via dlsym (unavailable on iOS headers) */
+    rlog("\n  --- Part 6: IOConnectSetCFProperties via dlsym ---\n"); fflush(stdout);
     {
-        CFMutableDictionaryRef dict = CFDictionaryCreateMutable(NULL, 0,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        CFNumberRef sidNum = CFNumberCreate(NULL, kCFNumberIntType, &sid);
-        CFDictionarySetValue(dict, CFSTR("IOSurfaceID"), sidNum);
-        kr = IOConnectSetCFProperties(conn, dict);
-        rlog("    SetCFProperties(conn, {IOSurfaceID: %u}): 0x%x\n", sid, kr); fflush(stdout);
-        CFRelease(sidNum);
-        CFRelease(dict);
+        void *iokit2 = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+        typedef kern_return_t (*setcfprops_t)(io_connect_t, CFTypeRef);
+        setcfprops_t setCFProps = NULL;
+        if (iokit2) setCFProps = (setcfprops_t)dlsym(iokit2, "IOConnectSetCFProperties");
+        if (setCFProps) {
+            CFMutableDictionaryRef dict = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef sidNum = CFNumberCreate(NULL, kCFNumberIntType, &sid);
+            CFDictionarySetValue(dict, CFSTR("IOSurfaceID"), sidNum);
+            kr = setCFProps(conn, dict);
+            rlog("    SetCFProperties({IOSurfaceID: %u}): 0x%x\n", sid, kr); fflush(stdout);
+            CFRelease(sidNum);
+            CFRelease(dict);
 
-        dict = CFDictionaryCreateMutable(NULL, 0,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        CFNumberRef spNum = CFNumberCreate(NULL, kCFNumberIntType, &sp);
-        CFDictionarySetValue(dict, CFSTR("IOSurfacePort"), spNum);
-        kr = IOConnectSetCFProperties(conn, dict);
-        rlog("    SetCFProperties(conn, {IOSurfacePort: %u}): 0x%x\n", sp, kr); fflush(stdout);
-        CFRelease(spNum);
-        CFRelease(dict);
+            dict = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int spInt = (int)sp;
+            CFNumberRef spNum = CFNumberCreate(NULL, kCFNumberIntType, &spInt);
+            CFDictionarySetValue(dict, CFSTR("IOSurfacePort"), spNum);
+            kr = setCFProps(conn, dict);
+            rlog("    SetCFProperties({IOSurfacePort: %u}): 0x%x\n", sp, kr); fflush(stdout);
+            CFRelease(spNum);
+            CFRelease(dict);
+        } else {
+            rlog("    IOConnectSetCFProperties not found via dlsym\n"); fflush(stdout);
+        }
+        if (iokit2) dlclose(iokit2);
     }
 
     IOServiceClose(conn);
