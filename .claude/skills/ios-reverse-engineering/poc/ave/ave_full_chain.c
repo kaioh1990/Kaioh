@@ -1791,14 +1791,8 @@ static void *r267_id_tracker_fn(void *arg) {
 
 /* r267 kernel-touching racer: perform kernel ops on looked-up surfaces */
 static void *r267_kernel_racer_fn(void *arg) {
-    int mode = (int)(uintptr_t)arg; /* 0=lock, 1=purgeable, 2=metal_tex */
+    int mode = (int)(uintptr_t)arg; /* 0=lock, 1=purgeable, 2=usecount+setvalue */
     uint64_t ops = 0, fails = 0;
-
-    /* For Metal texture creation */
-    id<MTLDevice> dev = NULL;
-    if (mode == 2) {
-        dev = MTLCreateSystemDefaultDevice();
-    }
 
     while (!r267_race_stop) {
         int idx = (r267_id_head - 1) & 63;
@@ -1832,26 +1826,14 @@ static void *r267_kernel_racer_fn(void *arg) {
             } else {
                 fails++;
             }
-        } else if (mode == 2 && dev) {
-            /* Create Metal texture from surface — AGX kernel operation */
-            MTLTextureDescriptor *desc = [MTLTextureDescriptor
-                texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                width:IOSurfaceGetWidth(s)
-                height:IOSurfaceGetHeight(s)
-                mipmapped:NO];
-            desc.usage = MTLTextureUsageShaderRead;
-            desc.storageMode = MTLStorageModeShared;
-            id<MTLTexture> tex = [(id<MTLDevice>)dev
-                newTextureWithDescriptor:desc
-                iosurface:(__bridge IOSurfaceRef)s
-                plane:0
-                slice:0];
-            if (tex) {
-                ops++;
-                tex = nil;
-            } else {
-                fails++;
-            }
+        } else if (mode == 2) {
+            /* UseCount + SetValue — kernel property + refcount ops */
+            IOSurfaceIncrementUseCount(s);
+            IOSurfaceSetValue(s, CFSTR("r267race"), CFSTR("v"));
+            CFTypeRef v = IOSurfaceCopyValue(s, CFSTR("r267race"));
+            if (v) { ops++; CFRelease(v); } else { fails++; }
+            IOSurfaceRemoveValue(s, CFSTR("r267race"));
+            IOSurfaceDecrementUseCount(s);
         }
         CFRelease(s);
     }
